@@ -273,7 +273,7 @@ bool TSurface::ParamDraw(PSDrawParam dp, PTBitmap bitmap)
     return result;
 }
 
-bool TSurface::ParamBlitSetup(RSDrawParam tmpdp, PTSurface srcsurface, int32_t flags)
+bool TSurface::ParamBlitSetup(RSDrawParam tmpdp, TSurface* srcsurface, int32_t flags)
 {
   // Set defaults
     if (tmpdp.drawmode == DM_USEDEFAULT)
@@ -305,7 +305,7 @@ bool TSurface::ParamBlitSetup(RSDrawParam tmpdp, PTSurface srcsurface, int32_t f
     return true;
 }
 
-bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t flags)
+bool TSurface::BlitHandler(PSDrawParam dp, TSurface* srcsurface, int32_t flags)
 {
     SDrawParam tmpdp = *dp;
     
@@ -399,7 +399,7 @@ bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t flags)
     return result;
 }
 
-bool TSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags)
+bool TSurface::ParamBlit(PSDrawParam dp, TSurface* surface, int32_t flags)
 {
     if (surface && surface->UseGetBlit())  // If source surface is complex, call its Get function instead
     {
@@ -416,7 +416,7 @@ bool TSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags)
         (surface && (GetZBuffer() != surface->GetZBuffer())) &&
         (dp->drawmode & DM_ZBUFFER))
     {
-        PTSurface zbuffer = nullptr;
+        TSurface* zbuffer = nullptr;
         if (surface)
             zbuffer = surface->GetZBuffer();
 //      if ((void *)this == (void *)Display && NoVidZBufLock)
@@ -431,7 +431,7 @@ bool TSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags)
         (surface && (GetNormalBuffer() != surface->GetNormalBuffer())) &&
         (dp->drawmode & DM_NORMALS))
     {
-        PTSurface normals = nullptr;
+        TSurface* normals = nullptr;
         if (surface)
             normals = surface->GetNormalBuffer();
         if (!GetNormalBuffer()->BlitHandler(dp, normals, flags))
@@ -441,7 +441,7 @@ bool TSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags)
     return true;
 }
 
-bool TSurface::ParamGetBlit(PSDrawParam dp, PTSurface surface, int32_t flags)
+bool TSurface::ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t flags)
 {
     return surface->ParamBlit(dp, this, flags);
 }
