@@ -269,13 +269,13 @@ class TSurface
         SColor &color, uint32_t drawmode = DM_USEDEFAULT);
 
     int32_t WriteText(char *text, int32_t x = 0, int32_t y = 0, 
-        int32_t numlines = 1, PTFont font = SystemFont, 
+        int32_t numlines = 1, TFont* font = SystemFont, 
         PSColor color = nullptr, uint32_t drawmode = DM_USEDEFAULT, 
         int32_t wrapwidth = -1, int32_t startline = 0, 
         int32_t justify = JUSTIFY_LEFT, int32_t hue = -1, int32_t linespace = 0);
         
     int32_t WriteTextShadow(char *text, int32_t x = 0, int32_t y = 0, 
-        int32_t numlines = 1, PTFont font = SystemFont, 
+        int32_t numlines = 1, TFont* font = SystemFont, 
         PSColor color = nullptr, uint32_t drawmode = DM_USEDEFAULT, 
         int32_t wrapwidth = -1, int32_t startline = 0, 
         int32_t justify = JUSTIFY_LEFT, int32_t hue = -1, int32_t linespace = 0);
