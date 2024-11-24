@@ -293,7 +293,7 @@ bool TSurface::ParamBlitSetup(RSDrawParam tmpdp, PTSurface srcsurface, int32_t f
     return true;
 }
 
-bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t flags, void* fx)
+bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t flags)
 {
     SDrawParam tmpdp = *dp;
     
@@ -311,9 +311,9 @@ bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t flags, 
         pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
         pip_desc.shader = sg_make_shader(blit_shader_desc());
         pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-        pip_desc.blend.enabled = true;
-        pip_desc.blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-        pip_desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pip_desc.colors[0].blend.enabled = true;
+        pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+        pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
         pipeline = sg_make_pipeline(&pip_desc);
     }
 
