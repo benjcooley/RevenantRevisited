@@ -261,7 +261,7 @@ bool TSurface::ParamDraw(PSDrawParam dp, PTBitmap bitmap)
     return result;
 }
 
-bool TSurface::ParamBlitSetup(RSDrawParam tmpdp, PTSurface srcsurface, int32_t ddflags, LPDDBLTFX fx)
+bool TSurface::ParamBlitSetup(RSDrawParam tmpdp, PTSurface srcsurface, int32_t flags)
 {
   // Set defaults
     if (tmpdp.drawmode == DM_USEDEFAULT)

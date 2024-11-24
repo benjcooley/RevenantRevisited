@@ -142,7 +142,7 @@ class TSurface
   // functions.
     bool ParamDrawSetup(RSDrawParam dpv, PTBitmap bitmap);
       // Sets up a DrawParam structure for a call to DrawParam().  Returns false if fails
-    bool ParamBlitSetup(RSDrawParam tmpdp, PTSurface srcsurface, int32_t ddflags, LPDDBLTFX fx);
+    bool ParamBlitSetup(RSDrawParam tmpdp, PTSurface srcsurface, int32_t flags);
       // Sets up a DrawParam structure for a call to BlitHandler.  Returns false if fails
 
   // Low level Put and Blit which ONLY do primary surface (no Z or Normal Buffer)
@@ -216,7 +216,7 @@ class TSurface
     bool GetBlit(int32_t x, int32_t y, PTSurface surface, uint32_t drawmode = DM_USEDEFAULT,
                int32_t flags = 0)
     { 
-        return GetBlit(x, y, surface, 0, 0, surface->Width(), surface->Height(), drawmode, ddflags, fx);
+        return GetBlit(x, y, surface, 0, 0, surface->Width(), surface->Height(), drawmode, flags);
     }
 
   // Shortcut put functions
