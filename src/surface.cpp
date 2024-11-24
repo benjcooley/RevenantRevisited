@@ -314,14 +314,15 @@ bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t flags)
 
     // Setup Sokol render pass
     sg_pass_action pass_action = {};
-    pass_action.colors[0].action = SG_ACTION_LOAD;
+    pass_action.colors[0] = { .action = SG_ACTION_LOAD };
     
     // Create pipeline if needed
     if (!pipeline.id) {
         sg_pipeline_desc pip_desc = {};
         pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
         pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
-        pip_desc.shader = sg_make_shader(blit_shader_desc());
+        pip_desc.shader = sg_make_shader(blit_shader_desc()); 
+        pipeline = sg_make_pipeline(pip_desc);
         pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
         pip_desc.colors[0].blend.enabled = true;
         pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
@@ -667,7 +668,7 @@ void* TSurface::Lock()
                 img_desc.width = width;
                 img_desc.height = height;
                 img_desc.data = img_data;
-                image = sg_make_image(&img_desc);
+                image = sg_make_image(img_desc);
             }
 
             // Initialize CPU buffer with zeros if no previous content
@@ -696,7 +697,7 @@ bool TSurface::Unlock()
             sg_image_data img_data = {};
             img_data.subimage[0][0].ptr = cpu_buffer;
             img_data.subimage[0][0].size = buffer_size;
-            sg_update_image(image, &img_data);
+            sg_update_image(image, img_data);
         }
         locked = nullptr;
         return true;
