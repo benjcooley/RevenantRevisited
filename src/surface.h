@@ -44,9 +44,10 @@ class TSurface
     uint32_t keycolor;       // Surface transparent color
     void* locked;            // True if surface locked
 
-    // Sokol resources
+    // Buffers
+    void* cpu_buffer;        // CPU-side pixel buffer
+    size_t buffer_size;      // Size of CPU buffer in bytes
     sg_image image;          // Sokol GPU texture
-    sg_buffer buffer;        // Sokol vertex buffer
     sg_pipeline pipeline;    // Sokol render pipeline
     sg_bindings bindings;    // Sokol resource bindings
 
