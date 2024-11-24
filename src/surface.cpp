@@ -550,7 +550,7 @@ bool TSurface::Rect(int32_t x, int32_t y, int32_t w, int32_t h, SColor &color, u
     return true;
 }
 
-int32_t TSurface::WriteText(char *text, int32_t x, int32_t y, int32_t numlines, PTFont font, PSColor color,
+int32_t TSurface::WriteText(char *text, int32_t x, int32_t y, int32_t numlines, TFont* font, PSColor color,
                          uint32_t drawmode, int32_t wrapwidth, int32_t startline, int32_t justify, int32_t hue, int32_t linespace)
 {
     if (!text || !*text)
@@ -601,7 +601,7 @@ int32_t TSurface::WriteText(char *text, int32_t x, int32_t y, int32_t numlines, 
     return tp.length;
 };
 
-int32_t TSurface::WriteTextShadow(char *text, int32_t x, int32_t y, int32_t numlines, PTFont font, PSColor color,
+int32_t TSurface::WriteTextShadow(char *text, int32_t x, int32_t y, int32_t numlines, TFont* font, PSColor color,
                                uint32_t drawmode, int32_t wrapwidth, int32_t startline, int32_t justify, int32_t hue, int32_t linespace)
 {
     SColor black = { 0, 0, 0 };
