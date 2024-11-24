@@ -428,9 +428,9 @@ bool TSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags)
     return true;
 }
 
-bool TSurface::ParamGetBlit(PSDrawParam dp, PTSurface surface, int32_t ddflags, LPDDBLTFX fx)
+bool TSurface::ParamGetBlit(PSDrawParam dp, PTSurface surface, int32_t flags)
 {
-    return surface->ParamBlit(dp, this, ddflags, fx);
+    return surface->ParamBlit(dp, this, flags);
 }
 
 bool TSurface::Put(int32_t x, int32_t y, PTBitmap bitmap, uint32_t drawmode, PSColor color)
