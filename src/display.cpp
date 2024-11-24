@@ -4,17 +4,13 @@
 // *                 display.cpp  - Display Object File                    *
 // *************************************************************************
 
-#include <windows.h>
-#include <ddraw.h>
-#include <d3drmwin.h>
+#include "display.h"
 
-#include "revenant.h"
 #include "directdraw.h"
 #include "graphics.h"
 #include "mainwnd.h"
 #include "bitmap.h"
 #include "multisurface.h"
-#include "display.h"
 
 LPDIRECTDRAWSURFACE front;      // Pointer to DirectDraw Surfaces for the display.   
 LPDIRECTDRAWSURFACE back;
@@ -416,7 +412,7 @@ bool TDisplay::ParamDraw(PSDrawParam dp, PTBitmap bitmap)
   // Blits from surface to this surface. RECT sets size of blit. 
   // X & Y specifies dest origin.  If no hardware available, uses software
   // blitting
-bool TDisplay::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags, LPDDBLTFX fx)
+bool TDisplay::ParamBlit(PSDrawParam dp, TSurface* surface, int32_t flags, LPDDBLTFX fx)
 {
     if (front->IsLost() == DDERR_SURFACELOST)
         return false;
@@ -436,7 +432,7 @@ bool TDisplay::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags, LPDDB
   // X & Y specifies dest origin.  If no hardware available, uses software
   // blitting.  Called by ParamBlit when blitting from a complex surface
   // to an ordinary surface.
-bool TDisplay::ParamGetBlit(PSDrawParam dp, PTSurface surface, int32_t flags, LPDDBLTFX fx)
+bool TDisplay::ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t flags, LPDDBLTFX fx)
 {
     if (front->IsLost() == DDERR_SURFACELOST)
         return false;
@@ -476,7 +472,7 @@ struct RestoreBuf
     int32_t width;                  // Size of Background Buffer
     int32_t height;
 
-    PTSurface surface;          // Video surface for restore buffer
+    TSurface* surface;          // Video surface for restore buffer
 
     bool        deletesurface;  // bool to determine if surfaces are deleted on exit
 
@@ -559,13 +555,13 @@ bool TDisplay::ClearBackgroundAreas()
 
 int32_t TDisplay::CreateBackgroundArea(int32_t x, int32_t y, int32_t width, int32_t height, bool createzbuf, int32_t vsflags)
 {
-    PTSurface surface;
+    TSurface* surface;
     if (createzbuf)
     {
-        PTSurface zbuf = new TDDSurface(width, height, vsflags);
+        TSurface* zbuf = new TDDSurface(width, height, vsflags);
         if (!zbuf)
             return nullptr;
-        PTSurface graphics = new TDDSurface(width, height, vsflags);
+        TSurface* graphics = new TDDSurface(width, height, vsflags);
         if (!graphics)
             return nullptr;
         surface = new TMultiSurface(graphics, zbuf, nullptr, true);
@@ -582,7 +578,7 @@ int32_t TDisplay::CreateBackgroundArea(int32_t x, int32_t y, int32_t width, int3
     return buf;
 }
 
-int32_t TDisplay::UseBackgroundArea(int32_t x, int32_t y, int32_t width, int32_t height, PTSurface surface)
+int32_t TDisplay::UseBackgroundArea(int32_t x, int32_t y, int32_t width, int32_t height, TSurface* surface)
 {
     if (surface == nullptr) return false;
 
@@ -1129,7 +1125,7 @@ bool TDisplay::ZPut(int32_t x, int32_t y, int32_t z, PTBitmap bitmap, uint32_t d
         return false;
 
     static int32_t status = 0;
-    static PTSurface multi = nullptr;
+    static TSurface* multi = nullptr;
 
     if (status == 0)
     {
@@ -1186,7 +1182,7 @@ bool TDisplay::ZPut(int32_t x, int32_t y, int32_t z, PTBitmap bitmap, uint32_t d
         SetClipRect(saveclipx, saveclipy, saveclipwidth, saveclipheight);
         SetClipMode(saveclipmode);
 
-        PTSurface tmp = (PTSurface)ZBuffer;
+        TSurface* tmp = (TSurface*)ZBuffer;
         ZBuffer = (PTDDSurface)multi->GetZBuffer();
 
         ZPut(x, y, z, bitmap, drawmode);

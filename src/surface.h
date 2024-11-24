@@ -89,11 +89,11 @@ class TSurface
     bool IsLocked() { return locked != nullptr; }
     
     
-    virtual PTSurface GetGraphicsBuffer() { return this; }
+    virtual TSurface* GetGraphicsBuffer() { return this; }
       // Returns ZBuffer surface for this surface (if it has one)
-    virtual PTSurface GetZBuffer() { return nullptr; }
+    virtual TSurface* GetZBuffer() { return nullptr; }
       // Returns ZBuffer surface for this surface (if it has one)
-    virtual PTSurface GetNormalBuffer() { return nullptr; }
+    virtual TSurface* GetNormalBuffer() { return nullptr; }
       // Returns the normal buffer for this surface (if it has one)
 
     virtual void SetOrigin(int32_t x, int32_t y) { originx = x; originy = y; }
@@ -144,11 +144,11 @@ class TSurface
   // functions.
     bool ParamDrawSetup(RSDrawParam dpv, PTBitmap bitmap);
       // Sets up a DrawParam structure for a call to DrawParam().  Returns false if fails
-    bool ParamBlitSetup(RSDrawParam tmpdp, PTSurface srcsurface, int32_t flags);
+    bool ParamBlitSetup(RSDrawParam tmpdp, TSurface* srcsurface, int32_t flags);
       // Sets up a DrawParam structure for a call to BlitHandler.  Returns false if fails
 
   // Low level Put and Blit which ONLY do primary surface (no Z or Normal Buffer)
-    virtual bool BlitHandler(PSDrawParam dp, PTSurface surface, int32_t flags = 0);
+    virtual bool BlitHandler(PSDrawParam dp, TSurface* surface, int32_t flags = 0);
       // Blits from surface to surface. RECT sets size of blit. 
       // X & Y specifies dest. origin
 
@@ -170,11 +170,11 @@ class TSurface
   // Put and blit functions which do primary, zbuffer, and normal buffer surface
     virtual bool ParamDraw(PSDrawParam dp, PTBitmap bitmap = nullptr);
       // Copies specified bitmap to current bitmap
-    virtual bool ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags = 0);
+    virtual bool ParamBlit(PSDrawParam dp, TSurface* surface, int32_t flags = 0);
       // Blits from surface to this surface. RECT sets size of blit.
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting
-    virtual bool ParamGetBlit(PSDrawParam dp, PTSurface surface, int32_t flags = 0);
+    virtual bool ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t flags = 0);
       // Blits from this surface to surface. RECT sets size of blit. 
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting.  Called by ParamBlit when blitting from a complex surface
@@ -192,7 +192,7 @@ class TSurface
     }
 
   // Shortcut blit functions
-    bool Blit(int32_t x, int32_t y, PTSurface surface, int32_t sx, int32_t sy, int32_t swidth,
+    bool Blit(int32_t x, int32_t y, TSurface* surface, int32_t sx, int32_t sy, int32_t swidth,
                int32_t sheight, uint32_t drawmode = DM_USEDEFAULT, int32_t flags = 0)
     {
         SDrawParam dp;
@@ -200,14 +200,14 @@ class TSurface
         return ParamBlit(&dp, surface, flags);
     }
     
-    bool Blit(int32_t x, int32_t y, PTSurface surface, uint32_t drawmode = DM_USEDEFAULT,
+    bool Blit(int32_t x, int32_t y, TSurface* surface, uint32_t drawmode = DM_USEDEFAULT,
                int32_t flags = 0)
     { 
         return Blit(x, y, surface, 0, 0, surface->Width(), surface->Height(), drawmode, flags);
     }
 
   // Shortcut blit functions
-    bool GetBlit(int32_t x, int32_t y, PTSurface surface, int32_t sx, int32_t sy, int32_t swidth,
+    bool GetBlit(int32_t x, int32_t y, TSurface* surface, int32_t sx, int32_t sy, int32_t swidth,
                int32_t sheight, uint32_t drawmode = DM_USEDEFAULT, int32_t flags = 0)
     {
         SDrawParam dp;
@@ -215,7 +215,7 @@ class TSurface
         return ParamGetBlit(&dp, surface, flags);
     }
     
-    bool GetBlit(int32_t x, int32_t y, PTSurface surface, uint32_t drawmode = DM_USEDEFAULT,
+    bool GetBlit(int32_t x, int32_t y, TSurface* surface, uint32_t drawmode = DM_USEDEFAULT,
                int32_t flags = 0)
     { 
         return GetBlit(x, y, surface, 0, 0, surface->Width(), surface->Height(), drawmode, flags);
