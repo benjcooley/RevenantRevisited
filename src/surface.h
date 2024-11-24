@@ -8,10 +8,9 @@
 
 #include "revenant.h"
 #include "graphics.h"
-
-// Forward declarations for sokol types
-typedef struct sg_image sg_image;
-typedef struct sg_buffer sg_buffer;
+#include "sokol_gfx.h"
+#include "HandmadeMath.h"
+#include "shaders/blit.h"
 
 #define SURFACE_UNKNOWN 0
 #define SURFACE_VIDEO   1
@@ -43,8 +42,14 @@ class TSurface
     int32_t clipy;
     int32_t clipwidth;
     int32_t clipheight;
-    uint32_t keycolor;      // Surface transparent color
-    void* locked;           // True if surface locked
+    uint32_t keycolor;       // Surface transparent color
+    void* locked;            // True if surface locked
+
+    // Sokol resources
+    sg_image image;          // Sokol GPU texture
+    sg_buffer buffer;        // Sokol vertex buffer
+    sg_pipeline pipeline;    // Sokol render pipeline
+    sg_bindings bindings;    // Sokol resource bindings
 
   public:
     uint32_t flags;         // 'BM' flags for surface
