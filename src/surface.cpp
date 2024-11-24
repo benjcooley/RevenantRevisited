@@ -637,33 +637,63 @@ int32_t TSurface::WriteTextShadow(char *text, int32_t x, int32_t y, int32_t numl
 void* TSurface::Lock()
 {
     if (!locked) {
-        // Allocate CPU buffer if needed
+        // Allocate staging buffer if needed
         if (!cpu_buffer) {
             buffer_size = width * height * sizeof(uint32_t);
             cpu_buffer = (uint8_t*)malloc(buffer_size);
-            
-            // Initialize with current texture data if it exists
-            if (image.id) {
-                sg_image_data data = sg_query_image_data(image);
-                if (data.subimage[0][0].ptr && data.subimage[0][0].size == buffer_size) {
-                    memcpy(cpu_buffer, data.subimage[0][0].ptr, buffer_size);
-                }
-            }
         }
+
+        // Read back current texture content into staging buffer
+        if (image.id) {
+            // Create temporary readback buffer
+            sg_buffer readback_buf = sg_make_buffer(&(sg_buffer_desc){
+                .size = buffer_size,
+                .usage = SG_USAGE_STREAM,
+                .type = SG_BUFFERTYPE_PIXELDATA
+            });
+
+            // Copy texture content to readback buffer
+            sg_image_data img_data = {};
+            img_data.subimage[0][0].ptr = cpu_buffer;
+            img_data.subimage[0][0].size = buffer_size;
+            sg_copy_image_to_buffer(image, readback_buf, &img_data);
+
+            // Copy readback buffer to CPU staging buffer
+            void* mapped = sg_map_buffer(readback_buf);
+            if (mapped) {
+                memcpy(cpu_buffer, mapped, buffer_size);
+                sg_unmap_buffer(readback_buf);
+            }
+
+            sg_destroy_buffer(readback_buf);
+        }
+
         locked = cpu_buffer;
     }
     return locked;
 }
 
-bool TSurface::Unlock() 
+bool TSurface::Unlock()
 {
     if (locked) {
-        // Upload modified CPU buffer to GPU texture
+        // Upload staging buffer to GPU texture
         if (image.id && cpu_buffer) {
-            sg_image_data data = {};
-            data.subimage[0][0].ptr = cpu_buffer;
-            data.subimage[0][0].size = buffer_size;
-            sg_update_image(image, &data);
+            sg_image_data img_data = {};
+            img_data.subimage[0][0].ptr = cpu_buffer;
+            img_data.subimage[0][0].size = buffer_size;
+
+            // Create and fill staging buffer
+            sg_buffer staging_buf = sg_make_buffer(&(sg_buffer_desc){
+                .size = buffer_size,
+                .usage = SG_USAGE_STREAM,
+                .type = SG_BUFFERTYPE_PIXELDATA,
+                .data = { .ptr = cpu_buffer, .size = buffer_size }
+            });
+
+            // Copy staging buffer to texture
+            sg_copy_buffer_to_image(staging_buf, image, &img_data);
+
+            sg_destroy_buffer(staging_buf);
         }
         locked = nullptr;
         return true;
