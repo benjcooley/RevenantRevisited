@@ -24,17 +24,17 @@ TSurface::TSurface()
     clipheight = height;
     clipmode = CLIP_EDGES;
     
-    // Initialize buffer
-    buffer.ptr = nullptr;
-    buffer.size = 0;
+    // Initialize buffers
+    cpu_buffer = nullptr;
+    buffer_size = 0;
 }
 
 TSurface::~TSurface()
 {
-    if (buffer.ptr) {
-        free(buffer.ptr);
-        buffer.ptr = nullptr;
-        buffer.size = 0;
+    if (cpu_buffer) {
+        free(cpu_buffer);
+        cpu_buffer = nullptr;
+        buffer_size = 0;
     }
 }
 
@@ -638,11 +638,11 @@ void* TSurface::Lock()
 {
     if (!locked) {
         // Allocate CPU memory buffer if needed
-        if (!buffer.ptr) {
-            buffer.size = width * height * sizeof(uint32_t);
-            buffer.ptr = malloc(buffer.size);
+        if (!cpu_buffer) {
+            buffer_size = width * height * sizeof(uint32_t);
+            cpu_buffer = malloc(buffer_size);
         }
-        locked = buffer.ptr;
+        locked = cpu_buffer;
     }
     return locked;
 }
