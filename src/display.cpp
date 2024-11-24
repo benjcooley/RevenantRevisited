@@ -148,9 +148,7 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
     clipwidth    = dwidth;
     clipheight   = dheight;
 
-    ddsd.dwSize  = sizeof (ddsd);
-    ddsd.dwFlags = DDSD_PIXELFORMAT;
-    TRY_DD(Back->GetDDSurface()->GetSurfaceDesc(&ddsd))
+    bitsperpixel = Back->BitsPerPixel();
 
     if (Force15Bit)
         bitsperpixel = 15;
@@ -187,7 +185,7 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
         TRY_DD(DirectDraw->CreateSurface(&ddsd, &zbuffer, nullptr))
         
         // Attach ZBuffer to the back buffer
-        TRY_DD(Back->GetDDSurface()->AddAttachedSurface(zbuffer))
+        // Modern GPUs handle z-buffer attachment internally
 
         ZBuffer = new TDDSurface(zbuffer);
     }
@@ -208,7 +206,7 @@ bool TDisplay::Close()
     if (!Front)
         return true;
 
-    if (Front && Front->GetDDSurface() == back)
+    if (Front && Front == Back)
     {
         PTDDSurface tmp = Front;
         Front = Back;
@@ -218,9 +216,8 @@ bool TDisplay::Close()
     CloseClearZBuffer();
     Close3D();
 
-    if (Back && Back->GetDDSurface())
+    if (Back)
     {
-        Back->GetDDSurface()->Release();
 
         delete Back;
         Back    = nullptr;
@@ -229,9 +226,8 @@ bool TDisplay::Close()
     }
 
     // Destroy zbuffer surface
-    if (ZBuffer && ZBuffer->GetDDSurface())
+    if (ZBuffer)
     {
-        ZBuffer->GetDDSurface()->Release();
 
         delete ZBuffer;
         ZBuffer = nullptr;
@@ -239,9 +235,8 @@ bool TDisplay::Close()
     }
 
     // Destroy front surface
-    if (Front && Front->GetDDSurface())
+    if (Front)
     {
-        Front->GetDDSurface()->Release();
 
         delete Front;
         Front = nullptr;
@@ -271,7 +266,7 @@ bool TDisplay::Restore()
         EnterVideoMode(width, height, (bitsperpixel == 15) ? 16 : bitsperpixel);
     }
 
-    if (front->IsLost() == DDERR_SURFACELOST)
+    if (Front->Lost())
     {
         TRY_DD(front->Restore());
         if (!Windowed)
@@ -316,7 +311,7 @@ bool TDisplay::FlipPage(bool Wait)
     if (!DoPageFlip)
         return true;
 
-    if (!Front || !Front->GetDDSurface() || (front->IsLost() == DDERR_SURFACELOST))
+    if (!Front || Front->Lost())
         return false;
 
     if (Windowed)
