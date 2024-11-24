@@ -146,7 +146,7 @@ class TSurface
       // Sets up a DrawParam structure for a call to BlitHandler.  Returns false if fails
 
   // Low level Put and Blit which ONLY do primary surface (no Z or Normal Buffer)
-    virtual bool BlitHandler(PSDrawParam dp, PTSurface surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr);
+    virtual bool BlitHandler(PSDrawParam dp, PTSurface surface, int32_t flags = 0);
       // Blits from surface to surface. RECT sets size of blit. 
       // X & Y specifies dest. origin
 
