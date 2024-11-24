@@ -4,24 +4,13 @@
 // *               display.h  - EXILE Display Include File                 *
 // *************************************************************************
 
-#ifndef _DISPLAY_H
-#define _DISPLAY_H
+#pragma once
 
-#ifndef _REVENANT_H
 #include "revenant.h"
-#endif
 
-#ifndef _GRAPHICS_H
 #include "graphics.h"
-#endif
-
-#ifndef _SURFACE_H
 #include "surface.h"
-#endif
-
-#ifndef _DDSURFACE_H
 #include "ddsurface.h"
-#endif
 
 _STRUCTDEF(RestoreRect)
 _CLASSDEF(TDisplay)
@@ -65,7 +54,7 @@ class TDisplay : public TDDSurface
       // Closes the clear zbuffer and puts the real video zbuffer back as the main zbuffer
     bool UsingClearZBuffer() { return SaveZBuffer != nullptr; }
       // True if we're currently using a secondary zbuffer
-    PTSurface GetRealZBuffer() { if (SaveZBuffer) return SaveZBuffer; else return ZBuffer; }
+    TSurface* GetRealZBuffer() { if (SaveZBuffer) return SaveZBuffer; else return ZBuffer; }
       // Returns the real display zbuffer (used by the Scene3D.RestoreZBuffer() function)
 
     virtual int32_t SurfaceType() { return SURFACE_DISPLAY; }
@@ -74,9 +63,9 @@ class TDisplay : public TDDSurface
     uint32_t GetSurface() {return (uint32_t)surface;}
       // Returns LPDIRECTDRAWSURFACE pointer or Null if not Direct Draw Surface.
 
-    PTSurface BackBuffer() { return Back; }
+    TSurface* BackBuffer() { return Back; }
       // Returns the back buffer surface
-    PTSurface FrontBuffer() { return Front; }
+    TSurface* FrontBuffer() { return Front; }
       // Returns the front buffer surface
 
     bool Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel);
@@ -86,9 +75,9 @@ class TDisplay : public TDDSurface
     bool Restore();
       // Restores the display device after having been tabbed out of
   
-    virtual PTSurface GetZBuffer() { return ZBuffer; }  // Returns nullptr if display ZBuffer disabled
+    virtual TSurface* GetZBuffer() { return ZBuffer; }  // Returns nullptr if display ZBuffer disabled
       // Returns ZBuffer surface for this surface (if it has one)
-    virtual PTSurface GetNormalBuffer() { return nullptr; }
+    virtual TSurface* GetNormalBuffer() { return nullptr; }
       // Returns the normal buffer for this surface (if it has one)
 
     bool FlipPage(bool Wait = true);
@@ -110,11 +99,11 @@ class TDisplay : public TDDSurface
   // Put and blit functions which do primary, zbuffer, and normal buffer surface
     virtual bool ParamDraw(PSDrawParam dp, PTBitmap bitmap = nullptr);
       // Copies specified bitmap to current bitmap
-    virtual bool ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags = 0, LPDDBLTFX fx = nullptr);
+    virtual bool ParamBlit(PSDrawParam dp, TSurface* surface, int32_t flags = 0, LPDDBLTFX fx = nullptr);
       // Blits from surface to this surface. RECT sets size of blit. 
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting
-    virtual bool ParamGetBlit(PSDrawParam dp, PTSurface surface, int32_t flags = 0, LPDDBLTFX fx = nullptr);
+    virtual bool ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t flags = 0, LPDDBLTFX fx = nullptr);
       // Blits from this surface to surface. RECT sets size of blit. 
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting.  Called by ParamBlit when blitting from a complex surface
@@ -159,7 +148,7 @@ class TDisplay : public TDDSurface
     int32_t CreateBackgroundArea(int32_t x, int32_t y, int32_t width, int32_t height,
         bool createzbuf = false, int32_t vsflags = VSURF_SYSTEMMEM);
       // Uses surface as background area
-    int32_t UseBackgroundArea(int32_t x, int32_t y, int32_t width, int32_t height, PTSurface surface);
+    int32_t UseBackgroundArea(int32_t x, int32_t y, int32_t width, int32_t height, TSurface* surface);
       // Creates a background area.   
     void FreeBackgroundArea(int32_t index);
       // Frees the given background area
@@ -201,5 +190,3 @@ class TDisplay : public TDDSurface
     void AddSubRect(int32_t index, int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t flags);
       // Calls AddUpdateRect with parameters of a smaller rect.
 };
-
-#endif 
