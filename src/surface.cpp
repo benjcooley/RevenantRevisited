@@ -637,20 +637,34 @@ int32_t TSurface::WriteTextShadow(char *text, int32_t x, int32_t y, int32_t numl
 void* TSurface::Lock()
 {
     if (!locked) {
-        // Allocate CPU memory buffer if needed
+        // Allocate CPU buffer if needed
         if (!cpu_buffer) {
             buffer_size = width * height * sizeof(uint32_t);
-            cpu_buffer = malloc(buffer_size);
+            cpu_buffer = (uint8_t*)malloc(buffer_size);
+            
+            // Initialize with current texture data if it exists
+            if (image.id) {
+                sg_image_data data = sg_query_image_data(image);
+                if (data.subimage[0][0].ptr && data.subimage[0][0].size == buffer_size) {
+                    memcpy(cpu_buffer, data.subimage[0][0].ptr, buffer_size);
+                }
+            }
         }
         locked = cpu_buffer;
     }
     return locked;
 }
 
-bool TSurface::Unlock()
+bool TSurface::Unlock() 
 {
     if (locked) {
-        // Mark as unlocked but keep memory allocated
+        // Upload modified CPU buffer to GPU texture
+        if (image.id && cpu_buffer) {
+            sg_image_data data = {};
+            data.subimage[0][0].ptr = cpu_buffer;
+            data.subimage[0][0].size = buffer_size;
+            sg_update_image(image, &data);
+        }
         locked = nullptr;
         return true;
     }
