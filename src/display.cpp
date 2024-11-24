@@ -84,23 +84,27 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
         ddsd.ddsCaps.dwCaps    = DDSCAPS_PRIMARYSURFACE;
 
         // Create the primary surface
-        TRY_DD(DirectDraw->CreateSurface(&ddsd, &front, nullptr))
+        // Initialize Sokol graphics context
+        sg_setup(&(sg_desc){
+            .context = sapp_sgcontext()
+        });
 
-        // Create back buffer surface
-        img_desc.width = WIDTH;
-        img_desc.height = HEIGHT;
-        img_desc.usage = SG_USAGE_DYNAMIC;
-        img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        // Create front buffer surface
+        Front = new TSurface();
+        Front->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_RGBA8);
+
+        // Create back buffer surface 
+        Back = new TSurface();
+        Back->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_RGBA8);
         if (UsingHardware)
             ddsd.ddsCaps.dwCaps |= DDSCAPS_VIDEOMEMORY;     // Use video memory for back buffer
         else                                                // if not using hardware 3D.
             ddsd.ddsCaps.dwCaps |= DDSCAPS_SYSTEMMEMORY;    
 
-        TRY_DD(DirectDraw->CreateSurface(&ddsd, &back, nullptr))
-
-        // Verify color format
-        if (sg_query_pixelformat(SG_PIXELFORMAT_RGBA8).sample_size != 32) {
-            FatalError("Game requires 32-bit color support");
+        // Verify graphics capabilities
+        sg_features features = sg_query_features();
+        if (!features.image_float) {
+            FatalError("GPU does not support required floating point textures");
         }
     }
     else  // Exclusive full screen mode
@@ -119,10 +123,10 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
         ddsd.dwBackBufferCount = 1;
 
         // Create the primary surface with 1 back buffer
-        TRY_DD(DirectDraw->CreateSurface(&ddsd, &front, nullptr))
-
-        // Get pointer to back buffer
-        // Back buffer is managed by Sokol
+        // Create front and back buffers
+        Front = new TSurface();
+        Front->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_RGBA8);
+        
         Back = new TSurface();
         Back->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_RGBA8);
     }
@@ -177,13 +181,18 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
         ddsd.dwZBufferBitDepth  = ZBufferBitDepth;
 
         // Create the zbuffer
-        TRY_DD(DirectDraw->CreateSurface(&ddsd, &zbuffer, nullptr))
+        // Create depth-stencil buffer
+        sg_image_desc depth_desc = {
+            .type = SG_IMAGETYPE_2D,
+            .width = WIDTH,
+            .height = HEIGHT,
+            .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+            .sample_count = 1,
+            .usage = SG_USAGE_IMMUTABLE
+        };
         
-        // Attach ZBuffer to the back buffer
-        // Modern GPUs handle z-buffer attachment internally
-
         ZBuffer = new TSurface();
-        ZBuffer->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_D24S8);
+        ZBuffer->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_DEPTH_STENCIL);
     }
 
     Setup3D(dwidth, dheight);
