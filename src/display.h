@@ -26,6 +26,7 @@ class TDisplay : public TSurface
     TSurface* Back;
     TSurface* ZBuffer;
     TSurface* SaveZBuffer;    // Where the real zbuffer goes when we're using a secondary z
+    sg_pass default_pass;     // Default render pass for Sokol
 
   public:
     TDisplay();
