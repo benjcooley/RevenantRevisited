@@ -24,18 +24,18 @@ TSurface::TSurface()
     clipheight = height;
     clipmode = CLIP_EDGES;
     
-    // Initialize Sokol image descriptor to defaults
-    sg_image_desc img_desc = {};
-    img_desc.type = SG_IMAGETYPE_2D;
-    img_desc.render_target = true;
-    img_desc.min_filter = SG_FILTER_LINEAR;
-    img_desc.mag_filter = SG_FILTER_LINEAR;
-    img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-    img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    // Initialize buffer
+    buffer.ptr = nullptr;
+    buffer.size = 0;
 }
 
 TSurface::~TSurface()
 {
+    if (buffer.ptr) {
+        free(buffer.ptr);
+        buffer.ptr = nullptr;
+        buffer.size = 0;
+    }
 }
 
 void TSurface::Reset()
@@ -637,19 +637,12 @@ int32_t TSurface::WriteTextShadow(char *text, int32_t x, int32_t y, int32_t numl
 void* TSurface::Lock()
 {
     if (!locked) {
-        // Map buffer for CPU access if needed
-        if (!buffer.id) {
-            sg_buffer_desc buf_desc = {};
-            buf_desc.usage = SG_USAGE_DYNAMIC;
-            buf_desc.size = width * height * sizeof(uint32_t);
-            buffer = sg_make_buffer(&buf_desc);
+        // Allocate CPU memory buffer if needed
+        if (!buffer.ptr) {
+            buffer.size = width * height * sizeof(uint32_t);
+            buffer.ptr = malloc(buffer.size);
         }
-        
-        sg_range range = { 
-            .ptr = nullptr,
-            .size = width * height * sizeof(uint32_t)
-        };
-        locked = sg_map_buffer(buffer, &range);
+        locked = buffer.ptr;
     }
     return locked;
 }
@@ -657,11 +650,7 @@ void* TSurface::Lock()
 bool TSurface::Unlock()
 {
     if (locked) {
-        sg_range range = {
-            .ptr = locked,
-            .size = width * height * sizeof(uint32_t)
-        };
-        sg_unmap_buffer(buffer, &range);
+        // Mark as unlocked but keep memory allocated
         locked = nullptr;
         return true;
     }
