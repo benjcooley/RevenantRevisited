@@ -15,8 +15,7 @@
 // If you notice graphics getting screwed up, try setting this to false..  This should always
 // be false if _DEBUG is not defined.
 
-TSurface::TSurface()
-{
+TSurface::TSurface() {
     locked = nullptr;
     width = height = stride = 0;
     clipx = clipy = 0;
@@ -30,12 +29,46 @@ TSurface::TSurface()
     // Initialize buffers
     cpu_buffer = nullptr;
     buffer_size = 0;
-    surface = nullptr;
-    ownssurface = false;
+    image = {};
     // Initialize image description with defaults
     img_desc = {};
     img_desc.type = SG_IMAGETYPE_2D;
     img_desc.render_target = false;
+    img_desc.num_mipmaps = 1;
+    img_desc.usage = SG_USAGE_DYNAMIC;
+    img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    img_desc.sample_count = 1;
+    img_desc.min_filter = SG_FILTER_LINEAR;
+    img_desc.mag_filter = SG_FILTER_LINEAR;
+    img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+}
+
+TSurface::TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp) {
+    locked = nullptr;
+    width = w;
+    height = h;
+    bitsperpixel = bpp;
+    stride = width;
+    clipx = clipy = 0;
+    clipwidth = width;
+    clipheight = height;
+    clipmode = CLIP_EDGES;
+    flags = 0;
+    keycolor = 0;
+    originx = originy = 0;
+    
+    // Initialize buffers
+    cpu_buffer = nullptr;
+    buffer_size = width * height * sizeof(uint32_t);
+    image = existing_image;
+    
+    // Initialize image description
+    img_desc = {};
+    img_desc.type = SG_IMAGETYPE_2D;
+    img_desc.render_target = true;
+    img_desc.width = width;
+    img_desc.height = height;
     img_desc.num_mipmaps = 1;
     img_desc.usage = SG_USAGE_DYNAMIC;
     img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
