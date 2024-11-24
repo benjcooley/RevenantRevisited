@@ -48,7 +48,7 @@ class TSurface
     uint8_t* cpu_buffer;     // CPU-side staging buffer for modifications
     size_t buffer_size;      // Size of staging buffer in bytes
     sg_image image;          // Sokol GPU texture
-    sg_image_type img_type;  // Type of Sokol image (2D, 3D, etc)
+    sg_image_desc img_desc;  // Sokol image description/config
     sg_pipeline pipeline;    // Sokol render pipeline
     sg_bindings bindings;    // Sokol resource bindings
 
