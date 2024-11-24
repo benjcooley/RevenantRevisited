@@ -7,10 +7,9 @@
 #pragma once
 
 #include "revenant.h"
-#include "graphics.h"
-#include "sokol_gfx.h"
-#include "HandmadeMath.h"
+
 #include "blit.h"
+#include "graphics.h"
 
 #define SURFACE_UNKNOWN 0
 #define SURFACE_VIDEO   1

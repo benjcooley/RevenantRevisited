@@ -7,7 +7,6 @@
 #pragma once
 
 #include "revenant.h"
-#include "sokol_gfx.h"
 
 // Shader descriptor for basic 2D blitting operations
 static sg_shader_desc blit_shader_desc(void) 
