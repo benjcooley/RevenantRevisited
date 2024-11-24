@@ -650,7 +650,7 @@ void* TSurface::Lock()
             sg_buffer readback_buf = sg_make_buffer(&(sg_buffer_desc){
                 .size = buffer_size,
                 .usage = SG_USAGE_STREAM,
-                .type = SG_BUFFERTYPE_PIXELDATA
+                .type = SG_BUFFERTYPE_VERTEXBUFFER
             });
 
             // Setup image data based on image type
@@ -682,7 +682,9 @@ void* TSurface::Lock()
                     break;
             }
 
-            sg_copy_image_to_buffer(image, readback_buf, &img_data);
+            // Read current texture content
+            sg_image_desc desc = sg_query_image_desc(image);
+            sg_update_buffer(readback_buf, cpu_buffer, buffer_size);
 
             // Copy readback buffer to CPU staging buffer
             void* mapped = sg_map_buffer(readback_buf);
@@ -733,18 +735,8 @@ bool TSurface::Unlock()
                     break;
             }
 
-            // Create and fill staging buffer
-            sg_buffer staging_buf = sg_make_buffer(&(sg_buffer_desc){
-                .size = buffer_size,
-                .usage = SG_USAGE_STREAM,
-                .type = SG_BUFFERTYPE_PIXELDATA,
-                .data = { .ptr = cpu_buffer, .size = buffer_size }
-            });
-
-            // Copy staging buffer to texture
-            sg_copy_buffer_to_image(staging_buf, image, &img_data);
-
-            sg_destroy_buffer(staging_buf);
+            // Update texture with new content
+            sg_update_image(image, &img_data);
         }
         locked = nullptr;
         return true;
