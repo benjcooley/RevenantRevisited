@@ -46,162 +46,69 @@ TDisplay::TDisplay()
     clipmode        = CLIP_EDGES; 
 }
 
-bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel)
+bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpixel*/)
 {
     if (Front)
         return true;
 
-    DDSURFACEDESC ddsd;
-    DDSCAPS ddscaps;
-
     SaveZBuffer = nullptr;
+    ResetUpdateCallbacks();
 
-    ResetUpdateCallbacks(); // Make sure our update list is reset
+    // Initialize Sokol graphics context
+    sg_desc desc = {};
+    desc.context = sapp_sgcontext();
+    desc.buffer_pool_size = 128;
+    desc.image_pool_size = 128;
+    desc.shader_pool_size = 32;
+    desc.pipeline_pool_size = 32;
+    desc.pass_pool_size = 16;
+    sg_setup(&desc);
 
-    InitDirectDraw();
+    // Always use 32-bit RGBA color
+    const sg_pixel_format color_format = SG_PIXELFORMAT_RGBA8;
 
-  // We must use single buffering when UsingHardware=false, or Windowed=true    
-    if (Windowed || !UsingHardware)
-        SingleBuffer = true;
-
-    if (SingleBuffer)
-    {
-        if (Windowed)
-        {
-            SetNormalMode();
-        }
-        else
-        {
-            SetExclusiveMode();
-            EnterVideoMode(dwidth, dheight, dbitsperpixel);
-        }
-
-        // First, create complex flipping primary surface
-
-        memset(&ddsd, sizeof(DDSURFACEDESC), 0);
-        ddsd.dwSize            = sizeof(DDSURFACEDESC);
-        ddsd.dwFlags           = DDSD_CAPS;
-        ddsd.ddsCaps.dwCaps    = DDSCAPS_PRIMARYSURFACE;
-
-        // Create the primary surface
-        // Initialize Sokol graphics context
-        sg_setup(&(sg_desc){
-            .context = sapp_sgcontext()
-        });
-
-        // Create front buffer surface
-        Front = new TSurface();
-        Front->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_RGBA8);
-
-        // Create back buffer surface 
-        Back = new TSurface();
-        Back->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_RGBA8);
-        if (UsingHardware)
-            ddsd.ddsCaps.dwCaps |= DDSCAPS_VIDEOMEMORY;     // Use video memory for back buffer
-        else                                                // if not using hardware 3D.
-            ddsd.ddsCaps.dwCaps |= DDSCAPS_SYSTEMMEMORY;    
-
-        // Verify graphics capabilities
-        sg_features features = sg_query_features();
-        if (!features.image_float) {
-            FatalError("GPU does not support required floating point textures");
-        }
-    }
-    else  // Exclusive full screen mode
-    {
-
-        SetExclusiveMode();
-        EnterVideoMode(dwidth, dheight, dbitsperpixel);
-
-        // First, create complex flipping primary surface
-
-        memset(&ddsd, sizeof(DDSURFACEDESC), 0);
-        ddsd.dwSize            = sizeof(DDSURFACEDESC);
-        ddsd.dwFlags           = DDSD_CAPS | DDSD_BACKBUFFERCOUNT;
-        ddsd.ddsCaps.dwCaps    = DDSCAPS_PRIMARYSURFACE | DDSCAPS_FLIP | 
-                                                  DDSCAPS_COMPLEX | DDSCAPS_3DDEVICE;
-        ddsd.dwBackBufferCount = 1;
-
-        // Create the primary surface with 1 back buffer
         // Create front and back buffers
         Front = new TSurface();
-        Front->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_RGBA8);
-        
+        Front->Initialize(dwidth, dheight, color_format);
+
         Back = new TSurface();
-        Back->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_RGBA8);
+        Back->Initialize(dwidth, dheight, color_format);
+
+        // Verify required graphics capabilities
+        sg_features features = sg_query_features();
+        if (!features.image_float || !features.instancing) {
+            FatalError("GPU does not support required features");
+        }
     }
+    // Set up display properties
+    surface = Back;
+    flags = Back->flags;
+    stride = Back->Stride();
+    originx = 0;
+    originy = 0;
+    clipmode = CLIP_EDGES;
+    clipx = 0;
+    clipy = 0;
+    width = dwidth;
+    height = dheight;
+    clipwidth = dwidth;
+    clipheight = dheight;
+    bitsperpixel = 32; // Always use 32-bit color
 
-    Front = new TSurface(front);
-    Back  = new TSurface(back);
+    // Create depth buffer
+    ZBuffer = new TSurface();
+    ZBuffer->Initialize(dwidth, dheight, SG_PIXELFORMAT_DEPTH_STENCIL);
 
-    surface      = back;
-    flags        = Back->flags;
-    stride       = Back->Stride();
-    originx      = 0;
-    originy      = 0;
-    clipmode     = CLIP_EDGES;
-    clipx        = 0;
-    clipy        = 0;
-    width        = dwidth;
-    height       = dheight;
-    clipwidth    = dwidth;
-    clipheight   = dheight;
+    // Create default render pass
+    sg_pass_desc pass_desc = {};
+    pass_desc.color_attachments[0].image = Back->GetSGImage();
+    pass_desc.depth_stencil_attachment.image = ZBuffer->GetSGImage();
+    default_pass = sg_make_pass(&pass_desc);
 
-    bitsperpixel = Back->BitsPerPixel();
-
-    if (Force15Bit)
-        bitsperpixel = 15;
-    else if (Force16Bit)
-        bitsperpixel = 16;
-    else if (ddsd.ddpfPixelFormat.dwRBitMask == 0xf800)
-        bitsperpixel = 16;
-    else 
-        bitsperpixel = 15;
-
-    // Only create a zbuffer if ZBufferBitDepth > 0
-    if (ZBufferBitDepth) 
-    {
-        // Then, create Z-Buffer. The ZBufferMemType and ZBufferBitDepth variables
-        // are set up when the Direct3D device enumeration is done at runtime
-        memset(&ddsd, sizeof(DDSURFACEDESC), 0);
-        ddsd.dwSize   = sizeof(DDSURFACEDESC);
-        ddsd.dwFlags  = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS | DDSD_ZBUFFERBITDEPTH;
-        ddsd.dwWidth  = dwidth;
-        ddsd.dwHeight = dheight;
-
-        // If a hardware device is present allocate zbuffer in VRAM else use
-        // system ram.
-
-        if (UsingHardware == true)
-            ddsd.ddsCaps.dwCaps = DDSCAPS_VIDEOMEMORY | DDSCAPS_ZBUFFER;
-        
-        else
-            ddsd.ddsCaps.dwCaps = DDSCAPS_SYSTEMMEMORY | DDSCAPS_ZBUFFER;
-
-        ddsd.dwZBufferBitDepth  = ZBufferBitDepth;
-
-        // Create the zbuffer
-        // Create depth-stencil buffer
-        sg_image_desc depth_desc = {
-            .type = SG_IMAGETYPE_2D,
-            .width = WIDTH,
-            .height = HEIGHT,
-            .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
-            .sample_count = 1,
-            .usage = SG_USAGE_IMMUTABLE
-        };
-        
-        ZBuffer = new TSurface();
-        ZBuffer->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_DEPTH_STENCIL);
-    }
-
-    Setup3D(dwidth, dheight);
-
-    if (UseClearZBuffer)
-        InitClearZBuffer();
-
+    // Clear buffers
     Front->Clear();
     Back->Clear();
+    ZBuffer->Clear();
 
     return true;
 }
