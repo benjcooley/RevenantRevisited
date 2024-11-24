@@ -45,10 +45,9 @@ class TSurface
     void* locked;            // True if surface locked
 
     // Buffers
-    uint8_t* cpu_buffer;     // CPU-side pixel buffer for modifications
-    size_t buffer_size;      // Size of CPU buffer in bytes
-    bool buffer_dirty;       // Whether CPU buffer needs to be uploaded to GPU
-    sg_image image;          // Sokol GPU texture 
+    uint8_t* cpu_buffer;     // CPU-side staging buffer for modifications
+    size_t buffer_size;      // Size of staging buffer in bytes
+    sg_image image;          // Sokol GPU texture
     sg_pipeline pipeline;    // Sokol render pipeline
     sg_bindings bindings;    // Sokol resource bindings
 
