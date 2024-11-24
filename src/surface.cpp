@@ -677,8 +677,6 @@ void* TSurface::Lock()
 
             // Initialize CPU buffer with zeros if no previous content
             memset(cpu_buffer, 0, buffer_size);
-
-            sg_destroy_buffer(readback_buf);
         }
 
         locked = cpu_buffer;
@@ -691,36 +689,18 @@ bool TSurface::Unlock()
     if (locked) {
         // Upload staging buffer to GPU texture
         if (image.id && cpu_buffer) {
-            // Setup image data based on image type
+            // Create immutable buffer with current CPU data
+            sg_buffer_desc buf_desc = {};
+            buf_desc.size = buffer_size;
+            buf_desc.type = SG_BUFFERTYPE_VERTEXBUFFER;
+            buf_desc.usage = SG_USAGE_IMMUTABLE;
+            buf_desc.data.ptr = cpu_buffer;
+            buf_desc.data.size = buffer_size;
+            
+            // Update image content via buffer
             sg_image_data img_data = {};
-            switch (img_type) {
-                case SG_IMAGETYPE_2D:
-                    img_data.subimage[0][0].ptr = cpu_buffer;
-                    img_data.subimage[0][0].size = buffer_size;
-                    break;
-                    
-                case SG_IMAGETYPE_3D:
-                case SG_IMAGETYPE_ARRAY:
-                    // Handle 3D/Array textures with proper layer count
-                    for (int i = 0; i < 1; i++) { // Adjust layer count as needed
-                        img_data.subimage[i][0].ptr = cpu_buffer + (i * buffer_size);
-                        img_data.subimage[i][0].size = buffer_size;
-                    }
-                    break;
-                    
-                case SG_IMAGETYPE_CUBE:
-                    // Handle cubemap faces
-                    for (int face = 0; face < 6; face++) {
-                        img_data.subimage[0][face].ptr = cpu_buffer + (face * buffer_size / 6);
-                        img_data.subimage[0][face].size = buffer_size / 6;
-                    }
-                    break;
-                    
-                default:
-                    break;
-            }
-
-            // Update texture with new content
+            img_data.subimage[0][0].ptr = cpu_buffer;
+            img_data.subimage[0][0].size = buffer_size;
             sg_update_image(image, &img_data);
         }
         locked = nullptr;
