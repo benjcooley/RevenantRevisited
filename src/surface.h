@@ -9,13 +9,9 @@
 #include "revenant.h"
 #include "graphics.h"
 
-#ifndef __DDRAW_INCLUDED__
-struct IDirectDrawSurface;
-typedef struct IDirectDrawSurface *LPDIRECTDRAWSURFACE;
-struct _DDBLTFX;
-typedef struct _DDBLTFX DDBLTFX;
-typedef struct _DDBLTFX *LPDDBLTFX;
-#endif
+// Forward declarations for sokol types
+typedef struct sg_image sg_image;
+typedef struct sg_buffer sg_buffer;
 
 #define SURFACE_UNKNOWN 0
 #define SURFACE_VIDEO   1
@@ -61,8 +57,8 @@ class TSurface
     virtual int32_t SurfaceType() { return 0; }
       // Returns type of surface this is
 
-    virtual LPDIRECTDRAWSURFACE GetDDSurface() { return SURFACE_UNKNOWN; }
-      // Returns LPDIRECTDRAWSURFACE pointer or Null if not Direct Draw Surface.
+    virtual sg_image* GetSGImage() { return nullptr; }
+      // Returns sokol image handle or nullptr if not a valid image
 
     virtual int32_t BitsPerPixel() {return bitsperpixel;}
       // Returns current bits per pixel
