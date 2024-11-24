@@ -634,3 +634,28 @@ int32_t TSurface::WriteTextShadow(char *text, int32_t x, int32_t y, int32_t numl
 
     return len;
 }
+void* TSurface::Lock()
+{
+    if (!locked) {
+        // Map buffer for CPU access if needed
+        if (!buffer.id) {
+            sg_buffer_desc buf_desc = {};
+            buf_desc.usage = SG_USAGE_DYNAMIC;
+            buf_desc.size = width * height * sizeof(uint32_t);
+            buffer = sg_make_buffer(&buf_desc);
+        }
+        
+        locked = sg_map_buffer(buffer);
+    }
+    return locked;
+}
+
+bool TSurface::Unlock()
+{
+    if (locked) {
+        sg_unmap_buffer(buffer);
+        locked = nullptr;
+        return true;
+    }
+    return false;
+}
