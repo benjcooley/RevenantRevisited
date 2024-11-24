@@ -297,7 +297,7 @@ bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t flags, 
 {
     SDrawParam tmpdp = *dp;
     
-    if (!ParamBlitSetup(tmpdp, srcsurface, flags, fx))
+    if (!ParamBlitSetup(tmpdp, srcsurface, flags))
         return false;
 
     // Setup Sokol render pass
