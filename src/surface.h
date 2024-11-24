@@ -201,7 +201,7 @@ class TSurface
     bool Blit(int32_t x, int32_t y, PTSurface surface, uint32_t drawmode = DM_USEDEFAULT,
                int32_t flags = 0)
     { 
-        return Blit(x, y, surface, 0, 0, surface->Width(), surface->Height(), drawmode, ddflags, fx);
+        return Blit(x, y, surface, 0, 0, surface->Width(), surface->Height(), drawmode, flags);
     }
 
   // Shortcut blit functions
