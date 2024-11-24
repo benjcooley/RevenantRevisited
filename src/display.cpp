@@ -51,6 +51,9 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     if (Front)
         return true;
 
+    width = dwidth;
+    height = dheight;
+    bitsperpixel = 32; // Always use 32-bit RGBA color
     SaveZBuffer = nullptr;
     ResetUpdateCallbacks();
 
@@ -64,36 +67,26 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     desc.pass_pool_size = 16;
     sg_setup(&desc);
 
-    // Always use 32-bit RGBA color
-    const sg_pixel_format color_format = SG_PIXELFORMAT_RGBA8;
+    // Create front and back buffer images
+    sg_image_desc img_desc = {};
+    img_desc.width = width;
+    img_desc.height = height;
+    img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    img_desc.usage = SG_USAGE_DYNAMIC;
+    img_desc.render_target = true;
 
-        // Create front and back buffers
-        Front = new TSurface();
-        Front->Initialize(dwidth, dheight, color_format);
+    sg_image front_img = sg_make_image(&img_desc);
+    sg_image back_img = sg_make_image(&img_desc);
 
-        Back = new TSurface();
-        Back->Initialize(dwidth, dheight, color_format);
+    // Create front and back buffer surfaces
+    Front = new TSurface(front_img, width, height, bitsperpixel);
+    Back = new TSurface(back_img, width, height, bitsperpixel);
 
-        // Verify required graphics capabilities
-        sg_features features = sg_query_features();
-        if (!features.image_float || !features.instancing) {
-            FatalError("GPU does not support required features");
-        }
+    // Verify required graphics capabilities
+    sg_features features = sg_query_features();
+    if (!features.image_float || !features.instancing) {
+        FatalError("GPU does not support required features");
     }
-    // Set up display properties
-    surface = Back;
-    flags = Back->flags;
-    stride = Back->Stride();
-    originx = 0;
-    originy = 0;
-    clipmode = CLIP_EDGES;
-    clipx = 0;
-    clipy = 0;
-    width = dwidth;
-    height = dheight;
-    clipwidth = dwidth;
-    clipheight = dheight;
-    bitsperpixel = 32; // Always use 32-bit color
 
     // Create depth buffer
     ZBuffer = new TSurface();

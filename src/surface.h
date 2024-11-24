@@ -57,6 +57,8 @@ class TSurface
 
     TSurface();
       // Initializes Surface
+    TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp);
+      // Initialize with existing Sokol image
     virtual ~TSurface();
       // Releases Surface
 
