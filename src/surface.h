@@ -10,7 +10,7 @@
 #include "graphics.h"
 #include "sokol_gfx.h"
 #include "HandmadeMath.h"
-#include "shaders/blit.h"
+#include "blit.h"
 
 #define SURFACE_UNKNOWN 0
 #define SURFACE_VIDEO   1
