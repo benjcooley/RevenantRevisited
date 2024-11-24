@@ -645,7 +645,11 @@ void* TSurface::Lock()
             buffer = sg_make_buffer(&buf_desc);
         }
         
-        locked = sg_map_buffer(buffer);
+        sg_range range = { 
+            .ptr = nullptr,
+            .size = width * height * sizeof(uint32_t)
+        };
+        locked = sg_map_buffer(buffer, &range);
     }
     return locked;
 }
@@ -653,7 +657,11 @@ void* TSurface::Lock()
 bool TSurface::Unlock()
 {
     if (locked) {
-        sg_unmap_buffer(buffer);
+        sg_range range = {
+            .ptr = locked,
+            .size = width * height * sizeof(uint32_t)
+        };
+        sg_unmap_buffer(buffer, &range);
         locked = nullptr;
         return true;
     }
