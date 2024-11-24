@@ -386,16 +386,16 @@ bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t flags)
     return result;
 }
 
-bool TSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t ddflags, LPDDBLTFX fx)
+bool TSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t flags)
 {
     if (surface && surface->UseGetBlit())  // If source surface is complex, call its Get function instead
     {
-        return surface->ParamGetBlit(dp, this, ddflags, fx);
+        return surface->ParamGetBlit(dp, this, flags);
     }
 
     if (!(dp->drawmode & DM_NODRAW))
     {
-        if (!BlitHandler(dp, surface, ddflags, fx))
+        if (!BlitHandler(dp, surface, flags))
             return false;
     }
     if (GetZBuffer() && 
@@ -410,7 +410,7 @@ bool TSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t ddflags, LPD
 //      {
 //          dp->drawmode |= DM_NOHARDWARE;
 //      }
-        if (!GetZBuffer()->BlitHandler(dp, zbuffer, ddflags, fx))
+        if (!GetZBuffer()->BlitHandler(dp, zbuffer, flags))
              return false;
     }
     if (GetNormalBuffer() && 
@@ -421,7 +421,7 @@ bool TSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t ddflags, LPD
         PTSurface normals = nullptr;
         if (surface)
             normals = surface->GetNormalBuffer();
-        if (!GetNormalBuffer()->BlitHandler(dp, normals, ddflags, fx))
+        if (!GetNormalBuffer()->BlitHandler(dp, normals, flags))
             return false;
     }
 
