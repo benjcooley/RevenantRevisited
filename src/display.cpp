@@ -86,10 +86,11 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
         // Create the primary surface
         TRY_DD(DirectDraw->CreateSurface(&ddsd, &front, nullptr))
 
-        ddsd.dwFlags = DDSD_WIDTH | DDSD_HEIGHT | DDSD_CAPS;
-        ddsd.dwWidth = WIDTH;
-        ddsd.dwHeight = HEIGHT;
-        ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_3DDEVICE;
+        // Create back buffer surface
+        img_desc.width = WIDTH;
+        img_desc.height = HEIGHT;
+        img_desc.usage = SG_USAGE_DYNAMIC;
+        img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
         if (UsingHardware)
             ddsd.ddsCaps.dwCaps |= DDSCAPS_VIDEOMEMORY;     // Use video memory for back buffer
         else                                                // if not using hardware 3D.
@@ -97,16 +98,10 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
 
         TRY_DD(DirectDraw->CreateSurface(&ddsd, &back, nullptr))
 
-        ddsd.dwSize  = sizeof (ddsd);
-        ddsd.dwFlags = DDSD_PIXELFORMAT;
-        TRY_DD(back->GetSurfaceDesc(&ddsd))
-
-        if (ddsd.ddpfPixelFormat.dwRGBBitCount != 16)
-            FatalError("Game must run in a 16 bit per pixel mode");
-
-        TRY_DD(DirectDraw->CreateClipper(0, &clipper, nullptr))
-        TRY_DD(clipper->SetHWnd(0, MainWindow.Hwnd()))
-        TRY_DD(front->SetClipper(clipper))
+        // Verify color format
+        if (sg_query_pixelformat(SG_PIXELFORMAT_RGBA8).sample_size != 32) {
+            FatalError("Game requires 32-bit color support");
+        }
     }
     else  // Exclusive full screen mode
     {
@@ -127,9 +122,9 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
         TRY_DD(DirectDraw->CreateSurface(&ddsd, &front, nullptr))
 
         // Get pointer to back buffer
-        ddscaps.dwCaps = DDSCAPS_BACKBUFFER;
-    
-        TRY_DD(front->GetAttachedSurface(&ddscaps, &back))
+        // Back buffer is managed by Sokol
+        Back = new TSurface();
+        Back->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_RGBA8);
     }
 
     Front = new TSurface(front);
@@ -187,7 +182,8 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
         // Attach ZBuffer to the back buffer
         // Modern GPUs handle z-buffer attachment internally
 
-        ZBuffer = new TDDSurface(zbuffer);
+        ZBuffer = new TSurface();
+        ZBuffer->Initialize(WIDTH, HEIGHT, SG_PIXELFORMAT_D24S8);
     }
 
     Setup3D(dwidth, dheight);
@@ -327,10 +323,12 @@ bool TDisplay::FlipPage(bool Wait)
     }
     else 
     {
-        while(front->GetFlipStatus(DDGFS_ISFLIPDONE) == DDERR_WASSTILLDRAWING)
-            Sleep(1);
-
-        TRY_DD(front->Flip(nullptr, (Wait ? DDFLIP_WAIT : nullptr)))
+        // Use Sokol frame synchronization
+        if (Wait) {
+            sg_commit();
+        }
+        sg_begin_default_pass(&pass_action, WIDTH, HEIGHT);
+        sg_end_pass();
     }
 
     if (!SingleBuffer)              // do NOT switch when single buffered
