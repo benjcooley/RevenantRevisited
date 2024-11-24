@@ -15,17 +15,17 @@
 _STRUCTDEF(RestoreRect)
 _CLASSDEF(TDisplay)
 
-class TDisplay : public TDDSurface
+class TDisplay : public TSurface 
 {
   protected:
     int32_t currentpage;            // Currently Displayed Front/Back Suface
     bool updateenabled;         // Whether restore system is enabled
-    PTDDSurface Front;          // Screen Surface Structures.
+    TSurface* Front;          // Screen Surface Structures.
 
   public:
-    PTDDSurface Back;
-    PTDDSurface ZBuffer;
-    PTDDSurface SaveZBuffer;    // Where the real zbuffer goes when we're using a secondary z
+    TSurface* Back;
+    TSurface* ZBuffer;
+    TSurface* SaveZBuffer;    // Where the real zbuffer goes when we're using a secondary z
 
   public:
     TDisplay();
@@ -60,8 +60,6 @@ class TDisplay : public TDDSurface
     virtual int32_t SurfaceType() { return SURFACE_DISPLAY; }
       // Returns type of surface this is
 
-    uint32_t GetSurface() {return (uint32_t)surface;}
-      // Returns LPDIRECTDRAWSURFACE pointer or Null if not Direct Draw Surface.
 
     TSurface* BackBuffer() { return Back; }
       // Returns the back buffer surface
@@ -99,11 +97,11 @@ class TDisplay : public TDDSurface
   // Put and blit functions which do primary, zbuffer, and normal buffer surface
     virtual bool ParamDraw(PSDrawParam dp, PTBitmap bitmap = nullptr);
       // Copies specified bitmap to current bitmap
-    virtual bool ParamBlit(PSDrawParam dp, TSurface* surface, int32_t flags = 0, LPDDBLTFX fx = nullptr);
+    virtual bool ParamBlit(PSDrawParam dp, TSurface* surface, int32_t flags = 0);
       // Blits from surface to this surface. RECT sets size of blit. 
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting
-    virtual bool ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t flags = 0, LPDDBLTFX fx = nullptr);
+    virtual bool ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t flags = 0);
       // Blits from this surface to surface. RECT sets size of blit. 
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting.  Called by ParamBlit when blitting from a complex surface
@@ -182,10 +180,6 @@ class TDisplay : public TDDSurface
 //  NOTE: This code is part of surface.cpp now (BEN)
 //  virtual bool ZPut(int32_t x, int32_t y, int32_t z, PTBitmap bitmap, uint32_t drawmode = DM_USEDEFAULT);
 
-  private:
-    bool operator = (LPDIRECTDRAWSURFACE surface)
-        { memcpy(surface, this, sizeof(this)); return true; };
-      // Redefines '=' to allow assigning strings.
   
     void AddSubRect(int32_t index, int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t flags);
       // Calls AddUpdateRect with parameters of a smaller rect.
