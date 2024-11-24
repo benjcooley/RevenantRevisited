@@ -60,11 +60,11 @@ class TSurface
     virtual ~TSurface();
       // Releases Surface
 
-    virtual int32_t SurfaceType() { return 0; }
+    virtual int32_t SurfaceType() { return SURFACE_VIDEO; }
       // Returns type of surface this is
 
-    virtual sg_image* GetSGImage() { return nullptr; }
-      // Returns sokol image handle or nullptr if not a valid image
+    virtual sg_image GetSGImage() { return image; }
+      // Returns sokol image handle
 
     virtual int32_t BitsPerPixel() {return bitsperpixel;}
       // Returns current bits per pixel

@@ -23,10 +23,15 @@ TSurface::TSurface()
     clipwidth = width;
     clipheight = height;
     clipmode = CLIP_EDGES;
+    flags = 0;
+    keycolor = 0;
+    originx = originy = 0;
     
     // Initialize buffers
     cpu_buffer = nullptr;
     buffer_size = 0;
+    surface = nullptr;
+    ownssurface = false;
     // Initialize image description with defaults
     img_desc = {};
     img_desc.type = SG_IMAGETYPE_2D;

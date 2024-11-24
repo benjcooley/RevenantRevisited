@@ -132,8 +132,8 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel
         TRY_DD(front->GetAttachedSurface(&ddscaps, &back))
     }
 
-    Front = new TDDSurface(front);
-    Back  = new TDDSurface(back);
+    Front = new TSurface(front);
+    Back  = new TSurface(back);
 
     surface      = back;
     flags        = Back->flags;
