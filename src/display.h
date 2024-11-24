@@ -15,18 +15,20 @@
 _STRUCTDEF(RestoreRect)
 _CLASSDEF(TDisplay)
 
-class TDisplay : public TSurface 
+class TDisplay
 {
-  protected:
-    int32_t currentpage;            // Currently Displayed Front/Back Suface
-    bool updateenabled;         // Whether restore system is enabled
-    TSurface* Front;          // Screen Surface Structures.
-
-  public:
-    TSurface* Back;
-    TSurface* ZBuffer;
-    TSurface* SaveZBuffer;    // Where the real zbuffer goes when we're using a secondary z
-    sg_pass default_pass;     // Default render pass for Sokol
+private:
+    int32_t currentpage;            // Currently Displayed Front/Back Surface
+    bool updateenabled;             // Whether restore system is enabled
+    TSurface* Front;                // Front buffer surface
+    TSurface* Back;                 // Back buffer surface  
+    TSurface* ZBuffer;              // Depth buffer surface
+    TSurface* SaveZBuffer;          // Where the real zbuffer goes when we're using a secondary z
+    sg_pass default_pass;           // Default render pass for Sokol
+    
+    int32_t width;                  // Display width
+    int32_t height;                 // Display height
+    int32_t bitsperpixel;           // Color depth
 
   public:
     TDisplay();
