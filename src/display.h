@@ -27,10 +27,10 @@ _CLASSDEF(TDisplay)
 class TDisplay
 {
   public:
+    // Creates Display Structures and Surfaces
     TDisplay();
-      // Creates Display Structures and Surfaces
+    // Destructor
     ~TDisplay();
-      // Destructor
 
       // Clear ZBuffer Info:
       // -------------------
@@ -45,40 +45,39 @@ class TDisplay
       // never draws to the video zbuffer except when drawing 3D objects, and the Viewport->Clear()
       // function is actually faster than our dirty rectangle routine anyway.
 
+    // Creates a clear zbuffer for use with the Viewport->Clear() function
+    // and swaps the actual zbuffer with the clear buffer so the rest of the program
+    // thinks the clear buffer is the actual zbuffer
     void InitClearZBuffer();
-      // Creates a clear zbuffer for use with the Viewport->Clear() function
-      // and swaps the actual zbuffer with the clear buffer so the rest of the program
-      // thinks the clear buffer is the actual zbuffer
+    // Closes the clear zbuffer and puts the real video zbuffer back as the main zbuffer
     void CloseClearZBuffer();
-      // Closes the clear zbuffer and puts the real video zbuffer back as the main zbuffer
+    // True if we're currently using a secondary zbuffer
     bool UsingClearZBuffer() { return savezbuffer != nullptr; }
-      // True if we're currently using a secondary zbuffer
+    // Returns the real display zbuffer (used by the Scene3D.RestoreZBuffer() function)
     TSurface* GetRealZBuffer() { if (savezbuffer) return savezbuffer; else return zbuffer; }
-      // Returns the real display zbuffer (used by the Scene3D.RestoreZBuffer() function)
 
+    // Returns type of surface this is
     virtual int32_t SurfaceType() { return SURFACE_DISPLAY; }
-      // Returns type of surface this is
 
-
+    // Returns the back buffer surface
     TSurface* BackBuffer() { return backbuffer; }
-      // Returns the back buffer surface
+    // Returns the front buffer surface
     TSurface* FrontBuffer() { return frontbuffer; }
-      // Returns the front buffer surface
 
+    // Initializes the Display Structures and Sets up the screen.
     bool Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel);
-      // Initializes the Display Structures and Sets up the screen.
+    // Shuts down and frees the display
     virtual bool Close();
-      // Shuts down and frees the display
+    // Restores the display device after having been tabbed out of
     bool Restore();
-      // Restores the display device after having been tabbed out of
   
+    // Returns ZBuffer surface for this surface (if it has one)
     virtual TSurface* GetZBuffer() { return zbuffer; }  // Returns nullptr if display ZBuffer disabled
-      // Returns ZBuffer surface for this surface (if it has one)
+    // Returns the normal buffer for this surface (if it has one)
     virtual TSurface* GetNormalBuffer() { return nullptr; }
-      // Returns the normal buffer for this surface (if it has one)
 
+    // Flips front and back surfaces
     bool FlipPage(bool Wait = true);
-      // Flips front and back surfaces
 
     bool PutToScreen(int32_t x, int32_t y, int32_t width, int32_t height);
       // Copies specific area from back buffer to front buffer (or window) so it can
