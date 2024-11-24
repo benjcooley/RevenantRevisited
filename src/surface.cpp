@@ -646,14 +646,7 @@ void* TSurface::Lock()
 
         // Read back current texture content into staging buffer
         if (image.id) {
-            // Create temporary readback buffer with appropriate type
-            sg_buffer readback_buf = sg_make_buffer(&(sg_buffer_desc){
-                .size = buffer_size,
-                .usage = SG_USAGE_STREAM,
-                .type = SG_BUFFERTYPE_VERTEXBUFFER
-            });
-
-            // Setup image data based on image type
+            // Setup image data based on image type for initial state
             sg_image_data img_data = {};
             switch (img_type) {
                 case SG_IMAGETYPE_2D:
@@ -682,16 +675,8 @@ void* TSurface::Lock()
                     break;
             }
 
-            // Read current texture content
-            sg_image_desc desc = sg_query_image_desc(image);
-            sg_update_buffer(readback_buf, cpu_buffer, buffer_size);
-
-            // Copy readback buffer to CPU staging buffer
-            void* mapped = sg_map_buffer(readback_buf);
-            if (mapped) {
-                memcpy(cpu_buffer, mapped, buffer_size);
-                sg_unmap_buffer(readback_buf);
-            }
+            // Initialize CPU buffer with zeros if no previous content
+            memset(cpu_buffer, 0, buffer_size);
 
             sg_destroy_buffer(readback_buf);
         }
