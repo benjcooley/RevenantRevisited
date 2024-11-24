@@ -27,6 +27,7 @@ TSurface::TSurface()
     // Initialize buffers
     cpu_buffer = nullptr;
     buffer_size = 0;
+    img_type = SG_IMAGETYPE_2D; // Default to 2D textures
 }
 
 TSurface::~TSurface()
@@ -645,17 +646,42 @@ void* TSurface::Lock()
 
         // Read back current texture content into staging buffer
         if (image.id) {
-            // Create temporary readback buffer
+            // Create temporary readback buffer with appropriate type
             sg_buffer readback_buf = sg_make_buffer(&(sg_buffer_desc){
                 .size = buffer_size,
                 .usage = SG_USAGE_STREAM,
                 .type = SG_BUFFERTYPE_PIXELDATA
             });
 
-            // Copy texture content to readback buffer
+            // Setup image data based on image type
             sg_image_data img_data = {};
-            img_data.subimage[0][0].ptr = cpu_buffer;
-            img_data.subimage[0][0].size = buffer_size;
+            switch (img_type) {
+                case SG_IMAGETYPE_2D:
+                    img_data.subimage[0][0].ptr = cpu_buffer;
+                    img_data.subimage[0][0].size = buffer_size;
+                    break;
+                    
+                case SG_IMAGETYPE_3D:
+                case SG_IMAGETYPE_ARRAY:
+                    // Handle 3D/Array textures with proper layer count
+                    for (int i = 0; i < 1; i++) { // Adjust layer count as needed
+                        img_data.subimage[i][0].ptr = cpu_buffer + (i * buffer_size);
+                        img_data.subimage[i][0].size = buffer_size;
+                    }
+                    break;
+                    
+                case SG_IMAGETYPE_CUBE:
+                    // Handle cubemap faces
+                    for (int face = 0; face < 6; face++) {
+                        img_data.subimage[0][face].ptr = cpu_buffer + (face * buffer_size / 6);
+                        img_data.subimage[0][face].size = buffer_size / 6;
+                    }
+                    break;
+                    
+                default:
+                    break;
+            }
+
             sg_copy_image_to_buffer(image, readback_buf, &img_data);
 
             // Copy readback buffer to CPU staging buffer
@@ -678,9 +704,34 @@ bool TSurface::Unlock()
     if (locked) {
         // Upload staging buffer to GPU texture
         if (image.id && cpu_buffer) {
+            // Setup image data based on image type
             sg_image_data img_data = {};
-            img_data.subimage[0][0].ptr = cpu_buffer;
-            img_data.subimage[0][0].size = buffer_size;
+            switch (img_type) {
+                case SG_IMAGETYPE_2D:
+                    img_data.subimage[0][0].ptr = cpu_buffer;
+                    img_data.subimage[0][0].size = buffer_size;
+                    break;
+                    
+                case SG_IMAGETYPE_3D:
+                case SG_IMAGETYPE_ARRAY:
+                    // Handle 3D/Array textures with proper layer count
+                    for (int i = 0; i < 1; i++) { // Adjust layer count as needed
+                        img_data.subimage[i][0].ptr = cpu_buffer + (i * buffer_size);
+                        img_data.subimage[i][0].size = buffer_size;
+                    }
+                    break;
+                    
+                case SG_IMAGETYPE_CUBE:
+                    // Handle cubemap faces
+                    for (int face = 0; face < 6; face++) {
+                        img_data.subimage[0][face].ptr = cpu_buffer + (face * buffer_size / 6);
+                        img_data.subimage[0][face].size = buffer_size / 6;
+                    }
+                    break;
+                    
+                default:
+                    break;
+            }
 
             // Create and fill staging buffer
             sg_buffer staging_buf = sg_make_buffer(&(sg_buffer_desc){
