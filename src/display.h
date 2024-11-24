@@ -24,13 +24,13 @@
 _STRUCTDEF(RestoreRect)
 _CLASSDEF(TDisplay)
 
-class TDisplay
+class TDisplay 
 {
   public:
     // Creates Display Structures and Surfaces
     TDisplay();
     // Destructor
-    ~TDisplay();
+    virtual ~TDisplay();
 
       // Clear ZBuffer Info:
       // -------------------
@@ -56,13 +56,10 @@ class TDisplay
     // Returns the real display zbuffer (used by the Scene3D.RestoreZBuffer() function)
     TSurface* GetRealZBuffer() { if (savezbuffer) return savezbuffer; else return zbuffer; }
 
-    // Returns type of surface this is
-    virtual int32_t SurfaceType() { return SURFACE_DISPLAY; }
-
     // Returns the back buffer surface
-    TSurface* BackBuffer() { return backbuffer; }
-    // Returns the front buffer surface
-    TSurface* FrontBuffer() { return frontbuffer; }
+    TSurface* BackBuffer() const { return backbuffer; }
+    // Returns the front buffer surface 
+    TSurface* FrontBuffer() const { return frontbuffer; }
 
     // Initializes the Display Structures and Sets up the screen.
     bool Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel);
@@ -71,10 +68,10 @@ class TDisplay
     // Restores the display device after having been tabbed out of
     bool Restore();
   
-    // Returns ZBuffer surface for this surface (if it has one)
-    virtual TSurface* GetZBuffer() { return zbuffer; }  // Returns nullptr if display ZBuffer disabled
-    // Returns the normal buffer for this surface (if it has one)
-    virtual TSurface* GetNormalBuffer() { return nullptr; }
+    // Returns ZBuffer surface (nullptr if display ZBuffer disabled)
+    TSurface* GetZBuffer() const { return zbuffer; }
+    // Returns the normal buffer (nullptr if not available)
+    TSurface* GetNormalBuffer() const { return nullptr; }
 
     // Flips front and back surfaces
     bool FlipPage(bool Wait = true);
