@@ -77,11 +77,28 @@ class TSurface
     virtual bool Lost() = 0;
       // Returns true if the surface needs to be regenerated.
     
-    virtual void *Lock() = 0;
-      // Locks surface. Returns pointer to surface or nullptr 
-      // if buffer couldn't be locked. (must set locked ptr)
-    virtual bool Unlock() = 0;
-      // Unlocks surface.(must clear locked ptr)
+    virtual void* Lock() 
+    {
+        if (!locked) {
+            // Map buffer for CPU access
+            sg_buffer_desc map_desc = {};
+            map_desc.usage = SG_USAGE_DYNAMIC;
+            map_desc.size = width * height * sizeof(uint32_t);
+            locked = sg_map_buffer(buffer, &map_desc);
+        }
+        return locked;
+    }
+
+    virtual bool Unlock() 
+    {
+        if (locked) {
+            sg_unmap_buffer(buffer);
+            locked = nullptr;
+            return true;
+        }
+        return false;
+    }
+
     bool IsLocked() { return locked != nullptr; }
     
     

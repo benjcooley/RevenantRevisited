@@ -17,13 +17,21 @@
 
 TSurface::TSurface()
 {
-    locked     = nullptr;
-    width      = height = stride = 0;
-    clipx      = clipy  = 0;
-    clipwidth  = width;
+    locked = nullptr;
+    width = height = stride = 0;
+    clipx = clipy = 0;
+    clipwidth = width;
     clipheight = height;
+    clipmode = CLIP_EDGES;
     
-    clipmode   = CLIP_EDGES; 
+    // Initialize Sokol image descriptor to defaults
+    sg_image_desc img_desc = {};
+    img_desc.type = SG_IMAGETYPE_2D;
+    img_desc.render_target = true;
+    img_desc.min_filter = SG_FILTER_LINEAR;
+    img_desc.mag_filter = SG_FILTER_LINEAR;
+    img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
 }
 
 TSurface::~TSurface()
@@ -285,13 +293,29 @@ bool TSurface::ParamBlitSetup(RSDrawParam tmpdp, PTSurface srcsurface, int32_t d
     return true;
 }
 
-bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t ddflags, LPDDBLTFX fx)
+bool TSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t flags, void* fx)
 {
-    SDrawParam  tmpdp = *dp;
-    SDrawBlock  tmpdb;
-
-    if (!ParamBlitSetup(tmpdp, srcsurface, ddflags, fx))
+    SDrawParam tmpdp = *dp;
+    
+    if (!ParamBlitSetup(tmpdp, srcsurface, flags, fx))
         return false;
+
+    // Setup Sokol render pass
+    sg_pass_action pass_action = {};
+    pass_action.colors[0].action = SG_ACTION_LOAD;
+    
+    // Create pipeline if needed
+    if (!pipeline.id) {
+        sg_pipeline_desc pip_desc = {};
+        pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+        pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
+        pip_desc.shader = sg_make_shader(blit_shader_desc());
+        pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+        pip_desc.blend.enabled = true;
+        pip_desc.blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+        pip_desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pipeline = sg_make_pipeline(&pip_desc);
+    }
 
     tmpdb.dbufwidth  = width;
     tmpdb.dbufheight = height;
