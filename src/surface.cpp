@@ -27,7 +27,18 @@ TSurface::TSurface()
     // Initialize buffers
     cpu_buffer = nullptr;
     buffer_size = 0;
-    img_type = SG_IMAGETYPE_2D; // Default to 2D textures
+    // Initialize image description with defaults
+    img_desc = {};
+    img_desc.type = SG_IMAGETYPE_2D;
+    img_desc.render_target = false;
+    img_desc.num_mipmaps = 1;
+    img_desc.usage = SG_USAGE_DYNAMIC;
+    img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    img_desc.sample_count = 1;
+    img_desc.min_filter = SG_FILTER_LINEAR;
+    img_desc.mag_filter = SG_FILTER_LINEAR;
+    img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
 }
 
 TSurface::~TSurface()
@@ -646,33 +657,17 @@ void* TSurface::Lock()
 
         // Read back current texture content into staging buffer
         if (image.id) {
-            // Setup image data based on image type for initial state
+            // Setup image data for 2D texture
             sg_image_data img_data = {};
-            switch (img_type) {
-                case SG_IMAGETYPE_2D:
-                    img_data.subimage[0][0].ptr = cpu_buffer;
-                    img_data.subimage[0][0].size = buffer_size;
-                    break;
-                    
-                case SG_IMAGETYPE_3D:
-                case SG_IMAGETYPE_ARRAY:
-                    // Handle 3D/Array textures with proper layer count
-                    for (int i = 0; i < 1; i++) { // Adjust layer count as needed
-                        img_data.subimage[i][0].ptr = cpu_buffer + (i * buffer_size);
-                        img_data.subimage[i][0].size = buffer_size;
-                    }
-                    break;
-                    
-                case SG_IMAGETYPE_CUBE:
-                    // Handle cubemap faces
-                    for (int face = 0; face < 6; face++) {
-                        img_data.subimage[0][face].ptr = cpu_buffer + (face * buffer_size / 6);
-                        img_data.subimage[0][face].size = buffer_size / 6;
-                    }
-                    break;
-                    
-                default:
-                    break;
+            img_data.subimage[0][0].ptr = cpu_buffer;
+            img_data.subimage[0][0].size = buffer_size;
+
+            // Create image if it doesn't exist
+            if (!image.id) {
+                img_desc.width = width;
+                img_desc.height = height;
+                img_desc.data = img_data;
+                image = sg_make_image(&img_desc);
             }
 
             // Initialize CPU buffer with zeros if no previous content
