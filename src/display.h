@@ -12,24 +12,20 @@
 #include "surface.h"
 #include "ddsurface.h"
 
+#define UPDATE_THISFRAME        0x01        // Adds a dirty rectangle update rect for this frame
+#define UPDATE_NEXTFRAME        0x02        // Adds a dirty rectangle update rect for the next frame
+#define UPDATE_SCREENTOBUFFER   0x04        // Immediately copies the screen rect to the background
+#define UPDATE_BUFFERTOSCREEN   0x08        // Immediately copies the background rect to the screen
+#define UPDATE_NOMERGERECT      0x10        // Prevents dirty rectangle system from merging this rect
+
+#define UPDATE_RESTORE          (UPDATE_THISFRAME)
+#define UPDATE_BACKGROUND       (UPDATE_SCREENTOBUFFER | UPDATE_NEXTFRAME)
+
 _STRUCTDEF(RestoreRect)
 _CLASSDEF(TDisplay)
 
 class TDisplay
 {
-private:
-    int32_t currentpage;            // Currently Displayed Front/Back Surface
-    bool updateenabled;             // Whether restore system is enabled
-    TSurface* Front;                // Front buffer surface
-    TSurface* Back;                 // Back buffer surface  
-    TSurface* ZBuffer;              // Depth buffer surface
-    TSurface* SaveZBuffer;          // Where the real zbuffer goes when we're using a secondary z
-    sg_pass default_pass;           // Default render pass for Sokol
-    
-    int32_t width;                  // Display width
-    int32_t height;                 // Display height
-    int32_t bitsperpixel;           // Color depth
-
   public:
     TDisplay();
       // Creates Display Structures and Surfaces
@@ -55,18 +51,18 @@ private:
       // thinks the clear buffer is the actual zbuffer
     void CloseClearZBuffer();
       // Closes the clear zbuffer and puts the real video zbuffer back as the main zbuffer
-    bool UsingClearZBuffer() { return SaveZBuffer != nullptr; }
+    bool UsingClearZBuffer() { return savezbuffer != nullptr; }
       // True if we're currently using a secondary zbuffer
-    TSurface* GetRealZBuffer() { if (SaveZBuffer) return SaveZBuffer; else return ZBuffer; }
+    TSurface* GetRealZBuffer() { if (savezbuffer) return savezbuffer; else return zbuffer; }
       // Returns the real display zbuffer (used by the Scene3D.RestoreZBuffer() function)
 
     virtual int32_t SurfaceType() { return SURFACE_DISPLAY; }
       // Returns type of surface this is
 
 
-    TSurface* BackBuffer() { return Back; }
+    TSurface* BackBuffer() { return backbuffer; }
       // Returns the back buffer surface
-    TSurface* FrontBuffer() { return Front; }
+    TSurface* FrontBuffer() { return frontbuffer; }
       // Returns the front buffer surface
 
     bool Initialize(int32_t dwidth, int32_t dheight, int32_t dbitsperpixel);
@@ -76,7 +72,7 @@ private:
     bool Restore();
       // Restores the display device after having been tabbed out of
   
-    virtual TSurface* GetZBuffer() { return ZBuffer; }  // Returns nullptr if display ZBuffer disabled
+    virtual TSurface* GetZBuffer() { return zbuffer; }  // Returns nullptr if display ZBuffer disabled
       // Returns ZBuffer surface for this surface (if it has one)
     virtual TSurface* GetNormalBuffer() { return nullptr; }
       // Returns the normal buffer for this surface (if it has one)
@@ -163,15 +159,6 @@ private:
     bool ScrollBackground(int32_t index, int32_t originx, int32_t originy);
       // Sets origin of background Buffer
 
-    #define UPDATE_THISFRAME        0x01        // Adds a dirty rectangle update rect for this frame
-    #define UPDATE_NEXTFRAME        0x02        // Adds a dirty rectangle update rect for the next frame
-    #define UPDATE_SCREENTOBUFFER   0x04        // Immediately copies the screen rect to the background
-    #define UPDATE_BUFFERTOSCREEN   0x08        // Immediately copies the background rect to the screen
-    #define UPDATE_NOMERGERECT      0x10        // Prevents dirty rectangle system from merging this rect
-
-    #define UPDATE_RESTORE          (UPDATE_THISFRAME)
-    #define UPDATE_BACKGROUND       (UPDATE_SCREENTOBUFFER | UPDATE_NEXTFRAME)
-
     void AddUpdateRect(int32_t x, int32_t y, int32_t width, int32_t height, int32_t flags);
       // Adds restore rects for all screen buffers (uses screen coords)
     bool AddBackgroundUpdateRect(int32_t index, int32_t x, int32_t y, int32_t width, int32_t height, int32_t flags); 
@@ -186,4 +173,17 @@ private:
   
     void AddSubRect(int32_t index, int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t flags);
       // Calls AddUpdateRect with parameters of a smaller rect.
+
+private:
+    int32_t currentpage = 0;          // Currently Displayed Front/Back Surface
+    bool updateenabled = true;        // Whether restore system is enabled
+    TSurface* frontbuffer = nullptr;  // Front buffer surface
+    TSurface* backbuffer = nullptr;   // Back buffer surface  
+    TSurface* zbuffer = nullptr;      // Depth buffer surface
+    TSurface* savezbuffer = nullptr;  // Where the real zbuffer goes when we're using a secondary z
+    sg_pass default_pass;             // Default render pass for Sokol
+    
+    int32_t width = 0;                // Display width
+    int32_t height = 0;               // Display height
+    int32_t bitsperpixel = 0;         // Color depth      
 };
