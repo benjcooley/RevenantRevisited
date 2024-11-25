@@ -30,6 +30,7 @@ TSurface::TSurface() {
     cpu_buffer = nullptr;
     buffer_size = 0;
     image = {};
+
     // Initialize image description with defaults
     img_desc = {};
     img_desc.type = SG_IMAGETYPE_2D;
@@ -44,7 +45,8 @@ TSurface::TSurface() {
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
 }
 
-TSurface::TSurface(int32_t w, int32_t h, int32_t bpp) {
+TSurface::TSurface(int32_t w, int32_t h, int32_t bpp) 
+{
     locked = nullptr;
     width = w;
     height = h;
