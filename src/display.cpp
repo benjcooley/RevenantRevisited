@@ -206,43 +206,42 @@ void TDisplay::CloseClearZBuffer()
 // Flips the front/back buffer
 bool TDisplay::FlipPage(bool Wait)
 {
-    if (!DoPageFlip)
-        return true;
-
     if (!frontbuffer || frontbuffer->Lost())
         return false;
 
-    if (Windowed)
-    {
-        RECT r;
-        GetClientRect(MainWindow.Hwnd(), &r);
-        ClientToScreen(MainWindow.Hwnd(), (LPPOINT)&r);
-        frontbuffer->Blit(r.left - MonitorX, r.top - MonitorY, backbuffer, 0, 0, min(r.right, WIDTH), min(r.bottom, HEIGHT));   
-    }
-    else if (SingleBuffer)
-    {
-        frontbuffer->Blit(0, 0, backbuffer, 0, 0, WIDTH, HEIGHT);   
-    }
-    else 
-    {
-        // Use Sokol frame synchronization
-        if (Wait) {
-            sg_commit();
-        }
-        sg_begin_default_pass(&pass_action, WIDTH, HEIGHT);
-        sg_end_pass();
+    // Set up pass action for clearing
+    sg_pass_action pass_action = {};
+    pass_action.colors[0] = { .action = SG_ACTION_DONTCARE };
+    pass_action.depth = { .action = SG_ACTION_DONTCARE };
+    pass_action.stencil = { .action = SG_ACTION_DONTCARE };
+
+    // Begin default pass with viewport matching window size
+    sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
+
+    // Draw backbuffer to screen
+    if (backbuffer) {
+        // Set up pipeline state
+        sg_apply_pipeline(backbuffer->pipeline);
+        
+        // Set up bindings
+        sg_bindings bind = {};
+        bind.fs.images[0] = backbuffer->GetSGImage();
+        sg_apply_bindings(&bind);
+
+        // Draw fullscreen quad
+        sg_draw(0, 6, 1);
     }
 
-    if (!SingleBuffer)              // do NOT switch when single buffered
-        currentpage = !currentpage;
+    // End pass and commit frame
+    sg_end_pass();
+    sg_commit();
 
-  // Show drawing (this shows drawing).. causes drawing to be shown >*
-    if ((ShowDrawing == false && frontbuffer->GetSGImage() == back) ||
-        (ShowDrawing == true && frontbuffer->GetSGImage() == front))
-    {       
+    // Swap front/back buffers
+    if (!SingleBuffer) {
         TSurface* tmp = frontbuffer;
         frontbuffer = backbuffer;
-        backbuffer  = tmp;
+        backbuffer = tmp;
+        currentpage = !currentpage;
     }
 
     return true;
