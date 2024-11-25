@@ -59,7 +59,7 @@ class TSurface
 
     virtual void Reset();
       // Resets originx, originy, cliprect and clipmode to screen defaults.
-    virtual bool Lost() = 0;
+    virtual bool Lost();
       // Returns true if the surface needs to be regenerated.
     
     virtual void* Lock();
