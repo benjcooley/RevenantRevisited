@@ -29,32 +29,7 @@ struct SClipState
 _CLASSDEF(TSurface)
 class TSurface
 {
-  protected:
-    int32_t width;           // Width of Surface
-    int32_t height;          // Height of Surface
-    int32_t bitsperpixel;    // Surface Color Depth
-    int32_t stride;          // Size of one horizontal screen line in pixels
-    int32_t originx;         // Current drawing origin
-    int32_t originy;
-    int32_t clipmode;        // Current clipmode
-    int32_t clipx;           // Current clipping rectangle
-    int32_t clipy;
-    int32_t clipwidth;
-    int32_t clipheight;
-    uint32_t keycolor;       // Surface transparent color
-    void* locked;            // True if surface locked
-
-    // Buffers
-    uint8_t* cpu_buffer;     // CPU-side staging buffer for modifications
-    size_t buffer_size;      // Size of staging buffer in bytes
-    sg_image image;          // Sokol GPU texture
-    sg_image_desc img_desc;  // Sokol image description/config
-    sg_pipeline pipeline;    // Sokol render pipeline
-    sg_bindings bindings;    // Sokol resource bindings
-
   public:
-    uint32_t flags;         // 'BM' flags for surface
-
     TSurface();
       // Initializes Surface
     TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp);
@@ -304,5 +279,29 @@ class TSurface
     // o Game specific low level surface or bitmap functions should go in the module
     //   they're most closely connected with, and should have their own functions which
     //   use the 'func' member and the ParamDraw() function.
+
+  protected:
+    uint32_t flags;          // 'BM' flags for surface  
+    int32_t width;           // Width of Surface
+    int32_t height;          // Height of Surface
+    int32_t bitsperpixel;    // Surface Color Depth
+    int32_t stride;          // Size of one horizontal screen line in pixels
+    int32_t originx;         // Current drawing origin
+    int32_t originy;
+    int32_t clipmode;        // Current clipmode
+    int32_t clipx;           // Current clipping rectangle
+    int32_t clipy;
+    int32_t clipwidth;
+    int32_t clipheight;
+    uint32_t keycolor;       // Surface transparent color
+    void* locked;            // True if surface locked
+
+    // Buffers
+    uint8_t* cpu_buffer;     // CPU-side staging buffer for modifications
+    size_t buffer_size;      // Size of staging buffer in bytes
+    sg_image image;          // Sokol GPU texture
+    sg_image_desc img_desc;  // Sokol image description/config
+    sg_pipeline pipeline;    // Sokol render pipeline
+    sg_bindings bindings;    // Sokol resource bindings    
 };
 
