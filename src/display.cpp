@@ -37,24 +37,17 @@ void ProcessUpdateCallbacks();
 void AddUpdateCallback(PSDrawBlock db, PSDrawParam dp);
 
 TDisplay::TDisplay()
-{
-    Front = Back = nullptr;
-
-    clipx  = clipy  = 0;
-    currentpage     = 0;
-
-    clipmode        = CLIP_EDGES; 
-}
+{}
 
 bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpixel*/)
 {
-    if (Front)
+    if (frontbuffer)
         return true;
 
     width = dwidth;
     height = dheight;
     bitsperpixel = 32; // Always use 32-bit RGBA color
-    SaveZBuffer = nullptr;
+    savezbuffer = nullptr;
     ResetUpdateCallbacks();
 
     // Initialize Sokol graphics context
@@ -79,8 +72,8 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     sg_image back_img = sg_make_image(&img_desc);
 
     // Create front and back buffer surfaces
-    Front = new TSurface(front_img, width, height, bitsperpixel);
-    Back = new TSurface(back_img, width, height, bitsperpixel);
+    frontbuffer = new TSurface(front_img, width, height, bitsperpixel);
+    backbuffer = new TSurface(back_img, width, height, bitsperpixel);
 
     // Verify required graphics capabilities
     sg_features features = sg_query_features();
@@ -89,62 +82,62 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     }
 
     // Create depth buffer
-    ZBuffer = new TSurface();
-    ZBuffer->Initialize(dwidth, dheight, SG_PIXELFORMAT_DEPTH_STENCIL);
+    zbuffer = new TSurface();
+    zbuffer->Initialize(dwidth, dheight, SG_PIXELFORMAT_DEPTH_STENCIL);
 
     // Create default render pass
     sg_pass_desc pass_desc = {};
-    pass_desc.color_attachments[0].image = Back->GetSGImage();
-    pass_desc.depth_stencil_attachment.image = ZBuffer->GetSGImage();
+    pass_desc.color_attachments[0].image = backbuffer->GetSGImage();
+    pass_desc.depth_stencil_attachment.image = zbuffer->GetSGImage();
     default_pass = sg_make_pass(&pass_desc);
 
     // Clear buffers
-    Front->Clear();
-    Back->Clear();
-    ZBuffer->Clear();
+    frontbuffer->Clear();
+    backbuffer->Clear();
+    zbuffer->Clear();
 
     return true;
 }
 
 bool TDisplay::Close()
 {
-    if (!Front)
+    if (!frontbuffer)
         return true;
 
-    if (Front && Front == Back)
+    if (frontbuffer && frontbuffer == backbuffer)
     {
-        PTDDSurface tmp = Front;
-        Front = Back;
-        Back = tmp;
+        TSurface* tmp = frontbuffer;
+        frontbuffer = backbuffer;
+        backbuffer = tmp;
     }
     
     CloseClearZBuffer();
     Close3D();
 
-    if (Back)
+    if (backbuffer)
     {
 
-        delete Back;
-        Back    = nullptr;
+        delete backbuffer;
+        backbuffer    = nullptr;
         back    = nullptr;
         surface = nullptr;
     }
 
     // Destroy zbuffer surface
-    if (ZBuffer)
+    if (zbuffer)
     {
 
-        delete ZBuffer;
-        ZBuffer = nullptr;
+        delete zbuffer;
+        zbuffer = nullptr;
         zbuffer = nullptr;
     }
 
     // Destroy front surface
-    if (Front)
+    if (frontbuffer)
     {
 
-        delete Front;
-        Front = nullptr;
+        delete frontbuffer;
+        frontbuffer = nullptr;
         front = nullptr;
     }
 
@@ -162,7 +155,7 @@ TDisplay::~TDisplay()
 
 bool TDisplay::Restore()
 {
-    if (!Front)
+    if (!frontbuffer)
         return false;
     
     if (!Windowed)
@@ -171,17 +164,17 @@ bool TDisplay::Restore()
         EnterVideoMode(width, height, (bitsperpixel == 15) ? 16 : bitsperpixel);
     }
 
-    if (Front->Lost())
+    if (frontbuffer->Lost())
     {
-        TRY_DD(front->Restore());
+        front->Restore();
         if (!Windowed)
-            Front->Clear();
+            frontbuffer->Clear();
     }
 
-    if (back->IsLost() == DDERR_SURFACELOST)
+    if (back->IsLost())
     {
-        TRY_DD(front->Restore());
-        Back->Clear();
+        back->Restore();
+        backbuffer->Clear();
     }
 
 
@@ -191,23 +184,23 @@ bool TDisplay::Restore()
 // Initializes a secondary zbuffer for use with the Viewport->Clear() function
 void TDisplay::InitClearZBuffer()
 {
-    PTDDSurface s = new TDDSurface(width, height, VSURF_SYSTEMMEM);
+    TSurface* s = new TSurface(width, height, VSURF_SYSTEMMEM);
     if (!s)
         FatalError("Unable to allocate clear ZBuffer");
     
-    SaveZBuffer = ZBuffer;
-    ZBuffer = s;
+    savezbuffer = zbuffer;
+    zbuffer = s;
 }
 
 // Closes the secondary zbuffer
 void TDisplay::CloseClearZBuffer()
 {
-    if (!SaveZBuffer)
+    if (!savezbuffer)
         return;
 
-    delete ZBuffer;
-    ZBuffer = SaveZBuffer;
-    SaveZBuffer = nullptr;
+    delete zbuffer;
+    zbuffer = savezbuffer;
+    savezbuffer = nullptr;
 }
 
 // Flips the front/back buffer
@@ -216,7 +209,7 @@ bool TDisplay::FlipPage(bool Wait)
     if (!DoPageFlip)
         return true;
 
-    if (!Front || Front->Lost())
+    if (!frontbuffer || frontbuffer->Lost())
         return false;
 
     if (Windowed)
@@ -224,11 +217,11 @@ bool TDisplay::FlipPage(bool Wait)
         RECT r;
         GetClientRect(MainWindow.Hwnd(), &r);
         ClientToScreen(MainWindow.Hwnd(), (LPPOINT)&r);
-        Front->Blit(r.left - MonitorX, r.top - MonitorY, Back, 0, 0, min(r.right, WIDTH), min(r.bottom, HEIGHT));   
+        frontbuffer->Blit(r.left - MonitorX, r.top - MonitorY, backbuffer, 0, 0, min(r.right, WIDTH), min(r.bottom, HEIGHT));   
     }
     else if (SingleBuffer)
     {
-        Front->Blit(0, 0, Back, 0, 0, WIDTH, HEIGHT);   
+        frontbuffer->Blit(0, 0, backbuffer, 0, 0, WIDTH, HEIGHT);   
     }
     else 
     {
@@ -244,12 +237,12 @@ bool TDisplay::FlipPage(bool Wait)
         currentpage = !currentpage;
 
   // Show drawing (this shows drawing).. causes drawing to be shown >*
-    if ((ShowDrawing == false && Front->GetDDSurface() == back) ||
-        (ShowDrawing == true && Front->GetDDSurface() == front))
+    if ((ShowDrawing == false && frontbuffer->GetSGImage() == back) ||
+        (ShowDrawing == true && frontbuffer->GetSGImage() == front))
     {       
-        PTDDSurface tmp = Front;
-        Front = Back;
-        Back  = tmp;
+        TSurface* tmp = frontbuffer;
+        frontbuffer = backbuffer;
+        backbuffer  = tmp;
     }
 
     return true;
@@ -267,15 +260,15 @@ bool TDisplay::PutToScreen(int32_t x, int32_t y, int32_t width, int32_t height)
         RECT r;
         GetClientRect(MainWindow.Hwnd(), &r);
         ClientToScreen(MainWindow.Hwnd(), (LPPOINT)&r);
-        Front->Blit(r.left - MonitorX + x, r.top - MonitorY + y, Back, x, y, width, height);    
+        frontbuffer->Blit(r.left - MonitorX + x, r.top - MonitorY + y, backbuffer, x, y, width, height);    
     }
     else if (SingleBuffer)
     {
-        Front->Blit(x, y, Back, x, y, width, height);   
+        frontbuffer->Blit(x, y, backbuffer, x, y, width, height);   
     }
     else
     {
-        Front->Blit(x, y, Back, x, y, width, height);
+        frontbuffer->Blit(x, y, backbuffer, x, y, width, height);
     }
 
     RestoreClipState(cs);
@@ -303,7 +296,7 @@ bool TDisplay::ParamDraw(PSDrawParam dp, PTBitmap bitmap)
   // Set update rectangles to 0 
     ResetUpdateCallbacks();
 
-    bool ret = TDDSurface::ParamDraw(dp, bitmap);
+    bool ret = TSurface::ParamDraw(dp, bitmap);
 
   // Process update rectangles returned by draw routines
     ProcessUpdateCallbacks();
@@ -322,7 +315,7 @@ bool TDisplay::ParamBlit(PSDrawParam dp, TSurface* surface, int32_t flags, LPDDB
  // Set update rectangles to 0  
     ResetUpdateCallbacks();
 
-    bool ret = TDDSurface::ParamBlit(dp, surface, flags, fx);
+    bool ret = TSurface::ParamBlit(dp, surface, flags, fx);
     
   // Process update rectangles returned by draw routines
     ProcessUpdateCallbacks();
@@ -342,7 +335,7 @@ bool TDisplay::ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t flags, LP
   // Set update rectangles to 0 
     ResetUpdateCallbacks();
 
-    bool ret = TDDSurface::ParamGetBlit(dp, surface, flags, fx);
+    bool ret = TSurface::ParamGetBlit(dp, surface, flags, fx);
     
   // Process update rectangles returned by draw routines
     ProcessUpdateCallbacks();
@@ -460,17 +453,17 @@ int32_t TDisplay::CreateBackgroundArea(int32_t x, int32_t y, int32_t width, int3
     TSurface* surface;
     if (createzbuf)
     {
-        TSurface* zbuf = new TDDSurface(width, height, vsflags);
+        TSurface* zbuf = new TSurface(width, height, vsflags);
         if (!zbuf)
             return nullptr;
-        TSurface* graphics = new TDDSurface(width, height, vsflags);
+        TSurface* graphics = new TSurface(width, height, vsflags);
         if (!graphics)
             return nullptr;
         surface = new TMultiSurface(graphics, zbuf, nullptr, true);
     }
     else
     {
-        surface = new TDDSurface(width, height, vsflags);
+        surface = new TSurface(width, height, vsflags);
     }
 
     int32_t buf = UseBackgroundArea(x, y, width, height, surface);
@@ -785,7 +778,7 @@ bool TDisplay::AddBackgroundUpdateRect(int32_t index, int32_t x, int32_t y, int3
                           rb.width, rb.height);
         rb.surface->Blit(
             x, y,
-            Back,
+            backbuffer,
             rb.x + (x - rb.originx), rb.y + (y - rb.originy),
             width, height, DM_WRAPCLIP | DM_NORESTORE);
 
@@ -798,14 +791,14 @@ bool TDisplay::AddBackgroundUpdateRect(int32_t index, int32_t x, int32_t y, int3
         rb.originx == rb.oldoriginx && rb.originy == rb.oldoriginy)
     {
         SRect saveclip;
-        Back->GetClipRect(saveclip);
-        Back->SetClipRect(rb.x, rb.y, rb.width, rb.height);
-        Back->Blit(
+        backbuffer->GetClipRect(saveclip);
+        backbuffer->SetClipRect(rb.x, rb.y, rb.width, rb.height);
+        backbuffer->Blit(
             rb.x + (x - rb.originx), rb.y + (y - rb.originy),
             rb.surface,
             x, y,
             width, height, DM_WRAPCLIPSRC | DM_NORESTORE);
-        Back->SetClipRect(saveclip);
+        backbuffer->SetClipRect(saveclip);
     }
     flags &= ~UPDATE_BUFFERTOSCREEN;  // Done.. now clear flag
 
@@ -1045,7 +1038,7 @@ bool TDisplay::ZPut(int32_t x, int32_t y, int32_t z, PTBitmap bitmap, uint32_t d
         {
             status = 1;         // dang, gotta use the workaround
 #if 0
-            PTDDSurface zbuffer = new TDDSurface(WIDTH, HEIGHT, VSURF_SYSTEMMEM);
+            TSurface* zbuffer = new TSurface(WIDTH, HEIGHT, VSURF_SYSTEMMEM);
             multi = new TMultiSurface(Back, zbuffer, nullptr, true);
 #endif
         }
@@ -1055,7 +1048,7 @@ bool TDisplay::ZPut(int32_t x, int32_t y, int32_t z, PTBitmap bitmap, uint32_t d
 
     if (status == 1)
     {
-        return TDDSurface::Put(x, y, bitmap, drawmode & ~DM_ZBUFFER);
+        return TSurface::Put(x, y, bitmap, drawmode & ~DM_ZBUFFER);
 #if 0
         int32_t saveoriginx, saveoriginy;
         int32_t saveclipx, saveclipy, saveclipwidth, saveclipheight;
@@ -1085,11 +1078,11 @@ bool TDisplay::ZPut(int32_t x, int32_t y, int32_t z, PTBitmap bitmap, uint32_t d
         SetClipMode(saveclipmode);
 
         TSurface* tmp = (TSurface*)ZBuffer;
-        ZBuffer = (PTDDSurface)multi->GetZBuffer();
+        ZBuffer = (TSurface*)multi->GetZBuffer();
 
         ZPut(x, y, z, bitmap, drawmode);
 
-        ZBuffer = (PTDDSurface)tmp;
+        ZBuffer = (TSurface*)tmp;
 
         Reset();
         SetOrigin(0, 0);
@@ -1108,8 +1101,8 @@ bool TDisplay::ZPut(int32_t x, int32_t y, int32_t z, PTBitmap bitmap, uint32_t d
 #endif
 #if 0
         // special case - monster3d which can't lock zbuffer and graphics at the same time
-        //PTDDSurface graphics = new TDDSurface(bitmap->width, bitmap->height, VSURF_SYSTEMMEM);
-        //PTDDSurface zbuffer = new TDDSurface(bitmap->width, bitmap->height, VSURF_SYSTEMMEM);
+        //TSurface* graphics = new TSurface(bitmap->width, bitmap->height, VSURF_SYSTEMMEM);
+        //TSurface* zbuffer = new TSurface(bitmap->width, bitmap->height, VSURF_SYSTEMMEM);
         //PTMultiSurface multi = new TMultiSurface(Back, zbuffer, nullptr, true);
         //multi->SetClipRect(0, 0, bitmap->width, bitmap->height);
 
@@ -1169,7 +1162,7 @@ bool TDisplay::ZPut(int32_t x, int32_t y, int32_t z, PTBitmap bitmap, uint32_t d
     }
     
     // otherwise, just do it like normal
-    return TDDSurface::ZPut(x, y, z, bitmap, drawmode);
+    return TSurface::ZPut(x, y, z, bitmap, drawmode);
 }
 
 #endif
