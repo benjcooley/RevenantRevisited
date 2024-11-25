@@ -61,6 +61,8 @@ class TSurface
       // Resets originx, originy, cliprect and clipmode to screen defaults.
     virtual bool Lost();
       // Returns true if the surface needs to be regenerated.
+    virtual bool Restore();
+      // Recreates lost surface resources. Returns true if successful.
     
     virtual void* Lock();
     virtual bool Unlock();
@@ -304,6 +306,7 @@ class TSurface
     sg_image image;          // Sokol GPU texture
     sg_image_desc img_desc;  // Sokol image description/config
     sg_pipeline pipeline;    // Sokol render pipeline
-    sg_bindings bindings;    // Sokol resource bindings    
+    sg_bindings bindings;    // Sokol resource bindings
+    bool needs_restore;      // True if surface resources need recreation
 };
 

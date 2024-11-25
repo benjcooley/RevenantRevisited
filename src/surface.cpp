@@ -16,6 +16,7 @@
 // be false if _DEBUG is not defined.
 
 TSurface::TSurface() {
+    needs_restore = false;
     locked = nullptr;
     width = height = stride = 0;
     clipx = clipy = 0;
@@ -713,6 +714,10 @@ int32_t TSurface::WriteTextShadow(char *text, int32_t x, int32_t y, int32_t numl
 }
 void* TSurface::Lock()
 {
+    if (Lost() && !Restore()) {
+        return nullptr;
+    }
+
     if (!locked) {
         // Allocate staging buffer if needed
         if (!cpu_buffer) {
