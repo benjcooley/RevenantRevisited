@@ -30,8 +30,10 @@ _CLASSDEF(TSurface)
 class TSurface
 {
   public:
-    TSurface();
-      // Initializes Surface
+    TSurface(); 
+      // Initializes Surface with empty state
+    TSurface(int32_t w, int32_t h, int32_t bpp);
+      // Initialize and create new Sokol image
     TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp);
       // Initialize with existing Sokol image
     virtual ~TSurface();
