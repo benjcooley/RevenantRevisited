@@ -389,91 +389,60 @@ bool TSurface::BlitHandler(PSDrawParam dp, TSurface* srcsurface, int32_t flags)
     if (!ParamBlitSetup(tmpdp, srcsurface, flags))
         return false;
 
-    // Setup Sokol render pass
-    sg_pass_action pass_action = {};
-    pass_action.colors[0] = { .action = SG_ACTION_LOAD };
-    
     // Create pipeline if needed
     if (!pipeline.id) {
-        sg_pipeline_desc pip_desc = {};
-        pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
-        pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
-        pip_desc.shader = sg_make_shader(blit_shader_desc()); 
-        pipeline = sg_make_pipeline(pip_desc);
-        pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-        pip_desc.colors[0].blend.enabled = true;
-        pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-        pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
         pipeline = sg_make_pipeline(&pip_desc);
     }
 
-    tmpdb.dbufwidth  = width;
-    tmpdb.dbufheight = height;
-    tmpdb.dstride = stride;
-    tmpdb.dstbitmapflags = flags;
+    // Set up vertex data for fullscreen quad
+    float vertices[] = {
+        // positions            // texcoords
+        -1.0f, -1.0f, 0.0f,    0.0f, 1.0f,
+         1.0f, -1.0f, 0.0f,    1.0f, 1.0f,
+         1.0f,  1.0f, 0.0f,    1.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f,    0.0f, 1.0f,
+         1.0f,  1.0f, 0.0f,    1.0f, 0.0f,
+        -1.0f,  1.0f, 0.0f,    0.0f, 0.0f
+    };
 
-    if (srcsurface)
-    {
-      // Voodoo can't use zbuffer as a source surface
-//      if (NoVidZBufLock && srcsurface == Display->GetZBuffer())
-//          return true;
+    // Create vertex buffer
+    sg_buffer_desc vbuf_desc = {
+        .size = sizeof(vertices),
+        .data = SG_RANGE(vertices),
+        .usage = SG_USAGE_IMMUTABLE
+    };
+    sg_buffer vbuf = sg_make_buffer(&vbuf_desc);
 
-        tmpdb.srcbitmapflags = srcsurface->flags;
-        tmpdb.keycolor   = srcsurface->KeyColor();
-        tmpdb.sbufwidth  = srcsurface->Width();
-        tmpdb.sbufheight = srcsurface->Height();
-        tmpdb.sstride = srcsurface->Stride();
-
-      // Clip source
-        if (!(tmpdp.drawmode & DM_WRAPCLIPSRC) &&
-           (tmpdp.sx >= tmpdb.sbufwidth || tmpdp.sy >= tmpdb.sbufheight ||
-            tmpdp.sx + tmpdp.swidth < 0 || tmpdp.sy + tmpdp.sheight < 0))
-                return false;
-
-        tmpdb.source = srcsurface->Lock();
-        if (!tmpdb.source)
-            return false;
-        if (UnlockImmediately)
-            srcsurface->Unlock();
-    }
-    else
-    {   
-        tmpdb.srcbitmapflags = 0;
-        tmpdb.sbufwidth = tmpdb.sbufheight = tmpdb.sstride = 0;
-        tmpdb.source = nullptr;
-        tmpdb.keycolor = 0;
+    // Set up bindings
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = vbuf;
+    
+    // Set source texture if available
+    if (srcsurface) {
+        bind.fs.images[0] = srcsurface->GetSGImage();
     }
 
-    tmpdb.dest = Lock();
-    if (!tmpdb.dest)
-        return false;
-    if (UnlockImmediately)
-        Unlock();
+    // Begin rendering
+    sg_begin_default_pass(&pass_action, width, height);
+    sg_apply_pipeline(pipeline);
+    sg_apply_bindings(&bind);
 
-    if (!tmpdb.dest)
-    {
-        if (srcsurface && srcsurface->IsLocked())
-            srcsurface->Unlock();
-        return false;
+    // Apply any blend modes or other render states
+    if (tmpdp.drawmode & DM_ALPHA) {
+        sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(float[]){tmpdp.intensity / 31.0f}, sizeof(float));
     }
 
-    tmpdb.szbuffer = tmpdb.dzbuffer = nullptr;
-    tmpdb.szstride = tmpdb.dzstride = 0;
-    tmpdb.snormals = tmpdb.dnormals = nullptr;
+    // Draw fullscreen quad
+    sg_draw(0, 6, 1);
 
-    tmpdb.palette  = nullptr;
-    tmpdb.alias    = tmpdb.alpha    = nullptr;
+    // End rendering
+    sg_end_pass();
+    sg_commit();
 
-    tmpdp.drawmode &= ~(DM_ZBUFFER | DM_NORMALS | DM_ALPHA | DM_ALIAS);
+    // Clean up
+    sg_destroy_buffer(vbuf);
 
-    bool result = Draw(&tmpdb, &tmpdp);
-
-    if (IsLocked())
-        Unlock();
-    if (srcsurface && srcsurface->IsLocked())
-        srcsurface->Unlock();
-
-    return result;
+    return true;
 }
 
 bool TSurface::ParamBlit(PSDrawParam dp, TSurface* surface, int32_t flags)
