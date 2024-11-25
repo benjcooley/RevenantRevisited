@@ -306,6 +306,7 @@ class TSurface
     sg_image image;          // Sokol GPU texture
     sg_image_desc img_desc;  // Sokol image description/config
     sg_pipeline pipeline;    // Sokol render pipeline
+    sg_pipeline_desc pip_desc; // Pipeline description/config  
     sg_bindings bindings;    // Sokol resource bindings
     bool needs_restore;      // True if surface resources need recreation
 };
