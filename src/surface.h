@@ -310,3 +310,64 @@ class TSurface
     bool needs_restore;      // True if surface resources need recreation
 };
 
+bool TSurface::Lost() 
+{
+    if (!image.id) {
+        return false; // No texture to lose
+    }
+    
+    // Check if texture is valid
+    sg_resource_state state = sg_query_image_state(image);
+    if (state != SG_RESOURCESTATE_VALID) {
+        needs_restore = true;
+        return true;
+    }
+    
+    return needs_restore;
+}
+
+bool TSurface::Restore() 
+{
+    if (!needs_restore) {
+        return true;
+    }
+
+    // Recreate the image if needed
+    if (image.id) {
+        sg_destroy_image(image);
+    }
+
+    // Create new image with saved description
+    image = sg_make_image(&img_desc);
+    
+    // Check if creation succeeded
+    if (sg_query_image_state(image) != SG_RESOURCESTATE_VALID) {
+        return false;
+    }
+
+    // Recreate pipeline if needed
+    if (pipeline.id) {
+        sg_destroy_pipeline(pipeline);
+        sg_pipeline_desc pip_desc = {};
+        pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+        pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
+        pip_desc.shader = sg_make_shader(blit_shader_desc());
+        pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+        pip_desc.colors[0].blend.enabled = true;
+        pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+        pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pipeline = sg_make_pipeline(&pip_desc);
+    }
+
+    // Upload current CPU buffer content if it exists
+    if (cpu_buffer) {
+        sg_image_data img_data = {};
+        img_data.subimage[0][0].ptr = cpu_buffer;
+        img_data.subimage[0][0].size = buffer_size;
+        sg_update_image(image, img_data);
+    }
+
+    needs_restore = false;
+    return true;
+}
+
