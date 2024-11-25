@@ -389,11 +389,6 @@ bool TSurface::BlitHandler(PSDrawParam dp, TSurface* srcsurface, int32_t flags)
     if (!ParamBlitSetup(tmpdp, srcsurface, flags))
         return false;
 
-    // Create pipeline if needed
-    if (!pipeline.id) {
-        pipeline = sg_make_pipeline(&pip_desc);
-    }
-
     // Set up vertex data for fullscreen quad
     float vertices[] = {
         // positions            // texcoords
@@ -422,11 +417,6 @@ bool TSurface::BlitHandler(PSDrawParam dp, TSurface* srcsurface, int32_t flags)
         bind.fs.images[0] = srcsurface->GetSGImage();
     }
 
-    // Begin rendering
-    sg_begin_default_pass(&pass_action, width, height);
-    sg_apply_pipeline(pipeline);
-    sg_apply_bindings(&bind);
-
     // Apply any blend modes or other render states
     if (tmpdp.drawmode & DM_ALPHA) {
         sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(float[]){tmpdp.intensity / 31.0f}, sizeof(float));
@@ -434,10 +424,6 @@ bool TSurface::BlitHandler(PSDrawParam dp, TSurface* srcsurface, int32_t flags)
 
     // Draw fullscreen quad
     sg_draw(0, 6, 1);
-
-    // End rendering
-    sg_end_pass();
-    sg_commit();
 
     // Clean up
     sg_destroy_buffer(vbuf);
