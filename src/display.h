@@ -78,11 +78,26 @@ private:
     TSurface* backbuffer = nullptr;   // Back buffer surface  
     TSurface* zbuffer = nullptr;      // Depth buffer surface
     TSurface* savezbuffer = nullptr;  // Where the real zbuffer goes when we're using a secondary z
-    sg_pass default_pass;             // Default render pass for Sokol
-    sg_pipeline pipeline;             // Sokol render pipeline for surface rendering
-    sg_pipeline_desc pip_desc;        // Pipeline description/config
+    // Sokol graphics resources
+    sg_pass default_pass;             // Default render pass
+    sg_pass depth_pass;               // Pass for depth pre-pass
+    sg_pipeline tile_pipeline;        // Pipeline for tile rendering
+    sg_pipeline_desc tile_pip_desc;   // Tile pipeline config
     
-    int32_t width = 0;                // Display width
-    int32_t height = 0;               // Display height
-    int32_t bitsperpixel = 0;         // Color depth      
+    // Render targets
+    sg_image color_target;            // Main color render target
+    sg_image depth_target;            // Depth render target
+    sg_image normal_target;           // Normal render target for lighting
+    
+    // Uniform buffers
+    struct {
+        sg_buffer view_proj;          // View-projection matrix
+        sg_buffer model;              // Model matrix
+        sg_buffer light_params;       // Light position, color, etc
+    } uniforms;
+    
+    // Display properties  
+    int32_t width = 0;               // Display width
+    int32_t height = 0;              // Display height
+    int32_t bitsperpixel = 0;        // Color depth
 };

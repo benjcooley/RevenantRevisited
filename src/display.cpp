@@ -47,65 +47,80 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     width = dwidth;
     height = dheight;
     bitsperpixel = 32; // Always use 32-bit RGBA color
-    savezbuffer = nullptr;
-    ResetUpdateCallbacks();
 
     // Initialize Sokol graphics context
     sg_desc desc = {};
     desc.context = sapp_sgcontext();
-    desc.buffer_pool_size = 128;
-    desc.image_pool_size = 128;
-    desc.shader_pool_size = 32;
-    desc.pipeline_pool_size = 32;
-    desc.pass_pool_size = 16;
+    desc.buffer_pool_size = 256;
+    desc.image_pool_size = 256;
+    desc.shader_pool_size = 64;
+    desc.pipeline_pool_size = 64;
+    desc.pass_pool_size = 32;
     sg_setup(&desc);
 
-    // Create front and back buffer images
-    sg_image_desc img_desc = {};
-    img_desc.width = width;
-    img_desc.height = height;
-    img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    img_desc.usage = SG_USAGE_DYNAMIC;
-    img_desc.render_target = true;
+    // Create render target images
+    sg_image_desc rt_desc = {};
+    rt_desc.width = width;
+    rt_desc.height = height;
+    rt_desc.sample_count = 1;
+    rt_desc.render_target = true;
+    rt_desc.min_filter = SG_FILTER_LINEAR;
+    rt_desc.mag_filter = SG_FILTER_LINEAR;
 
-    sg_image front_img = sg_make_image(&img_desc);
-    sg_image back_img = sg_make_image(&img_desc);
+    // Color target (RGBA8)
+    rt_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    color_target = sg_make_image(&rt_desc);
 
-    // Create front and back buffer surfaces
-    frontbuffer = new TSurface(front_img, width, height, bitsperpixel);
-    backbuffer = new TSurface(back_img, width, height, bitsperpixel);
+    // Depth target (Depth32F)
+    rt_desc.pixel_format = SG_PIXELFORMAT_DEPTH;
+    depth_target = sg_make_image(&rt_desc);
 
-    // Verify required graphics capabilities
-    sg_features features = sg_query_features();
-    if (!features.image_float || !features.instancing) {
-        FatalError("GPU does not support required features");
-    }
+    // Normal target (RGBA16F for normals/material data)
+    rt_desc.pixel_format = SG_PIXELFORMAT_RGBA16F;
+    normal_target = sg_make_image(&rt_desc);
 
-    // Create depth buffer
-    zbuffer = new TSurface();
-    zbuffer->Initialize(dwidth, dheight, SG_PIXELFORMAT_DEPTH_STENCIL);
-
-    // Create pipeline for surface rendering
-    pip_desc = {};
-    pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
-    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
-    pip_desc.shader = sg_make_shader(blit_shader_desc());
-    pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-    pip_desc.colors[0].blend.enabled = true;
-    pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-    pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    pipeline = sg_make_pipeline(&pip_desc);
-
-    // Create default render pass
+    // Create render passes
     sg_pass_desc pass_desc = {};
-    pass_desc.color_attachments[0].image = backbuffer->GetSGImage();
-    pass_desc.depth_stencil_attachment.image = zbuffer->GetSGImage();
+    
+    // Main render pass
+    pass_desc.color_attachments[0].image = color_target;
+    pass_desc.depth_stencil_attachment.image = depth_target;
     default_pass = sg_make_pass(&pass_desc);
 
-    // Clear buffers
-    frontbuffer->Clear();
-    backbuffer->Clear();
-    zbuffer->Clear();
+    // Depth pre-pass
+    pass_desc.color_attachments[0].image.id = SG_INVALID_ID;
+    depth_pass = sg_make_pass(&pass_desc);
+
+    // Create uniform buffers
+    sg_buffer_desc buf_desc = {};
+    buf_desc.type = SG_BUFFERTYPE_UNIFORM;
+    buf_desc.usage = SG_USAGE_STREAM;
+    
+    buf_desc.size = sizeof(float) * 16; // 4x4 matrix
+    uniforms.view_proj = sg_make_buffer(&buf_desc);
+    uniforms.model = sg_make_buffer(&buf_desc);
+    
+    buf_desc.size = sizeof(float) * 8; // light pos (vec3) + padding + color (vec3) + intensity
+    uniforms.light_params = sg_make_buffer(&buf_desc);
+
+    // Create tile rendering pipeline
+    tile_pip_desc = {};
+    tile_pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;  // position
+    tile_pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;  // texcoord
+    tile_pip_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT;   // depth
+    tile_pip_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT3;  // normal
+    tile_pip_desc.shader = sg_make_shader(tile_shader_desc());
+    tile_pip_desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
+    tile_pip_desc.depth.write_enabled = true;
+    tile_pip_desc.colors[0].blend.enabled = true;
+    tile_pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+    tile_pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    tile_pipeline = sg_make_pipeline(&tile_pip_desc);
+
+    // Create front/back buffers as surfaces
+    frontbuffer = new TSurface(color_target, width, height, bitsperpixel);
+    backbuffer = new TSurface(sg_make_image(&rt_desc), width, height, bitsperpixel);
+    zbuffer = new TSurface(depth_target, width, height, 32);
 
     return true;
 }
