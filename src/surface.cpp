@@ -785,3 +785,49 @@ bool TSurface::Unlock()
     }
     return false;
 }
+bool TSurface::Lost() 
+{
+    if (!image.id) {
+        return false; // No texture to lose
+    }
+    
+    // Check if texture is valid
+    sg_resource_state state = sg_query_image_state(image);
+    if (state != SG_RESOURCESTATE_VALID) {
+        needs_restore = true;
+        return true;
+    }
+    
+    return needs_restore;
+}
+
+bool TSurface::Restore() 
+{
+    if (!needs_restore) {
+        return true;
+    }
+
+    // Recreate the image if needed
+    if (image.id) {
+        sg_destroy_image(image);
+    }
+
+    // Create new image with saved description
+    image = sg_make_image(&img_desc);
+    
+    // Check if creation succeeded
+    if (sg_query_image_state(image) != SG_RESOURCESTATE_VALID) {
+        return false;
+    }
+
+    // Upload current CPU buffer content if it exists
+    if (cpu_buffer) {
+        sg_image_data img_data = {};
+        img_data.subimage[0][0].ptr = cpu_buffer;
+        img_data.subimage[0][0].size = buffer_size;
+        sg_update_image(image, img_data);
+    }
+
+    needs_restore = false;
+    return true;
+}
