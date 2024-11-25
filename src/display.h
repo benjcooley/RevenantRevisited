@@ -178,6 +178,8 @@ private:
     TSurface* zbuffer = nullptr;      // Depth buffer surface
     TSurface* savezbuffer = nullptr;  // Where the real zbuffer goes when we're using a secondary z
     sg_pass default_pass;             // Default render pass for Sokol
+    sg_pipeline pipeline;             // Sokol render pipeline for surface rendering
+    sg_pipeline_desc pip_desc;        // Pipeline description/config
     
     int32_t width = 0;                // Display width
     int32_t height = 0;               // Display height

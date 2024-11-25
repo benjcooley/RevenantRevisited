@@ -85,6 +85,17 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     zbuffer = new TSurface();
     zbuffer->Initialize(dwidth, dheight, SG_PIXELFORMAT_DEPTH_STENCIL);
 
+    // Create pipeline for surface rendering
+    pip_desc = {};
+    pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
+    pip_desc.shader = sg_make_shader(blit_shader_desc());
+    pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+    pip_desc.colors[0].blend.enabled = true;
+    pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+    pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pipeline = sg_make_pipeline(&pip_desc);
+
     // Create default render pass
     sg_pass_desc pass_desc = {};
     pass_desc.color_attachments[0].image = backbuffer->GetSGImage();
