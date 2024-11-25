@@ -44,6 +44,30 @@ TSurface::TSurface() {
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
 }
 
+TSurface::TSurface(int32_t w, int32_t h, int32_t bpp) {
+    locked = nullptr;
+    width = w;
+    height = h;
+    bitsperpixel = bpp;
+    stride = width;
+    clipx = clipy = 0;
+    clipwidth = width;
+    clipheight = height;
+    clipmode = CLIP_EDGES;
+    flags = 0;
+    keycolor = 0;
+    originx = originy = 0;
+    
+    // Initialize buffers
+    cpu_buffer = nullptr;
+    buffer_size = width * height * sizeof(uint32_t);
+    // Create new Sokol image
+    img_desc.width = width;
+    img_desc.height = height;
+    image = sg_make_image(&img_desc);
+    
+}
+
 TSurface::TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp) {
     locked = nullptr;
     width = w;
@@ -63,7 +87,7 @@ TSurface::TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp) {
     buffer_size = width * height * sizeof(uint32_t);
     image = existing_image;
     
-    // Initialize image description
+    // Initialize image description with defaults
     img_desc = {};
     img_desc.type = SG_IMAGETYPE_2D;
     img_desc.render_target = true;
