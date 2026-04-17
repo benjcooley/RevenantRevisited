@@ -6,18 +6,12 @@
 
 #include "display.h"
 
-#include "graphics.h"
-#include "mainwnd.h"
-#include "bitmap.h"
+#include <sokol_app.h>
+#include <sokol_gfx.h>
+#include <sokol_glue.h>
+
 #include "multisurface.h"
-
-LPDIRECTDRAWSURFACE front;      // Pointer to DirectDraw Surfaces for the display.   
-LPDIRECTDRAWSURFACE back;
-LPDIRECTDRAWCLIPPER clipper;    
-LPDIRECTDRAWSURFACE zbuffer;
-
-extern uint32_t ZBufferBitDepth;
-extern LPDIRECTDRAW         DirectDraw;       // DirectDraw pointer
+#include "revenant.h"
 
 // Initializes Color Tables
 extern bool  Hardware3D;
@@ -27,13 +21,13 @@ extern void  MakeColorTables();
 // These functions are used to record a list of update ares on the screen.
 // The low level graphics functions all are passed the address of a function called
 // 'callback' in their drawparam structures.  For the display, this funciton is set
-// to AddUpdateCallback(), which logs the rectangle drawn in a list.  When all the 
+// to AddUpdateCallback(), which logs the rectangle drawn in a list.  When all the
 // drawing is complete, the low level draw functions return, and the list is added
 // to the display dirty rectangle update list with a call to ProcessUpdateCallbacks().
 
 void ResetUpdateCallbacks();
 void ProcessUpdateCallbacks();
-void AddUpdateCallback(PSDrawBlock db, PSDrawParam dp);
+void AddUpdateCallback(SDrawBlock* db, SDrawParam* dp);
 
 TDisplay::TDisplay()
 {}
@@ -80,7 +74,7 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
 
     // Create render passes
     sg_pass_desc pass_desc = {};
-    
+
     // Main render pass
     pass_desc.color_attachments[0].image = color_target;
     pass_desc.depth_stencil_attachment.image = depth_target;
@@ -90,19 +84,25 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     pass_desc.color_attachments[0].image.id = SG_INVALID_ID;
     depth_pass = sg_make_pass(&pass_desc);
 
-    // Create uniform buffers
+#if 0 // TODO(port): real sokol_gfx path — Phase 3
+    // sokol_gfx has no SG_BUFFERTYPE_UNIFORM (no UBOs); uniforms are pushed
+    // via sg_apply_uniforms each draw call. These sg_buffer slots go away
+    // when the tile pipeline gets wired up in Phase 3.
     sg_buffer_desc buf_desc = {};
     buf_desc.type = SG_BUFFERTYPE_UNIFORM;
     buf_desc.usage = SG_USAGE_STREAM;
-    
+
     buf_desc.size = sizeof(float) * 16; // 4x4 matrix
     uniforms.view_proj = sg_make_buffer(&buf_desc);
     uniforms.model = sg_make_buffer(&buf_desc);
-    
+
     buf_desc.size = sizeof(float) * 8; // light pos (vec3) + padding + color (vec3) + intensity
     uniforms.light_params = sg_make_buffer(&buf_desc);
+#endif
 
-    // Create tile rendering pipeline
+#if 0 // TODO(port): real sokol_gfx path — Phase 3
+    // Tile rendering pipeline needs a shader module to be wired up; deferred
+    // along with the rest of the tile-draw rewrite.
     tile_pip_desc = {};
     tile_pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;  // position
     tile_pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;  // texcoord
@@ -115,6 +115,7 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     tile_pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
     tile_pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     tile_pipeline = sg_make_pipeline(&tile_pip_desc);
+#endif
 
     // Create front/back buffers as surfaces
     frontbuffer = new TSurface(color_target, width, height, bitsperpixel);
@@ -138,28 +139,22 @@ bool TDisplay::Close()
 
     if (backbuffer)
     {
-
         delete backbuffer;
-        backbuffer    = nullptr;
-        back    = nullptr;
+        backbuffer = nullptr;
     }
 
     // Destroy zbuffer surface
     if (zbuffer)
     {
-
         delete zbuffer;
-        zbuffer = nullptr;
         zbuffer = nullptr;
     }
 
     // Destroy front surface
     if (frontbuffer)
     {
-
         delete frontbuffer;
         frontbuffer = nullptr;
-        front = nullptr;
     }
 
     width = height = 0;
@@ -179,23 +174,22 @@ bool TDisplay::Restore()
 
     if (frontbuffer->Lost())
     {
-        front->Restore();
+        frontbuffer->Restore();
         if (!Windowed)
             frontbuffer->Clear();
     }
 
-    if (back->IsLost())
+    if (backbuffer && backbuffer->Lost())
     {
-        back->Restore();
+        backbuffer->Restore();
         backbuffer->Clear();
     }
-
 
     return true;
 }
 
 // Flips the front/back buffer
-bool TDisplay::FlipPage(bool Wait)
+bool TDisplay::FlipPage(bool /*Wait*/)
 {
     if (!frontbuffer || frontbuffer->Lost())
         return false;
@@ -209,19 +203,20 @@ bool TDisplay::FlipPage(bool Wait)
     // Begin default pass with viewport matching window size
     sg_begin_default_pass(&pass_action, sapp_width(), sapp_height());
 
-    // Draw backbuffer to screen
+#if 0 // TODO(port): real sokol_gfx path — Phase 3
+    // Draw backbuffer to screen. The per-surface pipeline handle used to live
+    // on TSurface; it's being moved onto TDisplay in the Phase 3 rewrite, so
+    // the actual fullscreen blit call gets re-wired there.
     if (backbuffer) {
-        // Set up pipeline state
         sg_apply_pipeline(backbuffer->pipeline);
-        
-        // Set up bindings
+
         sg_bindings bind = {};
         bind.fs.images[0] = backbuffer->GetSGImage();
         sg_apply_bindings(&bind);
 
-        // Draw fullscreen quad
         sg_draw(0, 6, 1);
     }
+#endif
 
     // End pass and commit frame
     sg_end_pass();

@@ -192,7 +192,7 @@ void TCharacter::Pulse()
     if (IsFighting())
     {
       // Call signal hostility to tell character he's being attacked
-        PTCharacter target = Fighting();
+        TCharacter* target = Fighting();
         if (target)
             target->SignalHostility(this, target);
 
@@ -233,7 +233,7 @@ void TCharacter::Pulse()
             TObjectInstance* inst = MapPane.GetInstance(index);
             if (inst)
             {
-                ((PTBloodEffect)inst)->SetParams(height, 0, 64, 255, 5, 1);
+                ((TBloodEffect*)inst)->SetParams(height, 0, 64, 255, 5, 1);
             }
         }
     }
@@ -271,7 +271,7 @@ void TCharacter::Pulse()
           // Get attack whose chainname matches last attack name    
             for (int32_t c = 0; c < chardata->attacks.NumItems(); c++)
             {
-                PSCharAttackData ad = &(chardata->attacks[c]);
+                SCharAttackData* ad = &(chardata->attacks[c]);
 
                 if (!stricmp(lastattack->attackname, ad->chainname))
                 {
@@ -292,7 +292,7 @@ void TCharacter::Pulse()
   // PLAYER: Update the character's enemy list... and begin combat if targets in range...
     if (ObjClass() == OBJCLASS_PLAYER && !(PlayScreen.GameFrame() % FRAMERATE))
     {
-        PTCharacter targ = FindClosestEnemy(GetFace(), 32); // Updates enemy list and HasSeen list
+        TCharacter* targ = FindClosestEnemy(GetFace(), 32); // Updates enemy list and HasSeen list
         if (targ && !targ->IsDead() &&  // Has targ, and targ is alive 
             !targ->IsInvisibleSpell() &&// Target is hidden with the invisible spell
             !IsFighting() &&            // We're not fighting now
@@ -363,10 +363,10 @@ void TCharacter::Pulse()
         }
         lastpoisondamage = gametime;
     }
-    PTCharAnimator anim = (PTCharAnimator)GetAnimator();
+    TCharAnimator* anim = (TCharAnimator*)GetAnimator();
     if (anim)
     {
-        PTWeaponSwipe weaponswipe = anim->GetWeaponSwipe();
+        TWeaponSwipe* weaponswipe = anim->GetWeaponSwipe();
         if (weaponswipe && weaponswipe->GetInitialized())
             weaponswipe->Animate();
     }
@@ -459,7 +459,7 @@ void TCharacter::UpdateAction(int32_t bits)
         }
         else if (waittype == WAIT_CHAR_DONE && comstate == COM_COMPLETED)
         {
-            if (!doing->obj || ((PTCharacter)doing->obj)->IsInRoot())
+            if (!doing->obj || ((TCharacter*)doing->obj)->IsInRoot())
                 continuescript = true;
         }
 
@@ -555,7 +555,7 @@ void TCharacter::Animate(bool draw)
 
         SColor color = { 0, 150, 255 };
 
-        if (this == (PTCharacter)Player)
+        if (this == (TCharacter*)Player)
         {
             color.red = 200;
             color.green = 0;
@@ -600,7 +600,7 @@ void TCharacter::Notify(int32_t notify, void *ptr)
 
 #define MAXZMOVE 32
 
-bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t *height, PTCharacter *bychar)
+bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t *height, TCharacter* *bychar)
 {
     int32_t h;
     if (!height)
@@ -623,7 +623,7 @@ bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t
 
     int32_t aniflags = GetAniFlags();
 
-    PTCharacter dummybychar;
+    TCharacter* dummybychar;
     if (!bychar)
         bychar = &dummybychar;
     *bychar = nullptr;
@@ -926,7 +926,7 @@ int32_t TCharacter::CalculateDamage(int32_t damage, int32_t damagetype, int32_t 
 }
 
 void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
-    PTActionBlock action, PTCharacter attacker)
+    TActionBlock* action, TCharacter* attacker)
 {
   // Calculate total damage
     if (damagetype >= 0)
@@ -936,7 +936,7 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
     TObjectInstance::Damage(damage);
 
   // Get impact pointer
-    PSCharAttackImpact impactdata = nullptr;
+    SCharAttackImpact* impactdata = nullptr;
 
   // Do death...
     if (Health() < 1)
@@ -951,7 +951,7 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
             Pulp(vel, count, count * 30);
         }
 */
-        PTActionBlock death = action;
+        TActionBlock* death = action;
 
       // Caller didn't give us a special death to use so...
         if (!death)
@@ -998,7 +998,7 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
   // Or do impact...
     else
     {
-        PTActionBlock impact = action;
+        TActionBlock* impact = action;
 
       // Caller didn't give us a special impact to use so...    
         if (!impact)
@@ -1079,7 +1079,7 @@ void TCharacter::RestoreHealth()
 }
 
 // Returns true if character has seen 'me'
-bool TCharacter::HasSeenMe(PTCharacter me)
+bool TCharacter::HasSeenMe(TCharacter* me)
 {
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
@@ -1092,7 +1092,7 @@ bool TCharacter::HasSeenMe(PTCharacter me)
 }
 
 // Add me to the HASSEEN list
-void TCharacter::SetHasSeen(PTCharacter me)
+void TCharacter::SetHasSeen(TCharacter* me)
 {
     int32_t lowest = 0x7FFFFFFF;
     int32_t lowestnum = 0;
@@ -1117,7 +1117,7 @@ void TCharacter::SetHasSeen(PTCharacter me)
 }
 
 // Returns true if character has seen 'me'
-bool TCharacter::HasSeenAutoCombat(PTCharacter me)
+bool TCharacter::HasSeenAutoCombat(TCharacter* me)
 {
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
@@ -1371,7 +1371,7 @@ TObjectInstance* TCharacter::FindObjAhead()
 // * General AI Routines *
 // ***********************
 
-int32_t TCharacter::ResolveMove(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
 {
   // Do pivoting before moving (character stays in root neutral state until pivot is done, 
   // then sets the first step action block.  No block checking is done when pivoting
@@ -1394,7 +1394,7 @@ int32_t TCharacter::ResolveMove(PTActionBlock ab, int32_t bits)
             return 0;
         else
         {
-            PTActionBlock newab = nullptr;
+            TActionBlock* newab = nullptr;
 
             if (HasActionAni(StName(root->name, "f")))
                 newab = new TActionBlock(*doing, StName(root->name, "f"));
@@ -1448,7 +1448,7 @@ int32_t TCharacter::ResolveMove(PTActionBlock ab, int32_t bits)
 
     if (commanddone && !ab->stop) // Take another step unless we were stopped
     {
-        PTActionBlock newab = new TActionBlock(*doing);
+        TActionBlock* newab = new TActionBlock(*doing);
       // Left step
         if (doing->IsLeft(root->name))
             strcpy(newab->name, StName(root->name, "r"));
@@ -1464,11 +1464,11 @@ int32_t TCharacter::ResolveMove(PTActionBlock ab, int32_t bits)
 // This function is called by the ResolveAttack() function to resolve hits for
 // multiple characters.  The characters are usually found by calling the FindCharacters()
 // function, then calling this function for each character.  Returns true if hit.
-bool TCharacter::ResolveHit(PTCharacter targ, 
-    PSCharAttackData attack, PSCharAttackImpact attackimpact, int32_t attackdamage)
+bool TCharacter::ResolveHit(TCharacter* targ, 
+    SCharAttackData* attack, SCharAttackImpact* attackimpact, int32_t attackdamage)
 {
     int32_t damage = 0;
-    PSCharAttackImpact impact = nullptr;
+    SCharAttackImpact* impact = nullptr;
 
     if (targ)
     {
@@ -1520,7 +1520,7 @@ bool TCharacter::ResolveHit(PTCharacter targ,
             if (!targ->IsDoing(ACTION_BLOCK) || damage > 0) // ****** CODE FOR IMPACT *******
             {
                 // Get interactive DEATH
-                PTActionBlock deathab, impactab, hitab;
+                TActionBlock* deathab, impactab, hitab;
                 deathab = impactab = hitab = nullptr;
                 if (targ->Health() - damage < 1)
                 {
@@ -1595,11 +1595,11 @@ bool TCharacter::ResolveHit(PTCharacter targ,
 // Maximum number of characters we can hit at a time
 #define MAXHITCHARS 32  // This should do it
 
-int32_t TCharacter::ResolveAttack(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
 {
-    PTCharacter targ = (PTCharacter)ab->obj;
-    PSCharAttackData attack = ab->attack;
-    PSCharAttackImpact impact = ab->impact;
+    TCharacter* targ = (TCharacter*)ab->obj;
+    SCharAttackData* attack = ab->attack;
+    SCharAttackImpact* impact = ab->impact;
 
   // Set last attack stuff
     if (ab->firsttime)
@@ -1671,7 +1671,7 @@ int32_t TCharacter::ResolveAttack(PTActionBlock ab, int32_t bits)
         if (!(attack->flags & CA_ONETARGET))
         {
             int32_t numchars;
-            PTCharacter chars[MAXHITCHARS];
+            TCharacter* chars[MAXHITCHARS];
 
             numchars = FindCharacters(chars, MAXHITCHARS, 
                 attack->hitmaxrange, GetFace(), attack->hitangle, FINDCHAR_ENEMY);
@@ -1686,7 +1686,7 @@ int32_t TCharacter::ResolveAttack(PTActionBlock ab, int32_t bits)
       // Do miss if we failed to hit anything   
         if (!hit)
         {
-            PTActionBlock missab;
+            TActionBlock* missab;
 
           // Do we play miss animation, or return straightway to combat state? 
             if (!(attack->flags & CA_NOMISS))
@@ -1723,7 +1723,7 @@ int32_t TCharacter::ResolveAttack(PTActionBlock ab, int32_t bits)
     return 0;
 }
 
-int32_t TCharacter::ResolveImpact(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveImpact(TActionBlock* ab, int32_t bits)
 {
 #if 0
     static int32_t frame;
@@ -1783,7 +1783,7 @@ int32_t TCharacter::ResolveImpact(PTActionBlock ab, int32_t bits)
             ab->impact->loopname[0] != nullptr &&
             FindState(ab->impact->loopname) >= 0)
         {
-            PTActionBlock newab = new TActionBlock(*ab, ab->impact->loopname, ab->action);
+            TActionBlock* newab = new TActionBlock(*ab, ab->impact->loopname, ab->action);
             newab->priority = true;
             newab->interrupt = true;
             desired->priority = false;
@@ -1803,7 +1803,7 @@ int32_t TCharacter::ResolveImpact(PTActionBlock ab, int32_t bits)
   // is exauhsted.
     if (commanddone && ab->wait <= 0)
     {
-        PTActionBlock newab = new TActionBlock(root->name, ACTION_COMBAT);
+        TActionBlock* newab = new TActionBlock(root->name, ACTION_COMBAT);
         newab->interrupt = true;
         SetDesired(newab);
     }
@@ -1811,7 +1811,7 @@ int32_t TCharacter::ResolveImpact(PTActionBlock ab, int32_t bits)
     return 0;
 }
 
-int32_t TCharacter::ResolveBlock(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveBlock(TActionBlock* ab, int32_t bits)
 {
     if (ab->wait <= 0 || (doing && doing->stop))
     {
@@ -1823,7 +1823,7 @@ int32_t TCharacter::ResolveBlock(PTActionBlock ab, int32_t bits)
     return COM_EXECUTING;
 }
 
-int32_t TCharacter::ResolveDead(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveDead(TActionBlock* ab, int32_t bits)
 {
   // Do blood for attack
     if (ab->firsttime && (!ab->attack || (ab->attack->flags & CA_BLOOD)))
@@ -1836,7 +1836,7 @@ int32_t TCharacter::ResolveDead(PTActionBlock ab, int32_t bits)
         !ab->Is(ab->impact->loopname) &&
         FindState(ab->impact->loopname) >= 0)
     {
-        PTActionBlock newab = new TActionBlock(*ab, ab->impact->loopname, ab->action);
+        TActionBlock* newab = new TActionBlock(*ab, ab->impact->loopname, ab->action);
         newab->priority = true;
         newab->interrupt = true;
         desired->priority = false;
@@ -1848,14 +1848,14 @@ int32_t TCharacter::ResolveDead(PTActionBlock ab, int32_t bits)
     return COM_EXECUTING;
 }
 
-int32_t TCharacter::ResolveCombat(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
 {
   // Clear goto's when in combat
     ab->target.x = ab->target.y = ab->target.z = 0;
 
   // If target is dead, change to new target, or end combat
-    PTCharacter targ = (PTCharacter)ab->obj;
-    PTCharacter newtarg;
+    TCharacter* targ = (TCharacter*)ab->obj;
+    TCharacter* newtarg;
     if (!targ || targ->IsDead() || targ->IsInvisibleSpell() ||Distance(targ) > chardata->combatrangemax)
     {
         newtarg = FindClosestEnemy();
@@ -1917,7 +1917,7 @@ int32_t TCharacter::ResolveCombat(PTActionBlock ab, int32_t bits)
         {
             char animname[RESNAMELEN];
             GetAngleMoveAnim(ab->moveangle, angle, root->name, animname, RESNAMELEN);
-            PTActionBlock newab = new TActionBlock(animname, doing->action);
+            TActionBlock* newab = new TActionBlock(animname, doing->action);
             newab->angle = ab->angle;
             newab->moveangle = ab->moveangle;
             newab->obj = ab->obj;
@@ -1938,7 +1938,7 @@ int32_t TCharacter::ResolveCombat(PTActionBlock ab, int32_t bits)
             {
                 char animname[RESNAMELEN];
                 GetAngleMoveAnim(ab->moveangle, faceangle, root->name, animname, RESNAMELEN);
-                PTActionBlock newab = new TActionBlock(animname, doing->action);
+                TActionBlock* newab = new TActionBlock(animname, doing->action);
                 newab->angle = faceangle;
                 newab->moveangle = ab->moveangle;
                 int32_t anglediff = abs(AngleDiff(GetFace(), newab->angle));
@@ -1979,7 +1979,7 @@ int32_t TCharacter::ResolveCombat(PTActionBlock ab, int32_t bits)
     return 0;
 }
 
-int32_t TCharacter::ResolveCombatMove(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveCombatMove(TActionBlock* ab, int32_t bits)
 {
     if (bits & MOVE_BLOCKED || ab->stop)
     {
@@ -1993,7 +1993,7 @@ int32_t TCharacter::ResolveCombatMove(PTActionBlock ab, int32_t bits)
     return ResolveCombat(ab, bits);
 }
 
-int32_t TCharacter::ResolveBowAim(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveBowAim(TActionBlock* ab, int32_t bits)
 {
     Halt(); // Make sure there's no movement
 
@@ -2006,7 +2006,7 @@ int32_t TCharacter::ResolveBowAim(PTActionBlock ab, int32_t bits)
     return COM_EXECUTING; // Allow to loop indefinitely until cancelled
 }
 
-int32_t TCharacter::ResolveBowShoot(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveBowShoot(TActionBlock* ab, int32_t bits)
 {
     // generate a new arrow and fire it
     if (ab->firsttime)
@@ -2041,12 +2041,12 @@ int32_t TCharacter::ResolveBowShoot(PTActionBlock ab, int32_t bits)
     return 0;
 }
 
-int32_t TCharacter::ResolveLeap(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveLeap(TActionBlock* ab, int32_t bits)
 {
     return ResolveCombat(ab, bits);
 }
 
-int32_t TCharacter::ResolvePull(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolvePull(TActionBlock* ab, int32_t bits)
 {
     int32_t start;
 
@@ -2092,7 +2092,7 @@ int32_t TCharacter::ResolvePull(PTActionBlock ab, int32_t bits)
     return 0;
 }
 
-int32_t TCharacter::ResolveSay(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolveSay(TActionBlock* ab, int32_t bits)
 {
     if (ab->wait <= 0 || (doing && doing->stop))
     {
@@ -2104,7 +2104,7 @@ int32_t TCharacter::ResolveSay(PTActionBlock ab, int32_t bits)
     return COM_EXECUTING;
 }
 
-int32_t TCharacter::ResolvePivot(PTActionBlock ab, int32_t bits)
+int32_t TCharacter::ResolvePivot(TActionBlock* ab, int32_t bits)
 {
     Halt(); // Make sure there's no movement
 
@@ -2156,7 +2156,7 @@ void TCharacter::EffectBurst(char *name, int32_t height)
         if (!inst)
             return;
 
-        ((PTBloodEffect)inst)->SetParams(height, (GetFace() + 128) & 255, 0, 80, 20, random(1, 5));
+        ((TBloodEffect*)inst)->SetParams(height, (GetFace() + 128) & 255, 0, 80, 20, random(1, 5));
     }
     else
     {
@@ -2168,7 +2168,7 @@ void TCharacter::EffectBurst(char *name, int32_t height)
             return;
 
         inst->CreateAnimator();
-        PTParticle3DAnimator anim = (PTParticle3DAnimator)inst->GetAnimator();
+        TParticle3DAnimator* anim = (TParticle3DAnimator*)inst->GetAnimator();
 
         int32_t ang = (GetFace() + random(-80, 80)) & 0xff;
 
@@ -2231,7 +2231,7 @@ bool TCharacter::IsFinalState()
     return false;
 }
 
-bool TCharacter::IsEnemy(PTCharacter chr)
+bool TCharacter::IsEnemy(TCharacter* chr)
 {
   // Is this character attacking me
     if (chr->IsFighting() && chr->Fighting() == this)
@@ -2269,13 +2269,13 @@ void TCharacter::AI()
     if (Editor)
         return;
 
-    PTCharacter target = Fighting();
+    TCharacter* target = Fighting();
     
   // We don't have a target.. try to find one
     if (!target && !Editor && Aggressive())
     {
         target = FindClosestEnemy(); // Finds the closest visible enemy (if it can see it)
-        if (target && Distance((PTCharacter)target) < chardata->combatrangemin)
+        if (target && Distance((TCharacter*)target) < chardata->combatrangemin)
             BeginCombat(target);
     }
     if (target)
@@ -2283,7 +2283,7 @@ void TCharacter::AI()
         if (target->IsInvisibleSpell())
         {
             target = FindClosestEnemy(); // Finds the closest visible enemy (if it can see it)
-            if (target && Distance((PTCharacter)target) < chardata->combatrangemin)
+            if (target && Distance((TCharacter*)target) < chardata->combatrangemin)
                 BeginCombat(target);
         }
     }
@@ -2369,7 +2369,7 @@ void TCharacter::AI()
     }
 }
 
-bool TCharacter::CanHearCharacter(PTCharacter chr)
+bool TCharacter::CanHearCharacter(TCharacter* chr)
 {
     bool hear = true;
     int32_t dist = Distance(chr);
@@ -2387,7 +2387,7 @@ bool TCharacter::CanHearCharacter(PTCharacter chr)
     return hear;
 }
 
-bool TCharacter::CanSeeCharacter(PTCharacter chr, int32_t angle)
+bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
 {
     bool see = true;
 
@@ -2419,7 +2419,7 @@ bool TCharacter::CanSeeCharacter(PTCharacter chr, int32_t angle)
 }
 
 // Finds characters in range, with closest guy at head of list
-int32_t TCharacter::FindCharacters(PTCharacter chars[], int32_t maxchars, 
+int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars, 
     int32_t range, int32_t angle, int32_t anglerange, int32_t flags)
 {
     if (maxchars < 1)
@@ -2437,7 +2437,7 @@ int32_t TCharacter::FindCharacters(PTCharacter chars[], int32_t maxchars,
 
     for (TMapIterator i(Pos(), range, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_CHARACTER); i; i++)
     {
-        PTCharacter chr = (PTCharacter)i.Item();
+        TCharacter* chr = (TCharacter*)i.Item();
 
         if (chr == this)
             continue;
@@ -2490,7 +2490,7 @@ int32_t TCharacter::FindCharacters(PTCharacter chars[], int32_t maxchars,
       // Put closest guy at head of list
         if (chars[0] != nullptr && dist <= bestdist)
         {
-            PTCharacter temp = chars[0];
+            TCharacter* temp = chars[0];
             chars[0] = chr;
             chr = temp;
             bestdist = dist;
@@ -2507,9 +2507,9 @@ int32_t TCharacter::FindCharacters(PTCharacter chars[], int32_t maxchars,
     return numchars;
 }
 
-PTCharacter TCharacter::FindCharacter(int32_t range, int32_t angle, int32_t anglerange, int32_t flags)
+TCharacter* TCharacter::FindCharacter(int32_t range, int32_t angle, int32_t anglerange, int32_t flags)
 {
-    PTCharacter chr;
+    TCharacter* chr;
     int32_t numchars = FindCharacters(&chr, 1, range, angle, anglerange, flags);
     if (numchars > 0)
         return chr;
@@ -2517,12 +2517,12 @@ PTCharacter TCharacter::FindCharacter(int32_t range, int32_t angle, int32_t angl
         return nullptr;
 }
 
-PTCharacter TCharacter::FindCharacterAhead(int32_t angle, int32_t anglerange)
+TCharacter* TCharacter::FindCharacterAhead(int32_t angle, int32_t anglerange)
 {
     return FindCharacter(512, angle, anglerange, 0);
 }
 
-PTCharacter TCharacter::FindClosestEnemy(int32_t angle, int32_t anglerange)
+TCharacter* TCharacter::FindClosestEnemy(int32_t angle, int32_t anglerange)
 {
     return FindCharacter(-1, angle, anglerange, FINDCHAR_ENEMY | FINDCHAR_SEE | FINDCHAR_HEAR);
 }
@@ -2613,7 +2613,7 @@ void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target)
 
     // if we're a monster, then target our attacker...
     if (ObjClass() != OBJCLASS_PLAYER)
-        SetFighting((PTCharacter)actor);
+        SetFighting((TCharacter*)actor);
 }
 
 void TCharacter::SetOnExit()
@@ -2628,7 +2628,7 @@ void TCharacter::SetOnExit()
 
 bool TCharacter::Go(int32_t angle)
 {
-    PTActionBlock ab = nullptr;
+    TActionBlock* ab = nullptr;
 
   // What is our moveaction for this mode
     ACTION moveaction = GetMoveAction(root->action);
@@ -2637,7 +2637,7 @@ bool TCharacter::Go(int32_t angle)
         return false; // Can't move right now
 
   // Do we start fighting a new character?
-    PTCharacter newtarg = FindClosestEnemy(angle, 32); // Hack to get has seen setup
+    TCharacter* newtarg = FindClosestEnemy(angle, 32); // Hack to get has seen setup
 
     if (!IsFighting() || IsRunMode())
     {
@@ -2687,11 +2687,11 @@ bool TCharacter::Go(int32_t angle)
         if (IsMoving() && doing->moveangle == angle)
             return true;
 
-        PTCharacter targ = (PTCharacter)doing->obj;
+        TCharacter* targ = (TCharacter*)doing->obj;
 
       // Always check if we're pointing to a new target when we move in a new direction
         if (newtarg && 
-            newtarg != (PTCharacter)doing->obj && 
+            newtarg != (TCharacter*)doing->obj && 
             !newtarg->IsDead() && 
             !newtarg->IsInvisibleSpell() && 
             (!targ || Distance(newtarg) < 64 || (Distance(newtarg) < Distance(targ))) )
@@ -2826,7 +2826,7 @@ bool TCharacter::SetWalkMode()
     if (!HasActionAni(aniname))
         return false;
 
-    PTActionBlock ab = new TActionBlock(aniname, root->action);
+    TActionBlock* ab = new TActionBlock(aniname, root->action);
     SetRoot(ab);
 
     if (IsMoving())         // If moving, change next step to new root
@@ -2851,7 +2851,7 @@ bool TCharacter::SetSneakMode()
     if (IsSneakMode())
         return true;
 
-    PTActionBlock ab = new TActionBlock("sneak");
+    TActionBlock* ab = new TActionBlock("sneak");
     SetRoot(ab);
 
     if (doing && doing->action == ACTION_MOVE)      // If moving, change next step to new root
@@ -2887,7 +2887,7 @@ bool TCharacter::SetRunMode()
     if (!HasActionAni(aniname))
         return false;
 
-    PTActionBlock ab = new TActionBlock(aniname, root->action);
+    TActionBlock* ab = new TActionBlock(aniname, root->action);
     SetRoot(ab);
 
     if (doing && IsMoving())        // If moving, change next step to new root
@@ -2953,7 +2953,7 @@ bool TCharacter::Pivot(int32_t angle)
         turnrate = MAKETURNRATE(absdiff);
     }
 
-    PTActionBlock ab = new TActionBlock(buf, ACTION_PIVOT);
+    TActionBlock* ab = new TActionBlock(buf, ACTION_PIVOT);
     ab->angle = ab->moveangle = angle;
     ab->turnrate = turnrate;
     ab->interrupt = true;
@@ -2990,9 +2990,9 @@ bool TCharacter::Pickup(TObjectInstance* inst)
 
 bool TCharacter::Pull(TObjectInstance* inst)
 {
-    PTActionBlock ab = new TActionBlock("Pull Front");
+    TActionBlock* ab = new TActionBlock("Pull Front");
     int32_t state = inst->GetState();
-    int32_t direction = (((PTLever)inst)->targetpos.z / 64);
+    int32_t direction = (((TLever*)inst)->targetpos.z / 64);
 
     ab->obj = inst;
     ab->priority = true;    // Won't do it otherwise
@@ -3118,7 +3118,7 @@ bool TCharacter::Say(char *string, int32_t wait, char *anim, char *sound)
       {
         if (SoundPlayer.Mount(soundid))
         {
-            PTSound sound = SoundPlayer.GetSound(soundid);
+            TSound* sound = SoundPlayer.GetSound(soundid);
             if (sound)
             {
                 wait = sound->GetLength() * FRAMERATE / 100;     // Get seconds to wait
@@ -3136,7 +3136,7 @@ bool TCharacter::Say(char *string, int32_t wait, char *anim, char *sound)
     char buf[128];
     DialogLine(string, buf, 128);  // Translate dialog line (convert [tags])
 
-    PTActionBlock ab;
+    TActionBlock* ab;
     if (anim)
         ab = new TActionBlock(anim, ACTION_SAY);
     else
@@ -3186,7 +3186,7 @@ bool TCharacter::DrawBow()
     if (IsMoving())
         Stop();
 
-    PTActionBlock ab = new TActionBlock(StName(root->name, "aim"), ACTION_BOWAIM);
+    TActionBlock* ab = new TActionBlock(StName(root->name, "aim"), ACTION_BOWAIM);
     ab->interrupt = true;
     ab->angle = ab->moveangle = GetFace();
     SetDesired(ab);
@@ -3236,7 +3236,7 @@ bool TCharacter::ShootBow(int32_t angle)
     doing->turnrate = MAKETURNRATE(absdiff);
 
   // Queue the shoot action (after pivot)
-    PTActionBlock ab = new TActionBlock(StName(root->name, "shoot"), ACTION_BOWSHOOT);
+    TActionBlock* ab = new TActionBlock(StName(root->name, "shoot"), ACTION_BOWSHOOT);
     ab->angle = ab->moveangle = angle;
     SetDesired(ab);
 
@@ -3265,8 +3265,8 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
     if ((uint32_t)attacknum >= (uint32_t)chardata->attacks.NumItems())
         return false;
 
-    PSCharAttackData ad = &(chardata->attacks[attacknum]);
-    PTCharacter targ = Fighting();
+    SCharAttackData* ad = &(chardata->attacks[attacknum]);
+    TCharacter* targ = Fighting();
 
   // Matches flags
     if ((ad->flags & flagmask) != flags)
@@ -3378,7 +3378,7 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
   // If impact, make sure character has appropriate impact/death/stun animation
     if (ad->numimpacts > 0 && targ)
     {
-        PSCharAttackImpact ai = ad->impacts;
+        SCharAttackImpact* ai = ad->impacts;
         for (int32_t i = 0; i < ad->numimpacts; i++, ai++)
         {
             if (((damage >= targ->Health()) && (ai->flags & CAI_DEATH)) ||  // Is death impact (overrides any damage impacts)
@@ -3473,10 +3473,10 @@ bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage)
         return false;
 
   // Get attack info from char data
-    PSCharAttackData ad = &(chardata->attacks[attacknum]);
+    SCharAttackData* ad = &(chardata->attacks[attacknum]);
 
   // Get target
-    PTCharacter targ = (PTCharacter)doing->obj;
+    TCharacter* targ = (TCharacter*)doing->obj;
 
   // Do magic attack
     if (ad->flags & CA_MAGICATTACK)
@@ -3490,7 +3490,7 @@ bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage)
         a = ACTION_ATTACK;  
 
   // Setup action block
-    PTActionBlock ab = new TActionBlock(ad->attackname, a);
+    TActionBlock* ab = new TActionBlock(ad->attackname, a);
     ab->obj = targ;
     ab->attack = ad;
     if (impactnum >= 0)
@@ -3560,7 +3560,7 @@ bool TCharacter::RandomAttack(int32_t pcnt)
 // Do a specific attack
 bool TCharacter::SpecificAttack(int32_t attacknum)
 {
-    PTCharacter targ = Fighting();
+    TCharacter* targ = Fighting();
     int32_t tdist = 0;
     if (targ)
         tdist = Distance(targ);
@@ -3584,7 +3584,7 @@ bool TCharacter::Leap(int32_t angle)
     int32_t diff = (angle - roundangle) & 255;
     int32_t anim = diff / 32;
 
-    PTActionBlock ab = nullptr;
+    TActionBlock* ab = nullptr;
 
     char *sfx;
 
@@ -3622,7 +3622,7 @@ bool TCharacter::Block(int32_t frames)
     if (!IsFighting() || !(IsDoing(ACTION_COMBAT) || IsDoing(ACTION_IMPACT)))
         return false;
 
-    PTCharacter targ = (PTCharacter)doing->obj;
+    TCharacter* targ = (TCharacter*)doing->obj;
 
     char *blockanim = "block";
     bool synchronize = false;
@@ -3651,7 +3651,7 @@ bool TCharacter::Block(int32_t frames)
         return false;
 
   // Ok, now start the block (note that AF_SYNCHRONIZE will cause frames to sync with attack
-    PTActionBlock ab = new TActionBlock(blockanim, ACTION_BLOCK);
+    TActionBlock* ab = new TActionBlock(blockanim, ACTION_BLOCK);
     ab->obj = doing->obj;
     if (frames < 0)
         ab->wait = random(chardata->blockmin, chardata->blockmax);
@@ -3682,7 +3682,7 @@ bool TCharacter::Dodge()
     if (!IsFighting() || !IsDoing(ACTION_COMBAT))
         return false;
 
-    PTActionBlock ab = new TActionBlock("dodge", ACTION_DODGE);
+    TActionBlock* ab = new TActionBlock("dodge", ACTION_DODGE);
     ab->obj = doing->obj;
     SetDesired(ab);
 
@@ -3697,7 +3697,7 @@ bool TCharacter::Pulp(S3DPoint vel, int32_t piece_count, int32_t blood_count)
         return false;
 
     // create the action block
-    PTActionBlock ab = new TActionBlock("pulped", ACTION_PULP);
+    TActionBlock* ab = new TActionBlock("pulped", ACTION_PULP);
     ab->priority = true;
     ab->action = ACTION_PULP;
     ForceCommand(ab);
@@ -3713,7 +3713,7 @@ bool TCharacter::Pulp(S3DPoint vel, int32_t piece_count, int32_t blood_count)
     def.facing = GetFace();
     def.objtype = EffectClass.FindObjType("PULP");
 
-    PTPulpEffect pulpstuff = (PTPulpEffect)MapPane.GetInstance(MapPane.NewObject(&def));
+    TPulpEffect* pulpstuff = (TPulpEffect*)MapPane.GetInstance(MapPane.NewObject(&def));
     if (!pulpstuff)
         return false;
 
@@ -3738,7 +3738,7 @@ bool TCharacter::Burn()
         def.facing = GetFace();
         def.objtype = EffectClass.FindObjType("BURN");
 
-        PTBurnEffect burn = (PTBurnEffect)MapPane.GetInstance(MapPane.NewObject(&def));
+        TBurnEffect* burn = (TBurnEffect*)MapPane.GetInstance(MapPane.NewObject(&def));
         if (!burn)
             return false;
         burning = burn;
@@ -3748,13 +3748,13 @@ bool TCharacter::Burn()
 
         // now make him do the uncontrolable chicken on fire dance of death!
         // create action block
-        PTActionBlock ab = new TActionBlock("onfire", ACTION_BURN);
+        TActionBlock* ab = new TActionBlock("onfire", ACTION_BURN);
         ab->priority = true;
         ForceCommand(ab);
     }
     else
     {
-        ((PTBurnEffect)burning)->ResetFrameCount();
+        ((TBurnEffect*)burning)->ResetFrameCount();
     }
 
     return true;
@@ -3771,7 +3771,7 @@ bool TCharacter::KnockBack(S3DPoint frompos)
     GetPos(pos);
     float dx = (float)(frompos.x - pos.x), dy = (float)(frompos.y - pos.y);
     float ang = (float)atan2(dy, dx);
-    PTActionBlock ab = new TActionBlock("cimpk", ACTION_IMPACT);
+    TActionBlock* ab = new TActionBlock("cimpk", ACTION_IMPACT);
     ab->priority = true;
     ForceCommand(ab);
     Face((int32_t)((ang * 256) / M_2PI));
@@ -3839,7 +3839,7 @@ ACTION TCharacter::GetLeapAction(ACTION action)
     return ACTION_NONE;
 }
 
-bool TCharacter::BeginFighting(PTCharacter target, ACTION action)
+bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
 {
   // Prevent auto combat from being called again for 
   // all currently visible characters.
@@ -3878,7 +3878,7 @@ bool TCharacter::BeginFighting(PTCharacter target, ACTION action)
     if (IsMoving())
         Stop();
 
-    PTActionBlock ab = new TActionBlock(rootname, action);
+    TActionBlock* ab = new TActionBlock(rootname, action);
     ab->obj = target;
     ab->priority = (FindTransitionState(doing->name, ab->name) >= 0);
         // Priority if has transition only, otherwise it will go immediately
@@ -3917,7 +3917,7 @@ bool TCharacter::EndFighting()
     if (IsMoving())
         Stop();
 
-    PTActionBlock ab = new TActionBlock("walk");
+    TActionBlock* ab = new TActionBlock("walk");
     ab->priority = (FindTransitionState(doing->name, ab->name) >= 0);
         // Priority if has transition only, otherwise it will go immediately
         // to correct state without possibility of being interrupted
@@ -3934,7 +3934,7 @@ bool TCharacter::EndFighting()
     return true;
 }
 
-bool TCharacter::SetFighting(PTCharacter newtarget)
+bool TCharacter::SetFighting(TCharacter* newtarget)
 {
     if (newtarget && newtarget->IsDead())   // Can't target dead guys
         return false;
@@ -3967,7 +3967,7 @@ bool TCharacter::PlayAnim(char *string)
     if (!HasActionAni(string))
         return false;
 
-    PTActionBlock ab = new TActionBlock(string, ACTION_ANIMATE);
+    TActionBlock* ab = new TActionBlock(string, ACTION_ANIMATE);
     SetDesired(ab);
 
     return true;
@@ -4062,13 +4062,13 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
     return false;
 }
 
-PTCharacter TCharacter::CharBlocking(TObjectInstance* inst, S3DPoint& pos, int32_t radius)
+TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, S3DPoint& pos, int32_t radius)
 {
     int32_t range = 128; // This should be about right
 
     for (TMapIterator i(pos, range, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_CHARACTER); i; i++)
     {
-        PTCharacter chr = (PTCharacter)i.Item();
+        TCharacter* chr = (TCharacter*)i.Item();
 
         if (chr && chr != inst && !chr->IsDead())
         {
@@ -4167,14 +4167,14 @@ void TCharacter::MakeVisible()
 {
     is_invisible = false;
 
-    PTCharAnimator animator = (PTCharAnimator)GetAnimator();
+    TCharAnimator* animator = (TCharAnimator*)GetAnimator();
 
     for(int32_t i = 0; i < animator->Get3DImagery()->NumMaterials(); ++i)
     {
         S3DMat mat;
         animator->Get3DImagery()->GetMaterial(i, &mat);
 
-        D3DMATERIAL &m = mat.matdesc;
+        S3DMaterial &m = mat.matdesc;
 
         m.ambient.a = 1.0f;
         m.diffuse.a = 1.0f;
@@ -4189,13 +4189,13 @@ void TCharacter::MakeInvisible()
 {
     is_invisible = true;
 
-    PTCharAnimator animator = (PTCharAnimator)GetAnimator();
+    TCharAnimator* animator = (TCharAnimator*)GetAnimator();
 
     for(int32_t i = 0; i < animator->Get3DImagery()->NumMaterials(); ++i)
     {
         S3DMat mat;
         animator->Get3DImagery()->GetMaterial(i, &mat);
-        D3DMATERIAL &m = mat.matdesc;
+        S3DMaterial &m = mat.matdesc;
 
         m.ambient.a = .5f;
         m.diffuse.a = .5f;
@@ -4396,7 +4396,7 @@ bool TCharacter::SetCast(char* ani, TObjectInstance* target, int32_t invoke_dela
     }
 
     // create the action block
-    PTActionBlock ab = new TActionBlock(puthere, ACTION_INVOKE);
+    TActionBlock* ab = new TActionBlock(puthere, ACTION_INVOKE);
     ab->obj = target;
     ab->priority = true;
     ForceCommand(ab);
@@ -4431,7 +4431,7 @@ bool TCharacter::Flail()
     if (IsFlailing())
         return true;
 
-    PTActionBlock ab = new TActionBlock("impact", ACTION_FLAIL);
+    TActionBlock* ab = new TActionBlock("impact", ACTION_FLAIL);
     ab->priority = true;
     ForceCommand(ab);
 
@@ -4447,7 +4447,7 @@ bool TCharacter::Flail()
         def.facing = GetFace();
         def.objtype = EffectClass.FindObjType("BURN");
 
-        PTBurnEffect burn = (PTBurnEffect)MapPane.GetInstance(MapPane.NewObject(&def));
+        TBurnEffect* burn = (TBurnEffect*)MapPane.GetInstance(MapPane.NewObject(&def));
         if (!burn)
             return false;
         burning = burn;
@@ -4457,13 +4457,13 @@ bool TCharacter::Flail()
 
         // now make him do the uncontrolable chicken on fire dance of death!
         // create action block
-        PTActionBlock ab = new TActionBlock("onfire", ACTION_BURN);
+        TActionBlock* ab = new TActionBlock("onfire", ACTION_BURN);
         ab->priority = true;
         ForceCommand(ab);
     }
     else
     {
-        ((PTBurnEffect)burning)->ResetFrameCount();
+        ((TBurnEffect*)burning)->ResetFrameCount();
     }
 
     return true;

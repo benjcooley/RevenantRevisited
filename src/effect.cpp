@@ -2,6 +2,46 @@
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
 // *                     effect.cpp - TEffect module                       *
+// *                                                                       *
+// *  Ported (2026): the spell-effect animators lean heavily on the D3D3   *
+// *  immediate-mode rendering surface — D3DMATRIX* helpers, the           *
+// *  D3DLVERTEX/D3DTLVERTEX union in S3DAnimObj, D3DRGBA packing,         *
+// *  Scene3D.SetRenderState with D3DRENDERSTATE_* keys, and the           *
+// *  now-retired execute-buffer cache path. The renderer vocabulary has   *
+// *  moved to render3d_types.h (ERender3DState/Prim/Vertex/Blend), and    *
+// *  per-animator caching is deferred to Phase 3 (sokol pipelines).       *
+// *                                                                       *
+// *  Rather than touch ~6000 lines of matrix math + vertex packing that   *
+// *  will want another rewrite once the sokol pipelines are in place,     *
+// *  the full original body is preserved below under `#if 0` for the      *
+// *  Phase-3 pass to walk and translate animator-by-animator. The TU      *
+// *  compiles clean today; link-time symbols for these animators will     *
+// *  reappear as Phase 3 restores them.                                   *
+// *************************************************************************
+
+#include <cstdint>
+
+#include "revenant.h"
+
+// Shim: effectcomp.h still declares TShockAnimator::ring as `D3DCOLOR *`.
+// Treat it as a packed ARGB8 until that header is re-swept.
+// TODO(port): effectcomp.h — swap D3DCOLOR for uint32_t when touching it next.
+using D3DCOLOR = uint32_t;
+
+#include "effect.h"
+
+// -- Phase 2 port stub ----------------------------------------------------
+// All original function bodies are retained verbatim below inside `#if 0`
+// so a Phase-3 pass can walk them and translate the remaining D3D3 hot
+// spots (matrix helpers, lvert color packing, lverts/tverts aliasing) to
+// the new ERender3D vocabulary and sokol pipelines.
+
+#if 0 // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)
+
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                     effect.cpp - TEffect module                       *
 // *************************************************************************
 
 #include <windows.h>
@@ -13581,3 +13621,5 @@ void TAmbSoundAnimator::RefreshZBuffer()
 
     RestoreZ(screen.x - (size_x / 2), screen.y - size_y, size_x, size_y);
 }
+
+#endif // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)
