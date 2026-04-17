@@ -1,0 +1,136 @@
+#include "TScript.h"
+
+// Decompiled methods and structure for class: TScript
+
+
+
+// Function at 004e4d50
+
+void TScript::virt_meth_0x4e4d50()
+
+{
+  this->virt_meth_0x40dd60();
+  this->mbr_0x104 = 0x42200000;
+  this->mbr_0x100 = 0;
+  this->curtrigger = 0;
+  return;
+}
+
+
+
+// Function at 004e4d90
+
+undefined4 TScript::virt_meth_0x4e4d90()
+
+{
+  float *pfVar1;
+  dword dVar2;
+  undefined4 *puVar3;
+  
+  cls_0x411eb0::meth_0x4178e0((cls_0x411eb0 *)((int)&DAT_0065a578 + 4));
+  cls_0x411eb0::meth_0x417d60((cls_0x411eb0 *)((int)&DAT_0065a578 + 4),2);
+  puVar3 = (undefined4 *)cls_0x5a7e38::meth_0x40eef0((cls_0x5a7e38 *)this);
+  FUN_0040c960();
+  puVar3[0x12] = 0x40000000;
+  puVar3[0x11] = 0x40000000;
+  puVar3[0x10] = 2.0;
+  dVar2 = this->curtrigger;
+  pfVar1 = (float *)(puVar3 + 0x16);
+  *puVar3 = 0x100;
+  puVar3[4] = dVar2;
+  dVar2 = this->mbr_0x104;
+  puVar3[5] = this->mbr_0x100;
+  puVar3[6] = dVar2;
+  FUN_0043a9f0(pfVar1);
+  FUN_0043b180(pfVar1,-1.047198);
+  FUN_0043b230(pfVar1,-0.7853982);
+  FUN_0043b130(pfVar1,(float *)(puVar3 + 0x10));
+  FUN_0043b090(pfVar1,puVar3 + 4);
+  cls_0x5a486c::meth_0x40a8f0((cls_0x5a486c *)this->newtrigger);
+  FUN_0040c9c0(&this->lastpriority);
+  if ((this->newtriggerstr & 1) != 0) {
+    FUN_0040ca20((int *)&this->lastpriority);
+  }
+  this->depth = 1;
+  if ((this->newtriggerstr & 2) != 0) {
+    cls_0x5a486c::meth_0x40ca90((cls_0x5a486c *)this->newtrigger,this->proto,this->trigger);
+  }
+  this->depth = 1;
+  cls_0x411eb0::meth_0x417b00((cls_0x411eb0 *)((int)&DAT_0065a578 + 4));
+  return 1;
+}
+
+
+
+// Function at 004f5d70
+
+cls_0x5a47f0 * TScript::virt_meth_0x4f5d70()
+
+{
+  cls_0x5a47f0 *this_00;
+  void *local_c;
+  undefined *puStack_8;
+  undefined4 local_4;
+  
+  local_4 = 0xffffffff;
+  puStack_8 = &LAB_0059f13e;
+  local_c = ExceptionList;
+  ExceptionList = &local_c;
+  this_00 = (cls_0x5a47f0 *)FUN_00482fb0(0x100);
+  local_4 = 0;
+  if (this_00 != (cls_0x5a47f0 *)0x0) {
+    cls_0x5a47f0::cls_0x5a47f0(this_00);
+    local_4._0_1_ = 1;
+    cls_0x41c7f0::cls_0x41c7f0((cls_0x41c7f0 *)&this_00[1].mbr_0x8,0x10);
+    local_4 = CONCAT31(local_4._1_3_,2);
+    cls_0x41c7f0::cls_0x41c7f0((cls_0x41c7f0 *)&this_00[1].mbr_0x1c,0);
+    this_00->vftptr_0x0 = (cls_0x5a47f0__vftable_5a47f0 *)&PTR_virt_meth_0x4f7730_005a9dec;
+    ExceptionList = local_c;
+    return this_00;
+  }
+  ExceptionList = local_c;
+  return (cls_0x5a47f0 *)0x0;
+}
+
+
+
+// Function at 004f76c0
+
+TScript * TScript::virt_meth_0x4f76c0()
+
+{
+  byte in_stack_00000004;
+  
+  cls_0x4f76e0::~cls_0x4f76e0((cls_0x4f76e0 *)this);
+  if ((in_stack_00000004 & 1) != 0) {
+    FUN_004830f0(this);
+  }
+  return this;
+}
+
+
+
+// Function at 004f7750
+
+TScript * __thiscall TScript::~TScript(TScript *this)
+
+{
+  cls_0x5b0074 *pcVar1;
+  void *local_c;
+  undefined *puStack_8;
+  undefined4 local_4;
+  
+  puStack_8 = &LAB_0059f6e8;
+  local_c = ExceptionList;
+  ExceptionList = &local_c;
+  this->vftptr_0x0 = (cls_0x5a9d88__vftable_5a9d88 *)&PTR_virt_meth_0x4f7730_005a9dec;
+  local_4 = 0;
+  this->virt_meth_0x40de10();
+  local_4 = 0xffffffff;
+  pcVar1 = cls_0x5b0074::~cls_0x5b0074((cls_0x5b0074 *)this);
+  ExceptionList = local_c;
+  return (TScript *)pcVar1;
+}
+
+
+

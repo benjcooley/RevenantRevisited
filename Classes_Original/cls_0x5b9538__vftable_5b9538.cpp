@@ -1,0 +1,30 @@
+// Decompiled methods and structure for class: cls_0x5b9538::vftable_5b9538
+
+/*
+/OOAnalyzer/cls_0x5b9538::vftable_5b9538
+pack(disabled)
+Structure cls_0x5b9538::vftable_5b9538 {
+   0   virt_meth_0x539fa0 *   4   virt_meth_0x539fa0_0   "virtual function table entry."
+   4   virt_meth_0x5392e0 *   4   virt_meth_0x5392e0_4   "virtual function table entry."
+   8   virt_meth_0x539360 *   4   virt_meth_0x539360_8   "virtual function table entry."
+   12   virt_meth_0x46cf20 *   4   virt_meth_0x46cf20_12   "virtual function table entry."
+   16   FUN_0048fda0 *   4   FUN_0048fda0_16   "virtual function table entry."
+   20   FUN_0048ff00 *   4   FUN_0048ff00_20   "virtual function table entry."
+   24   FUN_00490030 *   4   FUN_00490030_24   "virtual function table entry."
+   28   virt_meth_0x490110 *   4   virt_meth_0x490110_28   "virtual function table entry."
+   32   FUN_004901e0 *   4   FUN_004901e0_32   "virtual function table entry."
+   36   virt_meth_0x4902c0 *   4   virt_meth_0x4902c0_36   "virtual function table entry."
+   40   FUN_004903b0 *   4   FUN_004903b0_40   "virtual function table entry."
+   44   virt_meth_0x490530 *   4   virt_meth_0x490530_44   "virtual function table entry."
+   48   FUN_00490660 *   4   FUN_00490660_48   "virtual function table entry."
+   52   FUN_00490760 *   4   FUN_00490760_52   "virtual function table entry."
+   56   FUN_00490860 *   4   FUN_00490860_56   "virtual function table entry."
+   60   virt_meth_0x46cf30 *   4   virt_meth_0x46cf30_60   "virtual function table entry."
+   64   FUN_00490960 *   4   FUN_00490960_64   "virtual function table entry."
+   68   virt_meth_0x490bd0 *   4   virt_meth_0x490bd0_68   "virtual function table entry."
+   72   FUN_00491870 *   4   FUN_00491870_72   "virtual function table entry."
+}
+Length: 76 Alignment: 1
+
+*/
+

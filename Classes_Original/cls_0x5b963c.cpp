@@ -1,0 +1,148 @@
+// Decompiled methods and structure for class: cls_0x5b963c
+
+/*
+/OOAnalyzer/cls_0x5b963c
+pack(disabled)
+Structure cls_0x5b963c {
+   0   cls_0x5b963c::vftable_5b963c *   4   vftptr_0x0   "pointer to cls_0x5b963c::vftable_5b963c"
+   4   dword   4   mbr_0x4   "Unsigned Double-Word (ddw, 4-bytes)"
+   8   dword   4   mbr_0x8   "Unsigned Double-Word (ddw, 4-bytes)"
+   12   dword   4   mbr_0xc   "Unsigned Double-Word (ddw, 4-bytes)"
+   16   dword   4   mbr_0x10   "Unsigned Double-Word (ddw, 4-bytes)"
+   20   dword   4   mbr_0x14   "Unsigned Double-Word (ddw, 4-bytes)"
+   24   dword   4   mbr_0x18   "Unsigned Double-Word (ddw, 4-bytes)"
+   28   dword   4   mbr_0x1c   "Unsigned Double-Word (ddw, 4-bytes)"
+   32   dword   4   mbr_0x20   "Unsigned Double-Word (ddw, 4-bytes)"
+   72   dword   4   mbr_0x48   "Unsigned Double-Word (ddw, 4-bytes)"
+   76   dword   4   mbr_0x4c   "Unsigned Double-Word (ddw, 4-bytes)"
+   80   dword   4   mbr_0x50   "Unsigned Double-Word (ddw, 4-bytes)"
+   84   dword   4   mbr_0x54   "Unsigned Double-Word (ddw, 4-bytes)"
+   92   dword   4   mbr_0x5c   "Unsigned Double-Word (ddw, 4-bytes)"
+   380   dword   4   mbr_0x17c   "Unsigned Double-Word (ddw, 4-bytes)"
+   384   dword   4   mbr_0x180   "Unsigned Double-Word (ddw, 4-bytes)"
+   388   dword   4   mbr_0x184   "Unsigned Double-Word (ddw, 4-bytes)"
+   392   dword   4   mbr_0x188   "Unsigned Double-Word (ddw, 4-bytes)"
+   396   dword   4   mbr_0x18c   "Unsigned Double-Word (ddw, 4-bytes)"
+   400   dword   4   mbr_0x190   "Unsigned Double-Word (ddw, 4-bytes)"
+   412   dword   4   mbr_0x19c   "Unsigned Double-Word (ddw, 4-bytes)"
+   416   dword   4   mbr_0x1a0   "Unsigned Double-Word (ddw, 4-bytes)"
+}
+Length: 420 Alignment: 1
+
+*/
+
+// Function at 005399f0
+
+undefined4 __thiscall OOAnalyzer::cls_0x5b963c::virt_meth_0x5399f0(cls_0x5b963c *this)
+
+{
+  dword dVar1;
+  dword extraout_ECX;
+  cls_0x419dd0 cVar2;
+  undefined2 uVar3;
+  
+  cls_0x45f7c0::meth_0x48d260((cls_0x45f7c0 *)&DAT_0065a618);
+  (**(code **)(*(int *)PTR_DAT_005d79e0 + 0x18))();
+  dVar1 = FUN_004a1ec0(0xd8);
+  this->mbr_0x19c = dVar1;
+  uVar3 = 0;
+  cVar2.mbr_0x0 = extraout_ECX;
+  cls_0x419dd0::cls_0x419dd0((cls_0x419dd0 *)&stack0xfffffff0);
+  cls_0x4a22f0::meth_0x4a22f0((cls_0x4a22f0 *)this->mbr_0x19c,cVar2.mbr_0x0,uVar3);
+  this->mbr_0x1a0 = 0;
+  DAT_0066fb04 = 0xffffffff;
+  cls_0x5b93c4::virt_meth_0x435150
+            ((cls_0x5b93c4 *)this,s_savegame_005e4330,s_default_005e4328,0x11,0,0,0x280,0x1e0,0x1c2,
+             0xa0,s_widgets_005e4320);
+  return 1;
+}
+
+
+
+// Function at 00539ab0
+
+void __thiscall OOAnalyzer::cls_0x5b963c::virt_meth_0x539ab0(cls_0x5b963c *this)
+
+{
+  if (this->mbr_0x19c != 0) {
+    FUN_004830f0(this->mbr_0x19c);
+  }
+  this->mbr_0x19c = 0;
+  cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
+  return;
+}
+
+
+
+// Function at 0053a0e0
+
+cls_0x5b963c * __thiscall OOAnalyzer::cls_0x5b963c::cls_0x5b963c(cls_0x5b963c *this)
+
+{
+  this->mbr_0xc = 0x280;
+  this->mbr_0x1c = 0x280;
+  this->mbr_0x10 = 0x1e0;
+  this->mbr_0x20 = 0x1e0;
+  this->vftptr_0x0 = (cls_0x5b963c__vftable_5b963c *)&cls_0x5a4494__vftable_5a4494_005a4494;
+  this->mbr_0x4 = 0;
+  this->mbr_0x14 = 0;
+  this->mbr_0x8 = 0;
+  this->mbr_0x18 = 0;
+  this->mbr_0x48 = 0;
+  this->mbr_0x4c = 0;
+  this->mbr_0x50 = 0;
+  this->mbr_0x54 = 0;
+  cls_0x41c7f0::cls_0x41c7f0((cls_0x41c7f0 *)&this->field_0x88,0x10);
+  this->vftptr_0x0 = &cls_0x5b963c__vftable_5b963c_005b963c;
+  return this;
+}
+
+
+
+// Function at 0053a140
+
+cls_0x5b963c * __thiscall OOAnalyzer::cls_0x5b963c::~cls_0x5b963c(cls_0x5b963c *this)
+
+{
+  cls_0x5b963c *pcVar1;
+  void *local_c;
+  undefined *puStack_8;
+  undefined4 local_4;
+  
+  puStack_8 = &LAB_005a1b96;
+  local_c = ExceptionList;
+  ExceptionList = &local_c;
+  this->vftptr_0x0 = &cls_0x5b963c__vftable_5b963c_005b963c;
+  local_4 = 0;
+  if (this->mbr_0x19c != 0) {
+    FUN_004830f0(this->mbr_0x19c);
+  }
+  this->mbr_0x19c = 0;
+  cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
+  this->vftptr_0x0 = (cls_0x5b963c__vftable_5b963c *)&cls_0x5a4510__vftable_5a4510_005a4510;
+  local_4 = 1;
+  cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
+  local_4 = 0xffffffff;
+  pcVar1 = (cls_0x5b963c *)FUN_004830f0(*(undefined4 *)&this->field_0x98);
+  ExceptionList = local_c;
+  return pcVar1;
+}
+
+
+
+// Function at 0053a1d0
+
+cls_0x5b963c * __thiscall OOAnalyzer::cls_0x5b963c::virt_meth_0x53a1d0(cls_0x5b963c *this)
+
+{
+  byte in_stack_00000004;
+  
+  ~cls_0x5b963c(this);
+  if ((in_stack_00000004 & 1) != 0) {
+    FUN_004830f0(this);
+  }
+  return this;
+}
+
+
+

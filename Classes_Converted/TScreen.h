@@ -1,0 +1,62 @@
+#pragma once
+#include "classes_all.h"
+
+struct TScreen {
+    dword mbr_0x4;// offset 04 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x8;// offset 08 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    word mbr_0xc;// offset 0c - 2 bytes - Unsigned Word (dw, 2-bytes)
+    word mbr_0xe;// offset 0e - 2 bytes - Unsigned Word (dw, 2-bytes)
+    dword mbr_0x10;// offset 10 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x14;// offset 14 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x18;// offset 18 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x1c;// offset 1c - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x20;// offset 20 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x24;// offset 24 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x28;// offset 28 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x2c;// offset 2c - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x30;// offset 30 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    byte mbr_0x34;// offset 34 - 1 bytes - Unsigned Byte (db)
+    byte mbr_0x35;// offset 35 - 1 bytes - Unsigned Byte (db)
+    byte mbr_0x36;// offset 36 - 1 bytes - Unsigned Byte (db)
+    byte mbr_0x37;// offset 37 - 1 bytes - Unsigned Byte (db)
+    dword mbr_0x38;// offset 38 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x3c;// offset 3c - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x44;// offset 44 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x48;// offset 48 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x4c;// offset 4c - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x50;// offset 50 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x54;// offset 54 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x58;// offset 58 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    word mbr_0x5c;// offset 5c - 2 bytes - Unsigned Word (dw, 2-bytes)
+    word mbr_0x5e;// offset 5e - 2 bytes - Unsigned Word (dw, 2-bytes)
+    dword mbr_0x64;// offset 64 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x84;// offset 84 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    word mbr_0x8a;// offset 8a - 2 bytes - Unsigned Word (dw, 2-bytes)
+    dword mbr_0x9c;// offset 9c - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xa0;// offset a0 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xa8;// offset a8 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xac;// offset ac - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xb0;// offset b0 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xb4;// offset b4 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xb8;// offset b8 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xbc;// offset bc - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xc0;// offset c0 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xc4;// offset c4 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xc8;// offset c8 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xcc;// offset cc - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xd0;// offset d0 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xd4;// offset d4 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xd8;// offset d8 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xe0;// offset e0 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0xf8;// offset f8 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x104;// offset 104 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x108;// offset 108 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x10c;// offset 10c - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+    dword mbr_0x110;// offset 110 - 4 bytes - Unsigned Double-Word (ddw, 4-bytes)
+
+    void meth_0x46e0f0();
+    TScreen();
+    void meth_0x471150();
+    virtual TScreen * virt_meth_0x477840();
+    void meth_0x526c90();
+};
