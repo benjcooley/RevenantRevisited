@@ -10,7 +10,6 @@
 
 #include "graphics.h"
 #include "surface.h"
-#include "ddsurface.h"
 
 #define UPDATE_THISFRAME        0x01        // Adds a dirty rectangle update rect for this frame
 #define UPDATE_NEXTFRAME        0x02        // Adds a dirty rectangle update rect for the next frame

@@ -22,7 +22,6 @@
 #include "screen.h"
 #include "player.h"
 #include "cursor.h"
-#include "videocap.h"
 
 #define ID_ICON 101
 

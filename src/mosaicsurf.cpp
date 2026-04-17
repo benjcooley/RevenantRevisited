@@ -8,8 +8,6 @@
 
 #include "revenant.h"
 #include "mosaicsurf.h"
-#include "directdraw.h"
-#include "ddsurface.h"
 #include "multisurface.h"
 #include "bitmap.h"
 #include "bmsurface.h"

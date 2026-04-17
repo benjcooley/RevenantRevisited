@@ -10,7 +10,6 @@
 #include "stream.h"
 #include "3dscene.h"
 #include "bmsurface.h"
-#include "ddsurface.h"
 #include "multisurface.h"
 #include "mosaicsurf.h"
 #include "display.h"
@@ -28,8 +27,6 @@
 #include "exit.h"
 #include "textbar.h"
 #include "statusbar.h"
-#include "directdraw.h"
-#include "directinput.h"
 #include "spellpane.h"
 #include "sound.h"
 

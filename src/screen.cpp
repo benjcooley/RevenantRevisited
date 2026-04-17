@@ -15,7 +15,6 @@
 #include "mappane.h"
 #include "screen.h"
 #include "sound.h"
-#include "videocap.h"
 
 int32_t cursorx = 0;        // Mouse cursor positions
 int32_t cursory = 0;
