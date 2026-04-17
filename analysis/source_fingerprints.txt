@@ -1,0 +1,8 @@
+SOURCE CLASS FINGERPRINTS
+========================================
+
+Total: 0 classes
+Features: Recursive structs + Array handling + Bitfield packing + Large array 'A'
+Signatures: b=1byte, w=2bytes, d=4bytes, q=8bytes, A=large array (>32 bytes)
+Sorted by: Pattern length (longest first)
+

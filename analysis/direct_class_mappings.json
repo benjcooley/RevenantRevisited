@@ -1,0 +1,100 @@
+{
+  "bmsurface": {
+    "src_file": "src/bmsurface.cpp",
+    "ghidra_file": "Classes/cls_0x5a68d8_TSurface.cpp",
+    "ghidra_class": "tsurface",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "player": {
+    "src_file": "src/player.cpp",
+    "ghidra_file": "Classes/cls_0x5b93c4_TPlayer.cpp",
+    "ghidra_class": "tplayer",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "complexobj": {
+    "src_file": "src/complexobj.cpp",
+    "ghidra_file": "Classes/cls_0x5a9900_TComplexObject.cpp",
+    "ghidra_class": "tcomplexobject",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "character": {
+    "src_file": "src/character.cpp",
+    "ghidra_file": "Classes/cls_0x5a7b98_TCharacter.cpp",
+    "ghidra_class": "tcharacter",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "playscreen": {
+    "src_file": "src/playscreen.cpp",
+    "ghidra_file": "Classes/cls_0x5a50e8_TScreen.cpp",
+    "ghidra_class": "tscreen",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "imagery": {
+    "src_file": "src/imagery.cpp",
+    "ghidra_file": "Classes/cls_0x5a35ac_T3DImagery.cpp",
+    "ghidra_class": "t3dimagery",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "screen": {
+    "src_file": "src/screen.cpp",
+    "ghidra_file": "Classes/cls_0x5a50e8_TScreen.cpp",
+    "ghidra_class": "tscreen",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "object": {
+    "src_file": "src/object.cpp",
+    "ghidra_file": "Classes/cls_0x5a9900_TComplexObject.cpp",
+    "ghidra_class": "tcomplexobject",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "3dimage": {
+    "src_file": "src/3dimage.cpp",
+    "ghidra_file": "Classes/cls_0x5a35ac_T3DImagery.cpp",
+    "ghidra_class": "t3dimagery",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "3dscene": {
+    "src_file": "src/3dscene.cpp",
+    "ghidra_file": "Classes/cls_0x411eb0_T3DScene.cpp",
+    "ghidra_class": "t3dscene",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "multisurface": {
+    "src_file": "src/multisurface.cpp",
+    "ghidra_file": "Classes/cls_0x5a68d8_TSurface.cpp",
+    "ghidra_class": "tsurface",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "textbar": {
+    "src_file": "src/textbar.cpp",
+    "ghidra_file": "Classes/cls_0x5a4358_TTextBar.cpp",
+    "ghidra_class": "ttextbar",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "surface": {
+    "src_file": "src/surface.cpp",
+    "ghidra_file": "Classes/cls_0x5a68d8_TSurface.cpp",
+    "ghidra_class": "tsurface",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  },
+  "ddsurface": {
+    "src_file": "src/ddsurface.cpp",
+    "ghidra_file": "Classes/cls_0x5a68d8_TSurface.cpp",
+    "ghidra_class": "tsurface",
+    "match_type": "fuzzy",
+    "confidence": "medium"
+  }
+}

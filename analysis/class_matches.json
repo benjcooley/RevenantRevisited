@@ -1,0 +1,1772 @@
+{
+  "summary": {
+    "total_src_classes": 92,
+    "total_decompiled_classes": 879,
+    "total_matches": 88,
+    "high_confidence_matches": 88,
+    "medium_confidence_matches": 0,
+    "low_confidence_matches": 0
+  },
+  "matches": [
+    {
+      "src_class": {
+        "name": "rangedweapon",
+        "file": "src/rangedweapon.cpp",
+        "size": 654,
+        "method_count": 1,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x41c7b0",
+        "file": "Classes/cls_0x41c7b0.cpp",
+        "size": 654,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 1.0,
+      "size_ratio": 1.0,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "lightsource",
+        "file": "src/lightsource.cpp",
+        "size": 663,
+        "method_count": 1,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5427f0",
+        "file": "Classes/cls_0x5427f0.cpp",
+        "size": 663,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 1.0,
+      "size_ratio": 1.0,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "string",
+        "file": "src/string.cpp",
+        "size": 5058,
+        "method_count": 11,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x49d2a0",
+        "file": "Classes/cls_0x49d2a0.cpp",
+        "size": 5058,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 1.0,
+      "size_ratio": 1.0,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "tool",
+        "file": "src/tool.cpp",
+        "size": 829,
+        "method_count": 3,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b4308__vftable_5b4308",
+        "file": "Classes/cls_0x5b4308__vftable_5b4308.cpp",
+        "size": 829,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 1.0,
+      "size_ratio": 1.0,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "key",
+        "file": "src/key.cpp",
+        "size": 703,
+        "method_count": 1,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x51a5b0",
+        "file": "Classes/cls_0x51a5b0.cpp",
+        "size": 703,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 1.0,
+      "size_ratio": 1.0,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "scroll",
+        "file": "src/scroll.cpp",
+        "size": 7961,
+        "method_count": 17,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x535a10",
+        "file": "Classes/cls_0x535a10.cpp",
+        "size": 7959,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9997487752794876,
+      "size_ratio": 0.9997487752794875,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "effect3",
+        "file": "src/effect3.cpp",
+        "size": 11709,
+        "method_count": 5,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b4814__vftable_5b4814",
+        "file": "Classes/cls_0x5b4814__vftable_5b4814.cpp",
+        "size": 11706,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9997437868306431,
+      "size_ratio": 0.9997437868306431,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "multisurface",
+        "file": "src/multisurface.cpp",
+        "size": 3233,
+        "method_count": 7,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a4f74",
+        "file": "Classes/cls_0x5a4f74.cpp",
+        "size": 3232,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9996906897618311,
+      "size_ratio": 0.9996906897618311,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "trap",
+        "file": "src/trap.cpp",
+        "size": 3223,
+        "method_count": 5,
+        "virtual_method_count": 3
+      },
+      "decompiled_class": {
+        "name": "0x5a42d4__vftable_5a42d4",
+        "file": "Classes/cls_0x5a42d4__vftable_5a42d4.cpp",
+        "size": 3222,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9996897300651567,
+      "size_ratio": 0.9996897300651567,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "resource",
+        "file": "src/resource.cpp",
+        "size": 9224,
+        "method_count": 4,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a9f2c",
+        "file": "Classes/cls_0x5a9f2c.cpp",
+        "size": 9229,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9994582294939863,
+      "size_ratio": 0.9994582294939863,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "timer",
+        "file": "src/timer.cpp",
+        "size": 1829,
+        "method_count": 5,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5790b0",
+        "file": "Classes/cls_0x5790b0.cpp",
+        "size": 1830,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9994535519125683,
+      "size_ratio": 0.9994535519125683,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "screen",
+        "file": "src/screen.cpp",
+        "size": 21915,
+        "method_count": 30,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a3db0",
+        "file": "Classes/cls_0x5a3db0.cpp",
+        "size": 21903,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9994524298425735,
+      "size_ratio": 0.9994524298425735,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "font",
+        "file": "src/font.cpp",
+        "size": 1110,
+        "method_count": 2,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x4a3060",
+        "file": "Classes/cls_0x4a3060.cpp",
+        "size": 1111,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9990999099909992,
+      "size_ratio": 0.9990999099909991,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "button",
+        "file": "src/button.cpp",
+        "size": 9216,
+        "method_count": 16,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a43dc",
+        "file": "Classes/cls_0x5a43dc.cpp",
+        "size": 9207,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9990234375000001,
+      "size_ratio": 0.9990234375,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "multictrl",
+        "file": "src/multictrl.cpp",
+        "size": 2439,
+        "method_count": 10,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5ab460__vftable_5ab460",
+        "file": "Classes/cls_0x5ab460__vftable_5ab460.cpp",
+        "size": 2442,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9987714987714987,
+      "size_ratio": 0.9987714987714987,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "multi",
+        "file": "src/multi.cpp",
+        "size": 789,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x41c720",
+        "file": "Classes/cls_0x41c720.cpp",
+        "size": 790,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9987341772151899,
+      "size_ratio": 0.9987341772151899,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "tile",
+        "file": "src/tile.cpp",
+        "size": 739,
+        "method_count": 1,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a96d8__vftable_5a96d8",
+        "file": "Classes/cls_0x5a96d8__vftable_5a96d8.cpp",
+        "size": 738,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9986468200270637,
+      "size_ratio": 0.9986468200270636,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "cursor",
+        "file": "src/cursor.cpp",
+        "size": 5165,
+        "method_count": 11,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b0a28",
+        "file": "Classes/cls_0x5b0a28.cpp",
+        "size": 5174,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9982605334364129,
+      "size_ratio": 0.9982605334364129,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "blit",
+        "file": "src/blit.cpp",
+        "size": 1631,
+        "method_count": 3,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x56fe30",
+        "file": "Classes/cls_0x56fe30.cpp",
+        "size": 1628,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9981606376456161,
+      "size_ratio": 0.9981606376456161,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "shadow",
+        "file": "src/shadow.cpp",
+        "size": 513,
+        "method_count": 1,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x52fe90",
+        "file": "Classes/cls_0x52fe90.cpp",
+        "size": 512,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9980506822612085,
+      "size_ratio": 0.9980506822612085,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "revutils",
+        "file": "src/revutils.cpp",
+        "size": 19973,
+        "method_count": 52,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x532340",
+        "file": "Classes/cls_0x532340.cpp",
+        "size": 19934,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9980473639413208,
+      "size_ratio": 0.9980473639413208,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "template",
+        "file": "src/template.cpp",
+        "size": 6354,
+        "method_count": 5,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x4485a0",
+        "file": "Classes/cls_0x4485a0.cpp",
+        "size": 6367,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9979582220826134,
+      "size_ratio": 0.9979582220826134,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "dls",
+        "file": "src/dls.cpp",
+        "size": 51659,
+        "method_count": 11,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x41c7d0",
+        "file": "Classes/cls_0x41c7d0.cpp",
+        "size": 51773,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9977980800803508,
+      "size_ratio": 0.9977980800803508,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "armor",
+        "file": "src/armor.cpp",
+        "size": 887,
+        "method_count": 1,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x575ab0",
+        "file": "Classes/cls_0x575ab0.cpp",
+        "size": 885,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9977452085682076,
+      "size_ratio": 0.9977452085682075,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "talisman",
+        "file": "src/talisman.cpp",
+        "size": 863,
+        "method_count": 2,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x4483f0",
+        "file": "Classes/cls_0x4483f0.cpp",
+        "size": 865,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9976878612716763,
+      "size_ratio": 0.9976878612716763,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "death",
+        "file": "src/death.cpp",
+        "size": 2117,
+        "method_count": 7,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x487a50",
+        "file": "Classes/cls_0x487a50.cpp",
+        "size": 2122,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9976437323279924,
+      "size_ratio": 0.9976437323279924,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "container",
+        "file": "src/container.cpp",
+        "size": 8446,
+        "method_count": 9,
+        "virtual_method_count": 3
+      },
+      "decompiled_class": {
+        "name": "0x5a5e1c",
+        "file": "Classes/cls_0x5a5e1c.cpp",
+        "size": 8468,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.997401983939537,
+      "size_ratio": 0.997401983939537,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "weapon",
+        "file": "src/weapon.cpp",
+        "size": 1877,
+        "method_count": 6,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x48cb50",
+        "file": "Classes/cls_0x48cb50.cpp",
+        "size": 1882,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9973432518597237,
+      "size_ratio": 0.9973432518597237,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "spellpane",
+        "file": "src/spellpane.cpp",
+        "size": 15067,
+        "method_count": 28,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a4358_TTextBar",
+        "file": "Classes/cls_0x5a4358_TTextBar.cpp",
+        "size": 15109,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9972201998808657,
+      "size_ratio": 0.9972201998808657,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "mainwnd",
+        "file": "src/mainwnd.cpp",
+        "size": 14243,
+        "method_count": 5,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x4aaeb0",
+        "file": "Classes/cls_0x4aaeb0.cpp",
+        "size": 14202,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9971213929649653,
+      "size_ratio": 0.9971213929649653,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "statusbar",
+        "file": "src/statusbar.cpp",
+        "size": 2397,
+        "method_count": 4,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x535e90",
+        "file": "Classes/cls_0x535e90.cpp",
+        "size": 2404,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9970881863560732,
+      "size_ratio": 0.9970881863560732,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "food",
+        "file": "src/food.cpp",
+        "size": 2011,
+        "method_count": 2,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x43f8b0",
+        "file": "Classes/cls_0x43f8b0.cpp",
+        "size": 2005,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9970164097463948,
+      "size_ratio": 0.9970164097463948,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "command",
+        "file": "src/command.cpp",
+        "size": 99040,
+        "method_count": 31,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x57d9d0_likely_TDirectX_or_TNetwork",
+        "file": "Classes/cls_0x57d9d0_likely_TDirectX_or_TNetwork.cpp",
+        "size": 99349,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.996889752287391,
+      "size_ratio": 0.996889752287391,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "inventory",
+        "file": "src/inventory.cpp",
+        "size": 7857,
+        "method_count": 10,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x56f3c0",
+        "file": "Classes/cls_0x56f3c0.cpp",
+        "size": 7831,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9966908489245259,
+      "size_ratio": 0.9966908489245259,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "file",
+        "file": "src/file.cpp",
+        "size": 6898,
+        "method_count": 5,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b9744",
+        "file": "Classes/cls_0x5b9744.cpp",
+        "size": 6923,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9963888487649863,
+      "size_ratio": 0.9963888487649862,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "display",
+        "file": "src/display.cpp",
+        "size": 6886,
+        "method_count": 12,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a9674",
+        "file": "Classes/cls_0x5a9674.cpp",
+        "size": 6860,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9962242230612839,
+      "size_ratio": 0.9962242230612838,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "script",
+        "file": "src/script.cpp",
+        "size": 26524,
+        "method_count": 36,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a3cd8",
+        "file": "Classes/cls_0x5a3cd8.cpp",
+        "size": 26423,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9961921278841803,
+      "size_ratio": 0.9961921278841803,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "countlines",
+        "file": "src/countlines.cpp",
+        "size": 977,
+        "method_count": 2,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x51fe50",
+        "file": "Classes/cls_0x51fe50.cpp",
+        "size": 973,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9959058341862845,
+      "size_ratio": 0.9959058341862845,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "ammo",
+        "file": "src/ammo.cpp",
+        "size": 8433,
+        "method_count": 19,
+        "virtual_method_count": 2
+      },
+      "decompiled_class": {
+        "name": "0x5a5e1c",
+        "file": "Classes/cls_0x5a5e1c.cpp",
+        "size": 8468,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9958667926310817,
+      "size_ratio": 0.9958667926310817,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "player",
+        "file": "src/player.cpp",
+        "size": 18877,
+        "method_count": 30,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x4164c0",
+        "file": "Classes/cls_0x4164c0.cpp",
+        "size": 18956,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9958324541042414,
+      "size_ratio": 0.9958324541042414,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "directinput",
+        "file": "src/directinput.cpp",
+        "size": 13220,
+        "method_count": 11,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a5c60",
+        "file": "Classes/cls_0x5a5c60.cpp",
+        "size": 13162,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9956127080181543,
+      "size_ratio": 0.9956127080181543,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "d3dmath",
+        "file": "src/d3dmath.cpp",
+        "size": 7083,
+        "method_count": 4,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b1d28",
+        "file": "Classes/cls_0x5b1d28.cpp",
+        "size": 7051,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9954821403360159,
+      "size_ratio": 0.9954821403360158,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "3dcont",
+        "file": "src/3dcont.cpp",
+        "size": 8018,
+        "method_count": 5,
+        "virtual_method_count": 4
+      },
+      "decompiled_class": {
+        "name": "0x5b79ac",
+        "file": "Classes/cls_0x5b79ac.cpp",
+        "size": 7981,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9953853828885009,
+      "size_ratio": 0.9953853828885009,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "stream",
+        "file": "src/stream.cpp",
+        "size": 1496,
+        "method_count": 1,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x579bb0",
+        "file": "Classes/cls_0x579bb0.cpp",
+        "size": 1489,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9953208556149734,
+      "size_ratio": 0.9953208556149733,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "bmsurface",
+        "file": "src/bmsurface.cpp",
+        "size": 2522,
+        "method_count": 6,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5abe4c__vftable_5abe4c",
+        "file": "Classes/cls_0x5abe4c__vftable_5abe4c.cpp",
+        "size": 2535,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.994871794871795,
+      "size_ratio": 0.9948717948717949,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "equip",
+        "file": "src/equip.cpp",
+        "size": 6598,
+        "method_count": 9,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x4a22f0",
+        "file": "Classes/cls_0x4a22f0.cpp",
+        "size": 6633,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9947233529323082,
+      "size_ratio": 0.9947233529323082,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "money",
+        "file": "src/money.cpp",
+        "size": 8515,
+        "method_count": 19,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a5e1c",
+        "file": "Classes/cls_0x5a5e1c.cpp",
+        "size": 8468,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9944803288314739,
+      "size_ratio": 0.9944803288314739,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "animation",
+        "file": "src/animation.cpp",
+        "size": 3541,
+        "method_count": 8,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x48f870",
+        "file": "Classes/cls_0x48f870.cpp",
+        "size": 3561,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.994383600112328,
+      "size_ratio": 0.994383600112328,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "mappane",
+        "file": "src/mappane.cpp",
+        "size": 123073,
+        "method_count": 126,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b4f30_TPlayScreen",
+        "file": "Classes/cls_0x5b4f30_TPlayScreen.cpp",
+        "size": 122291,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9936460474677631,
+      "size_ratio": 0.9936460474677631,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "playscreen",
+        "file": "src/playscreen.cpp",
+        "size": 34835,
+        "method_count": 35,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b4a7c",
+        "file": "Classes/cls_0x5b4a7c.cpp",
+        "size": 34611,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9935696856609733,
+      "size_ratio": 0.9935696856609731,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "dialog",
+        "file": "src/dialog.cpp",
+        "size": 9110,
+        "method_count": 16,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a5a30",
+        "file": "Classes/cls_0x5a5a30.cpp",
+        "size": 9170,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9934569247546347,
+      "size_ratio": 0.9934569247546347,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "3dscene",
+        "file": "src/3dscene.cpp",
+        "size": 70245,
+        "method_count": 83,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a486c_T3DImageryRes",
+        "file": "Classes/cls_0x5a486c_T3DImageryRes.cpp",
+        "size": 70710,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9934238438693255,
+      "size_ratio": 0.9934238438693254,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "bitmap",
+        "file": "src/bitmap.cpp",
+        "size": 18571,
+        "method_count": 14,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a6858",
+        "file": "Classes/cls_0x5a6858.cpp",
+        "size": 18436,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9927306014754187,
+      "size_ratio": 0.9927306014754187,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "chunkcache",
+        "file": "src/chunkcache.cpp",
+        "size": 14994,
+        "method_count": 8,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a4358_TTextBar",
+        "file": "Classes/cls_0x5a4358_TTextBar.cpp",
+        "size": 15109,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.992388642530942,
+      "size_ratio": 0.9923886425309418,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "videocap",
+        "file": "src/videocap.cpp",
+        "size": 2921,
+        "method_count": 7,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b9bf0",
+        "file": "Classes/cls_0x5b9bf0.cpp",
+        "size": 2897,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9917836357411847,
+      "size_ratio": 0.9917836357411846,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "textbar",
+        "file": "src/textbar.cpp",
+        "size": 2869,
+        "method_count": 7,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x49e790",
+        "file": "Classes/cls_0x49e790.cpp",
+        "size": 2845,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9916347159288952,
+      "size_ratio": 0.9916347159288951,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "animimage",
+        "file": "src/animimage.cpp",
+        "size": 10440,
+        "method_count": 12,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x44ceb0",
+        "file": "Classes/cls_0x44ceb0.cpp",
+        "size": 10349,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9912835249042146,
+      "size_ratio": 0.9912835249042146,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "statpane",
+        "file": "src/statpane.cpp",
+        "size": 8860,
+        "method_count": 15,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b9f34",
+        "file": "Classes/cls_0x5b9f34.cpp",
+        "size": 8780,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9909706546275395,
+      "size_ratio": 0.9909706546275395,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "helper",
+        "file": "src/helper.cpp",
+        "size": 2512,
+        "method_count": 3,
+        "virtual_method_count": 2
+      },
+      "decompiled_class": {
+        "name": "0x5abe4c__vftable_5abe4c",
+        "file": "Classes/cls_0x5abe4c__vftable_5abe4c.cpp",
+        "size": 2535,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9909270216962525,
+      "size_ratio": 0.9909270216962525,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "surface",
+        "file": "src/surface.cpp",
+        "size": 22908,
+        "method_count": 25,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a58c0",
+        "file": "Classes/cls_0x5a58c0.cpp",
+        "size": 22700,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9909202025493278,
+      "size_ratio": 0.9909202025493278,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "directdraw",
+        "file": "src/directdraw.cpp",
+        "size": 27052,
+        "method_count": 27,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a5d64",
+        "file": "Classes/cls_0x5a5d64.cpp",
+        "size": 27300,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9909157509157509,
+      "size_ratio": 0.9909157509157509,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "ctrlmap",
+        "file": "src/ctrlmap.cpp",
+        "size": 14963,
+        "method_count": 15,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a4358_TTextBar",
+        "file": "Classes/cls_0x5a4358_TTextBar.cpp",
+        "size": 15109,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9903368853001522,
+      "size_ratio": 0.9903368853001522,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "sector",
+        "file": "src/sector.cpp",
+        "size": 17370,
+        "method_count": 17,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x41c7f0",
+        "file": "Classes/cls_0x41c7f0.cpp",
+        "size": 17197,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9900402993667242,
+      "size_ratio": 0.9900402993667242,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "3dimage",
+        "file": "src/3dimage.cpp",
+        "size": 100523,
+        "method_count": 92,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x57d9d0_likely_TDirectX_or_TNetwork",
+        "file": "Classes/cls_0x57d9d0_likely_TDirectX_or_TNetwork.cpp",
+        "size": 99349,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9883210807476895,
+      "size_ratio": 0.9883210807476895,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "parse",
+        "file": "src/parse.cpp",
+        "size": 24263,
+        "method_count": 17,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b4f30__vftable_5b4f30",
+        "file": "Classes/cls_0x5b4f30__vftable_5b4f30.cpp",
+        "size": 24553,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9881888160306276,
+      "size_ratio": 0.9881888160306276,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "rules",
+        "file": "src/rules.cpp",
+        "size": 18696,
+        "method_count": 6,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x4164c0",
+        "file": "Classes/cls_0x4164c0.cpp",
+        "size": 18956,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9862840261658579,
+      "size_ratio": 0.9862840261658578,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "spell",
+        "file": "src/spell.cpp",
+        "size": 14583,
+        "method_count": 23,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a3e7c",
+        "file": "Classes/cls_0x5a3e7c.cpp",
+        "size": 14791,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.985937394361436,
+      "size_ratio": 0.985937394361436,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "complexobj",
+        "file": "src/complexobj.cpp",
+        "size": 13675,
+        "method_count": 24,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a34a0",
+        "file": "Classes/cls_0x5a34a0.cpp",
+        "size": 13473,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9852285191956124,
+      "size_ratio": 0.9852285191956124,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "area",
+        "file": "src/area.cpp",
+        "size": 13675,
+        "method_count": 16,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a34a0",
+        "file": "Classes/cls_0x5a34a0.cpp",
+        "size": 13473,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9852285191956124,
+      "size_ratio": 0.9852285191956124,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "savegame",
+        "file": "src/savegame.cpp",
+        "size": 4903,
+        "method_count": 3,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a9e50",
+        "file": "Classes/cls_0x5a9e50.cpp",
+        "size": 4980,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9845381526104419,
+      "size_ratio": 0.9845381526104418,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "missileeffect",
+        "file": "src/missileeffect.cpp",
+        "size": 49854,
+        "method_count": 22,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a5658",
+        "file": "Classes/cls_0x5a5658.cpp",
+        "size": 50662,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9840511626070823,
+      "size_ratio": 0.9840511626070823,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "stripeffect",
+        "file": "src/stripeffect.cpp",
+        "size": 24955,
+        "method_count": 14,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b4f30__vftable_5b4f30",
+        "file": "Classes/cls_0x5b4f30__vftable_5b4f30.cpp",
+        "size": 24553,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9838910038068523,
+      "size_ratio": 0.9838910038068523,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "mosaicsurf",
+        "file": "src/mosaicsurf.cpp",
+        "size": 15369,
+        "method_count": 11,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a4358_TTextBar",
+        "file": "Classes/cls_0x5a4358_TTextBar.cpp",
+        "size": 15109,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9830828290715077,
+      "size_ratio": 0.9830828290715076,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "imagery",
+        "file": "src/imagery.cpp",
+        "size": 28334,
+        "method_count": 33,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x530af0",
+        "file": "Classes/cls_0x530af0.cpp",
+        "size": 27708,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9779064022023011,
+      "size_ratio": 0.9779064022023011,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "charanimator",
+        "file": "src/charanimator.cpp",
+        "size": 33024,
+        "method_count": 37,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a5ed4_likely_ObjectCollection",
+        "file": "Classes/cls_0x5a5ed4_likely_ObjectCollection.cpp",
+        "size": 33800,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9770414201183432,
+      "size_ratio": 0.9770414201183432,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "editor",
+        "file": "src/editor.cpp",
+        "size": 86252,
+        "method_count": 121,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b93c4_TPlayer",
+        "file": "Classes/cls_0x5b93c4_TPlayer.cpp",
+        "size": 88325,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9765298613076706,
+      "size_ratio": 0.9765298613076705,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "exit",
+        "file": "src/exit.cpp",
+        "size": 16749,
+        "method_count": 23,
+        "virtual_method_count": 8
+      },
+      "decompiled_class": {
+        "name": "0x41c7f0",
+        "file": "Classes/cls_0x41c7f0.cpp",
+        "size": 17197,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9739489445833577,
+      "size_ratio": 0.9739489445833576,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "effectcomp",
+        "file": "src/effectcomp.cpp",
+        "size": 45927,
+        "method_count": 24,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x49ead0",
+        "file": "Classes/cls_0x49ead0.cpp",
+        "size": 44726,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9738498051255253,
+      "size_ratio": 0.9738498051255253,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "revmain",
+        "file": "src/revmain.cpp",
+        "size": 54823,
+        "method_count": 75,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a7e38",
+        "file": "Classes/cls_0x5a7e38.cpp",
+        "size": 56318,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9734543130082746,
+      "size_ratio": 0.9734543130082745,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "automap",
+        "file": "src/automap.cpp",
+        "size": 54817,
+        "method_count": 22,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5a7e38",
+        "file": "Classes/cls_0x5a7e38.cpp",
+        "size": 56318,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9733477751340602,
+      "size_ratio": 0.9733477751340601,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "colortable",
+        "file": "src/colortable.cpp",
+        "size": 17767,
+        "method_count": 15,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x41c7f0",
+        "file": "Classes/cls_0x41c7f0.cpp",
+        "size": 17197,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9679180503180053,
+      "size_ratio": 0.9679180503180053,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "ddsurface",
+        "file": "src/ddsurface.cpp",
+        "size": 16582,
+        "method_count": 10,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x41c7f0",
+        "file": "Classes/cls_0x41c7f0.cpp",
+        "size": 17197,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9642379484793859,
+      "size_ratio": 0.9642379484793859,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "sound",
+        "file": "src/sound.cpp",
+        "size": 28876,
+        "method_count": 43,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x530af0",
+        "file": "Classes/cls_0x530af0.cpp",
+        "size": 27708,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9595511843745671,
+      "size_ratio": 0.9595511843745671,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "effect2",
+        "file": "src/effect2.cpp",
+        "size": 103776,
+        "method_count": 12,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x57d9d0_likely_TDirectX_or_TNetwork",
+        "file": "Classes/cls_0x57d9d0_likely_TDirectX_or_TNetwork.cpp",
+        "size": 99349,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.95734081097749,
+      "size_ratio": 0.95734081097749,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "graphics",
+        "file": "src/graphics.cpp",
+        "size": 236948,
+        "method_count": 83,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5b8e94_TObjectInstance_Final",
+        "file": "Classes/cls_0x5b8e94_TObjectInstance_Final.cpp",
+        "size": 224622,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9479801475429208,
+      "size_ratio": 0.9479801475429208,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "object",
+        "file": "src/object.cpp",
+        "size": 82944,
+        "method_count": 104,
+        "virtual_method_count": 0
+      },
+      "decompiled_class": {
+        "name": "0x5756d0_likely_TDirectX_or_TNetwork",
+        "file": "Classes/cls_0x5756d0_likely_TDirectX_or_TNetwork.cpp",
+        "size": 78047,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9409601658950617,
+      "size_ratio": 0.9409601658950617,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "effect",
+        "file": "src/effect.cpp",
+        "size": 403374,
+        "method_count": 55,
+        "virtual_method_count": 6
+      },
+      "decompiled_class": {
+        "name": "0x5a50e8_TScreen",
+        "file": "Classes/cls_0x5a50e8_TScreen.cpp",
+        "size": 370935,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9195808356512815,
+      "size_ratio": 0.9195808356512815,
+      "confidence": "HIGH",
+      "method_matches": []
+    },
+    {
+      "src_class": {
+        "name": "character",
+        "file": "src/character.cpp",
+        "size": 134362,
+        "method_count": 127,
+        "virtual_method_count": 1
+      },
+      "decompiled_class": {
+        "name": "0x5b4f30_TPlayScreen",
+        "file": "Classes/cls_0x5b4f30_TPlayScreen.cpp",
+        "size": 122291,
+        "method_count": 0,
+        "virtual_method_count": 0
+      },
+      "similarity_score": 0.9101606108870067,
+      "size_ratio": 0.9101606108870067,
+      "confidence": "HIGH",
+      "method_matches": []
+    }
+  ]
+}

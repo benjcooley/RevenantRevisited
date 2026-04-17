@@ -1,0 +1,65 @@
+ULTIMATE CLASS MATCHER - LOADING FINGERPRINTS
+============================================================
+✅ C3DCamera: 88 bytes, 22 fields, complexity: 59 [3cameraf.h]
+✅ S3DAnimObj: 60 bytes, 15 fields, complexity: 57 [3dimage.h]
+✅ SSurfaceDesc: 68 bytes, 17 fields, complexity: 46 [3dimagebody.h]
+✅ SAnimationFrame: 40 bytes, 10 fields, complexity: 29 [animdata.h]
+✅ TArea: 44 bytes, 11 fields, complexity: 31 [area.h]
+✅ TAutoMap: 32 bytes, 8 fields, complexity: 49 [automap.h]
+✅ TBitmapData: 80 bytes, 20 fields, complexity: 55 [bitmapdata.h]
+✅ TBitmapSurface: 8 bytes, 2 fields, complexity: 25 [bmsurface.h]
+✅ TCharacter: 192 bytes, 48 fields, complexity: 144 [character.h]
+✅ TWeaponSwipe: 36 bytes, 9 fields, complexity: 49 [charanimator.h]
+✅ TComplexObject: 8 bytes, 2 fields, complexity: 22 [complexobj.h]
+✅ TSurface: 12 bytes, 3 fields, complexity: 30 [ddsurface.h]
+✅ TDialogPane: 28 bytes, 7 fields, complexity: 41 [dialog.h]
+✅ TDisplay: 36 bytes, 9 fields, complexity: 43 [display.h]
+✅ TConsolePane: 28 bytes, 7 fields, complexity: 41 [editor.h]
+✅ SParticleParams: 56 bytes, 14 fields, complexity: 43 [effect.h]
+✅ SStormParams: 80 bytes, 20 fields, complexity: 49 [effectcomp.h]
+✅ TEquipPane: 24 bytes, 6 fields, complexity: 36 [equip.h]
+✅ SExitRef: 24 bytes, 6 fields, complexity: 24 [exit.h]
+✅ SDrawParam: 84 bytes, 21 fields, complexity: 57 [graphics.h]
+✅ SImageryStateHeader: 80 bytes, 20 fields, complexity: 49 [imageres.h]
+✅ SImageryEntry: 36 bytes, 9 fields, complexity: 36 [imagery.h]
+✅ SLightDef: 28 bytes, 7 fields, complexity: 29 [lightdef.h]
+✅ TMapPane: 92 bytes, 23 fields, complexity: 91 [mappane.h]
+✅ TFireBallAnimator: 36 bytes, 9 fields, complexity: 42 [missileeffect.h]
+✅ TMultiSurface: 16 bytes, 4 fields, complexity: 29 [multisurface.h]
+✅ TObjectInstance: 96 bytes, 24 fields, complexity: 108 [object.h]
+✅ TToken: 32 bytes, 7 fields, complexity: 26 [parse.h]
+✅ FileResHdr: 28 bytes, 7 fields, complexity: 23 [resourcehdr.h]
+✅ SCharData: 68 bytes, 17 fields, complexity: 49 [rules.h]
+✅ TPane: 24 bytes, 6 fields, complexity: 31 [screen.h]
+✅ TScript: 28 bytes, 7 fields, complexity: 23 [script.h]
+✅ TScrollPane: 16 bytes, 4 fields, complexity: 32 [scroll.h]
+✅ TSound: 28 bytes, 7 fields, complexity: 35 [sound.h]
+✅ TSpell: 44 bytes, 11 fields, complexity: 50 [spell.h]
+✅ TSpellPane: 16 bytes, 4 fields, complexity: 29 [spellpane.h]
+✅ TStatusBar: 12 bytes, 3 fields, complexity: 27 [statusbar.h]
+✅ TLightningAnimator: 52 bytes, 13 fields, complexity: 56 [stripeffect.h]
+✅ TSurface: 72 bytes, 18 fields, complexity: 70 [surface.h]
+✅ TTextBar: 20 bytes, 5 fields, complexity: 34 [textbar.h]
+✅ TVideoCapture: 32 bytes, 8 fields, complexity: 22 [videocap.h]
+
+📊 Extracted 63 classes, 39 failed
+📊 Loaded 319 substantial Ghidra classes
+
+ULTIMATE COMPREHENSIVE MATCHING
+============================================================
+
+🔍 TCharacter (192 bytes, 48 fields, complexity: 144):
+    🧬 Source pattern: 'ddddddbbdbddbbddbddddddddbdddddddddbddddddddbddd'
+Traceback (most recent call last):
+  File "/Users/benjamincooley/projects/RevenantRevisited/scripts/ultimate_class_matcher.py", line 704, in <module>
+    main()
+  File "/Users/benjamincooley/projects/RevenantRevisited/scripts/ultimate_class_matcher.py", line 674, in main
+    all_matches, confidence_stats = matcher.find_comprehensive_matches()
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/benjamincooley/projects/RevenantRevisited/scripts/ultimate_class_matcher.py", line 530, in find_comprehensive_matches
+    confidence_info = self.calculate_enhanced_confidence(source_info, ghidra_info)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/benjamincooley/projects/RevenantRevisited/scripts/ultimate_class_matcher.py", line 366, in calculate_enhanced_confidence
+    containment = self.analyze_containment_patterns(source_pattern, ghidra_pattern)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'UltimateClassMatcher' object has no attribute 'analyze_containment_patterns'

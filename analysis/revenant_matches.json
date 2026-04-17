@@ -1,0 +1,1565 @@
+{
+  "summary": {
+    "total_src_classes": 92,
+    "total_decompiled_classes": 879,
+    "total_matches": 30,
+    "layout_matches": 30,
+    "string_matches": 0,
+    "functional_matches": 0,
+    "high_confidence": 0,
+    "medium_confidence": 30,
+    "low_confidence": 0
+  },
+  "matches": [
+    {
+      "src_class": "stream",
+      "decompiled_class": "0x438ea0",
+      "confidence": 0.6980295085953349,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.9901475429766743,
+      "field_mappings": [
+        [
+          "buf",
+          "mbr_0x0"
+        ],
+        [
+          "this",
+          "mbr_0x4"
+        ],
+        [
+          "this",
+          "mbr_0x8"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "weapon",
+      "decompiled_class": "0x49a5c0",
+      "confidence": 0.6940285000290664,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.9701425001453318,
+      "field_mappings": [
+        [
+          "true",
+          "mbr_0x0"
+        ],
+        [
+          "false",
+          "mbr_0x4"
+        ],
+        [
+          "CURSOR_HAND",
+          "mbr_0x8"
+        ],
+        [
+          "CURSOR_NONE",
+          "mbr_0xc"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "helper",
+      "decompiled_class": "0x4164c0",
+      "confidence": 0.6930502037497134,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.9652510187485668,
+      "field_mappings": [
+        [
+          "true",
+          "mbr_0x0"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "file",
+      "decompiled_class": "0x5ba014",
+      "confidence": 0.6876191251850332,
+      "match_type": "layout",
+      "layout_similarity": 0.9857142857142857,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.9738099116394516,
+      "field_mappings": [
+        [
+          "size",
+          "mbr_0x4"
+        ],
+        [
+          "nullptr",
+          "mbr_0x8"
+        ],
+        [
+          "nullptr",
+          "mbr_0xc"
+        ],
+        [
+          "nullptr",
+          "mbr_0x10"
+        ],
+        [
+          "nullptr",
+          "mbr_0x14"
+        ],
+        [
+          "filebuf",
+          "mbr_0x18"
+        ],
+        [
+          "true",
+          "mbr_0x1c"
+        ],
+        [
+          "false",
+          "mbr_0x20"
+        ],
+        [
+          "datafile",
+          "mbr_0x24"
+        ],
+        [
+          "size",
+          "mbr_0x28"
+        ],
+        [
+          "0",
+          "mbr_0x2c"
+        ],
+        [
+          "size",
+          "mbr_0x30"
+        ],
+        [
+          "n",
+          "mbr_0x34"
+        ],
+        [
+          "fp",
+          "mbr_0x38"
+        ],
+        [
+          "n",
+          "mbr_0x3c"
+        ],
+        [
+          "success",
+          "mbr_0x40"
+        ],
+        [
+          "n",
+          "mbr_0x44"
+        ],
+        [
+          "success",
+          "mbr_0x48"
+        ],
+        [
+          "fp",
+          "mbr_0x4c"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "animation",
+      "decompiled_class": "0x49a5c0",
+      "confidence": 0.6793741971387725,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8968709856938621,
+      "field_mappings": [
+        [
+          "true",
+          "mbr_0x0"
+        ],
+        [
+          "db",
+          "mbr_0x4"
+        ],
+        [
+          "n",
+          "mbr_0x8"
+        ],
+        [
+          "nullptr",
+          "mbr_0xc"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "multisurface",
+      "decompiled_class": "0x56c730",
+      "confidence": 0.6685259568030045,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8426297840150224,
+      "field_mappings": [
+        [
+          "graphics",
+          "mbr_0x0"
+        ],
+        [
+          "zbuffer",
+          "mbr_0x4"
+        ],
+        [
+          "normals",
+          "mbr_0x8"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "statusbar",
+      "decompiled_class": "0x56c730",
+      "confidence": 0.6646109783506203,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8230548917531016,
+      "field_mappings": [
+        [
+          "true",
+          "mbr_0x0"
+        ],
+        [
+          "tubedata",
+          "mbr_0x4"
+        ],
+        [
+          "hue",
+          "mbr_0x8"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "timer",
+      "decompiled_class": "0x41c7f0",
+      "confidence": 0.6599742939976286,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.7998714699881433,
+      "field_mappings": [
+        [
+          "tickevent",
+          "mbr_0x0"
+        ],
+        [
+          "tc",
+          "mbr_0x4"
+        ],
+        [
+          "true",
+          "mbr_0x8"
+        ],
+        [
+          "false",
+          "mbr_0xc"
+        ],
+        [
+          "false",
+          "mbr_0x10"
+        ],
+        [
+          "true",
+          "mbr_0x14"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "3dcont",
+      "decompiled_class": "0x5ba014",
+      "confidence": 0.6547442873861864,
+      "match_type": "layout",
+      "layout_similarity": 0.969290465631929,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8504952728511097,
+      "field_mappings": [
+        [
+          "false",
+          "mbr_0x8"
+        ],
+        [
+          "false",
+          "mbr_0xc"
+        ],
+        [
+          "true",
+          "mbr_0x10"
+        ],
+        [
+          "false",
+          "mbr_0x14"
+        ],
+        [
+          "false",
+          "mbr_0x18"
+        ],
+        [
+          "true",
+          "mbr_0x1c"
+        ],
+        [
+          "olduv",
+          "mbr_0x20"
+        ],
+        [
+          "false",
+          "mbr_0x24"
+        ],
+        [
+          "false",
+          "mbr_0x28"
+        ],
+        [
+          "true",
+          "mbr_0x2c"
+        ],
+        [
+          "false",
+          "mbr_0x30"
+        ],
+        [
+          "false",
+          "mbr_0x34"
+        ],
+        [
+          "true",
+          "mbr_0x38"
+        ],
+        [
+          "olduv",
+          "mbr_0x3c"
+        ],
+        [
+          "UV",
+          "mbr_0x40"
+        ],
+        [
+          "olduv",
+          "mbr_0x44"
+        ],
+        [
+          "UV",
+          "mbr_0x48"
+        ],
+        [
+          "olduv",
+          "mbr_0x4c"
+        ],
+        [
+          "f",
+          "mbr_0x50"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "button",
+      "decompiled_class": "0x429ac0",
+      "confidence": 0.654335112051334,
+      "match_type": "layout",
+      "layout_similarity": 0.9254901960784314,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.9579500700605913,
+      "field_mappings": [
+        [
+          "color",
+          "mbr_0x0"
+        ],
+        [
+          "tmp",
+          "mbr_0x4"
+        ],
+        [
+          "color",
+          "mbr_0x8"
+        ],
+        [
+          "false",
+          "mbr_0xc"
+        ],
+        [
+          "insquare",
+          "mbr_0x10"
+        ],
+        [
+          "false",
+          "mbr_0x14"
+        ],
+        [
+          "true",
+          "mbr_0x18"
+        ],
+        [
+          "false",
+          "mbr_0x1c"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "textbar",
+      "decompiled_class": "0x56c730",
+      "confidence": 0.6530230842500414,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.7651154212502068,
+      "field_mappings": [
+        [
+          "true",
+          "mbr_0x0"
+        ],
+        [
+          "drawmode",
+          "mbr_0x4"
+        ],
+        [
+          "marker",
+          "mbr_0x8"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "death",
+      "decompiled_class": "0x49a5c0",
+      "confidence": 0.6463160817284127,
+      "match_type": "layout",
+      "layout_similarity": 0.9045751633986927,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.9701425001453318,
+      "field_mappings": [],
+      "string_mappings": []
+    },
+    {
+      "src_class": "template",
+      "decompiled_class": "0x50bf20",
+      "confidence": 0.6446675093808969,
+      "match_type": "layout",
+      "layout_similarity": 0.9533333333333334,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8400042135711512,
+      "field_mappings": [
+        [
+          "TileClass",
+          "mbr_0x0"
+        ],
+        [
+          "false",
+          "mbr_0x4"
+        ],
+        [
+          "true",
+          "mbr_0x8"
+        ],
+        [
+          "false",
+          "mbr_0xc"
+        ],
+        [
+          "pos",
+          "mbr_0x14"
+        ],
+        [
+          "def",
+          "mbr_0x18"
+        ],
+        [
+          "foundlist",
+          "mbr_0x1c"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "money",
+      "decompiled_class": "0x50bf20",
+      "confidence": 0.6370171431516396,
+      "match_type": "layout",
+      "layout_similarity": 0.9624999999999999,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.7788357157581979,
+      "field_mappings": [
+        [
+          "true",
+          "mbr_0x0"
+        ],
+        [
+          "inst",
+          "mbr_0x4"
+        ],
+        [
+          "true",
+          "mbr_0x8"
+        ],
+        [
+          "false",
+          "mbr_0xc"
+        ],
+        [
+          "CURSOR_NONE",
+          "mbr_0x14"
+        ],
+        [
+          "amount",
+          "mbr_0x18"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "font",
+      "decompiled_class": "0x439000",
+      "confidence": 0.6317135872546803,
+      "match_type": "layout",
+      "layout_similarity": 0.9142857142857143,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8728536505591158,
+      "field_mappings": [
+        [
+          "nullptr",
+          "mbr_0x0"
+        ],
+        [
+          "character",
+          "mbr_0x4"
+        ],
+        [
+          "db",
+          "mbr_0x8"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "mosaicsurf",
+      "decompiled_class": "0x5a4358_TTextBar",
+      "confidence": 0.6290644843430622,
+      "match_type": "layout",
+      "layout_similarity": 0.8957219251336899,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.9060176088810864,
+      "field_mappings": [
+        [
+          "false",
+          "mbr_0x4"
+        ],
+        [
+          "false",
+          "mbr_0x8"
+        ],
+        [
+          "false",
+          "mbr_0xc"
+        ],
+        [
+          "false",
+          "mbr_0x10"
+        ],
+        [
+          "false",
+          "mbr_0x14"
+        ],
+        [
+          "vflags",
+          "mbr_0x18"
+        ],
+        [
+          "zflags",
+          "mbr_0x1c"
+        ],
+        [
+          "nflags",
+          "mbr_0x20"
+        ],
+        [
+          "false",
+          "mbr_0x48"
+        ],
+        [
+          "drew",
+          "mbr_0x4c"
+        ],
+        [
+          "db",
+          "mbr_0x50"
+        ],
+        [
+          "numrects",
+          "mbr_0x54"
+        ],
+        [
+          "drew",
+          "mbr_0x60"
+        ],
+        [
+          "db",
+          "mbr_0x64"
+        ],
+        [
+          "numrects",
+          "mbr_0x68"
+        ],
+        [
+          "false",
+          "mbr_0x6c"
+        ],
+        [
+          "false",
+          "mbr_0x70"
+        ],
+        [
+          "false",
+          "mbr_0x74"
+        ],
+        [
+          "drew",
+          "mbr_0x78"
+        ],
+        [
+          "dparray",
+          "mbr_0x7c"
+        ],
+        [
+          "dparray",
+          "mbr_0x80"
+        ],
+        [
+          "bytesperpixel",
+          "mbr_0x88"
+        ],
+        [
+          "2",
+          "mbr_0x90"
+        ],
+        [
+          "numtilex",
+          "mbr_0x94"
+        ],
+        [
+          "numtilex",
+          "mbr_0x9c"
+        ],
+        [
+          "numtiley",
+          "mbr_0xa0"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "bmsurface",
+      "decompiled_class": "0x477870",
+      "confidence": 0.6289662839873208,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.644831419936604,
+      "field_mappings": [
+        [
+          "bitmap",
+          "mbr_0x0"
+        ],
+        [
+          "true",
+          "mbr_0x4"
+        ],
+        [
+          "true",
+          "mbr_0x8"
+        ],
+        [
+          "true",
+          "mbr_0xc"
+        ],
+        [
+          "true",
+          "mbr_0x10"
+        ],
+        [
+          "true",
+          "mbr_0x14"
+        ],
+        [
+          "true",
+          "mbr_0x18"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "trap",
+      "decompiled_class": "0x477870",
+      "confidence": 0.6289662839873208,
+      "match_type": "layout",
+      "layout_similarity": 1.0,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.644831419936604,
+      "field_mappings": [
+        [
+          "CURSOR_NONE",
+          "mbr_0x0"
+        ],
+        [
+          "frame",
+          "mbr_0x4"
+        ],
+        [
+          "lastshot",
+          "mbr_0x8"
+        ],
+        [
+          "wallfacing",
+          "mbr_0xc"
+        ],
+        [
+          "false",
+          "mbr_0x10"
+        ],
+        [
+          "AmmoClass",
+          "mbr_0x14"
+        ],
+        [
+          "def",
+          "mbr_0x18"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "food",
+      "decompiled_class": "0x49a2e0",
+      "confidence": 0.6288854381999831,
+      "match_type": "layout",
+      "layout_similarity": 0.8999999999999999,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8944271909999159,
+      "field_mappings": [
+        [
+          "true",
+          "mbr_0x0"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "player",
+      "decompiled_class": "0x433170",
+      "confidence": 0.624490705512618,
+      "match_type": "layout",
+      "layout_similarity": 0.9818576388888888,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.6678094303408678,
+      "field_mappings": [
+        [
+          "DeathPane",
+          "mbr_0x0"
+        ],
+        [
+          "CharacterClass",
+          "mbr_0x4"
+        ],
+        [
+          "TalismanClass",
+          "mbr_0x8"
+        ],
+        [
+          "retval",
+          "mbr_0xc"
+        ],
+        [
+          "nextmove",
+          "mbr_0x10"
+        ],
+        [
+          "retval",
+          "mbr_0x14"
+        ],
+        [
+          "0",
+          "mbr_0x18"
+        ],
+        [
+          "false",
+          "mbr_0x1c"
+        ],
+        [
+          "false",
+          "mbr_0x20"
+        ],
+        [
+          "false",
+          "mbr_0x24"
+        ],
+        [
+          "false",
+          "mbr_0x28"
+        ],
+        [
+          "true",
+          "mbr_0x30"
+        ],
+        [
+          "false",
+          "mbr_0x34"
+        ],
+        [
+          "true",
+          "mbr_0x38"
+        ],
+        [
+          "mod",
+          "mbr_0x3c"
+        ],
+        [
+          "mod",
+          "mbr_0x40"
+        ],
+        [
+          "0",
+          "mbr_0x44"
+        ],
+        [
+          "animator",
+          "mbr_0x48"
+        ],
+        [
+          "false",
+          "mbr_0x4c"
+        ],
+        [
+          "true",
+          "mbr_0x50"
+        ],
+        [
+          "x",
+          "mbr_0x54"
+        ],
+        [
+          "has",
+          "mbr_0x58"
+        ],
+        [
+          "true",
+          "mbr_0x5c"
+        ],
+        [
+          "pos",
+          "mbr_0x60"
+        ],
+        [
+          "c",
+          "mbr_0x64"
+        ],
+        [
+          "c",
+          "mbr_0x68"
+        ],
+        [
+          "c",
+          "mbr_0x6c"
+        ],
+        [
+          "removenum",
+          "mbr_0x70"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "videocap",
+      "decompiled_class": "0x50bf20",
+      "confidence": 0.622622990199688,
+      "match_type": "layout",
+      "layout_similarity": 0.9034090909090908,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8545922237257128,
+      "field_mappings": [
+        [
+          "true",
+          "mbr_0x0"
+        ],
+        [
+          "true",
+          "mbr_0x4"
+        ],
+        [
+          "bmsurface",
+          "mbr_0x8"
+        ],
+        [
+          "PTBitmapSurface",
+          "mbr_0xc"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "automap",
+      "decompiled_class": "0x5a4358_TTextBar",
+      "confidence": 0.6094761278172514,
+      "match_type": "layout",
+      "layout_similarity": 0.863761801016703,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8879761365444994,
+      "field_mappings": [
+        [
+          "HandCursor",
+          "mbr_0x4"
+        ],
+        [
+          "Success",
+          "mbr_0x8"
+        ],
+        [
+          "d",
+          "mbr_0xc"
+        ],
+        [
+          "PlayerX",
+          "mbr_0x10"
+        ],
+        [
+          "PlayerY",
+          "mbr_0x14"
+        ],
+        [
+          "FilterTotal",
+          "mbr_0x18"
+        ],
+        [
+          "Width",
+          "mbr_0x48"
+        ],
+        [
+          "Height",
+          "mbr_0x4c"
+        ],
+        [
+          "Offset",
+          "mbr_0x50"
+        ],
+        [
+          "Color",
+          "mbr_0x54"
+        ],
+        [
+          "PlayerY",
+          "mbr_0x60"
+        ],
+        [
+          "n",
+          "mbr_0x64"
+        ],
+        [
+          "n",
+          "mbr_0x68"
+        ],
+        [
+          "false",
+          "mbr_0x6c"
+        ],
+        [
+          "Size",
+          "mbr_0x70"
+        ],
+        [
+          "Size",
+          "mbr_0x74"
+        ],
+        [
+          "Pos",
+          "mbr_0x78"
+        ],
+        [
+          "ColorTableUpperHi",
+          "mbr_0x7c"
+        ],
+        [
+          "ColorTableUpperLo",
+          "mbr_0x80"
+        ],
+        [
+          "Filter",
+          "mbr_0x88"
+        ],
+        [
+          "256",
+          "mbr_0x90"
+        ],
+        [
+          "Width",
+          "mbr_0x94"
+        ],
+        [
+          "d",
+          "mbr_0x9c"
+        ],
+        [
+          "32",
+          "mbr_0xa0"
+        ],
+        [
+          "Buf",
+          "mbr_0xa4"
+        ],
+        [
+          "s",
+          "mbr_0xa8"
+        ],
+        [
+          "32",
+          "mbr_0xac"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "mainwnd",
+      "decompiled_class": "0x44ceb0",
+      "confidence": 0.6090715439708769,
+      "match_type": "layout",
+      "layout_similarity": 0.8657969370391378,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8808653772565402,
+      "field_mappings": [],
+      "string_mappings": []
+    },
+    {
+      "src_class": "complexobj",
+      "decompiled_class": "0x5ba014",
+      "confidence": 0.6079251489539452,
+      "match_type": "layout",
+      "layout_similarity": 0.8502901353965183,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.9139004062784305,
+      "field_mappings": [
+        [
+          "true",
+          "mbr_0x4"
+        ],
+        [
+          "true",
+          "mbr_0x8"
+        ],
+        [
+          "false",
+          "mbr_0xc"
+        ],
+        [
+          "true",
+          "mbr_0x10"
+        ],
+        [
+          "false",
+          "mbr_0x14"
+        ],
+        [
+          "true",
+          "mbr_0x18"
+        ],
+        [
+          "false",
+          "mbr_0x1c"
+        ],
+        [
+          "true",
+          "mbr_0x20"
+        ],
+        [
+          "false",
+          "mbr_0x24"
+        ],
+        [
+          "0",
+          "mbr_0x28"
+        ],
+        [
+          "stnamebuf",
+          "mbr_0x2c"
+        ],
+        [
+          "stnamebuf",
+          "mbr_0x30"
+        ],
+        [
+          "COM_IMPOSSIBLE",
+          "mbr_0x34"
+        ],
+        [
+          "0",
+          "mbr_0x38"
+        ],
+        [
+          "root",
+          "mbr_0x3c"
+        ],
+        [
+          "doing",
+          "mbr_0x40"
+        ],
+        [
+          "desired",
+          "mbr_0x44"
+        ],
+        [
+          "COM_EXECUTING",
+          "mbr_0x48"
+        ],
+        [
+          "COM_EXECUTING",
+          "mbr_0x4c"
+        ],
+        [
+          "COM_IMPOSSIBLE",
+          "mbr_0x50"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "script",
+      "decompiled_class": "0x42d730",
+      "confidence": 0.606447107502518,
+      "match_type": "layout",
+      "layout_similarity": 0.9112676056338027,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.754066523428083,
+      "field_mappings": [
+        [
+          "false",
+          "mbr_0x0"
+        ],
+        [
+          "retval",
+          "mbr_0x4"
+        ],
+        [
+          "return",
+          "mbr_0x8"
+        ],
+        [
+          "false",
+          "mbr_0x10"
+        ],
+        [
+          "false",
+          "mbr_0x14"
+        ],
+        [
+          "true",
+          "mbr_0x18"
+        ],
+        [
+          "st",
+          "mbr_0x1c"
+        ],
+        [
+          "len",
+          "mbr_0x20"
+        ],
+        [
+          "false",
+          "mbr_0x24"
+        ],
+        [
+          "false",
+          "mbr_0x28"
+        ],
+        [
+          "true",
+          "mbr_0x2c"
+        ],
+        [
+          "true",
+          "mbr_0x30"
+        ],
+        [
+          "false",
+          "mbr_0x34"
+        ],
+        [
+          "true",
+          "mbr_0x38"
+        ],
+        [
+          "buffer",
+          "mbr_0x3c"
+        ],
+        [
+          "retval",
+          "mbr_0x40"
+        ],
+        [
+          "true",
+          "mbr_0x44"
+        ],
+        [
+          "false",
+          "mbr_0x48"
+        ],
+        [
+          "retval",
+          "mbr_0x4c"
+        ],
+        [
+          "nullptr",
+          "mbr_0x50"
+        ],
+        [
+          "newscript",
+          "mbr_0x54"
+        ],
+        [
+          "nullptr",
+          "mbr_0x58"
+        ],
+        [
+          "val",
+          "mbr_0x5c"
+        ],
+        [
+          "i",
+          "mbr_0x60"
+        ],
+        [
+          "0",
+          "mbr_0x64"
+        ],
+        [
+          "char",
+          "mbr_0x74"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "bitmap",
+      "decompiled_class": "0x5a4358_TTextBar",
+      "confidence": 0.6047214474681071,
+      "match_type": "layout",
+      "layout_similarity": 0.8549713801144794,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8861787870543368,
+      "field_mappings": [
+        [
+          "nullptr",
+          "mbr_0x4"
+        ],
+        [
+          "nullptr",
+          "mbr_0x8"
+        ],
+        [
+          "bitmap",
+          "mbr_0xc"
+        ],
+        [
+          "bitmap",
+          "mbr_0x10"
+        ],
+        [
+          "db",
+          "mbr_0x14"
+        ],
+        [
+          "dp",
+          "mbr_0x18"
+        ],
+        [
+          "tp",
+          "mbr_0x1c"
+        ],
+        [
+          "false",
+          "mbr_0x20"
+        ],
+        [
+          "false",
+          "mbr_0x48"
+        ],
+        [
+          "db",
+          "mbr_0x4c"
+        ],
+        [
+          "dp",
+          "mbr_0x50"
+        ],
+        [
+          "false",
+          "mbr_0x54"
+        ],
+        [
+          "dp",
+          "mbr_0x60"
+        ],
+        [
+          "false",
+          "mbr_0x64"
+        ],
+        [
+          "false",
+          "mbr_0x68"
+        ],
+        [
+          "false",
+          "mbr_0x6c"
+        ],
+        [
+          "header",
+          "mbr_0x70"
+        ],
+        [
+          "info",
+          "mbr_0x74"
+        ],
+        [
+          "false",
+          "mbr_0x78"
+        ],
+        [
+          "false",
+          "mbr_0x7c"
+        ],
+        [
+          "false",
+          "mbr_0x80"
+        ],
+        [
+          "false",
+          "mbr_0x88"
+        ],
+        [
+          "true",
+          "mbr_0x90"
+        ],
+        [
+          "false",
+          "mbr_0x94"
+        ],
+        [
+          "false",
+          "mbr_0x9c"
+        ],
+        [
+          "true",
+          "mbr_0xa0"
+        ],
+        [
+          "false",
+          "mbr_0xa4"
+        ],
+        [
+          "true",
+          "mbr_0xa8"
+        ],
+        [
+          "bytesperpixel",
+          "mbr_0xac"
+        ],
+        [
+          "false",
+          "mbr_0xb0"
+        ],
+        [
+          "false",
+          "mbr_0xb4"
+        ],
+        [
+          "false",
+          "mbr_0xb8"
+        ],
+        [
+          "true",
+          "mbr_0xbc"
+        ],
+        [
+          "true",
+          "mbr_0xc0"
+        ],
+        [
+          "result",
+          "mbr_0xc4"
+        ],
+        [
+          "uint8_t",
+          "mbr_0xc8"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "dialog",
+      "decompiled_class": "0x42b340",
+      "confidence": 0.604590342741204,
+      "match_type": "layout",
+      "layout_similarity": 0.8792690058479531,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8247791990861375,
+      "field_mappings": [
+        [
+          "SDialogLine",
+          "mbr_0x0"
+        ],
+        [
+          "true",
+          "mbr_0x4"
+        ],
+        [
+          "nullptr",
+          "mbr_0xc"
+        ],
+        [
+          "nullptr",
+          "mbr_0x10"
+        ],
+        [
+          "nullptr",
+          "mbr_0x14"
+        ],
+        [
+          "DialogPane",
+          "mbr_0x18"
+        ],
+        [
+          "buf",
+          "mbr_0x44"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "savegame",
+      "decompiled_class": "0x429ac0",
+      "confidence": 0.6033332718572499,
+      "match_type": "layout",
+      "layout_similarity": 0.8571428571428571,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8738092164291066,
+      "field_mappings": [
+        [
+          "false",
+          "mbr_0x0"
+        ],
+        [
+          "false",
+          "mbr_0x4"
+        ],
+        [
+          "retval",
+          "mbr_0x8"
+        ],
+        [
+          "false",
+          "mbr_0xc"
+        ],
+        [
+          "size",
+          "mbr_0x10"
+        ],
+        [
+          "false",
+          "mbr_0x14"
+        ],
+        [
+          "retval",
+          "mbr_0x18"
+        ],
+        [
+          "data",
+          "mbr_0x1c"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "string",
+      "decompiled_class": "0x50ba90",
+      "confidence": 0.6024362046693501,
+      "match_type": "layout",
+      "layout_similarity": 0.8577142857142857,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.8678953090610362,
+      "field_mappings": [
+        [
+          "data",
+          "mbr_0x0"
+        ],
+        [
+          "diff",
+          "mbr_0x4"
+        ],
+        [
+          "data",
+          "mbr_0x8"
+        ],
+        [
+          "char",
+          "mbr_0xc"
+        ],
+        [
+          "char",
+          "mbr_0x10"
+        ],
+        [
+          "char",
+          "mbr_0x14"
+        ],
+        [
+          "char",
+          "mbr_0x18"
+        ],
+        [
+          "this",
+          "mbr_0x1c"
+        ],
+        [
+          "this",
+          "mbr_0x24"
+        ],
+        [
+          "this",
+          "mbr_0x28"
+        ],
+        [
+          "MAX_SIZE",
+          "mbr_0x2c"
+        ]
+      ],
+      "string_mappings": []
+    },
+    {
+      "src_class": "ddsurface",
+      "decompiled_class": "0x433170",
+      "confidence": 0.6009104195664973,
+      "match_type": "layout",
+      "layout_similarity": 0.9515625,
+      "string_similarity": 0.0,
+      "functional_similarity": 0.6256458478324866,
+      "field_mappings": [
+        [
+          "DirectDraw",
+          "mbr_0x0"
+        ]
+      ],
+      "string_mappings": []
+    }
+  ]
+}

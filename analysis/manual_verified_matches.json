@@ -1,0 +1,85 @@
+{
+  "verified_matches": [
+    {
+      "src_class": "character",
+      "src_file": "src/character.cpp", 
+      "ghidra_class": "TCharacter",
+      "ghidra_files": [
+        "Classes/cls_0x5a5320_TCharacter.cpp",
+        "Classes/cls_0x5a7b98_TCharacter.cpp"
+      ],
+      "verification_method": "manual_visual_inspection",
+      "confidence": "high",
+      "notes": "Two TCharacter variants found - likely different versions or inheritance levels"
+    },
+    {
+      "src_class": "object", 
+      "src_file": "src/object.cpp",
+      "ghidra_class": "TObjectInstance",
+      "ghidra_files": [
+        "Classes/cls_0x5b8e94_TObjectInstance_Final.cpp"
+      ],
+      "verification_method": "manual_visual_inspection", 
+      "confidence": "high",
+      "notes": "Core object system - massive file (233KB)"
+    },
+    {
+      "src_class": "object",
+      "src_file": "src/object.cpp", 
+      "ghidra_class": "TObjectClass",
+      "ghidra_files": [
+        "Classes/cls_0x45f7c0_TObjectClass.cpp"
+      ],
+      "verification_method": "manual_visual_inspection",
+      "confidence": "medium", 
+      "notes": "Object class definitions - 157KB file"
+    },
+    {
+      "src_class": "player",
+      "src_file": "src/player.cpp",
+      "ghidra_class": "TPlayer", 
+      "ghidra_files": [
+        "Classes/cls_0x5b93c4_TPlayer.cpp"
+      ],
+      "verification_method": "manual_visual_inspection",
+      "confidence": "high",
+      "notes": "Player character system"
+    },
+    {
+      "src_class": "3dscene",
+      "src_file": "src/3dscene.cpp",
+      "ghidra_class": "T3DScene",
+      "ghidra_files": [
+        "Classes/cls_0x411eb0_T3DScene.cpp" 
+      ],
+      "verification_method": "manual_visual_inspection",
+      "confidence": "high",
+      "notes": "3D scene rendering - sizes very close (73KB vs 75KB)"
+    },
+    {
+      "src_class": "playscreen", 
+      "src_file": "src/playscreen.cpp",
+      "ghidra_class": "TPlayScreen",
+      "ghidra_files": [
+        "Classes/cls_0x5b4f30_TPlayScreen.cpp"
+      ],
+      "verification_method": "manual_visual_inspection",
+      "confidence": "high", 
+      "notes": "Main game screen - 36KB vs 126KB (significant expansion)"
+    }
+  ],
+  "methodology": {
+    "why_fingerprinting_failed": [
+      "Source classes use inheritance - member vars not explicitly defined",
+      "Ghidra shows flattened complete structure - all fields visible", 
+      "Can't generate source fingerprints from method-only class definitions",
+      "Automated comparison requires both fingerprints to exist"
+    ],
+    "why_manual_works": [
+      "Visual pattern recognition of structure layouts",
+      "File size relationships make sense (release > dev)",
+      "Class name matching is obvious (TCharacter <-> character.cpp)",
+      "You can see both structures and correlate them"
+    ]
+  }
+}

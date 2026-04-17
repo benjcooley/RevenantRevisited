@@ -1,0 +1,1276 @@
+ULTIMATE CLASS MATCHER - LOADING FINGERPRINTS
+============================================================
+✅ C3DCamera: 88 bytes, 22 fields, complexity: 59 [3cameraf.h]
+   🧬 Pattern: ddddwwdddddddwwdwdwddw
+✅ S3DAnimObj: 60 bytes, 15 fields, complexity: 57 [3dimage.h]
+   🧬 Pattern: ddddddddddddddd
+✅ SSurfaceDesc: 68 bytes, 17 fields, complexity: 46 [3dimagebody.h]
+   🧬 Pattern: ddddddddddddddddd
+✅ SAnimationFrame: 40 bytes, 10 fields, complexity: 29 [animdata.h]
+   🧬 Pattern: dddddddddd
+✅ TArea: 44 bytes, 11 fields, complexity: 31 [area.h]
+   🧬 Pattern: ddddddbdddd
+✅ TAutoMap: 32 bytes, 8 fields, complexity: 49 [automap.h]
+   🧬 Pattern: dbdbdddb
+✅ TBitmapData: 80 bytes, 20 fields, complexity: 55 [bitmapdata.h]
+   🧬 Pattern: dddddddddddddddddddd
+✅ TBitmapSurface: 8 bytes, 2 fields, complexity: 25 [bmsurface.h]
+   🧬 Pattern: bd
+✅ TCharacter: 192 bytes, 48 fields, complexity: 144 [character.h]
+   🧬 Pattern: ddddddbbdbddbbddbddddddddbdddddddddbddddddddbddd
+✅ TWeaponSwipe: 36 bytes, 9 fields, complexity: 49 [charanimator.h]
+   🧬 Pattern: ddbddbddb
+✅ TComplexObject: 8 bytes, 2 fields, complexity: 22 [complexobj.h]
+   🧬 Pattern: dd
+✅ TSurface: 12 bytes, 3 fields, complexity: 30 [ddsurface.h]
+   🧬 Pattern: dbd
+✅ TDialogPane: 28 bytes, 7 fields, complexity: 41 [dialog.h]
+   🧬 Pattern: dbddbdb
+✅ TDisplay: 36 bytes, 9 fields, complexity: 43 [display.h]
+   🧬 Pattern: ddddddddd
+✅ TConsolePane: 28 bytes, 7 fields, complexity: 41 [editor.h]
+   🧬 Pattern: ddddddd
+✅ SParticleParams: 56 bytes, 14 fields, complexity: 43 [effect.h]
+   🧬 Pattern: dddbbdbbdddddd
+✅ SStormParams: 80 bytes, 20 fields, complexity: 49 [effectcomp.h]
+   🧬 Pattern: dddddddddddddddddddd
+✅ TEquipPane: 24 bytes, 6 fields, complexity: 36 [equip.h]
+   🧬 Pattern: dddddd
+✅ SExitRef: 24 bytes, 6 fields, complexity: 24 [exit.h]
+   🧬 Pattern: dddddd
+✅ SDrawParam: 84 bytes, 21 fields, complexity: 57 [graphics.h]
+   🧬 Pattern: ddddddddddddddddddddd
+✅ SImageryStateHeader: 80 bytes, 20 fields, complexity: 49 [imageres.h]
+   🧬 Pattern: ddwwwwwwwwwwwwwwwwww
+✅ SImageryEntry: 36 bytes, 9 fields, complexity: 36 [imagery.h]
+   🧬 Pattern: dddbdbddd
+✅ SLightDef: 28 bytes, 7 fields, complexity: 29 [lightdef.h]
+   🧬 Pattern: dwddddd
+✅ TMapPane: 92 bytes, 23 fields, complexity: 91 [mappane.h]
+   🧬 Pattern: ddddddbdddbdddddbdbdddb
+✅ TFireBallAnimator: 36 bytes, 9 fields, complexity: 42 [missileeffect.h]
+   🧬 Pattern: ddddddddd
+✅ TMultiSurface: 16 bytes, 4 fields, complexity: 29 [multisurface.h]
+   🧬 Pattern: ddbb
+✅ TObjectInstance: 96 bytes, 24 fields, complexity: 108 [object.h]
+   🧬 Pattern: ddddddddddddwdwwbddddddd
+✅ TToken: 32 bytes, 7 fields, complexity: 26 [parse.h]
+   🧬 Pattern: dddqbdd
+✅ FileResHdr: 28 bytes, 7 fields, complexity: 23 [resourcehdr.h]
+   🧬 Pattern: ddddddd
+✅ SCharData: 68 bytes, 17 fields, complexity: 49 [rules.h]
+   🧬 Pattern: dddbddddddddddddd
+✅ TPane: 24 bytes, 6 fields, complexity: 31 [screen.h]
+   🧬 Pattern: dbbbbd
+✅ TScript: 28 bytes, 7 fields, complexity: 23 [script.h]
+   🧬 Pattern: ddddddd
+✅ TScrollPane: 16 bytes, 4 fields, complexity: 32 [scroll.h]
+   🧬 Pattern: dddd
+✅ TSound: 28 bytes, 7 fields, complexity: 35 [sound.h]
+   🧬 Pattern: dddddbd
+✅ TSpell: 44 bytes, 11 fields, complexity: 50 [spell.h]
+   🧬 Pattern: ddddddddddd
+✅ TSpellPane: 16 bytes, 4 fields, complexity: 29 [spellpane.h]
+   🧬 Pattern: bddb
+✅ TStatusBar: 12 bytes, 3 fields, complexity: 27 [statusbar.h]
+   🧬 Pattern: ddb
+✅ TLightningAnimator: 52 bytes, 13 fields, complexity: 56 [stripeffect.h]
+   🧬 Pattern: ddddbbdddddbb
+✅ TSurface: 72 bytes, 18 fields, complexity: 70 [surface.h]
+   🧬 Pattern: dddddddddddddddddb
+✅ TTextBar: 20 bytes, 5 fields, complexity: 34 [textbar.h]
+   🧬 Pattern: bddbb
+✅ TVideoCapture: 32 bytes, 8 fields, complexity: 22 [videocap.h]
+   🧬 Pattern: bddddddd
+
+📊 Extracted 63 classes, 39 failed
+📊 Loaded 319 substantial Ghidra classes
+
+ULTIMATE COMPREHENSIVE MATCHING
+============================================================
+
+🔍 TCharacter (192 bytes, 48 fields, complexity: 144):
+    🧬 Source pattern: 'ddddddbbdbddbbddbddddddddbdddddddddbddddddddbddd'
+  📊 193 candidates found:
+    1. ✅ cls_0x5b4290: 1224 bytes (47 fields) - MEDIUM (80)
+       🧬 Ghidra pattern: 'ddddddbdddddddddddddddddddddddddddddddddddddddd'
+       📊 Δsize:1032, Δfields:1, pattern:64%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (83%) suggests inheritance with modifications
+    2. ✅ cls_0x5a3e1c: 416 bytes (48 fields) - MEDIUM (78)
+       🧬 Ghidra pattern: 'Addddddddddddddddddddddddddddddddddddddddddddddd'
+       📊 Δsize:224, Δfields:0, pattern:56%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (81%) suggests inheritance with modifications
+    3. ✅ cls_0x5a8aa4: 12360 bytes (49 fields) - MEDIUM (77)
+       🧬 Ghidra pattern: 'ddddbdddddddddddddddddddddddddddddddddddddddddddd'
+       📊 Δsize:12168, Δfields:1, pattern:55%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (81%) suggests inheritance with modifications
+    ... and 190 more matches
+
+🔍 TObjectInstance (96 bytes, 24 fields, complexity: 108):
+    🧬 Source pattern: 'ddddddddddddwdwwbddddddd'
+  📊 261 candidates found:
+    1. 🎯 cls_0x5ba014: 84 bytes (20 fields) - HIGH (93)
+       🧬 Ghidra pattern: 'dddddddddddddddddddd'
+       📊 Δsize:12, Δfields:4, pattern:76%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (83%) suggests inheritance with modifications
+    2. 🎯 cls_0x5b9ff0: 80 bytes (19 fields) - HIGH (92)
+       🧬 Ghidra pattern: 'ddddbdddddddddddddd'
+       📊 Δsize:16, Δfields:5, pattern:64%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    3. 🎯 cls_0x44ceb0: 72 bytes (18 fields) - HIGH (91)
+       🧬 Ghidra pattern: 'dddddddddddddddddd'
+       📊 Δsize:24, Δfields:6, pattern:64%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    ... and 258 more matches
+
+🔍 TMapPane (92 bytes, 23 fields, complexity: 91):
+    🧬 Source pattern: 'ddddddbdddbdddddbdbdddb'
+  📊 221 candidates found:
+    1. 🎯 cls_0x5ba014: 84 bytes (20 fields) - HIGH (93)
+       🧬 Ghidra pattern: 'dddddddddddddddddddd'
+       📊 Δsize:8, Δfields:3, pattern:69%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (78%) suggests inheritance with modifications
+    2. 🎯 cls_0x5b9ff0: 80 bytes (19 fields) - HIGH (93)
+       🧬 Ghidra pattern: 'ddddbdddddddddddddd'
+       📊 Δsize:12, Δfields:4, pattern:66%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (78%) suggests inheritance with modifications
+    3. 🎯 cls_0x5b9fcc: 76 bytes (18 fields) - HIGH (92)
+       🧬 Ghidra pattern: 'dddddddddddddddddd'
+       📊 Δsize:16, Δfields:5, pattern:69%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (78%) suggests inheritance with modifications
+    ... and 218 more matches
+
+🔍 TSurface (72 bytes, 18 fields, complexity: 70):
+    🧬 Source pattern: 'dddddddddddddddddb'
+  📊 269 candidates found:
+    1. 💎 cls_0x5a42d4: 160 bytes (19 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddddddddddddddd'
+       📊 Δsize:88, Δfields:1, pattern:86%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (94%) suggests inheritance with modifications
+    2. 💎 cls_0x4da9f0: 100 bytes (16 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddddddddddddd'
+       📊 Δsize:28, Δfields:2, pattern:86%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddddddddddddd' fully contained in 'dddddddddddddddddb'
+    3. 💎 cls_0x5a4e24: 396 bytes (17 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddddddddddddd'
+       📊 Δsize:324, Δfields:1, pattern:93%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddddd' fully contained in 'dddddddddddddddddb'
+    ... and 266 more matches
+
+🔍 C3DCamera (88 bytes, 22 fields, complexity: 59):
+    🧬 Source pattern: 'ddddwwdddddddwwdwdwddw'
+  📊 185 candidates found:
+    1. ✅ cls_0x57d820: 144 bytes (5 fields) - MEDIUM (73)
+       🧬 Ghidra pattern: 'ddddd'
+       📊 Δsize:56, Δfields:17, pattern:4%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddd' fully contained in 'ddddwwdddddddwwdwdwddw'
+    2. ✅ cls_0x5706e0: 80 bytes (3 fields) - MEDIUM (73)
+       🧬 Ghidra pattern: 'ddd'
+       📊 Δsize:8, Δfields:19, pattern:2%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddd' fully contained in 'ddddwwdddddddwwdwdwddw'
+    3. ✅ cls_0x499500: 276 bytes (6 fields) - MEDIUM (73)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:188, Δfields:16, pattern:5%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'ddddwwdddddddwwdwdwddw'
+    ... and 182 more matches
+
+🔍 S3DAnimObj (60 bytes, 15 fields, complexity: 57):
+    🧬 Source pattern: 'ddddddddddddddd'
+  📊 275 candidates found:
+    1. 💎 cls_0x54dd70: 60 bytes (15 fields) - PERFECT (125)
+       🧬 Ghidra pattern: 'ddddddddddddddd'
+       📊 Δsize:0, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddd' fully contained in 'ddddddddddddddd'
+    2. 💎 cls_0x5b9bdc: 340 bytes (15 fields) - PERFECT (120)
+       🧬 Ghidra pattern: 'ddddddddddddddd'
+       📊 Δsize:280, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddd' fully contained in 'ddddddddddddddd'
+    3. 💎 cls_0x5b97fc: 388 bytes (15 fields) - PERFECT (120)
+       🧬 Ghidra pattern: 'ddddddddddddddd'
+       📊 Δsize:328, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddd' fully contained in 'ddddddddddddddd'
+    ... and 272 more matches
+
+🔍 SDrawParam (84 bytes, 21 fields, complexity: 57):
+    🧬 Source pattern: 'ddddddddddddddddddddd'
+  📊 258 candidates found:
+    1. 💎 cls_0x5b963c: 420 bytes (21 fields) - PERFECT (120)
+       🧬 Ghidra pattern: 'ddddddddddddddddddddd'
+       📊 Δsize:336, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddddddddd' fully contained in 'ddddddddddddddddddddd'
+    2. 💎 cls_0x49ed40: 500 bytes (21 fields) - PERFECT (120)
+       🧬 Ghidra pattern: 'ddddddddddddddddddddd'
+       📊 Δsize:416, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddddddddd' fully contained in 'ddddddddddddddddddddd'
+    3. 💎 cls_0x45d610: 2328 bytes (21 fields) - PERFECT (120)
+       🧬 Ghidra pattern: 'ddddddddddddddddddddd'
+       📊 Δsize:2244, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddddddddd' fully contained in 'ddddddddddddddddddddd'
+    ... and 255 more matches
+
+🔍 TLightningAnimator (52 bytes, 13 fields, complexity: 56):
+    🧬 Source pattern: 'ddddbbdddddbb'
+  📊 240 candidates found:
+    1. 💎 cls_0x5a393c: 240 bytes (12 fields) - PERFECT (110)
+       🧬 Ghidra pattern: 'ddddbbdddddd'
+       📊 Δsize:188, Δfields:1, pattern:83%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (85%) suggests inheritance with modifications
+    2. 💎 cls_0x588410: 56 bytes (13 fields) - PERFECT (110)
+       🧬 Ghidra pattern: 'dddddbdddddbd'
+       📊 Δsize:4, Δfields:0, pattern:83%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (85%) suggests inheritance with modifications
+    3. 🎯 cls_0x5a47f0: 60 bytes (15 fields) - HIGH (93)
+       🧬 Ghidra pattern: 'ddddddddddddbbd'
+       📊 Δsize:8, Δfields:2, pattern:69%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (85%) suggests inheritance with modifications
+    ... and 237 more matches
+
+🔍 TBitmapData (80 bytes, 20 fields, complexity: 55):
+    🧬 Source pattern: 'dddddddddddddddddddd'
+  📊 264 candidates found:
+    1. 💎 cls_0x5ba014: 84 bytes (20 fields) - PERFECT (120)
+       🧬 Ghidra pattern: 'dddddddddddddddddddd'
+       📊 Δsize:4, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddddddddddddddddd' fully contained in 'dddddddddddddddddddd'
+    2. 💎 cls_0x5a3ab8: 144 bytes (21 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddbdbddddddwdddddd'
+       📊 Δsize:64, Δfields:1, pattern:81%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (90%) suggests inheritance with modifications
+    3. 💎 cls_0x5a4f74: 620 bytes (22 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddddddddddbdbdbdddd'
+       📊 Δsize:540, Δfields:2, pattern:81%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (95%) suggests inheritance with modifications
+    ... and 261 more matches
+
+🔍 TSpell (44 bytes, 11 fields, complexity: 50):
+    🧬 Source pattern: 'ddddddddddd'
+  📊 293 candidates found:
+    1. 💎 cls_0x41cdd0: 44 bytes (11 fields) - PERFECT (123)
+       🧬 Ghidra pattern: 'ddddddddddd'
+       📊 Δsize:0, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddd' fully contained in 'ddddddddddd'
+    2. 💎 cls_0x41cbf0: 44 bytes (11 fields) - PERFECT (123)
+       🧬 Ghidra pattern: 'ddddddddddd'
+       📊 Δsize:0, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddd' fully contained in 'ddddddddddd'
+    3. 💎 cls_0x4339f0: 324 bytes (11 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddddddd'
+       📊 Δsize:280, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddd' fully contained in 'ddddddddddd'
+    ... and 290 more matches
+
+🔍 TAutoMap (32 bytes, 8 fields, complexity: 49):
+    🧬 Source pattern: 'dbdbdddb'
+  📊 241 candidates found:
+    1. 🎯 cls_0x5b9f54: 32 bytes (7 fields) - HIGH (88)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:0, Δfields:1, pattern:64%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+    2. 🎯 cls_0x460620: 32 bytes (6 fields) - HIGH (88)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:0, Δfields:2, pattern:64%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+    3. 🎯 cls_0x50bf20: 32 bytes (7 fields) - HIGH (88)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:0, Δfields:1, pattern:64%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+    ... and 238 more matches
+
+🔍 TWeaponSwipe (36 bytes, 9 fields, complexity: 49):
+    🧬 Source pattern: 'ddbddbddb'
+  📊 181 candidates found:
+    1. 🎯 cls_0x49e610: 36 bytes (7 fields) - HIGH (88)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:0, Δfields:2, pattern:67%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 6/9 chars match
+    2. 🎯 cls_0x429ac0: 36 bytes (9 fields) - HIGH (88)
+       🧬 Ghidra pattern: 'ddddddddd'
+       📊 Δsize:0, Δfields:0, pattern:67%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 6/9 chars match
+    3. 🎯 cls_0x439150: 36 bytes (6 fields) - HIGH (88)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:0, Δfields:3, pattern:67%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 6/9 chars match
+    ... and 178 more matches
+
+🔍 SStormParams (80 bytes, 20 fields, complexity: 49):
+    🧬 Source pattern: 'dddddddddddddddddddd'
+  📊 264 candidates found:
+    1. 💎 cls_0x5ba014: 84 bytes (20 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'dddddddddddddddddddd'
+       📊 Δsize:4, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddddddddddddddddd' fully contained in 'dddddddddddddddddddd'
+    2. 💎 cls_0x5a3ab8: 144 bytes (21 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'dddddbdbddddddwdddddd'
+       📊 Δsize:64, Δfields:1, pattern:81%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (90%) suggests inheritance with modifications
+    3. 💎 cls_0x5a4f74: 620 bytes (22 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'dddddddddddddbdbdbdddd'
+       📊 Δsize:540, Δfields:2, pattern:81%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (95%) suggests inheritance with modifications
+    ... and 261 more matches
+
+🔍 SImageryStateHeader (80 bytes, 20 fields, complexity: 49):
+    🧬 Source pattern: 'ddwwwwwwwwwwwwwwwwww'
+  📊 9 candidates found:
+    1. ✅ cls_0x4710f0: 126 bytes (3 fields) - MEDIUM (73)
+       🧬 Ghidra pattern: 'ddw'
+       📊 Δsize:46, Δfields:17, pattern:3%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddw' fully contained in 'ddwwwwwwwwwwwwwwwwww'
+    2. ⚠️ cls_0x5ba014: 84 bytes (20 fields) - LOW (63)
+       🧬 Ghidra pattern: 'dddddddddddddddddddd'
+       📊 Δsize:4, Δfields:0, pattern:7%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+    3. ⚠️ cls_0x44ceb0: 72 bytes (18 fields) - LOW (63)
+       🧬 Ghidra pattern: 'dddddddddddddddddd'
+       📊 Δsize:8, Δfields:2, pattern:7%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+    ... and 6 more matches
+
+🔍 SCharData (68 bytes, 17 fields, complexity: 49):
+    🧬 Source pattern: 'dddbddddddddddddd'
+  📊 277 candidates found:
+    1. 💎 cls_0x4da9f0: 100 bytes (16 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'dddddddddddddddd'
+       📊 Δsize:32, Δfields:1, pattern:92%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (94%) suggests inheritance with modifications
+    2. 💎 cls_0x5a4e24: 396 bytes (17 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'ddddddddddddddddd'
+       📊 Δsize:328, Δfields:0, pattern:92%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (94%) suggests inheritance with modifications
+    3. 💎 cls_0x5a4680: 432 bytes (16 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'dddddddddddddddd'
+       📊 Δsize:364, Δfields:1, pattern:92%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (94%) suggests inheritance with modifications
+    ... and 274 more matches
+
+🔍 SSurfaceDesc (68 bytes, 17 fields, complexity: 46):
+    🧬 Source pattern: 'ddddddddddddddddd'
+  📊 270 candidates found:
+    1. 💎 cls_0x5a4e24: 396 bytes (17 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddddddddddddd'
+       📊 Δsize:328, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddddd' fully contained in 'ddddddddddddddddd'
+    2. 💎 cls_0x5ab6c8: 456 bytes (17 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddddddddddddd'
+       📊 Δsize:388, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddddd' fully contained in 'ddddddddddddddddd'
+    3. 💎 cls_0x5a5978: 400 bytes (17 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddddddddddddd'
+       📊 Δsize:332, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddddddddddd' fully contained in 'ddddddddddddddddd'
+    ... and 267 more matches
+
+🔍 TDisplay (36 bytes, 9 fields, complexity: 43):
+    🧬 Source pattern: 'ddddddddd'
+  📊 297 candidates found:
+    1. 💎 cls_0x429ac0: 36 bytes (9 fields) - PERFECT (123)
+       🧬 Ghidra pattern: 'ddddddddd'
+       📊 Δsize:0, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddd' fully contained in 'ddddddddd'
+    2. 💎 cls_0x41cbd0: 40 bytes (9 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddddd'
+       📊 Δsize:4, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddd' fully contained in 'ddddddddd'
+    3. 💎 cls_0x48c7f0: 84 bytes (9 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddddd'
+       📊 Δsize:48, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddd' fully contained in 'ddddddddd'
+    ... and 294 more matches
+
+🔍 SParticleParams (56 bytes, 14 fields, complexity: 43):
+    🧬 Source pattern: 'dddbbdbbdddddd'
+  📊 245 candidates found:
+    1. 💎 cls_0x5a393c: 240 bytes (12 fields) - PERFECT (108)
+       🧬 Ghidra pattern: 'ddddbbdddddd'
+       📊 Δsize:184, Δfields:2, pattern:84%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (86%) suggests inheritance with modifications
+    2. 🎯 cls_0x588410: 56 bytes (13 fields) - HIGH (93)
+       🧬 Ghidra pattern: 'dddddbdddddbd'
+       📊 Δsize:0, Δfields:1, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (79%) suggests inheritance with modifications
+    3. 🎯 cls_0x5b9f88: 60 bytes (14 fields) - HIGH (87)
+       🧬 Ghidra pattern: 'dddddddddddddd'
+       📊 Δsize:4, Δfields:0, pattern:68%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 10/14 chars match
+    ... and 242 more matches
+
+🔍 TFireBallAnimator (36 bytes, 9 fields, complexity: 42):
+    🧬 Source pattern: 'ddddddddd'
+  📊 297 candidates found:
+    1. 💎 cls_0x429ac0: 36 bytes (9 fields) - PERFECT (123)
+       🧬 Ghidra pattern: 'ddddddddd'
+       📊 Δsize:0, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddd' fully contained in 'ddddddddd'
+    2. 💎 cls_0x41cbd0: 40 bytes (9 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddddd'
+       📊 Δsize:4, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddd' fully contained in 'ddddddddd'
+    3. 💎 cls_0x48c7f0: 84 bytes (9 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddddd'
+       📊 Δsize:48, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddddd' fully contained in 'ddddddddd'
+    ... and 294 more matches
+
+🔍 TDialogPane (28 bytes, 7 fields, complexity: 41):
+    🧬 Source pattern: 'dbddbdb'
+  📊 141 candidates found:
+    1. ✅ cls_0x579bb0: 328 bytes (4 fields) - MEDIUM (84)
+       🧬 Ghidra pattern: 'ddbd'
+       📊 Δsize:300, Δfields:3, pattern:60%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddbd' fully contained in 'dbddbdb'
+    2. ✅ cls_0x570900: 56 bytes (6 fields) - MEDIUM (80)
+       🧬 Ghidra pattern: 'ddddbd'
+       📊 Δsize:28, Δfields:1, pattern:74%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 5/7 chars match
+    3. ✅ cls_0x5b9f54: 32 bytes (7 fields) - MEDIUM (76)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:4, Δfields:0, pattern:60%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+    ... and 138 more matches
+
+🔍 TConsolePane (28 bytes, 7 fields, complexity: 41):
+    🧬 Source pattern: 'ddddddd'
+  📊 301 candidates found:
+    1. 💎 cls_0x4a22f0: 76 bytes (7 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:48, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    2. 💎 cls_0x49a270: 68 bytes (7 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:40, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    3. 💎 cls_0x49a380: 68 bytes (7 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:40, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    ... and 298 more matches
+
+🔍 TEquipPane (24 bytes, 6 fields, complexity: 36):
+    🧬 Source pattern: 'dddddd'
+  📊 316 candidates found:
+    1. 💎 cls_0x499500: 276 bytes (6 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:252, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'dddddd'
+    2. 💎 cls_0x53f730: 336 bytes (6 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:312, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'dddddd'
+    3. 💎 cls_0x48cb50: 84 bytes (6 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:60, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'dddddd'
+    ... and 313 more matches
+
+🔍 SImageryEntry (36 bytes, 9 fields, complexity: 36):
+    🧬 Source pattern: 'dddbdbddd'
+  📊 281 candidates found:
+    1. 💎 cls_0x5acf9c: 260 bytes (10 fields) - PERFECT (108)
+       🧬 Ghidra pattern: 'ddddbddddd'
+       📊 Δsize:224, Δfields:1, pattern:80%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (89%) suggests inheritance with modifications
+    2. 💎 cls_0x5b30fc: 240 bytes (8 fields) - PERFECT (108)
+       🧬 Ghidra pattern: 'ddddbddd'
+       📊 Δsize:204, Δfields:1, pattern:89%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (89%) suggests inheritance with modifications
+    3. 💎 cls_0x40eb00: 240 bytes (8 fields) - PERFECT (108)
+       🧬 Ghidra pattern: 'dddbdddd'
+       📊 Δsize:204, Δfields:1, pattern:89%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (89%) suggests inheritance with modifications
+    ... and 278 more matches
+
+🔍 TSound (28 bytes, 7 fields, complexity: 35):
+    🧬 Source pattern: 'dddddbd'
+  📊 303 candidates found:
+    1. 💎 cls_0x570900: 56 bytes (6 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'ddddbd'
+       📊 Δsize:28, Δfields:1, pattern:87%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddbd' fully contained in 'dddddbd'
+    2. 💎 cls_0x4609f0: 292 bytes (6 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'dddddb'
+       📊 Δsize:264, Δfields:1, pattern:87%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddb' fully contained in 'dddddbd'
+    3. 💎 cls_0x499500: 276 bytes (6 fields) - PERFECT (108)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:248, Δfields:1, pattern:87%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (86%) suggests inheritance with modifications
+    ... and 300 more matches
+
+🔍 TTextBar (20 bytes, 5 fields, complexity: 34):
+    🧬 Source pattern: 'bddbb'
+  📊 155 candidates found:
+    1. ✅ cls_0x5877a0: 168 bytes (3 fields) - MEDIUM (84)
+       🧬 Ghidra pattern: 'bdd'
+       📊 Δsize:148, Δfields:2, pattern:66%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'bdd' fully contained in 'bddbb'
+    2. ✅ cls_0x5b8e94: 1352 bytes (115 fields) - MEDIUM (73)
+       🧬 Ghidra pattern: 'wwdwwdddddddddbbbbddddddddwwwwdddddwwddbbwddddddddddddddddddddddddddddddddbddbddddddddddddddddddddddbbdddddbddddddd'
+       📊 Δsize:1332, Δfields:110, pattern:0%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (100%) suggests inheritance with modifications
+    3. ✅ cls_0x41c7d0: 1760 bytes (31 fields) - MEDIUM (73)
+       🧬 Ghidra pattern: 'ddddddddddddddddddddbdbdbdbdbdb'
+       📊 Δsize:1740, Δfields:26, pattern:3%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (100%) suggests inheritance with modifications
+    ... and 152 more matches
+
+🔍 TScrollPane (16 bytes, 4 fields, complexity: 32):
+    🧬 Source pattern: 'dddd'
+  📊 316 candidates found:
+    1. 💎 cls_0x4cefb0: 228 bytes (4 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'dddd'
+       📊 Δsize:212, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddd' fully contained in 'dddd'
+    2. 💎 cls_0x429f80: 36 bytes (4 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'dddd'
+       📊 Δsize:20, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddd' fully contained in 'dddd'
+    3. 💎 cls_0x5a4a74: 392 bytes (4 fields) - PERFECT (118)
+       🧬 Ghidra pattern: 'dddd'
+       📊 Δsize:376, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddd' fully contained in 'dddd'
+    ... and 313 more matches
+
+🔍 TArea (44 bytes, 11 fields, complexity: 31):
+    🧬 Source pattern: 'ddddddbdddd'
+  📊 297 candidates found:
+    1. 💎 cls_0x49ab30: 128 bytes (12 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'dddddddddddd'
+       📊 Δsize:84, Δfields:1, pattern:82%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (91%) suggests inheritance with modifications
+    2. 💎 cls_0x41cdd0: 44 bytes (11 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'ddddddddddd'
+       📊 Δsize:0, Δfields:0, pattern:90%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (91%) suggests inheritance with modifications
+    3. 💎 cls_0x50f130: 240 bytes (10 fields) - PERFECT (113)
+       🧬 Ghidra pattern: 'dddddddddd'
+       📊 Δsize:196, Δfields:1, pattern:90%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (91%) suggests inheritance with modifications
+    ... and 294 more matches
+
+🔍 TPane (24 bytes, 6 fields, complexity: 31):
+    🧬 Source pattern: 'dbbbbd'
+  📊 130 candidates found:
+    1. ✅ cls_0x492c40: 192 bytes (4 fields) - MEDIUM (84)
+       🧬 Ghidra pattern: 'bbbd'
+       📊 Δsize:168, Δfields:2, pattern:70%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'bbbd' fully contained in 'dbbbbd'
+    2. ✅ cls_0x5b8e94: 1352 bytes (115 fields) - MEDIUM (73)
+       🧬 Ghidra pattern: 'wwdwwdddddddddbbbbddddddddwwwwdddddwwddbbwddddddddddddddddddddddddddddddddbddbddddddddddddddddddddddbbdddddbddddddd'
+       📊 Δsize:1328, Δfields:109, pattern:1%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dbbbbd' fully contained in 'wwdwwdddddddddbbbbddddddddwwwwdddddwwddbbwddddddddddddddddddddddddddddddddbddbddddddddddddddddddddddbbdddddbddddddd'
+    3. ✅ cls_0x41c7d0: 1760 bytes (31 fields) - MEDIUM (73)
+       🧬 Ghidra pattern: 'ddddddddddddddddddddbdbdbdbdbdb'
+       📊 Δsize:1736, Δfields:25, pattern:3%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (100%) suggests inheritance with modifications
+    ... and 127 more matches
+
+🔍 SAnimationFrame (40 bytes, 10 fields, complexity: 29):
+    🧬 Source pattern: 'dddddddddd'
+  📊 296 candidates found:
+    1. 💎 cls_0x50f130: 240 bytes (10 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddddddd'
+       📊 Δsize:200, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddddddd' fully contained in 'dddddddddd'
+    2. 💎 cls_0x50f2d0: 240 bytes (10 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddddddd'
+       📊 Δsize:200, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddddddd' fully contained in 'dddddddddd'
+    3. 💎 cls_0x42aed0: 44 bytes (10 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddddddd'
+       📊 Δsize:4, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddddddd' fully contained in 'dddddddddd'
+    ... and 293 more matches
+
+🔍 SLightDef (28 bytes, 7 fields, complexity: 29):
+    🧬 Source pattern: 'dwddddd'
+  📊 307 candidates found:
+    1. 💎 cls_0x5b3c18: 404 bytes (6 fields) - PERFECT (110)
+       🧬 Ghidra pattern: 'wddddd'
+       📊 Δsize:376, Δfields:1, pattern:87%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'wddddd' fully contained in 'dwddddd'
+    2. 💎 cls_0x499500: 276 bytes (6 fields) - PERFECT (105)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:248, Δfields:1, pattern:87%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (86%) suggests inheritance with modifications
+    3. 💎 cls_0x4a22f0: 76 bytes (7 fields) - PERFECT (105)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:48, Δfields:0, pattern:87%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (86%) suggests inheritance with modifications
+    ... and 304 more matches
+
+🔍 TMultiSurface (16 bytes, 4 fields, complexity: 29):
+    🧬 Source pattern: 'ddbb'
+  📊 198 candidates found:
+    1. ✅ cls_0x488020: 33 bytes (4 fields) - MEDIUM (82)
+       🧬 Ghidra pattern: 'dSdb'
+       📊 Δsize:17, Δfields:0, pattern:76%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    2. ✅ cls_0x4c5b80: 55 bytes (5 fields) - MEDIUM (79)
+       🧬 Ghidra pattern: 'wdddb'
+       📊 Δsize:39, Δfields:1, pattern:66%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    3. ✅ cls_0x579bb0: 328 bytes (4 fields) - MEDIUM (75)
+       🧬 Ghidra pattern: 'ddbd'
+       📊 Δsize:312, Δfields:0, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    ... and 195 more matches
+
+🔍 TSpellPane (16 bytes, 4 fields, complexity: 29):
+    🧬 Source pattern: 'bddb'
+  📊 201 candidates found:
+    1. ✅ cls_0x488020: 33 bytes (4 fields) - MEDIUM (82)
+       🧬 Ghidra pattern: 'dSdb'
+       📊 Δsize:17, Δfields:0, pattern:76%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    2. ✅ cls_0x5877a0: 168 bytes (3 fields) - MEDIUM (81)
+       🧬 Ghidra pattern: 'bdd'
+       📊 Δsize:152, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'bdd' fully contained in 'bddb'
+    3. ✅ cls_0x4c5b80: 55 bytes (5 fields) - MEDIUM (79)
+       🧬 Ghidra pattern: 'wdddb'
+       📊 Δsize:39, Δfields:1, pattern:66%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    ... and 198 more matches
+
+🔍 TStatusBar (12 bytes, 3 fields, complexity: 27):
+    🧬 Source pattern: 'ddb'
+  📊 198 candidates found:
+    1. 🎯 cls_0x488020: 33 bytes (4 fields) - HIGH (85)
+       🧬 Ghidra pattern: 'dSdb'
+       📊 Δsize:21, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (100%) suggests inheritance with modifications
+    2. ✅ cls_0x4c5b80: 55 bytes (5 fields) - MEDIUM (83)
+       🧬 Ghidra pattern: 'wdddb'
+       📊 Δsize:43, Δfields:2, pattern:66%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddb' fully contained in 'wdddb'
+    3. ✅ cls_0x579bb0: 328 bytes (4 fields) - MEDIUM (80)
+       🧬 Ghidra pattern: 'ddbd'
+       📊 Δsize:316, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddb' fully contained in 'ddbd'
+    ... and 195 more matches
+
+🔍 TToken (32 bytes, 7 fields, complexity: 26):
+    🧬 Source pattern: 'dddqbdd'
+  📊 235 candidates found:
+    1. 🎯 cls_0x5b9f54: 32 bytes (7 fields) - HIGH (85)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:0, Δfields:0, pattern:74%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 5/7 chars match
+    2. 🎯 cls_0x460620: 32 bytes (6 fields) - HIGH (85)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:0, Δfields:1, pattern:74%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 5/7 chars match
+    3. 🎯 cls_0x50bf20: 32 bytes (7 fields) - HIGH (85)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:0, Δfields:0, pattern:74%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 5/7 chars match
+    ... and 232 more matches
+
+🔍 TBitmapSurface (8 bytes, 2 fields, complexity: 25):
+    🧬 Source pattern: 'bd'
+  📊 137 candidates found:
+    1. ✅ cls_0x41b0b0: 76 bytes (3 fields) - MEDIUM (81)
+       🧬 Ghidra pattern: 'dbd'
+       📊 Δsize:68, Δfields:1, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'bd' fully contained in 'dbd'
+    2. ✅ cls_0x5877a0: 168 bytes (3 fields) - MEDIUM (80)
+       🧬 Ghidra pattern: 'bdd'
+       📊 Δsize:160, Δfields:1, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'bd' fully contained in 'bdd'
+    3. ✅ cls_0x4dab30: 100 bytes (16 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dbdddddddddddddd'
+       📊 Δsize:92, Δfields:14, pattern:2%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'bd' fully contained in 'dbdddddddddddddd'
+    ... and 134 more matches
+
+🔍 SExitRef (24 bytes, 6 fields, complexity: 24):
+    🧬 Source pattern: 'dddddd'
+  📊 316 candidates found:
+    1. 💎 cls_0x499500: 276 bytes (6 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:252, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'dddddd'
+    2. 💎 cls_0x53f730: 336 bytes (6 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:312, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'dddddd'
+    3. 💎 cls_0x48cb50: 84 bytes (6 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:60, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'dddddd'
+    ... and 313 more matches
+
+🔍 FileResHdr (28 bytes, 7 fields, complexity: 23):
+    🧬 Source pattern: 'ddddddd'
+  📊 301 candidates found:
+    1. 💎 cls_0x4a22f0: 76 bytes (7 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:48, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    2. 💎 cls_0x49a270: 68 bytes (7 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:40, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    3. 💎 cls_0x49a380: 68 bytes (7 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:40, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    ... and 298 more matches
+
+🔍 TScript (28 bytes, 7 fields, complexity: 23):
+    🧬 Source pattern: 'ddddddd'
+  📊 301 candidates found:
+    1. 💎 cls_0x4a22f0: 76 bytes (7 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:48, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    2. 💎 cls_0x49a270: 68 bytes (7 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:40, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    3. 💎 cls_0x49a380: 68 bytes (7 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:40, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    ... and 298 more matches
+
+🔍 TComplexObject (8 bytes, 2 fields, complexity: 22):
+    🧬 Source pattern: 'dd'
+  📊 318 candidates found:
+    1. ✅ cls_0x49d2a0: 40 bytes (3 fields) - MEDIUM (83)
+       🧬 Ghidra pattern: 'ddd'
+       📊 Δsize:32, Δfields:1, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dd' fully contained in 'ddd'
+    2. ✅ cls_0x46ce40: 32 bytes (3 fields) - MEDIUM (83)
+       🧬 Ghidra pattern: 'Sdd'
+       📊 Δsize:24, Δfields:1, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dd' fully contained in 'Sdd'
+    3. ✅ cls_0x48e630: 36 bytes (3 fields) - MEDIUM (83)
+       🧬 Ghidra pattern: 'ddd'
+       📊 Δsize:28, Δfields:1, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dd' fully contained in 'ddd'
+    ... and 315 more matches
+
+🔍 TVideoCapture (32 bytes, 8 fields, complexity: 22):
+    🧬 Source pattern: 'bddddddd'
+  📊 305 candidates found:
+    1. 💎 cls_0x4a22f0: 76 bytes (7 fields) - PERFECT (110)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:44, Δfields:1, pattern:88%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'bddddddd'
+    2. 💎 cls_0x49a270: 68 bytes (7 fields) - PERFECT (110)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:36, Δfields:1, pattern:88%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'bddddddd'
+    3. 💎 cls_0x49a380: 68 bytes (7 fields) - PERFECT (110)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:36, Δfields:1, pattern:88%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'bddddddd'
+    ... and 302 more matches
+
+🔍 TAnimImagery (4 bytes, 1 fields, complexity: 20):
+    🧬 Source pattern: 'd'
+  📊 319 candidates found:
+    1. ✅ cls_0x42bd90: 172 bytes (30 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dddddddddddddddddddddddddddddd'
+       📊 Δsize:168, Δfields:29, pattern:0%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dddddddddddddddddddddddddddddd'
+    2. ✅ cls_0x5a3b90: 188 bytes (8 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'Addddddd'
+       📊 Δsize:184, Δfields:7, pattern:2%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'Addddddd'
+    3. ✅ cls_0x4dab30: 100 bytes (16 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dbdddddddddddddd'
+       📊 Δsize:96, Δfields:15, pattern:1%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dbdddddddddddddd'
+    ... and 316 more matches
+
+🔍 TButtonPane (4 bytes, 1 fields, complexity: 20):
+    🧬 Source pattern: 'd'
+  📊 319 candidates found:
+    1. ✅ cls_0x42bd90: 172 bytes (30 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dddddddddddddddddddddddddddddd'
+       📊 Δsize:168, Δfields:29, pattern:0%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dddddddddddddddddddddddddddddd'
+    2. ✅ cls_0x5a3b90: 188 bytes (8 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'Addddddd'
+       📊 Δsize:184, Δfields:7, pattern:2%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'Addddddd'
+    3. ✅ cls_0x4dab30: 100 bytes (16 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dbdddddddddddddd'
+       📊 Δsize:96, Δfields:15, pattern:1%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dbdddddddddddddd'
+    ... and 316 more matches
+
+🔍 TFood (4 bytes, 1 fields, complexity: 20):
+    🧬 Source pattern: 'd'
+  📊 319 candidates found:
+    1. ✅ cls_0x42bd90: 172 bytes (30 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dddddddddddddddddddddddddddddd'
+       📊 Δsize:168, Δfields:29, pattern:0%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dddddddddddddddddddddddddddddd'
+    2. ✅ cls_0x5a3b90: 188 bytes (8 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'Addddddd'
+       📊 Δsize:184, Δfields:7, pattern:2%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'Addddddd'
+    3. ✅ cls_0x4dab30: 100 bytes (16 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dbdddddddddddddd'
+       📊 Δsize:96, Δfields:15, pattern:1%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dbdddddddddddddd'
+    ... and 316 more matches
+
+🔍 TMultiCtrlPane (4 bytes, 1 fields, complexity: 20):
+    🧬 Source pattern: 'd'
+  📊 319 candidates found:
+    1. ✅ cls_0x42bd90: 172 bytes (30 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dddddddddddddddddddddddddddddd'
+       📊 Δsize:168, Δfields:29, pattern:0%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dddddddddddddddddddddddddddddd'
+    2. ✅ cls_0x5a3b90: 188 bytes (8 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'Addddddd'
+       📊 Δsize:184, Δfields:7, pattern:2%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'Addddddd'
+    3. ✅ cls_0x4dab30: 100 bytes (16 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dbdddddddddddddd'
+       📊 Δsize:96, Δfields:15, pattern:1%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dbdddddddddddddd'
+    ... and 316 more matches
+
+🔍 TStatPane (4 bytes, 1 fields, complexity: 20):
+    🧬 Source pattern: 'd'
+  📊 319 candidates found:
+    1. ✅ cls_0x42bd90: 172 bytes (30 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dddddddddddddddddddddddddddddd'
+       📊 Δsize:168, Δfields:29, pattern:0%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dddddddddddddddddddddddddddddd'
+    2. ✅ cls_0x5a3b90: 188 bytes (8 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'Addddddd'
+       📊 Δsize:184, Δfields:7, pattern:2%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'Addddddd'
+    3. ✅ cls_0x4dab30: 100 bytes (16 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dbdddddddddddddd'
+       📊 Δsize:96, Δfields:15, pattern:1%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dbdddddddddddddd'
+    ... and 316 more matches
+
+🔍 tWAVEFORMATEX (28 bytes, 7 fields, complexity: 20):
+    🧬 Source pattern: 'ddddddd'
+  📊 301 candidates found:
+    1. 💎 cls_0x4a22f0: 76 bytes (7 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:48, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    2. 💎 cls_0x49a270: 68 bytes (7 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:40, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    3. 💎 cls_0x49a380: 68 bytes (7 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddddd'
+       📊 Δsize:40, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddddd' fully contained in 'ddddddd'
+    ... and 298 more matches
+
+🔍 SAnimImageryState (20 bytes, 5 fields, complexity: 19):
+    🧬 Source pattern: 'ddddd'
+  📊 316 candidates found:
+    1. 💎 cls_0x57d820: 144 bytes (5 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddd'
+       📊 Δsize:124, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddd' fully contained in 'ddddd'
+    2. 💎 cls_0x52fe90: 400 bytes (5 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddd'
+       📊 Δsize:380, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddd' fully contained in 'ddddd'
+    3. 💎 cls_0x41c3a0: 52 bytes (5 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'ddddd'
+       📊 Δsize:32, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddddd' fully contained in 'ddddd'
+    ... and 313 more matches
+
+🔍 SChunkHeader (16 bytes, 4 fields, complexity: 17):
+    🧬 Source pattern: 'bddd'
+  📊 317 candidates found:
+    1. 💎 cls_0x4a0d20: 424 bytes (5 fields) - PERFECT (110)
+       🧬 Ghidra pattern: 'bdddd'
+       📊 Δsize:408, Δfields:1, pattern:83%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'bddd' fully contained in 'bdddd'
+    2. 🎯 cls_0x49d2a0: 40 bytes (3 fields) - HIGH (86)
+       🧬 Ghidra pattern: 'ddd'
+       📊 Δsize:24, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddd' fully contained in 'bddd'
+    3. 🎯 cls_0x48e630: 36 bytes (3 fields) - HIGH (86)
+       🧬 Ghidra pattern: 'ddd'
+       📊 Δsize:20, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddd' fully contained in 'bddd'
+    ... and 314 more matches
+
+🔍 SAutoMapData (24 bytes, 6 fields, complexity: 15):
+    🧬 Source pattern: 'dddddd'
+  📊 316 candidates found:
+    1. 💎 cls_0x499500: 276 bytes (6 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:252, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'dddddd'
+    2. 💎 cls_0x53f730: 336 bytes (6 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:312, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'dddddd'
+    3. 💎 cls_0x48cb50: 84 bytes (6 fields) - PERFECT (115)
+       🧬 Ghidra pattern: 'dddddd'
+       📊 Δsize:60, Δfields:0, pattern:100%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddddd' fully contained in 'dddddd'
+    ... and 313 more matches
+
+🔍 SCommand (16 bytes, 4 fields, complexity: 14):
+    🧬 Source pattern: 'ddbb'
+  📊 198 candidates found:
+    1. ✅ cls_0x488020: 33 bytes (4 fields) - MEDIUM (82)
+       🧬 Ghidra pattern: 'dSdb'
+       📊 Δsize:17, Δfields:0, pattern:76%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    2. ✅ cls_0x4c5b80: 55 bytes (5 fields) - MEDIUM (79)
+       🧬 Ghidra pattern: 'wdddb'
+       📊 Δsize:39, Δfields:1, pattern:66%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    3. ✅ cls_0x579bb0: 328 bytes (4 fields) - MEDIUM (75)
+       🧬 Ghidra pattern: 'ddbd'
+       📊 Δsize:312, Δfields:0, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    ... and 195 more matches
+
+🔍 SSkill (16 bytes, 4 fields, complexity: 14):
+    🧬 Source pattern: 'bbdd'
+  📊 199 candidates found:
+    1. ✅ cls_0x5877a0: 168 bytes (3 fields) - MEDIUM (81)
+       🧬 Ghidra pattern: 'bdd'
+       📊 Δsize:152, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'bdd' fully contained in 'bbdd'
+    2. ✅ cls_0x492c40: 192 bytes (4 fields) - MEDIUM (76)
+       🧬 Ghidra pattern: 'bbbd'
+       📊 Δsize:176, Δfields:0, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    3. ✅ cls_0x531b70: 440 bytes (5 fields) - MEDIUM (75)
+       🧬 Ghidra pattern: 'bwwdd'
+       📊 Δsize:424, Δfields:1, pattern:66%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (75%) suggests inheritance with modifications
+    ... and 196 more matches
+
+🔍 TSaveGame (16 bytes, 4 fields, complexity: 14):
+    🧬 Source pattern: 'dddb'
+  📊 316 candidates found:
+    1. 💎 cls_0x5a85ac: 349 bytes (5 fields) - PERFECT (110)
+       🧬 Ghidra pattern: 'Adddb'
+       📊 Δsize:333, Δfields:1, pattern:83%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddb' fully contained in 'Adddb'
+    2. 💎 cls_0x4c5b80: 55 bytes (5 fields) - PERFECT (110)
+       🧬 Ghidra pattern: 'wdddb'
+       📊 Δsize:39, Δfields:1, pattern:83%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dddb' fully contained in 'wdddb'
+    3. 🎯 cls_0x49d2a0: 40 bytes (3 fields) - HIGH (86)
+       🧬 Ghidra pattern: 'ddd'
+       📊 Δsize:24, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddd' fully contained in 'dddb'
+    ... and 313 more matches
+
+🔍 SControlEntry (12 bytes, 3 fields, complexity: 12):
+    🧬 Source pattern: 'ddb'
+  📊 198 candidates found:
+    1. 🎯 cls_0x488020: 33 bytes (4 fields) - HIGH (85)
+       🧬 Ghidra pattern: 'dSdb'
+       📊 Δsize:21, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 partial_inheritance_match: High similarity (100%) suggests inheritance with modifications
+    2. ✅ cls_0x4c5b80: 55 bytes (5 fields) - MEDIUM (83)
+       🧬 Ghidra pattern: 'wdddb'
+       📊 Δsize:43, Δfields:2, pattern:66%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddb' fully contained in 'wdddb'
+    3. ✅ cls_0x579bb0: 328 bytes (4 fields) - MEDIUM (80)
+       🧬 Ghidra pattern: 'ddbd'
+       📊 Δsize:316, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'ddb' fully contained in 'ddbd'
+    ... and 195 more matches
+
+🔍 SLabel (12 bytes, 3 fields, complexity: 12):
+    🧬 Source pattern: 'bbd'
+  📊 91 candidates found:
+    1. ✅ cls_0x492c40: 192 bytes (4 fields) - MEDIUM (80)
+       🧬 Ghidra pattern: 'bbbd'
+       📊 Δsize:180, Δfields:1, pattern:79%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'bbd' fully contained in 'bbbd'
+    2. ✅ cls_0x41b0b0: 76 bytes (3 fields) - MEDIUM (72)
+       🧬 Ghidra pattern: 'dbd'
+       📊 Δsize:64, Δfields:0, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 2/3 chars match
+    3. ✅ cls_0x5877a0: 168 bytes (3 fields) - MEDIUM (71)
+       🧬 Ghidra pattern: 'bdd'
+       📊 Δsize:156, Δfields:0, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 weak_containment: Moderate overlap: 2/3 chars match
+    ... and 88 more matches
+
+🔍 TExecuteBuf (8 bytes, 2 fields, complexity: 10):
+    🧬 Source pattern: 'dd'
+  📊 318 candidates found:
+    1. ✅ cls_0x49d2a0: 40 bytes (3 fields) - MEDIUM (83)
+       🧬 Ghidra pattern: 'ddd'
+       📊 Δsize:32, Δfields:1, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dd' fully contained in 'ddd'
+    2. ✅ cls_0x46ce40: 32 bytes (3 fields) - MEDIUM (83)
+       🧬 Ghidra pattern: 'Sdd'
+       📊 Δsize:24, Δfields:1, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dd' fully contained in 'Sdd'
+    3. ✅ cls_0x48e630: 36 bytes (3 fields) - MEDIUM (83)
+       🧬 Ghidra pattern: 'ddd'
+       📊 Δsize:28, Δfields:1, pattern:73%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'dd' fully contained in 'ddd'
+    ... and 315 more matches
+
+🔍 TBitmap (4 bytes, 1 fields, complexity: 10):
+    🧬 Source pattern: 'd'
+  📊 319 candidates found:
+    1. ✅ cls_0x42bd90: 172 bytes (30 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dddddddddddddddddddddddddddddd'
+       📊 Δsize:168, Δfields:29, pattern:0%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dddddddddddddddddddddddddddddd'
+    2. ✅ cls_0x5a3b90: 188 bytes (8 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'Addddddd'
+       📊 Δsize:184, Δfields:7, pattern:2%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'Addddddd'
+    3. ✅ cls_0x4dab30: 100 bytes (16 fields) - MEDIUM (70)
+       🧬 Ghidra pattern: 'dbdddddddddddddd'
+       📊 Δsize:96, Δfields:15, pattern:1%
+       📝 Legend: b=byte(1), w=word(2), d=dword(4), q=qword(8), S=struct, A=array
+       🔗 full_containment: 'd' fully contained in 'dbdddddddddddddd'
+    ... and 316 more matches
+
+============================================================
+ANALYSIS AND IMPROVEMENT SUGGESTIONS
+============================================================
+📊 OVERALL RESULTS:
+   Total complex classes analyzed: 56
+   Successfully matched: 56/56 (100.0%)
+   High-quality matches: 56/56 (100.0%)
+
+📈 CONFIDENCE DISTRIBUTION:
+   PERFECT: 29 (51.8%)
+   HIGH: 7 (12.5%)
+   MEDIUM: 20 (35.7%)
+
+🎯 IMMEDIATE ACTION ITEMS:
+   1. Generate mappings for 36 PERFECT/HIGH confidence matches
+   2. Investigate 0 complex classes with no matches
+   3. Review extraction for classes with 0 fields
+
+🎯 GENERATING MAPPINGS FOR 36 BEST MATCHES:
+----------------------------------------
+   ✅ TObjectInstance ↔ cls_0x5ba014 (HIGH, score: 93)
+   ✅ TMapPane ↔ cls_0x5ba014 (HIGH, score: 93)
+   ✅ TSurface ↔ cls_0x5a42d4 (PERFECT, score: 115)
+   ✅ S3DAnimObj ↔ cls_0x54dd70 (PERFECT, score: 125)
+   ✅ SDrawParam ↔ cls_0x5b963c (PERFECT, score: 120)
+   ✅ TLightningAnimator ↔ cls_0x5a393c (PERFECT, score: 110)
+   ✅ TBitmapData ↔ cls_0x5ba014 (PERFECT, score: 120)
+   ✅ TSpell ↔ cls_0x41cdd0 (PERFECT, score: 123)
+   ✅ TAutoMap ↔ cls_0x5b9f54 (HIGH, score: 88)
+   ✅ TWeaponSwipe ↔ cls_0x49e610 (HIGH, score: 88)
+   ✅ SStormParams ↔ cls_0x5ba014 (PERFECT, score: 118)
+   ✅ SCharData ↔ cls_0x4da9f0 (PERFECT, score: 113)
+   ✅ SSurfaceDesc ↔ cls_0x5a4e24 (PERFECT, score: 118)
+   ✅ TDisplay ↔ cls_0x429ac0 (PERFECT, score: 123)
+   ✅ SParticleParams ↔ cls_0x5a393c (PERFECT, score: 108)
+   ✅ TFireBallAnimator ↔ cls_0x429ac0 (PERFECT, score: 123)
+   ✅ TConsolePane ↔ cls_0x4a22f0 (PERFECT, score: 118)
+   ✅ TEquipPane ↔ cls_0x499500 (PERFECT, score: 118)
+   ✅ SImageryEntry ↔ cls_0x5acf9c (PERFECT, score: 108)
+   ✅ TSound ↔ cls_0x570900 (PERFECT, score: 113)
+   ✅ TScrollPane ↔ cls_0x4cefb0 (PERFECT, score: 118)
+   ✅ TArea ↔ cls_0x49ab30 (PERFECT, score: 113)
+   ✅ SAnimationFrame ↔ cls_0x50f130 (PERFECT, score: 115)
+   ✅ SLightDef ↔ cls_0x5b3c18 (PERFECT, score: 110)
+   ✅ TStatusBar ↔ cls_0x488020 (HIGH, score: 85)
+   ✅ TToken ↔ cls_0x5b9f54 (HIGH, score: 85)
+   ✅ SExitRef ↔ cls_0x499500 (PERFECT, score: 115)
+   ✅ FileResHdr ↔ cls_0x4a22f0 (PERFECT, score: 115)
+   ✅ TScript ↔ cls_0x4a22f0 (PERFECT, score: 115)
+   ✅ TVideoCapture ↔ cls_0x4a22f0 (PERFECT, score: 110)
+   ✅ tWAVEFORMATEX ↔ cls_0x4a22f0 (PERFECT, score: 115)
+   ✅ SAnimImageryState ↔ cls_0x57d820 (PERFECT, score: 115)
+   ✅ SChunkHeader ↔ cls_0x4a0d20 (PERFECT, score: 110)
+   ✅ SAutoMapData ↔ cls_0x499500 (PERFECT, score: 115)
+   ✅ TSaveGame ↔ cls_0x5a85ac (PERFECT, score: 110)
+   ✅ SControlEntry ↔ cls_0x488020 (HIGH, score: 85)
+
+🎉 Generated 36 mapping files ready for pipeline
+
+======================================================================
+ULTIMATE CLASS MATCHER - COMPLETE
+======================================================================
+✅ Analyzed 56 complex source classes
+🎯 Generated 36 high-confidence mapping files
+🔧 Ready for Phase 2 pipeline with improved matches
+
+NEXT STEPS:
+1. Run: python3 scripts/run_conversion.py
+2. Review generated readable code
+3. Investigate problem classes for missing matches
+4. Iterate and improve extraction algorithms
