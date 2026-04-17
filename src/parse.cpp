@@ -392,9 +392,9 @@ bool TToken::DefineGet()
         WhiteGet();
         char name[MAXIDENTLEN];
         int32_t val;
-        if (!Parse(*this, "%32t %d", name, &val)) 
+        if (!Parse(*this, "%32t %d", name, &val))
             return false;
-        
+
         if (idents.Add(name, val) < 0)
             return false;
 
@@ -481,7 +481,7 @@ void TToken::SkipBlanks()
         Get();
 }
 
-int32_t abbrevcmp(char *abbrev, char *string)
+int32_t abbrevcmp(const char *abbrev, const char *string)
 // A string compare which allows abbreviation, ie abbrev = "fors" and
 // string = "forsaken" would return 4.
 {
@@ -633,28 +633,19 @@ bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap)
                                 break;
                               case 'w':
                                 if (stack)
-                                {
-                                    *va_arg(ap,uint16_t *) = (uint16_t)t.Index();
-                                    t.WhiteGet();
-                                }
+                                    va_arg(ap, uint16_t *);
                                 else
                                     *(uint16_t **)from += 1;
                                 break;
                               case 'i':
                                 if (stack)
-                                {
-                                    *va_arg(ap,int32_t *) = t.Index();
-                                    t.WhiteGet();
-                                }
+                                    va_arg(ap, int32_t *);
                                 else
                                     *(int32_t **)from += 1;
                                 break;
                               case 'd':
                                 if (stack)
-                                {
-                                    *va_arg(ap,uint32_t *) = t.Index();
-                                    t.WhiteGet();
-                                }
+                                    va_arg(ap, uint32_t *);
                                 else
                                     *(uint32_t **)from += 1;
                                 break;
@@ -903,7 +894,6 @@ bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap)
             {
                 if (t.Type() != TKN_SYMBOL || t.Code() != *f)
                 {
-                    f[1] = 0;
                     return false;
                 }
                 f++;
@@ -927,7 +917,7 @@ bool Parse(TToken &t, const char *format, ...)
 
 bool ParseString(const char *string, const char *format, ...)
 {
-    TStringParseStream s(string);
+    TStringParseStream s((char*)string);
     TToken t(s);
 
     va_list ap;

@@ -20,6 +20,8 @@ char *itos(int32_t val, char* buf, int32_t buflen);
   // Efficiently converts an int32_t to a string given a buffer of 'buflen' size
 int32_t stricmp(const char* s1, const char* s2);
   // Case insensitive string compare
+int32_t strnicmp(const char* s1, const char* s2, size_t n);
+  // Case insensitive bounded string compare
 int32_t copyfiles(const char *from, const char *to, bool overwrite = true);
   // Copy file command (uses wildcards!!)
 int32_t deletefiles(const char *name);
@@ -44,21 +46,35 @@ void END_CRITICAL();
 
 // Makes a file path given the current settings of RunPath and SavePath
 char *makepath(char *name, char *buf, int32_t buflen);
-// Open a FILE in the program path using the makepath() function
-FILE *popen(char *file, char *flags);
+// Open a FILE relative to SavePath / RunPath. Named to avoid the libc
+// popen(3) shell-pipe function, which would otherwise win overload
+// resolution on POSIX.
+FILE *rev_fopen(const char *file, const char *flags);
+
+// Resource archive VFS — retail shipped data/resources.rvr, data/imagery.rvi
+// and data/Modules/<name>.rvm as stored (uncompressed) ZIPs. WinMain mounted
+// the two base archives individually, and a per-module archive was swapped
+// in when the active module changed. We mirror that lifecycle: call these
+// explicitly; nothing is auto-scanned.
+//
+// Resolution order in rev_fopen: SavePath → RunPath → active module → base.
+bool MountArchive(const char *name);    // name looked up under data root, e.g. "resources.rvr"
+bool MountModule(const char *name);     // mounts data/Modules/<name>.rvm (unmounts any prior)
+void UnmountModule();
+void UnmountAll();
 
 // Random number generation
 int32_t random(int32_t min, int32_t max);
 
 // Comma delimited list functions (useful for strings in "abcd,defg,hijk" format)
 // If dst is nullptr, retuns result pointer from static internal buffer
-char *listrnd(char *src, char *dst = nullptr, int32_t len = 0);
+char *listrnd(const char *src, char *dst = nullptr, int32_t len = 0);
     // Get random string from comma list
-char *listget(char *src, int32_t num, char *dst = nullptr, int32_t len = 0);
+char *listget(const char *src, int32_t num, char *dst = nullptr, int32_t len = 0);
     // Get num string from comma list
-int32_t listnum(char *src);
+int32_t listnum(const char *src);
     // Get total number of strings in comma list
-bool listin(char *src, char *in);
+bool listin(const char *src, const char *in);
     // Returns true if string is in comma list (case insensitive)
 
 // Causes all game threads to pause
