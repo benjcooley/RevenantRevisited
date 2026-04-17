@@ -108,6 +108,7 @@ extern bool AppActive;          // Flag for if the game is the active applicatio
 extern bool Editor;             // This is true if we are in edit mode
 extern bool StartInEditor;      // Whether to start the program in editor mode
 extern bool NoQuickLoad;        // Prevent the program from attempting to load the IMAGERY.DAT file
+extern char StartupSavePath[];  // --loadmap=<path>; empty if no startup auto-load
 
 // Render state controls
 extern bool FlatShade;
@@ -228,6 +229,7 @@ extern TFont*       MetalFont;          // Small gold/metal font
 extern TFont*       MenuFont;           // Menu font
 extern TPlayer*     Player;             // The active player for current game
 extern TMulti*      GameData;           // Global game data pointer
+extern TFontTable*  FontTable;          // FONT.DEF driven named font registry
 extern TSoundPlayer SoundPlayer;        // Sound effects player
 extern TControlMap  ControlMap;         // Contains the key/joystick mappings for game control
 extern TAreaManager AreaManager;        // Manages the game area system

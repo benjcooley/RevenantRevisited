@@ -8,22 +8,30 @@
 
 // For multimonitor support
 #define COMPILE_MULTIMON_STUBS
+#include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <fcntl.h>
 #include <math.h>
+#include <sstream>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 #include <time.h>
 
+#include "argh.h"
+
 #include "revenant.h"
+#include "logging.h"
 #include "fonttable.h"
 #include "3dscene.h"
 #include "bitmap.h"
 #include "display.h"
 #include "graphics.h"
 #include "playscreen.h"
+#include "testscreen.h"
 #include "mappane.h"
 #include "automap.h"
 #include "inventory.h"
@@ -215,6 +223,11 @@ static int32_t videocapmegs, videocapfps;
 // Driver name string (allows user to select driver by just typing in name of card)
 char DXDriverMatchStr[FILENAMELEN]; // Will use first DX driver who's description has the given string in it
                                     // i.e. use if string is "permidia" and driver desc is "Glint Permidia 2 3D"
+
+// Optional save-game path requested via `--loadmap=...` on the command line.
+// When non-empty, AppInit hands it to PlayScreen.LoadGameFile() so the engine
+// restores a live session on first Pulse().
+char StartupSavePath[MAXPATHLEN] = "";
 
 // Tick Sync variable
 bool TickOccured = false;
@@ -1321,212 +1334,168 @@ void GetProgramPaths(char *lpCmdLine, char *RunPath, char *SavePath)
 #endif
 }
 
-void GetParameters(char *lpCmdLine)
+// Command-line parsing uses argh (thirdparty/argh, single-header). Flag
+// names are case-insensitive at the engine level — argh itself is
+// case-sensitive, so we register every flag twice (lower + upper) to keep
+// legacy `WINDOWED` style and modern `--windowed` / `--loadmap` working.
+// Values preserve their original case (paths, driver names).
+
+namespace {
+
+// Lowercase a std::string in place (ASCII only).
+std::string to_lower(std::string s)
 {
-    char *ptr;
+    for (auto &c : s) c = (char)std::tolower((unsigned char)c);
+    return s;
+}
 
-  // Find out game speed first!
-    ptr = strstr(lpCmdLine, "GAMESPEED=");  // Set game speed
-    if (ptr)                                
+// True if the given parser saw any spelling of `name` as a boolean flag.
+// Accepts e.g. "windowed" matching `--windowed`, `-windowed`, `/windowed`,
+// `WINDOWED` — argh strips the leading dashes, we normalize case.
+bool arg_flag(const argh::parser &cmd, const char *name)
+{
+    const std::string n = to_lower(name);
+    for (const auto &f : cmd.flags())
+        if (to_lower(f) == n)
+            return true;
+    return false;
+}
+
+// If `name` was given as `--name=value` or `--name value`, copy the
+// value into `out`. Returns true on hit. Value case is preserved.
+bool arg_param(const argh::parser &cmd, const char *name, std::string &out)
+{
+    const std::string n = to_lower(name);
+    for (const auto &p : cmd.params())
     {
-        GameSpeed = atoi(ptr + 10);
-        if (GameSpeed < 1)
-            GameSpeed = 1;
-        if (GameSpeed > 5)
-            GameSpeed = 5;
-    }
-
-  // Setup performance variables
-    if (GameSpeed <= 1)
-    {
-        SmoothScroll = false;
-        MaxLights = 1;
-    }
-    if (GameSpeed < 3)
-    {
-        UseDirLight = false;
-    } 
-
-  // Do rest of stuff...
-
-    if (strstr(lpCmdLine, "DEBUG"))
-        Debug = true;                       // Sets up debug compatible mode.
-
-    if (strstr(lpCmdLine, "FORCE15BIT"))
-        Force15Bit = true;                  // Forces 15 bit mode
-
-    if (strstr(lpCmdLine, "FORCE16BIT"))
-        Force16Bit = true;                  // Forces 15 bit mode
-
-    if (strstr(lpCmdLine, "EDITOR"))        // Start in editor mode
-        StartInEditor = true;
-
-    if (strstr(lpCmdLine, "WINDOWED"))      // Run game in a window
-        Windowed = true;
-
-    if (strstr(lpCmdLine, "NOQUICKLOAD"))   // Run game in a window
-        NoQuickLoad = true;
-
-    if (strstr(lpCmdLine, "BORDERLESS"))    // Run game with no border
-        Borderless = true;
-
-    if (strstr(lpCmdLine, "NOWIDE"))        // Prevents wide video buffers (stride > width)
-        NoWideBuffers = true;
-
-    if (strstr(lpCmdLine, "FULLSCREEN"))    // Causes game map to start in full screen mode
-        FullScreen = true;
-
-    if (strstr(lpCmdLine, "NOPRELOADSECTORS"))  // Causes sectors to NOT be cached
-    {
-        PreloadSectors = false;
-        PreloadSectorSize = 3;
-    }
-
-    ptr = strstr(lpCmdLine, "MONITOR=");    // Set monitor number
-    if (ptr)                                
-        MonitorNum = atoi(ptr + 8);
-
-    ptr = strstr(lpCmdLine, "VIOLENCELEVEL=");  // Set Violence level
-    if (ptr)                                
-    {
-        ViolenceLevel = atoi(ptr + 14);
-        if (ViolenceLevel < 0)
-            ViolenceLevel = 0;
-        if (ViolenceLevel > 5)
-            ViolenceLevel = 5;
-    }
-
-    ptr = strstr(lpCmdLine, "PRELOADSIZE=");    // Set game speed
-    if (ptr)                                
-    {
-        PreloadSectorSize = atoi(ptr + 12);
-        if (PreloadSectorSize > 8)
-            PreloadSectorSize = 8;
-        if (PreloadSectorSize < 3)
+        if (to_lower(p.first) == n)
         {
-            PreloadSectors = false;
-            PreloadSectorSize = 3;
+            out = p.second;
+            return true;
+        }
+    }
+    return false;
+}
+
+template <typename T>
+bool arg_param_to(const argh::parser &cmd, const char *name, T &out)
+{
+    std::string v;
+    if (!arg_param(cmd, name, v)) return false;
+    std::istringstream iss(v);
+    iss >> out;
+    return !iss.fail();
+}
+
+} // namespace
+
+void GetParameters(int argc, char **argv)
+{
+    argh::parser cmd;
+    // Flags that consume a value (so argh doesn't treat their value as
+    // a positional). Everything else is a boolean flag.
+    cmd.add_params({
+        "gamespeed", "monitor", "violencelevel", "preloadsize",
+        "chunkcachesize", "driver", "device", "videocap", "fastlock",
+        "loadmap", "lang", "test",
+    });
+    cmd.parse(argc, argv);
+
+  // Game speed first — performance knobs below depend on it
+    if (!arg_param_to(cmd, "gamespeed", GameSpeed)) {} // leaves prior value
+    if (GameSpeed < 1) GameSpeed = 1;
+    if (GameSpeed > 5) GameSpeed = 5;
+
+    if (GameSpeed <= 1) { SmoothScroll = false; MaxLights = 1; }
+    if (GameSpeed < 3)  { UseDirLight = false; }
+
+  // Boolean switches
+    if (arg_flag(cmd, "debug"))            Debug = true;
+    if (arg_flag(cmd, "force15bit"))       Force15Bit = true;
+    if (arg_flag(cmd, "force16bit"))       Force16Bit = true;
+    if (arg_flag(cmd, "editor"))           StartInEditor = true;
+    if (arg_flag(cmd, "windowed"))         Windowed = true;
+    if (arg_flag(cmd, "noquickload"))      NoQuickLoad = true;
+    if (arg_flag(cmd, "borderless"))       Borderless = true;
+    if (arg_flag(cmd, "nowide"))           NoWideBuffers = true;
+    if (arg_flag(cmd, "fullscreen"))       FullScreen = true;
+    if (arg_flag(cmd, "nopreloadsectors")) { PreloadSectors = false; PreloadSectorSize = 3; }
+    if (arg_flag(cmd, "ignore3d"))         Ignore3D = true;
+    if (arg_flag(cmd, "olddirect3d"))      { UseDirect3D2 = false; UseDrawPrimitive = false; }
+    if (arg_flag(cmd, "software3d"))       UseSoftware3D = true;
+    if (arg_flag(cmd, "rampmode"))         { SoftRampMode = true;  SoftRGBMode = false; UseSoftware3D = true; }
+    if (arg_flag(cmd, "rgbmode"))          { SoftRampMode = false; SoftRGBMode = true;  UseSoftware3D = true; }
+    if (arg_flag(cmd, "blue"))             { UseBlue = true; SoftRampMode = true; SoftRGBMode = false; UseSoftware3D = true; }
+    if (arg_flag(cmd, "nodrawprim"))       UseDrawPrimitive = false;
+    if (arg_flag(cmd, "nocacheexbufs"))    CacheExBufs = false;
+    if (arg_flag(cmd, "novidzlock"))       NoVidZBufLock = true;
+    if (arg_flag(cmd, "clearz"))           { UseClearZBuffer = true; NoVidZBufLock = false; }
+    if (arg_flag(cmd, "voodoo"))           { IsVooDoo = true; NoVidZBufLock = true; NoBlitZBuffer = true; UseClearZBuffer = true; }
+    if (arg_flag(cmd, "nommx"))            IsMMX = false;
+
+  // Value-taking knobs. Use parenthesized std::min/clamp idiom so legacy
+  // min/max macros from revtypes.h don't hijack them.
+    arg_param_to(cmd, "monitor", MonitorNum);
+    if (int v; arg_param_to(cmd, "violencelevel", v))
+    { ViolenceLevel = (std::clamp)(v, 0, 5); }
+    if (int v; arg_param_to(cmd, "preloadsize", v))
+    {
+        PreloadSectorSize = (v > 8) ? 8 : v;
+        if (PreloadSectorSize < 3) { PreloadSectors = false; PreloadSectorSize = 3; }
+    }
+    if (int v; arg_param_to(cmd, "chunkcachesize", v))
+    { ChunkCacheSize = (v > 256) ? 256 : v; }
+
+  // Driver/device: first match wins, value case preserved
+    {
+        std::string d;
+        if (!arg_param(cmd, "driver", d)) arg_param(cmd, "device", d);
+        if (!d.empty()) { strncpyz(DXDriverMatchStr, d.c_str(), FILENAMELEN); }
+    }
+
+  // VIDEOCAP=megs,fps
+    {
+        std::string vc;
+        if (arg_param(cmd, "videocap", vc))
+        {
+            dovideocap = true;
+            videocapmegs = FRAMERATE;
+            videocapfps  = FRAMERATE;
+            const size_t comma = vc.find(',');
+            videocapmegs = (std::clamp)(atoi(vc.substr(0, comma).c_str()), 4, 128);
+            videocapfps  = (comma == std::string::npos)
+                           ? FRAMERATE
+                           : (std::clamp)(atoi(vc.substr(comma + 1).c_str()), 8, (int)FRAMERATE);
+        }
+        else
+            dovideocap = false;
+    }
+
+  // FASTLOCK=on|off|1|0
+    {
+        std::string v;
+        if (arg_param(cmd, "fastlock", v))
+        {
+            const std::string lv = to_lower(v);
+            UnlockImmediately = (lv == "on" || lv == "1" || lv == "true");
         }
     }
 
-    ptr = strstr(lpCmdLine, "CHUNKCACHESIZE="); // Set game speed
-    if (ptr)                                
+  // LOADMAP=<save-file> — jump straight into a loaded save at boot,
+  // skipping any menu screens. Path is resolved via rev_fopen (SavePath,
+  // RunPath, module dir, then VFS archives).
     {
-        ChunkCacheSize = atoi(ptr + 15);
-        if (ChunkCacheSize > 256)
-            ChunkCacheSize = 256;
+        std::string p;
+        if (arg_param(cmd, "loadmap", p))
+            strncpyz(StartupSavePath, p.c_str(), MAXPATHLEN);
     }
 
-    ptr = strstr(lpCmdLine, "DRIVER="); // Set display device
-    if (!ptr)
-        ptr = strstr(lpCmdLine, "DEVICE="); // Set display device (same thing)
-    if (ptr)
+  // TEST=<mode> — route to TTestScreen instead of LogoScreen/PlayScreen.
+  // See recon/docs/RETAIL_SYNC_PLAN.md.
     {
-        ptr += 7;
-        char *d = DXDriverMatchStr;
-        while (*ptr && *ptr != ' ')
-            *d++ = *ptr++;
-        *d = 0;
-#if 0 // TODO(port): Subsystem 8 — strlwr is MS CRT; use portable lowercase helper
-        strlwr(DXDriverMatchStr);
-#endif
-    }
-
-    if (strstr(lpCmdLine, "IGNORE3D"))      // Run game without Direct3D objects
-        Ignore3D = true;
-
-    if (strstr(lpCmdLine, "OLDDIRECT3D"))   // Prevents game from using draw primitives
-    {
-        UseDirect3D2 = false;               // Doesn't initialize Direct3D 2 stuff
-        UseDrawPrimitive = false;           // Forces system to use execute buffers
-    }
-
-    if (strstr(lpCmdLine, "SOFTWARE3D"))    // Turns on default software 3D (BLUE)
-    {
-        UseSoftware3D = true;
-    }
-
-    if (strstr(lpCmdLine, "RAMPMODE"))      // Runs software 3D in ramp emulation mode
-    {
-        SoftRampMode = true;
-        SoftRGBMode = false;
-        UseSoftware3D = true;
-    }
-
-    if (strstr(lpCmdLine, "RGBMODE"))       // Runs software 3D in rgb mode
-    {
-        SoftRampMode = false;
-        SoftRGBMode = true;
-        UseSoftware3D = true;
-    }
-
-    if (strstr(lpCmdLine, "BLUE"))  // Causes game to use software 3D
-    {
-        UseBlue = true;
-        SoftRampMode = true;        // Initializes Direct3D as if it was going to use 
-        SoftRGBMode = false;        // The software RGB mode (BUT WE NEVER DO!)
-        UseSoftware3D = true;
-    }
-
-    if (strstr(lpCmdLine, "NODRAWPRIM"))    // Forces system to use execute buffers
-        UseDrawPrimitive = false;
-
-    if (strstr(lpCmdLine, "NOCACHEEXBUFS")) // Prevents system from caching execute buffers
-        CacheExBufs = false;
-
-    if (strstr(lpCmdLine, "NOVIDZLOCK"))    // Prevents system from simultaneously lcoking the
-        NoVidZBufLock = true;               // display video and z surfaces (locks the VooDoo)
-
-    if (strstr(lpCmdLine, "CLEARZ"))        // Causes system to allocate an extra ZBuffer so 
-    {                                       // we can use the Viewport->Clear() function to 
-        UseClearZBuffer = true;             // update the screen ZBuffer, and so that we can
-        NoVidZBufLock = false;              // draw to the ZBuffer in TDisplay (since 
-    }                                       // it won't be the tree screen ZBuffer.
-
-    if (strstr(lpCmdLine, "VOODOO"))        // This is a voodoo card
-    {                                       // we can use the Viewport->Clear() function to 
-        IsVooDoo = true;                    
-        NoVidZBufLock = true;   // Don't try to lock video and zbuffer at same time
-        NoBlitZBuffer = true;   // Can't blit to or from the zbuffer
-        UseClearZBuffer = true; // Use a secondary clear zbuffer for drawing instead of display zbuffer 
-    }
-
-    if (strstr(lpCmdLine, "NOMMX"))         // Force into no MMX mode
-        IsMMX = false;
-
-    ptr = strstr(lpCmdLine, "VIDEOCAP="); // VIDEOCAP=megs,fps 
-    if (ptr)
-    {
-        dovideocap = true;
-        videocapmegs = atoi(ptr + 9);
-        if (videocapmegs < 4)
-            videocapmegs = 4;
-        else if (videocapmegs > 128)
-            videocapmegs = 128;
-        if (ptr[10] == ',')
-            ptr += 11;
-        else if (ptr[11] == ',')
-            ptr += 12;
-        else if (ptr[12] == ',')
-            ptr += 13;
-        else
-            ptr = nullptr;
-        videocapfps = FRAMERATE;
-        if (ptr)
-            videocapfps = atoi(ptr);
-        if (videocapfps < 8)
-            videocapfps = 8;
-        else if (videocapfps > FRAMERATE)
-            videocapfps = FRAMERATE;
-    }
-    else
-        dovideocap = false;
-
-    ptr = strstr(lpCmdLine, "FASTLOCK=");
-    if (ptr)                                // Sets the buffer locking mode.  If on, causes 
-    {                                       // buffers to be unlocked immediately after locked (faster)
-        UnlockImmediately = !strnicmp(ptr + 9, "on", 2) ||
-                            !strnicmp(ptr + 9, "1", 1);
+        std::string p;
+        if (arg_param(cmd, "test", p))
+            strncpyz(StartupTestMode, p.c_str(), sizeof(StartupTestMode));
     }
 }
 
@@ -1978,30 +1947,20 @@ static void AppCleanup();
 static TScreen* BootScreen = nullptr;
 static bool SystemInitialized = false;
 
+// Saved argv for AppInit — sokol owns the run loop after sokol_main
+// returns, so we stash the pointers for the later GetParameters call.
+static int    g_argc = 0;
+static char **g_argv = nullptr;
+
 sapp_desc sokol_main(int argc, char* argv[])
 {
-    // Command-line parsing: the legacy parameter parser works on a single
-    // flat uppercased string. Glue argv back together for it.
-    static char cmdbuf[1024];
-    cmdbuf[0] = '\0';
-    for (int i = 1; i < argc; ++i)
-    {
-        if (i > 1 && (int)strlen(cmdbuf) + 1 < (int)sizeof(cmdbuf))
-            strncatz(cmdbuf, " ", sizeof(cmdbuf));
-        if ((int)strlen(cmdbuf) + (int)strlen(argv[i]) + 1 < (int)sizeof(cmdbuf))
-            strncatz(cmdbuf, argv[i], sizeof(cmdbuf));
-    }
+    // Stand up logging before anything else so early failures are visible.
+    rev_logging_init("revenant.log");
 
-    // Parse parameters that influence window creation BEFORE describing
-    // the sokol window. The rest of GetParameters (game-engine toggles)
-    // happens in AppInit after globals are safe to poke.
+    g_argc = argc;
+    g_argv = argv;
+
     IsMMX = false;
-
-    // TODO(port): previously called strupr(lpCmdLine) here; GetParameters
-    // matches uppercase strings. Do the same in-place on cmdbuf so the
-    // INI/flag heuristics keep working.
-    for (char* p = cmdbuf; *p; ++p)
-        if (*p >= 'a' && *p <= 'z') *p += 'A' - 'a';
 
     sapp_desc desc = {};
     desc.init_cb = AppInit;
@@ -2011,15 +1970,12 @@ sapp_desc sokol_main(int argc, char* argv[])
     desc.width = WIDTH;
     desc.height = HEIGHT;
     desc.window_title = "Revenant";
-    desc.high_dpi = true;
+    desc.high_dpi = false;
     desc.sample_count = 1;
     // Windowed by default; Borderless/FullScreen come from INI/args and
     // take effect before the window opens only if set via argv. Anything
     // else stays at sokol defaults.
     Windowed = true;
-
-    (void)argc;
-    (void)argv;
     return desc;
 }
 
@@ -2039,10 +1995,7 @@ static void AppInit()
 
     GetINISettings();
 
-    // TODO(port): feed real argv through here; see sokol_main for the
-    // cmdbuf we built.
-    char emptycmd[1] = "";
-    GetParameters(emptycmd);
+    GetParameters(g_argc, g_argv);
 
     // Base resource archives — retail WinMain opened these explicitly before
     // anything that calls rev_fopen (FontTable->Initialize, LoadClasses...).
@@ -2076,7 +2029,25 @@ static void AppInit()
         return;
     }
 
-    BootScreen = &PlayScreen;
+    if (StartupTestMode[0])
+    {
+        log_info("[boot] routing to TestScreen, mode='%s'", StartupTestMode);
+        BootScreen = &TestScreen;
+    }
+    else
+    {
+        BootScreen = &PlayScreen;
+
+        // --loadmap=<file>: hand the save path to PlayScreen; its Pulse()
+        // picks it up on the first tick, clears the current map, and streams
+        // the player object — the same path the menu uses for "Continue".
+        if (StartupSavePath[0])
+        {
+            log_info("[boot] auto-loading save '%s'", StartupSavePath);
+            PlayScreen.LoadGameFile(StartupSavePath);
+        }
+    }
+
     SystemInitialized = true;
 }
 

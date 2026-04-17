@@ -13,6 +13,7 @@
 #include "multictrl.h"
 #include "player.h"
 #include "playscreen.h"
+#include "revutils.h"
 #include "script.h"
 #include "sector.h"
 #include "statusbar.h"
@@ -110,13 +111,15 @@ bool TSaveGame::ReadGame(char *name)
   // Now attempt to load the game
     bool retval = true;
 
-    FILE *fp = fopen(name, "rb");
+    FILE *fp = rev_fopen(name, "rb");
     if (fp == nullptr)
     {
         loading = false;
         return false;
     }
-    size_t bufsize = _filelength(fileno(fp));
+    fseek(fp, 0, SEEK_END);
+    size_t bufsize = (size_t)ftell(fp);
+    fseek(fp, 0, SEEK_SET);
     uint8_t *buf = nullptr;
 
     if (bufsize > 0)

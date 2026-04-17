@@ -6,6 +6,7 @@
 
 #include "playscreen.h"
 
+#include "logging.h"
 #include "timer.h"
 #include "mainwnd.h"
 #include "animation.h"
@@ -141,8 +142,6 @@ SControlEntry GameControls[] = {
 };
 #define NUMGAMECONTROLS sizearray(GameControls)
 
-HFONT font;
-
 // *********************
 // * PlayScreen Screen *
 // *********************
@@ -150,6 +149,7 @@ HFONT font;
 TPlayScreen::TPlayScreen()
 {
     nextscreen   = nullptr;
+    loadgamepath[0] = '\0';
 }
 
 bool TPlayScreen::Initialize()
@@ -160,9 +160,9 @@ bool TPlayScreen::Initialize()
     controlon = true;
     demomode = false;
     
-    // Don't load a new game right off (set to false when starting)
-    loadgame = false;  
-    savegame = false;  
+    // Don't reset loadgame/loadgamepath here — AppInit may have already
+    // set them via LoadGameFile() before Initialize ran on the first frame.
+    savegame = false;
     gamenum = 0;
 
     // Don't save the map
@@ -263,10 +263,25 @@ bool TPlayScreen::Initialize()
     if (!SoundPlayer.Initialize())
         FatalError("Trouble initalizing soundplayer - is SOUND.DEF present?");
 
-  // Load game
+  // Load game. If --loadmap handed us a specific save path in AppInit, use
+  // it here so Initialize itself primes the world with the intended save;
+  // otherwise fall back to the legacy slot-0 load.
     Status("Loading save game\n");
     if (!Editor && !StartInEditor)
-        ::SaveGame.ReadGame(0);
+    {
+        if (loadgamepath[0])
+        {
+            log_info("[boot] reading save '%s'", loadgamepath);
+            bool ok = ::SaveGame.ReadGame(loadgamepath);
+            log_info("[boot] save load %s", ok ? "succeeded" : "FAILED");
+            loadgamepath[0] = '\0';
+            loadgame = false;
+        }
+        else
+        {
+            ::SaveGame.ReadGame(0);
+        }
+    }
 
   // Set up editor
     if (StartInEditor)
@@ -275,30 +290,39 @@ bool TPlayScreen::Initialize()
         StartEditor(StartInEditor);
     }
 
-  // Setup screen interface
+  // Setup screen interface. The pre-release source expected a loose
+  // BITMAP.100 in the Resources directory — a 640x480 pre-composed backdrop
+  // with the UI already painted into it. Retail ships no such file; the
+  // interface is composed at runtime from per-pane bitmaps in playscrn.dat,
+  // bottombar.dat, sidepane.dat, etc. Keep the load attempt so a pre-release
+  // asset still works when present, but degrade gracefully when it isn't.
     Status("Loading interface/starting game...\n");
     bitmap = TBitmap::Load(100);
-    if (!bitmap)
-        return false;
+    if (bitmap)
+    {
+        // Hang on to the parts which hang over the map pane
+        for (int32_t i = 0; i < NUMOVERHANGS; i++)
+        {
+            if (!(overhang[i] = TBitmap::NewBitmap(oh[i].w, oh[i].h, BM_8BIT | BM_PALETTE)))
+                return false;
+
+            overhang[i]->Put(0, 0, bitmap, oh[i].x, oh[i].y, oh[i].w, oh[i].h);
+            if (bitmap->palettesize)
+                memcpy(overhang[i]->palette.ptr(), bitmap->palette.ptr(), bitmap->palettesize);
+        }
+
+        Display->Put(0, 0, bitmap, DM_NOCLIP | DM_BACKGROUND);
+        delete bitmap;
+    }
+    else
+    {
+        log_warn("[playscreen] no BITMAP.100 backdrop; panes will render on black");
+    }
 
     multidirty = false;
 
     numpostcharanims = 0;
     numpostchartexts = 0;
-
-    // Hang on to the parts which hang over the map pane
-    for (int32_t i = 0; i < NUMOVERHANGS; i++)
-    {
-        if (!(overhang[i] = TBitmap::NewBitmap(oh[i].w, oh[i].h, BM_8BIT | BM_PALETTE)))
-            return false;
-
-        overhang[i]->Put(0, 0, bitmap, oh[i].x, oh[i].y, oh[i].w, oh[i].h);
-        if (bitmap->palettesize)
-            memcpy(overhang[i]->palette.ptr(), bitmap->palette.ptr(), bitmap->palettesize);
-    }
-
-    Display->Put(0, 0, bitmap, DM_NOCLIP | DM_BACKGROUND);
-    delete bitmap;
 
   // Set next pane to null
     nextpane = nullptr;
@@ -381,12 +405,16 @@ void TPlayScreen::DrawBackground()
     if (dirty)
     {
         bitmap = TBitmap::Load(100);
-        if (!bitmap)
-            FatalError("loading interface bitmap");
-
-        Display->Reset();
-        Display->Put(0, 0, bitmap, DM_NOCLIP | DM_BACKGROUND);
-        delete bitmap;
+        if (bitmap)
+        {
+            Display->Reset();
+            Display->Put(0, 0, bitmap, DM_NOCLIP | DM_BACKGROUND);
+            delete bitmap;
+        }
+        else
+        {
+            Display->Reset();
+        }
     }
 
     TScreen::DrawBackground();
@@ -415,7 +443,15 @@ void TPlayScreen::Pulse()
   // Load a game
     if (loadgame)
     {
-        ::SaveGame.ReadGame(gamenum);
+        if (loadgamepath[0])
+        {
+            ::SaveGame.ReadGame(loadgamepath);
+            loadgamepath[0] = '\0';
+        }
+        else
+        {
+            ::SaveGame.ReadGame(gamenum);
+        }
         loadgame = false;
     }
 
@@ -460,7 +496,8 @@ void TPlayScreen::Animate(bool draw)
     if (draw && !InCompleteExclusion())
     {
         MapPane.SetClipRect();
-        for (int32_t i = 0; i < numpostcharanims; i++)
+        int32_t i;
+        for (i = 0; i < numpostcharanims; i++)
         {
             if (postanim[i].drawmode & (DM_ZBUFFER | DM_ZSTATIC))
                 Display->ZPut(postanim[i].x, postanim[i].y, postanim[i].z, postanim[i].bm, postanim[i].drawmode);
@@ -508,11 +545,11 @@ void TPlayScreen::Animate(bool draw)
       !MapPane.IsHidden() && MapPane.IsOpen() && !InCompleteExclusion())
     {
         gameframes++;
-        gametime = 
-            (int32_t)((__int64)((__int64)GameFrame() * (__int64)100 / (__int64)FRAMERATE));
-        timeofday = 
-            (int32_t)((__int64)(((__int64)gametime * (__int64)(24 * 60) / 
-                (__int64)Rules.daylength) % (__int64)(24 * 60)));
+        gametime =
+            (int32_t)((int64_t)((int64_t)GameFrame() * (int64_t)100 / (int64_t)FRAMERATE));
+        timeofday =
+            (int32_t)((int64_t)(((int64_t)gametime * (int64_t)(24 * 60) /
+                (int64_t)Rules.daylength) % (int64_t)(24 * 60)));
     }
 }
 
@@ -986,15 +1023,8 @@ void TPlayScreen::UpdateMove()
 
 void TPlayScreen::CreateBackgroundAreas()
 {
-    if (!IsFullScreen()) // Create border background areas
-    {
-        Display->CreateBackgroundArea(0, 0, Display->Width(), FRAMEMAPPANEY);
-            Display->CreateBackgroundArea(0, FRAMEMAPPANEY, FRAMEMAPPANEX, FRAMEMAPPANEHEIGHT);
-        Display->CreateBackgroundArea(FRAMEMAPPANEX+FRAMEMAPPANEWIDTH, FRAMEMAPPANEY,
-                        Display->Width() - (FRAMEMAPPANEX+FRAMEMAPPANEWIDTH), FRAMEMAPPANEHEIGHT);
-        Display->CreateBackgroundArea(0, FRAMEMAPPANEY+FRAMEMAPPANEHEIGHT, Display->Width(),
-                        Display->Height() - FRAMEMAPPANEY - FRAMEMAPPANEHEIGHT);
-    }
+    // CPU-side background area caching is obsolete under the sokol GPU compositor.
+    // TODO(port): replace with per-pane dirty-region tracking if needed.
 }
 
 void TPlayScreen::DrawOverhangs(bool temporary)
@@ -1029,6 +1059,14 @@ void TPlayScreen::LoadGame(int32_t game)
 {
     loadgame = true;
     gamenum = game;
+    loadgamepath[0] = '\0';
+}
+
+void TPlayScreen::LoadGameFile(const char *path)
+{
+    if (!path || !*path) return;
+    strncpyz(loadgamepath, path, MAXPATHLEN);
+    loadgame = true;
 }
 
 void TPlayScreen::SaveGame(int32_t game)
@@ -1065,12 +1103,12 @@ int32_t TPlayScreen::GameTime()
 void TPlayScreen::SetGameTime(int32_t gametime)
 {
     sessionstart = gameframes;
-    lastsessionframes = (int32_t)((__int64)((__int64)gametime * (__int64)FRAMERATE / (__int64)100));
-    gametime = 
-        (int32_t)((__int64)((__int64)GameFrame() * (__int64)100 / (__int64)FRAMERATE));
-    timeofday = 
-        (int32_t)((__int64)(((__int64)gametime * (__int64)(24 * 60) / 
-            (__int64)Rules.daylength) % (__int64)(24 * 60)));
+    lastsessionframes = (int32_t)((int64_t)((int64_t)gametime * (int64_t)FRAMERATE / (int64_t)100));
+    gametime =
+        (int32_t)((int64_t)((int64_t)GameFrame() * (int64_t)100 / (int64_t)FRAMERATE));
+    timeofday =
+        (int32_t)((int64_t)(((int64_t)gametime * (int64_t)(24 * 60) /
+            (int64_t)Rules.daylength) % (int64_t)(24 * 60)));
 }
 
 // Returns the time of day in minutes
