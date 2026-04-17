@@ -53,10 +53,10 @@ class TMosaicSurface : public TSurface
       { if (!Initialize(clone, ncreateflags))
          FatalError("Couldn't initialize mosaic surface"); }
       // Initializes a Cloned Mosaic surface
-    virtual ~TMosaicSurface();
+    ~TMosaicSurface() override;
       // Destroys Mosaic surfaces.
 
-    virtual int32_t SurfaceType() { return SURFACE_MOSAIC; }
+    int32_t SurfaceType() override { return SURFACE_MOSAIC; }
       // Returns type of surface this is
 
     bool Initialize(int32_t ntilex, int32_t ntiley, int32_t nnumtilex, int32_t nnumtiley, uint32_t ncreateflags);
@@ -66,60 +66,60 @@ class TMosaicSurface : public TSurface
     void Close();
       // Closes the mosaic surface
 
-    virtual TSurface* GetZBuffer() { return tiles[0]->GetZBuffer(); }
+    TSurface* GetZBuffer() override { return tiles[0]->GetZBuffer(); }
       // Returns ZBuffer surface for this surface (if it has one)
-    virtual TSurface* GetNormalBuffer() { return tiles[0]->GetNormalBuffer(); }
+    TSurface* GetNormalBuffer() override { return tiles[0]->GetNormalBuffer(); }
       // Returns the normal buffer for this surface (if it has one)
 
-    virtual int32_t BitsPerPixel(){return tiles[0]->BitsPerPixel();}
+    int32_t BitsPerPixel() override { return tiles[0]->BitsPerPixel(); }
       // Returns current bits per pixel
-    virtual sg_image GetSGImage() { return tiles[0]->GetSGImage(); }
+    sg_image GetSGImage() override { return tiles[0]->GetSGImage(); }
       // Returns the sokol image backing this tile (sg_image{0} if none).
 
-    virtual bool Lost() { return tiles[0]->Lost(); }
+    bool Lost() override { return tiles[0]->Lost(); }
       // Returns true if the surface needs to be regenerated.
-    
-    virtual void *Lock() { return locked = tiles[0]->Lock(); }
-      // Locks surface. Returns pointer to surface or nullptr 
+
+    void* Lock() override { return locked = tiles[0]->Lock(); }
+      // Locks surface. Returns pointer to surface or nullptr
       // if buffer couldn't be locked.
-    virtual bool Unlock() { locked = nullptr; return tiles[0]->Unlock(); }
+    bool Unlock() override { locked = nullptr; return tiles[0]->Unlock(); }
       // Unlocks surface.
-    
-    virtual void SetOrigin(int32_t x, int32_t y);
+
+    void SetOrigin(int32_t x, int32_t y) override;
       // Sets drawing origin
-    virtual void SetClipRect(int32_t x, int32_t y, int32_t w, int32_t h);
+    void SetClipRect(int32_t x, int32_t y, int32_t w, int32_t h) override;
       // Sets display clipping rectangle
-    virtual void SetClipMode(int32_t mode);
+    void SetClipMode(int32_t mode) override;
       // Sets clipping to normal of wrap around
 
-    TMultiSurface* GetTile(int32_t x, int32_t y)
+    TMultiSurface* GetTile(int32_t x, int32_t y) const
       { return (TMultiSurface*)tiles[y * numtilex + x]; }
       // Gets the given tile
 
 // --------------------------------------------------------------------------------
 // CORE SURFACE DRAW ROUTINES
 //
-// These routines are called by ALL surface drawing functions, and allow the 
+// These routines are called by ALL surface drawing functions, and allow the
 // special surfaces such as TMultiSurface, and TMosaicSurface to redirect the
 // drawing calls to one or more ordinary surface drawing calls.  It is therefore
 // extremely important that NO drawing functions bypass these calls below.  All
 // drawing functions MUST be called by the following functions below!!!!!!!
 
-    virtual bool UseGetBlit() { return true; }
+    bool UseGetBlit() override { return true; }
       // true when blitting from a complex surface like a TMosaicSurface.  This
-      // causes the surface to use the complex source surfaces' GetBlit function 
+      // causes the surface to use the complex source surfaces' GetBlit function
       // instead of the ordinary destination surfaces Blit function when blitting
       // from a complex (mosaic) surface to an ordinary surface.
 
   // Put and blit functions which do primary, zbuffer, and normal buffer surface
-    virtual bool ParamDraw(SDrawParam* dp, TBitmap* bitmap = nullptr);
+    bool ParamDraw(SDrawParam* dp, TBitmap* bitmap = nullptr) override;
       // Copies specified bitmap to current bitmap
-    virtual bool ParamBlit(SDrawParam* dp, TSurface* surface, int32_t ddflags = 0);
+    bool ParamBlit(SDrawParam* dp, TSurface* surface, int32_t ddflags = 0) override;
       // Blits from surface to this surface. RECT sets size of blit.
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting
-    virtual bool ParamGetBlit(SDrawParam* dp, TSurface* surface, int32_t ddflags = 0);
-      // Blits from this surface to surface. RECT sets size of blit. 
+    bool ParamGetBlit(SDrawParam* dp, TSurface* surface, int32_t ddflags = 0) override;
+      // Blits from this surface to surface. RECT sets size of blit.
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting.  Called by ParamBlit when blitting from a complex surface
       // to an ordinary surface.

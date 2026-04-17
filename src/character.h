@@ -44,7 +44,7 @@
 _STRUCTDEF(SHasSeen)
 struct SHasSeen
 {
-    PTCharacter chr;            // Has seen this character
+    TCharacter* chr;            // Has seen this character
     int32_t time;                   // Game ticks when last seen
     bool noautocombat;          // Prevents player from toggling autocombat
 };
@@ -81,7 +81,7 @@ class TCharacter : public TComplexObject
         // GetDamageType()), and a percentage modifier such as +10%(10) or -30%(-30).  Damage
         // is calculated as damage * (100% + modifier) * (100% + chardmgmodifier).
     virtual void Damage(int32_t damage, int32_t damagetype = DT_NONE, int32_t modifier = 0,
-        PTActionBlock action = nullptr, PTCharacter attacker = nullptr);
+        PTActionBlock action = nullptr, TCharacter* attacker = nullptr);
         // Apply damage to the character.  If character hit, use 'action' action block
         // instead of default "impact" state, or use 'action' block if he dies instead
         // of default "dead" state.  If impact and death are nullptr, uses default "impact"
@@ -163,17 +163,17 @@ class TCharacter : public TComplexObject
       // Set the character to the cast animation
     bool Cast(char* talismans, S3DPoint* sourcepos = nullptr);
       // quick cast a spell
-    bool BeginFighting(PTCharacter target = nullptr, ACTION action = ACTION_COMBAT);
+    bool BeginFighting(TCharacter* target = nullptr, ACTION action = ACTION_COMBAT);
       // Engage character in combat
     bool EndFighting();
       // Leave combat mode
-    bool BeginCombat(PTCharacter target = nullptr)
+    bool BeginCombat(TCharacter* target = nullptr)
       { return BeginFighting(target, ACTION_COMBAT); }
       // Enter combat mode
     bool EndCombat()
       { return EndFighting(); }
       // Leave combat mode
-    bool BeginBowMode(PTCharacter target = nullptr)
+    bool BeginBowMode(TCharacter* target = nullptr)
       { return BeginFighting(target, ACTION_BOW); }
       // Enter bow combat mode
     bool EndBowMode()
@@ -229,9 +229,9 @@ class TCharacter : public TComplexObject
       // Returns true if bow is drawn and we are in aim mode
     bool IsAttack() { return IsDoing(ACTION_ATTACK); }
       // Returns whether the character is attacking or not
-    PTCharacter Fighting() { if (IsFighting()) return (PTCharacter)root->obj; return nullptr; }
+    TCharacter* Fighting() { if (IsFighting()) return (TCharacter*)root->obj; return nullptr; }
       // Return the current target if they are in combat, nullptr if not fighting anyone
-    bool SetFighting(PTCharacter newtarget);
+    bool SetFighting(TCharacter* newtarget);
       // Sets the current fighting target
     bool IsTalking() { if (doing && doing->Is("say")) return true; return false; }
       // Returns whether character is talking or not
@@ -257,7 +257,7 @@ class TCharacter : public TComplexObject
         { return IsMoving() && (doing->target.x != 0 || doing->target.y != 0 || doing->target.z != 0); }
     bool IsDead() { return (Health() <= 0); }
       // Dammit Jim, I'm a corpse not a doctor..
-    bool IsEnemy(PTCharacter chr);
+    bool IsEnemy(TCharacter* chr);
       // Returns true if the character is an enemy
     bool IsFinalState();
       // Returns whether character is in their last days
@@ -286,11 +286,11 @@ class TCharacter : public TComplexObject
       // Forces the current command to be done
 
     // Static access functions
-    static PTCharacter CharBlocking(TObjectInstance* inst, S3DPoint& pos, int32_t radius = 0);
+    static TCharacter* CharBlocking(TObjectInstance* inst, S3DPoint& pos, int32_t radius = 0);
         // Find if a character is blocking movement to this position
-    PTCharacter CharBlocking() { return CharBlocking(this, Pos(), Radius()); }
+    TCharacter* CharBlocking() { return CharBlocking(this, Pos(), Radius()); }
         // Calls static function above with this chars parameters
-    bool Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits = 0, int32_t *height = nullptr, PTCharacter *bychar = nullptr);
+    bool Blocked(S3DPoint& pos, S3DPoint& newpos, uint32_t bits = 0, int32_t* height = nullptr, TCharacter** bychar = nullptr);
       // Returns true if character would be blocked when going to new position
     
   // Miscellaneous functions
@@ -336,11 +336,11 @@ class TCharacter : public TComplexObject
     S3DPoint GetTeleportPosition(void){return teleport_position;}
 
   // Functions to remember if characters are seen or not
-    bool HasSeenMe(PTCharacter me);
+    bool HasSeenMe(TCharacter* me);
       // Have I been seen by this character?
-    void SetHasSeen(PTCharacter me);
+    void SetHasSeen(TCharacter* me);
       // Add me to the HASSEEN list
-    bool HasSeenAutoCombat(PTCharacter me);
+    bool HasSeenAutoCombat(TCharacter* me);
       // Should I go into combat automatically against this guy I've just seen?
     void SetHasSeenAutoCombat(bool on);
       // Sets AUTOCOMBAT mode for all recently seen characters.  If set to false, prevents
@@ -410,7 +410,7 @@ class TCharacter : public TComplexObject
       // Returns combat root given current weapon or weapon type
     virtual char *GetBowRoot(TObjectInstance* oi = nullptr) { return "bow"; } 
       // Returns bow root given current bow weapon type
-    bool CanSeeCharacter(PTCharacter chr, int32_t angle = -1);
+    bool CanSeeCharacter(TCharacter* chr, int32_t angle = -1);
       // Returns true if this character can 'see' the last glimpse of 'chr'
     bool IsMagicResistant() { return (magic_resistance > 0.0f); }
       // gets the level of magic resistance
@@ -428,7 +428,7 @@ class TCharacter : public TComplexObject
     virtual void UpdateAction(int32_t bits = 0);
       // Called by Pulse() to update the action blocks
 
-    bool ResolveHit(PTCharacter targ, 
+    bool ResolveHit(TCharacter* targ, 
         PSCharAttackData attack, PSCharAttackImpact attackimpact, int32_t attackdamage);
     // This function is called by the ResolveAttack() function to resolve hits for
     // multiple characters.  The characters are usually found by calling the FindCharacters()
@@ -459,21 +459,21 @@ class TCharacter : public TComplexObject
       // Check path along current angle and adjuct accordingly
     TObjectInstance* FindObjAhead();
       // Find object in front of character
-    bool CanHearCharacter(PTCharacter chr);
+    bool CanHearCharacter(TCharacter* chr);
       // Returns true if this character can hear the last noise made by 'chr'
-    int32_t FindCharacters(PTCharacter chars[], int32_t maxchars, 
+    int32_t FindCharacters(TCharacter* chars[], int32_t maxchars, 
         int32_t range = 128, int32_t angle = -1, int32_t anglerange = 32, int32_t flags = 0);
       // Finds characters given the above parameters.  Will find all chars in range from
       // direction 'angle' if not -1 with angle range of 32.  Puts the closest character
       // at the beginning of the list, all other characters are in random order.  Returns
       // the number of characters found.
-    PTCharacter FindCharacter(int32_t range = 128, int32_t angle = -1, int32_t anglerange = 32, int32_t flags = 0);
+    TCharacter* FindCharacter(int32_t range = 128, int32_t angle = -1, int32_t anglerange = 32, int32_t flags = 0);
       // Calls the FindCharacters function above with only 1 character
       // Finds characters given the above parameters.  Will find all chars in range from
       // direction 'angle' if not -1 with angle range of 32.
-    PTCharacter FindCharacterAhead(int32_t angle, int32_t anglerange = 32);
+    TCharacter* FindCharacterAhead(int32_t angle, int32_t anglerange = 32);
       // Find closest character in this direction
-    PTCharacter FindClosestEnemy(int32_t angle = -1, int32_t anglerange = 32);
+    TCharacter* FindClosestEnemy(int32_t angle = -1, int32_t anglerange = 32);
       // Finds the closest character attacking this character
     void ResetStealthValues();
       // Based on character position, lights, and stealth, sets noise and glimpse

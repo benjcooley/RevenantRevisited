@@ -1632,7 +1632,7 @@ void T3DImagery::RestoreSurfaces()
 // * General Purpose Functions *
 // *****************************
 
-char* T3DImagery::FindTag(char* name, int32_t state, int32_t frame,
+char* T3DImagery::FindTag(const char* name, int32_t state, int32_t frame,
     int32_t* foundstate, int32_t* foundframe)
 {
     for (int32_t c = 0; c < tags.NumItems(); c++)
@@ -1833,7 +1833,7 @@ bool T3DImagery::NeedsAnimator(TObjectInstance*)
 int32_t T3DControllerBuilder::numconttypes = 0;
 T3DControllerBuilder* T3DControllerBuilder::builders[MAX3DCONTROLLERTYPES];
 
-T3DControllerBuilder::T3DControllerBuilder(char* name)
+T3DControllerBuilder::T3DControllerBuilder(const char* name)
 {
     if (numconttypes < MAX3DCONTROLLERTYPES)
         builders[numconttypes++] = this;
@@ -1841,7 +1841,7 @@ T3DControllerBuilder::T3DControllerBuilder(char* name)
     controllername = _strdup(name);
 }
 
-T3DControllerBuilder* T3DControllerBuilder::GetBuilder(char* name)
+T3DControllerBuilder* T3DControllerBuilder::GetBuilder(const char* name)
 {
     if (!stricmp(name, "play") || !stricmp(name, "beg") || !stricmp(name, "end"))
         return nullptr;
@@ -1943,7 +1943,7 @@ void T3DController::Close()
 int32_t T3DAnimatorBuilder::numanimtypes = 0;
 T3DAnimatorBuilder* T3DAnimatorBuilder::builders[MAX3DANIMATORTYPES];
 
-T3DAnimatorBuilder::T3DAnimatorBuilder(char* name)
+T3DAnimatorBuilder::T3DAnimatorBuilder(const char* name)
 {
     if (numanimtypes < MAX3DANIMATORTYPES)
         builders[numanimtypes++] = this;
@@ -1964,7 +1964,7 @@ T3DAnimator* T3DAnimatorBuilder::Build(TObjectInstance* oi)
     return new T3DAnimator(oi);
 }
 
-T3DAnimatorBuilder* T3DAnimatorBuilder::GetBuilder(char* name)
+T3DAnimatorBuilder* T3DAnimatorBuilder::GetBuilder(const char* name)
 {
     for (int32_t i = 0; i < numanimtypes; i++)
         if (stricmp(name, builders[i]->animatorname) == 0)
@@ -2395,7 +2395,7 @@ void T3DAnimator::RemoveObject(int32_t objnum)
     animobjs.Delete(objnum);
 }
 
-int32_t T3DAnimator::GetObjectNum(char* name)
+int32_t T3DAnimator::GetObjectNum(const char* name)
 {
     for (int32_t c = 0; c < animobjs.NumItems(); c++)
     {
@@ -2456,7 +2456,7 @@ bool T3DAnimator::GetObjectPos(int32_t objnum, hmm_vec3& v, hmm_vec3* s)
     return true;
 }
 
-bool T3DAnimator::GetObjectPos(char* objname, hmm_vec3& v, hmm_vec3* s)
+bool T3DAnimator::GetObjectPos(const char* objname, hmm_vec3& v, hmm_vec3* s)
 {
     int32_t objnum = GetObjectNum(objname);
     if (objnum < 0) return false;
@@ -2473,7 +2473,7 @@ bool T3DAnimator::GetObjectMapPos(int32_t objnum, S3DPoint& pos)
     return true;
 }
 
-bool T3DAnimator::GetObjectMapPos(char* objname, S3DPoint& pos)
+bool T3DAnimator::GetObjectMapPos(const char* objname, S3DPoint& pos)
 {
     int32_t objnum = GetObjectNum(objname);
     if (objnum < 0) return false;

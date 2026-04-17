@@ -41,15 +41,15 @@ class T3DScene
     T3DScene();
     ~T3DScene();
 
-    bool Initialize();
+    [[nodiscard]] bool Initialize();
       // Sets up viewport, ambient light, etc.
-    bool SetSize(int32_t x, int32_t y, int32_t width, int32_t height);
+    [[nodiscard]] bool SetSize(int32_t x, int32_t y, int32_t width, int32_t height);
       // Sets the 3D viewport size
-    bool InitializeMatrices();
+    [[nodiscard]] bool InitializeMatrices();
       // Initialize view matrices
     bool Close();
 
-    void RestoreZBuffer(SRect &r);
+    void RestoreZBuffer(const SRect& r);
       // Restores a rectangle in the screen zbuffer.  Called by
       // T3DImage::RefreshZBuffer() before a 3D object is drawn.
 
@@ -58,38 +58,38 @@ class T3DScene
     void SetAmbientColor(RSColor color);
 
   // Camera / scene draw
-    void SetCameraPos(S3DPoint& pos, int32_t zdist);
+    void SetCameraPos(const S3DPoint& pos, int32_t zdist);
     bool UpdateCamera();
     void RefreshZBuffer();
     bool DrawScene();
 
   // Dynamic lights
-    int32_t AddLight(S3DPoint& pos, SColor color, int32_t intensity, int32_t multiplier);
+    int32_t AddLight(const S3DPoint& pos, SColor color, int32_t intensity, int32_t multiplier);
     bool DeleteLight(int32_t lightid);
     bool SetLightIntensity(int32_t lightid, int32_t intensity);
     bool SetLightMultiplier(int32_t lightid, int32_t multiplier);
     bool SetLightColor(int32_t lightid, SColor color);
-    bool SetLightPosition(int32_t lightid, S3DPoint& pos);
-    int32_t GetNumLights();
-    bool GetClosestLights(int32_t x, int32_t y, int32_t z, int32_t &minlight1, int32_t &minlight2, int32_t &minlight3);
+    bool SetLightPosition(int32_t lightid, const S3DPoint& pos);
+    int32_t GetNumLights() const;
+    bool GetClosestLights(int32_t x, int32_t y, int32_t z, int32_t& minlight1, int32_t& minlight2, int32_t& minlight3);
     bool LightAffectObject(int32_t x, int32_t y, int32_t z);
-    void GetLightBrightness(int32_t lightid, int32_t x, int32_t y, int32_t z, int32_t &brightness);
-    void GetLightBrightness(int32_t lightid, int32_t x, int32_t y, int32_t z, float &brightness);
-    void GetLightColor(int32_t lightid, int32_t x, int32_t y, int32_t z, int32_t &r, int32_t &g, int32_t &b);
-    void GetLightColor(int32_t lightid, int32_t x, int32_t y, int32_t z, float &r, float &g, float &b);
+    void GetLightBrightness(int32_t lightid, int32_t x, int32_t y, int32_t z, int32_t& brightness);
+    void GetLightBrightness(int32_t lightid, int32_t x, int32_t y, int32_t z, float& brightness);
+    void GetLightColor(int32_t lightid, int32_t x, int32_t y, int32_t z, int32_t& r, int32_t& g, int32_t& b);
+    void GetLightColor(int32_t lightid, int32_t x, int32_t y, int32_t z, float& r, float& g, float& b);
     void ResetAllLights();
 
   // Animator list
     int32_t AddAnimator(T3DAnimator* animator);
     bool RemoveAnimator(uint32_t animid);
-    int32_t GetNumAnimators();
+    int32_t GetNumAnimators() const;
 
   // Texture format conversion (still needed — on-disk textures are in a
   // small set of legacy pixel formats, we convert to sokol-friendly ones).
     void GetTextureFormats();
-    void GetClosestTextureFormat(SSurfaceDesc* srcsd, SSurfaceDesc* dstsd);
+    void GetClosestTextureFormat(const SSurfaceDesc* srcsd, SSurfaceDesc* dstsd);
     void ConvertTexture(
-        SSurfaceDesc* srcsd, void* srcpixels, void* srcpal,
+        const SSurfaceDesc* srcsd, const void* srcpixels, const void* srcpal,
         SSurfaceDesc* dstsd, void* dstpixels, void* dstpal);
       // Also generates mask/alpha data if a color key is supplied on srcsd.
 
@@ -97,15 +97,15 @@ class T3DScene
     bool BeginScene();
     bool EndScene();
     bool SetRenderState(ERender3DState rs, uint32_t data);
-    bool GetRenderState(ERender3DState rs, uint32_t *data);
+    bool GetRenderState(ERender3DState rs, uint32_t* data) const;
     bool SetLightState(ERender3DLightState ls, uint32_t data);
-    bool GetLightState(ERender3DLightState ls, uint32_t *data);
-    bool SetTransform(ERender3DTransform ts, hmm_mat4* matrix);
-    bool GetTransform(ERender3DTransform ts, hmm_mat4* matrix);
+    bool GetLightState(ERender3DLightState ls, uint32_t* data) const;
+    bool SetTransform(ERender3DTransform ts, const hmm_mat4* matrix);
+    bool GetTransform(ERender3DTransform ts, hmm_mat4* matrix) const;
     bool DrawIndexedPrimitive(
-        ERender3DPrim pt, ERender3DVertex vt, void* v, uint32_t vc, uint16_t* i, uint32_t ic, uint32_t flags);
+        ERender3DPrim pt, ERender3DVertex vt, const void* v, uint32_t vc, const uint16_t* i, uint32_t ic, uint32_t flags);
     bool DrawPrimitive(
-        ERender3DPrim pt, ERender3DVertex vt, void* v, uint32_t vc, uint32_t flags);
+        ERender3DPrim pt, ERender3DVertex vt, const void* v, uint32_t vc, uint32_t flags);
 
   // Binds a texture for subsequent draws. Texture handle is an engine-side
   // key; the sg_image is resolved from it during pipeline binding.

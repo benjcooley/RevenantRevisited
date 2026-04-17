@@ -28,10 +28,10 @@ class TMultiSurface : public TSurface
         TSurface* surface3, bool delsurf = false)
       { Initialize(surface1, surface2, surface3, delsurf); }
       // Initializes Multi surfaces
-    virtual ~TMultiSurface();
+    ~TMultiSurface() override;
       // Destroys Multi surfaces.
 
-    virtual int32_t SurfaceType() { return SURFACE_MULTI; }
+    int32_t SurfaceType() override { return SURFACE_MULTI; }
       // Returns type of surface this is
 
     void Initialize(TSurface* surface1,
@@ -47,37 +47,37 @@ class TMultiSurface : public TSurface
     void SetNormalBuffer(TSurface* surf) { normals = surf; }
       // Sets the normal buffer surface manually
 
-    virtual TSurface* GetGraphicsBuffer() { return graphics; }
+    TSurface* GetGraphicsBuffer() override { return graphics; }
+      // Returns the primary (color) surface backing this multisurface.
+    TSurface* GetZBuffer() override { return zbuffer; }
       // Returns ZBuffer surface for this surface (if it has one)
-    virtual TSurface* GetZBuffer() { return zbuffer; }
-      // Returns ZBuffer surface for this surface (if it has one)
-    virtual TSurface* GetNormalBuffer() { return normals; }
+    TSurface* GetNormalBuffer() override { return normals; }
       // Returns the normal buffer for this surface (if it has one)
 
-    virtual sg_image GetSGImage() { return graphics->GetSGImage(); }
+    sg_image GetSGImage() override { return graphics->GetSGImage(); }
       // Returns the sokol image backing the graphics surface (sg_image{0} if
       // this surface type doesn't carry one).
 
-    virtual bool Lost() { return lost; }
+    bool Lost() override { return lost; }
       // Returns true if the surface needs to be regenerated.
-    
-    virtual void Reset();
+
+    void Reset() override;
       // Resets originx, originy, cliprect and clipmode to screen defaults.
-    virtual void *Lock() { return locked = graphics->Lock(); }
-      // Locks surface. Returns pointer to surface or nullptr 
+    void* Lock() override { return locked = graphics->Lock(); }
+      // Locks surface. Returns pointer to surface or nullptr
       // if buffer couldn't be locked.
-    virtual bool Unlock() { locked = nullptr; return graphics->Unlock(); }
+    bool Unlock() override { locked = nullptr; return graphics->Unlock(); }
       // Unlocks surface.
-    
-    virtual void SetOrigin(int32_t x, int32_t y);
+
+    void SetOrigin(int32_t x, int32_t y) override;
       // Sets drawing origin
-    virtual void SetClipRect(int32_t x, int32_t y, int32_t w, int32_t h);
+    void SetClipRect(int32_t x, int32_t y, int32_t w, int32_t h) override;
       // Sets display clipping rectangle
-    virtual void SetClipMode(int32_t mode);
+    void SetClipMode(int32_t mode) override;
       // Sets clipping to normal of wrap around
 
   // Low level Blit which ONLY does primary surface (no Z or Normal Buffer)
-    virtual bool BlitHandler(SDrawParam* dp, TSurface* surface, int32_t ddflags = 0)
+    bool BlitHandler(SDrawParam* dp, TSurface* surface, int32_t ddflags = 0) override
       { return graphics->BlitHandler(dp, surface, ddflags); }
       // Blits from surface to surface.  dp->rect sets size of blit,
       // dp->x/y specifies dest. origin.

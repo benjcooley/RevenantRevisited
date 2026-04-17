@@ -365,7 +365,7 @@ void TCharAnimator::SetMaterialTransparency(T3DImagery* img)
         S3DMat m;
         img->GetMaterial(0, &m);
         m.matdesc.ambient.a = m.matdesc.diffuse.a =
-            m.matdesc.specular.a = m.matdesc.emmissive.a = transparency;
+            m.matdesc.specular.a = m.matdesc.emissive.a = transparency;
         img->SetMaterial(0, &m);
     }
 }
@@ -377,7 +377,7 @@ void TCharAnimator::ResetMaterialTransparency(T3DImagery* img)
         S3DMat m;
         img->GetMaterial(0, &m);
         m.matdesc.ambient.a = m.matdesc.diffuse.a =
-            m.matdesc.specular.a = m.matdesc.emmissive.a = 100.0f;
+            m.matdesc.specular.a = m.matdesc.emissive.a = 100.0f;
         img->SetMaterial(0, &m);
     }
 }
