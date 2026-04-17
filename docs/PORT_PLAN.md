@@ -41,7 +41,7 @@ Mapped from the Direct3D / Windows API dependency audit.
 | 6 | DirectSound                     | mostly stubbed    | `LPDIRECTSOUND`, `LPDIRECTSOUNDBUFFER`, `LPDIRECTSOUND3DBUFFER`             | 1 header, deferred | `miniaudio` (header-only) or `sokol_audio`                                              |
 | 7 | DirectInput                     | fully stubbed     | `LPDIRECTINPUT`, `DIJOYSTATE`                                               | 1 file, deferred | `sokol_app` keyboard/mouse; `GLFW`/IOKit for gamepad later                                   |
 | 8 | DirectPlay (multiplayer)        | unknown / deferred | TBD                                                                        | TBD        | Deferred — multiplayer was "terrible" per author; revisit post-singleplayer                   |
-| 9 | MMX intrinsics + inline asm     | untouched         | `_mm_*`, `__asm` blocks (notably `src/dls.cpp:1263`)                        | 5 files    | Scalar fallback first; portable SIMD (`xsimd` / `std::experimental::simd`) later if profiled    |
+| 9 | MMX intrinsics + inline asm     | delete            | `_mm_*`, `__asm` blocks (notably `src/dls.cpp:1263`)                        | 5 files    | **Not in shipped build.** Delete MMX paths when touching the file; keep / write scalar fallback |
 | 10 | `<windows.h>` / COM misc        | scattered        | `#include <windows.h>` in 13 files                                          | broad      | Remove per file as the above subsystems are addressed                                          |
 
 ## 4. Phased plan
@@ -95,7 +95,7 @@ Rolling, not a single phase: as each file is touched, fold in:
 
 - **Data compatibility.** The `src/` snapshot predates release by ~6 months; `data/` is the shipped 1998 set. Animation / imagery / save / sector formats may have shifted late in development. Expect loader failures in Phase 3 that require reading release-era struct layouts out of `recon/` to repair.
 - **Sokol coverage gap.** `sokol_gfx` is a good Metal abstraction but provides no 3D math, no mesh loading, and no scene management — those all have to come from the existing engine code or `HandmadeMath`.
-- **MMX / inline asm in DLS and effects.** Deoptimized scalar fallback is correct but potentially slow. Defer the perf question until a frame renders.
+- **MMX / inline asm in DLS and effects.** Not relevant — the MMX paths in the pre-release snapshot were dropped before shipping. Delete them as files are touched; keep scalar code.
 - **Multiplayer via DirectPlay.** Not replaced anywhere in sokol's ecosystem. Deferred.
 
 ## 6. What's explicitly not in scope
