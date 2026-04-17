@@ -17,6 +17,7 @@
 #include "player.h"
 #include "playscreen.h"
 #include "resource.h"
+#include "revutils.h"
 #include "script.h"
 #include "sound.h"
 #include "stream.h"
@@ -138,7 +139,7 @@ int32_t ConvertToFacing(const S3DPoint& target)
     return angle;
 }
 
-int32_t ConvertToFacing(const S3DPoint& pos, S3DPoint& target)
+int32_t ConvertToFacing(const S3DPoint& pos, const S3DPoint& target)
 {
     S3DPoint p;
 
@@ -262,6 +263,25 @@ TObjectInstance* TInventoryIterator::NextItem()
     // Currently this DOES NOT recurse into other object's inventories,
     // because nothing uses it that way.  Copying some code from TMapIterator
     // would make it possible to do so if it is ever needed.
+    item = nullptr;
+
+    if (owner)
+    {
+        do
+        {
+            if (invindex >= owner->NumInventoryItems())
+                break;
+
+            item = owner->GetInventory(invindex++);
+
+        } while (!item);
+    }
+
+    return item;
+}
+
+const TObjectInstance* TConstInventoryIterator::NextItem() const
+{
     item = nullptr;
 
     if (owner)
@@ -1773,7 +1793,7 @@ void TObjectInstance::LoadInventory(RTInputStream is, int32_t version)
 
     if (num > 2048) // Maddness!!  Maddness!!
     {
-        _RPT1(_CRT_WARN, "Invalid inventory size for obj %s\n", this->GetName());
+        fprintf(stderr, "Invalid inventory size for obj %s\n", this->GetName());
         return;
     }
 
@@ -1787,7 +1807,7 @@ void TObjectInstance::LoadInventory(RTInputStream is, int32_t version)
         }
         else
         {
-            _RPT1(_CRT_WARN, "Invalid inventory object for obj %s", this->GetName());
+            fprintf(stderr, "Invalid inventory object for obj %s", this->GetName());
         }
     }
 }
@@ -2214,7 +2234,8 @@ bool TStatisticDefList::ParseStat(SStatisticDef &stat, TToken &t)
         if (!Parse(t, "%5t %d %d %d", uniqueidstr, &stat.def, &stat.min, &stat.max))
             return false;
 
-        strupr(uniqueidstr);
+        for (char *p = uniqueidstr; *p; ++p)
+            *p = (char)toupper((unsigned char)*p);
         stat.uniqueid = *(uint32_t *)uniqueidstr; // Get groovy 4 char unique id string for stats
     }
 
@@ -2703,7 +2724,7 @@ bool TObjectClass::LoadClasses(bool lock, bool reload)
 {
     char fname[MAXPATHLEN];
     FILE *classfp;
-    struct _stat st;
+    struct stat st;
 
     sprintf(fname, "%sclass.def", ClassDefPath);
 
@@ -2719,7 +2740,7 @@ bool TObjectClass::LoadClasses(bool lock, bool reload)
   // and use the lastest time stamp from that.
     if (!NoQuickLoad && !reload)
     {
-        _fstat(fileno(classfp), &st);
+        fstat(fileno(classfp), &st);
         TObjectImagery::QuickLoadHeaders(st.st_mtime);
     }
 
@@ -2753,6 +2774,9 @@ bool TObjectClass::LoadClasses(bool lock, bool reload)
     {
         if (t.Type() == TKN_RETURN || t.Type() == TKN_WHITESPACE)
             t.LineGet();
+
+        if (t.Type() == TKN_EOF)
+            break;
 
         if (t.Is("CLASS"))
         {
@@ -2955,10 +2979,10 @@ bool TObjectClass::ParseClass(TToken &t, bool reload)
         return false;
     }
 
-    TObjectClass* cl = TObjectClass::GetClass(TObjectClass::FindClass(t.Text()));
+    TObjectClass* cl = TObjectClass::GetClass(TObjectClass::FindClass((char *)t.Text()));
     if (!cl)
     {
-        _RPT1(_CRT_ASSERT, "Class %s not found", t.Text());
+        fprintf(stderr, "Class %s not found\n", t.Text());
         t.LineGet();
         if (!t.SkipBlock())
             Error("Unexpected EOF");
@@ -3248,7 +3272,7 @@ uint32_t GenerateUniqueID()
 {
     uint32_t UniqueID;
     uint32_t r = (uint32_t)random(0, 255);
-    uint32_t t = GetTickCount() & 255;
+    uint32_t t = tickcount() & 255;
 
     UniqueID = (r << 24) | (t << 16) | UniqueTypeID;
 

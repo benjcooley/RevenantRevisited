@@ -28,9 +28,9 @@ static int32_t lastdayflag;
 TArea::TArea()
 {
     flags = 0;
-    name[0] = nullptr;
+    name[0] = '\0';
     rects.Clear();
-    scriptfile[0] = nullptr;
+    scriptfile[0] = '\0';
     amblight = 30;
     nightamblight = 10;
     ambcolor.red = ambcolor.green = ambcolor.blue = 255;
@@ -181,9 +181,12 @@ bool TArea::Load(char *aname, TToken &t)
         }
         else
         {
-            char buf[80];
-            sprintf(buf, "Invalid area tag %s", t.Text());
-            t.Error(buf);
+            // Retail added area tags (AUDIOENV, ...) not in the pre-release
+            // source. Skip to the next line rather than aborting.
+            fprintf(stderr, "[area] skipping unknown tag '%s'\n", t.Text());
+            while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+                t.Get();
+            t.LineGet();
         }
     }
 
@@ -466,7 +469,7 @@ bool TAreaManager::Load()
     char fname[MAXPATHLEN];
     sprintf(fname, "%s%s", ClassDefPath, "area.def");
 
-    FILE *fp = popen(fname, "rb");
+    FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
         FatalError("Unable to find game area file AREA.DEF");
 

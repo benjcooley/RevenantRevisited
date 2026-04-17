@@ -5,7 +5,6 @@
 // *************************************************************************
 
 #include <stdio.h>
-#include <io.h>
 #include <ctype.h>
 #include <math.h>
 
@@ -17,11 +16,12 @@
 #include "mappane.h"
 #include "dialog.h"
 #include "file.h"
+#include "revutils.h"
 #include "exit.h"
 #include "player.h"
 #include "textbar.h"
 
-int32_t TScript::pauseall = false;
+bool TScript::pauseall = false;
 
 TObjectInstance* TakenObject = nullptr;
 TObjectInstance* DroppedObject = nullptr;
@@ -54,9 +54,9 @@ TScript::TScript(TScriptProto* prototype)
     depth = 0;
     lastpriority = 0;
     newtrigger = 0;
-    newtriggerstr[0] = nullptr;
+    newtriggerstr[0] = '\0';
     block[0].conditional = COND_UNDEF;
-    block[0].loopstart = nullptr;
+    block[0].loopstart = 0;
 }
 
 TScript::TScript() 
@@ -67,8 +67,8 @@ TScript::TScript()
     depth = 0; 
     newtrigger = 0; 
     lastpriority = 0;
-    block[depth].conditional = COND_UNDEF; 
-    block[depth].loopstart = nullptr; 
+    block[depth].conditional = COND_UNDEF;
+    block[depth].loopstart = 0;
 //  ScriptManager.AddScript(this); 
 }
 
@@ -100,7 +100,7 @@ void TScript::StartTrigger(TScriptProto* proto, PSScriptTrigger st)
     Start(proto, st->pos, st->priority);
     trigger = st->type;         // Set current trigger we're going to do
     newtrigger = 0;             // Set manual new trigger (if any) to 0
-    newtriggerstr[0] = nullptr;    // Set manual new trigger key (if any) to nullptr
+    newtriggerstr[0] = '\0';    // Set manual new trigger key (if any) to nullptr
 }
 
 bool TScript::Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* context)
@@ -150,7 +150,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* c
             else
             {
 //              TObjectInstance* inst = MapPane.ObjectInRange(context->Pos(), st->dist, OBJSET_CHARACTER);
-//              if (st->name[0] == nullptr || !stricmp(st->name, inst->GetName()))
+//              if (st->name[0] == '\0' || !stricmp(st->name, inst->GetName()))
 //                  retval = true;
             }
         }
@@ -173,7 +173,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* c
         else 
         {
             TObjectInstance* inst = MapPane.ObjectInCube(&st->cube, OBJSET_MOVING);
-            if (inst && (st->name[0] == nullptr || !stricmp(st->name, inst->GetName())))
+            if (inst && (st->name[0] == '\0' || !stricmp(st->name, inst->GetName())))
                 retval = true;
         }
         break;
@@ -258,7 +258,7 @@ void TScript::Continue(TObjectInstance* context)
     // *******************
 
     // now execute the current thread
-    s.SetPos((uint32_t)ip);
+    s.SetPos((uint32_t)(uintptr_t)ip);
 
     int32_t iterations = MAXITERATIONS;
 
@@ -273,8 +273,8 @@ void TScript::Continue(TObjectInstance* context)
         }
 
         uint32_t thisline = s.GetPos();            // hang onto it in case of loop
-        if (thisline > (uint32_t)ip && !isspace(*((char *)thisline)) &&
-                                    !isspace(*((char *)thisline - 1)))
+        if (thisline > (uint32_t)(uintptr_t)ip && !isspace(*((char *)(uintptr_t)thisline)) &&
+                                    !isspace(*((char *)(uintptr_t)thisline - 1)))
             thisline--;                         // token code jacks the pointer sometimes
 
         t.Get();
@@ -328,7 +328,7 @@ void TScript::Continue(TObjectInstance* context)
 
             if (bits & CMD_BEGIN)
             {
-                block[++depth].loopstart = nullptr;
+                block[++depth].loopstart = 0;
                 block[depth].conditional = COND_UNDEF;
             }
 
@@ -338,10 +338,10 @@ void TScript::Continue(TObjectInstance* context)
                     ScriptError("END without matching BEGIN", t.LineNum());
             }
 
-            if (block[depth].loopstart != nullptr)
+            if (block[depth].loopstart != 0)
             {
                 s.SetPos(block[depth].loopstart);
-                block[depth].loopstart = nullptr;
+                block[depth].loopstart = 0;
             }
 
             if (bits & CMD_LOOP)
@@ -355,7 +355,7 @@ void TScript::Continue(TObjectInstance* context)
 
             if (bits & CMD_JUMP)
             {
-                s.SetPos((uint32_t)ip);
+                s.SetPos((uint32_t)(uintptr_t)ip);
             }
         }
         else
@@ -523,7 +523,7 @@ bool TScriptProto::ParseCriteria(TToken &t)
             if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
                 ScriptError("Expected object parent identifier", t.LineNum());
 
-            parent = ScriptManager.FindScriptProto(t.Text());
+            parent = ScriptManager.FindScriptProto((char*)t.Text());
 
             t.WhiteGet();
         }
@@ -709,7 +709,7 @@ int32_t TScriptProto::ParseScript(TToken &t)
         }
 
         st.pos = t.GetPos() - start;
-    
+
         t.SkipBlanks();
 
         if (st.type != 0)
@@ -732,14 +732,23 @@ int32_t TScriptProto::ParseScript(TToken &t)
     if (!t.Is("END"))
         ScriptError("Object block END expected", t.LineNum());
 
-    int32_t len = (int32_t)(t.GetPos() - start - 4); // Get length of buffer - 4 for end token (END\n)
-    text = new char[len+1];
-    memcpy(text, (void *)start, len);
-    text[len] = 0;
+    // Extract the trigger body from the full-buffer copy SetBuffer left on
+    // text. start/GetPos are offsets into the parser's source buffer, which
+    // has the same contents. The "-4" trims the trailing "END\n".
+    int32_t bodylen = (int32_t)(t.GetPos() - start - 4);
+    char *newtext = (char *)malloc(bodylen + 1);
+    if (text)
+    {
+        memcpy(newtext, text + start, bodylen);
+        free(text);
+    }
+    newtext[bodylen] = 0;
+    text = newtext;
+    len = bodylen;
 
     t.LineGet();
 
-    return len;
+    return bodylen;
 }
 
 bool TScriptProto::WriteScript(FILE *fp)
@@ -762,7 +771,7 @@ bool TGameState::Load(char *filename)
     char fname[MAXPATHLEN];
     sprintf(fname, "%s%s", ClassDefPath, filename);
 
-    FILE *fp = fopen(fname, "rb");
+    FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
         FatalError("Unable to find game state file %s", filename);
 
@@ -809,7 +818,7 @@ bool TGameState::Save(char *filename)
     char fname[MAXPATHLEN];
     sprintf(fname, "%s%s", ClassDefPath, filename);
 
-    FILE *fp = popen(fname, "wt");
+    FILE *fp = rev_fopen(fname, "wt");
     if (!fp)
         return false;
 
@@ -835,11 +844,13 @@ bool TScriptManager::Initialize()
 {
     scripts.Clear();
 
+#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
     if (!_CrtCheckMemory())
     {
         _CrtMemDumpAllObjectsSince(nullptr);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
+#endif
 
     return (Load("master.s") && gamestate.Load("state.def"));
 }
@@ -859,11 +870,13 @@ bool TScriptManager::Load(char *filename, void *owner)
 {
     char fname[MAXPATHLEN];
 
+#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
     if (!_CrtCheckMemory())
     {
         _CrtMemDumpAllObjectsSince(nullptr);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
+#endif
 
     sprintf(fname, "%s%s", ClassDefPath, filename);
 
@@ -872,7 +885,9 @@ bool TScriptManager::Load(char *filename, void *owner)
         FatalError("Unable to find game master script file %s", filename);
 
     bool retval = true;
-    int32_t bufsize = _filelength(fileno(fp));
+    fseek(fp, 0, SEEK_END);
+    int32_t bufsize = (int32_t)ftell(fp);
+    fseek(fp, 0, SEEK_SET);
     char *buffer = new char[bufsize+1];
 
     if (fread(buffer, 1, bufsize, fp) < (size_t)bufsize)
@@ -891,11 +906,13 @@ bool TScriptManager::Load(char *filename, void *owner)
 
     scriptsdirty = false;
 
+#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
     if (!_CrtCheckMemory())
     {
         _CrtMemDumpAllObjectsSince(nullptr);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
+#endif
 
     return retval;
 }
@@ -981,9 +998,10 @@ void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
         TScriptProto* script = new TScriptProto(nullptr, owner, filename, buffer);
         script->ParseScript(t);
 
-        for (int32_t c = 0; c < scripts.NumItems(); c++) // Add into unused entries
+        int32_t c;
+        for (c = 0; c < scripts.NumItems(); c++) // Add into unused entries
         {
-            if (!scripts.Used(c))  
+            if (!scripts.Used(c))
             {
                 scripts.Set(script, c);
                 break;
