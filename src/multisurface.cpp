@@ -17,8 +17,8 @@ TMultiSurface::~TMultiSurface()
     Close();
 }
 
-void TMultiSurface::Initialize(PTSurface surface1, 
-    PTSurface surface2, PTSurface surface3, bool delsurf)
+void TMultiSurface::Initialize(TSurface* surface1, 
+    TSurface* surface2, TSurface* surface3, bool delsurf)
 {
     SetGraphicsBuffer(surface1);
     SetZBuffer(surface2);
@@ -27,7 +27,7 @@ void TMultiSurface::Initialize(PTSurface surface1,
     deletesurf = delsurf;
 }
 
-void TMultiSurface::SetGraphicsBuffer(PTSurface surface)
+void TMultiSurface::SetGraphicsBuffer(TSurface* surface)
 {
     graphics = surface;
 

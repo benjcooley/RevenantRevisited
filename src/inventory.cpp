@@ -49,7 +49,7 @@ void TInventory::DrawBackground()
 
         for (TInventoryIterator i(container); i; i++)
         {
-            PTObjectInstance oi = i.Item();
+            TObjectInstance* oi = i.Item();
 
             if ((!isdragging || oi->InventNum() != grabslot) && oi->InventNum() < 256)
             {
@@ -85,7 +85,7 @@ void TInventory::Animate(bool draw)
 {
     if (draw && container && !mousebutton)
     {
-        PTObjectInstance inst = container->GetInventorySlot(OnSlot(cursorx - GetPosX(), cursory - GetPosY()));
+        TObjectInstance* inst = container->GetInventorySlot(OnSlot(cursorx - GetPosX(), cursory - GetPosY()));
         CursorOverObject(inst);
     }
 }
@@ -113,7 +113,7 @@ void TInventory::MouseClick(int32_t button, int32_t x, int32_t y)
                     SetContainer(container->GetOwner());
                 else
                 {
-                    PTObjectInstance inst = container->GetInventorySlot(grabslot);
+                    TObjectInstance* inst = container->GetInventorySlot(grabslot);
                     if (inst && container->GetOwner()->FindFreeInventorySlot() < MAXINVITEMS)
                     {
                         inst->RemoveFromInventory();
@@ -129,8 +129,8 @@ void TInventory::MouseClick(int32_t button, int32_t x, int32_t y)
 
             if (newslot >= 0)
             {
-                PTObjectInstance inst = container->GetInventorySlot(grabslot);
-                PTObjectInstance oi = container->GetInventorySlot(newslot);
+                TObjectInstance* inst = container->GetInventorySlot(grabslot);
+                TObjectInstance* oi = container->GetInventorySlot(newslot);
 
                 bool used = false;
 
@@ -152,13 +152,13 @@ void TInventory::MouseClick(int32_t button, int32_t x, int32_t y)
             // handle transfers from other panes
             if (EquipPane.GetHeldSlot() >= 0)
             {
-                PTObjectInstance inst = ((PTPlayer)GetTopContainer())->GetEquip(EquipPane.GetHeldSlot());
+                TObjectInstance* inst = ((TPlayer*)GetTopContainer())->GetEquip(EquipPane.GetHeldSlot());
                 int32_t newslot = OnSlot(x, y);
                 if (inst && newslot >= 0)
                 {
                     if (GetTopContainer()->GetInventorySlot(newslot) == nullptr)
                     {
-                        ((PTPlayer)GetTopContainer())->Equip(nullptr, EquipPane.GetHeldSlot());    // clear from eq list
+                        ((TPlayer*)GetTopContainer())->Equip(nullptr, EquipPane.GetHeldSlot());    // clear from eq list
                         inst->SetInventNum(newslot);                    // add to inventory
                         Update();
                     }
@@ -187,7 +187,7 @@ void TInventory::MouseMove(int32_t button, int32_t x, int32_t y)
             // don't bother switching to drag mode until they actually move it
             if (absval(startposx - x) >= 2 || absval(startposy - y) >= 2)
             {
-                PTObjectInstance inst = container->GetInventorySlot(grabslot);
+                TObjectInstance* inst = container->GetInventorySlot(grabslot);
 
                 if (inst && inst->InventoryImage())
                 {
@@ -207,7 +207,7 @@ void TInventory::MouseMove(int32_t button, int32_t x, int32_t y)
         }
 }
 
-void TInventory::DrawAnim(PTObjectInstance inst, PTBitmap bm)
+void TInventory::DrawAnim(TObjectInstance* inst, PTBitmap bm)
 {
     if (!container || inst->GetOwner() != container)
         return;
@@ -244,8 +244,8 @@ int32_t TInventory::OnSlot(int32_t x, int32_t y)
 
 void TInventory::SwapSlots(int32_t oldslot, int32_t newslot)
 {
-    PTObjectInstance inst0 = container->GetInventorySlot(oldslot);
-    PTObjectInstance inst1 = container->GetInventorySlot(newslot);
+    TObjectInstance* inst0 = container->GetInventorySlot(oldslot);
+    TObjectInstance* inst1 = container->GetInventorySlot(newslot);
 
     if (inst0)
         inst0->SetInventNum(newslot);

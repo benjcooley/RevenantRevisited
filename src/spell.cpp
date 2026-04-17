@@ -312,8 +312,8 @@ PSSpellVariant TSpellList::GetVariantDataByName(char* name)
 // **************
 
 // TSpell Constructor
-TSpell::TSpell(PTObjectInstance invoke, 
-    PTObjectInstance *targ, int32_t numtargs, PS3DPoint sourcepos, 
+TSpell::TSpell(TObjectInstance* invoke, 
+    TObjectInstance* *targ, int32_t numtargs, S3DPoint* sourcepos, 
     PSSpellData dat, PSSpellVariant var, PTSpell mtr)
 { 
     invoker = invoke; 
@@ -326,7 +326,7 @@ TSpell::TSpell(PTObjectInstance invoke,
     if (!targ)
         targets[0] = invoker;
     else
-        memcpy(targets, targ, numtargs * sizeof(PTObjectInstance));
+        memcpy(targets, targ, numtargs * sizeof(TObjectInstance*));
 
     spell = dat; 
     variant = var; 
@@ -341,7 +341,7 @@ TSpell::TSpell(PTObjectInstance invoke,
 }
 
 // Returns source pos, or right hand pos if 'source' is (-1,-1,-1).
-bool TSpell::GetSourcePos(RS3DPoint sourcepos)
+bool TSpell::GetSourcePos(S3DPoint& sourcepos)
 {
     if (source.x != -1 || source.y != -1 || source.z != -1) // If source used...
     {
@@ -417,7 +417,7 @@ bool TSpell::Timer()
     return timer == 0; 
 }
 
-void TSpell::Damage(PTObjectInstance ch)
+void TSpell::Damage(TObjectInstance* ch)
 {
     int32_t mindam = variant->mindamage;
     int32_t maxdam = variant->maxdamage;
@@ -446,8 +446,8 @@ void TSpell::ManaDrain()
 // *********************
 
 // cast a spell by using its name
-bool TSpellManager::CastByName(char* name, PTObjectInstance invoker, 
-    PTObjectInstance *targets, int32_t numtargs, PS3DPoint sourcepos, PTSpell mst)
+bool TSpellManager::CastByName(char* name, TObjectInstance* invoker, 
+    TObjectInstance* *targets, int32_t numtargs, S3DPoint* sourcepos, PTSpell mst)
 {
     PSSpellData spell_data = SpellList.GetSpellDataByName(name);
     PSSpellVariant variant_data = SpellList.GetVariantDataByName(name);
@@ -469,8 +469,8 @@ bool TSpellManager::CastByName(char* name, PTObjectInstance invoker,
 }
 
 // cast a spell by using the talismans
-bool TSpellManager::CastByTalismans(char* talismans, PTObjectInstance invoker, 
-    PTObjectInstance *targets, int32_t numtargs, PS3DPoint sourcepos, PTSpell mst)
+bool TSpellManager::CastByTalismans(char* talismans, TObjectInstance* invoker, 
+    TObjectInstance* *targets, int32_t numtargs, S3DPoint* sourcepos, PTSpell mst)
 {
     PSSpellData spell_data = SpellList.GetSpellDataByTalismans(talismans);
     PSSpellVariant variant_data = SpellList.GetVariantDataByTalismans(talismans);

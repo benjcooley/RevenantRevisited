@@ -38,7 +38,7 @@ static char imagerypath[FILENAMELEN];
 // * TObjectAnimator *
 // *******************
 
-TObjectAnimator::TObjectAnimator(PTObjectInstance oi)
+TObjectAnimator::TObjectAnimator(TObjectInstance* oi)
 {
     inst = oi;
     image = oi->GetImagery();
@@ -111,7 +111,7 @@ TObjectImagery::~TObjectImagery()
     FreeBody();
 }
 
-int32_t TObjectImagery::RegisterImagery(char *filename, PSImageryHeader header, uint32_t headersize)
+int32_t TObjectImagery::RegisterImagery(char *filename, SImageryHeader* header, uint32_t headersize)
 {
     for (int32_t c = 0; c < EntryArray.NumItems(); c++)
     {
@@ -128,7 +128,7 @@ int32_t TObjectImagery::RegisterImagery(char *filename, PSImageryHeader header, 
         char buf[FILENAMELEN];
         strcpy(buf, imagerypath);
         strcat(buf, filename);
-        header   = (PSImageryHeader)LoadResourceHeader(buf, -1, (uint32_t *)&headersize);
+        header   = (SImageryHeader*)LoadResourceHeader(buf, -1, (uint32_t *)&headersize);
     }
 
     if (!header)
@@ -199,7 +199,7 @@ int32_t TObjectImagery::RegisterImagery(char *filename, PSImageryHeader header, 
         int32_t skipdist = sizeof(SImageryHeader) + (sizeof(SImageryStateHeader) * (ie.header->numstates - 1));
         uint8_t *ptr = newbuf + skipdist;
 
-        PSImageryHeader head = (PSImageryHeader)newbuf;
+        SImageryHeader* head = (SImageryHeader*)newbuf;
         memcpy(newbuf, ie.header, sizeof(SImageryHeader));
 
         for (i = 0; i < ie.header->numstates; i++)
@@ -221,7 +221,7 @@ int32_t TObjectImagery::RegisterImagery(char *filename, PSImageryHeader header, 
                 sh->walkmap.set(nullptr);
         }
 
-        ie.header = (PSImageryHeader)newbuf;
+        ie.header = (SImageryHeader*)newbuf;
         ie.headersize = size;
         ie.headerdirty = true;
 #endif
@@ -236,7 +236,7 @@ int32_t TObjectImagery::RegisterImagery(char *filename, PSImageryHeader header, 
     return id;
 }
 
-PSImageryEntry TObjectImagery::GetImageryEntry(int32_t id)
+SImageryEntry* TObjectImagery::GetImageryEntry(int32_t id)
 {
     return &(EntryArray[id]);
 }
@@ -334,7 +334,7 @@ int32_t TObjectImagery::FindImagery(char *imageryname)
     return -1; 
 }
 
-PTObjectImagery TObjectImagery::LoadImagery(int32_t imgid)
+TObjectImagery* TObjectImagery::LoadImagery(int32_t imgid)
 {
     if (imgid < 0 || EntryArray.Used(imgid) == false ||
         imgid >= EntryArray.NumItems())
@@ -365,7 +365,7 @@ PTObjectImagery TObjectImagery::LoadImagery(int32_t imgid)
     return ie.imagery;
 }
 
-void TObjectImagery::FreeImagery(PTObjectImagery imagery)
+void TObjectImagery::FreeImagery(TObjectImagery* imagery)
 {
     if (!imagery || (uint32_t)imagery->imageryid >= (uint32_t)EntryArray.NumItems())
         return;
@@ -580,7 +580,7 @@ int32_t TObjectImagery::GetUseCount()
 extern bool UpdatingBoundingRect;
 
 // Returns screen update area and 'onscreen' intersection rectangle given data from state
-void TObjectImagery::GetScreenRect(PTObjectInstance oi, SRect &r)
+void TObjectImagery::GetScreenRect(TObjectInstance* oi, SRect &r)
 {
     if ((uint32_t)oi->GetState() >= (uint32_t)NumStates())
     {
@@ -607,7 +607,7 @@ void TObjectImagery::GetScreenRect(PTObjectInstance oi, SRect &r)
     r.bottom = r.top + st->height - 1;
 }
 
-void TObjectImagery::GetAnimRect(PTObjectInstance oi, SRect &r)
+void TObjectImagery::GetAnimRect(TObjectInstance* oi, SRect &r)
 {
     PSImageryStateHeader st = GetState(oi->GetState());
 
@@ -626,7 +626,7 @@ void TObjectImagery::GetAnimRect(PTObjectInstance oi, SRect &r)
     r.bottom = r.top + st->height - 1;
 }
 
-void TObjectImagery::ResetScreenRect(PTObjectInstance oi, int32_t state, bool frontonly)
+void TObjectImagery::ResetScreenRect(TObjectInstance* oi, int32_t state, bool frontonly)
 {
     if (state < 0)
     {
@@ -691,7 +691,7 @@ void TObjectImagery::SetWorldBoundBox(int32_t state, int32_t width, int32_t leng
         int32_t skipdist = sizeof(SImageryHeader) + (sizeof(SImageryStateHeader) * (entry->header->numstates - 1));
         uint8_t *ptr = newbuf + skipdist;
 
-        PSImageryHeader head = (PSImageryHeader)newbuf;
+        SImageryHeader* head = (SImageryHeader*)newbuf;
         memcpy(newbuf, entry->header, sizeof(SImageryHeader));
 
         for (i = 0; i < entry->header->numstates; i++)
@@ -730,7 +730,7 @@ void TObjectImagery::SetWorldBoundBox(int32_t state, int32_t width, int32_t leng
 //      VirtualUnlock(entry->header, entry->headersize);
         free(entry->header);
 
-        entry->header = (PSImageryHeader)newbuf;
+        entry->header = (SImageryHeader*)newbuf;
         entry->headersize = size;
 //      VirtualLock(entry->header, entry->headersize);
     }
@@ -742,7 +742,7 @@ void TObjectImagery::SetWorldBoundBox(int32_t state, int32_t width, int32_t leng
     entry->headerdirty = true;
 }
 
-void TObjectImagery::DrawInvItem(PTObjectInstance oi, int32_t x, int32_t y)
+void TObjectImagery::DrawInvItem(TObjectInstance* oi, int32_t x, int32_t y)
 {
     int32_t state = oi->GetState();
 
@@ -816,7 +816,7 @@ unsigned _stdcall TObjectImagery::LoaderThread(void *)
                 strcat(buf, ie.filename);
 
                 uint32_t ressize;
-                PSImageryBody body = (PSImageryBody)LoadResource(buf, -1, &ressize);
+                SImageryBody* body = (SImageryBody*)LoadResource(buf, -1, &ressize);
 
                 BEGIN_CRITICAL();
 
@@ -871,7 +871,7 @@ void TObjectImagery::ResumeLoader()
     ReleaseMutex(PauseLoaderMutex);
 }
 
-PSImageryBody TObjectImagery::LoadBody(bool wait)
+SImageryBody* TObjectImagery::LoadBody(bool wait)
 {
     if (entry->status == QE_LOADED)
         return entry->body;
@@ -891,7 +891,7 @@ PSImageryBody TObjectImagery::LoadBody(bool wait)
             strcpy(buf, imagerypath);
             strcat(buf, entry->filename);
 
-            entry->body = (PSImageryBody)LoadResource(buf, -1, (uint32_t *)&entry->ressize);
+            entry->body = (SImageryBody*)LoadResource(buf, -1, (uint32_t *)&entry->ressize);
 
             BEGIN_CRITICAL();
 
@@ -1042,7 +1042,7 @@ bool TObjectImagery::QuickLoadHeaders(time_t iflater)
             return false;
         }
 
-        PSImageryHeader header = (PSImageryHeader)malloc(headersize);
+        SImageryHeader* header = (SImageryHeader*)malloc(headersize);
         if (fread(header, headersize, 1, f) < 1)
         {
             fclose(f);

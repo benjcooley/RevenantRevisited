@@ -54,16 +54,16 @@ class TSound
     PTSound Duplicate();
         // Make a duplicate of this sound
 
-    void Play(int32_t volume = 0, int32_t freq = 0, PS3DPoint lpos = nullptr, PS3DPoint spos = nullptr);
+    void Play(int32_t volume = 0, int32_t freq = 0, S3DPoint* lpos = nullptr, S3DPoint* spos = nullptr);
     void Stop();
 
-    void SetListenerPos(PS3DPoint lpos = nullptr);
+    void SetListenerPos(S3DPoint* lpos = nullptr);
         // set the listener's position for direction-based audio
-    void SetSoundPos(PS3DPoint spos = nullptr);
+    void SetSoundPos(S3DPoint* spos = nullptr);
         // set the sound's position for direction-based audio
 
-    void GetListenerPos(PS3DPoint lpos) { memcpy(lpos, &listener_pos, sizeof(S3DPoint)); }
-    void GetSoundPos(PS3DPoint spos) { memcpy(spos, &sound_pos, sizeof(S3DPoint)); }
+    void GetListenerPos(S3DPoint* lpos) { memcpy(lpos, &listener_pos, sizeof(S3DPoint)); }
+    void GetSoundPos(S3DPoint* spos) { memcpy(spos, &sound_pos, sizeof(S3DPoint)); }
     int32_t GetSoundVolume() { return sound_volume; }
 
     uint32_t GetStatus();
@@ -162,7 +162,7 @@ class TSoundPlayer
         // Inform sound system to prepare this sound for later use
     bool Unmount(int32_t id);
         // Inform sound system that you are done with this sound
-    bool Play(int32_t id, int32_t volume = 0, int32_t freq = 0, PS3DPoint spos = nullptr);
+    bool Play(int32_t id, int32_t volume = 0, int32_t freq = 0, S3DPoint* spos = nullptr);
         // Play a mounted sound
     bool Stop(int32_t id);
         // Stop a playing, mounted sound

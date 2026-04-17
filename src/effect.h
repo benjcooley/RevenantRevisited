@@ -20,9 +20,9 @@ bool SaveBlendState();
 bool RestoreBlendState();
 bool SetBlendState();
 bool SetAddBlendState();
-void DamageCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type);
-void BlastCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type, int32_t interior_range = 0);
-void PulpCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t range);
+void DamageCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type);
+void BlastCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type, int32_t interior_range = 0);
+void PulpCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range);
 void PulpGuy(PTCharacter ch, S3DPoint pos, S3DPoint blast);
 void RestoreZ(int32_t x, int32_t y, int32_t width, int32_t height);
 
@@ -37,8 +37,8 @@ _CLASSDEF(TSpellBlock)
 class TEffect : public TObjectInstance
 {
   public:
-    TEffect(PTObjectImagery newim) : TObjectInstance(newim) { flags |= OF_IMMOBILE | OF_PULSE; }
-    TEffect(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE | OF_PULSE; }
+    TEffect(TObjectImagery* newim) : TObjectInstance(newim) { flags |= OF_IMMOBILE | OF_PULSE; }
+    TEffect(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE | OF_PULSE; }
 
     virtual void Pulse();
 
@@ -67,8 +67,8 @@ _CLASSDEF(TFireEffect)
 class TFireEffect : public TEffect
 {
   public:
-    TFireEffect(PTObjectImagery newim) : TEffect(newim) {}
-    TFireEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) {}
+    TFireEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TFireEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
 
     virtual void Pulse();
 };
@@ -88,8 +88,8 @@ _CLASSDEF(TIceEffect)
 class TIceEffect : public TEffect
 {
   public:
-    TIceEffect(PTObjectImagery newim) : TEffect(newim) { flags |= OF_MOVING; }
-    TIceEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim)
+    TIceEffect(TObjectImagery* newim) : TEffect(newim) { flags |= OF_MOVING; }
+    TIceEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim)
         { pos.y += ICEDIST; pos.x -= ICEDIST; pos.z += ICEDIST; flags |= OF_MOVING; }
 
     virtual void Pulse();
@@ -106,9 +106,9 @@ class TIceEffect : public TEffect
 //*class TLightningEffect : public TEffect
 //*{
 //*  public:
-//* TLightningEffect(PTObjectImagery newim) : TEffect(newim)
+//* TLightningEffect(TObjectImagery* newim) : TEffect(newim)
 //*     { flags |= OF_MOVING; firsttime = true; SoundPlayer.Mount(LIGHTNING_SOUND); }
-//* TLightningEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim)
+//* TLightningEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim)
 //*     { flags |= OF_MOVING; firsttime = true; SoundPlayer.Mount(LIGHTNING_SOUND); }
 //* virtual ~TLightningEffect() { SoundPlayer.Unmount(LIGHTNING_SOUND); }
 //*
@@ -131,8 +131,8 @@ class THealEffect : public TEffect
   public:
     int32_t level;
 
-    THealEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    THealEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    THealEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    THealEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
 
     virtual void Initialize();
     virtual void Pulse();
@@ -150,8 +150,8 @@ class THealEffect : public TEffect
 //*    int32_t angle;
 //*
 //*  public:
-//*    TLightning2Effect(PTObjectImagery newim) : TEffect(newim) { }
-//*    TLightning2Effect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+//*    TLightning2Effect(TObjectImagery* newim) : TEffect(newim) { }
+//*    TLightning2Effect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
 //*
 //* virtual void Pulse();
 //*};
@@ -172,7 +172,7 @@ class TTest3DAnimator : public T3DAnimator
     S3DMat mat[NUMPARTICLES];
 
   public:
-    TTest3DAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TTest3DAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TTest3DAnimator() { Close(); }
       // Call close function
@@ -202,7 +202,7 @@ class TFlareAnimator : public T3DAnimator
     S3DMat mat[NUMFLARES];
 
   public:
-    TFlareAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFlareAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TFlareAnimator() { Close(); }
       // Call close function
@@ -233,7 +233,7 @@ class TBallAnimator : public T3DAnimator
     float scale;         // the scale used
 
   public:
-    TBallAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TBallAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TBallAnimator() { Close(); }
       // Call close function
@@ -264,7 +264,7 @@ class TFireAnimator : public T3DAnimator
     S3DMat mat[NUMFIRES];
 
   public:
-    TFireAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFireAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TFireAnimator() { Close(); }
       // Call close function
@@ -295,7 +295,7 @@ class TIceAnimator : public T3DAnimator
     int32_t framenum[NUM_ICE_CRYSTALS];      // Frame counters (used for delays & timing)
 
   public:
-    TIceAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TIceAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TIceAnimator() { Close(); }
       // Call close function
@@ -332,7 +332,7 @@ class THealAnimator : public T3DAnimator
     int32_t glow_num;
 
   public:
-    THealAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    THealAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~THealAnimator() { Close(); }
       // Call close function
@@ -363,7 +363,7 @@ class THealAnimator : public T3DAnimator
 //*    int32_t framenum;                          // Keeps track of time
 //*
 //*  public:
-//*    TLightningAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+//*    TLightningAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
 //*   // Constructor (initialization handled by Initialize)
 //*    virtual ~TLightningAnimator() { Close(); }
 //*   // Call close function
@@ -398,7 +398,7 @@ class TFountainAnimator : public T3DAnimator
     int32_t colorobj;                            // Which object to use for the desired texture color
 
   public:
-    TFountainAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFountainAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TFountainAnimator() { Close(); }
       // Call close function
@@ -424,7 +424,7 @@ _CLASSDEF(TCyanFountainAnimator)
 class TCyanFountainAnimator : public TFountainAnimator
 {
   public:
-    TCyanFountainAnimator(PTObjectInstance oi) : TFountainAnimator(oi) {}
+    TCyanFountainAnimator(TObjectInstance* oi) : TFountainAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
 
     virtual void SetColorObject() { colorobj = 0; }
@@ -439,7 +439,7 @@ _CLASSDEF(TRedFountainAnimator)
 class TRedFountainAnimator : public TFountainAnimator
 {
   public:
-    TRedFountainAnimator(PTObjectInstance oi) : TFountainAnimator(oi) {}
+    TRedFountainAnimator(TObjectInstance* oi) : TFountainAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
 
     virtual void SetColorObject() { colorobj = 1; }
@@ -454,7 +454,7 @@ _CLASSDEF(TGreenFountainAnimator)
 class TGreenFountainAnimator : public TFountainAnimator
 {
   public:
-    TGreenFountainAnimator(PTObjectInstance oi) : TFountainAnimator(oi) {}
+    TGreenFountainAnimator(TObjectInstance* oi) : TFountainAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
 
     virtual void SetColorObject() { colorobj = 2; }
@@ -469,7 +469,7 @@ _CLASSDEF(TBlueFountainAnimator)
 class TBlueFountainAnimator : public TFountainAnimator
 {
   public:
-    TBlueFountainAnimator(PTObjectInstance oi) : TFountainAnimator(oi) {}
+    TBlueFountainAnimator(TObjectInstance* oi) : TFountainAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
 
     virtual void SetColorObject() { colorobj = 3; }
@@ -504,7 +504,7 @@ class TRibbonAnimator : public T3DAnimator
     float centertilt_dx;
 
   public:
-    TRibbonAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TRibbonAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TRibbonAnimator() { Close(); }
       // Call close function
@@ -532,7 +532,7 @@ class TShieldAnimator : public T3DAnimator
     int32_t framenum;      // Frame counter
 
   public:
-    TShieldAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TShieldAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TShieldAnimator() { Close(); }
       // Call close function
@@ -557,7 +557,7 @@ class TFlameAnimator : public T3DAnimator
     int32_t frame;      // Frame counter
   
   public:
-    TFlameAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFlameAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TFlameAnimator() { Close(); }
       // Call close function
@@ -586,7 +586,7 @@ class TSymGlowAnimator : public T3DAnimator
     int32_t timer;
 
   public:
-    TSymGlowAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TSymGlowAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TSymGlowAnimator() { Close(); }
       // Call close function
@@ -637,7 +637,7 @@ class TParticle3DAnimator : public T3DAnimator
     int32_t *ti;                        // ti = target index (0 to numtargets - 1)
 
   public:
-    TParticle3DAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TParticle3DAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TParticle3DAnimator() { Close(); }
       // Call close function
@@ -684,8 +684,8 @@ _CLASSDEF(TMeteorStormEffect)
 class TMeteorStormEffect : public TEffect
 {
   public:
-    TMeteorStormEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TMeteorStormEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TMeteorStormEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TMeteorStormEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TMeteorStormEffect() {}
 
     virtual void Initialize();          // init
@@ -705,7 +705,7 @@ class TMeteorStormAnimator : public T3DAnimator
     int32_t tracker;                        // counts meteors in flight
   public:
     // construction...
-    TMeteorStormAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TMeteorStormAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
     // destruction!
     virtual ~TMeteorStormAnimator() { Close(); }
 
@@ -721,8 +721,8 @@ _CLASSDEF(TVortexEffect)
 class TVortexEffect : public TEffect
 {
   public:
-    TVortexEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TVortexEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TVortexEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TVortexEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TVortexEffect() {}
 
     virtual void Initialize();          // init
@@ -792,8 +792,8 @@ class TVortexAnimator : public T3DAnimator
     int32_t level;
   public:
     // constructor
-    TVortexAnimator(PTObjectInstance oi) : T3DAnimator(oi), particle_system(VORTEX_PARTICLE_COUNT) {}
-    //TVortexAnimator(PTObjectInstance oi);
+    TVortexAnimator(TObjectInstance* oi) : T3DAnimator(oi), particle_system(VORTEX_PARTICLE_COUNT) {}
+    //TVortexAnimator(TObjectInstance* oi);
     // destructor
     virtual ~TVortexAnimator() { Close(); }
 
@@ -812,8 +812,8 @@ _CLASSDEF(TFlyEffect)
 class TFlyEffect : public TEffect
 {
   public:
-    TFlyEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TFlyEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TFlyEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TFlyEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TFlyEffect() {}
 
     virtual void Initialize();          // init
@@ -834,7 +834,7 @@ class TFlyAnimator : public T3DAnimator
     TParticleSystem flies;  // the flies    
   public:
     // constructor
-    TFlyAnimator(PTObjectInstance oi) : T3DAnimator(oi), flies(FLY_COUNT) {}
+    TFlyAnimator(TObjectInstance* oi) : T3DAnimator(oi), flies(FLY_COUNT) {}
     // destructor
     virtual ~TFlyAnimator() { Close(); }
 
@@ -869,7 +869,7 @@ class TFogAnimator : public T3DAnimator
     float color_velocity[FOG_VERTEX];// the velocity of the color changing
     float alpha_velocity[FOG_VERTEX];// the velocity of the color changing
   public:
-    TFogAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFogAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
     virtual ~TFogAnimator() { Close(); }
 
     virtual void Initialize();
@@ -942,8 +942,8 @@ class TPulpEffect : public TEffect
     int32_t index;                      // a unique id for the character
   public:
     // functions
-    TPulpEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TPulpEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TPulpEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TPulpEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TPulpEffect() { if (blood_splat) delete [] blood_splat; if (body_part) delete [] body_part; if (blood) delete [] blood; }
 
     virtual void Initialize();          // init
@@ -971,7 +971,7 @@ _CLASSDEF(TPulpAnimator)
 class TPulpAnimator : public T3DAnimator
 {
   public:
-    TPulpAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TPulpAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
     virtual ~TPulpAnimator() { Close(); }
 
         // virtual functions
@@ -993,8 +993,8 @@ private:
     PTCharacter character;
     int32_t frame;
 public:
-    TBurnEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TBurnEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TBurnEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TBurnEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
 
     virtual void Initialize();
     virtual void Pulse();
@@ -1020,7 +1020,7 @@ class TBurnAnimator : public T3DAnimator
     int32_t frame;
     int32_t to_add;
   public:
-    TBurnAnimator(PTObjectInstance oi) : T3DAnimator(oi), fire(BURN_COUNT), smoke(BURN_COUNT) {}
+    TBurnAnimator(TObjectInstance* oi) : T3DAnimator(oi), fire(BURN_COUNT), smoke(BURN_COUNT) {}
     virtual ~TBurnAnimator() { Close(); }
 
     virtual void Initialize();
@@ -1042,8 +1042,8 @@ private:
     PTCharacter character;
     bool first_time;
 public:
-    TAuraEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TAuraEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TAuraEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TAuraEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
 
     virtual void Initialize();
     virtual void Pulse();
@@ -1065,7 +1065,7 @@ class TAuraAnimator : public T3DAnimator
     int32_t frame;
     int32_t to_add;
   public:
-    TAuraAnimator(PTObjectInstance oi) : T3DAnimator(oi), fire(AURA_COUNT) {}
+    TAuraAnimator(TObjectInstance* oi) : T3DAnimator(oi), fire(AURA_COUNT) {}
     virtual ~TAuraAnimator() { Close(); }
 
     virtual void Initialize();
@@ -1084,8 +1084,8 @@ class TIceBoltEffect : public TEffect
 {
   private:
   public:
-    TIceBoltEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TIceBoltEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TIceBoltEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TIceBoltEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TIceBoltEffect() {}
 
     virtual void Initialize();
@@ -1113,7 +1113,7 @@ _CLASSDEF(TIceBoltAnimator)
     TShockAnimator ring;                // da ring!
 
   public:
-    TIceBoltAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TIceBoltAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TIceBoltAnimator() { Close(); }
       // Call close function
@@ -1151,7 +1151,7 @@ class TIceBoltAnimator : public T3DAnimator
         rs[MAX_SNOW_PARTICLES], sz[MAX_SNOW_PARTICLES];
     
   public:
-    TIceBoltAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TIceBoltAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TIceBoltAnimator() { Close(); }
       // Call close function
@@ -1175,8 +1175,8 @@ class TIcedEffect : public TEffect
 {
   private:
   public:
-    TIcedEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TIcedEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TIcedEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TIcedEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TIcedEffect() {}
 
     virtual void Initialize();
@@ -1199,10 +1199,10 @@ class TIcedAnimator : public T3DAnimator
     hmm_vec3 p[MAX_ICED_CHUNKS], v[MAX_ICED_CHUNKS], t[MAX_ICED_CHUNKS], w[MAX_ICED_CHUNKS];
     hmm_vec3 s[MAX_ICED_CHUNKS];
     int32_t l[MAX_ICED_CHUNKS];
-    PTObjectInstance icedchar;
+    TObjectInstance* icedchar;
     
   public:
-    TIcedAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TIcedAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TIcedAnimator() { Close(); }
       // Call close function
@@ -1215,7 +1215,7 @@ class TIcedAnimator : public T3DAnimator
       // Called to render a frame
     virtual void RefreshZBuffer();
 
-    void InitIced(PTObjectInstance iceme);
+    void InitIced(TObjectInstance* iceme);
       // Tell who to ice!
 };
 
@@ -1230,8 +1230,8 @@ class TQuicksandEffect : public TEffect
   private:
     bool first_time;
   public:
-    TQuicksandEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TQuicksandEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TQuicksandEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TQuicksandEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TQuicksandEffect() {}
 
     virtual void Initialize();
@@ -1249,7 +1249,7 @@ class TQuicksandAnimator : public T3DAnimator
   private:
     float scalesize, cylscale, cylheight, cylrot, cylcount;
     int32_t stage, count;
-    PTObjectInstance quicksandchar;
+    TObjectInstance* quicksandchar;
     float ang;
     float zscalefactor;
   protected:
@@ -1265,7 +1265,7 @@ class TQuicksandAnimator : public T3DAnimator
     int32_t num_targets;
     S3DPoint target_position[10];
 
-    TQuicksandAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TQuicksandAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TQuicksandAnimator() { Close(); }
       // Call close function
@@ -1278,7 +1278,7 @@ class TQuicksandAnimator : public T3DAnimator
       // Called to render a frame
     virtual void RefreshZBuffer();
 
-    void InitQuicksand(PTObjectInstance quicksandme, int32_t delay);
+    void InitQuicksand(TObjectInstance* quicksandme, int32_t delay);
       // Tell who to quicksand!
 };
 
@@ -1292,8 +1292,8 @@ class TSandswirlEffect : public TEffect
 {
   private:
   public:
-    TSandswirlEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TSandswirlEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TSandswirlEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TSandswirlEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TSandswirlEffect() {}
 
     virtual void Initialize();
@@ -1314,7 +1314,7 @@ class TSandswirlAnimator : public T3DAnimator
     PTParticle3DAnimator particleanim;
     
   public:
-    TSandswirlAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TSandswirlAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TSandswirlAnimator() { Close(); }
       // Call close function
@@ -1327,8 +1327,8 @@ class TSandswirlAnimator : public T3DAnimator
       // Called to render a frame
     virtual void RefreshZBuffer();
 
-//void SetParticles(PTObjectInstance inst) { particles = inst; }
-//PTObjectInstance GetParticles(void) { return particles; }
+//void SetParticles(TObjectInstance* inst) { particles = inst; }
+//TObjectInstance* GetParticles(void) { return particles; }
 };
 
 // ********************
@@ -1341,8 +1341,8 @@ class TTornadoEffect : public TEffect
 {
   private:
   public:
-    TTornadoEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TTornadoEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TTornadoEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TTornadoEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TTornadoEffect() {}
 
     virtual void Initialize();
@@ -1387,7 +1387,7 @@ class TTornadoAnimator : public T3DAnimator
         
   public:
     int32_t frameon;
-    TTornadoAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TTornadoAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TTornadoAnimator() { Close(); }
       // Call close function
@@ -1416,8 +1416,8 @@ class TStreamerEffect : public TEffect
   private:
     bool first_time;
   public:
-    TStreamerEffect(PTObjectImagery newim) : TEffect(newim) { Initialize();}
-    TStreamerEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize();}
+    TStreamerEffect(TObjectImagery* newim) : TEffect(newim) { Initialize();}
+    TStreamerEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize();}
     virtual ~TStreamerEffect() {}
 
     virtual void Initialize();
@@ -1449,7 +1449,7 @@ class TStreamerAnimator : public T3DAnimator
     PSStreamerParticle stream[STREAMER_MAXSTREAMS];
         
   public:
-    TStreamerAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TStreamerAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TStreamerAnimator() { Close(); }
       // Call close function
@@ -1478,8 +1478,8 @@ class TFireSwarmEffect : public TEffect
 {
   private:
   public:
-    TFireSwarmEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TFireSwarmEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TFireSwarmEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TFireSwarmEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TFireSwarmEffect() {}
 
     virtual void Initialize();
@@ -1499,7 +1499,7 @@ class TFireSwarmAnimator : public T3DAnimator
     float cylhscl, cylvscl, cylth;
             
   public:
-    TFireSwarmAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFireSwarmAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TFireSwarmAnimator() { Close(); }
       // Call close function
@@ -1526,8 +1526,8 @@ class THaloEffect : public TEffect
       float halostep;
       int32_t totframes;
   public:
-    THaloEffect(PTObjectImagery newim) : TEffect(newim) { }
-    THaloEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    THaloEffect(TObjectImagery* newim) : TEffect(newim) { }
+    THaloEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~THaloEffect() {}
 
     virtual void Initialize();
@@ -1551,7 +1551,7 @@ class THaloAnimator : public T3DAnimator
     int32_t frameon;
             
   public:
-    THaloAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    THaloAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~THaloAnimator() { Close(); }
       // Call close function
@@ -1576,8 +1576,8 @@ class TRippleEffect : public TEffect
   private:
      int32_t len;
   public:
-    TRippleEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TRippleEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TRippleEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TRippleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TRippleEffect() {}
 
     virtual void Initialize();
@@ -1615,7 +1615,7 @@ class TRippleAnimator : public T3DAnimator
       // Called to change texture frame
     
   public:
-    TRippleAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TRippleAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TRippleAnimator() { Close(); }
       // Call close function
@@ -1642,8 +1642,8 @@ class TDripEffect : public TEffect
   private:
     int32_t ripplesize, height, period;
   public:
-    TDripEffect(PTObjectImagery newim) : TEffect(newim) {  }
-    TDripEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TDripEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TDripEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TDripEffect() {}
 
     virtual void Initialize();
@@ -1675,7 +1675,7 @@ class TDripAnimator : public T3DAnimator
   protected:
     
   public:
-    TDripAnimator(PTObjectInstance oi) : T3DAnimator(oi) { ripplesize = 64; height = 128; period = 48;}
+    TDripAnimator(TObjectInstance* oi) : T3DAnimator(oi) { ripplesize = 64; height = 128; period = 48;}
       // Constructor (initialization handled by Initialize)
     virtual ~TDripAnimator() { Close(); }
       // Call close function
@@ -1701,8 +1701,8 @@ class TFaultFireEffect : public TEffect
 {
   private:
   public:
-    TFaultFireEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TFaultFireEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TFaultFireEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TFaultFireEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TFaultFireEffect() {}
 
     virtual void Initialize();
@@ -1724,7 +1724,7 @@ class TFaultFireAnimator : public T3DAnimator
     float th, tvs[4];
     //static float per[FF_GROUPS], phase[FF_GROUPS];
   public:
-    TFaultFireAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFaultFireAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TFaultFireAnimator() { Close(); }
       // Call close function
@@ -1751,8 +1751,8 @@ class TBloodEffect : public TEffect
   private:
     int32_t height, hangle, vangle, hspread, vspread, num;
   public:
-    TBloodEffect(PTObjectImagery newim) : TEffect(newim) {  }
-    TBloodEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TBloodEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TBloodEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TBloodEffect() {}
 
     virtual void OffScreen() { KillThisEffect(); }
@@ -1778,7 +1778,7 @@ class TBloodAnimator : public T3DAnimator
   protected:
     
   public:
-    TBloodAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TBloodAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
       // Constructor (initialization handled by Initialize)
     virtual ~TBloodAnimator() { Close(); }
       // Call close function
@@ -1803,8 +1803,8 @@ class TMistEffect : public TEffect
   private:
     
   public:
-    TMistEffect(PTObjectImagery newim) : TEffect(newim) {  }
-    TMistEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TMistEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TMistEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TMistEffect() {}
 
     virtual void Initialize();
@@ -1826,7 +1826,7 @@ class TMistAnimator : public T3DAnimator
   protected:
     
   public:
-    TMistAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TMistAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
       // Constructor (initialization handled by Initialize)
     virtual ~TMistAnimator() { Close(); }
       // Call close function
@@ -1853,8 +1853,8 @@ class TWaterFallEffect : public TEffect
   private:
     
   public:
-    TWaterFallEffect(PTObjectImagery newim) : TEffect(newim) {  }
-    TWaterFallEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TWaterFallEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TWaterFallEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TWaterFallEffect() {}
 
     virtual void Initialize();
@@ -1885,7 +1885,7 @@ class TWaterFallAnimator : public T3DAnimator
   protected:
     
   public:
-    TWaterFallAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TWaterFallAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
       // Constructor (initialization handled by Initialize)
     virtual ~TWaterFallAnimator() { Close(); }
       // Call close function
@@ -1914,8 +1914,8 @@ class TWaterEffect : public TEffect
   private:
     
   public:
-    TWaterEffect(PTObjectImagery newim) : TEffect(newim) {  }
-    TWaterEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TWaterEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TWaterEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TWaterEffect() {}
 
     virtual void Initialize();
@@ -1937,7 +1937,7 @@ class TWaterAnimator : public T3DAnimator
   protected:
     
   public:
-    TWaterAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TWaterAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
       // Constructor (initialization handled by Initialize)
     virtual ~TWaterAnimator() { Close(); }
       // Call close function
@@ -1966,8 +1966,8 @@ class TPixieEffect : public TEffect
   private:
     
   public:
-    TPixieEffect(PTObjectImagery newim) : TEffect(newim) {  }
-    TPixieEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TPixieEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TPixieEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TPixieEffect() {}
 
     virtual void Initialize();
@@ -1989,7 +1989,7 @@ class TPixieAnimator : public T3DAnimator
   protected:
     
   public:
-    TPixieAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TPixieAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
       // Constructor (initialization handled by Initialize)
     virtual ~TPixieAnimator() { Close(); }
       // Call close function
@@ -2019,8 +2019,8 @@ class TAmbSoundEffect : public TEffect
     int32_t ticks;                      // our current tick count...
 
   public:
-    TAmbSoundEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TAmbSoundEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TAmbSoundEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TAmbSoundEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TAmbSoundEffect() { if (id > 0) SoundPlayer.Unmount(id); }
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
@@ -2043,7 +2043,7 @@ _CLASSDEF(TAmbSoundAnimator)
 class TAmbSoundAnimator : public T3DAnimator
 {
   public:
-    TAmbSoundAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TAmbSoundAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void Initialize();
     void Animate(bool);
     bool Render();

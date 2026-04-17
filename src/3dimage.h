@@ -126,7 +126,7 @@ struct S3DImageryIcons
 #define OBJ3D_ABSPOS    0x400000    // Treats the position as absolute (already converted to world space)
 #define OBJ3D_PARENT    0x800000    // Override parent pointer
 
-#define OBJ3D_RENDERED  0x80000000  // Used internally to indicate if obect was rendered
+#define OBJ3D_RENDERED  0x80000000  // Used internally to indicate if object was rendered
 
 _STRUCTDEF(S3DAnimObj) // Approx 200 bytes per obj
 struct S3DAnimObj
@@ -138,7 +138,7 @@ struct S3DAnimObj
     hmm_vec3 pos;                           // Use with OBJ3D_POS, OBJ3D_ROT, and OBJ3D_SCL
     hmm_vec3 rot;                           // These can not be used together with OBJ3D_MATRIX!
     hmm_vec3 scl;                      
-    hmm_mat4 matrix;                       // Matrix (can be set directly using OBJ3D_MATRIX, or calculated by pos/rot/scl)
+    hmm_mat4 matrix;                        // Matrix (can be set directly using OBJ3D_MATRIX, or calculated by pos/rot/scl)
     D3DPRIMITIVETYPE primtype;              // Type of primitive (face, line, etc.)
     D3DVERTEXTYPE verttype;                 // Type of verts (VERTEX, LVERTEX, TLVERTEX)
     int32_t numverts;                       // Number of verts for object
@@ -166,31 +166,31 @@ class T3DImagery : public TObjectImagery
 
     int32_t baseobj;
 
-    uint32_t flags;    // Flags for this 3D object
-    uint32_t version;  // version of this 3D object
+    uint32_t flags;                       // Flags for this 3D object
+    uint32_t version;                     // version of this 3D object
 
-    int32_t numverts;                       // Global vert list
+    int32_t numverts;                     // Global vert list
     hmm_vec3 ***verts;
 
-    int32_t numfaces;                       // Global face list
+    int32_t numfaces;                     // Global face list
     S3DFace *faces;
 
-    T3DMatArray materials;              // Object resource arrays
+    T3DMatArray materials;                // Object resource arrays
     T3DTexArray textures;
     T3DObjArray objects;
     T3DTagArray tags;
 
-    int32_t numframes;                      // Mesh/Ani/Icon/etc. arrays
-    SMotionData **motion;               // Points to motion data
+    int32_t numframes;                    // Mesh/Ani/Icon/etc. arrays
+    SMotionData **motion;                 // Points to motion data
     S3DImageryIcons *icons;
     unsigned char *hierarchy;
 
-    PTExecuteBuf executebuf;            // Current execute buffer cache
-    bool cacheexbuf;                    // true if we want to cache the execute buffer
+    PTExecuteBuf executebuf;              // Current execute buffer cache
+    bool cacheexbuf;                      // true if we want to cache the execute buffer
 
   // State data for rendering   
-    int32_t prevstate;                      // Used to control interpolation between states
-    int32_t prevframe;                      // Last frame drawn in previous state
+    int32_t prevstate;                    // Used to control interpolation between states
+    int32_t prevframe;                    // Last frame drawn in previous state
 
   public:
     T3DImagery(int32_t imageid);
@@ -303,7 +303,7 @@ class T3DImagery : public TObjectImagery
       // This function is called after all calls to RenderObject are complete.  This function
       // will grab the execute buffer created by the calls to RenderObject and store it if
       // it doesn't yet exist.
-    void PlaySound(PTObjectInstance inst, int32_t state, int32_t frame);
+    void PlaySound(TObjectInstance* inst, int32_t state, int32_t frame);
       // Called by animator to play a sound (if there is one) for the current frame and state
     PTExecuteBuf GetExecuteBuf() { return executebuf; }
       // If the imagery object currently has an execute buffer cache, this function will 
@@ -363,7 +363,7 @@ class T3DImagery : public TObjectImagery
       // Causes texture surfaces to be reloaded from imagery file
 
   // Miscellaneous support functions
-    void RefreshZBuffer(PTObjectInstance oi);
+    void RefreshZBuffer(TObjectInstance* oi);
       // Called for all imagery before rendering to refresh the z buffer behind the object
     void ResetExtents();
       // Resets the rendered extents to default values
@@ -371,7 +371,7 @@ class T3DImagery : public TObjectImagery
       // Retrieves the extents of any imagery drawn since the ResetExtents() function was called
     void AddUpdateRect(LPD3DRECT extents, int32_t uflags = UPDATE_RESTORE);
       // Adds an update rectangle to the screen for the current rendered extents
-    void UpdateBoundingRect(PTObjectInstance oi, int32_t state, LPD3DRECT extents);
+    void UpdateBoundingRect(TObjectInstance* oi, int32_t state, LPD3DRECT extents);
       // This function sets the maximum bounding box for a state given the supplied extents rect
     int32_t NumTags() { return tags.NumItems(); }
       // Returns number of tags
@@ -382,25 +382,25 @@ class T3DImagery : public TObjectImagery
       // state or frame are less < 0, will find any state, or any frame.  Optional
       // foundstate and foundframe will return the state and frame actually found.
 
-    virtual bool GetZ(PTObjectInstance oi, PTSurface surface) { return true; }
+    virtual bool GetZ(TObjectInstance* oi, TSurface* surface) { return true; }
         // At some point a pixel-perfect routine might be nice
-    virtual bool AlwaysOnTop(PTObjectInstance oi) { return true; }
+    virtual bool AlwaysOnTop(TObjectInstance* oi) { return true; }
         // This wouldn't be necessary if the pixel routine worked
     virtual PTBitmap GetInvImage(int32_t state, int32_t num = 0);
       // Returns the inventory image for the item
     virtual PTAnimation GetInvAnimation(int32_t state);
         // Get inventory animation for state
 
-    virtual PTObjectAnimator NewObjectAnimator(PTObjectInstance oi);
+    virtual PTObjectAnimator NewObjectAnimator(TObjectInstance* oi);
         // Creates an animator for the given object
-    virtual bool NeedsAnimator(PTObjectInstance oi);
+    virtual bool NeedsAnimator(TObjectInstance* oi);
       // Returns whether or not an animator is necessary
 
   // Motion functions
     bool GetMotion(int32_t state, int32_t frame, 
         int32_t &dist, int32_t &vert, int32_t &ang, int32_t &rotx, int32_t &roty, int32_t &rotz);
       // Gets motion deltas for the current frame (returns false if no motion or invalid state/frame)
-    virtual void SetObjectMotion(PTObjectInstance inst);
+    virtual void SetObjectMotion(TObjectInstance* inst);
       // Sets the motion for an object based on its state, frame, and 3D motion data
 };
 
@@ -421,7 +421,7 @@ class T3DControllerBuilder
     T3DControllerBuilder(char *name);
       // Sets name and adds builder to builder array
     virtual PT3DController Build(int32_t ptagstate, int32_t ptagframe, 
-        PT3DAnimator panimator, PT3DImagery pimagery, PTObjectInstance pinst) { return nullptr; }
+        PT3DAnimator panimator, PT3DImagery pimagery, TObjectInstance* pinst) { return nullptr; }
       // Creates a new object from the given 'def' structure
     static PT3DControllerBuilder GetBuilder(char *name);
       // Gets a pointer to a builder in the builder array
@@ -439,7 +439,7 @@ class obj##Builder : public T3DControllerBuilder                                
   public:                                                                       \
     obj##Builder() : T3DControllerBuilder(name) {}                              \
     virtual PT3DController Build(int32_t ptagstate, int32_t ptagframe,                  \
-      PT3DAnimator panimator, PT3DImagery pimagery, PTObjectInstance pinst)     \
+      PT3DAnimator panimator, PT3DImagery pimagery, TObjectInstance* pinst)     \
         { return new obj(ptagstate, ptagframe, panimator, pimagery, pinst); }   \
 };                                                                              \
 obj##Builder obj##BuilderInstance;
@@ -462,7 +462,7 @@ class T3DController
     int32_t tagstate, tagframe;                   // State and frame this controller was tagged
     PT3DAnimator animator;                    // Pointer to animator
     PT3DImagery imagery;                      // Pointer to imagery
-    PTObjectInstance inst;                    // Pointer to object instance
+    TObjectInstance* inst;                    // Pointer to object instance
     T3DAnimObjArray animobjs;                 // Object list for this controller
 
     virtual bool ParseParams(TToken &t);
@@ -478,7 +478,7 @@ class T3DController
       // a particular 'param' tag.
 
   public:
-    T3DController(int32_t ptagstate, int32_t ptagframe, PT3DAnimator panimator, PT3DImagery pimagery, PTObjectInstance pinst)
+    T3DController(int32_t ptagstate, int32_t ptagframe, PT3DAnimator panimator, PT3DImagery pimagery, TObjectInstance* pinst)
       { tagstate = ptagstate; tagframe = ptagframe; 
         animator = panimator; imagery = pimagery; inst = pinst; }
       // Constructor
@@ -498,7 +498,7 @@ class T3DController
       // Gets the animator for this controller
     PT3DImagery GetImagery() { return imagery; }
       // Gets the imagery for this controller
-    PTObjectInstance GetInstance() { return inst; }
+    TObjectInstance* GetInstance() { return inst; }
       // Returns the object instance for this controller
     int32_t NumObjects() { return animobjs.NumItems(); }
       // Returns number of S3DAnimObj strucutres controlled by controller
@@ -528,7 +528,7 @@ class T3DAnimatorBuilder
       // Used for default builder
     T3DAnimatorBuilder(char *name);
       // Sets name and adds builder to builder array
-    virtual PT3DAnimator Build(PTObjectInstance oi);
+    virtual PT3DAnimator Build(TObjectInstance* oi);
       // Creates a new object from the given 'def' structure
     static PT3DAnimatorBuilder GetBuilder(char *name);
       // Gets a pointer to a builder in the builder array
@@ -545,7 +545,7 @@ class obj##Builder : public T3DAnimatorBuilder                                  
 {                                                                               \
   public:                                                                       \
     obj##Builder() : T3DAnimatorBuilder(name) {}                                \
-    virtual PT3DAnimator Build(PTObjectInstance oi)                             \
+    virtual PT3DAnimator Build(TObjectInstance* oi)                             \
         { return new obj(oi); }                                                 \
 };                                                                              \
 obj##Builder obj##BuilderInstance;
@@ -555,7 +555,7 @@ class obj##Builder : public T3DAnimatorBuilder                                  
 {                                                                               \
   public:                                                                       \
     obj##Builder() : T3DAnimatorBuilder(name) {}                                \
-    virtual PT3DAnimator Build(PTObjectInstance oi)                             \
+    virtual PT3DAnimator Build(TObjectInstance* oi)                             \
         { return new anim(oi); }                                                \
 };                                                                              \
 obj##Builder obj##BuilderInstance;
@@ -618,7 +618,7 @@ class T3DAnimator : public TObjectAnimator
     bool             updated;                 // Background was updated (call update funcs if still false after render)
 
   public:
-    T3DAnimator(PTObjectInstance oi) : TObjectAnimator(oi) {}
+    T3DAnimator(TObjectInstance* oi) : TObjectAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~T3DAnimator();
       // Closes the object
@@ -762,7 +762,7 @@ class T3DAnimator : public TObjectAnimator
     void UpdateExtents()
       { GetExtents(&extents); AddUpdateRect(&extents); UpdateBoundingRect(&extents); }
       // Called to do all that extents crap automatically!!
-    void RecordNewExtents(PTObjectInstance oi, int32_t state = -1, bool frontonly = false);
+    void RecordNewExtents(TObjectInstance* oi, int32_t state = -1, bool frontonly = false);
       // Record screen rectangle for object for given state, or all states if -1
       // If 'front' is true, records extents for 'angle=0' only (the front)
 

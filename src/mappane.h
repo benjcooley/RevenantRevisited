@@ -52,15 +52,15 @@ class TMapIterator
     TMapIterator(PSRect sr = nullptr, int32_t fl = CHECK_NONE, int32_t objset = OBJSET_ALL)
       { Initialize(sr, fl, objset); }
       // Calls initialize function
-    TMapIterator(RS3DPoint pos, int32_t range = LOCALRANGE, int32_t fl = CHECK_NOINVENT | CHECK_MAPRECT, int32_t objset = OBJSET_ALL);
+    TMapIterator(S3DPoint& pos, int32_t range = LOCALRANGE, int32_t fl = CHECK_NOINVENT | CHECK_MAPRECT, int32_t objset = OBJSET_ALL);
       // Initializes iterator with a range value
     TMapIterator(RTObjectInstance oi, int32_t fl = CHECK_NONE, int32_t objset = OBJSET_ALL);
       // Initializes iterator with a range value
     void Initialize(PSRect sr = nullptr, int32_t fl = CHECK_NONE, int32_t objset = OBJSET_ALL);
       // Initializes iterator
-    PTObjectInstance Item() { return item; }
+    TObjectInstance* Item() { return item; }
       // Returns current item.
-    PTObjectInstance NextItem();
+    TObjectInstance* NextItem();
       // Advance to the next item, and return it (nullptr if end of list)
     bool operator ++ (int32_t) { return (NextItem() != nullptr); }
       // Allows moving forwards through array in sequential order
@@ -68,9 +68,9 @@ class TMapIterator
       // Allows moving backwards through array in sequential order
 //  operator bool () { return (item != nullptr); }
       // Returns false if at end of item list
-    operator PTObjectInstance () { return item; }
+    operator TObjectInstance* () { return item; }
       // Typecast operator for object
-    PTObjectInstance operator -> () { return item; }
+    TObjectInstance* operator -> () { return item; }
       // Allows iterator to be used as pointer
     RTObjectInstance operator * () { return *item; }
       // Dereferencing operator
@@ -78,7 +78,7 @@ class TMapIterator
     int32_t SectorX() const { return sx; }
     int32_t SectorY() const { return sy; }
     int32_t SectorIndex() const { return index; }
-    PTObjectInstance Parent() const { return parent; }
+    TObjectInstance* Parent() const { return parent; }
     int32_t InventoryIndex() const { if (parent) return invindex - 1; return invindex; }
 
     void Nuke();
@@ -87,11 +87,11 @@ class TMapIterator
   protected:
     int32_t objset;                 // Object set to iterate through
     int32_t index;                  // Object index (in set)
-    PTObjectInstance item;      // Current object
+    TObjectInstance* item;      // Current object
     int32_t sx, sy;                 // sector x and y
-    PTSector sector;            // Current sector
+    TSector* sector;            // Current sector
     int32_t numitems;               // Number of items in current sector set
-    PTObjectInstance parent;    // parent object, or nullptr when in map pane
+    TObjectInstance* parent;    // parent object, or nullptr when in map pane
     int32_t invindex;               // index into parent object's inventory
 
     int32_t flags;                  // flags for which objects are valid
@@ -123,7 +123,7 @@ _STRUCTDEF(SCenterOnState)
 struct SCenterOnState
 {
     int32_t flags;
-    PTObjectInstance obj;
+    TObjectInstance* obj;
     S3DPoint pos;
     int32_t level;
 };
@@ -184,9 +184,9 @@ class TMapPane : public TPane
       // Sets the dynamic light intensity
     uint8_t GetDLightIntensity() { return dlight.intensity; }
       // Gets the dynamic light intensity
-    void SetDLightPos(RS3DPoint newpos) { dlight.pos = newpos; }
+    void SetDLightPos(S3DPoint& newpos) { dlight.pos = newpos; }
       // Sets light relative position
-    RS3DPoint GetDLightPos(RS3DPoint newpos) { return dlight.pos; }
+    S3DPoint& GetDLightPos(S3DPoint& newpos) { return dlight.pos; }
       // Sets light relative position
     void SetAmbientLight(int32_t light, bool stopfade = true);
       // Sets ambient light intensity.  If fading, sets target to new value unless stopfade
@@ -312,21 +312,21 @@ class TMapPane : public TPane
         // Free and then reload all sectors
 
   // World position functions
-    void SetMapPos(RS3DPoint newpos);
-    void GetMapPos(RS3DPoint retpos) { retpos = center; }
+    void SetMapPos(S3DPoint& newpos);
+    void GetMapPos(S3DPoint& retpos) { retpos = center; }
     void SetMapLevel(int32_t newlev) { newlevel = newlev; if (newlev != level) RedrawAll(); }
     int32_t GetMapLevel() { return level; }
 
   // Center On Functions (causes game map to center on point or object)
-    void CenterOnObj(PTObjectInstance obj, bool scroll)
+    void CenterOnObj(TObjectInstance* obj, bool scroll)
         { centeron.obj = obj; centeron.flags = CENTERON_OBJ | (scroll ? CENTERON_SCROLL:0); }
       // Center on object
-    PTObjectInstance GetCenterOnObj() { return centeron.obj; }
+    TObjectInstance* GetCenterOnObj() { return centeron.obj; }
       // Gets centered object
-    void CenterOnPos(RS3DPoint pos, int32_t level, bool scroll)
+    void CenterOnPos(S3DPoint& pos, int32_t level, bool scroll)
         { centeron.pos = pos; centeron.level = level; centeron.flags = CENTERON_POS | (scroll ? CENTERON_SCROLL:0); }
       // Center on a point
-    void GetCenterOnPos(RS3DPoint pos, int32_t &level) { pos = centeron.pos; level = centeron.level; }
+    void GetCenterOnPos(S3DPoint& pos, int32_t &level) { pos = centeron.pos; level = centeron.level; }
       // Gets current center on point
     bool IsScrollCenterOn() { return centeron.flags & CENTERON_SCROLL; }
       // True if we smooth scroll to object or point
@@ -344,28 +344,28 @@ class TMapPane : public TPane
   // Add/Remove objects
     int32_t MakeIndex();
       // Makes a unique id map index for an object
-    int32_t NewObject(PSObjectDef def);
+    int32_t NewObject(SObjectDef* def);
       // Create a new object with the given objdef
-    int32_t AddObject(PTObjectInstance oi);
+    int32_t AddObject(TObjectInstance* oi);
       // Adds the given object to the map and returns unique id
-    void ObjectFlagsChanged(PTObjectInstance oi, uint32_t oldflags, uint32_t newflags);
+    void ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags);
       // Allows map to update lists, etc. when an objects flags change (mainly
       // for OF_LIGHT, OF_PULSE, and OF_ANIMATE changing objects location on 
       // OBJSET_xxx sector arrays.
-    PTObjectInstance RemoveObject(int32_t index);
+    TObjectInstance* RemoveObject(int32_t index);
       // Removes the given object from the map, recursing through inventories
-    PTObjectInstance RemoveObject(PTObjectInstance inst)
+    TObjectInstance* RemoveObject(TObjectInstance* inst)
         { return RemoveObject(inst->GetMapIndex()); }
       // Removes the given object from the map, recursing through inventories
-    void DeleteObject(PTObjectInstance obj);
+    void DeleteObject(TObjectInstance* obj);
       // Removes and deletes an object
-    PTObjectInstance RemoveFromSector(PTObjectInstance inst, int32_t sx, int32_t sy, int32_t sectindex);
+    TObjectInstance* RemoveFromSector(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t sectindex);
       // Removes the given object from the sector array (called by RemoveObject())
-    void DeleteSector(PTSector sect);
+    void DeleteSector(TSector* sect);
       // Removes and deletes a sector (hey.. don't call this)
     void ReloadImagery();
       // Forces imagery system to reload imagery.
-    int32_t AddShadow(PTObjectInstance oi);
+    int32_t AddShadow(TObjectInstance* oi);
       // Add shadow for object, if there is one
 
   // Object find functions
@@ -373,48 +373,48 @@ class TMapPane : public TPane
   // NOTE: Use the 'objset' variable to greatly reduce search times for common sets of
   // objects like MOVING objects and CHARACTERS. 
   
-    PTObjectInstance FindObject(char *name, int32_t occurance = 1, int32_t objset = OBJSET_ALL);
+    TObjectInstance* FindObject(char *name, int32_t occurance = 1, int32_t objset = OBJSET_ALL);
         // Returns a pointer to the occurance of object answering to name
-    PTObjectInstance FindClosestObject(char *name, S3DPoint pos, bool partial, int32_t objset = OBJSET_ALL);
+    TObjectInstance* FindClosestObject(char *name, S3DPoint pos, bool partial, int32_t objset = OBJSET_ALL);
         // Returns a pointer to the object answering to name closest to center
-    PTObjectInstance FindClosestObject(char *name, PTObjectInstance from = nullptr, bool partial = false, int32_t objset = OBJSET_ALL);
+    TObjectInstance* FindClosestObject(char *name, TObjectInstance* from = nullptr, bool partial = false, int32_t objset = OBJSET_ALL);
         // Returns a pointer to the object answering to name closest to center
     int32_t FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height = 0, int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL);
       // Finds objects within given range. If height not given uses width as radius
-    PTObjectInstance ObjectInCube(PS3DRect cube, int32_t objset = OBJSET_ALL);
+    TObjectInstance* ObjectInCube(PS3DRect cube, int32_t objset = OBJSET_ALL);
         // Returns pointer to object in cube
-    PTObjectInstance OnObject(int32_t screenx, int32_t screeny, PTObjectInstance with = nullptr);
+    TObjectInstance* OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with = nullptr);
         // Returns the index of the object the mouse is on
-    PTObjectInstance GetInstance(int32_t index, int32_t objset = OBJSET_ALL);
+    TObjectInstance* GetInstance(int32_t index, int32_t objset = OBJSET_ALL);
         // Returns the instance given an object index
-    void FindClickPos(int32_t x, int32_t y, RS3DPoint start, RS3DPoint target);
+    void FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& target);
         // Find the position clicked on, taking into account the walkmap heights
-    bool SwapDrawOrder(PTObjectInstance inst0, PTObjectInstance inst1);
+    bool SwapDrawOrder(TObjectInstance* inst0, TObjectInstance* inst1);
         // Exchange the sector positions of the two objects
-    void PushToFront(PTObjectInstance inst);
+    void PushToFront(TObjectInstance* inst);
         // Push object to the top of the sector
-    void PushToBack(PTObjectInstance inst);
+    void PushToBack(TObjectInstance* inst);
         // Push object to the bottom of the sector
 
   // Walk map functions
-    void TransferWalkmap(PTObjectInstance inst) { WalkmapHandler(inst, WALK_TRANSFER); }
+    void TransferWalkmap(TObjectInstance* inst) { WalkmapHandler(inst, WALK_TRANSFER); }
         // Transfer object's walkmap to the sector walkmap
-    bool SaveWalkmap(PTObjectInstance oi)
+    bool SaveWalkmap(TObjectInstance* oi)
         { WalkmapHandler(oi, WALK_CAPTURE); oi->SaveHeader(); return true; }
         // Write walkmap for object to disk (editor use only)
-    void ClearWalkmap(PTObjectInstance oi) { WalkmapHandler(oi, WALK_CLEAR); }
+    void ClearWalkmap(TObjectInstance* oi) { WalkmapHandler(oi, WALK_CLEAR); }
         // Clear out area of walkmap that object resides in
-    void ExtractWalkmap(PTObjectInstance inst) { WalkmapHandler(inst, WALK_EXTRACT); }
+    void ExtractWalkmap(TObjectInstance* inst) { WalkmapHandler(inst, WALK_EXTRACT); }
         // Remove object's walkmap from the sector walkmap (by redrawing its rect)
-    int32_t GetWalkHeight(RS3DPoint pos);
+    int32_t GetWalkHeight(S3DPoint& pos);
         // Gets walk height for a given walk map
     int32_t GetWalkGridHeight(int32_t x, int32_t y);
         // Gets walk height given walk grid x and y
-    int32_t GetWalkHeightArea(RS3DPoint pos, int32_t width = 0, int32_t height = 0);
+    int32_t GetWalkHeightArea(S3DPoint& pos, int32_t width = 0, int32_t height = 0);
         // Gets walk height for a given walk map CENTERED on pos with given with and height
         // If width == 0, pos is treated as a point
         // Otherwise pos, width, and height define the box of walk area CENTERED on pos
-    void GetWalkHeightRadius(RS3DPoint pos, int32_t radius, 
+    void GetWalkHeightRadius(S3DPoint& pos, int32_t radius, 
         int32_t &mindelta, int32_t &maxdelta, int32_t &curheight);
         // Returns the minimum delta (fall), and maximum delta (rise) between any two walk grids 
         // within the radius, and also the height at the current position.
@@ -424,7 +424,7 @@ class TMapPane : public TPane
         // Note that the 'deltas' only indicate differences in hieght between adjacent walk
         // grids, so 'radius' may be scaled arbirarily large and still work correctly.
         // This routine is somewhat processor intensive, so only use for moving chars and objs.
-    bool LineOfSight(RS3DPoint pos, RS3DPoint to, PS3DPoint obst = nullptr);
+    bool LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst = nullptr);
         // Returns line of sight flags for line between positions
     void CalculateWalkmap();
         // Call to recalculate the walkmap for the current sector
@@ -440,24 +440,24 @@ class TMapPane : public TPane
         // Snap the walk display to the given object (editor only)
 
   // Object manipulation functions
-    void MoveObject(int32_t index, RS3DPoint newpos);
+    void MoveObject(int32_t index, S3DPoint& newpos);
     void SetFlags(int32_t index, uint16_t newflags);
     void SetState(int32_t index, uint8_t newstate);
     void Damage(int32_t intdex, int32_t damage);
-    void Throw(int32_t index, RS3DPoint velocity);
+    void Throw(int32_t index, S3DPoint& velocity);
     void RepaintObject(int32_t index);
 
-    int32_t MoneyHandler(PTObjectInstance oi, int32_t amount);
+    int32_t MoneyHandler(TObjectInstance* oi, int32_t amount);
         // General purpose money handler, called by the two functions below
-    int32_t SubtractMoney(PTObjectInstance oi, int32_t amount);
+    int32_t SubtractMoney(TObjectInstance* oi, int32_t amount);
         // Take away the amount of money specified from oi's inventory
         // If they don't have enough, do nothing and return 0
-    int32_t GetTotalMoney(PTObjectInstance oi);
+    int32_t GetTotalMoney(TObjectInstance* oi);
         // Return the total about of money owned by the object
 
-    int32_t CheckPos(PTObjectInstance inst, RS3DPoint newpos, int32_t newlevel = -1);
+    int32_t CheckPos(TObjectInstance* inst, const S3DPoint& newpos, int32_t newlevel = -1);
         // Call before moving inst to newpos - returns index
-    int32_t TransferObject(PTObjectInstance inst, int32_t sx, int32_t sy, int32_t newsx, int32_t newsy);
+    int32_t TransferObject(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t newsx, int32_t newsy);
         // Transfer an object to a new sector, returns new itemnum
     bool Use(int32_t index, int32_t with);
     int32_t Face(int32_t index, int32_t newfacing);
@@ -484,9 +484,9 @@ class TMapPane : public TPane
     void Update3DScenePos();
         // Called by drawbackground to update the 3d scene position
 
-    void WalkmapHandler(PTObjectInstance inst, int32_t mode);
+    void WalkmapHandler(TObjectInstance* inst, int32_t mode);
         // Handles clipping of inst's walkmap to various sectors it may reside in
-    void RedrawWalkmapRect(PTObjectInstance oi, int32_t x, int32_t y, int32_t w, int32_t l, PTSector dsect);
+    void RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int32_t w, int32_t l, TSector* dsect);
         // Redraws the given wm rect - must already be clipped to sector
     void DrawWalkMap(SRect &r);
         // Draws lit walmap crap
@@ -495,28 +495,28 @@ class TMapPane : public TPane
         // Called by Pulse() function to update ambient fade values
   
   // Data Members
-    PTSector sectors[SECTORWINDOWX][SECTORWINDOWY]; // Currently loaded sectors
-    int32_t oldsectorx, oldsectory;                     // Position of sector in last frame
-    int32_t sectorx, sectory;                           // Position of sector in current frame
-    int32_t newsectorx, newsectory;                     // Position of sector in next frame
-    int32_t oldlevel, oldposx, oldposy;                 // Position of screen in last frame
-    int32_t level, posx, posy;                          // Current position (this frame)
-    int32_t newlevel;                                   // New position in map (next frame)
-    int32_t oldscrollx, oldscrolly;                     // Scroll position of previous frame
-    int32_t scrollx, scrolly;                           // Scroll position of current frame
+    TSector* sectors[SECTORWINDOWX][SECTORWINDOWY]; // Currently loaded sectors
+    int32_t oldsectorx, oldsectory;                 // Position of sector in last frame
+    int32_t sectorx, sectory;                       // Position of sector in current frame
+    int32_t newsectorx, newsectory;                 // Position of sector in next frame
+    int32_t oldlevel, oldposx, oldposy;             // Position of screen in last frame
+    int32_t level, posx, posy;                      // Current position (this frame)
+    int32_t newlevel;                               // New position in map (next frame)
+    int32_t oldscrollx, oldscrolly;                 // Scroll position of previous frame
+    int32_t scrollx, scrolly;                       // Scroll position of current frame
     S3DPoint center;                                // World coordinates of pane center (current pos)
     SCenterOnState centeron;                        // Pane will attempt to scroll to this object or point
-    int32_t onobject;                                   // Object clicked on
-    int32_t grabx, graby;                               // Click pos
-    int32_t objx, objy;                                 // Offset on the object
-    int32_t oldz;                                       // For z-dragging
-    int32_t mx, my;                                     // Mouse scrolling
+    int32_t onobject;                               // Object clicked on
+    int32_t grabx, graby;                           // Click pos
+    int32_t objx, objy;                             // Offset on the object
+    int32_t oldz;                                   // For z-dragging
+    int32_t mx, my;                                 // Mouse scrolling
     bool clicked;                                   // To allow movement outside of pane
-    uint32_t notifyflags;                              // Notify Objects of changes
-    int32_t lastkey;                                    // Last virtual keycode generated by mouseclicks
+    uint32_t notifyflags;                           // Notify Objects of changes
+    int32_t lastkey;                                // Last virtual keycode generated by mouseclicks
 
   // Update system members...
-    int32_t numbgrects;                                 // Number of background update rectangles
+    int32_t numbgrects;                             // Number of background update rectangles
     SBgUpdateRect bgrects[MAXMAPBGRECTS];           // Background update rectangles
     bool isrecqueued;                               // True if update system has a rectangle in queue
     SRect queuedrect;                               // Current rectangle in queue
@@ -532,22 +532,22 @@ class TMapPane : public TPane
     void (*targetcallback)(S3DPoint pos);           // Callback target function
     void (*abortcallback)();                        // Callback on abort
     bool dragmode;                                  // Drags objects without clicking
-    int32_t mode;                                       // Mode number
+    int32_t mode;                                   // Mode number
 
-    int32_t lightdist[MAXLIGHTS];                       // Array of nearest light distances
-    int32_t lightindex[MAXLIGHTS];                      // Array of nearest light indexes
+    int32_t lightdist[MAXLIGHTS];                   // Array of nearest light distances
+    int32_t lightindex[MAXLIGHTS];                  // Array of nearest light indexes
 
-    int32_t wmrevealx, wmrevealy;                       // Start of walkmap cutaway
-    int32_t wmrevealsizex, wmrevealsizey;               // Size of walkmap cutaway
+    int32_t wmrevealx, wmrevealy;                   // Start of walkmap cutaway
+    int32_t wmrevealsizex, wmrevealsizey;           // Size of walkmap cutaway
 
   // Ambient lighting values    
-    int32_t ambient;                                    // Ambient light value
+    int32_t ambient;                                // Ambient light value
     SColor ambcolor;                                // Ambient light color
     bool ambientchanged;                            // true when ambient needs to be reset
-    int32_t oldambient, newambient;                     // Ambient fade old and new values
+    int32_t oldambient, newambient;                 // Ambient fade old and new values
     SColor oldambcolor, newambcolor;                // Ambient fade old and new color
-    int32_t totambfadeframes, ambfadeframes;            // Ambient fade frame values
-    int32_t totambfadesteps, ambfadesteps;              // Ambient fade step values
+    int32_t totambfadeframes, ambfadeframes;        // Ambient fade frame values
+    int32_t totambfadesteps, ambfadesteps;          // Ambient fade step values
 };
 
 inline void PosToScreen(int32_t posx, int32_t posy, int32_t posz, int32_t &screenx, int32_t &screeny)
@@ -563,10 +563,10 @@ inline void ScreenToPos(int32_t screenx, int32_t screeny, int32_t &posx, int32_t
 }
 
 // Converts a map pos to a walk grid pos
-void PosToWalkGrid(RS3DPoint pos, int32_t &x, int32_t &y);
+void PosToWalkGrid(S3DPoint& pos, int32_t &x, int32_t &y);
 
 // Converts a walk grid pos to a map pos
-void WalkGridToPos(int32_t x, int32_t y, RS3DPoint pos);
+void WalkGridToPos(int32_t x, int32_t y, S3DPoint& pos);
 
 #define PAUSEUPDATE     MapPane.PauseUpdate(__FILE__, __LINE__)
 #define RESUMEUPDATE    MapPane.ResumeUpdate()

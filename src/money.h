@@ -16,8 +16,8 @@ _CLASSDEF(TMoney)
 class TMoney : public TObjectInstance
 {
   public:
-    TMoney(PTObjectImagery newim) : TObjectInstance(newim) { }
-    TMoney(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) {}
+    TMoney(TObjectImagery* newim) : TObjectInstance(newim) { }
+    TMoney(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
     virtual ~TMoney();
 
     static bool Initialize();
@@ -34,9 +34,9 @@ class TMoney : public TObjectInstance
     static void FreeGroundItem(int32_t type, int32_t count);
         // Free up use of an instance of this count
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Combine money
-    virtual int32_t CursorType(PTObjectInstance with = nullptr);
+    virtual int32_t CursorType(TObjectInstance* with = nullptr);
         // Returns type of cursor that should appear when mouse arrow is over the object
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
@@ -56,7 +56,7 @@ class TMoney : public TObjectInstance
 
     virtual void GetScreenRect(SRect &r);
         // Get screen bounding rectangle for object (in world coordinates)
-    virtual void DrawUnlit(PTSurface surface);
+    virtual void DrawUnlit(TSurface* surface);
         // Returns bitmap for the inventory image
     virtual PTBitmap GetStillImage(int32_t ostate = -1);
         // Returns still image

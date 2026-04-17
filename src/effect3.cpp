@@ -50,8 +50,8 @@ class TRockStormEffect : public TEffect
 protected:
 public:
     int32_t stage;
-    TRockStormEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TRockStormEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TRockStormEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TRockStormEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
@@ -103,7 +103,7 @@ protected:
 public:
     void Initialize();
     bool Render();
-    TRockStormAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TRockStormAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
     void Animate(bool);
 };

@@ -119,7 +119,7 @@ bool SetAddBlendState()
 }
 
 // Utility function for hurting folks (could probably be a lot better, but this will do for now)
-void DamageCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type)
+void DamageCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type)
 {
     PTCharacter invchar;
 
@@ -150,7 +150,7 @@ void DamageCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t ra
 }
 
 // Utility function for hurting folks (could probably be a lot better, but this will do for now)
-void BlastCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type, int32_t interior_range)
+void BlastCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type, int32_t interior_range)
 {
     PTCharacter invchar;
     int32_t distance;
@@ -186,7 +186,7 @@ void BlastCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t ran
     }
 }
 
-void BurnCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t range)
+void BurnCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range)
 {
     PTCharacter invchar;
 
@@ -216,7 +216,7 @@ void BurnCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t rang
     }
 }
 
-void PulpCharactersInRange(PTObjectInstance invoker, RS3DPoint pos, int32_t range)
+void PulpCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range)
 {
     PTCharacter invchar;
 
@@ -312,8 +312,8 @@ int32_t TEffect::GetAngle()
 
     if (spell)
     {
-        PTObjectInstance invoker = spell->GetInvoker();
-        PTObjectInstance target = spell->GetTarget();
+        TObjectInstance* invoker = spell->GetInvoker();
+        TObjectInstance* target = spell->GetTarget();
 
         if ((target == nullptr) || (target == invoker))
             angle = invoker->GetFace();
@@ -837,7 +837,7 @@ class TCreateFoodAnimator : public T3DAnimator
   public:
     S3DPoint foodpos;
     int32_t framenum;
-    TCreateFoodAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TCreateFoodAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
     virtual ~TCreateFoodAnimator() { Close(); }
 
     virtual void Initialize();
@@ -855,8 +855,8 @@ _CLASSDEF(TCreateFoodEffect)
 class TCreateFoodEffect : public TEffect
 {
   public:
-    TCreateFoodEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TCreateFoodEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TCreateFoodEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TCreateFoodEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
 
     virtual void Initialize();
     virtual void Pulse();
@@ -878,7 +878,7 @@ void TCreateFoodEffect::Pulse()
         if (((PTCreateFoodAnimator)animator)->framenum == CFD_SOUPS_ON)
         {
             // create the new food object
-            PTObjectClass cl = TObjectClass::GetClass(OBJCLASS_FOOD);
+            TObjectClass* cl = TObjectClass::GetClass(OBJCLASS_FOOD);
 
             // Get the number of various food types (i.e. watermelon, cheese, beer)
             int32_t num = cl->NumTypes();
@@ -1299,8 +1299,8 @@ class TCureEffect : public TEffect
   private:
     bool first_time;
   public:
-    TCureEffect(PTObjectImagery newim) : TEffect(newim) { Initialize();}
-    TCureEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize();}
+    TCureEffect(TObjectImagery* newim) : TEffect(newim) { Initialize();}
+    TCureEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize();}
 
     virtual void Initialize();
     virtual void Pulse();
@@ -1448,7 +1448,7 @@ class TCureAnimator : public T3DAnimator
     int32_t killing;
 
   public:
-    TCureAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TCureAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
     virtual ~TCureAnimator() { Close(); }
 
     virtual void Initialize();
@@ -1853,8 +1853,8 @@ _CLASSDEF(TFireFlashEffect)
 class TFireFlashEffect : public TEffect
 {
   public:
-    TFireFlashEffect(PTObjectImagery newim) : TEffect(newim) {  }
-    TFireFlashEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) {  }
+    TFireFlashEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TFireFlashEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {  }
 
     virtual void Initialize();
     virtual void Pulse();
@@ -1974,7 +1974,7 @@ class TFireFlashAnimator : public T3DAnimator
     PTCharacter target;
   
   public:
-    TFireFlashAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFireFlashAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
     virtual ~TFireFlashAnimator() { Close(); }
 
     virtual void Initialize();
@@ -2381,8 +2381,8 @@ class TFireWindEffect : public TEffect
     int32_t last_range;
     int32_t life;
   public:
-    TFireWindEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TFireWindEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TFireWindEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TFireWindEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
 
     virtual void Initialize();
     virtual void Pulse();
@@ -2547,7 +2547,7 @@ class TFireWindAnimator : public T3DAnimator
     FWIND_FIRERING fr[FWIND_HOWMANYRINGS];  // properties for each fire ring
 
   public:
-    TFireWindAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFireWindAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
     virtual ~TFireWindAnimator() { Close(); }
 
     virtual void Initialize();
@@ -3145,7 +3145,7 @@ void TBurnEffect::Notify(int32_t notify, void *ptr)
     // **** WARNING!!! MAKE SURE YOU CHECK FOR BROKEN LINKS AND DELETED OBJECTS HERE!!! ****
     // If you want to be notified, you must call SetNotify() in your contsructor
 
-    if (sector == (PTSector)ptr)
+    if (sector == (TSector*)ptr)
         return;
 
     TObjectInstance::Notify(notify, ptr);
@@ -3244,7 +3244,7 @@ void TBurnAnimator::Animate(bool draw)
         SParticleSystemInfo p;
 
         PS3DAnimObj obj = ca->GetObject(j);
-        ca->Get3DImagery()->CalcObjectMatrix(obj, ((PTObjectInstance)character)->GetState(), character->GetFrame(), &mtx);
+        ca->Get3DImagery()->CalcObjectMatrix(obj, ((TObjectInstance*)character)->GetState(), character->GetFrame(), &mtx);
 
         hmm_vec3 vp;
         vp.x = vp.y = vp.z = 0.0f;
@@ -3465,7 +3465,7 @@ void TAuraAnimator::Animate(bool draw)
         SParticleSystemInfo p;
 
         PS3DAnimObj obj = ca->GetObject(j);
-        ca->Get3DImagery()->CalcObjectMatrix(obj, ((PTObjectInstance)character)->GetState(), character->GetFrame(), &mtx);
+        ca->Get3DImagery()->CalcObjectMatrix(obj, ((TObjectInstance*)character)->GetState(), character->GetFrame(), &mtx);
 
         hmm_vec3 vp;
         vp.x = vp.y = vp.z = 0.0f;
@@ -3831,8 +3831,8 @@ public:
     PTCharacter target;
     int32_t first_time;
 
-    TReviveEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TReviveEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TReviveEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TReviveEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
@@ -4841,7 +4841,7 @@ class TIrisFlareAnimator : public T3DAnimator
     float cylsize1, cylsize2;
     float growx, growy;
 
-    TIrisFlareAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TIrisFlareAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     virtual ~TIrisFlareAnimator() { Close(); }
 
     virtual void Initialize();
@@ -5087,8 +5087,8 @@ class TSetVortexEffect : public TEffect
 {
 protected:
 public:
-    TSetVortexEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TSetVortexEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TSetVortexEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TSetVortexEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     void Initialize();
     void Pulse();
 };
@@ -5150,7 +5150,7 @@ protected:
 public:
     void Initialize();
     bool Render();
-    TSetVortexAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TSetVortexAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
     void Animate(bool);
 };
@@ -5255,8 +5255,8 @@ public:
     int32_t my_state;
     bool has_moved;
     S3DPoint new_position;
-    TTeleporterEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TTeleporterEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TTeleporterEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TTeleporterEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen(){}
@@ -5275,7 +5275,7 @@ class TTeleporterAnimator : public T3DAnimator
     float cylsize[5];
     float growx, growy;
 
-    TTeleporterAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TTeleporterAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     virtual ~TTeleporterAnimator() { Close(); }
 
     virtual void Initialize();
@@ -5714,7 +5714,7 @@ class TBarrierAnimator : public T3DAnimator
         { for (int32_t i = 0; i < MAXFLARES; i++) if (type[i] == FL_INACTIVE) return i; return -1; }
 
   public:
-    TBarrierAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TBarrierAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~TBarrierAnimator() { Close(); }
       // Call close function
@@ -6008,7 +6008,7 @@ class TSmokeEffectAnimator : public T3DAnimator
     float centervx, centervy;
     SSmoke smoke[NUMSMOKEBALLS];
 
-    TSmokeEffectAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TSmokeEffectAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     virtual ~TSmokeEffectAnimator() { Close(); }
 
     virtual void Initialize();
@@ -6971,7 +6971,7 @@ void TPulpEffect::Notify(int32_t notify, void *ptr)
     // **** WARNING!!! MAKE SURE YOU CHECK FOR BROKEN LINKS AND DELETED OBJECTS HERE!!! ****
     // If you want to be notified, you must call SetNotify() in your contsructor
 
-    if (sector == (PTSector)ptr)
+    if (sector == (TSector*)ptr)
         return;
 
     TObjectInstance::Notify(notify, ptr);
@@ -6993,8 +6993,8 @@ class TFireConeEffect : public TEffect
 {
   public:
     bool firsttime;
-    TFireConeEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TFireConeEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TFireConeEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TFireConeEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TFireConeEffect() {}
 
     virtual void Initialize();          // init
@@ -7032,7 +7032,7 @@ class TFireConeAnimator : public T3DAnimator
     int32_t state;
   public:
     TParticleSystem fire;
-    TFireConeAnimator(PTObjectInstance oi) : T3DAnimator(oi), fire(FLAME_COUNT), smoke(FLAME_COUNT), burst(FLAME_BURST) {}
+    TFireConeAnimator(TObjectInstance* oi) : T3DAnimator(oi), fire(FLAME_COUNT), smoke(FLAME_COUNT), burst(FLAME_BURST) {}
     virtual ~TFireConeAnimator() { Close(); }
 
     virtual void Initialize();
@@ -7540,8 +7540,8 @@ _CLASSDEF(TDragonFireEffect)
 class TDragonFireEffect : public TEffect
 {
   public:
-    TDragonFireEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TDragonFireEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TDragonFireEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TDragonFireEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TDragonFireEffect() {}
 
     virtual void Initialize();          // init
@@ -7559,7 +7559,7 @@ class TDragonFireAnimator : public T3DAnimator
     bool done;
     int32_t frame_count;
   public:
-    TDragonFireAnimator(PTObjectInstance oi) : T3DAnimator(oi), fire(DRAGON_FLAME_COUNT), smoke(DRAGON_FLAME_COUNT) {}
+    TDragonFireAnimator(TObjectInstance* oi) : T3DAnimator(oi), fire(DRAGON_FLAME_COUNT), smoke(DRAGON_FLAME_COUNT) {}
     virtual ~TDragonFireAnimator() { Close(); }
 
     virtual void Initialize();
@@ -7854,7 +7854,7 @@ void TIceBoltAnimator::Initialize()
         S3DPoint pos;
         ((PTEffect)inst)->GetPos(pos);
         def.pos = pos;
-        PTObjectInstance instance = MapPane.GetInstance(MapPane.NewObject(&def));
+        TObjectInstance* instance = MapPane.GetInstance(MapPane.NewObject(&def));
         if (!instance)
             return;
 
@@ -8014,7 +8014,7 @@ void TIceBoltAnimator::Animate(bool draw)
 
             for(int32_t i = 0; i < num; ++i) 
             {
-                PTObjectInstance inst = MapPane.GetInstance(targets[i]);
+                TObjectInstance* inst = MapPane.GetInstance(targets[i]);
                 if (inst && inst != ((PTEffect)inst)->GetSpell()->GetInvoker() &&
                     !((PTCharacter)inst)->IsDead())
                         flag = true;
@@ -8092,12 +8092,12 @@ void TIceBoltAnimator::Animate(bool draw)
         S3DPoint effect_pos;
         ((PTEffect)inst)->GetPos(effect_pos);
         effect_pos.y -= (int32_t)length;
-        PTObjectInstance caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
+        TObjectInstance* caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
         int32_t num = MapPane.FindObjectsInRange(effect_pos, targets, 200, 0, OBJCLASS_CHARACTER);
         effect_pos.y += (int32_t)length;
         for (int32_t i = 0; i < num && pr.numtargets < 5; i++)
         {
-            PTObjectInstance instan = MapPane.GetInstance(targets[i]);
+            TObjectInstance* instan = MapPane.GetInstance(targets[i]);
             if (instan && instan != caster && !((PTCharacter)instan)->IsDead())// && !(instan->GetFlags() & OF_ICED))
             {
                 S3DPoint putpos;
@@ -8189,7 +8189,7 @@ void TIceBoltAnimator::Animate(bool draw)
         // deal damage proporational to subspell level
         ((PTEffect)inst)->GetPos(effect_pos);
         effect_pos.y -= (int32_t)length;
-        PTObjectInstance caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
+        TObjectInstance* caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
 //      DamageCharactersInRange(caster, effect_pos, 200, ((PTEffect)inst)->GetSpell()->VariantData()->mindamage, ((PTEffect)inst)->GetSpell()->VariantData()->maxdamage, ((PTEffect)inst)->GetSpell()->SpellData()->damagetype);
         DamageCharactersInRange(caster, effect_pos, 200, ((PTEffect)inst)->GetSpell()->VariantData()->mindamage, ((PTEffect)inst)->GetSpell()->VariantData()->maxdamage, DAMAGE_ICE);
     }
@@ -8197,14 +8197,14 @@ void TIceBoltAnimator::Animate(bool draw)
     {
         ((PTEffect)inst)->GetPos(effect_pos);
         effect_pos.y -= (int32_t)length;
-        PTObjectInstance caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
+        TObjectInstance* caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
 //      DamageCharactersInRange(caster, effect_pos, 200, 250, 250, DAMAGE_ICE);
     }
     // freeze guys (if high enough spell level)
     if (frameon == GROW_DURATION * 2 && subspell > 1)
     {
         ((PTEffect)inst)->GetPos(effect_pos);
-        PTObjectInstance caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
+        TObjectInstance* caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
 
         // find me some characters to ice!
         S3DPoint putpos, vel;
@@ -8214,12 +8214,12 @@ void TIceBoltAnimator::Animate(bool draw)
         effect_pos.y = putpos.y + vel.y;
         effect_pos.z = putpos.z;
 
-        PTObjectInstance toice = nullptr;
+        TObjectInstance* toice = nullptr;
         int32_t targets[MAXFOUNDOBJS];
         int32_t num = MapPane.FindObjectsInRange(effect_pos, targets, 200, 0, OBJCLASS_CHARACTER);
         for (int32_t i = 0; i < num; i++)
         {
-            PTObjectInstance instan = MapPane.GetInstance(targets[i]);
+            TObjectInstance* instan = MapPane.GetInstance(targets[i]);
             if (instan && instan != caster && !((PTCharacter)instan)->IsDead()/* && !(instan->GetFlags() & OF_ICED)*/)
             {
                 // create the iced effect
@@ -8549,7 +8549,7 @@ void TIcedAnimator::Initialize()
     donebouncing = 0;
 }
 
-void TIcedAnimator::InitIced(PTObjectInstance iceme)
+void TIcedAnimator::InitIced(TObjectInstance* iceme)
 {
     icedchar = iceme;
     if (icedchar)
@@ -8966,7 +8966,7 @@ void TQuicksandAnimator::Initialize()
 
 }
 
-void TQuicksandAnimator::InitQuicksand(PTObjectInstance quicksandme, int32_t delay)
+void TQuicksandAnimator::InitQuicksand(TObjectInstance* quicksandme, int32_t delay)
 {
     frameon = -delay;
     quicksandchar = quicksandme;
@@ -9281,7 +9281,7 @@ void TSandswirlAnimator::Initialize()
     S3DPoint pos;
     ((PTEffect)inst)->GetPos(pos);
     def.pos = pos;
-    PTObjectInstance instance = MapPane.GetInstance(MapPane.NewObject(&def));
+    TObjectInstance* instance = MapPane.GetInstance(MapPane.NewObject(&def));
     if (!instance)
         return;
 
@@ -9375,11 +9375,11 @@ void TSandswirlAnimator::Animate(bool draw)
         S3DPoint effect_pos;
         ((PTEffect)inst)->GetPos(effect_pos);
         //effect_pos.y -= length;
-        PTObjectInstance caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
+        TObjectInstance* caster = ((PTEffect)inst)->GetSpell()->GetInvoker();
         int32_t num = MapPane.FindObjectsInRange(effect_pos, targets, 400, 0, OBJCLASS_CHARACTER);
         for (int32_t i = 0; i < num && pr.numtargets < 5; i++)
         {
-            PTObjectInstance instan = MapPane.GetInstance(targets[i]);
+            TObjectInstance* instan = MapPane.GetInstance(targets[i]);
             if (instan && instan != caster && !((PTCharacter)instan)->IsDead()/* && !(instan->GetFlags() & OF_ICED)*/)
             {
                 // create the quicksand effect
@@ -9517,7 +9517,7 @@ void TTornadoEffect::Pulse()
         {
             if (spell)
             {
-                PTObjectInstance invoker = spell->GetInvoker();
+                TObjectInstance* invoker = spell->GetInvoker();
                 S3DPoint pos;
                 GetPos(pos);
                 DamageCharactersInRange(invoker, pos, TORNADO_MODIFIER, spell->VariantData()->mindamage, spell->VariantData()->maxdamage, spell->SpellData()->damagetype);
@@ -11322,7 +11322,7 @@ class TMistFogAnimator : public T3DAnimator
     float centervx, centervy;
     SSmoke smoke[NUMMISTFOG];
 
-    TMistFogAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TMistFogAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     virtual ~TMistFogAnimator() { Close(); }
 
     virtual void Initialize();
@@ -11982,7 +11982,7 @@ void TPixieAnimator::Animate(bool draw)
     if (acharnear)
     {
         //run awee run awee
-        PTObjectInstance charinst = MapPane.GetInstance(targets[i]);
+        TObjectInstance* charinst = MapPane.GetInstance(targets[i]);
         if (charinst)
         {
             S3DPoint charpos;
@@ -12074,8 +12074,8 @@ _CLASSDEF(TFizzleEffect)
 class TFizzleEffect : public TEffect
 {
   public:
-    TFizzleEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TFizzleEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TFizzleEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TFizzleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TFizzleEffect() {}
 
     virtual void Initialize();          // init
@@ -12106,7 +12106,7 @@ class TFizzleAnimator : public T3DAnimator
     float add;
     int32_t frame_count;
   public:
-    TFizzleAnimator(PTObjectInstance oi) : T3DAnimator(oi), blue(DUST_COUNT), red(DUST_COUNT), purple(DUST_COUNT) {}
+    TFizzleAnimator(TObjectInstance* oi) : T3DAnimator(oi), blue(DUST_COUNT), red(DUST_COUNT), purple(DUST_COUNT) {}
     virtual ~TFizzleAnimator() { Close(); }
 
     virtual void Initialize();
@@ -12376,7 +12376,7 @@ void TQuicksandAnimator::Initialize()
     GetVerts(obj, D3DVT_LVERTEX);
 }
 
-void TQuicksandAnimator::InitQuicksand(PTObjectInstance quicksandme, int32_t delay)
+void TQuicksandAnimator::InitQuicksand(TObjectInstance* quicksandme, int32_t delay)
 {
     frameon = -delay;
     quicksandchar = quicksandme;

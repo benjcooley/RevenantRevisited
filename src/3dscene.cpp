@@ -383,7 +383,7 @@ bool T3DScene::Initialize()
 
     if (Display->UsingClearZBuffer())
     {
-        TRY_D3D(Viewport->SetBackgroundDepth(Display->GetZBuffer()->GetDDSurface()));
+        TRY_D3D(Viewport->SetBackgroundDepth(Display->GetZBuffer()->GetSGImage()));
     }
 
     /*
@@ -700,8 +700,8 @@ bool T3DScene::DrawScene()
     {
         if (AnimatorArray[c] != nullptr) 
         {
-            PTObjectInstance inst = AnimatorArray[c]->GetObjInst();
-            PTObjectImagery imagery = AnimatorArray[c]->GetImagery();
+            TObjectInstance* inst = AnimatorArray[c]->GetObjInst();
+            TObjectImagery* imagery = AnimatorArray[c]->GetImagery();
 
             if ((int32_t)inst->GetFrame() == -1)
             {
@@ -770,7 +770,7 @@ void T3DScene::SetAmbientColor(SColor &color)
 
 // ************ Light Functions **************
 
-int32_t T3DScene::AddLight(RS3DPoint pos, SColor color, int32_t intensity, int32_t multiplier)
+int32_t T3DScene::AddLight(S3DPoint& pos, SColor color, int32_t intensity, int32_t multiplier)
 {
     if (!initialized)
         return -1;
@@ -854,7 +854,7 @@ bool T3DScene::SetLightColor(int32_t lightid, SColor color)
     return true;
 }
 
-bool T3DScene::SetLightPosition(int32_t lightid, RS3DPoint pos)
+bool T3DScene::SetLightPosition(int32_t lightid, S3DPoint& pos)
 {
     if (!initialized)
         return false;

@@ -148,7 +148,7 @@ void TAmmo::Save(RTOutputStream os)
     TObjectInstance::Save(os);
 }
 
-void TAmmo::AllocInvItem(PTObjectImagery img, int32_t state, int32_t type, int32_t count)
+void TAmmo::AllocInvItem(TObjectImagery* img, int32_t state, int32_t type, int32_t count)
 {
     if (!img)
         return;
@@ -184,7 +184,7 @@ void TAmmo::FreeInvItem(int32_t type, int32_t count)
     }
 }
 
-void TAmmo::AllocGroundItem(PTObjectImagery img, int32_t state, int32_t type, int32_t count)
+void TAmmo::AllocGroundItem(TObjectImagery* img, int32_t state, int32_t type, int32_t count)
 {
     if (!img)
         return;
@@ -252,7 +252,7 @@ void TAmmo::GetScreenRect(SRect &r)
     }
 }
 
-void TAmmo::DrawUnlit(PTSurface surface)
+void TAmmo::DrawUnlit(TSurface* surface)
 {
     int32_t count = IMGAMOUNT(Amount());
 
@@ -276,8 +276,8 @@ _CLASSDEF(TArrow3D)
 class TArrow3D : public TObjectInstance
 {
   public:
-    TArrow3D(PTObjectImagery newim) : TObjectInstance(newim) { killwait = -1; }
-    TArrow3D(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) { killwait = -1; }
+    TArrow3D(TObjectImagery* newim) : TObjectInstance(newim) { killwait = -1; }
+    TArrow3D(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { killwait = -1; }
 
     virtual uint32_t Move();
     virtual void Pulse();
@@ -292,7 +292,7 @@ uint32_t TArrow3D::Move()
 {
     uint32_t bits = TObjectInstance::Move();
 
-    PTObjectInstance inst = (PTObjectInstance)TCharacter::CharBlocking(this, pos);
+    TObjectInstance* inst = (TObjectInstance*)TCharacter::CharBlocking(this, pos);
 
     if (killwait < 0 && ((bits & MOVE_BLOCKED) || inst))
     {

@@ -17,7 +17,7 @@
 
 REGISTER_IMAGERYBUILDER(TAnimImagery);
 
-bool TAnimImagery::AlwaysOnTop(PTObjectInstance oi)
+bool TAnimImagery::AlwaysOnTop(TObjectInstance* oi)
 {
     int32_t state = oi->GetState();
 
@@ -44,7 +44,7 @@ void TAnimImagery::CacheImagery()
     }
 }
 
-void TAnimImagery::DrawLit(PTObjectInstance oi, PTSurface surface)
+void TAnimImagery::DrawLit(TObjectInstance* oi, TSurface* surface)
 {
     int32_t state = oi->GetState();
 
@@ -92,7 +92,7 @@ void TAnimImagery::DrawLit(PTObjectInstance oi, PTSurface surface)
     }
 }       
 
-void TAnimImagery::DrawUnlit(PTObjectInstance oi, PTSurface surface)
+void TAnimImagery::DrawUnlit(TObjectInstance* oi, TSurface* surface)
 {
     int32_t state = oi->GetState();
 
@@ -147,7 +147,7 @@ void TAnimImagery::DrawUnlit(PTObjectInstance oi, PTSurface surface)
                       screenpos.z - GetRegZ(state), bm, flags);
 }
 
-bool TAnimImagery::GetZ(PTObjectInstance oi, PTSurface surface)
+bool TAnimImagery::GetZ(TObjectInstance* oi, TSurface* surface)
 {
     int32_t state = oi->GetState();
 
@@ -202,7 +202,7 @@ bool TAnimImagery::GetZ(PTObjectInstance oi, PTSurface surface)
                           screenpos.z - GetRegZ(state), bm, flags);
 }
 
-void TAnimImagery::DrawSelected(PTObjectInstance oi, PTSurface surface)
+void TAnimImagery::DrawSelected(TObjectInstance* oi, TSurface* surface)
 {
     int32_t state = oi->GetState();
 
@@ -318,7 +318,7 @@ bool TAnimImagery::SaveBitmap(char *path, int32_t state, bool zbuffer)
     return true;
 }
 
-bool TAnimImagery::NeedsAnimator(PTObjectInstance oi)
+bool TAnimImagery::NeedsAnimator(TObjectInstance* oi)
 {
     int32_t state = oi->GetState();
 
@@ -329,7 +329,7 @@ bool TAnimImagery::NeedsAnimator(PTObjectInstance oi)
     return false;
 }
 
-PTObjectAnimator TAnimImagery::NewObjectAnimator(PTObjectInstance oi)
+PTObjectAnimator TAnimImagery::NewObjectAnimator(TObjectInstance* oi)
 {
     return (PTObjectAnimator)new TAnimAnimator(oi);
 }
@@ -338,7 +338,7 @@ PTObjectAnimator TAnimImagery::NewObjectAnimator(PTObjectInstance oi)
 // * Anim Object Animator Funtions *
 // *********************************
 
-TAnimAnimator::TAnimAnimator(PTObjectInstance oi) : TObjectAnimator(oi) 
+TAnimAnimator::TAnimAnimator(TObjectInstance* oi) : TObjectAnimator(oi) 
 {
 }
 

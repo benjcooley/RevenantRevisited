@@ -15,7 +15,7 @@
 #include "parse.h"
 #endif
 
-#define COMMAND(x)  int32_t (x)(PTObjectInstance context, TToken &t)
+#define COMMAND(x)  int32_t (x)(TObjectInstance* context, TToken &t)
 
 #define CMD_WAIT        (1 << 0)        // wait for command completion
 #define CMD_BADCOMMAND  (1 << 1)        // bad command
@@ -46,7 +46,7 @@ struct SCommand
     char *usage;                        // help text
 };
 
-int32_t CommandInterpreter(PTObjectInstance context, TToken &t, int32_t abrevlen = 0);
+int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen = 0);
 void Output(char *fmt, ...);
 
 int32_t StringVal(char *string);

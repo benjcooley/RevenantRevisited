@@ -4,6 +4,8 @@
 // *                ddsurface.cpp - EXILE Surface Object                   *
 // *************************************************************************
 
+#if 0
+
 #include <windows.h>
 #include <ddraw.h>
 
@@ -20,12 +22,12 @@ extern LPDIRECTDRAW DirectDraw;       // DirectDraw pointer
 extern bool         BlitHardware;
 extern uint32_t        ZBufferBitDepth;
 
-TDDSurface::TDDSurface()
+TSurface::TSurface()
 {
     surface = nullptr;
 }
 
-void TDDSurface::Initialize(int32_t vidwidth, int32_t vidheight, int32_t createflags, int32_t vidstride)
+void TSurface::Initialize(int32_t vidwidth, int32_t vidheight, int32_t createflags, int32_t vidstride)
 {
     if (surface != nullptr)
         return;
@@ -65,7 +67,7 @@ void TDDSurface::Initialize(int32_t vidwidth, int32_t vidheight, int32_t createf
     else if (createflags & VSURF_SYSTEMMEM)
         ddsd.ddsCaps.dwCaps = DDSCAPS_SYSTEMMEMORY; 
     else
-        Error("Invalid TDDSurface initialize flag");
+        Error("Invalid TSurface initialize flag");
 
     if (createflags & VSURF_ZBUFFER)
     {
@@ -136,7 +138,7 @@ void TDDSurface::Initialize(int32_t vidwidth, int32_t vidheight, int32_t createf
     ownssurface = true;
 }
 
-void TDDSurface::Initialize(PTBitmap bitmap, int32_t intensity, bool usevideomem)
+void TSurface::Initialize(PTBitmap bitmap, int32_t intensity, bool usevideomem)
 {
     if (surface != nullptr)
         return;
@@ -155,7 +157,7 @@ void TDDSurface::Initialize(PTBitmap bitmap, int32_t intensity, bool usevideomem
     ParamDraw(&dp, bitmap);
 }
 
-void TDDSurface::Initialize(LPDIRECTDRAWSURFACE ddsurface)
+void TSurface::Initialize(LPDIRECTDRAWSURFACE ddsurface)
 {
     DDSURFACEDESC ddsd;
     memset(&ddsd, 0, sizeof(DDSURFACEDESC));
@@ -193,7 +195,7 @@ void TDDSurface::Initialize(LPDIRECTDRAWSURFACE ddsurface)
         vsflags = VSURF_VIDEOMEM;
 }
 
-void TDDSurface::Close()
+void TSurface::Close()
 {
     if (ownssurface && surface != nullptr) 
     {
@@ -202,13 +204,13 @@ void TDDSurface::Close()
     }
 }
 
-TDDSurface::~TDDSurface()
+TSurface::~TSurface()
 {
     Close();
 }
 
 // Restore Surface
-bool TDDSurface::Restore()
+bool TSurface::Restore()
 {
     // Attempt to restore surface
     if (surface)
@@ -223,7 +225,7 @@ bool TDDSurface::Restore()
     return true;
 }
 
-void *TDDSurface::Lock()
+void *TSurface::Lock()
 {
     if (!surface)
         return nullptr;
@@ -296,7 +298,7 @@ void *TDDSurface::Lock()
     return ddsd.lpSurface;
 }
 
-bool TDDSurface::Unlock()
+bool TSurface::Unlock()
 {
     if (!locked)
         return true;
@@ -337,13 +339,13 @@ bool TDDSurface::Unlock()
     return true;
 }
 
-bool TDDSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t ddflags, LPDDBLTFX fx)
+bool TSurface::BlitHandler(PSDrawParam dp, TSurface* srcsurface, int32_t ddflags, LPDDBLTFX fx)
 {
     HRESULT error;
 
     LPDIRECTDRAWSURFACE ddsrcsurf = nullptr;
     if (srcsurface)
-        ddsrcsurf = srcsurface->GetDDSurface();
+        ddsrcsurf = srcsurface->GetSGImage();
 
   // Can't blit to the zbuffer..
     if (NoBlitZBuffer && 
@@ -528,7 +530,7 @@ bool TDDSurface::BlitHandler(PSDrawParam dp, PTSurface srcsurface, int32_t ddfla
     return true;
 }
 
-bool TDDSurface::Box(int32_t dx, int32_t dy, int32_t dwidth, int32_t dheight, 
+bool TSurface::Box(int32_t dx, int32_t dy, int32_t dwidth, int32_t dheight, 
         uint32_t color, uint16_t zpos, uint16_t normal, uint32_t drawmode)
 {
     if (drawmode == DM_USEDEFAULT)
@@ -570,4 +572,4 @@ bool TDDSurface::Box(int32_t dx, int32_t dy, int32_t dwidth, int32_t dheight,
     return true;
 }
 
-
+#endif

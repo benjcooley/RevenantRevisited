@@ -16,6 +16,8 @@ class TStatusBar : public TPane
   public:
     TStatusBar(int32_t x, int32_t y, int32_t w, int32_t h) : TPane(x, y, w, h) { }
 
+    _NODEFAULTCONS(TStatusBar);
+
     virtual bool Initialize();
     virtual void Close();
 
@@ -29,7 +31,7 @@ class TStatusBar : public TPane
     void ChangeLevel(int32_t tlev) { targetlevel = max(min(tlev, 1000), 0); }
 
   protected:
-    PTMulti tubedata;
+    TMulti* tubedata;
 
     int32_t level;              // level of fluid (0-1000)
     int32_t targetlevel;        // target level (animating towards)
@@ -37,20 +39,24 @@ class TStatusBar : public TPane
 };
 
 _CLASSDEF(THealthBar)
-class THealthBar : public TStatusBar
+class THealthBar final : public TStatusBar
 {
   public:
     THealthBar() : TStatusBar(HEALTHBARX, HEALTHBARY, HEALTHBARWIDTH, HEALTHBARHEIGHT) { }
+
+    _NODEFAULTCONS(THealthBar);
 
     virtual bool Initialize();
     virtual int32_t GetHue();
 };
 
 _CLASSDEF(TStaminaBar)
-class TStaminaBar : public TStatusBar
+class TStaminaBar final : public TStatusBar
 {
   public:
     TStaminaBar() : TStatusBar(STAMINABARX, STAMINABARY, STAMINABARWIDTH, STAMINABARHEIGHT) { }
+
+    _NODEFAULTCONS(TStaminaBar);
 
     virtual bool Initialize();
     virtual int32_t GetHue();

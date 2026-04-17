@@ -14,8 +14,8 @@ _CLASSDEF(TTile)
 class TTile : public TObjectInstance
 {
   public:
-    TTile(PTObjectImagery newim) : TObjectInstance(newim) { flags |= OF_IMMOBILE; }
-    TTile(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE; }
+    TTile(TObjectImagery* newim) : TObjectInstance(newim) { flags |= OF_IMMOBILE; }
+    TTile(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE; }
 
     // Tile stats
     STATFUNC(Code)

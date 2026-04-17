@@ -223,7 +223,7 @@ void TExit::GetExitStrip(int32_t &regx, int32_t &regy, int32_t &regz, int32_t &w
     }
 }
 
-bool TExit::AddExit(char *name, PTObjectInstance inst, bool getamb)
+bool TExit::AddExit(char *name, TObjectInstance* inst, bool getamb)
 {
     if (!name || !*name || !inst)
         return false;
@@ -300,7 +300,7 @@ PSExitRef TExit::FindExit(char *exitname)
     return nullptr;
 }
 
-bool TExit::Use(PTObjectInstance user, int32_t with)
+bool TExit::Use(TObjectInstance* user, int32_t with)
 {
     TObjectInstance::Use(user, with);
 
@@ -326,7 +326,7 @@ bool TExit::Use(PTObjectInstance user, int32_t with)
     return false;
 }
 
-int32_t TExit::CursorType(PTObjectInstance with)
+int32_t TExit::CursorType(TObjectInstance* with)
 {
     if (Openable())
     {
@@ -494,11 +494,11 @@ _CLASSDEF(TPressPlate)
 class TPressPlate : public TExit
 {
   public:
-    TPressPlate(PTObjectImagery newim) : TExit(newim) { }
-    TPressPlate(PSObjectDef def, PTObjectImagery newim) : TExit(def, newim) { }
+    TPressPlate(TObjectImagery* newim) : TExit(newim) { }
+    TPressPlate(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { }
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1) { return false; }
-    virtual int32_t CursorType(PTObjectInstance with = nullptr) { return CURSOR_NONE; }
+    virtual bool Use(TObjectInstance* user, int32_t with = -1) { return false; }
+    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
 
     virtual bool Activate();
     virtual void Unactivate();
@@ -529,11 +529,11 @@ _CLASSDEF(TUpBlock)
 class TUpBlock : public TExit
 {
   public:
-    TUpBlock(PTObjectImagery newim) : TExit(newim) { }
-    TUpBlock(PSObjectDef def, PTObjectImagery newim) : TExit(def, newim) { }
+    TUpBlock(TObjectImagery* newim) : TExit(newim) { }
+    TUpBlock(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { }
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
-    virtual int32_t CursorType(PTObjectInstance with = nullptr) { return CURSOR_NONE; }
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
+    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
 
     virtual void Pulse();
 };
@@ -554,7 +554,7 @@ void TUpBlock::Pulse()
     TExit::Pulse();
 }
 
-bool TUpBlock::Use(PTObjectInstance user, int32_t with)
+bool TUpBlock::Use(TObjectInstance* user, int32_t with)
 {
     if (with == -1)
     {
@@ -579,7 +579,7 @@ _CLASSDEF(TDragonEntAnimator)
 class TDragonEntAnimator : public T3DAnimator
 {
   public:
-    TDragonEntAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TDragonEntAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     virtual ~TDragonEntAnimator() { Close(); }
 
     virtual void Animate(bool draw);
@@ -626,11 +626,11 @@ _CLASSDEF(TSpikeWall)
 class TSpikeWall : public TExit
 {
   public:
-    TSpikeWall(PTObjectImagery newim) : TExit(newim) { }
-    TSpikeWall(PSObjectDef def, PTObjectImagery newim) : TExit(def, newim) { }
+    TSpikeWall(TObjectImagery* newim) : TExit(newim) { }
+    TSpikeWall(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { }
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1) { return false; }
-    virtual int32_t CursorType(PTObjectInstance with = nullptr) { return CURSOR_NONE; }
+    virtual bool Use(TObjectInstance* user, int32_t with = -1) { return false; }
+    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
 
     virtual bool Activate();
     virtual void Unactivate();
@@ -669,7 +669,7 @@ void TSpikeWall::Unactivate()
 
 REGISTER_BUILDER(TLever)
 
-bool TLever::Use(PTObjectInstance user, int32_t with)
+bool TLever::Use(TObjectInstance* user, int32_t with)
 {
     TExit::Use(user, with);
 

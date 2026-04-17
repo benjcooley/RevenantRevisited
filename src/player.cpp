@@ -90,12 +90,12 @@ SSkill SkillTree[NUM_SKILLS] =
 // REMEMBER: !!!!! Please attempt to put MOST of player functionality into character instead.
 // Player should only be the place for functionality that CAN'T be placed into character!!
 
-TPlayer::TPlayer(PTObjectImagery newim) : TCharacter(newim)
+TPlayer::TPlayer(TObjectImagery* newim) : TCharacter(newim)
 {
     ClearPlayer();
 }
 
-TPlayer::TPlayer(PSObjectDef def, PTObjectImagery newim) : TCharacter(def, newim)
+TPlayer::TPlayer(SObjectDef* def, TObjectImagery* newim) : TCharacter(def, newim)
 {
     ClearPlayer();
 }
@@ -107,7 +107,7 @@ TPlayer::~TPlayer()
 
 void TPlayer::ClearPlayer()
 {
-    memset(equipment, 0, NUM_EQ_SLOTS * sizeof(PTObjectInstance));
+    memset(equipment, 0, NUM_EQ_SLOTS * sizeof(TObjectInstance*));
 
     flags |= OF_NONMAP; // Allows us to insert object into the game map, and not
                         // worry about it getting deleted, saved, or whatnot
@@ -194,7 +194,7 @@ void TPlayer::RefreshEquip()
     }
 }
 
-bool TPlayer::CanEquip(PTObjectInstance oi, int32_t slot)
+bool TPlayer::CanEquip(TObjectInstance* oi, int32_t slot)
 {
     if (!oi)
         return false;
@@ -224,7 +224,7 @@ bool TPlayer::CanEquip(PTObjectInstance oi, int32_t slot)
     return true;
 }
 
-bool TPlayer::Equip(PTObjectInstance oi, int32_t slot)
+bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
 {
     if (oi && !CanEquip(oi, slot))
         return false;
@@ -366,7 +366,7 @@ void TPlayer::SetMana(int32_t v)
         StaminaBar.ChangeLevel(v * 1000 / MaxMana());
 }
 
-char *TPlayer::GetCombatRoot(PTObjectInstance oi)
+char *TPlayer::GetCombatRoot(TObjectInstance* oi)
 {
     if (!oi)
         oi = PrimeHand();
@@ -387,7 +387,7 @@ char *TPlayer::GetCombatRoot(PTObjectInstance oi)
         return "combat";
 }
 
-char *TPlayer::GetBowRoot(PTObjectInstance oi)
+char *TPlayer::GetBowRoot(TObjectInstance* oi)
 {
     if (!oi)
         oi = RangedWeapon();
@@ -509,9 +509,9 @@ bool TPlayer::HasTalismans(char *talismans)
 
     // now parse the inventory and count how many of each talisman there are
     // find their spell pouch
-    PTObjectInstance pouch = FindObjInventory("Spell Pouch");
+    TObjectInstance* pouch = FindObjInventory("Spell Pouch");
     if (!pouch)
-        PTObjectInstance pouch = FindObjInventory("spellpouch");
+        TObjectInstance* pouch = FindObjInventory("spellpouch");
     if (pouch)
     {
         for(x = 0; x < TalismanClass.NumTypes(); ++x)
@@ -657,7 +657,7 @@ void TPlayerManager::SetMainPlayer(int32_t newplayernum)
 }
 
 // Sets the main player for the game
-void TPlayerManager::SetMainPlayer(PTPlayer player)
+void TPlayerManager::SetMainPlayer(TPlayer* player)
 {
     int32_t newplayernum = -1;
 
@@ -674,7 +674,7 @@ void TPlayerManager::SetMainPlayer(PTPlayer player)
 }
 
 // Add player
-int32_t TPlayerManager::AddPlayer(PTPlayer newplayer)
+int32_t TPlayerManager::AddPlayer(TPlayer* newplayer)
 {
     int32_t c;
     int32_t empty = -1;
@@ -717,7 +717,7 @@ void TPlayerManager::RemovePlayer(int32_t removenum, bool collapse)
 }
 
 // Remove a player (given player pointer)
-void TPlayerManager::RemovePlayer(PTPlayer removeplayer, bool collapse)
+void TPlayerManager::RemovePlayer(TPlayer* removeplayer, bool collapse)
 {
     int32_t removenum;
     for (removenum = 0; removenum < players.NumItems(); removenum++)

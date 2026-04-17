@@ -38,15 +38,15 @@ class TAnimImagery : public TObjectImagery
       // (Called by the SectorCache system to cause imagery to be loaded and decompressed)
       // AnimImagery uses this to call the TBitmap::CacheChunks() function  
 
-    virtual void DrawUnlit(PTObjectInstance oi, PTSurface surface);
+    virtual void DrawUnlit(TObjectInstance* oi, TSurface* surface);
         // Draws unlit imagery to background
-    virtual void DrawLit(PTObjectInstance oi, PTSurface surface);
+    virtual void DrawLit(TObjectInstance* oi, TSurface* surface);
         // Draws lit imagery to background
-    virtual bool GetZ(PTObjectInstance oi, PTSurface surface);
+    virtual bool GetZ(TObjectInstance* oi, TSurface* surface);
         // Get first unclipped zbuffer point by simulating drawing to the surface
-    virtual void DrawSelected(PTObjectInstance oi, PTSurface surface);
+    virtual void DrawSelected(TObjectInstance* oi, TSurface* surface);
         // Causes image to draw selection (hilighting) around itself
-    virtual bool AlwaysOnTop(PTObjectInstance oi);
+    virtual bool AlwaysOnTop(TObjectInstance* oi);
         // Lit imagery is always on top because it has no zbuffer
     virtual PTBitmap GetStillImage(int32_t state, int32_t num = 0)
       { return (PTBitmap)GetAnimState(state)->still.ptr(); }
@@ -67,16 +67,16 @@ class TAnimImagery : public TObjectImagery
     virtual bool SaveBitmap(char *path, int32_t state = 0, bool zbuffer = true);
         // Saves a bitmap of the current object given the current state
 
-    virtual PTObjectAnimator NewObjectAnimator(PTObjectInstance oi);
+    virtual PTObjectAnimator NewObjectAnimator(TObjectInstance* oi);
         // Creates an animtor for the given object
-    virtual bool NeedsAnimator(PTObjectInstance oi);
+    virtual bool NeedsAnimator(TObjectInstance* oi);
       // Returns whether or not an animator is necessary
 };
 
 class TAnimAnimator : public TObjectAnimator
 {
   public:
-    TAnimAnimator(PTObjectInstance oi);
+    TAnimAnimator(TObjectInstance* oi);
       // Constructor. Sets objectimagery. and object instance to nullptr.
     virtual void Animate(bool draw);
       // Animates object

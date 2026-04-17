@@ -1006,8 +1006,8 @@ void TStripAnimator::AddUpdateRects( LPD3DRECT drawextents) {
 //  drawextents->x2 += r.right;
 //  drawextents->y2 += r.bottom;
 
-    // WorldToScreen( RS3DPoint pos, int32_t &x, int32_t &y);
-    // WorldToScreen( RS3DPoint pos, RS3DPoint spos);
+    // WorldToScreen( S3DPoint& pos, int32_t &x, int32_t &y);
+    // WorldToScreen( S3DPoint& pos, S3DPoint& spos);
 }
 
 void TParticleSystem::Init(PT3DAnimator a, PS3DAnimObj o, S3DPoint s, bool move, float facing_angle)

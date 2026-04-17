@@ -45,10 +45,10 @@ extern TEditStatusPane StatusBar;
 extern TConsolePane Console;
 extern TEditClassPane ClassPane;
 extern PTBitmap PointerCursor;
-extern PTMulti EditorData;
+extern TMulti* EditorData;
 
-extern PTObjectInstance TakenObject;
-extern PTObjectInstance DroppedObject;
+extern TObjectInstance* TakenObject;
+extern TObjectInstance* DroppedObject;
 
 #define GRIDZOFF    334
 
@@ -110,7 +110,7 @@ int32_t TMapPane::MakeIndex()
 // ****************
 
 // Initializes iterator with a range value (makes rect and calls Initialize)
-TMapIterator::TMapIterator(RS3DPoint pos, int32_t range, int32_t fl, int32_t objset)
+TMapIterator::TMapIterator(S3DPoint& pos, int32_t range, int32_t fl, int32_t objset)
 {
     SRect r;
     r.left = pos.x - range; 
@@ -160,7 +160,7 @@ void TMapIterator::Initialize(PSRect sr, int32_t fl, int32_t os)
 }
 
 
-PTObjectInstance TMapIterator::NextItem()
+TObjectInstance* TMapIterator::NextItem()
 {
     // OPTIONAL Inventory Iterator
     // ***************************
@@ -566,7 +566,7 @@ void TMapPane::SnapWalkDisplay(int32_t mapindex)
     if (mapindex < 0)
         return;
 
-    PTObjectInstance inst = GetInstance(mapindex);
+    TObjectInstance* inst = GetInstance(mapindex);
     if (inst && inst->GetImagery())
     {
         S3DPoint pos;
@@ -664,7 +664,7 @@ void TMapPane::KeyPress(int32_t key, bool down)
         PostQuitMessage(0);
 }
 
-void TMapPane::FindClickPos(int32_t x, int32_t y, RS3DPoint start, RS3DPoint target)
+void TMapPane::FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& target)
 {
     int32_t bottomy = posy + GetHeight() + ((255 * 866) / 1000);
 
@@ -711,7 +711,7 @@ void TMapPane::FindClickPos(int32_t x, int32_t y, RS3DPoint start, RS3DPoint tar
 
 // ************* Draw order change functions ***************
 
-bool TMapPane::SwapDrawOrder(PTObjectInstance inst0, PTObjectInstance inst1)
+bool TMapPane::SwapDrawOrder(TObjectInstance* inst0, TObjectInstance* inst1)
 {
     for (TMapIterator i; i; i++)
         if (i == inst0)
@@ -727,7 +727,7 @@ bool TMapPane::SwapDrawOrder(PTObjectInstance inst0, PTObjectInstance inst1)
     int32_t pos0 = i.SectorIndex();
     int32_t pos1 = j.SectorIndex();
 
-    PTSector sect = sectors[i.SectorX()][i.SectorY()];
+    TSector* sect = sectors[i.SectorX()][i.SectorY()];
 
     sect->RemoveObject(pos0);
     sect->RemoveObject(pos1);
@@ -738,7 +738,7 @@ bool TMapPane::SwapDrawOrder(PTObjectInstance inst0, PTObjectInstance inst1)
     return true;
 }
 
-void TMapPane::PushToFront(PTObjectInstance inst)
+void TMapPane::PushToFront(TObjectInstance* inst)
 {
     for (TMapIterator i; i; i++)
         if (i == inst)
@@ -747,14 +747,14 @@ void TMapPane::PushToFront(PTObjectInstance inst)
     if (!i)
         return;
 
-    PTObjectInstance top = nullptr;
+    TObjectInstance* top = nullptr;
     for (TMapIterator j; j; j++)
         top = j;
 
     SwapDrawOrder(inst, top);
 }
 
-void TMapPane::PushToBack(PTObjectInstance inst)
+void TMapPane::PushToBack(TObjectInstance* inst)
 {
     for (TMapIterator i; i; i++)
         if (i == inst)
@@ -905,7 +905,7 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
             }
             else
             {
-                PTObjectInstance oi = OnObject(x, y);
+                TObjectInstance* oi = OnObject(x, y);
                 if (oi)
                 {
                     S3DPoint pos;
@@ -922,7 +922,7 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
         }
         if (button == MB_MIDDLEDOWN && InPane(x, y))
         {
-            PTObjectInstance oi = OnObject(x, y);
+            TObjectInstance* oi = OnObject(x, y);
             if (oi)
                 StatusBar.Select(oi->GetMapIndex());
             Console.Input("follow\n");
@@ -1041,7 +1041,7 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
                 }
                 else
                 {
-                    PTObjectInstance oi = OnObject(x, y);
+                    TObjectInstance* oi = OnObject(x, y);
                     if (oi)
                         onobject = oi->GetMapIndex();
                     else
@@ -1064,18 +1064,18 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
                 }
                 else
                 {
-                    PTObjectInstance inst = Inventory.GetContainer()->GetInventorySlot(Inventory.GetHeldSlot());
+                    TObjectInstance* inst = Inventory.GetContainer()->GetInventorySlot(Inventory.GetHeldSlot());
                     if (!inst && Player)
                         inst = Player->GetInventorySlot(EquipPane.GetHeldSlot() + 256);
 
                     int32_t objindex = -1;
-                    PTObjectInstance oninst = OnObject(x, y, inst);
+                    TObjectInstance* oninst = OnObject(x, y, inst);
                     if (oninst)
                         objindex = oninst->GetMapIndex();
 
                     if (clicked)
                     {
-                        PTObjectInstance inst = oninst;
+                        TObjectInstance* inst = oninst;
 
                         bool used = false;
 
@@ -1109,7 +1109,7 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
                             if (objindex >= 0)
                             {
                                 // use the dragged object with the object clicked on
-                                PTObjectInstance oi = GetInstance(objindex);
+                                TObjectInstance* oi = GetInstance(objindex);
                                 if (oi)
                                 {
                                     used = oi->Use(Player, inst->GetMapIndex());
@@ -1122,7 +1122,7 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
                             {
                                 // didn't click on anything special, so just drop it on the ground
                                 if (inst->InventNum() >= 256)
-                                    ((PTPlayer)Player)->Equip(nullptr, EquipPane.GetHeldSlot());   // clear from eq list
+                                    ((TPlayer*)Player)->Equip(nullptr, EquipPane.GetHeldSlot());   // clear from eq list
 
                                 S3DPoint curpos, target;
                                 Player->GetPos(curpos);
@@ -1196,13 +1196,13 @@ void TMapPane::MouseMove(int32_t button, int32_t x, int32_t y)
             {
                 if (ShiftDown)
                 {
-                    PTObjectInstance inst = OnObject(x, y);
+                    TObjectInstance* inst = OnObject(x, y);
                     if (inst)
                         StatusBar.Select(inst->GetMapIndex(), true);
                 }
                 else
                 {
-                    PTObjectInstance oi = GetInstance(StatusBar.GetSelectedObj());
+                    TObjectInstance* oi = GetInstance(StatusBar.GetSelectedObj());
                     if (oi && !(oi->GetFlags() & OF_EDITORLOCK))
                     {
                         if (!(oi->GetFlags() & OF_SELDRAW))
@@ -1238,7 +1238,7 @@ void TMapPane::MouseMove(int32_t button, int32_t x, int32_t y)
 
                         for (int32_t i = StatusBar.GetFirstObj(); i >= 0; i = StatusBar.GetNextObj())
                         {
-                            PTObjectInstance inst = GetInstance(i);
+                            TObjectInstance* inst = GetInstance(i);
                             if (!inst || inst == oi)
                                 continue;
 
@@ -1272,13 +1272,13 @@ void TMapPane::MoveObjScreen(int32_t index, int32_t x, int32_t y)
     if (index < 0)
         return;
 
-    PTObjectInstance oi = GetInstance(index);
+    TObjectInstance* oi = GetInstance(index);
     if (oi)
     {
         S3DPoint newpos;
         oi->GetPos(newpos);
 /*
-        PTObjectInstance overinst = GetInstance(OnObject(x, y));
+        TObjectInstance* overinst = GetInstance(OnObject(x, y));
         if (overinst)
         {
             S3DPoint opos;
@@ -1312,7 +1312,7 @@ void TMapPane::MoveObjScreen(int32_t index, int32_t x, int32_t y)
 // *********************
 
 // Set Map Pos
-void TMapPane::SetMapPos(RS3DPoint newpos)
+void TMapPane::SetMapPos(S3DPoint& newpos)
 {
     int32_t nposx, nposy;
 
@@ -1327,15 +1327,15 @@ void TMapPane::SetMapPos(RS3DPoint newpos)
 // ********************
 
 // Create object
-int32_t TMapPane::NewObject(PSObjectDef def)
+int32_t TMapPane::NewObject(SObjectDef* def)
 {
-    PTObjectClass oc = TObjectClass::GetClass(def->objclass);
+    TObjectClass* oc = TObjectClass::GetClass(def->objclass);
     if (!oc)
     {
         _RPT0(_CRT_WARN, "MAPPANE: Bad class in NewObject");
         return -1;
     }
-    PTObjectInstance oi = oc->NewObject(def);
+    TObjectInstance* oi = oc->NewObject(def);
     if (!oi)
     {
         _RPT0(_CRT_WARN, "MAPPANE: Unable to create obj in NewObject");
@@ -1349,7 +1349,7 @@ int32_t TMapPane::NewObject(PSObjectDef def)
 
     if (index < 0 && shadowindex >= 0)
     {
-        PTObjectInstance shadow = GetInstance(shadowindex);
+        TObjectInstance* shadow = GetInstance(shadowindex);
         if (shadow)
         {
             DeleteObject(shadow);
@@ -1361,7 +1361,7 @@ int32_t TMapPane::NewObject(PSObjectDef def)
 }
 
 // Add object
-int32_t TMapPane::AddObject(PTObjectInstance oi)
+int32_t TMapPane::AddObject(TObjectInstance* oi)
 {
     if (oi->GetSector() != nullptr)    // Object is already in the map
     {
@@ -1388,7 +1388,7 @@ int32_t TMapPane::AddObject(PTObjectInstance oi)
         return -1;
     }
 
-    PTSector sect = sectors[sx - sectorx][sy - sectory];
+    TSector* sect = sectors[sx - sectorx][sy - sectory];
     if (!sect)
     {
         _RPT0(_CRT_WARN, "MAPPANE: Sector unavailable in AddObject");
@@ -1416,9 +1416,9 @@ int32_t TMapPane::AddObject(PTObjectInstance oi)
 }
 
 // Remove object (The main place objects are removed)
-PTObjectInstance TMapPane::RemoveObject(int32_t index)
+TObjectInstance* TMapPane::RemoveObject(int32_t index)
 {
-    PTObjectInstance inst = nullptr;
+    TObjectInstance* inst = nullptr;
     TMapIterator i;
 
     for ( ; i; i++)
@@ -1457,7 +1457,7 @@ PTObjectInstance TMapPane::RemoveObject(int32_t index)
 }
 
 // Delete object
-void TMapPane::DeleteObject(PTObjectInstance obj)
+void TMapPane::DeleteObject(TObjectInstance* obj)
 {
     if (RemoveObject(obj->GetMapIndex()) == nullptr)
         FatalError("Tried to delete an object not in the sector.  This is a Very Bad Thing(tm).  Get Adam to check this out RIGHT AWAY!");
@@ -1465,7 +1465,7 @@ void TMapPane::DeleteObject(PTObjectInstance obj)
 }
 
 // Causes object to be put into new OBJSET_xxx lists when flags change in game
-void TMapPane::ObjectFlagsChanged(PTObjectInstance oi, uint32_t oldflags, uint32_t newflags)
+void TMapPane::ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags)
 {
     if (!oi->GetSector())
         return;
@@ -1474,7 +1474,7 @@ void TMapPane::ObjectFlagsChanged(PTObjectInstance oi, uint32_t oldflags, uint32
 }
 
 // Delete sector
-void TMapPane::DeleteSector(PTSector sect)
+void TMapPane::DeleteSector(TSector* sect)
 {
     Notify(N_DELETINGSECTOR, sect);
 
@@ -1490,7 +1490,7 @@ void TMapPane::DeleteSector(PTSector sect)
     TSector::CloseSector(sect);
 }
 
-PTObjectInstance TMapPane::RemoveFromSector(PTObjectInstance inst, int32_t sx, int32_t sy, int32_t sectindex)
+TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t sectindex)
 {
     // extract from sector
     ExtractWalkmap(inst);
@@ -1508,7 +1508,7 @@ PTObjectInstance TMapPane::RemoveFromSector(PTObjectInstance inst, int32_t sx, i
 }
 
 // Add the shadow (if any) associated with an object
-int32_t TMapPane::AddShadow(PTObjectInstance oi)
+int32_t TMapPane::AddShadow(TObjectInstance* oi)
 {
     extern TObjectClass ShadowClass;
 
@@ -1540,7 +1540,7 @@ int32_t TMapPane::AddShadow(PTObjectInstance oi)
 }
 
 // Object find functions
-PTObjectInstance TMapPane::FindObject(char *name, int32_t occurance, int32_t objset)
+TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t objset)
 {
     int32_t found = 0;
 
@@ -1555,9 +1555,9 @@ PTObjectInstance TMapPane::FindObject(char *name, int32_t occurance, int32_t obj
     return nullptr;
 }
 
-PTObjectInstance TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool partial, int32_t objset)
+TObjectInstance* TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool partial, int32_t objset)
 {
-    PTObjectInstance closest = nullptr;
+    TObjectInstance* closest = nullptr;
     int32_t closestdist = 0x800000;
 
     for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
@@ -1593,7 +1593,7 @@ PTObjectInstance TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool 
     return closest;
 }
 
-PTObjectInstance TMapPane::FindClosestObject(char *name, PTObjectInstance from, bool partial, int32_t objset)
+TObjectInstance* TMapPane::FindClosestObject(char *name, TObjectInstance* from, bool partial, int32_t objset)
 {
     S3DPoint frompos;
     if (from)
@@ -1616,7 +1616,7 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
 
     for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
     {
-        PTObjectInstance inst = i;
+        TObjectInstance* inst = i;
 
         if (inst->IsInInventory() || (objclass != -1 && inst->ObjClass() != objclass))
             continue;
@@ -1686,9 +1686,9 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
     return found;
 }
 
-PTObjectInstance TMapPane::ObjectInCube(PS3DRect cube, int32_t objset)
+TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t objset)
 {
-    PTObjectInstance in = nullptr;
+    TObjectInstance* in = nullptr;
 
     for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
     {
@@ -1699,10 +1699,10 @@ PTObjectInstance TMapPane::ObjectInCube(PS3DRect cube, int32_t objset)
     return nullptr;
 }   
 
-PTObjectInstance TMapPane::OnObject(int32_t screenx, int32_t screeny, PTObjectInstance with)
+TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with)
 {
     bool IsPriorityItem = false;
-    PTObjectInstance on = nullptr;
+    TObjectInstance* on = nullptr;
 
     screenx += posx;
     screeny += posy;
@@ -1716,7 +1716,7 @@ PTObjectInstance TMapPane::OnObject(int32_t screenx, int32_t screeny, PTObjectIn
 
     for (TMapIterator i(nullptr, CHECK_NOINVENT); i; i++)
     {
-        PTObjectInstance inst = i;
+        TObjectInstance* inst = i;
         if (!inst->OnObject(p))
             continue;
 
@@ -1747,7 +1747,7 @@ PTObjectInstance TMapPane::OnObject(int32_t screenx, int32_t screeny, PTObjectIn
 }
 
 // Returns the instance structure given an object index
-PTObjectInstance TMapPane::GetInstance(int32_t index, int32_t objset)
+TObjectInstance* TMapPane::GetInstance(int32_t index, int32_t objset)
 {
     if (index < 0)
         return nullptr;
@@ -1784,7 +1784,7 @@ PTObjectInstance TMapPane::GetInstance(int32_t index, int32_t objset)
 // * Walkmap Functions *
 // *********************
 
-void PosToWalkGrid(RS3DPoint pos, int32_t &x, int32_t &y)
+void PosToWalkGrid(S3DPoint& pos, int32_t &x, int32_t &y)
 {
     // because 0, 0 is actually the center of a walk grid, not the edge,
     // everything has to be offset by half the walk grid size
@@ -1793,7 +1793,7 @@ void PosToWalkGrid(RS3DPoint pos, int32_t &x, int32_t &y)
     y = (pos.y + (GRIDSIZE / 2)) >> WALKMAPSHIFT;
 }
 
-void WalkGridToPos(int32_t x, int32_t y, RS3DPoint pos)
+void WalkGridToPos(int32_t x, int32_t y, S3DPoint& pos)
 {
     // because 0, 0 is actually the center of a walk grid, not the edge,
     // everything has to be offset by half the walk grid size
@@ -1804,13 +1804,13 @@ void WalkGridToPos(int32_t x, int32_t y, RS3DPoint pos)
 }
 
 // General purpose handler for transfer, extract, clear etc
-void TMapPane::WalkmapHandler(PTObjectInstance oi, int32_t mode)
+void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
 {
     if (!oi || oi->GetMapIndex() < 0 || 
       ((mode == WALK_TRANSFER) && (oi->Flags() & OF_NOWALK)))
         return;
 
-    PTObjectImagery imagery = oi->GetImagery();
+    TObjectImagery* imagery = oi->GetImagery();
     if (!imagery)
         return;
 
@@ -1880,7 +1880,7 @@ void TMapPane::WalkmapHandler(PTObjectInstance oi, int32_t mode)
                 (uint32_t)sy >= MAXSECTORY || sy < sectory || sy >= sectory + SECTORWINDOWY)
                 continue;
 
-            PTSector sect = sectors[sx - sectorx][sy - sectory];
+            TSector* sect = sectors[sx - sectorx][sy - sectory];
             if (!sect)
                 continue;
 
@@ -1899,23 +1899,23 @@ void TMapPane::WalkmapHandler(PTObjectInstance oi, int32_t mode)
         free(appliedwalk);
 }
 
-void TMapPane::RedrawWalkmapRect(PTObjectInstance oi, int32_t x, int32_t y, int32_t w, int32_t l, PTSector dsect)
+void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int32_t w, int32_t l, TSector* dsect)
 {
     for (int32_t sx = 0; sx < SECTORWINDOWX; sx++)
         for (int32_t sy = 0; sy < SECTORWINDOWY; sy++)
         {
-            PTSector sect = sectors[sx][sy];
+            TSector* sect = sectors[sx][sy];
             if (!sect)
                 continue;
 
             for (TObjectIterator i(sect->ObjectArray()); i; i++)
             {
-                PTObjectInstance inst = i.Item();
+                TObjectInstance* inst = i.Item();
 
                 if (!inst || oi == inst || inst->IsInInventory() || (inst->Flags() & OF_NOWALK))
                     continue;
 
-                PTObjectImagery imagery = inst->GetImagery();
+                TObjectImagery* imagery = inst->GetImagery();
                 if (!imagery)
                     continue;
 
@@ -1972,7 +1972,7 @@ void TMapPane::RedrawWalkmapRect(PTObjectInstance oi, int32_t x, int32_t y, int3
         }
 }
 
-int32_t TMapPane::GetWalkHeight(RS3DPoint pos)
+int32_t TMapPane::GetWalkHeight(S3DPoint& pos)
 {
     // because 0, 0 is actually the center of a walk grid, not the edge,
     // everything has to be offset by half the walk grid size
@@ -2011,7 +2011,7 @@ int32_t TMapPane::GetWalkGridHeight(int32_t x, int32_t y)
 
 // Returns the maximum walk height in the area bounded by 
 // pos - width/2,height/2 to pos + with/2,height/2
-int32_t TMapPane::GetWalkHeightArea(RS3DPoint pos, int32_t width, int32_t height)
+int32_t TMapPane::GetWalkHeightArea(S3DPoint& pos, int32_t width, int32_t height)
 {
     if (width == 0)
         return GetWalkHeight(pos);
@@ -2046,7 +2046,7 @@ int32_t TMapPane::GetWalkHeightArea(RS3DPoint pos, int32_t width, int32_t height
 
 #define MAXRADIUS 8
 
-void TMapPane::GetWalkHeightRadius(RS3DPoint pos, int32_t radius, 
+void TMapPane::GetWalkHeightRadius(S3DPoint& pos, int32_t radius, 
     int32_t &mindelta, int32_t &maxdelta, int32_t &curheight)
 {
     static int32_t heights[MAXRADIUS][MAXRADIUS]; 
@@ -2179,7 +2179,7 @@ void TMapPane::ClearWalkmaps()
     {
         for (int32_t sy = 0; sy < SECTORWINDOWY; sy++)
         {
-            PTSector sect = sectors[sx][sy];
+            TSector* sect = sectors[sx][sy];
             if (!sect)
                 continue;
 
@@ -2188,7 +2188,7 @@ void TMapPane::ClearWalkmaps()
     }
 }
 
-bool TMapPane::LineOfSight(RS3DPoint pos, RS3DPoint to, PS3DPoint obst)
+bool TMapPane::LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst)
 {
     int32_t sx, sy, sz, ex, ey, ez, dx, dy, dz;
 
@@ -2710,7 +2710,7 @@ void TMapPane::AddBgUpdateRect(SRect &r, int32_t bgdraw)
 
 void TMapPane::AddObjectUpdateRect(int32_t index)
 {
-    PTObjectInstance inst = GetInstance(index);
+    TObjectInstance* inst = GetInstance(index);
     if (!inst)
         return;
 
@@ -3565,7 +3565,7 @@ void TMapPane::DrawSelectedObjects(SRect &r)
 
     for (int32_t i = StatusBar.GetFirstObj(); i >= 0; i = StatusBar.GetNextObj())
     {
-        PTObjectInstance inst = GetInstance(i);
+        TObjectInstance* inst = GetInstance(i);
         if (!inst || inst->IsInInventory() || inst->GetFlags() & OF_SELDRAW)
             continue;
 
@@ -3612,7 +3612,7 @@ void TMapPane::AnimateSelectedObjects()
 
     for (int32_t i = StatusBar.GetFirstObj(); i >= 0; i = StatusBar.GetNextObj())
     {
-        PTObjectInstance inst = GetInstance(i);
+        TObjectInstance* inst = GetInstance(i);
         if (!inst || inst->IsInInventory() || !(inst->GetFlags() & OF_SELDRAW))
             continue;
 
@@ -3620,7 +3620,7 @@ void TMapPane::AnimateSelectedObjects()
 
         if (inst->GetShadow() >= 0)
         {
-            PTObjectInstance s = GetInstance(inst->GetShadow());
+            TObjectInstance* s = GetInstance(inst->GetShadow());
             if (!s || s->IsInInventory() || !(s->GetFlags() & OF_SELDRAW))
                 continue;
 
@@ -3638,7 +3638,7 @@ void TMapPane::NextFrameObjects()
 
     for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_ANIMATE); i; i++)
     {
-        PTObjectInstance inst = i.Item();
+        TObjectInstance* inst = i.Item();
         inst->NextFrame();
     }
 }
@@ -3692,7 +3692,7 @@ void TMapPane::AnimateObjects(bool draw)
 
     for (TMapIterator i(&r, CHECK_SECTRECT|CHECK_INVIS|CHECK_NOINVENT, OBJSET_ANIMATE); i; i++)
     {
-        PTObjectInstance inst = i.Item();
+        TObjectInstance* inst = i.Item();
 
         SRect ir, ar;
         inst->GetScreenRect(ir);
@@ -3786,8 +3786,8 @@ void TMapPane::UpdateSectors()
                             //  BETWEEN THESE TWO FUNCTIONS!!)
 
       // Temporary sectors
-        PTSector newsectors[SECTORWINDOWX][SECTORWINDOWY];
-        memset(newsectors, 0, sizeof(PTSector) * SECTORWINDOWX * SECTORWINDOWY);
+        TSector* newsectors[SECTORWINDOWX][SECTORWINDOWY];
+        memset(newsectors, 0, sizeof(TSector*) * SECTORWINDOWX * SECTORWINDOWY);
 
       // Delete old sectors
         int32_t nx, ny;
@@ -3812,7 +3812,7 @@ void TMapPane::UpdateSectors()
         }
 
       // Copy new sector list to sector list
-        memcpy(sectors, newsectors, sizeof(PTSector) * SECTORWINDOWX * SECTORWINDOWY);
+        memcpy(sectors, newsectors, sizeof(TSector*) * SECTORWINDOWX * SECTORWINDOWY);
 
       // Preload sectors if level changed
         if (!PreloadSectors)
@@ -3883,7 +3883,7 @@ void TMapPane::UpdateSectors()
 
         for (int32_t player = 0; player < PlayerManager.NumPlayers(); player++)
         {
-            PTPlayer p = PlayerManager.GetPlayer(player);
+            TPlayer* p = PlayerManager.GetPlayer(player);
             if (p && !p->GetSector())
                 AddObject(p); // Attempt to add player to current sector area
         }
@@ -3891,7 +3891,7 @@ void TMapPane::UpdateSectors()
     }
 }
 
-/*void TMapPane::GetPlayerFocus(RS3DPoint pos)
+/*void TMapPane::GetPlayerFocus(S3DPoint& pos)
 {
     if (!Player)
         return;
@@ -3970,7 +3970,7 @@ void TMapPane::Animate(bool draw)
 
             if (!Editor)
             {
-                PTObjectInstance inst = OnObject(x, y);
+                TObjectInstance* inst = OnObject(x, y);
                 if (inst)
                     if (GetDragObj() == nullptr && inst->IsInventoryItem())
                         type = CURSOR_HAND;         // can pick up while in the map pane
@@ -3990,7 +3990,7 @@ void TMapPane::Animate(bool draw)
 // * Object Manipulation *
 // ***********************
 
-bool TMapPane::MoneyHandler(PTObjectInstance oi, int32_t amount)
+bool TMapPane::MoneyHandler(TObjectInstance* oi, int32_t amount)
 {
     if (oi == nullptr)
         return 0;
@@ -4031,7 +4031,7 @@ bool TMapPane::MoneyHandler(PTObjectInstance oi, int32_t amount)
     return total;
 }
 
-int32_t TMapPane::SubtractMoney(PTObjectInstance oi, int32_t amount)
+int32_t TMapPane::SubtractMoney(TObjectInstance* oi, int32_t amount)
 {
     if (amount < 1 || GetTotalMoney(oi) < amount)
         return 0;
@@ -4039,14 +4039,14 @@ int32_t TMapPane::SubtractMoney(PTObjectInstance oi, int32_t amount)
     return MoneyHandler(oi, amount);
 }
 
-int32_t TMapPane::GetTotalMoney(PTObjectInstance oi)
+int32_t TMapPane::GetTotalMoney(TObjectInstance* oi)
 {
     return MoneyHandler(oi, 0);
 }
 
 // Checks new position and transfers object between sectors if object crosses a sector
 // boundry.  Also prevents objects from going outside of loaded sector list
-int32_t TMapPane::CheckPos(PTObjectInstance inst, RS3DPoint newpos, int32_t newlevel)
+int32_t TMapPane::CheckPos(TObjectInstance* inst, const S3DPoint& newpos, int32_t newlevel)
 {
   // If default, or object is owned by map, set level to object level
   // Note: only floating NONMAP objects like TPlayer objects can change their level
@@ -4141,7 +4141,7 @@ int32_t TMapPane::CheckPos(PTObjectInstance inst, RS3DPoint newpos, int32_t newl
 }
 
 // Moves an object from one sector to another
-int32_t TMapPane::TransferObject(PTObjectInstance inst, int32_t sx, int32_t sy, int32_t newsx, int32_t newsy)
+int32_t TMapPane::TransferObject(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t newsx, int32_t newsy)
 {
     if (!inst || (uint32_t)sx >= SECTORWINDOWX || (uint32_t)sy >= SECTORWINDOWY)
         return -1;
@@ -4168,7 +4168,7 @@ int32_t TMapPane::TransferObject(PTObjectInstance inst, int32_t sx, int32_t sy, 
 // Walkmap auto-generator for current sector
 void TMapPane::CalculateWalkmap()
 {
-    PTSector sector = sectors[1][1];
+    TSector* sector = sectors[1][1];
     if (!sector)
         return;
 
@@ -4215,7 +4215,7 @@ void TMapPane::CalculateWalkmap()
 
 void TMapPane::AdjustWalkmap(int32_t deltaz, bool absolute, bool nonzero)
 {
-    PTSector sect = sectors[1][1];
+    TSector* sect = sectors[1][1];
     if (!sect || !deltaz)
         return;
 
@@ -4253,7 +4253,7 @@ void TMapPane::SetMode(void (*tfunc)(S3DPoint), void (*afunc)(), int32_t newmode
     if (mode == MODE_CLONE || mode == MODE_MOVE)
     {
         dragmode = true;
-        PTObjectInstance inst = GetInstance(StatusBar.GetSelectedObj());
+        TObjectInstance* inst = GetInstance(StatusBar.GetSelectedObj());
         if (inst)
         {
             SRect r;

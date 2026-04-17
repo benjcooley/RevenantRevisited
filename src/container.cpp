@@ -27,18 +27,18 @@ DEFOBJSTAT(Container, Locked,           LOCK, 0, 0, 0, 0)
 DEFOBJSTAT(Container, KeyId,            KEY,  1, 0, 0, 0)
 DEFOBJSTAT(Container, PickDifficulty,   PICK, 2, 0, 0, 0)
 
-extern PTObjectInstance TakenObject;
-extern PTObjectInstance DroppedObject;
+extern TObjectInstance* TakenObject;
+extern TObjectInstance* DroppedObject;
 
 // Container states
 #define CLOSED      0
 #define OPEN        1
 
-bool TContainer::Use(PTObjectInstance user, int32_t with)
+bool TContainer::Use(TObjectInstance* user, int32_t with)
 {
     TObjectInstance::Use(user, with);
 
-    PTObjectInstance inst = MapPane.GetInstance(with);
+    TObjectInstance* inst = MapPane.GetInstance(with);
 
     if (state == CLOSED && CheckKeyUse(user, inst))
         return true;
@@ -88,7 +88,7 @@ bool TContainer::Use(PTObjectInstance user, int32_t with)
         {
             // get from
             TInventoryIterator i(this);
-            PTObjectInstance oi = i.Item();
+            TObjectInstance* oi = i.Item();
 
             if (oi)
             {
@@ -132,7 +132,7 @@ bool TContainer::Use(PTObjectInstance user, int32_t with)
     return true;
 }
 
-int32_t TContainer::CursorType(PTObjectInstance inst)
+int32_t TContainer::CursorType(TObjectInstance* inst)
 {
     if (Openable() || NumObjects() > 0)
         return CURSOR_HAND;
@@ -164,7 +164,7 @@ void TContainer::Save(RTOutputStream os)
     TObjectInstance::Save(os);
 }
 
-bool TContainer::CheckKeyUse(PTObjectInstance user, PTObjectInstance inst)
+bool TContainer::CheckKeyUse(TObjectInstance* user, TObjectInstance* inst)
 {
     if (!inst || !Locked())
         return false;
@@ -194,7 +194,7 @@ bool TContainer::CheckKeyUse(PTObjectInstance user, PTObjectInstance inst)
         if (abil > 0)
         {
             if (user->ObjClass() == OBJCLASS_PLAYER)
-                abil += ((PTPlayer)user)->Agil() + ((PTPlayer)user)->Skill(SK_LOCKPICK);
+                abil += ((TPlayer*)user)->Agil() + ((TPlayer*)user)->Skill(SK_LOCKPICK);
 
             if (abil < PickDifficulty())
             {
@@ -229,20 +229,20 @@ _CLASSDEF(TVialRack)
 class TVialRack : public TContainer
 {
   public:
-    TVialRack(PTObjectImagery newim) : TContainer(newim) {}
-    TVialRack(PSObjectDef def, PTObjectImagery newim) : TContainer(def, newim) {}
+    TVialRack(TObjectImagery* newim) : TContainer(newim) {}
+    TVialRack(SObjectDef* def, TObjectImagery* newim) : TContainer(def, newim) {}
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
-    virtual int32_t CursorType(PTObjectInstance inst = nullptr);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
+    virtual int32_t CursorType(TObjectInstance* inst = nullptr);
     virtual void Save(RTOutputStream os);
 };
 
 DEFINE_BUILDER("VIAL RACK", TVialRack)
 REGISTER_BUILDER(TVialRack)
 
-bool TVialRack::Use(PTObjectInstance user, int32_t with)
+bool TVialRack::Use(TObjectInstance* user, int32_t with)
 {
-    PTObjectInstance inst = MapPane.GetInstance(with);
+    TObjectInstance* inst = MapPane.GetInstance(with);
 
     if (!inst)
     {
@@ -296,7 +296,7 @@ bool TVialRack::Use(PTObjectInstance user, int32_t with)
     return false;
 }
 
-int32_t TVialRack::CursorType(PTObjectInstance inst)
+int32_t TVialRack::CursorType(TObjectInstance* inst)
 {
     if (state > 0 && (!inst || (state < 4 && strcmp(inst->GetName(), "Poison Vial") == 0)))
         return CURSOR_HAND;
@@ -312,7 +312,7 @@ void TVialRack::Save(RTOutputStream os)
 }
 
 
-bool TContainer::AddToInventory(PTObjectInstance inst, int32_t slot)
+bool TContainer::AddToInventory(TObjectInstance* inst, int32_t slot)
 {
     bool ret = TObjectInstance::AddToInventory(inst, slot);
     if (stricmp(GetTypeName(), "Spell Pouch") == 0 || stricmp(GetTypeName(), "SpellPouch") == 0)

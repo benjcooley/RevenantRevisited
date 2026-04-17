@@ -7,6 +7,7 @@
 #pragma once
 
 #include "revenant.h"
+
 #include "parse.h"
 #include "command.h"
 
@@ -50,7 +51,7 @@ class TScriptProto
 {
   public:
     TScriptProto();// { name = nullptr; text = nullptr; next = nullptr; }
-    TScriptProto(PTScriptProto pparent, void *powner, char *pfilename, char *pbuffer);
+    TScriptProto(TScriptProto* pparent, void *powner, char *pfilename, char *pbuffer);
     ~TScriptProto();// { if (name) delete name; if (text) delete text; }
     bool ParseCriteria(TToken &t);
         // Parse criteria for the proto
@@ -66,18 +67,18 @@ class TScriptProto
         // Returns the lenghth of the script in bytes
     char *Text(){return text;}
         // Returns a pointer to the text
-    PTScriptProto ParentProto(){return parent;}
+    TScriptProto* ParentProto(){return parent;}
         // Returns a pointer to the parent prototype
 
-    bool FitsCriteria(PTObjectInstance inst);
+    bool FitsCriteria(TObjectInstance* inst);
         // Check to see if given object instance will use this script
 
     int32_t NumTriggers(){return numtriggers;}
 
     char *name;                             // Text for criteria
     char *text;                             // Text of script
-//  PTScriptProto next;                     // Next in list
-    PTScriptProto parent;                   // The parent in list
+//  TScriptProto* next;                     // Next in list
+    TScriptProto* parent;                   // The parent in list
     TTriggerArray triggers;                 // Trigger array
     void *owner;                            // Pointer to an owner for script
     char *filename;
@@ -112,7 +113,7 @@ class TScript
     TScript();// { proto = nullptr; ip = nullptr; priority = 0; depth = 0; newtrigger = 0; lastpriority = 0;
                 //block[depth].conditional = COND_UNDEF; block[depth].loopstart = nullptr; }
         // Init script without data
-    TScript(PTScriptProto prototype);
+    TScript(TScriptProto* prototype);
         // Init script from the given buffer
     ~TScript();
         // Destory the script without saving
@@ -127,13 +128,13 @@ class TScript
     char *Text() { if (curproto) return curproto->text; else return nullptr; }
         // Get a pointer to the script's text
 
-    void Start(PTScriptProto proto = nullptr, int32_t pos = 0, int32_t newpriority = 0);
+    void Start(TScriptProto* proto = nullptr, int32_t pos = 0, int32_t newpriority = 0);
         // Begin script execution at the given location and priority
-    void StartTrigger(PTScriptProto proto, PSScriptTrigger st);
+    void StartTrigger(TScriptProto* proto, PSScriptTrigger st);
         // Begin triger 
-    void Continue(PTObjectInstance context);
+    void Continue(TObjectInstance* context);
         // Continue script exectuion
-    void Jump(PTObjectInstance context, char *label);
+    void Jump(TObjectInstance* context, char *label);
         // Jump to the label
     void Break();
         // Temporarily interrupt script execution
@@ -145,14 +146,14 @@ class TScript
         // Terminate script execution
     bool Running() { return priority > 0; }
         // Returns true if the script is already running
-    void Trigger(int32_t newtrig, char *triggerstr = nullptr)
+    void Trigger(int32_t newtrig, const char *triggerstr = nullptr)
       { newtrigger = newtrig; if (triggerstr) strcpy(newtriggerstr, triggerstr); }
         // Manually triggers the given script handler
     int32_t GetTrigger() { return trigger; }
         // Returns current trigger type executing
     int32_t GetPriority() { return priority; }
         // Returns the priority of the script executing (also is id of specific script block)
-    PTScriptProto GetScriptProto() { return proto; }
+    TScriptProto* GetScriptProto() { return proto; }
         // Returns the prototype for this script
 
     static void PauseAllScripts(){ pauseall = true; }
@@ -161,13 +162,13 @@ class TScript
         // Causes all scripts to resume playing
 
   private:
-    bool Triggered(PSScriptTrigger st, int32_t priority, PTObjectInstance context);
+    bool Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* context);
         // Returns true if the current block was triggered
 
     static bool pauseall;                   // True if all scripts paused
 
-    PTScriptProto proto;                    // Pointer to script prototype
-    PTScriptProto topproto, curproto;       // Pointer's to the top and current prototype
+    TScriptProto* proto;                    // Pointer to script prototype
+    TScriptProto* topproto, curproto;       // Pointer's to the top and current prototype
     int32_t newtrigger;                         // Next trigger type to execute
     int32_t trigger;                            // Current trigger type executing 
     char newtriggerstr[MAXSCRIPTNAME];      // Name of what is triggering
@@ -251,7 +252,7 @@ class TScriptManager
     bool ReloadStates();
         // Reloads initial values for game states
 
-    PTScript ObjectScript(PTObjectInstance inst);
+    PTScript ObjectScript(TObjectInstance* inst);
         // Find script for the given instance
 
     int32_t GameState(char *name);
@@ -271,7 +272,7 @@ class TScriptManager
     void SetScriptsDirty() { scriptsdirty = true; }
         // For manual changes to the script
 
-    PTScriptProto FindScriptProto(char *name);
+    TScriptProto* FindScriptProto(char *name);
         // Used to find the parent prototype
 
   private:

@@ -20,8 +20,8 @@
 	//* needs to be in the animator, and I don't know how to get or translate the visible
 	//* rectangle for any point and add it individually to the Extents list
 
-	// WorldToScreen( RS3DPoint pos, int32_t &x, int32_t &y);
-	// WorldToScreen( RS3DPoint pos, RS3DPoint spos);
+	// WorldToScreen( S3DPoint& pos, int32_t &x, int32_t &y);
+	// WorldToScreen( S3DPoint& pos, S3DPoint& spos);
 
 	AddUpdateRects(SRect drawextents); // Called after outside function calls RenderObject()
 	    // For obj returned by GetStrip()..
@@ -56,8 +56,8 @@ class TStripEffect : public TEffect
 	int32_t my_state;
 	PTCharacter chr;
 
-	TStripEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-	TStripEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+	TStripEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+	TStripEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
 
 	virtual void Initialize();
 
@@ -103,7 +103,7 @@ public:
 	bool maxsize;		// Have all the points been added?  (Used when deleting points)
 	bool down;
 
-    TLightningAnimator(PTObjectInstance oi) : T3DAnimator(oi) { mystrip = nullptr; numpoints = 0; }
+    TLightningAnimator(TObjectInstance* oi) : T3DAnimator(oi) { mystrip = nullptr; numpoints = 0; }
 	  // Constructor (initialization handled by Initialize)
     virtual ~TLightningAnimator() { Close(); }
 	  // Call close function
@@ -133,8 +133,8 @@ class TWindStripEffect : public TEffect
 	int32_t end_of_targets;
 	int32_t count;
   public:
-	TWindStripEffect(PTObjectImagery newim) : TEffect(newim) { Initialize();}
-    TWindStripEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize();}
+	TWindStripEffect(TObjectImagery* newim) : TEffect(newim) { Initialize();}
+    TWindStripEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize();}
 	virtual ~TWindStripEffect() {}
 
 	virtual void Initialize();
@@ -176,7 +176,7 @@ public:
 	int32_t subspell;
 	hmm_vec3 realpos;
 
-	TWindStripAnimator(PTObjectInstance oi) : T3DAnimator(oi) { for (int32_t i = 0; i < WINDSTRIP_MAX_STRIPS; i++) mystrip[i] = nullptr; }
+	TWindStripAnimator(TObjectInstance* oi) : T3DAnimator(oi) { for (int32_t i = 0; i < WINDSTRIP_MAX_STRIPS; i++) mystrip[i] = nullptr; }
 	  // Constructor (initialization handled by Initialize)
     virtual ~TWindStripAnimator() { Close(); }
 	  // Call close function

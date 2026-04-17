@@ -15,6 +15,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 char sectorfilename[80] = "%d_%d_%d.DAT";
 uint32_t SectrorMapFCC = (('M' << 0) | ('A' << 8) | ('P' << 16) | (' ' << 24));
@@ -52,7 +53,7 @@ TSector::~TSector()
 
     for (TObjectIterator i(&objects); i; i++)
     {
-        PTObjectInstance inst = i.Item();
+        TObjectInstance* inst = i.Item();
 
         if (!inst)
             continue;
@@ -73,9 +74,9 @@ TSector::~TSector()
 // ************************
 
 // Loads the sector.. keeps file open so sector is locked
-PTSector TSector::LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory, bool preload)
+TSector* TSector::LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory, bool preload)
 {
-    PTSector sector;
+    TSector* sector;
 
     if (preload)
     {
@@ -94,7 +95,7 @@ PTSector TSector::LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newse
 }
 
 // Save and delete the sector (doesn't really delete it if sector is preload)
-void TSector::CloseSector(PTSector sector)
+void TSector::CloseSector(TSector* sector)
 {
     if (!sector->preloaded)
     {
@@ -170,7 +171,7 @@ bool TSector::Load(bool lock)
 
     for (int32_t c = 0; c < numobjects; c++)
     {
-        PTObjectInstance inst = TObjectInstance::LoadObject(is, version, true);
+        TObjectInstance* inst = TObjectInstance::LoadObject(is, version, true);
         // Note: inst can be nullptr here if a placeholder (-1) was saved for the obj class id
 
         if (inst)
@@ -292,7 +293,7 @@ void TSector::GetMaxMapRect(RSRect r)
 // ********************
 
 // Adds an object to the sector
-int32_t TSector::AddObject(PTObjectInstance oi, int32_t item)
+int32_t TSector::AddObject(TObjectInstance* oi, int32_t item)
 {
     if (!oi)
         return -1;
@@ -315,7 +316,7 @@ int32_t TSector::AddObject(PTObjectInstance oi, int32_t item)
 }
 
 // Sets an object into the sector at the given item index
-int32_t TSector::SetObject(PTObjectInstance oi, int32_t item)
+int32_t TSector::SetObject(TObjectInstance* oi, int32_t item)
 {
     item = objects.Set(oi, item);
 
@@ -335,9 +336,9 @@ int32_t TSector::SetObject(PTObjectInstance oi, int32_t item)
 }
 
 // Removes an object from the sector
-PTObjectInstance TSector::RemoveObject(int32_t item)
+TObjectInstance* TSector::RemoveObject(int32_t item)
 {
-    PTObjectInstance oi = objects[item];
+    TObjectInstance* oi = objects[item];
     objects.Remove(item);
     oi->ForceSector(nullptr);
 
@@ -359,7 +360,7 @@ PTObjectInstance TSector::RemoveObject(int32_t item)
     return oi;
 }
 
-int32_t TSector::GetObjIndex(PTObjectInstance oi)
+int32_t TSector::GetObjIndex(const TObjectInstance* oi) const
 {
     for (int32_t i = 0; i < objects.NumItems(); i++)
     {
@@ -369,7 +370,7 @@ int32_t TSector::GetObjIndex(PTObjectInstance oi)
     return -1;
 }
 
-void TSector::ObjectFlagsChanged(PTObjectInstance oi, uint32_t oldflags, uint32_t newflags)
+void TSector::ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags)
 {
     if (oi->GetSector() != this)
         return;
@@ -527,7 +528,7 @@ bool TSector::LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
             bool alreadyloaded = false;
             for (int32_t s = 0; s < preloads.NumItems(); s++)
             {
-              PTSector loaded = preloads[s];
+              TSector* loaded = preloads[s];
               if (loaded->level == level && loaded->sectorx == x && loaded->sectory == y)
               {
                 alreadyloaded = true;
@@ -538,7 +539,7 @@ bool TSector::LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
           // If not already in sector list, load it
             if (!alreadyloaded)
             {
-                PTSector sector = new TSector(level, x, y);
+                TSector* sector = new TSector(level, x, y);
                 if (sector)
                 {
                     sector->Load();
@@ -568,7 +569,7 @@ bool TSector::LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
         {
             for (int32_t c = 0; c < preloads.NumItems(); c++)
             {
-                PTSector s = preloads[c];
+                TSector* s = preloads[c];
                 if (s->sectorx == b.left || s->sectorx == b.right || // On borders of rect
                     s->sectory == b.top || s->sectory == b.bottom)
                 {
@@ -607,7 +608,7 @@ void TSector::ClearPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
 {
     for (int32_t c = preloads.NumItems() - 1; c >= 0; c--)
     {
-        PTSector sector = preloads[c];
+        TSector* sector = preloads[c];
 
       // Can't delete sectors which are currently in use!!
         if (sector->usecount > 0)
@@ -647,7 +648,7 @@ void TSector::ClearPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
 }
 
 // Returns a preload sector
-PTSector TSector::FindPreloadSector(int32_t level, int32_t sectorx, int32_t sectory)
+TSector* TSector::FindPreloadSector(int32_t level, int32_t sectorx, int32_t sectory)
 {
     for (int32_t c = 0; c < preloads.NumItems(); c++)
     {
@@ -661,7 +662,7 @@ PTSector TSector::FindPreloadSector(int32_t level, int32_t sectorx, int32_t sect
 }
 
 // Are we in the preload area?
-bool TSector::InPreloadArea(RS3DPoint p, int32_t level)
+bool TSector::InPreloadArea(const S3DPoint& p, int32_t level)
 {
     if (level != preloadlevel)
         return false;

@@ -79,54 +79,47 @@ typedef TPointerArray<TSector, 64, 64> TSectorArray;
 #define OBJSETOBJFLAGS (OF_MOVING | OF_LIGHT | OF_PULSE | OF_ANIMATE)
 
 _CLASSDEF(TSector)
-class TSector
+class TSector final
 {
   public:
     TSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory);
     ~TSector();
 
+    _NODEFAULTCONS(TSector)
+
     void Clear();
 
   // Creates and loads a sector (uses preloaded sector if it can find one)
-    static PTSector LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory, bool preload = true);
-        // Loads the sector.. keeps file open so sector is locked
-    static void CloseSector(PTSector sector);
-        // Save and delete the sector (doesn't really delete it if sector is preload)
 
-  // Load and save the sector (straight load.. don't use preloaded sector list)
+    // Loads the sector.. keeps file open so sector is locked
+    static TSector* LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory, bool preload = true);
+    // Save and delete the sector (doesn't really delete it if sector is preload)
+    static void CloseSector(TSector* sector);
+
+    // Load and save the sector (straight load.. don't use preloaded sector list)
+
     bool Load(bool lock = false);
-        // Loads the sector.. keeps file open so sector is locked
     void Save();
-        // Saves the sector..
 
-  // Sector
+    // Sector
+
     int32_t SectorLevel() { return level; }
-      // Returns sector level
     int32_t SectorX() { return sectorx; }
-      // Returns sector x position
     int32_t SectorY() { return sectory; }
-      // Returns sector y position
     void GetMaxScreenRect(RSRect r);
-      // Returns sector max screen rectangle (as determined by furthest tiles)
     void GetMaxMapRect(RSRect r);
-      // Returns sector max map rectangle
 
   // Object manipulation functions
-    PTObjectInstance GetInstance(int32_t item) const
+
+    TObjectInstance* GetInstance(int32_t item) const
         { return objects[item]; }
-    int32_t AddObject(PTObjectInstance oi, int32_t item = -1);
-      // Adds an object to the sector
-    int32_t SetObject(PTObjectInstance oi, int32_t item);
-      // Sets an object into the sector at the given item index
-    PTObjectInstance RemoveObject(int32_t item);
-      // Removes an object from the sector
+    int32_t AddObject(TObjectInstance* oi, int32_t item = -1);
+    int32_t SetObject(TObjectInstance* oi, int32_t item);
+    TObjectInstance* RemoveObject(int32_t item);
     int32_t NumItems() const { return objects.NumItems(); }
-      // Returns number of items in sector array
-    int32_t GetObjIndex(PTObjectInstance oi) const;
-      // Gets the object index (in main set) of given object
+    int32_t GetObjIndex(const TObjectInstance* oi) const;
     PTObjectArray ObjectArray()
       { return &objects; }
-      // Returns pointer to the main object array
 
   // Object set functions
   // --------------------
@@ -136,7 +129,7 @@ class TSector
   //
   // All MapPane object functions use object sets, and most (including the map iterator), 
   // allow you to pass the object set parameter to the various search functions.
-    bool InObjSet(PTObjectInstance oi, int32_t objset) const
+    bool InObjSet(TObjectInstance* oi, int32_t objset) const
         {
             switch (objset) 
             { 
@@ -149,14 +142,14 @@ class TSector
             }
             return true; 
         }
-    void ObjectFlagsChanged(PTObjectInstance oi, uint32_t oldflags, uint32_t newflags);
+    void ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags);
       // Removes object from old sets and places in new sets if objset flags change
       // Checks flags in OBJSETOBJFLAGS macro define to check change
     int32_t NumObjSetItems(int32_t objset) const { if (!objset) return objects.NumItems(); else return objsets[objset-1].NumItems(); }
       // Returns number of moving objects (objects with OF_MOVING flag set)
     int32_t GetObjSetIndex(int32_t objset, int32_t item) const
         { if (!objset) return item; else return (objsets[objset-1])[item]; }
-    PTObjectInstance GetObjSetInstance(int32_t objset, int32_t item) const
+    TObjectInstance* GetObjSetInstance(int32_t objset, int32_t item) const
         { if (!objset) return objects[item]; else return objects[(objsets[objset-1])[item]]; }
 
   // Walkmap stuff
@@ -177,15 +170,15 @@ class TSector
     static void ClearPreloadSectors(int32_t level = -1, int32_t numrects = 0, SRect *rects = nullptr);
       // Clear preload sectors (if level, numrects, and rects are supplied, keeps any
       // sectors within the indicated level and rectangle set from being deleted)
-    static PTSector FindPreloadSector(int32_t level, int32_t sectorx, int32_t sectory) const;
+    static TSector* FindPreloadSector(int32_t level, int32_t sectorx, int32_t sectory);
       // find a particular preloaded sector
-    static int32_t PreloadSectorLevel() const { return preloadlevel; }
+    static int32_t PreloadSectorLevel() { return preloadlevel; }
       // Get preload sector level
-    static int32_t NumPreloadRects(SRect &r) const { return numpreloadrects; }
+    static int32_t NumPreloadRects(const SRect &r) { return numpreloadrects; }
       // Get preload sector rectangle
-    static SRect &GetPreloadRect(int32_t rectnum) { return preloadrects[rectnum]; }
+    static const SRect& GetPreloadRect(int32_t rectnum) { return preloadrects[rectnum]; }
       // Get preload sector rectangle
-    static bool InPreloadArea(RS3DPoint p, int32_t level);
+    static bool InPreloadArea(const S3DPoint& p, int32_t level);
       // Are we in the preload area?
 
   private:

@@ -42,8 +42,8 @@ _CLASSDEF(TExit)
 class TExit : public TContainer
 {
   public:
-    TExit(PTObjectImagery newim) : TContainer(newim) { flags |= OF_PULSE; exitflags = 0;  wait = 0; }
-    TExit(PSObjectDef def, PTObjectImagery newim) : TContainer(def, newim) { flags |= OF_PULSE; exitflags = 0; wait = 0; }
+    TExit(TObjectImagery* newim) : TContainer(newim) { flags |= OF_PULSE; exitflags = 0;  wait = 0; }
+    TExit(SObjectDef* def, TObjectImagery* newim) : TContainer(def, newim) { flags |= OF_PULSE; exitflags = 0; wait = 0; }
 
     static bool Initialize();
         // Set up static vars
@@ -55,7 +55,7 @@ class TExit : public TContainer
     virtual void Save(RTOutputStream os);
         // Saves data to the sector
 
-    static bool AddExit(char *name, PTObjectInstance inst, bool getamb = true);
+    static bool AddExit(char *name, TObjectInstance* inst, bool getamb = true);
         // Add an exit from name to inst, closing inst if it is an exit, and getting ambient color and level
     static bool WriteExitList();
         // Save exit list
@@ -67,9 +67,9 @@ class TExit : public TContainer
 
     virtual void Pulse();
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Open or close the exit
-    virtual int32_t CursorType(PTObjectInstance with = nullptr);
+    virtual int32_t CursorType(TObjectInstance* with = nullptr);
         // Show that they can enter this object
     virtual void UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang);
         // Character needs to be standing in front of the door
@@ -125,10 +125,10 @@ _CLASSDEF(TLever)
 class TLever : public TExit
 {
   public:
-    TLever(PTObjectImagery newim) : TExit(newim) { usedir = 3; }    // 0 = NE, SE, SW, NW
-    TLever(PSObjectDef def, PTObjectImagery newim) : TExit(def, newim) { usedir = 3; }
+    TLever(TObjectImagery* newim) : TExit(newim) { usedir = 3; }    // 0 = NE, SE, SW, NW
+    TLever(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { usedir = 3; }
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
 
     virtual void Pulse();
 

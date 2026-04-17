@@ -149,7 +149,7 @@ PTBitmap TBitmap::Load(int32_t resource)
 // * Bitmap Drawing Functions *
 // ****************************
 
-void TBitmap::WriteText(char *text, int32_t x, int32_t y, int32_t lines, PTFont font, PSColor color, uint32_t drawmode)
+void TBitmap::WriteText(char *text, int32_t x, int32_t y, int32_t lines, TFont* font, PSColor color, uint32_t drawmode)
 {
     SDrawBlock db;
     SDrawParam dp;
@@ -226,9 +226,9 @@ bool TBitmap::CacheChunks()
     if (!(flags & BM_CHUNKED))
         return false;
 
-    PSChunkHeader hdr  = (PSChunkHeader)(void *)data8;
-    PSChunkHeader zhdr = (PSChunkHeader)(void *)zbuffer;
-    PSChunkHeader nhdr = (PSChunkHeader)(void *)normal;
+    SChunkHeader* hdr  = (SChunkHeader*)(void *)data8;
+    SChunkHeader* zhdr = (SChunkHeader*)(void *)zbuffer;
+    SChunkHeader* nhdr = (SChunkHeader*)(void *)normal;
 
     int32_t type   = hdr->type;
     int32_t width  = hdr->width;
@@ -419,7 +419,7 @@ bool TBitmap::RawPut(int32_t x, int32_t y,
     return Draw(&db, &dp);
 }
 
-bool TBitmap::Put(int32_t x, int32_t y, PTSurface surface, int32_t srcx, int32_t srcy, int32_t srcw, 
+bool TBitmap::Put(int32_t x, int32_t y, TSurface* surface, int32_t srcx, int32_t srcy, int32_t srcw, 
     int32_t srch, int32_t drawmode, int32_t intensity)
 {
     SDrawBlock  db;

@@ -52,37 +52,37 @@ void SetMonoPercent(int32_t pcnt);
 int32_t GetMonoPercent();
     // returns the color/monochrome percentage for the 16to32 bit tables (tile drawing)
 
-//void DrawLight(RS3DPoint pos, RSColor color, int32_t intensity, PTSurface surface);
+//void DrawLight(S3DPoint& pos, RSColor color, int32_t intensity, TSurface* surface);
     // Draw a dynamic light to the screen!!
 
-void DrawLightNoNormals(RS3DPoint pos, RSColor color, int32_t intensity, PTSurface surface);
+void DrawLightNoNormals(S3DPoint& pos, RSColor color, int32_t intensity, TSurface* surface);
     // Draw a dynamic light without looking at surface normals
 
-//void DrawStaticLight(RS3DPoint pos, RSColor color, int32_t intensity, PTSurface surface, int32_t id);
+//void DrawStaticLight(S3DPoint& pos, RSColor color, int32_t intensity, TSurface* surface, int32_t id);
     // Draws a static light (matches color val in 'color' to one of four lighting colors)
 
-//void DrawStaticMonoLight(RS3DPoint pos, int32_t intensity, PTSurface surface);
+//void DrawStaticMonoLight(S3DPoint& pos, int32_t intensity, TSurface* surface);
     // Draws a monochrome (color 0) static light (faster than DrawStaticLight)
 
-//void DrawStaticDirLight(RS3DPoint pos, RSColor color, int32_t intensity, PTSurface surface, int32_t id);
+//void DrawStaticDirLight(S3DPoint& pos, RSColor color, int32_t intensity, TSurface* surface, int32_t id);
     // Draws a static directional light
 
-//void DrawStaticDirMonoLight(RS3DPoint pos, int32_t intensity, PTSurface surface);
+//void DrawStaticDirMonoLight(S3DPoint& pos, int32_t intensity, TSurface* surface);
     // Draws a monochrome static directional light (color 0) FASTER
 
-void DrawStaticLightNoNormals(RS3DPoint pos, RSColor color, int32_t intensity, PTSurface surface, int32_t id);
+void DrawStaticLightNoNormals(S3DPoint& pos, RSColor color, int32_t intensity, TSurface* surface, int32_t id);
     // Draws a static no normal light (matches color val in 'color' to one of four lighting colors)
 
-void DrawStaticMonoLightNoNormals(RS3DPoint pos, int32_t intensity, PTSurface surface);
+void DrawStaticMonoLightNoNormals(S3DPoint& pos, int32_t intensity, TSurface* surface);
     // Draws a static monochrome (color 0) static light without normal values (faster!)
 
-void DrawAmbientLight(PTSurface surface, RSRect r);
+void DrawAmbientLight(TSurface* surface, RSRect r);
     // Draws static ambient light
 
-//void DrawAmbientLightNoNormals(PTSurface surface, RSRect r);
+//void DrawAmbientLightNoNormals(TSurface* surface, RSRect r);
     // Draws static ambient light without normals
 
-void TransferAndLight32to16(PTSurface dest, PTSurface source, RSRect r);
+void TransferAndLight32to16(TSurface* dest, TSurface* source, RSRect r);
     // Transfer 32 bit color/intensity to 16 bit screen
 
 void  MakeColorTables();

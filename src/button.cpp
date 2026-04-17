@@ -15,7 +15,7 @@
 // * TButton *
 // ***********
 
-void DrawFrame(PTSurface surface, int32_t x, int32_t y, int32_t w, int32_t h, bool down)
+void DrawFrame(TSurface* surface, int32_t x, int32_t y, int32_t w, int32_t h, bool down)
 {
     int32_t topcolor = 216, bottomcolor = 40, leftcolor = 196, rightcolor = 70;
     int32_t centercolor = 128;

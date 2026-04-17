@@ -37,8 +37,8 @@ _CLASSDEF(TMosaicSurface)
 class TMosaicSurface : public TSurface
 {
   protected:
-    uint32_t createflags;      // Creation flags
-    TSurface **tiles;       // Tile array
+    uint32_t createflags;       // Creation flags
+    TSurface **tiles;           // Tile array
     int32_t tilex, tiley;       // Size of each tile
     int32_t numtilex, numtiley; // Number of tiles in x and y
 
@@ -66,14 +66,14 @@ class TMosaicSurface : public TSurface
     void Close();
       // Closes the mosaic surface
 
-    virtual PTSurface GetZBuffer() { return tiles[0]->GetZBuffer(); }
+    virtual TSurface* GetZBuffer() { return tiles[0]->GetZBuffer(); }
       // Returns ZBuffer surface for this surface (if it has one)
-    virtual PTSurface GetNormalBuffer() { return tiles[0]->GetNormalBuffer(); }
+    virtual TSurface* GetNormalBuffer() { return tiles[0]->GetNormalBuffer(); }
       // Returns the normal buffer for this surface (if it has one)
 
     virtual int32_t BitsPerPixel(){return tiles[0]->BitsPerPixel();}
       // Returns current bits per pixel
-    virtual LPDIRECTDRAWSURFACE GetDDSurface() { return tiles[0]->GetDDSurface(); }
+    virtual LPDIRECTDRAWSURFACE GetSGImage() { return tiles[0]->GetSGImage(); }
       // Returns LPDIRECTDRAWSURFACE pointer or Null if not Direct Draw Surface.
 
     virtual bool Lost() { return tiles[0]->Lost(); }
@@ -114,11 +114,11 @@ class TMosaicSurface : public TSurface
   // Put and blit functions which do primary, zbuffer, and normal buffer surface
     virtual bool ParamDraw(PSDrawParam dp, PTBitmap bitmap = nullptr);
       // Copies specified bitmap to current bitmap
-    virtual bool ParamBlit(PSDrawParam dp, PTSurface surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr);
+    virtual bool ParamBlit(PSDrawParam dp, TSurface* surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr);
       // Blits from surface to this surface. RECT sets size of blit. 
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting
-    virtual bool ParamGetBlit(PSDrawParam dp, PTSurface surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr);
+    virtual bool ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr);
       // Blits from this surface to surface. RECT sets size of blit. 
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting.  Called by ParamBlit when blitting from a complex surface

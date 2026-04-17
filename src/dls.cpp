@@ -55,7 +55,7 @@ other files (like colortable.cpp) and uncomment it.
 // *                   L I G H T I N G   F U N C T I O N S                     *
 // *****************************************************************************
 
-//void DrawLight(RS3DPoint pos, RSColor color, int32_t intensity, PTSurface surface)
+//void DrawLight(S3DPoint& pos, RSColor color, int32_t intensity, TSurface* surface)
 //{
 //  See OLDDLS.CPP for source for this function
 //}
@@ -66,7 +66,7 @@ struct SLightData
     int32_t z;
     SColor color;
     int32_t intensity;
-    PTSurface surface;
+    TSurface* surface;
     int32_t id;
 };
 
@@ -302,7 +302,7 @@ bool DrawStaticLightNoNormalsFunc(PSDrawBlock db, PSDrawParam dp)
     RSLightData ld = *(PSLightData)dp->data;
     RSColor color = ld.color;
     int32_t intensity = ld.intensity;
-    PTSurface surface = ld.surface;
+    TSurface* surface = ld.surface;
     int32_t id = ld.id;
 
     if (dp->dwidth <= 0 || dp->dheight <= 0)
@@ -492,7 +492,7 @@ bool DrawStaticLightNoNormalsFunc(PSDrawBlock db, PSDrawParam dp)
     return true;
 }
 
-void DrawStaticLightNoNormals(RS3DPoint pos, RSColor color, int32_t intensity, PTSurface surface, int32_t id)
+void DrawStaticLightNoNormals(S3DPoint& pos, RSColor color, int32_t intensity, TSurface* surface, int32_t id)
 {
     if (surface->BitsPerPixel() != 32 || id >= NUMBASELIGHTS)
         return;
@@ -576,7 +576,7 @@ bool DrawAmbientLightFunc(PSDrawBlock db, PSDrawParam dp)
     return true;
 }
 
-void DrawAmbientLight(PTSurface surface, RSRect r)
+void DrawAmbientLight(TSurface* surface, RSRect r)
 {
     SDrawParam dp;
     MakeDPNoSrc(dp, r.x(), r.y(), r.w(), r.h(), DM_DEFAULT);
@@ -1242,7 +1242,7 @@ bool Transfer32to16Func(PSDrawBlock db, PSDrawParam dp)
     return true;
 }
 
-void TransferAndLight32to16(PTSurface dest, PTSurface source, RSRect r)
+void TransferAndLight32to16(TSurface* dest, TSurface* source, RSRect r)
 {
     SDrawParam dp;
     MakeDP(dp, r.x(), r.y(), r.x(), r.y(), r.w(), r.h(), DM_WRAPCLIP | DM_WRAPCLIPSRC);

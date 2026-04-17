@@ -13,11 +13,11 @@ _CLASSDEF(TTool)
 class TTool : public TObjectInstance
 {
   public:
-    TTool(PTObjectImagery newim) : TObjectInstance(newim) {}
-    TTool(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) {}
+    TTool(TObjectImagery* newim) : TObjectInstance(newim) {}
+    TTool(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
-    virtual int32_t CursorType(PTObjectInstance with = nullptr);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
+    virtual int32_t CursorType(TObjectInstance* with = nullptr);
 
     // Tool stats
     STATFUNC(Value)

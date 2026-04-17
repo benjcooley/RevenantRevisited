@@ -23,8 +23,8 @@ _CLASSDEF(TAmmo)
 class TAmmo : public TObjectInstance
 {
   public:
-    TAmmo(PTObjectImagery newim) : TObjectInstance(newim) {}
-    TAmmo(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) {}
+    TAmmo(TObjectImagery* newim) : TObjectInstance(newim) {}
+    TAmmo(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
     virtual ~TAmmo();
 
     static bool Initialize();
@@ -32,11 +32,11 @@ class TAmmo : public TObjectInstance
     static void Close();
         // Clear static vars
 
-    static void AllocInvItem(PTObjectImagery img, int32_t state, int32_t type, int32_t count);
+    static void AllocInvItem(TObjectImagery* img, int32_t state, int32_t type, int32_t count);
         // Allocate a new inventory item for the given count and return it
     static void FreeInvItem(int32_t type, int32_t count);
         // Free up use of an instance of this count
-    static void AllocGroundItem(PTObjectImagery img, int32_t state, int32_t type, int32_t count);
+    static void AllocGroundItem(TObjectImagery* img, int32_t state, int32_t type, int32_t count);
         // Allocate a new ground item for the given count and return it
     static void FreeGroundItem(int32_t type, int32_t count);
         // Free up use of an instance of this count
@@ -58,7 +58,7 @@ class TAmmo : public TObjectInstance
 
     virtual void GetScreenRect(SRect &r);
         // Get screen bounding rectangle for object (in world coordinates)
-    virtual void DrawUnlit(PTSurface surface);
+    virtual void DrawUnlit(TSurface* surface);
         // Returns bitmap for the inventory image
     virtual PTBitmap GetStillImage(int32_t ostate = -1);
         // Returns still image

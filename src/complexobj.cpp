@@ -472,7 +472,7 @@ void TComplexObject::Notify(int32_t notify, void *ptr)
     // **** WARNING!!! MAKE SURE YOU CHECK FOR BROKEN LINKS AND DELETED OBJECTS HERE!!! ****
     // If you want to be notified, you must call SetNotify() in your contsructor
 
-    if (sector == (PTSector)ptr)
+    if (sector == (TSector*)ptr)
         return;
 
     TObjectInstance::Notify(notify, ptr);

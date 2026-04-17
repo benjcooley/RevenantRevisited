@@ -23,8 +23,8 @@
 
 int32_t TScript::pauseall = false;
 
-PTObjectInstance TakenObject = nullptr;
-PTObjectInstance DroppedObject = nullptr;
+TObjectInstance* TakenObject = nullptr;
+TObjectInstance* DroppedObject = nullptr;
 
 void ScriptError(char *buf, int32_t linenum)
 {
@@ -46,7 +46,7 @@ void SkipBlock(TToken &t)
 // * TScript *
 // ***********
 
-TScript::TScript(PTScriptProto prototype)
+TScript::TScript(TScriptProto* prototype)
 {
     topproto = curproto = prototype;
     ip = nullptr;
@@ -82,7 +82,7 @@ void TScript::SetText(char *buf)
     ScriptManager.SetScriptsDirty();
 }
  
-void TScript::Start(PTScriptProto proto, int32_t pos, int32_t newpriority)
+void TScript::Start(TScriptProto* proto, int32_t pos, int32_t newpriority)
 {
     if (!proto)
         curproto = topproto;
@@ -95,7 +95,7 @@ void TScript::Start(PTScriptProto proto, int32_t pos, int32_t newpriority)
     ip = curproto->Text() + pos;
 }
 
-void TScript::StartTrigger(PTScriptProto proto, PSScriptTrigger st)
+void TScript::StartTrigger(TScriptProto* proto, PSScriptTrigger st)
 {
     Start(proto, st->pos, st->priority);
     trigger = st->type;         // Set current trigger we're going to do
@@ -103,7 +103,7 @@ void TScript::StartTrigger(PTScriptProto proto, PSScriptTrigger st)
     newtriggerstr[0] = nullptr;    // Set manual new trigger key (if any) to nullptr
 }
 
-bool TScript::Triggered(PSScriptTrigger st, int32_t priority, PTObjectInstance context)
+bool TScript::Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* context)
 {
     bool retval = false;
 
@@ -149,7 +149,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t priority, PTObjectInstance c
                 retval = context->Pos().InRange(Player->Pos(), st->dist);
             else
             {
-//              PTObjectInstance inst = MapPane.ObjectInRange(context->Pos(), st->dist, OBJSET_CHARACTER);
+//              TObjectInstance* inst = MapPane.ObjectInRange(context->Pos(), st->dist, OBJSET_CHARACTER);
 //              if (st->name[0] == nullptr || !stricmp(st->name, inst->GetName()))
 //                  retval = true;
             }
@@ -172,7 +172,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t priority, PTObjectInstance c
         }
         else 
         {
-            PTObjectInstance inst = MapPane.ObjectInCube(&st->cube, OBJSET_MOVING);
+            TObjectInstance* inst = MapPane.ObjectInCube(&st->cube, OBJSET_MOVING);
             if (inst && (st->name[0] == nullptr || !stricmp(st->name, inst->GetName())))
                 retval = true;
         }
@@ -224,7 +224,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t priority, PTObjectInstance c
 
 #define MAXITERATIONS   6000            // for catching endless loops
 
-void TScript::Continue(PTObjectInstance context)
+void TScript::Continue(TObjectInstance* context)
 {
     if (priority & SCRIPT_PAUSED || pauseall)
         return;
@@ -236,7 +236,7 @@ void TScript::Continue(PTObjectInstance context)
     // Check Triggers For Interruption
     // *******************************
 
-    PTScriptProto proto = topproto;
+    TScriptProto* proto = topproto;
     bool foundtrigger = false;
     while (proto)
     {
@@ -385,7 +385,7 @@ void TScript::Continue(PTObjectInstance context)
     }
 }
 
-void TScript::Jump(PTObjectInstance context, char *label)
+void TScript::Jump(TObjectInstance* context, char *label)
 {
     TStringParseStream s(curproto->text, strlen(curproto->text));
     TToken t(s);
@@ -449,7 +449,7 @@ void TScript::End()
 // * TScriptProto *
 // ****************
 
-TScriptProto::TScriptProto(PTScriptProto pparent, void *powner, char *pfilename, char *pbuffer)
+TScriptProto::TScriptProto(TScriptProto* pparent, void *powner, char *pfilename, char *pbuffer)
 {
     parent = pparent;
     owner = powner;
@@ -472,7 +472,7 @@ TScriptProto::~TScriptProto()
         free(text);
 }
 
-bool TScriptProto::FitsCriteria(PTObjectInstance inst)
+bool TScriptProto::FitsCriteria(TObjectInstance* inst)
 {
     if (name && *name && stricmp(name, inst->GetName()) == 0)
         return true;
@@ -953,7 +953,7 @@ void TScriptManager::Clear(void *owner)
     }
 }   
 
-PTScriptProto TScriptManager::FindScriptProto(char *name)
+TScriptProto* TScriptManager::FindScriptProto(char *name)
 {
     for (int32_t c = 0; c < scripts.NumItems(); c++)
     {
@@ -978,7 +978,7 @@ void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
 
     while (t.Type() != TKN_EOF)
     {
-        PTScriptProto script = new TScriptProto(nullptr, owner, filename, buffer);
+        TScriptProto* script = new TScriptProto(nullptr, owner, filename, buffer);
         script->ParseScript(t);
 
         for (int32_t c = 0; c < scripts.NumItems(); c++) // Add into unused entries
@@ -997,7 +997,7 @@ void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
 
 // This finds all the scripts which apply to a given object instance and put pointers to
 // them into the new script object (which is returned).
-PTScript TScriptManager::ObjectScript(PTObjectInstance inst)
+PTScript TScriptManager::ObjectScript(TObjectInstance* inst)
 {
     for (int32_t c = 0; c < scripts.NumItems(); c++)
     {

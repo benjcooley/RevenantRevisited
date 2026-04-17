@@ -13,18 +13,20 @@
 #include "font.h"
 
 _CLASSDEF(TScroll)
-class TScroll : public TObjectInstance
+class TScroll final : public TObjectInstance
 {
   public:
-    TScroll(PTObjectImagery newim) : TObjectInstance(newim) { text = nullptr; }
-    TScroll(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) { text = nullptr; }
+    TScroll(TObjectImagery* newim) : TObjectInstance(newim) { text = nullptr; }
+    TScroll(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { text = nullptr; }
+
+    _NODEFAULTCONS(TScroll);
 
     char *GetText() { return text; }
     void SetText(char *newtext);
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Read scroll
-    virtual int32_t CursorType(PTObjectInstance inst = nullptr) { if (inst) return CURSOR_NONE; return CURSOR_EYE; }
+    virtual int32_t CursorType(TObjectInstance* inst = nullptr) { if (inst) return CURSOR_NONE; return CURSOR_EYE; }
         // Indicate you can read the scroll
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
@@ -49,6 +51,8 @@ class TScrollPane : public TButtonPane
   public:
     TScrollPane() : TButtonPane(0, 0, WIDTH, HEIGHT) { scroll = nullptr; }
     
+    _NODEFAULTCONS(TScrollPane);
+
     virtual bool Initialize();
     virtual void Close();
     virtual void DrawBackground();
@@ -63,8 +67,8 @@ class TScrollPane : public TButtonPane
   protected:
     PTScroll scroll;                // Pointer to the scroll being read
 
-    PTMulti scrolldata;             // Bitmap of scroll and buttons
-    PTFont scrollfont;              // Text font
+    TMulti* scrolldata;             // Bitmap of scroll and buttons
+    TFont* scrollfont;              // Text font
 
     int32_t line;                       // For scrolling through the text
     int32_t numlines;                   // Number of total lines in the text
@@ -75,13 +79,13 @@ class TScrollPane : public TButtonPane
 // *************
 
 _CLASSDEF(TBookPane)
-class TBookPane : public TScrollPane
+class TBookPane final : public TScrollPane
 {
   public:
     TBookPane() : TScrollPane() { }
 
+    _NODEFAULTCONS(TBookPane);
+
     virtual bool Initialize();
     virtual void DrawBackground();
 };
-
-#endif

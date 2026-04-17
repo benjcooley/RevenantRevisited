@@ -31,18 +31,18 @@ class TInventory : public TPane
     virtual void MouseClick(int32_t button, int32_t x, int32_t y);
     virtual void MouseMove(int32_t button, int32_t x, int32_t y);
 
-    PTObjectInstance GetContainer() { return container; }
+    TObjectInstance* GetContainer() { return container; }
         // Container whose inventory contents are currently displayed
-    PTObjectInstance GetTopContainer()
-        { PTObjectInstance inst = container; while (inst->GetOwner()) inst = inst->GetOwner(); return inst; }
+    TObjectInstance* GetTopContainer()
+        { TObjectInstance* inst = container; while (inst->GetOwner()) inst = inst->GetOwner(); return inst; }
         // Master of inventory (usually Player)
-    void SetContainer(PTObjectInstance cont)
+    void SetContainer(TObjectInstance* cont)
         { if (container != cont) { container = cont; Update(); } }
         // Sets the object whose inventory the pane displays
     int32_t GetHeldSlot() { return heldslot; }
         // Function for transfering objects to other panes (namely, the equipment pane)
 
-    void DrawAnim(PTObjectInstance inst, PTBitmap bm);
+    void DrawAnim(TObjectInstance* inst, PTBitmap bm);
         // Draw an animation for an inventory object
 
   private:
@@ -51,7 +51,7 @@ class TInventory : public TPane
     void SwapSlots(int32_t oldslot, int32_t newslot);
         // Swap the inventory objects in the slots specified
 
-    PTObjectInstance container;         // Object inventory is shown for
+    TObjectInstance* container;         // Object inventory is shown for
 
     int32_t grabslot;                       // slot number currently dragging with mouse
     int32_t heldslot;                       // for passing objects to other panes

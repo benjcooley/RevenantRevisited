@@ -44,7 +44,7 @@ void TStripEffect::Pulse()
     {
         case STRIP_LAUNCH:
         { 
-			PTObjectInstance invoker = spell->GetInvoker();
+			TObjectInstance* invoker = spell->GetInvoker();
 			S3DPoint newpos, vel;
 			int32_t pnt, block;
 
@@ -56,7 +56,7 @@ void TStripEffect::Pulse()
 				newpos.x += vel.x;
 				newpos.y += vel.y;
 				block = MapPane.GetWalkHeight( newpos);
-				if ((block == 0) || ((PTCharacter)Player)->CharBlocking( ((PTObjectInstance)Player), newpos))
+				if ((block == 0) || ((PTCharacter)Player)->CharBlocking( ((TObjectInstance*)Player), newpos))
 				{
 					// Either a character or a wall
 					targetrange = (pnt + 2);
@@ -845,7 +845,7 @@ void TWindStripAnimator::Animate(bool draw)
 	frameon++;
 	if (((PTEffect)inst)->GetSpell())
 	{
-		PTObjectInstance invoker = ((PTEffect)inst)->GetSpell()->GetInvoker();
+		TObjectInstance* invoker = ((PTEffect)inst)->GetSpell()->GetInvoker();
 		S3DPoint vel;
 		ConvertToVector(centerang, WINDSTRIP_RADIUS, vel);
 		center.x += (float)vel.x;

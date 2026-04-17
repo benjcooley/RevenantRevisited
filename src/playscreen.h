@@ -91,7 +91,7 @@ class TPlayScreen : public TScreen
     virtual void Command(GAMECOMMAND command);
       // Called by various input functions to process commands
 
-    static PTScreen ShowScreen(PTScreen screen, int32_t ticks);
+    static TScreen* ShowScreen(TScreen* screen, int32_t ticks);
       // Shows screen
 
     void AddPostCharAnim(int32_t x, int32_t y, int32_t z, PTBitmap bm, uint32_t drawmode, int32_t dim = 0)
@@ -200,8 +200,8 @@ class TPlayScreen : public TScreen
     int32_t gametime;                       // Current game time in 100ths of a second
     int32_t timeofday;                      // Current time of day in GAME (not real) minutes
 
-    PTObjectImagery bloodimagery;       // Blood imagery
-    PTObjectImagery sparksimagery;      // Sparks imagery
+    TObjectImagery* bloodimagery;       // Blood imagery
+    TObjectImagery* sparksimagery;      // Sparks imagery
 
     PTPane nextpane;                    // pane to add at start of next frame
 };

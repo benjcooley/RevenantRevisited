@@ -37,13 +37,15 @@ _CLASSDEF(TWeapon)
 class TWeapon : public TObjectInstance
 {
   public:
-    TWeapon(PTObjectImagery newim) : TObjectInstance(newim) { ClearWeapon(); }
-    TWeapon(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) { ClearWeapon(); }
+    TWeapon(TObjectImagery* newim) : TObjectInstance(newim) { ClearWeapon(); }
+    TWeapon(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { ClearWeapon(); }
+
+    _NODEFAULTCONS(TWeapon);
 
     void ClearWeapon();
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
-    virtual int32_t CursorType(PTObjectInstance with = nullptr);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
+    virtual int32_t CursorType(TObjectInstance* with = nullptr);
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
     virtual void Save(RTOutputStream os);

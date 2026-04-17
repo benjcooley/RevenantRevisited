@@ -90,7 +90,7 @@ class TActionBlock
     int32_t wait;                         // Delay for current command
     int32_t angle, moveangle, turnrate;   // Angle of movement and turn rate
     S3DPoint target;                      // Target location for movement
-    PTObjectInstance obj;                 // Target object for action
+    TObjectInstance* obj;                 // Target object for action
     PSCharAttackData attack;              // Attack info (if is attack/impact/death/stun/knockdown action)
     PSCharAttackImpact impact;            // Impact info (if is attack/impact/death/stun/knockdown action)
     int32_t damage;                       // Damage attack will do (if hits)
@@ -130,8 +130,8 @@ class TComplexObject : public TObjectInstance
   public:
     void ClearComplexObj();
 
-    TComplexObject(PTObjectImagery newim) : TObjectInstance(newim) { ClearComplexObj(); }
-    TComplexObject(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) { ClearComplexObj(); }
+    TComplexObject(TObjectImagery* newim) : TObjectInstance(newim) { ClearComplexObj(); }
+    TComplexObject(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { ClearComplexObj(); }
 
     virtual void Pulse();
       // Main pulse (done before frame is drawn)

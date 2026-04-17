@@ -21,7 +21,7 @@
 REGISTER_3DANIMATOR("CHARACTER", TCharAnimator)
 REGISTER_3DANIMATOR("PLAYER", TPlayerAnimator)
 
-TCharAnimator::TCharAnimator(PTObjectInstance oi) : T3DAnimator(oi)
+TCharAnimator::TCharAnimator(TObjectInstance* oi) : T3DAnimator(oi)
 {
     InitPoisonColor();
     InitTransparency();
@@ -97,7 +97,7 @@ bool TCharAnimator::Render()
     if (weaponswipe.GetInitialized() &&                                     // Ready
       ((PTCharacter)inst)->IsAttack() &&                                    // Is an attack
       !(inst->ObjClass() == OBJCLASS_PLAYER &&                              // Is not hand to hand
-        ((PTPlayer)inst)->PrimeHand() == nullptr ))    
+        ((TPlayer*)inst)->PrimeHand() == nullptr ))    
           weaponswipe.Render();
 
 //  RenderCombatFlashes();
@@ -204,11 +204,11 @@ void TCharAnimator::ProcessEquipment(int32_t task)
     S3DAnimObj equipobj;
     memset(&equipobj, 0, sizeof(S3DAnimObj));
 
-    PTPlayer player = (PTPlayer)inst;
+    TPlayer* player = (TPlayer*)inst;
 
     for (int32_t eq = 0; eq < NUM_EQ_SLOTS; eq++)
     {
-        PTObjectInstance oi = player->GetEquip(eq);
+        TObjectInstance* oi = player->GetEquip(eq);
         if (!oi)
             continue;
             
@@ -216,7 +216,7 @@ void TCharAnimator::ProcessEquipment(int32_t task)
             continue;
 
         PT3DImagery equipimagery = (PT3DImagery)oi->GetImagery();
-        PSImageryHeader equipheader = equipimagery->GetHeader();
+        SImageryHeader* equipheader = equipimagery->GetHeader();
 
       // Find equipment state for player's body type
         int32_t nlen = 0;
@@ -387,7 +387,7 @@ void TCharAnimator::InitUtilityImagery()
 
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = EffectClass.FindObjType("CharUtility");
-    PSObjectInfo info = EffectClass.GetObjType(def.objtype);
+    SObjectInfo* info = EffectClass.GetObjType(def.objtype);
     if (info)
         utilityimagery = (PT3DImagery)TObjectImagery::LoadImagery(info->imageryid);
 }
@@ -664,8 +664,8 @@ PT3DImagery TCharAnimator::GetWeaponImagery(int32_t objnum)
     if (inst->ObjClass() != OBJCLASS_PLAYER)
         return nullptr;
 
-    PTPlayer player = (PTPlayer)inst;
-    PTObjectInstance oi = player->GetEquip(EQ_PRIMEHAND);
+    TPlayer* player = (TPlayer*)inst;
+    TObjectInstance* oi = player->GetEquip(EQ_PRIMEHAND);
     if (!oi)
         return nullptr;
             
@@ -685,8 +685,8 @@ int32_t TCharAnimator::GetWeaponNum()
     S3DAnimObj equipobj;
     memset(&equipobj, 0, sizeof(S3DAnimObj));
 
-    PTPlayer player = (PTPlayer)inst;
-    PTObjectInstance oi = player->GetEquip(EQ_PRIMEHAND);
+    TPlayer* player = (TPlayer*)inst;
+    TObjectInstance* oi = player->GetEquip(EQ_PRIMEHAND);
     if (!oi)
         return -1;
             
@@ -694,7 +694,7 @@ int32_t TCharAnimator::GetWeaponNum()
 //          return 0;
 
     PT3DImagery equipimagery = (PT3DImagery)oi->GetImagery();
-    PSImageryHeader equipheader = equipimagery->GetHeader();
+    SImageryHeader* equipheader = equipimagery->GetHeader();
 
   // Find equipment state for player's body type
     int32_t nlen = 0;
@@ -824,8 +824,8 @@ void TCharAnimator::SetupWeaponSwipe()
     
     if (inst->ObjClass() == OBJCLASS_PLAYER)
     {
-        PTPlayer player = (PTPlayer)inst;
-        PTObjectInstance oi = player->PrimeHand();
+        TPlayer* player = (TPlayer*)inst;
+        TObjectInstance* oi = player->PrimeHand();
         if (oi)
         {
             p.primehand = oi->GetTypeName();
@@ -973,8 +973,8 @@ void TWeaponSwipe::Animate()
 
     if (charanim->GetObjInst()->ObjClass() == OBJCLASS_PLAYER)
     {
-        PTPlayer player = (PTPlayer)charanim->GetObjInst();
-        PTObjectInstance oi = player->PrimeHand();
+        TPlayer* player = (TPlayer*)charanim->GetObjInst();
+        TObjectInstance* oi = player->PrimeHand();
         if (oi)
         {
             char* name = oi->GetTypeName();
@@ -1124,7 +1124,7 @@ hmm_mat4* TWeaponSwipe::GetCharsWeaponMatrix()
         charanim->MakeMatrix(&pos);                 // Get character position
         weaponobj = charanim->GetObject(weaponnum);
         PTCharacter inst = (PTCharacter)charanim->GetObjInst();
-        charanim->Get3DImagery()->CalcObjectMatrix(weaponobj, ((PTObjectInstance)inst)->GetState(), inst->GetFrame(), &pos);
+        charanim->Get3DImagery()->CalcObjectMatrix(weaponobj, ((TObjectInstance*)inst)->GetState(), inst->GetFrame(), &pos);
         return &weaponobj->matrix;
     }
     else 

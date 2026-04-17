@@ -4,7 +4,8 @@
 // *            ddsurface.h - Direct Draw Surface Include File             *
 // *************************************************************************
 
-#ifndef _DDSURFACE_H
+#if 0
+
 #define _DDSURFACE_H
 
 #ifndef _REVENANT_H
@@ -20,8 +21,8 @@
 #define VSURF_VIDEOONLY    4       // Forces system to only grab video memory or exit with error
 #define VSURF_ZBUFFER      8       // This surface will be a zbuffer
 
-_CLASSDEF(TDDSurface)
-class TDDSurface : public TSurface
+_CLASSDEF(TSurface)
+class TSurface : public TSurface
 {
   protected:
     bool                lost;          // Indicates if a surface was lost
@@ -31,24 +32,24 @@ class TDDSurface : public TSurface
 
   public:
   // Constructor
-    TDDSurface();
+    TSurface();
       // No initialize - must call Initialize() and Close() 
-    TDDSurface(int32_t width, int32_t height, int32_t flags = VSURF_VIDEOMEM, int32_t stride = 0)
+    TSurface(int32_t width, int32_t height, int32_t flags = VSURF_VIDEOMEM, int32_t stride = 0)
         { surface = nullptr; Initialize(width, height, flags, stride); ownssurface = true;}
       // Initializes Video Surface
-    TDDSurface(PTBitmap bitmap, int32_t intensity, int32_t flags = VSURF_VIDEOMEM)
+    TSurface(PTBitmap bitmap, int32_t intensity, int32_t flags = VSURF_VIDEOMEM)
         { surface = nullptr; Initialize(bitmap, intensity, flags);  ownssurface = true;}
       // Initializes Video Surface
-    TDDSurface(LPDIRECTDRAWSURFACE ddsurface)
+    TSurface(LPDIRECTDRAWSURFACE ddsurface)
         { surface = nullptr; Initialize(ddsurface);  ownssurface = false;}
       // Initializes Video Surface from DirectDraw surface.
-    virtual ~TDDSurface();
+    virtual ~TSurface();
       // Closes Video Surface.
 
     virtual int32_t SurfaceType() { return SURFACE_VIDEO; }
       // Returns type of surface this is
 
-    virtual LPDIRECTDRAWSURFACE GetDDSurface() { return surface; }
+    virtual LPDIRECTDRAWSURFACE GetSGImage() { return surface; }
       // Returns LPDIRECTDRAWSURFACE pointer or Null if not Direct Draw Surface.
 
   // Initialize functions
@@ -78,7 +79,7 @@ class TDDSurface : public TSurface
       // Unlocks surface.
 
   // Low level Put and Blit which ONLY do primary surface (no Z or Normal Buffer)
-    virtual bool BlitHandler(PSDrawParam dp, PTSurface surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr);
+    virtual bool BlitHandler(PSDrawParam dp, TSurface* surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr);
       // Blits from surface to surface. RECT sets size of blit. 
       // X & Y specifies dest. origin
 

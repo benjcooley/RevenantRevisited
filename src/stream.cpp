@@ -48,7 +48,7 @@ void TOutputStream::MakeFreeSpace(int32_t freespace)
 RTInputStream TInputStream::operator >> (char *d)
 {
     strncpy(d, (char *)(ptr + 1), *ptr);
-    d[*ptr] = nullptr;
+    d[*ptr] = 0;
     ptr += *ptr + 1;
     return *this;
 }

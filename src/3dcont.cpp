@@ -41,7 +41,7 @@ class TScrollTexController : public T3DController
       // Parses a parameter item
 
   public:
-    TScrollTexController(int32_t s, int32_t f, PT3DAnimator a, PT3DImagery i, PTObjectInstance o) :
+    TScrollTexController(int32_t s, int32_t f, PT3DAnimator a, PT3DImagery i, TObjectInstance* o) :
       T3DController(s, f, a, i, o) {}
       // Constructor
     virtual ~TScrollTexController() { Close(); }
@@ -181,7 +181,7 @@ class TAnimTexController : public T3DController
       // Parses a parameter item
 
   public:
-    TAnimTexController(int32_t s, int32_t f, PT3DAnimator a, PT3DImagery i, PTObjectInstance o) :
+    TAnimTexController(int32_t s, int32_t f, PT3DAnimator a, PT3DImagery i, TObjectInstance* o) :
       T3DController(s, f, a, i, o) {}
       // Constructor
     virtual ~TAnimTexController() { Close(); }

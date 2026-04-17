@@ -7,6 +7,7 @@
 #pragma once
 
 #include "revenant.h"
+
 #include "object.h"
 #include "graphics.h"
 
@@ -26,7 +27,7 @@ class TSaveGame
         // Checks to see if the game is loading
 
   protected:
-    PTObjectInstance saved;                 // Saved object (Locke)
+    TObjectInstance* saved;                 // Saved object (Locke)
     int32_t gametime;                       // Game time when saved
     int32_t version;                        // Version of savegame
     int32_t pane;                           // Which pane was up

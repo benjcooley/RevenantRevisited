@@ -20,8 +20,8 @@ class TFont : public TFontData
 {
   public:
     TFont() {}
-    static PTFont LoadFont(int32_t id)
-        { return (PTFont)LoadResource("FONT", id); }
+    static TFont* LoadFont(int32_t id)
+        { return (TFont*)LoadResource("FONT", id); }
     PTBitmap GetChar(unsigned char ch);
     int32_t FirstChar()
         { return firstchar; }

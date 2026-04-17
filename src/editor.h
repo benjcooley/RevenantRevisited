@@ -103,7 +103,7 @@ class TScrollEditorPane : public TTextPane
     virtual bool Initialize();
     virtual void KeyPress(int32_t key, bool down);
 
-    void SetScroll(PTObjectInstance s);
+    void SetScroll(TObjectInstance* s);
 
     void SaveText();
         // Save text back out to the scroll
@@ -126,13 +126,13 @@ class TScriptPane : public TTextPane
     virtual void KeyPress(int32_t key, bool down);
         // For extended keys (arrows, etc)
 
-    void LoadScript(PTObjectInstance oi);
+    void LoadScript(TObjectInstance* oi);
         // Load up the script from the object into the text buffer
     void SaveScript();
         // Save the text buffer as the script for the object
 
   private:
-    PTObjectInstance inst;              // Instance for script being edited
+    TObjectInstance* inst;              // Instance for script being edited
 };
 
 _STRUCTDEF(SChained)
@@ -182,7 +182,7 @@ class TConsolePane : public TTextPane
         // Enter bound-adjust mode
     bool AdjustingBounds() { return (box != nullptr); }
         // Returns whether bounding box is being edited
-    bool AddAxis(PTObjectInstance inst);
+    bool AddAxis(TObjectInstance* inst);
         // Add the axis object at the location of inst
     void ClearAxis();
         // Clear out the axis object, if necessary
@@ -206,8 +206,8 @@ class TConsolePane : public TTextPane
     int32_t oldcx, oldcy;                   // Update only when changed
     int32_t oldbuflen;                      // Mouse chain text update
 
-    PTObjectInstance box;               // Bounding box display
-    PTObjectInstance axis;              // Axis for lining up registration
+    TObjectInstance* box;               // Bounding box display
+    TObjectInstance* axis;              // Axis for lining up registration
 
     HANDLE cmdthreadhandle;             // Handle of the command processor thread
     static HANDLE cmdevents[2];         // Events used by the command processor thread
@@ -306,7 +306,7 @@ class TEditToolsPane : public TButtonPane
 
     void AddBookmark(int32_t mark, S3DPoint pos, int32_t lev);
         // Add a new bookmark
-    void GetBookmark(int32_t mark, RS3DPoint pos, int32_t &lev);
+    void GetBookmark(int32_t mark, S3DPoint& pos, int32_t &lev);
         // Get the given bookmark
     void ClearBookmarks();
         // Clear out all bookmarks
@@ -380,7 +380,7 @@ class TEditClassPane : public TButtonPane
 };
 
 // Editor externals
-extern PTMulti EditorData;
+extern TMulti* EditorData;
 extern TConsolePane Console;
 extern TScriptPane ScriptEditor;
 extern TScrollEditorPane ScrollEditor;
