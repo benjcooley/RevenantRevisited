@@ -34,14 +34,15 @@ Mapped from the Direct3D / Windows API dependency audit.
 | # | Subsystem                       | State             | Blocking types                                                              | Scope      | Replacement                                                                                   |
 |---|---------------------------------|-------------------|-----------------------------------------------------------------------------|------------|-----------------------------------------------------------------------------------------------|
 | 1 | Win32 windowing + message loop  | untouched         | `HWND`, `HINSTANCE`, `WNDPROC`, `WPARAM`/`LPARAM`, `LRESULT`                | 2 files    | `sokol_app` events → `TScreen`                                                                 |
-| 2 | Direct3D 5 execute buffers      | untouched         | `LPDIRECT3DEXECUTEBUFFER`, `D3DVERTEXTYPE`, `D3DPRIMITIVETYPE`, `D3DMATERIALHANDLE`, `HRESULT` | 7+ files | `sokol_gfx` pipelines + vertex buffers; `HandmadeMath` for transforms                          |
+| 2a | Direct3D — **animated** 3D (characters, effects, projectiles) | untouched | `LPDIRECT3DEXECUTEBUFFER`, `D3DVERTEXTYPE`, `D3DPRIMITIVETYPE`, `D3DMATERIALHANDLE`, `HRESULT` | 7+ files | Standard `sokol_gfx` pipelines + vertex buffers; `HandmadeMath` for transforms. Straightforward. |
+| 2b | DLS — static-tile per-pixel lighting (the renderer that was too slow to ship in 1999) | untouched; spec lives as MMX in `src/dls.cpp` | n/a — CPU SIMD, not a DirectX type issue | 1 main file + tile compositing | **One Metal/sokol_gfx pixel shader.** Port the algorithm from the MMX code; delete MMX once shader verified. Do not recreate the shipped triangle-grid approximation. |
 | 3 | DirectDraw surfaces (stragglers) | partly migrated  | `LPDIRECTDRAWSURFACE`, `DDSURFACEDESC`, `LPDIRECTDRAWCLIPPER`               | 3 files    | Already on `sg_image`; finish converting `3dimage.h::S3DTex`, `multisurface.h::GetSGImage`     |
 | 4 | Win32 threading + synchronization | untouched       | `CRITICAL_SECTION`, `HANDLE`, `CreateThread`, `CreateEvent`, `CreateMutex`, `WaitForSingleObject` | 5 files | `std::thread`, `std::mutex`, `std::condition_variable`, `std::binary_semaphore`                 |
 | 5 | Win32 config / INI              | partly modern     | `GetPrivateProfileString/Int`                                               | 2 files    | Small INI parser (`simpleini`) or switch to JSON; `std::filesystem` for path handling           |
 | 6 | DirectSound                     | mostly stubbed    | `LPDIRECTSOUND`, `LPDIRECTSOUNDBUFFER`, `LPDIRECTSOUND3DBUFFER`             | 1 header, deferred | `miniaudio` (header-only) or `sokol_audio`                                              |
 | 7 | DirectInput                     | fully stubbed     | `LPDIRECTINPUT`, `DIJOYSTATE`                                               | 1 file, deferred | `sokol_app` keyboard/mouse; `GLFW`/IOKit for gamepad later                                   |
 | 8 | DirectPlay (multiplayer)        | unknown / deferred | TBD                                                                        | TBD        | Deferred — multiplayer was "terrible" per author; revisit post-singleplayer                   |
-| 9 | MMX intrinsics + inline asm     | delete            | `_mm_*`, `__asm` blocks (notably `src/dls.cpp:1263`)                        | 5 files    | **Not in shipped build.** Delete MMX paths when touching the file; keep / write scalar fallback |
+| 9 | MMX / inline asm (non-DLS)      | delete            | `_mm_*`, `__asm` in `bitmap.cpp`, `graphics.cpp`, `automap.cpp`, `revmain.cpp`, `chunkcache.cpp` | 5 files | Experimental; not in shipped build. **Delete on contact.** No fallback needed. |
 | 10 | `<windows.h>` / COM misc        | scattered        | `#include <windows.h>` in 13 files                                          | broad      | Remove per file as the above subsystems are addressed                                          |
 
 ## 4. Phased plan
@@ -52,7 +53,8 @@ Goal: `cmake --build build` exits 0. No runtime expectation.
 
 1. **`platform_compat.h`** — new header providing minimal shim types: `HRESULT` → `int` alias with `SUCCEEDED`/`FAILED` macros (or drop entirely and convert call-sites to `bool`); drop or alias Win32 handle types where the calling code is about to be rewritten. Prefer *conversion* over *shim* where scope is small.
 2. **Subsystem 1 (windowing):** rewrite `src/mainwnd.h/.cpp` and `src/revmain.cpp` entry around `sokol_app`. Route events to `TScreen::HandleInput`.
-3. **Subsystem 2 (D3D):** convert `src/3dscene.h/.cpp`, `src/3dimage.h/.cpp`, and effect files (`effect.cpp`, `missileeffect.cpp`, `stripeffect.cpp`) from Execute Buffer model to `sokol_gfx` pipeline + vertex buffer. Type aliases for the value types (`D3DVERTEXTYPE`, `D3DPRIMITIVETYPE`) can land in `platform_compat.h` if it keeps the diff bounded.
+3. **Subsystem 2a (animated 3D):** convert `src/3dscene.h/.cpp`, `src/3dimage.h/.cpp`, and effect files (`effect.cpp`, `missileeffect.cpp`, `stripeffect.cpp`) from Execute Buffer model to `sokol_gfx` pipeline + vertex buffer. Type aliases for the value types (`D3DVERTEXTYPE`, `D3DPRIMITIVETYPE`) can land in `platform_compat.h` if it keeps the diff bounded. This is standard triangle rendering — no shader novelty.
+   *Subsystem 2b (DLS static-tile shader) is Phase 3 work — not required to reach compile.*
 4. **Subsystem 3 (DD stragglers):** replace remaining `LPDIRECTDRAWSURFACE` in `src/3dimage.h` and `src/multisurface.h` with `sg_image` / a thin owned handle type.
 5. **Subsystem 5 (INI):** replace `GetPrivateProfileString/Int` with a small portable INI reader (vendor `simpleini` into `thirdparty/`) — isolated, low risk.
 6. **Subsystems 6, 7, 8:** *stub only* — empty implementations behind the existing classes so the link succeeds. No real audio/input/multiplayer yet.
@@ -64,9 +66,10 @@ Goal: `cmake --build build` exits 0. No runtime expectation.
 
 1. **Subsystem 4 (threading):** replace the loader / timer / update threads with `std::thread` + `std::condition_variable`. `TImagery` loader, `TMapPane` update, and `Timer` are the main consumers.
 2. **Asset paths:** point config at `data/` (the former `RevenantBin/`). Verify the startup sector / imagery / character-class files load — this is the first real compatibility test against the GOG data set.
-3. **First render:** reach a rendered frame of the title screen or an in-game sector. Expect format issues — triage by whether it's a code bug vs. an incompatibility between our pre-release snapshot and the shipped 1998 data formats.
-4. **Input:** hook `sokol_app` keyboard/mouse into the game command system (`GAMECMD_*`).
-5. **Audio:** swap `miniaudio` in behind `TSoundPlayer`. CD audio (MCI) stays stubbed — replace with ogg loader pointed at `data/Music/`.
+3. **First render — animated objects:** reach a rendered frame of the title screen or an in-game sector with animated 3D working. Expect format issues — triage by whether it's a code bug vs. an incompatibility between our pre-release snapshot and the shipped 1998 data formats.
+4. **DLS static-tile pixel shader (Subsystem 2b):** port the lighting algorithm from `src/dls.cpp`'s MMX code into a Metal/sokol_gfx pixel shader that runs per-pixel over the static tile imagery with the Z-buffer. This is the renderer that was too slow to ship in 1999 — modern GPU makes it free. Delete the MMX source once the shader output matches expectations.
+5. **Input:** hook `sokol_app` keyboard/mouse into the game command system (`GAMECMD_*`).
+6. **Audio:** swap `miniaudio` in behind `TSoundPlayer`. CD audio (MCI) stays stubbed — replace with ogg loader pointed at `data/Music/`.
 
 **Exit criterion:** game launches, renders, and accepts input on macOS.
 
@@ -95,7 +98,8 @@ Rolling, not a single phase: as each file is touched, fold in:
 
 - **Data compatibility.** The `src/` snapshot predates release by ~6 months; `data/` is the shipped 1998 set. Animation / imagery / save / sector formats may have shifted late in development. Expect loader failures in Phase 3 that require reading release-era struct layouts out of `recon/` to repair.
 - **Sokol coverage gap.** `sokol_gfx` is a good Metal abstraction but provides no 3D math, no mesh loading, and no scene management — those all have to come from the existing engine code or `HandmadeMath`.
-- **MMX / inline asm in DLS and effects.** Not relevant — the MMX paths in the pre-release snapshot were dropped before shipping. Delete them as files are touched; keep scalar code.
+- **DLS shader authoring.** The `src/dls.cpp` MMX code is the spec for the static-tile per-pixel lighting shader. It's the one non-trivial shader in the port, and the whole visual identity of static backgrounds depends on it. Allow time to get it right; keep the MMX source readable until the shader matches.
+- **Renderer fork is intentional.** We're resurrecting the *pre-release ambitious* renderer (per-pixel DLS via shader), not the *shipped compromise* (overlapped triangle grid with lit vertices). `recon/ghidra/`'s renderer classes are therefore reference material for gameplay systems, not for the render pipeline.
 - **Multiplayer via DirectPlay.** Not replaced anywhere in sokol's ecosystem. Deferred.
 
 ## 6. What's explicitly not in scope
