@@ -3,7 +3,7 @@
 /bin
 
 # Reference copies (kept locally, not tracked)
-/RevenantRepo
+/legacy
 
 # Editor / OS
 .DS_Store
