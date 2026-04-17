@@ -1,0 +1,25 @@
+# STemplate - MEDIUM CONFIDENCE MATCH
+source_class: "STemplate"
+ghidra_class: "cls_0x48fbe0"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 83/100
+# - Source: 16 bytes, 4 fields 
+# - Ghidra: 72 bytes, 3 fields
+# - Size difference: ±56 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 17
+# - Source file: template.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "names"  # char -> dword (score: 100)
+  "mbr_0x40": "numnames"  # int32_t -> dword (score: 100)
+  "mbr_0x44": "objects"  # SObjectRef -> dword (score: 100)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

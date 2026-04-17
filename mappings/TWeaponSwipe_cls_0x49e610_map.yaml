@@ -1,0 +1,29 @@
+# TWeaponSwipe - HIGH CONFIDENCE MATCH
+source_class: "TWeaponSwipe"
+ghidra_class: "cls_0x49e610"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 88/100
+# - Source: 36 bytes, 9 fields 
+# - Ghidra: 36 bytes, 7 fields
+# - Size difference: ±0 bytes
+# - Field difference: ±2 fields
+# - Complexity score: 49
+# - Source file: charanimator.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x8": "obj"  # PS3DAnimObj -> dword (score: 184)
+  "mbr_0xc": "weaponmat"  # hmm_mat4* -> dword (score: 184)
+  "mbr_0x10": "initialized"  # bool -> dword (score: 84)
+  "mbr_0x14": "weaponverts"  # LPD3DLVERTEX -> dword (score: 178)
+  "mbr_0x18": "numverts"  # int32_t -> dword (score: 178)
+  "mbr_0x1c": "charanim"  # PTCharAnimator -> dword (score: 78)
+  "mbr_0x20": "maxsegs"  # int32_t -> dword (score: 172)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

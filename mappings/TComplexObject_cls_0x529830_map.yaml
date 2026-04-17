@@ -1,0 +1,24 @@
+# TComplexObject - MEDIUM CONFIDENCE MATCH
+source_class: "TComplexObject"
+ghidra_class: "cls_0x529830"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 82/100
+# - Source: 8 bytes, 2 fields 
+# - Ghidra: 56 bytes, 3 fields
+# - Size difference: ±48 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 22
+# - Source file: complexobj.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "desired"  # PTActionBlock -> dword (score: 192)
+  "mbr_0x24": "root"  # PTActionBlock -> dword (score: 136)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

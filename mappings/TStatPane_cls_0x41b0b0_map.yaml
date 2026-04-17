@@ -1,0 +1,24 @@
+# TStatPane - MEDIUM CONFIDENCE MATCH
+source_class: "TStatPane"
+ghidra_class: "cls_0x41b0b0"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 81/100
+# - Source: 8 bytes, 2 fields 
+# - Ghidra: 76 bytes, 3 fields
+# - Size difference: ±68 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 25
+# - Source file: statpane.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x40": "startline"  # int32_t -> dword (score: 100)
+  "mbr_0x44": "expanded"  # bool -> byte (score: 100)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

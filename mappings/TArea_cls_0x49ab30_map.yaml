@@ -1,0 +1,34 @@
+# TArea - PERFECT CONFIDENCE MATCH
+source_class: "TArea"
+ghidra_class: "cls_0x49ab30"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 108/100
+# - Source: 52 bytes, 13 fields 
+# - Ghidra: 128 bytes, 12 fields
+# - Size difference: ±76 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 38
+# - Source file: area.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "level"  # int32_t -> dword (score: 200)
+  "mbr_0x4": "flags"  # int32_t -> dword (score: 200)
+  "mbr_0x8": "rects"  # TRectArray -> dword (score: 200)
+  "mbr_0xc": "scriptfile"  # char -> dword (score: 100)
+  "mbr_0x18": "lastdaylight"  # int32_t -> dword (score: 178)
+  "mbr_0x1c": "cdplaynum"  # int32_t -> dword (score: 178)
+  "mbr_0x20": "cdplaylistsize"  # int32_t -> dword (score: 178)
+  "mbr_0x2c": "cdplaylist"  # int32_t -> dword (score: 162)
+  "mbr_0x30": "cdplayisrandom"  # bool -> dword (score: 62)
+  "mbr_0x34": "cdplaypause"  # int32_t -> dword (score: 156)
+  "mbr_0x3c": "cdplaystart"  # int32_t -> dword (score: 148)
+  "mbr_0x7c": "cdplaywait"  # int32_t -> dword (score: 100)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

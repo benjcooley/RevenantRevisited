@@ -1,0 +1,26 @@
+# TMultiSurface - MEDIUM CONFIDENCE MATCH
+source_class: "TMultiSurface"
+ghidra_class: "cls_0x488020"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 82/100
+# - Source: 16 bytes, 4 fields 
+# - Ghidra: 33 bytes, 4 fields
+# - Size difference: ±17 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 29
+# - Source file: multisurface.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "zbuffer"  # TSurface* -> dword (score: 200)
+  "mbr_0x1c": "normals"  # TSurface* -> dword (score: 152)
+  "mbr_0x20": "deletesurf"  # bool -> byte (score: 152)
+  "cls_0x41c7f0": "lost"  # bool -> cls_0x41c7f0 (score: 90)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

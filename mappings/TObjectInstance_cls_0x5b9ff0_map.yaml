@@ -1,0 +1,41 @@
+# TObjectInstance - PERFECT CONFIDENCE MATCH
+source_class: "TObjectInstance"
+ghidra_class: "cls_0x5b9ff0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 110/100
+# - Source: 84 bytes, 21 fields 
+# - Ghidra: 80 bytes, 19 fields
+# - Size difference: ±4 bytes
+# - Field difference: ±2 fields
+# - Complexity score: 99
+# - Source file: object.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "notifyflags"  # uint32_t -> dword (score: 192)
+  "mbr_0x8": "mapindex"  # int32_t -> dword (score: 192)
+  "mbr_0xc": "sector"  # TSector* -> dword (score: 192)
+  "mbr_0x10": "cl"  # TObjectClass* -> dword (score: 192)
+  "mbr_0x18": "inf"  # SObjectInfo* -> dword (score: 184)
+  "mbr_0x1c": "shadow"  # int32_t -> dword (score: 184)
+  "mbr_0x20": "imagery"  # TObjectImagery* -> dword (score: 184)
+  "mbr_0x24": "animator"  # PTObjectAnimator -> dword (score: 184)
+  "mbr_0x28": "prevstate"  # uint16_t -> dword (score: 84)
+  "mbr_0x2c": "prevframe"  # short -> dword (score: 80)
+  "mbr_0x30": "owner"  # TObjectInstance* -> dword (score: 176)
+  "mbr_0x34": "inventnum"  # short -> dword (score: 76)
+  "mbr_0x38": "invindex"  # short -> dword (score: 72)
+  "mbr_0x14": "commanddone"  # bool -> byte (score: 152)
+  "mbr_0x3c": "script"  # PTScript -> dword (score: 170)
+  "mbr_0x40": "lightdef"  # SLightDef -> dword (score: 170)
+  "mbr_0x44": "stats"  # TStatisticList -> dword (score: 170)
+  "mbr_0x48": "moveangle"  # int32_t -> dword (score: 170)
+  "mbr_0x4c": "movedist"  # int32_t -> dword (score: 170)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

@@ -1,0 +1,31 @@
+# TDisplay - PERFECT CONFIDENCE MATCH
+source_class: "TDisplay"
+ghidra_class: "cls_0x429ac0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 123/100
+# - Source: 36 bytes, 9 fields 
+# - Ghidra: 36 bytes, 9 fields
+# - Size difference: ±0 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 43
+# - Source file: display.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "default_pass"  # sg_pass -> dword (score: 200)
+  "mbr_0x4": "depth_pass"  # sg_pass -> dword (score: 200)
+  "mbr_0x8": "tile_pipeline"  # sg_pipeline -> dword (score: 200)
+  "mbr_0xc": "tile_pip_desc"  # sg_pipeline_desc -> dword (score: 200)
+  "mbr_0x10": "color_target"  # sg_image -> dword (score: 200)
+  "mbr_0x14": "depth_target"  # sg_image -> dword (score: 200)
+  "mbr_0x18": "normal_target"  # sg_image -> dword (score: 200)
+  "mbr_0x1c": "model"  # sg_buffer -> dword (score: 200)
+  "mbr_0x20": "light_params"  # sg_buffer -> dword (score: 200)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

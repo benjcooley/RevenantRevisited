@@ -1,0 +1,42 @@
+# SStormParams - PERFECT CONFIDENCE MATCH
+source_class: "SStormParams"
+ghidra_class: "cls_0x5b42f0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 113/100
+# - Source: 80 bytes, 20 fields 
+# - Ghidra: 132 bytes, 25 fields
+# - Size difference: ±52 bytes
+# - Field difference: ±5 fields
+# - Complexity score: 49
+# - Source file: effectcomp.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "particles"  # int32_t -> dword (score: 192)
+  "mbr_0x8": "tex_u"  # int32_t -> dword (score: 192)
+  "mbr_0xc": "tex_v"  # int32_t -> dword (score: 192)
+  "mbr_0x10": "particle_u"  # int32_t -> dword (score: 192)
+  "mbr_0x14": "particle_v"  # int32_t -> dword (score: 192)
+  "mbr_0x1c": "particle_begin"  # int32_t -> dword (score: 184)
+  "mbr_0x20": "particle_end"  # int32_t -> dword (score: 184)
+  "mbr_0x24": "impact_u"  # int32_t -> dword (score: 184)
+  "mbr_0x28": "impact_v"  # int32_t -> dword (score: 184)
+  "mbr_0x2c": "impact_begin"  # int32_t -> dword (score: 184)
+  "mbr_0x30": "impact_end"  # int32_t -> dword (score: 184)
+  "mbr_0x34": "gravity"  # float -> dword (score: 184)
+  "mbr_0x38": "velocity"  # hmm_vec3 -> dword (score: 184)
+  "mbr_0x3c": "pos"  # hmm_vec3 -> dword (score: 184)
+  "mbr_0x40": "pos_spread"  # hmm_vec3 -> dword (score: 184)
+  "mbr_0x44": "impact_frame_inc"  # float -> dword (score: 184)
+  "mbr_0x48": "particle_frame_inc"  # float -> dword (score: 184)
+  "mbr_0x64": "particle_scale"  # hmm_vec3 -> dword (score: 136)
+  "mbr_0x68": "impact_scale"  # hmm_vec3 -> dword (score: 136)
+  "mbr_0x6c": "rot"  # hmm_vec3 -> dword (score: 136)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

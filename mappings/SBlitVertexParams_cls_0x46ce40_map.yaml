@@ -1,0 +1,24 @@
+# SBlitVertexParams - MEDIUM CONFIDENCE MATCH
+source_class: "SBlitVertexParams"
+ghidra_class: "cls_0x46ce40"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 83/100
+# - Source: 8 bytes, 2 fields 
+# - Ghidra: 32 bytes, 3 fields
+# - Size difference: ±24 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 7
+# - Source file: blit.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x18": "mvp"  # float -> dword (score: 152)
+  "mbr_0x1c": "tex_scale"  # float -> dword (score: 152)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

@@ -1,0 +1,24 @@
+# TMultiData - MEDIUM CONFIDENCE MATCH
+source_class: "TMultiData"
+ghidra_class: "cls_0x572890"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 82/100
+# - Source: 8 bytes, 2 fields 
+# - Ghidra: 60 bytes, 3 fields
+# - Size difference: ±52 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 7
+# - Source file: multidat.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x1c": "names"  # OFFSET -> dword (score: 144)
+  "mbr_0x20": "offsets"  # OFFSET -> dword (score: 144)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

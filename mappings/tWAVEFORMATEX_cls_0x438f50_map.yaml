@@ -1,0 +1,29 @@
+# tWAVEFORMATEX - PERFECT CONFIDENCE MATCH
+source_class: "tWAVEFORMATEX"
+ghidra_class: "cls_0x438f50"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 28 bytes, 7 fields 
+# - Ghidra: 36 bytes, 7 fields
+# - Size difference: ±8 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 20
+# - Source file: wavedata.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "wFormatTag"  # uint16_t -> dword (score: 100)
+  "mbr_0x4": "nChannels"  # uint16_t -> dword (score: 96)
+  "mbr_0x8": "nSamplesPerSec"  # uint32_t -> dword (score: 192)
+  "mbr_0x14": "nAvgBytesPerSec"  # uint32_t -> dword (score: 176)
+  "mbr_0x18": "nBlockAlign"  # uint16_t -> dword (score: 76)
+  "mbr_0x1c": "wBitsPerSample"  # uint16_t -> dword (score: 72)
+  "mbr_0x20": "cbSize"  # uint16_t -> dword (score: 68)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

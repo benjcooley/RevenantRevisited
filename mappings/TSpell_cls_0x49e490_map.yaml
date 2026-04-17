@@ -1,0 +1,34 @@
+# TSpell - PERFECT CONFIDENCE MATCH
+source_class: "TSpell"
+ghidra_class: "cls_0x49e490"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 125/100
+# - Source: 48 bytes, 12 fields 
+# - Ghidra: 48 bytes, 12 fields
+# - Size difference: ±0 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 52
+# - Source file: spell.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "effect"  # TObjectInstance* -> dword (score: 200)
+  "mbr_0x4": "targetnum"  # int32_t -> dword (score: 200)
+  "mbr_0x8": "targets"  # TObjectInstance* -> dword (score: 200)
+  "mbr_0xc": "timer"  # int32_t -> dword (score: 200)
+  "mbr_0x10": "frame"  # int32_t -> dword (score: 200)
+  "mbr_0x14": "master"  # PTSpell -> dword (score: 200)
+  "mbr_0x18": "spell"  # PSSpellData -> dword (score: 200)
+  "mbr_0x1c": "variant"  # PSSpellVariant -> dword (score: 200)
+  "mbr_0x20": "wait"  # int32_t -> dword (score: 200)
+  "mbr_0x24": "source"  # S3DPoint -> dword (score: 200)
+  "mbr_0x28": "magic_defense"  # int32_t -> dword (score: 200)
+  "mbr_0x2c": "magic_offense"  # int32_t -> dword (score: 200)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

@@ -1,0 +1,42 @@
+# TMapPane - HIGH CONFIDENCE MATCH
+source_class: "TMapPane"
+ghidra_class: "cls_0x42f9f0"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 93/100
+# - Source: 104 bytes, 26 fields 
+# - Ghidra: 120 bytes, 34 fields
+# - Size difference: ±16 bytes
+# - Field difference: ±8 fields
+# - Complexity score: 100
+# - Source file: mappane.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "sectors"  # TSector* -> dword (score: 200)
+  "mbr_0x4": "newlevel"  # int32_t -> dword (score: 200)
+  "mbr_0x8": "center"  # S3DPoint -> dword (score: 200)
+  "mbr_0x10": "centeron"  # SCenterOnState -> dword (score: 192)
+  "mbr_0x14": "onobject"  # int32_t -> dword (score: 192)
+  "mbr_0x18": "oldz"  # int32_t -> dword (score: 192)
+  "mbr_0x48": "clicked"  # bool -> byte (score: 104)
+  "mbr_0x1c": "notifyflags"  # uint32_t -> dword (score: 194)
+  "mbr_0x20": "lastkey"  # int32_t -> dword (score: 194)
+  "mbr_0x24": "numbgrects"  # int32_t -> dword (score: 194)
+  "mbr_0x28": "bgrects"  # SBgUpdateRect -> dword (score: 194)
+  "mbr_0x49": "isrecqueued"  # bool -> byte (score: 136)
+  "mbr_0x2c": "queuedrect"  # SRect -> dword (score: 196)
+  "mbr_0x30": "scrollrect"  # SRect -> dword (score: 196)
+  "mbr_0x34": "unlitmulti"  # PTMosaicSurface -> dword (score: 196)
+  "mbr_0x38": "litmulti"  # PTMosaicSurface -> dword (score: 196)
+  "mbr_0x3c": "updatemulti"  # PTMosaicSurface -> dword (score: 196)
+  "mbr_0x4a": "zbufferiscloned"  # bool -> byte (score: 176)
+  "mbr_0x40": "dlight"  # SLightDef -> dword (score: 198)
+  "mbr_0x4b": "dragmode"  # bool -> byte (score: 184)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

@@ -1,0 +1,28 @@
+# TSound - PERFECT CONFIDENCE MATCH
+source_class: "TSound"
+ghidra_class: "cls_0x491b30"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 108/100
+# - Source: 28 bytes, 7 fields 
+# - Ghidra: 92 bytes, 7 fields
+# - Size difference: ±64 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 35
+# - Source file: sound.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x24": "sound_pos"  # S3DPoint -> dword (score: 128)
+  "mbr_0x28": "sound_volume"  # int32_t -> dword (score: 128)
+  "mbr_0x2c": "size"  # uint32_t -> dword (score: 128)
+  "mbr_0x30": "format"  # WAVEFORMATEX -> dword (score: 128)
+  "mbr_0x34": "SoundBuffer"  # LPDIRECTSOUNDBUFFER -> dword (score: 128)
+  "mbr_0x38": "next"  # PTSound -> dword (score: 130)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

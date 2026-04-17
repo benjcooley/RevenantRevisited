@@ -1,0 +1,25 @@
+# SChunkHeader - MEDIUM CONFIDENCE MATCH
+source_class: "SChunkHeader"
+ghidra_class: "cls_0x49c3f0"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 84/100
+# - Source: 16 bytes, 4 fields 
+# - Ghidra: 56 bytes, 3 fields
+# - Size difference: ±40 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 17
+# - Source file: decompdata.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "type"  # bool -> dword (score: 92)
+  "mbr_0x18": "width"  # int32_t -> dword (score: 154)
+  "mbr_0x34": "height"  # int32_t -> dword (score: 106)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

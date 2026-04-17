@@ -1,0 +1,40 @@
+# SCharData - HIGH CONFIDENCE MATCH
+source_class: "SCharData"
+ghidra_class: "cls_0x5b9fcc"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 87/100
+# - Source: 92 bytes, 23 fields 
+# - Ghidra: 76 bytes, 18 fields
+# - Size difference: ±16 bytes
+# - Field difference: ±5 fields
+# - Complexity score: 64
+# - Source file: rules.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "name"  # char -> dword (score: 92)
+  "mbr_0x8": "groups"  # char -> dword (score: 86)
+  "mbr_0xc": "enemies"  # char -> dword (score: 80)
+  "mbr_0x10": "objtype"  # int32_t -> dword (score: 174)
+  "mbr_0x14": "flags"  # int32_t -> dword (score: 174)
+  "mbr_0x18": "attacks"  # TCharAttackArray -> dword (score: 74)
+  "mbr_0x1c": "damagemods"  # int32_t -> dword (score: 168)
+  "mbr_0x20": "blocksounds"  # char -> dword (score: 68)
+  "mbr_0x24": "misssounds"  # char -> dword (score: 62)
+  "mbr_0x28": "maxattackrange"  # int32_t -> dword (score: 156)
+  "mbr_0x2c": "swipecolor"  # SColor -> dword (score: 156)
+  "mbr_0x30": "bodytype"  # char -> dword (score: 56)
+  "mbr_0x34": "weapontype"  # int32_t -> dword (score: 150)
+  "mbr_0x38": "weapondamage"  # int32_t -> dword (score: 150)
+  "mbr_0x3c": "armorvalue"  # int32_t -> dword (score: 150)
+  "mbr_0x40": "defensemod"  # int32_t -> dword (score: 150)
+  "mbr_0x44": "attackmod"  # int32_t -> dword (score: 150)
+  "mbr_0x48": "arrowpos"  # S3DPoint -> dword (score: 150)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

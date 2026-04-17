@@ -1,0 +1,25 @@
+# TSaveGame - MEDIUM CONFIDENCE MATCH
+source_class: "TSaveGame"
+ghidra_class: "cls_0x5b5354"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 84/100
+# - Source: 16 bytes, 4 fields 
+# - Ghidra: 56 bytes, 3 fields
+# - Size difference: ±40 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 14
+# - Source file: savegame.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x24": "gametime"  # int32_t -> dword (score: 128)
+  "mbr_0x28": "version"  # int32_t -> dword (score: 128)
+  "mbr_0x34": "pane"  # int32_t -> dword (score: 112)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

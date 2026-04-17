@@ -1,0 +1,31 @@
+# TScript - PERFECT CONFIDENCE MATCH
+source_class: "TScript"
+ghidra_class: "cls_0x48c7f0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 108/100
+# - Source: 36 bytes, 9 fields 
+# - Ghidra: 84 bytes, 9 fields
+# - Size difference: ±48 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 33
+# - Source file: script.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "proto"  # TScriptProto* -> dword (score: 192)
+  "mbr_0x8": "newtrigger"  # int32_t -> dword (score: 192)
+  "mbr_0xc": "trigger"  # int32_t -> dword (score: 192)
+  "mbr_0x18": "newtriggerstr"  # char -> dword (score: 76)
+  "mbr_0x28": "priority"  # int32_t -> dword (score: 146)
+  "mbr_0x2c": "lastpriority"  # int32_t -> dword (score: 146)
+  "mbr_0x3c": "block"  # SScriptBlock -> dword (score: 122)
+  "mbr_0x40": "depth"  # int32_t -> dword (score: 122)
+  "mbr_0x50": "curtrigger"  # PSScriptTrigger -> dword (score: 100)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

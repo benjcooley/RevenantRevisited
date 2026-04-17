@@ -1,0 +1,31 @@
+# SImageryEntry - HIGH CONFIDENCE MATCH
+source_class: "SImageryEntry"
+ghidra_class: "cls_0x41cbd0"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 88/100
+# - Source: 40 bytes, 10 fields 
+# - Ghidra: 40 bytes, 9 fields
+# - Size difference: ±0 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 41
+# - Source file: imagery.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "filename"  # char -> dword (score: 100)
+  "mbr_0x4": "status"  # uint32_t -> dword (score: 194)
+  "mbr_0x8": "header"  # SImageryHeader* -> dword (score: 194)
+  "mbr_0xc": "headersize"  # int32_t -> dword (score: 194)
+  "mbr_0x10": "headerdirty"  # bool -> dword (score: 94)
+  "mbr_0x18": "body"  # SImageryBody* -> dword (score: 180)
+  "mbr_0x1c": "bodydirty"  # bool -> dword (score: 80)
+  "mbr_0x20": "ressize"  # int32_t -> dword (score: 174)
+  "mbr_0x24": "usecount"  # int32_t -> dword (score: 174)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

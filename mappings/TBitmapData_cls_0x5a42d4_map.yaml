@@ -1,0 +1,41 @@
+# TBitmapData - PERFECT CONFIDENCE MATCH
+source_class: "TBitmapData"
+ghidra_class: "cls_0x5a42d4"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 120/100
+# - Source: 80 bytes, 20 fields 
+# - Ghidra: 160 bytes, 19 fields
+# - Size difference: ±80 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 55
+# - Source file: bitmapdata.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0xc": "height"  # int32_t -> dword (score: 176)
+  "mbr_0x10": "regx"  # int32_t -> dword (score: 176)
+  "mbr_0x50": "regy"  # int32_t -> dword (score: 100)
+  "mbr_0x60": "flags"  # uint32_t -> dword (score: 100)
+  "mbr_0x64": "drawmode"  # uint32_t -> dword (score: 100)
+  "mbr_0x68": "keycolor"  # uint32_t -> dword (score: 100)
+  "mbr_0x6c": "aliassize"  # uint32_t -> dword (score: 100)
+  "mbr_0x70": "alias"  # OFFSET -> dword (score: 100)
+  "mbr_0x74": "alphasize"  # uint32_t -> dword (score: 100)
+  "mbr_0x78": "alpha"  # OFFSET -> dword (score: 100)
+  "mbr_0x7c": "zbuffersize"  # uint32_t -> dword (score: 100)
+  "mbr_0x80": "zbuffer"  # OFFSET -> dword (score: 100)
+  "mbr_0x84": "normalsize"  # uint32_t -> dword (score: 100)
+  "mbr_0x88": "normal"  # OFFSET -> dword (score: 100)
+  "mbr_0x8c": "palettesize"  # uint32_t -> dword (score: 100)
+  "mbr_0x90": "palette"  # OFFSET -> dword (score: 100)
+  "mbr_0x94": "datasize"  # uint32_t -> dword (score: 100)
+  "mbr_0x98": "data24"  # RGBTRIPLE -> dword (score: 100)
+  "mbr_0x9c": "data32"  # uint32_t -> dword (score: 100)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

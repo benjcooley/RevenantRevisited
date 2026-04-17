@@ -1,0 +1,38 @@
+# SOld3DImageryBody - PERFECT CONFIDENCE MATCH
+source_class: "SOld3DImageryBody"
+ghidra_class: "cls_0x5ba0b4"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 88 bytes, 22 fields 
+# - Ghidra: 168 bytes, 25 fields
+# - Size difference: ±80 bytes
+# - Field difference: ±3 fields
+# - Complexity score: 70
+# - Source file: 3dimagebody.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "cls_0x5ba0a0": "flags"  # uint32_t -> cls_0x5ba0a0 (score: 100)
+  "mbr_0x3c": "numverts"  # int32_t -> dword (score: 100)
+  "mbr_0x40": "verts"  # OFFSET -> dword (score: 100)
+  "mbr_0x44": "numfaces"  # int32_t -> dword (score: 100)
+  "mbr_0x48": "faces"  # OFFSET -> dword (score: 100)
+  "mbr_0x4c": "nummaterials"  # int32_t -> dword (score: 100)
+  "mbr_0x50": "material"  # S3DMaterial -> dword (score: 100)
+  "mbr_0x5c": "numtextures"  # int32_t -> dword (score: 100)
+  "mbr_0x60": "texturedesc"  # DDSURFACEDESC -> dword (score: 100)
+  "mbr_0x74": "texturebits"  # OFFSET -> dword (score: 100)
+  "mbr_0x78": "texturepals"  # OFFSET -> dword (score: 100)
+  "mbr_0x80": "textureframes"  # int32_t -> dword (score: 100)
+  "mbr_0x84": "numobjects"  # int32_t -> dword (score: 100)
+  "mbr_0x54": "objname"  # char -> byte (score: 136)
+  "mbr_0x88": "motion"  # OFFSET -> dword (score: 100)
+  "mbr_0x8c": "anikeys"  # OFFSET -> dword (score: 100)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

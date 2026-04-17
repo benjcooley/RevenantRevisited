@@ -1,0 +1,28 @@
+# TEquipPane - PERFECT CONFIDENCE MATCH
+source_class: "TEquipPane"
+ghidra_class: "cls_0x54dd40"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 118/100
+# - Source: 24 bytes, 6 fields 
+# - Ghidra: 52 bytes, 6 fields
+# - Size difference: ±28 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 36
+# - Source file: equip.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "equipdata"  # TMulti* -> dword (score: 200)
+  "mbr_0x4": "top"  # PTBitmap -> dword (score: 200)
+  "mbr_0x18": "bottom"  # PTBitmap -> dword (score: 168)
+  "mbr_0x20": "section"  # int32_t -> dword (score: 160)
+  "mbr_0x2c": "grabslot"  # int32_t -> dword (score: 144)
+  "mbr_0x30": "heldslot"  # int32_t -> dword (score: 144)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

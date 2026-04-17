@@ -1,0 +1,40 @@
+# SDrawParam - PERFECT CONFIDENCE MATCH
+source_class: "SDrawParam"
+ghidra_class: "cls_0x44ceb0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 84 bytes, 21 fields 
+# - Ghidra: 72 bytes, 18 fields
+# - Size difference: ±12 bytes
+# - Field difference: ±3 fields
+# - Complexity score: 57
+# - Source file: graphics.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "drawmode"  # uint32_t -> dword (score: 200)
+  "mbr_0x4": "func"  # DRAWFUNCTION -> dword (score: 200)
+  "mbr_0x8": "callback"  # DRAWCALLBACK -> dword (score: 200)
+  "mbr_0xc": "originx"  # int32_t -> dword (score: 200)
+  "mbr_0x10": "originy"  # int32_t -> dword (score: 200)
+  "mbr_0x14": "clipx"  # int32_t -> dword (score: 200)
+  "mbr_0x18": "clipy"  # int32_t -> dword (score: 200)
+  "mbr_0x1c": "clipwidth"  # int32_t -> dword (score: 200)
+  "mbr_0x20": "clipheight"  # int32_t -> dword (score: 200)
+  "mbr_0x24": "dx"  # int32_t -> dword (score: 200)
+  "mbr_0x28": "dy"  # int32_t -> dword (score: 200)
+  "mbr_0x2c": "dwidth"  # int32_t -> dword (score: 200)
+  "mbr_0x30": "dheight"  # int32_t -> dword (score: 200)
+  "mbr_0x34": "sx"  # int32_t -> dword (score: 200)
+  "mbr_0x38": "sy"  # int32_t -> dword (score: 200)
+  "mbr_0x3c": "swidth"  # int32_t -> dword (score: 200)
+  "mbr_0x40": "sheight"  # int32_t -> dword (score: 200)
+  "mbr_0x44": "color"  # uint32_t -> dword (score: 200)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

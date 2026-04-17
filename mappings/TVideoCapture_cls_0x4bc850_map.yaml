@@ -1,0 +1,29 @@
+# TVideoCapture - PERFECT CONFIDENCE MATCH
+source_class: "TVideoCapture"
+ghidra_class: "cls_0x4bc850"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 110/100
+# - Source: 32 bytes, 8 fields 
+# - Ghidra: 104 bytes, 7 fields
+# - Size difference: ±72 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 22
+# - Source file: videocap.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "saving"  # bool -> dword (score: 100)
+  "mbr_0x4": "totframes"  # int32_t -> dword (score: 194)
+  "mbr_0x8": "frame"  # int32_t -> dword (score: 194)
+  "mbr_0xc": "bufframe"  # int32_t -> dword (score: 194)
+  "mbr_0x10": "bufsize"  # int32_t -> dword (score: 194)
+  "mbr_0x38": "framesize"  # int32_t -> dword (score: 122)
+  "mbr_0x64": "frameaccum"  # int32_t -> dword (score: 100)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

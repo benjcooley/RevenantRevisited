@@ -1,0 +1,27 @@
+# SAnimImageryState - PERFECT CONFIDENCE MATCH
+source_class: "SAnimImageryState"
+ghidra_class: "cls_0x41c3a0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 20 bytes, 5 fields 
+# - Ghidra: 52 bytes, 5 fields
+# - Size difference: ±32 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 19
+# - Source file: animimagebody.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "still"  # OTBitmap -> dword (score: 192)
+  "mbr_0x14": "anim"  # OTAnimation -> dword (score: 168)
+  "mbr_0x28": "invitem"  # OTBitmap -> dword (score: 136)
+  "mbr_0x2c": "invanim"  # OTAnimation -> dword (score: 136)
+  "mbr_0x30": "flags"  # uint32_t -> dword (score: 136)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

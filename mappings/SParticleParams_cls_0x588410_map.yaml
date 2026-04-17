@@ -1,0 +1,35 @@
+# SParticleParams - HIGH CONFIDENCE MATCH
+source_class: "SParticleParams"
+ghidra_class: "cls_0x588410"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 93/100
+# - Source: 56 bytes, 14 fields 
+# - Ghidra: 56 bytes, 13 fields
+# - Size difference: ±0 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 43
+# - Source file: effect.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "particles"  # int32_t -> dword (score: 200)
+  "mbr_0x4": "gravity"  # float -> dword (score: 200)
+  "mbr_0x8": "trails"  # int32_t -> dword (score: 200)
+  "mbr_0x14": "bounce"  # bool -> byte (score: 184)
+  "mbr_0x31": "killobj"  # bool -> byte (score: 128)
+  "mbr_0xc": "objflags"  # uint32_t -> dword (score: 196)
+  "mbr_0x10": "seektargets"  # bool -> dword (score: 96)
+  "mbr_0x18": "seekz"  # bool -> dword (score: 90)
+  "mbr_0x1c": "numtargets"  # int32_t -> dword (score: 184)
+  "mbr_0x20": "targetpos"  # hmm_vec3 -> dword (score: 184)
+  "mbr_0x24": "turnang"  # float -> dword (score: 184)
+  "mbr_0x28": "seekspeed"  # float -> dword (score: 184)
+  "mbr_0x34": "autorange"  # float -> dword (score: 168)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

@@ -1,0 +1,28 @@
+# SAutoMapData - PERFECT CONFIDENCE MATCH
+source_class: "SAutoMapData"
+ghidra_class: "cls_0x48cb50"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 24 bytes, 6 fields 
+# - Ghidra: 84 bytes, 6 fields
+# - Size difference: ±60 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 15
+# - Source file: automapdata.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x18": "ResID"  # int32_t -> dword (score: 152)
+  "mbr_0x28": "Level"  # int32_t -> dword (score: 128)
+  "mbr_0x2c": "Left"  # int32_t -> dword (score: 128)
+  "mbr_0x3c": "Top"  # int32_t -> dword (score: 104)
+  "mbr_0x40": "Right"  # int32_t -> dword (score: 104)
+  "mbr_0x50": "Bottom"  # int32_t -> dword (score: 100)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

@@ -1,0 +1,33 @@
+# TFireBallAnimator - PERFECT CONFIDENCE MATCH
+source_class: "TFireBallAnimator"
+ghidra_class: "cls_0x41cdd0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 123/100
+# - Source: 44 bytes, 11 fields 
+# - Ghidra: 44 bytes, 11 fields
+# - Size difference: ±0 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 49
+# - Source file: missileeffect.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "trail"  # FireBallData -> dword (score: 200)
+  "mbr_0x4": "next_state"  # int32_t -> dword (score: 200)
+  "mbr_0x8": "frame_count"  # int32_t -> dword (score: 200)
+  "mbr_0xc": "glow_frame"  # int32_t -> dword (score: 200)
+  "mbr_0x10": "spark"  # TSubParticleAnimator -> dword (score: 200)
+  "mbr_0x14": "ring"  # TShockAnimator -> dword (score: 200)
+  "mbr_0x18": "fireball_angle"  # int32_t -> dword (score: 200)
+  "mbr_0x1c": "explode"  # int32_t -> dword (score: 200)
+  "mbr_0x20": "burst"  # FireBallData -> dword (score: 200)
+  "mbr_0x24": "firsttime"  # int32_t -> dword (score: 200)
+  "mbr_0x28": "old_state"  # int32_t -> dword (score: 200)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

@@ -1,0 +1,42 @@
+# C3DCamera - HIGH CONFIDENCE MATCH
+source_class: "C3DCamera"
+ghidra_class: "cls_0x5ba014"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 89/100
+# - Source: 88 bytes, 22 fields 
+# - Ghidra: 84 bytes, 20 fields
+# - Size difference: ±4 bytes
+# - Field difference: ±2 fields
+# - Complexity score: 59
+# - Source file: 3cameraf.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "m_originx"  # int32_t -> dword (score: 192)
+  "mbr_0x8": "m_originy"  # int32_t -> dword (score: 192)
+  "mbr_0xc": "m_clippx"  # int32_t -> dword (score: 192)
+  "mbr_0x10": "m_clippy"  # int32_t -> dword (score: 192)
+  "mbr_0x14": "pm_videoorigin"  # short* -> dword (score: 192)
+  "mbr_0x18": "pm_zbufferorigin"  # short* -> dword (score: 192)
+  "mbr_0x1c": "m_startx"  # int32_t -> dword (score: 192)
+  "mbr_0x20": "m_endx"  # int32_t -> dword (score: 192)
+  "mbr_0x24": "m_starty"  # int32_t -> dword (score: 192)
+  "mbr_0x28": "m_endy"  # int32_t -> dword (score: 192)
+  "mbr_0x2c": "m_screenx"  # int32_t -> dword (score: 192)
+  "mbr_0x30": "m_centerx"  # int32_t -> dword (score: 192)
+  "mbr_0x34": "m_centery"  # int32_t -> dword (score: 192)
+  "mbr_0x38": "pm_video"  # short* -> dword (score: 192)
+  "mbr_0x3c": "pm_zbuffer"  # short* -> dword (score: 192)
+  "mbr_0x40": "pm_savecarrytable"  # uint32_t* -> dword (score: 192)
+  "mbr_0x44": "pm_addlighttable"  # unsigned short* -> dword (score: 192)
+  "mbr_0x48": "pm_divtable"  # int32_t* -> dword (score: 192)
+  "mbr_0x4c": "pm_alphatable"  # unsigned short* -> dword (score: 192)
+  "mbr_0x50": "m_alphacount"  # int32_t -> dword (score: 192)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

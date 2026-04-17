@@ -1,0 +1,39 @@
+# S3DAnimObj - PERFECT CONFIDENCE MATCH
+source_class: "S3DAnimObj"
+ghidra_class: "cls_0x5a3ab8"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 68 bytes, 17 fields 
+# - Ghidra: 144 bytes, 21 fields
+# - Size difference: ±76 bytes
+# - Field difference: ±4 fields
+# - Complexity score: 67
+# - Source file: 3dimage.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x8": "flags"  # int32_t -> dword (score: 184)
+  "mbr_0xc": "objnum"  # int32_t -> dword (score: 184)
+  "mbr_0x10": "parent"  # PS3DAnimObj -> dword (score: 184)
+  "mbr_0x14": "animtrack"  # int32_t -> dword (score: 184)
+  "mbr_0x18": "pos"  # hmm_vec3 -> dword (score: 184)
+  "mbr_0x38": "rot"  # hmm_vec3 -> dword (score: 128)
+  "mbr_0x58": "scl"  # hmm_vec3 -> dword (score: 100)
+  "mbr_0x5c": "matrix"  # hmm_mat4 -> dword (score: 100)
+  "mbr_0x60": "primtype"  # D3DPRIMITIVETYPE -> dword (score: 100)
+  "mbr_0x64": "verttype"  # D3DVERTEXTYPE -> dword (score: 100)
+  "mbr_0x68": "numverts"  # int32_t -> dword (score: 100)
+  "mbr_0x6c": "lverts"  # LPD3DLVERTEX -> dword (score: 100)
+  "mbr_0x74": "tlverts"  # LPD3DTLVERTEX -> dword (score: 100)
+  "mbr_0x78": "numfaces"  # int32_t -> dword (score: 100)
+  "mbr_0x80": "htextures"  # D3DTEXTUREHANDLE -> dword (score: 100)
+  "mbr_0x84": "surfaces"  # LPDIRECTDRAWSURFACE -> dword (score: 100)
+  "mbr_0x88": "hmaterial"  # D3DMATERIALHANDLE -> dword (score: 100)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

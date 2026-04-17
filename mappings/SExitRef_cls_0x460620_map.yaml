@@ -1,0 +1,28 @@
+# SExitRef - PERFECT CONFIDENCE MATCH
+source_class: "SExitRef"
+ghidra_class: "cls_0x460620"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 24 bytes, 6 fields 
+# - Ghidra: 32 bytes, 6 fields
+# - Size difference: ±8 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 24
+# - Source file: exit.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "target"  # S3DPoint -> dword (score: 200)
+  "mbr_0x4": "level"  # int32_t -> dword (score: 200)
+  "mbr_0x8": "mapindex"  # int32_t -> dword (score: 200)
+  "mbr_0x14": "ambient"  # int32_t -> dword (score: 184)
+  "mbr_0x18": "ambcolor"  # SColor -> dword (score: 184)
+  "mbr_0x1c": "next"  # PSExitRef -> dword (score: 184)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

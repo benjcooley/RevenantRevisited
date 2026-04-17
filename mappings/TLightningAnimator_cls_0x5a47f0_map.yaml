@@ -1,0 +1,35 @@
+# TLightningAnimator - HIGH CONFIDENCE MATCH
+source_class: "TLightningAnimator"
+ghidra_class: "cls_0x5a47f0"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 93/100
+# - Source: 52 bytes, 13 fields 
+# - Ghidra: 60 bytes, 15 fields
+# - Size difference: ±8 bytes
+# - Field difference: ±2 fields
+# - Complexity score: 56
+# - Source file: stripeffect.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "impact_spark"  # TSubParticleAnimator -> dword (score: 192)
+  "mbr_0x8": "glow_scale"  # float -> dword (score: 192)
+  "mbr_0xc": "total_offset"  # int32_t -> dword (score: 192)
+  "mbr_0x10": "end_p"  # hmm_vec3 -> dword (score: 192)
+  "mbr_0x34": "damage_flag"  # bool -> byte (score: 128)
+  "mbr_0x35": "firsttime"  # bool -> byte (score: 128)
+  "mbr_0x14": "numpoints"  # int32_t -> dword (score: 196)
+  "mbr_0x18": "maxpoints"  # int32_t -> dword (score: 196)
+  "mbr_0x1c": "showangle"  # int32_t -> dword (score: 196)
+  "mbr_0x20": "rotdegree"  # int32_t -> dword (score: 196)
+  "mbr_0x24": "morrotdegree"  # int32_t -> dword (score: 196)
+  "mbr_0x28": "maxsize"  # bool -> dword (score: 96)
+  "mbr_0x2c": "down"  # bool -> dword (score: 90)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

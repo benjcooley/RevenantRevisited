@@ -1,0 +1,27 @@
+# TFontData - MEDIUM CONFIDENCE MATCH
+source_class: "TFontData"
+ghidra_class: "cls_0x4746d0"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 81/100
+# - Source: 24 bytes, 6 fields 
+# - Ghidra: 60 bytes, 7 fields
+# - Size difference: ±36 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 21
+# - Source file: fontdata.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x14": "numchars"  # short -> word (score: 160)
+  "mbr_0x1c": "height"  # short -> word (score: 148)
+  "mbr_0x4": "startheight"  # short -> dword (score: 100)
+  "mbr_0x8": "drawleft"  # uint8_t -> dword (score: 96)
+  "mbr_0x24": "chars"  # OTBitmapData -> dword (score: 144)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

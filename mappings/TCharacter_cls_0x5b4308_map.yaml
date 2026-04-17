@@ -1,0 +1,42 @@
+# TCharacter - HIGH CONFIDENCE MATCH
+source_class: "TCharacter"
+ghidra_class: "cls_0x5b4308"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 92/100
+# - Source: 172 bytes, 43 fields 
+# - Ghidra: 144 bytes, 35 fields
+# - Size difference: ±28 bytes
+# - Field difference: ±8 fields
+# - Complexity score: 134
+# - Source file: character.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "autocombat"  # bool -> dword (score: 92)
+  "mbr_0x8": "movetopos"  # bool -> dword (score: 86)
+  "mbr_0xc": "movepos"  # S3DPoint -> dword (score: 180)
+  "mbr_0x10": "chardata"  # PSCharData -> dword (score: 80)
+  "mbr_0x14": "waittype"  # int32_t -> dword (score: 174)
+  "mbr_0x18": "waitticks"  # int32_t -> dword (score: 174)
+  "mbr_0x1c": "forcecommanddone"  # bool -> dword (score: 74)
+  "mbr_0x20": "forcenomove"  # bool -> dword (score: 68)
+  "mbr_0x24": "charflags"  # uint32_t -> dword (score: 162)
+  "mbr_0x28": "exittimestamp"  # int32_t -> dword (score: 162)
+  "mbr_0x2c": "is_invisible"  # bool -> dword (score: 62)
+  "mbr_0x30": "shovedir"  # int32_t -> dword (score: 156)
+  "mbr_0x34": "nextattack"  # int32_t -> dword (score: 156)
+  "mbr_0x38": "glimpse"  # int32_t -> dword (score: 156)
+  "mbr_0x3c": "noise"  # int32_t -> dword (score: 156)
+  "mbr_0x40": "lasthealthrecov"  # int32_t -> dword (score: 156)
+  "mbr_0x44": "lastfatiguerecov"  # int32_t -> dword (score: 156)
+  "mbr_0x48": "lastmanarecov"  # int32_t -> dword (score: 156)
+  "mbr_0x4c": "lastpoisondamage"  # int32_t -> dword (score: 156)
+  "mbr_0x50": "lastattack"  # PSCharAttackData -> dword (score: 56)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

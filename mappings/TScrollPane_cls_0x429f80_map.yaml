@@ -1,0 +1,26 @@
+# TScrollPane - PERFECT CONFIDENCE MATCH
+source_class: "TScrollPane"
+ghidra_class: "cls_0x429f80"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 118/100
+# - Source: 16 bytes, 4 fields 
+# - Ghidra: 36 bytes, 4 fields
+# - Size difference: ±20 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 32
+# - Source file: scroll.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x14": "scrolldata"  # TMulti* -> dword (score: 160)
+  "mbr_0x18": "scrollfont"  # TFont* -> dword (score: 160)
+  "mbr_0x1c": "line"  # int32_t -> dword (score: 160)
+  "mbr_0x20": "numlines"  # int32_t -> dword (score: 160)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

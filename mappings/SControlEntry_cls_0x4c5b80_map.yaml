@@ -1,0 +1,26 @@
+# SControlEntry - PERFECT CONFIDENCE MATCH
+source_class: "SControlEntry"
+ghidra_class: "cls_0x4c5b80"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 110/100
+# - Source: 16 bytes, 4 fields 
+# - Ghidra: 55 bytes, 5 fields
+# - Size difference: ±39 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 17
+# - Source file: ctrlmap.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x10": "mode"  # uint32_t -> dword (score: 168)
+  "mbr_0x14": "codes"  # SControlKey -> dword (score: 168)
+  "mbr_0x18": "cmdflag"  # uint32_t -> dword (score: 168)
+  "mbr_0x36": "down"  # bool -> byte (score: 116)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

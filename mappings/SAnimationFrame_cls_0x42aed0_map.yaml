@@ -1,0 +1,32 @@
+# SAnimationFrame - PERFECT CONFIDENCE MATCH
+source_class: "SAnimationFrame"
+ghidra_class: "cls_0x42aed0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 40 bytes, 10 fields 
+# - Ghidra: 44 bytes, 10 fields
+# - Size difference: ±4 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 29
+# - Source file: animdata.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "dx"  # int32_t -> dword (score: 200)
+  "mbr_0x4": "dy"  # int32_t -> dword (score: 200)
+  "mbr_0xc": "regx"  # int32_t -> dword (score: 192)
+  "mbr_0x10": "regy"  # int32_t -> dword (score: 192)
+  "mbr_0x14": "x"  # int32_t -> dword (score: 192)
+  "mbr_0x18": "y"  # int32_t -> dword (score: 192)
+  "mbr_0x1c": "width"  # int32_t -> dword (score: 192)
+  "mbr_0x20": "height"  # int32_t -> dword (score: 192)
+  "mbr_0x24": "decbufsize"  # uint32_t -> dword (score: 192)
+  "mbr_0x28": "bitmap"  # OTBitmap -> dword (score: 192)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

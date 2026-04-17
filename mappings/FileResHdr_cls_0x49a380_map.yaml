@@ -1,0 +1,29 @@
+# FileResHdr - PERFECT CONFIDENCE MATCH
+source_class: "FileResHdr"
+ghidra_class: "cls_0x49a380"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 28 bytes, 7 fields 
+# - Ghidra: 68 bytes, 7 fields
+# - Size difference: ±40 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 23
+# - Source file: resourcehdr.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "resmagic"  # uint32_t -> dword (score: 200)
+  "mbr_0x4": "topbm"  # uint16_t -> dword (score: 100)
+  "mbr_0x8": "comptype"  # uint8_t -> dword (score: 96)
+  "mbr_0xc": "version"  # uint8_t -> dword (score: 90)
+  "mbr_0x10": "datasize"  # uint32_t -> dword (score: 184)
+  "mbr_0x14": "objsize"  # uint32_t -> dword (score: 184)
+  "mbr_0x40": "hdrsize"  # uint32_t -> dword (score: 104)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

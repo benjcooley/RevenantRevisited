@@ -1,0 +1,29 @@
+# TAutoMap - HIGH CONFIDENCE MATCH
+source_class: "TAutoMap"
+ghidra_class: "cls_0x5b9f54"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 88/100
+# - Source: 32 bytes, 8 fields 
+# - Ghidra: 32 bytes, 7 fields
+# - Size difference: ±0 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 49
+# - Source file: automap.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x4": "MapArea"  # SRect -> dword (score: 192)
+  "mbr_0x8": "ScrollToTarget"  # bool -> dword (score: 92)
+  "mbr_0xc": "SavePlayerPixel"  # uint16_t -> dword (score: 86)
+  "mbr_0x10": "DraggingMap"  # bool -> dword (score: 82)
+  "mbr_0x14": "CurrentMap"  # int32_t -> dword (score: 176)
+  "mbr_0x18": "MapGrfx"  # PTAutoMapGraphics -> dword (score: 176)
+  "mbr_0x1c": "DisplayMap"  # PTBitmap -> dword (score: 176)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

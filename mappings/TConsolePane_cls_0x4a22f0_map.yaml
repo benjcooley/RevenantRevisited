@@ -1,0 +1,29 @@
+# TConsolePane - PERFECT CONFIDENCE MATCH
+source_class: "TConsolePane"
+ghidra_class: "cls_0x4a22f0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 118/100
+# - Source: 28 bytes, 7 fields 
+# - Ghidra: 76 bytes, 7 fields
+# - Size difference: ±48 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 41
+# - Source file: editor.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "head"  # PSChained -> dword (score: 200)
+  "mbr_0x4": "chained"  # PSChained -> dword (score: 200)
+  "mbr_0x10": "tail"  # PSChained -> dword (score: 184)
+  "mbr_0x30": "oldbuflen"  # int32_t -> dword (score: 128)
+  "mbr_0x38": "box"  # TObjectInstance* -> dword (score: 120)
+  "mbr_0x44": "axis"  # TObjectInstance* -> dword (score: 104)
+  "mbr_0x48": "cmdthreadhandle"  # HANDLE -> dword (score: 104)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

@@ -1,0 +1,38 @@
+# TSurface - PERFECT CONFIDENCE MATCH
+source_class: "TSurface"
+ghidra_class: "cls_0x4da9f0"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 115/100
+# - Source: 72 bytes, 18 fields 
+# - Ghidra: 100 bytes, 16 fields
+# - Size difference: ±28 bytes
+# - Field difference: ±2 fields
+# - Complexity score: 70
+# - Source file: surface.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "width"  # int32_t -> dword (score: 200)
+  "mbr_0x4": "height"  # int32_t -> dword (score: 200)
+  "mbr_0x24": "bitsperpixel"  # int32_t -> dword (score: 144)
+  "mbr_0x28": "stride"  # int32_t -> dword (score: 144)
+  "mbr_0x2c": "originx"  # int32_t -> dword (score: 144)
+  "mbr_0x30": "originy"  # int32_t -> dword (score: 144)
+  "mbr_0x34": "clipmode"  # int32_t -> dword (score: 144)
+  "mbr_0x38": "clipx"  # int32_t -> dword (score: 144)
+  "mbr_0x3c": "clipy"  # int32_t -> dword (score: 144)
+  "mbr_0x40": "clipwidth"  # int32_t -> dword (score: 144)
+  "mbr_0x44": "clipheight"  # int32_t -> dword (score: 144)
+  "mbr_0x48": "keycolor"  # uint32_t -> dword (score: 144)
+  "mbr_0x4c": "locked"  # void* -> dword (score: 144)
+  "mbr_0x50": "cpu_buffer"  # uint8_t* -> dword (score: 144)
+  "mbr_0x5c": "buffer_size"  # size_t -> dword (score: 128)
+  "mbr_0x60": "image"  # sg_image -> dword (score: 128)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

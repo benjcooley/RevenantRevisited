@@ -1,0 +1,28 @@
+# SLightDef - PERFECT CONFIDENCE MATCH
+source_class: "SLightDef"
+ghidra_class: "cls_0x49a270"
+confidence: "PERFECT"
+
+# Match details:
+# - Score: 105/100
+# - Source: 28 bytes, 7 fields 
+# - Ghidra: 68 bytes, 7 fields
+# - Size difference: ±40 bytes
+# - Field difference: ±0 fields
+# - Complexity score: 29
+# - Source file: lightdef.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "flags"  # uint8_t -> dword (score: 100)
+  "mbr_0x4": "multiplier"  # short -> dword (score: 94)
+  "mbr_0x8": "pos"  # S3DPoint -> dword (score: 190)
+  "mbr_0xc": "color"  # SColor -> dword (score: 190)
+  "mbr_0x24": "lightindex"  # int32_t -> dword (score: 152)
+  "mbr_0x3c": "lightid"  # int32_t -> dword (score: 112)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

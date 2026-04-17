@@ -1,0 +1,28 @@
+# TDialogPane - MEDIUM CONFIDENCE MATCH
+source_class: "TDialogPane"
+ghidra_class: "cls_0x570900"
+confidence: "MEDIUM"
+
+# Match details:
+# - Score: 80/100
+# - Source: 28 bytes, 7 fields 
+# - Ghidra: 56 bytes, 6 fields
+# - Size difference: ±28 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 41
+# - Source file: dialog.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "dialogdata"  # TMulti* -> dword (score: 200)
+  "mbr_0x30": "character"  # PTCharacter -> byte (score: 112)
+  "mbr_0xc": "numchoices"  # int32_t -> dword (score: 186)
+  "mbr_0x10": "choice"  # int32_t -> dword (score: 186)
+  "mbr_0x14": "freshresponse"  # bool -> dword (score: 86)
+  "mbr_0x34": "grabslot"  # int32_t -> dword (score: 124)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references

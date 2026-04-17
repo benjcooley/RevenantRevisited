@@ -1,0 +1,29 @@
+# TScreen - HIGH CONFIDENCE MATCH
+source_class: "TScreen"
+ghidra_class: "cls_0x50bf20"
+confidence: "HIGH"
+
+# Match details:
+# - Score: 88/100
+# - Source: 32 bytes, 8 fields 
+# - Ghidra: 32 bytes, 7 fields
+# - Size difference: ±0 bytes
+# - Field difference: ±1 fields
+# - Complexity score: 35
+# - Source file: screen.h
+
+fields:
+  # Automatic field mappings based on size/offset analysis
+  "mbr_0x0": "exclusive"  # int32_t -> dword (score: 200)
+  "mbr_0x4": "complete"  # bool -> dword (score: 100)
+  "mbr_0x8": "curexclusive"  # int32_t -> dword (score: 194)
+  "mbr_0xc": "numexclusive"  # int32_t -> dword (score: 194)
+  "mbr_0x14": "nextscreen"  # TScreen* -> dword (score: 186)
+  "mbr_0x18": "firstframe"  # bool -> dword (score: 86)
+  "mbr_0x1c": "dirty"  # bool -> dword (score: 80)
+  
+methods:
+  # TODO: Extract method mappings using signature analysis
+  
+parameters:
+  # TODO: Add parameter type mappings for cross-class references
