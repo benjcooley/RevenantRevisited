@@ -1,0 +1,23 @@
+// Revenant - Copyright 1999 Cinematix Studios, Inc.
+// ********* Revenant VIDEOCARD.DEF File  ********** 
+
+// Card must match all id's supplied.. but will only match name if no other id's are given.
+// It is best to use only one main id (i.e. VENDORID/DEVICEID or GUID or DRIVER or NAME).
+// You must use at least one of these id's in addition to the card version.
+// The system will use the first VIDEOCARD line who's id's all match, and who's version 
+// is between VER and TOVER if both are supplied, or if only ver is supplied, matches first
+// that equals to VER, or if only TOVER is supplied, matches first that is less than or
+// equal to TOVER.
+// 
+// VIDEOCARD "name" [VENDORID 0xXXXX] [DEVICEID 0xXXXX]\
+//      [GUID "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"] [DRIVER "driver.dll"]\
+//      [VER "#.#.#.#"] [TOVER "#.#.#.#"] [NOLOCKZBUF] [NOBLITZBUF]	[USECLEARZBUF]\
+//      [NOVIDMEMZBUF] [VOODOO] [NOQUICKLOCK] [SOFTWARE3D] [NOREALTIMELIGHT]\
+//      [NOTEXOVERLAY] [NOBLITTEXTURES] [GETNEWDRIVER] [TEXALIGN 0.5 0.5 0.0 0.0]
+
+// Riva 128 must run in software mode right now.  Doesn't support unsigned zbuffers.
+VIDEOCARD "NVidia RIVA 128" VENDORID 0x12D2 DEVICEID 0x0018 SOFTWARE3D
+VIDEOCARD "NVidia RIVA 128ZX" VENDORID 0x12D2 DEVICEID 0x0019 SOFTWARE3D
+
+// Must be a curse on cards with 128 in the name.  ATI Rage 128 hacks up when accessing zbuf
+VIDEOCARD "ATI Rage 128" VENDORID 0x1002 DEVICEID 0x524C NOQUICKLOCK NOBLITTEXTURES

@@ -1,0 +1,562 @@
+                    Revenent Coop Multiplayer Information
+                  Copyright (C) 2000 Cinematix Studios, Inc. 
+
+Revenant version 1.2 includes new functionality to provide module builders
+with the ability to create true MUD style multiplayer coop levels.  These
+modules can be set to run in 'dedicated' mode, and allow users to log in
+and play a persistent character on that server.
+
+Cinematix has completely rebuilt the script engine to allow for coop play.  
+Unfortunately this has necessarily lead to a few bugs cropping up in the 
+single player game, and we apologize for this.  Revenant is a large game
+with many components, and it is a real task to get them to all work together
+correctly sometimes.
+
+The multiplayer system uses the multiplayer 'party' mechanism to set up 
+player parties.  One a party with a group of characters has been created, the
+various multiplayer commands work with the party of the player which uses or
+activates a script.  See the game documentation for creating parties in 
+multiplayer mode for instructions on how to create a party. 
+
+Revenant coop Multiplayer
+-------------------------
+
+Revenant version 1.2 and above support true multiplayer coop scripting and coop
+play.  The original revenant MP system was intended to allow multi user coop
+play with a reasonably large number of simultaneous users.  This explains why
+the original 'advanced' coop screens provided support for the maintenance of
+user 'Names' and 'Passwords', along with a user information system to allow game
+hosts to check the real name, email, and other information for a user before
+accepting him onto his system.
+
+Logging on to an existing server with an existing account..
+
+In the Revenant Advanced MP interface, each character listed in the 'character'
+panel has a name and password.  This name and password is used when submitting
+the player to a host game to log into the game.  When logging into an existing
+game, the player's information is transmitted to the game, where the name and
+password are matched to a currently 'OFFLINE' player in that games player list.
+
+If the player matches one of the offline players, the information for that OFFLINE
+player is retransmitted back to the client.  The client then uses this 'host' copy
+of his player to play the game.  Cheating is prevented by constant hash value
+checks of inventory and stats to make sure that the client and host player match.
+When logging on to an existing game with an existing character, the client's 
+character is replaced by the character on the host, which means that the client's
+inventory, stats, etc. will not be used.   
+
+Submitting a new player to a server..
+
+In Revenant Advanced MP, hosts may set up various game parameters which control
+how New players are added to the game.  These are 'open' games, where any new
+player is automatically added to the game, New Player Only, where only level 1
+players with no inventory items are allowed in as new players, or 'Host Approve'
+where all new players are allowed in, but the player can not actually begin 
+playing the game until the host 'enables' that character to play.
+
+Once a player has sucessfully entered the game, his player will remain in the 
+player list of the game, even if he logs out of the game.  The host system will
+save his current location, equipment, and all other aspects of his status within
+the game.   When he logs back in, he will return to the same spot that he left
+when he was last playing.   When a player logs off, his character is removed from
+the game map, and he will not be visible to other players on the server except as
+a 'grayed' character entry in the character list.
+
+Creating parties..
+
+Revenant MP supports the creation of player parties.  Parties are created in the
+MP in game screen by typing in an existing party name with the correct party password,
+then clicking the 'New' button to create a new party, or the 'Join' button to join
+an existing party.  Once in a party, your chat messages will default to only your
+party members.  You can transmit your parties password to desired party mates by using
+ICQ, email, or in game whispering.
+
+Multplayer Chat..
+
+The multplayer chat system has the following special chat commands..  These commands
+are indicated by a special character at the beginning of the chat line..
+
+Broadcast to all "!"
+
+	Broadcasts chat message to all players on server.
+
+	Example:
+
+	!Hey, what's the deal with this server?
+
+
+Broadcast only to server "$"
+
+	Broadcasts chat message to host of game only.  Host page.
+
+	Example:
+
+	$Hey host.. what's the deal with this server?
+	
+Whisper to player "/"
+
+	Whispers chat line only to specific player.  ":" must be placed immediately after
+	player name.
+	
+	Example:
+	
+	/Balrog: Join our party, our password is SPOON
+
+
+Dedicated Server Mode..
+
+Revenant 1.2 and above includes a Dedidcated Server mode.  In this mode, the host of the
+game can run Revenant in the background on a system.  Revenant will unload it's graphics
+system files, and run quietly in the background.  This greatly reduces the system load
+to run revenant (though it still requires some system resources), and speeds up gameplay
+for all client players.
+
+Any multiplayer game can be run in dedicated server mode by clicking on the 'dedicated' 
+button in the multiplayer interface.  Revenant is then shrunk down to a toolbar icon, the
+game graphics are unloaded, and Revenant will be running in dedicated mode.  You can then
+check on the current users, or view the current chat in the Windows multitabbed dedicated
+server panel (available from the toolbar).  
+
+You can reenter full mode at any time from the server panel.
+
+Running A MUD Server..
+
+To run a Revenant MUD server, you must have your MODULE.DEF file marked as GAMEMOD_MUD,
+and not GAMEMOD_COOP.  In deathmatch mode, all players which leave the game are deleted 
+from the player list.   In MUD mode, all players which leave the game are left in the
+player list and marked as OFFLINE.  This allows players to reenter the game by using the
+correct player name and password, and continue their 'quest'.
+
+There are several limitations to Revenant MUD games.  First.. a Revenant server requires
+a reasonable amount of bandwidth.  A 56k modem will probably not suffice to set up a 
+Revenant server.  Second.. there are still missing aspects to the scripting system to 
+provide full support for Ultima Online style play.  There is no economy, and there is no
+facilities for party local, or player local game states.  All game states are tied to
+the module itself.   That being said, Revenant, even with all of its limitations, is
+still the only Diablo style game that can edited at a very deep level, and Run online 
+like an Ultima online style server.  Perhaps in the future we'll see other games which
+will provide the same facilities, but until then..
+
+If you are interested in making your own Revenant online worlds, and providing your own
+2D or 3D graphics for these worlds, check out the documentation on file formats, tools,
+and tutorials on how to create revenant modules.  These are available online at 
+www.cinematix.com, or www.revenantqs.com.
+
+Thanks...
+
+The Revenant Team at Cinematix.
+
+
+New script object names for Coop MUD mode in 1.2
+------------------------------------------------
+
+PARTY objects
+-------------
+
+Description: Allows you to access party members by number
+
+Example:
+
+	party1.say "I'm the first member in the party of the guy using this object"
+
+	party3.say "And I'm the third member"
+
+Remarks:
+
+The party object name allows you to have the various members of the user of the
+current scripts party do various things.
+
+CURRENT object
+--------------
+
+Description: The current object set by the 'setcurrent' command
+
+Example:
+
+	party1.setcurrent		// Set party member 1 as 'current'
+	current.say "Hi, I'm player 1"
+
+Remarks:
+
+The current object is set using the 'setcurrent' command (see below), and can be
+used to set a current player in a script.
+
+PLAYER object
+-------------
+
+Description: The player on the current system
+
+Example:
+
+	player.say "This will always be said by the host machine player"
+
+Remarks:
+
+The 'player' object is used in all single player scripts to indicate the 'player'
+of the game.  In multiplayer, since all scripts run on the host, this is pretty much
+the same thing as saying the 'host' player.   Scripts that need the current 'user'
+of the script to do something should use the 'user' object instead.  
+
+Note: Most of the single player scritps in the Ahkuilon Coop module were converted
+by pretty much doing a search and replace for 'player.' and 'Locke.' to 'user.'
+
+USER object
+-----------
+
+Description: The general purpose 'user' of this script object
+
+Example:
+
+	user.say "The player who initiated this script will say this line"
+
+Remarks:
+
+The 'user' object should be used almost universally in all scripts when 
+referring to the 'player' that caused the script to run (i.e. used an object,
+activated a cube or proximity trigger, or initiated a dialog script).   The
+'user' object refers to the user of the script.   In single player modules where
+the 'player.' object or 'Locke.' is used, you must replace these with 'user.' to 
+make the module multiplayer coop operational.
+
+New script Commands for Coop MUD mode in 1.2
+--------------------------------------------
+
+The following commands were added to the 1.2 multiplayer system.  The script system
+in the single player game works as is, but there were several commands added to allow
+additional mp functionality.
+
+Please note that in the examples.. the object name "user" is a new script keyword used 
+to indicate the player that initiated the current script.  In the old single player 
+scripts, the user player was denoted as "player" (i.e. player.say "Hello").  "player" 
+now refers to the player on the current machine, while "user" refers to the actual 
+user of the script.  In the commands below where "user" is used for party commands, 
+the implied party is the "user"'s party.
+
+GROUPINRANGE
+------------
+
+Description: Checks to see if party members are within range of scripted event
+
+Syntax: GROUPINRANGE range
+
+Example:
+
+	user.groupinrange 1000	// The current script 'user's party..
+	begin
+	  say "Everybody's here, ok lets go"
+	end
+	else
+	begin
+	  say "Wait a second.. we're missing somebody in our party"
+	end
+
+Remarks:
+
+The groupinrange command allows you to execute a script only if all the members
+of a party are within the given range.  This allows the module designer to force
+all party members to progress to a certain point before beginning a scripted 
+sequence.
+
+
+HASPLAYER
+---------
+
+Decription: Checks to see if current party has character of given class
+
+Syntax: HASCLASS name_or_classname
+
+Example:
+
+	user.hasclass "Revenant"  // The current script 'user's party..
+	begin
+	  say "Ok, lets get going"
+	end
+	else
+	begin
+	  say "You must have a Revenant in your party to play this module"
+	end
+
+	user.hasclass "Bill"
+	begin
+	  say "Hi bill.. glad to have you in our party"
+	end
+	else
+	begin
+	  say "You must have a player named Bill in your party"
+	end
+
+
+Remarks:
+
+Allows a script to check to see if a given party has a member of this particular class or name.
+This should usually be done in the lobby area of a module (the town, etc.) so that
+the designer can design missions which assume that parties include characters of 
+certain classes or players with certain names.
+
+HASLEVEL
+--------
+
+Description: Checks to see if all party members have at least a minumum experience level
+
+Syntax: HASLEVEL minlevel
+
+Example:
+
+	user.haslevel 10     // The current script 'user's party..
+	begin
+	  say "Ok, lets get going"
+	end
+	else
+	begin
+	  say "All party members must be level 10 to open go here"
+	end
+
+Remarks:
+
+Allows a script to check to see if all party members have enough experience.
+This should usually be done in the lobby area of a module (the town, etc.) so that
+the designer can design missions which assume that parties include characters have
+enough experience for this area.
+
+
+HASNUMPLAYERS
+-------------
+
+Description: Checks to see if all party members have at least a minumum experience level
+
+Syntax: HASNUMPLAYERS min max
+
+Example:
+
+	user.hasnumplayers 2 6    // The current script 'user's party..
+	begin
+	  say "Ok, you've got enough people, lets get going"
+	end
+	else
+	begin
+	  say "There needs to be between two to six players in your party"
+	end
+
+Remarks:
+
+Allows a script to check to see if a party has too many or too few players.
+This should usually be done in the lobby area of a module (the town, etc.) so that
+the designer can design missions which assume that parties have enough players to
+play through the given area.
+
+
+GROUPGOTO
+---------
+
+Description: Causes all party members to go to a given position
+
+Syntax: GROUPGOTO x1 y1 x2 y2 x3 y3 x4 y4... 
+
+Example:
+
+	// Causes group to go to the following 4 locations
+	user.groupgoto 200 520 200 540 100 220 300 550
+
+Remarks:
+
+The groupgoto command causes the members of a party to walk from their current
+locations to the given positions listed in the command.  If there are more party
+members than positions in the command, more than one party member will try to go
+to the same position (and stop when they bump into eachother).  Try to include
+more than enough positions for any size party.. just in case.
+
+GROUPPOS
+--------
+
+Description: Sets the position of all party members
+
+Syntax: GROUPPOS level x1 y1 x2 y2 x3 y3 x4 y4...
+
+Example:
+
+	// Causes player's in 'user's party to go to the following 4 locations
+	user.grouppos 1 200 520 200 540 100 220 300 550
+
+Description:
+
+The grouppos command causes the members of a party to be placed on the given level
+at the given positions listed in the command.  If there are more party
+members than positions in the command, more than one party member will be positioned
+in the same place.  Try to include more than enough positions for any size party.. 
+just in case.
+
+
+GROUPFACE
+---------
+
+Description: Sets the facing of all party members
+
+Syntax: GROUPFACE f1 f2 f3 f4...
+
+Example:
+
+	// Causes player's in 'user's party to face the following 5 directions
+	user.groupface 50 72 129 200 59
+
+Remarks:
+
+The grouppos command causes the members of a party to face the given directions listed
+in the command.  If there are more party members than positions in the command the 
+additional party members will face in the same direction as the others.
+
+
+SETCURRENT
+----------
+
+Description: Sets the current character
+
+Syntax: SETCURRENT name_or_classname_or_playerclass
+
+Example:
+
+	setcurrent "Bill"		// Sets the 'current' object to bill
+	current.say "Hi my name is bill"
+
+	setcurrent "Revenant"	// Sets the 'current' object to the closest Revenant player
+	current.say "Hi I'm a revenant"
+
+	setcurrent "Ogrok"		// Sets the 'current' object to the closest Ogrok
+	current.say "Grrr"
+	
+
+Remarks:
+
+The setcurrent command sets the script object 'current' to an object you select.
+You may then use the 'current' object in various script statements for which you
+would normally use an object name.  This allows you to select a party member with
+a given name or class, or a nearby monster, as a target for your script.
+
+
+JUMPCLASS
+---------
+
+Description: Jumps to a label with the name of the current characters class
+
+Syntax: <object>.JUMPCLASS
+
+Example:
+
+	user.jumpclass			// Jumps to the class of the user in the script
+
+	:Revenant
+	say "I'm a revenant"
+	jump end
+
+	:Veteran
+	say "I'm a veteran"
+
+	:Shaman
+	say "I'm a shaman"
+
+	:Assasin
+	say "I'm an assasin"
+
+	:end
+	say "The end
+
+Remarks:
+
+The jumpclass command jumps to the label in a script that matches the class of the
+given player.  This allows you to write scripts specifically for players of specific
+classes.
+
+
+JUMPNAME
+--------
+
+Description: Jumps to a label with the name of the current character
+
+Syntax: <object>.JUMPNAME
+
+Example:
+
+	user.jumpname			// Jumps to the class of the user in the script
+
+	:Bill
+	say "I'm a Bill"
+	jump end
+
+	:FredTheGreat
+	say "I'm Fred The Great (gets rid of spaces)"
+
+	:end
+	say "The end
+
+Remarks:
+
+The jumpname command jumps to the label in a script that matches the name of the
+given player.  This allows you to write scripts specifically for players with 
+specific names.
+
+
+TIMELIMIT
+---------
+
+Description: Sets a time limit on the given script
+
+Syntax: TIMELIMIT time
+
+Example:
+
+	timelimit 5m		// Five minute limit for script
+
+Remarks:
+
+This allows you to set a maximum time limit for a given script.  After this period, 
+the script will automatically exit, allowing other players to use the object the
+script is running for.  This prevents inactive players from preventing others from
+accessing scripts, and prevents script errors from stopping the server.  Numbers can
+be in frames at 24fps, seconds with an s at the end (i.e. "5s" is five seconds), or 
+minutes with an m at the end (i.e. "5m" is five minutes). 
+
+Note: Whenever the user responds to a dialog choice, the time limit is reset to it's
+maximum value.  This allows interactive scripts to run to their conclusion without
+being interrupted unecessarily.
+
+BUSYSAY
+-------
+
+Description: Sets the dialog response when character is busy
+
+Syntax: BUSYSAY sayid or "saystring"
+
+Example:
+
+	busysay IV2971E
+	busysay "I'm busy with another player right now, come back later!"
+
+Remarks:
+
+Sets the dialog an NPC will say when he is busy serving another player.  If a
+player comes up and attempts to interrupt the transaction of another player, this
+dialog line will be displayed.  Players must wait for the current player to finish
+his transaction before they can talk to this player.  This command should be placed
+at the beginning of the script of an NPC, before it begins talking to the player it
+is serving.
+
+
+BUSYMSG
+-------
+
+Description: Sets the message response when a usable object is busy
+
+Syntax: BUSYMSG sayid or "saystring"
+
+Example:
+
+	busymsg IV2971E
+	busymsg "Somebody is using this door right now"
+
+Remarks:
+
+Sets the message that will be displayed in the message area of the screen when a
+player attempts to use an object or do a script which another player is currently
+using or doing.  Players must wait for the current player to finish with this object
+or script before they can use it.   This command should be placed at the beginning of
+a script before any other script commands.
+ 

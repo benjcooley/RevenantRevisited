@@ -1,0 +1,111 @@
+{
+    "actions": [
+        {
+            "install": {
+                "action": "installSDB",
+                "arguments": {
+                    "GUID": "{de903e80-fb76-4869-9559-cfe58fd73986}",
+                    "sdbFile": "{app}/goggame.sdb"
+                }
+            },
+            "languages": [
+                "*"
+            ],
+            "name": "install_sdb"
+        },
+        {
+            "install": {
+                "action": "supportData",
+                "arguments": {
+                    "target": "{app}/Save/Chars",
+                    "type": "folder"
+                }
+            },
+            "languages": [
+                "*"
+            ],
+            "name": "createFolder1"
+        },
+        {
+            "install": {
+                "action": "supportData",
+                "arguments": {
+                    "target": "{app}/Save/Multi",
+                    "type": "folder"
+                }
+            },
+            "languages": [
+                "*"
+            ],
+            "name": "createFolder2"
+        },
+        {
+            "install": {
+                "action": "supportData",
+                "arguments": {
+                    "target": "{app}/Save/Single",
+                    "type": "folder"
+                }
+            },
+            "languages": [
+                "*"
+            ],
+            "name": "createFolder3"
+        },
+        {
+            "install": {
+                "action": "Execute",
+                "arguments": {
+                    "conditions": [
+                        "onlyOnce"
+                    ],
+                    "executable": "{app}/directplay.cmd",
+                    "runAsAdmin": true,
+                    "workingDir": "{app}"
+                }
+            },
+            "languages": [
+                "*"
+            ],
+            "name": "Install DirectPlay"
+        },
+        {
+            "install": {
+                "action": "Execute",
+                "arguments": {
+                    "conditions": [
+                        "onlyOnce"
+                    ],
+                    "executable": "{app}/ipx_reg.cmd",
+                    "runAsAdmin": true,
+                    "workingDir": "{app}"
+                }
+            },
+            "languages": [
+                "*"
+            ],
+            "name": "IPXReg"
+        },
+        {
+            "install": {
+                "action": "setIni",
+                "arguments": {
+                    "conditions": [
+                        "onLanguageChange"
+                    ],
+                    "filename": "{app}\\revenant.ini",
+                    "keyName": "Language",
+                    "keyType": "string",
+                    "keyValue": "English",
+                    "section": "Language",
+                    "utf8": false
+                }
+            },
+            "languages": [
+                "en-US"
+            ],
+            "name": "ini1"
+        }
+    ],
+    "productId": "1207665803"
+}

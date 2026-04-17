@@ -1,0 +1,71 @@
+// Revenant - Copyright 1999 Cinematix Studios, Inc.
+// ** Revenant Join Game Interface DEF File  *** 
+
+PANEL "default"
+BEGIN
+
+//  FRAME POS 55 110 525 35
+//  FRAME POS 55 160 525 200
+
+  FRAME POS 32 80 565 323 FLAGS CTRLFLAG_DRAWTOBG BITMAP "TransFrame1" FRAME 14 14 16 16 MARGINS 0 0 4 4
+
+  FRAME POS 55 100 525 40 BITMAP "ClearFrame2"
+  FRAME POS 55 160 525 215 BITMAP "ClearFrame2"
+
+// Session info text descriptions
+  TEXT POS 75 110 106 20 TEXT "Game Name:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 360 110 55 20 TEXT "Host:" FLAGS TEXTFLAG_RIGHT
+
+  TEXT POS 220 166 200 16 TEXT "Game Options" FLAGS TEXTFLAG_CENTER
+
+  TEXT POS 52 190 220 18 TEXT "Minimum Level to Join Game:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 52 208 220 18 TEXT "Maximum Level to Join Game:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 52 226 220 18 TEXT "Host God Mode:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 52 244 220 18 TEXT "Edit Character Equipment:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 52 262 220 18 TEXT "Allow Corpse Looting:" FLAGS TEXTFLAG_RIGHT
+
+  TEXT POS 306 190 192 18 TEXT "Maximum Players In Game:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 306 208 192 18 TEXT "Maximum Players On Line:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 306 226 192 18 TEXT "Player Viewing:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 306 244 192 18 TEXT "Player Killing:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 306 262 192 18 TEXT "No Monsters:" FLAGS TEXTFLAG_RIGHT
+
+  TEXT POS 150 290 208 18 TEXT "Resurrection Penalty:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 150 308 208 18 TEXT "Experience Penalty Percent:" FLAGS TEXTFLAG_RIGHT
+  TEXT POS 150 326 208 18 TEXT "Admit New Players:" FLAGS TEXTFLAG_RIGHT
+
+// Session info text
+  TEXT POS 182 110 186 20 NAME "gamename" FIELD "gamename" TEXT ""
+  TEXT POS 415 110 165 20 NAME "hostname" FIELD "hostname" TEXT ""
+
+  TEXT POS 272 190 50 18 NAME "minlevel" FIELD "minlevel" TEXT "1"
+  TEXT POS 272 208 50 18 NAME "maxlevel" FIELD "maxlevel" TEXT "4"
+  TEXT POS 272 226 50 18 NAME "editstats" FIELD "editstats" TEXT "Yes"
+  TEXT POS 272 244 50 18 NAME "editequip" FIELD "editequip" TEXT "No"
+  TEXT POS 272 262 50 18 NAME "lootcorpse" FIELD "lootcorpse" TEXT "Yes"
+
+  TEXT POS 498 190 212 18 NAME "maxonline" FIELD "maxonline" TEXT "8"
+  TEXT POS 498 208 212 18 NAME "maxplay" FIELD "maxplay" TEXT "32"
+  TEXT POS 498 226 100 18 NAME "viewplry" FIELD "viewplry" TEXT "Selectable"
+  TEXT POS 498 244 212 18 NAME "playkill" FIELD "playkill" TEXT "All"
+  TEXT POS 498 262 212 18 NAME "nomonster" FIELD "nomonster" TEXT "Yes" 
+
+  TEXT POS 358 290 100 20 NAME "respenalty" FIELD "respenalty" TEXT "Never"
+  TEXT POS 358 308 100 20 NAME "penaltypcnt" FIELD "penaltypcnt" TEXT "25%"
+  TEXT POS 358 326 100 20 NAME "admitnew" FIELD "admitnew" TEXT "Immediately"
+
+// Connection Status
+//  TEXT POS 105 275 130 20 NAME "txtcnctstatus" TEXT "Connection Status"
+
+//  LISTBOX POS 105 295 430 100 NAME "cnctstatus" FIELD "cnctstatusfield" FLAGS LISTFLAG_VLIST | LISTFLAG_USEFORMAT ITEM 1000 10 SELCOLOR 0 0 0\
+//  FONT "small" COLOR 255 255 255 FLAGS TEXT_CENTER | TEXT_VCENTER | TEXT_SHADOW | TEXT_SINGLELINE DRAWMODE DM_USEDEFAULT
+//  BEGIN
+//	FIELD 0 0 430 290 FLAGS TEXT_CENTER | TEXT_SHADOW "cdata"
+//  END
+
+// Screen Control
+  BUTTON POS 220 415 100 25 NAME "start" TEXT "Connect" UP "TransFrame2" FRAME 10 10 12 12 MARGINS 0 0 4 4
+  BUTTON POS 350 415 100 25 NAME "cancel" TEXT "Cancel" UP "TransFrame2" FRAME 10 10 12 12 MARGINS 0 0 4 4
+
+END
+

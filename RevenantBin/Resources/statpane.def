@@ -1,0 +1,568 @@
+// ********* Revenant Stat Pane Format File ********
+// -------------------------------------------------
+
+// Revenant - Copyright 1999 Cinematix Studios, Inc.
+
+CLASS "Player" FORMAT "Page1"
+BEGIN
+  LINEHEIGHT 12
+  LINEWRAP none
+
+  BUTTON "page1" 63 108 25 14
+  BUTTON "page2" 89 108 29 14
+  BUTTON "trainstrn" 24 120 62 12
+  BUTTON "traincons" 24 132 62 12
+  BUTTON "trainagil" 24 144 62 12
+  BUTTON "trainrflx" 24 156 62 12
+  BUTTON "trainmind" 24 168 62 12
+  BUTTON "trainluck" 24 180 62 12
+
+  COLOR 255 240 215
+  COLOR aqua 113 187 255
+  COLOR teal 95 228 193
+//COLOR red 255 43 43    // old red was hard to read... bumped it up a bit
+  COLOR red 255 150 150
+  COLOR blue 110 160 255
+  COLOR green 6 221 0
+  COLOR yellow 255 247 73
+
+  POS 28 62
+  TEXT "Name: "
+  FIELD aqua name
+  
+  NEXTLINE
+  TEXT "Class: "
+  FIELD aqua class
+  
+  NEXTLINE
+  TEXT "Lvl: "
+  FIELD teal level
+  TEXT " Exp: "
+  FIELD teal exp
+  TEXT " Nxt: "
+  FIELD teal nextexp
+
+  NEXTLINE
+  TEXT "Hlth: "
+  FIELD red health
+  TEXT red "/"
+  FIELD red maxhealth
+  TEXT " Mana: "
+  FIELD blue mana
+  TEXT blue "/"
+  FIELD blue maxmana
+
+  NEXTLINE
+  TAB 40
+  TEXT green "Stats"
+  TEXT "/Skills"
+
+  NEXTLINE
+  TAB 12
+  FIELD right trainstrn
+  TAB 14
+  TEXT "Strn"
+  TAB 56
+  FIELD right strn
+  TAB 70
+  FIELD "Dmg" strnmod1
+  FIELD " Hit" strnmod2
+
+  NEXTLINE
+  TAB 12
+  FIELD right traincons
+  TAB 14
+  TEXT "Cons"
+  TAB 56
+  FIELD right cons
+  TAB 70
+  FIELD "Hlth" consmod1
+  FIELD " Ftg" consmod2
+
+  NEXTLINE
+  TAB 12
+  FIELD right trainagil
+  TAB 14
+  TEXT "Agil"
+  TAB 56
+  FIELD right agil
+  TAB 70
+  FIELD "Atk" agilmod1
+
+  NEXTLINE
+  TAB 12
+  FIELD right trainrflx
+  TAB 14
+  TEXT "Rflx"
+  TAB 56
+  FIELD right rflx
+  TAB 70
+  FIELD "Def" rflxmod1
+
+  NEXTLINE
+  TAB 12
+  FIELD right trainmind
+  TAB 14
+  TEXT "Mind"
+  TAB 56
+  FIELD right mind
+  TAB 70
+  FIELD "Mana " mindmod1
+  FIELD " Spl " mindmod2
+
+  NEXTLINE
+  TAB 12
+  FIELD right trainluck
+  TAB 14
+  TEXT "Luck"
+  TAB 56
+  FIELD right luck
+  TAB 70
+  FIELD "Rolls " luckmod1
+
+  NEXTLINE
+  TEXT "Armor: "
+  FIELD yellow armor
+  TEXT " Dmg: "
+  FIELD yellow damage
+
+
+//  NEXTLINE
+//  LINEWRAP 150
+//  TEXT "Atck: "
+//  FIELD atckmod1
+//  FIELD atckmod2
+//  FIELD atckmod3
+//  FIELD atckmod4
+//  FIELD atckmod5
+//  FIELD atckmod6
+//  LINEWRAP none
+//  TAB 145
+//  FIELD right attackpct
+
+//  NEXTLINE
+//  LINEWRAP 150
+//  TEXT "Def: "
+//  FIELD defmod1
+//  FIELD defmod2
+//  FIELD defmod3
+//  FIELD defmod4
+//  FIELD defmod5
+//  FIELD defmod6
+//  LINEWRAP none
+//  TAB 145
+//  FIELD right defensepct
+
+END
+
+CLASS "Player" FORMAT "Page2"
+BEGIN
+  LINEHEIGHT 12
+  LINEWRAP none
+
+  BUTTON "page1" 63 108 25 14
+  BUTTON "page2" 89 108 29 14
+
+  COLOR 255 240 215
+  COLOR aqua 113 187 255
+  COLOR teal 95 228 193
+//COLOR red 255 43 43    // old red was hard to read... bumped it up a bit
+  COLOR red 255 150 150
+  COLOR blue 110 160 255
+  COLOR green 6 221 0
+  COLOR yellow 255 247 73
+
+  POS 28 62
+  TEXT "Name: "
+  FIELD aqua name
+  
+  NEXTLINE
+  TEXT "Class: "
+  FIELD aqua class
+  
+  NEXTLINE
+  TEXT "Lvl: "
+  FIELD teal level
+  TEXT " Exp: "
+  FIELD teal exp
+  TEXT " Nxt: "
+  FIELD teal nextexp
+
+  NEXTLINE
+  TEXT "Hlth: "
+  FIELD red health
+  TEXT red "/"
+  FIELD red maxhealth
+  TEXT " Mana: "
+  FIELD blue mana
+  TEXT blue "/"
+  FIELD blue maxmana
+
+  NEXTLINE
+  TAB 40
+  TEXT "Stats/"
+  TEXT green "Skills"
+
+//  NEXTLINE
+//  TAB 10
+//  TEXT "Attack"
+//  TAB 68
+//  FIELD right attack
+//  TAB 76
+//  FIELD attackexp
+//  TEXT "/"
+//  FIELD attacknxtexp
+
+//  NEXTLINE
+//  TAB 10
+//  TEXT "Defense"
+//  TAB 68
+//  FIELD right defense
+//  TAB 76
+//  FIELD defenseexp
+//  TEXT "/"
+//  FIELD defensenxtexp
+
+  NEXTLINE
+  TAB 10
+  TEXT "Invoke"
+  TAB 68
+  FIELD right invoke
+  TAB 76
+  FIELD invokeexp
+  TEXT "/"
+  FIELD invokenxtexp
+
+  NEXTLINE
+  TAB 10
+  TEXT "Hands"
+  TAB 68
+  FIELD right hands
+  TAB 76
+  FIELD handsexp
+  TEXT "/"
+  FIELD handsnxtexp
+
+  NEXTLINE
+  TAB 10
+  TEXT "Sword"
+  TAB 68
+  FIELD right sword
+  TAB 76
+  FIELD swordexp
+  TEXT "/"
+  FIELD swordnxtexp
+
+  NEXTLINE
+  TAB 10
+  TEXT "Bludgeon"
+  TAB 68
+  FIELD right bludgeon
+  TAB 76
+  FIELD bludgeonexp
+  TEXT "/"
+  FIELD bludgeonnxtexp
+
+  NEXTLINE
+  TAB 10
+  TEXT "Axes"
+  TAB 68
+  FIELD right axes
+  TAB 76
+  FIELD axesexp
+  TEXT "/"
+  FIELD axesnxtexp
+
+  NEXTLINE
+  TAB 10
+  TEXT "Bows"
+  TAB 68
+  FIELD right bows
+  TAB 76
+  FIELD bowsexp
+  TEXT "/"
+  FIELD bowsnxtexp
+
+  NEXTLINE
+  TAB 10
+  TEXT "Lockpick"
+  TAB 68
+  FIELD right lockpick
+  TAB 76
+  FIELD lockpickexp
+  TEXT "/"
+  FIELD lockpicknxtexp
+END
+
+CLASS "Character"
+BEGIN
+  LINEHEIGHT 12
+  LINEWRAP none
+
+  BUTTON "Prev" 27 250 25 14
+  BUTTON "Next" 143 250 29 14
+
+  COLOR 255 240 215
+  COLOR aqua 113 187 255
+  COLOR teal 95 228 193
+  COLOR red 255 43 43
+  COLOR blue 97 110 255
+  COLOR green 6 221 0
+  COLOR yellow 255 247 73
+
+  POS 28 62
+  TAB 27
+  TEXT right "Name: "
+  TAB 27
+  FIELD aqua name
+  
+  NEXTLINE
+  TAB 82
+  ICON
+
+  TAB 27
+  TEXT right "Type: "
+  TAB 27
+  FIELD aqua objclass
+  
+  NEXTLINE
+  TAB 27
+  TEXT right "Level: "
+  TAB 27
+  FIELD aqua value
+
+  NEXTLINE
+  TAB 60
+  TEXT right "Experience: "
+  TAB 60
+  FIELD aqua experience
+
+  NEXTLINE
+  TAB 60
+  TEXT right "Attack Skill: "
+  TAB 60
+  FIELD aqua attack
+
+  NEXTLINE
+  TAB 60
+  TEXT right "Defense Skill: "
+  TAB 60
+  FIELD aqua defense
+
+  NEXTLINE
+
+  TEXT "Description:"
+  NEXTLINE
+  TAB 10
+  FIELD multipage 135 100 objdesc
+
+  POS 27 250
+  TEXT grayable "Prev"
+  POS 143 250
+  TEXT grayable "Next"
+
+END
+
+CLASS "Weapon"
+BEGIN
+  LINEHEIGHT 12
+  LINEWRAP none
+
+  BUTTON "Prev" 27 250 25 14
+  BUTTON "Next" 143 250 29 14
+
+  COLOR 255 240 215
+  COLOR aqua 113 187 255
+  COLOR teal 95 228 193
+  COLOR red 255 43 43
+  COLOR blue 97 110 255
+  COLOR green 6 221 0
+  COLOR yellow 255 247 73
+
+  POS 28 62
+  TAB 27
+  TEXT right "Name: "
+  TAB 27
+  FIELD aqua name
+  
+  NEXTLINE
+  TAB 82
+  ICON
+
+  TAB 24
+  TEXT right "Type: "
+  TAB 24
+  FIELD aqua objclass
+  
+  NEXTLINE
+  TAB 26
+  TEXT right "Value: "
+  TAB 26
+  FIELD aqua value
+
+  NEXTLINE
+  TAB 37
+  TEXT right "Damage: "
+  TAB 37
+  FIELD aqua damage
+
+  NEXTLINE
+  TAB 30
+  TEXT right "Poison: "
+  TAB 30
+  FIELD aqua poison
+
+  NEXTLINE
+  TAB 64
+  TEXT right "Weapon Class: "
+  TAB 64
+  FIELD aqua type
+
+  NEXTLINE
+  TAB 78
+  TEXT right "Minimum Strength: "
+  TAB 78
+  FIELD aqua minstrength
+
+  NEXTLINE
+  NEXTLINE
+
+  TEXT "Description:"
+  NEXTLINE
+  TAB 10
+  FIELD multipage 135 80 objdesc
+
+  POS 27 250
+  TEXT grayable "Prev"
+  POS 143 250
+  TEXT grayable "Next"
+
+END
+
+CLASS "Armor"
+BEGIN
+  LINEHEIGHT 12
+  LINEWRAP none
+
+  BUTTON "Prev" 27 250 25 14
+  BUTTON "Next" 143 250 29 14
+
+  COLOR 255 240 215
+  COLOR aqua 113 187 255
+  COLOR teal 95 228 193
+  COLOR red 255 43 43
+  COLOR blue 97 110 255
+  COLOR green 6 221 0
+  COLOR yellow 255 247 73
+
+  POS 28 62
+  TAB 27
+  TEXT right "Name: "
+  TAB 27
+  FIELD aqua name
+  
+  NEXTLINE
+  TAB 82
+  ICON
+
+  TAB 24
+  TEXT right "Type: "
+  TAB 24
+  FIELD aqua objclass
+  
+  NEXTLINE
+  TAB 26
+  TEXT right "Value: "
+  TAB 26
+  FIELD aqua value
+
+  NEXTLINE
+  TAB 44
+  TEXT right "Protection: "
+  TAB 44
+  FIELD aqua protection
+
+  NEXTLINE
+  TAB 60
+  TEXT right "Resist Poison: "
+  TAB 60
+  FIELD aqua resistpoison
+
+  NEXTLINE
+  TAB 78
+  TEXT right "Minimum Strength: "
+  TAB 78
+  FIELD aqua minstrength
+
+  NEXTLINE
+  TAB 93
+  TEXT right "Minimum Constitution: "
+  TAB 93
+  FIELD aqua minconstitution
+
+  NEXTLINE
+  NEXTLINE
+
+  TEXT "Description:"
+  NEXTLINE
+  TAB 10
+  FIELD multipage 135 80 objdesc
+
+  POS 27 250
+  TEXT grayable "Prev"
+  POS 143 250
+  TEXT grayable "Next"
+
+END
+
+CLASS "Default"
+BEGIN
+  LINEHEIGHT 12
+  LINEWRAP none
+
+  BUTTON "Prev" 27 250 25 14
+  BUTTON "Next" 143 250 29 14
+
+  COLOR 255 240 215
+  COLOR aqua 113 187 255
+  COLOR teal 95 228 193
+  COLOR red 255 43 43
+  COLOR blue 97 110 255
+  COLOR green 6 221 0
+  COLOR yellow 255 247 73
+
+  POS 28 62
+  TAB 27
+  TEXT right "Name: "
+  TAB 27
+  FIELD aqua name
+  
+  NEXTLINE
+  TAB 82
+  ICON
+
+  TAB 27
+  TEXT right "Type: "
+  TAB 27
+  FIELD aqua objclass
+  
+  NEXTLINE
+  TAB 27
+  TEXT right "Value: "
+  TAB 27
+  FIELD aqua value
+
+  NEXTLINE
+  NEXTLINE
+
+  TEXT "Description:"
+  NEXTLINE
+  TAB 10
+  FIELD multipage 135 120 objdesc
+
+  POS 27 250
+  TEXT grayable "Prev"
+  POS 143 250
+  TEXT grayable "Next"
+
+END

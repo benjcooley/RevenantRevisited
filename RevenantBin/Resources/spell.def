@@ -1,0 +1,1904 @@
+// Revenant - Copyright 1998 Cinematix Studios, Inc.
+// *********** Revenant SPELL DEF File  ************
+
+// contains all the spell info
+
+// Command List
+// Start a spell with: SPELL "name"
+
+// then BEGIN it
+// when done END it
+
+// #defines to macro define text
+
+// talismans
+// "Sun" = A
+// "Life" = B
+// "Ocean" = C
+// "Law" = D
+// "Soul" = E
+// "Stars" = F
+// "Death" = G
+// "Chaos" = H
+// "Sky" = I
+// "Earth" = J
+// "Ward" = K
+// "Moon" = L
+// "Rubert" = M		// This is now reserved for Enemy Spells - Pepper
+// "Gilmor" = N		// This is now reserved for Fizzel - Pepper
+// "Barry" = O
+
+// damage types
+#define DT_NONE		-1		// Does no damage whatsoever
+#define DT_MISC		0		// Just damage (no specific type)
+#define DT_HAND		1		// Damage from hand to hand combat
+#define DT_PUNCTURE 2		// Puncture damage (arrows, knives and swords thrusts)
+#define DT_CUT		3		// Cutting or slashing damage (knive and sword swings)
+#define DT_CHOP		4		// Chopping damage (knive, sword, or axe chops)
+#define DT_BLUDGEON 5       // Bludgeoning damage (warhammers, clubs, maces)
+#define DT_MAGICAL  6       // Magical damage (other than any that fit below)
+#define DT_BURN     7       // Burn damage (i.e. lava, fileball, etc.)
+#define DT_FREEZE   8       // Freeze damage (i.e. frost, etc.)
+#define DT_POISON   9		// Poison damage
+
+
+#define SOFTWARE_TIMED		-1
+
+
+// spell flags
+#define SF_NONE		0x0000
+
+// variant types
+#define TP_BASIC	3
+
+// conditionals
+#define TRUE		1
+#define FALSE		0
+
+
+
+
+
+
+// LEVEL 1 SPELLS
+
+
+SPELL "Fire Flash"
+BEGIN
+	NAME "Fire Flash"
+	ICONNAME "Fire Flash"
+	DESCRIPTION "Eat the new cheetos, fire poofs!"
+	DAMAGETYPE DT_BURN
+	ANIMATION "invoke1"
+	DELAY 5
+	LIGHT COLOR 255, 130, 0 INT 160 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Fire Flash", TP_BASIC, "LI", "fireflash", 31, 50, 50, 55, 1, 0, FALSE, 50
+	CONTROLDATA "Strike"
+	BEGIN
+		PATTERN "circle"
+		RADIUS 1
+		HITTARGET
+		HITS 1
+		FOLLOW
+  	END
+
+	VARIANT "Priest Fire Flash", TP_BASIC, "MA", "fireflash", 186, 50, 56, 68, 0, 0, FALSE, 50
+	CONTROLDATA "Strike"
+	BEGIN
+		PATTERN "circle"
+		RADIUS 20
+		HITTARGET
+		HITS 2
+		FOLLOW
+  	END
+END
+
+
+
+
+SPELL "Poison"
+BEGIN
+	NAME "Poison"
+	ICONNAME "Poison"
+	DESCRIPTION "whats YOUR poison"
+	DAMAGETYPE DT_POISON
+	ANIMATION "invoke1"
+	DELAY 5
+	LIGHT COLOR 50, 255, 50 INT 120 MULT 20
+	POISONCHANCE 90
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Poison", TP_BASIC, "L", "StrikeEffect", 42, 20, 0, 2, 1, 0, FALSE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		HITTARGET
+		DURATION 1080 24
+		HITTARGET
+		FOLLOW
+		PLAYONCE "poison"
+		IMAGERY "magic\PoisonCloud.i3d"
+	END
+
+	VARIANT "SpiderPoison", TP_BASIC, "MC", "StrikeEffect", 10, 1, 10, 20, 0, 0, FALSE, 1
+	CONTROLDATA "Strike"
+	BEGIN
+		HITTARGET
+		DURATION 1080 24
+		HITTARGET
+		FOLLOW
+		PLAYONCE "poison"
+		IMAGERY "magic\PoisonCloud.i3d"
+	 END
+END
+
+
+
+
+SPELL "Nourish"
+BEGIN
+	NAME "Nourish"
+	ICONNAME "Nourish"
+	DESCRIPTION "Hungry for those good times baby..."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke5"
+	DELAY 5
+	LIGHT COLOR 100, 100, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Nourish", TP_BASIC, "B", "createfood", 40, 70, 22, 34, 2, 0, TRUE, 70
+END
+
+
+
+
+
+SPELL "CureP"
+BEGIN
+	NAME "CureP"
+	ICONNAME "Cure Poison"
+	DESCRIPTION "Remove the effects of poisoning"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Cure Poison", TP_BASIC, "BI", "Streamer", 25, 70, 0, 20, 2, 0, TRUE, 70
+      CONTROLDATA "Strike"
+      BEGIN
+      	FOLLOW
+      END
+END
+
+
+
+
+
+SPELL "Might"
+BEGIN
+	ICONNAME "Might"
+	DESCRIPTION "Oh my gawd, my hands are on fire!"
+	DAMAGETYPE DT_NONE
+	NAME "Might" 
+	ANIMATION "invoke4"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 255, 160, 0 INT 120 MULT 10
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Might", TP_BASIC, "E", "StrikeEffect", 31, 20, 0, 0, 3, 40, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\might.i3d"
+		FOLLOW 
+		PLAY "fist"
+		DURATION 2880 24
+		HITS 2
+		ATTACHMULTIPLE "lhand" "rhand"
+		STATLINE STRN 2 TIME 2880
+	END
+END
+
+
+
+
+
+SPELL "Fist Mastery"
+BEGIN
+	ICONNAME "Fist Mastery"
+	DESCRIPTION "Hah! Your kungfu is weak. As well as obsolete. Prepare to die. Hmmpf!"
+	DAMAGETYPE DT_NONE
+	NAME "Fist Mastery" 
+	ANIMATION "invoke4"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 255,120,0 INT 120 MULT 10
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Fist Mastery", TP_BASIC, "BE", "StrikeEffect", 50, 20, 0, 0, 3, 50, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\fmaster.i3d"
+		FOLLOW 
+		DURATION 2880 24
+		HITS 2
+		PLAY "fist"
+		ATTACHMULTIPLE "lhand" "rhand"
+		STATLINE HANDS 4 TIME 2880
+	END
+END
+
+
+
+
+// LEVEL 2 SPELLS
+
+
+
+
+SPELL "Meteor Storm"
+BEGIN
+	NAME "Meteor Storm"
+	ICONNAME "Meteor Storm"
+	DESCRIPTION "A mighty blow from above."
+	DAMAGETYPE DT_BURN
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 255, 180, 0 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Meteor Storm", TP_BASIC, "JI", "StrikeEffect", 53, 70, 74, 94, 4, 100, FALSE, 70
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\Comet.i3d"
+		RADIUS 265
+		PLAY "meteorstorm"
+		WAIT 48
+		HITS 4
+		PATTERN "random"
+		DURATION 93 0
+		RANGEDAMAGE 150 30
+	END
+
+	VARIANT "Priest Meteor Storm", TP_BASIC, "MD", "StrikeEffect", 80, 70, 92, 122, 0, 100, FALSE, 70
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\Comet.i3d"
+		RADIUS 265
+		PLAY "meteorstorm"
+		WAIT 48
+		HITS 12
+		PATTERN "random"
+		DURATION 93 0
+		RANGEDAMAGE 150 25
+	END
+END
+
+
+
+
+SPELL "Quicksand"
+BEGIN
+	NAME "Quicksand"
+	ICONNAME "Quicksand"
+	DESCRIPTION "Is it a tornado?  I think it should be, or at least a dust storm."
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke1"
+	DELAY 5
+	FLAGS SF_NONE
+	
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Quicksand", TP_BASIC, "JC", "Quicksand", 71, 20, 80, 95, 4, 0, FALSE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\quick.i3d"
+		WAIT 10
+		HITTARGET
+	END
+END
+
+SPELL "Swamp Pit"
+BEGIN
+	NAME "SwampPit"
+	ICONNAME "Swamp Pit"
+	DESCRIPTION "Is it a tornado?  I think it should be, or at least a dust storm."
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke1"
+	DELAY 5
+	FLAGS SF_NONE
+	
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+	VARIANT "Swamp Pit", TP_BASIC, "CBJ", "Quicksand", 104, 20, 35, 45, 7, 0, FALSE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\swamp.i3d"
+		WAIT 10
+		HITTARGET
+	END
+END
+
+
+
+// SPELL "Swift Strike" [CL] mana 61, +13 fatigue per sec for 10 secs, invoke skill 5
+SPELL "Swift Strike"
+BEGIN
+	ICONNAME "Swift Strike"
+	DESCRIPTION "What you need is a swift kick in the head."
+	NAME "Swift Strike"
+	DAMAGETYPE DT_NONE	
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 255, 120, 0 INT 120 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Swift Strike", TP_BASIC, "CL", "StrikeEffect", 61, 20, 0, 0, 5, 0, FALSE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\SwiftStrike.i3d"
+		FOLLOW 
+		DURATION 650 24
+		POS 0 0 0
+		STATLINE FATIGUEPCT 780 TIME 650
+	END
+END
+
+
+
+
+SPELL "Regeneration"
+BEGIN
+	ICONNAME "Regeneration"
+	DESCRIPTION "1.. 2.. 3.. testing.."
+	DAMAGETYPE DT_NONE
+	NAME "Regeneration"
+	ANIMATION "invoke4"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 255, 55, 0 INT 160 MULT 20
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Regeneration", TP_BASIC, "BJ", "Regeneration", 107, 20, 0, 0, 5, 50, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		FOLLOW
+		DURATION 2880 24
+		POS 0 0 0
+		STATLINE HealthPct 120 TIME 2880
+	END
+END
+
+
+
+
+
+SPELL "Dexterity"
+BEGIN
+	ICONNAME "Dexterity"
+	DESCRIPTION "1.. 2.. 3.. testing.."
+	DAMAGETYPE DT_NONE
+	NAME "Dexterity" 
+	ANIMATION "invoke4"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 50, 125, 255 INT 120 MULT 20
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Dexterity", TP_BASIC, "EF", "Dexterity", 53, 20, 0, 0, 6, 50, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		FOLLOW 
+		PLAY "dexterity"
+		DURATION 2880 24
+		POS 0 0 0
+		STATLINE RFLX 2 TIME 2880
+	END
+END
+
+
+
+
+
+SPELL "Anti-magic"
+BEGIN
+	ICONNAME "Anti Magic"
+	DESCRIPTION "Practicing safe hex."
+	DAMAGETYPE DT_NONE
+	NAME "Anti-magic" 
+	ANIMATION "invoke4"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 255, 165, 0 INT 255 MULT 20
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Anti-magic", TP_BASIC, "FI", "StrikeEffect", 53, 20, 0, 0, 6, 50, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\antimagic.i3d"
+		FOLLOW 
+		PLAY "antimagic"
+		DURATION 240 24
+		POS 0 0 -40
+		STATLINE DmgResMagical 25 TIME 240
+	END
+
+	VARIANT "Priest Anti-magic", TP_BASIC, "MF", "StrikeEffect", 33, 20, 0, 0, 0, 50, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\antimagic.i3d"
+		FOLLOW 
+		PLAY "antimagic"
+		DURATION 240 24
+		POS 0 0 -40
+		STATLINE DmgResMagical 25 TIME 240
+	END
+END
+
+
+
+
+// LEVEL 3 SPELLS
+
+
+
+
+SPELL "Tornado"
+BEGIN
+	NAME "Tornado"
+	ICONNAME "Tornado"
+	DESCRIPTION "Moo"
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke3"
+	DELAY 5
+	LIGHT COLOR 50, 125, 255 INT 140 MULT 20
+	FLAGS SF_NONE
+	
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Tornado", TP_BASIC, "JFI", "Funnel", 78, 20, 110, 140, 7, 0, TRUE, 20
+	
+	VARIANT "Priest Tornado", TP_BASIC, "MG", "Funnel", 42, 20, 36, 58, 0, 0, TRUE, 20
+END
+
+SPELL "Stone Skin"
+BEGIN
+	ICONNAME "Stone Skin"
+	DESCRIPTION "1.. 2.. 3.. testing.."
+	DAMAGETYPE DT_NONE
+	NAME "Stone Skin"
+	ANIMATION "invoke4"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 255, 185, 0 INT 180 MULT 20
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+	
+	VARIANT "StoneSkin", TP_BASIC, "LJ", "StrikeEffect", 125, 20, 0, 0, 6, 50, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\stone.i3d"
+		FOLLOW
+		PLAY "head"
+		DURATION 2880 24
+		POS 0 0 100
+		STATLINE DmgResMisc 4 TIME 2880
+	END
+END
+
+
+
+
+SPELL "Iron Skin"
+BEGIN
+	NAME "Iron Skin"
+	ICONNAME "Iron Skin"
+	DESCRIPTION "Help me!"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 100, 0, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "IronSkin", TP_BASIC, "KJL", "StrikeEffect", 267, 20, 0, 0, 17, 0, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\iskin.i3d"
+		FOLLOW
+		PLAY "head"
+		DURATION 2880 24
+		POS 0 0 100
+		STATLINE DmgResMisc 6 TIME 2880
+	END
+
+	VARIANT "Priest IronSkin", TP_BASIC, "MH", "StrikeEffect", 167, 20, 0, 0, 0, 0, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\iskin.i3d"
+		FOLLOW
+		PLAY "head"
+		DURATION 2880 24
+		POS 0 0 100
+		STATLINE DmgResMisc 6 TIME 2880
+	END
+END
+
+
+
+
+SPELL "Speed"
+BEGIN
+	ICONNAME "Speed"
+	DESCRIPTION "1.. 2.. 3.. testing.."
+	DAMAGETYPE DT_NONE
+	NAME "Speed" 
+	ANIMATION "invoke4"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 155, 255, 55 INT 80 MULT 10
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Speed", TP_BASIC, "EBF", "StrikeEffect", 78, 20, 0, 0, 8, 50, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\speed.i3d"
+		FOLLOW 
+		PLAY "feet"
+		DURATION 2880 24
+		HITS 2
+		ATTACHMULTIPLE "lshin" "rshin"
+		STATLINE AGIL 4 TIME 2880
+	END
+END
+
+
+
+
+SPELL "Physical Paralysis"
+BEGIN
+	NAME "Paralysis"
+	ICONNAME "Physical Paralysis"
+	DESCRIPTION "Uh, yea, this is some ugly little circles scurring."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke1"
+	DELAY 5
+	LIGHT COLOR 255, 255, 255 INT 80 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Physical Paralysis", TP_BASIC, "BLE", "Paralize1", 78, 20, 0, 0, 9, 0, TRUE, 20
+END
+
+
+
+
+SPELL "Neural Paralysis"
+BEGIN
+	NAME "Paralysis"
+	ICONNAME "Neural Paralysis"
+	DESCRIPTION "Uh, yea, this is some ugly little circles scurring."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke1"
+	DELAY 5
+	LIGHT COLOR 255, 255, 255 INT 80 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Neural Paralysis", TP_BASIC, "KEBF", "Paralize1", 167, 20, 0, 0, 18, 0, TRUE, 20
+END
+
+
+
+
+SPELL "Full Paralysis"
+BEGIN
+	NAME "Paralysis"
+	ICONNAME "Full Paralysis"
+	DESCRIPTION "Uh, yea, this is some ugly little circles scurring."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke1"
+	DELAY 5
+	LIGHT COLOR 255, 255, 255 INT 80 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Full Paralysis", TP_BASIC, "KBEL", "Paralize1", 228, 20, 0, 0, 24, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		RADIUS 400
+		MULTIPLETARGETS
+	END	
+END
+
+
+
+
+// SPELL "Shadow Fist" [FL]
+SPELL "Shadow Fist"
+BEGIN
+	ICONNAME "Shadow Fist"
+	DESCRIPTION "Shadow fist.  The fist of shadow."
+	DAMAGETYPE DT_NONE
+	NAME "Shadow fist" 
+	ANIMATION "invoke4"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 200,50,255 INT 160 MULT 10
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Shadow Fist", TP_BASIC, "FL", "StrikeEffect", 125, 20, 0, 0, 9, 50, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\sfist.i3d"
+		FOLLOW 
+		PLAY "fist"
+		DURATION 2880 24
+		HITS 2
+		ATTACHMULTIPLE "lhand" "rhand"
+		STATLINE HANDS 8 TIME 2880
+	END
+END
+
+
+
+
+// LEVEL 4 SPELLS
+
+
+
+
+SPELL "Lightning"
+BEGIN
+	NAME "Lightning"
+	ICONNAME "Lightning Bolt"
+	DESCRIPTION "A devastating bolt of electricity."
+	DAMAGETYPE DT_BURN
+	ANIMATION "invoke3"
+	DELAY 5
+	LIGHT COLOR 150,150,255 INT 255 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Electric Bolt", TP_BASIC, "AI", "lightstrip", 105, 20, 155, 187, 10, 100, TRUE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		ATTACH "lhand"
+	END
+
+	VARIANT "Priest Bolt", TP_BASIC, "MJ", "lightstrip", 48, 20, 58, 68, 0, 100, TRUE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		ATTACH "lhand"
+	END
+
+	VARIANT "HighPriest Bolt", TP_BASIC, "MAL", "lightstrip", 82, 20, 84, 112, 0, 100, TRUE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		ATTACH "lhand"
+	END
+END
+
+
+
+
+SPELL "Fire Wind"
+BEGIN
+    NAME "Fire Wind"
+	ICONNAME "Fire Wind"
+	DESCRIPTION "Kaboom!"
+	DAMAGETYPE DT_BURN
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 255, 130, 0 INT 255 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Fire Wind", TP_BASIC, "AEF", "firewind", 128, 70, 96, 124, 10, 0, TRUE, 70
+
+	VARIANT "Priest Fire Wind", TP_BASIC, "MK", "firewind", 87, 70, 76, 92, 0, 0, TRUE, 70
+END
+
+
+
+
+SPELL "Heal"
+BEGIN
+	NAME "Heal"
+	ICONNAME "Heal"
+	DESCRIPTION "A magical medication."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 10
+	LIGHT COLOR 255,100,100 INT 180 MULT 20
+	FLAGS SF_NONE
+	
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Heal", TP_BASIC, "BEA", "heal", 140, 70, 0, 203, 11, 0, TRUE, 70
+	CONTROLDATA "Strike"
+      BEGIN
+      	FOLLOW
+      END	
+
+	VARIANT "Advanced healing", TP_BASIC, "DEB", "heal", 303, 70, 0, 412, 23, 0, TRUE, 70
+      CONTROLDATA "Strike"
+      BEGIN
+      	FOLLOW
+      END
+
+	VARIANT "Priest Heal", TP_BASIC, "ML", "heal", 21, 70, 50, 100, 0, 0, TRUE, 70
+	CONTROLDATA "Strike"
+      BEGIN
+      	FOLLOW
+      END
+
+	VARIANT "HighPriest Heal", TP_BASIC, "MAB", "heal", 33, 70, 150, 200, 0, 0, TRUE, 70		
+	CONTROLDATA "Strike"
+      BEGIN
+      	FOLLOW
+      END
+END
+
+
+
+
+
+SPELL "Charm"
+BEGIN
+	NAME "Charm"
+	ICONNAME "Charm"
+	DESCRIPTION "Bon jeur, cara mia."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Charm", TP_BASIC, "FA", "StrikeEffect", 105, 20, 0, 0, 12, 0, FALSE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\charm.i3d"
+		FOLLOW 
+		DURATION 2880 24
+		PLAY "hip"
+		POS 0 0 50
+		STATLINE Luck 5 TIME 2880
+	END
+END
+
+
+
+
+SPELL "Teleport"
+BEGIN
+	NAME "Teleport"
+	ICONNAME "Teleport"
+	DESCRIPTION "Hood-dini has nothing on me!"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 10
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Teleport", TP_BASIC, "CIF", "Teleporter", 84, 20, 0, 0, 12, 0, TRUE, 20
+		CONTROLDATA "Strike"
+		BEGIN
+			DURATION 40 0
+		END
+
+	VARIANT "Priest Teleport", TP_BASIC, "MAC", "Teleporter", 66, 20, 0, 0, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 40 0
+	END
+END
+
+
+
+
+// LEVEL 5 SPELLS
+
+
+
+
+SPELL "Fireball"
+BEGIN
+	DESCRIPTION "A flaming ball of fire."
+	DAMAGETYPE DT_BURN
+	NAME "Fireball"
+	ICONNAME "Fire Ball"
+	ANIMATION "invoke3"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 255, 130, 0 INT 255 MULT 20
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Fireball", TP_BASIC, "AF", "fireball", 135, 20, 200, 246, 13, 50, FALSE, 20
+
+	VARIANT "Priest Fireball", TP_BASIC, "MAD", "fireball", 54, 20, 62, 74, 0, 50, FALSE, 20
+END
+
+
+
+
+SPELL "Blood Drain"
+BEGIN
+	NAME "Blood Drain"
+	ICONNAME "Blood Drain"
+	DESCRIPTION "Gimme that juice!"
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke3"
+	DELAY 5
+	LIGHT COLOR 250, 250, 0 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Blood Drain", TP_BASIC, "EAB", "ManaDrain", 179, 100, 130, 154, 13, 0, TRUE, 100
+END
+
+
+
+
+SPELL "Vampiric Drain"
+BEGIN
+	NAME "Vampiric Drain"
+	ICONNAME "Vampiric Drain"
+	DESCRIPTION "Gimme that juice!"
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke3"
+	DELAY 5
+	LIGHT COLOR 255, 50, 0 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Vampiric Drain", TP_BASIC, "GBE", "ManaDrain", 338, 100, 266, 266, 25, 0, TRUE, 100
+END
+
+
+
+
+SPELL "Mana Drain"
+BEGIN
+	NAME "ManaDrain1"
+	ICONNAME "Mana Drain"
+	DESCRIPTION "Gimme that juice!"
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke3"
+	DELAY 5
+	LIGHT COLOR 0, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Mana Drain", TP_BASIC, "LEF", "ManaDrain", 135, 70, 60, 62, 14, 0, TRUE, 70
+
+	VARIANT "Priest Mana Drain", TP_BASIC, "MAF", "ManaDrain", 135, 100, 150, 200, 0, 0, TRUE, 100
+END
+
+
+
+
+SPELL "Essence Drain"
+BEGIN
+	NAME "Essence Drain"
+	ICONNAME "Essence Drain"
+	DESCRIPTION "Gimme that juice!"
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke3"
+	DELAY 5
+	LIGHT COLOR 255, 50, 150 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Essence Drain", TP_BASIC, "EH", "ManaDrain", 254, 100, 110, 115, 26, 0, TRUE, 100
+END
+
+
+
+
+SPELL "Warrior Born"
+BEGIN
+	NAME "Warrior Born"
+	ICONNAME "Warrior Might"
+	DESCRIPTION "Congratulations, it's a warrior."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 255, 140, 0 INT 160 MULT 20
+	FLAGS SF_NONE
+
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Warrior Born", TP_BASIC, "ALFI", "StrikeEffect", 135, 20, 0, 0, 14, 0, FALSE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\wborn.i3d"
+		FOLLOW 
+		PLAY "fist"
+		DURATION 4320 24
+		POS -15 -15 50
+		STATLINE Strn 3 Cons 3 Agil 3 Rflx 3 Mind 3 Luck 3 TIME 4320
+	  END
+END
+
+
+
+
+SPELL "Invisible"
+BEGIN
+	NAME "Invisible"
+	ICONNAME "Invisibility"
+	DESCRIPTION "Vanish into thin air!"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Invisibility", TP_BASIC, "IE", "Invisible", 108, 20, 0, 0, 15, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		FOLLOW
+	END
+
+	VARIANT "Priest Invisibility", TP_BASIC, "MAG", "Invisible", 92, 20, 0, 0, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		FOLLOW
+	END
+END
+
+
+
+
+// LEVEL 6 SPELLS
+
+
+
+
+SPELL "RockStorm"
+BEGIN
+	NAME "RockStorm"
+	ICONNAME "Rock Storm"
+	DESCRIPTION "Swirling rocks smash it up..."
+	DAMAGETYPE DT_BLUDGEON
+	ANIMATION "invoke1"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 190 MULT 30
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Rock Storm", TP_BASIC, "JID", "RockStorm", 167, 50, 175, 275, 16, 0, TRUE, 50
+
+	VARIANT "Priest Rock Storm", TP_BASIC, "MAH", "RockStorm", 70, 50, 88, 110, 0, 0, TRUE, 50
+END
+
+
+
+
+SPELL "Cataclysm"
+BEGIN
+	NAME "Cataclysm"
+	ICONNAME "Cataclysm"
+	DESCRIPTION ""
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 255, 255, 255 INT 140 MULT 20
+	FLAGS SF_NONE
+	VARIANT "Cataclysm", TP_BASIC, "DBJI", "BLAST", 222, 100, 175, 240, 16, 0, TRUE, 100
+	CONTROLDATA "Strike"
+	BEGIN
+		PLAY "espray"
+		DURATION 120 0
+		RANGEDAMAGE 500 35
+	END
+END
+
+
+
+
+SPELL "Armageddon"
+BEGIN
+	NAME "Armageddon"
+	ICONNAME "Armageddon"
+	DESCRIPTION "Repent! Repent! The Magic Rock is making itself known!!!"
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 255, 255, 255 INT 140 MULT 20
+	FLAGS SF_NONE
+	VARIANT "Armageddon", TP_BASIC, "FJI", "Cataclysm", 303, 20, 112, 130, 22, 0, TRUE, 20
+END
+
+
+
+
+SPELL "Troll Blood"
+BEGIN
+	NAME "Troll Blood"
+	ICONNAME "Troll Blood"
+	DESCRIPTION "The streets shall flow with the blood of the infidels."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 250, 50 INT 180 MULT 20
+	FLAGS SF_NONE
+	VARIANT "Troll Blood", TP_BASIC, "DB", "StrikeEffect", 333, 20, 0, 0, 17, 0, FALSE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\Trollblood.i3d"
+		FOLLOW 
+		PLAY "hip"
+		DURATION 2880 24
+		POS 0 0 50
+		STATLINE HealthPct 240 TIME 2880
+	END
+END
+
+
+
+// LEVEL 7 SPELLS
+
+
+
+
+SPELL "Napalm"
+BEGIN
+	NAME "Napalm"
+	ICONNAME "Napalm"
+	DESCRIPTION "A mystical blow torch."
+	DAMAGETYPE DT_BURN
+	ANIMATION "invoke3"
+	DELAY 5
+	LIGHT COLOR 255,180,80 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Napalm", TP_BASIC, "AID", "firecone", 192, 40, 300, 346, 19, 100, TRUE, 40
+
+	VARIANT "Priest Napalm", TP_BASIC, "MAI", "firecone", 72, 40, 89, 102, 0, 0, TRUE, 40
+END
+
+
+
+
+SPELL "Ice Storm"
+BEGIN
+	NAME "Ice Storm"
+	ICONNAME "Ice Storm"
+	DESCRIPTION "Blizzard Entertainment."
+	DAMAGETYPE DT_FREEZE
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 100,100,255 INT 255 MULT 20
+	FLAGS SF_NONE
+	
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Ice Storm", TP_BASIC, "CBD", "tornado", 256, 150, 105, 125, 19, 0, TRUE, 150
+
+	VARIANT "Priest Ice Storm", TP_BASIC, "MAJ", "tornado", 66, 20, 115, 135, 0, 0, TRUE, 150
+END
+
+
+
+
+SPELL "Ogre Strength"
+BEGIN
+	NAME "Ogre Strength"
+	ICONNAME "Ogre Strength"
+	DESCRIPTION "I'm an ogre, listen to me roar."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 250, 50 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Ogre Strength", TP_BASIC, "JLDK", "StrikeEffect", 192, 20, 0, 0, 20, 0, FALSE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\ogre.i3d"
+		FOLLOW
+		PLAY "ogre" 
+		DURATION 2880 24
+		POS 0 0 50
+		STATLINE Strn 6 TIME 2880
+	END
+END
+
+
+
+
+SPELL "Weapon Mastery"
+BEGIN
+	NAME "Weapon Mastery"
+	ICONNAME "Weapon Mastery"
+	DESCRIPTION "Ummm... how can you get to be better with a sword by casting a spell?  Lame."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 10
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+	
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Weapon Mastery", TP_BASIC, "LAEI", "StrikeEffect", 192, 20, 0, 0, 21, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\fmaster.i3d"
+		FOLLOW 
+		DURATION 2880 24
+		HITS 2
+		PLAY "fist"
+		ATTACHMULTIPLE "lhand" "rhand"
+		STATLINE SWORD 4 BLUDGEON 4 AXES 4 TIME 2880
+	END
+END
+
+
+
+
+SPELL "Nullifier"
+BEGIN
+	NAME "Nullifier"
+	ICONNAME "Nullifier"
+	DESCRIPTION "Nullimotherfreakinfier"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 250, 50 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Nullifier", TP_BASIC, "KE", "StrikeEffect", 192, 20, 0, 0, 21, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\Nullifier.i3d"
+		FOLLOW 
+		PLAY "feet"
+		DURATION 240 24
+		STATLINE DmgResMagical 50 TIME 240
+	END
+END
+
+
+
+
+// LEVEL 8 SPELLS
+
+
+
+
+SPELL "Ice Bolt"
+BEGIN
+	NAME "Ice Bolt"
+	ICONNAME "Ice Bolt"
+	DESCRIPTION "A blast from the past."
+	DAMAGETYPE DT_FREEZE
+	ANIMATION "invoke3"
+	DELAY 5
+	LIGHT COLOR 100,100,255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Ice Bolt", TP_BASIC, "CIB", "icebolt", 228, 40, 350, 392, 22, 70, TRUE, 40
+
+	VARIANT "Priest Ice Bolt", TP_BASIC, "MAK", "icebolt", 99, 40, 120, 142, 0, 70, TRUE, 40
+END
+
+
+
+
+
+SPELL "Quicksilver"
+BEGIN
+	ICONNAME "Quicksilver"
+	DESCRIPTION "1.. 2.. 3.. testing.."
+	DAMAGETYPE DT_NONE
+	NAME "Quicksilver" 
+	ANIMATION "invoke4"
+	DELAY 6
+	FLAGS SF_NONE
+	LIGHT COLOR 0,100,255 INT 255 MULT 20
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Quicksilver", TP_BASIC, "ICJ", "StrikeEffect", 228, 20, 0, 0, 8, 50, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\quicksilver.i3d"
+		FOLLOW 
+		PLAY "feet"
+		DURATION 2880 24
+		HITS 2
+		ATTACHMULTIPLE "lshin" "rshin"
+		STATLINE AGIL 6 RFLX 6 TIME 2880
+	END
+END
+
+
+
+
+// LEVEL 9 SPELLS
+
+
+
+
+SPELL "Crystalysm"
+BEGIN
+	NAME "Crystalism"
+	ICONNAME "Crystalism"
+	DESCRIPTION "Repent! Repent! The Magic Rock is making itself known!!!"
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 200, 200, 255 INT 180 MULT 10
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Crystalism", TP_BASIC, "FIGH", "Cataclysm", 338, 20, 140, 160, 25, 0, TRUE, 20
+END
+
+
+
+
+SPELL "Aura"
+BEGIN
+	NAME "Aura"
+	ICONNAME "Aura"
+	DESCRIPTION "For the true blue flamer."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Aura", TP_BASIC, "KBEF", "aura", 406, 20, 0, 0, 26, 0, FALSE, 20
+
+	VARIANT "Priest Aura", TP_BASIC, "KBEF", "aura", 90, 20, 0, 0, 26, 0, FALSE, 20
+END
+
+
+
+
+SPELL "Maelstrom"
+BEGIN
+	NAME "Maelstrom"
+	ICONNAME "Maelstrom"
+	DESCRIPTION "Prismatic Spray ala Mode"
+	DAMAGETYPE DT_MAGICAL
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 255, 160, 0 INT 255 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Maelstrom", TP_BASIC, "GH", "StrikeEffect", 750, 200, 450, 550, 27, 0, FALSE, 200
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\maelstrom.i3d"
+		DURATION 256 32
+		PLAYONCE "espray"
+		MULTIPLETARGETS
+		RADIUS 600
+		ONCASTER
+	END
+END
+
+
+
+
+SPELL "Revive"
+BEGIN
+	NAME "Restore Life"
+	ICONNAME "Restore Life"
+	DESCRIPTION "Bring yo sorry ass back to life, bey0tch..."
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 100, 0, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Restore Life", TP_BASIC, "BED", "StrikeEffect", 587, 70, 1018, 1018, 27, 0, FALSE, 70
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\Restorelife.i3d"
+		FOLLOW
+		DURATION 100 24
+		PLAYONCE "restore"
+		STATLINE Health 1018
+	END
+END
+
+
+
+
+SPELL "Immortal Might"
+BEGIN
+	ICONNAME "Immortal Might"
+	DESCRIPTION "When someone asks you whether you're a god, you say YES."
+	DAMAGETYPE DT_NONE
+	NAME "Immortal Might" 
+	ANIMATION "invoke4"
+	DELAY 6
+	FLAGS SF_NONE
+	LIGHT COLOR 255,180,80 INT 180 MULT 20
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Immortal Might", TP_BASIC, "EJLH", "StrikeEffect", 293, 20, 0, 0, 27, 40, FALSE, 20
+	CONTROLDATA "Strike" 
+	BEGIN
+		IMAGERY "magic\imight.i3d"
+		FOLLOW 
+		DURATION 4320 24
+		PLAY "fist"
+		HITS 2
+		ATTACHMULTIPLE "lhand" "rhand"
+		STATLINE Strn 5 Cons 5 Agil 5 Rflx 5 Mind 5 Luck 5 TIME 4320
+	END
+END
+
+
+
+
+SPELL "Fizzle"
+BEGIN
+	NAME "Fizzle"
+	ICONNAME ""
+	DESCRIPTION "Failed casting attempt!"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 255,50,190 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Fizzle", TP_BASIC, "PEP", "fizzle", 0, 20, 0, 0, 0, 0, FALSE, 20
+END
+
+
+
+
+SPELL "Jhaga Attack"
+BEGIN
+	DESCRIPTION "Do you see the fire in my eyes?"
+	DAMAGETYPE DT_NONE
+	NAME "Jhaga Attack" 
+	ANIMATION "invoke1"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 255,80,180 INT 255 MULT 20
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Jhaga Attack", TP_BASIC, "MJA", "JhagaAttack", 10, 20, 10, 30, 1, 50, FALSE, 20
+END
+
+
+
+
+SPELL "Dragon Attack"
+BEGIN
+	DESCRIPTION "Do you see the fire in my eyes?"
+	DAMAGETYPE DT_BURN
+	NAME "Dragon Attack" 
+	ANIMATION "cinv1"
+	DELAY 5
+	FLAGS SF_NONE
+	LIGHT COLOR 255, 130, 0 INT 160 MULT 20
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Sid Dragon Attack", TP_BASIC, "MDR", "DragonAttack", 0, 20, 26, 48, 0, 115, FALSE, 20
+
+	VARIANT "Green Dragon Attack", TP_BASIC, "MDR", "DragonAttack", 0, 20, 36, 52, 0, 115, FALSE, 20
+
+        VARIANT "White Dragon Attack", TP_BASIC, "MDR", "DragonAttack", 0, 20, 46, 64, 0, 115, FALSE, 20
+         
+        VARIANT "Blue Dragon Attack", TP_BASIC, "MDR", "DragonAttack", 0, 20, 56, 76, 0, 115, FALSE, 20
+
+        VARIANT "Red Dragon Attack", TP_BASIC, "MDR", "DragonAttack", 0, 20, 66, 84, 0, 115, FALSE, 20
+END
+
+
+
+
+SPELL "VortexM"
+BEGIN
+	NAME "VortexM"
+	ICONNAME "Teleport"
+	DESCRIPTION "Hood-dini has nothing on me!"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke2"
+	DELAY 5
+	LIGHT COLOR 255, 50, 150 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "VortexM", TP_BASIC, "BM", "Teleporter", 25, 20, 0, 0, 50, 0, TRUE, 20
+END
+
+
+
+
+SPELL "Shriek"
+BEGIN
+	NAME "Shriek"
+	ICONNAME ""
+	DESCRIPTION "The Wraiths Shriek"
+	DAMAGETYPE DT_MISC
+	ANIMATION "cinv1"
+	DELAY 5
+	LIGHT COLOR 255, 50, 150 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Shriek", TP_BASIC, "CM", "Shriek", 0, 50, 68, 88, 50, 0, TRUE, 50
+END
+
+
+
+
+SPELL "Puke"
+BEGIN
+	NAME "Puke"
+	ICONNAME ""
+	DESCRIPTION "The Zombie's Puke"
+	DAMAGETYPE DT_BLUDGEON
+	ANIMATION "Vomit"
+	DELAY 0
+	LIGHT COLOR 150, 255, 50 INT 20 MULT 10
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "Puke", TP_BASIC, "DM", "Puke", 0, 20, 48, 68, 50, 0, TRUE, 20
+END
+
+
+
+
+SPELL "SummonArakna"
+BEGIN
+	NAME "SummonArakna"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20	
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonArakna", TP_BASIC, "MBF", "Teleporter", 45, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+SPELL "SummonArtikulid"
+BEGIN
+	NAME "SummonArtikulid"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20	
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonArtikulid", TP_BASIC, "MCBF", "Teleporter", 25, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+SPELL "SummonRecluse"
+BEGIN
+	NAME "SummonRecluse"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20	
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonRecluse", TP_BASIC, "MBC", "Teleporter", 45, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+SPELL "SummonIssathi"
+BEGIN
+	NAME "SummonIssathi"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonIssathi", TP_BASIC, "MBD", "Teleporter", 68, 20, 2, 6, 0, 0, TRUE, 20
+		CONTROLDATA "Strike"
+		BEGIN
+			DURATION 24 0
+		END
+END
+
+
+// Summon
+// Bring some dude to life, just add replace 
+SPELL "SummonLurker"
+BEGIN
+	NAME "SummonLurker"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonLurker", TP_BASIC, "MBE", "Teleporter", 54, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+
+SPELL "SummonDark Revenant"
+BEGIN
+	NAME "SummonDark Revenant"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 10
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonDark Revenant", TP_BASIC, "MBJ", "Teleporter", 75, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+SPELL "SummonDark Ogrok"
+BEGIN
+	NAME "SummonDark Ogrok"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonDark Ogrok", TP_BASIC, "MBI", "Teleporter", 142, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+// Summon
+// Bring some dude to life, just add replace 
+SPELL "SummonDark Ogrok "
+BEGIN
+	NAME "SummonDark Ogrok "
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 10
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+	VARIANT "SummonDark Ogrok ", TP_BASIC, "MBH", "Teleporter", 142, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+SPELL "SummonOgrok"
+BEGIN
+	NAME "SummonOgrok"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonOgrok", TP_BASIC, "MBK", "Teleporter", 86, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+SPELL "SummonOgrok "
+BEGIN
+	NAME "SummonOgrok "
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonOgrok ", TP_BASIC, "MBL", "Teleporter", 86, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+
+SPELL "SummonSkeleton"
+BEGIN
+	NAME "SummonSkeleton"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonSkeleton", TP_BASIC, "FM", "Teleporter", 45, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+SPELL "SummonZombie"
+BEGIN
+	NAME "SummonZombie"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonZombie", TP_BASIC, "GM", "Teleporter", 45, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+
+
+SPELL "SummonWraith"
+BEGIN
+	NAME "SummonWraith"
+	ICONNAME ""
+	DESCRIPTION "Call in the cavilry"
+	DAMAGETYPE DT_NONE
+	ANIMATION "invoke4"
+	DELAY 5
+	LIGHT COLOR 50, 50, 255 INT 180 MULT 20
+	FLAGS SF_NONE
+
+//	NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, HEIGHT, FACING, LOOP_TIME
+
+	VARIANT "SummonWraith", TP_BASIC, "HM", "Teleporter", 45, 20, 2, 6, 0, 0, TRUE, 20
+	CONTROLDATA "Strike"
+	BEGIN
+		DURATION 24 0
+	END
+END
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+// Yhagoro spells...(special variety ;)
+// Throw chunks at player
+SPELL "YTelekinesis"
+BEGIN
+	NAME "YTelekinesis"
+	ICONNAME ""
+	DESCRIPTION "Throw chunks at player"
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke4"
+	DELAY 10
+	LIGHT COLOR 100,255,100 INT 0 MULT 20
+	FLAGS SF_NONE
+		VARIANT "YTelekinesis", TP_BASIC, "MBHD", "YTelekinesis", 10, 1, 126, 144, 0, 0, TRUE, 70
+	
+END
+
+SPELL "YFireball"
+BEGIN
+	DESCRIPTION "Grassy green fire from Yhagoro's Own Special Recipe."
+	DAMAGETYPE DT_BURN
+	NAME "YFireball"
+	ICONNAME "YFireBall"
+	ANIMATION "invoke3"
+	DELAY 6
+	FLAGS SF_NONE
+	LIGHT COLOR 180,255,80 INT 255 MULT 20
+	VARIANT "YFireball", TP_BASIC, "MBHE", "YFireBall", 84, 20, 89, 122, 0, 50, FALSE, 20
+END
+
+// the fire blast, thingie
+SPELL "YFireWind"
+BEGIN
+    NAME "YFireWind"
+	ICONNAME "Fire Wind"
+	DESCRIPTION "Kaboom! (Two)"
+	DAMAGETYPE DT_BURN
+	ANIMATION "invoke2"
+	DELAY 10
+	LIGHT COLOR 180,255,80 INT 255 MULT 20
+	FLAGS SF_NONE
+		VARIANT "YFireWind", TP_BASIC, "MBHF", "YFireWind", 102, 20, 118, 132, 0, 0, TRUE, 110
+END
+
+// Cataclysm2
+// Feel the Magic Rock's Fury!
+SPELL "YCataclysm"
+BEGIN
+	NAME "YCataclysm"
+	ICONNAME "Cataclysm"
+	DESCRIPTION "Repent! Repent! The Magic Rock is making itself known!!! Yhagoro awaits."
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke2"
+	DELAY 10
+	LIGHT COLOR 200, 255, 200 INT 180 MULT 20
+	FLAGS SF_NONE
+	VARIANT "YCataclysm", TP_BASIC, "MBHG", "YCataclysm", 140, 20, 142, 164, 16, 0, TRUE, 20
+END
+
+SPELL "YMaelstrom"
+BEGIN
+	NAME "YMaelstrom"
+	ICONNAME "YMaelstrom"
+	DESCRIPTION "Prismatic Spray ala Mode"
+	DAMAGETYPE DT_MAGICAL
+	ANIMATION "invoke2"
+	DELAY 10
+	LIGHT COLOR 175, 255, 80 INT 190 MULT 50
+	FLAGS SF_NONE
+	VARIANT "YMaelstrom", TP_BASIC, "MBHH", "StrikeEffect", 214, 20, 450, 550, 27, 0, FALSE, 250
+	CONTROLDATA "Strike"
+	BEGIN
+		IMAGERY "magic\ymaelstrom.i3d"
+		DURATION 256 32
+		PLAYONCE "espray"
+		MULTIPLETARGETS
+		RADIUS 600
+		ONCASTER
+	END
+END
+
+SPELL "YMana Drain"
+BEGIN
+	NAME "YManaDrain"
+	ICONNAME "YMana Drain"
+	DESCRIPTION "Gimme that juice!"
+	DAMAGETYPE DT_MISC
+	ANIMATION "invoke2"
+	DELAY 10
+	LIGHT COLOR 150, 255, 50 INT 180 MULT 20
+	FLAGS SF_NONE
+		VARIANT "YManaDrain", TP_BASIC, "MBHI", "YManaDrain", 80, 20, 160, 260, 14, 0, TRUE, 80
+END

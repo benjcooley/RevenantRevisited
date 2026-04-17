@@ -1,0 +1,242 @@
+                              Revenant Revision File
+                              ----------------------
+
+Command Line Options
+--------------------
+
+NOQUICKLOAD - Prevents imagery headers from being loaded from IMAGERY.DAT file.
+
+	By default, the game will load all its tile information from a file called 
+	IMAGERY.DAT in the game directory.  This stores the general information about
+	all the tiles, characters, effects, etc. in the game map.  If NOQUICKLOAD is
+	specified, the game will search through the imagery sub directories, and 
+	query each file for its basic information before loading.  This is somewhat
+	slower, but safer when the game graphics are constantly changing and new imagery
+	is being created.
+
+NOPRELOADSECTORS - Causes map sector caching to be disabled.
+
+	By default, when the character enters a game map, the game will load all map
+	sectors (small screen sized chunks of the game map) surrounding the character
+	(including all the tiles and other graphics within those sectors) up before
+	the game starts.  Also, when the character reaches the edge of the cached 
+	sector area, the game will pause for a moment, and reload a new set of sectors
+	surrounding the character at the new position.
+
+	This caching prevents the game from reading from the HD for imagery while
+	the character is moving, but it does cause the game to pause when it reloads
+	a new cache.  Without PRELOADSECTORS, the game constantly loads a small 
+	chunk of graphics as the character moves, causing the character to slightly
+	pause when he moves one screenlength.  On computers with fast HD's, and 
+	lots of memory, you may want to turn PRELOADSECTORS off.
+
+	Note: in current rev, game will still pause when 3D based object come within
+	range of character.  This is being looked into.
+
+PRELOADSIZE=x - Sets the radius of the sector cache from the characters position.
+
+	This is the number of sectors in each direction that the system will attempt
+	to cache when the character moves to a new location (see above).  A value
+	of 1 will cause the sytem to cache 4 sectors (1 sector away from char in 
+	each direction).  A value of 3 will cache a 6x6 block (or 36 sectors). Obviously, 
+	the greater the number, the longer the cache will take to load, and the more 
+	memory it will use.
+
+CHUNKCACHESIZE=x - Sets the size of the tile chunk cache.
+
+	Tiles in the game are stored as compressed 32x32 chunks.  The game stores both
+	16 bit zbuffer and 16 bit graphics for each chunk as compressed 8 bit palettized
+	bitmaps using a modified public domain LH algorithm.  In order to draw to the
+	screen, the 32x32 chunks must be decompressed and then blitted to the screen. 
+	The system stores a chache of decompressed chunks so it doesn't have to
+	constantly decompress the same chunk over and over again.  The size of this
+	cache affects scroll speed to a large degree.  Sizes of 4MB-12MB are reasonable.
+	Smaller caches greatly affect scroll speed, while caches larger than 12MB don't
+	seem to make things go too much faster.
+
+DEBUG - Cinematix debug mode
+
+	Sets various system components to run in debug mode so that the programmers
+	can more easily spot problems.  This flag is not useful for end users.
+
+FORCE15BIT - Forces game to run in 15 bits per pixel mode
+FORCE16BIT - Forces game to run in 16 bits per pixel mode
+
+	Revenant runs in DirectX 16 bits per pixel display modes.  There are two 
+	common pixel layouts for these modes: 5 red 5 green 5 blue (15 bit mode)
+	or 5 red 6 green 5 blue (16 bit mode).  The game automatically detects
+	the proper pixel format by querying the pixel format through DirectX.  
+	Several video cards, however, do not correctly report the pixel format
+	for their video modes, so these command line options allow the user to
+	force the game to run in a particular mode.  If you notice that the many
+	of the colors in the game are bright cyan, or the red and green colors
+	are off, try using one of these options to force the video mode to either
+	15 or 16 bit mode.
+
+EDITOR - Begin game in the integrated game editor
+
+	This option causes the game to begin in the integrated game editor.  The
+	game editor is where all map editing, game settings, etc. are stored.
+	The game editor will not allow you to edit save game information, and
+	edited game maps will not work with standard save games (cheater!).  You
+	may however experiment with your own maps and levels using the functions
+	of the editor.  Editor documentation will be available on the Cinematix
+	web site at www.cinematix.com.
+
+WINDOWED - Runs the game in a window
+
+	This causes the game to appear in a standard Microsoft Windows window that
+	can be moved and scaled.  Pressing Alt-Spacebar in the game will also
+	cause the game to be displayed in a window, or back to full screen.
+
+BORDERLESS - Causes the game window to be borderless
+
+	When in windowed mode, the game will not have any borders.
+
+NOWIDE - Prevents the game from using wider than requested video buffers
+
+	On the Permidia I card, no video surfaces can be less than 640 pixel wide.
+	Revenant uses several video surfaces to support background buffers, 
+	refesh buffers, etc.  If each of these surfaces are forced to be 640 pixel
+	wide instead of their normal width, the game may run out of video memory on
+	4MB cards.  Setting this option causes the game to allocate these surfaces 
+	in system memory instead of memory on the video card.
+
+FULLSCREEN - Causes game to start in fullscreen mode
+
+	The game will begin without any border or interface stuff obscuring the 
+	main screen (fullscreen mode).
+
+MONITOR=x - Causes the game to use a particular monitor in a multimonitor system
+
+	On a multimonitor system, the game can be set to run on a particular monitor
+	by using the number of the monitor.
+
+GAMESPEED=x - Causes various game options to be enabled/disabled (values from 1-5)
+
+	The 3D and 2D effects in revenant are scalable to different speeds of computers.
+	If you are using a higher end computer, you will want all effects enabled,
+	while if you are using an older computer, you may want to disable many of
+	the more processor intensive effects to improve game speed.  The GAMESPEED
+	option allows you to select the speed of your computer from 1-5 to
+	turn off or on groups of game options that might cause the game to run too
+	slowly.  A speed of 1 should be used for older machines such as non MMX
+	Pentiumns below 200 Mhz, 2 or 3 should be used for MMX pentiums below 233 Mhz,
+	and 3-4 should be used for Pentium II's below 266 Mhz.  5 should be used
+	for 300Mhz pentium II's or above.  
+	
+	Note that the speed of your graphics accellerator will have a large effect on
+	game speed, allowing slower systems to use higher GAMESPEED= values, while 
+	faster systems with slower video cards may need to uses lower GAMESPEED= values.
+
+DRIVER=drivername - Selects DirectX device
+DEVICE=drivername - Selects DirectX device
+
+	This option tells the game to use a specific DirectX device.  The game takes
+	the keyword after the DEVICE= or DRIVER= option (i.e. DEVICE=BLASTER) and 
+	checks if any DirectX device name or device description has that keyword in
+	it.  If it does, it uses that device instead of the default device.  Typical
+	keywords might be "DEVICE=3DFXV2" for the standard 3Dfx Voodoo II drivers, 
+	or "DRIVER=viper" for the viper card.
+
+	Note that this option should NOT be used in multi monitor systems (see
+	MONITOR= option), and is only useful typically when a user has a 3D add
+	on card such as the VooDoo based cards, or PowerVR cards.
+
+	DEVICE= and DRIVER= are identical.
+
+IGNORE3D - Runs games without any real time 3D
+
+	Allows the game to be run on systems which do not have Direct3D.  Used by
+	programmers to get the game to run on NT 4.0 without the service packs.
+
+OLDDIRECT3D - Causes game to use only DirectX 3.0 functions
+
+	Originally intended for NT 4.0 before we found the secret DirectX 5.0 
+	NT drivers.  This option does not work correctly, and should not be used.
+
+SOFTWARE3D - Causes the game to select software rendering
+
+	This will cause the game to use a software renderer even if the user has a
+	hardware accelerator in his machine.  Useful if the hardware does not
+	support all of the features the game needs to run correctly.
+
+RAMPMODE - Causes the software renderer to use MONO RAMP mode
+
+RGBMODE - Causes the software renderer to use RGB mode (slower)
+
+NODRAWPRIM - Causes the game to use execute buffers instead of Draw Primitive
+
+	This option is no longer valid.  Do not use.
+
+NOCACHEEXBUFS - Causes the execute buffer caching system to be disabled
+
+	This option is no longer valid.  Do not use.
+
+NOVIDZLOCK - Prevents the system from trying to simultaneously lock screen/zbuffers
+
+	Voodoo cards do not allow both Z and Video buffers to be locked simultaneously.
+	This option prevents this from happening, but slightly slows down the system.
+
+	THIS OPTION IS ALSO ENABLED BY THE 'VOODOO' COMMAND LINE OPTION, SO
+	DO NOT USE IT.
+
+CLEARZ - Creates a separately accessible Z buffer which can be read by game.
+
+	Voodoo cards do not allow you to read the values in the Z buffer.  This 
+	option creates a separate clear z buffer which can be read, that is copied
+	(when necessary) to the real z buffer on the video card.  This 'slightly'
+	slows the game down (but the speed of the Voodoo more than makes up for
+	this penalty).
+
+	THIS OPTION IS ALSO ENABLED BY THE 'VOODOO' COMMAND LINE OPTION, SO
+	DO NOT USE IT.
+
+NOBLITZBUF - Prevents the game from attempting to HW blit to ZBuffer
+
+	Voodoo cards pretty much don't allow you to do ANYTHING with the zbuffer,
+	especially not hardware blitting.  This option prevents the game from
+	attempting a hardware blit to the zbuffer.
+
+VOODOO - Enables a group of options necessary to allow the game to use VOODOO cards
+
+	This option enables NOVIDZLOCK, CLEARZ, and NOBLITZBUF.  Together these options
+	allow support for VOODOO based cards.  Though each of these options comes
+	with a minor performance hit, the increased rendering speed of the voodoo 
+	cards more than makes up for these minor work arounds.
+
+	In the future (DirectX 6), the game will be able to autodetect VOODOO based
+	accelerators and enable these options automagically.
+
+FASTLOCK=ON/OFF - Turns fastlocking "ON" or "OFF"
+
+	Revenant uses a widely frowned upon technique for surface locking where a 
+	surface is locked and unlocked immediately, then the pointer use used after
+	the unlock.  This seems to work quite nicely for debugging, and also allows
+	the system to have multithreaded access to system surfaces (allowing the
+	update thread to work efficiently).  If the system seems to lock up for
+	no explainable reason, try this flag.  This has never happened to us, but
+	we've put this in just in case.
+
+VIDEOCAP=bufsize,fps - Enables video capture
+
+	Initializes a video capture buffer to allow game to capture gameplay to
+	a sequence of BMP files.  'bufsize' is the size in megabytes of the video
+	capture buffer (32 mb at 24 fps is about 4 seconds of video).  'fps' is the
+	desired frames per second.  If this is left out, the video capture will
+	default to 24 frames per second.  Video capture is started by pressing
+	the Ctrl-Shift-V buttons in sequence, and stopped the same way.  The video
+	capture system stores video as sequential .BMP files with the names
+	'video000.bmp' where 000 is the frame number.  Each bmp file is about 900k,
+	and they tend to soak up quite a bit of disk space when capture sessions
+	go on too long.
+
+NOMMX
+
+	Tells system to not use MMX accellerated instructions and routines.  Lighting
+	system is slower, but has somewhat better color when this is used.
+
+VIOLENCELEVEL=x
+
+	Indicates the violence level of the game from 1-5, where 1 is no violence or
+	blood whatsoever, while 5 is a massive gorefest.

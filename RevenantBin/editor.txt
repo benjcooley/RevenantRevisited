@@ -1,0 +1,50 @@
+				  Revenant
+			       EDITOR.TXT File
+		         (C) 1999 Eidos Interactive
+
+To start the Revenant Editor follow the instructions listed below:
+
+1) Run the launcher from your game directory.
+
+2) Select the "Run Revenant" option from the launcher window.
+
+3) Click on the "advanced options" button.
+
+4) Mark the checkbox "start in editor".
+
+5) Click on the "Start Game" button. (Note: if you get an error message, run in primary display mode)
+
+6) The editor window should open up after the game loads. You cannot modify the main game modules so 
+you will need to create a new one.
+
+7) In the editor, [type: createmodule "nameofmodule" single] and press enter. If you want to make a multiplayer module
+you must [type: createmodule "nameofmodule" multi] and press enter.
+
+8) You will then need to set your module to be the active module. In the editor [type: setcurmodule "nameofmodule"]
+
+9) Now you need to set up the level you want to build. [Type: level 100] and press enter. 100 is the number of the level we 
+are using in this example. You can use any level # you want.
+
+10) Go to a good starting point in the level. [Type: map 10000 10000 16] and press enter. 
+
+11) You will need bright lighting while building levels so [type: amb 50] to turn the ambient lighting value up. 
+You can adjust these values later when you are done building.
+
+12) To build maps you select objects from the list on the lower right hand side of the editor window. Left click on the
+object you want to place and left click again in the map window to place it. When you are done with placing the tile, 
+right click to deselect it. For more information on building maps, check out http://revenantqs.telefragged.com/index.shtml.
+
+12) When you want to save your work, [type: save map] and the map will be saved to your map directory in your module folder.
+
+13) You are now ready to start building levels with the Revenant editor. For more detailed information about the editor,
+building maps, and modifying game files, please go to http://revenantqs.telefragged.com/index.shtml
+
+
+Editor Tips:
+
+1) Save your work often. There's nothing worse than losing hours of map work because you forgot to save your progress.
+
+2) NEVER build above Z-height 1000. Walkmap flags will stop functioning above this height.
+
+3) You cannot build walkable areas directly on top of other walkable areas. 
+

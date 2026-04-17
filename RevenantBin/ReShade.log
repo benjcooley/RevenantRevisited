@@ -1,0 +1,254 @@
+22:44:02:098 [05976] | INFO  | Initializing crosire's ReShade version '6.0.1.1824' (32-bit) loaded from "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\DXGI.DLL" into "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\Revenant.exe" (0xd25db95a) ...
+22:44:02:099 [05976] | INFO  | Registering hooks for "user32.dll" ...
+22:44:02:099 [05976] | INFO  | > Libraries loaded.
+22:44:02:099 [05976] | INFO  | > Found 14 match(es). Installing ...
+22:44:02:119 [05976] | INFO  | Registering hooks for "C:\Windows\system32\dinput.dll" ...
+22:44:02:119 [05976] | INFO  | > Libraries loaded.
+22:44:02:119 [05976] | INFO  | > Found 3 match(es). Installing ...
+22:44:02:140 [05976] | INFO  | Registering hooks for "ws2_32.dll" ...
+22:44:02:140 [05976] | INFO  | > Delayed.
+22:44:02:140 [05976] | INFO  | Registering hooks for "C:\Windows\system32\d2d1.dll" ...
+22:44:02:141 [05976] | INFO  | > Delayed.
+22:44:02:141 [05976] | INFO  | Registering hooks for "C:\Windows\system32\d3d9.dll" ...
+22:44:02:141 [05976] | INFO  | > Delayed.
+22:44:02:141 [05976] | INFO  | Registering hooks for "C:\Windows\system32\d3d10.dll" ...
+22:44:02:141 [05976] | INFO  | > Delayed.
+22:44:02:141 [05976] | INFO  | Registering hooks for "C:\Windows\system32\d3d10_1.dll" ...
+22:44:02:141 [05976] | INFO  | > Delayed.
+22:44:02:141 [05976] | INFO  | Registering hooks for "C:\Windows\system32\d3d11.dll" ...
+22:44:02:141 [05976] | INFO  | > Delayed.
+22:44:02:141 [05976] | INFO  | Registering hooks for "C:\Windows\system32\d3d12.dll" ...
+22:44:02:142 [05976] | INFO  | > Delayed.
+22:44:02:142 [05976] | INFO  | Registering hooks for "C:\Windows\system32\dxgi.dll" ...
+22:44:02:142 [05976] | INFO  | > Delayed until first call to an exported function.
+22:44:02:142 [05976] | INFO  | Registering hooks for "vrclient.dll" ...
+22:44:02:142 [05976] | INFO  | > Delayed.
+22:44:02:142 [05976] | INFO  | Initialized.
+22:44:02:142 [05976] | INFO  | Installing delayed hooks for "C:\Windows\system32\d3d11.dll" (Just loaded via LoadLibrary("C:\Windows\SYSTEM32\D3D11.DLL")) ...
+22:44:02:142 [05976] | INFO  | > Found 3 match(es). Installing ...
+22:44:02:164 [05976] | INFO  | Redirecting RegisterClassExA(lpWndClassEx = 0019ED60 { "DGD3D11ROOT", style = 0 }) ...
+22:44:02:164 [05976] | INFO  | Redirecting CreateDXGIFactory1(riid = {770AAE78-F26F-4DBA-A829-253C83D1B387}, ppFactory = 00972D20) ...
+22:44:02:164 [05976] | INFO  | Installing export hooks for "C:\Windows\system32\dxgi.dll" ...
+22:44:02:165 [05976] | INFO  | > Found 5 match(es). Installing ...
+22:44:02:192 [05976] | INFO  | Redirecting CreateDXGIFactory1(riid = {770AAE78-F26F-4DBA-A829-253C83D1B387}, ppFactory = 0019ED90) ...
+22:44:02:192 [05976] | INFO  | Redirecting RegisterClassExA(lpWndClassEx = 0019ED90 { "DGDRIVERROOT", style = 0 }) ...
+22:44:02:193 [05976] | INFO  | Redirecting RegisterClassExA(lpWndClassEx = 0019ED60 { "DGD3D11ROOT", style = 0 }) ...
+22:44:02:193 [05976] | INFO  | Redirecting CreateDXGIFactory1(riid = {770AAE78-F26F-4DBA-A829-253C83D1B387}, ppFactory = 00972960) ...
+22:44:02:193 [05976] | INFO  | Redirecting CreateDXGIFactory1(riid = {770AAE78-F26F-4DBA-A829-253C83D1B387}, ppFactory = 0019ED90) ...
+22:44:02:193 [05976] | INFO  | Redirecting D3D11CreateDevice(pAdapter = 009F5868, DriverType = 0, Software = 00000000, Flags = 0, pFeatureLevels = 72EB0A38, FeatureLevels = 3, SDKVersion = 7, ppDevice = 00972BA0, pFeatureLevel = 00972BB0, ppImmediateContext = 00972BA4) ...
+22:44:02:193 [05976] | INFO  | > Passing on to D3D11CreateDeviceAndSwapChain:
+22:44:02:193 [05976] | INFO  | Redirecting D3D11CreateDeviceAndSwapChain(pAdapter = 009F5868, DriverType = 0, Software = 00000000, Flags = 0, pFeatureLevels = 72EB0A38, FeatureLevels = 3, SDKVersion = 7, pSwapChainDesc = 00000000, ppSwapChain = 00000000, ppDevice = 00972BA0, pFeatureLevel = 00972BB0, ppImmediateContext = 00972BA4) ...
+22:44:02:268 [05976] | INFO  | Using feature level 0xb000.
+22:44:02:268 [05976] | INFO  | Searching for add-ons (*.addon, *.addon32) in "C:\Program Files (x86)\GOG Galaxy\Games\Revenant" ...
+22:44:02:322 [05976] | WARN  | Reference count for ID3D11Device0 object 05953DE4 (057EEE1C) is inconsistent (54).
+22:44:02:331 [05976] | INFO  | Redirecting RegisterClassExA(lpWndClassEx = 0019ED90 { "DGDRIVERROOT", style = 0 }) ...
+22:44:02:332 [05976] | INFO  | Redirecting RegisterClassExA(lpWndClassEx = 0019ED90 { "DGDRIVERROOT", style = 0 }) ...
+22:44:02:332 [05976] | INFO  | Redirecting RegisterClassExA(lpWndClassEx = 0019ED60 { "DGD3D11ROOT", style = 0 }) ...
+22:44:02:332 [05976] | INFO  | Redirecting CreateDXGIFactory1(riid = {770AAE78-F26F-4DBA-A829-253C83D1B387}, ppFactory = 059547C0) ...
+22:44:02:332 [05976] | INFO  | Redirecting CreateDXGIFactory1(riid = {770AAE78-F26F-4DBA-A829-253C83D1B387}, ppFactory = 0019ED90) ...
+22:44:02:332 [05976] | INFO  | Redirecting D3D11CreateDevice(pAdapter = 05194620, DriverType = 0, Software = 00000000, Flags = 0, pFeatureLevels = 72EB0A38, FeatureLevels = 3, SDKVersion = 7, ppDevice = 05954A00, pFeatureLevel = 05954A10, ppImmediateContext = 05954A04) ...
+22:44:02:333 [05976] | INFO  | > Passing on to D3D11CreateDeviceAndSwapChain:
+22:44:02:333 [05976] | INFO  | Redirecting D3D11CreateDeviceAndSwapChain(pAdapter = 05194620, DriverType = 0, Software = 00000000, Flags = 0, pFeatureLevels = 72EB0A38, FeatureLevels = 3, SDKVersion = 7, pSwapChainDesc = 00000000, ppSwapChain = 00000000, ppDevice = 05954A00, pFeatureLevel = 05954A10, ppImmediateContext = 05954A04) ...
+22:44:02:384 [05976] | INFO  | Using feature level 0xb000.
+22:44:02:384 [05976] | INFO  | Searching for add-ons (*.addon, *.addon32) in "C:\Program Files (x86)\GOG Galaxy\Games\Revenant" ...
+22:44:02:444 [05976] | INFO  | Redirecting RegisterClassA(lpWndClass = 0019F6C8 { "REVENANTClass", style = 0x3 }) ...
+22:44:02:444 [05976] | INFO  | > Adding 'CS_OWNDC' window class style flag to "REVENANTClass".
+22:44:02:458 [05976] | INFO  | Redirecting IDXGIFactory::CreateSwapChain(this = 04F97C80, pDevice = 009D067C, pDesc = 0019EFD8, ppSwapChain = 0AD84B74) ...
+22:44:02:459 [05976] | INFO  | > Dumping swap chain description:
+22:44:02:459 [05976] | INFO  |   +-----------------------------------------+-----------------------------------------+
+22:44:02:459 [05976] | INFO  |   | Parameter                               | Value                                   |
+22:44:02:459 [05976] | INFO  |   +-----------------------------------------+-----------------------------------------+
+22:44:02:459 [05976] | INFO  |   | Width                                   | 1                                       |
+22:44:02:459 [05976] | INFO  |   | Height                                  | 1                                       |
+22:44:02:459 [05976] | INFO  |   | RefreshRate                             | 0                   1                   |
+22:44:02:459 [05976] | INFO  |   | Format                                  | DXGI_FORMAT_R8G8B8A8_UNORM              |
+22:44:02:459 [05976] | INFO  |   | ScanlineOrdering                        | 0                                       |
+22:44:02:459 [05976] | INFO  |   | Scaling                                 | 0                                       |
+22:44:02:459 [05976] | INFO  |   | SampleCount                             | 1                                       |
+22:44:02:459 [05976] | INFO  |   | SampleQuality                           | 0                                       |
+22:44:02:459 [05976] | INFO  |   | BufferUsage                             | 0x60                                    |
+22:44:02:459 [05976] | INFO  |   | BufferCount                             | 2                                       |
+22:44:02:459 [05976] | INFO  |   | OutputWindow                            | 0006019C                                |
+22:44:02:459 [05976] | INFO  |   | Windowed                                | TRUE                                    |
+22:44:02:459 [05976] | INFO  |   | SwapEffect                              | 0                                       |
+22:44:02:459 [05976] | INFO  |   | Flags                                   | 0x2                                     |
+22:44:02:459 [05976] | INFO  |   +-----------------------------------------+-----------------------------------------+
+22:44:02:460 [05976] | INFO  | Running on NVIDIA GeForce RTX 4070 Driver 551.23.
+22:44:02:462 [05976] | INFO  | Installing delayed hooks for "ws2_32.dll" (Just loaded via LoadLibrary("C:\Windows\System32\WS2_32.dll")) ...
+22:44:02:462 [05976] | INFO  | > Found 8 match(es). Installing ...
+22:44:03:020 [05976] | INFO  | Redirecting IDXGISwapChain::SetFullscreenState(this = 0AD135C0, Fullscreen = FALSE, pTarget = 00000000) ...
+22:44:03:021 [05976] | INFO  | Redirecting IDXGIFactory::CreateSwapChain(this = 04F97C80, pDevice = 009D067C, pDesc = 0019F000, ppSwapChain = 0AD84B74) ...
+22:44:03:021 [05976] | INFO  | > Dumping swap chain description:
+22:44:03:021 [05976] | INFO  |   +-----------------------------------------+-----------------------------------------+
+22:44:03:021 [05976] | INFO  |   | Parameter                               | Value                                   |
+22:44:03:021 [05976] | INFO  |   +-----------------------------------------+-----------------------------------------+
+22:44:03:021 [05976] | INFO  |   | Width                                   | 640                                     |
+22:44:03:021 [05976] | INFO  |   | Height                                  | 480                                     |
+22:44:03:021 [05976] | INFO  |   | RefreshRate                             | 60                  1                   |
+22:44:03:021 [05976] | INFO  |   | Format                                  | DXGI_FORMAT_R8G8B8A8_UNORM              |
+22:44:03:021 [05976] | INFO  |   | ScanlineOrdering                        | 0                                       |
+22:44:03:022 [05976] | INFO  |   | Scaling                                 | 0                                       |
+22:44:03:022 [05976] | INFO  |   | SampleCount                             | 1                                       |
+22:44:03:022 [05976] | INFO  |   | SampleQuality                           | 0                                       |
+22:44:03:022 [05976] | INFO  |   | BufferUsage                             | 0x60                                    |
+22:44:03:022 [05976] | INFO  |   | BufferCount                             | 2                                       |
+22:44:03:022 [05976] | INFO  |   | OutputWindow                            | 0006019C                                |
+22:44:03:022 [05976] | INFO  |   | Windowed                                | TRUE                                    |
+22:44:03:022 [05976] | INFO  |   | SwapEffect                              | 0                                       |
+22:44:03:022 [05976] | INFO  |   | Flags                                   | 0x2                                     |
+22:44:03:022 [05976] | INFO  |   +-----------------------------------------+-----------------------------------------+
+22:44:03:023 [05976] | INFO  | Running on NVIDIA GeForce RTX 4070 Driver 551.23.
+22:44:03:036 [05976] | INFO  | Recreated runtime environment on runtime 0ADB32C8 ("C:\Program Files (x86)\GOG Galaxy\Games\Revenant\ReShade.ini").
+22:44:03:036 [05976] | INFO  | Redirecting IDXGISwapChain::SetFullscreenState(this = 0ADB1748, Fullscreen = FALSE, pTarget = 00000000) ...
+22:44:03:036 [05976] | INFO  | Redirecting IDXGISwapChain::SetFullscreenState(this = 0ADB1748, Fullscreen = TRUE, pTarget = 0AE32980) ...
+22:44:03:476 [24428] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\ASCII.fx" in 0.001 s.
+22:44:03:478 [24428] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Border.fx" in 0 s.
+22:44:03:479 [24428] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Cartoon.fx" in 0 s.
+22:44:03:480 [24428] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\CAS.fx" in 0.001 s.
+22:44:03:481 [12572] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\ChromaticAberration.fx" in 0.004 s.
+22:44:03:482 [12572] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\ColorMatrix.fx" in 0 s.
+22:44:03:540 [12572] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\CRT-Royale\crt-royale.fx" in 0.057 s.
+22:44:03:542 [08820] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\CRT.fx" in 0.001 s.
+22:44:03:543 [08820] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Curves.fx" in 0.001 s.
+22:44:03:544 [08820] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Daltonize.fx" in 0.001 s.
+22:44:03:546 [25908] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Deband.fx" in 0.001 s.
+22:44:03:547 [25908] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\DisplayDepth.fx" in 0.001 s.
+22:44:03:549 [25908] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\DPX.fx" in 0.001 s.
+22:44:03:550 [24808] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\FakeHDR.fx" in 0.001 s.
+22:44:03:551 [24808] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\FilmGrain.fx" in 0.001 s.
+22:44:03:553 [24808] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\FXAA.fx" in 0.002 s.
+22:44:03:554 [25916] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Layer.fx" in 0 s.
+22:44:03:555 [25916] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Levels.fx" in 0 s.
+22:44:03:556 [25916] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\LiftGammaGain.fx" in 0 s.
+22:44:03:558 [04308] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\LumaSharpen.fx" in 0.001 s.
+22:44:03:559 [04308] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\LUT.fx" in 0 s.
+22:44:03:560 [04308] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Monochrome.fx" in 0.001 s.
+22:44:03:562 [18592] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Nostalgia.fx" in 0.002 s.
+22:44:03:564 [18592] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\3DFX.fx" in 0.001 s.
+22:44:03:566 [18592] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\BasicCRT.fx" in 0.001 s.
+22:44:03:567 [09148] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Cathode.fx" in 0.001 s.
+22:44:03:569 [09148] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Chromaticity.fx" in 0.001 s.
+22:44:03:570 [09148] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\ChromaticitySimplified.fx" in 0.001 s.
+22:44:03:572 [16212] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\cmyk_halftone_dot.fx" in 0.001 s.
+22:44:03:573 [16212] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\ColorMAME.fx" in 0.001 s.
+22:44:03:575 [16212] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CoolRetroTerminal.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CoolRetroTerminal.fx(167, 20): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CoolRetroTerminal.fx(168, 21): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CoolRetroTerminal.fx(174, 25): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CoolRetroTerminal.fx(194, 24): warning X3206: implicit truncation of vector type
+
+22:44:03:576 [09672] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRT-Frutbunn.fx" in 0.001 s.
+22:44:03:577 [09672] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\crt-nes-mini.fx" in 0 s.
+22:44:03:580 [09672] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRT-NewPixie.fx" in 0.002 s.
+22:44:03:581 [09672] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRT-Yee64.fx" in 0.001 s.
+22:44:03:583 [26288] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRT-Yeetron.fx" in 0.001 s.
+22:44:03:584 [26288] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTAperture.fx" in 0.001 s.
+22:44:03:585 [26288] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTCaligari.fx" in 0.001 s.
+22:44:03:587 [08920] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTcgwg.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTcgwg.fx(108, 14): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTcgwg.fx(109, 15): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTcgwg.fx(129, 16): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTcgwg.fx(129, 36): warning X3206: implicit truncation of vector type
+
+22:44:03:589 [08920] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTCX.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTCX.fx(157, 33): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTCX.fx(157, 19): warning X3206: implicit truncation of vector type
+
+22:44:03:590 [08920] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTEasymode.fx" in 0.001 s.
+22:44:03:591 [10708] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTFakeLottes.fx" in 0.001 s.
+22:44:03:593 [10708] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTGeom.fx" in 0.001 s.
+22:44:03:595 [10708] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTHyllian.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTHyllian.fx(240, 19): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTHyllian.fx(241, 19): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTHyllian.fx(242, 19): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTHyllian.fx(243, 19): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTHyllian.fx(244, 19): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTHyllian.fx(245, 19): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTHyllian.fx(246, 19): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTHyllian.fx(247, 19): warning X3206: implicit truncation of vector type
+
+22:44:03:597 [14308] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTKurg.fx" in 0.001 s.
+22:44:03:598 [14308] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTLottes.fx" in 0.001 s.
+22:44:03:600 [14308] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTLottes2.fx" in 0.001 s.
+22:44:03:602 [06412] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTPi.fx" in 0.001 s.
+22:44:03:603 [06412] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTPotatoCool.fx" in 0 s.
+22:44:03:604 [06412] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTPotatoWarm.fx" in 0 s.
+22:44:03:605 [07532] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTRefresh.fx" in 0 s.
+22:44:03:607 [07532] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\CRTSim.fx" in 0.002 s.
+22:44:03:608 [07532] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Deconverge.fx" in 0 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Deconverge.fx(80, 17): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Deconverge.fx(81, 17): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Deconverge.fx(88, 17): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Deconverge.fx(89, 17): warning X3206: implicit truncation of vector type
+
+22:44:03:610 [09084] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Defocus.fx" in 0.001 s.
+22:44:03:611 [09084] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\DOSGame.fx" in 0.001 s.
+22:44:03:612 [09084] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\EGAfilter.fx" in 0.001 s.
+22:44:03:616 [22192] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\LeiFX_OA.fx" in 0.002 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\LeiFX_OA.fx(121, 14): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\LeiFX_OA.fx(272, 16): warning X3206: implicit truncation of vector type
+
+22:44:03:617 [22192] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\MattiasCRT.fx" in 0.001 s.
+22:44:03:618 [22192] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\MCAmber.fx" in 0 s.
+22:44:03:621 [15576] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\GTU.fx" in 0.011 s.
+22:44:03:623 [15576] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\ImageAdjustment.fx" in 0.001 s.
+22:44:03:624 [15576] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\JPEG.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\JPEG.fx(79, 29): warning X3206: implicit truncation of vector type
+
+22:44:03:625 [15012] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\MCGreen.fx" in 0 s.
+22:44:03:626 [15012] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\MCOrange.fx" in 0 s.
+22:44:03:629 [15012] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\mdapt.fx" in 0.003 s.
+22:44:03:631 [15012] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\MetaCRT.fx" in 0.001 s.
+22:44:03:633 [25884] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\MMJCelShader.fx" in 0.001 s.
+22:44:03:634 [25884] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\N64_3Point.fx" in 0.001 s.
+22:44:03:635 [25884] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\nGlide_3DFX.fx" in 0.001 s.
+22:44:03:637 [16140] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\ntsc.fx" in 0.001 s.
+22:44:03:639 [16140] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\NTSC_RetroArch.fx" in 0.001 s.
+22:44:03:641 [16140] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\NTSC_RetroArch_NoScanlines.fx" in 0.001 s.
+22:44:03:643 [24156] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\PAL.fx" in 0.001 s.
+22:44:03:644 [24156] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Phosphor.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\Phosphor.fx(42, 41): warning X3206: implicit truncation of vector type
+
+22:44:03:645 [24156] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\PowerVR2.fx" in 0.001 s.
+22:44:03:646 [05184] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\R57_PAL.fx" in 0.001 s.
+22:44:03:647 [05184] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\RetroCRT.fx" in 0 s.
+22:44:03:648 [05184] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\RGBLCD.fx" in 0 s.
+22:44:03:649 [10668] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\scanlines-abs.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\scanlines-abs.fx(73, 1): warning X4576: 'PS_ScanlinesAbs': input parameter 'angle' semantic does not match vertex shader one
+
+22:44:03:650 [10668] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\scanlines-fract.fx" in 0.001 s.
+22:44:03:651 [10668] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\TVCRTPixels.fx" in 0 s.
+22:44:03:655 [25540] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\VHS.fx" in 0.003 s.
+22:44:03:656 [25540] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\VHS_RA.fx" in 0.001 s.
+22:44:03:658 [25540] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220.fx(106, 16): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220.fx(107, 14): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220.fx(108, 8): warning X3206: implicit truncation of vector type
+
+22:44:03:660 [18528] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220_frame.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220_frame.fx(80, 16): warning X3206: implicit truncation of vector type
+
+22:44:03:662 [18528] | WARN  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220_night.fx" in 0.001 s with warnings:
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220_night.fx(164, 16): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220_night.fx(165, 14): warning X3206: implicit truncation of vector type
+C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\vt220_night.fx(166, 8): warning X3206: implicit truncation of vector type
+
+22:44:03:663 [18528] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\RSRetroArch\zfast_crt.fx" in 0.001 s.
+22:44:03:664 [13800] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Sepia.fx" in 0 s.
+22:44:03:668 [13800] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\SMAA.fx" in 0.004 s.
+22:44:03:669 [13800] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Splitscreen.fx" in 0.001 s.
+22:44:03:670 [05664] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Technicolor.fx" in 0 s.
+22:44:03:671 [05664] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Technicolor2.fx" in 0 s.
+22:44:03:672 [05664] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Tonemap.fx" in 0 s.
+22:44:03:868 [03524] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\UIMask.fx" in 0.194 s.
+22:44:03:870 [03524] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Vibrance.fx" in 0.001 s.
+22:44:03:872 [03524] | INFO  | Successfully compiled "C:\Program Files (x86)\GOG Galaxy\Games\Revenant\reshade-shaders\Shaders\Vignette.fx" in 0.001 s.
+22:44:19:579 [05976] | INFO  | Redirecting DirectInputCreateA(hinst = 00400000, dwVersion = 0x700, ppDI = 00656618, punkOuter = 00000000) ...
+22:44:19:695 [05976] | INFO  | Redirecting IDirectInputA::CreateDevice(this = 0B1086CC, rguid = {DE43EB90-BA2A-11EE-8002-444553540000}, lplpDirectInputDevice = 0019E7AC, pUnkOuter = 00000000) ...
+22:44:19:695 [05976] | INFO  | Redirecting IDirectInputDevice::SetCooperativeLevel(this = 0CF63C8C, hwnd = 0006019C, dwFlags = 0xa) ...
+22:44:19:696 [05976] | INFO  | Redirecting IDirectInputA::CreateDevice(this = 0B1086CC, rguid = {5CF29DD0-BA2E-11EE-800F-444553540000}, lplpDirectInputDevice = 0019E7AC, pUnkOuter = 00000000) ...
+22:44:19:696 [05976] | INFO  | Redirecting IDirectInputDevice::SetCooperativeLevel(this = 0CF64FC4, hwnd = 0006019C, dwFlags = 0xa) ...
+22:54:09:848 [05976] | INFO  | Redirecting IDXGISwapChain::SetFullscreenState(this = 0ADB1748, Fullscreen = FALSE, pTarget = 00000000) ...
+22:54:10:350 [05976] | INFO  | Exiting ...
+22:54:10:350 [05976] | INFO  | Uninstalling 44 hook(s) ...
+22:54:11:382 [05976] | INFO  | Finished exiting.

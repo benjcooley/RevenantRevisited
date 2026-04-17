@@ -1,0 +1,43 @@
+{
+    "buildId": "51347621263488579",
+    "clientId": "49964623964052889",
+    "gameId": "1207665803",
+    "language": "English",
+    "languages": [
+        "en-US"
+    ],
+    "name": "Revenant",
+    "playTasks": [
+        {
+            "category": "game",
+            "compatibilityFlags": "DISABLETHEMES DISABLECICERO DISABLEDWM WIN95",
+            "isPrimary": true,
+            "languages": [
+                "*"
+            ],
+            "name": "Revenant",
+            "path": "Revenant.exe",
+            "type": "FileTask"
+        },
+        {
+            "category": "document",
+            "languages": [
+                "*"
+            ],
+            "name": "Manual",
+            "path": "manual.pdf",
+            "type": "FileTask"
+        },
+        {
+            "category": "document",
+            "languages": [
+                "*"
+            ],
+            "link": "http://www.gog.com/support/revenant",
+            "name": "Support",
+            "type": "URLTask"
+        }
+    ],
+    "rootGameId": "1207665803",
+    "version": 1
+}

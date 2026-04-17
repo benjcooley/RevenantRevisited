@@ -1,0 +1,31 @@
+COMMAND LINE: 
+
+VIDEOCARD "dgVoodoo DirectX Wrapper" VENDORID 0x0 DEVICEID 0x0 GUID "D7B71E3E-5105-11CF-E877-FE140EC2CD35" DRIVER "dgVoodoo" VER "17479.2.8.1"
+Video card chipset detected: Unknown
+Revenant Version 1.22 Build May  8 2000 11:22:22
+Copyright (C) Cinematix Studios, Inc. 1998
+MMX detected, using advanced lighting
+Physical memory 256 MB
+Chunk cache size 20 MB
+Available display devices: display
+Current display device: display - dgVoodoo DirectX Wrapper
+Preload sectors ON, preload size 5
+Initializing timers
+Initializing sound system
+Digitial audio initialized successfully
+Red book audio initialized
+Initializing direct input
+Initializing joysticks
+Loading game rules
+Loading classes with QUICKLOAD option
+Initializing multi-player manager
+Initializing TPlayScreen
+Creating background areas
+Initializing game script manager
+Initializing game areas
+Loading interface/starting game...
+Initializing TPlayScreen
+Creating background areas
+Initializing game script manager
+Initializing game areas
+Loading interface/starting game...
