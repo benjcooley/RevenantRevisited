@@ -905,6 +905,10 @@ std::vector<std::unique_ptr<VFSArchive>> g_base_archives;
 std::unordered_map<std::string, VFSEntry> g_base_map;
 std::unique_ptr<VFSArchive> g_module_archive;
 std::unordered_map<std::string, VFSEntry> g_module_map;
+// Pre-release modules ship unpacked as data/Modules/<name>/; retail uses
+// data/Modules/<name>.rvm ZIPs. MountModule detects which and we fall back
+// to filesystem lookup from this directory when set.
+std::filesystem::path g_module_dir;
 
 std::filesystem::path g_data_root;
 bool g_data_root_resolved = false;
@@ -1087,6 +1091,15 @@ bool MountModule(const char *name)
         return false;
     }
 
+    // Pre-release unpacked module dir first.
+    const fs::path dir = root / "Modules" / name;
+    std::error_code ec;
+    if (fs::is_directory(dir, ec))
+    {
+        g_module_dir = dir;
+        return true;
+    }
+
     const fs::path p = root / "Modules" / (std::string(name) + ".rvm");
     auto arc = vfs_open_archive(p);
     if (!arc)
@@ -1105,6 +1118,7 @@ void UnmountModule()
 {
     g_module_map.clear();
     g_module_archive.reset();
+    g_module_dir.clear();
 }
 
 void UnmountAll()
@@ -1152,6 +1166,16 @@ FILE *rev_fopen(const char *name, const char *flags)
         strncatz(fn, name, MAXPATHLEN);
         rev_normalize_sep(fn);
         fp = fopen(fn, flags);
+    }
+    if (!fp && !g_module_dir.empty())
+    {
+        // Module-dir fallback: try <module_dir>/<basename>.
+        const char *base = name;
+        for (const char *q = name; *q; ++q)
+            if (*q == '/' || *q == '\\')
+                base = q + 1;
+        std::filesystem::path mpath = g_module_dir / base;
+        fp = fopen(mpath.string().c_str(), flags);
     }
     if (!fp)
         fp = rev_vfs_open(name, flags);

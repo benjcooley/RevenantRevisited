@@ -2051,6 +2051,17 @@ static void AppInit()
     if (!MountArchive("imagery.rvi"))
         FatalError("Error in pack file IMAGERY.RVI", nullptr);
 
+    // Mount the main module so per-module files (area.def, master.s, etc.)
+    // resolve. Pre-release lays modules out as unpacked folders under
+    // data/Modules/<Name>/; retail ships them as data/Modules/<Name>.rvm.
+    {
+        char modname[128];
+        INISetSection("Modules");
+        INIGetStr("MainModule", (char *)"Ahkuilon", modname, sizeof(modname));
+        if (!MountModule(modname))
+            FatalError("Unable to mount module %s", modname);
+    }
+
     if (!InitMonitor())
         FatalError("Invalid monitor selected", nullptr);
 

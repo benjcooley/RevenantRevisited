@@ -11,6 +11,7 @@
 #include "weapon.h"
 #include "playscreen.h"
 #include "rules.h"
+#include "revutils.h"
 
 extern TObjectClass CharacterClass;
 extern TObjectClass PlayerClass;
@@ -104,7 +105,15 @@ bool SClassData::Load(char *aname, TToken &t)
             ok = Parse(t, "%i", &manamod);
         }
         else
-            t.Error("Invalid class tag %s", t.Text());
+        {
+            // Retail added per-class tags (WM_*, etc.) that didn't exist
+            // in the pre-release source. Skip the line.
+            fprintf(stderr, "[rules] skipping unknown class tag '%s'\n", tag);
+            while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+                t.Get();
+            t.LineGet();
+            continue;
+        }
 
         if (!ok)
             t.Error(errorparsingtag, tag);
@@ -553,7 +562,7 @@ bool TRules::Load()
     char fname[MAXPATHLEN];
     sprintf(fname, "%s%s", ClassDefPath, "rules.def");
 
-    FILE *fp = fopen(fname, "rb");
+    FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
         FatalError("Unable to find character info file RULES.DEF");
 
@@ -654,7 +663,23 @@ bool TRules::Load()
             }
         }
         else
-            t.Error("Invalid RULES.DEF block or tag %s", t.Text());
+        {
+            // Retail added rules tags (TOHIT*, AMMODATA, etc.) that didn't
+            // exist in the pre-release source. Skip the tag's payload. If
+            // the tag introduces a BEGIN/END block, skip the whole block;
+            // otherwise just skip to end-of-line. Leave current token at the
+            // trailing RETURN so the "Return expected" check below passes.
+            fprintf(stderr, "[rules] skipping unknown tag '%s'\n", tag);
+            while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+                t.Get();
+            t.LineGet();
+            if (t.Type() == TKN_KEYWORD && t.Code() == KEY_BEGIN)
+            {
+                t.SkipBlock();
+                t.LineGet();
+            }
+            continue;
+        }
 
         if (!ok)
             t.Error(errorparsingtag, tag);
