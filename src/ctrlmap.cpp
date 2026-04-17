@@ -6,7 +6,6 @@
 
 #include "revenant.h"
 #include "ctrlmap.h"
-#include "directinput.h"
 
 _STRUCTDEF(SKeyName)
 struct SKeyName

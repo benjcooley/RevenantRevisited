@@ -10,7 +10,6 @@
 
 #include "3dimagebody.h"
 #include "3dscene.h"
-#include "directdraw.h"
 #include "display.h"
 #include "object.h"
 #include "parse.h"

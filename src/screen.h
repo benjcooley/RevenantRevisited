@@ -9,7 +9,6 @@
 #define NUMEXCLUSIVEPANES 4
 
 #include "revenant.h"
-#include "directinput.h"
 
 // ******************************
 // * TPane - Screen pane object *

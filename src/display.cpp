@@ -6,7 +6,6 @@
 
 #include "display.h"
 
-#include "directdraw.h"
 #include "graphics.h"
 #include "mainwnd.h"
 #include "bitmap.h"

@@ -4,9 +4,6 @@
 // *                stripeffect.cpp - TStripEffect module                  *
 // *************************************************************************
 
-#include "d3dmacs.h"
-#include "d3dmath.h"
-
 #include "effect.h"
 #include "revenant.h"
 #include "stripeffect.h"

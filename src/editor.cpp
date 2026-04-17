@@ -11,7 +11,6 @@
 
 #include "revenant.h"
 #include "3dscene.h"
-#include "directdraw.h"
 #include "mappane.h"
 #include "object.h"
 #include "tile.h"

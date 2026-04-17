@@ -9,8 +9,6 @@
 #include <d3d.h>
 #include <d3drmwin.h>
 #include <math.h>
-#include "d3dmacs.h"
-#include "d3dmath.h"
 
 #include "character.h"
 #include "player.h"
