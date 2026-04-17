@@ -9,9 +9,28 @@
 #include "bitmap.h"
 #include "graphics.h"
 #include "resourcehdr.h"
+#include "revutils.h"
 
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
+
+static inline void strupr(char *s)
+{
+    for (; *s; ++s) *s = (char)toupper((unsigned char)*s);
+}
+
+// True when the last path component has a '.' — used to decide whether to
+// append ".DAT". Plain strchr on the full path is wrong because a leading
+// "./"/".\" in ResourcePath contains a dot.
+static inline bool has_basename_ext(const char *path)
+{
+    const char *base = path;
+    for (const char *q = path; *q; ++q)
+        if (*q == '/' || *q == '\\')
+            base = q + 1;
+    return strchr(base, '.') != nullptr;
+}
 
 static char erropen[]    = "Couldn't open resource file %s!";
 static char errnotcgs[]  = "%s is not a CGS resource file!";
@@ -42,13 +61,13 @@ void *LoadResource(const char *name, int32_t id, uint32_t *ressize)
     {
         strcpy(filename, ResourcePath);
         strcat(filename, name);
-        if (!strchr(filename, '.'))
+        if (!has_basename_ext(filename))
             strcat(filename, ".DAT");
     }
 
     strupr(filename);
 
-    FILE *fl = fopen(filename, "rb");
+    FILE *fl = rev_fopen(filename, "rb");
 
     if (!fl)
         FatalError(erropen, filename);
@@ -143,13 +162,13 @@ void *LoadResourceHeader(const char *name, int32_t id, uint32_t *ressize)
     {
         strcpy(filename, ResourcePath);
         strcat(filename, name);
-        if (!strchr(filename, '.'))
+        if (!has_basename_ext(filename))
             strcat(filename, ".DAT");
     }
 
     strupr(filename);
 
-    FILE *fl = fopen(filename, "rb");
+    FILE *fl = rev_fopen(filename, "rb");
 
     if (!fl)
     {
@@ -232,7 +251,7 @@ void *LoadResourceHeader(const char *name, int32_t id, uint32_t *ressize)
     {
         strcpy(filename, ResourcePath);
         strcat(filename, name);
-        if (!strchr(filename, '.'))
+        if (!has_basename_ext(filename))
             strcat(filename, ".dat");
     }
 
@@ -289,13 +308,13 @@ bool SaveResourceHeader(const char *name, void *header, int32_t hdrsize, int32_t
     {
         strcpy(filename, ResourcePath);
         strcat(filename, name);
-        if (!strchr(filename, '.'))
+        if (!has_basename_ext(filename))
             strcat(filename, ".DAT");
     }
 
     strupr(filename);
 
-    FILE *fl = fopen(filename, "rb+");
+    FILE *fl = rev_fopen(filename, "rb+");
 
     if (!fl)
         FatalError(erropen, filename);

@@ -6,7 +6,12 @@
 
 #include "revutils.h"
 
+#include "display.h"
+#include "imagery.h"
+#include "mainwnd.h"
+#include "mappane.h"
 #include "parse.h"
+#include "timer.h"
 
 #include <fcntl.h>
 #include <math.h>
@@ -16,6 +21,7 @@
 #include <string.h>
 #include <time.h>
 
+#include <cassert>
 #include <cctype>
 #include <cstring>
 #include <filesystem>
@@ -23,6 +29,11 @@
 #include <system_error>
 
 #include <SimpleIni.h>
+#include <miniz.h>
+
+#include <memory>
+#include <unordered_map>
+#include <vector>
 
 // ************************************************************************
 // *                          Support Functions                           *
@@ -52,19 +63,19 @@ char *itos(int32_t val, char *buf, int32_t buflen)
         return buf;
     if (buflen < 2)
     {
-        if (buf > 0)
-            buf[0] = nullptr;
+        if (buf != nullptr)
+            buf[0] = '\0';
         return buf;
     }
     if (buflen >= 12) // Twelve is big enough for anything
     {
-        _itoa(val, buf, 10);
+        std::snprintf(buf, buflen, "%d", val);
         return buf;
     }
     char b[12];
-    _itoa(val, b, 10);
+    std::snprintf(b, sizeof(b), "%d", val);
     strncpy(buf, b, buflen - 1);
-    buf[buflen - 1] = nullptr;
+    buf[buflen - 1] = '\0';
     return buf;
 }
 
@@ -91,12 +102,29 @@ int32_t stricmp(const char* s1, const char* s2)
 #endif
 }
 
+int32_t strnicmp(const char* s1, const char* s2, size_t n)
+{
+    assert(s1 != nullptr);
+    assert(s2 != nullptr);
+    while (n-- > 0)
+    {
+        int c1 = tolower((unsigned char) *s1++);
+        int c2 = tolower((unsigned char) *s2++);
+        if (c1 != c2)
+            return c1 - c2;
+        if (c1 == 0)
+            return 0;
+    }
+    return 0;
+}
+
 // Copies a file, or group of files using wildcards
 int32_t copyfiles(const char *from, const char *to, bool overwrite)
 {
     if (!from || !to)
         return 0;
 
+#if 0 // TODO(port): Subsystem 6 — filesystem enumeration + copy (→ std::filesystem::copy_file / POSIX opendir/readdir)
     struct _finddata_t data;
 
     TStackString fdrive;
@@ -139,11 +167,15 @@ int32_t copyfiles(const char *from, const char *to, bool overwrite)
     }
 
     return copied;
+#else
+    return 0;
+#endif
 }
 
 // Deletes a file, or group of files using wildcards
 int32_t deletefiles(const char *name)
 {
+#if 0 // TODO(port): Subsystem 6 — filesystem enumeration + delete (→ std::filesystem::remove / POSIX opendir/readdir)
     struct _finddata_t data;
 
     char dir[MAXPATHLEN], file[MAXPATHLEN];
@@ -170,20 +202,30 @@ int32_t deletefiles(const char *name)
     }
 
     return deleted;
+#else
+    (void)name;
+    return 0;
+#endif
 }
 
-uint64_t flen(FILE* f)
+int32_t flen(FILE* f)
 {
-    fseek(fp, 0L, SEEK_END);
-    uint64_t sz = ftell(fp);
-    fseek(fp, 0L, SEEK_SET);
-    return sz;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    return static_cast<int32_t>(n);
 }
 
 // Returns system ticks in milliseconds since system was turned on
 uint32_t tickcount()
 {
+#if 0 // TODO(port): Subsystem 4 — timing (→ std::chrono / sokol_time)
     return GetTickCount();
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint32_t>(ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL);
+#endif
 }
 
 // *************** Error Functions *****************
@@ -191,8 +233,9 @@ uint32_t tickcount()
 void ThreadError(const char *error, const char *extra)
 {
     char buf[101];
-    sprintf(buf, error, extra);
+    snprintf(buf, sizeof(buf), error, extra);
 
+#if 0 // TODO(port): Subsystem 2 — DirectDraw/Win32 presentation (→ sokol)
     if (extra)
         _RPT1(_CRT_ERROR, error, extra);
     else
@@ -206,6 +249,13 @@ void ThreadError(const char *error, const char *extra)
 //  }
 
 //  MessageBox(nullptr, buf, "FATAL ERROR", MB_ICONSTOP | MB_OK);
+#else
+    if (extra)
+        fprintf(stderr, error, extra);
+    else
+        fprintf(stderr, "%s", error);
+    fputc('\n', stderr);
+#endif
 }
 
 void FatalError(const char *error, const char *extra)
@@ -217,7 +267,7 @@ void FatalError(const char *error, const char *extra)
     alreadyin = true;
 
     char buf[101];
-    sprintf(buf, error, extra);
+    snprintf(buf, sizeof(buf), error, extra);
 
   // Write error string to display
     Status(buf);
@@ -232,10 +282,11 @@ void FatalError(const char *error, const char *extra)
   // Close the display
     Display->Close();
 
+#if 0 // TODO(port): Subsystem 2 — DirectDraw/Win32 presentation (→ sokol)
   // Close Direct Draw
     CloseDirectDraw();
 
-  // Close the window!  
+  // Close the window!
     MainWindow.Close();
 
     MSG Message;
@@ -255,6 +306,14 @@ void FatalError(const char *error, const char *extra)
 
 //  ShowWindow(MainWindow.Hwnd(), 0);
 //  MessageBox(nullptr, buf, "FATAL ERROR", MB_ICONSTOP | MB_OK);
+#else
+    MainWindow.Close();
+    if (extra)
+        fprintf(stderr, error, extra);
+    else
+        fprintf(stderr, "%s", error);
+    fputc('\n', stderr);
+#endif
 
     exit(1);
 }
@@ -297,24 +356,26 @@ void WaitMultipleErr(uint32_t /*objs*/, const HANDLE* /*obj*/, bool /*all*/)
 
 void Status(const char *fmt, ...)
 {
+#if 0 // TODO(port): Subsystem 2 — DirectDraw/Win32 presentation (→ sokol)
     static char buf[1024]; // Temporary buf for output
-    static y = 10;
+    static int32_t y = 10;
 
     if (!DirectDraw || !SystemFont || !Display->GetSurface())
         return;
 
     va_list marker;
     va_start(marker, fmt);
-    vsprintf(buf, fmt, marker);
+    vsnprintf(buf, sizeof(buf), fmt, marker);
+    va_end(marker);
 
     char *s = buf;
     char *p = buf;
     while (1)
     {
-        if (*p == '\n' || *p == nullptr)
+        if (*p == '\n' || *p == '\0')
         {
             char save = *p;
-            *p = nullptr;
+            *p = '\0';
             if (strlen(s) > 0)
             {
                 Display->WriteText(s, 10, y, 1, SystemFont, nullptr, DM_TRANSPARENT | DM_ALIAS);
@@ -327,25 +388,41 @@ void Status(const char *fmt, ...)
         }
         p++;
     }
+#else
+    char buf[1024];
+    va_list marker;
+    va_start(marker, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, marker);
+    va_end(marker);
+    fprintf(stderr, "[status] %s\n", buf);
+#endif
 }
 
 // *************** Critical Section Functions *****************
 
 void BEGIN_CRITICAL()
 {
+#if 0 // TODO(port): Subsystem 4 — threading (→ std::mutex / worker pool)
     EnterCriticalSection(&CriticalSection);
+#endif
 }
 
 void END_CRITICAL()
 {
+#if 0 // TODO(port): Subsystem 4 — threading (→ std::mutex / worker pool)
     LeaveCriticalSection(&CriticalSection);
+#endif
 }
 
 // ****** Exit the Game - Why would anyone want to do that? ******
 
 void ExitGame()
 {
+#if 0 // TODO(port): Subsystem 2 — DirectDraw/Win32 presentation (→ sokol_app)
     PostQuitMessage(0);
+#else
+    std::exit(0);
+#endif
 }
 
 // *************** Settings Functions *****************
@@ -726,21 +803,25 @@ void *xmalloc(int32_t size)
 
 void *xrealloc(void *p, int32_t size)
 {
+#if 0 // TODO(port): Subsystem 7 — allocation tracking (→ platform-agnostic msize)
     TotalAllocated = TotalAllocated - _msize(p) + size;
     if (TotalAllocated > MaxAllocated)
         MaxAllocated = TotalAllocated;
+#endif
     p = realloc(p, size);
     return p;
 }
 
 void xfree(void *p)
 {
+#if 0 // TODO(port): Subsystem 7 — allocation tracking (→ platform-agnostic msize)
     if (p != nullptr)
         TotalAllocated -= _msize(p);
+#endif
     free(p);
 }
 
-void* __cdecl operator new(size_t size)
+void* operator new(size_t size)
 {
     void *p = xmalloc(size);
     if (!p)
@@ -748,7 +829,7 @@ void* __cdecl operator new(size_t size)
     return p;
 }
 
-void __cdecl operator delete(void *pointer)
+void operator delete(void *pointer) noexcept
 {
     xfree(pointer);
 }
@@ -779,35 +860,301 @@ char *makepath(char *name, char *buf, int32_t buflen)
     return buf;
 }
 
-FILE *popen(char *name, char *flags)
+// Normalize Win32 backslash separators to POSIX forward slashes in place.
+// The 1998 data paths were authored with '\' throughout; retail INI values
+// still carry them. Anywhere the engine builds a path from those strings
+// and hands it to fopen(3), we have to translate.
+static void rev_normalize_sep(char *p)
 {
-    char fn[MAXPATHLEN];
-    
-  // If root path expicitly given, (i.e. "c:\", or "\" or "\\" or "..") use it
-    if (name[0] == '\\' || name[1] == ':' || (name[0] == '.' && name[1] == '.'))
-        return fopen(name, flags);
+    for (; *p; ++p)
+        if (*p == '\\')
+            *p = '/';
+}
 
-  // If root path is ".", substitute SavePath or RunPath
+// ============================================================================
+// ZIP-VFS: retail pack-archive mount layer
+// ----------------------------------------------------------------------------
+// Retail shipped data/resources.rvr, data/imagery.rvi and data/Modules/<N>.rvm
+// as stored (uncompressed) ZIPs. WinMain (FUN_004865a0) mounted the two base
+// archives explicitly — see FUN_0045f980 + DAT_00666448 — and a per-module
+// archive was swapped in when the active module changed. Different modules
+// share root filenames (module.def, state.def, exit.def, area.def, ...) so
+// a flat "index everything up front" scan would collide across modules.
+//
+// API: MountArchive / MountModule / UnmountModule / UnmountAll.
+// Lookup in rev_fopen: SavePath → RunPath → active module map → base map.
+// ============================================================================
+
+namespace {
+
+struct VFSArchive
+{
+    std::string path;
+    mz_zip_archive zip{};
+    ~VFSArchive() { mz_zip_reader_end(&zip); }
+};
+
+struct VFSEntry
+{
+    VFSArchive *arch;
+    mz_uint file_index;
+    size_t size;
+};
+
+std::vector<std::unique_ptr<VFSArchive>> g_base_archives;
+std::unordered_map<std::string, VFSEntry> g_base_map;
+std::unique_ptr<VFSArchive> g_module_archive;
+std::unordered_map<std::string, VFSEntry> g_module_map;
+
+std::filesystem::path g_data_root;
+bool g_data_root_resolved = false;
+
+std::string vfs_lower(std::string s)
+{
+    for (auto &c : s)
+        c = (char)tolower((unsigned char)c);
+    return s;
+}
+
+std::string vfs_basename_lower(const char *p)
+{
+    const char *name = p;
+    for (const char *q = p; *q; ++q)
+        if (*q == '/' || *q == '\\')
+            name = q + 1;
+    return vfs_lower(std::string(name));
+}
+
+std::filesystem::path vfs_resolve_data_root()
+{
+    namespace fs = std::filesystem;
+    if (const char *env = getenv("REVENANT_DATA_PATH"))
+    {
+        fs::path p(env);
+        if (fs::exists(p))
+            return p;
+    }
+    const fs::path cwd = fs::current_path();
+    for (const fs::path cand : {cwd, cwd / "data", cwd / ".." / "data"})
+    {
+        std::error_code ec;
+        if (fs::exists(cand / "imagery.rvi", ec) ||
+            fs::exists(cand / "Modules", ec))
+            return fs::canonical(cand, ec);
+    }
+    return {};
+}
+
+const std::filesystem::path &vfs_data_root()
+{
+    if (!g_data_root_resolved)
+    {
+        g_data_root_resolved = true;
+        g_data_root = vfs_resolve_data_root();
+    }
+    return g_data_root;
+}
+
+std::unique_ptr<VFSArchive> vfs_open_archive(const std::filesystem::path &path)
+{
+    auto arc = std::make_unique<VFSArchive>();
+    arc->path = path.string();
+    if (!mz_zip_reader_init_file(&arc->zip, arc->path.c_str(), 0))
+        return nullptr;
+    return arc;
+}
+
+void vfs_index_archive(VFSArchive *arc, std::unordered_map<std::string, VFSEntry> &map)
+{
+    const mz_uint n = mz_zip_reader_get_num_files(&arc->zip);
+    for (mz_uint i = 0; i < n; ++i)
+    {
+        mz_zip_archive_file_stat st;
+        if (!mz_zip_reader_file_stat(&arc->zip, i, &st))
+            continue;
+        if (st.m_is_directory)
+            continue;
+        // First-wins within a single archive (same as retail)
+        map.try_emplace(vfs_basename_lower(st.m_filename),
+                        VFSEntry{arc, i, (size_t)st.m_uncomp_size});
+    }
+}
+
+struct VFSHandle
+{
+    std::vector<uint8_t> buf;
+    size_t pos;
+};
+
+int vfs_read(void *c, char *p, int n)
+{
+    auto *h = static_cast<VFSHandle *>(c);
+    const size_t avail = h->buf.size() - h->pos;
+    size_t copy = n < 0 ? 0 : (size_t)n;
+    if (copy > avail)
+        copy = avail;
+    memcpy(p, h->buf.data() + h->pos, copy);
+    h->pos += copy;
+    return (int)copy;
+}
+
+fpos_t vfs_seek(void *c, fpos_t off, int whence)
+{
+    auto *h = static_cast<VFSHandle *>(c);
+    fpos_t newpos = 0;
+    switch (whence)
+    {
+    case SEEK_SET: newpos = off; break;
+    case SEEK_CUR: newpos = (fpos_t)h->pos + off; break;
+    case SEEK_END: newpos = (fpos_t)h->buf.size() + off; break;
+    default: return -1;
+    }
+    if (newpos < 0 || (size_t)newpos > (fpos_t)h->buf.size())
+        return -1;
+    h->pos = (size_t)newpos;
+    return newpos;
+}
+
+int vfs_close(void *c)
+{
+    delete static_cast<VFSHandle *>(c);
+    return 0;
+}
+
+FILE *rev_vfs_open(const char *name, const char *flags)
+{
+    if (!flags || flags[0] != 'r' || strchr(flags, '+'))
+        return nullptr;
+
+    const auto key = vfs_basename_lower(name);
+
+    const VFSEntry *entry = nullptr;
+    if (auto it = g_module_map.find(key); it != g_module_map.end())
+        entry = &it->second;
+    else if (auto it = g_base_map.find(key); it != g_base_map.end())
+        entry = &it->second;
+    if (!entry)
+        return nullptr;
+
+    auto h = std::make_unique<VFSHandle>();
+    h->buf.resize(entry->size);
+    h->pos = 0;
+    if (!mz_zip_reader_extract_to_mem(&entry->arch->zip, entry->file_index,
+                                      h->buf.data(), h->buf.size(), 0))
+        return nullptr;
+
+    FILE *fp = funopen(h.get(), vfs_read, nullptr, vfs_seek, vfs_close);
+    if (fp)
+        h.release();
+    return fp;
+}
+
+} // anonymous namespace
+
+bool MountArchive(const char *name)
+{
+    namespace fs = std::filesystem;
+    const fs::path root = vfs_data_root();
+    if (root.empty())
+    {
+        fprintf(stderr, "MountArchive(%s): no data root found\n", name);
+        return false;
+    }
+
+    const fs::path p = root / name;
+    auto arc = vfs_open_archive(p);
+    if (!arc)
+    {
+        fprintf(stderr, "Error in pack file %s (%s)\n", name, p.string().c_str());
+        return false;
+    }
+
+    VFSArchive *raw = arc.get();
+    g_base_archives.push_back(std::move(arc));
+    vfs_index_archive(raw, g_base_map);
+    return true;
+}
+
+bool MountModule(const char *name)
+{
+    namespace fs = std::filesystem;
+    UnmountModule();
+
+    const fs::path root = vfs_data_root();
+    if (root.empty())
+    {
+        fprintf(stderr, "MountModule(%s): no data root found\n", name);
+        return false;
+    }
+
+    const fs::path p = root / "Modules" / (std::string(name) + ".rvm");
+    auto arc = vfs_open_archive(p);
+    if (!arc)
+    {
+        fprintf(stderr, "Error in pack file %s.rvm (%s)\n", name, p.string().c_str());
+        return false;
+    }
+
+    VFSArchive *raw = arc.get();
+    g_module_archive = std::move(arc);
+    vfs_index_archive(raw, g_module_map);
+    return true;
+}
+
+void UnmountModule()
+{
+    g_module_map.clear();
+    g_module_archive.reset();
+}
+
+void UnmountAll()
+{
+    UnmountModule();
+    g_base_map.clear();
+    g_base_archives.clear();
+}
+
+FILE *rev_fopen(const char *name, const char *flags)
+{
+    if (!name)
+        return nullptr;
+
+    char fn[MAXPATHLEN];
+
+  // If root path explicitly given (absolute POSIX, Win32 drive, or "..") use it
+    if (name[0] == '/' || name[0] == '\\' || name[1] == ':' ||
+        (name[0] == '.' && name[1] == '.'))
+    {
+        strncpyz(fn, name, MAXPATHLEN);
+        rev_normalize_sep(fn);
+        if (FILE *fp = fopen(fn, flags))
+            return fp;
+        return rev_vfs_open(name, flags);
+    }
+
+  // If root path is ".", strip it and any following separators
     if (name[0] == '.')
     {
         name++;
-        while (name[0] == '\\')
+        while (name[0] == '\\' || name[0] == '/')
             name++;
     }
 
-  // Always try SavePath first (SavePath will always be writable directory on hard drive)
+  // Always try SavePath first (writable on real installs)
     strncpyz(fn, SavePath, MAXPATHLEN);
     strncatz(fn, name, MAXPATHLEN);
+    rev_normalize_sep(fn);
 
-  // If SavePath fails, and we have a different run path, try it 
-  // (RunPath can be read only CD-ROM)
     FILE *fp = fopen(fn, flags);
     if (!fp && stricmp(SavePath, RunPath) != 0)
     {
         strncpyz(fn, RunPath, MAXPATHLEN);
         strncatz(fn, name, MAXPATHLEN);
+        rev_normalize_sep(fn);
         fp = fopen(fn, flags);
     }
+    if (!fp)
+        fp = rev_vfs_open(name, flags);
 
     return fp;
 }
@@ -839,7 +1186,7 @@ int32_t random(int32_t min, int32_t max)
 static char listbuf[LISTBUFLEN];
 
 // Get num string from comma list
-char *listget(char *src, int32_t num, char *dst, int32_t len)
+char *listget(const char *src, int32_t num, char *dst, int32_t len)
 {
     if (!dst)
     {
@@ -850,9 +1197,9 @@ char *listget(char *src, int32_t num, char *dst, int32_t len)
     if (len <= 0)
         return dst;
 
-    dst[0] = nullptr;
+    dst[0] = '\0';
 
-    char *p = src;
+    const char *p = src;
     int32_t comma = 0;
     while (*p && comma < num)
     {
@@ -870,15 +1217,15 @@ char *listget(char *src, int32_t num, char *dst, int32_t len)
         p++;
         l++;
     }
-    *d = nullptr;
+    *d = '\0';
 
     return dst;
 }
 
 // Get total number of strings in comma list
-int32_t listnum(char *src)
+int32_t listnum(const char *src)
 {
-    char *p = src;
+    const char *p = src;
     int32_t comma = 0;
     while (*p)
     {
@@ -891,22 +1238,22 @@ int32_t listnum(char *src)
 }
 
 // Get random string from comma list
-char *listrnd(char *src, char *dst, int32_t len)
+char *listrnd(const char *src, char *dst, int32_t len)
 {
-    return listget(src, random(0, listnum(src) - 1), dst, len); 
+    return listget(src, random(0, listnum(src) - 1), dst, len);
 }
 
 // Returns true if string is in comma list (case insensitive)
-bool listin(char *src, char *in)
+bool listin(const char *src, const char *in)
 {
-    char *s = src;
-    char *i = in;
+    const char *s = src;
+    const char *i = in;
 
     while (*s)
     {
         if (*s == ',')
         {
-            if (*i == nullptr)
+            if (*i == '\0')
                 break;
             i = in;
             s++;
@@ -926,11 +1273,12 @@ bool listin(char *src, char *in)
         }
     }
 
-    return *i == nullptr;
+    return *i == '\0';
 }
 
 // ********* Free Memory Functions **********
 
+#if 0 // TODO(port): Subsystem 7 — memory introspection (→ host_statistics64 / sysctl)
 uint32_t MemUsed()
 {
     MEMORYSTATUS ms;
@@ -986,3 +1334,12 @@ uint32_t TotalPage()
     GlobalMemoryStatus(&ms);
     return ms.dwTotalPageFile;
 }
+#else
+uint32_t MemUsed()   { return 0; }
+uint32_t FreeMem()   { return 0; }
+uint32_t TotalMem()  { return 0; }
+uint32_t FreePhys()  { return 0; }
+uint32_t TotalPhys() { return 0; }
+uint32_t FreePage()  { return 0; }
+uint32_t TotalPage() { return 0; }
+#endif

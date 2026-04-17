@@ -80,9 +80,10 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     pass_desc.depth_stencil_attachment.image = depth_target;
     default_pass = sg_make_pass(&pass_desc);
 
-    // Depth pre-pass
-    pass_desc.color_attachments[0].image.id = SG_INVALID_ID;
-    depth_pass = sg_make_pass(&pass_desc);
+    // Depth pre-pass — wired up with the 3D renderer in Phase 3. sokol_gfx
+    // does not permit a pass with no color attachment, so we skip creation
+    // until the depth-only prepass actually has a consumer.
+    depth_pass = {};
 
 #if 0 // TODO(port): real sokol_gfx path — Phase 3
     // sokol_gfx has no SG_BUFFERTYPE_UNIFORM (no UBOs); uniforms are pushed

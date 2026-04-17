@@ -8,6 +8,7 @@
 
 // For multimonitor support
 #define COMPILE_MULTIMON_STUBS
+#include <cassert>
 #include <fcntl.h>
 #include <math.h>
 #include <stdarg.h>
@@ -17,6 +18,7 @@
 #include <time.h>
 
 #include "revenant.h"
+#include "fonttable.h"
 #include "3dscene.h"
 #include "bitmap.h"
 #include "display.h"
@@ -52,6 +54,15 @@
 
 #include <sokol_app.h>
 
+// TODO(port): Subsystem 7 — MSVC CRT debug heap (crtdbg.h) not available on
+// Clang/macOS. Stub the macros so assertions compile. Real validation should
+// come from AddressSanitizer and a portable heap checker.
+#define _CrtCheckMemory() (1)
+#define _CRT_ERROR 0
+#define _RPT0(mode, msg) ((void)0)
+#define _RPT1(mode, msg, a) ((void)0)
+#define _RPT2(mode, msg, a, b) ((void)0)
+
 // Global Variables
 // TODO(port): hInstance / StartMemory / PauseMutex were Win32-only.
 // PauseMutex was for the loader-thread pause; Subsystem 4 will replace it
@@ -60,16 +71,16 @@
 HANDLE PauseMutex = nullptr;
 
 // Game directories
-TString RunPath;
-TString SavePath;
+char RunPath[MAXPATHLEN];
+char SavePath[MAXPATHLEN];
 
 // Define the Editor paths
-TString ClassDefPath;               // Where to load / save Class.Def
-TString ExileRCPath;                // Where to run ExileRC from & where
-                                    // the graphics for the resources are
-TString ResourcePath;               // Where to read / write the resources
-TString BaseMapPath;                // Where the untouched version of the game map is stored
-TString CurMapPath;                 // Where the current map is stored
+char ClassDefPath[MAXPATHLEN];               // Where to load / save Class.Def
+char ExileRCPath[MAXPATHLEN];                // Where to run ExileRC from & where
+                                             // the graphics for the resources are
+char ResourcePath[MAXPATHLEN];               // Where to read / write the resources
+char BaseMapPath[MAXPATHLEN];                // Where the untouched version of the game map is stored
+char CurMapPath[MAXPATHLEN];                 // Where the current map is stored
 
 // Current language
 TString Language;                   // Where the current map is stored
@@ -97,7 +108,9 @@ TMainWindow     MainWindow;         // Windows Object
 TSaveGame       SaveGame;           // SaveGame Object
 TChunkCache     ChunkCache;         // Tile Cache
 TTimer          Timer;              // Timer Object
+#if 0 // TODO(port): Subsystem 3 — video capture (DirectShow → AVFoundation/sokol)
 TVideoCapture   VideoCapture;       // Video capture object
+#endif
 TFont*          SystemFont;         // Basic utility font for game
 TFont*          DialogFont;         // Dialog font
 TFont*          DialogFontShadow;   // Dialog font shadow
@@ -147,6 +160,7 @@ bool Show3D          = true;        // Turn on the 3D system
 bool Interpolate     = true;        // Causes 3D animations to interpolate when state changes
 bool DoPageFlip      = true;        // Allows the PageFlip function to flip pages
 bool PauseWhenNotActive = true;     // Causes game to pause when not active
+bool AppActive       = false;       // Flag for if the game is the active application
 bool NoWideBuffers   = false;       // Doesn't allow video buffers with stides wider than their widths
 bool UseDirect3D2    = true;        // True if you want to be able to use drawprimive stuff
 bool UseSoftware3D   = false;       // Use software 3D (False assumes we want hardware if available)
@@ -245,7 +259,15 @@ int32_t SCROLLBUFWIDTH, SCROLLBUFHEIGHT;
 // ************************************************************************
 // *                          Support Functions                           *
 // ************************************************************************
+//
+// ATTIC: every utility below (thread pause gate, itos/stricmp, file copy,
+// tickcount, FatalError/Error/Status, INI access, xmalloc family, random,
+// list helpers, Mem*/*Phys/*Page) now lives in revutils.cpp. The 1998
+// bodies are kept under `#if 0` so a reviewer can diff the old Win32 paths
+// against the macOS-oriented rewrites. Delete this block once the port
+// stabilizes.
 
+#if 0 // ATTIC: duplicated in revutils.cpp
 bool ThreadsPaused = false;
 
 void PauseThreads()
@@ -270,19 +292,19 @@ char *itos(int32_t val, char *buf, int32_t buflen)
         return buf;
     if (buflen < 2)
     {
-        if (buf > 0)
-            buf[0] = nullptr;
+        if (buf != nullptr)
+            buf[0] = '\0';
         return buf;
     }
     if (buflen >= 12) // Twelve is big enough for anything
     {
-        _itoa(val, buf, 10);
+        snprintf(buf, buflen, "%d", val);
         return buf;
     }
     char b[12];
-    _itoa(val, b, 10);
+    snprintf(b, sizeof(b), "%d", val);
     strncpy(buf, b, buflen - 1);
-    buf[buflen - 1] = nullptr;
+    buf[buflen - 1] = '\0';
     return buf;
 }
 
@@ -309,6 +331,10 @@ int32_t stricmp(const char* s1, const char* s2)
 #endif
 }
 
+#if 0 // TODO(port): Subsystem 6 — filesystem enumeration (→ POSIX opendir/readdir)
+      // Duplicate of the canonical implementations in revutils.cpp — kept
+      // disabled here until the enumeration port lands, then this dead copy
+      // will be deleted outright.
 // Copies a file, or group of files using wildcards
 int32_t copyfiles(const char *from, const char *to, bool overwrite)
 {
@@ -389,7 +415,9 @@ int32_t deletefiles(const char *name)
 
     return deleted;
 }
+#endif
 
+#if 0 // TODO(port): Subsystem 1 — duplicate of revutils.cpp flen()/tickcount(); retired here
 uint64_t flen(FILE* f)
 {
     fseek(fp, 0L, SEEK_END);
@@ -403,14 +431,16 @@ uint32_t tickcount()
 {
     return GetTickCount();
 }
+#endif
 
 // *************** Error Functions *****************
 
 void ThreadError(char *error, char *extra)
 {
     char buf[101];
-    sprintf(buf, error, extra);
+    snprintf(buf, sizeof(buf), error, extra);
 
+#if 0 // TODO(port): Subsystem 2 — DirectDraw/Win32 presentation (→ sokol)
     if (extra)
         _RPT1(_CRT_ERROR, error, extra);
     else
@@ -424,6 +454,13 @@ void ThreadError(char *error, char *extra)
 //  }
 
 //  MessageBox(nullptr, buf, "FATAL ERROR", MB_ICONSTOP | MB_OK);
+#else
+    if (extra)
+        fprintf(stderr, error, extra);
+    else
+        fprintf(stderr, "%s", error);
+    fprintf(stderr, "\n");
+#endif
 }
 
 void FatalError(const char *error, const char *extra)
@@ -450,10 +487,11 @@ void FatalError(const char *error, const char *extra)
   // Close the display
     Display->Close();
 
+#if 0 // TODO(port): Subsystem 2 — DirectDraw/Win32 presentation (→ sokol)
   // Close Direct Draw
     CloseDirectDraw();
 
-  // Close the window!  
+  // Close the window!
     MainWindow.Close();
 
     MSG Message;
@@ -473,6 +511,14 @@ void FatalError(const char *error, const char *extra)
 
 //  ShowWindow(MainWindow.Hwnd(), 0);
 //  MessageBox(nullptr, buf, "FATAL ERROR", MB_ICONSTOP | MB_OK);
+#else
+    MainWindow.Close();
+    if (extra)
+        fprintf(stderr, error, extra);
+    else
+        fprintf(stderr, "%s", error);
+    fprintf(stderr, "\n");
+#endif
 
     exit(1);
 }
@@ -509,6 +555,7 @@ void WaitMultipleErr(uint32_t objs, const HANDLE *obj, bool all) {}
 
 void Status(const char *fmt, ...)
 {
+#if 0 // TODO(port): Subsystem 2 — DirectDraw/Win32 presentation (→ sokol)
     static char buf[1024]; // Temporary buf for output
     static y = 10;
 
@@ -523,10 +570,10 @@ void Status(const char *fmt, ...)
     char *p = buf;
     while (1)
     {
-        if (*p == '\n' || *p == nullptr)
+        if (*p == '\n' || *p == '\0')
         {
             char save = *p;
-            *p = nullptr;
+            *p = '\0';
             if (strlen(s) > 0)
             {
                 Display->WriteText(s, 10, y, 1, SystemFont, nullptr, DM_TRANSPARENT | DM_ALIAS);
@@ -539,6 +586,13 @@ void Status(const char *fmt, ...)
         }
         p++;
     }
+#else
+    va_list marker;
+    va_start(marker, fmt);
+    vfprintf(stderr, fmt, marker);
+    va_end(marker);
+    fprintf(stderr, "\n");
+#endif
 }
 
 // *************** Critical Section Functions *****************
@@ -638,7 +692,7 @@ char *INIGetText(const char *key, char *def, char *buf, int32_t buflen)
     {
         int32_t l = strlen(buf);
         memmove(buf, buf + 1, l - 2);
-        buf[l - 2] = nullptr;
+        buf[l - 2] = '\0';
     }
 
     INISetText(key, buf);
@@ -728,7 +782,7 @@ void INISetArray(char *key, int32_t size, int32_t ary[], char *format)
     if (!format)
         format = "%d";
 
-    buf[0] = nullptr;
+    buf[0] = '\0';
     for (int32_t c = 0; c < size; c++)
     {
         if (c >= 1)
@@ -925,17 +979,21 @@ void *xmalloc(int32_t size)
 
 void *xrealloc(void *p, int32_t size)
 {
+#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
     TotalAllocated = TotalAllocated - _msize(p) + size;
     if (TotalAllocated > MaxAllocated)
         MaxAllocated = TotalAllocated;
+#endif
     p = realloc(p, size);
     return p;
 }
 
 void xfree(void *p)
 {
+#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
     if (p != nullptr)
         TotalAllocated -= _msize(p);
+#endif
     free(p);
 }
 
@@ -1049,7 +1107,7 @@ char *listget(char *src, int32_t num, char *dst, int32_t len)
     if (len <= 0)
         return dst;
 
-    dst[0] = nullptr;
+    dst[0] = '\0';
 
     char *p = src;
     int32_t comma = 0;
@@ -1069,7 +1127,7 @@ char *listget(char *src, int32_t num, char *dst, int32_t len)
         p++;
         l++;
     }
-    *d = nullptr;
+    *d = '\0';
 
     return dst;
 }
@@ -1105,7 +1163,7 @@ bool listin(char *src, char *in)
     {
         if (*s == ',')
         {
-            if (*i == nullptr)
+            if (*i == '\0')
                 break;
             i = in;
             s++;
@@ -1125,11 +1183,12 @@ bool listin(char *src, char *in)
         }
     }
 
-    return *i == nullptr;
+    return *i == '\0';
 }
 
 // ********* Free Memory Functions **********
 
+#if 0 // TODO(port): Subsystem 7 — Win32 GlobalMemoryStatus → mach/sysctl equivalents
 uint32_t MemUsed()
 {
     MEMORYSTATUS ms;
@@ -1185,6 +1244,16 @@ uint32_t TotalPage()
     GlobalMemoryStatus(&ms);
     return ms.dwTotalPageFile;
 }
+#else
+uint32_t MemUsed()   { return 0; }
+uint32_t FreeMem()   { return 0; }
+uint32_t TotalMem()  { return 0; }
+uint32_t FreePhys()  { return 0; }
+uint32_t TotalPhys() { return 0; }
+uint32_t FreePage()  { return 0; }
+uint32_t TotalPage() { return 0; }
+#endif
+#endif // ATTIC: duplicated in revutils.cpp
 
 // ************************************************************************
 // *                     Initialization Functions                         *
@@ -1200,7 +1269,7 @@ bool HasMMX()
 
 void GetProgramPaths(char *lpCmdLine, char *RunPath, char *SavePath)
 {
-
+#if 0 // TODO(port): Subsystem 8 — Win32 path discovery (GetModuleFileName/unlink/mkdir/strlwr)
   char *p;
   // Get The Run Path
     GetModuleFileName(hInstance, RunPath, RUNPATHLEN - 1);
@@ -1244,6 +1313,12 @@ void GetProgramPaths(char *lpCmdLine, char *RunPath, char *SavePath)
 
     strlwr(SavePath);
     strlwr(RunPath);
+#else
+    (void)lpCmdLine;
+    // Minimal stub: use current directory for both.
+    strncpyz(RunPath, "./", RUNPATHLEN);
+    strncpyz(SavePath, "./", RUNPATHLEN);
+#endif
 }
 
 void GetParameters(char *lpCmdLine)
@@ -1352,7 +1427,9 @@ void GetParameters(char *lpCmdLine)
         while (*ptr && *ptr != ' ')
             *d++ = *ptr++;
         *d = 0;
+#if 0 // TODO(port): Subsystem 8 — strlwr is MS CRT; use portable lowercase helper
         strlwr(DXDriverMatchStr);
+#endif
     }
 
     if (strstr(lpCmdLine, "IGNORE3D"))      // Run game without Direct3D objects
@@ -1494,6 +1571,7 @@ void GetINISettings()
 // work correctly.
 void DriverSetupCallback()
 {
+#if 0 // TODO(port): Subsystem 2 — DirectDraw driver description inspection (→ sokol backend)
     char buf[DRIVERDESCLEN];
     strncpyz(buf, DirectDrawDesc, DRIVERDESCLEN);
     strlwr(buf);
@@ -1503,14 +1581,15 @@ void DriverSetupCallback()
     {
         NoVidZBufLock = true; // Don't try to lock video and zbuffer at same time
         NoBlitZBuffer = true; // Can't blit to or from the zbuffer
-        UseClearZBuffer = true; // Use a secondary clear zbuffer for drawing instead of display zbuffer 
+        UseClearZBuffer = true; // Use a secondary clear zbuffer for drawing instead of display zbuffer
     }
+#endif
 }
 
 bool InitLanguage()
 {
   // Set language
-    strcpy(Language, "english");
+    Language = "english";
 
   // Load Language file
     DialogList.Initialize();
@@ -1561,42 +1640,53 @@ bool InitMonitor()
 
 bool InitSystem()
 {
-    SystemFont = TFont::LoadFont(100);
-    DialogFont = TFont::LoadFont(101);
-    DialogFontShadow = TFont::LoadFont(102);
-    SmallFont = TFont::LoadFont(104);
-    GameFont = TFont::LoadFont(105);
-//  GoldFont = TFont::LoadFont(105);
+    FontTable = new TFontTable;
+    if (!FontTable->Initialize())
+        FatalError("Unable to load FONT.DEF");
+
+    SystemFont       = FontTable->Bitmap("System");
+    DialogFont       = FontTable->Bitmap("Dialog");
+    DialogFontShadow = FontTable->Bitmap("Dialog");  // WINFONT - shadow handled by TrueType later
+    SmallFont        = FontTable->Bitmap("Small");
+    GameFont         = FontTable->Bitmap("Med");
     
+#if 0 // TODO(port): Subsystem 7 — MSVC CRT debug heap check (_CrtCheckMemory)
     if (!_CrtCheckMemory())
     {
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
+#endif
   // Set correct imagery path
     if (NoNormals == true)
         TObjectImagery::SetImageryPath(NONORMALPATH);
     else
         TObjectImagery::SetImageryPath(NORMALPATH);
 
+#if 0 // TODO(port): Subsystem 7 — MSVC CRT debug heap check (_CrtCheckMemory)
     if (!_CrtCheckMemory())
     {
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
+#endif
   // Allocate the chunk cache as 1/4 free physical memory or 4MB
     int32_t physmegs = TotalPhys() / (1024 * 1024);
     if (ChunkCacheSize < 1)
     {
         if (physmegs < 16)
         {
+#if 0 // TODO(port): Subsystem 2 — Win32 MessageBox warning; stub as warning log
             uint32_t res = MessageBox(nullptr, "This game requires at least 16MB of system minimum to run well. "
                              "If you press OK the game will load normally, but game "
                              "performance will be severely degraded.",
                              "WARNING", MB_ICONSTOP | MB_OK);
-            
+
             if (res == IDCANCEL)
                 return false;
+#else
+            fprintf(stderr, "WARNING: less than 16MB physical memory detected; continuing.\n");
+#endif
 
             ChunkCacheSize = 2;
         }
@@ -1607,11 +1697,13 @@ bool InitSystem()
         else
             ChunkCacheSize = min(physmegs - 32, 16);
     }
+#if 0 // TODO(port): Subsystem 7 — MSVC CRT debug heap check (_CrtCheckMemory)
     if (!_CrtCheckMemory())
     {
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
+#endif
     if (PreloadSectorSize < 0)
     {
         if (physmegs < 16)
@@ -1648,7 +1740,9 @@ bool InitSystem()
     }
 
   // Do the critical section object
+#if 0 // TODO(port): Subsystem 4 — Win32 CRITICAL_SECTION (→ std::mutex / worker pool)
     InitializeCriticalSection(&CriticalSection);
+#endif
 
     if (!_CrtCheckMemory())
     {
@@ -1665,8 +1759,10 @@ bool InitSystem()
         _RPT0(_CRT_ERROR, "Memory Error");
     }
   // Now display is initialized, set up video cap system (if needed)
+#if 0 // TODO(port): Subsystem 3 — video capture (DirectShow → AVFoundation/sokol)
     if (dovideocap)
         VideoCapture.Initialize(videocapmegs, videocapfps);
+#endif
 
     if (!_CrtCheckMemory())
     {
@@ -1690,8 +1786,10 @@ bool InitSystem()
         Status("No MMX detected, using normal lighting\n");
     Status("Physical memory %d MB\n", physmegs);
     Status("Chunk cache size %d MB\n", ChunkCacheSize);
+#if 0 // TODO(port): Subsystem 2 — DirectDraw device enumeration (→ sokol backend)
     Status("Available display devices: %s\n", DriversAvailable);
     Status("Current display device: %s - %s\n", DirectDrawName, DirectDrawDesc);
+#endif
     Status("Preload sectors %s, preload size %d\n", (PreloadSectors?"ON":"OFF"), PreloadSectorSize);
 
     if (!_CrtCheckMemory())
@@ -1714,7 +1812,9 @@ bool InitSystem()
 
   // Initialize Direct Input
     Status("Initializing direct input\n");
+#if 0 // TODO(port): Subsystem 5 — DirectInput (→ sokol_app event translation)
     InitializeDirectInput();
+#endif
 
     if (!_CrtCheckMemory())
     {
@@ -1723,7 +1823,9 @@ bool InitSystem()
     }
   // Initialize Joysticks (if any)
     Status("Initializing joysticks\n");
+#if 0 // TODO(port): Subsystem 5 — DirectInput joystick (→ GameController framework)
     InitializeJoysticks();
+#endif
 
     if (!_CrtCheckMemory())
     {
@@ -1774,15 +1876,14 @@ void CloseSystem()
     DialogList.Close();
 
   // Kill fonts
-    delete SystemFont;
-    delete DialogFont;
-    delete DialogFontShadow;
-    delete SmallFont;
-    delete GameFont;
-//  delete GoldFont;
+    delete FontTable;
+    FontTable = nullptr;
+    SystemFont = DialogFont = DialogFontShadow = SmallFont = GameFont = nullptr;
 
   // Kill video capture buffers (if they are allocated)
+#if 0 // TODO(port): Subsystem 3 — video capture (DirectShow → AVFoundation/sokol)
     VideoCapture.Close();
+#endif
 
   // Kill rules data
     Rules.Close();
@@ -1794,8 +1895,9 @@ void CloseSystem()
     TObjectClass::FreeClasses();
 
   // Resume all threads
+    extern bool ThreadsPaused;
     if (ThreadsPaused)
-        ResumeThreads();        
+        ResumeThreads();
 
     if (CurrentScreen)
     {
@@ -1812,10 +1914,12 @@ void CloseSystem()
     SoundPlayer.Close();
 
   // Release DirectInput (including joystick)
+#if 0 // TODO(port): Subsystem 5 — DirectInput teardown (→ sokol_app cleanup)
     CloseDirectInput();
 
   // Release the mouse capture
     ReleaseCapture();
+#endif
 
   // Stop timer stuff
     Timer.Close();
@@ -1823,18 +1927,22 @@ void CloseSystem()
   // Close the display
     Display->Close();
 
+#if 0 // TODO(port): Subsystem 2 — Win32 message pump drain (→ sokol_app cleanup)
     MSG Message;
     while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
     {
         TranslateMessage(&Message);
         DispatchMessage(&Message);
     }
+#endif
 
   // Close the main window
     MainWindow.Close();
 
   // Clear out any clipping rectangle
+#if 0 // TODO(port): Subsystem 5 — Win32 ClipCursor (→ sapp_lock_mouse)
     ClipCursor(nullptr);
+#endif
 }
 
 // ************************************************************************
@@ -1936,6 +2044,13 @@ static void AppInit()
     char emptycmd[1] = "";
     GetParameters(emptycmd);
 
+    // Base resource archives — retail WinMain opened these explicitly before
+    // anything that calls rev_fopen (FontTable->Initialize, LoadClasses...).
+    if (!MountArchive("resources.rvr"))
+        FatalError("Error in pack file RESOURCE.RVR", nullptr);
+    if (!MountArchive("imagery.rvi"))
+        FatalError("Error in pack file IMAGERY.RVI", nullptr);
+
     if (!InitMonitor())
         FatalError("Invalid monitor selected", nullptr);
 
@@ -1986,6 +2101,7 @@ static void AppCleanup()
     if (SystemInitialized)
         CloseSystem();
     MainWindow.Close();
+    UnmountAll();
 }
 
 // Translate an sapp_keycode into the legacy VK_* codes the screen / pane
@@ -2159,8 +2275,10 @@ static void UnusedWinMainAnchor_()
   // Preset capabilities flags
     IsMMX = HasMMX();
 
+#if 0 // TODO(port): Subsystem 7 — MEMORYSTATUS snapshot; dropped, see header comment
     StartMemory.dwLength = sizeof(MEMORYSTATUS);
     GlobalMemoryStatus(&StartMemory);
+#endif
 
 #ifdef _DEBUG
     if (!_CrtCheckMemory())
