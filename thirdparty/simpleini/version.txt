@@ -1,0 +1,13 @@
+simpleini v4.25
+https://github.com/brofield/simpleini/releases/tag/v4.25
+Vendored 2026-04-16.
+
+Files:
+  SimpleIni.h   - header-only INI parser (CSimpleIniA / CSimpleIniW)
+  ConvertUTF.h  - Unicode conversion helpers used when SI_CONVERT_GENERIC is defined
+  ConvertUTF.c  - implementation of the above
+  LICENSE.txt   - MIT license (see upstream LICENCE.txt)
+
+Only SimpleIni.h is actually included by the live tree right now; Revenant
+uses CSimpleIniA (narrow-char). The ConvertUTF pair is bundled for future
+use if we enable wide/UTF-8 conversion.

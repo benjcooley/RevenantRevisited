@@ -6,10 +6,8 @@
 
 #include "revutils.h"
 
-#include <stdarg.h>
+#include "parse.h"
 
-// For multimonitor support
-#define COMPILE_MULTIMON_STUBS
 #include <fcntl.h>
 #include <math.h>
 #include <stdarg.h>
@@ -17,6 +15,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#include <cctype>
+#include <cstring>
+#include <filesystem>
+#include <string>
+#include <system_error>
+
+#include <SimpleIni.h>
 
 // ************************************************************************
 // *                          Support Functions                           *
@@ -343,134 +349,198 @@ void ExitGame()
 }
 
 // *************** Settings Functions *****************
+//
+// Subsystem 5 port: these were Win32 GetPrivateProfile* / WritePrivateProfile*
+// calls in the 1999 source. Now backed by simpleini (CSimpleIniA) with the
+// same public signatures so call sites in ctrlmap.cpp, editor.cpp, and the
+// main settings loader don't need touching. The original Win32 bodies live
+// in attic/src/revutils_win32_ini.cpp.
+//
+// Behaviour preserved from the original: every INIGet* re-writes the value
+// (default or parsed) back to the file via its matching INISet*. That's how
+// Revenant.ini ends up as a self-documenting record of every option the
+// game queries. To keep that semantic with simpleini, each Set flushes to
+// disk immediately via SaveFile(). Volume is tiny (a few dozen keys at
+// startup) so the IO cost is irrelevant.
 
-static TString INIPath;
-static TString INISection;
+namespace {
+
+std::filesystem::path g_iniPath;
+std::string g_iniSection;
+CSimpleIniA g_ini;
+bool g_iniLoaded = false;
+
+void EnsureLoaded()
+{
+    if (g_iniLoaded)
+        return;
+    g_ini.SetUnicode(false);
+    g_ini.SetMultiKey(false);
+    g_ini.SetQuotes(false);
+    if (!g_iniPath.empty())
+        g_ini.LoadFile(g_iniPath.string().c_str());
+    g_iniLoaded = true;
+}
+
+void Flush()
+{
+    if (g_iniPath.empty())
+        return;
+    g_ini.SaveFile(g_iniPath.string().c_str());
+}
+
+// Lowercase in-place helper (replacement for the Win32 strlwr() used by the
+// old INIGetBool body).
+std::string ToLower(const char* s)
+{
+    std::string out = s ? s : "";
+    for (char& c : out)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+} // namespace
 
 void INISetSection(const char* newsection)
 {
-    INISection = newsection;
+    g_iniSection = newsection ? newsection : "";
 }
 
-void INISetPath(const char *runpath)
+// Called from revmain at startup to fix the .ini location relative to the
+// user's save directory. Not declared in revutils.h because revmain owns
+// path policy; keep the definition here so revutils.cpp is self-contained.
+void INISetPath(const char* /*runpath*/)
 {
-    char *ininame = "Revenant.ini";
+    constexpr const char* ininame = "Revenant.ini";
 
-    INIPath = SavePath;
-    INIPath.Append(ininame);
+    std::filesystem::path savePath = SavePath;
+    std::filesystem::path runPath  = RunPath;
 
-  // Make sure INI file is in writable (SavePath) directory
-    if (stricmp(RunPath, SavePath) != 0) // Run/Save path are different
+    g_iniPath = savePath / ininame;
+
+    // If SavePath and RunPath differ and SavePath doesn't yet hold an .ini,
+    // seed it from RunPath so first-run defaults come from the install.
+    std::error_code ec;
+    if (!std::filesystem::equivalent(savePath, runPath, ec))
     {
-        FILE *fp = fopen(INIPath.CStr(), "r");
-        if (!fp)    // INI file not in SavePath
+        if (!std::filesystem::exists(g_iniPath, ec))
         {
-            char from[MAXPATHLEN];
-            strcpy(from, RunPath);
-            strcat(from, ininame);
-            copyfiles(from, INIPath.CStr());
+            std::filesystem::path src = runPath / ininame;
+            if (std::filesystem::exists(src, ec))
+                std::filesystem::copy_file(src, g_iniPath,
+                    std::filesystem::copy_options::overwrite_existing, ec);
         }
     }
+
+    g_iniLoaded = false;
+    EnsureLoaded();
 }
 
-int32_t INIGetInt(const char *key, int32_t def, const char *format)
+int32_t INIGetInt(const char* key, int32_t def, char* format)
 {
-    int32_t i = GetPrivateProfileInt(INISection, key, def, INIPath);
-
+    EnsureLoaded();
+    const int32_t i = static_cast<int32_t>(
+        g_ini.GetLongValue(g_iniSection.c_str(), key, def));
     INISetInt(key, i, format);
-
     return i;
 }
 
-void INISetInt(const char *key, int32_t i, char *format)
+void INISetInt(const char* key, int32_t i, char* format)
 {
+    EnsureLoaded();
     if (!format)
-        format = "%d";
+        format = const_cast<char*>("%d");
 
-    char buf[20];
-    sprintf(buf, format, i);
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), format, i);
 
-    WritePrivateProfileString(INISection, key, buf, INIPath);
+    g_ini.SetValue(g_iniSection.c_str(), key, buf);
+    Flush();
 }
 
-char *INIGetText(const char *key, char *def, char *buf, int32_t buflen)
+char* INIGetText(const char* key, char* def, char* buf, int32_t buflen)
 {
+    EnsureLoaded();
+
     static char s[128];
     if (!buf)
     {
         buf = s;
         buflen = 128;
     }
-
     if (!def)
-        def = "";
+        def = const_cast<char*>("");
 
-  // Quote the string
-    char qdef[128];
-    strncpyz(qdef, "\"", 128);
-    strncatz(qdef, def, 128);
-    strncatz(qdef, "\"", 128);
-
-    GetPrivateProfileString(INISection, key, qdef, buf, buflen, INIPath);
-
-    if (buf[0] == '\"')
+    // Original semantics: stored text is quoted; default is also quoted for
+    // the Win32 GetPrivateProfileString call so the retrieved raw value ends
+    // with surrounding quotes, which the old code then strips.
+    const char* raw = g_ini.GetValue(g_iniSection.c_str(), key, nullptr);
+    std::string value;
+    if (raw)
     {
-        int32_t l = strlen(buf);
-        memmove(buf, buf + 1, l - 2);
-        buf[l - 2] = nullptr;
+        value = raw;
+        if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+            value = value.substr(1, value.size() - 2);
+    }
+    else
+    {
+        value = def;
     }
 
+    strncpyz(buf, value.c_str(), buflen);
     INISetText(key, buf);
-
     return buf;
 }
 
-void INISetText(char *key, char *str)
+void INISetText(const char* key, char* str)
 {
-  // Quote the string
-    char qstr[128];
-    strncpyz(qstr, "\"", 128);
-    strncatz(qstr, str, 128);
-    strncatz(qstr, "\"", 128);
-
-    WritePrivateProfileString(INISection, key, qstr, INIPath);
+    EnsureLoaded();
+    std::string quoted = "\"";
+    quoted += (str ? str : "");
+    quoted += "\"";
+    g_ini.SetValue(g_iniSection.c_str(), key, quoted.c_str());
+    Flush();
 }
 
-char *INIGetStr(char *key, char *def, char *buf, int32_t buflen)
+char* INIGetStr(const char* key, char* def, char* buf, int32_t buflen)
 {
+    EnsureLoaded();
+
     static char s[128];
     if (!buf)
     {
         buf = s;
         buflen = 128;
     }
-
     if (!def)
-        def = "";
+        def = const_cast<char*>("");
 
-    GetPrivateProfileString(INISection, key, def, buf, buflen, INIPath);
-
+    const char* raw = g_ini.GetValue(g_iniSection.c_str(), key, def);
+    strncpyz(buf, raw ? raw : "", buflen);
     INISetStr(key, buf);
-
     return buf;
 }
 
-void INISetStr(char *key, char *str)
+void INISetStr(const char* key, char* str)
 {
-    WritePrivateProfileString(INISection, key, str, INIPath);
+    EnsureLoaded();
+    g_ini.SetValue(g_iniSection.c_str(), key, str ? str : "");
+    Flush();
 }
 
-int32_t INIGetArray(char *key, int32_t size, int32_t *ary, int32_t defsize, int32_t *defary, char *format)
+int32_t INIGetArray(const char* key, int32_t size, int32_t* ary,
+                    int32_t defsize, int32_t* defary, char* format)
 {
-    char buf[128];
+    EnsureLoaded();
 
     if (ary != defary)
-        memset(ary, 0, sizeof(int32_t) * size);
+        std::memset(ary, 0, sizeof(int32_t) * size);
 
-    GetPrivateProfileString(INISection, key, "", buf, 128, INIPath);
+    const char* raw = g_ini.GetValue(g_iniSection.c_str(), key, "");
+    std::string buf = raw ? raw : "";
 
     int32_t newsize = 0;
-    if (!buf[0])
+    if (buf.empty())
     {
         if (defary)
         {
@@ -483,127 +553,85 @@ int32_t INIGetArray(char *key, int32_t size, int32_t *ary, int32_t defsize, int3
     }
     else
     {
-        char *tok = nullptr;
-        do
+        // strtok mutates — use a mutable copy.
+        std::string scratch = buf;
+        char* tok = std::strtok(scratch.data(), ",");
+        while (tok && newsize < size)
         {
-            tok = strtok((newsize < 1) ? buf : nullptr, ",");
-            if (tok)
-            {
-                ary[newsize] = atol(tok);
-                newsize++;
-            }
-        } while (tok && newsize < size);
-    }   
+            ary[newsize++] = std::atol(tok);
+            tok = std::strtok(nullptr, ",");
+        }
+    }
 
     INISetArray(key, newsize, ary, format);
-
     return newsize;
 }
 
-void INISetArray(char *key, int32_t size, int32_t ary[], char *format)
+void INISetArray(const char* key, int32_t size, int32_t ary[], const char* format)
 {
-    char buf[128];
-
+    EnsureLoaded();
     if (!format)
         format = "%d";
 
-    buf[0] = nullptr;
+    std::string out;
+    char tmp[32];
     for (int32_t c = 0; c < size; c++)
     {
         if (c >= 1)
-            strcat(buf, ",");
-        int32_t len = strlen(buf);
-        sprintf(buf + len, format, ary[c]);
+            out.push_back(',');
+        std::snprintf(tmp, sizeof(tmp), format, ary[c]);
+        out += tmp;
     }
 
-    WritePrivateProfileString(INISection, key, buf, INIPath);
+    g_ini.SetValue(g_iniSection.c_str(), key, out.c_str());
+    Flush();
 }
 
-bool INIGetBool(char *key, bool def, char *yes, char *no)
+bool INIGetBool(const char* key, bool def, const char* yes, const char* no)
 {
-    char buf[30];
-    char getyes[30], getno[30];
+    EnsureLoaded();
 
-    if (!yes)
-        strcpy(getyes,"yes on true 1");
-    else
-    {
-        strcpy(getyes, yes);
-        strlwr(getyes);
-    }
+    const std::string yesTokens = yes ? ToLower(yes) : "yes on true 1";
+    const std::string noTokens  = no  ? ToLower(no)  : "no off false 0";
 
-    if (!no)
-        strcpy(getno, "no off false 0");
-    else
-    {
-        strcpy(getno, no);
-        strlwr(getno);
-    }
+    const char* raw = g_ini.GetValue(g_iniSection.c_str(), key, "");
+    const std::string val = ToLower(raw ? raw : "");
 
-    GetPrivateProfileString(INISection, key, "", buf, 30, INIPath);
-    strlwr(buf);
-
-    bool b; 
-    if (!strstr(yes, buf))
+    bool b;
+    if (!val.empty() && yesTokens.find(val) != std::string::npos)
         b = true;
-    else if (!strstr(no, buf))
+    else if (!val.empty() && noTokens.find(val) != std::string::npos)
         b = false;
     else
         b = def;
 
     INISetBool(key, b, yes, no);
-
     return b;
 }
 
-void INISetBool(char *key, bool on, char *yes, char *no)
+void INISetBool(const char* key, bool on, const char* yes, const char* no)
 {
-    if (!yes)
-        yes = "1";
-    if (!no)
-        no = "0";
-
-    WritePrivateProfileString(INISection, key, on ? yes : no, INIPath);
+    EnsureLoaded();
+    if (!yes) yes = "1";
+    if (!no)  no  = "0";
+    g_ini.SetValue(g_iniSection.c_str(), key, on ? yes : no);
+    Flush();
 }
 
-bool INIGetYesNo(const char *key, bool def)
-{
-    return INIGetBool(key, def, "Yes", "No");
-}
+bool INIGetYesNo(const char* key, bool def)      { return INIGetBool(key, def, "Yes", "No"); }
+void INISetYesNo(const char* key, bool on)       {        INISetBool(key, on, "Yes", "No"); }
+bool INIGetTrueFalse(const char* key, bool def)  { return INIGetBool(key, def, "True", "False"); }
+void INISetTrueFalse(const char* key, bool on)   {        INISetBool(key, on, "True", "False"); }
+bool INIGetOnOff(const char* key, bool def)      { return INIGetBool(key, def, "On", "Off"); }
+void INISetOnOff(const char* key, bool on)       {        INISetBool(key, on, "On", "Off"); }
 
-void INISetYesNo(const char *key, bool on)
-{
-    INISetBool(key, on, "Yes", "No");
-}
+// Declared in parse.cpp. Used by INIParse below.
+bool ParseAnything(bool stack, TToken& t, const char* format, va_list ap);
 
-bool INIGetTrueFalse(const char *key, bool def)
-{
-    return INIGetBool(key, def, "True", "False");
-}
-
-void INISetTrueFalse(const char *key, bool on)
-{
-    INISetBool(key, on, "True", "False");
-}
-
-bool INIGetOnOff(const char *key, bool def)
-{
-    return INIGetBool(key, def, "On", "Off");
-}
-
-void INISetOnOff(const char *key, bool on)
-{
-    INISetBool(key, on, "On", "Off");
-}
-
-// Grab the ParseAnything function from PARSE.CPP
-bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap);
-
-bool INIParse(const char *key, cons char *def, const char *format, ...)
+bool INIParse(const char* key, const char* def, char* format, ...)
 {
     char buf[128];
-
-    INIGetStr(key, def, buf, 128);
+    INIGetStr(key, const_cast<char*>(def), buf, 128);
 
     va_list ap;
     va_start(ap, format);
@@ -611,23 +639,19 @@ bool INIParse(const char *key, cons char *def, const char *format, ...)
     TStringParseStream s(buf, strlen(buf));
     TToken t(s);
     t.Get();
-
-    bool retval = ParseAnything(true, t, format, ap);
+    const bool retval = ParseAnything(true, t, format, ap);
 
     va_end(ap);
-
     return retval;
 }
 
-void INIPrint(const char *key, const char *format, ...)
+void INIPrint(const char* key, const char* format, ...)
 {
     char buf[128];
 
     va_list marker;
     va_start(marker, format);
-
-    vsprintf(buf, format, marker);
-
+    std::vsnprintf(buf, sizeof(buf), format, marker);
     va_end(marker);
 
     INISetStr(key, buf);

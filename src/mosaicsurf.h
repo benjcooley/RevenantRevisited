@@ -49,7 +49,7 @@ class TMosaicSurface : public TSurface
       { if (!Initialize(ntilex, ntiley, nnumtilex, nnumtiley, ncreateflags))
          FatalError("Couldn't initialize mosaic surface"); }
       // Initializes Mosaic surfaces
-    TMosaicSurface(PTMosaicSurface clone, uint32_t ncreateflags = MOSAICSURF_CLONEALL)
+    TMosaicSurface(TMosaicSurface* clone, uint32_t ncreateflags = MOSAICSURF_CLONEALL)
       { if (!Initialize(clone, ncreateflags))
          FatalError("Couldn't initialize mosaic surface"); }
       // Initializes a Cloned Mosaic surface
@@ -61,7 +61,7 @@ class TMosaicSurface : public TSurface
 
     bool Initialize(int32_t ntilex, int32_t ntiley, int32_t nnumtilex, int32_t nnumtiley, uint32_t ncreateflags);
       // Causes the mosaicsurface to be initialized
-    bool Initialize(PTMosaicSurface clone, uint32_t ncreateflags = MOSAICSURF_CLONEALL);
+    bool Initialize(TMosaicSurface* clone, uint32_t ncreateflags = MOSAICSURF_CLONEALL);
       // Initializes a cloned mosaic surface
     void Close();
       // Closes the mosaic surface
@@ -73,8 +73,8 @@ class TMosaicSurface : public TSurface
 
     virtual int32_t BitsPerPixel(){return tiles[0]->BitsPerPixel();}
       // Returns current bits per pixel
-    virtual LPDIRECTDRAWSURFACE GetSGImage() { return tiles[0]->GetSGImage(); }
-      // Returns LPDIRECTDRAWSURFACE pointer or Null if not Direct Draw Surface.
+    virtual sg_image GetSGImage() { return tiles[0]->GetSGImage(); }
+      // Returns the sokol image backing this tile (sg_image{0} if none).
 
     virtual bool Lost() { return tiles[0]->Lost(); }
       // Returns true if the surface needs to be regenerated.
@@ -92,8 +92,8 @@ class TMosaicSurface : public TSurface
     virtual void SetClipMode(int32_t mode);
       // Sets clipping to normal of wrap around
 
-    PTMultiSurface GetTile(int32_t x, int32_t y)
-      { return (PTMultiSurface)tiles[y * numtilex + x]; }
+    TMultiSurface* GetTile(int32_t x, int32_t y)
+      { return (TMultiSurface*)tiles[y * numtilex + x]; }
       // Gets the given tile
 
 // --------------------------------------------------------------------------------
@@ -112,13 +112,13 @@ class TMosaicSurface : public TSurface
       // from a complex (mosaic) surface to an ordinary surface.
 
   // Put and blit functions which do primary, zbuffer, and normal buffer surface
-    virtual bool ParamDraw(PSDrawParam dp, PTBitmap bitmap = nullptr);
+    virtual bool ParamDraw(SDrawParam* dp, TBitmap* bitmap = nullptr);
       // Copies specified bitmap to current bitmap
-    virtual bool ParamBlit(PSDrawParam dp, TSurface* surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr);
-      // Blits from surface to this surface. RECT sets size of blit. 
+    virtual bool ParamBlit(SDrawParam* dp, TSurface* surface, int32_t ddflags = 0);
+      // Blits from surface to this surface. RECT sets size of blit.
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting
-    virtual bool ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr);
+    virtual bool ParamGetBlit(SDrawParam* dp, TSurface* surface, int32_t ddflags = 0);
       // Blits from this surface to surface. RECT sets size of blit. 
       // X & Y specifies dest origin.  If no hardware available, uses software
       // blitting.  Called by ParamBlit when blitting from a complex surface
@@ -127,4 +127,3 @@ class TMosaicSurface : public TSurface
 // --------------------------------------------------------------------------------
 
 };
-#endif

@@ -48,11 +48,16 @@
 #include "area.h"
 #include "rules.h"
 #include "dialog.h"
+#include "cursor.h"
+
+#include <sokol_app.h>
 
 // Global Variables
-HINSTANCE hInstance;
-HANDLE PauseMutex;
-MEMORYSTATUS StartMemory;
+// TODO(port): hInstance / StartMemory / PauseMutex were Win32-only.
+// PauseMutex was for the loader-thread pause; Subsystem 4 will replace it
+// with a worker-pool pause primitive. StartMemory was a GlobalMemoryStatus
+// snapshot at WinMain entry, used only in debug prints. Dropped here.
+HANDLE PauseMutex = nullptr;
 
 // Game directories
 TString RunPath;
@@ -108,7 +113,9 @@ TControlMap     ControlMap;         // Contains the key/joystick mappings for ga
 TAreaManager    AreaManager;        // Manages the game area system
 TPlayerManager  PlayerManager;      // Manages the game player list
 TRules  Rules;                      // Manages global rules data (classes, chars, stats for attacks, etc.)
-CRITICAL_SECTION CriticalSection;   // Controls enter critical section functions;
+// TODO(port): CRITICAL_SECTION replaced by Subsystem 4 threading work
+// (worker pool + async completions). Removed here; revutils.cpp still
+// references it via the stub in BEGIN_CRITICAL / END_CRITICAL below.
 TSpellList      SpellList;          // a list of spells in the game
 TDialogList     DialogList;         // List of dialog and other game messages for current language
 
@@ -163,12 +170,13 @@ bool ShowDialog      = false;       // Show dialog lines (always shows if no spe
 
 // Multi-Monitor Variables
 int32_t MonitorNum = 0;         // Monitor game will run on (0=default (primary), 1=monitor 1, 2=monitor 2, etc.)
-int32_t MonitorX = 0;           // Relative position of monitor in desktop coordinates  
-int32_t MonitorY = 0;       
-int32_t MonitorW = 640;         // Relative position of monitor in desktop coordinates  
-int32_t MonitorH = 480;     
-HMONITOR Monitor = nullptr;     // Windows monitor handle
-MONITORINFOEX MonitorInfo;      // Windows monitor info structure
+int32_t MonitorX = 0;           // Relative position of monitor in desktop coordinates
+int32_t MonitorY = 0;
+int32_t MonitorW = 640;         // Relative position of monitor in desktop coordinates
+int32_t MonitorH = 480;
+// TODO(port): HMONITOR / MONITORINFOEX were Win32 state populated by the
+// retired MonitorEnumProc. sokol_app doesn't expose a monitor index; the
+// engine will need reworked multi-display support or we drop the feature.
 
 // Game flags
 bool Windowed = false;      // Do we run the game in a window in NORMAL mode (instead of EXLUSIVE)
@@ -221,7 +229,8 @@ bool UpdatingBoundingRect = false;
 
 // Is joystick available?
 bool HasJoyStick = false;
-JOYINFO JoyInfo;
+// TODO(port): JOYINFO was Win32 joyGetPos result; Subsystem 7 (input)
+// will rework joystick support via sokol_app/IOKit.
 
 // Memory used by program
 uint32_t ImageryMemUsage = 0;
@@ -533,25 +542,28 @@ void Status(const char *fmt, ...)
 }
 
 // *************** Critical Section Functions *****************
+// TODO(port): these are stubs; Subsystem 4 (threading) will land proper
+// mutex-backed critical sections. Safe as no-ops while we are single-
+// threaded during Phase 2 bringup.
 
-void BEGIN_CRITICAL()
-{
-    EnterCriticalSection(&CriticalSection);
-}
-
-void END_CRITICAL()
-{
-    LeaveCriticalSection(&CriticalSection);
-}
+void BEGIN_CRITICAL() {}
+void END_CRITICAL() {}
 
 // ****** Exit the Game - Why would anyone want to do that? ******
 
 void ExitGame()
 {
-    PostQuitMessage(0);
+    sapp_request_quit();
 }
 
 // *************** Settings Functions *****************
+//
+// The INI accessor family (INISetPath/INIGetInt/INIGetBool/...) lives in
+// revutils.cpp now — the revutils port rebuilt them on top of CSimpleIniA.
+// The Win32 GetPrivateProfile* bodies that used to live here have been
+// retired to attic/src/revutils_win32_ini.cpp. Leaving the banner as a
+// landmark for anyone grepping.
+#if 0  // ATTIC: retired duplicate — see revutils.cpp for the live impl
 
 static TString INIPath;
 static TString INISection;
@@ -841,6 +853,8 @@ void INIPrint(const char *key, const char *format, ...)
 
     INISetStr(key, buf);
 }
+
+#endif // ATTIC: retired duplicate INI block
 
 // *************** Allocation Functions *****************
 
@@ -1176,24 +1190,12 @@ uint32_t TotalPage()
 // *                     Initialization Functions                         *
 // ************************************************************************
 
-#define cpuid __asm _emit 0x0f __asm _emit 0xa2
-
-#define MMXBIT (1 << 23)
-
+// TODO(port): MMX paths are not shipped and scheduled for deletion; see
+// feedback_mmx_unused. The original CPUID-based HasMMX() is in
+// attic/src/revmain_win32_entry.cpp. Hard-coded false for now.
 bool HasMMX()
 {
-    uint32_t version;
-    uint32_t features;
-
-    __asm
-    {
-        mov eax, 1
-        cpuid
-        mov version, eax
-        mov features, edx
-    }
-
-    return (features & MMXBIT) != 0;
+    return false;
 }
 
 void GetProgramPaths(char *lpCmdLine, char *RunPath, char *SavePath)
@@ -1541,42 +1543,15 @@ bool InitLanguage()
     return true;
 }
 
-bool CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hDC, LPRECT lpRect, LPARAM)
-{
-    MonitorInfo.cbSize = sizeof(MonitorInfo);
-    Monitor = hMonitor;
-    GetMonitorInfo(hMonitor, (MONITORINFO*)&MonitorInfo);
-    MonitorX = MonitorInfo.rcMonitor.left;
-    MonitorY = MonitorInfo.rcMonitor.top;
-    MonitorW = MonitorInfo.rcMonitor.right - MonitorInfo.rcMonitor.left;
-    MonitorH = MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top;
-
-    char *ptr = strstr(MonitorInfo.szDevice, "Display");
-    if (!ptr)
-        ptr = strstr(MonitorInfo.szDevice, "display");
-    if (!ptr)
-        ptr = strstr(MonitorInfo.szDevice, "DISPLAY");
-    int32_t dispnum = atoi(ptr + 7);
-
-    if (MonitorNum <= 1 && ((dispnum == 1) || (dispnum == 0)))
-    {
-        if (MonitorNum == 0)
-            strcpy(MonitorInfo.szDevice, "display");
-        return false;
-    }
-
-    if (MonitorNum == dispnum)
-        return false;
-
-    return true;
-} 
-
+// TODO(port): multi-monitor selection. sokol_app puts the window on the
+// user's active display; the MONITOR=n command-line selector from the
+// Win32 build is not wired up yet. Originals in attic/src/revmain_win32_entry.cpp.
 bool InitMonitor()
 {
-    if (MonitorNum > GetSystemMetrics(SM_CMONITORS) || MonitorNum < 0)
-        return false;
-    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, nullptr);
-
+    MonitorX = 0;
+    MonitorY = 0;
+    MonitorW = WIDTH;
+    MonitorH = HEIGHT;
     return true;
 }
 
@@ -1863,14 +1838,305 @@ void CloseSystem()
 }
 
 // ************************************************************************
-// *                   WinMain - Main Program Function                    *
+// *               sokol_main - macOS/sokol_app Entry Point               *
 // ************************************************************************
+//
+// sokol_app owns the window and the run loop. Our lifecycle is:
+//   1. sokol_main()  -> return sapp_desc describing the window + callbacks
+//   2. AppInit()     -> sapp has created the window + Metal context.
+//                       Call InitSystem() which brings up TDisplay (which
+//                       itself calls sg_setup via sapp_sgcontext()),
+//                       timers, imagery loader, rules, etc.
+//   3. AppFrame()    -> one game tick per call. Currently drives the
+//                       legacy screen dispatch by pumping one frame of
+//                       the current TScreen.
+//   4. AppEvent()    -> translate sapp_event -> TScreen input hooks.
+//   5. AppCleanup()  -> CloseSystem() and teardown.
+//
+// The pre-port WinMain / MessageLoop / RegisterClass scaffolding lives
+// in attic/src/revmain_win32_entry.cpp and attic/src/mainwnd_win32.cpp.
 
-/* Pretty simple here.  Just make a main window, start its message loop
- * going, then when the message loop returns, close the program. */
+#include <sokol_glue.h>
 
-int32_t PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
-    LPSTR lpCmdLine, int32_t nCmdShow)
+// Forward decls for the sokol callbacks (defined below sokol_main).
+static void AppInit();
+static void AppFrame();
+static void AppEvent(const sapp_event* ev);
+static void AppCleanup();
+
+// The screen we were told to start on. Latched in AppInit, consumed in
+// AppFrame. When a screen ends (TScreen::ShowScreen logic formerly in
+// the old WinMain loop) we advance to GetNextScreen().
+static TScreen* BootScreen = nullptr;
+static bool SystemInitialized = false;
+
+sapp_desc sokol_main(int argc, char* argv[])
+{
+    // Command-line parsing: the legacy parameter parser works on a single
+    // flat uppercased string. Glue argv back together for it.
+    static char cmdbuf[1024];
+    cmdbuf[0] = '\0';
+    for (int i = 1; i < argc; ++i)
+    {
+        if (i > 1 && (int)strlen(cmdbuf) + 1 < (int)sizeof(cmdbuf))
+            strncatz(cmdbuf, " ", sizeof(cmdbuf));
+        if ((int)strlen(cmdbuf) + (int)strlen(argv[i]) + 1 < (int)sizeof(cmdbuf))
+            strncatz(cmdbuf, argv[i], sizeof(cmdbuf));
+    }
+
+    // Parse parameters that influence window creation BEFORE describing
+    // the sokol window. The rest of GetParameters (game-engine toggles)
+    // happens in AppInit after globals are safe to poke.
+    IsMMX = false;
+
+    // TODO(port): previously called strupr(lpCmdLine) here; GetParameters
+    // matches uppercase strings. Do the same in-place on cmdbuf so the
+    // INI/flag heuristics keep working.
+    for (char* p = cmdbuf; *p; ++p)
+        if (*p >= 'a' && *p <= 'z') *p += 'A' - 'a';
+
+    sapp_desc desc = {};
+    desc.init_cb = AppInit;
+    desc.frame_cb = AppFrame;
+    desc.event_cb = AppEvent;
+    desc.cleanup_cb = AppCleanup;
+    desc.width = WIDTH;
+    desc.height = HEIGHT;
+    desc.window_title = "Revenant";
+    desc.high_dpi = true;
+    desc.sample_count = 1;
+    // Windowed by default; Borderless/FullScreen come from INI/args and
+    // take effect before the window opens only if set via argv. Anything
+    // else stays at sokol defaults.
+    Windowed = true;
+
+    (void)argc;
+    (void)argv;
+    return desc;
+}
+
+static void AppInit()
+{
+    // Equivalent to the top of the retired WinMain: set paths, load INI,
+    // parse command line, initialize monitor info, language, window, and
+    // the rest of the system.
+
+    srand((unsigned)time(nullptr));
+
+    // TODO(port): proper save/run-path discovery for macOS. For now point
+    // both at the cwd. Agent working on Subsystem 5 (INI) will revisit.
+    strncpyz(RunPath, "./", MAXPATHLEN);
+    strncpyz(SavePath, "./", MAXPATHLEN);
+    INISetPath(RunPath);
+
+    GetINISettings();
+
+    // TODO(port): feed real argv through here; see sokol_main for the
+    // cmdbuf we built.
+    char emptycmd[1] = "";
+    GetParameters(emptycmd);
+
+    if (!InitMonitor())
+        FatalError("Invalid monitor selected", nullptr);
+
+    InitLanguage();
+
+    if (!MainWindow.Initialize())
+        FatalError("Couldn't create main window", nullptr);
+
+    if (!InitSystem())
+    {
+        sapp_request_quit();
+        return;
+    }
+
+    BootScreen = &PlayScreen;
+    SystemInitialized = true;
+}
+
+static void AppFrame()
+{
+    // Drive the legacy screen dispatch. The pre-port top-level loop was:
+    //     while (NextScreen) NextScreen = TScreen::ShowScreen(NextScreen, 0);
+    // TScreen::ShowScreen is blocking (runs that screen's TimerLoop),
+    // which doesn't work under sokol_app's non-blocking run loop. For the
+    // Phase-2 port we call ShowScreen() once per sokol frame; it will
+    // return when the screen ends, at which point we advance to the next
+    // one. Screens whose TimerLoop blocks internally on PeekMessage will
+    // need to be reworked when the display / screen subsystem (screen.cpp)
+    // is ported off Win32.
+    //
+    // TODO(port): once TScreen::TimerTick is de-Win32'd, split its body
+    // into a non-blocking "one tick" that we can call directly here
+    // instead of entering a blocking TimerLoop.
+
+    if (!SystemInitialized || Closing)
+        return;
+
+    if (BootScreen)
+    {
+        BootScreen = TScreen::ShowScreen(BootScreen, 0);
+        if (!BootScreen)
+            sapp_request_quit();
+    }
+}
+
+static void AppCleanup()
+{
+    if (SystemInitialized)
+        CloseSystem();
+    MainWindow.Close();
+}
+
+// Translate an sapp_keycode into the legacy VK_* codes the screen / pane
+// key handlers were written against. Only the keys the engine actually
+// switches on need an accurate mapping; everything else passes through
+// as the sokol enum value (the game's key-binding system compares codes
+// numerically, it doesn't care what they are as long as they're stable).
+static int32_t SappKeyToVK(sapp_keycode key)
+{
+    switch (key)
+    {
+        case SAPP_KEYCODE_LEFT_CONTROL:
+        case SAPP_KEYCODE_RIGHT_CONTROL: return VK_CONTROL;
+        case SAPP_KEYCODE_LEFT_ALT:
+        case SAPP_KEYCODE_RIGHT_ALT:     return VK_MENU;
+        case SAPP_KEYCODE_LEFT_SHIFT:
+        case SAPP_KEYCODE_RIGHT_SHIFT:   return VK_SHIFT;
+        case SAPP_KEYCODE_BACKSPACE:     return VK_BACK;
+        case SAPP_KEYCODE_ENTER:         return VK_RETURN;
+        default:                          return (int32_t)key;
+    }
+}
+
+static void AppEvent(const sapp_event* ev)
+{
+    if (!ev) return;
+
+    switch (ev->type)
+    {
+      case SAPP_EVENTTYPE_KEY_DOWN:
+      {
+        const int32_t vk = SappKeyToVK(ev->key_code);
+        if (vk == VK_CONTROL) CtrlDown = true;
+        else if (vk == VK_MENU) AltDown = true;
+        else if (vk == VK_SHIFT) ShiftDown = true;
+
+        if (!AppActive) break;
+        if (CurrentScreen)
+            CurrentScreen->KeyPress(vk, true);
+        break;
+      }
+
+      case SAPP_EVENTTYPE_KEY_UP:
+      {
+        const int32_t vk = SappKeyToVK(ev->key_code);
+        if (vk == VK_CONTROL) CtrlDown = false;
+        else if (vk == VK_MENU) AltDown = false;
+        else if (vk == VK_SHIFT) ShiftDown = false;
+
+        if (!AppActive) break;
+        if (CurrentScreen)
+            CurrentScreen->KeyPress(vk, false);
+        break;
+      }
+
+      case SAPP_EVENTTYPE_CHAR:
+      {
+        if (!AppActive) break;
+        if (CtrlDown && ShiftDown) break;
+        if (CurrentScreen)
+            CurrentScreen->CharPress((int32_t)ev->char_code, true);
+        break;
+      }
+
+      case SAPP_EVENTTYPE_MOUSE_MOVE:
+      {
+        cursorx = (int32_t)ev->mouse_x;
+        cursory = (int32_t)ev->mouse_y;
+        if (!AppActive) break;
+        if (CurrentScreen)
+            CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
+        break;
+      }
+
+      case SAPP_EVENTTYPE_MOUSE_DOWN:
+      {
+        cursorx = (int32_t)ev->mouse_x;
+        cursory = (int32_t)ev->mouse_y;
+        if (!AppActive) break;
+        int32_t btn = 0;
+        switch (ev->mouse_button)
+        {
+          case SAPP_MOUSEBUTTON_LEFT:   btn = MB_LEFTDOWN;   mousebutton |= MB_LEFTDOWN;   break;
+          case SAPP_MOUSEBUTTON_RIGHT:  btn = MB_RIGHTDOWN;  mousebutton |= MB_RIGHTDOWN;  break;
+          case SAPP_MOUSEBUTTON_MIDDLE: btn = MB_MIDDLEDOWN; mousebutton |= MB_MIDDLEDOWN; break;
+          default: break;
+        }
+        if (btn && CurrentScreen)
+            CurrentScreen->MouseClick(btn, cursorx, cursory);
+        break;
+      }
+
+      case SAPP_EVENTTYPE_MOUSE_UP:
+      {
+        cursorx = (int32_t)ev->mouse_x;
+        cursory = (int32_t)ev->mouse_y;
+        if (!AppActive) break;
+        int32_t btn = 0;
+        switch (ev->mouse_button)
+        {
+          case SAPP_MOUSEBUTTON_LEFT:   btn = MB_LEFTUP;   mousebutton &= ~MB_LEFTDOWN;   break;
+          case SAPP_MOUSEBUTTON_RIGHT:  btn = MB_RIGHTUP;  mousebutton &= ~MB_RIGHTDOWN;  break;
+          case SAPP_MOUSEBUTTON_MIDDLE: btn = MB_MIDDLEUP; mousebutton &= ~MB_MIDDLEDOWN; break;
+          default: break;
+        }
+        if (btn && CurrentScreen)
+            CurrentScreen->MouseClick(btn, cursorx, cursory);
+        break;
+      }
+
+      case SAPP_EVENTTYPE_RESIZED:
+      {
+        // TODO(port): TDisplay is hard-coded WIDTH x HEIGHT. When the
+        // renderer learns to cope with resize we should forward new
+        // dimensions here.
+        break;
+      }
+
+      case SAPP_EVENTTYPE_FOCUSED:
+      case SAPP_EVENTTYPE_RESUMED:
+      {
+        AppActive = true;
+        if (CurrentScreen)
+            CurrentScreen->Redraw();
+        break;
+      }
+
+      case SAPP_EVENTTYPE_UNFOCUSED:
+      case SAPP_EVENTTYPE_SUSPENDED:
+      case SAPP_EVENTTYPE_ICONIFIED:
+      {
+        AppActive = false;
+        break;
+      }
+
+      case SAPP_EVENTTYPE_QUIT_REQUESTED:
+      {
+        Closing = true;
+        break;
+      }
+
+      default:
+        break;
+    }
+}
+
+// Retired original WinMain body. Replaced by sokol_main + AppInit above.
+// Kept here in #if 0 briefly so the diff to attic/src/revmain_win32_entry.cpp
+// is easy to eyeball; delete once the sokol path is verified at runtime.
+#if 0
+static void UnusedWinMainAnchor_()
 {
 #ifdef _DEBUG
    _CrtMemState s1;
@@ -2079,3 +2345,4 @@ int32_t PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     return 0;
 }
+#endif  // retired WinMain body

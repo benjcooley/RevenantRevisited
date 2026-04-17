@@ -4,12 +4,7 @@
 // *                   charanimator.h - TCharAnimator module               *
 // *************************************************************************
 
-#ifndef _CHARANIMATOR_H
-#define _CHARANIMATOR_H
-
-#ifndef _WINDOWS_
-#error WINDOWS.H Must be included at the top of your .CPP file
-#endif
+#pragma once
 
 #include "3dimage.h"
 
@@ -21,9 +16,9 @@ _CLASSDEF(TCharAnimator)
 _STRUCTDEF(SWeaponSwipeParams)
 struct SWeaponSwipeParams
 {
-    LPD3DLVERTEX weaponverts;   // vertices of weapon, used for extents
+    S3DLVertex* weaponverts;    // vertices of weapon, used for extents
     int32_t numverts;               // number of vertices in weaponverts
-    PTCharAnimator charanim;    // animator of character this swipe is for
+    TCharAnimator* charanim;    // animator of character this swipe is for
     float r, g, b;              // color (to be normalized) of swipe
     int32_t maxsegs;                // number of segments/length of swipe
     int32_t smooth;                 // number of triangles per frame such that maxsegs % smooth == 0
@@ -34,16 +29,16 @@ class TWeaponSwipe
 {
   private:
     S3DAnimObj theobj;
-    PS3DAnimObj obj;
+    S3DAnimObj* obj;
     int32_t maxpoints, maxverts;        // Maximum number of points we can have, max verts
     hmm_vec3 *points[2];   // The points themselves points[0] = hilt, points[1] = tip or vv
     hmm_vec3 vweapbeg, vweapend; // vertex of hilt, tip of weapon
     hmm_mat4* weaponmat; // translation table for weapon
     bool initialized;   // is this real
     // duplicate los parameteros
-    LPD3DLVERTEX weaponverts;   // vertices of weapon, used for extents
+    S3DLVertex* weaponverts;    // vertices of weapon, used for extents
     int32_t numverts;               // number of vertices in weaponverts
-    PTCharAnimator charanim;    // animator of character this swipe is for
+    TCharAnimator* charanim;    // animator of character this swipe is for
     float r, g, b;              // color (to be normalized) of swipe
     int32_t maxsegs;                // number of segments/length of swipe
     int32_t smooth;                 // number of triangles per frame such that maxsegs % smooth == 0
@@ -53,7 +48,7 @@ class TWeaponSwipe
     TWeaponSwipe() { initialized = false; maxpoints = 0; primehand = nullptr; }
     virtual ~TWeaponSwipe() { }
 
-    void Init(PSWeaponSwipeParams p);
+    void Init(SWeaponSwipeParams* p);
     void GenerateStrip();
     void Animate();
     void CycleStrip();
@@ -64,7 +59,7 @@ class TWeaponSwipe
     void Close();
     hmm_mat4* GetCharsWeaponMatrix();
     bool GetInitialized() { return initialized; }
-    PTCharAnimator GetCharAnim() { return charanim; }
+    TCharAnimator* GetCharAnim() { return charanim; }
 };
 
 
@@ -82,17 +77,17 @@ class TCharAnimator : public T3DAnimator
 
     virtual void Animate(bool draw);
     virtual bool Render();
-    PTWeaponSwipe GetWeaponSwipe() { return &weaponswipe; }
+    TWeaponSwipe* GetWeaponSwipe() { return &weaponswipe; }
       // get the weaponswipe
 
     // WeaponSwipe handling stuff
     void SetupWeaponSwipe();
       // Called from SetupObjects() to init the weaponswipe!
-    LPD3DLVERTEX GetWeaponVertices(int32_t len);
+    S3DLVertex* GetWeaponVertices(int32_t len);
       // Called from SetupWeaponSwipe to get the correct weapon vertices
     int32_t GetWeaponNumVerts();
       // Called from SetupWeaponSwipe to get the correct number of weapon vertices
-    PT3DImagery GetWeaponImagery(int32_t objnum);
+    T3DImagery* GetWeaponImagery(int32_t objnum);
       // called from GetWeaponVertices and GetWeaponNumVerts
     int32_t GetWeaponNum();
       // called from GetWeaponVertices and GetWeaponNumVerts
@@ -125,10 +120,10 @@ class TCharAnimator : public T3DAnimator
       // Sets initial transparency level for character
     void UpdateTransparency();
       // Updates the character's transparency each frame
-    void SetMaterialTransparency(PT3DImagery img);
+    void SetMaterialTransparency(T3DImagery* img);
       // Sets the transparency for a given imagery (all materials) based on current
       // transparency level
-    void ResetMaterialTransparency(PT3DImagery img);
+    void ResetMaterialTransparency(T3DImagery* img);
       // Resets all imagery transparency back to 1.0
 
   // Utility Imagery stuff (shadow, combat flashes, bloody chunks, etc.)
@@ -139,12 +134,12 @@ class TCharAnimator : public T3DAnimator
     void RenderBloodyChunks();
 
   // cool function (like T3DAnimator::NewObject except uses imagery passed to it!
-    PS3DAnimObj GetNewImObject(PT3DImagery imagery, int32_t objnum, int32_t flags = 0);
-    void GetImFaces(PT3DImagery imagery, PS3DAnimObj obj);
-    void GetImVerts(PT3DImagery imagery, PS3DAnimObj obj, D3DVERTEXTYPE verttype);
+    S3DAnimObj* GetNewImObject(T3DImagery* imagery, int32_t objnum, int32_t flags = 0);
+    void GetImFaces(T3DImagery* imagery, S3DAnimObj* obj);
+    void GetImVerts(T3DImagery* imagery, S3DAnimObj* obj, ERender3DVertex verttype);
 
     TWeaponSwipe weaponswipe;               // swipe structure!
-    PT3DImagery utilityimagery;
+    T3DImagery* utilityimagery;
 
     float *origmatred, *origmatgreen;       // saved material values
     int32_t oldpoison;                          // update only when needed
@@ -159,5 +154,3 @@ class TPlayerAnimator : public TCharAnimator
     TPlayerAnimator(TObjectInstance* oi) : TCharAnimator(oi) {}
     virtual ~TPlayerAnimator()              {}
 };
-
-#endif

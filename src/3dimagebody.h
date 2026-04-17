@@ -450,7 +450,7 @@ struct SOld3DImageryBody : public SImageryBody
     S3DMaterial material[OLDMAXMATERIALS];
 
     int32_t numtextures;
-    DDSURFACEDESC texturedesc[OLDMAXTEXTURES];
+    SSurfaceDesc texturedesc[OLDMAXTEXTURES];
     OFFSET texturebits[OLDMAXTEXTURES]; // Offset to array of texture frame offsets 
     OFFSET texturepals[OLDMAXTEXTURES]; // Texture palette (if not null, 1 per texture)
     int32_t textureframes[OLDMAXTEXTURES]; // Number of texture frames
