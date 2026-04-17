@@ -54,8 +54,9 @@ class TMultiSurface : public TSurface
     virtual TSurface* GetNormalBuffer() { return normals; }
       // Returns the normal buffer for this surface (if it has one)
 
-    virtual LPDIRECTDRAWSURFACE GetSGImage() { return graphics->GetSGImage(); }
-      // Returns LPDIRECTDRAWSURFACE pointer or Null if not Direct Draw Surface.
+    virtual sg_image GetSGImage() { return graphics->GetSGImage(); }
+      // Returns the sokol image backing the graphics surface (sg_image{0} if
+      // this surface type doesn't carry one).
 
     virtual bool Lost() { return lost; }
       // Returns true if the surface needs to be regenerated.
@@ -75,10 +76,10 @@ class TMultiSurface : public TSurface
     virtual void SetClipMode(int32_t mode);
       // Sets clipping to normal of wrap around
 
-  // Low level Put and Blit which ONLY do primary surface (no Z or Normal Buffer)
-    virtual bool BlitHandler(PSDrawParam dp, TSurface* surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr)
-      { return graphics->BlitHandler(dp, surface, ddflags, fx); }
-      // Blits from surface to surface. RECT sets size of blit. 
-      // X & Y specifies dest. origin
+  // Low level Blit which ONLY does primary surface (no Z or Normal Buffer)
+    virtual bool BlitHandler(SDrawParam* dp, TSurface* surface, int32_t ddflags = 0)
+      { return graphics->BlitHandler(dp, surface, ddflags); }
+      // Blits from surface to surface.  dp->rect sets size of blit,
+      // dp->x/y specifies dest. origin.
 };
 

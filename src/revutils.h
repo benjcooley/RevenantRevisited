@@ -81,6 +81,7 @@ uint32_t FreePage();   // Free paging file memory
 uint32_t TotalPage();  // Total paging file memory
 
 // INI File Functions
+void INISetPath(const char *runpath);
 void INISetSection(const char *newsection);
 int32_t INIGetInt(const char *key, int32_t def = 0, char *format = nullptr);
 void INISetInt(const char *key, int32_t i, char *format = nullptr);

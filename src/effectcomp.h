@@ -73,10 +73,10 @@ _CLASSDEF(TStormAnimator)
 class TStormAnimator
 {
   protected:
-    PT3DAnimator animator;          // pointer to the animator
-    PS3DAnimObj obj;                // pointer to a 3D object
+    T3DAnimator* animator;          // pointer to the animator
+    S3DAnimObj* obj;                // pointer to a 3D object
     SStormParams params;            // the storm parameters
-    PSStormInstance storm_instance; // the instance stuff
+    SStormInstance* storm_instance; // the instance stuff
     int32_t size;                       // the size of the instance array
 
   protected:
@@ -90,9 +90,9 @@ class TStormAnimator
     virtual ~TStormAnimator()
     { delete [] storm_instance; }
 
-    virtual void Init(PT3DAnimator anim, PS3DAnimObj o);    // init, must be called
-    virtual void Set(PSStormParams nparams);                // set the parameters
-    virtual void Get(PSStormParams nparams);                // get the parameters
+    virtual void Init(T3DAnimator* anim, S3DAnimObj* o);    // init, must be called
+    virtual void Set(SStormParams* nparams);                // set the parameters
+    virtual void Get(SStormParams* nparams);                // get the parameters
     virtual void Animate();                                 // animate the storm effect
     virtual void Render();                                  // render the storm effect
     virtual void RefreshZBuffer();                          // refresh the storm effect
@@ -158,8 +158,8 @@ class TSubParticleAnimator
     SSubParticleParams params;  // the parameters to use when creating a new particle
     SParticle *particle;        // the list of particles
     int32_t max_particles;          // the total number of particles
-    PT3DAnimator animator;      // animator
-    PS3DAnimObj obj;            // 3d object
+    T3DAnimator* animator;      // animator
+    S3DAnimObj* obj;            // 3d object
   protected:
   public:
     // constructor
@@ -169,8 +169,8 @@ class TSubParticleAnimator
     virtual ~TSubParticleAnimator() { delete [] particle;}
 
     // set the parameters
-    virtual void Set(PSSubParticleParams nparams);
-    virtual void Get(PSSubParticleParams nparams);
+    virtual void Set(SSubParticleParams* nparams);
+    virtual void Get(SSubParticleParams* nparams);
 
     // animate the existing particles
     virtual void Animate();
@@ -187,7 +187,7 @@ class TSubParticleAnimator
     void Create();
 
     // init the particle parameters
-    virtual void Init(PT3DAnimator anim, PS3DAnimObj o);
+    virtual void Init(T3DAnimator* anim, S3DAnimObj* o);
 };
 
 // ************************
@@ -220,8 +220,8 @@ _CLASSDEF(TShockAnimator)
 class TShockAnimator
 {
   private:
-    PT3DAnimator animator;          // 3d animator
-    PS3DAnimObj obj;                // the object 
+    T3DAnimator* animator;          // 3d animator
+    S3DAnimObj* obj;                // the object 
     SShockParam params;             // describe the shockwave
     int32_t ring_count;                 // the number of rings
     int32_t vertex_count;               // the number of vertices
@@ -235,8 +235,8 @@ class TShockAnimator
     virtual ~TShockAnimator()       // destructor
     { delete [] ring; }
 
-    virtual void Set(PSShockParam nparams); // set the parameters
-    virtual void Init(PT3DAnimator anim, PS3DAnimObj o, int32_t rings, int32_t vertices);// init the animator
+    virtual void Set(SShockParam* nparams); // set the parameters
+    virtual void Init(T3DAnimator* anim, S3DAnimObj* o, int32_t rings, int32_t vertices);// init the animator
     virtual void Animate();                 // animate the shockwave
     virtual void RefreshZBuffer(int32_t tex_u, int32_t tex_v);// refresh the zbuffer
     virtual void Render();                  // render the shockwave
@@ -250,7 +250,7 @@ _CLASSDEF(TStripAnimator)
 class TStripAnimator
 {
     public:
-    PS3DAnimObj obj;
+    S3DAnimObj* obj;
     int32_t pbeg, pend;     // The beginning and end points
     int32_t startsize;      // How thick is the strip at the origin
     int32_t endsize;        // How thick is the strip at the end
@@ -265,10 +265,10 @@ class TStripAnimator
     float myx[8];
     float myz[8];
 
-    TStripAnimator( PS3DAnimObj myobj, int32_t maxp);
+    TStripAnimator( S3DAnimObj* myobj, int32_t maxp);
         // Build strip with maximum number of points
 
-    PS3DAnimObj GetStripObj() { return obj; };
+    S3DAnimObj* GetStripObj() { return obj; };
         // Returns pointer to obj.  Why?  I'm not sure
 
     void GenerateStrip( int32_t angle);
@@ -298,7 +298,7 @@ class TStripAnimator
     void SetWidth( int32_t start, int32_t end);
         // Which texture map to use
 
-    void AddUpdateRects( LPD3DRECT drawextents);
+    void AddUpdateRects( SRenderRect* drawextents);
         // Called after outside function calls RenderObject()
 
     hmm_vec3& operator [] (int32_t i)
@@ -330,9 +330,9 @@ _CLASSDEF(TParticleSystem)
 class TParticleSystem
 {
   private:
-    PSParticleSystemInfo particle;      // information about the particles
-    PT3DAnimator animator;              // pointer to the animator used
-    PS3DAnimObj object;                 // pointer to the object
+    SParticleSystemInfo* particle;      // information about the particles
+    T3DAnimator* animator;              // pointer to the animator used
+    S3DAnimObj* object;                 // pointer to the object
     S3DPoint size;                      // the size for zbuffer refresh
     int32_t count;                          // the number of particles in the system
     float facing;                       // the facing of the thing
@@ -344,14 +344,14 @@ class TParticleSystem
     virtual ~TParticleSystem()      { delete [] particle; }
 
     // our basic functions
-    virtual void Init(PT3DAnimator a, PS3DAnimObj o, S3DPoint s, bool move = false, float facing_angle = 0.0f);
+    virtual void Init(T3DAnimator* a, S3DAnimObj* o, S3DPoint s, bool move = false, float facing_angle = 0.0f);
     virtual void Animate();
     virtual void Render(bool flicker = false, bool abs_pos = false);
     virtual void RefreshZBuffer();
-    virtual void Add(PSParticleSystemInfo p);
+    virtual void Add(SParticleSystemInfo* p);
 
     // an accessor or two for good measure
-    PSParticleSystemInfo Get(int32_t i) { if (i >= count || i < 0) return nullptr; else return &particle[i]; }
+    SParticleSystemInfo* Get(int32_t i) { if (i >= count || i < 0) return nullptr; else return &particle[i]; }
 };
 
 _STRUCTDEF(SBloodParticle)
@@ -366,8 +366,8 @@ struct SBloodParticle
 _STRUCTDEF(SBloodSystemParams)
 struct SBloodSystemParams
 {
-    PT3DAnimator a;
-    PS3DAnimObj s, m, b, sp, s2, m2, b2, sp2;
+    T3DAnimator* a;
+    S3DAnimObj* s, m, b, sp, s2, m2, b2, sp2;
     int32_t maxsize, num, height, hangle, vangle, hspread, vspread;
     S3DPoint zbuf, effectpos;
 };
@@ -378,9 +378,9 @@ _CLASSDEF(TBloodSystem)
 class TBloodSystem
 {
   private:
-    PSBloodParticle blood;              // blood particles
-    PT3DAnimator animator;              // animator pointer
-    PS3DAnimObj sml, med, big, spl, sml2, med2, big2, spl2;// objects (small, med, or large--would you like fries?)
+    SBloodParticle* blood;              // blood particles
+    T3DAnimator* animator;              // animator pointer
+    S3DAnimObj* sml, med, big, spl, sml2, med2, big2, spl2;// objects (small, med, or large--would you like fries?)
     S3DPoint size, eff;
     bool done;
     float height, bifscale;//facing, height;
@@ -397,7 +397,7 @@ class TBloodSystem
     virtual void Render();
     virtual void RefreshZBuffer();
 
-    virtual void DoLighting(float x, float y, float z, PS3DAnimObj object);
+    virtual void DoLighting(float x, float y, float z, S3DAnimObj* object);
 
     virtual bool GetDone() { return done; }
 };

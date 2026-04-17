@@ -243,5 +243,3 @@ inline bool PLAYN(char *x, int32_t n)
         return false;
     return true;
 }
-
-#endif
