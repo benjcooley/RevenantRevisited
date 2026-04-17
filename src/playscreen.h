@@ -145,7 +145,9 @@ class TPlayScreen : public TScreen
     int32_t GameNum() { return gamenum; }
       // Returns the currently loaded save game (0=New game)
     void LoadGame(int32_t game);
-      // Cause system to begin a new game
+      // Cause system to begin a new game (legacy gameNN.sav slot form)
+    void LoadGameFile(const char *path);
+      // Cause system to load a specific save file by path on the next Pulse
     void SaveGame(int32_t game);
       // Cause system to save a game new game
     void NewGame() { LoadGame(0); }
@@ -192,6 +194,7 @@ class TPlayScreen : public TScreen
     bool loadgame;                      // Causes screen to load a new game when set
     bool savegame;                      // Causes screen to load a new game when set
     int32_t gamenum;                        // Number of new game to load
+    char loadgamepath[MAXPATHLEN];      // When non-empty, load this named save file instead of gamenum
     bool savemap;                       // Causes screen to save current map on next refresh
 
     int32_t gameframes;                     // Number of frames since PlayScreen started (only in game mode)

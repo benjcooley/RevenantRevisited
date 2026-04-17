@@ -8,6 +8,7 @@
 
 #include "display.h"
 #include "imagery.h"
+#include "logging.h"
 #include "mainwnd.h"
 #include "mappane.h"
 #include "parse.h"
@@ -19,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 
 #include <cassert>
@@ -251,10 +253,9 @@ void ThreadError(const char *error, const char *extra)
 //  MessageBox(nullptr, buf, "FATAL ERROR", MB_ICONSTOP | MB_OK);
 #else
     if (extra)
-        fprintf(stderr, error, extra);
+        log_error(error, extra);
     else
-        fprintf(stderr, "%s", error);
-    fputc('\n', stderr);
+        log_error("%s", error);
 #endif
 }
 
@@ -309,10 +310,9 @@ void FatalError(const char *error, const char *extra)
 #else
     MainWindow.Close();
     if (extra)
-        fprintf(stderr, error, extra);
+        log_fatal(error, extra);
     else
-        fprintf(stderr, "%s", error);
-    fputc('\n', stderr);
+        log_fatal("%s", error);
 #endif
 
     exit(1);
@@ -394,7 +394,11 @@ void Status(const char *fmt, ...)
     va_start(marker, fmt);
     vsnprintf(buf, sizeof(buf), fmt, marker);
     va_end(marker);
-    fprintf(stderr, "[status] %s\n", buf);
+    // Drop trailing newline — the logger adds its own.
+    size_t blen = strlen(buf);
+    while (blen > 0 && (buf[blen - 1] == '\n' || buf[blen - 1] == '\r'))
+        buf[--blen] = '\0';
+    log_info("%s", buf);
 #endif
 }
 
@@ -1061,7 +1065,7 @@ bool MountArchive(const char *name)
     const fs::path root = vfs_data_root();
     if (root.empty())
     {
-        fprintf(stderr, "MountArchive(%s): no data root found\n", name);
+        log_error("[vfs] MountArchive(%s): no data root found", name);
         return false;
     }
 
@@ -1069,7 +1073,7 @@ bool MountArchive(const char *name)
     auto arc = vfs_open_archive(p);
     if (!arc)
     {
-        fprintf(stderr, "Error in pack file %s (%s)\n", name, p.string().c_str());
+        log_error("[vfs] error in pack file %s (%s)", name, p.string().c_str());
         return false;
     }
 
@@ -1087,7 +1091,7 @@ bool MountModule(const char *name)
     const fs::path root = vfs_data_root();
     if (root.empty())
     {
-        fprintf(stderr, "MountModule(%s): no data root found\n", name);
+        log_error("[vfs] MountModule(%s): no data root found", name);
         return false;
     }
 
@@ -1097,6 +1101,7 @@ bool MountModule(const char *name)
     if (fs::is_directory(dir, ec))
     {
         g_module_dir = dir;
+        log_info("[vfs] mounted module dir %s", dir.string().c_str());
         return true;
     }
 
@@ -1104,7 +1109,7 @@ bool MountModule(const char *name)
     auto arc = vfs_open_archive(p);
     if (!arc)
     {
-        fprintf(stderr, "Error in pack file %s.rvm (%s)\n", name, p.string().c_str());
+        log_error("[vfs] error in pack file %s.rvm (%s)", name, p.string().c_str());
         return false;
     }
 
@@ -1176,6 +1181,23 @@ FILE *rev_fopen(const char *name, const char *flags)
                 base = q + 1;
         std::filesystem::path mpath = g_module_dir / base;
         fp = fopen(mpath.string().c_str(), flags);
+    }
+    if (!fp)
+    {
+        // Data-root fallback: when the engine is launched from a build/ dir
+        // with SavePath/RunPath = "./", loose-file paths like
+        // "data/Save/Single/Foo/game.sav" won't resolve relative to cwd.
+        // Try them under the detected data root as well. Strip a leading
+        // "data/" since data_root IS the data dir.
+        const std::filesystem::path &root = vfs_data_root();
+        if (!root.empty())
+        {
+            const char *rel = name;
+            if (strncasecmp(rel, "data/", 5) == 0 || strncasecmp(rel, "data\\", 5) == 0)
+                rel += 5;
+            std::filesystem::path dpath = root / rel;
+            fp = fopen(dpath.string().c_str(), flags);
+        }
     }
     if (!fp)
         fp = rev_vfs_open(name, flags);
