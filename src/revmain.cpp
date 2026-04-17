@@ -32,6 +32,7 @@
 #include "graphics.h"
 #include "playscreen.h"
 #include "testscreen.h"
+#include "time.h"
 #include "mappane.h"
 #include "automap.h"
 #include "inventory.h"
@@ -2069,6 +2070,34 @@ static void AppFrame()
 
     if (!SystemInitialized || Closing)
         return;
+
+    TTime::BeginFrame(sapp_frame_duration());
+
+    // Test-mode harness: drive TestScreen directly, bypassing the gutted
+    // TScreen::ShowScreen/TimerLoop path. Once TScreen is synced from retail
+    // (step 2 of the sync plan) and TimerTick is wired sokol-native, this
+    // branch goes away and test screens flow through the normal path.
+    if (StartupTestMode[0])
+    {
+        static bool initialized = false;
+        if (!initialized)
+        {
+            if (!TestScreen.Initialize())
+            {
+                sapp_request_quit();
+                return;
+            }
+            initialized = true;
+        }
+        TestScreen.Pulse();
+        TestScreen.Animate(true);
+        if (TestScreen.IsQuit())
+        {
+            TestScreen.Close();
+            sapp_request_quit();
+        }
+        return;
+    }
 
     if (BootScreen)
     {
