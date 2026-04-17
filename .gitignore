@@ -1,4 +1,29 @@
-/bin
+# Build output
 /build
+/bin
+
+# Reference copies (kept locally, not tracked)
+/RevenantRepo
+
+# Editor / OS
 .DS_Store
+.vscode/ipch
+.vscode/.browse.c_cpp.db*
+
+# Aider
 .aider*
+
+# Env / secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Generated at root
+/compile_commands.json
+
+# Backup / temp
+*~
+*.bak
