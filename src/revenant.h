@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "platform_compat.h"
 #include "revdefs.h"
 #include "revtypes.h"
 #include "revutils.h"

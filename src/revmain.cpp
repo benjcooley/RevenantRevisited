@@ -489,21 +489,12 @@ void Error(const char *error, const char *extra)
 */
 }
 
-void WaitSingleErr(HANDLE obj)
-{
-    if (WaitForSingleObject(obj, INFINITE /*10000*/) == WAIT_TIMEOUT)
-    {
-        FatalError("Wait Failed");
-    }
-}
-
-void WaitMultipleErr(uint32_t objs, const HANDLE *obj, bool all)
-{
-    if (WaitForMultipleObjects(objs, obj, all, INFINITE /*10000*/) == WAIT_TIMEOUT)
-    {
-        FatalError("Wait Failed");
-    }
-}
+// Duplicate of revutils.cpp definitions. Agent A rewrites revmain.cpp
+// around sokol_app; this block will be replaced wholesale there.
+#if 0
+void WaitSingleErr(HANDLE obj) {}
+void WaitMultipleErr(uint32_t objs, const HANDLE *obj, bool all) {}
+#endif
 
 // *************** Display Status Functions *****************
 
