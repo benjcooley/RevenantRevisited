@@ -319,7 +319,7 @@ DRAWFUNCTION GetPutFunction(PSDrawBlock db, PSDrawParam dp)
 // ****************************************************
 
 // Returns the intersection of two rectangles (always a single rectangle)
-bool ClipRect(RSRect dst, RSRect src, RSRect result)
+bool ClipRect(const SRect& dst, const SRect& src, RSRect result)
 {
     if (src.left > dst.right || src.top > dst.bottom ||
         src.right < dst.left || src.bottom < dst.top)
@@ -349,7 +349,7 @@ bool ClipRect(RSRect dst, RSRect src, RSRect result)
 }
 
 // Returns the inverse of the intersection of two rectangles (subtraction) returns up to 4 rects
-bool SubtractRect(RSRect dst, RSRect src, PSRect rects, int32_t &numrects)
+bool SubtractRect(const SRect& dst, const SRect& src, PSRect rects, int32_t &numrects)
 {
     numrects = 0;
 

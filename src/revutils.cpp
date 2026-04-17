@@ -274,20 +274,17 @@ void Error(const char *error, const char *extra)
 */
 }
 
-void WaitSingleErr(HANDLE obj)
+// TODO(port): Subsystem 4 — threading. These two helpers model blocking on
+// Win32 HANDLE-based events/mutexes and will be replaced by the worker-pool
+// / completions API (see feedback_threading memory + PORT_PLAN Phase 3).
+// Bodies stubbed so Phase 2 links; current call sites in mappane.cpp still
+// compile against the signatures.
+void WaitSingleErr(HANDLE /*obj*/)
 {
-    if (WaitForSingleObject(obj, INFINITE /*10000*/) == WAIT_TIMEOUT)
-    {
-        FatalError("Wait Failed");
-    }
 }
 
-void WaitMultipleErr(uint32_t objs, const HANDLE *obj, bool all)
+void WaitMultipleErr(uint32_t /*objs*/, const HANDLE* /*obj*/, bool /*all*/)
 {
-    if (WaitForMultipleObjects(objs, obj, all, INFINITE /*10000*/) == WAIT_TIMEOUT)
-    {
-        FatalError("Wait Failed");
-    }
 }
 
 // *************** Display Status Functions *****************

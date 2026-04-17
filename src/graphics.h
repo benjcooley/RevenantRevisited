@@ -139,21 +139,21 @@ bool Draw(PSDrawBlock db, PSDrawParam dp);
 DRAWFUNCTION GetPutFunction(PSDrawBlock db, PSDrawParam dp);
   // Returns the pointer to the appropriate put function given the current drawmode state
 
-bool ClipRect(RSRect dst, RSRect src, RSRect result);
+bool ClipRect(const SRect& dst, const SRect& src, RSRect result);
   // General purpose function to clip src rectangle in dest.
   // Returns false if rectangles don't overlap.  Src and result can be same rect
 
-inline bool ClipRect(int32_t x, int32_t y, int32_t w, int32_t h, RSRect src, RSRect result)
+inline bool ClipRect(int32_t x, int32_t y, int32_t w, int32_t h, const SRect& src, RSRect result)
   { return ClipRect(SRect(x, y, x + w - 1, y + h - 1), src, result); }
   // General purpose function to clip src rectangle with dest rect.
   // Returns false if rectangles don't overlap.  Src and result can be same rect
 
-bool SubtractRect(RSRect dst, RSRect src, PSRect rects, int32_t &numrects);
+bool SubtractRect(const SRect& dst, const SRect& src, PSRect rects, int32_t &numrects);
   // Subtracts src rect from dest and returns results in 'rects'.  Returns
   // false if rects don't intersect.  Returns a maximum of 4 rects.
   // The Subtract rect function basically calculates an inverse of the rect intersection
 
-inline bool SubtractRect(int32_t x, int32_t y, int32_t w, int32_t h, RSRect src, PSRect rects, int32_t &numrects)
+inline bool SubtractRect(int32_t x, int32_t y, int32_t w, int32_t h, const SRect& src, PSRect rects, int32_t &numrects)
   { return SubtractRect(SRect(x, y, x + w - 1, y + h - 1), src, rects, numrects); }
   // Subtracts src rect from dest and returns results in 'rects'.  Returns
   // false if rects don't intersect.  Returns a maximum of 4 rects.
