@@ -122,9 +122,9 @@ void TMoney::SetAmount(int32_t amt)
     SetObjStat(se_Amount.id, amt);
 }
 
-bool TMoney::Use(PTObjectInstance user, int32_t with)
+bool TMoney::Use(TObjectInstance* user, int32_t with)
 {
-    PTObjectInstance inst = MapPane.GetInstance(with);
+    TObjectInstance* inst = MapPane.GetInstance(with);
     if (inst && inst->ObjClass() == ObjClass() && inst->ObjType() == ObjType() &&
         inst->Amount() < MAXMONEYIMAGE && Amount() < MAXMONEYIMAGE)
     {
@@ -151,7 +151,7 @@ bool TMoney::Use(PTObjectInstance user, int32_t with)
     return false;
 }
 
-int32_t TMoney::CursorType(PTObjectInstance with)
+int32_t TMoney::CursorType(TObjectInstance* with)
 {
     if (with && with->ObjClass() == ObjClass() && with->ObjType() == ObjType() &&
         with->Amount() < MAXMONEYIMAGE && Amount() < MAXMONEYIMAGE)
@@ -285,7 +285,7 @@ void TMoney::GetScreenRect(SRect &r)
     }
 }
 
-void TMoney::DrawUnlit(PTSurface surface)
+void TMoney::DrawUnlit(TSurface* surface)
 {
     int32_t count = min(Amount(), MAXMONEYIMAGE-1);
 

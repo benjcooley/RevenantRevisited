@@ -26,9 +26,9 @@ void TWeapon::ClearWeapon()
 {
 }
 
-bool TWeapon::Use(PTObjectInstance user, int32_t with)
+bool TWeapon::Use(TObjectInstance* user, int32_t with)
 {
-    PTObjectInstance inst = MapPane.GetInstance(with);
+    TObjectInstance* inst = MapPane.GetInstance(with);
 
     if (inst && strcmp(inst->GetName(), "Poison Vial") == 0 &&
         inst->GetState() == VIAL_STATE_FULL && Type() == WT_KNIFE)
@@ -42,7 +42,7 @@ bool TWeapon::Use(PTObjectInstance user, int32_t with)
     return false;
 }
 
-int32_t TWeapon::CursorType(PTObjectInstance with)
+int32_t TWeapon::CursorType(TObjectInstance* with)
 {
     if (with && strcmp(with->GetName(), "Poison Vial") == 0 &&
         with->GetState() == VIAL_STATE_FULL && Type() == WT_KNIFE)

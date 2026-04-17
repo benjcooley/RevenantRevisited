@@ -225,9 +225,9 @@ void TSpellPane::DrawBackground()
         if (Player)
         {
             // find their spell pouch
-            PTObjectInstance pouch = Player->FindObjInventory("spell pouch");
+            TObjectInstance* pouch = Player->FindObjInventory("spell pouch");
             if (!pouch)
-                PTObjectInstance pouch = Player->FindObjInventory("spellpouch");
+                TObjectInstance* pouch = Player->FindObjInventory("spellpouch");
             if (pouch)
             {
                 int32_t x = TAL_STARTX, y = TAL_STARTY;
@@ -361,9 +361,9 @@ int32_t TSpellPane::OnTal(int32_t x, int32_t y)
 
     if (Player)
     {
-        PTObjectInstance pouch = Player->FindObjInventory("spell pouch");
+        TObjectInstance* pouch = Player->FindObjInventory("spell pouch");
         if (!pouch)
-            PTObjectInstance pouch = Player->FindObjInventory("spellpouch");
+            TObjectInstance* pouch = Player->FindObjInventory("spellpouch");
         if (pouch)
         {
             int32_t x0 = TAL_STARTX, y0 = TAL_STARTY;

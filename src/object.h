@@ -26,17 +26,17 @@
 #define REV_FIX_Z_VALUE(z3d)                ((float)z3d * (float)1.46)
 
 // Coordinate converters (between world/map and screen/pixel)
-void WorldToScreen(RS3DPoint pos, int32_t &x, int32_t &y);
-void WorldToScreen(RS3DPoint pos, RS3DPoint spos);
-void WorldToScreenZ(RS3DPoint pos, int32_t &x);
-void ScreenToWorld(int32_t x, int32_t y, RS3DPoint pos, int32_t zheight = 0);
-void ConvertToVector(int32_t angle, int32_t speed, RS3DPoint vect, int32_t zangle = 0);
-int32_t ConvertToFacing(RS3DPoint pos, RS3DPoint target);
-int32_t ConvertToFacing(RS3DPoint target);
-int32_t ConvertZToFacing(RS3DPoint pos, RS3DPoint target);
-int32_t ConvertZToFacing(RS3DPoint target);
-int32_t Distance(RS3DPoint pos);
-int32_t Distance(RS3DPoint pos, RS3DPoint target);
+void WorldToScreen(const S3DPoint& pos, int32_t &x, int32_t &y);
+void WorldToScreen(const S3DPoint& pos, S3DPoint& spos);
+void WorldToScreenZ(const S3DPoint& pos, int32_t &x);
+void ScreenToWorld(int32_t x, int32_t y, S3DPoint& pos, int32_t zheight = 0);
+void ConvertToVector(int32_t angle, int32_t speed, S3DPoint& vect, int32_t zangle = 0);
+int32_t ConvertToFacing(const S3DPoint& pos, const S3DPoint& target);
+int32_t ConvertToFacing(const S3DPoint& target);
+int32_t ConvertZToFacing(const S3DPoint& pos, const S3DPoint& target);
+int32_t ConvertZToFacing(const S3DPoint& target);
+int32_t Distance(const S3DPoint& pos);
+int32_t Distance(const S3DPoint& pos, const S3DPoint& target);
 int32_t AngleDiff(int32_t angle1, int32_t angle2);
 
 // Create new unique id
@@ -59,21 +59,21 @@ class TObjectBuilder
   public:
     TObjectBuilder(const char *name);
       // Sets name and adds builder to builder array
-    virtual PTObjectInstance Build(PTObjectImagery img) = 0;
+    virtual TObjectInstance* Build(TObjectImagery* img) = 0;
       // Creates a new object from the given 'def' structure
-    virtual PTObjectInstance Build(PSObjectDef def, PTObjectImagery img) = 0;
+    virtual TObjectInstance* Build(SObjectDef* def, TObjectImagery* img) = 0;
       // Creates a new object from the given 'def' structure
 
-    static PTObjectBuilder GetBuilder(int32_t objtype);
+    static TObjectBuilder* GetBuilder(int32_t objtype);
       // Gets a pointer to a builder in the builder array
-    static PTObjectBuilder GetBuilder(const char *name);
+    static TObjectBuilder* GetBuilder(const char *name);
       // Gets a pointer to a builder in the builder array
 
     char *GetTypeName() { return objtypename; }
 
   private:
     static int32_t numobjtypes;                         // Number of object types
-    static PTObjectBuilder builders[MAXOBJECTTYPES];    // Object builder for each type
+    static TObjectBuilder* builders[MAXOBJECTTYPES];    // Object builder for each type
 
     char *objtypename;
 };
@@ -83,9 +83,9 @@ class obj##Builder : public TObjectBuilder                                      
 {                                                                               \
   public:                                                                       \
     obj##Builder() : TObjectBuilder(name) {}                                    \
-    virtual PTObjectInstance Build(PTObjectImagery img)                         \
+    virtual TObjectInstance* Build(TObjectImagery* img)                         \
         { return new obj(img); }                                                \
-    virtual PTObjectInstance Build(PSObjectDef def, PTObjectImagery img)        \
+    virtual TObjectInstance* Build(SObjectDef* def, TObjectImagery* img)        \
         { return new obj(def, img); }                                           \
 };
 
@@ -99,32 +99,56 @@ _CLASSDEF(TInventoryIterator)
 class TInventoryIterator
 {
   public:
-    TInventoryIterator(PTObjectInstance own)
+    TInventoryIterator(TObjectInstance* own)
         { owner = own; invindex = 0; item = nullptr; NextItem(); }
 
-    PTObjectInstance Item() const { return item; }
+    TObjectInstance* Item() const { return item; }
       // Returns current item.
     int32_t InvIndex() const { return invindex - 1; }
       // Returns current inventory index
-    PTObjectInstance NextItem();
+    TObjectInstance* NextItem();
       // Advance to the next item, and return it (nullptr if end of list)
     bool operator ++ (int32_t) { return (NextItem() != nullptr); }
       // Allows moving forwards through array in sequential order
-    //bool operator -- (int32_t) { return PrevItem(); }
-      // Allows moving backwards through array in sequential order
-//  operator bool () { return (item != nullptr); }
-//    // Returns false if at end of item list
-    operator PTObjectInstance () const { return item; }
+    operator TObjectInstance* () const { return item; }
       // Typecast operator for object
-    PTObjectInstance operator -> () const { return item; }
+    TObjectInstance* operator -> () const { return item; }
       // Allows iterator to be used as pointer
     RTObjectInstance operator * () const { return *item; }
       // Dereferencing operator
 
   protected:
-    PTObjectInstance owner;     // inventory parent
+    TObjectInstance* owner;     // inventory parent
     int32_t invindex;           // index into inventory
-    PTObjectInstance item;      // current object
+    TObjectInstance* item;      // current object
+};
+
+_CLASSDEF(TConstInventoryIterator)
+class TConstInventoryIterator
+{
+  public:
+    TConstInventoryIterator(const TObjectInstance* own)
+        { owner = own; invindex = 0; item = nullptr; NextItem(); }
+
+    TObjectInstance* Item() const { return item; }
+      // Returns current item.
+    int32_t InvIndex() const { return invindex - 1; }
+      // Returns current inventory index
+    const TObjectInstance* NextItem() const;
+      // Advance to the next item, and return it (nullptr if end of list)
+    bool operator ++ (int32_t) const { return (NextItem() != nullptr); }
+      // Allows moving forwards through array in sequential order
+    operator TObjectInstance* () const { return item; }
+      // Typecast operator for object
+    TObjectInstance* operator -> () const { return item; }
+      // Allows iterator to be used as pointer
+    RTObjectInstance operator * () const { return *item; }
+      // Dereferencing operator
+
+  protected:
+    const TObjectInstance* owner;   // inventory parent
+    int32_t invindex;               // index into inventory
+    TObjectInstance* item;          // current object
 };
 
 // ************************************************
@@ -207,7 +231,7 @@ class TStatisticDefList
         // Returns statistic maximum value
     uint32_t StatUniqueId(int32_t statid) const { if ((uint32_t)statid < (uint32_t)statdefs.NumItems()) return statdefs[statid].uniqueid; else return 0; }
         // Returns statistic maximum value
-    int32_t FindStat(char *statname) const;
+    int32_t FindStat(const char *statname) const;
         // Locates stat by name and returns its statid
     void Clear() { statdefs.Clear(); }
 };
@@ -215,7 +239,7 @@ class TStatisticDefList
 _STRUCTDEF(SStatEntry)
 struct SStatEntry 
 {
-    SStatEntry(PTObjectClass cl, const char *statname, const char *uniqueid, int32_t statid, 
+    SStatEntry(TObjectClass* cl, const char *statname, const char *uniqueid, int32_t statid, 
         int32_t def, int32_t min, int32_t max, bool objstat);
     int32_t id;
 };
@@ -284,23 +308,23 @@ struct SObjectInfo
 {   // HEY!  KEEP ME SMALL!
     SObjectInfo()
       { name = nullptr; objbuilder = nullptr; imageryid = 0; imagery = nullptr; uniqueid = 0; stats.Clear(); objstats.Clear(); }
-    SObjectInfo(char *n, PTObjectBuilder b, int32_t id, uint32_t uid)
+    SObjectInfo(char *n, TObjectBuilder* b, int32_t id, uint32_t uid)
       { name = _strdup(n); objbuilder = b; imageryid = id; imagery = nullptr; uniqueid = uid; stats.Clear(); objstats.Clear(); }
     ~SObjectInfo() { delete [] name; stats.Clear(); objstats.Clear(); }
 
     char *name;                             // Name of object (allocated with _strdup()
-    PTObjectBuilder objbuilder;             // Object builder for this object
-    int32_t  imageryid;                         // Imagery object for this object
-    PTObjectImagery imagery;                // Imagery object for this object
+    TObjectBuilder* objbuilder;             // Object builder for this object
+    int32_t  imageryid;                     // Imagery object for this object
+    TObjectImagery* imagery;                // Imagery object for this object
     TStatisticList stats, objstats;         // Statistics (class and object)
-    uint32_t uniqueid;                         // Unique ID for this object
+    uint32_t uniqueid;                      // Unique ID for this object
 };
 
 _CLASSDEF(TObjectClass)
 class TObjectClass
 {
   public:
-    TObjectClass(char *classname, int32_t classid, uint16_t flags, PTObjectClass base = nullptr);
+    TObjectClass(char *classname, int32_t classid, uint16_t flags, TObjectClass* base = nullptr);
         // Creates object class and adds it to class array
     ~TObjectClass();
         // Destroys the object class and all object types and stats inside it
@@ -316,7 +340,7 @@ class TObjectClass
       // Deallocate class arrays
 
   // Class functions
-    static PTObjectClass GetClass(int32_t objclass)
+    static TObjectClass* GetClass(int32_t objclass)
         { return ((uint32_t)objclass >= (uint32_t)numclasses) ? nullptr : classes[objclass]; }
       // Returns the given class from the class array
     static int32_t FindClass(char *name);
@@ -335,13 +359,13 @@ class TObjectClass
         // Removes an object type
 
   // Object functions
-    PTObjectInstance NewObject(PSObjectDef objectdef);
+    TObjectInstance* NewObject(SObjectDef* objectdef);
         // Create a new object based on the given object definition
 
   // Type functions
     int32_t NumTypes() const { return objinfo.NumItems(); }
         // Returns number of object types in the class
-    PSObjectInfo GetObjType(int32_t index) const { if (!objinfo.Used(index)) return nullptr; else return &(objinfo[index]); }
+    SObjectInfo* GetObjType(int32_t index) const { if (!objinfo.Used(index)) return nullptr; else return &(objinfo[index]); }
         // Return objinfo pointer for given index
     int32_t FindObjType(const char *objtypename, bool partial = false) const;
         // Return type of object given name
@@ -369,7 +393,7 @@ class TObjectClass
         // Returns statistic maximum value
     uint32_t StatUniqueId(int32_t statid) const { return statdefs.StatUniqueId(statid); }
         // Returns statistic maximum value
-    int32_t FindStat(char *statname) const { return statdefs.FindStat(statname); }
+    int32_t FindStat(const char *statname) const { return statdefs.FindStat(statname); }
         // Locates stat by name and returns its statid
     const char *GetStatDefString(int32_t statid, char *buf) const { return statdefs.GetStatDefString(statid, buf); }
         // Gets a parsable string that defines the stat
@@ -420,7 +444,7 @@ class TObjectClass
         // Returns statistic maximum value
     uint32_t ObjStatUniqueId(int32_t statid) const { return objstatdefs.StatUniqueId(statid); }
         // Returns statistic maximum value
-    int32_t FindObjStat(char *statname) const { return objstatdefs.FindStat(statname); }
+    int32_t FindObjStat(const char *statname) const { return objstatdefs.FindStat(statname); }
         // Locates stat by name and returns its statid
     const char *GetObjStatDefString(int32_t statid, char *buf) const { return objstatdefs.GetStatDefString(statid, buf); }
         // Gets a parsable string that defines the stat
@@ -435,7 +459,7 @@ class TObjectClass
         // Returns a statistic for an object
     void SetObjStat(int32_t objtype, int32_t statid, int32_t newvalue) { objinfo[objtype].objstats[statid] = newvalue; }
         // Sets a statistic for an object (Note: converted to a string if stat is string stat)
-    void SetObjStat(int32_t objtype, char *statname, int32_t newvalue)
+    void SetObjStat(int32_t objtype, const char *statname, int32_t newvalue)
         { int32_t statid = objstatdefs.FindStat(statname); 
           if (statid >= 0) objinfo[objtype].objstats[statid] = newvalue; }
         // Sets a statistic for an object (Note: converted to a string if stat is a string stat)
@@ -443,7 +467,7 @@ class TObjectClass
         { objinfo[objtype].objstats[statid] = ObjStatDef(statid); }
         // Reset Statistic to default value for class
 
-    void CopyStats(const PTObjectClass from);
+    void CopyStats(const TObjectClass* from);
         // Copies stats from base class TObjectClass to this class 
         // (copies character class stats to player class, etc.)
 
@@ -457,7 +481,7 @@ class TObjectClass
         // Called by SaveClasses() to write out a class
 
     static int32_t numclasses;
-    static PTObjectClass classes[MAXOBJECTCLASSES];
+    static TObjectClass* classes[MAXOBJECTCLASSES];
 
     static FILE *classfp;                               // Stream file pointer when reading/writing
     static bool classesdirty;                           // Set to true when CLASS.DEF needs to be resaved
@@ -465,7 +489,7 @@ class TObjectClass
     const char*     name;
     int32_t         id;
     uint16_t        objflags;
-    PTObjectClass   basedon;
+    TObjectClass*   basedon;
 
     TStatisticDefList statdefs, objstatdefs;// Statistics for objects
     TVirtualArray<SObjectInfo> objinfo;     // There are no limits to these arrays!!
@@ -554,17 +578,17 @@ class TObjectClass
 
 // Useful Notify Macros
 #define NOTIFY_DELETED(ptr, obj)\
-    ( (notify == N_DELETINGOBJECT && obj == (PTObjectInstance)ptr) ||\
-      (notify == N_DELETINGSECTOR && obj->GetSector() == (PTSector)ptr) )
+    ( (notify == N_DELETINGOBJECT && obj == (TObjectInstance*)ptr) ||\
+      (notify == N_DELETINGSECTOR && obj->GetSector() == (TSector*)ptr) )
 
 #define NOTIFY_CONTROLCANCELLED(ptr, obj)\
-  (notify == N_CANCELCONTROL && (PTObjectInstance)ptr == obj)
+  (notify == N_CANCELCONTROL && (TObjectInstance*)ptr == obj)
 
 #define NOTIFY_MOVED(ptr, obj)\
-  (notify == N_MOVED && (PTObjectInstance)ptr == obj)
+  (notify == N_MOVED && (TObjectInstance*)ptr == obj)
 
 #define NOTIFY_STATECHANGED(ptr, obj)\
-  (notify == N_STATECHANGED && (PTObjectInstance)ptr == obj)
+  (notify == N_STATECHANGED && (TObjectInstance*)ptr == obj)
 
 // Move() return value flags
 #define MOVE_NOTHING    0           // Nothing happened; no movement whatsoever
@@ -595,11 +619,11 @@ class SObjectDef
     
     uint8_t     rotatex;    // Rotation around the x axis (0 - 255)
     uint8_t     rotatey;    // Rotation around the y axis (0 - 255)
-  union
-  {
-    uint8_t     rotatez;    // Rotation around the z axis (0 - 255)
-    uint8_t     facing;     // Direction object is facing (0 to 255 on x-y plane)
-  };
+    union
+    {
+        uint8_t     rotatez;    // Rotation around the z axis (0 - 255)
+        uint8_t     facing;     // Direction object is facing (0 to 255 on x-y plane)
+    };
 
     uint8_t     group;      // Group of object
 };
@@ -636,15 +660,15 @@ class TObjectInstance : protected SObjectDef
 
   // Constructors/Destructors
     TObjectInstance() { ClearObject(); }
-    TObjectInstance(PTObjectImagery img);
+    TObjectInstance(TObjectImagery* img);
         // Constructor for new objects
-    TObjectInstance(PSObjectDef def, PTObjectImagery img);
+    TObjectInstance(SObjectDef* def, TObjectImagery* img);
         // Constructor for new objects
     virtual ~TObjectInstance();
         // Destructor - call class to decrease usage count
 
   // Object status functions
-    PSObjectInfo GetInfo() const { return inf; }
+    SObjectInfo* GetInfo() const { return inf; }
         // Get the object's info struct
     const char *GetClassName() const { return cl->ClassName(); }
         // Get the object's info struct
@@ -666,33 +690,33 @@ class TObjectInstance : protected SObjectDef
         // Returns group number of object
     void SetGroup(int32_t newgroup) { group = newgroup; }
         // Sets the group number of the object
-    void GetPos(RS3DPoint getpos) const { getpos = pos; }
+    void GetPos(S3DPoint& getpos) const { getpos = pos; }
         // Gets current object position
     const S3DPoint& Pos() const { return pos; }
         // Returns a reference to the object pos
-    int32_t Distance(const TObjectInstance& inst) const;
+    int32_t Distance(const TObjectInstance* inst) const;
         // Returns the distance on the x-y plane between this and inst
-    int32_t SqrDist(const TObjectInstance& inst) const { return SQRDIST(pos, inst.pos); }
+    int32_t SqrDist(const TObjectInstance* inst) const { return SQRDIST(pos, inst->pos); }
         // Returns the square of the distance between this and inst
-    int32_t AngleTo(const TObjectInstance& inst) const;
+    int32_t AngleTo(const TObjectInstance* inst) const;
         // Returns the angle to the other instance
-    int32_t FaceAngleTo(const TObjectInstance& inst) const;
+    int32_t FaceAngleTo(const TObjectInstance* inst) const;
         // Returns the + or - difference between this objects facing and the dest obj
     void GetScreenPos(int32_t &x, int32_t &y) const;
         // Gets x and y pixel position of object
     void GetScreenPos(S3DPoint &s) const;
         // Converts tile pos z to screen zbuffer z
-    virtual int32_t SetPos(RS3DPoint newpos, int32_t newlevel = -1, bool override = false);
+    virtual int32_t SetPos(const S3DPoint& newpos, int32_t newlevel = -1, bool override = false);
         // Sets current object position, returns object's sector number (override to ignore bounds checking)
-    void ForcePos(RS3DPoint newpos) { pos = newpos; }
+    void ForcePos(const S3DPoint& newpos) { pos = newpos; }
         // Forces current position to new postion with NO validity checking, sector transfer, etc.
-    virtual void MoveTo(RS3DPoint newpos) { SetPos(newpos, -1, false); }
+    virtual void MoveTo(const S3DPoint& newpos) { SetPos(newpos, -1, false); }
         // Moves object to new position (does walk checking for characters).
         // Use this function instead of SetPos() to avoid moving objects through or onto
         // barriers.
-    void GetSnapPos(PTObjectInstance oi, int32_t dist, S3DPoint &p);
+    void GetSnapPos(const TObjectInstance* oi, int32_t dist, S3DPoint &p) const;
         // Return the snap position from this character given this distance
-    void SnapDist(PTObjectInstance oi, int32_t dist);
+    void SnapDist(TObjectInstance* oi, int32_t dist);
         // Moves this object so that it is exactly 'dist' distance from the object 'oi', while
         // keeping the angle between them the same.
     int32_t GetLevel() const { return level; }
@@ -710,9 +734,9 @@ class TObjectInstance : protected SObjectDef
         // Sets object notify flags
     virtual void Notify(int32_t notify, void *ptr);
         // Notify Action
-    void ForceSector(PTSector newsector) { sector = newsector; }
+    void ForceSector(TSector* newsector) { sector = newsector; }
         // Directly sets the sector pointer for this object
-    PTSector GetSector() const { return sector; }
+    TSector* GetSector() const { return sector; }
         // Get the object's current sector
     int32_t GetState() const { return state; }
         // Gets current object state
@@ -736,7 +760,7 @@ class TObjectInstance : protected SObjectDef
         // Gets the current framerate
     void SetFrameRate(int32_t newframerate) { framerate = newframerate; }
         // Sets the current framerate
-    PTObjectImagery GetImagery() const;
+    TObjectImagery* GetImagery() const;
         // Returns object's imagery
     virtual bool HasAnimator() const { return animator != nullptr; }
         // Returns true if object is an animating object.
@@ -756,7 +780,7 @@ class TObjectInstance : protected SObjectDef
         // Gets number of object flags
     const char *GetFlagName(int32_t flagnum) const;
         // Returns the name of a flag
-    int32_t GetFlagNum(char *flagname) const;
+    int32_t GetFlagNum(const char *flagname) const;
         // Returns the number of the flag (use (1 << flagnum) to get flag)
     uint32_t Flags() const { return flags; }
     uint32_t GetFlags()const { return flags; }
@@ -814,13 +838,13 @@ class TObjectInstance : protected SObjectDef
         // Apply damage to an object
     virtual void RepaintObject();
         // Cause object to repaint itself on the screen
-    virtual bool AddToInventory(PTObjectInstance inst, int32_t slot = -1);
+    virtual bool AddToInventory(TObjectInstance* inst, int32_t slot = -1);
         // Add inst to this object's inventory, in the given slot (first free slot if none specified)
     virtual bool AddToInventory(const char *name, int32_t number = 1, int32_t slot = -1);
         // Add object of type 'name', amount of 'number' to this objects inventory at slot 'slot'
     virtual void RemoveFromInventory();
         // Remove this object from whatever inventory it is in
-    virtual int32_t GiveInventoryTo(PTObjectInstance to, const char *name, int32_t number = 1);
+    virtual int32_t GiveInventoryTo(TObjectInstance* to, const char *name, int32_t number = 1);
         // Gives the object 'name' to another object.  Will move multiple objects, 
         // or objects with varying amounts if 'number' > 1.
     virtual int32_t DeleteFromInventory(const char *name, int32_t number = 1)
@@ -839,16 +863,16 @@ class TObjectInstance : protected SObjectDef
         // Find the first free inventory slot in the object's inventory
     virtual void SignalAddedToInventory();
         // Called to signal object that it was added to a new inventory
-    virtual PTObjectInstance FindObjInventory(char *name) const;
+    virtual TObjectInstance* FindObjInventory(const char *name) const;
         // Find an object by name in inventory
-    virtual PTObjectInstance FindObjInventory(int32_t objclass, int32_t type = -1) const;
+    virtual TObjectInstance* FindObjInventory(int32_t objclass, int32_t type = -1) const;
         // Find an object by class and type in inventory
     virtual bool IsInInventory() const { return (inventnum >= 0); }
       // Returns true if the object is in another object's inventory and should not be drawn
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Uses object (user is the person using it, with is the object to use with this)
         // Returns true if the object was actually used, false if nothing could be done with it
-    virtual int32_t CursorType(PTObjectInstance with = nullptr) const { return CURSOR_NONE; }
+    virtual int32_t CursorType(TObjectInstance* with = nullptr) const { return CURSOR_NONE; }
         // Returns type of cursor that should appear when mouse arrow is over the object
     virtual void UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang)
         { mindist = 20; maxdist = 50; minang = 0; maxang = 255; }
@@ -878,7 +902,7 @@ class TObjectInstance : protected SObjectDef
         // Returns a statistic for an class
     int32_t GetStat(int32_t statid) const { return cl->GetStat(objtype, statid); }
         // Returns a statistic for an class
-    int32_t FindStat(char *statname) const { return cl->FindStat(statname); }
+    int32_t FindStat(const char *statname) const { return cl->FindStat(statname); }
         // Finds a stat and returns its stat id or -1 if not found
     const char *ObjStatName(int32_t statid) const { return cl->ObjStatName(statid); }
         // Returns a statistic for an class
@@ -894,11 +918,11 @@ class TObjectInstance : protected SObjectDef
         // Resets class stat to default value
     void ResetObjStat(int32_t statid) { stats[statid] = cl->GetObjStat(objtype, statid); }
         // Resets object stat to default value
-    int32_t GetStat(char *statname) const;
+    int32_t GetStat(const char *statname) const;
         // Returns a statistic given the statistic name (stat can be object or class stat)
-    int32_t GetStat(char *statname, char *str, int32_t id = -1) const;
+    int32_t GetStat(const char *statname, char *str, int32_t id = -1) const;
         // Returns a statistic via sprintf format 'StatnameId.Str' (stat can be object or class stat)
-    void SetStat(char *statname, int32_t value);
+    void SetStat(const char *statname, int32_t value);
         // Sets a statistic given the stat name (stat can be object or class stat)
     void DelStat(int32_t statid) { stats.Collapse(statid); }
         // Deletes a stat in stat array (Used by classes DeleteStat(), don't call directly)
@@ -917,18 +941,18 @@ class TObjectInstance : protected SObjectDef
         // Get animation bounding rect for the object, if different from screen rect
     virtual int32_t BgDrawMode();
         // Determines the bgdraw pipeline position this object should start at when drawing to bg
-    virtual void DrawUnlit(PTSurface surface) { if (imagery) imagery->DrawUnlit(this, surface); }
+    virtual void DrawUnlit(TSurface* surface) { if (imagery) imagery->DrawUnlit(this, surface); }
         // Causes the object to draw itself to the unlit background
-    void DrawLit(PTSurface surface) { if (imagery) imagery->DrawLit(this, surface); }
+    void DrawLit(TSurface* surface) { if (imagery) imagery->DrawLit(this, surface); }
         // Causes the object to draw itself to the lit background
-    virtual bool GetZ(PTSurface surface) { return (imagery) ? imagery->GetZ(this, surface) : false; }
+    virtual bool GetZ(TSurface* surface) { return (imagery) ? imagery->GetZ(this, surface) : false; }
         // Get first uncliped zbuffer point by simulating drawing to the surface
-    void DrawSelected(PTSurface surface)
+    void DrawSelected(TSurface* surface)
         { if (imagery) imagery->DrawSelected(this, surface); }
         // Causes image to draw selection (hilighting) around itself
     virtual void DrawInvItem(int32_t x, int32_t y) { if (imagery) imagery->DrawInvItem(this, x, y); }
         // Draws inventory icon for object
-    void DrawLight(PTSurface surface, bool resetid = false);
+    void DrawLight(TSurface* surface, bool resetid = false);
         // Causes the object to draw light for object
     void RedrawBackground(int32_t bgdraw = -1);
         // Forces the background for the current object rect to be redrawn
@@ -1010,9 +1034,9 @@ class TObjectInstance : protected SObjectDef
       // Sets the light intensity
     short GetLightMultiplier() { return lightdef.multiplier; }
       // Returns objects light intensity
-    void SetLightPos(RS3DPoint newpos);
+    void SetLightPos(S3DPoint& newpos);
       // Sets light relative position
-    void GetLightPos(RS3DPoint getpos) { getpos = lightdef.pos; }
+    void GetLightPos(S3DPoint& getpos) { getpos = lightdef.pos; }
       // Gets the light relative position
     void SetLightColor(SColor color);
       // Sets the light color
@@ -1026,7 +1050,7 @@ class TObjectInstance : protected SObjectDef
       // Gets the light flags
     PSLightDef GetLightDef() { return &lightdef; }
       // Returns light data for object
-    int32_t GetIllumination(PTObjectInstance oi);
+    int32_t GetIllumination(TObjectInstance* oi);
       // Get the amount of illumination from this light to this particular object
     int32_t GetShadow() { return shadow; }
       // Returns shadow index
@@ -1038,10 +1062,10 @@ class TObjectInstance : protected SObjectDef
     virtual void SetCommandDone(bool newcmd);
 
   // Streaming functions
-    static PTObjectInstance LoadObject(RTInputStream is, int32_t version, bool ismap = false);
+    static TObjectInstance* LoadObject(RTInputStream is, int32_t version, bool ismap = false);
         // Loads and creates a new object from stream 
         // (objs with OF_NOSAVEMAP i.e. players will be ignored if ismap is true)
-    static void SaveObject(PTObjectInstance inst, RTOutputStream os, bool ismap = false);
+    static void SaveObject(TObjectInstance* inst, RTOutputStream os, bool ismap = false);
         // Saves object to stream (includes header and block information)
         // (objs with OF_NOSAVEMAP i.e. players will be ignored if ismap is true)
     virtual int32_t ObjVersion() { return 0; }
@@ -1067,9 +1091,9 @@ class TObjectInstance : protected SObjectDef
         // Save inventory recursively
 
   // Inventory access functions
-    PTObjectInstance GetInventory(int32_t index);
+    TObjectInstance* GetInventory(int32_t index) const;
         // Gets inventory object, index is NOT the same as inventory slot
-    PTObjectInstance GetInventorySlot(int32_t slot);
+    TObjectInstance* GetInventorySlot(int32_t slot) const;
         // Searches for inventory object occupying the given slot
     int32_t NumInventoryItems() { return inventory.NumItems(); }
         // Number of objects in the array
@@ -1080,22 +1104,22 @@ class TObjectInstance : protected SObjectDef
     void SetInventNum(short i) { inventnum = i; }
 
   // Owner functions
-    PTObjectInstance GetOwner() { return owner; }
-    PTObjectInstance GetTopOwner()
-        { PTObjectInstance inst = this;
+    TObjectInstance* GetOwner() { return owner; }
+    TObjectInstance* GetTopOwner()
+        { TObjectInstance* inst = this;
           while (inst->owner) inst = inst->owner;
           return inst == this ? nullptr : inst; }
         // Recurse through the owner list and get the topmost owner
-    void SetOwner(PTObjectInstance newown) { owner = newown; }
+    void SetOwner(TObjectInstance* newown) { owner = newown; }
 
   // Mapindex functions
     void SetMapIndex(int32_t newindex) { mapindex = newindex; }
     int32_t GetMapIndex() { return mapindex; }
 
   // Nextmove functions
-    void SetNextMove(RS3DPoint p);
+    void SetNextMove(S3DPoint& p);
       // Set next frame's movement.
-    void GetNextMove(RS3DPoint p);
+    void GetNextMove(S3DPoint& p);
       // Get next frame's movement.
     void SetMoveAngle(int32_t ang) { moveangle = ang; }
     int32_t GetMoveAngle() { return moveangle; }
@@ -1154,20 +1178,20 @@ class TObjectInstance : protected SObjectDef
     char *name;                 // What is my name
     uint32_t notifyflags;       // Notify Objects of changes
     int32_t mapindex;           // Unique instance id
-    PTSector sector;            // Which sector am I in
-    PTObjectClass cl;           // Pointer to object's class
-    PSObjectInfo inf;           // Pointer to object type info
+    TSector* sector;            // Which sector am I in
+    TObjectClass* cl;           // Pointer to object's class
+    SObjectInfo* inf;           // Pointer to object type info
     int32_t shadow;             // Attached shadow (-1 if none)
 
   //Animation/drawing
-    PTObjectImagery imagery;    // Pointer to current imagery object
+    TObjectImagery* imagery;    // Pointer to current imagery object
     PTObjectAnimator animator;  // Pointer to animatior
     short frame, framerate;     // Frame number and framerate for object
     uint16_t prevstate;         // Previous state
     short prevframe;            // Previous state's last frame (not previous frame for this state)
 
   // Inventory
-    PTObjectInstance owner;     // What container it is in
+    TObjectInstance* owner;     // What container it is in
     TPointerArray<TObjectInstance, 0, 4> inventory;
     short inventnum;            // Inventory slot number
     short invindex;             // Inventory index (NOT necessarily equal to slot number)
@@ -1189,8 +1213,8 @@ class TObjectInstance : protected SObjectDef
     uint32_t                movebits;   // Result of last move
 
     // members to optimize function calls
-    S3DPoint oldpos;                    // Where it was last time function was called
-    int32_t screenx, screeny, screenz;  // Pixel/zbuf coords as of oldpos
+    mutable S3DPoint oldpos;                    // Where it was last time function was called
+    mutable int32_t screenx, screeny, screenz;  // Pixel/zbuf coords as of oldpos
 };
 
 inline void rollover(int32_t &i, int32_t &j)

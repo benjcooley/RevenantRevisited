@@ -273,7 +273,7 @@ SCommand Commands[] =
 };
 
 
-inline bool CheckOneContext(PTObjectInstance context, int32_t classid)
+inline bool CheckOneContext(TObjectInstance* context, int32_t classid)
 {
     if (classid >= 0)
     {
@@ -292,7 +292,7 @@ inline bool CheckOneContext(PTObjectInstance context, int32_t classid)
     return true;
 }
 
-inline bool CheckContext(PTObjectInstance context, int32_t classid, int32_t classid2)
+inline bool CheckContext(TObjectInstance* context, int32_t classid, int32_t classid2)
 {
     if (classid < 0 && classid2 < 0)
         return true;
@@ -300,12 +300,12 @@ inline bool CheckContext(PTObjectInstance context, int32_t classid, int32_t clas
     return (CheckOneContext(context, classid) || (classid2 >= 0 && CheckOneContext(context, classid2)));
 }
 
-int32_t CommandInterpreter(PTObjectInstance context, TToken &t, int32_t abrevlen)
+int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen)
 {
     bool skip = false;
     bool nowait = false;
 
-    PTObjectInstance orgcontext = context; // Save original context
+    TObjectInstance* orgcontext = context; // Save original context
 
     t.SkipBlanks();
     if (t.Type() == TKN_EOF)
@@ -343,7 +343,7 @@ int32_t CommandInterpreter(PTObjectInstance context, TToken &t, int32_t abrevlen
             }
             else
             {               
-                PTObjectInstance inst = MapPane.FindClosestObject(buf);
+                TObjectInstance* inst = MapPane.FindClosestObject(buf);
                 if (inst)
                 {
                     context = inst;
@@ -743,9 +743,9 @@ int32_t GetOverlayTile(uint8_t *overmap, int32_t x, int32_t y, int32_t code)
     return -1;
 }
 
-PTObjectInstance GenerateObj(PTSector sect, uint8_t *map, uint8_t *overmap, int32_t type, int32_t x, int32_t y, int32_t px, int32_t py, int32_t flux = 0)
+TObjectInstance* GenerateObj(TSector* sect, uint8_t *map, uint8_t *overmap, int32_t type, int32_t x, int32_t y, int32_t px, int32_t py, int32_t flux = 0)
 {
-    PTObjectInstance inst;
+    TObjectInstance* inst;
     SObjectDef def;
 
     memset(&def, 0, sizeof(SObjectDef));
@@ -792,7 +792,7 @@ void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
 {
     TObjectImagery::PauseLoader(); // NOTE: if resume isn't called, program will lock
 
-    PTSector sect;
+    TSector* sect;
     uint8_t filled[MAXPLATESX][MAXPLATESY];
     int32_t x, y, px, py;
     FILE *fp;
@@ -868,7 +868,7 @@ void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
                             (type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), code, &flux)) < 0)
                             continue;
 
-                        PTObjectInstance inst = GenerateObj(sect, map, overmap, type, sx, sy, px, py, flux);
+                        TObjectInstance* inst = GenerateObj(sect, map, overmap, type, sx, sy, px, py, flux);
 
                         if (!inst)
                             continue;
@@ -1063,7 +1063,7 @@ bool ParseExpression(TToken &t, int32_t *value)
                         if (t.Type() != TKN_IDENT)
                             return false;
 
-                        PTObjectInstance inst = MapPane.FindClosestObject(buf);;
+                        TObjectInstance* inst = MapPane.FindClosestObject(buf);;
                         if (inst)
                         {
                             if (t.Is("state"))
@@ -1226,7 +1226,7 @@ COMMAND(CmdWait)
         if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
             return CMD_BADPARAMS;
 
-        PTObjectInstance inst = MapPane.FindClosestObject(t.Text(), context);
+        TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context);
         if (!inst)
             Output("Couldn't find wait char\n");
 
@@ -1245,8 +1245,8 @@ COMMAND(CmdWait)
 
 COMMAND(CmdUse)
 {
-    PTObjectInstance inst = nullptr;
-    PTObjectInstance with = nullptr;
+    TObjectInstance* inst = nullptr;
+    TObjectInstance* with = nullptr;
 
     if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
     {
@@ -1419,7 +1419,7 @@ COMMAND(CmdCombat)
             ((PTCharacter)context)->EndCombat();
         else
         {
-            PTObjectInstance inst = nullptr;
+            TObjectInstance* inst = nullptr;
             if (!t.Is("on"))
             {
                 inst = MapPane.FindClosestObject(t.Text(), context);
@@ -1440,7 +1440,7 @@ COMMAND(CmdAttack)
 
     if (t.Type() == TKN_IDENT)
     {
-        PTObjectInstance inst = MapPane.FindClosestObject(t.Text(), context);
+        TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context);
         t.WhiteGet();
     }
 
@@ -1458,7 +1458,7 @@ COMMAND(CmdControl)
     if (t.Type() != TKN_IDENT)
         return CMD_BADPARAMS;
 
-    if ((PTPlayer)context == Player)
+    if ((TPlayer*)context == Player)
     {
         if (t.Is("on"))
             PlayScreen.SetDemoMode(false);
@@ -1636,7 +1636,7 @@ COMMAND(CmdSelect)
         return 0;
     }
 
-    PTObjectInstance inst = MapPane.FindClosestObject(t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), nullptr, true);
 
     if (!inst)
         Output("Can't find any object by that name.\n");
@@ -1726,7 +1726,7 @@ COMMAND(CmdAdd)
     }
     else // Add an object
     {
-        PTObjectClass cl;
+        TObjectClass* cl;
 
         for (int32_t i = 0; i < MAXOBJECTCLASSES; i++)
         {
@@ -1762,11 +1762,11 @@ COMMAND(CmdAdd)
                 // If we added a player, add him to the player manager
                 if (def.objclass == OBJCLASS_PLAYER)
                 {
-                    PTObjectInstance oi = MapPane.GetInstance(index);
+                    TObjectInstance* oi = MapPane.GetInstance(index);
                     if (oi)
                     {
-                        PlayerManager.AddPlayer((PTPlayer)oi);
-                        PlayerManager.SetMainPlayer((PTPlayer)oi);
+                        PlayerManager.AddPlayer((TPlayer*)oi);
+                        PlayerManager.SetMainPlayer((TPlayer*)oi);
                     }
                 }
             }
@@ -1834,7 +1834,7 @@ COMMAND(CmdGive)
     if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
         return CMD_BADPARAMS;
 
-    PTObjectInstance inst = MapPane.FindClosestObject(t.Text(), context);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context);
     if (inst < 0)
     {
         Output("Unable to find object %s\n", t.Text());
@@ -1868,7 +1868,7 @@ COMMAND(CmdTake)
     if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
         return CMD_BADPARAMS;
 
-    PTObjectInstance inst = MapPane.FindClosestObject(t.Text(), context);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context);
     if (!inst)
     {
         Output("Unable to find object %s\n", t.Text());
@@ -1942,7 +1942,7 @@ COMMAND(CmdTileWalkmap)
     return 0;
 }
 
-static void OutputState(PTObjectInstance context, int32_t state)
+static void OutputState(TObjectInstance* context, int32_t state)
 {
     char flstr[32];
     int32_t flags = context->GetImagery()->GetAniFlags(state);
@@ -2155,7 +2155,7 @@ COMMAND(CmdTemplate)
 
     for (int32_t i = 0; i < numfound; i++)
     {
-        PTObjectInstance inst = MapPane.GetInstance(objlist[i]);
+        TObjectInstance* inst = MapPane.GetInstance(objlist[i]);
         if (inst && inst != context)
         {
             S3DPoint ipos;
@@ -2273,7 +2273,7 @@ COMMAND(CmdGet)
         return CMD_BADPARAMS;
 
     int32_t index = -1;
-    PTObjectInstance inst = MapPane.FindClosestObject(t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), nullptr, true);
 
     if (inst == nullptr)
         Output("Can't find any object by that name.\n");
@@ -2321,12 +2321,12 @@ COMMAND(CmdSectorCommand)
     for (int32_t sy = 0; sy < MAXSECTORY; sy++)
         for (int32_t sx = 0; sx < MAXSECTORX; sx++)
         {
-            PTSector sector = new TSector(level, sx, sy);
+            TSector* sector = new TSector(level, sx, sy);
             sector->Load(false);
 
             for (int32_t i = 0; i < sector->NumItems(); i++)
             {
-                PTObjectInstance inst = sector->GetInstance(i);
+                TObjectInstance* inst = sector->GetInstance(i);
                 if (inst)
                 {
                     TStringParseStream s(command, strlen(command));
@@ -2353,7 +2353,7 @@ COMMAND(CmdSwap)
     if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
         return CMD_BADPARAMS;
 
-    PTObjectInstance inst = MapPane.FindClosestObject(t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), nullptr, true);
 
     if (inst == nullptr)
         Output("Can't find any object by that name.\n");
@@ -2493,7 +2493,7 @@ COMMAND(CmdNewGame)
 
 COMMAND(CmdCurPlayer)
 {
-    PlayerManager.SetMainPlayer((PTPlayer)context);
+    PlayerManager.SetMainPlayer((TPlayer*)context);
     
     Output("%s is now current player\n", context->GetName());
 
@@ -2747,7 +2747,7 @@ COMMAND(CmdStat)
     /* enumeration of container flags */
     char *contflags[] = { "LOCKED", nullptr };
 
-    PTObjectClass cl = TObjectClass::GetClass(context->ObjClass());
+    TObjectClass* cl = TObjectClass::GetClass(context->ObjClass());
 
     if (t.Type() == TKN_IDENT)
     {
@@ -2853,7 +2853,7 @@ COMMAND(CmdStat)
     strcat(buf, "\n");
     Output(buf);
 
-    PTObjectImagery i = context->GetImagery();
+    TObjectImagery* i = context->GetImagery();
     int32_t s = context->GetState();
     sprintf(buf, "Registration (%d, %d, %d)  AnimReg (%d, %d, %d)\n",
             i->GetRegX(s), i->GetRegY(s), i->GetRegZ(s),
@@ -2896,7 +2896,7 @@ COMMAND(CmdScript)
     return 0;
 }
 
-int32_t CenterOnFunc(PTObjectInstance context, TToken &t, bool scroll)
+int32_t CenterOnFunc(TObjectInstance* context, TToken &t, bool scroll)
 {
     S3DPoint pos;
 
@@ -2909,7 +2909,7 @@ int32_t CenterOnFunc(PTObjectInstance context, TToken &t, bool scroll)
     {
         if (t.Type() == TKN_IDENT)
         {
-            PTObjectInstance inst = MapPane.FindClosestObject(t.Text());
+            TObjectInstance* inst = MapPane.FindClosestObject(t.Text());
             if (!inst)
             {
                 Output("Object not found");
@@ -3048,7 +3048,7 @@ COMMAND(CmdMapPos)
     return 0;
 }
 
-bool ShowObjList(PTObjectClass cl, char *match)
+bool ShowObjList(TObjectClass* cl, char *match)
 {
     bool ismatch = false;
     int32_t cnt = 0;
@@ -3079,9 +3079,9 @@ bool ShowObjList(PTObjectClass cl, char *match)
     return ismatch;
 }
 
-void ShowObjTypeInfo(PTObjectClass cl, int32_t objtype)
+void ShowObjTypeInfo(TObjectClass* cl, int32_t objtype)
 {
-    PSObjectInfo inf = cl->GetObjType(objtype);
+    SObjectInfo* inf = cl->GetObjType(objtype);
 
     if (!cl || !inf)
         return;
@@ -3126,7 +3126,7 @@ void ShowObjTypeInfo(PTObjectClass cl, int32_t objtype)
 
 COMMAND(CmdShow)
 {
-    PTObjectClass cl;
+    TObjectClass* cl;
     buf[0] = 0;
 
     if (t.Is("classes"))
@@ -3243,7 +3243,7 @@ COMMAND(CmdBaseLight)
 
 COMMAND(CmdReplace)
 {
-    PTObjectClass cl = TObjectClass::GetClass(TObjectClass::FindClass(t.Text()));
+    TObjectClass* cl = TObjectClass::GetClass(TObjectClass::FindClass(t.Text()));
     if (cl)
         t.WhiteGet();
     else
@@ -3275,7 +3275,7 @@ COMMAND(CmdReplace)
             {
                 int32_t oldindex = context->GetMapIndex();
                 StatusBar.Deselect(oldindex);
-                PTObjectInstance oi = MapPane.GetInstance(oldindex);
+                TObjectInstance* oi = MapPane.GetInstance(oldindex);
                 MapPane.DeleteObject(oi);
                 StatusBar.Select(index, true);
             }
@@ -3396,11 +3396,11 @@ COMMAND(CmdLight)
 
 void ZOffset(int32_t zoffset, int32_t dummy = -1)
 {
-    PTObjectInstance oi = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* oi = MapPane.GetInstance(StatusBar.GetSelectedObj());
 
     if (oi)
     {
-        PTObjectImagery img = oi->GetImagery();
+        TObjectImagery* img = oi->GetImagery();
 
         if (img)
         {
@@ -3425,7 +3425,7 @@ COMMAND(CmdZOffset)
     if (!Parse(t, "%d", &zoff))
         return CMD_BADPARAMS;
 
-    PTObjectImagery img = context->GetImagery();
+    TObjectImagery* img = context->GetImagery();
 
     if (img)
     {
@@ -3444,7 +3444,7 @@ COMMAND(CmdRegistration)
     if (!Parse(t, "%d %d", &dx, &dy))
         return CMD_BADPARAMS;
 
-    PTObjectImagery img = context->GetImagery();
+    TObjectImagery* img = context->GetImagery();
     if (!img)
         return 0;
 
@@ -3462,7 +3462,7 @@ COMMAND(CmdAnimRegistration)
     if (!Parse(t, "%d %d", &dx, &dy))
         return CMD_BADPARAMS;
 
-    PTObjectImagery img = context->GetImagery();
+    TObjectImagery* img = context->GetImagery();
     if (!img)
         return 0;
 
@@ -3479,7 +3479,7 @@ COMMAND(CmdAnimZ)
     if (!Parse(t, "%d", &dz))
         return CMD_BADPARAMS;
 
-    PTObjectImagery img = context->GetImagery();
+    TObjectImagery* img = context->GetImagery();
     if (!img)
         return 0;
 

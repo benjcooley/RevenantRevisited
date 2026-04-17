@@ -77,7 +77,7 @@ class TWeaponSwipe
 class TCharAnimator : public T3DAnimator
 {
   public:
-    TCharAnimator(PTObjectInstance oi);
+    TCharAnimator(TObjectInstance* oi);
     virtual ~TCharAnimator();
 
     virtual void Animate(bool draw);
@@ -156,7 +156,7 @@ _CLASSDEF(TPlayerAnimator)
 class TPlayerAnimator : public TCharAnimator
 {
   public:
-    TPlayerAnimator(PTObjectInstance oi) : TCharAnimator(oi) {}
+    TPlayerAnimator(TObjectInstance* oi) : TCharAnimator(oi) {}
     virtual ~TPlayerAnimator()              {}
 };
 

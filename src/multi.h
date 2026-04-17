@@ -25,10 +25,10 @@ class TMulti : public TMultiData
   public:
 
   // Functions
-    static PTMulti LoadMulti(char *name)
-      { return (PTMulti)LoadResource(name); }
-    static PTMulti LoadMulti(char *name, int32_t id)
-      { return (PTMulti)LoadResource(name, id); }
+    static TMulti* LoadMulti(char *name)
+      { return (TMulti*)LoadResource(name); }
+    static TMulti* LoadMulti(char *name, int32_t id)
+      { return (TMulti*)LoadResource(name, id); }
     void operator delete(void *p)
       { free(p); }
 
@@ -40,15 +40,15 @@ class TMulti : public TMultiData
       { return (PTAnimation)(void *)offsets[i]; }
     PTBitmap Bitmap(int32_t i)
       { return (PTBitmap)(void *)offsets[i]; }
-    PTFont Font(int32_t i)
-      { return (PTFont)(void *)offsets[i]; }
+    TFont* Font(int32_t i)
+      { return (TFont*)(void *)offsets[i]; }
 
     PTAnimation Animation(char *name)
       { return (PTAnimation)Object(name); }
     PTBitmap Bitmap(char *name)
       { return (PTBitmap)Object(name); }
-    PTFont Font(char *name)
-      { return (PTFont)Object(name); }
+    TFont* Font(char *name)
+      { return (TFont*)Object(name); }
     PTWaveData Wave(char *name)
       { return (PTWaveData)Object(name); }
 };

@@ -45,7 +45,7 @@ extern TObjectClass HelperClass;
 extern PTBitmap PointerCursor;
 //extern CBox ImageryBox;
 
-PTMulti EditorData;
+TMulti* EditorData;
 TConsolePane Console;
 TScriptPane ScriptEditor;
 TScrollEditorPane ScrollEditor;
@@ -639,7 +639,7 @@ void TConsolePane::ChainMouse(void (*cfunc)(int32_t, int32_t), int32_t x0, int32
 
 void TConsolePane::SetBounds()
 {
-    PTObjectInstance inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (!inst)
         return;
 
@@ -671,7 +671,7 @@ void TConsolePane::SetBounds()
     Output(buf);
 }
 
-bool TConsolePane::AddAxis(PTObjectInstance inst)
+bool TConsolePane::AddAxis(TObjectInstance* inst)
 {
     SObjectDef def;
     memset(&def, 0, sizeof(SObjectDef));
@@ -692,7 +692,7 @@ void TConsolePane::ClearAxis()
 {
     if (axis)
     {
-        PTObjectInstance oi = MapPane.GetInstance(axis->GetMapIndex());
+        TObjectInstance* oi = MapPane.GetInstance(axis->GetMapIndex());
         if (oi) MapPane.DeleteObject(oi);
         axis = nullptr;
     }
@@ -704,7 +704,7 @@ void TConsolePane::KeyPress(int32_t key, bool down)
 
     if (box && down)
     {
-        PTObjectInstance inst;
+        TObjectInstance* inst;
 
         int32_t width, length, height;
         box->GetImagery()->GetWorldBoundBox(box->GetState(), width, length, height);
@@ -763,7 +763,7 @@ void TConsolePane::KeyPress(int32_t key, bool down)
                     box->GetImagery()->SetHeaderDirty(false);
                 }
 
-                PTObjectInstance oi = MapPane.GetInstance(box->GetMapIndex());
+                TObjectInstance* oi = MapPane.GetInstance(box->GetMapIndex());
                 if (oi) MapPane.DeleteObject(oi);
                 box = nullptr;
             }
@@ -1066,7 +1066,7 @@ unsigned _stdcall TConsolePane::CommandThread(void *arg)
 
             for (int32_t n = 0; n < j; n++)
             {
-                PTObjectInstance inst = MapPane.GetInstance(list[n]);
+                TObjectInstance* inst = MapPane.GetInstance(list[n]);
                 if (inst)
                     CommandInterpreter(inst, t, MINCMDABREV);
 
@@ -1099,7 +1099,7 @@ bool TScriptPane::Initialize()
     return true;
 }
 
-void TScriptPane::LoadScript(PTObjectInstance oi)
+void TScriptPane::LoadScript(TObjectInstance* oi)
 {
     inst = oi;
     strcpy(text, ScriptManager.ObjectScript(oi)->Text());
@@ -1151,7 +1151,7 @@ bool TScrollEditorPane::Initialize()
     return true;
 }
 
-void TScrollEditorPane::SetScroll(PTObjectInstance s)
+void TScrollEditorPane::SetScroll(TObjectInstance* s)
 {
     scroll = (PTScroll)s;
 
@@ -1221,7 +1221,7 @@ void BtnDeselect()
 void BtnCenterOn()
 {
     S3DPoint pos;
-    PTObjectInstance inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (inst)
     {
         inst->GetPos(pos);
@@ -1240,7 +1240,7 @@ void BtnWalkmap()
     MapPane.ResetDrag();
 
     int32_t index = StatusBar.GetSelectedObj();
-    PTObjectInstance oi = MapPane.GetInstance(index);
+    TObjectInstance* oi = MapPane.GetInstance(index);
     if (oi)
         MapPane.SaveWalkmap(oi);
 }
@@ -1309,7 +1309,7 @@ void TEditStatusPane::DrawBackground()
 
         if (curobj >= 0)
         {
-            PTObjectInstance oi = MapPane.GetInstance(selected[curobj]);
+            TObjectInstance* oi = MapPane.GetInstance(selected[curobj]);
             if (!oi)
                 StatusBar.Validate();
             else
@@ -1469,7 +1469,7 @@ void TEditStatusPane::Delete()
 
     while (numobjs > 0)
     {
-        PTObjectInstance oi = MapPane.GetInstance(selected[--numobjs]);
+        TObjectInstance* oi = MapPane.GetInstance(selected[--numobjs]);
         if (!oi)
             Console.Output("\nERROR: Index is invalid\n");
         else
@@ -1479,7 +1479,7 @@ void TEditStatusPane::Delete()
     SetDirty(true);
 }
 
-void StartObjMoving(PTObjectInstance oi)
+void StartObjMoving(TObjectInstance* oi)
 {
     if (oi && !(oi->GetFlags() & OF_EDITORLOCK))
     {
@@ -1498,7 +1498,7 @@ void TEditStatusPane::StartMoving()
     for (int32_t i = 0; i < numobjs; i++)
     {
         canundo = true;
-        PTObjectInstance oi = MapPane.GetInstance(selected[i]);
+        TObjectInstance* oi = MapPane.GetInstance(selected[i]);
 
         if (oi)
         {
@@ -1507,14 +1507,14 @@ void TEditStatusPane::StartMoving()
 
             if (oi->GetShadow() >= 0)
             {
-                PTObjectInstance s = MapPane.GetInstance(oi->GetShadow());
+                TObjectInstance* s = MapPane.GetInstance(oi->GetShadow());
                 StartObjMoving(s);
             }
         }
     }
 }
 
-void StopObjMoving(PTObjectInstance oi)
+void StopObjMoving(TObjectInstance* oi)
 {
     if (oi && (oi->GetFlags() & OF_SELDRAW))
     {
@@ -1528,7 +1528,7 @@ void TEditStatusPane::StopMoving()
 {
     for (int32_t i = 0; i < numobjs; i++)
     {
-        PTObjectInstance oi = MapPane.GetInstance(selected[i]);
+        TObjectInstance* oi = MapPane.GetInstance(selected[i]);
 
         if (oi)
         {
@@ -1536,7 +1536,7 @@ void TEditStatusPane::StopMoving()
 
             if (oi->GetShadow() >= 0)
             {
-                PTObjectInstance s = MapPane.GetInstance(oi->GetShadow());
+                TObjectInstance* s = MapPane.GetInstance(oi->GetShadow());
                 StopObjMoving(s);
             }
         }
@@ -1549,7 +1549,7 @@ void TEditStatusPane::Undo()
 {
     for (int32_t i = 0; i < numobjs; i++)
     {
-        PTObjectInstance oi = MapPane.GetInstance(selected[i]);
+        TObjectInstance* oi = MapPane.GetInstance(selected[i]);
         oi->SetPos(lastpos[i]);
     }
 }
@@ -1588,7 +1588,7 @@ void BtnStat()
 
 void BtnZOff()
 {
-/*  PTObjectInstance oi = MapPane.GetInstance(StatusBar.GetSelectedObj());
+/*  TObjectInstance* oi = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (oi)
     {
         StatusBar.StartMoving();
@@ -1605,7 +1605,7 @@ void Registration(S3DPoint pos)
 {
     int32_t dx, dy;
 
-    PTObjectInstance inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (inst)
     {
         inst->GetPos(pos);
@@ -1628,7 +1628,7 @@ void Registration(S3DPoint pos)
 
 void RegistrationAbort()
 {
-    PTObjectInstance inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (inst)
         inst->SetPos(startpos);
 
@@ -1638,7 +1638,7 @@ void RegistrationAbort()
 
 void BtnReg()
 {
-    PTObjectInstance inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (inst)
     {
         inst->GetPos(startpos);             // save for later comparisson
@@ -1675,7 +1675,7 @@ void Clone(S3DPoint pos)
 
     for (int32_t i = StatusBar.GetFirstObj(); i >= 0; i = StatusBar.GetNextObj())
     {
-        PTObjectInstance inst = MapPane.GetInstance(i);
+        TObjectInstance* inst = MapPane.GetInstance(i);
         if (!inst)
             Output("ERROR: Aquiring instance in clone\n");
         else
@@ -1696,7 +1696,7 @@ void Clone(S3DPoint pos)
             else
             {
                 // copy light stuff
-                PTObjectInstance newinst = MapPane.GetInstance(index);
+                TObjectInstance* newinst = MapPane.GetInstance(index);
                 if (newinst)
                 {
                     newinst->SetLightIntensity(inst->GetLightIntensity());
@@ -1755,7 +1755,7 @@ void BtnBound()
 
 void AnimRegistration(int32_t x, int32_t y)
 {
-    PTObjectInstance inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (inst && inst->GetImagery())
     {
         int32_t z = inst->GetImagery()->GetAnimRegZ(inst->GetState());
@@ -1765,7 +1765,7 @@ void AnimRegistration(int32_t x, int32_t y)
 
 void AnimZ(int32_t z, int32_t dummy = -1)
 {
-    PTObjectInstance inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (inst && inst->GetImagery())
     {
         int32_t x = inst->GetImagery()->GetAnimRegX(inst->GetState());
@@ -1776,7 +1776,7 @@ void AnimZ(int32_t z, int32_t dummy = -1)
 
 void BtnAnReg()
 {
-    PTObjectInstance inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (inst && inst->GetImagery())
     {
         Console.Output("animreg ");
@@ -1787,7 +1787,7 @@ void BtnAnReg()
 
 void BtnAnimZ()
 {
-    PTObjectInstance inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
+    TObjectInstance* inst = MapPane.GetInstance(StatusBar.GetSelectedObj());
     if (inst && inst->GetImagery())
     {
         Console.Output("animz ");
@@ -1892,7 +1892,7 @@ void TEditToolsPane::AddBookmark(int32_t mark, S3DPoint pos, int32_t lev)
     bookmarklev[mark] = lev;
 }
 
-void TEditToolsPane::GetBookmark(int32_t mark, RS3DPoint pos, int32_t &lev)
+void TEditToolsPane::GetBookmark(int32_t mark, S3DPoint& pos, int32_t &lev)
 {
     if (mark < 0 || mark >= NUMBOOKMARKS)
         return;
@@ -2070,13 +2070,13 @@ void TEditClassPane::DrawBackground()
         Display->SetClipRect(GetPosX(), GetPosY(), GetWidth() - 32, GetHeight());
         Display->Box(0, 0, GetWidth() - 32, GetHeight(), 0, 0xffff, 0, DM_BACKGROUND);
 
-        PTObjectClass cl = TObjectClass::GetClass(curclass);
+        TObjectClass* cl = TObjectClass::GetClass(curclass);
         if (cl)
         {
             int32_t col = 0, lines = 0;
             for (int32_t o = firstobj; o < cl->NumTypes() && lines < maxlines; o++)
             {
-                PSObjectInfo inf = cl->GetObjType(o);
+                SObjectInfo* inf = cl->GetObjType(o);
                 if (!inf)
                     continue;
 
@@ -2089,7 +2089,7 @@ void TEditClassPane::DrawBackground()
                     Display->Box(x, y, OBJWIDTH, OBJHEIGHT, TranslateColor(color), 0xffff, 0, DM_BACKGROUND);
                 }
 
-                PSImageryEntry ie = TObjectImagery::GetImageryEntry(inf->imageryid);
+                SImageryEntry* ie = TObjectImagery::GetImageryEntry(inf->imageryid);
 
                 if (ie)
                 {
@@ -2270,7 +2270,7 @@ int32_t TEditClassPane::PutObject(S3DPoint pos)
     }
 
     StatusBar.Select(index);
-    PTObjectInstance oi = MapPane.GetInstance(index);
+    TObjectInstance* oi = MapPane.GetInstance(index);
 
     return index;
 }
@@ -2287,7 +2287,7 @@ void TEditClassPane::Scroll(int32_t lines)
 
 void TEditClassPane::SelectSame(int32_t index)
 {
-    PTObjectInstance inst = MapPane.GetInstance(index);
+    TObjectInstance* inst = MapPane.GetInstance(index);
     if (inst && (curclass != inst->ObjClass() || curobj != inst->ObjType()))
     {
         curclass = inst->ObjClass();
@@ -2615,7 +2615,7 @@ COMMAND(CmdAddRC)
     FILE *fp;
     bool done = false;
     bool proceed;
-    PTObjectClass cl;
+    TObjectClass* cl;
 
     // Create the temporary CGS file
     sprintf(tmpcgsname, "%sTmpRC%c%c%c.CGS", ExileRCPath, random(65, 90), random(65, 90), random(65, 90));
@@ -3039,7 +3039,7 @@ COMMAND(CmdDeleteRC)
     char *p;
     int32_t classnum;
     int32_t objtype;
-    PTObjectClass cl;
+    TObjectClass* cl;
 
     // -------------------------------------------------------------------------
     //                  Get the class that they are deleting from

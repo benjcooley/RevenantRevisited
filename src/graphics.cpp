@@ -2165,9 +2165,9 @@ bool PutChunk8(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
-    PSChunkHeader hdr  = (PSChunkHeader)dbval.source;
-    PSChunkHeader zhdr = (PSChunkHeader)dbval.szbuffer;
-    PSChunkHeader nhdr = (PSChunkHeader)dbval.snormals;
+    SChunkHeader* hdr  = (SChunkHeader*)dbval.source;
+    SChunkHeader* zhdr = (SChunkHeader*)dbval.szbuffer;
+    SChunkHeader* nhdr = (SChunkHeader*)dbval.snormals;
 
     int32_t type   = hdr->type;
     int32_t width  = hdr->width;
@@ -10107,12 +10107,12 @@ bool TextDraw(PSDrawBlock db, PSDrawParam dp)
 // *********** Chunk Z Find Routine *********
 uint16_t ZFindChunk(PSDrawBlock db, PSDrawParam dp)
 {
-    PSChunkHeader hdr = nullptr;
+    SChunkHeader* hdr = nullptr;
     
     if (dp->drawmode & DM_ZBUFFER)
-        hdr = (PSChunkHeader)db->szbuffer;
+        hdr = (SChunkHeader*)db->szbuffer;
     else if (dp->drawmode & DM_ZSTATIC)
-        hdr = (PSChunkHeader)db->source;
+        hdr = (SChunkHeader*)db->source;
 
     if (hdr == nullptr)
         return 0x7f7f;

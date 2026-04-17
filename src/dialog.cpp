@@ -115,11 +115,11 @@ char *TDialogList::GetLine(char *tag)
 
 TDialogPane DialogPane;
 
-static PTObjectInstance DlgContext;
+static TObjectInstance* DlgContext;
 static bool savecontrolon;
 static bool saveisfullscreen;
 
-void SetDialogContext(PTObjectInstance context)
+void SetDialogContext(TObjectInstance* context)
 {
     DlgContext = context;
 }

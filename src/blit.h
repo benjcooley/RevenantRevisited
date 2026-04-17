@@ -20,7 +20,6 @@ sg_shader_desc blit_shader_desc(void);
 #pragma once
 
 #include "revenant.h"
-#include "sokol_gfx.h"
 
 // Shader vertex parameters
 _STRUCTDEF(SBlitVertexParams)

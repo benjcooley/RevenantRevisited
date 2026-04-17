@@ -58,25 +58,25 @@ HANDLE PauseMutex;
 MEMORYSTATUS StartMemory;
 
 // Game directories
-char RunPath[MAXPATHLEN];
-char SavePath[MAXPATHLEN];
+TString RunPath;
+TString SavePath;
 
 // Define the Editor paths
-char ClassDefPath[MAXPATHLEN];        // Where to load / save Class.Def
-char ExileRCPath[MAXPATHLEN];         // Where to run ExileRC from & where
+TString ClassDefPath;               // Where to load / save Class.Def
+TString ExileRCPath;                // Where to run ExileRC from & where
                                     // the graphics for the resources are
-char ResourcePath[MAXPATHLEN];        // Where to read / write the resources
-char BaseMapPath[MAXPATHLEN];         // Where the untouched version of the game map is stored
-char CurMapPath[MAXPATHLEN];          // Where the current map is stored
+TString ResourcePath;               // Where to read / write the resources
+TString BaseMapPath;                // Where the untouched version of the game map is stored
+TString CurMapPath;                 // Where the current map is stored
 
 // Current language
-char Language[NAMELEN];             // Where the current map is stored
+TString Language;                   // Where the current map is stored
 
 // Global Structure Defines
-PTScreen        CurrentScreen;      // Currently displayed screen object
-PTScreen        NextScreen;         // Next Screen to be display object
+TScreen*        CurrentScreen;      // Currently displayed screen object
+TScreen*        NextScreen;         // Next Screen to be display object
 TDisplay        display;            // Display object
-PTDisplay       Display = &display; // Display pointer
+TDisplay*       Display = &display; // Display pointer
 T3DScene        Scene3D;            // Display pointer
 TPlayScreen     PlayScreen;         // PlayScreen Object
 TMapPane        MapPane;            // Map pane for PlayScreen
@@ -96,31 +96,31 @@ TSaveGame       SaveGame;           // SaveGame Object
 TChunkCache     ChunkCache;         // Tile Cache
 TTimer          Timer;              // Timer Object
 TVideoCapture   VideoCapture;       // Video capture object
-PTFont          SystemFont;         // Basic utility font for game
-PTFont          DialogFont;         // Dialog font
-PTFont          DialogFontShadow;   // Dialog font shadow
-PTFont          SmallFont;          // Small game font
-PTFont          GameFont;           // Medium game font
-PTFont          GoldFont;           // Medium gold font
-PTFont          MetalFont;          // Small gold/metal font
-PTFont          MenuFont;           // Menu font
-PTPlayer        Player;             // Main player for the game
-PTMulti         GameData;           // Multiresource for in game data
+TFont*          SystemFont;         // Basic utility font for game
+TFont*          DialogFont;         // Dialog font
+TFont*          DialogFontShadow;   // Dialog font shadow
+TFont*          SmallFont;          // Small game font
+TFont*          GameFont;           // Medium game font
+TFont*          GoldFont;           // Medium gold font
+TFont*          MetalFont;          // Small gold/metal font
+TFont*          MenuFont;           // Menu font
+TPlayer*        Player;             // Main player for the game
+TMulti*         GameData;           // Multiresource for in game data
 TSoundPlayer    SoundPlayer;        // Sound effects player
 TControlMap     ControlMap;         // Contains the key/joystick mappings for game control
 TAreaManager    AreaManager;        // Manages the game area system
 TPlayerManager  PlayerManager;      // Manages the game player list
-TRules  Rules;      // Manages global rules data (classes, chars, stats for attacks, etc.)
+TRules  Rules;                      // Manages global rules data (classes, chars, stats for attacks, etc.)
 CRITICAL_SECTION CriticalSection;   // Controls enter critical section functions;
 TSpellList      SpellList;          // a list of spells in the game
 TDialogList     DialogList;         // List of dialog and other game messages for current language
 
 // Game speed variable
-int32_t GameSpeed = 3;          // Value 1-5 which determines how fast the game is running
-                            // Used to switch on/off processor intensive effects
+int32_t GameSpeed = 3;              // Value 1-5 which determines how fast the game is running
+                                    // Used to switch on/off processor intensive effects
 // Violence Level
-int32_t ViolenceLevel = 5;      // Value 0-5 which determines how much blood and gore, etc. to use
-                            // 0 = none
+int32_t ViolenceLevel = 5;          // Value 0-5 which determines how much blood and gore, etc. to use
+                                    // 0 = none
 
 // Total size of preload area (in sectors) if PreloadSectors is on
 int32_t PreloadSectorSize = -1;
@@ -170,8 +170,8 @@ int32_t MonitorX = 0;           // Relative position of monitor in desktop coord
 int32_t MonitorY = 0;       
 int32_t MonitorW = 640;         // Relative position of monitor in desktop coordinates  
 int32_t MonitorH = 480;     
-HMONITOR Monitor = nullptr;    // Windows monitor handle
-MONITORINFOEX MonitorInfo;  // Windows monitor info structure
+HMONITOR Monitor = nullptr;     // Windows monitor handle
+MONITORINFOEX MonitorInfo;      // Windows monitor info structure
 
 // Game flags
 bool Windowed = false;      // Do we run the game in a window in NORMAL mode (instead of EXLUSIVE)
@@ -500,7 +500,7 @@ void WaitSingleErr(HANDLE obj)
     }
 }
 
-void WaitMultipleErr(uint32_t objs, CONST HANDLE *obj, bool all)
+void WaitMultipleErr(uint32_t objs, const HANDLE *obj, bool all)
 {
     if (WaitForMultipleObjects(objs, obj, all, INFINITE /*10000*/) == WAIT_TIMEOUT)
     {
@@ -565,15 +565,15 @@ void ExitGame()
 
 // *************** Settings Functions *****************
 
-char INIPath[RUNPATHLEN];
-char INISection[64];
+static TString INIPath;
+static TString INISection;
 
-void INISetSection(char *newsection)
+void INISetSection(const char* newsection)
 {
-    strncpyz(INISection, newsection, 64);
+    INISection = newsection;
 }
 
-void INISetPath(char *runpath)
+void INISetPath(const char *runpath)
 {
     char *ininame = "Revenant.ini";
 
@@ -594,7 +594,7 @@ void INISetPath(char *runpath)
     }
 }
 
-int32_t INIGetInt(char *key, int32_t def, char *format)
+int32_t INIGetInt(const char *key, int32_t def, char *format)
 {
     int32_t i = GetPrivateProfileInt(INISection, key, def, INIPath);
 
@@ -603,7 +603,7 @@ int32_t INIGetInt(char *key, int32_t def, char *format)
     return i;
 }
 
-void INISetInt(char *key, int32_t i, char *format)
+void INISetInt(const char *key, int32_t i, char *format)
 {
     if (!format)
         format = "%d";
@@ -614,7 +614,7 @@ void INISetInt(char *key, int32_t i, char *format)
     WritePrivateProfileString(INISection, key, buf, INIPath);
 }
 
-char *INIGetText(char *key, char *def, char *buf, int32_t buflen)
+char *INIGetText(const char *key, char *def, char *buf, int32_t buflen)
 {
     static char s[128];
     if (!buf)
@@ -787,40 +787,40 @@ void INISetBool(char *key, bool on, char *yes, char *no)
     WritePrivateProfileString(INISection, key, on ? yes : no, INIPath);
 }
 
-bool INIGetYesNo(char *key, bool def)
+bool INIGetYesNo(const char *key, bool def)
 {
     return INIGetBool(key, def, "Yes", "No");
 }
 
-void INISetYesNo(char *key, bool on)
+void INISetYesNo(const char *key, bool on)
 {
     INISetBool(key, on, "Yes", "No");
 }
 
-bool INIGetTrueFalse(char *key, bool def)
+bool INIGetTrueFalse(const char *key, bool def)
 {
     return INIGetBool(key, def, "True", "False");
 }
 
-void INISetTrueFalse(char *key, bool on)
+void INISetTrueFalse(const char *key, bool on)
 {
     INISetBool(key, on, "True", "False");
 }
 
-bool INIGetOnOff(char *key, bool def)
+bool INIGetOnOff(const char *key, bool def)
 {
     return INIGetBool(key, def, "On", "Off");
 }
 
-void INISetOnOff(char *key, bool on)
+void INISetOnOff(const char *key, bool on)
 {
     INISetBool(key, on, "On", "Off");
 }
 
 // Grab the ParseAnything function from PARSE.CPP
-bool ParseAnything(bool stack, TToken &t, char *format, va_list ap);
+bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap);
 
-bool INIParse(char *key, char *def, char *format, ...)
+bool INIParse(const char *key, cons char *def, const char *format, ...)
 {
     char buf[128];
 
@@ -840,7 +840,7 @@ bool INIParse(char *key, char *def, char *format, ...)
     return retval;
 }
 
-void INIPrint(char *key, char *format, ...)
+void INIPrint(const char *key, const char *format, ...)
 {
     char buf[128];
 
@@ -2080,7 +2080,7 @@ int32_t PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 #endif
 
   // Figure out first screen
-    PTScreen NextScreen = &PlayScreen;
+    TScreen* NextScreen = &PlayScreen;
 
   // Do game screens
     while (NextScreen)

@@ -51,7 +51,7 @@ class TMultiCtrlPane : public TButtonPane
 // Data Members
   private:
     int32_t curpane;                // pane currently showing
-    PTMulti buttondata;         // bitmaps for buttons
+    TMulti* buttondata;         // bitmaps for buttons
 };
 
 

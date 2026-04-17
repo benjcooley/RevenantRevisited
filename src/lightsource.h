@@ -13,8 +13,8 @@ _CLASSDEF(TLightSource)
 class TLightSource : public TObjectInstance
 {
   public:
-    TLightSource(PTObjectImagery newim) : TObjectInstance(newim) {}
-    TLightSource(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) {}
+    TLightSource(TObjectImagery* newim) : TObjectInstance(newim) {}
+    TLightSource(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     // Lightsource stats
     STATFUNC(EqSlot)

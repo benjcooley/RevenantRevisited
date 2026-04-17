@@ -17,12 +17,12 @@ TObjectClass ToolClass("TOOL", OBJCLASS_TOOL, 0);
 DEFSTAT(Tool, Value, VAL, 0, 0, 0, 1000000)
 DEFSTAT(Tool, Pick, PICK, 1, 0, 0, 100)
 
-bool TTool::Use(PTObjectInstance user, int32_t with)
+bool TTool::Use(TObjectInstance* user, int32_t with)
 {
     return false;
 }
 
-int32_t TTool::CursorType(PTObjectInstance with)
+int32_t TTool::CursorType(TObjectInstance* with)
 {
     return CURSOR_NONE;
 }

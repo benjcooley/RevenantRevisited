@@ -21,7 +21,7 @@ _CLASSDEF(THelperAnimator)
 class THelperAnimator : public T3DAnimator
 {
   public:
-    THelperAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    THelperAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
       // Constructor (initialization handled by Initialize)
     virtual ~THelperAnimator() { Close(); }
       // Call close function

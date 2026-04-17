@@ -29,13 +29,13 @@
 // Declarations of global arrays for object classes, imagery, and builders
 
 int32_t TObjectClass::numclasses = 0;
-PTObjectClass TObjectClass::classes[MAXOBJECTCLASSES];
+TObjectClass* TObjectClass::classes[MAXOBJECTCLASSES];
 
 // true if classes need be be resaved
 bool TObjectClass::classesdirty = false;
 
 int32_t TObjectBuilder::numobjtypes = 0;
-PTObjectBuilder TObjectBuilder::builders[MAXOBJECTTYPES];
+TObjectBuilder* TObjectBuilder::builders[MAXOBJECTTYPES];
 
 
 // Tables for ConvertToFacing, Move, and other angle/distance related functions
@@ -57,7 +57,7 @@ uint16_t UniqueTypeID;
 // * Map/Screen Conversion Utils *
 // *******************************
 
-void WorldToScreen(RS3DPoint pos, int32_t &x, int32_t &y)
+void WorldToScreen(const S3DPoint& pos, int32_t &x, int32_t &y)
 {
     // 2:1
     x = pos.x - pos.y;
@@ -65,7 +65,7 @@ void WorldToScreen(RS3DPoint pos, int32_t &x, int32_t &y)
         // the screen z is actually pos.z * cos(30), cos(30) = .866
 }
 
-void WorldToScreen(RS3DPoint pos, RS3DPoint spos)
+void WorldToScreen(const S3DPoint& pos, S3DPoint& spos)
 {
     // 2:1
     spos.x = pos.x - pos.y;
@@ -76,19 +76,19 @@ void WorldToScreen(RS3DPoint pos, RS3DPoint spos)
         // zratio = 512.0 * sin(30) = 256.0, yratio = 512.0 * cos(30) = 443.4
 }
 
-void WorldToScreenZ(RS3DPoint pos, int32_t &z)
+void WorldToScreenZ(const S3DPoint& pos, int32_t &z)
 {
     z = (uint16_t)(WORLDZOFFSET - (int32_t)(pos.z / 2) - (int32_t)((pos.x + pos.y) * MYSTERYVAL1 / MYSTERYVAL2));
 }
 
-void ScreenToWorld(RS3DPoint pos, RS3DPoint spos)
+void ScreenToWorld(S3DPoint& pos, const S3DPoint& spos)
 {
     pos.z = (-3464 * spos.y / 1000 - 2 * spos.z) / 4;
     pos.y = - spos.x / 2 + MYSTERYVAL1 * pos.z / MYSTERYVAL2 + spos.y;
     pos.x = spos.x + pos.y;
 }
 
-void ScreenToWorld(int32_t x, int32_t y, RS3DPoint pos, int32_t zheight)
+void ScreenToWorld(int32_t x, int32_t y, S3DPoint& pos, int32_t zheight)
 {
     if (zheight)
         y += (int32_t)((zheight * MYSTERYVAL1) / MYSTERYVAL2);
@@ -99,7 +99,7 @@ void ScreenToWorld(int32_t x, int32_t y, RS3DPoint pos, int32_t zheight)
     pos.z = zheight;
 }
 
-void ConvertToVector(int32_t angle, int32_t speed, RS3DPoint vect, int32_t zangle)
+void ConvertToVector(int32_t angle, int32_t speed, S3DPoint& vect, int32_t zangle)
 {
     if (zangle == 0)
     {
@@ -114,7 +114,7 @@ void ConvertToVector(int32_t angle, int32_t speed, RS3DPoint vect, int32_t zangl
     }
 }
 
-int32_t ConvertToFacing(RS3DPoint target)
+int32_t ConvertToFacing(const S3DPoint& target)
 {
     int32_t absx = absval(target.x);
     int32_t absy = absval(target.y);
@@ -138,7 +138,7 @@ int32_t ConvertToFacing(RS3DPoint target)
     return angle;
 }
 
-int32_t ConvertToFacing(RS3DPoint pos, RS3DPoint target)
+int32_t ConvertToFacing(const S3DPoint& pos, S3DPoint& target)
 {
     S3DPoint p;
 
@@ -149,7 +149,7 @@ int32_t ConvertToFacing(RS3DPoint pos, RS3DPoint target)
     return ConvertToFacing(p);
 }
 
-int32_t ConvertZToFacing(RS3DPoint target)
+int32_t ConvertZToFacing(S3DPoint& target)
 {
     int32_t absdist = abs(Distance(target));
     int32_t absz = abs(target.z);
@@ -173,7 +173,7 @@ int32_t ConvertZToFacing(RS3DPoint target)
     return angle;
 }
 
-int32_t ConvertZToFacing(RS3DPoint pos, RS3DPoint target)
+int32_t ConvertZToFacing(const S3DPoint& pos, const S3DPoint& target)
 {
     S3DPoint p;
 
@@ -184,7 +184,7 @@ int32_t ConvertZToFacing(RS3DPoint pos, RS3DPoint target)
     return ConvertZToFacing(p);
 }
 
-int32_t Distance(RS3DPoint pos)
+int32_t Distance(const S3DPoint& pos)
 {
     int32_t numshifts = 0;
     int32_t x = abs(pos.x);
@@ -203,7 +203,7 @@ int32_t Distance(RS3DPoint pos)
     return d;
 }
 
-int32_t Distance(RS3DPoint pos, RS3DPoint target)
+int32_t Distance(const S3DPoint& pos, const S3DPoint& target)
 {
     S3DPoint p;
 
@@ -228,7 +228,7 @@ int32_t AngleDiff(int32_t angle1, int32_t angle2)
 // * TObjectBuilder *
 // ******************
 
-TObjectBuilder::TObjectBuilder(char *name)
+TObjectBuilder::TObjectBuilder(const char *name)
 {
     if (numobjtypes < MAXOBJECTTYPES)
         builders[numobjtypes++] = this;
@@ -236,7 +236,7 @@ TObjectBuilder::TObjectBuilder(char *name)
     objtypename = _strdup(name);
 }
 
-PTObjectBuilder TObjectBuilder::GetBuilder(int32_t objtype)
+TObjectBuilder* TObjectBuilder::GetBuilder(int32_t objtype)
 {
     if (objtype < numobjtypes)
         return builders[objtype];
@@ -244,7 +244,7 @@ PTObjectBuilder TObjectBuilder::GetBuilder(int32_t objtype)
     return nullptr;
 }
 
-PTObjectBuilder TObjectBuilder::GetBuilder(char *name)
+TObjectBuilder* TObjectBuilder::GetBuilder(const char *name)
 {
     for (int32_t i = 0; i < numobjtypes; i++)
         if (stricmp(name, builders[i]->objtypename) == 0)
@@ -257,7 +257,7 @@ PTObjectBuilder TObjectBuilder::GetBuilder(char *name)
 // * TInventoryIterator *
 // **********************
 
-PTObjectInstance TInventoryIterator::NextItem()
+TObjectInstance* TInventoryIterator::NextItem()
 {
     // Currently this DOES NOT recurse into other object's inventories,
     // because nothing uses it that way.  Copying some code from TMapIterator
@@ -324,7 +324,7 @@ void TObjectInstance::ClearObject()
     screenx = screeny = screenz = 0;
 }
 
-TObjectInstance::TObjectInstance(PTObjectImagery img)
+TObjectInstance::TObjectInstance(TObjectImagery* img)
 {
     ClearObject();
     imagery = img;
@@ -336,7 +336,7 @@ TObjectInstance::TObjectInstance(PTObjectImagery img)
         flags |= OF_PULSE;
 }
 
-TObjectInstance::TObjectInstance(PSObjectDef def, PTObjectImagery img)
+TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
 {
     ClearObject();
 
@@ -448,7 +448,7 @@ void TObjectInstance::SetName(char *newname)
         InitScript(ScriptManager.ObjectScript(this));
 }
 
-PTObjectImagery TObjectInstance::GetImagery() const
+TObjectImagery* TObjectInstance::GetImagery() const
 {
     return  imagery;
 }
@@ -496,13 +496,13 @@ void TObjectInstance::RepaintObject()
 {
 }
 
-int32_t TObjectInstance::Distance(PTObjectInstance inst)
+int32_t TObjectInstance::Distance(const TObjectInstance* inst) const
 {
     return ::Distance(pos, inst->pos);
 }
 
 // Returns the angle to the other instance
-int32_t TObjectInstance::AngleTo(PTObjectInstance inst)
+int32_t TObjectInstance::AngleTo(const TObjectInstance* inst) const
 {
     S3DPoint tpos;
     inst->GetPos(tpos);
@@ -510,7 +510,7 @@ int32_t TObjectInstance::AngleTo(PTObjectInstance inst)
 }
 
 // Returns the + or - difference between this objects facing and the dest obj
-int32_t TObjectInstance::FaceAngleTo(PTObjectInstance inst)
+int32_t TObjectInstance::FaceAngleTo(const TObjectInstance* inst) const
 {
     int32_t angle = AngleTo(inst) - GetFace();
     if (angle >= 128)
@@ -520,7 +520,7 @@ int32_t TObjectInstance::FaceAngleTo(PTObjectInstance inst)
     return angle;
 }
 
-void TObjectInstance::GetScreenPos(int32_t &x, int32_t &y)
+void TObjectInstance::GetScreenPos(int32_t &x, int32_t &y) const
 {
     if (oldpos == pos)
     {
@@ -539,7 +539,7 @@ void TObjectInstance::GetScreenPos(int32_t &x, int32_t &y)
     }
 }
 
-void TObjectInstance::GetScreenPos(S3DPoint &s)
+void TObjectInstance::GetScreenPos(S3DPoint& s) const
 {
     if (oldpos == pos)
     {
@@ -561,7 +561,7 @@ void TObjectInstance::GetScreenPos(S3DPoint &s)
 }
 
 // Sets the current object position
-int32_t TObjectInstance::SetPos(RS3DPoint newpos, int32_t newlevel, bool override)
+int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool override)
 {
     int32_t index = GetMapIndex();
 
@@ -584,7 +584,7 @@ int32_t TObjectInstance::SetPos(RS3DPoint newpos, int32_t newlevel, bool overrid
   // Handle shadow, if any
     if (shadow >= 0)
     {
-        PTObjectInstance s = MapPane.GetInstance(shadow);
+        TObjectInstance* s = MapPane.GetInstance(shadow);
         if (s)
         {
             S3DPoint delta = newpos;
@@ -641,14 +641,14 @@ int32_t TObjectInstance::SetPos(RS3DPoint newpos, int32_t newlevel, bool overrid
 }
 
 // Gets new snap position
-void TObjectInstance::GetSnapPos(PTObjectInstance oi, int32_t dist, S3DPoint &p)
+void TObjectInstance::GetSnapPos(const TObjectInstance* oi, int32_t dist, S3DPoint &p) const
 {
     ConvertToVector(oi->GetFace(), dist, p);
     p += oi->Pos();
 }
 
 // Moves this object so that it is the given distance 'dist' from 'oi'
-void TObjectInstance::SnapDist(PTObjectInstance oi, int32_t dist)
+void TObjectInstance::SnapDist(TObjectInstance* oi, int32_t dist)
 {
     if (dist >= 0)
     {
@@ -724,7 +724,7 @@ bool TObjectInstance::SetState(int32_t newstate)
     return true;
 }
 
-bool TObjectInstance::AddToInventory(PTObjectInstance inst, int32_t slot)
+bool TObjectInstance::AddToInventory(TObjectInstance* inst, int32_t slot)
 {
     if (slot < 0)
         slot = FindFreeInventorySlot();
@@ -757,9 +757,9 @@ bool TObjectInstance::AddToInventory(PTObjectInstance inst, int32_t slot)
     return true;
 }
 
-bool TObjectInstance::AddToInventory(char *name, int32_t number, int32_t slot)
+bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t slot)
 {
-    PTObjectClass cl;
+    TObjectClass* cl;
     int32_t ot;
     for (int32_t i = 0; i < MAXOBJECTCLASSES; i++)
     {
@@ -777,7 +777,7 @@ bool TObjectInstance::AddToInventory(char *name, int32_t number, int32_t slot)
     def.objclass = cl->ClassId();
     def.objtype = ot;
 
-    PTObjectInstance inst = cl->NewObject(&def);
+    TObjectInstance* inst = cl->NewObject(&def);
     if (!inst)
         return false;
 
@@ -802,7 +802,7 @@ void TObjectInstance::RemoveFromInventory()
     inventnum = -1;
 }
 
-int32_t TObjectInstance::GiveInventoryTo(PTObjectInstance to, char *name, int32_t number)
+int32_t TObjectInstance::GiveInventoryTo(TObjectInstance* to, const char *name, int32_t number)
 {
     int32_t total = 0;
     if (number < 1)
@@ -810,7 +810,7 @@ int32_t TObjectInstance::GiveInventoryTo(PTObjectInstance to, char *name, int32_
 
     do
     {
-        PTObjectInstance inst = FindObjInventory(name);
+        TObjectInstance* inst = FindObjInventory(name);
 
         if (!inst)
             return total;
@@ -847,18 +847,18 @@ int32_t TObjectInstance::GiveInventoryTo(PTObjectInstance to, char *name, int32_
     return total;
 }
 
-int32_t TObjectInstance::GetInventoryAmount(char *name)
+int32_t TObjectInstance::GetInventoryAmount(const char *name) const
 {
     int32_t total = 0;
 
-    for (TInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this); i; i++)
         if (stricmp(i.Item()->GetName(), name) == 0)
             total += max(i.Item()->Amount(), 1);
 
     return total;
 }
 
-bool TObjectInstance::HasEmptySlot()
+bool TObjectInstance::HasEmptySlot() const
 {
     uint32_t slot = FindFreeInventorySlot();
 
@@ -880,15 +880,19 @@ bool TObjectInstance::AddToMap()
 
 void TObjectInstance::RemoveFromMap()
 {
-    for (TMapIterator i; i; i++)
+    TMapIterator i;
+    while (i)
+    {
         if (i.Item() == this)
             break;
+        i++;
+    }
 
     if (i.Item())
         MapPane.RemoveFromSector(this, i.SectorX(), i.SectorY(), i.SectorIndex());
 }
 
-int32_t TObjectInstance::FindFreeInventorySlot()
+int32_t TObjectInstance::FindFreeInventorySlot() const
 {
     int32_t lowest = 0;
     bool done = false;
@@ -897,7 +901,7 @@ int32_t TObjectInstance::FindFreeInventorySlot()
     {
         done = true;
 
-        for (TInventoryIterator i(this); i; i++)
+        for (TConstInventoryIterator i(this); i; i++)
             if (i.Item()->InventNum() == lowest)
             {
                 done = false;
@@ -919,43 +923,43 @@ int32_t TObjectInstance::RealNumInventoryItems()
     return num;
 }
 
-PTObjectInstance TObjectInstance::GetInventory(int32_t index)
+TObjectInstance* TObjectInstance::GetInventory(int32_t index) const
 {
     return inventory[index];
 }
 
-PTObjectInstance TObjectInstance::GetInventorySlot(int32_t slot)
+TObjectInstance* TObjectInstance::GetInventorySlot(int32_t slot) const
 {
-    for (TInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this); i; i++)
         if (i.Item()->InventNum() == slot)
             return i.Item();
 
     return nullptr;
 }
 
-PTObjectInstance TObjectInstance::FindObjInventory(char *name)
+TObjectInstance* TObjectInstance::FindObjInventory(const char *name) const
 {
-    for (TInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this); i; i++)
         if (stricmp(i.Item()->GetName(), name) == 0)
             return i.Item();
 
     return nullptr;
 }
 
-PTObjectInstance TObjectInstance::FindObjInventory(int32_t objclass, int32_t type)
+TObjectInstance* TObjectInstance::FindObjInventory(int32_t objclass, int32_t type) const
 {
-    for (TInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this); i; i++)
         if (i.Item()->ObjClass() == objclass && (type < 0 || i.Item()->GetStat("Type") == type))
             return i.Item();
 
     return nullptr;
 }
 
-bool TObjectInstance::Use(PTObjectInstance user, int32_t with)
+bool TObjectInstance::Use(TObjectInstance* user, int32_t with)
 {
     if (with >= 0)  // With object.. use with name as key
     {
-        PTObjectInstance inst = MapPane.GetInstance(with);
+        TObjectInstance* inst = MapPane.GetInstance(with);
         if (GetScript())
             GetScript()->Trigger(TRIGGER_USE, inst->GetName());
     }
@@ -971,13 +975,13 @@ bool TObjectInstance::Use(PTObjectInstance user, int32_t with)
     if (!inst || inst->GetOwner() != GetOwner() || inst->ObjClass() != objclass)
         return false;
 
-    PTObjectClass cl = TObjectClass::GetClass(ObjClass());
+    TObjectClass* cl = TObjectClass::GetClass(ObjClass());
 
     if (GetStatistic("Combining") && inst->GetStatistic("Combining") &&
         absval(ObjType() - inst->ObjType()) == 1)
     {
         int32_t slot = inst->InventNum();
-        PTObjectInstance own = GetOwner();
+        TObjectInstance* own = GetOwner();
         if (own)
         {
             MapPane.RemoveFromInventory(own, InventNum());
@@ -1106,7 +1110,7 @@ void TObjectInstance::SetObjectMotion()
 }
 
 // Set next frame's movement.
-void TObjectInstance::SetNextMove(RS3DPoint p)
+void TObjectInstance::SetNextMove(S3DPoint& p)
 {
     moveangle = ::ConvertToFacing(p);
     movedist = ::Distance(p);
@@ -1114,7 +1118,7 @@ void TObjectInstance::SetNextMove(RS3DPoint p)
 }
 
 // Get next frame's movement.
-void TObjectInstance::GetNextMove(RS3DPoint p)
+void TObjectInstance::GetNextMove(S3DPoint& p)
 {
     ConvertToVector(moveangle, movedist, p);
     p.z = movevert;
@@ -1366,7 +1370,7 @@ void TObjectInstance::ScriptJump(char *label)
 
 // ****************************** Parse Command ********************************
 
-int32_t TObjectInstance::ParseCommand(TToken &t)
+int32_t TObjectInstance::ParseCommand(const TToken &t)
 {
     return CMD_BADCOMMAND;
 }
@@ -1443,7 +1447,7 @@ void TObjectInstance::SetLightMultiplier(int32_t mult)
     UNLOCKOBJECTS; // Allow update system to draw lights now
 }
 
-void TObjectInstance::SetLightPos(RS3DPoint newpos)
+void TObjectInstance::SetLightPos(S3DPoint& newpos)
 {
     if (!(flags & OF_LIGHT))
         return;
@@ -1489,7 +1493,7 @@ void TObjectInstance::SetLightColor(SColor color)
     UNLOCKOBJECTS;   // Allow update system to draw lights now
 }
 
-void TObjectInstance::DrawLight(PTSurface surface, bool resetid)
+void TObjectInstance::DrawLight(TSurface* surface, bool resetid)
 {
     if ((flags & OF_LIGHT) && (lightdef.intensity > 0))
     {
@@ -1518,7 +1522,7 @@ void TObjectInstance::DrawLight(PTSurface surface, bool resetid)
 extern double GetLightBrightness(int32_t dist, int32_t intensity, int32_t multiplier);
 
 // Get the amount of illumination from this light to this particular object
-int32_t TObjectInstance::GetIllumination(PTObjectInstance oi)
+int32_t TObjectInstance::GetIllumination(TObjectInstance* oi)
 {
   // Not a light
     if (!(flags & OF_LIGHT) || (lightdef.intensity <= 0))
@@ -1565,7 +1569,7 @@ void TObjectInstance::Notify(int32_t notify, void *ptr)
 {
     if (notify == N_SCRIPTDELETED) // Check if we're using this script and delete it if so
     {
-        if (script && script->GetScriptProto() == (PTScriptProto)ptr)
+        if (script && script->GetScriptProto() == (TScriptProto*)ptr)
         {
             delete script;
             script = nullptr;
@@ -1578,7 +1582,7 @@ void TObjectInstance::Notify(int32_t notify, void *ptr)
     }
 }
 
-PTObjectInstance TObjectInstance::LoadObject(RTInputStream is, int32_t version, bool ismap)
+TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, bool ismap)
 {
     uint32_t uniqueid;
     short objversion = 0;
@@ -1630,7 +1634,7 @@ PTObjectInstance TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
 
     // ****** Is this object any good? ******
     
-    PTObjectClass cl = TObjectClass::GetClass(objclass);
+    TObjectClass* cl = TObjectClass::GetClass(objclass);
     if (!cl || !cl->ClassName())
     {
         if (Debug)
@@ -1656,7 +1660,7 @@ PTObjectInstance TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
         {
             // not found in this class, so check all of them
             int32_t newobjtype, newobjclass;
-            PTObjectClass newcl;
+            TObjectClass* newcl;
             for (newobjclass = 0; newobjclass < MAXOBJECTCLASSES; newobjclass++)
             {
                 newcl = TObjectClass::GetClass(newobjclass);
@@ -1700,7 +1704,7 @@ PTObjectInstance TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     def.objclass = objclass;
     def.objtype  = objtype;
 
-    PTObjectInstance inst = cl->NewObject(&def);
+    TObjectInstance* inst = cl->NewObject(&def);
     if (!inst)
         FatalError("Trouble creating loaded object (corrupted sector file?)");
 
@@ -1730,7 +1734,7 @@ PTObjectInstance TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     return inst;
 }
 
-void TObjectInstance::SaveObject(PTObjectInstance inst, RTOutputStream os, bool ismap)
+void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, bool ismap)
 {
 
     os.MakeFreeSpace(1024); // Check for enough free space for object
@@ -1775,7 +1779,7 @@ void TObjectInstance::LoadInventory(RTInputStream is, int32_t version)
 
     for (int32_t i = 0; i < num; i++)
     {
-        PTObjectInstance inst = LoadObject(is, version);
+        TObjectInstance* inst = LoadObject(is, version);
         if (inst)
         {
             inventory.Add(inst);
@@ -1812,8 +1816,12 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
     if (len > 0)
     {
         name = (char *)malloc(len + 1);
-        for (int32_t i = 0; i < len; i++)
+        int32_t i = 0;
+        while (i < len)
+        {
             is >> name[i];
+            ++i;
+        }
         name[i] = 0;
     }
 
@@ -2013,17 +2021,17 @@ void TObjectInstance::Save(RTOutputStream os)
 static char *flagnames[] = OBJFLAGNAMES;
 #define NUMFLAGS sizearray(flagnames)
 
-int32_t TObjectInstance::GetNumFlags()
+int32_t TObjectInstance::GetNumFlags() const
 {
     return NUMFLAGS;
 }
 
-char *TObjectInstance::GetFlagName(int32_t flagnum)
+const char *TObjectInstance::GetFlagName(int32_t flagnum) const
 {
     return flagnames[flagnum];
 }
 
-int32_t TObjectInstance::GetFlagNum(char *flagname)
+int32_t TObjectInstance::GetFlagNum(const char *flagname) const
 {
     for (int32_t c = 0; c < NUMFLAGS; c++)
     {
@@ -2033,7 +2041,7 @@ int32_t TObjectInstance::GetFlagNum(char *flagname)
     return -1;
 }
 
-void TObjectInstance::SetFlag(char *flagname, bool on)
+void TObjectInstance::SetFlag(const char *flagname, bool on)
 {
     int32_t flagnum = GetFlagNum(flagname);
     if (flagnum < 0)
@@ -2045,7 +2053,7 @@ void TObjectInstance::SetFlag(char *flagname, bool on)
         ResetFlags(flags & (~(1 << flagnum)));
 }
 
-bool TObjectInstance::IsFlagSet(char *flagname)
+bool TObjectInstance::IsFlagSet(const char *flagname) const
 {
     int32_t flagnum = GetFlagNum(flagname);
     if (flagnum < 0)
@@ -2077,7 +2085,7 @@ void TObjectInstance::ResetFlags(uint32_t newflags)
 
 // ----------------- Object Instance Statistic Functions --------------
 
-int32_t TObjectInstance::GetStat(char *statname)
+int32_t TObjectInstance::GetStat(const char *statname) const
 {
     int32_t statid = cl->FindObjStat(statname);
     if (statid >= 0)
@@ -2088,7 +2096,7 @@ int32_t TObjectInstance::GetStat(char *statname)
     return 0;
 }
 
-void TObjectInstance::SetStat(char *statname, int32_t value)
+void TObjectInstance::SetStat(const char *statname, int32_t value)
 {
     int32_t statid = cl->FindObjStat(statname);
     if (statid >= 0)
@@ -2101,7 +2109,7 @@ void TObjectInstance::SetStat(char *statname, int32_t value)
         cl->SetStat(objtype, statid, value);
 }
 
-int32_t TObjectInstance::GetStat(char *statname, char *str, int32_t id)
+int32_t TObjectInstance::GetStat(const char *statname, char *str, int32_t id) const
 {
     char buf[MAXNAMELEN];
     if (str && id >= 0)
@@ -2142,7 +2150,7 @@ bool TObjectInstance::PlayWave(char *soundname, int32_t nr, int32_t volume, int3
 // ***********************
 
 // Statistic entry constructor (adds the given stat to the class)
-SStatEntry::SStatEntry(PTObjectClass cl, const char *statname, const char *uniqueid, int32_t statid, 
+SStatEntry::SStatEntry(TObjectClass* cl, const char *statname, const char *uniqueid, int32_t statid, 
     int32_t def, int32_t min, int32_t max, bool objstat)
 {
     id = statid;
@@ -2198,7 +2206,7 @@ bool TStatisticDefList::ParseStat(SStatisticDef &stat, TToken &t)
         if (!Parse(t, "%d %d %d", &stat.def, &stat.min, &stat.max))
             return false;
 
-        stat.name[0] = nullptr; // Eliminate all old style stats!
+        stat.name[0] = 0; // Eliminate all old style stats!
         return true;
     }
     else
@@ -2213,7 +2221,7 @@ bool TStatisticDefList::ParseStat(SStatisticDef &stat, TToken &t)
     return true;
 }
 
-char *TStatisticDefList::GetStatDefString(int32_t statid, char *buf)
+const char *TStatisticDefList::GetStatDefString(int32_t statid, char *buf) const
 {
     if ((uint32_t)statid >= (uint32_t)statdefs.NumItems())
         return "";
@@ -2230,9 +2238,9 @@ char *TStatisticDefList::GetStatDefString(int32_t statid, char *buf)
     return buf;
 }
 
-int32_t TStatisticDefList::FindStat(char *statname)
+int32_t TStatisticDefList::FindStat(const char *statname) const
 {
-    for (TSizableIterator<SStatisticDef> i(&statdefs); i; i++)
+    for (TConstSizableIterator<SStatisticDef> i(&statdefs); i; i++)
     {
         if (stricmp(i.Item()->name, statname) == 0)
             return i.ItemNum();
@@ -2245,7 +2253,7 @@ int32_t TStatisticDefList::FindStat(char *statname)
 // * TObjectClass *
 // ****************
 
-TObjectClass::TObjectClass(char *classname, int32_t classid, uint16_t flags, PTObjectClass base)
+TObjectClass::TObjectClass(char *classname, int32_t classid, uint16_t flags, TObjectClass* base)
 {
     name     = classname;
     id       = classid;
@@ -2277,7 +2285,7 @@ void TObjectClass::Clear()
 
 int32_t TObjectClass::AddType(char *name, char *imgfilename, uint32_t uniqueid)
 {
-    PTObjectBuilder objbuilder = TObjectBuilder::GetBuilder(name);
+    TObjectBuilder* objbuilder = TObjectBuilder::GetBuilder(name);
     if (objbuilder == nullptr)
         objbuilder = TObjectBuilder::GetBuilder(ClassName());
     if (uniqueid == 0)
@@ -2288,7 +2296,7 @@ int32_t TObjectClass::AddType(char *name, char *imgfilename, uint32_t uniqueid)
     if (imageryid < 0)
         return -1;
 
-    PSObjectInfo inf = new SObjectInfo(name, objbuilder, imageryid, uniqueid);
+    SObjectInfo* inf = new SObjectInfo(name, objbuilder, imageryid, uniqueid);
     int32_t objtype = objinfo.AddPtr(inf);
 
     inf->stats.SetNumItems(statdefs.NumStats());
@@ -2296,7 +2304,7 @@ int32_t TObjectClass::AddType(char *name, char *imgfilename, uint32_t uniqueid)
         ResetStat(objtype, i);
 
     inf->objstats.SetNumItems(objstatdefs.NumStats());
-    for (i = 0; i < objstatdefs.NumStats(); i++)
+    for (int32_t i = 0; i < objstatdefs.NumStats(); i++)
         ResetObjStat(objtype, i);
 
     classesdirty = true;
@@ -2318,7 +2326,7 @@ bool TObjectClass::RemoveType(int32_t objtype)
     return true;
 }
 
-PTObjectInstance TObjectClass::NewObject(PSObjectDef objectdef)
+TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef)
 {
     if (objectdef->pos.x < 0)
         objectdef->pos.x = 0;
@@ -2338,7 +2346,7 @@ PTObjectInstance TObjectClass::NewObject(PSObjectDef objectdef)
     if (!objinfo[objectdef->objtype].imagery)
         return nullptr;
 
-    PTObjectInstance inst = objinfo[objectdef->objtype].objbuilder->Build(objectdef,
+    TObjectInstance* inst = objinfo[objectdef->objtype].objbuilder->Build(objectdef,
         objinfo[objectdef->objtype].imagery);
 
     if (objectdef->objclass == OBJCLASS_TILE || objectdef->objclass == OBJCLASS_EXIT)
@@ -2356,10 +2364,10 @@ int32_t TObjectClass::FindClass(char *name)
         if (classes[i] && classes[i]->name && stricmp(classes[i]->name, name) == 0)
             return i;
 
-    return nullptr;
+    return 0;
 }
 
-int32_t TObjectClass::FindObjType(char *objtypename, bool partial)
+int32_t TObjectClass::FindObjType(const char *objtypename, bool partial) const
 {
 #ifdef _DEBUG
     if (!_CrtCheckMemory())
@@ -2368,7 +2376,7 @@ int32_t TObjectClass::FindObjType(char *objtypename, bool partial)
         _RPT0(_CRT_ERROR, "Memory Error");
     }
 #endif
-    for (TVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
+    for (TConstVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
     {
         if (!i.Used())
             continue;
@@ -2388,9 +2396,9 @@ int32_t TObjectClass::FindObjType(char *objtypename, bool partial)
     return -1;
 }
 
-int32_t TObjectClass::FindObjType(uint32_t uniqueid)
+int32_t TObjectClass::FindObjType(uint32_t uniqueid) const
 {
-    for (TVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
+    for (TConstVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
     {
         if (!i.Used())
             continue;
@@ -2459,7 +2467,7 @@ bool TObjectClass::ParseNewStat(TToken &t, bool reload)
         return false;
 
   // Stat was eliminated
-    if (stat.name[0] == nullptr)
+    if (stat.name[0] == 0)
         return true;
 
   // Make sure it doesn't already exist
@@ -2473,9 +2481,9 @@ bool TObjectClass::ParseNewStat(TToken &t, bool reload)
     return true;
 }
 
-int32_t TObjectClass::FindStatVal(int32_t statid, int32_t searchvalue)
+int32_t TObjectClass::FindStatVal(int32_t statid, int32_t searchvalue) const
 {
-    for (TVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
+    for (TConstVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
     {
         if (!i.Used())
             continue;
@@ -2487,7 +2495,7 @@ int32_t TObjectClass::FindStatVal(int32_t statid, int32_t searchvalue)
     return -1;
 }
 
-int32_t TObjectClass::FindRandStatVal(int32_t statid, int32_t searchvalue, int32_t *heightflux)
+int32_t TObjectClass::FindRandStatVal(int32_t statid, int32_t searchvalue, int32_t *heightflux) const
 // This thing is designed exclusively for the use of the editor's map generator.
 {
     int32_t foundlist[64];
@@ -2498,7 +2506,7 @@ int32_t TObjectClass::FindRandStatVal(int32_t statid, int32_t searchvalue, int32
     if (heightflux)
         *heightflux = 0;
 
-    for (TVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
+    for (TConstVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
     {
         if (!i.Used())
             continue;
@@ -2666,7 +2674,7 @@ bool TObjectClass::ParseNewObjStat(TToken &t, bool reload)
         return false;
 
   // Stat was eliminated
-    if (stat.name[0] == nullptr)
+    if (stat.name[0] == 0)
         return true;
 
   // Make sure it doesn't already exist
@@ -2680,7 +2688,7 @@ bool TObjectClass::ParseNewObjStat(TToken &t, bool reload)
     return true;
 }
 
-void TObjectClass::CopyStats(PTObjectClass from)
+void TObjectClass::CopyStats(const TObjectClass* from)
 {
     int32_t c;
     for (c = 0; c < basedon->NumStats(); c++)
@@ -2801,7 +2809,7 @@ bool TObjectClass::SaveClasses(bool lock)
 
     for (int32_t i = 0; i < numclasses; i++)
     {
-        PTObjectClass cl = classes[i];
+        TObjectClass* cl = classes[i];
         if (cl)
             if (!cl->WriteClass(classfp))
                 return false;
@@ -2877,7 +2885,7 @@ bool TObjectClass::WriteClass(FILE *fp)
             if (!o.Item() || !o.Used())
                 continue;
 
-            PSImageryEntry ie = TObjectImagery::GetImageryEntry(o.Item()->imageryid);
+            SImageryEntry* ie = TObjectImagery::GetImageryEntry(o.Item()->imageryid);
             if (!ie)
                 continue;
 
@@ -2947,7 +2955,7 @@ bool TObjectClass::ParseClass(TToken &t, bool reload)
         return false;
     }
 
-    PTObjectClass cl = TObjectClass::GetClass(TObjectClass::FindClass(t.Text()));
+    TObjectClass* cl = TObjectClass::GetClass(TObjectClass::FindClass(t.Text()));
     if (!cl)
     {
         _RPT1(_CRT_ASSERT, "Class %s not found", t.Text());

@@ -466,6 +466,32 @@ class TSizableIterator
       // Returns false if past end of array
 };
 
+template <class T>
+class TConstSizableIterator
+{
+    const TSizableArray<T> *array;
+    const T *item;
+    int32_t itemnum;
+
+  public:
+    TConstSizableIterator() { array = nullptr; item = nullptr; itemnum = 0; }
+    TConstSizableIterator(const void *a) { SetArray(a); }
+    void SetArray(const void *a) { array = (const TSizableArray<T> *)a;
+        item = &(array->items[0]); itemnum = 0; }
+    const T *Item() const { return item; }
+      // Returns current item.
+    bool Used() const { return true; }
+      // Returns if item is used or not
+    int32_t  ItemNum() const { return itemnum; }
+      // Returns current itemnum.
+    bool operator ++ (int32_t) const { item++; itemnum++; return array && itemnum < array->numitems; }
+      // Allows moving forwards through array in sequential order
+    bool operator -- (int32_t) const { item--; itemnum--; return itemnum >= 0; }
+      // Allows moving backwards through array in sequential order
+    operator bool () const { return array && (uint32_t)itemnum < (uint32_t)array->numitems; }
+      // Returns false if past end of array
+};
+
 // *****************************************************
 // * TPointerArray - Array of pointers of a given type *
 // *****************************************************
@@ -879,6 +905,33 @@ class TVirtualIterator
       // Returns false if past end of array
 };
 
+template <class T>
+class TConstVirtualIterator
+{
+    const TVirtualArray<T> *array;
+    const T **item;
+    int32_t itemnum;
+
+  public:
+    TConstVirtualIterator() { array = nullptr; item = nullptr; itemnum = 0; }
+    TConstVirtualIterator(const void *a) { SetArray(a); }
+    void SetArray(const void *a) { array = (TVirtualArray<T> *)a;
+        item = &(array->items[0]); itemnum = 0; }
+    const T *Item() const { return *item; }
+      // Returns current item.
+    bool Used() const { return *item != nullptr; }
+      // Returns if item is used or not
+    int32_t  ItemNum() const { return itemnum; }
+      // Returns current itemnum.
+    bool operator ++ (int32_t) const { item++; itemnum++; return array && itemnum < array->numitems; }
+      // Allows moving forwards through array in sequential order
+    bool operator -- (int32_t) const { item--; itemnum--; return itemnum >= 0; }
+      // Allows moving backwards through array in sequential order
+    operator bool () const { return array && (uint32_t)itemnum < (uint32_t)array->numitems; }
+      // Returns false if past end of array
+};
+
+
 template <class T, int32_t size = 64>
 class TOffsetArray;
 
@@ -992,6 +1045,13 @@ class TOffsetArray
     _REFDEF(name) \
     _OFFDEF(name)
 
+#define _NODEFAULTCONS(classname) \
+    classname() = delete; \
+    classname(const classname&) = delete; \
+    classname(classname&&) = delete; \
+    classname& operator=(const classname&) = delete; \
+    classname& operator=(classname&&) = delete;
+
 // Name typedefs
 typedef char FileName[13];
 typedef char FNAMESTRING[81];
@@ -1038,7 +1098,7 @@ _CLASSDEF(TCharacter)
 _CLASSDEF(TCharDataManager)
 _CLASSDEF(TComplexObject)
 _CLASSDEF(TControlMap)
-_CLASSDEF(TDDSurface)
+_CLASSDEF(TSurface)
 _CLASSDEF(TDialogList)
 _CLASSDEF(TDialogPane)
 _CLASSDEF(TDisplay)
@@ -1161,27 +1221,28 @@ struct S3DPoint
     S3DPoint() = default;
     S3DPoint(int32_t newx, int32_t newy, int32_t newz)
         { x = newx; y = newy; z = newz;}
-    S3DPoint(RS3DPoint) = default;
+    S3DPoint(S3DPoint&) = default;
+    S3DPoint(const S3DPoint&) = default;
     S3DPoint(S3DPoint&&) = default;
 
     // assignment and arithmatic operators
-    RS3DPoint operator=(const S3DPoint& p)
+    S3DPoint& operator=(const S3DPoint& p)
         { x = p.x; y = p.y; z = p.z; return *this; }
     S3DPoint operator+(const S3DPoint& p) const
         { return S3DPoint(x + p.x, y + p.y, z + p.z); }
-    RS3DPoint operator+=(const S3DPoint& p)
+    S3DPoint& operator+=(const S3DPoint& p)
         { x += p.x; y += p.y; z += p.z; return *this; }
     S3DPoint operator-(const S3DPoint& p) const
         { return S3DPoint(x - p.x, y - p.y, z - p.z); }
-    RS3DPoint operator-=(const S3DPoint& p)
+    S3DPoint& operator-=(const S3DPoint& p)
         { x -= p.x; y -= p.y; z -= p.z; return *this; }
     S3DPoint operator*(int32_t m) const
         { return S3DPoint(x * m, y * m, z * m); }
-    RS3DPoint operator*=(int32_t m)
+    S3DPoint& operator*=(int32_t m)
         { x *= m; y *= m; z *= m; return *this; }
     S3DPoint operator/(int32_t m) const
         { return S3DPoint(x / m, y / m, z / m); }
-    RS3DPoint operator/=(int32_t m)
+    S3DPoint& operator/=(int32_t m)
         { x /= m; y /= m; z /= m; return *this; }
     S3DPoint operator&=(uint32_t m)
         { return S3DPoint(x &= m, y &= m, z &= m); }

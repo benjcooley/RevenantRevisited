@@ -19,9 +19,9 @@ class TAnimation : public TAnimationData
     int32_t  GetDecBufSize(int32_t frame) {return frames[frame].decbufsize;}
     bool Decompress(PSDrawBlock db, int32_t frame, bool Transparent);
       // Decompresses frame to surface
-    void Put(PTSurface surface, void *decbuf, int32_t frame, PSDrawParam dp);
+    void Put(TSurface* surface, void *decbuf, int32_t frame, PSDrawParam dp);
       // Draws a frame to a surface
-    void Stretch(PTSurface surface, PTSurface decbuf, int32_t x, int32_t y, int32_t size, int32_t frame);
+    void Stretch(TSurface* surface, TSurface* decbuf, int32_t x, int32_t y, int32_t size, int32_t frame);
       // Stretches a frame of animation to a surface
     PTBitmap GetFrame(int32_t frame);
       // Returns bitmap for the given frame

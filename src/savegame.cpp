@@ -183,10 +183,10 @@ bool TSaveGame::ReadGame(char *name)
     MultiCtrl.ActivatePane(pane);
 
   // Adds the player into the player manager
-    PlayerManager.AddPlayer((PTPlayer)saved);
+    PlayerManager.AddPlayer((TPlayer*)saved);
 
   // Tell system this is our main player
-    PlayerManager.SetMainPlayer((PTPlayer)saved);
+    PlayerManager.SetMainPlayer((TPlayer*)saved);
 
   // Restore game time
     PlayScreen.SetGameTime(gametime);

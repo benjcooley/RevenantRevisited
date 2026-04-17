@@ -58,12 +58,12 @@ class TCharacter : public TComplexObject
   public:
     void ClearChar();       // Clear out working vars of char
 
-    TCharacter(PTObjectImagery newim) : TComplexObject(newim) { ClearChar(); }
-    TCharacter(PSObjectDef def, PTObjectImagery newim) : TComplexObject(def, newim) { ClearChar(); }
+    TCharacter(TObjectImagery* newim) : TComplexObject(newim) { ClearChar(); }
+    TCharacter(SObjectDef* def, TObjectImagery* newim) : TComplexObject(def, newim) { ClearChar(); }
 
-    virtual int32_t CursorType(PTObjectInstance inst = nullptr);
+    virtual int32_t CursorType(TObjectInstance* inst = nullptr);
         // Talk icon if they are friendly, attack icon if aggressive, hand if dead
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Talk to or attack character
     virtual bool DrawShadow() { return false; }
         // no shadow // Characters get a little shadow that follows them
@@ -98,11 +98,11 @@ class TCharacter : public TComplexObject
       // Returns the default root state for this char
 
   // Action response functions to trigger character AI
-    virtual void SignalMovement(PTObjectInstance actor);
+    virtual void SignalMovement(TObjectInstance* actor);
         // Actor is moving
-    virtual void SignalHostility(PTObjectInstance actor, PTObjectInstance target);
+    virtual void SignalHostility(TObjectInstance* actor, TObjectInstance* target);
         // Actor is hostile to target
-    virtual void SignalAttack(PTObjectInstance actor, PTObjectInstance target);
+    virtual void SignalAttack(TObjectInstance* actor, TObjectInstance* target);
         // Actor is attacking target
 
   // ActionBlock generic function callers
@@ -136,11 +136,11 @@ class TCharacter : public TComplexObject
       // Causes character to jump (in normal mode, use Leap in Combat mode)
     bool Pivot(int32_t angle);
       // Pivots character to given direction (in 32 increments)
-    bool FollowChar(PTObjectInstance inst);
+    bool FollowChar(TObjectInstance* inst);
       // Causes character to follow another character.
-    bool Pickup(PTObjectInstance inst);
+    bool Pickup(TObjectInstance* inst);
       // Causes character to move to and pickup object.
-    bool Pull(PTObjectInstance inst);
+    bool Pull(TObjectInstance* inst);
       // Causes character to pull lever
     bool TryUse();
       // Attempts to use something in the direction character is facing
@@ -155,13 +155,13 @@ class TCharacter : public TComplexObject
       // Says something given a dialog tag id number
     bool SayTag(char *tag, int32_t wait = -1, char *anim = nullptr);
       // Says something given a dialog tag
-    bool CastByName(char* name, PTObjectInstance *target = nullptr, int32_t numtargs = 0, PS3DPoint sourcepos = nullptr);
+    bool CastByName(char* name, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
       // Cast a spell by usings its name
-    bool CastByTalismans(char* talismans, PTObjectInstance *target = nullptr, int32_t numtargs = 0, PS3DPoint sourcepos = nullptr);
+    bool CastByTalismans(char* talismans, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
       // Cast a spell by using a talisman list
-    bool SetCast(char* ani, PTObjectInstance target, int32_t invoke_delay = INVOKE_DELAY);
+    bool SetCast(char* ani, TObjectInstance* target, int32_t invoke_delay = INVOKE_DELAY);
       // Set the character to the cast animation
-    bool Cast(char* talismans, PS3DPoint sourcepos = nullptr);
+    bool Cast(char* talismans, S3DPoint* sourcepos = nullptr);
       // quick cast a spell
     bool BeginFighting(PTCharacter target = nullptr, ACTION action = ACTION_COMBAT);
       // Engage character in combat
@@ -278,7 +278,7 @@ class TCharacter : public TComplexObject
   // Wait functions
     void Wait(int32_t waitlen);
       // Wait for specified number of frames to elapse
-    void WaitChar(PTObjectInstance inst) { if (doing) doing->obj = inst; waittype = WAIT_CHAR_DONE; }
+    void WaitChar(TObjectInstance* inst) { if (doing) doing->obj = inst; waittype = WAIT_CHAR_DONE; }
       // Waits for another character to finish his current action
     void WaitResponse() { waittype = WAIT_RESPONSE; }
       // Waits for the player to pick a response in the response panel
@@ -286,7 +286,7 @@ class TCharacter : public TComplexObject
       // Forces the current command to be done
 
     // Static access functions
-    static PTCharacter CharBlocking(PTObjectInstance inst, RS3DPoint pos, int32_t radius = 0);
+    static PTCharacter CharBlocking(TObjectInstance* inst, S3DPoint& pos, int32_t radius = 0);
         // Find if a character is blocking movement to this position
     PTCharacter CharBlocking() { return CharBlocking(this, Pos(), Radius()); }
         // Calls static function above with this chars parameters
@@ -294,7 +294,7 @@ class TCharacter : public TComplexObject
       // Returns true if character would be blocked when going to new position
     
   // Miscellaneous functions
-    virtual void MoveTo(RS3DPoint newpos) { movepos = newpos; movetopos = true; }
+    virtual void MoveTo(S3DPoint& newpos) { movepos = newpos; movetopos = true; }
         // Moves object to new position (does walk checking for characters).
         // Use this function instead of SetPos() to avoid moving objects through or onto
         // barriers.
@@ -406,9 +406,9 @@ class TCharacter : public TComplexObject
       // 100 is pots and pans crashing.
     virtual char *BodyType() { return "na"; }
       // Character's don't use the equipment replacement system
-    virtual char *GetCombatRoot(PTObjectInstance oi = nullptr) { return "combat"; }
+    virtual char *GetCombatRoot(TObjectInstance* oi = nullptr) { return "combat"; }
       // Returns combat root given current weapon or weapon type
-    virtual char *GetBowRoot(PTObjectInstance oi = nullptr) { return "bow"; } 
+    virtual char *GetBowRoot(TObjectInstance* oi = nullptr) { return "bow"; } 
       // Returns bow root given current bow weapon type
     bool CanSeeCharacter(PTCharacter chr, int32_t angle = -1);
       // Returns true if this character can 'see' the last glimpse of 'chr'
@@ -457,7 +457,7 @@ class TCharacter : public TComplexObject
       // Advance the character's facing and moving angle
     int32_t UpdateAngle(int32_t angle);
       // Check path along current angle and adjuct accordingly
-    PTObjectInstance FindObjAhead();
+    TObjectInstance* FindObjAhead();
       // Find object in front of character
     bool CanHearCharacter(PTCharacter chr);
       // Returns true if this character can hear the last noise made by 'chr'
@@ -558,7 +558,7 @@ class TCharacter : public TComplexObject
     S3DPoint teleport_position;
 
   // burn stuff
-    PTObjectInstance burning;
+    TObjectInstance* burning;
 
   // Has seen list  
     SHasSeen hasseen[MAXHASSEEN]; // List of characters seen recently

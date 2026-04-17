@@ -16,13 +16,13 @@ void SetMouseBitmap(PTBitmap cursor);
 void SetMouseShadow(PTBitmap shadow, int32_t offsetx = 1, int32_t offsety = 3);
 void SetMouseCornerBitmap(PTBitmap corner, bool toppriority = false);
 void SetMouseCornerBitmap(int32_t type, bool toppriority = false);
-void CursorOverObject(PTObjectInstance inst, bool toppriority = false);
+void CursorOverObject(TObjectInstance* inst, bool toppriority = false);
 
 void SetDragBitmap(PTBitmap drag, int32_t x = 0, int32_t y = 0);
 void ClearDragBitmap();
 
-void SetDragObj(PTObjectInstance inst);
-PTObjectInstance GetDragObj();
+void SetDragObj(TObjectInstance* inst);
+TObjectInstance* GetDragObj();
 
 void DrawMouseCursor();
 void DrawMouseShadow();

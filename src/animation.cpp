@@ -29,7 +29,7 @@ bool TAnimation::Decompress(PSDrawBlock db, int32_t frame, bool Transparent)
     return true;
 }
 
-void TAnimation::Put(PTSurface surface, void *decbuf, int32_t frame, PSDrawParam dp)
+void TAnimation::Put(TSurface* surface, void *decbuf, int32_t frame, PSDrawParam dp)
 {
     SDrawBlock  db;
     SDrawParam  dp2 = *dp;
@@ -94,7 +94,7 @@ void TAnimation::Put(PTSurface surface, void *decbuf, int32_t frame, PSDrawParam
     }
 }
 
-void TAnimation::Stretch(PTSurface surface, PTSurface decbuf, int32_t x, int32_t y, int32_t size, 
+void TAnimation::Stretch(TSurface* surface, TSurface* decbuf, int32_t x, int32_t y, int32_t size, 
                          int32_t frame)
 {
 }

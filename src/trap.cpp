@@ -21,13 +21,13 @@ _CLASSDEF(TArrowWall)
 class TArrowWall : public TTrap
 {
   public:
-    TArrowWall(PTObjectImagery newim) : TTrap(newim) { Init(); }
-    TArrowWall(PSObjectDef def, PTObjectImagery newim) : TTrap(def, newim) { Init(); }
+    TArrowWall(TObjectImagery* newim) : TTrap(newim) { Init(); }
+    TArrowWall(SObjectDef* def, TObjectImagery* newim) : TTrap(def, newim) { Init(); }
 
     void Init();
 
-    virtual bool Use(PTObjectInstance user, int32_t with);
-    virtual int32_t CursorType(PTObjectInstance with = nullptr) { return CURSOR_NONE; }
+    virtual bool Use(TObjectInstance* user, int32_t with);
+    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
 
     virtual void Pulse();
 
@@ -44,8 +44,8 @@ _CLASSDEF(TArrowWall2)
 class TArrowWall2 : public TArrowWall
 {
   public:
-    TArrowWall2(PTObjectImagery newim) : TArrowWall(newim) { }
-    TArrowWall2(PSObjectDef def, PTObjectImagery newim) : TArrowWall(def, newim) { }
+    TArrowWall2(TObjectImagery* newim) : TArrowWall(newim) { }
+    TArrowWall2(SObjectDef* def, TObjectImagery* newim) : TArrowWall(def, newim) { }
 };
 
 DEFINE_BUILDER("ArrowWallE", TArrowWall2)
@@ -63,7 +63,7 @@ void TArrowWall::Init()
 }
 
 
-bool TArrowWall::Use(PTObjectInstance user, int32_t with)
+bool TArrowWall::Use(TObjectInstance* user, int32_t with)
 {
     if (user == this && with == -1)
     {

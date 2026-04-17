@@ -151,9 +151,9 @@ bool TMosaicSurface::Initialize(
     else
         bmbits = BM_16BIT;
 
-    tiles = new PTSurface[numtilex * numtiley];
+    tiles = new TSurface*[numtilex * numtiley];
 
-    PTSurface vsurf, zsurf, nsurf;
+    TSurface* vsurf, zsurf, nsurf;
     TSurface **surf = tiles;
 
     int32_t x, y, offx, offy;
@@ -169,27 +169,27 @@ bool TMosaicSurface::Initialize(
                 vsurf = new TBitmapSurface(tilex, tiley, bmbits);
             else
             {
-                vsurf = new TDDSurface(tilex, tiley, vflags);
+                vsurf = new TSurface(tilex, tiley, vflags);
                 if (vsurf->Stride() != tilex && NoWideBuffers)
                 {
                     delete vsurf;
                     vflags = (vflags & (~(uint32_t)VSURF_VIDEOMEM)) | VSURF_SYSTEMMEM;
-                    vsurf = new TDDSurface(tilex, tiley, vflags);
+                    vsurf = new TSurface(tilex, tiley, vflags);
                 }
             }
         }
         if (createflags & MOSAICSURF_ZBUFFER)
         {
-            zsurf = new TDDSurface(tilex, tiley, zflags | VSURF_ZBUFFER); // Voodoo doesn't like this
+            zsurf = new TSurface(tilex, tiley, zflags | VSURF_ZBUFFER); // Voodoo doesn't like this
             if (zsurf->Stride() != tilex && NoWideBuffers)
             {
                 delete zsurf;
                 zflags = (zflags & (~(uint32_t)VSURF_VIDEOMEM)) | VSURF_SYSTEMMEM;
-                zsurf = new TDDSurface(tilex, tiley, zflags | VSURF_ZBUFFER); // Voodoo doesn't like this
+                zsurf = new TSurface(tilex, tiley, zflags | VSURF_ZBUFFER); // Voodoo doesn't like this
             }
         }
 //      if (createflags & MOSAICSURF_NORMALS)
-//          nsurf = new TDDSurface(tilex, tiley, nflags, stride);
+//          nsurf = new TSurface(tilex, tiley, nflags, stride);
 
         *surf = new TMultiSurface(vsurf, zsurf, nsurf, true);
       }
@@ -217,7 +217,7 @@ bool TMosaicSurface::Initialize(PTMosaicSurface clone, uint32_t ncreateflags)
     Initialize(clone->tilex, clone->tiley, 
         clone->numtilex, clone->numtiley, ncreateflags | MOSAICSURF_ISCLONE);
 
-    PTSurface vsurf, zsurf, nsurf;
+    TSurface* vsurf, zsurf, nsurf;
     TMultiSurface **surf = (TMultiSurface **)tiles;
 
     int32_t x, y, offx, offy;
@@ -235,17 +235,17 @@ bool TMosaicSurface::Initialize(PTMosaicSurface clone, uint32_t ncreateflags)
                 vsurf = new TBitmapSurface(
                     ((PTBitmapSurface)tile->GetGraphicsBuffer())->GetBitmap());
             else
-                vsurf = new TDDSurface(tile->GetGraphicsBuffer()->GetDDSurface());
+                vsurf = new TSurface(tile->GetGraphicsBuffer()->GetSGImage());
             (*surf)->SetGraphicsBuffer(vsurf);
         }
         if ((createflags & MOSAICSURF_CLONEZBUFFER) && tile->GetZBuffer())
         {
-            zsurf = new TDDSurface(tile->GetZBuffer()->GetDDSurface());
+            zsurf = new TSurface(tile->GetZBuffer()->GetSGImage());
             (*surf)->SetZBuffer(zsurf);
         }
         if ((createflags & MOSAICSURF_CLONENORMALS) && tile->GetNormalBuffer())
         {
-            nsurf = new TDDSurface(tile->GetNormalBuffer()->GetDDSurface());
+            nsurf = new TSurface(tile->GetNormalBuffer()->GetSGImage());
             (*surf)->SetNormalBuffer(nsurf);
         }
 
@@ -381,7 +381,7 @@ bool TMosaicSurface::ParamDraw(PSDrawParam dp, PTBitmap bitmap)
 
 // Blits from surface to surface. RECT sets size of blit. 
 // X & Y specifies dest. origin
-bool TMosaicSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t ddflags, LPDDBLTFX fx)
+bool TMosaicSurface::ParamBlit(PSDrawParam dp, TSurface* surface, int32_t ddflags, LPDDBLTFX fx)
 {
     SDrawParam dpv = *dp;
     bool drew = false;
@@ -426,7 +426,7 @@ bool TMosaicSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t ddflag
     int32_t soriginx, soriginy;
     surface->GetOrigin(soriginx, soriginy);
 
-    PTSurface src = surface;
+    TSurface* src = surface;
     for (int32_t cliploop = 0; cliploop < numrects; cliploop++)
     {
         RSDrawParam dpa = dparray[cliploop];
@@ -455,7 +455,7 @@ bool TMosaicSurface::ParamBlit(PSDrawParam dp, PTSurface surface, int32_t ddflag
 
 // Blits from surface to surface. RECT sets size of blit. 
 // X & Y specifies dest. origin
-bool TMosaicSurface::ParamGetBlit(PSDrawParam dp, PTSurface surface, int32_t ddflags, LPDDBLTFX fx)
+bool TMosaicSurface::ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t ddflags, LPDDBLTFX fx)
 {
     SDrawParam dpv = *dp;
     bool drew = false;
@@ -502,7 +502,7 @@ bool TMosaicSurface::ParamGetBlit(PSDrawParam dp, PTSurface surface, int32_t ddf
     if (!Clip(&db, &dpv, dparray, numrects))
         return false;
 
-    PTSurface dest = surface;
+    TSurface* dest = surface;
     for (int32_t cliploop = 0; cliploop < numrects; cliploop++)
     {
         RSDrawParam dpa = dparray[cliploop];

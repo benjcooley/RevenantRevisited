@@ -155,7 +155,7 @@ int32_t TTerrainTemplate::NewTemplate(char *tilename)
     return numtemplates++;
 }
 
-int32_t TTerrainTemplate::AddObject(int32_t index, PTObjectInstance inst, S3DPoint offset)
+int32_t TTerrainTemplate::AddObject(int32_t index, TObjectInstance* inst, S3DPoint offset)
 {
     if ((uint32_t)index >= MAXTEMPLATES ||
         templates[index].numobjects >= MAXOBJECTREFS)
@@ -169,7 +169,7 @@ int32_t TTerrainTemplate::AddObject(int32_t index, PTObjectInstance inst, S3DPoi
 
 #define MAXFOUND    32
 
-void TTerrainTemplate::ApplyTemplate(PTObjectInstance inst, PTSector sect, int32_t density)
+void TTerrainTemplate::ApplyTemplate(TObjectInstance* inst, TSector* sect, int32_t density)
 {
     if (!inst || !sect)
         return;

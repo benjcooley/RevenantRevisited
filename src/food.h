@@ -19,12 +19,12 @@ _CLASSDEF(TFood)
 class TFood : public TObjectInstance
 {
   public:
-    TFood(PTObjectImagery newim) : TObjectInstance(newim) {}
-    TFood(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) {}
+    TFood(TObjectImagery* newim) : TObjectInstance(newim) {}
+    TFood(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Munch munch munch
-    virtual int32_t CursorType(PTObjectInstance inst = nullptr) { if (inst) return CURSOR_NONE; return CURSOR_MOUTH; }
+    virtual int32_t CursorType(TObjectInstance* inst = nullptr) { if (inst) return CURSOR_NONE; return CURSOR_MOUTH; }
         // Yummy
 
     // Food statistics

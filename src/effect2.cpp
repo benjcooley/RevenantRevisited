@@ -62,8 +62,8 @@ public:
     float scale;
     S3DPoint target_position[PARA_MAX_TARGETS];
     int32_t num_targets;
-    TParaEffect(PTObjectImagery newim) : TEffect(newim) { }
-    TParaEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { }
+    TParaEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TParaEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
     void Initialize();
     void Pulse();
 };
@@ -535,7 +535,7 @@ protected:
 public:
     void Initialize();
     bool Render();
-    TParaAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TParaAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
 };
 
@@ -714,8 +714,8 @@ public:
     int32_t stage;      // what stage its at...
     int32_t ticks;      // how many ticks til the next stage...
 
-    TManaDrainEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TManaDrainEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TManaDrainEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TManaDrainEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
@@ -908,7 +908,7 @@ protected:
 public:
     void Initialize();
     bool Render();
-    TManaDrainAnimator(PTObjectInstance oi) : T3DAnimator(oi) { /* Initialize(); */ }
+    TManaDrainAnimator(TObjectInstance* oi) : T3DAnimator(oi) { /* Initialize(); */ }
     void RefreshZBuffer();
     void Animate(bool);
 };
@@ -1160,8 +1160,8 @@ class TShriekEffect : public TEffect
 {
 protected:
 public:
-    TShriekEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TShriekEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TShriekEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TShriekEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
@@ -1200,7 +1200,7 @@ public:
     void Initialize();
     bool Render();
     void Animate(bool);
-    TShriekAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TShriekAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
 };
 
@@ -1359,8 +1359,8 @@ class TPukeEffect : public TEffect
 {
 protected:
 public:
-    TPukeEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TPukeEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TPukeEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TPukeEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
@@ -1397,7 +1397,7 @@ protected:
 public:
     void Initialize();
     bool Render();
-    TPukeAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TPukeAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
     void Animate(bool);
 };
@@ -2082,8 +2082,8 @@ protected:
     float anglec;   // the cos of the angle
 public:
     int32_t life;
-    TFunnelEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TFunnelEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TFunnelEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TFunnelEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
@@ -2099,7 +2099,7 @@ public:
     PTTornadoSystem my_tornado;
     void Initialize();
     bool Render();
-    TFunnelAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TFunnelAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
     void Animate(bool);
 };
@@ -2320,8 +2320,8 @@ class TInvisibleEffect : public TEffect
 protected:
 public:
     int32_t life;
-    TInvisibleEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TInvisibleEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TInvisibleEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TInvisibleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen();
@@ -2391,7 +2391,7 @@ protected:
 public:
     void Initialize();
     bool Render();
-    TInvisibleAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TInvisibleAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
     void Animate(bool);
 };
@@ -2709,8 +2709,8 @@ class TRestEffect : public TEffect
 {
 protected:
 public:
-    TRestEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TRestEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TRestEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TRestEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen();
@@ -2732,7 +2732,7 @@ protected:
 public:
     void Initialize();
     bool Render();
-    TRestAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TRestAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
     void Animate(bool);
 };
@@ -2942,8 +2942,8 @@ public:
     int32_t my_state;
     hmm_vec3 velocity;
     S3DPoint position;
-    TCataclysmEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TCataclysmEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TCataclysmEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TCataclysmEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen();
@@ -2977,7 +2977,7 @@ protected:
 public:
     void Initialize();
     bool Render();
-    TCataclysmAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TCataclysmAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
     void Animate(bool);
     void SetUp();
@@ -3474,8 +3474,8 @@ class TIceStormEffect : public TMissileEffect
 {
 protected:
 public:
-    TIceStormEffect(PTObjectImagery newim) : TMissileEffect(newim) { Initialize(); }
-    TIceStormEffect(PSObjectDef def, PTObjectImagery newim) : TMissileEffect(def, newim) { Initialize(); }
+    TIceStormEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
+    TIceStormEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen();
@@ -3497,7 +3497,7 @@ protected:
 public:
     void Initialize();
     bool Render();
-    TIceStormAnimator(PTObjectInstance oi) : T3DAnimator(oi) { }
+    TIceStormAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
     void RefreshZBuffer();
     void Animate(bool);
 };

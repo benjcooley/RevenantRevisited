@@ -85,7 +85,7 @@ void TEquipPane::MouseClick(int32_t button, int32_t x, int32_t y)
         else if (InPane(x, y))
         {
             // dragging from the inventory pane to here
-            PTObjectInstance inst = Inventory.GetContainer()->GetInventorySlot(Inventory.GetHeldSlot());
+            TObjectInstance* inst = Inventory.GetContainer()->GetInventorySlot(Inventory.GetHeldSlot());
             if (inst)
             {
                 int32_t slot = inst->GetStat("eqslot");
@@ -172,7 +172,7 @@ void TEquipPane::Animate(bool draw)
 {
     if (draw && !mousebutton && Player)
     {
-        PTObjectInstance inst = Player->GetInventorySlot(OnSlot(cursorx - GetPosX(), cursory - GetPosY()));
+        TObjectInstance* inst = Player->GetInventorySlot(OnSlot(cursorx - GetPosX(), cursory - GetPosY()));
         CursorOverObject(inst);
     }
 }
@@ -189,7 +189,7 @@ void TEquipPane::Scroll(int32_t amount)
     SetDirty(true);
 }
  
-void TEquipPane::DrawAnim(PTObjectInstance inst, PTBitmap bm)
+void TEquipPane::DrawAnim(TObjectInstance* inst, PTBitmap bm)
 {
     if (inst->InventNum() < 256)
         return;

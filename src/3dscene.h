@@ -148,7 +148,7 @@ class T3DScene
       // Sets Ambient Light value.
 
   // Miscellaneous functions  
-    void SetCameraPos(RS3DPoint pos, int32_t zdist);
+    void SetCameraPos(S3DPoint& pos, int32_t zdist);
       // Sets Camera Position
     bool UpdateCamera();
       // Recalculates camera frame and position.
@@ -158,7 +158,7 @@ class T3DScene
       //  Draws all objects using Direct 3D
 
   // Light functions
-    int32_t AddLight(RS3DPoint pos, SColor color, int32_t intensity, int32_t multiplier);
+    int32_t AddLight(S3DPoint& pos, SColor color, int32_t intensity, int32_t multiplier);
       // Adds light to scene. Returns lightid
     bool DeleteLight(int32_t lightid);
       // Removes light from scene. 
@@ -168,7 +168,7 @@ class T3DScene
       // Changes position of frame relative to camera frame.
     bool SetLightColor(int32_t lightid, SColor color);
       // Changes position of frame relative to camera frame.
-    bool SetLightPosition(int32_t lightid, RS3DPoint pos);
+    bool SetLightPosition(int32_t lightid, S3DPoint& pos);
       // Changes position of frame relative to camera frame.
     int32_t GetNumLights();
       // Returns number of lights in scene.

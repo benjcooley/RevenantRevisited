@@ -117,7 +117,7 @@ class TSpell
 {
   public:
     // The constructor for the tspell object
-    TSpell(PTObjectInstance invoke, PTObjectInstance *targ, int32_t numtargs, PS3DPoint sourcepos, PSSpellData dat, PSSpellVariant var, PTSpell mtr = nullptr);
+    TSpell(TObjectInstance* invoke, TObjectInstance* *targ, int32_t numtargs, S3DPoint* sourcepos, PSSpellData dat, PSSpellVariant var, PTSpell mtr = nullptr);
     TSpell()
     { invoker = nullptr; targets[0] = nullptr; targetnum = 0;
       timer = 0; master = nullptr; spell = nullptr; variant = nullptr; frame = 0; 
@@ -125,9 +125,9 @@ class TSpell
       source.x = source.y = source.z = -1; }
 
     // Functions to return current spell values
-    PTObjectInstance GetInvoker() { return invoker; }
+    TObjectInstance* GetInvoker() { return invoker; }
       // Returns the character that invoked the spell
-    PTObjectInstance GetTarget(int32_t numtarg = 0) 
+    TObjectInstance* GetTarget(int32_t numtarg = 0) 
         { if (numtarg >= targetnum) return nullptr; else return targets[numtarg]; }
       // Returns the target for the spell
     int32_t GetTargetNum() { return targetnum; }
@@ -146,7 +146,7 @@ class TSpell
     void SetByName(char* name);
     void SetByTalismans(char* talismans);
 
-    void Damage(PTObjectInstance ch);
+    void Damage(TObjectInstance* ch);
 
     virtual void Pulse() {}
       // pulse through the spell, this is standard
@@ -167,11 +167,11 @@ class TSpell
     void ManaDrain();
 
   protected:
-    PTObjectInstance invoker;               // Object that invoked the spell
-    PTObjectInstance effect;                // The effect for this spell
+    TObjectInstance* invoker;               // Object that invoked the spell
+    TObjectInstance* effect;                // The effect for this spell
 
     int32_t targetnum;                      // Number of targets in target list
-    PTObjectInstance targets[MAXSPELLTARGETS]; // Spell's target list
+    TObjectInstance* targets[MAXSPELLTARGETS]; // Spell's target list
 
     int32_t timer;                          // Nice timer value for time based spells
     int32_t frame;                          // Frame number for spells
@@ -207,9 +207,9 @@ class TSpellManager
     void Pulse();
       // pulse through all the spells
 
-    bool CastByName(char* name, PTObjectInstance invoker, PTObjectInstance *targets, int32_t numtargs, PS3DPoint sourcepos = nullptr, PTSpell mst = nullptr);
+    bool CastByName(char* name, TObjectInstance* invoker, TObjectInstance* *targets, int32_t numtargs, S3DPoint* sourcepos = nullptr, PTSpell mst = nullptr);
       // cast a spell by its name, returns success or failure
-    bool CastByTalismans(char* talismans, PTObjectInstance invoker, PTObjectInstance *targets, int32_t numtargs, PS3DPoint sourcepos = nullptr, PTSpell mst = nullptr);
+    bool CastByTalismans(char* talismans, TObjectInstance* invoker, TObjectInstance* *targets, int32_t numtargs, S3DPoint* sourcepos = nullptr, PTSpell mst = nullptr);
       // cast a spell by its talismans, returns success or failure
 
     int32_t GetDefense();

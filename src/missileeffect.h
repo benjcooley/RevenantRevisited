@@ -36,8 +36,8 @@ class TMissileEffect : public TEffect
 	bool status;
 
   public:
-    TMissileEffect(PTObjectImagery newim) : TEffect(newim) { Initialize(); }
-    TMissileEffect(PSObjectDef def, PTObjectImagery newim) : TEffect(def, newim) { Initialize(); }
+    TMissileEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TMissileEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
 
     virtual void Initialize();
 
@@ -68,8 +68,8 @@ class TPhotonEffect : public TMissileEffect
     bool firsttime;
 
 	public:
-	TPhotonEffect(PTObjectImagery newim) : TMissileEffect(newim) { Initialize(); }
-	TPhotonEffect(PSObjectDef def, PTObjectImagery newim) : TMissileEffect(def, newim) { Initialize(); }
+	TPhotonEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
+	TPhotonEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
 	virtual ~TPhotonEffect() { SoundPlayer.Unmount(LIGHTNING_SOUND); }
 
     virtual void Initialize();
@@ -99,7 +99,7 @@ class TPhotonAnimator : public T3DAnimator
     int32_t oldstate;		// Used to keep track of state changes
 
   public:
-    TPhotonAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TPhotonAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
 	  // Constructor (initialization handled by Initialize)
     virtual ~TPhotonAnimator() { Close(); }
 	  // Call close function
@@ -127,8 +127,8 @@ class TFireBallEffect : public TMissileEffect
   private:
 	bool fireball_done;
   public:
-    TFireBallEffect(PTObjectImagery newim) : TMissileEffect(newim) { Initialize(); }
-    TFireBallEffect(PSObjectDef def, PTObjectImagery newim) : TMissileEffect(def, newim) { Initialize(); }
+    TFireBallEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
+    TFireBallEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
 	virtual ~TFireBallEffect() {}
 
     virtual void Initialize();
@@ -218,7 +218,7 @@ class TFireBallAnimator : public T3DAnimator
 	int32_t IsTrail();
   public:
 	// another boring constructor
-	TFireBallAnimator(PTObjectInstance oi) : T3DAnimator(oi), spark(FIREBALL_MAX_SPARK) { fireball_angle = ((PTEffect)inst)->GetAngle(); }	
+	TFireBallAnimator(TObjectInstance* oi) : T3DAnimator(oi), spark(FIREBALL_MAX_SPARK) { fireball_angle = ((PTEffect)inst)->GetAngle(); }	
 	// another boring virtual destructor
 	virtual ~TFireBallAnimator()	{ Close(); }
 
@@ -245,8 +245,8 @@ class TFireColumnEffect : public TMissileEffect
     bool firsttime;
 
 	public:
-	TFireColumnEffect(PTObjectImagery newim) : TMissileEffect(newim) { Initialize(); }
-	TFireColumnEffect(PSObjectDef def, PTObjectImagery newim) : TMissileEffect(def, newim) { Initialize(); }
+	TFireColumnEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
+	TFireColumnEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
 	virtual ~TFireColumnEffect() { /*SoundPlayer.Unmount(LIGHTNING_SOUND);*/ }
 
     virtual void Initialize();
@@ -275,7 +275,7 @@ class TFireColumnAnimator : public T3DAnimator
     int32_t oldstate;		// Used to keep track of state changes
 
   public:
-    TFireColumnAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFireColumnAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
 	  // Constructor (initialization handled by Initialize)
     virtual ~TFireColumnAnimator() { Close(); }
 	  // Call close function
@@ -304,8 +304,8 @@ class TFlameDiscEffect : public TMissileEffect
     bool firsttime;
 
 	public:
-	TFlameDiscEffect(PTObjectImagery newim) : TMissileEffect(newim) { Initialize(); }
-	TFlameDiscEffect(PSObjectDef def, PTObjectImagery newim) : TMissileEffect(def, newim) { Initialize(); }
+	TFlameDiscEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
+	TFlameDiscEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
 	virtual ~TFlameDiscEffect() { SoundPlayer.Unmount(LIGHTNING_SOUND); }
 
     virtual void Initialize();
@@ -334,7 +334,7 @@ class TFlameDiscAnimator : public T3DAnimator
 	int32_t	angle;			// Player's Facing
 
   public:
-    TFlameDiscAnimator(PTObjectInstance oi) : T3DAnimator(oi) {}
+    TFlameDiscAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
 	  // Constructor (initialization handled by Initialize)
     virtual ~TFlameDiscAnimator() { Close(); }
 	  // Call close function

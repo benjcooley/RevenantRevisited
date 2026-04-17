@@ -15,17 +15,17 @@ _CLASSDEF(TMultiSurface)
 class TMultiSurface : public TSurface
 {
   protected:
-    PTSurface graphics;     // Graphics surface
-    PTSurface zbuffer;      // ZBuffer surface
-    PTSurface normals;      // Normal surface
+    TSurface* graphics;     // Graphics surface
+    TSurface* zbuffer;      // ZBuffer surface
+    TSurface* normals;      // Normal surface
     bool      deletesurf;   // Do we delete these surfaces when we die
     bool      lost;         // Indicates if a surface was lost
 
   public:
     TMultiSurface();
       // Initializes Multi surfaces
-    TMultiSurface(PTSurface surface1, PTSurface surface2,
-        PTSurface surface3, bool delsurf = false)
+    TMultiSurface(TSurface* surface1, TSurface* surface2,
+        TSurface* surface3, bool delsurf = false)
       { Initialize(surface1, surface2, surface3, delsurf); }
       // Initializes Multi surfaces
     virtual ~TMultiSurface();
@@ -34,27 +34,27 @@ class TMultiSurface : public TSurface
     virtual int32_t SurfaceType() { return SURFACE_MULTI; }
       // Returns type of surface this is
 
-    void Initialize(PTSurface surface1,
-         PTSurface surface2, PTSurface surface3, bool delsurf = false);
+    void Initialize(TSurface* surface1,
+         TSurface* surface2, TSurface* surface3, bool delsurf = false);
       // Causes the multisurface to be initialized
     void Close();
       // Closes the multi surface
 
-    void SetGraphicsBuffer(PTSurface surf);
+    void SetGraphicsBuffer(TSurface* surf);
       // Sets the graphics buffer surface manually
-    void SetZBuffer(PTSurface surf) { zbuffer = surf; }
+    void SetZBuffer(TSurface* surf) { zbuffer = surf; }
       // Sets the zbuffer surface manually
-    void SetNormalBuffer(PTSurface surf) { normals = surf; }
+    void SetNormalBuffer(TSurface* surf) { normals = surf; }
       // Sets the normal buffer surface manually
 
-    virtual PTSurface GetGraphicsBuffer() { return graphics; }
+    virtual TSurface* GetGraphicsBuffer() { return graphics; }
       // Returns ZBuffer surface for this surface (if it has one)
-    virtual PTSurface GetZBuffer() { return zbuffer; }
+    virtual TSurface* GetZBuffer() { return zbuffer; }
       // Returns ZBuffer surface for this surface (if it has one)
-    virtual PTSurface GetNormalBuffer() { return normals; }
+    virtual TSurface* GetNormalBuffer() { return normals; }
       // Returns the normal buffer for this surface (if it has one)
 
-    virtual LPDIRECTDRAWSURFACE GetDDSurface() { return graphics->GetDDSurface(); }
+    virtual LPDIRECTDRAWSURFACE GetSGImage() { return graphics->GetSGImage(); }
       // Returns LPDIRECTDRAWSURFACE pointer or Null if not Direct Draw Surface.
 
     virtual bool Lost() { return lost; }
@@ -76,7 +76,7 @@ class TMultiSurface : public TSurface
       // Sets clipping to normal of wrap around
 
   // Low level Put and Blit which ONLY do primary surface (no Z or Normal Buffer)
-    virtual bool BlitHandler(PSDrawParam dp, PTSurface surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr)
+    virtual bool BlitHandler(PSDrawParam dp, TSurface* surface, int32_t ddflags = 0, LPDDBLTFX fx = nullptr)
       { return graphics->BlitHandler(dp, surface, ddflags, fx); }
       // Blits from surface to surface. RECT sets size of blit. 
       // X & Y specifies dest. origin

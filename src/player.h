@@ -67,14 +67,14 @@ class TPlayer : public TCharacter
   public:
     void ClearPlayer();
 
-    TPlayer(PTObjectImagery newim);
-    TPlayer(PSObjectDef def, PTObjectImagery newim);
+    TPlayer(TObjectImagery* newim);
+    TPlayer(SObjectDef* def, TObjectImagery* newim);
     ~TPlayer();
 
-    virtual bool GetZ(PTSurface surface) { if (!Editor) return false; return TCharacter::GetZ(surface); }
+    virtual bool GetZ(TSurface* surface) { if (!Editor) return false; return TCharacter::GetZ(surface); }
     virtual bool AlwaysOnTop() { if (!Editor) return false; return TCharacter::AlwaysOnTop(); }
-    virtual bool Use(PTObjectInstance user, int32_t with = -1) { return false; }
-    virtual int32_t CursorType(PTObjectInstance inst = nullptr) { return CURSOR_NONE; }
+    virtual bool Use(TObjectInstance* user, int32_t with = -1) { return false; }
+    virtual int32_t CursorType(TObjectInstance* inst = nullptr) { return CURSOR_NONE; }
         // These functions make sure the player never clicks on themselves
 
     virtual void Pulse();
@@ -89,24 +89,24 @@ class TPlayer : public TCharacter
 //  virtual int32_t ThrustRange();
         // These are computed from the currently wielded weapon
 
-    PTObjectInstance PrimeHand() { return equipment[EQ_PRIMEHAND]; }
-    PTObjectInstance OffHand() { return equipment[EQ_OFFHAND]; }
-    PTObjectInstance Head() { return equipment[EQ_HEAD]; }
-    PTObjectInstance Body() { return equipment[EQ_BODY]; }
-    PTObjectInstance Neck() { return equipment[EQ_NECK]; }
-    PTObjectInstance RAccessory() { return equipment[EQ_R_ACCESSORY]; }
-    PTObjectInstance LAccessory() { return equipment[EQ_L_ACCESSORY]; }
-    PTObjectInstance RangedWeapon() { return equipment[EQ_RANGEDWEAPON]; }
-    PTObjectInstance Legs() { return equipment[EQ_LEGS]; }
-    PTObjectInstance Feet() { return equipment[EQ_FEET]; }
+    TObjectInstance* PrimeHand() { return equipment[EQ_PRIMEHAND]; }
+    TObjectInstance* OffHand() { return equipment[EQ_OFFHAND]; }
+    TObjectInstance* Head() { return equipment[EQ_HEAD]; }
+    TObjectInstance* Body() { return equipment[EQ_BODY]; }
+    TObjectInstance* Neck() { return equipment[EQ_NECK]; }
+    TObjectInstance* RAccessory() { return equipment[EQ_R_ACCESSORY]; }
+    TObjectInstance* LAccessory() { return equipment[EQ_L_ACCESSORY]; }
+    TObjectInstance* RangedWeapon() { return equipment[EQ_RANGEDWEAPON]; }
+    TObjectInstance* Legs() { return equipment[EQ_LEGS]; }
+    TObjectInstance* Feet() { return equipment[EQ_FEET]; }
 
     void RefreshEquip();
         // Sets up all equipment pointers, and refreshes equipment pane if necessary
-    bool CanEquip(PTObjectInstance oi, int32_t slot);
+    bool CanEquip(TObjectInstance* oi, int32_t slot);
         // Returns true if player can be equiped by the given object
-    bool Equip(PTObjectInstance oi, int32_t slot);
+    bool Equip(TObjectInstance* oi, int32_t slot);
         // Set up equipment pointers from objects in player's inventory
-    PTObjectInstance GetEquip(int32_t slot) { return equipment[slot]; }
+    TObjectInstance* GetEquip(int32_t slot) { return equipment[slot]; }
         // Returns object pointer to equipment in the given slot
 
     // Player stat access
@@ -246,13 +246,13 @@ class TPlayer : public TCharacter
       // Dwarf - Navarro - Halflings, dwarves, etc.
       // Lithe - Morgana - Sexy female characters (longer legs, hips, breasts, etc.)
       // NOTE: Not all armor or clothing needs to fit all body types.
-    virtual char *GetCombatRoot(PTObjectInstance oi = nullptr);
+    virtual char *GetCombatRoot(TObjectInstance* oi = nullptr);
       // Returns combat root given the weapon oi or current weapon if oi is nullptr
-    virtual char *GetBowRoot(PTObjectInstance oi = nullptr); 
+    virtual char *GetBowRoot(TObjectInstance* oi = nullptr); 
       // Returns bow root given the bow 'oi' or current bow if oi is nullptr
 
   private:
-    PTObjectInstance equipment[NUM_EQ_SLOTS];       // Player's weapons and armor
+    TObjectInstance* equipment[NUM_EQ_SLOTS];       // Player's weapons and armor
     char quickspells[QSPELL_NUM][MAXTALISMANLEN];   // Quickspells (0-construction, 1-4 quick buttons)
     bool OnTheHog;                                  // hog cheat
 };
@@ -289,23 +289,23 @@ class TPlayerManager
       // Deletes all players
     int32_t NumPlayers() { return players.NumItems(); }
       // Returns number of areas
-    PTPlayer GetPlayer(int32_t playernum) { return players[playernum]; }
+    TPlayer* GetPlayer(int32_t playernum) { return players[playernum]; }
       // Returns the control entry for the given index
     void SetMainPlayer(int32_t playernum);
       // Sets the main player for the game
-    void SetMainPlayer(PTPlayer player);
+    void SetMainPlayer(TPlayer* player);
       // Sets the main player for the game
     int32_t GetMainPlayerNum() { return mainplayernum; }
       // Returns the main player number
-    PTPlayer GetMainPlayer() { return Player; }
+    TPlayer* GetMainPlayer() { return Player; }
       // Returns the game's main player (same as just accessing the Player global)
-    int32_t AddPlayer(PTPlayer player);
+    int32_t AddPlayer(TPlayer* player);
       // Adds another player and returns index into player array
     void RemovePlayer(int32_t removenum, bool collapse = true);
       // Remove a player, if collapse is true, collapses player list so no empty slot is left
       // Use collapse when setting up a game, and no collapse when in game so that player id
       // nums remain the same for network messages.
-    void RemovePlayer(PTPlayer removeplayer, bool collapse = true);
+    void RemovePlayer(TPlayer* removeplayer, bool collapse = true);
       // Remove a player (given player pointer)
 
   private:

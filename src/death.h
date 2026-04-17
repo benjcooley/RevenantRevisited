@@ -26,7 +26,7 @@ class TDeathPane : public TButtonPane
     virtual void DrawBackground();
 
   private:
-    PTMulti deathdata;              // Background and buttons
+    TMulti* deathdata;              // Background and buttons
 };
 
 #endif

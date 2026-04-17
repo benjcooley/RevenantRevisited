@@ -28,7 +28,7 @@ class TPane
     int32_t  oldscrollx, oldscrolly;// Previous scroll position
     int32_t  scrollx, scrolly;      // Current scroll position
     int32_t  newscrollx, newscrolly;// Next scroll position
-    PTScreen screen;            // Screen pane is on
+    TScreen* screen;            // Screen pane is on
     bool isopen;                // Pane is currently active
     bool hidden;                // Flag set if Pane is hidden
     bool ignoreinput;           // To allow hidden panes to still process input
@@ -135,9 +135,9 @@ class TPane
       // Returns the pane's visibility status
     virtual bool IsIgnoringInput() { return ignoreinput; }
       // Whether or not the pane is processing input (keyboard only)
-    PTScreen Screen() { return screen; }
+    TScreen* Screen() { return screen; }
       // Returns the screen this pane is currently on
-    void SetScreen(PTScreen newscreen) { screen = newscreen; }
+    void SetScreen(TScreen* newscreen) { screen = newscreen; }
       // Called to set the pane's screen (CALLED ONLY BY SCREEN FUNCTIONS!!!)
 
   // Pane virtual handler functions
@@ -196,7 +196,7 @@ class TScreen
     bool complete[NUMEXCLUSIVEPANES];   // Whether the exclusive pane is completely exclusive
     int32_t curexclusive;                   // Current exclusive pane
     int32_t numexclusive;                   // Number of exclusive panes
-    PTScreen nextscreen;                // Pointer to nextscreen
+    TScreen* nextscreen;                // Pointer to nextscreen
     bool firstframe;                    // True just after screen is initialized before first frame
     bool dirty;                         // Needs redraw
     int32_t screenframes;                   // Number of ticks since screen initialized
@@ -241,9 +241,9 @@ class TScreen
       // Redraw all non-hidden panes
 
    // Next screen stuff
-    void SetNextScreen(PTScreen screen) {nextscreen = screen;}
+    void SetNextScreen(TScreen* screen) {nextscreen = screen;}
       // Sets nextscreen variable
-    PTScreen GetNextScreen() {return nextscreen;}
+    TScreen* GetNextScreen() {return nextscreen;}
       // Gets nextscreen variable
 
   // Virtual handlers
@@ -272,7 +272,7 @@ class TScreen
     virtual bool TimerLoop(int32_t ticks);
       // Wait for ticks to pass (Calls TimerTick())
 
-    static PTScreen ShowScreen(PTScreen screen, int32_t ticks);
+    static TScreen* ShowScreen(TScreen* screen, int32_t ticks);
       // Shows screen
 
   // Get screen frames

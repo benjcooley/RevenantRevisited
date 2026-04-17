@@ -4,18 +4,15 @@
 // *         imageres.h - TObjectImagery resource structures               *
 // *************************************************************************
 
-#ifndef _IMAGERES_H
-#define _IMAGERES_H
+#pragma once
 
-#ifndef _REVENANT_H
 #include "revenant.h"
-#endif
 
 // The object imagery data resource buffer is the base class
 // for all object imagery data buffers.  The 'imageryid'
 // member indicates which imagery object the imagery data
 // will need to be able to display itself.  When the object
-// class loades the imagery buffer, it checks the imagery
+// class loads the imagery buffer, it checks the imagery
 // id number, and creates an instance of the appropriate
 // object imagery object for the buffer.
 
@@ -50,7 +47,7 @@ struct SImageryStateHeader
 {
     char        animname[MAXANIMNAME];  // Array of Ascii Names
     OFFSET      walkmap;    // Walkmap
-    uint32_t       flags;      // Imagery state flags
+    uint32_t    flags;      // Imagery state flags
     short       aniflags;   // Animation state flags
     short       frames;     // Number of frames
     short       width;      // Graphics maximum width/height (for IsOnScreen and refresh rects) 
@@ -76,7 +73,7 @@ struct SImageryHeader
 {
     int32_t                 imageryid;              // Id number for imagery handler (index to builder array)
     int32_t                 numstates;              // Number of states
-    SImageryStateHeader states[1];              // Imagery for state
+    SImageryStateHeader     states[1];              // Imagery for state
 };
 
 // ****************
@@ -88,6 +85,4 @@ struct SImageryBody
 {
     // [insert tumbleweeds here]
 };
-
-#endif
 

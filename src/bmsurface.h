@@ -59,7 +59,7 @@ class TBitmapSurface : public TSurface
     virtual bool Copy(PTBitmap bitmap);
       // Copies specified bitmap to current Direct Draw Surface
 
-    virtual bool BlitPrimary(PSDrawParam dp, PTSurface surface, int32_t ddflags = 0);
+    virtual bool BlitPrimary(PSDrawParam dp, TSurface* surface, int32_t ddflags = 0);
       // Blits from surface to surface. RECT sets size of blit. 
       // X & Y specifies dest. origin
 

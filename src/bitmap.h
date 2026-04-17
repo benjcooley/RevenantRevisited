@@ -6,11 +6,12 @@
 
 #pragma once
 
-#include <memory.h>
-
 #include "revenant.h"
+
 #include "bitmapdata.h"
 #include "surface.h"
+
+#include <memory.h>
 
 // ***************************************
 // * TBitmap Class Varible/Function List *
@@ -51,10 +52,10 @@ class TBitmap : public TBitmapData
             0, 0, bitmap->width, bitmap->height, drawmode, 0, 0, (uint16_t)z, nullptr, nullptr); }
       // Draws bitmap to bitmap
     
-    bool Put(int32_t x, int32_t y, PTSurface surface, int32_t srcx, int32_t srcy, int32_t srcw, int32_t srch, 
-             int32_t drawmode  = nullptr, int32_t intensity = 31);
+    bool Put(int32_t x, int32_t y, TSurface* surface, int32_t srcx, int32_t srcy, int32_t srcw, int32_t srch, 
+             int32_t drawmode  = 0, int32_t intensity = 31);
       // Draws a Rectangle of a surface to bitmap.    
-    bool Put(int32_t x, int32_t y, PTSurface surface, int32_t drawmode = DM_USEDEFAULT, 
+    bool Put(int32_t x, int32_t y, TSurface* surface, int32_t drawmode = DM_USEDEFAULT, 
              int32_t intensity = 31)
        { return Put(x, y, surface, 0, 0, surface->Width(), surface->Height(), drawmode, 
             intensity); }
@@ -65,7 +66,7 @@ class TBitmap : public TBitmapData
                     int32_t srcy, int32_t srcw, int32_t srch, int32_t drawmode);
       // Stretch versions of Normal Puts
     
-    void WriteText(char *text, int32_t x = 0, int32_t y = 0, int32_t lines = 1, PTFont font = SystemFont, PSColor color = nullptr, uint32_t drawmode = DM_USEDEFAULT);
+    void WriteText(char *text, int32_t x = 0, int32_t y = 0, int32_t lines = 1, TFont* font = SystemFont, PSColor color = nullptr, uint32_t drawmode = DM_USEDEFAULT);
       // Draws text to the bitmap
 
     bool Line(int32_t x1, int32_t y1, int32_t x2, int32_t y2, SColor &color);

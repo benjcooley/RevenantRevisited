@@ -440,7 +440,7 @@ void TScreen::Joystick(int32_t key, bool down)
 // * Screen System Functions *
 // ***************************
 
-PTScreen TScreen::ShowScreen(PTScreen screen, int32_t ticks)
+TScreen* TScreen::ShowScreen(TScreen* screen, int32_t ticks)
 {
     if (!screen)
         return nullptr;

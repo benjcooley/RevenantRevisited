@@ -55,7 +55,7 @@ class TEquipPane : public TButtonPane
         // Draws the tile information to the background
     virtual void Animate(bool draw);
         // Animate the pane
-    void DrawAnim(PTObjectInstance inst, PTBitmap bm);
+    void DrawAnim(TObjectInstance* inst, PTBitmap bm);
 
     int32_t GetHeldSlot() { return heldslot; }
         // For moving objects between panes
@@ -66,7 +66,7 @@ class TEquipPane : public TButtonPane
     int32_t OnSlot(int32_t x, int32_t y);
         // Returns the eq slot number that pixel position x, y is located in
 
-    PTMulti equipdata;
+    TMulti* equipdata;
 
     PTBitmap top;                           // background for pane
     PTBitmap bottom;                        // bottom section

@@ -1807,7 +1807,7 @@ void T3DImagery::EndRender()
         executebuf = Scene3D.CopyExecuteBuf();
 }
 
-void T3DImagery::PlaySound(PTObjectInstance inst, int32_t state, int32_t frame)
+void T3DImagery::PlaySound(TObjectInstance* inst, int32_t state, int32_t frame)
 {
     char *soundlist = FindTag("play", state, frame);
     if (soundlist)
@@ -2383,7 +2383,7 @@ void T3DImagery::AddUpdateRect(LPD3DRECT extents, int32_t uflags)
 }
 
 // This function sets the maximum bounding box for a state given the latest extents rect
-void T3DImagery::UpdateBoundingRect(PTObjectInstance oi, int32_t state, LPD3DRECT extents)
+void T3DImagery::UpdateBoundingRect(TObjectInstance* oi, int32_t state, LPD3DRECT extents)
 {
     if (extents->x2 <= 0 || extents->x1 <= 0 || extents->x1 >= WIDTH ||
         extents->y2 <= 0 || extents->y1 <= 0 || extents->y1 >= HEIGHT ||
@@ -2417,7 +2417,7 @@ void T3DImagery::UpdateBoundingRect(PTObjectInstance oi, int32_t state, LPD3DREC
 }
 
 // Refreshes Z buffer
-void T3DImagery::RefreshZBuffer(PTObjectInstance oi)
+void T3DImagery::RefreshZBuffer(TObjectInstance* oi)
 {
     SRect r;
 
@@ -2457,7 +2457,7 @@ bool T3DImagery::GetMotion(int32_t state, int32_t frame,
 }
 
 // Sets the motion for an object based on its state, frame, and 3D motion data
-void T3DImagery::SetObjectMotion(PTObjectInstance inst)
+void T3DImagery::SetObjectMotion(TObjectInstance* inst)
 {
     int32_t state = inst->GetState();
     int32_t frame = inst->GetFrame();
@@ -2518,7 +2518,7 @@ PTAnimation T3DImagery::GetInvAnimation(int32_t state)
         return icons[state].invanim;
 }
 
-PTObjectAnimator T3DImagery::NewObjectAnimator(PTObjectInstance oi)
+PTObjectAnimator T3DImagery::NewObjectAnimator(TObjectInstance* oi)
 {
   // If mesh not initialized, attempt to initialize it now
     if (!meshinitialized)
@@ -2539,7 +2539,7 @@ PTObjectAnimator T3DImagery::NewObjectAnimator(PTObjectInstance oi)
 }
 
 // Returns whether or not an animator is necessary
-bool T3DImagery::NeedsAnimator(PTObjectInstance)
+bool T3DImagery::NeedsAnimator(TObjectInstance*)
 {
     return true;  // 3D imagery always needs an animator
 }
@@ -2698,7 +2698,7 @@ T3DAnimatorBuilder::T3DAnimatorBuilder()
     animatorname = "default";
 }
 
-PT3DAnimator T3DAnimatorBuilder::Build(PTObjectInstance oi)
+PT3DAnimator T3DAnimatorBuilder::Build(TObjectInstance* oi)
 {
     return new T3DAnimator(oi);
 }
@@ -2812,7 +2812,7 @@ void T3DAnimator::RefreshControllers(int32_t newstate)
     contprevstate = newstate;
 }
 
-void T3DAnimator::RecordNewExtents(PTObjectInstance oi, int32_t state, bool frontonly)
+void T3DAnimator::RecordNewExtents(TObjectInstance* oi, int32_t state, bool frontonly)
 {
     if (state < 0)
     {

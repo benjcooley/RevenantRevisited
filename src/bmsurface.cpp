@@ -117,7 +117,7 @@ bool TBitmapSurface::Copy(PTBitmap bitmap)
     return true;
 }
 
-bool TBitmapSurface::BlitPrimary(PSDrawParam dp, PTSurface surface, int32_t ddflags)
+bool TBitmapSurface::BlitPrimary(PSDrawParam dp, TSurface* surface, int32_t ddflags)
 {
     return true;
 }

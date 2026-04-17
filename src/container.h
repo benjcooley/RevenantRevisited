@@ -19,11 +19,11 @@ _CLASSDEF(TContainer)
 class TContainer : public TObjectInstance
 {
   public:
-    TContainer(PTObjectImagery newim) : TObjectInstance(newim) { }
-    TContainer(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) { }
+    TContainer(TObjectImagery* newim) : TObjectInstance(newim) { }
+    TContainer(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { }
 
-    virtual bool Use(PTObjectInstance user, int32_t with = -1);
-    virtual int32_t CursorType(PTObjectInstance inst = nullptr);
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
+    virtual int32_t CursorType(TObjectInstance* inst = nullptr);
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
     virtual void Save(RTOutputStream os);
@@ -31,7 +31,7 @@ class TContainer : public TObjectInstance
     int32_t NumObjects();
         // Count the number of objects in the container
 
-    bool CheckKeyUse(PTObjectInstance user, PTObjectInstance inst);
+    bool CheckKeyUse(TObjectInstance* user, TObjectInstance* inst);
         // Try to use inst to unlock this object
     
     // Container stats
@@ -41,7 +41,7 @@ class TContainer : public TObjectInstance
     OBJSTATFUNC(KeyId)
     OBJSTATFUNC(PickDifficulty)
 
-    virtual bool AddToInventory(PTObjectInstance inst, int32_t slot = -1);
+    virtual bool AddToInventory(TObjectInstance* inst, int32_t slot = -1);
         // Add inst to this object's inventory, in the given slot (first free slot if none specified)
 };
 

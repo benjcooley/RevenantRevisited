@@ -13,8 +13,8 @@ _CLASSDEF(TArmor)
 class TArmor : public TObjectInstance
 {
   public:
-    TArmor(PTObjectImagery newim) : TObjectInstance(newim) {}
-    TArmor(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) {}
+    TArmor(TObjectImagery* newim) : TObjectInstance(newim) {}
+    TArmor(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     // Armor stats
     STATFUNC(EqSlot)

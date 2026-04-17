@@ -24,7 +24,7 @@ DEFSTAT(Food, Cure, CURE, 5, 0, 0, 1000000)
 DEFSTAT(Food, Fill, FILL, 5, 0, 0, 1000000)
 
 
-bool TFood::Use(PTObjectInstance user, int32_t with)
+bool TFood::Use(TObjectInstance* user, int32_t with)
 {
     if (GetState() == 0)
     {

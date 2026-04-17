@@ -38,7 +38,7 @@ class TImageryBuilder
   public:
     TImageryBuilder(int32_t newid);
         // Sets id and adds builder to builder array
-    virtual PTObjectImagery Build(int32_t id) = 0;
+    virtual TObjectImagery* Build(int32_t id) = 0;
         // Builds an imagery object given an imagery buffer
     static PTImageryBuilder GetBuilder(int32_t imageryid)
       { if ((uint32_t)imageryid < (uint32_t)numimagerytypes) return builders[imageryid]; else return nullptr; }
@@ -56,7 +56,7 @@ class obj##Builder : public TImageryBuilder                                     
 {                                                                               \
   public:                                                                       \
     obj##Builder() : TImageryBuilder(id) {}                                     \
-    virtual PTObjectImagery Build(int32_t id)                                   \
+    virtual TObjectImagery* Build(int32_t id)                                   \
         { return new obj(id); }                                                 \
 };
 
@@ -76,14 +76,14 @@ struct SImageryEntry
 {
     char                filename[MAXIMFNAMELEN];    // Filename of resource
     uint32_t            status;        // Status of loading
-    PSImageryHeader     header;        // Imagery header
+    SImageryHeader*     header;        // Imagery header
     int32_t             headersize;    // Size of header
     bool                headerdirty;   // Header has been changed
-    PSImageryBody       body;          // Imagery body
+    SImageryBody*       body;          // Imagery body
     bool                bodydirty;     // Body has been changed
     int32_t             ressize;       // Size of body resource
     int32_t             usecount;      // usecount
-    PTObjectImagery     imagery;       // Pointer to imagery
+    TObjectImagery*     imagery;       // Pointer to imagery
 };
 
 class TObjectImagery
@@ -97,11 +97,11 @@ class TObjectImagery
       // Returns the id of this imagery (OBJIMAGE_ANIMATION, OBJIMAGE_MESH3D, etc.)
 
   // Main imagery functions..
-    static int32_t RegisterImagery(char *filename, PSImageryHeader header = nullptr, uint32_t headersize = 0);
+    static int32_t RegisterImagery(char *filename, SImageryHeader* header = nullptr, uint32_t headersize = 0);
       // Adds imagery file to internal image array.  Called by object class system when
       // object definitions are loaded from 'class.def' file.  Register's imagery file and'
       // returns an id number for that imagery.
-    static PSImageryEntry GetImageryEntry(int32_t id);
+    static SImageryEntry* GetImageryEntry(int32_t id);
       // Return the entery array structure for the given imagery id
     static void FreeImageryEntry(int32_t imageryentry);
       // Frees an individual imagery entry
@@ -119,11 +119,11 @@ class TObjectImagery
       // Finds the id of imagery given imagery file name
     static bool RenameImageryFile(int32_t imgid, const char *newfile);
       // Renames the file that a specific imagery id uses
-    static PTObjectImagery LoadImagery(int32_t imageryid);
+    static TObjectImagery* LoadImagery(int32_t imageryid);
       // Loads an imagery object given the imagery id (same id returned from RegisterImagery)
-    static PTObjectImagery LoadImagery(const char *imageryname) { return LoadImagery(FindImagery(imageryname)); }
+    static TObjectImagery* LoadImagery(const char *imageryname) { return LoadImagery(FindImagery(imageryname)); }
       // Loads an imagery object given the object name and class
-    static void FreeImagery(PTObjectImagery imagery);
+    static void FreeImagery(TObjectImagery* imagery);
       // Reduces use count of imagery by 1, and frees if no longer used
     static void SaveHeader(int32_t imageryid);
       // Saves the header info for the given imagery id
@@ -140,9 +140,9 @@ class TObjectImagery
   // Access functions for private data
     char *GetResFilename() { return entry->filename; }
       // Filename
-    PSImageryHeader GetHeader() { return entry->header; }
+    SImageryHeader* GetHeader() { return entry->header; }
       // Returns imagery header info
-    PSImageryBody GetBody() { if (entry->body) return entry->body; else return LoadBody(true); }
+    SImageryBody* GetBody() { if (entry->body) return entry->body; else return LoadBody(true); }
       // Gets the pointer to the imagery body.. loads it now if it's not there
     int32_t GetHeaderSize() const { return entry->headersize; }
       // Returns imagery header info
@@ -160,7 +160,7 @@ class TObjectImagery
       // Causes the imagery loader to pause temporarily
     static void ResumeLoader();
       // Resumes the imagery loader
-    PSImageryBody LoadBody(bool wait = true);
+    SImageryBody* LoadBody(bool wait = true);
       // Adds body load to the loader thread's load queue, waits for load or returns nullptr.
     void FreeBody();
       // Free imagery body and sets body pointer to nullptr
@@ -172,21 +172,21 @@ class TObjectImagery
       // AnimImagery uses this to call the TBitmap::CacheChunks() function  
 
   // Drawing functions, etc.
-    virtual void DrawUnlit(PTObjectInstance oi, PTSurface surface) {}
+    virtual void DrawUnlit(TObjectInstance* oi, TSurface* surface) {}
         // Draws unlit imagery to background
-    virtual void DrawLit(PTObjectInstance oi, PTSurface surface) {}
+    virtual void DrawLit(TObjectInstance* oi, TSurface* surface) {}
         // Draws lit imagery to background
-    virtual bool GetZ(PTObjectInstance oi, PTSurface surface) { return false; }
+    virtual bool GetZ(TObjectInstance* oi, TSurface* surface) { return false; }
         // Find first uncliped portion of zbuffer
-    virtual void DrawSelected(PTObjectInstance oi, PTSurface surface) { }
+    virtual void DrawSelected(TObjectInstance* oi, TSurface* surface) { }
         // Causes image to draw selection (hilighting) around itself
-    virtual void DrawLight(PTObjectInstance oi, PTSurface surface) {}
+    virtual void DrawLight(TObjectInstance* oi, TSurface* surface) {}
         // Draws a light
-    virtual void DrawInvItem(PTObjectInstance oi, int32_t x, int32_t y);
+    virtual void DrawInvItem(TObjectInstance* oi, int32_t x, int32_t y);
         // Draws object's inventory bitmap to the screen
     int32_t GetUseCount();
         // Returns number of times imagery is used by objects
-    virtual bool AlwaysOnTop(PTObjectInstance oi) { return false; }
+    virtual bool AlwaysOnTop(TObjectInstance* oi) { return false; }
         // Returns true if this is nonzbuffered imagery that should always be considered 'on top'
 
     virtual void SaveHeader() { SaveHeader(imageryid); }
@@ -194,9 +194,9 @@ class TObjectImagery
     virtual bool SaveBitmap(char *path, int32_t state = 0, bool zbuffer = true) { return false; }
         // Saves a bitmap of the current object given the current state
 
-    virtual PTObjectAnimator NewObjectAnimator(PTObjectInstance oi) { return nullptr; }
+    virtual PTObjectAnimator NewObjectAnimator(TObjectInstance* oi) { return nullptr; }
       // Creates an animator for the given object
-    virtual bool NeedsAnimator(PTObjectInstance oi) const { return false; }
+    virtual bool NeedsAnimator(const TObjectInstance* oi) const { return false; }
       // Returns whether or not an animator is necessary
 
   // State functions
@@ -229,7 +229,7 @@ class TObjectImagery
     virtual bool GetMotion(int32_t state, int32_t frame, int32_t &dist, int32_t &ang, int32_t &face) const
       { return false; }
       // Gets the motion data for the given state and frame
-    virtual void SetObjectMotion(PTObjectInstance inst) { } 
+    virtual void SetObjectMotion(TObjectInstance* inst) { } 
       // Sets the motion for an object based on its state, frame, and 3D motion data
 
   // Get/set Header Info (will also cause header to reallocate itself)
@@ -325,11 +325,11 @@ class TObjectImagery
          entry->header->states[state].height = height;
          entry->headerdirty = true; } }
       // Sets the imagery width and height for a state
-    virtual void GetScreenRect(PTObjectInstance oi, SRect &r) const;
+    virtual void GetScreenRect(TObjectInstance* oi, SRect &r) const;
       // Returns screen rectangle for object given the values returned by GetWidth(),GetHeight()
-    virtual void GetAnimRect(PTObjectInstance oi, SRect &r) const;
+    virtual void GetAnimRect(TObjectInstance* oi, SRect &r) const;
       // Returns screen rectangle for object given the values returned by GetWidth(),GetHeight()
-    virtual void ResetScreenRect(PTObjectInstance oi, int32_t state = -1, bool frontonly = false);
+    virtual void ResetScreenRect(TObjectInstance* oi, int32_t state = -1, bool frontonly = false);
       // Reset screen rectangle for object for given state, or all states if -1
     virtual void GetWorldBoundBox(int32_t state, int32_t &width, int32_t &length, int32_t &height) const
       { if ((uint32_t)state < (uint32_t)entry->header->numstates)
@@ -376,7 +376,7 @@ class TObjectImagery
         // Get the number of objects in the mesh
 
   protected:
-    PSImageryEntry      entry;                      // Pointer to entry in entry array
+    SImageryEntry*          entry;                      // Pointer to entry in entry array
 
   private:
     int32_t                 imageryid;                  // Index into imagery entry array
@@ -399,14 +399,14 @@ class TObjectAnimator
     bool complete;              // When a (non-looping) animation has exhausted its frames
 
   public:
-    TObjectAnimator(PTObjectInstance oi);
+    TObjectAnimator(TObjectInstance* oi);
       // Constructor. Sets objectimagery. and object instance to nullptr.
     virtual ~TObjectAnimator();
       // Destructor.
 
-    PTObjectInstance GetObjInst() { return inst; }
+    TObjectInstance* GetObjInst() { return inst; }
       // Returns the object instance for this animator
-    PTObjectImagery GetImagery() { return image; }
+    TObjectImagery* GetImagery() { return image; }
       // Returns the animators imagery
 
     virtual void Initialize() {}

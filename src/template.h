@@ -49,10 +49,10 @@ class TTerrainTemplate
 
     int32_t NewTemplate(char *tilename);
         // Returns the index of the template
-    int32_t AddObject(int32_t index, PTObjectInstance inst, S3DPoint offset);
+    int32_t AddObject(int32_t index, TObjectInstance* inst, S3DPoint offset);
         // Add inst at offset to the indexed template
 
-    void ApplyTemplate(PTObjectInstance inst, PTSector sect, int32_t density);
+    void ApplyTemplate(TObjectInstance* inst, TSector* sect, int32_t density);
         // Choose a template for the given object and add the template objects to the sector
 
   private:

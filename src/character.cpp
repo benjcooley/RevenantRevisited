@@ -197,7 +197,7 @@ void TCharacter::Pulse()
             target->SignalHostility(this, target);
 
       // Update the health/etc. for player's target
-        if ((PTPlayer)this == Player && target)
+        if ((TPlayer*)this == Player && target)
             TextBar.SetHealthDisplay(target->GetName(), target->Health());
     }
 
@@ -230,7 +230,7 @@ void TCharacter::Pulse()
             def.facing = 0;
 
             int32_t index = MapPane.NewObject(&def);
-            PTObjectInstance inst = MapPane.GetInstance(index);
+            TObjectInstance* inst = MapPane.GetInstance(index);
             if (inst)
             {
                 ((PTBloodEffect)inst)->SetParams(height, 0, 64, 255, 5, 1);
@@ -1333,7 +1333,7 @@ int32_t TCharacter::UpdateAngle(int32_t angle)
     return angle;
 }
 
-PTObjectInstance TCharacter::FindObjAhead()
+TObjectInstance* TCharacter::FindObjAhead()
 {
     S3DPoint pos, v;
     GetPos(pos);
@@ -1343,12 +1343,12 @@ PTObjectInstance TCharacter::FindObjAhead()
     int32_t list[MAXFOUNDOBJS];
     int32_t n = MapPane.FindObjectsInRange(pos, list, 60);
 
-    PTObjectInstance best = nullptr;
+    TObjectInstance* best = nullptr;
     int32_t bestdist;
 
     for (int32_t i = 0; i < n; i++)
     {
-        PTObjectInstance oi = MapPane.GetInstance(list[i]);
+        TObjectInstance* oi = MapPane.GetInstance(list[i]);
         if (!oi)
             continue;
 
@@ -2031,7 +2031,7 @@ int32_t TCharacter::ResolveBowShoot(PTActionBlock ab, int32_t bits)
 
         MapPane.NewObject(&def);
 
-        PTObjectInstance arrow = FindObjInventory(OBJCLASS_AMMO, AT_ARROW);
+        TObjectInstance* arrow = FindObjInventory(OBJCLASS_AMMO, AT_ARROW);
         if (arrow)
             DeleteFromInventory(arrow->GetName(), 1);
 
@@ -2152,7 +2152,7 @@ void TCharacter::EffectBurst(char *name, int32_t height)
         def.facing = 0;
 
         int32_t index = MapPane.NewObject(&def);
-        PTObjectInstance inst = MapPane.GetInstance(index);
+        TObjectInstance* inst = MapPane.GetInstance(index);
         if (!inst)
             return;
 
@@ -2163,7 +2163,7 @@ void TCharacter::EffectBurst(char *name, int32_t height)
         def.pos = pos;
 
         int32_t index = MapPane.NewObject(&def);
-        PTObjectInstance inst = MapPane.GetInstance(index);
+        TObjectInstance* inst = MapPane.GetInstance(index);
         if (!inst)
             return;
 
@@ -2592,17 +2592,17 @@ void TCharacter::ResetStealthValues()
     glimpse = (visibility + (r * visibility / 100)) * stealthmod / 100;
 }
 
-void TCharacter::SignalMovement(PTObjectInstance actor)
+void TCharacter::SignalMovement(TObjectInstance* actor)
 {
 }
 
-void TCharacter::SignalHostility(PTObjectInstance actor, PTObjectInstance target)
+void TCharacter::SignalHostility(TObjectInstance* actor, TObjectInstance* target)
 {
     if (target != this)
         return;
 }
 
-void TCharacter::SignalAttack(PTObjectInstance actor, PTObjectInstance target)
+void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target)
 {
     if (target != this)
         return;
@@ -2964,12 +2964,12 @@ bool TCharacter::Pivot(int32_t angle)
 }
 
 // This obviously does nothing right now
-bool TCharacter::FollowChar(PTObjectInstance inst)
+bool TCharacter::FollowChar(TObjectInstance* inst)
 {
     return false;
 }
 
-bool TCharacter::Pickup(PTObjectInstance inst)
+bool TCharacter::Pickup(TObjectInstance* inst)
 {
     if (!inst || !inst->IsInventoryItem())
         return false;
@@ -2988,7 +2988,7 @@ bool TCharacter::Pickup(PTObjectInstance inst)
     return true;
 }
 
-bool TCharacter::Pull(PTObjectInstance inst)
+bool TCharacter::Pull(TObjectInstance* inst)
 {
     PTActionBlock ab = new TActionBlock("Pull Front");
     int32_t state = inst->GetState();
@@ -3026,12 +3026,12 @@ bool TCharacter::TryUse()
     int32_t list[MAXFOUNDOBJS];
     int32_t n = MapPane.FindObjectsInRange(pos, list, 60);
 
-    PTObjectInstance best = nullptr;
+    TObjectInstance* best = nullptr;
     int32_t bestdist;
 
     for (int32_t i = 0; i < n; i++)
     {
-        PTObjectInstance oi = MapPane.GetInstance(list[i]);
+        TObjectInstance* oi = MapPane.GetInstance(list[i]);
         if (!oi)
             continue;
 
@@ -3071,12 +3071,12 @@ bool TCharacter::TryGet()
     int32_t list[MAXFOUNDOBJS];
     int32_t n = MapPane.FindObjectsInRange(pos, list, 60);
 
-    PTObjectInstance best = nullptr;
+    TObjectInstance* best = nullptr;
     int32_t bestdist;
 
     for (int32_t i = 0; i < n; i++)
     {
-        PTObjectInstance oi = MapPane.GetInstance(list[i]);
+        TObjectInstance* oi = MapPane.GetInstance(list[i]);
         if (!oi)
             continue;
 
@@ -3344,7 +3344,7 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
   // Check player skills, etc.  
     if (objclass == OBJCLASS_PLAYER)
     {
-        PTPlayer player = (PTPlayer)this;
+        TPlayer* player = (TPlayer*)this;
         
       // Is using correct weapon for this attack
         if (!(ad->weaponmask & (1 << (WeaponType() - 1))))
@@ -3480,7 +3480,7 @@ bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage)
 
   // Do magic attack
     if (ad->flags & CA_MAGICATTACK)
-        return CastByName(ad->spellname, (PTObjectInstance *)&targ, (targ)?1:0, &(ad->spellsource));
+        return CastByName(ad->spellname, (TObjectInstance* *)&targ, (targ)?1:0, &(ad->spellsource));
 
   // Get action type
     ACTION a;
@@ -3852,7 +3852,7 @@ bool TCharacter::BeginFighting(PTCharacter target, ACTION action)
   // If player doesn't have bow, escape out
     if (action == ACTION_BOW && ObjClass() == OBJCLASS_PLAYER)
     {
-            PTPlayer player = (PTPlayer)this;
+            TPlayer* player = (TPlayer*)this;
             if (player->RangedWeapon() == nullptr)
                 return false;
     }
@@ -3982,7 +3982,7 @@ bool TCharacter::ExecutingQueued()
     return false;
 }
 
-int32_t TCharacter::CursorType(PTObjectInstance inst)
+int32_t TCharacter::CursorType(TObjectInstance* inst)
 {
     if (inst)
         return CURSOR_NONE;
@@ -4002,11 +4002,11 @@ int32_t TCharacter::CursorType(PTObjectInstance inst)
     return CURSOR_MOUTH;                // chat for a bit
 }
 
-bool TCharacter::Use(PTObjectInstance user, int32_t with)
+bool TCharacter::Use(TObjectInstance* user, int32_t with)
 {
     if (with >= 0)
     {
-        PTObjectInstance inst = MapPane.GetInstance(with);
+        TObjectInstance* inst = MapPane.GetInstance(with);
         if (!inst)
             return false;
         if (GetScript())
@@ -4020,7 +4020,7 @@ bool TCharacter::Use(PTObjectInstance user, int32_t with)
     {
         // loot the corpse
         TInventoryIterator i(this);
-        PTObjectInstance oi = i.Item();
+        TObjectInstance* oi = i.Item();
 
         if (oi)
         {
@@ -4042,7 +4042,7 @@ bool TCharacter::Use(PTObjectInstance user, int32_t with)
         return false;
     }
 
-    if (!Aggressive() && user == (PTObjectInstance)Player)
+    if (!Aggressive() && user == (TObjectInstance*)Player)
     {
       // Face eachother
         S3DPoint upos;
@@ -4062,7 +4062,7 @@ bool TCharacter::Use(PTObjectInstance user, int32_t with)
     return false;
 }
 
-PTCharacter TCharacter::CharBlocking(PTObjectInstance inst, RS3DPoint pos, int32_t radius)
+PTCharacter TCharacter::CharBlocking(TObjectInstance* inst, S3DPoint& pos, int32_t radius)
 {
     int32_t range = 128; // This should be about right
 
@@ -4246,7 +4246,7 @@ void TCharacter::UpdateFade(void)
 }
 
 // set to cast mode
-bool TCharacter::SetCast(char* ani, PTObjectInstance target, int32_t invoke_delay)
+bool TCharacter::SetCast(char* ani, TObjectInstance* target, int32_t invoke_delay)
 {
 //  int32_t incombat = IsFighting();
     char puthere[50];
@@ -4406,21 +4406,21 @@ bool TCharacter::SetCast(char* ani, PTObjectInstance target, int32_t invoke_dela
 }
 
 // cast a spell using talismans, automating the targeting
-bool TCharacter::Cast(char* talismans, PS3DPoint sourcepos)
+bool TCharacter::Cast(char* talismans, S3DPoint* sourcepos)
 {
-    PTObjectInstance targ = Fighting();
+    TObjectInstance* targ = Fighting();
 
     return CastByTalismans(talismans, &targ, (targ)?1:0, sourcepos);
 }
 
 // cast a spell by using its name
-bool TCharacter::CastByName(char* name, PTObjectInstance *target, int32_t numtargs, PS3DPoint sourcepos)
+bool TCharacter::CastByName(char* name, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
 {
     return SpellManager.CastByName(name, this, target, numtargs, sourcepos);
 }
 
 // cast a spell by using a list of talismans
-bool TCharacter::CastByTalismans(char* talismans, PTObjectInstance *target, int32_t numtargs, PS3DPoint sourcepos)
+bool TCharacter::CastByTalismans(char* talismans, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
 {
     return SpellManager.CastByTalismans(talismans, this, target, numtargs, sourcepos);
 }

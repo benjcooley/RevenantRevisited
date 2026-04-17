@@ -557,7 +557,7 @@ PTSound TSound::Duplicate()
 
 // lpos is the listeners position
 // spos is the sound's position
-int32_t CalcPan(PS3DPoint lpos, PS3DPoint spos)
+int32_t CalcPan(S3DPoint* lpos, S3DPoint* spos)
 {
     int32_t pan = 0;
     S3DPoint tmp_pos;
@@ -584,7 +584,7 @@ int32_t CalcPan(PS3DPoint lpos, PS3DPoint spos)
 
 // lpos is the listeners position
 // spos is the sound's position
-int32_t CalcDirectionalVol(int32_t orig_vol, PS3DPoint lpos, PS3DPoint spos)
+int32_t CalcDirectionalVol(int32_t orig_vol, S3DPoint* lpos, S3DPoint* spos)
 {
     int32_t vol = orig_vol;
     
@@ -603,7 +603,7 @@ int32_t CalcDirectionalVol(int32_t orig_vol, PS3DPoint lpos, PS3DPoint spos)
 }
 
 
-void TSound::SetListenerPos(PS3DPoint lpos)
+void TSound::SetListenerPos(S3DPoint* lpos)
 {
     if (lpos)
     {
@@ -621,7 +621,7 @@ void TSound::SetListenerPos(PS3DPoint lpos)
     }
 }
 
-void TSound::SetSoundPos(PS3DPoint spos)
+void TSound::SetSoundPos(S3DPoint* spos)
 {
     if (spos)
     {
@@ -642,7 +642,7 @@ void TSound::SetSoundPos(PS3DPoint spos)
 
 // lpos is the listeners position
 // spos is the sound's position
-void TSound::Play(int32_t volume, int32_t freq, PS3DPoint lpos, PS3DPoint spos)
+void TSound::Play(int32_t volume, int32_t freq, S3DPoint* lpos, S3DPoint* spos)
 {
     int32_t pan = 0;
 
@@ -1007,7 +1007,7 @@ bool TSoundPlayer::Unmount(int32_t id)
     return true;
 }
 
-bool TSoundPlayer::Play(int32_t id, int32_t volume, int32_t freq, PS3DPoint spos)
+bool TSoundPlayer::Play(int32_t id, int32_t volume, int32_t freq, S3DPoint* spos)
 {
     if (!Functioning() || id < 0 || id >= soundlist.NumItems())
         return false;

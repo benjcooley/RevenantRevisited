@@ -68,7 +68,7 @@ void TScroll::Save(RTOutputStream os)
     }
 }
 
-bool TScroll::Use(PTObjectInstance user, int32_t with)
+bool TScroll::Use(TObjectInstance* user, int32_t with)
 {
     if (with < 0)
     {

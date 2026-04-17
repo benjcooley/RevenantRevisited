@@ -13,8 +13,8 @@ _CLASSDEF(TKey)
 class TKey : public TObjectInstance
 {
   public:
-    TKey(PTObjectImagery newim) : TObjectInstance(newim) {}
-    TKey(PSObjectDef def, PTObjectImagery newim) : TObjectInstance(def, newim) {}
+    TKey(TObjectImagery* newim) : TObjectInstance(newim) {}
+    TKey(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     // Key stats
     STATFUNC(Value)

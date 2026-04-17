@@ -58,7 +58,7 @@ class TDialogList
 
 // Global function for translating dialog lines
 
-void SetDialogContext(PTObjectInstance context); // The script context
+void SetDialogContext(TObjectInstance* context); // The script context
 char *DialogLine(char *line, char *buf, int32_t buflen);
 
 // Dialog pane, for interacting with NPCs in conversation
@@ -99,7 +99,7 @@ class TDialogPane : public TPane
     int32_t OnSlot(int32_t x, int32_t y);
         // Find which dialog choice x, y is over
 
-    PTMulti dialogdata;             // Background and misc
+    TMulti* dialogdata;             // Background and misc
     PTCharacter character;          // Character doing the blabing
 
     char *choices[MAXCHOICES];      // Choice text

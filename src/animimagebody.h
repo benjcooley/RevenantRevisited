@@ -30,7 +30,7 @@ struct SAnimImageryState
     OTAnimation anim;                   // Animation associated with state
     OTBitmap    invitem;                // Inventory image
     OTAnimation invanim;                // Inventory image animation
-    uint32_t       flags;                  // Imagery state flags
+    uint32_t    flags;                  // Imagery state flags
 };
 
 // ********************

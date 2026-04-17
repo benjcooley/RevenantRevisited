@@ -8,6 +8,7 @@
 
 #include "revdefs.h"
 #include "revtypes.h"
+#include "revutils.h"
 
 #include <HandmadeMath.h>
 #include <sokol_gfx.h>
@@ -158,110 +159,13 @@ extern int32_t CurGetStringChar;
 extern bool GetStringDone;
 
 // Ambient light variables
-extern int32_t    ambient;
+extern int32_t ambient;
 extern double lred;
 extern double lgreen;
 extern double lblue;
 
 // Language
-extern char Language[NAMELEN];              // Where the current map is stored
-
-// Simple Support Functions
-inline char *strncpyz(char* dst, const char* src, int32_t n)
-  { strncpy(dst, src, n-1); dst[n-1] = 0; return dst; }
-  // Does a strncpy and insures that last character is always null
-inline char *strncatz(char* dst, const char* src, int32_t n)
-  { int32_t l = strlen(dst); return strncpyz(dst + l, src, n - l); }
-  // Concatenates a src with dst, but does not go beyound n-1 chars for dest, and insures
-  // a null is appended at end of dst
-char *itos(int32_t val, char* buf, int32_t buflen);
-  // Efficiently converts an int32_t to a string given a buffer of 'buflen' size
-int32_t stricmp(const char* s1, const char* s2);
-  // Case insensitive string compare
-int32_t copyfiles(const char *from, const char *to, bool overwrite = true);
-  // Copy file command (uses wildcards!!)
-int32_t deletefiles(const char *name);
-  // Delete file command (uses wildcards!!)
-int32_t flen(FILE* f);
-  // Returns the length of a file
-uint32_t tickcount();
-  // Returns system ticks (in milliseconds) since system was turned on
-
-// Prints error, or fatal error message, and exits
-void Error(const char *error, const char *extra = nullptr);
-void FatalError(const char *error, const char *extra = nullptr);
-void ThreadError(const char *error, const char *extra = nullptr);
-
-// Event and Mutex error stuff
-void WaitSingleErr(HANDLE obj);
-void WaitMultipleErr(uint32_t objs, CONST HANDLE *obj, bool all);
-
-// Critical Section Functions
-void BEGIN_CRITICAL();
-void END_CRITICAL();
-
-// Load a resource functions
-void *LoadRCResource(char *name, int32_t id); // Shouldn't be used anymore
-void FreeRC(void *p);                         // Same here
-
-// Makes a file path given the current settings of RunPath and SavePath
-char *makepath(char *name, char *buf, int32_t buflen);
-// Open a FILE in the program path using the makepath() function
-FILE *popen(char *file, char *flags);
-
-// Random number generation
-int32_t random(int32_t min, int32_t max);
-
-// Comma delimited list functions (useful for strings in "abcd,defg,hijk" format)
-// If dst is nullptr, retuns result pointer from static internal buffer
-char *listrnd(char *src, char *dst = nullptr, int32_t len = 0);
-    // Get random string from comma list
-char *listget(char *src, int32_t num, char *dst = nullptr, int32_t len = 0);
-    // Get num string from comma list
-int32_t listnum(char *src);
-    // Get total number of strings in comma list
-bool listin(char *src, char *in);
-    // Returns true if string is in comma list (case insensitive)
-
-// Causes all game threads to pause
-void PauseThreads();
-void ResumeThreads();
-
-// Exit the game (Now why would somebody want to do that?)
-void ExitGame();
-
-// Prints out game status info to the display as game loads
-void Status(const char *fmt, ...);
-
-// Memory free functions
-uint32_t MemUsed();    // Percentage of memory used
-uint32_t FreeMem();    // Free system memory (virtual)
-uint32_t TotalMem();   // Total system memory (virtual)
-uint32_t FreePhys();   // Free physical memory
-uint32_t TotalPhys();  // Total physical memory
-uint32_t FreePage();   // Free paging file memory
-uint32_t TotalPage();  // Total paging file memory
-
-// INI File Functions
-void INISetSection(char *newsection);
-int32_t INIGetInt(char *key, int32_t def = 0, char *format = nullptr);
-void INISetInt(char *key, int32_t i, char *format = nullptr);
-char *INIGetText(char *key, char *def, char *buf, int32_t buflen);
-void INISetText(char *key, char *str);
-char *INIGetStr(char *key, char *def = nullptr, char *buf = nullptr, int32_t buflen = 0);
-void INISetStr(char *key, char *str);
-int32_t INIGetArray(char *key, int32_t size, int32_t *ary, int32_t defsize = 0, int32_t *defary = nullptr, char *format = nullptr);
-void INISetArray(char *key, int32_t size, int32_t ary[], char *format = nullptr);
-bool INIGetBool(char *key, bool def = false, char *yes = nullptr, char *no = nullptr);
-void INISetBool(char *key, bool on, char *yes = nullptr, char *no = nullptr);
-bool INIGetYesNo(char *key, bool def = false);
-void INISetYesNo(char *key, bool on);
-bool INIGetTrueFalse(char *key, bool def = false);
-void INISetTrueFalse(char *key, bool on);
-bool INIGetOnOff(char *key, bool def = false);
-void INISetOnOff(char *key, bool on);
-bool INIParse(char *key, char *def, char *format, ...);
-void INIPrint(char *key, char *format, ...);
+extern TString Language; // Where the current map is stored
 
 // Debug bool variable
 extern bool Debug;
@@ -288,11 +192,11 @@ extern int32_t LastFrameTicks;
 extern bool ShowFramesPerSecond;
 
 // Global Objects
-extern PTScreen     CurrentScreen;      // Currently displayed screen object 
-extern PTScreen     NextScreen;         // Next Screen to be display object
+extern TScreen*     CurrentScreen;      // Currently displayed screen object 
+extern TScreen*     NextScreen;         // Next Screen to be display object
 extern TDisplay     display;            // Display object
 extern T3DScene     Scene3D;            // 3d Object
-extern PTDisplay    Display;            // Display object
+extern TDisplay*    Display;            // Display object
 extern TPlayScreen  PlayScreen;         // PlayScreen Object
 extern TLogoScreen  LogoScreen;         // LogoScreen Object
 extern TMapPane     MapPane;            // Main map pane for PlayScreen
@@ -313,16 +217,16 @@ extern TSaveGame    SaveGame;           // SaveGame Object
 extern TChunkCache  ChunkCache;         // Tile Cache
 extern TTimer       Timer;              // Timer Object
 extern TVideoCapture VideoCapture;      // Video capture object
-extern PTFont       SystemFont;         // Basic utility font
-extern PTFont       DialogFont;         // Dialog font
-extern PTFont       DialogFontShadow;   // Dialog font shadow
-extern PTFont       SmallFont;          // Small game font
-extern PTFont       GameFont;           // Medium game font
-extern PTFont       GoldFont;           // Medium gold font
-extern PTFont       MetalFont;          // Small gold/metal font
-extern PTFont       MenuFont;           // Menu font
-extern PTPlayer     Player;             // The active player for current game
-extern PTMulti      GameData;           // Global game data pointer
+extern TFont*       SystemFont;         // Basic utility font
+extern TFont*       DialogFont;         // Dialog font
+extern TFont*       DialogFontShadow;   // Dialog font shadow
+extern TFont*       SmallFont;          // Small game font
+extern TFont*       GameFont;           // Medium game font
+extern TFont*       GoldFont;           // Medium gold font
+extern TFont*       MetalFont;          // Small gold/metal font
+extern TFont*       MenuFont;           // Menu font
+extern TPlayer*     Player;             // The active player for current game
+extern TMulti*      GameData;           // Global game data pointer
 extern TSoundPlayer SoundPlayer;        // Sound effects player
 extern TControlMap  ControlMap;         // Contains the key/joystick mappings for game control
 extern TAreaManager AreaManager;        // Manages the game area system

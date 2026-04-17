@@ -24,7 +24,7 @@ bool priority;                      // Priority of mouse image
 PTBitmap DragBitmap = nullptr;
 int32_t grabx, graby;
 
-PTObjectInstance DragObj = nullptr;
+TObjectInstance* DragObj = nullptr;
 
 bool cleardragbitmap = false;
 
@@ -82,12 +82,12 @@ void ClearDragBitmap()
     cleardragbitmap = true;
 }
 
-void SetDragObj(PTObjectInstance inst)
+void SetDragObj(TObjectInstance* inst)
 {
     DragObj = inst;
 }
 
-PTObjectInstance GetDragObj()
+TObjectInstance* GetDragObj()
 {
     return DragObj;
 }
@@ -150,7 +150,7 @@ void DrawMouseShadow()
     }
 }
 
-void CursorOverObject(PTObjectInstance inst, bool toppriority)
+void CursorOverObject(TObjectInstance* inst, bool toppriority)
 {
     if (toppriority || !priority)
     {
