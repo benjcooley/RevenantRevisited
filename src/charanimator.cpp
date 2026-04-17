@@ -4,17 +4,27 @@
 // *                 charanimator.cpp - TCharAnimator module               *
 // *************************************************************************
 
-#include <windows.h>
-#include <ddraw.h>
-#include <d3d.h>
-#include <d3drmwin.h>
 #include <math.h>
 
 #include "character.h"
 #include "player.h"
 #include "charanimator.h"
 #include "effect.h"
-#include "mappane.h"
+#include "render3d_types.h"
+
+namespace
+{
+// Float-RGBA (0..1) -> packed ARGB8 uint32 (matches S3DLVertex::diffuse layout).
+static inline uint32_t PackARGB(float r, float g, float b, float a)
+{
+    auto clamp8 = [](float f) -> uint32_t {
+        if (f <= 0.0f) return 0u;
+        if (f >= 1.0f) return 255u;
+        return (uint32_t)(f * 255.0f + 0.5f);
+    };
+    return (clamp8(a) << 24) | (clamp8(r) << 16) | (clamp8(g) << 8) | clamp8(b);
+}
+}
 
 REGISTER_3DANIMATOR("CHARACTER", TCharAnimator)
 REGISTER_3DANIMATOR("PLAYER", TPlayerAnimator)
@@ -59,7 +69,7 @@ bool TCharAnimator::Render()
   // Unhide all objects (except for weapon/sword)
     for (int32_t c = 0; c < NumObjects(); c++)
     {
-        PS3DAnimObj obj = GetObject(c);
+        S3DAnimObj* obj = GetObject(c);
         if (!stricmp(Get3DImagery()->GetObjectName(obj->objnum), "sword") ||
             !stricmp(Get3DImagery()->GetObjectName(obj->objnum), "weapon"))
             obj->flags |= OBJ3D_HIDE;
@@ -93,7 +103,7 @@ bool TCharAnimator::Render()
         RenderEquipment();      // Renders equipment geometry
 
     if (weaponswipe.GetInitialized() &&                                     // Ready
-      ((PTCharacter)inst)->IsAttack() &&                                    // Is an attack
+      ((TCharacter*)inst)->IsAttack() &&                                    // Is an attack
       !(inst->ObjClass() == OBJCLASS_PLAYER &&                              // Is not hand to hand
         ((TPlayer*)inst)->PrimeHand() == nullptr ))    
           weaponswipe.Render();
@@ -122,7 +132,7 @@ void TCharAnimator::InitPoisonColor()
         memset(&mat, 0, sizeof(S3DMat));
         Get3DImagery()->GetMaterial(i, &mat);
 
-        D3DMATERIAL &m = mat.matdesc;
+        S3DMaterial &m = mat.matdesc;
         origmatred[i] = m.ambient.r;
         origmatgreen[i] = m.ambient.g;
     }
@@ -136,9 +146,9 @@ void TCharAnimator::ClosePoisonColor()
         memset(&mat, 0, sizeof(S3DMat));
         Get3DImagery()->GetMaterial(i, &mat);
 
-        D3DMATERIAL &m = mat.matdesc;
-        m.ambient.r = origmatred[i]f;
-        m.ambient.b = origmatgreen[i]f;
+        S3DMaterial &m = mat.matdesc;
+        m.ambient.r = origmatred[i];
+        m.ambient.b = origmatgreen[i];
 
         Get3DImagery()->SetMaterial(i, &mat);
     }
@@ -150,7 +160,7 @@ void TCharAnimator::ClosePoisonColor()
 // Sets poison color for character
 void TCharAnimator::SetPoisonColor()
 {
-    int32_t poison = 9 * ((PTCharacter)inst)->Poisoned();
+    int32_t poison = 9 * ((TCharacter*)inst)->Poisoned();
 
     if (poison != oldpoison)
     {
@@ -168,17 +178,17 @@ void TCharAnimator::SetPoisonColor()
             memset(&mat, 0, sizeof(S3DMat));
             Get3DImagery()->GetMaterial(i, &mat);
 
-            D3DMATERIAL &m = mat.matdesc;
+            S3DMaterial &m = mat.matdesc;
 
             if (amount < 0.1)
             {
-                m.ambient.r = origmatred[i]f;
-                m.ambient.b = origmatgreen[i]f;
+                m.ambient.r = origmatred[i];
+                m.ambient.b = origmatgreen[i];
             }
             else
             {
-                m.ambient.r = origmatred[i] * amountf;
-                m.ambient.b = origmatgreen[i] * amountf;
+                m.ambient.r = origmatred[i] * amount;
+                m.ambient.b = origmatgreen[i] * amount;
             }
 
             Get3DImagery()->SetMaterial(i, &mat);
@@ -213,7 +223,7 @@ void TCharAnimator::ProcessEquipment(int32_t task)
         if (oi->GetImagery()->GetHeader()->imageryid != OBJIMAGE_MESH3D)
             continue;
 
-        PT3DImagery equipimagery = (PT3DImagery)oi->GetImagery();
+        T3DImagery* equipimagery = (T3DImagery*)oi->GetImagery();
         SImageryHeader* equipheader = equipimagery->GetHeader();
 
       // Find equipment state for player's body type
@@ -255,7 +265,7 @@ void TCharAnimator::ProcessEquipment(int32_t task)
 
             if (eq == EQ_PRIMEHAND)     // If weapon slot
             {   
-                if (((PTCharacter)inst)->IsBowMode())   // Not in combat mode.. don't replace
+                if (((TCharacter*)inst)->IsBowMode())   // Not in combat mode.. don't replace
                     playerobjnum = -1;
                 else
                 {
@@ -268,7 +278,7 @@ void TCharAnimator::ProcessEquipment(int32_t task)
             }
             else if (eq == EQ_RANGEDWEAPON)     // If bow slot
             {
-                if (!((PTCharacter)inst)->IsBowMode())  // Not in bow mode.. don't replace
+                if (!((TCharacter*)inst)->IsBowMode())  // Not in bow mode.. don't replace
                     playerobjnum = -1;
                 else
                 {
@@ -285,7 +295,7 @@ void TCharAnimator::ProcessEquipment(int32_t task)
             if (playerobjnum < 0)
                 continue;
 
-            PS3DAnimObj playerobj = GetObject(playerobjnum);
+            S3DAnimObj* playerobj = GetObject(playerobjnum);
 
           // Do the actual thing now
             if (task == PROCESSEQUIPMENT_HIDECHARPARTS)
@@ -333,12 +343,12 @@ void TCharAnimator::RenderEquipment()
 
 void TCharAnimator::InitTransparency()
 {
-    float transparency = (float)((PTCharacter)inst)->Transparency() / 100.0f;
+    float transparency = (float)((TCharacter*)inst)->Transparency() / 100.0f;
 }
 
 void TCharAnimator::UpdateTransparency()
 {
-    float t = (float)((PTCharacter)inst)->Transparency() / 100.0f;
+    float t = (float)((TCharacter*)inst)->Transparency() / 100.0f;
 
     if (Editor || abs(t - transparency) < MAX_TRANSPARENCY_GROW)
         transparency = t;
@@ -348,26 +358,26 @@ void TCharAnimator::UpdateTransparency()
         transparency += MAX_TRANSPARENCY_GROW;
 }
 
-void TCharAnimator::SetMaterialTransparency(PT3DImagery img)
+void TCharAnimator::SetMaterialTransparency(T3DImagery* img)
 {
     for (int32_t c = 0; c < img->NumMaterials(); c++)
     {
         S3DMat m;
         img->GetMaterial(0, &m);
-        m.matdesc.ambient.a = m.matdesc.diffuse.a = 
-            m.matdesc.specular.a = m.matdesc.emissive.a = transparency;
+        m.matdesc.ambient.a = m.matdesc.diffuse.a =
+            m.matdesc.specular.a = m.matdesc.emmissive.a = transparency;
         img->SetMaterial(0, &m);
     }
 }
 
-void TCharAnimator::ResetMaterialTransparency(PT3DImagery img)
+void TCharAnimator::ResetMaterialTransparency(T3DImagery* img)
 {
     for (int32_t c = 0; c < img->NumMaterials(); c++)
     {
         S3DMat m;
         img->GetMaterial(0, &m);
-        m.matdesc.ambient.a = m.matdesc.diffuse.a = 
-            m.matdesc.specular.a = m.matdesc.emissive.a = 100.0f;
+        m.matdesc.ambient.a = m.matdesc.diffuse.a =
+            m.matdesc.specular.a = m.matdesc.emmissive.a = 100.0f;
         img->SetMaterial(0, &m);
     }
 }
@@ -387,7 +397,7 @@ void TCharAnimator::InitUtilityImagery()
     def.objtype = EffectClass.FindObjType("CharUtility");
     SObjectInfo* info = EffectClass.GetObjType(def.objtype);
     if (info)
-        utilityimagery = (PT3DImagery)TObjectImagery::LoadImagery(info->imageryid);
+        utilityimagery = (T3DImagery*)TObjectImagery::LoadImagery(info->imageryid);
 }
 
 void TCharAnimator::CloseUtilityImagery()
@@ -397,9 +407,9 @@ void TCharAnimator::CloseUtilityImagery()
     TObjectImagery::FreeImagery(utilityimagery);
 }
 
-PS3DAnimObj TCharAnimator::GetNewImObject(PT3DImagery imagery, int32_t objnum, int32_t flags)
+S3DAnimObj* TCharAnimator::GetNewImObject(T3DImagery* imagery, int32_t objnum, int32_t flags)
 {
-    PS3DAnimObj obj = new S3DAnimObj;
+    S3DAnimObj* obj = new S3DAnimObj;
     memset(obj, 0, sizeof(S3DAnimObj));
     obj->objnum = objnum;
     obj->parent = nullptr;
@@ -408,15 +418,14 @@ PS3DAnimObj TCharAnimator::GetNewImObject(PT3DImagery imagery, int32_t objnum, i
     imagery->GetObject(objnum, &o);
 
     obj->animtrack = min(objnum, imagery->NumObjects() - 1);
-    obj->primtype = D3DPT_TRIANGLELIST;
-    obj->verttype = D3DVT_VERTEX;
-    //obj->verttype = D3DVT_LVERTEX;
+    obj->primtype = ERender3DPrim::TriangleList;
+    obj->verttype = ERender3DVertex::Vertex;
     obj->hmaterial = imagery->GetMaterialHandle(o.material);
     for (int32_t c = 0; c < MAXTEXTURES; c++)
         obj->htextures[c] = imagery->GetTextureHandle(c);
 
     if (flags & OBJ3D_COPYVERTS)
-        GetImVerts(imagery, obj, obj->verttype); 
+        GetImVerts(imagery, obj, obj->verttype);
 
     if (flags & OBJ3D_COPYFACES)
         GetImFaces(imagery, obj);
@@ -424,22 +433,22 @@ PS3DAnimObj TCharAnimator::GetNewImObject(PT3DImagery imagery, int32_t objnum, i
     return obj;
 }
 
-void TCharAnimator::GetImVerts(PT3DImagery imagery, PS3DAnimObj obj, D3DVERTEXTYPE verttype)
+void TCharAnimator::GetImVerts(T3DImagery* imagery, S3DAnimObj* obj, ERender3DVertex verttype)
 {
     obj->flags |= (OBJ3D_VERTS | OBJ3D_COPYVERTS | OBJ3D_OWNSVERTS);
     obj->verttype = verttype;
 
     obj->numverts = imagery->NumObjVerts(obj->objnum);
-    if (obj->verttype == D3DVT_VERTEX)
-        obj->verts = new hmm_vec3[obj->numverts];
-    else if (obj->verttype == D3DVT_LVERTEX)
-        obj->lverts = new D3DLVERTEX[obj->numverts];
-    else if (obj->verttype == D3DVT_TLVERTEX)
-        obj->tlverts = new D3DTLVERTEX[obj->numverts];
+    if (obj->verttype == ERender3DVertex::Vertex)
+        obj->verts = new S3DVertex[obj->numverts];
+    else if (obj->verttype == ERender3DVertex::LitVertex)
+        obj->verts = new S3DLVertex[obj->numverts];
+    else if (obj->verttype == ERender3DVertex::TLVertex)
+        obj->verts = new S3DTLVertex[obj->numverts];
     imagery->GetObjVerts(obj->objnum, obj->verts, 0, 0, obj->verttype);
 }
 
-void TCharAnimator::GetImFaces(PT3DImagery imagery, PS3DAnimObj obj)
+void TCharAnimator::GetImFaces(T3DImagery* imagery, S3DAnimObj* obj)
 {
     obj->flags |= (OBJ3D_FACES | OBJ3D_COPYFACES | OBJ3D_OWNSFACES);
 
@@ -450,11 +459,11 @@ void TCharAnimator::GetImFaces(PT3DImagery imagery, PS3DAnimObj obj)
 
 void TCharAnimator::RenderShadow()
 {
-    PS3DAnimObj obj;
+    S3DAnimObj* obj;
     obj = GetNewImObject(utilityimagery, 0, OBJ3D_COPYVERTS | OBJ3D_COPYFACES);
     /*for(int32_t i = 0; i < obj->numverts; i++)
     {
-        obj->lverts[i].color = D3DRGBA(1.0f, 1.0f, 1.0f, 1.0f);
+        ((S3DLVertex*)obj->verts)[i].diffuse = PackARGB(1.0f, 1.0f, 1.0f, 1.0f);
     }*/
     
     hmm_mat4 pos;
@@ -463,7 +472,7 @@ void TCharAnimator::RenderShadow()
 
   // Scale shadow based on radius
     hmm_vec3 scl;
-    scl.x = scl.y = scl.z = (float)((PTCharacter)inst)->Radius() / 24.0f;
+    scl.x = scl.y = scl.z = (float)((TCharacter*)inst)->Radius() / 24.0f;
     D3DMATRIXScale(&obj->matrix, &scl);
 
   // Add in char's position
@@ -492,15 +501,15 @@ void TCharAnimator::RenderShadow()
 
 void TCharAnimator::RenderCombatFlashes()
 {
-    int32_t frame = ((PTCharacter)inst)->GetCombatFlashTicks();
+    int32_t frame = ((TCharacter*)inst)->GetCombatFlashTicks();
     if (!frame)
         return;
 
-    PS3DAnimObj obj;
+    S3DAnimObj* obj;
     obj = GetNewImObject(utilityimagery, 1, OBJ3D_COPYVERTS | OBJ3D_COPYFACES);
     /*for(int32_t i = 0; i < obj->numverts; i++)
     {
-        obj->lverts[i].color = D3DRGBA(1.0f, 1.0f, 1.0f, 1.0f);
+        ((S3DLVertex*)obj->verts)[i].diffuse = PackARGB(1.0f, 1.0f, 1.0f, 1.0f);
     }*/
     
     hmm_mat4 pos;
@@ -548,9 +557,9 @@ void TCharAnimator::RenderBloodyChunks()
 
 void TCharAnimator::RenderVisionIndicator()
 {
-    if (!(((PTCharacter)inst)->CanSeeCharacter(Player, -1)))
+    if (!(((TCharacter*)inst)->CanSeeCharacter(Player, -1)))
     {
-        PS3DAnimObj obj;
+        S3DAnimObj* obj;
         S3DPoint charpos;
         hmm_vec3 translate_vector, head_pos;
         hmm_vec3 scl;
@@ -590,8 +599,8 @@ void TCharAnimator::RenderVisionIndicator()
         facing_angle = ((float)inst->GetFace()) * ((float)M_PI / 127.0f);
 
         // scale first: base it on the character's maximum sight range
-        scl.y = 128.0f / (float)(((PTCharacter)inst)->GetCharData())->sightangle;
-        scl.x = ((float)(((PTCharacter)inst)->GetCharData())->sightmax / 100.0f) + 1.0f;
+        scl.y = 128.0f / (float)(((TCharacter*)inst)->GetCharData())->sightangle;
+        scl.x = ((float)(((TCharacter*)inst)->GetCharData())->sightmax / 100.0f) + 1.0f;
         D3DMATRIXScale(&obj->matrix, &scl);
 
 
@@ -629,10 +638,10 @@ void TCharAnimator::RenderVisionIndicator()
 
 
         // offset the texture u-coordinate so that the visor changes color appropriately
-        tmp_shiftval = (float)(((PTCharacter)inst)->LastGlimpse() / 100.0f);
+        tmp_shiftval = (float)(((TCharacter*)inst)->LastGlimpse() / 100.0f);
         if (tmp_shiftval > 1.0f) tmp_shiftval = 1.0f;
         if (tmp_shiftval < 0.0f) tmp_shiftval = 0.0f;
-        
+
         if (visindicator_shiftval < tmp_shiftval) visindicator_shiftval += 0.033f;
         else visindicator_shiftval -= 0.033f;
         if (visindicator_shiftval > 0.999f) visindicator_shiftval = 0.999f;
@@ -640,7 +649,7 @@ void TCharAnimator::RenderVisionIndicator()
 
         for(int32_t k = 0; k < obj->numverts; k++)
         {
-            obj->lverts[k].tu = visindicator_shiftval;
+            ((S3DLVertex*)obj->verts)[k].tu = visindicator_shiftval;
         }
 
 
@@ -655,7 +664,7 @@ void TCharAnimator::RenderVisionIndicator()
 // * WeaponSwipe Functions and Attachments *
 // *****************************************
 
-PT3DImagery TCharAnimator::GetWeaponImagery(int32_t objnum)
+T3DImagery* TCharAnimator::GetWeaponImagery(int32_t objnum)
 {
     if (objnum == -1)
         return nullptr;
@@ -666,12 +675,12 @@ PT3DImagery TCharAnimator::GetWeaponImagery(int32_t objnum)
     TObjectInstance* oi = player->GetEquip(EQ_PRIMEHAND);
     if (!oi)
         return nullptr;
-            
+
 //      if (oi->GetImagery()->ImageryId() != OBJIMAGE_MESH3D)
 //          return 0;
 
-    PT3DImagery equipimagery = (PT3DImagery)oi->GetImagery();
-    
+    T3DImagery* equipimagery = (T3DImagery*)oi->GetImagery();
+
     return equipimagery;
 }
 
@@ -691,7 +700,7 @@ int32_t TCharAnimator::GetWeaponNum()
 //      if (oi->GetImagery()->ImageryId() != OBJIMAGE_MESH3D)
 //          return 0;
 
-    PT3DImagery equipimagery = (PT3DImagery)oi->GetImagery();
+    T3DImagery* equipimagery = (T3DImagery*)oi->GetImagery();
     SImageryHeader* equipheader = equipimagery->GetHeader();
 
   // Find equipment state for player's body type
@@ -749,12 +758,12 @@ int32_t TCharAnimator::GetWeaponNum()
 int32_t TCharAnimator::GetWeaponNumVerts()
 {
     int32_t weaponnum = GetWeaponNum();
-    PT3DImagery imagery = GetWeaponImagery(weaponnum);
-            
+    T3DImagery* imagery = GetWeaponImagery(weaponnum);
+
     if (imagery)
     {
         return imagery->NumVerts();
-    }           
+    }
     else if (inst->ObjClass() != OBJCLASS_PLAYER)
     // this is a character, not a player (no weapon equiped)
     {
@@ -765,8 +774,8 @@ int32_t TCharAnimator::GetWeaponNumVerts()
             weaponnum = GetObjectNum("ogrokaxe");
         if (weaponnum >= 0)
         {
-            PS3DAnimObj weaponobj = GetObject(weaponnum);
-            GetVerts(weaponobj, D3DVT_LVERTEX);
+            S3DAnimObj* weaponobj = GetObject(weaponnum);
+            GetVerts(weaponobj, ERender3DVertex::LitVertex);
             return weaponobj->numverts;
         }
 
@@ -775,19 +784,19 @@ int32_t TCharAnimator::GetWeaponNumVerts()
     return 0;
 }
 
-LPD3DLVERTEX TCharAnimator::GetWeaponVertices(int32_t len)
+S3DLVertex* TCharAnimator::GetWeaponVertices(int32_t len)
 {
     if (len <= 0)
         return nullptr;
 
     int32_t weaponnum = GetWeaponNum();
-    PT3DImagery imagery = GetWeaponImagery(weaponnum);
-        
+    T3DImagery* imagery = GetWeaponImagery(weaponnum);
+
     if (imagery)
     {
-        LPD3DLVERTEX verts;
-        verts = new D3DLVERTEX[len];
-        imagery->GetObjVerts(weaponnum, verts, 0, 0, D3DVT_LVERTEX);
+        S3DLVertex* verts;
+        verts = new S3DLVertex[len];
+        imagery->GetObjVerts(weaponnum, verts, 0, 0, ERender3DVertex::LitVertex);
 
         return verts;
     }
@@ -801,9 +810,9 @@ LPD3DLVERTEX TCharAnimator::GetWeaponVertices(int32_t len)
             weaponnum = GetObjectNum("ogrokaxe");
         if (weaponnum >= 0)
         {
-            PS3DAnimObj weaponobj = GetObject(weaponnum);
-            GetVerts(weaponobj, D3DVT_LVERTEX);
-            return weaponobj->lverts;
+            S3DAnimObj* weaponobj = GetObject(weaponnum);
+            GetVerts(weaponobj, ERender3DVertex::LitVertex);
+            return (S3DLVertex*)weaponobj->verts;
         }
     }
     return nullptr;
@@ -834,7 +843,7 @@ void TCharAnimator::SetupWeaponSwipe()
 
     p.charanim = this;
 
-    PSCharData chardata = ((PTCharacter)inst)->GetCharData();
+    SCharData* chardata = ((TCharacter*)inst)->GetCharData();
     if (chardata->swipecolor.red == 0 &&
         chardata->swipecolor.green == 0 &&
         chardata->swipecolor.blue == 0)
@@ -851,7 +860,7 @@ void TCharAnimator::SetupWeaponSwipe()
     weaponswipe.Init(&p);
 }
 
-void TWeaponSwipe::Init(PSWeaponSwipeParams p)
+void TWeaponSwipe::Init(SWeaponSwipeParams* p)
 {
     initialized = true;
     r = p->r;
@@ -882,9 +891,9 @@ void TWeaponSwipe::Init(PSWeaponSwipeParams p)
 
     // Paraphrased GetVerts
     maxverts = (maxpoints - 1) * smooth * 2;
-    obj->numverts = maxverts;   
-    obj->lverts = new D3DLVERTEX[obj->numverts];
-    obj->verttype = D3DVT_LVERTEX;
+    obj->numverts = maxverts;
+    obj->verts = new S3DLVertex[obj->numverts];
+    obj->verttype = ERender3DVertex::LitVertex;
 
     // Paraphrased GetFaces
     obj->numfaces = (maxsegs * 2);
@@ -897,11 +906,11 @@ void TWeaponSwipe::Init(PSWeaponSwipeParams p)
         obj->faces[i].v3 = i + 2;
     }
 
-  // Set start and number of faces for texture 0 (no texture)   
+  // Set start and number of faces for texture 0 (no texture)
     obj->texfaces[0] = 0;
     obj->numtexfaces[0] = obj->numfaces;
 
-    obj->primtype = D3DPT_TRIANGLELIST;
+    obj->primtype = ERender3DPrim::TriangleList;
 
     for (i = 0; i < maxsegs + 1; i++)
     {
@@ -928,6 +937,7 @@ void TWeaponSwipe::GenerateStrip()
     float wfade = (float)(4.0f / maxverts), ratio = 0.0f, smoothinv = (float)(1.0f / smooth);
     hmm_vec3 avert; // your eyes
     int32_t o, k, i, vn = 0;
+    S3DLVertex* lverts = (S3DLVertex*)obj->verts;
     for (o = 0; o < maxpoints - 2; o++)
     {
         ratio = 0.0f;
@@ -936,10 +946,10 @@ void TWeaponSwipe::GenerateStrip()
             for (k = 0; k < 2; k++)
             {
                 spline(&avert, ratio, &points[k][max(0, o - 1)], &points[k][o], &points[k][o + 1], &points[k][o + 2]);
-                obj->lverts[vn].x = avert.x;
-                obj->lverts[vn].y = avert.y;
-                obj->lverts[vn].z = avert.z;
-                obj->lverts[vn].color = D3DRGBA(startr, startg, startb, alpha);
+                lverts[vn].pos.x = avert.x;
+                lverts[vn].pos.y = avert.y;
+                lverts[vn].pos.z = avert.z;
+                lverts[vn].diffuse = PackARGB(startr, startg, startb, alpha);
                 vn++;
                 if (startr > r)
                     startr -= wfade;
@@ -1088,11 +1098,11 @@ void TWeaponSwipe::Render()
     SaveBlendState();
 
     // set the new render flags
-    TRY_D3D(Scene3D.SetRenderState(D3DRENDERSTATE_CULLMODE, D3DCULL_NONE));
-    TRY_D3D(Scene3D.SetRenderState(D3DRENDERSTATE_SRCBLEND, D3DBLEND_SRCALPHA));
-    TRY_D3D(Scene3D.SetRenderState(D3DRENDERSTATE_DESTBLEND, D3DBLEND_INVSRCALPHA));
-    TRY_D3D(Scene3D.SetRenderState(D3DRENDERSTATE_ALPHABLENDENABLE, true));
-    TRY_D3D(Scene3D.SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, false));
+    Scene3D.SetRenderState(ERender3DState::Cull,       0 /* none */);
+    Scene3D.SetRenderState(ERender3DState::SrcBlend,   (uint32_t)ERender3DBlend::SrcAlpha);
+    Scene3D.SetRenderState(ERender3DState::DstBlend,   (uint32_t)ERender3DBlend::InvSrcAlpha);
+    Scene3D.SetRenderState(ERender3DState::AlphaBlend, 1);
+    Scene3D.SetRenderState(ERender3DState::ZWriteEnable, 0);
 
     //charanim->ResetExtents();
     GenerateStrip();
@@ -1106,7 +1116,7 @@ void TWeaponSwipe::Render()
 hmm_mat4* TWeaponSwipe::GetCharsWeaponMatrix()
 {
     int32_t weaponnum;
-    PS3DAnimObj weaponobj;
+    S3DAnimObj* weaponobj;
 
     weaponnum = charanim->GetObjectNum("weapon");
 
@@ -1121,7 +1131,7 @@ hmm_mat4* TWeaponSwipe::GetCharsWeaponMatrix()
         hmm_mat4 pos;
         charanim->MakeMatrix(&pos);                 // Get character position
         weaponobj = charanim->GetObject(weaponnum);
-        PTCharacter inst = (PTCharacter)charanim->GetObjInst();
+        TCharacter* inst = (TCharacter*)charanim->GetObjInst();
         charanim->Get3DImagery()->CalcObjectMatrix(weaponobj, ((TObjectInstance*)inst)->GetState(), inst->GetFrame(), &pos);
         return &weaponobj->matrix;
     }

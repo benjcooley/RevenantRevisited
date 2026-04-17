@@ -4,13 +4,14 @@
 // *              mosaicsurf.cpp - 3D Surface Include File                 *
 // *************************************************************************
 
-#include <windows.h>
-
-#include "revenant.h"
 #include "mosaicsurf.h"
-#include "multisurface.h"
+
+#include <cstring>
+
 #include "bitmap.h"
 #include "bmsurface.h"
+#include "multisurface.h"
+#include "revenant.h"
 
 TMosaicSurface::TMosaicSurface()
 {
@@ -210,9 +211,9 @@ bool TMosaicSurface::Initialize(
 // its own local origin and clipping rectangle.  This is very useful for... say.. 
 // a surface used simultaneously by two different threads.
 
-bool TMosaicSurface::Initialize(PTMosaicSurface clone, uint32_t ncreateflags)
+bool TMosaicSurface::Initialize(TMosaicSurface* clone, uint32_t ncreateflags)
 {
-    Initialize(clone->tilex, clone->tiley, 
+    Initialize(clone->tilex, clone->tiley,
         clone->numtilex, clone->numtiley, ncreateflags | MOSAICSURF_ISCLONE);
 
     TSurface* vsurf, zsurf, nsurf;
@@ -223,27 +224,30 @@ bool TMosaicSurface::Initialize(PTMosaicSurface clone, uint32_t ncreateflags)
     {
       for (x = 0, offx = 0; x < numtilex; x++, surf++, offx += tiley)
       {
-    
-        PTMultiSurface tile = clone->GetTile(x, y);
+
+        TMultiSurface* tile = clone->GetTile(x, y);
         vsurf = zsurf = nsurf = nullptr;
 
         if ((createflags & MOSAICSURF_CLONEGRAPHICS) && tile->GetGraphicsBuffer())
         {
+            TSurface* gb = tile->GetGraphicsBuffer();
             if (clone->createflags & MOSAICSURF_BMSURFACE)
                 vsurf = new TBitmapSurface(
-                    ((PTBitmapSurface)tile->GetGraphicsBuffer())->GetBitmap());
+                    ((TBitmapSurface*)gb)->GetBitmap());
             else
-                vsurf = new TSurface(tile->GetGraphicsBuffer()->GetSGImage());
+                vsurf = new TSurface(gb->GetSGImage(), gb->Width(), gb->Height(), gb->BitsPerPixel());
             (*surf)->SetGraphicsBuffer(vsurf);
         }
         if ((createflags & MOSAICSURF_CLONEZBUFFER) && tile->GetZBuffer())
         {
-            zsurf = new TSurface(tile->GetZBuffer()->GetSGImage());
+            TSurface* zb = tile->GetZBuffer();
+            zsurf = new TSurface(zb->GetSGImage(), zb->Width(), zb->Height(), zb->BitsPerPixel());
             (*surf)->SetZBuffer(zsurf);
         }
         if ((createflags & MOSAICSURF_CLONENORMALS) && tile->GetNormalBuffer())
         {
-            nsurf = new TSurface(tile->GetNormalBuffer()->GetSGImage());
+            TSurface* nb = tile->GetNormalBuffer();
+            nsurf = new TSurface(nb->GetSGImage(), nb->Width(), nb->Height(), nb->BitsPerPixel());
             (*surf)->SetNormalBuffer(nsurf);
         }
 
@@ -327,7 +331,7 @@ void TMosaicSurface::SetClipMode(int32_t mode)
 }
 
 // Copies specified bitmap to current bitmap
-bool TMosaicSurface::ParamDraw(PSDrawParam dp, PTBitmap bitmap)
+bool TMosaicSurface::ParamDraw(SDrawParam* dp, TBitmap* bitmap)
 {
     SDrawParam dpv = *dp;
     bool drew = false;
@@ -377,9 +381,9 @@ bool TMosaicSurface::ParamDraw(PSDrawParam dp, PTBitmap bitmap)
     return drew;
 }
 
-// Blits from surface to surface. RECT sets size of blit. 
+// Blits from surface to surface. RECT sets size of blit.
 // X & Y specifies dest. origin
-bool TMosaicSurface::ParamBlit(PSDrawParam dp, TSurface* surface, int32_t ddflags, LPDDBLTFX fx)
+bool TMosaicSurface::ParamBlit(SDrawParam* dp, TSurface* surface, int32_t ddflags)
 {
     SDrawParam dpv = *dp;
     bool drew = false;
@@ -389,16 +393,16 @@ bool TMosaicSurface::ParamBlit(PSDrawParam dp, TSurface* surface, int32_t ddflag
 
   // Allow special case of blitting from one mosaic surface with identical size and tile
   // layout to another!!
-    PTMosaicSurface mosaicsrc = nullptr;
+    TMosaicSurface* mosaicsrc = nullptr;
     if (surface && surface->SurfaceType() == SURFACE_MOSAIC)
     {
-        mosaicsrc = (PTMosaicSurface)surface;
+        mosaicsrc = (TMosaicSurface*)surface;
         if (mosaicsrc->tilex != tilex || mosaicsrc->tiley != tiley ||
             mosaicsrc->numtilex != numtilex || mosaicsrc->numtiley != numtiley)
                 FatalError("Attempt to blit between non-identical mosaic surfaces");
     }
 
-    if (!ParamBlitSetup(dpv, surface, ddflags, fx))
+    if (!ParamBlitSetup(dpv, surface, ddflags))
         return false;
 
     memset(&db, 0, sizeof(SDrawBlock));
@@ -443,7 +447,7 @@ bool TMosaicSurface::ParamBlit(PSDrawParam dp, TSurface* surface, int32_t ddflag
             if (mosaicsrc)
                 src = mosaicsrc->GetTile(tx, ty);
 
-            drew |= (*surf)->ParamBlit(&dpa, src, ddflags, fx);
+            drew |= (*surf)->ParamBlit(&dpa, src, ddflags);
           }
         }
     }
@@ -451,9 +455,9 @@ bool TMosaicSurface::ParamBlit(PSDrawParam dp, TSurface* surface, int32_t ddflag
     return drew;
 }
 
-// Blits from surface to surface. RECT sets size of blit. 
+// Blits from surface to surface. RECT sets size of blit.
 // X & Y specifies dest. origin
-bool TMosaicSurface::ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t ddflags, LPDDBLTFX fx)
+bool TMosaicSurface::ParamGetBlit(SDrawParam* dp, TSurface* surface, int32_t ddflags)
 {
     SDrawParam dpv = *dp;
     bool drew = false;
@@ -467,7 +471,7 @@ bool TMosaicSurface::ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t ddf
 
   // Allow special case of blitting from one mosaic surface with identical size and tile
   // layout to another!!
-    PTMosaicSurface mosaicdest = nullptr;
+    TMosaicSurface* mosaicdest = nullptr;
     if (surface->UseGetBlit())
     {
         bool err = false;
@@ -475,7 +479,7 @@ bool TMosaicSurface::ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t ddf
             err = true;
         if (!err)
         {
-            mosaicdest = (PTMosaicSurface)surface;
+            mosaicdest = (TMosaicSurface*)surface;
             if (mosaicdest->tilex != tilex || mosaicdest->tiley != tiley ||
                 mosaicdest->numtilex != numtilex || mosaicdest->numtiley != numtiley)
                 err = true;
@@ -484,7 +488,7 @@ bool TMosaicSurface::ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t ddf
             FatalError("Attempt to blit between non-identical mosaic surfaces");
     }
 
-    if (!surface->ParamBlitSetup(dpv, this, ddflags, fx))
+    if (!surface->ParamBlitSetup(dpv, this, ddflags))
         return false;
 
     memset(&db, 0, sizeof(SDrawBlock));
@@ -515,7 +519,7 @@ bool TMosaicSurface::ParamGetBlit(PSDrawParam dp, TSurface* surface, int32_t ddf
             if (mosaicdest)
                 dest = mosaicdest->GetTile(tx, ty);
 
-            drew |= dest->ParamBlit(&dpa, *surf, ddflags, fx);
+            drew |= dest->ParamBlit(&dpa, *surf, ddflags);
           }
         }
     }

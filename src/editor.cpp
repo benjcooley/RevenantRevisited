@@ -59,8 +59,9 @@ HANDLE TConsolePane::cmdevents[2];          // Events used by the command proces
 int32_t TConsolePane::cmdchar;                  // Character passed to the command processor thread
 char *TConsolePane::cmdline;                // Pointer to the beginning of the command line
 
-extern LPDIRECT3DDEVICE Device;         // Direct3D device
-extern bool             BlitHardware;
+// The legacy Direct3D device + BlitHardware externs were declared but never
+// referenced in this TU; the 3D device is owned by T3DScene under the
+// sokol_gfx port.
 
 /* general buffer for formated strings */
 char buf[1024];

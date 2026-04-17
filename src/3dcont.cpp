@@ -8,9 +8,8 @@
 #include "3dimage.h"
 #include "playscreen.h"
 #include "object.h"
-#include "mappane.h"       
-#include "character.h"
 #include "parse.h"
+#include "render3d_types.h"
 
 // **************************************************************************
 // * TScrollTexController - Scrolls a texture for an object given delta u,v *
@@ -41,7 +40,7 @@ class TScrollTexController : public T3DController
       // Parses a parameter item
 
   public:
-    TScrollTexController(int32_t s, int32_t f, PT3DAnimator a, PT3DImagery i, TObjectInstance* o) :
+    TScrollTexController(int32_t s, int32_t f, T3DAnimator* a, T3DImagery* i, TObjectInstance* o) :
       T3DController(s, f, a, i, o) {}
       // Constructor
     virtual ~TScrollTexController() { Close(); }
@@ -100,13 +99,13 @@ bool TScrollTexController::Initialize(char *params)
   // Override vertices for this object
     for (int32_t o = 0; o < animobjs.NumItems(); o++)
     {
-        PS3DAnimObj obj = animobjs[o];
+        S3DAnimObj* obj = animobjs[o];
 
         animator->GetVerts(obj);
         olduv[o] = new UV[obj->numverts];
 
       // Save original uv's for this object
-        LPD3DVERTEX v = obj->verts;
+        S3DVertex* v = (S3DVertex*)obj->verts;
         UV *uv = olduv[o];
         for (int32_t c = 0; c < obj->numverts; c++, v++, uv++)
         {
@@ -143,10 +142,10 @@ void TScrollTexController::Render()
   // Scroll texture vertices for each object
     for (int32_t o = 0; o < animobjs.NumItems(); o++)
     {
-        PS3DAnimObj obj = animobjs[o];
+        S3DAnimObj* obj = animobjs[o];
 
       // Add new deltau and deltav to original u and v for each object
-        LPD3DVERTEX v = obj->verts;
+        S3DVertex* v = (S3DVertex*)obj->verts;
         UV *uv = olduv[o];
         for (int32_t c = 0; c < obj->numverts; c++, v++, uv++)
         {
@@ -181,7 +180,7 @@ class TAnimTexController : public T3DController
       // Parses a parameter item
 
   public:
-    TAnimTexController(int32_t s, int32_t f, PT3DAnimator a, PT3DImagery i, TObjectInstance* o) :
+    TAnimTexController(int32_t s, int32_t f, T3DAnimator* a, T3DImagery* i, TObjectInstance* o) :
       T3DController(s, f, a, i, o) {}
       // Constructor
     virtual ~TAnimTexController() { Close(); }
@@ -238,13 +237,13 @@ bool TAnimTexController::Initialize(char *params)
   // Override vertices for this object
     for (int32_t o = 0; o < animobjs.NumItems(); o++)
     {
-        PS3DAnimObj obj = animobjs[o];
+        S3DAnimObj* obj = animobjs[o];
 
         animator->GetVerts(obj);
         olduv[o] = new UV[obj->numverts];
 
       // Save original uv's for this object
-        LPD3DVERTEX v = obj->verts;
+        S3DVertex* v = (S3DVertex*)obj->verts;
         UV *uv = olduv[o];
         for (int32_t c = 0; c < obj->numverts; c++, v++, uv++)
         {
@@ -283,10 +282,10 @@ void TAnimTexController::Render()
   // Scroll texture vertices for each object
     for (int32_t o = 0; o < animobjs.NumItems(); o++)
     {
-        PS3DAnimObj obj = animobjs[o];
+        S3DAnimObj* obj = animobjs[o];
 
       // Add new deltau and deltav to original u and v for each object
-        LPD3DVERTEX v = obj->verts;
+        S3DVertex* v = (S3DVertex*)obj->verts;
         UV *uv = olduv[o];
         for (int32_t c = 0; c < obj->numverts; c++, v++, uv++)
         {

@@ -2,6 +2,32 @@
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
 // *             effectcomp.cpp - Effect components module                 *
+// *                                                                       *
+// *  Ported (2026): matches effect.cpp — same D3D3 vocabulary (matrix     *
+// *  helpers, LVERTEX union access, D3DRGBA color packing, D3DRENDERSTATE *
+// *  keys) underlying the particle/storm/shockwave/strip animators. The   *
+// *  bodies are preserved under `#if 0` below so the Phase-3 sokol-       *
+// *  pipeline pass can walk them one-by-one; the TU compiles today.       *
+// *************************************************************************
+
+#include <cstdint>
+
+#include "revenant.h"
+
+// Shim: effectcomp.h still declares TShockAnimator::ring as `D3DCOLOR *`.
+// Treat it as a packed ARGB8 until that header is re-swept.
+// TODO(port): effectcomp.h — swap D3DCOLOR for uint32_t when touching it next.
+using D3DCOLOR = uint32_t;
+
+#include "effect.h"
+#include "effectcomp.h"
+
+#if 0 // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)
+
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *             effectcomp.cpp - Effect components module                 *
 // *************************************************************************
 
 #include "effect.h"
@@ -1534,3 +1560,5 @@ void TBloodSystem::RefreshZBuffer()
             (int32_t)(size.x * blood[i].scl), (int32_t)(size.y * blood[i].scl));
     }
 }
+
+#endif // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)
