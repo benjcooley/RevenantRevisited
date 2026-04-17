@@ -243,7 +243,7 @@ bool T3DScene::Close()
     return true;
 }
 
-void T3DScene::RestoreZBuffer(SRect& r)
+void T3DScene::RestoreZBuffer(const SRect& r)
 {
     if (NoScrollZBuffer)
         MapPane.DrawRestoreRect(r.x(), r.y(), r.w(), r.h(),
@@ -255,7 +255,7 @@ void T3DScene::RestoreZBuffer(SRect& r)
 #endif
 }
 
-void T3DScene::SetCameraPos(S3DPoint& pos, int32_t /*zdist*/)
+void T3DScene::SetCameraPos(const S3DPoint& pos, int32_t /*zdist*/)
 {
     if (!initialized)
         return;
@@ -368,7 +368,7 @@ void T3DScene::SetAmbientColor(RSColor color)
 
 // ************ Light Functions **************
 
-int32_t T3DScene::AddLight(S3DPoint& pos, SColor color, int32_t intensity, int32_t multiplier)
+int32_t T3DScene::AddLight(const S3DPoint& pos, SColor color, int32_t intensity, int32_t multiplier)
 {
     if (!initialized)
         return -1;
@@ -423,7 +423,7 @@ bool T3DScene::SetLightColor(int32_t lightid, SColor color)
     return true;
 }
 
-bool T3DScene::SetLightPosition(int32_t lightid, S3DPoint& pos)
+bool T3DScene::SetLightPosition(int32_t lightid, const S3DPoint& pos)
 {
     if (!initialized || lightid < 0 ||
         lightid >= LightArray.NumItems() ||
@@ -433,7 +433,7 @@ bool T3DScene::SetLightPosition(int32_t lightid, S3DPoint& pos)
     return true;
 }
 
-int32_t T3DScene::GetNumLights()
+int32_t T3DScene::GetNumLights() const
 {
     if (!initialized) return 0;
     return LightArray.NumItems();
@@ -579,7 +579,7 @@ bool T3DScene::RemoveAnimator(uint32_t animid)
     return true;
 }
 
-int32_t T3DScene::GetNumAnimators()
+int32_t T3DScene::GetNumAnimators() const
 {
     if (!initialized) return 0;
     return AnimatorArray.NumItems();
@@ -600,7 +600,7 @@ void T3DScene::GetTextureFormats()
     // No device enumeration in the portable path — sokol chooses formats.
 }
 
-void T3DScene::GetClosestTextureFormat(SSurfaceDesc* srcsd, SSurfaceDesc* dstsd)
+void T3DScene::GetClosestTextureFormat(const SSurfaceDesc* srcsd, SSurfaceDesc* dstsd)
 {
     if (!initialized || !srcsd || !dstsd)
         return;
@@ -639,7 +639,7 @@ static inline int32_t getmaskshift(uint32_t mask)
 }
 
 void T3DScene::ConvertTexture(
-    SSurfaceDesc* srcsd, void* srcpixels, void* /*srcpal*/,
+    const SSurfaceDesc* srcsd, const void* srcpixels, const void* /*srcpal*/,
     SSurfaceDesc* dstsd, void* dstpixels, void* /*dstpal*/)
 {
     if (!initialized || !srcsd || !dstsd || !srcpixels || !dstpixels)
@@ -695,7 +695,7 @@ bool T3DScene::SetRenderState(ERender3DState rs, uint32_t data)
     return true;
 }
 
-bool T3DScene::GetRenderState(ERender3DState rs, uint32_t* data)
+bool T3DScene::GetRenderState(ERender3DState rs, uint32_t* data) const
 {
     if (!data) return false;
     uint32_t idx = (uint32_t)rs;
@@ -714,7 +714,7 @@ bool T3DScene::SetLightState(ERender3DLightState ls, uint32_t data)
     return true;
 }
 
-bool T3DScene::GetLightState(ERender3DLightState ls, uint32_t* data)
+bool T3DScene::GetLightState(ERender3DLightState ls, uint32_t* data) const
 {
     if (!data) return false;
     uint32_t idx = (uint32_t)ls;
@@ -725,7 +725,7 @@ bool T3DScene::GetLightState(ERender3DLightState ls, uint32_t* data)
     return true;
 }
 
-bool T3DScene::SetTransform(ERender3DTransform ts, hmm_mat4* matrix)
+bool T3DScene::SetTransform(ERender3DTransform ts, const hmm_mat4* matrix)
 {
     if (!matrix) return false;
     uint32_t idx = (uint32_t)ts;
@@ -734,7 +734,7 @@ bool T3DScene::SetTransform(ERender3DTransform ts, hmm_mat4* matrix)
     return true;
 }
 
-bool T3DScene::GetTransform(ERender3DTransform ts, hmm_mat4* matrix)
+bool T3DScene::GetTransform(ERender3DTransform ts, hmm_mat4* matrix) const
 {
     if (!matrix) return false;
     uint32_t idx = (uint32_t)ts;
@@ -745,8 +745,8 @@ bool T3DScene::GetTransform(ERender3DTransform ts, hmm_mat4* matrix)
 
 bool T3DScene::DrawIndexedPrimitive(
     ERender3DPrim /*pt*/, ERender3DVertex /*vt*/,
-    void* /*v*/, uint32_t /*vc*/,
-    uint16_t* /*i*/, uint32_t /*ic*/, uint32_t /*flags*/)
+    const void* /*v*/, uint32_t /*vc*/,
+    const uint16_t* /*i*/, uint32_t /*ic*/, uint32_t /*flags*/)
 {
 #if 0 // TODO(port): allocate from dynamic sg_buffer, bind pipeline, draw — Phase 3
 #endif
@@ -755,7 +755,7 @@ bool T3DScene::DrawIndexedPrimitive(
 
 bool T3DScene::DrawPrimitive(
     ERender3DPrim /*pt*/, ERender3DVertex /*vt*/,
-    void* /*v*/, uint32_t /*vc*/, uint32_t /*flags*/)
+    const void* /*v*/, uint32_t /*vc*/, uint32_t /*flags*/)
 {
 #if 0 // TODO(port): allocate from dynamic sg_buffer, bind pipeline, draw — Phase 3
 #endif

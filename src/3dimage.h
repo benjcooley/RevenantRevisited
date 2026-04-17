@@ -199,7 +199,7 @@ class T3DImagery : public TObjectImagery
       // Creates renderer objects from the given S3DMesh pointer
     void ClearMesh();
       // Deletes 3D objects from the given mesh pointer
-    bool MeshInitialized() { return meshinitialized; }
+    bool MeshInitialized() const { return meshinitialized; }
     virtual bool Restore();
 
   // GENERAL NOTE: T3DImagery is instantiated once per imagery file and shared
@@ -237,7 +237,7 @@ class T3DImagery : public TObjectImagery
         hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl);
     void SetPrevState(int32_t pstate, int32_t pframe)
       { prevstate = pstate; prevframe = pframe; }
-    int32_t GetObjectParent(int32_t objnum, int32_t state) { return objects[objnum].parent[state]; }
+    int32_t GetObjectParent(int32_t objnum, int32_t state) const { return objects[objnum].parent[state]; }
     void BeginRender(bool clearbuf);
       // Called before any RenderObject() calls for an animator.
       // (The legacy second `cachebuf` argument is gone — the execute-buffer
@@ -257,7 +257,7 @@ class T3DImagery : public TObjectImagery
     void RemoveMaterial(int32_t matnum);
     void ClearMaterials();
   public:
-    int32_t NumMaterials() { return materials.NumItems(); }
+    int32_t NumMaterials() const { return materials.NumItems(); }
     void GetMaterial(int32_t matnum, S3DMat* mat);
     TMaterialHandle GetMaterialHandle(int32_t matnum);
     void SetMaterial(int32_t matnum, S3DMat* mat);
@@ -285,9 +285,9 @@ class T3DImagery : public TObjectImagery
     void GetExtents(SRenderRect* extents);
     void AddUpdateRect(SRenderRect* extents, int32_t uflags = UPDATE_RESTORE);
     void UpdateBoundingRect(TObjectInstance* oi, int32_t state, SRenderRect* extents);
-    int32_t NumTags() { return tags.NumItems(); }
-    S3DTag *GetTag(int32_t tagnum) { return &(tags[tagnum]); }
-    char *FindTag(char *name, int32_t state, int32_t frame = -1, int32_t *foundstate = nullptr, int32_t *foundframe = nullptr);
+    int32_t NumTags() const { return tags.NumItems(); }
+    S3DTag* GetTag(int32_t tagnum) { return &(tags[tagnum]); }
+    char* FindTag(const char* name, int32_t state, int32_t frame = -1, int32_t* foundstate = nullptr, int32_t* foundframe = nullptr);
 
     virtual bool GetZ(TObjectInstance* oi, TSurface* surface) { return true; }
     virtual bool AlwaysOnTop(TObjectInstance* oi) { return true; }
@@ -316,16 +316,16 @@ class T3DControllerBuilder
 {
   public:
     T3DControllerBuilder();
-    T3DControllerBuilder(char *name);
+    T3DControllerBuilder(const char* name);
     virtual T3DController* Build(int32_t ptagstate, int32_t ptagframe,
         T3DAnimator* panimator, T3DImagery* pimagery, TObjectInstance* pinst) { return nullptr; }
-    static T3DControllerBuilder* GetBuilder(char *name);
+    static T3DControllerBuilder* GetBuilder(const char* name);
 
   private:
     static int32_t numconttypes;
     static T3DControllerBuilder* builders[MAX3DCONTROLLERTYPES];
 
-    char *controllername;
+    char* controllername;
 };
 
 #define REGISTER_3DCONTROLLER(name, obj)                                        \
@@ -365,13 +365,13 @@ class T3DController
     virtual bool Initialize(char *params);
     virtual void Close();
 
-    int32_t TagState() { return tagstate; }
-    int32_t TagFrame() { return tagframe; }
-    T3DAnimator* GetAnimator() { return animator; }
-    T3DImagery* GetImagery() { return imagery; }
-    TObjectInstance* GetInstance() { return inst; }
-    int32_t NumObjects() { return animobjs.NumItems(); }
-    S3DAnimObj* GetObject(int32_t objnum) { return animobjs[objnum]; }
+    int32_t TagState() const { return tagstate; }
+    int32_t TagFrame() const { return tagframe; }
+    T3DAnimator* GetAnimator() const { return animator; }
+    T3DImagery* GetImagery() const { return imagery; }
+    TObjectInstance* GetInstance() const { return inst; }
+    int32_t NumObjects() const { return animobjs.NumItems(); }
+    S3DAnimObj* GetObject(int32_t objnum) const { return animobjs[objnum]; }
 
     virtual void Pulse() {}
     virtual void Render() {}
@@ -390,15 +390,15 @@ class T3DAnimatorBuilder
 {
   public:
     T3DAnimatorBuilder();
-    T3DAnimatorBuilder(char *name);
+    T3DAnimatorBuilder(const char* name);
     virtual T3DAnimator* Build(TObjectInstance* oi);
-    static T3DAnimatorBuilder* GetBuilder(char *name);
+    static T3DAnimatorBuilder* GetBuilder(const char* name);
 
   private:
     static int32_t numanimtypes;
     static T3DAnimatorBuilder* builders[MAX3DANIMATORTYPES];
 
-    char *animatorname;
+    char* animatorname;
 };
 
 #define REGISTER_3DANIMATOR(name, obj)                                          \
@@ -453,13 +453,13 @@ class T3DAnimator : public TObjectAnimator
     virtual void Initialize();
     virtual void Close();
 
-    uint32_t GetFlags() { return flags; }
+    uint32_t GetFlags() const { return flags; }
     void SetFlags(uint32_t newflags) { flags = newflags; }
-    T3DImagery* Get3DImagery() { return (T3DImagery*)image; }
+    T3DImagery* Get3DImagery() const { return (T3DImagery*)image; }
 
     virtual void RefreshControllers(int32_t state);
-    int32_t NumControllers() { return controllers.NumItems(); }
-    T3DController* GetController(int32_t num) { return controllers[num]; }
+    int32_t NumControllers() const { return controllers.NumItems(); }
+    T3DController* GetController(int32_t num) const { return controllers[num]; }
     void AddController(T3DController* cont) { controllers.Add(cont); }
     void RemoveController(int32_t num) { controllers.Collapse(num, true); }
 
@@ -475,21 +475,21 @@ class T3DAnimator : public TObjectAnimator
     void FreeVerts(S3DAnimObj* obj);
     void GetFaces(S3DAnimObj* obj);
     void FreeFaces(S3DAnimObj* obj);
-    int32_t NumObjects() { return animobjs.NumItems(); }
+    int32_t NumObjects() const { return animobjs.NumItems(); }
     S3DAnimObj* NewObject(int32_t objnum, int32_t flags = 0);
     int32_t AddObject(S3DAnimObj* obj);
     void RemoveObject(int32_t objnum);
-    int32_t GetObjectNum(char *name);
+    int32_t GetObjectNum(const char* name);
     S3DAnimObj* GetObject(int32_t objnum);
     bool IsObjectEnabled(int32_t objnum);
     void EnableObject(int32_t objnum, bool enable);
     bool RenderObject(S3DAnimObj* animobj, int32_t tex = -1, bool uselastmatrix = false)
       { return Get3DImagery()->RenderObject(animobj, state, frame, &matrix, tex, uselastmatrix); }
-    bool GetObjectMatrix(int32_t objnum, hmm_mat4 *m);
-    bool GetObjectPos(int32_t objnum, hmm_vec3 &v, hmm_vec3 *s = nullptr);
-    bool GetObjectPos(char *objname, hmm_vec3 &v, hmm_vec3 *s = nullptr);
-    bool GetObjectMapPos(int32_t objnum, S3DPoint &pos);
-    bool GetObjectMapPos(char *objname, S3DPoint &pos);
+    bool GetObjectMatrix(int32_t objnum, hmm_mat4* m);
+    bool GetObjectPos(int32_t objnum, hmm_vec3& v, hmm_vec3* s = nullptr);
+    bool GetObjectPos(const char* objname, hmm_vec3& v, hmm_vec3* s = nullptr);
+    bool GetObjectMapPos(int32_t objnum, S3DPoint& pos);
+    bool GetObjectMapPos(const char* objname, S3DPoint& pos);
 
   // Render functions
     virtual void RefreshZBuffer()
@@ -511,7 +511,7 @@ class T3DAnimator : public TObjectAnimator
     void UpdateBoundingRect(SRenderRect* extents)
       { if (flags & ANI3D_UPDATEBOUNDRECT)
             Get3DImagery()->UpdateBoundingRect(inst, state, extents); updated = true; }
-    bool WasUpdated() { return updated; }
+    bool WasUpdated() const { return updated; }
     void UpdateExtents()
       { GetExtents(&extents); AddUpdateRect(&extents); UpdateBoundingRect(&extents); }
     void RecordNewExtents(TObjectInstance* oi, int32_t state = -1, bool frontonly = false);

@@ -58,8 +58,8 @@ class TWeaponSwipe
     void Render();
     void Close();
     hmm_mat4* GetCharsWeaponMatrix();
-    bool GetInitialized() { return initialized; }
-    TCharAnimator* GetCharAnim() { return charanim; }
+    bool GetInitialized() const { return initialized; }
+    TCharAnimator* GetCharAnim() const { return charanim; }
 };
 
 
@@ -73,10 +73,10 @@ class TCharAnimator : public T3DAnimator
 {
   public:
     TCharAnimator(TObjectInstance* oi);
-    virtual ~TCharAnimator();
+    ~TCharAnimator() override;
 
-    virtual void Animate(bool draw);
-    virtual bool Render();
+    void Animate(bool draw) override;
+    bool Render() override;
     TWeaponSwipe* GetWeaponSwipe() { return &weaponswipe; }
       // get the weaponswipe
 
@@ -152,5 +152,5 @@ class TPlayerAnimator : public TCharAnimator
 {
   public:
     TPlayerAnimator(TObjectInstance* oi) : TCharAnimator(oi) {}
-    virtual ~TPlayerAnimator()              {}
+    ~TPlayerAnimator() override = default;
 };

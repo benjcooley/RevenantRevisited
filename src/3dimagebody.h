@@ -424,7 +424,7 @@ struct S3DMaterial
     sg_color    diffuse;
     sg_color    ambient;
     sg_color    specular;
-    sg_color    emmissive;
+    sg_color    emissive;
     float       power;
     uint32_t    hTexture;
     uint32_t    rampSize;

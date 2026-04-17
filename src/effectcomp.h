@@ -225,24 +225,23 @@ class TShockAnimator
     SShockParam params;             // describe the shockwave
     int32_t ring_count;                 // the number of rings
     int32_t vertex_count;               // the number of vertices
-    D3DCOLOR *ring;                 // the rings
-    hmm_vec3 init_scale;           // the original size of the scale
+    uint32_t* ring;                 // the rings (packed ARGB8 per ring)
+    hmm_vec3 init_scale;            // the original size of the scale
     bool done;                      // is it done animating
-    int32_t grow;                       // is it growing
+    int32_t grow;                   // is it growing
   public:
-    TShockAnimator()                // constructor
-    { done = true; }
-    virtual ~TShockAnimator()       // destructor
-    { delete [] ring; }
+    TShockAnimator()
+    { done = true; ring = nullptr; }
+    virtual ~TShockAnimator()
+    { delete[] ring; }
 
-    virtual void Set(SShockParam* nparams); // set the parameters
-    virtual void Init(T3DAnimator* anim, S3DAnimObj* o, int32_t rings, int32_t vertices);// init the animator
-    virtual void Animate();                 // animate the shockwave
-    virtual void RefreshZBuffer(int32_t tex_u, int32_t tex_v);// refresh the zbuffer
-    virtual void Render();                  // render the shockwave
-    bool IsDone()                           // check to see if the shockwave is done
-    { return done; }
-    void SetRingColor(int32_t ring_num, D3DCOLOR color)
+    virtual void Set(SShockParam* nparams);
+    virtual void Init(T3DAnimator* anim, S3DAnimObj* o, int32_t rings, int32_t vertices);
+    virtual void Animate();
+    virtual void RefreshZBuffer(int32_t tex_u, int32_t tex_v);
+    virtual void Render();
+    bool IsDone() const { return done; }
+    void SetRingColor(int32_t ring_num, uint32_t color)
     { ring[ring_num] = color; }
 };
 
