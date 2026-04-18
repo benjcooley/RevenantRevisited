@@ -22,17 +22,17 @@ _CLASSDEF(TPane)
 class TPane
 {
   private:
-    int32_t  x, y, width, height;               // Pane's position in screen coordinates
-    int32_t  newx, newy, newwidth, newheight;   // Size and position to change to on next frame
-    int32_t  oldscrollx, oldscrolly;// Previous scroll position
-    int32_t  scrollx, scrolly;      // Current scroll position
-    int32_t  newscrollx, newscrolly;// Next scroll position
-    TScreen* screen;            // Screen pane is on
-    bool isopen;                // Pane is currently active
-    bool hidden;                // Flag set if Pane is hidden
-    bool ignoreinput;           // To allow hidden panes to still process input
-    bool dirty;                 // Pane needs update
-    int32_t  backgroundbuffer;      // Background buffer index
+    int32_t  x, y, width, height;             // Pane's position in screen coordinates
+    int32_t  newx, newy, newwidth, newheight; // Size and position to change to on next frame
+    int32_t  oldscrollx, oldscrolly;          // Previous scroll position
+    int32_t  scrollx, scrolly;                // Current scroll position
+    int32_t  newscrollx, newscrolly;          // Next scroll position
+    TScreen* screen;                          // Screen pane is on
+    bool isopen;                              // Pane is currently active
+    bool hidden;                              // Flag set if Pane is hidden
+    bool ignoreinput;                         // To allow hidden panes to still process input
+    bool dirty;                               // Pane needs update
+    int32_t  backgroundbuffer;                // Background buffer index
 
    public:
 
@@ -198,7 +198,9 @@ class TScreen
     TScreen* nextscreen;                // Pointer to nextscreen
     bool firstframe;                    // True just after screen is initialized before first frame
     bool dirty;                         // Needs redraw
+    bool done = false;                  // Set by subclass when screen is ready to end (AppFrame transitions)
     int32_t screenframes;                   // Number of ticks since screen initialized
+    int64_t lastPulseLegacyFrame = -1;  // Last TTime::LegacyFrameCount() value a Pulse was emitted at
 
   public:
     TScreen();
@@ -267,12 +269,21 @@ class TScreen
 
   // Screen loops
     virtual bool TimerTick(bool draw);
-      // Performs required actions every timer tick (calls DrawBackground() and Animate())
-    virtual bool TimerLoop(int32_t ticks);
-      // Wait for ticks to pass (Calls TimerTick())
+      // Runs one non-blocking tick: catches up any pending 24Hz Pulses (via
+      // TTime::LegacyFrameCount), then DrawBackground/Animate. Called once per
+      // sokol AppFrame by revmain; subclasses rarely need to override.
+      // Returns !done — false means the screen has asked to end.
 
     static TScreen* ShowScreen(TScreen* screen, int32_t ticks);
-      // Shows screen
+      // Begins a screen: sets CurrentScreen and calls Initialize. Returns the
+      // screen on success (still running; driven by AppFrame) or nullptr on
+      // init failure. `ticks` is legacy and ignored. AppFrame is responsible
+      // for detecting IsDone() and calling EndCurrentScreen.
+    static void EndCurrentScreen();
+      // Tears down CurrentScreen and clears the global pointer.
+
+    [[nodiscard]] bool IsDone() const { return done; }
+    void SetDone(bool v = true) { done = v; }
 
   // Get screen frames
     int32_t FrameCount() { return screenframes; }

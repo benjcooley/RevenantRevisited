@@ -29,7 +29,7 @@ TTerrainTemplate::~TTerrainTemplate()
 
 bool TTerrainTemplate::Load()
 {
-    FILE *fp = popen(TEMPLATEFILENAME, "rb");
+    FILE *fp = rev_fopen(TEMPLATEFILENAME, "rb");
     if (!fp)
         return false;
 
@@ -111,7 +111,7 @@ bool TTerrainTemplate::Load()
 
 bool TTerrainTemplate::Save()
 {
-    FILE *fp = popen(TEMPLATEFILENAME, "wb");
+    FILE *fp = rev_fopen(TEMPLATEFILENAME, "wb");
     if (!fp)
         return false;
 
@@ -174,12 +174,12 @@ void TTerrainTemplate::ApplyTemplate(TObjectInstance* inst, TSector* sect, int32
     if (!inst || !sect)
         return;
 
-    char *name = inst->GetTypeName();
+    const char *name = inst->GetTypeName();
     int32_t foundlist[MAXFOUND];
     int32_t numfound = 0;
 
-    bool found = false;
-    for (int32_t t = 0; t < numtemplates && numfound < MAXFOUND; t++)
+    int32_t t;
+    for (t = 0; t < numtemplates && numfound < MAXFOUND; t++)
         for (int32_t n = 0; n < templates[t].numnames && numfound < MAXFOUND; n++)
             if (stricmp(templates[t].names[n], name) == 0)
                 foundlist[numfound++] = t;

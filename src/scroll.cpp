@@ -9,6 +9,7 @@
 #include "display.h"
 #include "bitmap.h"
 #include "font.h"
+#include "fonttable.h"
 #include "playscreen.h"
 
 REGISTER_BUILDER(TScroll)
@@ -114,7 +115,7 @@ bool TScrollPane::Initialize()
     numlines = 0;
 
     scrolldata = TMulti::LoadMulti("scroll.dat");
-    scrollfont = TFont::LoadFont(103);
+    scrollfont = FontTable->Bitmap("Scroll");
 
     SetScroll(scroll);      // recompute number of lines now that font is loaded up
 
@@ -263,7 +264,7 @@ bool TBookPane::Initialize()
     numlines = 0;
 
     scrolldata = TMulti::LoadMulti("book.dat");
-    scrollfont = TFont::LoadFont(103);
+    scrollfont = FontTable->Bitmap("Book");
 
     SetScroll(scroll);          // recompute number of lines now that font is loaded up
 

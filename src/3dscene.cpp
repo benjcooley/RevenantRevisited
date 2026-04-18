@@ -28,7 +28,7 @@ bool SpecularEnable = true;
 bool ZEnable = true;
 bool BilinearFilter = false;
 bool NoUpdateRects = false;
-bool MaxLights = 1;
+int32_t MaxLights = 1;
 bool UseDirLight = true;
 int32_t DirLightPercent = 85;
 bool Double3D, Triple3D;

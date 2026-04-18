@@ -197,7 +197,7 @@ class TConsolePane : public TTextPane
         // Gets a character from the input stream
     static int32_t GetLine(char *buffer, int32_t buffersize);
         // Gets an entire line from the input stream
-    static unsigned _stdcall CommandThread(void *arg);
+    static unsigned CommandThread(void *arg);
 
     PSChained head;                     // Chained mouse func list
     PSChained chained;                  // Node for list traversal
@@ -388,4 +388,4 @@ extern TEditStatusPane StatusBar;
 extern TEditToolsPane ToolBar;
 extern TEditClassPane ClassPane;
 
-#endif
+#endif // _EDITOR_H

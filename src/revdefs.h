@@ -439,5 +439,6 @@
 #define GRAVITY             (6 * ROLLOVER)  // distance / time^2
 #define TERMINAL_VELOCITY   (50 * ROLLOVER) // realism? pshaw
 
-// Map version
-#define MAP_VERSION     9
+// Map version — retail shipped v15 (adds 4-byte sessiontag between version
+// and numobjects). The pre-release 1998 source left this at 9.
+#define MAP_VERSION     15

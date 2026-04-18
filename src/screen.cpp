@@ -15,6 +15,7 @@
 #include "mappane.h"
 #include "screen.h"
 #include "sound.h"
+#include "time.h"
 
 int32_t cursorx = 0;        // Mouse cursor positions
 int32_t cursory = 0;
@@ -35,22 +36,18 @@ TScreen::~TScreen()
 
 bool TScreen::BeginScreen()
 {
-    int32_t loop;
-
-    Display->InitBackgroundSystem();
+    // TODO(port): InitBackgroundSystem removed — CPU background caching obsolete under sokol GPU compositor.
     firstframe = true;  // Tell timer tick function not to flip a page the first time
+    done = false;
+    lastPulseLegacyFrame = TTime::LegacyFrameCount() - 1;  // catch up to current on first tick
 
     panes.Clear();
     screenframes = 0;
-    for (loop = 0; loop < NUMEXCLUSIVEPANES; loop++)
+    for (int32_t loop = 0; loop < NUMEXCLUSIVEPANES; loop++)
         exclusive[loop] = 0;
     numexclusive = 0;
 
-    bool ok = Initialize();
-    if (!ok)
-        return false;
-
-    return true;
+    return Initialize();
 }
 
 void TScreen::EndScreen()
@@ -70,7 +67,7 @@ void TScreen::EndScreen()
 // 'loading' screens which have to update from within a single timer tick).
 void TScreen::PutToScreen()
 {
-    Display->PutToScreen(0, 0, Display->Width(), Display->Height());
+    // TODO(port): Display->PutToScreen removed — sokol handles presentation.
 }
 
 // *************************
@@ -439,326 +436,93 @@ void TScreen::Joystick(int32_t key, bool down)
 // * Screen System Functions *
 // ***************************
 
-TScreen* TScreen::ShowScreen(TScreen* screen, int32_t ticks)
+// Non-blocking screen startup. Under sokol_app there is no message pump for us
+// to own, so ShowScreen no longer runs a TimerLoop — it just Initialize()s the
+// screen and hands control back to AppFrame, which drives TimerTick() per sokol
+// frame and calls EndCurrentScreen() once IsDone() flips true.
+TScreen* TScreen::ShowScreen(TScreen* screen, int32_t /*ticks*/)
 {
     if (!screen)
         return nullptr;
 
     CurrentScreen = screen;
-
-    CurrentScreen->screenframes = 0;
-
-    // clear the screen
-//  Display->Clear(0, 0xffff, 0, DM_NOCLIP | DM_NORESTORE);
-//  Display->FlipPage();
-//  Display->Clear(0, 0xffff, 0, DM_NOCLIP | DM_NORESTORE);
-
-    bool init = CurrentScreen->BeginScreen();
-
-    if (init)
+    if (!screen->BeginScreen())
     {
-        CurrentScreen->TimerLoop(ticks);
-        CurrentScreen->EndScreen();
-    }
-
-    CurrentScreen = nullptr;
-
-    if (init && !Closing)
-        return screen->GetNextScreen();
-    else
+        CurrentScreen = nullptr;
         return nullptr;
+    }
+    return screen;
 }
 
+void TScreen::EndCurrentScreen()
+{
+    if (!CurrentScreen)
+        return;
+    CurrentScreen->EndScreen();
+    CurrentScreen = nullptr;
+}
+
+// One non-blocking tick. Called once per sokol AppFrame.
+//
+// Pulses catch up to the 24Hz legacy frame counter (which TTime clamps to
+// never exceed the real frame count, so at >=24Hz render we pulse at most
+// once per real frame, and if we slow below 24Hz the game slows with us).
+// DrawBackground/Animate run every call since sokol presents at vsync.
+// Input is delivered out-of-band via AppEvent, so there is no message pump
+// here any more. Returns false when the screen has set `done` — AppFrame
+// uses that as the signal to EndCurrentScreen and advance.
 bool TScreen::TimerTick(bool draw)
 {
-    // Make sure we pick up where we left off if TimerTick() is called recursively
-    // from the message handling functions!
-    static bool washandlingmessage = false;
-    MSG  Message;
-
-    HWND hwnd = MainWindow.Hwnd();
-
-    if (hwnd == nullptr || Closing || !Display->Width())
+    if (Closing)
         return false;
 
-  // Update game toggles here...
-  // ***************************
+    Display->Reset();
 
-  // Allow scrolling of ZBuffer if game speed is high enough
-    if (GameSpeed >= 4)
-        NoScrollZBuffer = false;
-
-  // ***************************
-  // End update game toggles
-
-    if (!washandlingmessage)
+    // Resize panes that asked for it before we pulse (panes may set new map
+    // position in their Pulse, which depends on post-resize dimensions).
+    for (int32_t loop = 0; loop < panes.NumItems(); loop++)
     {
-      // Process windows messages
-        washandlingmessage = true;
-        while (PeekMessage(&Message, hwnd, 0, 0, PM_REMOVE))
-        {
-            if (Message.message == WM_QUIT)
-            {   
-                Closing = true;
-                return false;
-            }
-            if (Message.message == WM_PAINT)
-                ValidateRect(hwnd, nullptr);
-            else
-            {
-                TranslateMessage(&Message);
-                DispatchMessage(&Message);
-            }
-        }
-
-      // If no current screen, forget it!
-        if (CurrentScreen != this || Closing)
-            return false;
-
-      // Simulate mouse messages by polling the mouse
-        POINT cursorpos;
-        GetCursorPos(&cursorpos);
-        RECT r;
-        GetClientRect(MainWindow.Hwnd(), &r);
-        ClientToScreen(MainWindow.Hwnd(), (LPPOINT)&r);
-        cursorpos.x -= r.left;
-        cursorpos.y -= r.top;
-
-        // only bother if it's changed
-        if (cursorx != cursorpos.x || cursory != cursorpos.y)
-        {
-            cursorx = cursorpos.x;
-            cursory = cursorpos.y;
-
-            CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
-        }
-
-      // Get joystick state and send down to screen
-        uint32_t joystate, joychanged, dbljoystate, dbljoychanged;
-        GetJoystickState(0, &joystate, &joychanged, &dbljoystate, &dbljoychanged);
-        if (joychanged || dbljoychanged)
-        {
-            int32_t joykey = -1;
-            bool joydown = false;
-
-            while (GetJoystickKeyCode(joystate, joychanged, dbljoystate, dbljoychanged, joykey, joydown))
-                Joystick(joykey, joydown);
-        }
-
-      // Reset clipping stuff
-        Display->Reset();
-
-      // Resize pane before pulsing (and possibly setting new map position)
-        for (int32_t loop = 0; loop < panes.NumItems(); loop++)
-        {
-            if (!panes.Used(loop))
-                continue;
-
-          // Update pane sizes
-            if (panes[loop]->WasResized())
-                panes[loop]->PaneResized();
-        }
-
-      // Pulse the screen (and it's panes) before we do any drawring....
-        Pulse();    
-
-      // Now update pane scroll position (after pulsing and possibly setting new map pos)
-        for (loop = 0; loop < panes.NumItems(); loop++)
-        {
-            if (!panes.Used(loop))
-                continue;
-
-          // Set panes do dirty if screen is dirty
-            if (dirty)
-                panes[loop]->SetDirty(true);    
-
-          // Update the scrollpos for panes 
-            panes[loop]->UpdateBackgroundScrollPos();
-        }
-
-      // Calls the DrawBackground() function
-      // Note: All drawing is done BEFORE the dirty rectangle restore functions are called.
-      // This means that you can actually override what the restore system would do before
-      // it has a chance to do it.  Any background draws will merge their update rectangles
-      // with the restore rects in the restore system, thus reducing the total amount of the
-      // display to restore.  If you update the entire background, all restore rects are
-      // deleted (this actually happens during screen scrolling).
-
-        if (draw)
-            DrawBackground();
-
-      // Restores the video buffer
-        if (draw)
-            Display->RestoreBackgroundAreas();
-
+        if (!panes.Used(loop))
+            continue;
+        if (panes[loop]->WasResized())
+            panes[loop]->PaneResized();
     }
 
-    washandlingmessage = false;
+    // Catch up missed Pulses. At 60Hz render this is 0 or 1 per call; at
+    // sub-24Hz render it stays 0 (TTime clamps legacy ≤ real).
+    const int64_t lf = TTime::LegacyFrameCount();
+    while (lastPulseLegacyFrame < lf)
+    {
+        Pulse();
+        lastPulseLegacyFrame++;
+        screenframes++;
+    }
 
- // Call screen's Animate() virtual function
+    // Propagate dirty + update pane scroll after pulsing.
+    for (int32_t loop = 0; loop < panes.NumItems(); loop++)
+    {
+        if (!panes.Used(loop))
+            continue;
+        if (dirty)
+            panes[loop]->SetDirty(true);
+        panes[loop]->UpdateBackgroundScrollPos();
+    }
+
+    if (draw && !firstframe)
+    {
+        Display->Reset();
+        DrawBackground();
+        // TODO(port): Display->RestoreBackgroundAreas() — CPU background
+        // caching obsolete under sokol GPU compositor.
+    }
+
     Display->Reset();
     Animate(draw);
 
- // Draw new mouse cursor
-    Display->Reset();
-    if (draw)
-        DrawMouseCursor();  
+    // TODO(port): DrawMouseCursor — cursor currently drawn by MainWindow.
 
-    return true;
-}
-
-bool TScreen::TimerLoop(int32_t ticks)
-{
-    uint32_t totalticks, totalframes, skipframes;
-    float showrate, framerate, frameaccum;
-    bool lastskipped;
-
-    showrate = framerate = (float)FRAMERATE;
-    frameaccum = (float)0.0;
-    totalticks = totalframes = skipframes = 0;
-    lastskipped = false;
-
-    while (true)
-    {
-      // If clock has ticked, call timertick
-        if (!DisableTimer)
-            Timer.WaitForTick();
-
-        while (PauseWhenNotActive && !AppActive)
-        {
-          // Process windows messages
-            MSG  Message;
-            HWND hwnd = MainWindow.Hwnd();
-
-            GetMessage(&Message, hwnd, 0, 0);       // use getmessage instead of peekmessage for pause
-
-            if (Message.message == WM_QUIT)
-            {
-                Closing = true;
-                return false;
-            }
-            if (Message.message == WM_PAINT)
-                ValidateRect(hwnd, nullptr);
-            else
-            {
-                TranslateMessage(&Message);
-                DispatchMessage(&Message);
-            }
-        }
-        
-        if (CurrentScreen)
-        {
-            static uint32_t lastcount;
-
-            LastFrameTicks = GetTickCount() - lastcount;
-            lastcount = GetTickCount();
-
-            totalticks += LastFrameTicks;
-            totalframes++;
-            if (lastskipped)
-                skipframes++;
-
-            if (PauseFrameSkip)
-                totalframes = totalticks = skipframes = 0;
-
-            if (totalframes >= 5)
-            {
-                showrate = (float)1000.0 / (float)(totalticks / totalframes);
-                int32_t realframes = totalframes - skipframes;
-                if (realframes <= 0)
-                    realframes = 1; 
-                framerate = (float)1000.0 / (float)(totalticks / realframes);
-
-                if (skipframes >= totalframes)
-                    PauseFrameSkip = true;
-
-                totalticks = 0;
-                totalframes = 0;
-                skipframes = 0;
-            }
-
-            if (ShowFramesPerSecond)
-            {
-                char buf[80];
-                int32_t usleep = MapPane.GetUpdateSleep();
-                sprintf(buf, "Frame rate: %4.1f %4.1f %d - %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s", showrate, framerate, usleep,
-                    (SmoothScroll)?"Scr ":"",
-                    (NoFrameSkip)?"NSkp ":"",
-                    (NoScrollZBuffer)?"NSZb ":"",
-                    (ShowDrawing)?"Shw ":"",
-                    (NoNormals)?"NNrm ":"",
-                    (ClearBeforeDraw)?"Clr ":"",
-                    (FlatShade)?"FSh ":"",
-                    (DitherEnable)?"Dth ":"",
-                    (BlendEnable)?"Bln ":"",
-                    (ZEnable)?"Zbf ":"",
-                    (SpecularEnable)?"Spc ":"",
-                    (UseTextures)?"Tex ":"",
-                    (BilinearFilter)?"Flt ":"",
-                    (NoUpdateRects)?"NUp ":"",
-                    (Show3D)?"3D ":"",
-                    (GridSnap)?"Grd ":"",
-                    (UseDrawPrimitive)?"Dpr ":"",
-                    (NoPulseObjs)?"NPls ":"",
-                    (NoAnimateObjs)?"NAni ":"",
-                    (Interpolate)?"":"NInt ",
-                    (NoAI)?"NAI ":"");
-                Display->Reset(); // Reset display clipping rect
-                Display->WriteText(buf, 
-                    MapPane.GetPosX() + 10,
-                    MapPane.GetPosY() + 10,
-                    1, SystemFont, nullptr, DM_TRANSPARENT | DM_ALIAS);
-            }
-            
-            frameaccum += framerate; // Accumulator is greater than framerate to draw a frame
-
-          // Do we draw this frame?
-            if (frameaccum > (FRAMERATE - 0.5) ||               // Frame rate caught up or..
-                firstframe || PauseFrameSkip || NoFrameSkip ||  // game flags say draw every frame or..
-                VideoCapture.IsCapturing())                     // if capturing video frames
-            {
-                PauseFrameSkip = false;         // resume normal frame skipping
-
-                Timer.ResetTick();
-                if (frameaccum > (float)100.0)
-                    frameaccum = (float)0.0;
-                else
-                    frameaccum -= FRAMERATE;
-
-                if (!firstframe)
-                    Display->FlipPage(true);  // Don't flip page the first time
-                firstframe = false;
-
-                if (!CurrentScreen->TimerTick(true))
-                    return false;
-
-                if (VideoCapture.IsCapturing())
-                    VideoCapture.SaveFrame();  
-
-                screenframes++;
-
-                lastskipped = false;
-            }
-            else
-            {
-                if (!CurrentScreen->TimerTick(false))
-                    return false;
-
-                screenframes++;
-
-                lastskipped = true;
-            }
-        }
-
-        if (ticks)
-        {
-            ticks--;
-            if (!ticks)
-                return true;
-        }
-    }
-
-    return false;
+    firstframe = false;
+    return !done;
 }
 
 // *******************
@@ -798,7 +562,7 @@ void TPane::Close()
 // timer tick.
 void TPane::PutToScreen()
 {
-    Display->PutToScreen(x, y, width, height);
+    // TODO(port): Display->PutToScreen removed — sokol handles presentation.
 }
 
 // This function can be called to draw a pane immediately (instead of waiting for the
@@ -835,13 +599,13 @@ void TPane::UpdateBackgroundScrollPos()
 {
     oldscrollx = scrollx; oldscrolly = scrolly;
     scrollx = newscrollx; scrolly = newscrolly;
-    if (backgroundbuffer >= 0)
-        Display->ScrollBackground(backgroundbuffer, scrollx, scrolly);
-}   
+    // TODO(port): Display->ScrollBackground removed — CPU background caching obsolete under sokol GPU compositor.
+}
 
 void TPane::DrawRestoreRect(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t drawmode)
 {
-    Display->DrawRestoreRect(backgroundbuffer, x, y, width, height, drawmode);
+    (void)x; (void)y; (void)width; (void)height; (void)drawmode;
+    // TODO(port): Display->DrawRestoreRect removed — CPU background caching obsolete under sokol GPU compositor.
 }
 
 bool TPane::IsOnScreen()

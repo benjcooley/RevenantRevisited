@@ -188,6 +188,14 @@ class TSector final
     char filename[FILENAMELEN];
     int32_t usecount;
 
+    // v14+ adds a 4-byte hash between sector version and numobjects.
+    // Retail regenerates it at save time over sector coords, numobjects,
+    // and the serialized body of state-bearing objects (obj classes
+    // 0xb/0xc — TCharacter/TPlayer). See TSector::Save at FUN_00498c90
+    // and hash helper FUN_00499e90 in data/Revenant.exe. We round-trip
+    // the read value for now; regeneration is future work.
+    int32_t statehash = 0;
+
     TObjectArray objects;
     TObjSetArray objsets[NUMOBJSETS];
 

@@ -69,7 +69,7 @@ void TInventory::DrawBackground()
                 if (oi->Amount() > 1)
                 {
                     char buf[80];
-                    itoa(oi->Amount(), buf, 10);
+                    itos(oi->Amount(), buf, 80);
                     Display->WriteText(buf, x, y-1, 1, GameData->Font("numbers"));
                 }
             }

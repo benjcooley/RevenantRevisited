@@ -30,11 +30,11 @@ _CLASSDEF(TSurface)
 class TSurface
 {
   public:
-    TSurface(); 
+    TSurface();
       // Initializes Surface with empty state
-    TSurface(int32_t w, int32_t h, int32_t bpp);
+    TSurface(int32_t w, int32_t h, sg_pixel_format fmt = SG_PIXELFORMAT_RGBA8);
       // Initialize and create new Sokol image
-    TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp);
+    TSurface(sg_image existing_image, int32_t w, int32_t h, sg_pixel_format fmt = SG_PIXELFORMAT_RGBA8);
       // Initialize with existing Sokol image
     virtual ~TSurface();
       // Releases Surface
@@ -45,8 +45,25 @@ class TSurface
     virtual sg_image GetSGImage() { return image; }
       // Returns sokol image handle
 
-    virtual int32_t BitsPerPixel() {return bitsperpixel;}
-      // Returns current bits per pixel
+    sg_pixel_format Format() const { return format; }
+      // Returns sokol pixel format
+
+    virtual int32_t BitsPerPixel() { return FormatBits(format); }
+      // Returns current bits per pixel (derived from format)
+
+    static int32_t FormatBits(sg_pixel_format f);
+      // Maps an sg_pixel_format to its bit depth.
+
+    // A surface is drawn into by opening a render pass whose color attachment
+    // is the surface's sokol image. Between StartPass/EndPass, callers issue
+    // sokol draw commands (typically textured quads via TDisplay::Composite
+    // or equivalent) that land on this surface.
+    //
+    // StartPass clears the surface to (r,g,b,a) — floats in [0,1]. Pass is
+    // created lazily on first StartPass; the surface's image must have been
+    // created with render_target=true.
+    void StartPass(float r = 0.0f, float g = 0.0f, float b = 0.0f, float a = 1.0f);
+    void EndPass();
     int32_t  Stride() {return stride;}
       // Returns current stride
     int32_t  Width() {return width;}
@@ -56,6 +73,8 @@ class TSurface
     int32_t  KeyColor() {return keycolor;}
     void SetKeyColor(uint32_t key){keycolor = key;}
       // Sets KeyColor for surface.
+    uint32_t Flags() const {return flags;}
+      // Returns surface flags
 
     virtual void Reset();
       // Resets originx, originy, cliprect and clipmode to screen defaults.
@@ -288,7 +307,8 @@ class TSurface
     uint32_t flags;          // 'BM' flags for surface  
     int32_t width;           // Width of Surface
     int32_t height;          // Height of Surface
-    int32_t bitsperpixel;    // Surface Color Depth
+    sg_pixel_format format;  // Surface pixel format (SG_PIXELFORMAT_*)
+    sg_pass         pass;    // Render pass that draws into this surface's image (lazy)
     int32_t stride;          // Size of one horizontal screen line in pixels
     int32_t originx;         // Current drawing origin
     int32_t originy;

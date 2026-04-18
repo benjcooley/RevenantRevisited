@@ -22,7 +22,7 @@ struct SWeaponSwipeParams
     float r, g, b;              // color (to be normalized) of swipe
     int32_t maxsegs;                // number of segments/length of swipe
     int32_t smooth;                 // number of triangles per frame such that maxsegs % smooth == 0
-    char* primehand;                // using this weapon...(to test for change of weapon)
+    const char* primehand;          // using this weapon...(to test for change of weapon)
 };
 
 class TWeaponSwipe
@@ -42,7 +42,7 @@ class TWeaponSwipe
     float r, g, b;              // color (to be normalized) of swipe
     int32_t maxsegs;                // number of segments/length of swipe
     int32_t smooth;                 // number of triangles per frame such that maxsegs % smooth == 0
-    char* primehand;                // using this weapon...(to test for change of weapon)
+    const char* primehand;          // using this weapon...(to test for change of weapon)
 
   public:
     TWeaponSwipe() { initialized = false; maxpoints = 0; primehand = nullptr; }

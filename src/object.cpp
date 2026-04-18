@@ -1609,6 +1609,7 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     short objclass;
     short objtype;
     short blocksize;
+    short invblocksize = -1;  // v14+: separate block size for inventory body
     SObjectDef def;
     bool forcesimple = false;
     bool corrupted = false;
@@ -1645,11 +1646,17 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     }
     else
     {
-        // Version 4 has block size, so we can just skip over objects 
+        // Version 4 has block size, so we can just skip over objects
         //              we don't recognize
         objtype = -1;
         is >> uniqueid;
         is >> blocksize;
+
+        // v14+ splits the single blocksize into a body blocksize plus a
+        // separate inventory blocksize, so the inventory body can also be
+        // skipped independently. See retail FUN_00471ce0 gate `param_4 >= 0xe`.
+        if (version >= 14)
+            is >> invblocksize;
     }
 
     // ****** Is this object any good? ******
@@ -1661,7 +1668,11 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
             FatalError("Object in map file has invalid class - possible file corruption");
         else if (blocksize >= 0)
         {
-            is.MovePos(blocksize);  // Just quietly skip this object
+            // v14+: blocksize covers body only, invblocksize covers inventory.
+            // Earlier versions used a single blocksize for body + inventory.
+            is.MovePos(blocksize);
+            if (version >= 14 && invblocksize >= 0)
+                is.MovePos(invblocksize);
             return nullptr;
         }
         else                        // Try to fix it by assuming its a tile
@@ -1706,7 +1717,9 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
             }
             else if (blocksize >= 0)    // Just skip over this object
             {
-                is.MovePos(blocksize);  
+                is.MovePos(blocksize);
+                if (version >= 14 && invblocksize >= 0)
+                    is.MovePos(invblocksize);
                 return nullptr;
             }
             else      // If attempting to fix, assume type is type 0 - first type in list
@@ -1726,23 +1739,53 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
 
     TObjectInstance* inst = cl->NewObject(&def);
     if (!inst)
-        FatalError("Trouble creating loaded object (corrupted sector file?)");
+    {
+        // Class registration missing (e.g. POTION/INVCONTAINER/EFFECT not yet
+        // wired). Skip rather than abort so the rest of the sector loads.
+        fprintf(stderr, "[obj] skipping class=%d type=%d uniqueid=0x%x (NewObject returned null)\n",
+                objclass, objtype, uniqueid);
+        if (blocksize >= 0)
+        {
+            is.MovePos(blocksize);
+            if (version >= 14 && invblocksize >= 0)
+                is.MovePos(invblocksize);
+        }
+        return nullptr;
+    }
 
     // ****** Load the object ******
 
-  // Get start of object
-    uint32_t start = is.GetPos();
+  // Load object body. v4..v13 has a single blocksize covering body +
+  // inventory. v14+ splits it so body and inventory each have their own
+  // blocksize and can be skipped independently.
+    uint32_t bodystart = is.GetPos();
 
-  // Load object and its inventory
     if (forcesimple)
-        inst->TObjectInstance::Load(is, version, objversion); // Used if object changed class (for some reason)
+        inst->TObjectInstance::Load(is, version, objversion);
     else
-        inst->Load(is, version, objversion);                  // This should normally be used
-    inst->LoadInventory(is, version);
+        inst->Load(is, version, objversion);
 
-  // Reset position to start of next object (in case object load is bad or forcesimple is true)
-    if (blocksize >= 0)
-        is.SetPos(start + blocksize);
+    if (version >= 14 && blocksize >= 0)
+        is.SetPos(bodystart + blocksize);
+
+    uint32_t invstart = is.GetPos();
+
+  // v14+: retail skips LoadInventory entirely when invblocksize < 1 (no
+  // inventory body present). See FUN_00471ce0 LAB_00471fa3 — the `0xd <
+  // param_4` gate jumps over the vtable dispatch for version > 13.
+    if (version < 14 || invblocksize >= 1)
+        inst->LoadInventory(is, version);
+
+  // Snap to end of whole object so a corrupt body doesn't shift subsequent objects.
+    if (version >= 14)
+    {
+        if (invblocksize >= 0)
+            is.SetPos(invstart + invblocksize);
+    }
+    else if (blocksize >= 0)
+    {
+        is.SetPos(bodystart + blocksize);
+    }
 
   // If this object is corrupted in some way, delete it after doing load
     if (corrupted || (ismap && (inst->Flags() & OF_NONMAP)))
@@ -1766,20 +1809,31 @@ void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, bool 
         return;
     }
 
-    os << (short)inst->ObjVersion();// Object version id
-    os << (short)inst->ObjClass();  // Class id
-    os << (uint32_t)inst->ObjId();     // Object id
-    os << (short)0;                 // Block size
+    os << (short)inst->ObjVersion();    // Object version id
+    os << (short)inst->ObjClass();      // Class id
+    os << (uint32_t)inst->ObjId();      // Object id
+    os << (short)0;                     // Body blocksize (patched below)
+    if (MAP_VERSION >= 14)
+        os << (short)0;                 // Inventory blocksize (patched below)
 
-    uint32_t start = os.GetPos();
-
+    uint32_t bodystart = os.GetPos();
     inst->Save(os);
-    inst->SaveInventory(os);
+    uint32_t bodyend = os.GetPos();
 
+    inst->SaveInventory(os);
     uint32_t end = os.GetPos();
 
-    os.SetPos(start - 2);
-    os << (short)(end - start);
+    if (MAP_VERSION >= 14)
+    {
+        os.SetPos(bodystart - 4);
+        os << (short)(bodyend - bodystart);
+        os << (short)(end - bodyend);
+    }
+    else
+    {
+        os.SetPos(bodystart - 2);
+        os << (short)(end - bodystart);
+    }
     os.SetPos(end);
 }
 

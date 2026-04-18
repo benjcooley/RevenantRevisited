@@ -89,12 +89,12 @@ void TTextBar::Print(char *txt, ...)
     va_list marker;
     va_start(marker, txt);
 
-    name[0] = nullptr;
+    name[0] = '\0';
     vsprintf(text, txt, marker);
     SetDirty(true);
 }
 
-void TTextBar::SetHealthDisplay(char *n, int32_t l)
+void TTextBar::SetHealthDisplay(const char *n, int32_t l)
 {
     pulsecheck = true;
 

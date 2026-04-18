@@ -10,15 +10,7 @@
 // *  pipeline pass can walk them one-by-one; the TU compiles today.       *
 // *************************************************************************
 
-#include <cstdint>
-
 #include "revenant.h"
-
-// Shim: effectcomp.h still declares TShockAnimator::ring as `D3DCOLOR *`.
-// Treat it as a packed ARGB8 until that header is re-swept.
-// TODO(port): effectcomp.h — swap D3DCOLOR for uint32_t when touching it next.
-using D3DCOLOR = uint32_t;
-
 #include "effect.h"
 #include "effectcomp.h"
 

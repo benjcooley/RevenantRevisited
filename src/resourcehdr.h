@@ -5,7 +5,7 @@
 // *              Copyright (C) 1993 by Cinematix Studios              *
 // *********************************************************************
 
-#pramga once
+#pragma once
 
 #include "revenant.h"
 

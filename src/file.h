@@ -6,7 +6,7 @@
 
 #pragma once
 
-#included "revenant.h"
+#include "revenant.h"
 
 //==============================================================================
 //                           File.CPP Function Prototypes

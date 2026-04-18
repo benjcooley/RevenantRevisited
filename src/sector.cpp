@@ -7,7 +7,9 @@
 #include "sector.h"
 
 #include "bitmap.h"
+#include "logging.h"
 #include "parse.h"
+#include "revutils.h"
 #include "stream.h"
 #include "textbar.h"
 
@@ -117,18 +119,20 @@ bool TSector::Load(bool lock)
 
     char mappath[MAXPATHLEN];
 
+    // rev_fopen handles SavePath/RunPath/data-root/VFS fallbacks so both the
+    // loose .DAT under data/Curmap and rvr-packed sectors resolve cleanly.
     strcpy(mappath, CurMapPath);
     strcat(mappath, CURMAPDIR "\\");
     strcat(mappath, filename);
-    fp = fopen(mappath, "rb"); // Path open (uses program path)
+    fp = rev_fopen(mappath, "rb");
 
     if (!fp)
     {
         strcpy(mappath, BaseMapPath);
         strcat(mappath, BASEMAPDIR "\\");
         strcat(mappath, filename);
-        fp = fopen(mappath, "rb"); // Path open (uses program path)
-    
+        fp = rev_fopen(mappath, "rb");
+
         if (!fp)
             return false;
     }
@@ -166,6 +170,14 @@ bool TSector::Load(bool lock)
     {
         // Get which sector map version this is
         is >> version;
+
+        // v14+ adds a 4-byte hash (statehash) between version and
+        // numobjects. See TSector in sector.h and
+        // recon/docs/SECTOR_FILE_FORMAT.md. Gate matches retail
+        // (FUN_00498780 @ 0x498780): `if (version > 13)`.
+        if (version > 13)
+            is >> statehash;
+
         is >> numobjects;
     }
 
@@ -216,6 +228,12 @@ void TSector::Save()
     // Write out the "header" with "MAP " followed by the version #
     os << SectrorMapFCC;
     os << version;
+
+    // v14+ writes statehash between version and numobjects. Retail
+    // regenerates this hash at save time (FUN_00499e90). We round-trip
+    // the last-loaded value for now.
+    if (version > 13)
+        os << statehash;
 
     os << objects.NumItems();
 

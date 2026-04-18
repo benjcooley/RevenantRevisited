@@ -16,8 +16,6 @@ class TStatusBar : public TPane
   public:
     TStatusBar(int32_t x, int32_t y, int32_t w, int32_t h) : TPane(x, y, w, h) { }
 
-    _NODEFAULTCONS(TStatusBar);
-
     virtual bool Initialize();
     virtual void Close();
 
@@ -44,8 +42,6 @@ class THealthBar final : public TStatusBar
   public:
     THealthBar() : TStatusBar(HEALTHBARX, HEALTHBARY, HEALTHBARWIDTH, HEALTHBARHEIGHT) { }
 
-    _NODEFAULTCONS(THealthBar);
-
     virtual bool Initialize();
     virtual int32_t GetHue();
 };
@@ -55,8 +51,6 @@ class TStaminaBar final : public TStatusBar
 {
   public:
     TStaminaBar() : TStatusBar(STAMINABARX, STAMINABARY, STAMINABARWIDTH, STAMINABARHEIGHT) { }
-
-    _NODEFAULTCONS(TStaminaBar);
 
     virtual bool Initialize();
     virtual int32_t GetHue();

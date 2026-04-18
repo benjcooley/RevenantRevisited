@@ -168,7 +168,8 @@ class TScript
     static bool pauseall;                   // True if all scripts paused
 
     TScriptProto* proto;                    // Pointer to script prototype
-    TScriptProto* topproto, curproto;       // Pointer's to the top and current prototype
+    TScriptProto* topproto;                 // Pointer to the top prototype
+    TScriptProto* curproto;                 // Pointer to the current prototype
     int32_t newtrigger;                         // Next trigger type to execute
     int32_t trigger;                            // Current trigger type executing 
     char newtriggerstr[MAXSCRIPTNAME];      // Name of what is triggering

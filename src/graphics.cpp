@@ -833,6 +833,7 @@ bool Put(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -925,6 +926,7 @@ bool Put(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
 
     return true;
 }
@@ -951,6 +953,7 @@ bool Put8(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -1027,6 +1030,7 @@ bool Put8(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
 
     return true;
 }
@@ -1053,6 +1057,7 @@ bool Put88(PSDrawBlock db, PSDrawParam dp)
     int32_t width = bmwidth >> 2;
     int32_t odd = bmwidth & 3;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -1135,6 +1140,7 @@ bool Put88(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -1159,6 +1165,7 @@ bool Put816(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -1235,6 +1242,7 @@ bool Put816(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
 
     return true;
 }
@@ -1263,6 +1271,7 @@ bool Put32(PSDrawBlock db, PSDrawParam dp)
 
         SETUP_DRAW
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  esi, [dbval.source]    ; Point ESI to source
@@ -1337,6 +1346,7 @@ bool Put32(PSDrawBlock db, PSDrawParam dp)
 
         Done32:
         }
+        #endif
     }
 
     if (db->dstbitmapflags & BM_24BIT)
@@ -1346,6 +1356,7 @@ bool Put32(PSDrawBlock db, PSDrawParam dp)
 
         SETUP_DRAW
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  esi, [dbval.source]    ; Point ESI to source
@@ -1418,6 +1429,7 @@ bool Put32(PSDrawBlock db, PSDrawParam dp)
 
         Done24:
         }
+        #endif
     }
 
     return true;
@@ -1445,6 +1457,7 @@ bool ShutterPut(PSDrawBlock db, PSDrawParam dp)
     uint32_t pixelx;   // Current pixel screen pos
     uint32_t pixely;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -1560,6 +1573,7 @@ bool ShutterPut(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
 
     return true;
 }
@@ -1589,6 +1603,7 @@ bool ShutterPut8(PSDrawBlock db, PSDrawParam dp)
     uint32_t pixelx;   // Screen pos of current pixel
     uint32_t pixely;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -1712,6 +1727,7 @@ bool ShutterPut8(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
 
     return true;
 }
@@ -1740,6 +1756,7 @@ bool ShutterPut816(PSDrawBlock db, PSDrawParam dp)
     uint32_t pixelx;   // Screen pos of current pixel
     uint32_t pixely;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -1864,6 +1881,7 @@ bool ShutterPut816(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
 
     return true;
 }
@@ -1895,6 +1913,7 @@ bool ShutterPut32(PSDrawBlock db, PSDrawParam dp)
         uint32_t pixelx;   // Screen pos of current pixel
         uint32_t pixely;
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  esi, [dbval.source]    ; Point ESI to source
@@ -2018,6 +2037,7 @@ bool ShutterPut32(PSDrawBlock db, PSDrawParam dp)
 
         Done32:
         }
+        #endif
     }
 
     if (db->dstbitmapflags & BM_24BIT)
@@ -2030,6 +2050,7 @@ bool ShutterPut32(PSDrawBlock db, PSDrawParam dp)
         uint32_t pixelx;   // Screen pos of current pixel
         uint32_t pixely;
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  esi, [dbval.source]    ; Point ESI to source
@@ -2148,6 +2169,7 @@ bool ShutterPut32(PSDrawBlock db, PSDrawParam dp)
 
         Done24:
         }
+        #endif
     }
 
     return true;
@@ -2289,6 +2311,7 @@ bool TransPut(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -2430,6 +2453,7 @@ bool TransPut(PSDrawBlock db, PSDrawParam dp)
      
     done:
     }
+    #endif
     return true;
 }
 
@@ -2455,6 +2479,7 @@ bool TransPut8(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -2544,6 +2569,7 @@ bool TransPut8(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -2575,6 +2601,7 @@ bool TransZStaticPut8(PSDrawBlock db, PSDrawParam dp)
 
     uint32_t tmpesp;   // Stores Temp ESP
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  [tmpesp], esp
@@ -2690,6 +2717,7 @@ bool TransZStaticPut8(PSDrawBlock db, PSDrawParam dp)
     Done:
         mov esp, [tmpesp]
     }
+    #endif
 
     return true;
 }
@@ -2722,6 +2750,7 @@ bool TransZStaticPut816(PSDrawBlock db, PSDrawParam dp)
 
     uint32_t tmpesp;   // Stores Temp ESP
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  [tmpesp], esp
@@ -2836,6 +2865,7 @@ bool TransZStaticPut816(PSDrawBlock db, PSDrawParam dp)
     Done:
         mov esp, [tmpesp]
     }
+    #endif
 
     return true;
 }
@@ -2862,6 +2892,7 @@ bool TransPut816(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -2946,6 +2977,7 @@ bool TransPut816(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -2969,6 +3001,7 @@ bool TransPut88(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -3043,6 +3076,7 @@ bool TransPut88(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -3068,6 +3102,7 @@ bool TransPutColor(PSDrawBlock db, PSDrawParam dp)
 
     uint16_t color = (uint16_t)dp->color;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -3142,6 +3177,7 @@ bool TransPutColor(PSDrawBlock db, PSDrawParam dp)
      
     done:
     }
+    #endif
     return true;
 }
 
@@ -3465,6 +3501,7 @@ bool TransPutKey(PSDrawBlock db, PSDrawParam dp)
     uint16_t keycolor = (uint16_t) dbval.keycolor;
     uint32_t dblkeycolor = (keycolor << 16) | keycolor;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -3630,6 +3667,7 @@ bool TransPutKey(PSDrawBlock db, PSDrawParam dp)
      
     done:
     }
+    #endif
     return true;
 }
 
@@ -3656,6 +3694,7 @@ bool TransPut32(PSDrawBlock db, PSDrawParam dp)
 
         SETUP_DRAW
     
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  esi, [dbval.source]    ; Point ESI to source
@@ -3738,6 +3777,7 @@ bool TransPut32(PSDrawBlock db, PSDrawParam dp)
 
         Done32:
         }
+        #endif
     }
 
     if (db->dstbitmapflags & BM_24BIT)
@@ -3747,6 +3787,7 @@ bool TransPut32(PSDrawBlock db, PSDrawParam dp)
 
         SETUP_DRAW
     
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  esi, [dbval.source]    ; Point ESI to source
@@ -3825,6 +3866,7 @@ bool TransPut32(PSDrawBlock db, PSDrawParam dp)
 
         Done24:
         }
+        #endif
     }
 
     return true;
@@ -3853,6 +3895,7 @@ bool Mask(PSDrawBlock db, PSDrawParam dp)
     SETUP_DRAW
 
     uint32_t tmpecx;
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -3911,6 +3954,7 @@ bool Mask(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -3930,6 +3974,7 @@ bool Translucent(PSDrawBlock db, PSDrawParam dp)
     SETUP_DRAW
 
     uint32_t tmpebx;
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -4046,6 +4091,7 @@ bool Translucent(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -4060,6 +4106,7 @@ bool TransTranslucent(PSDrawBlock db, PSDrawParam dp)
     SETUP_DRAW
 
     uint32_t tmpebx;
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -4180,6 +4227,7 @@ bool TransTranslucent(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -4216,6 +4264,7 @@ bool AlphaLighten(PSDrawBlock db, PSDrawParam dp)
     uint32_t outercounter;
     uint32_t innercounter;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov [tmpesp], esp
@@ -4359,6 +4408,7 @@ bool AlphaLighten(PSDrawBlock db, PSDrawParam dp)
     done:
         mov esp, [tmpesp]
     }
+    #endif
     return true;
 }
 
@@ -4387,6 +4437,7 @@ bool Alpha(PSDrawBlock db, PSDrawParam dp)
 
     uint32_t tmpecx;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -4519,6 +4570,7 @@ bool Alpha(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -4550,6 +4602,7 @@ bool Alpha8(PSDrawBlock db, PSDrawParam dp)
     uint32_t tmpecx;
     uint16_t  pixel16;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -4718,6 +4771,7 @@ bool Alpha8(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -4748,6 +4802,7 @@ bool AlphaZ(PSDrawBlock db, PSDrawParam dp)
     uint32_t tmpecx;
     uint32_t tmpecx2;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -4907,6 +4962,7 @@ bool AlphaZ(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -4940,6 +4996,7 @@ bool AlphaZ8(PSDrawBlock db, PSDrawParam dp)
     uint32_t tmpecx2;
     uint16_t  pixel16;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -5119,6 +5176,7 @@ bool AlphaZ8(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -5148,6 +5206,7 @@ bool AlphaDim(PSDrawBlock db, PSDrawParam dp)
     uint8_t modifier = (uint8_t)(31 - min(dp->intensity, 31));
 
     uint32_t tmpecx;
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -5303,6 +5362,7 @@ bool AlphaDim(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -5335,6 +5395,7 @@ bool AlphaDimZ(PSDrawBlock db, PSDrawParam dp)
     uint32_t tmpecx;
     uint32_t tmpecx2;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -5517,6 +5578,7 @@ bool AlphaDimZ(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -5547,6 +5609,7 @@ bool AlphaDimZNoBitmap(PSDrawBlock db, PSDrawParam dp)
     uint8_t highbyte = (uint8_t)((dp->color >> 8) & 0xff);
     uint8_t lowbyte = (uint8_t)(dp->color & 0xff);
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -5740,6 +5803,7 @@ bool AlphaDimZNoBitmap(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     return true;
 }
 
@@ -5769,6 +5833,7 @@ bool Alpha32(PSDrawBlock db, PSDrawParam dp)
     uint32_t tmpecx2;
     uint32_t color;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld
@@ -5977,6 +6042,7 @@ bool Alpha32(PSDrawBlock db, PSDrawParam dp)
 
     done:
     }
+    #endif
     
     return true;
 }
@@ -6010,6 +6076,7 @@ bool Alias(PSDrawBlock db, PSDrawParam dp)
 
     uint32_t nextdestrow;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  esi, [dbval.alias]             // load source alias data
@@ -6136,6 +6203,7 @@ bool Alias(PSDrawBlock db, PSDrawParam dp)
     done:
         // if we get to here, EOD was reached...we're done
     }
+    #endif
 
     return true;
 }
@@ -6172,6 +6240,7 @@ bool AliasColor(PSDrawBlock db, PSDrawParam dp)
     uint8_t colorhi = color >> 8;
     uint8_t colorlo = color & 0xff;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  esi, [dbval.alias]             // load source alias data
@@ -6298,6 +6367,7 @@ bool AliasColor(PSDrawBlock db, PSDrawParam dp)
     done:
         // if we get to here, EOD was reached...we're done
     }
+    #endif
 
     return true;
 }
@@ -6332,6 +6402,7 @@ bool Alias32(PSDrawBlock db, PSDrawParam dp)
     uint32_t nextdestrow, nextzbufrow, nextnormrow;
     uint32_t tmpesp;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  [tmpesp], esp                  // Save esp
@@ -6527,6 +6598,7 @@ bool Alias32(PSDrawBlock db, PSDrawParam dp)
         // if we get to here, EOD was reached...we're done
         mov esp, [tmpesp]
     }
+    #endif
 
     return true;
 }
@@ -6559,6 +6631,7 @@ bool DrawSelected8(PSDrawBlock db, PSDrawParam dp)
 
     uint32_t lastpixel;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  edi, [dbval.dest]      ; Point EDI to destination
@@ -6626,6 +6699,7 @@ bool DrawSelected8(PSDrawBlock db, PSDrawParam dp)
         dec  esi
         jne  OuterLoop
     }
+    #endif
 
     return true;
 }
@@ -6657,6 +6731,7 @@ bool DrawSelected(PSDrawBlock db, PSDrawParam dp)
     uint32_t tmpecx;   // Stores Temp ECX value in OuterLoop
     uint32_t lastpixel;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  edi, [dbval.dest]      ; Point EDI to destination
@@ -6790,6 +6865,7 @@ bool DrawSelected(PSDrawBlock db, PSDrawParam dp)
 
     Done:
     }
+    #endif
 
     return true;
 }
@@ -6820,6 +6896,7 @@ bool ZPut(PSDrawBlock db, PSDrawParam dp)
 
     uint32_t tmpecx;   // Stores Temp ECX value in OuterLoop
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  esi, [dbval.source]    ; Point ESI to source
@@ -6931,6 +7008,7 @@ bool ZPut(PSDrawBlock db, PSDrawParam dp)
 
     Done:
     }
+    #endif
 
     return true;
 }
@@ -6975,6 +7053,7 @@ bool ZPut8(PSDrawBlock db, PSDrawParam dp)
 
     uint32_t zval = dpval.zpos;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  [tmpesp], esp          ; Save esp value
@@ -7100,6 +7179,7 @@ bool ZPut8(PSDrawBlock db, PSDrawParam dp)
         mov  esp, [tmpesp]
     
     }
+    #endif
 
     return true;
 }
@@ -7133,6 +7213,7 @@ bool ZPut816(PSDrawBlock db, PSDrawParam dp)
     uint32_t tmpedx;   // Stores Temp ECX value in OuterLoop
     uint32_t tmpecx;   // Stores Temp ECX value in InnerLoop
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  esi, [dbval.source]    ; Point ESI to source
@@ -7260,6 +7341,7 @@ bool ZPut816(PSDrawBlock db, PSDrawParam dp)
 
     Done:
     }
+    #endif
 
     return true;
 }
@@ -7301,6 +7383,7 @@ bool ZPut32(PSDrawBlock db, PSDrawParam dp)
         uint32_t srczwidth = dbval.sstride << 1;
         uint32_t dstzwidth = dbval.dstride << 1;
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  [tmpesp], esp
@@ -7419,6 +7502,7 @@ bool ZPut32(PSDrawBlock db, PSDrawParam dp)
         Done32:
             mov  esp, [tmpesp]
         }
+        #endif
     }
 
     if (db->dstbitmapflags & BM_24BIT)
@@ -7431,6 +7515,7 @@ bool ZPut32(PSDrawBlock db, PSDrawParam dp)
         uint32_t tmpecx;   // Stores Temp ECX value in OuterLoop
         uint32_t tmpesp;   // Stores Temp ESP value;
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  [tmpesp], esp
@@ -7555,6 +7640,7 @@ bool ZPut32(PSDrawBlock db, PSDrawParam dp)
         Done24:
             mov  esp, [tmpesp]
         }
+        #endif
     }
 
     return true;
@@ -7587,6 +7673,7 @@ bool ShutterZPut(PSDrawBlock db, PSDrawParam dp)
     uint32_t tmpecx;   // Stores Temp ECX value in OuterLoop
     uint32_t tmpedx;   // Stores Temp EDX value in OuterLoop
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  esi, [dbval.source]    ; Point ESI to source
@@ -7738,6 +7825,7 @@ bool ShutterZPut(PSDrawBlock db, PSDrawParam dp)
 
     Done:
     }
+    #endif
 
     return true;
 }
@@ -7773,6 +7861,7 @@ bool ShutterZPut8(PSDrawBlock db, PSDrawParam dp)
     uint32_t tmpecx;   // Stores Temp ECX value in OuterLoop
     uint32_t tmpedx;   // Stores Temp ECX value in OuterLoop
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  esi, [dbval.source]    ; Point ESI to source
@@ -7950,6 +8039,7 @@ bool ShutterZPut8(PSDrawBlock db, PSDrawParam dp)
 
     Done:
     }
+    #endif
 
     return true;
 }
@@ -7985,6 +8075,7 @@ bool ShutterZPut816(PSDrawBlock db, PSDrawParam dp)
     uint32_t pixelx;   // Stores current pixel position on screen
     uint32_t pixely;   // Stores Temp ECX value in OuterLoop
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         cld                         ; Forward direction
@@ -8162,6 +8253,7 @@ bool ShutterZPut816(PSDrawBlock db, PSDrawParam dp)
 
     Done:
     }
+    #endif
 
     return true;
 }
@@ -8199,6 +8291,7 @@ bool ShutterZPut32(PSDrawBlock db, PSDrawParam dp)
         uint32_t pixelx;   // Screen Pos of currently drawn pixel
         uint32_t pixely;
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             cld                         ; Forward direction
@@ -8373,6 +8466,7 @@ bool ShutterZPut32(PSDrawBlock db, PSDrawParam dp)
         Done32:
             mov  esp, [tmpesp]
         }
+        #endif
     }
 
     if (db->dstbitmapflags & BM_24BIT)
@@ -8389,6 +8483,7 @@ bool ShutterZPut32(PSDrawBlock db, PSDrawParam dp)
         uint32_t pixelx;   // Screen Pos of currently drawn pixel
         uint32_t pixely;
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             cld                         ; Forward direction
@@ -8561,6 +8656,7 @@ bool ShutterZPut32(PSDrawBlock db, PSDrawParam dp)
         Done24:
             mov  esp, [tmpesp]
         }
+        #endif
     }
 
     return true;
@@ -8587,6 +8683,7 @@ bool ZFind(PSDrawBlock db, PSDrawParam dp)
 
         zval += dpa->zpos;
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  edx, [dbval.dzbuffer]  ; Points EDX to Dest zbuffer
@@ -8601,6 +8698,7 @@ bool ZFind(PSDrawBlock db, PSDrawParam dp)
 
         Exit:
         }
+        #endif
         
         return retval;
     }
@@ -8614,6 +8712,7 @@ bool ZFind(PSDrawBlock db, PSDrawParam dp)
 
         bool retval = false;
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  ebx, [dbval.szbuffer]  ; Points EBX to Src zbuffer
@@ -8651,6 +8750,7 @@ bool ZFind(PSDrawBlock db, PSDrawParam dp)
 
         Done32:
         }
+        #endif
 
         if (retval && dp->drawmode & DM_ZSTATIC)
         {
@@ -8783,6 +8883,7 @@ bool Box(PSDrawBlock db, PSDrawParam dp)
 
         if (dest)
         {
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 cld 
@@ -8819,6 +8920,7 @@ bool Box(PSDrawBlock db, PSDrawParam dp)
                 dec  edx
                 jne  OuterLoop
             }
+            #endif
         }
     }
 
@@ -9000,6 +9102,7 @@ bool Convert15to16(PTBitmapData bitmap)
             
             else
             {
+                #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
                 __asm
                 {
                     mov  esi, [data]
@@ -9022,6 +9125,7 @@ bool Convert15to16(PTBitmapData bitmap)
                 EndDLECmp2:
                     mov  uint16_t ptr [esi], ax
                 }
+                #endif
                 
                 data += 2;
                 loop -= 2;      
@@ -9031,6 +9135,7 @@ bool Convert15to16(PTBitmapData bitmap)
     
     else
     {
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             cld
@@ -9066,6 +9171,7 @@ bool Convert15to16(PTBitmapData bitmap)
             dec  edx
             jne  forward
         }
+        #endif
     }
 
     // transform alias data (RLE)
@@ -9073,6 +9179,7 @@ bool Convert15to16(PTBitmapData bitmap)
     {
         uint32_t *alias = (uint32_t *) bitmap->alias.ptr();
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  esi, [alias]                   // load alias data
@@ -9120,6 +9227,7 @@ bool Convert15to16(PTBitmapData bitmap)
 
             // if we get to here, EOD was reached...we're done
         }
+        #endif
 
     }
     
@@ -9318,6 +9426,7 @@ bool Convert16to15(PTBitmapData bitmap)
             
             else
             {
+                #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
                 __asm
                 {
                     mov  esi, [data]
@@ -9340,6 +9449,7 @@ bool Convert16to15(PTBitmapData bitmap)
                 EndDLECmp2:
                     mov  uint16_t ptr [esi], ax
                 }
+                #endif
                 
                 data += 2;
                 loop -= 2;      
@@ -9364,6 +9474,7 @@ bool Convert16to15(PTBitmapData bitmap)
     {
         uint32_t *alias = (uint32_t *) bitmap->alias.ptr();
 
+        #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
         __asm
         {
             mov  esi, [alias]                   // load alias data
@@ -9413,6 +9524,7 @@ bool Convert16to15(PTBitmapData bitmap)
 
             // if we get to here, EOD was reached...we're done
         }
+        #endif
 
     }
     
@@ -9503,6 +9615,7 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
         if (xchange == 0)
         {
             ychange++;
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ax, uint16_t PTR newcolor
@@ -9518,11 +9631,13 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  vertloop
             }
+            #endif
         }
 
         else if (ychange == 0)
         {
             xchange++;
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ax, uint16_t PTR newcolor
@@ -9548,12 +9663,14 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  horzloop
             }
+            #endif
         }
 
         else if (ychange == xchange)
         {
             uint16_t xincr = (int32_t)(((double)xchange / (double)ychange) * 65536.0);
 
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ax, uint16_t PTR newcolor
@@ -9572,12 +9689,14 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  diagloop
             }
+            #endif
         }
 
         else if (ychange > xchange)
         {
             uint16_t xincr = (int32_t)(((double)xchange / (double)ychange) * 65536.0);
 
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ax, uint16_t PTR newcolor
@@ -9603,11 +9722,13 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  yloop
             }
+            #endif
         }
 
         else                                    
         {
             uint16_t yincr = (int32_t)(((double)xchange / (double)ychange) * 65536.0);
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {                                   ; xchange > ychange
                 mov  ax, uint16_t PTR newcolor
@@ -9634,6 +9755,7 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  xloop
             }
+            #endif
         }
     }
 
@@ -9646,6 +9768,7 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
 
         if (xchange == 0)
         {
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {                                   ; Draw 24 bit line
                 mov  ah, color.red
@@ -9666,10 +9789,12 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  vertloop24
             }
+            #endif
         }
 
         else if (ychange == 0)
         {
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ah, color.red
@@ -9694,12 +9819,14 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 mov  al, [edi + 3]              ; Write out last pixel the SLOOOW way
                 mov  [edi], eax
             }
+            #endif
         }
 
         else if (ychange = xchange)
         {
             uint16_t xincr = (int32_t)(((double)xchange / (double)ychange) * 65536.0);
 
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ah, color.red
@@ -9720,12 +9847,14 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  diagloop24
             }
+            #endif
         }
 
         else if (ychange > xchange)
         {
             uint16_t xincr = (int32_t)(((double)xchange / (double)ychange) * 65536.0);
 
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ah, color.red
@@ -9752,11 +9881,13 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  yloop24
             }
+            #endif
         }
 
         else                                    
         {
             uint16_t yincr = (int32_t)(((double)xchange / (double)ychange) * 65536.0);
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {                                   ; xchange > ychange
                 mov ah, color.red
@@ -9783,6 +9914,7 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  xloop24
             }
+            #endif
         }
     }
 
@@ -9795,6 +9927,7 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
 
         if (xchange == 0)
         {
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {                                   ; Draw 32 bit line
                 mov  ah, color.red
@@ -9814,10 +9947,12 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  vertloop32 
             }
+            #endif
         }
 
         else if (ychange == 0)
         {
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ah, color.red;
@@ -9837,12 +9972,14 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  horzloop32
             }
+            #endif
         }
 
         else if (ychange = xchange)
         {
             uint16_t xincr = (int32_t)(((double)xchange / (double)ychange) * 65536.0);
 
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ah, color.red
@@ -9863,12 +10000,14 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  diagloop32
             }
+            #endif
         }
 
         else if (ychange > xchange)
         {
             uint16_t xincr = (int32_t)(((double)xchange / (double)ychange) * 65536.0);
 
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {
                 mov  ah, color.red
@@ -9896,11 +10035,13 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  yloop32
             }
+            #endif
         }
 
         else                                    
         {
             uint16_t yincr = (int32_t)(((double)xchange / (double)ychange) * 65536.0);
+            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
             __asm
             {                                   ; xchange > ychange
                 mov  ah, color.red
@@ -9927,6 +10068,7 @@ bool LineDraw(PSDrawBlock db, PSDrawParam dp)
                 dec  ecx
                 jne  xloop32
             }
+            #endif
         }
     }
 

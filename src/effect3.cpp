@@ -1,12 +1,20 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
-// *                 effect3.cpp - Third Effects module                   *
+// *                 effect3.cpp - Third Effects module                    *
+// *                                                                       *
+// *  Ported (2026): same D3D3 vocabulary as effect.cpp/effect2.cpp;       *
+// *  full original body preserved below under `#if 0` for the Phase-3    *
+// *  sokol-pipelines pass.                                                *
 // *************************************************************************
+
+#include "revenant.h"
+
+#if 0 // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)
 
 #include "effect.h"
 
-#include "mappane.h"       
+#include "mappane.h"
 #include "character.h"
 #include "statusbar.h"
 #include "missileeffect.h"
@@ -402,3 +410,5 @@ void TRockStormAnimator::RefreshZBuffer()
 }
 
 
+
+#endif // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)

@@ -69,8 +69,14 @@ void *LoadResource(const char *name, int32_t id, uint32_t *ressize)
 
     FILE *fl = rev_fopen(filename, "rb");
 
+    // Missing files are recoverable — let the caller decide. This matches the
+    // LoadResourceHeader policy (Status + return null). Keep FatalError for
+    // format errors where the file exists but is corrupt.
     if (!fl)
-        FatalError(erropen, filename);
+    {
+        Status(erropen, filename);
+        return nullptr;
+    }
 
   // Load header and check validity
     if (fread(&frh, sizeof(FileResHdr), 1, fl) < 1)

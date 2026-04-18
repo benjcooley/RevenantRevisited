@@ -18,6 +18,17 @@ TBitmapSurface::~TBitmapSurface()
         delete bitmap;
 }
 
+int32_t TBitmapSurface::BitsPerPixel()
+{
+    if (!bitmap) return 0;
+    if (bitmap->flags & BM_8BIT)  return 8;
+    if (bitmap->flags & BM_15BIT) return 15;
+    if (bitmap->flags & BM_16BIT) return 16;
+    if (bitmap->flags & BM_24BIT) return 24;
+    if (bitmap->flags & BM_32BIT) return 32;
+    return 0;
+}
+
 void TBitmapSurface::Initialize(int32_t bmwidth, int32_t bmheight, int32_t bmflags)
 {
     bitmap = TBitmap::NewBitmap(bmwidth, bmheight, bmflags);
@@ -25,32 +36,6 @@ void TBitmapSurface::Initialize(int32_t bmwidth, int32_t bmheight, int32_t bmfla
     height = bitmap->height;
     flags  = bmflags;
     stride = width;
-
-    if (bitmap->flags & BM_8BIT)
-    {
-        bitsperpixel = 8;
-    }
-
-    else if (bitmap->flags & BM_15BIT)
-    {
-        bitsperpixel = 15;
-    }
-    
-    else if (bitmap->flags & BM_16BIT)
-    {
-        bitsperpixel = 16;
-    }
-    
-    else if (bitmap->flags & BM_24BIT)
-    {
-        bitsperpixel = 24;
-    }
-    
-    else if (bitmap->flags & BM_32BIT)
-    {
-        bitsperpixel = 32;
-    }
-    
     ownsbitmap = true;
 }
 
@@ -65,31 +50,6 @@ void TBitmapSurface::Initialize(PTBitmap newbitmap)
     clipheight = bitmap->height;
     flags      = bitmap->flags;
     stride     = width;
-
-    if (bitmap->flags & BM_8BIT)
-    {
-        bitsperpixel = 8;
-    }
-
-    else if (bitmap->flags & BM_15BIT)
-    {
-        bitsperpixel = 15;
-    }
-    
-    else if (bitmap->flags & BM_16BIT)
-    {
-        bitsperpixel = 16;
-    }
-    
-    else if (bitmap->flags & BM_24BIT)
-    {
-        bitsperpixel = 24;
-    }
-    
-    else if (bitmap->flags & BM_32BIT)
-    {
-        bitsperpixel = 32;
-    }
 }
 
 bool TBitmapSurface::Rect(int32_t x, int32_t y, int32_t w, int32_t h, SColor &color)

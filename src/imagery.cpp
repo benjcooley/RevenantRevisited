@@ -241,6 +241,16 @@ SImageryEntry* TObjectImagery::GetImageryEntry(int32_t id)
     return &(EntryArray[id]);
 }
 
+int32_t TObjectImagery::NumEntries()
+{
+    return EntryArray.NumItems();
+}
+
+bool TObjectImagery::IsUsed(int32_t id)
+{
+    return EntryArray.Used(id);
+}
+
 void TObjectImagery::FreeImageryEntry(int32_t imageryentry)
 {
     if (EntryArray[imageryentry].header)
@@ -318,7 +328,7 @@ void TObjectImagery::SetEntryReg(int32_t imageryid, int32_t state, int32_t regx,
     EntryArray[imageryid].headerdirty = true;
 }
 
-int32_t TObjectImagery::FindImagery(char *imageryname)
+int32_t TObjectImagery::FindImagery(const char *imageryname)
 {
     for (int32_t c = 0; c < EntryArray.NumItems(); c++)
     {
@@ -455,17 +465,17 @@ int32_t TObjectImagery::FindState(const char *name, int32_t pcnt) const
 
 // This function checks string against statename allowing for the "or" seperator.
 // For example, "one" would match up against "one or two or three".
-bool StateMatch(char *string, char *statename)
+bool StateMatch(const char *string, const char *statename)
 {
     if (!string || !statename)
         return false;
 
     char buf[80];
 
-    char *ptr = statename;
+    const char *ptr = statename;
     do
     {
-        char *sep = strstr(ptr, " or ");
+        const char *sep = strstr(ptr, " or ");
         if (sep == nullptr)
         {
             if (stricmp(string, ptr) == 0)
@@ -491,7 +501,7 @@ bool StateMatch(char *string, char *statename)
 
 // Finds a transition state, such as "stand to walk" if you passed in "stand" and "walk".
 // Note that "stand or walk to walk", "stand to walk or run", and "stand or turn to walk" would also work.
-int32_t TObjectImagery::FindTransitionState(char *from, char *to, int32_t pcnt)
+int32_t TObjectImagery::FindTransitionState(const char *from, const char *to, int32_t pcnt) const
 {
     if (!from || !to)
         return -1;
@@ -580,7 +590,7 @@ int32_t TObjectImagery::GetUseCount()
 extern bool UpdatingBoundingRect;
 
 // Returns screen update area and 'onscreen' intersection rectangle given data from state
-void TObjectImagery::GetScreenRect(TObjectInstance* oi, SRect &r)
+void TObjectImagery::GetScreenRect(TObjectInstance* oi, SRect &r) const
 {
     if ((uint32_t)oi->GetState() >= (uint32_t)NumStates())
     {
@@ -607,7 +617,7 @@ void TObjectImagery::GetScreenRect(TObjectInstance* oi, SRect &r)
     r.bottom = r.top + st->height - 1;
 }
 
-void TObjectImagery::GetAnimRect(TObjectInstance* oi, SRect &r)
+void TObjectImagery::GetAnimRect(TObjectInstance* oi, SRect &r) const
 {
     PSImageryStateHeader st = GetState(oi->GetState());
 
@@ -675,7 +685,8 @@ void TObjectImagery::SetWorldBoundBox(int32_t state, int32_t width, int32_t leng
         // all the old data
         int32_t size = sizeof(SImageryHeader);
 
-        for (int32_t i = 0; i < entry->header->numstates; i++)
+        int32_t i;
+        for (i = 0; i < entry->header->numstates; i++)
         {
             if (i > 0)
                 size += sizeof(SImageryStateHeader);
@@ -757,6 +768,8 @@ void TObjectImagery::DrawInvItem(TObjectInstance* oi, int32_t x, int32_t y)
 }
 
 // ******************* Progressive Load System ******************
+
+#if 0 // TODO(port): Subsystem 4 — threading (Win32 events/mutex/CreateThread → worker pool)
 
 static bool QuitThread;
 static HANDLE LoadBodyEvent, LoadCompleteEvent, PauseLoaderMutex, LoaderThreadHandle;
@@ -971,6 +984,51 @@ void TObjectImagery::FreeBody()
     }
 }
 
+#else
+
+void TObjectImagery::BeginLoaderThread() {}
+void TObjectImagery::EndLoaderThread() {}
+uint_fast32_t TObjectImagery::LoaderThread(void *) { return 0; }
+void TObjectImagery::PauseLoader() {}
+void TObjectImagery::ResumeLoader() {}
+
+SImageryBody* TObjectImagery::LoadBody(bool wait)
+{
+    if (entry->status == QE_LOADED)
+        return entry->body;
+
+    char buf[120];
+    strcpy(buf, imagerypath);
+    strcat(buf, entry->filename);
+
+    entry->body = (SImageryBody*)LoadResource(buf, -1, (uint32_t *)&entry->ressize);
+
+    if (!entry->body)
+    {
+        entry->status = QE_FAILED;
+        FatalError("Imagery body load failed!");
+    }
+    else
+    {
+        ImageryMemUsage += entry->ressize;
+        entry->status = QE_LOADED;
+    }
+
+    return entry->body;
+}
+
+void TObjectImagery::FreeBody()
+{
+    if (entry->status == QE_LOADED)
+    {
+        free(entry->body);
+        entry->body = nullptr;
+    }
+    entry->status = QE_NONE;
+}
+
+#endif
+
 // ******************* END OF Progressive Load System ******************
 
 // *******************************
@@ -990,7 +1048,7 @@ struct SQuickLoadHeader
 bool TObjectImagery::QuickLoadHeaders(time_t iflater)
 {
     char filename[FILENAMELEN];
-    struct _stat s;
+    struct stat s;
 
   // We can only do a quickload if there's nothing in there yet!!
     if (EntryArray.NumItems() > 0)
@@ -1004,7 +1062,7 @@ bool TObjectImagery::QuickLoadHeaders(time_t iflater)
         return false;
 
   // Is file later than the iflater time?
-    _fstat(fileno(f), &s);
+    fstat(fileno(f), &s);
     if (s.st_mtime <= iflater)
     {
         fclose(f);

@@ -129,10 +129,14 @@ void TCharacter::ClearChar()
   // combatflash
     combatflashticks = 0;
 
-  // Set initial health/fatigue/mana values
-    SetHealth(MaxHealth());
-    SetFatigue(MaxFatigue());
-    SetMana(MaxMana());
+  // Set initial health/fatigue/mana values. If rules are missing chardata
+  // (e.g. partial rules.ini parse), skip the stat init rather than deref null.
+    if (chardata)
+    {
+        SetHealth(MaxHealth());
+        SetFatigue(MaxFatigue());
+        SetMana(MaxMana());
+    }
 
   // Reset AI data
     nextattack = -1;
@@ -588,8 +592,7 @@ void TCharacter::Notify(int32_t notify, void *ptr)
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
         
-        if (IsBadReadPtr(hasseen[c].chr, 4) || 
-            hasseen[c].chr && NOTIFY_DELETED(ptr, hasseen[c].chr))
+        if (hasseen[c].chr && NOTIFY_DELETED(ptr, hasseen[c].chr))
         {
             hasseen[c].chr = nullptr;
             hasseen[c].time = 0;
@@ -957,17 +960,18 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
         if (!death)
         {
           // Find a 'death' impact in impact list (if there is one)
-            char *deathname = "dead";
+            const char *deathname = "dead";
             impactdata = chardata->impacts;
-            for (int32_t i = 0; i < chardata->numimpacts; i++, impactdata++)
+            int32_t i;
+            for (i = 0; i < chardata->numimpacts; i++, impactdata++)
             {
-                if (damage >= impactdata->damagemin && 
+                if (damage >= impactdata->damagemin &&
                     damage <= impactdata->damagemax &&
                     (impactdata->flags & CAI_DEATH) &&
                     (!(impactdata->flags & CAI_WHENSTUNNED) || doing->action == ACTION_STUN) &&
                     (!(impactdata->flags & CAI_WHENDOWN) || doing->action == ACTION_KNOCKDOWN) &&
-                    HasActionAni(impactdata->impactname) && 
-                    (impactdata->loopname[0] == nullptr || HasActionAni(impactdata->loopname)))
+                    HasActionAni(impactdata->impactname) &&
+                    (impactdata->loopname[0] == '\0' || HasActionAni(impactdata->loopname)))
                 {
                     deathname = impactdata->impactname;
                     break;
@@ -1004,18 +1008,19 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
         if (!impact)
         {
           // Find default impact from char's default impact list
-            char *impactname = "impact";
+            const char *impactname = "impact";
             ACTION impactaction = ACTION_IMPACT;
             impactdata = chardata->impacts;
-            for (int32_t i = 0; i < chardata->numimpacts; i++, impactdata++)
+            int32_t i;
+            for (i = 0; i < chardata->numimpacts; i++, impactdata++)
             {
-                if (damage >= impactdata->damagemin && 
+                if (damage >= impactdata->damagemin &&
                     damage <= impactdata->damagemax &&
                     !(impactdata->flags & CAI_DEATH) &&
                     (!(impactdata->flags & CAI_WHENSTUNNED) || doing->action == ACTION_STUN) &&
                     (!(impactdata->flags & CAI_WHENDOWN) || doing->action == ACTION_KNOCKDOWN) &&
-                    HasActionAni(impactdata->impactname) && 
-                    (impactdata->loopname[0] == nullptr || HasActionAni(impactdata->loopname)))
+                    HasActionAni(impactdata->impactname) &&
+                    (impactdata->loopname[0] == '\0' || HasActionAni(impactdata->loopname)))
                 {
                     impactname = impactdata->impactname;
                     if (impactdata->flags & CAI_STUN)
@@ -1520,8 +1525,9 @@ bool TCharacter::ResolveHit(TCharacter* targ,
             if (!targ->IsDoing(ACTION_BLOCK) || damage > 0) // ****** CODE FOR IMPACT *******
             {
                 // Get interactive DEATH
-                TActionBlock* deathab, impactab, hitab;
-                deathab = impactab = hitab = nullptr;
+                TActionBlock* deathab = nullptr;
+                TActionBlock* impactab = nullptr;
+                TActionBlock* hitab = nullptr;
                 if (targ->Health() - damage < 1)
                 {
                     if (impact)
@@ -1779,8 +1785,8 @@ int32_t TCharacter::ResolveImpact(TActionBlock* ab, int32_t bits)
       // specifying anything for 'loopname'.  'loopname' is provided so that different impacts can end in
       // the same looping stun, knockdown, or death state.
         else if (ab->impact && 
-            ab->Is(ab->impact->impactname) && 
-            ab->impact->loopname[0] != nullptr &&
+            ab->Is(ab->impact->impactname) &&
+            ab->impact->loopname[0] != '\0' &&
             FindState(ab->impact->loopname) >= 0)
         {
             TActionBlock* newab = new TActionBlock(*ab, ab->impact->loopname, ab->action);
@@ -1831,8 +1837,8 @@ int32_t TCharacter::ResolveDead(TActionBlock* ab, int32_t bits)
 
   // If we're done with dying animation (transition), do the death animation.
     if (commanddone &&
-        ab->impact && 
-        ab->impact->loopname[0] != nullptr &&
+        ab->impact &&
+        ab->impact->loopname[0] != '\0' &&
         !ab->Is(ab->impact->loopname) &&
         FindState(ab->impact->loopname) >= 0)
     {
@@ -2187,18 +2193,18 @@ void TCharacter::EffectBurst(char *name, int32_t height)
             vect0.z += 45;
 
             pr.particles = random(15, 25);
-            pr.pos.x = (float)vect0.x;
-            pr.pos.y = (float)vect0.y;
-            pr.pos.z = (float)vect0.z;
-            pr.pspread.x = (float)3.0;
-            pr.pspread.y = (float)3.0;
-            pr.pspread.z = (float)3.0;
-            pr.dir.x = (float)((float)vect.x / (float)100.0);
-            pr.dir.y = (float)((float)vect.y / (float)100.0);
-            pr.dir.z = (float)((float)vect.z / (float)100.0);
-            pr.spread.x = (float)0.5;
-            pr.spread.y = (float)0.5;
-            pr.spread.z = (float)0.5;
+            pr.pos.X = (float)vect0.x;
+            pr.pos.Y = (float)vect0.y;
+            pr.pos.Z = (float)vect0.z;
+            pr.pspread.X = (float)3.0;
+            pr.pspread.Y = (float)3.0;
+            pr.pspread.Z = (float)3.0;
+            pr.dir.X = (float)((float)vect.x / (float)100.0);
+            pr.dir.Y = (float)((float)vect.y / (float)100.0);
+            pr.dir.Z = (float)((float)vect.z / (float)100.0);
+            pr.spread.X = (float)0.5;
+            pr.spread.Y = (float)0.5;
+            pr.spread.Z = (float)0.5;
             pr.gravity = (float)0.2;
             pr.trails = 1;
             pr.minstart = 0;
@@ -3335,7 +3341,7 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
         return false;
 
   // Check if chain attack is valid...
-    if ((ad->flags & (CA_CHAIN | CA_AUTOCOMBO)) && ad->chainname[0] != nullptr && 
+    if ((ad->flags & (CA_CHAIN | CA_AUTOCOMBO)) && ad->chainname[0] != '\0' &&
       (!lastattack || 
        stricmp(lastattack->attackname, ad->chainname) != 0 ||
        PlayScreen.GameFrame() - lastattackticks > lastattack->chainexptime))
@@ -3387,7 +3393,7 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
             {
                 if (!targ->HasActionAni(ai->impactname)) // Don't have this impact ani, don't do this attack!
                     return false;
-                if (ai->loopname[0] != nullptr && !targ->FindState(ai->loopname)) // Needs the loop too!
+                if (ai->loopname[0] != '\0' && !targ->FindState(ai->loopname)) // Needs the loop too!
                     return false;
                 impactnum = i;  // Remember what impact we're using
             }
@@ -4062,7 +4068,7 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
     return false;
 }
 
-TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, S3DPoint& pos, int32_t radius)
+TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius)
 {
     int32_t range = 128; // This should be about right
 
@@ -4125,7 +4131,7 @@ void TCharacter::Load(RTInputStream is, int32_t version, int32_t objversion)
         teleport_level = -1;
     }
 
-    if (ObjClass() == OBJCLASS_CHARACTER)
+    if (ObjClass() == OBJCLASS_CHARACTER && chardata)
     {
         if (Health() > chardata->health)
             SetHealth(chardata->health);

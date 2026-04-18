@@ -43,8 +43,8 @@ sg_pipeline_desc GetBlitPipelineDesc(void)
     desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
     desc.shader = sg_make_shader(GetBlitShaderDesc());
     desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-    desc.blend.enabled = true;
-    desc.blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-    desc.blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    desc.colors[0].blend.enabled = true;
+    desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+    desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     return desc;
 }

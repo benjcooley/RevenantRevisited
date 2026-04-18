@@ -52,7 +52,7 @@ class TMapIterator
     TMapIterator(PSRect sr = nullptr, int32_t fl = CHECK_NONE, int32_t objset = OBJSET_ALL)
       { Initialize(sr, fl, objset); }
       // Calls initialize function
-    TMapIterator(S3DPoint& pos, int32_t range = LOCALRANGE, int32_t fl = CHECK_NOINVENT | CHECK_MAPRECT, int32_t objset = OBJSET_ALL);
+    TMapIterator(const S3DPoint& pos, int32_t range = LOCALRANGE, int32_t fl = CHECK_NOINVENT | CHECK_MAPRECT, int32_t objset = OBJSET_ALL);
       // Initializes iterator with a range value
     TMapIterator(RTObjectInstance oi, int32_t fl = CHECK_NONE, int32_t objset = OBJSET_ALL);
       // Initializes iterator with a range value

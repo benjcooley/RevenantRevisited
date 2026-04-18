@@ -23,4 +23,3 @@ class TLightSource : public TObjectInstance
 
 DEFINE_BUILDER("LIGHTSOURCE", TLightSource)
 
-#endif

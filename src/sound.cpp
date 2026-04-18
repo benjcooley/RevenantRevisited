@@ -1211,7 +1211,7 @@ bool TSoundPlayer::SearchSoundDir(char * /*soundpath*/, char * /*subdir*/, int32
         strcpy(name, data.name);
         char *p = strchr(name, '.');
         if (p)
-            *p = nullptr;
+            *p = '\0';
 
         ref = new SSoundRef;
         ref->name = strdup(name);

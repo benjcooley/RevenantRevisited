@@ -120,6 +120,45 @@ typedef unsigned size_t;
 #define VK_ZOOM           0xFB
 #define VK_NONAME         0xFC
 
+// Joystick virtual keys — ported from legacy DirectInput layer. Kept here
+// so the port's input mapping tables still compile; actual joystick routing
+// isn't wired up yet under sokol_app.
+#define VK_JOYUPLEFT      (1024 + 0)
+#define VK_JOYUP          (1024 + 1)
+#define VK_JOYUPRIGHT     (1024 + 2)
+#define VK_JOYLEFT        (1024 + 3)
+#define VK_JOYRIGHT       (1024 + 4)
+#define VK_JOYDOWNLEFT    (1024 + 5)
+#define VK_JOYDOWN        (1024 + 6)
+#define VK_JOYDOWNRIGHT   (1024 + 7)
+#define VK_JOYBUTTON1     (1024 + 8)
+#define VK_JOYBUTTON2     (1024 + 9)
+#define VK_JOYBUTTON3     (1024 + 10)
+#define VK_JOYBUTTON4     (1024 + 11)
+#define VK_JOYBUTTON5     (1024 + 12)
+#define VK_JOYBUTTON6     (1024 + 13)
+#define VK_JOYBUTTON7     (1024 + 14)
+#define VK_JOYBUTTON8     (1024 + 15)
+#define VK_JOYBUTTON9     (1024 + 16)
+#define VK_JOYBUTTON10    (1024 + 17)
+#define VK_JOYBUTTON11    (1024 + 18)
+#define VK_JOYBUTTON12    (1024 + 19)
+#define VK_JOYBUTTON13    (1024 + 20)
+#define VK_JOYBUTTON14    (1024 + 21)
+#define VK_JOYBUTTON15    (1024 + 22)
+#define VK_JOYBUTTON16    (1024 + 23)
+#define VK_JOYBUTTON17    (1024 + 24)
+#define VK_JOYBUTTON18    (1024 + 25)
+#define VK_JOYBUTTON19    (1024 + 26)
+#define VK_JOYBUTTON20    (1024 + 27)
+#define VK_JOYBUTTON21    (1024 + 28)
+#define VK_JOYBUTTON22    (1024 + 29)
+#define VK_JOYBUTTON23    (1024 + 30)
+#define VK_JOYBUTTON24    (1024 + 31)
+#define VK_DBLTAP         (32)
+#define VK_JOYFIRST       VK_JOYUPLEFT
+#define VK_JOYLAST        (VK_JOYBUTTON24 | VK_DBLTAP)
+
 #endif // Virtual key codes defined
 
 //****************************** REVENANT TYPES ******************************
@@ -165,10 +204,16 @@ template <class T>
 class TSizableIterator;
 
 template <class T>
+class TConstSizableIterator;
+
+template <class T>
 class TPointerIterator;
 
 template <class T>
 class TVirtualIterator;
+
+template <class T>
+class TConstVirtualIterator;
 
 // ********************************************************************************************
 // * TArray - Statically allocated array type (just a small wrapper around an ordinary array) *
@@ -289,6 +334,7 @@ template <class T, int32_t defsize = 64, int32_t grow = 64>
 class TSizableArray
 {
     friend class TSizableIterator<T>;
+    friend class TConstSizableIterator<T>;
 
     short numitems; // Number of items in array
     short size;     // Size of the array
@@ -484,9 +530,9 @@ class TConstSizableIterator
       // Returns if item is used or not
     int32_t  ItemNum() const { return itemnum; }
       // Returns current itemnum.
-    bool operator ++ (int32_t) const { item++; itemnum++; return array && itemnum < array->numitems; }
+    bool operator ++ (int32_t) { item++; itemnum++; return array && itemnum < array->numitems; }
       // Allows moving forwards through array in sequential order
-    bool operator -- (int32_t) const { item--; itemnum--; return itemnum >= 0; }
+    bool operator -- (int32_t) { item--; itemnum--; return itemnum >= 0; }
       // Allows moving backwards through array in sequential order
     operator bool () const { return array && (uint32_t)itemnum < (uint32_t)array->numitems; }
       // Returns false if past end of array
@@ -707,6 +753,7 @@ template <class T, int32_t defsize = 64, int32_t defgrow = 64>
 class TVirtualArray
 {
     friend class TVirtualIterator<T>;
+    friend class TConstVirtualIterator<T>;
 
     int32_t numitems;   // Number of items in array
     int32_t size;       // Size of the array
@@ -909,13 +956,13 @@ template <class T>
 class TConstVirtualIterator
 {
     const TVirtualArray<T> *array;
-    const T **item;
+    T *const *item;
     int32_t itemnum;
 
   public:
     TConstVirtualIterator() { array = nullptr; item = nullptr; itemnum = 0; }
     TConstVirtualIterator(const void *a) { SetArray(a); }
-    void SetArray(const void *a) { array = (TVirtualArray<T> *)a;
+    void SetArray(const void *a) { array = (const TVirtualArray<T> *)a;
         item = &(array->items[0]); itemnum = 0; }
     const T *Item() const { return *item; }
       // Returns current item.
@@ -923,9 +970,9 @@ class TConstVirtualIterator
       // Returns if item is used or not
     int32_t  ItemNum() const { return itemnum; }
       // Returns current itemnum.
-    bool operator ++ (int32_t) const { item++; itemnum++; return array && itemnum < array->numitems; }
+    bool operator ++ (int32_t) { item++; itemnum++; return array && itemnum < array->numitems; }
       // Allows moving forwards through array in sequential order
-    bool operator -- (int32_t) const { item--; itemnum--; return itemnum >= 0; }
+    bool operator -- (int32_t) { item--; itemnum--; return itemnum >= 0; }
       // Allows moving backwards through array in sequential order
     operator bool () const { return array && (uint32_t)itemnum < (uint32_t)array->numitems; }
       // Returns false if past end of array
@@ -1105,6 +1152,8 @@ _CLASSDEF(TDisplay)
 _CLASSDEF(TEffect)
 _CLASSDEF(TEquipPane)
 _CLASSDEF(TFont)
+_CLASSDEF(TGenericFont)
+_CLASSDEF(TFontTable)
 _CLASSDEF(TGameState)
 _CLASSDEF(THealthBar)
 _CLASSDEF(TImageryBuilder)

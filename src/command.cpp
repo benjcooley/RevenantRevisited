@@ -4,11 +4,18 @@
 // *                  command.cpp - Command interpreter                    *
 // *************************************************************************
 
-#include <windows.h>
-
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <ctype.h>
+
+// Local replacement for Win32 strlwr()
+static inline char *strlwr(char *s)
+{
+    for (char *p = s; *p; ++p)
+        *p = static_cast<char>(tolower(static_cast<unsigned char>(*p)));
+    return s;
+}
 
 #include "revenant.h"
 #include "3dscene.h"
@@ -367,7 +374,8 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
 
     int32_t retval = CMD_BADCOMMAND;
 
-    for (int32_t cmd = 0; Commands[cmd].name; cmd++)
+    int32_t cmd;
+    for (cmd = 0; Commands[cmd].name; cmd++)
     {
         if ((abrevlen && abbrevcmp(buf, Commands[cmd].name) >= abrevlen) ||
             !stricmp(buf, Commands[cmd].name))
@@ -477,8 +485,7 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
     return retval;
 }
 
-// Defined in editor.cpp
-static char buf[1024]; // Temporary buf for output
+// Defined in editor.cpp (see extern declaration above)
 
 void Output(char *fmt,...)
 {
@@ -503,7 +510,8 @@ COMMAND(CmdHelp)
 {
     if (t.Type() == TKN_IDENT)
     {
-        for (int32_t cmd = 0; Commands[cmd].name; cmd++)
+        int32_t cmd;
+        for (cmd = 0; Commands[cmd].name; cmd++)
             if (t.Is(Commands[cmd].name, MINCMDABREV))
             {
                 Output(Commands[cmd].usage);
@@ -798,7 +806,7 @@ void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
 
     memset(filled, 0, MAXPLATESX*MAXPLATESY);
 
-    if ((fp = popen("map.bmp", "r")) == nullptr)
+    if ((fp = rev_fopen("map.bmp", "r")) == nullptr)
     {
         TObjectImagery::ResumeLoader();
         return;
@@ -813,7 +821,7 @@ void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
         fread(map+(y*MAXPLATESX), MAXPLATESX, 1, fp);
     fclose(fp);
 
-    if ((fp = popen("overmap.bmp", "r")) == nullptr)
+    if ((fp = rev_fopen("overmap.bmp", "r")) == nullptr)
     {
         TObjectImagery::ResumeLoader();
         return;
@@ -920,7 +928,8 @@ void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
                                     newcode |= QUAD(newcode, 0) << 24;
 
                             flux = 1000;
-                            for (int32_t i = 0; i < 4; i++)
+                            int32_t i;
+                            for (i = 0; i < 4; i++)
                                 if ((QUAD(newcode, i) & 0x0F) < (uint32_t)flux)
                                     flux = QUAD(newcode, i) & 0x0F;
 
@@ -1040,7 +1049,7 @@ bool ParseExpression(TToken &t, int32_t *value)
 
             if (t.Type() == TKN_IDENT)
             {
-                int32_t ot = FindElement(t.Text(), Operators);
+                int32_t ot = FindElement((char *)t.Text(), Operators);
                 if (ot >= 0) // and, or, not...
                 {
                     if (lval != STATE_INVALID || ot == 8)
@@ -1080,7 +1089,7 @@ bool ParseExpression(TToken &t, int32_t *value)
             }
             else if (t.Type() == TKN_TEXT)
             {
-                rval = StringVal(t.Text());
+                rval = StringVal((char *)t.Text());
                 t.WhiteGet();
             }
             else
@@ -1225,7 +1234,7 @@ COMMAND(CmdWait)
         if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
             return CMD_BADPARAMS;
 
-        TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context);
+        TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
         if (!inst)
             Output("Couldn't find wait char\n");
 
@@ -1249,13 +1258,13 @@ COMMAND(CmdUse)
 
     if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
     {
-        inst = MapPane.FindClosestObject(t.Text(), context);
+        inst = MapPane.FindClosestObject((char *)t.Text(), context);
         t.WhiteGet();
     }
 
     if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
     {
-        with = MapPane.FindClosestObject(t.Text(), context);
+        with = MapPane.FindClosestObject((char *)t.Text(), context);
         t.WhiteGet();
     }
 
@@ -1284,8 +1293,8 @@ COMMAND(CmdSay)
     char anim[32];
     char sound[32];
 
-    anim[0] = nullptr;
-    sound[0] = nullptr;
+    anim[0] = '\0';
+    sound[0] = '\0';
 
     bool nowait = false;
     if (t.Is("nowait"))
@@ -1421,7 +1430,7 @@ COMMAND(CmdCombat)
             TObjectInstance* inst = nullptr;
             if (!t.Is("on"))
             {
-                inst = MapPane.FindClosestObject(t.Text(), context);
+                inst = MapPane.FindClosestObject((char *)t.Text(), context);
                 if (!inst)
                     return CMD_BADPARAMS;
             }
@@ -1439,7 +1448,7 @@ COMMAND(CmdAttack)
 
     if (t.Type() == TKN_IDENT)
     {
-        TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context);
+        TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
         t.WhiteGet();
     }
 
@@ -1493,7 +1502,7 @@ COMMAND(CmdJump)
         return CMD_BADPARAMS;
 
     if (context)
-        context->ScriptJump(t.Text());
+        context->ScriptJump((char *)t.Text());
 
     return CMD_JUMP;
 }
@@ -1635,7 +1644,7 @@ COMMAND(CmdSelect)
         return 0;
     }
 
-    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), nullptr, true);
 
     if (!inst)
         Output("Can't find any object by that name.\n");
@@ -1833,8 +1842,8 @@ COMMAND(CmdGive)
     if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
         return CMD_BADPARAMS;
 
-    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context);
-    if (inst < 0)
+    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
+    if (inst == nullptr)
     {
         Output("Unable to find object %s\n", t.Text());
         t.SkipLine();
@@ -1867,7 +1876,7 @@ COMMAND(CmdTake)
     if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
         return CMD_BADPARAMS;
 
-    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context);
+    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
     if (!inst)
     {
         Output("Unable to find object %s\n", t.Text());
@@ -1945,7 +1954,7 @@ static void OutputState(TObjectInstance* context, int32_t state)
 {
     char flstr[32];
     int32_t flags = context->GetImagery()->GetAniFlags(state);
-    flstr[0] = nullptr;
+    flstr[0] = '\0';
     if (flags & AF_LOOPING)
         strcat(flstr, "l");
     if (flags & AF_SYNCHRONIZE)
@@ -1997,7 +2006,7 @@ COMMAND(CmdState)
             if (matchlen > 0 && matchbuf[matchlen - 1] == '*')
             {
                 matchlen--;
-                matchbuf[matchlen] = nullptr; 
+                matchbuf[matchlen] = '\0'; 
             }
             else
                 matchlen = -1;
@@ -2011,7 +2020,7 @@ COMMAND(CmdState)
 
         for (int32_t c = 0; c < context->GetImagery()->NumStates(); c++)
         {
-            char *name = context->GetImagery()->GetAniName(c);
+            const char *name = context->GetImagery()->GetAniName(c);
 
             if (find)       // Find the word in the state name for 'find'
             {
@@ -2138,7 +2147,7 @@ COMMAND(CmdLevel)
 
 COMMAND(CmdTemplate)
 {
-    int32_t index = TerrainTemplates->NewTemplate(context->GetTypeName());
+    int32_t index = TerrainTemplates->NewTemplate((char *)context->GetTypeName());
     if (index < 0)
     {
         Output("Max number of templates reached\n");
@@ -2272,7 +2281,7 @@ COMMAND(CmdGet)
         return CMD_BADPARAMS;
 
     int32_t index = -1;
-    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), nullptr, true);
 
     if (inst == nullptr)
         Output("Can't find any object by that name.\n");
@@ -2352,7 +2361,7 @@ COMMAND(CmdSwap)
     if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
         return CMD_BADPARAMS;
 
-    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), nullptr, true);
 
     if (inst == nullptr)
         Output("Can't find any object by that name.\n");
@@ -2596,12 +2605,12 @@ COMMAND(CmdToggle)
     if (t.Type() != TKN_IDENT)
         return CMD_BADPARAMS;
 
-    char *flagname = nullptr;
+    const char *flagname = nullptr;
 
     for (int32_t i = 0; i < context->GetNumFlags(); i++)
     {
         flagname = context->GetFlagName(i);
-        if (t.Is(flagname, 3))
+        if (t.Is((char *)flagname, 3))
             break;
     }
 
@@ -2908,7 +2917,7 @@ int32_t CenterOnFunc(TObjectInstance* context, TToken &t, bool scroll)
     {
         if (t.Type() == TKN_IDENT)
         {
-            TObjectInstance* inst = MapPane.FindClosestObject(t.Text());
+            TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text());
             if (!inst)
             {
                 Output("Object not found");
@@ -3021,7 +3030,8 @@ COMMAND(CmdMapPos)
             return 0;
         }
 
-        for (int32_t i = 0; i < numlocations; i++)
+        int32_t i;
+        for (i = 0; i < numlocations; i++)
             if (t.Is(MapLocations[i].name, 3))
             {
                 pos.x = MapLocations[i].pos.x;
@@ -3131,7 +3141,8 @@ COMMAND(CmdShow)
     if (t.Is("classes"))
     {
         Output("Object Classes:\n");
-        for (int32_t i = 0, cnt = 0; i < TObjectClass::NumClasses(); i++)
+        int32_t cnt = 0;
+        for (int32_t i = 0; i < TObjectClass::NumClasses(); i++)
         {
             cl = TObjectClass::GetClass(i);
             if (cl == nullptr)
@@ -3155,7 +3166,7 @@ COMMAND(CmdShow)
     }
     else
     {
-        if ((cl = TObjectClass::GetClass(TObjectClass::FindClass(t.Text()))))
+        if ((cl = TObjectClass::GetClass(TObjectClass::FindClass((char *)t.Text()))))
         {
             t.WhiteGet();
             if (t.Type() == TKN_IDENT)
@@ -3163,7 +3174,7 @@ COMMAND(CmdShow)
                 int32_t objtype = cl->FindObjType(t.Text());
                 if (objtype < 0)
                 {
-                    if (!ShowObjList(cl, t.Text()))
+                    if (!ShowObjList(cl, (char *)t.Text()))
                     {
                         sprintf(buf, "%s contains no type named '%s'.\n", cl->ClassName(), t.Text());
                         Output(buf);
@@ -3242,7 +3253,7 @@ COMMAND(CmdBaseLight)
 
 COMMAND(CmdReplace)
 {
-    TObjectClass* cl = TObjectClass::GetClass(TObjectClass::FindClass(t.Text()));
+    TObjectClass* cl = TObjectClass::GetClass(TObjectClass::FindClass((char *)t.Text()));
     if (cl)
         t.WhiteGet();
     else
@@ -3499,12 +3510,12 @@ COMMAND(CmdName)
         if (t.Type() != TKN_IDENT)
             return CMD_BADPARAMS;
 
-        context->SetTypeName(t.Text());
+        context->SetTypeName((char *)t.Text());
     }
     else if (t.Is("clear"))
-        context->SetName("");
+        context->SetName((char *)"");
     else
-        context->SetName(t.Text());
+        context->SetName((char *)t.Text());
 
     t.WhiteGet();
     return 0;
@@ -3658,82 +3669,16 @@ COMMAND(CmdSave)
 
 COMMAND(CmdDXStats)
 {
-    Output("Direct X Stats.\n");
-    sprintf(buf, "Display bits per pixel: %d\n", Display->BitsPerPixel());
-    Output(buf);
-    sprintf(buf, "Video Memory Total    : %3.1f K\n",
-        (float)(GetFreeVideoMem()) / 1024.0);
-    Output(buf);
-
-    sprintf(buf, "Video Memory Available: %3.1f K\n",
-        (float)(GetFreeVideoMem()) / 1024.0);
-
-    Output(buf);
-
-    if (BlitHardware)
-        Output("\nBlit hardware available.\n");
-    else
-        Output("\nBlit hardware not available.\n");
-
-    sprintf(buf, "Number of 3D objects  : %d\n", Scene3D.GetNumAnimators());
-    Output(buf);
-
-    sprintf(buf, "Number of 3D lights   : %d\n", Scene3D.GetNumLights());
-    Output(buf);
-
-    if (GetColorMode() == MONO)
-        Output("\nRAMP emulation mode on.\n");
-
-    else if (GetColorMode() == COLOR)
-        Output("\nRGB emulation mode on.\n");
-    else
-        Output("\nEmulation mode currently undefined.\n");
-
-    if (IsUsingHardware())
-        Output("Hardware 3D support.\n");
-    else
-        Output("Software 3D support.\n");
-
+    // TODO: port Win32/DirectX diagnostics to sokol + macOS equivalents.
+    Output("Graphics stats not yet available in the sokol port.\n");
     return 0;
 }
 
 COMMAND(CmdMemory)
 {
-    extern MEMORYSTATUS StartMemory;
-    extern uint32_t ImageryMemUsage;
-    extern TotalAllocated, MaxAllocated;
-
-    MEMORYSTATUS mem;
-    mem.dwLength = sizeof(MEMORYSTATUS);
-    GlobalMemoryStatus(&mem);
-
-    Output("Starting memory usage:\n");
-    sprintf(buf, "   Percent used: %d%%\n", StartMemory.dwMemoryLoad);
-    Output(buf);
-    sprintf(buf, "   Physical: %4.1fM  Free: %4.1fM\n", (float)StartMemory.dwTotalPhys / 1024 / 1024, (float)StartMemory.dwAvailPhys / 1024 / 1024);
-    Output(buf);
-    sprintf(buf, "   Paged:    %4.1fM  Free: %4.1fM\n", (float)StartMemory.dwTotalPageFile / 1024 / 1024, (float)StartMemory.dwAvailPageFile / 1024 / 1024);
-    Output(buf);
-    sprintf(buf, "   Virtual:  %4.1fM  Free: %4.1fM\n", (float)StartMemory.dwTotalVirtual / 1024 / 1024, (float)StartMemory.dwAvailVirtual / 1024 / 1024);
-    Output(buf);
-
-    Output("Current memory usage:\n");
-    sprintf(buf, "   Percent used: %d%%\n", mem.dwMemoryLoad);
-    Output(buf);
-    sprintf(buf, "   Physical: %4.1fM  Free: %4.1fM\n", (float)mem.dwTotalPhys / 1024 / 1024, (float)mem.dwAvailPhys / 1024 / 1024);
-    Output(buf);
-    sprintf(buf, "   Paged:    %4.1fM  Free: %4.1fM\n", (float)mem.dwTotalPageFile / 1024 / 1024, (float)mem.dwAvailPageFile / 1024 / 1024);
-    Output(buf);
-    sprintf(buf, "  Virtual:  %4.1fM  Free: %4.1fM\n", (float)mem.dwTotalVirtual / 1024 / 1024, (float)mem.dwAvailVirtual / 1024 / 1024);
-    Output(buf);
-
-    sprintf(buf, "Memory usaged by object imagery: %4.1fM\n", (float)ImageryMemUsage / 1024 / 1024);
-    Output(buf);
-    sprintf(buf, "Memory usaged by chunk cache: %4.1fM\n", (float)ChunkCache.MemUsed() / 1024 / 1024);
-    Output(buf);
-    sprintf(buf, "Memory allocated:  %4.1fM  Max: %4.1fM\n", (float)TotalAllocated / 1024 / 1024, (float)MaxAllocated / 1024 / 1024);
-    Output(buf);
-
+    // TODO: port MEMORYSTATUS/GlobalMemoryStatus diagnostics to a
+    // macOS-friendly mach/sysctl equivalent.
+    Output("Memory stats not yet available in the sokol port.\n");
     return 0;
 }
 

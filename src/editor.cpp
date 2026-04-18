@@ -4,10 +4,7 @@
 // *                 editor.cpp - EXILE editor routines                    *
 // *************************************************************************
 
-#include <windows.h>
 #include <stdio.h>
-#include <io.h>
-#include <process.h>
 
 #include "revenant.h"
 #include "3dscene.h"
@@ -209,8 +206,6 @@ void StartFullScreen()
     ClassPane.Hide();
 
     MapPane.Resize(0, 0, Display->Width(), Display->Height());
-
-    Display->ClearBackgroundAreas();
 }
 
 void ShutDownFullScreen()
@@ -222,7 +217,6 @@ void ShutDownFullScreen()
 
     MapPane.Resize(FRAMEMAPPANEX, FRAMEMAPPANEY, FRAMEMAPPANEWIDTH, FRAMEMAPPANEHEIGHT);
 
-    Display->ClearBackgroundAreas();
     PlayScreen.CreateBackgroundAreas();
 }
 
@@ -270,7 +264,7 @@ void TTextPane::DrawBackground()
 }
 
 // a couple of utility functions for the text processing
-inline isvalid(int32_t key)
+inline bool isvalid(int32_t key)
 {
     if (((key >= ' ' && key <= '~') || key == '\n') && key != '`' && !CtrlDown && !AltDown)
         return true;
@@ -363,7 +357,7 @@ char *TTextPane::GetText(int32_t start, int32_t len, char *buf)
         return nullptr;
 
     strncpy(buf, text + start, len);
-    buf[len] = nullptr;
+    buf[len] = '\0';
 
     return buf;
 }
@@ -546,6 +540,7 @@ bool TConsolePane::Initialize()
 
     wrapwidth = GetWidth();
 
+#if 0 // TODO(port): Subsystem 4 — threading (Win32 Event/CreateThread → worker pool)
     // Create the kill event
     if ((cmdevents[KILL_EVENT] = CreateEvent(nullptr, true, false, nullptr)) == nullptr)
         FatalError("Could not create kill event for command processor!");
@@ -563,12 +558,14 @@ bool TConsolePane::Initialize()
         &threadid );
 
     SetThreadPriority(cmdthreadhandle, THREAD_PRIORITY_ABOVE_NORMAL);
+#endif
 
     return true;
 }
 
 void TConsolePane::Close()
 {
+#if 0 // TODO(port): Subsystem 4 — threading (Win32 Event/CreateThread → worker pool)
     // Trigger the Kill event and wait for the command processor thread to close
     SetEvent(cmdevents[KILL_EVENT]);
     WaitForSingleObject(cmdthreadhandle, INFINITE);
@@ -576,6 +573,7 @@ void TConsolePane::Close()
     // Close the events
     CloseHandle(cmdevents[CHAR_AVAILABLE_EVENT]);
     CloseHandle(cmdevents[KILL_EVENT]);
+#endif
 }
 
 void TConsolePane::SetupMouseBitmap(int32_t xspan, int32_t yspan)
@@ -822,7 +820,9 @@ void TConsolePane::CharPress(int32_t key, bool down)
     if (key != '\r')
     {
         cmdchar = key;
+#if 0 // TODO(port): Subsystem 4 — threading (Win32 Event/CreateThread → worker pool)
         SetEvent(cmdevents[CHAR_AVAILABLE_EVENT]);
+#endif
     }
 }
 
@@ -900,13 +900,13 @@ void TConsolePane::DrawBackground()
             if (chained->yspan)
                 sprintf(buf, "(%d, %d)", cx, cy);
             else
-                itoa(cx, buf, 10);
+                itos(cx, buf, sizeof(buf));
 
             (*(chained->func))(cx, cy);
         }
         else
         {
-            itoa(cy, buf, 10);
+            itos(cy, buf, sizeof(buf));
 
             (*(chained->func))(cy, cx);
         }
@@ -945,7 +945,8 @@ bool TConsolePane::Input(char *string)
     while ((ptr = strchr(ptr, '\n')))
     {
         char *textoff = string;
-        for (int32_t i = 0; *textoff && *textoff != '\n' && i < 255; textoff++, i++)
+        int32_t i;
+        for (i = 0; *textoff && *textoff != '\n' && i < 255; textoff++, i++)
             tmpbuf[i] = *textoff;
         tmpbuf[i] = 0;
 
@@ -966,7 +967,9 @@ bool TConsolePane::Input(char *string)
 
         // Flag the command processor thread that a line has been entered
         cmdchar = '\r';
+#if 0 // TODO(port): Subsystem 4 — threading (Win32 Event/CreateThread → worker pool)
         SetEvent(cmdevents[CHAR_AVAILABLE_EVENT]); // This causes the command thread to run
+#endif
 
       // Command processed, now reset the command line pointer to end of buffer
         cmdline = text + curoffset;
@@ -998,6 +1001,7 @@ bool TConsolePane::Output(char *string)
 // This cannot be called from the main thread
 int32_t TConsolePane::GetChar()
 {
+#if 0 // TODO(port): Subsystem 4 — threading (Win32 Event/CreateThread → worker pool)
     uint32_t wait;
 
     wait = WaitForMultipleObjects(2, cmdevents, false, INFINITE);
@@ -1008,10 +1012,13 @@ int32_t TConsolePane::GetChar()
     ResetEvent(cmdevents[CHAR_AVAILABLE_EVENT]);
 
     return cmdchar;
+#else
+    return -1;
+#endif
 }
 
 // This cannot be called from the main thread
-bool TConsolePane::GetLine(char *buffer, int32_t buffersize)
+int32_t TConsolePane::GetLine(char *buffer, int32_t buffersize)
 {
     int32_t key;
 
@@ -1028,7 +1035,8 @@ bool TConsolePane::GetLine(char *buffer, int32_t buffersize)
             if (strchr(textoff, '\n') != nullptr)
             {
                 // Copy the line to the buffer passed in
-                for (int32_t i = 0; *textoff && *textoff != '\n' && i < buffersize - 1; textoff++, i++)
+                int32_t i;
+                for (i = 0; *textoff && *textoff != '\n' && i < buffersize - 1; textoff++, i++)
                     buffer[i] = *textoff;
                 buffer[i] = 0;
 
@@ -1041,8 +1049,9 @@ bool TConsolePane::GetLine(char *buffer, int32_t buffersize)
     return false;
 }
 
-unsigned _stdcall TConsolePane::CommandThread(void *arg)
+unsigned TConsolePane::CommandThread(void *arg)
 {
+#if 0 // TODO(port): Subsystem 4 — threading (Win32 Event/CreateThread → worker pool)
     PTConsolePane console = (PTConsolePane)arg;
     char tmpbuf[256];
 
@@ -1084,6 +1093,7 @@ unsigned _stdcall TConsolePane::CommandThread(void *arg)
     }
 
     _endthreadex(0);
+#endif
 
     return 0;
 }
@@ -2930,6 +2940,7 @@ COMMAND(CmdAddRC)
     {
         Output("Compiling resource...");
 
+#if 0 // TODO(port): Subsystem 4 — threading (Win32 Event/CreateThread → worker pool)
         STARTUPINFO StartUpInfo;
         PROCESS_INFORMATION ProcessInfo;
 
@@ -2958,6 +2969,7 @@ COMMAND(CmdAddRC)
 
         // Wait for ExileRC to finish
         WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+#endif
 
         Output("Press ENTER to continue..\n");
         Output("> ");
@@ -3172,9 +3184,10 @@ COMMAND(CmdSaveTileBM)
     if (!context)
         return 0;
 
-    char *objname = context->GetTypeName();
+    const char *objname = context->GetTypeName();
 
-    for (int32_t rctype = 0; rctype < NUMRCDIRS; rctype++)
+    int32_t rctype;
+    for (rctype = 0; rctype < NUMRCDIRS; rctype++)
     {
         if (!strnicmp(objname, RCPrefixes[rctype], 3))
             break;

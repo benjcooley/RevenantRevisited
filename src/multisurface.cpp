@@ -33,21 +33,21 @@ void TMultiSurface::SetGraphicsBuffer(TSurface* surface)
 
     if (surface)
     {
-        width        = surface->Width();
-        height       = surface->Height();
-        bitsperpixel = surface->BitsPerPixel();
-        stride       = surface->Stride();
-        flags        = surface->flags;
+        width  = surface->Width();
+        height = surface->Height();
+        format = surface->Format();
+        stride = surface->Stride();
+        flags  = surface->Flags();
 
         Reset();
     }
     else
     {
-        width        = 0;
-        height       = 0;
-        bitsperpixel = 0;
-        stride       = 0;
-        flags        = 0;
+        width  = 0;
+        height = 0;
+        format = SG_PIXELFORMAT_NONE;
+        stride = 0;
+        flags  = 0;
     }
 
 }

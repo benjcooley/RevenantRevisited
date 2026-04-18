@@ -165,6 +165,7 @@ void CursorOverObject(TObjectInstance* inst, bool toppriority)
 
 void RestrictCursor()
 {
+#if 0 // TODO(port): Win32 cursor clipping; sokol_app has no equivalent yet
     // center the cursor
     RECT r;
     GetClientRect(MainWindow.Hwnd(), &r);
@@ -178,6 +179,7 @@ void RestrictCursor()
         r.bottom = r.top + HEIGHT;
         ClipCursor(&r);
     }
+#endif
 }
 
 void ReleaseCursor()
@@ -186,7 +188,9 @@ void ReleaseCursor()
     oldcursorx = cursorx;
     oldcursory = cursory;
 
+#if 0 // TODO(port): Win32 cursor clipping; sokol_app has no equivalent yet
     // clear out the clip rect (cursor can move anywhere)
     ClipCursor(nullptr);
+#endif
 }
 

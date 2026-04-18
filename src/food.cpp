@@ -7,7 +7,7 @@
 #include "revenant.h"
 #include "character.h"
 #include "statusbar.h"
-#include "typeinfo.h"
+#include <typeinfo>
 #include "food.h"
 
 REGISTER_BUILDER(TFood)
