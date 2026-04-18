@@ -20,6 +20,18 @@ set(SIMPLEINI_DIR "${THIRDPARTY_DIR}/simpleini")
 set(MINIZ_DIR "${THIRDPARTY_DIR}/miniz")
 set(LOG_DIR "${THIRDPARTY_DIR}/log")
 set(ARGH_DIR "${THIRDPARTY_DIR}/argh")
+set(STB_DIR "${THIRDPARTY_DIR}/stb")
+set(IMGUI_DIR "${THIRDPARTY_DIR}/imgui")
+
+# Dear ImGui core (no backends — sokol_imgui.h provides the backend).
+add_library(imgui STATIC
+  ${IMGUI_DIR}/imgui.cpp
+  ${IMGUI_DIR}/imgui_draw.cpp
+  ${IMGUI_DIR}/imgui_tables.cpp
+  ${IMGUI_DIR}/imgui_widgets.cpp
+  ${IMGUI_DIR}/imgui_demo.cpp
+)
+target_include_directories(imgui PUBLIC ${IMGUI_DIR})
 
 # Add executable target
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
@@ -28,6 +40,7 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/src/*.m")
 list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/countlines.cpp")
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
+target_link_libraries(Revenant PRIVATE imgui)
 
 # Include directories for third-party dependencies
 target_include_directories(Revenant PRIVATE
@@ -37,6 +50,8 @@ target_include_directories(Revenant PRIVATE
   ${MINIZ_DIR}
   ${LOG_DIR}
   ${ARGH_DIR}
+  ${STB_DIR}
+  ${IMGUI_DIR}
 )
 
 # Link necessary frameworks for macOS (if applicable)
