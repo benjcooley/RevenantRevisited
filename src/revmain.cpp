@@ -1498,6 +1498,14 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "test", p))
             strncpyz(StartupTestMode, p.c_str(), sizeof(StartupTestMode));
     }
+
+  // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.
+  // Empty = the default hard-coded pick (0_2_25, Misthaven).
+    {
+        std::string p;
+        if (arg_param(cmd, "sector", p))
+            strncpyz(StartupSectorId, p.c_str(), sizeof(StartupSectorId));
+    }
 }
 
 void GetINISettings()
@@ -1935,6 +1943,7 @@ void CloseSystem()
 // in attic/src/revmain_win32_entry.cpp and attic/src/mainwnd_win32.cpp.
 
 #include <sokol_glue.h>
+#include "sokol_imgui.h"
 
 // Forward decls for the sokol callbacks (defined below sokol_main).
 static void AppInit();
@@ -2057,52 +2066,62 @@ static void AppFrame()
     // Drive the legacy screen dispatch. The pre-port top-level loop was:
     //     while (NextScreen) NextScreen = TScreen::ShowScreen(NextScreen, 0);
     // TScreen::ShowScreen is blocking (runs that screen's TimerLoop),
-    // which doesn't work under sokol_app's non-blocking run loop. For the
-    // Phase-2 port we call ShowScreen() once per sokol frame; it will
-    // return when the screen ends, at which point we advance to the next
-    // one. Screens whose TimerLoop blocks internally on PeekMessage will
-    // need to be reworked when the display / screen subsystem (screen.cpp)
-    // is ported off Win32.
-    //
-    // TODO(port): once TScreen::TimerTick is de-Win32'd, split its body
-    // into a non-blocking "one tick" that we can call directly here
-    // instead of entering a blocking TimerLoop.
+    // Every screen (test + production) flows through the same path now that
+    // TScreen::TimerTick is sokol-native. ShowScreen Initialize()s a screen
+    // and hands back; AppFrame calls its TimerTick once per sokol frame;
+    // when the screen sets `done`, we EndCurrentScreen and advance to
+    // GetNextScreen (or quit if there isn't one).
 
     if (!SystemInitialized || Closing)
         return;
 
     TTime::BeginFrame(sapp_frame_duration());
 
-    // Test-mode harness: drive TestScreen directly, bypassing the gutted
-    // TScreen::ShowScreen/TimerLoop path. Once TScreen is synced from retail
-    // (step 2 of the sync plan) and TimerTick is wired sokol-native, this
-    // branch goes away and test screens flow through the normal path.
-    if (StartupTestMode[0])
+    // Start the ImGui frame before Animate/draw so screens can build debug
+    // panels from their normal per-frame code. simgui_render() is called
+    // inside TDisplay::FlipPage on the swapchain pass.
     {
-        static bool initialized = false;
-        if (!initialized)
+        simgui_frame_desc_t fd = {};
+        fd.width       = sapp_width();
+        fd.height      = sapp_height();
+        fd.delta_time  = sapp_frame_duration();
+        fd.dpi_scale   = sapp_dpi_scale();
+        simgui_new_frame(&fd);
+    }
+
+    // Begin next queued screen if none is active.
+    if (!CurrentScreen && BootScreen)
+    {
+        TScreen *next = BootScreen;
+        BootScreen = nullptr;
+        if (!TScreen::ShowScreen(next, 0))
         {
-            if (!TestScreen.Initialize())
-            {
-                sapp_request_quit();
-                return;
-            }
-            initialized = true;
-        }
-        TestScreen.Pulse();
-        TestScreen.Animate(true);
-        if (TestScreen.IsQuit())
-        {
-            TestScreen.Close();
             sapp_request_quit();
+            return;
         }
+    }
+
+    if (!CurrentScreen)
+    {
+        sapp_request_quit();
         return;
     }
 
-    if (BootScreen)
+    CurrentScreen->TimerTick(true);
+
+    // Present the frame: composite backbuffer onto the swapchain and commit
+    // the Metal command buffer. Without this, sokol's cmd_buffer is never
+    // released/nil'd and its dangling pointer crashes the next frame's
+    // sg_begin_pass.
+    if (Display)
+        Display->FlipPage();
+
+    if (CurrentScreen->IsDone() || Closing)
     {
-        BootScreen = TScreen::ShowScreen(BootScreen, 0);
-        if (!BootScreen)
+        TScreen *next = CurrentScreen->GetNextScreen();
+        TScreen::EndCurrentScreen();
+        BootScreen = next;
+        if (!next && !Closing)
             sapp_request_quit();
     }
 }
@@ -2140,6 +2159,11 @@ static void AppEvent(const sapp_event* ev)
 {
     if (!ev) return;
 
+    // ImGui sees every event. For mouse/keyboard it also returns whether
+    // ImGui wants to capture — when a panel has focus, skip the game
+    // handler so sliders don't also drive the game.
+    const bool imgui_capture = simgui_handle_event(ev);
+
     switch (ev->type)
     {
       case SAPP_EVENTTYPE_KEY_DOWN:
@@ -2150,6 +2174,7 @@ static void AppEvent(const sapp_event* ev)
         else if (vk == VK_SHIFT) ShiftDown = true;
 
         if (!AppActive) break;
+        if (imgui_capture) break;
         if (CurrentScreen)
             CurrentScreen->KeyPress(vk, true);
         break;
@@ -2163,6 +2188,7 @@ static void AppEvent(const sapp_event* ev)
         else if (vk == VK_SHIFT) ShiftDown = false;
 
         if (!AppActive) break;
+        if (imgui_capture) break;
         if (CurrentScreen)
             CurrentScreen->KeyPress(vk, false);
         break;
@@ -2171,6 +2197,7 @@ static void AppEvent(const sapp_event* ev)
       case SAPP_EVENTTYPE_CHAR:
       {
         if (!AppActive) break;
+        if (imgui_capture) break;
         if (CtrlDown && ShiftDown) break;
         if (CurrentScreen)
             CurrentScreen->CharPress((int32_t)ev->char_code, true);
@@ -2182,6 +2209,7 @@ static void AppEvent(const sapp_event* ev)
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
+        if (imgui_capture) break;
         if (CurrentScreen)
             CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
         break;
@@ -2192,6 +2220,7 @@ static void AppEvent(const sapp_event* ev)
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
+        if (imgui_capture) break;
         int32_t btn = 0;
         switch (ev->mouse_button)
         {
@@ -2210,6 +2239,7 @@ static void AppEvent(const sapp_event* ev)
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
+        if (imgui_capture) break;
         int32_t btn = 0;
         switch (ev->mouse_button)
         {

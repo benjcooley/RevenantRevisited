@@ -24,12 +24,11 @@ class TTestScreen : public TScreen
     void Animate(bool draw) override;
     void KeyPress(int32_t key, bool down) override;
 
-    [[nodiscard]] bool IsQuit() const { return quit; }
-
   private:
     int64_t lastLoggedLegacyFrame = -1;
-    bool    quit                  = false;
 };
 
 extern TTestScreen TestScreen;
 extern char        StartupTestMode[32];
+// --sector=L_X_Y — which sector --test=sector should render. Empty = default.
+extern char        StartupSectorId[32];
