@@ -2,11 +2,26 @@
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
 // *                 effect2.cpp - Second Effects module                   *
+// *                                                                       *
+// *  Ported (2026): paralyse/flame/ice/teleport and friends rely on the   *
+// *  D3D3 immediate-mode path — Device2->SetRenderState with              *
+// *  D3DRENDERSTATE_*, D3DMATRIX* helpers, D3DRGBA packing, and the       *
+// *  S3DAnimObj lverts/tverts union. The renderer vocabulary has moved    *
+// *  to render3d_types.h + math3d.h; sokol pipelines land in Phase 3.    *
+// *                                                                       *
+// *  Full original body preserved below under `#if 0` for the Phase-3    *
+// *  pass to walk animator-by-animator.                                   *
 // *************************************************************************
+
+#include "revenant.h"
+
+// -- Phase 2 port stub ----------------------------------------------------
+
+#if 0 // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)
 
 #include "effect.h"
 
-#include "mappane.h"       
+#include "mappane.h"
 #include "character.h"
 #include "statusbar.h"
 #include "missileeffect.h"
@@ -129,7 +144,7 @@ void TParaEffect::Initialize()
             }
             if (num_targets == 0)
             {
-                target[0] = nullptr;
+                target[0] = '\0';
                 invoker->GetPos(target_position[0]);
                 target_position[0].z = (int32_t)FIX_Z_VALUE(target_position[0].z);
             }
@@ -153,7 +168,7 @@ void TParaEffect::Initialize()
     else
     {
         num_targets = 0;
-        target[0] = nullptr;
+        target[0] = '\0';
         GetPos(target_position[0]);
         GetPos(temp_point);
         target_position[0].z = (int32_t)FIX_Z_VALUE(target_position[0].z);
@@ -228,13 +243,13 @@ void TParaEffect::Initialize()
         }
         else
         {
-            target[0] = nullptr;
+            target[0] = '\0';
             target_position[0].x = target_position[0].y = target_position[0].z = 0;
         }
     }
     else
     {
-        target[0] = nullptr;
+        target[0] = '\0';
         target_position[0].x = target_position[0].y = target_position[0].z = 0;
     }
 
@@ -3609,3 +3624,5 @@ void TIceStormAnimator::RefreshZBuffer()
     WorldToScreen(effect, screen);
     RestoreZ(screen.x - (size.x / 2), screen.y - (size.y / 2), size.x, size.y);
 }
+
+#endif // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)

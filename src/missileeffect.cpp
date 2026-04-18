@@ -2,7 +2,17 @@
 // *                           Cinematix EXILE                             *
 // *                    Copyright (C) 1996 Cinematix                       *
 // *              missileeffect.cpp - TMissileEffect module                *
+// *                                                                       *
+// *  Ported (2026): missile animators pull hard on the D3D3 immediate-   *
+// *  mode path (Device2->SetRenderState with D3DRENDERSTATE_*,            *
+// *  D3DMATRIX* helpers, D3DRGBA, D3DLVERTEX). Renderer vocabulary has   *
+// *  moved to render3d_types.h + math3d.h; sokol pipelines land in       *
+// *  Phase 3. Full original body preserved below under `#if 0`.           *
 // *************************************************************************
+
+#include "revenant.h"
+
+#if 0 // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)
 
 #include <ddraw.h>
 #include <d3d.h>
@@ -10,7 +20,6 @@
 #include <math.h>
 #include "character.h"
 
-#include "revenant.h"
 #include "missileeffect.h"
 #include "effect.h"
 #include "character.h"
@@ -1690,3 +1699,4 @@ bool TFlameDiscAnimator::Render()
 
     return true;
 }
+#endif // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)

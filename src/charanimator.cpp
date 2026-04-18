@@ -10,6 +10,7 @@
 #include "player.h"
 #include "charanimator.h"
 #include "effect.h"
+#include "math3d.h"
 #include "render3d_types.h"
 
 namespace
@@ -228,7 +229,8 @@ void TCharAnimator::ProcessEquipment(int32_t task)
 
       // Find equipment state for player's body type
         int32_t nlen = 0;
-        for (int32_t st = 0; st < equipheader->numstates; st++)
+        int32_t st = 0;
+        for (; st < equipheader->numstates; st++)
         {
           // Objects in this state are for all chars
             if (!stricmp(equipheader->states[st].animname, "still") ||
@@ -467,13 +469,13 @@ void TCharAnimator::RenderShadow()
     }*/
     
     hmm_mat4 pos;
-    D3DMATRIXClear(&pos);
-    D3DMATRIXClear(&obj->matrix);
+    MtxClear(&pos);
+    MtxClear(&obj->matrix);
 
   // Scale shadow based on radius
     hmm_vec3 scl;
-    scl.x = scl.y = scl.z = (float)((TCharacter*)inst)->Radius() / 24.0f;
-    D3DMATRIXScale(&obj->matrix, &scl);
+    scl.X = scl.Y = scl.Z = (float)((TCharacter*)inst)->Radius() / 24.0f;
+    MtxScale(&obj->matrix, &scl);
 
   // Add in char's position
     hmm_vec3 v;
@@ -481,10 +483,10 @@ void TCharAnimator::RenderShadow()
     inst->GetPos(charpos);
 
 #define SHADOW_OFFSET   5.0f
-    v.x = (float)(charpos.x + SHADOW_OFFSET * 2);
-    v.y = (float)(charpos.y + SHADOW_OFFSET * 2);
-    v.z = (float)FIX_Z_VALUE(charpos.z) + (float)SHADOW_OFFSET;
-    D3DMATRIXTranslate(&obj->matrix, &v);
+    v.X = (float)(charpos.x + SHADOW_OFFSET * 2);
+    v.Y = (float)(charpos.y + SHADOW_OFFSET * 2);
+    v.Z = (float)FIX_Z_VALUE(charpos.z) + (float)SHADOW_OFFSET;
+    MtxTranslate(&obj->matrix, &v);
     obj->flags |= OBJ3D_MATRIX | OBJ3D_FACES | OBJ3D_VERTS | OBJ3D_OWNSFACES | OBJ3D_OWNSVERTS;
     
     // Set start (offset, usually 0!!) and number of faces for texture[0 no texture]
@@ -513,16 +515,16 @@ void TCharAnimator::RenderCombatFlashes()
     }*/
     
     hmm_mat4 pos;
-    D3DMATRIXClear(&pos);
-    D3DMATRIXClear(&obj->matrix);
+    MtxClear(&pos);
+    MtxClear(&obj->matrix);
 
     hmm_vec3 scl;
-    scl.x = scl.y = scl.z = 0.6f;
-    D3DMATRIXScale(&obj->matrix, &scl);
-    D3DMATRIXRotateX(&obj->matrix, -(float)(90 * TORADIAN));
-    D3DMATRIXRotateZ(&obj->matrix, -(float)(M_PI / 4.0f));
+    scl.X = scl.Y = scl.Z = 0.6f;
+    MtxScale(&obj->matrix, &scl);
+    MtxRotateX(&obj->matrix, -(float)(90 * TORADIAN));
+    MtxRotateZ(&obj->matrix, -(float)(M_PI / 4.0f));
     // spin 45 degrees every other frame
-    D3DMATRIXRotateY(&obj->matrix, -(float)(45 * TORADIAN * (frame & 1)));
+    MtxRotateY(&obj->matrix, -(float)(45 * TORADIAN * (frame & 1)));
         
     hmm_vec3 v;
     S3DPoint charpos;
@@ -530,10 +532,10 @@ void TCharAnimator::RenderCombatFlashes()
 
 #define CF_OFFSET   25.0f
 #define CF_HEIGHT   50.0f
-    v.x = (float)(charpos.x + CF_OFFSET * 2);
-    v.y = (float)(charpos.y + CF_OFFSET * 2);
-    v.z = (float)FIX_Z_VALUE(charpos.z) + (float)(CF_OFFSET + CF_HEIGHT);
-    D3DMATRIXTranslate(&obj->matrix, &v);
+    v.X = (float)(charpos.x + CF_OFFSET * 2);
+    v.Y = (float)(charpos.y + CF_OFFSET * 2);
+    v.Z = (float)FIX_Z_VALUE(charpos.z) + (float)(CF_OFFSET + CF_HEIGHT);
+    MtxTranslate(&obj->matrix, &v);
     obj->flags |= OBJ3D_MATRIX | OBJ3D_FACES | OBJ3D_VERTS | OBJ3D_OWNSFACES | OBJ3D_OWNSVERTS;
     
     // Set start (offset, usually 0!!) and number of faces for texture[0]
@@ -573,25 +575,19 @@ void TCharAnimator::RenderVisionIndicator()
         obj->flags |= OBJ3D_MATRIX | OBJ3D_FACES | OBJ3D_VERTS | OBJ3D_OWNSFACES | OBJ3D_OWNSVERTS;
     
 #if 1
-//      D3DMATRIXClear(&head_matrix);
+//      MtxClear(&head_matrix);
 
         GetObjectMatrix(GetObjectNum("head"), &pos);
 
         // extract the translation info from the head object's matrix
-        head_pos.x = pos._41;
-        head_pos.y = pos._42;
-        head_pos.z = pos._43;
+        head_pos.X = pos.Elements[3][0];
+        head_pos.Y = pos.Elements[3][1];
+        head_pos.Z = pos.Elements[3][2];
 
-/*
-        head_matrix._11 = pos._11;
-        head_matrix._12 = pos._12;
-        head_matrix._21 = pos._21;
-        head_matrix._22 = pos._22;
-*/
 #endif
 
-        D3DMATRIXClear(&obj->matrix);
-        D3DMATRIXClear(&pos);
+        MtxClear(&obj->matrix);
+        MtxClear(&pos);
 
         inst->GetPos(charpos);
 
@@ -599,31 +595,29 @@ void TCharAnimator::RenderVisionIndicator()
         facing_angle = ((float)inst->GetFace()) * ((float)M_PI / 127.0f);
 
         // scale first: base it on the character's maximum sight range
-        scl.y = 128.0f / (float)(((TCharacter*)inst)->GetCharData())->sightangle;
-        scl.x = ((float)(((TCharacter*)inst)->GetCharData())->sightmax / 100.0f) + 1.0f;
-        D3DMATRIXScale(&obj->matrix, &scl);
+        scl.Y = 128.0f / (float)(((TCharacter*)inst)->GetCharData())->sightangle;
+        scl.X = ((float)(((TCharacter*)inst)->GetCharData())->sightmax / 100.0f) + 1.0f;
+        MtxScale(&obj->matrix, &scl);
 
 
-        D3DMATRIXRotateZ(&obj->matrix, (-90.0f * (float)TORADIAN));
+        MtxRotateZ(&obj->matrix, (-90.0f * (float)TORADIAN));
 
 
         // translate next: put it in front of the character
-        translate_vector.y = -50.0f;
-        translate_vector.x = translate_vector.z = 0.0f;
-        D3DMATRIXTranslate(&obj->matrix, &translate_vector);
+        translate_vector.Y = -50.0f;
+        translate_vector.X = translate_vector.Z = 0.0f;
+        MtxTranslate(&obj->matrix, &translate_vector);
 
 
         // rotate last: aim it in the direction they are facing
-        D3DMATRIXRotateZ(&obj->matrix, facing_angle);
+        MtxRotateZ(&obj->matrix, facing_angle);
 
 
         // now place it where the character's head is...
-        translate_vector.x = (float)charpos.x + head_pos.x;
-        translate_vector.y = (float)charpos.y + head_pos.y;
-        translate_vector.z = (float)charpos.z + head_pos.z;
-        D3DMATRIXTranslate(&obj->matrix, &translate_vector);
-
-        //MultiplyD3DMATRIX(&obj->matrix, &obj->matrix, &head_matrix);
+        translate_vector.X = (float)charpos.x + head_pos.X;
+        translate_vector.Y = (float)charpos.y + head_pos.Y;
+        translate_vector.Z = (float)charpos.z + head_pos.Z;
+        MtxTranslate(&obj->matrix, &translate_vector);
 
         // Set start (not an offset... starts at 1) and number of faces for texture[0]
         obj->texfaces[0] = 0;
@@ -705,7 +699,8 @@ int32_t TCharAnimator::GetWeaponNum()
 
   // Find equipment state for player's body type
     int32_t nlen = 0;
-    for (int32_t st = 0; st < equipheader->numstates; st++)
+    int32_t st = 0;
+    for (; st < equipheader->numstates; st++)
     {
       // Objects in this state are for all chars
         if (!stricmp(equipheader->states[st].animname, "still") ||
@@ -912,7 +907,7 @@ void TWeaponSwipe::Init(SWeaponSwipeParams* p)
 
     obj->primtype = ERender3DPrim::TriangleList;
 
-    for (i = 0; i < maxsegs + 1; i++)
+    for (int32_t i = 0; i < maxsegs + 1; i++)
     {
         Animate();
     }
@@ -930,7 +925,7 @@ void TWeaponSwipe::GenerateStrip()
         return;
 
     obj->flags = OBJ3D_MATRIX | OBJ3D_ROT1 | OBJ3D_VERTS | OBJ3D_FACES | OBJ3D_OWNSVERTS | OBJ3D_OWNSFACES;
-    D3DMATRIXClear(&obj->matrix);
+    MtxClear(&obj->matrix);
 
     float start = 0.3f, startr = min(r + 0.4f, 1.0f), startg = min(g + 0.4f, 1.0f), startb = min(b + 0.4f, 1.0f);
     float fadeoutstep = (float)(start * 2.0f / maxverts), alpha = start;
@@ -945,10 +940,10 @@ void TWeaponSwipe::GenerateStrip()
         {
             for (k = 0; k < 2; k++)
             {
-                spline(&avert, ratio, &points[k][max(0, o - 1)], &points[k][o], &points[k][o + 1], &points[k][o + 2]);
-                lverts[vn].pos.x = avert.x;
-                lverts[vn].pos.y = avert.y;
-                lverts[vn].pos.z = avert.z;
+                Spline(&avert, ratio, &points[k][max(0, o - 1)], &points[k][o], &points[k][o + 1], &points[k][o + 2]);
+                lverts[vn].pos.X = avert.X;
+                lverts[vn].pos.Y = avert.Y;
+                lverts[vn].pos.Z = avert.Z;
                 lverts[vn].diffuse = PackARGB(startr, startg, startb, alpha);
                 vn++;
                 if (startr > r)
@@ -985,7 +980,7 @@ void TWeaponSwipe::Animate()
         TObjectInstance* oi = player->PrimeHand();
         if (oi)
         {
-            char* name = oi->GetTypeName();
+            const char* name = oi->GetTypeName();
             if (stricmp(primehand, name)) // switched weapons! now reset the weaponswipe and all that
             {
                 Close();
@@ -999,16 +994,16 @@ void TWeaponSwipe::Animate()
 
     S3DPoint animpos;
         
-    D3DMATRIXTransform(weaponmat, &vweapbeg, &beg);
-    D3DMATRIXTransform(weaponmat, &vweapend, &end);
+    MtxTransform(weaponmat, &vweapbeg, &beg);
+    MtxTransform(weaponmat, &vweapend, &end);
     
     CycleStrip();
-    points[0][0].x = beg.x;
-    points[0][0].y = beg.y;
-    points[0][0].z = beg.z;
-    points[1][0].x = end.x;
-    points[1][0].y = end.y;
-    points[1][0].z = end.z;
+    points[0][0].X = beg.X;
+    points[0][0].Y = beg.Y;
+    points[0][0].Z = beg.Z;
+    points[1][0].X = end.X;
+    points[1][0].Y = end.Y;
+    points[1][0].Z = end.Z;
 }
 
 void TWeaponSwipe::GetWeaponExtents()
@@ -1023,26 +1018,24 @@ void TWeaponSwipe::GetWeaponExtents()
     float beg = 100000.0f, end = -100000.0f;
     for (int32_t i = 0; i < numverts; i++)
     {
-        if (weaponverts[i].z < beg)
+        if (weaponverts[i].pos.Z < beg)
         {
-            beg = weaponverts[i].z;
+            beg = weaponverts[i].pos.Z;
             ivweapbeg = i;
         }
-        if (weaponverts[i].z > end)
+        if (weaponverts[i].pos.Z > end)
         {
-            end = weaponverts[i].z;
+            end = weaponverts[i].pos.Z;
             ivweapend = i;
         }
     }
-    vweapbeg.x = 0.0f;
-    vweapbeg.y = 0.0f;
-    vweapbeg.z = 0.0f;
-    //vweapbeg.x = weaponverts[ivweapbeg].x;
-    //vweapbeg.y = weaponverts[ivweapbeg].y;
-    //vweapbeg.z = weaponverts[ivweapbeg].z;
-    vweapend.x = weaponverts[ivweapend].x;
-    vweapend.y = weaponverts[ivweapend].y;
-    vweapend.z = weaponverts[ivweapend].z;
+    (void)ivweapbeg;
+    vweapbeg.X = 0.0f;
+    vweapbeg.Y = 0.0f;
+    vweapbeg.Z = 0.0f;
+    vweapend.X = weaponverts[ivweapend].pos.X;
+    vweapend.Y = weaponverts[ivweapend].pos.Y;
+    vweapend.Z = weaponverts[ivweapend].pos.Z;
 }
 
 void TWeaponSwipe::NormalizeColors()
@@ -1081,9 +1074,9 @@ void TWeaponSwipe::CycleStrip()
     {
         for (int32_t i = maxpoints - 1; i > 0; i--)
         {
-            points[o][i].x = points[o][i - 1].x;
-            points[o][i].y = points[o][i - 1].y;
-            points[o][i].z = points[o][i - 1].z;
+            points[o][i].X = points[o][i - 1].X;
+            points[o][i].Y = points[o][i - 1].Y;
+            points[o][i].Z = points[o][i - 1].Z;
         }
     }
 }

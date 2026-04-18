@@ -16,7 +16,7 @@
 #define RADIUS 254
 #define DIAMETER (RADIUS << 1)
 
-#define rdtsc __asm _emit 0x0f __asm _emit 0x31
+// rdtsc macro removed — was only used for x86 cycle-count profiling in commented-out asm
 
 uint8_t IntTable[256];
 
@@ -92,13 +92,14 @@ void DrawStaticLightBlock(int32_t ptrpos, uint16_t *zbufptr, uint32_t *ubptr,
     uint32_t curxend = 0;
     uint8_t iseven = !(abs(xend - xpos) & 1);
 
-    uint32_t ubpos = ptrpos + ((uint32_t)ubptr / 4);
-    uint32_t zoffset = (uint32_t)zbufptr - ((uint32_t)ubptr / 2);
+    uintptr_t ubpos = ptrpos + ((uintptr_t)ubptr / 4);
+    uintptr_t zoffset = (uintptr_t)zbufptr - ((uintptr_t)ubptr / 2);
 
     uint32_t saveesp = 0;
 
 //  uint32_t begtime, endtime;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
 //      rdtsc
@@ -290,6 +291,7 @@ void DrawStaticLightBlock(int32_t ptrpos, uint16_t *zbufptr, uint32_t *ubptr,
 //      rdtsc
 //      mov endtime, eax
     }
+    #endif
 
 //  int32_t diff = (int32_t)(endtime - begtime);
 //  int32_t pixels = (abs(xend - xpos) + 1) * (abs(yend - ypos) + 1);
@@ -548,8 +550,9 @@ bool DrawAmbientLightFunc(PSDrawBlock db, PSDrawParam dp)
 
     int32_t ypos = dp->dheight;
     
-    uint32_t dstptr  = (uint32_t)db->dest + dstoff;
+    uintptr_t dstptr  = (uintptr_t)db->dest + dstoff;
       
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
         mov  esi, dstptr
@@ -572,6 +575,7 @@ bool DrawAmbientLightFunc(PSDrawBlock db, PSDrawParam dp)
         dec  ypos
         jne  ayloop1
     }
+    #endif
 
     return true;
 }
@@ -592,9 +596,9 @@ bool Transfer32to16MMXFunc(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
-    uint32_t srcptr = (uint32_t)db->source;
+    uintptr_t srcptr = (uintptr_t)db->source;
     srcptr += srcoff;
-    uint32_t dstptr = (uint32_t)db->dest;
+    uintptr_t dstptr = (uintptr_t)db->dest;
     dstptr += dstoff;
 
     int32_t height = dp->dheight;
@@ -645,15 +649,16 @@ bool Transfer32to16MMXFunc(PSDrawBlock db, PSDrawParam dp)
     uint8_t REDMASK = 0xF8;
     uint32_t GREENMASK = 0x07E0;
 
-    unsigned __int64 ZERO = 0;
-    unsigned __int64 MULFACT = 0x0008200000082000;
-    unsigned __int64 REDBLUE = 0x00F800F800F800F8;
-    unsigned __int64 GREEN =   0x0000F8000000F800;
-    unsigned __int64 MASKBLUE16 =0x7FE07FE07FE07FE0;
-    unsigned __int64 TEST = 0;
+    uint64_t ZERO = 0;
+    uint64_t MULFACT = 0x0008200000082000;
+    uint64_t REDBLUE = 0x00F800F800F800F8;
+    uint64_t GREEN =   0x0000F8000000F800;
+    uint64_t MASKBLUE16 =0x7FE07FE07FE07FE0;
+    uint64_t TEST = 0;
 
 //  uint32_t begtime, endtime;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
 //      rdtsc
@@ -819,6 +824,7 @@ bool Transfer32to16MMXFunc(PSDrawBlock db, PSDrawParam dp)
 
         emms
     }
+    #endif
 
 //  int32_t diff = (int32_t)(endtime - begtime);
 //  int32_t pixels = dp->swidth * dp->sheight;
@@ -834,9 +840,9 @@ bool Transfer32to15MMXFunc(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
-    uint32_t srcptr = (uint32_t)db->source;
+    uintptr_t srcptr = (uintptr_t)db->source;
     srcptr += srcoff;
-    uint32_t dstptr = (uint32_t)db->dest;
+    uintptr_t dstptr = (uintptr_t)db->dest;
     dstptr += dstoff;
 
     int32_t height = dp->dheight;
@@ -887,15 +893,16 @@ bool Transfer32to15MMXFunc(PSDrawBlock db, PSDrawParam dp)
     uint8_t REDMASK = 0x7C;
     uint32_t GREENMASK = 0x03E0;
 
-    unsigned __int64 ZERO = 0;
-    unsigned __int64 MULFACT = 0x0008200000082000;
-    unsigned __int64 REDBLUE = 0x00F800F800F800F8;
-    unsigned __int64 GREEN =   0x0000F8000000F800;
-    unsigned __int64 MASKBLUE16 =0x7FE07FE07FE07FE0;
-    unsigned __int64 TEST = 0;
+    uint64_t ZERO = 0;
+    uint64_t MULFACT = 0x0008200000082000;
+    uint64_t REDBLUE = 0x00F800F800F800F8;
+    uint64_t GREEN =   0x0000F8000000F800;
+    uint64_t MASKBLUE16 =0x7FE07FE07FE07FE0;
+    uint64_t TEST = 0;
 
 //  uint32_t begtime, endtime;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
 //      rdtsc
@@ -1051,6 +1058,7 @@ bool Transfer32to15MMXFunc(PSDrawBlock db, PSDrawParam dp)
 
         emms
     }
+    #endif
 
 //  int32_t diff = (int32_t)(endtime - begtime);
 //  int32_t pixels = dp->swidth * dp->sheight;
@@ -1066,9 +1074,9 @@ bool Transfer32to16Func(PSDrawBlock db, PSDrawParam dp)
 
     SETUP_DRAW
 
-    uint32_t srcptr = (uint32_t)db->source;
+    uintptr_t srcptr = (uintptr_t)db->source;
     srcptr += srcoff;
-    uint32_t dstptr = (uint32_t)db->dest;
+    uintptr_t dstptr = (uintptr_t)db->dest;
     dstptr += dstoff;
 
     int32_t height = dp->dheight;
@@ -1108,6 +1116,7 @@ bool Transfer32to16Func(PSDrawBlock db, PSDrawParam dp)
 
 //  uint32_t begtime, endtime;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
 //      rdtsc
@@ -1234,6 +1243,7 @@ bool Transfer32to16Func(PSDrawBlock db, PSDrawParam dp)
 //      rdtsc
 //      mov endtime, eax
     }
+    #endif
 
 //  int32_t diff = (int32_t)(endtime - begtime);
 //  int32_t pixels = dp->swidth * dp->sheight;
@@ -1389,13 +1399,14 @@ void DrawStaticLightBlockMMX(int32_t ptrpos, uint16_t *zbufptr, uint32_t *ubptr,
     uint32_t curxend = 0;
     uint8_t iseven = !(abs(xend - xpos) & 1);
 
-    uint32_t ubpos = ptrpos + ((uint32_t)ubptr / 4);
-    uint32_t zoffset = (uint32_t)zbufptr - ((uint32_t)ubptr / 2);
+    uintptr_t ubpos = ptrpos + ((uintptr_t)ubptr / 4);
+    uintptr_t zoffset = (uintptr_t)zbufptr - ((uintptr_t)ubptr / 2);
 
     uint32_t saveesp = 0;
 
 //  uint32_t begtime, endtime;
 
+    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
     __asm
     {
 //      rdtsc
@@ -1595,6 +1606,7 @@ pixel1:
 //      rdtsc
 //      mov endtime, eax
     }
+    #endif
 
 //  int32_t diff = (int32_t)(endtime - begtime);
 //  int32_t pixels = (abs(xend - xpos) + 1) * (abs(yend - ypos) + 1);

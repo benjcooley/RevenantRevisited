@@ -9,8 +9,28 @@
 #include "decompdata.h"
 #include "chunkcache.h"
 
-int32_t TChunkCache::ChunkDecompress(void *source, void *dest, uint32_t clear);
-int32_t TChunkCache::ChunkDecompressZ(void *source, void *dest, uint32_t clear);
+#include <cstring>
+
+// Chunk compression format (per-chunk):
+//   int32   chunk id
+//   uint8   dle_rle    // byte value reserved as the RLE escape
+//   uint8   dle_lz     // byte value reserved as the LZ escape
+//   byte stream organized as CHUNKHEIGHT rows. For every source byte `op`:
+//     op == dle_rle → next byte is count:
+//        count == 0       → end of row
+//        count >= 0x80    → skip (count & 0x7f) output pixels
+//        count  < 0x80    → fill `count` pixels with the following data byte
+//     op == dle_lz  → next byte is count:
+//        count == 0 (16-bit variant only) → next byte sets the high-byte
+//                                           state used for 16-bit writes
+//        count  > 0 → next two bytes form a little-endian distance; copy
+//                     `count` bytes from (post-payload - distance - 4) in
+//                     the source stream forward into dest
+//     otherwise           → write `op` as a raw pixel
+//
+// The LZ back-reference walks backwards through the *source* stream (not
+// the output), and the -4 subtracted from the distance compensates for
+// the 4-byte chunk-id prefix sitting before the DLE header.
 
 TChunkCache::TChunkCache()
 {
@@ -197,7 +217,8 @@ bool TChunkCache::RemoveChunk(int32_t number)
 
     BEGIN_CRITICAL(); // Don't allow two threads at once
 
-    for (int32_t loop = 0; loop < numchunks; loop++)
+    int32_t loop = 0;
+    for (; loop < numchunks; loop++)
     {
         int32_t cycle = currentcycle - 10;
 
@@ -210,7 +231,7 @@ bool TChunkCache::RemoveChunk(int32_t number)
         }
     }
 
-    END_CRITICAL(); // 
+    END_CRITICAL(); //
 
     if (loop == numchunks)
         return false;
@@ -225,7 +246,8 @@ bool TChunkCache::RemoveChunk16(int32_t number)
 
     BEGIN_CRITICAL(); // Don't allow two threads at once
 
-    for (int32_t loop = 0; loop < numchunks; loop++)
+    int32_t loop = 0;
+    for (; loop < numchunks; loop++)
     {
         int32_t cycle = currentcycle16 - 10;
 
@@ -238,7 +260,7 @@ bool TChunkCache::RemoveChunk16(int32_t number)
         }
     }
 
-    END_CRITICAL(); // 
+    END_CRITICAL(); //
 
     if (loop == numchunks)
         return false;
@@ -250,371 +272,109 @@ int32_t TChunkCache::ChunkDecompress(void *source, void *dest, uint32_t clear)
 {
     if (chunks == nullptr)
         return -1;
-    
-    int32_t *buffer = (int32_t *)source;
-    int32_t number  = *buffer;
-    buffer++;
-    
-    uint32_t tmpedx;
-    uint32_t tmpesi;
 
-    __asm
+    const uint8_t *src = static_cast<const uint8_t *>(source);
+    const int32_t number = *reinterpret_cast<const int32_t *>(src);
+    src += 4;
+
+    constexpr int32_t total = CHUNKWIDTH * CHUNKHEIGHT;
+    uint8_t *dst = static_cast<uint8_t *>(dest);
+
+    std::memset(dst, (clear == 1) ? 0x00 : 0xFF, total);
+
+    const uint8_t dle_rle = src[0];
+    const uint8_t dle_lz  = src[1];
+    src += 2;
+
+    int32_t row = CHUNKHEIGHT;
+    while (row > 0)
     {
-        mov  ecx, CHUNKWIDTH * CHUNKHEIGHT
-        shr  ecx, 2
-
-        mov  edi, [dest]
-
-        mov  eax, [clear]
-        cmp  eax, 1
-        jne  clearzloop
-
-    clearloop:
-        mov  uint32_t PTR [edi], uint32_t PTR 0
-        add  edi, 4
-        dec  ecx
-        jne  clearloop
-        jmp  normy
-
-    clearzloop:
-        mov  uint32_t PTR [edi], uint32_t PTR 0xffffffff
-        add  edi, 4
-        dec  ecx
-        jne  clearzloop
-
-    normy:
-        mov  esi, [buffer]          ; Point ESI to source
-        mov  edi, [dest]            ; Point EDI to destination
-
-        cld                         ; Forward direction
-
-        mov  dx, [esi]              ; Get DLE 1/2
-        add  esi, 2                 ; Advance past header
-        
-        mov  ecx, CHUNKHEIGHT
-
-    DecompLoop:
-        mov  ax, [esi]              ; Get one byte of data
-        inc  esi
-
-        cmp  al, dl                 ; Is RLE ?
-        je   unrle  
-
-        cmp  al, dh                 ; Is LZ ?
-        je   unlz   
-
-        mov  [edi], al              ; Store raw data
-
-        inc  edi
-        jmp  DecompLoop
-
-    EOL:
-        dec  ecx
-        jne  DecompLoop
-
-        jmp  Exit
-
-    unrle:
-        mov  al, ah             ; Get count
-        inc  esi
-
-        or   al, al
-        je   EOL
-
-        cmp  al, 80h
-        jb   NormalRLE
-        
-        and  eax, 7fh
-        add  edi, eax
-
-        jmp  DecompLoop             ; Loop for more data
-
-    NormalRLE:
-        and  eax, 7fh
-        mov  [tmpedx], edx          
-
-        mov  edx, eax               ; Use local counter
-        mov  al, [esi]              ; Get byte to repeat cx times
-
-        inc  esi                    ; Advance
-        mov  ah, al                 ; Extend to ax
-
-        mov  ebx, eax               ; Store in bx
-        shl  eax, 16                ; Put it into high 16 bits
-
-        mov  al, bl                 ; Include it in low 16 bits
-        mov  ah, bh                 ; Include it in low 16 bits
-
-        shr  edx, 1                 ; Make ready for word
-        setc bl                     ; Store carry-flag in bl
-
-        shr  edx, 1                 ; Make ready for dwords
-        setc bh                     ; Store carry-flag in bh
-
-        or   edx, edx
-        je   CheckSingle
-    
-    RLEDecompLoop:
-        mov  [edi], eax
-        add  edi, 4
-
-        dec  edx
-        jne  RLEDecompLoop
-
-    CheckSingle:
-        or   bh, bh
-        jz   skip1
-
-        mov  [edi], ax              ; Store extra-word
-        add  edi, 2                 ; Advance
-
-    skip1:
-        or   bl, bl                 ; Extra byte ?
-        jz   skip2  
-
-        mov  [edi], al              ; Store extra byte
-        inc  edi                    ; Advance
-
-    skip2:
-        mov  edx, [tmpedx]
-        jmp  DecompLoop             ; Loop for more data
-
-    unlz:
-        xor  ebx, ebx
-        mov  [tmpedx], edx
-
-        mov  dl, ah                 ; Get count
-        mov  bx, [esi + 1]          ; Get distance to look back
-
-        and  edx, 000000ffh
-        add  esi, 3                 ; Advance
-
-        mov  [tmpesi], esi 
-        sub  esi, ebx               ; Go back to start of data
-
-        sub  esi, 4
-
-        cmp  ebx, 4                 ; Less than 4 bytes back ?
-        jae  Ok386
-
-    LZDecompLoop:
-        mov  al, [esi]
-        inc  esi
-
-        mov  [edi], al
-        inc  edi
-
-        dec  edx
-        jne  LZDecompLoop
-
-        jmp  GoOn
-
-    Ok386:
-        shr  edx, 1                 ; Make ready for words
-        setc bl                     ; Save carry flag
-
-        shr  edx, 1                 ; Make ready for dwords
-        setc bh                     ; Save carry flag
-
-        or   edx, edx
-        je   Skip3
-
-    LZDeLoop2:
-        mov  eax, [esi]
-        add  esi, 4
-
-        mov  [edi], eax
-        add  edi, 4
-    
-        dec  edx
-        jne  LZDeLoop2
-
-        or   bh, bh
-        jz   Skip3                  ; Skip if no extra word
-
-        mov  ax, [esi]
-        add  esi, 2
-
-        mov  [edi], ax
-        add  edi, 2
-    
-    Skip3:
-        or   bl, bl                 ; Extra-byte ?
-        jz   GoOn   
-
-        mov  al, [esi]
-        inc  esi
-
-        mov  [edi], al
-        inc  edi
-
-    GoOn:
-        mov  edx, [tmpedx]
-        mov  esi, [tmpesi]
-
-        jmp  DecompLoop
-
-    Exit:
+        const uint8_t op = *src++;
+        if (op == dle_rle)
+        {
+            const uint8_t count = *src++;
+            if (count == 0) { --row; continue; }
+            if (count >= 0x80) { dst += (count & 0x7F); continue; }
+            const uint8_t data = *src++;
+            std::memset(dst, data, count);
+            dst += count;
+        }
+        else if (op == dle_lz)
+        {
+            const uint8_t count = *src++;
+            const uint16_t dist =
+                static_cast<uint16_t>(src[0]) |
+                (static_cast<uint16_t>(src[1]) << 8);
+            src += 2;
+            const uint8_t *back = src - dist - 4;
+            for (int32_t i = 0; i < count; ++i)
+                *dst++ = *back++;
+        }
+        else
+        {
+            *dst++ = op;
+        }
     }
 
     return number;
 }
 
-int32_t TChunkCache::ChunkDecompressZ(void *source, void *dest, uint32_t clear)
+int32_t TChunkCache::ChunkDecompressZ(void *source, void *dest, uint32_t /*clear*/)
 {
     if (chunks == nullptr)
         return -1;
 
-    int32_t *buffer = (int32_t *)source;
-    int32_t number  = *buffer;
-    buffer++;
-    
-    uint32_t tmpecx;
-    uint32_t tmpedx;
-    uint32_t tmpesi;
-    uint8_t  highbyte = 0;
+    const uint8_t *src = static_cast<const uint8_t *>(source);
+    const int32_t number = *reinterpret_cast<const int32_t *>(src);
+    src += 4;
 
-    __asm
+    constexpr int32_t total = CHUNKWIDTH * CHUNKHEIGHT;
+    uint16_t *dst = static_cast<uint16_t *>(dest);
+
+    for (int32_t i = 0; i < total; ++i)
+        dst[i] = 0x7F7F;
+
+    const uint8_t dle_rle = src[0];
+    const uint8_t dle_lz  = src[1];
+    src += 2;
+
+    uint8_t highbyte = 0;
+    int32_t row = CHUNKHEIGHT;
+    while (row > 0)
     {
-        mov  ecx, CHUNKWIDTH * CHUNKHEIGHT
-        shr  ecx, 1
-
-        mov  edi, [dest]
-
-    clearzloop:
-        mov  uint32_t PTR [edi], uint32_t PTR 0x7f7f7f7f
-        add  edi, 4
-        dec  ecx
-        jne  clearzloop
-
-        mov  esi, [buffer]          ; Point ESI to source
-        mov  edi, [dest]            ; Point EDI to destination
-
-        cld                         ; Forward direction
-
-        mov  dx, [esi]              ; Get DLE 1/2
-        add  esi, 2                 ; Advance past header
-        
-        mov  [tmpecx], CHUNKHEIGHT
-
-    DecompLoop:
-        mov  ax, [esi]              ; Get one byte of data
-        inc  esi
-
-        cmp  al, dl                 ; Is RLE ?
-        je   unrle  
-
-        cmp  al, dh                 ; Is LZ ?
-        je   unlz   
-
-        mov  ah, [highbyte]
-        mov  [edi], ax              ; Store raw data
-
-        add  edi, 2
-        jmp  DecompLoop
-
-    EOL:
-        dec  [tmpecx]
-        jne  DecompLoop
-
-        jmp  Exit
-
-    unrle:
-        mov  al, ah             ; Get count
-        inc  esi
-
-        or   al, al
-        je   EOL
-                 
-        cmp  al, 80h
-        jb   NormalRLE
-        
-        and  eax, 7fh
-        
-        shl  eax, 1
-        add  edi, eax
-
-        jmp  DecompLoop             ; Loop for more data
-
-    NormalRLE:
-        and  eax, 7fh
-        mov  [tmpedx], eax          
-
-        mov  al, [esi]              ; Get byte to repeat cx times
-        inc  esi                    ; Advance
-
-        mov  ah, [highbyte]
-        mov  ebx, eax               ; Store in bx
-        
-        shl  eax,  16               ; Put it into high 16 bits
-        mov  al, bl                 ; Include it in low 16 bits
-        
-        mov  ah, bh
-        shr  [tmpedx], 1            ; Make ready for word
-
-        setc bl                     ; Store carry-flag in bl
-        
-        cmp  [tmpedx], 0
-        je   CheckSingle
-    
-    RLEDecompLoop:
-        mov  [edi], eax
-        add  edi, 4
-
-        dec  [tmpedx]
-        jne  RLEDecompLoop
-
-    CheckSingle:
-        or   bl, bl                 ; Extra byte ?
-        je   skip2  
-
-        mov  [edi], ax              ; Store extra byte
-        add  edi, 2                 ; Advance
-
-    skip2:
-        jmp  DecompLoop             ; Loop for more data
-
-    unlz:
-        or   ah, ah
-        jne  normallz
-
-        mov  ah, [esi + 1]
-        add  esi, 2
-
-        mov  [highbyte], ah
-        jmp  DecompLoop
-
-    normallz:
-        mov  al, ah                 ; Get count
-
-        mov  bx, [esi + 1]          ; Get distance to look back
-        and  ebx, 0000ffffh
-
-        and  eax, 000000ffh
-        mov  [tmpedx], eax
-    
-        add  esi, 3                 ; Advance
-        mov  [tmpesi], esi 
-
-        sub  esi, ebx               ; Go back to start of data
-        sub  esi, 4
-
-        mov  ah, [highbyte]
-
-    LZDecompLoop:
-        mov  al, [esi]
-        inc  esi
-
-        mov  [edi], ax
-        add  edi, 2
-
-        dec  [tmpedx]
-        jne  LZDecompLoop
-
-        mov  esi, [tmpesi]
-        jmp  DecompLoop
-
-    Exit:
+        const uint8_t op = *src++;
+        if (op == dle_rle)
+        {
+            const uint8_t count = *src++;
+            if (count == 0) { --row; continue; }
+            if (count >= 0x80) { dst += (count & 0x7F); continue; }
+            const uint8_t data = *src++;
+            const uint16_t word = static_cast<uint16_t>(highbyte) << 8 | data;
+            for (int32_t i = 0; i < count; ++i)
+                *dst++ = word;
+        }
+        else if (op == dle_lz)
+        {
+            const uint8_t count = *src++;
+            if (count == 0)
+            {
+                // Set highbyte state (no pixels written).
+                highbyte = *src++;
+                continue;
+            }
+            const uint16_t dist =
+                static_cast<uint16_t>(src[0]) |
+                (static_cast<uint16_t>(src[1]) << 8);
+            src += 2;
+            const uint8_t *back = src - dist - 4;
+            const uint16_t high = static_cast<uint16_t>(highbyte) << 8;
+            for (int32_t i = 0; i < count; ++i)
+                *dst++ = high | *back++;
+        }
+        else
+        {
+            *dst++ = static_cast<uint16_t>(highbyte) << 8 | op;
+        }
     }
 
     return number;

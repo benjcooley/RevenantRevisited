@@ -411,7 +411,7 @@ bool T3DImagery::InitializeMesh(S3DImageryBody* mesh)
             else
                 ist = &(mesh->statedata[c]);
 
-            if (ist->motion == nullptr)
+            if (!ist->motion.ptr())
             {
                 motion[c] = nullptr;
                 GetHeader()->states[c].aniflags |= AF_NOMOTION;
@@ -1809,7 +1809,7 @@ TObjectAnimator* T3DImagery::NewObjectAnimator(TObjectInstance* oi)
         if (!InitializeMesh((S3DImageryBody*)GetBody()))
             FatalError("Unable to initialize 3D imagery for %s", oi->GetName());
 
-    char* name = oi->GetTypeName();
+    const char* name = oi->GetTypeName();
     T3DAnimatorBuilder* builder = T3DAnimatorBuilder::GetBuilder(name);
 
     if (builder == &T3DAnimatorBuilderInstance)

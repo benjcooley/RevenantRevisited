@@ -4,7 +4,8 @@
 // *                     area.h - Game Area Manager                        *
 // ************************************************************************* 
 
-#include "revenant.h" 
+#include "revenant.h"
+#include "logging.h"
 #include "parse.h"
 #include "sound.h"
 #include "mappane.h"
@@ -183,7 +184,7 @@ bool TArea::Load(char *aname, TToken &t)
         {
             // Retail added area tags (AUDIOENV, ...) not in the pre-release
             // source. Skip to the next line rather than aborting.
-            fprintf(stderr, "[area] skipping unknown tag '%s'\n", t.Text());
+            log_warn("[area] skipping unknown tag '%s'", t.Text());
             while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
                 t.Get();
             t.LineGet();

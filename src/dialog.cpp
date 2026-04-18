@@ -26,11 +26,11 @@ bool TDialogList::Initialize()
     lines.DeleteAll();
 
     char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s.def", ClassDefPath, Language);
+    sprintf(fname, "%s%s.def", ClassDefPath, Language.CStr());
 
-    FILE *fp = popen(fname, "rb");
+    FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
-        FatalError("Unable to find game area file %s.DEF", Language);
+        FatalError("Unable to find game area file", Language.CStr());
 
     TFileParseStream s(fp, fname);
     TToken t(s);
@@ -134,7 +134,7 @@ char *DialogLine(char *line, char *outbuf, int32_t buflen)
     char *p, *b, *d;
 
     b = buf;
-    for (p = line; *p != nullptr; )
+    for (p = line; *p != '\0'; )
     {
         if (*p == '[')
         {
@@ -149,9 +149,9 @@ char *DialogLine(char *line, char *outbuf, int32_t buflen)
                 *t++ = *p++;
             if (*p == ']')
                 p++;
-            *t++ = nullptr;
+            *t++ = '\0';
 
-            data[0] = nullptr;
+            data[0] = '\0';
             if (!stricmp(tag, "me"))                // "me" is locke
                 strcpy(data, Player->GetName());
             else if (!stricmp(tag, "chr") && DlgContext != nullptr) // "chr" is the character talking
@@ -165,7 +165,7 @@ char *DialogLine(char *line, char *outbuf, int32_t buflen)
             *b++ = *p++;
     }
 
-    *b = nullptr;
+    *b = '\0';
 
     return strncpyz(outbuf, buf, buflen);
 }
@@ -413,7 +413,7 @@ COMMAND(CmdChoice)
     if (t.Type() != TKN_TEXT && t.Type() != TKN_IDENT)
         return CMD_BADPARAMS;
 
-    DialogPane.AddChoice(buf, t.Text());
+    DialogPane.AddChoice(buf, const_cast<char *>(t.Text()));
 
     t.Get();
     return 0;

@@ -6,6 +6,9 @@
 
 #include "spell.h"
 
+#include "logging.h"
+#include "revutils.h"
+
 #include "3dimage.h"
 #include "character.h"
 #include "complexobj.h"
@@ -114,7 +117,44 @@ bool SSpellData::Load(char *aname, TToken &t)
             variants.Add(var);
         }
         else
-            t.Error("Invalid spell tag %s", t.Text());
+        {
+            // Retail added spell tags not in the pre-release source. Skip
+            // them rather than aborting. Tags come in two flavors: single-
+            // line (ICONNAME, LIGHT) and ones followed by a BEGIN/END block
+            // (CONTROLDATA). Detect the block form by peeking for BEGIN.
+            const char *tag = t.Text();
+            log_warn("[spell] skipping unknown tag '%s'", tag);
+
+            while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+                t.Get();
+            t.LineGet();
+
+            // If the next line opens a nested BEGIN/END block (retail
+            // CONTROLDATA, etc.), skip until its matching END. BEGIN/END
+            // are TKN_KEYWORD tokens — use IsBegin()/IsEnd() not TKN_IDENT.
+            if (t.IsBegin())
+            {
+                int depth = 1;
+                t.LineGet();
+                while (depth > 0 && t.Type() != TKN_EOF)
+                {
+                    if (t.IsBegin())
+                        depth++;
+                    else if (t.IsEnd())
+                    {
+                        depth--;
+                        if (depth == 0)
+                        {
+                            t.LineGet();
+                            break;
+                        }
+                    }
+                    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+                        t.Get();
+                    t.LineGet();
+                }
+            }
+        }
     }
 
     if (!t.Is("END"))
@@ -155,7 +195,7 @@ bool TSpellList::Load()
     char fname[MAXPATHLEN];
     sprintf(fname, "%s%s", ClassDefPath, "spell.def");
 
-    FILE *fp = fopen(fname, "rb");
+    FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
         FatalError("Unable to find spell info file SPELL.DEF");
 

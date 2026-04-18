@@ -273,7 +273,7 @@ bool TAnimImagery::SaveBitmap(char *path, int32_t state, bool zbuffer)
     strcpy(basename, path);
     char *ptr = strchr(basename, '.');
     if (ptr)
-        *ptr = nullptr;
+        *ptr = '\0';
 
     if (state >= NumStates())
         return false;

@@ -18,21 +18,21 @@ char desname1[RESNAMELEN], desname2[RESNAMELEN], desname3[RESNAMELEN], desname4[
 
 // ******************** Action Block ************************
 
-TActionBlock::TActionBlock(char *n, ACTION a)
+TActionBlock::TActionBlock(const char *n, ACTION a)
 {
     ClearBlock();
     strcpy(name, n);
     action = a;
 }
 
-TActionBlock::TActionBlock(char *n, char *str, ACTION a)
+TActionBlock::TActionBlock(const char *n, const char *str, ACTION a)
 {
     ClearBlock();
     sprintf(name, "%s%s", n, str);
     action = a;
 }
 
-TActionBlock::TActionBlock(TActionBlock &ab, char *str, ACTION a)
+TActionBlock::TActionBlock(TActionBlock &ab, const char *str, ACTION a)
 {
     memcpy(this, &ab, sizeof(TActionBlock));
     if (str)
@@ -43,7 +43,7 @@ TActionBlock::TActionBlock(TActionBlock &ab, char *str, ACTION a)
 
 void TActionBlock::ClearBlock()
 {
-    name[0] = nullptr;
+    name[0] = '\0';
     action = ACTION_ANIMATE;
     frame = -1; // Means set frame to default
     wait = 0;
@@ -61,8 +61,8 @@ void TActionBlock::ClearBlock()
 
 bool TActionBlock::Is(const char *s) const
 {
-    char *p1 = name;
-    char *p2 = s;
+    const char *p1 = name;
+    const char *p2 = s;
 
     while (*p1 && *p2 && 
              (
@@ -109,7 +109,7 @@ bool TActionBlock::Is(const char *s) const
 bool TActionBlock::IsRight(const char *state) const
 {
     int32_t len = strlen(state);
-    if (!strnicmp(name, state, len) && name[len] == 'r' && name[len + 1] == nullptr)
+    if (!strnicmp(name, state, len) && name[len] == 'r' && name[len + 1] == '\0')
         return true;
 
     return false;
@@ -118,7 +118,7 @@ bool TActionBlock::IsRight(const char *state) const
 bool TActionBlock::IsLeft(const char *state) const
 {
     int32_t len = strlen(state);
-    if (!strnicmp(name, state, len) && name[len] == 'l' && name[len + 1] == nullptr)
+    if (!strnicmp(name, state, len) && name[len] == 'l' && name[len + 1] == '\0')
         return true;
 
     return false;
@@ -127,8 +127,8 @@ bool TActionBlock::IsLeft(const char *state) const
 bool TActionBlock::IsStep(const char *state) const
 {
     int32_t len = strlen(state);
-    if (!strnicmp(name, state, len) && 
-      (name[len] == 'r' || name[len] == 'l') && name[len + 1] == nullptr)
+    if (!strnicmp(name, state, len) &&
+      (name[len] == 'r' || name[len] == 'l') && name[len + 1] == '\0')
         return true;
 
     return false;
@@ -138,8 +138,8 @@ bool TActionBlock::IsStep(const char *state) const
 bool TActionBlock::IsOneOf(const char *state) const
 {
     int32_t len = strlen(state);
-    if (!strnicmp(name, state, len) && 
-      (name[len] >= '0' && name[len] <= '9') && name[len + 1] == nullptr)
+    if (!strnicmp(name, state, len) &&
+      (name[len] >= '0' && name[len] <= '9') && name[len + 1] == '\0')
         return true;
 
     return false;

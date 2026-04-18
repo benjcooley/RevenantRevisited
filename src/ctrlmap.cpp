@@ -377,9 +377,9 @@ void TControlMap::Clear()
 // Gets a keycode id given the ascii string name
 int32_t TControlMap::GetKeyCode(char *name)
 {
-    if (name[1] == nullptr && (name[0] >= 'A' && name[0] <= 'Z'))
+    if (name[1] == '\0' && (name[0] >= 'A' && name[0] <= 'Z'))
         return name[0];
-    if (name[1] == nullptr && (name[0] >= 'a' && name[0] <= 'z'))
+    if (name[1] == '\0' && (name[0] >= 'a' && name[0] <= 'z'))
         return name[0] - 'a' + 'A';
     for (int32_t c = 0; c < NUMKEYNAMES; c++)
     {
@@ -397,7 +397,7 @@ char *TControlMap::GetKeyName(int32_t keycode)
     if (keycode >= 'A' && keycode <= 'Z')
     {
         buf[0] = (char)keycode;
-        buf[1] = nullptr;
+        buf[1] = '\0';
         return buf;
     }
 
@@ -413,7 +413,7 @@ char *TControlMap::GetKeyName(int32_t keycode)
 // Takes an array of keycodes and returns a keystring with the format "CTRL-SHIFT-A"
 char *TControlMap::MakeKeyString(int32_t numkeys, int32_t *keys, char *buf, int32_t buflen)
 {
-    buf[0] = nullptr;
+    buf[0] = '\0';
 
     if (numkeys < 1 || keys[0] <= 0)
         return buf;
@@ -445,7 +445,7 @@ int32_t TControlMap::ParseKeyString(char *str, int32_t numkeys, int32_t *keys)
     char *t = buf;
     char *p = strchr(buf, '-');
     if (p)
-        *p = nullptr;
+        *p = '\0';
 
     int32_t key = 0;
     int32_t num = 0;
@@ -458,7 +458,7 @@ int32_t TControlMap::ParseKeyString(char *str, int32_t numkeys, int32_t *keys)
             t = p + 1;
             p = strchr(t, '-');
             if (p)
-                *p = nullptr;
+                *p = '\0';
         }
         else
             t = nullptr;
@@ -479,7 +479,7 @@ int32_t TControlMap::ParseKeyString(char *str, int32_t numkeys, int32_t *keys)
 // Takes a command entry structure, and creates a string of the format "CTRL-A,SHIFT-F1"
 char *TControlMap::MakeCommandString(PSControlEntry ce, char *buf, int32_t buflen)
 {
-    buf[0] = nullptr;
+    buf[0] = '\0';
 
     for (int32_t code = 0; code < CODESPERCOMMAND; code++)
     {
@@ -506,7 +506,7 @@ int32_t TControlMap::ParseCommandString(char *str, PSControlEntry ce)
     char *t = buf;
     char *p = strchr(buf, ',');
     if (p)
-        *p = nullptr;
+        *p = '\0';
 
     int32_t code = 0;
     int32_t num = 0;
@@ -520,7 +520,7 @@ int32_t TControlMap::ParseCommandString(char *str, PSControlEntry ce)
             t = p + 1;
             p = strchr(t, ',');
             if (p)
-                *p = nullptr;
+                *p = '\0';
         }
         else
             t = nullptr;

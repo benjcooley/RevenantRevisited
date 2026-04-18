@@ -428,7 +428,7 @@ bool TBitmap::Put(int32_t x, int32_t y, TSurface* surface, int32_t srcx, int32_t
     memset(&db, 0, sizeof(SDrawBlock));
     memset(&dp, 0, sizeof(SDrawParam));
 
-    db.srcbitmapflags = surface->flags;
+    db.srcbitmapflags = surface->Flags();
     db.dstbitmapflags = flags;
 
     db.dest = &data16;
@@ -487,41 +487,42 @@ bool TBitmap::SaveBMP(char *filename)
 {
     if (this->width < 1 || this->height < 1 || !(flags & (BM_15BIT | BM_16BIT)))
         return false;
-    
+
     int32_t dstwidth = (width + 3) & 0xFFFFFFFC; // Round up to even 4 pixels
 
     FILE *f = fopen(filename, "wb");
     if (!f)
         return false;
 
-  // Bitmap file header
-    BITMAPFILEHEADER header;
-    memset(&header, 0, sizeof(BITMAPFILEHEADER));
-    BITMAPINFOHEADER info;
-    memset(&info, 0, sizeof(BITMAPINFOHEADER));
+    // Portable BMP file header (14 bytes) + BITMAPINFOHEADER (40 bytes), little-endian
+    const uint32_t fileHeaderSize = 14;
+    const uint32_t infoHeaderSize = 40;
+    const uint32_t pixelDataOffset = fileHeaderSize + infoHeaderSize;
+    const uint32_t imageSize = (uint32_t)(dstwidth * 3) * (uint32_t)height;
+    const uint32_t fileSize = pixelDataOffset + imageSize;
 
-    header.bfType = ((uint16_t)'M' << 8U) + (uint16_t)'B';
-    header.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + (dstwidth * 3) * height;
-    header.bfReserved1 = 0;
-    header.bfReserved2 = 0;
-    header.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
-    
-    if (fwrite(&header, sizeof(header), 1, f) != 1)
-    {
-        fclose(f);
-        return false;
-    }
+    auto writeU16 = [&](uint16_t v) { uint8_t b[2] = { (uint8_t)(v & 0xFF), (uint8_t)((v >> 8) & 0xFF) }; return fwrite(b, 2, 1, f) == 1; };
+    auto writeU32 = [&](uint32_t v) { uint8_t b[4] = { (uint8_t)(v & 0xFF), (uint8_t)((v >> 8) & 0xFF), (uint8_t)((v >> 16) & 0xFF), (uint8_t)((v >> 24) & 0xFF) }; return fwrite(b, 4, 1, f) == 1; };
+    auto writeS32 = [&](int32_t v) { return writeU32((uint32_t)v); };
 
-  // Bitmap info header
-    info.biSize = sizeof(BITMAPINFOHEADER);
-    info.biWidth = dstwidth;
-    info.biHeight = height;
-    info.biPlanes = 1;
-    info.biBitCount = 24;
-    info.biCompression = BI_RGB;
-//  info.biSizeImage = (dstwidth * 3) * (uint32_t)height;
-    
-    if (fwrite(&info, sizeof(info), 1, f) != 1)
+    bool ok = true;
+    ok = ok && writeU16(0x4D42);           // "BM"
+    ok = ok && writeU32(fileSize);
+    ok = ok && writeU16(0);                // reserved1
+    ok = ok && writeU16(0);                // reserved2
+    ok = ok && writeU32(pixelDataOffset);
+    ok = ok && writeU32(infoHeaderSize);
+    ok = ok && writeS32(dstwidth);
+    ok = ok && writeS32(height);
+    ok = ok && writeU16(1);                // planes
+    ok = ok && writeU16(24);               // bit count
+    ok = ok && writeU32(0);                // BI_RGB
+    ok = ok && writeU32(imageSize);
+    ok = ok && writeS32(0);                // x pels per meter
+    ok = ok && writeS32(0);                // y pels per meter
+    ok = ok && writeU32(0);                // clr used
+    ok = ok && writeU32(0);                // clr important
+    if (!ok)
     {
         fclose(f);
         return false;
@@ -656,19 +657,11 @@ bool TBitmap::Line(int32_t x1, int32_t y1, int32_t x2, int32_t y2, SColor &color
         break;
     }   
 
-    __asm
+    if (x1 > x2)
     {
-        mov eax, x1
-        cmp eax, x2
-        jne noswap   
-       
-        xchg eax, x2
-        mov x1, eax
-        mov eax, y1
-        xchg eax, y2
-        mov y1, eax
-noswap:
-    }   
+        std::swap(x1, x2);
+        std::swap(y1, y2);
+    }
     
     if (x2 < 0 || x1 >= width || max(y1,y2) < 0 || min(y1,y2) >= height)
         return false;
@@ -728,46 +721,13 @@ bool TBitmap::Box(int32_t x1, int32_t y1, int32_t x2, int32_t y2, SColor &color)
     TBitmap bitmap=*this;
     uint16_t *data=bitmap.data16;
 
-    __asm
+    uint16_t c16 = TranslateColor(color);
+    uint16_t* row = data + dstoff;
+    for (int32_t y = 0; y < fillheight; ++y)
     {
-        cld
-
-  // Load destination
-        mov     edi, uint32_t PTR [data]
-        add     edi, dstoff
-
-        mov     eax, color
-        shl     eax, 16
-        or      eax, color
-
-  // Load lines
-        mov     edx, fillheight
-
-forward:
-
-  // Get Color int32_t AX
-        mov     ecx, fillwidth
-        shr     ecx, 1
-fillloop:
-        mov     [edi], eax
-        add     edi, 4
-        dec     ecx
-        jne     fillloop
-
-        mov     ecx, fillwidth
-        and     ecx, 1
-        je      notodd
-
-        mov     [edi], ax
-        add     edi, 2
-
-notodd:
-        add     edi, dstadd
-        dec     ecx
-        jne     forward
-    
-        dec     edx
-        jne     forward
+        for (int32_t x = 0; x < fillwidth; ++x)
+            row[x] = c16;
+        row += width;
     }
     
     return true;

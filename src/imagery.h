@@ -103,6 +103,10 @@ class TObjectImagery
       // returns an id number for that imagery.
     static SImageryEntry* GetImageryEntry(int32_t id);
       // Return the entery array structure for the given imagery id
+    static int32_t NumEntries();
+      // Number of slots in the imagery registry (sparse — combine with IsUsed()).
+    static bool IsUsed(int32_t id);
+      // True if `id` is a live entry; entries can be free'd, leaving holes.
     static void FreeImageryEntry(int32_t imageryentry);
       // Frees an individual imagery entry
     static void FreeAllImagery();
@@ -140,7 +144,7 @@ class TObjectImagery
   // Access functions for private data
     char *GetResFilename() { return entry->filename; }
       // Filename
-    SImageryHeader* GetHeader() { return entry->header; }
+    SImageryHeader* GetHeader() const { return entry->header; }
       // Returns imagery header info
     SImageryBody* GetBody() { if (entry->body) return entry->body; else return LoadBody(true); }
       // Gets the pointer to the imagery body.. loads it now if it's not there

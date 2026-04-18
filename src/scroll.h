@@ -50,8 +50,6 @@ class TScrollPane : public TButtonPane
 {
   public:
     TScrollPane() : TButtonPane(0, 0, WIDTH, HEIGHT) { scroll = nullptr; }
-    
-    _NODEFAULTCONS(TScrollPane);
 
     virtual bool Initialize();
     virtual void Close();
@@ -83,8 +81,6 @@ class TBookPane final : public TScrollPane
 {
   public:
     TBookPane() : TScrollPane() { }
-
-    _NODEFAULTCONS(TBookPane);
 
     virtual bool Initialize();
     virtual void DrawBackground();

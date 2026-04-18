@@ -2,12 +2,31 @@
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
 // *                stripeffect.cpp - TStripEffect module                  *
+// *                                                                       *
+// *  Ported (2026): TStripEffect/TWindStripEffect/TLaserEffect pull on    *
+// *  the D3D3 immediate-mode path — Device2->SetRenderState with          *
+// *  D3DRENDERSTATE_*, D3DMATRIX* helpers, D3DRGBA packing, and the       *
+// *  S3DAnimObj lverts/tverts D3DLVERTEX/D3DTLVERTEX union. That whole    *
+// *  vocabulary has moved to render3d_types.h + math3d.h, and the sokol  *
+// *  pipelines land in Phase 3.                                           *
+// *                                                                       *
+// *  Rather than churn ~1000 lines of matrix math + vertex packing that   *
+// *  will want another rewrite once the sokol pipelines are in place,    *
+// *  the full original body is preserved below under `#if 0` for the      *
+// *  Phase-3 pass to walk strip-animator-by-strip-animator.                *
 // *************************************************************************
 
-#include "effect.h"
 #include "revenant.h"
-#include "stripeffect.h"
+
+// -- Phase 2 port stub ----------------------------------------------------
+// All original function bodies are retained verbatim below inside `#if 0`
+// so a Phase-3 pass can translate the remaining D3D3 hot spots (matrix
+// helpers, lvert color packing) to math3d.h / ERender3D vocabulary.
+
+#if 0 // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)
+
 #include "effect.h"
+#include "stripeffect.h"
 #include "character.h"
 #include "3dscene.h"
 
@@ -1041,3 +1060,5 @@ void TWindStripAnimator::AddDrop(hmm_vec3 pos)
 		drops[p].used = true;
 	}
 }
+
+#endif // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)

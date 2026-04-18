@@ -57,86 +57,13 @@ bool TMosaicSurface::Initialize(
        && !(createflags & (MOSAICSURF_NSYSTEMMEM | MOSAICSURF_NVIDEOMEM)))
         return false;  // Must be one or other
 
-    bitsperpixel = 16;
-    if (createflags & MOSAICSURF_8BIT)
-    {
-        bitsperpixel = 8;
+    // 8/24/32-bit tiles route through TBitmapSurface (CPU blit path); the
+    // GPU tile path is always RGBA8 now.
+    if (createflags & (MOSAICSURF_8BIT | MOSAICSURF_24BIT | MOSAICSURF_32BIT))
         createflags |= MOSAICSURF_BMSURFACE;
-    }
-    else if (createflags & MOSAICSURF_16BIT)
-    {
-        bitsperpixel = 16;
-    }
-    else if (createflags & MOSAICSURF_24BIT)
-    {
-        bitsperpixel = 24;
-        createflags |= MOSAICSURF_BMSURFACE;
-    }
-    else if (createflags & MOSAICSURF_32BIT)
-    {
-        bitsperpixel = 32;
-        createflags |= MOSAICSURF_BMSURFACE;
-    }
-    int32_t bytesperpixel = bitsperpixel >> 3;
-
-    int32_t freevidmem = GetFreeVideoMem();
-
-    if (createflags & MOSAICSURF_VIDEOMEM)
-    {
-        freevidmem -= tilex * tiley * numtilex * numtiley * bytesperpixel;
-
-        if (freevidmem < TEXTURERESERVE)
-        {
-            if (createflags & MOSAICSURF_VIDEOMEMONLY)
-                return false;
-            createflags &= ~MOSAICSURF_VIDEOMEM;
-            createflags |= MOSAICSURF_SYSTEMMEM;
-        }
-    }
-
-    if ((createflags & MOSAICSURF_ZBUFFER) && (createflags & MOSAICSURF_ZVIDEOMEM))
-    {
-        freevidmem -= tilex * tiley * numtilex * numtiley * 2;
-
-        if (freevidmem < TEXTURERESERVE)
-        {
-            if (createflags & MOSAICSURF_ZVIDEOMEMONLY)
-                return false;
-            createflags &= ~MOSAICSURF_ZVIDEOMEM;
-            createflags |= MOSAICSURF_ZSYSTEMMEM;
-        }
-    }
-
-    if ((createflags & MOSAICSURF_NORMALS) && (createflags & MOSAICSURF_NVIDEOMEM))
-    {
-        freevidmem -= tilex * tiley * numtilex * numtiley * 2;
-
-        if (freevidmem < TEXTURERESERVE)
-        {
-            if (createflags & MOSAICSURF_NVIDEOMEMONLY)
-                return false;
-            createflags &= ~MOSAICSURF_NVIDEOMEM;
-            createflags |= MOSAICSURF_NSYSTEMMEM;
-        }
-    }
-    
-    int32_t vflags;
-    if (createflags & MOSAICSURF_VIDEOMEM)
-        vflags = VSURF_VIDEOMEM;
-    else
-        vflags = VSURF_SYSTEMMEM;
-
-    int32_t zflags;
-    if (createflags & MOSAICSURF_ZVIDEOMEM)
-        zflags = VSURF_VIDEOMEM;
-    else
-        zflags = VSURF_SYSTEMMEM;
-
-    int32_t nflags;
-    if (createflags & MOSAICSURF_NVIDEOMEM)
-        nflags = VSURF_VIDEOMEM;
-    else
-        nflags = VSURF_SYSTEMMEM;
+    // TODO(port): VRAM tiering not modeled post-sokol; all surfaces are GPU textures.
+    // The old code branched on VIDEOMEM vs SYSTEMMEM and called GetFreeVideoMem()
+    // to fall back from video to system memory. That distinction is gone.
 
     int32_t bmbits;
     if (createflags & MOSAICSURF_8BIT)
@@ -152,7 +79,9 @@ bool TMosaicSurface::Initialize(
 
     tiles = new TSurface*[numtilex * numtiley];
 
-    TSurface* vsurf, zsurf, nsurf;
+    TSurface* vsurf;
+    TSurface* zsurf;
+    TSurface* nsurf;
     TSurface **surf = tiles;
 
     int32_t x, y, offx, offy;
@@ -168,37 +97,26 @@ bool TMosaicSurface::Initialize(
                 vsurf = new TBitmapSurface(tilex, tiley, bmbits);
             else
             {
-                vsurf = new TSurface(tilex, tiley, vflags);
-                if (vsurf->Stride() != tilex && NoWideBuffers)
-                {
-                    delete vsurf;
-                    vflags = (vflags & (~(uint32_t)VSURF_VIDEOMEM)) | VSURF_SYSTEMMEM;
-                    vsurf = new TSurface(tilex, tiley, vflags);
-                }
+                vsurf = new TSurface(tilex, tiley, SG_PIXELFORMAT_RGBA8);
             }
         }
         if (createflags & MOSAICSURF_ZBUFFER)
         {
-            zsurf = new TSurface(tilex, tiley, zflags | VSURF_ZBUFFER); // Voodoo doesn't like this
-            if (zsurf->Stride() != tilex && NoWideBuffers)
-            {
-                delete zsurf;
-                zflags = (zflags & (~(uint32_t)VSURF_VIDEOMEM)) | VSURF_SYSTEMMEM;
-                zsurf = new TSurface(tilex, tiley, zflags | VSURF_ZBUFFER); // Voodoo doesn't like this
-            }
+            // TODO(port): ZBuffer surfaces not yet modeled post-sokol.
+            zsurf = new TSurface(tilex, tiley, SG_PIXELFORMAT_DEPTH);
         }
 //      if (createflags & MOSAICSURF_NORMALS)
-//          nsurf = new TSurface(tilex, tiley, nflags, stride);
+//          nsurf = new TSurface(tilex, tiley, bitsperpixel);
 
         *surf = new TMultiSurface(vsurf, zsurf, nsurf, true);
       }
     }
 
-    width        = tilex * numtilex;
-    height       = tiley * numtiley;
-    stride       = width;
-    bitsperpixel = tiles[0]->BitsPerPixel();
-    flags        = tiles[0]->flags;
+    width  = tilex * numtilex;
+    height = tiley * numtiley;
+    stride = width;
+    format = tiles[0]->Format();
+    flags  = tiles[0]->Flags();
 
     Reset();
 
@@ -216,7 +134,9 @@ bool TMosaicSurface::Initialize(TMosaicSurface* clone, uint32_t ncreateflags)
     Initialize(clone->tilex, clone->tiley,
         clone->numtilex, clone->numtiley, ncreateflags | MOSAICSURF_ISCLONE);
 
-    TSurface* vsurf, zsurf, nsurf;
+    TSurface* vsurf;
+    TSurface* zsurf;
+    TSurface* nsurf;
     TMultiSurface **surf = (TMultiSurface **)tiles;
 
     int32_t x, y, offx, offy;
@@ -235,30 +155,30 @@ bool TMosaicSurface::Initialize(TMosaicSurface* clone, uint32_t ncreateflags)
                 vsurf = new TBitmapSurface(
                     ((TBitmapSurface*)gb)->GetBitmap());
             else
-                vsurf = new TSurface(gb->GetSGImage(), gb->Width(), gb->Height(), gb->BitsPerPixel());
+                vsurf = new TSurface(gb->GetSGImage(), gb->Width(), gb->Height(), gb->Format());
             (*surf)->SetGraphicsBuffer(vsurf);
         }
         if ((createflags & MOSAICSURF_CLONEZBUFFER) && tile->GetZBuffer())
         {
             TSurface* zb = tile->GetZBuffer();
-            zsurf = new TSurface(zb->GetSGImage(), zb->Width(), zb->Height(), zb->BitsPerPixel());
+            zsurf = new TSurface(zb->GetSGImage(), zb->Width(), zb->Height(), zb->Format());
             (*surf)->SetZBuffer(zsurf);
         }
         if ((createflags & MOSAICSURF_CLONENORMALS) && tile->GetNormalBuffer())
         {
             TSurface* nb = tile->GetNormalBuffer();
-            nsurf = new TSurface(nb->GetSGImage(), nb->Width(), nb->Height(), nb->BitsPerPixel());
+            nsurf = new TSurface(nb->GetSGImage(), nb->Width(), nb->Height(), nb->Format());
             (*surf)->SetNormalBuffer(nsurf);
         }
 
       }
     }
 
-    width        = tilex * numtilex;
-    height       = tiley * numtiley;
-    stride       = width;
-    bitsperpixel = tiles[0]->BitsPerPixel();
-    flags        = tiles[0]->flags;
+    width  = tilex * numtilex;
+    height = tiley * numtiley;
+    stride = width;
+    format = tiles[0]->Format();
+    flags  = tiles[0]->Flags();
 
     Reset();
 

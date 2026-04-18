@@ -350,12 +350,13 @@ void MakeColorTables()
 {
 
   // Round up light table pointer to nearest 32 (so 32 color values fit in one cache entry)
-    LightTable = (uint16_t *)(((uint32_t)LightTableBuffer + 31) & 0xFFFFFFE0);
+    LightTable = (uint16_t *)(((uintptr_t)LightTableBuffer + 31) & ~uintptr_t{31});
 
-  // Make Falloff Table 
+  // Make Falloff Table
     double minpower = pow(256.0, exponent);
     double maxpower = pow(1.0, exponent) - minpower;
-    for (int32_t dist = 0; dist < 256; dist++)
+    int32_t dist;
+    for (dist = 0; dist < 256; dist++)
     {
         double p = pow((double)(dist + 1.0), exponent) - minpower;
         double brightness = min(p / maxpower * maxbrightness, 1.0);
@@ -403,7 +404,7 @@ void MakeColorTables()
          }
     }
 
-    for (loop = 0; loop < 32; loop++)
+    for (int32_t loop = 0; loop < 32; loop++)
     {
         for(int32_t loop2 = 0; loop2 < 256; loop2++)
         {
@@ -448,6 +449,7 @@ void MakeColorTables()
     }
 
     // make this as explicit as possible to avoid any precision errors
+    int32_t loop;
     for (loop = 0; loop < 64; loop++)
     {
         if (loop == 0)
@@ -464,7 +466,7 @@ void MakeColorTables()
             else
                 DistY[loop] = (short) Round(256.0 * cos(angle));
         }
-        
+
     }
     // and just copy to the other three quadrants with appropriate sign changes
     for (loop = 64; loop < 128; loop++)
@@ -483,9 +485,9 @@ void MakeColorTables()
         DistY[loop] = -(DistY[loop - 128]);
     }
 
-    signed char *coscosidx = (signed char *)CosCos;   
-    index = SinSin;   
-    
+    signed char *coscosidx = (signed char *)CosCos;
+    index = SinSin;
+
     for (loop = 0; loop < 64; loop++)
     {
         for (int32_t loop2 = 0; loop2 < 256; loop2++)

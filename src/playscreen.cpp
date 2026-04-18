@@ -327,9 +327,10 @@ bool TPlayScreen::Initialize()
   // Set next pane to null
     nextpane = nullptr;
 
-  // get the spell list stuff
+  // get the spell list stuff. Initialize() calls Load() internally once; don't
+  // double-load (pre-release source did, producing double-parsed variants and
+  // a 2x spurious-warning spew).
     SpellList.Initialize();
-    SpellList.Load();
 
   // Preload game imagery (all imagery constantly used in game)
     bloodimagery = TObjectImagery::LoadImagery("Misc\\Blood.I3D");
@@ -1013,12 +1014,17 @@ void TPlayScreen::UpdateMove()
             Player->Stop();
     }
 
-  // Now set block/unblock
-    if ((state & CMDFLAG_BLOCK) && 
-        Player->IsFighting() && !Player->IsDoing(ACTION_BLOCK))
-        Player->Block(10000); // Some huge number for block frames, as StopBlock() will stop us!
-    if (!(state & CMDFLAG_BLOCK) && Player->IsDoing(ACTION_BLOCK))
-        Player->StopBlock();
+  // Now set block/unblock. Guard against a null Player (no save loaded / no
+  // new-game started yet); the earlier blocks in this function already do,
+  // but the pre-release source forgot to guard this tail.
+    if (Player)
+    {
+        if ((state & CMDFLAG_BLOCK) &&
+            Player->IsFighting() && !Player->IsDoing(ACTION_BLOCK))
+            Player->Block(10000); // Some huge number for block frames, as StopBlock() will stop us!
+        if (!(state & CMDFLAG_BLOCK) && Player->IsDoing(ACTION_BLOCK))
+            Player->StopBlock();
+    }
 }
 
 void TPlayScreen::CreateBackgroundAreas()

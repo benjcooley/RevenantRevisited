@@ -6,10 +6,21 @@
 
 #include "file.h"
 
-#include <io.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <sys\stat.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+
+static inline long filelength(int fd)
+{
+    struct stat st;
+    if (fstat(fd, &st) == -1) return -1;
+    return (long)st.st_size;
+}
 
 //==============================================================================
 //    Function : LoadFile.
@@ -158,7 +169,7 @@ FILE *TryOpen(const char *name, const char *mode)
     // try more than once before we exit out
     for (n = 0; n < 300; n++)
     {
-        if ((fp = popen((char *)name, (char *)mode)) != nullptr)
+        if ((fp = rev_fopen(name, mode)) != nullptr)
             break;
 
         // check error - if we're out of disk space or trying to access
@@ -167,7 +178,7 @@ FILE *TryOpen(const char *name, const char *mode)
             break;
 
         // Wait 100 milliseconds inbetween trys
-        while (GetTickCount() % 100);
+        while (tickcount() % 100);
     }
 
     return fp;
@@ -199,7 +210,7 @@ bool TryDelete(const char *name)
             if (remove(name) == 0)
                 break;
             // Wait 100 milliseconds inbetween trys
-            while (GetTickCount() % 100);
+            while (tickcount() % 100);
         }
         if (n == 1000)
             success = false;
@@ -233,7 +244,7 @@ bool TryRename(const char *oldname, const char *newname)
         if (rename(oldname, newname) == 0)
             break;
         // Wait 100 milliseconds inbetween trys
-        while (GetTickCount() % 100);
+        while (tickcount() % 100);
     }
     if (n == 1000)
         success = false;

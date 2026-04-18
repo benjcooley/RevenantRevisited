@@ -23,4 +23,3 @@ class TKey : public TObjectInstance
 
 DEFINE_BUILDER("KEY", TKey)
 
-#endif

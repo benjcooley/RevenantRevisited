@@ -15,6 +15,38 @@
 // If you notice graphics getting screwed up, try setting this to false..  This should always
 // be false if _DEBUG is not defined.
 
+int32_t TSurface::FormatBits(sg_pixel_format f)
+{
+    switch (f)
+    {
+        case SG_PIXELFORMAT_R8:
+        case SG_PIXELFORMAT_R8SN:
+        case SG_PIXELFORMAT_R8UI:
+        case SG_PIXELFORMAT_R8SI:
+            return 8;
+        case SG_PIXELFORMAT_R16:
+        case SG_PIXELFORMAT_R16F:
+        case SG_PIXELFORMAT_RG8:
+            return 16;
+        case SG_PIXELFORMAT_R32F:
+        case SG_PIXELFORMAT_RG16:
+        case SG_PIXELFORMAT_RG16F:
+        case SG_PIXELFORMAT_RGBA8:
+        case SG_PIXELFORMAT_BGRA8:
+        case SG_PIXELFORMAT_DEPTH:
+        case SG_PIXELFORMAT_DEPTH_STENCIL:
+            return 32;
+        case SG_PIXELFORMAT_RGBA16:
+        case SG_PIXELFORMAT_RGBA16F:
+        case SG_PIXELFORMAT_RG32F:
+            return 64;
+        case SG_PIXELFORMAT_RGBA32F:
+            return 128;
+        default:
+            return 0;
+    }
+}
+
 TSurface::TSurface() {
     needs_restore = false;
     locked = nullptr;
@@ -26,22 +58,15 @@ TSurface::TSurface() {
     flags = 0;
     keycolor = 0;
     originx = originy = 0;
-    
+
     // Initialize buffers
     cpu_buffer = nullptr;
     buffer_size = 0;
     image = {};
-    pipeline = {};
+    pass  = {};
+    format = SG_PIXELFORMAT_NONE;
 
-    // Initialize pipeline description
-    pip_desc = {};
-    pip_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
-    pip_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
-    pip_desc.shader = sg_make_shader(blit_shader_desc());
-    pip_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-    pip_desc.colors[0].blend.enabled = true;
-    pip_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-    pip_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    // Pipeline is owned by TDisplay (shared across surfaces), not TSurface.
 
     // Initialize image description with defaults
     img_desc = {};
@@ -57,12 +82,13 @@ TSurface::TSurface() {
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
 }
 
-TSurface::TSurface(int32_t w, int32_t h, int32_t bpp) 
+TSurface::TSurface(int32_t w, int32_t h, sg_pixel_format fmt)
 {
     locked = nullptr;
     width = w;
     height = h;
-    bitsperpixel = bpp;
+    format = fmt;
+    pass = {};
     stride = width;
     clipx = clipy = 0;
     clipwidth = width;
@@ -71,23 +97,39 @@ TSurface::TSurface(int32_t w, int32_t h, int32_t bpp)
     flags = 0;
     keycolor = 0;
     originx = originy = 0;
-    
+
+    const int32_t bpp = FormatBits(format);
+
     // Initialize buffers
     cpu_buffer = nullptr;
-    buffer_size = width * height * sizeof(uint32_t);
-    // Create new Sokol image and pipeline
+    buffer_size = size_t(width) * height * ((bpp + 7) / 8);
+
+    // Create new Sokol image as a render target — the game treats TSurface
+    // as something it renders into. The actual draw pipeline lives on
+    // TDisplay. Without this the img_desc fields are zero and sokol_gfx
+    // rejects sg_make_image.
+    img_desc = {};
+    img_desc.type = SG_IMAGETYPE_2D;
+    img_desc.render_target = true;
     img_desc.width = width;
     img_desc.height = height;
+    img_desc.num_mipmaps = 1;
+    img_desc.usage = SG_USAGE_IMMUTABLE; // render target - data comes from rendering
+    img_desc.pixel_format = format;
+    img_desc.sample_count = 1;
+    img_desc.min_filter = SG_FILTER_LINEAR;
+    img_desc.mag_filter = SG_FILTER_LINEAR;
+    img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
     image = sg_make_image(&img_desc);
-    pipeline = sg_make_pipeline(&pip_desc);
-    
 }
 
-TSurface::TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp) {
+TSurface::TSurface(sg_image existing_image, int32_t w, int32_t h, sg_pixel_format fmt) {
     locked = nullptr;
     width = w;
     height = h;
-    bitsperpixel = bpp;
+    format = fmt;
+    pass = {};
     stride = width;
     clipx = clipy = 0;
     clipwidth = width;
@@ -96,12 +138,14 @@ TSurface::TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp) {
     flags = 0;
     keycolor = 0;
     originx = originy = 0;
-    
+
+    const int32_t bpp = FormatBits(format);
+
     // Initialize buffers
     cpu_buffer = nullptr;
-    buffer_size = width * height * sizeof(uint32_t);
+    buffer_size = size_t(width) * height * ((bpp + 7) / 8);
     image = existing_image;
-    
+
     // Initialize image description with defaults
     img_desc = {};
     img_desc.type = SG_IMAGETYPE_2D;
@@ -110,7 +154,7 @@ TSurface::TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp) {
     img_desc.height = height;
     img_desc.num_mipmaps = 1;
     img_desc.usage = SG_USAGE_DYNAMIC;
-    img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    img_desc.pixel_format = format;
     img_desc.sample_count = 1;
     img_desc.min_filter = SG_FILTER_LINEAR;
     img_desc.mag_filter = SG_FILTER_LINEAR;
@@ -120,6 +164,10 @@ TSurface::TSurface(sg_image existing_image, int32_t w, int32_t h, int32_t bpp) {
 
 TSurface::~TSurface()
 {
+    if (pass.id) {
+        sg_destroy_pass(pass);
+        pass = {};
+    }
     if (cpu_buffer) {
         free(cpu_buffer);
         cpu_buffer = nullptr;
@@ -132,6 +180,29 @@ void TSurface::Reset()
     SetOrigin(0, 0);
     SetClipRect(0, 0, width, height);
     SetClipMode(CLIP_EDGES);
+}
+
+void TSurface::StartPass(float r, float g, float b, float a)
+{
+    if (!image.id) return;
+    if (!pass.id)
+    {
+        sg_pass_desc pd = {};
+        pd.color_attachments[0].image = image;
+        pd.label = "tsurface.pass";
+        pass = sg_make_pass(&pd);
+    }
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_CLEAR;
+    pa.colors[0].value  = { r, g, b, a };
+    pa.depth.action     = SG_ACTION_DONTCARE;
+    pa.stencil.action   = SG_ACTION_DONTCARE;
+    sg_begin_pass(pass, &pa);
+}
+
+void TSurface::EndPass()
+{
+    sg_end_pass();
 }
 
 // This function sets up the ParamDraw DrawParam structure.  This function is also
@@ -414,12 +485,14 @@ bool TSurface::BlitHandler(PSDrawParam dp, TSurface* srcsurface, int32_t flags)
     
     // Set source texture if available
     if (srcsurface) {
-        bind.fs.images[0] = srcsurface->GetSGImage();
+        bind.fs_images[0] = srcsurface->GetSGImage();
     }
 
     // Apply any blend modes or other render states
     if (tmpdp.drawmode & DM_ALPHA) {
-        sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &(float[]){tmpdp.intensity / 31.0f}, sizeof(float));
+        const float alpha = tmpdp.intensity / 31.0f;
+        const sg_range alpha_range = { &alpha, sizeof(alpha) };
+        sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &alpha_range);
     }
 
     // Draw fullscreen quad

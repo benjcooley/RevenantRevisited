@@ -32,7 +32,7 @@ class TTextBar : public TPane
     void Clear() { text[0] = 0; SetDirty(true); }
 
     // Opponent health display functions
-    void SetHealthDisplay(char *n, int32_t l);
+    void SetHealthDisplay(const char *n, int32_t l);
     void ClearHealthDisplay();
 
     // Sets the target and current levels

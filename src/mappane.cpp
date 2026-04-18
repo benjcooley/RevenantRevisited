@@ -35,7 +35,6 @@
 #include <stdlib.h> 
 #include <memory.h>
 #include <math.h>
-#include <process.h>
 #include <time.h>
 
 extern TEditStatusPane StatusBar;
@@ -107,7 +106,7 @@ int32_t TMapPane::MakeIndex()
 // ****************
 
 // Initializes iterator with a range value (makes rect and calls Initialize)
-TMapIterator::TMapIterator(S3DPoint& pos, int32_t range, int32_t fl, int32_t objset)
+TMapIterator::TMapIterator(const S3DPoint& pos, int32_t range, int32_t fl, int32_t objset)
 {
     SRect r;
     r.left = pos.x - range; 
@@ -453,9 +452,11 @@ void TMapPane::CreateBackgroundBuffers()
   // MUST ****NOT**** be used in the update thread.  If these rules are not followed,
   // the program will not work correctly!!!
 
-    int32_t bgbuffer = Display->UseBackgroundArea(
-        GetPosX(), GetPosY(), GetWidth(), GetHeight(), updatemulti);
-    SetBackgroundBuffer(bgbuffer);
+  // Old CPU-side background caching is not needed with the sokol GPU compositor;
+  // UseBackgroundArea was removed from TDisplay during the sokol port.
+  //  int32_t bgbuffer = Display->UseBackgroundArea(
+  //      GetPosX(), GetPosY(), GetWidth(), GetHeight(), updatemulti);
+  //  SetBackgroundBuffer(bgbuffer);
 
   // Start the update thread going
     BeginUpdateThread();
@@ -468,8 +469,9 @@ void TMapPane::FreeBackgroundBuffers()
     EndUpdateThread();
     
   // Free background scrolling area for this pane
-    Display->FreeBackgroundArea(GetBackgroundBuffer());
-    ClearBackgroundBuffer();
+  // FreeBackgroundArea was removed from TDisplay during the sokol port.
+  //  Display->FreeBackgroundArea(GetBackgroundBuffer());
+  //  ClearBackgroundBuffer();
 
   // Kill surfaces
     if (unlitmulti && litmulti && updatemulti)
@@ -658,7 +660,7 @@ void TMapPane::KeyPress(int32_t key, bool down)
     }
 
     if (down && key == VK_ESCAPE)
-        PostQuitMessage(0);
+        exit(0);
 }
 
 void TMapPane::FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& target)
@@ -710,11 +712,12 @@ void TMapPane::FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& tar
 
 bool TMapPane::SwapDrawOrder(TObjectInstance* inst0, TObjectInstance* inst1)
 {
-    for (TMapIterator i; i; i++)
+    TMapIterator i, j;
+    for (; i; i++)
         if (i == inst0)
             break;
 
-    for (TMapIterator j; j; j++)
+    for (; j; j++)
         if (j == inst1)
             break;
 
@@ -737,7 +740,8 @@ bool TMapPane::SwapDrawOrder(TObjectInstance* inst0, TObjectInstance* inst1)
 
 void TMapPane::PushToFront(TObjectInstance* inst)
 {
-    for (TMapIterator i; i; i++)
+    TMapIterator i;
+    for (; i; i++)
         if (i == inst)
             break;
 
@@ -753,7 +757,8 @@ void TMapPane::PushToFront(TObjectInstance* inst)
 
 void TMapPane::PushToBack(TObjectInstance* inst)
 {
-    for (TMapIterator i; i; i++)
+    TMapIterator i;
+    for (; i; i++)
         if (i == inst)
             break;
 
@@ -1329,13 +1334,13 @@ int32_t TMapPane::NewObject(SObjectDef* def)
     TObjectClass* oc = TObjectClass::GetClass(def->objclass);
     if (!oc)
     {
-        _RPT0(_CRT_WARN, "MAPPANE: Bad class in NewObject");
+        fprintf(stderr, "MAPPANE: Bad class in NewObject");
         return -1;
     }
     TObjectInstance* oi = oc->NewObject(def);
     if (!oi)
     {
-        _RPT0(_CRT_WARN, "MAPPANE: Unable to create obj in NewObject");
+        fprintf(stderr, "MAPPANE: Unable to create obj in NewObject");
         return -1;
     }
 
@@ -1362,13 +1367,13 @@ int32_t TMapPane::AddObject(TObjectInstance* oi)
 {
     if (oi->GetSector() != nullptr)    // Object is already in the map
     {
-        _RPT0(_CRT_WARN, "MAPPANE: Object already in a sector in AddObject");
+        fprintf(stderr, "MAPPANE: Object already in a sector in AddObject");
         return -1;
     }
 
     if (oi->GetLevel() != GetMapLevel())
     {
-        _RPT0(_CRT_WARN, "MAPPANE: Invalid level in AddObject");
+        fprintf(stderr, "MAPPANE: Invalid level in AddObject");
         return -1;
     }
 
@@ -1381,14 +1386,14 @@ int32_t TMapPane::AddObject(TObjectInstance* oi)
     if ((uint32_t)sx >= MAXSECTORX || sx < sectorx || sx >= sectorx + SECTORWINDOWX ||
         (uint32_t)sy >= MAXSECTORY || sy < sectory || sy >= sectory + SECTORWINDOWY)
     {
-        _RPT0(_CRT_WARN, "MAPPANE: Object not in current map area in AddObject");
+        fprintf(stderr, "MAPPANE: Object not in current map area in AddObject");
         return -1;
     }
 
     TSector* sect = sectors[sx - sectorx][sy - sectory];
     if (!sect)
     {
-        _RPT0(_CRT_WARN, "MAPPANE: Sector unavailable in AddObject");
+        fprintf(stderr, "MAPPANE: Sector unavailable in AddObject");
         return -1;
     }
 
@@ -1543,7 +1548,7 @@ TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t obj
 
     for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
     {
-        char *instname = i->GetName();
+        const char *instname = i->GetName();
 
         if (!stricmp(name, instname) && ++found == occurance)
             return i;
@@ -1559,7 +1564,7 @@ TObjectInstance* TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool 
 
     for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
     {
-        char *instname = i->GetName();
+        const char *instname = i->GetName();
 
         bool found = false;
 
@@ -1635,7 +1640,8 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
 
             if ((d = (SQRDIST(pos, itempos) - r)) < sqrwidth)
             {
-                for (int32_t j = 0; j < found && d > dist[j]; j++)
+                int32_t j;
+                for (j = 0; j < found && d > dist[j]; j++)
                     ;
 
                 if (j >= maxnum)
@@ -1661,7 +1667,8 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
             {
                 d = sqr(dx) + sqr(dy);
 
-                for (int32_t j = 0; j < found && d > dist[j]; j++)
+                int32_t j;
+                for (j = 0; j < found && d > dist[j]; j++)
                     ;
 
                 if (j >= maxnum)
@@ -1811,7 +1818,7 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
     if (!imagery)
         return;
 
-    uint8_t *walk = imagery->GetWalkMap(oi->GetState());
+    const uint8_t *walk = imagery->GetWalkMap(oi->GetState());
     if (!walk)
         return;
 
@@ -1883,11 +1890,11 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
 
             if (mode == WALK_EXTRACT)
             {
-                sect->WalkmapHandler(WALK_CLEAR, appliedwalk ? appliedwalk : walk, 0, x, y, width, length, width);
+                sect->WalkmapHandler(WALK_CLEAR, appliedwalk ? appliedwalk : const_cast<uint8_t*>(walk), 0, x, y, width, length, width);
                 RedrawWalkmapRect(oi, x, y, width, length, sect);
             }
             else
-                sect->WalkmapHandler(mode, appliedwalk ? appliedwalk : walk, pos.z, x, y, width, length, width, override);
+                sect->WalkmapHandler(mode, appliedwalk ? appliedwalk : const_cast<uint8_t*>(walk), pos.z, x, y, width, length, width, override);
         }
 
     imagery->SetHeaderDirty(true);
@@ -1916,7 +1923,7 @@ void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int3
                 if (!imagery)
                     continue;
 
-                uint8_t *walk = imagery->GetWalkMap(inst->GetState());
+                const uint8_t *walk = imagery->GetWalkMap(inst->GetState());
                 if (!walk)
                     continue;
 
@@ -1964,7 +1971,7 @@ void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int3
                 cy += y;
                 walk += (ay * iw) + ax;
 
-                dsect->WalkmapHandler(WALK_TRANSFER, walk, pos.z, cx, cy, cw, cl, iw);
+                dsect->WalkmapHandler(WALK_TRANSFER, const_cast<uint8_t*>(walk), pos.z, cx, cy, cw, cl, iw);
             }
         }
 }
@@ -2754,6 +2761,8 @@ static int32_t PauseMutexLine, SectorMutexLine, ObjectMutexLine;
 
 static TObjectArray UpdateObjs;
 
+#if 0 // TODO(port): Subsystem 4 — threading (Win32 events/mutex/CreateThread → worker pool)
+
 void TMapPane::BeginUpdateThread()
 {
     if (ThreadRunning)
@@ -3372,6 +3381,107 @@ void TMapPane::UnlockObjects()
     ObjectMutexLine = 0;
 }
 
+#else // TODO(port): Subsystem 4 — threading stubs (synchronous fallback)
+
+void TMapPane::BeginUpdateThread() {}
+void TMapPane::EndUpdateThread() {}
+
+static void ClearMutex(HANDLE /*hmutex*/) {}
+
+int32_t TMapPane::GetUpdateSleep()
+{
+    return UpdateSleep;
+}
+
+void TMapPane::UpdateTimeSlice(bool /*draw*/) {}
+void TMapPane::AdjustTimeSlice(int32_t /*milliseconds*/) {}
+
+void TMapPane::FlushUpdate(bool /*updatetimeslice*/)
+{
+    if (isrecqueued)
+    {
+        scrollrect = queuedrect;
+        isrecqueued = false;
+    }
+    PutQueueRectsToDisplay();
+    ClearQueueRects();
+}
+
+void TMapPane::UpdateEdges(int32_t updatex, int32_t updatey)
+{
+    oldscrollx = scrollx;
+    oldscrolly = scrolly;
+    scrollx    = updatex;
+    scrolly    = updatey;
+
+    // Without the async update thread, just mark the whole scroll buffer
+    // as valid and drop any pending background-rect state.
+    SRect full = SRect(scrollx, scrolly,
+        scrollx + SCROLLBUFWIDTH - 1, scrolly + SCROLLBUFHEIGHT - 1);
+    scrollrect = full;
+    queuedrect = full;
+    isrecqueued = false;
+    numbgrects = 0;
+    numqueuerects = 0;
+}
+
+void TMapPane::BeginUpdate() {}
+
+bool TMapPane::UpdateDone()
+{
+    return true;
+}
+
+void TMapPane::CancelUpdate() {}
+
+uint32_t TMapPane::WaitUpdate()
+{
+    return 0;
+}
+
+void TMapPane::ClearQueueRects()
+{
+    numqueuerects = 0;
+}
+
+void TMapPane::QueueUpdateRect(RSRect rect, int32_t bgdraw)
+{
+    if (numqueuerects >= MAXQUEUERECTS)
+        return;
+    queuerects[numqueuerects].rect = rect;
+    queuerects[numqueuerects].bgdraw = bgdraw;
+    numqueuerects++;
+}
+
+void TMapPane::PutQueueRectsToDisplay()
+{
+    // TODO(port): wire up background-buffer blits once the display
+    // pipeline gains AddBackgroundUpdateRect (or equivalent) again.
+    for (int32_t c = 0; c < numqueuerects; c++)
+    {
+        Display->AddUpdateRect(
+            queuerects[c].rect.x(), queuerects[c].rect.y(),
+            queuerects[c].rect.w(), queuerects[c].rect.h(),
+            UPDATE_BUFFERTOSCREEN | UPDATE_NEXTFRAME);
+    }
+}
+
+unsigned TMapPane::UpdateThread(void *)
+{
+    return 0;
+}
+
+void TMapPane::UpdateLoop() {}
+
+void TMapPane::PauseUpdate(const char * /*file*/, int32_t /*line*/) {}
+void TMapPane::ResumeUpdate() {}
+void TMapPane::LockSectors(const char * /*file*/, int32_t /*line*/) {}
+void TMapPane::UnlockSectors() {}
+void TMapPane::LockObjects(const char * /*file*/, int32_t /*line*/) {}
+void TMapPane::UnlockObjects() {}
+
+#endif // TODO(port): Subsystem 4 — threading
+
 void TMapPane::DrawUpdateRect(RSRect r, int32_t bgdraw)
 {
     bgdraw = bgdraw & (~(uint32_t)BGDRAW_REDRAW);
@@ -3447,7 +3557,9 @@ void TMapPane::DrawUnlitObjects(SRect &r)
     {
         WaitSingleErr(ObjectMutex);
         i.Item()->DrawUnlit(unlitmulti);
+#if 0 // TODO(port): Subsystem 4 — threading
         ReleaseMutex(ObjectMutex);
+#endif
 
     // Check to see if update was canceled
         if (UpdateCancelled)
@@ -3462,7 +3574,9 @@ void TMapPane::DrawStaticLights(SRect &r)
     {
         WaitSingleErr(ObjectMutex);
         i.Item()->DrawLight(unlitmulti, IsDirty());
+#if 0 // TODO(port): Subsystem 4 — threading
         ReleaseMutex(ObjectMutex);
+#endif
 
     // Check to see if update was canceled
         if (UpdateCancelled)
@@ -3492,7 +3606,9 @@ void TMapPane::DrawLitObjects(SRect &r)
 
         WaitSingleErr(ObjectMutex);
         i.Item()->DrawLit(litmulti);
+#if 0 // TODO(port): Subsystem 4 — threading
         ReleaseMutex(ObjectMutex);
+#endif
 
     // Check to see if update was canceled
         if (UpdateCancelled)
@@ -3987,7 +4103,7 @@ void TMapPane::Animate(bool draw)
 // * Object Manipulation *
 // ***********************
 
-bool TMapPane::MoneyHandler(TObjectInstance* oi, int32_t amount)
+int32_t TMapPane::MoneyHandler(TObjectInstance* oi, int32_t amount)
 {
     if (oi == nullptr)
         return 0;
@@ -4043,12 +4159,16 @@ int32_t TMapPane::GetTotalMoney(TObjectInstance* oi)
 
 // Checks new position and transfers object between sectors if object crosses a sector
 // boundry.  Also prevents objects from going outside of loaded sector list
-int32_t TMapPane::CheckPos(TObjectInstance* inst, const S3DPoint& newpos, int32_t newlevel)
+int32_t TMapPane::CheckPos(TObjectInstance* inst, const S3DPoint& newpos_in, int32_t newlevel)
 {
   // If default, or object is owned by map, set level to object level
   // Note: only floating NONMAP objects like TPlayer objects can change their level
     if (newlevel == -1 || !(inst->Flags() & OF_NONMAP))
         newlevel = inst->GetLevel();
+
+    // Local mutable copy so we can clamp/snap to sector bounds without
+    // mutating the caller's point.
+    S3DPoint newpos = newpos_in;
 
     // basic bounds checking
     if (newpos.x < 0)

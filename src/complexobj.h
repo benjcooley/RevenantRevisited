@@ -116,8 +116,8 @@ class TActionBlock
 };
 
 // Helper functions to make it easy to make state names
-char *StName(char *name, int32_t num);
-char *StName(char *name, char *str);
+const char *StName(const char *name, int32_t num);
+char *StName(const char *name, const char *str);
 
 // TComplexObject adds the state transition code to TObjectInstance.
 // It is not intended for use as a seperate object class any more than

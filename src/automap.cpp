@@ -921,40 +921,21 @@ void TAutoMap::DrawAutoMap()
 inline uint16_t TAutoMap::MergePixel(uint16_t *Background, uint16_t *Overlay, int32_t Mul, int32_t Div)
 {
     uint8_t Alpha = (uint8_t)((Mul << 5) / Div);
-    uint16_t Result;
 
-    __asm
-    {
-        xor  edx, edx
-
-        mov  esi, [Background]
-        mov  edi, [Overlay]
-
-        mov  dh, [Alpha]
-
-        mov  dl, uint8_t PTR [edi + 1]
-        mov  ah, [ColorTableUpperHi + edx]
-        mov  al, [ColorTableUpperLo + edx]
-        mov  dl, uint8_t PTR [edi]
-        add  al, [ColorTableLower + edx]
-        adc  ah, 0
-
-        mov  dh, 31
-        sub  dh, [Alpha]
-
-        mov  dl, uint8_t PTR [esi + 1]
-        mov  bh, [ColorTableUpperHi + edx]
-        mov  bl, [ColorTableUpperLo + edx]
-        mov  dl, uint8_t PTR [esi]
-        add  bl, [ColorTableLower + edx]
-        adc  bh, 0
-
-        add  ax, bx
-
-        mov  [Result], ax
-    }
-
-    return Result;
+    const uint32_t A = Alpha;
+    const uint32_t IA = 31u - A;
+    const uint16_t o = *Overlay;
+    const uint16_t b = *Background;
+    const uint32_t or_ = (o >> 11) & 0x1F;
+    const uint32_t og  = (o >> 5)  & 0x3F;
+    const uint32_t ob  =  o        & 0x1F;
+    const uint32_t br_ = (b >> 11) & 0x1F;
+    const uint32_t bg  = (b >> 5)  & 0x3F;
+    const uint32_t bb  =  b        & 0x1F;
+    const uint32_t rr = (or_ * A + br_ * IA) >> 5;
+    const uint32_t rg = (og  * A + bg  * IA) >> 5;
+    const uint32_t rb = (ob  * A + bb  * IA) >> 5;
+    return static_cast<uint16_t>((rr << 11) | (rg << 5) | rb);
 }
 
 
@@ -969,28 +950,15 @@ inline uint16_t TAutoMap::MergePixel(uint16_t *Background, uint16_t *Overlay, in
 
 inline uint16_t TAutoMap::MergePixelToBlack(uint16_t *Overlay, int32_t Mul, int32_t Div)
 {
-    uint8_t Alpha = (uint8_t)((Mul << 5) / Div);
-    uint16_t Result;
-
-    __asm
-    {
-        xor  edx, edx
-
-        mov  edi, [Overlay]
-
-        mov  dh, [Alpha]
-
-        mov  dl, uint8_t PTR [edi + 1]
-        mov  ah, [ColorTableUpperHi + edx]
-        mov  al, [ColorTableUpperLo + edx]
-        mov  dl, uint8_t PTR [edi]
-        add  al, [ColorTableLower + edx]
-        adc  ah, 0
-
-        mov  [Result], ax
-    }
-
-    return Result;
+    const uint32_t A = (uint32_t)((Mul << 5) / Div);
+    const uint16_t o = *Overlay;
+    const uint32_t or_ = (o >> 11) & 0x1F;
+    const uint32_t og  = (o >> 5)  & 0x3F;
+    const uint32_t ob  =  o        & 0x1F;
+    const uint32_t rr = (or_ * A) >> 5;
+    const uint32_t rg = (og  * A) >> 5;
+    const uint32_t rb = (ob  * A) >> 5;
+    return static_cast<uint16_t>((rr << 11) | (rg << 5) | rb);
 }
 
 

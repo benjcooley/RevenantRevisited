@@ -22,6 +22,8 @@
 _CLASSDEF(T3DScene)
 _CLASSDEF(T3DAnimator)
 
+struct SSurfaceDesc;
+
 // ************************************
 // * T3DScene - 3D System Main Object *
 // ************************************

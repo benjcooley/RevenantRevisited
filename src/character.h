@@ -94,7 +94,7 @@ class TCharacter : public TComplexObject
     virtual void AI();
         // Causes the object to perform its A.I. routines
 
-    virtual char *DefaultRootState() { return (Sleeping() ? "sleep" : Aggressive() ? "combat" : IsDead() ? "dead" : "walk"); }
+    virtual const char *DefaultRootState() { return (Sleeping() ? "sleep" : Aggressive() ? "combat" : IsDead() ? "dead" : "walk"); }
       // Returns the default root state for this char
 
   // Action response functions to trigger character AI
@@ -286,7 +286,7 @@ class TCharacter : public TComplexObject
       // Forces the current command to be done
 
     // Static access functions
-    static TCharacter* CharBlocking(TObjectInstance* inst, S3DPoint& pos, int32_t radius = 0);
+    static TCharacter* CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius = 0);
         // Find if a character is blocking movement to this position
     TCharacter* CharBlocking() { return CharBlocking(this, Pos(), Radius()); }
         // Calls static function above with this chars parameters

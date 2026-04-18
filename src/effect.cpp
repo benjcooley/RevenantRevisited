@@ -19,15 +19,7 @@
 // *  reappear as Phase 3 restores them.                                   *
 // *************************************************************************
 
-#include <cstdint>
-
 #include "revenant.h"
-
-// Shim: effectcomp.h still declares TShockAnimator::ring as `D3DCOLOR *`.
-// Treat it as a packed ARGB8 until that header is re-swept.
-// TODO(port): effectcomp.h — swap D3DCOLOR for uint32_t when touching it next.
-using D3DCOLOR = uint32_t;
-
 #include "effect.h"
 
 // -- Phase 2 port stub ----------------------------------------------------
@@ -35,6 +27,51 @@ using D3DCOLOR = uint32_t;
 // so a Phase-3 pass can walk them and translate the remaining D3D3 hot
 // spots (matrix helpers, lvert color packing, lverts/tverts aliasing) to
 // the new ERender3D vocabulary and sokol pipelines.
+//
+// A small set of link-visible symbols (EffectClass, and the Set/Reset
+// entry points callers in character.cpp/spell.cpp use) live above the
+// gate as minimal stubs so the rest of the engine links while the
+// renderer body is being reworked.
+
+#include "character.h"
+
+TObjectClass EffectClass("EFFECT", OBJCLASS_EFFECT, 0);
+
+void TBurnEffect::Set(PTCharacter ch)
+{
+    character = ch;
+
+    if (character)
+    {
+        S3DPoint pos;
+        character->GetPos(pos);
+        SetPos(pos);
+    }
+}
+
+void TBurnEffect::ResetFrameCount()
+{
+    // Phase 3: delegate to TBurnAnimator once the burn animator is
+    // ported. No-op in the stub keeps callers linking.
+}
+
+void TPulpEffect::Set(S3DPoint /*vel*/, PTCharacter ch,
+                      int32_t /*num_body_part*/, int32_t /*num_blood*/,
+                      int32_t /*num_splat*/)
+{
+    // Phase 3: allocate body-part/blood/splat arrays and kick the pulp
+    // animator. Stub records the owning character so the effect can be
+    // GC'd like any other.
+    character = ch;
+}
+
+// Blend-state helpers used by every animator's Render() path. The 1998
+// bodies poked D3DRENDERSTATE_* keys on Scene3D; sokol pipelines express
+// blend mode declaratively per-pipeline so these will melt away once the
+// animators move to pipeline objects. No-op stubs unblock linking today.
+bool SaveBlendState()    { return true; }
+bool SetBlendState()     { return true; }
+bool RestoreBlendState() { return true; }
 
 #if 0 // TODO(port): revisit in Phase 3 (sokol_gfx pipelines)
 
@@ -8906,14 +8943,14 @@ void TQuicksandEffect::Pulse()
                 }
                 else
                 {
-                    ((PTQuicksandAnimator)animator)->target[0] = nullptr;
+                    ((PTQuicksandAnimator)animator)->target[0] = '\0';
                     ((PTQuicksandAnimator)animator)->target_position[0].x = ((PTQuicksandAnimator)animator)->target_position[0].y = ((PTQuicksandAnimator)animator)->target_position[0].z = 0;
                 }
             }
             else
             {
                 ((PTQuicksandAnimator)animator)->num_targets = 0;
-                ((PTQuicksandAnimator)animator)->target[0] = nullptr;
+                ((PTQuicksandAnimator)animator)->target[0] = '\0';
                 GetPos(((PTQuicksandAnimator)animator)->target_position[0]);
                 GetPos(temp_point);
                 level = 1;

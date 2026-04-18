@@ -471,7 +471,7 @@ bool TPlayer::InvokeQuickSpell(int32_t button)
     if ((uint32_t)button >= QSPELL_NUM)
         return false;
 
-    if (quickspells[button][0] != nullptr)
+    if (quickspells[button][0] != '\0')
     {
         if (HasTalismans(quickspells[button]))
         {

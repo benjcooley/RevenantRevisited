@@ -147,8 +147,8 @@ class TConstInventoryIterator
 
   protected:
     const TObjectInstance* owner;   // inventory parent
-    int32_t invindex;               // index into inventory
-    TObjectInstance* item;          // current object
+    mutable int32_t invindex;       // index into inventory
+    mutable TObjectInstance* item;  // current object
 };
 
 // ************************************************
@@ -1095,7 +1095,7 @@ class TObjectInstance : protected SObjectDef
         // Gets inventory object, index is NOT the same as inventory slot
     TObjectInstance* GetInventorySlot(int32_t slot) const;
         // Searches for inventory object occupying the given slot
-    int32_t NumInventoryItems() { return inventory.NumItems(); }
+    int32_t NumInventoryItems() const { return inventory.NumItems(); }
         // Number of objects in the array
     int32_t RealNumInventoryItems();
         // Number of *used* objects in the array

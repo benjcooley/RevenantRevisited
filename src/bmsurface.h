@@ -28,6 +28,11 @@ class TBitmapSurface : public TSurface
     virtual int32_t SurfaceType() { return SURFACE_BITMAP; }
       // Returns type of surface this is
 
+    int32_t BitsPerPixel() override;
+      // Reports the wrapped bitmap's pixel depth (8/15/16/24/32). Legacy
+      // CPU-only surface — base-class `format` stays SG_PIXELFORMAT_NONE
+      // because these never become sokol textures.
+
       // Constructor for BitmapSurface.
     virtual ~TBitmapSurface();
       // Destructor for BitmapSurface.
@@ -37,8 +42,8 @@ class TBitmapSurface : public TSurface
     void Initialize(PTBitmap bitmap);
       // Initializes bitmap surface from an existing bitmap. Sets variables.
 
-    uint32_t GetSurface() { return nullptr; }
-      // Returns Direct Draw pointer or Null if not Direct Draw Surface.
+    uint32_t GetSurface() { return 0; }
+      // Legacy accessor — returned the DirectDraw surface under D3D, always 0 now.
     virtual void *Lock() { stride = width; return locked = (void *)bitmap->data16; }
       // Locks surface. Returns pointer to surface or nullptr 
       // if buffer couldn't be locked.
@@ -67,5 +72,3 @@ class TBitmapSurface : public TSurface
       // Allows access to bitmap
 
 };
-
-#endif
