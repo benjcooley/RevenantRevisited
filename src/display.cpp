@@ -48,7 +48,10 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     sg_desc desc = {};
     desc.context = sapp_sgcontext();
     desc.buffer_pool_size = 256;
-    desc.image_pool_size = 256;
+    // One tile bitmap needs 2 images (color + depth); a single Misthaven
+    // sector already has ~200 unique bitmaps, and the test harness loads a
+    // 3x3 neighborhood. Headroom for UI atlases, render targets, and ImGui.
+    desc.image_pool_size = 4096;
     desc.shader_pool_size = 64;
     desc.pipeline_pool_size = 64;
     desc.pass_pool_size = 32;
@@ -75,13 +78,36 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     rt_desc.pixel_format = SG_PIXELFORMAT_RGBA16F;
     normal_target = sg_make_image(&rt_desc);
 
-    // Create render passes
-    sg_pass_desc pass_desc = {};
+    // Scene-z color target. Tile fragment shader writes the same normalized
+    // depth here as to the depth attachment; the light pass samples this
+    // (depth attachments aren't cleanly sampleable on sokol's Metal path).
+    rt_desc.pixel_format = SG_PIXELFORMAT_R32F;
+    scene_z_target = sg_make_image(&rt_desc);
 
-    // Main render pass
-    pass_desc.color_attachments[0].image = color_target;
-    pass_desc.depth_stencil_attachment.image = depth_target;
-    default_pass = sg_make_pass(&pass_desc);
+    // Lit target — final shaded RGBA8 that FlipPage composites to the
+    // swapchain. Separate from color_target because color_target is now
+    // the G-buffer albedo channel and must survive across the lighting
+    // pass that reads it.
+    rt_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    rt_desc.min_filter   = SG_FILTER_NEAREST;
+    rt_desc.mag_filter   = SG_FILTER_NEAREST;
+    lit_target = sg_make_image(&rt_desc);
+
+    // G-buffer fill pass — MRT: albedo + world normal + scene_z color.
+    // Depth attachment is for HW Z-testing only; the light pass samples
+    // scene_z_target instead (sokol/Metal depth-attachment sampling quirks).
+    sg_pass_desc gbuf_desc = {};
+    gbuf_desc.color_attachments[0].image     = color_target;
+    gbuf_desc.color_attachments[1].image     = normal_target;
+    gbuf_desc.color_attachments[2].image     = scene_z_target;
+    gbuf_desc.depth_stencil_attachment.image = depth_target;
+    default_pass = sg_make_pass(&gbuf_desc);
+
+    // Light accumulation pass — fullscreen quad reading the G-buffer,
+    // outputting lit RGBA8 into lit_target. No depth attachment.
+    sg_pass_desc lit_desc = {};
+    lit_desc.color_attachments[0].image = lit_target;
+    lit_pass = sg_make_pass(&lit_desc);
 
     // Depth pre-pass — wired up with the 3D renderer in Phase 3. sokol_gfx
     // does not permit a pass with no color attachment, so we skip creation
@@ -149,6 +175,7 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
 
     InitCompositePipeline();
     InitTilePipeline();
+    InitLightPipeline();
 
     // Dear ImGui overlay — used for in-game debug/tuning panels (lighting,
     // depth scale, camera). Draws into the swapchain pass in FlipPage.
@@ -263,33 +290,20 @@ void TDisplay::ShutdownCompositePipeline()
     if (composite_vbuf.id)     { sg_destroy_buffer(composite_vbuf);       composite_vbuf     = {}; }
 }
 
-// ---- Tile rendering pipeline ---------------------------------------------
-// Draws a sprite into (color_target, depth_target) with per-pixel depth
-// written from a companion depthmap texture. The fragment shader samples
-// depth_tex (normalized [0,1] delta) and writes `[[depth(any)]] = z_base +
-// sample * z_scale`, so overlapping sprites interpenetrate at the sample
-// level rather than sprite-level painter order. Matches Revenant's 2.5D
-// composition where each tile/object ships with a per-pixel depthmap.
+// ---- Tile G-buffer fill pipeline -----------------------------------------
+// Deferred shading. The tile shader fills a G-buffer (albedo + world normal +
+// depth). A second fullscreen pass (InitLightPipeline) reads the G-buffer and
+// runs the actual lighting math. Lifting lights out of the per-tile uniform
+// block means no per-draw cap — future work will loop the light pass in
+// batches of 16 for unlimited lights.
 
 namespace {
-
-// zparams.zw carries the depth-derivative scale used to convert per-pixel
-// dfdx/dfdy of the sampled depth into a surface-space slope. light_dir.w is
-// the diffuse intensity; light_col.w is the ambient term. Normal is
-// reconstructed from the tile's own authored depthmap (per-pixel depth is
-// shipped with every tile bitmap), so lighting happens inline — no separate
-// g-buffer or fullscreen light pass is needed for this first tier.
-// Matches TDisplay::kMaxPointLights. Keep in sync — the Metal struct layout
-// is a straight memcpy from DrawTile's uniforms buffer.
-#define TILE_MAX_POINT_LIGHTS 16
 
 const char* kTileVsMetal =
     "#include <metal_stdlib>\n"
     "using namespace metal;\n"
-    "#define MAX_PL 16\n"
-    "struct params { float4 rect; float4 zparams; float4 light_dir; float4 light_col;\n"
-    "                float4 plight_count;\n"
-    "                float4 plight_pos[MAX_PL]; float4 plight_col[MAX_PL]; };\n"
+    "struct params { float4 rect; float4 zparams; float4 tile_root; float4 tile_sprite;\n"
+    "                float4 filter; };\n"
     "struct vs_in  { float2 pos [[attribute(0)]]; float2 uv [[attribute(1)]]; };\n"
     "struct vs_out { float4 pos [[position]]; float2 uv; };\n"
     "vertex vs_out _main(vs_in in [[stage_in]], constant params& p [[buffer(0)]]) {\n"
@@ -299,15 +313,25 @@ const char* kTileVsMetal =
     "    return o;\n"
     "}\n";
 
+// G-buffer fill. zparams.x = anchor_z, zparams.y = depth_mul,
+// zparams.z = normal_mul, zparams.w unused. tile_root.xyz = world xyz of
+// the anchor pixel, tile_root.w = zraw_to_wu for normal reconstruction.
+// tile_sprite.xy = anchor pixel (regx, regy), zw = sprite size (dst_w, dst_h).
+// filter.x = normal_radius (texels), filter.y = bilateral edge threshold in
+// uploaded depth-texture units. No light-related uniforms anymore — lighting runs as a
+// fullscreen pass over the G-buffer.
 const char* kTileFsMetal =
     "#include <metal_stdlib>\n"
     "using namespace metal;\n"
-    "#define MAX_PL 16\n"
-    "struct params { float4 rect; float4 zparams; float4 light_dir; float4 light_col;\n"
-    "                float4 plight_count;\n"
-    "                float4 plight_pos[MAX_PL]; float4 plight_col[MAX_PL]; };\n"
+    "#define ISO_COS30 0.867\n"
+    "#define EDGE_EPS 1e-6\n"
+    "struct params { float4 rect; float4 zparams; float4 tile_root; float4 tile_sprite;\n"
+    "                float4 filter; };\n"
     "struct vs_out { float4 pos [[position]]; float2 uv; };\n"
-    "struct fs_out { float4 color [[color(0)]]; float depth [[depth(any)]]; };\n"
+    "struct fs_out { float4 albedo   [[color(0)]];\n"
+    "                float4 normal   [[color(1)]];\n"
+    "                float4 scene_z  [[color(2)]];\n"
+    "                float  depth    [[depth(any)]]; };\n"
     "fragment fs_out _main(vs_out in [[stage_in]],\n"
     "                      texture2d<float> color_tex [[texture(0)]],\n"
     "                      texture2d<float> depth_tex [[texture(1)]],\n"
@@ -316,38 +340,46 @@ const char* kTileFsMetal =
     "    fs_out o;\n"
     "    float4 c = color_tex.sample(smp, in.uv);\n"
     "    if (c.a < 0.01) discard_fragment();\n"
-    "    float zd = depth_tex.sample(smp, in.uv).r;\n"
-    "    float d  = clamp(p.zparams.x + zd * p.zparams.y, 0.0, 1.0);\n"
-    "    float s  = p.zparams.z;\n"
-    "    float3 N = normalize(float3(-dfdx(zd)*s, -dfdy(zd)*s, 1.0));\n"
-    "    float3 L = normalize(p.light_dir.xyz);\n"
-    "    float ndotl = max(dot(N, L), 0.0) * p.light_dir.w;\n"
-    "    float3 lit = c.rgb * (p.light_col.w + p.light_col.rgb * ndotl);\n"
-    "    // Screen-space point lights. All coords in pixels; fragment sits on\n"
-    "    // the screen plane (z=0). Lights float above at plight_pos[i].z.\n"
-    "    // Linear falloff squared for a softer knee.\n"
-    "    int n = int(p.plight_count.x);\n"
-    "    if (n > MAX_PL) n = MAX_PL;\n"
-    "    float3 frag_p = float3(in.pos.xy, 0.0);\n"
-    "    for (int i = 0; i < n; ++i) {\n"
-    "        float3 Lv    = p.plight_pos[i].xyz - frag_p;\n"
-    "        float  rad   = max(p.plight_pos[i].w, 1e-4);\n"
-    "        float  dist  = length(Lv);\n"
-    "        if (dist >= rad) continue;\n"
-    "        float3 Ldir  = Lv / max(dist, 1e-4);\n"
-    "        float  pdotn = max(dot(N, Ldir), 0.0);\n"
-    "        float  atten = 1.0 - dist / rad;\n"
-    "        atten *= atten;\n"
-    "        lit += c.rgb * p.plight_col[i].rgb * p.plight_col[i].w * pdotn * atten;\n"
-    "    }\n"
-    "    int mode = int(p.zparams.w);\n"
-    "    float3 rgb;\n"
-    "    if      (mode == 1) rgb = c.rgb;          // albedo only\n"
-    "    else if (mode == 2) rgb = float3(d);      // depth actually written to zbuffer\n"
-    "    else if (mode == 3) rgb = N * 0.5 + 0.5;  // normals\n"
-    "    else                rgb = lit;                    // lit (default)\n"
-    "    o.color = float4(rgb, c.a);\n"
-    "    o.depth = d;\n"
+    "    float zraw = depth_tex.sample(smp, in.uv).r;\n"
+    "    float d    = p.zparams.x + zraw * p.zparams.y;\n"
+    "    // Fragments outside the active depth window should not collapse to\n"
+    "    // 0/1 and pin the z-buffer there; reject them so they don't occlude\n"
+    "    // in-range tiles incorrectly.\n"
+    "    if (d < 0.0 || d > 1.0) discard_fragment();\n"
+    "    // Build world-space normal via central-difference of the depthmap.\n"
+    "    // Same math as the old forward path — see that history for the\n"
+    "    // derivation. Tangent basis in world: basis_u = dst_w*(0.5,-0.5,0),\n"
+    "    // basis_v = dst_h*(1,1,0), plus (dzwu/du)*(cos30,cos30,1) etc.\n"
+    "    float  nr  = max(p.filter.x, 0.5);\n"
+    "    float  thr = max(p.filter.y, 0.0);\n"
+    "    float  tw  = float(depth_tex.get_width());\n"
+    "    float  th  = float(depth_tex.get_height());\n"
+    "    float2 tex = float2(nr / max(tw, 1.0), nr / max(th, 1.0));\n"
+    "    float  zl  = depth_tex.sample(smp, in.uv - float2(tex.x, 0.0)).r;\n"
+    "    float  zrs = depth_tex.sample(smp, in.uv + float2(tex.x, 0.0)).r;\n"
+    "    float  zt  = depth_tex.sample(smp, in.uv - float2(0.0, tex.y)).r;\n"
+    "    float  zb  = depth_tex.sample(smp, in.uv + float2(0.0, tex.y)).r;\n"
+    "    if (fabs(zl  - zraw) > thr + EDGE_EPS) zl  = zraw;\n"
+    "    if (fabs(zrs - zraw) > thr + EDGE_EPS) zrs = zraw;\n"
+    "    if (fabs(zt  - zraw) > thr + EDGE_EPS) zt  = zraw;\n"
+    "    if (fabs(zb  - zraw) > thr + EDGE_EPS) zb  = zraw;\n"
+    "    float  dzwu_du_uv = (zrs - zl) * 0.5 / max(tex.x, 1e-6) * p.tile_root.w;\n"
+    "    float  dzwu_dv_uv = (zb - zt)  * 0.5 / max(tex.y, 1e-6) * p.tile_root.w;\n"
+    "    float  ns  = p.zparams.z;\n"
+    "    float3 t_u = p.tile_sprite.z * float3(0.5, -0.5, 0.0) +\n"
+    "                 dzwu_du_uv * ns * float3(ISO_COS30, ISO_COS30, 1.0);\n"
+    "    float3 t_v = p.tile_sprite.w * float3(1.0, 1.0, 0.0) +\n"
+    "                 dzwu_dv_uv * ns * float3(ISO_COS30, ISO_COS30, 1.0);\n"
+    "    float3 N   = normalize(cross(t_v, t_u));\n"
+    "    float3 Vc  = normalize(float3(ISO_COS30, ISO_COS30, 1.0));\n"
+    "    // The depth texture describes the camera-facing side of a billboarded\n"
+    "    // tile, so keep the reconstructed normal in the camera-facing\n"
+    "    // hemisphere rather than blindly forcing +Z.\n"
+    "    if (dot(N, Vc) < 0.0) N = -N;\n"
+    "    o.albedo  = c;\n"
+    "    o.normal  = float4(N * 0.5 + 0.5, 1.0);\n"
+    "    o.scene_z = float4(d, 0.0, 0.0, 1.0);\n"
+    "    o.depth   = d;\n"
     "    return o;\n"
     "}\n";
 
@@ -362,12 +394,10 @@ void TDisplay::InitTilePipeline()
     vb.label = "display.tile.vbuf";
     tile_vbuf = sg_make_buffer(&vb);
 
-    // Uniform block: rect, zparams, light_dir, light_col, plight_count (5
-    // vec4s) + plight_pos[N] + plight_col[N]. sokol's Metal path memcpys
-    // the raw bytes into a constant buffer, so this matches the Metal
-    // struct layout in kTile*Metal exactly.
-    constexpr int32_t kPL = TDisplay::kMaxPointLights;
-    constexpr int32_t kUB_vec4s = 5 + kPL + kPL;
+    // Uniform block for the G-buffer fill: rect, zparams, tile_root,
+    // tile_sprite, filter (5 vec4s). Lights no longer live here — the
+    // deferred light pass reads the G-buffer and runs all lighting math.
+    constexpr int32_t kUB_vec4s = 5;
     constexpr int32_t kUB_bytes = kUB_vec4s * 16;
 
     sg_shader_desc sh = {};
@@ -380,18 +410,12 @@ void TDisplay::InitTilePipeline()
     sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     sh.vs.uniform_blocks[0].uniforms[1].name = "zparams";
     sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.vs.uniform_blocks[0].uniforms[2].name = "light_dir";
+    sh.vs.uniform_blocks[0].uniforms[2].name = "tile_root";
     sh.vs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.vs.uniform_blocks[0].uniforms[3].name = "light_col";
+    sh.vs.uniform_blocks[0].uniforms[3].name = "tile_sprite";
     sh.vs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.vs.uniform_blocks[0].uniforms[4].name = "plight_count";
+    sh.vs.uniform_blocks[0].uniforms[4].name = "filter";
     sh.vs.uniform_blocks[0].uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.vs.uniform_blocks[0].uniforms[5].name = "plight_pos";
-    sh.vs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.vs.uniform_blocks[0].uniforms[5].array_count = kPL;
-    sh.vs.uniform_blocks[0].uniforms[6].name = "plight_col";
-    sh.vs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.vs.uniform_blocks[0].uniforms[6].array_count = kPL;
     sh.fs.source = kTileFsMetal;
     sh.fs.entry  = "_main";
     sh.fs.uniform_blocks[0].size = kUB_bytes;
@@ -399,18 +423,12 @@ void TDisplay::InitTilePipeline()
     sh.fs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[1].name = "zparams";
     sh.fs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[2].name = "light_dir";
+    sh.fs.uniform_blocks[0].uniforms[2].name = "tile_root";
     sh.fs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[3].name = "light_col";
+    sh.fs.uniform_blocks[0].uniforms[3].name = "tile_sprite";
     sh.fs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[4].name = "plight_count";
+    sh.fs.uniform_blocks[0].uniforms[4].name = "filter";
     sh.fs.uniform_blocks[0].uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[5].name = "plight_pos";
-    sh.fs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[5].array_count = kPL;
-    sh.fs.uniform_blocks[0].uniforms[6].name = "plight_col";
-    sh.fs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[6].array_count = kPL;
     sh.fs.images[0].name         = "color_tex";
     sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -425,12 +443,19 @@ void TDisplay::InitTilePipeline()
     pip.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
     pip.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
     pip.primitive_type         = SG_PRIMITIVETYPE_TRIANGLES;
+    // MRT: albedo (RGBA8) + world normal (RGBA16F) + scene_z (R32F). Formats
+    // must match default_pass attachments exactly or pipeline creation fails.
+    pip.color_count            = 3;
     pip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
     pip.colors[0].blend.enabled = true;
     pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
     pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
     pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pip.colors[1].pixel_format = SG_PIXELFORMAT_RGBA16F;
+    pip.colors[1].blend.enabled = false;
+    pip.colors[2].pixel_format = SG_PIXELFORMAT_R32F;
+    pip.colors[2].blend.enabled = false;
     pip.depth.pixel_format     = SG_PIXELFORMAT_DEPTH;
     pip.depth.compare          = SG_COMPAREFUNC_LESS_EQUAL;
     pip.depth.write_enabled    = true;
@@ -445,12 +470,287 @@ void TDisplay::ShutdownTilePipeline()
     if (tile_vbuf.id)     { sg_destroy_buffer(tile_vbuf);       tile_vbuf     = {}; }
 }
 
+// ---- Deferred lighting pass ---------------------------------------------
+// Reads the G-buffer (albedo + world normal + depth), reconstructs each
+// fragment's world position via the iso inverse, and runs directional +
+// point-light shading. Writes lit_target, which FlipPage composites.
+//
+// Iso inverse derivation (retail uses cos30 = 867/1000):
+//   rel     = world - camera_center
+//   screen S = rel.x - rel.y
+//   screen T = (rel.x+rel.y)/2 - rel.z*cos30
+//   scene_z  = kcam - (rel.x+rel.y)*cos30 - rel.z/2     (CameraDepth)
+//
+// Given (S, T, scene_z):
+//   K       = kcam - scene_z
+//   wz      = (K - 2*T*cos30) / (2*cos30^2 + 0.5)
+//   sum_r   = 2*(T + wz*cos30)
+//   rel.x/y = ((sum_r ± S) / 2)
+//   world   = rel + camera_center
+// Fragment pixel -> (S, T) via S = uv.x*fb_w - ox, T = uv.y*fb_h - oy,
+// where (ox, oy) already includes any debug pan offset.
+
+namespace {
+
+const char* kLightVsMetal =
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "struct vs_in  { float2 pos [[attribute(0)]]; float2 uv [[attribute(1)]]; };\n"
+    "struct vs_out { float4 pos [[position]];     float2 uv; };\n"
+    "vertex vs_out _main(vs_in in [[stage_in]]) {\n"
+    "    vs_out o;\n"
+    "    o.pos = float4(in.pos * 2.0 - 1.0, 0.0, 1.0);\n"
+    "    o.uv  = in.uv;\n"
+    "    return o;\n"
+    "}\n";
+
+// params:
+//   vp       .xy = screen origin for camera center; .zw = z_near, zspan
+//   recon    .xy = world_center.xy;                 .z = kcam_forward
+//             .w  = reserved
+//   light_dir .xyz = dir,            .w  = intensity
+//   light_col .xyz = color,          .w  = ambient
+//   settings .x = view_mode (0 lit, 1 albedo, 2 depth, 3 normal),
+//            .y = plight_count
+//            .z = world_scale, .w = wz_scale for vm=5 debug
+//   plight_pos[N] .xyz = world xyz,  .w  = radius (wu)
+//   plight_col[N] .xyz = rgb,        .w  = intensity
+const char* kLightFsMetal =
+    "#include <metal_stdlib>\n"
+    "using namespace metal;\n"
+    "#define ISO_COS30 0.867\n"
+    "#define ISO_WZ_DENOM 2.003378\n"
+    "#define KPL 16\n"
+    "struct params {\n"
+    "    float4 vp; float4 recon; float4 light_dir; float4 light_col;\n"
+    "    float4 settings;\n"
+    "    float4 plight_pos[KPL]; float4 plight_col[KPL];\n"
+    "};\n"
+    "struct vs_out { float4 pos [[position]]; float2 uv; };\n"
+    "fragment float4 _main(vs_out in [[stage_in]],\n"
+    "                      texture2d<float> albedo_tex [[texture(0)]],\n"
+    "                      texture2d<float> normal_tex [[texture(1)]],\n"
+    "                      texture2d<float> depth_tex  [[texture(2)]],\n"
+    "                      sampler smp                [[sampler(0)]],\n"
+    "                      constant params& p         [[buffer(0)]]) {\n"
+    "    float4 alb = albedo_tex.sample(smp, in.uv);\n"
+    "    if (alb.a < 0.01) discard_fragment();\n"
+    "    float  d   = depth_tex.sample(smp, in.uv).r;\n"
+    "    float3 np  = normal_tex.sample(smp, in.uv).xyz;\n"
+    "    float3 N   = normalize(np * 2.0 - 1.0);\n"
+    "    float  fbw = float(albedo_tex.get_width());\n"
+    "    float  fbh = float(albedo_tex.get_height());\n"
+    "    float  S   = in.uv.x * fbw - p.vp.x;\n"
+    "    float  T   = in.uv.y * fbh - p.vp.y;\n"
+    "    float  scene_z = d * p.vp.w + p.vp.z;\n"
+    "    float  K   = p.recon.z - scene_z;\n"
+    "    float  wz  = (K - 2.0 * T * ISO_COS30) / ISO_WZ_DENOM;\n"
+    "    float  sum_r = 2.0 * (T + wz * ISO_COS30);\n"
+    "    float3 W = float3(p.recon.x + (sum_r + S) * 0.5,\n"
+    "                      p.recon.y + (sum_r - S) * 0.5,\n"
+    "                      wz);\n"
+    "    int vm = int(p.settings.x);\n"
+    "    if (vm == 1) return float4(alb.rgb, 1.0);\n"
+    "    if (vm == 2) { float vd = clamp(1.0 - d, 0.0, 1.0); return float4(vd, vd, vd, 1.0); }\n"
+    "    if (vm == 3) return float4(np, 1.0);\n"
+    "    int nl_dbg = int(p.settings.y);\n"
+    "    if (vm == 4) {\n"
+    "        // Point-light debug: accumulate the same attenuation * NdotL\n"
+    "        // term used by lit mode, but without albedo modulation.\n"
+    "        // This makes it obvious whether reconstructed normals are\n"
+    "        // participating in the point-light response.\n"
+    "        float3 accum = float3(0.0);\n"
+    "        for (int i = 0; i < nl_dbg; ++i) {\n"
+    "            float3 delta = p.plight_pos[i].xyz - W;\n"
+    "            float  dist  = length(delta);\n"
+    "            float  rad   = p.plight_pos[i].w;\n"
+    "            if (rad > 0.0 && dist < rad) {\n"
+    "                float3 ldir = delta / max(dist, 1e-4);\n"
+    "                float attn = 1.0 - dist / rad;\n"
+    "                float ndotl = max(dot(N, ldir), 0.0);\n"
+    "                accum += p.plight_col[i].rgb * p.plight_col[i].w * attn * attn * ndotl;\n"
+    "            }\n"
+    "        }\n"
+    "        return float4(accum, 1.0);\n"
+    "    }\n"
+    "    if (vm == 5) {\n"
+    "        // Reconstructed W as color. R=wx, G=wy, B=wz, each scaled to a\n"
+    "        // readable range. settings.z = world_scale (wu per full intensity),\n"
+    "        // settings.w = wz_scale. Use the sector panel sliders to tune.\n"
+    "        float ws = max(p.settings.z, 1.0);\n"
+    "        float zs = max(p.settings.w, 1.0);\n"
+    "        return float4(fract(W.x / ws), fract(W.y / ws), fract(W.z / zs), 1.0);\n"
+    "    }\n"
+    "    float3 light = p.light_col.rgb * p.light_col.w;\n"
+    "    float3 Ldir  = normalize(p.light_dir.xyz);\n"
+    "    light += p.light_col.rgb * p.light_dir.w * max(dot(N, Ldir), 0.0);\n"
+    "    int nl = int(p.settings.y);\n"
+    "    for (int i = 0; i < KPL; ++i) {\n"
+    "        if (i >= nl) break;\n"
+    "        float3 delta = p.plight_pos[i].xyz - W;\n"
+    "        float  dist  = length(delta);\n"
+    "        float  rad   = p.plight_pos[i].w;\n"
+    "        if (rad > 0.0 && dist < rad) {\n"
+    "            float3 ldir  = delta / max(dist, 1e-4);\n"
+    "            float  attn  = 1.0 - dist / rad;\n"
+    "            attn *= attn;\n"
+    "            float  ndotl = max(dot(N, ldir), 0.0);\n"
+    "            light += p.plight_col[i].rgb * p.plight_col[i].w * attn * ndotl;\n"
+    "        }\n"
+    "    }\n"
+    "    return float4(alb.rgb * light, 1.0);\n"
+    "}\n";
+
+}  // namespace
+
+void TDisplay::InitLightPipeline()
+{
+    constexpr int32_t kPL = TDisplay::kMaxPointLights;
+    // 5 scalar vec4s + kPL vec4s of plight_pos + kPL vec4s of plight_col.
+    constexpr int32_t kUB_vec4s = 5 + kPL + kPL;
+    constexpr int32_t kUB_bytes = kUB_vec4s * 16;
+
+    sg_shader_desc sh = {};
+    sh.attrs[0].name = "pos";
+    sh.attrs[1].name = "uv";
+    sh.vs.source = kLightVsMetal;
+    sh.vs.entry  = "_main";
+    sh.fs.source = kLightFsMetal;
+    sh.fs.entry  = "_main";
+    sh.fs.uniform_blocks[0].size = kUB_bytes;
+    sh.fs.uniform_blocks[0].uniforms[0].name = "vp";
+    sh.fs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[1].name = "recon";
+    sh.fs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[2].name = "light_dir";
+    sh.fs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[3].name = "light_col";
+    sh.fs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[4].name = "settings";
+    sh.fs.uniform_blocks[0].uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[5].name = "plight_pos";
+    sh.fs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[5].array_count = kPL;
+    sh.fs.uniform_blocks[0].uniforms[6].name = "plight_col";
+    sh.fs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[6].array_count = kPL;
+    sh.fs.images[0].name         = "albedo_tex";
+    sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
+    sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
+    sh.fs.images[1].name         = "normal_tex";
+    sh.fs.images[1].image_type   = SG_IMAGETYPE_2D;
+    sh.fs.images[1].sampler_type = SG_SAMPLERTYPE_FLOAT;
+    sh.fs.images[2].name         = "depth_tex";
+    sh.fs.images[2].image_type   = SG_IMAGETYPE_2D;
+    sh.fs.images[2].sampler_type = SG_SAMPLERTYPE_FLOAT;
+    sh.label = "display.light.shader";
+    light_shader = sg_make_shader(&sh);
+
+    sg_pipeline_desc pip = {};
+    pip.shader = light_shader;
+    pip.layout.attrs[0].format  = SG_VERTEXFORMAT_FLOAT2;
+    pip.layout.attrs[1].format  = SG_VERTEXFORMAT_FLOAT2;
+    pip.primitive_type          = SG_PRIMITIVETYPE_TRIANGLES;
+    pip.colors[0].pixel_format  = SG_PIXELFORMAT_RGBA8;
+    pip.colors[0].blend.enabled = false;
+    pip.depth.pixel_format      = SG_PIXELFORMAT_NONE;
+    pip.label = "display.light.pipeline";
+    light_pipeline = sg_make_pipeline(&pip);
+}
+
+void TDisplay::ShutdownLightPipeline()
+{
+    if (light_pipeline.id) { sg_destroy_pipeline(light_pipeline); light_pipeline = {}; }
+    if (light_shader.id)   { sg_destroy_shader(light_shader);     light_shader   = {}; }
+}
+
+void TDisplay::SetReconstructionParams(float ox, float oy,
+                                       float z_near, float z_far,
+                                       float center_wx, float center_wy,
+                                       float kcam_forward, float reserved)
+{
+    recon.ox           = ox;
+    recon.oy           = oy;
+    recon.z_near       = z_near;
+    recon.zspan        = z_far - z_near;
+    recon.center_wx    = center_wx;
+    recon.center_wy    = center_wy;
+    recon.kcam_forward = kcam_forward;
+    recon.reserved     = reserved;
+}
+
+void TDisplay::RunLightingPass()
+{
+    if (!lit_pass.id || !light_pipeline.id) return;
+
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_CLEAR;
+    pa.colors[0].value  = { tile_clear_rgba[0], tile_clear_rgba[1],
+                            tile_clear_rgba[2], tile_clear_rgba[3] };
+    sg_begin_pass(lit_pass, &pa);
+
+    sg_apply_pipeline(light_pipeline);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = composite_vbuf;
+    bind.fs_images[0]      = color_target;    // albedo
+    bind.fs_images[1]      = normal_target;   // world normal
+    bind.fs_images[2]      = scene_z_target;  // scene_z in [0,1]
+    sg_apply_bindings(&bind);
+
+    constexpr int32_t kPL = TDisplay::kMaxPointLights;
+    constexpr int32_t kUB_vec4s = 5 + kPL + kPL;
+    float u[kUB_vec4s * 4] = {};
+    int32_t o = 0;
+    // vp
+    u[o++] = recon.ox;    u[o++] = recon.oy;
+    u[o++] = recon.z_near; u[o++] = recon.zspan;
+    // recon
+    u[o++] = recon.center_wx; u[o++] = recon.center_wy;
+    u[o++] = recon.kcam_forward; u[o++] = recon.reserved;
+    // light_dir
+    u[o++] = light.dir[0]; u[o++] = light.dir[1]; u[o++] = light.dir[2]; u[o++] = light.intensity;
+    // light_col
+    u[o++] = light.color[0]; u[o++] = light.color[1]; u[o++] = light.color[2]; u[o++] = light.ambient;
+    // settings: .x=view_mode, .y=plight_count, .z=world_scale, .w=wz_scale
+    // (world_scale/wz_scale tune the vm=5 reconstruction heatmap)
+    u[o++] = float(light.view_mode);
+    u[o++] = float(light.plight_count);
+    u[o++] = 256.0f;
+    u[o++] = 64.0f;
+    // plight_pos[]
+    for (int32_t i = 0; i < kPL; ++i)
+        for (int32_t k = 0; k < 4; ++k) u[o++] = light.plight_pos[i][k];
+    // plight_col[]
+    for (int32_t i = 0; i < kPL; ++i)
+        for (int32_t k = 0; k < 4; ++k) u[o++] = light.plight_col[i][k];
+
+    const sg_range r = { u, sizeof(u) };
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &r);
+    sg_draw(0, 6, 1);
+    sg_end_pass();
+
+    lit_target_dirty = true;
+}
+
 void TDisplay::BeginTilePass(float r, float g, float b, float a)
 {
     if (!default_pass.id) return;
+    tile_clear_rgba[0] = r; tile_clear_rgba[1] = g;
+    tile_clear_rgba[2] = b; tile_clear_rgba[3] = a;
     sg_pass_action pa = {};
+    // color_target (albedo) — clear to transparent. The light pass's fragment
+    // shader discards on alpha < 0.01, so pixels no tile drew to just get the
+    // lit_pass clear color (the user-supplied backdrop). This is how we get
+    // the backdrop through without running bogus lighting on pixels whose
+    // normal_target / scene_z_target slots were never written.
     pa.colors[0].action = SG_ACTION_CLEAR;
-    pa.colors[0].value  = { r, g, b, a };
+    pa.colors[0].value  = { 0.0f, 0.0f, 0.0f, 0.0f };
+    // normal_target / scene_z_target — sokol defaults to CLEAR with (0.5,…).
+    // Exact values don't matter because the light pass discards those pixels.
+    pa.colors[1].action = SG_ACTION_CLEAR;
+    pa.colors[1].value  = { 0.5f, 0.5f, 0.5f, 1.0f };
+    pa.colors[2].action = SG_ACTION_CLEAR;
+    pa.colors[2].value  = { 1.0f, 0.0f, 0.0f, 1.0f };
     pa.depth.action     = SG_ACTION_CLEAR;
     pa.depth.value      = 1.0f;
     pa.stencil.action   = SG_ACTION_DONTCARE;
@@ -460,7 +760,10 @@ void TDisplay::BeginTilePass(float r, float g, float b, float a)
 
 void TDisplay::DrawTile(sg_image color_img, sg_image depth_img,
                         int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
-                        float anchor_z, float z_scale)
+                        float anchor_z, float depth_mul, float normal_mul,
+                        float root_wx, float root_wy, float root_wz,
+                        float anchor_px_x, float anchor_px_y,
+                        float zraw_to_wu)
 {
     if (!tile_pipeline.id || !color_img.id || !depth_img.id) return;
     if (width <= 0 || height <= 0) return;
@@ -478,33 +781,27 @@ void TDisplay::DrawTile(sg_image color_img, sg_image depth_img,
     const float ny = 1.0f - (2.0f * (dst_y + dst_h) / height);
     const float nh = (2.0f * dst_h) / height;
 
-    // 5 vec4s of scalar params + kMaxPointLights vec4s of plight_pos + same
-    // again for plight_col. Layout must match the Metal struct in kTile*Metal.
-    constexpr int32_t kUB_vec4s = 5 + kMaxPointLights + kMaxPointLights;
-    float uniforms[kUB_vec4s * 4] = {};
+    // 5 vec4s: rect, zparams, tile_root, tile_sprite, filter.
+    float uniforms[5 * 4] = {};
     int32_t off = 0;
     // rect
     uniforms[off++] = nx; uniforms[off++] = ny; uniforms[off++] = nw; uniforms[off++] = nh;
-    // zparams: anchor_z, z_scale, deriv_scale, view_mode
+    // zparams: anchor_z, depth_mul, normal_mul, unused
     uniforms[off++] = anchor_z;
-    uniforms[off++] = z_scale;
-    uniforms[off++] = light.deriv_scale;
-    uniforms[off++] = float(light.view_mode);
-    // light_dir: dir + intensity
-    uniforms[off++] = light.dir[0]; uniforms[off++] = light.dir[1];
-    uniforms[off++] = light.dir[2]; uniforms[off++] = light.intensity;
-    // light_col: rgb + ambient
-    uniforms[off++] = light.color[0]; uniforms[off++] = light.color[1];
-    uniforms[off++] = light.color[2]; uniforms[off++] = light.ambient;
-    // plight_count.x
-    uniforms[off++] = float(light.plight_count);
-    uniforms[off++] = 0.0f; uniforms[off++] = 0.0f; uniforms[off++] = 0.0f;
-    // plight_pos[kMaxPointLights]
-    for (int32_t i = 0; i < kMaxPointLights; ++i)
-        for (int32_t k = 0; k < 4; ++k) uniforms[off++] = light.plight_pos[i][k];
-    // plight_col[kMaxPointLights]
-    for (int32_t i = 0; i < kMaxPointLights; ++i)
-        for (int32_t k = 0; k < 4; ++k) uniforms[off++] = light.plight_col[i][k];
+    uniforms[off++] = depth_mul;
+    uniforms[off++] = normal_mul;
+    uniforms[off++] = 0.0f;
+    // tile_root: world xyz of the tile's anchor pixel, .w = zraw_to_wu scale
+    uniforms[off++] = root_wx; uniforms[off++] = root_wy;
+    uniforms[off++] = root_wz; uniforms[off++] = zraw_to_wu;
+    // tile_sprite: xy = anchor pixel in sprite-local coords, zw = sprite size
+    uniforms[off++] = anchor_px_x; uniforms[off++] = anchor_px_y;
+    uniforms[off++] = float(dst_w); uniforms[off++] = float(dst_h);
+    // filter: .x = normal-filter radius in texels, .y = bilateral edge threshold
+    uniforms[off++] = light.normal_radius;
+    uniforms[off++] = light.edge_threshold;
+    uniforms[off++] = 0.0f;
+    uniforms[off++] = 0.0f;
 
     const sg_range u_range = { uniforms, sizeof(uniforms) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
@@ -513,14 +810,12 @@ void TDisplay::DrawTile(sg_image color_img, sg_image depth_img,
 }
 
 void TDisplay::SetLight(float dx, float dy, float dz, float intensity,
-                        float r, float g, float b, float ambient,
-                        float deriv_scale)
+                        float r, float g, float b, float ambient)
 {
     light.dir[0] = dx; light.dir[1] = dy; light.dir[2] = dz;
     light.intensity   = intensity;
     light.color[0] = r; light.color[1] = g; light.color[2] = b;
     light.ambient     = ambient;
-    light.deriv_scale = deriv_scale;
 }
 
 void TDisplay::SetTileViewMode(int32_t mode)
@@ -528,20 +823,30 @@ void TDisplay::SetTileViewMode(int32_t mode)
     light.view_mode = mode;
 }
 
+void TDisplay::SetNormalRadius(float texels)
+{
+    light.normal_radius = texels;
+}
+
+void TDisplay::SetEdgeThreshold(float zraw_units)
+{
+    light.edge_threshold = zraw_units;
+}
+
 void TDisplay::ClearPointLights()
 {
     light.plight_count = 0;
 }
 
-void TDisplay::AddPointLight(float x, float y, float z_above, float radius,
+void TDisplay::AddPointLight(float wx, float wy, float wz, float radius_wu,
                              float r, float g, float b, float intensity)
 {
     if (light.plight_count >= kMaxPointLights) return;
     const int32_t i = light.plight_count++;
-    light.plight_pos[i][0] = x;
-    light.plight_pos[i][1] = y;
-    light.plight_pos[i][2] = z_above;
-    light.plight_pos[i][3] = radius;
+    light.plight_pos[i][0] = wx;
+    light.plight_pos[i][1] = wy;
+    light.plight_pos[i][2] = wz;
+    light.plight_pos[i][3] = radius_wu;
     light.plight_col[i][0] = r;
     light.plight_col[i][1] = g;
     light.plight_col[i][2] = b;
@@ -628,6 +933,7 @@ void TDisplay::Composite(sg_image img,
 bool TDisplay::Close()
 {
     simgui_shutdown();
+    ShutdownLightPipeline();
     ShutdownTilePipeline();
     ShutdownCompositePipeline();
 
@@ -707,23 +1013,28 @@ bool TDisplay::FlipPage(bool /*Wait*/)
     pa.stencil.action   = SG_ACTION_DONTCARE;
 
     sg_begin_default_pass(&pa, sapp_width(), sapp_height());
-    if (color_target_dirty)
+    if (lit_target_dirty || color_target_dirty)
     {
-        // Tile pass output is the final image for this frame. The
+        // Tile/lighting output is the final image for this frame. The
         // backbuffer in this mode is undefined (never cleared/drawn), so
         // compositing it on top would paint garbage (initial pink) over
         // the tiles. UI/widget modes will reintroduce the backbuffer
         // composite when they start writing to it.
+        //
+        // Prefer lit_target (post-deferred-lighting). If the caller ran
+        // BeginTilePass without RunLightingPass (e.g. a pre-lighting debug
+        // build), fall back to color_target so the albedo still shows.
         sg_apply_pipeline(composite_pip_swap);
         sg_bindings bind = {};
         bind.vertex_buffers[0] = composite_vbuf;
-        bind.fs_images[0]      = color_target;
+        bind.fs_images[0]      = lit_target_dirty ? lit_target : color_target;
         sg_apply_bindings(&bind);
         const float u[8] = { -1.0f, -1.0f, 2.0f, 2.0f,  0.0f, 0.0f, 1.0f, 1.0f };
         const sg_range ur = { u, sizeof(u) };
         sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ur);
         sg_draw(0, 6, 1);
         color_target_dirty = false;
+        lit_target_dirty   = false;
     }
     else
     {

@@ -169,7 +169,9 @@ bool Show3D          = true;        // Turn on the 3D system
 bool Interpolate     = true;        // Causes 3D animations to interpolate when state changes
 bool DoPageFlip      = true;        // Allows the PageFlip function to flip pages
 bool PauseWhenNotActive = true;     // Causes game to pause when not active
-bool AppActive       = false;       // Flag for if the game is the active application
+bool AppActive       = true;        // Flag for if the game is the active application
+                                    // (starts true — sokol_app doesn't always deliver FOCUSED
+                                    // at launch on macOS, and the window is already active)
 bool NoWideBuffers   = false;       // Doesn't allow video buffers with stides wider than their widths
 bool UseDirect3D2    = true;        // True if you want to be able to use drawprimive stuff
 bool UseSoftware3D   = false;       // Use software 3D (False assumes we want hardware if available)
@@ -251,6 +253,13 @@ bool CtrlDown, ShiftDown, AltDown;
 
 // Is System Closing Down?
 bool Closing = false;
+
+// Set by SAPP_EVENTTYPE_MOUSE_MOVE; consumed once per frame in AppFrame. A
+// single frame can see dozens of move events on macOS — forwarding every one
+// synchronously to CurrentScreen->MouseMove() backs up the NSEvent queue and
+// the cursor appears to lag seconds behind reality. Coalesce to one call per
+// frame with the latest cursor position.
+static bool g_pendingMouseMove = false;
 
 // For setting up 3D object bounding rects in the editor
 bool UpdatingBoundingRect = false;
@@ -1944,6 +1953,7 @@ void CloseSystem()
 
 #include <sokol_glue.h>
 #include "sokol_imgui.h"
+#include "imgui.h"
 
 // Forward decls for the sokol callbacks (defined below sokol_main).
 static void AppInit();
@@ -2107,6 +2117,14 @@ static void AppFrame()
         return;
     }
 
+    // Flush coalesced mouse move. See AppEvent MOUSE_MOVE for the rationale.
+    if (g_pendingMouseMove)
+    {
+        g_pendingMouseMove = false;
+        if (AppActive)
+            CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
+    }
+
     CurrentScreen->TimerTick(true);
 
     // Present the frame: composite backbuffer onto the swapchain and commit
@@ -2159,10 +2177,14 @@ static void AppEvent(const sapp_event* ev)
 {
     if (!ev) return;
 
-    // ImGui sees every event. For mouse/keyboard it also returns whether
-    // ImGui wants to capture — when a panel has focus, skip the game
-    // handler so sliders don't also drive the game.
-    const bool imgui_capture = simgui_handle_event(ev);
+    // ImGui sees every event. simgui_handle_event returns the OR of
+    // WantCaptureKeyboard and WantCaptureMouse, which swallows mouse drags
+    // whenever a slider has keyboard focus — so we split the flags and gate
+    // each event class on the one that matters.
+    simgui_handle_event(ev);
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool imgui_kbd   = io.WantCaptureKeyboard;
+    const bool imgui_mouse = io.WantCaptureMouse;
 
     switch (ev->type)
     {
@@ -2174,7 +2196,7 @@ static void AppEvent(const sapp_event* ev)
         else if (vk == VK_SHIFT) ShiftDown = true;
 
         if (!AppActive) break;
-        if (imgui_capture) break;
+        if (imgui_kbd) break;
         if (CurrentScreen)
             CurrentScreen->KeyPress(vk, true);
         break;
@@ -2188,7 +2210,7 @@ static void AppEvent(const sapp_event* ev)
         else if (vk == VK_SHIFT) ShiftDown = false;
 
         if (!AppActive) break;
-        if (imgui_capture) break;
+        if (imgui_kbd) break;
         if (CurrentScreen)
             CurrentScreen->KeyPress(vk, false);
         break;
@@ -2197,7 +2219,7 @@ static void AppEvent(const sapp_event* ev)
       case SAPP_EVENTTYPE_CHAR:
       {
         if (!AppActive) break;
-        if (imgui_capture) break;
+        if (imgui_kbd) break;
         if (CtrlDown && ShiftDown) break;
         if (CurrentScreen)
             CurrentScreen->CharPress((int32_t)ev->char_code, true);
@@ -2209,9 +2231,14 @@ static void AppEvent(const sapp_event* ev)
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
-        if (imgui_capture) break;
-        if (CurrentScreen)
-            CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
+        if (imgui_mouse) break;
+        // Coalesce. A single frame can now see dozens of MOUSE_MOVE events
+        // (trackpads fire at 120–500 Hz and we drain the whole NSEvent queue
+        // at the top of drawRect). Calling CurrentScreen->MouseMove for each
+        // one drives pane/screen logic harder than needed — just flag a
+        // pending move and AppFrame forwards the latest cursor position once
+        // per frame.
+        g_pendingMouseMove = true;
         break;
       }
 
@@ -2220,7 +2247,7 @@ static void AppEvent(const sapp_event* ev)
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
-        if (imgui_capture) break;
+        if (imgui_mouse) break;
         int32_t btn = 0;
         switch (ev->mouse_button)
         {
@@ -2239,7 +2266,8 @@ static void AppEvent(const sapp_event* ev)
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
-        if (imgui_capture) break;
+        // MouseUp always forwarded so in-progress drags can clear even if
+        // the release lands over an ImGui panel; otherwise drag state latches.
         int32_t btn = 0;
         switch (ev->mouse_button)
         {

@@ -17,6 +17,11 @@ void TTime::BeginFrame(double dt_seconds)
 {
     if (dt_seconds < 0.0)
         dt_seconds = 0.0;
+    // Clamp to a sane ceiling so a sleep/wake, debugger pause, or other
+    // long stall looks like one dropped frame rather than a multi-minute
+    // jump that dt-scaled consumers try to integrate through.
+    if (dt_seconds > 0.1)
+        dt_seconds = 0.1;
 
     m_deltaTime = dt_seconds;
     m_time     += dt_seconds;
