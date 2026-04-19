@@ -1,3 +1,4 @@
+// REVSYNC: disputed=TTextBar reason="class contains 'Could not create character event' / 'Could not create kill event for c...' strings and CreateEventA calls — character-event/lifecycle concerns, not UI text rendering as TTextBar name implies" rejected=MEDIUM date=2026-04-17 note="likely TCharacter-related (event/kill signals) but not confirmed; prior TTextBar suffix stripped."
 // Decompiled methods and structure for class: cls_0x5a4358
 
 /*

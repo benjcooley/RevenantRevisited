@@ -1,3 +1,4 @@
+// REVSYNC: disputed=TScreen reason="yaml claims TScreen 88/100 but class is only 32 bytes; cannot hold TPointerArray<TPane,32>" rejected=HIGH date=2026-04-17 see=memory/project_tscreen_unconfirmed.md
 // Decompiled methods and structure for class: cls_0x50bf20
 
 /*

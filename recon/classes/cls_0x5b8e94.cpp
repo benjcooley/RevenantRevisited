@@ -1,3 +1,4 @@
+// REVSYNC: candidate="TObjectInstance|TObjectClass" confidence=MEDIUM evidence=src-path(Object.cpp x1) src-file=src/object.cpp date=2026-04-17 note="filename _Final suggests curated; need to confirm TObjectInstance vs TObjectClass"
 // Decompiled methods and structure for class: cls_0x5b8e94
 
 /*

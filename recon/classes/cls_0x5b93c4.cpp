@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TStatPane confidence=MEDIUM evidence=src-path(StatPane.cpp x2) src-file=src/statpane.cpp date=2026-04-17 note="only 2 StatPane.cpp assertion refs — source-path alone is suggestive but not personally verified against src/statpane this session; downgraded from prior HIGH. Prior TPlayer suffix was still wrong and remains removed."
 // Decompiled methods and structure for class: cls_0x5b93c4
 
 /*

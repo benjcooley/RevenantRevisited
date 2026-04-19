@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TMovies confidence=MEDIUM evidence=src-path(Movies.cpp x1) src-file=(retired) date=2026-04-17 note="movies code retired in attic/; single-class file so candidate label likely correct but not independently verified"
 // Decompiled methods and structure for class: cls_0x4bc2a0
 
 /*

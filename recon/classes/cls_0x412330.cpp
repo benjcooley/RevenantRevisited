@@ -1,3 +1,4 @@
+// REVSYNC: candidate=3dscene-helper confidence=LOW evidence=src-path(3DScene.cpp x1) src-file=src/3dscene.cpp date=2026-04-17
 // Decompiled methods and structure for class: cls_0x412330
 
 /*

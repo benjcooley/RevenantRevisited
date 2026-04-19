@@ -1,3 +1,4 @@
+// REVSYNC: disputed=TScreen reason="strings are animation state names (RunFireHead1E, RunFireHead1S, RunFireHeadN/W, 'Bad object class') — not consistent with a screen/display class; see memory/project_tscreen_unconfirmed.md" rejected=MEDIUM date=2026-04-17 see=memory/project_tscreen_unconfirmed.md note="likely an imagery/animation class (possibly T3DImage-family) that Ghidra's OOAnalyzer misattributed; prior TScreen suffix stripped."
 // Decompiled methods and structure for class: cls_0x5a50e8
 
 /*

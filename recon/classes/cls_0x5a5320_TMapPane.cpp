@@ -1,3 +1,4 @@
+// REVSYNC: identified=TMapPane confidence=HIGH evidence=src-path(MapPane.cpp x41)+string(s_curmap_*) src-file=src/mappane.cpp date=2026-04-17 verified-by=session-2026-04-17 note="41 MapPane.cpp assertions plus curmap\\ path literals match src/mappane.h LoadCurMap/SaveCurMap/ClearCurMap which operate on the curmap directory; prior TCharacter suffix was wrong and has been corrected."
 // Decompiled methods and structure for class: cls_0x5a5320
 
 /*

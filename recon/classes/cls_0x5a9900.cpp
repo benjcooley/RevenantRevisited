@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TComplexObject confidence=LOW evidence=none-yet(14 fields, no strings/APIs in class_index) src-file=src/complexobj.cpp date=2026-04-17 note="prior TComplexObject suffix is plausible by class-name convention but no independent fingerprint found yet; stripped pending verification."
 // Decompiled methods and structure for class: cls_0x5a9900
 
 /*

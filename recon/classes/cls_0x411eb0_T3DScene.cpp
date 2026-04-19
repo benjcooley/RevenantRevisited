@@ -1,3 +1,4 @@
+// REVSYNC: identified=T3DScene confidence=HIGH evidence=src-path(3DScene.cpp x46 distinct assertion RVAs) src-file=src/3dscene.cpp date=2026-04-17 verified-by=session-2026-04-17 note="46 per-line __FILE__ assertion strings at unique addresses is overwhelming; src/3dscene.h T3DScene is the only plausible counterpart."
 // Decompiled methods and structure for class: cls_0x411eb0
 
 /*

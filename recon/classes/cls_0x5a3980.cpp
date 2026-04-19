@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TDDSurface-subpart confidence=LOW evidence=src-path(DDSurface.cpp x1) src-file=(retired) date=2026-04-17 note="DDSurface retired; kept for reference only"
 // Decompiled methods and structure for class: cls_0x5a3980
 
 /*

@@ -3895,16 +3895,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 #endif
 
 _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
-    /*
-
-    NOTE: late event polling temporarily out-commented to check if this
-    causes infrequent and almost impossible to reproduce probelms with the
-    window close events, see:
-    https://github.com/floooh/sokol/pull/483#issuecomment-805148815
-
-
+    // Revenant: re-enabled the late event poll (originally commented out
+    // upstream for a close-event regression tracked by sokol PR #483). Without
+    // it, NSEvents only drain in main-run-loop slack time between drawRect
+    // invocations; under a heavy frame (thousands of DrawTile calls) the
+    // NSApp event queue grows monotonically and mouse input trails by
+    // seconds. Draining here collapses any pending backlog before we render,
+    // so mouse coalescing in AppEvent + AppFrame can emit one MouseMove per
+    // frame with the latest cursor position.
     const NSEventMask mask = NSEventMaskLeftMouseDown |
-                             NSEventMaskLeftMouseUp|
+                             NSEventMaskLeftMouseUp |
                              NSEventMaskRightMouseDown |
                              NSEventMaskRightMouseUp |
                              NSEventMaskMouseMoved |
@@ -3925,16 +3925,18 @@ _SOKOL_PRIVATE void _sapp_macos_poll_input_events() {
                              NSEventMaskDirectTouch;
     @autoreleasepool {
         for (;;) {
-            // NOTE: using NSDefaultRunLoopMode here causes stuttering in the GL backend,
-            // see: https://github.com/floooh/sokol/issues/486
-            NSEvent* event = [NSApp nextEventMatchingMask:mask untilDate:nil inMode:NSEventTrackingRunLoopMode dequeue:YES];
+            // NSDefaultRunLoopMode causes stuttering in the GL backend
+            // (sokol issue #486); NSEventTrackingRunLoopMode is the safe pick.
+            NSEvent* event = [NSApp nextEventMatchingMask:mask
+                                               untilDate:nil
+                                                  inMode:NSEventTrackingRunLoopMode
+                                                 dequeue:YES];
             if (event == nil) {
                 break;
             }
             [NSApp sendEvent:event];
         }
     }
-    */
 }
 
 - (void)drawRect:(NSRect)rect {

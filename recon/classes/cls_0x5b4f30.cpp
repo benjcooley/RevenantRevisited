@@ -1,3 +1,4 @@
+// REVSYNC: candidate="TCharacter|TPlayer" confidence=MEDIUM evidence=src-path(Object.cpp x4)+anim-strings(bowaim,leapb,sneak,cstaff) src-file=src/character.cpp date=2026-04-17 note="previously mislabeled TPlayScreen; Object.cpp path + character anim move strings suggest TObjectInstance-derived class (TCharacter or TPlayer)"
 // Decompiled methods and structure for class: cls_0x5b4f30
 
 /*

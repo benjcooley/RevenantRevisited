@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TCharacter confidence=MEDIUM evidence=strings("bowrun","combat","combatrun","fakedead","handrun","sneak","combat_to_stunned","blood","skywalk","fakedead_to_walk","combat_to_fakedead") src-file=src/character.cpp date=2026-04-17 note="combat/animation state-name fingerprints strongly suggest TCharacter, plus 84 fields/106 methods is in the right order of magnitude; prior TCharacter suffix likely correct but not personally verified by method-body/src cross-check this session — keeping MEDIUM."
 // Decompiled methods and structure for class: cls_0x5a7b98
 
 /*

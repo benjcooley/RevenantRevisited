@@ -1,3 +1,4 @@
+// REVSYNC: candidate=T3DImageryRes confidence=MEDIUM evidence=src-path(3DImage.cpp x10) src-file=src/3dimage.cpp date=2026-04-17 note="3dimage.cpp has multiple classes; filename guess plausible"
 // Decompiled methods and structure for class: cls_0x5a486c
 
 /*

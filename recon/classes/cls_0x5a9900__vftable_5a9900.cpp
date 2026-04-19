@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TComplexObject-vftable confidence=LOW evidence=paired-with(cls_0x5a9900.cpp) src-file=src/complexobj.cpp date=2026-04-17 note="Ghidra vftable export for cls_0x5a9900; inherits whatever identification that class gets. Prior TComplexObject suffix stripped pending verification of the paired class."
 // Decompiled methods and structure for class: cls_0x5a9900::vftable_5a9900
 
 /*

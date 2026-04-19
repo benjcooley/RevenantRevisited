@@ -1,3 +1,4 @@
+// REVSYNC: disputed=TObjectInstance reason="yaml 110/100 PERFECT but class holds 2 strings + Win32 HGLOBAL (GlobalFree in dtor); not a game-object state class" rejected=HIGH date=2026-04-17
 // Decompiled methods and structure for class: cls_0x5b9ff0
 
 /*

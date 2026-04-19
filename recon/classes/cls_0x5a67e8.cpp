@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TDisplay confidence=MEDIUM evidence=src-path(Display.cpp x2) src-file=src/display.cpp date=2026-04-17 note="only 2 Display.cpp assertion refs — source-path alone is suggestive but not personally verified against src counterpart this session; downgraded from prior HIGH pending method-body cross-check."
 // Decompiled methods and structure for class: cls_0x5a67e8
 
 /*

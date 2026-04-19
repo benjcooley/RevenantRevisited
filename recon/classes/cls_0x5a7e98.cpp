@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TCharAnimator confidence=MEDIUM evidence=src-path(CharAnimator.cpp x1) src-file=src/charanimator.cpp date=2026-04-17 note="only 1 CharAnimator.cpp assertion ref — low-strength fingerprint; downgraded from prior HIGH, not personally verified against src/charanimator this session."
 // Decompiled methods and structure for class: cls_0x5a7e98
 
 /*

@@ -1,3 +1,4 @@
+// REVSYNC: identified=TAutoMap confidence=HIGH evidence=src-path(AutoMap.cpp x24)+strings("Error putting to automap memory","Error Blitting to automap overlay","%sautomaps\\%d\\%d_%d.bmp") src-file=src/automap.cpp date=2026-04-17 verified-by=session-2026-04-17 note="unique automap error strings and per-map bitmap path format match the automap bitmap loader in src/automap; 24 AutoMap.cpp assertions corroborate."
 // Decompiled methods and structure for class: cls_0x5a5658
 
 /*

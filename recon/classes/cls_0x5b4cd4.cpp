@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TMoney confidence=MEDIUM evidence=src-path(Money.cpp x2) src-file=src/money.cpp date=2026-04-17 note="only 2 Money.cpp assertion refs — source-path alone is suggestive but not personally verified against src/money this session; downgraded from prior HIGH."
 // Decompiled methods and structure for class: cls_0x5b4cd4
 
 /*

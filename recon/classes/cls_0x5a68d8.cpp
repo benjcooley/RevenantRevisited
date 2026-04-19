@@ -1,3 +1,4 @@
+// REVSYNC: candidate="TSurface|TDDSurface" confidence=MEDIUM evidence=src-path(Surface.cpp x2, DDSurface.cpp x2) src-file=src/surface.cpp date=2026-04-17 note="both Surface.cpp and DDSurface.cpp paths present; likely TDDSurface (derived) inheriting TSurface base"
 // Decompiled methods and structure for class: cls_0x5a68d8
 
 /*

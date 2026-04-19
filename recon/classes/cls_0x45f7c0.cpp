@@ -1,3 +1,4 @@
+// REVSYNC: disputed=TObjectClass reason="82 methods/5345 lines spanning save-slot mgmt, font CreateFontA, script-tag parsing (ANIMATION/DAMAGETYPE/etc.), and object load/save dispatch. Appears heavily telescoped by Ghidra OOAnalyzer. Previously filenamed _TObjectClass but content is not a single class. Global instance at DAT_0065a890 behaves like a game/player manager singleton." rejected=HIGH date=2026-04-17 note="trust method bodies (meth_0x48d260..0x48e820 are the save-slot cluster), not class boundary"
 // Decompiled methods and structure for class: cls_0x45f7c0
 
 /*

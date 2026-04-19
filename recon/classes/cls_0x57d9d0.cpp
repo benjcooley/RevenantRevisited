@@ -1,3 +1,4 @@
+// REVSYNC: candidate=? confidence=LOW evidence=none(no source-path, no distinguishing strings; 66 methods, 16 fields) src-file=unknown date=2026-04-17 note="prior suffix was 'likely_TDirectX_or_TNetwork' — pure speculation with no supporting evidence. Suffix stripped; leave unclassified until we find fingerprint evidence."
 // Decompiled methods and structure for class: cls_0x57d9d0
 
 /*

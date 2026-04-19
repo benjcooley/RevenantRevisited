@@ -1,3 +1,4 @@
+// REVSYNC: candidate=TNetwork confidence=MEDIUM evidence=strings("Network_login","TCP_IP","MPAppear")+api(CreateEventA,CreateMutexA,GetUserNameA,strncpy-heavy) src-file=(retired?) date=2026-04-17 note="prior suffix was 'likely_TDirectX_or_TNetwork' — TDirectX ruled out by multiplayer-login strings; narrowing to TNetwork candidate. Not personally verified against src counterpart this session."
 // Decompiled methods and structure for class: cls_0x5756d0
 
 /*
