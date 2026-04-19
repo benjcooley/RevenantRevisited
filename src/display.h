@@ -103,37 +103,74 @@ class TDisplay : public TSurface
     // EndTilePass closes the pass. FlipPage composites color_target to the
     // swapchain when it was written to this frame.
     void BeginTilePass(float r, float g, float b, float a);
+    // Draw a tile. `anchor_z` is the normalized scene-depth of the billboard's
+    // anchor pixel before the bitmap-local z sample is added. Per-tile params:
+    //   tile_root_wu   — world position of the tile anchor (regx, regy pixel)
+    //   anchor_px      — which sprite pixel is the anchor (usually regx, regy)
+    //   dst_wh         — sprite size in destination pixels (= dst_w, dst_h)
+    //   zraw_to_wu     — scale factor applied to sampled bitmap-z differences
+    //                    for normal reconstruction.
     void DrawTile(sg_image color_img, sg_image depth_img,
                   int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
-                  float anchor_z, float z_scale);
+                  float anchor_z, float depth_mul, float normal_mul,
+                  float root_wx, float root_wy, float root_wz,
+                  float anchor_px_x, float anchor_px_y,
+                  float zraw_to_wu);
     void EndTilePass();
 
-    // Scene light used by the tile fragment shader. Normals are reconstructed
-    // from each tile's authored per-pixel depthmap via dfdx/dfdy, and albedo
+    // Scene light used by the deferred fullscreen light pass. Normals are
+    // reconstructed from each tile's authored per-pixel depthmap, and albedo
     // is modulated by (ambient + diffuse). dir is lit-space (x right, y down
-    // on screen, z out of the screen); deriv_scale maps a unit of sampled
-    // depth across a screen pixel to a unit of surface slope — tune to taste.
+    // on screen, z out of the screen).
     void SetLight(float dx, float dy, float dz, float intensity,
-                  float r, float g, float b, float ambient,
-                  float deriv_scale);
-
+                  float r, float g, float b, float ambient);
+    // Normal-reconstruction denoise radius in texels (central-difference
+    // stencil width). Wider = smoother normals, loses surface detail.
+    void SetNormalRadius(float texels);
+    // Bilateral-reject threshold for normal reconstruction, in the same units
+    // as the uploaded tile depth texture. Neighbor samples that differ from
+    // the center by more than this get clamped to the center — kills the
+    // "bevel" artifact where the filter bleeds across wall/floor seams.
+    void SetEdgeThreshold(float zraw_units);
     // Debug view modes for the tile fragment shader:
     //   0 = lit (default)  1 = albedo only  2 = depth  3 = normals
     void SetTileViewMode(int32_t mode);
 
-    // Screen-space point lights. Rebuild the list each frame — ClearPointLights()
-    // at the top, AddPointLight(...) per light. Position is in pixels (x, y
-    // screen-space, z above the screen plane); radius is also pixels (linear
-    // falloff to radius, squared for a softer knee). Up to kMaxPointLights
-    // per draw; extras silently dropped.
+    // World-space point lights. Rebuild the list each frame — ClearPointLights()
+    // at the top, AddPointLight(...) per light. Position is world xyz in
+    // world units (100 wu = 1 m), radius is also in world units: linear
+    // falloff to `radius`, squared for a softer knee. The tile fragment
+    // shader reconstructs each fragment's world position, so falloff is a
+    // true sphere in world space (rendered as an iso-foreshortened ellipse
+    // on-screen). Up to kMaxPointLights per draw; extras silently dropped.
     static constexpr int32_t kMaxPointLights = 16;
     void ClearPointLights();
-    void AddPointLight(float x, float y, float z_above, float radius,
+    void AddPointLight(float wx, float wy, float wz, float radius_wu,
                        float r, float g, float b, float intensity);
 
     // The color render target that BeginTilePass draws into. Exposed so
     // callers can composite it onto the backbuffer or swapchain.
     sg_image ColorTarget() const { return color_target; }
+
+    // Deferred-shading reconstruction params. The light pass reads only the
+    // G-buffer (albedo + normal + depth) and reconstructs per-fragment world
+    // position from (screen xy, depth) via the iso inverse. Call once per
+    // frame before RunLightingPass().
+    //   ox, oy         — screen-pixel position of the camera origin on screen
+    //                    (sector center plus debug pan in the test harness)
+    //   z_near, z_far  — camera-depth range in world units (maps to [0,1])
+    //   center_wx/y    — world-space camera center xy
+    //   kcam_forward   — camera-forward distance (kCamForwardWU)
+    //   reserved       — unused, reserved for future reconstruction tweaks
+    void SetReconstructionParams(float ox, float oy,
+                                 float z_near, float z_far,
+                                 float center_wx, float center_wy,
+                                 float kcam_forward, float reserved);
+
+    // Run the deferred lighting pass over the G-buffer filled by the
+    // preceding BeginTilePass/DrawTile/EndTilePass calls. Output lands in
+    // the internal lit_target, which FlipPage composites to the swapchain.
+    void RunLightingPass();
 
 private:
     int32_t currentpage = 0;          // Currently Displayed Front/Back Surface
@@ -155,13 +192,27 @@ private:
     void InitCompositePipeline();
     void ShutdownCompositePipeline();
 
-    // Sokol graphics resources
-    sg_pass default_pass;             // Default render pass (color_target + depth_target)
-    sg_pass depth_pass;               // Pass for depth pre-pass
+    // Sokol graphics resources. default_pass is now a G-buffer fill pass:
+    //   color attachment 0 → color_target  (albedo, RGBA8)
+    //   color attachment 1 → normal_target (world normal packed *0.5+0.5
+    //                                       into RGBA16F)
+    //   depth attachment   → depth_target  (camera-depth 0..1)
+    // Lighting runs in a second pass reading those three, writing to
+    // lit_target, which FlipPage composites to the swapchain.
+    sg_pass default_pass;             // G-buffer fill pass
+    sg_pass lit_pass;                 // Light accumulation pass (-> lit_target)
+    sg_pass depth_pass;               // Pass for depth pre-pass (unused)
     sg_shader   tile_shader   = {};
     sg_pipeline tile_pipeline = {};
     sg_buffer   tile_vbuf     = {};
+    sg_shader   light_shader    = {};
+    sg_pipeline light_pipeline  = {};
     bool        color_target_dirty = false;  // Set by BeginTilePass, read by FlipPage
+    bool        lit_target_dirty   = false;  // Set by RunLightingPass, read by FlipPage
+    // BeginTilePass's clear color is the scene backdrop. Stored here so the
+    // light pass clears lit_target to it — tile fragments overwrite, anything
+    // outside a drawn tile stays the backdrop color.
+    float       tile_clear_rgba[4] = { 0, 0, 0, 1 };
 
     // Scene light used by the tile fragment shader. Defaults are tuned so
     // a flat surface (normal = +Z) doesn't clamp to 1.0 — without that,
@@ -172,7 +223,8 @@ private:
         float intensity  = 1.0f;
         float color[3]   = { 1.0f, 1.0f, 1.0f };
         float ambient    = 0.25f;
-        float deriv_scale = 8192.0f;
+        float normal_radius = 1.5f;   // texels; wider = smoother normals
+        float edge_threshold = 0.001f; // zraw units; bilateral reject cutoff
         int32_t view_mode = 0;
         // Screen-space point lights. Each light is (pos xy, z_above, radius)
         // + (rgb, intensity); shader loops to `plight_count`.
@@ -182,11 +234,30 @@ private:
     } light;
     void InitTilePipeline();
     void ShutdownTilePipeline();
+    void InitLightPipeline();
+    void ShutdownLightPipeline();
+
+    // Reconstruction params for the light pass — updated once per frame via
+    // SetReconstructionParams(). Packed into 2 vec4s for the light shader's
+    // uniform block. See SetReconstructionParams() docs for units.
+    struct {
+        float ox = 0, oy = 0;
+        float z_near = 0, zspan = 1;
+        float center_wx = 0, center_wy = 0;
+        float kcam_forward = 0;
+        float reserved = 0;
+    } recon;
 
     // Render targets
-    sg_image color_target;            // Main color render target
-    sg_image depth_target;            // Depth render target
-    sg_image normal_target;           // Normal render target for lighting
+    sg_image color_target;            // G-buffer RT0: albedo (RGBA8)
+    sg_image depth_target;            // G-buffer depth-stencil (DEPTH) for HW z-test
+    sg_image normal_target;           // G-buffer RT1: world normal (RGBA16F)
+    sg_image scene_z_target;          // G-buffer RT2: scene_z in [0,1] (R32F).
+                                      //   Separate from depth_target because
+                                      //   sokol's Metal backend doesn't
+                                      //   support sampling the depth-stencil
+                                      //   attachment as a regular texture.
+    sg_image lit_target;              // Light pass output (RGBA8) -> swapchain
     
     // Uniform buffers
     struct {
