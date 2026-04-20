@@ -179,9 +179,18 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
 
     // Dear ImGui overlay — used for in-game debug/tuning panels (lighting,
     // depth scale, camera). Draws into the swapchain pass in FlipPage.
+    //
+    // max_vertices default is 65,536 which silently truncates the foreground
+    // drawlist when a debug overlay pushes a lot of geometry (e.g. the sector
+    // test's per-tile bbox wireframes — ~12 AA lines × thousands of tiles).
+    // sokol_imgui.h bails with `break` once a drawlist would overflow the
+    // shared vtx/idx buffer, dropping whatever hadn't been copied yet —
+    // including the foreground drawlist since it's appended last. Bump to
+    // 1M vertices (~20 MB) so large debug overlays render intact.
     {
         simgui_desc_t d = {};
         d.ini_filename = "imgui.ini";
+        d.max_vertices = 1 << 20; // 1,048,576
         simgui_setup(&d);
     }
 
