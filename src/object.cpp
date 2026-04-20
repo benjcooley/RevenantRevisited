@@ -1602,6 +1602,17 @@ void TObjectInstance::Notify(int32_t notify, void *ptr)
     }
 }
 
+// Diagnostic counters for why LoadObject returned nullptr. Wired up by the
+// sector test harness to tell "legitimate empty placeholder" apart from
+// "loader couldn't recover this object".
+int32_t g_loadObjNullObjVerNeg   = 0;
+int32_t g_loadObjNullClassNeg    = 0;
+int32_t g_loadObjNullBadClass    = 0;
+int32_t g_loadObjNullBadType     = 0;
+int32_t g_loadObjNullNewObjFail  = 0;
+int32_t g_loadObjNullCorruptDrop = 0;
+int32_t g_loadObjOk              = 0;
+
 TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, bool ismap)
 {
     uint32_t uniqueid;
@@ -1621,11 +1632,17 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
         is >> objversion;
 
     if (objversion < 0) // Objversion is the placeholder in map version 8 or above
+    {
+        ++g_loadObjNullObjVerNeg;
         return nullptr;
+    }
 
     is >> objclass;
     if (objclass < 0)   // Placeholder for empty object slot
+    {
+        ++g_loadObjNullClassNeg;
         return nullptr;
+    }
 
     // Check the sector map version before we read the type info
     if (version < 1)
@@ -1668,11 +1685,12 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
             FatalError("Object in map file has invalid class - possible file corruption");
         else if (blocksize >= 0)
         {
-            // v14+: blocksize covers body only, invblocksize covers inventory.
-            // Earlier versions used a single blocksize for body + inventory.
+            // Retail LAB_00471e57: unsupported class (bags/chests/invcontainer
+            // added post-1998-source, e.g. retail-only class 18). `blocksize`
+            // covers body + inventory together in v14+, so a single MovePos
+            // resyncs to the next object. invblocksize is already included.
             is.MovePos(blocksize);
-            if (version >= 14 && invblocksize >= 0)
-                is.MovePos(invblocksize);
+            ++g_loadObjNullBadClass;
             return nullptr;
         }
         else                        // Try to fix it by assuming its a tile
@@ -1718,8 +1736,7 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
             else if (blocksize >= 0)    // Just skip over this object
             {
                 is.MovePos(blocksize);
-                if (version >= 14 && invblocksize >= 0)
-                    is.MovePos(invblocksize);
+                ++g_loadObjNullBadType;
                 return nullptr;
             }
             else      // If attempting to fix, assume type is type 0 - first type in list
@@ -1740,24 +1757,28 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     TObjectInstance* inst = cl->NewObject(&def);
     if (!inst)
     {
-        // Class registration missing (e.g. POTION/INVCONTAINER/EFFECT not yet
-        // wired). Skip rather than abort so the rest of the sector loads.
-        fprintf(stderr, "[obj] skipping class=%d type=%d uniqueid=0x%x (NewObject returned null)\n",
-                objclass, objtype, uniqueid);
+        // Class factory missing — retail added bag/chest/invcontainer-style
+        // classes (e.g. class 25) after this 1998 source was snapshotted, so
+        // NewObject returns null for them. Skip rather than abort; blocksize
+        // covers body+inventory so a single MovePos resyncs the stream.
+        // Retail FUN_00471ce0 would crash here (the "Trouble creating" error
+        // is a warning, followed by an unchecked virtual call on null); our
+        // port is strictly safer.
         if (blocksize >= 0)
-        {
             is.MovePos(blocksize);
-            if (version >= 14 && invblocksize >= 0)
-                is.MovePos(invblocksize);
-        }
+        ++g_loadObjNullNewObjFail;
         return nullptr;
     }
 
     // ****** Load the object ******
 
-  // Load object body. v4..v13 has a single blocksize covering body +
-  // inventory. v14+ splits it so body and inventory each have their own
-  // blocksize and can be skipped independently.
+  // Retail layout (FUN_00471ce0, v14+): `blocksize` is the TOTAL post-header
+  // byte count covering body + inventory together; `invblocksize` is the
+  // inventory tail carved out of the end of that block. Body-proper size is
+  // `blocksize - invblocksize`. The single final resync at LAB_00471fbc sets
+  // the stream to `bodystart + blocksize`. Earlier pre-retail (v4..v13) source
+  // used a single blocksize covering body+inventory without a separate
+  // invblocksize field.
     uint32_t bodystart = is.GetPos();
 
     if (forcesimple)
@@ -1765,10 +1786,11 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     else
         inst->Load(is, version, objversion);
 
-    if (version >= 14 && blocksize >= 0)
-        is.SetPos(bodystart + blocksize);
-
-    uint32_t invstart = is.GetPos();
+  // Snap back to start-of-inventory before calling LoadInventory so it reads
+  // from the correct offset regardless of how many bytes Load() actually
+  // consumed.
+    if (version >= 14 && blocksize >= 0 && invblocksize >= 0)
+        is.SetPos(bodystart + blocksize - invblocksize);
 
   // v14+: retail skips LoadInventory entirely when invblocksize < 1 (no
   // inventory body present). See FUN_00471ce0 LAB_00471fa3 — the `0xd <
@@ -1776,61 +1798,72 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     if (version < 14 || invblocksize >= 1)
         inst->LoadInventory(is, version);
 
-  // Snap to end of whole object so a corrupt body doesn't shift subsequent objects.
-    if (version >= 14)
-    {
-        if (invblocksize >= 0)
-            is.SetPos(invstart + invblocksize);
-    }
-    else if (blocksize >= 0)
-    {
+  // Final resync to end-of-object = bodystart + blocksize (covers body+inv).
+    if (blocksize >= 0)
         is.SetPos(bodystart + blocksize);
-    }
 
   // If this object is corrupted in some way, delete it after doing load
     if (corrupted || (ismap && (inst->Flags() & OF_NONMAP)))
     {
         delete inst;
+        ++g_loadObjNullCorruptDrop;
         return nullptr;
     }
 
+    ++g_loadObjOk;
     return inst;
 }
 
+// Mirrors retail FUN_00472110 (v14+). Layout written to disk:
+//   [objversion:int16][objclass:int16][uniqueid:uint32]
+//   [blocksize:int16][invblocksize:int16]     (invblocksize only when v14+)
+//   [body bytes: blocksize - invblocksize]
+//   [inventory bytes: invblocksize]           (present only when invblocksize>0)
+// An empty slot is encoded as just a single int16 = -1.
 void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, bool ismap)
 {
+    os.MakeFreeSpace(1024);
 
-    os.MakeFreeSpace(1024); // Check for enough free space for object
-
-  // Note: Main game sector files will not load or save players....
+    // Retail gate: when saving a map file, any OF_NONMAP object (players,
+    // script-generated effects, etc.) is emitted as a placeholder. The
+    // `ismap` argument corresponds to retail `DAT_0065a254 & 1`.
     if (!inst || (ismap && (inst->Flags() & OF_NONMAP)))
     {
-        os << (short const)-1; // Keep empty spaces in object array
+        os << (short const)-1;
         return;
     }
 
-    os << (short)inst->ObjVersion();    // Object version id
-    os << (short)inst->ObjClass();      // Class id
-    os << (uint32_t)inst->ObjId();      // Object id
-    os << (short)0;                     // Body blocksize (patched below)
+    os << (short)inst->ObjVersion();
+    os << (short)inst->ObjClass();
+    os << (uint32_t)inst->ObjId();
+    os << (short)0;                           // blocksize placeholder
     if (MAP_VERSION >= 14)
-        os << (short)0;                 // Inventory blocksize (patched below)
+        os << (short)0;                       // invblocksize placeholder
 
     uint32_t bodystart = os.GetPos();
     inst->Save(os);
     uint32_t bodyend = os.GetPos();
 
-    inst->SaveInventory(os);
+    // Retail only emits inventory bytes when there is actually something to
+    // save. Skipping the SaveInventory call entirely (rather than letting it
+    // write just a 4-byte count=0) keeps invblocksize==0 on disk, matching
+    // retail byte-for-byte and letting LoadObject's `invblocksize < 1`
+    // fast-path skip LoadInventory.
+    if (inst->RealNumInventoryItems() > 0)
+        inst->SaveInventory(os);
+
     uint32_t end = os.GetPos();
 
     if (MAP_VERSION >= 14)
     {
+        // v14+: blocksize = total body+inv bytes, invblocksize = inv tail.
         os.SetPos(bodystart - 4);
-        os << (short)(bodyend - bodystart);
+        os << (short)(end - bodystart);
         os << (short)(end - bodyend);
     }
     else
     {
+        // Pre-v14: single blocksize covering body+inventory together.
         os.SetPos(bodystart - 2);
         os << (short)(end - bodystart);
     }

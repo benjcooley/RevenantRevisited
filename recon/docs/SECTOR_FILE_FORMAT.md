@@ -75,26 +75,72 @@ int16   blocksize         // covers BOTH body and inventory
 ... body ... inventory ...
 ```
 
-### v14+ (confirmed 2026-04-17 via FUN_00471ce0 decomp)
+### v14+ (confirmed 2026-04-20 via FUN_00471ce0 full decomp)
 
 ```
 int16   objversion
 int16   objclass          // -1 = empty slot (skip)
 uint32  uniqueid
-int16   blocksize         // body size only
-int16   invblocksize      // inventory body size, 0 = no inventory
-... body ...              // blocksize bytes
+int16   blocksize         // TOTAL post-header bytes (body + inventory)
+int16   invblocksize      // tail portion of blocksize used for inventory
+... body proper ...       // blocksize - invblocksize bytes
 ... inventory body ...    // invblocksize bytes (only when invblocksize > 0)
 ```
 
-Key retail behavior from FUN_00471ce0 LAB_00471fa3:
-- When `version > 13 && invblocksize < 1`, LoadInventory is **not called**
-  at all (the vtable dispatch at `*vtbl+0x168` is skipped).
-- When invblocksize > 0, LoadInventory runs, and the stream is re-synced
-  to `invstart + invblocksize` afterward.
+IMPORTANT: `blocksize` in v14+ covers body **and** inventory together;
+`invblocksize` just carves out how much of the block's tail is inventory.
+The body-proper is `blocksize − invblocksize` bytes. Do not add
+`invblocksize` on top of `blocksize` when skipping an object — that
+double-counts the inventory bytes and drifts the stream forward.
 
-The stream position is re-synced via `start + blocksize (+ invblocksize)`
-after each object, so a single unknown/corrupt object is non-fatal.
+Key retail behavior from FUN_00471ce0:
+- `LAB_00471e57` (bad-class or EFFECT skip): advances to
+  `end_of_header + blocksize`, i.e. one single skip of `blocksize` bytes.
+- `LAB_00471fa3`: when `version > 13 && invblocksize < 1`, LoadInventory
+  is **not called** at all (the vtable dispatch at `*vtbl+0x168` is skipped).
+- When `invblocksize > 0`, LoadInventory runs from position
+  `start_of_body + (blocksize − invblocksize)`.
+- `LAB_00471fbc` (final resync for every valid-load path): sets the stream
+  to `start_of_body + blocksize` = start of next object, irrespective of
+  how many bytes Load() and LoadInventory() actually consumed.
+
+The stream position is re-synced to `start_of_body + blocksize` after each
+object, so a single unknown/corrupt object (or overread Load) is non-fatal.
+
+Verified empirically 2026-04-20: re-parsing shipped `data/Curmap/*.DAT`
+sectors with this model parses every tested sector (including
+`0_2_26`, `0_3_27`, `0_7_22`) to exactly file size with zero drift; the
+previous body-only interpretation cascaded into `bad_class` garbage after
+the first object that carried inventory.
+
+### SaveObject (retail FUN_00472110)
+
+Mirror image of the layout above. Written by
+[src/object.cpp TObjectInstance::SaveObject](../../src/object.cpp) which
+now matches retail's structure:
+
+1. `MakeFreeSpace(1024)`.
+2. If `inst == nullptr` OR (saving a map AND `inst->Flags() & OF_NONMAP`):
+   emit a single `int16 = -1` placeholder and return.
+3. Otherwise emit `[objversion][objclass][uniqueid][blocksize=0][invblocksize=0]`
+   (the two sizes are zero placeholders, patched at step 7). For `MAP_VERSION < 14`
+   the `invblocksize` slot is omitted (single-size pre-retail layout).
+4. Record `bodystart = os.GetPos()`.
+5. Call `inst->Save(os)`.
+6. Record `bodyend = os.GetPos()`.
+7. Only call `inst->SaveInventory(os)` when `inst->RealNumInventoryItems() > 0`.
+   Retail's `(**(*vtable+0x170))()` guard amounts to "don't emit the 4-byte
+   count=0 stub for empty inventories" — skipping the call keeps
+   `invblocksize == 0` on disk, which LoadObject uses as the fast-path gate.
+8. `end = os.GetPos()`. Rewind to the size placeholders and patch:
+   `blocksize = end - bodystart` (total body+inv bytes),
+   `invblocksize = end - bodyend` (inventory tail only).
+9. `SetPos(end)`.
+
+This means an empty-inventory container saved with the retail-compatible
+path writes exactly zero bytes of inventory (no count stub), and a fresh
+sector round-trip through our Save → Load path reproduces the retail
+byte layout.
 
 ## Version mapping (from 1998 source + retail trace)
 

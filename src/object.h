@@ -160,35 +160,40 @@ class TConstInventoryIterator
 // inventory items, wall objects, characters, the player character, spell effects
 // groups, etc.
 
-// Classes for FORSAKEN
+// Class IDs must stay byte-for-byte compatible with the retail Revenant.exe
+// jump table at 0x00483850..0x004839a4 (see recon/docs/OBJCLASS_IDS.md).
+// Retail's FindClassByID switch dispatches IDs 0..26 with "???" placeholders
+// at 19/20/24 and three retail-only classes (INVCONTAINER=17, POTION=18,
+// MAPSCROLL=26) that were added after the 1998 source snapshot.
 enum
 {
-    OBJCLASS_ITEM,
-    OBJCLASS_WEAPON,
-    OBJCLASS_ARMOR,
-    OBJCLASS_TALISMAN,
-    OBJCLASS_FOOD,
-    OBJCLASS_CONTAINER,
-    OBJCLASS_LIGHTSOURCE,
-    OBJCLASS_TOOL,
-    OBJCLASS_MONEY,
-    OBJCLASS_TILE,
-    OBJCLASS_EXIT,
-    OBJCLASS_PLAYER,
-    OBJCLASS_CHARACTER,
-    OBJCLASS_TRAP,
-    OBJCLASS_SHADOW,
-    OBJCLASS_HELPER,
-    OBJCLASS_KEY,
-    OBJCLASS_UNUSED1,
-    OBJCLASS_UNUSED2,
-    OBJCLASS_UNUSED3,
-    OBJCLASS_UNUSED4,
-    OBJCLASS_AMMO,
-    OBJCLASS_SCROLL,
-    OBJCLASS_RANGEDWEAPON,
-    OBJCLASS_UNUSED5,
-    OBJCLASS_EFFECT,
+    OBJCLASS_ITEM,          // 0
+    OBJCLASS_WEAPON,        // 1
+    OBJCLASS_ARMOR,         // 2
+    OBJCLASS_TALISMAN,      // 3
+    OBJCLASS_FOOD,          // 4
+    OBJCLASS_CONTAINER,     // 5
+    OBJCLASS_LIGHTSOURCE,   // 6
+    OBJCLASS_TOOL,          // 7
+    OBJCLASS_MONEY,         // 8
+    OBJCLASS_TILE,          // 9
+    OBJCLASS_EXIT,          // 10
+    OBJCLASS_PLAYER,        // 11
+    OBJCLASS_CHARACTER,     // 12
+    OBJCLASS_TRAP,          // 13
+    OBJCLASS_SHADOW,        // 14
+    OBJCLASS_HELPER,        // 15
+    OBJCLASS_KEY,           // 16
+    OBJCLASS_INVCONTAINER,  // 17  (retail add: inventory containers / bags)
+    OBJCLASS_POTION,        // 18  (retail add: potions)
+    OBJCLASS_UNUSED3,       // 19  ("???" placeholder in retail)
+    OBJCLASS_UNUSED4,       // 20  ("???" placeholder in retail)
+    OBJCLASS_AMMO,          // 21
+    OBJCLASS_SCROLL,        // 22
+    OBJCLASS_RANGEDWEAPON,  // 23
+    OBJCLASS_UNUSED5,       // 24  ("???" placeholder in retail)
+    OBJCLASS_EFFECT,        // 25
+    OBJCLASS_MAPSCROLL,     // 26  (retail add: player-persistent scroll artifacts)
 };
 
 #define MAXSTATSTRINGLEN    64

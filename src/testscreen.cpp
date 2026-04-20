@@ -126,6 +126,8 @@ struct SSectorTileInst {
     bool     has_authored_local_dz = false;
     float    authored_local_dz_min = 0.0f;
     float    authored_local_dz_max = 0.0f;
+    int32_t  wwidth = 0, wlength = 0, wheight = 0;  // world bbox dims (wu)
+    int32_t  wregx = 0, wregy = 0, wregz = 0;       // world reg (bbox origin)
 };
 std::vector<SSectorTileTex>  g_sectorTileTex;
 std::vector<SSectorTileInst> g_sectorTileInst;
@@ -172,6 +174,8 @@ inline float CameraDepth(const S3DPoint& rel)
 }
 
 S3DPoint g_sectorCameraWorld = {0,0,0}; // live camera center in world space
+bool     g_sectorShowTileBboxes = false; // overlay every tile instance's dst rect
+                                         // (toggle via Sector lighting UI)
 
 inline S3DPoint SectorCameraRel(const S3DPoint& world)
 {
@@ -620,6 +624,15 @@ bool UploadTileBitmap(PTBitmap bm,
     dd.data.subimage[0][0].size = npx * sizeof(float);
     dd.label = "tile.depth.bm";
     *out_depth = sg_make_image(&dd);
+
+    const sg_resource_state cs = sg_query_image_state(*out_color);
+    const sg_resource_state ds = sg_query_image_state(*out_depth);
+    if (cs != SG_RESOURCESTATE_VALID || ds != SG_RESOURCESTATE_VALID) {
+        log_error("[UploadTileBitmap] sg_make_image state color=%d depth=%d"
+                  " (w=%d h=%d 8bit=%d 16bit=%d has_z=%d)",
+            (int)cs, (int)ds, w, h, is_8bit?1:0, is_16bit?1:0, has_zbuffer?1:0);
+        return false;
+    }
 
     *out_w = w; *out_h = h;
     if (out_z_local_min) *out_z_local_min = z_local_min;
@@ -1193,6 +1206,16 @@ bool TTestScreen::Initialize()
             }
         }
 
+        // Reset LoadObject null-bucket counters so the sector scan only sees
+        // drops from sector files we load right below.
+        extern int32_t g_loadObjNullObjVerNeg, g_loadObjNullClassNeg,
+                       g_loadObjNullBadClass,  g_loadObjNullBadType,
+                       g_loadObjNullNewObjFail, g_loadObjNullCorruptDrop,
+                       g_loadObjOk;
+        g_loadObjNullObjVerNeg = g_loadObjNullClassNeg = g_loadObjNullBadClass =
+        g_loadObjNullBadType = g_loadObjNullNewObjFail = g_loadObjNullCorruptDrop =
+        g_loadObjOk = 0;
+
         struct SLoaded { int32_t lvl, sx, sy; TSector* sec; };
         std::vector<SLoaded> loaded;
         std::vector<SSectorCoord> load_coords = FindLevelSectorCoords(keep_lvl);
@@ -1226,12 +1249,30 @@ bool TTestScreen::Initialize()
             const int32_t sx = coord.sx;
             const int32_t sy = coord.sy;
             log_info("[sector] -> loading %d_%d_%d", keep_lvl, sx, sy);
+            const int32_t pre_ok       = g_loadObjOk;
+            const int32_t pre_objver   = g_loadObjNullObjVerNeg;
+            const int32_t pre_classneg = g_loadObjNullClassNeg;
+            const int32_t pre_badclass = g_loadObjNullBadClass;
+            const int32_t pre_badtype  = g_loadObjNullBadType;
+            const int32_t pre_newfail  = g_loadObjNullNewObjFail;
+            const int32_t pre_corrupt  = g_loadObjNullCorruptDrop;
             TSector* sec = TSector::LoadSector(keep_lvl, sx, sy, false);
             if (!sec)
             {
                 log_warn("[sector] %d_%d_%d: LoadSector failed", keep_lvl, sx, sy);
                 continue;
             }
+            const int32_t d_ok       = g_loadObjOk              - pre_ok;
+            const int32_t d_objver   = g_loadObjNullObjVerNeg   - pre_objver;
+            const int32_t d_classneg = g_loadObjNullClassNeg    - pre_classneg;
+            const int32_t d_badclass = g_loadObjNullBadClass    - pre_badclass;
+            const int32_t d_badtype  = g_loadObjNullBadType     - pre_badtype;
+            const int32_t d_newfail  = g_loadObjNullNewObjFail  - pre_newfail;
+            const int32_t d_corrupt  = g_loadObjNullCorruptDrop - pre_corrupt;
+            log_info("[sector]   %d_%d_%d buckets: ok=%d objver_neg=%d class_neg=%d"
+                     " bad_class=%d bad_type=%d new_fail=%d corrupt=%d",
+                keep_lvl, sx, sy, d_ok, d_objver, d_classneg,
+                d_badclass, d_badtype, d_newfail, d_corrupt);
             log_info("[sector] <- %d_%d_%d: %d objects (lights=%d anim=%d)",
                 keep_lvl, sx, sy, sec->NumItems(),
                 sec->NumObjSetItems(OBJSET_LIGHTS),
@@ -1254,19 +1295,67 @@ bool TTestScreen::Initialize()
                 bool    has_authored_local_dz;
                 float   authored_local_dz_min;
                 float   authored_local_dz_max;
+                int32_t wwidth, wlength, wheight;
+                int32_t wregx, wregy, wregz;
             };
             std::vector<WorldInst> work;
             int32_t total_tiles = 0, no_img = 0, no_body = 0,
-                    bad_state = 0, no_still = 0, upload_fail = 0;
+                    bad_state = 0, no_still = 0, upload_fail = 0,
+                    non_2d = 0;
+            int32_t tiles_drawflip = 0, tiles_invisible = 0,
+                    tiles_seldraw = 0, tiles_nowalk = 0;
+            int32_t numstates_hist[8] = {};
+            int32_t state_hist[8] = {};
+            // Diagnostic: of every non-TILE object in the loaded sectors, how
+            // many would pass the same "has valid OBJIMAGE_ANIMATION still"
+            // check we apply to tiles? Those are the 2D sprite props (floor
+            // planks, scenery, shadows, etc.) retail also blits but that this
+            // filter currently discards — making the map look incomplete.
+            constexpr int32_t kNumObjClasses = OBJCLASS_EFFECT + 1;
+            int32_t nontile_class_total[kNumObjClasses]      = {};
+            int32_t nontile_class_with_anim[kNumObjClasses]  = {};
+            int32_t nontile_class_with_still[kNumObjClasses] = {};
+            int32_t scan_slot_total = 0, scan_slot_null = 0;
+            int32_t scan_class_oor = 0; // class ID outside the known enum
             for (auto& L : loaded)
             {
                 TSector* sec = L.sec;
                 const int32_t sec_lvl = L.lvl, sec_sx = L.sx, sec_sy = L.sy;
+                scan_slot_total += sec->NumItems();
                 for (int32_t i = 0; i < sec->NumItems(); i++)
                 {
                     TObjectInstance* oi = sec->GetInstance(i);
-                    if (!oi || oi->ObjClass() != OBJCLASS_TILE) continue;
+                    if (!oi) { scan_slot_null++; continue; }
+                    if (oi->ObjClass() != OBJCLASS_TILE) {
+                        if ((uint32_t)oi->ObjClass() >= (uint32_t)kNumObjClasses)
+                            scan_class_oor++;
+                        const int32_t cls = oi->ObjClass();
+                        if ((uint32_t)cls < (uint32_t)kNumObjClasses) {
+                            nontile_class_total[cls]++;
+                            if (TObjectImagery* xi = oi->GetImagery()) {
+                                SImageryHeader* xh = xi->GetHeader();
+                                SImageryBody*   xb = xi->GetBody();
+                                if (xh && xb && xh->imageryid == OBJIMAGE_ANIMATION) {
+                                    nontile_class_with_anim[cls]++;
+                                    const int32_t xs = oi->GetState();
+                                    if (xs >= 0 && xs < xh->numstates) {
+                                        auto* xab = (SAnimImageryBody*)xb;
+                                        if (xab->states[xs].still)
+                                            nontile_class_with_still[cls]++;
+                                    }
+                                }
+                            }
+                        }
+                        continue;
+                    }
                     total_tiles++;
+                    {
+                        const uint32_t fl = oi->GetFlags();
+                        if (fl & OF_DRAWFLIP)  tiles_drawflip++;
+                        if (fl & OF_INVISIBLE) tiles_invisible++;
+                        if (fl & OF_SELDRAW)   tiles_seldraw++;
+                        if (fl & OF_NOWALK)    tiles_nowalk++;
+                    }
                     TObjectImagery* img = oi->GetImagery();
                     if (!img) { no_img++;
                         log_warn("[sector]   drop tile[%d] %s: no imagery",
@@ -1274,44 +1363,44 @@ bool TTestScreen::Initialize()
                         continue;
                     }
                     SImageryHeader* hdr = img->GetHeader();
-                    auto* ab = (SAnimImageryBody*)img->GetBody();
-                    if (!hdr || !ab) { no_body++;
+                    SImageryBody*   body = img->GetBody();
+                    if (!hdr || !body) { no_body++;
                         log_warn("[sector]   drop tile[%d] %s: hdr=%p body=%p",
                             i, oi->GetClassName() ? oi->GetClassName() : "?",
-                            (void*)hdr, (void*)ab);
+                            (void*)hdr, (void*)body);
                         continue;
                     }
+                    // Only OBJIMAGE_ANIMATION tiles have SAnimImageryBody layout
+                    // with per-state `still` bitmaps. I3D/multi tiles (Barrel,
+                    // Crate, etc.) live on the unported 3D path — skip here
+                    // rather than misinterpret their body bytes as still ptrs.
+                    if (hdr->imageryid != OBJIMAGE_ANIMATION) {
+                        non_2d++;
+                        continue;
+                    }
+                    auto* ab = (SAnimImageryBody*)body;
                     const int32_t st = oi->GetState();
+                    {
+                        const int32_t ns = hdr->numstates;
+                        const int32_t nb = ns < 0 ? 0 : (ns >= 8 ? 7 : ns);
+                        numstates_hist[nb]++;
+                        const int32_t sb = st < 0 ? 0 : (st >= 8 ? 7 : st);
+                        state_hist[sb]++;
+                    }
                     if (st < 0 || st >= hdr->numstates) { bad_state++;
-                        log_warn("[sector]   drop tile[%d] %s: state=%d numstates=%d",
+                        log_warn("[sector]   drop tile[%d] %s: state=%d numstates=%d"
+                                 " file=%s",
                             i, oi->GetClassName() ? oi->GetClassName() : "?",
-                            st, hdr->numstates);
+                            st, hdr->numstates,
+                            img->GetResFilename() ? img->GetResFilename() : "?");
                         continue;
                     }
                     PTBitmap bm = (TBitmap*)ab->states[st].still;
                     if (!bm) { no_still++;
-                        log_warn("[sector]   drop tile[%d] %s: no still for state %d",
-                            i, oi->GetClassName() ? oi->GetClassName() : "?", st);
-                        continue;
-                    }
-                    // TODO(port): some sectors hand back a `still` pointer
-                    // that isn't a valid TBitmap — observed in 0_1_27 tile[0],
-                    // 0_1_28 tile[6] with pos.z ≈ -20. Width comes out in the
-                    // billions which then blows up the RGBA upload buffer.
-                    // Skipping for now; real fix is in the imagery loader.
-                    constexpr int32_t kMaxTileDim = 8192;
-                    if (bm->width <= 0 || bm->height <= 0 ||
-                        bm->width > kMaxTileDim || bm->height > kMaxTileDim)
-                    {
-                        S3DPoint p = oi->Pos();
-                        log_error("[sector] CORRUPT TBitmap still=%p w=%d h=%d"
-                                  " flags=0x%x tile[%d] %s pos=(%d,%d,%d)"
-                                  " in %d_%d_%d (state=%d imagery=%p)",
-                            (void*)bm, bm->width, bm->height, bm->flags,
-                            i, oi->GetClassName() ? oi->GetClassName() : "?",
-                            p.x, p.y, p.z, sec_lvl, sec_sx, sec_sy,
-                            st, (void*)img);
-                        upload_fail++;
+                        log_warn("[sector]   drop tile[%d] %s: no still for state %d"
+                                 " file=%s",
+                            i, oi->GetClassName() ? oi->GetClassName() : "?", st,
+                            img->GetResFilename() ? img->GetResFilename() : "?");
                         continue;
                     }
 
@@ -1345,24 +1434,60 @@ bool TTestScreen::Initialize()
                     work.push_back({ tex_idx, oi->Pos(),
                                      img->GetRegX(st), img->GetRegY(st),
                                      img->GetRegZ(st),
-                                     false, 0.0f, 0.0f });
+                                     false, 0.0f, 0.0f,
+                                     0, 0, 0, 0, 0, 0 });
                     WorldInst& winst = work.back();
                     int32_t wwidth = 0, wlength = 0, wheight = 0;
                     img->GetWorldBoundBox(st, wwidth, wlength, wheight);
+                    winst.wwidth  = wwidth;
+                    winst.wlength = wlength;
+                    winst.wheight = wheight;
+                    winst.wregx   = img->GetWorldRegX(st);
+                    winst.wregy   = img->GetWorldRegY(st);
+                    winst.wregz   = img->GetWorldRegZ(st);
                     ComputeAuthoredLocalDepthRange(wwidth, wlength, wheight,
-                                                   img->GetWorldRegX(st),
-                                                   img->GetWorldRegY(st),
-                                                   img->GetWorldRegZ(st),
+                                                   winst.wregx, winst.wregy, winst.wregz,
                                                    winst.has_authored_local_dz,
                                                    winst.authored_local_dz_min,
                                                    winst.authored_local_dz_max);
                 }
             }
-            log_info("[sector] tile scan: total=%d kept=%zu"
+            log_info("[sector] tile scan: total=%d kept=%zu non_2d=%d"
                      " drops: no_img=%d no_body=%d bad_state=%d"
                      " no_still=%d upload_fail=%d",
-                total_tiles, work.size(), no_img, no_body, bad_state,
+                total_tiles, work.size(), non_2d, no_img, no_body, bad_state,
                 no_still, upload_fail);
+            log_info("[sector] tile flags: drawflip=%d invisible=%d seldraw=%d nowalk=%d",
+                tiles_drawflip, tiles_invisible, tiles_seldraw, tiles_nowalk);
+            log_info("[sector] scan slots: total=%d null=%d class_oor=%d accounted=%d",
+                scan_slot_total, scan_slot_null, scan_class_oor,
+                scan_slot_total - scan_slot_null);
+            log_info("[sector] LoadObject buckets: ok=%d objver_neg=%d class_neg=%d"
+                     " bad_class=%d bad_type=%d new_obj_fail=%d corrupt_drop=%d",
+                g_loadObjOk, g_loadObjNullObjVerNeg, g_loadObjNullClassNeg,
+                g_loadObjNullBadClass, g_loadObjNullBadType,
+                g_loadObjNullNewObjFail, g_loadObjNullCorruptDrop);
+            {
+                static const char* kClassNames[kNumObjClasses] = {
+                    "ITEM","WEAPON","ARMOR","TALISMAN","FOOD","CONTAINER",
+                    "LIGHTSOURCE","TOOL","MONEY","TILE","EXIT","PLAYER",
+                    "CHARACTER","TRAP","SHADOW","HELPER","KEY","UNUSED1",
+                    "UNUSED2","UNUSED3","UNUSED4","AMMO","SCROLL","RANGEDWEAPON",
+                    "UNUSED5","EFFECT",
+                };
+                for (int32_t c = 0; c < kNumObjClasses; ++c) {
+                    if (nontile_class_total[c] == 0) continue;
+                    log_info("[sector] non-tile class %-12s total=%d anim=%d with_still=%d",
+                        kClassNames[c], nontile_class_total[c],
+                        nontile_class_with_anim[c], nontile_class_with_still[c]);
+                }
+            }
+            log_info("[sector] numstates hist: 0=%d 1=%d 2=%d 3=%d 4=%d 5=%d 6=%d 7+=%d",
+                numstates_hist[0], numstates_hist[1], numstates_hist[2], numstates_hist[3],
+                numstates_hist[4], numstates_hist[5], numstates_hist[6], numstates_hist[7]);
+            log_info("[sector] state hist: 0=%d 1=%d 2=%d 3=%d 4=%d 5=%d 6=%d 7+=%d",
+                state_hist[0], state_hist[1], state_hist[2], state_hist[3],
+                state_hist[4], state_hist[5], state_hist[6], state_hist[7]);
             LogSectorTileDepthDump();
 
             // Pass 2: project every tile so we can derive an initial camera
@@ -1469,6 +1594,12 @@ bool TTestScreen::Initialize()
                 inst.has_authored_local_dz = w.has_authored_local_dz;
                 inst.authored_local_dz_min = w.authored_local_dz_min;
                 inst.authored_local_dz_max = w.authored_local_dz_max;
+                inst.wwidth  = w.wwidth;
+                inst.wlength = w.wlength;
+                inst.wheight = w.wheight;
+                inst.wregx   = w.wregx;
+                inst.wregy   = w.wregy;
+                inst.wregz   = w.wregz;
                 g_sectorTileInst.push_back(inst);
             }
 
@@ -1858,6 +1989,8 @@ void TTestScreen::Animate(bool)
             }
 
             ImGui::Separator();
+            ImGui::Checkbox("show tile bboxes", &g_sectorShowTileBboxes);
+            ImGui::Separator();
             ImGui::Text("point lights (%zu from sector)", g_sectorLights.size());
             ImGui::Checkbox("lights enabled",    &lights_on);
             ImGui::SliderFloat("radius x",        &radius_mul,    0.1f, 8.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
@@ -1977,6 +2110,15 @@ void TTestScreen::Animate(bool)
             ? depth_mul / zspan : 0.0f;
 
         Display->BeginTilePass(0.12f, 0.16f, 0.10f, 1.0f);  // dark-green placeholder ground
+        static bool draw_stats_logged = false;
+        int32_t draw_submitted = 0, draw_invalid_img = 0, draw_offscreen = 0;
+        // Coverage map at 32x32 pixel cells. A cell is "covered" if any on-screen
+        // tile rect overlaps it. Lets us answer "is swiss cheese gaps between
+        // tiles or holes within tiles?" without a visual capture.
+        constexpr int32_t kCovCellPx = 32;
+        const int32_t cov_cw = (vw + kCovCellPx - 1) / kCovCellPx;
+        const int32_t cov_ch = (vh + kCovCellPx - 1) / kCovCellPx;
+        std::vector<uint8_t> cov(size_t(cov_cw) * size_t(cov_ch), 0);
         for (const auto& inst : g_sectorTileInst)
         {
             const auto& tex = g_sectorTileTex[inst.tex_idx];
@@ -1985,9 +2127,34 @@ void TTestScreen::Animate(bool)
             const float anchor_scene = SectorCameraSceneZ(inst) - depth_mul * float(inst.regz);
             const float anchor_scene_norm = std::fabs(zspan) > 1e-6f
                 ? (anchor_scene - z_near) / zspan : 0.5f;
+            const int32_t dx = sp.x - inst.regx + cam_ox;
+            const int32_t dy = sp.y - inst.regy + cam_oy;
+            if (!tex.color.id || !tex.depth.id) { draw_invalid_img++; continue; }
+            const bool onscreen = !(dx + tex.w <= 0 || dy + tex.h <= 0 || dx >= vw || dy >= vh);
+            if (!draw_stats_logged && onscreen)
+            {
+                log_info("[sector] onscreen tile: wpos=(%d,%d,%d) reg=(%d,%d,%d)"
+                         " dst=(%d,%d %dx%d) class=%s",
+                    inst.world_pos.x, inst.world_pos.y, inst.world_pos.z,
+                    inst.regx, inst.regy, inst.regz,
+                    dx, dy, tex.w, tex.h,
+                    tex.debug_classname ? tex.debug_classname : "?");
+            }
+            if (!onscreen) draw_offscreen++;
+            else {
+                int32_t cx0 = dx / kCovCellPx; if (cx0 < 0) cx0 = 0;
+                int32_t cy0 = dy / kCovCellPx; if (cy0 < 0) cy0 = 0;
+                int32_t cx1 = (dx + tex.w + kCovCellPx - 1) / kCovCellPx;
+                int32_t cy1 = (dy + tex.h + kCovCellPx - 1) / kCovCellPx;
+                if (cx1 > cov_cw) cx1 = cov_cw;
+                if (cy1 > cov_ch) cy1 = cov_ch;
+                for (int32_t cy = cy0; cy < cy1; ++cy)
+                    for (int32_t cx = cx0; cx < cx1; ++cx)
+                        cov[size_t(cy) * size_t(cov_cw) + size_t(cx)] = 1;
+            }
+            draw_submitted++;
             Display->DrawTile(tex.color, tex.depth,
-                              sp.x - inst.regx + cam_ox,
-                              sp.y - inst.regy + cam_oy,
+                              dx, dy,
                               tex.w, tex.h,
                               anchor_scene_norm, depth_scale_norm, normal_mul,
                               float(inst.world_pos.x),
@@ -1996,8 +2163,131 @@ void TTestScreen::Animate(bool)
                               float(inst.regx), float(inst.regy),
                               1.0f);
         }
+        if (!draw_stats_logged) {
+            draw_stats_logged = true;
+            int32_t cov_hit = 0;
+            for (uint8_t b : cov) cov_hit += b;
+            const int32_t cov_total = int32_t(cov.size());
+            log_info("[sector] draw stats: total_inst=%zu submitted=%d invalid_img=%d"
+                     " offscreen_submitted=%d vw=%d vh=%d cov_cells=%d/%d (%.1f%%)",
+                g_sectorTileInst.size(), draw_submitted, draw_invalid_img, draw_offscreen,
+                vw, vh, cov_hit, cov_total,
+                cov_total > 0 ? 100.0 * cov_hit / cov_total : 0.0);
+            // ASCII map of coverage: '#' covered, '.' gap. Shows the gap pattern.
+            std::string line;
+            line.reserve(size_t(cov_cw) + 1);
+            for (int32_t cy = 0; cy < cov_ch; ++cy) {
+                line.clear();
+                for (int32_t cx = 0; cx < cov_cw; ++cx)
+                    line.push_back(cov[size_t(cy) * size_t(cov_cw) + size_t(cx)] ? '#' : '.');
+                log_info("[sector] cov %02d %s", cy, line.c_str());
+            }
+        }
         Display->EndTilePass();
         Display->RunLightingPass();
+
+        // Tile bbox overlay — project each tile's world-space bounding box
+        // (wwidth x wlength x wheight wu at world_pos-wreg) onto the screen
+        // and wireframe it. Lets us see which tiles are loaded and where they
+        // sit, independent of whether their bitmap actually covered the pixel.
+        //
+        // The sector test loads the whole level (thousands of tiles), so the
+        // overlay is frustum-culled to the viewport — drawing every tile's
+        // wireframe would dwarf the screen with off-screen geometry and push
+        // well over the simgui vertex budget even after the 1M bump.
+        if (g_sectorShowTileBboxes)
+        {
+            if (ImDrawList* dl = ImGui::GetForegroundDrawList())
+            {
+                const ImU32 edge_ground = IM_COL32(255, 80, 80, 255);
+                const ImU32 edge_top    = IM_COL32(255, 220, 80, 255);
+                const ImU32 edge_vert   = IM_COL32(120, 180, 255, 255);
+                auto proj = [&](int32_t wx, int32_t wy, int32_t wz) {
+                    S3DPoint w = { wx, wy, wz };
+                    S3DPoint sp;
+                    SectorProjectWorld(w, sp);
+                    return ImVec2(float(sp.x + cam_ox), float(sp.y + cam_oy));
+                };
+                static int32_t bbox_debug_logged = 0;
+                int32_t bbox_with_dims = 0, bbox_drawn = 0;
+                // `GetWorldBoundBox` / `GetWorldRegX|Y|Z` return values in walk-grid
+                // units (see helper.cpp: obj->pos.X = (wwidth/2 - wregx) * GRIDSIZE).
+                // One grid cell = 16 world units, so an "8x8" tile is actually
+                // 128x128 world units on the ground. Using a local constant avoids
+                // pulling mappane.h just for GRIDSIZE/GRIDSHIFT.
+                constexpr int32_t kGridWU = 16;
+                for (const auto& inst : g_sectorTileInst)
+                {
+                    if (inst.wwidth <= 0 || inst.wlength <= 0) continue;
+                    ++bbox_with_dims;
+                    const int32_t x0 = inst.world_pos.x - inst.wregx * kGridWU;
+                    const int32_t y0 = inst.world_pos.y - inst.wregy * kGridWU;
+                    const int32_t z0 = inst.world_pos.z - inst.wregz * kGridWU;
+                    const int32_t x1 = x0 + inst.wwidth  * kGridWU;
+                    const int32_t y1 = y0 + inst.wlength * kGridWU;
+                    const int32_t z1 = z0 + (inst.wheight > 0 ? inst.wheight * kGridWU : 0);
+                    const ImVec2 c000 = proj(x0, y0, z0);
+                    const ImVec2 c100 = proj(x1, y0, z0);
+                    const ImVec2 c010 = proj(x0, y1, z0);
+                    const ImVec2 c110 = proj(x1, y1, z0);
+                    const ImVec2 c001 = proj(x0, y0, z1);
+                    const ImVec2 c101 = proj(x1, y0, z1);
+                    const ImVec2 c011 = proj(x0, y1, z1);
+                    const ImVec2 c111 = proj(x1, y1, z1);
+                    float bxmin = c000.x, bxmax = c000.x;
+                    float bymin = c000.y, bymax = c000.y;
+                    auto expand = [&](const ImVec2& v) {
+                        if (v.x < bxmin) bxmin = v.x; if (v.x > bxmax) bxmax = v.x;
+                        if (v.y < bymin) bymin = v.y; if (v.y > bymax) bymax = v.y;
+                    };
+                    expand(c100); expand(c010); expand(c110);
+                    expand(c001); expand(c101); expand(c011); expand(c111);
+                    if (bxmax < 0.0f || bymax < 0.0f
+                        || bxmin > float(vw) || bymin > float(vh))
+                        continue;
+                    ++bbox_drawn;
+                    if (bbox_debug_logged < 6) {
+                        ++bbox_debug_logged;
+                        log_info("[sector] bbox[%d] wpos=(%d,%d,%d) wreg=(%d,%d,%d)"
+                                 " wsize=%dx%dx%d screen_bbox=[%.1f,%.1f..%.1f,%.1f]"
+                                 " c000=(%.1f,%.1f) c110=(%.1f,%.1f) c111=(%.1f,%.1f)",
+                            bbox_drawn, inst.world_pos.x, inst.world_pos.y, inst.world_pos.z,
+                            inst.wregx, inst.wregy, inst.wregz,
+                            inst.wwidth, inst.wlength, inst.wheight,
+                            bxmin, bymin, bxmax, bymax,
+                            c000.x, c000.y, c110.x, c110.y, c111.x, c111.y);
+                    }
+                    // Bottom rect
+                    dl->AddLine(c000, c100, edge_ground, 1.0f);
+                    dl->AddLine(c100, c110, edge_ground, 1.0f);
+                    dl->AddLine(c110, c010, edge_ground, 1.0f);
+                    dl->AddLine(c010, c000, edge_ground, 1.0f);
+                    if (inst.wheight > 0) {
+                        // Top rect
+                        dl->AddLine(c001, c101, edge_top, 1.0f);
+                        dl->AddLine(c101, c111, edge_top, 1.0f);
+                        dl->AddLine(c111, c011, edge_top, 1.0f);
+                        dl->AddLine(c011, c001, edge_top, 1.0f);
+                        // Vertical edges
+                        dl->AddLine(c000, c001, edge_vert, 1.0f);
+                        dl->AddLine(c100, c101, edge_vert, 1.0f);
+                        dl->AddLine(c010, c011, edge_vert, 1.0f);
+                        dl->AddLine(c110, c111, edge_vert, 1.0f);
+                    }
+                }
+                static bool bbox_stats_logged = false;
+                if (!bbox_stats_logged) {
+                    bbox_stats_logged = true;
+                    int32_t no_dims = 0;
+                    for (const auto& inst : g_sectorTileInst)
+                        if (inst.wwidth <= 0 || inst.wlength <= 0) no_dims++;
+                    log_info("[sector] bbox overlay: total=%zu with_dims=%d"
+                             " no_dims=%d onscreen_drawn=%d",
+                        g_sectorTileInst.size(), bbox_with_dims, no_dims,
+                        bbox_drawn);
+                }
+            }
+        }
 
         // Light gizmos — ImGui overlay on top of the composited frame. Draws
         // a small yellow circle at each light's projected screen position,
