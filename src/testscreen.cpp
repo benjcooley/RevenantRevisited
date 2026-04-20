@@ -177,6 +177,8 @@ inline float CameraDepth(const S3DPoint& rel)
 S3DPoint g_sectorCameraWorld = {0,0,0}; // live camera center in world space
 bool     g_sectorShowTileBboxes = false; // overlay every tile instance's dst rect
                                          // (toggle via Sector lighting UI)
+bool     g_sectorShowGizmos     = true;  // in-world editor gizmos (light star
+                                         // billboards today; add more here)
 
 inline S3DPoint SectorCameraRel(const S3DPoint& world)
 {
@@ -2024,6 +2026,7 @@ void TTestScreen::Animate(bool)
 
             ImGui::Separator();
             ImGui::Checkbox("show tile bboxes", &g_sectorShowTileBboxes);
+            ImGui::Checkbox("show gizmos",      &g_sectorShowGizmos);
             ImGui::Separator();
             ImGui::Text("point lights (%zu from sector)", g_sectorLights.size());
             ImGui::Checkbox("lights enabled",    &lights_on);
@@ -2159,6 +2162,10 @@ void TTestScreen::Animate(bool)
         std::vector<uint8_t> cov(size_t(cov_cw) * size_t(cov_ch), 0);
         for (const auto& inst : g_sectorTileInst)
         {
+            if (!g_sectorShowGizmos) {
+                TObjectInstance* oi = inst.src.Get();
+                if (oi && oi->IsLight()) continue;
+            }
             const auto& tex = g_sectorTileTex[inst.tex_idx];
             S3DPoint sp;
             SectorProjectWorld(inst.world_pos, sp);
