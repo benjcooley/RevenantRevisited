@@ -386,7 +386,15 @@ class TMapPane : public TPane
     TObjectInstance* OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with = nullptr);
         // Returns the index of the object the mouse is on
     TObjectInstance* GetInstance(int32_t index, int32_t objset = OBJSET_ALL);
-        // Returns the instance given an object index
+        // Returns the instance given an object index. Backed by an
+        // unordered_map keyed on mapindex (O(1) hit, falls back to a linear
+        // TMapIterator scan if the registry misses). The registry is kept
+        // in sync by TObjectInstance::SetMapIndex and the dtor.
+
+    void RegisterInstance(TObjectInstance* oi, int32_t index);
+    void UnregisterInstance(int32_t index);
+        // Registry maintenance — only the TObjectInstance lifecycle should
+        // call these; nothing else needs to touch the table.
     void FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& target);
         // Find the position clicked on, taking into account the walkmap heights
     bool SwapDrawOrder(TObjectInstance* inst0, TObjectInstance* inst1);

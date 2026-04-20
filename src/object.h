@@ -1118,8 +1118,9 @@ class TObjectInstance : protected SObjectDef
     void SetOwner(TObjectInstance* newown) { owner = newown; }
 
   // Mapindex functions
-    void SetMapIndex(int32_t newindex) { mapindex = newindex; }
-    int32_t GetMapIndex() { return mapindex; }
+    void SetMapIndex(int32_t newindex);   // out-of-line: also syncs the
+                                          // MapPane mapindex→instance registry
+    int32_t GetMapIndex() const { return mapindex; }
 
   // Nextmove functions
     void SetNextMove(S3DPoint& p);
@@ -1220,6 +1221,60 @@ class TObjectInstance : protected SObjectDef
     // members to optimize function calls
     mutable S3DPoint oldpos;                    // Where it was last time function was called
     mutable int32_t screenx, screeny, screenz;  // Pixel/zbuf coords as of oldpos
+};
+
+// ---------------------------------------------------------------------------
+// TSafeRef<T> — safe, mapindex-backed reference to a TObjectInstance.
+//
+// Holds an integer mapindex (not a raw pointer), so the instance it refers
+// to can be deleted, paged out, or reassigned between uses and this ref
+// never dangles. Resolution goes through the MapPane mapindex registry in
+// O(1), returning nullptr when the referent no longer exists.
+//
+// Typical use:
+//   TSafeRef<TObjectInstance> target;     // empty
+//   target = oi;                          // capture the mapindex
+//   if (TObjectInstance* live = target.Get()) { ... } // nullptr if gone
+//   if (target) target->Use(...);         // operator-> also returns nullptr-safe
+//
+// The forward-declared LookupMapIndex() (defined in mappane.cpp) lets us
+// keep object.h free of the mappane/sector include chain.
+// ---------------------------------------------------------------------------
+
+TObjectInstance* LookupMapIndex(int32_t mapindex);
+
+template <typename T = TObjectInstance>
+class TSafeRef
+{
+  public:
+    TSafeRef() = default;
+    TSafeRef(const T* inst) : idx(inst ? inst->GetMapIndex() : -1) {}
+    TSafeRef(int32_t mapindex) : idx(mapindex) {}
+
+    TSafeRef& operator=(const T* inst) { idx = inst ? inst->GetMapIndex() : -1; return *this; }
+    TSafeRef& operator=(int32_t mapindex) { idx = mapindex; return *this; }
+
+    [[nodiscard]] T* Get() const
+    {
+        if (idx < 0) return nullptr;
+        // static_cast is safe only if the caller parameterizes T on the
+        // actual instance's class (or a base). For mismatched Ts the ref
+        // still returns a pointer — same contract as a C-style downcast.
+        return static_cast<T*>(LookupMapIndex(idx));
+    }
+    [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
+    [[nodiscard]] int32_t MapIndex() const { return idx; }
+    void Clear() { idx = -1; }
+
+    explicit operator bool() const { return IsValid(); }
+    T* operator->() const { return Get(); }
+    T& operator*()  const { return *Get(); }
+
+    bool operator==(const TSafeRef& rhs) const { return idx == rhs.idx; }
+    bool operator!=(const TSafeRef& rhs) const { return idx != rhs.idx; }
+
+  private:
+    int32_t idx = -1;
 };
 
 inline void rollover(int32_t &i, int32_t &j)
