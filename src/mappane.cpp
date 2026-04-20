@@ -32,10 +32,11 @@
 
 #include <string.h>
 #include <stdio.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <memory.h>
 #include <math.h>
 #include <time.h>
+#include <unordered_map>
 
 extern TEditStatusPane StatusBar;
 extern TConsolePane Console;
@@ -70,6 +71,39 @@ inline int32_t ScreenGrid(int32_t n, int32_t s)
         n += s / 2;
 
     return (n / s);
+}
+
+// Fast mapindex → TObjectInstance* lookup. Holders store the integer
+// mapindex and resolve through MapPane.GetInstance() each frame (see
+// mappane.h). The map is a function-local static so it's constructed on
+// first use regardless of global-init order. Kept in sync exclusively by
+// TObjectInstance::SetMapIndex() and TObjectInstance::~TObjectInstance().
+static std::unordered_map<int32_t, TObjectInstance*>& InstMap()
+{
+    static std::unordered_map<int32_t, TObjectInstance*> m;
+    return m;
+}
+
+void TMapPane::RegisterInstance(TObjectInstance* oi, int32_t index)
+{
+    if (!oi || index < 0) return;
+    InstMap()[index] = oi;
+}
+
+void TMapPane::UnregisterInstance(int32_t index)
+{
+    if (index < 0) return;
+    InstMap().erase(index);
+}
+
+// Free-function mapindex lookup used by TSafeRef<T>. Lives here so
+// object.h can forward-declare it without pulling in mappane's includes.
+TObjectInstance* LookupMapIndex(int32_t index)
+{
+    if (index < 0) return nullptr;
+    auto& m = InstMap();
+    auto it = m.find(index);
+    return (it != m.end()) ? it->second : nullptr;
 }
 
 // Generate a random map index
@@ -1750,38 +1784,28 @@ TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectIns
     return on;
 }
 
-// Returns the instance structure given an object index
+// Resolve an instance by mapindex. O(1) via the registry; falls back to a
+// TMapIterator scan on a miss (defensive — shouldn't happen if SetMapIndex
+// and the dtor are the only mutation points, but keeps behavior identical
+// to retail in case a code path sets mapindex directly and skips the
+// registry). objset is preserved from retail's signature; when the hit
+// path is taken it is ignored, since every in-tree caller passes
+// OBJSET_ALL.
 TObjectInstance* TMapPane::GetInstance(int32_t index, int32_t objset)
 {
     if (index < 0)
         return nullptr;
 
-    TMapIterator i(nullptr, 0, objset);
+    auto& m = InstMap();
+    auto it = m.find(index);
+    if (it != m.end())
+        return it->second;
 
+    TMapIterator i(nullptr, 0, objset);
     for ( ; i; i++)
         if (i->GetMapIndex() == index)
-            break;
-
-    return i;
-
-#ifdef OLD_STYLE_MAP_INDEXES
-    int32_t lv = GETLEVEL(index);
-
-    if (lv != level)
-        return nullptr;
-
-    int32_t sx = GETSECTORX(index);
-    int32_t sy = GETSECTORY(index);
-
-    if ((uint32_t)sx >= MAXSECTORX || sx < sectorx || sx >= sectorx + SECTORWINDOWX ||
-        (uint32_t)sy >= MAXSECTORY || sy < sectory || sy >= sectory + SECTORWINDOWY)
-            return nullptr;
-
-    if (!sectors[sx - sectorx][sy - sectory])
-        return nullptr; 
-
-    return sectors[sx - sectorx][sy - sectory]->GetInstance(GETITEM(index));
-#endif
+            return i;
+    return nullptr;
 }
 
 // *********************

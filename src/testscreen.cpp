@@ -128,6 +128,7 @@ struct SSectorTileInst {
     float    authored_local_dz_max = 0.0f;
     int32_t  wwidth = 0, wlength = 0, wheight = 0;  // world bbox dims (wu)
     int32_t  wregx = 0, wregy = 0, wregz = 0;       // world reg (bbox origin)
+    TSafeRef<> src;             // mapindex-backed live ref to the source oi
 };
 std::vector<SSectorTileTex>  g_sectorTileTex;
 std::vector<SSectorTileInst> g_sectorTileInst;
@@ -366,25 +367,70 @@ bool    g_sectorDragging = false;
 int32_t g_dragStartX = 0, g_dragStartY = 0;
 S3DPoint g_dragCameraStartWorld = {0,0,0};
 
-// Light gizmo state. Right-drag on a light icon moves it in the world xy
-// plane; shift+right-drag moves it in world z (positive = up). Pick
-// threshold is pixels from the light's projected screen position.
-int32_t g_lightDragIdx     = -1;
-int32_t g_lightDragStartSX = 0;
-int32_t g_lightDragStartSY = 0;
-S3DPoint g_lightDragStartWP;
+// Light drag state. Left-click on an OF_LIGHT object's tile icon picks and
+// drags the instance itself in the world xy plane; shift+drag moves it in
+// world z (positive = up). The light's world pos and the tile render pos
+// both derive from oi->Pos() each frame, so there is no snapshot to sync.
+int32_t  g_lightDragIdx      = -1;
+int32_t  g_lightDragStartSX  = 0;
+int32_t  g_lightDragStartSY  = 0;
+S3DPoint g_lightDragStartOiPos;
 
-// Sector point lights. Collected once at sector load and projected every
-// frame from the same world-space camera as the tiles.
+// Sector point lights. Each entry is a TSafeRef to an OF_LIGHT instance
+// in one of the kept sectors; position, radius, color and multiplier are
+// read back from oi / oi->GetLightDef() each frame. If the instance is
+// deleted or paged out, Get() returns nullptr and the helpers no-op —
+// nothing here can dangle.
 struct SSectorLight {
-    const char* classname; // for the debug panel listing
-    S3DPoint    world_pos; // light anchor in world units (projects per frame)
-    float       radius;    // retail lightdef.intensity (doubles as radius)
-    float       col[3];    // 0..1 rgb
-    float       intensity; // derived from multiplier (28 = baseline in retail)
-    bool        enabled;
+    TSafeRef<> ref;
+    bool       enabled;
 };
 std::vector<SSectorLight> g_sectorLights;
+
+inline S3DPoint SectorLightPos(const SSectorLight& L)
+{
+    TObjectInstance* oi = L.ref.Get();
+    if (!oi) return { 0, 0, 0 };
+    S3DPoint p = oi->Pos();
+    if (PSLightDef ld = oi->GetLightDef()) {
+        p.x += ld->pos.x; p.y += ld->pos.y; p.z += ld->pos.z;
+    }
+    return p;
+}
+inline float SectorLightRadius(const SSectorLight& L)
+{
+    TObjectInstance* oi = L.ref.Get();
+    if (!oi) return 0.0f;
+    PSLightDef ld = oi->GetLightDef();
+    return ld ? float(ld->intensity) : 0.0f;
+}
+inline void SectorLightColor(const SSectorLight& L, float rgb[3])
+{
+    TObjectInstance* oi = L.ref.Get();
+    PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
+    if (ld) {
+        rgb[0] = ld->color.red   / 255.0f;
+        rgb[1] = ld->color.green / 255.0f;
+        rgb[2] = ld->color.blue  / 255.0f;
+    } else {
+        rgb[0] = rgb[1] = rgb[2] = 0.0f;
+    }
+}
+inline float SectorLightIntensity(const SSectorLight& L)
+{
+    // Retail: GetLightBrightness returns BrightnessTable[d] * multiplier /
+    // (multiplierscale/2), where multiplierscale = 20, i.e. divide by 10.
+    // Default lightdef multiplier = 28 → 2.8× peak (colortable.cpp).
+    TObjectInstance* oi = L.ref.Get();
+    PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
+    if (!ld || ld->multiplier <= 0) return 0.0f;
+    return float(ld->multiplier) / 10.0f;
+}
+inline const char* SectorLightClassName(const SSectorLight& L)
+{
+    TObjectInstance* oi = L.ref.Get();
+    return oi ? oi->GetClassName() : nullptr;
+}
 
 // Legacy hello-world globals (used by earlier single-tile test path).
 sg_image g_tileColorImg = {};
@@ -551,14 +597,11 @@ bool UploadTileBitmap(PTBitmap bm,
                 rgba[i*4+1] = (uint8_t)((c >> 8)  & 0xFF);
                 rgba[i*4+2] = (uint8_t)((c >> 16) & 0xFF);
             }
-            else if (bm->flags & BM_16BIT)
-            {
-                rgba[i*4+0] = (uint8_t)(((px16 >> 11) & 0x1F) << 3);
-                rgba[i*4+1] = (uint8_t)(((px16 >> 5)  & 0x3F) << 2);
-                rgba[i*4+2] = (uint8_t)(( px16        & 0x1F) << 3);
-            }
             else
             {
+                // Non-paletted retail bitmaps are RGB555 with bit 15 unused,
+                // regardless of BM_15BIT vs BM_16BIT flag. Matches the font/UI
+                // decoder in font.cpp's BlitBitmap16ToRGBA8.
                 rgba[i*4+0] = (uint8_t)(((px16 >> 10) & 0x1F) << 3);
                 rgba[i*4+1] = (uint8_t)(((px16 >> 5)  & 0x1F) << 3);
                 rgba[i*4+2] = (uint8_t)(( px16        & 0x1F) << 3);
@@ -876,7 +919,6 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
             {
                 const uint16_t px = src[y * w + x];
                 if (px == key) { row[0]=row[1]=row[2]=row[3]=0; }
-                else if (bm->flags & BM_16BIT) { Decode565(px, row); }
                 else                           { Decode555(px, row); }
                 row += 4;
             }
@@ -1297,6 +1339,7 @@ bool TTestScreen::Initialize()
                 float   authored_local_dz_max;
                 int32_t wwidth, wlength, wheight;
                 int32_t wregx, wregy, wregz;
+                TObjectInstance* oi;
             };
             std::vector<WorldInst> work;
             int32_t total_tiles = 0, no_img = 0, no_body = 0,
@@ -1435,7 +1478,7 @@ bool TTestScreen::Initialize()
                                      img->GetRegX(st), img->GetRegY(st),
                                      img->GetRegZ(st),
                                      false, 0.0f, 0.0f,
-                                     0, 0, 0, 0, 0, 0 });
+                                     0, 0, 0, 0, 0, 0, oi });
                     WorldInst& winst = work.back();
                     int32_t wwidth = 0, wlength = 0, wheight = 0;
                     img->GetWorldBoundBox(st, wwidth, wlength, wheight);
@@ -1600,6 +1643,7 @@ bool TTestScreen::Initialize()
                 inst.wregx   = w.wregx;
                 inst.wregy   = w.wregy;
                 inst.wregz   = w.wregz;
+                inst.src     = w.oi;
                 g_sectorTileInst.push_back(inst);
             }
 
@@ -1609,44 +1653,34 @@ bool TTestScreen::Initialize()
                 bw, bh, view_bounds.count, sz_min, sz_max,
                 g_sectorWorldCenter.x, g_sectorWorldCenter.y, g_sectorWorldCenter.z);
 
-            // Pass 3: collect every OF_LIGHT object in every loaded sector.
-            // Retail stores light position as a world-space offset
-            // (lightdef.pos) on top of the owning object's Pos(); intensity
-            // is a byte that also served as a screen-pixel radius.
-            // WorldToScreen + the same (ox, oy) as tiles keeps lights pinned
-            // to what you see.
-            for (auto& L : loaded)
+            // Pass 3: bind every OF_LIGHT object in every loaded sector as a
+            // live light reference. Position, radius, color and multiplier
+            // are read from oi / oi->GetLightDef() each frame, so the lights
+            // track whatever the scene does (drag, script, save-load) — no
+            // snapshot to keep in sync.
+            for (auto& Ls : loaded)
             {
-                TSector* sec = L.sec;
+                TSector* sec = Ls.sec;
                 for (int32_t i = 0; i < sec->NumItems(); i++)
                 {
                     TObjectInstance* oi = sec->GetInstance(i);
                     if (!oi || !oi->IsLight()) continue;
                     PSLightDef ld = oi->GetLightDef();
                     if (!ld || ld->intensity == 0) continue;
-                    S3DPoint wp = oi->Pos();
-                    wp += ld->pos;
-                    SSectorLight SL = {};
-                    SL.classname = oi->GetClassName();
-                    SL.world_pos = wp;
-                    SL.radius = float(ld->intensity);
-                    SL.col[0] = ld->color.red   / 255.0f;
-                    SL.col[1] = ld->color.green / 255.0f;
-                    SL.col[2] = ld->color.blue  / 255.0f;
-                    SL.intensity = ld->multiplier > 0 ? float(ld->multiplier) / 28.0f : 1.0f;
-                    SL.enabled = true;
-                    g_sectorLights.push_back(SL);
+                    g_sectorLights.push_back({ TSafeRef<>(oi), true });
                 }
             }
             {
                 float rmin = FLT_MAX, rmax = 0.0f, rsum = 0.0f;
                 float imin = FLT_MAX, imax = 0.0f;
                 for (const auto& L : g_sectorLights) {
-                    rmin = fminf(rmin, L.radius);
-                    rmax = fmaxf(rmax, L.radius);
-                    rsum += L.radius;
-                    imin = fminf(imin, L.intensity);
-                    imax = fmaxf(imax, L.intensity);
+                    const float r = SectorLightRadius(L);
+                    const float m = SectorLightIntensity(L);
+                    rmin = fminf(rmin, r);
+                    rmax = fmaxf(rmax, r);
+                    rsum += r;
+                    imin = fminf(imin, m);
+                    imax = fmaxf(imax, m);
                 }
                 const float rmean = g_sectorLights.empty() ? 0.0f
                     : rsum / float(g_sectorLights.size());
@@ -2000,12 +2034,15 @@ void TTestScreen::Animate(bool)
                 for (size_t i = 0; i < g_sectorLights.size(); ++i)
                 {
                     SSectorLight& L = g_sectorLights[i];
+                    float rgb[3]; SectorLightColor(L, rgb);
+                    const char* cn = SectorLightClassName(L);
                     ImGui::PushID(int(i));
                     ImGui::Checkbox("##on", &L.enabled);
                     ImGui::SameLine();
                     ImGui::Text("%zu %s  r=%.0f  (%.2f,%.2f,%.2f) int=%.2f",
-                                i, L.classname ? L.classname : "?",
-                                L.radius, L.col[0], L.col[1], L.col[2], L.intensity);
+                                i, cn ? cn : "?",
+                                SectorLightRadius(L), rgb[0], rgb[1], rgb[2],
+                                SectorLightIntensity(L));
                     ImGui::PopID();
                 }
                 ImGui::TreePop();
@@ -2052,21 +2089,22 @@ void TTestScreen::Animate(bool)
             {
                 const SSectorLight& L = g_sectorLights[i];
                 if (!L.enabled) continue;
+                const S3DPoint wp = SectorLightPos(L);
                 // Project to final screen position (same math as the gizmo).
                 S3DPoint sp;
-                SectorProjectWorld(L.world_pos, sp);
+                SectorProjectWorld(wp, sp);
                 const int32_t sx = sp.x + cam_ox;
                 const int32_t sy = sp.y + cam_oy;
                 // Inflated viewport test: a sphere of radius R in world is
                 // at most R screen-pixels across in iso (x is unsquashed;
                 // y is 2x squashed). So a loose R-pixel margin on all sides
                 // catches any light that could touch a visible fragment.
-                const float r_px = L.radius * radius_mul;
+                const float r_px = SectorLightRadius(L) * radius_mul;
                 if (sx + r_px < 0 || sx - r_px >= vw) continue;
                 if (sy + r_px < 0 || sy - r_px >= vh) continue;
-                const float dx = float(L.world_pos.x - vc_w.x);
-                const float dy = float(L.world_pos.y - vc_w.y);
-                const float dz = float(L.world_pos.z - vc_w.z);
+                const float dx = float(wp.x - vc_w.x);
+                const float dy = float(wp.y - vc_w.y);
+                const float dz = float(wp.z - vc_w.z);
                 const float d2 = dx*dx + dy*dy + dz*dz;
                 if (pick_n < TDisplay::kMaxPointLights) {
                     picks[pick_n++] = { i, d2 };
@@ -2080,12 +2118,12 @@ void TTestScreen::Animate(bool)
             for (int32_t k = 0; k < pick_n; ++k)
             {
                 const SSectorLight& L = g_sectorLights[picks[k].light_idx];
-                Display->AddPointLight(float(L.world_pos.x),
-                                       float(L.world_pos.y),
-                                       float(L.world_pos.z),
-                                       L.radius * radius_mul,
-                                       L.col[0], L.col[1], L.col[2],
-                                       L.intensity * intensity_mul);
+                const S3DPoint wp = SectorLightPos(L);
+                float rgb[3]; SectorLightColor(L, rgb);
+                Display->AddPointLight(float(wp.x), float(wp.y), float(wp.z),
+                                       SectorLightRadius(L) * radius_mul,
+                                       rgb[0], rgb[1], rgb[2],
+                                       SectorLightIntensity(L) * intensity_mul);
             }
         }
 
@@ -2289,28 +2327,22 @@ void TTestScreen::Animate(bool)
             }
         }
 
-        // Light gizmos — ImGui overlay on top of the composited frame. Draws
-        // a small yellow circle at each light's projected screen position,
-        // plus its (foreshortened) world-space radius circle and a crosshair
-        // for the currently-dragged light. Right-drag to move in world xy;
-        // shift + right-drag to move in world z.
-        if (ImDrawList* dl = ImGui::GetForegroundDrawList())
+        // Light drag feedback — the light's in-world billboard icon is its
+        // own visual, so we only draw a crosshair on the currently-dragged
+        // light. Pick/drag happens by clicking the icon directly. Right-drag
+        // to move in world xy; shift + right-drag to move in world z.
+        if (g_lightDragIdx >= 0 && g_lightDragIdx < int32_t(g_sectorLights.size()))
         {
-            for (size_t i = 0; i < g_sectorLights.size(); ++i)
+            if (ImDrawList* dl = ImGui::GetForegroundDrawList())
             {
-                const SSectorLight& L = g_sectorLights[i];
-                if (!L.enabled) continue;
-                S3DPoint sp;
-                SectorProjectWorld(L.world_pos, sp);
-                const ImVec2 c(float(sp.x + cam_ox),
-                               float(sp.y + cam_oy));
-                const ImU32 fill  = IM_COL32(255, 220, 60, 220);
-                const ImU32 outl  = IM_COL32(0, 0, 0, 220);
-                const bool  picked = (int32_t(i) == g_lightDragIdx);
-                dl->AddCircleFilled(c, picked ? 6.0f : 4.0f, fill);
-                dl->AddCircle(c, picked ? 6.0f : 4.0f, outl, 0, 1.5f);
-                if (picked)
+                const SSectorLight& L = g_sectorLights[g_lightDragIdx];
+                if (L.enabled)
                 {
+                    S3DPoint sp;
+                    SectorProjectWorld(SectorLightPos(L), sp);
+                    const ImVec2 c(float(sp.x + cam_ox),
+                                   float(sp.y + cam_oy));
+                    const ImU32 outl = IM_COL32(0, 0, 0, 220);
                     dl->AddLine(ImVec2(c.x - 12, c.y), ImVec2(c.x + 12, c.y), outl, 1.5f);
                     dl->AddLine(ImVec2(c.x, c.y - 12), ImVec2(c.x, c.y + 12), outl, 1.5f);
                 }
@@ -2562,7 +2594,7 @@ void TTestScreen::MouseClick(int32_t button, int32_t x, int32_t y)
                 const SSectorLight& L = g_sectorLights[i];
                 if (!L.enabled) continue;
                 S3DPoint sp;
-                SectorProjectWorld(L.world_pos, sp);
+                SectorProjectWorld(SectorLightPos(L), sp);
                 const float dx = float((sp.x + cam_ox) - x);
                 const float dy = float((sp.y + cam_oy) - y);
                 const float d2 = dx * dx + dy * dy;
@@ -2571,10 +2603,25 @@ void TTestScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         }
         if (picked >= 0)
         {
-            g_lightDragIdx     = picked;
-            g_lightDragStartSX = x;
-            g_lightDragStartSY = y;
-            g_lightDragStartWP = g_sectorLights[picked].world_pos;
+            if (TObjectInstance* pi = g_sectorLights[picked].ref.Get())
+            {
+                g_lightDragIdx        = picked;
+                g_lightDragStartSX    = x;
+                g_lightDragStartSY    = y;
+                // Drag the OF_LIGHT instance itself — the light pos and its
+                // tile render pos both derive from oi->Pos(), so moving the
+                // instance moves both together. Snapshot the starting oi
+                // pos so the drag is relative to the click, not jumpy.
+                g_lightDragStartOiPos = pi->Pos();
+            }
+            else
+            {
+                picked = -1;  // ref went stale between cull and pick — pan
+                g_sectorDragging       = true;
+                g_dragStartX           = x;
+                g_dragStartY           = y;
+                g_dragCameraStartWorld = g_sectorCameraWorld;
+            }
         }
         else
         {
@@ -2597,28 +2644,37 @@ void TTestScreen::MouseMove(int32_t button, int32_t x, int32_t y)
     if (g_lightDragIdx >= 0 && g_lightDragIdx < int32_t(g_sectorLights.size()))
     {
         SSectorLight& L = g_sectorLights[g_lightDragIdx];
+        TObjectInstance* oi = L.ref.Get();
+        if (!oi) { g_lightDragIdx = -1; return; }
+        S3DPoint newpos = g_lightDragStartOiPos;
         if (ShiftDown)
         {
-            // Shift-drag: move light in world z. Screen y is inverted so
-            // dragging the mouse up raises the light. Sensitivity 1 wu/px.
+            // Shift-drag: move instance in world z. Screen y is inverted so
+            // dragging the mouse up raises the instance. 1 wu/px.
             const int32_t dy = y - g_lightDragStartSY;
-            L.world_pos.x = g_lightDragStartWP.x;
-            L.world_pos.y = g_lightDragStartWP.y;
-            L.world_pos.z = g_lightDragStartWP.z - dy;
+            newpos.z = g_lightDragStartOiPos.z - dy;
         }
         else
         {
             // XY drag: back-project the current mouse to world space at the
-            // light's original z height relative to the live camera.
+            // instance's original z height relative to the live camera.
             int32_t cam_ox = 0, cam_oy = 0;
             SectorCameraOriginScreen(cam_ox, cam_oy);
             S3DPoint wp_rel;
             ScreenToWorld(x - cam_ox,
                           y - cam_oy,
-                          wp_rel, int32_t(g_lightDragStartWP.z));
-            L.world_pos.x = wp_rel.x + g_sectorCameraWorld.x;
-            L.world_pos.y = wp_rel.y + g_sectorCameraWorld.y;
-            L.world_pos.z = g_lightDragStartWP.z;
+                          wp_rel, int32_t(g_lightDragStartOiPos.z));
+            newpos.x = wp_rel.x + g_sectorCameraWorld.x;
+            newpos.y = wp_rel.y + g_sectorCameraWorld.y;
+            newpos.z = g_lightDragStartOiPos.z;
+        }
+        // SetPos(override=true) bypasses move validation; retail uses it for
+        // editor/debug moves. Then sync any cached tile-inst world_pos that
+        // was snapshotted from oi->Pos() at load so the icon follows.
+        oi->SetPos(newpos, -1, true);
+        const S3DPoint now = oi->Pos();
+        for (auto& ti : g_sectorTileInst) {
+            if (ti.src.Get() == oi) ti.world_pos = now;
         }
         return;
     }

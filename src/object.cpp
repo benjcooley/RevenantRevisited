@@ -331,6 +331,7 @@ void TObjectInstance::ClearObject()
     accum.x = accum.y = accum.z = 0;
     invindex = inventnum = -1;
     shadow = -1;
+    mapindex = -1;
 
     owner = nullptr;
 
@@ -394,8 +395,29 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
         InitScript(ScriptManager.ObjectScript(this));
 }
 
+void TObjectInstance::SetMapIndex(int32_t newindex)
+{
+    // Keep the MapPane mapindex → instance registry in sync. Holders of a
+    // mapindex resolve via MapPane.GetInstance(), so any reassignment or
+    // clear-to-negative must move the registry entry with the instance.
+    if (newindex == mapindex)
+        return;
+    if (mapindex >= 0)
+        MapPane.UnregisterInstance(mapindex);
+    mapindex = newindex;
+    if (mapindex >= 0)
+        MapPane.RegisterInstance(this, mapindex);
+}
+
 TObjectInstance::~TObjectInstance()
 {
+    // Drop any registry entry first — even a partially-constructed instance
+    // that stashed a mapindex must be removed before its memory is freed.
+    if (mapindex >= 0) {
+        MapPane.UnregisterInstance(mapindex);
+        mapindex = -1;
+    }
+
     if (objclass == -1)
         return;
 
@@ -1987,7 +2009,11 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
     }
     else
     {
-        is >> inventnum >> invindex >> shadow >> rotatex >> rotatey >> rotatez >> mapindex;
+        int32_t loaded_mapindex = -1;
+        is >> inventnum >> invindex >> shadow >> rotatex >> rotatey >> rotatez >> loaded_mapindex;
+        // Route through SetMapIndex so the MapPane mapindex→instance registry
+        // picks up every streamed-in instance; TSafeRef<T>::Get() relies on it.
+        SetMapIndex(loaded_mapindex);
     }
     moveangle = rotatez;    // Set movement angle
 
