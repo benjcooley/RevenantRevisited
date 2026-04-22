@@ -26,6 +26,145 @@ namespace {
 TMapRenderer g_mapRenderer;
 SBitmapAtlas g_uiAtlas;
 
+// --- Mesh test state ----------------------------------------------------
+struct SMeshTestState
+{
+    MeshHandle cube    = 0;
+    sg_image   albedo  = {};
+    float      spin    = 0.0f;
+    int32_t    frames  = 0;
+};
+SMeshTestState g_meshTest;
+
+bool InitializeMeshMode()
+{
+    if (!Renderer) { log_error("[mesh] Renderer is null"); return false; }
+
+    // 1x1 white albedo so the cube reads the tint directly.
+    uint32_t white = 0xFFFFFFFFu;
+    sg_image_desc idesc = {};
+    idesc.width  = 1;
+    idesc.height = 1;
+    idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    idesc.min_filter   = SG_FILTER_NEAREST;
+    idesc.mag_filter   = SG_FILTER_NEAREST;
+    idesc.data.subimage[0][0] = { &white, sizeof(white) };
+    idesc.label = "meshtest.albedo";
+    g_meshTest.albedo = sg_make_image(&idesc);
+
+    // Cube, half-extent h, face-independent normals.
+    constexpr float h = 128.0f;
+    const SMeshVertex verts[24] = {
+        // +X face (normal +X)
+        { {  h, -h, -h }, { 1, 0, 0 }, { 0, 0 } },
+        { {  h,  h, -h }, { 1, 0, 0 }, { 1, 0 } },
+        { {  h,  h,  h }, { 1, 0, 0 }, { 1, 1 } },
+        { {  h, -h,  h }, { 1, 0, 0 }, { 0, 1 } },
+        // -X face (normal -X)
+        { { -h,  h, -h }, { -1, 0, 0 }, { 0, 0 } },
+        { { -h, -h, -h }, { -1, 0, 0 }, { 1, 0 } },
+        { { -h, -h,  h }, { -1, 0, 0 }, { 1, 1 } },
+        { { -h,  h,  h }, { -1, 0, 0 }, { 0, 1 } },
+        // +Y face (normal +Y)
+        { {  h,  h, -h }, { 0, 1, 0 }, { 0, 0 } },
+        { { -h,  h, -h }, { 0, 1, 0 }, { 1, 0 } },
+        { { -h,  h,  h }, { 0, 1, 0 }, { 1, 1 } },
+        { {  h,  h,  h }, { 0, 1, 0 }, { 0, 1 } },
+        // -Y face (normal -Y)
+        { { -h, -h, -h }, { 0, -1, 0 }, { 0, 0 } },
+        { {  h, -h, -h }, { 0, -1, 0 }, { 1, 0 } },
+        { {  h, -h,  h }, { 0, -1, 0 }, { 1, 1 } },
+        { { -h, -h,  h }, { 0, -1, 0 }, { 0, 1 } },
+        // +Z face (normal +Z, top)
+        { { -h, -h,  h }, { 0, 0, 1 }, { 0, 0 } },
+        { {  h, -h,  h }, { 0, 0, 1 }, { 1, 0 } },
+        { {  h,  h,  h }, { 0, 0, 1 }, { 1, 1 } },
+        { { -h,  h,  h }, { 0, 0, 1 }, { 0, 1 } },
+        // -Z face (normal -Z, bottom)
+        { { -h,  h, -h }, { 0, 0, -1 }, { 0, 0 } },
+        { {  h,  h, -h }, { 0, 0, -1 }, { 1, 0 } },
+        { {  h, -h, -h }, { 0, 0, -1 }, { 1, 1 } },
+        { { -h, -h, -h }, { 0, 0, -1 }, { 0, 1 } },
+    };
+    const uint16_t indices[36] = {
+        0,  1,  2,   0,  2,  3,   // +X
+        4,  5,  6,   4,  6,  7,   // -X
+        8,  9, 10,   8, 10, 11,   // +Y
+       12, 13, 14,  12, 14, 15,   // -Y
+       16, 17, 18,  16, 18, 19,   // +Z
+       20, 21, 22,  20, 22, 23,   // -Z
+    };
+    g_meshTest.cube = Renderer->RegisterMesh(verts, 24, indices, 36, g_meshTest.albedo);
+    if (!g_meshTest.cube) { log_error("[mesh] RegisterMesh failed"); return false; }
+    log_info("[mesh] registered cube mesh=%u", g_meshTest.cube);
+    return true;
+}
+
+void RenderMeshMode()
+{
+    if (!Renderer || !Display || !Display->BackBuffer()) return;
+    if (!g_meshTest.cube) return;
+
+    g_meshTest.spin  += 0.015f;
+    g_meshTest.frames++;
+
+    const int32_t vw = Display->Width();
+    const int32_t vh = Display->Height();
+    const int32_t cam_ox = vw / 2;
+    const int32_t cam_oy = vh / 2;
+
+    // Reasonable defaults for a single-cube preview.
+    Renderer->SetLight(0.6f, -0.6f, 0.4f, 1.0f, 1.0f, 1.0f, 1.0f, 0.25f);
+    Renderer->SetAmbientColor(0.55f, 0.55f, 0.55f);
+    Renderer->SetAmbientOcclusion(false, 12.0f, 1.0f, 0.15f, 96.0f);
+    Renderer->SetNormalLightingHardness(1.0f);
+    Renderer->SetLightingMode(1);
+    Renderer->SetSunShadow(false, 24.0f, 3.0f, 32);
+    Renderer->SetShadowWorldDir(0.6f, -0.6f, 0.4f);
+    Renderer->SetShadowVariance(0.0f, 0.0f, 1.0f);
+
+    // Cube sits at world (0,0,0). Pick a z window centered on the same
+    // kcam_forward the map test uses so the cube lands mid-range.
+    constexpr float kCam    = 2750.0f;
+    constexpr float zHalf   =  512.0f;
+    const float znear = kCam - zHalf;
+    const float zfar  = kCam + zHalf;
+    Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
+                                      znear, zfar, 0.0f, 0.0f, kCam, 0.0f);
+    Renderer->ClearPointLights();
+
+    Renderer->BeginTilePass(0.08f, 0.08f, 0.12f, 1.0f);
+
+    // Rotation around Z (iso "up") by spin.
+    const float c  = std::cos(g_meshTest.spin);
+    const float si = std::sin(g_meshTest.spin);
+    SMeshSubmit m = {};
+    m.mesh    = g_meshTest.cube;
+    // Row 0: [c, -s, 0, 0]
+    m.world[0] =  c;  m.world[1] = -si; m.world[2] = 0; m.world[3] = 0;
+    // Row 1: [s, c, 0, 0]
+    m.world[4] = si;  m.world[5] =  c;  m.world[6] = 0; m.world[7] = 0;
+    // Row 2: [0, 0, 1, 0]
+    m.world[8] = 0;   m.world[9] =  0;  m.world[10] = 1; m.world[11] = 0;
+    // Row 3: [0, 0, 0, 1]
+    m.world[12] = 0;  m.world[13] = 0;  m.world[14] = 0; m.world[15] = 1;
+    m.tint[0] = 0.9f; m.tint[1] = 0.3f; m.tint[2] = 0.2f; m.tint[3] = 1.0f;
+    Renderer->SubmitMesh(m);
+
+    Renderer->EndTilePass();
+    Renderer->RunLightingPass();
+
+    if (g_meshTest.frames == 1)
+        log_info("[mesh] first-frame submit: cube=%u tint=(%.2f,%.2f,%.2f)",
+                 m.mesh, m.tint[0], m.tint[1], m.tint[2]);
+}
+
+void CloseMeshMode()
+{
+    if (g_meshTest.albedo.id) { sg_destroy_image(g_meshTest.albedo); g_meshTest.albedo = {}; }
+    g_meshTest.cube = 0;
+}
+
 bool InitializeTTFMode()
 {
     const char* paths[] = {
@@ -328,6 +467,8 @@ bool Initialize(const char* mode)
         return true;
     if (strcmp(mode, "sector") == 0)
         return g_mapRenderer.InitializeFromStartupArgs();
+    if (strcmp(mode, "mesh") == 0)
+        return InitializeMeshMode();
     if (strcmp(mode, "ttf") == 0)
         return InitializeTTFMode();
     if (strcmp(mode, "text") == 0)
@@ -352,6 +493,8 @@ void Close(const char* mode)
 {
     if (strcmp(mode, "sector") == 0)
         g_mapRenderer.Shutdown();
+    if (strcmp(mode, "mesh") == 0)
+        CloseMeshMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -362,6 +505,8 @@ void Render(const char* mode)
 
     if (strcmp(mode, "sector") == 0)
         return g_mapRenderer.RenderFrame();
+    if (strcmp(mode, "mesh") == 0)
+        return RenderMeshMode();
     if (strcmp(mode, "ui") == 0 && g_uiAtlas.image.id && !g_uiAtlas.items.empty())
         return RenderUiMode();
     if (strcmp(mode, "icon") == 0)
