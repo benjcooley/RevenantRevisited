@@ -14,6 +14,7 @@
 #include "chunkcache.h"
 #include "decompdata.h"
 #include "display.h"
+#include "renderer.h"
 #include "debugui.h"
 #include "imgui.h"
 #include "imagery.h"
@@ -826,29 +827,29 @@ void TMapRenderer::RenderFrame()
     // Global debug UI owns the ImGui shell; it will call DrawDebugTab() on
     // this renderer as a contributor.
 
-    Display->SetLight(s.light_dir[0], s.light_dir[1], s.light_dir[2], s.intensity, s.color[0], s.color[1], s.color[2], s.ambient);
-    Display->SetAmbientColor(s.ambient_color[0], s.ambient_color[1], s.ambient_color[2]);
-    Display->SetAmbientOcclusion(s.ao_enable, s.ao_radius_px, s.ao_strength, s.ao_bias, s.ao_max_dist);
-    Display->SetShadowWorldDir(s.dir[0], s.dir[1], s.dir[2]);
-    Display->SetShadowVariance(s.sdir_off_x, s.sdir_off_y, s.sdir_wz_mul);
-    Display->SetNormalLightingHardness(s.normal_hardness);
-    Display->SetNormalRadius(s.normal_radius);
-    Display->SetEdgeThreshold(s.edge_thr);
-    Display->SetTileViewMode(s.view_mode);
-    Display->SetLightingMode(s.lighting_mode);
-    Display->SetSunShadow(s.sun_shadow, s.sun_shadow_step, s.sun_shadow_soft, s.sun_shadow_max);
-    Display->SetReconstructionParams(float(cam_ox), float(cam_oy), s.z_near, s.z_far,
-                                     float(s.sectorCameraWorld.x), float(s.sectorCameraWorld.y),
-                                     kCamForwardWU, 0.0f);
+    Renderer->SetLight(s.light_dir[0], s.light_dir[1], s.light_dir[2], s.intensity, s.color[0], s.color[1], s.color[2], s.ambient);
+    Renderer->SetAmbientColor(s.ambient_color[0], s.ambient_color[1], s.ambient_color[2]);
+    Renderer->SetAmbientOcclusion(s.ao_enable, s.ao_radius_px, s.ao_strength, s.ao_bias, s.ao_max_dist);
+    Renderer->SetShadowWorldDir(s.dir[0], s.dir[1], s.dir[2]);
+    Renderer->SetShadowVariance(s.sdir_off_x, s.sdir_off_y, s.sdir_wz_mul);
+    Renderer->SetNormalLightingHardness(s.normal_hardness);
+    Renderer->SetNormalRadius(s.normal_radius);
+    Renderer->SetEdgeThreshold(s.edge_thr);
+    Renderer->SetTileViewMode(s.view_mode);
+    Renderer->SetLightingMode(s.lighting_mode);
+    Renderer->SetSunShadow(s.sun_shadow, s.sun_shadow_step, s.sun_shadow_soft, s.sun_shadow_max);
+    Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy), s.z_near, s.z_far,
+                                      float(s.sectorCameraWorld.x), float(s.sectorCameraWorld.y),
+                                      kCamForwardWU, 0.0f);
 
-    Display->ClearPointLights();
+    Renderer->ClearPointLights();
     if (s.lights_on)
     {
         S3DPoint vc_rel;
         ScreenToWorld(vw / 2 - cam_ox, vh / 2 - cam_oy, vc_rel, 0);
         const S3DPoint vc_w = vc_rel + s.sectorCameraWorld;
         struct Pick { int32_t light_idx; float d2_to_view; };
-        Pick picks[TDisplay::kMaxPointLights];
+        Pick picks[TRenderer::kMaxPointLights];
         int32_t pick_n = 0;
         for (int32_t i = 0; i < int32_t(s.sectorLights.size()); ++i)
         {
@@ -863,7 +864,7 @@ void TMapRenderer::RenderFrame()
             if (sy + r_px < 0 || sy - r_px >= vh) continue;
             const float dx = float(wp.x - vc_w.x), dy = float(wp.y - vc_w.y), dz = float(wp.z - vc_w.z);
             const float d2 = dx*dx + dy*dy + dz*dz;
-            if (pick_n < TDisplay::kMaxPointLights) picks[pick_n++] = { i, d2 };
+            if (pick_n < TRenderer::kMaxPointLights) picks[pick_n++] = { i, d2 };
             else {
                 int32_t worst = 0;
                 for (int32_t k = 1; k < pick_n; ++k)
@@ -876,23 +877,23 @@ void TMapRenderer::RenderFrame()
             const SSectorLight& L = s.sectorLights[picks[k].light_idx];
             const S3DPoint wp = s.sectorLightPos(L);
             float rgb[3]; s.sectorLightColor(L, rgb);
-            Display->AddPointLight(float(wp.x), float(wp.y), float(wp.z),
-                                   s.sectorLightRadius(L) * s.radius_mul,
-                                   rgb[0], rgb[1], rgb[2],
-                                   s.sectorLightIntensity(L) * s.intensity_mul);
+            Renderer->AddPointLight(float(wp.x), float(wp.y), float(wp.z),
+                                    s.sectorLightRadius(L) * s.radius_mul,
+                                    rgb[0], rgb[1], rgb[2],
+                                    s.sectorLightIntensity(L) * s.intensity_mul);
         }
     }
 
     const float zspan = s.z_far - s.z_near;
-    Display->BeginTilePass(0.12f, 0.16f, 0.10f, 1.0f);
+    Renderer->BeginTilePass(0.12f, 0.16f, 0.10f, 1.0f);
     static bool draw_stats_logged = false;
     int32_t draw_submitted = 0, draw_invalid_img = 0, draw_offscreen = 0;
 
     S3DPoint c0, c1, c2, c3;
-    ScreenToWorld(-cam_ox - TDisplay::kGBufPad, -cam_oy - TDisplay::kGBufPad, c0, 0);
-    ScreenToWorld(vw - cam_ox + TDisplay::kGBufPad, -cam_oy - TDisplay::kGBufPad, c1, 0);
-    ScreenToWorld(-cam_ox - TDisplay::kGBufPad, vh - cam_oy + TDisplay::kGBufPad, c2, 0);
-    ScreenToWorld(vw - cam_ox + TDisplay::kGBufPad, vh - cam_oy + TDisplay::kGBufPad, c3, 0);
+    ScreenToWorld(-cam_ox - TRenderer::kGBufPad, -cam_oy - TRenderer::kGBufPad, c0, 0);
+    ScreenToWorld(vw - cam_ox + TRenderer::kGBufPad, -cam_oy - TRenderer::kGBufPad, c1, 0);
+    ScreenToWorld(-cam_ox - TRenderer::kGBufPad, vh - cam_oy + TRenderer::kGBufPad, c2, 0);
+    ScreenToWorld(vw - cam_ox + TRenderer::kGBufPad, vh - cam_oy + TRenderer::kGBufPad, c3, 0);
     const int32_t min_wx = (std::min)((std::min)(c0.x, c1.x), (std::min)(c2.x, c3.x)) + s.sectorCameraWorld.x - SECTORWIDTH;
     const int32_t max_wx = (std::max)((std::max)(c0.x, c1.x), (std::max)(c2.x, c3.x)) + s.sectorCameraWorld.x + SECTORWIDTH;
     const int32_t min_wy = (std::min)((std::min)(c0.y, c1.y), (std::min)(c2.y, c3.y)) + s.sectorCameraWorld.y - SECTORHEIGHT;
@@ -940,10 +941,10 @@ void TMapRenderer::RenderFrame()
                         cov[size_t(cy) * size_t(cov_cw) + size_t(cx)] = 1;
             }
             ++draw_submitted;
-            Display->DrawTile(tex.color, tex.depth, dx, dy, tex.w, tex.h,
-                              anchor_scene_norm, std::fabs(zspan) > 1e-6f ? s.depth_mul / zspan : 0.0f, 1.0f,
-                              float(inst.world_pos.x), float(inst.world_pos.y), float(inst.world_pos.z),
-                              float(inst.regx), float(inst.regy), s.depth_mul);
+            Renderer->DrawTile(tex.color, tex.depth, dx, dy, tex.w, tex.h,
+                               anchor_scene_norm, std::fabs(zspan) > 1e-6f ? s.depth_mul / zspan : 0.0f, 1.0f,
+                               float(inst.world_pos.x), float(inst.world_pos.y), float(inst.world_pos.z),
+                               float(inst.regx), float(inst.regy), s.depth_mul);
         }
     }
     if (!draw_stats_logged) {
@@ -955,8 +956,8 @@ void TMapRenderer::RenderFrame()
             s.sectorTileInst.size(), draw_submitted, draw_invalid_img, draw_offscreen, vw, vh, cov_hit, cov_total,
             cov_total > 0 ? 100.0 * cov_hit / cov_total : 0.0);
     }
-    Display->EndTilePass();
-    Display->RunLightingPass();
+    Renderer->EndTilePass();
+    Renderer->RunLightingPass();
 }
 
 void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)

@@ -14,14 +14,12 @@
 #include "parse.h"
 #include "timer.h"
 
-#include <fcntl.h>
+#include <chrono>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
-#include <time.h>
 
 #include <cassert>
 #include <cctype>
@@ -221,13 +219,10 @@ int32_t flen(FILE* f)
 // Returns system ticks in milliseconds since system was turned on
 uint32_t tickcount()
 {
-#if 0 // TODO(port): Subsystem 4 — timing (→ std::chrono / sokol_time)
-    return GetTickCount();
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return static_cast<uint32_t>(ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL);
-#endif
+    using namespace std::chrono;
+    static const auto epoch = steady_clock::now();
+    return static_cast<uint32_t>(
+        duration_cast<milliseconds>(steady_clock::now() - epoch).count());
 }
 
 // *************** Error Functions *****************

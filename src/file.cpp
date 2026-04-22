@@ -3,251 +3,160 @@
 // *                    Copyright (C) 1998 Cinematix                       *
 // *                      file.cpp - Common File IO                        *
 // *************************************************************************
+//
+// Portable file I/O helpers. The retail 1998 build used the POSIX open/
+// read/close + sys/stat + unistd path. This rewrite uses std::filesystem
+// for existence/size queries and cstdio for read/write so the module
+// builds unchanged on macOS, Linux, and Windows (MSVC).
+//
+// *************************************************************************
 
 #include "file.h"
 
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
-
-static inline long filelength(int fd)
-{
-    struct stat st;
-    if (fstat(fd, &st) == -1) return -1;
-    return (long)st.st_size;
-}
+namespace fs = std::filesystem;
 
 //==============================================================================
 //    Function : LoadFile.
 //------------------------------------------------------------------------------
-// Description : This will load the file specified by FileName into memory.
-//               If the filebuf specified is nullptr, the memory to store the file
-//               will be allocated here, otherwise the file will be loaded
-//               into the buffer provided.
-//
-//  Parameters : filepath = Path to the file to load.
-//
-//               filebuf  = Pointer to a buffer to recieve the file or nullptr if
-//                          LoadFile is to allocate the memory
-//
-//               filesize = Pointer to a int32_t to recieve the size of the file.
-//
-//     Returns : If successful, returns a pointer to the newly loaded file.
-//               If the load fails, returns nullptr.
-//
+// Description : Loads the file specified by filepath into memory. If filebuf
+//               is nullptr, LoadFile allocates the buffer; otherwise it
+//               loads into the provided buffer. Size (if requested) is
+//               written back through filesize.
 //==============================================================================
 
-void *LoadFile(const char *filepath, void *filebuf, int32_t *filesize)
+void* LoadFile(const char* filepath, void* filebuf, int32_t* filesize)
 {
-  int32_t datafile;
-  int32_t size;
-  bool allocmem = true;
+    if (filesize != nullptr)
+        *filesize = 0;
 
-  // Initialize the size of the file read to 0 incase we encounter an error
-  if (filesize != nullptr)
-    *filesize = 0;
+    FILE* fp = fopen(filepath, "rb");
+    if (fp == nullptr)
+        return nullptr;
 
-  // Open the File
-  if ((datafile = open(filepath, O_BINARY|O_RDONLY)) == -1)
-    return nullptr;
-
-  // Get the size
-  size = filelength(datafile);
-  if (size == -1)
-  {
-    close(datafile);
-    return nullptr;
-  }
-
-  // See if we need to allocate memory here or use the provided buffer
-  if (filebuf == nullptr)
-  {
-    // Allocate memory to load the file into
-    if ((filebuf = (void *)malloc(size)) == nullptr)
+    std::error_code ec;
+    auto sz = fs::file_size(filepath, ec);
+    if (ec)
     {
-      close(datafile);
-      return nullptr;
+        fclose(fp);
+        return nullptr;
     }
-  }
-  else
-    allocmem = false;
+    const int32_t size = static_cast<int32_t>(sz);
 
-  // Make sure that we read the entire file
-  if (read(datafile, filebuf, size) != size)
-  {
-    if (allocmem)
-      free(filebuf);
-    close(datafile);
-    return nullptr;
-  }
+    bool allocmem = true;
+    if (filebuf == nullptr)
+    {
+        filebuf = malloc(size);
+        if (filebuf == nullptr)
+        {
+            fclose(fp);
+            return nullptr;
+        }
+    }
+    else
+    {
+        allocmem = false;
+    }
 
-  close(datafile);
+    if (fread(filebuf, 1, size, fp) != static_cast<size_t>(size))
+    {
+        if (allocmem)
+            free(filebuf);
+        fclose(fp);
+        return nullptr;
+    }
 
-  // If the filesize is requested, set it now
-  if (filesize != nullptr)
-    *filesize = size;
+    fclose(fp);
 
-  return filebuf;
+    if (filesize != nullptr)
+        *filesize = size;
+
+    return filebuf;
 }
-
-
 
 //==============================================================================
 //    Function : FileExists.
-//------------------------------------------------------------------------------
-// Description : This will tell if the file specified by filename exists or not.
-//
-//  Parameters : filepath = Specifies the file to check for.
-//
-//     Returns : If the file exists, returns true, otherwise returns false.
-//
 //==============================================================================
 
-bool FileExists(const char *filepath)
+bool FileExists(const char* filepath)
 {
-    if (!access(filepath, 0))
-        return true;
-    else
-        return false;
+    std::error_code ec;
+    return fs::exists(filepath, ec) && !ec;
 }
-
-
 
 //==============================================================================
 //    Function : FileSize.
-//------------------------------------------------------------------------------
-// Description : This will return the size of the file specified.
-//
-//  Parameters : filepath = Path to the file to check.
-//
-//     Returns : If the file exists, it returns the size of the file.
-//               If the file doesn't exist, it returns 0.
-//
 //==============================================================================
 
-int32_t FileSize(const char *filepath)
+int32_t FileSize(const char* filepath)
 {
-  int32_t datafile;
-  int32_t size;
-
-  if ((datafile = open(filepath, O_RDONLY|O_BINARY)) == -1)
-    return 0;
-
-  size = filelength(datafile);
-
-  close(datafile);
-
-  return size;
+    std::error_code ec;
+    auto sz = fs::file_size(filepath, ec);
+    if (ec)
+        return 0;
+    return static_cast<int32_t>(sz);
 }
-
-
 
 //==============================================================================
 //    Function : TryOpen.
 //------------------------------------------------------------------------------
-// Description : This will attempt to open the file specified.
-//
-//  Parameters : name = Path to the file to try to open.
-//
-//               mode = How to open the file.
-//
-//     Returns : Returns the FILE * if it succeeds, nullptr if it fails.
-//
+// Retry-open loop for files that may be briefly locked by another process.
 //==============================================================================
 
-FILE *TryOpen(const char *name, const char *mode)
+FILE* TryOpen(const char* name, const char* mode)
 {
-    FILE *fp;
-    int32_t n;
-
-    // Try to open the file, it may already be open by someone else so we need to
-    // try more than once before we exit out
-    for (n = 0; n < 300; n++)
+    FILE* fp = nullptr;
+    for (int32_t n = 0; n < 300; n++)
     {
         if ((fp = rev_fopen(name, mode)) != nullptr)
             break;
 
-        // check error - if we're out of disk space or trying to access
-        // a non-existant file, just jump out right away
+        // Out of disk space or missing file -- bail immediately.
         if (errno == ENOENT || errno == ENOSPC)
             break;
 
-        // Wait 100 milliseconds inbetween trys
-        while (tickcount() % 100);
+        // Wait ~100ms between retries.
+        while (tickcount() % 100) { }
     }
 
     return fp;
 }
 
-
-
 //==============================================================================
 //    Function : TryDelete.
-//------------------------------------------------------------------------------
-// Description : This will attempt to delete the file specified.
-//
-//  Parameters : name = Path to the file to try to delete.
-//
-//     Returns : If successful, returns true, otherwise, returns false.
-//
 //==============================================================================
 
-bool TryDelete(const char *name)
+bool TryDelete(const char* name)
 {
-    int32_t n;
-    bool success = true;
+    if (!FileExists(name))
+        return true;
 
-    // Remove the file (if it exists)
-    if (FileExists(name))
+    int32_t n = 0;
+    for (; n < 1000; n++)
     {
-        for (n = 0; n < 1000; n++)
-        {
-            if (remove(name) == 0)
-                break;
-            // Wait 100 milliseconds inbetween trys
-            while (tickcount() % 100);
-        }
-        if (n == 1000)
-            success = false;
+        if (remove(name) == 0)
+            break;
+        while (tickcount() % 100) { }
     }
-
-    return success;
+    return n < 1000;
 }
-
-
 
 //==============================================================================
 //    Function : TryRename.
-//------------------------------------------------------------------------------
-// Description : This will attempt to rename the file oldname to newname.
-//
-//  Parameters : oldname = Path specifying the current name.
-//
-//               newname = Path specifying the new name.
-//
-//     Returns : If successful, returns true, otherwise, returns false.
-//
 //==============================================================================
 
-bool TryRename(const char *oldname, const char *newname)
+bool TryRename(const char* oldname, const char* newname)
 {
-    int32_t n;
-    bool success = true;
-
-    for (n = 0; n < 1000; n++)
+    int32_t n = 0;
+    for (; n < 1000; n++)
     {
         if (rename(oldname, newname) == 0)
             break;
-        // Wait 100 milliseconds inbetween trys
-        while (tickcount() % 100);
+        while (tickcount() % 100) { }
     }
-    if (n == 1000)
-        success = false;
-
-    return success;
+    return n < 1000;
 }
