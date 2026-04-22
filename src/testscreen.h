@@ -31,6 +31,3 @@ class TTestScreen : public TScreen
 };
 
 extern TTestScreen TestScreen;
-extern char        StartupTestMode[32];
-// --sector=L_X_Y — which sector --test=sector should render. Empty = default.
-extern char        StartupSectorId[32];

@@ -73,6 +73,14 @@ const SFontAtlas* FindFontAtlas(TFont* font);
 void DestroyAllFontAtlases();
   // Releases every cached atlas image. Call during shutdown.
 
+void LogFontInfo(const char* name);
+  // Logs the named FONT.DEF entry plus a few representative glyph metrics.
+void LogFontGlyphAsciiArt(const char* fontname, unsigned char ch);
+  // Logs a coarse ASCII-art view of one glyph for bitmap-font debugging.
+void LogFontGlyphHexDump(const char* fontname, unsigned char ch,
+                        int max_rows = 8, int max_cols = 14);
+  // Logs the raw 16-bit source pixels for the top-left rows of one glyph.
+
 // stb_truetype-backed atlas for WINFONT entries. Rasterizes ASCII 32..127
 // at `pixel_height` and packs via stbtt_PackFontRange. Uses a separate
 // cache (keyed by path+size) from BuildFontAtlas's TFont* cache because

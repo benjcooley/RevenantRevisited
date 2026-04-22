@@ -7,6 +7,7 @@
 #include "font.h"
 
 #include "bitmap.h"
+#include "fonttable.h"
 #include "graphics.h"
 #include "logging.h"
 
@@ -196,6 +197,101 @@ void DestroyAllFontAtlases()
         delete atlas;
     }
     g_fontAtlases.clear();
+}
+
+void LogFontInfo(const char* name)
+{
+    if (!FontTable)
+    {
+        log_error("[font] FontTable is null");
+        return;
+    }
+
+    TGenericFont* g = FontTable->FindFont(name);
+    if (!g)
+    {
+        log_warn("[font] '%s' not in font.def", name);
+        return;
+    }
+
+    TFont* f = g->primary;
+    if (!f)
+    {
+        log_warn("[font] '%s' has no primary bitmap atom (type=%d)", name, g->type);
+        return;
+    }
+
+    log_info("[font] '%s' firstchar=%d numchars=%d height=%d",
+        name, (int)f->FirstChar(), (int)f->Numchars(), (int)f->height);
+
+    for (unsigned char probe : { (unsigned char)'A', (unsigned char)'0', (unsigned char)' ' })
+    {
+        PTBitmap bm = f->GetChar(probe);
+        if (!bm)
+        {
+            log_warn("[font]   glyph '%c' (0x%02x): GetChar returned null", probe, probe);
+            continue;
+        }
+        log_info("[font]   glyph '%c' (0x%02x): w=%d h=%d flags=0x%08x keycolor=0x%08x",
+            probe, probe, bm->width, bm->height, bm->flags, bm->keycolor);
+    }
+}
+
+void LogFontGlyphAsciiArt(const char* fontname, unsigned char ch)
+{
+    if (!FontTable) return;
+    TFont* f = FontTable->Bitmap(fontname);
+    if (!f) return;
+
+    PTBitmap bm = f->GetChar(ch);
+    if (!bm) return;
+
+    const int w = bm->width;
+    const int h = bm->height;
+    if (w <= 0 || h <= 0 || w > 64 || h > 64)
+    {
+        log_warn("[font] skip ascii-render '%c' from '%s': implausible %dx%d", ch, fontname, w, h);
+        return;
+    }
+
+    const uint16_t key = (uint16_t)bm->keycolor;
+    log_info("[font] ascii-render '%c' from '%s' (%dx%d, 16-bit, key=0x%04x):", ch, fontname, w, h, key);
+    for (int y = 0; y < h; y++)
+    {
+        char row[72];
+        int pos = 0;
+        for (int x = 0; x < w && pos < 70; x++)
+        {
+            const uint16_t px = bm->data16[y * w + x];
+            row[pos++] = (px == key) ? '.' : '#';
+        }
+        row[pos] = 0;
+        log_info("[font]   |%s|", row);
+    }
+}
+
+void LogFontGlyphHexDump(const char* fontname, unsigned char ch,
+                         int max_rows, int max_cols)
+{
+    if (!FontTable) return;
+    TFont* f = FontTable->Bitmap(fontname);
+    if (!f) return;
+
+    PTBitmap bm = f->GetChar(ch);
+    if (!bm || bm->width <= 0 || bm->height <= 0) return;
+
+    const uint16_t* src = bm->data16;
+    const int rows = bm->height < max_rows ? bm->height : max_rows;
+    const int cols = bm->width < max_cols ? bm->width : max_cols;
+    for (int r = 0; r < rows; r++)
+    {
+        char row[256];
+        int p = 0;
+        row[0] = 0;
+        for (int i = 0; i < cols && p < int(sizeof(row)); i++)
+            p += snprintf(row + p, sizeof(row) - p, "%04x ", src[r * bm->width + i]);
+        log_info("[font/diag] '%s' '%c' row%d: %s", fontname, ch, r, row);
+    }
 }
 
 int32_t TFont::FindNumLinesInText(char *text, int32_t wrapwidth, int32_t justify)
