@@ -120,10 +120,15 @@ class TDisplay : public TSurface
 
     // Scene light used by the deferred fullscreen light pass. Normals are
     // reconstructed from each tile's authored per-pixel depthmap, and albedo
-    // is modulated by (ambient + diffuse). dir is lit-space (x right, y down
-    // on screen, z out of the screen).
+    // is modulated by (ambient + diffuse). dir is a world-space vector from
+    // the shaded point toward the sun, in Revenant's iso world basis.
     void SetLight(float dx, float dy, float dz, float intensity,
                   float r, float g, float b, float ambient);
+    // Ambient floor color is independent from the directional sun tint.
+    void SetAmbientColor(float r, float g, float b);
+    // Z-buffer-based screen-space ambient occlusion controls.
+    void SetAmbientOcclusion(bool enable, float radius_px, float strength,
+                             float bias, float max_dist_wu);
     // Normal-reconstruction denoise radius in texels (central-difference
     // stencil width). Wider = smoother normals, loses surface detail.
     void SetNormalRadius(float texels);
@@ -132,9 +137,33 @@ class TDisplay : public TSurface
     // the center by more than this get clamped to the center — kills the
     // "bevel" artifact where the filter bleeds across wall/floor seams.
     void SetEdgeThreshold(float zraw_units);
+    // Blend between flat sun tint/intensity (0) and full normal-based
+    // directional lighting (1). Lower values soften the harsh/speckled look
+    // from per-pixel reconstructed normals while preserving the sun color.
+    void SetNormalLightingHardness(float hardness);
     // Debug view modes for the tile fragment shader:
-    //   0 = lit (default)  1 = albedo only  2 = depth  3 = normals
+    //   0 = lit    1 = albedo    2 = depth     3 = normals
+    //   4 = point-light only    5 = recon heatmap
+    //   6 = sun-shadow mask     7 = ambient occlusion
     void SetTileViewMode(int32_t mode);
+    // Lighting model. 0 = retail 1998 (ambient + colortable.cpp distance
+    // falloff point lights; no sun, no shadows). 1 = modern (adds the
+    // directional sun + screen-space contact shadows). Default 1.
+    void SetLightingMode(int32_t mode);
+    // Sun contact-shadow ray march. World-space step size, perpendicular
+    // jitter radius in pixels (penumbra width, 0 = hard), and max iteration
+    // count; enable flag gates the whole pass.
+    void SetSunShadow(bool enable, float step_wu, float softness_px,
+                      int32_t max_steps);
+    // Explicit world-space base direction for the sun-shadow ray. This lets
+    // the shadow system use a different world vector than directional
+    // lighting while still sharing the same soft-shadow implementation.
+    void SetShadowWorldDir(float dx, float dy, float dz);
+    // Debug variance for the modern sun-shadow ray. The base ray direction is
+    // derived from SetShadowWorldDir's world-space dir in the shader. (sx, sy)
+    // are additive screen-space offsets in pixels-per-wu, and sz is a scalar
+    // applied to shadow_world_dir.z to lengthen/shorten shadows.
+    void SetShadowVariance(float sx, float sy, float sz);
 
     // World-space point lights. Rebuild the list each frame — ClearPointLights()
     // at the top, AddPointLight(...) per light. Position is world xyz in
@@ -144,6 +173,16 @@ class TDisplay : public TSurface
     // true sphere in world space (rendered as an iso-foreshortened ellipse
     // on-screen). Up to kMaxPointLights per draw; extras silently dropped.
     static constexpr int32_t kMaxPointLights = 16;
+
+    // G-buffer padding — pixels of margin added on every side around the
+    // display area when allocating the albedo/normal/scene_z/depth/lit
+    // targets. The tile pass renders into the padded region; the final
+    // composite samples only the centered display-sized sub-rect for the
+    // swapchain. This keeps off-screen geometry (up to kGBufPad pixels
+    // beyond the visible edge) in the G-buffer so the sun-shadow ray march
+    // can find occluders that aren't on-screen. Tune here and rebuild.
+    static constexpr int32_t kGBufPad = 128;
+
     void ClearPointLights();
     void AddPointLight(float wx, float wy, float wz, float radius_wu,
                        float r, float g, float b, float intensity);
@@ -200,11 +239,14 @@ private:
     // Lighting runs in a second pass reading those three, writing to
     // lit_target, which FlipPage composites to the swapchain.
     sg_pass default_pass;             // G-buffer fill pass
+    sg_pass ao_pass;                  // AO pass (-> ao_target)
     sg_pass lit_pass;                 // Light accumulation pass (-> lit_target)
     sg_pass depth_pass;               // Pass for depth pre-pass (unused)
     sg_shader   tile_shader   = {};
     sg_pipeline tile_pipeline = {};
     sg_buffer   tile_vbuf     = {};
+    sg_shader   ao_shader       = {};
+    sg_pipeline ao_pipeline     = {};
     sg_shader   light_shader    = {};
     sg_pipeline light_pipeline  = {};
     bool        color_target_dirty = false;  // Set by BeginTilePass, read by FlipPage
@@ -222,10 +264,39 @@ private:
         float dir[3]     = { 0.6f, -0.6f, 0.4f };
         float intensity  = 1.0f;
         float color[3]   = { 1.0f, 1.0f, 1.0f };
+        float ambient_color[3] = { 1.0f, 1.0f, 1.0f };
         float ambient    = 0.25f;
+        bool  ao_enable  = true;
+        float ao_radius_px = 12.0f;
+        float ao_strength = 1.0f;
+        float ao_bias = 0.15f;
+        float ao_max_dist_wu = 96.0f;
         float normal_radius = 1.5f;   // texels; wider = smoother normals
         float edge_threshold = 0.001f; // zraw units; bilateral reject cutoff
+        float normal_lighting_hardness = 0.5f; // 0=flat tint, 1=full N.L
         int32_t view_mode = 0;
+        // Lighting mode: 0 = retail 1998 (ambient + distance-only point
+        // lights; no sun, no shadows, no AO), 1 = modern (adds directional
+        // sun, screen-space contact shadows, and future effects). The retail
+        // mode is the authoritative reference we must be able to flip back
+        // to at any time.
+        int32_t mode = 1;
+        // Sun contact-shadow ray march. Steps along +light_dir in world
+        // space, forward-projects each step, and samples the depth buffer
+        // to see if a closer surface occludes the path to the sun.
+        bool    sun_shadow_enable = true;
+        float   sun_shadow_step_wu = 24.0f;    // wu per step
+        float   sun_shadow_softness_px = 3.0f; // perp. jitter radius (px);
+                                               // 0 = hard, larger = softer
+        int32_t sun_shadow_max_steps = 32;     // cap loop length
+        // Base world-space direction for the shadow ray march. Defaults to the
+        // same direction as dir[] but can diverge when callers want lighting
+        // and cast-shadow directions to differ.
+        float   shadow_world_dir[3] = { 0.6f, -0.6f, 0.4f };
+        // Debug variance applied on top of the shadow ray derived from dir[].
+        // xy = additive screen-space offset (pixels-per-wu), z = multiplier
+        // applied to dir.z before the ray-march world-z test.
+        float   shadow_dir[3] = { 0.0f, 0.0f, 1.0f };
         // Screen-space point lights. Each light is (pos xy, z_above, radius)
         // + (rgb, intensity); shader loops to `plight_count`.
         int32_t plight_count = 0;
@@ -234,6 +305,9 @@ private:
     } light;
     void InitTilePipeline();
     void ShutdownTilePipeline();
+    void InitAOPipeline();
+    void ShutdownAOPipeline();
+    void RunAOPass();
     void InitLightPipeline();
     void ShutdownLightPipeline();
 
@@ -257,6 +331,7 @@ private:
                                       //   sokol's Metal backend doesn't
                                       //   support sampling the depth-stencil
                                       //   attachment as a regular texture.
+    sg_image ao_target;               // AO pass output (R32F) -> light pass
     sg_image lit_target;              // Light pass output (RGBA8) -> swapchain
     
     // Uniform buffers

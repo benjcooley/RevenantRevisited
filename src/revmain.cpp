@@ -32,6 +32,7 @@
 #include "graphics.h"
 #include "playscreen.h"
 #include "testscreen.h"
+#include "testconfig.h"
 #include "time.h"
 #include "mappane.h"
 #include "automap.h"
@@ -59,6 +60,7 @@
 #include "area.h"
 #include "rules.h"
 #include "dialog.h"
+#include "debugui.h"
 #include "cursor.h"
 
 #include <sokol_app.h>
@@ -1407,7 +1409,7 @@ void GetParameters(int argc, char **argv)
     cmd.add_params({
         "gamespeed", "monitor", "violencelevel", "preloadsize",
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
-        "loadmap", "lang", "test",
+        "loadmap", "lang", "test", "level",
     });
     cmd.parse(argc, argv);
 
@@ -1514,6 +1516,14 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "sector", p))
             strncpyz(StartupSectorId, p.c_str(), sizeof(StartupSectorId));
+    }
+
+  // LEVEL=L — load the whole requested level in --test=sector and anchor the
+  // initial camera/origin at world 0,0 instead of assuming sector 0,0 exists.
+    {
+        std::string p;
+        if (arg_param(cmd, "level", p))
+            strncpyz(StartupLevelId, p.c_str(), sizeof(StartupLevelId));
     }
 }
 
@@ -2126,6 +2136,7 @@ static void AppFrame()
     }
 
     CurrentScreen->TimerTick(true);
+    DebugUI::DrawFrame();
 
     // Present the frame: composite backbuffer onto the swapchain and commit
     // the Metal command buffer. Without this, sokol's cmd_buffer is never

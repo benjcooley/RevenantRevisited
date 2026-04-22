@@ -1,6 +1,12 @@
 # Build output
 /build
 /bin
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/build.ninja
+/Makefile
+/Testing/
 
 # Reference copies (kept locally, not tracked)
 /legacy

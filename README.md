@@ -1,49 +1,130 @@
 # RevenantRevisited
 
-A modern port of the classic 1998 PC game **Revenant** by EIDOS Interactive, originally developed by Benjamin Cooley.
+`RevenantRevisited` is an in-progress modernization of the original 1998 **Revenant** codebase for contemporary machines. The project keeps the original game data and gameplay intent, while replacing old platform dependencies with a modern build and rendering stack.
 
-## About the Game
+The current port already runs the game data, loads archived map sectors from the shipped module files, and includes an actively developed modern sector renderer with deferred lighting, shadows, ambient occlusion, and debug tooling.
 
-Revenant is an action RPG that was released in 1998 for Windows, built with DirectX 5. The game features:
+## Project Goals
 
-- Real-time 3D graphics with Direct3D
-- Action-based combat system
-- RPG elements including character progression, inventory, and spells
-- Multiplayer support via DirectPlay
-- Level editor and modding capabilities
+- Preserve the original game content and behavior wherever practical
+- Make the source buildable on modern systems with CMake
+- Replace obsolete DirectX-era rendering/input assumptions with modern platform code
+- Expose internal systems through focused test modes so rendering and data-loading work can be verified quickly
 
-## About the Project
+## Current Highlights
 
-This repository contains the complete source code for Revenant, originally developed in 1998-1999. The goal of this project is to modernize the codebase and make it run on contemporary platforms while preserving the original gameplay experience.
+- Cross-platform CMake-based build
+- Modern GPU-backed renderer
+- Deferred directional lighting
+- Screen-space contact shadows
+- Screen-space ambient occlusion
+- Archive-backed level scanning and sector loading from the shipped Ahkuilon module
+- Debug UI tabs for renderer tuning and inspection
 
-### Current Status
+## Screenshots
 
-- **Original Platform**: Windows with DirectX 5
-- **Target Platforms**: Modern Windows, macOS, Linux
-- **Graphics**: Transitioning from Direct3D to modern graphics APIs (Metal, Vulkan, DirectX 12)
-- **Build System**: CMake for cross-platform compilation
+Some current captures from the modern renderer:
 
-## Development
+- [Dynamic shadows](images/revenant-dynamic-shadows.png)
+- [Dynamic shadows 2](images/revenant-dynamic-shadows-2.png)
+- [Lit Misthaven tower](images/revenant-lit-misthaven-tower.png)
+- [Lit house scene](images/revenant-lit-house.png)
+- [Dead sea monster](images/revenant-dead-seamonster.png)
+- [Puppet show](images/revenant-puppet-show.png)
 
-This is the original source code from the game's development. The codebase is being modernized to:
+## Repository Layout
 
-1. Remove Windows/DirectX dependencies
-2. Implement cross-platform graphics and input systems
-3. Update the build system for modern development environments
-4. Preserve the original game mechanics and content
+- `src/` — game source and current porting work
+- `data/` — shipped game/module data used at runtime
+- `docs/` — reverse-engineering notes, architecture notes, and subsystem docs
+- `images/` — project screenshots and visual references
+- `thirdparty/` — embedded dependencies used by the modern build
 
 ## Building
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed information about the codebase structure and porting strategy.
+The project currently builds with CMake.
+
+```bash
+cmake -S . -B build
+cmake --build build
+```
+
+On macOS, the project links Metal/Cocoa/AppKit frameworks through `CMakeLists.txt`.
+
+## Running
+
+Run the executable from the repository root so the game can find `data/` and the runtime INI/log paths land where expected:
+
+```bash
+./build/Revenant
+```
+
+You can also start directly into a save:
+
+```bash
+./build/Revenant --loadmap=SAVEFILE.SAV
+```
+
+## Test Modes
+
+The active development workflow uses `--test=<mode>` to jump directly into focused subsystem checks.
+
+### Basic modes
+
+- `--test=blank` — simple animated clear color
+- `--test=ticker` — logs frame/time progression
+- `--test=font` — logs bitmap font diagnostics
+- `--test=text` — renders bitmap font atlas text
+- `--test=icon` — shows the built `SystemFont` atlas
+- `--test=ttf` — exercises stb_truetype atlas rendering
+- `--test=ui` — builds and previews a packed bitmap atlas from 2D imagery
+- `--test=i3d` — probes a few imagery resources and logs state/header info
+
+### Sector / map renderer mode
+
+This is the main graphics bring-up path right now:
+
+```bash
+./build/Revenant --test=sector
+```
+
+Useful sector-renderer variants:
+
+```bash
+./build/Revenant --test=sector --sector=0_2_25
+./build/Revenant --test=sector --level=0
+./build/Revenant --test=sector --level=1
+./build/Revenant --test=sector --level=51
+```
+
+Notes:
+
+- `--sector=L_X_Y` centers startup on the requested sector
+- `--level=L` loads every discovered sector for that level from the archived module data and picks an occupied startup area
+- if a requested `--level` has no sectors, startup now fails cleanly instead of opening an empty screen
+- startup logs now summarize sector count, object count, and renderable tile totals for large level loads
+
+## Useful Files
+
+- `docs/DEFERRED_LIGHTING.md` — current lighting/depth pipeline notes
+- `docs/FILE_FORMATS.md` — data format notes, including map sectors
+- `docs/PORT_PLAN.md` — broader porting roadmap
+- `docs/WORLD_MATH.md` — coordinate-space and projection notes
+
+## Status
+
+This is an active port/recovery effort, not a finished remaster. The codebase still contains a mix of original game code, modern platform replacements, and temporary test harnesses used to verify subsystems while the port is underway.
+
+## Authorship
+
+Original game and source material:
+
+- **Benjamin Cooley** and Cinematix Studios
+
+Original game publication:
+
+- **EIDOS Interactive** (1998)
 
 ## License
 
-[Add your license information here]
-
-## Author
-
-**Benjamin Cooley** - Original developer of Revenant (1998-1999)
-
----
-
-*Revenant was originally published by EIDOS Interactive in 1998. EIDOS is now owned by Square Enix.*
+No new license text has been added to this repository yet. Treat the code and shipped game assets accordingly until an explicit license is documented.
