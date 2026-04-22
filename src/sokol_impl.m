@@ -1,14 +1,16 @@
 // *************************************************************************
 // *                      RevenantRevisited (port)                         *
-// *  sokol_impl.m - Translation unit that instantiates the sokol headers. *
+// *  sokol_impl.m - Sokol implementation TU for Apple / Metal builds.     *
 // *                                                                       *
-// *  macOS build only: sokol_app + sokol_gfx share the Metal backend and  *
-// *  need to be compiled as Objective-C. Everything else in the project   *
-// *  includes the sokol headers as declarations.                          *
+// *  macOS only: sokol_app + sokol_gfx share the Metal backend and need   *
+// *  to be compiled as Objective-C. On Windows / Linux, CMake drops this  *
+// *  file and compiles sokol_impl.c against SOKOL_D3D11 / SOKOL_GLCORE33  *
+// *  instead. The SOKOL_<BACKEND> macro is set by the Revenant CMake      *
+// *  target so every TU that pulls in <sokol_gfx.h> sees the same        *
+// *  backend selection.                                                  *
 // *************************************************************************
 
 #define SOKOL_IMPL
-#define SOKOL_METAL
 
 #import <sokol_gfx.h>
 #import <sokol_app.h>

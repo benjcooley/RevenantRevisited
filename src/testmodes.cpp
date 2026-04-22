@@ -14,6 +14,7 @@
 #include "imageres.h"
 #include "logging.h"
 #include "maprenderer.h"
+#include "renderer.h"
 #include "revenant.h"
 #include "time.h"
 
@@ -170,7 +171,7 @@ void RenderUiMode()
             const int32_t cy = row * cell_h + cell_h / 2 - scroll + k * total_h;
             const int32_t dy = cy - fr.h / 2;
             if (dy + fr.h <= 0 || dy >= th) continue;
-            Display->Composite(
+            Renderer->Composite(
                 g_uiAtlas.image,
                 dx, dy, fr.w, fr.h,
                 tw, th,
@@ -193,7 +194,7 @@ void RenderIconMode()
     const int32_t dy = (th - atlas->height) / 2;
 
     Display->BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
-    Display->Composite(atlas->image, dx, dy, atlas->width, atlas->height, tw, th);
+    Renderer->Composite(atlas->image, dx, dy, atlas->width, atlas->height, tw, th);
     Display->BackBuffer()->EndPass();
 }
 
@@ -232,7 +233,7 @@ void RenderTTFMode()
                 const int32_t gy = (int32_t)(pen_y + r.yoff + 0.5f);
                 const int32_t gw = (int32_t)(r.xoff2 - r.xoff + 0.5f);
                 const int32_t gh = (int32_t)(r.yoff2 - r.yoff + 0.5f);
-                Display->Composite(
+                Renderer->Composite(
                     atlas->image,
                     gx, gy, gw, gh,
                     tw, th,
@@ -291,7 +292,7 @@ void RenderTextMode()
             {
                 const int32_t gx = pen_x - (int32_t)L.font->DrawLeft(ch);
                 const int32_t gy = pen_y - (int32_t)L.font->StartHeight(ch);
-                Display->Composite(
+                Renderer->Composite(
                     L.atlas->image,
                     gx, gy, r.w, r.h,
                     tw, th,

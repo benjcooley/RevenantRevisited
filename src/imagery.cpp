@@ -1057,17 +1057,13 @@ bool TObjectImagery::QuickLoadHeaders(time_t iflater)
     strcpy(filename, ResourcePath);
     strcat(filename, "IMAGERY.DAT");
 
+  // Is file later than the iflater time?
+    if (stat(filename, &s) != 0 || s.st_mtime <= iflater)
+        return false;   // No: don't use file, it's out of date
+
     FILE *f = fopen(filename, "rb");
     if (!f)
         return false;
-
-  // Is file later than the iflater time?
-    fstat(fileno(f), &s);
-    if (s.st_mtime <= iflater)
-    {
-        fclose(f);
-        return false;   // No: don't use file, it's out of date
-    }
 
     SQuickLoadHeader qh;
 

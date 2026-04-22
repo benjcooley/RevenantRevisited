@@ -17,7 +17,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 char sectorfilename[80] = "%d_%d_%d.DAT";
 uint32_t SectrorMapFCC = (('M' << 0) | ('A' << 8) | ('P' << 16) | (' ' << 24));
@@ -217,7 +216,7 @@ void TSector::Save()
     if (objects.NumItems() == 0)
     {
         // don't save empty sectors, and clear out old save file
-        unlink(filename);
+        std::remove(filename);
         return;
     }
 

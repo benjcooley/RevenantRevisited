@@ -2853,8 +2853,8 @@ bool TObjectClass::LoadClasses(bool lock, bool reload)
   // and use the lastest time stamp from that.
     if (!NoQuickLoad && !reload)
     {
-        fstat(fileno(classfp), &st);
-        TObjectImagery::QuickLoadHeaders(st.st_mtime);
+        if (stat(fname, &st) == 0)
+            TObjectImagery::QuickLoadHeaders(st.st_mtime);
     }
 
   // Now get first token... 
