@@ -24,6 +24,9 @@
 
 #include <sokol_gfx.h>
 
+#include <algorithm>
+#include <cstring>
+
 #include "revenant.h"
 #include "shaders/shaders.h"
 #include "surface.h"
@@ -141,6 +144,7 @@ bool TRenderer::Initialize(int32_t dwidth, int32_t dheight)
 
     InitCompositePipeline();
     InitTilePipeline();
+    InitMeshPipeline();
     InitAOPipeline();
     InitLightPipeline();
 
@@ -151,6 +155,7 @@ void TRenderer::Shutdown()
 {
     ShutdownLightPipeline();
     ShutdownAOPipeline();
+    ShutdownMeshPipeline();
     ShutdownTilePipeline();
     ShutdownCompositePipeline();
 
@@ -323,6 +328,208 @@ void TRenderer::ShutdownTilePipeline()
     if (tile_pipeline.id) { sg_destroy_pipeline(tile_pipeline); tile_pipeline = {}; }
     if (tile_shader.id)   { sg_destroy_shader(tile_shader);     tile_shader   = {}; }
     if (tile_vbuf.id)     { sg_destroy_buffer(tile_vbuf);       tile_vbuf     = {}; }
+}
+
+// *************************************************************************
+// * Mesh Pipeline  --  3D rigid mesh into G-buffer                        *
+// *************************************************************************
+//
+// Writes the same MRT targets as the tile pipeline (albedo / world normal /
+// scene_z + HW depth) from real 3D vertices. Per-instance data (world matrix
+// + tint) comes through a dynamic instance vertex buffer filled every
+// DrainMeshQueue; sorting by MeshHandle groups instances of the same asset
+// into single instanced draws.
+//
+// *************************************************************************
+
+void TRenderer::InitMeshPipeline()
+{
+    // Shader: 8 attribute slots. Slot 0..2 per-vertex; slot 3..7 per-instance
+    // (4 rows of the world matrix + tint). Single uniform block of 3 vec4s
+    // (vp / camz / camw) shared VS-side.
+    sg_shader_desc sh = {};
+    sh.attrs[0].name = "pos";       sh.attrs[0].sem_name = "POSITION"; sh.attrs[0].sem_index = 0;
+    sh.attrs[1].name = "normal";    sh.attrs[1].sem_name = "NORMAL";   sh.attrs[1].sem_index = 0;
+    sh.attrs[2].name = "uv";        sh.attrs[2].sem_name = "TEXCOORD"; sh.attrs[2].sem_index = 0;
+    sh.attrs[3].name = "w0";        sh.attrs[3].sem_name = "TEXCOORD"; sh.attrs[3].sem_index = 1;
+    sh.attrs[4].name = "w1";        sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 2;
+    sh.attrs[5].name = "w2";        sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 3;
+    sh.attrs[6].name = "w3";        sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 4;
+    sh.attrs[7].name = "tint";      sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 5;
+
+    sh.vs.source = kMeshVs;
+    sh.vs.entry  = kShaderVsEntry;
+    sh.vs.uniform_blocks[0].size = 3 * sizeof(float) * 4;
+    sh.vs.uniform_blocks[0].uniforms[0].name = "vp";
+    sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[1].name = "camz";
+    sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[2].name = "camw";
+    sh.vs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+
+    sh.fs.source = kMeshFs;
+    sh.fs.entry  = kShaderFsEntry;
+    sh.fs.images[0].name         = "albedo_tex";
+    sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
+    sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
+    sh.label = "renderer.mesh.shader";
+    mesh_shader = sg_make_shader(&sh);
+
+    sg_pipeline_desc pip = {};
+    pip.shader = mesh_shader;
+    // Vertex buffer 0: per-vertex (pos/normal/uv).
+    pip.layout.buffers[0].stride    = sizeof(SMeshVertex);
+    pip.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+    // Vertex buffer 1: per-instance (world rows + tint).
+    pip.layout.buffers[1].stride    = sizeof(float) * 20;   // 4*vec4 world + vec4 tint
+    pip.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
+    pip.layout.attrs[0].buffer_index = 0;
+    pip.layout.attrs[0].offset       = offsetof(SMeshVertex, pos);
+    pip.layout.attrs[0].format       = SG_VERTEXFORMAT_FLOAT3;
+    pip.layout.attrs[1].buffer_index = 0;
+    pip.layout.attrs[1].offset       = offsetof(SMeshVertex, normal);
+    pip.layout.attrs[1].format       = SG_VERTEXFORMAT_FLOAT3;
+    pip.layout.attrs[2].buffer_index = 0;
+    pip.layout.attrs[2].offset       = offsetof(SMeshVertex, uv);
+    pip.layout.attrs[2].format       = SG_VERTEXFORMAT_FLOAT2;
+    for (int32_t i = 0; i < 5; ++i) {
+        pip.layout.attrs[3 + i].buffer_index = 1;
+        pip.layout.attrs[3 + i].offset       = i * int32_t(sizeof(float)) * 4;
+        pip.layout.attrs[3 + i].format       = SG_VERTEXFORMAT_FLOAT4;
+    }
+    pip.index_type     = SG_INDEXTYPE_UINT16;
+    pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+    pip.cull_mode      = SG_CULLMODE_BACK;
+    pip.color_count            = 3;
+    pip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    pip.colors[0].blend.enabled = true;
+    pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+    pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pip.colors[1].pixel_format = SG_PIXELFORMAT_RGBA16F;
+    pip.colors[1].blend.enabled = false;
+    pip.colors[2].pixel_format = SG_PIXELFORMAT_R32F;
+    pip.colors[2].blend.enabled = false;
+    pip.depth.pixel_format  = SG_PIXELFORMAT_DEPTH;
+    pip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
+    pip.depth.write_enabled = true;
+    pip.label = "renderer.mesh.pipeline";
+    mesh_pipeline = sg_make_pipeline(&pip);
+
+    sg_buffer_desc ivb = {};
+    ivb.size  = kMaxMeshInstances * int32_t(sizeof(float)) * 20;
+    ivb.usage = SG_USAGE_STREAM;
+    ivb.label = "renderer.mesh.instance_vbuf";
+    mesh_instance_vb = sg_make_buffer(&ivb);
+}
+
+void TRenderer::ShutdownMeshPipeline()
+{
+    for (auto& m : meshes) {
+        if (m.vbuf.id) sg_destroy_buffer(m.vbuf);
+        if (m.ibuf.id) sg_destroy_buffer(m.ibuf);
+    }
+    meshes.clear();
+    if (mesh_instance_vb.id) { sg_destroy_buffer(mesh_instance_vb); mesh_instance_vb = {}; }
+    if (mesh_pipeline.id)    { sg_destroy_pipeline(mesh_pipeline);  mesh_pipeline    = {}; }
+    if (mesh_shader.id)      { sg_destroy_shader(mesh_shader);      mesh_shader      = {}; }
+}
+
+MeshHandle TRenderer::RegisterMesh(const SMeshVertex* verts, int32_t num_verts,
+                                   const uint16_t*  indices, int32_t num_indices,
+                                   sg_image albedo)
+{
+    if (!verts || !indices || num_verts <= 0 || num_indices <= 0) return 0;
+
+    SMeshEntry e = {};
+    sg_buffer_desc vbd = {};
+    vbd.size  = int(num_verts) * int(sizeof(SMeshVertex));
+    vbd.data  = { verts, size_t(vbd.size) };
+    vbd.label = "renderer.mesh.asset.vbuf";
+    e.vbuf = sg_make_buffer(&vbd);
+
+    sg_buffer_desc ibd = {};
+    ibd.type  = SG_BUFFERTYPE_INDEXBUFFER;
+    ibd.size  = int(num_indices) * int(sizeof(uint16_t));
+    ibd.data  = { indices, size_t(ibd.size) };
+    ibd.label = "renderer.mesh.asset.ibuf";
+    e.ibuf = sg_make_buffer(&ibd);
+
+    e.num_indices = num_indices;
+    e.albedo      = albedo;
+
+    meshes.push_back(e);
+    return MeshHandle(meshes.size());   // index+1
+}
+
+void TRenderer::SubmitMesh(const SMeshSubmit& m)
+{
+    if (m.mesh == 0 || m.mesh > meshes.size()) return;
+    mesh_queue.push_back(m);
+}
+
+void TRenderer::DrainMeshQueue()
+{
+    if (mesh_queue.empty() || !mesh_pipeline.id) return;
+
+    // Cap to what the instance buffer can hold.
+    if (int32_t(mesh_queue.size()) > kMaxMeshInstances)
+        mesh_queue.resize(kMaxMeshInstances);
+
+    // Sort by mesh handle so same-asset instances are contiguous.
+    std::sort(mesh_queue.begin(), mesh_queue.end(),
+              [](const SMeshSubmit& a, const SMeshSubmit& b) { return a.mesh < b.mesh; });
+
+    // Pack instance rows (20 floats each: w0..w3 + tint).
+    std::vector<float> inst;
+    inst.resize(mesh_queue.size() * 20);
+    for (size_t i = 0; i < mesh_queue.size(); ++i) {
+        const SMeshSubmit& s = mesh_queue[i];
+        float* dst = &inst[i * 20];
+        std::memcpy(dst,      s.world, sizeof(s.world));
+        std::memcpy(dst + 16, s.tint,  sizeof(s.tint));
+    }
+    const sg_range r = { inst.data(), inst.size() * sizeof(float) };
+    sg_update_buffer(mesh_instance_vb, &r);
+
+    sg_apply_pipeline(mesh_pipeline);
+
+    // Uniform block: vp/camz/camw.
+    float u[12] = {};
+    u[0] = recon.ox;
+    u[1] = recon.oy;
+    u[2] = float(width  + 2 * kGBufPad);
+    u[3] = float(height + 2 * kGBufPad);
+    u[4] = recon.z_near;
+    u[5] = recon.zspan;
+    u[6] = recon.kcam_forward;
+    u[7] = 0.0f;
+    u[8] = recon.center_wx;
+    u[9] = recon.center_wy;
+    u[10] = 0.0f;
+    u[11] = 0.0f;
+    const sg_range u_range = { u, sizeof(u) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+
+    // Emit one instanced draw per contiguous run of equal mesh handles.
+    size_t i = 0;
+    while (i < mesh_queue.size()) {
+        size_t j = i + 1;
+        while (j < mesh_queue.size() && mesh_queue[j].mesh == mesh_queue[i].mesh) ++j;
+
+        const SMeshEntry& me = meshes[mesh_queue[i].mesh - 1];
+        sg_bindings bind = {};
+        bind.vertex_buffers[0]        = me.vbuf;
+        bind.vertex_buffers[1]        = mesh_instance_vb;
+        bind.vertex_buffer_offsets[1] = int(i) * int(sizeof(float)) * 20;
+        bind.index_buffer             = me.ibuf;
+        bind.fs_images[0]             = me.albedo;
+        sg_apply_bindings(&bind);
+        sg_draw(0, me.num_indices, int(j - i));
+
+        i = j;
+    }
 }
 
 // *************************************************************************
@@ -578,7 +785,7 @@ void TRenderer::RunLightingPass()
 }
 
 // *************************************************************************
-// * Tile Pass Submission  (BeginTilePass / DrawTile / EndTilePass)        *
+// * Tile Pass Submission  (BeginTilePass / SubmitTile / EndTilePass)      *
 // *************************************************************************
 
 void TRenderer::BeginTilePass(float r, float g, float b, float a)
@@ -586,6 +793,7 @@ void TRenderer::BeginTilePass(float r, float g, float b, float a)
     if (!default_pass.id) return;
     tile_clear_rgba[0] = r; tile_clear_rgba[1] = g;
     tile_clear_rgba[2] = b; tile_clear_rgba[3] = a;
+    tile_queue.clear();
     sg_pass_action pa = {};
     pa.colors[0].action = SG_ACTION_CLEAR;
     pa.colors[0].value  = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -600,44 +808,44 @@ void TRenderer::BeginTilePass(float r, float g, float b, float a)
     color_target_dirty = true;
 }
 
-void TRenderer::DrawTile(sg_image color_img, sg_image depth_img,
-                         int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
-                         float anchor_z, float depth_mul, float normal_mul,
-                         float root_wx, float root_wy, float root_wz,
-                         float anchor_px_x, float anchor_px_y,
-                         float zraw_to_wu)
+void TRenderer::SubmitTile(const STileSubmit& t)
 {
-    if (!tile_pipeline.id || !color_img.id || !depth_img.id) return;
+    tile_queue.push_back(t);
+}
+
+void TRenderer::EmitTile(const STileSubmit& t)
+{
+    if (!tile_pipeline.id || !t.color_img.id || !t.depth_img.id) return;
     if (width <= 0 || height <= 0) return;
 
     sg_apply_pipeline(tile_pipeline);
     sg_bindings bind = {};
     bind.vertex_buffers[0] = tile_vbuf;
-    bind.fs_images[0]      = color_img;
-    bind.fs_images[1]      = depth_img;
+    bind.fs_images[0]      = t.color_img;
+    bind.fs_images[1]      = t.depth_img;
     sg_apply_bindings(&bind);
 
     const int32_t pad = kGBufPad;
     const int32_t gbw = width  + 2 * pad;
     const int32_t gbh = height + 2 * pad;
-    const int32_t px  = dst_x + pad;
-    const int32_t py  = dst_y + pad;
+    const int32_t px  = t.dst_x + pad;
+    const int32_t py  = t.dst_y + pad;
     const float nx = (2.0f * px / gbw)  - 1.0f;
-    const float nw = (2.0f * dst_w) / gbw;
-    const float ny = 1.0f - (2.0f * (py + dst_h) / gbh);
-    const float nh = (2.0f * dst_h) / gbh;
+    const float nw = (2.0f * t.dst_w) / gbw;
+    const float ny = 1.0f - (2.0f * (py + t.dst_h) / gbh);
+    const float nh = (2.0f * t.dst_h) / gbh;
 
     float uniforms[5 * 4] = {};
     int32_t off = 0;
     uniforms[off++] = nx; uniforms[off++] = ny; uniforms[off++] = nw; uniforms[off++] = nh;
-    uniforms[off++] = anchor_z;
-    uniforms[off++] = depth_mul;
-    uniforms[off++] = normal_mul;
+    uniforms[off++] = t.anchor_z;
+    uniforms[off++] = t.depth_mul;
+    uniforms[off++] = t.normal_mul;
     uniforms[off++] = 0.0f;
-    uniforms[off++] = root_wx; uniforms[off++] = root_wy;
-    uniforms[off++] = root_wz; uniforms[off++] = zraw_to_wu;
-    uniforms[off++] = anchor_px_x; uniforms[off++] = anchor_px_y;
-    uniforms[off++] = float(dst_w); uniforms[off++] = float(dst_h);
+    uniforms[off++] = t.root_wx; uniforms[off++] = t.root_wy;
+    uniforms[off++] = t.root_wz; uniforms[off++] = t.zraw_to_wu;
+    uniforms[off++] = t.anchor_px_x; uniforms[off++] = t.anchor_px_y;
+    uniforms[off++] = float(t.dst_w); uniforms[off++] = float(t.dst_h);
     uniforms[off++] = light.normal_radius;
     uniforms[off++] = light.edge_threshold;
     uniforms[off++] = 0.0f;
@@ -651,6 +859,10 @@ void TRenderer::DrawTile(sg_image color_img, sg_image depth_img,
 
 void TRenderer::EndTilePass()
 {
+    for (const auto& t : tile_queue)
+        EmitTile(t);
+    DrainMeshQueue();
+    mesh_queue.clear();
     sg_end_pass();
 }
 

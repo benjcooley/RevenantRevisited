@@ -941,10 +941,23 @@ void TMapRenderer::RenderFrame()
                         cov[size_t(cy) * size_t(cov_cw) + size_t(cx)] = 1;
             }
             ++draw_submitted;
-            Renderer->DrawTile(tex.color, tex.depth, dx, dy, tex.w, tex.h,
-                               anchor_scene_norm, std::fabs(zspan) > 1e-6f ? s.depth_mul / zspan : 0.0f, 1.0f,
-                               float(inst.world_pos.x), float(inst.world_pos.y), float(inst.world_pos.z),
-                               float(inst.regx), float(inst.regy), s.depth_mul);
+            STileSubmit sub = {};
+            sub.color_img   = tex.color;
+            sub.depth_img   = tex.depth;
+            sub.dst_x       = dx;
+            sub.dst_y       = dy;
+            sub.dst_w       = tex.w;
+            sub.dst_h       = tex.h;
+            sub.anchor_z    = anchor_scene_norm;
+            sub.depth_mul   = std::fabs(zspan) > 1e-6f ? s.depth_mul / zspan : 0.0f;
+            sub.normal_mul  = 1.0f;
+            sub.root_wx     = float(inst.world_pos.x);
+            sub.root_wy     = float(inst.world_pos.y);
+            sub.root_wz     = float(inst.world_pos.z);
+            sub.anchor_px_x = float(inst.regx);
+            sub.anchor_px_y = float(inst.regy);
+            sub.zraw_to_wu  = s.depth_mul;
+            Renderer->SubmitTile(sub);
         }
     }
     if (!draw_stats_logged) {

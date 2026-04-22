@@ -79,8 +79,50 @@
 
 #include <sokol_gfx.h>
 
+#include <vector>
+
 _CLASSDEF(TRenderer)
 _CLASSDEF(TSurface)
+
+// Per-tile submission payload. Scene code fills one of these per visible
+// tile and hands it to TRenderer::SubmitTile; TRenderer accumulates them
+// during a tile pass and emits draws at EndTilePass. Scene code never
+// issues GPU work directly.
+struct STileSubmit
+{
+    sg_image color_img;
+    sg_image depth_img;
+    int32_t  dst_x, dst_y, dst_w, dst_h;
+    float    anchor_z;        // normalized scene-z of the tile anchor [0..1]
+    float    depth_mul;       // bitmap-z -> normalized-scene-z scale
+    float    normal_mul;      // normal-reconstruction depth scale
+    float    root_wx, root_wy, root_wz;   // world xyz of the tile anchor
+    float    anchor_px_x, anchor_px_y;    // source-image anchor pixel
+    float    zraw_to_wu;      // bitmap-z -> world-units scale
+};
+
+// Opaque handle to a mesh registered with TRenderer. 0 is invalid.
+using MeshHandle = uint32_t;
+
+// Per-vertex layout for rigid meshes (mesh slot 0). Tight-packed, 32 bytes.
+struct SMeshVertex
+{
+    float pos[3];
+    float normal[3];
+    float uv[2];
+};
+
+// Per-instance submission payload. Scene code fills one of these per visible
+// mesh instance and hands it to TRenderer::SubmitMesh. TRenderer sorts by
+// mesh handle, uploads a dynamic instance vertex buffer, and emits one
+// instanced draw per mesh at EndTilePass (instancing is always on; a single
+// instance just means count=1).
+struct SMeshSubmit
+{
+    MeshHandle mesh;
+    float      world[16];     // row-major 4x4
+    float      tint[4];       // rgba multiplier
+};
 
 class TRenderer
 {
@@ -109,18 +151,23 @@ public:
 
     // ---- G-buffer fill (pass [1]) ---------------------------------------
     // Begin a pass on the MRT G-buffer (albedo/normal/scene_z + depth),
-    // clearing to the caller-supplied backdrop color. DrawTile issues any
-    // number of sprite draws; the fragment shader writes per-pixel depth
+    // clearing to the caller-supplied backdrop color. Scene code calls
+    // SubmitTile per visible tile -- TRenderer accumulates them and emits
+    // draws at EndTilePass. The fragment shader writes per-pixel depth
     // from the sampled bitmap-z plus anchor_z, so tiles interpenetrate
-    // correctly in world space. EndTilePass closes the pass.
+    // correctly in world space.
     void BeginTilePass(float r, float g, float b, float a);
-    void DrawTile(sg_image color_img, sg_image depth_img,
-                  int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
-                  float anchor_z, float depth_mul, float normal_mul,
-                  float root_wx, float root_wy, float root_wz,
-                  float anchor_px_x, float anchor_px_y,
-                  float zraw_to_wu);
+    void SubmitTile(const STileSubmit& t);
+    void SubmitMesh(const SMeshSubmit& m);
     void EndTilePass();
+
+    // ---- Mesh registry -------------------------------------------------
+    // Register a rigid mesh. TRenderer owns the resulting GPU buffers for
+    // the life of the renderer; there is no unregister today (meshes
+    // accumulate across a session). Returns 0 on failure.
+    MeshHandle RegisterMesh(const SMeshVertex* verts, int32_t num_verts,
+                            const uint16_t*  indices, int32_t num_indices,
+                            sg_image albedo);
 
     // ---- Scene lighting state -------------------------------------------
     // Directional sun. Normals are reconstructed per-fragment from the tile
@@ -241,6 +288,25 @@ private:
     sg_shader   light_shader   = {};
     sg_pipeline light_pipeline = {};
 
+    // Accumulated tile submissions for the current tile pass; drained in
+    // EndTilePass. Capacity is preserved across frames to avoid churn.
+    std::vector<STileSubmit> tile_queue;
+    std::vector<SMeshSubmit> mesh_queue;
+
+    // ---- Mesh pipeline -------------------------------------------------
+    sg_shader   mesh_shader      = {};
+    sg_pipeline mesh_pipeline    = {};
+    sg_buffer   mesh_instance_vb = {};   // dynamic, rebuilt each frame
+    static constexpr int32_t kMaxMeshInstances = 2048;
+
+    struct SMeshEntry {
+        sg_buffer vbuf;
+        sg_buffer ibuf;
+        int32_t   num_indices;
+        sg_image  albedo;
+    };
+    std::vector<SMeshEntry> meshes;   // index+1 is MeshHandle
+
     // Dirty flags -- read by PresentToSwapchain.
     bool color_target_dirty = false;
     bool lit_target_dirty   = false;
@@ -301,6 +367,14 @@ private:
     void InitLightPipeline();
     void ShutdownLightPipeline();
     void RunAOPass();
+
+    // Emit one queued tile as a single sg_draw (no instancing yet).
+    void EmitTile(const STileSubmit& t);
+
+    // Mesh pipeline lifecycle + per-frame drain.
+    void InitMeshPipeline();
+    void ShutdownMeshPipeline();
+    void DrainMeshQueue();
 };
 
 // Global renderer instance -- created by TDisplay::Initialize, destroyed by

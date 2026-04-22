@@ -30,6 +30,7 @@
 #if defined(SOKOL_METAL)
     #include "composite.metal.h"
     #include "tile.metal.h"
+    #include "mesh.metal.h"
     #include "ao.metal.h"
     #include "light.metal.h"
 
@@ -37,6 +38,8 @@
     inline constexpr const char* kCompositeFs = kCompositeFsMetal;
     inline constexpr const char* kTileVs      = kTileVsMetal;
     inline constexpr const char* kTileFs      = kTileFsMetal;
+    inline constexpr const char* kMeshVs      = kMeshVsMetal;
+    inline constexpr const char* kMeshFs      = kMeshFsMetal;
     inline constexpr const char* kAOVs        = kAOVsMetal;
     inline constexpr const char* kAOFs        = kAOFsMetal;
     inline constexpr const char* kLightVs     = kLightVsMetal;
@@ -46,6 +49,7 @@
 #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
     #include "composite.glsl.h"
     #include "tile.glsl.h"
+    #include "mesh.glsl.h"
     #include "ao.glsl.h"
     #include "light.glsl.h"
 
@@ -53,6 +57,8 @@
     inline constexpr const char* kCompositeFs = kCompositeFsGlsl;
     inline constexpr const char* kTileVs      = kTileVsGlsl;
     inline constexpr const char* kTileFs      = kTileFsGlsl;
+    inline constexpr const char* kMeshVs      = kMeshVsGlsl;
+    inline constexpr const char* kMeshFs      = kMeshFsGlsl;
     inline constexpr const char* kAOVs        = kAOVsGlsl;
     inline constexpr const char* kAOFs        = kAOFsGlsl;
     inline constexpr const char* kLightVs     = kLightVsGlsl;
@@ -62,6 +68,7 @@
 #elif defined(SOKOL_D3D11)
     #include "composite.hlsl.h"
     #include "tile.hlsl.h"
+    #include "mesh.hlsl.h"
     #include "ao.hlsl.h"
     #include "light.hlsl.h"
 
@@ -69,6 +76,8 @@
     inline constexpr const char* kCompositeFs = kCompositeFsHlsl;
     inline constexpr const char* kTileVs      = kTileVsHlsl;
     inline constexpr const char* kTileFs      = kTileFsHlsl;
+    inline constexpr const char* kMeshVs      = kMeshVsHlsl;
+    inline constexpr const char* kMeshFs      = kMeshFsHlsl;
     inline constexpr const char* kAOVs        = kAOVsHlsl;
     inline constexpr const char* kAOFs        = kAOFsHlsl;
     inline constexpr const char* kLightVs     = kLightVsHlsl;
