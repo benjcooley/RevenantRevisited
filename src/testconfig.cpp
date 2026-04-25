@@ -6,6 +6,9 @@
 
 #include "testconfig.h"
 
-char StartupTestMode[32] = "";
-char StartupSectorId[32] = "";
-char StartupLevelId[32] = "";
+char  StartupTestMode[32]     = "";
+char  StartupSectorId[32]     = "";
+char  StartupLevelId[32]      = "";
+char  StartupAssetPath[128]   = "";
+float StartupAssetScale       = 0.0f;   // 0 = auto-fit based on bbox
+char  StartupDumpTilesPath[MAXPATHLEN] = "";

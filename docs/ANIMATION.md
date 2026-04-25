@@ -1,5 +1,11 @@
 # Animation System in Revenant
 
+> **Note:** This document covers the **retail 1998 animation system** (data
+> formats, state machine, action blocks). The port reuses the retail data
+> on disk and the retail decoder, but everything above the decoder has
+> been replaced by a channel-based system. See
+> [ANIMATION_SYSTEM.md](ANIMATION_SYSTEM.md) for the rewrite.
+
 ## Overview
 
 Revenant features a sophisticated **3D skeletal animation system** with advanced character action management, animation blending, and transition systems. The system supports both **keyframe-based animation** and **motion data** for character movement, with a complex action state machine that handles combat, movement, and interactive animations.

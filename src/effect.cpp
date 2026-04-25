@@ -37,6 +37,46 @@
 
 TObjectClass EffectClass("EFFECT", OBJCLASS_EFFECT, 0);
 
+class TGenericEffectBuilder : public TObjectBuilder
+{
+  public:
+    TGenericEffectBuilder(const char* name) : TObjectBuilder(name) {}
+    TObjectInstance* Build(TObjectImagery* img) override { return new TEffect(img); }
+    TObjectInstance* Build(SObjectDef* def, TObjectImagery* img) override { return new TEffect(def, img); }
+};
+
+static TGenericEffectBuilder g_effect_builder("EFFECT");
+static TGenericEffectBuilder g_effect_builder_lower("effect");
+static TGenericEffectBuilder g_effect_stillwater_builder("StillWater");
+static TGenericEffectBuilder g_effect_flowwater_builder("FlowWater");
+static TGenericEffectBuilder g_effect_bendwater1_builder("BendWater1");
+static TGenericEffectBuilder g_effect_bendwater2_builder("BendWater2");
+static TGenericEffectBuilder g_effect_sewerwater_builder("SewerWater");
+static TGenericEffectBuilder g_effect_wave_builder("Wave");
+static TGenericEffectBuilder g_effect_waves_builder("WaveS");
+static TGenericEffectBuilder g_effect_wavem_builder("WaveM");
+static TGenericEffectBuilder g_effect_mistfog_builder("MistFog");
+static TGenericEffectBuilder g_effect_pixie_builder("Pixie");
+static TGenericEffectBuilder g_effect_speaker_builder("speaker");
+static TGenericEffectBuilder g_effect_speaker_caps_builder("Speaker");
+
+void TEffect::Pulse()
+{
+    TObjectInstance::Pulse();
+    SetFrame(0);
+    SetCommandDone(false);
+}
+
+void TEffect::KillThisEffect()
+{
+    flags |= OF_KILL | OF_PULSE;
+}
+
+int32_t TEffect::GetAngle()
+{
+    return angle;
+}
+
 void TBurnEffect::Set(PTCharacter ch)
 {
     character = ch;

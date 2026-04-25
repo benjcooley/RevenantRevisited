@@ -77,4 +77,5 @@ class TDisplay : public TSurface
     TSurface* backbuffer  = nullptr;
     TSurface* zbuffer     = nullptr;
     TSurface* savezbuffer = nullptr;
+    bool      imgui_initialized = false;
 };

@@ -9,6 +9,7 @@
 #include "bitmap.h"
 #include "display.h"
 #include "graphics.h"
+#include "logging.h"
 #include "object.h"
 #include "resource.h"
 
@@ -31,6 +32,43 @@ extern uint32_t ImageryMemUsage;
 static TVirtualArray <SImageryEntry> EntryArray;
 
 static char imagerypath[FILENAMELEN];
+
+static bool ContainsIgnoreCase(const char* haystack, const char* needle)
+{
+    if (!haystack || !needle || !*needle)
+        return false;
+    const size_t nlen = std::strlen(needle);
+    for (const char* p = haystack; *p; ++p)
+    {
+        size_t i = 0;
+        while (i < nlen && p[i] &&
+               std::tolower((unsigned char)p[i]) == std::tolower((unsigned char)needle[i]))
+            ++i;
+        if (i == nlen)
+            return true;
+    }
+    return false;
+}
+
+static bool IsWaterDebugImagery(const char* name)
+{
+    if (!name || !*name)
+        return false;
+    return ContainsIgnoreCase(name, "water.i3d") ||
+           ContainsIgnoreCase(name, "stillwater.i3d") ||
+           ContainsIgnoreCase(name, "flowwater.i3d") ||
+           ContainsIgnoreCase(name, "bendwater1.i3d") ||
+           ContainsIgnoreCase(name, "bendwater2.i3d") ||
+           ContainsIgnoreCase(name, "sewerw.i3d") ||
+           ContainsIgnoreCase(name, "wave.i3d") ||
+           ContainsIgnoreCase(name, "waves.i3d") ||
+           ContainsIgnoreCase(name, "wavem.i3d") ||
+           ContainsIgnoreCase(name, "wfall.i3d") ||
+           ContainsIgnoreCase(name, "wfall2.i3d") ||
+           ContainsIgnoreCase(name, "wcap.i3d") ||
+           ContainsIgnoreCase(name, "wcap2.i3d") ||
+           ContainsIgnoreCase(name, "riverfall.i3d");
+}
 
 //bool LoaderWait = false;
 
@@ -351,10 +389,14 @@ TObjectImagery* TObjectImagery::LoadImagery(int32_t imgid)
         return nullptr;
 
     RSImageryEntry ie = EntryArray[imgid];
+    const bool debug_water = IsWaterDebugImagery(ie.filename);
 
     if (ie.imagery)
     {
         ie.usecount++;
+        if (debug_water)
+            log_info("[waterdbg] reuse imagery id=%d file='%s' type=%d usecount=%d",
+                     imgid, ie.filename, ie.header ? int(ie.header->imageryid) : -1, ie.usecount);
     }
 
     else
@@ -363,11 +405,18 @@ TObjectImagery* TObjectImagery::LoadImagery(int32_t imgid)
         if (!imbuilder)
             return nullptr;
 
+        if (debug_water)
+            log_info("[waterdbg] build imagery id=%d file='%s' imageryid=%d",
+                     imgid, ie.filename, ie.header ? int(ie.header->imageryid) : -1);
+
         ie.imagery = imbuilder->Build(imgid);
         if (!ie.imagery)
             return nullptr;
 
         ie.usecount = 1;
+        if (debug_water)
+            log_info("[waterdbg] built imagery id=%d file='%s' obj=%p",
+                     imgid, ie.filename, (void*)ie.imagery);
     }
 
     ie.imagery->imageryid = imgid;

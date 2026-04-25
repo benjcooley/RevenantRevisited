@@ -49,6 +49,321 @@ namespace {
 
 struct SCompositeVertex { float x, y, u, v; };
 
+#if defined(SOKOL_METAL)
+inline constexpr const char* kHelperMeshVs = R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+#define ISO_COS30 0.867
+struct helper_vs_params {
+    float4 w0; float4 w1; float4 w2; float4 w3;
+    float4 vp; float4 camz; float4 camw;
+};
+struct vs_in {
+    float3 pos    [[attribute(0)]];
+    float3 normal [[attribute(1)]];
+    float2 uv     [[attribute(2)]];
+};
+struct vs_out {
+    float4 pos     [[position]];
+    float3 wpos;
+    float3 wnormal;
+    float2 uv;
+};
+vertex vs_out _main(vs_in in [[stage_in]],
+                    constant helper_vs_params& p [[buffer(0)]]) {
+    float4 ph = float4(in.pos, 1.0);
+    float3 wp = float3(dot(p.w0, ph), dot(p.w1, ph), dot(p.w2, ph));
+    float3 wn = normalize(float3(dot(p.w0.xyz, in.normal),
+                                 dot(p.w1.xyz, in.normal),
+                                 dot(p.w2.xyz, in.normal)));
+    float wx = wp.x - p.camw.x;
+    float wy = wp.y - p.camw.y;
+    float wz = wp.z;
+    float sum = wx + wy;
+    float S   = wx - wy;
+    float T   = 0.5 * sum - wz * ISO_COS30;
+    float spx = p.vp.x + S;
+    float spy = p.vp.y + T;
+    float scene_z_wu = p.camz.z - ISO_COS30 * sum - 0.5 * wz;
+    float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
+    vs_out o;
+    o.pos.x = 2.0 * spx / max(p.vp.z, 1.0) - 1.0;
+    o.pos.y = 1.0 - 2.0 * spy / max(p.vp.w, 1.0);
+    o.pos.z = scene_z_n;
+    o.pos.w = 1.0;
+    o.wpos = wp;
+    o.wnormal = wn;
+    o.uv = in.uv;
+    return o;
+}
+)MSL";
+inline constexpr const char* kHelperMeshFs = R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+struct vs_out {
+    float4 pos     [[position]];
+    float3 wpos;
+    float3 wnormal;
+    float2 uv;
+    float4 tint;
+    float  scene_z;
+};
+struct helper_params {
+    float4 diffuse;
+    float4 ambient;
+    float4 specular;
+    float4 emissive;
+    float4 light_dir_i;
+    float4 light_col_a;
+    float4 view_dir_power;
+};
+fragment float4 _main(vs_out in [[stage_in]],
+                      constant helper_params& hp [[buffer(0)]],
+                      texture2d<float> albedo_tex [[texture(0)]],
+                      sampler smp [[sampler(0)]]) {
+    float4 tex = albedo_tex.sample(smp, in.uv);
+    float alpha = tex.a * max(max(hp.diffuse.a, hp.ambient.a), max(hp.specular.a, hp.emissive.a));
+    if (alpha < 0.01) discard_fragment();
+    float3 N = normalize(in.wnormal);
+    float3 L = normalize(hp.light_dir_i.xyz);
+    float3 V = normalize(hp.view_dir_power.xyz);
+    float3 H = normalize(L + V);
+    float ndl = max(dot(N, L), 0.0);
+    float spec = (ndl > 0.0) ? pow(max(dot(N, H), 0.0), max(hp.view_dir_power.w, 1.0)) : 0.0;
+    float3 base = tex.rgb * hp.diffuse.rgb;
+    float3 col = base * (hp.ambient.rgb * hp.light_col_a.w + hp.light_col_a.rgb * hp.light_dir_i.w * ndl)
+               + hp.specular.rgb * spec * hp.light_dir_i.w
+               + hp.emissive.rgb;
+    return float4(col, alpha);
+}
+)MSL";
+inline constexpr const char* kTransparentTileFs = R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+struct params { float4 rect; float4 zparams; float4 tile_root; float4 tile_sprite;
+                float4 filter; };
+struct vs_out { float4 pos [[position]]; float2 uv; };
+struct fs_out { float4 color [[color(0)]];
+                float  depth [[depth(any)]]; };
+fragment fs_out _main(vs_out in [[stage_in]],
+                      texture2d<float> color_tex [[texture(0)]],
+                      texture2d<float> depth_tex [[texture(1)]],
+                      sampler smp [[sampler(0)]],
+                      constant params& p [[buffer(0)]]) {
+    fs_out o;
+    float4 c = color_tex.sample(smp, in.uv);
+    if (c.a < 0.01) discard_fragment();
+    float zraw = depth_tex.sample(smp, in.uv).r;
+    float d    = p.zparams.x + zraw * p.zparams.y;
+    if (d < 0.0 || d > 1.0) discard_fragment();
+    o.color = c;
+    o.depth = d;
+    return o;
+}
+)MSL";
+#elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
+inline constexpr const char* kHelperMeshVs = R"GLSL(
+#version 330
+#define ISO_COS30 0.867
+layout(location = 0) in vec3 pos;
+layout(location = 1) in vec3 normal;
+layout(location = 2) in vec2 uv;
+layout(std140) uniform helper_vs_params {
+    vec4 w0; vec4 w1; vec4 w2; vec4 w3;
+    vec4 vp; vec4 camz; vec4 camw;
+};
+out vec3  v_wpos;
+out vec3  v_wnormal;
+out vec2  v_uv;
+void main() {
+    vec4 ph = vec4(pos, 1.0);
+    vec3 wp = vec3(dot(w0, ph), dot(w1, ph), dot(w2, ph));
+    vec3 wn = normalize(vec3(dot(w0.xyz, normal), dot(w1.xyz, normal), dot(w2.xyz, normal)));
+    float wx = wp.x - camw.x;
+    float wy = wp.y - camw.y;
+    float wz = wp.z;
+    float sum = wx + wy;
+    float S   = wx - wy;
+    float T   = 0.5 * sum - wz * ISO_COS30;
+    float spx = vp.x + S;
+    float spy = vp.y + T;
+    float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
+    float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    gl_Position = vec4(2.0 * spx / max(vp.z, 1.0) - 1.0,
+                       1.0 - 2.0 * spy / max(vp.w, 1.0),
+                       scene_z_n, 1.0);
+    v_wpos = wp;
+    v_wnormal = wn;
+    v_uv = uv;
+}
+)GLSL";
+inline constexpr const char* kHelperMeshFs = R"GLSL(
+#version 330
+in vec3  v_wpos;
+in vec3  v_wnormal;
+in vec2  v_uv;
+in vec4  v_tint;
+in float v_scene_z;
+layout(std140) uniform helper_params {
+    vec4 diffuse;
+    vec4 ambient;
+    vec4 specular;
+    vec4 emissive;
+    vec4 light_dir_i;
+    vec4 light_col_a;
+    vec4 view_dir_power;
+};
+uniform sampler2D albedo_tex;
+out vec4 fragColor;
+void main() {
+    vec4 tex = texture(albedo_tex, v_uv);
+    float alpha = tex.a * max(max(diffuse.a, ambient.a), max(specular.a, emissive.a));
+    if (alpha < 0.01) discard;
+    vec3 N = normalize(v_wnormal);
+    vec3 L = normalize(light_dir_i.xyz);
+    vec3 V = normalize(view_dir_power.xyz);
+    vec3 H = normalize(L + V);
+    float ndl = max(dot(N, L), 0.0);
+    float spec = (ndl > 0.0) ? pow(max(dot(N, H), 0.0), max(view_dir_power.w, 1.0)) : 0.0;
+    vec3 base = tex.rgb * diffuse.rgb;
+    vec3 col = base * (ambient.rgb * light_col_a.w + light_col_a.rgb * light_dir_i.w * ndl)
+             + specular.rgb * spec * light_dir_i.w
+             + emissive.rgb;
+    fragColor = vec4(col, alpha);
+}
+)GLSL";
+inline constexpr const char* kTransparentTileFs = R"GLSL(
+#version 330
+layout(std140) uniform params {
+    vec4 rect;
+    vec4 zparams;
+    vec4 tile_root;
+    vec4 tile_sprite;
+    vec4 filter_;
+};
+in vec2 v_uv;
+uniform sampler2D color_tex;
+uniform sampler2D depth_tex;
+out vec4 fragColor;
+void main() {
+    vec4 c = texture(color_tex, v_uv);
+    if (c.a < 0.01) discard;
+    float zraw = texture(depth_tex, v_uv).r;
+    float d    = zparams.x + zraw * zparams.y;
+    if (d < 0.0 || d > 1.0) discard;
+    fragColor = c;
+    gl_FragDepth = d;
+}
+)GLSL";
+#elif defined(SOKOL_D3D11)
+inline constexpr const char* kHelperMeshVs = R"HLSL(
+#define ISO_COS30 0.867
+cbuffer helper_vs_params : register(b0) {
+    float4 w0; float4 w1; float4 w2; float4 w3;
+    float4 vp; float4 camz; float4 camw;
+};
+struct vs_in {
+    float3 pos    : POSITION;
+    float3 normal : NORMAL;
+    float2 uv     : TEXCOORD0;
+};
+struct vs_out {
+    float4 pos     : SV_Position;
+    float3 wpos    : TEXCOORD0;
+    float3 wnormal : TEXCOORD1;
+    float2 uv      : TEXCOORD2;
+};
+vs_out main_vs(vs_in i) {
+    float4 ph = float4(i.pos, 1.0);
+    float3 wp = float3(dot(w0, ph), dot(w1, ph), dot(w2, ph));
+    float3 wn = normalize(float3(dot(w0.xyz, i.normal), dot(w1.xyz, i.normal), dot(w2.xyz, i.normal)));
+    float wx = wp.x - camw.x;
+    float wy = wp.y - camw.y;
+    float wz = wp.z;
+    float sum = wx + wy;
+    float S   = wx - wy;
+    float T   = 0.5 * sum - wz * ISO_COS30;
+    float spx = vp.x + S;
+    float spy = vp.y + T;
+    float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
+    float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    vs_out o;
+    o.pos = float4(2.0 * spx / max(vp.z, 1.0) - 1.0,
+                   1.0 - 2.0 * spy / max(vp.w, 1.0),
+                   scene_z_n, 1.0);
+    o.wpos = wp;
+    o.wnormal = wn;
+    o.uv = i.uv;
+    return o;
+}
+)HLSL";
+inline constexpr const char* kHelperMeshFs = R"HLSL(
+cbuffer helper_params : register(b0) {
+    float4 diffuse;
+    float4 ambient;
+    float4 specular;
+    float4 emissive;
+    float4 light_dir_i;
+    float4 light_col_a;
+    float4 view_dir_power;
+};
+Texture2D albedo_tex : register(t0);
+SamplerState smp : register(s0);
+struct ps_in {
+    float4 pos : SV_POSITION;
+    float3 wpos : TEXCOORD0;
+    float3 wnormal : TEXCOORD1;
+    float2 uv : TEXCOORD2;
+    float4 tint : TEXCOORD3;
+    float  scene_z : TEXCOORD4;
+};
+float4 main_ps(ps_in input) : SV_Target0 {
+    float4 tex = albedo_tex.Sample(smp, input.uv);
+    float alpha = tex.a * max(max(diffuse.a, ambient.a), max(specular.a, emissive.a));
+    clip(alpha - 0.01);
+    float3 N = normalize(input.wnormal);
+    float3 L = normalize(light_dir_i.xyz);
+    float3 V = normalize(view_dir_power.xyz);
+    float3 H = normalize(L + V);
+    float ndl = max(dot(N, L), 0.0);
+    float specPow = (ndl > 0.0) ? pow(max(dot(N, H), 0.0), max(view_dir_power.w, 1.0)) : 0.0;
+    float3 base = tex.rgb * diffuse.rgb;
+    float3 col = base * (ambient.rgb * light_col_a.w + light_col_a.rgb * light_dir_i.w * ndl)
+               + specular.rgb * specPow * light_dir_i.w
+               + emissive.rgb;
+    return float4(col, alpha);
+}
+)HLSL";
+inline constexpr const char* kTransparentTileFs = R"HLSL(
+cbuffer params : register(b0) {
+    float4 rect;
+    float4 zparams;
+    float4 tile_root;
+    float4 tile_sprite;
+    float4 filter_;
+};
+Texture2D    color_tex : register(t0);
+Texture2D    depth_tex : register(t1);
+SamplerState smp       : register(s0);
+struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
+struct fs_out {
+    float4 color : SV_Target0;
+    float  depth : SV_Depth;
+};
+fs_out main_ps(vs_out in_) {
+    fs_out o;
+    float4 c = color_tex.Sample(smp, in_.uv);
+    if (c.a < 0.01) discard;
+    float zraw = depth_tex.Sample(smp, in_.uv).r;
+    float d    = zparams.x + zraw * zparams.y;
+    if (d < 0.0 || d > 1.0) discard;
+    o.color = c;
+    o.depth = d;
+    return o;
+}
+)HLSL";
+#endif
+
 // Unit quad in [0,1]^2 with UVs. Shared by composite, tile, AO, and light
 // pipelines. UV.y is flipped so row 0 of a source image lands at the top.
 const SCompositeVertex kCompositeQuad[6] = {
@@ -134,6 +449,11 @@ bool TRenderer::Initialize(int32_t dwidth, int32_t dheight)
     lit_desc.color_attachments[0].image = lit_target;
     lit_pass = sg_make_pass(&lit_desc);
 
+    sg_pass_desc helper_desc = {};
+    helper_desc.color_attachments[0].image = lit_target;
+    helper_desc.depth_stencil_attachment.image = depth_target;
+    helper_pass = sg_make_pass(&helper_desc);
+
     // Pass [2] -- screen-space AO.
     sg_pass_desc ao_desc = {};
     ao_desc.color_attachments[0].image = ao_target;
@@ -161,6 +481,7 @@ void TRenderer::Shutdown()
 
     if (default_pass.id) { sg_destroy_pass(default_pass); default_pass = {}; }
     if (lit_pass.id)     { sg_destroy_pass(lit_pass);     lit_pass     = {}; }
+    if (helper_pass.id)  { sg_destroy_pass(helper_pass);  helper_pass  = {}; }
     if (ao_pass.id)      { sg_destroy_pass(ao_pass);      ao_pass      = {}; }
 
     if (color_target.id)   { sg_destroy_image(color_target);   color_target   = {}; }
@@ -321,10 +642,36 @@ void TRenderer::InitTilePipeline()
     pip.depth.write_enabled    = true;
     pip.label = "renderer.tile.pipeline";
     tile_pipeline = sg_make_pipeline(&pip);
+
+    sg_shader_desc tsh = sh;
+    tsh.fs.source = kTransparentTileFs;
+    tsh.fs.entry  = kShaderFsEntry;
+    tsh.label = "renderer.transparent_tile.shader";
+    transparent_tile_shader = sg_make_shader(&tsh);
+
+    sg_pipeline_desc tpip = {};
+    tpip.shader = transparent_tile_shader;
+    tpip.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+    tpip.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
+    tpip.primitive_type         = SG_PRIMITIVETYPE_TRIANGLES;
+    tpip.color_count            = 1;
+    tpip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    tpip.colors[0].blend.enabled = true;
+    tpip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+    tpip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    tpip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    tpip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    tpip.depth.pixel_format     = SG_PIXELFORMAT_DEPTH;
+    tpip.depth.compare          = SG_COMPAREFUNC_LESS_EQUAL;
+    tpip.depth.write_enabled    = false;
+    tpip.label = "renderer.transparent_tile.pipeline";
+    transparent_tile_pipeline = sg_make_pipeline(&tpip);
 }
 
 void TRenderer::ShutdownTilePipeline()
 {
+    if (transparent_tile_pipeline.id) { sg_destroy_pipeline(transparent_tile_pipeline); transparent_tile_pipeline = {}; }
+    if (transparent_tile_shader.id)   { sg_destroy_shader(transparent_tile_shader);     transparent_tile_shader   = {}; }
     if (tile_pipeline.id) { sg_destroy_pipeline(tile_pipeline); tile_pipeline = {}; }
     if (tile_shader.id)   { sg_destroy_shader(tile_shader);     tile_shader   = {}; }
     if (tile_vbuf.id)     { sg_destroy_buffer(tile_vbuf);       tile_vbuf     = {}; }
@@ -399,7 +746,7 @@ void TRenderer::InitMeshPipeline()
     }
     pip.index_type     = SG_INDEXTYPE_UINT16;
     pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-    pip.cull_mode      = SG_CULLMODE_BACK;
+    pip.cull_mode      = SG_CULLMODE_NONE;
     pip.color_count            = 3;
     pip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
     pip.colors[0].blend.enabled = true;
@@ -417,6 +764,95 @@ void TRenderer::InitMeshPipeline()
     pip.label = "renderer.mesh.pipeline";
     mesh_pipeline = sg_make_pipeline(&pip);
 
+    sg_shader_desc hsh = {};
+    hsh.attrs[0].name = "pos";       hsh.attrs[0].sem_name = "POSITION"; hsh.attrs[0].sem_index = 0;
+    hsh.attrs[1].name = "normal";    hsh.attrs[1].sem_name = "NORMAL";   hsh.attrs[1].sem_index = 0;
+    hsh.attrs[2].name = "uv";        hsh.attrs[2].sem_name = "TEXCOORD"; hsh.attrs[2].sem_index = 0;
+    hsh.vs.source = kHelperMeshVs;
+    hsh.vs.entry  = kShaderVsEntry;
+    hsh.vs.uniform_blocks[0].size = 7 * sizeof(float) * 4;
+    hsh.vs.uniform_blocks[0].uniforms[0].name = "w0";
+    hsh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[1].name = "w1";
+    hsh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[2].name = "w2";
+    hsh.vs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[3].name = "w3";
+    hsh.vs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[4].name = "vp";
+    hsh.vs.uniform_blocks[0].uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[5].name = "camz";
+    hsh.vs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[6].name = "camw";
+    hsh.vs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.fs.source = kHelperMeshFs;
+    hsh.fs.entry  = kShaderFsEntry;
+    hsh.fs.uniform_blocks[0].size = 7 * sizeof(float) * 4;
+    hsh.fs.uniform_blocks[0].uniforms[0].name = "diffuse";
+    hsh.fs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.fs.uniform_blocks[0].uniforms[1].name = "ambient";
+    hsh.fs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.fs.uniform_blocks[0].uniforms[2].name = "specular";
+    hsh.fs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.fs.uniform_blocks[0].uniforms[3].name = "emissive";
+    hsh.fs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.fs.uniform_blocks[0].uniforms[4].name = "light_dir_i";
+    hsh.fs.uniform_blocks[0].uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.fs.uniform_blocks[0].uniforms[5].name = "light_col_a";
+    hsh.fs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.fs.uniform_blocks[0].uniforms[6].name = "view_dir_power";
+    hsh.fs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.fs.images[0].name         = "albedo_tex";
+    hsh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
+    hsh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
+    hsh.label = "renderer.helper.shader";
+    helper_mesh_shader = sg_make_shader(&hsh);
+
+    sg_pipeline_desc hpip = {};
+    hpip.shader = helper_mesh_shader;
+    hpip.layout.buffers[0].stride    = sizeof(SMeshVertex);
+    hpip.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+    hpip.layout.attrs[0].buffer_index = 0;
+    hpip.layout.attrs[0].offset       = offsetof(SMeshVertex, pos);
+    hpip.layout.attrs[0].format       = SG_VERTEXFORMAT_FLOAT3;
+    hpip.layout.attrs[1].buffer_index = 0;
+    hpip.layout.attrs[1].offset       = offsetof(SMeshVertex, normal);
+    hpip.layout.attrs[1].format       = SG_VERTEXFORMAT_FLOAT3;
+    hpip.layout.attrs[2].buffer_index = 0;
+    hpip.layout.attrs[2].offset       = offsetof(SMeshVertex, uv);
+    hpip.layout.attrs[2].format       = SG_VERTEXFORMAT_FLOAT2;
+    hpip.index_type     = SG_INDEXTYPE_UINT16;
+    hpip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+    hpip.cull_mode      = SG_CULLMODE_FRONT;
+    hpip.color_count = 1;
+    hpip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    hpip.colors[0].blend.enabled = true;
+    hpip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+    hpip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    hpip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    hpip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    hpip.depth.pixel_format  = SG_PIXELFORMAT_DEPTH;
+    hpip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
+    hpip.depth.write_enabled = false;
+    hpip.label = "renderer.helper.back.pipeline";
+    helper_mesh_back_pipeline = sg_make_pipeline(&hpip);
+
+    hpip.cull_mode = SG_CULLMODE_BACK;
+    hpip.label = "renderer.helper.front.pipeline";
+    helper_mesh_front_pipeline = sg_make_pipeline(&hpip);
+
+    hpip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_ONE;
+    hpip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE;
+    hpip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    hpip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+    hpip.cull_mode = SG_CULLMODE_FRONT;
+    hpip.label = "renderer.helper.add.back.pipeline";
+    helper_mesh_add_back_pipeline = sg_make_pipeline(&hpip);
+
+    hpip.cull_mode = SG_CULLMODE_BACK;
+    hpip.label = "renderer.helper.add.front.pipeline";
+    helper_mesh_add_front_pipeline = sg_make_pipeline(&hpip);
+
     sg_buffer_desc ivb = {};
     ivb.size  = kMaxMeshInstances * int32_t(sizeof(float)) * 20;
     ivb.usage = SG_USAGE_STREAM;
@@ -432,6 +868,11 @@ void TRenderer::ShutdownMeshPipeline()
     }
     meshes.clear();
     if (mesh_instance_vb.id) { sg_destroy_buffer(mesh_instance_vb); mesh_instance_vb = {}; }
+    if (helper_mesh_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_back_pipeline); helper_mesh_back_pipeline = {}; }
+    if (helper_mesh_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_front_pipeline); helper_mesh_front_pipeline = {}; }
+    if (helper_mesh_add_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_back_pipeline); helper_mesh_add_back_pipeline = {}; }
+    if (helper_mesh_add_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_front_pipeline); helper_mesh_add_front_pipeline = {}; }
+    if (helper_mesh_shader.id)   { sg_destroy_shader(helper_mesh_shader); helper_mesh_shader = {}; }
     if (mesh_pipeline.id)    { sg_destroy_pipeline(mesh_pipeline);  mesh_pipeline    = {}; }
     if (mesh_shader.id)      { sg_destroy_shader(mesh_shader);      mesh_shader      = {}; }
 }
@@ -463,10 +904,37 @@ MeshHandle TRenderer::RegisterMesh(const SMeshVertex* verts, int32_t num_verts,
     return MeshHandle(meshes.size());   // index+1
 }
 
+void TRenderer::SetMeshAlbedo(MeshHandle mesh, sg_image albedo)
+{
+    if (mesh == 0 || mesh > meshes.size() || !albedo.id)
+        return;
+    meshes[mesh - 1].albedo = albedo;
+}
+
 void TRenderer::SubmitMesh(const SMeshSubmit& m)
 {
     if (m.mesh == 0 || m.mesh > meshes.size()) return;
     mesh_queue.push_back(m);
+}
+
+void TRenderer::SubmitTransparentTile(const STileSubmit& t)
+{
+    if (!t.color_img.id || !t.depth_img.id) return;
+    STransparentWorldSubmit sub = {};
+    sub.kind = ETransparentWorldKind::Tile;
+    sub.sort_depth = t.sort_depth;
+    sub.tile = t;
+    transparent_world_queue.push_back(sub);
+}
+
+void TRenderer::SubmitHelperMesh(const SHelperMeshSubmit& m)
+{
+    if (m.mesh == 0 || m.mesh > meshes.size()) return;
+    STransparentWorldSubmit sub = {};
+    sub.kind = ETransparentWorldKind::Helper;
+    sub.sort_depth = m.sort_depth;
+    sub.helper = m;
+    transparent_world_queue.push_back(sub);
 }
 
 void TRenderer::DrainMeshQueue()
@@ -530,6 +998,131 @@ void TRenderer::DrainMeshQueue()
 
         i = j;
     }
+}
+
+void TRenderer::EmitTransparentTile(const STileSubmit& t)
+{
+    if (!transparent_tile_pipeline.id || !t.color_img.id || !t.depth_img.id) return;
+
+    sg_apply_pipeline(transparent_tile_pipeline);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = tile_vbuf;
+    bind.fs_images[0]      = t.color_img;
+    bind.fs_images[1]      = t.depth_img;
+    sg_apply_bindings(&bind);
+
+    const int32_t pad = kGBufPad;
+    const int32_t gbw = width  + 2 * pad;
+    const int32_t gbh = height + 2 * pad;
+    const int32_t px  = t.dst_x + pad;
+    const int32_t py  = t.dst_y + pad;
+    const float nx = (2.0f * px / gbw)  - 1.0f;
+    const float nw = (2.0f * t.dst_w) / gbw;
+    const float ny = 1.0f - (2.0f * (py + t.dst_h) / gbh);
+    const float nh = (2.0f * t.dst_h) / gbh;
+
+    float uniforms[5 * 4] = {};
+    int32_t off = 0;
+    uniforms[off++] = nx; uniforms[off++] = ny; uniforms[off++] = nw; uniforms[off++] = nh;
+    uniforms[off++] = t.anchor_z;
+    uniforms[off++] = t.depth_mul;
+    uniforms[off++] = t.normal_mul;
+    uniforms[off++] = 0.0f;
+    uniforms[off++] = t.root_wx; uniforms[off++] = t.root_wy;
+    uniforms[off++] = t.root_wz; uniforms[off++] = t.zraw_to_wu;
+    uniforms[off++] = t.anchor_px_x; uniforms[off++] = t.anchor_px_y;
+    uniforms[off++] = float(t.dst_w); uniforms[off++] = float(t.dst_h);
+    uniforms[off++] = light.normal_radius;
+    uniforms[off++] = light.edge_threshold;
+    uniforms[off++] = 0.0f;
+    uniforms[off++] = 0.0f;
+
+    const sg_range u_range = { uniforms, sizeof(uniforms) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
+    sg_draw(0, 6, 1);
+}
+
+void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
+{
+    sg_pipeline back_pipeline = s.additive_blend ? helper_mesh_add_back_pipeline : helper_mesh_back_pipeline;
+    sg_pipeline front_pipeline = s.additive_blend ? helper_mesh_add_front_pipeline : helper_mesh_front_pipeline;
+    if (!back_pipeline.id || !front_pipeline.id) return;
+
+    const float view_dir[4] = { -0.5f, -0.5f, 1.0f, 1.0f };
+    const SMeshEntry& me = meshes[s.mesh - 1];
+
+    sg_apply_pipeline(back_pipeline);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = me.vbuf;
+    bind.index_buffer = me.ibuf;
+    bind.fs_images[0] = me.albedo;
+    sg_apply_bindings(&bind);
+
+    float vsu[28] = {};
+    int vo = 0;
+    std::memcpy(&vsu[vo], s.world + 0,  sizeof(float) * 4); vo += 4;
+    std::memcpy(&vsu[vo], s.world + 4,  sizeof(float) * 4); vo += 4;
+    std::memcpy(&vsu[vo], s.world + 8,  sizeof(float) * 4); vo += 4;
+    std::memcpy(&vsu[vo], s.world + 12, sizeof(float) * 4); vo += 4;
+    vsu[vo++] = recon.ox;
+    vsu[vo++] = recon.oy;
+    vsu[vo++] = float(width  + 2 * kGBufPad);
+    vsu[vo++] = float(height + 2 * kGBufPad);
+    vsu[vo++] = recon.z_near;
+    vsu[vo++] = recon.zspan;
+    vsu[vo++] = recon.kcam_forward;
+    vsu[vo++] = 0.0f;
+    vsu[vo++] = recon.center_wx;
+    vsu[vo++] = recon.center_wy;
+    vsu[vo++] = 0.0f;
+    vsu[vo++] = 0.0f;
+    const sg_range vsr = { vsu, sizeof(vsu) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsr);
+
+    float fsu[28] = {};
+    int o = 0;
+    std::memcpy(&fsu[o], s.diffuse, sizeof(s.diffuse)); o += 4;
+    std::memcpy(&fsu[o], s.ambient, sizeof(s.ambient)); o += 4;
+    std::memcpy(&fsu[o], s.specular, sizeof(s.specular)); o += 4;
+    std::memcpy(&fsu[o], s.emissive, sizeof(s.emissive)); o += 4;
+    fsu[o++] = light.dir[0]; fsu[o++] = light.dir[1]; fsu[o++] = light.dir[2]; fsu[o++] = light.intensity;
+    fsu[o++] = light.color[0]; fsu[o++] = light.color[1]; fsu[o++] = light.color[2]; fsu[o++] = light.ambient;
+    fsu[o++] = view_dir[0]; fsu[o++] = view_dir[1]; fsu[o++] = view_dir[2]; fsu[o++] = s.power;
+    const sg_range fsr = { fsu, sizeof(fsu) };
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fsr);
+
+    sg_draw(0, me.num_indices, 1);
+    sg_apply_pipeline(front_pipeline);
+    sg_apply_bindings(&bind);
+    sg_draw(0, me.num_indices, 1);
+}
+
+void TRenderer::DrainTransparentWorldQueue()
+{
+    if (transparent_world_queue.empty() || !helper_pass.id) return;
+
+    std::stable_sort(transparent_world_queue.begin(), transparent_world_queue.end(),
+                     [](const STransparentWorldSubmit& a, const STransparentWorldSubmit& b)
+                     {
+                         return a.sort_depth < b.sort_depth;
+                     });
+
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_LOAD;
+    pa.depth.action = SG_ACTION_LOAD;
+    pa.stencil.action = SG_ACTION_DONTCARE;
+    sg_begin_pass(helper_pass, &pa);
+    for (const auto& s : transparent_world_queue)
+    {
+        if (s.kind == ETransparentWorldKind::Tile)
+            EmitTransparentTile(s.tile);
+        else
+            EmitTransparentHelper(s.helper);
+    }
+    sg_end_pass();
+    transparent_world_queue.clear();
+    lit_target_dirty = true;
 }
 
 // *************************************************************************
@@ -781,6 +1374,8 @@ void TRenderer::RunLightingPass()
     sg_draw(0, 6, 1);
     sg_end_pass();
 
+    DrainTransparentWorldQueue();
+    DrainOverlayQueue();
     lit_target_dirty = true;
 }
 
@@ -794,6 +1389,8 @@ void TRenderer::BeginTilePass(float r, float g, float b, float a)
     tile_clear_rgba[0] = r; tile_clear_rgba[1] = g;
     tile_clear_rgba[2] = b; tile_clear_rgba[3] = a;
     tile_queue.clear();
+    transparent_world_queue.clear();
+    overlay_queue.clear();
     sg_pass_action pa = {};
     pa.colors[0].action = SG_ACTION_CLEAR;
     pa.colors[0].value  = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -811,6 +1408,12 @@ void TRenderer::BeginTilePass(float r, float g, float b, float a)
 void TRenderer::SubmitTile(const STileSubmit& t)
 {
     tile_queue.push_back(t);
+}
+
+void TRenderer::SubmitOverlay(const SOverlaySubmit& t)
+{
+    if (!t.color_img.id) return;
+    overlay_queue.push_back(t);
 }
 
 void TRenderer::EmitTile(const STileSubmit& t)
@@ -855,6 +1458,26 @@ void TRenderer::EmitTile(const STileSubmit& t)
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
     sg_draw(0, 6, 1);
+}
+
+void TRenderer::DrainOverlayQueue()
+{
+    if (overlay_queue.empty() || !lit_pass.id) return;
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_LOAD;
+    pa.depth.action = SG_ACTION_DONTCARE;
+    pa.stencil.action = SG_ACTION_DONTCARE;
+    sg_begin_pass(lit_pass, &pa);
+    const int32_t gbw = width + 2 * kGBufPad;
+    const int32_t gbh = height + 2 * kGBufPad;
+    for (const auto& t : overlay_queue)
+        Composite(t.color_img,
+                  t.dst_x + kGBufPad, t.dst_y + kGBufPad,
+                  t.dst_w, t.dst_h,
+                  gbw, gbh);
+    sg_end_pass();
+    overlay_queue.clear();
+    lit_target_dirty = true;
 }
 
 void TRenderer::EndTilePass()

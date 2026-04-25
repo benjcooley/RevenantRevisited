@@ -29,6 +29,7 @@
 #include "statusbar.h"
 #include "spellpane.h"
 #include "sound.h"
+#include "logging.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -1547,6 +1548,7 @@ TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst, int32_t sx, i
 int32_t TMapPane::AddShadow(TObjectInstance* oi)
 {
     extern TObjectClass ShadowClass;
+    static int32_t s_shadow_log_count = 0;
 
     if (oi->ObjClass() == OBJCLASS_SHADOW)
     {
@@ -1562,6 +1564,12 @@ int32_t TMapPane::AddShadow(TObjectInstance* oi)
 
     def.objclass = OBJCLASS_SHADOW;
     int32_t objtype = ShadowClass.FindObjType(buf);
+    if (s_shadow_log_count < 32)
+    {
+        log_info("[shadow] request class='%s' type='%s' shadow_type='%s' found=%d",
+                 oi->GetClassName(), oi->GetTypeName(), buf, objtype);
+        ++s_shadow_log_count;
+    }
     if (objtype < 0)
         return -1;
 

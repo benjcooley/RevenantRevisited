@@ -12,6 +12,7 @@
 #include "dls.h"
 #include "file.h"
 #include "inventory.h"
+#include "logging.h"
 #include "mappane.h"
 #include "parse.h"
 #include "player.h"
@@ -233,6 +234,9 @@ TObjectBuilder::TObjectBuilder(const char *name)
 {
     if (numobjtypes < MAXOBJECTTYPES)
         builders[numobjtypes++] = this;
+    else
+        log_warn("[object] object builder registry full (%d), dropping builder '%s'",
+                 MAXOBJECTTYPES, name ? name : "?");
 
     objtypename = _strdup(name);
 }
@@ -1633,6 +1637,7 @@ int32_t g_loadObjNullBadClass    = 0;
 int32_t g_loadObjNullBadType     = 0;
 int32_t g_loadObjNullNewObjFail  = 0;
 int32_t g_loadObjNullCorruptDrop = 0;
+int32_t g_loadObjNullNonMapDrop  = 0;
 int32_t g_loadObjOk              = 0;
 
 TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, bool ismap)
@@ -1779,6 +1784,22 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     TObjectInstance* inst = cl->NewObject(&def);
     if (!inst)
     {
+        static int32_t s_new_object_fail_log_count = 0;
+        if (s_new_object_fail_log_count < 64)
+        {
+            SObjectInfo* info = cl ? cl->GetObjType(objtype) : nullptr;
+            log_warn("[loadobj] NewObject failed class=%d '%s' type=%d '%s' unique=0x%08X builder=%p imageryid=%d block=%d invblock=%d version=%d objver=%d",
+                     int32_t(objclass),
+                     cl && cl->ClassName() ? cl->ClassName() : "?",
+                     int32_t(objtype),
+                     info && info->name ? info->name : "?",
+                     uniqueid,
+                     info ? (void*)info->objbuilder : nullptr,
+                     info ? info->imageryid : -1,
+                     int32_t(blocksize), int32_t(invblocksize),
+                     version, int32_t(objversion));
+            ++s_new_object_fail_log_count;
+        }
         // Class factory missing — retail added bag/chest/invcontainer-style
         // classes (e.g. class 25) after this 1998 source was snapshotted, so
         // NewObject returns null for them. Skip rather than abort; blocksize
@@ -1824,11 +1845,18 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     if (blocksize >= 0)
         is.SetPos(bodystart + blocksize);
 
-  // If this object is corrupted in some way, delete it after doing load
-    if (corrupted || (ismap && (inst->Flags() & OF_NONMAP)))
+  // If this object is corrupted in some way, delete it after doing load.
+  // Keep OF_NONMAP drops separate from true corruption so the sector harness
+  // can distinguish "players intentionally discarded from map-owned sectors"
+  // from "loader failed to reconstruct this object."
+    const bool nonmap_drop = ismap && (inst->Flags() & OF_NONMAP);
+    if (corrupted || nonmap_drop)
     {
         delete inst;
-        ++g_loadObjNullCorruptDrop;
+        if (nonmap_drop)
+            ++g_loadObjNullNonMapDrop;
+        else
+            ++g_loadObjNullCorruptDrop;
         return nullptr;
     }
 

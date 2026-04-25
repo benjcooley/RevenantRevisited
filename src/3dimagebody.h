@@ -9,6 +9,7 @@
 #include "revenant.h"
 
 #include "imageres.h"
+#include "render3d_types.h"
 
 // To-do list for 3D imagery:
 // - Alpha channel textures
@@ -36,10 +37,10 @@
 
 struct S3DMaterial;
 
-typedef TOffset<hmm_vec3> OVEC3;
+typedef TOffset<S3DVertex> OVEC3;
 typedef TOffset<S3DMaterial> OMATERIAL;
 
-typedef TOffset<hmm_vec3> OVEC3;      // Offset to an array of vertices
+typedef TOffset<S3DVertex> OVEC3;     // Offset to an array of retail-style vertices
 typedef TOffset<OVEC3> OOVEC3;        // Offset to an array of offsets to array of vertices (Frame array) 
 typedef TOffset<OOVEC3> OOOVEC3;      // Offset to an array of offsets to array of offsets to vertex array (State array)
 
@@ -272,7 +273,7 @@ struct SSurfaceDesc
     };
     uint32_t            alphaBitDepth;          // depth of alpha buffer requested
     uint32_t            reserved;               // reserved
-    void*               surface;                // pointer to the associated surface memory
+    uint32_t            surface;                // 32-bit file-era surface pointer/offset slot
     SColorKey           ddckCKDestOverlay;      // color key for destination overlay use
     SColorKey           ddckCKDestBlt;          // color key for destination blt use
     SColorKey           ddckCKSrcOverlay;       // color key for source overlay use
@@ -280,6 +281,7 @@ struct SSurfaceDesc
     SPixelFormat        pixelFormat;            // pixel format description of the surface
     uint32_t            ddsCaps;                // direct draw surface capabilities
 };
+static_assert(sizeof(SSurfaceDesc) == 0x6C, "SSurfaceDesc must match retail 32-bit layout");
 
 _STRUCTDEF(S3DImageryTexture)
 struct S3DImageryTexture

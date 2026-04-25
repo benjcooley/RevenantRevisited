@@ -15,5 +15,6 @@ void Close(const char* mode);
 void Render(const char* mode);
 void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y);
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y);
+bool DumpTilesToFolder(const char* path);
 
 }  // namespace TestModes

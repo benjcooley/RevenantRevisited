@@ -16,52 +16,129 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #include "3dscene.h"
 #include "animation.h"
 #include "bitmap.h"
+#include "logging.h"
 #include "mappane.h"
+#include "math3d.h"
 #include "parse.h"
 #include "sound.h"
 
 T3DAnimatorBuilder T3DAnimatorBuilderInstance;  // Register default builder
 
-// ---------------------------------------------------------------------------
-// Matrix-math helpers. These used to live in d3dmath.h (retired to attic/).
-// They're pure math, not D3D, so we reimplement them here on top of hmm_mat4
-// for the code paths below. Kept file-local — other TUs that still call them
-// are Phase-3's problem.
-// ---------------------------------------------------------------------------
+static inline uint8_t ExpandBitsTo8(uint32_t value, int32_t bits)
+{
+    if (bits <= 0) return 0;
+    const uint32_t maxv = (1u << bits) - 1u;
+    return (uint8_t)((value * 255u + (maxv >> 1)) / maxv);
+}
 
-static inline void MtxClear(hmm_mat4* m) { *m = HMM_Mat4d(1.0f); }
+static inline int32_t CountBits32(uint32_t d)
+{
+    int32_t n = 0;
+    for (int32_t c = 0; c < 32; c++)
+        if (d & (1u << c))
+            n++;
+    return n;
+}
 
-static inline void MtxRotateX(hmm_mat4* m, float a)
+static inline int32_t MaskShift32(uint32_t mask)
 {
-    hmm_vec3 axis = {1.0f, 0.0f, 0.0f};
-    *m = HMM_MultiplyMat4(*m, HMM_Rotate(a * (180.0f / (float)M_PI), axis));
+    if (!mask) return 0;
+    int32_t s = 0;
+    while (!(mask & 1u) && s < 32) { mask >>= 1; s++; }
+    return s;
 }
-static inline void MtxRotateY(hmm_mat4* m, float a)
+
+static bool DecodeTextureFrameRGBA(const SSurfaceDesc* srcsd, const void* srcpixels, const void* srcpal,
+    std::vector<uint8_t>& rgba)
 {
-    hmm_vec3 axis = {0.0f, 1.0f, 0.0f};
-    *m = HMM_MultiplyMat4(*m, HMM_Rotate(a * (180.0f / (float)M_PI), axis));
+    if (!srcsd || !srcpixels || srcsd->width == 0 || srcsd->height == 0)
+        return false;
+
+    const int32_t w = (int32_t)srcsd->width;
+    const int32_t h = (int32_t)srcsd->height;
+    const int32_t src_bpp = (int32_t)(srcsd->pixelFormat.dwRGBBitCount / 8u);
+    const int32_t pitch = srcsd->pitch > 0 ? srcsd->pitch : (w * (src_bpp > 0 ? src_bpp : 1));
+    rgba.resize((size_t)w * (size_t)h * 4u);
+
+    const uint32_t pf_flags = srcsd->pixelFormat.dwFlags;
+    const uint32_t rmask = srcsd->pixelFormat.dwRBitMask;
+    const uint32_t gmask = srcsd->pixelFormat.dwGBitMask;
+    const uint32_t bmask = srcsd->pixelFormat.dwBBitMask;
+    const uint32_t amask = srcsd->pixelFormat.dwRGBAlphaBitMask;
+
+    if (srcsd->pixelFormat.dwRGBBitCount == 16 && rmask && gmask && bmask)
+    {
+        const int32_t rs = MaskShift32(rmask), gs = MaskShift32(gmask), bs = MaskShift32(bmask), as = MaskShift32(amask);
+        const int32_t rb = CountBits32(rmask), gb = CountBits32(gmask), bb = CountBits32(bmask), ab = CountBits32(amask);
+        for (int32_t y = 0; y < h; ++y)
+        {
+            const uint16_t* row = (const uint16_t*)((const uint8_t*)srcpixels + y * pitch);
+            uint8_t* dst = rgba.data() + (size_t)y * (size_t)w * 4u;
+            for (int32_t x = 0; x < w; ++x, dst += 4)
+            {
+                const uint32_t px = row[x];
+                dst[0] = ExpandBitsTo8((px & rmask) >> rs, rb);
+                dst[1] = ExpandBitsTo8((px & gmask) >> gs, gb);
+                dst[2] = ExpandBitsTo8((px & bmask) >> bs, bb);
+                dst[3] = amask ? ExpandBitsTo8((px & amask) >> as, ab) : 255;
+            }
+        }
+        return true;
+    }
+
+    if ((srcsd->pixelFormat.dwRGBBitCount == 24 || srcsd->pixelFormat.dwRGBBitCount == 32) &&
+        rmask && gmask && bmask)
+    {
+        const int32_t rs = MaskShift32(rmask), gs = MaskShift32(gmask), bs = MaskShift32(bmask), as = MaskShift32(amask);
+        const int32_t rb = CountBits32(rmask), gb = CountBits32(gmask), bb = CountBits32(bmask), ab = CountBits32(amask);
+        const int32_t bytespp = (int32_t)(srcsd->pixelFormat.dwRGBBitCount / 8u);
+        for (int32_t y = 0; y < h; ++y)
+        {
+            const uint8_t* row = (const uint8_t*)srcpixels + y * pitch;
+            uint8_t* dst = rgba.data() + (size_t)y * (size_t)w * 4u;
+            for (int32_t x = 0; x < w; ++x, dst += 4)
+            {
+                uint32_t px = 0;
+                std::memcpy(&px, row + x * bytespp, bytespp);
+                dst[0] = ExpandBitsTo8((px & rmask) >> rs, rb);
+                dst[1] = ExpandBitsTo8((px & gmask) >> gs, gb);
+                dst[2] = ExpandBitsTo8((px & bmask) >> bs, bb);
+                dst[3] = amask ? ExpandBitsTo8((px & amask) >> as, ab) : 255;
+            }
+        }
+        return true;
+    }
+
+    // Common paletted path: palette entries are 16-bit 555/565-style colors.
+    if ((srcsd->pixelFormat.dwRGBBitCount == 8 || (pf_flags & 0x20)) && srcpal)
+    {
+        const uint16_t* pal = (const uint16_t*)srcpal;
+        for (int32_t y = 0; y < h; ++y)
+        {
+            const uint8_t* row = (const uint8_t*)srcpixels + y * pitch;
+            uint8_t* dst = rgba.data() + (size_t)y * (size_t)w * 4u;
+            for (int32_t x = 0; x < w; ++x, dst += 4)
+            {
+                const uint16_t px = pal[row[x]];
+                dst[0] = ExpandBitsTo8((px >> 10) & 0x1F, 5);
+                dst[1] = ExpandBitsTo8((px >> 5) & 0x1F, 5);
+                dst[2] = ExpandBitsTo8(px & 0x1F, 5);
+                dst[3] = 255;
+            }
+        }
+        return true;
+    }
+
+    return false;
 }
-static inline void MtxRotateZ(hmm_mat4* m, float a)
-{
-    hmm_vec3 axis = {0.0f, 0.0f, 1.0f};
-    *m = HMM_MultiplyMat4(*m, HMM_Rotate(a * (180.0f / (float)M_PI), axis));
-}
-static inline void MtxTranslate(hmm_mat4* m, const hmm_vec3* t)
-{
-    *m = HMM_MultiplyMat4(*m, HMM_Translate(*t));
-}
-static inline void MtxScale(hmm_mat4* m, const hmm_vec3* s)
-{
-    *m = HMM_MultiplyMat4(*m, HMM_Scale(*s));
-}
-static inline void MtxMultiply(hmm_mat4* out, const hmm_mat4* a, const hmm_mat4* b)
-{
-    *out = HMM_MultiplyMat4(*a, *b);
-}
+
+// Use the shared row-vector matrix helpers from math3d.cpp directly so the
+// imagery hierarchy math matches the rest of the source path.
 
 // **********************
 // * 3DImagery Funtions *
@@ -97,18 +174,18 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
 
     int32_t vertstates = !(flags & I3D_ISMORPH) ? 1 : NumStates();
 
-    verts = new hmm_vec3**[vertstates];
+    verts = new S3DVertex**[vertstates];
 
     for (c = 0; c < vertstates; c++)
     {
         int32_t vertframes = !(flags & I3D_ISMORPH) ? 1 : GetAniLength(c);
 
-        verts[c] = new hmm_vec3*[vertframes];
+        verts[c] = new S3DVertex*[vertframes];
         for (int32_t fr = 0; fr < vertframes; fr++)
         {
-            verts[c][fr] = new hmm_vec3[numverts];
+            verts[c][fr] = new S3DVertex[numverts];
             OFFSET* meshverts = (OFFSET*)((void*)mesh->verts[c]);
-            std::memcpy(verts[c][fr], (void*)meshverts[fr], sizeof(hmm_vec3) * numverts);
+            std::memcpy(verts[c][fr], (void*)meshverts[fr], sizeof(S3DVertex) * numverts);
         }
     }
 
@@ -283,24 +360,27 @@ bool T3DImagery::InitializeMesh(S3DImageryBody* mesh)
 
     flags = mesh->flags;
     version = mesh->version;
+    if (version > VERSION3DIMAGEBODY)
+        log_warn("[i3d] newer imagery version in file (%u) for %s",
+                 version, GetResFilename());
 
     // ---- morph vertex lists ----
     numverts = mesh->numverts;
 
     int32_t vertstates = !(flags & I3D_ISMORPH) ? 1 : NumStates();
 
-    verts = new hmm_vec3**[vertstates];
+    verts = new S3DVertex**[vertstates];
 
     for (c = 0; c < vertstates; c++)
     {
         int32_t vertframes = !(flags & I3D_ISMORPH) ? 1 : GetAniLength(c);
 
-        verts[c] = new hmm_vec3*[vertframes];
+        verts[c] = new S3DVertex*[vertframes];
         for (int32_t fr = 0; fr < vertframes; fr++)
         {
-            verts[c][fr] = new hmm_vec3[numverts];
-            hmm_vec3* meshverts = (hmm_vec3*)mesh->verts[c][fr];
-            std::memcpy(verts[c][fr], meshverts, sizeof(hmm_vec3) * numverts);
+            verts[c][fr] = new S3DVertex[numverts];
+            S3DVertex* meshverts = (S3DVertex*)mesh->verts[c][fr];
+            std::memcpy(verts[c][fr], meshverts, sizeof(S3DVertex) * numverts);
         }
     }
 
@@ -673,39 +753,39 @@ void T3DImagery::GetVerts(void* vertbuf, int32_t state, int32_t frame,
     if (beg < 0) beg = 0;
     if (len < 0) len = numverts;
 
-    hmm_vec3* v = (flags & I3D_ISMORPH) ? verts[state][frame] : verts[0][0];
+    S3DVertex* v = (flags & I3D_ISMORPH) ? verts[state][frame] : verts[0][0];
 
     if (verttype == ERender3DVertex::Vertex)
     {
-        std::memcpy(vertbuf, v + beg, sizeof(hmm_vec3) * len);
+        std::memcpy(vertbuf, v + beg, sizeof(S3DVertex) * len);
     }
     else if (verttype == ERender3DVertex::LitVertex)
     {
-        hmm_vec3*    s = v + beg;
+        S3DVertex*   s = v + beg;
         S3DLVertex*  d = (S3DLVertex*)vertbuf;
         for (int32_t c = 0; c < len; c++, s++, d++)
         {
-            d->pos = *s;
+            d->pos = s->pos;
             d->diffuse  = 0xFF808080;
             d->specular = 0x00000000;
-            d->tu = 0.0f;
-            d->tv = 0.0f;
+            d->tu = s->tu;
+            d->tv = s->tv;
         }
     }
     else if (verttype == ERender3DVertex::TLVertex)
     {
-        hmm_vec3*    s = v + beg;
+        S3DVertex*   s = v + beg;
         S3DTLVertex* d = (S3DTLVertex*)vertbuf;
         for (int32_t c = 0; c < len; c++, s++, d++)
         {
-            d->sx = 100.0f + s->X;
-            d->sy = 100.0f + s->Y;
-            d->sz = 500.0f + s->Z;
+            d->sx = 100.0f + s->pos.X;
+            d->sy = 100.0f + s->pos.Y;
+            d->sz = 500.0f + s->pos.Z;
             d->rhw = 1.0f;
             d->diffuse  = 0xFFFFFFFF;
             d->specular = 0x00000000;
-            d->tu = 0.0f;
-            d->tv = 0.0f;
+            d->tu = s->tu;
+            d->tv = s->tv;
         }
     }
 }
@@ -761,12 +841,25 @@ void T3DImagery::GetObjFaces(int32_t objnum, S3DFace* facesbuf,
     if (objnum < 0 || objnum > objects.NumItems() || !objects.Used(objnum))
         return;
 
-    std::memcpy(facesbuf, faces + objects[objnum].startface,
-        sizeof(S3DFace) * objects[objnum].numfaces);
+    const int32_t ntex = textures.NumItems() < MAXTEXTURES ? textures.NumItems() : MAXTEXTURES;
+    const int32_t slots = ntex + 1; // slot 0 = untextured faces
+    int32_t packed_face = 0;
 
-    int32_t n = textures.NumItems() < MAXTEXTURES ? textures.NumItems() : MAXTEXTURES;
-    if (texfaces)    std::memcpy(texfaces,    objects[objnum].texfaces,    sizeof(int32_t) * n);
-    if (numtexfaces) std::memcpy(numtexfaces, objects[objnum].numtexfaces, sizeof(int32_t) * n);
+    for (int32_t t = 0; t < slots; ++t)
+    {
+        const int32_t count = objects[objnum].numtexfaces[t];
+        if (texfaces) texfaces[t] = packed_face;
+        if (numtexfaces) numtexfaces[t] = count;
+
+        if (facesbuf && count > 0)
+        {
+            std::memcpy(facesbuf + packed_face,
+                faces + objects[objnum].startface + objects[objnum].texfaces[t],
+                sizeof(S3DFace) * count);
+        }
+
+        packed_face += count;
+    }
 }
 
 // ********************
@@ -1489,14 +1582,18 @@ int32_t T3DImagery::AddTexture(SSurfaceDesc* srcsd,
 }
 
 bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
-    OFFSET* /*pixels*/, int32_t frames, void* /*palette*/, bool copyframes)
+    OFFSET* pixels, int32_t frames, void* palette, bool copyframes)
 {
+    // Retail D3D3 required square, power-of-two textures in 8..512. Modern
+    // GPUs (sokol backends) don't care; log a debug note instead of fatal-ing.
     if (srcsd->width != srcsd->height)
-        Error("%s has non square texture", GetResFilename());
+        log_info("[i3d] %s has non-square texture (%dx%d) -- accepting",
+                 GetResFilename(), srcsd->width, srcsd->height);
     if (srcsd->width != 128 && srcsd->width != 64 && srcsd->width != 256 &&
         srcsd->width != 32  && srcsd->width != 512 && srcsd->width != 16 &&
         srcsd->width != 8)
-            Error("%s texture is not a power of two (8-512)", GetResFilename());
+        log_info("[i3d] %s texture is not a D3D3-era power of two (%d) -- accepting",
+                 GetResFilename(), srcsd->width);
 
     SSurfaceDesc dstsd;
     Scene3D.GetClosestTextureFormat(srcsd, &dstsd);
@@ -1523,15 +1620,45 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
         tex->framehtexs = nullptr;
     }
 
-#if 0 // TODO(port): actually upload frame pixels to sg_images — Phase 3
-    // The Phase-1 body created system-memory DirectDraw texture surfaces,
-    // converted pixels into them via Scene3D.ConvertTexture, built palettes
-    // where needed, then Load()'d them into ALLOCONLOAD video surfaces.
-    // Replacement: convert into an RGBA8 staging buffer and sg_make_image.
-#endif
+    std::vector<uint8_t> rgba;
+    for (int32_t f = 0; f < frames; ++f)
+    {
+        void* frame_pixels = nullptr;
+        if (pixels)
+            frame_pixels = pixels[f].ptr();
+        if (!frame_pixels)
+            continue;
 
-    tex->surface  = sg_image{0};
-    tex->htexture = kInvalidTexture;
+        if (!DecodeTextureFrameRGBA(srcsd, frame_pixels, palette, rgba))
+            continue;
+
+        sg_image_desc id = {};
+        id.width = (int)srcsd->width;
+        id.height = (int)srcsd->height;
+        id.pixel_format = SG_PIXELFORMAT_RGBA8;
+        id.min_filter = SG_FILTER_LINEAR;
+        id.mag_filter = SG_FILTER_LINEAR;
+        id.data.subimage[0][0] = { rgba.data(), rgba.size() };
+        id.label = "i3d.texture";
+        sg_image img = sg_make_image(&id);
+
+        if (frames > 1)
+        {
+            tex->framesurfs[f] = img;
+            tex->framehtexs[f] = 0;
+        }
+        else
+        {
+            tex->surface = img;
+            tex->htexture = 0;
+        }
+    }
+
+    if (frames > 1)
+    {
+        tex->surface = tex->framesurfs[0];
+        tex->htexture = tex->framehtexs[0];
+    }
 
     return true;
 }
@@ -1539,15 +1666,19 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
 void T3DImagery::RemoveTexture(int32_t texnum)
 {
     S3DTex* t = &textures[texnum];
+    const uint32_t active_id = t->surface.id;
 
-    // Phase 3 will sg_destroy_image here.
+    if (t->surface.id) sg_destroy_image(t->surface);
     t->surface  = sg_image{0};
     t->htexture = kInvalidTexture;
 
     if (t->framesurfs)
     {
-        delete t->framesurfs;
-        delete t->framehtexs;
+        for (int32_t i = 0; i < t->numframes; ++i)
+            if (t->framesurfs[i].id && t->framesurfs[i].id != active_id)
+                sg_destroy_image(t->framesurfs[i]);
+        delete[] t->framesurfs;
+        delete[] t->framehtexs;
         t->framesurfs = nullptr;
         t->framehtexs = nullptr;
     }
@@ -1596,7 +1727,7 @@ bool T3DImagery::SetTextureFrame(int32_t texnum, int32_t framenum)
         return false;
     if (textures[texnum].numframes <= 1)
         return true;
-    if (framenum > textures[texnum].numframes)
+    if (framenum >= textures[texnum].numframes)
         framenum = framenum % textures[texnum].numframes;
     if (textures[texnum].framenum == framenum)
         return true;
@@ -2335,7 +2466,7 @@ void T3DAnimator::GetVerts(S3DAnimObj* obj, ERender3DVertex verttype)
 
     obj->numverts = Get3DImagery()->NumObjVerts(obj->objnum);
     if (verttype == ERender3DVertex::Vertex)
-        obj->verts = new hmm_vec3[obj->numverts];
+        obj->verts = new S3DVertex[obj->numverts];
     else if (verttype == ERender3DVertex::LitVertex)
         obj->verts = new S3DLVertex[obj->numverts];
     else if (verttype == ERender3DVertex::TLVertex)
