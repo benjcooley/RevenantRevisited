@@ -169,8 +169,8 @@ class T3DImagery : public TObjectImagery
     uint32_t flags;                       // Flags for this 3D object
     uint32_t version;
 
-    int32_t numverts;                     // Global vert list
-    hmm_vec3 ***verts;
+    int32_t numverts;                     // Global retail-style vertex list
+    S3DVertex ***verts;
 
     int32_t numfaces;                     // Global face list
     S3DFace *faces;
@@ -211,7 +211,7 @@ class T3DImagery : public TObjectImagery
     void GetVerts(void* vertbuf, int32_t state = 0, int32_t frame = 0,
         ERender3DVertex verttype = ERender3DVertex::Vertex, int32_t beg = 0, int32_t len = -1);
       // Copies a single frame of vertices (default is state 0, frame 0, all verts).
-      // Translates stored verts to LVERTEX / TLVERTEX layouts as requested.
+      // Vertex returns stored retail-style S3DVertex records; Lit/TL are adapted.
     int32_t NumObjVerts(int32_t objnum);
     void GetObjVerts(int32_t objnum, void* vertbuf, int32_t state = 0, int32_t frame = 0,
         ERender3DVertex verttype = ERender3DVertex::Vertex);

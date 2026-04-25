@@ -1,0 +1,230 @@
+// Revenant extended render metadata.
+//
+// This file contains renderer-side policy that is not authored inside I2D/I3D
+// imagery resources. It is intentionally separate from gameplay class data:
+// instances still own logical state, while drawables use this file to choose
+// pass, blend, lighting, texture animation, and special drawable behavior.
+
+// Common pass/blend vocabulary:
+//   PASS       opaque_world | transparent_world | overlay
+//   BLEND      opaque | alpha | additive
+//   LIGHTING   lit | fullbright | vertex_lit | unlit_shadow
+//   ZTEST      true | false
+//   ZWRITE     true | false
+
+EFFECT "Water"
+BEGIN
+  IMAGERY "misc\Water.i3d"
+  DRAWABLE water_particles
+  PASS transparent_world
+  BLEND additive
+  LIGHTING vertex_lit
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "Waterfall"
+BEGIN
+  IMAGERY "misc\Water.i3d"
+  DRAWABLE waterfall_particles
+  PASS transparent_world
+  BLEND additive
+  LIGHTING vertex_lit
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "StillWater"
+BEGIN
+  IMAGERY "Misc\StillWater.I3D"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND alpha
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "FlowWater"
+BEGIN
+  IMAGERY "Misc\FlowWater.I3D"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND alpha
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "BendWater1"
+BEGIN
+  IMAGERY "Misc\BendWater1.I3D"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND alpha
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "BendWater2"
+BEGIN
+  IMAGERY "Misc\BendWater2.I3D"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND alpha
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "SewerWater"
+BEGIN
+  IMAGERY "Misc\SewerW.I3D"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND alpha
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "Wave"
+BEGIN
+  IMAGERY "Misc\Wave.I3D"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND alpha
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "WaveS"
+BEGIN
+  IMAGERY "Misc\WaveS.I3D"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND alpha
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "WaveM"
+BEGIN
+  IMAGERY "Misc\WaveM.I3D"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND alpha
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "WaterFlft"
+BEGIN
+  IMAGERY "misc\WFall.i3d"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND additive
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "WaterFrt"
+BEGIN
+  IMAGERY "misc\WFall2.i3d"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND additive
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "WaterClft"
+BEGIN
+  IMAGERY "misc\WCap.i3d"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND additive
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "WaterCrt"
+BEGIN
+  IMAGERY "misc\Wcap2.i3d"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND additive
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+EFFECT "RiverFall"
+BEGIN
+  IMAGERY "misc\Riverfall.i3d"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND additive
+  LIGHTING fullbright
+  ZTEST true
+  ZWRITE false
+  TEXTURE_ANIM frame_by_instance
+END
+
+HELPER "Box"
+BEGIN
+  IMAGERY "Misc\box.i3d"
+  DRAWABLE mesh
+
+  SUBMESH "hedra01"
+  BEGIN
+    PASS transparent_world
+    BLEND alpha
+    LIGHTING lit
+    ZTEST true
+    ZWRITE false
+  END
+
+  // Historical helper shadow/ground plane. Kept explicit so we can tune or
+  // replace it without changing the I3D data.
+  SUBMESH "rectangle0"
+  BEGIN
+    PASS transparent_world
+    BLEND alpha
+    LIGHTING unlit_shadow
+    ZTEST true
+    ZWRITE false
+  END
+END
+
+HELPER "Axis"
+BEGIN
+  IMAGERY "Misc\Axis.i3d"
+  DRAWABLE mesh
+  PASS transparent_world
+  BLEND alpha
+  LIGHTING lit
+  ZTEST true
+  ZWRITE false
+END

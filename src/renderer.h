@@ -99,6 +99,13 @@ struct STileSubmit
     float    root_wx, root_wy, root_wz;   // world xyz of the tile anchor
     float    anchor_px_x, anchor_px_y;    // source-image anchor pixel
     float    zraw_to_wu;      // bitmap-z -> world-units scale
+    float    sort_depth = 0.0f;
+};
+
+struct SOverlaySubmit
+{
+    sg_image color_img;
+    int32_t  dst_x, dst_y, dst_w, dst_h;
 };
 
 // Opaque handle to a mesh registered with TRenderer. 0 is invalid.
@@ -122,6 +129,34 @@ struct SMeshSubmit
     MeshHandle mesh;
     float      world[16];     // row-major 4x4
     float      tint[4];       // rgba multiplier
+};
+
+struct SHelperMeshSubmit
+{
+    MeshHandle mesh;
+    float      world[16];
+    bool       shadow_plane = false;
+    bool       additive_blend = false;
+    float      diffuse[4];
+    float      ambient[4];
+    float      specular[4];
+    float      emissive[4];
+    float      power;
+    float      sort_depth = 0.0f;
+};
+
+enum class ETransparentWorldKind : uint8_t
+{
+    Tile,
+    Helper,
+};
+
+struct STransparentWorldSubmit
+{
+    ETransparentWorldKind kind = ETransparentWorldKind::Tile;
+    float                 sort_depth = 0.0f;
+    STileSubmit           tile = {};
+    SHelperMeshSubmit     helper = {};
 };
 
 class TRenderer
@@ -158,7 +193,10 @@ public:
     // correctly in world space.
     void BeginTilePass(float r, float g, float b, float a);
     void SubmitTile(const STileSubmit& t);
+    void SubmitTransparentTile(const STileSubmit& t);
+    void SubmitOverlay(const SOverlaySubmit& t);
     void SubmitMesh(const SMeshSubmit& m);
+    void SubmitHelperMesh(const SHelperMeshSubmit& m);
     void EndTilePass();
 
     // ---- Mesh registry -------------------------------------------------
@@ -168,6 +206,7 @@ public:
     MeshHandle RegisterMesh(const SMeshVertex* verts, int32_t num_verts,
                             const uint16_t*  indices, int32_t num_indices,
                             sg_image albedo);
+    void SetMeshAlbedo(MeshHandle mesh, sg_image albedo);
 
     // ---- Scene lighting state -------------------------------------------
     // Directional sun. Normals are reconstructed per-fragment from the tile
@@ -291,11 +330,20 @@ private:
     // Accumulated tile submissions for the current tile pass; drained in
     // EndTilePass. Capacity is preserved across frames to avoid churn.
     std::vector<STileSubmit> tile_queue;
+    std::vector<STransparentWorldSubmit> transparent_world_queue;
+    std::vector<SOverlaySubmit> overlay_queue;
     std::vector<SMeshSubmit> mesh_queue;
 
     // ---- Mesh pipeline -------------------------------------------------
     sg_shader   mesh_shader      = {};
     sg_pipeline mesh_pipeline    = {};
+    sg_shader   transparent_tile_shader   = {};
+    sg_pipeline transparent_tile_pipeline = {};
+    sg_shader   helper_mesh_shader        = {};
+    sg_pipeline helper_mesh_back_pipeline = {};
+    sg_pipeline helper_mesh_front_pipeline = {};
+    sg_pipeline helper_mesh_add_back_pipeline = {};
+    sg_pipeline helper_mesh_add_front_pipeline = {};
     sg_buffer   mesh_instance_vb = {};   // dynamic, rebuilt each frame
     static constexpr int32_t kMaxMeshInstances = 2048;
 
@@ -319,6 +367,7 @@ private:
     sg_image scene_z_target = {};   // G-buffer: scene-z  (R32F)
     sg_image ao_target      = {};   // AO pass output     (R32F)
     sg_image lit_target     = {};   // Lit output         (RGBA8)
+    sg_pass  helper_pass    = {};   // Forward helper/material pass into lit_target
 
     // ---- Lighting state (uploaded by RunLightingPass) -------------------
     struct SLightState {
@@ -370,11 +419,15 @@ private:
 
     // Emit one queued tile as a single sg_draw (no instancing yet).
     void EmitTile(const STileSubmit& t);
+    void DrainOverlayQueue();
 
     // Mesh pipeline lifecycle + per-frame drain.
     void InitMeshPipeline();
     void ShutdownMeshPipeline();
     void DrainMeshQueue();
+    void EmitTransparentTile(const STileSubmit& t);
+    void EmitTransparentHelper(const SHelperMeshSubmit& s);
+    void DrainTransparentWorldQueue();
 };
 
 // Global renderer instance -- created by TDisplay::Initialize, destroyed by

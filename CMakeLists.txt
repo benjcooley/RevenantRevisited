@@ -91,6 +91,16 @@ target_include_directories(Revenant PRIVATE
   ${IMGUI_DIR}
 )
 
+add_executable(test_defdoc tools/test_defdoc.cpp)
+
+add_executable(test_render_metadata
+  tools/test_render_metadata.cpp
+  src/render_metadata.cpp)
+
+add_executable(test_anim_system
+  tools/test_anim_system.cpp
+  src/animsystem.cpp)
+
 # ----------------------------------------------------------------------------
 # Platform libs / frameworks.
 # ----------------------------------------------------------------------------

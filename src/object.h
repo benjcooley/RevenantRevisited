@@ -48,7 +48,7 @@ _CLASSDEF(TObjectAnimator)
 // * TObjectBuilder - Creates objects for a given object class *
 // *************************************************************
 
-#define MAXOBJECTTYPES 256
+#define MAXOBJECTTYPES 2048
 
 _CLASSDEF(SObjectDef)
 _CLASSDEF(TObjectInstance)

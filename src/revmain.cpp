@@ -32,6 +32,7 @@
 #include "graphics.h"
 #include "playscreen.h"
 #include "testscreen.h"
+#include "testmodes.h"
 #include "testconfig.h"
 #include "time.h"
 #include "mappane.h"
@@ -1525,6 +1526,27 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "level", p))
             strncpyz(StartupLevelId, p.c_str(), sizeof(StartupLevelId));
     }
+
+  // ASSET=path — which imagery --test=i3d3d loads.
+    {
+        std::string p;
+        if (arg_param(cmd, "asset", p))
+            strncpyz(StartupAssetPath, p.c_str(), sizeof(StartupAssetPath));
+    }
+
+  // SCALE=f — uniform mesh scale multiplier for --test=i3d3d (0 = auto-fit).
+    {
+        std::string p;
+        if (arg_param(cmd, "scale", p))
+            StartupAssetScale = float(atof(p.c_str()));
+    }
+
+  // DUMPTILES=path — export tile albedo PNGs to the given folder, creating it if needed.
+    {
+        std::string p;
+        if (arg_param(cmd, "dumptiles", p))
+            strncpyz(StartupDumpTilesPath, p.c_str(), MAXPATHLEN);
+    }
 }
 
 void GetINISettings()
@@ -1840,6 +1862,15 @@ bool InitSystem()
   // Load class.def
     Status("Loading classes with %s option\n", NoQuickLoad?"NOQUICKLOAD":"QUICKLOAD");
     TObjectClass::LoadClasses();
+
+    if (StartupDumpTilesPath[0])
+    {
+        Status("Dumping tiles to %s\n", StartupDumpTilesPath);
+        if (!TestModes::DumpTilesToFolder(StartupDumpTilesPath))
+            FatalError("Failed dumping any tiles to %s", StartupDumpTilesPath);
+        Status("Tile dump complete. Exiting.\n");
+        return false;
+    }
 
     if (!_CrtCheckMemory())
     {

@@ -47,14 +47,17 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     // ---- sokol_gfx context ------------------------------------------------
     sg_desc desc = {};
     desc.context          = sapp_sgcontext();
-    desc.buffer_pool_size = 256;
+    // Full-level scenes can now cache hundreds of rigid mesh assets in
+    // addition to tile/backbuffer/ImGui buffers. Each mesh asset owns a vertex
+    // and index buffer, so leave generous headroom.
+    desc.buffer_pool_size = 8192;
     // One tile bitmap needs 2 images (color + depth); a Misthaven sector
     // has ~200 unique bitmaps, and the test harness loads a 3x3 neighborhood.
     // Plenty of headroom for UI atlases and ImGui.
     desc.image_pool_size  = 4096;
     desc.shader_pool_size = 64;
-    desc.pipeline_pool_size = 64;
-    desc.pass_pool_size   = 32;
+    desc.pipeline_pool_size = 128;
+    desc.pass_pool_size   = 64;
     // Full-level sector tests can issue tens of thousands of draw calls
     // with small uniform uploads; Metal stages these through sokol's
     // per-frame shared buffer.
@@ -108,6 +111,7 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
         d.ini_filename = "imgui.ini";
         d.max_vertices = 1 << 20;
         simgui_setup(&d);
+        imgui_initialized = true;
         constexpr float kDebugUiScale = 0.85f;
         ImGui::GetStyle().ScaleAllSizes(kDebugUiScale);
         ImGui::GetIO().FontGlobalScale = kDebugUiScale;
@@ -118,7 +122,10 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
 
 bool TDisplay::Close()
 {
-    simgui_shutdown();
+    if (imgui_initialized) {
+        simgui_shutdown();
+        imgui_initialized = false;
+    }
 
     if (Renderer) {
         Renderer->Shutdown();

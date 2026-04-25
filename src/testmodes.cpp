@@ -6,25 +6,685 @@
 
 #include "testmodes.h"
 
+#include "3dimage.h"
+#include "animimage.h"
 #include "bitmapatlas.h"
+#include "bitmapdecode.h"
+#include "decompdata.h"
 #include "display.h"
 #include "font.h"
 #include "fonttable.h"
 #include "imagery.h"
 #include "imageres.h"
+#include "imgui.h"
+#include "chunkcache.h"
+#include "character.h"
 #include "logging.h"
 #include "maprenderer.h"
+#include "meshextract.h"
+#include "render_metadata.h"
 #include "renderer.h"
 #include "revenant.h"
+#include "testconfig.h"
 #include "time.h"
+#include "tile.h"
 
 #include <cmath>
+#include <cctype>
+#include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <vector>
+
+extern TObjectClass TileClass;
+extern TObjectClass CharacterClass;
+extern TObjectClass PlayerClass;
 
 namespace {
 
 TMapRenderer g_mapRenderer;
 SBitmapAtlas g_uiAtlas;
+
+std::string SanitizeFilenameComponent(const char* name)
+{
+    std::string s = name ? name : "unnamed";
+    for (char& ch : s)
+    {
+        const unsigned char u = static_cast<unsigned char>(ch);
+        if (!(std::isalnum(u) || ch == '_' || ch == '-' || ch == '.'))
+            ch = '_';
+    }
+    if (s.empty())
+        s = "unnamed";
+    return s;
+}
+
+void MatrixMul16(const float a[16], const float b[16], float out[16])
+{
+    for (int32_t r = 0; r < 4; ++r)
+    {
+        for (int32_t c = 0; c < 4; ++c)
+        {
+            float s = 0.0f;
+            for (int32_t i = 0; i < 4; ++i)
+                s += a[r * 4 + i] * b[i * 4 + c];
+            out[r * 4 + c] = s;
+        }
+    }
+}
+
+bool DumpTilesToPath(const char* out_path_cstr)
+{
+    namespace fs = std::filesystem;
+    const fs::path out_dir = (out_path_cstr && out_path_cstr[0])
+        ? fs::path(out_path_cstr)
+        : (fs::current_path() / "tile_dump_albedo");
+    std::error_code ec;
+    fs::create_directories(out_dir, ec);
+    if (ec)
+    {
+        log_error("[tiledump] create_directories failed for '%s': %s",
+                  out_dir.string().c_str(), ec.message().c_str());
+        return false;
+    }
+
+    int dumped = 0;
+    int failed = 0;
+
+    auto append_be32 = [](std::vector<uint8_t>& out, uint32_t v) {
+        out.push_back(uint8_t((v >> 24) & 0xFF));
+        out.push_back(uint8_t((v >> 16) & 0xFF));
+        out.push_back(uint8_t((v >>  8) & 0xFF));
+        out.push_back(uint8_t((v      ) & 0xFF));
+    };
+    auto crc32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
+        static uint32_t table[256] = {};
+        static bool init = false;
+        if (!init) {
+            for (uint32_t i = 0; i < 256; ++i) {
+                uint32_t c = i;
+                for (int k = 0; k < 8; ++k)
+                    c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+                table[i] = c;
+            }
+            init = true;
+        }
+        uint32_t c = 0xFFFFFFFFu;
+        for (size_t i = 0; i < len; ++i)
+            c = table[(c ^ data[i]) & 0xFFu] ^ (c >> 8);
+        return c ^ 0xFFFFFFFFu;
+    };
+    auto adler32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
+        uint32_t s1 = 1, s2 = 0;
+        for (size_t i = 0; i < len; ++i) {
+            s1 = (s1 + data[i]) % 65521u;
+            s2 = (s2 + s1) % 65521u;
+        }
+        return (s2 << 16) | s1;
+    };
+    auto write_png_rgba = [&](const fs::path& path, int32_t w, int32_t h, const std::vector<uint8_t>& rgba) -> bool {
+        if (w <= 0 || h <= 0 || rgba.size() != size_t(w) * size_t(h) * 4) return false;
+        std::vector<uint8_t> raw;
+        raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
+        for (int32_t y = 0; y < h; ++y) {
+            raw.push_back(0); // filter type 0
+            const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
+            raw.insert(raw.end(), row, row + size_t(w) * 4);
+        }
+
+        std::vector<uint8_t> zlib;
+        zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
+        zlib.push_back(0x78);
+        zlib.push_back(0x01);
+        size_t off = 0;
+        while (off < raw.size()) {
+            const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
+            const bool final = (off + chunk) == raw.size();
+            zlib.push_back(final ? 0x01 : 0x00);
+            zlib.push_back(uint8_t(chunk & 0xFF));
+            zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
+            const uint16_t nlen = uint16_t(~uint16_t(chunk));
+            zlib.push_back(uint8_t(nlen & 0xFF));
+            zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
+            zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
+            off += chunk;
+        }
+        append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
+
+        std::vector<uint8_t> png;
+        const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
+        png.insert(png.end(), sig, sig + 8);
+
+        auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
+            append_be32(png, uint32_t(payload.size()));
+            const size_t type_off = png.size();
+            png.push_back(uint8_t(type[0]));
+            png.push_back(uint8_t(type[1]));
+            png.push_back(uint8_t(type[2]));
+            png.push_back(uint8_t(type[3]));
+            png.insert(png.end(), payload.begin(), payload.end());
+            const uint32_t crc = crc32_bytes(png.data() + type_off, 4 + payload.size());
+            append_be32(png, crc);
+        };
+
+        std::vector<uint8_t> ihdr;
+        ihdr.reserve(13);
+        append_be32(ihdr, uint32_t(w));
+        append_be32(ihdr, uint32_t(h));
+        ihdr.push_back(8); // bit depth
+        ihdr.push_back(6); // RGBA
+        ihdr.push_back(0); // compression
+        ihdr.push_back(0); // filter
+        ihdr.push_back(0); // interlace
+        append_chunk("IHDR", ihdr);
+        append_chunk("IDAT", zlib);
+        append_chunk("IEND", {});
+
+        std::ofstream f(path, std::ios::binary);
+        if (!f) return false;
+        f.write((const char*)png.data(), std::streamsize(png.size()));
+        return f.good();
+    };
+    auto decode_tile_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out) -> bool {
+        if (!bm || bm->width <= 0 || bm->height <= 0) return false;
+        const bool is_8bit = (bm->flags & BM_8BIT) != 0;
+        const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
+        const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
+        if (!is_8bit && !is_16bit) return false;
+        SPalette* pal = (SPalette*)bm->palette.ptr();
+        if (is_8bit && !pal) return false;
+        const int32_t w = bm->width, h = bm->height;
+        const size_t npx = size_t(w) * size_t(h);
+        const uint8_t key8 = (uint8_t)bm->keycolor;
+        const uint16_t key16 = (uint16_t)bm->keycolor;
+        std::unique_ptr<uint8_t[]> idxplane;
+        std::unique_ptr<uint16_t[]> rgbplane16;
+        if (is_8bit) idxplane.reset(new uint8_t[npx]); else rgbplane16.reset(new uint16_t[npx]);
+        std::unique_ptr<uint16_t[]> zplane;
+        if (has_zbuffer) zplane.reset(new uint16_t[npx]);
+
+        if (bm->flags & BM_CHUNKED)
+        {
+            if (!bm->CacheChunks()) return false;
+            SChunkHeader* hdr = (SChunkHeader*)(void*)bm->data8;
+            SChunkHeader* zhdr = has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
+            if (!hdr || (has_zbuffer && !zhdr)) return false;
+            const int32_t cw = hdr->width, ch = hdr->height;
+            if (is_8bit) std::memset(idxplane.get(), key8, npx);
+            else std::fill_n(rgbplane16.get(), npx, key16);
+            if (has_zbuffer) for (size_t i = 0; i < npx; ++i) zplane[i] = 0;
+            for (int32_t by = 0; by < ch; ++by)
+            for (int32_t bx = 0; bx < cw; ++bx)
+            {
+                void* cptr = hdr->block[by * cw + bx].ptr();
+                void* zptr = zhdr ? zhdr->block[by * cw + bx].ptr() : nullptr;
+                const uint8_t*  c8  = (is_8bit && cptr) ? (const uint8_t*)ChunkCache.AddChunk(cptr, 1) : nullptr;
+                const uint16_t* c16 = (is_16bit && cptr) ? (const uint16_t*)ChunkCache.AddChunk16(cptr, 1) : nullptr;
+                const uint16_t* z16 = (has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
+                const int32_t x0 = bx * CHUNKWIDTH, y0 = by * CHUNKHEIGHT;
+                const int32_t cxmax = (w - x0 < CHUNKWIDTH) ? (w - x0) : CHUNKWIDTH;
+                const int32_t cymax = (h - y0 < CHUNKHEIGHT) ? (h - y0) : CHUNKHEIGHT;
+                if (cxmax <= 0 || cymax <= 0) continue;
+                for (int32_t y = 0; y < cymax; ++y)
+                {
+                    if (c8) std::memcpy(&idxplane[(y0 + y) * w + x0], &c8[y * CHUNKWIDTH], cxmax);
+                    if (c16) std::memcpy(&rgbplane16[(y0 + y) * w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+                    if (z16) std::memcpy(&zplane[(y0 + y) * w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+                }
+            }
+        }
+        else
+        {
+            if (is_8bit) std::memcpy(idxplane.get(), bm->data8, npx);
+            else std::memcpy(rgbplane16.get(), bm->data16, npx * sizeof(uint16_t));
+            if (has_zbuffer)
+            {
+                uint16_t* zbuf = (uint16_t*)bm->zbuffer.ptr();
+                if (zbuf) std::memcpy(zplane.get(), zbuf, npx * sizeof(uint16_t));
+            }
+        }
+
+        rgba_out.assign(npx * 4, 0);
+        for (size_t i = 0; i < npx; ++i)
+        {
+            const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
+            const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
+            const uint16_t z = has_zbuffer ? zplane[i] : 1;
+            const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
+                                                 : (is_8bit ? (idx8 == key8) : (px16 == key16));
+            uint8_t* row = rgba_out.data() + i * 4;
+            if (transparent)
+                continue;
+            if (is_8bit)
+            {
+                const uint32_t c = pal->rgbcolors[idx8];
+                row[0] = (uint8_t)( c        & 0xFF);
+                row[1] = (uint8_t)((c >> 8)  & 0xFF);
+                row[2] = (uint8_t)((c >> 16) & 0xFF);
+            }
+            else
+            {
+                row[0] = (uint8_t)(((px16 >> 10) & 0x1F) << 3);
+                row[1] = (uint8_t)(((px16 >> 5)  & 0x1F) << 3);
+                row[2] = (uint8_t)(( px16        & 0x1F) << 3);
+            }
+            row[3] = 255;
+        }
+        return true;
+    };
+
+    for (int32_t objtype = 0; objtype < TileClass.NumTypes(); ++objtype)
+    {
+        SObjectInfo* info = TileClass.GetObjType(objtype);
+        if (!info || !info->name)
+            continue;
+
+        TObjectImagery* imagery = TObjectImagery::LoadImagery(info->imageryid);
+        if (!imagery)
+        {
+            ++failed;
+            log_warn("[tiledump] imagery load failed for tile[%d] '%s'", objtype, info->name);
+            continue;
+        }
+
+        TAnimImagery* anim = dynamic_cast<TAnimImagery*>(imagery);
+        if (!anim || anim->NumStates() <= 0)
+        {
+            ++failed;
+            log_warn("[tiledump] imagery is not anim/still for tile[%d] '%s'", objtype, info->name);
+            continue;
+        }
+        PTBitmap bm = anim->GetStillImage(0);
+        if (!bm)
+        {
+            ++failed;
+            log_warn("[tiledump] no still image for tile[%d] '%s'", objtype, info->name);
+            continue;
+        }
+        std::vector<uint8_t> rgba;
+        if (!decode_tile_bitmap_rgba(bm, rgba))
+        {
+            ++failed;
+            log_warn("[tiledump] decode failed for tile[%d] '%s' flags=0x%x", objtype, info->name, bm->flags);
+            continue;
+        }
+
+        char stem[256];
+        std::snprintf(stem, sizeof(stem), "%04d_%s.png", objtype, SanitizeFilenameComponent(info->name).c_str());
+        const fs::path out_path = out_dir / stem;
+        if (!write_png_rgba(out_path, bm->width, bm->height, rgba))
+        {
+            ++failed;
+            log_warn("[tiledump] png write failed for tile[%d] '%s'", objtype, info->name);
+            continue;
+        }
+
+        ++dumped;
+    }
+
+    log_info("[tiledump] dumped=%d failed=%d folder='%s'",
+             dumped, failed, out_dir.string().c_str());
+    return dumped > 0;
+}
+
+bool InitializeTileDumpMode()
+{
+    return DumpTilesToPath(StartupDumpTilesPath);
+}
+
+struct SCharPreviewState
+{
+    sg_image fallback_albedo = {};
+    struct Sub {
+        MeshHandle handle = 0;
+        int32_t objnum = -1;
+        int32_t texslot = -1;
+    };
+    std::vector<Sub> subs;
+    TObjectInstance* inst = nullptr;
+    T3DImagery* img = nullptr;
+    std::vector<std::pair<int32_t, int32_t>> roster; // {objclass,objtype}
+    int32_t roster_idx = 0;
+    float bbox_min[3] = { 0, 0, 0 };
+    float bbox_max[3] = { 0, 0, 0 };
+    float scale = 1.0f;
+    float spin = 0.0f;
+    bool paused = false;
+    int64_t last_legacy_tick = -1;
+};
+SCharPreviewState g_charPreview;
+
+SAnimPose SampleCharPreviewPose()
+{
+    if (!g_charPreview.img || !g_charPreview.inst)
+        return {};
+    return SampleI3DAnimPose(g_charPreview.img,
+                             g_charPreview.inst->GetState(),
+                             g_charPreview.inst->GetFrame(),
+                             g_charPreview.inst->GetPrevState(),
+                             g_charPreview.inst->GetPrevFrame());
+}
+
+void CloseCharPreviewMode()
+{
+    if (g_charPreview.inst)
+    {
+        g_charPreview.inst->OffScreen();
+        delete g_charPreview.inst;
+        g_charPreview.inst = nullptr;
+    }
+    if (g_charPreview.fallback_albedo.id)
+    {
+        sg_destroy_image(g_charPreview.fallback_albedo);
+        g_charPreview.fallback_albedo = {};
+    }
+    g_charPreview.subs.clear();
+    g_charPreview.img = nullptr;
+    g_charPreview.spin = 0.0f;
+    g_charPreview.last_legacy_tick = -1;
+}
+
+bool RebuildCharPreviewForRosterIndex(int32_t roster_idx)
+{
+    if (!Renderer || roster_idx < 0 || roster_idx >= int32_t(g_charPreview.roster.size()))
+        return false;
+
+    if (g_charPreview.inst)
+    {
+        g_charPreview.inst->OffScreen();
+        delete g_charPreview.inst;
+        g_charPreview.inst = nullptr;
+    }
+    g_charPreview.subs.clear();
+    g_charPreview.img = nullptr;
+    g_charPreview.spin = 0.0f;
+    g_charPreview.last_legacy_tick = -1;
+    g_charPreview.roster_idx = roster_idx;
+
+    const auto [objclass, objtype] = g_charPreview.roster[roster_idx];
+    TObjectClass* cl = TObjectClass::GetClass(objclass);
+    if (!cl) return false;
+
+    SObjectDef def = {};
+    def.objclass = short(objclass);
+    def.objtype = short(objtype);
+    def.state = 0;
+    def.level = 0;
+    def.pos = {0, 0, 0};
+    def.vel = {0, 0, 0};
+    def.accum = {0, 0, 0};
+    def.rotatex = 0;
+    def.rotatey = 0;
+    def.rotatez = 32;
+    def.group = 0;
+
+    TObjectInstance* inst = cl->NewObject(&def);
+    if (!inst)
+        return false;
+    if (inst->IsCharacter())
+    {
+        if (auto* chr = dynamic_cast<TCharacter*>(inst))
+        {
+            const char* root = chr->DefaultRootState();
+            if (root && *root)
+                chr->SetState(root);
+        }
+    }
+    inst->OnScreen();
+    g_charPreview.inst = inst;
+
+    g_charPreview.img = dynamic_cast<T3DImagery*>(inst->GetImagery());
+    if (!g_charPreview.img)
+        return false;
+
+    if (!g_charPreview.fallback_albedo.id)
+    {
+        uint32_t white = 0xFFFFFFFFu;
+        sg_image_desc idesc = {};
+        idesc.width = 1;
+        idesc.height = 1;
+        idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        idesc.data.subimage[0][0] = { &white, sizeof(white) };
+        idesc.label = "char3d.albedo";
+        g_charPreview.fallback_albedo = sg_make_image(&idesc);
+    }
+
+    const int32_t state = inst->GetState();
+    const int32_t frame = inst->GetFrame();
+    const int32_t prevstate = inst->GetPrevState();
+    const int32_t prevframe = inst->GetPrevFrame();
+    const SAnimPose pose = SampleCharPreviewPose();
+    bool bbox_init = false;
+    const int32_t texslots = g_charPreview.img->NumTextures() + 1;
+    for (int32_t objnum = 0; objnum < g_charPreview.img->NumObjects(); ++objnum)
+    {
+        if (g_charPreview.img->IsHidden(objnum, state))
+            continue;
+
+        bool obj_kept = false;
+        for (int32_t texslot = 0; texslot < texslots; ++texslot)
+        {
+            std::vector<SMeshVertex> verts;
+            std::vector<uint16_t> indices;
+            if (!ExtractSubMeshTextureSlot(g_charPreview.img, objnum, texslot, verts, indices))
+                continue;
+
+            sg_image albedo = g_charPreview.fallback_albedo;
+            if (texslot > 0)
+            {
+                S3DTex tex = {};
+                g_charPreview.img->GetTexture(texslot - 1, &tex);
+                if (tex.surface.id)
+                    albedo = tex.surface;
+            }
+            MeshHandle h = Renderer->RegisterMesh(verts.data(), int32_t(verts.size()),
+                                                  indices.data(), int32_t(indices.size()),
+                                                  albedo);
+            if (!h) return false;
+            g_charPreview.subs.push_back({h, objnum, texslot});
+            obj_kept = true;
+
+            float world[16];
+            BuildAnimPoseObjectMatrix(g_charPreview.img, pose, state, objnum, world);
+            for (const auto& v : verts)
+            {
+                const float x = v.pos[0], y = v.pos[1], z = v.pos[2];
+                const float wx = world[0] * x + world[1] * y + world[2]  * z + world[3];
+                const float wy = world[4] * x + world[5] * y + world[6]  * z + world[7];
+                const float wz = world[8] * x + world[9] * y + world[10] * z + world[11];
+                if (!bbox_init) {
+                    g_charPreview.bbox_min[0] = g_charPreview.bbox_max[0] = wx;
+                    g_charPreview.bbox_min[1] = g_charPreview.bbox_max[1] = wy;
+                    g_charPreview.bbox_min[2] = g_charPreview.bbox_max[2] = wz;
+                    bbox_init = true;
+                } else {
+                    g_charPreview.bbox_min[0] = std::fmin(g_charPreview.bbox_min[0], wx);
+                    g_charPreview.bbox_min[1] = std::fmin(g_charPreview.bbox_min[1], wy);
+                    g_charPreview.bbox_min[2] = std::fmin(g_charPreview.bbox_min[2], wz);
+                    g_charPreview.bbox_max[0] = std::fmax(g_charPreview.bbox_max[0], wx);
+                    g_charPreview.bbox_max[1] = std::fmax(g_charPreview.bbox_max[1], wy);
+                    g_charPreview.bbox_max[2] = std::fmax(g_charPreview.bbox_max[2], wz);
+                }
+            }
+        }
+        if (!obj_kept)
+        {
+            std::vector<SMeshVertex> verts;
+            std::vector<uint16_t> indices;
+            if (!ExtractSubMesh(g_charPreview.img, objnum, verts, indices))
+                continue;
+            sg_image albedo = g_charPreview.fallback_albedo;
+            if (g_charPreview.img->NumTextures() > 0)
+            {
+                S3DTex tex = {};
+                g_charPreview.img->GetTexture(0, &tex);
+                if (tex.surface.id)
+                    albedo = tex.surface;
+            }
+            MeshHandle h = Renderer->RegisterMesh(verts.data(), int32_t(verts.size()),
+                                                  indices.data(), int32_t(indices.size()),
+                                                  albedo);
+            if (!h) return false;
+            g_charPreview.subs.push_back({h, objnum, -1});
+
+            float world[16];
+            BuildAnimPoseObjectMatrix(g_charPreview.img, pose, state, objnum, world);
+            for (const auto& v : verts)
+            {
+                const float x = v.pos[0], y = v.pos[1], z = v.pos[2];
+                const float wx = world[0] * x + world[1] * y + world[2]  * z + world[3];
+                const float wy = world[4] * x + world[5] * y + world[6]  * z + world[7];
+                const float wz = world[8] * x + world[9] * y + world[10] * z + world[11];
+                if (!bbox_init) {
+                    g_charPreview.bbox_min[0] = g_charPreview.bbox_max[0] = wx;
+                    g_charPreview.bbox_min[1] = g_charPreview.bbox_max[1] = wy;
+                    g_charPreview.bbox_min[2] = g_charPreview.bbox_max[2] = wz;
+                    bbox_init = true;
+                } else {
+                    g_charPreview.bbox_min[0] = std::fmin(g_charPreview.bbox_min[0], wx);
+                    g_charPreview.bbox_min[1] = std::fmin(g_charPreview.bbox_min[1], wy);
+                    g_charPreview.bbox_min[2] = std::fmin(g_charPreview.bbox_min[2], wz);
+                    g_charPreview.bbox_max[0] = std::fmax(g_charPreview.bbox_max[0], wx);
+                    g_charPreview.bbox_max[1] = std::fmax(g_charPreview.bbox_max[1], wy);
+                    g_charPreview.bbox_max[2] = std::fmax(g_charPreview.bbox_max[2], wz);
+                }
+            }
+        }
+    }
+
+    if (g_charPreview.subs.empty() || !bbox_init)
+        return false;
+
+    const float bbox_w = std::fmax(
+        std::fmax(g_charPreview.bbox_max[0] - g_charPreview.bbox_min[0],
+                  g_charPreview.bbox_max[1] - g_charPreview.bbox_min[1]),
+                  g_charPreview.bbox_max[2] - g_charPreview.bbox_min[2]);
+    const float autofit = (bbox_w > 1e-3f) ? (280.0f / bbox_w) : 1.0f;
+    g_charPreview.scale = (StartupAssetScale > 0.0f) ? StartupAssetScale : autofit;
+    log_info("[char3d] loaded %s:%s state=%d frame=%d prev=(%d,%d) subs=%zu scale=%.2f",
+             cl->ClassName(), inst->GetTypeName(), state, frame, prevstate, prevframe,
+             g_charPreview.subs.size(), g_charPreview.scale);
+    return true;
+}
+
+bool InitializeCharPreviewMode()
+{
+    CloseCharPreviewMode();
+    g_charPreview.roster.clear();
+    for (int32_t i = 0; i < CharacterClass.NumTypes(); ++i)
+        if (CharacterClass.GetObjType(i))
+            g_charPreview.roster.push_back({OBJCLASS_CHARACTER, i});
+    for (int32_t i = 0; i < PlayerClass.NumTypes(); ++i)
+        if (PlayerClass.GetObjType(i))
+            g_charPreview.roster.push_back({OBJCLASS_PLAYER, i});
+    if (g_charPreview.roster.empty())
+        return false;
+
+    int32_t pick = 0;
+    if (StartupAssetPath[0])
+    {
+        const int32_t c = CharacterClass.FindObjType(StartupAssetPath);
+        const int32_t p = PlayerClass.FindObjType(StartupAssetPath);
+        if (c >= 0)
+            for (int32_t i = 0; i < int32_t(g_charPreview.roster.size()); ++i)
+                if (g_charPreview.roster[i].first == OBJCLASS_CHARACTER && g_charPreview.roster[i].second == c)
+                    pick = i;
+        if (p >= 0)
+            for (int32_t i = 0; i < int32_t(g_charPreview.roster.size()); ++i)
+                if (g_charPreview.roster[i].first == OBJCLASS_PLAYER && g_charPreview.roster[i].second == p)
+                    pick = i;
+    }
+    return RebuildCharPreviewForRosterIndex(pick);
+}
+
+void RenderCharPreviewMode()
+{
+    if (!Renderer || !Display || !Display->BackBuffer()) return;
+    if (!g_charPreview.inst || g_charPreview.subs.empty() || !g_charPreview.img) return;
+
+    const int64_t legacy_tick = TTime::LegacyFrameCount();
+    if (!g_charPreview.paused && legacy_tick != g_charPreview.last_legacy_tick)
+    {
+        g_charPreview.last_legacy_tick = legacy_tick;
+        g_charPreview.inst->NextFrame();
+        if (g_charPreview.inst->NeedsAnimator() && !g_charPreview.inst->HasAnimator())
+            g_charPreview.inst->OnScreen();
+        g_charPreview.inst->Animate(false);
+        g_charPreview.spin += 0.035f;
+        if ((legacy_tick % 12) == 0)
+        {
+            log_info("[char3d] tick state=%d frame=%d prev=(%d,%d) len=%d done=%d",
+                     g_charPreview.inst->GetState(),
+                     g_charPreview.inst->GetFrame(),
+                     g_charPreview.inst->GetPrevState(),
+                     g_charPreview.inst->GetPrevFrame(),
+                     g_charPreview.inst->GetImagery()->GetAniLength(g_charPreview.inst->GetState()),
+                     g_charPreview.inst->CommandDone() ? 1 : 0);
+        }
+    }
+
+    const int32_t state = g_charPreview.inst->GetState();
+    const int32_t vw = Display->Width();
+    const int32_t vh = Display->Height();
+    const int32_t cam_ox = vw / 2;
+    const int32_t cam_oy = vh / 2;
+
+    Renderer->SetLight(0.6f, -0.6f, 0.4f, 1.0f, 1.0f, 1.0f, 1.0f, 0.25f);
+    Renderer->SetAmbientColor(0.55f, 0.55f, 0.55f);
+    Renderer->SetAmbientOcclusion(false, 12.0f, 1.0f, 0.15f, 96.0f);
+    Renderer->SetNormalLightingHardness(1.0f);
+    Renderer->SetLightingMode(1);
+    Renderer->SetTileViewMode(0);
+    Renderer->SetSunShadow(false, 24.0f, 3.0f, 32);
+
+    const float s = g_charPreview.scale;
+    const float bbox_w = std::fmax(
+        std::fmax(g_charPreview.bbox_max[0] - g_charPreview.bbox_min[0],
+                  g_charPreview.bbox_max[1] - g_charPreview.bbox_min[1]),
+                  g_charPreview.bbox_max[2] - g_charPreview.bbox_min[2]);
+    constexpr float kCam = 2750.0f;
+    const float half_z = std::fmax(256.0f, bbox_w * s);
+    const float znear = kCam - half_z - 128.0f;
+    const float zfar  = kCam + half_z + 128.0f;
+    Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy), znear, zfar, 0.0f, 0.0f, kCam, 0.0f);
+    Renderer->ClearPointLights();
+    Renderer->BeginTilePass(0.08f, 0.08f, 0.12f, 1.0f);
+
+    const float cx = 0.5f * (g_charPreview.bbox_min[0] + g_charPreview.bbox_max[0]);
+    const float cy = 0.5f * (g_charPreview.bbox_min[1] + g_charPreview.bbox_max[1]);
+    const float cz = 0.5f * (g_charPreview.bbox_min[2] + g_charPreview.bbox_max[2]);
+    const float c = std::cos(g_charPreview.spin);
+    const float si = std::sin(g_charPreview.spin);
+    const float rot[16] = {
+         c, -si, 0.0f, 0.0f,
+         si,  c, 0.0f, 0.0f,
+       0.0f, 0.0f, 1.0f, 0.0f,
+       0.0f, 0.0f, 0.0f, 1.0f
+    };
+    const SAnimPose pose = SampleCharPreviewPose();
+    for (const auto& sub : g_charPreview.subs)
+    {
+        SMeshSubmit m = {};
+        m.mesh = sub.handle;
+        float w[16];
+        BuildAnimPoseObjectMatrix(g_charPreview.img, pose, state, sub.objnum, w);
+        w[0] *= s; w[1] *= s; w[2] *= s; w[3] *= s;
+        w[4] *= s; w[5] *= s; w[6] *= s; w[7] *= s;
+        w[8] *= s; w[9] *= s; w[10] *= s; w[11] *= s;
+        w[3] -= cx * s;
+        w[7] -= cy * s;
+        w[11] -= cz * s;
+        float wr[16];
+        MatrixMul16(rot, w, wr);
+        std::memcpy(m.world, wr, sizeof(wr));
+        m.tint[0] = m.tint[1] = m.tint[2] = m.tint[3] = 1.0f;
+        Renderer->SubmitMesh(m);
+    }
+    Renderer->EndTilePass();
+    Renderer->RunLightingPass();
+}
 
 // --- Mesh test state ----------------------------------------------------
 struct SMeshTestState
@@ -163,6 +823,731 @@ void CloseMeshMode()
 {
     if (g_meshTest.albedo.id) { sg_destroy_image(g_meshTest.albedo); g_meshTest.albedo = {}; }
     g_meshTest.cube = 0;
+}
+
+// --- I3D static-render test state ---------------------------------------
+// Loads one T3DImagery asset and renders all its sub-objects in state 0
+// frame 0 (binding pose). Proves the mesh-extract + hierarchy walk before
+// we plumb animation or map integration.
+struct SI3DStaticTestState
+{
+    sg_image   fallback_albedo = {};
+    sg_image   bg_black = {};
+    sg_image   bg_brown = {};
+    sg_image   bg_green = {};
+    sg_image   bg_checker = {};
+    sg_image   bg_depth = {};
+    struct Sub {
+        MeshHandle handle;
+        int32_t    objnum = -1;
+        int32_t    texslot = -1;
+        int32_t    texture_idx = -1;
+        float      world[16];  // state-0/frame-0 local hierarchy matrix
+    };
+    std::vector<Sub> subs;
+    std::vector<std::string> roster;
+    int32_t    roster_idx = 0;
+    std::string active_asset;
+    int32_t    bg_mode = 0;
+    T3DImagery* img = nullptr;
+    bool       transparent_preview = false;
+    SRenderMetadata render_meta;
+    const SRenderPolicy* active_policy = nullptr;
+    float      bbox_min[3] = { 0, 0, 0 };
+    float      bbox_max[3] = { 0, 0, 0 };
+    float      scale  = 1.0f;
+    float      spin = 0.0f;
+    double     anim_time = 0.0;
+    int32_t    anim_state = 0;
+    int32_t    anim_frame = 0;
+    int32_t    anim_prev_frame = 0;
+    int32_t    frames = 0;
+    bool       logged = false;
+};
+SI3DStaticTestState g_i3dTest;
+
+const char* kI3DBGNames[] = {
+    "checkerboard",
+    "black",
+    "light brown",
+    "green",
+};
+
+sg_image MakeSolidImage(uint32_t rgba, const char* label)
+{
+    sg_image_desc idesc = {};
+    idesc.width = 1;
+    idesc.height = 1;
+    idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    idesc.data.subimage[0][0] = { &rgba, sizeof(rgba) };
+    idesc.label = label;
+    return sg_make_image(&idesc);
+}
+
+sg_image MakeCheckerImage(const char* label)
+{
+    static constexpr int32_t kW = 64;
+    static constexpr int32_t kH = 64;
+    uint32_t pixels[kW * kH] = {};
+    for (int32_t y = 0; y < kH; ++y)
+    {
+        for (int32_t x = 0; x < kW; ++x)
+        {
+            const bool dark = (((x / 8) + (y / 8)) & 1) != 0;
+            const uint8_t c = dark ? 0x66 : 0xB8;
+            pixels[y * kW + x] = 0xFF000000u | (uint32_t(c) << 16) | (uint32_t(c) << 8) | uint32_t(c);
+        }
+    }
+    sg_image_desc idesc = {};
+    idesc.width = kW;
+    idesc.height = kH;
+    idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    idesc.min_filter = SG_FILTER_NEAREST;
+    idesc.mag_filter = SG_FILTER_NEAREST;
+    idesc.wrap_u = SG_WRAP_REPEAT;
+    idesc.wrap_v = SG_WRAP_REPEAT;
+    idesc.data.subimage[0][0] = { pixels, sizeof(pixels) };
+    idesc.label = label;
+    return sg_make_image(&idesc);
+}
+
+bool EnsureI3DStaticBackgroundAssets()
+{
+    if (g_i3dTest.bg_black.id && g_i3dTest.bg_brown.id &&
+        g_i3dTest.bg_green.id && g_i3dTest.bg_checker.id &&
+        g_i3dTest.bg_depth.id)
+        return true;
+
+    if (!g_i3dTest.bg_black.id)   g_i3dTest.bg_black   = MakeSolidImage(0xFF000000u, "i3d3d.bg.black");
+    if (!g_i3dTest.bg_brown.id)   g_i3dTest.bg_brown   = MakeSolidImage(0xFF6E7B9Au, "i3d3d.bg.brown");
+    if (!g_i3dTest.bg_green.id)   g_i3dTest.bg_green   = MakeSolidImage(0xFF4E7A4Au, "i3d3d.bg.green");
+    if (!g_i3dTest.bg_checker.id) g_i3dTest.bg_checker = MakeCheckerImage("i3d3d.bg.checker");
+
+    if (!g_i3dTest.bg_depth.id)
+    {
+        const float zero = 0.0f;
+        sg_image_desc idesc = {};
+        idesc.width = 1;
+        idesc.height = 1;
+        idesc.pixel_format = SG_PIXELFORMAT_R32F;
+        idesc.min_filter = SG_FILTER_NEAREST;
+        idesc.mag_filter = SG_FILTER_NEAREST;
+        idesc.data.subimage[0][0] = { &zero, sizeof(zero) };
+        idesc.label = "i3d3d.bg.depth";
+        g_i3dTest.bg_depth = sg_make_image(&idesc);
+    }
+
+    return g_i3dTest.bg_black.id && g_i3dTest.bg_brown.id &&
+           g_i3dTest.bg_green.id && g_i3dTest.bg_checker.id &&
+           g_i3dTest.bg_depth.id;
+}
+
+sg_image CurrentI3DBackgroundImage()
+{
+    switch (g_i3dTest.bg_mode)
+    {
+    case 1: return g_i3dTest.bg_black;
+    case 2: return g_i3dTest.bg_brown;
+    case 3: return g_i3dTest.bg_green;
+    default: return g_i3dTest.bg_checker;
+    }
+}
+
+const char* RenderMetaBlendName(ERenderMetaBlend blend)
+{
+    switch (blend)
+    {
+    case ERenderMetaBlend::Opaque: return "opaque";
+    case ERenderMetaBlend::Alpha: return "alpha";
+    case ERenderMetaBlend::Additive: return "additive";
+    }
+    return "?";
+}
+
+const char* RenderMetaDrawableName(ERenderMetaDrawable drawable)
+{
+    switch (drawable)
+    {
+    case ERenderMetaDrawable::Mesh: return "mesh";
+    case ERenderMetaDrawable::WaterParticles: return "water_particles";
+    case ERenderMetaDrawable::WaterfallParticles: return "waterfall_particles";
+    }
+    return "?";
+}
+
+const char* RenderMetaLightingName(ERenderMetaLighting lighting)
+{
+    switch (lighting)
+    {
+    case ERenderMetaLighting::Lit: return "lit";
+    case ERenderMetaLighting::Fullbright: return "fullbright";
+    case ERenderMetaLighting::VertexLit: return "vertex_lit";
+    case ERenderMetaLighting::UnlitShadow: return "unlit_shadow";
+    }
+    return "?";
+}
+
+const char* RenderMetaTextureAnimName(ERenderMetaTextureAnim anim)
+{
+    switch (anim)
+    {
+    case ERenderMetaTextureAnim::None: return "none";
+    case ERenderMetaTextureAnim::FrameByInstance: return "frame_by_instance";
+    }
+    return "?";
+}
+
+const char* WaterPreviewTypeName()
+{
+    static const char* kNames[] = {
+        "Water",
+        "StillWater",
+        "FlowWater",
+        "BendWater1",
+        "BendWater2",
+        "SewerWater",
+        "Wave",
+        "WaveS",
+        "WaveM",
+        "WaterFlft",
+        "WaterFrt",
+        "WaterClft",
+        "WaterCrt",
+        "RiverFall",
+        "Box",
+        "Axis",
+    };
+    if (g_i3dTest.roster_idx >= 0 && g_i3dTest.roster_idx < int32_t(sizeof(kNames) / sizeof(kNames[0])))
+        return kNames[g_i3dTest.roster_idx];
+    return nullptr;
+}
+
+void LogWaterPreviewPolicy()
+{
+    const char* type_name = WaterPreviewTypeName();
+    g_i3dTest.active_policy = type_name ? g_i3dTest.render_meta.FindEffect(type_name) : nullptr;
+    if (!g_i3dTest.active_policy && type_name)
+    {
+        if (const SRenderObjectPolicy* helper = g_i3dTest.render_meta.FindHelper(type_name))
+            g_i3dTest.active_policy = helper;
+    }
+    if (g_i3dTest.active_policy)
+    {
+        const SRenderPolicy& p = *g_i3dTest.active_policy;
+        log_info("[water3d] showing type='%s' asset='%s' expected drawable=%s blend=%s lighting=%s ztest=%d zwrite=%d texanim=%d",
+                 type_name ? type_name : "?",
+                 g_i3dTest.active_asset.c_str(),
+                 RenderMetaDrawableName(p.drawable),
+                 RenderMetaBlendName(p.blend),
+                 RenderMetaLightingName(p.lighting),
+                 p.ztest ? 1 : 0,
+                 p.zwrite ? 1 : 0,
+                 int(p.texture_anim));
+    }
+    else
+    {
+        log_info("[water3d] showing type='%s' asset='%s' expected policy=<none>",
+                 type_name ? type_name : "?",
+                 g_i3dTest.active_asset.c_str());
+    }
+}
+
+void LogI3DAnimationSummary(T3DImagery* img, const char* label)
+{
+    if (!img)
+        return;
+    log_info("[water3d] anim summary '%s': states=%d textures=%d",
+             label ? label : "?", img->NumStates(), img->NumTextures());
+    for (int32_t st = 0; st < img->NumStates() && st < 6; ++st)
+    {
+        PSImageryStateHeader state = img->GetState(st);
+        log_info("[water3d]   state[%d] name='%s' frames=%d flags=0x%x",
+                 st,
+                 state ? state->animname : "?",
+                 img->GetAniLength(st),
+                 img->GetAniFlags(st));
+    }
+    for (int32_t texnum = 0; texnum < img->NumTextures() && texnum < 6; ++texnum)
+    {
+        S3DTex tex = {};
+        img->GetTexture(texnum, &tex);
+        log_info("[water3d]   tex[%d] frames=%d current=%d surface=%u",
+                 texnum, tex.numframes, tex.framenum, tex.surface.id);
+    }
+    const int32_t st = 0;
+    const int32_t len = img->NumStates() > 0 ? img->GetAniLength(st) : 0;
+    for (int32_t objnum = 0; objnum < img->NumObjects() && objnum < 4; ++objnum)
+    {
+        int32_t frames[3] = {0, len > 1 ? len / 2 : 0, len > 1 ? len - 1 : 0};
+        for (int32_t i = 0; i < 3; ++i)
+        {
+            hmm_vec3 pos = {}, rot = {}, scl = {1,1,1};
+            const bool ok = len > 0 && img->GetUninterpolatedAniKey(objnum, st, frames[i], pos, rot, scl);
+            log_info("[water3d]   obj[%d] frame=%d key_ok=%d pos=(%.3f,%.3f,%.3f) rot=(%.3f,%.3f,%.3f) scl=(%.3f,%.3f,%.3f)",
+                     objnum, frames[i], ok ? 1 : 0,
+                     pos.X, pos.Y, pos.Z,
+                     rot.X, rot.Y, rot.Z,
+                     scl.X, scl.Y, scl.Z);
+        }
+    }
+}
+
+void DrawWaterPreviewOverlay()
+{
+    if (g_i3dTest.roster.empty())
+        return;
+
+    ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.72f);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
+                             ImGuiWindowFlags_AlwaysAutoResize |
+                             ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoFocusOnAppearing |
+                             ImGuiWindowFlags_NoNav;
+    if (!ImGui::Begin("water3d_overlay", nullptr, flags))
+    {
+        ImGui::End();
+        return;
+    }
+
+    const char* type_name = WaterPreviewTypeName();
+    ImGui::Text("water3d  %d/%zu", g_i3dTest.roster_idx + 1, g_i3dTest.roster.size());
+    ImGui::Separator();
+    ImGui::Text("type:  %s", type_name ? type_name : "?");
+    ImGui::Text("asset: %s", g_i3dTest.active_asset.c_str());
+    ImGui::Text("bg:    %s", kI3DBGNames[g_i3dTest.bg_mode]);
+
+    if (g_i3dTest.active_policy)
+    {
+        const SRenderPolicy& p = *g_i3dTest.active_policy;
+        ImGui::Separator();
+        ImGui::Text("drawable: %s", RenderMetaDrawableName(p.drawable));
+        ImGui::Text("blend:    %s", RenderMetaBlendName(p.blend));
+        ImGui::Text("lighting: %s", RenderMetaLightingName(p.lighting));
+        ImGui::Text("ztest/zwrite: %d / %d", p.ztest ? 1 : 0, p.zwrite ? 1 : 0);
+        ImGui::Text("tex anim: %s", RenderMetaTextureAnimName(p.texture_anim));
+    }
+    else
+    {
+        ImGui::Separator();
+        ImGui::Text("policy: <none>");
+    }
+
+    ImGui::Separator();
+    ImGui::Text("frame: %d  anim: %d -> %d", g_i3dTest.frames,
+                g_i3dTest.anim_prev_frame, g_i3dTest.anim_frame);
+    if (g_i3dTest.img)
+    {
+        ImGui::Text("textures: %d", g_i3dTest.img->NumTextures());
+        for (int32_t i = 0; i < g_i3dTest.img->NumTextures() && i < 4; ++i)
+        {
+            S3DTex tex = {};
+            g_i3dTest.img->GetTexture(i, &tex);
+            ImGui::Text("tex[%d]: frame %d/%d img=%u", i, tex.framenum, tex.numframes, tex.surface.id);
+        }
+    }
+    ImGui::Text("subs: %zu", g_i3dTest.subs.size());
+    ImGui::Text("LMB next asset, RMB bg");
+
+    ImGui::End();
+}
+
+bool LoadI3DStaticAsset(const char* path)
+{
+    if (!Renderer) { log_error("[i3d3d] Renderer is null"); return false; }
+
+    g_i3dTest.subs.clear();
+    g_i3dTest.logged = false;
+    g_i3dTest.spin = 0.0f;
+    g_i3dTest.frames = 0;
+    g_i3dTest.anim_time = 0.0;
+    g_i3dTest.anim_state = 0;
+    g_i3dTest.anim_frame = 0;
+    g_i3dTest.anim_prev_frame = 0;
+    g_i3dTest.img = nullptr;
+
+    if (!g_i3dTest.fallback_albedo.id)
+    {
+        uint32_t white = 0xFFFFFFFFu;
+        sg_image_desc idesc = {};
+        idesc.width = 1; idesc.height = 1;
+        idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        idesc.data.subimage[0][0] = { &white, sizeof(white) };
+        idesc.label = "i3d3d.albedo";
+        g_i3dTest.fallback_albedo = sg_make_image(&idesc);
+    }
+    if (!EnsureI3DStaticBackgroundAssets())
+    {
+        log_error("[i3d3d] failed to initialize preview backgrounds");
+        return false;
+    }
+
+    g_i3dTest.active_asset = path ? path : "";
+    log_info("[i3d3d] resolving '%s'", path);
+    const int32_t id = TObjectImagery::FindImagery(path);
+    log_info("[i3d3d]   FindImagery returned id=%d", id);
+    if (id < 0) { log_error("[i3d3d] FindImagery failed for '%s'", path); return false; }
+    log_info("[i3d3d]   LoadImagery...");
+    TObjectImagery* base = TObjectImagery::LoadImagery(id);
+    log_info("[i3d3d]   LoadImagery -> %p", (void*)base);
+    if (!base) { log_error("[i3d3d] LoadImagery returned null for '%s'", path); return false; }
+    T3DImagery* img = dynamic_cast<T3DImagery*>(base);
+    if (!img) { log_error("[i3d3d] imagery is not a T3DImagery (id=%d)", id); return false; }
+    g_i3dTest.img = img;
+
+    log_info("[i3d3d] loaded '%s' (NumVerts=%d NumFaces=%d NumObjects=%d)",
+             path, img->NumVerts(), img->NumFaces(), img->NumObjects());
+    if (!g_i3dTest.roster.empty())
+        LogI3DAnimationSummary(img, path);
+
+    bool bbox_init = false;
+    int32_t total_tris = 0;
+    const int32_t texslots = img->NumTextures() + 1;
+    for (int32_t objnum = 0; objnum < img->NumObjects(); ++objnum) {
+        if (img->IsHidden(objnum, 0))
+            continue;
+        bool logged_obj = false;
+        for (int32_t texslot = 0; texslot < texslots; ++texslot) {
+            std::vector<SMeshVertex> verts;
+            std::vector<uint16_t>    indices;
+            if (!ExtractSubMeshTextureSlot(img, objnum, texslot, verts, indices))
+                continue;
+
+            sg_image albedo = g_i3dTest.fallback_albedo;
+            int32_t texture_idx = -1;
+            if (texslot > 0) {
+                S3DTex tex = {};
+                img->GetTexture(texslot - 1, &tex);
+                if (tex.surface.id)
+                    albedo = tex.surface;
+                texture_idx = texslot - 1;
+            }
+            if (texture_idx < 0)
+            {
+                S3DObj obj = {};
+                img->GetObject(objnum, &obj);
+                if (obj.material >= 0 && obj.material < img->NumMaterials())
+                {
+                    S3DMat mat = {};
+                    img->GetMaterial(obj.material, &mat);
+                    if (mat.texture >= 0 && mat.texture < img->NumTextures())
+                    {
+                        S3DTex tex = {};
+                        img->GetTexture(mat.texture, &tex);
+                        if (tex.surface.id)
+                        {
+                            albedo = tex.surface;
+                            texture_idx = mat.texture;
+                        }
+                    }
+                }
+            }
+
+            MeshHandle h = Renderer->RegisterMesh(verts.data(), int32_t(verts.size()),
+                                                  indices.data(), int32_t(indices.size()),
+                                                  albedo);
+            if (!h) {
+                log_error("[i3d3d] RegisterMesh failed for obj %d texslot %d", objnum, texslot);
+                return false;
+            }
+
+            SI3DStaticTestState::Sub s = {};
+            s.handle = h;
+            s.objnum = objnum;
+            s.texslot = texslot;
+            s.texture_idx = texture_idx;
+            BuildStaticObjectMatrix(img, objnum, 0, 0, s.world);
+            g_i3dTest.subs.push_back(s);
+            total_tris += int32_t(indices.size() / 3);
+
+            if (!logged_obj)
+            {
+                logged_obj = true;
+                float cmin[3] = { 0, 0, 0 };
+                float cmax[3] = { 0, 0, 0 };
+                if (!verts.empty())
+                {
+                    cmin[0] = cmax[0] = verts[0].pos[0];
+                    cmin[1] = cmax[1] = verts[0].pos[1];
+                    cmin[2] = cmax[2] = verts[0].pos[2];
+                    for (const auto& v : verts)
+                    {
+                        cmin[0] = std::fmin(cmin[0], v.pos[0]);
+                        cmin[1] = std::fmin(cmin[1], v.pos[1]);
+                        cmin[2] = std::fmin(cmin[2], v.pos[2]);
+                        cmax[0] = std::fmax(cmax[0], v.pos[0]);
+                        cmax[1] = std::fmax(cmax[1], v.pos[1]);
+                        cmax[2] = std::fmax(cmax[2], v.pos[2]);
+                    }
+                }
+                hmm_vec3 key_pos = {}, key_rot = {}, key_scl = { 1.0f, 1.0f, 1.0f };
+                img->GetUninterpolatedAniKey(objnum, 0, 0, key_pos, key_rot, key_scl);
+                const float center_x = 0.5f * (cmin[0] + cmax[0]);
+                const float center_y = 0.5f * (cmin[1] + cmax[1]);
+                const float center_z = 0.5f * (cmin[2] + cmax[2]);
+                log_info(
+                    "[i3d3d]   obj[%d] '%s' parent=%d key_pos=(%.3f,%.3f,%.3f) "
+                    "key_rot=(%.3f,%.3f,%.3f) key_scl=(%.3f,%.3f,%.3f) "
+                    "local_center=(%.3f,%.3f,%.3f) world_t=(%.3f,%.3f,%.3f)",
+                    objnum, img->GetObjectName(objnum), img->GetObjectParent(objnum, 0),
+                    key_pos.X, key_pos.Y, key_pos.Z,
+                    key_rot.X, key_rot.Y, key_rot.Z,
+                    key_scl.X, key_scl.Y, key_scl.Z,
+                    center_x, center_y, center_z,
+                    s.world[3], s.world[7], s.world[11]);
+            }
+
+            for (const auto& v : verts) {
+                const float x = v.pos[0];
+                const float y = v.pos[1];
+                const float z = v.pos[2];
+                const float wx = s.world[0] * x + s.world[1] * y + s.world[2]  * z + s.world[3];
+                const float wy = s.world[4] * x + s.world[5] * y + s.world[6]  * z + s.world[7];
+                const float wz = s.world[8] * x + s.world[9] * y + s.world[10] * z + s.world[11];
+                if (!bbox_init) {
+                    g_i3dTest.bbox_min[0] = g_i3dTest.bbox_max[0] = wx;
+                    g_i3dTest.bbox_min[1] = g_i3dTest.bbox_max[1] = wy;
+                    g_i3dTest.bbox_min[2] = g_i3dTest.bbox_max[2] = wz;
+                    bbox_init = true;
+                } else {
+                    g_i3dTest.bbox_min[0] = std::fmin(g_i3dTest.bbox_min[0], wx);
+                    g_i3dTest.bbox_min[1] = std::fmin(g_i3dTest.bbox_min[1], wy);
+                    g_i3dTest.bbox_min[2] = std::fmin(g_i3dTest.bbox_min[2], wz);
+                    g_i3dTest.bbox_max[0] = std::fmax(g_i3dTest.bbox_max[0], wx);
+                    g_i3dTest.bbox_max[1] = std::fmax(g_i3dTest.bbox_max[1], wy);
+                    g_i3dTest.bbox_max[2] = std::fmax(g_i3dTest.bbox_max[2], wz);
+                }
+            }
+        }
+    }
+
+    if (g_i3dTest.subs.empty()) {
+        log_error("[i3d3d] no renderable sub-meshes extracted");
+        return false;
+    }
+
+    log_info("[i3d3d]   object-meshes: subs=%zu tris=%d",
+             g_i3dTest.subs.size(), total_tris);
+    // Auto-fit scale: target a ~200-world-unit-wide render regardless of
+    // the asset's native units. Override via --scale=f.
+    const float bbox_w = std::fmax(
+        std::fmax(g_i3dTest.bbox_max[0] - g_i3dTest.bbox_min[0],
+                  g_i3dTest.bbox_max[1] - g_i3dTest.bbox_min[1]),
+                  g_i3dTest.bbox_max[2] - g_i3dTest.bbox_min[2]);
+    // Fit the full authored bbox into the preview. Treat oversized manual
+    // scales as hints, not absolute truth, so the model remains viewable.
+    const float autofit = (bbox_w > 1e-3f) ? (300.0f / bbox_w) : 1.0f;
+    if (StartupAssetScale > 0.0f)
+        g_i3dTest.scale = std::fmin(StartupAssetScale, autofit);
+    else
+        g_i3dTest.scale = autofit;
+
+    log_info("[i3d3d] world bbox min=(%.1f,%.1f,%.1f) max=(%.1f,%.1f,%.1f) scale=%.2f",
+             g_i3dTest.bbox_min[0], g_i3dTest.bbox_min[1], g_i3dTest.bbox_min[2],
+             g_i3dTest.bbox_max[0], g_i3dTest.bbox_max[1], g_i3dTest.bbox_max[2],
+             g_i3dTest.scale);
+    if (!g_i3dTest.roster.empty())
+        LogWaterPreviewPolicy();
+    return true;
+}
+
+// Re-use --asset=... arg as the asset path selector. If unset, default.
+bool InitializeI3DStaticMode()
+{
+    g_i3dTest.roster.clear();
+    g_i3dTest.roster_idx = 0;
+    const char* path = StartupAssetPath[0] ? StartupAssetPath : "Misc\\Blood.I3D";
+    return LoadI3DStaticAsset(path);
+}
+
+bool InitializeWaterPreviewMode()
+{
+    std::string meta_error;
+    const std::filesystem::path meta_path =
+        std::filesystem::current_path() / ".." / "data" / "Resources" / "render_metadata.def";
+    if (!LoadRenderMetadataFile(meta_path.string().c_str(), g_i3dTest.render_meta, &meta_error))
+        log_warn("[water3d] failed to load render metadata '%s': %s",
+                 meta_path.string().c_str(), meta_error.c_str());
+
+    g_i3dTest.roster = {
+        "Misc\\Water.I3D",
+        "Misc\\StillWater.I3D",
+        "Misc\\FlowWater.I3D",
+        "Misc\\BendWater1.I3D",
+        "Misc\\BendWater2.I3D",
+        "Misc\\SewerW.I3D",
+        "Misc\\Wave.I3D",
+        "Misc\\WaveS.I3D",
+        "Misc\\WaveM.I3D",
+        "Misc\\WFall.I3D",
+        "Misc\\WFall2.I3D",
+        "Misc\\WCap.I3D",
+        "Misc\\WCap2.I3D",
+        "Misc\\RiverFall.I3D",
+        "Misc\\Box.I3D",
+        "Misc\\Axis.I3D",
+    };
+    g_i3dTest.roster_idx = 0;
+    g_i3dTest.transparent_preview = true;
+    return LoadI3DStaticAsset(g_i3dTest.roster[g_i3dTest.roster_idx].c_str());
+}
+
+void RenderI3DStaticMode()
+{
+    if (!Renderer || !Display || !Display->BackBuffer()) return;
+    if (g_i3dTest.subs.empty()) return;
+
+    g_i3dTest.spin += 0.01f;
+    g_i3dTest.frames++;
+
+    const int32_t vw = Display->Width();
+    const int32_t vh = Display->Height();
+    const int32_t cam_ox = vw / 2;
+    const int32_t cam_oy = vh / 2;
+
+    Renderer->SetLight(0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+    Renderer->SetAmbientColor(1.0f, 1.0f, 1.0f);
+    Renderer->SetAmbientOcclusion(false, 12.0f, 1.0f, 0.15f, 96.0f);
+    Renderer->SetNormalLightingHardness(1.0f);
+    Renderer->SetLightingMode(1);
+    Renderer->SetTileViewMode(0);  // lit preview
+    Renderer->SetSunShadow(false, 24.0f, 3.0f, 32);
+
+    // Work in scaled-asset world units: bbox * scale, centered at origin.
+    const float s = g_i3dTest.scale;
+    const float bbox_w = std::fmax(
+        std::fmax(g_i3dTest.bbox_max[0] - g_i3dTest.bbox_min[0],
+                  g_i3dTest.bbox_max[1] - g_i3dTest.bbox_min[1]),
+                  g_i3dTest.bbox_max[2] - g_i3dTest.bbox_min[2]);
+    constexpr float kCam = 2750.0f;
+    const float half_z = std::fmax(256.0f, bbox_w * s);
+    const float znear = kCam - half_z - 128.0f;
+    const float zfar  = kCam + half_z + 128.0f;
+    Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
+                                      znear, zfar, 0.0f, 0.0f, kCam, 0.0f);
+    Renderer->ClearPointLights();
+
+    if (g_i3dTest.img)
+    {
+        const int32_t len = (std::max)(1, g_i3dTest.img->GetAniLength(g_i3dTest.anim_state));
+        g_i3dTest.anim_time += TTime::DeltaTime() * 24.0;
+        const double wrapped = std::fmod(g_i3dTest.anim_time, double(len));
+        const double positive = wrapped < 0.0 ? wrapped + double(len) : wrapped;
+        g_i3dTest.anim_frame = int32_t(positive) % len;
+        g_i3dTest.anim_prev_frame = (g_i3dTest.anim_frame + len - 1) % len;
+    }
+
+    // Apply uniform scale to the I3D mesh (sub 0 is the control triangle
+    // which is pre-sized in world units; don't scale that).
+    Renderer->BeginTilePass(0.08f, 0.08f, 0.12f, 1.0f);
+    const float cx = 0.5f * (g_i3dTest.bbox_min[0] + g_i3dTest.bbox_max[0]);
+    const float cy = 0.5f * (g_i3dTest.bbox_min[1] + g_i3dTest.bbox_max[1]);
+    const float cz = 0.5f * (g_i3dTest.bbox_min[2] + g_i3dTest.bbox_max[2]);
+    {
+        STileSubmit bg = {};
+        bg.color_img = CurrentI3DBackgroundImage();
+        bg.depth_img = g_i3dTest.bg_depth;
+        bg.dst_x = 0;
+        bg.dst_y = 0;
+        bg.dst_w = vw;
+        bg.dst_h = vh;
+        bg.anchor_z = 0.995f;
+        bg.depth_mul = 0.0f;
+        bg.normal_mul = 0.0f;
+        bg.root_wx = 0.0f;
+        bg.root_wy = 0.0f;
+        bg.root_wz = 0.0f;
+        bg.anchor_px_x = 0.0f;
+        bg.anchor_px_y = 0.0f;
+        bg.zraw_to_wu = 0.0f;
+        Renderer->SubmitTile(bg);
+    }
+    for (const auto& sub : g_i3dTest.subs) {
+        SAnimPose anim_pose;
+        if (g_i3dTest.img)
+        {
+            const int32_t len = (std::max)(1, g_i3dTest.img->GetAniLength(g_i3dTest.anim_state));
+            const float frac = float(g_i3dTest.anim_time - std::floor(g_i3dTest.anim_time));
+            const int32_t next_frame = (g_i3dTest.anim_frame + 1) % len;
+            const SAnimPose a = SampleI3DAnimPose(g_i3dTest.img, g_i3dTest.anim_state, g_i3dTest.anim_frame);
+            const SAnimPose b = SampleI3DAnimPose(g_i3dTest.img, g_i3dTest.anim_state, next_frame);
+            anim_pose = BlendI3DAnimPoses(a, b, frac);
+        }
+        if (g_i3dTest.img && sub.texture_idx >= 0)
+        {
+            g_i3dTest.img->SetTextureFrame(sub.texture_idx, g_i3dTest.anim_frame);
+            S3DTex tex = {};
+            g_i3dTest.img->GetTexture(sub.texture_idx, &tex);
+            if (tex.surface.id)
+                Renderer->SetMeshAlbedo(sub.handle, tex.surface);
+        }
+        float w[16];
+        if (g_i3dTest.img)
+            BuildAnimPoseObjectMatrix(g_i3dTest.img, anim_pose, g_i3dTest.anim_state, sub.objnum, w);
+        else
+            std::memcpy(w, sub.world, sizeof(w));
+        // Uniform scale in object/world space: scale both basis vectors and
+        // translations because the hierarchy stores both in asset units.
+        w[0] *= s; w[1] *= s; w[2] *= s; w[3] *= s;
+        w[4] *= s; w[5] *= s; w[6] *= s; w[7] *= s;
+        w[8] *= s; w[9] *= s; w[10] *= s; w[11] *= s;
+
+        // Recenter the authored asset-space bbox around the preview origin so
+        // characters authored away from (0,0,0) still frame on screen.
+        w[3]  -= cx * s;
+        w[7]  -= cy * s;
+        w[11] -= cz * s;
+        if (g_i3dTest.transparent_preview)
+        {
+            SHelperMeshSubmit m = {};
+            m.mesh = sub.handle;
+            m.additive_blend = g_i3dTest.active_policy &&
+                               g_i3dTest.active_policy->blend == ERenderMetaBlend::Additive;
+            std::memcpy(m.world, w, sizeof(w));
+            m.diffuse[0] = m.diffuse[1] = m.diffuse[2] = m.diffuse[3] = 1.0f;
+            m.ambient[0] = m.ambient[1] = m.ambient[2] = m.ambient[3] = 1.0f;
+            m.specular[0] = m.specular[1] = m.specular[2] = m.specular[3] = 0.0f;
+            m.emissive[0] = m.emissive[1] = m.emissive[2] = 0.0f;
+            m.emissive[3] = 1.0f;
+            m.power = 1.0f;
+            m.sort_depth = kCam - 0.867f * (w[3] + w[7]) - 0.5f * w[11];
+            Renderer->SubmitHelperMesh(m);
+        }
+        else
+        {
+            SMeshSubmit m = {};
+            m.mesh = sub.handle;
+            std::memcpy(m.world, w, sizeof(w));
+            m.tint[0] = 1.0f; m.tint[1] = 1.0f; m.tint[2] = 1.0f; m.tint[3] = 1.0f;
+            Renderer->SubmitMesh(m);
+        }
+    }
+    Renderer->EndTilePass();
+    Renderer->RunLightingPass();
+
+    if (!g_i3dTest.logged) {
+        g_i3dTest.logged = true;
+        log_info("[i3d3d] first-frame: %zu subs, znear=%.1f zfar=%.1f",
+                 g_i3dTest.subs.size(), znear, zfar);
+    }
+
+    if (g_i3dTest.transparent_preview)
+        DrawWaterPreviewOverlay();
+}
+
+void CloseI3DStaticMode()
+{
+    g_i3dTest.img = nullptr;
+    // Mesh handles registered with the renderer still point at these images.
+    // Keep them alive until the renderer/backend shutdown owns the final tear-down.
+    g_i3dTest.subs.clear();
+    g_i3dTest.roster.clear();
+    g_i3dTest.roster_idx = 0;
+    g_i3dTest.active_asset.clear();
+    g_i3dTest.bg_mode = 0;
+    g_i3dTest.transparent_preview = false;
+    g_i3dTest.logged = false;
 }
 
 bool InitializeTTFMode()
@@ -461,6 +1846,11 @@ void RenderBlankMode()
 
 namespace TestModes {
 
+bool DumpTilesToFolder(const char* path)
+{
+    return DumpTilesToPath(path);
+}
+
 bool Initialize(const char* mode)
 {
     if (strcmp(mode, "blank") == 0 || strcmp(mode, "ticker") == 0)
@@ -469,6 +1859,14 @@ bool Initialize(const char* mode)
         return g_mapRenderer.InitializeFromStartupArgs();
     if (strcmp(mode, "mesh") == 0)
         return InitializeMeshMode();
+    if (strcmp(mode, "char3d") == 0)
+        return InitializeCharPreviewMode();
+    if (strcmp(mode, "tiledump") == 0)
+        return InitializeTileDumpMode();
+    if (strcmp(mode, "i3d3d") == 0)
+        return InitializeI3DStaticMode();
+    if (strcmp(mode, "water3d") == 0)
+        return InitializeWaterPreviewMode();
     if (strcmp(mode, "ttf") == 0)
         return InitializeTTFMode();
     if (strcmp(mode, "text") == 0)
@@ -495,6 +1893,12 @@ void Close(const char* mode)
         g_mapRenderer.Shutdown();
     if (strcmp(mode, "mesh") == 0)
         CloseMeshMode();
+    if (strcmp(mode, "char3d") == 0)
+        CloseCharPreviewMode();
+    if (strcmp(mode, "i3d3d") == 0)
+        CloseI3DStaticMode();
+    if (strcmp(mode, "water3d") == 0)
+        CloseI3DStaticMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -507,6 +1911,12 @@ void Render(const char* mode)
         return g_mapRenderer.RenderFrame();
     if (strcmp(mode, "mesh") == 0)
         return RenderMeshMode();
+    if (strcmp(mode, "char3d") == 0)
+        return RenderCharPreviewMode();
+    if (strcmp(mode, "i3d3d") == 0)
+        return RenderI3DStaticMode();
+    if (strcmp(mode, "water3d") == 0)
+        return RenderI3DStaticMode();
     if (strcmp(mode, "ui") == 0 && g_uiAtlas.image.id && !g_uiAtlas.items.empty())
         return RenderUiMode();
     if (strcmp(mode, "icon") == 0)
@@ -520,6 +1930,55 @@ void Render(const char* mode)
 
 void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 {
+    (void)x; (void)y;
+    if (strcmp(mode, "char3d") == 0)
+    {
+        if (!g_charPreview.inst || g_charPreview.roster.empty())
+            return;
+        if (button == MB_LEFTDOWN)
+        {
+            int32_t st = g_charPreview.inst->GetState() + 1;
+            if (st >= g_charPreview.inst->NumStates())
+                st = 0;
+            g_charPreview.inst->SetState(st);
+            g_charPreview.last_legacy_tick = -1;
+            log_info("[char3d] state -> %d ('%s')",
+                     st,
+                     g_charPreview.inst->GetImagery()->GetState(st)
+                         ? g_charPreview.inst->GetImagery()->GetState(st)->animname
+                         : "?");
+            return;
+        }
+        if (button == MB_RIGHTDOWN)
+        {
+            const int32_t next = (g_charPreview.roster_idx + 1) % int32_t(g_charPreview.roster.size());
+            RebuildCharPreviewForRosterIndex(next);
+            return;
+        }
+        if (button == MB_MIDDLEDOWN)
+        {
+            g_charPreview.paused = !g_charPreview.paused;
+            log_info("[char3d] paused=%d", g_charPreview.paused ? 1 : 0);
+            return;
+        }
+        return;
+    }
+    if (strcmp(mode, "water3d") == 0)
+    {
+        if (button == MB_LEFTDOWN && !g_i3dTest.roster.empty())
+        {
+            g_i3dTest.roster_idx = (g_i3dTest.roster_idx + 1) % int32_t(g_i3dTest.roster.size());
+            const char* asset = g_i3dTest.roster[g_i3dTest.roster_idx].c_str();
+            log_info("[water3d] asset -> %s", asset);
+            LoadI3DStaticAsset(asset);
+        }
+        else if (button == MB_RIGHTDOWN)
+        {
+            g_i3dTest.bg_mode = (g_i3dTest.bg_mode + 1) % 4;
+            log_info("[water3d] background -> %s", kI3DBGNames[g_i3dTest.bg_mode]);
+        }
+        return;
+    }
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleMouseClick(button, x, y);
 }

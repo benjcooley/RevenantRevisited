@@ -3,6 +3,7 @@
 #include "maprenderer.h"
 
 #include "object.h"
+#include "renderer.h"
 #include "revenant.h"
 #include "sector.h"
 
@@ -30,10 +31,15 @@ struct SSectorTileTex {
     int32_t  w = 0, h = 0;
     float    z_local_min = 0.0f;
     float    z_local_max = 0.0f;
+    bool     has_alpha = false;
+    uint32_t bm_flags = 0;
+    int32_t  opaque_count = 0;
+    int32_t  pixel_count = 0;
     std::vector<float>   cpu_depth_local;
     std::vector<uint8_t> cpu_opaque;
     SDepthDump z_dump;
     const char* debug_classname = nullptr;
+    const char* debug_typename = nullptr;
     S3DPoint    debug_world_pos = {0,0,0};
     int32_t     debug_regx = 0;
     int32_t     debug_regy = 0;
@@ -57,6 +63,86 @@ struct SSectorLight {
     bool       enabled = true;
 };
 
+enum class ESectorDrawableKind : uint8_t {
+    Tile,
+    Mesh,
+};
+
+struct SSectorMeshAsset {
+    TObjectImagery* imagery_key = nullptr;
+    int32_t         objnum = -1;
+    int32_t         texslot = -1;
+    MeshHandle      handle = 0;
+    bool            helper_material = false;
+    bool            helper_shadow_plane = false;
+    float           diffuse[4] = {1,1,1,1};
+    float           ambient[4] = {1,1,1,1};
+    float           specular[4] = {0,0,0,1};
+    float           emissive[4] = {0,0,0,1};
+    float           power = 1.0f;
+    float           bbox_min[3] = { 0, 0, 0 };
+    float           bbox_max[3] = { 0, 0, 0 };
+};
+
+struct SMapRenderContext;
+struct SMapRenderStats;
+
+struct SSectorDrawableInst {
+    ESectorDrawableKind kind = ESectorDrawableKind::Tile;
+    int32_t   asset_idx = -1;
+    S3DPoint  world_pos = {0,0,0};
+    int32_t   regx = 0, regy = 0, regz = 0;
+    bool      has_authored_local_dz = false;
+    float     authored_local_dz_min = 0.0f;
+    float     authored_local_dz_max = 0.0f;
+    int32_t   wwidth = 0, wlength = 0, wheight = 0;
+    int32_t   wregx = 0, wregy = 0, wregz = 0;
+    int32_t   state = 0;
+    int32_t   frame = 0;
+    int32_t   debug_sector_level = 0;
+    int32_t   debug_sector_x = 0;
+    int32_t   debug_sector_y = 0;
+    int32_t   debug_sector_slot = -1;
+    TSafeRef<> src;
+
+    void UpdateFromInstance();
+    void AccumulateSceneZ(const SMapRenderContext& ctx, float& scene_z_min_fit,
+                          float& scene_z_max_fit, int32_t& fit_tiles) const;
+    void Submit(const SMapRenderContext& ctx, SMapRenderStats& stats) const;
+};
+
+struct SMapRenderContext {
+    const std::vector<SSectorTileTex>* tile_assets = nullptr;
+    const std::vector<SSectorMeshAsset>* mesh_assets = nullptr;
+    S3DPoint sectorCameraWorld = {0,0,0};
+    int32_t cam_ox = 0, cam_oy = 0;
+    int32_t vw = 0, vh = 0;
+    float z_near = 0.0f, z_far = 1.0f, zspan = 1.0f;
+    float depth_mul = 1.0f;
+    bool show_gizmos = true;
+    bool show_tiles = true;
+    bool show_meshes = true;
+    bool force_mesh_preview_pose = false;
+    float mesh_scale_x = 1.0f;
+    float mesh_scale_y = 1.0f;
+    float mesh_scale_z = 1.0f;
+    int32_t cov_cell_px = 32;
+    int32_t cov_cw = 0, cov_ch = 0;
+    std::vector<uint8_t>* cov = nullptr;
+};
+
+struct SMapRenderStats {
+    int32_t draw_submitted = 0;
+    int32_t draw_invalid_img = 0;
+    int32_t draw_offscreen = 0;
+    int32_t draw_bin_missed_visible = 0;
+    int32_t mesh_submitted = 0;
+    int32_t mesh_skipped = 0;
+    int32_t mesh_project_logged = 0;
+    int32_t char_mesh_logged = 0;
+    int32_t char_mesh_skip_logged = 0;
+};
+
 struct FVec3 {
     float x, y, z;
 };
@@ -68,6 +154,18 @@ inline float MapRendererCameraDepth(const S3DPoint& rel)
 {
     return kMapRendererCamForwardWU
          - (float(rel.x + rel.y) * kMapRendererIsoCos30 + float(rel.z) * 0.5f);
+}
+
+inline S3DPoint MapRendererMeshWorld(const S3DPoint& world,
+                                     float scale_x = 1.0f,
+                                     float scale_y = 1.0f,
+                                     float scale_z = 1.0f)
+{
+    return {
+        int32_t(float(world.x) * scale_x),
+        int32_t(float(world.y) * scale_y),
+        int32_t(FIX_Z_VALUE(world.z) * scale_z)
+    };
 }
 
 inline int32_t MapRendererFloorDiv(int32_t v, int32_t d)
@@ -83,8 +181,9 @@ inline int64_t MapRendererSectorBinKey(int32_t sx, int32_t sy)
 struct TMapRenderer::Impl
 {
     std::vector<SSectorTileTex>  sectorTileTex;
-    std::vector<SSectorTileInst> sectorTileInst;
-    std::unordered_map<int64_t, std::vector<int32_t>> sectorTileBins;
+    std::vector<SSectorMeshAsset> sectorMeshAsset;
+    std::vector<SSectorDrawableInst> sectorDrawInst;
+    std::unordered_map<int64_t, std::vector<int32_t>> sectorDrawBins;
     std::vector<TSector*> sectorsKept;
     std::vector<SSectorLight> sectorLights;
     float sectorSceneZMin = 500.0f;
@@ -94,7 +193,19 @@ struct TMapRenderer::Impl
     S3DPoint sectorWorldCenter = {0,0,0};
     S3DPoint sectorCameraWorld = {0,0,0};
     bool sectorShowTileBboxes = false;
+    bool sectorShowTileLocators = false;
+    bool sectorShowTileLabels = true;
+    bool sectorShowObjectLocators = false;
+    bool sectorShowObjectLabels = true;
     bool sectorShowGizmos = true;
+    bool sectorShowTiles = true;
+    bool sectorShowMeshes = true;
+    bool sectorShowMeshLocators = false;
+    bool sectorForceMeshPreviewPose = false;
+    float sectorMeshScaleX = 1.0f;
+    float sectorMeshScaleY = 1.0f;
+    float sectorMeshScaleZ = 1.5f;
+    int32_t sectorCharacterFocusIdx = -1;
     bool sectorDragging = false;
     int32_t dragStartX = 0, dragStartY = 0;
     S3DPoint dragCameraStartWorld = {0,0,0};
@@ -142,21 +253,28 @@ struct TMapRenderer::Impl
     float debugSceneZMinFit = 0.0f;
     float debugSceneZMaxFit = 0.0f;
     int32_t debugFitTiles = 0;
+    int64_t lastLegacyAnimTick = -1;
 
     void rebuildBins()
     {
-        sectorTileBins.clear();
-        for (int32_t i = 0; i < int32_t(sectorTileInst.size()); ++i)
+        sectorDrawBins.clear();
+        for (int32_t i = 0; i < int32_t(sectorDrawInst.size()); ++i)
         {
-            const auto& inst = sectorTileInst[i];
+            const auto& inst = sectorDrawInst[i];
             const int32_t sx = MapRendererFloorDiv(inst.world_pos.x, SECTORWIDTH);
             const int32_t sy = MapRendererFloorDiv(inst.world_pos.y, SECTORHEIGHT);
-            sectorTileBins[MapRendererSectorBinKey(sx, sy)].push_back(i);
+            sectorDrawBins[MapRendererSectorBinKey(sx, sy)].push_back(i);
         }
     }
     S3DPoint sectorCameraRel(const S3DPoint& world) const
     {
         return { world.x - sectorCameraWorld.x, world.y - sectorCameraWorld.y, world.z - sectorCameraWorld.z };
+    }
+    S3DPoint sectorCameraRelMesh(const S3DPoint& world) const
+    {
+        const S3DPoint mesh_world = MapRendererMeshWorld(world, sectorMeshScaleX, sectorMeshScaleY, sectorMeshScaleZ);
+        const S3DPoint mesh_camera = MapRendererMeshWorld(sectorCameraWorld, sectorMeshScaleX, sectorMeshScaleY, sectorMeshScaleZ);
+        return { mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z - mesh_camera.z };
     }
     void sectorProjectWorld(const S3DPoint& world, S3DPoint& screen) const
     {
@@ -164,9 +282,19 @@ struct TMapRenderer::Impl
         WorldToScreen(rel, screen.x, screen.y);
         screen.z = int32_t(MapRendererCameraDepth(rel));
     }
-    float sectorCameraSceneZ(const SSectorTileInst& inst) const
+    void sectorProjectMeshWorld(const S3DPoint& world, S3DPoint& screen) const
+    {
+        const S3DPoint rel = sectorCameraRelMesh(world);
+        WorldToScreen(rel, screen.x, screen.y);
+        screen.z = int32_t(MapRendererCameraDepth(rel));
+    }
+    float sectorCameraSceneZ(const SSectorDrawableInst& inst) const
     {
         return MapRendererCameraDepth(sectorCameraRel(inst.world_pos));
+    }
+    float sectorCameraSceneZMesh(const SSectorDrawableInst& inst) const
+    {
+        return MapRendererCameraDepth(sectorCameraRelMesh(inst.world_pos));
     }
     void sectorCameraOriginScreen(int32_t& sx, int32_t& sy) const
     {
