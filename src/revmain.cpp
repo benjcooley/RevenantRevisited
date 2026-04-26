@@ -55,7 +55,7 @@
 #include "textbar.h"
 #include "statusbar.h"
 #include "sound.h"
-#include "editor.h"
+#include "editorstub.h"
 #include "dls.h"
 #include "ctrlmap.h"
 #include "area.h"
@@ -212,7 +212,8 @@ bool SingleBuffer = false;  // True if single buffering (true if Windowed=true, 
 bool Borderless = false;    // When windowed, cut out the border (menu, other windows garabage)?
 bool Debug = false;         // Should program be run in debug compatible mode?
 bool Ignore3D = false;      // Whether to disallow 3D imagery (to make it run on systmes without Direct3D)
-bool Editor = false;        // true when in editor mode
+// `Editor` global moved to src/editor.cpp; revmain just references it.
+extern bool Editor;
 bool StartInEditor = false; // Whether to start the program in editor mode
 bool NoQuickLoad = false;   // true if program should not try to use IMAGERY.DAT file
 bool Force15Bit = false;    // Forces video mode to assume 15 bit
@@ -2097,6 +2098,7 @@ static void AppInit()
     }
     else
     {
+        log_info("[boot] routing to PlayScreen");
         BootScreen = &PlayScreen;
 
         // --loadmap=<file>: hand the save path to PlayScreen; its Pulse()
@@ -2211,6 +2213,31 @@ static int32_t SappKeyToVK(sapp_keycode key)
         case SAPP_KEYCODE_RIGHT_SHIFT:   return VK_SHIFT;
         case SAPP_KEYCODE_BACKSPACE:     return VK_BACK;
         case SAPP_KEYCODE_ENTER:         return VK_RETURN;
+        case SAPP_KEYCODE_TAB:           return VK_TAB;
+        case SAPP_KEYCODE_ESCAPE:        return VK_ESCAPE;
+        case SAPP_KEYCODE_SPACE:         return VK_SPACE;
+        case SAPP_KEYCODE_LEFT:          return VK_LEFT;
+        case SAPP_KEYCODE_RIGHT:         return VK_RIGHT;
+        case SAPP_KEYCODE_UP:            return VK_UP;
+        case SAPP_KEYCODE_DOWN:          return VK_DOWN;
+        case SAPP_KEYCODE_INSERT:        return VK_INSERT;
+        case SAPP_KEYCODE_DELETE:        return VK_DELETE;
+        case SAPP_KEYCODE_HOME:          return VK_HOME;
+        case SAPP_KEYCODE_END:           return VK_END;
+        case SAPP_KEYCODE_PAGE_UP:       return VK_PRIOR;
+        case SAPP_KEYCODE_PAGE_DOWN:     return VK_NEXT;
+        case SAPP_KEYCODE_F1:            return VK_F1;
+        case SAPP_KEYCODE_F2:            return VK_F2;
+        case SAPP_KEYCODE_F3:            return VK_F3;
+        case SAPP_KEYCODE_F4:            return VK_F4;
+        case SAPP_KEYCODE_F5:            return VK_F5;
+        case SAPP_KEYCODE_F6:            return VK_F6;
+        case SAPP_KEYCODE_F7:            return VK_F7;
+        case SAPP_KEYCODE_F8:            return VK_F8;
+        case SAPP_KEYCODE_F9:            return VK_F9;
+        case SAPP_KEYCODE_F10:           return VK_F10;
+        case SAPP_KEYCODE_F11:           return VK_F11;
+        case SAPP_KEYCODE_F12:           return VK_F12;
         default:                          return (int32_t)key;
     }
 }
