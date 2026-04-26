@@ -26,6 +26,11 @@ class TMapRenderer
     const char* GetDebugTabName() const override;
     void DrawDebugTab() override;
 
+    // Read the camera's current level / sector / world position. -1 in
+    // any field means "not available yet" (renderer not initialised).
+    void GetCameraStatus(int32_t& level, int32_t& sector_x, int32_t& sector_y,
+                         int32_t& world_x, int32_t& world_y, int32_t& world_z) const;
+
   private:
     struct Impl;
     std::unique_ptr<Impl> impl;

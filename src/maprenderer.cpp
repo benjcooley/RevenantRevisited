@@ -659,15 +659,19 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         const SSectorMeshAsset& asset = (*ctx.mesh_assets)[asset_idx];
         if (state < 0 || state >= meshimg->NumStates() || meshimg->IsHidden(asset.objnum, state))
         {
-            if (oi->IsCharacter() && stats.char_mesh_skip_logged < 12)
+            // Persistent (session-lifetime) diagnostic gate. SMapRenderStats
+            // is rebuilt per frame; using its counter here means logging
+            // every frame and choking the frame budget.
+            static int s_char_mesh_skip_logged = 0;
+            if (oi->IsCharacter() && s_char_mesh_skip_logged < 12)
             {
                 log_info("[sector] char mesh skip %d '%s' type='%s' pos=(%d,%d,%d) state=%d frame=%d obj=%d tex=%d numstates=%d hidden=%d",
-                    stats.char_mesh_skip_logged,
+                    s_char_mesh_skip_logged,
                     oi->GetClassName(), oi->GetTypeName(),
                     world_pos.x, world_pos.y, world_pos.z,
                     state, frame, asset.objnum, asset.texslot, meshimg->NumStates(),
                     (state >= 0 && state < meshimg->NumStates()) ? (meshimg->IsHidden(asset.objnum, state) ? 1 : 0) : -1);
-                ++stats.char_mesh_skip_logged;
+                ++s_char_mesh_skip_logged;
             }
             ++stats.mesh_skipped;
             return;
@@ -699,7 +703,9 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(world_renderer, scaled_world, sizeof(world_renderer));
         }
 
-        if (oi->IsCharacter() && stats.char_mesh_logged < 16)
+        // Persistent (session-lifetime) gate. See note on s_char_mesh_skip_logged.
+        static int s_char_mesh_logged = 0;
+        if (oi->IsCharacter() && s_char_mesh_logged < 16)
         {
             S3DPoint sp;
             const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
@@ -724,7 +730,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             }
             key_ok = meshimg->GetUninterpolatedAniKey(asset.objnum, state, frame, key_pos, key_rot, key_scl);
             log_info("[sector] char mesh %d '%s' type='%s' pos=(%d,%d,%d) zfix=%.2f screen=(%d,%d,%d) state=%d frame=%d obj=%d tex=%d pose=%s root_t=(%.2f,%.2f,%.2f) local_t=(%.2f,%.2f,%.2f) world_t=(%.2f,%.2f,%.2f)",
-                stats.char_mesh_logged,
+                s_char_mesh_logged,
                 oi->GetClassName(), oi->GetTypeName(),
                 world_pos.x, world_pos.y, world_pos.z,
                 FIX_Z_VALUE(world_pos.z),
@@ -735,20 +741,22 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 local_renderer[3], local_renderer[7], local_renderer[11],
                 world_renderer[3], world_renderer[7], world_renderer[11]);
             log_info("[sector] char mesh animator %d '%s' type='%s' obj=%d anim_local_t=(%.2f,%.2f,%.2f)",
-                stats.char_mesh_logged,
+                s_char_mesh_logged,
                 oi->GetClassName(), oi->GetTypeName(),
                 asset.objnum, anim_t0, anim_t1, anim_t2);
             log_info("[sector] char mesh key %d '%s' type='%s' obj=%d ok=%d len=%d pos=(%.2f,%.2f,%.2f) rot=(%.2f,%.2f,%.2f) scl=(%.2f,%.2f,%.2f)",
-                stats.char_mesh_logged,
+                s_char_mesh_logged,
                 oi->GetClassName(), oi->GetTypeName(),
                 asset.objnum, key_ok ? 1 : 0, meshimg->GetAniLength(state),
                 key_pos.X, key_pos.Y, key_pos.Z,
                 key_rot.X, key_rot.Y, key_rot.Z,
                 key_scl.X, key_scl.Y, key_scl.Z);
-            ++stats.char_mesh_logged;
+            ++s_char_mesh_logged;
         }
 
-        if (stats.mesh_project_logged < 12)
+        // Persistent (session-lifetime) gate. See note on s_char_mesh_skip_logged.
+        static int s_mesh_project_logged = 0;
+        if (s_mesh_project_logged < 12)
         {
             S3DPoint sp;
             const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
@@ -757,11 +765,11 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             WorldToScreen(rel, sp.x, sp.y);
             sp.z = int32_t(MapRendererCameraDepth(rel));
             log_info("[sector] mesh sample %d '%s' pos=(%d,%d,%d) screen=(%d,%d,%d) state=%d frame=%d asset(obj=%d tex=%d)",
-                     stats.mesh_project_logged, oi->GetClassName(),
+                     s_mesh_project_logged, oi->GetClassName(),
                      world_pos.x, world_pos.y, world_pos.z,
                      sp.x + ctx.cam_ox, sp.y + ctx.cam_oy, sp.z,
                      state, frame, asset.objnum, asset.texslot);
-            ++stats.mesh_project_logged;
+            ++s_mesh_project_logged;
         }
 
         if (oi->ObjClass() == OBJCLASS_HELPER)
@@ -794,6 +802,23 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
 
 TMapRenderer::TMapRenderer() : impl(std::make_unique<Impl>()) {}
 TMapRenderer::~TMapRenderer() = default;
+
+void TMapRenderer::GetCameraStatus(int32_t& level, int32_t& sector_x, int32_t& sector_y,
+                                   int32_t& world_x, int32_t& world_y, int32_t& world_z) const
+{
+    if (!impl) {
+        level = sector_x = sector_y = -1;
+        world_x = world_y = world_z = 0;
+        return;
+    }
+    const Impl& s = *impl;
+    level   = s.cameraLevel;
+    world_x = s.sectorCameraWorld.x;
+    world_y = s.sectorCameraWorld.y;
+    world_z = s.sectorCameraWorld.z;
+    sector_x = MapRendererFloorDiv(world_x, SECTORWIDTH);
+    sector_y = MapRendererFloorDiv(world_y, SECTORHEIGHT);
+}
 
 const char* TMapRenderer::GetDebugTabName() const
 {
@@ -834,6 +859,7 @@ bool TMapRenderer::InitializeFromStartupArgs()
     int32_t loaded_light_total = 0;
     int32_t loaded_anim_total = 0;
     std::vector<SSectorCoord> load_coords = FindLevelSectorCoords(keep_lvl);
+    s.cameraLevel = keep_lvl;
     if (load_coords.empty())
     {
         if (use_level_origin)

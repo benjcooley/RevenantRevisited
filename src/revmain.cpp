@@ -2134,6 +2134,14 @@ static void AppFrame()
     // panels from their normal per-frame code. simgui_render() is called
     // inside TDisplay::FlipPage on the swapchain pass.
     {
+        // ImGui 1.92 defaults ConfigInputTrickleEventQueue to true, which
+        // serializes input events to one per frame. With trackpads /
+        // high-Hz mice this turns into seconds of input lag as events
+        // pile up faster than they drain. Force it off every frame so
+        // any code path that flips it back doesn't bite us.
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigInputTrickleEventQueue = false;
+
         simgui_frame_desc_t fd = {};
         fd.width       = sapp_width();
         fd.height      = sapp_height();
@@ -2246,12 +2254,18 @@ static void AppEvent(const sapp_event* ev)
 {
     if (!ev) return;
 
+    // Force trickle off BEFORE handing the event to ImGui. ImGui 1.92
+    // defaults ConfigInputTrickleEventQueue to true, which causes events
+    // to drain one-per-frame and queue up under any frame-budget
+    // pressure. We always want immediate processing.
+    ImGui::GetIO().ConfigInputTrickleEventQueue = false;
+
     // ImGui sees every event. simgui_handle_event returns the OR of
     // WantCaptureKeyboard and WantCaptureMouse, which swallows mouse drags
     // whenever a slider has keyboard focus — so we split the flags and gate
     // each event class on the one that matters.
     simgui_handle_event(ev);
-    const ImGuiIO& io = ImGui::GetIO();
+    ImGuiIO& io = ImGui::GetIO();
     const bool imgui_kbd   = io.WantCaptureKeyboard;
     const bool imgui_mouse = io.WantCaptureMouse;
 
@@ -2263,6 +2277,16 @@ static void AppEvent(const sapp_event* ev)
         if (vk == VK_CONTROL) CtrlDown = true;
         else if (vk == VK_MENU) AltDown = true;
         else if (vk == VK_SHIFT) ShiftDown = true;
+
+        // macOS Cmd+Q quits the app, matching the platform convention.
+        // ImGui doesn't get to swallow this -- the user always wants it
+        // to work even if a slider has keyboard focus.
+        if (ev->key_code == SAPP_KEYCODE_Q
+            && (ev->modifiers & SAPP_MODIFIER_SUPER))
+        {
+            sapp_request_quit();
+            break;
+        }
 
         if (!AppActive) break;
         if (imgui_kbd) break;

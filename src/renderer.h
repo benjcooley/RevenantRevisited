@@ -295,8 +295,18 @@ public:
     // sub-rect of the padded G-buffer. Returns true if it drew anything.
     bool PresentToSwapchain();
 
+    // Where to composite the game image onto the swapchain. Default is
+    // the entire window. Editor mode disables this (the game render
+    // arrives in the editor's Game View panel via ImGui::Image of the
+    // lit_target sokol image) so the present blit can be skipped.
+    void SetPresentNDCRect(float x, float y, float w, float h);
+    void ResetPresentNDCRect() { SetPresentNDCRect(-1.0f, -1.0f, 2.0f, 2.0f); }
+    void SuppressPresent(bool on) { suppress_present = on; }
+
     // ---- Debug accessors ------------------------------------------------
     [[nodiscard]] sg_image ColorTarget() const { return color_target; }
+    [[nodiscard]] sg_image LitTarget()   const { return lit_target; }
+    [[nodiscard]] int32_t  GBufPad()     const { return kGBufPad; }
 
 private:
     int32_t width  = 0;
@@ -358,6 +368,10 @@ private:
     // Dirty flags -- read by PresentToSwapchain.
     bool color_target_dirty = false;
     bool lit_target_dirty   = false;
+
+    // NDC sub-rect for the present blit. Default fills the swapchain.
+    float present_ndc[4] = { -1.0f, -1.0f, 2.0f, 2.0f };
+    bool  suppress_present = false;
     float tile_clear_rgba[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
     // ---- Render targets -------------------------------------------------

@@ -1658,6 +1658,15 @@ bool TRenderer::PresentToSwapchain()
     if (!lit_target_dirty && !color_target_dirty)
         return false;
 
+    // Editor mode opts out: the game image is composited inside the
+    // ImGui Game View panel via ImGui::Image of lit_target. Just mark
+    // the targets clean so the next frame's pass actions don't fire.
+    if (suppress_present) {
+        color_target_dirty = false;
+        lit_target_dirty   = false;
+        return false;
+    }
+
     sg_apply_pipeline(composite_pip_swap);
     sg_bindings bind = {};
     bind.vertex_buffers[0] = composite_vbuf;
@@ -1673,7 +1682,10 @@ bool TRenderer::PresentToSwapchain()
     const float   v0  = float(pad)   / gbh;
     const float   uw  = float(width) / gbw;
     const float   vh  = float(height) / gbh;
-    const float u[8] = { -1.0f, -1.0f, 2.0f, 2.0f,  u0, v0, uw, vh };
+    const float u[8] = {
+        present_ndc[0], present_ndc[1], present_ndc[2], present_ndc[3],
+        u0, v0, uw, vh,
+    };
     const sg_range ur = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ur);
     sg_draw(0, 6, 1);
@@ -1681,4 +1693,12 @@ bool TRenderer::PresentToSwapchain()
     color_target_dirty = false;
     lit_target_dirty   = false;
     return true;
+}
+
+void TRenderer::SetPresentNDCRect(float x, float y, float w, float h)
+{
+    present_ndc[0] = x;
+    present_ndc[1] = y;
+    present_ndc[2] = w;
+    present_ndc[3] = h;
 }

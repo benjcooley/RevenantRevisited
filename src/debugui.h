@@ -28,4 +28,6 @@ namespace DebugUI {
 void RegisterContributor(IDebugTabContributor* contributor);
 void UnregisterContributor(IDebugTabContributor* contributor);
 void DrawFrame();
+bool IsVisible();
+void SetVisible(bool on);
 }  // namespace DebugUI

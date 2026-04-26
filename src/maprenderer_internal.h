@@ -192,6 +192,7 @@ struct TMapRenderer::Impl
     int32_t sectorCenterOy = 0;
     S3DPoint sectorWorldCenter = {0,0,0};
     S3DPoint sectorCameraWorld = {0,0,0};
+    int32_t  cameraLevel = 0;
     bool sectorShowTileBboxes = false;
     bool sectorShowTileLocators = false;
     bool sectorShowTileLabels = true;
