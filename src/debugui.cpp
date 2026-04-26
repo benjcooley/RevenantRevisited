@@ -53,13 +53,21 @@ void UnregisterContributor(IDebugTabContributor* contributor)
                               g_debugContributors.end());
 }
 
+// Hide the legacy debug panel by default. Toggle via DebugUI::SetVisible
+// (menu hook lives in the new ImGui editor). Off-by-default so the
+// shipping editor isn't cluttered with developer-tab UI.
+static bool g_debugVisible = false;
+
+bool IsVisible()              { return g_debugVisible; }
+void SetVisible(bool on)      { g_debugVisible = on; }
+
 void DrawFrame()
 {
-    if (g_debugContributors.empty())
-        return;
+    if (!g_debugVisible) return;
+    if (g_debugContributors.empty()) return;
 
     ImGui::SetNextWindowSize(ImVec2(320, 0), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Debug"))
+    if (!ImGui::Begin("Debug", &g_debugVisible))
     {
         ImGui::End();
         return;

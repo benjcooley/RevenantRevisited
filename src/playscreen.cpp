@@ -29,6 +29,7 @@
 #include <cstring>
 
 #include "display.h"
+#include "editor.h"
 #include "editorstub.h"
 #include "imagery.h"
 #include "logging.h"
@@ -106,6 +107,8 @@ bool TPlayScreen::Initialize()
     bloodimagery  = load("Misc\\Blood.I3D");
     sparksimagery = load("Misc\\Sparks.I3D");
 
+    EditorLoadState();
+
     log_info("[playscreen] initialize done");
     return true;
 }
@@ -180,7 +183,7 @@ void TPlayScreen::RenderFrame()
 // (matching what TTestScreen does for TestModes::Render). DrawBackground
 // is dead -- no BITMAP.100 backdrop on the new path.
 void TPlayScreen::Pulse()                  { Update(); }
-void TPlayScreen::Animate(bool /*draw*/)   { RenderFrame(); }
+void TPlayScreen::Animate(bool /*draw*/)   { RenderFrame(); EditorDrawChrome(); }
 void TPlayScreen::DrawBackground()         { /* no backdrop blit on the new path */ }
 
 // *************************************************************************

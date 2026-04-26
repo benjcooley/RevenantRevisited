@@ -112,9 +112,14 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
         d.max_vertices = 1 << 20;
         simgui_setup(&d);
         imgui_initialized = true;
-        constexpr float kDebugUiScale = 0.85f;
-        ImGui::GetStyle().ScaleAllSizes(kDebugUiScale);
-        ImGui::GetIO().FontGlobalScale = kDebugUiScale;
+        ImGuiIO& io = ImGui::GetIO();
+        // ImGui 1.92 defaults this to true, which serializes input
+        // events one-per-frame and makes fast mouse motion over menus
+        // feel choppy. Disable so menu hovers respond immediately.
+        io.ConfigInputTrickleEventQueue = false;
+        ImGuiStyle& st = ImGui::GetStyle();
+        st.HoverDelayShort  = 0.0f;
+        st.HoverDelayNormal = 0.0f;
     }
 
     return true;

@@ -72,6 +72,13 @@ else()
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/sokol_impl.c")
 endif()
 
+# Pick up the editor's macOS Obj-C++ shim. .mm files aren't part of the
+# default *.cpp glob so add it explicitly. Skipped on non-Apple builds
+# where there's no Cocoa to call into.
+if(APPLE)
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/editorplatform.mm")
+endif()
+
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
 target_link_libraries(Revenant PRIVATE imgui)
 

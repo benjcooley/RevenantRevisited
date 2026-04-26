@@ -1824,7 +1824,14 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         img_desc.data.subimage[0][0].size = (size_t)(font_width * font_height) * sizeof(uint32_t);
         img_desc.label = "sokol-imgui-font";
         _simgui.img = sg_make_image(&img_desc);
+        // ImGui 1.92+ retired ImFontAtlas::TexID in favour of TexRef +
+        // SetTexID. Branch by IMGUI_VERSION_NUM so this header still
+        // builds against older imgui too.
+#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= 19200
+        io->Fonts->SetTexID((ImTextureID)(uintptr_t) _simgui.img.id);
+#else
         io->Fonts->TexID = (ImTextureID)(uintptr_t) _simgui.img.id;
+#endif
     }
 
     /* shader object for using the embedded shader source (or bytecode) */
@@ -2075,7 +2082,11 @@ SOKOL_API_IMPL void simgui_render(void) {
     _simgui_clear((void*)&bind, sizeof(bind));
     bind.vertex_buffers[0] = _simgui.vbuf;
     bind.index_buffer = _simgui.ibuf;
+#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= 19200
+    ImTextureID tex_id = io->Fonts->TexRef.GetTexID();
+#else
     ImTextureID tex_id = io->Fonts->TexID;
+#endif
     bind.fs_images[0].id = (uint32_t)(uintptr_t)tex_id;
     int vb_offset = 0;
     int ib_offset = 0;
@@ -2103,8 +2114,13 @@ SOKOL_API_IMPL void simgui_render(void) {
                 sg_apply_bindings(&bind);
             }
             else {
-                if ((tex_id != pcmd->TextureId) || (vtx_offset != pcmd->VtxOffset)) {
-                    tex_id = pcmd->TextureId;
+#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= 19200
+                const ImTextureID cmd_tex_id = pcmd->GetTexID();
+#else
+                const ImTextureID cmd_tex_id = pcmd->TextureId;
+#endif
+                if ((tex_id != cmd_tex_id) || (vtx_offset != pcmd->VtxOffset)) {
+                    tex_id = cmd_tex_id;
                     vtx_offset = pcmd->VtxOffset;
                     bind.fs_images[0].id = (uint32_t)(uintptr_t)tex_id;
                     bind.vertex_buffer_offsets[0] = vb_offset + (int)(pcmd->VtxOffset * sizeof(ImDrawVert));

@@ -13,6 +13,7 @@
 
 #include "editorstub.h"
 
+#include "editor.h"
 #include "logging.h"
 #include "template.h"
 
@@ -46,12 +47,12 @@ void StartEditor(bool /*starting*/)
 {
     if (Editor) return;
     Editor = true;
-    log_info("[editor] enter (stub -- ImGui editor not yet wired)");
+    EditorEnter();
 }
 
 void ShutDownEditor()
 {
     if (!Editor) return;
+    EditorExit();
     Editor = false;
-    log_info("[editor] leave (stub -- ImGui editor not yet wired)");
 }
