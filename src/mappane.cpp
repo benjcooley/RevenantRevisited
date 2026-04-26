@@ -14,7 +14,7 @@
 #include "mosaicsurf.h"
 #include "display.h"
 #include "dls.h"
-#include "editor.h"
+#include "editorstub.h"
 #include "playscreen.h"
 #include "inventory.h"
 #include "player.h"

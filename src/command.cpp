@@ -22,7 +22,7 @@ static inline char *strlwr(char *s)
 #include "mappane.h"
 #include "object.h"
 #include "tile.h"
-#include "editor.h"
+#include "editorstub.h"
 #include "display.h"
 #include "font.h"
 #include "dls.h"
@@ -2231,7 +2231,8 @@ COMMAND(CmdText)
 {
     Console.Hide();
     ScrollEditor.Show();
-    PlayScreen.SetExclusivePane(&ScrollEditor);
+    // TODO(editor-imgui): re-route to the ImGui scroll editor surface.
+    // PlayScreen.SetExclusivePane(&ScrollEditor);
     ScrollEditor.SetScroll(context);
 
     return 0;
@@ -2897,7 +2898,8 @@ COMMAND(CmdScript)
     {
         Console.Hide();
         ScriptEditor.Show();
-        PlayScreen.SetExclusivePane(&ScriptEditor);
+        // TODO(editor-imgui): re-route to the ImGui script editor surface.
+        // PlayScreen.SetExclusivePane(&ScriptEditor);
         ScriptEditor.LoadScript(context);
     }
 
