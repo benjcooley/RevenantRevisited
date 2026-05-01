@@ -457,12 +457,11 @@ void DrawInstanceRow(TObjectInstance* oi)
     ImGui::TextUnformatted(nm);
 }
 
-// Render a title-bar-style header inside the current popup/window.
-// The band fills the full window width (extending under the
-// WindowPadding to the actual edges), uses TitleBgActive as the fill
-// color, and centers the title vertically. Used as the standard
-// header for the editor's "options" popups so they read as proper
-// settings sheets, not flat dropdowns.
+// Render a thin title-strip header inside the current popup/window.
+// Reads as an "app panel" header: just a slim band with subtly
+// darker fill than the popup body and the title text centered
+// vertically. Becomes the standard header style for editor
+// "options" popups.
 void EditorOptionsHeader(const char* title)
 {
     ImDrawList* dl       = ImGui::GetWindowDrawList();
@@ -472,14 +471,19 @@ void EditorOptionsHeader(const char* title)
     const float  win_w   = ImGui::GetWindowWidth();
     const ImVec2 cursor  = ImGui::GetCursorScreenPos();
 
-    const float band_h   = ImGui::GetFrameHeight() + 6.0f;
+    // Thin strip: just a couple pixels of padding around the text.
+    const float band_h   = ImGui::GetTextLineHeight() + 6.0f;
     // Extend the band back into the popup's WindowPadding so it
     // visually butts the popup borders (popup applies WindowPadding
     // to the cursor before our header starts).
-    const ImVec2 p0 = ImVec2(win_pos.x,                    cursor.y - st.WindowPadding.y);
-    const ImVec2 p1 = ImVec2(win_pos.x + win_w,            cursor.y - st.WindowPadding.y + band_h);
+    const ImVec2 p0 = ImVec2(win_pos.x,         cursor.y - st.WindowPadding.y);
+    const ImVec2 p1 = ImVec2(win_pos.x + win_w, cursor.y - st.WindowPadding.y + band_h);
 
-    dl->AddRectFilled(p0, p1, ImGui::GetColorU32(ImGuiCol_TitleBgActive));
+    // Subtly darker than WindowBg; an "app panel" header tone, not
+    // a high-contrast OS title bar.
+    const ImVec4 wbg  = st.Colors[ImGuiCol_WindowBg];
+    const ImVec4 band = ImVec4(wbg.x * 0.70f, wbg.y * 0.70f, wbg.z * 0.70f, wbg.w);
+    dl->AddRectFilled(p0, p1, ImGui::GetColorU32(band));
 
     // Title text vertically centered in the band, indented by the
     // popup's normal horizontal padding.
@@ -487,8 +491,8 @@ void EditorOptionsHeader(const char* title)
     dl->AddText(ImVec2(p0.x + st.WindowPadding.x, text_y),
                 ImGui::GetColorU32(ImGuiCol_Text), title);
 
-    // Advance the cursor below the band, then add a small gap so the
-    // first row doesn't sit flush against the title bar.
+    // Advance the cursor below the band with a small gap so the
+    // first row doesn't sit flush against the strip.
     ImGui::SetCursorScreenPos(ImVec2(cursor.x, p1.y + 6.0f));
 }
 
