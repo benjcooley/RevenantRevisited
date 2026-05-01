@@ -22,6 +22,7 @@
 #include "imagery.h"
 #include "imageres.h"
 #include "logging.h"
+#include "mappane.h"
 #include "math3d.h"
 #include "meshextract.h"
 #include "object.h"
@@ -1380,6 +1381,29 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     {
         const auto& sample = census_samples[i];
     }
+
+    // Stamp tile walkmaps onto each loaded sector's walkmap. Under the
+    // legacy MapPane.AddObject path this happened automatically per
+    // tile via MapPane.TransferWalkmap; the renderer-owns-sectors
+    // boot path skipped it because we never call AddObject. Without
+    // this, every walkmap cell reads as 0 -- characters spawn at
+    // z=0 below the floor and Move() can't compute walk heights.
+    int32_t walkmap_tiles_stamped = 0;
+    for (const auto& L : loaded)
+    {
+        TSector* sec = L.sec;
+        if (!sec) continue;
+        for (int32_t i = 0; i < sec->NumItems(); ++i)
+        {
+            TObjectInstance* oi = sec->GetInstance(i);
+            if (!oi || oi->ObjClass() != OBJCLASS_TILE) continue;
+            if (oi->Flags() & OF_NOWALK) continue;
+            MapPane.TransferWalkmap(oi);
+            ++walkmap_tiles_stamped;
+        }
+    }
+    log_info("[walkmap] stamped %d tile footprints across %zu sectors",
+             walkmap_tiles_stamped, loaded.size());
 
     // All startup sectors are loaded and registered with sectorsKept.
     // Run the optional post-load hook so callers can inject objects
