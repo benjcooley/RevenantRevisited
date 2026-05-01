@@ -305,79 +305,9 @@ class T3DImagery : public TObjectImagery
 
 DEFINE_IMAGERYBUILDER(OBJIMAGE_MESH3D, T3DImagery);
 
-// *******************************************************************************
-// * T3DControllerBuilder - Used to register and automatically build controllers *
-// *******************************************************************************
-
-#define MAX3DCONTROLLERTYPES 128
-
-_CLASSDEF(T3DControllerBuilder)
-class T3DControllerBuilder
-{
-  public:
-    T3DControllerBuilder();
-    T3DControllerBuilder(const char* name);
-    virtual T3DController* Build(int32_t ptagstate, int32_t ptagframe,
-        T3DAnimator* panimator, T3DImagery* pimagery, TObjectInstance* pinst) { return nullptr; }
-    static T3DControllerBuilder* GetBuilder(const char* name);
-
-  private:
-    static int32_t numconttypes;
-    static T3DControllerBuilder* builders[MAX3DCONTROLLERTYPES];
-
-    char* controllername;
-};
-
-#define REGISTER_3DCONTROLLER(name, obj)                                        \
-class obj##Builder : public T3DControllerBuilder                                \
-{                                                                               \
-  public:                                                                       \
-    obj##Builder() : T3DControllerBuilder(name) {}                              \
-    virtual T3DController* Build(int32_t ptagstate, int32_t ptagframe,          \
-      T3DAnimator* panimator, T3DImagery* pimagery, TObjectInstance* pinst)     \
-        { return new obj(ptagstate, ptagframe, panimator, pimagery, pinst); }   \
-};                                                                              \
-obj##Builder obj##BuilderInstance;
-
-// *********************************************************************
-// * T3DController - Controls Animated Effects Based on Animation Tags *
-// *********************************************************************
-
-_CLASSDEF(T3DController)
-class T3DController
-{
-  protected:
-    int32_t tagstate, tagframe;
-    T3DAnimator* animator;
-    T3DImagery* imagery;
-    TObjectInstance* inst;
-    T3DAnimObjArray animobjs;
-
-    virtual bool ParseParams(TToken &t);
-    virtual bool ParseItem(char *param, TToken &t);
-
-  public:
-    T3DController(int32_t ptagstate, int32_t ptagframe, T3DAnimator* panimator, T3DImagery* pimagery, TObjectInstance* pinst)
-      { tagstate = ptagstate; tagframe = ptagframe;
-        animator = panimator; imagery = pimagery; inst = pinst; }
-    virtual ~T3DController() { Close();}
-
-    virtual bool Initialize(char *params);
-    virtual void Close();
-
-    int32_t TagState() const { return tagstate; }
-    int32_t TagFrame() const { return tagframe; }
-    T3DAnimator* GetAnimator() const { return animator; }
-    T3DImagery* GetImagery() const { return imagery; }
-    TObjectInstance* GetInstance() const { return inst; }
-    int32_t NumObjects() const { return animobjs.NumItems(); }
-    S3DAnimObj* GetObject(int32_t objnum) const { return animobjs[objnum]; }
-
-    virtual void Pulse() {}
-    virtual void Render() {}
-    virtual bool KillMe() { return false; }
-};
-typedef TPointerArray<T3DController, 0, 16> T3DControllerArray;
+// T3DController + T3DControllerBuilder removed: the legacy 3D-tag-driven
+// controller hierarchy (scrolltex etc.) ran during the old D3D render path
+// that the drawable/mesh pipeline has fully replaced. No external consumers.
 
 // ***************************************************************************
 // * T3DAnimatorBuilder - Used to register and automatically build animators *
@@ -436,8 +366,6 @@ class T3DAnimator : public TObjectAnimator
     uint32_t         flags;
     int32_t          animid;
     T3DAnimObjArray  animobjs;
-    T3DControllerArray controllers;
-    int32_t          contprevstate;
     bool             changed;
     hmm_vec3         pos;
     hmm_vec3         rot;
@@ -456,12 +384,6 @@ class T3DAnimator : public TObjectAnimator
     uint32_t GetFlags() const { return flags; }
     void SetFlags(uint32_t newflags) { flags = newflags; }
     T3DImagery* Get3DImagery() const { return (T3DImagery*)image; }
-
-    virtual void RefreshControllers(int32_t state);
-    int32_t NumControllers() const { return controllers.NumItems(); }
-    T3DController* GetController(int32_t num) const { return controllers[num]; }
-    void AddController(T3DController* cont) { controllers.Add(cont); }
-    void RemoveController(int32_t num) { controllers.Collapse(num, true); }
 
     virtual void Pulse();
     virtual void Animate(bool draw);
