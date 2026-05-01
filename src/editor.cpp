@@ -514,6 +514,14 @@ void DrawScenePanel()
                 bool show_empty = EditorPrefs::GetBool(kPrefSceneShowEmpty, false);
                 ImGuiToggleConfig cfg = ImGuiTogglePresets::MaterialStyle();
                 cfg.Flags = ImGuiToggleFlags_Animated;
+                // The default toggle size (= GetFrameHeight) is too
+                // chunky next to ImGui's body font. Scale to 70% so
+                // the control fits in headers/popups without dwarfing
+                // adjacent labels. Future toggles should match.
+                {
+                    const float h = ImGui::GetFrameHeight() * 0.70f;
+                    cfg.Size = ImVec2(h * ImGuiToggleConstants::WidthRatioDefault, h);
+                }
                 if (ImGui::Toggle("Show empty sectors", &show_empty, cfg)) {
                     EditorPrefs::SetBool(kPrefSceneShowEmpty, show_empty);
                     EditorPrefs::Save();
