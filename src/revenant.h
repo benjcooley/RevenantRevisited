@@ -228,6 +228,7 @@ extern TFont*       GoldFont;           // Medium gold font
 extern TFont*       MetalFont;          // Small gold/metal font
 extern TFont*       MenuFont;           // Menu font
 extern TPlayer*     Player;             // The active player for current game
+extern class TObjectClass PlayerClass;  // OBJCLASS_PLAYER class registry (defined in player.cpp)
 extern TMulti*      GameData;           // Global game data pointer
 extern TFontTable*  FontTable;          // FONT.DEF driven named font registry
 extern TSoundPlayer SoundPlayer;        // Sound effects player
