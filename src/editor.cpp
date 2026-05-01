@@ -43,6 +43,7 @@
 #include "logging.h"
 #include "mappane.h"
 #include "maprenderer.h"
+#include "player.h"
 #include "object.h"
 #include "playscreen.h"
 #include "renderer.h"
@@ -1391,6 +1392,58 @@ void RegisterBuiltinCommands()
         .chord = ImGuiKey_R, .shortcut = "R",
         .is_checked = []{ return g_tool == EEditorTool::Scale; },
         .execute    = []{ g_tool = EEditorTool::Scale; EditorMarkDirty(); },
+    });
+
+    // -- Player.PlaceHere -- relocate the main player to the world XY
+    // currently centered in the Game View, with Z resolved off the
+    // walkmap. If no Player exists yet (boot-time spawn was skipped for
+    // some reason), spawn one at the anchor sector first. This is
+    // primarily a debug/iteration helper while the input + walkmap
+    // stack is being wired up.
+    EditorCommands::Register({
+        .id         = "Player.PlaceHere",
+        .label      = "Place Player at View Center",
+        .menu_path  = "Edit",
+        .chord      = 0,
+        .shortcut   = "",
+        .is_enabled = []{ return PlayScreen.MapRenderer() != nullptr; },
+        .is_checked = nullptr,
+        .execute    = []{
+            TMapRenderer* mr = PlayScreen.MapRenderer();
+            if (!mr) return;
+
+            S3DPoint        dst       = mr->CameraWorld();
+            const int32_t   cam_level = mr->CameraLevel();
+            const int32_t   cam_sx    = dst.x >> SECTORWSHIFT;
+            const int32_t   cam_sy    = dst.y >> SECTORHSHIFT;
+            dst.z = MapPane.GetWalkHeight(dst);
+
+            if (!Player)
+            {
+                // Boot-spawn path; will land at the anchor sector
+                // center. We then re-place precisely at dst below.
+                PlayScreen.SpawnDefaultPlayer(cam_level, cam_sx, cam_sy);
+            }
+
+            if (!Player)
+            {
+                log_warn("[player] PlaceHere: no Player and spawn failed");
+                return;
+            }
+
+            // SetMainPlayer's UI side effects (run inside SetPos via
+            // the legacy walkmap/transfer path) want CurrentScreen to
+            // be set up; clear it briefly so a place in a half-init
+            // editor frame doesn't poke an unprepared HealthBar.
+            TScreen* saved_screen = CurrentScreen;
+            CurrentScreen = nullptr;
+            Player->SetPos(dst, cam_level, /*override=*/true);
+            CurrentScreen = saved_screen;
+
+            EditorMarkDirty();
+            log_info("[player] placed at sector %d_%d_%d world (%d,%d,%d)",
+                     cam_level, cam_sx, cam_sy, dst.x, dst.y, dst.z);
+        },
     });
 
     // -- View.PlayPause -- toggle the running flag. While paused the
