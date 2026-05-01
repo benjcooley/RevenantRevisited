@@ -154,7 +154,15 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
     def.level    = level;
     def.pos.x    = (sx << SECTORWSHIFT) + (SECTORWIDTH  / 2);
     def.pos.y    = (sy << SECTORHSHIFT) + (SECTORHEIGHT / 2);
-    def.pos.z    = 0;
+    // Read the floor height from the sector walkmap so Locke spawns
+    // on top of the terrain instead of beneath it. MapPane's level
+    // window doesn't follow Locke yet (paging not wired); read off
+    // the renderer-owned sector directly.
+    {
+        const int32_t local_x = (def.pos.x & (SECTORWIDTH  - 1)) >> WALKMAPSHIFT;
+        const int32_t local_y = (def.pos.y & (SECTORHEIGHT - 1)) >> WALKMAPSHIFT;
+        def.pos.z = sec->ReturnWalkmap(local_x, local_y);
+    }
 
     TObjectInstance* oi = PlayerClass.NewObject(&def);
     if (!oi)

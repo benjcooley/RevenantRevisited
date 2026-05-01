@@ -7,6 +7,7 @@
 #include "mappane.h"
 
 #include "graphics.h"
+#include "maprenderer.h"
 #include "stream.h"
 #include "3dscene.h"
 #include "bmsurface.h"
@@ -1899,11 +1900,21 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
     for (int32_t sy = startsecty; sy <= endsecty; sy++)
         for (int32_t sx = startsectx; sx <= endsectx; sx++)
         {
-            if ((uint32_t)sx >= MAXSECTORX || sx < sectorx || sx >= sectorx + SECTORWINDOWX ||
-                (uint32_t)sy >= MAXSECTORY || sy < sectory || sy >= sectory + SECTORWINDOWY)
+            if ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)
                 continue;
 
-            TSector* sect = sectors[sx - sectorx][sy - sectory];
+            TSector* sect = nullptr;
+            const bool in_window =
+                sx >= sectorx && sx < sectorx + SECTORWINDOWX &&
+                sy >= sectory && sy < sectory + SECTORWINDOWY;
+            if (in_window)
+                sect = sectors[sx - sectorx][sy - sectory];
+
+            // Renderer-owned-sectors fallback (see GetWalkHeight comment).
+            if (!sect)
+                if (TMapRenderer* mr = PlayScreen.MapRenderer())
+                    sect = mr->FindLoadedSector(level, sx, sy);
+
             if (!sect)
                 continue;
 
@@ -2003,16 +2014,26 @@ int32_t TMapPane::GetWalkHeight(S3DPoint& pos)
     int32_t x = pos.x + (GRIDSIZE / 2);
     int32_t y = pos.y + (GRIDSIZE / 2);
 
-    int32_t sx = (x >> SECTORWSHIFT) - sectorx;
-    int32_t sy = (y >> SECTORHSHIFT) - sectory;
+    const int32_t world_sx = x >> SECTORWSHIFT;
+    const int32_t world_sy = y >> SECTORHSHIFT;
+    const int32_t local_x  = (x & (SECTORWIDTH  - 1)) >> WALKMAPSHIFT;
+    const int32_t local_y  = (y & (SECTORHEIGHT - 1)) >> WALKMAPSHIFT;
 
-    if (sx < 0 || sx >= SECTORWINDOWX || sy < 0 || sy >= SECTORWINDOWY || !sectors[sx][sy])
-        return 0;
+    const int32_t sx = world_sx - sectorx;
+    const int32_t sy = world_sy - sectory;
 
-    x = (x & (SECTORWIDTH - 1)) >> WALKMAPSHIFT;
-    y = (y & (SECTORHEIGHT - 1)) >> WALKMAPSHIFT;
+    if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
+        return sectors[sx][sy]->ReturnWalkmap(local_x, local_y);
 
-    return sectors[sx][sy]->ReturnWalkmap(x, y);
+    // Fall back to the renderer's loaded sectors. Under the new
+    // renderer-owns-sectors model, MapPane.sectors[][] stays empty
+    // until paging is wired up, but the renderer holds the same
+    // TSector instances and we can read their walkmap directly.
+    if (TMapRenderer* mr = PlayScreen.MapRenderer())
+        if (TSector* sec = mr->FindLoadedSector(level, world_sx, world_sy))
+            return sec->ReturnWalkmap(local_x, local_y);
+
+    return 0;
 }
 
 int32_t TMapPane::GetWalkGridHeight(int32_t x, int32_t y)
@@ -2020,16 +2041,23 @@ int32_t TMapPane::GetWalkGridHeight(int32_t x, int32_t y)
     // because 0, 0 is actually the center of a walk grid, not the edge,
     // everything has to be offset by half the walk grid size
 
-    int32_t sx = (x >> (SECTORWSHIFT - WALKMAPSHIFT)) - sectorx;
-    int32_t sy = (y >> (SECTORHSHIFT - WALKMAPSHIFT)) - sectory;
+    const int32_t world_sx = x >> (SECTORWSHIFT - WALKMAPSHIFT);
+    const int32_t world_sy = y >> (SECTORHSHIFT - WALKMAPSHIFT);
+    const int32_t wx = x & ((1 << (SECTORWSHIFT - WALKMAPSHIFT)) - 1);
+    const int32_t wy = y & ((1 << (SECTORHSHIFT - WALKMAPSHIFT)) - 1);
 
-    if (sx < 0 || sx >= SECTORWINDOWX || sy < 0 || sy >= SECTORWINDOWY || !sectors[sx][sy])
-        return 0;
+    const int32_t sx = world_sx - sectorx;
+    const int32_t sy = world_sy - sectory;
 
-    int32_t wx = x & ((1 << (SECTORWSHIFT - WALKMAPSHIFT)) - 1);
-    int32_t wy = y & ((1 << (SECTORHSHIFT - WALKMAPSHIFT)) - 1);
+    if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
+        return sectors[sx][sy]->ReturnWalkmap(wx, wy);
 
-    return sectors[sx][sy]->ReturnWalkmap(wx, wy);
+    // Renderer-owned-sectors fallback (see GetWalkHeight comment).
+    if (TMapRenderer* mr = PlayScreen.MapRenderer())
+        if (TSector* sec = mr->FindLoadedSector(level, world_sx, world_sy))
+            return sec->ReturnWalkmap(wx, wy);
+
+    return 0;
 }
 
 // Returns the maximum walk height in the area bounded by 
