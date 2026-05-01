@@ -549,33 +549,48 @@ void DrawScenePanel()
             if (ImGui::Button(ICON_MS_MENU "##scene_overflow",
                               ImVec2(kebab_w, kebab_w)))
                 ImGui::OpenPopup("##scene_overflow_popup");
-            // Options popup -- styled as a webby card so the controls
-            // get real breathing room: generous WindowPadding, wide
-            // minimum width, explicit vertical gap between the header
-            // separator and the row, and Toggle scaled to body-font
-            // proportions. Looks more like a settings sheet than a
-            // 1990s dropdown.
-            ImGui::SetNextWindowSizeConstraints(ImVec2(300.0f, 0.0f),
+            // Options popup -- toned-down "settings sheet" styling.
+            // This is a content/editor app so we don't go full Stripe-
+            // dashboard luxurious; margins are a touch tighter while
+            // still well above ImGui's default ~6px to feel modern
+            // rather than 90s-dense.
+            ImGui::SetNextWindowSizeConstraints(ImVec2(260.0f, 0.0f),
                                                 ImVec2(FLT_MAX,  FLT_MAX));
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 16.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 12.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
-                                ImVec2(ImGui::GetStyle().ItemSpacing.x, 14.0f));
+                                ImVec2(ImGui::GetStyle().ItemSpacing.x, 12.0f));
             if (ImGui::BeginPopup("##scene_overflow_popup")) {
                 EditorOptionsHeader("Options");
 
+                // Settings-row layout: label on the left, toggle
+                // right-aligned to the panel's content edge. Webby
+                // settings-sheet shape vs. imgui_toggle's default
+                // (toggle then label).
                 ImGuiToggleConfig cfg = ImGuiTogglePresets::MaterialStyle();
                 cfg.Flags = ImGuiToggleFlags_Animated;
-                const float toggle_h = ImGui::GetFrameHeight() * 0.70f;
+                const float toggle_h = ImGui::GetFrameHeight() * 0.88f;
                 cfg.Size = ImVec2(toggle_h * ImGuiToggleConstants::WidthRatioDefault,
                                   toggle_h);
 
+                auto OptionRow = [&](const char* label, bool* value) -> bool {
+                    ImGui::PushID(label);
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted(label);
+                    ImGui::SameLine();
+                    const float right_edge = ImGui::GetWindowContentRegionMax().x;
+                    ImGui::SetCursorPosX(right_edge - cfg.Size.x);
+                    const bool changed = ImGui::Toggle("##t", value, cfg);
+                    ImGui::PopID();
+                    return changed;
+                };
+
                 bool show_empty = EditorPrefs::GetBool(kPrefSceneShowEmpty, false);
-                if (ImGui::Toggle("Show empty sectors", &show_empty, cfg)) {
+                if (OptionRow("Show empty sectors", &show_empty)) {
                     EditorPrefs::SetBool(kPrefSceneShowEmpty, show_empty);
                     EditorPrefs::Save();
                 }
 
-                ImGui::Dummy(ImVec2(0, 2));        // bottom breathing
+                ImGui::Dummy(ImVec2(0, 4));        // bottom breathing
                 ImGui::EndPopup();
             }
             ImGui::PopStyleVar(2);
