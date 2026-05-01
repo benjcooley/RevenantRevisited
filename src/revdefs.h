@@ -90,6 +90,15 @@
 #define WALKMAPCONST    1
 #define ZPOSCONST       1
 
+// World-Z scale applied to 3D-mesh objects (characters, doors, etc.)
+// at sector load. 3D meshes are 1.5x taller than the tile coordinate
+// space, so historically the renderer post-scaled the world transform
+// by this factor; the new path pre-multiplies object pos.z and walkmap
+// heights at load time and applies an explicit 1.5 local scale on the
+// mesh model matrix so 3D objects share a single common world space
+// with everything else (no per-frame world Z scaling at draw).
+#define WORLD3D_Z_SCALE 1.5f
+
 // Step distance. Maximum distance a character can step up or down
 #define STEPDISTANCE 32
 
