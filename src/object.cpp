@@ -418,7 +418,8 @@ void TObjectInstance::ClearObject()
 {
     SetNotify(N_SCRIPTADDED);
 
-    animator            = nullptr;
+    // animator pointer field removed; animators are TObjectComponents
+    // stored in the components array and freed via the components dtor.
     lightdef.lightindex = -1;
     lightdef.lightid    = -1;
     lightdef.multiplier = -1;
@@ -565,9 +566,6 @@ TObjectInstance::~TObjectInstance()
             component->Detach();
     components.DeleteAll();
 
-    if (animator)
-        delete animator;
-
     TObjectImagery::FreeImagery(imagery);
 
     if (lightdef.lightindex != -1)
@@ -638,21 +636,23 @@ TObjectImagery* TObjectInstance::GetImagery() const
 
 bool TObjectInstance::CreateAnimator()
 {
-    animator = imagery->NewObjectAnimator(this);
+    // Drop any prior animator first so a re-create doesn't accumulate
+    // component slots (the legacy pointer-field path leaked here too).
+    FreeAnimator();
 
-    if (animator)
-        animator->Initialize();      // Call the animator's initialize function
+    TObjectAnimator* a = imagery->NewObjectAnimator(this);
+    if (!a)
+        return false;
 
-    return (animator != nullptr);
+    a->Initialize();
+    AddComponent(a);
+    return true;
 }
 
 void TObjectInstance::FreeAnimator()
 {
-    if (animator)
-    {
-        delete animator;
-        animator = nullptr;
-    }
+    if (TObjectAnimator* a = GetComponent<TObjectAnimator>())
+        RemoveComponent(a->ComponentSlot());
 }
 
 int32_t TObjectInstance::AddComponent(TObjectComponent* component)
@@ -690,7 +690,7 @@ TObjectComponent* TObjectInstance::GetComponent(int32_t component_slot) const
 
 bool TObjectInstance::NeedsAnimator() const
 {
-    if (!animator && imagery)
+    if (!HasAnimator() && imagery)
         return imagery->NeedsAnimator(this);
 
     return false;
@@ -893,8 +893,8 @@ void TObjectInstance::ResetState()
         frame = 0;
         framerate = 1;
     }
-    if (animator)
-        animator->ResetState();
+    if (TObjectAnimator* a = GetComponent<TObjectAnimator>())
+        a->ResetState();
 }
 
 // Sets the current animation state for the object
@@ -1245,9 +1245,11 @@ void TObjectInstance::Pulse()
         }
     }
 */
-  // Pulse the animator
-    if (animator)
-        animator->Pulse();
+  // Pulse the animator (now stored as a TObjectComponent on the
+  // instance). Driven explicitly here so per-instance ordering matches
+  // the legacy field-pointer path.
+    if (TObjectAnimator* a = GetComponent<TObjectAnimator>())
+        a->Pulse();
 
   // Check if script is done
     if (CommandDone())
@@ -1342,8 +1344,8 @@ void TObjectInstance::GetNextMove(S3DPoint& p)
 
 void TObjectInstance::Animate(bool draw)
 {
-    if (animator)
-        animator->Animate(draw);
+    if (TObjectAnimator* a = GetComponent<TObjectAnimator>())
+        a->Animate(draw);
 }
 
 // Sets next frame for object
@@ -1369,6 +1371,8 @@ void TObjectInstance::NextFrame()
         stateflags = imagery->GetAniFlags(state);
     }
 
+    TObjectAnimator* anim = GetComponent<TObjectAnimator>();
+
     frame += framerate;
 
     if (framerate < 0)
@@ -1390,8 +1394,8 @@ void TObjectInstance::NextFrame()
                     }
                     else
                     {
-                        if (animator)
-                            animator->SetComplete(true);
+                        if (anim)
+                            anim->SetComplete(true);
                         frame = 0;
                     }
                 }
@@ -1419,8 +1423,8 @@ void TObjectInstance::NextFrame()
                     }
                     else
                     {
-                        if (animator)
-                            animator->SetComplete(true);
+                        if (anim)
+                            anim->SetComplete(true);
                         frame = statesize - 1;
                     }
                 }
@@ -1430,8 +1434,8 @@ void TObjectInstance::NextFrame()
             SetCommandDone(false);
     }
 
-    if (animator)
-        animator->SetNewState(false);
+    if (anim)
+        anim->SetNewState(false);
 }
 
 void TObjectInstance::OnScreen()
@@ -1454,7 +1458,7 @@ void TObjectInstance::OnScreen()
 
 void TObjectInstance::OffScreen()
 {
-    if (animator)
+    if (HasAnimator())
         FreeAnimator();
 
     if (lightdef.lightindex != -1)

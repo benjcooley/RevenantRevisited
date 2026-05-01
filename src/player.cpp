@@ -410,12 +410,8 @@ void TPlayer::GetOnYerHog()
     if (newtype < 0)
         return;
 
-    if (animator)
-    {
-        delete animator;
-        animator = nullptr;
-    }
-    
+    FreeAnimator();
+
     TObjectImagery::FreeImagery(imagery);
     imagery = TObjectImagery::LoadImagery(PlayerClass.GetObjType(newtype)->imageryid);
     if (!imagery)

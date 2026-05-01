@@ -7,6 +7,7 @@
 #pragma once
 
 #include "revenant.h"
+#include "objectcomponent.h"
 #include "imagery.h"
 #include "stream.h"
 #include "lightdef.h"
@@ -51,9 +52,8 @@ _CLASSDEF(TObjectAnimator)
 #define MAXOBJECTTYPES 2048
 
 _CLASSDEF(SObjectDef)
-_CLASSDEF(TObjectComponent)
-_CLASSDEF(TObjectInstance)
-using TObjectComponentUpdateMethod = void (TObjectComponent::*)();
+// TObjectComponent + TObjectInstance forward decls and the update-method
+// typedef now live in objectcomponent.h; included above.
 
 _CLASSDEF(TObjectBuilder)
 class TObjectBuilder
@@ -503,50 +503,6 @@ class TObjectClass
 };
 
 // ****************************************************
-// * TObjectComponent - Optional per-instance behavior *
-// ****************************************************
-
-// Components are owned by TObjectInstance and are the intended place for
-// optional systems such as specialized visuals, effects, or other behavior
-// that should override/extend the class-definition default without adding
-// more ad-hoc checks to sector rendering.
-class TObjectComponent
-{
-  public:
-    TObjectComponent() = default;
-    virtual ~TObjectComponent() = default;
-
-    [[nodiscard]] TObjectInstance* Owner() const { return owner; }
-    [[nodiscard]] int32_t ComponentSlot() const { return slot; }
-    [[nodiscard]] uint32_t Generation() const { return generation; }
-    [[nodiscard]] virtual const char* ComponentName() const { return "component"; }
-    virtual void OnAttach() {}
-    virtual void OnDetach() {}
-    void Update() { OnUpdate(); }
-
-    static void RunUpdateList();
-
-  protected:
-    void RegisterUpdate(TObjectComponentUpdateMethod method);
-    void UnregisterUpdate(TObjectComponentUpdateMethod method);
-    virtual void OnUpdate() {}
-
-  private:
-    friend class TObjectInstance;
-    void Attach(TObjectInstance* newowner, int32_t newslot, uint32_t newgeneration)
-        { owner = newowner; slot = newslot; generation = newgeneration; }
-    void Activate()
-        { if (!active) { active = true; OnAttach(); } }
-    void Detach()
-        { if (active) { OnDetach(); active = false; } UnregisterUpdate(nullptr); owner = nullptr; slot = -1; ++generation; }
-
-    TObjectInstance* owner = nullptr;
-    int32_t slot = -1;
-    uint32_t generation = 1;
-    bool active = false;
-};
-
-// ****************************************************
 // * TObjectInstance - Map object instance base class *
 // ****************************************************
 
@@ -813,10 +769,10 @@ class TObjectInstance : protected SObjectDef
         // Sets the current framerate
     TObjectImagery* GetImagery() const;
         // Returns object's imagery
-    virtual bool HasAnimator() const { return animator != nullptr; }
+    virtual bool HasAnimator() const { return GetComponent<TObjectAnimator>() != nullptr; }
         // Returns true if object is an animating object.
-    virtual PTObjectAnimator GetAnimator() const { return animator; }
-        // Returns object's animator
+    virtual PTObjectAnimator GetAnimator() const { return GetComponent<TObjectAnimator>(); }
+        // Returns object's animator (now a TObjectComponent under the hood).
     virtual bool CreateAnimator();
         // Creates Animator
     virtual void FreeAnimator();
@@ -1130,7 +1086,7 @@ class TObjectInstance : protected SObjectDef
       // Sets shadow index
 
   // State handling functions
-    virtual bool CommandDone() { if (!animator) return true; return commanddone; }
+    virtual bool CommandDone() { if (!HasAnimator()) return true; return commanddone; }
     virtual void SetCommandDone(bool newcmd);
 
   // Streaming functions
@@ -1258,11 +1214,13 @@ class TObjectInstance : protected SObjectDef
 
   //Animation/drawing
     TObjectImagery* imagery;    // Pointer to current imagery object
-    PTObjectAnimator animator;  // Pointer to animatior
     short frame, framerate;     // Frame number and framerate for object
     uint16_t prevstate;         // Previous state
     short prevframe;            // Previous state's last frame (not previous frame for this state)
-    TPointerArray<TObjectComponent, 0, 2> components; // Optional owned components
+    // Animator + visual components live here. The animator was a dedicated
+    // pointer field; it is now stored as a TObjectComponent and looked up
+    // through GetAnimator() / GetComponent<TObjectAnimator>().
+    TPointerArray<TObjectComponent, 0, 2> components;
 
   // Inventory
     TObjectInstance* owner;     // What container it is in

@@ -103,7 +103,7 @@ void TStripEffect::Pulse()
 
 void TStripEffect::OffScreen()
 {
-	if (animator && (my_state == STRIP_EXPLODE) && commanddone)
+	if (HasAnimator() && (my_state == STRIP_EXPLODE) && commanddone)
 		TObjectInstance::OffScreen();
 }
 
@@ -643,9 +643,10 @@ void TWindStripEffect::Pulse()
 				int32_t j;
 				S3DPoint temp_point1, temp_point2;
 				GetPos(temp_point1);
-				temp_point1.x += (int32_t)((PTWindStripAnimator)animator)->realpos.x;
-				temp_point1.y += (int32_t)((PTWindStripAnimator)animator)->realpos.y;
-				temp_point1.z += (int32_t)((PTWindStripAnimator)animator)->realpos.z;
+				PTWindStripAnimator wsa = (PTWindStripAnimator)GetAnimator();
+				temp_point1.x += (int32_t)wsa->realpos.x;
+				temp_point1.y += (int32_t)wsa->realpos.y;
+				temp_point1.z += (int32_t)wsa->realpos.z;
 				for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
 				{
 					PTCharacter chr = (PTCharacter)i.Item();
