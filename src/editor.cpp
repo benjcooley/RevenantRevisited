@@ -52,6 +52,7 @@
 #include "sector.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <unordered_map>
@@ -473,13 +474,79 @@ void DrawScenePanel()
             std::vector<TSector*> sectors;
             mr->GetLoadedSectors(sectors);
 
-            bool show_empty = EditorPrefs::GetBool(kPrefSceneShowEmpty, false);
-            ImGuiToggleConfig cfg = ImGuiTogglePresets::MaterialStyle();
-            cfg.Flags = ImGuiToggleFlags_Animated;
-            if (ImGui::Toggle("Show empty sectors", &show_empty, cfg)) {
-                EditorPrefs::SetBool(kPrefSceneShowEmpty, show_empty);
-                EditorPrefs::Save();
+            // Sort sectors by (Y, X) so the hierarchy lists them in a
+            // stable, predictable order regardless of the renderer's
+            // internal load order. Objects within a sector are NOT
+            // sorted -- their order matches the source data so editor
+            // operations stay reproducible against the .DAT file.
+            std::sort(sectors.begin(), sectors.end(),
+                      [](TSector* a, TSector* b) {
+                          if (!a || !b) return a < b;
+                          if (a->SectorY() != b->SectorY())
+                              return a->SectorY() < b->SectorY();
+                          if (a->SectorX() != b->SectorX())
+                              return a->SectorX() < b->SectorX();
+                          return a->SectorLevel() < b->SectorLevel();
+                      });
+
+            // ---- Search + overflow header -----------------------------
+            //
+            // Magnifying-glass icon (Material Symbols) + InputTextWithHint
+            // for filtering, then a vertical-kebab overflow button that
+            // opens a popup of "panel option" toggles. Toggles that used
+            // to live inline (Show empty sectors, ...) move into the
+            // popup so the header stays compact.
+            static char s_search[64] = "";
+
+            const ImGuiStyle& st = ImGui::GetStyle();
+            const float kebab_w = ImGui::GetFrameHeight();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(ICON_MS_SEARCH);
+            ImGui::SameLine(0.0f, st.ItemInnerSpacing.x);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - kebab_w - st.ItemSpacing.x);
+            ImGui::InputTextWithHint("##scene_search", "Search...",
+                                     s_search, sizeof(s_search));
+            ImGui::SameLine();
+            if (ImGui::Button(ICON_MS_MORE_VERT "##scene_overflow",
+                              ImVec2(kebab_w, kebab_w)))
+                ImGui::OpenPopup("##scene_overflow_popup");
+            if (ImGui::BeginPopup("##scene_overflow_popup")) {
+                bool show_empty = EditorPrefs::GetBool(kPrefSceneShowEmpty, false);
+                ImGuiToggleConfig cfg = ImGuiTogglePresets::MaterialStyle();
+                cfg.Flags = ImGuiToggleFlags_Animated;
+                if (ImGui::Toggle("Show empty sectors", &show_empty, cfg)) {
+                    EditorPrefs::SetBool(kPrefSceneShowEmpty, show_empty);
+                    EditorPrefs::Save();
+                }
+                ImGui::EndPopup();
             }
+
+            // Case-insensitive substring search on (name | type | class).
+            // Empty filter matches everything.
+            const bool has_filter = s_search[0] != '\0';
+            auto IcaseContains = [](const char* hay, const char* needle) -> bool {
+                if (!hay || !needle) return false;
+                if (!*needle) return true;
+                for (const char* p = hay; *p; ++p) {
+                    const char* a = p;
+                    const char* b = needle;
+                    while (*a && *b &&
+                           std::tolower((uint8_t)*a) == std::tolower((uint8_t)*b))
+                    { ++a; ++b; }
+                    if (!*b) return true;
+                }
+                return false;
+            };
+            auto MatchesInst = [&](TObjectInstance* oi) -> bool {
+                if (!has_filter) return true;
+                if (!oi) return false;
+                if (IcaseContains(oi->GetName(),      s_search)) return true;
+                if (IcaseContains(oi->GetTypeName(),  s_search)) return true;
+                if (IcaseContains(oi->GetClassName(), s_search)) return true;
+                return false;
+            };
+
+            const bool show_empty = EditorPrefs::GetBool(kPrefSceneShowEmpty, false);
 
             size_t non_empty = 0;
             for (TSector* s : sectors)
@@ -496,6 +563,24 @@ void DrawScenePanel()
                 for (TSector* s : sectors) {
                     if (!s) continue;
                     if (!show_empty && s->NumItems() <= 0) continue;
+
+                    // Filter: count matching instances. If zero and the
+                    // filter is non-empty, skip the whole sector. Cache
+                    // the count so the inner loop can short-circuit.
+                    const int32_t n = s->NumItems();
+                    int32_t match_count = 0;
+                    if (has_filter) {
+                        for (int32_t i = 0; i < n; ++i)
+                            if (MatchesInst(s->GetInstance(i))) ++match_count;
+                        if (match_count == 0) continue;
+                    }
+
+                    // Auto-expand on a match so hits aren't hidden inside
+                    // a collapsed sector. Same trick the selection reveal
+                    // uses below.
+                    if (has_filter && match_count > 0)
+                        ImGui::SetNextItemOpen(true);
+
                     // When revealing the selection, force-open any
                     // sector that contains a selected instance so the
                     // row inside is exposed for SetScrollHereY to find.
@@ -503,7 +588,6 @@ void DrawScenePanel()
                     // marks reveal=true but the sector stays collapsed
                     // and the row is never drawn.
                     if (g_selection_reveal) {
-                        const int32_t n = s->NumItems();
                         for (int32_t i = 0; i < n; ++i) {
                             TObjectInstance* oi = s->GetInstance(i);
                             if (oi && IsSelected(oi->GetMapIndex())) {
@@ -512,13 +596,24 @@ void DrawScenePanel()
                             }
                         }
                     }
-                    char label[64];
-                    std::snprintf(label, sizeof(label), "Sector %d,%d (%d)##sec_%p",
-                                  s->SectorX(), s->SectorY(), s->NumItems(), (void*)s);
+
+                    char label[80];
+                    if (has_filter)
+                        std::snprintf(label, sizeof(label),
+                                      "Sector %d,%d (%d/%d)##sec_%p",
+                                      s->SectorX(), s->SectorY(),
+                                      match_count, n, (void*)s);
+                    else
+                        std::snprintf(label, sizeof(label),
+                                      "Sector %d,%d (%d)##sec_%p",
+                                      s->SectorX(), s->SectorY(), n, (void*)s);
+
                     if (ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_SpanAvailWidth)) {
-                        const int32_t n = s->NumItems();
-                        for (int32_t i = 0; i < n; ++i)
-                            DrawInstanceRow(s->GetInstance(i));
+                        for (int32_t i = 0; i < n; ++i) {
+                            TObjectInstance* oi = s->GetInstance(i);
+                            if (has_filter && !MatchesInst(oi)) continue;
+                            DrawInstanceRow(oi);
+                        }
                         ImGui::TreePop();
                     }
                 }
