@@ -97,8 +97,38 @@ bool g_shadows_were_on = true;
 
 // Game-View toolbar tool. Drives ImGuizmo's operation once wired; for
 // now just a UI state toggled by the toolbar buttons / hotkeys.
-enum class EEditorTool : uint8_t { Select, Pan, Move, Rotate, Scale };
+enum class EEditorTool : uint8_t { Select, Pan, Move, Rotate, Scale, _Count };
 EEditorTool g_tool = EEditorTool::Select;
+
+// Per-tool definition table. Anything that varies between tools (icon,
+// tooltip, gizmo op, whether a left click in the game view should
+// resolve to a pixel-pick selection, ...) lives here so call sites
+// don't have to switch on the enum.
+struct SEditorToolDef
+{
+    const char*          icon;
+    const char*          tooltip;
+    ImGuizmo::OPERATION  gizmo_op;
+    bool                 can_click_select;
+};
+
+constexpr SEditorToolDef kEditorTools[size_t(EEditorTool::_Count)] = {
+    /* Select */ { ICON_MS_ARROW_SELECTOR_TOOL, "Select (Q)",
+                   ImGuizmo::TRANSLATE, true  },
+    /* Pan    */ { ICON_MS_PAN_TOOL,            "Pan (H, or Alt+drag in any tool)",
+                   ImGuizmo::TRANSLATE, false },
+    /* Move   */ { ICON_MS_OPEN_WITH,           "Move (W)",
+                   ImGuizmo::TRANSLATE, true  },
+    /* Rotate */ { ICON_MS_3D_ROTATION,         "Rotate (E)",
+                   ImGuizmo::ROTATE,    true  },
+    /* Scale  */ { ICON_MS_TRANSFORM,           "Scale (R)",
+                   ImGuizmo::SCALE,     true  },
+};
+
+inline const SEditorToolDef& ToolDef(EEditorTool t)
+{
+    return kEditorTools[size_t(t)];
+}
 
 bool g_panning = false;       // active drag-to-pan in the game view
 
@@ -342,15 +372,11 @@ void ModelMatrixFromTranslation(const S3DPoint& W, float m[16])
     m[14] = float(W.z);
 }
 
-// Map current editor tool to an ImGuizmo OPERATION.
+// Map current editor tool to an ImGuizmo OPERATION (sourced from
+// kEditorTools so adding a tool is one table edit).
 ImGuizmo::OPERATION ToolToGizmoOp(EEditorTool t)
 {
-    switch (t) {
-        case EEditorTool::Move:   return ImGuizmo::TRANSLATE;
-        case EEditorTool::Rotate: return ImGuizmo::ROTATE;
-        case EEditorTool::Scale:  return ImGuizmo::SCALE;
-        default:                  return ImGuizmo::TRANSLATE;
-    }
+    return ToolDef(t).gizmo_op;
 }
 
 // Pick the right category icon for an editor IObject. Sectors get the
@@ -733,19 +759,20 @@ void DrawGameViewToolbar()
         return clicked;
     };
 
-    auto ToolButton = [&](const char* glyph, const char* tip, EEditorTool t) {
-        if (IconButton(glyph, tip, g_tool == t)) g_tool = t;
+    auto ToolButton = [&](EEditorTool t) {
+        const SEditorToolDef& def = ToolDef(t);
+        if (IconButton(def.icon, def.tooltip, g_tool == t)) g_tool = t;
     };
 
-    ToolButton(ICON_MS_ARROW_SELECTOR_TOOL, "Select (Q)",  EEditorTool::Select);
+    ToolButton(EEditorTool::Select);
     ImGui::SameLine();
-    ToolButton(ICON_MS_PAN_TOOL,            "Pan (H, or Alt+drag in any tool)", EEditorTool::Pan);
+    ToolButton(EEditorTool::Pan);
     ImGui::SameLine();
-    ToolButton(ICON_MS_OPEN_WITH,           "Move (W)",    EEditorTool::Move);
+    ToolButton(EEditorTool::Move);
     ImGui::SameLine();
-    ToolButton(ICON_MS_3D_ROTATION,         "Rotate (E)",  EEditorTool::Rotate);
+    ToolButton(EEditorTool::Rotate);
     ImGui::SameLine();
-    ToolButton(ICON_MS_TRANSFORM,           "Scale (R)",   EEditorTool::Scale);
+    ToolButton(EEditorTool::Scale);
 
     ImGui::SameLine(0.0f, kGroupGap);
     if (IconButton(EditorRunning() ? ICON_MS_PAUSE : ICON_MS_PLAY_ARROW,
@@ -918,9 +945,13 @@ void DrawGameViewPanel()
                     EditorUndo::UnlockResolver();
                 }
             }
-            // Click-pick raycast: available in any tool, not just Select.
-            // Skipped when the gizmo would consume the click (Move/
-            // Rotate/Scale handles) or while the gizmo is dragging.
+            // Click-pick raycast: available in tools where clicking has
+            // no other meaning -- Select + the transform tools (Move /
+            // Rotate / Scale) so clicking off the gizmo reselects.
+            // Suppressed in Pan (a click is a pan gesture there) and
+            // while Alt is held (Alt = pan modifier in any tool).
+            // Skipped when the gizmo would consume the click or while
+            // the gizmo is dragging.
             // Modifier rules:
             //   no mod    -> replace selection
             //   Ctrl      -> toggle add/remove
@@ -930,7 +961,8 @@ void DrawGameViewPanel()
                 const bool no_mod    = !mio.KeyShift && !mio.KeyAlt && !mio.KeySuper && !mio.KeyCtrl;
                 const bool ctrl_add  = !mio.KeyShift && !mio.KeyAlt && !mio.KeySuper &&  mio.KeyCtrl;
                 const bool shift_add =  mio.KeyShift && !mio.KeyAlt && !mio.KeySuper && !mio.KeyCtrl;
-                if (over_image && !ImGuizmo::IsUsing() && !ImGuizmo::IsOver()
+                if (ToolDef(g_tool).can_click_select
+                    && over_image && !ImGuizmo::IsUsing() && !ImGuizmo::IsOver()
                     && !ImGui::IsAnyItemHovered()
                     && (no_mod || ctrl_add || shift_add)
                     && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
