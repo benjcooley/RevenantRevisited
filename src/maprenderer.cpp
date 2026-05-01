@@ -968,6 +968,11 @@ int32_t TMapRenderer::CameraLevel() const
     return impl ? impl->cameraLevel : 0;
 }
 
+S3DPoint TMapRenderer::CameraWorld() const
+{
+    return impl ? impl->sectorCameraWorld : S3DPoint{0, 0, 0};
+}
+
 TSector* TMapRenderer::FindLoadedSector(int32_t level, int32_t sector_x, int32_t sector_y) const
 {
     if (!impl) return nullptr;

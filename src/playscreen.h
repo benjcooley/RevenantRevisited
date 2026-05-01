@@ -104,6 +104,12 @@ class TPlayScreen : public TScreen
     bool Initialize() override;
     void Close()      override;
 
+    // Drop a default "Locke" TPlayer into the first loaded sector and
+    // register him with PlayerManager. Used when there is no save-load
+    // path / new-game flow yet -- gives the world a Player to render
+    // and drive. Returns true if Player exists after the call.
+    bool SpawnDefaultPlayer();
+
     // ---- Per-frame -----------------------------------------------------
     // Update() advances game state (world, characters, input). It does NO
     // GPU work. The main frame loop calls RenderFrame() afterwards to

@@ -34,8 +34,12 @@
 #include "imagery.h"
 #include "logging.h"
 #include "maprenderer.h"
+#include "player.h"
 #include "savegame.h"
+#include "sector.h"
 #include "time.h"
+
+#include <vector>
 
 // Cursor bitmaps loaded from gamedata at boot. Other modules
 // (automap, editor console, mappane) reference these by symbol; keep
@@ -109,7 +113,83 @@ bool TPlayScreen::Initialize()
 
     EditorLoadState();
 
+    // No save-load wired up yet, and no menu/intro screen to drive a
+    // proper NewGame. Spawn Locke directly into the first loaded
+    // sector so the rest of the game has a Player to render and drive.
+    // Same wiring as the `add` console command (see CmdAdd in
+    // src/command.cpp): construct via the class factory, register with
+    // PlayerManager, mark as main. The TSector::AddObject path is used
+    // directly because MapPane.sectors[][] is empty under the new
+    // renderer-owned-sector model -- bypassing MapPane.NewObject.
+    SpawnDefaultPlayer();
+
     log_info("[playscreen] initialize done");
+    return true;
+}
+
+// Drop a "Locke" TPlayer into the first loaded sector, register with
+// PlayerManager, and make him the main player. Skipped if a Player
+// already exists (loaded from a save) or if no sectors are loaded.
+bool TPlayScreen::SpawnDefaultPlayer()
+{
+    if (Player)
+        return true;
+    if (!mapRenderer)
+        return false;
+
+    // Place Locke at the renderer's startup-anchored camera position
+    // (--level / --sector default, or the hard-coded Misthaven anchor).
+    const S3DPoint cam_world = mapRenderer->CameraWorld();
+    const int32_t  cam_level = mapRenderer->CameraLevel();
+    const int32_t  cam_sx    = cam_world.x >> SECTORWSHIFT;
+    const int32_t  cam_sy    = cam_world.y >> SECTORHSHIFT;
+
+    TSector* sec = mapRenderer->FindLoadedSector(cam_level, cam_sx, cam_sy);
+    if (!sec)
+    {
+        log_warn("[player] camera sector %d_%d_%d not loaded; cannot spawn Locke",
+                 cam_level, cam_sx, cam_sy);
+        return false;
+    }
+
+    const int32_t locke_type = PlayerClass.FindObjType("Locke");
+    if (locke_type < 0)
+    {
+        log_error("[player] PlayerClass has no 'Locke' objtype");
+        return false;
+    }
+
+    SObjectDef def;
+    memset(&def, 0, sizeof(def));
+    def.objclass = OBJCLASS_PLAYER;
+    def.objtype  = locke_type;
+    def.level    = cam_level;
+    def.pos      = cam_world;
+
+    TObjectInstance* oi = PlayerClass.NewObject(&def);
+    if (!oi)
+    {
+        log_error("[player] PlayerClass.NewObject failed for Locke");
+        return false;
+    }
+
+    sec->AddObject(oi);
+
+    // SetMainPlayer fires UI side effects (CenterOnObj / RefreshEquip /
+    // Inventory / HealthBar / StaminaBar) when CurrentScreen == &PlayScreen.
+    // We are inside TPlayScreen::Initialize -- CurrentScreen is already
+    // set, but the UI panes those calls touch are not yet initialized,
+    // and one of them hangs. Clear CurrentScreen for the duration of
+    // the spawn so the UI hookups are skipped; the player still becomes
+    // the main player, just without the per-screen redraws.
+    TScreen* saved_screen = CurrentScreen;
+    CurrentScreen = nullptr;
+    PlayerManager.AddPlayer((TPlayer*)oi);
+    PlayerManager.SetMainPlayer((TPlayer*)oi);
+    CurrentScreen = saved_screen;
+
+    log_info("[player] spawned Locke in sector %d_%d_%d at world (%d,%d,%d)",
+             cam_level, cam_sx, cam_sy, def.pos.x, def.pos.y, def.pos.z);
     return true;
 }
 

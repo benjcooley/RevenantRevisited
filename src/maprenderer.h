@@ -12,6 +12,8 @@
 
 #include "debugui.h"
 
+struct S3DPoint;
+
 class TMapRenderer
     : public IDebugTabContributor
 {
@@ -103,6 +105,13 @@ class TMapRenderer
     // because player-driven paging isn't running), this is the only
     // authoritative current-level signal.
     [[nodiscard]] int32_t CameraLevel() const;
+
+    // World-space position the camera was anchored to at startup. This
+    // is what InitializeFromStartupArgs picked from --sector / --level
+    // (or its default), pre-resolved to world coords so callers can use
+    // it as a "where the game opens" anchor without re-deriving the
+    // sector window.
+    [[nodiscard]] S3DPoint CameraWorld() const;
 
     // Find the loaded TSector covering (level, sector_x, sector_y).
     // Editor commands that create/remove instances need this because
