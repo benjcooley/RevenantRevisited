@@ -181,6 +181,12 @@ inline float MapRendererCameraDepth(const S3DPoint& rel)
          - (float(rel.x + rel.y) * kMapRendererIsoCos30 + float(rel.z) * 0.5f);
 }
 
+// 3D-mesh object world positions are in the common world space
+// (pos.z pre-scaled by WORLD3D_Z_SCALE at sector load), so this just
+// passes world coordinates through. The scale_* args are kept for
+// existing callers that historically applied per-axis scales but now
+// default to identity -- the only previously meaningful scale (Z=1.5)
+// has moved to the sector-load step + a mesh-local matrix scale.
 inline S3DPoint MapRendererMeshWorld(const S3DPoint& world,
                                      float scale_x = 1.0f,
                                      float scale_y = 1.0f,
@@ -189,7 +195,7 @@ inline S3DPoint MapRendererMeshWorld(const S3DPoint& world,
     return {
         int32_t(float(world.x) * scale_x),
         int32_t(float(world.y) * scale_y),
-        int32_t(FIX_Z_VALUE(world.z) * scale_z)
+        int32_t(float(world.z) * scale_z)
     };
 }
 
@@ -250,9 +256,14 @@ struct TMapRenderer::Impl
     int32_t sectorPerspectiveSteps = 32;
     int32_t sectorPerspectiveRefine = 5;
     int32_t sectorPerspectiveDebugMode = 0; // 0 normal, 1 checkerboard, 2 hit class
+    // World-space mesh scale was historically Z=1.5 to push mesh
+    // height into the tile coordinate space at draw time. That scale
+    // has moved to TSector::Load (positions) + a mesh-local matrix
+    // scale (mesh verts) so the renderer stops scaling per-frame.
+    // Kept here at 1.0 for any caller that still references them.
     float sectorMeshScaleX = 1.0f;
     float sectorMeshScaleY = 1.0f;
-    float sectorMeshScaleZ = 1.5f;
+    float sectorMeshScaleZ = 1.0f;
     int32_t sectorCharacterFocusIdx = -1;
     bool sectorDragging = false;
     int32_t dragStartX = 0, dragStartY = 0;

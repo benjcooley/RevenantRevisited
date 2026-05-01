@@ -254,10 +254,15 @@ static void BuildRootMatrixSource(const TObjectInstance* oi, hmm_mat4* out)
     MtxClear(&temp); MtxRotateX(&temp, oi->GetRotateX() * kTurn); MtxMultiply(out, out, &temp);
     MtxClear(&temp); MtxRotateY(&temp, oi->GetRotateY() * kTurn); MtxMultiply(out, out, &temp);
 
+    // 3D-mesh object positions are in the common world space (pos.z
+    // pre-scaled by WORLD3D_Z_SCALE at sector load), so translate by
+    // raw pos.z -- no FIX_Z_VALUE / per-frame Z scaling. The 1.5 mesh
+    // local scale that compensates for the dropped post-transform is
+    // applied to the local matrix before this root multiplies it.
     hmm_vec3 pos = {
         (float)oi->Pos().x,
         (float)oi->Pos().y,
-        (float)FIX_Z_VALUE(oi->Pos().z)
+        (float)oi->Pos().z
     };
     MtxClear(&temp); MtxTranslate(&temp, &pos); MtxMultiply(out, out, &temp);
 }
@@ -877,6 +882,17 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         else
         {
             BuildStaticObjectMatrix(meshimg, asset.objnum, 0, 0, local_renderer);
+        }
+        // Apply the mesh-local Z scale (WORLD3D_Z_SCALE) to the local
+        // pose matrix so mesh verts are stretched to common-world-space
+        // height. Replaces the legacy per-frame world scale (which
+        // also scaled the position translation, which is now wrong).
+        {
+            float local_scale[16];
+            float scaled_local[16];
+            MatrixScale16(1.0f, 1.0f, WORLD3D_Z_SCALE, local_scale);
+            MatrixMul16(local_scale, local_renderer, scaled_local);
+            std::memcpy(local_renderer, scaled_local, sizeof(local_renderer));
         }
         hmm_mat4 root_source = {};
         BuildRootMatrixSource(oi, &root_source);
