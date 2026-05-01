@@ -1232,7 +1232,7 @@ const char* TMapRenderer::GetDebugTabName() const
     return "Map";
 }
 
-bool TMapRenderer::InitializeFromStartupArgs()
+bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t, int32_t)> post_load_hook)
 {
     Impl& s = *impl;
     int32_t keep_lvl = 0, keep_sx = 2, keep_sy = 25;
@@ -1380,6 +1380,13 @@ bool TMapRenderer::InitializeFromStartupArgs()
     {
         const auto& sample = census_samples[i];
     }
+
+    // All startup sectors are loaded and registered with sectorsKept.
+    // Run the optional post-load hook so callers can inject objects
+    // (player spawn, scripted prelude, etc.) before the drawable scan
+    // below sees the sector contents.
+    if (post_load_hook)
+        post_load_hook(keep_lvl, keep_sx, keep_sy);
 
     std::vector<SSectorDrawableInst> draw_work;
     int32_t total_tiles = 0, non_2d = 0, bad_state = 0, no_still = 0, upload_fail = 0, no_img = 0, no_body = 0;

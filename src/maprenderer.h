@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -21,7 +22,15 @@ class TMapRenderer
     TMapRenderer();
     ~TMapRenderer();
 
-    bool InitializeFromStartupArgs();
+    // post_load_hook (optional) fires after the startup sectors are
+    // loaded but before the renderer scans them to build its initial
+    // drawable list. Callers use it to inject objects (e.g. spawn the
+    // player into a loaded sector) so the scan picks them up. The
+    // hook receives (level, sector_x, sector_y) of the renderer's
+    // anchor sector, which is the natural "where the game opens" pin.
+    bool InitializeFromStartupArgs(std::function<void(int32_t level,
+                                                       int32_t sector_x,
+                                                       int32_t sector_y)> post_load_hook = {});
     void Shutdown();
     void RenderFrame();
     void HandleMouseClick(int32_t button, int32_t x, int32_t y);
