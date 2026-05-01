@@ -507,7 +507,7 @@ void DrawScenePanel()
             ImGui::InputTextWithHint("##scene_search", "Search...",
                                      s_search, sizeof(s_search));
             ImGui::SameLine();
-            if (ImGui::Button(ICON_MS_MORE_VERT "##scene_overflow",
+            if (ImGui::Button(ICON_MS_MENU "##scene_overflow",
                               ImVec2(kebab_w, kebab_w)))
                 ImGui::OpenPopup("##scene_overflow_popup");
             if (ImGui::BeginPopup("##scene_overflow_popup")) {
