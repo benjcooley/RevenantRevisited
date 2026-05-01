@@ -2423,8 +2423,16 @@ SOKOL_API_IMPL bool simgui_handle_event(const sapp_event* ev) {
         case SAPP_EVENTTYPE_KEY_UP:
             _simgui_update_modifiers(io, ev->modifiers);
             /* intercept Ctrl-V, this is handled via EVENTTYPE_CLIPBOARD_PASTED */
-            if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_V)) {
-                break;
+            /* RR FIX: original code had this swallow unconditional, while
+               the matching KEY_DOWN swallow above is gated on
+               disable_paste_override. The asymmetry leaves V stuck at
+               down=true in ImGui (KEY_DOWN reaches ImGui, KEY_UP gets
+               dropped), so subsequent Cmd+V presses dedup as same-state
+               and never trigger a new press. Gate KEY_UP the same way. */
+            if (!_simgui.desc.disable_paste_override) {
+                if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_V)) {
+                    break;
+                }
             }
             /* on web platform, don't forward Ctrl-X, Ctrl-V to the browser */
             if (_simgui_is_ctrl(ev->modifiers) && (ev->key_code == SAPP_KEYCODE_X)) {

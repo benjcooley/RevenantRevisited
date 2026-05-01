@@ -174,8 +174,12 @@ void TPlayScreen::Update()
 
 void TPlayScreen::RenderFrame()
 {
-    if (mapRenderer)
-        mapRenderer->RenderFrame();
+    if (!mapRenderer) return;
+    // While the editor is paused and nothing is dirty, skip the world
+    // render entirely. The renderer's lit_target persists, so the Game
+    // View panel keeps displaying the previously rendered frame.
+    if (!EditorShouldRenderWorld()) return;
+    mapRenderer->RenderFrame();
 }
 
 // Legacy entry points still referenced by drivers / pane code. Pulse

@@ -14,18 +14,41 @@
 
 inline constexpr const char* kTileVsGlsl = R"GLSL(
 #version 330 core
+#define ISO_COS30 0.867
+#define ISO_WZ_DENOM 2.003378
 layout(std140) uniform params {
     vec4 rect;
     vec4 zparams;
     vec4 tile_root;
     vec4 tile_sprite;
     vec4 filter_;
+    vec4 obj_id;
+    vec4 camera;
 };
 layout(location = 0) in vec2 pos;
 layout(location = 1) in vec2 uv;
 out vec2 v_uv;
 void main() {
-    gl_Position = vec4(rect.xy + pos * rect.zw, 0.0, 1.0);
+    float sx = uv.x * tile_sprite.z - tile_sprite.x;
+    float sy = uv.y * tile_sprite.w - tile_sprite.y;
+    float lz = (-2.0 * sy * ISO_COS30) / ISO_WZ_DENOM;
+    float su = 2.0 * (sy + lz * ISO_COS30);
+    float wx = tile_root.x + 0.5 * (su + sx);
+    float wy = tile_root.y + 0.5 * (su - sx);
+    float wz = tile_root.z + lz;
+    float relx = wx - camera.x;
+    float rely = wy - camera.y;
+    float sum = relx + rely;
+    float S = relx - rely;
+    float T = 0.5 * sum - wz * ISO_COS30;
+    float scene_z_wu = camera.z - ISO_COS30 * sum - 0.5 * wz;
+    float zoom = max(zparams.w, 0.0001);
+    float persp_scale = ((camera.w > 0.5) ? (camera.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float spx = rect.x + S * persp_scale;
+    float spy = rect.y + T * persp_scale;
+    gl_Position = vec4(2.0 * spx / max(rect.z, 1.0) - 1.0,
+                       1.0 - 2.0 * spy / max(rect.w, 1.0),
+                       0.0, 1.0);
     v_uv = uv;
 }
 )GLSL";
@@ -41,6 +64,8 @@ layout(std140) uniform params {
     vec4 tile_root;
     vec4 tile_sprite;
     vec4 filter_;
+    vec4 obj_id;
+    vec4 camera;
 };
 in vec2 v_uv;
 uniform sampler2D color_tex;
@@ -48,6 +73,7 @@ uniform sampler2D depth_tex;
 layout(location = 0) out vec4 out_albedo;
 layout(location = 1) out vec4 out_normal;
 layout(location = 2) out vec4 out_scene_z;
+layout(location = 3) out vec4 out_obj_id;
 void main() {
     vec4 c = texture(color_tex, v_uv);
     if (c.a < 0.01) discard;
@@ -102,6 +128,7 @@ void main() {
     out_albedo  = c;
     out_normal  = vec4(N * 0.5 + 0.5, 1.0);
     out_scene_z = vec4(d, 0.0, 0.0, 1.0);
+    out_obj_id  = obj_id;
     gl_FragDepth = d;
 }
 )GLSL";

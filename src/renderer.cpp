@@ -25,6 +25,8 @@
 #include <sokol_gfx.h>
 
 #include <algorithm>
+#include <cfloat>
+#include <cmath>
 #include <cstring>
 
 #include "revenant.h"
@@ -82,10 +84,12 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float sum = wx + wy;
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
-    float spx = p.vp.x + S;
-    float spy = p.vp.y + T;
     float scene_z_wu = p.camz.z - ISO_COS30 * sum - 0.5 * wz;
     float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
+    float zoom = max(p.camw.z, 0.0001);
+    float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float spx = p.vp.x + S * persp_scale;
+    float spy = p.vp.y + T * persp_scale;
     vs_out o;
     o.pos.x = 2.0 * spx / max(p.vp.z, 1.0) - 1.0;
     o.pos.y = 1.0 - 2.0 * spy / max(p.vp.w, 1.0);
@@ -141,7 +145,8 @@ inline constexpr const char* kTransparentTileFs = R"MSL(
 #include <metal_stdlib>
 using namespace metal;
 struct params { float4 rect; float4 zparams; float4 tile_root; float4 tile_sprite;
-                float4 filter; };
+                float4 filter; float4 obj_id; float4 camera; float4 proj; float4 tile_rect;
+                float4 cam_tile; };
 struct vs_out { float4 pos [[position]]; float2 uv; };
 struct fs_out { float4 color [[color(0)]];
                 float  depth [[depth(any)]]; };
@@ -185,10 +190,12 @@ void main() {
     float sum = wx + wy;
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
-    float spx = vp.x + S;
-    float spy = vp.y + T;
     float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    float zoom = max(camw.z, 0.0001);
+    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float spx = vp.x + S * persp_scale;
+    float spy = vp.y + T * persp_scale;
     gl_Position = vec4(2.0 * spx / max(vp.z, 1.0) - 1.0,
                        1.0 - 2.0 * spy / max(vp.w, 1.0),
                        scene_z_n, 1.0);
@@ -240,6 +247,8 @@ layout(std140) uniform params {
     vec4 tile_root;
     vec4 tile_sprite;
     vec4 filter_;
+    vec4 obj_id;
+    vec4 camera;
 };
 in vec2 v_uv;
 uniform sampler2D color_tex;
@@ -283,10 +292,12 @@ vs_out main_vs(vs_in i) {
     float sum = wx + wy;
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
-    float spx = vp.x + S;
-    float spy = vp.y + T;
     float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    float zoom = max(camw.z, 0.0001);
+    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float spx = vp.x + S * persp_scale;
+    float spy = vp.y + T * persp_scale;
     vs_out o;
     o.pos = float4(2.0 * spx / max(vp.z, 1.0) - 1.0,
                    1.0 - 2.0 * spy / max(vp.w, 1.0),
@@ -341,6 +352,8 @@ cbuffer params : register(b0) {
     float4 tile_root;
     float4 tile_sprite;
     float4 filter_;
+    float4 obj_id;
+    float4 camera;
 };
 Texture2D    color_tex : register(t0);
 Texture2D    depth_tex : register(t1);
@@ -424,6 +437,17 @@ bool TRenderer::Initialize(int32_t dwidth, int32_t dheight)
     rt_desc.pixel_format = SG_PIXELFORMAT_R32F;
     scene_z_target = sg_make_image(&rt_desc);
 
+    // id_target -- per-pixel object instance id, packed into RGBA8.
+    // Used by the editor for pixel-perfect picking + selection outline.
+    // Pixels covered by no drawable read back as (0,0,0,0) which we
+    // reserve for "no object".
+    rt_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    rt_desc.min_filter   = SG_FILTER_NEAREST;
+    rt_desc.mag_filter   = SG_FILTER_NEAREST;
+    id_target = sg_make_image(&rt_desc);
+    rt_desc.min_filter   = SG_FILTER_LINEAR;
+    rt_desc.mag_filter   = SG_FILTER_LINEAR;
+
     // lit_target -- final shaded RGBA8. Nearest filter because we composite
     // 1:1 onto the swapchain and don't want resample blur.
     rt_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
@@ -441,6 +465,7 @@ bool TRenderer::Initialize(int32_t dwidth, int32_t dheight)
     gbuf_desc.color_attachments[0].image     = color_target;
     gbuf_desc.color_attachments[1].image     = normal_target;
     gbuf_desc.color_attachments[2].image     = scene_z_target;
+    gbuf_desc.color_attachments[3].image     = id_target;
     gbuf_desc.depth_stencil_attachment.image = depth_target;
     default_pass = sg_make_pass(&gbuf_desc);
 
@@ -488,6 +513,7 @@ void TRenderer::Shutdown()
     if (depth_target.id)   { sg_destroy_image(depth_target);   depth_target   = {}; }
     if (normal_target.id)  { sg_destroy_image(normal_target);  normal_target  = {}; }
     if (scene_z_target.id) { sg_destroy_image(scene_z_target); scene_z_target = {}; }
+    if (id_target.id)      { sg_destroy_image(id_target);      id_target      = {}; }
     if (ao_target.id)      { sg_destroy_image(ao_target);      ao_target      = {}; }
     if (lit_target.id)     { sg_destroy_image(lit_target);     lit_target     = {}; }
 
@@ -547,7 +573,18 @@ void TRenderer::InitCompositePipeline()
     pip.label = "renderer.composite.pipeline.rt";
     composite_pip_rt = sg_make_pipeline(&pip);
 
+    pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+    pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE;
+    pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip.label = "renderer.composite.pipeline.rt.add";
+    composite_pip_add_rt = sg_make_pipeline(&pip);
+
     // Variant 2: drawing into the swapchain (sokol default pass).
+    pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+    pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     pip.colors[0].pixel_format = _SG_PIXELFORMAT_DEFAULT;
     pip.depth.pixel_format     = _SG_PIXELFORMAT_DEFAULT;
     pip.label = "renderer.composite.pipeline.swap";
@@ -556,6 +593,7 @@ void TRenderer::InitCompositePipeline()
 
 void TRenderer::ShutdownCompositePipeline()
 {
+    if (composite_pip_add_rt.id) { sg_destroy_pipeline(composite_pip_add_rt); composite_pip_add_rt = {}; }
     if (composite_pip_rt.id)   { sg_destroy_pipeline(composite_pip_rt);   composite_pip_rt   = {}; }
     if (composite_pip_swap.id) { sg_destroy_pipeline(composite_pip_swap); composite_pip_swap = {}; }
     if (composite_shader.id)   { sg_destroy_shader(composite_shader);     composite_shader   = {}; }
@@ -574,8 +612,9 @@ void TRenderer::InitTilePipeline()
     vb.label = "renderer.tile.vbuf";
     tile_vbuf = sg_make_buffer(&vb);
 
-    // 5 vec4s: rect, zparams, tile_root, tile_sprite, filter.
-    constexpr int32_t kUB_vec4s = 5;
+    // 12 vec4s: rect, zparams, tile_root, tile_sprite, filter, obj_id,
+    // camera, proj, tile_rect, cam_tile, debug, raycast.
+    constexpr int32_t kUB_vec4s = 12;
     constexpr int32_t kUB_bytes = kUB_vec4s * 16;
 
     sg_shader_desc sh = {};
@@ -598,6 +637,20 @@ void TRenderer::InitTilePipeline()
     sh.vs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
     sh.vs.uniform_blocks[0].uniforms[4].name = "filter";
     sh.vs.uniform_blocks[0].uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[5].name = "obj_id";
+    sh.vs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[6].name = "camera";
+    sh.vs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[7].name = "proj";
+    sh.vs.uniform_blocks[0].uniforms[7].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[8].name = "tile_rect";
+    sh.vs.uniform_blocks[0].uniforms[8].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[9].name = "cam_tile";
+    sh.vs.uniform_blocks[0].uniforms[9].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[10].name = "debug";
+    sh.vs.uniform_blocks[0].uniforms[10].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[11].name = "raycast";
+    sh.vs.uniform_blocks[0].uniforms[11].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.source = kTileFs;
     sh.fs.entry  = kShaderFsEntry;
     sh.fs.uniform_blocks[0].size = kUB_bytes;
@@ -611,6 +664,20 @@ void TRenderer::InitTilePipeline()
     sh.fs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[4].name = "filter";
     sh.fs.uniform_blocks[0].uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[5].name = "obj_id";
+    sh.fs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[6].name = "camera";
+    sh.fs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[7].name = "proj";
+    sh.fs.uniform_blocks[0].uniforms[7].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[8].name = "tile_rect";
+    sh.fs.uniform_blocks[0].uniforms[8].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[9].name = "cam_tile";
+    sh.fs.uniform_blocks[0].uniforms[9].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[10].name = "debug";
+    sh.fs.uniform_blocks[0].uniforms[10].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[11].name = "raycast";
+    sh.fs.uniform_blocks[0].uniforms[11].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.images[0].name         = "color_tex";
     sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -625,8 +692,9 @@ void TRenderer::InitTilePipeline()
     pip.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
     pip.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
     pip.primitive_type         = SG_PRIMITIVETYPE_TRIANGLES;
-    // MRT: albedo (RGBA8) + world normal (RGBA16F) + scene_z (R32F).
-    pip.color_count            = 3;
+    // MRT: albedo (RGBA8) + world normal (RGBA16F) + scene_z (R32F) +
+    // obj_id (RGBA8 packed instance id).
+    pip.color_count            = 4;
     pip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
     pip.colors[0].blend.enabled = true;
     pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
@@ -637,6 +705,8 @@ void TRenderer::InitTilePipeline()
     pip.colors[1].blend.enabled = false;
     pip.colors[2].pixel_format = SG_PIXELFORMAT_R32F;
     pip.colors[2].blend.enabled = false;
+    pip.colors[3].pixel_format = SG_PIXELFORMAT_RGBA8;
+    pip.colors[3].blend.enabled = false;
     pip.depth.pixel_format     = SG_PIXELFORMAT_DEPTH;
     pip.depth.compare          = SG_COMPAREFUNC_LESS_EQUAL;
     pip.depth.write_enabled    = true;
@@ -702,7 +772,8 @@ void TRenderer::InitMeshPipeline()
     sh.attrs[4].name = "w1";        sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 2;
     sh.attrs[5].name = "w2";        sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 3;
     sh.attrs[6].name = "w3";        sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 4;
-    sh.attrs[7].name = "tint";      sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 5;
+    sh.attrs[7].name = "tint";        sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 5;
+    sh.attrs[8].name = "inst_obj_id"; sh.attrs[8].sem_name = "TEXCOORD"; sh.attrs[8].sem_index = 6;
 
     sh.vs.source = kMeshVs;
     sh.vs.entry  = kShaderVsEntry;
@@ -727,8 +798,8 @@ void TRenderer::InitMeshPipeline()
     // Vertex buffer 0: per-vertex (pos/normal/uv).
     pip.layout.buffers[0].stride    = sizeof(SMeshVertex);
     pip.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
-    // Vertex buffer 1: per-instance (world rows + tint).
-    pip.layout.buffers[1].stride    = sizeof(float) * 20;   // 4*vec4 world + vec4 tint
+    // Vertex buffer 1: per-instance (world rows + tint + obj_id rgba8).
+    pip.layout.buffers[1].stride    = sizeof(float) * 24;   // 4*vec4 world + vec4 tint + vec4 obj_id
     pip.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
     pip.layout.attrs[0].buffer_index = 0;
     pip.layout.attrs[0].offset       = offsetof(SMeshVertex, pos);
@@ -739,7 +810,7 @@ void TRenderer::InitMeshPipeline()
     pip.layout.attrs[2].buffer_index = 0;
     pip.layout.attrs[2].offset       = offsetof(SMeshVertex, uv);
     pip.layout.attrs[2].format       = SG_VERTEXFORMAT_FLOAT2;
-    for (int32_t i = 0; i < 5; ++i) {
+    for (int32_t i = 0; i < 6; ++i) {
         pip.layout.attrs[3 + i].buffer_index = 1;
         pip.layout.attrs[3 + i].offset       = i * int32_t(sizeof(float)) * 4;
         pip.layout.attrs[3 + i].format       = SG_VERTEXFORMAT_FLOAT4;
@@ -747,7 +818,7 @@ void TRenderer::InitMeshPipeline()
     pip.index_type     = SG_INDEXTYPE_UINT16;
     pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
     pip.cull_mode      = SG_CULLMODE_NONE;
-    pip.color_count            = 3;
+    pip.color_count            = 4;
     pip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
     pip.colors[0].blend.enabled = true;
     pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
@@ -758,6 +829,8 @@ void TRenderer::InitMeshPipeline()
     pip.colors[1].blend.enabled = false;
     pip.colors[2].pixel_format = SG_PIXELFORMAT_R32F;
     pip.colors[2].blend.enabled = false;
+    pip.colors[3].pixel_format = SG_PIXELFORMAT_RGBA8;   // obj_id
+    pip.colors[3].blend.enabled = false;
     pip.depth.pixel_format  = SG_PIXELFORMAT_DEPTH;
     pip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
     pip.depth.write_enabled = true;
@@ -854,7 +927,7 @@ void TRenderer::InitMeshPipeline()
     helper_mesh_add_front_pipeline = sg_make_pipeline(&hpip);
 
     sg_buffer_desc ivb = {};
-    ivb.size  = kMaxMeshInstances * int32_t(sizeof(float)) * 20;
+    ivb.size  = kMaxMeshInstances * int32_t(sizeof(float)) * 24;   // 4*vec4 world + tint + obj_id
     ivb.usage = SG_USAGE_STREAM;
     ivb.label = "renderer.mesh.instance_vbuf";
     mesh_instance_vb = sg_make_buffer(&ivb);
@@ -949,14 +1022,18 @@ void TRenderer::DrainMeshQueue()
     std::sort(mesh_queue.begin(), mesh_queue.end(),
               [](const SMeshSubmit& a, const SMeshSubmit& b) { return a.mesh < b.mesh; });
 
-    // Pack instance rows (20 floats each: w0..w3 + tint).
+    // Pack instance rows (24 floats each: w0..w3 + tint + obj_id rgba8).
     std::vector<float> inst;
-    inst.resize(mesh_queue.size() * 20);
+    inst.resize(mesh_queue.size() * 24);
     for (size_t i = 0; i < mesh_queue.size(); ++i) {
         const SMeshSubmit& s = mesh_queue[i];
-        float* dst = &inst[i * 20];
+        float* dst = &inst[i * 24];
         std::memcpy(dst,      s.world, sizeof(s.world));
         std::memcpy(dst + 16, s.tint,  sizeof(s.tint));
+        dst[20] = float((s.obj_id >>  0) & 0xFFu) / 255.0f;
+        dst[21] = float((s.obj_id >>  8) & 0xFFu) / 255.0f;
+        dst[22] = float((s.obj_id >> 16) & 0xFFu) / 255.0f;
+        dst[23] = float((s.obj_id >> 24) & 0xFFu) / 255.0f;
     }
     const sg_range r = { inst.data(), inst.size() * sizeof(float) };
     sg_update_buffer(mesh_instance_vb, &r);
@@ -972,10 +1049,10 @@ void TRenderer::DrainMeshQueue()
     u[4] = recon.z_near;
     u[5] = recon.zspan;
     u[6] = recon.kcam_forward;
-    u[7] = 0.0f;
+    u[7] = recon.reserved;
     u[8] = recon.center_wx;
     u[9] = recon.center_wy;
-    u[10] = 0.0f;
+    u[10] = recon.zoom;
     u[11] = 0.0f;
     const sg_range u_range = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
@@ -990,7 +1067,7 @@ void TRenderer::DrainMeshQueue()
         sg_bindings bind = {};
         bind.vertex_buffers[0]        = me.vbuf;
         bind.vertex_buffers[1]        = mesh_instance_vb;
-        bind.vertex_buffer_offsets[1] = int(i) * int(sizeof(float)) * 20;
+        bind.vertex_buffer_offsets[1] = int(i) * int(sizeof(float)) * 24;
         bind.index_buffer             = me.ibuf;
         bind.fs_images[0]             = me.albedo;
         sg_apply_bindings(&bind);
@@ -1011,29 +1088,96 @@ void TRenderer::EmitTransparentTile(const STileSubmit& t)
     bind.fs_images[1]      = t.depth_img;
     sg_apply_bindings(&bind);
 
-    const int32_t pad = kGBufPad;
-    const int32_t gbw = width  + 2 * pad;
-    const int32_t gbh = height + 2 * pad;
-    const int32_t px  = t.dst_x + pad;
-    const int32_t py  = t.dst_y + pad;
-    const float nx = (2.0f * px / gbw)  - 1.0f;
-    const float nw = (2.0f * t.dst_w) / gbw;
-    const float ny = 1.0f - (2.0f * (py + t.dst_h) / gbh);
-    const float nh = (2.0f * t.dst_h) / gbh;
+    const int32_t gbw = width  + 2 * kGBufPad;
+    const int32_t gbh = height + 2 * kGBufPad;
+    const int32_t px  = t.dst_x + kGBufPad;
+    const int32_t py  = t.dst_y + kGBufPad;
+    float rect_x = float(px);
+    float rect_y = float(py);
+    float rect_w = float(t.dst_w);
+    float rect_h = float(t.dst_h);
+    if (recon.reserved > 0.5f)
+    {
+        const float focal_zoom = recon.kcam_forward * recon.zoom;
+        const float anchor_cam_x = float(px) + t.anchor_px_x - recon.ox;
+        const float anchor_cam_y = float(py) + t.anchor_px_y - recon.oy;
+        float z0 = t.anchor_z * recon.zspan + recon.z_near + recon.z_offset + t.zraw_min * t.zraw_to_wu * recon.z_scale;
+        float z1 = t.anchor_z * recon.zspan + recon.z_near + recon.z_offset + t.zraw_max * t.zraw_to_wu * recon.z_scale;
+        if (z1 < z0) std::swap(z0, z1);
+        z0 = (std::max)(z0, 1.0f);
+        z1 = (std::max)(z1, z0 + 1.0f);
+        const float tile_scale = recon.tile_scale > 0.0f ? recon.tile_scale : 1.0f;
+        const float sx_min = -t.anchor_px_x * tile_scale;
+        const float sx_max = (float(t.dst_w) - t.anchor_px_x) * tile_scale;
+        const float sy_min = -t.anchor_px_y * tile_scale;
+        const float sy_max = (float(t.dst_h) - t.anchor_px_y) * tile_scale;
+        const float sxv[2] = { sx_min, sx_max };
+        const float syv[2] = { sy_min, sy_max };
+        const float zv[2] = { z0, z1 };
+        float min_x =  FLT_MAX, min_y =  FLT_MAX;
+        float max_x = -FLT_MAX, max_y = -FLT_MAX;
+        for (float z : zv)
+        for (float sx : sxv)
+        for (float sy : syv)
+        {
+            const float qx = recon.ox + (anchor_cam_x + sx) * focal_zoom / z;
+            const float qy = recon.oy + (anchor_cam_y + sy) * focal_zoom / z;
+            min_x = (std::min)(min_x, qx);
+            min_y = (std::min)(min_y, qy);
+            max_x = (std::max)(max_x, qx);
+            max_y = (std::max)(max_y, qy);
+        }
+        constexpr float kPerspectiveTilePadPx = 2.0f;
+        rect_x = std::floor(min_x - kPerspectiveTilePadPx);
+        rect_y = std::floor(min_y - kPerspectiveTilePadPx);
+        rect_w = std::ceil(max_x + kPerspectiveTilePadPx) - rect_x;
+        rect_h = std::ceil(max_y + kPerspectiveTilePadPx) - rect_y;
+    }
+    const float nx = (2.0f * rect_x / gbw)  - 1.0f;
+    const float nw = (2.0f * rect_w) / gbw;
+    const float ny = 1.0f - (2.0f * (rect_y + rect_h) / gbh);
+    const float nh = (2.0f * rect_h) / gbh;
 
-    float uniforms[5 * 4] = {};
+    // Keep layout identical to the opaque tile shader. Transparent tiles do
+    // not write obj_id, but still need the shared camera projection params.
+    float uniforms[12 * 4] = {};
     int32_t off = 0;
     uniforms[off++] = nx; uniforms[off++] = ny; uniforms[off++] = nw; uniforms[off++] = nh;
     uniforms[off++] = t.anchor_z;
     uniforms[off++] = t.depth_mul;
-    uniforms[off++] = t.normal_mul;
-    uniforms[off++] = 0.0f;
+    uniforms[off++] = recon.tile_scale;
+    uniforms[off++] = recon.zoom;
     uniforms[off++] = t.root_wx; uniforms[off++] = t.root_wy;
     uniforms[off++] = t.root_wz; uniforms[off++] = t.zraw_to_wu;
     uniforms[off++] = t.anchor_px_x; uniforms[off++] = t.anchor_px_y;
     uniforms[off++] = float(t.dst_w); uniforms[off++] = float(t.dst_h);
     uniforms[off++] = light.normal_radius;
     uniforms[off++] = light.edge_threshold;
+    uniforms[off++] = t.zraw_min;
+    uniforms[off++] = t.zraw_max;
+    // obj_id slot: zeros for transparent tiles (no need to pick them).
+    uniforms[off++] = 0.0f; uniforms[off++] = 0.0f;
+    uniforms[off++] = 0.0f; uniforms[off++] = 0.0f;
+    uniforms[off++] = recon.center_wx; uniforms[off++] = recon.center_wy;
+    uniforms[off++] = recon.kcam_forward; uniforms[off++] = recon.reserved;
+    uniforms[off++] = recon.ox; uniforms[off++] = recon.oy;
+    uniforms[off++] = float(gbw); uniforms[off++] = float(gbh);
+    uniforms[off++] = float(px); uniforms[off++] = float(py);
+    uniforms[off++] = float(t.dst_w); uniforms[off++] = float(t.dst_h);
+    uniforms[off++] = float(px) + t.anchor_px_x - recon.ox;
+    uniforms[off++] = float(py) + t.anchor_px_y - recon.oy;
+    uniforms[off++] = t.anchor_z * recon.zspan + recon.z_near + recon.z_offset;
+    uniforms[off++] = t.zraw_to_wu * recon.z_scale;
+    {
+        const uint32_t h = t.obj_id * 1103515245u + 12345u;
+        const float r = 0.25f + 0.70f * float((h >>  0) & 0xFFu) / 255.0f;
+        const float g = 0.25f + 0.70f * float((h >>  8) & 0xFFu) / 255.0f;
+        const float b = 0.25f + 0.70f * float((h >> 16) & 0xFFu) / 255.0f;
+        uniforms[off++] = float(perspective_debug_mode);
+        uniforms[off++] = r; uniforms[off++] = g; uniforms[off++] = b;
+    }
+    uniforms[off++] = float(perspective_steps);
+    uniforms[off++] = float(perspective_refine);
     uniforms[off++] = 0.0f;
     uniforms[off++] = 0.0f;
 
@@ -1072,10 +1216,10 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     vsu[vo++] = recon.z_near;
     vsu[vo++] = recon.zspan;
     vsu[vo++] = recon.kcam_forward;
-    vsu[vo++] = 0.0f;
+    vsu[vo++] = recon.reserved;
     vsu[vo++] = recon.center_wx;
     vsu[vo++] = recon.center_wy;
-    vsu[vo++] = 0.0f;
+    vsu[vo++] = recon.zoom;
     vsu[vo++] = 0.0f;
     const sg_range vsr = { vsu, sizeof(vsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsr);
@@ -1142,13 +1286,15 @@ void TRenderer::InitAOPipeline()
     sh.vs.entry  = kShaderVsEntry;
     sh.fs.source = kAOFs;
     sh.fs.entry  = kShaderFsEntry;
-    sh.fs.uniform_blocks[0].size = sizeof(float) * 12;
+    sh.fs.uniform_blocks[0].size = sizeof(float) * 16;
     sh.fs.uniform_blocks[0].uniforms[0].name = "vp";
     sh.fs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[1].name = "recon";
     sh.fs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[2].name = "ao_settings";
     sh.fs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[3].name = "camera";
+    sh.fs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.images[0].name         = "albedo_tex";
     sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -1196,7 +1342,7 @@ void TRenderer::RunAOPass()
     bind.fs_images[2]      = scene_z_target;
     sg_apply_bindings(&bind);
 
-    float u[12] = {};
+    float u[16] = {};
     int32_t o = 0;
     u[o++] = recon.ox; u[o++] = recon.oy; u[o++] = recon.z_near; u[o++] = recon.zspan;
     u[o++] = recon.center_wx; u[o++] = recon.center_wy; u[o++] = recon.kcam_forward; u[o++] = recon.reserved;
@@ -1204,6 +1350,10 @@ void TRenderer::RunAOPass()
     u[o++] = light.ao_enable ? light.ao_strength : 0.0f;
     u[o++] = light.ao_bias;
     u[o++] = light.ao_max_dist_wu;
+    u[o++] = recon.zoom;
+    u[o++] = 0.0f;
+    u[o++] = 0.0f;
+    u[o++] = 0.0f;
     const sg_range r = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &r);
     sg_draw(0, 6, 1);
@@ -1219,7 +1369,7 @@ void TRenderer::InitLightPipeline()
     constexpr int32_t kPL = TRenderer::kMaxPointLights;
     // 6 scalar vec4s + kPL plight_pos + kPL plight_col
     //                + shadow + shadow_dir + shadow_world_dir + normal_lighting
-    constexpr int32_t kUB_vec4s = 6 + kPL + kPL + 4;
+    constexpr int32_t kUB_vec4s = 6 + kPL + kPL + 4 + 1;   // +1 = selected_obj_id (editor outline)
     constexpr int32_t kUB_bytes = kUB_vec4s * 16;
 
     sg_shader_desc sh = {};
@@ -1260,6 +1410,8 @@ void TRenderer::InitLightPipeline()
     sh.fs.uniform_blocks[0].uniforms[10].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[11].name = "normal_lighting";
     sh.fs.uniform_blocks[0].uniforms[11].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[12].name = "selected_obj_id";
+    sh.fs.uniform_blocks[0].uniforms[12].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.images[0].name         = "albedo_tex";
     sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -1272,6 +1424,9 @@ void TRenderer::InitLightPipeline()
     sh.fs.images[3].name         = "ao_tex";
     sh.fs.images[3].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[3].sampler_type = SG_SAMPLERTYPE_FLOAT;
+    sh.fs.images[4].name         = "id_tex";
+    sh.fs.images[4].image_type   = SG_IMAGETYPE_2D;
+    sh.fs.images[4].sampler_type = SG_SAMPLERTYPE_FLOAT;
     sh.label = "renderer.light.shader";
     light_shader = sg_make_shader(&sh);
 
@@ -1296,7 +1451,11 @@ void TRenderer::ShutdownLightPipeline()
 void TRenderer::SetReconstructionParams(float ox, float oy,
                                         float z_near, float z_far,
                                         float center_wx, float center_wy,
-                                        float kcam_forward, float reserved)
+                                        float kcam_forward, float perspective,
+                                        float zoom,
+                                        float z_offset,
+                                        float z_scale,
+                                        float tile_scale)
 {
     // Callers pass the world-origin screen offset in display-space pixels.
     // The light shader samples the padded G-buffer, so shift by +pad to
@@ -1308,7 +1467,17 @@ void TRenderer::SetReconstructionParams(float ox, float oy,
     recon.center_wx    = center_wx;
     recon.center_wy    = center_wy;
     recon.kcam_forward = kcam_forward;
-    recon.reserved     = reserved;
+    recon.reserved     = perspective;
+    recon.zoom         = zoom > 0.0f ? zoom : 1.0f;
+    recon.z_offset     = z_offset;
+    recon.z_scale      = z_scale > 0.0f ? z_scale : 1.0f;
+    recon.tile_scale   = tile_scale > 0.0f ? tile_scale : 1.0f;
+}
+
+void TRenderer::SetPerspectiveRaycastParams(int32_t steps, int32_t refine)
+{
+    perspective_steps = std::clamp(steps, 4, 128);
+    perspective_refine = std::clamp(refine, 0, 8);
 }
 
 void TRenderer::RunLightingPass()
@@ -1330,10 +1499,11 @@ void TRenderer::RunLightingPass()
     bind.fs_images[1]      = normal_target;
     bind.fs_images[2]      = scene_z_target;
     bind.fs_images[3]      = ao_target;
+    bind.fs_images[4]      = id_target;
     sg_apply_bindings(&bind);
 
     constexpr int32_t kPL = TRenderer::kMaxPointLights;
-    constexpr int32_t kUB_vec4s = 6 + kPL + kPL + 4;
+    constexpr int32_t kUB_vec4s = 6 + kPL + kPL + 4 + 1;   // +1 = selected_obj_id (editor outline)
     float u[kUB_vec4s * 4] = {};
     int32_t o = 0;
     u[o++] = recon.ox;    u[o++] = recon.oy;
@@ -1347,7 +1517,7 @@ void TRenderer::RunLightingPass()
     u[o++] = float(light.view_mode);
     u[o++] = float(light.plight_count);
     u[o++] = float(light.mode);
-    u[o++] = 0.0f;
+    u[o++] = recon.zoom;
     for (int32_t i = 0; i < kPL; ++i)
         for (int32_t k = 0; k < 4; ++k) u[o++] = light.plight_pos[i][k];
     for (int32_t i = 0; i < kPL; ++i)
@@ -1368,6 +1538,12 @@ void TRenderer::RunLightingPass()
     u[o++] = 0.0f;
     u[o++] = 0.0f;
     u[o++] = 0.0f;
+    // selected_obj_id packed into RGBA8 channels for the outline shader.
+    // 0 means "no selection -- skip outline".
+    u[o++] = float((selected_obj_id >>  0) & 0xFFu) / 255.0f;
+    u[o++] = float((selected_obj_id >>  8) & 0xFFu) / 255.0f;
+    u[o++] = float((selected_obj_id >> 16) & 0xFFu) / 255.0f;
+    u[o++] = float((selected_obj_id >> 24) & 0xFFu) / 255.0f;
 
     const sg_range r = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &r);
@@ -1398,6 +1574,8 @@ void TRenderer::BeginTilePass(float r, float g, float b, float a)
     pa.colors[1].value  = { 0.5f, 0.5f, 0.5f, 1.0f };
     pa.colors[2].action = SG_ACTION_CLEAR;
     pa.colors[2].value  = { 1.0f, 0.0f, 0.0f, 1.0f };
+    pa.colors[3].action = SG_ACTION_CLEAR;
+    pa.colors[3].value  = { 0.0f, 0.0f, 0.0f, 0.0f };  // id=0 means "empty"
     pa.depth.action     = SG_ACTION_CLEAR;
     pa.depth.value      = 1.0f;
     pa.stencil.action   = SG_ACTION_DONTCARE;
@@ -1428,29 +1606,96 @@ void TRenderer::EmitTile(const STileSubmit& t)
     bind.fs_images[1]      = t.depth_img;
     sg_apply_bindings(&bind);
 
-    const int32_t pad = kGBufPad;
-    const int32_t gbw = width  + 2 * pad;
-    const int32_t gbh = height + 2 * pad;
-    const int32_t px  = t.dst_x + pad;
-    const int32_t py  = t.dst_y + pad;
-    const float nx = (2.0f * px / gbw)  - 1.0f;
-    const float nw = (2.0f * t.dst_w) / gbw;
-    const float ny = 1.0f - (2.0f * (py + t.dst_h) / gbh);
-    const float nh = (2.0f * t.dst_h) / gbh;
+    const int32_t gbw = width  + 2 * kGBufPad;
+    const int32_t gbh = height + 2 * kGBufPad;
+    const int32_t px  = t.dst_x + kGBufPad;
+    const int32_t py  = t.dst_y + kGBufPad;
+    float rect_x = float(px);
+    float rect_y = float(py);
+    float rect_w = float(t.dst_w);
+    float rect_h = float(t.dst_h);
+    if (recon.reserved > 0.5f)
+    {
+        const float focal_zoom = recon.kcam_forward * recon.zoom;
+        const float anchor_cam_x = float(px) + t.anchor_px_x - recon.ox;
+        const float anchor_cam_y = float(py) + t.anchor_px_y - recon.oy;
+        float z0 = t.anchor_z * recon.zspan + recon.z_near + recon.z_offset + t.zraw_min * t.zraw_to_wu * recon.z_scale;
+        float z1 = t.anchor_z * recon.zspan + recon.z_near + recon.z_offset + t.zraw_max * t.zraw_to_wu * recon.z_scale;
+        if (z1 < z0) std::swap(z0, z1);
+        z0 = (std::max)(z0, 1.0f);
+        z1 = (std::max)(z1, z0 + 1.0f);
+        const float tile_scale = recon.tile_scale > 0.0f ? recon.tile_scale : 1.0f;
+        const float sx_min = -t.anchor_px_x * tile_scale;
+        const float sx_max = (float(t.dst_w) - t.anchor_px_x) * tile_scale;
+        const float sy_min = -t.anchor_px_y * tile_scale;
+        const float sy_max = (float(t.dst_h) - t.anchor_px_y) * tile_scale;
+        const float sxv[2] = { sx_min, sx_max };
+        const float syv[2] = { sy_min, sy_max };
+        const float zv[2] = { z0, z1 };
+        float min_x =  FLT_MAX, min_y =  FLT_MAX;
+        float max_x = -FLT_MAX, max_y = -FLT_MAX;
+        for (float z : zv)
+        for (float sx : sxv)
+        for (float sy : syv)
+        {
+            const float qx = recon.ox + (anchor_cam_x + sx) * focal_zoom / z;
+            const float qy = recon.oy + (anchor_cam_y + sy) * focal_zoom / z;
+            min_x = (std::min)(min_x, qx);
+            min_y = (std::min)(min_y, qy);
+            max_x = (std::max)(max_x, qx);
+            max_y = (std::max)(max_y, qy);
+        }
+        constexpr float kPerspectiveTilePadPx = 2.0f;
+        rect_x = std::floor(min_x - kPerspectiveTilePadPx);
+        rect_y = std::floor(min_y - kPerspectiveTilePadPx);
+        rect_w = std::ceil(max_x + kPerspectiveTilePadPx) - rect_x;
+        rect_h = std::ceil(max_y + kPerspectiveTilePadPx) - rect_y;
+    }
+    const float nx = (2.0f * rect_x / gbw)  - 1.0f;
+    const float nw = (2.0f * rect_w) / gbw;
+    const float ny = 1.0f - (2.0f * (rect_y + rect_h) / gbh);
+    const float nh = (2.0f * rect_h) / gbh;
 
-    float uniforms[5 * 4] = {};
+    float uniforms[12 * 4] = {};
     int32_t off = 0;
     uniforms[off++] = nx; uniforms[off++] = ny; uniforms[off++] = nw; uniforms[off++] = nh;
     uniforms[off++] = t.anchor_z;
     uniforms[off++] = t.depth_mul;
-    uniforms[off++] = t.normal_mul;
-    uniforms[off++] = 0.0f;
+    uniforms[off++] = recon.tile_scale;
+    uniforms[off++] = recon.zoom;
     uniforms[off++] = t.root_wx; uniforms[off++] = t.root_wy;
     uniforms[off++] = t.root_wz; uniforms[off++] = t.zraw_to_wu;
     uniforms[off++] = t.anchor_px_x; uniforms[off++] = t.anchor_px_y;
     uniforms[off++] = float(t.dst_w); uniforms[off++] = float(t.dst_h);
     uniforms[off++] = light.normal_radius;
     uniforms[off++] = light.edge_threshold;
+    uniforms[off++] = t.zraw_min;
+    uniforms[off++] = t.zraw_max;
+    // obj_id packed into 4 bytes (RGBA8) for the gbuffer ID target.
+    uniforms[off++] = float((t.obj_id >>  0) & 0xFFu) / 255.0f;
+    uniforms[off++] = float((t.obj_id >>  8) & 0xFFu) / 255.0f;
+    uniforms[off++] = float((t.obj_id >> 16) & 0xFFu) / 255.0f;
+    uniforms[off++] = float((t.obj_id >> 24) & 0xFFu) / 255.0f;
+    uniforms[off++] = recon.center_wx; uniforms[off++] = recon.center_wy;
+    uniforms[off++] = recon.kcam_forward; uniforms[off++] = recon.reserved;
+    uniforms[off++] = recon.ox; uniforms[off++] = recon.oy;
+    uniforms[off++] = float(gbw); uniforms[off++] = float(gbh);
+    uniforms[off++] = float(px); uniforms[off++] = float(py);
+    uniforms[off++] = float(t.dst_w); uniforms[off++] = float(t.dst_h);
+    uniforms[off++] = float(px) + t.anchor_px_x - recon.ox;
+    uniforms[off++] = float(py) + t.anchor_px_y - recon.oy;
+    uniforms[off++] = t.anchor_z * recon.zspan + recon.z_near + recon.z_offset;
+    uniforms[off++] = t.zraw_to_wu * recon.z_scale;
+    {
+        const uint32_t h = t.obj_id * 1103515245u + 12345u;
+        const float r = 0.25f + 0.70f * float((h >>  0) & 0xFFu) / 255.0f;
+        const float g = 0.25f + 0.70f * float((h >>  8) & 0xFFu) / 255.0f;
+        const float b = 0.25f + 0.70f * float((h >> 16) & 0xFFu) / 255.0f;
+        uniforms[off++] = float(perspective_debug_mode);
+        uniforms[off++] = r; uniforms[off++] = g; uniforms[off++] = b;
+    }
+    uniforms[off++] = float(perspective_steps);
+    uniforms[off++] = float(perspective_refine);
     uniforms[off++] = 0.0f;
     uniforms[off++] = 0.0f;
 
@@ -1474,7 +1719,10 @@ void TRenderer::DrainOverlayQueue()
         Composite(t.color_img,
                   t.dst_x + kGBufPad, t.dst_y + kGBufPad,
                   t.dst_w, t.dst_h,
-                  gbw, gbh);
+                  gbw, gbh,
+                  t.src_x, t.src_y, t.src_w, t.src_h,
+                  t.src_tex_w, t.src_tex_h,
+                  t.additive_blend);
     sg_end_pass();
     overlay_queue.clear();
     lit_target_dirty = true;
@@ -1548,6 +1796,9 @@ void TRenderer::SetSunShadow(bool enable, float step_wu, float softness_px,
     light.sun_shadow_max_steps   = max_steps;
 }
 
+void TRenderer::SetSunShadowEnabled(bool enable) { light.sun_shadow_enable = enable; }
+bool TRenderer::SunShadowEnabled() const         { return light.sun_shadow_enable; }
+
 void TRenderer::SetNormalRadius(float texels)   { light.normal_radius = texels; }
 void TRenderer::SetEdgeThreshold(float zraw_units) { light.edge_threshold = zraw_units; }
 
@@ -1618,13 +1869,15 @@ void TRenderer::Composite(sg_image img,
                           int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                           int32_t target_w, int32_t target_h,
                           int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
-                          int32_t src_tex_w, int32_t src_tex_h)
+                          int32_t src_tex_w, int32_t src_tex_h,
+                          bool additive_blend)
 {
-    if (!img.id || !composite_pip_rt.id) return;
+    const sg_pipeline pip = additive_blend ? composite_pip_add_rt : composite_pip_rt;
+    if (!img.id || !pip.id) return;
     if (target_w <= 0 || target_h <= 0) return;
     if (src_tex_w <= 0 || src_tex_h <= 0) return;
 
-    sg_apply_pipeline(composite_pip_rt);
+    sg_apply_pipeline(pip);
     sg_bindings bind = {};
     bind.vertex_buffers[0] = composite_vbuf;
     bind.fs_images[0]      = img;

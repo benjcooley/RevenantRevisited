@@ -439,10 +439,15 @@ void TObjectImagery::FreeImagery(TObjectImagery* imagery)
     {
         imagery->FreeBody();
 
-        if (Editor && ie.imagery)   // Save header information if in editor
+        if (Editor && ie.imagery)
         {
-            ie.imagery->SaveHeader();
-
+            // Legacy editor persisted modified imagery headers back to
+            // disk on free (load-time endian/pointer fixups marked the
+            // header dirty). Modern editor handles serialization
+            // separately, and Mac asset paths aren't writable from the
+            // running app -- the SaveHeader fopen would FATAL on Cut /
+            // Delete when the freed instance was the imagery's last
+            // user. Skip the write; just release the in-memory record.
             ImageryMemUsage -= ie.imagery->GetResSize();
 
             delete ie.imagery;

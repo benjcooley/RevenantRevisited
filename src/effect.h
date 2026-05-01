@@ -58,6 +58,71 @@ class TEffect : public TObjectInstance
     int32_t angle;              // The direction we are cast
 };
 
+// Runtime visual component for effects rendered as animated billboard
+// flipbooks. It is not serialized; effect builders attach/configure it from
+// existing object/imagery definitions.
+class TFlipbookBillboardComponent : public TObjectComponent
+{
+  public:
+    [[nodiscard]] const char* ComponentName() const override { return "flipbook_billboard"; }
+
+    void Configure(sg_image texture, int32_t texture_width, int32_t texture_height,
+                   int32_t columns, int32_t rows, int32_t frames,
+                   float width, float height,
+                   bool additive, bool replaces_default)
+    {
+        image = texture;
+        tex_w = texture_width > 0 ? texture_width : 1;
+        tex_h = texture_height > 0 ? texture_height : 1;
+        cols = columns > 0 ? columns : 1;
+        this->rows = rows > 0 ? rows : 1;
+        frame_count = frames > 0 ? frames : cols * this->rows;
+        size_w = width;
+        size_h = height;
+        additive_blend = additive;
+        replaces_default_visual = replaces_default;
+    }
+
+    void OnAttach() override { RegisterUpdate(&TObjectComponent::Update); }
+    void OnDetach() override { UnregisterUpdate(&TObjectComponent::Update); }
+
+    [[nodiscard]] bool ReplacesDefaultVisual() const { return replaces_default_visual; }
+    [[nodiscard]] sg_image Image() const { return image; }
+    [[nodiscard]] int32_t TextureWidth() const { return tex_w; }
+    [[nodiscard]] int32_t TextureHeight() const { return tex_h; }
+    [[nodiscard]] int32_t SourceX() const { return (FrameCell() % cols) * SourceWidth(); }
+    [[nodiscard]] int32_t SourceY() const { return (FrameCell() / cols) * SourceHeight(); }
+    [[nodiscard]] int32_t SourceWidth() const { return tex_w / cols; }
+    [[nodiscard]] int32_t SourceHeight() const { return tex_h / rows; }
+    [[nodiscard]] float Width() const { return size_w; }
+    [[nodiscard]] float Height() const { return size_h; }
+    [[nodiscard]] bool AdditiveBlend() const { return additive_blend; }
+
+  protected:
+    void OnUpdate() override
+    {
+        ++legacy_frame;
+        if (legacy_frame >= 18)
+            legacy_frame = 0;
+    }
+
+  private:
+    [[nodiscard]] int32_t FrameCell() const
+    {
+        // Original TFlameAnimator timing: local 18-frame counter mapped into
+        // an 8-cell 4x2 texture atlas.
+        return frame_count > 0 ? ((legacy_frame * 11 / 24) % frame_count) : 0;
+    }
+
+    sg_image image = {};
+    int32_t tex_w = 1, tex_h = 1;
+    int32_t cols = 1, rows = 1, frame_count = 1;
+    int32_t legacy_frame = 0;
+    float size_w = 1.0f, size_h = 1.0f;
+    bool additive_blend = true;
+    bool replaces_default_visual = true;
+};
+
 // ***************
 // * TFireEffect *
 // ***************
@@ -71,6 +136,16 @@ class TFireEffect : public TEffect
     TFireEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
 
     virtual void Pulse();
+};
+
+class TFlameEffect : public TEffect
+{
+  public:
+    TFlameEffect(TObjectImagery* newim) : TEffect(newim) { InitializeVisualComponent(newim); }
+    TFlameEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { InitializeVisualComponent(newim); }
+
+  private:
+    void InitializeVisualComponent(TObjectImagery* imagery);
 };
 
 // **************

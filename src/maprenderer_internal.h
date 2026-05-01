@@ -10,6 +10,7 @@
 #include <sokol_gfx.h>
 
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 struct SSectorTileTex {
@@ -66,12 +67,15 @@ struct SSectorLight {
 enum class ESectorDrawableKind : uint8_t {
     Tile,
     Mesh,
+    FlameDebug,
+    Billboard,
 };
 
 struct SSectorMeshAsset {
     TObjectImagery* imagery_key = nullptr;
     int32_t         objnum = -1;
     int32_t         texslot = -1;
+    int32_t         uv_variant = 0;
     MeshHandle      handle = 0;
     bool            helper_material = false;
     bool            helper_shadow_plane = false;
@@ -99,6 +103,12 @@ struct SSectorDrawableInst {
     int32_t   wregx = 0, wregy = 0, wregz = 0;
     int32_t   state = 0;
     int32_t   frame = 0;
+    sg_image  billboard_img = {};
+    int32_t   billboard_tex_w = 1, billboard_tex_h = 1;
+    int32_t   billboard_src_x = 0, billboard_src_y = 0;
+    int32_t   billboard_src_w = 1, billboard_src_h = 1;
+    float     billboard_w = 1.0f, billboard_h = 1.0f;
+    bool      billboard_additive = false;
     int32_t   debug_sector_level = 0;
     int32_t   debug_sector_x = 0;
     int32_t   debug_sector_y = 0;
@@ -108,17 +118,22 @@ struct SSectorDrawableInst {
     void UpdateFromInstance();
     void AccumulateSceneZ(const SMapRenderContext& ctx, float& scene_z_min_fit,
                           float& scene_z_max_fit, int32_t& fit_tiles) const;
-    void Submit(const SMapRenderContext& ctx, SMapRenderStats& stats) const;
+    void Submit(const SMapRenderContext& ctx, SMapRenderStats& stats, uint32_t obj_id) const;
 };
 
 struct SMapRenderContext {
     const std::vector<SSectorTileTex>* tile_assets = nullptr;
     const std::vector<SSectorMeshAsset>* mesh_assets = nullptr;
+    sg_image debug_green_img = {};
     S3DPoint sectorCameraWorld = {0,0,0};
     int32_t cam_ox = 0, cam_oy = 0;
     int32_t vw = 0, vh = 0;
+    float cam_forward = 2750.0f;
+    float camera_zoom = 1.0f;
+    float tile_scale = 1.0f;
     float z_near = 0.0f, z_far = 1.0f, zspan = 1.0f;
     float depth_mul = 1.0f;
+    bool perspective_camera = false;
     bool show_gizmos = true;
     bool show_tiles = true;
     bool show_meshes = true;
@@ -129,18 +144,28 @@ struct SMapRenderContext {
     int32_t cov_cell_px = 32;
     int32_t cov_cw = 0, cov_ch = 0;
     std::vector<uint8_t>* cov = nullptr;
+    bool* logged_suppressed_legacy_flame_mesh = nullptr;
 };
 
 struct SMapRenderStats {
     int32_t draw_submitted = 0;
     int32_t draw_invalid_img = 0;
     int32_t draw_offscreen = 0;
-    int32_t draw_bin_missed_visible = 0;
     int32_t mesh_submitted = 0;
     int32_t mesh_skipped = 0;
     int32_t mesh_project_logged = 0;
     int32_t char_mesh_logged = 0;
     int32_t char_mesh_skip_logged = 0;
+};
+
+// Persisted across frames so the editor can read what was actually drawn
+// last frame without re-running the render. Updated at the end of each
+// RenderFrame (see maprenderer.cpp Submit / EndTilePass).
+struct SMapDrawCounts {
+    int32_t total_drawables  = 0;
+    int32_t tiles_submitted  = 0;
+    int32_t meshes_submitted = 0;
+    int32_t offscreen_culled = 0;
 };
 
 struct FVec3 {
@@ -186,6 +211,8 @@ struct TMapRenderer::Impl
     std::unordered_map<int64_t, std::vector<int32_t>> sectorDrawBins;
     std::vector<TSector*> sectorsKept;
     std::vector<SSectorLight> sectorLights;
+    int32_t dlightTexIdx = -1;
+    sg_image debugGreenImage = {};
     float sectorSceneZMin = 500.0f;
     float sectorSceneZMax = 5000.0f;
     int32_t sectorCenterOx = 0;
@@ -193,6 +220,13 @@ struct TMapRenderer::Impl
     S3DPoint sectorWorldCenter = {0,0,0};
     S3DPoint sectorCameraWorld = {0,0,0};
     int32_t  cameraLevel = 0;
+
+    // Last observed sum of TSector::ContentVer() across sectorsKept.
+    // Compared at frame start; if the live sum has advanced (any
+    // sector mutated its objects[] array via Add/Remove/Set), the
+    // renderer rebuilds the per-instance drawable cache. Initial
+    // -1 forces a build on first use after InitializeFromStartupArgs.
+    int64_t lastSyncedSectorVerSum = -1;
     bool sectorShowTileBboxes = false;
     bool sectorShowTileLocators = false;
     bool sectorShowTileLabels = true;
@@ -203,6 +237,19 @@ struct TMapRenderer::Impl
     bool sectorShowMeshes = true;
     bool sectorShowMeshLocators = false;
     bool sectorForceMeshPreviewPose = false;
+    // Editor-driven selection set, stored as map indices so any
+    // TSafeRef<T> (instance, light, sector entry, ...) can be marked
+    // without committing to a single concrete type at this layer.
+    std::unordered_set<int32_t> selectedMapIndices;
+    bool sectorPerspectiveCamera = false;
+    float sectorPerspectiveFovDeg = 6.0f;
+    float sectorCameraZoom = 1.0f;
+    float sectorPerspectiveZOffset = 0.0f;
+    float sectorPerspectiveZScale = 1.0f;
+    float sectorPerspectiveTileScale = 1.02f;
+    int32_t sectorPerspectiveSteps = 32;
+    int32_t sectorPerspectiveRefine = 5;
+    int32_t sectorPerspectiveDebugMode = 0; // 0 normal, 1 checkerboard, 2 hit class
     float sectorMeshScaleX = 1.0f;
     float sectorMeshScaleY = 1.0f;
     float sectorMeshScaleZ = 1.5f;
@@ -248,6 +295,7 @@ struct TMapRenderer::Impl
     float intensity_mul = 1.0f;
     int32_t lighting_mode = 1;
     bool  sun_shadow = true;
+    SMapDrawCounts last_draw_counts;   // updated each RenderFrame, read by the editor
     float sun_shadow_step = 24.0f;
     float sun_shadow_soft = 3.0f;
     int32_t sun_shadow_max = 32;
@@ -255,6 +303,7 @@ struct TMapRenderer::Impl
     float debugSceneZMaxFit = 0.0f;
     int32_t debugFitTiles = 0;
     int64_t lastLegacyAnimTick = -1;
+    bool loggedSuppressedLegacyFlameMesh = false;
 
     void rebuildBins()
     {
@@ -277,25 +326,32 @@ struct TMapRenderer::Impl
         const S3DPoint mesh_camera = MapRendererMeshWorld(sectorCameraWorld, sectorMeshScaleX, sectorMeshScaleY, sectorMeshScaleZ);
         return { mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z - mesh_camera.z };
     }
+    float sectorCameraForward(int32_t viewport_h) const;
+    float sectorCameraDepth(const S3DPoint& rel, int32_t viewport_h) const
+    {
+        return sectorCameraForward(viewport_h)
+             - (float(rel.x + rel.y) * kMapRendererIsoCos30 + float(rel.z) * 0.5f);
+    }
     void sectorProjectWorld(const S3DPoint& world, S3DPoint& screen) const
     {
         const S3DPoint rel = sectorCameraRel(world);
         WorldToScreen(rel, screen.x, screen.y);
-        screen.z = int32_t(MapRendererCameraDepth(rel));
+        screen.z = int32_t(sectorCameraDepth(rel, 0));
     }
+    void sectorProjectWorldForViewport(const S3DPoint& world, int32_t viewport_h, S3DPoint& screen) const;
     void sectorProjectMeshWorld(const S3DPoint& world, S3DPoint& screen) const
     {
         const S3DPoint rel = sectorCameraRelMesh(world);
         WorldToScreen(rel, screen.x, screen.y);
-        screen.z = int32_t(MapRendererCameraDepth(rel));
+        screen.z = int32_t(sectorCameraDepth(rel, 0));
     }
-    float sectorCameraSceneZ(const SSectorDrawableInst& inst) const
+    float sectorCameraSceneZ(const SSectorDrawableInst& inst, int32_t viewport_h) const
     {
-        return MapRendererCameraDepth(sectorCameraRel(inst.world_pos));
+        return sectorCameraDepth(sectorCameraRel(inst.world_pos), viewport_h);
     }
-    float sectorCameraSceneZMesh(const SSectorDrawableInst& inst) const
+    float sectorCameraSceneZMesh(const SSectorDrawableInst& inst, int32_t viewport_h) const
     {
-        return MapRendererCameraDepth(sectorCameraRelMesh(inst.world_pos));
+        return sectorCameraDepth(sectorCameraRelMesh(inst.world_pos), viewport_h);
     }
     void sectorCameraOriginScreen(int32_t& sx, int32_t& sy) const
     {

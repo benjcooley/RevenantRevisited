@@ -74,9 +74,12 @@ inline EPropertyFlag operator|(EPropertyFlag a, EPropertyFlag b)
 inline bool HasFlag(EPropertyFlag set, EPropertyFlag bit)
     { return (uint8_t(set) & uint8_t(bit)) != 0; }
 
-struct SVec3i { int32_t x = 0, y = 0, z = 0; };
-struct SVec3f { float   x = 0, y = 0, z = 0; };
-struct SColor4f { float r = 1, g = 1, b = 1, a = 1; };
+struct SVec3i { int32_t x = 0, y = 0, z = 0;
+    bool operator==(const SVec3i& o) const { return x==o.x && y==o.y && z==o.z; } };
+struct SVec3f { float   x = 0, y = 0, z = 0;
+    bool operator==(const SVec3f& o) const { return x==o.x && y==o.y && z==o.z; } };
+struct SColor4f { float r = 1, g = 1, b = 1, a = 1;
+    bool operator==(const SColor4f& o) const { return r==o.r && g==o.g && b==o.b && a==o.a; } };
 
 // One enum option in an Enum-typed property's choice set.
 struct SEnumOption

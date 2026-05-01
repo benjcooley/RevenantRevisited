@@ -2619,6 +2619,10 @@ SOKOL_GFX_API_DECL sg_resource_state sg_query_pass_state(sg_pass pass);
 /* get runtime information about a resource */
 SOKOL_GFX_API_DECL sg_buffer_info sg_query_buffer_info(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_image_info sg_query_image_info(sg_image img);
+/* RevenantRevisited: returns the active-slot MTLTexture for `img` on the
+   Metal backend, or NULL on other backends / invalid handles. Used by the
+   editor's OBJID pixel readback. */
+SOKOL_GFX_API_DECL const void* sg_mtl_query_image_handle(sg_image img);
 SOKOL_GFX_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
 SOKOL_GFX_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
 SOKOL_GFX_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
@@ -16309,6 +16313,22 @@ SOKOL_API_IMPL sg_image_info sg_query_image_info(sg_image img_id) {
         info.height = img->cmn.height;
     }
     return info;
+}
+
+SOKOL_API_IMPL const void* sg_mtl_query_image_handle(sg_image img_id) {
+#if defined(SOKOL_METAL)
+    SOKOL_ASSERT(_sg.valid);
+    _sg_image_t* img = _sg_lookup_image(&_sg.pools, img_id.id);
+    if (!img) return 0;
+    int slot = img->cmn.active_slot;
+    if (slot < 0 || slot >= SG_NUM_INFLIGHT_FRAMES) slot = 0;
+    int idx = img->mtl.tex[slot];
+    if (idx == 0) return 0;
+    return (__bridge const void*) [_sg.mtl.idpool.pool objectAtIndex:(NSUInteger)idx];
+#else
+    (void)img_id;
+    return 0;
+#endif
 }
 
 SOKOL_API_IMPL sg_shader_info sg_query_shader_info(sg_shader shd_id) {

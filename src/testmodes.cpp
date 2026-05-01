@@ -92,6 +92,9 @@ bool DumpTilesToPath(const char* out_path_cstr)
 
     int dumped = 0;
     int failed = 0;
+    std::ofstream report(out_dir / "tile_z_report.csv");
+    if (report)
+        report << "objtype,name,width,height,valid,zmin,zmax,expected_flat_zmin,expected_flat_zmax,mean_abs_flat_error,max_abs_flat_error,flat_fit_offset,mean_abs_fit_error,max_abs_fit_error\n";
 
     auto append_be32 = [](std::vector<uint8_t>& out, uint32_t v) {
         out.push_back(uint8_t((v >> 24) & 0xFF));
@@ -187,7 +190,12 @@ bool DumpTilesToPath(const char* out_path_cstr)
         f.write((const char*)png.data(), std::streamsize(png.size()));
         return f.good();
     };
-    auto decode_tile_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out) -> bool {
+    auto decode_tile_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out,
+                                      std::vector<float>* zraw_out = nullptr,
+                                      std::vector<uint8_t>* alpha_out = nullptr,
+                                      int32_t* valid_out = nullptr,
+                                      float* zmin_out = nullptr,
+                                      float* zmax_out = nullptr) -> bool {
         if (!bm || bm->width <= 0 || bm->height <= 0) return false;
         const bool is_8bit = (bm->flags & BM_8BIT) != 0;
         const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
@@ -247,6 +255,11 @@ bool DumpTilesToPath(const char* out_path_cstr)
         }
 
         rgba_out.assign(npx * 4, 0);
+        if (zraw_out) zraw_out->assign(npx, 0.0f);
+        if (alpha_out) alpha_out->assign(npx, 0);
+        int32_t valid = 0;
+        float zmin = FLT_MAX;
+        float zmax = -FLT_MAX;
         for (size_t i = 0; i < npx; ++i)
         {
             const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
@@ -257,6 +270,12 @@ bool DumpTilesToPath(const char* out_path_cstr)
             uint8_t* row = rgba_out.data() + i * 4;
             if (transparent)
                 continue;
+            ++valid;
+            if (alpha_out) (*alpha_out)[i] = 255;
+            const float zraw = has_zbuffer ? float(int16_t(z)) : 0.0f;
+            if (zraw_out) (*zraw_out)[i] = zraw;
+            zmin = (std::min)(zmin, zraw);
+            zmax = (std::max)(zmax, zraw);
             if (is_8bit)
             {
                 const uint32_t c = pal->rgbcolors[idx8];
@@ -272,6 +291,10 @@ bool DumpTilesToPath(const char* out_path_cstr)
             }
             row[3] = 255;
         }
+        if (valid == 0) { zmin = 0.0f; zmax = 0.0f; }
+        if (valid_out) *valid_out = valid;
+        if (zmin_out) *zmin_out = zmin;
+        if (zmax_out) *zmax_out = zmax;
         return true;
     };
 
@@ -304,7 +327,11 @@ bool DumpTilesToPath(const char* out_path_cstr)
             continue;
         }
         std::vector<uint8_t> rgba;
-        if (!decode_tile_bitmap_rgba(bm, rgba))
+        std::vector<float> zraw;
+        std::vector<uint8_t> alpha;
+        int32_t valid_count = 0;
+        float zmin = 0.0f, zmax = 0.0f;
+        if (!decode_tile_bitmap_rgba(bm, rgba, &zraw, &alpha, &valid_count, &zmin, &zmax))
         {
             ++failed;
             log_warn("[tiledump] decode failed for tile[%d] '%s' flags=0x%x", objtype, info->name, bm->flags);
@@ -312,13 +339,92 @@ bool DumpTilesToPath(const char* out_path_cstr)
         }
 
         char stem[256];
-        std::snprintf(stem, sizeof(stem), "%04d_%s.png", objtype, SanitizeFilenameComponent(info->name).c_str());
+        const std::string safe_name = SanitizeFilenameComponent(info->name);
+        std::snprintf(stem, sizeof(stem), "%04d_%s.png", objtype, safe_name.c_str());
         const fs::path out_path = out_dir / stem;
         if (!write_png_rgba(out_path, bm->width, bm->height, rgba))
         {
             ++failed;
             log_warn("[tiledump] png write failed for tile[%d] '%s'", objtype, info->name);
             continue;
+        }
+
+        {
+            std::snprintf(stem, sizeof(stem), "%04d_%s.ztile", objtype, safe_name.c_str());
+            std::ofstream zf(out_dir / stem, std::ios::binary);
+            if (zf)
+            {
+                const uint32_t magic = 0x455A5452u; // RTZE little-endian marker
+                const int32_t w = bm->width;
+                const int32_t h = bm->height;
+                zf.write((const char*)&magic, sizeof(magic));
+                zf.write((const char*)&w, sizeof(w));
+                zf.write((const char*)&h, sizeof(h));
+                zf.write((const char*)rgba.data(), std::streamsize(rgba.size()));
+                zf.write((const char*)zraw.data(), std::streamsize(zraw.size() * sizeof(float)));
+            }
+        }
+
+        std::vector<uint8_t> alpha_rgba(size_t(bm->width) * size_t(bm->height) * 4, 0);
+        std::vector<uint8_t> depth_rgba(size_t(bm->width) * size_t(bm->height) * 4, 0);
+        const float span = (zmax > zmin) ? (zmax - zmin) : 1.0f;
+        double abs_sum = 0.0;
+        double abs_max = 0.0;
+        double offset_sum = 0.0;
+        for (int32_t y = 0; y < bm->height; ++y)
+        for (int32_t x = 0; x < bm->width; ++x)
+        {
+            const size_t i = size_t(y) * size_t(bm->width) + size_t(x);
+            uint8_t* ar = alpha_rgba.data() + i * 4;
+            uint8_t* dr = depth_rgba.data() + i * 4;
+            ar[3] = dr[3] = 255;
+            if (!alpha.empty() && alpha[i])
+            {
+                ar[0] = ar[1] = ar[2] = 255;
+                const float t = (zraw[i] - zmin) / span;
+                dr[0] = uint8_t(255.0f * t);
+                dr[1] = uint8_t(128.0f + 127.0f * t);
+                dr[2] = uint8_t(255.0f * (1.0f - t));
+                // Expected flat square depth relative to center registration.
+                const float local_y = float(y) + 0.5f - float(bm->height) * 0.5f;
+                const float expected = -2.0f * 0.867f * local_y;
+                offset_sum += double(zraw[i] - expected);
+                const double e = std::fabs(double(zraw[i] - expected));
+                abs_sum += e;
+                if (e > abs_max) abs_max = e;
+            }
+        }
+        const double fit_offset = valid_count > 0 ? offset_sum / double(valid_count) : 0.0;
+        double fit_abs_sum = 0.0;
+        double fit_abs_max = 0.0;
+        for (int32_t y = 0; y < bm->height; ++y)
+        for (int32_t x = 0; x < bm->width; ++x)
+        {
+            const size_t i = size_t(y) * size_t(bm->width) + size_t(x);
+            if (alpha.empty() || !alpha[i]) continue;
+            const float local_y = float(y) + 0.5f - float(bm->height) * 0.5f;
+            const float expected = -2.0f * 0.867f * local_y;
+            const double e = std::fabs(double(zraw[i]) - (double(expected) + fit_offset));
+            fit_abs_sum += e;
+            if (e > fit_abs_max) fit_abs_max = e;
+        }
+
+        std::snprintf(stem, sizeof(stem), "%04d_%s_alpha.png", objtype, safe_name.c_str());
+        write_png_rgba(out_dir / stem, bm->width, bm->height, alpha_rgba);
+        std::snprintf(stem, sizeof(stem), "%04d_%s_depth.png", objtype, safe_name.c_str());
+        write_png_rgba(out_dir / stem, bm->width, bm->height, depth_rgba);
+        if (report)
+        {
+            const float expected_min = -2.0f * 0.867f * (float(bm->height) - 0.5f - float(bm->height) * 0.5f);
+            const float expected_max = -2.0f * 0.867f * (0.5f - float(bm->height) * 0.5f);
+            const double mean_abs = valid_count > 0 ? abs_sum / double(valid_count) : 0.0;
+            const double mean_fit_abs = valid_count > 0 ? fit_abs_sum / double(valid_count) : 0.0;
+            report << objtype << ",\"" << (info->name ? info->name : "?") << "\","
+                   << bm->width << "," << bm->height << ","
+                   << valid_count << "," << zmin << "," << zmax << ","
+                   << expected_min << "," << expected_max << ","
+                   << mean_abs << "," << abs_max << ","
+                   << fit_offset << "," << mean_fit_abs << "," << fit_abs_max << "\n";
         }
 
         ++dumped;
@@ -613,16 +719,6 @@ void RenderCharPreviewMode()
             g_charPreview.inst->OnScreen();
         g_charPreview.inst->Animate(false);
         g_charPreview.spin += 0.035f;
-        if ((legacy_tick % 12) == 0)
-        {
-            log_info("[char3d] tick state=%d frame=%d prev=(%d,%d) len=%d done=%d",
-                     g_charPreview.inst->GetState(),
-                     g_charPreview.inst->GetFrame(),
-                     g_charPreview.inst->GetPrevState(),
-                     g_charPreview.inst->GetPrevFrame(),
-                     g_charPreview.inst->GetImagery()->GetAniLength(g_charPreview.inst->GetState()),
-                     g_charPreview.inst->CommandDone() ? 1 : 0);
-        }
     }
 
     const int32_t state = g_charPreview.inst->GetState();
@@ -1987,6 +2083,12 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 {
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleMouseMove(button, x, y);
+}
+
+void HandleKeyPress(const char* mode, int32_t key, bool down)
+{
+    if (strcmp(mode, "sector") != 0) return;
+    g_mapRenderer.HandleKeyPress(key, down);
 }
 
 }  // namespace TestModes

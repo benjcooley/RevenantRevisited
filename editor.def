@@ -1,0 +1,3 @@
+layout = { imgui = { built = true } }
+scene = { show_empty_sectors = false }
+window = { editor = { h = 800, w = 1280 }, game = { h = 480, w = 640 } }

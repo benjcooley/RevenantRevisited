@@ -51,7 +51,9 @@ _CLASSDEF(TObjectAnimator)
 #define MAXOBJECTTYPES 2048
 
 _CLASSDEF(SObjectDef)
+_CLASSDEF(TObjectComponent)
 _CLASSDEF(TObjectInstance)
+using TObjectComponentUpdateMethod = void (TObjectComponent::*)();
 
 _CLASSDEF(TObjectBuilder)
 class TObjectBuilder
@@ -501,6 +503,50 @@ class TObjectClass
 };
 
 // ****************************************************
+// * TObjectComponent - Optional per-instance behavior *
+// ****************************************************
+
+// Components are owned by TObjectInstance and are the intended place for
+// optional systems such as specialized visuals, effects, or other behavior
+// that should override/extend the class-definition default without adding
+// more ad-hoc checks to sector rendering.
+class TObjectComponent
+{
+  public:
+    TObjectComponent() = default;
+    virtual ~TObjectComponent() = default;
+
+    [[nodiscard]] TObjectInstance* Owner() const { return owner; }
+    [[nodiscard]] int32_t ComponentSlot() const { return slot; }
+    [[nodiscard]] uint32_t Generation() const { return generation; }
+    [[nodiscard]] virtual const char* ComponentName() const { return "component"; }
+    virtual void OnAttach() {}
+    virtual void OnDetach() {}
+    void Update() { OnUpdate(); }
+
+    static void RunUpdateList();
+
+  protected:
+    void RegisterUpdate(TObjectComponentUpdateMethod method);
+    void UnregisterUpdate(TObjectComponentUpdateMethod method);
+    virtual void OnUpdate() {}
+
+  private:
+    friend class TObjectInstance;
+    void Attach(TObjectInstance* newowner, int32_t newslot, uint32_t newgeneration)
+        { owner = newowner; slot = newslot; generation = newgeneration; }
+    void Activate()
+        { if (!active) { active = true; OnAttach(); } }
+    void Detach()
+        { if (active) { OnDetach(); active = false; } UnregisterUpdate(nullptr); owner = nullptr; slot = -1; ++generation; }
+
+    TObjectInstance* owner = nullptr;
+    int32_t slot = -1;
+    uint32_t generation = 1;
+    bool active = false;
+};
+
+// ****************************************************
 // * TObjectInstance - Map object instance base class *
 // ****************************************************
 
@@ -779,6 +825,27 @@ class TObjectInstance : protected SObjectDef
         // Check to see if an animator is necessary for object at the moment
     virtual bool DrawShadow() { return false; }
         // Returns true of the object wants a simple alpha-channel circle shadow to follow it
+
+  // Component functions
+    int32_t AddComponent(TObjectComponent* component);
+        // Adds an owned component and returns its component slot, or -1.
+    void RemoveComponent(int32_t component_slot);
+        // Deletes and removes the owned component in the given slot.
+    TObjectComponent* GetComponent(int32_t component_slot) const;
+        // Returns the component in the given slot, or nullptr.
+    int32_t NumComponents() const { return components.NumItems(); }
+        // Number of component slots currently in use.
+    template <class T>
+    T* GetComponent() const
+    {
+        for (int32_t i = 0; i < components.NumItems(); ++i)
+            if (TObjectComponent* c = components.Get(i))
+                if (T* typed = dynamic_cast<T*>(c))
+                    return typed;
+        return nullptr;
+    }
+    template <class T>
+    T* FindComponent() const { return GetComponent<T>(); }
 
   // Object flag functions  
     int32_t GetNumFlags() const;
@@ -1195,6 +1262,7 @@ class TObjectInstance : protected SObjectDef
     short frame, framerate;     // Frame number and framerate for object
     uint16_t prevstate;         // Previous state
     short prevframe;            // Previous state's last frame (not previous frame for this state)
+    TPointerArray<TObjectComponent, 0, 2> components; // Optional owned components
 
   // Inventory
     TObjectInstance* owner;     // What container it is in
@@ -1275,6 +1343,66 @@ class TSafeRef
 
   private:
     int32_t idx = -1;
+};
+
+// Resolve a mapindex (or any TSafeRef<U>) to a typed pointer of choice.
+// Returns nullptr if the index has been recycled / never registered. Same
+// retype contract as a C-style downcast: caller is responsible for the
+// type being correct for the looked-up object.
+template <class T>
+[[nodiscard]] inline T* safe_cast(int32_t mapindex)
+{
+    if (mapindex < 0) return nullptr;
+    return static_cast<T*>(LookupMapIndex(mapindex));
+}
+
+template <class T, class U>
+[[nodiscard]] inline T* safe_cast(const TSafeRef<U>& ref)
+{
+    return safe_cast<T>(ref.MapIndex());
+}
+
+// Safe reference to a component owned by a TObjectInstance. It resolves the
+// owner through the normal mapindex registry, then validates the component slot
+// and generation before returning a pointer.
+template <typename T = TObjectComponent>
+class TSafeComponentRef
+{
+  public:
+    TSafeComponentRef() = default;
+    TSafeComponentRef(const T* component) { Set(component); }
+
+    void Set(const T* component)
+    {
+        owner = component ? component->Owner() : nullptr;
+        component_slot = component ? component->ComponentSlot() : -1;
+        generation = component ? component->Generation() : 0;
+    }
+    void Clear()
+    {
+        owner.Clear();
+        component_slot = -1;
+        generation = 0;
+    }
+
+    [[nodiscard]] T* Get() const
+    {
+        TObjectInstance* inst = owner.Get();
+        if (!inst || component_slot < 0) return nullptr;
+        TObjectComponent* component = inst->GetComponent(component_slot);
+        if (!component || component->Generation() != generation) return nullptr;
+        return static_cast<T*>(component);
+    }
+    [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
+
+    explicit operator bool() const { return IsValid(); }
+    T* operator->() const { return Get(); }
+    T& operator*() const { return *Get(); }
+
+  private:
+    TSafeRef<TObjectInstance> owner;
+    int32_t component_slot = -1;
+    uint32_t generation = 0;
 };
 
 inline void rollover(int32_t &i, int32_t &j)

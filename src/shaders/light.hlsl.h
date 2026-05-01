@@ -79,10 +79,12 @@ float4 main_ps(vs_out in_) : SV_Target0 {
             float  dist  = length(delta);
             float  rad   = plight_pos[i].w;
             if (rad > 0.0 && dist < rad) {
+                float3 Lp    = delta / max(dist, 1e-5);
+                float  pterm = lerp(1.0, max(dot(N, Lp), 0.0), saturate(normal_lighting.x));
                 float normd = dist * 254.0 / rad;
                 float pw    = pow(normd + 1.0, -1.1) - kMP;
                 float attn  = saturate(pw * kSC);
-                accum += plight_col[i].rgb * plight_col[i].w * attn;
+                accum += plight_col[i].rgb * plight_col[i].w * attn * pterm;
             }
         }
         return float4(accum, 1.0);
@@ -157,10 +159,12 @@ float4 main_ps(vs_out in_) : SV_Target0 {
         float  dist  = length(delta);
         float  rad   = plight_pos[i].w;
         if (rad > 0.0 && dist < rad) {
+            float3 Lp    = delta / max(dist, 1e-5);
+            float  pterm = lerp(1.0, max(dot(N, Lp), 0.0), normal_hardness);
             float normd = dist * 254.0 / rad;
             float pw    = pow(normd + 1.0, -1.1) - kMinPower;
             float attn  = saturate(pw * kScale);
-            light += plight_col[i].rgb * plight_col[i].w * attn;
+            light += plight_col[i].rgb * plight_col[i].w * attn * pterm;
         }
     }
     return float4(alb.rgb * light, 1.0);

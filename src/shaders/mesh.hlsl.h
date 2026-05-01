@@ -50,11 +50,13 @@ vs_out main_vs(vs_in i) {
     float sum = wx + wy;
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
-    float spx = vp.x + S;
-    float spy = vp.y + T;
 
     float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    float zoom = max(camw.z, 0.0001);
+    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float spx = vp.x + S * persp_scale;
+    float spy = vp.y + T * persp_scale;
 
     vs_out o;
     o.pos.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
@@ -83,7 +85,8 @@ struct vs_out {
 };
 struct fs_out { float4 albedo  : SV_Target0;
                 float4 normal  : SV_Target1;
-                float4 scene_z : SV_Target2; };
+                float4 scene_z : SV_Target2;
+                float4 obj_id  : SV_Target3; };
 fs_out main_ps(vs_out in_) {
     float4 c = albedo_tex.Sample(smp, in_.uv) * in_.tint;
     if (c.a < 0.01) discard;
@@ -92,6 +95,7 @@ fs_out main_ps(vs_out in_) {
     o.albedo  = c;
     o.normal  = float4(N * 0.5 + 0.5, 1.0);
     o.scene_z = float4(in_.scene_z, 0.0, 0.0, 1.0);
+    o.obj_id  = float4(0.0, 0.0, 0.0, 0.0);   // Phase 1: empty id
     return o;
 }
 )HLSL";

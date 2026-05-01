@@ -7,6 +7,7 @@
 #include "debugui.h"
 #include "maprenderer_internal.h"
 
+#include "display.h"
 #include "imgui.h"
 #include "time.h"
 
@@ -153,6 +154,23 @@ void TMapRenderer::DrawDebugTab()
             ImGui::TextUnformatted("mode:");
             ImGui::SameLine(); if (ImGui::RadioButton("retail 1998", s.lighting_mode == 0)) s.lighting_mode = 0;
             ImGui::SameLine(); if (ImGui::RadioButton("modern",      s.lighting_mode == 1)) s.lighting_mode = 1;
+            ImGui::Separator();
+            ImGui::Checkbox("perspective camera", &s.sectorPerspectiveCamera);
+            ImGui::BeginDisabled(!s.sectorPerspectiveCamera);
+            ImGui::SliderFloat("FOV", &s.sectorPerspectiveFovDeg, 2.0f, 20.0f, "%.1f deg");
+            ImGui::TextUnformatted("debug:");
+            ImGui::SameLine(); if (ImGui::RadioButton("normal##perspdbg", s.sectorPerspectiveDebugMode == 0)) s.sectorPerspectiveDebugMode = 0;
+            ImGui::SameLine(); if (ImGui::RadioButton("checker##perspdbg", s.sectorPerspectiveDebugMode == 1)) s.sectorPerspectiveDebugMode = 1;
+            ImGui::SameLine(); if (ImGui::RadioButton("hits##perspdbg", s.sectorPerspectiveDebugMode == 2)) s.sectorPerspectiveDebugMode = 2;
+            ImGui::SliderFloat("tile coverage scale", &s.sectorPerspectiveTileScale, 1.0f, 1.08f, "%.3f");
+            ImGui::SliderInt("ray steps", &s.sectorPerspectiveSteps, 4, 128);
+            ImGui::SliderInt("ray refine", &s.sectorPerspectiveRefine, 0, 8);
+            ImGui::SliderFloat("screen z offset", &s.sectorPerspectiveZOffset, -2048.0f, 2048.0f, "%.0f");
+            ImGui::SliderFloat("screen z scale", &s.sectorPerspectiveZScale, 0.1f, 4.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            ImGui::EndDisabled();
+            ImGui::SliderFloat("zoom", &s.sectorCameraZoom, 0.25f, 4.0f, "%.2fx", ImGuiSliderFlags_Logarithmic);
+            const float focal = s.sectorCameraForward(Display ? Display->Height() : 0);
+            ImGui::Text("camera forward: %.0f wu", focal);
             ImGui::EndTabItem();
         }
 

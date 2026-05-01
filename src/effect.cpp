@@ -4383,7 +4383,29 @@ bool TShieldAnimator::Render()
 // * Flame Animator *
 // ******************
 
+DEFINE_BUILDER("FLAME", TFlameEffect)
+REGISTER_BUILDER(TFlameEffect)
 REGISTER_3DANIMATOR("FLAME", TFlameAnimator)
+
+void TFlameEffect::InitializeVisualComponent(TObjectImagery* imagery)
+{
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(imagery);
+    if (!img3d || img3d->NumTextures() <= 0)
+        return;
+
+    S3DTex tex = {};
+    img3d->GetTexture(0, &tex);
+    if (!tex.surface.id)
+        return;
+
+    auto* flipbook = new TFlipbookBillboardComponent();
+    flipbook->Configure(tex.surface,
+                        int32_t(tex.desc.width), int32_t(tex.desc.height),
+                        4, 2, 8,
+                        25.0f, 62.5f,
+                        true, true);
+    AddComponent(flipbook);
+}
 
 //==============================================================================
 //    Function : Initialize.

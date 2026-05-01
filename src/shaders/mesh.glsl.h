@@ -46,11 +46,13 @@ void main() {
     float sum = wx + wy;
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
-    float spx = vp.x + S;
-    float spy = vp.y + T;
 
     float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    float zoom = max(camw.z, 0.0001);
+    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float spx = vp.x + S * persp_scale;
+    float spy = vp.y + T * persp_scale;
 
     gl_Position.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
     gl_Position.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
@@ -75,6 +77,7 @@ uniform sampler2D albedo_tex;
 layout(location = 0) out vec4 o_albedo;
 layout(location = 1) out vec4 o_normal;
 layout(location = 2) out vec4 o_scene_z;
+layout(location = 3) out vec4 o_obj_id;
 void main() {
     vec4 c = texture(albedo_tex, v_uv) * v_tint;
     if (c.a < 0.01) discard;
@@ -82,5 +85,6 @@ void main() {
     o_albedo  = c;
     o_normal  = vec4(N * 0.5 + 0.5, 1.0);
     o_scene_z = vec4(v_scene_z, 0.0, 0.0, 1.0);
+    o_obj_id  = vec4(0.0, 0.0, 0.0, 0.0);   // Phase 1: empty id
 }
 )GLSL";

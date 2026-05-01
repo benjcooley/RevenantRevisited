@@ -17,12 +17,33 @@ cbuffer params : register(b0) {
     float4 tile_root;
     float4 tile_sprite;
     float4 filter_;
+    float4 cb_obj_id;
+    float4 camera;
 };
 struct vs_in  { float2 pos : POSITION; float2 uv : TEXCOORD0; };
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 vs_out main_vs(vs_in i) {
     vs_out o;
-    o.pos = float4(rect.xy + i.pos * rect.zw, 0.0, 1.0);
+    float sx = i.uv.x * tile_sprite.z - tile_sprite.x;
+    float sy = i.uv.y * tile_sprite.w - tile_sprite.y;
+    float lz = (-2.0 * sy * 0.867) / 2.003378;
+    float su = 2.0 * (sy + lz * 0.867);
+    float wx = tile_root.x + 0.5 * (su + sx);
+    float wy = tile_root.y + 0.5 * (su - sx);
+    float wz = tile_root.z + lz;
+    float relx = wx - camera.x;
+    float rely = wy - camera.y;
+    float sum = relx + rely;
+    float S = relx - rely;
+    float T = 0.5 * sum - wz * 0.867;
+    float scene_z_wu = camera.z - 0.867 * sum - 0.5 * wz;
+    float zoom = max(zparams.w, 0.0001);
+    float persp_scale = ((camera.w > 0.5) ? (camera.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float spx = rect.x + S * persp_scale;
+    float spy = rect.y + T * persp_scale;
+    o.pos = float4(2.0 * spx / max(rect.z, 1.0) - 1.0,
+                   1.0 - 2.0 * spy / max(rect.w, 1.0),
+                   0.0, 1.0);
     o.uv  = i.uv;
     return o;
 }
@@ -38,6 +59,8 @@ cbuffer params : register(b0) {
     float4 tile_root;
     float4 tile_sprite;
     float4 filter_;
+    float4 cb_obj_id;
+    float4 camera;
 };
 Texture2D    color_tex : register(t0);
 Texture2D    depth_tex : register(t1);
@@ -47,6 +70,7 @@ struct fs_out {
     float4 albedo  : SV_Target0;
     float4 normal  : SV_Target1;
     float4 scene_z : SV_Target2;
+    float4 obj_id  : SV_Target3;
     float  depth   : SV_Depth;
 };
 fs_out main_ps(vs_out in_) {
@@ -104,6 +128,7 @@ fs_out main_ps(vs_out in_) {
     o.albedo  = c;
     o.normal  = float4(N * 0.5 + 0.5, 1.0);
     o.scene_z = float4(d, 0.0, 0.0, 1.0);
+    o.obj_id  = cb_obj_id;
     o.depth   = d;
     return o;
 }

@@ -47,13 +47,45 @@ struct params {
     float4 shadow_dir;
     float4 shadow_world_dir;
     float4 normal_lighting;
+    float4 selected_obj_id;
 };
 struct vs_out { float4 pos [[position]]; float2 uv; };
+static float3 reconstruct_world(float2 uv, float d, constant params& p, float fbw, float fbh) {
+    float scene_z = d * p.vp.w + p.vp.z;
+    float S = uv.x * fbw - p.vp.x;
+    float T = uv.y * fbh - p.vp.y;
+    if (p.recon.w > 0.5) {
+        float focal_zoom = max(p.recon.z * max(p.settings.w, 0.0001), 1.0);
+        S = (S / focal_zoom) * scene_z;
+        T = (T / focal_zoom) * scene_z;
+    }
+    float K = p.recon.z - scene_z;
+    float wz = (K - 2.0 * T * ISO_COS30) / ISO_WZ_DENOM;
+    float sum_r = 2.0 * (T + wz * ISO_COS30);
+    return float3(p.recon.x + (sum_r + S) * 0.5,
+                  p.recon.y + (sum_r - S) * 0.5,
+                  wz);
+}
+static float2 project_world_uv(float3 W, constant params& p, float fbw, float fbh) {
+    float dx = W.x - p.recon.x;
+    float dy = W.y - p.recon.y;
+    float S = dx - dy;
+    float T = 0.5 * (dx + dy) - W.z * ISO_COS30;
+    if (p.recon.w > 0.5) {
+        float scene_z = p.recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
+        float focal_zoom = max(p.recon.z * max(p.settings.w, 0.0001), 1.0);
+        float inv_z = focal_zoom / max(scene_z, 1.0);
+        S *= inv_z;
+        T *= inv_z;
+    }
+    return float2((S + p.vp.x) / fbw, (T + p.vp.y) / fbh);
+}
 fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> albedo_tex [[texture(0)]],
                       texture2d<float> normal_tex [[texture(1)]],
                       texture2d<float> depth_tex  [[texture(2)]],
                       texture2d<float> ao_tex     [[texture(3)]],
+                      texture2d<float> id_tex     [[texture(4)]],
                       sampler smp                [[sampler(0)]],
                       constant params& p         [[buffer(0)]]) {
     float4 alb = albedo_tex.sample(smp, in.uv);
@@ -64,15 +96,7 @@ fragment float4 _main(vs_out in [[stage_in]],
     float  ao  = ao_tex.sample(smp, in.uv).r;
     float  fbw = float(albedo_tex.get_width());
     float  fbh = float(albedo_tex.get_height());
-    float  S   = in.uv.x * fbw - p.vp.x;
-    float  T   = in.uv.y * fbh - p.vp.y;
-    float  scene_z = d * p.vp.w + p.vp.z;
-    float  K   = p.recon.z - scene_z;
-    float  wz  = (K - 2.0 * T * ISO_COS30) / ISO_WZ_DENOM;
-    float  sum_r = 2.0 * (T + wz * ISO_COS30);
-    float3 W = float3(p.recon.x + (sum_r + S) * 0.5,
-                      p.recon.y + (sum_r - S) * 0.5,
-                      wz);
+    float3 W = reconstruct_world(in.uv, d, p, fbw, fbh);
     int vm = int(p.settings.x);
     if (vm == 1) return float4(alb.rgb, 1.0);
     if (vm == 2) { float vd = clamp(1.0 - d, 0.0, 1.0); return float4(vd, vd, vd, 1.0); }
@@ -87,10 +111,12 @@ fragment float4 _main(vs_out in [[stage_in]],
             float  dist  = length(delta);
             float  rad   = p.plight_pos[i].w;
             if (rad > 0.0 && dist < rad) {
+                float3 Lp    = delta / max(dist, 1e-5);
+                float  pterm = mix(1.0, max(dot(N, Lp), 0.0), clamp(p.normal_lighting.x, 0.0, 1.0));
                 float normd = dist * 254.0 / rad;
                 float pw    = pow(normd + 1.0, -1.1) - kMP;
                 float attn  = clamp(pw * kSC, 0.0, 1.0);
-                accum += p.plight_col[i].rgb * p.plight_col[i].w * attn;
+                accum += p.plight_col[i].rgb * p.plight_col[i].w * attn * pterm;
             }
         }
         return float4(accum, 1.0);
@@ -112,16 +138,14 @@ fragment float4 _main(vs_out in [[stage_in]],
     if (mode == 1 && p.shadow.w > 0.5 && sun_term > 0.0) {
         float3 Sdir = normalize(p.shadow_world_dir.xyz);
         if (length(Sdir) < 1e-5) Sdir = Ldir;
-        float S_per = (-Sdir.x + Sdir.y) + p.shadow_dir.x;
-        float T_per = ((-Sdir.x - Sdir.y) * 0.5 + Sdir.z * ISO_COS30)
-                    + p.shadow_dir.y;
-        float Sz    = Sdir.z * p.shadow_dir.z;
+        float3 Rdir = normalize(float3(-Sdir.x, -Sdir.y, Sdir.z * p.shadow_dir.z));
         float step_wu  = p.shadow.x;
         float soft_px  = p.shadow.y;
         int   maxSteps = int(p.shadow.z);
         const float kBiasWu = 2.0;
-        float2 sun_uv  = float2(S_per, T_per);
-        float2 perp_uv = normalize(float2(-sun_uv.y, sun_uv.x));
+        float3 rayStepW = W + Rdir * step_wu;
+        float2 ray_uv = project_world_uv(float3(rayStepW.xy, 0.0), p, fbw, fbh) - in.uv;
+        float2 perp_uv = (length(ray_uv) > 1e-6) ? normalize(float2(-ray_uv.y, ray_uv.x)) : float2(0.0, 1.0);
         float h = fract(sin(dot(in.uv, float2(12.9898, 78.233))) * 43758.5453);
         const int kRays = 4;
         float hits = 0.0;
@@ -133,19 +157,16 @@ fragment float4 _main(vs_out in [[stage_in]],
             bool hit = false;
             for (int i = 1; i <= maxSteps; ++i) {
                 float t = (float(i) - 0.5 + rh) * step_wu;
-                float2 suv = in.uv + perp_off +
-                             float2(S_per * t / fbw, T_per * t / fbh);
+                float3 rayW = W + Rdir * t;
+                float2 suv = project_world_uv(float3(rayW.xy, 0.0), p, fbw, fbh) + perp_off +
+                             float2(p.shadow_dir.x * t / fbw, p.shadow_dir.y * t / fbh);
                 if (suv.x < 0.0 || suv.x > 1.0 ||
                     suv.y < 0.0 || suv.y > 1.0) break;
                 float4 albs = albedo_tex.sample(smp, suv);
                 if (albs.a < 0.01) continue;
                 float drs = depth_tex.sample(smp, suv).r;
-                float szs = drs * p.vp.w + p.vp.z;
-                float Tt  = suv.y * fbh - p.vp.y;
-                float Ks  = p.recon.z - szs;
-                float wzs = (Ks - 2.0 * Tt * ISO_COS30) / ISO_WZ_DENOM;
-                float ray_wz = W.z + t * Sz;
-                if (wzs > ray_wz + kBiasWu) { hit = true; break; }
+                float3 Ws = reconstruct_world(suv, drs, p, fbw, fbh);
+                if (Ws.z > rayW.z + kBiasWu) { hit = true; break; }
             }
             if (hit) hits += 1.0;
         }
@@ -165,12 +186,49 @@ fragment float4 _main(vs_out in [[stage_in]],
         float  dist  = length(delta);
         float  rad   = p.plight_pos[i].w;
         if (rad > 0.0 && dist < rad) {
+            float3 Lp    = delta / max(dist, 1e-5);
+            float  pterm = mix(1.0, max(dot(N, Lp), 0.0), normal_hardness);
             float  normd = dist * 254.0 / rad;
             float  pw    = pow(normd + 1.0, -1.1) - kMinPower;
             float  attn  = clamp(pw * kScale, 0.0, 1.0);
-            light += p.plight_col[i].rgb * p.plight_col[i].w * attn;
+            light += p.plight_col[i].rgb * p.plight_col[i].w * attn * pterm;
         }
     }
-    return float4(alb.rgb * light, 1.0);
+    float3 col = alb.rgb * light;
+
+    // Editor outline: each id_target pixel carries flag bits in the top
+    // 4 bits of its packed obj_id (alpha channel). Bit 0x80 of A is
+    // kObjFlagSelected. Multi-select draws all selected drawables for
+    // free -- we just check the bit per-pixel.
+    {
+        uint  iw = id_tex.get_width();
+        uint  ih = id_tex.get_height();
+        uint2 px = uint2(uint(in.uv.x * float(iw)),
+                         uint(in.uv.y * float(ih)));
+        if (px.x >= iw) px.x = iw - 1;
+        if (px.y >= ih) px.y = ih - 1;
+        uint xL = (px.x > 0) ? px.x - 1 : 0;
+        uint xR = (px.x + 1 < iw) ? px.x + 1 : iw - 1;
+        uint yT = (px.y > 0) ? px.y - 1 : 0;
+        uint yB = (px.y + 1 < ih) ? px.y + 1 : ih - 1;
+        // SelBit() returns true iff the alpha channel of the read texel
+        // has bit 0x80 set (kObjFlagSelected).
+        auto SelBit = [&](uint2 q) {
+            float a = id_tex.read(q).a;
+            return uint(a * 255.0 + 0.5) >= 128u;
+        };
+        bool matchC = SelBit(px);
+        int  matchN = (SelBit(uint2(xL, px.y)) ? 1 : 0)
+                    + (SelBit(uint2(xR, px.y)) ? 1 : 0)
+                    + (SelBit(uint2(px.x, yT)) ? 1 : 0)
+                    + (SelBit(uint2(px.x, yB)) ? 1 : 0);
+        if (matchC && matchN < 4) {
+            const float3 outline_col = float3(1.0, 0.85, 0.20);
+            col = mix(col, outline_col, 0.85);
+        } else if (matchC) {
+            col = mix(col, float3(1.0, 0.92, 0.55), 0.18);
+        }
+    }
+    return float4(col, 1.0);
 }
 )MSL";

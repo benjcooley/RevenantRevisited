@@ -36,6 +36,7 @@
 #include "testconfig.h"
 #include "time.h"
 #include "mappane.h"
+#include "object.h"
 #include "automap.h"
 #include "inventory.h"
 #include "mainwnd.h"
@@ -2034,6 +2035,13 @@ sapp_desc sokol_main(int argc, char* argv[])
     desc.window_title = "Revenant";
     desc.high_dpi = false;
     desc.sample_count = 1;
+    // Enable OS clipboard. Required for the editor's Cut/Copy/Paste
+    // commands -- sokol_imgui's clipboard handlers route through
+    // sapp_get/set_clipboard_string which silently no-op when this
+    // flag is false. Bumped buf size beyond the 8KB default since
+    // serialized object blocks can run large.
+    desc.enable_clipboard = true;
+    desc.clipboard_size   = 1 << 20;     // 1 MB
     // Windowed by default; Borderless/FullScreen come from INI/args and
     // take effect before the window opens only if set via argv. Anything
     // else stays at sokol defaults.
@@ -2134,14 +2142,14 @@ static void AppFrame()
     // panels from their normal per-frame code. simgui_render() is called
     // inside TDisplay::FlipPage on the swapchain pass.
     {
-        // ImGui 1.92 defaults ConfigInputTrickleEventQueue to true, which
-        // serializes input events to one per frame. With trackpads /
-        // high-Hz mice this turns into seconds of input lag as events
-        // pile up faster than they drain. Force it off every frame so
-        // any code path that flips it back doesn't bite us.
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigInputTrickleEventQueue = false;
-
+        // KEEP trickle enabled (ImGui 1.92 default). It splits ambiguous
+        // input transitions across frames, which is what makes Mac
+        // Cmd-modified shortcuts work (sokol's Cmd-held auto-keyup
+        // fires KEY_DOWN+KEY_UP in the same NSEvent — without trickle,
+        // Z appears to never be pressed). Trickle's per-event-type
+        // rules already consolidate mouse-move spam, so high-Hz mice
+        // don't actually pile up. See sokol issue #233 +
+        // memory/project_imgui_mac_modifiers.md.
         simgui_frame_desc_t fd = {};
         fd.width       = sapp_width();
         fd.height      = sapp_height();
@@ -2177,6 +2185,7 @@ static void AppFrame()
     }
 
     CurrentScreen->TimerTick(true);
+    TObjectComponent::RunUpdateList();
     DebugUI::DrawFrame();
 
     // Present the frame: composite backbuffer onto the swapchain and commit
@@ -2254,12 +2263,6 @@ static void AppEvent(const sapp_event* ev)
 {
     if (!ev) return;
 
-    // Force trickle off BEFORE handing the event to ImGui. ImGui 1.92
-    // defaults ConfigInputTrickleEventQueue to true, which causes events
-    // to drain one-per-frame and queue up under any frame-budget
-    // pressure. We always want immediate processing.
-    ImGui::GetIO().ConfigInputTrickleEventQueue = false;
-
     // ImGui sees every event. simgui_handle_event returns the OR of
     // WantCaptureKeyboard and WantCaptureMouse, which swallows mouse drags
     // whenever a slider has keyboard focus — so we split the flags and gate
@@ -2285,6 +2288,12 @@ static void AppEvent(const sapp_event* ev)
             && (ev->modifiers & SAPP_MODIFIER_SUPER))
         {
             sapp_request_quit();
+            break;
+        }
+
+        if (vk == VK_F10)
+        {
+            DebugUI::SetVisible(!DebugUI::IsVisible());
             break;
         }
 
@@ -2324,7 +2333,11 @@ static void AppEvent(const sapp_event* ev)
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
-        if (imgui_mouse) break;
+        const bool sector_test_drag =
+            StartupTestMode[0] &&
+            stricmp(StartupTestMode, "sector") == 0 &&
+            (mousebutton != 0);
+        if (imgui_mouse && !sector_test_drag) break;
         // Coalesce. A single frame can now see dozens of MOUSE_MOVE events
         // (trackpads fire at 120–500 Hz and we drain the whole NSEvent queue
         // at the top of drawRect). Calling CurrentScreen->MouseMove for each

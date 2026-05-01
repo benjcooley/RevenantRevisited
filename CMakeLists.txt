@@ -47,17 +47,32 @@ set(MINIZ_DIR "${THIRDPARTY_DIR}/miniz")
 set(LOG_DIR "${THIRDPARTY_DIR}/log")
 set(ARGH_DIR "${THIRDPARTY_DIR}/argh")
 set(STB_DIR "${THIRDPARTY_DIR}/stb")
-set(IMGUI_DIR "${THIRDPARTY_DIR}/imgui")
+set(IMGUI_DIR    "${THIRDPARTY_DIR}/imgui")
+set(IMGUIZMO_DIR "${THIRDPARTY_DIR}/imguizmo")
+set(IMPLOT_DIR   "${THIRDPARTY_DIR}/implot")
+set(IMGUIFD_DIR  "${THIRDPARTY_DIR}/imguifiledialog")
+set(IMGUITGL_DIR "${THIRDPARTY_DIR}/imgui_toggle")
+set(FONTS_DIR    "${THIRDPARTY_DIR}/fonts")
 
-# Dear ImGui core (no backends -- sokol_imgui.h provides the backend).
+# Dear ImGui core + first-party extensions (ImGuizmo, ImPlot, ImGuiFileDialog).
+# No backends here -- sokol_imgui.h provides the backend.
 add_library(imgui STATIC
   ${IMGUI_DIR}/imgui.cpp
   ${IMGUI_DIR}/imgui_draw.cpp
   ${IMGUI_DIR}/imgui_tables.cpp
   ${IMGUI_DIR}/imgui_widgets.cpp
   ${IMGUI_DIR}/imgui_demo.cpp
+  ${IMGUIZMO_DIR}/ImGuizmo.cpp
+  ${IMPLOT_DIR}/implot.cpp
+  ${IMPLOT_DIR}/implot_items.cpp
+  ${IMGUIFD_DIR}/ImGuiFileDialog.cpp
+  ${IMGUITGL_DIR}/imgui_toggle.cpp
+  ${IMGUITGL_DIR}/imgui_toggle_palette.cpp
+  ${IMGUITGL_DIR}/imgui_toggle_presets.cpp
+  ${IMGUITGL_DIR}/imgui_toggle_renderer.cpp
 )
-target_include_directories(imgui PUBLIC ${IMGUI_DIR})
+target_include_directories(imgui PUBLIC
+  ${IMGUI_DIR} ${IMGUIZMO_DIR} ${IMPLOT_DIR} ${IMGUIFD_DIR} ${IMGUITGL_DIR} ${FONTS_DIR})
 
 # Gather C++ sources. Sokol TU is added explicitly per-backend below so
 # the GLOB doesn't pick up the wrong one on a given platform.
@@ -76,7 +91,8 @@ endif()
 # default *.cpp glob so add it explicitly. Skipped on non-Apple builds
 # where there's no Cocoa to call into.
 if(APPLE)
-  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/editorplatform.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/osx/editorplatform.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/osx/renderer_readback.mm")
 endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
@@ -85,6 +101,11 @@ target_link_libraries(Revenant PRIVATE imgui)
 # Propagate the SOKOL_<BACKEND> macro to every TU that pulls in
 # <sokol_gfx.h> / <sokol_app.h> / sokol_imgui.h.
 target_compile_definitions(Revenant PRIVATE SOKOL_${SOKOL_BACKEND})
+
+# Absolute path to vendored fonts so the editor can load them regardless of
+# the current working directory at runtime.
+target_compile_definitions(Revenant PRIVATE REV_FONTS_DIR="${FONTS_DIR}")
+target_compile_definitions(Revenant PRIVATE REV_EDITOR_DATA_DIR="${CMAKE_SOURCE_DIR}/data/editor")
 
 # Include directories for third-party dependencies
 target_include_directories(Revenant PRIVATE
@@ -107,6 +128,9 @@ add_executable(test_render_metadata
 add_executable(test_anim_system
   tools/test_anim_system.cpp
   src/animsystem.cpp)
+
+add_executable(cpu_tile_perspective_test
+  tools/cpu_tile_perspective_test.cpp)
 
 # ----------------------------------------------------------------------------
 # Platform libs / frameworks.

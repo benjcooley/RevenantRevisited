@@ -16,7 +16,7 @@
 //
 // *************************************************************************
 
-#include "editorplatform.h"
+#include "../../editorplatform.h"
 
 #if defined(__APPLE__)
 #  include <AppKit/AppKit.h>
