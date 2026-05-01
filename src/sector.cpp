@@ -189,19 +189,11 @@ bool TSector::Load(bool lock)
         {
             inst->ForceSector(this);
             inst->ForceLevel(level); // Directly sets the inst's level variable
-
-            // 3D-mesh objects (everything except tiles) live in a Z
-            // space scaled up by WORLD3D_Z_SCALE relative to tile data.
-            // Pre-multiply pos.z at load so the renderer's mesh path
-            // can read raw world.z without per-frame compensation; the
-            // mesh model matrix gains a matching 1.5 local Z scale at
-            // draw time. Tiles stay in their native Z.
-            if (inst->ObjClass() != OBJCLASS_TILE)
-            {
-                S3DPoint p; inst->GetPos(p);
-                p.z = int32_t(float(p.z) * WORLD3D_Z_SCALE);
-                inst->ForcePos(p);
-            }
+            // World positions stay in tile-Z space (matches the tile
+            // draw path). The mesh-only 1.5 scaling lives entirely in
+            // the per-instance mesh model matrix at draw time, so a
+            // 3D object at pos.z = floor_height is visually at floor
+            // height with its 1.5x-stretched mesh extending above.
         }
 
         objects.Set(inst, c);
@@ -476,12 +468,7 @@ void TSector::WalkmapHandler(int32_t mode, uint8_t *walk, int32_t zpos, int32_t 
             {
                 if (*walk)
                 {
-                    // *walk is the tile's per-cell local height (1..255)
-                    // and zpos is the tile's world Z anchor. The stored
-                    // walkmap value is consumed by 3D-mesh objects, which
-                    // live in WORLD3D_Z_SCALE'd Z space, so scale here so
-                    // reads resolve directly without per-call conversion.
-                    int32_t walkval = int32_t(float(*walk + zpos) * WORLD3D_Z_SCALE);
+                    int32_t walkval = *walk + zpos;
 
                     walkval = min(0xffff, max(1, walkval));
 
@@ -491,16 +478,10 @@ void TSector::WalkmapHandler(int32_t mode, uint8_t *walk, int32_t zpos, int32_t 
             }
             else if (mode == WALK_CAPTURE)
             {
-                // Reverse the WORLD3D_Z_SCALE applied during transfer so
-                // captured tile-local heights go back into the imagery
-                // walkmap unchanged.
                 if (*start == 0)
                     *walk = 0;
                 else
-                {
-                    const int32_t descaled = int32_t(float(*start) / WORLD3D_Z_SCALE);
-                    *walk = min(255, max(1, descaled - zpos));
-                }
+                    *walk = min(255, max(1, *start - zpos));
             }
             else if (mode == WALK_CLEAR)
             {
