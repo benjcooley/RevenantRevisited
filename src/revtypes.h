@@ -1126,7 +1126,6 @@ _STRUCTDEF(SStatistic)
 _STRUCTDEF(SStatisticDef)
 
 _CLASSDEF(T3DAnimator)
-_CLASSDEF(T3DController)
 _CLASSDEF(T3DImagery)
 _CLASSDEF(T3DScene)
 _CLASSDEF(T3dSurface)

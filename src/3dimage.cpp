@@ -1957,116 +1957,6 @@ bool T3DImagery::NeedsAnimator(TObjectInstance*)
     return true;
 }
 
-// *******************************************************************************
-// * T3DControllerBuilder                                                         *
-// *******************************************************************************
-
-int32_t T3DControllerBuilder::numconttypes = 0;
-T3DControllerBuilder* T3DControllerBuilder::builders[MAX3DCONTROLLERTYPES];
-
-T3DControllerBuilder::T3DControllerBuilder(const char* name)
-{
-    if (numconttypes < MAX3DCONTROLLERTYPES)
-        builders[numconttypes++] = this;
-
-    controllername = _strdup(name);
-}
-
-T3DControllerBuilder* T3DControllerBuilder::GetBuilder(const char* name)
-{
-    if (!stricmp(name, "play") || !stricmp(name, "beg") || !stricmp(name, "end"))
-        return nullptr;
-
-    for (int32_t i = 0; i < numconttypes; i++)
-        if (stricmp(name, builders[i]->controllername) == 0)
-            return builders[i];
-
-    return nullptr;
-}
-
-// *********************************************************************
-// * T3DController                                                      *
-// *********************************************************************
-
-bool T3DController::ParseParams(TToken& t)
-{
-    while (t.Type() != TKN_EOF)
-    {
-        if (t.Type() != TKN_IDENT)
-            return false;
-
-        char param[80];
-        strncpyz(param, t.Text(), 80);
-        t.WhiteGet();
-
-        if (t.Is("="))
-            t.WhiteGet();
-
-        if (!ParseItem(param, t))
-            return false;
-
-        if (!(t.Is(",") || t.Type() == TKN_EOF))
-            return false;
-
-        if (t.Is(","))
-            t.WhiteGet();
-    }
-    return true;
-}
-
-bool T3DController::ParseItem(char* name, TToken& t)
-{
-    if (!stricmp(name, "obj"))
-    {
-        if (t.Is("("))
-        {
-            t.WhiteGet();
-            while (t.Type() != TKN_EOF && !t.Is(")"))
-            {
-                if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
-                    return false;
-
-                int32_t objnum = animator->GetObjectNum(t.Text());
-                if (objnum >= 0)
-                    animobjs.Add(animator->GetObject(objnum));
-
-                t.WhiteGet();
-                if (t.Is(","))
-                    t.WhiteGet();
-            }
-            if (t.Is(")"))
-                t.WhiteGet();
-        }
-        else if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
-        {
-            int32_t objnum = animator->GetObjectNum(t.Text());
-            if (objnum >= 0)
-                animobjs.Add(animator->GetObject(objnum));
-            t.WhiteGet();
-        }
-        else
-            return false;
-
-        return true;
-    }
-
-    return false;
-}
-
-bool T3DController::Initialize(char* params)
-{
-    TStringParseStream s(params, strlen(params));
-    TToken t(s);
-
-    t.WhiteGet();
-    return ParseParams(t);
-}
-
-void T3DController::Close()
-{
-    animobjs.Clear();
-}
-
 // *******************************
 // * T3DAnimatorBuilder Funtions *
 // *******************************
@@ -2126,15 +2016,11 @@ void T3DAnimator::Initialize()
 
     SetupObjects();
 
-    contprevstate = -1;
-    RefreshControllers(inst->GetState());
-
     animid = Scene3D.AddAnimator(this);
 }
 
 void T3DAnimator::Close()
 {
-    controllers.DeleteAll();
     Scene3D.RemoveAnimator(animid);
 
     for (int32_t c = 0; c < animobjs.NumItems(); c++)
@@ -2143,46 +2029,6 @@ void T3DAnimator::Close()
     animobjs.DeleteAll();
 
     TObjectAnimator::Close();
-}
-
-void T3DAnimator::RefreshControllers(int32_t newstate)
-{
-    int32_t c;
-
-    if (newstate == contprevstate)
-        return;
-
-    for (c = controllers.NumItems() - 1; c >= 0; c--)
-    {
-        int32_t tagstate = controllers[c]->TagState();
-        if (tagstate != -1 && tagstate != newstate)
-            RemoveController(c);
-    }
-
-    int32_t numtags = Get3DImagery()->NumTags();
-    for (c = 0; c < numtags; c++)
-    {
-        S3DTag* tag = Get3DImagery()->GetTag(c);
-        if (!((contprevstate == -1 && tag->state == -1) ||
-              tag->state == newstate))
-            continue;
-
-        T3DControllerBuilder* cbuilder = T3DControllerBuilder::GetBuilder(tag->name);
-        if (cbuilder)
-        {
-            T3DController* cont = cbuilder->Build(tag->state, tag->frame,
-                this, Get3DImagery(), inst);
-            if (cont)
-            {
-                if (!cont->Initialize(tag->str))
-                    delete cont;
-                else
-                    controllers.Add(cont);
-            }
-        }
-    }
-
-    contprevstate = newstate;
 }
 
 void T3DAnimator::RecordNewExtents(TObjectInstance* oi, int32_t state, bool frontonly)
@@ -2256,11 +2102,6 @@ void T3DAnimator::AnimateResetBoundRect()
 
 void T3DAnimator::Pulse()
 {
-    RefreshControllers(inst->GetState());
-
-    for (int32_t c = 0; c < controllers.NumItems(); c++)
-        controllers[c]->Pulse();
-
     ((T3DImagery*)image)->PlaySound(inst, state, frame);
 }
 
@@ -2332,9 +2173,6 @@ bool T3DAnimator::Render()
     int32_t stackpos;
     int32_t c;
 
-    for (c = 0; c < controllers.NumItems(); c++)
-        controllers[c]->Render();
-
     for (c = 0; c < animobjs.NumItems(); c++)
     {
         if (!(animobjs[c]->flags & OBJ3D_PARENT))
@@ -2394,12 +2232,6 @@ void T3DAnimator::PostRender()
         UpdateExtents();
 
     Scene3D.ResetAllLights();
-
-    for (int32_t c = 0; c < controllers.NumItems(); c++)
-    {
-        if (controllers[c]->KillMe())
-            controllers.Collapse(c, true);
-    }
 }
 
 // *****************************
