@@ -147,13 +147,18 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
         return false;
     }
 
+    // Sector-center is the Misthaven fountain at the default anchor;
+    // offset south so Locke spawns on the plaza paving instead of in
+    // the basin. Picked empirically -- TODO: replace with a real
+    // start-of-game position once save-load / a NewGame data path is
+    // wired up.
     SObjectDef def;
     memset(&def, 0, sizeof(def));
     def.objclass = OBJCLASS_PLAYER;
     def.objtype  = locke_type;
     def.level    = level;
     def.pos.x    = (sx << SECTORWSHIFT) + (SECTORWIDTH  / 2);
-    def.pos.y    = (sy << SECTORHSHIFT) + (SECTORHEIGHT / 2);
+    def.pos.y    = (sy << SECTORHSHIFT) + (SECTORHEIGHT / 2) + 384;
     // Read the floor height from the sector walkmap so Locke spawns
     // on top of the terrain instead of beneath it. MapPane's level
     // window doesn't follow Locke yet (paging not wired); read off
