@@ -66,6 +66,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_toggle.h>
+#include <imgui_toggle_palette.h>
 #include <imgui_toggle_presets.h>
 #include <sokol_app.h>
 
@@ -513,18 +514,20 @@ void DrawScenePanel()
             std::vector<TSector*> sectors;
             mr->GetLoadedSectors(sectors);
 
-            // Sort sectors by (Y, X) so the hierarchy lists them in a
-            // stable, predictable order regardless of the renderer's
-            // internal load order. Objects within a sector are NOT
-            // sorted -- their order matches the source data so editor
-            // operations stay reproducible against the .DAT file.
+            // Sort sectors by numeric (X, Y, Level) using the
+            // accessors -- not by the rendered "Sector x,y" label
+            // (which would lex-sort 10,5 before 2,5). Stable order
+            // regardless of the renderer's internal load sequence.
+            // Objects within a sector are NOT sorted -- their order
+            // matches the source data so editor operations stay
+            // reproducible against the .DAT file.
             std::sort(sectors.begin(), sectors.end(),
                       [](TSector* a, TSector* b) {
                           if (!a || !b) return a < b;
-                          if (a->SectorY() != b->SectorY())
-                              return a->SectorY() < b->SectorY();
                           if (a->SectorX() != b->SectorX())
                               return a->SectorX() < b->SectorX();
+                          if (a->SectorY() != b->SectorY())
+                              return a->SectorY() < b->SectorY();
                           return a->SectorLevel() < b->SectorLevel();
                       });
 
@@ -568,9 +571,43 @@ void DrawScenePanel()
                 // (toggle then label).
                 ImGuiToggleConfig cfg = ImGuiTogglePresets::MaterialStyle();
                 cfg.Flags = ImGuiToggleFlags_Animated;
-                const float toggle_h = ImGui::GetFrameHeight() * 0.88f;
-                cfg.Size = ImVec2(toggle_h * ImGuiToggleConstants::WidthRatioDefault,
-                                  toggle_h);
+                // Smaller (toggle was visually overpowering at default
+                // sizes vs body font) and wider (the default phi ratio
+                // makes the slider feel cramped against the knob -- a
+                // 2.4 ratio gives a clearer "track" the knob slides
+                // along). Height ~60% of the row's frame height.
+                const float toggle_h = ImGui::GetFrameHeight() * 0.62f;
+                cfg.Size = ImVec2(toggle_h * 2.4f, toggle_h);
+
+                // Explicit palettes so the off-state frame is visible
+                // against the dark popup bg, and the on-state reads
+                // green (Material-Active-ish) instead of the default
+                // accent. Static so the pointers stay valid past the
+                // imgui frame.
+                static const ImGuiTogglePalette s_on_pal = {
+                    /*Knob*/        ImVec4(1.00f, 1.00f, 1.00f, 1.00f),
+                    /*KnobHover*/   ImVec4(),
+                    /*Frame*/       ImVec4(0.22f, 0.70f, 0.38f, 1.00f),
+                    /*FrameHover*/  ImVec4(),
+                    /*FrameBorder*/ ImVec4(),
+                    /*FrameShadow*/ ImVec4(),
+                    /*KnobBorder*/  ImVec4(),
+                    /*KnobShadow*/  ImVec4(),
+                    /*A11yGlyph*/   ImVec4(),
+                };
+                static const ImGuiTogglePalette s_off_pal = {
+                    /*Knob*/        ImVec4(0.80f, 0.80f, 0.80f, 1.00f),
+                    /*KnobHover*/   ImVec4(),
+                    /*Frame*/       ImVec4(0.32f, 0.32f, 0.32f, 1.00f),
+                    /*FrameHover*/  ImVec4(),
+                    /*FrameBorder*/ ImVec4(),
+                    /*FrameShadow*/ ImVec4(),
+                    /*KnobBorder*/  ImVec4(),
+                    /*KnobShadow*/  ImVec4(),
+                    /*A11yGlyph*/   ImVec4(),
+                };
+                cfg.On.Palette  = &s_on_pal;
+                cfg.Off.Palette = &s_off_pal;
 
                 auto OptionRow = [&](const char* label, bool* value) -> bool {
                     ImGui::PushID(label);
