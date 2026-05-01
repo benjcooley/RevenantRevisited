@@ -1,35 +1,33 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
-// *  charanimator_weaponswipe.cpp - retired weapon-trail strip renderer   *
+// *           weapontrail.cpp - parked weapon-swipe code                 *
 // *************************************************************************
 //
-// Retired from src/charanimator.{h,cpp} on 2026-04-30 during the
-// animator-component sweep (commit "animator: pass B.2 -- drop
-// TWeaponSwipe"). The legacy strip-mesh trail renderer was wired into
-// TCharAnimator's Animate() / Render() and pulsed from TCharacter::Pulse;
-// it built a translucent quad strip from the last N (hilt, tip) world
-// positions of the equipped weapon and drew it through the legacy d3d
-// path. The drawable / mesh-pipeline rewrite replaces the rendering, but
-// the data shape and several pieces of in-class logic are still useful
-// when the swipe is reimplemented as a TWeaponTrailComponent picked up
-// by the renderer's submit pass.
+// TODO(weapontrail): re-implement as TWeaponTrailComponent picked up by
+// the renderer's submit pass. The legacy code below is the 1998-era
+// strip renderer (TWeaponSwipe + TCharAnimator weapon-extents helpers)
+// pulled out of charanimator.{h,cpp} when TCharAnimator stopped owning
+// rendering. It is gated under `#if 0` so this file builds as nothing,
+// and the migration target is local: lift the math identified below
+// into a TObjectComponent that the character/player attaches, with the
+// renderer emitting a strip drawable from its ring buffer.
 //
 // What carries over to the new TWeaponTrailComponent:
-//   * TCharAnimator::GetWeaponImagery / GetWeaponNum -- find the equipped
-//     weapon's mesh + objnum on the character.
-//   * TCharAnimator::GetWeaponVertices / GetWeaponNumVerts -- pull the
-//     vertex array of the weapon mesh, used to compute hilt/tip extents.
-//   * TWeaponSwipe::GetWeaponExtents -- the "scan vertices, take the
-//     two with extreme positions along the weapon axis" math that
-//     selects hilt vs. tip from the raw mesh.
+//   * GetWeaponImagery / GetWeaponNum -- find the equipped weapon's
+//     mesh + objnum on the character.
+//   * GetWeaponVertices / GetWeaponNumVerts -- pull the vertex array
+//     of the weapon mesh, used to compute hilt/tip extents.
+//   * TWeaponSwipe::GetWeaponExtents -- "scan vertices, take the two
+//     with extreme positions along the weapon axis" -- selects hilt
+//     vs. tip from the raw mesh.
 //   * The (points[0], points[1]) ring-buffer shape (length maxsegs,
 //     CycleStrip drops the oldest segment each frame so the trail
 //     fades).
 //   * TWeaponSwipe::NormalizeColors -- per-channel max-normalization
 //     for the swipe color.
-//   * Weapon-change detection via primehand string compare (resets the
-//     strip when the equipped weapon changes).
+//   * Weapon-change detection via primehand string compare (resets
+//     the strip when the equipped weapon changes).
 //
 // What does NOT carry over (the new submit path does these):
 //   * GenerateStrip's S3DLVertex / face packing.
@@ -37,10 +35,6 @@
 //   * GetCharsWeaponMatrix's reach into T3DAnimator::MakeMatrix +
 //     T3DImagery::CalcObjectMatrix -- replaced by SampleI3DAnimPose +
 //     BuildAnimPoseObjectMatrix (see src/meshextract.cpp).
-//
-// This file is reference-only; it does not participate in the build
-// (attic/ is excluded). When TWeaponTrailComponent lands, lift the
-// math identified above and delete this file.
 //
 // *************************************************************************
 
