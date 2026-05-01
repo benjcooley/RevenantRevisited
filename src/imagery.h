@@ -8,6 +8,7 @@
 
 #include "revenant.h"
 
+#include "objectcomponent.h"
 #include "imageres.h"
 
 #include <stdio.h>
@@ -390,7 +391,20 @@ class TObjectImagery
 // * TObjectAnimator *
 // *******************
 
-class TObjectAnimator
+// TObjectAnimator is a TObjectComponent: stored on the owning instance's
+// component array (one slot, looked up via GetComponent<TObjectAnimator>()).
+// The owning instance drives Pulse() / Animate() explicitly from its own
+// per-frame hooks so ordering relative to other instance work is preserved
+// -- so the animator does NOT auto-register with the global update list.
+//
+// In Pass A of the animator-component move this class still owns Pulse() /
+// Animate(bool draw) / state-mirror data; the legacy subclasses (T3DAnimator,
+// TCharAnimator, TAnimAnimator, the effect animators) keep their existing
+// shape on top. Pass B will collapse it down to transition logic only --
+// the renderer's drawable system already does pose sampling, blending and
+// matrix construction off (state, frame), so most of what the legacy
+// subclasses do here is dead.
+class TObjectAnimator : public TObjectComponent
 {
   protected:
     TObjectInstance *inst;      // Instance associated with animator
@@ -405,8 +419,10 @@ class TObjectAnimator
   public:
     TObjectAnimator(TObjectInstance* oi);
       // Constructor. Sets objectimagery. and object instance to nullptr.
-    virtual ~TObjectAnimator();
+    ~TObjectAnimator() override;
       // Destructor.
+
+    [[nodiscard]] const char* ComponentName() const override { return "animator"; }
 
     TObjectInstance* GetObjInst() { return inst; }
       // Returns the object instance for this animator
@@ -429,7 +445,7 @@ class TObjectAnimator
     virtual void Animate(bool draw);
       // Animates object
 
-    int32_t GetFrame() { return frame; } 
+    int32_t GetFrame() { return frame; }
       // Gets the current animation frame
     int32_t GetFrameRate() { return framerate; }
       // Returns the direction and rate of animation

@@ -125,7 +125,7 @@ void TMissileEffect::Pulse()
 
         case MISSILE_EXPLODE :
         {
-            if (!animator)
+            if (!HasAnimator())
                 KillThisEffect();
             break;
         }
@@ -136,7 +136,7 @@ void TMissileEffect::Pulse()
 
 void TMissileEffect::OffScreen()
 {
-    if (animator && (state == MISSILE_EXPLODE) && status)
+    if (HasAnimator() && (state == MISSILE_EXPLODE) && status)
         TObjectInstance::OffScreen();
 }
 

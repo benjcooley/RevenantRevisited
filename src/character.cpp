@@ -168,12 +168,12 @@ void TCharacter::ClearChar()
 
 void TCharacter::Pulse()
 {
-//  if (!animator)  // Quick hack to fix super slodown... BEN  (if not on screen, ignore me)
+//  if (!HasAnimator())  // Quick hack to fix super slodown... BEN  (if not on screen, ignore me)
 //      return;
 
   // Pulse the animator
-    if (animator)
-        animator->Pulse();
+    if (TObjectAnimator* anim = GetAnimator())
+        anim->Pulse();
 
   // If this is true, causes the command to be forced to done
     if (forcecommanddone)
@@ -426,7 +426,7 @@ void TCharacter::UpdateAction(int32_t bits)
   // being in the root state, having the current animation completed.
     int32_t comstate = ResolveAction(bits);
     if (comstate == 0)
-        comstate = (commanddone || !animator || (flags & OF_INVISIBLE)) ? // If done, or not animating..                                        // Done if finished animating
+        comstate = (commanddone || !HasAnimator() || (flags & OF_INVISIBLE)) ? // If done, or not animating..                                        // Done if finished animating
             COM_COMPLETED : COM_EXECUTING;
 
   // Reset priority when command complete   
@@ -549,8 +549,8 @@ void TCharacter::Animate(bool draw)
 {
     TObjectInstance::Animate(draw);
 
-    if (animator && draw && doing && 
-        doing->action == ACTION_SAY && 
+    if (HasAnimator() && draw && doing &&
+        doing->action == ACTION_SAY &&
         doing->data &&
         doing->wait > 12) // Leave a half a second between sentences
     {

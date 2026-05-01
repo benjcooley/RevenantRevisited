@@ -988,24 +988,24 @@ void TCreateFoodEffect::Pulse()
 {
     TEffect::Pulse();
 
-    if (animator)
+    if (auto* anim = (PTCreateFoodAnimator)GetAnimator())
     {
-        if (((PTCreateFoodAnimator)animator)->framenum == CFD_SOUPS_ON)
+        if (anim->framenum == CFD_SOUPS_ON)
         {
             // create the new food object
             TObjectClass* cl = TObjectClass::GetClass(OBJCLASS_FOOD);
 
             // Get the number of various food types (i.e. watermelon, cheese, beer)
             int32_t num = cl->NumTypes();
-            
+
             SObjectDef def;
             memset(&def, 0, sizeof(SObjectDef));
             def.objclass = OBJCLASS_FOOD;
             def.objtype = random(0, num - 1);
             def.level = MapPane.GetMapLevel();
-            def.pos.x = ((PTCreateFoodAnimator)animator)->foodpos.x;
-            def.pos.y = ((PTCreateFoodAnimator)animator)->foodpos.y;
-            def.pos.z = ((PTCreateFoodAnimator)animator)->foodpos.z;
+            def.pos.x = anim->foodpos.x;
+            def.pos.y = anim->foodpos.y;
+            def.pos.z = anim->foodpos.z;
             int32_t index = MapPane.NewObject(&def);
 
             if (!stricmp(cl->GetObjType(def.objtype)->name, "bottle"))
@@ -7207,7 +7207,7 @@ void TFireConeEffect::Pulse()
                 PSParticleSystemInfo flame;
                 float ang = (float)((6.283f * (float)invoker->GetFace()) / 256);
                 invoker->GetPos(temp_point1);
-                flame = ((PTFireConeAnimator)animator)->fire.Get(0);
+                flame = ((PTFireConeAnimator)GetAnimator())->fire.Get(0);
                 temp_point1.x += (int32_t)((flame->pos.x * cos(ang)) - (flame->pos.y * sin(ang)));
                 temp_point1.y += (int32_t)((flame->pos.x * sin(ang)) + (flame->pos.y * cos(ang)));
                 temp_point1.z = (int32_t)(flame->pos.z);
@@ -8945,7 +8945,8 @@ void TQuicksandEffect::Pulse()
     TEffect::Pulse();
 
 // added by pepper to move quicksand to the target
-    if (animator)
+    PTQuicksandAnimator anim = (PTQuicksandAnimator)GetAnimator();
+    if (anim)
     {
         if (first_time)
         {
@@ -8954,25 +8955,25 @@ void TQuicksandEffect::Pulse()
                 first_time = false;
                 if (strcmp(spell->VariantData()->name, "Quicksand") == 0)
                 {
-                    ((PTQuicksandAnimator)animator)->level = 1;
+                    anim->level = 1;
                 }
                 else if (strcmp(spell->VariantData()->name, "Quicksand2") == 0)
                 {
-                    ((PTQuicksandAnimator)animator)->level = 2;
+                    anim->level = 2;
                 }
 
                 PTCharacter invoker = (PTCharacter)spell->GetInvoker();
                 if (invoker)
                 {
                     invoker->GetPos(temp_point);
-                    invoker->GetPos(((PTQuicksandAnimator)animator)->target_position[0]);
-                    ((PTQuicksandAnimator)animator)->target_position[0].z = (int32_t)FIX_Z_VALUE(((PTQuicksandAnimator)animator)->target_position[0].z);
-                    ((PTQuicksandAnimator)animator)->target[0] = (PTCharacter)invoker->Fighting();
-                    if (((PTQuicksandAnimator)animator)->target[0])
+                    invoker->GetPos(anim->target_position[0]);
+                    anim->target_position[0].z = (int32_t)FIX_Z_VALUE(anim->target_position[0].z);
+                    anim->target[0] = (PTCharacter)invoker->Fighting();
+                    if (anim->target[0])
                     {
-                        ((PTQuicksandAnimator)animator)->target[0]->GetPos(((PTQuicksandAnimator)animator)->target_position[0]);
-                        ((PTQuicksandAnimator)animator)->target_position[0].z = (int32_t)FIX_Z_VALUE(((PTQuicksandAnimator)animator)->target_position[0].z);
-                        ((PTQuicksandAnimator)animator)->num_targets++;
+                        anim->target[0]->GetPos(anim->target_position[0]);
+                        anim->target_position[0].z = (int32_t)FIX_Z_VALUE(anim->target_position[0].z);
+                        anim->num_targets++;
                     }
                     S3DPoint temp_point1;
                     S3DPoint temp_point2;
@@ -8993,57 +8994,57 @@ void TQuicksandEffect::Pulse()
 
                         if (invoker && !invoker->IsEnemy(chr))
                             continue;   // We can't hurt our friends
-                        
-                        ((PTQuicksandAnimator)animator)->target[((PTQuicksandAnimator)animator)->num_targets] = chr;
-                        ((PTQuicksandAnimator)animator)->target[((PTQuicksandAnimator)animator)->num_targets]->GetPos(((PTQuicksandAnimator)animator)->target_position[((PTQuicksandAnimator)animator)->num_targets]);
-                        ((PTQuicksandAnimator)animator)->target_position[((PTQuicksandAnimator)animator)->num_targets].z = (int32_t)FIX_Z_VALUE(((PTQuicksandAnimator)animator)->target_position[((PTQuicksandAnimator)animator)->num_targets].z);
-                        ((PTQuicksandAnimator)animator)->num_targets++;
-            
-                        if (((PTQuicksandAnimator)animator)->num_targets >= 5 || ((PTQuicksandAnimator)animator)->level != 2)
+
+                        anim->target[anim->num_targets] = chr;
+                        anim->target[anim->num_targets]->GetPos(anim->target_position[anim->num_targets]);
+                        anim->target_position[anim->num_targets].z = (int32_t)FIX_Z_VALUE(anim->target_position[anim->num_targets].z);
+                        anim->num_targets++;
+
+                        if (anim->num_targets >= 5 || anim->level != 2)
                             break;
                     }
                 }
                 else
                 {
-                    ((PTQuicksandAnimator)animator)->target[0] = '\0';
-                    ((PTQuicksandAnimator)animator)->target_position[0].x = ((PTQuicksandAnimator)animator)->target_position[0].y = ((PTQuicksandAnimator)animator)->target_position[0].z = 0;
+                    anim->target[0] = '\0';
+                    anim->target_position[0].x = anim->target_position[0].y = anim->target_position[0].z = 0;
                 }
             }
             else
             {
-                ((PTQuicksandAnimator)animator)->num_targets = 0;
-                ((PTQuicksandAnimator)animator)->target[0] = '\0';
-                GetPos(((PTQuicksandAnimator)animator)->target_position[0]);
+                anim->num_targets = 0;
+                anim->target[0] = '\0';
+                GetPos(anim->target_position[0]);
                 GetPos(temp_point);
                 level = 1;
             }
         }
     }
 
-    if (animator)
+    if (anim)
     {
     // added by pepper to rotate the bad, bad man
-        if (((PTQuicksandAnimator)animator)->frameon > QUICKSAND_SPIN_START)
+        if (anim->frameon > QUICKSAND_SPIN_START)
         {
-            for(int32_t i = 0;i < ((PTQuicksandAnimator)animator)->num_targets;i++)
+            for(int32_t i = 0;i < anim->num_targets;i++)
             {
-                if (((PTQuicksandAnimator)animator)->target[i]  && !((PTQuicksandAnimator)animator)->target[i]->IsDead())
+                if (anim->target[i]  && !anim->target[i]->IsDead())
                 {
-                    ((PTQuicksandAnimator)animator)->target[i]->SetNoCollision(true);
-                    ((PTQuicksandAnimator)animator)->target[i]->SetRotateZ((int32_t)((PTQuicksandAnimator)animator)->target_rotation);
-                    if (!((PTQuicksandAnimator)animator)->target[i]->IsFlailing())
+                    anim->target[i]->SetNoCollision(true);
+                    anim->target[i]->SetRotateZ((int32_t)anim->target_rotation);
+                    if (!anim->target[i]->IsFlailing())
                     {
-                        ((PTQuicksandAnimator)animator)->target[i]->Flail();
+                        anim->target[i]->Flail();
                         if (spell)
                         {
-                            spell->Damage(((PTQuicksandAnimator)animator)->target[i]);
+                            spell->Damage(anim->target[i]);
                         }
                     }
-                    ((PTQuicksandAnimator)animator)->target_rotation+=10;
-                    temp_z_level = (float)((PTQuicksandAnimator)animator)->target_position[i].z;
-                    ((PTQuicksandAnimator)animator)->target[i]->GetPos(((PTQuicksandAnimator)animator)->target_position[i]);
-                    ((PTQuicksandAnimator)animator)->target_position[i].z = (int32_t)temp_z_level;
-                    SetPos(((PTQuicksandAnimator)animator)->target_position[0]);
+                    anim->target_rotation+=10;
+                    temp_z_level = (float)anim->target_position[i].z;
+                    anim->target[i]->GetPos(anim->target_position[i]);
+                    anim->target_position[i].z = (int32_t)temp_z_level;
+                    SetPos(anim->target_position[0]);
                 }
             }
         }
@@ -9648,9 +9649,9 @@ void TTornadoEffect::Pulse()
 {
     TEffect::Pulse();
     // deal damage every T_D frames
-    if (animator)
+    if (auto* anim = (PTTornadoAnimator)GetAnimator())
     {
-        if (((PTTornadoAnimator)animator)->frameon % TORNADO_DURATION == 0)
+        if (anim->frameon % TORNADO_DURATION == 0)
         {
             if (spell)
             {

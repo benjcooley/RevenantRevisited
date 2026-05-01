@@ -2144,35 +2144,36 @@ void TFunnelEffect::Pulse()
         anglec = (float)cos(((float)angle * 6.283180) / 255);
     }
 // this is WAY to complicated!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if (animator)
+    PTFunnelAnimator anim = (PTFunnelAnimator)GetAnimator();
+    if (anim)
     {
-        if (((PTFunnelAnimator)animator)->my_tornado != nullptr)
+        if (anim->my_tornado != nullptr)
         {
-            if (life >= 100 && ((PTFunnelAnimator)animator)->my_tornado->my_state != TORNADO_STATE_SHRINK && ((PTFunnelAnimator)animator)->my_tornado->my_state != TORNADO_STATE_DONE)
+            if (life >= 100 && anim->my_tornado->my_state != TORNADO_STATE_SHRINK && anim->my_tornado->my_state != TORNADO_STATE_DONE)
             {
                 S3DPoint temp_point, temp_point2;
-                
+
                 GetPos(temp_point);
-                ((PTFunnelAnimator)animator)->my_tornado->GetPos(temp_point2);
+                anim->my_tornado->GetPos(temp_point2);
 
                 temp_point.x += (int32_t)((temp_point2.x * anglec) - (temp_point2.y * angles));
                 temp_point.y += (int32_t)((temp_point2.x * angles) + (temp_point2.y * anglec));
 
-                ((PTFunnelAnimator)animator)->my_tornado->my_state = TORNADO_STATE_SHRINK;
+                anim->my_tornado->my_state = TORNADO_STATE_SHRINK;
                 BlastCharactersInRange(spell->GetInvoker(),temp_point,50,spell->VariantData()->mindamage,spell->VariantData()->maxdamage,spell->VariantData()->type);
             }
-            if (((PTFunnelAnimator)animator)->my_tornado->my_state == TORNADO_STATE_DONE)
+            if (anim->my_tornado->my_state == TORNADO_STATE_DONE)
             {
-                delete ((PTFunnelAnimator)animator)->my_tornado;
-                ((PTFunnelAnimator)animator)->my_tornado = nullptr;
+                delete anim->my_tornado;
+                anim->my_tornado = nullptr;
                 KillThisEffect();
             }
-            else if (((PTFunnelAnimator)animator)->my_tornado->my_state != TORNADO_STATE_SHRINK)//if ((life % 5) == 0)
+            else if (anim->my_tornado->my_state != TORNADO_STATE_SHRINK)//if ((life % 5) == 0)
             {
                 S3DPoint temp_point, temp_point2;
-                
+
                 GetPos(temp_point);
-                ((PTFunnelAnimator)animator)->my_tornado->GetPos(temp_point2);
+                anim->my_tornado->GetPos(temp_point2);
 
                 temp_point.x += (int32_t)((temp_point2.x * anglec) - (temp_point2.y * angles));
                 temp_point.y += (int32_t)((temp_point2.x * angles) + (temp_point2.y * anglec));
@@ -2187,19 +2188,19 @@ void TFunnelEffect::Pulse()
                             spell->GetInvoker()->GetPos(temp_point3);
                             if (::Distance(temp_point,temp_point3) > 10)
                             {
-                                ((PTFunnelAnimator)animator)->my_tornado->my_state = TORNADO_STATE_SHRINK;
+                                anim->my_tornado->my_state = TORNADO_STATE_SHRINK;
                                 BlastCharactersInRange(spell->GetInvoker(),temp_point,10,spell->VariantData()->mindamage,spell->VariantData()->maxdamage,spell->VariantData()->type);
                             }
                         }
                         else
                         {
-                                ((PTFunnelAnimator)animator)->my_tornado->my_state = TORNADO_STATE_SHRINK;
+                                anim->my_tornado->my_state = TORNADO_STATE_SHRINK;
                                 BlastCharactersInRange(spell->GetInvoker(),temp_point,10,spell->VariantData()->mindamage,spell->VariantData()->maxdamage,spell->VariantData()->type);
                         }
                     }
                     else
                     {
-                            ((PTFunnelAnimator)animator)->my_tornado->my_state = TORNADO_STATE_SHRINK;
+                            anim->my_tornado->my_state = TORNADO_STATE_SHRINK;
                             BlastCharactersInRange(spell->GetInvoker(),temp_point,10,spell->VariantData()->mindamage,spell->VariantData()->maxdamage,spell->VariantData()->type);
                     }
                 }
@@ -2231,9 +2232,9 @@ void TFunnelEffect::Pulse()
                             if (invoker && !invoker->IsEnemy(chr))
                                 continue;   // We can't hurt our friends
 
-                            ((PTFunnelAnimator)animator)->my_tornado->my_state = TORNADO_STATE_SHRINK;
+                            anim->my_tornado->my_state = TORNADO_STATE_SHRINK;
                             BlastCharactersInRange(spell->GetInvoker(),temp_point,10,spell->VariantData()->mindamage,spell->VariantData()->maxdamage,spell->VariantData()->type);
-                            
+
                             break;
                         }
                     }
@@ -3111,7 +3112,7 @@ void TCataclysmEffect::Pulse()
                     }
                 }
                 my_state = CATA_STATE_BOOM;
-                ((PTCataclysmAnimator)animator)->SetUp();
+                ((PTCataclysmAnimator)GetAnimator())->SetUp();
             }
             break;
         case CATA_STATE_BOOM:
