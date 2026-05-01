@@ -367,13 +367,6 @@ void TCharacter::Pulse()
         }
         lastpoisondamage = gametime;
     }
-    TCharAnimator* anim = (TCharAnimator*)GetAnimator();
-    if (anim)
-    {
-        TWeaponSwipe* weaponswipe = anim->GetWeaponSwipe();
-        if (weaponswipe && weaponswipe->GetInitialized())
-            weaponswipe->Animate();
-    }
 
   // This code below SHOULD be in ResolveInvoke()!
     if (IsDoing(ACTION_INVOKE))

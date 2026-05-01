@@ -8,62 +8,11 @@
 
 #include "3dimage.h"
 
-_CLASSDEF(TWeaponSwipe)
 _CLASSDEF(TCharAnimator)
 
-// weapon shtuffs
-
-_STRUCTDEF(SWeaponSwipeParams)
-struct SWeaponSwipeParams
-{
-    S3DLVertex* weaponverts;    // vertices of weapon, used for extents
-    int32_t numverts;               // number of vertices in weaponverts
-    TCharAnimator* charanim;    // animator of character this swipe is for
-    float r, g, b;              // color (to be normalized) of swipe
-    int32_t maxsegs;                // number of segments/length of swipe
-    int32_t smooth;                 // number of triangles per frame such that maxsegs % smooth == 0
-    const char* primehand;          // using this weapon...(to test for change of weapon)
-};
-
-class TWeaponSwipe
-{
-  private:
-    S3DAnimObj theobj;
-    S3DAnimObj* obj;
-    int32_t maxpoints, maxverts;        // Maximum number of points we can have, max verts
-    hmm_vec3 *points[2];   // The points themselves points[0] = hilt, points[1] = tip or vv
-    hmm_vec3 vweapbeg, vweapend; // vertex of hilt, tip of weapon
-    hmm_mat4* weaponmat; // translation table for weapon
-    bool initialized;   // is this real
-    // duplicate los parameteros
-    S3DLVertex* weaponverts;    // vertices of weapon, used for extents
-    int32_t numverts;               // number of vertices in weaponverts
-    TCharAnimator* charanim;    // animator of character this swipe is for
-    float r, g, b;              // color (to be normalized) of swipe
-    int32_t maxsegs;                // number of segments/length of swipe
-    int32_t smooth;                 // number of triangles per frame such that maxsegs % smooth == 0
-    const char* primehand;          // using this weapon...(to test for change of weapon)
-
-  public:
-    TWeaponSwipe() { initialized = false; maxpoints = 0; primehand = nullptr; }
-    virtual ~TWeaponSwipe() { }
-
-    void Init(SWeaponSwipeParams* p);
-    void GenerateStrip();
-    void Animate();
-    void CycleStrip();
-    void GetWeaponExtents();
-    void NormalizeColors();
-    void ChangeColor(float r, float g, float b);
-    void Render();
-    void Close();
-    hmm_mat4* GetCharsWeaponMatrix();
-    bool GetInitialized() const { return initialized; }
-    TCharAnimator* GetCharAnim() const { return charanim; }
-};
-
-
-
+// TWeaponSwipe was the legacy strip-mesh trail renderer that drew the
+// weapon arc during attacks. The drawable system will own that effect
+// when it is reintroduced; for now the swipe is fully retired.
 
 // *****************
 // * TCharAnimator *
@@ -77,20 +26,6 @@ class TCharAnimator : public T3DAnimator
 
     void Animate(bool draw) override;
     bool Render() override;
-    TWeaponSwipe* GetWeaponSwipe() { return &weaponswipe; }
-      // get the weaponswipe
-
-    // WeaponSwipe handling stuff
-    void SetupWeaponSwipe();
-      // Called from SetupObjects() to init the weaponswipe!
-    S3DLVertex* GetWeaponVertices(int32_t len);
-      // Called from SetupWeaponSwipe to get the correct weapon vertices
-    int32_t GetWeaponNumVerts();
-      // Called from SetupWeaponSwipe to get the correct number of weapon vertices
-    T3DImagery* GetWeaponImagery(int32_t objnum);
-      // called from GetWeaponVertices and GetWeaponNumVerts
-    int32_t GetWeaponNum();
-      // called from GetWeaponVertices and GetWeaponNumVerts
 
   protected:
 
@@ -138,7 +73,6 @@ class TCharAnimator : public T3DAnimator
     void GetImFaces(T3DImagery* imagery, S3DAnimObj* obj);
     void GetImVerts(T3DImagery* imagery, S3DAnimObj* obj, ERender3DVertex verttype);
 
-    TWeaponSwipe weaponswipe;               // swipe structure!
     T3DImagery* utilityimagery;
 
     float *origmatred, *origmatgreen;       // saved material values
