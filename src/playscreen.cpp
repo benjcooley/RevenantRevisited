@@ -91,9 +91,12 @@ bool TPlayScreen::Initialize()
     log_info("[playscreen] booting map renderer");
     // Spin up the map renderer. InitializeFromStartupArgs reads --level
     // and --sector to pick the starting world; with neither set, we fall
-    // back to its defaults (Misthaven-area).
+    // back to its defaults (Misthaven-area). The post-load hook injects
+    // Locke into the anchor sector before the renderer scans for
+    // drawables, so the player ends up in the initial draw list.
     mapRenderer = std::make_unique<TMapRenderer>();
-    if (!mapRenderer->InitializeFromStartupArgs())
+    if (!mapRenderer->InitializeFromStartupArgs(
+            [this](int32_t lvl, int32_t sx, int32_t sy) { SpawnDefaultPlayer(lvl, sx, sy); }))
     {
         log_warn("[playscreen] map renderer failed to initialize from startup args");
         // Keep going -- we still want to land on PlayScreen with empty
@@ -113,42 +116,27 @@ bool TPlayScreen::Initialize()
 
     EditorLoadState();
 
-    // No save-load wired up yet, and no menu/intro screen to drive a
-    // proper NewGame. Spawn Locke directly into the first loaded
-    // sector so the rest of the game has a Player to render and drive.
-    // Same wiring as the `add` console command (see CmdAdd in
-    // src/command.cpp): construct via the class factory, register with
-    // PlayerManager, mark as main. The TSector::AddObject path is used
-    // directly because MapPane.sectors[][] is empty under the new
-    // renderer-owned-sector model -- bypassing MapPane.NewObject.
-    SpawnDefaultPlayer();
-
     log_info("[playscreen] initialize done");
     return true;
 }
 
-// Drop a "Locke" TPlayer into the first loaded sector, register with
-// PlayerManager, and make him the main player. Skipped if a Player
-// already exists (loaded from a save) or if no sectors are loaded.
-bool TPlayScreen::SpawnDefaultPlayer()
+// Drop a "Locke" TPlayer into the loaded sector at (level, sx, sy) and
+// register with PlayerManager. Called from inside the TMapRenderer
+// post-load hook so the player exists in the sector before the
+// renderer scans sector contents into its drawable list. Skipped if a
+// Player already exists (loaded from a save).
+bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
 {
     if (Player)
         return true;
     if (!mapRenderer)
         return false;
 
-    // Place Locke at the renderer's startup-anchored camera position
-    // (--level / --sector default, or the hard-coded Misthaven anchor).
-    const S3DPoint cam_world = mapRenderer->CameraWorld();
-    const int32_t  cam_level = mapRenderer->CameraLevel();
-    const int32_t  cam_sx    = cam_world.x >> SECTORWSHIFT;
-    const int32_t  cam_sy    = cam_world.y >> SECTORHSHIFT;
-
-    TSector* sec = mapRenderer->FindLoadedSector(cam_level, cam_sx, cam_sy);
+    TSector* sec = mapRenderer->FindLoadedSector(level, sx, sy);
     if (!sec)
     {
-        log_warn("[player] camera sector %d_%d_%d not loaded; cannot spawn Locke",
-                 cam_level, cam_sx, cam_sy);
+        log_warn("[player] anchor sector %d_%d_%d not loaded; cannot spawn Locke",
+                 level, sx, sy);
         return false;
     }
 
@@ -163,8 +151,10 @@ bool TPlayScreen::SpawnDefaultPlayer()
     memset(&def, 0, sizeof(def));
     def.objclass = OBJCLASS_PLAYER;
     def.objtype  = locke_type;
-    def.level    = cam_level;
-    def.pos      = cam_world;
+    def.level    = level;
+    def.pos.x    = (sx << SECTORWSHIFT) + (SECTORWIDTH  / 2);
+    def.pos.y    = (sy << SECTORHSHIFT) + (SECTORHEIGHT / 2);
+    def.pos.z    = 0;
 
     TObjectInstance* oi = PlayerClass.NewObject(&def);
     if (!oi)
@@ -189,7 +179,7 @@ bool TPlayScreen::SpawnDefaultPlayer()
     CurrentScreen = saved_screen;
 
     log_info("[player] spawned Locke in sector %d_%d_%d at world (%d,%d,%d)",
-             cam_level, cam_sx, cam_sy, def.pos.x, def.pos.y, def.pos.z);
+             level, sx, sy, def.pos.x, def.pos.y, def.pos.z);
     return true;
 }
 
