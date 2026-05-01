@@ -107,33 +107,20 @@ TObjectInstance* LookupMapIndex(int32_t index)
     return (it != m.end()) ? it->second : nullptr;
 }
 
-// Generate a random map index
+// Generate a runtime-unique map index. Older data can contain duplicate
+// persisted ids, so this must be monotonic/collision-checked rather than
+// cycling through a small timestamp-derived range.
 int32_t TMapPane::MakeIndex()
 {
-    static int32_t incrementor = 0;
-
-    // Start with the current time
-    time_t t;
-    time(&t);
-
-    int32_t index = t - 0x34d6574c;
-    if (index < 0)
+    static int32_t next = 0x10000000;
+    for (;;)
     {
-        // hrm...messed up clock, just flip it
-        index *= -1;
+        if (next < 0x10000000)
+            next = 0x10000000;
+        const int32_t index = next++;
+        if (LookupMapIndex(index) == nullptr)
+            return index;
     }
-
-    // Throw in a semi-random element
-    // make sure that the index level does NOT match old style indexes
-    if (MapPane.GetMapLevel() == incrementor)
-        incrementor++;
-
-    if (incrementor > 0x1f)
-        incrementor = 0;
-
-    index |= incrementor++ << 26;
-
-    return index;
 }
 
 // ****************

@@ -206,6 +206,8 @@ bool TSector::Load(bool lock)
             inst->SetMapIndex(MAKEINDEX(level, sectorx, sectory, c));
     }
 
+    // Load is the initial "contents are populated" event.
+    contentver = 1;
     return true;
 }
 
@@ -329,6 +331,7 @@ int32_t TSector::AddObject(TObjectInstance* oi, int32_t item)
             objsets[d-1].Set(item, objsets[d-1].NumItems());
     }
 
+    ++contentver;
     return item;
 }
 
@@ -349,6 +352,7 @@ int32_t TSector::SetObject(TObjectInstance* oi, int32_t item)
         }
     }
 
+    ++contentver;
     return item;
 }
 
@@ -374,6 +378,7 @@ TObjectInstance* TSector::RemoveObject(int32_t item)
         }
     }
 
+    ++contentver;
     return oi;
 }
 

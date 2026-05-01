@@ -121,6 +121,13 @@ class TSector final
     PTObjectArray ObjectArray()
       { return &objects; }
 
+    // Monotonic counter incremented every time the sector's object
+    // contents change (Load/Add/Remove/Set). Consumers that cache
+    // anything derived from `objects` (e.g. the renderer's draw list)
+    // remember the last seen version and rebuild when it advances.
+    // Reset to 1 on Load so a fresh load reads as "changed since 0".
+    [[nodiscard]] int32_t ContentVer() const { return contentver; }
+
   // Object set functions
   // --------------------
   // Object sets allow super fast iteration through subsets of objects.  To add a new 
@@ -195,6 +202,11 @@ class TSector final
     // and hash helper FUN_00499e90 in data/Revenant.exe. We round-trip
     // the read value for now; regeneration is future work.
     int32_t statehash = 0;
+
+    // Bumped on every Add/Remove/Set, set to 1 in Load. Renderer
+    // (and any other cache derived from `objects`) compares against
+    // its own cached version per frame to detect changes.
+    int32_t contentver = 0;
 
     TObjectArray objects;
     TObjSetArray objsets[NUMOBJSETS];

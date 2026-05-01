@@ -18,6 +18,8 @@
 #include "imgui.h"
 #include "sokol_imgui.h"
 
+#include "editorfonts.h"
+#include "editoricons.h"
 #include "multisurface.h"
 #include "renderer.h"
 #include "revenant.h"
@@ -110,16 +112,28 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
         simgui_desc_t d = {};
         d.ini_filename = "imgui.ini";
         d.max_vertices = 1 << 20;
+        d.no_default_font = true;          // we build our own atlas next
+        // sokol_imgui swallows Cmd+V on macOS by default (routes through
+        // its own SAPP_EVENTTYPE_CLIPBOARD_PASTED instead). Disable that
+        // override so our Edit.Paste hotkey gets the key event normally;
+        // we read the OS clipboard in the command's execute callback.
+        d.disable_paste_override = true;
         simgui_setup(&d);
         imgui_initialized = true;
         ImGuiIO& io = ImGui::GetIO();
-        // ImGui 1.92 defaults this to true, which serializes input
-        // events one-per-frame and makes fast mouse motion over menus
-        // feel choppy. Disable so menu hovers respond immediately.
-        io.ConfigInputTrickleEventQueue = false;
+        // KEEP trickle enabled (ImGui's default). On macOS, Cmd-modified
+        // key shortcuts fire KEY_DOWN + KEY_UP in the same NSEvent (per
+        // sokol_app's "Cmd-held auto-keyup" stuck-key workaround). Without
+        // trickling, both apply in the same ImGui frame and IsKeyPressed
+        // never sees a transition -- Cmd+Z silently does nothing. See
+        // sokol issue #233 + memory/project_imgui_mac_modifiers.md.
+        io.ConfigInputTrickleEventQueue = true;
         ImGuiStyle& st = ImGui::GetStyle();
         st.HoverDelayShort  = 0.0f;
         st.HoverDelayNormal = 0.0f;
+
+        EditorFonts::Build();
+        EditorIcons::Build();
     }
 
     return true;
@@ -128,6 +142,7 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
 bool TDisplay::Close()
 {
     if (imgui_initialized) {
+        EditorIcons::Shutdown();
         simgui_shutdown();
         imgui_initialized = false;
     }

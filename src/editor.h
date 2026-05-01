@@ -51,3 +51,13 @@ void EditorDrawChrome();
 // center hole between the scene / properties / console panels.
 struct SEditorRect { int32_t x, y, w, h; };
 SEditorRect EditorGameViewRect();
+
+// "Game playing" flag. In editor mode this defaults to *false* (paused);
+// when paused the engine skips the world render and the Game View panel
+// keeps displaying the last lit frame. Anything that mutates state the
+// renderer would show should call EditorMarkDirty() so the next frame
+// re-renders once even while paused.
+bool EditorRunning();
+void EditorSetRunning(bool running);
+void EditorMarkDirty();
+bool EditorShouldRenderWorld();   // consumes one dirty tick when paused

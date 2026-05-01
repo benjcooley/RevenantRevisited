@@ -84,6 +84,16 @@
 _CLASSDEF(TRenderer)
 _CLASSDEF(TSurface)
 
+// obj_id layout: low 28 bits hold the per-drawable id (drawable index +
+// 1); the top 4 bits are state flags the editor can set per-submission
+// to drive shader-side overlays (outline, hover tint, ...). The lit
+// shader reads the alpha channel of id_target and tests the flag bits;
+// click-pick reads the same pixel and masks them off.
+constexpr uint32_t kObjFlagSelected = 1u << 31;
+constexpr uint32_t kObjFlagHovered  = 1u << 30;
+constexpr uint32_t kObjIdMask       = 0x0FFFFFFFu;
+constexpr uint32_t kObjFlagMask     = 0xF0000000u;
+
 // Per-tile submission payload. Scene code fills one of these per visible
 // tile and hands it to TRenderer::SubmitTile; TRenderer accumulates them
 // during a tile pass and emits draws at EndTilePass. Scene code never
@@ -99,13 +109,19 @@ struct STileSubmit
     float    root_wx, root_wy, root_wz;   // world xyz of the tile anchor
     float    anchor_px_x, anchor_px_y;    // source-image anchor pixel
     float    zraw_to_wu;      // bitmap-z -> world-units scale
+    float    zraw_min = 0.0f;
+    float    zraw_max = 0.0f;
     float    sort_depth = 0.0f;
+    uint32_t obj_id = 0;      // packed into id_target (RGBA8) for picking
 };
 
 struct SOverlaySubmit
 {
     sg_image color_img;
     int32_t  dst_x, dst_y, dst_w, dst_h;
+    int32_t  src_x = 0, src_y = 0, src_w = 1, src_h = 1;
+    int32_t  src_tex_w = 1, src_tex_h = 1;
+    bool     additive_blend = false;
 };
 
 // Opaque handle to a mesh registered with TRenderer. 0 is invalid.
@@ -129,6 +145,7 @@ struct SMeshSubmit
     MeshHandle mesh;
     float      world[16];     // row-major 4x4
     float      tint[4];       // rgba multiplier
+    uint32_t   obj_id = 0;    // packed into id_target (RGBA8) for picking
 };
 
 struct SHelperMeshSubmit
@@ -239,6 +256,10 @@ public:
     // Sun contact-shadow ray march.
     void SetSunShadow(bool enable, float step_wu, float softness_px,
                       int32_t max_steps);
+    // Toggle just the enable flag (params untouched). Editor uses this
+    // to suppress shadows while panels are open.
+    void SetSunShadowEnabled(bool enable);
+    [[nodiscard]] bool SunShadowEnabled() const;
     // Base world-space direction for the sun-shadow ray. Decoupled from
     // light direction so shadows can cast toward the viewer when lighting
     // comes from behind the scene.
@@ -262,11 +283,19 @@ public:
     //   z_near/z_far -- camera-depth range in wu (maps to scene_z [0,1])
     //   center_wx/y  -- world camera-center xy
     //   kcam_forward -- camera-forward distance (MapRenderer kCamForwardWU)
-    //   reserved     -- unused, for future tweaks
+    //   perspective  -- non-zero enables perspective projection
+    //   zoom         -- camera-plane scale multiplier (1 = authored scale)
+    //   z_offset/z_scale -- debug tweaks for perspective tile relief depth
     void SetReconstructionParams(float ox, float oy,
                                  float z_near, float z_far,
                                  float center_wx, float center_wy,
-                                 float kcam_forward, float reserved);
+                                 float kcam_forward, float perspective,
+                                 float zoom = 1.0f,
+                                 float z_offset = 0.0f,
+                                 float z_scale = 1.0f,
+                                 float tile_scale = 1.0f);
+    void SetPerspectiveRaycastParams(int32_t steps, int32_t refine);
+    void SetPerspectiveDebugMode(int32_t mode) { perspective_debug_mode = mode; }
 
     // Run the deferred lighting pass over the current G-buffer. Writes
     // lit_target (passes [2] + [3]).
@@ -287,7 +316,8 @@ public:
                    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                    int32_t target_w, int32_t target_h,
                    int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
-                   int32_t src_tex_w, int32_t src_tex_h);
+                   int32_t src_tex_w, int32_t src_tex_h,
+                   bool additive_blend = false);
 
     // Called from TDisplay::FlipPage inside sg_begin_default_pass. Picks
     // the best final image (lit_target > color_target > nothing) and
@@ -306,6 +336,13 @@ public:
     // ---- Debug accessors ------------------------------------------------
     [[nodiscard]] sg_image ColorTarget() const { return color_target; }
     [[nodiscard]] sg_image LitTarget()   const { return lit_target; }
+    [[nodiscard]] sg_image IdTarget()    const { return id_target; }
+
+    // Editor selection-outline plumbing. Setting this >0 turns on the
+    // post-process outline glow in the lit shader for pixels whose
+    // id_target value matches `id`.
+    void SetSelectedObjectId(uint32_t id) { selected_obj_id = id; }
+    [[nodiscard]] uint32_t SelectedObjectId() const { return selected_obj_id; }
     [[nodiscard]] int32_t  GBufPad()     const { return kGBufPad; }
 
 private:
@@ -316,6 +353,7 @@ private:
     sg_shader   composite_shader   = {};
     sg_buffer   composite_vbuf     = {};
     sg_pipeline composite_pip_rt   = {};   // RGBA8 RT variant
+    sg_pipeline composite_pip_add_rt = {}; // RGBA8 additive/lighten RT variant
     sg_pipeline composite_pip_swap = {};   // Swapchain variant
 
     // ---- Passes ---------------------------------------------------------
@@ -373,12 +411,17 @@ private:
     float present_ndc[4] = { -1.0f, -1.0f, 2.0f, 2.0f };
     bool  suppress_present = false;
     float tile_clear_rgba[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    int32_t perspective_debug_mode = 0;
+    int32_t perspective_steps = 32;
+    int32_t perspective_refine = 5;
 
     // ---- Render targets -------------------------------------------------
     sg_image color_target   = {};   // G-buffer: albedo   (RGBA8)
     sg_image depth_target   = {};   // G-buffer: HW depth (DEPTH)
     sg_image normal_target  = {};   // G-buffer: normal   (RGBA16F)
     sg_image scene_z_target = {};   // G-buffer: scene-z  (R32F)
+    sg_image id_target      = {};   // G-buffer: obj id   (RGBA8 packed)
+    uint32_t selected_obj_id = 0;   // editor selection (0 = no outline)
     sg_image ao_target      = {};   // AO pass output     (R32F)
     sg_image lit_target     = {};   // Lit output         (RGBA8)
     sg_pass  helper_pass    = {};   // Forward helper/material pass into lit_target
@@ -418,6 +461,10 @@ private:
         float center_wx = 0, center_wy = 0;
         float kcam_forward = 0;
         float reserved = 0;
+        float zoom = 1.0f;
+        float z_offset = 0.0f;
+        float z_scale = 1.0f;
+        float tile_scale = 1.0f;
     } recon;
 
     // ---- Pipeline setup / teardown --------------------------------------

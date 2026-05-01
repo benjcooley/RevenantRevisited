@@ -15,6 +15,7 @@
 #include "chunkcache.h"
 #include "decompdata.h"
 #include "display.h"
+#include "effect.h"
 #include "renderer.h"
 #include "debugui.h"
 #include "imgui.h"
@@ -90,6 +91,29 @@ inline float CameraDepth(const S3DPoint& rel)
          - (float(rel.x + rel.y) * kIsoCos30 + float(rel.z) * 0.5f);
 }
 
+inline float CameraDepth(const S3DPoint& rel, float cam_forward)
+{
+    return cam_forward
+         - (float(rel.x + rel.y) * kIsoCos30 + float(rel.z) * 0.5f);
+}
+
+inline void ProjectCameraRelToScreen(const SMapRenderContext& ctx,
+                                     const S3DPoint& rel,
+                                     float& sx, float& sy)
+{
+    int32_t iso_x = 0, iso_y = 0;
+    WorldToScreen(rel, iso_x, iso_y);
+    sx = float(iso_x);
+    sy = float(iso_y);
+    if (!ctx.perspective_camera)
+        return;
+
+    const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
+    const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
+    sx *= focal_zoom / z;
+    sy *= focal_zoom / z;
+}
+
 inline int32_t FloorDiv(int32_t v, int32_t d)
 {
     return (v >= 0) ? (v / d) : -(((-v) + d - 1) / d);
@@ -140,6 +164,82 @@ static void MatrixScale16(float sx, float sy, float sz, float out[16])
     out[0] = sx;
     out[5] = sy;
     out[10] = sz;
+}
+
+static bool IsLegacyFlameEffect(TObjectInstance* oi)
+{
+    return oi && oi->ObjClass() == OBJCLASS_EFFECT &&
+           oi->GetTypeName() && stricmp(oi->GetTypeName(), "FLAME") == 0;
+}
+
+static int32_t LegacyFlameUvVariant(int64_t tick)
+{
+    const int32_t frame = int32_t(tick % 18);
+    return int32_t(frame * 11 / 24) % 8;
+}
+
+static void ApplyLegacyFlameUvs(std::vector<SMeshVertex>& verts, int32_t variant)
+{
+    if (verts.size() < 4) return;
+    const float u0 = float(variant % 4) * 0.25f;
+    const float v0 = float(variant / 4) * 0.5f;
+    verts[0].uv[0] = u0;         verts[0].uv[1] = v0;
+    verts[1].uv[0] = u0 + 0.25f; verts[1].uv[1] = v0;
+    verts[2].uv[0] = u0;         verts[2].uv[1] = v0 + 0.5f;
+    verts[3].uv[0] = u0 + 0.25f; verts[3].uv[1] = v0 + 0.5f;
+}
+
+static bool TileCameraVolumeVisible(const SMapRenderContext& ctx,
+                                    const S3DPoint& rel,
+                                    int32_t regx, int32_t regy,
+                                    int32_t w, int32_t h,
+                                    float zraw_min, float zraw_max)
+{
+    int32_t sx_i = 0, sy_i = 0;
+    WorldToScreen(rel, sx_i, sy_i);
+    const float anchor_x = float(sx_i);
+    const float anchor_y = float(sy_i);
+
+    const float scale = ctx.perspective_camera ? (ctx.tile_scale > 0.0f ? ctx.tile_scale : 1.0f) : 1.0f;
+    const float x0 = anchor_x - float(regx) * scale;
+    const float x1 = anchor_x + (float(w) - float(regx)) * scale;
+    const float y0 = anchor_y - float(regy) * scale;
+    const float y1 = anchor_y + (float(h) - float(regy)) * scale;
+
+    if (!ctx.perspective_camera)
+    {
+        const float vx0 = -float(ctx.cam_ox);
+        const float vy0 = -float(ctx.cam_oy);
+        const float vx1 = float(ctx.vw - ctx.cam_ox);
+        const float vy1 = float(ctx.vh - ctx.cam_oy);
+        return x1 >= vx0 && x0 <= vx1 && y1 >= vy0 && y0 <= vy1;
+    }
+
+    float z0 = CameraDepth(rel, ctx.cam_forward) + zraw_min * ctx.depth_mul;
+    float z1 = CameraDepth(rel, ctx.cam_forward) + zraw_max * ctx.depth_mul;
+    if (z1 < z0) std::swap(z0, z1);
+    z0 = (std::max)(z0, 1.0f);
+    z1 = (std::max)(z1, z0 + 1.0f);
+
+    const float focal_zoom = (std::max)(ctx.cam_forward * (ctx.camera_zoom > 0.0f ? ctx.camera_zoom : 1.0f), 1.0f);
+    const float left   = -float(ctx.cam_ox);
+    const float right  =  float(ctx.vw - ctx.cam_ox);
+    const float top    = -float(ctx.cam_oy);
+    const float bottom =  float(ctx.vh - ctx.cam_oy);
+
+    bool any_left = false, any_right = false, any_top = false, any_bottom = false;
+    for (float z : { z0, z1 })
+    for (float x : { x0, x1 })
+    for (float y : { y0, y1 })
+    {
+        const float px = x * focal_zoom / z;
+        const float py = y * focal_zoom / z;
+        any_left   |= px >= left;
+        any_right  |= px <= right;
+        any_top    |= py >= top;
+        any_bottom |= py <= bottom;
+    }
+    return any_left && any_right && any_top && any_bottom;
 }
 
 static void BuildRootMatrixSource(const TObjectInstance* oi, hmm_mat4* out)
@@ -381,7 +481,8 @@ static bool UploadTileBitmap(PTBitmap bm,
         const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
         const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
         const uint16_t z = has_zbuffer ? zplane[i] : 0;
-        const bool transparent = has_zbuffer ? (z == 0x7F7F) : (is_8bit ? (idx8 == key8) : (px16 == key16));
+        const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
+                                             : (is_8bit ? (idx8 == key8) : (px16 == key16));
         if (transparent) {
             rgba[i*4+0]=rgba[i*4+1]=rgba[i*4+2]=rgba[i*4+3]=0;
             dflt[i] = 0.0f;
@@ -445,8 +546,8 @@ static bool UploadTileBitmap(PTBitmap bm,
     sg_image_desc dd = {};
     dd.width = w; dd.height = h;
     dd.pixel_format = SG_PIXELFORMAT_R32F;
-    dd.min_filter = SG_FILTER_NEAREST;
-    dd.mag_filter = SG_FILTER_NEAREST;
+    dd.min_filter = SG_FILTER_LINEAR;
+    dd.mag_filter = SG_FILTER_LINEAR;
     dd.wrap_u = dd.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
     dd.data.subimage[0][0].ptr  = dflt.get();
     dd.data.subimage[0][0].size = npx * sizeof(float);
@@ -467,6 +568,39 @@ static bool UploadTileBitmap(PTBitmap bm,
     }
     return sg_query_image_state(*out_color) == SG_RESOURCESTATE_VALID &&
            sg_query_image_state(*out_depth) == SG_RESOURCESTATE_VALID;
+}
+
+static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
+                                 PTBitmap bm,
+                                 TObjectInstance* oi,
+                                 TObjectImagery* img,
+                                 int32_t state)
+{
+    if (!bm) return -1;
+    for (size_t t = 0; t < cache.size(); ++t)
+        if (cache[t].bm_key == bm) return int32_t(t);
+
+    SSectorTileTex tex = {};
+    tex.bm_key = bm;
+    tex.debug_classname = oi ? oi->GetClassName() : nullptr;
+    tex.debug_typename = oi ? oi->GetTypeName() : nullptr;
+    tex.debug_world_pos = oi ? oi->Pos() : S3DPoint{0,0,0};
+    tex.debug_regx = img ? img->GetRegX(state) : 0;
+    tex.debug_regy = img ? img->GetRegY(state) : 0;
+    tex.debug_regz = img ? img->GetRegZ(state) : 0;
+    uint32_t bm_flags = 0;
+    if (!UploadTileBitmap(bm, &tex.color, &tex.depth, &tex.w, &tex.h,
+                          &tex.z_local_min, &tex.z_local_max,
+                          &tex.z_dump, &tex.has_alpha, &bm_flags,
+                          &tex.cpu_depth_local, &tex.cpu_opaque))
+        return -1;
+    tex.pixel_count = tex.w * tex.h;
+    for (uint8_t opaque : tex.cpu_opaque)
+        if (opaque) ++tex.opaque_count;
+    tex.bm_flags = bm_flags;
+    const int32_t idx = int32_t(cache.size());
+    cache.push_back(std::move(tex));
+    return idx;
 }
 
 static void DrawArrow(ImDrawList* dl, const ImVec2& a, const ImVec2& b,
@@ -516,7 +650,7 @@ void SSectorDrawableInst::AccumulateSceneZ(const SMapRenderContext& ctx, float& 
         const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
         rel = mesh_world - mesh_camera;
     }
-    const float camera_z = CameraDepth(rel);
+    const float camera_z = CameraDepth(rel, ctx.cam_forward);
     float z0 = camera_z - 512.0f;
     float z1 = camera_z + 512.0f;
     if (kind == ESectorDrawableKind::Tile && ctx.tile_assets)
@@ -528,24 +662,52 @@ void SSectorDrawableInst::AccumulateSceneZ(const SMapRenderContext& ctx, float& 
         const int32_t y0 = sp.y - regy + ctx.cam_oy;
         const int32_t x1 = x0 + tex.w;
         const int32_t y1 = y0 + tex.h;
-        if (x1 <= 0 || y1 <= 0 || x0 >= ctx.vw || y0 >= ctx.vh)
-            return;
         z0 = has_authored_local_dz ? (camera_z + ctx.depth_mul * authored_local_dz_min)
                                    : (camera_z + ctx.depth_mul * (tex.z_local_min - float(regz)));
         z1 = has_authored_local_dz ? (camera_z + ctx.depth_mul * authored_local_dz_max)
                                    : (camera_z + ctx.depth_mul * (tex.z_local_max - float(regz)));
+        if (!TileCameraVolumeVisible(ctx, rel, regx, regy, tex.w, tex.h,
+                                     has_authored_local_dz ? authored_local_dz_min : (tex.z_local_min - float(regz)),
+                                     has_authored_local_dz ? authored_local_dz_max : (tex.z_local_max - float(regz))))
+            return;
         ++fit_tiles;
     }
     scene_z_min_fit = (std::min)(scene_z_min_fit, z0);
     scene_z_max_fit = (std::max)(scene_z_max_fit, z1);
 }
 
-void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& stats) const
+void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& stats, uint32_t obj_id) const
 {
     TObjectInstance* oi = src.Get();
     if (!oi)
     {
         if (kind == ESectorDrawableKind::Mesh) ++stats.mesh_skipped;
+        return;
+    }
+
+    if (kind == ESectorDrawableKind::FlameDebug)
+    {
+        if (!ctx.debug_green_img.id) return;
+        const S3DPoint rel = world_pos - ctx.sectorCameraWorld;
+        float sx = 0.0f, sy = 0.0f;
+        ProjectCameraRelToScreen(ctx, rel, sx, sy);
+        float overlay_scale = 1.0f;
+        if (ctx.perspective_camera)
+        {
+            const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
+            const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
+            overlay_scale = focal_zoom / z;
+        }
+        const int32_t w = (std::max)(4, int32_t(std::lround(25.0f * overlay_scale)));
+        const int32_t h = (std::max)(8, int32_t(std::lround(62.5f * overlay_scale)));
+        SOverlaySubmit marker = {};
+        marker.color_img = ctx.debug_green_img;
+        marker.dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
+        marker.dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
+        marker.dst_w = w;
+        marker.dst_h = h;
+        Renderer->SubmitOverlay(marker);
+        ++stats.mesh_submitted;
         return;
     }
 
@@ -557,50 +719,20 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         S3DPoint sp;
         const S3DPoint rel = {world_pos.x - ctx.sectorCameraWorld.x, world_pos.y - ctx.sectorCameraWorld.y, world_pos.z - ctx.sectorCameraWorld.z};
         WorldToScreen(rel, sp.x, sp.y);
-        const float anchor_scene = MapRendererCameraDepth(rel) - ctx.depth_mul * float(regz);
+        const float anchor_scene = CameraDepth(rel, ctx.cam_forward) - ctx.depth_mul * float(regz);
         const float anchor_scene_norm = std::fabs(ctx.zspan) > 1e-6f ? (anchor_scene - ctx.z_near) / ctx.zspan : 0.5f;
         const int32_t dx = sp.x - regx + ctx.cam_ox;
         const int32_t dy = sp.y - regy + ctx.cam_oy;
         if (!tex.color.id || !tex.depth.id) { ++stats.draw_invalid_img; return; }
-        if (debug_sector_level == 0 && debug_sector_x == 7 && debug_sector_y == 22 &&
-            (debug_sector_slot == 34 || debug_sector_slot == 36 ||
-             debug_sector_slot == 37 || debug_sector_slot == 44 ||
-             debug_sector_slot == 122))
-        {
-            static bool logged_slots[256] = {};
-            const int32_t slot = debug_sector_slot;
-            if ((uint32_t)slot < 256u && !logged_slots[slot])
-            {
-                logged_slots[slot] = true;
-                const float depth_scale = std::fabs(ctx.zspan) > 1e-6f ? ctx.depth_mul / ctx.zspan : 0.0f;
-                const float min_norm = anchor_scene_norm + tex.z_local_min * depth_scale;
-                const float max_norm = anchor_scene_norm + tex.z_local_max * depth_scale;
-                const float opaque_pct = tex.pixel_count > 0
-                    ? (100.0f * float(tex.opaque_count) / float(tex.pixel_count))
-                    : 0.0f;
-                log_info("[sector] trace 7_22[%03d] '%s:%s' pos=(%d,%d,%d) local=(%d,%d) state=%d frame=%d asset=%d tex=%dx%d opaque=%d/%d(%.1f%%) reg=(%d,%d,%d) screen=(%d,%d)-(%d,%d) alpha=%d flags=0x%X zlocal=[%.0f..%.0f] znorm=[%.3f..%.3f] anchor=%.3f depth_scale=%.6f zraw_to_wu=%.3f samples=%d high=%d bbox=(%d,%d)-(%d,%d)",
-                         slot,
-                         oi->GetClassName() ? oi->GetClassName() : "?",
-                         oi->GetTypeName() ? oi->GetTypeName() : "?",
-                         world_pos.x, world_pos.y, world_pos.z,
-                         world_pos.x - debug_sector_x * SECTORWIDTH,
-                         world_pos.y - debug_sector_y * SECTORHEIGHT,
-                         state, frame, asset_idx,
-                         tex.w, tex.h, tex.opaque_count, tex.pixel_count, opaque_pct,
-                         regx, regy, regz,
-                         dx, dy, dx + tex.w, dy + tex.h,
-                         tex.has_alpha ? 1 : 0, tex.bm_flags,
-                         tex.z_local_min, tex.z_local_max,
-                         min_norm, max_norm, anchor_scene_norm, depth_scale,
-                         ctx.depth_mul,
-                         tex.z_dump.sample_count, tex.z_dump.high_bit_count,
-                         tex.z_dump.bbox_x0, tex.z_dump.bbox_y0,
-                         tex.z_dump.bbox_x1, tex.z_dump.bbox_y1);
-            }
+        const bool onscreen = TileCameraVolumeVisible(
+            ctx, rel, regx, regy, tex.w, tex.h,
+            has_authored_local_dz ? authored_local_dz_min : (tex.z_local_min - float(regz)),
+            has_authored_local_dz ? authored_local_dz_max : (tex.z_local_max - float(regz)));
+        if (!onscreen) {
+            ++stats.draw_offscreen;
+            return;       // <-- BUG FIX: was falling through and submitting
         }
-        const bool onscreen = !(dx + tex.w <= 0 || dy + tex.h <= 0 || dx >= ctx.vw || dy >= ctx.vh);
-        if (!onscreen) ++stats.draw_offscreen;
-        else if (ctx.cov)
+        if (ctx.cov)
         {
             int32_t cx0 = dx / ctx.cov_cell_px; if (cx0 < 0) cx0 = 0;
             int32_t cy0 = dy / ctx.cov_cell_px; if (cy0 < 0) cy0 = 0;
@@ -613,14 +745,24 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                     (*ctx.cov)[size_t(cy) * size_t(ctx.cov_cw) + size_t(cx)] = 1;
         }
         ++stats.draw_submitted;
-        if (oi->IsLight())
+        if (oi->IsLight() || oi->ObjClass() == OBJCLASS_EFFECT)
         {
+            float light_sx = float(sp.x);
+            float light_sy = float(sp.y);
+            ProjectCameraRelToScreen(ctx, rel, light_sx, light_sy);
+            float overlay_scale = 1.0f;
+            if (ctx.perspective_camera)
+            {
+                const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
+                const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
+                overlay_scale = focal_zoom / z;
+            }
             SOverlaySubmit sub = {};
             sub.color_img = tex.color;
-            sub.dst_x = dx;
-            sub.dst_y = dy;
-            sub.dst_w = tex.w;
-            sub.dst_h = tex.h;
+            sub.dst_x = int32_t(std::lround(light_sx - float(regx) * overlay_scale)) + ctx.cam_ox;
+            sub.dst_y = int32_t(std::lround(light_sy - float(regy) * overlay_scale)) + ctx.cam_oy;
+            sub.dst_w = (std::max)(1, int32_t(std::lround(float(tex.w) * overlay_scale)));
+            sub.dst_h = (std::max)(1, int32_t(std::lround(float(tex.h) * overlay_scale)));
             Renderer->SubmitOverlay(sub);
             return;
         }
@@ -640,7 +782,10 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         sub.anchor_px_x = float(regx);
         sub.anchor_px_y = float(regy);
         sub.zraw_to_wu  = ctx.depth_mul;
+        sub.zraw_min    = tex.z_local_min;
+        sub.zraw_max    = tex.z_local_max;
         sub.sort_depth  = anchor_scene;
+        sub.obj_id      = obj_id;
         if (tex.has_alpha)
             Renderer->SubmitTransparentTile(sub);
         else
@@ -648,31 +793,75 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         return;
     }
 
+    if (kind == ESectorDrawableKind::Billboard)
+    {
+        if (!billboard_img.id) return;
+        const S3DPoint rel = world_pos - ctx.sectorCameraWorld;
+        float sx = 0.0f, sy = 0.0f;
+        ProjectCameraRelToScreen(ctx, rel, sx, sy);
+        float overlay_scale = 1.0f;
+        if (ctx.perspective_camera)
+        {
+            const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
+            const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
+            overlay_scale = focal_zoom / z;
+        }
+        const int32_t w = (std::max)(1, int32_t(std::lround(billboard_w * overlay_scale)));
+        const int32_t h = (std::max)(1, int32_t(std::lround(billboard_h * overlay_scale)));
+        SOverlaySubmit sub = {};
+        sub.color_img = billboard_img;
+        sub.dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
+        sub.dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
+        sub.dst_w = w;
+        sub.dst_h = h;
+        sub.src_x = billboard_src_x;
+        sub.src_y = billboard_src_y;
+        sub.src_w = billboard_src_w;
+        sub.src_h = billboard_src_h;
+        sub.src_tex_w = billboard_tex_w;
+        sub.src_tex_h = billboard_tex_h;
+        sub.additive_blend = billboard_additive;
+        Renderer->SubmitOverlay(sub);
+        ++stats.draw_submitted;
+        return;
+    }
+
     if (kind == ESectorDrawableKind::Mesh)
     {
         if (!ctx.show_meshes || !ctx.mesh_assets) return;
         if (!ctx.show_gizmos && (oi->IsLight() || oi->ObjClass() == OBJCLASS_HELPER)) return;
+        if (IsLegacyFlameEffect(oi))
+        {
+            if (ctx.logged_suppressed_legacy_flame_mesh)
+                *ctx.logged_suppressed_legacy_flame_mesh = true;
+            return;
+        }
         if ((uint32_t)asset_idx >= (uint32_t)ctx.mesh_assets->size()) { ++stats.mesh_skipped; return; }
         TObjectImagery* img = oi->GetImagery();
         T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img);
         if (!meshimg) { ++stats.mesh_skipped; return; }
+
+        // Cheap viewport cull: project the mesh anchor to screen pixels
+        // and skip if it's well outside the viewport. Margin of ~256 px
+        // covers tall/wide meshes whose bounds extend past the anchor.
+        {
+            const S3DPoint mesh_world  = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            const S3DPoint rel = mesh_world - mesh_camera;
+            S3DPoint sp; WorldToScreen(rel, sp.x, sp.y);
+            const int32_t px = sp.x + ctx.cam_ox;
+            const int32_t py = sp.y + ctx.cam_oy;
+            constexpr int32_t kMargin = 256;
+            if (px + kMargin <= 0 || py + kMargin <= 0 ||
+                px - kMargin >= ctx.vw || py - kMargin >= ctx.vh)
+            {
+                ++stats.mesh_skipped;
+                return;
+            }
+        }
         const SSectorMeshAsset& asset = (*ctx.mesh_assets)[asset_idx];
         if (state < 0 || state >= meshimg->NumStates() || meshimg->IsHidden(asset.objnum, state))
         {
-            // Persistent (session-lifetime) diagnostic gate. SMapRenderStats
-            // is rebuilt per frame; using its counter here means logging
-            // every frame and choking the frame budget.
-            static int s_char_mesh_skip_logged = 0;
-            if (oi->IsCharacter() && s_char_mesh_skip_logged < 12)
-            {
-                log_info("[sector] char mesh skip %d '%s' type='%s' pos=(%d,%d,%d) state=%d frame=%d obj=%d tex=%d numstates=%d hidden=%d",
-                    s_char_mesh_skip_logged,
-                    oi->GetClassName(), oi->GetTypeName(),
-                    world_pos.x, world_pos.y, world_pos.z,
-                    state, frame, asset.objnum, asset.texslot, meshimg->NumStates(),
-                    (state >= 0 && state < meshimg->NumStates()) ? (meshimg->IsHidden(asset.objnum, state) ? 1 : 0) : -1);
-                ++s_char_mesh_skip_logged;
-            }
             ++stats.mesh_skipped;
             return;
         }
@@ -703,75 +892,6 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(world_renderer, scaled_world, sizeof(world_renderer));
         }
 
-        // Persistent (session-lifetime) gate. See note on s_char_mesh_skip_logged.
-        static int s_char_mesh_logged = 0;
-        if (oi->IsCharacter() && s_char_mesh_logged < 16)
-        {
-            S3DPoint sp;
-            const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint rel = mesh_world - mesh_camera;
-            WorldToScreen(rel, sp.x, sp.y);
-            sp.z = int32_t(MapRendererCameraDepth(rel));
-            float anim_t0 = 0.0f, anim_t1 = 0.0f, anim_t2 = 0.0f;
-            bool key_ok = false;
-            hmm_vec3 key_pos = {}, key_rot = {}, key_scl = {};
-            if (auto* animator = dynamic_cast<T3DAnimator*>(oi->GetAnimator()))
-            {
-                hmm_mat4 anim_local = {};
-                if (animator->GetObjectMatrix(asset.objnum, &anim_local))
-                {
-                    float anim_renderer[16];
-                    TransposeSourceToRenderer(anim_local, anim_renderer);
-                    anim_t0 = anim_renderer[3];
-                    anim_t1 = anim_renderer[7];
-                    anim_t2 = anim_renderer[11];
-                }
-            }
-            key_ok = meshimg->GetUninterpolatedAniKey(asset.objnum, state, frame, key_pos, key_rot, key_scl);
-            log_info("[sector] char mesh %d '%s' type='%s' pos=(%d,%d,%d) zfix=%.2f screen=(%d,%d,%d) state=%d frame=%d obj=%d tex=%d pose=%s root_t=(%.2f,%.2f,%.2f) local_t=(%.2f,%.2f,%.2f) world_t=(%.2f,%.2f,%.2f)",
-                s_char_mesh_logged,
-                oi->GetClassName(), oi->GetTypeName(),
-                world_pos.x, world_pos.y, world_pos.z,
-                FIX_Z_VALUE(world_pos.z),
-                sp.x + ctx.cam_ox, sp.y + ctx.cam_oy, sp.z,
-                state, frame, asset.objnum, asset.texslot,
-                ctx.force_mesh_preview_pose ? "forced_0_0" : (pose_key_ok ? "live" : "fallback_0_0"),
-                root_renderer[3], root_renderer[7], root_renderer[11],
-                local_renderer[3], local_renderer[7], local_renderer[11],
-                world_renderer[3], world_renderer[7], world_renderer[11]);
-            log_info("[sector] char mesh animator %d '%s' type='%s' obj=%d anim_local_t=(%.2f,%.2f,%.2f)",
-                s_char_mesh_logged,
-                oi->GetClassName(), oi->GetTypeName(),
-                asset.objnum, anim_t0, anim_t1, anim_t2);
-            log_info("[sector] char mesh key %d '%s' type='%s' obj=%d ok=%d len=%d pos=(%.2f,%.2f,%.2f) rot=(%.2f,%.2f,%.2f) scl=(%.2f,%.2f,%.2f)",
-                s_char_mesh_logged,
-                oi->GetClassName(), oi->GetTypeName(),
-                asset.objnum, key_ok ? 1 : 0, meshimg->GetAniLength(state),
-                key_pos.X, key_pos.Y, key_pos.Z,
-                key_rot.X, key_rot.Y, key_rot.Z,
-                key_scl.X, key_scl.Y, key_scl.Z);
-            ++s_char_mesh_logged;
-        }
-
-        // Persistent (session-lifetime) gate. See note on s_char_mesh_skip_logged.
-        static int s_mesh_project_logged = 0;
-        if (s_mesh_project_logged < 12)
-        {
-            S3DPoint sp;
-            const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint rel = mesh_world - mesh_camera;
-            WorldToScreen(rel, sp.x, sp.y);
-            sp.z = int32_t(MapRendererCameraDepth(rel));
-            log_info("[sector] mesh sample %d '%s' pos=(%d,%d,%d) screen=(%d,%d,%d) state=%d frame=%d asset(obj=%d tex=%d)",
-                     s_mesh_project_logged, oi->GetClassName(),
-                     world_pos.x, world_pos.y, world_pos.z,
-                     sp.x + ctx.cam_ox, sp.y + ctx.cam_oy, sp.z,
-                     state, frame, asset.objnum, asset.texslot);
-            ++s_mesh_project_logged;
-        }
-
         if (oi->ObjClass() == OBJCLASS_HELPER)
         {
             const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
@@ -785,7 +905,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(m.specular, asset.specular, sizeof(m.specular));
             std::memcpy(m.emissive, asset.emissive, sizeof(m.emissive));
             m.power = asset.power;
-            m.sort_depth = MapRendererCameraDepth(mesh_world - mesh_camera);
+            m.sort_depth = CameraDepth(mesh_world - mesh_camera, ctx.cam_forward);
             Renderer->SubmitHelperMesh(m);
         }
         else
@@ -794,6 +914,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             m.mesh = asset.handle;
             std::memcpy(m.world, world_renderer, sizeof(m.world));
             m.tint[0] = m.tint[1] = m.tint[2] = m.tint[3] = 1.0f;
+            m.obj_id = obj_id;
             Renderer->SubmitMesh(m);
         }
         ++stats.mesh_submitted;
@@ -802,6 +923,287 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
 
 TMapRenderer::TMapRenderer() : impl(std::make_unique<Impl>()) {}
 TMapRenderer::~TMapRenderer() = default;
+
+float TMapRenderer::Impl::sectorCameraForward(int32_t viewport_h) const
+{
+    if (!sectorPerspectiveCamera || viewport_h <= 0)
+        return kMapRendererCamForwardWU;
+    float fov = sectorPerspectiveFovDeg;
+    if (fov < 2.0f) fov = 2.0f;
+    if (fov > 20.0f) fov = 20.0f;
+    constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
+    const float half_fov = fov * 0.5f * kDegToRad;
+    const float t = std::tan(half_fov);
+    return t > 1.0e-5f ? (float(viewport_h) * 0.5f) / t : kMapRendererCamForwardWU;
+}
+
+void TMapRenderer::Impl::sectorProjectWorldForViewport(const S3DPoint& world,
+                                                       int32_t viewport_h,
+                                                       S3DPoint& screen) const
+{
+    const S3DPoint rel = sectorCameraRel(world);
+    WorldToScreen(rel, screen.x, screen.y);
+    const float scene_z = sectorCameraDepth(rel, viewport_h);
+    screen.z = int32_t(scene_z);
+    if (!sectorPerspectiveCamera)
+        return;
+
+    const float focal_zoom = (std::max)(sectorCameraForward(viewport_h) * sectorCameraZoom, 1.0f);
+    const float z = (std::max)(scene_z, 1.0f);
+    screen.x = int32_t(std::lround(float(screen.x) * focal_zoom / z));
+    screen.y = int32_t(std::lround(float(screen.y) * focal_zoom / z));
+}
+
+void TMapRenderer::GetLoadedSectors(std::vector<TSector*>& out) const
+{
+    out.clear();
+    if (!impl) return;
+    out.reserve(impl->sectorsKept.size());
+    for (TSector* s : impl->sectorsKept)
+        if (s) out.push_back(s);
+}
+
+int32_t TMapRenderer::CameraLevel() const
+{
+    return impl ? impl->cameraLevel : 0;
+}
+
+TSector* TMapRenderer::FindLoadedSector(int32_t level, int32_t sector_x, int32_t sector_y) const
+{
+    if (!impl) return nullptr;
+    for (TSector* s : impl->sectorsKept)
+        if (s && s->SectorLevel() == level
+              && s->SectorX() == sector_x
+              && s->SectorY() == sector_y)
+            return s;
+    return nullptr;
+}
+
+void TMapRenderer::SyncContentsCache()
+{
+    if (!impl) return;
+    Impl& s = *impl;
+
+    // Sum of ContentVer() across loaded sectors. Cheap to compute, and
+    // monotonic per-sector — any Add/Remove/Set in any sector advances
+    // the sum, even if mutations cancel out object-count-wise. (See
+    // memory/feedback_versions_over_flags.md on why versions over
+    // dirty flags: a skipped read can never miss a click.)
+    int64_t cur_sum = 0;
+    for (TSector* sec : s.sectorsKept)
+        if (sec) cur_sum += sec->ContentVer();
+    if (cur_sum == s.lastSyncedSectorVerSum) return;
+    s.lastSyncedSectorVerSum = cur_sum;
+
+    // V1: rebuild tile drawables only. Mesh/light entries stay stale
+    // until full sector reload (a separate inch). Tile path covers
+    // the editor's current paste/duplicate test cases.
+    //
+    // Strategy: drop existing tile entries from sectorDrawInst and
+    // rebuild from sectorsKept. Reuse the cached sectorTileTex (keyed
+    // by bm pointer) — instances whose imagery isn't already cached
+    // are skipped, with a one-shot warning log.
+    std::vector<SSectorDrawableInst> rebuilt;
+    rebuilt.reserve(s.sectorDrawInst.size());
+
+    // Keep non-tile entries verbatim (mesh, etc.). They go stale on
+    // mutation but at least don't disappear after a paste.
+    int32_t kept_non_tile = 0;
+    for (const auto& d : s.sectorDrawInst) {
+        if (d.kind != ESectorDrawableKind::Tile) {
+            rebuilt.push_back(d);
+            ++kept_non_tile;
+        }
+    }
+
+    int32_t tile_skipped_no_cache = 0;
+    int32_t tile_rebuilt = 0;
+    for (TSector* sec : s.sectorsKept) {
+        if (!sec) continue;
+        for (int32_t i = 0; i < sec->NumItems(); ++i) {
+            TObjectInstance* oi = sec->GetInstance(i);
+            if (!oi) continue;
+            if (oi->ObjClass() != OBJCLASS_TILE) continue;
+
+            TObjectImagery* img = oi->GetImagery();
+            if (!img) continue;
+            SImageryHeader* hdr = img->GetHeader();
+            SImageryBody*   body = img->GetBody();
+            if (!hdr || !body) continue;
+            if (hdr->imageryid != OBJIMAGE_ANIMATION) continue;
+            const int32_t st = oi->GetState();
+            if (st < 0 || st >= hdr->numstates) continue;
+            auto* ab = (SAnimImageryBody*)body;
+            PTBitmap bm = (TBitmap*)ab->states[st].still;
+            if (!bm) continue;
+
+            // Look up cached texture. Skip if not present (caller
+            // would need a full reload to register a new bitmap).
+            int32_t tex_idx = -1;
+            for (size_t t = 0; t < s.sectorTileTex.size(); ++t)
+                if (s.sectorTileTex[t].bm_key == bm) { tex_idx = (int32_t)t; break; }
+            if (tex_idx < 0) { ++tile_skipped_no_cache; continue; }
+
+            SSectorDrawableInst winst = {};
+            winst.kind = ESectorDrawableKind::Tile;
+            winst.asset_idx = tex_idx;
+            winst.world_pos = oi->Pos();
+            winst.regx = img->GetRegX(st);
+            winst.regy = img->GetRegY(st);
+            winst.regz = img->GetRegZ(st);
+            winst.src = TSafeRef<>(oi);
+            winst.debug_sector_level = sec->SectorLevel();
+            winst.debug_sector_x = sec->SectorX();
+            winst.debug_sector_y = sec->SectorY();
+            winst.debug_sector_slot = i;
+            int32_t wwidth = 0, wlength = 0, wheight = 0;
+            img->GetWorldBoundBox(st, wwidth, wlength, wheight);
+            winst.wwidth = wwidth; winst.wlength = wlength; winst.wheight = wheight;
+            winst.wregx = img->GetWorldRegX(st);
+            winst.wregy = img->GetWorldRegY(st);
+            winst.wregz = img->GetWorldRegZ(st);
+            ComputeAuthoredLocalDepthRange(wwidth, wlength, wheight,
+                                           winst.wregx, winst.wregy, winst.wregz,
+                                           winst.has_authored_local_dz,
+                                           winst.authored_local_dz_min,
+                                           winst.authored_local_dz_max);
+            rebuilt.push_back(winst);
+            ++tile_rebuilt;
+        }
+    }
+
+    s.sectorDrawInst = std::move(rebuilt);
+    s.rebuildBins();
+
+    log_info("[mr-sync] tile rebuild: kept_mesh=%d tile=%d skipped(no cache)=%d  ver_sum=%lld",
+             kept_non_tile, tile_rebuilt, tile_skipped_no_cache, (long long)cur_sum);
+}
+
+void TMapRenderer::SetCameraWorld(int32_t level, int32_t world_x, int32_t world_y, int32_t world_z)
+{
+    if (!impl) return;
+    Impl& s = *impl;
+    s.cameraLevel        = level;
+    s.sectorCameraWorld  = S3DPoint{ world_x, world_y, world_z };
+}
+
+void TMapRenderer::SetSunShadowEnabled(bool enable) { if (impl) impl->sun_shadow = enable; }
+bool TMapRenderer::SunShadowEnabled() const         { return impl ? impl->sun_shadow : false; }
+
+TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
+{
+    SDrawCounts out;
+    if (!impl) return out;
+    out.total_drawables  = impl->last_draw_counts.total_drawables;
+    out.tiles_submitted  = impl->last_draw_counts.tiles_submitted;
+    out.meshes_submitted = impl->last_draw_counts.meshes_submitted;
+    out.offscreen_culled = impl->last_draw_counts.offscreen_culled;
+    return out;
+}
+
+TObjectInstance* TMapRenderer::InstanceFromDrawId(uint32_t obj_id) const
+{
+    if (!impl) return nullptr;
+    const uint32_t raw = obj_id & kObjIdMask;
+    if (raw == 0) return nullptr;
+    const uint32_t idx = raw - 1u;
+    if (idx >= impl->sectorDrawInst.size()) return nullptr;
+    return impl->sectorDrawInst[idx].src.Get();
+}
+
+uint32_t TMapRenderer::DrawIdForInstance(TObjectInstance* oi) const
+{
+    if (!impl || !oi) return 0;
+    const auto& v = impl->sectorDrawInst;
+    for (size_t i = 0; i < v.size(); ++i)
+        if (v[i].src.Get() == oi) return uint32_t(i) + 1u;
+    return 0;
+}
+
+void TMapRenderer::SetSelectedMapIndices(const std::vector<int32_t>& indices)
+{
+    if (!impl) return;
+    impl->selectedMapIndices.clear();
+    impl->selectedMapIndices.reserve(indices.size());
+    for (int32_t i : indices) if (i >= 0) impl->selectedMapIndices.insert(i);
+}
+
+bool TMapRenderer::IsMapIndexSelected(int32_t mapindex) const
+{
+    if (!impl || mapindex < 0) return false;
+    return impl->selectedMapIndices.count(mapindex) != 0;
+}
+
+// ---------------------------------------------------------------------------
+// Iso view + projection matrices that reproduce WorldToScreen exactly.
+//
+// Revenant's iso projection (object.cpp WorldToScreen):
+//     screen.x =  wx -  wy
+//     screen.y = (wx + wy)/2 - wz * 0.867       (image-space Y is +DOWN)
+//
+// In standard 3D terms this is an orthographic camera with:
+//     world right  -> screen +X        (camera_right_world = (1,-1,0)/sqrt(2))
+//     world up_iso -> screen -Y (up)   (camera_up_world    = (-0.5,-0.5,0.866)/1.118)
+//     look (cam->scene) = -cross(right, up_iso)
+//
+// We solve the camera-position offset so HMM_LookAt produces those basis
+// vectors when handed an up-hint of world +Z.
+// ---------------------------------------------------------------------------
+void TMapRenderer::GetViewProj(float view_out[16], float proj_out[16],
+                               int32_t vp_w, int32_t vp_h) const
+{
+    if (!impl || vp_w <= 0 || vp_h <= 0) return;
+    const Impl& s = *impl;
+
+    // Camera offset direction such that HMM_LookAt with world-Z up gives
+    // exactly the iso right / up basis. Magnitudes derived in the comment
+    // above; D is arbitrary for an ortho camera, just pick something
+    // bigger than the scene depth.
+    // For HMM_LookAt(eye, target, up_z) to give the basis that matches
+    // Revenant's iso (right_world=(1,-1,0)/√2, up_world=(-0.5,-0.5,0.866)/1.118),
+    // forward must be (+0.5477, +0.5477, +0.6324). So eye is target -
+    // forward*D = target + (-0.5477, -0.5477, -0.6324)*D. Earlier the
+    // Z sign was flipped, which silently inverted the screen-Y axis --
+    // overlays drew with world+Z going down instead of up.
+    constexpr float kOffX  = -0.5477f;
+    constexpr float kOffY  = -0.5477f;
+    constexpr float kOffZ  = -0.6324f;
+    constexpr float D      = 100000.0f;
+
+    const hmm_vec3 target = HMM_Vec3(float(s.sectorCameraWorld.x),
+                                     float(s.sectorCameraWorld.y),
+                                     float(s.sectorCameraWorld.z));
+    const hmm_vec3 eye    = HMM_Vec3(target.X + kOffX * D,
+                                     target.Y + kOffY * D,
+                                     target.Z + kOffZ * D);
+    const hmm_vec3 up_h   = HMM_Vec3(0.0f, 0.0f, 1.0f);
+
+    const hmm_mat4 view = HMM_LookAt(eye, target, up_h);
+
+    // After the orthonormal view, screen X = view_x * sqrt(2),
+    //                              screen Y = view_y * 1/0.8944 (=1.1180).
+    // To get NDC ∈ [-1,1] across the full pixel viewport:
+    //   ortho.left/right = ±(vp_w/2) / sqrt(2)
+    //   ortho.bot/top    = ±(vp_h/2) * 0.8944
+    constexpr float kInvSqrt2  = 0.7071068f;
+    constexpr float kIsoUpNorm = 0.8944272f;  // 1 / 1.118
+    // Mirror the renderer's `zoom` so editor overlays (bbox / axis /
+    // ImGuizmo) project to the same pixels as the rendered scene. The
+    // shader path multiplies S/T by zoom; in matrix form that's a 1/zoom
+    // shrink of the ortho half-extents.
+    const float zoom = (s.sectorCameraZoom > 1e-4f) ? s.sectorCameraZoom : 1.0f;
+    const float half_w = (float(vp_w) * 0.5f * kInvSqrt2) / zoom;
+    const float half_h = (float(vp_h) * 0.5f * kIsoUpNorm) / zoom;
+    const hmm_mat4 proj = HMM_Orthographic(-half_w, half_w,
+                                           -half_h, half_h,
+                                           -D * 2.0f, D * 2.0f);
+    // TODO: when sectorPerspectiveCamera is on, build a true perspective
+    // matrix so ImGuizmo lands on the same pixels. Ortho path covers the
+    // common case for now.
+
+    std::memcpy(view_out, &view, sizeof(view));
+    std::memcpy(proj_out, &proj, sizeof(proj));
+}
 
 void TMapRenderer::GetCameraStatus(int32_t& level, int32_t& sector_x, int32_t& sector_y,
                                    int32_t& world_x, int32_t& world_y, int32_t& world_z) const
@@ -881,23 +1283,16 @@ bool TMapRenderer::InitializeFromStartupArgs()
             sx_min = (std::min)(sx_min, c.sx); sx_max = (std::max)(sx_max, c.sx);
             sy_min = (std::min)(sy_min, c.sy); sy_max = (std::max)(sy_max, c.sy);
         }
-        log_info("[sector] level %d scan: %zu sectors x=[%d..%d] y=[%d..%d] focus=%d_%d",
-            keep_lvl, load_coords.size(), sx_min, sx_max, sy_min, sy_max, keep_sx, keep_sy);
     }
 
     for (const auto& coord : load_coords)
     {
         const int32_t sx = coord.sx, sy = coord.sy;
-        log_info("[sector] -> loading %d_%d_%d", keep_lvl, sx, sy);
         TSector* sec = TSector::LoadSector(keep_lvl, sx, sy, false);
         if (!sec) {
             log_warn("[sector] %d_%d_%d: LoadSector failed", keep_lvl, sx, sy);
             continue;
         }
-        log_info("[sector] <- %d_%d_%d: %d objects (lights=%d anim=%d)",
-            keep_lvl, sx, sy, sec->NumItems(),
-            sec->NumObjSetItems(OBJSET_LIGHTS),
-            sec->NumObjSetItems(OBJSET_ANIMATE));
         loaded_obj_total += sec->NumItems();
         loaded_light_total += sec->NumObjSetItems(OBJSET_LIGHTS);
         loaded_anim_total += sec->NumObjSetItems(OBJSET_ANIMATE);
@@ -920,14 +1315,6 @@ bool TMapRenderer::InitializeFromStartupArgs()
         loaded_sy_min = (std::min)(loaded_sy_min, L.sy);
         loaded_sy_max = (std::max)(loaded_sy_max, L.sy);
     }
-    log_info("[sector] load summary: sectors=%zu/%zu objects=%d lights=%d anim=%d x=[%d..%d] y=[%d..%d]",
-        loaded.size(), load_coords.size(),
-        loaded_obj_total, loaded_light_total, loaded_anim_total,
-        loaded_sx_min, loaded_sx_max, loaded_sy_min, loaded_sy_max);
-    log_info("[sector] LoadObject buckets: ok=%d placeholder_objver=%d placeholder_class=%d bad_class=%d bad_type=%d new_obj_fail=%d corrupt_drop=%d nonmap_drop=%d",
-        g_loadObjOk, g_loadObjNullObjVerNeg, g_loadObjNullClassNeg,
-        g_loadObjNullBadClass, g_loadObjNullBadType, g_loadObjNullNewObjFail,
-        g_loadObjNullCorruptDrop, g_loadObjNullNonMapDrop);
 
     struct SCharacterCensusSample
     {
@@ -984,18 +1371,9 @@ bool TMapRenderer::InitializeFromStartupArgs()
             }
         }
     }
-    log_info("[sector] character census: live_players=%d live_characters=%d mesh=%d anim=%d sample_count=%zu",
-        live_players, live_characters, live_character_meshes, live_character_anims, census_samples.size());
     for (size_t i = 0; i < census_samples.size(); ++i)
     {
         const auto& sample = census_samples[i];
-        log_info("[sector] character sample %zu: sector=%d_%d_%d class=%d '%s' type='%s' name='%s' pos=(%d,%d,%d) state=%d frame=%d imagery=%d",
-            i, sample.lvl, sample.sx, sample.sy, sample.objclass,
-            sample.cls ? sample.cls : "(null)",
-            sample.type ? sample.type : "(null)",
-            sample.name ? sample.name : "(null)",
-            sample.pos.x, sample.pos.y, sample.pos.z,
-            sample.state, sample.frame, sample.imageryid);
     }
 
     std::vector<SSectorDrawableInst> draw_work;
@@ -1014,8 +1392,6 @@ bool TMapRenderer::InitializeFromStartupArgs()
                 ++no_img;
                 if (oi->IsCharacter() && char_no_drawable_logged < 64)
                 {
-                    log_info("[sector] char no drawable '%s' name='%s' sector=%d_%d_%d reason=no_imagery state=%d frame=%d",
-                        oi->GetTypeName(), oi->GetName(), L.lvl, L.sx, L.sy, oi->GetState(), oi->GetFrame());
                     ++char_no_drawable_logged;
                 }
                 continue;
@@ -1026,13 +1402,38 @@ bool TMapRenderer::InitializeFromStartupArgs()
                 ++no_body;
                 if (oi->IsCharacter() && char_no_drawable_logged < 64)
                 {
-                    log_info("[sector] char no drawable '%s' name='%s' sector=%d_%d_%d reason=no_body hdr=%p body=%p state=%d frame=%d",
-                        oi->GetTypeName(), oi->GetName(), L.lvl, L.sx, L.sy, (void*)hdr, (void*)body, oi->GetState(), oi->GetFrame());
                     ++char_no_drawable_logged;
                 }
                 continue;
             }
             const int32_t st = oi->GetState();
+
+            if (auto* flipbook = oi->GetComponent<TFlipbookBillboardComponent>())
+            {
+                SSectorDrawableInst billboard = {};
+                billboard.kind = ESectorDrawableKind::Billboard;
+                billboard.world_pos = oi->Pos();
+                billboard.state = st;
+                billboard.frame = oi->GetFrame();
+                billboard.src = TSafeRef<>(oi);
+                billboard.billboard_img = flipbook->Image();
+                billboard.billboard_tex_w = flipbook->TextureWidth();
+                billboard.billboard_tex_h = flipbook->TextureHeight();
+                billboard.billboard_src_x = flipbook->SourceX();
+                billboard.billboard_src_y = flipbook->SourceY();
+                billboard.billboard_src_w = flipbook->SourceWidth();
+                billboard.billboard_src_h = flipbook->SourceHeight();
+                billboard.billboard_w = flipbook->Width();
+                billboard.billboard_h = flipbook->Height();
+                billboard.billboard_additive = flipbook->AdditiveBlend();
+                billboard.debug_sector_level = L.lvl;
+                billboard.debug_sector_x = L.sx;
+                billboard.debug_sector_y = L.sy;
+                billboard.debug_sector_slot = i;
+                draw_work.push_back(billboard);
+                if (flipbook->ReplacesDefaultVisual())
+                    continue;
+            }
 
             if (hdr->imageryid == OBJIMAGE_MESH3D)
             {
@@ -1043,10 +1444,24 @@ bool TMapRenderer::InitializeFromStartupArgs()
                     ++bad_state;
                     if (oi->IsCharacter() && char_no_drawable_logged < 64)
                     {
-                        log_info("[sector] char no drawable '%s' name='%s' sector=%d_%d_%d reason=bad_state state=%d frame=%d numstates=%d",
-                            oi->GetTypeName(), oi->GetName(), L.lvl, L.sx, L.sy, st, oi->GetFrame(), hdr->numstates);
                         ++char_no_drawable_logged;
                     }
+                    continue;
+                }
+                if (IsLegacyFlameEffect(oi))
+                {
+                    SSectorDrawableInst flame = {};
+                    flame.kind = ESectorDrawableKind::FlameDebug;
+                    flame.world_pos = oi->Pos();
+                    flame.state = st;
+                    flame.frame = oi->GetFrame();
+                    flame.src = TSafeRef<>(oi);
+                    flame.debug_sector_level = L.lvl;
+                    flame.debug_sector_x = L.sx;
+                    flame.debug_sector_y = L.sy;
+                    flame.debug_sector_slot = i;
+                    draw_work.push_back(flame);
+                    ++mesh_slots_kept;
                     continue;
                 }
 
@@ -1155,15 +1570,6 @@ bool TMapRenderer::InitializeFromStartupArgs()
                                     asset.emissive[2] = mat.matdesc.emissive.b;
                                     asset.emissive[3] = mat.matdesc.emissive.a;
                                     asset.power = mat.matdesc.power;
-                                    static int32_t s_helper_asset_log_count = 0;
-                                    if (s_helper_asset_log_count < 24)
-                                    {
-                                        log_info("[sector] helper asset obj=%d name='%s' texslot=%d mat=%d mat_tex=%d htex=%u albedo_id=%u diff=(%.2f,%.2f,%.2f,%.2f)",
-                                                 objnum, o.name, texslot, o.material, mat.texture,
-                                                 (unsigned)mat.matdesc.hTexture, (unsigned)albedo.id,
-                                                 asset.diffuse[0], asset.diffuse[1], asset.diffuse[2], asset.diffuse[3]);
-                                        ++s_helper_asset_log_count;
-                                    }
                                 }
                             }
                             asset_idx = (int32_t)s.sectorMeshAsset.size();
@@ -1271,18 +1677,8 @@ bool TMapRenderer::InitializeFromStartupArgs()
                 }
                 if (oi->IsCharacter() && mesh_slots_kept == kept_before && char_no_drawable_logged < 64)
                 {
-                    log_info("[sector] char no drawable '%s' name='%s' sector=%d_%d_%d reason=no_mesh_slots state=%d frame=%d numobjs=%d texslots=%d hidden_objs=%d extract_fail=%d empty_texslots=%d",
-                        oi->GetTypeName(), oi->GetName(), L.lvl, L.sx, L.sy,
-                        st, oi->GetFrame(), meshimg->NumObjects(), texslots, hidden_for_state, extract_fail, empty_texslots);
                     for (int32_t objdiag = 0; objdiag < meshimg->NumObjects() && objdiag < 4; ++objdiag)
                     {
-                        log_info("[sector]   obj[%d] '%s' verts=%d faces=%d parent=%d hidden=%d",
-                            objdiag,
-                            meshimg->GetObjectName(objdiag),
-                            meshimg->NumObjVerts(objdiag),
-                            meshimg->NumObjFaces(objdiag),
-                            meshimg->GetObjectParent(objdiag, st),
-                            meshimg->IsHidden(objdiag, st) ? 1 : 0);
                     }
                     if (meshimg->NumObjects() > 0)
                     {
@@ -1299,16 +1695,12 @@ bool TMapRenderer::InitializeFromStartupArgs()
                                     ++invalid0;
                             }
                             const auto& f0 = faces0[0];
-                            log_info("[sector]   obj[0] face sample nv=%d nf=%d invalid=%d first=(%u,%u,%u)",
-                                nv0, nf0, invalid0, (unsigned)f0.v1, (unsigned)f0.v2, (unsigned)f0.v3);
                             std::vector<SMeshVertex> diag_verts;
                             std::vector<uint16_t> diag_indices;
                             const bool direct_ok = ExtractSubMesh(meshimg, 0, diag_verts, diag_indices);
                             diag_verts.clear();
                             diag_indices.clear();
                             const bool slot0_ok = ExtractSubMeshTextureSlot(meshimg, 0, 0, diag_verts, diag_indices);
-                            log_info("[sector]   obj[0] extract sample numtex=%d direct_ok=%d slot0_ok=%d",
-                                meshimg->NumTextures(), direct_ok ? 1 : 0, slot0_ok ? 1 : 0);
                         }
                     }
                     ++char_no_drawable_logged;
@@ -1318,9 +1710,35 @@ bool TMapRenderer::InitializeFromStartupArgs()
 
             if (oi->IsCharacter() && char_no_drawable_logged < 64)
             {
-                log_info("[sector] char no drawable '%s' name='%s' sector=%d_%d_%d reason=non_mesh_imagery imageryid=%d state=%d frame=%d",
-                    oi->GetTypeName(), oi->GetName(), L.lvl, L.sx, L.sy, hdr->imageryid, st, oi->GetFrame());
                 ++char_no_drawable_logged;
+            }
+
+            if (oi->ObjClass() == OBJCLASS_EFFECT && hdr->imageryid == OBJIMAGE_ANIMATION)
+            {
+                TAnimImagery* anim_img = dynamic_cast<TAnimImagery*>(img);
+                PTAnimation anim = (anim_img && st >= 0 && st < anim_img->NumStates()) ? anim_img->GetAnimation(st) : nullptr;
+                PTBitmap bm = anim ? anim->GetFrame(oi->GetFrame()) : nullptr;
+                if (!bm) { ++no_still; continue; }
+
+                const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, bm, oi, img, st);
+                if (tex_idx < 0) { ++upload_fail; continue; }
+
+                SSectorDrawableInst einst = {};
+                einst.kind = ESectorDrawableKind::Tile;
+                einst.asset_idx = tex_idx;
+                einst.world_pos = oi->Pos();
+                // Legacy TAnimAnimator draws at WorldToScreen(pos) + animreg
+                // with DM_USEREG, which subtracts the frame bitmap reg point.
+                einst.regx = bm->regx - img->GetAnimRegX(st);
+                einst.regy = bm->regy - img->GetAnimRegY(st);
+                einst.regz = img->GetAnimRegZ(st);
+                einst.src = TSafeRef<>(oi);
+                einst.debug_sector_level = L.lvl;
+                einst.debug_sector_x = L.sx;
+                einst.debug_sector_y = L.sy;
+                einst.debug_sector_slot = i;
+                draw_work.push_back(einst);
+                continue;
             }
 
             if (oi->ObjClass() != OBJCLASS_TILE) continue;
@@ -1352,16 +1770,6 @@ bool TMapRenderer::InitializeFromStartupArgs()
                 t.pixel_count = t.w * t.h;
                 for (uint8_t opaque : t.cpu_opaque)
                     if (opaque) ++t.opaque_count;
-                static int32_t s_tile_alpha_log_count = 0;
-                if (s_tile_alpha_log_count < 40 && (t.has_alpha || (bm_flags & BM_ALPHA)))
-                {
-                    log_info("[sector] alpha tile class='%s' type='%s' flags=0x%X has_alpha=%d size=%dx%d zbuf=%d",
-                             t.debug_classname ? t.debug_classname : "?",
-                             t.debug_typename ? t.debug_typename : "?",
-                             bm_flags, t.has_alpha ? 1 : 0, t.w, t.h,
-                             (bm_flags & BM_ZBUFFER) ? 1 : 0);
-                    ++s_tile_alpha_log_count;
-                }
                 tex_idx = (int32_t)s.sectorTileTex.size();
                 t.bm_flags = bm_flags;
                 s.sectorTileTex.push_back(std::move(t));
@@ -1390,132 +1798,6 @@ bool TMapRenderer::InitializeFromStartupArgs()
             draw_work.push_back(winst);
         }
     }
-    log_info("[sector] tile scan: total=%d kept=%zu non_2d=%d drops: no_img=%d no_body=%d bad_state=%d no_still=%d upload_fail=%d",
-        total_tiles, size_t(total_tiles - non_2d - no_still - upload_fail), non_2d, no_img, no_body, bad_state, no_still, upload_fail);
-    log_info("[sector] mesh scan: total=%d kept=%zu hidden=%d upload_fail=%d cached_assets=%zu",
-        total_mesh_objs, size_t(mesh_slots_kept), mesh_hidden, mesh_upload_fail, s.sectorMeshAsset.size());
-    struct STerrainGridCell {
-        bool present = false;
-        const char* type = nullptr;
-        int32_t slot = -1;
-        int32_t z = 0;
-    };
-    struct STerrainGridSector {
-        STerrainGridCell cells[8][8];
-        int32_t terrain_count = 0;
-    };
-    std::unordered_map<int64_t, STerrainGridSector> terrain_grids;
-    for (const auto& L : loaded)
-    {
-        TSector* sec = L.sec;
-        if (!sec) continue;
-        STerrainGridSector& grid = terrain_grids[SectorBinKey(L.sx, L.sy)];
-        for (int32_t i = 0; i < sec->NumItems(); ++i)
-        {
-            TObjectInstance* oi = sec->GetInstance(i);
-            if (!oi || oi->ObjClass() != OBJCLASS_TILE)
-                continue;
-            const char* type = oi->GetTypeName();
-            if (!IsTerrainGridTileName(type))
-                continue;
-            const S3DPoint p = oi->Pos();
-            const int32_t lx = p.x - L.sx * SECTORWIDTH;
-            const int32_t ly = p.y - L.sy * SECTORHEIGHT;
-            const int32_t gx = (lx - 64 + 64) / 128;
-            const int32_t gy = (ly - 64 + 64) / 128;
-            if ((uint32_t)gx >= 8u || (uint32_t)gy >= 8u)
-                continue;
-            STerrainGridCell& cell = grid.cells[gy][gx];
-            if (!cell.present)
-            {
-                cell.present = true;
-                cell.type = type;
-                cell.slot = i;
-                cell.z = p.z;
-                ++grid.terrain_count;
-            }
-        }
-    }
-    int32_t terrain_hole_logs = 0;
-    for (const auto& entry : terrain_grids)
-    {
-        const int32_t sx = int32_t(entry.first >> 32);
-        const int32_t sy = int32_t(uint32_t(entry.first));
-        const STerrainGridSector& grid = entry.second;
-        if (grid.terrain_count < 12)
-            continue;
-        for (int32_t gy = 0; gy < 8; ++gy)
-        for (int32_t gx = 0; gx < 8; ++gx)
-        {
-            if (grid.cells[gy][gx].present)
-                continue;
-            int32_t neighbors = 0;
-            const char* sample_type = nullptr;
-            for (int32_t dy = -1; dy <= 1; ++dy)
-            for (int32_t dx = -1; dx <= 1; ++dx)
-            {
-                if (dx == 0 && dy == 0)
-                    continue;
-                const int32_t nx = gx + dx;
-                const int32_t ny = gy + dy;
-                if ((uint32_t)nx >= 8u || (uint32_t)ny >= 8u)
-                    continue;
-                if (grid.cells[ny][nx].present)
-                {
-                    ++neighbors;
-                    if (!sample_type)
-                        sample_type = grid.cells[ny][nx].type;
-                }
-            }
-            if (neighbors < 5)
-                continue;
-            log_info("[sector] terrain grid hole sector=%d_%d cell=(%d,%d) local=(%d,%d) world=(%d,%d) neighbors=%d near='%s'",
-                     sx, sy, gx, gy, gx * 128 + 64, gy * 128 + 64,
-                     sx * SECTORWIDTH + gx * 128 + 64,
-                     sy * SECTORHEIGHT + gy * 128 + 64,
-                     neighbors, sample_type ? sample_type : "?");
-            if (++terrain_hole_logs >= 128)
-                goto terrain_hole_done;
-        }
-    }
-terrain_hole_done:
-    log_info("[sector] terrain grid hole scan: sectors=%zu logged=%d",
-             terrain_grids.size(), terrain_hole_logs);
-    int32_t debug_slot_mismatch_logs = 0;
-    for (const auto& inst : draw_work)
-    {
-        if (inst.debug_sector_slot < 0)
-            continue;
-        TSector* sec = nullptr;
-        for (const auto& L : loaded)
-        {
-            if (L.lvl == inst.debug_sector_level &&
-                L.sx == inst.debug_sector_x &&
-                L.sy == inst.debug_sector_y)
-            {
-                sec = L.sec;
-                break;
-            }
-        }
-        if (!sec || inst.debug_sector_slot >= sec->NumItems())
-            continue;
-        TObjectInstance* oi = sec->GetInstance(inst.debug_sector_slot);
-        if (!oi)
-            continue;
-        const S3DPoint p = oi->Pos();
-        if (p.x == inst.world_pos.x && p.y == inst.world_pos.y && p.z == inst.world_pos.z)
-            continue;
-        log_warn("[sector] draw slot mismatch %d_%d_%d[%03d] raw='%s:%s' raw=(%d,%d,%d) draw=(%d,%d,%d) kind=%d",
-                 inst.debug_sector_level, inst.debug_sector_x, inst.debug_sector_y, inst.debug_sector_slot,
-                 oi->GetClassName() ? oi->GetClassName() : "?",
-                 oi->GetTypeName() ? oi->GetTypeName() : "?",
-                 p.x, p.y, p.z,
-                 inst.world_pos.x, inst.world_pos.y, inst.world_pos.z,
-                 int(inst.kind));
-        if (++debug_slot_mismatch_logs >= 64)
-            break;
-    }
-    log_info("[sector] draw slot mismatch scan: logged=%d", debug_slot_mismatch_logs);
     const int32_t focus_wx0 = (keep_sx - 1) * SECTORWIDTH;
     const int32_t focus_wx1 = (keep_sx + 2) * SECTORWIDTH;
     const int32_t focus_wy0 = (keep_sy - 1) * SECTORHEIGHT;
@@ -1592,8 +1874,6 @@ terrain_hole_done:
         {
             s.sectorCameraWorld.x = (startup_sector->wx_min + startup_sector->wx_max) / 2;
             s.sectorCameraWorld.y = (startup_sector->wy_min + startup_sector->wy_max) / 2;
-            log_info("[sector] startup occupied sector: %d_%d (%d tiles)",
-                startup_sector->sx, startup_sector->sy, startup_sector->count);
         }
         else
         {
@@ -1617,11 +1897,12 @@ terrain_hole_done:
     }
 
     float sz_min = FLT_MAX, sz_max = -FLT_MAX;
+    const float init_camera_forward = s.sectorCameraForward(th);
     for (const auto& w : draw_work)
     {
         const float camera_z = (w.kind == ESectorDrawableKind::Mesh)
-            ? MapRendererCameraDepth(s.sectorCameraRelMesh(w.world_pos))
-            : CameraDepth(w.world_pos - s.sectorCameraWorld);
+            ? CameraDepth(s.sectorCameraRelMesh(w.world_pos), init_camera_forward)
+            : CameraDepth(w.world_pos - s.sectorCameraWorld, init_camera_forward);
         float z0 = camera_z - 512.0f;
         float z1 = camera_z + 512.0f;
         if (w.kind == ESectorDrawableKind::Tile)
@@ -1649,13 +1930,6 @@ terrain_hole_done:
             s.sectorLights.push_back({ TSafeRef<>(oi), true });
         }
     }
-    log_info("[sector] built drawable list: %zu instances, %zu unique bitmaps",
-        s.sectorDrawInst.size(), s.sectorTileTex.size());
-    log_info("[sector] renderable summary: draw_instances=%zu unique_bitmaps=%zu mesh_assets=%zu point_lights=%zu",
-        s.sectorDrawInst.size(), s.sectorTileTex.size(), s.sectorMeshAsset.size(), s.sectorLights.size());
-    log_info("[sector]   startup focus bbox=%dx%d (%d tiles) scene_z=[%.0f..%.0f] wu  anchor=(%d,%d,%d)",
-        bw, bh, view_bounds.count, sz_min, sz_max,
-        s.sectorWorldCenter.x, s.sectorWorldCenter.y, s.sectorWorldCenter.z);
     DebugUI::RegisterContributor(this);
     return true;
 }
@@ -1669,6 +1943,8 @@ void TMapRenderer::Shutdown()
         if (t.depth.id) sg_destroy_image(t.depth);
     }
     s.sectorTileTex.clear();
+    s.dlightTexIdx = -1;
+    if (s.debugGreenImage.id) { sg_destroy_image(s.debugGreenImage); s.debugGreenImage = {}; }
     s.sectorDrawInst.clear();
     s.sectorDrawBins.clear();
     s.sectorMeshAsset.clear();
@@ -1683,7 +1959,14 @@ void TMapRenderer::Shutdown()
 void TMapRenderer::RenderFrame()
 {
     Impl& s = *impl;
-    if (!Display || !Display->BackBuffer() || s.sectorDrawInst.empty())
+    if (!Display || !Display->BackBuffer())
+        return;
+    // Reconcile per-instance drawable cache against current sector
+    // contents BEFORE the empty-cache early-return; otherwise an
+    // initial empty cache (or a paste from empty) never kicks the
+    // rebuild even when sectors have content.
+    SyncContentsCache();
+    if (s.sectorDrawInst.empty())
         return;
 
     const int64_t legacy_tick = TTime::LegacyFrameCount();
@@ -1727,7 +2010,26 @@ void TMapRenderer::RenderFrame()
         inst.world_pos = oi->Pos();
         inst.state = oi->GetState();
         inst.frame = oi->GetFrame();
-        if (inst.kind == ESectorDrawableKind::Tile)
+        if (oi->ObjClass() == OBJCLASS_EFFECT)
+        {
+            TObjectImagery* img = oi->GetImagery();
+            TAnimImagery* anim_img = dynamic_cast<TAnimImagery*>(img);
+            const int32_t st = oi->GetState();
+            PTAnimation anim = (anim_img && st >= 0 && st < anim_img->NumStates()) ? anim_img->GetAnimation(st) : nullptr;
+            PTBitmap bm = anim ? anim->GetFrame(oi->GetFrame()) : nullptr;
+            const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, bm, oi, img, st);
+            if (tex_idx >= 0)
+            {
+                inst.asset_idx = tex_idx;
+                if (img && bm)
+                {
+                    inst.regx = bm->regx - img->GetAnimRegX(st);
+                    inst.regy = bm->regy - img->GetAnimRegY(st);
+                    inst.regz = img->GetAnimRegZ(st);
+                }
+            }
+        }
+        if (inst.kind == ESectorDrawableKind::Tile && oi->ObjClass() != OBJCLASS_EFFECT)
         {
             if (TObjectImagery* img = oi->GetImagery())
             {
@@ -1738,9 +2040,9 @@ void TMapRenderer::RenderFrame()
             }
         }
     }
-
     const int32_t vw = Display->Width();
     const int32_t vh = Display->Height();
+    const float camera_forward = s.sectorCameraForward(vh);
     int32_t cam_ox = 0, cam_oy = 0;
     s.sectorCameraOriginScreen(cam_ox, cam_oy);
 
@@ -1749,14 +2051,14 @@ void TMapRenderer::RenderFrame()
     for (const auto& inst : s.sectorDrawInst)
     {
         const float camera_z = (inst.kind == ESectorDrawableKind::Mesh)
-            ? s.sectorCameraSceneZMesh(inst)
-            : s.sectorCameraSceneZ(inst);
+            ? s.sectorCameraSceneZMesh(inst, vh)
+            : s.sectorCameraSceneZ(inst, vh);
         float z0 = camera_z - 512.0f;
         float z1 = camera_z + 512.0f;
         if (inst.kind == ESectorDrawableKind::Tile)
         {
             const auto& tex = s.sectorTileTex[inst.asset_idx];
-            S3DPoint sp; s.sectorProjectWorld(inst.world_pos, sp);
+            S3DPoint sp; s.sectorProjectWorldForViewport(inst.world_pos, vh, sp);
             const int32_t x0 = sp.x - inst.regx + cam_ox, y0 = sp.y - inst.regy + cam_oy;
             const int32_t x1 = x0 + tex.w, y1 = y0 + tex.h;
             if (x1 <= 0 || y1 <= 0 || x0 >= vw || y0 >= vh) continue;
@@ -1820,13 +2122,6 @@ void TMapRenderer::RenderFrame()
         s.light_dir[1] = cam_x_light * RwY + cam_y_light * UwY + cam_z * FwY;
         s.light_dir[2] = cam_x_light * RwZ + cam_y_light * UwZ + cam_z * FwZ;
     }
-    if (!s.z_range_logged)
-    {
-        s.z_range_logged = true;
-        log_info("[sector] fixed z window [%.0f..%.0f] wu (visible scene=[%.0f..%.0f])",
-            s.z_near, s.z_far, scene_z_min_fit, scene_z_max_fit);
-    }
-
     // Global debug UI owns the ImGui shell; it will call DrawDebugTab() on
     // this renderer as a contributor.
 
@@ -1841,9 +2136,15 @@ void TMapRenderer::RenderFrame()
     Renderer->SetTileViewMode(s.view_mode);
     Renderer->SetLightingMode(s.lighting_mode);
     Renderer->SetSunShadow(s.sun_shadow, s.sun_shadow_step, s.sun_shadow_soft, s.sun_shadow_max);
+    Renderer->SetPerspectiveDebugMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveDebugMode : 0);
+    Renderer->SetPerspectiveRaycastParams(s.sectorPerspectiveSteps, s.sectorPerspectiveRefine);
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy), s.z_near, s.z_far,
                                       float(s.sectorCameraWorld.x), float(s.sectorCameraWorld.y),
-                                      kCamForwardWU, 0.0f);
+                                      camera_forward, s.sectorPerspectiveCamera ? 1.0f : 0.0f,
+                                      s.sectorCameraZoom,
+                                      s.sectorPerspectiveZOffset,
+                                      s.sectorPerspectiveZScale,
+                                      s.sectorPerspectiveTileScale);
 
     Renderer->ClearPointLights();
     if (s.lights_on)
@@ -1859,7 +2160,7 @@ void TMapRenderer::RenderFrame()
             const SSectorLight& L = s.sectorLights[i];
             if (!L.enabled) continue;
             const S3DPoint wp = s.sectorLightPos(L);
-            S3DPoint sp; s.sectorProjectWorld(wp, sp);
+            S3DPoint sp; s.sectorProjectWorldForViewport(wp, vh, sp);
             const int32_t sx = sp.x + cam_ox;
             const int32_t sy = sp.y + cam_oy;
             const float r_px = s.sectorLightRadius(L) * s.radius_mul;
@@ -1891,10 +2192,26 @@ void TMapRenderer::RenderFrame()
     Renderer->BeginTilePass(0.12f, 0.16f, 0.10f, 1.0f);
     static bool draw_stats_logged = false;
     S3DPoint c0, c1, c2, c3;
-    ScreenToWorld(-cam_ox - TRenderer::kGBufPad, -cam_oy - TRenderer::kGBufPad, c0, 0);
-    ScreenToWorld(vw - cam_ox + TRenderer::kGBufPad, -cam_oy - TRenderer::kGBufPad, c1, 0);
-    ScreenToWorld(-cam_ox - TRenderer::kGBufPad, vh - cam_oy + TRenderer::kGBufPad, c2, 0);
-    ScreenToWorld(vw - cam_ox + TRenderer::kGBufPad, vh - cam_oy + TRenderer::kGBufPad, c3, 0);
+    const float cull_zoom = s.sectorCameraZoom > 0.01f ? s.sectorCameraZoom : 1.0f;
+    float cull_scale = 1.0f / cull_zoom;
+    if (s.sectorPerspectiveCamera)
+    {
+        const float max_depth = (std::max)(camera_forward, s.debugSceneZMaxFit + 1024.0f);
+        const float focal_zoom = (std::max)(camera_forward * cull_zoom, 1.0f);
+        cull_scale = (std::max)(cull_scale, max_depth / focal_zoom);
+        cull_scale *= (std::max)(s.sectorPerspectiveTileScale, 1.0f);
+    }
+    auto unzoomScreen = [cull_scale](int32_t v) -> int32_t {
+        return int32_t(std::floor(float(v) * cull_scale));
+    };
+    ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
+                  unzoomScreen(-cam_oy - TRenderer::kGBufPad), c0, 0);
+    ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
+                  unzoomScreen(-cam_oy - TRenderer::kGBufPad), c1, 0);
+    ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
+                  unzoomScreen(vh - cam_oy + TRenderer::kGBufPad), c2, 0);
+    ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
+                  unzoomScreen(vh - cam_oy + TRenderer::kGBufPad), c3, 0);
     const int32_t min_wx = (std::min)((std::min)(c0.x, c1.x), (std::min)(c2.x, c3.x)) + s.sectorCameraWorld.x - SECTORWIDTH;
     const int32_t max_wx = (std::max)((std::max)(c0.x, c1.x), (std::max)(c2.x, c3.x)) + s.sectorCameraWorld.x + SECTORWIDTH;
     const int32_t min_wy = (std::min)((std::min)(c0.y, c1.y), (std::min)(c2.y, c3.y)) + s.sectorCameraWorld.y - SECTORHEIGHT;
@@ -1908,18 +2225,35 @@ void TMapRenderer::RenderFrame()
     const int32_t cov_cw = (vw + kCovCellPx - 1) / kCovCellPx;
     const int32_t cov_ch = (vh + kCovCellPx - 1) / kCovCellPx;
     std::vector<uint8_t> cov(size_t(cov_cw) * size_t(cov_ch), 0);
+    bool suppressed_legacy_flame_mesh = false;
+    if (!s.debugGreenImage.id)
+    {
+        static const uint32_t kGreen = 0xFF00FF00u;
+        sg_image_desc desc = {};
+        desc.width = 1;
+        desc.height = 1;
+        desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        desc.data.subimage[0][0] = { &kGreen, sizeof(kGreen) };
+        desc.label = "maprenderer.debug.green";
+        s.debugGreenImage = sg_make_image(&desc);
+    }
     SMapRenderContext drawctx = {};
     drawctx.tile_assets = &s.sectorTileTex;
     drawctx.mesh_assets = &s.sectorMeshAsset;
+    drawctx.debug_green_img = s.debugGreenImage;
     drawctx.sectorCameraWorld = s.sectorCameraWorld;
     drawctx.cam_ox = cam_ox;
     drawctx.cam_oy = cam_oy;
     drawctx.vw = vw;
     drawctx.vh = vh;
+    drawctx.cam_forward = camera_forward;
+    drawctx.camera_zoom = s.sectorCameraZoom;
+    drawctx.tile_scale = s.sectorPerspectiveTileScale;
     drawctx.z_near = s.z_near;
     drawctx.z_far = s.z_far;
     drawctx.zspan = zspan;
     drawctx.depth_mul = s.depth_mul;
+    drawctx.perspective_camera = s.sectorPerspectiveCamera;
     drawctx.show_gizmos = s.sectorShowGizmos;
     drawctx.show_tiles = s.sectorShowTiles;
     drawctx.show_meshes = s.sectorShowMeshes;
@@ -1931,9 +2265,8 @@ void TMapRenderer::RenderFrame()
     drawctx.cov_cw = cov_cw;
     drawctx.cov_ch = cov_ch;
     drawctx.cov = &cov;
+    drawctx.logged_suppressed_legacy_flame_mesh = &suppressed_legacy_flame_mesh;
     SMapRenderStats stats = {};
-    std::vector<uint8_t> bin_considered(s.sectorDrawInst.size(), 0);
-
     for (int32_t sy = min_sy; sy <= max_sy; ++sy)
     for (int32_t sx = min_sx; sx <= max_sx; ++sx)
     {
@@ -1941,55 +2274,30 @@ void TMapRenderer::RenderFrame()
         if (it == s.sectorDrawBins.end()) continue;
         for (int32_t idx : it->second)
         {
-            if ((uint32_t)idx < (uint32_t)bin_considered.size())
-                bin_considered[size_t(idx)] = 1;
-            s.sectorDrawInst[idx].Submit(drawctx, stats);
+            // obj_id = drawable index + 1 (0 reserved for "no object").
+            // OR editor-state flag bits into obj_id for any selected
+            // drawable. We compare by map index (the universal id all
+            // TSafeRef<T> share) so the test handles any selectable
+            // type without committing to TObjectInstance here.
+            uint32_t obj_id = uint32_t(idx) + 1u;
+            const int32_t mi = s.sectorDrawInst[idx].src.MapIndex();
+            if (mi >= 0 && s.selectedMapIndices.count(mi))
+                obj_id |= kObjFlagSelected;
+            s.sectorDrawInst[idx].Submit(drawctx, stats, obj_id);
         }
     }
-    static bool bin_miss_logged = false;
-    for (size_t idx = 0; idx < s.sectorDrawInst.size(); ++idx)
+    if (suppressed_legacy_flame_mesh && !s.loggedSuppressedLegacyFlameMesh)
     {
-        if (idx < bin_considered.size() && bin_considered[idx])
-            continue;
-        const auto& inst = s.sectorDrawInst[idx];
-        if (inst.kind != ESectorDrawableKind::Tile)
-            continue;
-        if ((uint32_t)inst.asset_idx >= (uint32_t)s.sectorTileTex.size())
-            continue;
-        const auto& tex = s.sectorTileTex[inst.asset_idx];
-        S3DPoint sp; s.sectorProjectWorld(inst.world_pos, sp);
-        const int32_t x0 = sp.x - inst.regx + cam_ox;
-        const int32_t y0 = sp.y - inst.regy + cam_oy;
-        const int32_t x1 = x0 + tex.w;
-        const int32_t y1 = y0 + tex.h;
-        if (x1 <= 0 || y1 <= 0 || x0 >= vw || y0 >= vh)
-            continue;
-        ++stats.draw_bin_missed_visible;
-        if (!bin_miss_logged && stats.draw_bin_missed_visible <= 24)
-        {
-            TObjectInstance* oi = inst.src.Get();
-            log_warn("[sector] visible tile missed by bins idx=%zu class='%s' type='%s' sec=%d_%d pos=(%d,%d,%d) screen=(%d,%d)-(%d,%d)",
-                     idx,
-                     oi && oi->GetClassName() ? oi->GetClassName() : "?",
-                     oi && oi->GetTypeName() ? oi->GetTypeName() : "?",
-                     FloorDiv(inst.world_pos.x, SECTORWIDTH),
-                     FloorDiv(inst.world_pos.y, SECTORHEIGHT),
-                     inst.world_pos.x, inst.world_pos.y, inst.world_pos.z,
-                     x0, y0, x1, y1);
-        }
+        s.loggedSuppressedLegacyFlameMesh = true;
+        log_warn("[flame-override] suppressed ordinary mesh drawable(s) for legacy FLAME instance; override path is active");
     }
-    if (stats.draw_bin_missed_visible > 0)
-        bin_miss_logged = true;
-    if (!draw_stats_logged) {
-        draw_stats_logged = true;
-        int32_t cov_hit = 0;
-        for (uint8_t b : cov) cov_hit += b;
-        const int32_t cov_total = int32_t(cov.size());
-        log_info("[sector] draw stats: drawables=%zu tile_submitted=%d invalid_img=%d offscreen_tiles=%d bin_missed_visible=%d mesh_submitted=%d mesh_skipped=%d vw=%d vh=%d cov_cells=%d/%d (%.1f%%)",
-            s.sectorDrawInst.size(), stats.draw_submitted, stats.draw_invalid_img, stats.draw_offscreen,
-            stats.draw_bin_missed_visible, stats.mesh_submitted, stats.mesh_skipped, vw, vh, cov_hit, cov_total,
-            cov_total > 0 ? 100.0 * cov_hit / cov_total : 0.0);
-    }
+    // Mirror this frame's counts into the impl so the editor status bar
+    // can read them without re-running the render.
+    s.last_draw_counts.total_drawables  = int32_t(s.sectorDrawInst.size());
+    s.last_draw_counts.tiles_submitted  = stats.draw_submitted;
+    s.last_draw_counts.meshes_submitted = stats.mesh_submitted;
+    s.last_draw_counts.offscreen_culled = stats.draw_offscreen;
+
     Renderer->EndTilePass();
     Renderer->RunLightingPass();
 }
@@ -2010,7 +2318,7 @@ void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)
             {
                 const SSectorLight& L = s.sectorLights[i];
                 if (!L.enabled) continue;
-                S3DPoint sp; s.sectorProjectWorld(s.sectorLightPos(L), sp);
+                S3DPoint sp; s.sectorProjectWorldForViewport(s.sectorLightPos(L), Display ? Display->Height() : 0, sp);
                 const float dx = float((sp.x + cam_ox) - x);
                 const float dy = float((sp.y + cam_oy) - y);
                 const float d2 = dx*dx + dy*dy;
@@ -2088,4 +2396,28 @@ void TMapRenderer::HandleMouseMove(int32_t button, int32_t x, int32_t y)
     s.sectorCameraWorld.x = s.dragCameraStartWorld.x - drag_delta_w.x;
     s.sectorCameraWorld.y = s.dragCameraStartWorld.y - drag_delta_w.y;
     s.sectorCameraWorld.z = s.dragCameraStartWorld.z;
+}
+
+void TMapRenderer::HandleKeyPress(int32_t key, bool down)
+{
+    if (!down || !impl) return;
+    Impl& s = *impl;
+    const int32_t step = ShiftDown ? 512 : 128;
+    S3DPoint delta = {0, 0, 0};
+    switch (key)
+    {
+        case VK_LEFT:
+        case 'A': delta.x -= step; delta.y += step; break;
+        case VK_RIGHT:
+        case 'D': delta.x += step; delta.y -= step; break;
+        case VK_UP:
+        case 'W': delta.x -= step; delta.y -= step; break;
+        case VK_DOWN:
+        case 'S': delta.x += step; delta.y += step; break;
+        default: return;
+    }
+    s.sectorCameraWorld.x += delta.x;
+    s.sectorCameraWorld.y += delta.y;
+    s.sectorDragging = false;
+    s.lightDragIdx = -1;
 }

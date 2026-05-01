@@ -6,6 +6,8 @@
 
 #include "editorlog.h"
 
+#include "editorfonts.h"
+
 #include <imgui.h>
 
 #include <atomic>
@@ -174,6 +176,7 @@ void EditorLogDrawPanel()
                       ImVec2(0, 0), false,
                       ImGuiWindowFlags_HorizontalScrollbar);
 
+    if (ImFont* mono = EditorFonts::GetMonoFont()) ImGui::PushFont(mono);
     ImGuiListClipper clipper;
     clipper.Begin(snap_count);
     while (clipper.Step()) {
@@ -188,6 +191,7 @@ void EditorLogDrawPanel()
         }
     }
     clipper.End();
+    if (EditorFonts::GetMonoFont()) ImGui::PopFont();
 
     if (s.auto_scroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
         ImGui::SetScrollHereY(1.0f);

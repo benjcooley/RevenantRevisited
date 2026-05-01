@@ -81,10 +81,12 @@ void main() {
             float dist  = length(delta);
             float rad   = plight_pos[i].w;
             if (rad > 0.0 && dist < rad) {
+                vec3  Lp    = delta / max(dist, 1e-5);
+                float pterm = mix(1.0, max(dot(N, Lp), 0.0), clamp(normal_lighting.x, 0.0, 1.0));
                 float normd = dist * 254.0 / rad;
                 float pw    = pow(normd + 1.0, -1.1) - kMP;
                 float attn  = clamp(pw * kSC, 0.0, 1.0);
-                accum += plight_col[i].rgb * plight_col[i].w * attn;
+                accum += plight_col[i].rgb * plight_col[i].w * attn * pterm;
             }
         }
         frag_color = vec4(accum, 1.0); return;
@@ -160,10 +162,12 @@ void main() {
         float dist  = length(delta);
         float rad   = plight_pos[i].w;
         if (rad > 0.0 && dist < rad) {
+            vec3  Lp    = delta / max(dist, 1e-5);
+            float pterm = mix(1.0, max(dot(N, Lp), 0.0), normal_hardness);
             float normd = dist * 254.0 / rad;
             float pw    = pow(normd + 1.0, -1.1) - kMinPower;
             float attn  = clamp(pw * kScale, 0.0, 1.0);
-            light += plight_col[i].rgb * plight_col[i].w * attn;
+            light += plight_col[i].rgb * plight_col[i].w * attn * pterm;
         }
     }
     frag_color = vec4(alb.rgb * light, 1.0);

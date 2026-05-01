@@ -63,6 +63,8 @@ void TTestScreen::KeyPress(int32_t key, bool down)
 {
     if (down && key == VK_ESCAPE)
         SetDone();
+    const char* mode = StartupTestMode[0] ? StartupTestMode : "blank";
+    TestModes::HandleKeyPress(mode, key, down);
 }
 
 void TTestScreen::MouseClick(int32_t button, int32_t x, int32_t y)

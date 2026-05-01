@@ -27,6 +27,69 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <vector>
+
+namespace {
+
+int32_t MapIndexPreservePriority(const TObjectInstance* oi)
+{
+    if (!oi)
+        return 0;
+    switch (oi->ObjClass())
+    {
+        case OBJCLASS_EXIT:
+            return 100;
+        case OBJCLASS_PLAYER:
+        case OBJCLASS_CHARACTER:
+            return 90;
+        case OBJCLASS_CONTAINER:
+        case OBJCLASS_INVCONTAINER:
+            return 80;
+        case OBJCLASS_ITEM:
+        case OBJCLASS_WEAPON:
+        case OBJCLASS_ARMOR:
+        case OBJCLASS_TALISMAN:
+        case OBJCLASS_FOOD:
+        case OBJCLASS_LIGHTSOURCE:
+        case OBJCLASS_TOOL:
+        case OBJCLASS_MONEY:
+        case OBJCLASS_KEY:
+        case OBJCLASS_POTION:
+        case OBJCLASS_AMMO:
+        case OBJCLASS_SCROLL:
+        case OBJCLASS_RANGEDWEAPON:
+        case OBJCLASS_MAPSCROLL:
+            return 70;
+        case OBJCLASS_TRAP:
+        case OBJCLASS_EFFECT:
+        case OBJCLASS_HELPER:
+            return 60;
+        case OBJCLASS_TILE:
+        case OBJCLASS_SHADOW:
+            return 10;
+        default:
+            return 50;
+    }
+}
+
+int32_t FreshRuntimeMapIndex()
+{
+    int32_t fresh = -1;
+    do {
+        fresh = MapPane.MakeIndex();
+    } while (fresh < 0 || LookupMapIndex(fresh) != nullptr);
+    return fresh;
+}
+
+struct SComponentUpdateEntry
+{
+    TSafeComponentRef<TObjectComponent> component;
+    TObjectComponentUpdateMethod method = nullptr;
+};
+
+std::vector<SComponentUpdateEntry> g_component_updates;
+
+} // namespace
 
 // Declarations of global arrays for object classes, imagery, and builders
 
@@ -307,6 +370,50 @@ const TObjectInstance* TConstInventoryIterator::NextItem() const
 // * TObjectInstance *
 // *******************
 
+void TObjectComponent::RegisterUpdate(TObjectComponentUpdateMethod method)
+{
+    if (!method || !Owner())
+        return;
+
+    for (const SComponentUpdateEntry& entry : g_component_updates)
+        if (entry.method == method && entry.component.Get() == this)
+            return;
+
+    SComponentUpdateEntry entry = {};
+    entry.component.Set(this);
+    entry.method = method;
+    g_component_updates.push_back(entry);
+}
+
+void TObjectComponent::UnregisterUpdate(TObjectComponentUpdateMethod method)
+{
+    for (size_t i = 0; i < g_component_updates.size(); )
+    {
+        TObjectComponent* component = g_component_updates[i].component.Get();
+        if (!component || (component == this && (!method || g_component_updates[i].method == method)))
+            g_component_updates.erase(g_component_updates.begin() + ptrdiff_t(i));
+        else
+            ++i;
+    }
+}
+
+void TObjectComponent::RunUpdateList()
+{
+    for (size_t i = 0; i < g_component_updates.size(); )
+    {
+        SComponentUpdateEntry entry = g_component_updates[i];
+        TObjectComponent* component = entry.component.Get();
+        if (!component || !entry.method)
+        {
+            g_component_updates.erase(g_component_updates.begin() + ptrdiff_t(i));
+            continue;
+        }
+
+        (component->*entry.method)();
+        ++i;
+    }
+}
+
 void TObjectInstance::ClearObject()
 {
     SetNotify(N_SCRIPTADDED);
@@ -406,11 +513,36 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     // clear-to-negative must move the registry entry with the instance.
     if (newindex == mapindex)
         return;
+    if (newindex >= 0)
+    {
+        if (TObjectInstance* existing = LookupMapIndex(newindex))
+        {
+            if (existing != this)
+            {
+                const int32_t existing_priority = MapIndexPreservePriority(existing);
+                const int32_t incoming_priority = MapIndexPreservePriority(this);
+                if (incoming_priority > existing_priority)
+                {
+                    const int32_t replacement = FreshRuntimeMapIndex();
+                    existing->SetMapIndex(replacement);
+                }
+                else
+                {
+                    newindex = FreshRuntimeMapIndex();
+                }
+            }
+        }
+    }
     if (mapindex >= 0)
         MapPane.UnregisterInstance(mapindex);
     mapindex = newindex;
     if (mapindex >= 0)
+    {
         MapPane.RegisterInstance(this, mapindex);
+        for (int32_t i = 0; i < components.NumItems(); ++i)
+            if (TObjectComponent* component = components.Get(i))
+                component->Activate();
+    }
 }
 
 TObjectInstance::~TObjectInstance()
@@ -427,6 +559,11 @@ TObjectInstance::~TObjectInstance()
 
     if (Inventory.GetContainer() == this)
         Inventory.SetContainer(nullptr);
+
+    for (int32_t i = 0; i < components.NumItems(); ++i)
+        if (TObjectComponent* component = components.Get(i))
+            component->Detach();
+    components.DeleteAll();
 
     if (animator)
         delete animator;
@@ -516,6 +653,39 @@ void TObjectInstance::FreeAnimator()
         delete animator;
         animator = nullptr;
     }
+}
+
+int32_t TObjectInstance::AddComponent(TObjectComponent* component)
+{
+    if (!component || component->Owner())
+        return -1;
+
+    static uint32_t s_next_component_generation = 1;
+    const int32_t slot = components.Add(component);
+    if (slot < 0)
+        return -1;
+
+    component->Attach(this, slot, ++s_next_component_generation);
+    if (GetMapIndex() >= 0)
+        component->Activate();
+    return slot;
+}
+
+void TObjectInstance::RemoveComponent(int32_t component_slot)
+{
+    if ((uint32_t)component_slot >= (uint32_t)components.NumItems())
+        return;
+    TObjectComponent* component = components.Get(component_slot);
+    if (component)
+        component->Detach();
+    components.Delete(component_slot);
+}
+
+TObjectComponent* TObjectInstance::GetComponent(int32_t component_slot) const
+{
+    if ((uint32_t)component_slot >= (uint32_t)components.NumItems())
+        return nullptr;
+    return components.Get(component_slot);
 }
 
 bool TObjectInstance::NeedsAnimator() const
@@ -1784,22 +1954,6 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     TObjectInstance* inst = cl->NewObject(&def);
     if (!inst)
     {
-        static int32_t s_new_object_fail_log_count = 0;
-        if (s_new_object_fail_log_count < 64)
-        {
-            SObjectInfo* info = cl ? cl->GetObjType(objtype) : nullptr;
-            log_warn("[loadobj] NewObject failed class=%d '%s' type=%d '%s' unique=0x%08X builder=%p imageryid=%d block=%d invblock=%d version=%d objver=%d",
-                     int32_t(objclass),
-                     cl && cl->ClassName() ? cl->ClassName() : "?",
-                     int32_t(objtype),
-                     info && info->name ? info->name : "?",
-                     uniqueid,
-                     info ? (void*)info->objbuilder : nullptr,
-                     info ? info->imageryid : -1,
-                     int32_t(blocksize), int32_t(invblocksize),
-                     version, int32_t(objversion));
-            ++s_new_object_fail_log_count;
-        }
         // Class factory missing — retail added bag/chest/invcontainer-style
         // classes (e.g. class 25) after this 1998 source was snapshotted, so
         // NewObject returns null for them. Skip rather than abort; blocksize
