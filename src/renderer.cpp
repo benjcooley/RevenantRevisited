@@ -543,13 +543,20 @@ void TRenderer::InitCompositePipeline()
     sh.attrs[1].sem_index   = 0;
     sh.vs.source                 = kCompositeVs;
     sh.vs.entry                  = kShaderVsEntry;
-    sh.vs.uniform_blocks[0].size = sizeof(float) * 8;
+    sh.vs.uniform_blocks[0].size = sizeof(float) * 12;
     sh.vs.uniform_blocks[0].uniforms[0].name = "rect";
     sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     sh.vs.uniform_blocks[0].uniforms[1].name = "uv_rect";
     sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.source                 = kCompositeFs;
     sh.fs.entry                  = kShaderFsEntry;
+    sh.fs.uniform_blocks[0].size = sizeof(float) * 12;
+    sh.fs.uniform_blocks[0].uniforms[0].name = "rect";
+    sh.fs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[1].name = "uv_rect";
+    sh.fs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[2].name = "chroma_key";
+    sh.fs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.images[0].name         = "tex";
     sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -573,7 +580,7 @@ void TRenderer::InitCompositePipeline()
     pip.label = "renderer.composite.pipeline.rt";
     composite_pip_rt = sg_make_pipeline(&pip);
 
-    pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+    pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_ONE;
     pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE;
     pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
     pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
@@ -1722,7 +1729,9 @@ void TRenderer::DrainOverlayQueue()
                   gbw, gbh,
                   t.src_x, t.src_y, t.src_w, t.src_h,
                   t.src_tex_w, t.src_tex_h,
-                  t.additive_blend);
+                  t.additive_blend,
+                  t.chroma_key,
+                  t.chroma_key_rgb);
     sg_end_pass();
     overlay_queue.clear();
     lit_target_dirty = true;
@@ -1845,12 +1854,14 @@ void TRenderer::Composite(TSurface* src)
     bind.fs_images[0]      = img;
     sg_apply_bindings(&bind);
 
-    const float uniforms[8] = {
+    const float uniforms[12] = {
         -1.0f, -1.0f, 2.0f, 2.0f,
          0.0f,  0.0f, 1.0f, 1.0f,
+         0.0f,  0.0f, 0.0f, 0.0f,
     };
     const sg_range u_range = { uniforms, sizeof(uniforms) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
     sg_draw(0, 6, 1);
 }
 
@@ -1870,7 +1881,9 @@ void TRenderer::Composite(sg_image img,
                           int32_t target_w, int32_t target_h,
                           int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
                           int32_t src_tex_w, int32_t src_tex_h,
-                          bool additive_blend)
+                          bool additive_blend,
+                          bool chroma_key,
+                          const float* chroma_key_rgb)
 {
     const sg_pipeline pip = additive_blend ? composite_pip_add_rt : composite_pip_rt;
     if (!img.id || !pip.id) return;
@@ -1893,9 +1906,17 @@ void TRenderer::Composite(sg_image img,
     const float uw = float(src_w) / float(src_tex_w);
     const float vh = float(src_h) / float(src_tex_h);
 
-    const float uniforms[8] = { nx, ny, nw, nh,  u0, v0, uw, vh };
+    float uniforms[12] = { nx, ny, nw, nh,  u0, v0, uw, vh, 0.0f, 0.0f, 0.0f, 0.0f };
+    if (chroma_key && chroma_key_rgb)
+    {
+        uniforms[8] = 1.0f;
+        uniforms[9] = chroma_key_rgb[0];
+        uniforms[10] = chroma_key_rgb[1];
+        uniforms[11] = chroma_key_rgb[2];
+    }
     const sg_range u_range = { uniforms, sizeof(uniforms) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
     sg_draw(0, 6, 1);
 }
 
@@ -1935,12 +1956,14 @@ bool TRenderer::PresentToSwapchain()
     const float   v0  = float(pad)   / gbh;
     const float   uw  = float(width) / gbw;
     const float   vh  = float(height) / gbh;
-    const float u[8] = {
+    const float u[12] = {
         present_ndc[0], present_ndc[1], present_ndc[2], present_ndc[3],
         u0, v0, uw, vh,
+        0.0f, 0.0f, 0.0f, 0.0f,
     };
     const sg_range ur = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ur);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &ur);
     sg_draw(0, 6, 1);
 
     color_target_dirty = false;

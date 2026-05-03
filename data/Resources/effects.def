@@ -1,0 +1,36 @@
+// Revenant Revisited particle/effect definitions.
+//
+// First-pass format: simple key/value blocks. Values are intentionally strings
+// and scalar fields for now; later graph/editor tooling can emit the same text.
+
+effect TorchFlame
+{
+    debug = normal
+    inactive_ttl_pulses = 12
+
+    bucket flame_billboard
+    {
+        texture_slot = 0
+        atlas_cols = 4
+        atlas_rows = 2
+        atlas_frames = 8
+        width = 50.0
+        height = 125.0
+        scale = 0.5
+        blend = additive
+        flip_v = true
+        chroma_key = [255, 0, 0]
+        frame_expr = "frame(time_frame, 13.0)"
+        uv_rect_expr = "flipbook(frame(time_frame, 13.0), 4, 2)"
+    }
+
+    emitter billboard
+    {
+        local_pos = [0.0, 0.0, 32.0]
+
+        output flame_billboard
+        {
+            life = -1.0
+        }
+    }
+}

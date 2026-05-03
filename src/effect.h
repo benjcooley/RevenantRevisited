@@ -8,6 +8,10 @@
 
 #include "revenant.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "3dimage.h"
 #include "charanimator.h"
 #include "effect.h"
@@ -28,6 +32,8 @@ void RestoreZ(int32_t x, int32_t y, int32_t width, int32_t height);
 
 _CLASSDEF(TEffect)
 _CLASSDEF(TSpellBlock)
+
+#include "particlefx.h"
 
 // ***********
 // * TEffect *
@@ -82,6 +88,11 @@ class TFlipbookBillboardComponent : public TObjectComponent
         additive_blend = additive;
         replaces_default_visual = replaces_default;
     }
+    void SetDebugSolid(bool enable) { debug_solid = enable; }
+    bool SetFrameExpression(const char* expr, std::string* error = nullptr)
+        { return frame_expr.Compile(expr, error); }
+    bool SetUvRectExpression(const char* expr, std::string* error = nullptr)
+        { return uv_rect_expr.Compile(expr, error); }
 
     void OnAttach() override { RegisterUpdate(&TObjectComponent::Update); }
     void OnDetach() override { UnregisterUpdate(&TObjectComponent::Update); }
@@ -90,13 +101,14 @@ class TFlipbookBillboardComponent : public TObjectComponent
     [[nodiscard]] sg_image Image() const { return image; }
     [[nodiscard]] int32_t TextureWidth() const { return tex_w; }
     [[nodiscard]] int32_t TextureHeight() const { return tex_h; }
-    [[nodiscard]] int32_t SourceX() const { return (FrameCell() % cols) * SourceWidth(); }
-    [[nodiscard]] int32_t SourceY() const { return (FrameCell() / cols) * SourceHeight(); }
-    [[nodiscard]] int32_t SourceWidth() const { return tex_w / cols; }
-    [[nodiscard]] int32_t SourceHeight() const { return tex_h / rows; }
+    [[nodiscard]] int32_t SourceX() const { float r[4]; UvRect(r); return int32_t(r[0] * float(tex_w)); }
+    [[nodiscard]] int32_t SourceY() const { float r[4]; UvRect(r); return int32_t(r[1] * float(tex_h)); }
+    [[nodiscard]] int32_t SourceWidth() const { float r[4]; UvRect(r); const int32_t w = int32_t(r[2] * float(tex_w)); return w > 0 ? w : 1; }
+    [[nodiscard]] int32_t SourceHeight() const { float r[4]; UvRect(r); const int32_t h = int32_t(r[3] * float(tex_h)); return h > 0 ? h : 1; }
     [[nodiscard]] float Width() const { return size_w; }
     [[nodiscard]] float Height() const { return size_h; }
     [[nodiscard]] bool AdditiveBlend() const { return additive_blend; }
+    [[nodiscard]] bool DebugSolid() const { return debug_solid; }
 
   protected:
     void OnUpdate() override
@@ -111,16 +123,148 @@ class TFlipbookBillboardComponent : public TObjectComponent
     {
         // Original TFlameAnimator timing: local 18-frame counter mapped into
         // an 8-cell 4x2 texture atlas.
+        if (frame_expr.IsValid())
+        {
+            SParticleEvalContext ctx = {};
+            ctx.time_frame = float(legacy_frame);
+            const int32_t frame = int32_t(frame_expr.Eval(ctx));
+            return frame_count > 0 ? ((frame % frame_count) + frame_count) % frame_count : 0;
+        }
         return frame_count > 0 ? ((legacy_frame * 11 / 24) % frame_count) : 0;
+    }
+
+    void UvRect(float out[4]) const
+    {
+        if (uv_rect_expr.IsValid() && uv_rect_expr.ResultLanes() >= 4)
+        {
+            SParticleEvalContext ctx = {};
+            ctx.time_frame = float(legacy_frame);
+            uv_rect_expr.Eval(ctx, out, 4);
+            return;
+        }
+
+        const int32_t frame = FrameCell();
+        out[0] = float(frame % cols) / float(cols);
+        out[1] = float(frame / cols) / float(rows);
+        out[2] = 1.0f / float(cols);
+        out[3] = 1.0f / float(rows);
     }
 
     sg_image image = {};
     int32_t tex_w = 1, tex_h = 1;
     int32_t cols = 1, rows = 1, frame_count = 1;
     int32_t legacy_frame = 0;
+    TParticleExpression frame_expr;
+    TParticleExpression uv_rect_expr;
     float size_w = 1.0f, size_h = 1.0f;
     bool additive_blend = true;
     bool replaces_default_visual = true;
+    bool debug_solid = false;
+};
+
+struct SParticleBucketEffectDef
+{
+    std::string name;
+    int32_t texture_slot = 0;
+    int32_t atlas_cols = 1;
+    int32_t atlas_rows = 1;
+    int32_t atlas_frames = 1;
+    float width = 1.0f;
+    float height = 1.0f;
+    float scale = 1.0f;
+    bool additive = true;
+    bool flip_v = false;
+    bool chroma_key = false;
+    float chroma_key_rgb[3] = {1.0f, 0.0f, 0.0f};
+    std::string frame_expr;
+    std::string uv_rect_expr;
+};
+
+struct SParticleEmitterOutputDef
+{
+    std::string bucket;
+    float life = -1.0f;
+};
+
+struct SParticleEmitterEffectDef
+{
+    std::string name;
+    float local_pos[3] = {};
+    std::vector<SParticleEmitterOutputDef> outputs;
+};
+
+struct SParticleEffectDef
+{
+    std::string name;
+    bool debug_solid = false;
+    uint32_t inactive_ttl_pulses = 1;
+    std::vector<SParticleBucketEffectDef> buckets;
+    std::vector<SParticleEmitterEffectDef> emitters;
+};
+
+class TParticleEffectManager
+{
+  public:
+    void PulseEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
+    void StopEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
+    void ExpireInactiveEffects();
+    void Clear();
+
+  private:
+    struct SRuntime
+    {
+        const SParticleEffectDef* effect_def = nullptr;
+        TSafeRef<> owner;
+        float owner_particle_id = -1.0f;
+        uint32_t last_draw_pulse_pass = 0;
+        std::vector<TParticleBucket*> buckets;
+    };
+
+    SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_map_index);
+    void StartRuntime(SRuntime& runtime, TObjectInstance* owner);
+    void StopRuntime(size_t runtime_index);
+
+    std::vector<SRuntime> runtimes;
+    uint32_t last_expire_pass = 0;
+};
+
+extern TParticleEffectManager* ParticleEffectManager;
+
+class TParticleEffectComponent : public TObjectComponent
+{
+  public:
+    [[nodiscard]] const char* ComponentName() const override { return "particle_effect"; }
+
+    void Configure(const SParticleEffectDef* def) { effect_def = def; }
+
+    void OnAttach() override
+    {
+        RegisterUpdate(&TObjectComponent::Update);
+    }
+
+    void OnDetach() override
+    {
+        if (ParticleEffectManager)
+            ParticleEffectManager->StopEffect(effect_def, Owner());
+        UnregisterUpdate(&TObjectComponent::Update);
+    }
+
+    void DrawPulse()
+    {
+        if (!ParticleEffectManager || !effect_def || !Owner())
+            return;
+        ParticleEffectManager->PulseEffect(effect_def, Owner());
+    }
+
+  protected:
+    void OnUpdate() override
+    {
+        if (ParticleEffectManager)
+            ParticleEffectManager->ExpireInactiveEffects();
+    }
+
+  private:
+    const SParticleEffectDef* effect_def = nullptr;
 };
 
 // ***************
@@ -143,6 +287,8 @@ class TFlameEffect : public TEffect
   public:
     TFlameEffect(TObjectImagery* newim) : TEffect(newim) { InitializeVisualComponent(newim); }
     TFlameEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { InitializeVisualComponent(newim); }
+
+    static void AttachVisualComponent(TObjectInstance* inst, TObjectImagery* imagery);
 
   private:
     void InitializeVisualComponent(TObjectImagery* imagery);

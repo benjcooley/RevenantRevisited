@@ -67,7 +67,6 @@ struct SSectorLight {
 enum class ESectorDrawableKind : uint8_t {
     Tile,
     Mesh,
-    FlameDebug,
     Billboard,
 };
 
@@ -103,12 +102,6 @@ struct SSectorDrawableInst {
     int32_t   wregx = 0, wregy = 0, wregz = 0;
     int32_t   state = 0;
     int32_t   frame = 0;
-    sg_image  billboard_img = {};
-    int32_t   billboard_tex_w = 1, billboard_tex_h = 1;
-    int32_t   billboard_src_x = 0, billboard_src_y = 0;
-    int32_t   billboard_src_w = 1, billboard_src_h = 1;
-    float     billboard_w = 1.0f, billboard_h = 1.0f;
-    bool      billboard_additive = false;
     int32_t   debug_sector_level = 0;
     int32_t   debug_sector_x = 0;
     int32_t   debug_sector_y = 0;
@@ -314,7 +307,6 @@ struct TMapRenderer::Impl
     float debugSceneZMaxFit = 0.0f;
     int32_t debugFitTiles = 0;
     int64_t lastLegacyAnimTick = -1;
-    bool loggedSuppressedLegacyFlameMesh = false;
 
     void rebuildBins()
     {

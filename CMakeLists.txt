@@ -8,6 +8,7 @@ project(RevenantRevisited
   DESCRIPTION "Revenant PC 1998 built for modern machines."
   LANGUAGES C CXX
 )
+include(FetchContent)
 if(APPLE)
   enable_language(OBJC)
 endif()
@@ -128,6 +129,22 @@ add_executable(test_render_metadata
 add_executable(test_anim_system
   tools/test_anim_system.cpp
   src/animsystem.cpp)
+
+add_executable(test_particlefx
+  tools/test_particlefx.cpp
+  src/particlefx.cpp)
+target_include_directories(test_particlefx PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR})
+
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+target_link_libraries(test_particlefx PRIVATE GTest::gtest_main)
 
 add_executable(cpu_tile_perspective_test
   tools/cpu_tile_perspective_test.cpp)

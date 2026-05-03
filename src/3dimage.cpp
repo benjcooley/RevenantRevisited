@@ -1934,6 +1934,40 @@ TAnimation* T3DImagery::GetInvAnimation(int32_t state)
     return icons[state].invanim;
 }
 
+void T3DImagery::AttachAnimatorComponents(TObjectInstance* oi)
+{
+    if (!meshinitialized)
+        if (!InitializeMesh((S3DImageryBody*)GetBody()))
+            FatalError("Unable to initialize 3D imagery for %s", oi->GetName());
+
+    const char* name = oi->GetTypeName();
+    T3DAnimatorBuilder* builder = T3DAnimatorBuilder::GetBuilder(name);
+    const char* initial_name = name;
+
+    if (builder == &T3DAnimatorBuilderInstance)
+    {
+        name = oi->GetClassName();
+        builder = T3DAnimatorBuilder::GetBuilder(name);
+    }
+
+    const bool interesting = (builder != &T3DAnimatorBuilderInstance) ||
+                             (oi && oi->ObjClass() == OBJCLASS_EFFECT);
+    static int logged_count = 0;
+    if (interesting && logged_count < 64)
+    {
+        ++logged_count;
+        log_info("[anim-components] inst=%p class='%s' type='%s' builder-name='%s' fallback-from='%s' builder=%p default=%p",
+                 (void*)oi,
+                 oi ? oi->GetClassName() : "<null>",
+                 oi ? oi->GetTypeName() : "<null>",
+                 name ? name : "<null>",
+                 initial_name ? initial_name : "<null>",
+                 (void*)builder,
+                 (void*)&T3DAnimatorBuilderInstance);
+    }
+    builder->AttachComponents(oi);
+}
+
 TObjectAnimator* T3DImagery::NewObjectAnimator(TObjectInstance* oi)
 {
     if (!meshinitialized)
@@ -1949,6 +1983,7 @@ TObjectAnimator* T3DImagery::NewObjectAnimator(TObjectInstance* oi)
         builder = T3DAnimatorBuilder::GetBuilder(name);
     }
 
+    builder->AttachComponents(oi);
     return (TObjectAnimator*)builder->Build(oi);
 }
 

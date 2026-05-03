@@ -12,6 +12,9 @@
 #include "stream.h"
 #include "lightdef.h"
 
+#include <memory>
+#include <vector>
+
 /*
 #define MAKEINDEX(level, sx, sy, item)  ((level<<24) | (sx<<18) | (sy<<12) | (item & 0xFFF))
 #define GETLEVEL(index)                 (((unsigned)index) >> 24)
@@ -783,19 +786,19 @@ class TObjectInstance : protected SObjectDef
         // Returns true of the object wants a simple alpha-channel circle shadow to follow it
 
   // Component functions
-    int32_t AddComponent(TObjectComponent* component);
+    int32_t AddComponent(std::unique_ptr<TObjectComponent> component);
         // Adds an owned component and returns its component slot, or -1.
     void RemoveComponent(int32_t component_slot);
         // Deletes and removes the owned component in the given slot.
     TObjectComponent* GetComponent(int32_t component_slot) const;
         // Returns the component in the given slot, or nullptr.
-    int32_t NumComponents() const { return components.NumItems(); }
+    int32_t NumComponents() const { return int32_t(components.size()); }
         // Number of component slots currently in use.
     template <class T>
     T* GetComponent() const
     {
-        for (int32_t i = 0; i < components.NumItems(); ++i)
-            if (TObjectComponent* c = components.Get(i))
+        for (const auto& component : components)
+            if (TObjectComponent* c = component.get())
                 if (T* typed = dynamic_cast<T*>(c))
                     return typed;
         return nullptr;
@@ -1220,7 +1223,7 @@ class TObjectInstance : protected SObjectDef
     // Animator + visual components live here. The animator was a dedicated
     // pointer field; it is now stored as a TObjectComponent and looked up
     // through GetAnimator() / GetComponent<TObjectAnimator>().
-    TPointerArray<TObjectComponent, 0, 2> components;
+    std::vector<std::unique_ptr<TObjectComponent>> components;
 
   // Inventory
     TObjectInstance* owner;     // What container it is in
