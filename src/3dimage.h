@@ -294,6 +294,7 @@ class T3DImagery : public TObjectImagery
     virtual TBitmap* GetInvImage(int32_t state, int32_t num = 0);
     virtual TAnimation* GetInvAnimation(int32_t state);
 
+    void AttachAnimatorComponents(TObjectInstance* oi);
     virtual TObjectAnimator* NewObjectAnimator(TObjectInstance* oi);
     virtual bool NeedsAnimator(TObjectInstance* oi);
 
@@ -322,6 +323,7 @@ class T3DAnimatorBuilder
     T3DAnimatorBuilder();
     T3DAnimatorBuilder(const char* name);
     virtual T3DAnimator* Build(TObjectInstance* oi);
+    virtual void AttachComponents(TObjectInstance* oi) { (void)oi; }
     static T3DAnimatorBuilder* GetBuilder(const char* name);
 
   private:

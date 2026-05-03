@@ -122,6 +122,8 @@ struct SOverlaySubmit
     int32_t  src_x = 0, src_y = 0, src_w = 1, src_h = 1;
     int32_t  src_tex_w = 1, src_tex_h = 1;
     bool     additive_blend = false;
+    bool     chroma_key = false;
+    float    chroma_key_rgb[3] = {1.0f, 0.0f, 0.0f};
 };
 
 // Opaque handle to a mesh registered with TRenderer. 0 is invalid.
@@ -317,7 +319,9 @@ public:
                    int32_t target_w, int32_t target_h,
                    int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
                    int32_t src_tex_w, int32_t src_tex_h,
-                   bool additive_blend = false);
+                   bool additive_blend = false,
+                   bool chroma_key = false,
+                   const float* chroma_key_rgb = nullptr);
 
     // Called from TDisplay::FlipPage inside sg_begin_default_pass. Picks
     // the best final image (lit_target > color_target > nothing) and

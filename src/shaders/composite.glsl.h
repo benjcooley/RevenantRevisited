@@ -16,6 +16,7 @@ inline constexpr const char* kCompositeVsGlsl = R"GLSL(
 layout(std140) uniform params {
     vec4 rect;
     vec4 uv_rect;
+    vec4 chroma_key;
 };
 layout(location = 0) in vec2 pos;
 layout(location = 1) in vec2 uv;
@@ -32,6 +33,9 @@ in vec2 v_uv;
 out vec4 frag_color;
 uniform sampler2D tex;
 void main() {
-    frag_color = texture(tex, v_uv);
+    vec4 c = texture(tex, v_uv);
+    if (chroma_key.x > 0.5 && c.r > 0.55 && c.g < 0.30 && c.b < 0.30)
+        discard;
+    frag_color = c;
 }
 )GLSL";

@@ -125,6 +125,98 @@ inline int64_t SectorBinKey(int32_t sx, int32_t sy)
     return (int64_t(sx) << 32) ^ uint32_t(sy);
 }
 
+void SubmitParticleBillboards(const SMapRenderContext& ctx, SMapRenderStats& stats)
+{
+    TParticleManager& particles = ParticleManager();
+    for (int32_t bucket_index = 0; bucket_index < particles.GlobalBucketCount(); ++bucket_index)
+    {
+        const TParticleBucket* bucket = particles.GlobalBucket(bucket_index);
+        if (!bucket || !bucket->Active())
+            continue;
+
+        const SParticleBucketDesc& desc = bucket->Desc();
+        const bool debug_solid = desc.debug_solid && ctx.debug_green_img.id;
+        const sg_image image = debug_solid ? ctx.debug_green_img : desc.image;
+        if (!image.id)
+            continue;
+
+        for (int32_t particle_index = 0; particle_index < bucket->Count(); ++particle_index)
+        {
+            const float* draw_pos = bucket->VarPtr(particle_index, EParticleVar::DrawPos);
+            if (!draw_pos)
+                continue;
+
+            const S3DPoint world_pos = {
+                int32_t(std::lround(draw_pos[0])),
+                int32_t(std::lround(draw_pos[1])),
+                int32_t(std::lround(draw_pos[2])),
+            };
+            const S3DPoint particle_world = MapRendererMeshWorld(
+                world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            const S3DPoint particle_camera = MapRendererMeshWorld(
+                ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            const S3DPoint rel = particle_world - particle_camera;
+            float sx = 0.0f, sy = 0.0f;
+            ProjectCameraRelToScreen(ctx, rel, sx, sy);
+
+            float overlay_scale = 1.0f;
+            if (ctx.perspective_camera)
+            {
+                const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
+                const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
+                overlay_scale = focal_zoom / z;
+            }
+
+            float width = desc.default_width;
+            float height = desc.default_height;
+            if (const float* draw_scl = bucket->VarPtr(particle_index, EParticleVar::DrawScl))
+            {
+                width = draw_scl[0];
+                height = draw_scl[1];
+            }
+
+            const int32_t w = (std::max)(1, int32_t(std::lround(width * overlay_scale)));
+            const int32_t h = (std::max)(1, int32_t(std::lround(height * overlay_scale)));
+            const int32_t dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
+            const int32_t dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
+            if (dst_x > ctx.vw || dst_y > ctx.vh || dst_x + w < 0 || dst_y + h < 0)
+            {
+                ++stats.draw_offscreen;
+                continue;
+            }
+
+            float uv[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+            if (const float* draw_uv = bucket->VarPtr(particle_index, EParticleVar::DrawUvRect))
+            {
+                uv[0] = draw_uv[0];
+                uv[1] = draw_uv[1];
+                uv[2] = draw_uv[2];
+                uv[3] = draw_uv[3];
+            }
+
+            SOverlaySubmit sub = {};
+            sub.color_img = image;
+            sub.dst_x = dst_x;
+            sub.dst_y = dst_y;
+            sub.dst_w = w;
+            sub.dst_h = h;
+            sub.src_x = debug_solid ? 0 : int32_t(uv[0] * float(desc.texture_width));
+            sub.src_y = debug_solid ? 0 : int32_t((uv[1] + (desc.flip_v ? uv[3] : 0.0f)) * float(desc.texture_height));
+            sub.src_w = debug_solid ? 1 : (std::max)(1, int32_t(uv[2] * float(desc.texture_width)));
+            sub.src_h = debug_solid ? 1 : (desc.flip_v ? -1 : 1) * (std::max)(1, int32_t(uv[3] * float(desc.texture_height)));
+            sub.src_tex_w = debug_solid ? 1 : desc.texture_width;
+            sub.src_tex_h = debug_solid ? 1 : desc.texture_height;
+            sub.additive_blend = !debug_solid && desc.blend == EParticleBlendMode::Additive;
+            sub.chroma_key = !debug_solid && desc.chroma_key;
+            sub.chroma_key_rgb[0] = desc.chroma_key_rgb[0];
+            sub.chroma_key_rgb[1] = desc.chroma_key_rgb[1];
+            sub.chroma_key_rgb[2] = desc.chroma_key_rgb[2];
+            Renderer->SubmitOverlay(sub);
+            ++stats.draw_submitted;
+        }
+    }
+}
+
 inline FVec3 MakeFVec3(float x, float y, float z) { return { x, y, z }; }
 inline FVec3 Add(const FVec3& a, const FVec3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
 inline FVec3 Scale(const FVec3& v, float s) { return { v.x * s, v.y * s, v.z * s }; }
@@ -165,29 +257,6 @@ static void MatrixScale16(float sx, float sy, float sz, float out[16])
     out[0] = sx;
     out[5] = sy;
     out[10] = sz;
-}
-
-static bool IsLegacyFlameEffect(TObjectInstance* oi)
-{
-    return oi && oi->ObjClass() == OBJCLASS_EFFECT &&
-           oi->GetTypeName() && stricmp(oi->GetTypeName(), "FLAME") == 0;
-}
-
-static int32_t LegacyFlameUvVariant(int64_t tick)
-{
-    const int32_t frame = int32_t(tick % 18);
-    return int32_t(frame * 11 / 24) % 8;
-}
-
-static void ApplyLegacyFlameUvs(std::vector<SMeshVertex>& verts, int32_t variant)
-{
-    if (verts.size() < 4) return;
-    const float u0 = float(variant % 4) * 0.25f;
-    const float v0 = float(variant / 4) * 0.5f;
-    verts[0].uv[0] = u0;         verts[0].uv[1] = v0;
-    verts[1].uv[0] = u0 + 0.25f; verts[1].uv[1] = v0;
-    verts[2].uv[0] = u0;         verts[2].uv[1] = v0 + 0.5f;
-    verts[3].uv[0] = u0 + 0.25f; verts[3].uv[1] = v0 + 0.5f;
 }
 
 static bool TileCameraVolumeVisible(const SMapRenderContext& ctx,
@@ -691,32 +760,6 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         return;
     }
 
-    if (kind == ESectorDrawableKind::FlameDebug)
-    {
-        if (!ctx.debug_green_img.id) return;
-        const S3DPoint rel = world_pos - ctx.sectorCameraWorld;
-        float sx = 0.0f, sy = 0.0f;
-        ProjectCameraRelToScreen(ctx, rel, sx, sy);
-        float overlay_scale = 1.0f;
-        if (ctx.perspective_camera)
-        {
-            const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
-            const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
-            overlay_scale = focal_zoom / z;
-        }
-        const int32_t w = (std::max)(4, int32_t(std::lround(25.0f * overlay_scale)));
-        const int32_t h = (std::max)(8, int32_t(std::lround(62.5f * overlay_scale)));
-        SOverlaySubmit marker = {};
-        marker.color_img = ctx.debug_green_img;
-        marker.dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
-        marker.dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
-        marker.dst_w = w;
-        marker.dst_h = h;
-        Renderer->SubmitOverlay(marker);
-        ++stats.mesh_submitted;
-        return;
-    }
-
     if (kind == ESectorDrawableKind::Tile)
     {
         if (!ctx.show_tiles || !ctx.tile_assets) return;
@@ -801,8 +844,25 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
 
     if (kind == ESectorDrawableKind::Billboard)
     {
-        if (!billboard_img.id) return;
-        const S3DPoint rel = world_pos - ctx.sectorCameraWorld;
+        if (oi->GetComponent<TParticleEffectComponent>())
+            return;
+
+        auto* flipbook = oi->GetComponent<TFlipbookBillboardComponent>();
+        if (!flipbook && !ctx.debug_green_img.id) return;
+        const bool debug_solid = flipbook && flipbook->DebugSolid() && ctx.debug_green_img.id;
+        const sg_image image = debug_solid ? ctx.debug_green_img : flipbook->Image();
+        if (!image.id) return;
+        static bool logged_billboard_submit = false;
+        if (!logged_billboard_submit)
+        {
+            logged_billboard_submit = true;
+            log_info("[component-render] submit billboard inst=%p class='%s' type='%s' debug=%d image=%u green=%u",
+                     (void*)oi, oi->GetClassName(), oi->GetTypeName(),
+                     debug_solid ? 1 : 0, image.id, ctx.debug_green_img.id);
+        }
+        const S3DPoint billboard_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+        const S3DPoint billboard_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+        const S3DPoint rel = billboard_world - billboard_camera;
         float sx = 0.0f, sy = 0.0f;
         ProjectCameraRelToScreen(ctx, rel, sx, sy);
         float overlay_scale = 1.0f;
@@ -812,21 +872,23 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
             overlay_scale = focal_zoom / z;
         }
-        const int32_t w = (std::max)(1, int32_t(std::lround(billboard_w * overlay_scale)));
-        const int32_t h = (std::max)(1, int32_t(std::lround(billboard_h * overlay_scale)));
+        const float billboard_width = flipbook ? flipbook->Width() : 25.0f;
+        const float billboard_height = flipbook ? flipbook->Height() : 62.5f;
+        const int32_t w = (std::max)(1, int32_t(std::lround(billboard_width * overlay_scale)));
+        const int32_t h = (std::max)(1, int32_t(std::lround(billboard_height * overlay_scale)));
         SOverlaySubmit sub = {};
-        sub.color_img = billboard_img;
+        sub.color_img = image;
         sub.dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
         sub.dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
         sub.dst_w = w;
         sub.dst_h = h;
-        sub.src_x = billboard_src_x;
-        sub.src_y = billboard_src_y;
-        sub.src_w = billboard_src_w;
-        sub.src_h = billboard_src_h;
-        sub.src_tex_w = billboard_tex_w;
-        sub.src_tex_h = billboard_tex_h;
-        sub.additive_blend = billboard_additive;
+        sub.src_x = debug_solid ? 0 : flipbook->SourceX();
+        sub.src_y = debug_solid ? 0 : flipbook->SourceY();
+        sub.src_w = debug_solid ? 1 : flipbook->SourceWidth();
+        sub.src_h = debug_solid ? 1 : flipbook->SourceHeight();
+        sub.src_tex_w = debug_solid ? 1 : flipbook->TextureWidth();
+        sub.src_tex_h = debug_solid ? 1 : flipbook->TextureHeight();
+        sub.additive_blend = debug_solid ? false : flipbook->AdditiveBlend();
         Renderer->SubmitOverlay(sub);
         ++stats.draw_submitted;
         return;
@@ -836,12 +898,6 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
     {
         if (!ctx.show_meshes || !ctx.mesh_assets) return;
         if (!ctx.show_gizmos && (oi->IsLight() || oi->ObjClass() == OBJCLASS_HELPER)) return;
-        if (IsLegacyFlameEffect(oi))
-        {
-            if (ctx.logged_suppressed_legacy_flame_mesh)
-                *ctx.logged_suppressed_legacy_flame_mesh = true;
-            return;
-        }
         if ((uint32_t)asset_idx >= (uint32_t)ctx.mesh_assets->size()) { ++stats.mesh_skipped; return; }
         TObjectImagery* img = oi->GetImagery();
         T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img);
@@ -1459,25 +1515,30 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
                 continue;
             }
             const int32_t st = oi->GetState();
+            if (T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img))
+                meshimg->AttachAnimatorComponents(oi);
 
-            if (auto* flipbook = oi->GetComponent<TFlipbookBillboardComponent>())
+            TFlipbookBillboardComponent* flipbook = oi->GetComponent<TFlipbookBillboardComponent>();
+            if (flipbook)
             {
+                static bool logged_billboard_build = false;
+                if (!logged_billboard_build)
+                {
+                    logged_billboard_build = true;
+                    log_info("[component-render] build billboard inst=%p class='%s' type='%s' debug=%d image=%u src=(%d,%d %dx%d) tex=%dx%d",
+                             (void*)oi, oi->GetClassName(), oi->GetTypeName(),
+                             flipbook->DebugSolid() ? 1 : 0,
+                             flipbook->Image().id,
+                             flipbook->SourceX(), flipbook->SourceY(),
+                             flipbook->SourceWidth(), flipbook->SourceHeight(),
+                             flipbook->TextureWidth(), flipbook->TextureHeight());
+                }
                 SSectorDrawableInst billboard = {};
                 billboard.kind = ESectorDrawableKind::Billboard;
                 billboard.world_pos = oi->Pos();
                 billboard.state = st;
                 billboard.frame = oi->GetFrame();
                 billboard.src = TSafeRef<>(oi);
-                billboard.billboard_img = flipbook->Image();
-                billboard.billboard_tex_w = flipbook->TextureWidth();
-                billboard.billboard_tex_h = flipbook->TextureHeight();
-                billboard.billboard_src_x = flipbook->SourceX();
-                billboard.billboard_src_y = flipbook->SourceY();
-                billboard.billboard_src_w = flipbook->SourceWidth();
-                billboard.billboard_src_h = flipbook->SourceHeight();
-                billboard.billboard_w = flipbook->Width();
-                billboard.billboard_h = flipbook->Height();
-                billboard.billboard_additive = flipbook->AdditiveBlend();
                 billboard.debug_sector_level = L.lvl;
                 billboard.debug_sector_x = L.sx;
                 billboard.debug_sector_y = L.sy;
@@ -1500,23 +1561,6 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
                     }
                     continue;
                 }
-                if (IsLegacyFlameEffect(oi))
-                {
-                    SSectorDrawableInst flame = {};
-                    flame.kind = ESectorDrawableKind::FlameDebug;
-                    flame.world_pos = oi->Pos();
-                    flame.state = st;
-                    flame.frame = oi->GetFrame();
-                    flame.src = TSafeRef<>(oi);
-                    flame.debug_sector_level = L.lvl;
-                    flame.debug_sector_x = L.sx;
-                    flame.debug_sector_y = L.sy;
-                    flame.debug_sector_slot = i;
-                    draw_work.push_back(flame);
-                    ++mesh_slots_kept;
-                    continue;
-                }
-
                 const int32_t kept_before = mesh_slots_kept;
                 int32_t hidden_for_state = 0;
                 int32_t extract_fail = 0;
@@ -2277,7 +2321,6 @@ void TMapRenderer::RenderFrame()
     const int32_t cov_cw = (vw + kCovCellPx - 1) / kCovCellPx;
     const int32_t cov_ch = (vh + kCovCellPx - 1) / kCovCellPx;
     std::vector<uint8_t> cov(size_t(cov_cw) * size_t(cov_ch), 0);
-    bool suppressed_legacy_flame_mesh = false;
     if (!s.debugGreenImage.id)
     {
         static const uint32_t kGreen = 0xFF00FF00u;
@@ -2317,8 +2360,8 @@ void TMapRenderer::RenderFrame()
     drawctx.cov_cw = cov_cw;
     drawctx.cov_ch = cov_ch;
     drawctx.cov = &cov;
-    drawctx.logged_suppressed_legacy_flame_mesh = &suppressed_legacy_flame_mesh;
     SMapRenderStats stats = {};
+    ParticleManager().BeginDrawPulsePass();
     for (int32_t sy = min_sy; sy <= max_sy; ++sy)
     for (int32_t sx = min_sx; sx <= max_sx; ++sx)
     {
@@ -2335,14 +2378,13 @@ void TMapRenderer::RenderFrame()
             const int32_t mi = s.sectorDrawInst[idx].src.MapIndex();
             if (mi >= 0 && s.selectedMapIndices.count(mi))
                 obj_id |= kObjFlagSelected;
+            if (TObjectInstance* oi = s.sectorDrawInst[idx].src.Get())
+                if (TParticleEffectComponent* particle_effect = oi->GetComponent<TParticleEffectComponent>())
+                    particle_effect->DrawPulse();
             s.sectorDrawInst[idx].Submit(drawctx, stats, obj_id);
         }
     }
-    if (suppressed_legacy_flame_mesh && !s.loggedSuppressedLegacyFlameMesh)
-    {
-        s.loggedSuppressedLegacyFlameMesh = true;
-        log_warn("[flame-override] suppressed ordinary mesh drawable(s) for legacy FLAME instance; override path is active");
-    }
+    SubmitParticleBillboards(drawctx, stats);
     // Mirror this frame's counts into the impl so the editor status bar
     // can read them without re-running the render.
     s.last_draw_counts.total_drawables  = int32_t(s.sectorDrawInst.size());

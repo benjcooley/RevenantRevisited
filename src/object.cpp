@@ -540,8 +540,8 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     if (mapindex >= 0)
     {
         MapPane.RegisterInstance(this, mapindex);
-        for (int32_t i = 0; i < components.NumItems(); ++i)
-            if (TObjectComponent* component = components.Get(i))
+        for (const auto& component_ptr : components)
+            if (TObjectComponent* component = component_ptr.get())
                 component->Activate();
     }
 }
@@ -561,10 +561,10 @@ TObjectInstance::~TObjectInstance()
     if (Inventory.GetContainer() == this)
         Inventory.SetContainer(nullptr);
 
-    for (int32_t i = 0; i < components.NumItems(); ++i)
-        if (TObjectComponent* component = components.Get(i))
+    for (const auto& component_ptr : components)
+        if (TObjectComponent* component = component_ptr.get())
             component->Detach();
-    components.DeleteAll();
+    components.clear();
 
     TObjectImagery::FreeImagery(imagery);
 
@@ -645,7 +645,7 @@ bool TObjectInstance::CreateAnimator()
         return false;
 
     a->Initialize();
-    AddComponent(a);
+    AddComponent(std::unique_ptr<TObjectComponent>(a));
     return true;
 }
 
@@ -655,37 +655,51 @@ void TObjectInstance::FreeAnimator()
         RemoveComponent(a->ComponentSlot());
 }
 
-int32_t TObjectInstance::AddComponent(TObjectComponent* component)
+int32_t TObjectInstance::AddComponent(std::unique_ptr<TObjectComponent> component)
 {
     if (!component || component->Owner())
         return -1;
 
     static uint32_t s_next_component_generation = 1;
-    const int32_t slot = components.Add(component);
+    int32_t slot = -1;
+    for (int32_t i = 0; i < int32_t(components.size()); ++i)
+    {
+        if (!components[size_t(i)])
+        {
+            slot = i;
+            break;
+        }
+    }
     if (slot < 0)
-        return -1;
+    {
+        slot = int32_t(components.size());
+        components.push_back(nullptr);
+    }
 
-    component->Attach(this, slot, ++s_next_component_generation);
+    TObjectComponent* raw = component.get();
+    components[size_t(slot)] = std::move(component);
+
+    raw->Attach(this, slot, ++s_next_component_generation);
     if (GetMapIndex() >= 0)
-        component->Activate();
+        raw->Activate();
     return slot;
 }
 
 void TObjectInstance::RemoveComponent(int32_t component_slot)
 {
-    if ((uint32_t)component_slot >= (uint32_t)components.NumItems())
+    if ((uint32_t)component_slot >= (uint32_t)components.size())
         return;
-    TObjectComponent* component = components.Get(component_slot);
+    TObjectComponent* component = components[size_t(component_slot)].get();
     if (component)
         component->Detach();
-    components.Delete(component_slot);
+    components[size_t(component_slot)].reset();
 }
 
 TObjectComponent* TObjectInstance::GetComponent(int32_t component_slot) const
 {
-    if ((uint32_t)component_slot >= (uint32_t)components.NumItems())
+    if ((uint32_t)component_slot >= (uint32_t)components.size())
         return nullptr;
-    return components.Get(component_slot);
+    return components[size_t(component_slot)].get();
 }
 
 bool TObjectInstance::NeedsAnimator() const
