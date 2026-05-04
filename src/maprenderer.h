@@ -14,6 +14,7 @@
 #include "debugui.h"
 
 struct S3DPoint;
+class TGameMap;
 
 class TMapRenderer
     : public IDebugTabContributor
@@ -31,6 +32,23 @@ class TMapRenderer
     bool InitializeFromStartupArgs(std::function<void(int32_t level,
                                                        int32_t sector_x,
                                                        int32_t sector_y)> post_load_hook = {});
+
+    // Bind the renderer to a TGameMap (owned by TMapManager).
+    // Subscribes to the map's Loaded/Updated/Unloaded events:
+    //  * Loaded / Updated -> rebuild drawable / light / scene caches
+    //  * Unloaded         -> clear the SafeRef + drop caches before
+    //                        the sectors are freed
+    // Pass nullptr to detach. Calling SetMap on a fresh map triggers
+    // an immediate RebuildForCurrentMap.
+    void SetMap(TGameMap* map);
+
+    // Force a fresh build of the renderer's draw caches against
+    // whatever map the SafeRef currently points at. Called from SetMap
+    // and from the Loaded/Updated event handler; callers can also
+    // invoke explicitly after mutating sector contents (e.g. spawning
+    // the player) so the new objects show up on the next frame.
+    void RebuildForCurrentMap();
+
     void Shutdown();
     void RenderFrame();
     void HandleMouseClick(int32_t button, int32_t x, int32_t y);

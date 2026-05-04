@@ -211,9 +211,20 @@ struct TMapRenderer::Impl
     std::unordered_map<int64_t, std::vector<int32_t>> sectorDrawBins;
     // Borrowed reference to the active TGameMap (owned by TMapManager).
     // Renderer iterates currentMap->Sectors() per frame; SafeRef keeps
-    // it null after a map unload via the (id, gen) handle pattern even
-    // before the listener-driven event hookup lands.
+    // it null after a map unload via the (id, gen) handle pattern.
     TSafeRef<TGameMap> currentMap;
+
+    // Listener handle on currentMap.Get() (TGameMap::AddListener id).
+    // SetMap registers; Unloaded handler / next SetMap unregisters.
+    uint32_t mapListenerId = 0;
+
+    // Camera anchor for RebuildForCurrentMap. Set from --level / --sector
+    // at boot; used by the camera-anchor logic when rebuilding draw
+    // caches. Defaults to "level origin" so post-boot level swaps with
+    // no explicit anchor center on the new level's content.
+    int32_t initialAnchorSx       = 0;
+    int32_t initialAnchorSy       = 0;
+    bool    useInitialLevelOrigin = true;
     std::vector<SSectorLight> sectorLights;
     int32_t dlightTexIdx = -1;
     sg_image debugGreenImage = {};
