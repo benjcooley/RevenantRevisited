@@ -252,10 +252,14 @@ void TPlayScreen::Update()
     // unsubscribes from level 0, subscribes to level 1, rebuilds draw
     // caches). Will be removed once the input path drives real
     // exit/door-triggered swaps.
-    if (gameframes == kGameFrameRate * 20)       // ~20s of game time
+    if (gameframes == kGameFrameRate * 5)        // ~5s of game time
     {
         log_info("[playscreen] DEBUG: switching to level 1 (smoke test)");
         MapManager.SetCurrentLevel(1);
+        // No automatic listener wiring yet -- explicitly point the
+        // renderer at the new current map so its draw caches rebuild.
+        if (mapRenderer && MapManager.CurrentMap())
+            mapRenderer->SetMap(MapManager.CurrentMap());
     }
 
     // Advance per-frame counters. The map renderer ticks its own animator
