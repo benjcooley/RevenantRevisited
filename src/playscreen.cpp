@@ -258,6 +258,18 @@ void TPlayScreen::Update()
     MapPane.PulseObjects();
     MapPane.MoveObjects();
 
+    // Camera follow: keep the renderer's camera anchored on the
+    // player. Cheap pointer / int copy; runs every frame so the view
+    // tracks Locke as he walks (or as Move() applies gravity / pose
+    // motion before input is wired). No-op if there's no Player or
+    // no renderer yet.
+    if (Player && mapRenderer)
+    {
+        S3DPoint p;
+        Player->GetPos(p);
+        mapRenderer->SetCameraWorld(Player->GetLevel(), p.x, p.y, p.z);
+    }
+
     // Advance per-frame counters. The map renderer ticks its own animator
     // off LegacyFrameCount(), so we just track our own session bookkeeping
     // here.
