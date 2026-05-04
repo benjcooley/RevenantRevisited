@@ -6,7 +6,9 @@
 
 #include "mappane.h"
 
+#include "gamemap.h"
 #include "graphics.h"
+#include "mapmanager.h"
 #include "maprenderer.h"
 #include "stream.h"
 #include "3dscene.h"
@@ -1830,107 +1832,65 @@ void WalkGridToPos(int32_t x, int32_t y, S3DPoint& pos)
 // General purpose handler for transfer, extract, clear etc
 void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
 {
-    if (!oi || oi->GetMapIndex() < 0 || 
-      ((mode == WALK_TRANSFER) && (oi->Flags() & OF_NOWALK)))
-        return;
+    // Sector resolver: try the active 3x3 streaming window first; fall
+    // back to MapManager.CurrentMap()->FindSector for everything outside
+    // that window. The window-first ordering keeps legacy code paths
+    // that expect sectors[][] to win unchanged; the MapManager fallback
+    // covers the new "no streaming" model where the window is empty.
+    auto find_sector = [this](int32_t sx, int32_t sy) -> TSector* {
+        if ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)
+            return nullptr;
+        const bool in_window =
+            sx >= sectorx && sx < sectorx + SECTORWINDOWX &&
+            sy >= sectory && sy < sectory + SECTORWINDOWY;
+        if (in_window)
+            if (TSector* s = sectors[sx - sectorx][sy - sectory])
+                return s;
+        if (TGameMap* m = MapManager.CurrentMap())
+            return m->FindSector(sx, sy);
+        return nullptr;
+    };
 
-    TObjectImagery* imagery = oi->GetImagery();
-    if (!imagery)
-        return;
-
-    const uint8_t *walk = imagery->GetWalkMap(oi->GetState());
-    if (!walk)
-        return;
-
-    int32_t width, length, height;
-    imagery->GetWorldBoundBox(oi->GetState(), width, length, height);
-
-    int32_t regx = imagery->GetWorldRegX(oi->GetState());
-    int32_t regy = imagery->GetWorldRegY(oi->GetState());
-
-    uint8_t *appliedwalk = nullptr;
-    if (oi->GetFace() != 0)
+    // EXTRACT mode also wants to redraw the walkmap rect as part of the
+    // clear. Wrap the resolver to capture the sector for the redraw
+    // call, since TGameMap::StampTileWalkmap doesn't know about the
+    // pane redraw chrome.
+    if (mode == WALK_EXTRACT)
     {
-        // apply rotations to walkmap based on facing
-        appliedwalk = (uint8_t *)malloc(width * length);
+        // Stamp the clear, then walk the affected sectors a second time
+        // to redraw the rect. The redraw needs imagery bbox / pos in
+        // walkmap-local coords; recompute here once after the stamp.
+        TGameMap::StampTileWalkmap(oi, mode, find_sector);
 
-        int32_t nx, ny, nsx, nsy;
-        oi->GetFacingBoundBox(nx, ny, nsx, nsy);
-
-        if (oi->GetFace() < 128)
+        TObjectImagery* imagery = oi ? oi->GetImagery() : nullptr;
+        if (imagery)
         {
-            for (int32_t y = 0; y < nsy; y++)
-                for (int32_t x = 0; x < nsx; x++)
-                    *(appliedwalk+(y*nsx)+x) = *(walk+((length-x-1)*width)+y);
+            int32_t w, l, h;
+            imagery->GetWorldBoundBox(oi->GetState(), w, l, h);
+            int32_t rx = imagery->GetWorldRegX(oi->GetState());
+            int32_t ry = imagery->GetWorldRegY(oi->GetState());
+            if (oi->GetFace() != 0)
+            {
+                int32_t nx, ny, nsx, nsy;
+                oi->GetFacingBoundBox(nx, ny, nsx, nsy);
+                rx = nx; ry = ny; w = nsx; l = nsy;
+            }
+            S3DPoint pos; oi->GetPos(pos);
+            const int32_t x = (pos.x >> WALKMAPSHIFT) - rx;
+            const int32_t y = (pos.y >> WALKMAPSHIFT) - ry;
+            const int32_t startsectx = (x << WALKMAPSHIFT) >> SECTORWSHIFT;
+            const int32_t startsecty = (y << WALKMAPSHIFT) >> SECTORHSHIFT;
+            const int32_t endsectx   = ((x + w - 1) << WALKMAPSHIFT) >> SECTORWSHIFT;
+            const int32_t endsecty   = ((y + l - 1) << WALKMAPSHIFT) >> SECTORHSHIFT;
+            for (int32_t sy = startsecty; sy <= endsecty; sy++)
+            for (int32_t sx = startsectx; sx <= endsectx; sx++)
+                if (TSector* sect = find_sector(sx, sy))
+                    RedrawWalkmapRect(oi, x, y, w, l, sect);
         }
-        else if (oi->GetFace() < 192)
-        {
-            for (int32_t y = 0; y < nsy; y++)
-                for (int32_t x = 0; x < nsx; x++)
-                    *(appliedwalk+(y*nsx)+x) = *(walk+(y*width)+(width-x-1));
-        }
-        else
-        {
-            for (int32_t y = 0; y < nsy; y++)
-                for (int32_t x = 0; x < nsx; x++)
-                    *(appliedwalk+(y*nsx)+x) = *(walk+((length-x-1)*width)+(width-x-1));
-        }
-
-        regx = nx;
-        regy = ny;
-        width = nsx;
-        length = nsy;
+        return;
     }
 
-    S3DPoint pos;
-    oi->GetPos(pos);
-
-    bool override = (oi->ObjClass() == OBJCLASS_EXIT);
-    if (oi->ObjClass() == OBJCLASS_EXIT)
-        override = true;
-
-    int32_t x = (pos.x >> WALKMAPSHIFT) - regx;
-    int32_t y = (pos.y >> WALKMAPSHIFT) - regy;
-
-    int32_t startsectx = (x << WALKMAPSHIFT) >> SECTORWSHIFT;
-    int32_t startsecty = (y << WALKMAPSHIFT) >> SECTORHSHIFT;
-    int32_t endsectx = ((x + width - 1) << WALKMAPSHIFT) >> SECTORWSHIFT;
-    int32_t endsecty = ((y + length - 1) << WALKMAPSHIFT) >> SECTORHSHIFT;
-
-    for (int32_t sy = startsecty; sy <= endsecty; sy++)
-        for (int32_t sx = startsectx; sx <= endsectx; sx++)
-        {
-            if ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)
-                continue;
-
-            TSector* sect = nullptr;
-            const bool in_window =
-                sx >= sectorx && sx < sectorx + SECTORWINDOWX &&
-                sy >= sectory && sy < sectory + SECTORWINDOWY;
-            if (in_window)
-                sect = sectors[sx - sectorx][sy - sectory];
-
-            // Renderer-owned-sectors fallback (see GetWalkHeight comment).
-            if (!sect)
-                if (TMapRenderer* mr = PlayScreen.MapRenderer())
-                    sect = mr->FindLoadedSector(level, sx, sy);
-
-            if (!sect)
-                continue;
-
-            if (mode == WALK_EXTRACT)
-            {
-                sect->WalkmapHandler(WALK_CLEAR, appliedwalk ? appliedwalk : const_cast<uint8_t*>(walk), 0, x, y, width, length, width);
-                RedrawWalkmapRect(oi, x, y, width, length, sect);
-            }
-            else
-                sect->WalkmapHandler(mode, appliedwalk ? appliedwalk : const_cast<uint8_t*>(walk), pos.z, x, y, width, length, width, override);
-        }
-
-    imagery->SetHeaderDirty(true);
-
-    if (appliedwalk)
-        free(appliedwalk);
+    TGameMap::StampTileWalkmap(oi, mode, find_sector);
 }
 
 void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int32_t w, int32_t l, TSector* dsect)
@@ -2025,12 +1985,13 @@ int32_t TMapPane::GetWalkHeight(S3DPoint& pos)
     if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
         return sectors[sx][sy]->ReturnWalkmap(local_x, local_y);
 
-    // Fall back to the renderer's loaded sectors. Under the new
-    // renderer-owns-sectors model, MapPane.sectors[][] stays empty
-    // until paging is wired up, but the renderer holds the same
-    // TSector instances and we can read their walkmap directly.
-    if (TMapRenderer* mr = PlayScreen.MapRenderer())
-        if (TSector* sec = mr->FindLoadedSector(level, world_sx, world_sy))
+    // Fall back to the canonical sector pool: MapManager owns the
+    // current TGameMap, which holds every loaded sector regardless of
+    // the (legacy) 3x3 streaming window. The window-first lookup
+    // above keeps any code that genuinely depends on sectors[][]
+    // unchanged; everything else routes through here.
+    if (TGameMap* m = MapManager.CurrentMap())
+        if (TSector* sec = m->FindSector(world_sx, world_sy))
             return sec->ReturnWalkmap(local_x, local_y);
 
     return 0;
@@ -2052,9 +2013,9 @@ int32_t TMapPane::GetWalkGridHeight(int32_t x, int32_t y)
     if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
         return sectors[sx][sy]->ReturnWalkmap(wx, wy);
 
-    // Renderer-owned-sectors fallback (see GetWalkHeight comment).
-    if (TMapRenderer* mr = PlayScreen.MapRenderer())
-        if (TSector* sec = mr->FindLoadedSector(level, world_sx, world_sy))
+    // MapManager-canonical fallback (see GetWalkHeight comment).
+    if (TGameMap* m = MapManager.CurrentMap())
+        if (TSector* sec = m->FindSector(world_sx, world_sy))
             return sec->ReturnWalkmap(wx, wy);
 
     return 0;

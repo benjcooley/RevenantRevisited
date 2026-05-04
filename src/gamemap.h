@@ -31,6 +31,7 @@
 #include "object.h"
 
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 class TSector;
@@ -84,6 +85,18 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     // load/unload boundary). Called by code that mutates a sector's
     // objects array via the editor or scripts.
     void NotifyUpdated() { listeners.Notify(EGameMapEvent::Updated, this); }
+
+    // Stamp `oi`'s tile walkmap footprint into whatever sectors
+    // `find_sector(sx, sy)` resolves to. Static so both TGameMap::Load
+    // (initial stamp with self-FindSector resolver) and TMapPane's
+    // runtime path (tile moves with its own window-aware resolver)
+    // can share the bbox / facing-rotation math.
+    //
+    // `mode` is one of WALK_TRANSFER / WALK_CAPTURE / WALK_CLEAR /
+    // WALK_EXTRACT (defined in mappane.h).
+    using FindSectorFn = std::function<TSector*(int32_t sx, int32_t sy)>;
+    static void StampTileWalkmap(TObjectInstance* oi, int32_t mode,
+                                 const FindSectorFn& find_sector);
 
   private:
     int32_t               level = -1;
