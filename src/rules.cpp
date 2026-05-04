@@ -709,14 +709,27 @@ PSClassData TRules::GetClass(char *name)
 
 PSCharData TRules::GetCharData(int32_t objtype, int32_t objclass)
 {
-    if (!initialized)
-        return nullptr;
-
     for (int32_t c = 0; c < chardata.NumItems(); c++)
     {
         if (chardata[c]->objtype == objtype && chardata[c]->objclass == objclass)
             return chardata[c];
     }
-    
-    return def;
+
+    if (def)
+        return def;
+
+    // Fall back to a default-constructed SCharData so the 76+
+    // dereference sites in character.cpp don't need null guards.
+    // Field initializers on SCharData / SClassData (rules.h) zero-
+    // init every member; we wire ->classdata to a static SClassData
+    // so SkillPcnt-style chained accesses also resolve. Real
+    // entries should come back when rules.def gets per-class CHAR
+    // data and Initialize() loads them.
+    static SClassData s_fallback_class;
+    static SCharData  s_fallback = []{
+        SCharData d;
+        d.classdata = &s_fallback_class;
+        return d;
+    }();
+    return &s_fallback;
 }

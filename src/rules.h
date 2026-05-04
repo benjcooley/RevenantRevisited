@@ -146,10 +146,12 @@ struct SClassData
     bool Load(char *aname, TToken &t);
       // Loads the class info from the "CHAR.DEF" file
 
-    char name[RESNAMELEN];              // Name of character type (not individual name)
-    int32_t statreqs[NUM_PLRSTATS];         // Stat requirements (-x=below,+x=above,0=don't care)
-    int32_t skillmods[NUM_SKILLS];          // Plus or minus modifiers for skills
-    int32_t healthmod, fatiguemod, manamod; // Class based health fatigue and mana percent mods
+    char     name[RESNAMELEN]      = {}; // Name of character type (not individual name)
+    int32_t  statreqs[NUM_PLRSTATS] = {}; // Stat requirements (-x=below,+x=above,0=don't care)
+    int32_t  skillmods[NUM_SKILLS]  = {}; // Plus or minus modifiers for skills
+    int32_t  healthmod  = 0;
+    int32_t  fatiguemod = 0;
+    int32_t  manamod    = 0;
 };
 
 typedef TPointerArray<SClassData, 16, 16> TClassDataArray;
@@ -164,40 +166,55 @@ struct SCharData
     bool Load(char *aname, TToken &t);
       // Loads the character from the "CHAR.DEF" file
 
-    char name[RESNAMELEN];              // Name of character type (not individual name)
-    char groups[CHARGROUPLEN];          // Groups this character belongs to (not including char type)
-    char enemies[CHARGROUPLEN];         // Groups this character attacks (can include char types as well as groups)
-    int32_t objtype;                        // Type data is associated with
-    int32_t objclass;                       // Class data is associated with
-    int32_t flags;                          // Character flags
-    TCharAttackArray attacks;           // Attack info
-    int32_t damagemods[NUMDAMAGETYPES];     // Damage modifiers for character (100=100% of damage value)
-    char blocksounds[SOUNDLISTLEN];     // Sound played when char attack is blocked
-    char misssounds[SOUNDLISTLEN];      // Sound played when char attack missed
-    int32_t playerblockmin, playerblockstep, playerblockinc; // PLAYER: min pcnt, SK_DEFENSE step, and inc
-    int32_t combatrangemin, combatrangemax; // Range at which monster or player will go into combat
-    int32_t maxattackrange;                 // Range at which monster will stop chasing, and start attacking
-    SColor swipecolor;                  // Sword swipe color
-    char bodytype[MAXANIMNAME];         // PLAYER: Type of body (for selecting equipment geometry)
-    PSClassData classdata;              // PLAYER: Class of character
-    int32_t blockfreq, blockmin, blockmax;  // MONSTER: block freq, min block time, max block time
-    int32_t sightmin, sightmax, sightrange, sightangle; // MONSTER: range at which monster sees or hears
-    int32_t hearingmin, hearingmax, hearingrange;       // MONSTER: hearing ability and hearing range
-    int32_t weapontype;                     // MONSTER: weapon type
-    int32_t weapondamage;                   // MONSTER: damage for monster's weapon
-    int32_t armorvalue;                     // MONSTER: Armor value
-    int32_t defensemod;                     // MONSTER: Defense modifier
-    int32_t attackmod;                      // MONSTER: Offsense modifier
-    int32_t minattackfreq, maxattackfreq;   // MONSTER: Min and max attack freq in 100ths of second
-    int32_t mana, fatigue, health;          // MONSTER: Max values for monsters
-    int32_t walkspeed, runspeed, sneakspeed, combatwalkspeed;
-                                        // Speeds for character's movement
-    S3DPoint arrowpos;                  // Where arrow starts relative to character
-    int32_t arrowspeed;                     // How fast arrow goes
-    int32_t bowwait;                        // How int32_t to wait before character can shoot next arrow
-    int32_t bowaimspeed;                    // How fast do we pivot when aiming bow
-    int32_t numimpacts;
-    SCharAttackImpact impacts[MAXCHARIMPACTS]; // Default impacts for characters
+    char     name[RESNAMELEN]                = {}; // Name of character type (not individual name)
+    char     groups[CHARGROUPLEN]            = {}; // Groups this character belongs to (not including char type)
+    char     enemies[CHARGROUPLEN]           = {}; // Groups this character attacks (can include char types as well as groups)
+    int32_t  objtype                          = -1; // Type data is associated with (-1 = default)
+    int32_t  objclass                         = OBJCLASS_CHARACTER; // Class data is associated with
+    int32_t  flags                            = 0;
+    TCharAttackArray attacks;
+    int32_t  damagemods[NUMDAMAGETYPES]      = {}; // Damage modifiers (100=100% of damage value)
+    char     blocksounds[SOUNDLISTLEN]       = {};
+    char     misssounds[SOUNDLISTLEN]        = {};
+    int32_t  playerblockmin                  = 0;
+    int32_t  playerblockstep                 = 0;
+    int32_t  playerblockinc                  = 0;
+    int32_t  combatrangemin                  = 0;
+    int32_t  combatrangemax                  = 0;
+    int32_t  maxattackrange                  = 0;
+    SColor   swipecolor                      = {};  // Sword swipe color
+    char     bodytype[MAXANIMNAME]           = {};  // PLAYER: Type of body
+    PSClassData classdata                    = nullptr; // PLAYER: Class of character
+    int32_t  blockfreq                       = 0;
+    int32_t  blockmin                        = 0;
+    int32_t  blockmax                        = 0;
+    int32_t  sightmin                        = 0;
+    int32_t  sightmax                        = 0;
+    int32_t  sightrange                      = 0;
+    int32_t  sightangle                      = 0;
+    int32_t  hearingmin                      = 0;
+    int32_t  hearingmax                      = 0;
+    int32_t  hearingrange                    = 0;
+    int32_t  weapontype                      = 0;
+    int32_t  weapondamage                    = 0;
+    int32_t  armorvalue                      = 0;
+    int32_t  defensemod                      = 0;
+    int32_t  attackmod                       = 0;
+    int32_t  minattackfreq                   = 0;
+    int32_t  maxattackfreq                   = 0;
+    int32_t  mana                            = 0;
+    int32_t  fatigue                         = 0;
+    int32_t  health                          = 0;
+    int32_t  walkspeed                       = 0;
+    int32_t  runspeed                        = 0;
+    int32_t  sneakspeed                      = 0;
+    int32_t  combatwalkspeed                 = 0;
+    S3DPoint arrowpos                        = {};
+    int32_t  arrowspeed                      = 0;
+    int32_t  bowwait                         = 0;
+    int32_t  bowaimspeed                     = 0;
+    int32_t  numimpacts                      = 0;
+    SCharAttackImpact impacts[MAXCHARIMPACTS] = {};
 };
 
 typedef TPointerArray<SCharData, 16, 16> TCharDataArray;
