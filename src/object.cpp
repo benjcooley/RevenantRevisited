@@ -27,6 +27,7 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <atomic>
 #include <vector>
 
 namespace {
@@ -444,6 +445,16 @@ void TObjectInstance::ClearObject()
     invindex = inventnum = -1;
     shadow = -1;
     mapindex = -1;
+    // Fresh generation per construct/clear. Globally unique under our
+    // monotonic counter (see TSafeRef contract in object.h). When an
+    // id slot is later reused by a new instance, the new gen will not
+    // match TSafeRefs captured against the prior instance, so they
+    // resolve to nullptr instead of silently re-resolving to the new
+    // tenant.
+    {
+        static std::atomic<uint32_t> s_next_gen{1u};
+        safe_ref_gen = s_next_gen.fetch_add(1u, std::memory_order_relaxed);
+    }
 
     owner = nullptr;
 
