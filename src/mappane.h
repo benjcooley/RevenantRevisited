@@ -304,6 +304,14 @@ class TMapPane : public TPane
   // Sector Functions
     void UpdateSectors();
         // Reload sectors based on pane x, y position
+
+    // Populate the active window (sectors[SECTORWINDOWX][SECTORWINDOWY])
+    // from MapManager.CurrentMap, centered on the Player's sector. The
+    // active window is what TMapIterator walks for per-frame
+    // PulseObjects / MoveObjects / NextFrameObjects -- so anything
+    // inside it ticks; anything outside is idle this frame. Cheap when
+    // the player hasn't crossed a sector boundary (no-op).
+    void UpdateActiveWindow();
     void SaveAllSectors();
         // Save all sectors to disk without deallocating
     void FreeAllSectors();

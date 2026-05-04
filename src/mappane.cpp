@@ -3885,6 +3885,40 @@ void TMapPane::ReloadSectors()
     RedrawAll();
 }
 
+void TMapPane::UpdateActiveWindow()
+{
+    if (!Player) return;
+    TGameMap* map = MapManager.CurrentMap();
+    if (!map) return;
+
+    S3DPoint pos;
+    Player->GetPos(pos);
+    const int32_t player_lvl = Player->GetLevel();
+    const int32_t player_sx  = pos.x >> SECTORWSHIFT;
+    const int32_t player_sy  = pos.y >> SECTORHSHIFT;
+
+    // Window origin = player sector minus half-window so the player's
+    // sector ends up at the center cell.
+    const int32_t new_sectorx = player_sx - SECTORWINDOWX / 2;
+    const int32_t new_sectory = player_sy - SECTORWINDOWY / 2;
+
+    if (level == player_lvl && sectorx == new_sectorx && sectory == new_sectory)
+    {
+        // Already centered correctly. Cells stay valid as long as the
+        // map underneath doesn't change -- TGameMap::Unloaded would
+        // null these out at the renderer too.
+        return;
+    }
+
+    level    = player_lvl;
+    sectorx  = new_sectorx;
+    sectory  = new_sectory;
+
+    for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+        for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+            sectors[x][y] = map->FindSector(sectorx + x, sectory + y);
+}
+
 void TMapPane::UpdateSectors()
 {
     int32_t x, y;

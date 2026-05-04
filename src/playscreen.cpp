@@ -33,6 +33,7 @@
 #include "editorstub.h"
 #include "imagery.h"
 #include "logging.h"
+#include "mappane.h"
 #include "maprenderer.h"
 #include "player.h"
 #include "savegame.h"
@@ -245,6 +246,17 @@ void TPlayScreen::Update()
     // TPlayer; UpdateMove translates them into a movement step.
     if (controlon && !demomode)
         UpdateMove();
+
+    // Game-logic tick over the active 3x3 window centered on the
+    // player. UpdateActiveWindow re-fills MapPane.sectors[][] (cheap
+    // when the player hasn't crossed a sector boundary). PulseObjects
+    // runs per-instance Pulse() (AI / animator state); MoveObjects
+    // applies the movement step from movebits set during Pulse.
+    // NextFrame still runs from the renderer's per-frame loop today;
+    // collapsing both onto the same iterator is a follow-up.
+    MapPane.UpdateActiveWindow();
+    MapPane.PulseObjects();
+    MapPane.MoveObjects();
 
     // Advance per-frame counters. The map renderer ticks its own animator
     // off LegacyFrameCount(), so we just track our own session bookkeeping
