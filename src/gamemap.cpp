@@ -6,6 +6,7 @@
 
 #include "gamemap.h"
 
+#include "imagery.h"
 #include "logging.h"
 #include "mappane.h"
 #include "object.h"
@@ -174,18 +175,30 @@ bool TGameMap::Load(int32_t lvl)
         loaded_objs += sec->NumItems();
     }
 
-    // TODO(phase 2b): per-tile walkmap stamping should live here so
-    // it owns the same lifecycle as the sectors. Currently the
-    // MapPane.TransferWalkmap path looks up sectors via the renderer's
-    // sectorsKept (added as a fallback when MapPane.sectors[][] went
-    // empty), and at this point in the boot order the renderer's
-    // mirror hasn't been populated yet. Renderer keeps the stamping
-    // call after its sectorsKept mirror runs; we move it here once
-    // TGameMap exposes a direct sector lookup that doesn't need
-    // MapPane / the renderer fallback at all.
+    // Stamp tile walkmaps onto the sector walkmaps using a self-
+    // resolver -- no MapPane / renderer fallback dependency, so the
+    // stamping order doesn't matter relative to renderer init.
+    int32_t walkmap_tiles_stamped = 0;
+    auto find_self = [this](int32_t sx, int32_t sy) -> TSector* {
+        return FindSector(sx, sy);
+    };
+    for (TSector* sec : sectors)
+    {
+        if (!sec) continue;
+        const int32_t n = sec->NumItems();
+        for (int32_t i = 0; i < n; ++i)
+        {
+            TObjectInstance* oi = sec->GetInstance(i);
+            if (!oi || oi->ObjClass() != OBJCLASS_TILE) continue;
+            if (oi->Flags() & OF_NOWALK) continue;
+            StampTileWalkmap(oi, WALK_TRANSFER, find_self);
+            ++walkmap_tiles_stamped;
+        }
+    }
 
-    log_info("[gamemap] level %d loaded: %zu sectors, %d objects",
-             level, sectors.size(), loaded_objs);
+    log_info("[gamemap] level %d loaded: %zu sectors, %d objects, "
+             "%d tile walkmaps stamped",
+             level, sectors.size(), loaded_objs, walkmap_tiles_stamped);
 
     listeners.Notify(EGameMapEvent::Loaded, this);
     return true;
@@ -212,4 +225,94 @@ TSector* TGameMap::FindSector(int32_t sx, int32_t sy) const
         if (sec && sec->SectorX() == sx && sec->SectorY() == sy)
             return sec;
     return nullptr;
+}
+
+void TGameMap::StampTileWalkmap(TObjectInstance* oi, int32_t mode,
+                                const FindSectorFn& find_sector)
+{
+    if (!oi || oi->GetMapIndex() < 0)
+        return;
+    if (mode == WALK_TRANSFER && (oi->Flags() & OF_NOWALK))
+        return;
+
+    TObjectImagery* imagery = oi->GetImagery();
+    if (!imagery) return;
+    const uint8_t* walk = imagery->GetWalkMap(oi->GetState());
+    if (!walk) return;
+
+    int32_t width, length, height;
+    imagery->GetWorldBoundBox(oi->GetState(), width, length, height);
+
+    int32_t regx = imagery->GetWorldRegX(oi->GetState());
+    int32_t regy = imagery->GetWorldRegY(oi->GetState());
+
+    // Apply facing rotation to the walkmap stamp data; same logic as
+    // the legacy TMapPane::WalkmapHandler.
+    uint8_t* appliedwalk = nullptr;
+    if (oi->GetFace() != 0)
+    {
+        appliedwalk = (uint8_t*)malloc(width * length);
+
+        int32_t nx, ny, nsx, nsy;
+        oi->GetFacingBoundBox(nx, ny, nsx, nsy);
+
+        if (oi->GetFace() < 128)
+        {
+            for (int32_t y = 0; y < nsy; y++)
+                for (int32_t x = 0; x < nsx; x++)
+                    *(appliedwalk + (y * nsx) + x) = *(walk + ((length - x - 1) * width) + y);
+        }
+        else if (oi->GetFace() < 192)
+        {
+            for (int32_t y = 0; y < nsy; y++)
+                for (int32_t x = 0; x < nsx; x++)
+                    *(appliedwalk + (y * nsx) + x) = *(walk + (y * width) + (width - x - 1));
+        }
+        else
+        {
+            for (int32_t y = 0; y < nsy; y++)
+                for (int32_t x = 0; x < nsx; x++)
+                    *(appliedwalk + (y * nsx) + x) = *(walk + ((length - x - 1) * width) + (width - x - 1));
+        }
+
+        regx = nx;
+        regy = ny;
+        width = nsx;
+        length = nsy;
+    }
+
+    S3DPoint pos;
+    oi->GetPos(pos);
+
+    const bool override = (oi->ObjClass() == OBJCLASS_EXIT);
+
+    const int32_t x = (pos.x >> WALKMAPSHIFT) - regx;
+    const int32_t y = (pos.y >> WALKMAPSHIFT) - regy;
+
+    const int32_t startsectx = (x << WALKMAPSHIFT) >> SECTORWSHIFT;
+    const int32_t startsecty = (y << WALKMAPSHIFT) >> SECTORHSHIFT;
+    const int32_t endsectx   = ((x + width  - 1) << WALKMAPSHIFT) >> SECTORWSHIFT;
+    const int32_t endsecty   = ((y + length - 1) << WALKMAPSHIFT) >> SECTORHSHIFT;
+
+    uint8_t* walk_data = appliedwalk ? appliedwalk : const_cast<uint8_t*>(walk);
+
+    for (int32_t sy = startsecty; sy <= endsecty; sy++)
+    for (int32_t sx = startsectx; sx <= endsectx; sx++)
+    {
+        if ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)
+            continue;
+
+        TSector* sect = find_sector(sx, sy);
+        if (!sect) continue;
+
+        if (mode == WALK_EXTRACT)
+            sect->WalkmapHandler(WALK_CLEAR, walk_data, 0, x, y, width, length, width);
+        else
+            sect->WalkmapHandler(mode, walk_data, pos.z, x, y, width, length, width, override);
+    }
+
+    imagery->SetHeaderDirty(true);
+
+    if (appliedwalk)
+        free(appliedwalk);
 }

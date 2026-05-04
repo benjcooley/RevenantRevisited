@@ -1447,28 +1447,7 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
         const auto& sample = census_samples[i];
     }
 
-    // Stamp tile walkmaps. MapPane.TransferWalkmap routes through
-    // sectors[][] (empty) then falls back to
-    // mapRenderer->FindLoadedSector which now resolves through the
-    // renderer's TSafeRef<TGameMap>. Phase 2c moves stamping into
-    // TGameMap once MapPane's fallback can route directly to
-    // MapManager.CurrentMap()->FindSector.
-    int32_t walkmap_tiles_stamped = 0;
-    for (const auto& L : loaded)
-    {
-        TSector* sec = L.sec;
-        if (!sec) continue;
-        for (int32_t i = 0; i < sec->NumItems(); ++i)
-        {
-            TObjectInstance* oi = sec->GetInstance(i);
-            if (!oi || oi->ObjClass() != OBJCLASS_TILE) continue;
-            if (oi->Flags() & OF_NOWALK) continue;
-            MapPane.TransferWalkmap(oi);
-            ++walkmap_tiles_stamped;
-        }
-    }
-    log_info("[walkmap] stamped %d tile footprints across %zu sectors",
-             walkmap_tiles_stamped, loaded.size());
+    // (Walkmap stamping happens in TGameMap::Load now.)
 
     // The map is loaded and the SafeRef points at it. Run the optional
     // post-load hook so callers can inject objects (player spawn,
