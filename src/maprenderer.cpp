@@ -1456,23 +1456,19 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     if (post_load_hook)
         post_load_hook(keep_lvl, keep_sx, keep_sy);
 
-    // Anchor the camera per the parsed args (stored on Impl so
-    // RebuildForCurrentMap can re-use them on level swaps).
-    s.initialAnchorSx       = keep_sx;
-    s.initialAnchorSy       = keep_sy;
-    s.useInitialLevelOrigin = use_level_origin;
-
-    // Bind the renderer to the now-loaded TGameMap. SetMap subscribes
-    // to the map's events and triggers RebuildForCurrentMap, which
-    // (re)builds the draw / camera / light caches against the live
-    // sectors.
-    SetMap(gmap);
+    // Bind the renderer to the now-loaded TGameMap, passing the
+    // parsed --sector anchor (or defaulting to level-origin if
+    // --level was given alone). SetMap subscribes to the map's
+    // events and triggers RebuildForCurrentMap, which (re)builds
+    // the draw / camera / light caches against the live sectors.
+    SetMap(gmap, use_level_origin, keep_sx, keep_sy);
 
     DebugUI::RegisterContributor(this);
     return true;
 }
 
-void TMapRenderer::SetMap(TGameMap* m)
+void TMapRenderer::SetMap(TGameMap* m, bool use_level_origin,
+                          int32_t anchor_sx, int32_t anchor_sy)
 {
     Impl& s = *impl;
 
@@ -1487,6 +1483,12 @@ void TMapRenderer::SetMap(TGameMap* m)
 
     if (m)
     {
+        // Update camera-level + anchor state for the new map.
+        s.cameraLevel           = m->Level();
+        s.useInitialLevelOrigin = use_level_origin;
+        s.initialAnchorSx       = anchor_sx;
+        s.initialAnchorSy       = anchor_sy;
+
         // Subscribe -- Loaded / Updated trigger a full rebuild;
         // Unloaded clears the ref before the underlying sectors are
         // freed so subsequent draws don't dereference a dead map.

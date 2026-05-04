@@ -38,9 +38,20 @@ class TMapRenderer
     //  * Loaded / Updated -> rebuild drawable / light / scene caches
     //  * Unloaded         -> clear the SafeRef + drop caches before
     //                        the sectors are freed
-    // Pass nullptr to detach. Calling SetMap on a fresh map triggers
-    // an immediate RebuildForCurrentMap.
-    void SetMap(TGameMap* map);
+    // Pass nullptr to detach.
+    //
+    // Camera anchor for the new map:
+    //   use_level_origin = true  -> auto-center on the level's tile
+    //                                bounds (default for level swaps)
+    //   use_level_origin = false -> explicit (anchor_sx, anchor_sy)
+    //                                sector pin (boot --sector path)
+    //
+    // Calling SetMap on a fresh map triggers an immediate
+    // RebuildForCurrentMap.
+    void SetMap(TGameMap* map,
+                bool use_level_origin = true,
+                int32_t anchor_sx = 0,
+                int32_t anchor_sy = 0);
 
     // Force a fresh build of the renderer's draw caches against
     // whatever map the SafeRef currently points at. Called from SetMap
