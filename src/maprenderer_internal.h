@@ -2,6 +2,7 @@
 
 #include "maprenderer.h"
 
+#include "gamemap.h"
 #include "object.h"
 #include "renderer.h"
 #include "revenant.h"
@@ -208,7 +209,11 @@ struct TMapRenderer::Impl
     std::vector<SSectorMeshAsset> sectorMeshAsset;
     std::vector<SSectorDrawableInst> sectorDrawInst;
     std::unordered_map<int64_t, std::vector<int32_t>> sectorDrawBins;
-    std::vector<TSector*> sectorsKept;
+    // Borrowed reference to the active TGameMap (owned by TMapManager).
+    // Renderer iterates currentMap->Sectors() per frame; SafeRef keeps
+    // it null after a map unload via the (id, gen) handle pattern even
+    // before the listener-driven event hookup lands.
+    TSafeRef<TGameMap> currentMap;
     std::vector<SSectorLight> sectorLights;
     int32_t dlightTexIdx = -1;
     sg_image debugGreenImage = {};

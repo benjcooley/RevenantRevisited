@@ -1035,8 +1035,11 @@ void TMapRenderer::GetLoadedSectors(std::vector<TSector*>& out) const
 {
     out.clear();
     if (!impl) return;
-    out.reserve(impl->sectorsKept.size());
-    for (TSector* s : impl->sectorsKept)
+    TGameMap* m = impl->currentMap.Get();
+    if (!m) return;
+    const std::vector<TSector*>& src = m->Sectors();
+    out.reserve(src.size());
+    for (TSector* s : src)
         if (s) out.push_back(s);
 }
 
@@ -1053,12 +1056,9 @@ S3DPoint TMapRenderer::CameraWorld() const
 TSector* TMapRenderer::FindLoadedSector(int32_t level, int32_t sector_x, int32_t sector_y) const
 {
     if (!impl) return nullptr;
-    for (TSector* s : impl->sectorsKept)
-        if (s && s->SectorLevel() == level
-              && s->SectorX() == sector_x
-              && s->SectorY() == sector_y)
-            return s;
-    return nullptr;
+    TGameMap* m = impl->currentMap.Get();
+    if (!m || m->Level() != level) return nullptr;
+    return m->FindSector(sector_x, sector_y);
 }
 
 void TMapRenderer::SyncContentsCache()
@@ -1071,8 +1071,12 @@ void TMapRenderer::SyncContentsCache()
     // the sum, even if mutations cancel out object-count-wise. (See
     // memory/feedback_versions_over_flags.md on why versions over
     // dirty flags: a skipped read can never miss a click.)
+    TGameMap* m = s.currentMap.Get();
+    if (!m) return;
+    const std::vector<TSector*>& kept = m->Sectors();
+
     int64_t cur_sum = 0;
-    for (TSector* sec : s.sectorsKept)
+    for (TSector* sec : kept)
         if (sec) cur_sum += sec->ContentVer();
     if (cur_sum == s.lastSyncedSectorVerSum) return;
     s.lastSyncedSectorVerSum = cur_sum;
@@ -1082,7 +1086,7 @@ void TMapRenderer::SyncContentsCache()
     // the editor's current paste/duplicate test cases.
     //
     // Strategy: drop existing tile entries from sectorDrawInst and
-    // rebuild from sectorsKept. Reuse the cached sectorTileTex (keyed
+    // rebuild from the current map's sectors. Reuse the cached sectorTileTex (keyed
     // by bm pointer) — instances whose imagery isn't already cached
     // are skipped, with a one-shot warning log.
     std::vector<SSectorDrawableInst> rebuilt;
@@ -1100,7 +1104,7 @@ void TMapRenderer::SyncContentsCache()
 
     int32_t tile_skipped_no_cache = 0;
     int32_t tile_rebuilt = 0;
-    for (TSector* sec : s.sectorsKept) {
+    for (TSector* sec : kept) {
         if (!sec) continue;
         for (int32_t i = 0; i < sec->NumItems(); ++i) {
             TObjectInstance* oi = sec->GetInstance(i);
@@ -1345,8 +1349,7 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     s.cameraLevel = keep_lvl;
 
     // Load + own the level via MapManager (game-side ownership, see
-    // gamemap.h / mapmanager.h). The renderer just borrows. Walkmap
-    // stamping happens in TGameMap::Load -- no longer here.
+    // gamemap.h / mapmanager.h). The renderer just borrows.
     TGameMap* gmap = MapManager.SetCurrentLevel(keep_lvl);
     if (!gmap || gmap->Sectors().empty())
     {
@@ -1354,11 +1357,11 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
             log_error("[sector] level %d: MapManager returned no sectors; aborting startup", keep_lvl);
         return !use_level_origin;
     }
+    s.currentMap = gmap;        // SafeRef captures (id, gen)
 
-    // Mirror the loaded set into the renderer's existing iteration
-    // shape (`loaded` + sectorsKept) -- the rest of this function and
-    // the per-frame loops still expect those. Phase 2B will collapse
-    // them onto a direct currentMap->Sectors() read.
+    // Build the local `loaded` list the rest of this function uses for
+    // anchor / draw_work iteration. Sectors live on the map; we don't
+    // own them.
     for (TSector* sec : gmap->Sectors())
     {
         if (!sec) continue;
@@ -1366,7 +1369,6 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
         loaded_light_total += sec->NumObjSetItems(OBJSET_LIGHTS);
         loaded_anim_total  += sec->NumObjSetItems(OBJSET_ANIMATE);
         loaded.push_back({ sec->SectorLevel(), sec->SectorX(), sec->SectorY(), sec });
-        s.sectorsKept.push_back(sec);
     }
     if (loaded.empty())
     {
@@ -1445,12 +1447,12 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
         const auto& sample = census_samples[i];
     }
 
-    // Stamp tile walkmaps now that the renderer's sectorsKept mirror
-    // is populated -- MapPane.TransferWalkmap routes through
-    // sectors[][] (empty) then falls back to mapRenderer->FindLoadedSector
-    // which reads sectorsKept. Phase 2b moves this into TGameMap once
-    // it exposes a direct sector lookup that doesn't need the renderer
-    // fallback.
+    // Stamp tile walkmaps. MapPane.TransferWalkmap routes through
+    // sectors[][] (empty) then falls back to
+    // mapRenderer->FindLoadedSector which now resolves through the
+    // renderer's TSafeRef<TGameMap>. Phase 2c moves stamping into
+    // TGameMap once MapPane's fallback can route directly to
+    // MapManager.CurrentMap()->FindSector.
     int32_t walkmap_tiles_stamped = 0;
     for (const auto& L : loaded)
     {
@@ -1468,10 +1470,10 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     log_info("[walkmap] stamped %d tile footprints across %zu sectors",
              walkmap_tiles_stamped, loaded.size());
 
-    // All startup sectors are loaded and registered with sectorsKept.
-    // Run the optional post-load hook so callers can inject objects
-    // (player spawn, scripted prelude, etc.) before the drawable scan
-    // below sees the sector contents.
+    // The map is loaded and the SafeRef points at it. Run the optional
+    // post-load hook so callers can inject objects (player spawn,
+    // scripted prelude, etc.) before the drawable scan below sees the
+    // sector contents.
     if (post_load_hook)
         post_load_hook(keep_lvl, keep_sx, keep_sy);
 
@@ -2036,8 +2038,8 @@ void TMapRenderer::Shutdown()
     s.sectorDrawBins.clear();
     s.sectorMeshAsset.clear();
     // Sectors are owned by TGameMap (via TMapManager); the renderer
-    // just borrowed pointers. Drop the borrow without freeing.
-    s.sectorsKept.clear();
+    // just borrowed via the SafeRef. Drop the ref without freeing.
+    s.currentMap.Clear();
     s.sectorLights.clear();
     s.lightDragIdx = -1;
     s.sectorDragging = false;
@@ -2058,12 +2060,14 @@ void TMapRenderer::RenderFrame()
         return;
 
     const int64_t legacy_tick = TTime::LegacyFrameCount();
-    if (legacy_tick != s.lastLegacyAnimTick)
+    TGameMap* current_map = s.currentMap.Get();
+    if (current_map && legacy_tick != s.lastLegacyAnimTick)
     {
         const bool first_tick = (s.lastLegacyAnimTick < 0);
         s.lastLegacyAnimTick = legacy_tick;
+        const std::vector<TSector*>& kept = current_map->Sectors();
 
-        for (TSector* sec : s.sectorsKept)
+        for (TSector* sec : kept)
         {
             if (!sec) continue;
             for (int32_t i = 0; i < sec->NumItems(); ++i)
@@ -2074,7 +2078,7 @@ void TMapRenderer::RenderFrame()
                     oi->NextFrame();
             }
         }
-        for (TSector* sec : s.sectorsKept)
+        for (TSector* sec : kept)
         {
             if (!sec) continue;
             for (int32_t i = 0; i < sec->NumItems(); ++i)
