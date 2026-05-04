@@ -1456,6 +1456,95 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     if (post_load_hook)
         post_load_hook(keep_lvl, keep_sx, keep_sy);
 
+    // Anchor the camera per the parsed args (stored on Impl so
+    // RebuildForCurrentMap can re-use them on level swaps).
+    s.initialAnchorSx       = keep_sx;
+    s.initialAnchorSy       = keep_sy;
+    s.useInitialLevelOrigin = use_level_origin;
+
+    // Bind the renderer to the now-loaded TGameMap. SetMap subscribes
+    // to the map's events and triggers RebuildForCurrentMap, which
+    // (re)builds the draw / camera / light caches against the live
+    // sectors.
+    SetMap(gmap);
+
+    DebugUI::RegisterContributor(this);
+    return true;
+}
+
+void TMapRenderer::SetMap(TGameMap* m)
+{
+    Impl& s = *impl;
+
+    // Unsubscribe from the old map's events before flipping the ref.
+    if (TGameMap* old = s.currentMap.Get(); old && s.mapListenerId)
+    {
+        old->RemoveListener(s.mapListenerId);
+        s.mapListenerId = 0;
+    }
+
+    s.currentMap = m;
+
+    if (m)
+    {
+        // Subscribe -- Loaded / Updated trigger a full rebuild;
+        // Unloaded clears the ref before the underlying sectors are
+        // freed so subsequent draws don't dereference a dead map.
+        s.mapListenerId = m->AddListener(
+            [this](EGameMapEvent ev, TGameMap* /*map*/) {
+                if (ev == EGameMapEvent::Unloaded)
+                {
+                    impl->currentMap.Clear();
+                    impl->mapListenerId = 0;
+                }
+                RebuildForCurrentMap();
+            });
+    }
+
+    RebuildForCurrentMap();
+}
+
+void TMapRenderer::RebuildForCurrentMap()
+{
+    Impl& s = *impl;
+
+    // Clear all per-map caches first. Level-swap path destroys GPU
+    // textures from the prior level; first-time build is a no-op
+    // since the vectors are empty.
+    for (auto& t : s.sectorTileTex)
+    {
+        if (t.color.id) sg_destroy_image(t.color);
+        if (t.depth.id) sg_destroy_image(t.depth);
+    }
+    s.sectorTileTex.clear();
+    s.sectorMeshAsset.clear();
+    s.sectorDrawInst.clear();
+    s.sectorDrawBins.clear();
+    s.sectorLights.clear();
+    s.lastSyncedSectorVerSum = -1;
+
+    TGameMap* map = s.currentMap.Get();
+    if (!map) return;
+
+    // Pull anchor + level state from Impl (set by
+    // InitializeFromStartupArgs at boot, reused on level swaps).
+    const int32_t keep_lvl = s.cameraLevel;
+    const int32_t keep_sx  = s.initialAnchorSx;
+    const int32_t keep_sy  = s.initialAnchorSy;
+    const bool    use_level_origin = s.useInitialLevelOrigin;
+
+    // Build local `loaded` from the current map. The rest of this
+    // function (lifted from the legacy InitializeFromStartupArgs body)
+    // expects this vector for camera-anchor / draw_work iteration.
+    struct SLoaded { int32_t lvl, sx, sy; TSector* sec; };
+    std::vector<SLoaded> loaded;
+    for (TSector* sec : map->Sectors())
+    {
+        if (!sec) continue;
+        loaded.push_back({ sec->SectorLevel(), sec->SectorX(), sec->SectorY(), sec });
+    }
+    if (loaded.empty()) return;
+
     std::vector<SSectorDrawableInst> draw_work;
     int32_t total_tiles = 0, non_2d = 0, bad_state = 0, no_still = 0, upload_fail = 0, no_img = 0, no_body = 0;
     int32_t total_mesh_objs = 0, mesh_upload_fail = 0, mesh_hidden = 0, mesh_slots_kept = 0;
@@ -1998,8 +2087,6 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
             s.sectorLights.push_back({ TSafeRef<>(oi), true });
         }
     }
-    DebugUI::RegisterContributor(this);
-    return true;
 }
 
 void TMapRenderer::Shutdown()

@@ -33,6 +33,7 @@
 #include "editorstub.h"
 #include "imagery.h"
 #include "logging.h"
+#include "mapmanager.h"
 #include "maprenderer.h"
 #include "player.h"
 #include "savegame.h"
@@ -245,6 +246,17 @@ void TPlayScreen::Update()
     // TPlayer; UpdateMove translates them into a movement step.
     if (controlon && !demomode)
         UpdateMove();
+
+    // TODO(remove): one-shot level-switch smoke at ~20s into the run
+    // -- exercises the MapManager + listener chain end-to-end (renderer
+    // unsubscribes from level 0, subscribes to level 1, rebuilds draw
+    // caches). Will be removed once the input path drives real
+    // exit/door-triggered swaps.
+    if (gameframes == kGameFrameRate * 20)       // ~20s of game time
+    {
+        log_info("[playscreen] DEBUG: switching to level 1 (smoke test)");
+        MapManager.SetCurrentLevel(1);
+    }
 
     // Advance per-frame counters. The map renderer ticks its own animator
     // off LegacyFrameCount(), so we just track our own session bookkeeping
