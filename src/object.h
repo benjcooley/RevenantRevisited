@@ -12,7 +12,9 @@
 #include "stream.h"
 #include "lightdef.h"
 
+#include <atomic>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 /*
@@ -47,6 +49,11 @@ int32_t AngleDiff(int32_t angle1, int32_t angle2);
 uint32_t GenerateUniqueID();
 
 _CLASSDEF(TObjectAnimator)
+
+// Forward-declared free function used by TObjectInstance::SafeRefLookup
+// (and by TSafeRef<TObjectInstance>) to avoid pulling the mappane /
+// sector include chain into object.h. Defined in mappane.cpp.
+TObjectInstance* LookupMapIndex(int32_t mapindex);
 
 // *************************************************************
 // * TObjectBuilder - Creates objects for a given object class *
@@ -1148,6 +1155,15 @@ class TObjectInstance : protected SObjectDef
                                           // MapPane mapindex→instance registry
     int32_t GetMapIndex() const { return mapindex; }
 
+  // TSafeRef<T> contract -- see comment block before TSafeRef in this file.
+  // SafeRefId is the mapindex (the existing stable id for instances).
+  // SafeRefGen is a per-instance generation counter, fresh per construction;
+  // SafeRef captures (id, gen) so a recycled slot resolves to nullptr
+  // through a stale ref instead of the new tenant.
+    int32_t  SafeRefId()  const { return mapindex; }
+    uint32_t SafeRefGen() const { return safe_ref_gen; }
+    static TObjectInstance* SafeRefLookup(int32_t idx) { return ::LookupMapIndex(idx); }
+
   // Nextmove functions
     void SetNextMove(S3DPoint& p);
       // Set next frame's movement.
@@ -1210,6 +1226,11 @@ class TObjectInstance : protected SObjectDef
     char *name;                 // What is my name
     uint32_t notifyflags;       // Notify Objects of changes
     int32_t mapindex;           // Unique instance id
+    uint32_t safe_ref_gen;      // Per-instance generation; TSafeRef<T>
+                                // captures (id, gen) and rejects lookups
+                                // where gen mismatches the current
+                                // tenant of the slot. Assigned fresh in
+                                // ClearObject() from a global counter.
     TSector* sector;            // Which sector am I in
     TObjectClass* cl;           // Pointer to object's class
     SObjectInfo* inf;           // Pointer to object type info
@@ -1253,75 +1274,204 @@ class TObjectInstance : protected SObjectDef
 };
 
 // ---------------------------------------------------------------------------
-// TSafeRef<T> — safe, mapindex-backed reference to a TObjectInstance.
+// TSafeRef<T> — safe, id-backed reference to any "saferef-able" type.
 //
-// Holds an integer mapindex (not a raw pointer), so the instance it refers
-// to can be deleted, paged out, or reassigned between uses and this ref
-// never dangles. Resolution goes through the MapPane mapindex registry in
-// O(1), returning nullptr when the referent no longer exists.
+// Holds an integer id (not a raw pointer) so the referent can be deleted,
+// paged out, or reassigned between uses and this ref never dangles.
+// Resolution goes through whatever per-type registry T provides, returning
+// nullptr when the referent no longer exists.
 //
-// Typical use:
+// Contract a type T must satisfy to be referenced by TSafeRef<T>:
+//
+//   int32_t  SafeRefId()  const;           // member: stable id, -1 if none
+//   uint32_t SafeRefGen() const;           // member: per-instance generation
+//   static T* SafeRefLookup(int32_t id);   // static: id -> pointer or null
+//
+// The generation guards against id recycling: a SafeRef captures
+// (id, generation) at construction. If the original referent is destroyed
+// and a new instance later inherits the same slot id, its generation will
+// differ -- TSafeRef<T>::Get() returns nullptr instead of silently
+// resolving to the wrong object. Generation is per-instance and globally
+// unique, so even reuse-free workloads pay only an int32 compare per
+// dereference.
+//
+// Implementation note: the registry is currently an unordered_map keyed
+// by monotonically-increasing ids (in TObjectInstance's case the existing
+// MapPane mapindex registry). The traditional AAA-perf shape is a
+// versioned slot pool -- a contiguous std::vector indexed by slot, with
+// per-slot generation counters bumped on free + match-on-lookup. Same
+// observable contract on the SafeRef side; if we ever need it the swap
+// is a registry-internal change with no call-site impact. For now the
+// hash registry is well within budget.
+//
+// Both options for satisfying the contract are supported:
+//
+//   (a) Inherit TSafeObjectBase<Self> -- provides a per-type registry and
+//       all three contract methods (id, gen, lookup) automatically. Use
+//       for new types that don't already have an identity scheme.
+//
+//   (b) Implement the methods directly. TObjectInstance does this --
+//       its existing GetMapIndex() + the LookupMapIndex() free function
+//       are wrapped as SafeRefId / SafeRefLookup, plus a fresh
+//       per-instance safe_ref_gen for SafeRefGen.
+//
+// Typical use is unchanged from when this was TObjectInstance-only:
 //   TSafeRef<TObjectInstance> target;     // empty
-//   target = oi;                          // capture the mapindex
+//   target = oi;                          // capture the id
 //   if (TObjectInstance* live = target.Get()) { ... } // nullptr if gone
-//   if (target) target->Use(...);         // operator-> also returns nullptr-safe
-//
-// The forward-declared LookupMapIndex() (defined in mappane.cpp) lets us
-// keep object.h free of the mappane/sector include chain.
+//   if (target) target->Use(...);         // operator-> nullptr-safe
 // ---------------------------------------------------------------------------
-
-TObjectInstance* LookupMapIndex(int32_t mapindex);
 
 template <typename T = TObjectInstance>
 class TSafeRef
 {
   public:
     TSafeRef() = default;
-    TSafeRef(const T* inst) : idx(inst ? inst->GetMapIndex() : -1) {}
-    TSafeRef(int32_t mapindex) : idx(mapindex) {}
+    TSafeRef(const T* inst)
+        : idx(inst ? inst->SafeRefId()  : -1)
+        , gen(inst ? inst->SafeRefGen() : 0u) {}
+    TSafeRef(int32_t id, uint32_t gen_) : idx(id), gen(gen_) {}
 
-    TSafeRef& operator=(const T* inst) { idx = inst ? inst->GetMapIndex() : -1; return *this; }
-    TSafeRef& operator=(int32_t mapindex) { idx = mapindex; return *this; }
+    TSafeRef& operator=(const T* inst)
+    {
+        idx = inst ? inst->SafeRefId()  : -1;
+        gen = inst ? inst->SafeRefGen() : 0u;
+        return *this;
+    }
 
     [[nodiscard]] T* Get() const
     {
         if (idx < 0) return nullptr;
-        // static_cast is safe only if the caller parameterizes T on the
-        // actual instance's class (or a base). For mismatched Ts the ref
-        // still returns a pointer — same contract as a C-style downcast.
-        return static_cast<T*>(LookupMapIndex(idx));
+        // T::SafeRefLookup may be inherited from a base (e.g. TPlayer
+        // inherits TObjectInstance::SafeRefLookup which returns
+        // TObjectInstance*); the static_cast handles the down-cast.
+        // Same retype contract as a C-style downcast.
+        T* p = static_cast<T*>(T::SafeRefLookup(idx));
+        // Generation check: the slot may have been reused by a fresh
+        // instance with a different gen; in that case the ref is stale
+        // and must resolve to nullptr instead of the wrong object.
+        if (!p || p->SafeRefGen() != gen) return nullptr;
+        return p;
     }
     [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
     [[nodiscard]] int32_t MapIndex() const { return idx; }
-    void Clear() { idx = -1; }
+    [[nodiscard]] int32_t Id() const { return idx; }
+    [[nodiscard]] uint32_t Gen() const { return gen; }
+    void Clear() { idx = -1; gen = 0u; }
 
     explicit operator bool() const { return IsValid(); }
     T* operator->() const { return Get(); }
     T& operator*()  const { return *Get(); }
 
-    bool operator==(const TSafeRef& rhs) const { return idx == rhs.idx; }
-    bool operator!=(const TSafeRef& rhs) const { return idx != rhs.idx; }
+    // Equality compares (id, gen) so two refs to recycled-then-freshly-
+    // assigned slots aren't conflated.
+    bool operator==(const TSafeRef& rhs) const { return idx == rhs.idx && gen == rhs.gen; }
+    bool operator!=(const TSafeRef& rhs) const { return !(*this == rhs); }
 
   private:
-    int32_t idx = -1;
+    int32_t  idx = -1;
+    uint32_t gen = 0u;
 };
 
-// Resolve a mapindex (or any TSafeRef<U>) to a typed pointer of choice.
-// Returns nullptr if the index has been recycled / never registered. Same
-// retype contract as a C-style downcast: caller is responsible for the
-// type being correct for the looked-up object.
+// Resolve an id (or any TSafeRef<U>) to a typed pointer of choice. Same
+// retype contract as a C-style downcast.
+//
+// safe_cast<T>(id) is the *unchecked* form -- skips the generation check.
+// Use only when the caller knows the id is fresh (e.g. just-issued in the
+// same frame). Prefer the (id, gen) or TSafeRef<U> overloads everywhere
+// else so a recycled id doesn't silently resolve to the new tenant.
 template <class T>
-[[nodiscard]] inline T* safe_cast(int32_t mapindex)
+[[nodiscard]] inline T* safe_cast(int32_t id)
 {
-    if (mapindex < 0) return nullptr;
-    return static_cast<T*>(LookupMapIndex(mapindex));
+    if (id < 0) return nullptr;
+    return static_cast<T*>(T::SafeRefLookup(id));
+}
+
+template <class T>
+[[nodiscard]] inline T* safe_cast(int32_t id, uint32_t gen)
+{
+    if (id < 0) return nullptr;
+    T* p = static_cast<T*>(T::SafeRefLookup(id));
+    return (p && p->SafeRefGen() == gen) ? p : nullptr;
 }
 
 template <class T, class U>
 [[nodiscard]] inline T* safe_cast(const TSafeRef<U>& ref)
 {
-    return safe_cast<T>(ref.MapIndex());
+    return safe_cast<T>(ref.Id(), ref.Gen());
 }
+
+// ---------------------------------------------------------------------------
+// TSafeObjectBase<Self> -- CRTP helper that implements the TSafeRef<T>
+// contract via a per-type unordered registry. New types that don't already
+// have an identity scheme inherit this and get id assignment, generation
+// assignment, registration, and SafeRefLookup automatically.
+//
+// Construction allocates a fresh id (monotonic) and gen (global), inserts
+// into the per-type registry. Destruction removes from the registry --
+// any TSafeRef captured against this instance will resolve to nullptr.
+//
+// Usage:
+//   class TGameMap : public TSafeObjectBase<TGameMap> { ... };
+//   TSafeRef<TGameMap> ref = ptr;            // captures (id, gen)
+//   if (TGameMap* live = ref.Get()) { ... }  // null if destroyed
+// ---------------------------------------------------------------------------
+
+template <typename Self>
+class TSafeObjectBase
+{
+  public:
+    TSafeObjectBase()
+        : safe_id_(NextId())
+        , safe_gen_(NextGen())
+    {
+        Registry()[safe_id_] = static_cast<Self*>(this);
+    }
+
+    ~TSafeObjectBase()
+    {
+        Registry().erase(safe_id_);
+    }
+
+    TSafeObjectBase(const TSafeObjectBase&)            = delete;
+    TSafeObjectBase& operator=(const TSafeObjectBase&) = delete;
+    TSafeObjectBase(TSafeObjectBase&&)                 = delete;
+    TSafeObjectBase& operator=(TSafeObjectBase&&)      = delete;
+
+    [[nodiscard]] int32_t  SafeRefId()  const { return safe_id_; }
+    [[nodiscard]] uint32_t SafeRefGen() const { return safe_gen_; }
+
+    static Self* SafeRefLookup(int32_t id)
+    {
+        if (id < 0) return nullptr;
+        auto& m  = Registry();
+        auto  it = m.find(id);
+        return (it != m.end()) ? it->second : nullptr;
+    }
+
+  private:
+    static std::unordered_map<int32_t, Self*>& Registry()
+    {
+        static std::unordered_map<int32_t, Self*> m;
+        return m;
+    }
+    static int32_t NextId()
+    {
+        // Monotonic per-type, never reused. Same shape MapPane.MakeIndex
+        // uses for TObjectInstance ids -- collisions are statistically
+        // impossible inside a process lifetime.
+        static std::atomic<int32_t> s_next{1};
+        return s_next.fetch_add(1, std::memory_order_relaxed);
+    }
+    static uint32_t NextGen()
+    {
+        static std::atomic<uint32_t> s_next{1u};
+        return s_next.fetch_add(1u, std::memory_order_relaxed);
+    }
+
+    int32_t  safe_id_;
+    uint32_t safe_gen_;
+};
 
 // Safe reference to a component owned by a TObjectInstance. It resolves the
 // owner through the normal mapindex registry, then validates the component slot
