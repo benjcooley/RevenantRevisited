@@ -235,6 +235,7 @@ extern TSoundPlayer SoundPlayer;        // Sound effects player
 extern TControlMap  ControlMap;         // Contains the key/joystick mappings for game control
 extern TAreaManager AreaManager;        // Manages the game area system
 extern TPlayerManager PlayerManager;    // Stores the current player list for the game
+extern class TMapManager MapManager;    // Cache of loaded TGameMap levels (defined in revmain.cpp)
 extern TRules       Rules;              // Stores rules, like classes, char types, attacks, tables, etc.
 extern TSpellList   SpellList;          // a list of spells in the game
 extern TDialogList  DialogList;         // List of dialog and other game messages for current language

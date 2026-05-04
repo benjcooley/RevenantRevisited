@@ -47,6 +47,7 @@
 #include "timer.h"
 #include "equip.h"
 #include "parse.h"
+#include "mapmanager.h"
 #include "player.h"
 #include "multictrl.h"
 #include "spell.h"
@@ -138,6 +139,9 @@ TSoundPlayer    SoundPlayer;        // Sound effects player
 TControlMap     ControlMap;         // Contains the key/joystick mappings for game control
 TAreaManager    AreaManager;        // Manages the game area system
 TPlayerManager  PlayerManager;      // Manages the game player list
+TMapManager     MapManager;         // Cache of loaded TGameMap levels +
+                                    // current-map pointer; renderer / pane
+                                    // listen for CurrentMapChanged.
 TRules  Rules;                      // Manages global rules data (classes, chars, stats for attacks, etc.)
 // TODO(port): CRITICAL_SECTION replaced by Subsystem 4 threading work
 // (worker pool + async completions). Removed here; revutils.cpp still
