@@ -250,7 +250,9 @@ void TMapRenderer::DrawDebugTab()
         if (ImGui::BeginTabItem("Debug")) {
             std::vector<TObjectInstance*> character_list;
             character_list.reserve(64);
-            for (TSector* sec : s.sectorsKept)
+            TGameMap* dbg_map = s.currentMap.Get();
+            if (dbg_map)
+            for (TSector* sec : dbg_map->Sectors())
             {
                 if (!sec)
                     continue;
@@ -535,7 +537,9 @@ void TMapRenderer::DrawDebugTab()
         ImDrawList* dl = ImGui::GetForegroundDrawList();
         int shown = 0;
 
-        for (TSector* sec : s.sectorsKept)
+        TGameMap* dbg_map2 = s.currentMap.Get();
+        if (dbg_map2)
+        for (TSector* sec : dbg_map2->Sectors())
         {
             if (!sec) continue;
             const int32_t secx = sec->SectorX();
