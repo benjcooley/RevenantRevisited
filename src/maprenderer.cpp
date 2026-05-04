@@ -21,7 +21,9 @@
 #include "imgui.h"
 #include "imagery.h"
 #include "imageres.h"
+#include "gamemap.h"
 #include "logging.h"
+#include "mapmanager.h"
 #include "mappane.h"
 #include "math3d.h"
 #include "meshextract.h"
@@ -177,8 +179,10 @@ void SubmitParticleBillboards(const SMapRenderContext& ctx, SMapRenderStats& sta
 
             const int32_t w = (std::max)(1, int32_t(std::lround(width * overlay_scale)));
             const int32_t h = (std::max)(1, int32_t(std::lround(height * overlay_scale)));
-            const int32_t dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
-            const int32_t dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
+            const int32_t dst_x = int32_t(std::lround(sx)) + ctx.cam_ox
+                - int32_t(std::lround(float(w) * desc.anchor_x));
+            const int32_t dst_y = int32_t(std::lround(sy)) + ctx.cam_oy
+                - int32_t(std::lround(float(h) * desc.anchor_y));
             if (dst_x > ctx.vw || dst_y > ctx.vh || dst_x + w < 0 || dst_y + h < 0)
             {
                 ++stats.draw_offscreen;
@@ -1338,49 +1342,36 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     int32_t loaded_obj_total = 0;
     int32_t loaded_light_total = 0;
     int32_t loaded_anim_total = 0;
-    std::vector<SSectorCoord> load_coords = FindLevelSectorCoords(keep_lvl);
     s.cameraLevel = keep_lvl;
-    if (load_coords.empty())
+
+    // Load + own the level via MapManager (game-side ownership, see
+    // gamemap.h / mapmanager.h). The renderer just borrows. Walkmap
+    // stamping happens in TGameMap::Load -- no longer here.
+    TGameMap* gmap = MapManager.SetCurrentLevel(keep_lvl);
+    if (!gmap || gmap->Sectors().empty())
     {
         if (use_level_origin)
-        {
-            log_error("[sector] level %d: no sectors found; aborting startup", keep_lvl);
-            return false;
-        }
-        log_warn("[sector] no level-wide sector scan for level %d; falling back to 5x5 around %d_%d",
-            keep_lvl, keep_sx, keep_sy);
-        for (int32_t dy = -2; dy <= 2; ++dy)
-        for (int32_t dx = -2; dx <= 2; ++dx)
-            load_coords.push_back({ keep_sx + dx, keep_sy + dy });
-    }
-    else
-    {
-        int32_t sx_min = load_coords.front().sx, sx_max = load_coords.front().sx;
-        int32_t sy_min = load_coords.front().sy, sy_max = load_coords.front().sy;
-        for (const auto& c : load_coords) {
-            sx_min = (std::min)(sx_min, c.sx); sx_max = (std::max)(sx_max, c.sx);
-            sy_min = (std::min)(sy_min, c.sy); sy_max = (std::max)(sy_max, c.sy);
-        }
+            log_error("[sector] level %d: MapManager returned no sectors; aborting startup", keep_lvl);
+        return !use_level_origin;
     }
 
-    for (const auto& coord : load_coords)
+    // Mirror the loaded set into the renderer's existing iteration
+    // shape (`loaded` + sectorsKept) -- the rest of this function and
+    // the per-frame loops still expect those. Phase 2B will collapse
+    // them onto a direct currentMap->Sectors() read.
+    for (TSector* sec : gmap->Sectors())
     {
-        const int32_t sx = coord.sx, sy = coord.sy;
-        TSector* sec = TSector::LoadSector(keep_lvl, sx, sy, false);
-        if (!sec) {
-            log_warn("[sector] %d_%d_%d: LoadSector failed", keep_lvl, sx, sy);
-            continue;
-        }
-        loaded_obj_total += sec->NumItems();
+        if (!sec) continue;
+        loaded_obj_total   += sec->NumItems();
         loaded_light_total += sec->NumObjSetItems(OBJSET_LIGHTS);
-        loaded_anim_total += sec->NumObjSetItems(OBJSET_ANIMATE);
-        loaded.push_back({ keep_lvl, sx, sy, sec });
+        loaded_anim_total  += sec->NumObjSetItems(OBJSET_ANIMATE);
+        loaded.push_back({ sec->SectorLevel(), sec->SectorX(), sec->SectorY(), sec });
         s.sectorsKept.push_back(sec);
     }
     if (loaded.empty())
     {
         if (use_level_origin)
-            log_error("[sector] level %d: found sector names but loaded none; aborting startup", keep_lvl);
+            log_error("[sector] level %d: MapManager loaded zero sectors; aborting startup", keep_lvl);
         return !use_level_origin;
     }
 
@@ -1454,12 +1445,12 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
         const auto& sample = census_samples[i];
     }
 
-    // Stamp tile walkmaps onto each loaded sector's walkmap. Under the
-    // legacy MapPane.AddObject path this happened automatically per
-    // tile via MapPane.TransferWalkmap; the renderer-owns-sectors
-    // boot path skipped it because we never call AddObject. Without
-    // this, every walkmap cell reads as 0 -- characters spawn at
-    // z=0 below the floor and Move() can't compute walk heights.
+    // Stamp tile walkmaps now that the renderer's sectorsKept mirror
+    // is populated -- MapPane.TransferWalkmap routes through
+    // sectors[][] (empty) then falls back to mapRenderer->FindLoadedSector
+    // which reads sectorsKept. Phase 2b moves this into TGameMap once
+    // it exposes a direct sector lookup that doesn't need the renderer
+    // fallback.
     int32_t walkmap_tiles_stamped = 0;
     for (const auto& L : loaded)
     {
@@ -2044,7 +2035,8 @@ void TMapRenderer::Shutdown()
     s.sectorDrawInst.clear();
     s.sectorDrawBins.clear();
     s.sectorMeshAsset.clear();
-    for (TSector* sec : s.sectorsKept) if (sec) TSector::CloseSector(sec);
+    // Sectors are owned by TGameMap (via TMapManager); the renderer
+    // just borrowed pointers. Drop the borrow without freeing.
     s.sectorsKept.clear();
     s.sectorLights.clear();
     s.lightDragIdx = -1;

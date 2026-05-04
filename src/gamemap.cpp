@@ -9,9 +9,12 @@
 #include "logging.h"
 #include "mappane.h"
 #include "object.h"
+#include "revutils.h"
 #include "sector.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -21,9 +24,44 @@ namespace
 {
 // Disk scan: walk every per-sector .DAT file under the resolved data
 // roots and return the (sx, sy) coordinates that exist for `level`.
-// Equivalent to the version that lived in maprenderer.cpp; will move
-// fully into TGameMap once the renderer stops doing its own load.
+// Lifted from maprenderer.cpp's FindLevelSectorCoords -- this is the
+// same multi-path scan (curmap / basemap / data-root subdirs) plus the
+// 64x64 brute-force rev_fopen fallback that catches files visible only
+// through the VFS.
 struct SCoord { int32_t sx, sy; };
+
+inline std::filesystem::path NormalizeFsPath(const char* path)
+{
+    std::string s = (path && path[0]) ? path : ".";
+    for (char& ch : s)
+        if (ch == '\\') ch = '/';
+    if (s.empty()) s = ".";
+    return std::filesystem::path(s);
+}
+
+std::filesystem::path ResolveSectorDataRoot()
+{
+    namespace fs = std::filesystem;
+    if (const char* env = std::getenv("REVENANT_DATA_PATH"))
+    {
+        std::error_code ec;
+        fs::path p(env);
+        if (fs::exists(p, ec))
+            return p;
+    }
+    std::error_code ec;
+    const fs::path cwd = fs::current_path(ec);
+    for (const fs::path& cand : { cwd, cwd / "data", cwd / ".." / "data" })
+    {
+        if (cand.empty()) continue;
+        if (fs::exists(cand / "imagery.rvi", ec) ||
+            fs::exists(cand / "Modules", ec) ||
+            fs::is_directory(cand / "Curmap", ec) ||
+            fs::is_directory(cand / "curmap", ec))
+            return fs::canonical(cand, ec);
+    }
+    return {};
+}
 
 void GatherCoordsFromDir(const std::filesystem::path& dir, int32_t level,
                          std::vector<SCoord>& out)
@@ -51,17 +89,47 @@ std::vector<SCoord> ScanLevelCoords(int32_t level)
 {
     namespace fs = std::filesystem;
     std::vector<SCoord> coords;
-
-    // The renderer's older scan also looked under data-root subdirs and
-    // tried rev_fopen for every (sx,sy) up to 64x64. Phase 1 keeps this
-    // lighter -- the curmap dir scan covers everything Misthaven ships
-    // with. Tighten if a level shows missing sectors.
-    auto scan_dirs = std::vector<fs::path>{
-        fs::path(CurMapPath)  / CURMAPDIR,
-        fs::path(BaseMapPath) / BASEMAPDIR,
-    };
+    std::vector<fs::path> scan_dirs;
+    scan_dirs.push_back(NormalizeFsPath(CurMapPath)  / CURMAPDIR);
+    scan_dirs.push_back(NormalizeFsPath(BaseMapPath) / BASEMAPDIR);
+    const fs::path data_root = ResolveSectorDataRoot();
+    if (!data_root.empty())
+    {
+        scan_dirs.push_back(data_root / "Curmap");
+        scan_dirs.push_back(data_root / "curmap");
+        scan_dirs.push_back(data_root / "Map");
+        scan_dirs.push_back(data_root / "map");
+    }
+    std::sort(scan_dirs.begin(), scan_dirs.end(),
+        [](const fs::path& a, const fs::path& b) { return a.generic_string() < b.generic_string(); });
+    scan_dirs.erase(std::unique(scan_dirs.begin(), scan_dirs.end(),
+        [](const fs::path& a, const fs::path& b) { return a.generic_string() == b.generic_string(); }),
+        scan_dirs.end());
     for (const fs::path& dir : scan_dirs)
         GatherCoordsFromDir(dir, level, coords);
+
+    // VFS / rvr-pack fallback: try rev_fopen for every (sx,sy) up to
+    // 64x64. Picks up sectors visible through the resource archives
+    // even when there's no on-disk .DAT file in the scan dirs.
+    {
+        char relpath[MAXPATHLEN] = {};
+        for (int32_t sy = 0; sy < 64; ++sy)
+        for (int32_t sx = 0; sx < 64; ++sx)
+        {
+            std::snprintf(relpath, sizeof(relpath), CURMAPDIR "\\%d_%d_%d.DAT", level, sx, sy);
+            FILE* fp = rev_fopen(relpath, "rb");
+            if (!fp)
+            {
+                std::snprintf(relpath, sizeof(relpath), BASEMAPDIR "\\%d_%d_%d.DAT", level, sx, sy);
+                fp = rev_fopen(relpath, "rb");
+            }
+            if (fp)
+            {
+                fclose(fp);
+                coords.push_back({ sx, sy });
+            }
+        }
+    }
 
     // De-dup (sx,sy) pairs across the scan dirs.
     std::sort(coords.begin(), coords.end(), [](const SCoord& a, const SCoord& b) {
@@ -106,29 +174,18 @@ bool TGameMap::Load(int32_t lvl)
         loaded_objs += sec->NumItems();
     }
 
-    // Stamp tile walkmaps onto each sector's per-cell walkmap. Under
-    // the legacy MapPane.AddObject path this happened automatically per
-    // tile; the new renderer-owns-sectors path skipped it. Doing it
-    // here, while the map owns the sector list, is the right home --
-    // walkmap is sector data, not renderer data.
-    int32_t walkmap_tiles_stamped = 0;
-    for (TSector* sec : sectors)
-    {
-        if (!sec) continue;
-        const int32_t n = sec->NumItems();
-        for (int32_t i = 0; i < n; ++i)
-        {
-            TObjectInstance* oi = sec->GetInstance(i);
-            if (!oi || oi->ObjClass() != OBJCLASS_TILE) continue;
-            if (oi->Flags() & OF_NOWALK) continue;
-            MapPane.TransferWalkmap(oi);
-            ++walkmap_tiles_stamped;
-        }
-    }
+    // TODO(phase 2b): per-tile walkmap stamping should live here so
+    // it owns the same lifecycle as the sectors. Currently the
+    // MapPane.TransferWalkmap path looks up sectors via the renderer's
+    // sectorsKept (added as a fallback when MapPane.sectors[][] went
+    // empty), and at this point in the boot order the renderer's
+    // mirror hasn't been populated yet. Renderer keeps the stamping
+    // call after its sectorsKept mirror runs; we move it here once
+    // TGameMap exposes a direct sector lookup that doesn't need
+    // MapPane / the renderer fallback at all.
 
-    log_info("[gamemap] level %d loaded: %zu sectors, %d objects, "
-             "%d tile walkmaps stamped",
-             level, sectors.size(), loaded_objs, walkmap_tiles_stamped);
+    log_info("[gamemap] level %d loaded: %zu sectors, %d objects",
+             level, sectors.size(), loaded_objs);
 
     listeners.Notify(EGameMapEvent::Loaded, this);
     return true;

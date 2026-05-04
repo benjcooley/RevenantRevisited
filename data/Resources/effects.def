@@ -16,6 +16,7 @@ effect TorchFlame
         atlas_frames = 8
         width = 50.0
         height = 125.0
+        anchor = [0.5, 1.0]
         scale = 0.5
         blend = additive
         flip_v = true
