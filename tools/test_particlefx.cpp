@@ -239,6 +239,9 @@ TEST(ParticleFxDefs, TorchFlame)
     EXPECT_EQ((*bucket)["$name"].as_string(), "flame_billboard");
     EXPECT_EQ(bucket->get_int("atlas_cols"), 4);
     EXPECT_EQ(bucket->get_int("atlas_rows"), 2);
+    ASSERT_EQ((*bucket)["anchor"].as_array().size(), 2);
+    EXPECT_DOUBLE_EQ((*bucket)["anchor"].as_array()[0].as_double(), 0.5);
+    EXPECT_DOUBLE_EQ((*bucket)["anchor"].as_array()[1].as_double(), 1.0);
     EXPECT_DOUBLE_EQ(bucket->get_double("scale"), 0.5);
     EXPECT_TRUE(bucket->get_bool("flip_v"));
     ASSERT_EQ((*bucket)["chroma_key"].as_array().size(), 3);

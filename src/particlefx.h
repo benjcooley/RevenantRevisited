@@ -89,6 +89,8 @@ struct SParticleBucketDesc
     int32_t texture_height = 1;
     float default_width = 1.0f;
     float default_height = 1.0f;
+    float anchor_x = 0.5f;
+    float anchor_y = 0.5f;
     bool debug_solid = false;
     bool flip_v = false;
     bool chroma_key = false;
