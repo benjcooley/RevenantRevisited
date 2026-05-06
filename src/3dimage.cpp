@@ -2158,6 +2158,50 @@ void T3DAnimator::Pulse()
     ((T3DImagery*)image)->PlaySound(inst, state, frame);
 }
 
+// ---------------------------------------------------------------------------
+// SKELETON-TO-TTRANSFORM MIGRATION -- REMAINING WORK (C5)
+// ---------------------------------------------------------------------------
+//
+// The renderer's main mesh path (maprenderer.cpp Submit, mesh branch)
+// reads bone.transform.Matrix() for any object that has a live
+// T3DAnimator with a populated bone. A fallback compose path
+// (BuildAnimPoseObjectMatrix + BuildRootMatrixSource +
+// per-instance Z-stretch post-multiply) is still present for two
+// cases that haven't been migrated:
+//
+//   1. Editor preview (force_mesh_preview_pose). This path uses
+//      meshextract.cpp::BuildStaticObjectMatrix, which spins up a
+//      temporary std::vector<S3DAnimObj> per call, sets parent
+//      pointers, and calls T3DImagery::CalcObjectMatrix. To migrate:
+//      wire the temp bones' TTransform parents the same way
+//      T3DAnimator::SetupObjects does, RefreshHierarchy on the root
+//      bone (no inst.transform_ involved -- preview is bone-local),
+//      and apply the (1, 1, WORLD3D_Z_SCALE) Z stretch as a local
+//      scale on the root temp bone so bone.transform.Matrix() comes
+//      out of the call already-stretched. Then the renderer's
+//      preview branch can read bone.transform.Matrix() the same way
+//      the live-animator branch does.
+//
+//   2. Non-character mesh instances without a live animator. For
+//      characters TCharacter::IsAnimatorPermanent keeps the animator
+//      attached for the lifetime of the instance; non-character 3D
+//      meshes (props, helpers, etc.) get an animator lazily via
+//      OnScreen() and lose it on OffScreen / SetState. The renderer
+//      fallback exists for the "no animator at draw time" window.
+//      To migrate: extend the permanent-animator rule to every
+//      TObjectInstance whose imagery is T3DImagery (or just declare
+//      "everything 3D has a permanent T3DAnimator"). Then the
+//      renderer can assume bone.transform is always available and
+//      drop the fallback, BuildRootMatrixSource, and the
+//      per-instance Z-stretch post-multiply.
+//
+// Once both are in place: delete S3DAnimObj.matrix, S3DAnimObj.parent,
+// the manual parent-chain MtxMultiply at the tail of CalcObjectMatrix,
+// BuildRootMatrixSource itself, and the legacy compose blocks in
+// maprenderer.cpp Submit and meshextract.cpp BuildStatic/Animated*.
+// Estimated 1-2 hours of careful work + smoke testing. Deferred
+// (as of c3a8f21) so the AI / combat bring-up doesn't block on it.
+// ---------------------------------------------------------------------------
 void T3DAnimator::UpdateBoneTransforms()
 {
     if (!inst) return;
