@@ -171,7 +171,6 @@ struct SParticleBucketEffectDef
     int32_t atlas_frames = 1;
     float width = 1.0f;
     float height = 1.0f;
-    float anchor[2] = {0.5f, 0.5f};
     float scale = 1.0f;
     bool additive = true;
     bool flip_v = false;

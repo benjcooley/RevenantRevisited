@@ -335,15 +335,21 @@ struct TMapRenderer::Impl
             sectorDrawBins[MapRendererSectorBinKey(sx, sy)].push_back(i);
         }
     }
+    // Camera-relative XY for the iso projection origin, with object
+    // world Z passed through unchanged. Object screen positions must
+    // depend only on world coords (the camera follows objects, not the
+    // other way around). Subtracting camera.z here would couple
+    // every object's screen Y to the camera height -- which is the
+    // bug behind floating-Locke / NPCs-rise-on-stairs.
     S3DPoint sectorCameraRel(const S3DPoint& world) const
     {
-        return { world.x - sectorCameraWorld.x, world.y - sectorCameraWorld.y, world.z - sectorCameraWorld.z };
+        return { world.x - sectorCameraWorld.x, world.y - sectorCameraWorld.y, world.z };
     }
     S3DPoint sectorCameraRelMesh(const S3DPoint& world) const
     {
-        const S3DPoint mesh_world = MapRendererMeshWorld(world, sectorMeshScaleX, sectorMeshScaleY, sectorMeshScaleZ);
+        const S3DPoint mesh_world  = MapRendererMeshWorld(world,             sectorMeshScaleX, sectorMeshScaleY, sectorMeshScaleZ);
         const S3DPoint mesh_camera = MapRendererMeshWorld(sectorCameraWorld, sectorMeshScaleX, sectorMeshScaleY, sectorMeshScaleZ);
-        return { mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z - mesh_camera.z };
+        return { mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z };
     }
     float sectorCameraForward(int32_t viewport_h) const;
     float sectorCameraDepth(const S3DPoint& rel, int32_t viewport_h) const

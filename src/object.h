@@ -789,6 +789,14 @@ class TObjectInstance : protected SObjectDef
         // Releases Animator
     virtual bool NeedsAnimator() const;
         // Check to see if an animator is necessary for object at the moment
+    virtual bool IsAnimatorPermanent() const { return false; }
+        // True for object types whose animator is attached at construction
+        // and retained for the object's lifetime (e.g. TCharacter and
+        // descendants). Animator-toggling code paths (OffScreen / SetState /
+        // sector-unload) skip FreeAnimator() on objects that report true,
+        // so an attached animator survives sector load/unload churn. The
+        // animator is still released by the destructor when the object
+        // itself is destroyed.
     virtual bool DrawShadow() { return false; }
         // Returns true of the object wants a simple alpha-channel circle shadow to follow it
 

@@ -651,7 +651,7 @@ bool TObjectInstance::CreateAnimator()
     // component slots (the legacy pointer-field path leaked here too).
     FreeAnimator();
 
-    TObjectAnimator* a = imagery->NewObjectAnimator(this);
+    TObjectAnimator* a = imagery ? imagery->NewObjectAnimator(this) : nullptr;
     if (!a)
         return false;
 
@@ -717,7 +717,6 @@ bool TObjectInstance::NeedsAnimator() const
 {
     if (!HasAnimator() && imagery)
         return imagery->NeedsAnimator(this);
-
     return false;
 }
 
@@ -956,7 +955,12 @@ bool TObjectInstance::SetState(int32_t newstate)
         flags |= OF_ANIMATE;            // Cause Animate() function to be called
     else
     {
-        FreeAnimator();
+        // Permanent-animator types keep their animator across state
+        // changes. For non-permanent types, freeing here matches the
+        // legacy lazy-attach behavior on imagery types whose anim is
+        // state-conditional (e.g. sprites).
+        if (!IsAnimatorPermanent())
+            FreeAnimator();
         flags &= ~(uint32_t)OF_ANIMATE;    // Prevents Animate() function from being called
     }
 
@@ -1483,7 +1487,10 @@ void TObjectInstance::OnScreen()
 
 void TObjectInstance::OffScreen()
 {
-    if (HasAnimator())
+    // Permanent-animator types (e.g. TCharacter) keep their animator
+    // attached across sector load/unload churn -- the animator is
+    // owned by the object's lifetime, not its visibility.
+    if (HasAnimator() && !IsAnimatorPermanent())
         FreeAnimator();
 
     if (lightdef.lightindex != -1)

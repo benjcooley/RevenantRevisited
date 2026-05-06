@@ -190,9 +190,12 @@ class TPlayScreen : public TScreen
     // ---- TScreen pulse-driver hook -------------------------------------
     static TScreen* ShowScreen(TScreen* screen, int32_t ticks);
 
-  private:
     void UpdateMove();
       // Drives TPlayer movement from the current command-flag state.
+      // Called from TGameMode::Tick each frame; public so the runtime
+      // mode can drive it without befriending the screen.
+
+  private:
 
     std::unique_ptr<TMapRenderer> mapRenderer;
 

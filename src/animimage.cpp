@@ -11,6 +11,7 @@
 #include "bitmap.h"
 #include "surface.h"
 #include "display.h"
+#include "logging.h"
 #include "mappane.h"
 #include "playscreen.h"
 #include "inventory.h"
@@ -318,19 +319,23 @@ bool TAnimImagery::SaveBitmap(char *path, int32_t state, bool zbuffer)
     return true;
 }
 
-bool TAnimImagery::NeedsAnimator(TObjectInstance* oi)
+bool TAnimImagery::NeedsAnimator(const TObjectInstance* oi) const
 {
-    int32_t state = oi->GetState();
-
-    if (state < NumStates() && (GetAnimation(state) != nullptr ||
-        (oi->IsInInventory() && GetInvAnimation(state) != nullptr)))
-        return true;
-
-    return false;
+    if (!oi) return false;
+    const int32_t state = oi->GetState();
+    // GetAnimation / GetInvAnimation are legacy non-const getters that
+    // don't actually mutate; const_cast preserves correct semantics here
+    // until those getters can be made const themselves.
+    auto* self = const_cast<TAnimImagery*>(this);
+    return state < NumStates() &&
+           (self->GetAnimation(state) != nullptr ||
+            (oi->IsInInventory() && self->GetInvAnimation(state) != nullptr));
 }
 
 PTObjectAnimator TAnimImagery::NewObjectAnimator(TObjectInstance* oi)
 {
+    if (oi && oi->ObjClass() == OBJCLASS_PLAYER)
+        log_info("[anim-trace] TAnimImagery::NewObjectAnimator (sprite path)");
     return (PTObjectAnimator)new TAnimAnimator(oi);
 }
 
