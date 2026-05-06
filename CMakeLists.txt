@@ -130,6 +130,14 @@ add_executable(test_anim_system
   tools/test_anim_system.cpp
   src/animsystem.cpp)
 
+add_executable(test_transform
+  tools/test_transform.cpp
+  src/transform.cpp
+  src/animsystem.cpp
+  src/math3d.cpp)
+target_include_directories(test_transform PRIVATE
+  ${HANDMADE_MATH_DIR})
+
 add_executable(test_particlefx
   tools/test_particlefx.cpp
   src/particlefx.cpp)
