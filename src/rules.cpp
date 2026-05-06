@@ -729,6 +729,17 @@ PSCharData TRules::GetCharData(int32_t objtype, int32_t objclass)
     static SCharData  s_fallback = []{
         SCharData d;
         d.classdata = &s_fallback_class;
+        // SCharData ctor sets walk/run/sneak/combat speeds to -1 as a
+        // "uninitialized; will be set from rules.def" sentinel. Without
+        // rules.def CHAR entries every gated `chardata->walkspeed > 0`
+        // check in TCharacter::Move fails and the player can't translate.
+        // Wire reasonable defaults so the fallback alone is enough to
+        // walk -- real per-class entries will override these when
+        // rules.def CHAR data comes back.
+        d.walkspeed        = 6;
+        d.runspeed         = 12;
+        d.sneakspeed       = 3;
+        d.combatwalkspeed  = 4;
         return d;
     }();
     return &s_fallback;

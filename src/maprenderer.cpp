@@ -28,6 +28,7 @@
 #include "math3d.h"
 #include "meshextract.h"
 #include "object.h"
+#include "runtimemode.h"
 #include "revenant.h"
 #include "revdefs.h"
 #include "revutils.h"
@@ -117,6 +118,25 @@ inline void ProjectCameraRelToScreen(const SMapRenderContext& ctx,
     sy *= focal_zoom / z;
 }
 
+inline void ProjectWorldPointToScreen(const SMapRenderContext& ctx,
+                                      const S3DPoint& world,
+                                      float& sx, float& sy,
+                                      float* scene_z_out = nullptr)
+{
+    // Match the mesh vertex shader convention: X/Y are camera-relative,
+    // but Z remains absolute world height. Subtracting camera.z here makes
+    // CPU overlays drift against GPU-projected 3D meshes in perspective mode.
+    const S3DPoint rel = {
+        world.x - ctx.sectorCameraWorld.x,
+        world.y - ctx.sectorCameraWorld.y,
+        world.z
+    };
+    ProjectCameraRelToScreen(ctx, rel, sx, sy);
+    const float scene_z = CameraDepth(rel, ctx.cam_forward);
+    if (scene_z_out)
+        *scene_z_out = scene_z;
+}
+
 inline int32_t FloorDiv(int32_t v, int32_t d)
 {
     return (v >= 0) ? (v / d) : -(((-v) + d - 1) / d);
@@ -153,18 +173,14 @@ void SubmitParticleBillboards(const SMapRenderContext& ctx, SMapRenderStats& sta
                 int32_t(std::lround(draw_pos[1])),
                 int32_t(std::lround(draw_pos[2])),
             };
-            const S3DPoint particle_world = MapRendererMeshWorld(
-                world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint particle_camera = MapRendererMeshWorld(
-                ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint rel = particle_world - particle_camera;
             float sx = 0.0f, sy = 0.0f;
-            ProjectCameraRelToScreen(ctx, rel, sx, sy);
+            float scene_z = 0.0f;
+            ProjectWorldPointToScreen(ctx, world_pos, sx, sy, &scene_z);
 
             float overlay_scale = 1.0f;
             if (ctx.perspective_camera)
             {
-                const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
+                const float z = (std::max)(scene_z, 1.0f);
                 const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
                 overlay_scale = focal_zoom / z;
             }
@@ -179,10 +195,8 @@ void SubmitParticleBillboards(const SMapRenderContext& ctx, SMapRenderStats& sta
 
             const int32_t w = (std::max)(1, int32_t(std::lround(width * overlay_scale)));
             const int32_t h = (std::max)(1, int32_t(std::lround(height * overlay_scale)));
-            const int32_t dst_x = int32_t(std::lround(sx)) + ctx.cam_ox
-                - int32_t(std::lround(float(w) * desc.anchor_x));
-            const int32_t dst_y = int32_t(std::lround(sy)) + ctx.cam_oy
-                - int32_t(std::lround(float(h) * desc.anchor_y));
+            const int32_t dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
+            const int32_t dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
             if (dst_x > ctx.vw || dst_y > ctx.vh || dst_x + w < 0 || dst_y + h < 0)
             {
                 ++stats.draw_offscreen;
@@ -722,12 +736,17 @@ void SSectorDrawableInst::UpdateFromInstance()
 void SSectorDrawableInst::AccumulateSceneZ(const SMapRenderContext& ctx, float& scene_z_min_fit,
                                            float& scene_z_max_fit, int32_t& fit_tiles) const
 {
-    S3DPoint rel = world_pos - ctx.sectorCameraWorld;
+    // Camera-relative XY only. Z stays in absolute world space so the
+    // object's projected screen Y depends solely on its own world Z,
+    // not on where the camera happens to be.
+    S3DPoint rel = { world_pos.x - ctx.sectorCameraWorld.x,
+                     world_pos.y - ctx.sectorCameraWorld.y,
+                     world_pos.z };
     if (kind == ESectorDrawableKind::Mesh)
     {
-        const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+        const S3DPoint mesh_world  = MapRendererMeshWorld(world_pos,             ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
         const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-        rel = mesh_world - mesh_camera;
+        rel = { mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z };
     }
     const float camera_z = CameraDepth(rel, ctx.cam_forward);
     float z0 = camera_z - 512.0f;
@@ -770,7 +789,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         if (!ctx.show_gizmos && (oi->IsLight() || oi->ObjClass() == OBJCLASS_HELPER)) return;
         const auto& tex = (*ctx.tile_assets)[asset_idx];
         S3DPoint sp;
-        const S3DPoint rel = {world_pos.x - ctx.sectorCameraWorld.x, world_pos.y - ctx.sectorCameraWorld.y, world_pos.z - ctx.sectorCameraWorld.z};
+        const S3DPoint rel = {world_pos.x - ctx.sectorCameraWorld.x, world_pos.y - ctx.sectorCameraWorld.y, world_pos.z};
         WorldToScreen(rel, sp.x, sp.y);
         const float anchor_scene = CameraDepth(rel, ctx.cam_forward) - ctx.depth_mul * float(regz);
         const float anchor_scene_norm = std::fabs(ctx.zspan) > 1e-6f ? (anchor_scene - ctx.z_near) / ctx.zspan : 0.5f;
@@ -911,9 +930,9 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         // and skip if it's well outside the viewport. Margin of ~256 px
         // covers tall/wide meshes whose bounds extend past the anchor.
         {
-            const S3DPoint mesh_world  = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            const S3DPoint mesh_world  = MapRendererMeshWorld(world_pos,             ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint rel = mesh_world - mesh_camera;
+            const S3DPoint rel = { mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z };
             S3DPoint sp; WorldToScreen(rel, sp.x, sp.y);
             const int32_t px = sp.x + ctx.cam_ox;
             const int32_t py = sp.y + ctx.cam_oy;
@@ -982,7 +1001,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(m.specular, asset.specular, sizeof(m.specular));
             std::memcpy(m.emissive, asset.emissive, sizeof(m.emissive));
             m.power = asset.power;
-            m.sort_depth = CameraDepth(mesh_world - mesh_camera, ctx.cam_forward);
+            m.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
             Renderer->SubmitHelperMesh(m);
         }
         else
@@ -1018,7 +1037,11 @@ void TMapRenderer::Impl::sectorProjectWorldForViewport(const S3DPoint& world,
                                                        int32_t viewport_h,
                                                        S3DPoint& screen) const
 {
-    const S3DPoint rel = sectorCameraRel(world);
+    // Keep CPU-projected world markers in the same coordinate convention as
+    // the GPU mesh shader: camera-relative X/Y, absolute world Z.
+    const S3DPoint rel = { world.x - sectorCameraWorld.x,
+                           world.y - sectorCameraWorld.y,
+                           world.z };
     WorldToScreen(rel, screen.x, screen.y);
     const float scene_z = sectorCameraDepth(rel, viewport_h);
     screen.z = int32_t(scene_z);
@@ -1256,9 +1279,14 @@ void TMapRenderer::GetViewProj(float view_out[16], float proj_out[16],
     constexpr float kOffZ  = -0.6324f;
     constexpr float D      = 100000.0f;
 
+    // GPU view target uses camera X/Y but a constant Z. The camera follows
+    // Locke's full position (including Z) so other systems (lighting, fog,
+    // etc.) can read his height; but the LookAt target's Z must not move
+    // with him -- otherwise the entire scene scrolls vertically and the
+    // user sees objects "rise" with the player on stairs.
     const hmm_vec3 target = HMM_Vec3(float(s.sectorCameraWorld.x),
                                      float(s.sectorCameraWorld.y),
-                                     float(s.sectorCameraWorld.z));
+                                     0.0f);
     const hmm_vec3 eye    = HMM_Vec3(target.X + kOffX * D,
                                      target.Y + kOffY * D,
                                      target.Z + kOffZ * D);
@@ -2059,9 +2087,14 @@ void TMapRenderer::RebuildForCurrentMap()
     const float init_camera_forward = s.sectorCameraForward(th);
     for (const auto& w : draw_work)
     {
+        // Z stays absolute world (don't subtract camera.z) so depth ordering
+        // doesn't shift when the camera moves vertically.
         const float camera_z = (w.kind == ESectorDrawableKind::Mesh)
             ? CameraDepth(s.sectorCameraRelMesh(w.world_pos), init_camera_forward)
-            : CameraDepth(w.world_pos - s.sectorCameraWorld, init_camera_forward);
+            : CameraDepth(S3DPoint{ w.world_pos.x - s.sectorCameraWorld.x,
+                                    w.world_pos.y - s.sectorCameraWorld.y,
+                                    w.world_pos.z },
+                          init_camera_forward);
         float z0 = camera_z - 512.0f;
         float z1 = camera_z + 512.0f;
         if (w.kind == ESectorDrawableKind::Tile)
@@ -2413,7 +2446,10 @@ void TMapRenderer::RenderFrame()
     drawctx.zspan = zspan;
     drawctx.depth_mul = s.depth_mul;
     drawctx.perspective_camera = s.sectorPerspectiveCamera;
-    drawctx.show_gizmos = s.sectorShowGizmos;
+    // Editor-only decorations (light / helper gizmo bitmaps drawn from
+    // the per-instance Submit path) are forced off in game mode regardless
+    // of the underlying toggle so the player never sees editor visuals.
+    drawctx.show_gizmos = s.sectorShowGizmos && EditorOverlaysEnabled();
     drawctx.show_tiles = s.sectorShowTiles;
     drawctx.show_meshes = s.sectorShowMeshes;
     drawctx.force_mesh_preview_pose = s.sectorForceMeshPreviewPose;
@@ -2439,9 +2475,14 @@ void TMapRenderer::RenderFrame()
             // TSafeRef<T> share) so the test handles any selectable
             // type without committing to TObjectInstance here.
             uint32_t obj_id = uint32_t(idx) + 1u;
-            const int32_t mi = s.sectorDrawInst[idx].src.MapIndex();
-            if (mi >= 0 && s.selectedMapIndices.count(mi))
-                obj_id |= kObjFlagSelected;
+            // Selection highlight is an editor-only visual; suppress in
+            // game mode even if the editor's selection set is non-empty.
+            if (EditorOverlaysEnabled())
+            {
+                const int32_t mi = s.sectorDrawInst[idx].src.MapIndex();
+                if (mi >= 0 && s.selectedMapIndices.count(mi))
+                    obj_id |= kObjFlagSelected;
+            }
             if (TObjectInstance* oi = s.sectorDrawInst[idx].src.Get())
                 if (TParticleEffectComponent* particle_effect = oi->GetComponent<TParticleEffectComponent>())
                     particle_effect->DrawPulse();

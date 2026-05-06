@@ -32,10 +32,15 @@
 #include "editor.h"
 #include "editorstub.h"
 #include "imagery.h"
+#include "imgui.h"
 #include "logging.h"
+#include "ctrlmap.h"
+#include "gamemap.h"
+#include "mapmanager.h"
 #include "mappane.h"
 #include "maprenderer.h"
 #include "player.h"
+#include "runtimemode.h"
 #include "savegame.h"
 #include "sector.h"
 #include "time.h"
@@ -47,6 +52,29 @@
 // them as globals so the existing call sites compile unchanged.
 PTBitmap PointerCursor = nullptr;
 PTBitmap HandCursor    = nullptr;
+
+// Default game controls. Mirrors the retail table from
+// attic/src/playscreen.cpp; the trimmed first cut keeps the directional
+// + run / sneak entries that drive Locke's movement. Combat / bow /
+// inventory / spell-slot bindings come back as the receiving systems
+// get wired. Single-key chords for now -- no Ctrl/Shift combos.
+//
+// `mode` is currently set to ALLMODES (0xFFFFFFFF) since combat/bow/
+// sneak modes aren't gating anything yet; refine when those gameplay
+// modes come back online.
+static SControlEntry g_defaultGameControls[] =
+{
+    {"Run",         "Run",       ALLMODES, {{'R'}},                        GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_RUN,        false},
+    {"Sneak",       "Sneak",     ALLMODES, {{'S'}},                        GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_SNEAK,      false},
+    {"Left",        "Left",      ALLMODES, {{VK_LEFT},  {VK_JOYLEFT}},     GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_LEFT,       false},
+    {"Right",       "Right",     ALLMODES, {{VK_RIGHT}, {VK_JOYRIGHT}},    GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_RIGHT,      false},
+    {"Up",          "Up",        ALLMODES, {{VK_UP},    {VK_JOYUP}},       GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_UP,         false},
+    {"Down",        "Down",      ALLMODES, {{VK_DOWN},  {VK_JOYDOWN}},     GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_DOWN,       false},
+    {"Up Left",     "UpLeft",    ALLMODES, {{VK_HOME},  {VK_JOYUPLEFT}},   GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_UPLEFT,     false},
+    {"Up Right",    "UpRight",   ALLMODES, {{VK_PRIOR}, {VK_JOYUPRIGHT}},  GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_UPRIGHT,    false},
+    {"Down Left",   "DownLeft",  ALLMODES, {{VK_END},   {VK_JOYDOWNLEFT}}, GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_DOWNLEFT,   false},
+    {"Down Right",  "DownRight", ALLMODES, {{VK_NEXT},  {VK_JOYDOWNRIGHT}},GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_DOWNRIGHT,  false},
+};
 
 // Game runs at this many internal ticks per real-time second. Used by
 // time-of-day + the frame-to-minutes helpers.
@@ -115,6 +143,13 @@ bool TPlayScreen::Initialize()
     bloodimagery  = load("Misc\\Blood.I3D");
     sparksimagery = load("Misc\\Sparks.I3D");
 
+    // Default keyboard bindings. Direction keys + Run / Sneak; classic
+    // arrow + numpad-diagonal layout. UpdateMove synthesizes diagonals
+    // from adjacent cardinals so laptop users without a Home/PgUp/End/
+    // PgDn cluster still get full 8-way movement.
+    ControlMap.Initialize(int32_t(sizearray(g_defaultGameControls)),
+                          g_defaultGameControls);
+
     EditorLoadState();
 
     log_info("[playscreen] initialize done");
@@ -148,18 +183,18 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
         return false;
     }
 
-    // Sector-center is the Misthaven fountain at the default anchor;
-    // offset south so Locke spawns on the plaza paving instead of in
-    // the basin. Picked empirically -- TODO: replace with a real
-    // start-of-game position once save-load / a NewGame data path is
-    // wired up.
+    // Sector-center is the Misthaven fountain at the default anchor.
+    // Offset northwest of center onto open plaza paving so Locke isn't
+    // stuck on / against the fountain geometry. Picked empirically --
+    // TODO: replace with a real start-of-game position once save-load
+    // / a NewGame data path is wired up.
     SObjectDef def;
     memset(&def, 0, sizeof(def));
     def.objclass = OBJCLASS_PLAYER;
     def.objtype  = locke_type;
     def.level    = level;
-    def.pos.x    = (sx << SECTORWSHIFT) + (SECTORWIDTH  / 2);
-    def.pos.y    = (sy << SECTORHSHIFT) + (SECTORHEIGHT / 2) + 384;
+    def.pos.x    = (sx << SECTORWSHIFT) + (SECTORWIDTH  / 2) - 128;
+    def.pos.y    = (sy << SECTORHSHIFT) + (SECTORHEIGHT / 2) - 128;
     // Read the floor height from the sector walkmap so Locke spawns
     // on top of the terrain instead of beneath it. MapPane's level
     // window doesn't follow Locke yet (paging not wired); read off
@@ -168,6 +203,59 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
         const int32_t local_x = (def.pos.x & (SECTORWIDTH  - 1)) >> WALKMAPSHIFT;
         const int32_t local_y = (def.pos.y & (SECTORHEIGHT - 1)) >> WALKMAPSHIFT;
         def.pos.z = sec->ReturnWalkmap(local_x, local_y);
+        log_info("[player] spawn: world=(%d,%d,%d) sector=(%d_%d_%d) "
+                 "walkmap[%d,%d]=%d",
+                 def.pos.x, def.pos.y, def.pos.z, level, sx, sy,
+                 local_x, local_y, def.pos.z);
+
+        // One-shot Z reference probes: walk every loaded sector of the current
+        // map and log up to two example pos.z values -- one from any
+        // OBJCLASS_CHARACTER (NPC / monster, since monsters are CHARACTER too),
+        // one from the first non-tile static prop. Both render at correct Z
+        // visually, so comparing their stored pos.z + walkmap-under-feet to
+        // ours tells us whether Locke's spawn uses the wrong reference value.
+        if (TGameMap* gm = MapManager.CurrentMap())
+        {
+            int32_t char_logged = 0, prop_logged = 0;
+            for (TSector* probe_sec : gm->Sectors())
+            {
+                if (!probe_sec) continue;
+                if (char_logged && prop_logged) break;
+                for (int32_t i = 0; i < probe_sec->NumItems(); ++i)
+                {
+                    TObjectInstance* probe = probe_sec->GetInstance(i);
+                    if (!probe) continue;
+                    const int32_t cls = probe->ObjClass();
+                    const bool is_char = (cls == OBJCLASS_CHARACTER);
+                    const bool is_prop = (cls != OBJCLASS_TILE &&
+                                          cls != OBJCLASS_EXIT &&
+                                          cls != OBJCLASS_EFFECT &&
+                                          cls != OBJCLASS_LIGHTSOURCE &&
+                                          cls != OBJCLASS_HELPER &&
+                                          cls != OBJCLASS_PLAYER &&
+                                          cls != OBJCLASS_CHARACTER);
+                    if (!is_char && !is_prop) continue;
+                    if (is_char && char_logged) continue;
+                    if (is_prop && prop_logged) continue;
+                    S3DPoint pp; probe->GetPos(pp);
+                    const int32_t plx = (pp.x & (SECTORWIDTH  - 1)) >> WALKMAPSHIFT;
+                    const int32_t ply = (pp.y & (SECTORHEIGHT - 1)) >> WALKMAPSHIFT;
+                    const int32_t pwalk = probe_sec->ReturnWalkmap(plx, ply);
+                    log_info("[player] z-probe %s '%s' cls=%d pos=(%d,%d,%d) "
+                             "sector=(%d_%d) walkmap[%d,%d]=%d delta(z-walk)=%d",
+                             is_char ? "CHAR" : "PROP",
+                             probe->GetTypeName() ? probe->GetTypeName() : "?",
+                             cls, pp.x, pp.y, pp.z,
+                             probe_sec->SectorX(), probe_sec->SectorY(),
+                             plx, ply, pwalk, pp.z - pwalk);
+                    if (is_char) ++char_logged;
+                    else         ++prop_logged;
+                    if (char_logged && prop_logged) break;
+                }
+            }
+            if (!char_logged) log_info("[player] z-probe: no OBJCLASS_CHARACTER found in current map");
+            if (!prop_logged) log_info("[player] z-probe: no static prop found in current map");
+        }
     }
 
     TObjectInstance* oi = PlayerClass.NewObject(&def);
@@ -176,6 +264,18 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
         log_error("[player] PlayerClass.NewObject failed for Locke");
         return false;
     }
+
+    // The Aggressive stat defaults to 1 in DEFOBJSTAT(Character, Aggressive,
+    // ..., 1, 0, 1). The retail rules.def CHAR entry for the player class
+    // overrode that to 0; with the fallback SCharData (no rules.def CHAR
+    // entries) Locke inherits the default and spawns in "combat" root.
+    // That gates all movement on combat-walk animations and effectively
+    // freezes him. Force walk-mode by clearing Aggressive and re-running
+    // the character init so DefaultRootState resolves to "walk".
+    TCharacter* c = (TCharacter*)oi;
+    c->SetAggressive(0);
+    c->ClearChar();
+
 
     sec->AddObject(oi);
 
@@ -241,34 +341,11 @@ void TPlayScreen::Update()
         ::SaveGame.WriteGame(gamenum);
     }
 
-    // Drive player movement from the latest command-flag state. The
-    // actual flag bits are toggled in KeyPress / Joystick / Command via
-    // TPlayer; UpdateMove translates them into a movement step.
-    if (controlon && !demomode)
-        UpdateMove();
-
-    // Game-logic tick over the active 3x3 window centered on the
-    // player. UpdateActiveWindow re-fills MapPane.sectors[][] (cheap
-    // when the player hasn't crossed a sector boundary). PulseObjects
-    // runs per-instance Pulse() (AI / animator state); MoveObjects
-    // applies the movement step from movebits set during Pulse.
-    // NextFrame still runs from the renderer's per-frame loop today;
-    // collapsing both onto the same iterator is a follow-up.
-    MapPane.UpdateActiveWindow();
-    MapPane.PulseObjects();
-    MapPane.MoveObjects();
-
-    // Camera follow: keep the renderer's camera anchored on the
-    // player. Cheap pointer / int copy; runs every frame so the view
-    // tracks Locke as he walks (or as Move() applies gravity / pose
-    // motion before input is wired). No-op if there's no Player or
-    // no renderer yet.
-    if (Player && mapRenderer)
-    {
-        S3DPoint p;
-        Player->GetPos(p);
-        mapRenderer->SetCameraWorld(Player->GetLevel(), p.x, p.y, p.z);
-    }
+    // Per-frame work that differs between game and editor: input ->
+    // movement, pulse / move over the active sector window, camera
+    // follow. Editor mode's Tick is a no-op (the editor drives camera
+    // + pulse itself).
+    CurrentMode()->Tick();
 
     // Advance per-frame counters. The map renderer ticks its own animator
     // off LegacyFrameCount(), so we just track our own session bookkeeping
@@ -289,12 +366,98 @@ void TPlayScreen::RenderFrame()
     mapRenderer->RenderFrame();
 }
 
+// Diagnostic overlay: prints Locke's world position, walkmap height
+// under his feet, the delta that drives TCharacter::Blocked, sector
+// id, and current action. Game-mode only -- editor has its own
+// inspectors. Cheap; lifetime is the duration of the player-input
+// bring-up and can be removed once movement reliably works.
+static void DrawPlayerStatusOverlay()
+{
+    if (!Player) return;
+    if (CurrentMode() != GameMode()) return;
+
+    S3DPoint p; Player->GetPos(p);
+    const int32_t lvl = Player->GetLevel();
+    const int32_t walk = MapPane.GetWalkHeight(p);
+    const int32_t z_delta = p.z - walk;
+    const char* state_name = Player->GetStateName();
+    const int32_t sx_world = p.x >> SECTORWSHIFT;
+    const int32_t sy_world = p.y >> SECTORHSHIFT;
+    const int32_t radius = ((TCharacter*)Player)->Radius();
+    int32_t r_min = 0, r_max = 0, r_h = 0;
+    MapPane.GetWalkHeightRadius(p, radius, r_min, r_max, r_h);
+    const TCharacter* blocker = ((TCharacter*)Player)->CharBlocking();
+
+    ImGui::SetNextWindowPos(ImVec2(8, 8), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowBgAlpha(0.55f);
+    if (ImGui::Begin("Player Debug", nullptr,
+                     ImGuiWindowFlags_NoNav | ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("pos     : (%d, %d, %d)  level=%d", p.x, p.y, p.z, lvl);
+        ImGui::Text("sector  : %d_%d", sx_world, sy_world);
+        ImGui::Text("walkmap : %d  (z-walk = %d)", walk, z_delta);
+        ImGui::Text("radius  : %d   r_h=%d  min=%d  max=%d",
+                    radius, r_h, r_min, r_max);
+        const bool z_blocks    = std::abs(z_delta) > 32;
+        const bool no_floor    = (walk == 0);
+        const bool slope_min   = std::abs(r_min) > 32;
+        const bool slope_max   = std::abs(r_max) > 32;
+        const bool char_blocks = (blocker != nullptr);
+        ImGui::Text("would block: %s%s%s%s%s%s",
+                    z_blocks    ? "Z>32 "       : "",
+                    no_floor    ? "no-floor "   : "",
+                    slope_min   ? "min>32 "     : "",
+                    slope_max   ? "max>32 "     : "",
+                    char_blocks ? "char-blk "   : "",
+                    (!z_blocks && !no_floor && !slope_min && !slope_max && !char_blocks)
+                                ? "no" : "");
+        ImGui::Text("moving  : %s   moveangle=%d   anim=%s",
+                    Player->IsMoving() ? "yes" : "no",
+                    Player->GetMoveAngle(),
+                    state_name ? state_name : "?");
+        // Animation state breakout. state index by itself is opaque;
+        // pair it with frame/total + decoded ani-flags so the cycle bug
+        // ("walkf done but never advances") is readable at a glance.
+        // TComplexObject overrides GetState() to return const char*
+        // (the action-block name). Reach the integer state index via
+        // the TObjectInstance base.
+        const int32_t st_idx   = static_cast<TObjectInstance*>(Player)->GetState();
+        const int32_t st_total = Player->NumStates();
+        TObjectImagery* img    = Player->GetImagery();
+        const int32_t fr_total = img ? img->GetAniLength(st_idx) : 0;
+        const uint32_t ani_fl  = Player->GetAniFlags();
+        char flagstr[64] = {};
+        int  fpos = 0;
+        auto add = [&](const char* tag, uint32_t mask) {
+            if ((ani_fl & mask) && fpos < int(sizeof(flagstr)) - 12) {
+                fpos += std::snprintf(flagstr + fpos, sizeof(flagstr) - fpos,
+                                      fpos ? "|%s" : "%s", tag);
+            }
+        };
+        add("LOOP", AF_LOOPING);
+        add("PP",   AF_PINGPONG);
+        add("ROOT", AF_ROOT);
+        add("R2R",  AF_ROOT2ROOT);
+        add("FLY",  AF_FLY);
+        add("MOVE", AF_MOVE);
+        ImGui::Text("anim    : %s  state=%d/%d  frame=%d/%d  flags=%s  done=%s",
+                    state_name ? state_name : "?",
+                    st_idx, st_total, Player->GetFrame(), fr_total,
+                    fpos ? flagstr : "-",
+                    Player->CommandDone() ? "yes" : "no");
+        ImGui::Text("framerate=%d  HasAnimator=%s",
+                    Player->GetFrameRate(),
+                    Player->HasAnimator() ? "yes" : "NO");
+    }
+    ImGui::End();
+}
+
 // Legacy entry points still referenced by drivers / pane code. Pulse
 // pumps the per-frame state update; Animate fires the world render
 // (matching what TTestScreen does for TestModes::Render). DrawBackground
 // is dead -- no BITMAP.100 backdrop on the new path.
 void TPlayScreen::Pulse()                  { Update(); }
-void TPlayScreen::Animate(bool /*draw*/)   { RenderFrame(); EditorDrawChrome(); }
+void TPlayScreen::Animate(bool /*draw*/)   { RenderFrame(); EditorDrawChrome(); DrawPlayerStatusOverlay(); }
 void TPlayScreen::DrawBackground()         { /* no backdrop blit on the new path */ }
 
 // *************************************************************************
@@ -303,7 +466,9 @@ void TPlayScreen::DrawBackground()         { /* no backdrop blit on the new path
 
 void TPlayScreen::KeyPress(int32_t key, bool down)
 {
-    // Editor toggle. F12 is the retail-era hotkey.
+    // Editor toggle. F12 is the retail-era hotkey -- always handled at
+    // the screen level so the user can flip modes regardless of who
+    // currently owns input.
     if (down && key == VK_F12)
     {
         if (Editor)
@@ -318,14 +483,20 @@ void TPlayScreen::KeyPress(int32_t key, bool down)
         return;
     }
 
+    // Give the active mode first crack at the key (game-mode movement
+    // bindings, etc.). If it consumes the event we stop here.
+    if (CurrentMode()->HandleKey(key, down)) return;
+
     TScreen::KeyPress(key, down);
 }
 
 void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 {
     TScreen::MouseClick(button, x, y);
-    if (mapRenderer)
-        mapRenderer->HandleMouseClick(button, x, y);
+    // Route to the active runtime mode; editor mode forwards to the
+    // renderer's gizmo / drag picker, game mode keeps the click for
+    // future walk-to / interact wiring.
+    CurrentMode()->HandleMouseClick(button, x, y);
 }
 
 void TPlayScreen::Joystick(int32_t /*key*/, bool /*down*/)
@@ -341,9 +512,60 @@ void TPlayScreen::Command(GAMECOMMAND /*command*/)
 
 void TPlayScreen::UpdateMove()
 {
-    // TODO(port): apply CMDFLAG_DIRFLAGS direction state to TPlayer's
-    // movement. Wired up once TPlayer's movement path is live on the new
-    // engine.
+    if (!Player) return;
+
+    uint32_t state, changed;
+    ControlMap.GetCommandFlags(state, changed);
+
+    // Synthesize diagonal flags from adjacent cardinals so keyboards
+    // without a Home / PgUp / End / PgDn cluster can still walk
+    // diagonally with two arrow keys. The retail bit-scan picks the
+    // lowest set CMDFLAG bit, so without this UP+RIGHT would yield
+    // pure RIGHT instead of UPRIGHT. We OR the diagonal in and clear
+    // the cardinals so the scan resolves cleanly.
+    auto synthesize_diagonal = [](uint32_t s, uint32_t a, uint32_t b, uint32_t diag) -> uint32_t {
+        if ((s & a) && (s & b)) s = (s & ~(a | b)) | diag;
+        return s;
+    };
+    state = synthesize_diagonal(state, CMDFLAG_UP,   CMDFLAG_RIGHT, CMDFLAG_UPRIGHT);
+    state = synthesize_diagonal(state, CMDFLAG_UP,   CMDFLAG_LEFT,  CMDFLAG_UPLEFT);
+    state = synthesize_diagonal(state, CMDFLAG_DOWN, CMDFLAG_RIGHT, CMDFLAG_DOWNRIGHT);
+    state = synthesize_diagonal(state, CMDFLAG_DOWN, CMDFLAG_LEFT,  CMDFLAG_DOWNLEFT);
+
+    // Bow-aim mode: left/right adjust aim instead of moving.
+    if (Player->IsBowMode() && Player->IsBowDrawn())
+    {
+        if      (state & CMDFLAG_LEFT)  Player->AimBowLeft();
+        else if (state & CMDFLAG_RIGHT) Player->AimBowRight();
+        else                            return;
+    }
+
+    // Direction flags occupy bits 0..7 in clockwise order starting
+    // from UPRIGHT; the lowest set bit picks the angle (steps of 32).
+    int32_t angle = 0;
+    int32_t c;
+    for (c = 1; c < (1 << 8) && !(c & state); c <<= 1, angle += 32);
+    if (angle > 255) angle = -1;  // no direction held
+
+    if (angle >= 0)
+    {
+        if (Player->IsFighting() && (state & CMDFLAG_LEAP))
+            Player->Leap(angle);
+        else if (Player->GetMoveAngle() != angle ||
+                 !(Player->IsDoing(ACTION_MOVE) || Player->IsDoing(ACTION_COMBATMOVE)))
+            Player->Go(angle);
+    }
+    else if (changed && Player->IsMoving() && !Player->IsGoto())
+    {
+        Player->Stop();
+    }
+
+    // Block / unblock toggle (combat mode).
+    if ((state & CMDFLAG_BLOCK) &&
+        Player->IsFighting() && !Player->IsDoing(ACTION_BLOCK))
+        Player->Block(10000);
+    if (!(state & CMDFLAG_BLOCK) && Player->IsDoing(ACTION_BLOCK))
+        Player->StopBlock();
 }
 
 // *************************************************************************

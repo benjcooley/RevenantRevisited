@@ -15,6 +15,7 @@
 
 #include "editor.h"
 #include "logging.h"
+#include "runtimemode.h"
 #include "template.h"
 
 bool                  Editor       = false;
@@ -48,11 +49,13 @@ void StartEditor(bool /*starting*/)
     if (Editor) return;
     Editor = true;
     EditorEnter();
+    SetCurrentMode(EditorMode());
 }
 
 void ShutDownEditor()
 {
     if (!Editor) return;
+    SetCurrentMode(GameMode());
     EditorExit();
     Editor = false;
 }

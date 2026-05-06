@@ -9,6 +9,7 @@
 
 #include "display.h"
 #include "imgui.h"
+#include "runtimemode.h"
 #include "time.h"
 
 #include <algorithm>
@@ -368,7 +369,7 @@ void TMapRenderer::DrawDebugTab()
         ImGui::EndTabBar();
     }
 
-    if (s.sectorShowMeshLocators)
+    if (s.sectorShowMeshLocators && EditorOverlaysEnabled())
     {
         int32_t cam_ox = 0, cam_oy = 0;
         s.sectorCameraOriginScreen(cam_ox, cam_oy);
@@ -458,7 +459,7 @@ void TMapRenderer::DrawDebugTab()
         ImGui::Text("mesh locators shown: %d", shown);
     }
 
-    if (s.sectorShowTileLocators)
+    if (s.sectorShowTileLocators && EditorOverlaysEnabled())
     {
         int32_t cam_ox = 0, cam_oy = 0;
         s.sectorCameraOriginScreen(cam_ox, cam_oy);
@@ -530,7 +531,7 @@ void TMapRenderer::DrawDebugTab()
         ImGui::Text("tile locators shown: %d", shown);
     }
 
-    if (s.sectorShowObjectLocators)
+    if (s.sectorShowObjectLocators && EditorOverlaysEnabled())
     {
         int32_t cam_ox = 0, cam_oy = 0;
         s.sectorCameraOriginScreen(cam_ox, cam_oy);

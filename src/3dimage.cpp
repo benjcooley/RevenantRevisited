@@ -1987,7 +1987,7 @@ TObjectAnimator* T3DImagery::NewObjectAnimator(TObjectInstance* oi)
     return (TObjectAnimator*)builder->Build(oi);
 }
 
-bool T3DImagery::NeedsAnimator(TObjectInstance*)
+bool T3DImagery::NeedsAnimator(const TObjectInstance* /*oi*/) const
 {
     return true;
 }

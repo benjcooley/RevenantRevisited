@@ -296,7 +296,7 @@ class T3DImagery : public TObjectImagery
 
     void AttachAnimatorComponents(TObjectInstance* oi);
     virtual TObjectAnimator* NewObjectAnimator(TObjectInstance* oi);
-    virtual bool NeedsAnimator(TObjectInstance* oi);
+    bool NeedsAnimator(const TObjectInstance* oi) const override;
 
   // Motion functions
     bool GetMotion(int32_t state, int32_t frame,

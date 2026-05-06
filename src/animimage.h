@@ -69,7 +69,7 @@ class TAnimImagery : public TObjectImagery
 
     virtual PTObjectAnimator NewObjectAnimator(TObjectInstance* oi);
         // Creates an animtor for the given object
-    virtual bool NeedsAnimator(TObjectInstance* oi);
+    bool NeedsAnimator(const TObjectInstance* oi) const override;
       // Returns whether or not an animator is necessary
 };
 

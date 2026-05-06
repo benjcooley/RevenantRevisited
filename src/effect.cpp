@@ -97,17 +97,6 @@ void ParseVec3(const defdoc::Node& node, const char* key, float out[3])
     out[2] = float(arr[2].as_double());
 }
 
-void ParseOptionalVec2(const defdoc::Node& node, const char* key, float out[2])
-{
-    if (!node.contains(key))
-        return;
-    const defdoc::Node::Array& arr = node[key].as_array();
-    if (arr.size() != 2)
-        ParticleFatal(std::string("[particle] expected vec2 array for ") + key);
-    out[0] = float(arr[0].as_double());
-    out[1] = float(arr[1].as_double());
-}
-
 void ParseOptionalColorRgb01(const defdoc::Node& node, const char* key, bool& enabled, float out[3])
 {
     if (!node.contains(key))
@@ -196,7 +185,6 @@ SParticleEffectDef ParseParticleEffectDef(const char* wanted)
         bucket.atlas_frames = int32_t(bucket_node->get_int("atlas_frames", 1));
         bucket.width = float(bucket_node->get_double("width", 1.0));
         bucket.height = float(bucket_node->get_double("height", 1.0));
-        ParseOptionalVec2(*bucket_node, "anchor", bucket.anchor);
         bucket.scale = float(bucket_node->get_double("scale", 1.0));
         bucket.additive = bucket_node->get_string("blend", "additive") == "additive";
         bucket.flip_v = bucket_node->get_bool("flip_v", false);
@@ -323,8 +311,6 @@ SParticleBucketDesc BuildRuntimeBucketDesc(const SParticleEffectDef& effect_def,
     desc.texture_height = texture_height;
     desc.default_width = bucket_def.width;
     desc.default_height = bucket_def.height;
-    desc.anchor_x = bucket_def.anchor[0];
-    desc.anchor_y = bucket_def.anchor[1];
     desc.debug_solid = effect_def.debug_solid;
     desc.flip_v = bucket_def.flip_v;
     desc.chroma_key = bucket_def.chroma_key;
@@ -344,7 +330,7 @@ void InitializeRuntimeParticle(TParticleBucket& bucket, int32_t particle_index,
         const S3DPoint& p = owner->Pos();
         draw_pos[0] = float(p.x) + emitter.local_pos[0];
         draw_pos[1] = float(p.y) + emitter.local_pos[1];
-        draw_pos[2] = float(p.z) + emitter.local_pos[2] / WORLD3D_Z_SCALE;
+        draw_pos[2] = float(p.z) + emitter.local_pos[2];
     }
     if (float* emit_pos = bucket.VarPtr(particle_index, EParticleVar::EmitPos))
     {

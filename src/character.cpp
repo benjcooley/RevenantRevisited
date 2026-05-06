@@ -164,6 +164,18 @@ void TCharacter::ClearChar()
     teleport_position.y = -1;
     teleport_position.z = -1;
     teleport_level = -1;
+
+  // Attach the animator component up front. Characters carry the
+  // animator for the lifetime of the object (see IsAnimatorPermanent
+  // override) -- no lazy create/free during sector load/unload or
+  // state change. ClearChar runs from both TCharacter ctors and from
+  // explicit re-init paths (e.g. spawn-time Aggressive reset). The
+  // imagery-side builder lookup uses GetClassName() which is keyed
+  // off the cl pointer set during TObjectInstance construction, so
+  // even ctor-time invocation routes to the correct subclass animator
+  // (TCharAnimator / TPlayerAnimator).
+    if (imagery && !HasAnimator())
+        CreateAnimator();
 }
 
 void TCharacter::Pulse()

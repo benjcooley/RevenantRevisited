@@ -61,6 +61,10 @@ class TCharacter : public TComplexObject
     TCharacter(TObjectImagery* newim) : TComplexObject(newim) { ClearChar(); }
     TCharacter(SObjectDef* def, TObjectImagery* newim) : TComplexObject(def, newim) { ClearChar(); }
 
+    bool IsAnimatorPermanent() const override { return true; }
+        // Characters always own a TObjectAnimator from construction. See
+        // TObjectInstance::IsAnimatorPermanent for the contract.
+
     virtual int32_t CursorType(TObjectInstance* inst = nullptr);
         // Talk icon if they are friendly, attack icon if aggressive, hand if dead
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
