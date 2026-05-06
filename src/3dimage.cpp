@@ -2281,21 +2281,40 @@ void T3DAnimator::SetupObjects()
         AddObject(o);
     }
 
+    // Wire the bone hierarchy. Both linkages are established:
+    //   * Legacy `parent` raw pointer (still consumed by
+    //     CalcObjectMatrix's manual parent-chain compose).
+    //   * TTransform parent linkage (TTransform handles its own
+    //     parent/children lists; consumers reading transform.Matrix()
+    //     get the global composition for free).
+    // Removing the legacy `parent` is C5 once all consumers migrate to
+    // reading bone.transform.Matrix() instead of bone->matrix.
     for (int32_t c = 0; c < animobjs.NumItems(); c++)
     {
-        int32_t parent = ((T3DImagery*)image)->GetObjectParent(animobjs[c]->objnum, 0);
+        const int32_t parent = ((T3DImagery*)image)
+                               ->GetObjectParent(animobjs[c]->objnum, 0);
         if ((uint32_t)parent < (uint32_t)animobjs.NumItems() &&
             animobjs[parent]->objnum == parent)
+        {
             animobjs[c]->parent = animobjs[parent];
+            animobjs[c]->transform.SetParent(&animobjs[parent]->transform);
+        }
         else
+        {
             animobjs[c]->parent = nullptr;
+            animobjs[c]->transform.SetParent(nullptr);
+        }
     }
 }
 
 S3DAnimObj* T3DAnimator::NewObject(int32_t objnum, int32_t newflags)
 {
+    // Default member initializers in S3DAnimObj zero everything that
+    // needs zeroing (and identity-initialize scl + transform). The
+    // legacy memset was wrong for embedded class members like
+    // TTransform anyway -- it would clobber the registry-registered
+    // state and the children vector.
     S3DAnimObj* obj = new S3DAnimObj;
-    std::memset(obj, 0, sizeof(S3DAnimObj));
     obj->objnum = objnum;
     obj->parent = nullptr;
 

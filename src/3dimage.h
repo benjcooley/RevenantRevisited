@@ -21,6 +21,7 @@
 #include "parse.h"
 #include "render3d_types.h"
 #include "resource.h"
+#include "transform.h"
 
 // **************************************************************
 // * T3DImagery - Shared imagery resource for a given 3D object *
@@ -134,27 +135,35 @@ struct S3DImageryIcons
 _STRUCTDEF(S3DAnimObj)
 struct S3DAnimObj
 {
-    int32_t       flags;
-    int32_t       objnum;                               // Always set (not an override)
-    S3DAnimObj*   parent;                               // Pointer to a parent object (concatenates matrices)
-    int32_t       animtrack;                            // Borrow another object's anim track
-    hmm_vec3      pos;                                  // Used with OBJ3D_POS / ROT / SCL
-    hmm_vec3      rot;
-    hmm_vec3      scl;
-    hmm_mat4      matrix;                               // Directly via OBJ3D_MATRIX, or derived from pos/rot/scl
-    ERender3DPrim primtype;                             // Topology
-    ERender3DVertex verttype;                           // Layout selector for `verts`
-    int32_t       numverts;
-    void*         verts;                                // Points at array of S3DVertex / S3DLVertex / S3DTLVertex
+    int32_t       flags     = 0;
+    int32_t       objnum    = 0;                        // Always set (not an override)
+    S3DAnimObj*   parent    = nullptr;                  // Pointer to a parent object (concatenates matrices)
+    int32_t       animtrack = 0;                        // Borrow another object's anim track
+    hmm_vec3      pos       { 0.0f, 0.0f, 0.0f };       // Used with OBJ3D_POS / ROT / SCL
+    hmm_vec3      rot       { 0.0f, 0.0f, 0.0f };
+    hmm_vec3      scl       { 1.0f, 1.0f, 1.0f };       // Identity scale, not zero -- degenerate scale would
+                                                        // make subsequent MakeMatrix output collapse the bone.
+    hmm_mat4      matrix    {};                         // Directly via OBJ3D_MATRIX, or derived from pos/rot/scl
+    TTransform    transform;                            // Per-bone spatial transform; parent chain wires to
+                                                        // parent->transform at setup. Per-frame: animation
+                                                        // writes SetLocalPos / SetLocalRot / SetLocalScl,
+                                                        // then root-level RefreshHierarchy() resolves all
+                                                        // globals top-down. Mesh extraction reads
+                                                        // transform.Matrix(). Replaces the legacy `matrix`
+                                                        // / `parent`-based manual parent compose.
+    ERender3DPrim primtype  = ERender3DPrim::TriangleList; // Topology
+    ERender3DVertex verttype = ERender3DVertex::Vertex; // Layout selector for `verts`
+    int32_t       numverts  = 0;
+    void*         verts     = nullptr;                  // Points at array of S3DVertex / S3DLVertex / S3DTLVertex
                                                         // (based on `verttype`)
-    int32_t       numfaces;
-    S3DFace*      faces;
-    int32_t       texfaces[MAXTEXTURES + 1];            // Start face for each texture (index 0 is no texture)
-    int32_t       numtexfaces[MAXTEXTURES + 1];         // Num faces to render for each texture
-    int32_t       textureframe[MAXTEXTURES + 1];        // Frame number for animating textures
-    TTextureHandle htextures[MAXTEXTURES];              // Texture handles per texture slot
-    sg_image      surfaces[MAXTEXTURES];                // Bound sg_image per texture slot
-    TMaterialHandle hmaterial;                          // Material handle (only 1 per obj)
+    int32_t       numfaces  = 0;
+    S3DFace*      faces     = nullptr;
+    int32_t       texfaces[MAXTEXTURES + 1]    = {};    // Start face for each texture (index 0 is no texture)
+    int32_t       numtexfaces[MAXTEXTURES + 1] = {};    // Num faces to render for each texture
+    int32_t       textureframe[MAXTEXTURES + 1]= {};    // Frame number for animating textures
+    TTextureHandle htextures[MAXTEXTURES]      = {};    // Texture handles per texture slot
+    sg_image      surfaces[MAXTEXTURES]        = {};    // Bound sg_image per texture slot
+    TMaterialHandle hmaterial                  = {};    // Material handle (only 1 per obj)
 };
 typedef TPointerArray<S3DAnimObj, 16, 16> T3DAnimObjArray;
 
