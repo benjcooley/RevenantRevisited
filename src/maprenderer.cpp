@@ -950,35 +950,67 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             ++stats.mesh_skipped;
             return;
         }
+        // C4: read the world-space mesh matrix straight off the bone's
+        // TTransform, populated each frame by T3DAnimator::Animate ->
+        // UpdateBoneTransforms -> RefreshHierarchy. The bone's
+        // transform.Matrix() chains through (parent bones ->) inst's
+        // transform_ which carries object world pos / rot + the
+        // (1, 1, WORLD3D_Z_SCALE) Z stretch, so no separate root
+        // compose or Z-scale post-multiply is needed.
+        //
+        // Fallback paths kept for cases that don't have a live
+        // animator-with-bones to read from:
+        //   * force_mesh_preview_pose (editor preview): bones aren't
+        //     animator-driven; use BuildStaticObjectMatrix as before.
+        //   * No animator on the instance: fall back to the legacy
+        //     pose-sample compose for safety.
         bool pose_key_ok = false;
-        float local_renderer[16];
+        float world_renderer[16];
+        bool used_bone_xform = false;
         if (!ctx.force_mesh_preview_pose)
         {
-            const SAnimPose pose = SampleI3DAnimPose(meshimg, state, frame);
-            pose_key_ok = pose.Has(AnimTrack(uint16_t(asset.objnum), EAnimChannel::PosX));
-            BuildAnimPoseObjectMatrix(meshimg, pose, state, asset.objnum, local_renderer);
+            T3DAnimator* d3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
+            if (d3)
+            {
+                S3DAnimObj* bone = d3->GetObject(asset.objnum);
+                if (bone)
+                {
+                    pose_key_ok = true;
+                    const hmm_mat4& bone_world = bone->transform.Matrix();
+                    TransposeSourceToRenderer(bone_world, world_renderer);
+                    used_bone_xform = true;
+                }
+            }
         }
-        else
+        if (!used_bone_xform)
         {
-            BuildStaticObjectMatrix(meshimg, asset.objnum, 0, 0, local_renderer);
+            float local_renderer[16];
+            if (!ctx.force_mesh_preview_pose)
+            {
+                const SAnimPose pose = SampleI3DAnimPose(meshimg, state, frame);
+                pose_key_ok = pose.Has(AnimTrack(uint16_t(asset.objnum), EAnimChannel::PosX));
+                BuildAnimPoseObjectMatrix(meshimg, pose, state, asset.objnum, local_renderer);
+            }
+            else
+            {
+                BuildStaticObjectMatrix(meshimg, asset.objnum, 0, 0, local_renderer);
+            }
+            // Mesh-local Z stretch -- only on the legacy compose path;
+            // the bone-transform path already has it baked in via
+            // inst.transform_'s SetLocalScl.
+            {
+                float local_scale[16];
+                float scaled_local[16];
+                MatrixScale16(1.0f, 1.0f, WORLD3D_Z_SCALE, local_scale);
+                MatrixMul16(local_scale, local_renderer, scaled_local);
+                std::memcpy(local_renderer, scaled_local, sizeof(local_renderer));
+            }
+            hmm_mat4 root_source = {};
+            BuildRootMatrixSource(oi, &root_source);
+            float root_renderer[16];
+            TransposeSourceToRenderer(root_source, root_renderer);
+            MatrixMul16(root_renderer, local_renderer, world_renderer);
         }
-        // Apply the mesh-local Z scale (WORLD3D_Z_SCALE) to the local
-        // pose matrix so mesh verts are stretched to common-world-space
-        // height. Replaces the legacy per-frame world scale (which
-        // also scaled the position translation, which is now wrong).
-        {
-            float local_scale[16];
-            float scaled_local[16];
-            MatrixScale16(1.0f, 1.0f, WORLD3D_Z_SCALE, local_scale);
-            MatrixMul16(local_scale, local_renderer, scaled_local);
-            std::memcpy(local_renderer, scaled_local, sizeof(local_renderer));
-        }
-        hmm_mat4 root_source = {};
-        BuildRootMatrixSource(oi, &root_source);
-        float root_renderer[16];
-        TransposeSourceToRenderer(root_source, root_renderer);
-        float world_renderer[16];
-        MatrixMul16(root_renderer, local_renderer, world_renderer);
         if (ctx.mesh_scale_x != 1.0f || ctx.mesh_scale_y != 1.0f || ctx.mesh_scale_z != 1.0f)
         {
             float world_scale[16];

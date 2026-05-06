@@ -399,6 +399,16 @@ class T3DAnimator : public TObjectAnimator
     virtual void Pulse();
     virtual void Animate(bool draw);
 
+    void UpdateBoneTransforms();
+        // Per-frame: feed the imagery's anim keys for the current
+        // (state, frame) into each bone's TTransform via SetLocal* /
+        // CalcObjectMatrix's mirror, then RefreshHierarchy on the
+        // owning instance's transform_ for a single top-down sweep.
+        // Called from Animate() so any reader (renderer, attachment
+        // point lookup, hit detection) can pull a current world-space
+        // matrix off bone.transform.Matrix() without a per-bone
+        // recompute. Cheap top-down pass once the locals are written.
+
     virtual bool SurfacesLost();
     virtual void RestoreSurfaces();
 

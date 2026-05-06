@@ -2158,9 +2158,45 @@ void T3DAnimator::Pulse()
     ((T3DImagery*)image)->PlaySound(inst, state, frame);
 }
 
+void T3DAnimator::UpdateBoneTransforms()
+{
+    if (!inst) return;
+    T3DImagery* img = Get3DImagery();
+    if (!img) return;
+
+    const int32_t s = inst->GetState();
+    const int32_t f = inst->GetFrame();
+
+    // CalcObjectMatrix samples the imagery's anim keys via GetAniKey
+    // and (since C3b) mirrors the per-bone local TRS into bone.transform
+    // alongside its own legacy `bone->matrix` build. Iterating in
+    // animobj order is safe because parents always come before
+    // children in the array, so the legacy parent-chain compose at
+    // the end of CalcObjectMatrix sees a freshly-computed parent
+    // matrix on every visit.
+    for (int32_t c = 0; c < animobjs.NumItems(); c++)
+    {
+        S3DAnimObj* obj = animobjs[c];
+        if (!obj) continue;
+        img->CalcObjectMatrix(obj, s, f, /*pos*/nullptr, /*calcparents*/false);
+    }
+
+    // Single top-down sweep on the instance's transform resolves all
+    // bone globals in dependency order. Cheap because by here every
+    // dirty bone's local matrix is already cached.
+    inst->Transform().RefreshHierarchy();
+}
+
 void T3DAnimator::Animate(bool draw)
 {
     TObjectAnimator::Animate(draw);
+
+    // Per-frame: refresh the bone hierarchy so consumers (renderer,
+    // attachment lookup, etc.) can read up-to-date world matrices off
+    // bone.transform.Matrix(). Runs before the legacy pos/rot mirror
+    // below so anything reading inst->Pos() in this frame gets the
+    // pose-aware bone state.
+    UpdateBoneTransforms();
 
     S3DPoint p;
     inst->GetPos(p);
