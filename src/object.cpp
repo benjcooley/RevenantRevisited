@@ -517,6 +517,13 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
 
     memcpy(&objclass, def, sizeof(SObjectDef));
 
+    // The memcpy above writes def.pos straight into the legacy `pos`
+    // field, bypassing the WriteTransformPos single-setter path -- so
+    // transform_ would stay at the (0,0,0) ClearObject left it. Sync
+    // transform_ to the just-loaded pos so Pos() (which reads from
+    // transform_.Matrix()) returns the spawn coords instead of origin.
+    transform_.SetLocalPos(hmm_vec3{ float(pos.x), float(pos.y), float(pos.z) });
+
   // Set imagery
     imagery = img;
 

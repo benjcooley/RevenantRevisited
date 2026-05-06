@@ -268,14 +268,16 @@ void BuildStaticObjectMatrix(T3DImagery* img, int32_t objnum,
 
     const int32_t num_objects = img->NumObjects();
     std::vector<S3DAnimObj> animobjs(num_objects);
+    // Default member initializers in S3DAnimObj already give us
+    // objnum=0, animtrack=0, scl=(1,1,1), parent=nullptr, etc.
+    // Don't memset over a struct that holds a TTransform with
+    // registry-registered state and a children_ vector -- memset
+    // clobbers both, which silently corrupts subsequent matrix
+    // resolution and crashes the destructor.
     for (int32_t i = 0; i < num_objects; ++i)
     {
-        S3DAnimObj& obj = animobjs[i];
-        std::memset(&obj, 0, sizeof(obj));
-        obj.objnum = i;
-        obj.animtrack = i;
-        obj.scl.X = obj.scl.Y = obj.scl.Z = 1.0f;
-        obj.parent = nullptr;
+        animobjs[i].objnum    = i;
+        animobjs[i].animtrack = i;
     }
 
     for (int32_t i = 0; i < num_objects; ++i)
@@ -314,14 +316,12 @@ void BuildAnimatedObjectMatrix(T3DImagery* img, int32_t objnum,
 
     const int32_t num_objects = img->NumObjects();
     std::vector<S3DAnimObj> animobjs(num_objects);
+    // Default member initializers do the heavy lifting here; same
+    // memset-is-now-harmful note as BuildStaticObjectMatrix.
     for (int32_t i = 0; i < num_objects; ++i)
     {
-        S3DAnimObj& obj = animobjs[i];
-        std::memset(&obj, 0, sizeof(obj));
-        obj.objnum = i;
-        obj.animtrack = i;
-        obj.scl.X = obj.scl.Y = obj.scl.Z = 1.0f;
-        obj.parent = nullptr;
+        animobjs[i].objnum    = i;
+        animobjs[i].animtrack = i;
     }
 
     for (int32_t i = 0; i < num_objects; ++i)
