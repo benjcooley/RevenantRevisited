@@ -1244,7 +1244,25 @@ bool T3DImagery::CalcObjectMatrix(S3DAnimObj* animobj, int32_t state, int32_t fr
         int32_t animtrack = (animobj->flags & OBJ3D_ANIMTRACK)
                             ? animobj->animtrack : animobj->objnum;
         if (GetAniKey(animtrack, state, frame, animobj->pos, animobj->rot, animobj->scl))
+        {
             MakeMatrix(m, animobj->pos, animobj->rot, animobj->scl);
+            // Mirror the per-bone local TRS into the bone's TTransform.
+            // 3DSMax exports standard SRT, so feeding the same values
+            // into TTransform's SetLocal*/Rot/Scl produces an
+            // equivalent local matrix to MakeMatrix's output when the
+            // common scl == 1 case holds. Combined with the parent
+            // linkage wired at SetupObjects (in-tree bones to parent
+            // bone, root bones to inst->Transform()), this means
+            // bone.transform.Matrix() resolves to a world-space
+            // matrix that future consumers can use directly. Today
+            // nobody reads from it -- the legacy `bone->matrix` +
+            // BuildRootMatrixSource path is still the renderer's
+            // input -- but the data is now in lockstep, ready to
+            // switch consumers to in C4.
+            animobj->transform.SetLocalPos(animobj->pos);
+            animobj->transform.SetLocalRotEuler(animobj->rot);
+            animobj->transform.SetLocalScl(animobj->scl);
+        }
     }
 
     if (hastrans)
@@ -2283,12 +2301,18 @@ void T3DAnimator::SetupObjects()
 
     // Wire the bone hierarchy. Both linkages are established:
     //   * Legacy `parent` raw pointer (still consumed by
-    //     CalcObjectMatrix's manual parent-chain compose).
-    //   * TTransform parent linkage (TTransform handles its own
-    //     parent/children lists; consumers reading transform.Matrix()
-    //     get the global composition for free).
-    // Removing the legacy `parent` is C5 once all consumers migrate to
-    // reading bone.transform.Matrix() instead of bone->matrix.
+    //     CalcObjectMatrix's manual parent-chain compose) -- stays
+    //     nullptr at the imagery's roots so the legacy chain
+    //     terminates correctly.
+    //   * TTransform parent linkage. In-tree parents go to the
+    //     parent bone's transform; root bones (no in-tree parent)
+    //     are parented under the OWNING object's transform_ so
+    //     bone.transform.Matrix() yields a world-space matrix
+    //     directly. Lifetime is safe: bones live in the animator
+    //     component, which is destroyed before the instance's own
+    //     transform_ member, so each bone's dtor runs while
+    //     inst->Transform() is still alive and detaches itself
+    //     from the children list cleanly.
     for (int32_t c = 0; c < animobjs.NumItems(); c++)
     {
         const int32_t parent = ((T3DImagery*)image)
@@ -2302,7 +2326,7 @@ void T3DAnimator::SetupObjects()
         else
         {
             animobjs[c]->parent = nullptr;
-            animobjs[c]->transform.SetParent(nullptr);
+            animobjs[c]->transform.SetParent(inst ? &inst->Transform() : nullptr);
         }
     }
 }
