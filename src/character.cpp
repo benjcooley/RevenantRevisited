@@ -665,7 +665,11 @@ uint32_t TCharacter::Move()
     int32_t h = MapPane.GetWalkHeight(pos);
     int32_t d = pos.z - h;
     if (d < -16)
-        pos.z = h;
+    {
+        S3DPoint p = pos;
+        p.z = h;
+        ForcePos(p);
+    }
     else if (d > 16)
     {
         vel.z = max(vel.z - GRAVITY, -TERMINAL_VELOCITY);

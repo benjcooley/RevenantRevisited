@@ -12,6 +12,7 @@
 #include "saferef.h"
 #include "stream.h"
 #include "lightdef.h"
+#include "transform.h"
 
 #include <atomic>
 #include <memory>
@@ -708,10 +709,14 @@ class TObjectInstance : protected SObjectDef
         // Returns group number of object
     void SetGroup(int32_t newgroup) { group = newgroup; }
         // Sets the group number of the object
-    void GetPos(S3DPoint& getpos) const { getpos = pos; }
-        // Gets current object position
-    const S3DPoint& Pos() const { return pos; }
-        // Returns a reference to the object pos
+    void GetPos(S3DPoint& getpos) const { getpos = Pos(); }
+        // Gets current object position (world space).
+    S3DPoint Pos() const;
+        // World-space position. Reads from the transform's global
+        // matrix, so the cost is at worst a parent-chain recompute
+        // (cached afterwards). Returns by value -- the const-ref
+        // overload is gone because the value is computed, not a
+        // direct member reference.
     int32_t Distance(const TObjectInstance* inst) const;
         // Returns the distance on the x-y plane between this and inst
     int32_t SqrDist(const TObjectInstance* inst) const { return SQRDIST(pos, inst->pos); }
@@ -726,8 +731,10 @@ class TObjectInstance : protected SObjectDef
         // Converts tile pos z to screen zbuffer z
     virtual int32_t SetPos(const S3DPoint& newpos, int32_t newlevel = -1, bool override = false);
         // Sets current object position, returns object's sector number (override to ignore bounds checking)
-    void ForcePos(const S3DPoint& newpos) { pos = newpos; }
+    void ForcePos(const S3DPoint& newpos);
         // Forces current position to new postion with NO validity checking, sector transfer, etc.
+        // Same single setter as SetPos -- routes through transform_ so the world matrix stays
+        // coherent -- but skips the side effects.
     virtual void MoveTo(const S3DPoint& newpos) { SetPos(newpos, -1, false); }
         // Moves object to new position (does walk checking for characters).
         // Use this function instead of SetPos() to avoid moving objects through or onto
@@ -800,6 +807,14 @@ class TObjectInstance : protected SObjectDef
         // itself is destroyed.
     virtual bool DrawShadow() { return false; }
         // Returns true of the object wants a simple alpha-channel circle shadow to follow it
+
+    [[nodiscard]] TTransform&       Transform()       { return transform_; }
+    [[nodiscard]] const TTransform& Transform() const { return transform_; }
+        // Direct access to this instance's spatial transform. Use it
+        // for hierarchy operations (SetParent / GetChildAt) and for
+        // reading the cached world matrix. Phase A: position is the
+        // only field driven through transform_; rotation continues to
+        // live on the legacy rotatex / rotatey / rotatez fields.
 
   // Component functions
     int32_t AddComponent(std::unique_ptr<TObjectComponent> component);
@@ -1254,6 +1269,21 @@ class TObjectInstance : protected SObjectDef
     // pointer field; it is now stored as a TObjectComponent and looked up
     // through GetAnimator() / GetComponent<TObjectAnimator>().
     std::vector<std::unique_ptr<TObjectComponent>> components;
+
+    // Spatial transform: SafeRef-able, supports parent / children
+    // hierarchy, lazy / sweep matrix recompute. Phase A integration
+    // tracks position only -- rotation / scale stay on the legacy
+    // rotatex / rotatey / rotatez fields for now (rotation needs a
+    // ZXY-vs-XYZ Tait-Bryan conversion that's its own follow-up).
+    // The legacy `pos` field is kept in lockstep with transform_
+    // by SyncTransformPos() so existing const S3DPoint& Pos()
+    // callers see the same value through either path.
+    TTransform transform_;
+        // Authoritative spatial state. Pos() / GetPos() and the world
+        // matrix all flow through this. The legacy `pos` field stays
+        // as a synced shadow (mirrored from transform_ on every
+        // setter) so the 349-odd direct `oi->pos.x` reads scattered
+        // across the codebase don't have to change in lockstep.
 
   // Inventory
     TObjectInstance* owner;     // What container it is in

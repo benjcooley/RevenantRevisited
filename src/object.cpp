@@ -415,6 +415,33 @@ void TObjectComponent::RunUpdateList()
     }
 }
 
+// World-space position. Reads through the transform's global matrix,
+// so the cost is at worst a parent-chain recompute (cached afterwards).
+S3DPoint TObjectInstance::Pos() const
+{
+    const hmm_mat4& m = transform_.Matrix();
+    // Row-vector convention: translation in last row.
+    return { int32_t(m.Elements[3][0]),
+             int32_t(m.Elements[3][1]),
+             int32_t(m.Elements[3][2]) };
+}
+
+// Single internal setter shared by SetPos / ForcePos / load /
+// ClearObject reset. Updates transform_ (the canonical world-pos
+// store) and mirrors back to the legacy `pos` integer field so the
+// scatter of direct `oi->pos.x` reads across the codebase keeps
+// returning the right value.
+//
+// Phase A: while no game object has a transform parent, "world pos"
+// is the same as "local pos", so we route world setters straight to
+// SetLocalPos. When parenting is wired up later, swap this to
+// transform_.SetPos for a proper world->local decomposition.
+static void WriteTransformPos(TTransform& tr, S3DPoint& legacy_pos, const S3DPoint& world_p)
+{
+    tr.SetLocalPos(hmm_vec3{ float(world_p.x), float(world_p.y), float(world_p.z) });
+    legacy_pos = world_p;
+}
+
 void TObjectInstance::ClearObject()
 {
     SetNotify(N_SCRIPTADDED);
@@ -466,6 +493,10 @@ void TObjectInstance::ClearObject()
     // make oldpos DIFFERENT from pos here
     oldpos.x = pos.x + 1; oldpos.y = pos.y + 1; oldpos.z = pos.z + 1;
     screenx = screeny = screenz = 0;
+
+    // Init transform_ from the zeroed pos. Single setter path keeps
+    // transform_ and the legacy `pos` field in lockstep.
+    WriteTransformPos(transform_, pos, S3DPoint{0, 0, 0});
 }
 
 TObjectInstance::TObjectInstance(TObjectImagery* img)
@@ -816,7 +847,7 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
   // Isn't in map
     if (override || !sector || index < 0)
     {
-        pos = newpos;
+        WriteTransformPos(transform_, pos, newpos);
         level = newlevel;
         return index;
     }
@@ -847,7 +878,7 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     MapPane.ExtractWalkmap(this);
 
   // Sets new position
-    pos = newpos;
+    WriteTransformPos(transform_, pos, newpos);
     level = newlevel;
 
     MapPane.TransferWalkmap(this);
@@ -878,6 +909,14 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     }
 
     return index;
+}
+
+// "Raw poke" path: same single setter as SetPos but skips the
+// validation / sector / walkmap / shadow side effects. Routes
+// through transform_ so the world matrix stays coherent.
+void TObjectInstance::ForcePos(const S3DPoint& newpos)
+{
+    WriteTransformPos(transform_, pos, newpos);
 }
 
 // Gets new snap position
@@ -2174,7 +2213,11 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
 
     uint32_t newflags;
 
-    is >> newflags >> pos.x >> pos.y >> pos.z;
+    {
+        S3DPoint loaded;
+        is >> newflags >> loaded.x >> loaded.y >> loaded.z;
+        WriteTransformPos(transform_, pos, loaded);
+    }
 
   // Make sure fixed flags remain the way they were set in the constructor
     flags = flags & OF_FIXEDFLAGS | (newflags & ~(OF_FIXEDFLAGS));
