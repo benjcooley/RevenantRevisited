@@ -442,6 +442,33 @@ static void WriteTransformPos(TTransform& tr, S3DPoint& legacy_pos, const S3DPoi
     legacy_pos = world_p;
 }
 
+// Rebuild the transform's rotation quat from rotatex / rotatey /
+// rotatez (uint8 angles, 0..255 maps to 0..2*pi). Composition order
+// matches BuildRootMatrixSource: applied to a row vector v as
+// v * Rz * Rx * Ry. Quat composition for that "rotate Z first, then
+// X, then Y" application order is qy * qx * qz (innermost is applied
+// first to the vector, outermost is applied last).
+void TObjectInstance::SyncTransformRot()
+{
+    constexpr float kTurn  = float(M_PI * 2.0 / 256.0);
+    const float ax = float(rotatex) * kTurn;
+    const float ay = float(rotatey) * kTurn;
+    const float az = float(rotatez) * kTurn;
+    const SAnimQuat qx = { std::sin(ax * 0.5f), 0.0f, 0.0f, std::cos(ax * 0.5f) };
+    const SAnimQuat qy = { 0.0f, std::sin(ay * 0.5f), 0.0f, std::cos(ay * 0.5f) };
+    const SAnimQuat qz = { 0.0f, 0.0f, std::sin(az * 0.5f), std::cos(az * 0.5f) };
+    // q = qy * qx * qz  (apply order Z, X, Y).
+    auto qmul = [](const SAnimQuat& a, const SAnimQuat& b) -> SAnimQuat {
+        return {
+            a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+            a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+            a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+            a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+        };
+    };
+    transform_.SetLocalRot(qmul(qy, qmul(qx, qz)));
+}
+
 void TObjectInstance::ClearObject()
 {
     SetNotify(N_SCRIPTADDED);
@@ -497,6 +524,22 @@ void TObjectInstance::ClearObject()
     // Init transform_ from the zeroed pos. Single setter path keeps
     // transform_ and the legacy `pos` field in lockstep.
     WriteTransformPos(transform_, pos, S3DPoint{0, 0, 0});
+
+    // World Z-stretch baked into the instance's transform. The
+    // engine's mesh authoring is at "model Z"; world rendering and
+    // anything else that wants accurate world-space joint / point
+    // positions out of bone.transform.Pos() needs this 1.5x stretch
+    // applied somewhere up the chain. Putting it on inst.transform_
+    // means every bone parented under it inherits the stretch via
+    // SRT composition, while inst.transform_.Pos() itself still
+    // returns the unscaled translation (Pos reads the translation
+    // row only). The renderer's per-instance Z-stretch post-multiply
+    // becomes redundant for anything that reads through the bone
+    // transform path; it can be dropped in C4.
+    transform_.SetLocalScl(hmm_vec3{ 1.0f, 1.0f, WORLD3D_Z_SCALE });
+
+    // Sync transform_'s rotation from the just-zeroed rotate triple.
+    SyncTransformRot();
 }
 
 TObjectInstance::TObjectInstance(TObjectImagery* img)
@@ -517,12 +560,14 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
 
     memcpy(&objclass, def, sizeof(SObjectDef));
 
-    // The memcpy above writes def.pos straight into the legacy `pos`
-    // field, bypassing the WriteTransformPos single-setter path -- so
-    // transform_ would stay at the (0,0,0) ClearObject left it. Sync
-    // transform_ to the just-loaded pos so Pos() (which reads from
-    // transform_.Matrix()) returns the spawn coords instead of origin.
+    // The memcpy above writes def.pos / rotatex / rotatey / rotatez
+    // straight into the legacy fields, bypassing the WriteTransformPos
+    // / SetRotateX setter paths -- so transform_ would stay at the
+    // identity ClearObject left it. Sync from the freshly-loaded
+    // values so Pos() and the bone-chain world matrix reflect spawn
+    // coords + orientation instead of origin / identity.
     transform_.SetLocalPos(hmm_vec3{ float(pos.x), float(pos.y), float(pos.z) });
+    SyncTransformRot();
 
   // Set imagery
     imagery = img;
@@ -2283,6 +2328,10 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
         // picks up every streamed-in instance; TSafeRef<T>::Get() relies on it.
         SetMapIndex(loaded_mapindex);
     }
+    // Streamed-in rotatex / rotatey / rotatez (or facing for v<3) bypass
+    // the SetRotate* setter paths, so re-sync transform_'s rotation from
+    // the freshly-loaded triple here.
+    SyncTransformRot();
     moveangle = rotatez;    // Set movement angle
 
     if (version < 5)  // Set up empty stat array and stick health in it

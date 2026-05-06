@@ -941,13 +941,17 @@ class TObjectInstance : protected SObjectDef
         // Valid locations character can be standing in order to use the object
 
   // Rotation and velocity and scale functions
-    void SetRotateX(int32_t ang) { rotatex = ang; }
+    void SetRotateX(int32_t ang) { rotatex = uint8_t(ang); SyncTransformRot(); }
     int32_t GetRotateX() const { return rotatex; }
-    void SetRotateY(int32_t ang) { rotatey = ang; }
+    void SetRotateY(int32_t ang) { rotatey = uint8_t(ang); SyncTransformRot(); }
     int32_t GetRotateY() const { return rotatey; }
-    void SetRotateZ(int32_t ang) { rotatez = ang; }
+    void SetRotateZ(int32_t ang) { rotatez = uint8_t(ang); SyncTransformRot(); }
     int32_t GetRotateZ() const { return rotatez; }
-        // All of the above set or get rotations about the given axis
+        // All of the above set or get rotations about the given axis. Setters
+        // re-sync transform_ from the full triple after every legacy field
+        // write so transform_.LocalRot() / .Matrix() always reflect the
+        // current object orientation. The composition order matches the
+        // legacy renderer's Rz * Rx * Ry (see SyncTransformRot impl).
     void Face(int32_t newfacing) { SetRotateZ(newfacing); SetMoveAngle(newfacing); }
         // Faces object towards the given direction and sets motion to go in that direction
     void FaceOnly(int32_t newfacing) { SetRotateZ(newfacing); }
@@ -1284,6 +1288,13 @@ class TObjectInstance : protected SObjectDef
         // as a synced shadow (mirrored from transform_ on every
         // setter) so the 349-odd direct `oi->pos.x` reads scattered
         // across the codebase don't have to change in lockstep.
+
+    void SyncTransformRot();
+        // Rebuild transform_'s rotation from the current rotatex /
+        // rotatey / rotatez triple. Called after any legacy-side
+        // rotation write. Composition matches BuildRootMatrixSource:
+        // Rz * Rx * Ry, applied to a row vector as v * Rz * Rx * Ry,
+        // i.e. rotation order is Z, then X, then Y.
 
   // Inventory
     TObjectInstance* owner;     // What container it is in
