@@ -96,6 +96,39 @@ SAnimQuat QuatFromEulerXYZ(const hmm_vec3& e)
     return NormalizeQuat(QuatMul(QuatMul(qz, qy), qx));
 }
 
+// Inverse of QuatFromEulerXYZ. Decomposes a quat into XYZ Tait-Bryan
+// angles: rotations applied to a vector in the order rx (around X),
+// ry (around Y), rz (around Z) -- the same convention QuatFromEulerXYZ
+// produces. Result is non-unique under gimbal lock (|ry| = pi/2);
+// in that case rz is pinned to 0 and rx absorbs the freedom.
+hmm_vec3 QuatToEulerXYZ(const SAnimQuat& q)
+{
+    const SAnimQuat n = NormalizeQuat(q);
+    // R[2][0] of the row-vector rotation matrix = 2(xz - wy) = -sin(ry).
+    // Clamp to [-1, 1] to swallow floating-point drift before asin.
+    const float r20      = 2.0f * (n.x * n.z - n.w * n.y);
+    const float sin_ry   = -r20;
+    const float sin_clip = sin_ry < -1.0f ? -1.0f : (sin_ry > 1.0f ? 1.0f : sin_ry);
+
+    constexpr float kGimbal = 1.0f - 1e-6f;
+    if (std::fabs(sin_clip) >= kGimbal)
+    {
+        // Gimbal lock: ry == +/- pi/2. Decomposition is non-unique;
+        // fix rz = 0 and absorb the residual rotation into rx.
+        const float ry = sin_clip > 0.0f ? 0.5f * 3.14159265358979323846f
+                                         : -0.5f * 3.14159265358979323846f;
+        const float rx = std::atan2(-2.0f * (n.y * n.z - n.w * n.x),
+                                     1.0f - 2.0f * (n.x * n.x + n.z * n.z));
+        return { rx, ry, 0.0f };
+    }
+    const float rx = std::atan2(2.0f * (n.y * n.z + n.w * n.x),
+                                 1.0f - 2.0f * (n.x * n.x + n.y * n.y));
+    const float ry = std::asin(sin_clip);
+    const float rz = std::atan2(2.0f * (n.x * n.y + n.w * n.z),
+                                 1.0f - 2.0f * (n.y * n.y + n.z * n.z));
+    return { rx, ry, rz };
+}
+
 void QuatToMat4(const SAnimQuat& q, hmm_mat4* out)
 {
     // Row-vector convention; matches math3d's MtxRotate* layout (and
@@ -226,12 +259,14 @@ SAnimQuat TTransform::LocalRot() const
 
 hmm_vec3 TTransform::LocalRotEuler() const
 {
+    // If the rotation was last set as euler, return the user's stored
+    // form verbatim (lossless round-trip). Otherwise decompose the
+    // stored quat into XYZ Tait-Bryan angles. The decomposition is
+    // not unique under gimbal lock; we pin rz = 0 and let rx absorb
+    // the residual.
     if (!HasFlag(F_ROT_IS_QUAT))
         return euler_;
-    // We don't auto-decompose a quat to euler -- the result is not
-    // unique under gimbal lock and round-tripping is only meaningful
-    // when the rotation was originally set as an euler.
-    return { 0.0f, 0.0f, 0.0f };
+    return QuatToEulerXYZ(quat_);
 }
 
 void TTransform::SetLocalRot(const SAnimQuat& q)
