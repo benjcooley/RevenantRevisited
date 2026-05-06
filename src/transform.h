@@ -104,9 +104,14 @@ class TTransform : public TSafeObjectBase<TTransform>
     // representation (see LocalRotEuler) is preserved separately.
     [[nodiscard]] SAnimQuat       LocalRot() const;
     [[nodiscard]] hmm_vec3        LocalRotEuler() const;
-        // Returns the last-set euler if F_ROT_IS_QUAT is clear, else
-        // (0, 0, 0) -- we don't auto-convert quat to euler since the
-        // result is ambiguous (gimbal-lock equivalence classes).
+        // Returns the last-set euler verbatim if F_ROT_IS_QUAT is
+        // clear; otherwise decomposes the stored quat into XYZ
+        // Tait-Bryan angles. The decomposition is not unique under
+        // gimbal lock (|ry| = pi/2): rz is pinned to 0 in that case
+        // and rx absorbs the residual, which means an explicit
+        // gimbal-lock SetLocalRot followed by LocalRotEuler may not
+        // round-trip to the original (rx, ry, rz) you computed for
+        // the quat -- it'll round-trip to an equivalent rotation.
     void                          SetLocalRot(const SAnimQuat& q);
     void                          SetLocalRotEuler(const hmm_vec3& euler_xyz);
 

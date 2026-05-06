@@ -140,9 +140,79 @@ void test_rot_quat_vs_euler()
     t.SetLocalRot(q90x);
     EXPECT(t.HasFlag(TTransform::F_ROT_IS_QUAT), "SetLocalRot raises F_ROT_IS_QUAT");
     EXPECT(QuatEq(t.LocalRot(), q90x), "quat round-trip preserved");
-    // After quat set, LocalRotEuler returns (0,0,0) -- we don't auto-decompose.
-    EXPECT(VecEq(t.LocalRotEuler(), V(0,0,0)),
-           "LocalRotEuler returns zero vec after quat set (no auto-decompose)");
+    // After quat set, LocalRotEuler decomposes the stored quat.
+    // For a pure X-rotation by 90deg, the result is (pi/2, 0, 0).
+    EXPECT(VecEq(t.LocalRotEuler(), V(0.5f * kPi, 0, 0), 1e-3f),
+           "LocalRotEuler decomposes stored quat to euler");
+}
+
+void test_quat_to_euler_decomposition_basic_axes()
+{
+    // Pure single-axis rotations should decompose cleanly to that axis.
+    {
+        TTransform t;
+        const float a = 0.6f;
+        t.SetLocalRot(Q(std::sin(a * 0.5f), 0, 0, std::cos(a * 0.5f)));   // X
+        EXPECT(VecEq(t.LocalRotEuler(), V(a, 0, 0), 1e-3f), "pure X decomposes to (a, 0, 0)");
+    }
+    {
+        TTransform t;
+        const float a = -0.4f;
+        t.SetLocalRot(Q(0, std::sin(a * 0.5f), 0, std::cos(a * 0.5f)));   // Y
+        EXPECT(VecEq(t.LocalRotEuler(), V(0, a, 0), 1e-3f), "pure Y decomposes to (0, a, 0)");
+    }
+    {
+        TTransform t;
+        const float a = 1.2f;
+        t.SetLocalRot(Q(0, 0, std::sin(a * 0.5f), std::cos(a * 0.5f)));   // Z
+        EXPECT(VecEq(t.LocalRotEuler(), V(0, 0, a), 1e-3f), "pure Z decomposes to (0, 0, a)");
+    }
+}
+
+void test_euler_quat_euler_round_trip()
+{
+    // Take an arbitrary euler, convert to quat (via SetLocalRot of the
+    // explicit quat constructed from QuatFromEulerXYZ semantics), then
+    // decompose. The result should produce the same orientation,
+    // even if the euler triple itself differs (it shouldn't here --
+    // we're well clear of gimbal lock).
+    TTransform a, b;
+    const hmm_vec3 e = V(0.3f, -0.5f, 1.1f);
+    a.SetLocalRotEuler(e);
+    SAnimQuat q = a.LocalRot();    // euler -> quat
+
+    b.SetLocalRot(q);              // store as quat
+    const hmm_vec3 e_back = b.LocalRotEuler();   // decompose
+
+    // Round-trip: feeding e_back through the quat path should match q.
+    TTransform c;
+    c.SetLocalRotEuler(e_back);
+    SAnimQuat q_back = c.LocalRot();
+    EXPECT(QuatEq(q, q_back, 1e-3f),
+           "euler -> quat -> decomposed-euler -> quat round-trip");
+}
+
+void test_quat_to_euler_gimbal_lock()
+{
+    // Gimbal lock: ry = +pi/2 (sin_y = 1). Decomposition is non-
+    // unique; we pin rz = 0 and let rx absorb the residual. The key
+    // contract is that the *rotation* round-trips, even if the
+    // (rx, ry, rz) triple is different from any pre-quat triple.
+    TTransform t;
+    // Y-rotation by +pi/2.
+    const float half = 0.5f * kPi;
+    t.SetLocalRot(Q(0, std::sin(half * 0.5f), 0, std::cos(half * 0.5f)));
+    const hmm_vec3 e = t.LocalRotEuler();
+    EXPECT(FeqEps(e.Z, 0.0f), "gimbal: rz pinned to 0");
+    EXPECT(FeqEps(e.Y, half, 1e-3f), "gimbal: ry == pi/2");
+
+    // Round-trip the quat through the decomposed euler.
+    TTransform t2;
+    t2.SetLocalRotEuler(e);
+    SAnimQuat orig = t.LocalRot();
+    SAnimQuat back = t2.LocalRot();
+    EXPECT(QuatEq(orig, back, 1e-3f),
+           "rotation round-trips even though (rx, ry, rz) is non-unique");
 }
 
 void test_local_matrix_lazy()
@@ -1704,6 +1774,9 @@ int main()
     RUN(test_set_local_pos_compare_before_set);
     RUN(test_identity_clears_has_flags);
     RUN(test_rot_quat_vs_euler);
+    RUN(test_quat_to_euler_decomposition_basic_axes);
+    RUN(test_euler_quat_euler_round_trip);
+    RUN(test_quat_to_euler_gimbal_lock);
     RUN(test_local_matrix_lazy);
     RUN(test_root_global_equals_local);
     RUN(test_world_pos_via_parent);
