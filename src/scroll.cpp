@@ -159,10 +159,10 @@ void TScrollPane::DrawBackground()
 
         int32_t x = (WIDTH - bitmap->width) / 2;
         int32_t y = (HEIGHT - bitmap->height) / 4;
-        Display->Put(x, y, bitmap, DM_TRANSPARENT | DM_BACKGROUND);
+        Display.Put(x, y, bitmap, DM_TRANSPARENT | DM_BACKGROUND);
 
         if (scroll && scroll->GetText())
-            Display->WriteText(scroll->GetText(), x+65, y+68, NUMLINES, scrollfont, nullptr, DM_USEDEFAULT, SCROLLWIDTH, line);
+            Display.WriteText(scroll->GetText(), x+65, y+68, NUMLINES, scrollfont, nullptr, DM_USEDEFAULT, SCROLLWIDTH, line);
 
         // decide which buttons should be visisble
         if (line < 1)
@@ -294,7 +294,7 @@ void TBookPane::DrawBackground()
 
         int32_t x = (WIDTH - bitmap->width) / 2;
         int32_t y = (HEIGHT - bitmap->height) / 3;
-        Display->Put(x, y, bitmap, DM_TRANSPARENT | DM_BACKGROUND);
+        Display.Put(x, y, bitmap, DM_TRANSPARENT | DM_BACKGROUND);
 
         if (scroll && scroll->GetText())
         {
@@ -302,9 +302,9 @@ void TBookPane::DrawBackground()
             for (int32_t side = 0; side < 2; side++)
             {
                 sprintf(buf, "%d", (line / BOOKLINES) + side + 1);
-                Display->WriteText(buf, x+180+(side*232), y+21+(side*2), 1, scrollfont, nullptr, DM_USEDEFAULT, -1, 0, JUSTIFY_CENTER);
+                Display.WriteText(buf, x+180+(side*232), y+21+(side*2), 1, scrollfont, nullptr, DM_USEDEFAULT, -1, 0, JUSTIFY_CENTER);
 
-                Display->WriteText(scroll->GetText(), x+82+(side*232), y+40+(side*2), BOOKLINES, scrollfont, nullptr, DM_USEDEFAULT, BOOKWIDTH, line + (side*BOOKLINES));
+                Display.WriteText(scroll->GetText(), x+82+(side*232), y+40+(side*2), BOOKLINES, scrollfont, nullptr, DM_USEDEFAULT, BOOKWIDTH, line + (side*BOOKLINES));
             }
         }
 

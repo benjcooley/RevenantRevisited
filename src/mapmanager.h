@@ -43,13 +43,24 @@ class TMapManager
 {
   public:
     TMapManager();
-    // Out-of-line so the unique_ptr<TGameMap> destructor sees the
-    // complete type (defined in mapmanager.cpp where gamemap.h is
-    // included).
+    // Trivial destructor: at process exit the cache must already have
+    // been torn down via Shutdown() under InitGlobals/ShutdownGlobals control.
+    // Walking unique_ptr<TGameMap> from a global dtor would race other
+    // TUs (TMapPane / TPlayer / inventories live elsewhere) and ASan
+    // catches the resulting heap-use-after-free in TSector::Save.
+    // Defined out-of-line so the unique_ptr<TGameMap> dtor sees the
+    // complete type (gamemap.h is included in mapmanager.cpp).
     ~TMapManager();
 
     TMapManager(const TMapManager&)            = delete;
     TMapManager& operator=(const TMapManager&) = delete;
+
+    // ---- Lifecycle ----------------------------------------------------
+    // Init/Shutdown pattern: the global ctor/dtor must be trivial so
+    // static-destruction order across TUs is harmless. Real wiring
+    // happens explicitly from InitGlobals/ShutdownGlobals.
+    bool Init();
+    void Shutdown();
 
     // Returns the cached map at `level`, loading it from disk if not
     // already in the cache. Returns nullptr only if the load fails
@@ -92,6 +103,7 @@ class TMapManager
 
   private:
     std::vector<std::unique_ptr<TGameMap>> cache;
-    TGameMap*                              current = nullptr;
+    TGameMap*                              current     = nullptr;
     Listeners                              listeners;
+    bool                                   initialized = false;
 };

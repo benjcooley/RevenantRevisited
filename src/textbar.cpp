@@ -59,7 +59,7 @@ void TTextBar::DrawBackground()
             drawmode = DM_BACKGROUND;
         }
 
-        Display->Box(0, 0, GetWidth(), GetHeight(), 0, 0xffff, 0, drawmode);
+        Display.Box(0, 0, GetWidth(), GetHeight(), 0, 0xffff, 0, drawmode);
 
         if (drawhealth)
         {
@@ -69,11 +69,11 @@ void TTextBar::DrawBackground()
             else
                 hue = 0;
 
-            Display->PutHue(min(0, -(186 - level)), 1, GameData->Bitmap("texthealthbar"), drawmode, hue);
-            Display->WriteTextShadow(name, 2, -6, 1, GameData->Font("silverfont"), nullptr, drawmode | DM_TRANSPARENT);
+            Display.PutHue(min(0, -(186 - level)), 1, GameData->Bitmap("texthealthbar"), drawmode, hue);
+            Display.WriteTextShadow(name, 2, -6, 1, GameData->Font("silverfont"), nullptr, drawmode | DM_TRANSPARENT);
         }
         else
-            Display->WriteText(text, 2, -6, 1, GameData->Font("silverfont"));
+            Display.WriteText(text, 2, -6, 1, GameData->Font("silverfont"));
 
         SetDirty(false);
     }

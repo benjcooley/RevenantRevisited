@@ -183,10 +183,13 @@ bool TSpellList::Initialize()
     return true;
 }
 
-// Closes the area manager
+// Closes the spell list (idempotent — safe to call twice).
 void TSpellList::Close()
 {
+    if (!initialized)
+        return;
     spelldata.DeleteAll();
+    initialized = false;
 }
 
 // Loads all areas from the "SPELL.DEF" file

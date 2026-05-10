@@ -53,13 +53,13 @@ void TStatusBar::DrawBackground()
             drawmode |= DM_BACKGROUND;
         }
 
-        Display->PutHue(0, -(176 * level / 1000), tubedata->Bitmap("tube"), drawmode, GetHue());
+        Display.PutHue(0, -(176 * level / 1000), tubedata->Bitmap("tube"), drawmode, GetHue());
 
         drawmode |= DM_TRANSPARENT;
 
-        Display->Put(0, 0, tubedata->Bitmap("topoverlay"), drawmode);
-        Display->Put(0, 59, tubedata->Bitmap("middleoverlay"), drawmode);
-        Display->Put(0, 161, tubedata->Bitmap("bottomoverlay"), drawmode);
+        Display.Put(0, 0, tubedata->Bitmap("topoverlay"), drawmode);
+        Display.Put(0, 59, tubedata->Bitmap("middleoverlay"), drawmode);
+        Display.Put(0, 161, tubedata->Bitmap("bottomoverlay"), drawmode);
 
         SetDirty(false);
     }

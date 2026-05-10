@@ -707,7 +707,7 @@ bool InitializeCharPreviewMode()
 
 void RenderCharPreviewMode()
 {
-    if (!Renderer || !Display || !Display->BackBuffer()) return;
+    if (!Renderer || !Display.IsActive() || !Display.BackBuffer()) return;
     if (!g_charPreview.inst || g_charPreview.subs.empty() || !g_charPreview.img) return;
 
     const int64_t legacy_tick = TTime::LegacyFrameCount();
@@ -722,8 +722,8 @@ void RenderCharPreviewMode()
     }
 
     const int32_t state = g_charPreview.inst->GetState();
-    const int32_t vw = Display->Width();
-    const int32_t vh = Display->Height();
+    const int32_t vw = Display.Width();
+    const int32_t vh = Display.Height();
     const int32_t cam_ox = vw / 2;
     const int32_t cam_oy = vh / 2;
 
@@ -858,14 +858,14 @@ bool InitializeMeshMode()
 
 void RenderMeshMode()
 {
-    if (!Renderer || !Display || !Display->BackBuffer()) return;
+    if (!Renderer || !Display.IsActive() || !Display.BackBuffer()) return;
     if (!g_meshTest.cube) return;
 
     g_meshTest.spin  += 0.015f;
     g_meshTest.frames++;
 
-    const int32_t vw = Display->Width();
-    const int32_t vh = Display->Height();
+    const int32_t vw = Display.Width();
+    const int32_t vh = Display.Height();
     const int32_t cam_ox = vw / 2;
     const int32_t cam_oy = vh / 2;
 
@@ -1491,14 +1491,14 @@ bool InitializeWaterPreviewMode()
 
 void RenderI3DStaticMode()
 {
-    if (!Renderer || !Display || !Display->BackBuffer()) return;
+    if (!Renderer || !Display.IsActive() || !Display.BackBuffer()) return;
     if (g_i3dTest.subs.empty()) return;
 
     g_i3dTest.spin += 0.01f;
     g_i3dTest.frames++;
 
-    const int32_t vw = Display->Width();
-    const int32_t vh = Display->Height();
+    const int32_t vw = Display.Width();
+    const int32_t vh = Display.Height();
     const int32_t cam_ox = vw / 2;
     const int32_t cam_oy = vh / 2;
 
@@ -1752,8 +1752,8 @@ bool InitializeFontMode()
 
 void RenderUiMode()
 {
-    const int32_t tw = Display->Width();
-    const int32_t th = Display->Height();
+    const int32_t tw = Display.Width();
+    const int32_t th = Display.Height();
     int32_t cols = 1;
     const int32_t item_count = int32_t(g_uiAtlas.items.size());
     while (cols * cols < item_count) cols++;
@@ -1774,7 +1774,7 @@ void RenderUiMode()
         ? ((int32_t)(TTime::Time() * kScrollPxS) % total_h + total_h) % total_h
         : 0;
 
-    Display->BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
+    Display.BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
     for (int i = 0; i < item_count; i++)
     {
         const auto& it = g_uiAtlas.items[i];
@@ -1799,7 +1799,7 @@ void RenderUiMode()
                 g_uiAtlas.width, g_uiAtlas.height);
         }
     }
-    Display->BackBuffer()->EndPass();
+    Display.BackBuffer()->EndPass();
 }
 
 void RenderIconMode()
@@ -1808,20 +1808,20 @@ void RenderIconMode()
     if (!atlas || !atlas->image.id)
         return;
 
-    const int32_t tw = Display->Width();
-    const int32_t th = Display->Height();
+    const int32_t tw = Display.Width();
+    const int32_t th = Display.Height();
     const int32_t dx = (tw - atlas->width) / 2;
     const int32_t dy = (th - atlas->height) / 2;
 
-    Display->BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
+    Display.BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
     Renderer->Composite(atlas->image, dx, dy, atlas->width, atlas->height, tw, th);
-    Display->BackBuffer()->EndPass();
+    Display.BackBuffer()->EndPass();
 }
 
 void RenderTTFMode()
 {
-    const int32_t tw = Display->Width();
-    const int32_t th = Display->Height();
+    const int32_t tw = Display.Width();
+    const int32_t th = Display.Height();
     const char* msg = "Revenant 0123 !?";
     struct STtfLine { const char* path; int size; };
     const STtfLine lines[] = {
@@ -1829,7 +1829,7 @@ void RenderTTFMode()
         { "/System/Library/Fonts/Supplemental/Times New Roman.ttf", 48 },
     };
 
-    Display->BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
+    Display.BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
 
     int32_t baseline = 20 + lines[0].size;
     for (const auto& L : lines)
@@ -1865,7 +1865,7 @@ void RenderTTFMode()
         baseline += L.size + 16;
     }
 
-    Display->BackBuffer()->EndPass();
+    Display.BackBuffer()->EndPass();
 }
 
 void RenderTextMode()
@@ -1873,8 +1873,8 @@ void RenderTextMode()
     if (!FontTable)
         return;
 
-    const int32_t tw = Display->Width();
-    const int32_t th = Display->Height();
+    const int32_t tw = Display.Width();
+    const int32_t th = Display.Height();
     const char* msg = "Revenant 0123 !?.";
 
     struct SLine { TFont* font; const SFontAtlas* atlas; };
@@ -1887,7 +1887,7 @@ void RenderTextMode()
     for (const auto& L : lines)
         if (L.font) total_h += (int32_t)((TFontData*)L.font)->height + 4;
 
-    Display->BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
+    Display.BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
 
     int32_t line_top = (th - total_h) / 2;
     for (const auto& L : lines)
@@ -1925,7 +1925,7 @@ void RenderTextMode()
         line_top += line_h + 4;
     }
 
-    Display->BackBuffer()->EndPass();
+    Display.BackBuffer()->EndPass();
 }
 
 void RenderBlankMode()
@@ -1934,8 +1934,8 @@ void RenderBlankMode()
     const float r = 0.5f + 0.5f * float(std::sin(t * 1.0));
     const float g = 0.5f + 0.5f * float(std::sin(t * 1.3 + 2.0));
     const float b = 0.5f + 0.5f * float(std::sin(t * 1.7 + 4.0));
-    Display->BackBuffer()->StartPass(r, g, b, 1.0f);
-    Display->BackBuffer()->EndPass();
+    Display.BackBuffer()->StartPass(r, g, b, 1.0f);
+    Display.BackBuffer()->EndPass();
 }
 
 }  // namespace
@@ -2000,7 +2000,7 @@ void Close(const char* mode)
 
 void Render(const char* mode)
 {
-    if (!Display || !Display->BackBuffer())
+    if (!Display.IsActive() || !Display.BackBuffer())
         return;
 
     if (strcmp(mode, "sector") == 0)

@@ -40,7 +40,7 @@ bool TVideoCapture::Initialize(int32_t bufmegs, int32_t fps)
         PTBitmap bm = (PTBitmap)ptr;
         bm->width = WIDTH;
         bm->height = HEIGHT;
-        bm->flags = (Display->BitsPerPixel() == 15) ? BM_15BIT : BM_16BIT;
+        bm->flags = (Display.BitsPerPixel() == 15) ? BM_15BIT : BM_16BIT;
         bm->datasize = WIDTH * HEIGHT * 2;
         bmsurface[c] = new TBitmapSurface(bm);
     }
@@ -109,7 +109,7 @@ void TVideoCapture::SaveFrame()
         Flush();
 
   // Save eo buffer
-    Display->Reset();
+    Display.Reset();
     bmsurface[bufframe]->Blit(0, 0, Display);
     bufframe++;
 }

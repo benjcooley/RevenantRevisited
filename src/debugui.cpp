@@ -170,7 +170,7 @@ void TMapRenderer::DrawDebugTab()
             ImGui::SliderFloat("screen z scale", &s.sectorPerspectiveZScale, 0.1f, 4.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
             ImGui::EndDisabled();
             ImGui::SliderFloat("zoom", &s.sectorCameraZoom, 0.25f, 4.0f, "%.2fx", ImGuiSliderFlags_Logarithmic);
-            const float focal = s.sectorCameraForward(Display ? Display->Height() : 0);
+            const float focal = s.sectorCameraForward(Display.Height());
             ImGui::Text("camera forward: %.0f wu", focal);
             ImGui::EndTabItem();
         }

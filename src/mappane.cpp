@@ -338,8 +338,8 @@ void TMapIterator::Nuke()
 
 bool TMapPane::Initialize()
 {
-  // Initialize the 3D
-    Scene3D.Initialize();
+  // Initialize per-map 3D scene state (light/animator lists, viewport)
+    Scene3D.OnMapLoaded();
 
     TPane::Initialize(); // Initialize values and create background areas
 
@@ -414,8 +414,8 @@ void TMapPane::Close()
   // Free imagery in imagery system
     TObjectImagery::FreeAllImagery();
 
-  // Death to realtime 3D
-    Scene3D.Close();
+  // Death to realtime 3D (per-map state)
+    Scene3D.OnMapUnloaded();
  
   // Call base class close function
     TPane::Close(); // Free's background areas
@@ -479,7 +479,7 @@ void TMapPane::CreateBackgroundBuffers()
 
   // Old CPU-side background caching is not needed with the sokol GPU compositor;
   // UseBackgroundArea was removed from TDisplay during the sokol port.
-  //  int32_t bgbuffer = Display->UseBackgroundArea(
+  //  int32_t bgbuffer = Display.UseBackgroundArea(
   //      GetPosX(), GetPosY(), GetWidth(), GetHeight(), updatemulti);
   //  SetBackgroundBuffer(bgbuffer);
 
@@ -495,7 +495,7 @@ void TMapPane::FreeBackgroundBuffers()
     
   // Free background scrolling area for this pane
   // FreeBackgroundArea was removed from TDisplay during the sokol port.
-  //  Display->FreeBackgroundArea(GetBackgroundBuffer());
+  //  Display.FreeBackgroundArea(GetBackgroundBuffer());
   //  ClearBackgroundBuffer();
 
   // Kill surfaces
@@ -1190,12 +1190,12 @@ void TMapPane::MouseMove(int32_t button, int32_t x, int32_t y)
 
         if (cursorx < MOUSEBOUNDARY)
             mx = -MOUSESCROLLSPEED;
-        else if (cursorx >= (Display->Width() - MOUSEBOUNDARY))
+        else if (cursorx >= (Display.Width() - MOUSEBOUNDARY))
             mx = MOUSESCROLLSPEED;
 
         if (cursory < MOUSEBOUNDARY)
             my = -MOUSESCROLLSPEED;
-        else if (cursory >= (Display->Height() - MOUSEBOUNDARY))
+        else if (cursory >= (Display.Height() - MOUSEBOUNDARY))
             my = MOUSESCROLLSPEED;
 
         if (InPane(x, y) &&
@@ -2294,12 +2294,12 @@ void TMapPane::DrawDLight()
     WorldToScreen(dlight.pos, spos);
 
 //  if (NoNormals)
-        DrawLightNoNormals(spos, dlight.color, dlight.intensity, Display);
+        DrawLightNoNormals(spos, dlight.color, dlight.intensity, &Display);
 //  else
-//      DrawLight(spos, dlight.color, dlight.intensity, Display);
+//      DrawLight(spos, dlight.color, dlight.intensity, &Display);
 
     PTBitmap bitmap = GameData->Bitmap("dlight");
-    Display->Put(spos.x - bitmap->width / 2,
+    Display.Put(spos.x - bitmap->width / 2,
                  spos.y - bitmap->width / 2 - 20, 
                  bitmap, DM_ALPHALIGHTEN); //, nullptr, 31 - (dlight.intensity / 8));
 }
@@ -3200,7 +3200,7 @@ void TMapPane::PutQueueRectsToDisplay()
 
     for (int32_t c = 0; c < numqueuerects; c++)
     {
-        Display->AddBackgroundUpdateRect(       
+        Display.AddBackgroundUpdateRect(       
             GetBackgroundBuffer(),  
             queuerects[c].rect.x(), queuerects[c].rect.y(), queuerects[c].rect.w(), queuerects[c].rect.h(),
             UPDATE_BUFFERTOSCREEN | UPDATE_NEXTFRAME);
@@ -3467,7 +3467,7 @@ void TMapPane::PutQueueRectsToDisplay()
     // pipeline gains AddBackgroundUpdateRect (or equivalent) again.
     for (int32_t c = 0; c < numqueuerects; c++)
     {
-        Display->AddUpdateRect(
+        Display.AddUpdateRect(
             queuerects[c].rect.x(), queuerects[c].rect.y(),
             queuerects[c].rect.w(), queuerects[c].rect.h(),
             UPDATE_BUFFERTOSCREEN | UPDATE_NEXTFRAME);
@@ -3726,8 +3726,8 @@ void TMapPane::AnimateSelectedObjects()
             color.red = max(30, 255 - 4*absval(pos.z - 20));
             color.green = max(30, 255 - 4*absval(pos.z - 100));
             color.blue = max(30, 255 - 4*absval(pos.z - 180));
-            Display->ZPut(screenpos.x, screenpos.y, screenpos.z, EditorData->Bitmap("grid"), DM_TRANSPARENT | DM_WRAPCLIP | DM_ZBUFFER | DM_USEREG);
-            Display->Put(screenpos.x, screenpos.y, EditorData->Bitmap("gridout"), DM_TRANSPARENT | DM_WRAPCLIP | DM_USEREG | DM_CHANGECOLOR, &color);
+            Display.ZPut(screenpos.x, screenpos.y, screenpos.z, EditorData->Bitmap("grid"), DM_TRANSPARENT | DM_WRAPCLIP | DM_ZBUFFER | DM_USEREG);
+            Display.Put(screenpos.x, screenpos.y, EditorData->Bitmap("gridout"), DM_TRANSPARENT | DM_WRAPCLIP | DM_USEREG | DM_CHANGECOLOR, &color);
         }
     }
 
@@ -3737,7 +3737,7 @@ void TMapPane::AnimateSelectedObjects()
         if (!inst || inst->IsInInventory() || !(inst->GetFlags() & OF_SELDRAW))
             continue;
 
-        inst->DrawSelected(Display);
+        inst->DrawSelected(&Display);
 
         if (inst->GetShadow() >= 0)
         {
@@ -3745,11 +3745,11 @@ void TMapPane::AnimateSelectedObjects()
             if (!s || s->IsInInventory() || !(s->GetFlags() & OF_SELDRAW))
                 continue;
 
-            s->DrawSelected(Display);
+            s->DrawSelected(&Display);
         }
     }
 
-    Display->ResetClipRect();
+    Display.ResetClipRect();
 }
 
 void TMapPane::NextFrameObjects()
@@ -3809,7 +3809,7 @@ void TMapPane::AnimateObjects(bool draw)
     r.bottom = scrolly + GetHeight() + 128 - 1;
     r.right  = scrollx + GetWidth() + 64 - 1;
 
-    Display->SetClipRect(MAPPANEX, MAPPANEY, GetWidth(), GetHeight());
+    Display.SetClipRect(MAPPANEX, MAPPANEY, GetWidth(), GetHeight());
 
     for (TMapIterator i(&r, CHECK_SECTRECT|CHECK_INVIS|CHECK_NOINVENT, OBJSET_ANIMATE); i; i++)
     {
@@ -3830,7 +3830,7 @@ void TMapPane::AnimateObjects(bool draw)
         inst->Animate(draw);
     }
 
-    Display->ResetClipRect();
+    Display.ResetClipRect();
 }
 
 // *******************************

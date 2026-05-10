@@ -282,7 +282,7 @@ bool TAnimImagery::SaveBitmap(char *path, int32_t state, bool zbuffer)
     PTBitmap bm = GetStillImage(state);
 
     int32_t flags;
-    if (Display->BitsPerPixel() == 16)
+    if (Display.BitsPerPixel() == 16)
         flags = BM_16BIT;
     else
         flags = BM_15BIT;
@@ -399,7 +399,7 @@ void TAnimAnimator::Animate(bool draw)
                     MapPane.DrawRestoreRect(spos.x, spos.y, bm->width, bm->height, DM_WRAPCLIPSRC | DM_NORESTORE | DM_ZBUFFER | DM_NODRAW);
 
                 if (bm->flags & BM_ZBUFFER)
-                    Display->ZPut(spos.x, spos.y, spos.z, bm, drawmode | DM_ZBUFFER);
+                    Display.ZPut(spos.x, spos.y, spos.z, bm, drawmode | DM_ZBUFFER);
                 else
                     PlayScreen.AddPostCharAnim(spos.x, spos.y, spos.z, bm, drawmode | DM_ZSTATIC);
             }

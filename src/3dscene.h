@@ -43,13 +43,17 @@ class T3DScene
     T3DScene();
     ~T3DScene();
 
-    [[nodiscard]] bool Initialize();
-      // Sets up viewport, ambient light, etc.
+    // Per-map lifecycle — called by TMapPane on map load/unload to bring
+    // up viewport, ambient light, dynamic light list, and animator list,
+    // and tear them down when leaving the map. Not part of the global
+    // engine-lifetime InitGlobals/ShutdownGlobals pair.
+    [[nodiscard]] bool OnMapLoaded();
+    bool OnMapUnloaded();
+
     [[nodiscard]] bool SetSize(int32_t x, int32_t y, int32_t width, int32_t height);
       // Sets the 3D viewport size
     [[nodiscard]] bool InitializeMatrices();
       // Initialize view matrices
-    bool Close();
 
     void RestoreZBuffer(const SRect& r);
       // Restores a rectangle in the screen zbuffer.  Called by

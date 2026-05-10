@@ -34,9 +34,11 @@ class TDialogList
 {
   public:
     bool Initialize();
-      // Loads lines from LANGUAGE.DEF file (i.e. ENGLISH.DEF for english)
+      // Loads lines from LANGUAGE.DEF file (i.e. ENGLISH.DEF for english).
+      // Idempotent.
     void Close();
-      // Closes dialog file
+      // Closes dialog file. Idempotent — leaves `lines` empty so the
+      // trivial default dtor only walks zeroed state.
     int32_t FindLine(char *tag);
       // Finds the dialog line for the given tag and returns id
     char *GetLine(int32_t id);
@@ -48,6 +50,7 @@ class TDialogList
 
   private:
     TDialogLineArray lines;         // Dialog line list
+    bool initialized = false;
 };
 
 // ************************************************************

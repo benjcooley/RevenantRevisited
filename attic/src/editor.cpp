@@ -205,7 +205,7 @@ void StartFullScreen()
     StatusBar.Hide();
     ClassPane.Hide();
 
-    MapPane.Resize(0, 0, Display->Width(), Display->Height());
+    MapPane.Resize(0, 0, Display.Width(), Display.Height());
 }
 
 void ShutDownFullScreen()
@@ -256,8 +256,8 @@ void TTextPane::DrawBackground()
 {
     if (IsDirty())
     {
-        Display->Box(0, 0, GetWidth(), GetHeight(), 0, 0xffff, 0, DM_BACKGROUND);
-        Display->WriteText(text+offset, 0, 0, winheight, SystemFont, nullptr, DM_USEDEFAULT, 
+        Display.Box(0, 0, GetWidth(), GetHeight(), 0, 0xffff, 0, DM_BACKGROUND);
+        Display.WriteText(text+offset, 0, 0, winheight, SystemFont, nullptr, DM_USEDEFAULT, 
             wrapwidth, 0, JUSTIFY_LEFT, -1, TEXTPANE_LINESPACE);
         SetDirty(false);
     }
@@ -830,8 +830,8 @@ void TConsolePane::MouseMove(int32_t button, int32_t x, int32_t y)
 {
     if (chained)
     {
-        cx = ((cursorx * chained->xspan) / Display->Width()) + chained->xmin;
-        cy = ((cursory * chained->yspan) / Display->Height()) + chained->ymin;
+        cx = ((cursorx * chained->xspan) / Display.Width()) + chained->xmin;
+        cy = ((cursory * chained->yspan) / Display.Height()) + chained->ymin;
     }
 }
 
@@ -1315,7 +1315,7 @@ void TEditStatusPane::DrawBackground()
         SColor color;
         color.red = color.green = 10; color.blue = 50;
         uint16_t c = TranslateColor(color);
-        Display->Box(112, 0, GetWidth() - 200 - 112, GetHeight(), c, 0xffff, 0, DM_BACKGROUND);
+        Display.Box(112, 0, GetWidth() - 200 - 112, GetHeight(), c, 0xffff, 0, DM_BACKGROUND);
 
         if (curobj >= 0)
         {
@@ -1330,7 +1330,7 @@ void TEditStatusPane::DrawBackground()
                 sprintf(buf, "\"%s\" %s : %s (%d, %d, %d)", oi->GetName(),
                         TObjectClass::GetClass(oi->ObjClass())->ClassName(),
                         oi->GetTypeName(), pos.x, pos.y, pos.z);
-                Display->WriteText(buf, 270, 0, 1, SystemFont, nullptr, DM_USEDEFAULT, -1, 0, JUSTIFY_CENTER);
+                Display.WriteText(buf, 270, 0, 1, SystemFont, nullptr, DM_USEDEFAULT, -1, 0, JUSTIFY_CENTER);
             }
         }
         else
@@ -1338,7 +1338,7 @@ void TEditStatusPane::DrawBackground()
             S3DPoint pos;
             MapPane.GetMapPos(pos);
             sprintf(buf, "Level %d - (%d, %d, %d)", MapPane.GetMapLevel(), pos.x, pos.y, pos.z);
-            Display->WriteText(buf, 270, 0, 1, SystemFont, nullptr, DM_USEDEFAULT, -1, 0, JUSTIFY_CENTER);
+            Display.WriteText(buf, 270, 0, 1, SystemFont, nullptr, DM_USEDEFAULT, -1, 0, JUSTIFY_CENTER);
         }
     }
 }
@@ -1859,7 +1859,7 @@ void TEditToolsPane::DrawBackground()
 {
     if (IsDirty())
     {
-        Display->Box(0, 0, GetWidth(), GetHeight(), 0, 0xffff, 0, DM_BACKGROUND);
+        Display.Box(0, 0, GetWidth(), GetHeight(), 0, 0xffff, 0, DM_BACKGROUND);
         SetDirty(false);
     }
 
@@ -1930,14 +1930,14 @@ void BtnMaximize()
         Console.Show();
         ToolBar.Show();
         ClassPane.Resize(EDMULTIPANEX, ClassPane.GetPosY(),
-            Display->Width() - CONSOLEX - EDMULTIPANEX, ClassPane.GetHeight());
+            Display.Width() - CONSOLEX - EDMULTIPANEX, ClassPane.GetHeight());
     }
     else
     {
         Console.Hide();
         ToolBar.Hide();
         ClassPane.Resize(CONSOLEX, ClassPane.GetPosY(), 
-            Display->Width() - CONSOLEX - CONSOLEX, ClassPane.GetHeight());
+            Display.Width() - CONSOLEX - CONSOLEX, ClassPane.GetHeight());
     }
 
     int32_t i = 0;
@@ -2077,8 +2077,8 @@ void TEditClassPane::DrawBackground()
 
     if (IsDirty())
     {
-        Display->SetClipRect(GetPosX(), GetPosY(), GetWidth() - 32, GetHeight());
-        Display->Box(0, 0, GetWidth() - 32, GetHeight(), 0, 0xffff, 0, DM_BACKGROUND);
+        Display.SetClipRect(GetPosX(), GetPosY(), GetWidth() - 32, GetHeight());
+        Display.Box(0, 0, GetWidth() - 32, GetHeight(), 0, 0xffff, 0, DM_BACKGROUND);
 
         TObjectClass* cl = TObjectClass::GetClass(curclass);
         if (cl)
@@ -2096,7 +2096,7 @@ void TEditClassPane::DrawBackground()
                 {
                     SColor color;
                     color.red = color.green = 20; color.blue = 120;
-                    Display->Box(x, y, OBJWIDTH, OBJHEIGHT, TranslateColor(color), 0xffff, 0, DM_BACKGROUND);
+                    Display.Box(x, y, OBJWIDTH, OBJHEIGHT, TranslateColor(color), 0xffff, 0, DM_BACKGROUND);
                 }
 
                 SImageryEntry* ie = TObjectImagery::GetImageryEntry(inf->imageryid);
@@ -2105,10 +2105,10 @@ void TEditClassPane::DrawBackground()
                 {
                     PTBitmap tn = GetThumbnail(ie->filename);
                     if (tn)
-                        Display->Put(x, y, tn, DM_TRANSPARENT | DM_BACKGROUND);
+                        Display.Put(x, y, tn, DM_TRANSPARENT | DM_BACKGROUND);
                 }
 
-                Display->WriteText(inf->name, x+THUMBNAILWIDTH+2, y);
+                Display.WriteText(inf->name, x+THUMBNAILWIDTH+2, y);
 
                 col++;
                 if ((col * OBJWIDTH) > (GetWidth() - 32 - OBJWIDTH))

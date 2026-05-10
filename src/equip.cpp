@@ -137,7 +137,7 @@ void TEquipPane::DrawBackground()
         TButtonPane::DrawBackground();
     else
     {
-        Display->Put(0, 0, section == SECT_TOP ? top : bottom, DM_BACKGROUND);
+        Display.Put(0, 0, section == SECT_TOP ? top : bottom, DM_BACKGROUND);
 
         if (Player)
         {
@@ -195,7 +195,7 @@ void TEquipPane::DrawAnim(TObjectInstance* inst, PTBitmap bm)
         return;
 
     if (EquipLoc[section][inst->InventNum() - 256].x >= 0)
-        Display->Put(EquipLoc[section][inst->InventNum() - 256].x, EquipLoc[section][inst->InventNum() - 256].y, bm);
+        Display.Put(EquipLoc[section][inst->InventNum() - 256].x, EquipLoc[section][inst->InventNum() - 256].y, bm);
 }
 
 int32_t TEquipPane::OnSlot(int32_t x, int32_t y)

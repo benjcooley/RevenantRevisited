@@ -9,7 +9,28 @@
 #include "gamemap.h"
 
 TMapManager::TMapManager()  = default;
-TMapManager::~TMapManager() { EvictAll(); }
+// Trivial dtor: Shutdown() must have run already (via ShutdownGlobals) so
+// the cache is empty here. If a developer adds a new caller path that
+// skips Shutdown, the unique_ptr<TGameMap> dtors will still run, but
+// that's the bug we're avoiding by making Shutdown explicit -- see the
+// header comment.
+TMapManager::~TMapManager() = default;
+
+bool TMapManager::Init()
+{
+    if (initialized) return true;
+    // No allocations / listener registration today; the registry just
+    // becomes "live" so Shutdown knows to actually tear things down.
+    initialized = true;
+    return true;
+}
+
+void TMapManager::Shutdown()
+{
+    if (!initialized) return;
+    EvictAll();         // walks cache + fires CurrentMapChanged
+    initialized = false;
+}
 
 TGameMap* TMapManager::GetOrLoad(int32_t level)
 {

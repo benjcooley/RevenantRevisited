@@ -94,21 +94,21 @@ TObjectInstance* GetDragObj()
 
 void DrawMouseShadow(int32_t x, int32_t y, int32_t width, int32_t height)
 {
-    Display->SetClipRect(x, y, width, height);
-    Display->Put(cursorx + shadowoffsetx, cursory + shadowoffsety, MouseShadow, DM_TRANSPARENT | DM_USEREG | DM_ALIAS);
+    Display.SetClipRect(x, y, width, height);
+    Display.Put(cursorx + shadowoffsetx, cursory + shadowoffsety, MouseShadow, DM_TRANSPARENT | DM_USEREG | DM_ALIAS);
 }
 
 void DrawMouseCursor()
 {
     // draw the bitmap first so that the cursor appears over the top of it
     if (DragBitmap)
-        Display->Put(cursorx - grabx, cursory - graby, DragBitmap, DM_TRANSPARENT | DM_USEREG);
+        Display.Put(cursorx - grabx, cursory - graby, DragBitmap, DM_TRANSPARENT | DM_USEREG);
 
     if (MouseCursor && !MouseCursorAdd)
-        Display->Put(cursorx, cursory, MouseCursor, DM_TRANSPARENT | DM_USEREG | DM_ALIAS);
+        Display.Put(cursorx, cursory, MouseCursor, DM_TRANSPARENT | DM_USEREG | DM_ALIAS);
 
     if (MouseCursorAdd)
-        Display->Put(cursorx, cursory, MouseCursorAdd, DM_TRANSPARENT | DM_USEREG | DM_ALIAS);
+        Display.Put(cursorx, cursory, MouseCursorAdd, DM_TRANSPARENT | DM_USEREG | DM_ALIAS);
 
     if (cleardragbitmap)
     {
@@ -124,7 +124,7 @@ void DrawMouseShadow()
 {
     if (MouseShadow)
     {
-        Display->SetOrigin(0, 0);
+        Display.SetOrigin(0, 0);
 
         if (MouseShadow != GameData->Bitmap("cursorshadow"))
             DrawMouseShadow(MAPPANEX, MAPPANEY, MAPPANEWIDTH, MAPPANEHEIGHT);
@@ -146,7 +146,7 @@ void DrawMouseShadow()
             }
         }
 
-        Display->ResetClipRect();
+        Display.ResetClipRect();
     }
 }
 

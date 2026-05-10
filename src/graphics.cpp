@@ -3227,7 +3227,7 @@ bool TransPutSVChange(PSDrawBlock db, PSDrawParam dp)
             else
             {
                 int32_t r, g, b;
-                if (Display->BitsPerPixel() == 15)
+                if (Display.BitsPerPixel() == 15)
                 {
                     r = (pixel >> 10) & 0x1F;
                     g = (pixel >> 5) & 0x1F;
@@ -3335,7 +3335,7 @@ bool TransPutSVChange(PSDrawBlock db, PSDrawParam dp)
                 g >>= 3;
                 b >>= 3;
 
-                if (Display->BitsPerPixel() == 15)
+                if (Display.BitsPerPixel() == 15)
                     pixel = (r << 10) | (g << 5) | b;
                 else
                     pixel = (r << 11) | (g << 6) | b;
@@ -3389,7 +3389,7 @@ bool PutHueChange(PSDrawBlock db, PSDrawParam dp)
     if (pixel != 0)
     {
         int32_t r, g, b;
-        if (Display->BitsPerPixel() == 15)
+        if (Display.BitsPerPixel() == 15)
         {
             r = (pixel >> 10) & 0x1F;
             g = (pixel >> 5) & 0x1F;
@@ -3457,7 +3457,7 @@ bool PutHueChange(PSDrawBlock db, PSDrawParam dp)
             g >>= 3;
             b >>= 3;
 
-            if (Display->BitsPerPixel() == 15)
+            if (Display.BitsPerPixel() == 15)
                 pixel = (r << 10) | (g << 5) | b;
             else
                 pixel = (r << 11) | (g << 6) | b;
@@ -8929,7 +8929,7 @@ bool Box(PSDrawBlock db, PSDrawParam dp)
 
 bool Convert15to16(PTBitmapData bitmap)
 {
-    if (Display->BitsPerPixel() == 15)
+    if (Display.BitsPerPixel() == 15)
         return true;
 
     if (bitmap->flags & BM_8BIT)
@@ -9244,7 +9244,7 @@ bool Convert15to16(PTBitmapData bitmap)
 
 bool ConvertPal15to16(PTBitmapData bitmap)
 {
-    if (Display->BitsPerPixel() == 15)
+    if (Display.BitsPerPixel() == 15)
         return true;
 
     uint16_t *pal = (uint16_t *)bitmap->palette.ptr();
@@ -9262,7 +9262,7 @@ bool ConvertPal15to16(PTBitmapData bitmap)
 
 bool Convert16to15(PTBitmapData bitmap)
 {
-    if (Display->BitsPerPixel() == 15)
+    if (Display.BitsPerPixel() == 15)
         return true;
 
     if (bitmap->flags & BM_8BIT)
@@ -9537,7 +9537,7 @@ bool Convert16to15(PTBitmapData bitmap)
 
 bool ConvertPal16to15(PTBitmapData bitmap)
 {
-    if (Display->BitsPerPixel() == 15)
+    if (Display.BitsPerPixel() == 15)
         return true;
 
     uint16_t *pal = (uint16_t *)bitmap->palette.ptr();

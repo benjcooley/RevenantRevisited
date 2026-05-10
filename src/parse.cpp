@@ -735,16 +735,25 @@ bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap)
                 double n = t.Number();
                 t.WhiteGet();
 
+                // Cast double->uint32_t losslessly across the full range
+                // we care about. (uint32_t)(double) is UB for negatives,
+                // so route negatives through int32_t first; positives can
+                // exceed INT32_MAX (e.g. 0xFFFFFFFF flag masks) so leave
+                // those on the unsigned path. The bit patterns join up at
+                // the int32_t/uint32_t output cast below.
+                auto to_u32 = [](double v) -> uint32_t {
+                    return v < 0.0 ? (uint32_t)(int32_t)v : (uint32_t)v;
+                };
                 uint32_t d;
                 if (*f != 'f')
                 {
-                    d = (uint32_t)n;
+                    d = to_u32(n);
                     while (t.Type() == TKN_SYMBOL && (t.Text())[0] == '|')
                     {
                         t.WhiteGet();
                         if (t.Type() != TKN_NUMBER && t.Type() != TKN_DEFINE && t.Type() != TKN_SCENEID)
                             return false;
-                        d |= (uint32_t)t.Number();
+                        d |= to_u32(t.Number());
                         t.WhiteGet();
                     }
                 }
@@ -919,6 +928,8 @@ bool ParseString(const char *string, const char *format, ...)
 {
     TStringParseStream s((char*)string);
     TToken t(s);
+    t.WhiteGet();   // prime first non-whitespace token (real Parse() callers
+                    // already advance the stream past the tag before calling)
 
     va_list ap;
     va_start(ap, format);

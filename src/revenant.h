@@ -194,11 +194,14 @@ extern int32_t LastFrameTicks;
 extern bool ShowFramesPerSecond;
 
 // Global Objects
-extern TScreen*     CurrentScreen;      // Currently displayed screen object 
+extern TScreen*     CurrentScreen;      // Currently displayed screen object
 extern TScreen*     NextScreen;         // Next Screen to be display object
-extern TDisplay     display;            // Display object
 extern T3DScene     Scene3D;            // 3d Object
-extern TDisplay*    Display;            // Display object
+// TODO(cleanup): `Display` was previously a `TDisplay display;` value plus
+// a `TDisplay* Display = &display;` pointer alias. The duplication is
+// flagged for a follow-up pass and most of the codebase has been migrated
+// to access it as a value already; leaving as-is for now.
+extern TDisplay     Display;            // Display object
 extern TPlayScreen  PlayScreen;         // PlayScreen Object
 extern TLogoScreen  LogoScreen;         // LogoScreen Object
 extern TMapPane     MapPane;            // Main map pane for PlayScreen

@@ -349,7 +349,7 @@ bool TSurface::BlitHandler(PSDrawParam dp, TSurface* srcsurface, int32_t ddflags
 
   // Can't blit to the zbuffer..
     if (NoBlitZBuffer && 
-      (this == Display->GetRealZBuffer() || srcsurface == Display->GetRealZBuffer()) )
+      (this == Display.GetRealZBuffer() || srcsurface == Display.GetRealZBuffer()) )
         dp->drawmode |= DM_NOHARDWARE;
 
     if (!(dp->drawmode & DM_NOHARDWARE) && BlitHardware && (!srcsurface || ddsrcsurf) && !dp->func)

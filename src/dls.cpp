@@ -1097,8 +1097,8 @@ bool Transfer32to16Func(PSDrawBlock db, PSDrawParam dp)
     uint32_t saveesp = 0;
 
     uint8_t BLUEMASK = 0x1F;
-    uint8_t REDMASK = (Display->BitsPerPixel() == 15) ? 0x7C : 0xF8;
-    uint32_t GREENMASK = (Display->BitsPerPixel() == 15) ? 0x03E0 : 0x07E0;
+    uint8_t REDMASK = (Display.BitsPerPixel() == 15) ? 0x7C : 0xF8;
+    uint32_t GREENMASK = (Display.BitsPerPixel() == 15) ? 0x03E0 : 0x07E0;
 
     // Optimization notes:
     //
@@ -1261,7 +1261,7 @@ void TransferAndLight32to16(TSurface* dest, TSurface* source, RSRect r)
         dp.func = Transfer32to16Func;
     else
     {
-        if (Display->BitsPerPixel() == 16)
+        if (Display.BitsPerPixel() == 16)
             dp.func = Transfer32to16MMXFunc;
         else
             dp.func = Transfer32to15MMXFunc;

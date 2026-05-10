@@ -310,5 +310,6 @@ class TPlayerManager
 
   private:
     TPlayerArray players;
-    int32_t mainplayernum;
+    int32_t mainplayernum = -1;
+    bool    initialized   = false;
 };

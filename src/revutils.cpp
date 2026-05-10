@@ -21,6 +21,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__APPLE__)
+#  include <mach-o/dyld.h>     // _NSGetExecutablePath
+#endif
+#if defined(__linux__)
+#  include <unistd.h>          // readlink
+#endif
+
 #include <cassert>
 #include <cctype>
 #include <cstring>
@@ -118,64 +125,129 @@ int32_t strnicmp(const char* s1, const char* s2, size_t n)
     return 0;
 }
 
-// Copies a file, or group of files using wildcards
-int32_t copyfiles(const char *from, const char *to, bool overwrite)
+// Splits a Win32-style "<dir>\<pattern>" path into the directory and the
+// glob pattern. Accepts both '\\' and '/' separators. If no separator is
+// present the whole string is treated as the pattern in the current dir.
+namespace {
+
+void split_glob(const char *spec, std::filesystem::path &dir, std::string &pattern)
 {
-    if (!from || !to)
-        return 0;
-
-#if 0 // TODO(port): Subsystem 6 — filesystem enumeration + copy (→ std::filesystem::copy_file / POSIX opendir/readdir)
-    struct _finddata_t data;
-
-    TStackString fdrive;
-    TStackString fdir;
-    TStackString fname;
-    TStackString fext;
-
-    char fromdir[MAXPATHLEN];
-    char todir[MAXPATHLEN];
-    char source[MAXPATHLEN];
-    char dest[MAXPATHLEN];
-
-    _splitpath(from, fdrive, fdir, fname, fext);
-    sprintf(fromdir, "%s%s", fdrive, fdir);
-    if (!fromdir[0])
-        return 0;
-    if (fromdir[strlen(fromdir) - 1] != '\\')
-        strncatz(fromdir, "\\", MAXPATHLEN);
-
-    _splitpath(to, fdrive, fdir, fname, fext);
-    sprintf(todir, "%s%s", fdrive, fdir);
-    if (!todir[0])
-        return 0;
-    if (todir[strlen(todir) - 1] != '\\')
-        strncatz(todir, "\\", MAXPATHLEN);
-
-    int32_t copied = 0;
-
-    int32_t found, handle;
-    found = handle = _findfirst(from, &data);
-    while (found != -1)
-    {
-        sprintf(source, "%s%s", fromdir, data.name);
-        sprintf(dest, "%s%s", todir, data.name);
-
-        if (CopyFile(source, dest, !overwrite))
-            copied++;
-
-        found = _findnext(handle, &data);
-    }
-
-    return copied;
-#else
-    return 0;
-#endif
+    namespace fs = std::filesystem;
+    if (!spec) { dir = "."; pattern = ""; return; }
+    std::string s = spec;
+    for (auto &c : s) if (c == '\\') c = '/';
+    auto slash = s.find_last_of('/');
+    if (slash == std::string::npos) { dir = "."; pattern = s; }
+    else                            { dir = s.substr(0, slash); pattern = s.substr(slash + 1); }
 }
 
-// Deletes a file, or group of files using wildcards
+// Win32 wildcard match: '*' = 0+ chars, '?' = exactly one. Case-insensitive
+// to match Win32 FindFirstFile semantics; the surrounding code throws
+// arbitrary case at us (e.g. "*.DAT" vs files named "*.dat").
+bool glob_match(const char *pat, const char *str)
+{
+    while (*pat)
+    {
+        if (*pat == '*')
+        {
+            while (*pat == '*') pat++;
+            if (!*pat) return true;
+            for (; *str; ++str)
+                if (glob_match(pat, str)) return true;
+            return false;
+        }
+        if (!*str) return false;
+        if (*pat != '?' && tolower((unsigned char)*pat) != tolower((unsigned char)*str))
+            return false;
+        ++pat; ++str;
+    }
+    return *str == 0;
+}
+
+// Resolve a Win32-style "directory" (possibly `.` or `<savepath>...`) to
+// an absolute filesystem::path via makepath, in normalized form. If the
+// path exists already we return it; otherwise we still return the
+// resolved candidate so callers can mkdir.
+std::filesystem::path resolve_dir(const std::filesystem::path &p)
+{
+    namespace fs = std::filesystem;
+    if (p.is_absolute()) return fs::weakly_canonical(p);
+    char buf[MAXPATHLEN];
+    char tmp[MAXPATHLEN];
+    strncpyz(tmp, p.string().c_str(), MAXPATHLEN);
+    makepath(tmp, buf, MAXPATHLEN);  // SavePath-relative + normalize
+    return fs::weakly_canonical(fs::path(buf));
+}
+
+} // namespace
+
+// Copies one file or every wildcard-matched file from `from` (a glob like
+// "<dir>\\*.DAT") into the directory portion of `to`. Returns the count
+// copied. Silently skips matches that can't be opened. Creates the target
+// directory if needed.
+int32_t copyfiles(const char *from, const char *to, bool overwrite)
+{
+    namespace fs = std::filesystem;
+    if (!from || !to) return 0;
+
+    fs::path src_dir, dst_dir;
+    std::string src_pat, dst_pat;
+    split_glob(from, src_dir, src_pat);
+    split_glob(to,   dst_dir, dst_pat);
+
+    src_dir = resolve_dir(src_dir);
+    dst_dir = resolve_dir(dst_dir);
+
+    std::error_code ec;
+    fs::create_directories(dst_dir, ec);
+
+    if (!fs::exists(src_dir, ec) || !fs::is_directory(src_dir, ec))
+        return 0;
+
+    int32_t copied = 0;
+    const auto opt = overwrite ? fs::copy_options::overwrite_existing
+                               : fs::copy_options::skip_existing;
+    for (const auto &ent : fs::directory_iterator(src_dir, ec))
+    {
+        if (!ent.is_regular_file()) continue;
+        const std::string name = ent.path().filename().string();
+        if (!glob_match(src_pat.c_str(), name.c_str())) continue;
+        fs::copy_file(ent.path(), dst_dir / name, opt, ec);
+        if (!ec) copied++;
+    }
+    return copied;
+}
+
+// Deletes every file in `name`'s directory matching its glob (e.g.
+// "<dir>\\*.DAT"). Returns the count deleted.
 int32_t deletefiles(const char *name)
 {
-#if 0 // TODO(port): Subsystem 6 — filesystem enumeration + delete (→ std::filesystem::remove / POSIX opendir/readdir)
+    namespace fs = std::filesystem;
+    if (!name) return 0;
+
+    fs::path dir;
+    std::string pat;
+    split_glob(name, dir, pat);
+    dir = resolve_dir(dir);
+
+    std::error_code ec;
+    if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec))
+        return 0;
+
+    int32_t deleted = 0;
+    for (const auto &ent : fs::directory_iterator(dir, ec))
+    {
+        if (!ent.is_regular_file()) continue;
+        const std::string filename = ent.path().filename().string();
+        if (!glob_match(pat.c_str(), filename.c_str())) continue;
+        if (fs::remove(ent.path(), ec)) deleted++;
+    }
+    return deleted;
+}
+
+#if 0 // legacy Win32 deletefiles preserved for reference until we mothball
+int32_t deletefiles_LEGACY_unused(const char *name)
+{
     struct _finddata_t data;
 
     char dir[MAXPATHLEN], file[MAXPATHLEN];
@@ -202,11 +274,8 @@ int32_t deletefiles(const char *name)
     }
 
     return deleted;
-#else
-    (void)name;
-    return 0;
-#endif
 }
+#endif // legacy Win32 deletefiles_LEGACY_unused
 
 int32_t flen(FILE* f)
 {
@@ -269,46 +338,14 @@ void FatalError(const char *error, const char *extra)
     Status(buf);
     Status("Press any key to exit");
 
-  // Prevent passing of windows message (input etc) to current screen
-    CurrentScreen = nullptr;
-
-  // Stop timer stuff
-    Timer.Close();
-
-  // Close the display
-    Display->Close();
-
-#if 0 // TODO(port): Subsystem 2 — DirectDraw/Win32 presentation (→ sokol)
-  // Close Direct Draw
-    CloseDirectDraw();
-
-  // Close the window!
-    MainWindow.Close();
-
-    MSG Message;
-    while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
-    {
-        TranslateMessage(&Message);
-        DispatchMessage(&Message);
-    }
-
-    if (!DirectDraw)
-    {
-        if (extra)
-            _RPT1(_CRT_ERROR, error, extra);
-        else
-            _RPT0(_CRT_ERROR, error);
-    }
-
-//  ShowWindow(MainWindow.Hwnd(), 0);
-//  MessageBox(nullptr, buf, "FATAL ERROR", MB_ICONSTOP | MB_OK);
-#else
-    MainWindow.Close();
+  // FatalError aborts the process; the OS reclaims everything. Skipping
+  // the partial Shutdown dance keeps this path from racing the live
+  // ShutdownGlobals path and matches the "InitGlobals/ShutdownGlobals
+  // are the canonical callers" rule for file-scope globals.
     if (extra)
         log_fatal(error, extra);
     else
         log_fatal("%s", error);
-#endif
 
     exit(1);
 }
@@ -355,7 +392,7 @@ void Status(const char *fmt, ...)
     static char buf[1024]; // Temporary buf for output
     static int32_t y = 10;
 
-    if (!DirectDraw || !SystemFont || !Display->GetSurface())
+    if (!DirectDraw || !SystemFont || !Display.GetSurface())
         return;
 
     va_list marker;
@@ -373,8 +410,8 @@ void Status(const char *fmt, ...)
             *p = '\0';
             if (strlen(s) > 0)
             {
-                Display->WriteText(s, 10, y, 1, SystemFont, nullptr, DM_TRANSPARENT | DM_ALIAS);
-                Display->PutToScreen(0, 0, Display->Width(), Display->Height());
+                Display.WriteText(s, 10, y, 1, SystemFont, nullptr, DM_TRANSPARENT | DM_ALIAS);
+                Display.PutToScreen(0, 0, Display.Width(), Display.Height());
                 y += 10;
             }
             if (!save)
@@ -835,12 +872,251 @@ void operator delete(void *pointer) noexcept
 
 #endif
 
+// Forward declarations for helpers defined further down the TU.
+static void rev_normalize_sep(char *p);
+namespace {
+    std::filesystem::path vfs_resolve_data_root();
+    const std::filesystem::path &vfs_data_root();
+}
+
+// Walk up from `start` looking for a directory that contains both `src`
+// and `revisited` siblings (our repo layout). Returns empty path on
+// failure. Used by overlay discovery for the dev workflow when the exe
+// lives in <repo>/build/.
+static std::filesystem::path find_repo_root(const std::filesystem::path &start)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path p = start;
+    for (int i = 0; i < 8 && !p.empty() && p != p.root_path(); ++i)
+    {
+        if (fs::exists(p / "src", ec) && fs::exists(p / "revisited", ec))
+            return p;
+        p = p.parent_path();
+    }
+    return {};
+}
+
+const char *rev_resolve_revisited_overlay()
+{
+    namespace fs = std::filesystem;
+    static std::string s_resolved;
+    static bool s_done = false;
+    if (s_done) return s_resolved.c_str();
+    s_done = true;
+
+    auto looks_like_overlay = [](const fs::path &p) -> bool {
+        // For now: anything that exists. The overlay can be empty (no
+        // patches yet) and that's fine — we just won't find any files
+        // in it. Phase 2+ may add a manifest sentinel here.
+        std::error_code ec;
+        return fs::exists(p, ec);
+    };
+
+    // 1) explicit env-var override
+    if (const char *env = getenv("REVENANT_REVISITED_PATH"))
+    {
+        fs::path p(env);
+        if (looks_like_overlay(p))
+        {
+            s_resolved = (p.string() + "/");
+            log_info("[overlay] revisited: %s (env)", s_resolved.c_str());
+            return s_resolved.c_str();
+        }
+    }
+
+    // Resolve exe directory once.
+    fs::path exe_dir;
+#if defined(__APPLE__)
+    {
+        char raw[MAXPATHLEN];
+        uint32_t sz = sizeof(raw);
+        if (_NSGetExecutablePath(raw, &sz) == 0)
+        {
+            std::error_code ec;
+            fs::path p = fs::weakly_canonical(fs::path(raw), ec);
+            exe_dir = (ec ? fs::path(raw) : p).parent_path();
+        }
+    }
+#elif defined(__linux__)
+    {
+        char raw[MAXPATHLEN];
+        ssize_t n = readlink("/proc/self/exe", raw, sizeof(raw) - 1);
+        if (n > 0) { raw[n] = 0; exe_dir = fs::path(raw).parent_path(); }
+    }
+#endif
+
+    // 2) production: <exe-dir>/RevenantRevisited.rvr
+    // 3) production alt: <RunPath>/RevenantRevisited.rvr — RunPath is set
+    //    by rev_resolve_program_paths so check the global directly.
+    std::error_code ec;
+    for (const fs::path cand : { exe_dir / "RevenantRevisited.rvr",
+                                  fs::path(RunPath) / "RevenantRevisited.rvr" })
+    {
+        if (cand.empty()) continue;
+        if (fs::exists(cand, ec))
+        {
+            s_resolved = cand.string();
+            log_info("[overlay] revisited: %s (rvr archive)", s_resolved.c_str());
+            return s_resolved.c_str();
+        }
+    }
+
+    // 4) dev: walk up from exe_dir to find <repo>/revisited/resources/.
+    if (!exe_dir.empty())
+    {
+        fs::path repo = find_repo_root(exe_dir);
+        if (!repo.empty())
+        {
+            fs::path p = repo / "revisited" / "resources";
+            if (looks_like_overlay(p))
+            {
+                s_resolved = (p.string() + "/");
+                log_info("[overlay] revisited: %s (loose dev folder)",
+                         s_resolved.c_str());
+                return s_resolved.c_str();
+            }
+        }
+    }
+
+    log_info("[overlay] no revisited overlay found — running vanilla retail");
+    return "";
+}
+
+// Resolve the platform-conventional per-user data directory:
+//   macOS:   ~/Library/Application Support/Revenant/
+//   Linux:   $XDG_DATA_HOME/Revenant/ (default ~/.local/share/Revenant/)
+//   Windows: %LOCALAPPDATA%\Revenant\
+// Returns an empty path on failure (no $HOME, etc.).
+static std::filesystem::path resolve_user_data_dir()
+{
+    namespace fs = std::filesystem;
+#if defined(__APPLE__)
+    if (const char *home = getenv("HOME"))
+        return fs::path(home) / "Library" / "Application Support" / "Revenant";
+#elif defined(__linux__)
+    if (const char *xdg = getenv("XDG_DATA_HOME"))
+        return fs::path(xdg) / "Revenant";
+    if (const char *home = getenv("HOME"))
+        return fs::path(home) / ".local" / "share" / "Revenant";
+#elif defined(_WIN32)
+    if (const char *appdata = getenv("LOCALAPPDATA"))
+        return fs::path(appdata) / "Revenant";
+#endif
+    return {};
+}
+
+// Posix port of retail's GetProgramPaths probe. Splits the two roles
+// retail collapsed when installed on HD:
+//   * RunPath  = install dir (read-only-safe assets: Imagery/, Modules/,
+//                resources.rvr, imagery.rvi). Resolved via the same
+//                logic that VFS uses (env var $REVENANT_DATA_PATH, or
+//                cwd / cwd/data / cwd/../data — see vfs_resolve_data_root).
+//                Inside a macOS .app bundle, this naturally lands in
+//                Contents/Resources/data/ when shipped that way.
+//   * SavePath = writable per-user data dir (Revenant.ini, curmap/,
+//                Save/Single/<n>/, …) at the platform-conventional
+//                Application Support / XDG_DATA_HOME / LOCALAPPDATA.
+//                Created if missing; if creation fails we abort —
+//                Revenant requires a writable user-data dir and refuses
+//                to run from non-writable media.
+// Both buffers are filled with a trailing '/' so makepath / rev_fopen
+// can concat directly.
+void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen)
+{
+    namespace fs = std::filesystem;
+
+    // ---------- SavePath: per-user writable dir, mandatory. ----------
+    fs::path save = resolve_user_data_dir();
+    if (save.empty())
+    {
+        FatalError("Revenant: cannot resolve per-user data directory. "
+                   "Set $HOME (Linux/macOS) or %LOCALAPPDATA% (Windows).");
+    }
+    {
+        std::error_code ec;
+        fs::create_directories(save, ec);
+        if (ec)
+        {
+            char msg[512];
+            std::snprintf(msg, sizeof(msg),
+                "Revenant: cannot create user-data directory '%s' (%s). "
+                "The game requires writable storage and refuses to run "
+                "from read-only media.",
+                save.string().c_str(), ec.message().c_str());
+            FatalError(msg);
+        }
+        // Sanity-check writability with an actual probe — create_directories
+        // can succeed on read-only mounts in odd circumstances.
+        const fs::path probe = save / ".revenant_write_test";
+        if (FILE *fp = fopen(probe.string().c_str(), "wb"))
+        {
+            fclose(fp);
+            std::error_code rmec;
+            fs::remove(probe, rmec);
+        }
+        else
+        {
+            char msg[512];
+            std::snprintf(msg, sizeof(msg),
+                "Revenant: user-data directory '%s' exists but is not "
+                "writable. The game refuses to run from read-only media.",
+                save.string().c_str());
+            FatalError(msg);
+        }
+        std::string s = save.string() + "/";
+        strncpyz(SavePath, s.c_str(), buflen);
+    }
+
+    // ---------- RunPath: install dir (read-only assets). ----------
+    // Reuse the VFS data-root probe — it already supports the
+    // $REVENANT_DATA_PATH env var and cwd-relative dev fallbacks. If
+    // SavePath itself looks like a populated install (someone copied
+    // the data tree there), prefer that — matches retail's HD-install
+    // case where SavePath == RunPath.
+    fs::path run;
+    {
+        std::error_code ec;
+        if (fs::exists(save / "imagery.rvi", ec) ||
+            fs::exists(save / "Modules", ec))
+        {
+            run = save;
+        }
+        else
+        {
+            run = vfs_data_root();
+        }
+    }
+    if (!run.empty())
+    {
+        std::string s = run.string() + "/";
+        strncpyz(RunPath, s.c_str(), buflen);
+    }
+    else
+    {
+        // Couldn't find an install. Fall back to SavePath so the engine
+        // doesn't crash before logging — but most asset reads will
+        // FatalError shortly with a clear "missing data" message from
+        // the VFS layer, which the user can act on.
+        log_error("[paths] could not locate the Revenant install (looked in "
+                  "$REVENANT_DATA_PATH, %s, ./data/, ../data/). Asset loads "
+                  "will fail. Install the data tree under '%s' or set "
+                  "$REVENANT_DATA_PATH.",
+                  save.string().c_str(), save.string().c_str());
+        strncpyz(RunPath, SavePath, buflen);
+    }
+
+    log_info("[paths] RunPath  (install)  = %s", RunPath);
+    log_info("[paths] SavePath (user data) = %s", SavePath);
+}
+
 char *makepath(char *name, char *buf, int32_t buflen)
 {
   // If root path expicitly given, (i.e. "c:\", or "\" or "\\" or "..") use it
     if (name[0] == '\\' || name[1] == ':' || (name[0] == '.' && name[1] == '.'))
     {
         strncpyz(buf, name, buflen);
+        rev_normalize_sep(buf);
         return buf;
     }
 
@@ -848,13 +1124,14 @@ char *makepath(char *name, char *buf, int32_t buflen)
     if (name[0] == '.')
     {
         name++;
-        while (name[0] == '\\')
+        while (name[0] == '\\' || name[0] == '/')
             name++;
     }
 
   // Always try SavePath first (SavePath will always be writable directory on hard drive)
     strncpyz(buf, SavePath, buflen);
     strncatz(buf, name, buflen);
+    rev_normalize_sep(buf);
 
     return buf;
 }
@@ -928,23 +1205,77 @@ std::string vfs_basename_lower(const char *p)
     return vfs_lower(std::string(name));
 }
 
+// Locate the user's existing Revenant install (read-only assets:
+// Imagery/, Modules/, resources.rvr, imagery.rvi). We do NOT ship a
+// copy of these — the user must already own a Revenant install (GoG,
+// CD/DVD copy, etc.). Resolution order:
+//   1. $REVENANT_DATA_PATH env var (explicit override)
+//   2. cwd, cwd/data, cwd/../data         (dev: running from repo root)
+//   3. <exe-dir>, <exe-dir>/data, <exe-dir>/../data,
+//      <exe-dir>/../Resources/data         (drop our binary into the user's install)
+// Returns empty path on failure; caller is responsible for surfacing a
+// clear "set REVENANT_DATA_PATH or place our binary alongside your
+// Revenant install" message.
 std::filesystem::path vfs_resolve_data_root()
 {
     namespace fs = std::filesystem;
+    auto looks_like_revenant = [](const fs::path &cand) -> bool {
+        std::error_code ec;
+        return fs::exists(cand / "imagery.rvi", ec) ||
+               fs::exists(cand / "resources.rvr", ec) ||
+               fs::exists(cand / "Modules", ec);
+    };
+
     if (const char *env = getenv("REVENANT_DATA_PATH"))
     {
         fs::path p(env);
-        if (fs::exists(p))
+        if (fs::exists(p) && looks_like_revenant(p))
             return p;
     }
+
     const fs::path cwd = fs::current_path();
     for (const fs::path cand : {cwd, cwd / "data", cwd / ".." / "data"})
     {
         std::error_code ec;
-        if (fs::exists(cand / "imagery.rvi", ec) ||
-            fs::exists(cand / "Modules", ec))
+        if (looks_like_revenant(cand))
             return fs::canonical(cand, ec);
     }
+
+    fs::path exe_dir;
+#if defined(__APPLE__)
+    {
+        char raw[MAXPATHLEN];
+        uint32_t sz = sizeof(raw);
+        if (_NSGetExecutablePath(raw, &sz) == 0)
+        {
+            std::error_code ec;
+            fs::path p = fs::weakly_canonical(fs::path(raw), ec);
+            exe_dir = (ec ? fs::path(raw) : p).parent_path();
+        }
+    }
+#elif defined(__linux__)
+    {
+        char raw[MAXPATHLEN];
+        ssize_t n = readlink("/proc/self/exe", raw, sizeof(raw) - 1);
+        if (n > 0) { raw[n] = 0; exe_dir = fs::path(raw).parent_path(); }
+    }
+#endif
+    if (!exe_dir.empty())
+    {
+        for (const fs::path cand : {
+            exe_dir,
+            exe_dir / "data",
+            exe_dir / ".." / "data",
+            // macOS .app bundle: Contents/MacOS/<exe> → ../Resources/data/
+            exe_dir / ".." / "Resources" / "data",
+        })
+        {
+            std::error_code ec;
+            if (looks_like_revenant(cand))
+                return fs::canonical(cand, ec);
+        }
+    }
+
     return {};
 }
 
@@ -1154,12 +1485,33 @@ FILE *rev_fopen(const char *name, const char *flags)
             name++;
     }
 
-  // Always try SavePath first (writable on real installs)
+  // Always try SavePath first (writable on real installs — saves, INI).
     strncpyz(fn, SavePath, MAXPATHLEN);
     strncatz(fn, name, MAXPATHLEN);
     rev_normalize_sep(fn);
 
     FILE *fp = fopen(fn, flags);
+
+  // Revisited overlay (Bug fixes, game-behavior tweaks, enhanced
+  // graphics/UI). Strictly opt-in: empty string from the resolver means
+  // "no overlay, run vanilla". Reads only — never used for write fallback.
+  // See revisited/README.md for the contract.
+    if (!fp)
+    {
+        const bool is_read = flags && flags[0] == 'r' && !strchr(flags, '+');
+        if (is_read)
+        {
+            const char *overlay = rev_resolve_revisited_overlay();
+            if (overlay && overlay[0])
+            {
+                strncpyz(fn, overlay, MAXPATHLEN);
+                strncatz(fn, name, MAXPATHLEN);
+                rev_normalize_sep(fn);
+                fp = fopen(fn, flags);
+            }
+        }
+    }
+
     if (!fp && stricmp(SavePath, RunPath) != 0)
     {
         strncpyz(fn, RunPath, MAXPATHLEN);

@@ -743,7 +743,7 @@ uint16_t TranslateColor(SColor &color)
     blue = color.blue;
     blue = blue >> 3;
     
-    if (Display->BitsPerPixel() == 16)
+    if (Display.BitsPerPixel() == 16)
     {
         green = green >> 2;
         result = (red <<11) | (green << 5) | blue;

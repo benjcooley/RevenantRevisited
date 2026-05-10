@@ -172,7 +172,7 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, uint32_t wMessage, WPARAM wParam, LPARAM
             if (PauseWhenNotActive)
                 ResumeThreads();
             RestrictCursor();
-            Display->Restore();
+            Display.Restore();
             TObjectImagery::RestoreAll();
             if (CurrentScreen)
                 CurrentScreen->Redraw();
@@ -205,7 +205,7 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, uint32_t wMessage, WPARAM wParam, LPARAM
       {
         if (Windowed)
         {
-            Display->FlipPage();
+            Display.FlipPage();
         }
       }
 

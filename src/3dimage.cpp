@@ -242,11 +242,26 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
             }
             else
             {
+                // Old (pre-release) I3D anikeys layout is broken in our
+                // build: SOld3DImageryBody.anikeys[d] is one OFFSET per
+                // state, but its actual buffer is shorter than
+                // `sizeof(SAniKey) * GetAniLength(d)` — likely a struct-
+                // size mismatch (retail SAniKey32 = 4 bytes vs our
+                // SAniKey = 8 bytes) or a per-state-vs-flattened layout
+                // disagreement. ASan caught it as a 1200-byte heap-
+                // buffer-overflow READ.
+                //
+                // Until the loader is reverse-engineered against the on-
+                // disk Old format, allocate empty keys here. Affected
+                // meshes (anything that goes through OldInitializeMesh)
+                // will animate with zero deltas — visible as "frozen"
+                // bones — but the engine no longer over-reads heap.
+                // TODO retail: figure out the real source size of
+                //   SOld3DImageryBody.anikeys[d] (probably SAniKey32 +
+                //   per-state count) and copy correctly.
                 obj.anikeys[d] = new SAniKey[GetAniLength(d)];
                 obj.numanikeys[d] = GetAniLength(d);
-                std::memcpy(obj.anikeys[d],
-                    ((SAniKey*)mesh->anikeys[d].ptr()) + GetAniLength(d) * c,
-                    sizeof(SAniKey) * GetAniLength(d));
+                std::memset(obj.anikeys[d], 0, sizeof(SAniKey) * GetAniLength(d));
             }
         }
 
@@ -1829,10 +1844,10 @@ void T3DImagery::AddUpdateRect(SRenderRect* extents, int32_t /*uflags*/)
         extents->y2 - extents->y1 <= 0)
         return;
 
-#if 0 // TODO(port): Display->AddUpdateRect lost its method in the TDisplay
+#if 0 // TODO(port): Display.AddUpdateRect lost its method in the TDisplay
       // refactor; add the rect through whatever the new dirty-rect API is — Phase 3.
     if (!NoUpdateRects)
-        Display->AddUpdateRect(extents->x1, extents->y1,
+        Display.AddUpdateRect(extents->x1, extents->y1,
             extents->x2 - extents->x1 + 1, extents->y2 - extents->y1 + 1, uflags);
 #endif
 }

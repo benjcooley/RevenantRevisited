@@ -164,10 +164,11 @@ bool TDisplay::Close()
     return true;
 }
 
-TDisplay::~TDisplay()
-{
-    Close();
-}
+// Trivial dtor: explicit Close() runs from ShutdownGlobals before the
+// global destructs. Calling sokol_gfx / TRenderer teardown from a
+// process-exit path is unsafe because sokol's own static state and
+// the surfaces it references live in other TUs.
+TDisplay::~TDisplay() = default;
 
 bool TDisplay::Restore()
 {

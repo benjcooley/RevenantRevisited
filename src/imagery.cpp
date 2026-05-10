@@ -818,7 +818,7 @@ void TObjectImagery::DrawInvItem(TObjectInstance* oi, int32_t x, int32_t y)
     if (!invitem)
         return;
 
-    Display->Put(x, y, invitem, DM_TRANSPARENT | DM_BACKGROUND);
+    Display.Put(x, y, invitem, DM_TRANSPARENT | DM_BACKGROUND);
 }
 
 // ******************* Progressive Load System ******************

@@ -444,10 +444,10 @@ void T3DScene::RestoreZBuffer(SRect &r)
             DM_WRAPCLIPSRC | DM_NORESTORE | DM_ZBUFFER | DM_NODRAW);
     
     // Copy z-buffer from background to screen
-    if (Display->UsingClearZBuffer())
+    if (Display.UsingClearZBuffer())
     {
-        Display->GetRealZBuffer()->Blit(sr.x(), sr.y(), 
-            Display->GetZBuffer(), sr.x(), sr.y(), sr.w(), sr.h());
+        Display.GetRealZBuffer()->Blit(sr.x(), sr.y(), 
+            Display.GetZBuffer(), sr.x(), sr.y(), sr.w(), sr.h());
     }
 }
 ```
