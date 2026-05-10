@@ -324,7 +324,7 @@ void TStormAnimator::RefreshZBuffer()
         // convert it to screen position
         WorldToScreen(map_pos, screen_pos);
         RestoreZ(screen_pos.x - (rect_u / 2), screen_pos.y - (rect_v / 2), rect_u, rect_v);
-        //Display->Box(screen_pos.x - (rect_u / 2), screen_pos.y - (rect_v / 2), rect_u, rect_v);
+        //Display.Box(screen_pos.x - (rect_u / 2), screen_pos.y - (rect_v / 2), rect_u, rect_v);
     }
 }
 

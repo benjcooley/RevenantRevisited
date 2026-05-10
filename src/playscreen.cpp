@@ -10,7 +10,7 @@
 //
 // Behaviors that lived in the retail TPlayScreen and were dropped because
 // they don't fit the new architecture: BITMAP.100 backdrop, DrawOverhangs,
-// the postanim/posttext arrays, and the Pulse/Animate -> Display->Put/ZPut/
+// the postanim/posttext arrays, and the Pulse/Animate -> Display.Put/ZPut/
 // PutDim/WriteText draw chain. The legacy code is preserved at
 // attic/src/playscreen.cpp for reference.
 //
@@ -54,26 +54,101 @@ PTBitmap PointerCursor = nullptr;
 PTBitmap HandCursor    = nullptr;
 
 // Default game controls. Mirrors the retail table from
-// attic/src/playscreen.cpp; the trimmed first cut keeps the directional
-// + run / sneak entries that drive Locke's movement. Combat / bow /
-// inventory / spell-slot bindings come back as the receiving systems
-// get wired. Single-key chords for now -- no Ctrl/Shift combos.
-//
-// `mode` is currently set to ALLMODES (0xFFFFFFFF) since combat/bow/
-// sneak modes aren't gating anything yet; refine when those gameplay
-// modes come back online.
+// attic/src/playscreen.cpp. Mode flags differ per binding: directional
+// keys are ALLMODES (work in walk / combat / bow / sneak), combat
+// strikes only fire in CTRL_COMBATMODE, etc. Mode bits live in the
+// ControlMap and gate which command a key generates -- the retail
+// values matter once the mode-switching is wired through ControlMap.
+static constexpr uint32_t CTRL_NORMALMODE    = 1;
+static constexpr uint32_t CTRL_COMBATMODE    = 2;
+static constexpr uint32_t CTRL_BOWMODE       = 4;
+static constexpr uint32_t CTRL_SNEAKMODE     = 8;
+static constexpr uint32_t CTRL_INVENTORYMODE = 16;
+
 static SControlEntry g_defaultGameControls[] =
 {
-    {"Run",         "Run",       ALLMODES, {{'R'}},                        GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_RUN,        false},
-    {"Sneak",       "Sneak",     ALLMODES, {{'S'}},                        GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_SNEAK,      false},
-    {"Left",        "Left",      ALLMODES, {{VK_LEFT},  {VK_JOYLEFT}},     GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_LEFT,       false},
-    {"Right",       "Right",     ALLMODES, {{VK_RIGHT}, {VK_JOYRIGHT}},    GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_RIGHT,      false},
-    {"Up",          "Up",        ALLMODES, {{VK_UP},    {VK_JOYUP}},       GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_UP,         false},
-    {"Down",        "Down",      ALLMODES, {{VK_DOWN},  {VK_JOYDOWN}},     GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_DOWN,       false},
-    {"Up Left",     "UpLeft",    ALLMODES, {{VK_HOME},  {VK_JOYUPLEFT}},   GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_UPLEFT,     false},
-    {"Up Right",    "UpRight",   ALLMODES, {{VK_PRIOR}, {VK_JOYUPRIGHT}},  GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_UPRIGHT,    false},
-    {"Down Left",   "DownLeft",  ALLMODES, {{VK_END},   {VK_JOYDOWNLEFT}}, GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_DOWNLEFT,   false},
-    {"Down Right",  "DownRight", ALLMODES, {{VK_NEXT},  {VK_JOYDOWNRIGHT}},GAMECMD_DIRDOWN,  GAMECMD_DIRUP,  CMDFLAG_DOWNRIGHT,  false},
+    // -- spell invocation slots --
+    {"Invoke 1", "Invoke1", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F1}}, GAMECMD_INVOKE1, 0, 0, false},
+    {"Invoke 2", "Invoke2", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F2}}, GAMECMD_INVOKE2, 0, 0, false},
+    {"Invoke 3", "Invoke3", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F3}}, GAMECMD_INVOKE3, 0, 0, false},
+    {"Invoke 4", "Invoke4", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F4}}, GAMECMD_INVOKE4, 0, 0, false},
+
+    // -- mode switches --
+    {"Combat Mode", "CombatMode", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_RETURN}}, GAMECMD_COMBAT,     0, 0, false},
+    {"Bow Mode",    "BowMode",    CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'M'}},       GAMECMD_BOW,        0, 0, false},
+    {"Full Screen", "FullScreen", ALLMODES,                                          {{VK_SPACE}},  GAMECMD_FULLSCREEN, 0, 0, false},
+
+    // -- movement modifiers (state flags, repeat-down/up) --
+    {"Sneak", "Sneak", CTRL_NORMALMODE | CTRL_SNEAKMODE, {{'S'}}, GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_SNEAK, false},
+    {"Run",   "Run",   CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'R'}}, GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_RUN, false},
+
+    // -- world interaction --
+    {"Use",  "Use",  CTRL_NORMALMODE, {{'U'}, {'T'}}, GAMECMD_USE,  0, 0, false},
+    {"Get",  "Get",  CTRL_NORMALMODE, {{'G'}},         GAMECMD_GET,  0, 0, false},
+    {"Jump", "Jump", CTRL_NORMALMODE, {{'J'}},         GAMECMD_JUMP, 0, 0, false},
+
+    // -- walk-mode action slots (unmapped by default; scripted hooks bind these) --
+    {"Walk Action 1", "WalkAction1", CTRL_NORMALMODE, {{0}}, GAMECMD_WALKACTION1, 0, 0, false},
+    {"Walk Action 2", "WalkAction2", CTRL_NORMALMODE, {{0}}, GAMECMD_WALKACTION2, 0, 0, false},
+    {"Walk Action 3", "WalkAction3", CTRL_NORMALMODE, {{0}}, GAMECMD_WALKACTION3, 0, 0, false},
+
+    // -- inventory --
+    {"Inventory",       "Inventory", CTRL_NORMALMODE,    {{'I'}},       GAMECMD_INVENTORY, 0, 0, false},
+    {"Inventory Use",   "InvUse",    CTRL_INVENTORYMODE, {{'U'}},       GAMECMD_INVUSE,    0, 0, false},
+    {"Inventory Move",  "InvMove",   CTRL_INVENTORYMODE, {{'M'}},       GAMECMD_INVMOVE,   0, 0, false},
+    {"Inventory Drop",  "InvDrop",   CTRL_INVENTORYMODE, {{'D'}},       GAMECMD_INVDROP,   0, 0, false},
+    {"Inventory Exit",  "InvExit",   CTRL_INVENTORYMODE, {{VK_ESCAPE}}, GAMECMD_INVEXIT,   0, 0, false},
+
+    // -- combat combos (Ctrl + key, Shift + key) --
+    {"Combat Combo 1",  "CombatCombo1",  CTRL_COMBATMODE, {{VK_CONTROL, 'A'}}, GAMECMD_COMBO1,  0, 0, false},
+    {"Combat Combo 2",  "CombatCombo2",  CTRL_COMBATMODE, {{VK_CONTROL, 'S'}}, GAMECMD_COMBO2,  0, 0, false},
+    {"Combat Combo 3",  "CombatCombo3",  CTRL_COMBATMODE, {{VK_CONTROL, 'D'}}, GAMECMD_COMBO3,  0, 0, false},
+    {"Combat Combo 4",  "CombatCombo4",  CTRL_COMBATMODE, {{VK_CONTROL, 'F'}}, GAMECMD_COMBO4,  0, 0, false},
+    {"Combat Combo 5",  "CombatCombo5",  CTRL_COMBATMODE, {{VK_CONTROL, 'G'}}, GAMECMD_COMBO5,  0, 0, false},
+    {"Combat Combo 6",  "CombatCombo6",  CTRL_COMBATMODE, {{VK_CONTROL, 'H'}}, GAMECMD_COMBO6,  0, 0, false},
+    {"Combat Combo 7",  "CombatCombo7",  CTRL_COMBATMODE, {{VK_SHIFT,   'A'}}, GAMECMD_COMBO7,  0, 0, false},
+    {"Combat Combo 8",  "CombatCombo8",  CTRL_COMBATMODE, {{VK_SHIFT,   'S'}}, GAMECMD_COMBO8,  0, 0, false},
+    {"Combat Combo 9",  "CombatCombo9",  CTRL_COMBATMODE, {{VK_SHIFT,   'D'}}, GAMECMD_COMBO9,  0, 0, false},
+    {"Combat Combo 10", "CombatCombo10", CTRL_COMBATMODE, {{VK_SHIFT,   'F'}}, GAMECMD_COMBO10, 0, 0, false},
+    {"Combat Combo 11", "CombatCombo11", CTRL_COMBATMODE, {{VK_SHIFT,   'G'}}, GAMECMD_COMBO11, 0, 0, false},
+    {"Combat Combo 12", "CombatCombo12", CTRL_COMBATMODE, {{VK_SHIFT,   'H'}}, GAMECMD_COMBO12, 0, 0, false},
+
+    // -- combat strikes / blocks / dodge / leap --
+    {"Combat Block",  "CombatBlock",  CTRL_COMBATMODE, {{'Q'}}, GAMECMD_BLOCKDOWN, GAMECMD_BLOCKUP, CMDFLAG_BLOCK, false},
+    {"Combat Dodge",  "CombatDodge",  CTRL_COMBATMODE, {{'W'}}, GAMECMD_DODGE,     0,                0,            false},
+    {"Combat Leap",   "CombatLeap",   CTRL_COMBATMODE, {{'F'}}, GAMECMD_LEAPDOWN,  GAMECMD_LEAPUP,   CMDFLAG_LEAP,  false},
+    {"Combat Swing",  "CombatSwing",  CTRL_COMBATMODE, {{'A'}}, GAMECMD_SWING,     0,                0,            false},
+    {"Combat Thrust", "CombatThrust", CTRL_COMBATMODE, {{'S'}}, GAMECMD_THRUST,    0,                0,            false},
+    {"Combat Chop",   "CombatChop",   CTRL_COMBATMODE, {{'D'}}, GAMECMD_CHOP,      0,                0,            false},
+
+    // -- combat action slots (scripted) --
+    {"Combat Action 1", "CombatAction1", CTRL_COMBATMODE, {{0}}, GAMECMD_COMBATACTION1, 0, 0, false},
+    {"Combat Action 2", "CombatAction2", CTRL_COMBATMODE, {{0}}, GAMECMD_COMBATACTION2, 0, 0, false},
+    {"Combat Action 3", "CombatAction3", CTRL_COMBATMODE, {{0}}, GAMECMD_COMBATACTION3, 0, 0, false},
+
+    // -- bow mode --
+    {"Bow Shoot",    "BowShoot",    CTRL_BOWMODE, {{'Z'}}, GAMECMD_BOWAIM,    GAMECMD_BOWSHOOT, 0, false},
+    {"Bow Action 1", "BowAction1",  CTRL_BOWMODE, {{0}},   GAMECMD_BOWACTION1, 0, 0, false},
+    {"Bow Action 2", "BowAction2",  CTRL_BOWMODE, {{0}},   GAMECMD_BOWACTION2, 0, 0, false},
+    {"Bow Action 3", "BowAction3",  CTRL_BOWMODE, {{0}},   GAMECMD_BOWACTION3, 0, 0, false},
+
+    // -- sneak attacks / actions (scripted) --
+    {"Sneak Attack 1", "SneakAttack1", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKATTACK1, 0, 0, false},
+    {"Sneak Attack 2", "SneakAttack2", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKATTACK2, 0, 0, false},
+    {"Sneak Attack 3", "SneakAttack3", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKATTACK3, 0, 0, false},
+    {"Sneak Action 1", "SneakAction1", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKACTION1, 0, 0, false},
+    {"Sneak Action 2", "SneakAction2", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKACTION2, 0, 0, false},
+    {"Sneak Action 3", "SneakAction3", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKACTION3, 0, 0, false},
+
+    // -- 8-way movement (cardinal + diagonals) --
+    {"Left",       "Left",      ALLMODES, {{VK_LEFT},  {VK_JOYLEFT}},      GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_LEFT,      false},
+    {"Right",      "Right",     ALLMODES, {{VK_RIGHT}, {VK_JOYRIGHT}},     GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_RIGHT,     false},
+    {"Up",         "Up",        ALLMODES, {{VK_UP},    {VK_JOYUP}},        GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UP,        false},
+    {"Down",       "Down",      ALLMODES, {{VK_DOWN},  {VK_JOYDOWN}},      GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWN,      false},
+    {"Up Left",    "UpLeft",    ALLMODES, {{VK_HOME},  {VK_JOYUPLEFT}},    GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPLEFT,    false},
+    {"Up Right",   "UpRight",   ALLMODES, {{VK_PRIOR}, {VK_JOYUPRIGHT}},   GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPRIGHT,   false},
+    {"Down Left",  "DownLeft",  ALLMODES, {{VK_END},   {VK_JOYDOWNLEFT}},  GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNLEFT,  false},
+    {"Down Right", "DownRight", ALLMODES, {{VK_NEXT},  {VK_JOYDOWNRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNRIGHT, false},
 };
 
 // Game runs at this many internal ticks per real-time second. Used by
@@ -294,6 +369,47 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
 
     log_info("[player] spawned Locke in sector %d_%d_%d at world (%d,%d,%d)",
              level, sx, sy, def.pos.x, def.pos.y, def.pos.z);
+
+    // One-shot stat dump so we can see what ClearPlayer produced and
+    // confirm the rules.def/char.def + parser fix actually populated
+    // Locke's stats correctly.
+    {
+        TPlayer *p = (TPlayer*)oi;
+        const SCharData *cd  = p->GetCharData();
+        const SClassData *kd = (cd && cd->classdata) ? cd->classdata : nullptr;
+        if (cd)
+        {
+            for (int32_t i = 0; i < cd->attacks.NumItems() && i < 6; i++)
+            {
+                const SCharAttackData &a = cd->attacks[i];
+                log_info("[player-attacks] [%d] name='%s' btn=%d flags=0x%x "
+                         "mindist=%d maxdist=%d fatigue=%d weaponmask=0x%x",
+                         i, a.attackname, (int)a.button, (unsigned)a.flags,
+                         (int)a.mindist, (int)a.maxdist,
+                         (int)a.fatigue, (unsigned)a.weaponmask);
+            }
+        }
+        log_info("[player-stats] Lv=%d STR=%d CON=%d AGI=%d RFL=%d MND=%d LCK=%d "
+                 "H=%d/%d F=%d/%d M=%d/%d "
+                 "chardata=%s classdata=%s "
+                 "fatiguemod=%d healthmod=%d manamod=%d "
+                 "statreqs=[%d,%d,%d,%d,%d,%d]",
+                 (int)p->Level(),
+                 (int)p->Strn(), (int)p->Cons(), (int)p->Agil(),
+                 (int)p->Rflx(), (int)p->Mind(), (int)p->Luck(),
+                 (int)p->Health(), (int)p->MaxHealth(),
+                 (int)p->Fatigue(), (int)p->MaxFatigue(),
+                 (int)p->Mana(), (int)p->MaxMana(),
+                 cd ? cd->name : "(null)",
+                 kd ? "yes" : "(null)",
+                 kd ? kd->fatiguemod : -1,
+                 kd ? kd->healthmod  : -1,
+                 kd ? kd->manamod    : -1,
+                 kd ? kd->statreqs[0] : -1, kd ? kd->statreqs[1] : -1,
+                 kd ? kd->statreqs[2] : -1, kd ? kd->statreqs[3] : -1,
+                 kd ? kd->statreqs[4] : -1, kd ? kd->statreqs[5] : -1);
+    }
+
     return true;
 }
 
@@ -448,7 +564,210 @@ static void DrawPlayerStatusOverlay()
         ImGui::Text("framerate=%d  HasAnimator=%s",
                     Player->GetFrameRate(),
                     Player->HasAnimator() ? "yes" : "NO");
+
+      // Combat diagnostics. After the keybind dispatch fix the swing key
+      // calls Player->Swing() but the result depends on the chardata having
+      // attacks loaded for OBJCLASS_PLAYER + correct action animations.
+        TCharacter* pc = static_cast<TCharacter*>(Player);
+        const SCharData* pcd = pc->GetCharData();
+        ImGui::Text("mode    : combat=%d bow=%d walk=%d sneak=%d run=%d",
+                    pc->IsCombat() ? 1 : 0,
+                    pc->IsBowMode() ? 1 : 0,
+                    pc->IsWalkMode() ? 1 : 0,
+                    pc->IsSneakMode() ? 1 : 0,
+                    pc->IsRunMode() ? 1 : 0);
+        ImGui::Text("doing   : action=%d name=\"%s\"",
+                    pc->DoingAction(), pc->DoingName());
+        ImGui::Text("root    : action=%d name=\"%s\"",
+                    pc->RootAction(), pc->RootName());
+        if (pcd)
+            ImGui::Text("chardata: name=\"%s\" numattacks=%d combatrng=%d/%d attkrng=%d",
+                        pcd->name, pcd->attacks.NumItems(),
+                        pcd->combatrangemin, pcd->combatrangemax, pcd->maxattackrange);
+        else
+            ImGui::Text("chardata: NULL");
+        ImGui::Text("hasAni  : combat=%d swing=%d thrust=%d chop=%d",
+                    Player->HasActionAni("combat") ? 1 : 0,
+                    Player->HasActionAni("swing")  ? 1 : 0,
+                    Player->HasActionAni("thrust") ? 1 : 0,
+                    Player->HasActionAni("chop")   ? 1 : 0);
+
+      // Per-button attack triage: for each attack on the player's chardata
+      // with button==N, walk every IsValidAttack gate and count survivors.
+      // If pass-final == 0 we know which gate killed all attacks.
+        if (pcd)
+        {
+            const int32_t wt   = pc->WeaponType();
+            const int32_t wbit = 1 << wt;
+            TPlayer* tpl = (Player->ObjClass() == OBJCLASS_PLAYER) ? (TPlayer*)Player : nullptr;
+            const int32_t skAtk = tpl ? tpl->Skill(SK_ATTACK) : 999;
+            ImGui::Text("player  : weapontype=%d (mask=0x%x)  attackskill=%d  fatigue=%d/%d",
+                        wt, wbit, skAtk, pc->Fatigue(), pc->MaxFatigue());
+            if (tpl)
+            {
+                ImGui::Text("stats   : Lv=%d Exp=%d  STR=%d CON=%d AGI=%d RFL=%d MND=%d LCK=%d",
+                            tpl->Level(), tpl->Exp(),
+                            tpl->Strn(), tpl->Cons(), tpl->Agil(),
+                            tpl->Rflx(), tpl->Mind(), tpl->Luck());
+                ImGui::Text("max     : H=%d/%d F=%d/%d M=%d/%d  classdata=%s",
+                            tpl->Health(), tpl->MaxHealth(),
+                            tpl->Fatigue(), tpl->MaxFatigue(),
+                            tpl->Mana(), tpl->MaxMana(),
+                            (pcd->classdata ? pcd->classdata->name : "(NULL)"));
+                if (pcd->classdata)
+                {
+                    const SClassData* cd = pcd->classdata;
+                    ImGui::Text("classmod: H=%d F=%d M=%d  statreqs=[%d,%d,%d,%d,%d,%d]",
+                                cd->healthmod, cd->fatiguemod, cd->manamod,
+                                cd->statreqs[0], cd->statreqs[1], cd->statreqs[2],
+                                cd->statreqs[3], cd->statreqs[4], cd->statreqs[5]);
+                }
+            }
+            for (int btn = 1; btn <= 3; ++btn)
+            {
+                int with_button = 0, after_anim = 0, after_mode = 0,
+                    after_weapon = 0, after_skill = 0, after_wskill = 0,
+                    after_fatigue = 0;
+                const char* first_pass = nullptr;
+                for (int32_t i = 0; i < pcd->attacks.NumItems(); ++i)
+                {
+                    const SCharAttackData& ad = pcd->attacks[i];
+                    if (ad.button != btn) continue;
+                    ++with_button;
+                    if (!Player->HasActionAni(ad.attackname)) continue;
+                    ++after_anim;
+                    bool mode_ok = true;
+                    if ((ad.flags & CA_SNEAKMODE) && !pc->IsSneakMode()) mode_ok = false;
+                    else if ((ad.flags & CA_WALKMODE) && !pc->IsWalkMode()) mode_ok = false;
+                    else if ((ad.flags & CA_BOWMODE) && !pc->IsBowMode()) mode_ok = false;
+                    else if (!pc->IsCombat()) mode_ok = false;
+                    if (!mode_ok) continue;
+                    ++after_mode;
+                    if (Player->ObjClass() == OBJCLASS_PLAYER)
+                    {
+                        TPlayer* pl = (TPlayer*)Player;
+                        if (!(ad.weaponmask & wbit)) continue;
+                        ++after_weapon;
+                        if (pl->Skill(SK_ATTACK) < ad.attackskill) continue;
+                        ++after_skill;
+                        if (pl->WeaponSkill(wt) < ad.weaponskill) continue;
+                        ++after_wskill;
+                    }
+                    else
+                    {
+                        after_weapon = after_skill = after_wskill = after_mode;
+                    }
+                    if (pc->Fatigue() < ad.fatigue) continue;
+                    ++after_fatigue;
+                    if (!first_pass) first_pass = ad.attackname;
+                }
+                ImGui::Text("btn%d: btn=%d ani=%d mode=%d wpn=%d skl=%d wsk=%d fat=%d  [%s]",
+                            btn, with_button, after_anim, after_mode,
+                            after_weapon, after_skill, after_wskill, after_fatigue,
+                            first_pass ? first_pass : "(rejected)");
+            }
+        }
     }
+    ImGui::End();
+}
+
+// Closest-monster diagnostic overlay. Walks the active sector window
+// and finds the OBJCLASS_CHARACTER instance closest to the player
+// (excluding dead, hidden, etc.). Surfaces the AI-relevant fields so
+// "why is this monster not engaging" is answerable without instrumented
+// logging on every Pulse. Game-mode only.
+static void DrawClosestMonsterOverlay()
+{
+    if (!Player) return;
+    if (CurrentMode() != GameMode()) return;
+
+    const S3DPoint pp = Player->Pos();
+    TCharacter*    closest      = nullptr;
+    int32_t        closest_dist = INT32_MAX;
+
+    if (TGameMap* gm = MapManager.CurrentMap())
+    {
+        for (TSector* sec : gm->Sectors())
+        {
+            if (!sec) continue;
+            for (int32_t i = 0; i < sec->NumItems(); ++i)
+            {
+                TObjectInstance* oi = sec->GetInstance(i);
+                if (!oi) continue;
+                if (oi->ObjClass() != OBJCLASS_CHARACTER) continue;
+                if (oi == (TObjectInstance*)Player) continue;
+                S3DPoint mp = oi->Pos();
+                const int32_t dx = mp.x - pp.x;
+                const int32_t dy = mp.y - pp.y;
+                const int32_t d2 = dx * dx + dy * dy;
+                if (d2 < closest_dist)
+                {
+                    closest_dist = d2;
+                    closest = (TCharacter*)oi;
+                }
+            }
+        }
+    }
+
+    ImGui::SetNextWindowPos(ImVec2(8, 220), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowBgAlpha(0.55f);
+    if (!ImGui::Begin("Closest Monster", nullptr,
+                      ImGuiWindowFlags_NoNav | ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::End();
+        return;
+    }
+
+    if (!closest)
+    {
+        ImGui::Text("(no character in current map)");
+        ImGui::End();
+        return;
+    }
+
+    const S3DPoint mp = closest->Pos();
+    const int32_t  dx = mp.x - pp.x;
+    const int32_t  dy = mp.y - pp.y;
+    const int32_t  flat_dist = int32_t(std::sqrt(double(dx) * dx + double(dy) * dy));
+    const SCharData* cd = closest->GetCharData();
+
+    ImGui::Text("name    : %s  type=%s  class=%d",
+                closest->GetName() ? closest->GetName() : "?",
+                closest->GetTypeName() ? closest->GetTypeName() : "?",
+                closest->ObjClass());
+    ImGui::Text("pos     : (%d, %d, %d)  dist=%d", mp.x, mp.y, mp.z, flat_dist);
+    ImGui::Text("flags   : aggressive=%d dead=%d disabled=%d moving=%d fighting=%d",
+                closest->Aggressive() ? 1 : 0,
+                closest->IsDead() ? 1 : 0,
+                (closest->Flags() & OF_DISABLED) ? 1 : 0,
+                closest->IsMoving() ? 1 : 0,
+                closest->IsFighting() ? 1 : 0);
+    ImGui::Text("global  : NoAI=%d Editor=%d", NoAI ? 1 : 0, Editor ? 1 : 0);
+    ImGui::Text("ticks   : pulse=%u ai=%u", closest->ai_pulse_count, closest->ai_ai_count);
+    if (TCharacter* tgt = closest->Fighting())
+        ImGui::Text("target  : %s  dist=%d",
+                    tgt->GetName() ? tgt->GetName() : "?",
+                    closest->Distance(tgt));
+    else
+        ImGui::Text("target  : (none)");
+    if (cd)
+        ImGui::Text("chardata: walkspd=%d combatrng=%d/%d attkrng=%d freq=%d-%d",
+                    cd->walkspeed, cd->combatrangemin, cd->combatrangemax,
+                    cd->maxattackrange, cd->minattackfreq, cd->maxattackfreq);
+    else
+        ImGui::Text("chardata: NULL");
+    const char* anim = closest->GetStateName();
+    ImGui::Text("anim    : %s", anim ? anim : "?");
+
+    ImGui::Text("doing   : action=%d name=\"%s\"  target=(%d,%d)",
+                closest->DoingAction(), closest->DoingName(),
+                closest->DoingTargetX(), closest->DoingTargetY());
+    ImGui::Text("root    : action=%d name=\"%s\"",
+                closest->RootAction(), closest->RootName());
+    ImGui::Text("attack  : nextattack=%d radius=%d numattacks=%d",
+                closest->NextAttack(), closest->Radius(),
+                cd ? cd->attacks.NumItems() : -1);
+
     ImGui::End();
 }
 
@@ -457,7 +776,7 @@ static void DrawPlayerStatusOverlay()
 // (matching what TTestScreen does for TestModes::Render). DrawBackground
 // is dead -- no BITMAP.100 backdrop on the new path.
 void TPlayScreen::Pulse()                  { Update(); }
-void TPlayScreen::Animate(bool /*draw*/)   { RenderFrame(); EditorDrawChrome(); DrawPlayerStatusOverlay(); }
+void TPlayScreen::Animate(bool /*draw*/)   { RenderFrame(); EditorDrawChrome(); DrawPlayerStatusOverlay(); DrawClosestMonsterOverlay(); }
 void TPlayScreen::DrawBackground()         { /* no backdrop blit on the new path */ }
 
 // *************************************************************************

@@ -19,6 +19,30 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ----------------------------------------------------------------------------
+# Sanitizer build (ASan + UBSan). Off by default — opt in by configuring
+# with -DREVENANT_ASAN=ON. Use a separate build dir so the normal build
+# stays unaffected:
+#
+#   cmake -S . -B build-asan -DREVENANT_ASAN=ON
+#   cmake --build build-asan
+#   ./build-asan/Revenant      # ASan runtime errors stream to stderr
+#
+# ASan overhead is ~2x runtime + ~3x memory; fine for catching crashes
+# but not what you ship.
+# ----------------------------------------------------------------------------
+option(REVENANT_ASAN "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
+if(REVENANT_ASAN)
+  message(STATUS "Sanitizers: AddressSanitizer + UndefinedBehaviorSanitizer enabled")
+  # vptr is disabled because several polymorphic effect classes
+  # (TBloodEffect, TBurnEffect, TDripEffect, TPulpEffect, TParticle3DAnimator)
+  # have all virtuals inline → no key function → no typeinfo emitted →
+  # link error. Re-enable once those have an out-of-line virtual.
+  add_compile_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr
+                      -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1)
+  add_link_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr)
+endif()
+
+# ----------------------------------------------------------------------------
 # Sokol backend selection.
 #   Apple  -> Metal        (SOKOL_METAL, sokol_impl.m)
 #   Win32  -> Direct3D 11  (SOKOL_D3D11, sokol_impl.c)
@@ -156,6 +180,25 @@ target_link_libraries(test_particlefx PRIVATE GTest::gtest_main)
 
 add_executable(cpu_tile_perspective_test
   tools/cpu_tile_perspective_test.cpp)
+
+# Pin parser behavior with regression tests. Only compiles parse.cpp
+# (plus a tiny FatalError stub baked into the test) so we avoid pulling
+# in the rest of the engine. parse.h includes revenant.h, which expects
+# the same include dirs and SOKOL_<backend> define as the main target.
+add_executable(test_parse
+  tools/test_parse.cpp
+  src/parse.cpp)
+target_include_directories(test_parse PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR}
+  ${SIMPLEINI_DIR}
+  ${MINIZ_DIR}
+  ${LOG_DIR}
+  ${ARGH_DIR}
+  ${STB_DIR}
+  ${IMGUI_DIR}
+)
+target_compile_definitions(test_parse PRIVATE SOKOL_${SOKOL_BACKEND})
 
 # ----------------------------------------------------------------------------
 # Platform libs / frameworks.

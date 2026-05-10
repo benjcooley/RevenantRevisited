@@ -479,6 +479,11 @@ class TCharacter : public TComplexObject
       // Find closest character in this direction
     TCharacter* FindClosestEnemy(int32_t angle = -1, int32_t anglerange = 32);
       // Finds the closest character attacking this character
+    bool WanderToWaypoint(int32_t range = 1024);
+      // Find the closest object whose type name is "waypoint" within range and Goto() it.
+      // Ported from retail TCharacter::AI (FUN_004c8b60) waypoint-search branch — the
+      // late-development wander/patrol mechanism. Monsters with no enemy in sight walk
+      // between waypoints until they encounter the player.
     void ResetStealthValues();
       // Based on character position, lights, and stealth, sets noise and glimpse
 
@@ -573,6 +578,24 @@ class TCharacter : public TComplexObject
   // combatflash delay
     int32_t combatflashticks;
 
+  // Diagnostic counters. ai_pulse_count increments at every Pulse()
+  // entry, ai_ai_count at every AI() entry. The overlay reads these
+  // to confirm whether monsters are being ticked at all (and if so,
+  // whether AI() is being reached or short-circuited upstream).
+public:
+    uint32_t ai_pulse_count = 0;
+    uint32_t ai_ai_count    = 0;
+    // Debug accessors (overlay reads these). Wrap protected action-block
+    // pointers so the diagnostic UI doesn't need to be a friend.
+    int32_t  DoingAction() const { return doing ? (int32_t)doing->action : -1; }
+    int32_t  RootAction()  const { return root  ? (int32_t)root->action  : -1; }
+    const char* DoingName() const { return (doing && doing->name) ? doing->name : "?"; }
+    const char* RootName()  const { return (root  && root->name)  ? root->name  : "?"; }
+    int32_t  DoingTargetX() const { return doing ? doing->target.x : 0; }
+    int32_t  DoingTargetY() const { return doing ? doing->target.y : 0; }
+    int32_t  NextAttack()   const { return nextattack; }
+protected:
+
   // Last bow shot ticks (so we don't shoot bow too fast)
     int32_t lastbowshot;
 
@@ -584,6 +607,16 @@ class TCharacter : public TComplexObject
     int32_t last_position_distance;
     S3DPoint last_position_start_point;
     int32_t target_last_angle;
+
+  // Retail wander state (from FUN_004c8b60 lines 199-205): instead of
+  // re-running the closest-waypoint search every AI tick, retail caches the
+  // currently-targeted waypoint here and ticks a retry counter down. While
+  // retry > 0 we stay committed to the cached waypoint; when it reaches 0
+  // (or the search finds the same waypoint again, indicating arrival) we
+  // clear and re-search next tick. This is what prevents the
+  // pingpong-at-arrival bug our earlier ARRIVED-radius hack worked around.
+    TSafeRef<TObjectInstance> cached_waypoint;
+    int32_t  waypoint_retry = 0;
 };
 
 DEFINE_BUILDER("Character", TCharacter)

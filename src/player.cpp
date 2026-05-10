@@ -115,6 +115,88 @@ void TPlayer::ClearPlayer()
     memset(quickspells, 0, QSPELL_NUM * MAXTALISMANLEN);
 
     OnTheHog = false;
+
+  // Port of retail TPlayer::ClearPlayer (0x518750) starting-stats logic
+  // (recon/discovered/cls_0x5b4f30_TPlayer_ClearPlayer_518750.cpp,
+  // walkthrough at recon/discovered/player_init_notes.md).
+  //
+  // Retail distributes 84 stat points across the 6 PLRSTAT_* fields using
+  // chardata->classdata->statreqs[6]:
+  //   * statreqs[i] != 0 → that stat is hardcoded to abs(statreqs[i])
+  //   * statreqs[i] == 0 → that stat shares the remaining budget evenly
+  // All 11 skills are blanket-initialized to 30. RefreshStats then
+  // computes Max{Health,Fatigue,Mana} from the new stats + class mods.
+  //
+  // Retail does NOT set Level/Exp here — those come from newgame.sav at
+  // game start (LoadGame("newgame", 1) reads data/Modules/Demo/newgame.sav).
+  // Until we port the savegame loader (Tier 4 / System 12) we set Level=1
+  // and Exp=0 here so MaxFatigue (which scales with Level) is non-zero.
+  // Without this, IsValidAttack rejects every attack on the fatigue check.
+    if (chardata && chardata->classdata)
+    {
+        const SClassData* cd = chardata->classdata;
+
+      // Stat budget: 84 points minus pre-allocated (statreqs[i]!=0).
+        int32_t target = 84;
+        for (int32_t i = 0; i < NUM_PLRSTATS; i++)
+            target -= std::abs(cd->statreqs[i]);
+        if (target < 0) target = 0;
+
+      // Distribute remainder among statreqs[i]==0 entries. Retail uses a
+      // 16.16 fixed-point accumulator to spread fractional remainder.
+        int32_t zero_count = 0;
+        for (int32_t i = 0; i < NUM_PLRSTATS; i++)
+            if (cd->statreqs[i] == 0) ++zero_count;
+        const int32_t per_zero_fp = (zero_count > 0)
+            ? (target << 16) / zero_count + 1
+            : 0;
+
+        int32_t acc = per_zero_fp;
+        for (int32_t i = 0; i < NUM_PLRSTATS; i++)
+        {
+            int32_t v;
+            if (cd->statreqs[i] == 0)
+            {
+                v = acc >> 16;
+                acc = (acc & 0xffff) + per_zero_fp;
+            }
+            else
+            {
+                v = std::abs(cd->statreqs[i]);
+            }
+            switch (i)
+            {
+                case PLRSTAT_STRN: SetStrn(v); break;
+                case PLRSTAT_CONS: SetCons(v); break;
+                case PLRSTAT_AGIL: SetAgil(v); break;
+                case PLRSTAT_RFLX: SetRflx(v); break;
+                case PLRSTAT_MIND: SetMind(v); break;
+                case PLRSTAT_LUCK: SetLuck(v); break;
+            }
+        }
+
+      // All 11 skills baseline at 30.
+        for (int32_t s = 0; s < NUM_SKILLS; s++)
+            SetObjStat(SK_FIRST + s, 30);
+    }
+
+  // Band-aid (newgame.sav not loaded yet — TODO port System 12 save/load):
+  // retail's FATIGUEDATA is "3 per level" and attacks scale up. At Level 5
+  // (15 fatigue) Locke can do mediumpunch (12) and frontkick (14) but not
+  // spinkick (16) or any combo (most cost 18-30). Bump to Level 10 (30
+  // fatigue) so the protagonist can actually fight until newgame.sav is
+  // wired up.
+    if (Level() < 10) SetLevel(10);
+
+  // Refresh current stats now that Level + PLRSTAT_* are set. Retail calls
+  // TPlayer::RefreshStats (0x51c660) which we don't have ported; doing the
+  // equivalent inline.
+    if (chardata)
+    {
+        SetHealth(MaxHealth());
+        SetFatigue(MaxFatigue());
+        SetMana(MaxMana());
+    }
 }
 
 int32_t deathframe = 0;
@@ -575,22 +657,28 @@ void TPlayer::Save(RTOutputStream os)
 // * TPlayerManager - Object to manager the player list for the game *
 // *******************************************************************
 
-// Initialize the player manager
+// Initialize the player manager (idempotent).
 bool TPlayerManager::Initialize()
 {
+    if (initialized)
+        return true;
     players.Clear();
     mainplayernum = -1;
     Player = nullptr;
-
+    initialized = true;
     return true;
 }
 
-// Closes the player manager
+// Closes the player manager (idempotent — leaves the array empty so the
+// trivial default dtor only walks zeroed state).
 void TPlayerManager::Close()
 {
+    if (!initialized)
+        return;
     players.DeleteAll();
     Player = nullptr;
     mainplayernum = -1;
+    initialized = false;
 }
 
 // Clears the player manager (deletes all players for the current game)

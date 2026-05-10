@@ -93,10 +93,10 @@ void TButton::Draw()
     if (downbitmap)
     {
         if (pixelcheck)
-            //Display->PutSV(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND | DM_TRANSPARENT, level * 2, level);
-            Display->Put(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND | DM_TRANSPARENT);
+            //Display.PutSV(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND | DM_TRANSPARENT, level * 2, level);
+            Display.Put(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND | DM_TRANSPARENT);
         else
-            Display->Put(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND);
+            Display.Put(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND);
     }
     else
     {
@@ -104,11 +104,11 @@ void TButton::Draw()
         int32_t add = down ? 1 : 0;
         int32_t nx = x + (w / 2) - ((strlen(name) * SystemFont->GetChar(SystemFont->FirstChar())->width) / 2);
         int32_t ny = y + (h / 2) - (SystemFont->height / 2) - 3;
-        DrawFrame(Display, x, y, w, h, down);
+        DrawFrame(&Display, x, y, w, h, down);
         SColor color;
         color.red = color.blue = color.green = 40;
-        Display->WriteText(name, nx + add, ny + add, 1, SystemFont, &color, DM_TRANSPARENT | DM_ALIAS | DM_BACKGROUND);
-        Display->AddUpdateRect(x, y, w, h, UPDATE_RESTORE);
+        Display.WriteText(name, nx + add, ny + add, 1, SystemFont, &color, DM_TRANSPARENT | DM_ALIAS | DM_BACKGROUND);
+        Display.AddUpdateRect(x, y, w, h, UPDATE_RESTORE);
     }
 
     dirty = false;

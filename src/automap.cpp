@@ -177,7 +177,7 @@ void TAutoMap::DrawBackground()
     // See if we need to update the pane to the screen
     if (Update)
     {
-        Display->Put(0, 0, DisplayMap, ScrollX, ScrollY, DisplayMap->width, DisplayMap->height, DM_BACKGROUND);
+        Display.Put(0, 0, DisplayMap, ScrollX, ScrollY, DisplayMap->width, DisplayMap->height, DM_BACKGROUND);
         OldScrollX = ScrollX;
         OldScrollY = ScrollY;
         OldPlayerX = PlayerX;

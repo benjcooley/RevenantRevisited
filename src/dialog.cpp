@@ -23,6 +23,8 @@
 // Initialize the dialog list
 bool TDialogList::Initialize()
 {
+    if (initialized)
+        return true;
     lines.DeleteAll();
 
     char fname[MAXPATHLEN];
@@ -58,13 +60,17 @@ bool TDialogList::Initialize()
 
     fclose(fp);
 
+    initialized = true;
     return true;
 }
 
-// Closes dialog file
+// Closes dialog file (idempotent).
 void TDialogList::Close()
 {
+    if (!initialized)
+        return;
     lines.DeleteAll();
+    initialized = false;
 }
 
 // Finds the dialog line for the given tag and returns id
@@ -243,7 +249,7 @@ void TDialogPane::DrawBackground()
 {
     if (IsDirty())
     {
-        Display->Put(0, 0, dialogdata->Bitmap("background"), DM_BACKGROUND);
+        Display.Put(0, 0, dialogdata->Bitmap("background"), DM_BACKGROUND);
 
         for (int32_t i = 0; i < numchoices; i++)
         {
@@ -251,7 +257,7 @@ void TDialogPane::DrawBackground()
             char *line = DialogList.GetLine(choices[i]);
             if (!line)
                 line = choices[i];
-            Display->WriteText(line, 32, (i * CHOICEHEIGHT) + 4, 1, GameData->Font("choicefont"),
+            Display.WriteText(line, 32, (i * CHOICEHEIGHT) + 4, 1, GameData->Font("choicefont"),
                                 ((grabslot == i || choice == i) && highlighted) ? &color : nullptr);
         }
 

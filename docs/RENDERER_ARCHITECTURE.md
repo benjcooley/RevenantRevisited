@@ -234,7 +234,7 @@ Renderer->RunLightingPass();
 ```
 
 Non-renderer surface calls (`Put`, `WriteText`, `Box`, `ZPut`, dirty-rect
-hooks) still go through `Display->` -- those are TSurface operations, not
+hooks) still go through `Display.` -- those are TSurface operations, not
 pipeline submission.
 
 ## Submission API at a glance

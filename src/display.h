@@ -13,7 +13,7 @@
 // creates a TRenderer instance during Initialize and delegates the final
 // swapchain composite to Renderer->PresentToSwapchain. All new game-side
 // code that wants to submit draws should use Renderer-> directly; only
-// legacy TSurface-style blits still route through Display->.
+// legacy TSurface-style blits still route through Display..
 //
 // *************************************************************************
 
@@ -56,6 +56,13 @@ class TDisplay : public TSurface
 
     [[nodiscard]] TSurface* BackBuffer()  const { return backbuffer; }
     [[nodiscard]] TSurface* FrontBuffer() const { return frontbuffer; }
+
+    // Has Initialize() succeeded and Close() not yet been called? Used by
+    // call sites that need to gate "do display work" against headless
+    // mode and pre-init / post-shutdown phases. Replaces the old
+    // `if (Display)` null-check that worked when Display was a pointer
+    // global; now that Display is a value-typed global, we ask explicitly.
+    [[nodiscard]] bool IsActive() const { return backbuffer != nullptr; }
 
     // Brings up the sokol_gfx context, builds the TRenderer core engine,
     // wires up ImGui, and allocates the backbuffer/front/z TSurfaces.

@@ -1410,7 +1410,7 @@ void TCreateFoodAnimator::RefreshZBuffer()
 
     WorldToScreen(foodpos, screen);
     RestoreZ(screen.x - (size_x / 2), screen.y - size_y, size_x, size_y);
-//  Display->Box(screen.x - (size_x / 2), screen.y - size_y, size_x, size_y);
+//  Display.Box(screen.x - (size_x / 2), screen.y - size_y, size_x, size_y);
 }
 
 // *********************
@@ -1966,7 +1966,7 @@ void TCureAnimator::RefreshZBuffer()
 
     WorldToScreen(fatman, screen);
     RestoreZ(screen.x - (size_x / 2), screen.y - (size_y / 2) - 45, size_x, size_y);
-//  Display->Box(screen.x - (size_x / 2), screen.y - (size_y / 2) - 45, size_x, size_y);
+//  Display.Box(screen.x - (size_x / 2), screen.y - (size_y / 2) - 45, size_x, size_y);
 }
 
 // *********************
@@ -2490,7 +2490,7 @@ void TFireFlashAnimator::RefreshZBuffer()
     map.z = 0;
     WorldToScreen(map, screen);
     RestoreZ(screen.x - (size_x / 2), screen.y - size_y, size_x, size_y);
-//  Display->Box(screen.x - (size_x / 2), screen.y - size_y, size_x, size_y);
+//  Display.Box(screen.x - (size_x / 2), screen.y - size_y, size_x, size_y);
 }
 
 // *********************
@@ -3191,7 +3191,7 @@ void TFireWindAnimator::RefreshZBuffer()
     ((PTEffect)inst)->GetPos(map);
     WorldToScreen(map, screen);
     RestoreZ(screen.x - (size_x / 2), screen.y - (size_y / 2), size_x, size_y);
-//  Display->Box(screen.x - (size_x / 2), screen.y - (size_y / 2), size_x, size_y);
+//  Display.Box(screen.x - (size_x / 2), screen.y - (size_y / 2), size_x, size_y);
 }
 
 // **********************
@@ -3897,7 +3897,7 @@ void TFountainAnimator::RefreshZBuffer()
 
     WorldToScreen(effect, screen);
     RestoreZ((screen.x - (size_x / 2))+0, screen.y - size_y + 30, size_x, size_y);
-    //Display->Box((screen.x - (size_x / 2))+0, screen.y - size_y + 30, size_x, size_y);
+    //Display.Box((screen.x - (size_x / 2))+0, screen.y - size_y + 30, size_x, size_y);
 }
 
 // **************************
@@ -4675,7 +4675,7 @@ void TSymGlowAnimator::RefreshZBuffer()
 
     WorldToScreen(effect, screen);
     RestoreZ(screen.x - (size_x / 2), screen.y - size_y + 30, size_x, size_y);
-    //Display->Box(screen.x - (size_x / 2), screen.y - size_y + 30, size_x, size_y);
+    //Display.Box(screen.x - (size_x / 2), screen.y - size_y + 30, size_x, size_y);
 }
 
 // *********************
@@ -4996,7 +4996,7 @@ void TParticle3DAnimator::RefreshZBuffer()
 
     WorldToScreen(effect, screen);
     RestoreZ((screen.x - (size_x / 2))+25, screen.y - size_y - 50, size_x, size_y);
-    //Display->Box((screen.x - (size_x / 2))+25, screen.y - size_y - 50, size_x, size_y);
+    //Display.Box((screen.x - (size_x / 2))+25, screen.y - size_y - 50, size_x, size_y);
 }
 
 // *********

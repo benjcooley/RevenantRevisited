@@ -216,6 +216,13 @@ bool TSector::Load(bool lock)
     return true;
 }
 
+// (Historical band-aid: a `g_revenant_shutting_down` flag used to short-
+// circuit Save() at process exit, because the global ~TMapManager would
+// otherwise walk into freed TObjectInstances. That flag is gone now --
+// ShutdownGlobals (revmain.cpp) explicitly calls MapManager.Shutdown() while
+// the rest of the engine is still alive, so by the time the global dtor
+// fires the cache is already empty and Save isn't reached.)
+
 void TSector::Save()
 {
     int32_t version = MAP_VERSION; // Current sector map version #
@@ -250,11 +257,16 @@ void TSector::Save()
 
     char mappath[MAXPATHLEN];
 
+    // mirror TSector::Load — three-step concat. The original second line
+    // here was `strcpy` (clobbering CurMapPath); that's why every saved
+    // sector landed at `curmap\<file>.DAT` relative to CWD instead of
+    // `<CurMapPath>curmap\<file>.DAT`. Route through rev_fopen so the
+    // SavePath/separator-normalization layers apply on writes too.
     strcpy(mappath, CurMapPath);
-    strcpy(mappath, CURMAPDIR "\\");
+    strcat(mappath, CURMAPDIR "\\");
     strcat(mappath, filename);
 
-    FILE *fp = fopen(mappath, "wb");    // Path open (uses program path)
+    FILE *fp = rev_fopen(mappath, "wb");
     if (!fp)
         return;
 

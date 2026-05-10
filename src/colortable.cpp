@@ -123,7 +123,7 @@ void SetMonoPercent(int32_t pcnt)
    // Color tables for 16 to 32 bit conversion
     MonoPercent = (double)pcnt / 100.0;
     
-    if (Display->BitsPerPixel() == 15)
+    if (Display.BitsPerPixel() == 15)
     {
         for(loop = 0; loop < 256; loop++)
         {
@@ -307,7 +307,7 @@ void SetLightColor(int32_t id, RSColor color, int32_t mult)
             red = (uint8_t)min((double)clr * ared * aintensity * AmbientMultiplier, 31.0);
             red = (uint8_t)min((double)clr * lred * intensity * multiplier + (double)red, 31.0);
 
-            if (Display->BitsPerPixel() == 16)
+            if (Display.BitsPerPixel() == 16)
             {
                 green = (uint8_t)min((double)(clr << 1) * agreen * aintensity *
                     AmbientMultiplier, 63.0);
@@ -377,7 +377,7 @@ void MakeColorTables()
         for(int32_t loop2 = 0; loop2 < 256; loop2++)
         {
 
-            if (Display->BitsPerPixel() == 16)
+            if (Display.BitsPerPixel() == 16)
             {
                 red   = (loop2 & 0xf8) >> 3;
                 red   = red * loop / 31;

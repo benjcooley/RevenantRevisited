@@ -167,6 +167,13 @@ void ScreenToWorld(int32_t x, int32_t y, S3DPoint& pos, int32_t zheight)
 
 void ConvertToVector(int32_t angle, int32_t speed, S3DPoint& vect, int32_t zangle)
 {
+    // Revenant uses an 8-bit facing system: angles are 0..255 wrapping.
+    // Several callers (e.g. TCharacter::Move's ±64 sidestep probes) pass
+    // raw `face + 64` values that exceed 255; without this mask we read
+    // past the 256-element DistX/DistY lookup tables. ASan caught it as
+    // a load2 mid-frame in TMapPane::MoveObjects.
+    angle  &= 255;
+    zangle &= 255;
     if (zangle == 0)
     {
         vect.x = (DistX[angle] * speed) / 256;
@@ -3193,8 +3200,11 @@ bool TObjectClass::LoadClasses(bool lock, bool reload)
     }
     else
     {
-        // Read in the Unique Type ID
-        if (!Parse(t, "Unique Type ID = %d", &UniqueTypeID))
+        // Read in the Unique Type ID. Format is %w (uint16_t) to match
+        // UniqueTypeID's storage type — the original used %d (uint32_t)
+        // which silently overflowed UniqueTypeID by 2 bytes into adjacent
+        // globals. ASan caught it as the boot-time crash.
+        if (!Parse(t, "Unique Type ID = %w", &UniqueTypeID))
             FatalError("Reading Unique Type ID from class.def");
     }
     t.LineGet();

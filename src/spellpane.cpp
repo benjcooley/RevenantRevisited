@@ -49,7 +49,7 @@ void TTalismanButton::Draw()
         {
             char code = TalismanClass.GetStat(t, "Code");
             if (toupper(spell[i]) == toupper(code))
-                Display->Put(start + (i*23), y + 3 + (down ? 1 : 0),
+                Display.Put(start + (i*23), y + 3 + (down ? 1 : 0),
                 GameData->Bitmap(*(Old + t)), DM_BACKGROUND | DM_TRANSPARENT); // t used to be x - Pepper
         }
     }
@@ -218,7 +218,7 @@ void TSpellPane::DrawBackground()
 
     if (wasdirty)
     {
-        Display->Put(0, 0, GameData->Bitmap("spell"), DM_BACKGROUND);
+        Display.Put(0, 0, GameData->Bitmap("spell"), DM_BACKGROUND);
 
         RedrawButtons();
 
@@ -249,13 +249,13 @@ void TSpellPane::DrawBackground()
 
                             char buf[80];
                             sprintf(buf, "%scandy", Old[i]);
-                            Display->Put(x+2, y-2+2, GameData->Bitmap(buf), DM_BACKGROUND | DM_TRANSPARENT, &color);
-                            Display->Put(x+add, y-2+add, GameData->Bitmap(buf), DM_BACKGROUND | DM_TRANSPARENT);
-                            Display->Put(x+2+1, y+1+1, GameData->Bitmap(Old[i]), DM_BACKGROUND | DM_TRANSPARENT, &color);
-                            Display->Put(x+2+add, y+1+add, GameData->Bitmap(Old[i]), DM_BACKGROUND | DM_TRANSPARENT);
+                            Display.Put(x+2, y-2+2, GameData->Bitmap(buf), DM_BACKGROUND | DM_TRANSPARENT, &color);
+                            Display.Put(x+add, y-2+add, GameData->Bitmap(buf), DM_BACKGROUND | DM_TRANSPARENT);
+                            Display.Put(x+2+1, y+1+1, GameData->Bitmap(Old[i]), DM_BACKGROUND | DM_TRANSPARENT, &color);
+                            Display.Put(x+2+add, y+1+add, GameData->Bitmap(Old[i]), DM_BACKGROUND | DM_TRANSPARENT);
 
                             if (ShowTalismanNames())
-                                Display->WriteTextShadow(name, x + TAL_WIDTH - 1, y, 1, GameData->Font("goldfont"));
+                                Display.WriteTextShadow(name, x + TAL_WIDTH - 1, y, 1, GameData->Font("goldfont"));
 
                             x += TAL_WIDTH;
                             if (ShowTalismanNames())
@@ -271,7 +271,7 @@ void TSpellPane::DrawBackground()
                 }
 
                 //color.red = 255;
-                //Display->WriteTextShadow("Greater Slurpee", 32, 79, 1, GameData->Font("tinyfont"), &color);
+                //Display.WriteTextShadow("Greater Slurpee", 32, 79, 1, GameData->Font("tinyfont"), &color);
 
                 // set up button visibility
                 if (!ShowTalismanNames() || startline < 1)

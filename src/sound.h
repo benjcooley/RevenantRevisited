@@ -136,10 +136,12 @@ class TSoundPlayer
     friend class TSound;
 
     TSoundPlayer() { DirectSound = nullptr; PrimaryBuffer = nullptr; soundlist.Clear(); }
-    ~TSoundPlayer() { Close(); }
+    // Trivial dtor: explicit Close() runs from ShutdownGlobals before the
+    // global destructs. Walking soundlist from a global dtor risks
+    // cross-TU teardown ordering bugs.
+    ~TSoundPlayer() = default;
 
-    bool Initialize();
-    void Close();
+    void Close();           // idempotent — safe to call twice
 
     bool Functioning() { return (DirectSound && PrimaryBuffer); }
 

@@ -169,12 +169,13 @@ T3DScene::T3DScene()
     initialized = false;
 }
 
-T3DScene::~T3DScene()
-{
-    Close();
-}
+// Trivial dtor: explicit OnMapUnloaded() must be called via the owner's
+// teardown path (TMapPane::Close → Scene3D.OnMapUnloaded()) before the
+// global destructs. Walking AnimatorArray/LightArray from a global dtor
+// would race other TUs that hold references into those arrays.
+T3DScene::~T3DScene() = default;
 
-bool T3DScene::Initialize()
+bool T3DScene::OnMapLoaded()
 {
     if (initialized || Ignore3D)
         return true;
@@ -228,7 +229,7 @@ bool T3DScene::InitializeMatrices()
     return true;
 }
 
-bool T3DScene::Close()
+bool T3DScene::OnMapUnloaded()
 {
     if (!initialized)
         return false;
@@ -251,7 +252,7 @@ void T3DScene::RestoreZBuffer(const SRect& r)
 
 #if 0 // TODO(port): rectangle copy from the real z-buffer to the scroll
       // z-buffer used to live here; requires sokol blit path — Phase 3.
-    if (Display->UsingClearZBuffer()) { ... }
+    if (Display.UsingClearZBuffer()) { ... }
 #endif
 }
 

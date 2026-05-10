@@ -63,14 +63,93 @@ class TGameModeImpl final : public IRuntimeMode
 
     bool HandleKey(int32_t key, bool down) override
     {
-        // Pump the global ControlMap so cmdflagstate reflects what's
-        // currently held. UpdateMove reads that state on the next tick.
-        // GetCommand returns the GAMECMD_* fired (down/up edge); we
-        // don't dispatch it here -- direction commands are read off
-        // the flag state in UpdateMove. Returning false lets the rest
-        // of the pane stack also see the key (for non-movement
-        // accelerators).
-        ControlMap.GetCommand(key, down);
+      // Pump the global ControlMap so cmdflagstate reflects what's
+      // currently held. UpdateMove polls that state every tick to drive
+      // directional movement (forward/back/strafe). For edge-triggered
+      // commands (attacks, combos, mode toggles, dodge, jump, block) we
+      // dispatch the returned GAMECMD_* into the player here.
+      //
+      // Same-key bindings disambiguate by the current control mode:
+      // 'S' is "sneak-back" in normal/sneak mode and "thrust" in combat
+      // mode; 'D' is "inventory-drop" in inventory mode and "chop" in
+      // combat mode. ControlMap.GetCommand returns the *first* binding
+      // whose mode mask intersects modemask, so we have to pass exactly
+      // the active mode — ALLMODES would always pick the earlier entry.
+      // CTRL_* constants mirror those in playscreen.cpp's keybind table.
+        constexpr uint32_t CTRL_NORMALMODE    = 1;
+        constexpr uint32_t CTRL_COMBATMODE    = 2;
+        constexpr uint32_t CTRL_BOWMODE       = 4;
+        constexpr uint32_t CTRL_SNEAKMODE     = 8;
+        constexpr uint32_t CTRL_INVENTORYMODE = 16;
+        uint32_t modemask = CTRL_NORMALMODE;
+        if (Player)
+        {
+            if (Player->IsCombat())        modemask = CTRL_COMBATMODE;
+            else if (Player->IsBowMode())  modemask = CTRL_BOWMODE;
+            else if (Player->IsSneakMode())modemask = CTRL_SNEAKMODE;
+            // Inventory-mode is UI-driven (not a TCharacter mode); leave it
+            // unset for now — combat demos don't open the inventory pane.
+        }
+        int32_t cmd = ControlMap.GetCommand(key, down, modemask);
+
+        if (Player && PlayScreen.IsControlOn() && !PlayScreen.IsDemoMode() &&
+            cmd != GAMECMD_NONE)
+        {
+            if (down)
+            {
+                switch (cmd)
+                {
+                  // Combat mode toggle — required before swings register
+                  // (IsValidAttack rejects unless IsCombat()).
+                    case GAMECMD_COMBAT:
+                        if (Player->IsCombat()) Player->EndCombat();
+                        else                    Player->BeginCombat();
+                        break;
+
+                  // Three primary attack buttons.
+                    case GAMECMD_SWING:  {
+                        bool r = Player->Swing();
+                        log_info("[input] SWING -> ButtonAttack(1) returned %d", r ? 1 : 0);
+                        break;
+                    }
+                    case GAMECMD_THRUST: {
+                        bool r = Player->Thrust();
+                        log_info("[input] THRUST -> ButtonAttack(2) returned %d", r ? 1 : 0);
+                        break;
+                    }
+                    case GAMECMD_CHOP:   {
+                        bool r = Player->Chop();
+                        log_info("[input] CHOP -> ButtonAttack(3) returned %d", r ? 1 : 0);
+                        break;
+                    }
+
+                  // 12 combo slots (Ctrl+A-H, Shift+A-H).
+                    case GAMECMD_COMBO1: case GAMECMD_COMBO2: case GAMECMD_COMBO3:
+                    case GAMECMD_COMBO4: case GAMECMD_COMBO5: case GAMECMD_COMBO6:
+                    case GAMECMD_COMBO7: case GAMECMD_COMBO8: case GAMECMD_COMBO9:
+                    case GAMECMD_COMBO10: case GAMECMD_COMBO11: case GAMECMD_COMBO12:
+                        Player->Combo((cmd - GAMECMD_COMBO1) + 1);
+                        break;
+
+                    case GAMECMD_DODGE:    Player->Dodge();   break;
+                    case GAMECMD_JUMP:     Player->Jump();    break;
+                    case GAMECMD_BLOCKDOWN: Player->Block();   break;
+
+                    default: break;
+                }
+            }
+            else
+            {
+                switch (cmd)
+                {
+                    case GAMECMD_BLOCKUP: Player->StopBlock(); break;
+                    default: break;
+                }
+            }
+        }
+
+      // Returning false lets the rest of the pane stack also see the
+      // key (for non-game accelerators like F-keys, dev overlays).
         return false;
     }
 

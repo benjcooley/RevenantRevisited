@@ -74,7 +74,7 @@ void TDeathPane::DrawBackground()
 {
     if (IsDirty())
     {
-        Display->Put(0, 0, deathdata->Bitmap("background"), DM_BACKGROUND);
+        Display.Put(0, 0, deathdata->Bitmap("background"), DM_BACKGROUND);
         PlayScreen.DrawOverhangs();
         SetClipRect();      // drawing overhangs screws them up
         SetDirty(false);

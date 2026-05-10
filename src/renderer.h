@@ -67,7 +67,7 @@
 // backbuffer/frontbuffer/zbuffer TSurfaces, handles sokol context setup,
 // and its FlipPage delegates the final blit to TRenderer::PresentToSwap-
 // chain. All pipeline state, render targets, and submission APIs that used
-// to live on TDisplay are now owned here. Most direct Display-> calls in
+// to live on TDisplay are now owned here. Most direct Display. calls in
 // game code should migrate to Renderer-> over time; only TSurface-style
 // legacy blits (Put/WriteText/Box/ZPut/...) stay on TDisplay.
 //
@@ -195,7 +195,7 @@ public:
     // Bring the core renderer online. Allocates the G-buffer, AO, and
     // lit render targets at (width + 2*kGBufPad) x (height + 2*kGBufPad),
     // creates every pipeline, and sets up ImGui. Assumes sg_setup() has
-    // already run (TDisplay::Initialize drives that).
+    // already run (TDisplay::Init drives that).
     bool Initialize(int32_t width, int32_t height);
     // Tear down pipelines, shaders, RTs. Leaves sg_shutdown to TDisplay.
     void Shutdown();
@@ -495,8 +495,8 @@ private:
     void DrainTransparentWorldQueue();
 };
 
-// Global renderer instance -- created by TDisplay::Initialize, destroyed by
-// TDisplay::Close. All game-side renderer-specific calls (tile submission,
+// Global renderer instance -- created by TDisplay::Init, destroyed by
+// TDisplay::Shutdown. All game-side renderer-specific calls (tile submission,
 // lighting state, composites) go through this pointer. Non-renderer surface
-// calls (Put, WriteText, Box, ZPut, ...) still go through Display->.
+// calls (Put, WriteText, Box, ZPut, ...) still go through Display..
 extern TRenderer* Renderer;

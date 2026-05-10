@@ -1050,7 +1050,21 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
 }
 
 TMapRenderer::TMapRenderer() : impl(std::make_unique<Impl>()) {}
-TMapRenderer::~TMapRenderer() = default;
+TMapRenderer::~TMapRenderer()
+{
+  // Defensive: unregister our map listener even if Shutdown() wasn't
+  // called (e.g. abrupt teardown path that destroys TPlayScreen via
+  // its unique_ptr without going through Close()). Idempotent — safe
+  // to run after a normal Shutdown().
+    if (impl)
+    {
+        if (TGameMap* m = impl->currentMap.Get(); m && impl->mapListenerId)
+        {
+            m->RemoveListener(impl->mapListenerId);
+            impl->mapListenerId = 0;
+        }
+    }
+}
 
 float TMapRenderer::Impl::sectorCameraForward(int32_t viewport_h) const
 {
@@ -2061,8 +2075,8 @@ void TMapRenderer::RebuildForCurrentMap()
             accumulate_bounds(focus_bounds, w.world_pos, sp, w.regx, w.regy, tex.w, tex.h);
     }
     const SViewBounds& view_bounds = (use_level_origin || focus_bounds.count <= 0) ? all_bounds : focus_bounds;
-    const int32_t tw = Display ? Display->Width() : 1024;
-    const int32_t th = Display ? Display->Height() : 768;
+    const int32_t tw = Display.IsActive() ? Display.Width()  : 1024;
+    const int32_t th = Display.IsActive() ? Display.Height() : 768;
     const int32_t bw = view_bounds.sx_max - view_bounds.sx_min;
     const int32_t bh = view_bounds.sy_max - view_bounds.sy_min;
     if (use_level_origin) {
@@ -2159,6 +2173,19 @@ void TMapRenderer::RebuildForCurrentMap()
 void TMapRenderer::Shutdown()
 {
     Impl& s = *impl;
+
+  // Unregister our map listener BEFORE clearing currentMap so a later
+  // ~TGameMap()→Unload()→Notify() can't fire the lambda after our
+  // impl is dead. Static destruction order at process exit can drop
+  // TMapRenderer before TMapManager, and the lambda captures `this`;
+  // ASan caught this as a heap-use-after-free at exit (load 8 through
+  // a freed unique_ptr<Impl>).
+    if (TGameMap* m = s.currentMap.Get(); m && s.mapListenerId)
+    {
+        m->RemoveListener(s.mapListenerId);
+        s.mapListenerId = 0;
+    }
+
     for (auto& t : s.sectorTileTex)
     {
         if (t.color.id) sg_destroy_image(t.color);
@@ -2182,7 +2209,7 @@ void TMapRenderer::Shutdown()
 void TMapRenderer::RenderFrame()
 {
     Impl& s = *impl;
-    if (!Display || !Display->BackBuffer())
+    if (!Display.IsActive() || !Display.BackBuffer())
         return;
     // Reconcile per-instance drawable cache against current sector
     // contents BEFORE the empty-cache early-return; otherwise an
@@ -2265,8 +2292,8 @@ void TMapRenderer::RenderFrame()
             }
         }
     }
-    const int32_t vw = Display->Width();
-    const int32_t vh = Display->Height();
+    const int32_t vw = Display.Width();
+    const int32_t vh = Display.Height();
     const float camera_forward = s.sectorCameraForward(vh);
     int32_t cam_ox = 0, cam_oy = 0;
     s.sectorCameraOriginScreen(cam_ox, cam_oy);
@@ -2549,7 +2576,7 @@ void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)
             {
                 const SSectorLight& L = s.sectorLights[i];
                 if (!L.enabled) continue;
-                S3DPoint sp; s.sectorProjectWorldForViewport(s.sectorLightPos(L), Display ? Display->Height() : 0, sp);
+                S3DPoint sp; s.sectorProjectWorldForViewport(s.sectorLightPos(L), Display.IsActive() ? Display.Height() : 0, sp);
                 const float dx = float((sp.x + cam_ox) - x);
                 const float dy = float((sp.y + cam_oy) - y);
                 const float d2 = dx*dx + dy*dy;

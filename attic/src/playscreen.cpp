@@ -5,7 +5,7 @@
 // *************************************************************************
 //
 // Retired from src/playscreen.cpp during the 2026 port: this is the
-// retail-era TPlayScreen built around the legacy Display->Put / ZPut /
+// retail-era TPlayScreen built around the legacy Display.Put / ZPut /
 // PutDim / WriteText surface-blit rendering path. The whole DrawBackground
 // / Pulse / Animate / DrawOverhangs flow assumed the pre-sokol engine and
 // drove rendering through the pane graph.
@@ -213,7 +213,7 @@ bool TPlayScreen::Initialize()
   // Map pane
     Status("Setup up game panes in %s mode\n", FullScreen?"FULLSCREEN":"NONFULLSCREEN");
     if (FullScreen)
-        MapPane.Resize(0, 0, Display->Width(), Display->Height());
+        MapPane.Resize(0, 0, Display.Width(), Display.Height());
     else
         MapPane.Resize(FRAMEMAPPANEX, FRAMEMAPPANEY, FRAMEMAPPANEWIDTH, FRAMEMAPPANEHEIGHT);
     if (!MapPane.Initialize())
@@ -329,7 +329,7 @@ bool TPlayScreen::Initialize()
                 memcpy(overhang[i]->palette.ptr(), bitmap->palette.ptr(), bitmap->palettesize);
         }
 
-        Display->Put(0, 0, bitmap, DM_NOCLIP | DM_BACKGROUND);
+        Display.Put(0, 0, bitmap, DM_NOCLIP | DM_BACKGROUND);
         delete bitmap;
     }
     else
@@ -426,13 +426,13 @@ void TPlayScreen::DrawBackground()
         bitmap = TBitmap::Load(100);
         if (bitmap)
         {
-            Display->Reset();
-            Display->Put(0, 0, bitmap, DM_NOCLIP | DM_BACKGROUND);
+            Display.Reset();
+            Display.Put(0, 0, bitmap, DM_NOCLIP | DM_BACKGROUND);
             delete bitmap;
         }
         else
         {
-            Display->Reset();
+            Display.Reset();
         }
     }
 
@@ -442,7 +442,7 @@ void TPlayScreen::DrawBackground()
     if (multidirty && !Editor && !IsFullScreen())
     {
         for (int32_t i = STARTMULTIHANGS; i < ENDMULTIHANGS; i++)
-            Display->Put(oh[i].x, oh[i].y, overhang[i], DM_TRANSPARENT | DM_BACKGROUND);
+            Display.Put(oh[i].x, oh[i].y, overhang[i], DM_TRANSPARENT | DM_BACKGROUND);
 
         MultiCtrl.RedrawOverhangButtons();
         MultiCtrl.SetClipRect();
@@ -519,9 +519,9 @@ void TPlayScreen::Animate(bool draw)
         for (i = 0; i < numpostcharanims; i++)
         {
             if (postanim[i].drawmode & (DM_ZBUFFER | DM_ZSTATIC))
-                Display->ZPut(postanim[i].x, postanim[i].y, postanim[i].z, postanim[i].bm, postanim[i].drawmode);
+                Display.ZPut(postanim[i].x, postanim[i].y, postanim[i].z, postanim[i].bm, postanim[i].drawmode);
             else
-                Display->PutDim(postanim[i].x, postanim[i].y, postanim[i].bm, postanim[i].drawmode, postanim[i].dim);
+                Display.PutDim(postanim[i].x, postanim[i].y, postanim[i].bm, postanim[i].drawmode, postanim[i].dim);
         }
 
         // This is a tad tricky - draw the mouse shadow first, then the overhangs, and then
@@ -537,11 +537,11 @@ void TPlayScreen::Animate(bool draw)
             SColor color;
             color.red = color.green = color.blue = 0;
 
-            Display->WriteText(posttext[i].text, posttext[i].x, posttext[i].y - 1,
+            Display.WriteText(posttext[i].text, posttext[i].x, posttext[i].y - 1,
                                     99, DialogFontShadow,
                                     &color, DM_TRANSPARENT | DM_ALIAS,
                                     posttext[i].wrapwidth, 0, JUSTIFY_CENTER | JUSTIFY_CLIP);
-            Display->WriteText(posttext[i].text, posttext[i].x, posttext[i].y,
+            Display.WriteText(posttext[i].text, posttext[i].x, posttext[i].y,
                                     99, DialogFont,
                                     &posttext[i].color, DM_TRANSPARENT | DM_ALIAS,
                                     posttext[i].wrapwidth, 0, JUSTIFY_CENTER | JUSTIFY_CLIP);
@@ -578,7 +578,7 @@ void TPlayScreen::SetFullScreen(bool on)
   // Init map pane
     if (on)
     {
-        MapPane.Resize(0, 0, Display->Width(), Display->Height());
+        MapPane.Resize(0, 0, Display.Width(), Display.Height());
 
         RemovePane(&Inventory);
         RemovePane(&HealthBar);
@@ -657,9 +657,9 @@ void TPlayScreen::KeyPress(int32_t key, bool down)
                 static int32_t screennum;
                 char buf[80];
                 PTBitmap bm = TBitmap::NewBitmap(WIDTH, HEIGHT, 
-                    (Display->BitsPerPixel()==15)?BM_15BIT:BM_16BIT);
+                    (Display.BitsPerPixel()==15)?BM_15BIT:BM_16BIT);
                 PTBitmapSurface bmsurf = new TBitmapSurface(bm);
-                Display->Reset();
+                Display.Reset();
                 bmsurf->Blit(0, 0, Display);
                 sprintf(buf, "screen%02d.bmp", screennum);
                 bm->SaveBMP(buf);
@@ -1056,11 +1056,11 @@ void TPlayScreen::DrawOverhangs(bool temporary)
     if (IsFullScreen())
         return;
 
-    Display->Reset();
+    Display.Reset();
 
     // Overhanging parts of interface screen to background
     for (int32_t i = 0; i < NUMMAINHANGS; i++)
-        Display->Put(oh[i].x, oh[i].y, overhang[i], DM_TRANSPARENT | (temporary ? 0 : DM_BACKGROUND));
+        Display.Put(oh[i].x, oh[i].y, overhang[i], DM_TRANSPARENT | (temporary ? 0 : DM_BACKGROUND));
 }
 
 void TPlayScreen::HideLowerPanes()

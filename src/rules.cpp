@@ -54,43 +54,30 @@ bool SClassData::Load(char *aname, TToken &t)
       // Tags...
         if (TAGIS("STATREQS"))
         {
-            for (int32_t c = 0; c < NUM_PLRSTATS; c++)
-            {
-                if (c > 0)
-                {
-                    if (!t.Is(","))
-                        t.Error("',' Expected");
-
-                    t.WhiteGet();
-                }
-            
-                if (t.Type() != TKN_NUMBER)
-                    t.Error("Stat requirement value expected");
-
-                statreqs[c] = t.Index();
-
-                t.WhiteGet();
-            }
+            // rules.def column order is `str, con, agl, rflx, luck, mind`
+            // (note: luck before mind), but our PLRSTAT_* enum has
+            // MIND=4 / LUCK=5 — the opposite. Read into the file's order
+            // and rebind to enum slots explicitly so retail data lands in
+            // the right stat.
+            int32_t s_str, s_con, s_agl, s_rfl, s_luck, s_mind;
+            ok = Parse(t, "%i, %i, %i, %i, %i, %i",
+                       &s_str, &s_con, &s_agl, &s_rfl, &s_luck, &s_mind);
+            statreqs[PLRSTAT_STRN] = s_str;
+            statreqs[PLRSTAT_CONS] = s_con;
+            statreqs[PLRSTAT_AGIL] = s_agl;
+            statreqs[PLRSTAT_RFLX] = s_rfl;
+            statreqs[PLRSTAT_LUCK] = s_luck;
+            statreqs[PLRSTAT_MIND] = s_mind;
+            static_assert(NUM_PLRSTATS == 6, "STATREQS row width changed");
         }
         else if (TAGIS("SKILLMODS"))
         {
-            for (int32_t c = 0; c < NUM_SKILLS; c++)
-            {
-                if (c > 0)
-                {
-                    if (!t.Is(","))
-                        t.Error("',' Expected");
-
-                    t.WhiteGet();
-                }
-            
-                if (t.Type() != TKN_NUMBER)
-                    t.Error("Skill modifier expected");
-
-                skillmods[c] = t.Index();
-
-                t.WhiteGet();
-            }
+            ok = Parse(t, "%i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i",
+                       &skillmods[0], &skillmods[1], &skillmods[2],
+                       &skillmods[3], &skillmods[4], &skillmods[5],
+                       &skillmods[6], &skillmods[7], &skillmods[8],
+                       &skillmods[9], &skillmods[10]);
+            static_assert(NUM_SKILLS == 11, "SKILLMODS row width changed");
         }
         else if (TAGIS("HEALTHMOD"))
         {
@@ -240,20 +227,37 @@ bool SCharData::Load(char *aname, TToken &t)
         ok = true;
 
       // Tags...
-        if (TAGIS("ATTACK"))
+      // FATIGUEATTACK is a retail variant of ATTACK with the same field
+      // layout — just used by the AI to choose lower-impact moves when
+      // the character is tired. We don't have a dedicated CA_FATIGUE flag
+      // (that's a Demo-2+ concern); treat it as a plain ATTACK for now so
+      // the parse advances and the trailing IMPACT attaches correctly.
+        if (TAGIS("ATTACK") || TAGIS("FATIGUEATTACK"))
         {
             SCharAttackData ad;
 
             memset(&ad, 0, sizeof(SCharAttackData));
 
+          // Pre-release ATTACK ends at attackpcnt (22 fields). Retail char.def
+          // appends swipeframeon, swipeframeoff (24 fields) and FATIGUEATTACK
+          // adds one more trailing int (25 fields, likely fatigue cost).
+          // Parse the 22-field base, then consume any trailing tokens up
+          // to end-of-line so the outer "Return expected" check doesn't
+          // trip on the retail extras.
             ok = Parse(t, "%30s, %i, %i, %30s, %30s, %30s, %30s, "
                 "%i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i",
-                ad.attackname, &ad.flags, &ad.button, 
-                ad.responsename, ad.blockname, ad.missname, ad.chainname, 
-                &ad.blocktime, &ad.impacttime, &ad.nextwait, &ad.chainexptime, 
+                ad.attackname, &ad.flags, &ad.button,
+                ad.responsename, ad.blockname, ad.missname, ad.chainname,
+                &ad.blocktime, &ad.impacttime, &ad.nextwait, &ad.chainexptime,
                 &ad.mindist, &ad.maxdist, &ad.hitminrange, &ad.hitmaxrange,
-                &ad.hitangle, &ad.damagemod, &ad.fatigue, &ad.attackskill, 
+                &ad.hitangle, &ad.damagemod, &ad.fatigue, &ad.attackskill,
                 &ad.weaponmask, &ad.weaponskill, &ad.attackpcnt);
+            if (ok)
+            {
+              // Eat any trailing fields the retail format added.
+                while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+                    t.Get();
+            }
 
             if (ok)
             {
@@ -271,12 +275,17 @@ bool SCharData::Load(char *aname, TToken &t)
             memset(&ad, 0, sizeof(SCharAttackData));
 
             ok = Parse(t, "%30s, %i, %i, %i, %i, %i, %31s, %i, %i, %i",
-                ad.attackname, &ad.flags, &ad.button, 
+                ad.attackname, &ad.flags, &ad.button,
                 &ad.attackpcnt, &ad.mindist, &ad.maxdist,
                 ad.spellname, &ad.spellsource.x, &ad.spellsource.y, &ad.spellsource.z);
 
             if (ok)
             {
+              // Retail MAGICATTACK adds two trailing fields (stat requirement,
+              // stat value). Discard them — Demo 1 doesn't gate magic on stats.
+                while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+                    t.Get();
+
                 ad.flags |= CA_MAGICATTACK;
 
                 int32_t num = attacks.Add(ad);
@@ -506,7 +515,22 @@ bool SCharData::Load(char *aname, TToken &t)
             ok = Parse(t, "%i", &bowaimspeed);
         }
         else
-            t.Error("Invalid character tag %s", t.Text());
+        {
+          // Retail char.def added per-character tags the pre-release source
+          // doesn't recognize (MAGICFREQ, RUNFATIGUE, ATTRACTABLEWITH, ...).
+          // Skip the payload through end-of-line (and a BEGIN/END block if
+          // present) so the load doesn't fatal-error on Locke at line 119.
+            fprintf(stderr, "[rules] skipping unknown char tag '%s'\n", tag);
+            while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+                t.Get();
+            t.LineGet();
+            if (t.Type() == TKN_KEYWORD && t.Code() == KEY_BEGIN)
+            {
+                t.SkipBlock();
+                t.LineGet();
+            }
+            continue;
+        }
 
         if (!ok)
             t.Error(errorparsingtag, tag);
@@ -549,22 +573,56 @@ bool TRules::Initialize()
     return true;
 }
 
-// Closes the area manager
+// Closes the area manager (idempotent — second call is a no-op).
 void TRules::Close()
 {
+    if (!initialized)
+        return;
     chardata.DeleteAll();
     classdata.DeleteAll();
+    def = nullptr;
+    initialized = false;
 }
 
-// Loads all areas from the "RULES.DEF" file
+// Loads all areas from the "RULES.DEF" file plus the retail character roster
+// in "<dataroot>/Imagery/char.def". rules.def is required (provides global
+// rules tags + the pre-release characters); char.def is optional but gives us
+// the full 60-character retail roster that the post-snapshot game data
+// references (Araknid, Issathi, Druhgs, Golems, etc.). When both files
+// define the same CHARACTER name, the later load replaces the earlier one,
+// so char.def wins (retail-authoritative).
 bool TRules::Load()
 {
     char fname[MAXPATHLEN];
     sprintf(fname, "%s%s", ClassDefPath, "rules.def");
+    if (!LoadFile(fname, /*required=*/true))
+        return false;
 
+  // Pre-snapshot rules.def lives in <ClassDefPath> (which is .\Resources).
+  // Retail char.def lives in <dataroot>/Imagery/char.def. ClassDefPath is
+  // ".\\Resources\\" with a trailing slash; up one and into Imagery gets us
+  // there.
+    char charfile[MAXPATHLEN];
+#ifdef _WIN32
+    constexpr char SEP = '\\';
+#else
+    constexpr char SEP = '/';
+#endif
+    sprintf(charfile, "%s..%cImagery%cchar.def", ClassDefPath, SEP, SEP);
+    LoadFile(charfile, /*required=*/false);
+
+    return true;
+}
+
+bool TRules::LoadFile(const char* fname, bool required)
+{
     FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
-        FatalError("Unable to find character info file RULES.DEF");
+    {
+        if (required)
+            FatalError("Unable to find character info file %s", fname);
+        return false;
+    }
 
     TFileParseStream s(fp, fname);
     TToken t(s);
@@ -627,20 +685,29 @@ bool TRules::Load()
             {
                 PSCharData data = new SCharData;
 
+              // If the same CHARACTER name was already loaded (e.g. rules.def
+              // had it and char.def has it too), the later definition wins.
+              // Drop the earlier slot before adding the new one.
+                int32_t existing = -1;
                 for (int32_t c = 0; c < chardata.NumItems(); c++)
                 {
-                    if (!stricmp(chardata[c]->name, charname))
-                        t.Error("More than one %s in RULES.DEF file", charname);
+                    if (chardata.Used(c) && !stricmp(chardata[c]->name, charname))
+                    {
+                        existing = c;
+                        break;
+                    }
                 }
 
                 if (!data->Load(charname, t))
                     t.Error("Error loading char data");
-                
+
+                if (existing >= 0)
+                    chardata.Delete(existing);
                 chardata.Add(data);
 
-              // Set default char data object (-1 for objtype)  
+              // Set default char data object (-1 for objtype)
                 if (data->objtype < 0)
-                    def = data; 
+                    def = data;
 
                 t.Get();
             }

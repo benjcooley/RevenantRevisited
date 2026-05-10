@@ -83,7 +83,7 @@ void TStatPane::DrawBackground()
 {
     if (IsDirty())
     {
-        Display->Put(0, 0, GameData->Bitmap("statpane"), DM_BACKGROUND);
+        Display.Put(0, 0, GameData->Bitmap("statpane"), DM_BACKGROUND);
 
         RedrawButtons();
 
@@ -189,10 +189,10 @@ void TStatPane::DrawBackground()
                 showdownbutton = false;
         }
 
-        Display->WriteTextShadow(buf1, 12, TEXT_POS_Y, NUMLINES, GameData->Font("goldfont"));
+        Display.WriteTextShadow(buf1, 12, TEXT_POS_Y, NUMLINES, GameData->Font("goldfont"));
 
         if (Player)
-            Display->WriteTextShadow(buf2, 138, TEXT_POS_Y, NUMLINES, GameData->Font("goldfont"), nullptr, FONT_DRAWMODE, -1, 0, JUSTIFY_RIGHT);
+            Display.WriteTextShadow(buf2, 138, TEXT_POS_Y, NUMLINES, GameData->Font("goldfont"), nullptr, FONT_DRAWMODE, -1, 0, JUSTIFY_RIGHT);
 
         // determine which scroll buttons are showing
         if (startline < 1 || Button(0)->GetState())

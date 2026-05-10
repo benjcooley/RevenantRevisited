@@ -99,11 +99,24 @@ char CurMapPath[MAXPATHLEN];                 // Where the current map is stored
 // Current language
 TString Language;                   // Where the current map is stored
 
-// Global Structure Defines
+// Active and next game screens
 TScreen*        CurrentScreen;      // Currently displayed screen object
 TScreen*        NextScreen;         // Next Screen to be display object
-TDisplay        display;            // Display object
-TDisplay*       Display = &display; // Display pointer
+
+// Loaded game assets
+TFont*          SystemFont;         // Basic utility font for game
+TFont*          DialogFont;         // Dialog font
+TFont*          DialogFontShadow;   // Dialog font shadow
+TFont*          SmallFont;          // Small game font
+TFont*          GameFont;           // Medium game font
+TFont*          GoldFont;           // Medium gold font
+TFont*          MetalFont;          // Small gold/metal font
+TFont*          MenuFont;           // Menu font
+TPlayer*        Player;             // Main player for the game
+TMulti*         GameData;           // Multiresource for in game data
+
+// Global singleton objects
+TDisplay        Display;            // Display object (TODO: see revenant.h note)
 T3DScene        Scene3D;            // Display pointer
 TPlayScreen     PlayScreen;         // PlayScreen Object
 TMapPane        MapPane;            // Map pane for PlayScreen
@@ -125,16 +138,6 @@ TTimer          Timer;              // Timer Object
 #if 0 // TODO(port): Subsystem 3 — video capture (DirectShow → AVFoundation/sokol)
 TVideoCapture   VideoCapture;       // Video capture object
 #endif
-TFont*          SystemFont;         // Basic utility font for game
-TFont*          DialogFont;         // Dialog font
-TFont*          DialogFontShadow;   // Dialog font shadow
-TFont*          SmallFont;          // Small game font
-TFont*          GameFont;           // Medium game font
-TFont*          GoldFont;           // Medium gold font
-TFont*          MetalFont;          // Small gold/metal font
-TFont*          MenuFont;           // Menu font
-TPlayer*        Player;             // Main player for the game
-TMulti*         GameData;           // Multiresource for in game data
 TSoundPlayer    SoundPlayer;        // Sound effects player
 TControlMap     ControlMap;         // Contains the key/joystick mappings for game control
 TAreaManager    AreaManager;        // Manages the game area system
@@ -510,47 +513,15 @@ void FatalError(const char *error, const char *extra)
     Status(buf);
     Status("Press any key to exit");
 
-  // Prevent passing of windows message (input etc) to current screen
-    CurrentScreen = nullptr;
-
-  // Stop timer stuff
-    Timer.Close();
-
-  // Close the display
-    Display->Close();
-
-#if 0 // TODO(port): Subsystem 2 — DirectDraw/Win32 presentation (→ sokol)
-  // Close Direct Draw
-    CloseDirectDraw();
-
-  // Close the window!
-    MainWindow.Close();
-
-    MSG Message;
-    while (PeekMessage(&Message, nullptr, 0, 0, PM_REMOVE))
-    {
-        TranslateMessage(&Message);
-        DispatchMessage(&Message);
-    }
-
-    if (!DirectDraw)
-    {
-        if (extra)
-            _RPT1(_CRT_ERROR, error, extra);
-        else
-            _RPT0(_CRT_ERROR, error);
-    }
-
-//  ShowWindow(MainWindow.Hwnd(), 0);
-//  MessageBox(nullptr, buf, "FATAL ERROR", MB_ICONSTOP | MB_OK);
-#else
-    MainWindow.Close();
+  // FatalError aborts the process; the OS reclaims everything. Skipping
+  // the partial teardown dance keeps this path from racing the live
+  // ShutdownGlobals path and matches the "InitGlobals/ShutdownGlobals
+  // are the canonical callers" rule for file-scope globals.
     if (extra)
         fprintf(stderr, error, extra);
     else
         fprintf(stderr, "%s", error);
     fprintf(stderr, "\n");
-#endif
 
     exit(1);
 }
@@ -591,7 +562,7 @@ void Status(const char *fmt, ...)
     static char buf[1024]; // Temporary buf for output
     static y = 10;
 
-    if (!DirectDraw || !SystemFont || !Display->GetSurface())
+    if (!DirectDraw || !SystemFont || !Display.GetSurface())
         return;
 
     va_list marker;
@@ -608,8 +579,8 @@ void Status(const char *fmt, ...)
             *p = '\0';
             if (strlen(s) > 0)
             {
-                Display->WriteText(s, 10, y, 1, SystemFont, nullptr, DM_TRANSPARENT | DM_ALIAS);
-                Display->PutToScreen(0, 0, Display->Width(), Display->Height());
+                Display.WriteText(s, 10, y, 1, SystemFont, nullptr, DM_TRANSPARENT | DM_ALIAS);
+                Display.PutToScreen(0, 0, Display.Width(), Display.Height());
                 y += 10;
             }
             if (!save)
@@ -1044,29 +1015,10 @@ void __cdecl operator delete(void *pointer)
 
 #endif
 
-char *makepath(char *name, char *buf, int32_t buflen)
-{
-  // If root path expicitly given, (i.e. "c:\", or "\" or "\\" or "..") use it
-    if (name[0] == '\\' || name[1] == ':' || (name[0] == '.' && name[1] == '.'))
-    {
-        strncpyz(buf, name, buflen);
-        return buf;
-    }
-
-  // If root path is ".", substitute SavePath or RunPath
-    if (name[0] == '.')
-    {
-        name++;
-        while (name[0] == '\\')
-            name++;
-    }
-
-  // Always try SavePath first (SavePath will always be writable directory on hard drive)
-    strncpyz(buf, SavePath, buflen);
-    strncatz(buf, name, buflen);
-
-    return buf;
-}
+// makepath() lives in src/revutils.cpp — single definition keeps the
+// SavePath-relative resolution + separator normalization in one place.
+// (The duplicate previously here was an ODR violation; the linker silently
+// picked one of the two identical bodies.)
 
 FILE *popen(char *name, char *flags)
 {
@@ -1346,10 +1298,13 @@ void GetProgramPaths(char *lpCmdLine, char *RunPath, char *SavePath)
     strlwr(SavePath);
     strlwr(RunPath);
 #else
+    // Posix port. Mirrors retail's intent (RunPath = exe dir,
+    // SavePath = writable user-data dir; both end with '/'). Retail
+    // probed test.fil in RunPath and fell back to c:\Revenant when the
+    // install was on a CD; on macOS/Linux we go straight to a per-user
+    // Application Support / XDG_DATA_HOME dir which is always writable.
     (void)lpCmdLine;
-    // Minimal stub: use current directory for both.
-    strncpyz(RunPath, "./", RUNPATHLEN);
-    strncpyz(SavePath, "./", RUNPATHLEN);
+    rev_resolve_program_paths(RunPath, SavePath, RUNPATHLEN);
 #endif
 }
 
@@ -1613,11 +1568,10 @@ void DriverSetupCallback()
 
 bool InitLanguage()
 {
-  // Set language
+  // Set language. The actual DialogList load happens inside InitGlobals
+  // alongside the rest of the engine's lifecycle steps; that keeps every
+  // singleton's Initialize/Init call in one canonical caller.
     Language = "english";
-
-  // Load Language file
-    DialogList.Initialize();
 
 // Old MAYHEM stuff
 #if 0
@@ -1660,11 +1614,24 @@ bool InitMonitor()
 }
 
 // ************************************************************************
-// *                    Initialize and Close System                       *
+// *                  InitGlobals and ShutdownGlobals                      *
 // ************************************************************************
+//
+// One canonical caller for every file-scope global's lifecycle: each
+// singleton's existing API name (Initialize/Close, Init/Shutdown, or
+// AllocCache, depending on the class) is invoked from here in a fixed
+// construction order. ShutdownGlobals tears them down in EXACT reverse,
+// with comments numbered to match step-for-step.
 
-bool InitSystem()
+bool InitGlobals()
 {
+    // (1) MainWindow — sokol_app already owns the actual window by the
+    // time AppInit calls us, so this is just the engine-side state-flip.
+    if (!MainWindow.Initialize())
+        FatalError("Couldn't bring up MainWindow", nullptr);
+
+    // (2) FontTable — parses FONT.DEF. Runs before Display.Initialize()
+    // (sokol_gfx setup) because GPU atlas building is deferred to first use.
     FontTable = new TFontTable;
     if (!FontTable->Initialize())
         FatalError("Unable to load FONT.DEF");
@@ -1682,7 +1649,7 @@ bool InitSystem()
         _RPT0(_CRT_ERROR, "Memory Error");
     }
 #endif
-  // Set correct imagery path
+  // (8) ImageryPath — pure setting, no allocation.
     if (NoNormals == true)
         TObjectImagery::SetImageryPath(NONORMALPATH);
     else
@@ -1757,6 +1724,7 @@ bool InitSystem()
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
+    // (9) ChunkCache — AllocCache reserves the per-tile pinned buffers.
     ChunkCache.AllocCache(ChunkCacheSize);
     if (!_CrtCheckMemory())
     {
@@ -1774,8 +1742,9 @@ bool InitSystem()
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
-  // Create main display
-    if (!Display->Initialize(WIDTH, HEIGHT, BPP))
+  // (10) Display — sokol_gfx context setup + backbuffer/zbuffer surfaces
+  // + ImGui wiring. Heavy on sokol calls but no game data is loaded.
+    if (!Display.Initialize(WIDTH, HEIGHT, BPP))
         FatalError("Couldn't open main display", nullptr);
 
     if (!_CrtCheckMemory())
@@ -1785,6 +1754,8 @@ bool InitSystem()
     }
   // Now display is initialized, set up video cap system (if needed)
 #if 0 // TODO(port): Subsystem 3 — video capture (DirectShow → AVFoundation/sokol)
+    // (11) VideoCapture — optional, off by default; the entire block is
+    // currently #if 0'd because the Win32 capture backend isn't ported.
     if (dovideocap)
         VideoCapture.Initialize(videocapmegs, videocapfps);
 #endif
@@ -1794,7 +1765,7 @@ bool InitSystem()
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
-  // Setup system color tables
+  // (12) Color tables — free-function setup; nothing to undo.
     MakeColorTables();
 
     if (!_CrtCheckMemory())
@@ -1822,7 +1793,7 @@ bool InitSystem()
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
-  // Initialize the timer
+  // (13) Timer
     Status("Initializing timers\n");
     if (!Timer.Initialize())
         FatalError("Couldn't initialize timer", nullptr);
@@ -1835,7 +1806,7 @@ bool InitSystem()
   // Capture the mouse cursor
 //  SetCapture(MainWindow.Hwnd());
 
-  // Initialize Direct Input
+  // (14) Direct Input / Joystick — pending Subsystem 5 port; no-op now.
     Status("Initializing direct input\n");
 #if 0 // TODO(port): Subsystem 5 — DirectInput (→ sokol_app event translation)
     InitializeDirectInput();
@@ -1857,7 +1828,8 @@ bool InitSystem()
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
-  // Start loader thread..
+  // (15) Imagery loader thread — static-method API, paired with
+  // TObjectImagery::EndLoaderThread() in ShutdownGlobals.
     TObjectImagery::BeginLoaderThread();
 
     if (!_CrtCheckMemory())
@@ -1865,7 +1837,8 @@ bool InitSystem()
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
-  // Load class.def
+  // (16) TObjectClass — static load (paired with TObjectClass::FreeClasses
+  // in ShutdownGlobals). Loads class.def into the global class registry.
     Status("Loading classes with %s option\n", NoQuickLoad?"NOQUICKLOAD":"QUICKLOAD");
     TObjectClass::LoadClasses();
 
@@ -1883,7 +1856,7 @@ bool InitSystem()
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
-  // Setup player manager
+  // (17) PlayerManager
     Status("Initializing multi-player manager\n");
     PlayerManager.Initialize();
 
@@ -1892,9 +1865,21 @@ bool InitSystem()
 //      _CrtMemDumpAllObjectsSince(&s1);
         _RPT0(_CRT_ERROR, "Memory Error");
     }
-  // Load rules data
+  // (18) Rules — Initialize() loads rules.def + char.def.
     Status("Loading game rules\n");
-    Rules.Initialize();
+    if (!Rules.Initialize())
+        FatalError("Unable to load game rules");
+
+  // (19) DialogList — Initialize() loads <Language>.def. Pulled out of
+  // the old InitLanguage() helper so all global lifecycle calls live in
+  // one canonical caller.
+    if (!DialogList.Initialize())
+        FatalError("Unable to load dialog list");
+
+  // (20) MapManager — Init() is a state-flip; the cache populates lazily
+  // as PlayScreen / TMapRenderer call GetOrLoad. Has to be live before
+  // any subsystem that observes CurrentMapChanged.
+    MapManager.Init();
 
     if (!_CrtCheckMemory())
     {
@@ -1904,62 +1889,96 @@ bool InitSystem()
     return true;
 }
 
-void CloseSystem()
+void ShutdownGlobals()
 {
-  // Delete dialog list
-    DialogList.Close();
+  // Tear down in EXACT reverse of InitGlobals' construction order, so each
+  // global is shut down while everything it depends on is still alive.
+  // The numbered comments below mirror the numbered steps at the top of
+  // InitGlobals — keep the two in lockstep when adding/removing
+  // subsystems. Each shutdown call leaves members in empty/zero state so
+  // the trivial dtor that runs at process exit only walks already-emptied
+  // structures.
+  //
+  // Game-state-level teardown (active screen + worker threads) runs once
+  // before the InitGlobals-inverse so per-map state has somewhere alive
+  // to unwind into.
 
-  // Kill fonts
-    delete FontTable;
-    FontTable = nullptr;
-    SystemFont = DialogFont = DialogFontShadow = SmallFont = GameFont = nullptr;
+  // ---- game-state-level teardown (above InitGlobals) ----
 
-  // Kill video capture buffers (if they are allocated)
-#if 0 // TODO(port): Subsystem 3 — video capture (DirectShow → AVFoundation/sokol)
-    VideoCapture.Close();
-#endif
-
-  // Kill rules data
-    Rules.Close();
-
-  // Close player manager
-    PlayerManager.Close();
-
-  // Free all object classes in the class system
-    TObjectClass::FreeClasses();
-
-  // Resume all threads
-    extern bool ThreadsPaused;
-    if (ThreadsPaused)
-        ResumeThreads();
-
+  // Stop the active screen (PlayScreen owns the renderer + its listeners
+  // on TGameMap). Drop it before the maps it observes get evicted.
     if (CurrentScreen)
     {
         CurrentScreen->Close();
         CurrentScreen = nullptr;
     }
 
-  // End loader thread..
+  // Resume any paused worker threads so EndLoaderThread can join cleanly.
+    extern bool ThreadsPaused;
+    if (ThreadsPaused)
+        ResumeThreads();
+
+  // ---- inverse of InitGlobals ----
+
+  // (20) MapManager — inits last in InitGlobals, so closes first here.
+  // Walks each cached TGameMap → Unload → CloseSector while sectors,
+  // player inventories, and scripts are still alive. Was the use-after-
+  // free site that motivated the whole Init/Shutdown refactor.
+    MapManager.Shutdown();
+
+  // (19) DialogList
+    DialogList.Close();
+
+  // (18) Rules
+    Rules.Close();
+
+  // (17) PlayerManager
+    PlayerManager.Close();
+
+  // (16) TObjectClass — free the class registry/instances.
+    TObjectClass::FreeClasses();
+
+  // (15) Imagery loader thread
     TObjectImagery::EndLoaderThread();
 
-  // Close Sound System
+  // (14) DirectInput / joystick teardown
+#if 0 // TODO(port): Subsystem 5 — DirectInput teardown (→ sokol_app cleanup)
+    CloseDirectInput();
+    ReleaseCapture();
+#endif
+
+  // (13) Timer
+    Timer.Close();
+
+  // (12) Color tables — no per-instance cleanup needed.
+
+  // (11) Video capture
+#if 0 // TODO(port): Subsystem 3 — video capture (DirectShow → AVFoundation/sokol)
+    VideoCapture.Close();
+#endif
+
+  // (10) Display
+    Display.Close();
+
+  // (9) ChunkCache — currently no shutdown; allocations free at process
+  // exit via the dtor.
+
+  // (8) ImageryPath — pure setting, nothing to undo.
+
+  // (Sound system is not part of the InitGlobals chain yet — it is
+  // brought up lazily by gameplay code. Tear it down here while audio
+  // hardware references are still alive.)
     CDStop();
     CDClose();
     SoundPlayer.Close();
 
-  // Release DirectInput (including joystick)
-#if 0 // TODO(port): Subsystem 5 — DirectInput teardown (→ sokol_app cleanup)
-    CloseDirectInput();
-
-  // Release the mouse capture
-    ReleaseCapture();
-#endif
-
-  // Stop timer stuff
-    Timer.Close();
-
-  // Close the display
-    Display->Close();
+  // (2) FontTable
+    if (FontTable) {
+        FontTable->Close();
+        delete FontTable;
+        FontTable = nullptr;
+    }
+    SystemFont = DialogFont = DialogFontShadow = SmallFont = GameFont = nullptr;
 
 #if 0 // TODO(port): Subsystem 2 — Win32 message pump drain (→ sokol_app cleanup)
     MSG Message;
@@ -1970,10 +1989,9 @@ void CloseSystem()
     }
 #endif
 
-  // Close the main window
+  // (1) MainWindow — inverse of step 1 in InitGlobals.
     MainWindow.Close();
 
-  // Clear out any clipping rectangle
 #if 0 // TODO(port): Subsystem 5 — Win32 ClipCursor (→ sapp_lock_mouse)
     ClipCursor(nullptr);
 #endif
@@ -1986,14 +2004,14 @@ void CloseSystem()
 // sokol_app owns the window and the run loop. Our lifecycle is:
 //   1. sokol_main()  -> return sapp_desc describing the window + callbacks
 //   2. AppInit()     -> sapp has created the window + Metal context.
-//                       Call InitSystem() which brings up TDisplay (which
+//                       Call InitGlobals() which brings up TDisplay (which
 //                       itself calls sg_setup via sapp_sgcontext()),
 //                       timers, imagery loader, rules, etc.
 //   3. AppFrame()    -> one game tick per call. Currently drives the
 //                       legacy screen dispatch by pumping one frame of
 //                       the current TScreen.
 //   4. AppEvent()    -> translate sapp_event -> TScreen input hooks.
-//   5. AppCleanup()  -> CloseSystem() and teardown.
+//   5. AppCleanup()  -> ShutdownGlobals() and teardown.
 //
 // The pre-port WinMain / MessageLoop / RegisterClass scaffolding lives
 // in attic/src/revmain_win32_entry.cpp and attic/src/mainwnd_win32.cpp.
@@ -2061,10 +2079,10 @@ static void AppInit()
 
     srand((unsigned)time(nullptr));
 
-    // TODO(port): proper save/run-path discovery for macOS. For now point
-    // both at the cwd. Agent working on Subsystem 5 (INI) will revisit.
-    strncpyz(RunPath, "./", MAXPATHLEN);
-    strncpyz(SavePath, "./", MAXPATHLEN);
+    // Posix port of retail's WinMain GetProgramPaths probe — RunPath is
+    // the executable directory, SavePath is the per-user writable
+    // Application Support / XDG_DATA_HOME dir (created if missing).
+    rev_resolve_program_paths(RunPath, SavePath, MAXPATHLEN);
     INISetPath(RunPath);
 
     GetINISettings();
@@ -2094,10 +2112,10 @@ static void AppInit()
 
     InitLanguage();
 
-    if (!MainWindow.Initialize())
-        FatalError("Couldn't create main window", nullptr);
-
-    if (!InitSystem())
+    // MainWindow's lifecycle now lives at the top of InitGlobals so every
+    // singleton flows through the canonical caller; sokol_app already
+    // owns the actual window so there is no construction-ordering issue.
+    if (!InitGlobals())
     {
         sapp_request_quit();
         return;
@@ -2195,9 +2213,11 @@ static void AppFrame()
     // Present the frame: composite backbuffer onto the swapchain and commit
     // the Metal command buffer. Without this, sokol's cmd_buffer is never
     // released/nil'd and its dangling pointer crashes the next frame's
-    // sg_begin_pass.
-    if (Display)
-        Display->FlipPage();
+    // sg_begin_pass. Skip in headless mode (no Display.Initialize() yet
+    // / already Close()d) — IsActive() guards the back-buffer dereference
+    // path inside FlipPage.
+    if (Display.IsActive())
+        Display.FlipPage();
 
     if (CurrentScreen->IsDone() || Closing)
     {
@@ -2211,9 +2231,10 @@ static void AppFrame()
 
 static void AppCleanup()
 {
+    // ShutdownGlobals() handles MainWindow.Close() as its very last step;
+    // AppCleanup just drives that and then unmounts the resource archives.
     if (SystemInitialized)
-        CloseSystem();
-    MainWindow.Close();
+        ShutdownGlobals();
     UnmountAll();
 }
 
@@ -2619,7 +2640,7 @@ static void UnusedWinMainAnchor_()
 #endif
 
   // Ok, now initialize the rest of the system
-    if (!InitSystem())
+    if (!InitGlobals())
         return 0;
 
 #ifdef _DEBUG
@@ -2638,7 +2659,7 @@ static void UnusedWinMainAnchor_()
         NextScreen = TScreen::ShowScreen(NextScreen, 0);
 
   // Close the system down
-    CloseSystem();
+    ShutdownGlobals();
 
     return 0;
 }

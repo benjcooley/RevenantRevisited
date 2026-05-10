@@ -44,6 +44,23 @@ void WaitMultipleErr(uint32_t objs, const HANDLE *obj, bool all);
 void BEGIN_CRITICAL();
 void END_CRITICAL();
 
+// Posix replacement for the Win32 GetProgramPaths probe. Sets RunPath
+// (user's existing Revenant install — read-only assets) and SavePath
+// (per-user writable data dir — saves, INI) with trailing '/'. Both
+// buffers are at least `buflen` bytes. FatalErrors if SavePath can't
+// be created or written to (read-only-media refusal).
+void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen);
+
+// Locate the Revenant Revisited overlay (our enhancement layer — strictly
+// opt-in: empty/missing means vanilla retail). Resolution order:
+//   1. $REVENANT_REVISITED_PATH (explicit override)
+//   2. <exe-dir>/RevenantRevisited.rvr   (production: shipped pack)
+//   3. <RunPath>/RevenantRevisited.rvr   (production: in user's install)
+//   4. <repo-root>/revisited/resources/  (dev: loose folder beside src/)
+// Returns "" if no overlay found (engine then runs vanilla).
+// See revisited/README.md for the convention.
+const char *rev_resolve_revisited_overlay();
+
 // Makes a file path given the current settings of RunPath and SavePath
 char *makepath(char *name, char *buf, int32_t buflen);
 // Open a FILE relative to SavePath / RunPath. Named to avoid the libc

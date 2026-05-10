@@ -230,12 +230,16 @@ class TRules
 
   public:
     TRules() { initialized = false; }
-    ~TRules() { Close(); }
+    // Trivial dtor: explicit Close() runs from ShutdownGlobals, so by the
+    // time the global is destroyed the data arrays are already empty.
+    // We can't walk chardata/classdata from the dtor without risking
+    // cross-TU static-destruction-order bugs.
+    ~TRules() = default;
 
     bool Initialize();
-      // Initializes character data stuff
+      // Initializes character data stuff (idempotent via `initialized`)
     void Close();
-      // Kills all character data stuff
+      // Kills all character data stuff (idempotent)
     int32_t GetNumClasses() { return classdata.NumItems(); }
       // Returns number of character classes in data manager
     PSClassData GetClass(char *classname);
@@ -249,7 +253,9 @@ class TRules
     PSCharData GetCharData(int32_t objtype, int32_t objclass);
       // Gets pointer to character data structure
     bool Load();
-      // Loads character data and class data from CHAR.DEF file
+      // Loads character data and class data from rules.def + char.def
+    bool LoadFile(const char* fname, bool required);
+      // Internal: parses one .def (global rules tags + CHARACTER blocks).
 
   // Daytime...
     int32_t daylength;                  // Length of day in 100ths of a second

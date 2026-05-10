@@ -78,7 +78,8 @@ class TSpellList
 
   public:
     TSpellList() { initialized = false; }
-    ~TSpellList() { Close(); }
+    // Trivial dtor: explicit Close() runs from ShutdownGlobals.
+    ~TSpellList() = default;
 
     bool Initialize();
       // Initializes spell data stuff

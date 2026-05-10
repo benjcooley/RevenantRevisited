@@ -67,7 +67,7 @@ void TScreen::EndScreen()
 // 'loading' screens which have to update from within a single timer tick).
 void TScreen::PutToScreen()
 {
-    // TODO(port): Display->PutToScreen removed — sokol handles presentation.
+    // TODO(port): Display.PutToScreen removed — sokol handles presentation.
 }
 
 // *************************
@@ -152,7 +152,7 @@ void TScreen::ReleaseExclusivePane(int32_t panenum)
 
 void TScreen::RedrawAllPanes()
 {
-    Display->Reset();
+    Display.Reset();
 
   // Do exclusive
     if (numexclusive > 0)
@@ -163,7 +163,7 @@ void TScreen::RedrawAllPanes()
 
         if (complete[numexclusive - 1])
         {
-            Display->Reset();
+            Display.Reset();
             return;
         }
     }
@@ -173,7 +173,7 @@ void TScreen::RedrawAllPanes()
         if (panes.Used(loop) && !panes[loop]->IsHidden())
             panes[loop]->SetDirty(true);
 
-    Display->Reset();
+    Display.Reset();
 }
 
 // *****************************
@@ -182,7 +182,7 @@ void TScreen::RedrawAllPanes()
 
 void TScreen::DrawBackground()
 {
-    Display->Reset();
+    Display.Reset();
 
   // Do exclusive
     if (numexclusive > 0)
@@ -200,7 +200,7 @@ void TScreen::DrawBackground()
         if (complete[numexclusive - 1])
         {
             dirty = false;
-            Display->Reset();
+            Display.Reset();
             return;
         }
     }
@@ -219,12 +219,12 @@ void TScreen::DrawBackground()
     }
 
     dirty = false;
-    Display->Reset();
+    Display.Reset();
 }
 
 void TScreen::Pulse()
 {
-    Display->Reset();
+    Display.Reset();
 
   // Do exclusive
     if (numexclusive > 0)
@@ -238,7 +238,7 @@ void TScreen::Pulse()
 
         if (complete[numexclusive - 1])
         {
-            Display->Reset();
+            Display.Reset();
             return;
         }
     }
@@ -252,12 +252,12 @@ void TScreen::Pulse()
         panes[loop]->Pulse();
     }
 
-    Display->Reset();
+    Display.Reset();
 }
 
 void TScreen::Animate(bool draw)
 {
-    Display->Reset();
+    Display.Reset();
 
   // Do exclusive
     if (numexclusive > 0)
@@ -271,7 +271,7 @@ void TScreen::Animate(bool draw)
 
         if (complete[numexclusive - 1])
         {
-            Display->Reset();
+            Display.Reset();
             return;
         }
     }
@@ -285,12 +285,12 @@ void TScreen::Animate(bool draw)
         panes[loop]->Animate(draw);
     }
 
-    Display->Reset();
+    Display.Reset();
 }
 
 void TScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 {
-    Display->Reset();
+    Display.Reset();
 
   // Do exclusive
     if (numexclusive > 0)
@@ -301,7 +301,7 @@ void TScreen::MouseClick(int32_t button, int32_t x, int32_t y)
             pane->SetClipRect();
             pane->MouseClick(button, x - pane->GetPosX(), y - pane->GetPosY());
         }
-        Display->Reset();
+        Display.Reset();
         return;
     }
 
@@ -321,12 +321,12 @@ void TScreen::MouseClick(int32_t button, int32_t x, int32_t y)
             panes[loop]->MouseClick(button, nx, ny);
     }
 
-    Display->Reset();
+    Display.Reset();
 }
 
 void TScreen::MouseMove(int32_t button, int32_t x, int32_t y)
 {
-    Display->Reset();
+    Display.Reset();
 
   // Do exclusive
     if (numexclusive > 0)
@@ -337,7 +337,7 @@ void TScreen::MouseMove(int32_t button, int32_t x, int32_t y)
             pane->SetClipRect();
             pane->MouseMove(button, x - pane->GetPosX(), y - pane->GetPosY());
         }
-        Display->Reset();
+        Display.Reset();
         return;
     }
 
@@ -353,12 +353,12 @@ void TScreen::MouseMove(int32_t button, int32_t x, int32_t y)
         panes[loop]->MouseMove(button, nx, ny);
     }
 
-    Display->Reset();
+    Display.Reset();
 }
 
 void TScreen::KeyPress(int32_t key, bool down)
 {
-    Display->Reset();
+    Display.Reset();
 
   // Do exclusive
     if (numexclusive > 0)
@@ -366,7 +366,7 @@ void TScreen::KeyPress(int32_t key, bool down)
         PTPane pane = panes[exclusive[numexclusive - 1]];
         if (pane && !pane->IsHidden())
             pane->KeyPress(key, down);
-        Display->Reset();
+        Display.Reset();
         return;
     }
 
@@ -378,12 +378,12 @@ void TScreen::KeyPress(int32_t key, bool down)
         panes[loop]->KeyPress(key, down);
     }
 
-    Display->Reset();
+    Display.Reset();
 }
 
 void TScreen::CharPress(int32_t key, bool down)
 {
-    Display->Reset();
+    Display.Reset();
 
   // Do exclusive
     if (numexclusive > 0)
@@ -391,7 +391,7 @@ void TScreen::CharPress(int32_t key, bool down)
         PTPane pane = panes[exclusive[numexclusive - 1]];
         if (pane && !pane->IsHidden())
             pane->CharPress(key, down);
-        Display->Reset();
+        Display.Reset();
         return;
     }
 
@@ -403,12 +403,12 @@ void TScreen::CharPress(int32_t key, bool down)
         panes[loop]->CharPress(key, down);
     }
 
-    Display->Reset();
+    Display.Reset();
 }
 
 void TScreen::Joystick(int32_t key, bool down)
 {
-    Display->Reset();
+    Display.Reset();
 
   // Do exclusive
     if (numexclusive > 0)
@@ -416,7 +416,7 @@ void TScreen::Joystick(int32_t key, bool down)
         PTPane pane = panes[exclusive[numexclusive - 1]];
         if (pane && !pane->IsHidden())
             pane->Joystick(key, down);
-        Display->Reset();
+        Display.Reset();
         return;
     }
 
@@ -429,7 +429,7 @@ void TScreen::Joystick(int32_t key, bool down)
         panes[loop]->Joystick(key, down);
     }
 
-    Display->Reset();
+    Display.Reset();
 }
 
 // ***************************
@@ -476,7 +476,7 @@ bool TScreen::TimerTick(bool draw)
     if (Closing)
         return false;
 
-    Display->Reset();
+    Display.Reset();
 
     // Resize panes that asked for it before we pulse (panes may set new map
     // position in their Pulse, which depends on post-resize dimensions).
@@ -510,13 +510,13 @@ bool TScreen::TimerTick(bool draw)
 
     if (draw && !firstframe)
     {
-        Display->Reset();
+        Display.Reset();
         DrawBackground();
-        // TODO(port): Display->RestoreBackgroundAreas() — CPU background
+        // TODO(port): Display.RestoreBackgroundAreas() — CPU background
         // caching obsolete under sokol GPU compositor.
     }
 
-    Display->Reset();
+    Display.Reset();
     Animate(draw);
 
     // TODO(port): DrawMouseCursor — cursor currently drawn by MainWindow.
@@ -562,7 +562,7 @@ void TPane::Close()
 // timer tick.
 void TPane::PutToScreen()
 {
-    // TODO(port): Display->PutToScreen removed — sokol handles presentation.
+    // TODO(port): Display.PutToScreen removed — sokol handles presentation.
 }
 
 // This function can be called to draw a pane immediately (instead of waiting for the
@@ -576,7 +576,7 @@ void TPane::Draw()
         return;
 
     SClipState cs;
-    Display->SaveClipState(cs);
+    Display.SaveClipState(cs);
 
     SetClipRect();
 
@@ -584,28 +584,28 @@ void TPane::Draw()
     DrawBackground();
     Animate(true);
 
-    Display->RestoreClipState(cs);
+    Display.RestoreClipState(cs);
 }
 
 
 void TPane::SetClipRect()
 {
-    Display->SetOrigin(x - scrollx, y - scrolly);
-    Display->SetClipRect(x, y, width, height);
-    Display->SetClipMode(CLIP_EDGES);
+    Display.SetOrigin(x - scrollx, y - scrolly);
+    Display.SetClipRect(x, y, width, height);
+    Display.SetClipMode(CLIP_EDGES);
 }
 
 void TPane::UpdateBackgroundScrollPos()
 {
     oldscrollx = scrollx; oldscrolly = scrolly;
     scrollx = newscrollx; scrolly = newscrolly;
-    // TODO(port): Display->ScrollBackground removed — CPU background caching obsolete under sokol GPU compositor.
+    // TODO(port): Display.ScrollBackground removed — CPU background caching obsolete under sokol GPU compositor.
 }
 
 void TPane::DrawRestoreRect(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t drawmode)
 {
     (void)x; (void)y; (void)width; (void)height; (void)drawmode;
-    // TODO(port): Display->DrawRestoreRect removed — CPU background caching obsolete under sokol GPU compositor.
+    // TODO(port): Display.DrawRestoreRect removed — CPU background caching obsolete under sokol GPU compositor.
 }
 
 bool TPane::IsOnScreen()

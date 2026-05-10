@@ -114,7 +114,7 @@ TFont* TFontTable::LoadAtom(const char* resname)
     atoms.Add(entry);
 
     // Note: GPU atlas is NOT built here. FontTable->Initialize() runs before
-    // Display->Initialize() (sokol_gfx setup), so sg_make_image would assert.
+    // Display.Initialize() (sokol_gfx setup), so sg_make_image would assert.
     // Callers get-or-build via BuildFontAtlas(font) when they need to render.
 
     return f;

@@ -44,3 +44,9 @@ __pycache__/
 # Backup / temp
 *~
 *.bak
+
+# ASan / sanitizer build dir (sibling to /build, opt-in via -DREVENANT_ASAN=ON)
+/build-asan
+
+# Claude Code per-project session files
+/.claude

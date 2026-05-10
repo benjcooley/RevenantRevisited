@@ -362,7 +362,7 @@ bool TSurface::ParamDraw(PSDrawParam dp, PTBitmap bitmap)
         // We can get a simultaneous zbuffer/video buffer if NoVidZBufLock is false,
         // or if UseClearZBuffer is true, or we're not drawing to the display.
 
-        if ((void *)this == (void *)Display && NoVidZBufLock && !UseClearZBuffer)
+        if ((void *)this == (void *)&Display && NoVidZBufLock && !UseClearZBuffer)
             db.dzbuffer = nullptr;
         else
             db.dzbuffer  = (uint16_t *)(GetZBuffer()->Lock());

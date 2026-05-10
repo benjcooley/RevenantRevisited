@@ -37,13 +37,13 @@ void TInventory::DrawBackground()
 {
     if (container && IsDirty())
     {
-        Display->Box(INVENTORYCONTX, INVENTORYCONTY,
+        Display.Box(INVENTORYCONTX, INVENTORYCONTY,
             INVITEMREALHEIGHT, INVITEMREALWIDTH, 0, 0xffff, 0, DM_BACKGROUND);
         container->DrawInvItem(INVENTORYCONTX, INVENTORYCONTY);
 
         for (int32_t y = 0; y < INVITEMSY; y++)
             for (int32_t x = 0; x < INVITEMSX; x++)
-                Display->Box((x * INVITEMHEIGHT) + INVENTORYSTARTX,
+                Display.Box((x * INVITEMHEIGHT) + INVENTORYSTARTX,
                     (y * INVITEMWIDTH) + INVENTORYSTARTY, INVITEMREALHEIGHT,
                     INVITEMREALWIDTH, 0, 0xffff, 0, DM_BACKGROUND);
 
@@ -70,7 +70,7 @@ void TInventory::DrawBackground()
                 {
                     char buf[80];
                     itos(oi->Amount(), buf, 80);
-                    Display->WriteText(buf, x, y-1, 1, GameData->Font("numbers"));
+                    Display.WriteText(buf, x, y-1, 1, GameData->Font("numbers"));
                 }
             }
         }
@@ -222,10 +222,10 @@ void TInventory::DrawAnim(TObjectInstance* inst, PTBitmap bm)
         y += INVENTORYSTARTY;
 
         int32_t sx, sy, sw, sh;
-        Display->GetClipRect(sx, sy, sw, sh);
+        Display.GetClipRect(sx, sy, sw, sh);
         SetClipRect();
-        Display->Put(x, y, bm);
-        Display->SetClipRect(sx, sy, sw, sh);
+        Display.Put(x, y, bm);
+        Display.SetClipRect(sx, sy, sw, sh);
     }
 }
 
