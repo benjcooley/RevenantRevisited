@@ -19,6 +19,11 @@ cbuffer params : register(b0) {
     float4 filter_;
     float4 cb_obj_id;
     float4 camera;
+    float4 proj;
+    float4 tile_rect;
+    float4 cam_tile;
+    float4 debug;
+    float4 raycast;
 };
 struct vs_in  { float2 pos : POSITION; float2 uv : TEXCOORD0; };
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
@@ -61,6 +66,11 @@ cbuffer params : register(b0) {
     float4 filter_;
     float4 cb_obj_id;
     float4 camera;
+    float4 proj;
+    float4 tile_rect;
+    float4 cam_tile;
+    float4 debug;
+    float4 raycast;
 };
 Texture2D    color_tex : register(t0);
 Texture2D    depth_tex : register(t1);
@@ -73,11 +83,35 @@ struct fs_out {
     float4 obj_id  : SV_Target3;
     float  depth   : SV_Depth;
 };
+bool tile_depth_valid(float2 uv) {
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+        return false;
+    uint w, h;
+    depth_tex.GetDimensions(w, h);
+    int2 p = int2(clamp(uv * float2(float(w), float(h)),
+                         float2(0.0, 0.0),
+                         float2(float(w - 1), float(h - 1))));
+    return abs(depth_tex.Load(int3(p, 0)).r) > 0.0001;
+}
+float tile_depth_read(float2 uv) {
+    uint w, h;
+    depth_tex.GetDimensions(w, h);
+    int2 p = int2(clamp(uv * float2(float(w), float(h)),
+                         float2(0.0, 0.0),
+                         float2(float(w - 1), float(h - 1))));
+    return depth_tex.Load(int3(p, 0)).r;
+}
 fs_out main_ps(vs_out in_) {
     fs_out o;
     float4 c = color_tex.Sample(smp, in_.uv);
+    float albedo_pad = max(raycast.z, 0.0);
+    float2 gbuf_size = max(proj.zw, float2(1.0, 1.0));
+    bool present_albedo =
+        in_.pos.x >= albedo_pad && in_.pos.x < (gbuf_size.x - albedo_pad) &&
+        in_.pos.y >= albedo_pad && in_.pos.y < (gbuf_size.y - albedo_pad);
     if (c.a < 0.01) discard;
-    float zraw = depth_tex.Sample(smp, in_.uv).r;
+    if (!tile_depth_valid(in_.uv)) discard;
+    float zraw = tile_depth_read(in_.uv);
     float d    = zparams.x + zraw * zparams.y;
     if (d < 0.0 || d > 1.0) discard;
     float nr  = max(filter_.x, 0.5);
@@ -86,10 +120,10 @@ fs_out main_ps(vs_out in_) {
     float2 tex = float2(nr / max(tw, 1.0), nr / max(th, 1.0));
     float sx = in_.uv.x * tile_sprite.z - tile_sprite.x;
     float sy = in_.uv.y * tile_sprite.w - tile_sprite.y;
-    float zl  = depth_tex.Sample(smp, in_.uv - float2(tex.x, 0.0)).r;
-    float zrs = depth_tex.Sample(smp, in_.uv + float2(tex.x, 0.0)).r;
-    float zt  = depth_tex.Sample(smp, in_.uv - float2(0.0, tex.y)).r;
-    float zb  = depth_tex.Sample(smp, in_.uv + float2(0.0, tex.y)).r;
+    float zl  = tile_depth_read(in_.uv - float2(tex.x, 0.0));
+    float zrs = tile_depth_read(in_.uv + float2(tex.x, 0.0));
+    float zt  = tile_depth_read(in_.uv - float2(0.0, tex.y));
+    float zb  = tile_depth_read(in_.uv + float2(0.0, tex.y));
     if (abs(zl  - zraw) > thr + EDGE_EPS) zl  = zraw;
     if (abs(zrs - zraw) > thr + EDGE_EPS) zrs = zraw;
     if (abs(zt  - zraw) > thr + EDGE_EPS) zt  = zraw;
@@ -125,6 +159,7 @@ fs_out main_ps(vs_out in_) {
     float3 N   = normalize(cross(t_v, t_u));
     float3 Vc  = normalize(float3(ISO_COS30, ISO_COS30, 1.0));
     if (dot(N, Vc) < 0.0) N = -N;
+    if (!present_albedo) c = float4(0.0, 0.0, 0.0, 0.0);
     o.albedo  = c;
     o.normal  = float4(N * 0.5 + 0.5, 1.0);
     o.scene_z = float4(d, 0.0, 0.0, 1.0);

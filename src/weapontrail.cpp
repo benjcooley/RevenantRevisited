@@ -616,15 +616,11 @@ hmm_mat4* TWeaponSwipe::GetCharsWeaponMatrix()
 
     if (weaponnum >= 0)
     {
-        hmm_mat4 pos;
-        charanim->MakeMatrix(&pos);                 // Get character position
         weaponobj = charanim->GetObject(weaponnum);
-        TCharacter* inst = (TCharacter*)charanim->GetObjInst();
-        charanim->Get3DImagery()->CalcObjectMatrix(weaponobj, ((TObjectInstance*)inst)->GetState(), inst->GetFrame(), &pos);
-        return &weaponobj->matrix;
+        if (weaponobj && charanim->GetObjectMatrix(weaponnum, &weaponobj->matrix))
+            return &weaponobj->matrix;
     }
-    else 
-        return nullptr;
+    return nullptr;
 }
 
 void TWeaponSwipe::Close()

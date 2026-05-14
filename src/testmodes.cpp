@@ -31,6 +31,7 @@
 
 #include <cmath>
 #include <cctype>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -442,7 +443,7 @@ bool InitializeTileDumpMode()
 
 struct SCharPreviewState
 {
-    sg_image fallback_albedo = {};
+    TTextureHandle fallback_albedo = kInvalidTexture;
     struct Sub {
         MeshHandle handle = 0;
         int32_t objnum = -1;
@@ -481,11 +482,7 @@ void CloseCharPreviewMode()
         delete g_charPreview.inst;
         g_charPreview.inst = nullptr;
     }
-    if (g_charPreview.fallback_albedo.id)
-    {
-        sg_destroy_image(g_charPreview.fallback_albedo);
-        g_charPreview.fallback_albedo = {};
-    }
+    g_charPreview.fallback_albedo = kInvalidTexture;
     g_charPreview.subs.clear();
     g_charPreview.img = nullptr;
     g_charPreview.spin = 0.0f;
@@ -545,17 +542,8 @@ bool RebuildCharPreviewForRosterIndex(int32_t roster_idx)
     if (!g_charPreview.img)
         return false;
 
-    if (!g_charPreview.fallback_albedo.id)
-    {
-        uint32_t white = 0xFFFFFFFFu;
-        sg_image_desc idesc = {};
-        idesc.width = 1;
-        idesc.height = 1;
-        idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
-        idesc.data.subimage[0][0] = { &white, sizeof(white) };
-        idesc.label = "char3d.albedo";
-        g_charPreview.fallback_albedo = sg_make_image(&idesc);
-    }
+    if (g_charPreview.fallback_albedo == kInvalidTexture)
+        g_charPreview.fallback_albedo = Renderer->WhiteTextureHandle();
 
     const int32_t state = inst->GetState();
     const int32_t frame = inst->GetFrame();
@@ -577,13 +565,13 @@ bool RebuildCharPreviewForRosterIndex(int32_t roster_idx)
             if (!ExtractSubMeshTextureSlot(g_charPreview.img, objnum, texslot, verts, indices))
                 continue;
 
-            sg_image albedo = g_charPreview.fallback_albedo;
+            TTextureHandle albedo = g_charPreview.fallback_albedo;
             if (texslot > 0)
             {
                 S3DTex tex = {};
                 g_charPreview.img->GetTexture(texslot - 1, &tex);
-                if (tex.surface.id)
-                    albedo = tex.surface;
+                if (tex.htexture != kInvalidTexture)
+                    albedo = tex.htexture;
             }
             MeshHandle h = Renderer->RegisterMesh(verts.data(), int32_t(verts.size()),
                                                   indices.data(), int32_t(indices.size()),
@@ -621,13 +609,13 @@ bool RebuildCharPreviewForRosterIndex(int32_t roster_idx)
             std::vector<uint16_t> indices;
             if (!ExtractSubMesh(g_charPreview.img, objnum, verts, indices))
                 continue;
-            sg_image albedo = g_charPreview.fallback_albedo;
+            TTextureHandle albedo = g_charPreview.fallback_albedo;
             if (g_charPreview.img->NumTextures() > 0)
             {
                 S3DTex tex = {};
                 g_charPreview.img->GetTexture(0, &tex);
-                if (tex.surface.id)
-                    albedo = tex.surface;
+                if (tex.htexture != kInvalidTexture)
+                    albedo = tex.htexture;
             }
             MeshHandle h = Renderer->RegisterMesh(verts.data(), int32_t(verts.size()),
                                                   indices.data(), int32_t(indices.size()),
@@ -785,10 +773,10 @@ void RenderCharPreviewMode()
 // --- Mesh test state ----------------------------------------------------
 struct SMeshTestState
 {
-    MeshHandle cube    = 0;
-    sg_image   albedo  = {};
-    float      spin    = 0.0f;
-    int32_t    frames  = 0;
+    MeshHandle     cube   = 0;
+    TTextureHandle albedo = kInvalidTexture;
+    float          spin   = 0.0f;
+    int32_t        frames = 0;
 };
 SMeshTestState g_meshTest;
 
@@ -797,16 +785,7 @@ bool InitializeMeshMode()
     if (!Renderer) { log_error("[mesh] Renderer is null"); return false; }
 
     // 1x1 white albedo so the cube reads the tint directly.
-    uint32_t white = 0xFFFFFFFFu;
-    sg_image_desc idesc = {};
-    idesc.width  = 1;
-    idesc.height = 1;
-    idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    idesc.min_filter   = SG_FILTER_NEAREST;
-    idesc.mag_filter   = SG_FILTER_NEAREST;
-    idesc.data.subimage[0][0] = { &white, sizeof(white) };
-    idesc.label = "meshtest.albedo";
-    g_meshTest.albedo = sg_make_image(&idesc);
+    g_meshTest.albedo = Renderer->WhiteTextureHandle();
 
     // Cube, half-extent h, face-independent normals.
     constexpr float h = 128.0f;
@@ -917,22 +896,22 @@ void RenderMeshMode()
 
 void CloseMeshMode()
 {
-    if (g_meshTest.albedo.id) { sg_destroy_image(g_meshTest.albedo); g_meshTest.albedo = {}; }
+    g_meshTest.albedo = kInvalidTexture;
     g_meshTest.cube = 0;
 }
 
-// --- I3D static-render test state ---------------------------------------
-// Loads one T3DImagery asset and renders all its sub-objects in state 0
-// frame 0 (binding pose). Proves the mesh-extract + hierarchy walk before
-// we plumb animation or map integration.
+// --- I3D animation test state -------------------------------------------
+// Loads one T3DImagery asset and samples one selected state directly as a
+// pure loop. No TObjectInstance, player state machine, or prevstate transition
+// blend is involved; this screen is the baseline for validating authored loop
+// keys and frame-to-frame interpolation.
 struct SI3DStaticTestState
 {
-    sg_image   fallback_albedo = {};
-    sg_image   bg_black = {};
-    sg_image   bg_brown = {};
-    sg_image   bg_green = {};
-    sg_image   bg_checker = {};
-    sg_image   bg_depth = {};
+    TTextureHandle fallback_albedo = kInvalidTexture;
+    RendererImagePairHandle bg_black = 0;
+    RendererImagePairHandle bg_brown = 0;
+    RendererImagePairHandle bg_green = 0;
+    RendererImagePairHandle bg_checker = 0;
     struct Sub {
         MeshHandle handle;
         int32_t    objnum = -1;
@@ -940,10 +919,19 @@ struct SI3DStaticTestState
         int32_t    texture_idx = -1;
         float      world[16];  // state-0/frame-0 local hierarchy matrix
     };
+    struct CharacterChoice {
+        int32_t objclass = -1;
+        int32_t objtype = -1;
+        int32_t imageryid = -1;
+        std::string label;
+    };
     std::vector<Sub> subs;
     std::vector<std::string> roster;
+    std::vector<CharacterChoice> character_roster;
     int32_t    roster_idx = 0;
+    int32_t    character_idx = -1;
     std::string active_asset;
+    int32_t    active_imagery_id = -1;
     int32_t    bg_mode = 0;
     T3DImagery* img = nullptr;
     bool       transparent_preview = false;
@@ -954,10 +942,12 @@ struct SI3DStaticTestState
     float      scale  = 1.0f;
     float      spin = 0.0f;
     double     anim_time = 0.0;
+    float      anim_speed = 1.0f;
     int32_t    anim_state = 0;
     int32_t    anim_frame = 0;
     int32_t    anim_prev_frame = 0;
     int32_t    frames = 0;
+    bool       anim_paused = false;
     bool       logged = false;
 };
 SI3DStaticTestState g_i3dTest;
@@ -969,18 +959,156 @@ const char* kI3DBGNames[] = {
     "green",
 };
 
-sg_image MakeSolidImage(uint32_t rgba, const char* label)
+void MixI3DPreviewKey(uint64_t& hash, uint64_t value)
 {
-    sg_image_desc idesc = {};
-    idesc.width = 1;
-    idesc.height = 1;
-    idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    idesc.data.subimage[0][0] = { &rgba, sizeof(rgba) };
-    idesc.label = label;
-    return sg_make_image(&idesc);
+    hash ^= value;
+    hash *= 1099511628211ull;
 }
 
-sg_image MakeCheckerImage(const char* label)
+uint64_t I3DPreviewMeshKey(int32_t imageryid, int32_t objnum, int32_t texslot)
+{
+    uint64_t hash = 1469598103934665603ull;
+    MixI3DPreviewKey(hash, 0x493344544553544Dull); // "I3DTESTM"
+    MixI3DPreviewKey(hash, uint64_t(uint32_t(imageryid)));
+    MixI3DPreviewKey(hash, uint64_t(uint32_t(objnum)));
+    MixI3DPreviewKey(hash, uint64_t(uint32_t(texslot + 1)));
+    return hash ? hash : 1ull;
+}
+
+void ClearI3DStaticMeshes()
+{
+    if (Renderer)
+    {
+        for (const auto& sub : g_i3dTest.subs)
+            Renderer->ReleaseMeshAssetRef(sub.handle);
+    }
+    g_i3dTest.subs.clear();
+}
+
+void ResetI3DStaticPlayback(int32_t state = 0)
+{
+    g_i3dTest.anim_time = 0.0;
+    g_i3dTest.anim_state = state;
+    g_i3dTest.anim_frame = 0;
+    g_i3dTest.anim_prev_frame = 0;
+}
+
+int32_t ClampI3DStaticState(int32_t state)
+{
+    if (!g_i3dTest.img || g_i3dTest.img->NumStates() <= 0)
+        return 0;
+    if (state < 0)
+        return 0;
+    if (state >= g_i3dTest.img->NumStates())
+        return g_i3dTest.img->NumStates() - 1;
+    return state;
+}
+
+int32_t CurrentI3DStaticAnimLength()
+{
+    if (!g_i3dTest.img || g_i3dTest.img->NumStates() <= 0)
+        return 1;
+    g_i3dTest.anim_state = ClampI3DStaticState(g_i3dTest.anim_state);
+    return (std::max)(1, g_i3dTest.img->GetAniLength(g_i3dTest.anim_state));
+}
+
+void UpdateI3DStaticFrameFromTime()
+{
+    const int32_t len = CurrentI3DStaticAnimLength();
+    const double wrapped = std::fmod(g_i3dTest.anim_time, double(len));
+    const double positive = wrapped < 0.0 ? wrapped + double(len) : wrapped;
+    g_i3dTest.anim_time = positive;
+    g_i3dTest.anim_frame = int32_t(positive) % len;
+    g_i3dTest.anim_prev_frame = (g_i3dTest.anim_frame + len - 1) % len;
+}
+
+void StepI3DStaticFrames(int32_t frames)
+{
+    g_i3dTest.anim_paused = true;
+    g_i3dTest.anim_time += double(frames);
+    UpdateI3DStaticFrameFromTime();
+}
+
+void AddI3DCharacterChoices(TObjectClass& cl, int32_t objclass)
+{
+    for (int32_t objtype = 0; objtype < cl.NumTypes(); ++objtype)
+    {
+        SObjectInfo* info = cl.GetObjType(objtype);
+        if (!info)
+            continue;
+
+        SImageryEntry* entry = TObjectImagery::GetImageryEntry(info->imageryid);
+        if (!entry)
+            continue;
+        if (!entry->header ||
+            (entry->header->imageryid != OBJIMAGE_MESH3D &&
+             entry->header->imageryid != OBJIMAGE_MESH3DHELPER))
+            continue;
+
+        SI3DStaticTestState::CharacterChoice choice;
+        choice.objclass = objclass;
+        choice.objtype = objtype;
+        choice.imageryid = info->imageryid;
+        choice.label = cl.ClassName() ? cl.ClassName() : "Object";
+        choice.label += " / ";
+        choice.label += info->name ? info->name : "?";
+        choice.label += "  ";
+        choice.label += entry->filename;
+        g_i3dTest.character_roster.push_back(choice);
+    }
+}
+
+void BuildI3DCharacterChoices()
+{
+    g_i3dTest.character_roster.clear();
+    AddI3DCharacterChoices(CharacterClass, OBJCLASS_CHARACTER);
+    AddI3DCharacterChoices(PlayerClass, OBJCLASS_PLAYER);
+    g_i3dTest.character_idx = g_i3dTest.character_roster.empty() ? -1 : 0;
+}
+
+int32_t FindI3DCharacterChoiceByImagery(int32_t imageryid)
+{
+    for (int32_t i = 0; i < int32_t(g_i3dTest.character_roster.size()); ++i)
+        if (g_i3dTest.character_roster[i].imageryid == imageryid)
+            return i;
+    return -1;
+}
+
+const char* I3DFlagListText(int32_t flags)
+{
+    static char buf[160];
+    buf[0] = 0;
+    auto append = [&](const char* text) {
+        if (buf[0])
+            strncat(buf, " ", sizeof(buf) - strlen(buf) - 1);
+        strncat(buf, text, sizeof(buf) - strlen(buf) - 1);
+    };
+    if (flags & AF_LOOPING) append("loop");
+    if (flags & AF_PINGPONG) append("pingpong");
+    if (flags & AF_REVERSE) append("reverse");
+    if (flags & AF_NOINTERPOLATION) append("no-transition-interp");
+    if (flags & AF_MOVE) append("move");
+    if (flags & AF_ROOT) append("root");
+    if (flags & AF_ROOT2ROOT) append("root2root");
+    if (!buf[0])
+        strcpy(buf, "none");
+    return buf;
+}
+
+bool LoadI3DStaticAsset(const char* path);
+bool LoadI3DStaticImagery(int32_t imageryid, const char* label);
+
+RendererImagePairHandle MakeSolidImagePair(uint64_t key, uint32_t rgba)
+{
+    const float zero = 0.0f;
+    return Renderer->RegisterImagePairAsset(key,
+                                            &rgba, sizeof(rgba),
+                                            &zero, sizeof(zero),
+                                            1, 1,
+                                            sizeof(rgba) + sizeof(zero));
+}
+
+RendererImagePairHandle MakeCheckerImagePair(uint64_t key)
 {
     static constexpr int32_t kW = 64;
     static constexpr int32_t kH = 64;
@@ -994,51 +1122,30 @@ sg_image MakeCheckerImage(const char* label)
             pixels[y * kW + x] = 0xFF000000u | (uint32_t(c) << 16) | (uint32_t(c) << 8) | uint32_t(c);
         }
     }
-    sg_image_desc idesc = {};
-    idesc.width = kW;
-    idesc.height = kH;
-    idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    idesc.min_filter = SG_FILTER_NEAREST;
-    idesc.mag_filter = SG_FILTER_NEAREST;
-    idesc.wrap_u = SG_WRAP_REPEAT;
-    idesc.wrap_v = SG_WRAP_REPEAT;
-    idesc.data.subimage[0][0] = { pixels, sizeof(pixels) };
-    idesc.label = label;
-    return sg_make_image(&idesc);
+    float depth[kW * kH] = {};
+    return Renderer->RegisterImagePairAsset(key,
+                                            pixels, sizeof(pixels),
+                                            depth, sizeof(depth),
+                                            kW, kH,
+                                            sizeof(pixels) + sizeof(depth));
 }
 
 bool EnsureI3DStaticBackgroundAssets()
 {
-    if (g_i3dTest.bg_black.id && g_i3dTest.bg_brown.id &&
-        g_i3dTest.bg_green.id && g_i3dTest.bg_checker.id &&
-        g_i3dTest.bg_depth.id)
+    if (g_i3dTest.bg_black && g_i3dTest.bg_brown &&
+        g_i3dTest.bg_green && g_i3dTest.bg_checker)
         return true;
 
-    if (!g_i3dTest.bg_black.id)   g_i3dTest.bg_black   = MakeSolidImage(0xFF000000u, "i3d3d.bg.black");
-    if (!g_i3dTest.bg_brown.id)   g_i3dTest.bg_brown   = MakeSolidImage(0xFF6E7B9Au, "i3d3d.bg.brown");
-    if (!g_i3dTest.bg_green.id)   g_i3dTest.bg_green   = MakeSolidImage(0xFF4E7A4Au, "i3d3d.bg.green");
-    if (!g_i3dTest.bg_checker.id) g_i3dTest.bg_checker = MakeCheckerImage("i3d3d.bg.checker");
+    if (!g_i3dTest.bg_black)   g_i3dTest.bg_black   = MakeSolidImagePair(0x4933444247424C4Bull, 0xFF000000u);
+    if (!g_i3dTest.bg_brown)   g_i3dTest.bg_brown   = MakeSolidImagePair(0x493344424742524Eull, 0xFF6E7B9Au);
+    if (!g_i3dTest.bg_green)   g_i3dTest.bg_green   = MakeSolidImagePair(0x493344424747524Eull, 0xFF4E7A4Au);
+    if (!g_i3dTest.bg_checker) g_i3dTest.bg_checker = MakeCheckerImagePair(0x493344424743484Bull);
 
-    if (!g_i3dTest.bg_depth.id)
-    {
-        const float zero = 0.0f;
-        sg_image_desc idesc = {};
-        idesc.width = 1;
-        idesc.height = 1;
-        idesc.pixel_format = SG_PIXELFORMAT_R32F;
-        idesc.min_filter = SG_FILTER_NEAREST;
-        idesc.mag_filter = SG_FILTER_NEAREST;
-        idesc.data.subimage[0][0] = { &zero, sizeof(zero) };
-        idesc.label = "i3d3d.bg.depth";
-        g_i3dTest.bg_depth = sg_make_image(&idesc);
-    }
-
-    return g_i3dTest.bg_black.id && g_i3dTest.bg_brown.id &&
-           g_i3dTest.bg_green.id && g_i3dTest.bg_checker.id &&
-           g_i3dTest.bg_depth.id;
+    return g_i3dTest.bg_black && g_i3dTest.bg_brown &&
+           g_i3dTest.bg_green && g_i3dTest.bg_checker;
 }
 
-sg_image CurrentI3DBackgroundImage()
+RendererImagePairHandle CurrentI3DBackgroundImagePair()
 {
     switch (g_i3dTest.bg_mode)
     {
@@ -1167,8 +1274,8 @@ void LogI3DAnimationSummary(T3DImagery* img, const char* label)
     {
         S3DTex tex = {};
         img->GetTexture(texnum, &tex);
-        log_info("[water3d]   tex[%d] frames=%d current=%d surface=%u",
-                 texnum, tex.numframes, tex.framenum, tex.surface.id);
+        log_info("[water3d]   tex[%d] frames=%d current=%d handle=%u",
+                 texnum, tex.numframes, tex.framenum, tex.htexture);
     }
     const int32_t st = 0;
     const int32_t len = img->NumStates() > 0 ? img->GetAniLength(st) : 0;
@@ -1188,114 +1295,246 @@ void LogI3DAnimationSummary(T3DImagery* img, const char* label)
     }
 }
 
-void DrawWaterPreviewOverlay()
+void DrawI3DPreviewPanel()
 {
-    if (g_i3dTest.roster.empty())
-        return;
-
-    ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(0.72f);
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
-                             ImGuiWindowFlags_AlwaysAutoResize |
+    ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowBgAlpha(0.86f);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize |
                              ImGuiWindowFlags_NoSavedSettings |
-                             ImGuiWindowFlags_NoMove |
-                             ImGuiWindowFlags_NoFocusOnAppearing |
-                             ImGuiWindowFlags_NoNav;
-    if (!ImGui::Begin("water3d_overlay", nullptr, flags))
+                             ImGuiWindowFlags_NoFocusOnAppearing;
+    if (!ImGui::Begin("I3D Animation Test", nullptr, flags))
     {
         ImGui::End();
         return;
     }
 
-    const char* type_name = WaterPreviewTypeName();
-    ImGui::Text("water3d  %d/%zu", g_i3dTest.roster_idx + 1, g_i3dTest.roster.size());
-    ImGui::Separator();
-    ImGui::Text("type:  %s", type_name ? type_name : "?");
-    ImGui::Text("asset: %s", g_i3dTest.active_asset.c_str());
-    ImGui::Text("bg:    %s", kI3DBGNames[g_i3dTest.bg_mode]);
-
-    if (g_i3dTest.active_policy)
+    const bool water_mode = g_i3dTest.transparent_preview && !g_i3dTest.roster.empty();
+    if (water_mode)
     {
-        const SRenderPolicy& p = *g_i3dTest.active_policy;
-        ImGui::Separator();
-        ImGui::Text("drawable: %s", RenderMetaDrawableName(p.drawable));
-        ImGui::Text("blend:    %s", RenderMetaBlendName(p.blend));
-        ImGui::Text("lighting: %s", RenderMetaLightingName(p.lighting));
-        ImGui::Text("ztest/zwrite: %d / %d", p.ztest ? 1 : 0, p.zwrite ? 1 : 0);
-        ImGui::Text("tex anim: %s", RenderMetaTextureAnimName(p.texture_anim));
+        const char* preview = (g_i3dTest.roster_idx >= 0 &&
+                               g_i3dTest.roster_idx < int32_t(g_i3dTest.roster.size()))
+            ? g_i3dTest.roster[g_i3dTest.roster_idx].c_str()
+            : "?";
+        ImGui::SetNextItemWidth(360.0f);
+        if (ImGui::BeginCombo("Asset", preview))
+        {
+            for (int32_t i = 0; i < int32_t(g_i3dTest.roster.size()); ++i)
+            {
+                const bool selected = (i == g_i3dTest.roster_idx);
+                if (ImGui::Selectable(g_i3dTest.roster[i].c_str(), selected))
+                {
+                    g_i3dTest.roster_idx = i;
+                    LoadI3DStaticAsset(g_i3dTest.roster[i].c_str());
+                }
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    }
+    else if (!g_i3dTest.character_roster.empty())
+    {
+        const char* preview = (g_i3dTest.character_idx >= 0 &&
+                               g_i3dTest.character_idx < int32_t(g_i3dTest.character_roster.size()))
+            ? g_i3dTest.character_roster[g_i3dTest.character_idx].label.c_str()
+            : g_i3dTest.active_asset.c_str();
+        ImGui::SetNextItemWidth(420.0f);
+        if (ImGui::BeginCombo("Character", preview))
+        {
+            for (int32_t i = 0; i < int32_t(g_i3dTest.character_roster.size()); ++i)
+            {
+                const auto& choice = g_i3dTest.character_roster[i];
+                const bool selected = (i == g_i3dTest.character_idx);
+                if (ImGui::Selectable(choice.label.c_str(), selected))
+                {
+                    g_i3dTest.character_idx = i;
+                    LoadI3DStaticImagery(choice.imageryid, choice.label.c_str());
+                }
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    }
+
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::BeginCombo("Background", kI3DBGNames[g_i3dTest.bg_mode]))
+    {
+        for (int32_t i = 0; i < 4; ++i)
+        {
+            const bool selected = (i == g_i3dTest.bg_mode);
+            if (ImGui::Selectable(kI3DBGNames[i], selected))
+                g_i3dTest.bg_mode = i;
+            if (selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::Separator();
+    ImGui::TextWrapped("Source: %s", g_i3dTest.active_asset.empty() ? "?" : g_i3dTest.active_asset.c_str());
+    ImGui::Text("Sampling: direct I3D loop, prevstate disabled");
+
+    if (g_i3dTest.img && g_i3dTest.img->NumStates() > 0)
+    {
+        g_i3dTest.anim_state = ClampI3DStaticState(g_i3dTest.anim_state);
+
+        char preview[160];
+        const char* state_name = g_i3dTest.img->GetAniName(g_i3dTest.anim_state);
+        std::snprintf(preview, sizeof(preview), "%02d  %s",
+                      g_i3dTest.anim_state, state_name ? state_name : "?");
+
+        ImGui::SetNextItemWidth(320.0f);
+        if (ImGui::BeginCombo("State", preview))
+        {
+            for (int32_t st = 0; st < g_i3dTest.img->NumStates(); ++st)
+            {
+                char label[160];
+                const char* name = g_i3dTest.img->GetAniName(st);
+                std::snprintf(label, sizeof(label), "%02d  %s", st, name ? name : "?");
+                const bool selected = (st == g_i3dTest.anim_state);
+                if (ImGui::Selectable(label, selected))
+                    ResetI3DStaticPlayback(st);
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        const int32_t len = CurrentI3DStaticAnimLength();
+        const int32_t next_frame = (g_i3dTest.anim_frame + 1) % len;
+        const float frac = float(g_i3dTest.anim_time - std::floor(g_i3dTest.anim_time));
+        const int32_t state_flags = g_i3dTest.img->GetAniFlags(g_i3dTest.anim_state);
+        ImGui::Text("Frame: %d -> %d   frac %.3f   len %d",
+                    g_i3dTest.anim_frame, next_frame, frac, len);
+        ImGui::Text("Flags: 0x%04x  %s", state_flags, I3DFlagListText(state_flags));
+
+        ImGui::Checkbox("Pause", &g_i3dTest.anim_paused);
+        ImGui::SameLine();
+        if (ImGui::Button("- frame"))
+            StepI3DStaticFrames(-1);
+        ImGui::SameLine();
+        if (ImGui::Button("+ frame"))
+            StepI3DStaticFrames(1);
+        ImGui::SameLine();
+        if (ImGui::Button("Reset"))
+            ResetI3DStaticPlayback(g_i3dTest.anim_state);
+
+        ImGui::SetNextItemWidth(220.0f);
+        ImGui::SliderFloat("Speed", &g_i3dTest.anim_speed, 0.0f, 2.0f, "%.2fx");
+
+        float time_scale = float(TTime::TimeScale());
+        ImGui::SetNextItemWidth(220.0f);
+        if (ImGui::SliderFloat("Game time scale", &time_scale, 0.0f, 4.0f, "%.3fx"))
+            TTime::SetTimeScale(time_scale);
+        ImGui::TextUnformatted("Presets:");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("1x##i3d_timescale", TTime::TimeScale() == 1.0))
+            TTime::SetTimeScale(1.0);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("1/2##i3d_timescale", TTime::TimeScale() == 0.5))
+            TTime::SetTimeScale(0.5);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("1/4##i3d_timescale", TTime::TimeScale() == 0.25))
+            TTime::SetTimeScale(0.25);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("1/8##i3d_timescale", TTime::TimeScale() == 0.125))
+            TTime::SetTimeScale(0.125);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("2x##i3d_timescale", TTime::TimeScale() == 2.0))
+            TTime::SetTimeScale(2.0);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("4x##i3d_timescale", TTime::TimeScale() == 4.0))
+            TTime::SetTimeScale(4.0);
     }
     else
     {
+        ImGui::Text("No animation states");
+    }
+
+    if (water_mode)
+    {
+        const char* type_name = WaterPreviewTypeName();
         ImGui::Separator();
-        ImGui::Text("policy: <none>");
+        ImGui::Text("Water type: %s", type_name ? type_name : "?");
+        if (g_i3dTest.active_policy)
+        {
+            const SRenderPolicy& p = *g_i3dTest.active_policy;
+            ImGui::Text("Drawable: %s", RenderMetaDrawableName(p.drawable));
+            ImGui::Text("Blend: %s   Lighting: %s",
+                        RenderMetaBlendName(p.blend),
+                        RenderMetaLightingName(p.lighting));
+            ImGui::Text("ztest/zwrite: %d / %d", p.ztest ? 1 : 0, p.zwrite ? 1 : 0);
+        }
     }
 
     ImGui::Separator();
-    ImGui::Text("frame: %d  anim: %d -> %d", g_i3dTest.frames,
-                g_i3dTest.anim_prev_frame, g_i3dTest.anim_frame);
-    if (g_i3dTest.img)
-    {
-        ImGui::Text("textures: %d", g_i3dTest.img->NumTextures());
-        for (int32_t i = 0; i < g_i3dTest.img->NumTextures() && i < 4; ++i)
-        {
-            S3DTex tex = {};
-            g_i3dTest.img->GetTexture(i, &tex);
-            ImGui::Text("tex[%d]: frame %d/%d img=%u", i, tex.framenum, tex.numframes, tex.surface.id);
-        }
-    }
-    ImGui::Text("subs: %zu", g_i3dTest.subs.size());
-    ImGui::Text("LMB next asset, RMB bg");
+    ImGui::Text("Objects: %zu   textures: %d",
+                g_i3dTest.subs.size(),
+                g_i3dTest.img ? g_i3dTest.img->NumTextures() : 0);
 
     ImGui::End();
 }
 
 bool LoadI3DStaticAsset(const char* path)
 {
+    log_info("[i3d3d] resolving '%s'", path ? path : "");
+    const int32_t id = TObjectImagery::FindImagery(path);
+    log_info("[i3d3d]   FindImagery returned id=%d", id);
+    if (id < 0)
+    {
+        log_error("[i3d3d] FindImagery failed for '%s'", path ? path : "");
+        return false;
+    }
+    return LoadI3DStaticImagery(id, path);
+}
+
+bool LoadI3DStaticImagery(int32_t id, const char* label)
+{
     if (!Renderer) { log_error("[i3d3d] Renderer is null"); return false; }
 
-    g_i3dTest.subs.clear();
+    ClearI3DStaticMeshes();
     g_i3dTest.logged = false;
     g_i3dTest.spin = 0.0f;
     g_i3dTest.frames = 0;
-    g_i3dTest.anim_time = 0.0;
-    g_i3dTest.anim_state = 0;
-    g_i3dTest.anim_frame = 0;
-    g_i3dTest.anim_prev_frame = 0;
+    ResetI3DStaticPlayback(0);
     g_i3dTest.img = nullptr;
+    g_i3dTest.active_imagery_id = -1;
+    g_i3dTest.active_policy = nullptr;
 
-    if (!g_i3dTest.fallback_albedo.id)
-    {
-        uint32_t white = 0xFFFFFFFFu;
-        sg_image_desc idesc = {};
-        idesc.width = 1; idesc.height = 1;
-        idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
-        idesc.data.subimage[0][0] = { &white, sizeof(white) };
-        idesc.label = "i3d3d.albedo";
-        g_i3dTest.fallback_albedo = sg_make_image(&idesc);
-    }
+    if (g_i3dTest.fallback_albedo == kInvalidTexture)
+        g_i3dTest.fallback_albedo = Renderer->WhiteTextureHandle();
     if (!EnsureI3DStaticBackgroundAssets())
     {
         log_error("[i3d3d] failed to initialize preview backgrounds");
         return false;
     }
 
-    g_i3dTest.active_asset = path ? path : "";
-    log_info("[i3d3d] resolving '%s'", path);
-    const int32_t id = TObjectImagery::FindImagery(path);
-    log_info("[i3d3d]   FindImagery returned id=%d", id);
-    if (id < 0) { log_error("[i3d3d] FindImagery failed for '%s'", path); return false; }
-    log_info("[i3d3d]   LoadImagery...");
+    g_i3dTest.active_asset = label ? label : "";
+    log_info("[i3d3d]   LoadImagery id=%d label='%s'...",
+             id, g_i3dTest.active_asset.c_str());
     TObjectImagery* base = TObjectImagery::LoadImagery(id);
     log_info("[i3d3d]   LoadImagery -> %p", (void*)base);
-    if (!base) { log_error("[i3d3d] LoadImagery returned null for '%s'", path); return false; }
+    if (!base)
+    {
+        log_error("[i3d3d] LoadImagery returned null for id=%d '%s'",
+                  id, g_i3dTest.active_asset.c_str());
+        return false;
+    }
     T3DImagery* img = dynamic_cast<T3DImagery*>(base);
     if (!img) { log_error("[i3d3d] imagery is not a T3DImagery (id=%d)", id); return false; }
     g_i3dTest.img = img;
+    g_i3dTest.active_imagery_id = id;
+
+    const int32_t choice = FindI3DCharacterChoiceByImagery(id);
+    if (choice >= 0)
+        g_i3dTest.character_idx = choice;
 
     log_info("[i3d3d] loaded '%s' (NumVerts=%d NumFaces=%d NumObjects=%d)",
-             path, img->NumVerts(), img->NumFaces(), img->NumObjects());
+             g_i3dTest.active_asset.c_str(),
+             img->NumVerts(), img->NumFaces(), img->NumObjects());
     if (!g_i3dTest.roster.empty())
-        LogI3DAnimationSummary(img, path);
+        LogI3DAnimationSummary(img, g_i3dTest.active_asset.c_str());
 
     bool bbox_init = false;
     int32_t total_tris = 0;
@@ -1310,13 +1549,13 @@ bool LoadI3DStaticAsset(const char* path)
             if (!ExtractSubMeshTextureSlot(img, objnum, texslot, verts, indices))
                 continue;
 
-            sg_image albedo = g_i3dTest.fallback_albedo;
+            TTextureHandle albedo = g_i3dTest.fallback_albedo;
             int32_t texture_idx = -1;
             if (texslot > 0) {
                 S3DTex tex = {};
                 img->GetTexture(texslot - 1, &tex);
-                if (tex.surface.id)
-                    albedo = tex.surface;
+                if (tex.htexture != kInvalidTexture)
+                    albedo = tex.htexture;
                 texture_idx = texslot - 1;
             }
             if (texture_idx < 0)
@@ -1331,22 +1570,26 @@ bool LoadI3DStaticAsset(const char* path)
                     {
                         S3DTex tex = {};
                         img->GetTexture(mat.texture, &tex);
-                        if (tex.surface.id)
+                        if (tex.htexture != kInvalidTexture)
                         {
-                            albedo = tex.surface;
+                            albedo = tex.htexture;
                             texture_idx = mat.texture;
                         }
                     }
                 }
             }
 
-            MeshHandle h = Renderer->RegisterMesh(verts.data(), int32_t(verts.size()),
-                                                  indices.data(), int32_t(indices.size()),
-                                                  albedo);
+            const uint64_t mesh_key =
+                I3DPreviewMeshKey(g_i3dTest.active_imagery_id, objnum, texslot);
+            MeshHandle h = Renderer->RegisterMeshAsset(mesh_key,
+                                                       verts.data(), int32_t(verts.size()),
+                                                       indices.data(), int32_t(indices.size()),
+                                                       albedo);
             if (!h) {
                 log_error("[i3d3d] RegisterMesh failed for obj %d texslot %d", objnum, texslot);
                 return false;
             }
+            Renderer->AddMeshAssetRef(h);
 
             SI3DStaticTestState::Sub s = {};
             s.handle = h;
@@ -1453,8 +1696,20 @@ bool InitializeI3DStaticMode()
 {
     g_i3dTest.roster.clear();
     g_i3dTest.roster_idx = 0;
-    const char* path = StartupAssetPath[0] ? StartupAssetPath : "Misc\\Blood.I3D";
-    return LoadI3DStaticAsset(path);
+    g_i3dTest.transparent_preview = false;
+    BuildI3DCharacterChoices();
+
+    if (StartupAssetPath[0])
+        return LoadI3DStaticAsset(StartupAssetPath);
+
+    if (!g_i3dTest.character_roster.empty())
+    {
+        g_i3dTest.character_idx = 0;
+        const auto& choice = g_i3dTest.character_roster[g_i3dTest.character_idx];
+        return LoadI3DStaticImagery(choice.imageryid, choice.label.c_str());
+    }
+
+    return LoadI3DStaticAsset("Misc\\Blood.I3D");
 }
 
 bool InitializeWaterPreviewMode()
@@ -1485,6 +1740,7 @@ bool InitializeWaterPreviewMode()
         "Misc\\Axis.I3D",
     };
     g_i3dTest.roster_idx = 0;
+    g_i3dTest.character_idx = -1;
     g_i3dTest.transparent_preview = true;
     return LoadI3DStaticAsset(g_i3dTest.roster[g_i3dTest.roster_idx].c_str());
 }
@@ -1492,7 +1748,7 @@ bool InitializeWaterPreviewMode()
 void RenderI3DStaticMode()
 {
     if (!Renderer || !Display.IsActive() || !Display.BackBuffer()) return;
-    if (g_i3dTest.subs.empty()) return;
+    if (!EnsureI3DStaticBackgroundAssets()) return;
 
     g_i3dTest.spin += 0.01f;
     g_i3dTest.frames++;
@@ -1526,12 +1782,10 @@ void RenderI3DStaticMode()
 
     if (g_i3dTest.img)
     {
-        const int32_t len = (std::max)(1, g_i3dTest.img->GetAniLength(g_i3dTest.anim_state));
-        g_i3dTest.anim_time += TTime::DeltaTime() * 24.0;
-        const double wrapped = std::fmod(g_i3dTest.anim_time, double(len));
-        const double positive = wrapped < 0.0 ? wrapped + double(len) : wrapped;
-        g_i3dTest.anim_frame = int32_t(positive) % len;
-        g_i3dTest.anim_prev_frame = (g_i3dTest.anim_frame + len - 1) % len;
+        g_i3dTest.anim_state = ClampI3DStaticState(g_i3dTest.anim_state);
+        if (!g_i3dTest.anim_paused)
+            g_i3dTest.anim_time += TTime::DeltaTime() * 24.0 * double(g_i3dTest.anim_speed);
+        UpdateI3DStaticFrameFromTime();
     }
 
     // Apply uniform scale to the I3D mesh (sub 0 is the control triangle
@@ -1542,8 +1796,7 @@ void RenderI3DStaticMode()
     const float cz = 0.5f * (g_i3dTest.bbox_min[2] + g_i3dTest.bbox_max[2]);
     {
         STileSubmit bg = {};
-        bg.color_img = CurrentI3DBackgroundImage();
-        bg.depth_img = g_i3dTest.bg_depth;
+        bg.image_pair = CurrentI3DBackgroundImagePair();
         bg.dst_x = 0;
         bg.dst_y = 0;
         bg.dst_w = vw;
@@ -1559,27 +1812,30 @@ void RenderI3DStaticMode()
         bg.zraw_to_wu = 0.0f;
         Renderer->SubmitTile(bg);
     }
+
+    SAnimPose anim_pose;
+    bool have_anim_pose = false;
+    if (g_i3dTest.img)
+    {
+        const int32_t len = CurrentI3DStaticAnimLength();
+        const float frac = float(g_i3dTest.anim_time - std::floor(g_i3dTest.anim_time));
+        const int32_t next_frame = (g_i3dTest.anim_frame + 1) % len;
+        anim_pose = SampleI3DAnimPoseInterpolated(g_i3dTest.img,
+            g_i3dTest.anim_state, g_i3dTest.anim_frame, next_frame, frac);
+        have_anim_pose = true;
+    }
+
     for (const auto& sub : g_i3dTest.subs) {
-        SAnimPose anim_pose;
-        if (g_i3dTest.img)
-        {
-            const int32_t len = (std::max)(1, g_i3dTest.img->GetAniLength(g_i3dTest.anim_state));
-            const float frac = float(g_i3dTest.anim_time - std::floor(g_i3dTest.anim_time));
-            const int32_t next_frame = (g_i3dTest.anim_frame + 1) % len;
-            const SAnimPose a = SampleI3DAnimPose(g_i3dTest.img, g_i3dTest.anim_state, g_i3dTest.anim_frame);
-            const SAnimPose b = SampleI3DAnimPose(g_i3dTest.img, g_i3dTest.anim_state, next_frame);
-            anim_pose = BlendI3DAnimPoses(a, b, frac);
-        }
         if (g_i3dTest.img && sub.texture_idx >= 0)
         {
             g_i3dTest.img->SetTextureFrame(sub.texture_idx, g_i3dTest.anim_frame);
             S3DTex tex = {};
             g_i3dTest.img->GetTexture(sub.texture_idx, &tex);
-            if (tex.surface.id)
-                Renderer->SetMeshAlbedo(sub.handle, tex.surface);
+            if (tex.htexture != kInvalidTexture)
+                Renderer->SetMeshAlbedo(sub.handle, tex.htexture);
         }
         float w[16];
-        if (g_i3dTest.img)
+        if (g_i3dTest.img && have_anim_pose)
             BuildAnimPoseObjectMatrix(g_i3dTest.img, anim_pose, g_i3dTest.anim_state, sub.objnum, w);
         else
             std::memcpy(w, sub.world, sizeof(w));
@@ -1628,19 +1884,21 @@ void RenderI3DStaticMode()
                  g_i3dTest.subs.size(), znear, zfar);
     }
 
-    if (g_i3dTest.transparent_preview)
-        DrawWaterPreviewOverlay();
+    DrawI3DPreviewPanel();
 }
 
 void CloseI3DStaticMode()
 {
     g_i3dTest.img = nullptr;
-    // Mesh handles registered with the renderer still point at these images.
-    // Keep them alive until the renderer/backend shutdown owns the final tear-down.
-    g_i3dTest.subs.clear();
+    // Drop preview refs. Renderer-owned assets remain resident until the
+    // renderer/backend chooses to clear zero-ref assets.
+    ClearI3DStaticMeshes();
     g_i3dTest.roster.clear();
+    g_i3dTest.character_roster.clear();
     g_i3dTest.roster_idx = 0;
+    g_i3dTest.character_idx = -1;
     g_i3dTest.active_asset.clear();
+    g_i3dTest.active_imagery_id = -1;
     g_i3dTest.bg_mode = 0;
     g_i3dTest.transparent_preview = false;
     g_i3dTest.logged = false;
@@ -1669,7 +1927,7 @@ bool InitializeTextMode()
         return true;
     }
     const SFontAtlas* atlas = BuildFontAtlas(SystemFont);
-    if (!atlas || !atlas->image.id)
+    if (!atlas || atlas->texture == kInvalidTexture)
         log_error("[text] SystemFont atlas build failed");
     return true;
 }
@@ -1682,7 +1940,7 @@ bool InitializeIconMode()
         return true;
     }
     const SFontAtlas* atlas = BuildFontAtlas(SystemFont);
-    if (!atlas || !atlas->image.id)
+    if (!atlas || atlas->texture == kInvalidTexture)
     {
         log_error("[icon] SystemFont atlas build failed");
         return true;
@@ -1792,7 +2050,7 @@ void RenderUiMode()
             const int32_t dy = cy - fr.h / 2;
             if (dy + fr.h <= 0 || dy >= th) continue;
             Renderer->Composite(
-                g_uiAtlas.image,
+                g_uiAtlas.texture,
                 dx, dy, fr.w, fr.h,
                 tw, th,
                 fr.ax, fr.ay, fr.w, fr.h,
@@ -1805,7 +2063,7 @@ void RenderUiMode()
 void RenderIconMode()
 {
     const SFontAtlas* atlas = SystemFont ? FindFontAtlas(SystemFont) : nullptr;
-    if (!atlas || !atlas->image.id)
+    if (!atlas || atlas->texture == kInvalidTexture)
         return;
 
     const int32_t tw = Display.Width();
@@ -1814,7 +2072,7 @@ void RenderIconMode()
     const int32_t dy = (th - atlas->height) / 2;
 
     Display.BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
-    Renderer->Composite(atlas->image, dx, dy, atlas->width, atlas->height, tw, th);
+    Renderer->Composite(atlas->texture, dx, dy, atlas->width, atlas->height, tw, th);
     Display.BackBuffer()->EndPass();
 }
 
@@ -1835,7 +2093,7 @@ void RenderTTFMode()
     for (const auto& L : lines)
     {
         const SFontAtlas* atlas = BuildTTFAtlas(L.path, L.size);
-        if (!atlas || !atlas->image.id) continue;
+        if (!atlas || atlas->texture == kInvalidTexture) continue;
 
         float line_w = 0.0f;
         for (const char* p = msg; *p; ++p)
@@ -1854,7 +2112,7 @@ void RenderTTFMode()
                 const int32_t gw = (int32_t)(r.xoff2 - r.xoff + 0.5f);
                 const int32_t gh = (int32_t)(r.yoff2 - r.yoff + 0.5f);
                 Renderer->Composite(
-                    atlas->image,
+                    atlas->texture,
                     gx, gy, gw, gh,
                     tw, th,
                     r.x, r.y, r.w, r.h,
@@ -1892,7 +2150,7 @@ void RenderTextMode()
     int32_t line_top = (th - total_h) / 2;
     for (const auto& L : lines)
     {
-        if (!L.font || !L.atlas || !L.atlas->image.id) continue;
+        if (!L.font || !L.atlas || L.atlas->texture == kInvalidTexture) continue;
 
         const int32_t line_h = (int32_t)((TFontData*)L.font)->height;
         int32_t line_w = 0;
@@ -1913,7 +2171,7 @@ void RenderTextMode()
                 const int32_t gx = pen_x - (int32_t)L.font->DrawLeft(ch);
                 const int32_t gy = pen_y - (int32_t)L.font->StartHeight(ch);
                 Renderer->Composite(
-                    L.atlas->image,
+                    L.atlas->texture,
                     gx, gy, r.w, r.h,
                     tw, th,
                     r.x, r.y, r.w, r.h,
@@ -2013,7 +2271,7 @@ void Render(const char* mode)
         return RenderI3DStaticMode();
     if (strcmp(mode, "water3d") == 0)
         return RenderI3DStaticMode();
-    if (strcmp(mode, "ui") == 0 && g_uiAtlas.image.id && !g_uiAtlas.items.empty())
+    if (strcmp(mode, "ui") == 0 && g_uiAtlas.texture != kInvalidTexture && !g_uiAtlas.items.empty())
         return RenderUiMode();
     if (strcmp(mode, "icon") == 0)
         return RenderIconMode();

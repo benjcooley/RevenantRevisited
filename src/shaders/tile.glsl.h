@@ -5,8 +5,7 @@
 // *************************************************************************
 //
 // Linux / SOKOL_GLCORE33 port of tile.metal.h. See that file and
-// docs/DEFERRED_LIGHTING.md for the derivation; this is a straight
-// transcription.
+// docs/DEFERRED_LIGHTING.md for the derivation and G-buffer border contract.
 //
 // *************************************************************************
 
@@ -24,6 +23,11 @@ layout(std140) uniform params {
     vec4 filter_;
     vec4 obj_id;
     vec4 camera;
+    vec4 proj;
+    vec4 tile_rect;
+    vec4 cam_tile;
+    vec4 debug;
+    vec4 raycast;
 };
 layout(location = 0) in vec2 pos;
 layout(location = 1) in vec2 uv;
@@ -66,6 +70,11 @@ layout(std140) uniform params {
     vec4 filter_;
     vec4 obj_id;
     vec4 camera;
+    vec4 proj;
+    vec4 tile_rect;
+    vec4 cam_tile;
+    vec4 debug;
+    vec4 raycast;
 };
 in vec2 v_uv;
 uniform sampler2D color_tex;
@@ -74,10 +83,28 @@ layout(location = 0) out vec4 out_albedo;
 layout(location = 1) out vec4 out_normal;
 layout(location = 2) out vec4 out_scene_z;
 layout(location = 3) out vec4 out_obj_id;
+bool tile_depth_valid(vec2 uv) {
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+        return false;
+    ivec2 ts = textureSize(depth_tex, 0);
+    ivec2 p = clamp(ivec2(uv * vec2(ts)), ivec2(0), ts - ivec2(1));
+    return abs(texelFetch(depth_tex, p, 0).r) > 0.0001;
+}
+float tile_depth_read(vec2 uv) {
+    ivec2 ts = textureSize(depth_tex, 0);
+    ivec2 p = clamp(ivec2(uv * vec2(ts)), ivec2(0), ts - ivec2(1));
+    return texelFetch(depth_tex, p, 0).r;
+}
 void main() {
     vec4 c = texture(color_tex, v_uv);
+    float albedo_pad = max(raycast.z, 0.0);
+    vec2 gbuf_size = max(proj.zw, vec2(1.0));
+    bool present_albedo =
+        gl_FragCoord.x >= albedo_pad && gl_FragCoord.x < (gbuf_size.x - albedo_pad) &&
+        gl_FragCoord.y >= albedo_pad && gl_FragCoord.y < (gbuf_size.y - albedo_pad);
     if (c.a < 0.01) discard;
-    float zraw = texture(depth_tex, v_uv).r;
+    if (!tile_depth_valid(v_uv)) discard;
+    float zraw = tile_depth_read(v_uv);
     float d    = zparams.x + zraw * zparams.y;
     if (d < 0.0 || d > 1.0) discard;
     float nr  = max(filter_.x, 0.5);
@@ -86,10 +113,10 @@ void main() {
     vec2  tex = vec2(nr / max(ts.x, 1.0), nr / max(ts.y, 1.0));
     float sx = v_uv.x * tile_sprite.z - tile_sprite.x;
     float sy = v_uv.y * tile_sprite.w - tile_sprite.y;
-    float zl  = texture(depth_tex, v_uv - vec2(tex.x, 0.0)).r;
-    float zrs = texture(depth_tex, v_uv + vec2(tex.x, 0.0)).r;
-    float zt  = texture(depth_tex, v_uv - vec2(0.0, tex.y)).r;
-    float zb  = texture(depth_tex, v_uv + vec2(0.0, tex.y)).r;
+    float zl  = tile_depth_read(v_uv - vec2(tex.x, 0.0));
+    float zrs = tile_depth_read(v_uv + vec2(tex.x, 0.0));
+    float zt  = tile_depth_read(v_uv - vec2(0.0, tex.y));
+    float zb  = tile_depth_read(v_uv + vec2(0.0, tex.y));
     if (abs(zl  - zraw) > thr + EDGE_EPS) zl  = zraw;
     if (abs(zrs - zraw) > thr + EDGE_EPS) zrs = zraw;
     if (abs(zt  - zraw) > thr + EDGE_EPS) zt  = zraw;
@@ -125,6 +152,7 @@ void main() {
     vec3 N   = normalize(cross(t_v, t_u));
     vec3 Vc  = normalize(vec3(ISO_COS30, ISO_COS30, 1.0));
     if (dot(N, Vc) < 0.0) N = -N;
+    if (!present_albedo) c = vec4(0.0);
     out_albedo  = c;
     out_normal  = vec4(N * 0.5 + 0.5, 1.0);
     out_scene_z = vec4(d, 0.0, 0.0, 1.0);

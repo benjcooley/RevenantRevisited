@@ -142,11 +142,54 @@ TObjectImagery::TObjectImagery(int32_t id)
 
     if (!entry->body)
         LoadBody(false); // Queue imagery load
+
+    if (AssetCache.IsInitialized())
+        AssetCache.RegisterExternalAsset(this);
 }
 
 TObjectImagery::~TObjectImagery()
 {
+    if (AssetCache.IsInitialized())
+        AssetCache.UnregisterExternalAsset(this);
     FreeBody();
+}
+
+AssetUid TObjectImagery::AssetId() const
+{
+    return MakeClassicAssetUid(AssetPath(), AssetName());
+}
+
+EAssetKind TObjectImagery::AssetKind() const
+{
+    if (!entry || !entry->header)
+        return EAssetKind::Imagery;
+
+    switch (entry->header->imageryid)
+    {
+        case OBJIMAGE_ANIMATION:
+        case OBJIMAGE_MULTIANIMATION:
+            return EAssetKind::I2D;
+        case OBJIMAGE_MESH3D:
+        case OBJIMAGE_MESH3DHELPER:
+            return EAssetKind::I3D;
+        default:
+            return EAssetKind::Imagery;
+    }
+}
+
+const char* TObjectImagery::AssetPath() const
+{
+    return imagerypath;
+}
+
+const char* TObjectImagery::AssetName() const
+{
+    return entry ? entry->filename : "";
+}
+
+const char* TObjectImagery::AssetDebugName() const
+{
+    return AssetName();
 }
 
 int32_t TObjectImagery::RegisterImagery(char *filename, SImageryHeader* header, uint32_t headersize)
@@ -291,11 +334,30 @@ bool TObjectImagery::IsUsed(int32_t id)
 
 void TObjectImagery::FreeImageryEntry(int32_t imageryentry)
 {
-    if (EntryArray[imageryentry].header)
-        free(EntryArray[imageryentry].header);
+    if ((uint32_t)imageryentry >= (uint32_t)EntryArray.NumItems() ||
+        !EntryArray.Used(imageryentry))
+        return;
 
-    if (EntryArray[imageryentry].body)
-        free(EntryArray[imageryentry].body);
+    RSImageryEntry ie = EntryArray[imageryentry];
+
+    // Explicit registry teardown is the residency boundary for imagery
+    // assets. Ordinary refcount drops only mark an asset unused; this path is
+    // where source data and renderer refs are actually released.
+    if (ie.imagery)
+    {
+        delete ie.imagery;
+        ie.imagery = nullptr;
+    }
+
+    if (ie.header)
+        free(ie.header);
+
+    if (ie.body)
+    {
+        if (ie.ressize <= ImageryMemUsage)
+            ImageryMemUsage -= ie.ressize;
+        free(ie.body);
+    }
 
     memset(&EntryArray[imageryentry], 0, sizeof(SImageryEntry));
 }
@@ -393,7 +455,7 @@ TObjectImagery* TObjectImagery::LoadImagery(int32_t imgid)
 
     if (ie.imagery)
     {
-        ie.usecount++;
+        ie.usecount = int32_t(ie.imagery->AddAssetRef());
         if (debug_water)
             log_info("[waterdbg] reuse imagery id=%d file='%s' type=%d usecount=%d",
                      imgid, ie.filename, ie.header ? int(ie.header->imageryid) : -1, ie.usecount);
@@ -413,7 +475,7 @@ TObjectImagery* TObjectImagery::LoadImagery(int32_t imgid)
         if (!ie.imagery)
             return nullptr;
 
-        ie.usecount = 1;
+        ie.usecount = int32_t(ie.imagery->AddAssetRef());
         if (debug_water)
             log_info("[waterdbg] built imagery id=%d file='%s' obj=%p",
                      imgid, ie.filename, (void*)ie.imagery);
@@ -434,26 +496,12 @@ void TObjectImagery::FreeImagery(TObjectImagery* imagery)
 
     RSImageryEntry ie = EntryArray[imagery->imageryid];
 
-    ie.usecount--;
+    ie.usecount = int32_t(imagery->ReleaseAssetRef());
     if (ie.usecount <= 0)
     {
-        imagery->FreeBody();
-
-        if (Editor && ie.imagery)
-        {
-            // Legacy editor persisted modified imagery headers back to
-            // disk on free (load-time endian/pointer fixups marked the
-            // header dirty). Modern editor handles serialization
-            // separately, and Mac asset paths aren't writable from the
-            // running app -- the SaveHeader fopen would FATAL on Cut /
-            // Delete when the freed instance was the imagery's last
-            // user. Skip the write; just release the in-memory record.
-            ImageryMemUsage -= ie.imagery->GetResSize();
-
-            delete ie.imagery;
-            ie.imagery = nullptr;
-        }
-
+        // Zero refs are not an eviction signal. Keeping imagery resident
+        // avoids map/sector churn turning into CPU/GPU reload spikes; explicit
+        // calls such as FreeImageryEntry/FreeAllImagery own real teardown.
         ie.usecount = 0;
     }
 }
@@ -638,7 +686,7 @@ int32_t TObjectImagery::FindTransitionState(const char *from, const char *to, in
 
 int32_t TObjectImagery::GetUseCount()
 {
-    return entry->usecount;
+    return int32_t(AssetRefCount());
 }
 
 extern bool UpdatingBoundingRect;
@@ -1030,8 +1078,11 @@ void TObjectImagery::FreeBody()
     {
         entry->status = QE_NONE;
 //      VirtualUnlock(entry->body, entry->ressize);
+        if (entry->ressize <= ImageryMemUsage)
+            ImageryMemUsage -= entry->ressize;
         free(entry->body);
         entry->body = nullptr;
+        entry->ressize = 0;
 
         END_CRITICAL();
         return;
@@ -1075,8 +1126,11 @@ void TObjectImagery::FreeBody()
 {
     if (entry->status == QE_LOADED)
     {
+        if (entry->ressize <= ImageryMemUsage)
+            ImageryMemUsage -= entry->ressize;
         free(entry->body);
         entry->body = nullptr;
+        entry->ressize = 0;
     }
     entry->status = QE_NONE;
 }

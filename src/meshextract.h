@@ -25,7 +25,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "animsystem.h"
+#include "i3danimpose.h"
 #include "renderer.h"
 
 class T3DImagery;
@@ -56,13 +56,6 @@ void BuildAnimatedObjectMatrix(T3DImagery* img, int32_t objnum,
                                int32_t state, int32_t frame,
                                int32_t prevstate, int32_t prevframe,
                                float out16[16]);
-
-// Sample I3D object animation keys into the modern channel-pose model.
-// Rotation keys are converted from legacy Euler XYZ to quaternion channels.
-SAnimPose SampleI3DAnimPose(T3DImagery* img, int32_t state, int32_t frame);
-SAnimPose SampleI3DAnimPose(T3DImagery* img, int32_t state, int32_t frame,
-                            int32_t prevstate, int32_t prevframe);
-SAnimPose BlendI3DAnimPoses(const SAnimPose& a, const SAnimPose& b, float t);
 
 // Build a renderer row-major object matrix from a sampled pose. The hierarchy
 // variant walks parent objects from the imagery before returning `objnum`.

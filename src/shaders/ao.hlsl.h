@@ -28,6 +28,7 @@ cbuffer params : register(b0) {
     float4 vp;
     float4 recon;
     float4 ao_settings;
+    float4 camera;
 };
 Texture2D    albedo_tex : register(t0);
 Texture2D    normal_tex : register(t1);
@@ -35,9 +36,17 @@ Texture2D    depth_tex  : register(t2);
 SamplerState smp        : register(s0);
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 float3 reconstruct_world(float2 uv, float d, float fbw, float fbh) {
-    float S = uv.x * fbw - vp.x;
-    float T = uv.y * fbh - vp.y;
+    // Framebuffer pixels are scaled by the active camera zoom/resolution.
+    // Undo that first so the iso inverse sees the same units as WorldToScreen.
+    float zoom = max(camera.x, 0.0001);
+    float S = (uv.x * fbw - vp.x) / zoom;
+    float T = (uv.y * fbh - vp.y) / zoom;
     float scene_z = d * vp.w + vp.z;
+    if (recon.w > 0.5) {
+        float focal = max(recon.z, 1.0);
+        S = (S / focal) * scene_z;
+        T = (T / focal) * scene_z;
+    }
     float K = recon.z - scene_z;
     float wz = (K - 2.0 * T * ISO_COS30) / ISO_WZ_DENOM;
     float sum_r = 2.0 * (T + wz * ISO_COS30);

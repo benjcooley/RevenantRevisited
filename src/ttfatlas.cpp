@@ -11,6 +11,7 @@
 #include "font.h"
 
 #include "logging.h"
+#include "renderer.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_STATIC
@@ -116,8 +117,8 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     stbtt_PackEnd(&spc);
 
     // Promote the single-channel coverage atlas to RGBA8 (R=G=B=A=cov) so
-    // straight-alpha composite works against any tint. LINEAR sampling is
-    // set on the sg_image to smooth the 2x oversampled coverage.
+    // straight-alpha composite works against any tint. Linear sampling smooths
+    // the 2x oversampled coverage.
     const size_t rgba_bytes = size_t(atlas_w) * atlas_h * 4;
     std::unique_ptr<uint8_t[]> rgba(new uint8_t[rgba_bytes]);
     for (size_t i = 0; i < size_t(atlas_w) * atlas_h; i++)
@@ -156,24 +157,25 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
         r.xadvance = pc.xadvance;
     }
 
-    sg_image_desc d = {};
-    d.width        = atlas_w;
-    d.height       = atlas_h;
-    d.pixel_format = SG_PIXELFORMAT_RGBA8;
-    d.min_filter   = SG_FILTER_LINEAR;
-    d.mag_filter   = SG_FILTER_LINEAR;
-    d.wrap_u       = SG_WRAP_CLAMP_TO_EDGE;
-    d.wrap_v       = SG_WRAP_CLAMP_TO_EDGE;
-    d.data.subimage[0][0].ptr  = rgba.get();
-    d.data.subimage[0][0].size = rgba_bytes;
-    d.label = "ttf.atlas";
-    atlas->image = sg_make_image(&d);
+    if (Renderer)
+    {
+        atlas->texture = Renderer->RegisterTextureAsset(0,
+                                                        rgba.get(),
+                                                        rgba_bytes,
+                                                        atlas_w,
+                                                        atlas_h,
+                                                        ERendererTextureFormat::RGBA8,
+                                                        rgba_bytes,
+                                                        ERendererTextureFilter::Linear);
+        if (atlas->texture != kInvalidTexture)
+            Renderer->AddTextureAssetRef(atlas->texture);
+    }
 
     std::free(ttf);
 
-    if (!atlas->image.id)
+    if (atlas->texture == kInvalidTexture)
     {
-        log_error("[ttf] sg_make_image failed for '%s'", path);
+        log_error("[ttf] texture upload failed for '%s'", path);
         return nullptr;
     }
 
@@ -190,7 +192,8 @@ void DestroyAllTTFAtlases()
     for (auto& [k, a] : g_ttfAtlases)
     {
         if (!a) continue;
-        if (a->image.id) sg_destroy_image(a->image);
+        if (Renderer && a->texture != kInvalidTexture)
+            Renderer->ReleaseTextureAssetRef(a->texture);
         delete a;
     }
     g_ttfAtlases.clear();

@@ -29,6 +29,7 @@
 #include "listenerlist.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -82,6 +83,10 @@ class TMapManager
 
     [[nodiscard]] TGameMap* CurrentMap() const { return current; }
     [[nodiscard]] int32_t   CurrentLevel() const;
+
+    // Visit every loaded/cached map. Asset residency code uses this to count
+    // references from loaded maps, independent of which map is currently drawn.
+    void ForEachLoadedMap(const std::function<void(TGameMap*)>& fn) const;
 
     // Force-evict a single level. The map is unloaded (fires its
     // Unloaded event) and removed from the cache. If the evicted map

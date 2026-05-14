@@ -46,10 +46,11 @@
 //
 //    [1] G-BUFFER FILL       -- default_pass  (MRT: albedo, normal, scene_z)
 //    [2] AMBIENT OCCLUSION   -- ao_pass       (R32F  screen-space AO)
-//    [3] DEFERRED LIGHTING   -- lit_pass      (albedo * shading -> lit_target)
-//    [4] WATER / REFRACTION  -- (future, ping-pong sceneColor A<->B)
-//    [5] TRANSPARENT EFFECTS -- (future)
-//    [6] DEBUG 3D            -- (future, line/triangle primitives)
+//    [3] SUN SHADOW MASK     -- shadow_pass   (R32F, low-res + blur)
+//    [4] DEFERRED LIGHTING   -- lit_pass      (albedo * shading -> lit_target)
+//    [5] WATER / REFRACTION  -- (future, ping-pong sceneColor A<->B)
+//    [6] TRANSPARENT EFFECTS -- (future)
+//    [7] DEBUG 3D            -- (future, line/triangle primitives)
 //    [7] GAME UI             -- composite onto backbuffer or swapchain
 //    [8] DEBUG UI            -- ImGui overlay in swapchain pass
 //
@@ -76,9 +77,13 @@
 #pragma once
 
 #include "revenant.h"
+#include "render3d_types.h"
 
 #include <sokol_gfx.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 _CLASSDEF(TRenderer)
@@ -94,20 +99,31 @@ constexpr uint32_t kObjFlagHovered  = 1u << 30;
 constexpr uint32_t kObjIdMask       = 0x0FFFFFFFu;
 constexpr uint32_t kObjFlagMask     = 0xF0000000u;
 
+// Opaque handles to renderer-owned resources. 0 is invalid.
+using MeshHandle = uint32_t;
+using RendererImagePairHandle = uint32_t;
+
 // Per-tile submission payload. Scene code fills one of these per visible
 // tile and hands it to TRenderer::SubmitTile; TRenderer accumulates them
 // during a tile pass and emits draws at EndTilePass. Scene code never
 // issues GPU work directly.
 struct STileSubmit
 {
-    sg_image color_img;
-    sg_image depth_img;
+    RendererImagePairHandle image_pair = 0;
     int32_t  dst_x, dst_y, dst_w, dst_h;
+    int32_t  src_w = 0, src_h = 0;  // source sprite dimensions before viewport scaling
     float    anchor_z;        // normalized scene-z of the tile anchor [0..1]
     float    depth_mul;       // bitmap-z -> normalized-scene-z scale
     float    normal_mul;      // normal-reconstruction depth scale
     float    root_wx, root_wy, root_wz;   // world xyz of the tile anchor
     float    anchor_px_x, anchor_px_y;    // source-image anchor pixel
+    // Conservative source-pixel coverage of valid heightfield data. Perspective
+    // relief projection uses this to shrink the proxy draw rect; the fragment
+    // shader still samples the full source texture, so this is only a safe
+    // rasterization bound, not a UV remap.
+    float    coverage_px_x0 = 0.0f, coverage_px_y0 = 0.0f;
+    float    coverage_px_x1 = 0.0f, coverage_px_y1 = 0.0f;
+    float    anchor_cam_x = 0.0f, anchor_cam_y = 0.0f; // logical camera-plane anchor
     float    zraw_to_wu;      // bitmap-z -> world-units scale
     float    zraw_min = 0.0f;
     float    zraw_max = 0.0f;
@@ -117,7 +133,8 @@ struct STileSubmit
 
 struct SOverlaySubmit
 {
-    sg_image color_img;
+    TTextureHandle texture = kInvalidTexture;
+    RendererImagePairHandle image_pair = 0;
     int32_t  dst_x, dst_y, dst_w, dst_h;
     int32_t  src_x = 0, src_y = 0, src_w = 1, src_h = 1;
     int32_t  src_tex_w = 1, src_tex_h = 1;
@@ -126,8 +143,81 @@ struct SOverlaySubmit
     float    chroma_key_rgb[3] = {1.0f, 0.0f, 0.0f};
 };
 
-// Opaque handle to a mesh registered with TRenderer. 0 is invalid.
-using MeshHandle = uint32_t;
+// Renderer-owned paired images, currently used by world sprites that need both
+// color and depth textures. The renderer owns the sg_image lifetimes and ref
+// counts; game systems keep only RendererImagePairHandle values.
+struct SRendererImagePairInfo
+{
+    uint64_t key = 0;
+    int32_t width = 0;
+    int32_t height = 0;
+    int32_t height_minmax_mips = 0;
+    uint32_t tight_proxy_points = 0;
+    uint64_t gpu_bytes = 0;
+    uint32_t ref_count = 0;
+};
+
+// Renderer-owned single texture image. TTextureHandle is shared with the
+// legacy 3D imagery vocabulary, but the image lifetime belongs here.
+struct SRendererTextureInfo
+{
+    uint64_t key = 0;
+    int32_t width = 0;
+    int32_t height = 0;
+    uint64_t gpu_bytes = 0;
+    uint32_t ref_count = 0;
+};
+
+struct SRendererAssetStats
+{
+    uint32_t image_pair_count = 0;
+    uint32_t texture_count = 0;
+    uint32_t mesh_count = 0;
+
+    uint32_t image_pair_zero_ref_count = 0;
+    uint32_t texture_zero_ref_count = 0;
+    uint32_t mesh_zero_ref_count = 0;
+    uint32_t keyed_mesh_count = 0;
+    uint32_t unkeyed_mesh_count = 0;
+
+    uint64_t image_pair_ref_total = 0;
+    uint64_t texture_ref_total = 0;
+    uint64_t mesh_ref_total = 0;
+
+    uint64_t image_pair_gpu_bytes = 0;
+    uint64_t texture_gpu_bytes = 0;
+    uint64_t mesh_vertex_bytes = 0;
+    uint64_t mesh_index_bytes = 0;
+    uint64_t mesh_gpu_bytes = 0;
+
+    uint32_t renderer_buffer_count = 0;
+    uint32_t renderer_image_count = 0;
+    int32_t buffer_pool_size = 0;
+    int32_t image_pool_size = 0;
+};
+
+struct SRendererTilePassStats
+{
+    uint32_t tile_draws = 0;
+    uint32_t tile_proxy_draws = 0;
+    uint32_t tile_tight_proxy_draws = 0;
+    uint32_t tile_tight_proxy_points = 0;
+    uint32_t tile_rects_culled = 0;
+    uint64_t tile_projected_pixels = 0;
+    uint64_t tile_clipped_pixels = 0;
+};
+
+enum class ERendererTextureFormat : uint8_t
+{
+    RGBA8,
+    R32F,
+};
+
+enum class ERendererTextureFilter : uint8_t
+{
+    Linear,
+    Nearest,
+};
 
 // Per-vertex layout for rigid meshes (mesh slot 0). Tight-packed, 32 bytes.
 struct SMeshVertex
@@ -183,7 +273,12 @@ class TRenderer
 public:
     // Pad the G-buffer by this many pixels on every side so off-screen
     // geometry can still feed screen-space effects (sun-shadow ray-march).
-    static constexpr int32_t kGBufPad = 128;
+    // This needs to cover the projected shadow reach, not merely a small
+    // texture-filter neighborhood.
+    // Map-side occluder/depth visibility tests must cull against the display
+    // rect expanded by this amount, otherwise the padded border is allocated
+    // but never populated.
+    static constexpr int32_t kGBufPad = 512;
 
     // Max simultaneous point lights per deferred light pass. Extras are
     // silently dropped by AddPointLight.
@@ -217,15 +312,66 @@ public:
     void SubmitMesh(const SMeshSubmit& m);
     void SubmitHelperMesh(const SHelperMeshSubmit& m);
     void EndTilePass();
+    [[nodiscard]] SRendererTilePassStats GetLastTilePassStats() const
+    {
+        return last_tile_pass_stats;
+    }
 
-    // ---- Mesh registry -------------------------------------------------
-    // Register a rigid mesh. TRenderer owns the resulting GPU buffers for
-    // the life of the renderer; there is no unregister today (meshes
-    // accumulate across a session). Returns 0 on failure.
+    // ---- Renderer-owned asset registry ---------------------------------
+    // This is the GPU-realization cache. It owns sg_image/sg_buffer lifetimes;
+    // map, sector, and draw systems keep opaque handles only. TAssetCache owns
+    // source/CPU assets (I3D, bitmap, animation, sound, etc.) and passes
+    // stable source keys here when those assets need renderer resources.
+    //
+    // Producers register source-keyed GPU assets. CPU/source asset wrappers
+    // should balance renderer refs when they create GPU realizations; draw
+    // records and visible instances must not own GPU residency. Refcount zero
+    // is retained for now so we do not hitch during play; a future explicit
+    // eviction path can free zero-ref assets here under renderer memory policy.
+    RendererImagePairHandle RegisterImagePairAsset(uint64_t key,
+                                                   const void* color_rgba8,
+                                                   size_t color_bytes,
+                                                   const void* depth_r32f,
+                                                   size_t depth_bytes,
+                                                   int32_t width,
+                                                   int32_t height,
+                                                   uint64_t gpu_bytes);
+    const SRendererImagePairInfo* ImagePairInfo(RendererImagePairHandle handle) const;
+    void AddImagePairAssetRef(RendererImagePairHandle handle, uint32_t count = 1);
+    void ReleaseImagePairAssetRef(RendererImagePairHandle handle, uint32_t count = 1);
+
+    TTextureHandle RegisterTextureAsset(uint64_t key,
+                                        const void* pixels,
+                                        size_t pixel_bytes,
+                                        int32_t width,
+                                        int32_t height,
+                                        ERendererTextureFormat format,
+                                        uint64_t gpu_bytes,
+                                        ERendererTextureFilter filter = ERendererTextureFilter::Linear);
+    const SRendererTextureInfo* TextureInfo(TTextureHandle handle) const;
+    void AddTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
+    void ReleaseTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
+    void ResetAssetRefCounts();
+
+    // Register a rigid mesh. TRenderer owns the resulting GPU buffers and
+    // resolves albedo_texture internally. Returns 0 on failure.
+    MeshHandle RegisterMeshAsset(uint64_t key,
+                                 const SMeshVertex* verts, int32_t num_verts,
+                                 const uint16_t*  indices, int32_t num_indices,
+                                 TTextureHandle albedo_texture);
     MeshHandle RegisterMesh(const SMeshVertex* verts, int32_t num_verts,
                             const uint16_t*  indices, int32_t num_indices,
-                            sg_image albedo);
-    void SetMeshAlbedo(MeshHandle mesh, sg_image albedo);
+                            TTextureHandle albedo_texture)
+    {
+        return RegisterMeshAsset(0, verts, num_verts, indices, num_indices, albedo_texture);
+    }
+    void AddMeshAssetRef(MeshHandle mesh, uint32_t count = 1);
+    void ReleaseMeshAssetRef(MeshHandle mesh, uint32_t count = 1);
+    void SetMeshAlbedo(MeshHandle mesh, TTextureHandle albedo_texture);
+    TTextureHandle WhiteTextureHandle();
+    TTextureHandle SolidColorTexture(uint64_t key, uint32_t rgba, const char* debug_name = nullptr);
+    [[nodiscard]] SRendererAssetStats GetAssetStats() const;
+    [[nodiscard]] uintptr_t TextureImGuiId(TTextureHandle texture) const;
 
     // ---- Scene lighting state -------------------------------------------
     // Directional sun. Normals are reconstructed per-fragment from the tile
@@ -250,23 +396,34 @@ public:
     // Debug view modes for the lighting pass:
     //   0 = lit          1 = albedo     2 = depth       3 = normals
     //   4 = point-only   5 = recon heat 6 = shadow mask 7 = AO only
+    //   8 = z edges      9 = ground/world height
     void SetTileViewMode(int32_t mode);
     // 0 = retail 1998 (ambient + distance-only point lights, no sun,
     //                  no shadows, no AO)
     // 1 = modern (adds directional sun + screen-space contact shadows)
     void SetLightingMode(int32_t mode);
-    // Sun contact-shadow ray march.
+    // Sun contact-shadow mask. The expensive receiver->sun ray march writes
+    // a low-resolution R32F visibility buffer once; softness is then a cheap
+    // separable blur of that buffer before deferred lighting samples it.
+    // Debug controls expose step spacing, reach, blur radius, depth cutoff,
+    // and bias. The old "samples" parameter is accepted for compatibility
+    // but no longer multiplies ray work.
     void SetSunShadow(bool enable, float step_wu, float softness_px,
                       int32_t max_steps);
+    void SetSunShadowRaycast(int32_t samples, float depth_cutoff_wu,
+                             float bias_wu, float wz_scale);
     // Toggle just the enable flag (params untouched). Editor uses this
     // to suppress shadows while panels are open.
     void SetSunShadowEnabled(bool enable);
     [[nodiscard]] bool SunShadowEnabled() const;
-    // Base world-space direction for the sun-shadow ray. Decoupled from
-    // light direction so shadows can cast toward the viewer when lighting
-    // comes from behind the scene.
+    // World-space direction for the sun-shadow ray. This is the receiver ->
+    // sun vector, and should normally be the same vector passed to SetLight.
+    // The lighting pass marches along it and compares vertical world height,
+    // so the visible cast direction is the consequence of the light vector,
+    // not a second independently-authored shadow vector.
     void SetShadowWorldDir(float dx, float dy, float dz);
-    // Debug variance applied on top of the derived shadow ray.
+    // Legacy debug hook kept for old callers. XY drift is no longer part of
+    // the shadow model; z scales the ray's vertical rise.
     void SetShadowVariance(float sx, float sy, float sz);
 
     // ---- Point lights ---------------------------------------------------
@@ -297,6 +454,8 @@ public:
                                  float z_scale = 1.0f,
                                  float tile_scale = 1.0f);
     void SetPerspectiveRaycastParams(int32_t steps, int32_t refine);
+    void SetPerspectiveProjectionMode(int32_t mode);
+    void SetPerspectiveProxyRasterScale(float scale);
     void SetPerspectiveDebugMode(int32_t mode) { perspective_debug_mode = mode; }
 
     // Run the deferred lighting pass over the current G-buffer. Writes
@@ -307,14 +466,13 @@ public:
     // Fullscreen blit of a TSurface into the current render pass (used by
     // TDisplay::FlipPage to paint the backbuffer onto the swapchain).
     void Composite(TSurface* src);
-    // Sub-rect blit of an image into the current render pass (RGBA8 RT
-    // variant -- caller is inside that RT's pass).
-    void Composite(sg_image img,
+    // Sub-rect blit of a renderer texture into the current render pass.
+    void Composite(TTextureHandle texture,
                    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                    int32_t target_w, int32_t target_h);
     // Atlas-friendly sub-rect blit: also takes a pixel-space source rect
-    // within the image.
-    void Composite(sg_image img,
+    // within the texture.
+    void Composite(TTextureHandle texture,
                    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                    int32_t target_w, int32_t target_h,
                    int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
@@ -332,15 +490,14 @@ public:
     // Where to composite the game image onto the swapchain. Default is
     // the entire window. Editor mode disables this (the game render
     // arrives in the editor's Game View panel via ImGui::Image of the
-    // lit_target sokol image) so the present blit can be skipped.
+    // lit target texture id) so the present blit can be skipped.
     void SetPresentNDCRect(float x, float y, float w, float h);
     void ResetPresentNDCRect() { SetPresentNDCRect(-1.0f, -1.0f, 2.0f, 2.0f); }
     void SuppressPresent(bool on) { suppress_present = on; }
 
-    // ---- Debug accessors ------------------------------------------------
-    [[nodiscard]] sg_image ColorTarget() const { return color_target; }
-    [[nodiscard]] sg_image LitTarget()   const { return lit_target; }
-    [[nodiscard]] sg_image IdTarget()    const { return id_target; }
+    // ---- Debug/editor accessors -----------------------------------------
+    [[nodiscard]] uintptr_t LitTargetTextureId() const;
+    [[nodiscard]] bool ReadIdTargetPixel(int32_t x, int32_t y, uint8_t out_rgba[4]) const;
 
     // Editor selection-outline plumbing. Setting this >0 turns on the
     // post-process outline glow in the lit shader for pixels whose
@@ -350,6 +507,22 @@ public:
     [[nodiscard]] int32_t  GBufPad()     const { return kGBufPad; }
 
 private:
+    [[nodiscard]] sg_image TextureImage(TTextureHandle handle) const;
+    [[nodiscard]] sg_image ImagePairColor(RendererImagePairHandle handle) const;
+    [[nodiscard]] sg_image ImagePairDepth(RendererImagePairHandle handle) const;
+    [[nodiscard]] sg_image ImagePairHeightMinMax(RendererImagePairHandle handle) const;
+    void Composite(sg_image img,
+                   int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                   int32_t target_w, int32_t target_h);
+    void Composite(sg_image img,
+                   int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                   int32_t target_w, int32_t target_h,
+                   int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                   int32_t src_tex_w, int32_t src_tex_h,
+                   bool additive_blend = false,
+                   bool chroma_key = false,
+                   const float* chroma_key_rgb = nullptr);
+
     int32_t width  = 0;
     int32_t height = 0;
 
@@ -363,6 +536,8 @@ private:
     // ---- Passes ---------------------------------------------------------
     sg_pass default_pass = {};   // G-buffer MRT fill
     sg_pass ao_pass      = {};   // AO -> ao_target
+    sg_pass shadow_pass  = {};   // sun shadow -> shadow_target
+    sg_pass shadow_blur_pass = {}; // horizontal blur -> shadow_blur_target
     sg_pass lit_pass     = {};   // Deferred lighting -> lit_target
     sg_pass depth_pass   = {};   // Reserved for a depth-only prepass
 
@@ -370,10 +545,17 @@ private:
     sg_shader   tile_shader   = {};
     sg_pipeline tile_pipeline = {};
     sg_buffer   tile_vbuf     = {};
+    sg_buffer   tile_proxy_vbuf = {}; // stream convex proxies for projected relief tiles
 
     // ---- Screen-space AO pipeline ---------------------------------------
     sg_shader   ao_shader   = {};
     sg_pipeline ao_pipeline = {};
+
+    // ---- Low-resolution sun shadow mask + blur pipelines ----------------
+    sg_shader   shadow_shader      = {};
+    sg_pipeline shadow_pipeline    = {};
+    sg_shader   shadow_blur_shader = {};
+    sg_pipeline shadow_blur_pipeline = {};
 
     // ---- Deferred light pipeline ----------------------------------------
     sg_shader   light_shader   = {};
@@ -385,6 +567,8 @@ private:
     std::vector<STransparentWorldSubmit> transparent_world_queue;
     std::vector<SOverlaySubmit> overlay_queue;
     std::vector<SMeshSubmit> mesh_queue;
+    SRendererTilePassStats current_tile_pass_stats = {};
+    SRendererTilePassStats last_tile_pass_stats = {};
 
     // ---- Mesh pipeline -------------------------------------------------
     sg_shader   mesh_shader      = {};
@@ -397,15 +581,39 @@ private:
     sg_pipeline helper_mesh_add_back_pipeline = {};
     sg_pipeline helper_mesh_add_front_pipeline = {};
     sg_buffer   mesh_instance_vb = {};   // dynamic, rebuilt each frame
+    std::vector<float> mesh_instance_scratch;
     static constexpr int32_t kMaxMeshInstances = 2048;
 
     struct SMeshEntry {
         sg_buffer vbuf;
         sg_buffer ibuf;
         int32_t   num_indices;
-        sg_image  albedo;
+        TTextureHandle albedo = kInvalidTexture;
+        uint32_t  ref_count = 0;
+        uint64_t  key = 0;
+        uint64_t  vertex_bytes = 0;
+        uint64_t  index_bytes = 0;
     };
     std::vector<SMeshEntry> meshes;   // index+1 is MeshHandle
+    std::unordered_map<uint64_t, MeshHandle> mesh_by_key;
+    struct SRendererImagePairEntry : SRendererImagePairInfo {
+        sg_image color = {};
+        sg_image depth = {};
+        sg_image height_minmax = {};
+        // Source-space convex silhouette for perspective relief tiles. Two
+        // floats per point: x, y in source pixels. Built once from the
+        // immutable depth-valid mask; per-frame tile draws transform the
+        // 3D outline slab into the stream proxy buffer.
+        std::vector<float> tight_proxy_hull_px;
+    };
+    struct SRendererTextureEntry : SRendererTextureInfo {
+        sg_image image = {};
+    };
+    std::vector<SRendererImagePairEntry> image_pair_assets; // index+1 handle
+    std::unordered_map<uint64_t, RendererImagePairHandle> image_pair_by_key;
+    std::vector<SRendererTextureEntry> texture_assets; // index+1 is TTextureHandle
+    std::unordered_map<uint64_t, TTextureHandle> texture_by_key;
+    TTextureHandle white_texture = kInvalidTexture;
 
     // Dirty flags -- read by PresentToSwapchain.
     bool color_target_dirty = false;
@@ -416,8 +624,10 @@ private:
     bool  suppress_present = false;
     float tile_clear_rgba[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     int32_t perspective_debug_mode = 0;
-    int32_t perspective_steps = 32;
-    int32_t perspective_refine = 5;
+    int32_t perspective_projection_mode = 2; // 0 flat, 1 volume ref, 2 relief/SPOM.
+    int32_t perspective_steps = 12;
+    int32_t perspective_refine = 4;
+    float perspective_proxy_raster_scale = 1.0f; // debug: scales proxy coverage only
 
     // ---- Render targets -------------------------------------------------
     sg_image color_target   = {};   // G-buffer: albedo   (RGBA8)
@@ -427,8 +637,12 @@ private:
     sg_image id_target      = {};   // G-buffer: obj id   (RGBA8 packed)
     uint32_t selected_obj_id = 0;   // editor selection (0 = no outline)
     sg_image ao_target      = {};   // AO pass output     (R32F)
+    sg_image shadow_target  = {};   // sun visibility mask (R32F, low-res)
+    sg_image shadow_blur_target = {}; // blur ping-pong target (R32F, low-res)
     sg_image lit_target     = {};   // Lit output         (RGBA8)
     sg_pass  helper_pass    = {};   // Forward helper/material pass into lit_target
+    int32_t shadow_width = 0;
+    int32_t shadow_height = 0;
 
     // ---- Lighting state (uploaded by RunLightingPass) -------------------
     struct SLightState {
@@ -448,9 +662,15 @@ private:
         int32_t view_mode      = 0;
         int32_t mode           = 1;       // 0 retail, 1 modern
         bool    sun_shadow_enable     = true;
-        float   sun_shadow_step_wu    = 24.0f;
+        // Interactive default: one correct low-res ray plus a cheap separable
+        // mask blur. Softness never multiplies the ray-march cost.
+        float   sun_shadow_step_wu    = 32.0f;
         float   sun_shadow_softness_px = 3.0f;
-        int32_t sun_shadow_max_steps  = 32;
+        int32_t sun_shadow_max_steps  = 64;
+        int32_t sun_shadow_samples    = 1; // compatibility only; ignored
+        float   sun_shadow_depth_cutoff_wu = 16.0f;
+        float   sun_shadow_bias_wu    = 2.0f;
+        float   sun_shadow_wz_scale   = 1.0f;
         float   shadow_world_dir[3] = { 0.6f, -0.6f, 0.4f };
         float   shadow_dir[3]       = { 0.0f, 0.0f, 1.0f };
         int32_t plight_count = 0;
@@ -481,8 +701,15 @@ private:
     void InitLightPipeline();
     void ShutdownLightPipeline();
     void RunAOPass();
+    void InitShadowPipeline();
+    void ShutdownShadowPipeline();
+    void RunShadowPass();
+    void RunShadowBlurPass(sg_pass pass, sg_image source, float dir_x, float dir_y);
 
     // Emit one queued tile as a single sg_draw (no instancing yet).
+    bool ClipTileRasterRect(float& rect_x, float& rect_y,
+                            float& rect_w, float& rect_h,
+                            bool uv_independent_projection);
     void EmitTile(const STileSubmit& t);
     void DrainOverlayQueue();
 

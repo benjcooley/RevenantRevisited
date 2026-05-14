@@ -10,6 +10,7 @@
 
 #include "bitmap.h"
 #include "fontdata.h"
+#include "render3d_types.h"
 #include "resource.h"
 
 #define FONT_DRAWMODE   (DM_TRANSPARENT | DM_ALIAS | DM_BACKGROUND)
@@ -38,9 +39,9 @@ class TFont : public TFontData
         // and size of each character in the font.
 };
 
-// GPU atlas for a TFont: every glyph baked into one RGBA8 sg_image with a
-// per-glyph UV rect. Keycolor pixels become alpha=0 so straight-alpha blend
-// composites correctly. Stored in a parallel cache keyed by TFont* rather
+// Renderer texture atlas for a TFont: every glyph baked into one RGBA8 texture
+// with a per-glyph UV rect. Keycolor pixels become alpha=0 so straight-alpha
+// blend composites correctly. Stored in a parallel cache keyed by TFont* rather
 // than on the TFont object itself, because TFont instances are raw
 // resource-file memory (malloc'd to exact on-disk size by LoadResource) —
 // appending member fields would corrupt the bitmap data that follows.
@@ -54,7 +55,7 @@ struct SFontAtlasRect
 
 struct SFontAtlas
 {
-    sg_image       image = {};
+    TTextureHandle texture = kInvalidTexture;
     int32_t        width = 0;
     int32_t        height = 0;
     int16_t        firstchar = 0;

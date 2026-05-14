@@ -12,7 +12,6 @@
 #include "revutils.h"
 
 #include <HandmadeMath.h>
-#include <sokol_gfx.h>
 
 #include <cinttypes>
 #include <cstddef>
@@ -109,6 +108,12 @@ extern bool Editor;             // This is true if we are in edit mode
 extern bool StartInEditor;      // Whether to start the program in editor mode
 extern bool NoQuickLoad;        // Prevent the program from attempting to load the IMAGERY.DAT file
 extern char StartupSavePath[];  // --loadmap=<path>; empty if no startup auto-load
+
+// Startup-selected render size. WIDTH/HEIGHT remain the classic fallback
+// constants for legacy layout code; new render targets and window creation
+// use these values so command-line resolution changes are centralized.
+extern int32_t GameScreenWidth;
+extern int32_t GameScreenHeight;
 
 // Render state controls
 extern bool FlatShade;
@@ -238,6 +243,7 @@ extern TSoundPlayer SoundPlayer;        // Sound effects player
 extern TControlMap  ControlMap;         // Contains the key/joystick mappings for game control
 extern TAreaManager AreaManager;        // Manages the game area system
 extern TPlayerManager PlayerManager;    // Stores the current player list for the game
+extern class TAssetCache AssetCache;    // Shared engine CPU/source asset cache
 extern class TMapManager MapManager;    // Cache of loaded TGameMap levels (defined in revmain.cpp)
 extern TRules       Rules;              // Stores rules, like classes, char types, attacks, tables, etc.
 extern TSpellList   SpellList;          // a list of spells in the game

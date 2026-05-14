@@ -7,12 +7,9 @@
 #include "editorfonts.h"
 
 #include "logging.h"
+#include "renderer.h"
 
 #include <imgui.h>
-#include <sokol_gfx.h>
-
-#include <cstdio>
-#include <cstdlib>
 
 #ifndef REV_FONTS_DIR
 #  define REV_FONTS_DIR "thirdparty/fonts"
@@ -22,34 +19,34 @@ namespace {
 
 ImFont*  s_mono_font     = nullptr;
 ImFont*  s_icon_font     = nullptr;
-sg_image s_atlas_image   = { SG_INVALID_ID };
+TTextureHandle s_atlas_texture = kInvalidTexture;
 
-// Uploads the current ImGui font atlas as an sg_image and assigns it as
-// the atlas's texture id. Replaces whatever sokol_imgui set up (if any).
-bool UploadAtlasToSokol(ImFontAtlas* atlas)
+// Uploads the current ImGui font atlas through the renderer and assigns the
+// backend texture id ImGui needs for draw commands.
+bool UploadAtlasToRenderer(ImFontAtlas* atlas)
 {
     unsigned char* pixels = nullptr;
     int w = 0, h = 0;
     atlas->GetTexDataAsRGBA32(&pixels, &w, &h);
-    if (!pixels || w <= 0 || h <= 0) return false;
+    if (!Renderer || !pixels || w <= 0 || h <= 0) return false;
 
-    sg_image_desc d = {};
-    d.width        = w;
-    d.height       = h;
-    d.pixel_format = SG_PIXELFORMAT_RGBA8;
-    d.wrap_u       = SG_WRAP_CLAMP_TO_EDGE;
-    d.wrap_v       = SG_WRAP_CLAMP_TO_EDGE;
-    d.min_filter   = SG_FILTER_LINEAR;
-    d.mag_filter   = SG_FILTER_LINEAR;
-    d.data.subimage[0][0].ptr  = pixels;
-    d.data.subimage[0][0].size = size_t(w) * size_t(h) * 4u;
-    d.label = "imgui-fonts";
-    s_atlas_image = sg_make_image(&d);
-    if (s_atlas_image.id == SG_INVALID_ID) return false;
+    const size_t bytes = size_t(w) * size_t(h) * 4u;
+    s_atlas_texture = Renderer->RegisterTextureAsset(0,
+                                                     pixels,
+                                                     bytes,
+                                                     w,
+                                                     h,
+                                                     ERendererTextureFormat::RGBA8,
+                                                     bytes,
+                                                     ERendererTextureFilter::Linear);
+    if (s_atlas_texture == kInvalidTexture) return false;
+    Renderer->AddTextureAssetRef(s_atlas_texture);
+
+    const ImTextureID imgui_id = (ImTextureID)Renderer->TextureImGuiId(s_atlas_texture);
 #if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= 19200
-    atlas->SetTexID((ImTextureID)(uintptr_t) s_atlas_image.id);
+    atlas->SetTexID(imgui_id);
 #else
-    atlas->TexID = (ImTextureID)(uintptr_t) s_atlas_image.id;
+    atlas->TexID = imgui_id;
 #endif
     return true;
 }
@@ -67,6 +64,8 @@ ImFont* AddTTF(ImFontAtlas* atlas, const char* path, float px,
 
 void EditorFonts::Build()
 {
+    Shutdown();
+
     ImFontAtlas* atlas = ImGui::GetIO().Fonts;
     atlas->Clear();
 
@@ -112,10 +111,17 @@ void EditorFonts::Build()
                              28.0f, &cfg, kIconRange);
     }
 
-    if (!UploadAtlasToSokol(atlas))
+    if (!UploadAtlasToRenderer(atlas))
         log_error("[fonts] atlas upload failed -- text will be blank");
     else
         log_info("[fonts] atlas built: %d fonts uploaded to gpu", atlas->Fonts.Size);
+}
+
+void EditorFonts::Shutdown()
+{
+    if (Renderer && s_atlas_texture != kInvalidTexture)
+        Renderer->ReleaseTextureAssetRef(s_atlas_texture);
+    s_atlas_texture = kInvalidTexture;
 }
 
 ImFont* EditorFonts::GetMonoFont()

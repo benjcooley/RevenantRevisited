@@ -35,7 +35,6 @@
 #include "editorlog.h"
 #include "editorserialize.h"
 #include "editorundo.h"
-#include "renderer_readback.h"
 #include "editorplatform.h"
 #include "editorprefs.h"
 #include "editorstub.h"
@@ -384,9 +383,9 @@ ImGuizmo::OPERATION ToolToGizmoOp(EEditorTool t)
 
 // Pick the right category icon for an editor IObject. Sectors get the
 // Icon for a TObjectInstance: dispatched by ObjClass().
-sg_image IconForInstance(TObjectInstance* oi)
+TTextureHandle IconForInstance(TObjectInstance* oi)
 {
-    if (!oi) return sg_image{ SG_INVALID_ID };
+    if (!oi) return kInvalidTexture;
     return EditorIcons::ForObjClass(oi->ObjClass());
 }
 
@@ -404,7 +403,7 @@ void DrawInstanceRow(TObjectInstance* oi)
                                ImGuiTreeNodeFlags_NoTreePushOnOpen;
     if (IsSelected(mi)) flags |= ImGuiTreeNodeFlags_Selected;
 
-    const sg_image icon = IconForInstance(oi);
+    const TTextureHandle icon = IconForInstance(oi);
     const float    sz   = ImGui::GetTextLineHeight();
     ImGui::TreeNodeEx((void*)(uintptr_t)mi, flags, "");
     if (g_selection_reveal && IsSelected(mi)) {
@@ -447,8 +446,8 @@ void DrawInstanceRow(TObjectInstance* oi)
         }
     }
     ImGui::SameLine(0.0f, 0.0f);
-    if (icon.id != SG_INVALID_ID)
-        ImGui::Image((ImTextureID)(uintptr_t) icon.id, ImVec2(sz, sz));
+    if (Renderer && icon != kInvalidTexture)
+        ImGui::Image((ImTextureID)Renderer->TextureImGuiId(icon), ImVec2(sz, sz));
     else
         ImGui::Dummy(ImVec2(sz, sz));
     ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
@@ -884,10 +883,10 @@ void DrawPropertiesPanel()
             ImGui::TextDisabled("(no selection)");
         } else {
             // Large category icon + name/class header.
-            const sg_image icon = IconForInstance(SelectionPrimary());
+            const TTextureHandle icon = IconForInstance(SelectionPrimary());
             const float sz = 64.0f;
-            if (icon.id != SG_INVALID_ID) {
-                ImGui::Image((ImTextureID)(uintptr_t) icon.id, ImVec2(sz, sz));
+            if (Renderer && icon != kInvalidTexture) {
+                ImGui::Image((ImTextureID)Renderer->TextureImGuiId(icon), ImVec2(sz, sz));
                 ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
             }
             const IReflection& r = primary->GetRefl();
@@ -1029,8 +1028,8 @@ void DrawGameViewPanel()
         // The lit_target is a (width + 2*pad) x (height + 2*pad) RGBA8
         // image; only the centered display-sized sub-rect is the real
         // game view. Compute uv bounds for that sub-rect.
-        sg_image lit = Renderer->LitTarget();
-        if (lit.id) {
+        const uintptr_t lit = Renderer ? Renderer->LitTargetTextureId() : 0;
+        if (lit != 0) {
             const int32_t pad = Renderer->GBufPad();
             const float fbw = float(Renderer->Width()  + 2 * pad);
             const float fbh = float(Renderer->Height() + 2 * pad);
@@ -1038,7 +1037,7 @@ void DrawGameViewPanel()
             const ImVec2 uv1((float(pad) + float(Renderer->Width())) / fbw,
                              (float(pad) + float(Renderer->Height())) / fbh);
             ImGui::SetCursorScreenPos(img_min);
-            ImGui::Image((ImTextureID)(uintptr_t)lit.id,
+            ImGui::Image((ImTextureID)lit,
                          ImVec2(gw, gh), uv0, uv1);
         } else {
             ImGui::Dummy(ImVec2(avail.x, avail.y));
@@ -1179,7 +1178,7 @@ void DrawGameViewPanel()
                     const int32_t py  = int32_t(img_py) + pad;
                     uint8_t rgba[4] = {0,0,0,0};
                     TObjectInstance* hit = nullptr;
-                    if (Renderer && RendererReadback::ReadPixel(Renderer->IdTarget(), px, py, rgba)) {
+                    if (Renderer && Renderer->ReadIdTargetPixel(px, py, rgba)) {
                         const uint32_t obj_id = uint32_t(rgba[0])
                                              | (uint32_t(rgba[1]) << 8)
                                              | (uint32_t(rgba[2]) << 16)

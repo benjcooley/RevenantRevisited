@@ -203,8 +203,13 @@ class TSafeObjectBase
   private:
     static std::unordered_map<int32_t, Self*>& Registry()
     {
-        static std::unordered_map<int32_t, Self*> m;
-        return m;
+        // Safe-ref registries are process-lifetime tables. Do not make this
+        // a destructed function-local static: global teardown can delete
+        // SafeRefable assets/objects after the registry's destructor has
+        // already run, especially after FatalError/exit paths. Leaking this
+        // tiny table is intentional and keeps late destructors safe.
+        static auto* m = new std::unordered_map<int32_t, Self*>();
+        return *m;
     }
     static int32_t NextId()
     {

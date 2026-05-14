@@ -497,6 +497,16 @@ void TObjectInstance::ClearObject()
 
     frame               = 0;
     framerate           = 1;
+    anim_state_set_count = 0;
+    anim_same_state_set_count = 0;
+    anim_loop_wrap_count = 0;
+    anim_last_state_set_from = -1;
+    anim_last_state_set_to = -1;
+    anim_last_state_set_frame = -1;
+    anim_last_state_set_game_frame = -1;
+    anim_last_loop_wrap_state = -1;
+    anim_last_loop_wrap_frame = -1;
+    anim_last_loop_wrap_game_frame = -1;
 
     level = 0;
     pos.x = pos.y = pos.z = 0;
@@ -1031,12 +1041,41 @@ bool TObjectInstance::SetState(int32_t newstate)
         }
     }
 
+    if (newstate == state && imagery)
+    {
+        const int32_t stateflags = IsInInventory()
+            ? imagery->GetInvAniFlags(state)
+            : imagery->GetAniFlags(state);
+        if (stateflags & AF_LOOPING)
+        {
+            // A same-state request is not a transition. Looping animations
+            // must continue advancing through their authored keys; restarting
+            // here truncates the cycle and creates a visible pop.
+            ++anim_state_set_count;
+            ++anim_same_state_set_count;
+            anim_last_state_set_from = state;
+            anim_last_state_set_to = newstate;
+            anim_last_state_set_frame = frame;
+            anim_last_state_set_game_frame = PlayScreen.GameFrame();
+            SetCommandDone(false);
+            return true;
+        }
+    }
+
     RedrawBackground();
     MapPane.ExtractWalkmap(this);
 
     LOCKOBJECTS;   // Prevent update system from drawing objects while we change state
 
   // Set prevoious values for interpolation system
+    ++anim_state_set_count;
+    if (newstate == state)
+        ++anim_same_state_set_count;
+    anim_last_state_set_from = state;
+    anim_last_state_set_to = newstate;
+    anim_last_state_set_frame = frame;
+    anim_last_state_set_game_frame = PlayScreen.GameFrame();
+
     prevstate = state; // Previous state
     prevframe = frame; // Previous state's final frame (NOT THIS STATES PREVIOUS FRAME!!!)
 
@@ -1511,7 +1550,13 @@ void TObjectInstance::NextFrame()
             if (frame < 0)
             {
                 if (stateflags & AF_LOOPING)
+                {
+                    ++anim_loop_wrap_count;
+                    anim_last_loop_wrap_state = state;
+                    anim_last_loop_wrap_frame = frame;
+                    anim_last_loop_wrap_game_frame = PlayScreen.GameFrame();
                     frame = statesize - 1;
+                }
                 else
                 {
                     if (stateflags & AF_PINGPONG)
@@ -1540,7 +1585,13 @@ void TObjectInstance::NextFrame()
             if (frame >= statesize)
             {
                 if (stateflags & AF_LOOPING)
+                {
+                    ++anim_loop_wrap_count;
+                    anim_last_loop_wrap_state = state;
+                    anim_last_loop_wrap_frame = frame;
+                    anim_last_loop_wrap_game_frame = PlayScreen.GameFrame();
                     frame = 0;
+                }
                 else
                 {
                     if (stateflags & AF_PINGPONG)
@@ -3720,4 +3771,3 @@ uint32_t GenerateUniqueID()
 
     return UniqueID;
 }
-

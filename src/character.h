@@ -215,6 +215,10 @@ class TCharacter : public TComplexObject
       // Character stops blocking
     bool Dodge();
       // Character dodges an attack
+    bool SideStep(char dir = 0);
+      // Cartwheel/sidestep: step \xc2\xb190\xc2\xb0 of facing using the "sidestepl"/"sidestepr"
+      // animation if the root has it. Retail FUN_004d6220 @ 0x4d6220.
+      // dir is 'l' or 'r'; pass 0 for random L/R.
     bool Leap(int32_t angle);
       // Character leaps in the given direction (combat mode only)
     bool PlayAnim(char *string);
@@ -479,11 +483,14 @@ class TCharacter : public TComplexObject
       // Find closest character in this direction
     TCharacter* FindClosestEnemy(int32_t angle = -1, int32_t anglerange = 32);
       // Finds the closest character attacking this character
-    bool WanderToWaypoint(int32_t range = 1024);
-      // Find the closest object whose type name is "waypoint" within range and Goto() it.
-      // Ported from retail TCharacter::AI (FUN_004c8b60) waypoint-search branch — the
-      // late-development wander/patrol mechanism. Monsters with no enemy in sight walk
-      // between waypoints until they encounter the player.
+    TObjectInstance* WanderToWaypoint(const S3DPoint& search_center, int32_t range = 250);
+      // Retail TCharacter::AI (FUN_004c8b60) waypoint-search branch. Used by the
+      // out-of-sight target chase: when a monster has lost sight of its target, it
+      // hops between "waypoint" objects to thread its way toward the target's last
+      // known position. Each call: if there's a committed waypoint, tick the commit
+      // timer (decrement/clear); otherwise scan reachable waypoints near
+      // search_center, pick the closest, commit for ~6 frames. Returns the
+      // currently committed waypoint instance (or nullptr if none).
     void ResetStealthValues();
       // Based on character position, lights, and stealth, sets noise and glimpse
 
@@ -589,34 +596,56 @@ public:
     // pointers so the diagnostic UI doesn't need to be a friend.
     int32_t  DoingAction() const { return doing ? (int32_t)doing->action : -1; }
     int32_t  RootAction()  const { return root  ? (int32_t)root->action  : -1; }
-    const char* DoingName() const { return (doing && doing->name) ? doing->name : "?"; }
-    const char* RootName()  const { return (root  && root->name)  ? root->name  : "?"; }
+    int32_t  DesiredAction() const { return desired ? (int32_t)desired->action : -1; }
+    const char* DoingName() const { return (doing && doing->name[0]) ? doing->name : "?"; }
+    const char* RootName()  const { return (root  && root->name[0])  ? root->name  : "?"; }
+    const char* DesiredName() const { return (desired && desired->name[0]) ? desired->name : "?"; }
     int32_t  DoingTargetX() const { return doing ? doing->target.x : 0; }
     int32_t  DoingTargetY() const { return doing ? doing->target.y : 0; }
     int32_t  NextAttack()   const { return nextattack; }
 protected:
 
   // Last bow shot ticks (so we don't shoot bow too fast)
-    int32_t lastbowshot;
+    int32_t lastbowshot = 0;
 
   // AI fix, this variable keeps track of the last position we saw the enemy at
-    S3DPoint target_last_position;
+    S3DPoint target_last_position{};
   // AI fix, this variable keeps track of when to save the last position of the enemy
-    int32_t last_position_count;
-    bool target_out_of_sight;
-    int32_t last_position_distance;
-    S3DPoint last_position_start_point;
-    int32_t target_last_angle;
+    int32_t last_position_count = 0;
+    bool target_out_of_sight = false;
+    int32_t last_position_distance = 0;
+    S3DPoint last_position_start_point{};
+    int32_t target_last_angle = 0;
 
-  // Retail wander state (from FUN_004c8b60 lines 199-205): instead of
-  // re-running the closest-waypoint search every AI tick, retail caches the
-  // currently-targeted waypoint here and ticks a retry counter down. While
-  // retry > 0 we stay committed to the cached waypoint; when it reaches 0
-  // (or the search finds the same waypoint again, indicating arrival) we
-  // clear and re-search next tick. This is what prevents the
-  // pingpong-at-arrival bug our earlier ARRIVED-radius hack worked around.
-    TSafeRef<TObjectInstance> cached_waypoint;
-    int32_t  waypoint_retry = 0;
+  // Retail wander state (from FUN_004c8b60 lines 199-205).
+  // field_map.md: 0x238 = wander_target  (retail mbr_0x8d / param_1[0x8d])
+  // field_map.md: 0x248 = wander_commit  (retail mbr_0x92 / param_1[0x92])
+  // The AI body caches the currently-targeted waypoint instance here and
+  // ticks `wander_commit` down each frame while we walk toward it. While
+  // commit > 0 we keep the same waypoint; when the search re-finds the
+  // same waypoint as already-committed we treat that as arrival and clear,
+  // letting the next tick pick a different one. Replaces the pre-release
+  // version's missing waypoint state (it had only a closest-waypoint
+  // search per tick which pingponged at arrival). Source-side we keep
+  // wander_target as a TSafeRef for safe-pointer semantics.
+    TSafeRef<TObjectInstance> wander_target;
+    int32_t  wander_commit = 0;
+
+  // field_map.md: 0x254 = target_out_of_sight (retail mbr_0x95)
+  // field_map.md: 0x258 = target_out_of_sight_prev (retail mbr_0x96)
+  // field_map.md: 0x25c = sight_lost_ticks (retail mbr_0x97)
+  // The pair (out_of_sight, out_of_sight_prev) tracks both the current
+  // and previous-frame value of the "I can't see my target" flag, so the
+  // AI body can detect first-frame transitions. sight_lost_ticks
+  // decrements each frame after sight is lost; when it hits zero AI
+  // forces out_of_sight back to false (gives up on the search).
+  // MoveStep zeroes all three when the character commits to "stuck and
+  // can't sidestep" — sight tracking is invalidated when the path to the
+  // target is provably broken.
+  // (target_out_of_sight is declared above at line ~606 with the existing
+  // AI-fix sight tracking fields; the prev/lost_ticks pair lives here.)
+    bool     target_out_of_sight_prev = false;
+    int32_t  sight_lost_ticks = 0;
 };
 
 DEFINE_BUILDER("Character", TCharacter)

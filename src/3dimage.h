@@ -6,7 +6,7 @@
 // *  Ported (2026): D3D3-era handle/surface types have been replaced with *
 // *  render3d_types.h vocabulary. Material and texture handles are now    *
 // *  engine-issued ids (TMaterialHandle / TTextureHandle) that the        *
-// *  renderer maps to sokol_gfx images + material uniform slots. Per-     *
+// *  renderer maps to backend GPU resources + material uniform slots. Per-*
 // *  imagery execute-buffer caching is gone (see 3dscene.h note).         *
 // *************************************************************************
 
@@ -47,14 +47,11 @@ struct S3DTex
     int32_t         numframes;    // Number of frames
     int32_t         framenum;     // Current frame index
 
-    sg_image*       framesurfs;   // Per-frame graphics images (size = numframes)
     TTextureHandle* framehtexs;   // Per-frame engine texture handles
 
-    bool            copyframes;   // If true, surface/htexture below are the
-                                  // currently-bound frame copied into one slot;
-                                  // if false, they alias into the frame arrays.
+    bool            copyframes;   // Legacy semantic: current frame is selected
+                                  // by htexture, never by a direct GPU object.
 
-    sg_image        surface;      // Current frame graphics image
     TTextureHandle  htexture;     // Current frame engine texture handle
 };
 typedef TVirtualArray<S3DTex, 4, 4> T3DTexArray;
@@ -162,7 +159,6 @@ struct S3DAnimObj
     int32_t       numtexfaces[MAXTEXTURES + 1] = {};    // Num faces to render for each texture
     int32_t       textureframe[MAXTEXTURES + 1]= {};    // Frame number for animating textures
     TTextureHandle htextures[MAXTEXTURES]      = {};    // Texture handles per texture slot
-    sg_image      surfaces[MAXTEXTURES]        = {};    // Bound sg_image per texture slot
     TMaterialHandle hmaterial                  = {};    // Material handle (only 1 per obj)
 };
 typedef TPointerArray<S3DAnimObj, 16, 16> T3DAnimObjArray;
@@ -276,7 +272,8 @@ class T3DImagery : public TObjectImagery
     int32_t AddTexture(SSurfaceDesc* srcsd,
         OFFSET *pixels, int32_t frames, void *palette);
     bool LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
-        OFFSET *pixels, int32_t frames, void *palette, bool copyframes);
+        OFFSET *pixels, int32_t frames, void *palette, bool copyframes,
+        int32_t texture_index);
     void RemoveTexture(int32_t texnum);
     void ClearTextures();
   public:
@@ -384,6 +381,37 @@ class T3DAnimator : public TObjectAnimator
     SRenderRect      extents;
     hmm_mat4         matrix;
     bool             updated;
+    // Runtime animation pose buffers. These are configured once when the
+    // animator attaches to a stable I3D skeleton, then reused every frame.
+    // The live path must write into these arrays only; map-backed SAnimPose
+    // and other allocating compatibility APIs stay outside this hot path.
+    SAnimPoseLayout  pose_layout;
+    SAnimPoseBuffer  pose_current;
+    SAnimPoseBuffer  pose_next;
+    SAnimPoseBuffer  pose_blended;
+    int64_t          pose_update_render_frame = -1;
+    int32_t          pose_update_state = -1;
+    int32_t          pose_update_frame = -1;
+    int32_t          pose_update_next_state = -1;
+    int32_t          pose_update_next_frame = -1;
+    int32_t          pose_update_prev_state = -1;
+    int32_t          pose_update_prev_frame = -1;
+    float            pose_update_frame_frac = -1.0f;
+    // Legacy prevstate is object bookkeeping, not a persistent blend command.
+    // The bridge allows it only for the first state-entry frames, then samples
+    // loops as pure key interpolation so frame 0 after wrap is not re-blended
+    // from an old state.
+    int32_t          pose_transition_state = -1;
+    int32_t          pose_transition_prev_state = -1;
+    int32_t          pose_transition_prev_frame = -1;
+    int32_t          pose_transition_last_frame = -1;
+    int32_t          pose_transition_highest_frame = -1;
+    bool             pose_transition_active = false;
+    void UpdateLegacyTransitionWindow(T3DImagery* img,
+                                      int32_t state,
+                                      int32_t frame,
+                                      int32_t prevstate,
+                                      int32_t prevframe);
 
   public:
     T3DAnimator(TObjectInstance* oi) : TObjectAnimator(oi) {}
@@ -395,19 +423,29 @@ class T3DAnimator : public TObjectAnimator
     uint32_t GetFlags() const { return flags; }
     void SetFlags(uint32_t newflags) { flags = newflags; }
     T3DImagery* Get3DImagery() const { return (T3DImagery*)image; }
+    bool DebugTransitionActive() const { return pose_transition_active; }
+    int32_t DebugTransitionState() const { return pose_transition_state; }
+    int32_t DebugTransitionPrevState() const { return pose_transition_prev_state; }
+    int32_t DebugTransitionPrevFrame() const { return pose_transition_prev_frame; }
+    int32_t DebugTransitionLastFrame() const { return pose_transition_last_frame; }
+    int32_t DebugTransitionHighestFrame() const { return pose_transition_highest_frame; }
+    int32_t DebugPoseUpdateFrame() const { return pose_update_frame; }
+    int32_t DebugPoseUpdateNextState() const { return pose_update_next_state; }
+    int32_t DebugPoseUpdateNextFrame() const { return pose_update_next_frame; }
+    float DebugPoseUpdateFrameFrac() const { return pose_update_frame_frac; }
 
     virtual void Pulse();
     virtual void Animate(bool draw);
 
     void UpdateBoneTransforms();
-        // Per-frame: feed the imagery's anim keys for the current
-        // (state, frame) into each bone's TTransform via SetLocal* /
-        // CalcObjectMatrix's mirror, then RefreshHierarchy on the
-        // owning instance's transform_ for a single top-down sweep.
-        // Called from Animate() so any reader (renderer, attachment
-        // point lookup, hit detection) can pull a current world-space
-        // matrix off bone.transform.Matrix() without a per-bone
-        // recompute. Cheap top-down pass once the locals are written.
+        // Per-frame hot path:
+        //   * sample animation track data (currently via the legacy I3D
+        //     adapter) into fixed float pose buffers;
+        //   * blend pose buffers only; no type-aware blend code here;
+        //   * write local TRS into each bone's TTransform;
+        //   * RefreshHierarchy once from the owning instance transform.
+        // No ordinary frame should allocate here. Resize/reconfigure is
+        // only expected if the imagery/skeleton changes under the animator.
 
     virtual bool SurfacesLost();
     virtual void RestoreSurfaces();

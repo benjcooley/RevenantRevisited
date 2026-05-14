@@ -3369,7 +3369,8 @@ void TBurnAnimator::Animate(bool draw)
         SParticleSystemInfo p;
 
         PS3DAnimObj obj = ca->GetObject(j);
-        ca->Get3DImagery()->CalcObjectMatrix(obj, ((TObjectInstance*)character)->GetState(), character->GetFrame(), &mtx);
+        if (!obj || !ca->GetObjectMatrix(j, &obj->matrix))
+            continue;
 
         hmm_vec3 vp;
         vp.x = vp.y = vp.z = 0.0f;
@@ -3590,7 +3591,8 @@ void TAuraAnimator::Animate(bool draw)
         SParticleSystemInfo p;
 
         PS3DAnimObj obj = ca->GetObject(j);
-        ca->Get3DImagery()->CalcObjectMatrix(obj, ((TObjectInstance*)character)->GetState(), character->GetFrame(), &mtx);
+        if (!obj || !ca->GetObjectMatrix(j, &obj->matrix))
+            continue;
 
         hmm_vec3 vp;
         vp.x = vp.y = vp.z = 0.0f;

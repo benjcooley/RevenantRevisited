@@ -73,6 +73,15 @@ int32_t TMapManager::CurrentLevel() const
     return current ? current->Level() : -1;
 }
 
+void TMapManager::ForEachLoadedMap(const std::function<void(TGameMap*)>& fn) const
+{
+    if (!fn)
+        return;
+    for (const std::unique_ptr<TGameMap>& m : cache)
+        if (m)
+            fn(m.get());
+}
+
 void TMapManager::Evict(int32_t level)
 {
     for (auto it = cache.begin(); it != cache.end(); ++it)

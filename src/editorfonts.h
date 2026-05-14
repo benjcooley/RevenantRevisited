@@ -4,7 +4,7 @@
 // *           editorfonts.h - Editor font atlas (Inter + JetBrains)       *
 // *************************************************************************
 //
-// Builds the ImGui font atlas before sokol_imgui's first frame:
+// Builds the ImGui font atlas before the first editor frame:
 //   - Inter (proportional UI default; loaded as `font_default`)
 //   - Material Symbols Outlined merged into the default at the same size,
 //     covering U+E000..U+F8FF (private use area icons via IconFontCppHeaders)
@@ -14,7 +14,7 @@
 // Caller order:
 //   simgui_desc_t d{ .no_default_font = true, ... };
 //   simgui_setup(&d);
-//   EditorFonts::Build();   // populates atlas + uploads sokol image
+//   EditorFonts::Build();   // populates atlas + uploads renderer texture
 //
 // *************************************************************************
 
@@ -24,10 +24,11 @@
 
 namespace EditorFonts {
 
-// Build the font atlas + sokol image. Safe to call once after simgui_setup.
+// Build the font atlas + renderer texture. Safe to call once after simgui_setup.
 // Falls back to ImGui default font on any failure (so the app still runs
 // if the TTFs aren't on disk).
 void Build();
+void Shutdown();
 
 // Pointer to the JetBrains Mono font for log / console panels. Returns
 // the default font when the mono font failed to load.

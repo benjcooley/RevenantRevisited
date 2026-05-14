@@ -464,9 +464,9 @@ void TScreen::EndCurrentScreen()
 
 // One non-blocking tick. Called once per sokol AppFrame.
 //
-// Pulses catch up to the 24Hz legacy frame counter (which TTime clamps to
-// never exceed the real frame count, so at >=24Hz render we pulse at most
-// once per real frame, and if we slow below 24Hz the game slows with us).
+// Pulses catch up to the 24Hz legacy frame counter in scaled simulation time.
+// Slow-motion scales leave extra render frames for interpolation; fast scales
+// may process more than one fixed legacy tick before drawing.
 // DrawBackground/Animate run every call since sokol presents at vsync.
 // Input is delivered out-of-band via AppEvent, so there is no message pump
 // here any more. Returns false when the screen has set `done` — AppFrame
@@ -488,8 +488,8 @@ bool TScreen::TimerTick(bool draw)
             panes[loop]->PaneResized();
     }
 
-    // Catch up missed Pulses. At 60Hz render this is 0 or 1 per call; at
-    // sub-24Hz render it stays 0 (TTime clamps legacy ≤ real).
+    // Catch up missed Pulses. At 1x / 60Hz this is 0 or 1 per call; debug
+    // time scales deliberately alter that cadence.
     const int64_t lf = TTime::LegacyFrameCount();
     while (lastPulseLegacyFrame < lf)
     {

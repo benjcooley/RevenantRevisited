@@ -7,7 +7,7 @@
 // *  TExecuteBuf class and T3DScene's BeginRender/EndRender/              *
 // *  CopyExecuteBuf/UseExecuteBuf/CreateMatrixList API (used to cache     *
 // *  Immediate Mode command streams per-animator) no longer have a        *
-// *  sokol_gfx equivalent — pipelines + dynamic vertex buffers replace    *
+// *  backend equivalent -- pipelines + dynamic vertex buffers replace     *
 // *  it. Callers that were holding PTExecuteBuf now just re-record each   *
 // *  frame. The legacy code lives in attic/src/3dscene_d3d3.cpp.          *
 // *************************************************************************
@@ -30,8 +30,8 @@ struct SSurfaceDesc;
 //
 // Owns the global 3D view: viewport, camera, ambient light, dynamic light
 // list, and the animator list that gets ticked each frame. Also mediates
-// rendering state — the DrawPrimitive / SetRenderState calls below used to
-// forward to a Direct3D device; they now forward to the sokol_gfx pipeline
+// rendering state -- the DrawPrimitive / SetRenderState calls below used to
+// forward to a Direct3D device; they now forward to renderer pipeline
 // that T3DScene owns. Calls are valid between BeginScene() / EndScene().
 
 class T3DScene
@@ -114,8 +114,8 @@ class T3DScene
         ERender3DPrim pt, ERender3DVertex vt, const void* v, uint32_t vc, uint32_t flags);
 
   // Binds a texture for subsequent draws. Texture handle is an engine-side
-  // key; the sg_image is resolved from it during pipeline binding.
-    bool SetTexture(TTextureHandle hTexture, sg_image surface);
+  // key; backend GPU objects are resolved inside the renderer.
+    bool SetTexture(TTextureHandle hTexture);
 };
 
 // Inline rotations about a center (h, k). Still used by effect code.

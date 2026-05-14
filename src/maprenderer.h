@@ -53,7 +53,7 @@ class TMapRenderer
                 int32_t anchor_sx = 0,
                 int32_t anchor_sy = 0);
 
-    // Force a fresh build of the renderer's draw caches against
+    // Force a fresh build of the renderer's non-owning draw records against
     // whatever map the SafeRef currently points at. Called from SetMap
     // and from the Loaded/Updated event handler; callers can also
     // invoke explicitly after mutating sector contents (e.g. spawning
@@ -87,10 +87,17 @@ class TMapRenderer
     // Last-frame draw counts, exposed so the editor status bar can show
     // exactly what's hitting the GPU. All-zero before the first frame.
     struct SDrawCounts {
-        int32_t total_drawables  = 0;   // sum of tiles + meshes considered
+        int32_t total_drawables  = 0;   // resident draw records for the loaded map
+        int32_t draw_candidates  = 0;   // records visited by this frame's sector-bin pass
+        int32_t resident_lights  = 0;
+        int32_t active_lights    = 0;
+        int32_t point_lights_considered = 0;
+        int32_t point_lights_submitted = 0;
         int32_t tiles_submitted  = 0;   // tile pass actually drew
+        int32_t tiles_visible_submitted = 0;
+        int32_t tiles_gbuffer_border_submitted = 0;
         int32_t meshes_submitted = 0;   // mesh pass actually drew
-        int32_t offscreen_culled = 0;   // tiles dropped at visibility check
+        int32_t offscreen_culled = 0;   // dropped outside visual/padded checks
     };
     [[nodiscard]] SDrawCounts GetLastDrawCounts() const;
 
@@ -125,17 +132,10 @@ class TMapRenderer
     // you need to outlive a frame.
     void GetLoadedSectors(std::vector<class TSector*>& out) const;
 
-    // Reconcile the renderer's per-instance drawable cache against the
-    // current contents of sectorsKept. Compares sum of ContentVer()
-    // versions; if any sector has mutated since the last sync, the
-    // tile drawables for that sector are rebuilt. Cheap when nothing
-    // changed (one sum + compare). Called automatically at the top
-    // of RenderFrame; editor commands don't need to invoke directly.
-    //
-    // V1 limitation: only tile drawables are reconciled. Mesh/light
-    // entries stay stale until next full sector reload. The version
-    // infrastructure is in place, so adding mesh/light reconciliation
-    // is mechanical when needed.
+    // Reconcile non-owning draw records against the current resident map
+    // contents. Sector transfers refresh instance state and bins; object-set
+    // changes rebuild draw/light records over already-resident assets. Called
+    // automatically at the top of RenderFrame.
     void SyncContentsCache();
 
     // Camera-anchored level. The renderer manages its own sector load

@@ -13,6 +13,7 @@
 #include "imagery.h"
 #include "imageres.h"
 #include "logging.h"
+#include "renderer.h"
 #include "revdefs.h"
 
 #include <memory>
@@ -56,9 +57,9 @@ inline void ClearBitmapAtlasMetadata(SBitmapAtlas* atlas)
 void DestroyBitmapAtlas(SBitmapAtlas* atlas)
 {
     if (!atlas) return;
-    if (atlas->image.id)
-        sg_destroy_image(atlas->image);
-    atlas->image = {};
+    if (Renderer && atlas->texture != kInvalidTexture)
+        Renderer->ReleaseTextureAssetRef(atlas->texture);
+    atlas->texture = kInvalidTexture;
     ClearBitmapAtlasMetadata(atlas);
 }
 
@@ -205,20 +206,22 @@ bool BuildImageryBitmapAtlas(SBitmapAtlas* atlas)
         }
     }
 
-    sg_image_desc d = {};
-    d.width = atlas->width;
-    d.height = atlas->height;
-    d.pixel_format = SG_PIXELFORMAT_RGBA8;
-    d.min_filter = SG_FILTER_NEAREST;
-    d.mag_filter = SG_FILTER_NEAREST;
-    d.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-    d.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    d.data.subimage[0][0].ptr = rgba.get();
-    d.data.subimage[0][0].size = size_t(atlas->width) * atlas->height * 4;
-    d.label = "ui.atlas";
-    atlas->image = sg_make_image(&d);
+    const size_t bytes = size_t(atlas->width) * atlas->height * 4;
+    if (Renderer)
+    {
+        atlas->texture = Renderer->RegisterTextureAsset(0,
+                                                        rgba.get(),
+                                                        bytes,
+                                                        atlas->width,
+                                                        atlas->height,
+                                                        ERendererTextureFormat::RGBA8,
+                                                        bytes,
+                                                        ERendererTextureFilter::Nearest);
+        if (atlas->texture != kInvalidTexture)
+            Renderer->AddTextureAssetRef(atlas->texture);
+    }
 
-    if (sg_query_image_state(atlas->image) != SG_RESOURCESTATE_VALID)
+    if (atlas->texture == kInvalidTexture)
     {
         log_error("[ui] atlas upload failed");
         DestroyBitmapAtlas(atlas);

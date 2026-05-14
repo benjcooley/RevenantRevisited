@@ -5,8 +5,8 @@
 // *  These types replace the Direct3D Immediate-Mode 3.0 surface that the *
 // *  1998 renderer leaned on (D3DVERTEX / D3DPRIMITIVETYPE / execute      *
 // *  buffers / material + texture handles). They are plain data so mesh   *
-// *  loaders and cached animation data keep working; the rendering path   *
-// *  translates them to sokol_gfx pipelines and bindings.                 *
+// *  loaders and cached animation data keep working; the renderer         *
+// *  translates them to backend pipelines and bindings.                   *
 // *************************************************************************
 
 #pragma once
@@ -14,7 +14,6 @@
 #include <cstdint>
 
 #include <HandmadeMath.h>
-#include <sokol_gfx.h>
 
 // Primitive topology. Mirrors the subset of D3DPRIMITIVETYPE that Revenant
 // actually uses — the mesh format only ever records triangle lists; line and
@@ -118,12 +117,20 @@ enum class ERender3DLightState : uint8_t
 };
 
 // Integer handles issued by the renderer for materials/textures. We keep
-// them opaque at the game layer; the renderer maps them to sg_image plus
-// uniform slots.
+// them opaque at the game layer; only the renderer may map them to backend
+// GPU objects.
 using TMaterialHandle = uint32_t;
 using TTextureHandle  = uint32_t;
 static constexpr TMaterialHandle kInvalidMaterial = 0;
 static constexpr TTextureHandle  kInvalidTexture  = 0;
+
+struct SRenderColor
+{
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    float a = 1.0f;
+};
 
 // 4-int rectangle — replaces D3DRECT. Used by extents/update-rect code.
 struct SRenderRect

@@ -72,12 +72,12 @@ class TFlipbookBillboardComponent : public TObjectComponent
   public:
     [[nodiscard]] const char* ComponentName() const override { return "flipbook_billboard"; }
 
-    void Configure(sg_image texture, int32_t texture_width, int32_t texture_height,
+    void Configure(TTextureHandle texture, int32_t texture_width, int32_t texture_height,
                    int32_t columns, int32_t rows, int32_t frames,
                    float width, float height,
                    bool additive, bool replaces_default)
     {
-        image = texture;
+        texture_handle = texture;
         tex_w = texture_width > 0 ? texture_width : 1;
         tex_h = texture_height > 0 ? texture_height : 1;
         cols = columns > 0 ? columns : 1;
@@ -98,7 +98,7 @@ class TFlipbookBillboardComponent : public TObjectComponent
     void OnDetach() override { UnregisterUpdate(&TObjectComponent::Update); }
 
     [[nodiscard]] bool ReplacesDefaultVisual() const { return replaces_default_visual; }
-    [[nodiscard]] sg_image Image() const { return image; }
+    [[nodiscard]] TTextureHandle Texture() const { return texture_handle; }
     [[nodiscard]] int32_t TextureWidth() const { return tex_w; }
     [[nodiscard]] int32_t TextureHeight() const { return tex_h; }
     [[nodiscard]] int32_t SourceX() const { float r[4]; UvRect(r); return int32_t(r[0] * float(tex_w)); }
@@ -150,7 +150,7 @@ class TFlipbookBillboardComponent : public TObjectComponent
         out[3] = 1.0f / float(rows);
     }
 
-    sg_image image = {};
+    TTextureHandle texture_handle = kInvalidTexture;
     int32_t tex_w = 1, tex_h = 1;
     int32_t cols = 1, rows = 1, frame_count = 1;
     int32_t legacy_frame = 0;
@@ -2270,4 +2270,3 @@ class TAmbSoundAnimator : public T3DAnimator
     bool Render();
     void RefreshZBuffer();
 };
-

@@ -610,6 +610,22 @@ void TCharacter::Notify(int32_t notify, void *ptr)
 
 #define MAXZMOVE 32
 
+// REVSYNC: retail TCharacter::Blocked @ 0x4c39d0
+//   recon/discovered/cls_0x5a7b98_TCharacter_Blocked_4c39d0.cpp (size 490).
+//   Vetted — same shape as retail: GetWalkHeightRadius if moving (else
+//   GetWalkHeight), reject on |dz| > 0x21 (= MAXZMOVE+1=33), then char-vs-char
+//   blocking via CharBlocking which iterates a 128-radius TMapIterator and
+//   returns the closest blocking character.
+//
+// Retail differences we have NOT folded in (low-impact for AI parity):
+//   - Retail tests `param_1[0x3b] != 0` (movetopos active) and SKIPS the
+//     char-blocking pass — i.e. ignore other characters as obstacles when
+//     moving to a scripted target. Our version always char-blocks. This
+//     can manifest as scripted moves stuck behind another NPC; not seen
+//     in Demo 1 because nothing scripts MoveTo() through a crowd.
+//   - Retail also masks against `(*(byte *)(param_1 + 2) & 0x80)` which
+//     is OF_PARALIZE — we already test OF_PARALIZE in Move() before
+//     calling Blocked() so the gate is effectively the same.
 bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t *height, TCharacter* *bychar)
 {
     int32_t h;
@@ -815,48 +831,109 @@ uint32_t TCharacter::Move()
 
         if (retval & MOVE_BLOCKED) // Try to nudge!
         {
-          // Pre-snapshot used WALKMAPGRANULARITY (=16) for the shove probe,
-          // which usually lands back inside the same obstacle and the char
-          // gives up. Retail (per recon/discovered/walkmap_notes.md) uses
-          // ±32 and ±64 — far enough off-axis to actually clear most
-          // obstacles. Same algorithm, doubled distances.
-            if (shovedir < 0)
+          // REVSYNC: retail TCharacter::MoveStep shove probe @ 0x4c3bc0:304-381
+          // (recon/discovered/cls_0x5a7b98_TCharacter_MoveStep_4c3bc0.cpp).
+          //
+          // shovedir is an *angle offset* (-0x20, +0x20, -0x40, +0x40)
+          // relative to moveangle, NOT a final angle. Retail field +0x47.
+          // -1 means "not yet committed". When uncommitted, probe all 4
+          // offsets at distances 2, 4, 6; pick the (offset, distance)
+          // pair with the largest unblocked reach. Once committed, on
+          // subsequent ticks only re-probe the committed offset until it
+          // either clears (move forward) or fails (stay blocked).
+          //
+          // Action-state gate (retail 0x4c3bc0:307-309): SKIP the probe
+          // entirely when the character is committed to a combat-anchored
+          // action with a target — the AI body owns repositioning in that
+          // case (e.g. circling, dodging) and a sidestep would fight it.
+          // Negated (skip when ALL true): root != null && root->action is
+          // ACTION_COMBAT or ACTION_BOW && root->obj != null && local_2c.
+          // local_2c is set elsewhere in MoveStep and we don't yet know
+          // what it tracks (probably "doing has obstacle awareness");
+          // for now we approximate the gate without it.
+          // TODO retail: pin down local_2c semantics and add to the gate.
+            const bool combat_anchored =
+                root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW)
+                     && root->obj != nullptr;
+
+            if (!combat_anchored)
             {
-                for (int32_t i = 0; i < 4; i++)
+                constexpr int32_t kOffsets[4] = { -32, +32, -64, +64 };
+
+                int32_t numoffsets;
+                const int32_t *which;
+                int32_t single[1] = { shovedir };
+                if (shovedir == -1) {
+                    numoffsets = 4;
+                    which      = kOffsets;
+                } else {
+                    numoffsets = 1;
+                    which      = single;
+                }
+
+                int32_t best_step = 0;        // 0 = nothing reachable yet
+                int32_t best_off  = -1;
+                S3DPoint best_pos = newpos;   // committed candidate position
+
+                for (int32_t k = 0; k < numoffsets; k++)
                 {
-                    int32_t d;
-                    if (i & 1)
-                        d = 32 << (i >> 1);   // +32, +64
-                    else
-                        d = -(32 << (i >> 1)); // -32, -64
-
-                    S3DPoint v, p;
-                    p = newpos;
-                    ConvertToVector(moveangle + 64, d, v);
-                    p += v;
-
-                  // Check to see if there's open space to right/left
-                    if (!Blocked(pos, p, retval)) // This way's ok
+                    const int32_t off = which[k];
+                    for (int32_t step = 2; step < 8; step += 2)  // 2, 4, 6
                     {
-                        if (d < 0)
-                            shovedir = (moveangle - 64) & 255; // Go left around obstacle
-                        else
-                            shovedir = (moveangle + 64) & 255; // Go right around obstacle
-                        break;
+                        S3DPoint v;
+                        ConvertToVector((moveangle + off) & 0xff, step, v);
+                        S3DPoint cand = pos;
+                        cand += v;
+
+                        uint32_t probe_bits = retval;  // preserve falling/etc
+                        if (Blocked(pos, cand, probe_bits))
+                            break;  // this offset's clearance ends here — stop
+                                    // probing further distances on the same offset
+                        if (step > best_step)
+                        {
+                            best_step = step;
+                            best_off  = off;
+                            best_pos  = cand;
+                        }
                     }
+                }
+
+                if (best_step > 0)
+                {
+                  // Sanity-recheck the chosen candidate (retail 0x4c3bc0:352
+                  // — catches char-blocking races between probe and commit).
+                    uint32_t recheck_bits = retval;
+                    if (!Blocked(pos, best_pos, recheck_bits))
+                    {
+                      // Commit (retail 0x4c3bc0:354-362): zero velocity and
+                      // accumulator so we don't carry forward momentum into
+                      // the obstacle. Without this monsters jitter against
+                      // the wall as their forward velocity fights the
+                      // sideways shove.
+                        shovedir   = best_off;
+                        newpos     = best_pos;
+                        moveaccum  = S3DPoint{};      // zero accum
+                        accum      = S3DPoint{};
+                        vel        = S3DPoint{};      // zero velocity
+                        retval    &= ~MOVE_BLOCKED;
+                    }
+                  // else: leave shovedir as-is and stay blocked this tick;
+                  // next tick will re-probe the committed offset.
                 }
             }
 
-
-            if (shovedir >= 0)
+          // If after the probe (or the gate-skip) we're STILL blocked,
+          // retail 0x4c3bc0:371-379 invalidates sight tracking — the path
+          // to whatever we were tracking is broken, drop the cached sight
+          // state so the AI body re-acquires next tick.
+            if (retval & MOVE_BLOCKED)
             {
-                S3DPoint v;
-                ConvertToVector(shovedir, 4, v);
-                newpos = pos;
-                newpos += v;
-                moveaccum = accum;
-                if (!Blocked(pos, newpos, retval)) // This way's ok
-                    retval &= ~MOVE_BLOCKED; // Go ahead and move there
+                if (target_out_of_sight)
+                {
+                    target_out_of_sight      = false;
+                    target_out_of_sight_prev = false;
+                    sight_lost_ticks         = 0;
+                }
             }
         }
 
@@ -2281,132 +2358,364 @@ bool TCharacter::IsEnemy(TCharacter* chr)
 // * General AI Routines *
 // ***********************
 
+// REVSYNC: retail TCharacter::AI @ 0x4c8b60
+//   recon/discovered/cls_0x5a7b98_TCharacter_AI_4c8b60.cpp (size 2291 / 326 lines).
+//   Per-tick monster brain. Retail flow:
+//     1. Health<1 -> return (dead).
+//     2. Player class with charflags-mask 0x100000 unset -> return.
+//     3. OF_DISABLED, NoAI globals, or AI-paused -> Stop(), return.
+//     4. AI_PerMonster() per-creature overlay. We currently only handle
+//        Araknid (the Demo 1 creature), which has no overlay (returns 0).
+//     5. Validate desired->obj as a current target via CanSeeCharacter
+//        check; if missing/invalid, every 32 frames sweep FindCharacters
+//        to acquire a fresh enemy.
+//     6. If we have a target and we're in combat, run the attack tree:
+//        out-of-range / blocked -> sidestep or Go(angle); in-range ->
+//        RandomAttack pick guarded by a CharBlocking line check; tick
+//        nextattack/waitticks counters and reset from chardata when they
+//        underflow.
+//     7. If no target (or non-combat root) and not moving, wander to the
+//        nearest "waypoint" object. The committed waypoint is held in
+//        wander_target with a wander_commit watchdog so we don't
+//        ping-pong on arrival.
+//     8. Tail: target_out_of_sight is the *current* "lost target" flag,
+//        target_out_of_sight_prev mirrors it for transition detection,
+//        sight_lost_ticks is a frame countdown.
+//
+// Field-offset cross-references (recon/discovered/field_map.md):
+//   doing       (mbr_0xd8  / param_1[0x36])
+//   desired     (mbr_0xe0  / param_1[0x38])
+//   chardata    (mbr_0xfc  / param_1[0x3f])
+//   charflags   (mbr_0x110 / param_1[0x44])
+//   nextattack  (mbr_0x120 / param_1[0x48])
+//   waitticks   (mbr_0x124 / param_1[0x49])
+//   chainhits   (mbr_0x12c / param_1[0x4b])
+//   oldab       (mbr_0x160 / param_1[0x58])  — retail uses for "in-progress action"
+//   wander_target            (mbr_0x238 / param_1[0x8d])
+//   target_last_position     (mbr_0x23c / param_1[0x8f..0x91])
+//   wander_commit            (mbr_0x248 / param_1[0x92])
+//   target_out_of_sight      (mbr_0x254 / param_1[0x95])
+//   target_out_of_sight_prev (mbr_0x258 / param_1[0x96])
+//   sight_lost_ticks         (mbr_0x25c / param_1[0x97])
 void TCharacter::AI()
 {
     ai_ai_count++;
-    if (flags & OF_DISABLED || IsDead() || NoAI)
+
+  // (1) Dead -> skip entirely.
+    if (Health() < 1)
+        return;
+
+  // (2) Player object that's been "AI-disabled" via the player-state bit.
+  //     Retail: `if (objclass==0xb && (charflags & 0x100000) == 0) return;`
+  //     We don't have the 0x100000 flag yet, so just bail for the player
+  //     object — TPlayer overrides AI() anyway.
+    if (ObjClass() == OBJCLASS_PLAYER)
+        return;
+
+  // (3) Global / object-flag gates. Retail also tests DAT_00668110 (a
+  //     "AI globally disabled" flag e.g. cinematic mode); we don't have
+  //     that global yet. NoAI is our stand-in.
+    if ((flags & OF_DISABLED) || NoAI || Editor)
     {
-        if (IsMoving())
+        if (doing && (doing->action == ACTION_MOVE ||
+                      doing->action == ACTION_COMBATMOVE ||
+                      doing->action == ACTION_BOWMOVE))
             Stop();
         return;
     }
 
-    if (Editor)
-        return;
+  // (4) Per-monster behavioural overlay. Retail dispatches on a one-time
+  //     name match against {"Baez","Solifuge","Jhaga","Yhagoro"}; every
+  //     other creature (including Araknid) takes the default branch and
+  //     returns 0, falling through to the generic AI body below.
+  //     Demo 1 only ships Araknid, so we leave the overlay as a no-op
+  //     stub and TODO the four boss cases. See
+  //     recon/discovered/araknid_ai_notes.md for confirmation that
+  //     Araknid has no special-case branch.
+  //     TODO retail: port AI_PerMonster cases 1..4 (Baez, Solifuge,
+  //     Jhaga, Yhagoro) when we actually have those creatures in a demo.
 
-    TCharacter* target = Fighting();
-    
-  // We don't have a target.. try to find one
-    if (!target && !Editor && Aggressive())
+  // (5) Validate / acquire combat target.
+  //
+  //     Retail reads desired->obj as the current target (the action
+  //     block's `obj` field), validates it via IsValidTarget (0x4cd990),
+  //     and if missing acquires a new one every 32 frames via
+  //     FindCharacters with a 32-unit angle range.
+    TCharacter* target = nullptr;
+    if (desired && desired->obj &&
+        (desired->action == ACTION_COMBAT || desired->action == ACTION_BOW))
     {
-        target = FindClosestEnemy(); // Finds the closest visible enemy (if it can see it)
-        if (target && Distance((TCharacter*)target) < chardata->combatrangemin)
-            BeginCombat(target);
-    }
-    // Still no target — wander toward the closest waypoint object so we
-    // eventually bump into Locke. Retail-faithful behaviour ported from
-    // FUN_004c8b60. Gated on Aggressive() because civilian NPCs (Howard,
-    // shopkeepers) are supposed to stand still or follow per-character
-    // ALWAYS scripts; without System 11 scripting (Tier 3) they have
-    // nothing else to do, and unconditional wander sends them marching
-    // off the map toward whatever waypoint is closest.
-    if (!target && !Editor && !IsMoving() &&
-        ObjClass() != OBJCLASS_PLAYER && Aggressive())
-    {
-        WanderToWaypoint();
-    }
-    if (target)
-    {
-        if (target->IsInvisibleSpell())
+        // desired->obj is the combat target.
+        target = (TCharacter*)desired->obj;
+        if (!target || target->IsDead() ||
+            (target->ObjClass() != OBJCLASS_CHARACTER &&
+             target->ObjClass() != OBJCLASS_PLAYER))
         {
-            target = FindClosestEnemy(); // Finds the closest visible enemy (if it can see it)
-            if (target && Distance((TCharacter*)target) < chardata->combatrangemin)
-                BeginCombat(target);
+            target = nullptr;
         }
     }
-    if (target && doing)
-    {
-        if (doing->action == ACTION_COMBAT)
-        {
-            if (nextattack > 0)
-                nextattack--;
 
-            if (nextattack == 0)
+    if (!target)
+    {
+      // Periodic enemy sweep — retail only fires once every 32 frames
+      // (frame_tick xor charflags & 0x1f != 0) which keeps the cost
+      // amortised across the monster population.
+        if (Aggressive() && ((CurrentScreen->FrameCount() ^ (int32_t)charflags) & 0x1f) == 0)
+        {
+            TCharacter* found = nullptr;
+            int32_t n = FindCharacters(&found, 1, /*range=*/-1, /*angle=*/-1, /*anglerange=*/32,
+                                       FINDCHAR_ENEMY | FINDCHAR_SEE | FINDCHAR_HEAR);
+            if (n > 0 && found && !target_out_of_sight)
+                BeginFighting(found, ACTION_COMBAT);
+            target = Fighting();
+        }
+    }
+
+  // (6+7) Main per-tick decision tree.
+    if (!doing)
+        goto sight_tail;
+
+  // ===== Pre-step: cartwheel-pair on blocker =====
+  // Retail FUN_004c8b60:96-115. When we're NOT in a move root and
+  // another character is blocking our position (FindClearPath returns
+  // a char), throw a SideStep one direction; if the blocker isn't our
+  // combat target, throw the OPPOSITE side too — that's the "cartwheel
+  // both ways" liveliness. The retail action gate is "doing == null OR
+  // action ∉ {MOVE, COMBATMOVE, BOWMOVE}", i.e. don't double-step while
+  // already moving.
+  //
+  // We use CharBlocking() in place of retail's FindClearPath(pos, pos)
+  // — same semantics for this call (blocker char near current pos).
+  // The accum.x/y == 0 gate is retail FUN_004c8b60:98 ("character has
+  // no horizontal momentum"): only cartwheel when truly standing still
+  // in combat, never mid-step.
+    {
+        ACTION da = doing->action;
+        if (da != ACTION_MOVE && da != ACTION_COMBATMOVE && da != ACTION_BOWMOVE
+            && accum.x == 0 && accum.y == 0)
+        {
+            TCharacter* blocker = CharBlocking(this, pos, Radius());
+            if (blocker)
             {
-                if (random(1,100) <= 20/*chardata->blockfreq*/ && !(flags & OF_ICED))
-                    Block();
+              // Retail line 101-102: cVar2 = diff>=0 ? 'r' : 'l'.
+              // (Sidestep moves 90° off facing; retail issues the pair
+              // and lets the engine decide which one actually plays.)
+                int32_t diff = AngleDiff(GetFace(), AngleTo(blocker));
+                char first = (diff >= 0) ? 'r' : 'l';
+                SideStep(first);
+
+              // Retail lines 104-114: if blocker is NOT our combat
+              // target, fire the opposite-side sidestep too.
+                TObjectInstance* combat_target = nullptr;
+                if (desired && (desired->action == ACTION_COMBAT ||
+                                desired->action == ACTION_BOW))
+                    combat_target = desired->obj;
+                if (combat_target != (TObjectInstance*)blocker)
+                {
+                    char second = (first == 'l') ? 'r' : 'l';
+                    SideStep(second);
+                }
+              // Retail then does `goto LAB_004c93ce` — straight to the
+              // sight-tail, skipping the attack tree this frame. We
+              // mirror that with `goto sight_tail` so the in-range
+              // tree below doesn't immediately try to attack.
+                goto sight_tail;
+            }
+        }
+    }
+
+  // Special branch: we have an in-flight action that's interactive (e.g.
+  // a cast / use). Retail tests `TActionBlock_Is("combat") && !target_out_of_sight && (charflags & 0x4000)`
+  // — we approximate by skipping the attack tree when nextattack hasn't
+  // armed.
+    {
+        ACTION da = doing->action;
+
+        if (da == ACTION_COMBAT && target && !target_out_of_sight)
+        {
+          // ===== In combat, target visible: tick attack/wait, fire =====
+            if (nextattack > 0) nextattack--;
+            if (waitticks  > 0) waitticks--;
+
+            if (nextattack == 0 || waitticks == 0)
+            {
+              // Reset interrupt flag (retail clears charflags & 1).
+
+              // Retail gating: skip attack if oldab is set with the
+              // "interactive" bit. Approximation: just always allow.
+                int32_t tdist = Distance(target);
+                if (tdist > chardata->maxattackrange)
+                {
+                  // Out of range: walk toward target. Retail Walk(angle)
+                  // (FUN_004ce350) is essentially Go(angle). The
+                  // pre-snapshot hardcoded "> 80" was wrong for
+                  // short-reach creatures (e.g. Araknid attkrng=32);
+                  // chardata-driven is right.
+                    target_out_of_sight = false;
+                    Go(AngleTo(target));
+                    oldab = nullptr;
+                }
                 else
                 {
-                    bool attacked = RandomAttack(random(1,100));
-                    if (!attacked && Distance(target) > chardata->maxattackrange)
+                  // In range: try a percentage-driven attack. Retail
+                  // first does a CharBlocking line check from us through
+                  // 2*radius — if some other character is between us
+                  // and the target, sidestep instead of attacking
+                  // through them.
+                    int32_t pcnt    = random(1, 100);
+                    bool    attacked = RandomAttack(pcnt);
+
+                    int32_t reach = Radius() * 2;
+                    TCharacter* lineblocker = CharBlocking(this, pos, reach);
+                    if (lineblocker && lineblocker != target)
                     {
-                      // Out of any attack's reach: step closer. The pre-snapshot
-                      // hardcoded "> 80" was wrong for short-reach creatures
-                      // (e.g. Araknid attkrng=32) — they'd be inside 80 and outside
-                      // 32 simultaneously and freeze in place.
-                        target_out_of_sight = false;
-                        Go(AngleTo(target));
+                        if (!attacked)
+                        {
+                          // Sidestep around the blocker, retail
+                          // FUN_004c8b60:282-291. AngleDiff sign picks
+                          // the side: blocker on our right (diff in
+                          // +33..+95) → step left; blocker on our left
+                          // (-95..-33) → step right; else skip.
+                            int32_t angtoblock = AngleTo(lineblocker);
+                            int32_t diff       = AngleDiff(GetFace(), angtoblock);
+                            if (diff >= 33 && diff <= 95)
+                                SideStep('l');
+                            else if (diff <= -33 && diff >= -95)
+                                SideStep('r');
+                          // else: blocker is in front-cone or behind —
+                          // sidestep wouldn't help; just skip the dodge.
+                        }
+                    }
+
+                    if (attacked)
+                    {
+                      // Attack landed: bump chainhits (retail decrements
+                      // mbr_0x4b which is our chainhits — but retail's
+                      // semantics are "chain-attack budget remaining",
+                      // counting down from MAXCHAINHITS).
+                        if (chainhits > 0) chainhits--;
                     }
                 }
 
-                nextattack--;
+                // TODO retail: gate `if oldab && (oldab->mbr_0x24 & 0x01000000)`
+                // — the retail decompile masks bit 24 of TActionBlock
+                // offset 0x24, but in our 92-byte source TActionBlock that
+                // offset is `frame` (an int frame number). Either the
+                // retail layout differs (TActionBlock is 100 bytes there
+                // with 8 bytes of extra fields per field_map.md) or the
+                // mask targets a flag that lives somewhere else in our
+                // layout. Until we resolve, just always refresh.
+                if (nextattack <= 0)
+                    nextattack--;
+            }
+
+            if (nextattack < 0)
+                nextattack = random(chardata->minattackfreq * FRAMERATE / 100,
+                                    chardata->maxattackfreq * FRAMERATE / 100);
+            // TODO retail: waitticks reset uses chardata + 0x1d8 / 0x1dc
+            // (the field directly after attackfreq); field_map.md tags
+            // these as mana/fatigue but that doesn't match SCharData
+            // semantics. For now just reuse the attackfreq bounds — this
+            // gives correct behaviour for "tick down both counters in
+            // lockstep, refire when either runs out".
+            if (waitticks < 0)
+                waitticks = random(chardata->minattackfreq * FRAMERATE / 100,
+                                   chardata->maxattackfreq * FRAMERATE / 100);
+        }
+        else if ((da == ACTION_MOVE || da == ACTION_COMBATMOVE || da == ACTION_BOWMOVE)
+                 && target)
+        {
+          // ===== We're in a move root with a known target: drive the =====
+          // ===== move-angle and decide whether to switch to attack    =====
+            int32_t tdist = Distance(target);
+            if (tdist < chardata->maxattackrange && !target_out_of_sight)
+            {
+                Stop();
+            }
+            // TODO retail: same `oldab->mbr_0x24 & 0x01000000` gate as
+            // above — see the matching comment block in the COMBAT branch.
+            else if (CanSeeCharacter(target))
+            {
+              // (target_out_of_sight goes false next frame via tail)
+                target_last_position = target->Pos();
+                doing->moveangle      = AngleTo(target);
+                doing->angle          = AngleTo(target);
             }
             else
+            {
+              // ===== Lost sight: hop waypoints toward target =====
+              // Retail FUN_004c8b60 lines 128-244: when we have a target
+              // we can't see, we walk between "waypoint" objects to
+              // approach the last-known position. Initial search center
+              // is target's last known pos; on arrival at a waypoint
+              // (within ~5 units) we re-search with center at the
+              // target's CURRENT pos to find the next hop.
+                last_position_distance = ::Distance(pos, target_last_position);
+                last_position_start_point = pos;
+                target_out_of_sight = true;
+                target_last_angle = ConvertToFacing(pos, target_last_position);
 
-            if (nextattack <= 0)
-            {
-                nextattack = 
-                    random(chardata->minattackfreq * FRAMERATE / 100, 
-                           chardata->maxattackfreq * FRAMERATE / 100);
-            }
-        }
-        else if (doing->action == GetMoveAction(root->action))
-        {
-            if (Fighting())
-            {
-                if (Distance(Fighting()) < (Radius() + Fighting()->Radius() + chardata->maxattackrange))
-                    Stop();
+              // If we have a committed waypoint and we've arrived at it,
+              // clear the commit so the search below re-picks. Use the
+              // target's current pos as the new search center (retail
+              // line 209-213: iStack_68 = piVar10[4..6] where piVar10 is
+              // the target character).
+                constexpr int32_t ARRIVAL_DIST = 5;
+                S3DPoint search_center = target_last_position;
+                if (TObjectInstance* cmt = wander_target.Get())
+                {
+                    if (::Distance(pos, cmt->Pos()) < ARRIVAL_DIST)
+                    {
+                        wander_target = TSafeRef<TObjectInstance>{};
+                        wander_commit = 0;
+                        search_center = target->Pos();
+                    }
+                }
+
+                TObjectInstance* wp = WanderToWaypoint(search_center);
+
+              // Walk toward the committed waypoint if we have one,
+              // otherwise straight toward the last-known target pos.
+                if (wp)
+                {
+                    doing->moveangle = AngleTo(wp);
+                  // Retail also caches the walk-to position in
+                  // mbr_0x8f/0x90/0x91; we mirror that into
+                  // target_last_position so subsequent frames have a
+                  // sensible fallback if the waypoint disappears.
+                }
                 else
                 {
-                    if (target_out_of_sight)
-                    {
-                        int32_t needed_angle = AngleTo(Fighting());
-
-//                      if (target_last_angle > needed_angle)
-//                          doing->moveangle = real_angle - 25;
-//                      else
-                            doing->moveangle = target_last_angle;
-                        if (::Distance(pos,last_position_start_point) > last_position_distance)
-                            target_out_of_sight = false;
-                    }
-                    else
-                    {
-                        if (CanSeeCharacter(target))
-                        {
-                            last_position_count--;
-                            if (last_position_count <= 0)
-                            {
-                                last_position_count = 2;
-                                target->GetPos(target_last_position);
-                            }
-                            doing->moveangle = AngleTo(Fighting()); // Go towards char
-                        }
-                        else
-                        {
-                            int32_t needed_angle = AngleTo(Fighting());
-                            int32_t target_angle = ConvertToFacing(pos, target_last_position) + 63;
-                            last_position_distance = ::Distance(pos,target_last_position);
-                            GetPos(last_position_start_point);
-                            target_out_of_sight = true;
-                            if (target_angle > needed_angle)
-                                target_last_angle = target_angle + 30;
-                            else
-                                target_last_angle = target_angle - 30;
-                        }
-                    }
-                }       
+                    doing->moveangle = target_last_angle;
+                }
             }
         }
+      // No idle-wander branch: retail leaves untargeted monsters alone
+      // and lets per-character ALWAYS scripts (System 11) do whatever
+      // patrolling the level designer wants. Until System 11 is ported,
+      // monsters with no target just stand still.
+    }
+
+sight_tail:
+  // (8) Tail: tick the sight-lost watchdog. Retail:
+  //     out_of_sight = (frame > sight_max && !out_of_sight_prev) || sight_lost_ticks==0 ? 0 : 1;
+  //     out_of_sight_prev = out_of_sight;
+  //     if (sight_lost_ticks > 0) sight_lost_ticks--;
+  //
+  // chardata + 0x440 in retail is some "max sight-loss ticks" tunable
+  // we don't have; gate on FRAMERATE * a couple seconds for now.
+    {
+        const int32_t sight_max = FRAMERATE * 4;  // TODO retail: chardata field at +0x440 is unknown
+        const int32_t fc = CurrentScreen->FrameCount();
+        bool new_oos;
+        if ((fc > sight_max && !target_out_of_sight_prev) || sight_lost_ticks == 0)
+            new_oos = false;
+        else
+            new_oos = true;
+        target_out_of_sight_prev = new_oos;
+        target_out_of_sight      = new_oos;
+        if (sight_lost_ticks > 0)
+            sight_lost_ticks--;
     }
 }
 
@@ -2568,77 +2877,78 @@ TCharacter* TCharacter::FindClosestEnemy(int32_t angle, int32_t anglerange)
     return FindCharacter(-1, angle, anglerange, FINDCHAR_ENEMY | FINDCHAR_SEE | FINDCHAR_HEAR);
 }
 
-// Search nearby objects for type-name "waypoint", pick the closest, and Goto() it.
-// Ported from retail TCharacter::AI body lines 149-205
-// (recon/discovered/cls_0x5a7b98_TCharacter_AI_4c8b60.cpp, see also
-// recon/discovered/port_status/PLAN.md System 1).
+// REVSYNC: retail TCharacter::AI waypoint-search branch @ 0x4c8b60 lines 149-244
 //
-// Algorithm:
-//   * If we already have a cached waypoint and the retry counter is > 0,
-//     keep heading toward it (committed for ≥ retry frames). Decrement.
-//   * Otherwise scan nearby objects, filter by type-name "waypoint", pick
-//     the closest by 2D distance.
-//   * If the new closest equals the cached one, clear the cache — we've
-//     arrived; next tick will re-pick a *different* waypoint. (This is
-//     what prevents the pingpong-at-arrival our earlier ARRIVED hack
-//     worked around.)
-//   * Otherwise commit: cache = newClosest, retry_counter = 6.
-//   * Issue Goto() toward the (now committed) waypoint's position.
+// Decompile: recon/discovered/cls_0x5a7b98_TCharacter_AI_4c8b60.cpp
 //
-// Returns true if the character is heading toward a waypoint.
-bool TCharacter::WanderToWaypoint(int32_t range)
+// Algorithm (retail):
+//   * If we DON'T have a committed waypoint:
+//       - FindObjectsInRange around `search_center` (retail mbr_0x8f/0x90/0x91,
+//         the cached "walk-to" point). Filter to type-name "waypoint" + reachable.
+//         Pick the closest by 2D distance.
+//       - If the new closest equals the last committed (rare here since we just
+//         nulled it), clear and bail. Else commit + reset timer to 6 frames.
+//   * If we DO have a committed waypoint:
+//       - Decrement the commit timer. When it hits 0, clear committed (will
+//         re-search next call).
+//   * Caller is responsible for calling this with the right search_center:
+//       - Initial search: target_last_position
+//       - On arrival (within ~5 units of committed): target's *current* pos
+//   * Walking is the caller's job — this function only manages the committed
+//     waypoint state.
+TObjectInstance* TCharacter::WanderToWaypoint(const S3DPoint& search_center, int32_t range)
 {
-    constexpr int32_t COMMIT_FRAMES = 6;  // retail mbr_0x92 reset value
+    constexpr int32_t COMMIT_FRAMES = 6;  // retail mbr_0x92 reset value (param_1[0x92] = 6)
 
-  // If we still have a committed waypoint and time on the clock, just keep
-  // walking to it. Decrement the retry counter.
-    TObjectInstance* committed = cached_waypoint.Get();
-    if (committed && waypoint_retry > 0)
+    TObjectInstance* committed = wander_target.Get();
+
+  // If we have a committed waypoint, just tick the timer. Caller decides
+  // whether to call us again with a target-centered search after arrival.
+    if (committed)
     {
-        --waypoint_retry;
-        S3DPoint p = committed->Pos();
-        return Goto(p.x, p.y);
+        if (wander_commit == 0)
+        {
+            wander_target = TSafeRef<TObjectInstance>{};
+            committed = nullptr;
+        }
+        else
+        {
+            --wander_commit;
+        }
     }
 
-  // Search for the closest "waypoint"-typed object in range.
+    if (committed)
+        return committed;
+
+  // No commit: search for the closest "waypoint"-typed object near
+  // search_center. Retail uses TMapPane::FindObjectsInRange (0xfa range,
+  // max 10 candidates) and applies a WaypointReachable() filter; our
+  // TMapIterator is cheap so we don't cap, but we do match the 250-unit
+  // range. WaypointReachable is a TODO — without it, monsters may pick
+  // waypoints across walls.
     TObjectInstance* closest = nullptr;
-    int32_t          best    = INT32_MAX;
-    for (TMapIterator i(Pos(), range, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_ALL); i; i++)
+    int32_t          best    = 1000;  // retail's initial "best" sentinel
+    for (TMapIterator i(search_center, range, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_ALL); i; i++)
     {
         TObjectInstance* oi = i.Item();
         if (!oi || oi == (TObjectInstance*)this) continue;
         const char *tn = oi->GetTypeName();
         if (!tn || stricmp(tn, "waypoint") != 0) continue;
-        int32_t d = Distance(oi);
+        int32_t d = ::Distance(search_center, oi->Pos());
         if (d < best) { best = d; closest = oi; }
     }
 
     if (!closest)
     {
-        cached_waypoint = TSafeRef<TObjectInstance>{};
-        waypoint_retry = 0;
-        return false;
-    }
-
-  // If we just re-found the same waypoint we were committed to, that means
-  // we've arrived — clear so next tick picks a different one (the search
-  // will skip identity match... no it won't; but with cache cleared and no
-  // retry we'll commit to the closest *next* tick which might be the same
-  // one. Retail tolerates this; the side-effect is one wasted tick before
-  // moving on. The ARRIVED-radius workaround is no longer needed because
-  // retry_counter prevents tight loops).
-    if (committed == closest)
-    {
-        cached_waypoint = TSafeRef<TObjectInstance>{};
-        waypoint_retry = 0;
-        return false;
+        wander_target = TSafeRef<TObjectInstance>{};
+        wander_commit = 0;
+        return nullptr;
     }
 
   // Fresh pick — commit.
-    cached_waypoint = TSafeRef<TObjectInstance>(closest);
-    waypoint_retry = COMMIT_FRAMES;
-    S3DPoint p = closest->Pos();
-    return Goto(p.x, p.y);
+    wander_target = TSafeRef<TObjectInstance>(closest);
+    wander_commit = COMMIT_FRAMES;
+    return closest;
 }
 
 // Returns a 1-100 hearing value which indicates how the average noise will be heard
@@ -4105,6 +4415,71 @@ bool TCharacter::Dodge()
     return true;
 }
 
+// REVSYNC: retail TCharacter::SideStep @ 0x4d6220
+//   recon/discovered/cls_0x5a7b98_TCharacter_GoCmd_4d6220.cpp (size 398).
+// Cartwheel sidestep: queues a "sidestepl" / "sidestepr" animation that
+// steps the character ~90 degrees off facing. Used by the AI body to
+// dodge blockers and by the in-range attack tree when a character is in
+// the line of attack. When called with dir=0 (or any non-l/r byte),
+// retail picks L/R at random — fed twice in a row, that's the
+// "cartwheel both ways" pattern.
+//
+// Retail uses bare anim names ("sidestepl", not "comhand_sidestepl");
+// HasActionAni resolves transitions from the current root via
+// FindTransitionState.
+bool TCharacter::SideStep(char dir)
+{
+    if (!doing)
+        return false;
+
+  // Retail FUN_004d6220:26 — gate: only proceed if doing->name is NOT
+  // already prefixed with "sidestep" (i.e. we're not already in a
+  // sidestep). Prevents re-queuing a fresh sidestep on top of an
+  // in-progress one.
+    if (doing->name && strncmp(doing->name, "sidestep", 8) == 0)
+        return false;
+
+  // Retail randomises L/R when caller didn't specify (lines 28-31).
+    if (dir != 'l' && dir != 'r')
+        dir = random(0, 1) ? 'l' : 'r';
+
+    char animname[10];
+    animname[0] = 's'; animname[1] = 'i'; animname[2] = 'd'; animname[3] = 'e';
+    animname[4] = 's'; animname[5] = 't'; animname[6] = 'e'; animname[7] = 'p';
+    animname[8] = dir; animname[9] = '\0';
+
+  // Retail FUN_004d6220:33 calls vftbl[0x1f0/4] which is HasActionAni
+  // (or its variant) on the bare anim name — so transitions from the
+  // current root are searched automatically.
+    if (!HasActionAni(animname))
+        return false;
+
+  // Retail uses action=3 (ACTION_COMBAT) — the sidestep stays inside the
+  // combat root rather than swapping to ACTION_DODGE; keeps the character
+  // ready to attack again on the next tick.
+    TActionBlock* ab = new TActionBlock(animname, ACTION_COMBAT);
+    ab->obj       = doing->obj;
+    ab->moveangle = doing->moveangle;
+
+  // Step direction: 90° left or right of facing. Retail FUN_004d6220:49
+  //   ab->angle = (dir == 'l' ? face + 0x40 : face + 0xc0) & 0xff
+    int32_t face = GetFace();
+    if (dir == 'l') ab->angle = (face + 0x40) & 0xff;
+    else            ab->angle = (face + 0xc0) & 0xff;
+
+  // Retail FUN_004d6220:51 — turnrate=8 (limits in-step turn speed).
+    ab->turnrate = 8;
+
+  // Retail FUN_004d6220:52 — flags = (flags & ~nowaitdone) | interrupt | noroot
+  //   bit 0x10 = interrupt, bit 0x20 = nowaitdone, bit 0x200 = noroot.
+    ab->interrupt  = 1;
+    ab->noroot     = 1;
+    ab->nowaitdone = 0;
+
+    SetDesired(ab);
+    return true;
+}
+
 bool TCharacter::Pulp(S3DPoint vel, int32_t piece_count, int32_t blood_count)
 {
     // I'm not dead yet. I think I'll go for a walk.
@@ -4478,6 +4853,24 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
     return false;
 }
 
+// REVSYNC: retail TCharacter::CharBlocking / FindCharInLine @ 0x4d4db0
+//   recon/discovered/cls_0x5a7b98_TCharacter_CharBlocking_4d4db0.cpp (size 253).
+//   Iterates characters within a 0xe0 (224) radius of the search position,
+//   filters out self / dead / interactive-attack-flagged / paralised /
+//   movetopos-active / sleeping-with-flag-2 / fallen, then returns the
+//   first whose 2D distance minus radius minus their radius is <= 0.
+//   Our 128 range is tighter than retail's 224 but matches what the
+//   pre-snapshot source has shipped with. Retail-side filters we have
+//   NOT folded in (low-impact for AI parity):
+//     - doing->attack & 0x2000000 ("INTERACTIVE attack") suppression on
+//       the scanned char.
+//     - imagery flag 0x800 mask on the scanned char.
+//     - OF_PARALIZE / movetopos / sleeping-with-bit-2 gates on the
+//       scanned char.
+//   The Demo 1 Araknid case never hits these branches: no spider has
+//   INTERACTIVE attacks active in walk-mode, and the player isn't going
+//   to be paralised while a spider's running at it. Folding the rest in
+//   is a Tier-2 chore.
 TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius)
 {
     int32_t range = 128; // This should be about right

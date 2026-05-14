@@ -69,6 +69,61 @@ struct SQuatAccum
 
 } // namespace
 
+void SAnimPoseLayout::ConfigureBoneLocalTRS(int32_t bones)
+{
+    bone_count = (std::max)(0, bones);
+    channel_count = bone_count * ANIM_BONE_STRIDE;
+    channel_flags.assign(size_t(channel_count), uint8_t(ANIM_POSE_CHANNEL_NONE));
+    quat_spans.clear();
+    quat_spans.reserve(size_t(bone_count));
+    for (int32_t bone = 0; bone < bone_count; ++bone)
+    {
+        const int32_t offset = bone * ANIM_BONE_STRIDE + ANIM_BONE_ROT_X;
+        quat_spans.push_back({ offset });
+        SetChannelFlags(offset, 4, uint8_t(ANIM_POSE_CHANNEL_QUAT));
+    }
+}
+
+void SAnimPoseLayout::SetChannelFlags(int32_t offset, int32_t count, uint8_t flags)
+{
+    if (offset < 0 || count <= 0)
+        return;
+    const int32_t end = (std::min)(offset + count, channel_count);
+    for (int32_t i = offset; i < end; ++i)
+        channel_flags[size_t(i)] |= flags;
+}
+
+int32_t SAnimPoseLayout::BoneOffset(int32_t bone_index) const
+{
+    if (bone_index < 0 || bone_index >= bone_count)
+        return -1;
+    return bone_index * ANIM_BONE_STRIDE;
+}
+
+uint8_t SAnimPoseLayout::ChannelFlags(int32_t channel_index) const
+{
+    if (channel_index < 0 || channel_index >= int32_t(channel_flags.size()))
+        return uint8_t(ANIM_POSE_CHANNEL_NONE);
+    return channel_flags[size_t(channel_index)];
+}
+
+void SAnimPoseBuffer::Configure(const SAnimPoseLayout& new_layout)
+{
+    layout = &new_layout;
+    values.resize(size_t((std::max)(0, new_layout.channel_count)));
+    ResetToIdentity();
+}
+
+void SAnimPoseBuffer::ResetToIdentity()
+{
+    if (!layout)
+    {
+        values.clear();
+        return;
+    }
+    AnimPoseResetToIdentity(*layout, Data(), Count());
+}
+
 float SAnimTrack::Sample(float time, float duration, bool loop) const
 {
     if (keys.empty())
@@ -80,7 +135,21 @@ float SAnimTrack::Sample(float time, float duration, bool loop) const
     if (t <= keys.front().time)
         return keys.front().value;
     if (t >= keys.back().time)
-        return loop ? keys.front().value : keys.back().value;
+    {
+        if (!loop || kind == EAnimTrackKind::Step)
+            return keys.back().value;
+
+        // In a looping clip, the final key is the start of the final frame
+        // interval, not the clip end. The clip duration names the end of that
+        // interval, so linear tracks continue from the final key toward the
+        // first key until the wrapped time reaches 0 again.
+        const float first_time = keys.front().time;
+        const float final_span = duration - keys.back().time + first_time;
+        if (final_span <= 0.0f)
+            return keys.back().value;
+        const float u = (std::min)(1.0f, (t - keys.back().time) / final_span);
+        return Lerp(keys.back().value, keys.front().value, u);
+    }
 
     auto it = std::upper_bound(keys.begin(), keys.end(), t,
         [](float value, const SAnimKey& key) { return value < key.time; });
@@ -188,6 +257,193 @@ SAnimQuat NlerpQuat(SAnimQuat a, SAnimQuat b, float t)
     });
 }
 
+void AnimPoseResetToIdentity(const SAnimPoseLayout& layout, float* out, int32_t out_count)
+{
+    if (!out || out_count <= 0)
+        return;
+
+    const int32_t count = (std::min)(out_count, layout.channel_count);
+    std::fill(out, out + count, 0.0f);
+
+    for (int32_t bone = 0; bone < layout.bone_count; ++bone)
+    {
+        const int32_t base = layout.BoneOffset(bone);
+        if (base < 0 || base + ANIM_BONE_STRIDE > count)
+            continue;
+        out[base + ANIM_BONE_ROT_W] = 1.0f;
+        out[base + ANIM_BONE_SCALE_X] = 1.0f;
+        out[base + ANIM_BONE_SCALE_Y] = 1.0f;
+        out[base + ANIM_BONE_SCALE_Z] = 1.0f;
+    }
+}
+
+void AnimPoseNormalizeQuats(const SAnimPoseLayout& layout, float* pose, int32_t pose_count)
+{
+    if (!pose || pose_count <= 0)
+        return;
+
+    for (const SAnimQuatSpan& span : layout.quat_spans)
+    {
+        if (span.offset < 0 || span.offset + 3 >= pose_count)
+            continue;
+
+        SAnimQuat q = {
+            pose[span.offset + 0],
+            pose[span.offset + 1],
+            pose[span.offset + 2],
+            pose[span.offset + 3],
+        };
+        q = NormalizeQuat(q);
+        pose[span.offset + 0] = q.x;
+        pose[span.offset + 1] = q.y;
+        pose[span.offset + 2] = q.z;
+        pose[span.offset + 3] = q.w;
+    }
+}
+
+void AnimPoseAlignQuatSigns(const SAnimPoseLayout& layout, const float* reference,
+                            float* pose, int32_t pose_count)
+{
+    if (!reference || !pose || pose_count <= 0)
+        return;
+
+    for (const SAnimQuatSpan& span : layout.quat_spans)
+    {
+        if (span.offset < 0 || span.offset + 3 >= pose_count)
+            continue;
+
+        const float dot =
+            reference[span.offset + 0] * pose[span.offset + 0] +
+            reference[span.offset + 1] * pose[span.offset + 1] +
+            reference[span.offset + 2] * pose[span.offset + 2] +
+            reference[span.offset + 3] * pose[span.offset + 3];
+        if (dot >= 0.0f)
+            continue;
+
+        pose[span.offset + 0] = -pose[span.offset + 0];
+        pose[span.offset + 1] = -pose[span.offset + 1];
+        pose[span.offset + 2] = -pose[span.offset + 2];
+        pose[span.offset + 3] = -pose[span.offset + 3];
+    }
+}
+
+void AnimPoseBlendLayers(const SAnimPoseLayout& layout, const SAnimBlendLayer* layers,
+                         int32_t layer_count, float* out, int32_t out_count)
+{
+    if (!out || out_count <= 0)
+        return;
+
+    const int32_t count = (std::min)(out_count, layout.channel_count);
+    if (!layers || layer_count <= 0 || count <= 0)
+    {
+        AnimPoseResetToIdentity(layout, out, out_count);
+        return;
+    }
+
+    std::fill(out, out + count, 0.0f);
+    bool any = false;
+    for (int32_t layer_index = 0; layer_index < layer_count; ++layer_index)
+    {
+        const SAnimBlendLayer& layer = layers[layer_index];
+        if (!layer.values || layer.weight == 0.0f)
+            continue;
+
+        any = true;
+        if (layer.mask)
+        {
+            for (int32_t i = 0; i < count; ++i)
+                out[i] += layer.values[i] * layer.weight * layer.mask[i];
+        }
+        else
+        {
+            for (int32_t i = 0; i < count; ++i)
+                out[i] += layer.values[i] * layer.weight;
+        }
+    }
+
+    // q and -q represent the same rotation. Re-accumulate only the quaternion
+    // spans with a shared hemisphere before normalization; every other channel
+    // remains the plain weighted array sum above.
+    for (const SAnimQuatSpan& span : layout.quat_spans)
+    {
+        if (span.offset < 0 || span.offset + 3 >= count)
+            continue;
+
+        SAnimQuat reference = {};
+        bool have_reference = false;
+        out[span.offset + 0] = 0.0f;
+        out[span.offset + 1] = 0.0f;
+        out[span.offset + 2] = 0.0f;
+        out[span.offset + 3] = 0.0f;
+
+        for (int32_t layer_index = 0; layer_index < layer_count; ++layer_index)
+        {
+            const SAnimBlendLayer& layer = layers[layer_index];
+            if (!layer.values || layer.weight == 0.0f)
+                continue;
+
+            SAnimQuat q = {
+                layer.values[span.offset + 0],
+                layer.values[span.offset + 1],
+                layer.values[span.offset + 2],
+                layer.values[span.offset + 3],
+            };
+            if (!have_reference)
+            {
+                reference = q;
+                have_reference = true;
+            }
+            else if (Dot(reference, q) < 0.0f)
+            {
+                q.x = -q.x;
+                q.y = -q.y;
+                q.z = -q.z;
+                q.w = -q.w;
+            }
+
+            const float mx = layer.mask ? layer.mask[span.offset + 0] : 1.0f;
+            const float my = layer.mask ? layer.mask[span.offset + 1] : 1.0f;
+            const float mz = layer.mask ? layer.mask[span.offset + 2] : 1.0f;
+            const float mw = layer.mask ? layer.mask[span.offset + 3] : 1.0f;
+            out[span.offset + 0] += q.x * layer.weight * mx;
+            out[span.offset + 1] += q.y * layer.weight * my;
+            out[span.offset + 2] += q.z * layer.weight * mz;
+            out[span.offset + 3] += q.w * layer.weight * mw;
+        }
+    }
+
+    AnimPoseNormalizeQuats(layout, out, count);
+
+    for (int32_t i = 0; i < count; ++i)
+    {
+        if (layout.ChannelFlags(i) & uint8_t(ANIM_POSE_CHANNEL_BOOL))
+            out[i] = out[i] >= 0.5f ? 1.0f : 0.0f;
+    }
+
+    if (!any)
+    {
+        AnimPoseResetToIdentity(layout, out, out_count);
+        return;
+    }
+}
+
+void AnimPoseBlendTwo(const SAnimPoseLayout& layout, const float* a, const float* b,
+                      float alpha, float* out, int32_t out_count)
+{
+    if (!a && !b)
+    {
+        AnimPoseResetToIdentity(layout, out, out_count);
+        return;
+    }
+
+    alpha = (std::max)(0.0f, (std::min)(alpha, 1.0f));
+    const SAnimBlendLayer layers[2] = {
+        { a ? a : b, 1.0f - alpha, nullptr },
+        { b ? b : a, alpha,        nullptr },
+    };
+    AnimPoseBlendLayers(layout, layers, 2, out, out_count);
+}
+
 SAnimPose EvaluateAnimLayers(const std::vector<SAnimLayer>& layers)
 {
     SAnimPose out;
@@ -274,4 +530,3 @@ SAnimPose EvaluateAnimLayers(const std::vector<SAnimLayer>& layers)
 
     return out;
 }
-

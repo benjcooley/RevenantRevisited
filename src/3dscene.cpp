@@ -6,8 +6,8 @@
 // *  Ported (Phase 2): D3D3 execute-buffer recording path, viewport,      *
 // *  D3D light objects, and matrix-list cache have been removed. The      *
 // *  full legacy code lives in attic/src/3dscene_d3d3.cpp. The methods    *
-// *  declared in 3dscene.h are now bool stubs that return success — a     *
-// *  real sokol_gfx pipeline will replace the inner bodies in Phase 3.    *
+// *  declared in 3dscene.h are now bool stubs that return success -- the  *
+// *  renderer backend will replace the inner bodies in Phase 3.           *
 // *************************************************************************
 
 #include "3dscene.h"
@@ -184,7 +184,7 @@ bool T3DScene::OnMapLoaded()
 
     // NOTE(port): viewport + device + execute-buffer subsystem + background
     // material + directional D3D light all lived here. Retired in Phase 2.
-#if 0 // TODO(port): real sokol_gfx path — Phase 3
+#if 0 // TODO(port): real renderer-backend path -- Phase 3
     // CreateViewport, CreateExecuteBuffer, CreateMaterial, CreateLight, etc.
 #endif
 
@@ -603,7 +603,7 @@ void T3DScene::GetTextureFormats()
 
 void T3DScene::GetClosestTextureFormat(const SSurfaceDesc* srcsd, SSurfaceDesc* dstsd)
 {
-    if (!initialized || !srcsd || !dstsd)
+    if (!srcsd || !dstsd)
         return;
 
 #if 0 // TODO(port): real pixel-format selection — Phase 3
@@ -611,8 +611,11 @@ void T3DScene::GetClosestTextureFormat(const SSurfaceDesc* srcsd, SSurfaceDesc* 
     // candidates by matching bit counts.
 #endif
 
-    // For now: feed the source format straight through; loaders will convert
-    // to whatever sokol_gfx wants at upload time.
+    // For now: feed the source format straight through; loaders will hand
+    // normalized texture data to the renderer at upload time. This must not
+    // depend on T3DScene::OnMapLoaded(): source assets can be realized before
+    // legacy Scene3D viewport state exists, and callers still need a valid
+    // descriptor for renderer-owned texture handles.
     *dstsd = *srcsd;
 }
 
@@ -763,7 +766,7 @@ bool T3DScene::DrawPrimitive(
     return true;
 }
 
-bool T3DScene::SetTexture(TTextureHandle hTexture, sg_image /*surface*/)
+bool T3DScene::SetTexture(TTextureHandle hTexture)
 {
     // Tracked as the current "texture handle" render-state slot for
     // compatibility with the rest of the game code. Actual binding is done

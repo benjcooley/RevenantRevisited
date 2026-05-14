@@ -7,8 +7,7 @@
 #pragma once
 
 #include "revenant.h"
-
-#include <sokol_gfx.h>
+#include "render3d_types.h"
 
 #include <string>
 #include <vector>
@@ -36,7 +35,7 @@ struct SBitmapAtlasItem
 
 struct SBitmapAtlas
 {
-    sg_image image = {};
+    TTextureHandle texture = kInvalidTexture;
     int32_t width = 0;
     int32_t height = 0;
     std::vector<SBitmapAtlasItem> items;

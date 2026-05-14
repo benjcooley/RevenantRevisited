@@ -24,6 +24,7 @@
 #include "argh.h"
 
 #include "revenant.h"
+#include "assetcache.h"
 #include "logging.h"
 #include "fonttable.h"
 #include "3dscene.h"
@@ -142,6 +143,7 @@ TSoundPlayer    SoundPlayer;        // Sound effects player
 TControlMap     ControlMap;         // Contains the key/joystick mappings for game control
 TAreaManager    AreaManager;        // Manages the game area system
 TPlayerManager  PlayerManager;      // Manages the game player list
+TAssetCache     AssetCache;         // Shared engine CPU/source asset cache
 TMapManager     MapManager;         // Cache of loaded TGameMap levels +
                                     // current-map pointer; renderer / pane
                                     // listen for CurrentMapChanged.
@@ -243,6 +245,12 @@ char DXDriverMatchStr[FILENAMELEN]; // Will use first DX driver who's descriptio
 // When non-empty, AppInit hands it to PlayScreen.LoadGameFile() so the engine
 // restores a live session on first Pulse().
 char StartupSavePath[MAXPATHLEN] = "";
+
+// Window/backbuffer size selected before sokol creates the native window.
+// WIDTH/HEIGHT stay as the classic 640x480 layout baseline; the renderer and
+// display surfaces use these runtime values.
+int32_t GameScreenWidth = WIDTH;
+int32_t GameScreenHeight = HEIGHT;
 
 // Tick Sync variable
 bool TickOccured = false;
@@ -1361,6 +1369,151 @@ bool arg_param_to(const argh::parser &cmd, const char *name, T &out)
     return !iss.fail();
 }
 
+struct SSupportedResolution
+{
+    int32_t width;
+    int32_t height;
+};
+
+constexpr SSupportedResolution kSupportedResolutions[] =
+{
+    { 640,  480  },
+    { 800,  600  },
+    { 960,  540  },
+    { 960,  720  },
+    { 1024, 768  },
+    { 1280, 720  },
+    { 1280, 800  },
+    { 1280, 860  },
+    { 1280, 960  },
+    { 1280, 1024 },
+    { 1366, 768  },
+    { 1440, 900  },
+    { 1600, 900  },
+    { 1920, 1080 },
+};
+
+constexpr const char* kSupportedResolutionText =
+    "640x480, 800x600, 960x540, 960x720, 1024x768, "
+    "1280x720, 1280x800, 1280x860, 1280x960, 1280x1024, "
+    "1366x768, 1440x900, 1600x900, 1920x1080";
+
+bool IsSupportedResolution(int32_t width, int32_t height)
+{
+    for (const SSupportedResolution& r : kSupportedResolutions)
+        if (r.width == width && r.height == height)
+            return true;
+    return false;
+}
+
+bool ParsePositiveInt(const char* begin, const char* end, int32_t& out)
+{
+    while (begin < end && std::isspace((unsigned char)*begin)) ++begin;
+    while (end > begin && std::isspace((unsigned char)*(end - 1))) --end;
+    if (begin >= end)
+        return false;
+
+    char* parse_end = nullptr;
+    const long value = std::strtol(begin, &parse_end, 10);
+    if (parse_end != end || value <= 0 || value > 32767)
+        return false;
+
+    out = int32_t(value);
+    return true;
+}
+
+bool ParseResolutionValue(const std::string& value, int32_t& width, int32_t& height)
+{
+    const size_t sep = value.find_first_of("xX,");
+    if (sep == std::string::npos)
+        return false;
+
+    const char* text = value.c_str();
+    return ParsePositiveInt(text, text + sep, width) &&
+           ParsePositiveInt(text + sep + 1, text + value.size(), height);
+}
+
+bool ParseResolutionPair(const char* width_text, const char* height_text,
+                         int32_t& width, int32_t& height)
+{
+    if (!width_text || !height_text)
+        return false;
+    return ParsePositiveInt(width_text, width_text + strlen(width_text), width) &&
+           ParsePositiveInt(height_text, height_text + strlen(height_text), height);
+}
+
+std::string StripArgPrefix(const char* arg)
+{
+    std::string s = arg ? arg : "";
+    while (!s.empty() && (s[0] == '-' || s[0] == '/'))
+        s.erase(0, 1);
+    return s;
+}
+
+enum class EResolutionArgResult
+{
+    Missing,
+    Valid,
+    Invalid,
+};
+
+EResolutionArgResult ParseResolutionArg(int argc, char** argv,
+                                        int32_t& width, int32_t& height,
+                                        std::string& raw_value)
+{
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string opt = StripArgPrefix(argv[i]);
+        const size_t eq = opt.find('=');
+        const std::string key = to_lower(opt.substr(0, eq));
+        if (key != "resolution" && key != "res")
+            continue;
+
+        bool parsed = false;
+        if (eq != std::string::npos)
+        {
+            raw_value = opt.substr(eq + 1);
+            parsed = ParseResolutionValue(raw_value, width, height);
+        }
+        else if (i + 1 < argc)
+        {
+            raw_value = argv[i + 1];
+            parsed = ParseResolutionValue(raw_value, width, height);
+            if (!parsed && i + 2 < argc)
+            {
+                raw_value = std::string(argv[i + 1]) + " " + argv[i + 2];
+                parsed = ParseResolutionPair(argv[i + 1], argv[i + 2], width, height);
+            }
+        }
+
+        return parsed ? EResolutionArgResult::Valid : EResolutionArgResult::Invalid;
+    }
+
+    return EResolutionArgResult::Missing;
+}
+
+void ApplyCommandLineResolution(int argc, char** argv)
+{
+    int32_t width = WIDTH;
+    int32_t height = HEIGHT;
+    std::string raw;
+    const EResolutionArgResult result = ParseResolutionArg(argc, argv, width, height, raw);
+    if (result == EResolutionArgResult::Missing)
+        return;
+
+    if (result == EResolutionArgResult::Invalid || !IsSupportedResolution(width, height))
+    {
+        log_warn("[video] ignoring unsupported --resolution '%s'; supported: %s",
+                 raw.empty() ? "(missing)" : raw.c_str(),
+                 kSupportedResolutionText);
+        return;
+    }
+
+    GameScreenWidth = width;
+    GameScreenHeight = height;
+    log_info("[video] resolution set to %dx%d", GameScreenWidth, GameScreenHeight);
+}
+
 } // namespace
 
 void GetParameters(int argc, char **argv)
@@ -1371,7 +1524,7 @@ void GetParameters(int argc, char **argv)
     cmd.add_params({
         "gamespeed", "monitor", "violencelevel", "preloadsize",
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
-        "loadmap", "lang", "test", "level",
+        "loadmap", "lang", "test", "level", "resolution", "res",
     });
     cmd.parse(argc, argv);
 
@@ -1608,8 +1761,8 @@ bool InitMonitor()
 {
     MonitorX = 0;
     MonitorY = 0;
-    MonitorW = WIDTH;
-    MonitorH = HEIGHT;
+    MonitorW = GameScreenWidth;
+    MonitorH = GameScreenHeight;
     return true;
 }
 
@@ -1744,7 +1897,7 @@ bool InitGlobals()
     }
   // (10) Display — sokol_gfx context setup + backbuffer/zbuffer surfaces
   // + ImGui wiring. Heavy on sokol calls but no game data is loaded.
-    if (!Display.Initialize(WIDTH, HEIGHT, BPP))
+    if (!Display.Initialize(GameScreenWidth, GameScreenHeight, BPP))
         FatalError("Couldn't open main display", nullptr);
 
     if (!_CrtCheckMemory())
@@ -1876,7 +2029,11 @@ bool InitGlobals()
     if (!DialogList.Initialize())
         FatalError("Unable to load dialog list");
 
-  // (20) MapManager — Init() is a state-flip; the cache populates lazily
+  // (20) AssetCache - shared CPU/source asset registry. Loading here gives
+  // callers a safe engine handle, not renderer GPU residency.
+    AssetCache.Init();
+
+  // (21) MapManager — Init() is a state-flip; the cache populates lazily
   // as PlayScreen / TMapRenderer call GetOrLoad. Has to be live before
   // any subsystem that observes CurrentMapChanged.
     MapManager.Init();
@@ -1920,11 +2077,14 @@ void ShutdownGlobals()
 
   // ---- inverse of InitGlobals ----
 
-  // (20) MapManager — inits last in InitGlobals, so closes first here.
+  // (21) MapManager - inits last in InitGlobals, so closes first here.
   // Walks each cached TGameMap → Unload → CloseSector while sectors,
   // player inventories, and scripts are still alive. Was the use-after-
   // free site that motivated the whole Init/Shutdown refactor.
     MapManager.Shutdown();
+
+  // (20) AssetCache - outlives maps and any source asset handles they held.
+    AssetCache.Shutdown();
 
   // (19) DialogList
     DialogList.Close();
@@ -2046,14 +2206,15 @@ sapp_desc sokol_main(int argc, char* argv[])
     g_argv = argv;
 
     IsMMX = false;
+    ApplyCommandLineResolution(argc, argv);
 
     sapp_desc desc = {};
     desc.init_cb = AppInit;
     desc.frame_cb = AppFrame;
     desc.event_cb = AppEvent;
     desc.cleanup_cb = AppCleanup;
-    desc.width = WIDTH;
-    desc.height = HEIGHT;
+    desc.width = GameScreenWidth;
+    desc.height = GameScreenHeight;
     desc.window_title = "Revenant";
     desc.high_dpi = false;
     desc.sample_count = 1;
