@@ -12,7 +12,7 @@ Length: 4 Alignment: 1
 
 // Function at 00499720
 
-ushort __thiscall OOAnalyzer::cls_0x499720::meth_0x499720(cls_0x499720 *this,int param_1)
+ushort __thiscall OOAnalyzer::cls_0x499720::meth_0x499720_TSector_ReturnWalkmap(cls_0x499720 *this,int param_1)
 
 {
   int in_stack_00000008;
@@ -27,7 +27,7 @@ ushort __thiscall OOAnalyzer::cls_0x499720::meth_0x499720(cls_0x499720 *this,int
 
 // Function at 00499750
 
-void __thiscall OOAnalyzer::cls_0x499720::meth_0x499750(cls_0x499720 *this,int param_1,int param_2)
+void __thiscall OOAnalyzer::cls_0x499720::meth_0x499750_TSector_SetWalkmap(cls_0x499720 *this,int param_1,int param_2)
 
 {
   ushort uVar1;

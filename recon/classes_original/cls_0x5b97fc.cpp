@@ -74,10 +74,10 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b97fc::virt_meth_0x53bfa0(cls_0x5b97fc 
   }
   if (in_stack_00000008 == 3000) {
     iVar3 = param_1 + 0x18;
-    iVar2 = FUN_0059a530(&DAT_005e4688,iVar3);
-    if ((iVar2 != 0) && (iVar2 = FUN_0059a530(&DAT_005e468c,iVar3), iVar2 != 0)) {
-      iVar2 = FUN_0059a530(s_cancel_005e4690,iVar3);
-      if ((iVar2 != 0) && (iVar3 = FUN_0059a530(&DAT_005e4698,iVar3), iVar3 != 0)) {
+    iVar2 = FUN_0059a530_stricmp(&DAT_005e4688,iVar3);
+    if ((iVar2 != 0) && (iVar2 = FUN_0059a530_stricmp(&DAT_005e468c,iVar3), iVar2 != 0)) {
+      iVar2 = FUN_0059a530_stricmp(s_cancel_005e4690,iVar3);
+      if ((iVar2 != 0) && (iVar3 = FUN_0059a530_stricmp(&DAT_005e4698,iVar3), iVar3 != 0)) {
         return 1;
       }
       this->mbr_0x5c = 0;

@@ -138,10 +138,10 @@ void __thiscall OOAnalyzer::cls_0x5a4680::virt_meth_0x441d50(cls_0x5a4680 *this,
       return;
     }
     if ((-1 < *piVar1) || (-1 < *(int *)((int)this + (iVar4 * 3 + 0x60) * 4))) {
-      cls_0x5a5320::meth_0x450d20((cls_0x5a5320 *)&DAT_006668d8);
+      cls_0x5a5320_TPlayScreen::meth_0x450d20((cls_0x5a5320_TPlayScreen *)&DAT_006668d8);
       _DAT_00666970 = *(int *)((int)this + iVar4 * 4 + 0x1ac);
       if (_DAT_00666970 != DAT_00666974) {
-        cls_0x5a5320::meth_0x4546a0((cls_0x5a5320 *)&DAT_006668d8);
+        cls_0x5a5320_TPlayScreen::meth_0x4546a0((cls_0x5a5320_TPlayScreen *)&DAT_006668d8);
       }
       UNK_00656e7c._76_4_ = 1;
     }

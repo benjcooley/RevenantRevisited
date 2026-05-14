@@ -31,7 +31,7 @@ OOAnalyzer::cls_0x5b99c0::cls_0x5b99c0
           dword param_5,dword param_6)
 
 {
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   dword dVar1;
   int iVar2;
   dword dVar3;
@@ -70,7 +70,7 @@ OOAnalyzer::cls_0x5b99c0::cls_0x5b99c0
     }
     if ((*(int *)(param_5 + 200) != 0) && (0 < (int)param_3)) {
       do {
-        iVar2 = FUN_00483300(0,100);
+        iVar2 = FUN_00483300_RandomRange(0,100);
         if (iVar2 < *(int *)(param_5 + 200)) {
           (**(code **)(*(int *)*pdVar4 + 0x1b4))(1);
         }
@@ -86,10 +86,10 @@ OOAnalyzer::cls_0x5b99c0::cls_0x5b99c0
   this->mbr_0x110 = 0xffffffff;
   this->mbr_0x118 = in_stack_0000001c;
   this->mbr_0x124 = dVar3;
-  if (((iVar2 != 0) && (this_00 = (cls_0x5a7b98 *)this->mbr_0x4, this_00 != (cls_0x5a7b98 *)0x0)) &&
+  if (((iVar2 != 0) && (this_00 = (cls_0x5a7b98_TCharacter *)this->mbr_0x4, this_00 != (cls_0x5a7b98_TCharacter *)0x0)) &&
      (*(short *)&(this_00->cls_0x5a50e8).mbr_0x4 == 0xb)) {
     (this_00->cls_0x5a50e8).mbr_0x110 = (this_00->cls_0x5a50e8).mbr_0x110 | 0x20;
-    cls_0x5a7b98::meth_0x51c2c0(this_00);
+    cls_0x5a7b98_TCharacter::meth_0x51c2c0(this_00);
   }
   if (param_4 == (dword *)0x0) {
     this->mbr_0x130 = 0xffffffff;
@@ -132,7 +132,7 @@ void __thiscall OOAnalyzer::cls_0x5b99c0::meth_0x53f560(cls_0x5b99c0 *this)
       iVar3 = iVar3 - iVar2;
     }
     piVar1 = (int *)this->mbr_0x4;
-    iVar4 = FUN_00483300(iVar4,iVar3);
+    iVar4 = FUN_00483300_RandomRange(iVar4,iVar3);
     if ((piVar1 != (int *)0x0) && (*(short *)(piVar1 + 1) == 0xb)) {
       iVar3 = (**(code **)(*piVar1 + 0x3cc))();
       iVar4 = ((iVar3 + 100) * iVar4) / 100;
@@ -181,7 +181,7 @@ void __thiscall OOAnalyzer::cls_0x5b99c0::virt_meth_0x53f860(cls_0x5b99c0 *this)
 
 {
   dword dVar1;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   uint uVar2;
   
   uVar2 = 0;
@@ -192,15 +192,15 @@ void __thiscall OOAnalyzer::cls_0x5b99c0::virt_meth_0x53f860(cls_0x5b99c0 *this)
       dVar1 = (this->cls_0x41c7f0).mbr_0x10;
       if ((((dVar1 != 0) && (uVar2 < (this->cls_0x41c7f0).mbr_0x0)) &&
           (*(int *)(dVar1 + uVar2 * 4) != 0)) &&
-         (this_00 = *(cls_0x5a7b98 **)((this->cls_0x41c7f0).mbr_0x10 + uVar2 * 4),
-         this_00 != (cls_0x5a7b98 *)0x0)) {
+         (this_00 = *(cls_0x5a7b98_TCharacter **)((this->cls_0x41c7f0).mbr_0x10 + uVar2 * 4),
+         this_00 != (cls_0x5a7b98_TCharacter *)0x0)) {
         if (((this->mbr_0x11c != 0) && (*(int *)(this->mbr_0x11c + 200) != 0)) &&
            ((0 < (int)this->mbr_0xc && ((int *)this->mbr_0x10 != (int *)0x0)))) {
           (**(code **)(*(int *)this->mbr_0x10 + 0x1b4))(0);
         }
         (*((this_00->cls_0x5a50e8).vftptr_0x0)->FUN_00472e90_64)
                   ((this_00->cls_0x5a50e8).mbr_0x8 | 0x1000);
-        cls_0x5a7b98::meth_0x4de7d0(this_00);
+        cls_0x5a7b98_TCharacter::meth_0x4de7d0(this_00);
         FUN_00540af0(this_00,(this_00->cls_0x5a50e8).mbr_0x10,0);
       }
       uVar2 = uVar2 + 1;

@@ -1,4 +1,4 @@
-// REVSYNC: disputed=TSaveGame reason="yaml 84/100 but class has 3 fields + TPointerArray-style destructor; not a save-game class. See retail save logic in cls_0x45f7c0:meth_0x48df70." rejected=HIGH date=2026-04-17
+// REVSYNC: disputed=TSaveGame reason="yaml 84/100 but class has 3 fields + TPointerArray-style destructor; not a save-game class. See retail save logic in cls_0x45f7c0:meth_0x48df70_LoadGame." rejected=HIGH date=2026-04-17
 // Decompiled methods and structure for class: cls_0x5b5354
 
 /*

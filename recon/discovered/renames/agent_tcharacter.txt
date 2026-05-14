@@ -1,0 +1,215 @@
+# Format: BARE_TOKEN|RENAMED_TOKEN  — one per line, # comments ignored.
+# TCharacter (cls_0x5a7b98) method identifications, agent pass.
+# Anchors used: string literals, calls into already-identified methods,
+# field-offset patterns (mbr_0x10/14/18 = pos.{x,y,z}; mbr_0x36 = face;
+# mbr_0xb0 = moveangle; mbr_0xd8 = doing; mbr_0xdc = root; mbr_0xe0 = desired;
+# mbr_0xfc = chardata; mbr_0x110 = TObjectInstance::flags; mbr_0x1c0..1cc =
+# hasseen[8] triple of (chr, time, noautocombat); mbr_0x194=fade, mbr_0x198=fade_step,
+# mbr_0x19c=fade_limit; mbr_0x130=glimpse, mbr_0x134=noise; mbr_0x1b8=burn).
+
+# ---- Pos getter — fills out param[0..2] with mbr_0x10/14/18 ----
+meth_0x4d7000|meth_0x4d7000_GetPos
+FUN_004d7000|FUN_004d7000_GetPos
+
+# ---- Face setter — sets mbr_0x36 (face) and mbr_0xb0 (moveangle) to param ----
+meth_0x4d7020|meth_0x4d7020_Face
+FUN_004d7020|FUN_004d7020_Face
+
+# ---- Flag bit-set / bit-clear on TObjectInstance::flags (mbr_0x110) ----
+meth_0x4d7400|meth_0x4d7400_SetFlags
+FUN_004d7400|FUN_004d7400_SetFlags
+meth_0x4d7420|meth_0x4d7420_ClearFlags
+FUN_004d7420|FUN_004d7420_ClearFlags
+
+# ---- DefaultRootState — virt returning "combat" (Aggressive's branch) ----
+# Returns "combat" string when in active state, else "walk" via base.
+virt_meth_0x4d6db0|virt_meth_0x4d6db0_DefaultRootState
+
+# ---- Destructor (TCharacter::~TCharacter) — slot 524 of vtable, calls ~Self ----
+virt_meth_0x4d6ce0|virt_meth_0x4d6ce0_Dtor
+
+# ---- AdvanceAngles(faceang, moveang, maxturn) — wraps angles to ±128 and
+# clamps face/move toward target by maxturn. Sets mbr_0x36 / mbr_0xb0. ----
+meth_0x4c5ad0|meth_0x4c5ad0_AdvanceAngles
+FUN_004c5ad0|FUN_004c5ad0_AdvanceAngles
+
+# ---- SetHasSeen — finds slot matching `me` or LRU slot in 8-entry hasseen
+# triple array (mbr_0x1c0/1c4/1c8), assigns timestamp. ----
+meth_0x4c5940|meth_0x4c5940_SetHasSeen
+FUN_004c5940|FUN_004c5940_SetHasSeen
+
+# ---- ResolveHit(targ, attack, attackimpact, attackdamage) — calls IsEnemy,
+# SetHasSeen on targ, applies impulse vel, computes tohit, fires Damage. ----
+meth_0x4c62b0|meth_0x4c62b0_ResolveHit
+FUN_004c62b0|FUN_004c62b0_ResolveHit
+
+# ---- ResolveAction — virtual switch on doing->action (2..0x1c) dispatching
+# to ResolveMove/Attack/Impact/Block/Combat/etc. Matches source structure. ----
+virt_meth_0x4c3490|virt_meth_0x4c3490_ResolveAction
+
+# ---- Move() — virtual; calls MoveStep (4c3bc0) in a multi-step loop while
+# position changes. Returns uint flags. Wrapper around 4c3bc0. ----
+virt_meth_0x4c46d0|virt_meth_0x4c46d0_Move
+
+# ---- MoveStep — internal helper, single move increment with falling/walk/
+# sneak/run speed lookup; called from Move(). ----
+meth_0x4c3bc0|meth_0x4c3bc0_MoveStep
+FUN_004c3bc0|FUN_004c3bc0_MoveStep
+
+# ---- CalculateDamage(damage, damagetype, modifier) — virtual
+# `(100 - resist) * ((100 + modifier) * damage / 100) / 100 - dmgmod`. ----
+virt_meth_0x4c4860|virt_meth_0x4c4860_CalculateDamage
+
+# ---- IsFinalState — checks doing->Is("collapse"|"impale"|"dead"|"fall"). ----
+virt_meth_0x4c8950|virt_meth_0x4c8950_IsFinalState
+
+# ---- Save (action stream variant) — writes name string + skeleton state to
+# stream. Called from full Save below. ----
+virt_meth_0x4dbb80|virt_meth_0x4dbb80_SaveState
+
+# ---- Save(stream) — top-level character save: writes mbr_0x138/13c/140
+# (health/fatigue/mana?), mbr_0x15c, mbr_0x1ac/1b0/1b4/1a8 etc. ----
+virt_meth_0x4d50d0|virt_meth_0x4d50d0_Save
+
+# ---- Load(stream, version, objversion) — reads health/fatigue/mana arrays
+# back, version-branched, sets fade=100/fade_step=0/fade_limit=100. ----
+virt_meth_0x4d4eb0|virt_meth_0x4d4eb0_Load
+
+# ---- StatLookup — script-driven stat get; cmps param vs "armor",
+# "maxhealth", "maxfatigue", "maxmana", "attackpct", "defensepct",
+# "damage", "stealth"; routes to virtual stat getters. ----
+virt_meth_0x4d5260|virt_meth_0x4d5260_StatLookup
+
+# ---- UpdateFade — decrements mbr_0x194 by mbr_0x198, clamps against
+# mbr_0x19c (limit) at both ends. Mirrors source UpdateFade exactly. ----
+meth_0x4d57a0|meth_0x4d57a0_UpdateFade
+FUN_004d57a0|FUN_004d57a0_UpdateFade
+
+# ---- ResetStealthValues — sets mbr_0x134 (noise) and mbr_0x130 (glimpse)
+# from random * stealthmod. Source matches. ----
+meth_0x4cdbb0|meth_0x4cdbb0_ResetStealthValues
+FUN_004cdbb0|FUN_004cdbb0_ResetStealthValues
+
+# ---- BeginFighting(target, action) — references "Invalid fighting action"
+# / "enemy" strings, sets target on action block, calls SetFighting.
+# Source body matches almost exactly. ----
+meth_0x4d3b90|meth_0x4d3b90_BeginFighting
+FUN_004d3b90|FUN_004d3b90_BeginFighting
+
+# ---- EndFighting — only acts when current action is combat/bow (3,0x19);
+# stops fighting and returns to walk. Mirrors source. ----
+meth_0x4d3fd0|meth_0x4d3fd0_EndFighting
+FUN_004d3fd0|FUN_004d3fd0_EndFighting
+
+# ---- SetFighting(targ) — sets fighting target (mbr_0xd8+0x44) on doing /
+# desired / root, sends signal. Matches source SetFighting. ----
+meth_0x4d4790|meth_0x4d4790_SetFighting
+FUN_004d4790|FUN_004d4790_SetFighting
+
+# ---- Stop(name) — halts movement when doing is move (2,4,0x1a) or
+# pivot (0x11), or when doing->Is(name) matches. ----
+meth_0x4cee70|meth_0x4cee70_Stop
+FUN_004cee70|FUN_004cee70_Stop
+
+# ---- FindCharacters(out_arr, maxchars, range, angle, anglerange, flags)
+# — iterates nearby chars via 0x44ceb0 spatial index, applies IsEnemy /
+# CanSee filters, calls SetHasSeen on found. Param shape matches. ----
+meth_0x4cd690|meth_0x4cd690_FindCharacters
+FUN_004cd690|FUN_004cd690_FindCharacters
+
+# ---- CanSeeCharacter(targ, angle) — los/distance/angle test calling
+# raycast FUN_004533d0 plus chardata sight thresholds. ----
+meth_0x4cd540|meth_0x4cd540_CanSeeCharacter
+FUN_004cd540|FUN_004cd540_CanSeeCharacter
+
+# ---- IsValidTarget — internal targetability test (alive, not invisible,
+# in range, valid scriptobj). Helper used by FindCharacters etc. ----
+meth_0x4cd990|meth_0x4cd990_IsValidTarget
+FUN_004cd990|FUN_004cd990_IsValidTarget
+
+# ---- IsValidAttack(attacknum, &impactnum, ...) — validates attack index
+# against chardata->attacks; sets out impactnum to -1 initially. ----
+meth_0x4d1120|meth_0x4d1120_IsValidAttack
+FUN_004d1120|FUN_004d1120_IsValidAttack
+
+# ---- FindPcntAttack — picks random valid attack index by calling
+# IsValidAttack up to 2*N tries. ----
+meth_0x4d1eb0|meth_0x4d1eb0_FindPcntAttack
+FUN_004d1eb0|FUN_004d1eb0_FindPcntAttack
+
+# ---- FindButtonAttack — iterates attacks looking for ones with
+# CA_BUTTON flag (0x2000000), returns first valid match. ----
+meth_0x4d1ff0|meth_0x4d1ff0_FindButtonAttack
+FUN_004d1ff0|FUN_004d1ff0_FindButtonAttack
+
+# ---- DoAttack — creates ACTION_ATTACK action block, fills in attack /
+# impact / damage. Called by RandomAttack/SpecificAttack/ButtonAttack. ----
+meth_0x4d2120|meth_0x4d2120_DoAttack
+FUN_004d2120|FUN_004d2120_DoAttack
+
+# ---- RandomAttack(pcnt) — calls FindPcntAttack/FindButtonAttack then
+# DoAttack. ----
+meth_0x4d2900|meth_0x4d2900_RandomAttack
+FUN_004d2900|FUN_004d2900_RandomAttack
+
+# ---- SpecificAttack(attacknum) — single-attack variant: validates
+# specific index and DoAttack. ----
+meth_0x4d2a60|meth_0x4d2a60_SpecificAttack
+FUN_004d2a60|FUN_004d2a60_SpecificAttack
+
+# ---- Burn — references "onfire" string, sets mbr_0x1bc=50, allocates
+# burn effect. Matches source Burn(). ----
+meth_0x4d3590|meth_0x4d3590_Burn
+FUN_004d3590|FUN_004d3590_Burn
+
+# ---- GetAngleMoveAnim(movedir, facedir, root, animname, buflen)
+# — 8-way switch on (movedir-facedir)/32 yields suffix string. Source
+# match: identical 8-way table. ----
+meth_0x4d39f0|meth_0x4d39f0_GetAngleMoveAnim
+FUN_004d39f0|FUN_004d39f0_GetAngleMoveAnim
+
+# ---- Cast — references "SPLCASTOK" / "SPLCASTFAIL" strings, dispatches
+# spell cast logic. Source has Cast / CastByName / CastByTalismans. ----
+meth_0x4d5c20|meth_0x4d5c20_Cast
+FUN_004d5c20|FUN_004d5c20_Cast
+
+# ---- FindWaypoint — searches 10 closest objects within radius 2000 for
+# name "waypoint", returns closest by face angle. Used by AI. ----
+meth_0x4c95e0|meth_0x4c95e0_FindWaypoint
+FUN_004c95e0|FUN_004c95e0_FindWaypoint
+
+# ---- IsSlopeTooSteep — walks toward target point in 8-unit steps,
+# returns true if elevation diff > 0x1f along path. Used by FindWaypoint. ----
+meth_0x4c9460|meth_0x4c9460_IsSlopeTooSteep
+FUN_004c9460|FUN_004c9460_IsSlopeTooSteep
+
+# ---- WanderToWaypoint — virtual; the wander/patrol AI loop. Picks
+# waypoint via FindWaypoint, MoveTo it, switch waypoints when reached. ----
+virt_meth_0x4c9790|virt_meth_0x4c9790_WanderToWaypoint
+
+# ---- SaveMaterials — saves all material RGB values into mbr_0x298
+# buffer (size = NumMaterials * 0x18), then sets each mat to (0.1,0.1,1.0)
+# / (0.2,0.2,1.0) (cast-mode tint). ----
+meth_0x4d6a30|meth_0x4d6a30_SaveMaterials
+FUN_004d6a30|FUN_004d6a30_SaveMaterials
+
+# ---- RestoreMaterials — inverse of SaveMaterials; reads mbr_0x298 back
+# into TImagery materials and frees buffer. ----
+meth_0x4d6b40|meth_0x4d6b40_RestoreMaterials
+FUN_004d6b40|FUN_004d6b40_RestoreMaterials
+
+# ---- BeginCombat — wrapper that calls SetFighting(targ) then Stop. ----
+meth_0x4d5fc0|meth_0x4d5fc0_BeginCombat
+FUN_004d5fc0|FUN_004d5fc0_BeginCombat
+
+# ---- EffectCombatFlash — references s_combatflash, spawns the combat-
+# flash effect at character pos+0x1e, used as combat startup VFX. ----
+meth_0x4c8500|meth_0x4c8500_EffectCombatFlash
+FUN_004c8500|FUN_004c8500_EffectCombatFlash
+
+# ---- UseContainer — handles unlocking containers / picking locks.
+# Object-type 0x10 (KEY) and 7 (LOCKED?) branches; references CONTWRONGKEY,
+# CONTPICKFAIL, CONTPICKTOUGH, CONTUNLOCK localization strings. Likely the
+# retail Use() override path; pre-release source has empty Use() body. ----
+meth_0x4dd480|meth_0x4dd480_UseContainer
+FUN_004dd480|FUN_004dd480_UseContainer

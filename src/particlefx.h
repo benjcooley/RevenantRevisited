@@ -6,8 +6,7 @@
 #pragma once
 
 #include "revenant.h"
-
-#include <sokol_gfx.h>
+#include "render3d_types.h"
 
 #include <cstdint>
 #include <string>
@@ -84,7 +83,7 @@ struct SParticleBucketDesc
     EParticleBlendMode blend = EParticleBlendMode::Additive;
     EParticleSortMode sort = EParticleSortMode::None;
     int32_t sort_order = 0;
-    sg_image image = {};
+    TTextureHandle texture = kInvalidTexture;
     int32_t texture_width = 1;
     int32_t texture_height = 1;
     float default_width = 1.0f;

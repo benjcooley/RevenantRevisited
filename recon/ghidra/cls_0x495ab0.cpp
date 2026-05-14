@@ -31,7 +31,7 @@ void __thiscall OOAnalyzer::cls_0x495ab0::meth_0x495ab0(cls_0x495ab0 *this,byte 
   iVar6 = 0;
   pcVar4 = this;
   if (0 < (int)this->mbr_0x24) {
-    while (uVar3 = FUN_0059a530((uint)pcVar4,(byte *)(*(int *)(this->mbr_0x34 + iVar6 * 4) + 8),
+    while (uVar3 = FUN_0059a530_stricmp((uint)pcVar4,(byte *)(*(int *)(this->mbr_0x34 + iVar6 * 4) + 8),
                                 param_1), uVar3 != 0) {
       iVar6 = iVar6 + 1;
       pcVar4 = extraout_ECX;

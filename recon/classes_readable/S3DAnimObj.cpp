@@ -64,7 +64,7 @@ undefined4 S3DAnimObj::virt_meth_0x4697a0(byte *param_1, char *param_2, undefine
   int in_stack_00000014;
   
   *param_2 = '\0';
-  uVar1 = FUN_0059a530((uint)this,param_1,(byte *)s_startpos_005d3c74);
+  uVar1 = FUN_0059a530_stricmp((uint)this,param_1,(byte *)s_startpos_005d3c74);
   if (uVar1 != 0) {
     uVar3 = this->virt_meth_0x436ea0();
     return uVar3;
@@ -94,7 +94,7 @@ void S3DAnimObj::virt_meth_0x469890()
   if (((DAT_00668128 != 0) && (this->hmaterial != 0)) && (this->surfaces == 0)) {
     this->hmaterial = 0;
     this->surfaces = 1;
-    FUN_00483300(0,*(int *)(this->numfaces + 0x98) + -1);
+    FUN_00483300_RandomRange(0,*(int *)(this->numfaces + 0x98) + -1);
     cls_0x5a3d44::meth_0x430b80((cls_0x5a3d44 *)this->numfaces);
     pcVar1 = this->vftptr_0x0;
     cls_0x5b98b8::meth_0x436980((cls_0x5b98b8 *)this);

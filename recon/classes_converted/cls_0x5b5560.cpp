@@ -36,7 +36,7 @@ cls_0x5b5560 * __thiscall cls_0x5b5560::~cls_0x5b5560(cls_0x5b5560 *this)
   this->vftptr_0x0 = &cls_0x5b5560__vftable_5b5560_005b5560;
   local_4 = 0;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   FUN_004830f0((LPCVOID)this->mbr_0xd8);
   local_4 = 0xffffffff;

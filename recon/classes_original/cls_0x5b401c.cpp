@@ -72,7 +72,7 @@ void __thiscall OOAnalyzer::cls_0x5b401c::virt_meth_0x510220(cls_0x5b401c *this)
   undefined3 extraout_var_00;
   int iVar4;
   undefined4 uVar5;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   dword dVar6;
   dword *pdVar7;
   undefined4 uVar8;
@@ -86,8 +86,8 @@ void __thiscall OOAnalyzer::cls_0x5b401c::virt_meth_0x510220(cls_0x5b401c *this)
       if (dVar6 != 0) {
         pdVar7 = &this->mbr_0x1c;
         uVar8 = 0;
-        uVar5 = cls_0x5b8e94::meth_0x4df070((cls_0x5b8e94 *)this);
-        FUN_0046db20(uVar5,dVar6,pdVar7,uVar8);
+        uVar5 = cls_0x5b8e94_TObjectInstance::meth_0x4df070((cls_0x5b8e94_TObjectInstance *)this);
+        FUN_0046db20_ConvertToVector(uVar5,dVar6,pdVar7,uVar8);
         dVar6 = this->mbr_0x188;
         this->mbr_0x8 = this->mbr_0x8 & 0xfffffffe | 0x10008;
         this->mbr_0x24 = -((int)(dVar6 + ((int)dVar6 >> 0x1f & 0xfU)) >> 4);
@@ -103,21 +103,21 @@ void __thiscall OOAnalyzer::cls_0x5b401c::virt_meth_0x510220(cls_0x5b401c *this)
       this->mbr_0x184 = dVar6;
       if ((bVar2 & 2) == 0) {
         if (this->mbr_0xd8 == 0) {
-          this_00 = (cls_0x5a7b98 *)0x0;
+          this_00 = (cls_0x5a7b98_TCharacter *)0x0;
         }
         else {
-          this_00 = *(cls_0x5a7b98 **)(this->mbr_0xd8 + 4);
+          this_00 = *(cls_0x5a7b98_TCharacter **)(this->mbr_0xd8 + 4);
         }
         cls_0x44ceb0::cls_0x44ceb0(&cStack_48,&this->mbr_0x10,0x100,0xe0,2,0);
-        while ((cls_0x5a7b98 *)cStack_48.mbr_0xc != (cls_0x5a7b98 *)0x0) {
-          if (((((cls_0x5a7b98 *)cStack_48.mbr_0xc != this_00) &&
+        while ((cls_0x5a7b98_TCharacter *)cStack_48.mbr_0xc != (cls_0x5a7b98_TCharacter *)0x0) {
+          if (((((cls_0x5a7b98_TCharacter *)cStack_48.mbr_0xc != this_00) &&
                (uVar3 = (*((cls_0x5a50e8 *)cStack_48.mbr_0xc)->vftptr_0x0->virt_meth_0x477e50_448)
                                   ((void *)cStack_48.mbr_0xc),
                CONCAT31(extraout_var,uVar3) != 0 && -1 < extraout_var)) &&
               (uVar3 = (*this->vftptr_0x0->virt_meth_0x410aa0_4)(this),
               CONCAT31(extraout_var_00,uVar3) < 0x21)) &&
-             ((this_00 == (cls_0x5a7b98 *)0x0 ||
-              (iVar4 = cls_0x5a7b98::meth_0x4c89c0(this_00), iVar4 != 0)))) goto LAB_00510310;
+             ((this_00 == (cls_0x5a7b98_TCharacter *)0x0 ||
+              (iVar4 = cls_0x5a7b98_TCharacter::meth_0x4c89c0_IsEnemy(this_00), iVar4 != 0)))) goto LAB_00510310;
           cls_0x44ceb0::meth_0x44d080((cls_0x44ceb0 *)&stack0xffffffb4);
           cStack_48.mbr_0xc = cStack_48.mbr_0x8;
         }
@@ -126,17 +126,17 @@ void __thiscall OOAnalyzer::cls_0x5b401c::virt_meth_0x510220(cls_0x5b401c *this)
 LAB_00510310:
       this->mbr_0x8 = this->mbr_0x8 & 0xfffefff7 | 1;
       (*this->vftptr_0x0->virt_meth_0x5104c0_24)(this);
-      cls_0x5b8e94::virt_meth_0x4de800((cls_0x5b8e94 *)this);
+      cls_0x5b8e94_TObjectInstance::virt_meth_0x4de800((cls_0x5b8e94_TObjectInstance *)this);
       return;
     }
     if ((sVar1 == 2) && (this->mbr_0x58 == 0)) {
-      cls_0x5b8e94::meth_0x4defe0((cls_0x5b8e94 *)this);
-      cls_0x5b8e94::virt_meth_0x4de800((cls_0x5b8e94 *)this);
+      cls_0x5b8e94_TObjectInstance::meth_0x4defe0((cls_0x5b8e94_TObjectInstance *)this);
+      cls_0x5b8e94_TObjectInstance::virt_meth_0x4de800((cls_0x5b8e94_TObjectInstance *)this);
       return;
     }
   }
 LAB_005103ac:
-  cls_0x5b8e94::virt_meth_0x4de800((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x4de800((cls_0x5b8e94_TObjectInstance *)this);
   return;
 }
 

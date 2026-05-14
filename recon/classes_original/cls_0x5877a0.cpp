@@ -25,11 +25,11 @@ undefined4 __thiscall OOAnalyzer::cls_0x5877a0::meth_0x5877a0(cls_0x5877a0 *this
     if ((DAT_0067682c == 0) && (this->mbr_0x54 == 0)) {
       return 0;
     }
-    iVar1 = cls_0x5a5320::meth_0x47e940((cls_0x5a5320 *)&DAT_0065caf0);
+    iVar1 = cls_0x5a5320_TPlayScreen::meth_0x47e940((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
     if ((int)(this->mbr_0xa0 + 0x78) < iVar1) {
       this->mbr_0xa0 = 0;
     }
-    iVar1 = cls_0x5a5320::meth_0x47e940((cls_0x5a5320 *)&DAT_0065caf0);
+    iVar1 = cls_0x5a5320_TPlayScreen::meth_0x47e940((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
     if (iVar1 < (int)this->mbr_0xa0) {
       return 0;
     }
@@ -60,7 +60,7 @@ void __thiscall OOAnalyzer::cls_0x5877a0::meth_0x587880(cls_0x5877a0 *this)
 {
   int iVar1;
   
-  iVar1 = cls_0x5a5320::meth_0x47e940((cls_0x5a5320 *)&DAT_0065caf0);
+  iVar1 = cls_0x5a5320_TPlayScreen::meth_0x47e940((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
   this->mbr_0xa0 = iVar1 + 0x60;
   return;
 }

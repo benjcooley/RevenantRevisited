@@ -44,7 +44,7 @@ void __thiscall OOAnalyzer::cls_0x530af0::meth_0x530af0(cls_0x530af0 *this,uint 
     param_1 = 1;
   }
   if (((uVar5 & 8) == 0) && ((uVar5 & 4) == 0)) {
-    uVar5 = -(uint)(1 < DAT_0065a258) & DAT_0065a14c;
+    uVar5 = -(uint)(1 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a14c;
     pcVar6 = (cls_0x45f7c0 *)(uVar5 + 0x24);
     if (0 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0) {
       do {
@@ -109,7 +109,7 @@ LAB_00530ccd:
       } while ((int)uVar4 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0);
     }
     uVar5 = 0;
-    uVar4 = -(uint)(2 < DAT_0065a258) & DAT_0065a150;
+    uVar4 = -(uint)(2 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a150;
     pcVar6 = (cls_0x45f7c0 *)(uVar4 + 0x24);
     if (0 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0) {
       do {
@@ -175,7 +175,7 @@ LAB_00530e77:
       } while ((int)uVar5 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0);
     }
     uVar5 = 0;
-    uVar4 = -(uint)(2 < DAT_0065a258) & DAT_0065a150;
+    uVar4 = -(uint)(2 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a150;
     pcVar6 = (cls_0x45f7c0 *)(uVar4 + 0x24);
     if (0 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0) {
       do {
@@ -241,7 +241,7 @@ LAB_00531021:
       } while ((int)uVar5 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0);
     }
     uVar5 = 0;
-    uVar4 = -(uint)(4 < DAT_0065a258) & DAT_0065a158;
+    uVar4 = -(uint)(4 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a158;
     pcVar6 = (cls_0x45f7c0 *)(uVar4 + 0x24);
     if (0 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0) {
       do {
@@ -307,7 +307,7 @@ LAB_005311cb:
       } while ((int)uVar5 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0);
     }
     uVar5 = 0;
-    uVar4 = -(uint)(0x12 < DAT_0065a258) & DAT_0065a190;
+    uVar4 = -(uint)(0x12 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a190;
     pcVar6 = (cls_0x45f7c0 *)(uVar4 + 0x24);
     if (0 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0) {
       do {
@@ -373,7 +373,7 @@ LAB_00531375:
       } while ((int)uVar5 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0);
     }
     uVar5 = 0;
-    uVar4 = -(uint)(0x15 < DAT_0065a258) & DAT_0065a19c;
+    uVar4 = -(uint)(0x15 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a19c;
     pcVar6 = (cls_0x45f7c0 *)(uVar4 + 0x24);
     if (0 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0) {
       do {
@@ -439,7 +439,7 @@ LAB_0053151f:
       } while ((int)uVar5 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0);
     }
     uVar5 = 0;
-    uVar4 = -(uint)(5 < DAT_0065a258) & DAT_0065a15c;
+    uVar4 = -(uint)(5 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a15c;
     pcVar6 = (cls_0x45f7c0 *)(uVar4 + 0x24);
     if (0 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0) {
       do {
@@ -509,7 +509,7 @@ LAB_005316cf:
       } while ((int)uVar5 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0);
     }
     uVar5 = 0;
-    uVar4 = -(uint)(0x11 < DAT_0065a258) & DAT_0065a18c;
+    uVar4 = -(uint)(0x11 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a18c;
     pcVar6 = (cls_0x45f7c0 *)(uVar4 + 0x24);
     if (0 < (int)(pcVar6->cls_0x41c7f0).mbr_0x0) {
       do {
@@ -579,8 +579,8 @@ LAB_00531879:
     }
   }
   else {
-    if (param_1 < DAT_0065a258) {
-      local_54 = (&DAT_0065a148)[param_1];
+    if (param_1 < DAT_0065a258_TObjectClass_numclasses) {
+      local_54 = (&DAT_0065a148_TObjectClass_classes)[param_1];
     }
     else {
       local_54 = 0;

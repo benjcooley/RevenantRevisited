@@ -507,7 +507,7 @@ cls_0x5b4a7c * __thiscall cls_0x5b4a7c::~cls_0x5b4a7c(cls_0x5b4a7c *this)
   this->vftptr_0x0 = &cls_0x5b4a7c__vftable_5b4a7c_005b4a7c;
   local_4 = 0;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   uVar1 = (*this->vftptr_0x0->FUN_00477aa0_220)(DAT_0066d694);
   if (CONCAT31(extraout_var,uVar1) < 0x40) {
@@ -619,7 +619,7 @@ void cls_0x5b4a7c::virt_meth_0x515c00()
   int iVar3;
   int iVar4;
   
-  this->virt_meth_0x46faf0();
+  this->virt_meth_0x46faf0_RemoveFromInventory();
   if (this->mbr_0x64 == DAT_0065d674) {
     uVar1 = (*this->vftptr_0x0->virt_meth_0x516920_408)(this);
     uVar2 = CONCAT31(extraout_var,uVar1);

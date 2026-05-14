@@ -1664,7 +1664,7 @@ OOAnalyzer::cls_0x5a486c::meth_0x40af50
           *(undefined2 *)((int)puVar11 + 3) = uVar4;
           return;
         case 2:
-          iVar7 = FUN_00483300(0,5);
+          iVar7 = FUN_00483300_RandomRange(0,5);
           cVar6 = s_bigsword_005c5e8c[8];
           uVar8 = s_bigsword_005c5e8c._4_4_;
           uVar3 = s_sword_005c5e84._4_2_;
@@ -1773,7 +1773,7 @@ OOAnalyzer::cls_0x5a486c::meth_0x40af50
     if (in_stack_00000010 == (undefined4 *)0x0) {
       return;
     }
-    if ((*(int *)(param_1 + 0xe0) != 0) && (iVar7 = FUN_004dab80(s_sneak_005c618c), iVar7 != 0)) {
+    if ((*(int *)(param_1 + 0xe0) != 0) && (iVar7 = FUN_004dab80_TActionBlock_Is(s_sneak_005c618c), iVar7 != 0)) {
       *in_stack_00000010 = 0x40;
       return;
     }
@@ -1789,7 +1789,7 @@ OOAnalyzer::cls_0x5a486c::meth_0x40af50
 // Function at 0040b2e0
 
 void __thiscall
-OOAnalyzer::cls_0x5a486c::meth_0x40b2e0(cls_0x5a486c *this,cls_0x5a7b98 *param_1,dword param_2)
+OOAnalyzer::cls_0x5a486c::meth_0x40b2e0(cls_0x5a486c *this,cls_0x5a7b98_TCharacter *param_1,dword param_2)
 
 {
   dword dVar1;
@@ -1857,7 +1857,7 @@ OOAnalyzer::cls_0x5a486c::meth_0x40b2e0(cls_0x5a486c *this,cls_0x5a7b98 *param_1
         pcVar7 = pcVar7 + 1;
       } while (bVar8);
       if ((bVar8) && (pdVar2[1] == in_stack_0000000c + 1U)) {
-        if (param_1 == (cls_0x5a7b98 *)0x0) {
+        if (param_1 == (cls_0x5a7b98_TCharacter *)0x0) {
           FUN_004833c0(pdVar2[3],0,0);
           iVar5 = cls_0x41c7d0::meth_0x49c430((cls_0x41c7d0 *)&DAT_00667548);
           if ((-1 < iVar5) &&
@@ -1869,7 +1869,7 @@ OOAnalyzer::cls_0x5a486c::meth_0x40b2e0(cls_0x5a486c *this,cls_0x5a7b98 *param_1
           puVar9 = local_80;
           uVar4 = FUN_004833c0(pdVar2[3],0,0,puVar9,&local_84);
           meth_0x40af50(this,param_1,uVar4,puVar9);
-          cls_0x5a7b98::meth_0x473990(param_1,(char)local_80,0);
+          cls_0x5a7b98_TCharacter::meth_0x473990(param_1,(char)local_80,0);
         }
       }
       local_8c = local_8c + 1;

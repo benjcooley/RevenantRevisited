@@ -22,7 +22,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x495b70::meth_0x495b70(cls_0x495b70 *this
   iVar2 = 0;
   if (0 < (int)this->mbr_0x24) {
     do {
-      iVar1 = FUN_0059a530(*(int *)(this->mbr_0x34 + iVar2 * 4) + 8);
+      iVar1 = FUN_0059a530_stricmp(*(int *)(this->mbr_0x34 + iVar2 * 4) + 8);
       if (iVar1 == 0) {
         return **(undefined4 **)(this->mbr_0x34 + iVar2 * 4);
       }

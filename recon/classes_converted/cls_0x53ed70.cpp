@@ -28,7 +28,7 @@ undefined4 cls_0x53ed70::meth_0x53ed70()
           if (uVar3 == 0) {
             uVar2 = piVar1[5];
           }
-          uVar3 = FUN_0059a530(uVar3,(byte *)(uVar2 + 0x24),in_stack_00000004);
+          uVar3 = FUN_0059a530_stricmp(uVar3,(byte *)(uVar2 + 0x24),in_stack_00000004);
           if (uVar3 == 0) {
             return *(undefined4 *)(this->mbr_0x14 + iVar5 * 4);
           }
@@ -68,7 +68,7 @@ int cls_0x53ed70::meth_0x53ef90()
           if (uVar3 == 0) {
             uVar2 = piVar1[5];
           }
-          uVar3 = FUN_0059a530(uVar3,(byte *)(uVar2 + 0x24),in_stack_00000004);
+          uVar3 = FUN_0059a530_stricmp(uVar3,(byte *)(uVar2 + 0x24),in_stack_00000004);
           if (uVar3 == 0) {
             iVar5 = *(int *)(this->mbr_0x14 + iVar5 * 4);
             iVar4 = *(int *)(*(int *)(iVar5 + 0x10) + iVar4 * 4);
@@ -113,7 +113,7 @@ int cls_0x53ed70::meth_0x53f010()
           if (uVar3 == 0) {
             uVar2 = piVar1[5];
           }
-          uVar3 = FUN_0059a530(uVar3,(byte *)(uVar2 + 4),in_stack_00000004);
+          uVar3 = FUN_0059a530_stricmp(uVar3,(byte *)(uVar2 + 4),in_stack_00000004);
           if (uVar3 == 0) {
             iVar5 = *(int *)(this->mbr_0x14 + iVar5 * 4);
             iVar4 = *(int *)(*(int *)(iVar5 + 0x10) + iVar4 * 4);

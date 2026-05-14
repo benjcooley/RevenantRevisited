@@ -22,7 +22,7 @@ void __thiscall OOAnalyzer::cls_0x5253e0::meth_0x5253e0(cls_0x5253e0 *this)
 {
   int iVar1;
   
-  iVar1 = FUN_0059a530(this->mbr_0x38,s_DunFireWallS_005e2fc4);
+  iVar1 = FUN_0059a530_stricmp(this->mbr_0x38,s_DunFireWallS_005e2fc4);
   if (iVar1 == 0) {
     this->mbr_0xfc = 0x80;
   }

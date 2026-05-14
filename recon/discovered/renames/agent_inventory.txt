@@ -1,0 +1,167 @@
+# Format: BARE_TOKEN|RENAMED_TOKEN  — one per line, # comments ignored.
+# TObjectClass + per-class registry + inventory + base TObjectInstance dtor
+# identifications, agent pass.
+#
+# Anchors:
+#   - Static-init pattern at every per-class registration site:
+#       MOV [innerVTable_global], 0x5XXXXX        ; TXxxClass (TObjectBuilder) vptr
+#       PUSH 0/&BaseClass; PUSH 0=flags; PUSH classid; PUSH classname_str
+#       MOV ECX, classGlobal                      ; this = &XxxClass
+#       CALL 0x004742e0                            ; TObjectClass::TObjectClass
+#       PUSH dtor_thunk; CALL atexit
+#   - The strings "AMMO", "ARMOR", "CHARACTER", ... in .rdata each have one
+#     immediate-operand reference at the corresponding registration site.
+#   - The TObjectClass ctor body writes (&DAT_0065a148)[id] = this and
+#     numclasses_065a258 = max(numclasses, id+1) — confirming
+#     classes[]@0x65a148 + numclasses@0x65a258 globals.
+
+
+# ============================================================================
+# TObjectClass core
+# ============================================================================
+
+# TObjectClass::TObjectClass(char* name, int32_t id, uint16_t flags, TObjectClass* base)
+# Body matches src/object.cpp:2707 exactly: writes name/id/flags/basedon,
+# vptr=&PTR_LAB_005a52d8, classes[id]=this, numclasses=max(numclasses,id+1),
+# Clear() inlined.
+meth_0x4742e0|meth_0x4742e0_TObjectClassCtor
+FUN_004742e0|FUN_004742e0_TObjectClassCtor
+
+# TObjectClass::NewObject(SObjectDef* def) — clamps def->pos to >=0,
+# bounds-checks objtype against numtypes, looks up objinfo[objtype],
+# calls objbuilder->Build(def, imagery), assigns mapindex if missing.
+# Body matches src/object.cpp:2780.
+meth_0x474bb0|meth_0x474bb0_NewObject
+FUN_00474bb0|FUN_00474bb0_NewObject
+
+# Address labels for the class-registry globals.
+DAT_0065a148|DAT_0065a148_TObjectClass_classes
+DAT_0065a258|DAT_0065a258_TObjectClass_numclasses
+
+
+# ============================================================================
+# Per-class registration (one TXxxClass static per OBJCLASS_*)
+# Two globals per class: classGlobal (the TXxxClass instance, also classes[id])
+# and innerVTable_global (the TObjectBuilder vptr storage adjacent to it).
+# ============================================================================
+
+# OBJCLASS_AMMO = 21 (0x15)  AmmoClass("AMMO",21,0,nullptr)  @ static-init 0x4bf0e0
+DAT_0066b160|DAT_0066b160_AmmoClass
+FUN_004bf0e0|FUN_004bf0e0_AmmoClass_StaticInit
+FUN_004bf120|FUN_004bf120_AmmoClass_StaticDtorThunk
+
+# OBJCLASS_ARMOR = 2  ArmorClass("ARMOR",2,0,nullptr)  @ static-init 0x4c0ec0
+DAT_0066c9d8|DAT_0066c9d8_ArmorClass
+FUN_004c0ec0|FUN_004c0ec0_ArmorClass_StaticInit
+
+# OBJCLASS_CHARACTER = 12 (0xc)  CharacterClass("CHARACTER",12,0,nullptr)  @ 0x4c1310
+DAT_0066ca68|DAT_0066ca68_CharacterClass
+FUN_004c1310|FUN_004c1310_CharacterClass_StaticInit
+FUN_004c1340|FUN_004c1340_CharacterClass_StaticDtorThunk
+
+# OBJCLASS_CONTAINER = 5  ContainerClass("CONTAINER",5,0,nullptr)  @ 0x4dbea0
+DAT_0066cb28|DAT_0066cb28_ContainerClass
+FUN_004dbea0|FUN_004dbea0_ContainerClass_StaticInit
+
+# OBJCLASS_INVCONTAINER = 17 (0x11)  InvContainerClass("INVCONTAINER",17,0,&ContainerClass)  @ 0x4dbf00
+DAT_0066cb90|DAT_0066cb90_InvContainerClass
+FUN_004dbf00|FUN_004dbf00_InvContainerClass_StaticInit
+
+# OBJCLASS_EFFECT = 25 (0x19)  EffectClass("EFFECT",25,0,nullptr)  @ 0x4de150
+# (Uses base TObjectClass directly — JMP into 0x46e420 via dtor thunk; no derived TEffectClass.)
+DAT_0066cc68|DAT_0066cc68_EffectClass
+FUN_004de150|FUN_004de150_EffectClass_StaticInit
+FUN_004de180|FUN_004de180_EffectClass_StaticDtorThunk
+
+# OBJCLASS_EXIT = 10  ExitClass("EXIT",10,0,nullptr)  @ 0x50c660
+DAT_0066d1f0|DAT_0066d1f0_ExitClass
+FUN_0050c660|FUN_0050c660_ExitClass_StaticInit
+
+# OBJCLASS_FOOD = 4  FoodClass("FOOD",4,0,nullptr)  @ 0x50e530
+DAT_0066d2a8|DAT_0066d2a8_FoodClass
+FUN_0050e530|FUN_0050e530_FoodClass_StaticInit
+
+# OBJCLASS_POTION = 18 (0x12)  PotionClass("POTION",18,0,&FoodClass)  @ 0x50e590
+DAT_0066d268|DAT_0066d268_PotionClass
+FUN_0050e590|FUN_0050e590_PotionClass_StaticInit
+
+# OBJCLASS_HELPER = 15 (0xf)  HelperClass("HELPER",15,0,nullptr)  @ 0x50ee60
+DAT_0066d320|DAT_0066d320_HelperClass
+FUN_0050ee60|FUN_0050ee60_HelperClass_StaticInit
+
+# OBJCLASS_KEY = 16 (0x10)  KeyClass("KEY",16,0,nullptr)  @ 0x50fc90
+DAT_0066d378|DAT_0066d378_KeyClass
+FUN_0050fc90|FUN_0050fc90_KeyClass_StaticInit
+
+# OBJCLASS_LIGHTSOURCE = 6  LightSourceClass("LIGHTSOURCE",6,0,nullptr)  @ 0x50fe40
+DAT_0066d3f0|DAT_0066d3f0_LightSourceClass
+FUN_0050fe40|FUN_0050fe40_LightSourceClass_StaticInit
+
+# OBJCLASS_MONEY = 8  MoneyClass("MONEY",8,0,nullptr)  @ 0x515790
+DAT_0066d7a8|DAT_0066d7a8_MoneyClass
+FUN_00515790|FUN_00515790_MoneyClass_StaticInit
+
+# OBJCLASS_PLAYER = 11 (0xb)  PlayerClass("PLAYER",11,0,&CharacterClass)  @ 0x517780
+DAT_0066d910|DAT_0066d910_PlayerClass
+FUN_00517780|FUN_00517780_PlayerClass_StaticInit
+
+# OBJCLASS_RANGEDWEAPON = 23 (0x17)  RangedWeaponClass("RANGEDWEAPON",23,0,nullptr)  @ 0x5209c0
+DAT_0066da88|DAT_0066da88_RangedWeaponClass
+FUN_005209c0|FUN_005209c0_RangedWeaponClass_StaticInit
+
+# OBJCLASS_SCROLL = 22 (0x16)  ScrollClass("SCROLL",22,0,nullptr)  @ 0x520bd0
+DAT_0066dad0|DAT_0066dad0_ScrollClass
+FUN_00520bd0|FUN_00520bd0_ScrollClass_StaticInit
+
+# OBJCLASS_SHADOW = 14 (0xe)  ShadowClass("SHADOW",14,0,nullptr)  @ 0x521f70
+DAT_0066de50|DAT_0066de50_ShadowClass
+FUN_00521f70|FUN_00521f70_ShadowClass_StaticInit
+
+# OBJCLASS_TALISMAN = 3  TalismanClass("TALISMAN",3,0,nullptr)  @ 0x5239d0
+DAT_0066dec8|DAT_0066dec8_TalismanClass
+FUN_005239d0|FUN_005239d0_TalismanClass_StaticInit
+
+# OBJCLASS_TILE = 9  TileClass("TILE",9,0,nullptr)  @ 0x523be0
+DAT_0066df10|DAT_0066df10_TileClass
+FUN_00523be0|FUN_00523be0_TileClass_StaticInit
+
+# OBJCLASS_TOOL = 7  ToolClass("TOOL",7,0,nullptr)  @ 0x524020
+DAT_0066df70|DAT_0066df70_ToolClass
+FUN_00524020|FUN_00524020_ToolClass_StaticInit
+
+# OBJCLASS_TRAP = 13 (0xd)  TrapClass("TRAP",13,0,nullptr)  @ 0x524200
+DAT_0066e030|DAT_0066e030_TrapClass
+FUN_00524200|FUN_00524200_TrapClass_StaticInit
+
+# OBJCLASS_WEAPON = 1  WeaponClass("WEAPON",1,0,nullptr)  @ 0x528b50
+DAT_0066e0f8|DAT_0066e0f8_WeaponClass
+FUN_00528b50|FUN_00528b50_WeaponClass_StaticInit
+
+
+# ============================================================================
+# OBJCLASS_* numeric-id → name dispatcher (FUN_00483850, already noted in
+# OBJCLASS_IDS.md as "FindClassByID"). Add a label since none exists yet.
+# ============================================================================
+meth_0x483850|meth_0x483850_FindClassNameByID
+FUN_00483850|FUN_00483850_FindClassNameByID
+
+
+# ============================================================================
+# TObjectInstance::~TObjectInstance — real destructor at 0x46e420
+# Sets vptr=&PTR_FUN_005a50e8 (TObjectInstance vptr descriptor), tears down
+# animator/script/inventory/stats/chardata. Slot-0 vector dtor at 0x528b00
+# (already labeled by agent_baseclass) calls into here.
+# ============================================================================
+meth_0x46e420|meth_0x46e420_TObjectInstance_RealDtor
+FUN_0046e420|FUN_0046e420_TObjectInstance_RealDtor
+
+
+# ============================================================================
+# TCharacter::EffectBurst(type, height_offset) at 0x4c85d0
+# String-anchored on "blood" / "Blood" / "sparks". README already lists this
+# address as "EffectBurst" — wire up the BARE token rename for consistency.
+# (Note: agent_tcharacter.txt labelled 0x4c8500 as EffectCombatFlash; that's
+# the *combat-flash* sibling, distinct from this generic EffectBurst.)
+# ============================================================================
+meth_0x4c85d0|meth_0x4c85d0_EffectBurst
+FUN_004c85d0|FUN_004c85d0_EffectBurst

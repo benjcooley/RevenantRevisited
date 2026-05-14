@@ -17,7 +17,7 @@ Length: 276 Alignment: 1
 
 // Function at 00499500
 
-void __thiscall OOAnalyzer::cls_0x499500::meth_0x499500(cls_0x499500 *this)
+void __thiscall OOAnalyzer::cls_0x499500::meth_0x499500_TSector_InitLights(cls_0x499500 *this)
 
 {
   int *piVar1;

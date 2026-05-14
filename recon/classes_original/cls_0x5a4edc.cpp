@@ -4,7 +4,7 @@
 /OOAnalyzer/cls_0x5a4edc
 pack(disabled)
 Structure cls_0x5a4edc {
-   0   cls_0x5a5ed4   112   cls_0x5a5ed4   "Component (member) class."
+   0   cls_0x5a5ed4_TScreen   112   cls_0x5a5ed4_TScreen   "Component (member) class."
    112   dword   4   mbr_0x70   "Unsigned Double-Word (ddw, 4-bytes)"
    116   dword   4   mbr_0x74   "Unsigned Double-Word (ddw, 4-bytes)"
    120   dword   4   mbr_0x78   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -40,7 +40,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4edc::virt_meth_0x469910(cls_0x5a4edc 
   pvStack_c = ExceptionList;
   pcStack_28 = s_cursor_005d3ca8;
   ExceptionList = &pvStack_c;
-  (this->cls_0x5a5ed4).mbr_0x54 = 0;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x54 = 0;
   cStack_2c.mbr_0x0 = 0x469943;
   pcStack_28 = (char *)cls_0x46d6b0::meth_0x46d710(this_00);
   cStack_2c.mbr_0x0 = 0x469949;
@@ -52,8 +52,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4edc::virt_meth_0x469910(cls_0x5a4edc 
   local_10 = &cStack_2c;
   cls_0x419dd0::cls_0x419dd0(&cStack_2c);
   (**(code **)(dVar1 + 0x30))(8);
-  (this->cls_0x5a5ed4).mbr_0x40 = (dword)&this->mbr_0x70;
-  (this->cls_0x5a5ed4).mbr_0x44 = (dword)&this->mbr_0x70;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x40 = (dword)&this->mbr_0x70;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x44 = (dword)&this->mbr_0x70;
   this_01 = (cls_0x5a4494 *)FUN_00482fb0(0x18c);
   local_10 = (cls_0x419dd0 *)0x0;
   if (this_01 == (cls_0x5a4494 *)0x0) {
@@ -108,13 +108,13 @@ void __thiscall OOAnalyzer::cls_0x5a4edc::virt_meth_0x469a20(cls_0x5a4edc *this)
 cls_0x5a4edc * __thiscall OOAnalyzer::cls_0x5a4edc::cls_0x5a4edc(cls_0x5a4edc *this)
 
 {
-  cls_0x5a5ed4::cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   this->mbr_0x70 = (dword)&cls_0x5a4c30__vftable_5a4c30_005a4c30;
   this->mbr_0x78 = 0;
   this->mbr_0x7c = 0;
   this->mbr_0x80 = 0;
   this->mbr_0x74 = 0;
-  (this->cls_0x5a5ed4).vftptr_0x0 =
+  (this->cls_0x5a5ed4_TScreen).vftptr_0x0 =
        (cls_0x5a5ed4__vftable_5a5ed4 *)&cls_0x5a4edc__vftable_5a4edc_005a4edc;
   return this;
 }
@@ -128,7 +128,7 @@ cls_0x5a4edc * __thiscall OOAnalyzer::cls_0x5a4edc::virt_meth_0x46d360(cls_0x5a4
 {
   byte in_stack_00000004;
   
-  cls_0x5a5ed4::~cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }

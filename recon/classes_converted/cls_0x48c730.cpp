@@ -19,7 +19,7 @@ undefined4 cls_0x48c730::meth_0x48c730()
   pcVar2 = this;
   if (0 < (int)this->mbr_0x4) {
     do {
-      uVar1 = FUN_0059a530((uint)pcVar2,*(byte **)(this->mbr_0x14 + iVar3 * 4),in_stack_00000004);
+      uVar1 = FUN_0059a530_stricmp((uint)pcVar2,*(byte **)(this->mbr_0x14 + iVar3 * 4),in_stack_00000004);
       if (uVar1 == 0) {
         return *(undefined4 *)(this->mbr_0x14 + iVar3 * 4);
       }

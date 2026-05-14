@@ -6,7 +6,7 @@
 
 // Function at 00499720
 
-ushort cls_0x499720::meth_0x499720(int param_1)
+ushort cls_0x499720::meth_0x499720_TSector_ReturnWalkmap(int param_1)
 
 {
   int in_stack_00000008;
@@ -21,7 +21,7 @@ ushort cls_0x499720::meth_0x499720(int param_1)
 
 // Function at 00499750
 
-void cls_0x499720::meth_0x499750(int param_1, int param_2)
+void cls_0x499720::meth_0x499750_TSector_SetWalkmap(int param_1, int param_2)
 
 {
   ushort uVar1;

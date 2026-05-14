@@ -1,0 +1,217 @@
+# TPlayer (vtable @ 0x5b4f30) — agent identifications.
+# Strategy: vtable diff vs TCharacter (0x5a7b98) finds overrides; player-specific
+# strings ("Locke", "Stealth", "cbow", "PLYR" magic, etc.) anchor names.
+# Only entries with >= 70% confidence — see notes for evidence.
+
+# ---- Vtable overrides (slot N replaces a TCharacter slot N) ----
+
+# slot 0: dtor; conditionally calls operator delete (FUN_004830f0).
+# Pattern matches every other class destructor in the dump.
+virt_meth_0x51ff00|virt_meth_0x51ff00_dtor
+meth_0x51ff00|meth_0x51ff00_dtor
+FUN_0051ff00|FUN_0051ff00_dtor
+
+# slot 16: RemoveItem override. Calls TCharacter::virt_meth_0x4c36c0 super,
+# then iterates the 11 equipment slots (0x2a0..0x2c8) clearing the matching
+# pointer. Matches TPlayer needing to drop equip-slot ptrs when an item leaves
+# inventory.
+virt_meth_0x51ec20|virt_meth_0x51ec20_RemoveItem
+meth_0x51ec20|meth_0x51ec20_RemoveItem
+FUN_0051ec20|FUN_0051ec20_RemoveItem
+
+# slot 540 (0x4c3490): ResolveCombat override. Multi-target dispatch on
+# target-object class id (3=Char, 7=Container, 8, 0xc/0xd/0xe, 0x19/0x1a, ...)
+# routing to specialized resolvers. Matches player.h
+# `virtual int32_t ResolveCombat(PTActionBlock ab, int32_t bits)`.
+virt_meth_0x4c3490|virt_meth_0x4c3490_ResolveCombat
+meth_0x4c3490|meth_0x4c3490_ResolveCombat
+FUN_004c3490|FUN_004c3490_ResolveCombat
+
+# slot 544 (0x520150): DefaultRootState override returning constant string.
+# DAT_005e062c content is "walk" (verified). Player's default animation root
+# is walk; matches TCharacter::DefaultRootState concept.
+virt_meth_0x520150|virt_meth_0x520150_DefaultRootState
+meth_0x520150|meth_0x520150_DefaultRootState
+FUN_00520150|FUN_00520150_DefaultRootState
+
+# slot 548 (0x4c4860): CalcDamage helper. Takes (this, damage, type), calls
+# slot 0x2c8 (GetResistance) and slot 700 (Protection mod) with damage-type
+# branches — multiplies/divides damage by resistance/protection. NOTE: vtable
+# slot for this in TCharacter doesn't exist (TPlayer extends here). Used by
+# slot 556 (Damage) and slot 540 (ResolveCombat). Naming as CalcDamage to
+# distinguish from the void Damage() applier.
+virt_meth_0x4c4860|virt_meth_0x4c4860_CalcDamage
+meth_0x4c4860|meth_0x4c4860_CalcDamage
+FUN_004c4860|FUN_004c4860_CalcDamage
+
+# slot 552 (0x4c4950): ResolveAttack override (player). 3776-byte attack-flow
+# fn taking (this, target, atkInfo, ?, mask, atkBlock*). Counterpart of
+# TCharacter::ResolveAttack at 0x4c1bb0 already identified.
+virt_meth_0x4c4950|virt_meth_0x4c4950_ResolveAttack
+meth_0x4c4950|meth_0x4c4950_ResolveAttack
+FUN_004c4950|FUN_004c4950_ResolveAttack
+
+# slot 556 (0x4c5810): Damage override. Takes (this, damage, type, ...).
+# Calls CalcDamage (slot 137 = 0x4c4860) to adjust, then SetHealth(0) if
+# adjusted >= Health() else SetHealth(Health()-adjusted). Matches player.h
+# `virtual void Damage(int32_t damage, int32_t type = DAMAGE_UNDEFINED)`.
+virt_meth_0x4c5810|virt_meth_0x4c5810_Damage
+meth_0x4c5810|meth_0x4c5810_Damage
+FUN_004c5810|FUN_004c5810_Damage
+
+# slot 564 (0x4c9790): Pulse override. 856-byte fn called per-frame; references
+# animation roots "combatrun"/"handrun"/"bowrun" (player movement animations),
+# decrements timer fields 0x93/0x94, triggers footstep sounds. Matches
+# player.h `virtual void Pulse()`.
+virt_meth_0x4c9790|virt_meth_0x4c9790_Pulse
+meth_0x4c9790|meth_0x4c9790_Pulse
+FUN_004c9790|FUN_004c9790_Pulse
+
+# slot 568 (0x4cdcc0): empty stub (return;). With Pulse overridden, this is
+# the AI() no-op the source declares: `virtual void AI() { }`.
+virt_meth_0x4cdcc0|virt_meth_0x4cdcc0_AI
+meth_0x4cdcc0|meth_0x4cdcc0_AI
+FUN_004cdcc0|FUN_004cdcc0_AI
+
+# slot 472 (0x520630): MaxHealth override. Reads classdata field at +400+0x64
+# (classdata->healthmod), multiplies by Level()+stat, divides by 100. Matches
+# player.h MaxHealth() exactly: `Rules.healthperlevel * Level() *
+# (100 + classdata->healthmod + PlyrStatPcnt(PLRSTAT_CONS)) / 100`.
+virt_meth_0x520630|virt_meth_0x520630_MaxHealth
+meth_0x520630|meth_0x520630_MaxHealth
+FUN_00520630|FUN_00520630_MaxHealth
+
+# slot 480 (0x5206d0): MaxFatigue override. Same pattern as MaxHealth but uses
+# classdata field +0x68 (fatiguemod) and divides by 200 (the fatigue formula
+# in retail differs slightly from the source).
+virt_meth_0x5206d0|virt_meth_0x5206d0_MaxFatigue
+meth_0x5206d0|meth_0x5206d0_MaxFatigue
+FUN_005206d0|FUN_005206d0_MaxFatigue
+
+# slot 488 (0x520770): MaxMana override. Same pattern but classdata +0x6c
+# (manamod) and stat 0x26 (PLRSTAT_MIND). Matches player.h MaxMana().
+virt_meth_0x520770|virt_meth_0x520770_MaxMana
+meth_0x520770|meth_0x520770_MaxMana
+FUN_00520770|FUN_00520770_MaxMana
+
+# ---- TPlayer-only virtuals (slot >= 548) and instance methods ----
+
+# slot 744 (0x520860): StealthMod override. Reads body (0x2a8) and feet (0x2c8)
+# equipment ->GetStat("Stealth") (verified — ref to s_Stealth_005e2be8), adds
+# SkillPcnt(SK_STEALTH), classdata bonus. Matches player.h StealthMod() body
+# 1:1.
+virt_meth_0x520860|virt_meth_0x520860_StealthMod
+meth_0x520860|meth_0x520860_StealthMod
+FUN_00520860|FUN_00520860_StealthMod
+
+# slot 776 (0x51b3b0): GetBowRoot override. Returns "cbow" (combat-bow) or
+# "bow" string based on equipped ranged weapon's ammo type and class==0x17
+# (TBow). Matches player.h `virtual char *GetBowRoot(TObjectInstance* oi
+# = nullptr)`.
+virt_meth_0x51b3b0|virt_meth_0x51b3b0_GetBowRoot
+meth_0x51b3b0|meth_0x51b3b0_GetBowRoot
+FUN_0051b3b0|FUN_0051b3b0_GetBowRoot
+
+# slot 772 (0x51b340): GetCombatRoot override. Returns "hand"/"combat"/
+# "cstaff"/"cknife"/"combat" based on PrimeHand weapon type. Matches
+# player.h `virtual char *GetCombatRoot(TObjectInstance* oi = nullptr)`.
+virt_meth_0x51b340|virt_meth_0x51b340_GetCombatRoot
+meth_0x51b340|meth_0x51b340_GetCombatRoot
+FUN_0051b340|FUN_0051b340_GetCombatRoot
+
+# slot 780 (0x51b3f0): TPlayer-only torch-equip animation root selector.
+# Returns "torch" string when off-hand (field_0x2b8) carries class 6 (Torch),
+# else "walk". This is the L/R-Accessory animation root — call it
+# GetTorchRoot. Not present in shipped player.h.
+virt_meth_0x51b3f0|virt_meth_0x51b3f0_GetTorchRoot
+meth_0x51b3f0|meth_0x51b3f0_GetTorchRoot
+FUN_0051b3f0|FUN_0051b3f0_GetTorchRoot
+
+# 0x51b420: GetOnYerHog cheat. Toggles between body-type "Locke" (verified
+# string ref) and the hog model; flips field_0x300; uses "Hog"/"hog idle"/
+# "hog drive" anim names. Matches player.h `void GetOnYerHog()`.
+meth_0x51b420|meth_0x51b420_GetOnYerHog
+FUN_0051b420|FUN_0051b420_GetOnYerHog
+
+# 0x51e0a0: SavePlayerFile. CreateDirectoryA(<saves>/Chars), opens file,
+# writes "PLYR" magic 0x52594c50, version 0xf, then calls TPlayer::Save
+# (FUN_00472110). Standalone .chr export — distinct from sector save (slot
+# 356). High confidence — only fn in dump touching CreateDirectoryA + PLYR
+# magic.
+meth_0x51e0a0|meth_0x51e0a0_SavePlayerFile
+FUN_0051e0a0|FUN_0051e0a0_SavePlayerFile
+
+# slot 352 (0x51b960): Load override. Player serialization-in; reads version
+# byte, deserializes equipment + quickspells. Matches player.h
+# `virtual void Load(RTInputStream is, int32_t version, int32_t objversion)`.
+virt_meth_0x51b960|virt_meth_0x51b960_Load
+meth_0x51b960|meth_0x51b960_Load
+FUN_0051b960|FUN_0051b960_Load
+
+# slot 356 (0x51bdc0): Save override. Writes version 4 header, serializes
+# fields. Matches player.h `virtual void Save(RTOutputStream os)` and
+# ObjVersion()=4.
+virt_meth_0x51bdc0|virt_meth_0x51bdc0_Save
+meth_0x51bdc0|meth_0x51bdc0_Save
+FUN_0051bdc0|FUN_0051bdc0_Save
+
+# slot 788 (0x51d800): Exp getter. Reads field_0x370. Trivial accessor.
+virt_meth_0x51d800|virt_meth_0x51d800_GetExperience
+meth_0x51d800|meth_0x51d800_GetExperience
+FUN_0051d800|FUN_0051d800_GetExperience
+
+# slot 792 (0x51d810): Exp setter. Sets field_0x370 = val and field_0x374 =
+# val * 24 / 100 (cached "experience-derived stat", maybe level threshold).
+virt_meth_0x51d810|virt_meth_0x51d810_SetExperience
+meth_0x51d810|meth_0x51d810_SetExperience
+FUN_0051d810|FUN_0051d810_SetExperience
+
+# 0x51d680: SetPlayerState (sets field_0x36c bitfield, stops walk if motion
+# bit changes, updates HUD when this == singleton DAT_00667fcc=Player main).
+# Used to flip combat/stealth/cursor flags.
+meth_0x51d680|meth_0x51d680_SetPlayerState
+FUN_0051d680|FUN_0051d680_SetPlayerState
+
+# slot 360 (0x51bd20): SetPos override. Calls TCharacter slot 360
+# (FUN_00472310 — base SetPos), then propagates X/Y/Z to attached items (via
+# field_0x2b/0x2b8) using slot 0x1c4/0x1cc/0x1d4 setters. Player-specific
+# because attached items follow the player around.
+virt_meth_0x51bd20|virt_meth_0x51bd20_SetPos
+meth_0x51bd20|meth_0x51bd20_SetPos
+FUN_0051bd20|FUN_0051bd20_SetPos
+
+# slot 4 (0x4d61b0): DistanceTo override. Vec3 distance minus self radius;
+# additionally subtracts target radius when target is class 0xb (Player) or
+# 0xc (Monster). Matches the "between-character" distance refinement.
+virt_meth_0x4d61b0|virt_meth_0x4d61b0_DistanceTo
+meth_0x4d61b0|meth_0x4d61b0_DistanceTo
+FUN_004d61b0|FUN_004d61b0_DistanceTo
+
+# slot 12 (0x4d6e00): SetMoveTarget override. Trivial — sets fields 0xec/0xf0/
+# 0xf4/0xf8 from a Vec3 (move-target enabled flag + xyz). Player walking
+# toward a target.
+virt_meth_0x4d6e00|virt_meth_0x4d6e00_SetMoveTarget
+meth_0x4d6e00|meth_0x4d6e00_SetMoveTarget
+FUN_004d6e00|FUN_004d6e00_SetMoveTarget
+
+# slot 72 (0x5191e0): ResolveAttack 5-arg dispatch wrapper. Calls
+# FUN_004c4950 (= ResolveAttack at slot 552) with default args (0,0,0,0).
+# 2-arg overload of the same virtual.
+virt_meth_0x5191e0|virt_meth_0x5191e0_ResolveAttack2
+meth_0x5191e0|meth_0x5191e0_ResolveAttack2
+FUN_005191e0|FUN_005191e0_ResolveAttack2
+
+# slot 272 (0x518aa0): Animate override. 842-byte fn; first call is to
+# FUN_004c1bb0 (= TCharacter::ResolveAttack already identified). Reads
+# fields 0xdb/0xdd, runs per-frame animation/state advance with
+# multiplication. TCharacter slot 272 is also Animate (0x4db190). Strong.
+virt_meth_0x518aa0|virt_meth_0x518aa0_Animate
+meth_0x518aa0|meth_0x518aa0_Animate
+FUN_00518aa0|FUN_00518aa0_Animate
+
+# slot 528 (0x4c3260): Move override. Try/catch wrapped, takes (this, mask),
+# steps motion via slot 0x1b8/0x1bc/0x21c, polls 0x4c (motion ptr) for class
+# 0x17. Matches player.h `virtual uint32_t Move()`.
+virt_meth_0x4c3260|virt_meth_0x4c3260_Move
+meth_0x4c3260|meth_0x4c3260_Move
+FUN_004c3260|FUN_004c3260_Move

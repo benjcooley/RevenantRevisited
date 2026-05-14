@@ -6,7 +6,7 @@
 
 // Function at 00498eb0
 
-void cls_0x498eb0::meth_0x498eb0()
+void cls_0x498eb0::meth_0x498eb0_TSector_GetMaxScreenRect()
 
 {
   int *piVar1;
@@ -50,7 +50,7 @@ void cls_0x498eb0::meth_0x498eb0()
 
 // Function at 00498f60
 
-void cls_0x498eb0::meth_0x498f60()
+void cls_0x498eb0::meth_0x498f60_TSector_GetMaxMapRect()
 
 {
   int iVar1;

@@ -1,10 +1,10 @@
 // REVSYNC: candidate=TCharacter confidence=MEDIUM evidence=strings("bowrun","combat","combatrun","fakedead","handrun","sneak","combat_to_stunned","blood","skywalk","fakedead_to_walk","combat_to_fakedead") src-file=src/character.cpp date=2026-04-17 note="combat/animation state-name fingerprints strongly suggest TCharacter, plus 84 fields/106 methods is in the right order of magnitude; prior TCharacter suffix likely correct but not personally verified by method-body/src cross-check this session — keeping MEDIUM."
-// Decompiled methods and structure for class: cls_0x5a7b98
+// Decompiled methods and structure for class: cls_0x5a7b98_TCharacter
 
 /*
-/OOAnalyzer/cls_0x5a7b98
+/OOAnalyzer/cls_0x5a7b98_TCharacter
 pack(disabled)
-Structure cls_0x5a7b98 {
+Structure cls_0x5a7b98_TCharacter {
    0   cls_0x5a50e8   276   cls_0x5a50e8   "Component (member) class."
    276   dword   4   mbr_0x114   "Unsigned Double-Word (ddw, 4-bytes)"
    280   dword   4   mbr_0x118   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -98,7 +98,7 @@ Length: 1636 Alignment: 1
 
 // Function at 004111a0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4111a0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4111a0(cls_0x5a7b98_TCharacter *this)
 
 {
   cls_0x5a50e8__vftable_5a50e8 *pcVar1;
@@ -141,7 +141,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4111a0(cls_0x5a7b98 *this)
 
 // Function at 00429990
 
-undefined __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x429990(cls_0x5a7b98 *this)
+undefined __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x429990(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -182,7 +182,7 @@ undefined __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x429990(cls_0x5a7b98 *this)
 
 // Function at 0045f770
 
-bool __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x45f770(cls_0x5a7b98 *this)
+bool __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x45f770(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -199,7 +199,7 @@ bool __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x45f770(cls_0x5a7b98 *this)
 
 // Function at 0046e7d0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46e7d0(cls_0x5a7b98 *this,undefined4 param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x46e7d0(cls_0x5a7b98_TCharacter *this,undefined4 param_1)
 
 {
   FUN_0046e7f0(param_1);
@@ -210,7 +210,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46e7d0(cls_0x5a7b98 *this,undef
 
 // Function at 0046e8a0
 
-dword __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46e8a0(cls_0x5a7b98 *this)
+dword __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x46e8a0(cls_0x5a7b98_TCharacter *this)
 
 {
   return (this->cls_0x5a50e8).mbr_0x54;
@@ -220,7 +220,7 @@ dword __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46e8a0(cls_0x5a7b98 *this)
 
 // Function at 0046ea90
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46ea90(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x46ea90_AngleTo(cls_0x5a7b98_TCharacter *this)
 
 {
   int in_stack_00000004;
@@ -231,7 +231,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46ea90(cls_0x5a7b98 *this)
   local_4 = 0;
   local_c = *(int *)(in_stack_00000004 + 0x10) - (this->cls_0x5a50e8).mbr_0x10;
   local_8 = *(int *)(in_stack_00000004 + 0x14) - (this->cls_0x5a50e8).mbr_0x14;
-  FUN_0046dbe0(&local_c);
+  FUN_0046dbe0_AngleFromDelta(&local_c);
   return;
 }
 
@@ -239,7 +239,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46ea90(cls_0x5a7b98 *this)
 
 // Function at 0046ead0
 
-int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46ead0(cls_0x5a7b98 *this)
+int __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x46ead0(cls_0x5a7b98_TCharacter *this)
 
 {
   byte bVar1;
@@ -253,7 +253,7 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46ead0(cls_0x5a7b98 *this)
   local_c = *(int *)(in_stack_00000004 + 0x10) - (this->cls_0x5a50e8).mbr_0x10;
   bVar1 = (this->cls_0x5a50e8).mbr_0x36;
   local_8 = *(int *)(in_stack_00000004 + 0x14) - (this->cls_0x5a50e8).mbr_0x14;
-  iVar2 = FUN_0046dbe0(&local_c);
+  iVar2 = FUN_0046dbe0_AngleFromDelta(&local_c);
   iVar2 = iVar2 - (uint)bVar1;
   if (0x7f < iVar2) {
     return iVar2 + -0x100;
@@ -268,7 +268,7 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46ead0(cls_0x5a7b98 *this)
 
 // Function at 0046eb40
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46eb40(cls_0x5a7b98 *this,dword *param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x46eb40(cls_0x5a7b98_TCharacter *this,dword *param_1)
 
 {
   dword dVar1;
@@ -302,7 +302,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46eb40(cls_0x5a7b98 *this,dword
 
 // Function at 0046ff80
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46ff80(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x46ff80(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -345,7 +345,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x46ff80(cls_0x5a7b98 *this)
 
 // Function at 00470040
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470040(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x470040(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -358,7 +358,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470040(cls_0x5a7b98 *this
   iVar2 = CONCAT31(extraout_var,uVar1);
   while (iVar2 != 0) {
     uVar1 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477d50_368)(this);
-    this = (cls_0x5a7b98 *)CONCAT31(extraout_var_00,uVar1);
+    this = (cls_0x5a7b98_TCharacter *)CONCAT31(extraout_var_00,uVar1);
     uVar1 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477d50_368)(this);
     iVar2 = CONCAT31(extraout_var_01,uVar1);
   }
@@ -369,7 +369,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470040(cls_0x5a7b98 *this
 
 // Function at 00470110
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470110(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x470110(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -382,7 +382,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470110(cls_0x5a7b98 *this
   if (CONCAT31(extraout_var,uVar1) != 0) {
     do {
       uVar1 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477d50_368)(this);
-      this = (cls_0x5a7b98 *)CONCAT31(extraout_var_00,uVar1);
+      this = (cls_0x5a7b98_TCharacter *)CONCAT31(extraout_var_00,uVar1);
       uVar1 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477d50_368)(this);
     } while (CONCAT31(extraout_var_01,uVar1) != 0);
     return *(undefined4 *)(*(int *)&(this->cls_0x5a50e8).field_0x78 + in_stack_00000004 * 4);
@@ -394,7 +394,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470110(cls_0x5a7b98 *this
 
 // Function at 00470bc0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470bc0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x470bc0(cls_0x5a7b98_TCharacter *this)
 
 {
   byte bVar1;
@@ -404,7 +404,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470bc0(cls_0x5a7b98 *this)
   byte bVar5;
   int *in_stack_00000004;
   
-  dVar2 = FUN_0046dbe0();
+  dVar2 = FUN_0046dbe0_AngleFromDelta();
   (this->cls_0x5a50e8).mbr_0xb0 = dVar2;
   iVar3 = *in_stack_00000004;
   bVar5 = 0;
@@ -429,7 +429,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470bc0(cls_0x5a7b98 *this)
 
 // Function at 00470c30
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470c30(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x470c30(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -457,7 +457,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470c30(cls_0x5a7b98 *this)
 
 // Function at 00470f50
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470f50(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x470f50(cls_0x5a7b98_TCharacter *this)
 
 {
   byte bVar1;
@@ -500,7 +500,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x470f50(cls_0x5a7b98 *this)
 
 // Function at 00471b60
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x471b60(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x471b60(cls_0x5a7b98_TCharacter *this)
 
 {
   uint in_stack_00000004;
@@ -519,7 +519,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x471b60(cls_0x5a7b98 *this)
 
 // Function at 00473900
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x473900(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x473900(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -535,7 +535,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x473900(cls_0x5a7b98 *this
   iVar3 = *(int *)(dVar1 + 0x20);
   while( true ) {
     if ((psVar4 == (short *)0x0) || ((uint)(int)*psVar4 <= uVar5)) goto LAB_00473944;
-    iVar2 = FUN_0059a530(iVar3,in_stack_00000004);
+    iVar2 = FUN_0059a530_stricmp(iVar3,in_stack_00000004);
     if (iVar2 == 0) break;
     iVar3 = iVar3 + 0x50;
     uVar5 = uVar5 + 1;
@@ -553,7 +553,7 @@ LAB_00473944:
       return 0;
     }
     if ((uint)(int)*psVar4 <= uVar5) break;
-    iVar2 = FUN_0059a530(iVar3,in_stack_00000004);
+    iVar2 = FUN_0059a530_stricmp(iVar3,in_stack_00000004);
     if (iVar2 == 0) {
       if ((int)uVar5 < 0) {
         return 0;
@@ -571,7 +571,7 @@ LAB_00473944:
 // Function at 00473990
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5a7b98::meth_0x473990(cls_0x5a7b98 *this,undefined param_1,undefined4 param_2)
+OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x473990(cls_0x5a7b98_TCharacter *this,undefined param_1,undefined4 param_2)
 
 {
   int iVar1;
@@ -596,8 +596,8 @@ OOAnalyzer::cls_0x5a7b98::meth_0x473990(cls_0x5a7b98 *this,undefined param_1,und
 
 // Function at 004c16b0
 
-cls_0x5a7b98 * __thiscall
-OOAnalyzer::cls_0x5a7b98::cls_0x5a7b98(cls_0x5a7b98 *this,undefined4 param_1)
+cls_0x5a7b98_TCharacter * __thiscall
+OOAnalyzer::cls_0x5a7b98_TCharacter::cls_0x5a7b98_TCharacter(cls_0x5a7b98_TCharacter *this,undefined4 param_1)
 
 {
   uint uVar1;
@@ -638,7 +638,7 @@ OOAnalyzer::cls_0x5a7b98::cls_0x5a7b98(cls_0x5a7b98 *this,undefined4 param_1)
   local_4 = CONCAT31(local_4._1_3_,2);
   (this->cls_0x5a50e8).vftptr_0x0 = (cls_0x5a50e8__vftable_5a50e8 *)&PTR_virt_meth_0x4d6c00_005a7848
   ;
-  meth_0x4c18a0(this);
+  meth_0x4c18a0_TCharacter_ClearChar(this);
   ExceptionList = local_c;
   return this;
 }
@@ -647,7 +647,7 @@ OOAnalyzer::cls_0x5a7b98::cls_0x5a7b98(cls_0x5a7b98 *this,undefined4 param_1)
 
 // Function at 004c18a0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c18a0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c18a0_TCharacter_ClearChar(cls_0x5a7b98_TCharacter *this)
 
 {
   uint uVar1;
@@ -761,7 +761,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c18a0(cls_0x5a7b98 *this)
 
 // Function at 004c1af0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c1af0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c1af0(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined4 uVar1;
@@ -780,7 +780,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c1af0(cls_0x5a7b98 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c1bb0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c1bb0_ResolveAttack(cls_0x5a7b98_TCharacter *this)
 
 {
   uint *puVar1;
@@ -903,7 +903,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c1bb0(cls_0x5a7b98 *this)
   if (0x18 < (int)(*(int *)(DAT_00667fd0 + 0x48) - this->mbr_0x114)) {
     *(undefined4 *)&(this->cls_0x5a50e8).field_0xe4 = 0;
   }
-  iVar11 = FUN_004dab80(s_decapdeath_005df72c);
+  iVar11 = FUN_004dab80_TActionBlock_Is(s_decapdeath_005df72c);
   if ((((iVar11 != 0) &&
        (iVar11 = *(int *)&(this->cls_0x5a50e8).field_0xfc, (*(byte *)(iVar11 + 200) & 0x10) == 0))
       && (*(int *)(iVar11 + 0x164) != 0)) &&
@@ -922,13 +922,13 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c1bb0(cls_0x5a7b98 *this)
     local_30 = (this->cls_0x5a50e8).mbr_0x14;
     local_2c = (this->cls_0x5a50e8).mbr_0x18 + 0x4b;
     local_e = 0;
-    uVar12 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_40);
-    piVar13 = (int *)FUN_00452690(uVar12,0);
+    uVar12 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_40);
+    piVar13 = (int *)FUN_00452690_TMapPane_GetInstance(uVar12,0);
     if (piVar13 != (int *)0x0) {
       (**(code **)(*piVar13 + 0x200))(0x4b,(this->cls_0x5a50e8).mbr_0x36 + 0xa5,0x40,0x5b,5,1);
     }
   }
-  iVar11 = FUN_004dab80(s_combat_to_ripinhalfed_005df740);
+  iVar11 = FUN_004dab80_TActionBlock_Is(s_combat_to_ripinhalfed_005df740);
   if (((iVar11 != 0) &&
       (iVar11 = *(int *)&(this->cls_0x5a50e8).field_0xfc, (*(byte *)(iVar11 + 200) & 0x10) == 0)) &&
      ((*(int *)(iVar11 + 0x164) != 0 &&
@@ -953,14 +953,14 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c1bb0(cls_0x5a7b98 *this)
       local_34 = (this->cls_0x5a50e8).mbr_0x10;
       local_2c = (this->cls_0x5a50e8).mbr_0x18 + 0x69;
       local_e = 0;
-      uVar12 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_40);
-      piVar13 = (int *)FUN_00452690(uVar12,0);
+      uVar12 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_40);
+      piVar13 = (int *)FUN_00452690_TMapPane_GetInstance(uVar12,0);
       if (piVar13 != (int *)0x0) {
         (**(code **)(*piVar13 + 0x200))(0x69,(this->cls_0x5a50e8).mbr_0x36 + 0xa5,0x40,0x5b,5,1);
       }
     }
   }
-  iVar11 = FUN_004dab80(s_ripkilldeath_005df760);
+  iVar11 = FUN_004dab80_TActionBlock_Is(s_ripkilldeath_005df760);
   if ((((iVar11 != 0) &&
        (iVar11 = *(int *)&(this->cls_0x5a50e8).field_0xfc, (*(byte *)(iVar11 + 200) & 0x10) == 0))
       && (*(int *)(iVar11 + 0x164) != 0)) &&
@@ -981,26 +981,26 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c1bb0(cls_0x5a7b98 *this)
       local_30 = (this->cls_0x5a50e8).mbr_0x14;
       local_2c = (this->cls_0x5a50e8).mbr_0x18 + 0x82;
       local_e = 0;
-      uVar12 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_40);
-      piVar13 = (int *)FUN_00452690(uVar12,0);
+      uVar12 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_40);
+      piVar13 = (int *)FUN_00452690_TMapPane_GetInstance(uVar12,0);
       if (piVar13 != (int *)0x0) {
         (**(code **)(*piVar13 + 0x200))(0x82,(this->cls_0x5a50e8).mbr_0x36 + 0xa5,0x40,0x5b,5,1);
       }
       iVar11 = iVar11 + -1;
     } while (iVar11 != 0);
   }
-  iVar11 = FUN_004dab80(s_atkimpale_to_walk_005df778);
+  iVar11 = FUN_004dab80_TActionBlock_Is(s_atkimpale_to_walk_005df778);
   if ((iVar11 != 0) ||
-     ((iVar11 = FUN_004dab80(s_atkimpale_005df78c), iVar11 != 0 &&
+     ((iVar11 = FUN_004dab80_TActionBlock_Is(s_atkimpale_005df78c), iVar11 != 0 &&
       (*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb)))) {
     (this->cls_0x5a50e8).mbr_0x110 = (this->cls_0x5a50e8).mbr_0x110 & 0xffffff7f;
   }
-  if (((this->mbr_0x280 == 4) && (iVar11 = FUN_004dab80(s_impimpale_005df798), iVar11 != 0)) &&
+  if (((this->mbr_0x280 == 4) && (iVar11 = FUN_004dab80_TActionBlock_Is(s_impimpale_005df798), iVar11 != 0)) &&
      (DAT_00667fcc != 0)) {
     *(uint *)(DAT_00667fcc + 0x110) = *(uint *)(DAT_00667fcc + 0x110) | 0x20000;
   }
-  iVar11 = FUN_0059a530((this->cls_0x5a50e8).mbr_0x38,&DAT_005df7a4);
-  if (((iVar11 == 0) && (iVar11 = FUN_004dab80(s_walk_to_dead_005df7ac), iVar11 != 0)) &&
+  iVar11 = FUN_0059a530_stricmp((this->cls_0x5a50e8).mbr_0x38,&DAT_005df7a4);
+  if (((iVar11 == 0) && (iVar11 = FUN_004dab80_TActionBlock_Is(s_walk_to_dead_005df7ac), iVar11 != 0)) &&
      ((int)(short)(this->cls_0x5a50e8).mbr_0x5c % 5 == 0)) {
     puVar22 = &local_40;
     for (iVar11 = 0xd; iVar11 != 0; iVar11 = iVar11 + -1) {
@@ -1015,13 +1015,13 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c1bb0(cls_0x5a7b98 *this)
     local_30 = (this->cls_0x5a50e8).mbr_0x14;
     local_2c = (this->cls_0x5a50e8).mbr_0x18 + 0x28;
     local_e = 0;
-    uVar12 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_40);
-    piVar13 = (int *)FUN_00452690(uVar12,0);
+    uVar12 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_40);
+    piVar13 = (int *)FUN_00452690_TMapPane_GetInstance(uVar12,0);
     if (piVar13 != (int *)0x0) {
       (**(code **)(*piVar13 + 0x200))(0x28,(this->cls_0x5a50e8).mbr_0x36 + 0x80,0x20,0x20,5,1);
     }
   }
-  meth_0x4d57a0(this);
+  meth_0x4d57a0_UpdateFade(this);
   uVar7 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(this);
   uVar20 = (this->cls_0x5a50e8).mbr_0x110;
   if (CONCAT31(extraout_var,uVar7) == 0 || extraout_var < 0) {
@@ -1050,7 +1050,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c1bb0(cls_0x5a7b98 *this)
       meth_0x4d6570(this);
     }
 LAB_004c21e9:
-    if (((this == (cls_0x5a7b98 *)0x0) ||
+    if (((this == (cls_0x5a7b98_TCharacter *)0x0) ||
         (piVar13 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar13 == (int *)0x0)) ||
        (*piVar13 != 0x13)) {
       dVar21 = (this->cls_0x5a50e8).mbr_0xd8;
@@ -1179,7 +1179,7 @@ LAB_004c21e9:
           FUN_004830f0(pcVar14);
         }
       }
-      meth_0x4ce1b0(this,&local_30);
+      meth_0x4ce1b0_BuildActionName(this,&local_30);
       pdVar19 = &local_30;
       uVar12 = 0;
       cVar8 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
@@ -1215,7 +1215,7 @@ LAB_004c21e9:
       else {
         pcVar14 = cls_0x4da9f0::cls_0x4da9f0(local_40,&pcStack_38);
       }
-      if (((this == (cls_0x5a7b98 *)0x0) ||
+      if (((this == (cls_0x5a7b98_TCharacter *)0x0) ||
           (piVar13 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar13 == (int *)0x0)) ||
          (*piVar13 != 0x13)) {
         (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_0046e8b0_40)(pcVar14,0,0);
@@ -1258,12 +1258,12 @@ LAB_004c21e9:
   }
   dVar21 = this->mbr_0x160;
   if (((dVar21 != 0) &&
-      (iVar11 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0),
+      (iVar11 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0),
       (int)(*(int *)(dVar21 + 0xc4) + this->mbr_0x164) <= iVar11)) &&
      ((uVar20 = *(uint *)(dVar21 + 0x24), (uVar20 & 0x8000) != 0 ||
       (((uVar20 & 0x4000) != 0 && (0 < (int)this->mbr_0x16c)))))) {
     if (((uVar20 & 0x4000) == 0) ||
-       (iVar11 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0),
+       (iVar11 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0),
        (int)(iVar11 - this->mbr_0x164) < *(int *)(this->mbr_0x160 + 0xc0))) {
       iVar11 = 0;
       piVar13 = (int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0xcc);
@@ -1273,12 +1273,12 @@ LAB_004c21e9:
           if (iVar17 == 0) {
             iVar17 = piVar13[5];
           }
-          iVar17 = FUN_0059a530(this->mbr_0x160,iVar17 + 0x98);
+          iVar17 = FUN_0059a530_stricmp(this->mbr_0x160,iVar17 + 0x98);
           if (iVar17 == 0) {
             if ((*(uint *)(this->mbr_0x160 + 0x24) & 0x4000) != 0) {
               this->mbr_0x16c = this->mbr_0x16c - 1;
             }
-            meth_0x4d2a60(this);
+            meth_0x4d2a60_SpecificAttack(this);
             goto LAB_004c25d5;
           }
           iVar11 = iVar11 + 1;
@@ -1292,16 +1292,16 @@ LAB_004c25d5:
   if (((*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) &&
       ((piVar13 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar13 == (int *)0x0 ||
        ((((*piVar13 != 3 ||
-          ((iVar11 = FUN_004dab80(s_combatrun_005e0618), iVar11 == 0 &&
-           (iVar11 = FUN_004dab80(s_handrun_005e0610), iVar11 == 0)))) &&
+          ((iVar11 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar11 == 0 &&
+           (iVar11 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar11 == 0)))) &&
          ((piVar13 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar13 == (int *)0x0 ||
-          ((*piVar13 != 0x19 || (iVar11 = FUN_004dab80(s_bowrun_005e0608), iVar11 == 0)))))) &&
-        (iVar11 = FUN_004dab80(&DAT_005e0604), iVar11 == 0)))))) &&
-     ((((this->cls_0x5a50e8).mbr_0xe0 == 0 || (iVar11 = FUN_004dab80(s_sneak_005c618c), iVar11 == 0)
+          ((*piVar13 != 0x19 || (iVar11 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar11 == 0)))))) &&
+        (iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar11 == 0)))))) &&
+     ((((this->cls_0x5a50e8).mbr_0xe0 == 0 || (iVar11 = FUN_004dab80_TActionBlock_Is(s_sneak_005c618c), iVar11 == 0)
        ) && (uVar20 = *(uint *)&(this->cls_0x5a50e8).field_0x40,
-            uVar18 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0),
+            uVar18 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0),
             ((uVar18 ^ uVar20) & 0x1f) == 0)))) {
-    iVar11 = meth_0x4cd690(this,&pcStack_48,1,0xff,(this->cls_0x5a50e8).mbr_0x36,0x20);
+    iVar11 = meth_0x4cd690_FindCharacters(this,&pcStack_48,1,0xff,(this->cls_0x5a50e8).mbr_0x36,0x20);
     pcVar26 = pcStack_48;
     if ((iVar11 < 1) || (pcStack_48 == (char *)0x0)) {
       if (*(int *)&(this->cls_0x5a50e8).field_0xe8 == 0) {
@@ -1309,13 +1309,13 @@ LAB_004c25d5:
       }
     }
     else {
-      iVar11 = meth_0x4cd990(this);
+      iVar11 = meth_0x4cd990_IsValidTarget(this);
       if (((iVar11 != 0) &&
           ((piVar13 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar13 == (int *)0x0 ||
            ((*piVar13 != 3 &&
             ((piVar13 == (int *)0x0 ||
              ((*piVar13 != 0x19 &&
-              ((piVar13 == (int *)0x0 || (iVar11 = FUN_004dab80(s_sneak_005c618c), iVar11 == 0))))))
+              ((piVar13 == (int *)0x0 || (iVar11 = FUN_004dab80_TActionBlock_Is(s_sneak_005c618c), iVar11 == 0))))))
             )))))) &&
          ((piVar13 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar13 == (int *)0x0 ||
           (*piVar13 != 0x19)))) {
@@ -1341,21 +1341,21 @@ LAB_004c25d5:
           if (CONCAT31(extraout_var_05,uVar7) <
               *(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0x158)) {
             bVar3 = (this->cls_0x5a50e8).mbr_0x36;
-            uVar12 = meth_0x46ea90(this);
+            uVar12 = meth_0x46ea90_AngleTo(this);
             iVar11 = FUN_0046ded0(bVar3,uVar12);
             if (iVar11 < 0) {
               bVar3 = (this->cls_0x5a50e8).mbr_0x36;
-              uVar12 = meth_0x46ea90(this);
+              uVar12 = meth_0x46ea90_AngleTo(this);
               iVar11 = FUN_0046ded0(bVar3,uVar12);
               iVar11 = -iVar11;
             }
             else {
               bVar3 = (this->cls_0x5a50e8).mbr_0x36;
-              uVar12 = meth_0x46ea90(this);
+              uVar12 = meth_0x46ea90_AngleTo(this);
               iVar11 = FUN_0046ded0(bVar3,uVar12);
             }
             if ((iVar11 < 0x30) && ((DAT_0065d0d0 != 0 || (DAT_0065d0c8 != 0)))) {
-              meth_0x4d3b90(this);
+              meth_0x4d3b90_BeginFighting(this);
             }
           }
         }
@@ -1365,8 +1365,8 @@ LAB_004c25d5:
 LAB_004c2867:
   if (((this->cls_0x5a50e8).mbr_0x110 & 0x20000) != 0) {
     if (((*(int *)&(this->cls_0x5a50e8).field_0xdc == 0) ||
-        (iVar11 = FUN_004dab80(&DAT_005df7d4), iVar11 == 0)) ||
-       (((this->cls_0x5a50e8).mbr_0xe0 == 0 || (iVar11 = FUN_004dab80(&DAT_005df7dc), iVar11 == 0)))
+        (iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005df7d4), iVar11 == 0)) ||
+       (((this->cls_0x5a50e8).mbr_0xe0 == 0 || (iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005df7dc), iVar11 == 0)))
        ) {
       dVar21 = (this->cls_0x5a50e8).mbr_0xe0;
       *(uint *)(dVar21 + 0x60) = *(uint *)(dVar21 + 0x60) & 0xffffffef;
@@ -1552,11 +1552,11 @@ LAB_004c2a8d:
     this->mbr_0x140 = dVar16;
     if (((piVar13 == (int *)0x0) ||
         ((((*piVar13 != 3 ||
-           ((iVar11 = FUN_004dab80(s_combatrun_005e0618), iVar11 == 0 &&
-            (iVar11 = FUN_004dab80(s_handrun_005e0610), iVar11 == 0)))) &&
+           ((iVar11 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar11 == 0 &&
+            (iVar11 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar11 == 0)))) &&
           ((piVar13 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar13 == (int *)0x0 ||
-           ((*piVar13 != 0x19 || (iVar11 = FUN_004dab80(s_bowrun_005e0608), iVar11 == 0)))))) &&
-         (iVar11 = FUN_004dab80(&DAT_005e0604), iVar11 == 0)))) ||
+           ((*piVar13 != 0x19 || (iVar11 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar11 == 0)))))) &&
+         (iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar11 == 0)))) ||
        ((this->cls_0x5a50e8).mbr_0xd8 == (this->cls_0x5a50e8).mbr_0xe0)) {
       pcVar6 = (this->cls_0x5a50e8).vftptr_0x0;
       this->mbr_0x144 = 0xffffffff;
@@ -1660,7 +1660,7 @@ LAB_004c2a8d:
       this->mbr_0x15c = dVar16;
     }
 LAB_004c30dd:
-    if (this != (cls_0x5a7b98 *)0x0) {
+    if (this != (cls_0x5a7b98_TCharacter *)0x0) {
       piVar13 = (int *)(this->cls_0x5a50e8).mbr_0xd8;
       if ((((piVar13 != (int *)0x0) && (*piVar13 == 0xb)) && (0 < (int)this->mbr_0x188)) &&
          (dVar21 = this->mbr_0x188 - 1, this->mbr_0x188 = dVar21, dVar21 == 0)) {
@@ -1696,7 +1696,7 @@ LAB_004c30dd:
     }
     (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e20_436)(this);
 LAB_004c3131:
-    if (this != (cls_0x5a7b98 *)0x0) {
+    if (this != (cls_0x5a7b98_TCharacter *)0x0) {
       piVar13 = (int *)(this->cls_0x5a50e8).mbr_0xd8;
       if (((piVar13 != (int *)0x0) && (*piVar13 == 0x15)) &&
          ((0 < (int)this->mbr_0x1bc &&
@@ -1714,7 +1714,7 @@ LAB_004c3131:
         pcVar6 = (this->cls_0x5a50e8).vftptr_0x0;
         *(uint *)(dVar21 + 0x60) = *(uint *)(dVar21 + 0x60) | 0x20;
         (*pcVar6[1].FUN_0046f250_24)(dVar21);
-        meth_0x4d3b90(this);
+        meth_0x4d3b90_BeginFighting(this);
       }
     }
   }
@@ -1731,16 +1731,16 @@ LAB_004c31ed:
   if (((sVar5 != 0xb) &&
       (uVar7 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477df0_424)(this),
       CONCAT31(extraout_var_37,uVar7) != 0)) &&
-     (iVar11 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0),
+     (iVar11 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0),
      (int)(this->mbr_0x26c + 0x78) < iVar11)) {
-    if (this == (cls_0x5a7b98 *)0x0) {
+    if (this == (cls_0x5a7b98_TCharacter *)0x0) {
       uVar12 = 0;
     }
     else {
       uVar12 = *(undefined4 *)&(this->cls_0x5a50e8).field_0x40;
     }
     cls_0x57d9d0::meth_0x583f60((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,0,0x4c,uVar12,3);
-    dVar21 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0);
+    dVar21 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
     this->mbr_0x26c = dVar21;
   }
   ExceptionList = local_c;
@@ -1751,7 +1751,7 @@ LAB_004c31ed:
 
 // Function at 004c3490
 
-uint __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c3490(cls_0x5a7b98 *this)
+uint __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c3490_ResolveAction(cls_0x5a7b98_TCharacter *this)
 
 {
   byte bVar1;
@@ -1767,11 +1767,11 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c3490(cls_0x5a7b98 *this)
   if ((*piVar4 == 2) ||
      (((piVar4 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar4 != (int *)0x0 &&
        ((((*piVar4 == 3 &&
-          ((iVar3 = FUN_004dab80(s_combatrun_005e0618), iVar3 != 0 ||
-           (iVar3 = FUN_004dab80(s_handrun_005e0610), iVar3 != 0)))) ||
+          ((iVar3 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar3 != 0 ||
+           (iVar3 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar3 != 0)))) ||
          ((piVar4 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar4 != (int *)0x0 &&
-          ((*piVar4 == 0x19 && (iVar3 = FUN_004dab80(s_bowrun_005e0608), iVar3 != 0)))))) ||
-        (iVar3 = FUN_004dab80(&DAT_005e0604), iVar3 != 0)))) &&
+          ((*piVar4 == 0x19 && (iVar3 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar3 != 0)))))) ||
+        (iVar3 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar3 != 0)))) &&
       ((piVar4 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar4 != (int *)0x0 &&
        (((iVar3 = *piVar4, iVar3 == 2 || (iVar3 == 4)) || (iVar3 == 0x1a)))))))) {
     bVar1 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_0046f160_300)(piVar4);
@@ -1833,7 +1833,7 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c3490(cls_0x5a7b98 *this)
 
 // Function at 004c36c0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c36c0(cls_0x5a7b98 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c36c0(cls_0x5a7b98_TCharacter *this,int param_1)
 
 {
   int *piVar1;
@@ -1858,7 +1858,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c36c0(cls_0x5a7b98 *this,
     }
     if (pvVar4 == in_stack_00000008) {
 LAB_004c37e3:
-      meth_0x4d4790(this);
+      meth_0x4d4790_SetFighting(this);
     }
   }
   else if ((param_1 == 2) &&
@@ -1898,7 +1898,7 @@ LAB_004c3815:
       this->mbr_0x1b8 = 0;
     }
   }
-  virt_meth_0x4dbc70(this,param_1);
+  virt_meth_0x4dbc70_Notify(this,param_1);
   if (param_1 == 1) {
     if ((void *)this->mbr_0x288 == in_stack_00000008) {
 LAB_004c3856:
@@ -2003,8 +2003,8 @@ LAB_004c39b2:
 // Function at 004c39d0
 
 uint __thiscall
-OOAnalyzer::cls_0x5a7b98::meth_0x4c39d0
-          (cls_0x5a7b98 *this,int param_1,undefined4 param_2,uint param_3,int *param_4)
+OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c39d0_FindClearPath
+          (cls_0x5a7b98_TCharacter *this,int param_1,undefined4 param_2,uint param_3,int *param_4)
 
 {
   word wVar1;
@@ -2043,13 +2043,13 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4c39d0
     wVar1 = (this->cls_0x5a50e8).mbr_0xe;
     piVar9 = piVar5;
     uVar2 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477780_104)(this);
-    FUN_004530a0(param_2,wVar1,uVar2,ppiVar8,piVar9,puVar10);
+    FUN_004530a0_GetWalkHeightRadius(param_2,wVar1,uVar2,ppiVar8,piVar9,puVar10);
     if (local_14 != 0) {
       return 1;
     }
   }
   else {
-    iVar3 = FUN_00452e10(param_2,(this->cls_0x5a50e8).mbr_0xe,0);
+    iVar3 = FUN_00452e10_GetWalkHeight(param_2,(this->cls_0x5a50e8).mbr_0xe,0);
     *piVar5 = iVar3;
     param_4 = (int *)0x0;
   }
@@ -2085,7 +2085,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4c39d0
            (this == DAT_00667fcc)))))) {
         wVar1 = (this->cls_0x5a50e8).mbr_0xe;
         uVar2 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477780_104)(this);
-        piVar5 = (int *)FUN_004d4db0(this,param_2,wVar1,uVar2);
+        piVar5 = (int *)FUN_004d4db0_FindCharInLine(this,param_2,wVar1,uVar2);
         *ppiVar7 = piVar5;
         if (piVar5 != (int *)0x0) {
           iStack_c = piVar5[4];
@@ -2093,7 +2093,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4c39d0
           iStack_4 = piVar5[6];
           iVar3 = (**(code **)(*piVar5 + 600))();
           uVar2 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477780_104)(this);
-          iVar6 = FUN_0046de60(param_1,&iStack_c);
+          iVar6 = FUN_0046de60_Distance2D(param_1,&iStack_c);
           return (uint)(iVar3 + CONCAT31(extraout_var_00,uVar2) <= iVar6);
         }
       }
@@ -2107,7 +2107,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4c39d0
 
 // Function at 004c3bc0
 
-uint __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c3bc0(cls_0x5a7b98 *this)
+uint __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c3bc0_MoveStep(cls_0x5a7b98_TCharacter *this)
 
 {
   dword *pdVar1;
@@ -2168,7 +2168,7 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c3bc0(cls_0x5a7b98 *this)
   uVar11 = (uint)(this->cls_0x5a50e8).mbr_0xe;
   uVar14 = 0;
   pdVar13 = pdVar1;
-  dVar6 = FUN_00452e10(pdVar1,uVar11,0);
+  dVar6 = FUN_00452e10_GetWalkHeight(pdVar1,uVar11,0);
   iVar12 = (this->cls_0x5a50e8).mbr_0x18 - dVar6;
   if (iVar12 < -0x10) {
     (this->cls_0x5a50e8).mbr_0x18 = dVar6;
@@ -2197,48 +2197,48 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c3bc0(cls_0x5a7b98 *this)
   if (*(int *)&(this->cls_0x5a50e8).field_0xec == 0) {
     iVar12 = *(int *)&(this->cls_0x5a50e8).field_0xfc;
     iVar9 = *(int *)(iVar12 + 0x1f8);
-    if (((iVar9 < 1) || (this == (cls_0x5a7b98 *)0x0)) ||
+    if (((iVar9 < 1) || (this == (cls_0x5a7b98_TCharacter *)0x0)) ||
        ((piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar2 == (int *)0x0 ||
         ((*piVar2 != 4 || ((piVar2[0x18] & 0x200U) != 0)))))) {
       if ((0 < *(int *)(iVar12 + 0x1ec)) &&
-         ((((this != (cls_0x5a7b98 *)0x0 &&
+         ((((this != (cls_0x5a7b98_TCharacter *)0x0 &&
             (piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar2 != (int *)0x0)) && (*piVar2 == 2)
            ) && ((piVar2[0x18] & 0x200U) == 0)))) {
         uVar5 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_00470ca0_284)(0);
-        iVar12 = FUN_004dab80(uVar5);
+        iVar12 = FUN_004dab80_TActionBlock_Is(uVar5);
         if (iVar12 != 0) {
-          FUN_0046db20((this->cls_0x5a50e8).mbr_0xb0,
+          FUN_0046db20_ConvertToVector((this->cls_0x5a50e8).mbr_0xb0,
                        *(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0x1ec) << 0x10,&local_54,
                        0,pdVar13,uVar11,uVar14);
           goto LAB_004c3eaf;
         }
       }
       if (((*(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0x1ec) < 1) ||
-          (this == (cls_0x5a7b98 *)0x0)) ||
+          (this == (cls_0x5a7b98_TCharacter *)0x0)) ||
          (((piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar2 == (int *)0x0 ||
            ((*piVar2 != 2 || ((piVar2[0x18] & 0x200U) != 0)))) ||
-          (iVar12 = FUN_004dab80(s_sneak_005df804), iVar12 == 0)))) {
+          (iVar12 = FUN_004dab80_TActionBlock_Is(s_sneak_005df804), iVar12 == 0)))) {
         if ((((*(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0x1f0) < 1) ||
-             (this == (cls_0x5a7b98 *)0x0)) ||
+             (this == (cls_0x5a7b98_TCharacter *)0x0)) ||
             (piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar2 == (int *)0x0)) ||
            (((*piVar2 != 2 || ((piVar2[0x18] & 0x200U) != 0)) ||
-            (iVar12 = FUN_004dab80(&DAT_005df80c), iVar12 == 0)))) {
+            (iVar12 = FUN_004dab80_TActionBlock_Is(&DAT_005df80c), iVar12 == 0)))) {
           meth_0x470c30(this);
         }
         else {
-          FUN_0046db20((this->cls_0x5a50e8).mbr_0xb0,
+          FUN_0046db20_ConvertToVector((this->cls_0x5a50e8).mbr_0xb0,
                        *(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0x1f0) << 0x10,&local_54,
                        0);
         }
       }
       else {
-        FUN_0046db20((this->cls_0x5a50e8).mbr_0xb0,
+        FUN_0046db20_ConvertToVector((this->cls_0x5a50e8).mbr_0xb0,
                      *(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 500) << 0x10,&local_54,0,
                      pdVar13,uVar11,uVar14);
       }
     }
     else {
-      FUN_0046db20((this->cls_0x5a50e8).mbr_0xb0,iVar9 << 0x10,&local_54,0,pdVar13,uVar11,uVar14);
+      FUN_0046db20_ConvertToVector((this->cls_0x5a50e8).mbr_0xb0,iVar9 << 0x10,&local_54,0,pdVar13,uVar11,uVar14);
     }
 LAB_004c3eaf:
     if (((local_54 == 0) && (local_50 == 0)) &&
@@ -2410,7 +2410,7 @@ LAB_004c405d:
         local_94 = local_94 + iVar12;
         local_68 = local_80 + iVar12 * -0x10000;
       }
-      iVar12 = meth_0x4c39d0(this,pdVar1,&stack0xffffff64,unaff_ESI,&local_30);
+      iVar12 = meth_0x4c39d0_FindClearPath(this,pdVar1,&stack0xffffff64,unaff_ESI,&local_30);
       if (iVar12 == 0) {
         this->mbr_0x11c = 0xffffffff;
         (this->cls_0x5a50e8).mbr_0x24 = 0;
@@ -2429,7 +2429,7 @@ LAB_004c405d:
       }
       else {
         uVar11 = unaff_ESI | 2;
-        meth_0x4c39d0(this,pdVar1,pdVar1,uVar11,local_10);
+        meth_0x4c39d0_FindClearPath(this,pdVar1,pdVar1,uVar11,local_10);
         if ((local_38 != 0) && (local_34 != 0)) {
           uVar11 = unaff_ESI & 0xfffffffd;
         }
@@ -2457,11 +2457,11 @@ LAB_004c405d:
             iVar12 = 2;
             dVar8 = *local_8c;
             do {
-              FUN_0046db20(dVar8 + (this->cls_0x5a50e8).mbr_0xb0 & 0xff,iVar12,&local_1c,0);
+              FUN_0046db20_ConvertToVector(dVar8 + (this->cls_0x5a50e8).mbr_0xb0 & 0xff,iVar12,&local_1c,0);
               local_5c = (this->cls_0x5a50e8).mbr_0x18 + local_14;
               local_60 = (this->cls_0x5a50e8).mbr_0x14 + local_18;
               local_64 = *pdVar1 + local_1c;
-              iVar9 = meth_0x4c39d0(this,pdVar1,&local_64,0,0);
+              iVar9 = meth_0x4c39d0_FindClearPath(this,pdVar1,&local_64,0,0);
               if (iVar9 != 0) break;
               if (local_58 < iVar12) {
                 this->mbr_0x11c = dVar8;
@@ -2482,7 +2482,7 @@ LAB_004c405d:
           }
           else {
             local_94 = local_40;
-            iVar12 = meth_0x4c39d0(this,pdVar1,&stack0xffffff64,0,0);
+            iVar12 = meth_0x4c39d0_FindClearPath(this,pdVar1,&stack0xffffff64,0,0);
             if (iVar12 == 0) {
               uVar11 = uVar11 & 0xfffffffd;
               bVar3 = true;
@@ -2517,9 +2517,9 @@ LAB_004c405d:
       *local_74 = local_70;
       (this->cls_0x5a50e8).mbr_0x2c = local_6c;
       (this->cls_0x5a50e8).mbr_0x30 = local_68;
-      iVar12 = FUN_00452e10(pdVar1,(this->cls_0x5a50e8).mbr_0xe,0);
+      iVar12 = FUN_00452e10_GetWalkHeight(pdVar1,(this->cls_0x5a50e8).mbr_0xe,0);
       if ((int)local_94 < iVar12) {
-        local_94 = FUN_00452e10(pdVar1,(this->cls_0x5a50e8).mbr_0xe,0);
+        local_94 = FUN_00452e10_GetWalkHeight(pdVar1,(this->cls_0x5a50e8).mbr_0xe,0);
       }
       if (((dVar7 != *pdVar1) || (dVar6 != (this->cls_0x5a50e8).mbr_0x14)) ||
          (local_94 != (this->cls_0x5a50e8).mbr_0x18)) {
@@ -2536,7 +2536,7 @@ LAB_004c405d:
 
 // Function at 004c46d0
 
-uint __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c46d0(cls_0x5a7b98 *this)
+uint __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c46d0_Move(cls_0x5a7b98_TCharacter *this)
 
 {
   uint *puVar1;
@@ -2554,7 +2554,7 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c46d0(cls_0x5a7b98 *this)
   }
   iVar4 = 10;
   while( true ) {
-    uVar3 = meth_0x4c3bc0(this);
+    uVar3 = meth_0x4c3bc0_MoveStep(this);
     iVar4 = iVar4 + -1;
     if (*(int *)&(this->cls_0x5a50e8).field_0xec == 0) break;
     if (((((this->cls_0x5a50e8).mbr_0x10 == *(dword *)&(this->cls_0x5a50e8).field_0xf0) &&
@@ -2584,7 +2584,7 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c46d0(cls_0x5a7b98 *this)
 // Function at 004c47d0
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c47d0(cls_0x5a7b98 *this,undefined param_1)
+OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c47d0(cls_0x5a7b98_TCharacter *this,undefined param_1)
 
 {
   undefined3 in_stack_00000005;
@@ -2634,7 +2634,7 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c47d0(cls_0x5a7b98 *this,undefined param_
 
 // Function at 004c4860
 
-int __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c4860(cls_0x5a7b98 *this,int param_1)
+int __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c4860_CalculateDamage(cls_0x5a7b98_TCharacter *this,int param_1)
 
 {
   undefined uVar1;
@@ -2686,7 +2686,7 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c4860(cls_0x5a7b98 *this,i
 
 /* WARNING: Type propagation algorithm not settling */
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c4950(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c4950_ResolveAttack(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
@@ -2794,7 +2794,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c4950(cls_0x5a7b98 *this)
   }
   else {
 LAB_004c49ec:
-    if ((in_stack_00000014 != (int *)0x0) && (iVar8 = meth_0x4c89c0(this), iVar8 == 0)) {
+    if ((in_stack_00000014 != (int *)0x0) && (iVar8 = meth_0x4c89c0_IsEnemy(this), iVar8 == 0)) {
       ExceptionList = pvStack_14;
       return;
     }
@@ -2869,7 +2869,7 @@ LAB_004c4a54:
   else {
 LAB_004c4c20:
     if (puVar18 != (undefined *)0x0) {
-      cls_0x5b8e94::virt_meth_0x46e970((cls_0x5b8e94 *)this,puVar18);
+      cls_0x5b8e94_TObjectInstance::virt_meth_0x46e970_Animate((cls_0x5b8e94_TObjectInstance *)this,puVar18);
     }
   }
   piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
@@ -2877,7 +2877,7 @@ LAB_004c4c20:
   uVar25 = 0;
   if ((((piVar2 != (int *)0x0) && (*piVar2 == 3)) || ((piVar2 != (int *)0x0 && (*piVar2 == 0x19))))
      && (piVar2[0x11] != 0)) {
-    iVar8 = meth_0x46ea90(this);
+    iVar8 = meth_0x46ea90_AngleTo(this);
     if (iVar8 < 0x20) {
       if (0x5f < iVar8) goto LAB_004c4c96;
       if (iVar8 < 0xa0) goto LAB_004c4cbd;
@@ -2951,7 +2951,7 @@ LAB_004c4cbd:
           }
           uVar5 = (*pcVar4[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
           if (CONCAT31(extraout_var_11,uVar5) == 0) {
-            meth_0x4ce1b0(this,&pdStack_94);
+            meth_0x4ce1b0_BuildActionName(this,&pdStack_94);
           }
           uVar25 = pdVar26[9];
           if (((((uVar25 & unaff_EDI) == unaff_EDI) && ((uVar25 & 4) != 0)) &&
@@ -2994,10 +2994,10 @@ LAB_004c4cbd:
       else {
         cStack_8c = '\0';
 LAB_004c5069:
-        meth_0x4ce1b0(this,&cStack_8c);
+        meth_0x4ce1b0_BuildActionName(this,&cStack_8c);
         uVar5 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
         if (CONCAT31(extraout_var_18,uVar5) == 0) {
-          meth_0x4ce1b0(this,auStack_50);
+          meth_0x4ce1b0_BuildActionName(this,auStack_50);
           uVar25 = 0xffffffff;
           pcVar21 = (char *)((this->cls_0x5a50e8).mbr_0xe0 + 4);
           do {
@@ -3199,7 +3199,7 @@ LAB_004c4dd7:
     }
 LAB_004c4df0:
     if (in_stack_0000000c != 0) {
-      dVar10 = meth_0x46ea90(this);
+      dVar10 = meth_0x46ea90_AngleTo(this);
       (this->cls_0x5a50e8).mbr_0x36 = (byte)dVar10;
       (this->cls_0x5a50e8).mbr_0xb0 = dVar10;
     }
@@ -3221,7 +3221,7 @@ LAB_004c4df0:
       }
       if ((((*(int *)(dVar10 + 0x44) != 0) && (pdVar26 != (dword *)0x0)) && (pdVar26[0x15] == 0)) &&
          ((pdVar26[9] & 0x100) == 0)) {
-        dVar10 = meth_0x46ea90(this);
+        dVar10 = meth_0x46ea90_AngleTo(this);
         uVar25 = pdVar26[9];
         if ((uVar25 & 0x200) == 0) {
           if ((uVar25 & 0x400) != 0) {
@@ -3257,7 +3257,7 @@ LAB_004c524d:
          (((*(uint *)(in_stack_00000008->mbr_0x48 + 0x24) & 0x2000000) == 0 &&
           ((*(byte *)(in_stack_00000008->mbr_0x4c + 0x24) & 0x80) == 0)))) {
         cStack_8c = '\0';
-        meth_0x4ce1b0(this,&cStack_8c);
+        meth_0x4ce1b0_BuildActionName(this,&cStack_8c);
         cVar6 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
         if (CONCAT31(extraout_var_22,cVar6) == 0) {
           uVar25 = 0xffffffff;
@@ -3401,7 +3401,7 @@ LAB_004c5354:
       }
       if ((((dVar10 != 0) && (pdVar26 != (dword *)0x0)) && (pdVar26[0x15] == 0)) &&
          ((pdVar26[9] & 0x100) == 0)) {
-        dVar10 = meth_0x46ea90(this);
+        dVar10 = meth_0x46ea90_AngleTo(this);
         uVar25 = pdVar26[9];
         if ((uVar25 & 0x200) == 0) {
           if ((uVar25 & 0x400) != 0) {
@@ -3465,7 +3465,7 @@ LAB_004c5769:
 
 // Function at 004c5880
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c5880(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c5880(cls_0x5a7b98_TCharacter *this)
 
 {
   cls_0x5a50e8__vftable_5a50e8 *pcVar1;
@@ -3481,7 +3481,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c5880(cls_0x5a7b98 *this)
 
 // Function at 004c58b0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c58b0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c58b0(cls_0x5a7b98_TCharacter *this)
 
 {
   cls_0x5a50e8__vftable_5a50e8 *pcVar1;
@@ -3496,7 +3496,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c58b0(cls_0x5a7b98 *this)
 
 // Function at 004c58d0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c58d0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c58d0(cls_0x5a7b98_TCharacter *this)
 
 {
   cls_0x5a50e8__vftable_5a50e8 *pcVar1;
@@ -3511,7 +3511,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c58d0(cls_0x5a7b98 *this)
 
 // Function at 004c5940
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c5940(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c5940_SetHasSeen(cls_0x5a7b98_TCharacter *this)
 
 {
   dword *pdVar1;
@@ -3522,12 +3522,12 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c5940(cls_0x5a7b98 *this)
   
   dVar2 = 0x7fffffff;
   iVar4 = 0;
-  FUN_0059a530(*(undefined4 *)(in_stack_00000004 + 0x38),s_Locke_005df868);
+  FUN_0059a530_stricmp(*(undefined4 *)(in_stack_00000004 + 0x38),s_Locke_005df868);
   iVar3 = 0;
   pdVar1 = &this->mbr_0x1c4;
   do {
     if (pdVar1[-1] == in_stack_00000004) {
-      dVar2 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0);
+      dVar2 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
       (&this->mbr_0x1c4)[iVar3 * 3] = dVar2;
       return;
     }
@@ -3539,7 +3539,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c5940(cls_0x5a7b98 *this)
     pdVar1 = pdVar1 + 3;
   } while (iVar3 < 8);
   (&this->mbr_0x1c0)[iVar4 * 3] = in_stack_00000004;
-  dVar2 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0);
+  dVar2 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
   (&this->mbr_0x1c4)[iVar4 * 3] = dVar2;
   (&this->mbr_0x1c8)[iVar4 * 3] = 0;
   return;
@@ -3550,7 +3550,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c5940(cls_0x5a7b98 *this)
 // Function at 004c5ad0
 
 void __thiscall
-OOAnalyzer::cls_0x5a7b98::meth_0x4c5ad0(cls_0x5a7b98 *this,uint param_1,uint param_2)
+OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c5ad0_AdvanceAngles(cls_0x5a7b98_TCharacter *this,uint param_1,uint param_2)
 
 {
   uint uVar1;
@@ -3609,7 +3609,7 @@ LAB_004c5b57:
 
 // Function at 004c62b0
 
-int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c62b0(cls_0x5a7b98 *this)
+int __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c62b0_ResolveHit(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -3647,20 +3647,20 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c62b0(cls_0x5a7b98 *this)
   undefined4 *puVar17;
   undefined4 unaff_EDI;
   cls_0x4da9f0 *pcVar18;
-  cls_0x5a7b98 *pcVar19;
+  cls_0x5a7b98_TCharacter *pcVar19;
   undefined4 *puVar20;
-  cls_0x5a7b98 *in_stack_00000004;
+  cls_0x5a7b98_TCharacter *in_stack_00000004;
   dword in_stack_00000008;
   int in_stack_0000000c;
-  cls_0x5a7b98 *in_stack_00000010;
+  cls_0x5a7b98_TCharacter *in_stack_00000010;
   int in_stack_00000014;
   int in_stack_00000018;
   undefined *puVar21;
   dword dVar22;
   char *pcVar23;
-  cls_0x5a7b98 *pcVar24;
+  cls_0x5a7b98_TCharacter *pcVar24;
   undefined4 uVar25;
-  cls_0x5a7b98 *pcStack_130;
+  cls_0x5a7b98_TCharacter *pcStack_130;
   uint local_12c;
   int in_stack_fffffed8;
   undefined4 local_118 [6];
@@ -3678,12 +3678,12 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c62b0(cls_0x5a7b98 *this)
   puStack_8 = &LAB_0059e3cd;
   local_c = ExceptionList;
   local_118[0] = 0;
-  if (in_stack_00000004 == (cls_0x5a7b98 *)0x0) {
+  if (in_stack_00000004 == (cls_0x5a7b98_TCharacter *)0x0) {
     ExceptionList = puStack_8;
     return in_stack_fffffed8;
   }
   ExceptionList = &local_c;
-  iVar6 = meth_0x4c89c0(this);
+  iVar6 = meth_0x4c89c0_IsEnemy(this);
   if (iVar6 == 0) {
     ExceptionList = puStack_8;
     return 0;
@@ -3715,7 +3715,7 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c62b0(cls_0x5a7b98 *this)
     ExceptionList = puStack_8;
     return in_stack_fffffed8;
   }
-  iVar6 = meth_0x4cd990(this);
+  iVar6 = meth_0x4cd990_IsValidTarget(this);
   if (iVar6 == 0) {
     ExceptionList = puStack_8;
     return in_stack_fffffed8;
@@ -3730,10 +3730,10 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c62b0(cls_0x5a7b98 *this)
     piVar7 = (int *)(in_stack_00000004->cls_0x5a50e8).mbr_0xe0;
     if ((piVar7 == (int *)0x0) || ((*piVar7 != 3 && ((piVar7 == (int *)0x0 || (*piVar7 != 0x19))))))
     {
-      pcVar24 = (cls_0x5a7b98 *)0x0;
+      pcVar24 = (cls_0x5a7b98_TCharacter *)0x0;
     }
     else {
-      pcVar24 = (cls_0x5a7b98 *)piVar7[0x11];
+      pcVar24 = (cls_0x5a7b98_TCharacter *)piVar7[0x11];
     }
     if (pcVar24 != this) goto LAB_004c63db;
   }
@@ -3753,8 +3753,8 @@ LAB_004c63db:
       }
     }
   }
-  meth_0x4c5940(in_stack_00000004);
-  FUN_0046db20((this->cls_0x5a50e8).mbr_0x36,0x40000,&dStack_100,0);
+  meth_0x4c5940_SetHasSeen(in_stack_00000004);
+  FUN_0046db20_ConvertToVector((this->cls_0x5a50e8).mbr_0x36,0x40000,&dStack_100,0);
   (in_stack_00000004->cls_0x5a50e8).mbr_0x1c =
        (in_stack_00000004->cls_0x5a50e8).mbr_0x1c + dStack_100;
   (in_stack_00000004->cls_0x5a50e8).mbr_0x20 =
@@ -3783,7 +3783,7 @@ LAB_004c63db:
         piVar7 = &DAT_0065d850;
         do {
           if (*piVar7 <= iVar6) {
-            pcStack_130 = (cls_0x5a7b98 *)
+            pcStack_130 = (cls_0x5a7b98_TCharacter *)
                           (((int)in_stack_00000010 * 100) / ((&DAT_0065d854)[iVar14 * 2] + 100));
             break;
           }
@@ -3811,9 +3811,9 @@ LAB_004c63db:
       piVar7 = &DAT_0065d850;
       do {
         if (*piVar7 <= iVar6) {
-          pcVar24 = (cls_0x5a7b98 *)((((&DAT_0065d854)[iVar14 * 2] + 100) * (int)pcStack_130) / 100)
+          pcVar24 = (cls_0x5a7b98_TCharacter *)((((&DAT_0065d854)[iVar14 * 2] + 100) * (int)pcStack_130) / 100)
           ;
-          pcStack_130 = (cls_0x5a7b98 *)0x1;
+          pcStack_130 = (cls_0x5a7b98_TCharacter *)0x1;
           if (0 < (int)pcVar24) {
             pcStack_130 = pcVar24;
           }
@@ -3841,7 +3841,7 @@ LAB_004c63db:
                     (in_stack_00000004);
   iVar6 = CONCAT31(extraout_var_00,uVar4) + CONCAT31(extraout_var_01,uVar5);
   uVar4 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x4710a0_252)(this);
-  pcVar24 = (cls_0x5a7b98 *)0x4c665a;
+  pcVar24 = (cls_0x5a7b98_TCharacter *)0x4c665a;
   uVar5 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_00473600_212)(unaff_EDI);
   iVar14 = CONCAT31(extraout_var_02,uVar4) + CONCAT31(extraout_var_03,uVar5);
   pcVar18 = (cls_0x4da9f0 *)0x0;
@@ -3855,13 +3855,13 @@ LAB_004c66ce:
       ExceptionList = puStack_8;
       return 0;
     }
-    pcVar24 = (cls_0x5a7b98 *)(local_118 + 2);
+    pcVar24 = (cls_0x5a7b98_TCharacter *)(local_118 + 2);
     FUN_0058b100(pcVar24,s_BASEGLANCE_005df8d4);
     uVar25 = 0x4c66ff;
     uVar4 = (*((in_stack_00000004->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)
                       (in_stack_00000004);
     if ((int)(CONCAT31(extraout_var_05,uVar4) - local_12c) < 1) {
-      if ((in_stack_00000010 != (cls_0x5a7b98 *)0x0) &&
+      if ((in_stack_00000010 != (cls_0x5a7b98_TCharacter *)0x0) &&
          ((*(byte *)&(in_stack_00000010->cls_0x5a50e8).mbr_0x24 & 4) != 0)) {
         uVar25 = 0;
         pcVar24 = in_stack_00000010;
@@ -3882,15 +3882,15 @@ LAB_004c66ce:
           pcVar16->mbr_0x44 = (dword)this;
           pcVar16->mbr_0x4c = 0;
           pcVar16->mbr_0x50 = unaff_EBX;
-          meth_0x4d4790(in_stack_00000004);
+          meth_0x4d4790_SetFighting(in_stack_00000004);
         }
       }
       in_stack_00000004->mbr_0x224 = 5;
       pcVar18 = pcVar16;
     }
-    else if (in_stack_00000010 != (cls_0x5a7b98 *)0x0) {
+    else if (in_stack_00000010 != (cls_0x5a7b98_TCharacter *)0x0) {
       if ((*(byte *)&(in_stack_00000010->cls_0x5a50e8).mbr_0x24 & 0x84) == 0) {
-        meth_0x4ce1b0(in_stack_00000004,auStack_f0);
+        meth_0x4ce1b0_BuildActionName(in_stack_00000004,auStack_f0);
       }
       else {
         uVar15 = 0xffffffff;
@@ -3898,7 +3898,7 @@ LAB_004c66ce:
           pcVar24 = in_stack_00000010;
           if (uVar15 == 0) break;
           uVar15 = uVar15 - 1;
-          pcVar24 = (cls_0x5a7b98 *)((int)&(in_stack_00000010->cls_0x5a50e8).vftptr_0x0 + 1);
+          pcVar24 = (cls_0x5a7b98_TCharacter *)((int)&(in_stack_00000010->cls_0x5a50e8).vftptr_0x0 + 1);
           pcVar3 = &in_stack_00000010->cls_0x5a50e8;
           in_stack_00000010 = pcVar24;
         } while (*(char *)&pcVar3->vftptr_0x0 != '\0');
@@ -3917,7 +3917,7 @@ LAB_004c66ce:
         }
       }
       pcVar18 = (cls_0x4da9f0 *)0x0;
-      pcVar24 = (cls_0x5a7b98 *)auStack_f0;
+      pcVar24 = (cls_0x5a7b98_TCharacter *)auStack_f0;
       uVar25 = 0;
       uVar4 = (*(in_stack_00000004->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477840_0)
                         (&in_stack_00000004->cls_0x5a50e8);
@@ -3939,7 +3939,7 @@ LAB_004c66ce:
         pcVar18->mbr_0x28 = *(dword *)(in_stack_00000008 + 0x48);
         pcVar18->mbr_0x44 = (dword)this;
         pcVar18->mbr_0x50 = unaff_EBX;
-        meth_0x4d4790(in_stack_00000004);
+        meth_0x4d4790_SetFighting(in_stack_00000004);
       }
     }
   }
@@ -3948,7 +3948,7 @@ LAB_004c66ce:
         (uVar4 = (*((in_stack_00000004->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)
                            (in_stack_00000004),
         (int)(CONCAT31(extraout_var_04,uVar4) - local_12c) < 1)) &&
-       ((in_stack_00000010 == (cls_0x5a7b98 *)0x0 ||
+       ((in_stack_00000010 == (cls_0x5a7b98_TCharacter *)0x0 ||
         (((in_stack_00000010->cls_0x5a50e8).mbr_0x24 & 4) == 0)))) {
       in_stack_fffffed8 = 0;
       goto LAB_004c66ce;
@@ -3957,7 +3957,7 @@ LAB_004c66ce:
     uVar4 = (*((in_stack_00000004->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)
                       (in_stack_00000004);
     if ((int)(CONCAT31(extraout_var_07,uVar4) - local_12c) < 1) {
-      if ((in_stack_00000010 != (cls_0x5a7b98 *)0x0) &&
+      if ((in_stack_00000010 != (cls_0x5a7b98_TCharacter *)0x0) &&
          ((*(byte *)&(in_stack_00000010->cls_0x5a50e8).mbr_0x24 & 4) != 0)) {
         uVar25 = 0;
         pcVar24 = in_stack_00000010;
@@ -3978,7 +3978,7 @@ LAB_004c66ce:
           pcVar16->mbr_0x44 = (dword)this;
           pcVar16->mbr_0x4c = 0;
           pcVar16->mbr_0x50 = unaff_EBX;
-          meth_0x4d4790(in_stack_00000004);
+          meth_0x4d4790_SetFighting(in_stack_00000004);
         }
       }
       in_stack_00000004->mbr_0x224 = 5;
@@ -3993,11 +3993,11 @@ LAB_004c66ce:
          ) {
         uVar25 = 3;
         pcVar24 = this;
-        meth_0x4d3b90(in_stack_00000004);
+        meth_0x4d3b90_BeginFighting(in_stack_00000004);
       }
-      if (in_stack_00000010 != (cls_0x5a7b98 *)0x0) {
+      if (in_stack_00000010 != (cls_0x5a7b98_TCharacter *)0x0) {
         if ((*(byte *)&(in_stack_00000010->cls_0x5a50e8).mbr_0x24 & 0x84) == 0) {
-          meth_0x4ce1b0(in_stack_00000004,auStack_f0);
+          meth_0x4ce1b0_BuildActionName(in_stack_00000004,auStack_f0);
         }
         else {
           uVar15 = 0xffffffff;
@@ -4006,7 +4006,7 @@ LAB_004c66ce:
             pcVar19 = pcVar24;
             if (uVar15 == 0) break;
             uVar15 = uVar15 - 1;
-            pcVar19 = (cls_0x5a7b98 *)((int)&(pcVar24->cls_0x5a50e8).vftptr_0x0 + 1);
+            pcVar19 = (cls_0x5a7b98_TCharacter *)((int)&(pcVar24->cls_0x5a50e8).vftptr_0x0 + 1);
             pcVar3 = &pcVar24->cls_0x5a50e8;
             pcVar24 = pcVar19;
           } while (*(char *)&pcVar3->vftptr_0x0 != '\0');
@@ -4025,7 +4025,7 @@ LAB_004c66ce:
           }
         }
         pcVar18 = (cls_0x4da9f0 *)0x0;
-        pcVar24 = (cls_0x5a7b98 *)auStack_f0;
+        pcVar24 = (cls_0x5a7b98_TCharacter *)auStack_f0;
         uVar25 = 0;
         uVar4 = (*(in_stack_00000004->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477840_0)
                           (&in_stack_00000004->cls_0x5a50e8);
@@ -4047,7 +4047,7 @@ LAB_004c66ce:
           pcVar18->mbr_0x28 = *(dword *)(in_stack_00000008 + 0x48);
           pcVar18->mbr_0x44 = (dword)this;
           pcVar18->mbr_0x50 = unaff_EBX;
-          meth_0x4d4790(in_stack_00000004);
+          meth_0x4d4790_SetFighting(in_stack_00000004);
         }
       }
     }
@@ -4101,11 +4101,11 @@ LAB_004c6bae:
       FUN_0054d170(&DAT_0065c5d0,auStack_d8);
     }
 LAB_004c6cb3:
-    if (pcStack_130 == (cls_0x5a7b98 *)0x0) goto LAB_004c6cbb;
+    if (pcStack_130 == (cls_0x5a7b98_TCharacter *)0x0) goto LAB_004c6cbb;
   }
   else {
     if (((in_stack_00000004->cls_0x5a50e8).mbr_0x24 & 0x2000000) == 0) goto LAB_004c6cb3;
-    if (pcStack_130 != (cls_0x5a7b98 *)0x0) goto LAB_004c6bae;
+    if (pcStack_130 != (cls_0x5a7b98_TCharacter *)0x0) goto LAB_004c6bae;
 LAB_004c6cbb:
     if (((*(short *)&(in_stack_00000004->cls_0x5a50e8).mbr_0x4 == 0xb) &&
         (piVar7 = (int *)(in_stack_00000004->cls_0x5a50e8).mbr_0xd8, piVar7 != (int *)0x0)) &&
@@ -4129,7 +4129,7 @@ LAB_004c6cf1:
   if (((*(short *)&(in_stack_00000004->cls_0x5a50e8).mbr_0x4 == 0xb) &&
       (piVar7 = (int *)(in_stack_00000004->cls_0x5a50e8).mbr_0xe0, piVar7 != (int *)0x0)) &&
      (*piVar7 == 0x19)) {
-    meth_0x4d3b90(in_stack_00000004);
+    meth_0x4d3b90_BeginFighting(in_stack_00000004);
   }
   if ((*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) &&
      ((DAT_00676828 == 0 || (DAT_0067682c != 0)))) {
@@ -4147,7 +4147,7 @@ LAB_004c6cf1:
 
 // Function at 004c77a0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c77a0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c77a0(cls_0x5a7b98_TCharacter *this)
 
 {
   cls_0x5a50e8__vftable_5a50e8 *pcVar1;
@@ -4156,7 +4156,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c77a0(cls_0x5a7b98 
   
   dVar2 = (this->cls_0x5a50e8).mbr_0xd8;
   if ((dVar2 != 0) && (*(int *)(dVar2 + 0x44) != 0)) {
-    dVar2 = meth_0x46ea90(this);
+    dVar2 = meth_0x46ea90_AngleTo(this);
     (this->cls_0x5a50e8).mbr_0x36 = (byte)dVar2;
     (this->cls_0x5a50e8).mbr_0xb0 = dVar2;
   }
@@ -4175,7 +4175,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c77a0(cls_0x5a7b98 
 
 // Function at 004c7980
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c7980(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c7980(cls_0x5a7b98_TCharacter *this)
 
 {
   short sVar1;
@@ -4221,25 +4221,25 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c7980(cls_0x5a7b98 
   in_stack_00000004 = (cls_0x4da9f0 *)0x0;
   if (((*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) &&
       (uVar12 = *(uint *)&(this->cls_0x5a50e8).field_0x40,
-      uVar7 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0),
+      uVar7 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0),
       ((uVar7 ^ uVar12) & 7) == 0)) ||
      ((DAT_00668110 == 0 &&
       (uVar12 = *(uint *)&(this->cls_0x5a50e8).field_0x40,
-      uVar7 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0),
+      uVar7 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0),
       ((uVar7 ^ uVar12) & 0x1f) == 0)))) {
     in_stack_00000004 = (cls_0x4da9f0 *)0x1;
   }
   uVar12 = 0;
-  if ((uVar13 == 0) || (iVar8 = meth_0x4cd990(this), iVar8 == 0)) {
+  if ((uVar13 == 0) || (iVar8 = meth_0x4cd990_IsValidTarget(this), iVar8 == 0)) {
     if (in_stack_00000004 != (cls_0x4da9f0 *)0x0) {
-      iVar8 = meth_0x4cd690(this,&local_5c,1,0xff,0xff,0x20);
+      iVar8 = meth_0x4cd690_FindCharacters(this,&local_5c,1,0xff,0xff,0x20);
       uVar12 = (iVar8 < 1) - 1 & local_5c;
     }
-    meth_0x4d4790(this);
+    meth_0x4d4790_SetFighting(this);
   }
   if (this->mbr_0x234 == 0) {
     if (in_stack_00000004 != (cls_0x4da9f0 *)0x0) {
-      iVar8 = meth_0x4cd690(this,&stack0x00000004,1,0xff,(char)piVar5[0xc],0x20);
+      iVar8 = meth_0x4cd690_FindCharacters(this,&stack0x00000004,1,0xff,(char)piVar5[0xc],0x20);
       uVar12 = (iVar8 < 1) - 1 & (uint)in_stack_00000004;
     }
     if ((uVar12 != 0) && (uVar12 != uVar13)) {
@@ -4249,23 +4249,23 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c7980(cls_0x5a7b98 
         uVar6 = (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046ea20_4)(uVar13);
         in_stack_00000004 = (cls_0x4da9f0 *)CONCAT31(extraout_var_00,uVar6);
         iVar8 = piVar5[0xc];
-        uVar9 = meth_0x46ea90(this);
+        uVar9 = meth_0x46ea90_AngleTo(this);
         iVar8 = FUN_0046ded0(uVar9,iVar8);
         if (iVar8 < 0) {
           iVar8 = piVar5[0xc];
-          uVar9 = meth_0x46ea90(this);
+          uVar9 = meth_0x46ea90_AngleTo(this);
           iVar8 = FUN_0046ded0(uVar9,iVar8);
           iVar8 = -iVar8;
         }
         else {
           iVar8 = piVar5[0xc];
-          uVar9 = meth_0x46ea90(this);
+          uVar9 = meth_0x46ea90_AngleTo(this);
           iVar8 = FUN_0046ded0(uVar9,iVar8);
         }
         if ((((int)in_stack_00000004 < 0x21) || (iVar8 < 0x21)) &&
            ((int)in_stack_00000004 <= (int)local_5c)) goto LAB_004c7b13;
       }
-      meth_0x4d4790(this);
+      meth_0x4d4790_SetFighting(this);
     }
   }
 LAB_004c7b13:
@@ -4298,7 +4298,7 @@ LAB_004c7d01:
       if (this->mbr_0x234 != 0) goto LAB_004c7d0b;
     }
     else {
-      iVar8 = meth_0x4cd540(this,in_stack_00000004);
+      iVar8 = meth_0x4cd540_CanSeeCharacter(this,in_stack_00000004);
       if ((iVar8 == 0) && (this->mbr_0x234 != 0)) {
         bVar4 = false;
       }
@@ -4307,7 +4307,7 @@ LAB_004c7d0b:
       uStack_58 = *(undefined4 *)(dVar11 + 0x10);
       uStack_54 = *(undefined4 *)(dVar11 + 0x14);
       uStack_50 = *(undefined4 *)(dVar11 + 0x18);
-      uVar13 = FUN_0046dc60(&(this->cls_0x5a50e8).mbr_0x10,&uStack_58);
+      uVar13 = FUN_0046dc60_AngleToPP(&(this->cls_0x5a50e8).mbr_0x10,&uStack_58);
       local_5c = uVar13;
     }
     if (*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) {
@@ -4330,8 +4330,8 @@ LAB_004c7d0b:
         }
       }
       else {
-        meth_0x4d39f0(this,piVar5[0xc],local_5c,(this->cls_0x5a50e8).mbr_0xe0 + 4,auStack_2c);
-        iVar8 = FUN_0059a530(piVar5 + 1,auStack_2c);
+        meth_0x4d39f0_GetAngleMoveAnim(this,piVar5[0xc],local_5c,(this->cls_0x5a50e8).mbr_0xe0 + 4,auStack_2c);
+        iVar8 = FUN_0059a530_stricmp(piVar5 + 1,auStack_2c);
         if (iVar8 != 0) {
           in_stack_00000004 = (cls_0x4da9f0 *)FUN_00482fb0(100);
           uStack_4 = 1;
@@ -4388,11 +4388,11 @@ LAB_004c7d0b:
     uVar13 = piVar5[0xb];
     (this->cls_0x5a50e8).mbr_0xb0 = dVar11;
 LAB_004c7f5b:
-    meth_0x4c5ad0(this,uVar13,dVar11);
+    meth_0x4c5ad0_AdvanceAngles(this,uVar13,dVar11);
   }
   else {
     (this->cls_0x5a50e8).mbr_0xb4 = 0;
-    iVar8 = FUN_0059a530(piVar5 + 1,piVar2 + 1);
+    iVar8 = FUN_0059a530_stricmp(piVar5 + 1,piVar2 + 1);
     if (iVar8 == 0) {
       uVar13 = piVar5[0xb];
       if ((this->cls_0x5a50e8).mbr_0x36 != uVar13) {
@@ -4404,7 +4404,7 @@ LAB_004c7f5b:
       ExceptionList = pvStack_c;
       return 0;
     }
-    meth_0x4d39f0(this,piVar5[0xc],piVar5[0xb],(this->cls_0x5a50e8).mbr_0xe0 + 4,auStack_4c);
+    meth_0x4d39f0_GetAngleMoveAnim(this,piVar5[0xc],piVar5[0xb],(this->cls_0x5a50e8).mbr_0xe0 + 4,auStack_4c);
     in_stack_00000004 = (cls_0x4da9f0 *)FUN_00482fb0(100);
     uStack_4 = 0;
     if (in_stack_00000004 == (cls_0x4da9f0 *)0x0) {
@@ -4446,7 +4446,7 @@ LAB_004c7f5b:
 
 // Function at 004c8470
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c8470(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c8470(cls_0x5a7b98_TCharacter *this)
 
 {
   uint uVar1;
@@ -4454,14 +4454,14 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c8470(cls_0x5a7b98 
   int in_stack_00000004;
   
   (this->cls_0x5a50e8).mbr_0xb4 = 0;
-  iVar2 = FUN_0059a530(in_stack_00000004 + 4,(this->cls_0x5a50e8).mbr_0xe0 + 4);
+  iVar2 = FUN_0059a530_stricmp(in_stack_00000004 + 4,(this->cls_0x5a50e8).mbr_0xe0 + 4);
   if (iVar2 == 0) {
     uVar1 = *(uint *)(in_stack_00000004 + 0x2c);
     if ((this->cls_0x5a50e8).mbr_0x36 == uVar1) {
       (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_0046f250_24)(0);
       return 0;
     }
-    meth_0x4c5ad0(this,uVar1,uVar1);
+    meth_0x4c5ad0_AdvanceAngles(this,uVar1,uVar1);
   }
   else if (*(int *)&(this->cls_0x5a50e8).field_0x80 != 0) {
     (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_0046f250_24)(0);
@@ -4474,7 +4474,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c8470(cls_0x5a7b98 
 
 // Function at 004c8500
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c8500(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c8500_EffectCombatFlash(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined4 uVar1;
@@ -4501,8 +4501,8 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c8500(cls_0x5a7b98 *this)
   local_2a = DAT_00666970;
   local_20 = (this->cls_0x5a50e8).mbr_0x18 + 0x50;
   local_28 = (this->cls_0x5a50e8).mbr_0x10 + 0x1e;
-  uVar1 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_34);
-  piVar2 = (int *)FUN_00452690(uVar1,0);
+  uVar1 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_34);
+  piVar2 = (int *)FUN_00452690_TMapPane_GetInstance(uVar1,0);
   if (piVar2 == (int *)0x0) {
     return;
   }
@@ -4516,7 +4516,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c8500(cls_0x5a7b98 *this)
       return;
     }
   }
-  iVar3 = FUN_00483300(0,iVar4 / 2);
+  iVar3 = FUN_00483300_RandomRange(0,iVar4 / 2);
   iVar3 = iVar3 * 2;
   iVar4 = iVar4 + -2;
   if (iVar3 - iVar4 != 0 && iVar4 <= iVar3) {
@@ -4532,7 +4532,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c8500(cls_0x5a7b98 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c85d0(cls_0x5a7b98 *this,undefined4 param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c85d0_EffectBurst(cls_0x5a7b98_TCharacter *this,undefined4 param_1)
 
 {
   byte bVar1;
@@ -4583,7 +4583,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c85d0(cls_0x5a7b98 *this,undef
   undefined4 uStack_58;
   undefined4 uStack_50;
   
-  if ((this->mbr_0x1b8 != 0) && (iVar3 = FUN_0059a530(param_1,s_blood_005df9b8), iVar3 == 0)) {
+  if ((this->mbr_0x1b8 != 0) && (iVar3 = FUN_0059a530_stricmp(param_1,s_blood_005df9b8), iVar3 == 0)) {
     return;
   }
   puVar6 = (undefined4 *)&local_e4;
@@ -4594,45 +4594,45 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c85d0(cls_0x5a7b98 *this,undef
   local_e4 = 0x19;
   local_e2 = cls_0x4746d0::meth_0x475210((cls_0x4746d0 *)&UNK_0066cc1c.field_0x4c,param_1);
   local_da = DAT_00666970;
-  iVar3 = FUN_0059a530(param_1,s_Blood_005df9c0);
+  iVar3 = FUN_0059a530_stricmp(param_1,s_Blood_005df9c0);
   if (iVar3 == 0) {
     local_d8 = (this->cls_0x5a50e8).mbr_0x10;
     local_d4 = (this->cls_0x5a50e8).mbr_0x14;
     local_d0 = (this->cls_0x5a50e8).mbr_0x18 + in_stack_00000008;
     local_b2 = 0;
-    uVar4 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_e4);
-    piVar5 = (int *)FUN_00452690(uVar4,0);
+    uVar4 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_e4);
+    piVar5 = (int *)FUN_00452690_TMapPane_GetInstance(uVar4,0);
     if (piVar5 != (int *)0x0) {
       iVar3 = *piVar5;
       bVar1 = (this->cls_0x5a50e8).mbr_0x36;
-      uVar4 = FUN_00483300(1,5);
+      uVar4 = FUN_00483300_RandomRange(1,5);
       (**(code **)(iVar3 + 0x200))(in_stack_00000008,bVar1 + 0x80,3,5,5,uVar4);
       return;
     }
   }
   else {
-    iVar3 = FUN_0059a530(param_1,s_sparks_005df9c8);
+    iVar3 = FUN_0059a530_stricmp(param_1,s_sparks_005df9c8);
     if (iVar3 == 0) {
       local_d8 = (this->cls_0x5a50e8).mbr_0x10;
       local_d0 = (this->cls_0x5a50e8).mbr_0x18;
       local_d4 = (this->cls_0x5a50e8).mbr_0x14;
-      uVar4 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_e4);
-      piVar5 = (int *)FUN_00452690(uVar4,0);
+      uVar4 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_e4);
+      piVar5 = (int *)FUN_00452690_TMapPane_GetInstance(uVar4,0);
       if (piVar5 != (int *)0x0) {
         (**(code **)(*piVar5 + 0x28))();
         piVar5 = (int *)(**(code **)(*piVar5 + 0x24))();
-        cVar2 = FUN_00483300(0xffffffb0,0x50);
-        FUN_0046db20(cVar2 + (this->cls_0x5a50e8).mbr_0x36,100,&iStack_fc,0);
+        cVar2 = FUN_00483300_RandomRange(0xffffffb0,0x50);
+        FUN_0046db20_ConvertToVector(cVar2 + (this->cls_0x5a50e8).mbr_0x36,100,&iStack_fc,0);
         if (piVar5 != (int *)0x0) {
           iVar3 = *(int *)((this->cls_0x5a50e8).mbr_0xd8 + 0x44);
           uStack_f0 = *(undefined4 *)(iVar3 + 0x10);
           uStack_ec = *(undefined4 *)(iVar3 + 0x14);
           uStack_e8 = *(undefined4 *)(iVar3 + 0x18);
-          uVar4 = FUN_0046dc60(&(this->cls_0x5a50e8).mbr_0x10,&uStack_f0);
-          iVar3 = cls_0x5b8e94::virt_meth_0x46ea20((cls_0x5b8e94 *)this);
-          FUN_0046db20(uVar4,iVar3 / 2,&iStack_108,0);
+          uVar4 = FUN_0046dc60_AngleToPP(&(this->cls_0x5a50e8).mbr_0x10,&uStack_f0);
+          iVar3 = cls_0x5b8e94_TObjectInstance::virt_meth_0x46ea20_Distance((cls_0x5b8e94_TObjectInstance *)this);
+          FUN_0046db20_ConvertToVector(uVar4,iVar3 / 2,&iStack_108,0);
           iStack_100 = iStack_100 + 0x2d;
-          uStack_b0 = FUN_00483300(0xf,0x19);
+          uStack_b0 = FUN_00483300_RandomRange(0xf,0x19);
           fStack_ac = (float)iStack_108;
           uStack_a0 = 0x40400000;
           fStack_a8 = (float)iStack_104;
@@ -4668,7 +4668,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c85d0(cls_0x5a7b98 *this,undef
 
 // Function at 004c8950
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c8950(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c8950_IsFinalState(cls_0x5a7b98_TCharacter *this)
 
 {
   int iVar1;
@@ -4676,10 +4676,10 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c8950(cls_0x5a7b98 
   if ((this->cls_0x5a50e8).mbr_0xd8 == 0) {
     return 0;
   }
-  iVar1 = FUN_004dab80(s_collapse_005df9d0);
-  if ((((iVar1 == 0) && (iVar1 = FUN_004dab80(&DAT_005df9dc), iVar1 == 0)) &&
-      (iVar1 = FUN_004dab80(s_impale_005df9e4), iVar1 == 0)) &&
-     (iVar1 = FUN_004dab80(&DAT_005df9ec), iVar1 == 0)) {
+  iVar1 = FUN_004dab80_TActionBlock_Is(s_collapse_005df9d0);
+  if ((((iVar1 == 0) && (iVar1 = FUN_004dab80_TActionBlock_Is(&DAT_005df9dc), iVar1 == 0)) &&
+      (iVar1 = FUN_004dab80_TActionBlock_Is(s_impale_005df9e4), iVar1 == 0)) &&
+     (iVar1 = FUN_004dab80_TActionBlock_Is(&DAT_005df9ec), iVar1 == 0)) {
     return 0;
   }
   return 1;
@@ -4689,7 +4689,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c8950(cls_0x5a7b98 
 
 // Function at 004c89c0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c89c0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c89c0_IsEnemy(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -4699,17 +4699,17 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c89c0(cls_0x5a7b98 *this
   int iVar5;
   undefined3 extraout_var;
   undefined3 extraout_var_00;
-  cls_0x5a7b98 *pcVar6;
+  cls_0x5a7b98_TCharacter *pcVar6;
   int iVar7;
-  cls_0x5a7b98 *in_stack_00000004;
+  cls_0x5a7b98_TCharacter *in_stack_00000004;
   
   if (*(short *)&(in_stack_00000004->cls_0x5a50e8).mbr_0x4 == 0xb) {
     if ((*(byte *)&in_stack_00000004->mbr_0x36c & 2) != 0) {
       return 0;
     }
     if (*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) {
-      if (((this != (cls_0x5a7b98 *)0x0) && (this->mbr_0x494 != 0)) &&
-         (iVar3 = FUN_0059a530(&this->mbr_0x494,&in_stack_00000004->mbr_0x494), iVar3 == 0)) {
+      if (((this != (cls_0x5a7b98_TCharacter *)0x0) && (this->mbr_0x494 != 0)) &&
+         (iVar3 = FUN_0059a530_stricmp(&this->mbr_0x494,&in_stack_00000004->mbr_0x494), iVar3 == 0)) {
         return 0;
       }
       iVar3 = meth_0x51e480(in_stack_00000004);
@@ -4726,10 +4726,10 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c89c0(cls_0x5a7b98 *this
   if ((piVar1 != (int *)0x0) &&
      ((iVar3 = *piVar1, iVar3 == 3 || ((piVar1 != (int *)0x0 && (iVar3 == 0x19)))))) {
     if ((iVar3 == 3) || (iVar3 == 0x19)) {
-      pcVar6 = (cls_0x5a7b98 *)piVar1[0x11];
+      pcVar6 = (cls_0x5a7b98_TCharacter *)piVar1[0x11];
     }
     else {
-      pcVar6 = (cls_0x5a7b98 *)0x0;
+      pcVar6 = (cls_0x5a7b98_TCharacter *)0x0;
     }
     if (pcVar6 == this) {
       return 1;
@@ -4778,7 +4778,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c89c0(cls_0x5a7b98 *this
 
 // Function at 004c9460
 
-bool __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9460(cls_0x5a7b98 *this)
+bool __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c9460_IsSlopeTooSteep(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -4824,8 +4824,8 @@ bool __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9460(cls_0x5a7b98 *this)
   iStack_14 = dStack_8 + iVar8;
   dStack_c = (this->cls_0x5a50e8).mbr_0x10;
   dStack_18 = dStack_c + iVar7;
-  dStack_4 = FUN_00452e10(&dStack_c,(this->cls_0x5a50e8).mbr_0xe,0);
-  iStack_10 = FUN_00452e10(&dStack_18,(this->cls_0x5a50e8).mbr_0xe,0);
+  dStack_4 = FUN_00452e10_GetWalkHeight(&dStack_c,(this->cls_0x5a50e8).mbr_0xe,0);
+  iStack_10 = FUN_00452e10_GetWalkHeight(&dStack_18,(this->cls_0x5a50e8).mbr_0xe,0);
   dStack_c = dStack_18;
   dStack_8 = iStack_14;
   while (iVar5 != 0) {
@@ -4838,7 +4838,7 @@ bool __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9460(cls_0x5a7b98 *this)
     iStack_14 = dStack_8 + iVar8;
     dStack_18 = dStack_c + iVar7;
     dStack_4 = iStack_10;
-    iStack_10 = FUN_00452e10(&dStack_18,(this->cls_0x5a50e8).mbr_0xe,0);
+    iStack_10 = FUN_00452e10_GetWalkHeight(&dStack_18,(this->cls_0x5a50e8).mbr_0xe,0);
     dStack_c = dStack_18;
     dStack_8 = iStack_14;
   }
@@ -4852,7 +4852,7 @@ bool __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9460(cls_0x5a7b98 *this)
 
 // Function at 004c95e0
 
-cls_0x528850 * __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c95e0(cls_0x5a7b98 *this)
+cls_0x528850 * __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c95e0_FindWaypoint(cls_0x5a7b98_TCharacter *this)
 
 {
   cls_0x528850 *this_00;
@@ -4877,8 +4877,8 @@ cls_0x528850 * __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c95e0(cls_0x5a7b98 *
   local_68 = (this->cls_0x5a50e8).mbr_0x10;
   local_60 = (this->cls_0x5a50e8).mbr_0x18;
   local_74 = 0;
-  local_70 = cls_0x5a5320::meth_0x452060
-                       ((cls_0x5a5320 *)&DAT_006668d8,&local_68,(char)(this->cls_0x5a50e8).mbr_0xe,
+  local_70 = cls_0x5a5320_TPlayScreen::meth_0x452060
+                       ((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_68,(char)(this->cls_0x5a50e8).mbr_0xe,
                         local_28,2000,0,0xf,10);
   if (10 < local_70) {
     local_70 = 10;
@@ -4887,15 +4887,15 @@ cls_0x528850 * __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c95e0(cls_0x5a7b98 *
     ppcVar5 = local_50;
     puVar3 = local_28;
     do {
-      this_00 = (cls_0x528850 *)FUN_00452690(*puVar3,0);
+      this_00 = (cls_0x528850 *)FUN_00452690_TMapPane_GetInstance(*puVar3,0);
       local_5c = this_00->mbr_0x10;
       local_58 = this_00->mbr_0x14;
       local_54 = *(undefined4 *)(this_00 + 1);
-      iVar1 = FUN_0059a530(**(undefined4 **)&this_00[3].field_0x4,s_waypoint_005dfa08);
+      iVar1 = FUN_0059a530_stricmp(**(undefined4 **)&this_00[3].field_0x4,s_waypoint_005dfa08);
       if ((((iVar1 == 0) && (this_00 != (cls_0x528850 *)this->mbr_0x238)) &&
           (this_00 != (cls_0x528850 *)this->mbr_0x234)) &&
          ((iVar1 = cls_0x528850::meth_0x528850(this_00), iVar1 != 0 &&
-          (iVar1 = meth_0x4c9460(this), iVar1 != 0)))) {
+          (iVar1 = meth_0x4c9460_IsSlopeTooSteep(this), iVar1 != 0)))) {
         *ppcVar5 = this_00;
         local_74 = local_74 + 1;
         ppcVar5 = ppcVar5 + 1;
@@ -4924,9 +4924,9 @@ cls_0x528850 * __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c95e0(cls_0x5a7b98 *
           iVar4 = iVar4 + 1;
         } while (iVar4 < local_74);
       }
-      iVar1 = FUN_00483300(1,100);
+      iVar1 = FUN_00483300_RandomRange(1,100);
       if (0x3b < iVar1) {
-        iVar1 = FUN_00483300(0,local_74 + -1);
+        iVar1 = FUN_00483300_RandomRange(0,local_74 + -1);
         return local_50[iVar1];
       }
       return local_50[local_6c];
@@ -4939,7 +4939,7 @@ cls_0x528850 * __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c95e0(cls_0x5a7b98 *
 
 // Function at 004c9790
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c9790(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4c9790_WanderToWaypoint(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -4962,17 +4962,17 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c9790(cls_0x5a7b98 *this)
   }
   if ((((this->cls_0x5a50e8).mbr_0xe0 != 0) &&
       ((((iVar5 = meth_0x45f770(this), iVar5 != 0 &&
-         ((iVar5 = FUN_004dab80(s_combatrun_005e0618), iVar5 != 0 ||
-          (iVar5 = FUN_004dab80(s_handrun_005e0610), iVar5 != 0)))) ||
+         ((iVar5 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar5 != 0 ||
+          (iVar5 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar5 != 0)))) ||
         ((piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar1 != (int *)0x0 &&
-         ((*piVar1 == 0x19 && (iVar5 = FUN_004dab80(s_bowrun_005e0608), iVar5 != 0)))))) ||
-       (iVar5 = FUN_004dab80(&DAT_005e0604), iVar5 != 0)))) &&
+         ((*piVar1 == 0x19 && (iVar5 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar5 != 0)))))) ||
+       (iVar5 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar5 != 0)))) &&
      (((iVar5 = meth_0x45f770(this), iVar5 != 0 ||
        ((piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar1 != (int *)0x0 && (*piVar1 == 0x19))))
       && (*(int *)((this->cls_0x5a50e8).mbr_0xe0 + 0x44) != 0)))) {
-    meth_0x4cf000(this);
+    meth_0x4cf000_SetWalkMode(this);
     meth_0x45f770(this);
-    meth_0x4d3b90(this);
+    meth_0x4d3b90_BeginFighting(this);
   }
   piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
   if ((piVar1 == (int *)0x0) || (*piVar1 != 3)) {
@@ -4980,10 +4980,10 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c9790(cls_0x5a7b98 *this)
       uVar3 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477ed0_480)(this);
       uVar4 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e70_456)(this);
       if ((CONCAT31(extraout_var_00,uVar4) == CONCAT31(extraout_var,uVar3)) &&
-         (iVar5 = FUN_00483300(1,100), iVar5 == 100)) {
-        dVar6 = FUN_00483300(100,800);
+         (iVar5 = FUN_00483300_RandomRange(1,100), iVar5 == 100)) {
+        dVar6 = FUN_00483300_RandomRange(100,800);
         this->mbr_0x250 = dVar6;
-        meth_0x4cf490(this);
+        meth_0x4cf490_SetRunMode(this);
       }
     }
     else {
@@ -4992,21 +4992,21 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c9790(cls_0x5a7b98 *this)
       uVar4 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e70_456)(this);
       if (((CONCAT31(extraout_var_02,uVar4) <
             CONCAT31(extraout_var_01,uVar3) - ((int)extraout_var_01 >> 0x17) >> 1) &&
-          (iVar5 = FUN_00483300(1,100), 0x32 < iVar5)) ||
+          (iVar5 = FUN_00483300_RandomRange(1,100), 0x32 < iVar5)) ||
          (((iVar5 = meth_0x45f770(this), iVar5 != 0 ||
            ((piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar1 != (int *)0x0 &&
             (*piVar1 == 0x19)))) &&
           ((*(int *)((this->cls_0x5a50e8).mbr_0xe0 + 0x44) != 0 &&
-           (iVar5 = FUN_00483300(1,100), 0xf < iVar5)))))) {
+           (iVar5 = FUN_00483300_RandomRange(1,100), 0xf < iVar5)))))) {
         this->mbr_0x250 = 0;
       }
       if (this->mbr_0x250 == 0) {
-        meth_0x4cf000(this);
+        meth_0x4cf000_SetWalkMode(this);
       }
     }
     dVar6 = this->mbr_0x234;
     if (dVar6 == 0) {
-      dVar6 = meth_0x4c95e0(this);
+      dVar6 = meth_0x4c95e0_FindWaypoint(this);
       this->mbr_0x234 = dVar6;
       if (dVar6 != 0) {
         meth_0x4cedb0(this,*(undefined4 *)(dVar6 + 0x10),*(undefined4 *)(dVar6 + 0x14));
@@ -5035,7 +5035,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c9790(cls_0x5a7b98 *this)
                          *(undefined4 *)(dVar6 + 0x18));
     if (iVar5 < 0x19) {
       dVar6 = this->mbr_0x234;
-      dVar7 = meth_0x4c95e0(this);
+      dVar7 = meth_0x4c95e0_FindWaypoint(this);
       this->mbr_0x238 = dVar6;
       this->mbr_0x234 = dVar7;
       return;
@@ -5043,17 +5043,17 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c9790(cls_0x5a7b98 *this)
   }
   else {
     if (piVar1[0x11] == 0) {
-      meth_0x4d3fd0(this);
+      meth_0x4d3fd0_EndFighting(this);
       this->mbr_0x24c = 100;
       return;
     }
     if (this->mbr_0x254 != 0) {
       if (this->mbr_0x250 == 0) {
-        iVar5 = FUN_00483300(1,100);
+        iVar5 = FUN_00483300_RandomRange(1,100);
         if (0x1e < iVar5) {
-          dVar6 = FUN_00483300(800,2000);
+          dVar6 = FUN_00483300_RandomRange(800,2000);
           this->mbr_0x250 = dVar6;
-          meth_0x4cf490(this);
+          meth_0x4cf490_SetRunMode(this);
           return;
         }
       }
@@ -5061,7 +5061,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c9790(cls_0x5a7b98 *this)
         dVar6 = this->mbr_0x250 - 1;
         this->mbr_0x250 = dVar6;
         if (dVar6 == 0) {
-          meth_0x4cf000(this);
+          meth_0x4cf000_SetWalkMode(this);
         }
       }
     }
@@ -5080,13 +5080,13 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4c9790(cls_0x5a7b98 *this)
 /* WARNING: Type propagation algorithm not settling */
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4c9b70_AI_PerMonster(cls_0x5a7b98_TCharacter *this)
 
 {
   uint *puVar1;
   undefined4 uVar2;
   cls_0x5a50e8__vftable_5a50e8 *pcVar3;
-  cls_0x5a7b98 *pcVar4;
+  cls_0x5a7b98_TCharacter *pcVar4;
   char cVar5;
   undefined uVar6;
   undefined uVar7;
@@ -5218,7 +5218,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
   if (this->mbr_0x280 == 0) {
     uVar16 = *(undefined4 *)(this->cls_0x5a50e8).mbr_0x4c;
     ExceptionList = &cStack_50.mbr_0x44;
-    iVar8 = FUN_0059a530(uVar16,&DAT_005dfa14);
+    iVar8 = FUN_0059a530_stricmp(uVar16,&s_Baez_005dfa14);
     if (iVar8 == 0) {
       this->mbr_0x280 = 1;
       if (this->mbr_0x284 == 0) {
@@ -5232,7 +5232,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
       }
     }
     else {
-      iVar8 = FUN_0059a530(uVar16,s_Solifuge_005dfa1c);
+      iVar8 = FUN_0059a530_stricmp(uVar16,s_Solifuge_005dfa1c);
       if (iVar8 == 0) {
         this->mbr_0x280 = 2;
         if (this->mbr_0x284 == 0) {
@@ -5246,7 +5246,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
         }
       }
       else {
-        iVar8 = FUN_0059a530(uVar16,s_Jhaga_005dfa28);
+        iVar8 = FUN_0059a530_stricmp(uVar16,s_Jhaga_005dfa28);
         if (iVar8 == 0) {
           this->mbr_0x280 = 3;
           if (this->mbr_0x284 == 0) {
@@ -5260,7 +5260,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
           }
         }
         else {
-          iVar8 = FUN_0059a530(uVar16,s_Yhagoro_005dfa30);
+          iVar8 = FUN_0059a530_stricmp(uVar16,s_Yhagoro_005dfa30);
           if (iVar8 == 0) {
             this->mbr_0x280 = 4;
             if (this->mbr_0x284 == 0) {
@@ -5284,17 +5284,17 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
     break;
   case 2:
     (this->cls_0x5a50e8).mbr_0x110 = (this->cls_0x5a50e8).mbr_0x110 | 0x80;
-    if (DAT_00667fcc != (cls_0x5a7b98 *)0x0) {
+    if (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) {
       uVar6 = (*((DAT_00667fcc->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(DAT_00667fcc);
       if ((CONCAT31(extraout_var_36,uVar6) < 1) &&
-         (((this == (cls_0x5a7b98 *)0x0 || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
-          (iVar8 = FUN_004dab80(s_combat_005dfd90), iVar8 == 0)))) {
+         (((this == (cls_0x5a7b98_TCharacter *)0x0 || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
+          (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_005dfd90), iVar8 == 0)))) {
         (DAT_00667fcc->cls_0x5a50e8).mbr_0x110 = (DAT_00667fcc->cls_0x5a50e8).mbr_0x110 | 0x1000;
         ExceptionList = puStack_8;
         return 1;
       }
       pcVar4 = DAT_00667fcc;
-      bVar30 = DAT_00667fcc != (cls_0x5a7b98 *)0x0;
+      bVar30 = DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0;
       (DAT_00667fcc->cls_0x5a50e8).mbr_0x110 = (DAT_00667fcc->cls_0x5a50e8).mbr_0x110 & 0xffffefff;
       if (bVar30) {
         piStack_14c = (int *)(pcVar4->cls_0x5a50e8).mbr_0x10;
@@ -5330,15 +5330,15 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
     }
     uVar6 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(this);
     if (CONCAT31(extraout_var_39,uVar6) < 1) {
-      piVar11 = (int *)FUN_00452690(*(undefined4 *)(this->mbr_0x284 + 0x1c),0);
+      piVar11 = (int *)FUN_00452690_TMapPane_GetInstance(*(undefined4 *)(this->mbr_0x284 + 0x1c),0);
       if (piVar11 != (int *)0x0) {
         (**(code **)(*piVar11 + 0x1c4))(0);
       }
-      piVar11 = (int *)FUN_00452690(*(undefined4 *)(this->mbr_0x284 + 0x20),0);
+      piVar11 = (int *)FUN_00452690_TMapPane_GetInstance(*(undefined4 *)(this->mbr_0x284 + 0x20),0);
       if (piVar11 != (int *)0x0) {
         (**(code **)(*piVar11 + 0x1c4))(0);
       }
-      piVar11 = (int *)FUN_00452690(*(undefined4 *)(this->mbr_0x284 + 0x24),0);
+      piVar11 = (int *)FUN_00452690_TMapPane_GetInstance(*(undefined4 *)(this->mbr_0x284 + 0x24),0);
       if (piVar11 != (int *)0x0) {
         (**(code **)(*piVar11 + 0x1c4))(0);
       }
@@ -5346,7 +5346,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
     if ((uVar20 & 0x800000) == 0) {
       dVar9 = this->mbr_0x284;
       if (*(int *)(dVar9 + 0x18) != 0) {
-        meth_0x4d6b40(this);
+        meth_0x4d6b40_RestoreMaterials(this);
         dVar9 = this->mbr_0x284;
         *(undefined4 *)(dVar9 + 0x18) = 0;
       }
@@ -5358,8 +5358,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
         iVar8 = *(int *)(dVar9 + 0x2c);
         (this->cls_0x5a50e8).mbr_0x110 = (this->cls_0x5a50e8).mbr_0x110 | 0x10;
         if (iVar8 != 0) {
-          if (((this == (cls_0x5a7b98 *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
-             (iVar8 = FUN_004dab80(s_pissedoff_005dfd98), iVar8 == 0)) {
+          if (((this == (cls_0x5a7b98_TCharacter *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_pissedoff_005dfd98), iVar8 == 0)) {
             pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
             if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
               pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -5382,8 +5382,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
             *(undefined4 *)(this->mbr_0x284 + 0x2c) = 0;
           }
         }
-        if (((this == (cls_0x5a7b98 *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
-           ((iVar8 = FUN_004dab80(s_pissedoff_005dfdb0), iVar8 == 0 ||
+        if (((this == (cls_0x5a7b98_TCharacter *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
+           ((iVar8 = FUN_004dab80_TActionBlock_Is(s_pissedoff_005dfdb0), iVar8 == 0 ||
             (*(int *)(this->mbr_0x284 + 0x30) != 0)))) {
           uVar20 = (this->cls_0x5a50e8).mbr_0x110 & 0xffff7fff;
         }
@@ -5392,11 +5392,11 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
         }
         dVar9 = this->mbr_0x284;
         (this->cls_0x5a50e8).mbr_0x110 = uVar20;
-        if (((*(int *)(dVar9 + 0x30) != 0) && (this != (cls_0x5a7b98 *)0x0)) &&
+        if (((*(int *)(dVar9 + 0x30) != 0) && (this != (cls_0x5a7b98_TCharacter *)0x0)) &&
            ((((this->cls_0x5a50e8).mbr_0xd8 != 0 &&
-             (iVar8 = FUN_004dab80(s_combat_005dfdbc), iVar8 != 0)) ||
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_005dfdbc), iVar8 != 0)) ||
             (((this->cls_0x5a50e8).mbr_0xd8 != 0 &&
-             (iVar8 = FUN_004dab80(s_combatf_005dfdc4), iVar8 != 0)))))) {
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_combatf_005dfdc4), iVar8 != 0)))))) {
           dVar9 = this->mbr_0x284;
           *(undefined4 *)(dVar9 + 0x30) = 0;
           *(undefined4 *)(dVar9 + 0x14) = 1;
@@ -5415,8 +5415,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
           }
           uVar6 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477780_104)(this);
           if (((iVar14 - (iVar25 >> 1)) + iVar8 < CONCAT31(extraout_var_41,uVar6) * 3) &&
-             (DAT_00667fcc != (cls_0x5a7b98 *)0x0)) {
-            meth_0x4ce1b0(DAT_00667fcc,&dStack_110);
+             (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0)) {
+            meth_0x4ce1b0_BuildActionName(DAT_00667fcc,&dStack_110);
             pcVar4 = DAT_00667fcc;
             pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
             if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
@@ -5442,13 +5442,13 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
       }
       else {
         (this->cls_0x5a50e8).mbr_0x110 = (this->cls_0x5a50e8).mbr_0x110 & 0xffff7fef | 4;
-        if ((this == (cls_0x5a7b98 *)0x0) ||
+        if ((this == (cls_0x5a7b98_TCharacter *)0x0) ||
            (((((this->cls_0x5a50e8).mbr_0xd8 == 0 ||
-              (iVar8 = FUN_004dab80(s_stunned_005dfdd4), iVar8 == 0)) &&
+              (iVar8 = FUN_004dab80_TActionBlock_Is(s_stunned_005dfdd4), iVar8 == 0)) &&
              (((this->cls_0x5a50e8).mbr_0xd8 == 0 ||
-              (iVar8 = FUN_004dab80(s_skywalk_to_combat_005dfddc), iVar8 == 0)))) &&
+              (iVar8 = FUN_004dab80_TActionBlock_Is(s_skywalk_to_combat_005dfddc), iVar8 == 0)))) &&
             (((this->cls_0x5a50e8).mbr_0xd8 == 0 ||
-             (iVar8 = FUN_004dab80(s_skywalk_005dfdf0), iVar8 == 0)))))) {
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_skywalk_005dfdf0), iVar8 == 0)))))) {
           dVar9 = (this->cls_0x5a50e8).mbr_0xd8;
           *(uint *)(dVar9 + 0x60) = *(uint *)(dVar9 + 0x60) & 0xffffffef;
           pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
@@ -5484,11 +5484,11 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
       piVar11 = (int *)this->mbr_0x284;
       if ((*piVar11 != 0) && (piVar11[1] == 0)) {
         *piVar11 = *piVar11 + -1;
-        if ((this != (cls_0x5a7b98 *)0x0) &&
+        if ((this != (cls_0x5a7b98_TCharacter *)0x0) &&
            ((((this->cls_0x5a50e8).mbr_0xd8 != 0 &&
-             (iVar8 = FUN_004dab80(s_skywalk_005dfe08), iVar8 != 0)) ||
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_skywalk_005dfe08), iVar8 != 0)) ||
             (((this->cls_0x5a50e8).mbr_0xd8 != 0 &&
-             (iVar8 = FUN_004dab80(s_skywalkf_005dfe10), iVar8 != 0)))))) {
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_skywalkf_005dfe10), iVar8 != 0)))))) {
           pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
           if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
             pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -5556,8 +5556,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
       }
       if (*piVar12 == 2) {
         (this->cls_0x5a50e8).mbr_0x110 = (this->cls_0x5a50e8).mbr_0x110 | 0x800c;
-        if (((this == (cls_0x5a7b98 *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
-           (iVar8 = FUN_004dab80(s_skywalkf_005dfe4c), iVar8 == 0)) {
+        if (((this == (cls_0x5a7b98_TCharacter *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
+           (iVar8 = FUN_004dab80_TActionBlock_Is(s_skywalkf_005dfe4c), iVar8 == 0)) {
           uVar20 = (this->cls_0x5a50e8).mbr_0x110 & 0xffffffbf;
         }
         else {
@@ -5581,12 +5581,12 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
             else if (adStack_148[0] == 2) {
               pcVar17 = *(cls_0x4da9f0 **)(this->mbr_0x284 + 0x24);
             }
-            piVar11 = (int *)FUN_00452690(pcVar17,0);
+            piVar11 = (int *)FUN_00452690_TMapPane_GetInstance(pcVar17,0);
             if ((piVar11 == (int *)0x0) || (iVar8 = (**(code **)(*piVar11 + 0x1c0))(), iVar8 < 1)) {
               pcVar17 = (cls_0x4da9f0 *)0x0;
               piStack_14c = (int *)0x0;
               if (dVar9 == 0) {
-                iVar8 = FUN_00483300(0,1);
+                iVar8 = FUN_00483300_RandomRange(0,1);
                 if (iVar8 == 0) {
                   pcVar26 = s_Recluse_005dfe58;
                 }
@@ -5595,7 +5595,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
                 }
               }
               else {
-                iVar8 = FUN_00483300(0,1);
+                iVar8 = FUN_00483300_RandomRange(0,1);
                 pcVar26 = s_Araknid_005dfe74;
                 if (iVar8 == 0) {
                   pcVar26 = s_Artikulid_005dfe68;
@@ -5629,7 +5629,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
                 puVar28 = puVar28 + 1;
               }
               uStack_f8._2_2_ =
-                   cls_0x4746d0::meth_0x475210((cls_0x4746d0 *)&DAT_0066ca68,adStack_10c);
+                   cls_0x4746d0::meth_0x475210((cls_0x4746d0 *)&DAT_0066ca68_CharacterClass,adStack_10c);
               if (-1 < uStack_f8._2_2_) {
                 dStack_ec = (this->cls_0x5a50e8).mbr_0x10;
                 dStack_e4 = (this->cls_0x5a50e8).mbr_0x18;
@@ -5637,16 +5637,16 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
                 dStack_e8 = (this->cls_0x5a50e8).mbr_0x14;
                 uStack_f8._0_2_ = 0xc;
                 uVar6 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477780_104)(this);
-                iVar8 = FUN_00483300(0,CONCAT31(extraout_var_45,uVar6) << 3);
+                iVar8 = FUN_00483300_RandomRange(0,CONCAT31(extraout_var_45,uVar6) << 3);
                 uVar6 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477780_104)(this);
                 dStack_ec = dStack_ec + iVar8 + CONCAT31(extraout_var_46,uVar6) * -4;
                 uVar6 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477780_104)(this);
-                iVar8 = FUN_00483300(0,CONCAT31(extraout_var_47,uVar6) << 3);
+                iVar8 = FUN_00483300_RandomRange(0,CONCAT31(extraout_var_47,uVar6) << 3);
                 uVar6 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477780_104)(this);
                 dStack_e8 = dStack_e8 + iVar8 + CONCAT31(extraout_var_48,uVar6) * -4;
                 pcVar17 = (cls_0x4da9f0 *)
-                          cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&uStack_f8);
-                piStack_14c = (int *)FUN_00452690(pcVar17,0);
+                          cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&uStack_f8);
+                piStack_14c = (int *)FUN_00452690_TMapPane_GetInstance(pcVar17,0);
               }
               if (adStack_148[0] == 0) {
                 *(cls_0x4da9f0 **)(this->mbr_0x284 + 0x1c) = pcVar17;
@@ -5681,9 +5681,9 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
         }
         dVar9 = this->mbr_0x284;
         if ((*(int *)(dVar9 + 8) == 0xa8) && (1 < *(int *)(dVar9 + 0xc))) {
-          piVar11 = (int *)FUN_00452690(*(undefined4 *)(dVar9 + 0x1c),0);
+          piVar11 = (int *)FUN_00452690_TMapPane_GetInstance(*(undefined4 *)(dVar9 + 0x1c),0);
           if ((piVar11 != (int *)0x0) &&
-             ((piVar11[0x36] != 0 && (iVar8 = FUN_004dab80(s_sleeping_005dfe88), iVar8 != 0)))) {
+             ((piVar11[0x36] != 0 && (iVar8 = FUN_004dab80_TActionBlock_Is(s_sleeping_005dfe88), iVar8 != 0)))) {
             local_150 = (cls_0x4da9f0 *)FUN_00482fb0(100);
             if (local_150 == (cls_0x4da9f0 *)0x0) {
               pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -5701,9 +5701,9 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
               FUN_004830f0(pcVar17);
             }
           }
-          piVar11 = (int *)FUN_00452690(*(undefined4 *)(this->mbr_0x284 + 0x20),0);
+          piVar11 = (int *)FUN_00452690_TMapPane_GetInstance(*(undefined4 *)(this->mbr_0x284 + 0x20),0);
           if (((piVar11 != (int *)0x0) && (piVar11[0x36] != 0)) &&
-             (iVar8 = FUN_004dab80(s_sleeping_005dfea8), iVar8 != 0)) {
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_sleeping_005dfea8), iVar8 != 0)) {
             local_150 = (cls_0x4da9f0 *)FUN_00482fb0(100);
             if (local_150 == (cls_0x4da9f0 *)0x0) {
               pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -5721,9 +5721,9 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
               FUN_004830f0(pcVar17);
             }
           }
-          piVar11 = (int *)FUN_00452690(*(undefined4 *)(this->mbr_0x284 + 0x24),0);
+          piVar11 = (int *)FUN_00452690_TMapPane_GetInstance(*(undefined4 *)(this->mbr_0x284 + 0x24),0);
           if (((piVar11 != (int *)0x0) && (piVar11[0x36] != 0)) &&
-             (iVar8 = FUN_004dab80(s_sleeping_005dfec8), iVar8 != 0)) {
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_sleeping_005dfec8), iVar8 != 0)) {
             local_150 = (cls_0x4da9f0 *)FUN_00482fb0(100);
             if (local_150 == (cls_0x4da9f0 *)0x0) {
               pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -5774,7 +5774,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
             FUN_004830f0(pcVar17);
           }
           if ((*(int *)&(this->cls_0x5a50e8).field_0xdc != 0) &&
-             (iVar8 = FUN_004dab80(s_combat_005dff04), iVar8 != 0)) {
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_005dff04), iVar8 != 0)) {
             (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x46ed70_8)(this);
           }
           puVar28 = (undefined4 *)this->mbr_0x284;
@@ -5785,7 +5785,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
           *puVar28 = 0xf0;
         }
         else {
-          dVar9 = FUN_0046dc60(&local_134,adStack_148 + 1);
+          dVar9 = FUN_0046dc60_AngleToPP(&local_134,adStack_148 + 1);
           (this->cls_0x5a50e8).mbr_0x36 = (byte)dVar9;
           (this->cls_0x5a50e8).mbr_0xb0 = dVar9;
           dVar9 = this->mbr_0x284;
@@ -5831,7 +5831,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
             }
             (this->cls_0x5a50e8).mbr_0x110 = (this->cls_0x5a50e8).mbr_0x110 & 0xffffffbf;
           }
-          if (this == (cls_0x5a7b98 *)0x0) {
+          if (this == (cls_0x5a7b98_TCharacter *)0x0) {
             ExceptionList = puStack_8;
             return 1;
           }
@@ -5839,7 +5839,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
             ExceptionList = puStack_8;
             return 1;
           }
-          iVar8 = FUN_004dab80(s_combat_to_skywalk_005dff20);
+          iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_to_skywalk_005dff20);
           if (iVar8 == 0) {
             ExceptionList = puStack_8;
             return 1;
@@ -5858,7 +5858,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4c9b70(cls_0x5a7b98 *this
       puVar28[4] = 0x48;
       puVar28[5] = 1;
       if (puVar28[6] == 0) {
-        meth_0x4d6a30(this);
+        meth_0x4d6a30_SaveMaterials(this);
         *(undefined4 *)(this->mbr_0x284 + 0x18) = 1;
         ExceptionList = puStack_8;
         return 1;
@@ -5878,7 +5878,7 @@ LAB_004cccfb:
         piVar11[0x10] = 0xf0;
         *piVar11 = 2;
         piVar11 = (int *)this->mbr_0x284;
-        iVar8 = FUN_00483300(0,2);
+        iVar8 = FUN_00483300_RandomRange(0,2);
         piVar11[0x11] = iVar8;
         uVar20 = (this->cls_0x5a50e8).mbr_0x110;
         piVar11[0x12] = 0;
@@ -5935,8 +5935,8 @@ LAB_004cccfb:
             dStack_e8 = adStack_148[2];
             dStack_f0 = dVar9;
             dStack_ec = dVar10;
-            uVar16 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&uStack_fc);
-            FUN_00452690(uVar16,0);
+            uVar16 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&uStack_fc);
+            FUN_00452690_TMapPane_GetInstance(uVar16,0);
           }
           pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
           if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
@@ -5974,18 +5974,18 @@ LAB_004cccfb:
           if (*(int *)(this->mbr_0x284 + 0x48) != 4) {
             cls_0x4d6ff0::cls_0x4d6ff0((cls_0x4d6ff0 *)&iStack_a8);
             cls_0x4d6ff0::cls_0x4d6ff0((cls_0x4d6ff0 *)&uStack_b4);
-            meth_0x4d7000(this);
-            if (DAT_00667fcc == (cls_0x5a7b98 *)0x0) {
+            meth_0x4d7000_GetPos(this);
+            if (DAT_00667fcc == (cls_0x5a7b98_TCharacter *)0x0) {
               dVar9 = this->mbr_0x284;
               uStack_b4 = *(undefined4 *)(dVar9 + 0x14);
               uStack_b0 = *(undefined4 *)(dVar9 + 0x28);
               uStack_ac = *(undefined4 *)(dVar9 + 0x3c);
             }
             else {
-              meth_0x4d7000(DAT_00667fcc);
+              meth_0x4d7000_GetPos(DAT_00667fcc);
             }
-            FUN_0046dc60(&iStack_a8,&uStack_b4);
-            meth_0x4d7020(this);
+            FUN_0046dc60_AngleToPP(&iStack_a8,&uStack_b4);
+            meth_0x4d7020_Face(this);
           }
           meth_0x4d5b90(this);
         }
@@ -6020,7 +6020,7 @@ LAB_004cccfb:
       pdVar22 = adStack_148;
       if (cStack_98.mbr_0xc == 0) goto LAB_004ccb28;
       do {
-        iVar14 = FUN_0059a530(**(undefined4 **)(cStack_98.mbr_0xc + 0x4c),s_waypoint_005dff34);
+        iVar14 = FUN_0059a530_stricmp(**(undefined4 **)(cStack_98.mbr_0xc + 0x4c),s_waypoint_005dff34);
         if (iVar14 == 0) {
           iVar8 = iVar8 + 1;
           *pdVar22 = cStack_98.mbr_0xc;
@@ -6126,12 +6126,12 @@ LAB_004ccb28:
     ExceptionList = puStack_8;
     return 1;
   case 4:
-    if ((DAT_00667fcc != (cls_0x5a7b98 *)0x0) &&
+    if ((DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) &&
        (uVar6 = (*(DAT_00667fcc->cls_0x5a50e8).vftptr_0x0[1].FUN_00477aa0_220)(unaff_EDI),
        CONCAT31(extraout_var_54,uVar6) == 2)) {
-      meth_0x4d7400(DAT_00667fcc);
+      meth_0x4d7400_SetFlags(DAT_00667fcc);
     }
-    meth_0x4d7400(this);
+    meth_0x4d7400_SetFlags(this);
     uVar6 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477900_36)(this);
     if (CONCAT31(extraout_var_55,uVar6) == 0) {
       (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046e8b0_40)();
@@ -6175,8 +6175,8 @@ LAB_004cd12b:
       pcVar18->mbr_0x0 = 3;
       (*pcVar3[1].virt_meth_0x46ed70_8)(this);
       *(undefined4 *)this->mbr_0x284 = 0xffffffff;
-      meth_0x4d7400(this);
-      meth_0x4d7420(this);
+      meth_0x4d7400_SetFlags(this);
+      meth_0x4d7420_ClearFlags(this);
     }
     if ((*(int *)(this->mbr_0x284 + 8) != 0) && (iVar8 = meth_0x4d7040(this), iVar8 != 0)) {
       puVar1 = (uint *)((this->cls_0x5a50e8).mbr_0xd8 + 0x60);
@@ -6189,39 +6189,39 @@ LAB_004cd12b:
     }
     iVar8 = meth_0x4d7040(this);
     if ((iVar8 == 0) && (iVar8 = meth_0x4d7040(this), iVar8 == 0)) {
-      meth_0x4d7420(this);
+      meth_0x4d7420_ClearFlags(this);
     }
     else {
-      meth_0x4d7400(this);
+      meth_0x4d7400_SetFlags(this);
     }
     if (((*(int *)this->mbr_0x284 == 1) && (((int *)this->mbr_0x284)[2] == 0)) &&
        (iVar8 = meth_0x4d7040(this), iVar8 == 0)) {
-      meth_0x4d7420(this);
-      meth_0x4d7400(this);
-      meth_0x4d7420(this);
-      meth_0x4d7420(this);
-      meth_0x4d7420(this);
-      meth_0x4d7400(this);
-      meth_0x4d7420(this);
+      meth_0x4d7420_ClearFlags(this);
+      meth_0x4d7400_SetFlags(this);
+      meth_0x4d7420_ClearFlags(this);
+      meth_0x4d7420_ClearFlags(this);
+      meth_0x4d7420_ClearFlags(this);
+      meth_0x4d7400_SetFlags(this);
+      meth_0x4d7420_ClearFlags(this);
       iVar8 = meth_0x4d7080(this);
       if (iVar8 == 0) {
         meth_0x4111a0(this);
       }
       else {
-        meth_0x4d7420(this);
+        meth_0x4d7420_ClearFlags(this);
       }
     }
     if (((*(int *)this->mbr_0x284 == 0) && (((int *)this->mbr_0x284)[1] == 0)) &&
        (iVar8 = meth_0x4d7040(this), iVar8 == 0)) {
-      meth_0x4d7420(this);
-      meth_0x4d7400(this);
-      meth_0x4d7420(this);
-      meth_0x4d7420(this);
-      meth_0x4d7420(this);
-      meth_0x4d7400(this);
-      meth_0x4d7400(this);
-      meth_0x4d7400(this);
-      meth_0x4d7420(this);
+      meth_0x4d7420_ClearFlags(this);
+      meth_0x4d7400_SetFlags(this);
+      meth_0x4d7420_ClearFlags(this);
+      meth_0x4d7420_ClearFlags(this);
+      meth_0x4d7420_ClearFlags(this);
+      meth_0x4d7400_SetFlags(this);
+      meth_0x4d7400_SetFlags(this);
+      meth_0x4d7400_SetFlags(this);
+      meth_0x4d7420_ClearFlags(this);
       iVar8 = meth_0x4d7080(this);
       if (iVar8 == 0) {
         meth_0x429990(this);
@@ -6245,7 +6245,7 @@ LAB_004cd12b:
         meth_0x4111a0(this);
       }
       else {
-        meth_0x4d7420(this);
+        meth_0x4d7420_ClearFlags(this);
       }
     }
     if (((*(int *)this->mbr_0x284 == -1) && (iVar8 = meth_0x4d7040(this), iVar8 != 0)) &&
@@ -6253,8 +6253,8 @@ LAB_004cd12b:
       puVar28 = (undefined4 *)this->mbr_0x284;
       puVar28[1] = 0;
       *puVar28 = 0;
-      meth_0x4d7420(this);
-      meth_0x4d7420(this);
+      meth_0x4d7420_ClearFlags(this);
+      meth_0x4d7420_ClearFlags(this);
     }
     ExceptionList = puStack_8;
     return 1;
@@ -6270,7 +6270,7 @@ LAB_004cd12b:
     while (local_f4 != 0) {
       iVar14 = 0;
       do {
-        iVar25 = FUN_0059a530(*(undefined4 *)(local_f4 + 0x38),
+        iVar25 = FUN_0059a530_stricmp(*(undefined4 *)(local_f4 + 0x38),
                               *(undefined4 *)((int)&PTR_DAT_005df54c + iVar14));
         if (iVar25 == 0) {
           iVar8 = iVar8 + 1;
@@ -6288,7 +6288,7 @@ LAB_004cd12b:
     pcVar4 = DAT_00667fcc;
     *(uint *)(dVar9 + 0x3c) = CONCAT31(extraout_var,uVar6);
     *(undefined4 *)(dVar9 + 0x38) = 0;
-    if (pcVar4 != (cls_0x5a7b98 *)0x0) {
+    if (pcVar4 != (cls_0x5a7b98_TCharacter *)0x0) {
       dVar9 = this->mbr_0x284;
       uVar6 = (*((pcVar4->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(pcVar4);
       *(uint *)(dVar9 + 0x38) = CONCAT31(extraout_var_00,uVar6);
@@ -6301,7 +6301,7 @@ LAB_004c9da7:
     local_130 = 0;
     local_150 = (cls_0x4da9f0 *)0x0;
     uVar6 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(this);
-    if (DAT_00667fcc != (cls_0x5a7b98 *)0x0) {
+    if (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) {
       uVar7 = (*((DAT_00667fcc->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(DAT_00667fcc);
       iVar8 = CONCAT31(extraout_var_02,uVar7);
     }
@@ -6315,7 +6315,7 @@ LAB_004c9da7:
     if (CONCAT31(extraout_var_01,uVar6) < *(int *)(this->mbr_0x284 + 0x3c)) {
       local_150 = (cls_0x4da9f0 *)0x1;
     }
-    if (DAT_00667fcc == (cls_0x5a7b98 *)0x0) {
+    if (DAT_00667fcc == (cls_0x5a7b98_TCharacter *)0x0) {
       dVar9 = 0;
       dVar10 = 0;
       dVar19 = 0;
@@ -6341,11 +6341,11 @@ LAB_004c9da7:
         local_138 = piVar11[4];
         local_134 = piVar11[5];
         local_130 = piVar11[6];
-        iVar8 = FUN_0046dc60(&local_138,adStack_148);
+        iVar8 = FUN_0046dc60_AngleToPP(&local_138,adStack_148);
         *(char *)((int)piVar11 + 0x36) = (char)iVar8;
         piVar11[0x2c] = iVar8;
-        if ((piVar11[0x38] == 0) || (iVar8 = FUN_004dab80(s_watcha_005dfa38), iVar8 == 0)) {
-          if ((piVar11[0x38] != 0) && (iVar8 = FUN_004dab80(s_watchb_005dfa50), iVar8 != 0)) {
+        if ((piVar11[0x38] == 0) || (iVar8 = FUN_004dab80_TActionBlock_Is(s_watcha_005dfa38), iVar8 == 0)) {
+          if ((piVar11[0x38] != 0) && (iVar8 = FUN_004dab80_TActionBlock_Is(s_watchb_005dfa50), iVar8 != 0)) {
             if (dVar9 == 0) {
               if (piStack_14c == (int *)0x0) goto LAB_004ca12d;
               pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
@@ -6368,7 +6368,7 @@ LAB_004ca07e:
             iVar8 = (**(code **)(iVar8 + 0x208))(pcVar17,0);
             goto LAB_004ca09d;
           }
-          if ((piVar11[0x38] != 0) && (iVar8 = FUN_004dab80(s_watchc_005dfa68), iVar8 != 0)) {
+          if ((piVar11[0x38] != 0) && (iVar8 = FUN_004dab80_TActionBlock_Is(s_watchc_005dfa68), iVar8 != 0)) {
             if (dVar9 != 0) {
               pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
               if (pcStack_154 == (cls_0x4da9f0 *)0x0) goto LAB_004ca07c;
@@ -6442,7 +6442,7 @@ LAB_004ca12d:
     uVar6 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(this);
     pcVar4 = DAT_00667fcc;
     *(uint *)(dVar9 + 0x3c) = CONCAT31(extraout_var_03,uVar6);
-    if (pcVar4 != (cls_0x5a7b98 *)0x0) {
+    if (pcVar4 != (cls_0x5a7b98_TCharacter *)0x0) {
       dVar9 = this->mbr_0x284;
       uVar6 = (*((pcVar4->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(pcVar4);
       *(uint *)(dVar9 + 0x38) = CONCAT31(extraout_var_04,uVar6);
@@ -6484,7 +6484,7 @@ LAB_004ca12d:
       *(undefined4 *)(dVar9 + 0x4c) = 0;
       cls_0x44ceb0::meth_0x44cf80(&cStack_50,0,0,0,0);
       while ((int *)cStack_50.mbr_0xc != (int *)0x0) {
-        iVar8 = FUN_0059a530(*(int *)(cStack_50.mbr_0xc + 0x38),s_ringwall_005dfa88);
+        iVar8 = FUN_0059a530_stricmp(*(int *)(cStack_50.mbr_0xc + 0x38),s_ringwall_005dfa88);
         if (iVar8 == 0) {
           if ((int *)cStack_50.mbr_0xc != (int *)0x0) {
             (**(code **)(*(int *)cStack_50.mbr_0xc + 0x40))
@@ -6528,7 +6528,7 @@ LAB_004ca3a3:
           ExceptionList = puStack_8;
           return 1;
         }
-        iVar8 = FUN_0059a530(**(undefined4 **)(cStack_98.mbr_0xc + 0x4c),s_ForBreakTable_005dfa9c);
+        iVar8 = FUN_0059a530_stricmp(**(undefined4 **)(cStack_98.mbr_0xc + 0x4c),s_ForBreakTable_005dfa9c);
         if (iVar8 == 0) {
           if (cStack_98.mbr_0xc != 0) {
             dVar9 = this->mbr_0x284;
@@ -6579,7 +6579,7 @@ LAB_004ca3a3:
               }
               FUN_004830f0(pcVar17);
             }
-            cls_0x5a5320::meth_0x4538d0((cls_0x5a5320 *)&DAT_006668d8,this);
+            cls_0x5a5320_TPlayScreen::meth_0x4538d0((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,this);
             dVar9 = this->mbr_0x284;
             *(undefined4 *)(dVar9 + 0x40) = 1;
             break;
@@ -6590,10 +6590,10 @@ LAB_004ca3a3:
       } while( true );
     }
     if (*(int *)(dVar9 + 0xc) != 1) goto LAB_004cb3f2;
-    if (DAT_00667fcc != (cls_0x5a7b98 *)0x0) {
-      meth_0x4d3fd0(DAT_00667fcc);
+    if (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) {
+      meth_0x4d3fd0_EndFighting(DAT_00667fcc);
     }
-    cls_0x5a5320::meth_0x47c580((cls_0x5a5320 *)&DAT_0065caf0);
+    cls_0x5a5320_TPlayScreen::meth_0x47c580((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
     dVar9 = this->mbr_0x284;
     iStack_128 = *(int *)(dVar9 + 0x10);
     iStack_124 = *(int *)(dVar9 + 0x14);
@@ -6602,7 +6602,7 @@ LAB_004ca3a3:
     if (CONCAT31(extraout_var_08,uVar6) == 0) {
       (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046e8b0_40)();
     }
-    dVar10 = FUN_0046dc60(&dStack_110,&iStack_128);
+    dVar10 = FUN_0046dc60_AngleToPP(&dStack_110,&iStack_128);
     dVar9 = this->mbr_0x284;
     (this->cls_0x5a50e8).mbr_0x36 = (byte)dVar10;
     (this->cls_0x5a50e8).mbr_0xb0 = dVar10;
@@ -6616,7 +6616,7 @@ LAB_004ca3a3:
       iStack_118 = *(int *)(dVar9 + 0x20);
       uStack_114 = *(undefined4 *)(dVar9 + 0x24);
     }
-    if (DAT_00667fcc != (cls_0x5a7b98 *)0x0) {
+    if (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) {
       local_138 = (DAT_00667fcc->cls_0x5a50e8).mbr_0x10;
       local_134 = (DAT_00667fcc->cls_0x5a50e8).mbr_0x14;
       local_130 = (DAT_00667fcc->cls_0x5a50e8).mbr_0x18;
@@ -6654,10 +6654,10 @@ LAB_004ca3a3:
       iVar25 = iVar14;
     }
     if ((iVar14 - (iVar25 >> 1)) + iVar8 < 0x20) {
-      if (DAT_00667fcc != (cls_0x5a7b98 *)0x0) {
+      if (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) {
         piVar11 = &iStack_11c;
         (*((DAT_00667fcc->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x4778a0_12)(DAT_00667fcc);
-        meth_0x4cee70(DAT_00667fcc);
+        meth_0x4cee70_Stop(DAT_00667fcc);
         pcVar4 = DAT_00667fcc;
         pcVar17 = (cls_0x4da9f0 *)FUN_00482fb0(100,piVar11);
         uStack_4 = 10;
@@ -6678,7 +6678,7 @@ LAB_004ca3a3:
           }
           FUN_004830f0(pcVar17);
         }
-        cVar5 = FUN_0046dc60(adStack_148 + 2,&iStack_118);
+        cVar5 = FUN_0046dc60_AngleToPP(adStack_148 + 2,&iStack_118);
         pcVar4 = DAT_00667fcc;
         (DAT_00667fcc->cls_0x5a50e8).mbr_0x36 = cVar5 + 0x80U;
         (pcVar4->cls_0x5a50e8).mbr_0xb0 = (uint)(byte)(cVar5 + 0x80U);
@@ -6700,7 +6700,7 @@ LAB_004ca3a3:
         *(undefined4 *)(this->mbr_0x284 + 0x54) = 1000;
       }
       if (iVar8 < 0x20) {
-        iVar8 = FUN_00452690(*(undefined4 *)(this->mbr_0x284 + 0x28),0);
+        iVar8 = FUN_00452690_TMapPane_GetInstance(*(undefined4 *)(this->mbr_0x284 + 0x28),0);
         if (iVar8 == 0) {
           adStack_148[0] = 0;
           adStack_148[1] = 0;
@@ -6711,7 +6711,7 @@ LAB_004ca3a3:
           adStack_148[1] = *(dword *)(iVar8 + 0x14);
           adStack_148[2] = *(dword *)(iVar8 + 0x18);
         }
-        dVar9 = FUN_0046dc60(&dStack_110,adStack_148);
+        dVar9 = FUN_0046dc60_AngleToPP(&dStack_110,adStack_148);
         (this->cls_0x5a50e8).mbr_0x36 = (byte)dVar9;
         (this->cls_0x5a50e8).mbr_0xb0 = dVar9;
         piVar11 = &iStack_128;
@@ -6735,10 +6735,10 @@ LAB_004ca3a3:
           }
           FUN_004830f0(pcVar17);
         }
-        meth_0x4cee70(this);
-        dVar9 = FUN_0046dc60(adStack_148 + 2,&iStack_118);
+        meth_0x4cee70_Stop(this);
+        dVar9 = FUN_0046dc60_AngleToPP(adStack_148 + 2,&iStack_118);
         pcVar4 = DAT_00667fcc;
-        if (DAT_00667fcc != (cls_0x5a7b98 *)0x0) {
+        if (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) {
           (DAT_00667fcc->cls_0x5a50e8).mbr_0x36 = (byte)dVar9;
           (pcVar4->cls_0x5a50e8).mbr_0xb0 = dVar9;
         }
@@ -6777,8 +6777,8 @@ LAB_004ca3a3:
           }
           FUN_004830f0(pcVar17);
         }
-        if (((this != (cls_0x5a7b98 *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) &&
-           (iVar8 = FUN_004dab80(s_combat_to_cdead_005dfca0), iVar8 != 0)) {
+        if (((this != (cls_0x5a7b98_TCharacter *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) &&
+           (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_to_cdead_005dfca0), iVar8 != 0)) {
           dVar9 = this->mbr_0x284;
           *(undefined4 *)(dVar9 + 0xc) = 2;
           *(undefined4 *)(dVar9 + 0x2c) = 0;
@@ -6791,15 +6791,15 @@ LAB_004ca3a3:
         }
       }
       else {
-        dVar9 = FUN_0046dc60(&dStack_110,&iStack_128);
+        dVar9 = FUN_0046dc60_AngleToPP(&dStack_110,&iStack_128);
         meth_0x4cedb0(this,iStack_128,iStack_124);
         (this->cls_0x5a50e8).mbr_0x36 = (byte)dVar9;
         (this->cls_0x5a50e8).mbr_0xb0 = dVar9;
-        if (this != (cls_0x5a7b98 *)0x0) {
+        if (this != (cls_0x5a7b98_TCharacter *)0x0) {
           if (((this->cls_0x5a50e8).mbr_0xd8 != 0) &&
-             (iVar8 = FUN_004dab80(s_combat_to_fakedead_005dfadc), iVar8 != 0)) goto LAB_004cb3e1;
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_to_fakedead_005dfadc), iVar8 != 0)) goto LAB_004cb3e1;
           if (((this->cls_0x5a50e8).mbr_0xd8 != 0) &&
-             (iVar8 = FUN_004dab80(s_fakedead_005dfaf0), iVar8 != 0)) {
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_fakedead_005dfaf0), iVar8 != 0)) {
             pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
             if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
               pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -6819,7 +6819,7 @@ LAB_004ca3a3:
             }
           }
           if (((this->cls_0x5a50e8).mbr_0xd8 != 0) &&
-             (iVar8 = FUN_004dab80(s_fakedead_to_walk_005dfb10), iVar8 != 0)) {
+             (iVar8 = FUN_004dab80_TActionBlock_Is(s_fakedead_to_walk_005dfb10), iVar8 != 0)) {
             pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
             if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
               pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -6839,7 +6839,7 @@ LAB_004ca3a3:
             }
           }
           if ((((this->cls_0x5a50e8).mbr_0xd8 != 0) &&
-              (iVar8 = FUN_004dab80(s_combat_005dfb2c), iVar8 != 0)) &&
+              (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_005dfb2c), iVar8 != 0)) &&
              (*(int *)(this->mbr_0x284 + 0x54) == 0)) {
             dVar9 = (this->cls_0x5a50e8).mbr_0xd8;
             if (((dVar9 == 0) || ((*(byte *)(dVar9 + 0x60) & 0x10) == 0)) ||
@@ -6895,8 +6895,8 @@ joined_r0x004cac51:
             FUN_004830f0(pcVar17);
           }
         }
-        else if (((this != (cls_0x5a7b98 *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) &&
-                (iVar8 = FUN_004dab80(&DAT_005dfb54), iVar8 != 0)) {
+        else if (((this != (cls_0x5a7b98_TCharacter *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) &&
+                (iVar8 = FUN_004dab80_TActionBlock_Is(&DAT_005dfb54), iVar8 != 0)) {
           pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
           if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
             pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -6918,17 +6918,17 @@ joined_r0x004cac51:
     else {
       *(undefined4 *)(dVar9 + 0x54) = 0x30;
       if (*(int *)(dVar9 + 0x40) == 0) {
-        if (((this == (cls_0x5a7b98 *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
-           (iVar8 = FUN_004dab80(s_fakedead_005dfbe4), iVar8 == 0)) {
-          dVar9 = FUN_0046dc60(&dStack_110,&iStack_128);
+        if (((this == (cls_0x5a7b98_TCharacter *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
+           (iVar8 = FUN_004dab80_TActionBlock_Is(s_fakedead_005dfbe4), iVar8 == 0)) {
+          dVar9 = FUN_0046dc60_AngleToPP(&dStack_110,&iStack_128);
           meth_0x4cedb0(this,iStack_128,iStack_124);
           (this->cls_0x5a50e8).mbr_0x36 = (byte)dVar9;
           (this->cls_0x5a50e8).mbr_0xb0 = dVar9;
-          if (this != (cls_0x5a7b98 *)0x0) {
+          if (this != (cls_0x5a7b98_TCharacter *)0x0) {
             if (((this->cls_0x5a50e8).mbr_0xd8 != 0) &&
-               (iVar8 = FUN_004dab80(s_combat_to_fakedead_005dfbf0), iVar8 != 0)) goto LAB_004cb253;
+               (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_to_fakedead_005dfbf0), iVar8 != 0)) goto LAB_004cb253;
             if (((this->cls_0x5a50e8).mbr_0xd8 != 0) &&
-               (iVar8 = FUN_004dab80(s_fakedead_005dfc04), iVar8 != 0)) {
+               (iVar8 = FUN_004dab80_TActionBlock_Is(s_fakedead_005dfc04), iVar8 != 0)) {
               pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
               if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
                 pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -6948,7 +6948,7 @@ joined_r0x004cac51:
               }
             }
             if (((this->cls_0x5a50e8).mbr_0xd8 != 0) &&
-               (iVar8 = FUN_004dab80(s_fakedead_to_walk_005dfc24), iVar8 != 0)) {
+               (iVar8 = FUN_004dab80_TActionBlock_Is(s_fakedead_to_walk_005dfc24), iVar8 != 0)) {
               pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
               if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
                 pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -6968,7 +6968,7 @@ joined_r0x004cac51:
               }
             }
             if ((((this->cls_0x5a50e8).mbr_0xd8 != 0) &&
-                (iVar8 = FUN_004dab80(s_combat_005dfc40), iVar8 != 0)) &&
+                (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_005dfc40), iVar8 != 0)) &&
                (*(int *)(this->mbr_0x284 + 0x54) != 0)) {
               dVar9 = (this->cls_0x5a50e8).mbr_0xd8;
               if (((dVar9 == 0) || ((*(byte *)(dVar9 + 0x60) & 0x10) == 0)) ||
@@ -7024,8 +7024,8 @@ joined_r0x004cb23f:
               FUN_004830f0(pcVar17);
             }
           }
-          else if (((this != (cls_0x5a7b98 *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) &&
-                  (iVar8 = FUN_004dab80(&DAT_005dfc68), iVar8 != 0)) {
+          else if (((this != (cls_0x5a7b98_TCharacter *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) &&
+                  (iVar8 = FUN_004dab80_TActionBlock_Is(&DAT_005dfc68), iVar8 != 0)) {
             pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
             if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
               pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -7045,8 +7045,8 @@ joined_r0x004cb23f:
         }
       }
       else {
-        if (((this == (cls_0x5a7b98 *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
-           (iVar8 = FUN_004dab80(s_combat_to_fakedead_005dfb6c), iVar8 == 0)) {
+        if (((this == (cls_0x5a7b98_TCharacter *)0x0) || ((this->cls_0x5a50e8).mbr_0xd8 == 0)) ||
+           (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_to_fakedead_005dfb6c), iVar8 == 0)) {
           dVar9 = (this->cls_0x5a50e8).mbr_0xd8;
           if (((dVar9 == 0) || ((*(byte *)(dVar9 + 0x60) & 0x10) == 0)) ||
              (*(dword *)&(this->cls_0x5a50e8).field_0xdc == dVar9)) {
@@ -7061,11 +7061,11 @@ joined_r0x004cb23f:
             pcVar17->mbr_0x2c = (uint)(this->cls_0x5a50e8).mbr_0x36;
             (*pcVar3[1].FUN_0046e8b0_40)(pcVar17,0,0);
           }
-          if ((this == (cls_0x5a7b98 *)0x0) ||
+          if ((this == (cls_0x5a7b98_TCharacter *)0x0) ||
              ((((this->cls_0x5a50e8).mbr_0xd8 == 0 ||
-               (iVar8 = FUN_004dab80(s_combat_to_fakedead_005dfb98), iVar8 == 0)) &&
+               (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_to_fakedead_005dfb98), iVar8 == 0)) &&
               (((this->cls_0x5a50e8).mbr_0xd8 == 0 ||
-               (iVar8 = FUN_004dab80(s_fakedead_005dfbac), iVar8 == 0)))))) {
+               (iVar8 = FUN_004dab80_TActionBlock_Is(s_fakedead_005dfbac), iVar8 == 0)))))) {
             dVar9 = (this->cls_0x5a50e8).mbr_0xd8;
             if (((dVar9 == 0) || ((*(byte *)(dVar9 + 0x60) & 0x10) == 0)) ||
                (*(dword *)&(this->cls_0x5a50e8).field_0xdc == dVar9)) {
@@ -7116,14 +7116,14 @@ joined_r0x004cae75:
             FUN_004830f0(pcVar17);
           }
         }
-        if (((this != (cls_0x5a7b98 *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) &&
-           (iVar8 = FUN_004dab80(s_fakedead_005dfbd8), iVar8 != 0)) {
+        if (((this != (cls_0x5a7b98_TCharacter *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) &&
+           (iVar8 = FUN_004dab80_TActionBlock_Is(s_fakedead_005dfbd8), iVar8 != 0)) {
           *(undefined4 *)(this->mbr_0x284 + 0x40) = 0;
         }
       }
 LAB_004cb253:
       pcVar4 = DAT_00667fcc;
-      if (DAT_00667fcc != (cls_0x5a7b98 *)0x0) {
+      if (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) {
         pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
         if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
           pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -7152,7 +7152,7 @@ LAB_004cb3e1:
 LAB_004cb3f2:
     pcVar4 = DAT_00667fcc;
     if (*(int *)(dVar9 + 0xc) == 2) {
-      if ((*(int *)(dVar9 + 0x2c) == 4) && (DAT_00667fcc != (cls_0x5a7b98 *)0x0)) {
+      if ((*(int *)(dVar9 + 0x2c) == 4) && (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0)) {
         dVar9 = (DAT_00667fcc->cls_0x5a50e8).mbr_0xd8;
         if ((dVar9 == 0) ||
            (((*(byte *)(dVar9 + 0x60) & 0x10) == 0 ||
@@ -7172,11 +7172,11 @@ LAB_004cb3f2:
       }
       dVar9 = this->mbr_0x284;
       if (*(int *)(dVar9 + 0x2c) == (*(int *)(dVar9 + 0x30) * 0x35) / 0x96) {
-        piVar11 = (int *)FUN_00452690(*(undefined4 *)(dVar9 + 0x28),0);
+        piVar11 = (int *)FUN_00452690_TMapPane_GetInstance(*(undefined4 *)(dVar9 + 0x28),0);
         if (piVar11 != (int *)0x0) {
           (**(code **)(*piVar11 + 0x18))(1);
         }
-        meth_0x4c8500(this);
+        meth_0x4c8500_EffectCombatFlash(this);
       }
       pcVar4 = DAT_00667fcc;
       dVar9 = this->mbr_0x284;
@@ -7206,7 +7206,7 @@ LAB_004cb3f2:
     }
     (this->cls_0x5a50e8).mbr_0x110 = (this->cls_0x5a50e8).mbr_0x110 & 0xfffffff7;
     (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e60_452)(this);
-    cls_0x5a5320::meth_0x4538d0((cls_0x5a5320 *)&DAT_006668d8,DAT_00667fcc);
+    cls_0x5a5320_TPlayScreen::meth_0x4538d0((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,DAT_00667fcc);
     ExceptionList = puStack_8;
     return 1;
   }
@@ -7309,7 +7309,7 @@ LAB_004cb3f2:
     }
   }
   if (*(int *)this->mbr_0x284 == 0) {
-    if (this == (cls_0x5a7b98 *)0x0) {
+    if (this == (cls_0x5a7b98_TCharacter *)0x0) {
       ExceptionList = puStack_8;
       return 1;
     }
@@ -7317,7 +7317,7 @@ LAB_004cb3f2:
       ExceptionList = puStack_8;
       return 1;
     }
-    iVar8 = FUN_004dab80(s_stunned_005dfd74);
+    iVar8 = FUN_004dab80_TActionBlock_Is(s_stunned_005dfd74);
     if (iVar8 == 0) {
       ExceptionList = puStack_8;
       return 1;
@@ -7344,16 +7344,16 @@ LAB_004cb3f2:
     goto joined_r0x004cbaff;
   }
   (this->cls_0x5a50e8).mbr_0x110 = (this->cls_0x5a50e8).mbr_0x110 | 4;
-  meth_0x4d4790(this);
-  if (this == (cls_0x5a7b98 *)0x0) {
+  meth_0x4d4790_SetFighting(this);
+  if (this == (cls_0x5a7b98_TCharacter *)0x0) {
 LAB_004cb9e4:
     piVar11 = (int *)(this->mbr_0x284 + 4);
     *piVar11 = *piVar11 + -1;
   }
   else if (((this->cls_0x5a50e8).mbr_0xd8 == 0) ||
-          (iVar8 = FUN_004dab80(s_combat_005dfd28), iVar8 == 0)) {
+          (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_005dfd28), iVar8 == 0)) {
     if (((this->cls_0x5a50e8).mbr_0xd8 == 0) ||
-       (iVar8 = FUN_004dab80(s_combat_to_stunned_005dfd44), iVar8 == 0)) goto LAB_004cb9e4;
+       (iVar8 = FUN_004dab80_TActionBlock_Is(s_combat_to_stunned_005dfd44), iVar8 == 0)) goto LAB_004cb9e4;
     pcStack_154 = (cls_0x4da9f0 *)FUN_00482fb0(100);
     if (pcStack_154 == (cls_0x4da9f0 *)0x0) {
       pcVar17 = (cls_0x4da9f0 *)0x0;
@@ -7432,7 +7432,7 @@ joined_r0x004cbaff:
 
 // Function at 004cd540
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cd540(cls_0x5a7b98 *this,int *param_1)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cd540_CanSeeCharacter(cls_0x5a7b98_TCharacter *this,int *param_1)
 
 {
   int iVar1;
@@ -7463,8 +7463,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cd540(cls_0x5a7b98 *this
   if ((int)in_stack_00000008 < 1) {
     in_stack_00000008 = (uint)(this->cls_0x5a50e8).mbr_0x36;
   }
-  iVar3 = FUN_0046de60(&local_c,&local_18);
-  uVar4 = meth_0x46ea90(this);
+  iVar3 = FUN_0046de60_Distance2D(&local_c,&local_18);
+  uVar4 = meth_0x46ea90_AngleTo(this);
   iVar5 = FUN_0046ded0(in_stack_00000008,uVar4);
   if (iVar5 < 0) {
     iVar5 = FUN_0046ded0(in_stack_00000008,uVar4);
@@ -7500,12 +7500,12 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cd540(cls_0x5a7b98 *this
 // Function at 004cd690
 
 int __thiscall
-OOAnalyzer::cls_0x5a7b98::meth_0x4cd690
-          (cls_0x5a7b98 *this,cls_0x5a7b98 **param_1,int param_2,undefined param_3,undefined param_4
+OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cd690_FindCharacters
+          (cls_0x5a7b98_TCharacter *this,cls_0x5a7b98_TCharacter **param_1,int param_2,undefined param_3,undefined param_4
           ,int param_5)
 
 {
-  cls_0x5a7b98 *pcVar1;
+  cls_0x5a7b98_TCharacter *pcVar1;
   undefined uVar2;
   undefined uVar3;
   int iVar4;
@@ -7516,7 +7516,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4cd690
   undefined3 extraout_var_02;
   int iVar6;
   bool bVar7;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   dword *pdVar8;
   int3 in_stack_0000000d;
   int3 in_stack_00000011;
@@ -7529,7 +7529,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4cd690
   if (param_2 < 1) {
     return 0;
   }
-  *param_1 = (cls_0x5a7b98 *)0x0;
+  *param_1 = (cls_0x5a7b98_TCharacter *)0x0;
   local_4c = 10000;
   if (((in_stack_0000000d < 0) || ((in_stack_00000018 & 2) != 0)) &&
      (iVar4 = *(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0x1b8), _param_3 <= iVar4)) {
@@ -7541,22 +7541,22 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4cd690
   }
   local_58 = 0;
   cls_0x44ceb0::cls_0x44ceb0(&local_48,&(this->cls_0x5a50e8).mbr_0x10,_param_3,0xe0,2,0);
-  this_00 = (cls_0x5a7b98 *)local_48.mbr_0xc;
+  this_00 = (cls_0x5a7b98_TCharacter *)local_48.mbr_0xc;
   do {
-    if (this_00 == (cls_0x5a7b98 *)0x0) {
+    if (this_00 == (cls_0x5a7b98_TCharacter *)0x0) {
       return local_58;
     }
     local_48.mbr_0xc = (dword)this_00;
     if ((this_00 != this) && (this_00->mbr_0x1a4 == 0)) {
-      if (((in_stack_00000018 & 1) == 0) || (iVar4 = meth_0x4c89c0(this), iVar4 != 0)) {
-        if (((in_stack_00000018 & 1) == 0) || (iVar4 = meth_0x4cd990(this), iVar4 != 0)) {
+      if (((in_stack_00000018 & 1) == 0) || (iVar4 = meth_0x4c89c0_IsEnemy(this), iVar4 != 0)) {
+        if (((in_stack_00000018 & 1) == 0) || (iVar4 = meth_0x4cd990_IsValidTarget(this), iVar4 != 0)) {
           uVar2 = (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046ea20_4)(this_00);
           iStack_50 = CONCAT31(extraout_var,uVar2);
           if (iStack_50 <= _param_3) {
-            uVar5 = meth_0x46ea90(this);
+            uVar5 = meth_0x46ea90_AngleTo(this);
             bVar7 = true;
             if ((in_stack_00000018 & 2) != 0) {
-              if ((this_00 == (cls_0x5a7b98 *)0x0) ||
+              if ((this_00 == (cls_0x5a7b98_TCharacter *)0x0) ||
                  ((*(byte *)&(this_00->cls_0x5a50e8).mbr_0x8 & 0x80) == 0)) {
                 uVar2 = (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046ea20_4)(this_00);
                 uVar3 = (*(this_00->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477be0_268)(this_00);
@@ -7573,22 +7573,22 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4cd690
 LAB_004cd80c:
             iVar4 = 1;
             if ((in_stack_00000018 & 4) != 0) {
-              iVar4 = meth_0x4cd540(this,this_00);
+              iVar4 = meth_0x4cd540_CanSeeCharacter(this,this_00);
             }
             if ((in_stack_00000018 & 6) != 0) {
               if ((!bVar7) && (iVar4 == 0)) {
                 pdVar8 = &this->mbr_0x1c4;
                 iVar4 = 0;
                 do {
-                  if (((cls_0x5a7b98 *)pdVar8[-1] == this_00) &&
-                     (iVar6 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0),
+                  if (((cls_0x5a7b98_TCharacter *)pdVar8[-1] == this_00) &&
+                     (iVar6 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0),
                      (int)(iVar6 - *pdVar8) < 0x438)) goto LAB_004cd876;
                   iVar4 = iVar4 + 1;
                   pdVar8 = pdVar8 + 3;
                 } while (iVar4 < 8);
                 goto LAB_004cd8f7;
               }
-              meth_0x4c5940(this);
+              meth_0x4c5940_SetHasSeen(this);
             }
 LAB_004cd876:
             if (-1 < in_stack_00000011) {
@@ -7604,7 +7604,7 @@ LAB_004cd876:
               iStack_50 = ((param_5 - iVar4) + 1) * iStack_50;
             }
             pcVar1 = *param_1;
-            if ((pcVar1 != (cls_0x5a7b98 *)0x0) && (iStack_50 <= local_4c)) {
+            if ((pcVar1 != (cls_0x5a7b98_TCharacter *)0x0) && (iStack_50 <= local_4c)) {
               *param_1 = this_00;
               local_4c = iStack_50;
               this_00 = pcVar1;
@@ -7617,12 +7617,12 @@ LAB_004cd876:
         }
       }
       else {
-        meth_0x4c5940(this);
+        meth_0x4c5940_SetHasSeen(this);
       }
     }
 LAB_004cd8f7:
     cls_0x44ceb0::meth_0x44d080(&local_48);
-    this_00 = (cls_0x5a7b98 *)local_48.mbr_0xc;
+    this_00 = (cls_0x5a7b98_TCharacter *)local_48.mbr_0xc;
   } while( true );
 }
 
@@ -7630,7 +7630,7 @@ LAB_004cd8f7:
 
 // Function at 004cd990
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cd990(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cd990_IsValidTarget(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -7675,7 +7675,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cd990(cls_0x5a7b98 *this
 
 // Function at 004cda80
 
-uint __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4cda80(cls_0x5a7b98 *this)
+uint __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4cda80(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -7698,7 +7698,7 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4cda80(cls_0x5a7b98 *this)
   if (*(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0x1b8) < iVar4) {
     return 0;
   }
-  iVar2 = FUN_00483300(0xfffffffe,2);
+  iVar2 = FUN_00483300_RandomRange(0xfffffffe,2);
   uVar3 = (((iVar2 + 100) * iVar4) / *(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0x1b8)) /
           100;
   uVar1 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e30_440)(this);
@@ -7716,7 +7716,7 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4cda80(cls_0x5a7b98 *this)
 
 // Function at 004cdbb0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cdbb0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cdbb0_ResetStealthValues(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -7728,18 +7728,18 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cdbb0(cls_0x5a7b98 *this)
   undefined3 extraout_var_02;
   uint uVar4;
   
-  if (((this == (cls_0x5a7b98 *)0x0) ||
+  if (((this == (cls_0x5a7b98_TCharacter *)0x0) ||
       (piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar1 == (int *)0x0)) ||
      (uVar4 = 100, *piVar1 != 7)) {
     uVar4 = 0x46;
   }
   if ((this->cls_0x5a50e8).mbr_0xe0 != 0) {
-    iVar3 = FUN_004dab80(s_sneak_005c618c);
+    iVar3 = FUN_004dab80_TActionBlock_Is(s_sneak_005c618c);
     if (iVar3 != 0) {
       uVar4 = uVar4 / 2;
     }
   }
-  iVar3 = FUN_00483300(1,0x19);
+  iVar3 = FUN_00483300_RandomRange(1,0x19);
   this->mbr_0x134 = (int)(iVar3 * 2 * uVar4) / 100;
   uVar2 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477b20_236)(this);
   if (CONCAT31(extraout_var,uVar2) + iVar3 < 100) {
@@ -7775,7 +7775,7 @@ LAB_004cdc76:
 /* WARNING: Removing unreachable block (ram,0x004ce00b) */
 /* WARNING: Removing unreachable block (ram,0x004ce019) */
 
-undefined * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4cdf60(cls_0x5a7b98 *this)
+undefined * __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4cdf60(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -7785,16 +7785,16 @@ undefined * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4cdf60(cls_0x5a7b98
   undefined3 extraout_var_00;
   undefined *puVar4;
   
-  iVar3 = FUN_004dab80(&DAT_005e064c);
+  iVar3 = FUN_004dab80_TActionBlock_Is(&DAT_005e064c);
   piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
   if (iVar3 != 0) {
     if ((piVar1 != (int *)0x0) &&
        (((*piVar1 == 3 &&
-         ((iVar3 = FUN_004dab80(s_combatrun_005e0618), iVar3 != 0 ||
-          (iVar3 = FUN_004dab80(s_handrun_005e0610), iVar3 != 0)))) ||
+         ((iVar3 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar3 != 0 ||
+          (iVar3 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar3 != 0)))) ||
         (((piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar1 != (int *)0x0 &&
-          ((*piVar1 == 0x19 && (iVar3 = FUN_004dab80(s_bowrun_005e0608), iVar3 != 0)))) ||
-         (iVar3 = FUN_004dab80(&DAT_005e0604), iVar3 != 0)))))) {
+          ((*piVar1 == 0x19 && (iVar3 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar3 != 0)))) ||
+         (iVar3 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar3 != 0)))))) {
       return &DAT_005e008c;
     }
     return &DAT_005e0090;
@@ -7803,24 +7803,24 @@ undefined * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4cdf60(cls_0x5a7b98
     if (*piVar1 == 0x19) {
       piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
       if ((((piVar1 == (int *)0x0) || (*piVar1 != 0x19)) ||
-          (iVar3 = FUN_004dab80(s_bowrun_005e0608), iVar3 == 0)) &&
-         (iVar3 = FUN_004dab80(&DAT_005e0604), iVar3 == 0)) {
+          (iVar3 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar3 == 0)) &&
+         (iVar3 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar3 == 0)) {
         return &DAT_005e0098;
       }
       return &DAT_005e0094;
     }
     if (piVar1 != (int *)0x0) {
       if (*piVar1 == 3) {
-        iVar3 = FUN_004dab80(s_combatrun_005e0618);
-        if ((((iVar3 == 0) && (iVar3 = FUN_004dab80(s_handrun_005e0610), iVar3 == 0)) &&
+        iVar3 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618);
+        if ((((iVar3 == 0) && (iVar3 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar3 == 0)) &&
             ((piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar1 == (int *)0x0 ||
-             ((*piVar1 != 0x19 || (iVar3 = FUN_004dab80(s_bowrun_005e0608), iVar3 == 0)))))) &&
-           (iVar3 = FUN_004dab80(&DAT_005e0604), iVar3 == 0)) {
+             ((*piVar1 != 0x19 || (iVar3 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar3 == 0)))))) &&
+           (iVar3 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar3 == 0)) {
           return &DAT_005e00a0;
         }
         return &DAT_005e009c;
       }
-      if ((piVar1 != (int *)0x0) && (iVar3 = FUN_004dab80(s_sneak_005c618c), iVar3 != 0)) {
+      if ((piVar1 != (int *)0x0) && (iVar3 = FUN_004dab80_TActionBlock_Is(s_sneak_005c618c), iVar3 != 0)) {
         return &DAT_005e00a4;
       }
     }
@@ -7828,11 +7828,11 @@ undefined * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4cdf60(cls_0x5a7b98
   piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
   if ((piVar1 != (int *)0x0) &&
      ((((*piVar1 == 3 &&
-        ((iVar3 = FUN_004dab80(s_combatrun_005e0618), iVar3 != 0 ||
-         (iVar3 = FUN_004dab80(s_handrun_005e0610), iVar3 != 0)))) ||
+        ((iVar3 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar3 != 0 ||
+         (iVar3 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar3 != 0)))) ||
        ((piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar1 != (int *)0x0 &&
-        ((*piVar1 == 0x19 && (iVar3 = FUN_004dab80(s_bowrun_005e0608), iVar3 != 0)))))) ||
-      (iVar3 = FUN_004dab80(&DAT_005e0604), iVar3 != 0)))) {
+        ((*piVar1 == 0x19 && (iVar3 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar3 != 0)))))) ||
+      (iVar3 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar3 != 0)))) {
     uVar2 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_0046faf0_96)();
     if (CONCAT31(extraout_var,uVar2) != 0) {
       return &DAT_005e00ac;
@@ -7851,7 +7851,7 @@ undefined * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4cdf60(cls_0x5a7b98
 
 // Function at 004ce1b0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4ce1b0(cls_0x5a7b98 *this,undefined4 *param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4ce1b0_BuildActionName(cls_0x5a7b98_TCharacter *this,undefined4 *param_1)
 
 {
   char cVar1;
@@ -7947,7 +7947,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4ce1b0(cls_0x5a7b98 *this,undef
     puVar7 = (undefined4 *)((int)puVar7 + 1);
   }
   if ((((param_1 != (undefined4 *)0x0) && (((this->cls_0x5a50e8).mbr_0x110 & 0x2000) != 0)) &&
-      ((this->cls_0x5a50e8).mbr_0xe0 != 0)) && (iVar6 = FUN_004dab80(&DAT_005e00bc), iVar6 != 0)) {
+      ((this->cls_0x5a50e8).mbr_0xe0 != 0)) && (iVar6 = FUN_004dab80_TActionBlock_Is(&DAT_005e00bc), iVar6 != 0)) {
     pcVar2 = (this->cls_0x5a50e8).vftptr_0x0;
     *(undefined *)param_1 = 0x77;
     uVar3 = (*pcVar2[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
@@ -7962,7 +7962,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4ce1b0(cls_0x5a7b98 *this,undef
 
 // Function at 004ce350
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4ce350(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4ce350_Walk(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -8027,10 +8027,10 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4ce350(cls_0x5a7b98 *this
   if ((*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) &&
      (ExceptionList = &pvStack_c, (this->mbr_0x36c & 2) != 0)) {
     ExceptionList = &pvStack_c;
-    cls_0x5b4f30::meth_0x51d680((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState((cls_0x5b4f30_TPlayer *)this);
   }
   if (((this->cls_0x5a50e8).mbr_0x110 & 0x80000) == 0) {
-    if ((((this == (cls_0x5a7b98 *)0x0) ||
+    if ((((this == (cls_0x5a7b98_TCharacter *)0x0) ||
          (piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar1 == (int *)0x0)) ||
         ((*piVar1 != *(int *)(this->cls_0x5a50e8).mbr_0xe0 &&
          ((piVar1 == (int *)0x0 || (*piVar1 != iVar9)))))) ||
@@ -8063,11 +8063,11 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4ce350(cls_0x5a7b98 *this
   if ((((piVar1 == (int *)0x0) || (iVar7 = *piVar1, iVar7 != 3)) &&
       ((piVar1 == (int *)0x0 || (iVar7 = *piVar1, iVar7 != 0x19)))) ||
      (((iVar7 == 3 &&
-       ((iVar7 = FUN_004dab80(s_combatrun_005e0618), iVar7 != 0 ||
-        (iVar7 = FUN_004dab80(s_handrun_005e0610), iVar7 != 0)))) ||
+       ((iVar7 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar7 != 0 ||
+        (iVar7 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar7 != 0)))) ||
       (((piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar1 != (int *)0x0 &&
-        ((*piVar1 == 0x19 && (iVar7 = FUN_004dab80(s_bowrun_005e0608), iVar7 != 0)))) ||
-       (iVar7 = FUN_004dab80(&DAT_005e0604), iVar7 != 0)))))) {
+        ((*piVar1 == 0x19 && (iVar7 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar7 != 0)))) ||
+       (iVar7 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar7 != 0)))))) {
     bVar4 = false;
 LAB_004ce523:
     iVar7 = FUN_0046ded0((this->cls_0x5a50e8).mbr_0x36,in_stack_00000004);
@@ -8084,19 +8084,19 @@ LAB_004ce523:
     bVar4 = true;
     if (DAT_005d7a64 == 0) goto LAB_004ce523;
 LAB_004ce560:
-    FUN_0046db20(in_stack_00000004,4,&iStack_38,0);
+    FUN_0046db20_ConvertToVector(in_stack_00000004,4,&iStack_38,0);
     pdVar13 = &(this->cls_0x5a50e8).mbr_0x10;
     pvStack_30 = (void *)((int)pvStack_30 + (this->cls_0x5a50e8).mbr_0x18);
     iStack_34 = iStack_34 + (this->cls_0x5a50e8).mbr_0x14;
     iStack_38 = iStack_38 + *pdVar13;
-    iVar7 = meth_0x4c39d0(this,pdVar13,&iStack_38,0,0);
+    iVar7 = meth_0x4c39d0_FindClearPath(this,pdVar13,&iStack_38,0,0);
     if (iVar7 != 0) {
       ExceptionList = pvStack_30;
       return 0;
     }
   }
   pcVar15 = (cls_0x4da9f0 *)0xffffffff;
-  iVar7 = meth_0x4cd690(this,&pcStack_3c,1,0xff,(char)in_stack_00000004,0x20);
+  iVar7 = meth_0x4cd690_FindCharacters(this,&pcStack_3c,1,0xff,(char)in_stack_00000004,0x20);
   uVar10 = (iVar7 < 1) - 1 & (uint)pcStack_3c;
   if (this->mbr_0x254 != 0) {
     iVar9 = FUN_0046ded0((this->cls_0x5a50e8).mbr_0x36,in_stack_00000004);
@@ -8150,7 +8150,7 @@ LAB_004ce560:
       return 1;
     }
     uVar12 = piVar1[0x11];
-    if (((uVar10 != 0) && (uVar10 != uVar12)) && (iVar7 = meth_0x4cd990(this), iVar7 != 0)) {
+    if (((uVar10 != 0) && (uVar10 != uVar12)) && (iVar7 = meth_0x4cd990_IsValidTarget(this), iVar7 != 0)) {
       if ((uVar12 != 0) &&
          (uVar5 = (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046ea20_4)(uVar10),
          0x2f < CONCAT31(extraout_var_04,uVar5))) {
@@ -8158,15 +8158,15 @@ LAB_004ce560:
         uVar6 = (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046ea20_4)(uVar12);
         if (CONCAT31(extraout_var_06,uVar6) <= CONCAT31(extraout_var_05,uVar5)) goto LAB_004ce8e9;
       }
-      meth_0x4d4790(this);
+      meth_0x4d4790_SetFighting(this);
       uVar12 = uVar10;
     }
 LAB_004ce8e9:
     pcVar15 = in_stack_00000004;
-    if ((((uVar12 != 0) && (iVar7 = meth_0x4cd990(this), iVar7 != 0)) &&
+    if ((((uVar12 != 0) && (iVar7 = meth_0x4cd990_IsValidTarget(this), iVar7 != 0)) &&
         ((DAT_005d7a64 != 0 || (*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xc)))) &&
        (this->mbr_0x254 == 0)) {
-      pcVar15 = (cls_0x4da9f0 *)meth_0x46ea90(this);
+      pcVar15 = (cls_0x4da9f0 *)meth_0x46ea90_AngleTo(this);
     }
     piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
     iVar7 = *(int *)(this->cls_0x5a50e8).mbr_0xd8;
@@ -8176,7 +8176,7 @@ LAB_004ce8e9:
       return 0;
     }
     pcStack_3c = pcVar15;
-    meth_0x4d39f0(this,in_stack_00000004,pcVar15,piVar1 + 1,auStack_2c);
+    meth_0x4d39f0_GetAngleMoveAnim(this,in_stack_00000004,pcVar15,piVar1 + 1,auStack_2c);
     iVar7 = FUN_0046ded0((this->cls_0x5a50e8).mbr_0x36,uVar10);
     if (iVar7 < 0) {
       iVar7 = FUN_0046ded0((this->cls_0x5a50e8).mbr_0x36,uVar10);
@@ -8187,7 +8187,7 @@ LAB_004ce8e9:
     }
     if ((*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) ||
        ((iVar7 < 0x41 &&
-        ((((this != (cls_0x5a7b98 *)0x0 &&
+        ((((this != (cls_0x5a7b98_TCharacter *)0x0 &&
            (piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar1 != (int *)0x0)) &&
           (*piVar1 == iVar9)) || (iVar7 < 0x21)))))) {
       pcVar11 = (cls_0x4da9f0 *)(this->cls_0x5a50e8).mbr_0xd8;
@@ -8252,18 +8252,18 @@ LAB_004cea67:
     }
     if ((*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xc) ||
        ((iVar7 < 0x41 &&
-        ((((this != (cls_0x5a7b98 *)0x0 && (piVar1 != (int *)0x0)) && (*piVar1 == iVar9)) ||
+        ((((this != (cls_0x5a7b98_TCharacter *)0x0 && (piVar1 != (int *)0x0)) && (*piVar1 == iVar9)) ||
          (iVar7 < 0x21)))))) {
       pcVar3 = (this->cls_0x5a50e8).vftptr_0x0;
-      FUN_004dadd0((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e00d8,0);
+      FUN_004dadd0_StName((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e00d8,0);
       uVar5 = (*pcVar3[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
       if (CONCAT31(extraout_var_01,uVar5) == 0) {
         pcVar3 = (this->cls_0x5a50e8).vftptr_0x0;
-        pcVar15 = (cls_0x4da9f0 *)FUN_004dadd0((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e00e0,0);
+        pcVar15 = (cls_0x4da9f0 *)FUN_004dadd0_StName((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e00e0,0);
         uVar5 = (*pcVar3[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
         if (CONCAT31(extraout_var_02,uVar5) == 0) {
           pcVar3 = (this->cls_0x5a50e8).vftptr_0x0;
-          uVar14 = FUN_004dadd0((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e00e8,0);
+          uVar14 = FUN_004dadd0_StName((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e00e8,0);
           uVar5 = (*pcVar3[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
           if (CONCAT31(extraout_var_03,uVar5) == 0) {
             ExceptionList = pvStack_30;
@@ -8278,7 +8278,7 @@ LAB_004cea67:
         }
         if (pcVar11 == (cls_0x4da9f0 *)0x0) goto LAB_004ce843;
 LAB_004ce7d3:
-        uVar14 = FUN_004dadd0((this->cls_0x5a50e8).mbr_0xe0 + 4);
+        uVar14 = FUN_004dadd0_StName((this->cls_0x5a50e8).mbr_0xe0 + 4);
         pcVar11 = cls_0x4da9f0::cls_0x4da9f0(pcVar11,uVar14);
       }
       else {
@@ -8354,7 +8354,7 @@ LAB_004cec2d:
 // Function at 004cedb0
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5a7b98::meth_0x4cedb0(cls_0x5a7b98 *this,undefined4 param_1,undefined4 param_2)
+OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cedb0(cls_0x5a7b98_TCharacter *this,undefined4 param_1,undefined4 param_2)
 
 {
   dword dVar1;
@@ -8368,8 +8368,8 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4cedb0(cls_0x5a7b98 *this,undefined4 param_1,un
   local_4 = (this->cls_0x5a50e8).mbr_0x18;
   local_c = param_1;
   local_8 = param_2;
-  FUN_0046dc60(&(this->cls_0x5a50e8).mbr_0x10,&local_c);
-  iVar2 = meth_0x4ce350(this);
+  FUN_0046dc60_AngleToPP(&(this->cls_0x5a50e8).mbr_0x10,&local_c);
+  iVar2 = meth_0x4ce350_Walk(this);
   if (iVar2 != 0) {
     dVar3 = *(dword *)&(this->cls_0x5a50e8).field_0xdc;
     if (dVar3 == (this->cls_0x5a50e8).mbr_0xe0) {
@@ -8393,7 +8393,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4cedb0(cls_0x5a7b98 *this,undefined4 param_1,un
 
 // Function at 004cee70
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cee70(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cee70_Stop(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -8407,9 +8407,9 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cee70(cls_0x5a7b98 *this
   piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xd8;
   if (((piVar1 == (int *)0x0) ||
       (((iVar5 = *piVar1, iVar5 != 2 && (iVar5 != 4)) && (iVar5 != 0x1a)))) &&
-     (((this == (cls_0x5a7b98 *)0x0 || (piVar1 == (int *)0x0)) || (*piVar1 != 0x11)))) {
+     (((this == (cls_0x5a7b98_TCharacter *)0x0 || (piVar1 == (int *)0x0)) || (*piVar1 != 0x11)))) {
     if (in_stack_00000004 != 0) {
-      iVar5 = FUN_004dab80(in_stack_00000004);
+      iVar5 = FUN_004dab80_TActionBlock_Is(in_stack_00000004);
       if (iVar5 != 0) goto LAB_004ceec0;
     }
     return 0;
@@ -8440,7 +8440,7 @@ LAB_004ceec0:
   if (this == DAT_00667fcc) {
     DAT_0065a9c8 = DAT_0065a9c8 | DAT_0065a9c4;
     DAT_0065a9c4 = 0;
-    cls_0x5a5320::virt_meth_0x44f140((cls_0x5a5320 *)&DAT_006668d8,5,0);
+    cls_0x5a5320_TPlayScreen::virt_meth_0x44f140((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,5,0);
   }
   return 1;
 }
@@ -8449,7 +8449,7 @@ LAB_004ceec0:
 
 // Function at 004cf000
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cf000(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cf000_SetWalkMode(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
@@ -8506,12 +8506,12 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cf000(cls_0x5a7b98 *this
   piVar3 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
   if ((piVar3 != (int *)0x0) &&
      ((((*piVar3 == 3 &&
-        ((iVar6 = FUN_004dab80(), iVar6 != 0 || (iVar6 = FUN_004dab80(), iVar6 != 0)))) ||
+        ((iVar6 = FUN_004dab80_TActionBlock_Is(), iVar6 != 0 || (iVar6 = FUN_004dab80_TActionBlock_Is(), iVar6 != 0)))) ||
        ((piVar3 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar3 != (int *)0x0 &&
-        ((*piVar3 == 0x19 && (iVar6 = FUN_004dab80(), iVar6 != 0)))))) ||
-      (iVar6 = FUN_004dab80(), iVar6 != 0)))) {
+        ((*piVar3 == 0x19 && (iVar6 = FUN_004dab80_TActionBlock_Is(), iVar6 != 0)))))) ||
+      (iVar6 = FUN_004dab80_TActionBlock_Is(), iVar6 != 0)))) {
     (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_00470ca0_284)(0);
-    iVar6 = FUN_004dab80();
+    iVar6 = FUN_004dab80_TActionBlock_Is();
     if (iVar6 != 0) {
       ExceptionList = local_c;
       return 1;
@@ -8578,7 +8578,7 @@ LAB_004cf172:
   if ((piVar3 != (int *)0x0) && (((iVar6 = *piVar3, iVar6 == 2 || (iVar6 == 4)) || (iVar6 == 0x1a)))
      ) {
     pcVar4 = (this->cls_0x5a50e8).vftptr_0x0;
-    uVar9 = FUN_004dadd0(&stack0xffffffc8,&DAT_005e00f0,0,pcVar16);
+    uVar9 = FUN_004dadd0_StName(&stack0xffffffc8,&DAT_005e00f0,0,pcVar16);
     uVar5 = (*pcVar4[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
     if (CONCAT31(extraout_var_04,uVar5) == 0) {
       puVar15 = &DAT_005e00f8;
@@ -8586,7 +8586,7 @@ LAB_004cf172:
     else {
       puVar15 = &DAT_005e00f4;
     }
-    uVar9 = FUN_004dadd0(&stack0xffffffc0,puVar15,uVar9);
+    uVar9 = FUN_004dadd0_StName(&stack0xffffffc0,puVar15,uVar9);
     pcVar8 = (cls_0x4daae0 *)FUN_00482fb0(100);
     uStack_18 = 1;
     if (pcVar8 == (cls_0x4daae0 *)0x0) {
@@ -8609,7 +8609,7 @@ LAB_004cf172:
 
 /* WARNING: Type propagation algorithm not settling */
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cf490(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cf490_SetRunMode(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
@@ -8679,18 +8679,18 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cf490(cls_0x5a7b98 *this
     ExceptionList = pvStack_28;
     return 0;
   }
-  if (((this->cls_0x5a50e8).mbr_0xe0 != 0) && (iVar5 = FUN_004dab80(s_sneak_005c618c), iVar5 != 0))
+  if (((this->cls_0x5a50e8).mbr_0xe0 != 0) && (iVar5 = FUN_004dab80_TActionBlock_Is(s_sneak_005c618c), iVar5 != 0))
   {
-    meth_0x4cf000(this);
+    meth_0x4cf000_SetWalkMode(this);
   }
   piVar20 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
   if ((piVar20 != (int *)0x0) &&
      ((((*piVar20 == 3 &&
-        ((iVar5 = FUN_004dab80(s_combatrun_005e0618), iVar5 != 0 ||
-         (iVar5 = FUN_004dab80(s_handrun_005e0610), iVar5 != 0)))) ||
+        ((iVar5 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar5 != 0 ||
+         (iVar5 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar5 != 0)))) ||
        ((piVar20 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar20 != (int *)0x0 &&
-        ((*piVar20 == 0x19 && (iVar5 = FUN_004dab80(s_bowrun_005e0608), iVar5 != 0)))))) ||
-      (iVar5 = FUN_004dab80(&DAT_005e0604), iVar5 != 0)))) {
+        ((*piVar20 == 0x19 && (iVar5 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar5 != 0)))))) ||
+      (iVar5 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar5 != 0)))) {
     ExceptionList = pvStack_28;
     return 1;
   }
@@ -8727,7 +8727,7 @@ LAB_004cf5f0:
       uVar21 = 0;
       uVar4 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_00470920_276)(0,&DAT_005e0120);
 LAB_004cf5e1:
-      pcVar17 = (char *)FUN_004dadd0(uVar4,uVar21,puVar22);
+      pcVar17 = (char *)FUN_004dadd0_StName(uVar4,uVar21,puVar22);
       puVar13 = &uStack_90;
       goto LAB_004cf5f0;
     }
@@ -8763,7 +8763,7 @@ LAB_004cf5e1:
     uStack_10 = 0xffffffff;
     goto LAB_004cfae6;
   }
-  pcVar17 = (char *)FUN_004dadd0(&stack0xffffff68,&DAT_005e0128);
+  pcVar17 = (char *)FUN_004dadd0_StName(&stack0xffffff68,&DAT_005e0128);
   uVar11 = 0xffffffff;
   do {
     pcVar18 = pcVar17;
@@ -8786,7 +8786,7 @@ LAB_004cf5e1:
     puVar13 = (undefined4 *)((int)puVar13 + 1);
     puVar14 = (undefined4 *)((int)puVar14 + 1);
   }
-  pcVar17 = (char *)FUN_004dadd0(&stack0xffffff68,&DAT_005e012c);
+  pcVar17 = (char *)FUN_004dadd0_StName(&stack0xffffff68,&DAT_005e012c);
   uVar11 = 0xffffffff;
   do {
     pcVar18 = pcVar17;
@@ -8809,7 +8809,7 @@ LAB_004cf5e1:
     puVar13 = (undefined4 *)((int)puVar13 + 1);
     puVar14 = (undefined4 *)((int)puVar14 + 1);
   }
-  pcVar17 = (char *)FUN_004dadd0(&stack0xffffff68,&DAT_005e0130);
+  pcVar17 = (char *)FUN_004dadd0_StName(&stack0xffffff68,&DAT_005e0130);
   uVar11 = 0xffffffff;
   do {
     pcVar18 = pcVar17;
@@ -8832,11 +8832,11 @@ LAB_004cf5e1:
     puVar13 = (undefined4 *)((int)puVar13 + 1);
     puVar14 = (undefined4 *)((int)puVar14 + 1);
   }
-  uVar6 = FUN_004dadd0((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e0134);
-  iVar5 = FUN_004dab80(uVar6);
+  uVar6 = FUN_004dadd0_StName((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e0134);
+  iVar5 = FUN_004dab80_TActionBlock_Is(uVar6);
   if (iVar5 == 0) {
-    uVar21 = FUN_004dadd0((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e0138);
-    iVar5 = FUN_004dab80(uVar21);
+    uVar21 = FUN_004dadd0_StName((this->cls_0x5a50e8).mbr_0xe0 + 4,&DAT_005e0138);
+    iVar5 = FUN_004dab80_TActionBlock_Is(uVar21);
     pcVar3 = (this->cls_0x5a50e8).vftptr_0x0;
     uVar21 = 0;
     if (iVar5 == 0) {
@@ -9041,7 +9041,7 @@ LAB_004cfae6:
 
 // Function at 004cfba0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cfba0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cfba0(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
@@ -9073,7 +9073,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cfba0(cls_0x5a7b98 *this
   dStack_4 = 0xffffffff;
   puStack_8 = &LAB_0059e8b2;
   local_c = ExceptionList;
-  if ((((this != (cls_0x5a7b98 *)0x0) &&
+  if ((((this != (cls_0x5a7b98_TCharacter *)0x0) &&
        (piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar2 != (int *)0x0)) && (*piVar2 == 0x11))
      && (piVar2[0xb] == in_stack_00000004)) {
     return 1;
@@ -9307,7 +9307,7 @@ LAB_004cfe00:
 
 // Function at 004cfef0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cfef0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4cfef0(cls_0x5a7b98_TCharacter *this)
 
 {
   short sVar1;
@@ -9320,13 +9320,13 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cfef0(cls_0x5a7b98 *this
   uint uVar8;
   undefined3 extraout_var_00;
   undefined4 uVar9;
-  cls_0x5a7b98 *in_stack_00000004;
-  cls_0x5a7b98 *in_stack_00000008;
+  cls_0x5a7b98_TCharacter *in_stack_00000004;
+  cls_0x5a7b98_TCharacter *in_stack_00000008;
   undefined *puVar10;
   undefined auStack_100 [256];
   uint uVar6;
   
-  if (in_stack_00000004 == (cls_0x5a7b98 *)0x0) {
+  if (in_stack_00000004 == (cls_0x5a7b98_TCharacter *)0x0) {
     return 0;
   }
   uVar2 = (*((in_stack_00000004->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477c00_308)
@@ -9337,7 +9337,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4cfef0(cls_0x5a7b98 *this
   if (in_stack_00000004 == this) {
     return 0;
   }
-  if (in_stack_00000008 == (cls_0x5a7b98 *)0x0) {
+  if (in_stack_00000008 == (cls_0x5a7b98_TCharacter *)0x0) {
     in_stack_00000008 = this;
   }
   if (DAT_0066829c != 0) {
@@ -9441,7 +9441,7 @@ LAB_004d017b:
 
 // Function at 004d0e00
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d0e00(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d0e00(cls_0x5a7b98_TCharacter *this)
 
 {
   byte bVar1;
@@ -9466,8 +9466,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d0e00(cls_0x5a7b98 *this
   piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
   if ((piVar2 != (int *)0x0) && (*piVar2 == 0x19)) {
     ExceptionList = &local_c;
-    uVar6 = FUN_004dadd0(piVar2 + 1,&DAT_005e02fc,(this->cls_0x5a50e8).mbr_0xd8 + 4);
-    iVar7 = FUN_0059a530(uVar6);
+    uVar6 = FUN_004dadd0_StName(piVar2 + 1,&DAT_005e02fc,(this->cls_0x5a50e8).mbr_0xd8 + 4);
+    iVar7 = FUN_0059a530_stricmp(uVar6);
     if (((void *)(uint)(iVar7 == 0) != (void *)0x0) &&
        (uVar5 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(this),
        CONCAT31(extraout_var,uVar5) != 0 && -1 < extraout_var)) {
@@ -9485,7 +9485,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d0e00(cls_0x5a7b98 *this
         }
       }
       if ((*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) && ((this->mbr_0x36c & 2) != 0)) {
-        cls_0x5b4f30::meth_0x51d680((cls_0x5b4f30 *)this);
+        cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState((cls_0x5b4f30_TPlayer *)this);
       }
       dVar3 = (this->cls_0x5a50e8).mbr_0xd8;
       *(uint *)(dVar3 + 0x60) = *(uint *)(dVar3 + 0x60) | 0x100;
@@ -9529,7 +9529,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d0e00(cls_0x5a7b98 *this
 
 // Function at 004d1120
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1120(cls_0x5a7b98 *this,uint param_1)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d1120_IsValidAttack(cls_0x5a7b98_TCharacter *this,uint param_1)
 
 {
   char cVar1;
@@ -9603,8 +9603,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1120(cls_0x5a7b98 *this
   int in_stack_00000014;
   int in_stack_00000018;
   uint in_stack_00000020;
-  cls_0x5a7b98 *in_stack_00000024;
-  cls_0x5a7b98 *in_stack_00000028;
+  cls_0x5a7b98_TCharacter *in_stack_00000024;
+  cls_0x5a7b98_TCharacter *in_stack_00000028;
   undefined4 uVar25;
   undefined4 auStack_50 [6];
   undefined4 auStack_38 [4];
@@ -9646,7 +9646,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1120(cls_0x5a7b98 *this
     return 0;
   }
   uVar14 = piVar18[9];
-  if ((cls_0x5a7b98 *)(uVar14 & in_stack_00000020) != in_stack_00000024) {
+  if ((cls_0x5a7b98_TCharacter *)(uVar14 & in_stack_00000020) != in_stack_00000024) {
     return 0;
   }
   if ((-1 < in_stack_00000014) && (piVar18[10] != in_stack_00000014)) {
@@ -9655,7 +9655,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1120(cls_0x5a7b98 *this
   if (piVar18[0xb] < in_stack_00000018) {
     return 0;
   }
-  if ((0 < piVar18[0xd]) && (in_stack_00000028 != (cls_0x5a7b98 *)0x0)) {
+  if ((0 < piVar18[0xd]) && (in_stack_00000028 != (cls_0x5a7b98_TCharacter *)0x0)) {
     if ((int)in_stack_00000010 < piVar18[0xc]) {
       return 0;
     }
@@ -9673,7 +9673,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1120(cls_0x5a7b98 *this
         if (*piVar16 != 3) {
           return 0;
         }
-        iVar11 = FUN_004dab80(&DAT_005e0318);
+        iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005e0318);
         if (iVar11 != 0) {
           return 0;
         }
@@ -9689,7 +9689,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1120(cls_0x5a7b98 *this
       if ((this->cls_0x5a50e8).mbr_0xe0 == 0) {
         return 0;
       }
-      uVar14 = FUN_004dab80(&DAT_005e0310);
+      uVar14 = FUN_004dab80_TActionBlock_Is(&DAT_005e0310);
     }
     if (uVar14 == 0) {
       return 0;
@@ -9699,7 +9699,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1120(cls_0x5a7b98 *this
     if ((this->cls_0x5a50e8).mbr_0xe0 == 0) {
       return 0;
     }
-    iVar11 = FUN_004dab80(s_sneak_005c618c);
+    iVar11 = FUN_004dab80_TActionBlock_Is(s_sneak_005c618c);
     if (iVar11 == 0) {
       return 0;
     }
@@ -9716,7 +9716,7 @@ LAB_004d12ef:
       if ((this->cls_0x5a50e8).mbr_0xe0 == 0) {
         return 0;
       }
-      iVar11 = FUN_004dab80(s_combat_005e0300);
+      iVar11 = FUN_004dab80_TActionBlock_Is(s_combat_005e0300);
       if (iVar11 == 0) {
         return 0;
       }
@@ -9727,7 +9727,7 @@ LAB_004d12ef:
     if ((this->cls_0x5a50e8).mbr_0xe0 == 0) {
       return 0;
     }
-    iVar11 = FUN_004dab80(&DAT_005e0308);
+    iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005e0308);
     if (iVar11 != 0) {
       return 1;
     }
@@ -9795,15 +9795,15 @@ LAB_004d12ef:
       return 0;
     }
     if ((((*piVar23 != 3) ||
-         ((iVar11 = FUN_004dab80(s_combatrun_005e0618), iVar11 == 0 &&
-          (iVar11 = FUN_004dab80(s_handrun_005e0610), iVar11 == 0)))) &&
+         ((iVar11 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar11 == 0 &&
+          (iVar11 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar11 == 0)))) &&
         ((piVar23 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar23 == (int *)0x0 ||
-         ((*piVar23 != 0x19 || (iVar11 = FUN_004dab80(s_bowrun_005e0608), iVar11 == 0)))))) &&
-       (iVar11 = FUN_004dab80(&DAT_005e0604), iVar11 == 0)) {
+         ((*piVar23 != 0x19 || (iVar11 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar11 == 0)))))) &&
+       (iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar11 == 0)) {
       return 0;
     }
   }
-  if (in_stack_00000028 != (cls_0x5a7b98 *)0x0) {
+  if (in_stack_00000028 != (cls_0x5a7b98_TCharacter *)0x0) {
     if ((piVar18[9] & 0x80000U) != 0) {
       piVar23 = (int *)(in_stack_00000028->cls_0x5a50e8).mbr_0xd8;
       if (piVar23 == (int *)0x0) {
@@ -9822,7 +9822,7 @@ LAB_004d12ef:
         return 0;
       }
     }
-    if ((*(char *)(piVar18 + 0xe) != '\0') && (iVar11 = FUN_004dab80(piVar18 + 0xe), iVar11 == 0)) {
+    if ((*(char *)(piVar18 + 0xe) != '\0') && (iVar11 = FUN_004dab80_TActionBlock_Is(piVar18 + 0xe), iVar11 == 0)) {
       return 0;
     }
   }
@@ -9830,17 +9830,17 @@ LAB_004d12ef:
     if (this->mbr_0x160 == 0) {
       return 0;
     }
-    iVar11 = FUN_0059a530(this->mbr_0x160,piVar18 + 0x26);
+    iVar11 = FUN_0059a530_stricmp(this->mbr_0x160,piVar18 + 0x26);
     if (iVar11 != 0) {
       return 0;
     }
-    iVar11 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0);
+    iVar11 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
     if (*(int *)(this->mbr_0x160 + 0xc0) < (int)(iVar11 - this->mbr_0x164)) {
       return 0;
     }
   }
   if ((piVar18[9] & 0x2000000U) != 0) {
-    if (in_stack_00000028 == (cls_0x5a7b98 *)0x0) {
+    if (in_stack_00000028 == (cls_0x5a7b98_TCharacter *)0x0) {
       return 0;
     }
     if (((in_stack_00000028->cls_0x5a50e8).mbr_0x110 & 0x80000) == 0) {
@@ -9855,7 +9855,7 @@ LAB_004d12ef:
       }
     }
   }
-  if (((in_stack_00000028 != (cls_0x5a7b98 *)0x0) &&
+  if (((in_stack_00000028 != (cls_0x5a7b98_TCharacter *)0x0) &&
       (iVar11 = *(int *)((in_stack_00000028->cls_0x5a50e8).mbr_0xd8 + 0x4c), iVar11 != 0)) &&
      ((*(byte *)(iVar11 + 0x24) & 0x80) != 0)) {
     return 0;
@@ -9889,10 +9889,10 @@ LAB_004d12ef:
         pcVar19 = pcVar19 + 1;
       } while (bVar24);
       if (bVar24) {
-        if (in_stack_00000028 == (cls_0x5a7b98 *)0x0) {
+        if (in_stack_00000028 == (cls_0x5a7b98_TCharacter *)0x0) {
           return 0;
         }
-        iVar11 = FUN_0059a530((in_stack_00000028->cls_0x5a50e8).mbr_0x38,&DAT_005e0330);
+        iVar11 = FUN_0059a530_stricmp((in_stack_00000028->cls_0x5a50e8).mbr_0x38,&DAT_005e0330);
         if (iVar11 != 0) {
           return 0;
         }
@@ -9900,7 +9900,7 @@ LAB_004d12ef:
     }
   }
   piVar16 = piVar18;
-  if (in_stack_00000028 != (cls_0x5a7b98 *)0x0) {
+  if (in_stack_00000028 != (cls_0x5a7b98_TCharacter *)0x0) {
     if (*piVar18 == -1) {
       pcVar4 = (this->cls_0x5a50e8).vftptr_0x0;
       pcVar5 = (in_stack_00000028->cls_0x5a50e8).vftptr_0x0;
@@ -9963,12 +9963,12 @@ LAB_004d12ef:
 LAB_004d187d:
         iVar11 = 100;
       }
-      iVar12 = FUN_00483300(0,9);
+      iVar12 = FUN_00483300_RandomRange(0,9);
       *in_stack_0000000c = (-(uint)(iVar12 != 0) & 0xfffffffb) + 5 + iVar11;
     }
     if (*in_stack_00000010 == -1) {
-      iVar11 = FUN_00483300(1,0x32);
-      iVar12 = FUN_00483300(0,0x32);
+      iVar11 = FUN_00483300_RandomRange(1,0x32);
+      iVar12 = FUN_00483300_RandomRange(0,0x32);
       *in_stack_00000010 = iVar11 + iVar12;
     }
     iVar11 = *in_stack_0000000c - *in_stack_00000010;
@@ -9996,7 +9996,7 @@ LAB_004d187d:
   }
   piVar13 = piStack_4;
   if ((*(byte *)(piStack_4 + 9) & 8) != 0) {
-    if (in_stack_00000028 == (cls_0x5a7b98 *)0x0) {
+    if (in_stack_00000028 == (cls_0x5a7b98_TCharacter *)0x0) {
       return 0;
     }
     uVar6 = (*((in_stack_00000028->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)
@@ -10005,7 +10005,7 @@ LAB_004d187d:
       return 0;
     }
   }
-  if (in_stack_00000028 == (cls_0x5a7b98 *)0x0) {
+  if (in_stack_00000028 == (cls_0x5a7b98_TCharacter *)0x0) {
     iVar11 = 1;
   }
   else {
@@ -10015,7 +10015,7 @@ LAB_004d187d:
   }
   iVar12 = *piVar16;
   if (iVar12 < iVar11) {
-    if (in_stack_00000028 != (cls_0x5a7b98 *)0x0) {
+    if (in_stack_00000028 != (cls_0x5a7b98_TCharacter *)0x0) {
       uVar6 = (*((in_stack_00000028->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)
                         (in_stack_00000028);
       iVar12 = CONCAT31(extraout_var_23,uVar6);
@@ -10027,17 +10027,17 @@ LAB_004d19a8:
   else {
 LAB_004d1992:
     if (iVar12 < 1) goto LAB_004d19c0;
-    if (in_stack_00000028 == (cls_0x5a7b98 *)0x0) goto LAB_004d19a8;
+    if (in_stack_00000028 == (cls_0x5a7b98_TCharacter *)0x0) goto LAB_004d19a8;
     uVar6 = (*((in_stack_00000028->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)
                       (in_stack_00000028);
     iVar11 = CONCAT31(extraout_var_24,uVar6);
   }
-  if ((*piVar16 < iVar11) && (in_stack_00000028 != (cls_0x5a7b98 *)0x0)) {
+  if ((*piVar16 < iVar11) && (in_stack_00000028 != (cls_0x5a7b98_TCharacter *)0x0)) {
     (*((in_stack_00000028->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(in_stack_00000028);
   }
 LAB_004d19c0:
   if (0 < piVar13[0x3a]) {
-    if (in_stack_00000028 == (cls_0x5a7b98 *)0x0) {
+    if (in_stack_00000028 == (cls_0x5a7b98_TCharacter *)0x0) {
       return 1;
     }
     iVar11 = *piVar18;
@@ -10064,7 +10064,7 @@ LAB_004d19c0:
            || (*unaff_retaddr < 0)) {
           if (((*(byte *)(piVar13 + 9) & 0x80) != 0) && (0 < piVar13[0x15])) {
             FUN_0046f010(this,piVar13[0x15],&stack0xffffff90);
-            iVar11 = meth_0x4c39d0(in_stack_00000028,&(in_stack_00000028->cls_0x5a50e8).mbr_0x10,
+            iVar11 = meth_0x4c39d0_FindClearPath(in_stack_00000028,&(in_stack_00000028->cls_0x5a50e8).mbr_0x10,
                                    &stack0xffffff90,0,0);
             if ((iVar11 != 0) && (in_stack_00000024 != this)) {
               return 0;
@@ -10072,7 +10072,7 @@ LAB_004d19c0:
           }
           if ((piVar13[9] & 4U) == 0) {
             if ((piVar13[9] & 0x80U) == 0) {
-              meth_0x4ce1b0(in_stack_00000028,auStack_50);
+              meth_0x4ce1b0_BuildActionName(in_stack_00000028,auStack_50);
             }
             else {
               uVar14 = 0xffffffff;
@@ -10118,8 +10118,8 @@ joined_r0x004d1cd4:
             uVar6 = (*(in_stack_00000028->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477840_0)
                               (&in_stack_00000028->cls_0x5a50e8);
             if (CONCAT31(extraout_var_29,uVar6) == 0) {
-              meth_0x4ce1b0(in_stack_00000028,&stack0xffffff94);
-              iVar11 = FUN_0059a530(piVar13,s_combat_to_dead_005e0340);
+              meth_0x4ce1b0_BuildActionName(in_stack_00000028,&stack0xffffff94);
+              iVar11 = FUN_0059a530_stricmp(piVar13,s_combat_to_dead_005e0340);
               if (iVar11 == 0) {
                 uVar14 = 0xffffffff;
                 pcVar19 = (char *)((in_stack_00000028->cls_0x5a50e8).mbr_0xe0 + 4);
@@ -10223,7 +10223,7 @@ joined_r0x004d1cd4:
                 iVar11 = CONCAT31(extraout_var_31,uVar6);
               }
               else {
-                iVar11 = FUN_0059a530(piVar13,&DAT_005e0350);
+                iVar11 = FUN_0059a530_stricmp(piVar13,&DAT_005e0350);
                 if (iVar11 != 0) {
                   return 0;
                 }
@@ -10237,7 +10237,7 @@ joined_r0x004d1cd4:
               if ((*(char *)(piVar13 + 10) != '\0') &&
                  (uVar6 = (*((in_stack_00000028->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477c10_312)
                                     (in_stack_00000028), CONCAT31(extraout_var_33,uVar6) == 0)) {
-                iVar11 = FUN_0059a530(piVar13 + 10,&DAT_005e0358);
+                iVar11 = FUN_0059a530_stricmp(piVar13 + 10,&DAT_005e0358);
                 if (iVar11 != 0) {
                   return 0;
                 }
@@ -10262,7 +10262,7 @@ joined_r0x004d1cd4:
       return 0;
     }
   }
-  if (in_stack_00000028 != (cls_0x5a7b98 *)0x0) {
+  if (in_stack_00000028 != (cls_0x5a7b98_TCharacter *)0x0) {
     if ((((*(byte *)&(this->cls_0x5a50e8).mbr_0x110 & 0x80) != 0) &&
         (uVar6 = (*((in_stack_00000028->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)
                            (in_stack_00000028), CONCAT31(extraout_var_38,uVar6) <= *piVar18)) &&
@@ -10281,7 +10281,7 @@ joined_r0x004d1cd4:
 
 // Function at 004d1eb0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1eb0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d1eb0_FindPcntAttack(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -10302,8 +10302,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1eb0(cls_0x5a7b98 *this
     iVar3 = *(int *)(*(int *)&(this->cls_0x5a50e8).field_0xfc + 0xcc);
     if (0 < iVar3 * 2) {
       do {
-        uVar2 = FUN_00483300(0,iVar3 + -1);
-        iVar3 = meth_0x4d1120(this,uVar2);
+        uVar2 = FUN_00483300_RandomRange(0,iVar3 + -1);
+        iVar3 = meth_0x4d1120_IsValidAttack(this,uVar2);
         if (iVar3 != 0) {
           *in_stack_00000008 = uVar2;
           return 1;
@@ -10320,7 +10320,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1eb0(cls_0x5a7b98 *this
 
 // Function at 004d1ff0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1ff0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d1ff0_FindButtonAttack(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -10345,7 +10345,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1ff0(cls_0x5a7b98 *this
           iVar2 = piVar1[5];
         }
         if (((*(uint *)(iVar2 + 0x24) & 0x2000000) != 0) &&
-           (iVar2 = meth_0x4d1120(this,iVar3), iVar2 != 0)) {
+           (iVar2 = meth_0x4d1120_IsValidAttack(this,iVar3), iVar2 != 0)) {
           *in_stack_00000008 = iVar3;
           return 1;
         }
@@ -10361,7 +10361,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d1ff0(cls_0x5a7b98 *this
 
 // Function at 004d2120
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2120(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d2120_DoAttack(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -10395,7 +10395,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2120(cls_0x5a7b98 *this
   uStack_4 = 0xffffffff;
   puStack_8 = &LAB_0059e917;
   local_c = ExceptionList;
-  if (((((this == (cls_0x5a7b98 *)0x0) ||
+  if (((((this == (cls_0x5a7b98_TCharacter *)0x0) ||
         (piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar1 == (int *)0x0)) || (*piVar1 != 0xb))
       && (((ExceptionList = &local_c,
            uVar5 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(this),
@@ -10406,7 +10406,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2120(cls_0x5a7b98 *this
        (uVar5 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477570_376)(this),
        0 < CONCAT31(extraout_var_00,uVar5))) || (DAT_00676e5c != '\0')))) {
     if ((*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) && ((this->mbr_0x36c & 2) != 0)) {
-      cls_0x5b4f30::meth_0x51d680((cls_0x5b4f30 *)this);
+      cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState((cls_0x5b4f30_TPlayer *)this);
     }
     iVar7 = *(int *)&(this->cls_0x5a50e8).field_0xfc;
     dVar10 = *(dword *)(*(int *)(iVar7 + 0xdc) + in_stack_00000004 * 4);
@@ -10484,7 +10484,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2120(cls_0x5a7b98 *this
         if ((piVar1 != (int *)0x0) &&
            (((*piVar1 == 3 || ((piVar1 != (int *)0x0 && (*piVar1 == 0x19)))) && (piVar1[0x11] != 0))
            )) {
-          bVar6 = meth_0x46ea90(this);
+          bVar6 = meth_0x46ea90_AngleTo(this);
           (this->cls_0x5a50e8).mbr_0x36 = bVar6;
           ExceptionList = unaff_EBX;
           return 1;
@@ -10512,7 +10512,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2120(cls_0x5a7b98 *this
       if ((((uVar2 & 1) == 0) && ((uVar2 & 0x2800000) == 0)) &&
          (iVar7 = cls_0x53ed70::meth_0x53f010((cls_0x53ed70 *)((int)&UNK_00667c34 + 4)), iVar7 != 0)
          ) {
-        uVar8 = meth_0x4d5c20(this);
+        uVar8 = meth_0x4d5c20_Cast(this);
         ExceptionList = unaff_EBX;
         return uVar8;
       }
@@ -10526,7 +10526,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2120(cls_0x5a7b98 *this
 
 // Function at 004d2900
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2900(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d2900_RandomAttack(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -10548,17 +10548,17 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2900(cls_0x5a7b98 *this
         return 0;
       }
     }
-    FUN_00483300(1,0x32);
-    FUN_00483300(1,0x32);
+    FUN_00483300_RandomRange(1,0x32);
+    FUN_00483300_RandomRange(1,0x32);
     if ((-1 < (int)this->mbr_0x28c) && ((*(byte *)&this->mbr_0x128 & 4) != 0)) {
-      iVar3 = meth_0x4d1ff0(this);
+      iVar3 = meth_0x4d1ff0_FindButtonAttack(this);
       this->mbr_0x128 = this->mbr_0x128 & 0xfffffffb;
       if (iVar3 != 0) goto LAB_004d2a1e;
     }
-    iVar3 = meth_0x4d1eb0(this);
+    iVar3 = meth_0x4d1eb0_FindPcntAttack(this);
     if (iVar3 != 0) {
 LAB_004d2a1e:
-      uVar4 = meth_0x4d2120(this);
+      uVar4 = meth_0x4d2120_DoAttack(this);
       return uVar4;
     }
   }
@@ -10569,7 +10569,7 @@ LAB_004d2a1e:
 
 // Function at 004d2a60
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2a60(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d2a60_SpecificAttack(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -10601,7 +10601,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2a60(cls_0x5a7b98 *this
   if ((piVar2 == (int *)0x0) ||
      (((iVar4 = *piVar2, iVar4 != 3 && ((piVar2 == (int *)0x0 || (iVar4 != 0x19)))) ||
       (uVar6 = piVar2[0x11], uVar6 == 0)))) {
-    iVar4 = meth_0x4cd690(this,&uStack_4,1,0xff,(this->cls_0x5a50e8).mbr_0x36,0x20);
+    iVar4 = meth_0x4cd690_FindCharacters(this,&uStack_4,1,0xff,(this->cls_0x5a50e8).mbr_0x36,0x20);
     uVar6 = (iVar4 < 1) - 1 & uStack_4;
   }
   else if ((iVar4 != 3) && (iVar4 != 0x19)) goto LAB_004d2b05;
@@ -10609,14 +10609,14 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2a60(cls_0x5a7b98 *this
     (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046ea20_4)(uVar6);
   }
 LAB_004d2b05:
-  FUN_00483300(1,0x32);
-  FUN_00483300(1,0x32);
+  FUN_00483300_RandomRange(1,0x32);
+  FUN_00483300_RandomRange(1,0x32);
   this->mbr_0x120 = 0;
-  iVar4 = meth_0x4d1120(this,in_stack_00000004);
+  iVar4 = meth_0x4d1120_IsValidAttack(this,in_stack_00000004);
   if (iVar4 == 0) {
     return 0;
   }
-  uVar5 = meth_0x4d2120(this);
+  uVar5 = meth_0x4d2120_DoAttack(this);
   return uVar5;
 }
 
@@ -10624,7 +10624,7 @@ LAB_004d2b05:
 
 // Function at 004d2e30
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2e30(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d2e30(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -10655,7 +10655,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2e30(cls_0x5a7b98 *this
   iVar3 = meth_0x45f770(this);
   if ((((iVar3 != 0) ||
        ((piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar1 != (int *)0x0 && (*piVar1 == 0x19))))
-      && ((this == (cls_0x5a7b98 *)0x0 ||
+      && ((this == (cls_0x5a7b98_TCharacter *)0x0 ||
           ((piVar1 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar1 == (int *)0x0 || (*piVar1 != 0xc))
           )))) &&
      (uVar2 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(this),
@@ -10707,7 +10707,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2e30(cls_0x5a7b98 *this
         }
         puVar7 = &stack0xffffffcc;
       }
-      meth_0x4ce1b0(this,puVar7);
+      meth_0x4ce1b0_BuildActionName(this,puVar7);
       puVar7 = auStack_2c;
       uVar8 = 0;
       uVar2 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
@@ -10724,7 +10724,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2e30(cls_0x5a7b98 *this
         pcVar5->mbr_0x44 = *(dword *)((this->cls_0x5a50e8).mbr_0xd8 + 0x44);
         if ((int)in_stack_00000004 < 0) {
           iVar3 = *(int *)&(this->cls_0x5a50e8).field_0xfc;
-          dVar6 = FUN_00483300(*(undefined4 *)(iVar3 + 0x198),*(undefined4 *)(iVar3 + 0x19c));
+          dVar6 = FUN_00483300_RandomRange(*(undefined4 *)(iVar3 + 0x198),*(undefined4 *)(iVar3 + 0x19c));
           pcVar5->mbr_0x28 = dVar6;
         }
         else {
@@ -10759,7 +10759,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d2e30(cls_0x5a7b98 *this
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3590(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d3590_Burn(cls_0x5a7b98_TCharacter *this)
 
 {
   cls_0x5a50e8__vftable_5a50e8 *pcVar1;
@@ -10803,8 +10803,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3590(cls_0x5a7b98 *this
     }
     cls_0x4746d0::meth_0x475210((cls_0x4746d0 *)&UNK_0066cc1c.field_0x4c,&DAT_005e03c0);
     uVar8 = 0;
-    uVar3 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&stack0xffffffb8);
-    this_00 = (cls_0x4e2fa0 *)FUN_00452690(uVar3,uVar8);
+    uVar3 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&stack0xffffffb8);
+    this_00 = (cls_0x4e2fa0 *)FUN_00452690_TMapPane_GetInstance(uVar3,uVar8);
     if (this_00 == (cls_0x4e2fa0 *)0x0) {
       ExceptionList = pvStack_14;
       return 0;
@@ -10842,7 +10842,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3590(cls_0x5a7b98 *this
 
 // Function at 004d3750
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3750(cls_0x5a7b98 *this,undefined4 param_1)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d3750(cls_0x5a7b98_TCharacter *this,undefined4 param_1)
 
 {
   undefined uVar1;
@@ -10920,30 +10920,30 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3750(cls_0x5a7b98 *this
   local_3c = (this->cls_0x5a50e8).mbr_0x18;
   ExceptionList = &local_c;
   this->mbr_0x224 = 5;
-  iVar2 = FUN_0046dc60(&local_44,param_1);
+  iVar2 = FUN_0046dc60_AngleToPP(&local_44,param_1);
   uVar8 = param_1;
   if ((int)((uint)(this->cls_0x5a50e8).mbr_0x36 - iVar2) < 0) {
     pdVar7 = &local_44;
-    uVar3 = FUN_0046dc60(pdVar7,param_1);
+    uVar3 = FUN_0046dc60_AngleToPP(pdVar7,param_1);
     uVar4 = (uint)(this->cls_0x5a50e8).mbr_0x36;
   }
   else {
     pdVar7 = &local_44;
-    uVar4 = FUN_0046dc60(pdVar7,param_1);
+    uVar4 = FUN_0046dc60_AngleToPP(pdVar7,param_1);
     uVar3 = (uint)(this->cls_0x5a50e8).mbr_0x36;
   }
   if (0x48 < (int)(uVar3 - uVar4)) {
-    meth_0x4ce1b0(this,local_38);
+    meth_0x4ce1b0_BuildActionName(this,local_38);
     pdVar7 = local_38;
     uVar8 = 0;
     uVar1 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
     if (CONCAT31(extraout_var,uVar1) != 0) goto LAB_004d394d;
   }
   if ((unaff_retaddr < 0) || (4 < unaff_retaddr)) {
-    FUN_00483300(0,4,pdVar7,uVar8);
+    FUN_00483300_RandomRange(0,4,pdVar7,uVar8);
   }
-  meth_0x4ce1b0(this,&local_40);
-  dVar5 = FUN_0046dc60(&local_4c,param_1);
+  meth_0x4ce1b0_BuildActionName(this,&local_40);
+  dVar5 = FUN_0046dc60_AngleToPP(&local_4c,param_1);
   (this->cls_0x5a50e8).mbr_0x36 = (byte)dVar5;
   (this->cls_0x5a50e8).mbr_0xb0 = dVar5;
 LAB_004d394d:
@@ -10975,8 +10975,8 @@ LAB_004d394d:
 // Function at 004d39f0
 
 char * __thiscall
-OOAnalyzer::cls_0x5a7b98::meth_0x4d39f0
-          (cls_0x5a7b98 *this,int param_1,int param_2,undefined *param_3,char *param_4)
+OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d39f0_GetAngleMoveAnim
+          (cls_0x5a7b98_TCharacter *this,int param_1,int param_2,undefined *param_3,char *param_4)
 
 {
   cls_0x5a50e8__vftable_5a50e8 *pcVar1;
@@ -11013,7 +11013,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4d39f0
   case 7:
     puVar3 = &DAT_005e0424;
   }
-  pcVar4 = (char *)FUN_004dadd0(param_3,puVar3);
+  pcVar4 = (char *)FUN_004dadd0_StName(param_3,puVar3);
   _strncpy(param_4,pcVar4,in_stack_00000014 - 1U);
   pcVar1 = (this->cls_0x5a50e8).vftptr_0x0;
   param_4[in_stack_00000014 + -1] = '\0';
@@ -11021,7 +11021,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4d39f0
   pcVar4 = param_4;
   uVar2 = (*pcVar1[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
   if (CONCAT31(extraout_var,uVar2) == 0) {
-    pcVar4 = (char *)FUN_004dadd0(param_1,&DAT_005e0428,pcVar4,uVar5);
+    pcVar4 = (char *)FUN_004dadd0_StName(param_1,&DAT_005e0428,pcVar4,uVar5);
     _strncpy(param_4,pcVar4,in_stack_00000014 - 1U);
     param_4[in_stack_00000014 + -1] = '\0';
   }
@@ -11032,7 +11032,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4d39f0
 
 // Function at 004d3b90
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3b90(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d3b90_BeginFighting(cls_0x5a7b98_TCharacter *this)
 
 {
   uint *puVar1;
@@ -11068,13 +11068,13 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3b90(cls_0x5a7b98 *this
   ExceptionList = &local_c;
   if ((((this->cls_0x5a50e8).mbr_0xe0 != 0) &&
       ((((ExceptionList = &local_c, iVar5 = meth_0x45f770(this), iVar5 != 0 &&
-         ((iVar5 = FUN_004dab80(s_combatrun_005e0618), iVar5 != 0 ||
-          (iVar5 = FUN_004dab80(s_handrun_005e0610), iVar5 != 0)))) ||
+         ((iVar5 = FUN_004dab80_TActionBlock_Is(s_combatrun_005e0618), iVar5 != 0 ||
+          (iVar5 = FUN_004dab80_TActionBlock_Is(s_handrun_005e0610), iVar5 != 0)))) ||
         ((piVar11 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar11 != (int *)0x0 &&
-         ((*piVar11 == 0x19 && (iVar5 = FUN_004dab80(s_bowrun_005e0608), iVar5 != 0)))))) ||
-       (iVar5 = FUN_004dab80(&DAT_005e0604), iVar5 != 0)))) ||
-     (((((this->cls_0x5a50e8).mbr_0xe0 != 0 && (iVar5 = FUN_004dab80(s_sneak_005c618c), iVar5 != 0))
-       || ((this != (cls_0x5a7b98 *)0x0 &&
+         ((*piVar11 == 0x19 && (iVar5 = FUN_004dab80_TActionBlock_Is(s_bowrun_005e0608), iVar5 != 0)))))) ||
+       (iVar5 = FUN_004dab80_TActionBlock_Is(&DAT_005e0604), iVar5 != 0)))) ||
+     (((((this->cls_0x5a50e8).mbr_0xe0 != 0 && (iVar5 = FUN_004dab80_TActionBlock_Is(s_sneak_005c618c), iVar5 != 0))
+       || ((this != (cls_0x5a7b98_TCharacter *)0x0 &&
            ((piVar11 = (int *)(this->cls_0x5a50e8).mbr_0xd8, piVar11 != (int *)0x0 &&
             (*piVar11 == 0xb)))))) ||
       ((DAT_0066829c != 0 &&
@@ -11101,14 +11101,14 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3b90(cls_0x5a7b98 *this
     return 0;
   }
   if (piVar11 == (int *)0x0) {
-    iVar5 = meth_0x4cd690(this,&stack0x00000004,1,0xff,(this->cls_0x5a50e8).mbr_0x36,0x20);
+    iVar5 = meth_0x4cd690_FindCharacters(this,&stack0x00000004,1,0xff,(this->cls_0x5a50e8).mbr_0x36,0x20);
     piVar11 = (int *)((iVar5 < 1) - 1 & (uint)in_stack_00000004);
   }
   if (DAT_0066829c == 0) {
-    cls_0x5a5320::meth_0x54d390((cls_0x5a5320 *)&DAT_0065c5d0);
+    cls_0x5a5320_TPlayScreen::meth_0x54d390((cls_0x5a5320_TPlayScreen *)&DAT_0065c5d0);
   }
   if (*(int *)(this->cls_0x5a50e8).mbr_0xe0 == in_stack_00000008) {
-    uVar7 = meth_0x4d4790(this);
+    uVar7 = meth_0x4d4790_SetFighting(this);
     ExceptionList = local_c;
     return uVar7;
   }
@@ -11141,7 +11141,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3b90(cls_0x5a7b98 *this
   piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xd8;
   if ((piVar2 != (int *)0x0) && (((iVar5 = *piVar2, iVar5 == 2 || (iVar5 == 4)) || (iVar5 == 0x1a)))
      ) {
-    meth_0x4cee70(this);
+    meth_0x4cee70_Stop(this);
   }
   pcStack00000018 = (cls_0x4da9f0 *)FUN_00482fb0(100);
   uStack0000000c = 0;
@@ -11157,7 +11157,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3b90(cls_0x5a7b98 *this
   (*pcVar3->virt_meth_0x477c30_316)(this);
   pcVar8->mbr_0x60 = (-1 < extraout_var_04 | 2) << 4 | pcVar8->mbr_0x60 & 0xffffffef;
   uVar4 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_00470ca0_284)(0);
-  iVar5 = FUN_004dab80(uVar4);
+  iVar5 = FUN_004dab80_TActionBlock_Is(uVar4);
   if (iVar5 == 0) {
     if (in_stack_00000008 == 0x19) {
       iVar5 = *(int *)(this->cls_0x5a50e8).mbr_0xd8;
@@ -11173,7 +11173,7 @@ LAB_004d3e9e:
     pcVar8->mbr_0x2c = (uint)(this->cls_0x5a50e8).mbr_0x36;
   }
   else {
-    dVar9 = meth_0x46ea90(this);
+    dVar9 = meth_0x46ea90_AngleTo(this);
     pcVar8->mbr_0x2c = dVar9;
   }
   piVar11 = (int *)(this->cls_0x5a50e8).mbr_0xd8;
@@ -11222,7 +11222,7 @@ LAB_004d3e9e:
 
 // Function at 004d3fd0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3fd0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d3fd0_EndFighting(cls_0x5a7b98_TCharacter *this)
 
 {
   uint *puVar1;
@@ -11286,7 +11286,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3fd0(cls_0x5a7b98 *this
       piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xd8;
       if ((piVar2 != (int *)0x0) &&
          (((iVar8 = *piVar2, iVar8 == 2 || (iVar8 == 4)) || (iVar8 == 0x1a)))) {
-        meth_0x4cee70(this);
+        meth_0x4cee70_Stop(this);
       }
       iVar8 = cls_0x57d9d0::meth_0x57d9d0((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,(char)this,0x20,1)
       ;
@@ -11345,7 +11345,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d3fd0(cls_0x5a7b98 *this
 
 // Function at 004d4220
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d4220(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d4220(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
@@ -11525,7 +11525,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d4220(cls_0x5a7b98 *this
 
 // Function at 004d4460
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d4460(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d4460(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -11618,7 +11618,7 @@ LAB_004d45db:
 
 // Function at 004d4790
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d4790(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d4790_SetFighting(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -11629,7 +11629,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d4790(cls_0x5a7b98 *this
   int3 extraout_var_00;
   int3 extraout_var_01;
   undefined4 uVar5;
-  cls_0x5a7b98 *in_stack_00000004;
+  cls_0x5a7b98_TCharacter *in_stack_00000004;
   
   if (((DAT_0066829c != 0) &&
       (uVar4 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477570_376)(this),
@@ -11650,7 +11650,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d4790(cls_0x5a7b98 *this
       }
     }
     if (in_stack_00000004 != this) {
-      if ((in_stack_00000004 != (cls_0x5a7b98 *)0x0) &&
+      if ((in_stack_00000004 != (cls_0x5a7b98_TCharacter *)0x0) &&
          (uVar4 = (*((in_stack_00000004->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)
                             (in_stack_00000004),
          CONCAT31(extraout_var_01,uVar4) == 0 || extraout_var_01 < 0)) {
@@ -11659,12 +11659,12 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d4790(cls_0x5a7b98 *this
       piVar3 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
       if (((piVar3 == (int *)0x0) ||
           ((*piVar3 != 3 && ((piVar3 == (int *)0x0 || (*piVar3 != 0x19)))))) &&
-         (in_stack_00000004 != (cls_0x5a7b98 *)0x0)) {
-        uVar5 = meth_0x4d3b90(this);
+         (in_stack_00000004 != (cls_0x5a7b98_TCharacter *)0x0)) {
+        uVar5 = meth_0x4d3b90_BeginFighting(this);
         return uVar5;
       }
-      if (*(cls_0x5a7b98 **)((this->cls_0x5a50e8).mbr_0xd8 + 0x44) != in_stack_00000004) {
-        if (in_stack_00000004 == (cls_0x5a7b98 *)0x0) {
+      if (*(cls_0x5a7b98_TCharacter **)((this->cls_0x5a50e8).mbr_0xd8 + 0x44) != in_stack_00000004) {
+        if (in_stack_00000004 == (cls_0x5a7b98_TCharacter *)0x0) {
           uVar5 = 0;
         }
         else {
@@ -11673,11 +11673,11 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d4790(cls_0x5a7b98 *this
         cls_0x57d9d0::meth_0x583f60((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,this,0x21,uVar5,0);
         iVar2 = *(int *)&(this->cls_0x5a50e8).field_0xdc;
         dVar1 = (this->cls_0x5a50e8).mbr_0xe0;
-        *(cls_0x5a7b98 **)((this->cls_0x5a50e8).mbr_0xd8 + 0x44) = in_stack_00000004;
-        *(cls_0x5a7b98 **)(iVar2 + 0x44) = in_stack_00000004;
-        *(cls_0x5a7b98 **)(dVar1 + 0x44) = in_stack_00000004;
-        if ((in_stack_00000004 != (cls_0x5a7b98 *)0x0) &&
-           (uVar5 = meth_0x46ea90(this), this->mbr_0x254 == 0)) {
+        *(cls_0x5a7b98_TCharacter **)((this->cls_0x5a50e8).mbr_0xd8 + 0x44) = in_stack_00000004;
+        *(cls_0x5a7b98_TCharacter **)(iVar2 + 0x44) = in_stack_00000004;
+        *(cls_0x5a7b98_TCharacter **)(dVar1 + 0x44) = in_stack_00000004;
+        if ((in_stack_00000004 != (cls_0x5a7b98_TCharacter *)0x0) &&
+           (uVar5 = meth_0x46ea90_AngleTo(this), this->mbr_0x254 == 0)) {
           iVar2 = *(int *)&(this->cls_0x5a50e8).field_0xdc;
           *(undefined4 *)((this->cls_0x5a50e8).mbr_0xd8 + 0x2c) = uVar5;
           dVar1 = (this->cls_0x5a50e8).mbr_0xe0;
@@ -11701,7 +11701,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d4790(cls_0x5a7b98 *this
 // Function at 004d4eb0
 
 void __thiscall
-OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d4eb0(cls_0x5a7b98 *this,int param_1,undefined4 param_2)
+OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4d4eb0_Load(cls_0x5a7b98_TCharacter *this,int param_1,undefined4 param_2)
 
 {
   dword *pdVar1;
@@ -11721,7 +11721,7 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d4eb0(cls_0x5a7b98 *this,int param_1,unde
   if (2 < in_stack_0000000c) {
     *(int *)(param_1 + 4) = *(int *)(param_1 + 4) + 1;
   }
-  virt_meth_0x4db930(this,param_1,param_2);
+  virt_meth_0x4db930_Load(this,param_1,param_2);
   if (0 < in_stack_0000000c) {
     pdVar1 = *(dword **)(param_1 + 4);
     dVar2 = pdVar1[1];
@@ -11803,7 +11803,7 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d4eb0(cls_0x5a7b98 *this,int param_1,unde
 
 // Function at 004d50d0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d50d0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4d50d0_Save(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined *puVar1;
@@ -11821,7 +11821,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d50d0(cls_0x5a7b98 *this)
   puVar1 = (undefined *)in_stack_00000004->mbr_0x8;
   *puVar1 = 1;
   in_stack_00000004->mbr_0x8 = (dword)(puVar1 + 1);
-  virt_meth_0x4dbb80(this);
+  virt_meth_0x4dbb80_SaveState(this);
   dVar2 = this->mbr_0x138;
   if ((int)((in_stack_00000004->mbr_0x4 - in_stack_00000004->mbr_0x8) + in_stack_00000004->mbr_0xc)
       < 4) {
@@ -11908,8 +11908,8 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d50d0(cls_0x5a7b98 *this)
 // Function at 004d5260
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d5260
-          (cls_0x5a7b98 *this,undefined4 param_1,undefined4 param_2)
+OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4d5260_StatLookup
+          (cls_0x5a7b98_TCharacter *this,undefined4 param_1,undefined4 param_2)
 
 {
   char cVar1;
@@ -11947,11 +11947,11 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d5260
   undefined4 uVar10;
   undefined3 extraout_var_03;
   
-  iVar8 = FUN_0059a530(param_1,s_armor_005e0530);
+  iVar8 = FUN_0059a530_stricmp(param_1,s_armor_005e0530);
   if (iVar8 == 0) {
     cVar1 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_00473460_204)(unaff_EDI,unaff_ESI);
     uVar4 = (undefined)unaff_EBX;
-    if ((this == DAT_00667fcc) && (DAT_00667fcc != (cls_0x5a7b98 *)0x0)) {
+    if ((this == DAT_00667fcc) && (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0)) {
       cVar2 = cls_0x41c7f0::meth_0x5407d0(&this->cls_0x41c7f0);
       cVar3 = (*(DAT_00667fcc->cls_0x5a50e8).vftptr_0x0[1].FUN_0046fd30_112)
                         (uVar4,unaff_retaddr,param_1);
@@ -11960,30 +11960,30 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d5260
     FUN_0058d252(cVar1);
     return 1;
   }
-  iVar8 = FUN_0059a530(param_1,s_maxhealth_005e0538);
+  iVar8 = FUN_0059a530_stricmp(param_1,s_maxhealth_005e0538);
   if (iVar8 == 0) {
     uVar10 = 10;
     uVar4 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477eb0_472)(this);
     FUN_0058d252(uVar4,param_2,uVar10);
     return 1;
   }
-  iVar8 = FUN_0059a530(param_1,s_maxfatigue_005e0544);
+  iVar8 = FUN_0059a530_stricmp(param_1,s_maxfatigue_005e0544);
   if (iVar8 == 0) {
     uVar10 = 10;
     uVar4 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477ed0_480)(this);
     FUN_0058d252(uVar4,param_2,uVar10);
     return 1;
   }
-  iVar8 = FUN_0059a530(param_1,s_maxmana_005e0550);
+  iVar8 = FUN_0059a530_stricmp(param_1,s_maxmana_005e0550);
   if (iVar8 == 0) {
     uVar10 = 10;
     uVar4 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477ef0_488)(this);
     FUN_0058d252(uVar4,param_2,uVar10);
     return 1;
   }
-  iVar8 = FUN_0059a530(param_1,s_attackpct_005e0558);
+  iVar8 = FUN_0059a530_stricmp(param_1,s_attackpct_005e0558);
   if (iVar8 == 0) {
-    if ((this == DAT_00667fcc) || (DAT_00667fcc == (cls_0x5a7b98 *)0x0)) {
+    if ((this == DAT_00667fcc) || (DAT_00667fcc == (cls_0x5a7b98_TCharacter *)0x0)) {
       iVar8 = cls_0x41c7f0::meth_0x540820(&this->cls_0x41c7f0);
       uVar4 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x4710a0_252)(this);
       iVar8 = iVar8 + CONCAT31(extraout_var_04,uVar4);
@@ -12006,9 +12006,9 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d5260
     FUN_0058b100(in_stack_0000000c,&DAT_005e0564,iVar8 + iVar9);
     return 1;
   }
-  iVar8 = FUN_0059a530(param_1,s_defensepct_005e0568);
+  iVar8 = FUN_0059a530_stricmp(param_1,s_defensepct_005e0568);
   if (iVar8 == 0) {
-    if ((this == DAT_00667fcc) || (DAT_00667fcc == (cls_0x5a7b98 *)0x0)) {
+    if ((this == DAT_00667fcc) || (DAT_00667fcc == (cls_0x5a7b98_TCharacter *)0x0)) {
       iVar8 = cls_0x41c7f0::meth_0x5407d0(&this->cls_0x41c7f0);
       uVar6 = (undefined)unaff_EDI;
       uVar4 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x4710a0_252)(this);
@@ -12030,7 +12030,7 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d5260
     FUN_0058b100(in_stack_00000014,&DAT_005e0574,iVar8 + iVar9);
     return 1;
   }
-  iVar8 = FUN_0059a530(param_1,s_damage_005e0578);
+  iVar8 = FUN_0059a530_stricmp(param_1,s_damage_005e0578);
   if (iVar8 == 0) {
     uVar4 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477a20_192)(this);
     uVar5 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_004736f0_224)(unaff_EDI,unaff_ESI);
@@ -12044,14 +12044,14 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d5260
     FUN_0058d252(iVar8,in_stack_00000014,10);
     return 1;
   }
-  iVar8 = FUN_0059a530(param_1,s_stealth_005e0580);
+  iVar8 = FUN_0059a530_stricmp(param_1,s_stealth_005e0580);
   if (iVar8 == 0) {
     uVar10 = 10;
     uVar4 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x477b80_248)(this);
     FUN_0058d252(uVar4,param_2,uVar10);
     return 1;
   }
-  uVar10 = cls_0x5b8e94::virt_meth_0x472f80((cls_0x5b8e94 *)this,param_1,param_2);
+  uVar10 = cls_0x5b8e94_TObjectInstance::virt_meth_0x472f80_GetProperty((cls_0x5b8e94_TObjectInstance *)this,param_1,param_2);
   return uVar10;
 }
 
@@ -12059,10 +12059,10 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d5260
 
 // Function at 004d55d0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d55d0(cls_0x5a7b98 *this,undefined4 param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4d55d0(cls_0x5a7b98_TCharacter *this,undefined4 param_1)
 
 {
-  cls_0x5b8e94::virt_meth_0x473460((cls_0x5b8e94 *)this,param_1);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x473460((cls_0x5b8e94_TObjectInstance *)this,param_1);
   return;
 }
 
@@ -12070,7 +12070,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d55d0(cls_0x5a7b98 *this,
 
 // Function at 004d57a0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d57a0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d57a0_UpdateFade(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -12129,7 +12129,7 @@ LAB_004d581c:
 
 // Function at 004d5b90
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5b90(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d5b90(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -12156,7 +12156,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5b90(cls_0x5a7b98 *this
     if ((((uVar2 & 1) == 0) && ((uVar2 & 0x2800000) == 0)) &&
        (iVar4 = cls_0x53ed70::meth_0x53f010((cls_0x53ed70 *)((int)&UNK_00667c34 + 4)), iVar4 != 0))
     {
-      uVar5 = meth_0x4d5c20(this);
+      uVar5 = meth_0x4d5c20_Cast(this);
       return uVar5;
     }
   }
@@ -12167,7 +12167,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5b90(cls_0x5a7b98 *this
 
 // Function at 004d5c20
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5c20(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d5c20_Cast(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -12199,7 +12199,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5c20(cls_0x5a7b98 *this
     uVar2 = (this->cls_0x5a50e8).mbr_0x8;
     if (((uVar2 & 1) == 0) && ((uVar2 & 0x2800000) == 0)) {
       if ((*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb) && ((this->mbr_0x36c & 2) != 0)) {
-        cls_0x5b4f30::meth_0x51d680((cls_0x5b4f30 *)this);
+        cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState((cls_0x5b4f30_TPlayer *)this);
       }
       if (((DAT_0066829c != 0) &&
           (uVar3 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477570_376)(this),
@@ -12252,7 +12252,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5c20(cls_0x5a7b98 *this
             if ((((uVar2 & 1) == 0) && ((uVar2 & 0x2800000) == 0)) &&
                (iVar4 = cls_0x53ed70::meth_0x53f010((cls_0x53ed70 *)((int)&UNK_00667c34 + 4)),
                iVar4 != 0)) {
-              meth_0x4d5c20(this);
+              meth_0x4d5c20_Cast(this);
             }
           }
         }
@@ -12266,7 +12266,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5c20(cls_0x5a7b98 *this
 
 // Function at 004d5e50
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5e50(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d5e50(cls_0x5a7b98_TCharacter *this)
 
 {
   int *piVar1;
@@ -12320,12 +12320,12 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5e50(cls_0x5a7b98 *this
 
 // Function at 004d5fc0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5fc0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d5fc0_BeginCombat(cls_0x5a7b98_TCharacter *this)
 
 {
-  meth_0x4d4790(this);
+  meth_0x4d4790_SetFighting(this);
   if (this->mbr_0x254 == 0) {
-    meth_0x4cee70(this);
+    meth_0x4cee70_Stop(this);
   }
   this->mbr_0x25c = 0x60;
   this->mbr_0x254 = 1;
@@ -12339,7 +12339,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d5fc0(cls_0x5a7b98 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6220(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d6220_SideStep(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -12371,7 +12371,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6220(cls_0x5a7b98 *this)
   iVar6 = FUN_0059a600(&local_18,(this->cls_0x5a50e8).mbr_0xd8 + 4,8);
   if (iVar6 != 0) {
     if ((in_stack_00000004 != 'l') && (in_stack_00000004 != 'r')) {
-      iVar6 = FUN_00483300(0,1);
+      iVar6 = FUN_00483300_RandomRange(0,1);
       in_stack_00000004 = (-(iVar6 != 0) & 0xfaU) + 0x72;
     }
     ppvVar8 = &local_18;
@@ -12423,12 +12423,12 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6220(cls_0x5a7b98 *this)
 
 // Function at 004d63b0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d63b0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d63b0(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
   dword dVar2;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   int iVar3;
   uint uVar4;
   uint uVar5;
@@ -12466,9 +12466,9 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d63b0(cls_0x5a7b98 *this)
         local_2a = DAT_00666970;
         local_20 = (this->cls_0x5a50e8).mbr_0x18;
         local_34 = 0x19;
-        dVar2 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_34);
-        this_00 = (cls_0x5a7b98 *)FUN_00452690(dVar2,0);
-        if (this_00 != (cls_0x5a7b98 *)0x0) {
+        dVar2 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_34);
+        this_00 = (cls_0x5a7b98_TCharacter *)FUN_00452690_TMapPane_GetInstance(dVar2,0);
+        if (this_00 != (cls_0x5a7b98_TCharacter *)0x0) {
           *local_40 = dVar2;
           meth_0x4def90(this_00,this,0,0);
           uVar4 = 0xffffffff;
@@ -12545,7 +12545,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d63b0(cls_0x5a7b98 *this)
 /* WARNING: Removing unreachable block (ram,0x004d66b5) */
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6570(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d6570(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -12593,7 +12593,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6570(cls_0x5a7b98 *this)
     if ((DAT_0066829c != 0) && (*(short *)&(this->cls_0x5a50e8).mbr_0x4 == 0xb)) {
       iVar5 = 0;
       bVar2 = false;
-      iVar6 = FUN_00474e20(s_pouch_005e05d8,0,0xffffffff,1);
+      iVar6 = FUN_00474e20_NewObjectByName(s_pouch_005e05d8,0,0xffffffff,1);
       if (iVar6 != 0) {
         (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046f3d0_88)(iVar6,0xffffffff);
         cStack_48.mbr_0x0 = 0;
@@ -12614,7 +12614,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6570(cls_0x5a7b98 *this)
                 if ((*(short *)piVar3 != 2) || ((iVar5 = iVar5 + 1, iVar5 != 2 && (iVar5 != 5)))) {
                   (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x46fbe0_100)(this);
                   cStack_48.mbr_0x8 =
-                       (int)&((cls_0x5a7b98 *)(cStack_48.mbr_0x8 + -0x664))->mbr_0x660 + 3;
+                       (int)&((cls_0x5a7b98_TCharacter *)(cStack_48.mbr_0x8 + -0x664))->mbr_0x660 + 3;
                 }
               }
               else {
@@ -12644,7 +12644,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6570(cls_0x5a7b98 *this)
     while (cStack_2c.mbr_0x18 = (dword)piVar3, piVar3 != (int *)0x0) {
       bVar2 = false;
       if ((piVar3 != (int *)0x0) && (iVar5 = (**(code **)(*piVar3 + 0x5c))(), iVar5 != 0)) {
-        iVar5 = FUN_0059a530(*(undefined4 *)piVar3[0x13],&DAT_005e05e8);
+        iVar5 = FUN_0059a530_stricmp(*(undefined4 *)piVar3[0x13],&DAT_005e05e8);
         dVar1 = (this->cls_0x5a50e8).mbr_0x10;
         if (iVar5 == 0) {
           dStack_4c = (this->cls_0x5a50e8).mbr_0x18;
@@ -12663,7 +12663,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6570(cls_0x5a7b98 *this)
           dStack_60 = dVar1;
           dStack_5c = dStack_74;
           dStack_58 = dStack_70;
-          iVar5 = FUN_00483300(0,0x100);
+          iVar5 = FUN_00483300_RandomRange(0,0x100);
           iVar6 = 0;
           fVar7 = (float10)iVar5 * (float10)_DAT_005a3a68 * (float10)_DAT_005a3a60;
           fVar8 = (float10)fcos(fVar7);
@@ -12673,7 +12673,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6570(cls_0x5a7b98 *this)
           do {
             fStack_6c = fVar14 + fStack_6c;
             fStack_68 = fVar15 + fStack_68;
-            FUN_004530a0(&dStack_60,(this->cls_0x5a50e8).mbr_0xe,0x10,&iStack_80,&stack0xffffff7c,
+            FUN_004530a0_GetWalkHeightRadius(&dStack_60,(this->cls_0x5a50e8).mbr_0xe,0x10,&iStack_80,&stack0xffffff7c,
                          &iStack_7c);
             fStack_64 = (float)unaff_ESI;
             iVar5 = iStack_80;
@@ -12696,7 +12696,7 @@ LAB_004d6900:
                 dStack_5c = dStack_74;
                 dStack_58 = dStack_70;
                 fStack_64 = (float)dStack_70;
-                iVar5 = FUN_00483300(0,0x100);
+                iVar5 = FUN_00483300_RandomRange(0,0x100);
                 iVar6 = 0;
                 fVar7 = (float10)iVar5 * (float10)_DAT_005a3a68 * (float10)_DAT_005a3a60;
                 fVar8 = (float10)fcos(fVar7);
@@ -12719,7 +12719,7 @@ LAB_004d6900:
           if (iVar5 != 0) {
             (**(code **)(*piVar3 + 0x28))();
           }
-          iVar5 = FUN_0059a530(*(undefined4 *)(piVar3[0x12] + 4),s_Armor_005e05f0);
+          iVar5 = FUN_0059a530_stricmp(*(undefined4 *)(piVar3[0x12] + 4),s_Armor_005e05f0);
           if (iVar5 != 0) {
             iStack_7c = iStack_7c + 0x3c;
           }
@@ -12752,7 +12752,7 @@ LAB_004d6900:
 
 // Function at 004d6a30
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6a30(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d6a30_SaveMaterials(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -12811,7 +12811,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6a30(cls_0x5a7b98 *this)
 
 // Function at 004d6b40
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6b40(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d6b40_RestoreMaterials(cls_0x5a7b98_TCharacter *this)
 
 {
   cls_0x40b770 *this_00;
@@ -12861,7 +12861,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d6b40(cls_0x5a7b98 *this)
 
 // Function at 004d6c00
 
-cls_0x5a7b98 * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d6c00(cls_0x5a7b98 *this)
+cls_0x5a7b98_TCharacter * __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4d6c00(cls_0x5a7b98_TCharacter *this)
 
 {
   byte in_stack_00000004;
@@ -12877,12 +12877,12 @@ cls_0x5a7b98 * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d6c00(cls_0x5a7
 
 // Function at 004d6ce0
 
-cls_0x5a7b98 * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d6ce0(cls_0x5a7b98 *this)
+cls_0x5a7b98_TCharacter * __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4d6ce0_Dtor(cls_0x5a7b98_TCharacter *this)
 
 {
   byte in_stack_00000004;
   
-  ~cls_0x5a7b98(this);
+  ~cls_0x5a7b98_TCharacter(this);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }
@@ -12893,7 +12893,7 @@ cls_0x5a7b98 * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d6ce0(cls_0x5a7
 
 // Function at 004d6db0
 
-char * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d6db0(cls_0x5a7b98 *this)
+char * __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4d6db0_DefaultRootState(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -12912,7 +12912,7 @@ char * __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d6db0(cls_0x5a7b98 *thi
 
 // Function at 004d7000
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7000(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d7000_GetPos(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -12929,7 +12929,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7000(cls_0x5a7b98 *this)
 
 // Function at 004d7020
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7020(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d7020_Face(cls_0x5a7b98_TCharacter *this)
 
 {
   dword in_stack_00000004;
@@ -12943,14 +12943,14 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7020(cls_0x5a7b98 *this)
 
 // Function at 004d7040
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7040(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d7040(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined4 uVar1;
   undefined4 in_stack_00000004;
   
-  if ((this != (cls_0x5a7b98 *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) {
-    uVar1 = FUN_004dab80(in_stack_00000004);
+  if ((this != (cls_0x5a7b98_TCharacter *)0x0) && ((this->cls_0x5a50e8).mbr_0xd8 != 0)) {
+    uVar1 = FUN_004dab80_TActionBlock_Is(in_stack_00000004);
     return uVar1;
   }
   return 0;
@@ -12960,14 +12960,14 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7040(cls_0x5a7b98 *this
 
 // Function at 004d7060
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7060(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d7060(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined4 uVar1;
   undefined4 in_stack_00000004;
   
   if (*(int *)&(this->cls_0x5a50e8).field_0xdc != 0) {
-    uVar1 = FUN_004dab80(in_stack_00000004);
+    uVar1 = FUN_004dab80_TActionBlock_Is(in_stack_00000004);
     return uVar1;
   }
   return 0;
@@ -12977,14 +12977,14 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7060(cls_0x5a7b98 *this
 
 // Function at 004d7080
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7080(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d7080(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined4 uVar1;
   undefined4 in_stack_00000004;
   
   if ((this->cls_0x5a50e8).mbr_0xe0 != 0) {
-    uVar1 = FUN_004dab80(in_stack_00000004);
+    uVar1 = FUN_004dab80_TActionBlock_Is(in_stack_00000004);
     return uVar1;
   }
   return 0;
@@ -12994,7 +12994,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7080(cls_0x5a7b98 *this
 
 // Function at 004d72a0
 
-int __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d72a0(cls_0x5a7b98 *this)
+int __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4d72a0(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -13011,7 +13011,7 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d72a0(cls_0x5a7b98 *this)
 
 // Function at 004d72e0
 
-int __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d72e0(cls_0x5a7b98 *this)
+int __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4d72e0(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -13028,7 +13028,7 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4d72e0(cls_0x5a7b98 *this)
 
 // Function at 004d7400
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7400(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d7400_SetFlags(cls_0x5a7b98_TCharacter *this)
 
 {
   uint in_stack_00000004;
@@ -13041,7 +13041,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7400(cls_0x5a7b98 *this)
 
 // Function at 004d7420
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7420(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4d7420_ClearFlags(cls_0x5a7b98_TCharacter *this)
 
 {
   uint in_stack_00000004;
@@ -13054,12 +13054,12 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4d7420(cls_0x5a7b98 *this)
 
 // Function at 004daf00
 
-cls_0x5a7b98 * __thiscall OOAnalyzer::cls_0x5a7b98::~cls_0x5a7b98(cls_0x5a7b98 *this)
+cls_0x5a7b98_TCharacter * __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::~cls_0x5a7b98_TCharacter(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
   int iVar2;
-  cls_0x5a7b98 *pcVar3;
+  cls_0x5a7b98_TCharacter *pcVar3;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -13071,7 +13071,7 @@ cls_0x5a7b98 * __thiscall OOAnalyzer::cls_0x5a7b98::~cls_0x5a7b98(cls_0x5a7b98 *
        (cls_0x5a50e8__vftable_5a50e8 *)&cls_0x5a7b98__vftable_5a7b98_005a7b98;
   local_4 = 0;
   if (((this->cls_0x5a50e8).mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   dVar1 = (this->cls_0x5a50e8).mbr_0xe0;
   if ((((dVar1 != 0) && (dVar1 != *(dword *)&(this->cls_0x5a50e8).field_0xdc)) &&
@@ -13099,7 +13099,7 @@ cls_0x5a7b98 * __thiscall OOAnalyzer::cls_0x5a7b98::~cls_0x5a7b98(cls_0x5a7b98 *
   (this->cls_0x5a50e8).mbr_0xd8 = 0;
   (this->cls_0x5a50e8).mbr_0xe0 = 0;
   local_4 = 0xffffffff;
-  pcVar3 = (cls_0x5a7b98 *)cls_0x5a50e8::~cls_0x5a50e8(&this->cls_0x5a50e8);
+  pcVar3 = (cls_0x5a7b98_TCharacter *)cls_0x5a50e8::~cls_0x5a50e8(&this->cls_0x5a50e8);
   ExceptionList = local_c;
   return pcVar3;
 }
@@ -13108,7 +13108,7 @@ cls_0x5a7b98 * __thiscall OOAnalyzer::cls_0x5a7b98::~cls_0x5a7b98(cls_0x5a7b98 *
 
 // Function at 004db000
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4db000(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4db000(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
@@ -13219,7 +13219,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4db000(cls_0x5a7b98 *this)
 
 // Function at 004db190
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db190(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4db190(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -13240,7 +13240,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db190(cls_0x5a7b98 *this)
 
 // Function at 004db1d0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db1d0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4db1d0(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -13290,7 +13290,7 @@ LAB_004db247:
 
 // Function at 004db2b0
 
-int __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db2b0(cls_0x5a7b98 *this)
+int __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4db2b0(cls_0x5a7b98_TCharacter *this)
 
 {
   return (-(uint)((this->cls_0x5a50e8).mbr_0xd8 != 0) & 0xfffffffd) + 3;
@@ -13300,7 +13300,7 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db2b0(cls_0x5a7b98 *this)
 
 // Function at 004db2d0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db2d0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4db2d0(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -13328,7 +13328,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db2d0(cls_0x5a7b98 *this)
 
 // Function at 004db340
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db340(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4db340_SetDoing(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -13354,7 +13354,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db340(cls_0x5a7b98 *this)
 
 // Function at 004db3a0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db3a0(cls_0x5a7b98 *this,dword param_1)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4db3a0(cls_0x5a7b98_TCharacter *this,dword param_1)
 
 {
   dword dVar1;
@@ -13393,7 +13393,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db3a0(cls_0x5a7b98 
 // Function at 004db450
 
 undefined __thiscall
-OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db450(cls_0x5a7b98 *this,dword param_1,undefined4 param_2)
+OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4db450(cls_0x5a7b98_TCharacter *this,dword param_1,undefined4 param_2)
 
 {
   dword dVar1;
@@ -13420,7 +13420,7 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db450(cls_0x5a7b98 *this,dword param_1,un
 // Function at 004db4d0
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db4d0(cls_0x5a7b98 *this,undefined param_1,int param_2)
+OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4db4d0(cls_0x5a7b98_TCharacter *this,undefined param_1,int param_2)
 
 {
   short *psVar1;
@@ -13520,7 +13520,7 @@ LAB_004db73d:
       }
     }
     in_stack_00000010 = in_stack_00000010 & 1;
-    iVar7 = FUN_0059a530((this->cls_0x5a50e8).mbr_0xd8 + 4,iVar12);
+    iVar7 = FUN_0059a530_stricmp((this->cls_0x5a50e8).mbr_0xd8 + 4,iVar12);
     uVar9 = *(uint *)(dVar13 + 0x60);
     uVar10 = (uint)(iVar7 != 0) << 1;
     *(uint *)(dVar13 + 0x60) = uVar10 | uVar9 & 0xfffffffd;
@@ -13670,7 +13670,7 @@ LAB_004db830:
 // Function at 004db930
 
 void __thiscall
-OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db930(cls_0x5a7b98 *this,cls_0x49ce00 *param_1,int param_2)
+OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4db930_Load(cls_0x5a7b98_TCharacter *this,cls_0x49ce00 *param_1,int param_2)
 
 {
   char cVar1;
@@ -13706,7 +13706,7 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db930(cls_0x5a7b98 *this,cls_0x49ce00 *pa
     ExceptionList = &pvStack_c;
     param_1->mbr_0x4 = param_1->mbr_0x4 + 1;
   }
-  cls_0x5b8e94::virt_meth_0x472430((cls_0x5b8e94 *)this,param_1);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x472430((cls_0x5b8e94_TObjectInstance *)this,param_1);
   if (param_2 < 7) {
     puVar6 = (uint *)FUN_00482fb0(100);
     local_4 = 0;
@@ -13826,7 +13826,7 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db930(cls_0x5a7b98 *this,cls_0x49ce00 *pa
     if (iVar8 != 0) {
       iVar7 = iVar8 + 1;
     }
-    iVar7 = FUN_0059a530(puVar6 + 1,iVar7);
+    iVar7 = FUN_0059a530_stricmp(puVar6 + 1,iVar7);
     if (iVar7 == 0) {
       ExceptionList = pvStack_18;
       return;
@@ -13843,7 +13843,7 @@ OOAnalyzer::cls_0x5a7b98::virt_meth_0x4db930(cls_0x5a7b98 *this,cls_0x49ce00 *pa
 
 // Function at 004dbb80
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4dbb80(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4dbb80_SaveState(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
@@ -13865,7 +13865,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4dbb80(cls_0x5a7b98 *this)
   puVar10 = (undefined *)in_stack_00000004->mbr_0x8;
   *puVar10 = 0;
   in_stack_00000004->mbr_0x8 = (dword)(puVar10 + 1);
-  cls_0x5b8e94::virt_meth_0x472980((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x472980((cls_0x5b8e94_TObjectInstance *)this);
   uVar2 = *(undefined *)(this->cls_0x5a50e8).mbr_0xe0;
   if ((int)((in_stack_00000004->mbr_0x4 - in_stack_00000004->mbr_0x8) + in_stack_00000004->mbr_0xc)
       < 1) {
@@ -13915,7 +13915,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4dbb80(cls_0x5a7b98 *this)
 
 // Function at 004dbc70
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4dbc70(cls_0x5a7b98 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::virt_meth_0x4dbc70_Notify(cls_0x5a7b98_TCharacter *this,int param_1)
 
 {
   dword dVar1;
@@ -13926,7 +13926,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::virt_meth_0x4dbc70(cls_0x5a7b98 *this,
   if ((this->cls_0x5a50e8).mbr_0x44 == in_stack_00000008) {
     return;
   }
-  cls_0x5b8e94::virt_meth_0x471ba0((cls_0x5b8e94 *)this,param_1);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x471ba0_Notify((cls_0x5b8e94_TObjectInstance *)this,param_1);
   dVar1 = (this->cls_0x5a50e8).mbr_0xe0;
   if ((dVar1 != 0) && (dVar2 = *(dword *)(dVar1 + 0x44), dVar2 != 0)) {
     if (param_1 == 1) {
@@ -13975,7 +13975,7 @@ LAB_004dbced:
 
 // Function at 004dd480
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4dd480(cls_0x5a7b98 *this,int *param_1)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4dd480_UseContainer(cls_0x5a7b98_TCharacter *this,int *param_1)
 
 {
   undefined uVar1;
@@ -14079,7 +14079,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4dd480(cls_0x5a7b98 *this
               }
             }
             else {
-              iVar2 = FUN_00483300(0,iVar2);
+              iVar2 = FUN_00483300_RandomRange(0,iVar2);
               uVar1 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_0046e8b0_40)();
               if (iVar2 < CONCAT31(extraout_var_03,uVar1)) {
                 if (in_stack_00000008 == DAT_00667fcc) {
@@ -14141,7 +14141,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4dd480(cls_0x5a7b98 *this
 
 // Function at 004de7d0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4de7d0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4de7d0(cls_0x5a7b98_TCharacter *this)
 
 {
   dword in_stack_00000004;
@@ -14159,7 +14159,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x4de7d0(cls_0x5a7b98 *this)
 // Function at 004def90
 
 void __thiscall
-OOAnalyzer::cls_0x5a7b98::meth_0x4def90(cls_0x5a7b98 *this,int param_1,dword param_2,dword param_3)
+OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x4def90(cls_0x5a7b98_TCharacter *this,int param_1,dword param_2,dword param_3)
 
 {
   int iVar1;
@@ -14186,7 +14186,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x4def90(cls_0x5a7b98 *this,int param_1,dword par
 
 // Function at 0050d2b0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x50d2b0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x50d2b0(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -14209,19 +14209,19 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x50d2b0(cls_0x5a7b98 *this
     uVar6 = 0;
     uVar4 = 10;
     uVar1 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x46fbe0_100)(this);
-    FUN_0046db20(CONCAT31(extraout_var,uVar1) + (uint)(this->cls_0x5a50e8).mbr_0x36,uVar4,puVar5,
+    FUN_0046db20_ConvertToVector(CONCAT31(extraout_var,uVar1) + (uint)(this->cls_0x5a50e8).mbr_0x36,uVar4,puVar5,
                  uVar6);
     puVar5 = auStack_18;
     uVar6 = 0;
     uVar4 = 10;
     uVar1 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x46fbe0_100)(this);
-    FUN_0046db20(CONCAT31(extraout_var_00,uVar1) + 0x7f + (uint)(this->cls_0x5a50e8).mbr_0x36,uVar4,
+    FUN_0046db20_ConvertToVector(CONCAT31(extraout_var_00,uVar1) + 0x7f + (uint)(this->cls_0x5a50e8).mbr_0x36,uVar4,
                  puVar5,uVar6);
     iStack_24 = *(int *)(in_stack_00000004 + 0x10) - (this->cls_0x5a50e8).mbr_0x10;
     iStack_20 = *(int *)(in_stack_00000004 + 0x14) - (this->cls_0x5a50e8).mbr_0x14;
     iStack_1c = *(int *)(in_stack_00000004 + 0x18) - (this->cls_0x5a50e8).mbr_0x18;
-    iVar2 = FUN_0046de60(auStack_18,&iStack_24);
-    iVar3 = FUN_0046de60(local_c,&iStack_24);
+    iVar2 = FUN_0046de60_Distance2D(auStack_18,&iStack_24);
+    iVar3 = FUN_0046de60_Distance2D(local_c,&iStack_24);
     if (iVar2 < iVar3) {
       return 1;
     }
@@ -14233,7 +14233,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x50d2b0(cls_0x5a7b98 *this
 
 // Function at 0050d530
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x50d530(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x50d530(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined uVar1;
@@ -14301,7 +14301,7 @@ LAB_0050d630:
 
 // Function at 00519230
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519230(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x519230(cls_0x5a7b98_TCharacter *this)
 
 {
   int iVar1;
@@ -14343,7 +14343,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519230(cls_0x5a7b98 *this)
 
 // Function at 00519300
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519300(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x519300(cls_0x5a7b98_TCharacter *this)
 
 {
   byte bVar1;
@@ -14436,23 +14436,23 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519300(cls_0x5a7b98 *this
 
 // Function at 00519500
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519500(cls_0x5a7b98 *this,cls_0x5a7b98 *param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x519500(cls_0x5a7b98_TCharacter *this,cls_0x5a7b98_TCharacter *param_1)
 
 {
   char cVar1;
   int iVar2;
   undefined uVar3;
-  cls_0x5b8e94 *this_00;
+  cls_0x5b8e94_TObjectInstance *this_00;
   undefined3 extraout_var;
   dword *pdVar4;
   int iVar5;
   undefined4 uVar6;
   dword dVar7;
-  cls_0x5a7b98 *this_01;
+  cls_0x5a7b98_TCharacter *this_01;
   uint uVar8;
   uint uVar9;
-  cls_0x5a7b98 *unaff_EBX;
-  cls_0x5a7b98 *pcVar10;
+  cls_0x5a7b98_TCharacter *unaff_EBX;
+  cls_0x5a7b98_TCharacter *pcVar10;
   int iVar11;
   int iVar12;
   undefined4 *puVar13;
@@ -14472,14 +14472,14 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519500(cls_0x5a7b98 *this,cls_0
   char acStack_54 [40];
   undefined auStack_2c [44];
   
-  if (param_1 == (cls_0x5a7b98 *)0x0) {
+  if (param_1 == (cls_0x5a7b98_TCharacter *)0x0) {
     pdVar4 = &this->mbr_0x3a0;
     iVar11 = 10;
     do {
       if (pdVar4[4] == in_stack_00000008) {
-        this_00 = (cls_0x5b8e94 *)FUN_00452690(*pdVar4,0);
-        if (this_00 != (cls_0x5b8e94 *)0x0) {
-          cls_0x5b8e94::meth_0x4defe0(this_00);
+        this_00 = (cls_0x5b8e94_TObjectInstance *)FUN_00452690_TMapPane_GetInstance(*pdVar4,0);
+        if (this_00 != (cls_0x5b8e94_TObjectInstance *)0x0) {
+          cls_0x5b8e94_TObjectInstance::meth_0x4defe0(this_00);
         }
         *pdVar4 = 0;
       }
@@ -14492,7 +14492,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519500(cls_0x5a7b98 *this,cls_0
   if (((**(int **)(*(int *)(iVar11 + 4) + 0x54) == 1) &&
       (iVar11 = meth_0x46e8a0(param_1), iVar11 != 0)) &&
      (uVar3 = (*((param_1->cls_0x5a50e8).vftptr_0x0)->FUN_00473600_212)(s_EqSlot_005e27f8),
-     (cls_0x5a7b98 *)CONCAT31(extraout_var,uVar3) == param_1)) {
+     (cls_0x5a7b98_TCharacter *)CONCAT31(extraout_var,uVar3) == param_1)) {
     iVar2 = *(int *)(iVar11 + 0x7c);
     local_c0 = 0;
     if (0 < iVar2) {
@@ -14501,7 +14501,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519500(cls_0x5a7b98 *this,cls_0
         if (iVar12 == 0) {
           iVar12 = *(int *)(iVar11 + 0x90);
         }
-        iVar11 = FUN_0059a530(*(undefined4 *)(iVar12 + 8),s_equipeffect_005e2800);
+        iVar11 = FUN_0059a530_stricmp(*(undefined4 *)(iVar12 + 8),s_equipeffect_005e2800);
         pcVar10 = this;
         if ((iVar11 == 0) && (iVar11 = *(int *)(iVar12 + 0xc), iVar11 != 0)) {
           iVar12 = 0;
@@ -14527,7 +14527,7 @@ LAB_00519608:
           }
           if (5 < iVar5) {
             FUN_00483330(iVar11,5,acStack_54,0x27);
-            iVar11 = FUN_0059a530(acStack_7c,&DAT_005e280c);
+            iVar11 = FUN_0059a530_stricmp(acStack_7c,&DAT_005e280c);
             if (iVar11 == 0) {
               acStack_7c[0] = '\0';
             }
@@ -14545,10 +14545,10 @@ LAB_00519608:
           uStack_a6 = DAT_00666970;
           dStack_9c = (this->cls_0x5a50e8).mbr_0x18;
           uStack_b0._0_2_ = 0x19;
-          dVar7 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&uStack_b0);
-          this_01 = (cls_0x5a7b98 *)FUN_00452690(dVar7,0);
+          dVar7 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&uStack_b0);
+          this_01 = (cls_0x5a7b98_TCharacter *)FUN_00452690_TMapPane_GetInstance(dVar7,0);
           pcVar10 = unaff_EBX;
-          if (this_01 != (cls_0x5a7b98 *)0x0) {
+          if (this_01 != (cls_0x5a7b98_TCharacter *)0x0) {
             (&this->mbr_0x3a0)[iVar12 * 6] = dVar7;
             (&this->mbr_0x3b0)[iVar12 * 6] = (dword)param_1;
             meth_0x4def90(this_01,unaff_EBX,0,0);
@@ -14630,16 +14630,16 @@ code_r0x0051960d:
 /* WARNING: Exceeded maximum restarts with more pending */
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5a7b98::meth_0x5199b0(cls_0x5a7b98 *this,cls_0x5a7b98 *param_1)
+OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x5199b0(cls_0x5a7b98_TCharacter *this,cls_0x5a7b98_TCharacter *param_1)
 
 {
   char cVar1;
   int *piVar2;
-  cls_0x5a7b98 *pcVar3;
+  cls_0x5a7b98_TCharacter *pcVar3;
   cls_0x5a50e8__vftable_5a50e8 *pcVar4;
   dword dVar5;
   dword dVar6;
-  cls_0x5a7b98 *pcVar7;
+  cls_0x5a7b98_TCharacter *pcVar7;
   void **ppvVar8;
   undefined uVar9;
   byte bVar10;
@@ -14680,7 +14680,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x5199b0(cls_0x5a7b98 *this,cls_0x5a7b98 *param_1
   }
   ppvVar8 = &local_c;
   if ((int)in_stack_00000008 < 0) {
-    if (param_1 == (cls_0x5a7b98 *)0x0) {
+    if (param_1 == (cls_0x5a7b98_TCharacter *)0x0) {
       return 0;
     }
     ExceptionList = &local_c;
@@ -14694,18 +14694,18 @@ OOAnalyzer::cls_0x5a7b98::meth_0x5199b0(cls_0x5a7b98 *this,cls_0x5a7b98 *param_1
     ppvVar8 = (void **)ExceptionList;
   }
   ExceptionList = ppvVar8;
-  if ((cls_0x5a7b98 *)(&this->mbr_0x2a0)[in_stack_00000008] == param_1) {
+  if ((cls_0x5a7b98_TCharacter *)(&this->mbr_0x2a0)[in_stack_00000008] == param_1) {
     ExceptionList = local_c;
     return 1;
   }
-  if ((param_1 != (cls_0x5a7b98 *)0x0) && (iVar11 = meth_0x519300(this), iVar11 == 0)) {
+  if ((param_1 != (cls_0x5a7b98_TCharacter *)0x0) && (iVar11 = meth_0x519300(this), iVar11 == 0)) {
     ExceptionList = local_c;
     return 0;
   }
   piVar2 = (int *)(&this->mbr_0x2a0)[in_stack_00000008];
   DAT_00676e5d._0_1_ = 1;
-  if ((param_1 == (cls_0x5a7b98 *)0x0) ||
-     (pcVar3 = (cls_0x5a7b98 *)(param_1->cls_0x5a50e8).mbr_0x64, pcVar3 == (cls_0x5a7b98 *)0x0)) {
+  if ((param_1 == (cls_0x5a7b98_TCharacter *)0x0) ||
+     (pcVar3 = (cls_0x5a7b98_TCharacter *)(param_1->cls_0x5a50e8).mbr_0x64, pcVar3 == (cls_0x5a7b98_TCharacter *)0x0)) {
     uVar9 = (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x46fef0_148)(this);
     iVar11 = CONCAT31(extraout_var_00,uVar9);
     param_1 = this;
@@ -14722,7 +14722,7 @@ OOAnalyzer::cls_0x5a7b98::meth_0x5199b0(cls_0x5a7b98 *this,cls_0x5a7b98 *param_1
     if (piVar2 != (int *)0x0) {
       *(short *)(piVar2 + 0x1f) = (short)iVar11;
     }
-    if (pcVar7 != (cls_0x5a7b98 *)0x0) {
+    if (pcVar7 != (cls_0x5a7b98_TCharacter *)0x0) {
       if ((pcVar7->cls_0x5a50e8).mbr_0x64 == 0) {
         (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046f3d0_88)(pcVar7,in_stack_00000008 + 0x100);
       }
@@ -14732,14 +14732,14 @@ OOAnalyzer::cls_0x5a7b98::meth_0x5199b0(cls_0x5a7b98 *this,cls_0x5a7b98 *param_1
     }
   }
   else {
-    if (pcVar7 != (cls_0x5a7b98 *)0x0) {
+    if (pcVar7 != (cls_0x5a7b98_TCharacter *)0x0) {
       (*((pcVar7->cls_0x5a50e8).vftptr_0x0)->FUN_0046faf0_96)();
     }
     if (piVar2 != (int *)0x0) {
       (**(code **)(*piVar2 + 0x60))();
       (*((param_1->cls_0x5a50e8).vftptr_0x0)->FUN_0046f3d0_88)(piVar2,iVar11);
     }
-    if (pcVar7 != (cls_0x5a7b98 *)0x0) {
+    if (pcVar7 != (cls_0x5a7b98_TCharacter *)0x0) {
       (*((this->cls_0x5a50e8).vftptr_0x0)->FUN_0046f3d0_88)(pcVar7,in_stack_00000008 + 0x100);
     }
   }
@@ -14798,25 +14798,25 @@ LAB_00519bf6:
   piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
   if (((piVar2 != (int *)0x0) &&
       ((((*piVar2 == 3 &&
-         ((iVar11 = FUN_004dab80(s_combat_005e0634), iVar11 != 0 ||
-          (iVar11 = FUN_004dab80(&DAT_005e064c), iVar11 != 0)))) ||
+         ((iVar11 = FUN_004dab80_TActionBlock_Is(s_combat_005e0634), iVar11 != 0 ||
+          (iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005e064c), iVar11 != 0)))) ||
         ((piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xe0, piVar2 != (int *)0x0 &&
-         ((*piVar2 == 0x19 && (iVar11 = FUN_004dab80(&DAT_005e0648), iVar11 != 0)))))) ||
-       (iVar11 = FUN_004dab80(&DAT_005e062c), iVar11 != 0)))) &&
-     ((pcVar7 != (cls_0x5a7b98 *)0x0 && (*(short *)&(pcVar7->cls_0x5a50e8).mbr_0x4 == 6)))) {
-    meth_0x4cf000(this);
+         ((*piVar2 == 0x19 && (iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005e0648), iVar11 != 0)))))) ||
+       (iVar11 = FUN_004dab80_TActionBlock_Is(&DAT_005e062c), iVar11 != 0)))) &&
+     ((pcVar7 != (cls_0x5a7b98_TCharacter *)0x0 && (*(short *)&(pcVar7->cls_0x5a50e8).mbr_0x4 == 6)))) {
+    meth_0x4cf000_SetWalkMode(this);
   }
   piVar2 = (int *)(this->cls_0x5a50e8).mbr_0xe0;
   if (((piVar2 != (int *)0x0) && (*piVar2 == 3)) && (in_stack_00000008 == 4)) {
     uVar9 = (*(this->cls_0x5a50e8).vftptr_0x0[1].FUN_00470920_276)(0);
-    iVar11 = FUN_0059a530(auStack_2c,uVar9);
+    iVar11 = FUN_0059a530_stricmp(auStack_2c,uVar9);
     if (iVar11 != 0) {
       pcVar4 = (this->cls_0x5a50e8).vftptr_0x0;
       bVar10 = (*pcVar4[1].FUN_00470920_276)(0,0);
       uVar14 = (uint)bVar10;
       uVar9 = (*pcVar4[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
       if (CONCAT31(extraout_var_04,uVar9) == 0) {
-        meth_0x4d3fd0(this);
+        meth_0x4d3fd0_EndFighting(this);
       }
       else {
         pcVar13 = (cls_0x4da9f0 *)FUN_00482fb0(100,uVar14);
@@ -14844,7 +14844,7 @@ LAB_00519bf6:
   if (((piVar2 != (int *)0x0) && (*piVar2 == 0x19)) && (in_stack_00000008 == 7)) {
     uVar21 = 0;
     uVar9 = (*(this->cls_0x5a50e8).vftptr_0x0[1].virt_meth_0x470bb0_280)(this);
-    iVar11 = FUN_0059a530(&stack0xffffffd0,uVar9,uVar21);
+    iVar11 = FUN_0059a530_stricmp(&stack0xffffffd0,uVar9,uVar21);
     if (iVar11 != 0) {
       pcVar4 = (this->cls_0x5a50e8).vftptr_0x0;
       uVar20 = 0;
@@ -14853,7 +14853,7 @@ LAB_00519bf6:
       uVar14 = (uint)bVar10;
       uVar9 = (*pcVar4[1].virt_meth_0x477840_0)(&this->cls_0x5a50e8);
       if (CONCAT31(extraout_var_06,uVar9) == 0) {
-        meth_0x4d3fd0(this);
+        meth_0x4d3fd0_EndFighting(this);
       }
       else {
         uVar19 = 100;
@@ -14880,7 +14880,7 @@ LAB_00519bf6:
       }
     }
   }
-  meth_0x51c660(this);
+  meth_0x51c660_TPlayer_RefreshStats(this);
   ExceptionList = local_c;
   return 1;
 }
@@ -14889,7 +14889,7 @@ LAB_00519bf6:
 
 // Function at 00519ff0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519ff0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x519ff0(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -14911,7 +14911,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519ff0(cls_0x5a7b98 *this
   cls_0x477870::meth_0x46dfb0(&local_38);
   dVar1 = in_stack_00000004;
   while ((dVar4 = dVar1, local_38.mbr_0x18 != 0 &&
-         (iVar3 = FUN_0059a530(*(undefined4 *)(local_38.mbr_0x18 + 0x38),in_stack_00000004),
+         (iVar3 = FUN_0059a530_stricmp(*(undefined4 *)(local_38.mbr_0x18 + 0x38),in_stack_00000004),
          dVar4 = local_38.mbr_0x18, iVar3 != 0))) {
     local_1c.mbr_0x0 = 0;
     local_1c.mbr_0x8 = local_38.mbr_0x18;
@@ -14922,7 +14922,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519ff0(cls_0x5a7b98 *this
     local_1c.mbr_0x18 = 0;
     cls_0x477870::meth_0x46dfb0(&local_1c);
     while ((dVar4 = dVar1, local_1c.mbr_0x18 != 0 &&
-           (iVar3 = FUN_0059a530(*(undefined4 *)(local_1c.mbr_0x18 + 0x38),in_stack_00000004),
+           (iVar3 = FUN_0059a530_stricmp(*(undefined4 *)(local_1c.mbr_0x18 + 0x38),in_stack_00000004),
            dVar4 = local_1c.mbr_0x18, iVar3 != 0))) {
       cls_0x477870::meth_0x46dfb0(&local_1c);
     }
@@ -14935,7 +14935,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519ff0(cls_0x5a7b98 *this
       meth_0x5199b0(this,0);
       *(short *)(dVar4 + 0x7c) = (short)CONCAT31(extraout_var,uVar2);
       meth_0x519230(this);
-      meth_0x51c660(this);
+      meth_0x51c660_TPlayer_RefreshStats(this);
       return 1;
     }
   }
@@ -14946,7 +14946,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x519ff0(cls_0x5a7b98 *this
 
 // Function at 0051a120
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51a120(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51a120(cls_0x5a7b98_TCharacter *this)
 
 {
   int iVar1;
@@ -14985,7 +14985,7 @@ LAB_0051a20b:
       (**(code **)(*piVar3 + 0x8c))();
       return 1;
     }
-    iVar1 = FUN_0059a530(*(int *)(local_38.mbr_0x18 + 0x38),in_stack_00000004);
+    iVar1 = FUN_0059a530_stricmp(*(int *)(local_38.mbr_0x18 + 0x38),in_stack_00000004);
     piVar2 = (int *)local_38.mbr_0x18;
     if (iVar1 == 0) {
       (**(code **)(*(int *)local_38.mbr_0x18 + 0x188))();
@@ -15001,7 +15001,7 @@ LAB_0051a20b:
     local_1c.mbr_0x18 = 0;
     cls_0x477870::meth_0x46dfb0(&local_1c);
     while (piVar2 = piVar3, (int *)local_1c.mbr_0x18 != (int *)0x0) {
-      iVar1 = FUN_0059a530(*(int *)(local_1c.mbr_0x18 + 0x38),in_stack_00000004);
+      iVar1 = FUN_0059a530_stricmp(*(int *)(local_1c.mbr_0x18 + 0x38),in_stack_00000004);
       piVar2 = (int *)local_1c.mbr_0x18;
       if (iVar1 == 0) {
         (**(code **)(*(int *)local_1c.mbr_0x18 + 0x188))();
@@ -15018,7 +15018,7 @@ LAB_0051a20b:
 
 // Function at 0051b560
 
-undefined * __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51b560(cls_0x5a7b98 *this)
+undefined * __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51b560(cls_0x5a7b98_TCharacter *this)
 
 {
   uint in_stack_00000004;
@@ -15033,7 +15033,7 @@ undefined * __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51b560(cls_0x5a7b98 *thi
 
 // Function at 0051b580
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51b580(cls_0x5a7b98 *this,uint param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51b580(cls_0x5a7b98_TCharacter *this,uint param_1)
 
 {
   char *in_stack_00000008;
@@ -15054,7 +15054,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51b580(cls_0x5a7b98 *this,uint 
 
 // Function at 0051b5d0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51b5d0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51b5d0(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -15100,7 +15100,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51b5d0(cls_0x5a7b98 *this
       }
     }
     else {
-      iVar3 = meth_0x4d5c20(this);
+      iVar3 = meth_0x4d5c20_Cast(this);
       if (iVar3 == 0) {
         if (((DAT_0066829c == 0) || (DAT_0067682c != 0)) &&
            (meth_0x4d5b90(this), this == DAT_00667fcc)) {
@@ -15123,7 +15123,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51b5d0(cls_0x5a7b98 *this
 
 // Function at 0051b7c0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51b7c0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51b7c0(cls_0x5a7b98_TCharacter *this)
 
 {
   undefined4 uVar1;
@@ -15185,7 +15185,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51b7c0(cls_0x5a7b98 *this
         local_84.mbr_0x8 = dVar5;
         cls_0x477870::meth_0x46dfb0(&local_84);
         while (local_84.mbr_0x18 != 0) {
-          iVar8 = FUN_0059a530(*(undefined4 *)(local_84.mbr_0x18 + 0x38),uVar1);
+          iVar8 = FUN_0059a530_stricmp(*(undefined4 *)(local_84.mbr_0x18 + 0x38),uVar1);
           if (iVar8 == 0) {
             aiStack_68[uVar7] = aiStack_68[uVar7] + 1;
           }
@@ -15240,7 +15240,7 @@ LAB_0051b91c:
 
 // Function at 0051c2c0
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51c2c0(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51c2c0(cls_0x5a7b98_TCharacter *this)
 
 {
   byte bVar1;
@@ -15444,7 +15444,7 @@ LAB_0051c3d8:
   *(undefined4 *)(dVar3 + (short)wVar4 * 8) = *puVar5;
   *(undefined4 *)(dVar3 + 4 + (short)wVar4 * 8) = puVar5[1];
   this->mbr_0x358 = this->mbr_0x358 + 1;
-  meth_0x51c660(this);
+  meth_0x51c660_TPlayer_RefreshStats(this);
   return;
 }
 
@@ -15452,7 +15452,7 @@ LAB_0051c3d8:
 
 // Function at 0051c550
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51c550(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51c550(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
@@ -15554,7 +15554,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51c550(cls_0x5a7b98 *this)
 
 // Function at 0051c660
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51c660(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51c660_TPlayer_RefreshStats(cls_0x5a7b98_TCharacter *this)
 
 {
   char cVar1;
@@ -15867,7 +15867,7 @@ LAB_0051c9b6:
 
 // Function at 0051cc40
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51cc40(cls_0x5a7b98 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51cc40(cls_0x5a7b98_TCharacter *this,int param_1)
 
 {
   char cVar1;
@@ -15976,7 +15976,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51cc40(cls_0x5a7b98 *this,int p
               if (local_318 != (undefined4 *)0x0) {
                 FUN_004830f0(local_318);
               }
-              meth_0x51c660(this);
+              meth_0x51c660_TPlayer_RefreshStats(this);
               return;
             }
           }
@@ -16230,7 +16230,7 @@ LAB_0051d178:
 
 // Function at 0051d390
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51d390(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51d390(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -16251,7 +16251,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51d390(cls_0x5a7b98 *this)
       this->mbr_0x354 = iVar3 - 1;
     }
     if ((int)this->mbr_0x354 < iVar3) {
-      meth_0x51c660(this);
+      meth_0x51c660_TPlayer_RefreshStats(this);
     }
   }
   return;
@@ -16261,7 +16261,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51d390(cls_0x5a7b98 *this)
 
 // Function at 0051d840
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51d840(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51d840(cls_0x5a7b98_TCharacter *this)
 
 {
   cls_0x5a50e8__vftable_5a50e8 *pcVar1;
@@ -16292,7 +16292,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51d840(cls_0x5a7b98 *this)
   if (1 < iVar4) {
     do {
       for (iVar2 = (iVar3 < 0xf) + 1; iVar2 != 0; iVar2 = iVar2 + -1) {
-        FUN_00483300();
+        FUN_00483300_RandomRange();
         (*((this->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477b00_232)(this);
       }
       iVar2 = 0;
@@ -16313,7 +16313,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51d840(cls_0x5a7b98 *this)
   pcVar1 = (this->cls_0x5a50e8).vftptr_0x0;
   (*pcVar1->virt_meth_0x477ed0_480)(this);
   (*pcVar1->virt_meth_0x477e80_460)(this);
-  meth_0x51c660(this);
+  meth_0x51c660_TPlayer_RefreshStats(this);
   return;
 }
 
@@ -16321,7 +16321,7 @@ void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51d840(cls_0x5a7b98 *this)
 
 // Function at 0051e480
 
-uint __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51e480(cls_0x5a7b98 *this)
+uint __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51e480(cls_0x5a7b98_TCharacter *this)
 
 {
   if (DAT_00676804 == 2) {
@@ -16337,7 +16337,7 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51e480(cls_0x5a7b98 *this)
 
 // Function at 0051e4a0
 
-uint __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51e4a0(cls_0x5a7b98 *this)
+uint __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x51e4a0(cls_0x5a7b98_TCharacter *this)
 
 {
   if (DAT_00676800 == 2) {
@@ -16355,7 +16355,7 @@ uint __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x51e4a0(cls_0x5a7b98 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x526fd0(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x526fd0(cls_0x5a7b98_TCharacter *this)
 
 {
   dword dVar1;
@@ -16370,7 +16370,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x526fd0(cls_0x5a7b98 *this
         return 0;
       }
       (**(code **)(*in_stack_00000004 + 0x18))();
-      FUN_0046db20((this->cls_0x5a50e8).mbr_0x110,0x80000);
+      FUN_0046db20_ConvertToVector((this->cls_0x5a50e8).mbr_0x110,0x80000);
       in_stack_00000004[7] = iStack_c;
       in_stack_00000004[8] = iStack_8;
       in_stack_00000004[9] = iStack_4;
@@ -16383,7 +16383,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x526fd0(cls_0x5a7b98 *this
     }
     (**(code **)(*in_stack_00000004 + 0x40))(in_stack_00000004[2] | 0x1000000);
     (**(code **)(*in_stack_00000004 + 8))(&stack0xffffffe4,_DAT_00666970,1);
-    dVar1 = FUN_004d4db0();
+    dVar1 = FUN_004d4db0_FindCharInLine();
     (this->cls_0x5a50e8).mbr_0xe0 = dVar1;
     if (dVar1 != 0) {
       return 1;
@@ -16396,7 +16396,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x526fd0(cls_0x5a7b98 *this
 
 // Function at 00587ec0
 
-int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x587ec0(cls_0x5a7b98 *this)
+int __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x587ec0(cls_0x5a7b98_TCharacter *this)
 
 {
   return (int)*(short *)&(this->cls_0x5a50e8).mbr_0x4;
@@ -16406,7 +16406,7 @@ int __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x587ec0(cls_0x5a7b98 *this)
 
 // Function at 00587f50
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x587f50(cls_0x5a7b98 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x587f50(cls_0x5a7b98_TCharacter *this)
 
 {
   return *(undefined4 *)&(this->cls_0x5a50e8).field_0xfc;
@@ -16416,7 +16416,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x587f50(cls_0x5a7b98 *this
 
 // Function at 0058eb90
 
-void __thiscall OOAnalyzer::cls_0x5a7b98::meth_0x58eb90(cls_0x5a7b98 *this)
+void __thiscall OOAnalyzer::cls_0x5a7b98_TCharacter::meth_0x58eb90(cls_0x5a7b98_TCharacter *this)
 
 {
   longlong lVar1;

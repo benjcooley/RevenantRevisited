@@ -601,7 +601,7 @@ void __thiscall OOAnalyzer::cls_0x5a5658::meth_0x52a620(cls_0x5a5658 *this)
   int iVar1;
   int iVar2;
   dword dVar3;
-  cls_0x5b4f30 *this_00;
+  cls_0x5b4f30_TPlayer *this_00;
   int iVar4;
   int iVar5;
   undefined uVar6;
@@ -628,25 +628,25 @@ void __thiscall OOAnalyzer::cls_0x5a5658::meth_0x52a620(cls_0x5a5658 *this)
   local_50 = local_50 + -1 + local_58;
   local_4c = local_4c + -1 + local_54;
   cls_0x411eb0::meth_0x412150((cls_0x411eb0 *)((int)&DAT_0065a578 + 4),iVar1,iVar2,0x90);
-  if (DAT_00667fcc != (cls_0x5b4f30 *)0x0) {
+  if (DAT_00667fcc != (cls_0x5b4f30_TPlayer *)0x0) {
     local_64 = (DAT_00667fcc->TPlayScreen).TScreen.mbr_0x10;
     local_60 = (DAT_00667fcc->TPlayScreen).TScreen.mbr_0x14;
     local_5c = (DAT_00667fcc->TPlayScreen).TScreen.mbr_0x18;
     cls_0x44ceb0::cls_0x44ceb0(&local_48,&local_64,0x200,0x60,2,0);
-    this_00 = (cls_0x5b4f30 *)local_48.mbr_0xc;
-    while (this_00 != (cls_0x5b4f30 *)0x0) {
+    this_00 = (cls_0x5b4f30_TPlayer *)local_48.mbr_0xc;
+    while (this_00 != (cls_0x5b4f30_TPlayer *)0x0) {
       local_48.mbr_0xc = (dword)this_00;
       uVar6 = (*((this_00->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477e50_448)(this_00);
       if ((CONCAT31(extraout_var,uVar6) != 0 && -1 < extraout_var) &&
-         (iVar7 = cls_0x5b4f30::meth_0x472e30(this_00), iVar7 == 0)) {
+         (iVar7 = cls_0x5b4f30_TPlayer::meth_0x472e30(this_00), iVar7 == 0)) {
         TPlayScreen::meth_0x46eb40((TPlayScreen *)local_48.mbr_0xc,&iStack_6c);
         iVar7 = (*(int *)(this->mbr_0x68 + 4) + -0x40) * 100;
         iVar8 = (int)(((iStack_6c >> 3) - this->mbr_0x11c) * dVar3 * 0x90) / iVar7 + iVar1;
         iVar7 = (int)(((iStack_68 >> 3) - this->mbr_0x120) * dVar3 * 0x90) / iVar7 + iVar2;
         if ((iVar1 <= iVar8) &&
            (((iVar8 < iVar4 + 0xa4 && (iVar2 <= iVar7)) && (iVar7 < iVar5 + 0xa2)))) {
-          if ((cls_0x5b4f30 *)local_48.mbr_0xc != DAT_00667fcc) {
-            TPlayScreen::meth_0x4c89c0((TPlayScreen *)local_48.mbr_0xc);
+          if ((cls_0x5b4f30_TPlayer *)local_48.mbr_0xc != DAT_00667fcc) {
+            TPlayScreen::meth_0x4c89c0_IsEnemy((TPlayScreen *)local_48.mbr_0xc);
           }
           cls_0x411eb0::meth_0x414d70
                     ((cls_0x411eb0 *)((int)&DAT_0065a578 + 4),(char)iVar8,(char)iVar7,0,
@@ -654,7 +654,7 @@ void __thiscall OOAnalyzer::cls_0x5a5658::meth_0x52a620(cls_0x5a5658 *this)
         }
       }
       cls_0x44ceb0::meth_0x44d080(&local_48);
-      this_00 = (cls_0x5b4f30 *)local_48.mbr_0xc;
+      this_00 = (cls_0x5b4f30_TPlayer *)local_48.mbr_0xc;
     }
   }
   cls_0x411eb0::meth_0x412150
@@ -1412,7 +1412,7 @@ OOAnalyzer::cls_0x5a5658::virt_meth_0x52ca70(cls_0x5a5658 *this,cls_0x5a68d8 *pa
 
 {
   dword dVar1;
-  cls_0x5b4f30 *this_00;
+  cls_0x5b4f30_TPlayer *this_00;
   undefined uVar2;
   int *piVar3;
   int *piVar4;
@@ -1457,8 +1457,8 @@ OOAnalyzer::cls_0x5a5658::virt_meth_0x52ca70(cls_0x5a5658 *this,cls_0x5a68d8 *pa
     local_6c.mbr_0x18 = 0;
     local_6c.mbr_0x8 = local_6c.mbr_0x4;
     cls_0x477870::meth_0x46dfb0(&local_6c);
-    this_00 = (cls_0x5b4f30 *)local_6c.mbr_0x18;
-    while (local_6c.mbr_0x18 = (dword)this_00, this_00 != (cls_0x5b4f30 *)0x0) {
+    this_00 = (cls_0x5b4f30_TPlayer *)local_6c.mbr_0x18;
+    while (local_6c.mbr_0x18 = (dword)this_00, this_00 != (cls_0x5b4f30_TPlayer *)0x0) {
       if ((this->mbr_0x6c == 0) ||
          ((int)*(short *)&(this_00->TPlayScreen).TScreen.field_0x7c - 0x10bU != this->mbr_0x64
          )) {
@@ -1472,10 +1472,10 @@ OOAnalyzer::cls_0x5a5658::virt_meth_0x52ca70(cls_0x5a5658 *this,cls_0x5a68d8 *pa
             iVar7 = iVar8 + -0x2e13;
             (*((this_00->TPlayScreen).TScreen.vftptr_0x0)->FUN_00471900_264)(iVar7,10,param_1)
             ;
-            uVar5 = FUN_0059a530(extraout_ECX,(byte *)(this_00->TPlayScreen).TScreen.mbr_0x38,
+            uVar5 = FUN_0059a530_stricmp(extraout_ECX,(byte *)(this_00->TPlayScreen).TScreen.mbr_0x38,
                                  (byte *)s_Pouch_005e37c4);
             if ((uVar5 == 0) &&
-               ((piVar4 = (int *)cls_0x5b4f30::meth_0x4701f0(this_00), piVar4 != (int *)0x0 &&
+               ((piVar4 = (int *)cls_0x5b4f30_TPlayer::meth_0x4701f0(this_00), piVar4 != (int *)0x0 &&
                 (piVar4 = (int *)(**(code **)(*piVar4 + 0x130))(), piVar4 != (int *)0x0)))) {
               FUN_004a31a0(piVar4,piVar3,DAT_006668d0);
               cls_0x5a68d8::meth_0x4bd680(param_1,iVar7,0x1e,piVar3,0x100);
@@ -1509,7 +1509,7 @@ OOAnalyzer::cls_0x5a5658::virt_meth_0x52ca70(cls_0x5a5658 *this,cls_0x5a68d8 *pa
         }
       }
       cls_0x477870::meth_0x46dfb0(&local_6c);
-      this_00 = (cls_0x5b4f30 *)local_6c.mbr_0x18;
+      this_00 = (cls_0x5b4f30_TPlayer *)local_6c.mbr_0x18;
     }
     if ((int)this->mbr_0x64 < 0) {
       this->mbr_0x68 = 0xffffffff;
@@ -1536,7 +1536,7 @@ OOAnalyzer::cls_0x5a5658::virt_meth_0x52d6e0(cls_0x5a5658 *this,int param_1,int 
   int iVar5;
   int in_stack_0000000c;
   
-  if (((((cls_0x5b4f30 *)this->mbr_0x60 != (cls_0x5b4f30 *)0x0) && (-1 < param_2)) &&
+  if (((((cls_0x5b4f30_TPlayer *)this->mbr_0x60 != (cls_0x5b4f30_TPlayer *)0x0) && (-1 < param_2)) &&
       (-1 < in_stack_0000000c)) &&
      (((param_2 < (int)this->mbr_0xc && (in_stack_0000000c < (int)this->mbr_0x10)) &&
       ((this->mbr_0x6c == 0 && ((param_1 == 1 || (param_1 == 2)))))))) {
@@ -1553,7 +1553,7 @@ OOAnalyzer::cls_0x5a5658::virt_meth_0x52d6e0(cls_0x5a5658 *this,int param_1,int 
         return;
       }
     }
-    piVar2 = (int *)cls_0x5b4f30::meth_0x4701f0((cls_0x5b4f30 *)this->mbr_0x60);
+    piVar2 = (int *)cls_0x5b4f30_TPlayer::meth_0x4701f0((cls_0x5b4f30_TPlayer *)this->mbr_0x60);
     if (((piVar2 != (int *)0x0) && (iVar1 = (**(code **)(*piVar2 + 0x130))(), iVar1 != 0)) &&
        (-1 < (int)this->mbr_0x64)) {
       iVar4 = (int)(this->mbr_0x70 - 0xdc) % 0x2d;

@@ -4,7 +4,8 @@
 // *     light.glsl.h  - GLSL deferred lighting (GL 3.3 core variant)      *
 // *************************************************************************
 //
-// Linux / SOKOL_GLCORE33 port of light.metal.h.
+// Linux / SOKOL_GLCORE33 port of light.metal.h. Lighting consumes the
+// precomputed sun-shadow mask; it does not ray-march.
 //
 // NOTE: KPL must match TRenderer::kMaxPointLights in renderer.h. If you
 // change one, change the other.
@@ -48,28 +49,88 @@ uniform sampler2D albedo_tex;
 uniform sampler2D normal_tex;
 uniform sampler2D depth_tex;
 uniform sampler2D ao_tex;
+uniform sampler2D id_tex;
+uniform sampler2D shadow_tex;
 out vec4 frag_color;
+vec3 reconstruct_world(vec2 uv, float d, float fbw, float fbh) {
+    float scene_z = d * vp.w + vp.z;
+    // Convert framebuffer pixels back to Revenant's authored iso screen
+    // units before applying the inverse. This is required even in ortho:
+    // high-resolution render targets scale the sprite pass, but they do not
+    // change the world camera.
+    float zoom = max(settings.w, 0.0001);
+    float S = (uv.x * fbw - vp.x) / zoom;
+    float T = (uv.y * fbh - vp.y) / zoom;
+    if (recon.w > 0.5) {
+        float focal = max(recon.z, 1.0);
+        S = (S / focal) * scene_z;
+        T = (T / focal) * scene_z;
+    }
+    float K = recon.z - scene_z;
+    float wz = (K - 2.0 * T * ISO_COS30) / ISO_WZ_DENOM;
+    float sum_r = 2.0 * (T + wz * ISO_COS30);
+    return vec3(recon.x + (sum_r + S) * 0.5,
+                recon.y + (sum_r - S) * 0.5,
+                wz);
+}
+vec2 project_world_uv(vec3 W, float fbw, float fbh) {
+    float dx = W.x - recon.x;
+    float dy = W.y - recon.y;
+    float S = dx - dy;
+    float T = 0.5 * (dx + dy) - W.z * ISO_COS30;
+    float scale = max(settings.w, 0.0001);
+    if (recon.w > 0.5) {
+        float scene_z = recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
+        scale *= recon.z / max(scene_z, 1.0);
+    }
+    S *= scale;
+    T *= scale;
+    return vec2((S + vp.x) / fbw, (T + vp.y) / fbh);
+}
+float scene_depth_world(vec3 W) {
+    float dx = W.x - recon.x;
+    float dy = W.y - recon.y;
+    return recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
+}
+float interpolate_ray_depth(float z0, float z1, float a) {
+    if (recon.w > 0.5) {
+        float inv_z = mix(1.0 / max(z0, 1.0), 1.0 / max(z1, 1.0), a);
+        return 1.0 / max(inv_z, 1e-6);
+    }
+    return mix(z0, z1, a);
+}
+float sample_scene_depth(vec2 uv) {
+    ivec2 ts = textureSize(depth_tex, 0);
+    ivec2 p = clamp(ivec2(uv * vec2(ts)), ivec2(0), ts - ivec2(1));
+    return texelFetch(depth_tex, p, 0).r;
+}
+float shadow_tap_weight(int tap, int sampleCount) {
+    if (sampleCount <= 1) return 1.0;
+    float u = float(tap) / float(sampleCount - 1);
+    return mix(0.5, 1.0, 1.0 - abs(u * 2.0 - 1.0));
+}
 void main() {
     vec4 alb = texture(albedo_tex, v_uv);
     if (alb.a < 0.01) discard;
-    float d  = texture(depth_tex, v_uv).r;
+    float d  = sample_scene_depth(v_uv);
     vec3  np = texture(normal_tex, v_uv).xyz;
     vec3  N  = normalize(np * 2.0 - 1.0);
     float ao = texture(ao_tex, v_uv).r;
     vec2  ts = vec2(textureSize(albedo_tex, 0));
     float fbw = ts.x, fbh = ts.y;
-    float S   = v_uv.x * fbw - vp.x;
-    float T   = v_uv.y * fbh - vp.y;
-    float scene_z = d * vp.w + vp.z;
-    float K   = recon.z - scene_z;
-    float wz  = (K - 2.0 * T * ISO_COS30) / ISO_WZ_DENOM;
-    float sum_r = 2.0 * (T + wz * ISO_COS30);
-    vec3  W = vec3(recon.x + (sum_r + S) * 0.5,
-                   recon.y + (sum_r - S) * 0.5,
-                   wz);
+    vec3  W = reconstruct_world(v_uv, d, fbw, fbh);
     int vm = int(settings.x);
     if (vm == 1) { frag_color = vec4(alb.rgb, 1.0); return; }
-    if (vm == 2) { float vd = clamp(1.0 - d, 0.0, 1.0); frag_color = vec4(vd, vd, vd, 1.0); return; }
+    if (vm == 2) {
+        // Depth diagnostic, not presentation art. This is scene-z only,
+        // shown as repeated world-unit bands so narrow ranges are visible.
+        // No edge detection is mixed into this mode.
+        float z_wu = d * vp.w + vp.z;
+        float coarse = fract(z_wu / 1024.0);
+        float fine = fract(z_wu / 128.0);
+        frag_color = vec4(fine, coarse, 1.0 - coarse, 1.0);
+        return;
+    }
     if (vm == 3) { frag_color = vec4(np, 1.0); return; }
     int nl_dbg = int(settings.y);
     if (vm == 4) {
@@ -98,57 +159,40 @@ void main() {
         return;
     }
     if (vm == 7) { frag_color = vec4(ao, ao, ao, 1.0); return; }
+    if (vm == 8) {
+        // Scene-z discontinuity diagnostic. Red here is an explicit
+        // derivative overlay, not raw depth.
+        float z_wu = d * vp.w + vp.z;
+        float edge = clamp((abs(dFdx(z_wu)) + abs(dFdy(z_wu))) / 48.0, 0.0, 1.0);
+        frag_color = vec4(edge, edge * 0.05, 0.0, 1.0);
+        return;
+    }
+    if (vm == 9) {
+        // Ground-plane-relative height diagnostic. This is reconstructed
+        // world Z (W.z): flat ground should be flat color, while walls and
+        // raised surfaces should form coherent equal-height bands. Blue is
+        // near/below ground, warm is higher; red bands are 128 wu intervals.
+        float h = W.z;
+        float norm_h = clamp((h + 256.0) / 2048.0, 0.0, 1.0);
+        float band = (fract(abs(h) / 128.0) < 0.04) ? 1.0 : 0.0;
+        frag_color = vec4(max(norm_h, band), norm_h * (1.0 - 0.5 * band), 1.0 - norm_h, 1.0);
+        return;
+    }
     vec3 light = ambient_col.rgb * light_col.w;
     int mode = int(settings.z);
     if (mode == 1) light *= ao;
-    float sun_shadow = 1.0;
     vec3  Ldir = normalize(light_dir.xyz);
-    float sun_ndotl = max(dot(N, Ldir), 0.0);
+    float raw_sun_ndotl = dot(N, Ldir);
+    float sun_ndotl = max(raw_sun_ndotl, 0.0);
     float normal_hardness = clamp(normal_lighting.x, 0.0, 1.0);
     float sun_term = mix(1.0, sun_ndotl, normal_hardness);
-    if (mode == 1 && shadow.w > 0.5 && sun_term > 0.0) {
-        vec3 Sdir = normalize(shadow_world_dir.xyz);
-        if (length(Sdir) < 1e-5) Sdir = Ldir;
-        float S_per = (-Sdir.x + Sdir.y) + shadow_dir.x;
-        float T_per = ((-Sdir.x - Sdir.y) * 0.5 + Sdir.z * ISO_COS30)
-                    + shadow_dir.y;
-        float Sz    = Sdir.z * shadow_dir.z;
-        float step_wu  = shadow.x;
-        float soft_px  = shadow.y;
-        int   maxSteps = int(shadow.z);
-        const float kBiasWu = 2.0;
-        vec2 sun_uv  = vec2(S_per, T_per);
-        vec2 perp_uv = normalize(vec2(-sun_uv.y, sun_uv.x));
-        float h = fract(sin(dot(v_uv, vec2(12.9898, 78.233))) * 43758.5453);
-        const int kRays = 4;
-        float hits = 0.0;
-        for (int r = 0; r < kRays; ++r) {
-            float rf = (float(r) + h) / float(kRays);
-            float off_px = (rf - 0.5) * 2.0 * soft_px;
-            vec2 perp_off = perp_uv * off_px / vec2(fbw, fbh);
-            float rh = fract(h + float(r) * 0.6180339);
-            bool hit = false;
-            for (int i = 1; i <= maxSteps; ++i) {
-                float t = (float(i) - 0.5 + rh) * step_wu;
-                vec2 suv = v_uv + perp_off +
-                           vec2(S_per * t / fbw, T_per * t / fbh);
-                if (suv.x < 0.0 || suv.x > 1.0 ||
-                    suv.y < 0.0 || suv.y > 1.0) break;
-                vec4 albs = texture(albedo_tex, suv);
-                if (albs.a < 0.01) continue;
-                float drs = texture(depth_tex, suv).r;
-                float szs = drs * vp.w + vp.z;
-                float Tt  = suv.y * fbh - vp.y;
-                float Ks  = recon.z - szs;
-                float wzs = (Ks - 2.0 * Tt * ISO_COS30) / ISO_WZ_DENOM;
-                float ray_wz = W.z + t * Sz;
-                if (wzs > ray_wz + kBiasWu) { hit = true; break; }
-            }
-            if (hit) hits += 1.0;
-        }
-        float occ = hits / float(kRays);
-        sun_shadow = 1.0 - occ * 0.8;
-    }
+    // Direct sun visibility is a composition of two intentionally separate
+    // facts: normal-facing geometry and the blurred cast-shadow mask. The
+    // lighting pass never ray-marches; the mask is produced once per frame by
+    // the shadow pass, then blurred as an image operation.
+    float normal_visibility = (raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
+    float cast_shadow = (mode == 1 && shadow.w > 0.5) ? texture(shadow_tex, v_uv).r : 1.0;
+    float sun_shadow = normal_visibility * cast_shadow;
     if (mode == 1) {
         light += light_col.rgb * light_dir.w * sun_term * sun_shadow;
     }

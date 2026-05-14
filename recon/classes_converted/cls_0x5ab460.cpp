@@ -15,7 +15,7 @@ void cls_0x5ab460::virt_meth_0x4ec890()
   this->virt_meth_0x4de800();
   this->mbr_0x188 = this->mbr_0x188 + 1;
   if ((TPlayScreen *)this->mbr_0x184 != (TPlayScreen *)0x0) {
-    TPlayScreen::meth_0x4cee70((TPlayScreen *)this->mbr_0x184);
+    TPlayScreen::meth_0x4cee70_Stop((TPlayScreen *)this->mbr_0x184);
     dVar1 = this->mbr_0x188;
     if ((int)dVar1 < 0xf0) {
       if (((((int *)this->mbr_0x184)[2] & 0x2000000U) == 0) ||

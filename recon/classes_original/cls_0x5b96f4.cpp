@@ -4,7 +4,7 @@
 /OOAnalyzer/cls_0x5b96f4
 pack(disabled)
 Structure cls_0x5b96f4 {
-   0   cls_0x5a5ed4   112   cls_0x5a5ed4   "Component (member) class."
+   0   cls_0x5a5ed4_TScreen   112   cls_0x5a5ed4_TScreen   "Component (member) class."
 }
 Length: 112 Alignment: 1
 
@@ -23,11 +23,11 @@ int __thiscall OOAnalyzer::cls_0x5b96f4::meth_0x48ed90(cls_0x5b96f4 *this)
   if (*(int *)(in_stack_00000004 + 0x40) == 0) {
     FUN_00481c10(s_Attempted_to_add_an_uninitialize_005d9d8c,0);
   }
-  this_00 = &(this->cls_0x5a5ed4).cls_0x41c7f0;
+  this_00 = &(this->cls_0x5a5ed4_TScreen).cls_0x41c7f0;
   iVar1 = 0;
-  if (0 < (int)(this->cls_0x5a5ed4).cls_0x41c7f0.mbr_0x0) {
+  if (0 < (int)(this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0) {
     do {
-      if (*(int *)((this->cls_0x5a5ed4).cls_0x41c7f0.mbr_0x10 + iVar1 * 4) == in_stack_00000004) {
+      if (*(int *)((this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x10 + iVar1 * 4) == in_stack_00000004) {
         if (in_stack_00000008 < 0) {
           return iVar1;
         }
@@ -52,7 +52,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b96f4::virt_meth_0x53a800(cls_0x5b96f4 
   int iVar1;
   undefined4 uVar2;
   
-  (this->cls_0x5a5ed4).mbr_0x54 = 0;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x54 = 0;
   iVar1 = cls_0x5b9744::virt_meth_0x53a8b0((cls_0x5b9744 *)&UNK_0066fcbc.field_0x4);
   if (iVar1 == 0) {
     FUN_00481c10(s_Trouble_initializing_Options_pan_005e4450,0);
@@ -71,8 +71,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b96f4::virt_meth_0x53a800(cls_0x5b96f4 
 cls_0x5b96f4 * __thiscall OOAnalyzer::cls_0x5b96f4::cls_0x5b96f4(cls_0x5b96f4 *this)
 
 {
-  cls_0x5a5ed4::cls_0x5a5ed4(&this->cls_0x5a5ed4);
-  (this->cls_0x5a5ed4).vftptr_0x0 =
+  cls_0x5a5ed4_TScreen::cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
+  (this->cls_0x5a5ed4_TScreen).vftptr_0x0 =
        (cls_0x5a5ed4__vftable_5a5ed4 *)&cls_0x5b96f4__vftable_5b96f4_005b96f4;
   return this;
 }
@@ -84,11 +84,11 @@ cls_0x5b96f4 * __thiscall OOAnalyzer::cls_0x5b96f4::cls_0x5b96f4(cls_0x5b96f4 *t
 cls_0x5b96f4 * __thiscall OOAnalyzer::cls_0x5b96f4::~cls_0x5b96f4(cls_0x5b96f4 *this)
 
 {
-  cls_0x5a5ed4 *pcVar1;
+  cls_0x5a5ed4_TScreen *pcVar1;
   
-  (this->cls_0x5a5ed4).vftptr_0x0 =
+  (this->cls_0x5a5ed4_TScreen).vftptr_0x0 =
        (cls_0x5a5ed4__vftable_5a5ed4 *)&cls_0x5b96f4__vftable_5b96f4_005b96f4;
-  pcVar1 = cls_0x5a5ed4::~cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  pcVar1 = cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   return (cls_0x5b96f4 *)pcVar1;
 }
 

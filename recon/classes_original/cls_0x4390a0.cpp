@@ -29,7 +29,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x4390a0::meth_0x4390a0(cls_0x4390a0 *this
       if (puVar3 == (undefined4 *)0x0) {
         puVar3 = (undefined4 *)this->mbr_0x18;
       }
-      if ((puVar3 != (undefined4 *)0x0) && (iVar1 = FUN_0059a530(puVar3[1],param_1), iVar1 == 0)) {
+      if ((puVar3 != (undefined4 *)0x0) && (iVar1 = FUN_0059a530_stricmp(puVar3[1],param_1), iVar1 == 0)) {
         for (iVar2 = 0x13; iVar2 != 0; iVar2 = iVar2 + -1) {
           *in_stack_00000008 = *puVar3;
           puVar3 = puVar3 + 1;

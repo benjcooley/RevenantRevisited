@@ -5,8 +5,8 @@
 // *************************************************************************
 //
 // Reads the G-buffer (albedo + world normal + scene_z + AO) and runs:
-//   * directional sun (N.L, toggled by normal_lighting_hardness)
-//   * screen-space sun-shadow ray march (mode 1 only)
+//   * directional sun (hard normal-facing visibility, tunable N.L falloff)
+//   * blurred screen-space sun-shadow mask (mode 1 only)
 //   * up to KPL point lights with retail's pow-based falloff curve
 //
 // Fragment world position is reconstructed from scene_z via the retail iso
@@ -52,12 +52,17 @@ struct params {
 struct vs_out { float4 pos [[position]]; float2 uv; };
 static float3 reconstruct_world(float2 uv, float d, constant params& p, float fbw, float fbh) {
     float scene_z = d * p.vp.w + p.vp.z;
-    float S = uv.x * fbw - p.vp.x;
-    float T = uv.y * fbh - p.vp.y;
+    // Convert framebuffer pixels back to Revenant's authored iso screen
+    // units before applying the inverse. This is required even in ortho:
+    // high-resolution render targets scale the sprite pass, but they do not
+    // change the world camera.
+    float zoom = max(p.settings.w, 0.0001);
+    float S = (uv.x * fbw - p.vp.x) / zoom;
+    float T = (uv.y * fbh - p.vp.y) / zoom;
     if (p.recon.w > 0.5) {
-        float focal_zoom = max(p.recon.z * max(p.settings.w, 0.0001), 1.0);
-        S = (S / focal_zoom) * scene_z;
-        T = (T / focal_zoom) * scene_z;
+        float focal = max(p.recon.z, 1.0);
+        S = (S / focal) * scene_z;
+        T = (T / focal) * scene_z;
     }
     float K = p.recon.z - scene_z;
     float wz = (K - 2.0 * T * ISO_COS30) / ISO_WZ_DENOM;
@@ -71,14 +76,38 @@ static float2 project_world_uv(float3 W, constant params& p, float fbw, float fb
     float dy = W.y - p.recon.y;
     float S = dx - dy;
     float T = 0.5 * (dx + dy) - W.z * ISO_COS30;
+    float scale = max(p.settings.w, 0.0001);
     if (p.recon.w > 0.5) {
         float scene_z = p.recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
-        float focal_zoom = max(p.recon.z * max(p.settings.w, 0.0001), 1.0);
-        float inv_z = focal_zoom / max(scene_z, 1.0);
-        S *= inv_z;
-        T *= inv_z;
+        scale *= p.recon.z / max(scene_z, 1.0);
     }
+    S *= scale;
+    T *= scale;
     return float2((S + p.vp.x) / fbw, (T + p.vp.y) / fbh);
+}
+static float scene_depth_world(float3 W, constant params& p) {
+    float dx = W.x - p.recon.x;
+    float dy = W.y - p.recon.y;
+    return p.recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
+}
+static float interpolate_ray_depth(float z0, float z1, float a, constant params& p) {
+    if (p.recon.w > 0.5) {
+        float inv_z = mix(1.0 / max(z0, 1.0), 1.0 / max(z1, 1.0), a);
+        return 1.0 / max(inv_z, 1e-6);
+    }
+    return mix(z0, z1, a);
+}
+static float sample_scene_depth(texture2d<float> depth_tex, float2 uv) {
+    uint w = depth_tex.get_width();
+    uint h = depth_tex.get_height();
+    uint2 p = uint2(uint(clamp(uv.x * float(w), 0.0, float(w - 1))),
+                    uint(clamp(uv.y * float(h), 0.0, float(h - 1))));
+    return depth_tex.read(p).r;
+}
+static float shadow_tap_weight(int tap, int sampleCount) {
+    if (sampleCount <= 1) return 1.0;
+    float u = float(tap) / float(sampleCount - 1);
+    return mix(0.5, 1.0, 1.0 - fabs(u * 2.0 - 1.0));
 }
 fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> albedo_tex [[texture(0)]],
@@ -86,11 +115,12 @@ fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> depth_tex  [[texture(2)]],
                       texture2d<float> ao_tex     [[texture(3)]],
                       texture2d<float> id_tex     [[texture(4)]],
+                      texture2d<float> shadow_tex [[texture(5)]],
                       sampler smp                [[sampler(0)]],
                       constant params& p         [[buffer(0)]]) {
     float4 alb = albedo_tex.sample(smp, in.uv);
     if (alb.a < 0.01) discard_fragment();
-    float  d   = depth_tex.sample(smp, in.uv).r;
+    float  d   = sample_scene_depth(depth_tex, in.uv);
     float3 np  = normal_tex.sample(smp, in.uv).xyz;
     float3 N   = normalize(np * 2.0 - 1.0);
     float  ao  = ao_tex.sample(smp, in.uv).r;
@@ -99,7 +129,15 @@ fragment float4 _main(vs_out in [[stage_in]],
     float3 W = reconstruct_world(in.uv, d, p, fbw, fbh);
     int vm = int(p.settings.x);
     if (vm == 1) return float4(alb.rgb, 1.0);
-    if (vm == 2) { float vd = clamp(1.0 - d, 0.0, 1.0); return float4(vd, vd, vd, 1.0); }
+    if (vm == 2) {
+        // Depth diagnostic, not presentation art. This is scene-z only,
+        // shown as repeated world-unit bands so narrow ranges are visible.
+        // No edge detection is mixed into this mode.
+        float z_wu = d * p.vp.w + p.vp.z;
+        float coarse = fract(z_wu / 1024.0);
+        float fine = fract(z_wu / 128.0);
+        return float4(fine, coarse, 1.0 - coarse, 1.0);
+    }
     if (vm == 3) return float4(np, 1.0);
     int nl_dbg = int(p.settings.y);
     if (vm == 4) {
@@ -127,52 +165,38 @@ fragment float4 _main(vs_out in [[stage_in]],
         return float4(fract(W.x / ws), fract(W.y / ws), fract(W.z / zs), 1.0);
     }
     if (vm == 7) return float4(ao, ao, ao, 1.0);
+    if (vm == 8) {
+        // Scene-z discontinuity diagnostic. Red here is an explicit
+        // derivative overlay, not raw depth.
+        float z_wu = d * p.vp.w + p.vp.z;
+        float edge = clamp((fabs(dfdx(z_wu)) + fabs(dfdy(z_wu))) / 48.0, 0.0, 1.0);
+        return float4(edge, edge * 0.05, 0.0, 1.0);
+    }
+    if (vm == 9) {
+        // Ground-plane-relative height diagnostic. This is reconstructed
+        // world Z (W.z): flat ground should be flat color, while walls and
+        // raised surfaces should form coherent equal-height bands. Blue is
+        // near/below ground, warm is higher; red bands are 128 wu intervals.
+        float h = W.z;
+        float norm_h = clamp((h + 256.0) / 2048.0, 0.0, 1.0);
+        float band = (fract(fabs(h) / 128.0) < 0.04) ? 1.0 : 0.0;
+        return float4(max(norm_h, band), norm_h * (1.0 - 0.5 * band), 1.0 - norm_h, 1.0);
+    }
     float3 light = p.ambient_col.rgb * p.light_col.w;
     int mode = int(p.settings.z);
     if (mode == 1) light *= ao;
-    float sun_shadow = 1.0;
     float3 Ldir = normalize(p.light_dir.xyz);
-    float  sun_ndotl = max(dot(N, Ldir), 0.0);
+    float  raw_sun_ndotl = dot(N, Ldir);
+    float  sun_ndotl = max(raw_sun_ndotl, 0.0);
     float  normal_hardness = clamp(p.normal_lighting.x, 0.0, 1.0);
     float  sun_term = mix(1.0, sun_ndotl, normal_hardness);
-    if (mode == 1 && p.shadow.w > 0.5 && sun_term > 0.0) {
-        float3 Sdir = normalize(p.shadow_world_dir.xyz);
-        if (length(Sdir) < 1e-5) Sdir = Ldir;
-        float3 Rdir = normalize(float3(-Sdir.x, -Sdir.y, Sdir.z * p.shadow_dir.z));
-        float step_wu  = p.shadow.x;
-        float soft_px  = p.shadow.y;
-        int   maxSteps = int(p.shadow.z);
-        const float kBiasWu = 2.0;
-        float3 rayStepW = W + Rdir * step_wu;
-        float2 ray_uv = project_world_uv(float3(rayStepW.xy, 0.0), p, fbw, fbh) - in.uv;
-        float2 perp_uv = (length(ray_uv) > 1e-6) ? normalize(float2(-ray_uv.y, ray_uv.x)) : float2(0.0, 1.0);
-        float h = fract(sin(dot(in.uv, float2(12.9898, 78.233))) * 43758.5453);
-        const int kRays = 4;
-        float hits = 0.0;
-        for (int r = 0; r < kRays; ++r) {
-            float rf = (float(r) + h) / float(kRays);
-            float off_px = (rf - 0.5) * 2.0 * soft_px;
-            float2 perp_off = perp_uv * off_px / float2(fbw, fbh);
-            float rh = fract(h + float(r) * 0.6180339);
-            bool hit = false;
-            for (int i = 1; i <= maxSteps; ++i) {
-                float t = (float(i) - 0.5 + rh) * step_wu;
-                float3 rayW = W + Rdir * t;
-                float2 suv = project_world_uv(float3(rayW.xy, 0.0), p, fbw, fbh) + perp_off +
-                             float2(p.shadow_dir.x * t / fbw, p.shadow_dir.y * t / fbh);
-                if (suv.x < 0.0 || suv.x > 1.0 ||
-                    suv.y < 0.0 || suv.y > 1.0) break;
-                float4 albs = albedo_tex.sample(smp, suv);
-                if (albs.a < 0.01) continue;
-                float drs = depth_tex.sample(smp, suv).r;
-                float3 Ws = reconstruct_world(suv, drs, p, fbw, fbh);
-                if (Ws.z > rayW.z + kBiasWu) { hit = true; break; }
-            }
-            if (hit) hits += 1.0;
-        }
-        float occ = hits / float(kRays);
-        sun_shadow = 1.0 - occ * 0.8;
-    }
+    // Direct sun visibility is a composition of two intentionally separate
+    // facts: normal-facing geometry and the blurred cast-shadow mask. The
+    // lighting pass never ray-marches; the mask is produced once per frame by
+    // the shadow pass, then blurred as an image operation.
+    float normal_visibility = (raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
+    float cast_shadow = (mode == 1 && p.shadow.w > 0.5) ? shadow_tex.sample(smp, in.uv).r : 1.0;
+    float sun_shadow = normal_visibility * cast_shadow;
     if (mode == 1) {
         light += p.light_col.rgb * p.light_dir.w * sun_term * sun_shadow;
     }

@@ -935,7 +935,7 @@ int __thiscall OOAnalyzer::cls_0x5b98b8::meth_0x436930(cls_0x5b98b8 *this)
   pcVar2 = this;
   if (0 < *(int *)&this->field_0x88) {
     do {
-      uVar1 = FUN_0059a530((uint)pcVar2,
+      uVar1 = FUN_0059a530_stricmp((uint)pcVar2,
                            (byte *)(*(int *)(*(int *)&this->field_0x98 + iVar3 * 4) + 0x18),
                            in_stack_00000004);
       if (uVar1 == 0) {
@@ -965,7 +965,7 @@ int __thiscall OOAnalyzer::cls_0x5b98b8::meth_0x436980(cls_0x5b98b8 *this)
   pcVar2 = this;
   if (0 < *(int *)&this->field_0x88) {
     do {
-      uVar1 = FUN_0059a530((uint)pcVar2,
+      uVar1 = FUN_0059a530_stricmp((uint)pcVar2,
                            (byte *)(*(int *)(*(int *)&this->field_0x98 + iVar3 * 4) + 0x18),
                            in_stack_00000004);
       if (uVar1 == 0) {
@@ -1236,7 +1236,7 @@ bool __thiscall OOAnalyzer::cls_0x5b98b8::meth_0x437a50(cls_0x5b98b8 *this)
   byte *in_stack_00000004;
   
   if ((in_stack_00000004 != (byte *)0x0) && (&this->mbr_0x158 != (dword *)0x0)) {
-    uVar1 = FUN_0059a530((uint)this,in_stack_00000004,(byte *)&this->mbr_0x158);
+    uVar1 = FUN_0059a530_stricmp((uint)this,in_stack_00000004,(byte *)&this->mbr_0x158);
     return uVar1 == 0;
   }
   return false;
@@ -1397,8 +1397,8 @@ void __thiscall OOAnalyzer::cls_0x5b98b8::meth_0x465d50(cls_0x5b98b8 *this)
   if (this_00 != (cls_0x5a3e1c *)0x0) {
     cls_0x5a3e1c::meth_0x434110(this_00);
   }
-  if (*(uint *)(&DAT_005d28b4 + this->mbr_0x1ec * 4) < DAT_0065a258) {
-    iVar4 = (&DAT_0065a148)[*(uint *)(&DAT_005d28b4 + this->mbr_0x1ec * 4)];
+  if (*(uint *)(&DAT_005d28b4 + this->mbr_0x1ec * 4) < DAT_0065a258_TObjectClass_numclasses) {
+    iVar4 = (&DAT_0065a148_TObjectClass_classes)[*(uint *)(&DAT_005d28b4 + this->mbr_0x1ec * 4)];
   }
   else {
     iVar4 = 0;
@@ -1467,12 +1467,12 @@ void __thiscall OOAnalyzer::cls_0x5b98b8::meth_0x465ea0(cls_0x5b98b8 *this)
     this->mbr_0x1a8 = dVar1;
   }
   iVar3 = 0;
-  if (((cls_0x5b4f30 *)this->mbr_0x1f8 != (cls_0x5b4f30 *)0x0) &&
-     (iVar2 = cls_0x5b4f30::meth_0x470090((cls_0x5b4f30 *)this->mbr_0x1f8), 0 < iVar2)) {
+  if (((cls_0x5b4f30_TPlayer *)this->mbr_0x1f8 != (cls_0x5b4f30_TPlayer *)0x0) &&
+     (iVar2 = cls_0x5b4f30_TPlayer::meth_0x470090((cls_0x5b4f30_TPlayer *)this->mbr_0x1f8), 0 < iVar2)) {
     do {
-      cls_0x5b4f30::meth_0x470160((cls_0x5b4f30 *)this->mbr_0x1f8);
+      cls_0x5b4f30_TPlayer::meth_0x470160((cls_0x5b4f30_TPlayer *)this->mbr_0x1f8);
       iVar3 = iVar3 + 1;
-      iVar2 = cls_0x5b4f30::meth_0x470090((cls_0x5b4f30 *)this->mbr_0x1f8);
+      iVar2 = cls_0x5b4f30_TPlayer::meth_0x470090((cls_0x5b4f30_TPlayer *)this->mbr_0x1f8);
     } while (iVar3 < iVar2);
   }
   if ((cls_0x5a3d44 *)this->mbr_0x1a8 != (cls_0x5a3d44 *)0x0) {
@@ -1743,9 +1743,9 @@ LAB_00466587:
       piVar1 = (int *)meth_0x436900(this);
       if (piVar1 != (int *)0x0) {
         piVar6 = piVar1 + 6;
-        uVar4 = FUN_0059a530(extraout_ECX,(byte *)s_skl_next_005d34e8,(byte *)piVar6);
+        uVar4 = FUN_0059a530_stricmp(extraout_ECX,(byte *)s_skl_next_005d34e8,(byte *)piVar6);
         if ((uVar4 != 0) &&
-           (uVar4 = FUN_0059a530(extraout_ECX_00,(byte *)s_skl_prev_005d34f4,(byte *)piVar6),
+           (uVar4 = FUN_0059a530_stricmp(extraout_ECX_00,(byte *)s_skl_prev_005d34f4,(byte *)piVar6),
            uVar4 != 0)) {
           if (((this->mbr_0x17c != 0) || (this->mbr_0x184 != 0)) &&
              ((uVar4 = FUN_0059a600((byte *)piVar6,&DAT_005d3500,4), uVar4 == 0 ||
@@ -2339,7 +2339,7 @@ OOAnalyzer::cls_0x5b98b8::meth_0x547240(cls_0x5b98b8 *this,byte *param_1,char *p
     }
     return 1;
   }
-  uVar2 = FUN_0059a530(extraout_ECX,param_1,(byte *)s_objdesc_005e5400);
+  uVar2 = FUN_0059a530_stricmp(extraout_ECX,param_1,(byte *)s_objdesc_005e5400);
   if ((uVar2 == 0) && (this->mbr_0x198 != 0)) {
     FUN_0058b100(local_28,(byte *)s_obj_08x_005e5408);
     iVar3 = cls_0x45f7c0::meth_0x49d6d0((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310);
@@ -2350,7 +2350,7 @@ OOAnalyzer::cls_0x5b98b8::meth_0x547240(cls_0x5b98b8 *this,byte *param_1,char *p
     _Source = (char *)cls_0x45f7c0::meth_0x49d780((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310);
   }
   else {
-    uVar2 = FUN_0059a530(extraout_ECX_00,param_1,&DAT_005e5418);
+    uVar2 = FUN_0059a530_stricmp(extraout_ECX_00,param_1,&DAT_005e5418);
     if ((uVar2 != 0) || ((int *)this->mbr_0x198 == (int *)0x0)) {
       uVar2 = FUN_0059a600(param_1,s_stmod_005e549c,5);
       if (uVar2 != 0) {

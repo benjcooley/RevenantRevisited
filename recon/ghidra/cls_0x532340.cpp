@@ -49,7 +49,7 @@ void __thiscall OOAnalyzer::cls_0x532340::meth_0x532340(cls_0x532340 *this,uint 
     param_1 = 1;
   }
   if (((uVar3 & 8) == 0) && ((uVar3 & 4) == 0)) {
-    pcVar7 = (cls_0x4746d0 *)(-(uint)(1 < DAT_0065a258) & DAT_0065a14c);
+    pcVar7 = (cls_0x4746d0 *)(-(uint)(1 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a14c);
     iVar2 = cls_0x4741b0::meth_0x474210((cls_0x4741b0 *)&pcVar7->mbr_0x14);
     if ((iVar2 != -1) && (local_c = 0, 0 < (short)this->mbr_0x194)) {
       local_4 = 0;
@@ -100,7 +100,7 @@ void __thiscall OOAnalyzer::cls_0x532340::meth_0x532340(cls_0x532340 *this,uint 
         local_4 = local_4 + 0x48;
       } while ((int)local_c < (int)(short)this->mbr_0x194);
     }
-    pcVar7 = (cls_0x4746d0 *)(-(uint)(2 < DAT_0065a258) & DAT_0065a150);
+    pcVar7 = (cls_0x4746d0 *)(-(uint)(2 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a150);
     iVar2 = cls_0x4741b0::meth_0x474210((cls_0x4741b0 *)&pcVar7->mbr_0x14);
     if (iVar2 != -1) {
       this_00 = &this->mbr_0x194;
@@ -159,7 +159,7 @@ LAB_0053259e:
         } while ((int)local_c < (int)(short)*this_00);
       }
     }
-    pcVar7 = (cls_0x4746d0 *)(-(uint)(4 < DAT_0065a258) & DAT_0065a158);
+    pcVar7 = (cls_0x4746d0 *)(-(uint)(4 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a158);
     iVar2 = cls_0x4741b0::meth_0x474210((cls_0x4741b0 *)&pcVar7->mbr_0x14);
     if ((iVar2 != -1) && (local_c = 0, 0 < (short)this->mbr_0x194)) {
       local_4 = 0;
@@ -219,7 +219,7 @@ LAB_005326e9:
         local_4 = local_4 + 0x48;
       } while ((int)local_c < (int)(short)this->mbr_0x194);
     }
-    pcVar7 = (cls_0x4746d0 *)(-(uint)(0x12 < DAT_0065a258) & DAT_0065a190);
+    pcVar7 = (cls_0x4746d0 *)(-(uint)(0x12 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a190);
     iVar2 = cls_0x4741b0::meth_0x474210((cls_0x4741b0 *)&pcVar7->mbr_0x14);
     if ((iVar2 != -1) && (local_c = 0, 0 < (short)this->mbr_0x194)) {
       local_4 = 0;
@@ -279,7 +279,7 @@ LAB_00532872:
         local_4 = local_4 + 0x48;
       } while ((int)local_c < (int)(short)this->mbr_0x194);
     }
-    pcVar7 = (cls_0x4746d0 *)(-(uint)(0x15 < DAT_0065a258) & DAT_0065a19c);
+    pcVar7 = (cls_0x4746d0 *)(-(uint)(0x15 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a19c);
     iVar2 = cls_0x4741b0::meth_0x474210((cls_0x4741b0 *)&pcVar7->mbr_0x14);
     if ((iVar2 != -1) && (local_c = 0, 0 < (short)this->mbr_0x194)) {
       local_4 = 0;
@@ -339,7 +339,7 @@ LAB_005329fb:
         local_4 = local_4 + 0x48;
       } while ((int)local_c < (int)(short)this->mbr_0x194);
     }
-    pcVar7 = (cls_0x4746d0 *)(-(uint)(5 < DAT_0065a258) & DAT_0065a15c);
+    pcVar7 = (cls_0x4746d0 *)(-(uint)(5 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a15c);
     iVar2 = cls_0x4741b0::meth_0x474210((cls_0x4741b0 *)&pcVar7->mbr_0x14);
     if ((iVar2 != -1) && (local_c = 0, 0 < (short)this->mbr_0x194)) {
       local_4 = 0;
@@ -399,7 +399,7 @@ LAB_00532b84:
         local_4 = local_4 + 0x48;
       } while ((int)local_c < (int)(short)this->mbr_0x194);
     }
-    pcVar7 = (cls_0x4746d0 *)(-(uint)(0x11 < DAT_0065a258) & DAT_0065a18c);
+    pcVar7 = (cls_0x4746d0 *)(-(uint)(0x11 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a18c);
     iVar2 = cls_0x4741b0::meth_0x474210((cls_0x4741b0 *)&pcVar7->mbr_0x14);
     if ((iVar2 != -1) && (local_c = 0, 0 < (short)this->mbr_0x194)) {
       local_4 = 0;
@@ -467,8 +467,8 @@ LAB_00532d02:
     }
   }
   else {
-    if (param_1 < DAT_0065a258) {
-      pcVar7 = (cls_0x4746d0 *)(&DAT_0065a148)[param_1];
+    if (param_1 < DAT_0065a258_TObjectClass_numclasses) {
+      pcVar7 = (cls_0x4746d0 *)(&DAT_0065a148_TObjectClass_classes)[param_1];
     }
     else {
       pcVar7 = (cls_0x4746d0 *)0x0;

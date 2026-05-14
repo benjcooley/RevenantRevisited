@@ -2589,7 +2589,7 @@ void __thiscall OOAnalyzer::cls_0x5a35ac::virt_meth_0x40cf50(cls_0x5a35ac *this)
   if (0 < DAT_005e872c) {
     piVar6 = &DAT_005e851c;
     do {
-      iVar4 = FUN_0059a530(uVar1,*(undefined4 *)(*piVar6 + 4));
+      iVar4 = FUN_0059a530_stricmp(uVar1,*(undefined4 *)(*piVar6 + 4));
       if (iVar4 == 0) {
         puVar5 = (undefined4 *)(&DAT_005e851c)[iVar3];
         if (puVar5 != &DAT_005e8508) goto LAB_0040d076;
@@ -2600,16 +2600,16 @@ void __thiscall OOAnalyzer::cls_0x5a35ac::virt_meth_0x40cf50(cls_0x5a35ac *this)
     } while (iVar3 < DAT_005e872c);
   }
   uVar2 = *(undefined4 *)(*(int *)(in_stack_00000004 + 0x48) + 4);
-  iVar3 = FUN_0059a530(uVar2,s_weapon_005c6048);
-  if ((((iVar3 == 0) || (iVar3 = FUN_0059a530(uVar2,s_armor_005c6050), iVar3 == 0)) ||
-      (iVar3 = FUN_0059a530(uVar2,s_lightsource_005c6058), iVar3 == 0)) ||
-     ((iVar3 = FUN_0059a530(uVar2,&DAT_005c6064), iVar3 == 0 &&
-      (iVar3 = FUN_0059a530(uVar1,s_arrow_005c606c), iVar3 == 0)))) {
+  iVar3 = FUN_0059a530_stricmp(uVar2,s_weapon_005c6048);
+  if ((((iVar3 == 0) || (iVar3 = FUN_0059a530_stricmp(uVar2,s_armor_005c6050), iVar3 == 0)) ||
+      (iVar3 = FUN_0059a530_stricmp(uVar2,s_lightsource_005c6058), iVar3 == 0)) ||
+     ((iVar3 = FUN_0059a530_stricmp(uVar2,&DAT_005c6064), iVar3 == 0 &&
+      (iVar3 = FUN_0059a530_stricmp(uVar1,s_arrow_005c606c), iVar3 == 0)))) {
     iVar3 = 0;
     if (0 < DAT_005e872c) {
       piVar6 = &DAT_005e851c;
       do {
-        iVar4 = FUN_0059a530(s_equip_005c6074,*(undefined4 *)(*piVar6 + 4));
+        iVar4 = FUN_0059a530_stricmp(s_equip_005c6074,*(undefined4 *)(*piVar6 + 4));
         if (iVar4 == 0) {
 LAB_0040d0bc:
           (***(code ***)(&DAT_005e851c)[iVar3])(in_stack_00000004);
@@ -2625,7 +2625,7 @@ LAB_0040d0bc:
     if (0 < DAT_005e872c) {
       piVar6 = &DAT_005e851c;
       do {
-        iVar4 = FUN_0059a530(uVar2,*(undefined4 *)(*piVar6 + 4));
+        iVar4 = FUN_0059a530_stricmp(uVar2,*(undefined4 *)(*piVar6 + 4));
         if (iVar4 == 0) goto LAB_0040d0bc;
         iVar3 = iVar3 + 1;
         piVar6 = piVar6 + 1;

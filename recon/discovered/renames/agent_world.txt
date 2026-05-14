@@ -1,0 +1,346 @@
+# Format: BARE_TOKEN|RENAMED_TOKEN  — one per line, # comments ignored.
+# World data class identifications: TSector + TArea + TAreaManager.
+# Anchors used: "%d_%d_%d.DAT" sector-filename literal, "MAP " FCC immediate
+# (0x20 << 24 | 'P' << 16 | 'A' << 8 | 'M' = 0x2050414d), area.def parser
+# strings, AMBLIGHT/AMBCOLOR/SCRIPT tag literals, callers from already-named
+# TMapPane methods (TMapPane::AddObject 0x451090, RemoveObject 0x451610,
+# SetPos at 0x459f50, ObjectFlagsChanged 0x451a50).
+#
+# Field offsets (TSector, retail size = 0x15c):
+#   +0x00  walkmap              uint16_t* (10-bit packed: 0..0x3ff = height,
+#                               upper bits = retail-only flag bits)
+#   +0x04  level                int32
+#   +0x08  sectorx              int32
+#   +0x0c  sectory              int32
+#   +0x14  filename[80]
+#   +0x94  usecount             int32 (renamed from `usecount`)
+#   +0x98  preloaded?           bool/int (gates Init-lights pass)
+#   +0xac  flag (init done?)    int (set by InitLights)
+#   +0xb0  preload-state        int (0/1/2 used by LoadSector)
+#   +0xb4  statehash            int32 (v14+; computed/stored)
+#   +0xb8  numobjects           int32
+#   +0xc8  objects[]            ptr-array (TObjectArray, +0xc4 cap, +0xc8 base)
+#   +0xcc  objsets[0..5]        SObjSet @ 0x18 stride (six sets:
+#                               MOVING/CHARACTER/LIGHTS/PULSE/ANIMATE/NOTIFY).
+#                               Source has 7 sets; retail dropped OBJSET_ALL
+#                               and stores only sets 1..6 inline.
+# Field offsets (TArea, retail size = 0x260):
+#   +0x00  name[80]
+#   +0x40  level
+#   +0x44  flags  (bit 0x2=PLAYERIN, 0x4=SETAMBIENT, 0x8=DONIGHT,
+#                  0x10=LOADSCRIPTS, 0x20=PLAYCDMUSIC, 0x40=PLAYAMBIENT,
+#                  retail-extra: 0x80, 0x100, 0x200, 0x400, 0x800, 0x1000,
+#                  0x2000, 0x4000, 0x8000, 0x10000, 0x20000, 0x40000)
+#   +0x48  rects.numitems (short)
+#   +0x4a  rects.cap (short)
+#   +0x4c  rects.base (SRect[])
+#   +0x50  scriptfile[]
+#   +0xd0  amblight, +0xd4 nightamblight
+#   +0xd8  ambcolor (RGBA bytes), +0xdc nightambcolor
+#   +0xe0  lastdaylight (per-area)
+#   +0x138 (start of audio-environment data — retail TArea extension)
+#   +0x1b8 cdplaynum, +0x1bc cdplaylistsize, +0x1c0 cdplaylist[32]
+#   +0x240 cdplayisrandom, +0x244 cdplaypause
+#   +0x248 cdplaystart (DWORD tickcount), +0x250 cdplaywait, +0x254 cdplaylength
+#   +0x25c TScript* (?) — used as runtime script tracking for the area
+
+
+# ============================================================================
+# Class label
+# ============================================================================
+
+# TArea has no vtable in pre-release source. Confirmed: the dtor wrapper at
+# 0x0041c790 only calls FUN_0041a3b0 (real dtor body) then heap-frees, no
+# vtable touch. cls_TArea here is the symbolic class label.
+cls_TArea|cls_TArea
+
+
+# ============================================================================
+# TSector methods — recon/sector.cpp + recon/sector.h pre-release as guide
+# ============================================================================
+
+# Constructor TSector::TSector(level, sx, sy) — sprintf into filename[80] at
+# +0x14 with "%d_%d_%d.DAT" pattern, walkmap = malloc(0x2000) (= WALKMAPSIZE
+# uint16s zeroed), inits 6 objsets at 0x18 stride starting at +0xcc.
+meth_0x498020|meth_0x498020_TSector_Ctor
+FUN_00498020|FUN_00498020_TSector_Ctor
+
+# Destructor body TSector::~TSector — frees walkmap, frees object array.
+# Skips OF_NONMAP (0x80000) objects from delete (matches source pattern).
+# Removes from preload list before final free.
+meth_0x498190|meth_0x498190_TSector_Dtor
+FUN_00498190|FUN_00498190_TSector_Dtor
+
+# TSector::LoadSector(level, sx, sy, preload) — static. Searches preload
+# list (DAT_00668588), increments usecount on hit, otherwise allocates a
+# 0x15c-byte TSector, calls TSector::Load (FUN_004984d0), runs InitLights
+# pass.
+meth_0x4982b0|meth_0x4982b0_TSector_LoadSector
+FUN_004982b0|FUN_004982b0_TSector_LoadSector
+
+# TSector::CloseSector(sector) — static. Decrements usecount; if usecount
+# drops to 0 and not preloaded, calls Save then dtor + free.
+meth_0x498460|meth_0x498460_TSector_CloseSector
+FUN_00498460|FUN_00498460_TSector_CloseSector
+
+# TSector::Load(lock=false) — open-file path: tries CurMapPath\CURMAPDIR\
+# filename then BaseMapPath\BASEMAPDIR\filename via fopen("rb"), reads whole
+# file, allocates buf, then forwards to TSector::LoadFromStream
+# (FUN_00498780). Sets contentver-equivalent flag (+0x94=1) on success.
+meth_0x4984d0|meth_0x4984d0_TSector_Load
+FUN_004984d0|FUN_004984d0_TSector_Load
+
+# TSector::LoadFromStream(stream, version) — actual deserialization. Reads
+# MAP fcc check, version, statehash if v>13, numobjects, then loops calling
+# TObjectInstance::LoadObject (FUN_00471ce0), assigns sector ptr at +0x44 of
+# inst, level at +0x0e, classifies into objsets[1..6] (MOVING / CHARACTER
+# (objclass==0xb||0xc) / LIGHTS / PULSE / ANIMATE / NOTIFY). Skips
+# "monstergen" objects when DAT_00676828 monster cap reached.
+meth_0x498780|meth_0x498780_TSector_LoadFromStream
+FUN_00498780|FUN_00498780_TSector_LoadFromStream
+
+# TSector::Save() — open-file path: builds CurMapPath\CURMAPDIR\filename,
+# allocates 0x8000-byte TOutputStream, calls SaveToStream (FUN_00498c90),
+# fopen("wb"), writes buffer.
+meth_0x498a40|meth_0x498a40_TSector_Save
+FUN_00498a40|FUN_00498a40_TSector_Save
+
+# TSector::SaveToStream(stream) — writes MAP fcc, version (=15 = 0xf),
+# statehash (computed via FUN_00499e90), numobjects, then loops calling
+# TObjectInstance::SaveObject (FUN_00472110) per object. statehash is
+# regenerated every save in retail (pre-release didn't have it).
+meth_0x498c90|meth_0x498c90_TSector_SaveToStream
+FUN_00498c90|FUN_00498c90_TSector_SaveToStream
+
+# TSector::GetMaxScreenRect(r) — calls GetMaxMapRect, transforms via
+# WorldToScreen (FUN_0046d7a0), widens by SECTORWIDTH (0x400) plus the
+# SECTORLREDGE/UEDGE/LEDGE constants (0x600/0x600/0x400 in retail).
+meth_0x498eb0|meth_0x498eb0_TSector_GetMaxScreenRect
+FUN_00498eb0|FUN_00498eb0_TSector_GetMaxScreenRect
+
+# TSector::GetMaxMapRect(r) — clamps if sectorx/sectory >= 0x20=MAXSECTORX,
+# else returns rect (sectorx<<10, sectory<<10, +0x3ff, +0x3ff).
+meth_0x498f60|meth_0x498f60_TSector_GetMaxMapRect
+FUN_00498f60|FUN_00498f60_TSector_GetMaxMapRect
+
+# TSector::AddObject(oi, item=-1) — ForceSector + ForceLevel on inst (+0x44
+# = sector, +0xe = level), Add or Set into objects[], then add to relevant
+# objsets[1..6] based on flags. Returns item index. Bumps no contentver
+# in retail (pre-release-only).
+meth_0x498fb0|meth_0x498fb0_TSector_AddObject
+FUN_00498fb0|FUN_00498fb0_TSector_AddObject
+
+# TSector::SetObject(oi, item) — Set into objects[item], adds to objsets.
+# Mirrors AddObject's objset-add loop.
+meth_0x4990c0|meth_0x4990c0_TSector_SetObject
+FUN_004990c0|FUN_004990c0_TSector_SetObject
+
+# TSector::RemoveObject(oi) — RETAIL TAKES OBJECT POINTER, NOT ITEM INDEX.
+# Linear-scans objects[] for *oi, then Removes the slot and Collapses it
+# from each objset. Pre-release source took an int item; retail simplified
+# the API.
+meth_0x499250|meth_0x499250_TSector_RemoveObject
+FUN_00499250|FUN_00499250_TSector_RemoveObject
+
+# TSector::ObjectFlagsChanged(oi, oldflags, newflags) — gated on
+# (oldflags ^ newflags) & 0xc00c (= OBJSETOBJFLAGS = OF_MOVING|OF_LIGHT|
+# OF_PULSE|OF_ANIMATE = 0x8|0x4|0x8000|0x4000). Resyncs the 6 objset
+# memberships against the new flag bits. Confirmed match to source.
+meth_0x499360|meth_0x499360_TSector_ObjectFlagsChanged
+FUN_00499360|FUN_00499360_TSector_ObjectFlagsChanged
+
+# TSector::InitLights — iterates objsets[2] (LIGHTS, offset 0xfc), forces
+# notify (FUN_00471b40) on each light obj, sets +0xac=1 (lights initialized
+# flag). Called from LoadSector after Load completes.
+meth_0x499500|meth_0x499500_TSector_InitLights
+FUN_00499500|FUN_00499500_TSector_InitLights
+
+# TSector::WalkmapHandler(mode, walk, zpos, x, y, w, l, stride, group,
+# override) — bounds-clip then iterate. mode 0=WALK_TRANSFER (write packed
+# value: lower 10 bits = clamped height 1..0x3ff, upper bits = group/flag
+# from param 9 << 10), mode 1=WALK_CAPTURE (extract lower 10 bits minus
+# zpos), mode 2=WALK_CLEAR. RETAIL EXTENSION: walkmap is now packed
+# (height + group bits) instead of plain uint16 height. Pre-release source
+# used full uint16 for height.
+meth_0x499560|meth_0x499560_TSector_WalkmapHandler
+FUN_00499560|FUN_00499560_TSector_WalkmapHandler
+
+# TSector::ClearWalkmap — memset 0 over WALKMAPSIZE uint16s (0x2000 bytes).
+meth_0x499710|meth_0x499710_TSector_ClearWalkmap
+FUN_00499710|FUN_00499710_TSector_ClearWalkmap
+
+# TSector::ReturnWalkmap(x, y) — returns walkmap[y*64 + x] & 0x3ff (height
+# only; masks off retail-only group/flag bits).
+meth_0x499720|meth_0x499720_TSector_ReturnWalkmap
+FUN_00499720|FUN_00499720_TSector_ReturnWalkmap
+
+# TSector::SetWalkmap(x, y, height) — writes only the lower 10 bits,
+# preserving the retail-only upper flag bits. Pre-release source did a
+# plain assignment.
+meth_0x499750|meth_0x499750_TSector_SetWalkmap
+FUN_00499750|FUN_00499750_TSector_SetWalkmap
+
+# TSector::LoadPreloadSectors(level, numrects, rects, callback?) — clamps
+# rect coords to MAXSECTORX-1 (0x1f), iterates over each (sx,sy) pair in
+# the preload area, allocates+loads new sectors via LoadSector(level, sx,
+# sy, mode=2). Then "telescopes" inward to call CacheImagery (vtable+0x1c)
+# on objects in border sectors. Retail adds an optional progress callback
+# (param 4, called as callback(percent)) which pre-release source didn't
+# have (source called TextBar directly).
+meth_0x4998b0|meth_0x4998b0_TSector_LoadPreloadSectors
+FUN_004998b0|FUN_004998b0_TSector_LoadPreloadSectors
+
+# TSector::ClearPreloadSectors(level, numrects, rects) — iterates preloads,
+# Saves+frees ones outside any rect, decrements usecount on shared ones.
+# Mirrors source body exactly.
+meth_0x499be0|meth_0x499be0_TSector_ClearPreloadSectors
+FUN_00499be0|FUN_00499be0_TSector_ClearPreloadSectors
+
+# TSector::FindPreloadSector(level, sx, sy) — linear-scans preload array
+# (DAT_006687a0; this is the "main" preload pool, distinct from the
+# usecount pool at DAT_00668588) by matching level/sx/sy at +4/+8/+0xc.
+meth_0x499d60|meth_0x499d60_TSector_FindPreloadSector
+FUN_00499d60|FUN_00499d60_TSector_FindPreloadSector
+
+# TSector::InPreloadArea(p, level) — checks level == DAT_005da754
+# (preloadlevel), then iterates DAT_006687a8 (numpreloadrects) calling
+# SRect::In(p) (FUN_0041c720).
+meth_0x499db0|meth_0x499db0_TSector_InPreloadArea
+FUN_00499db0|FUN_00499db0_TSector_InPreloadArea
+
+# Sibling FindSector at DAT_00668588 list: looks identical to the preload
+# searcher but operates on a *second* sector pool (probably
+# loaded-by-MapPane sectors, retail-only split). Used by LoadSector and
+# TMapPane::AddObject (FUN_00451090, line 21 → FUN_00499e10).
+meth_0x499e10|meth_0x499e10_TSector_FindLoadedSector
+FUN_00499e10|FUN_00499e10_TSector_FindLoadedSector
+
+# Save-all helper: iterates DAT_00668588 (loaded pool), calls Save on each
+# non-null entry. Used during shutdown / level-flush.
+meth_0x499e60|meth_0x499e60_TSector_SaveAllLoaded
+FUN_00499e60|FUN_00499e60_TSector_SaveAllLoaded
+
+# TSector::ComputeStateHash — feeds level/sx/sy/numobjects + serialized
+# bytes of state-bearing objects (objclass 0xc/0xb only, i.e.
+# TCharacter/TPlayer) into a CRC/hasher (FUN_0056ff60/FUN_0056ff80).
+# Returns 32-bit hash. Mentioned in src/sector.h v14 section: this is
+# `FUN_00499e90` referenced there.
+meth_0x499e90|meth_0x499e90_TSector_ComputeStateHash
+FUN_00499e90|FUN_00499e90_TSector_ComputeStateHash
+
+# DispatchNotifyToAllSectors(notify, ptr) — iterates DAT_00668588 (loaded
+# pool), for each sector iterates its objsets[5] (NOTIFY, offset 0x144),
+# calls TObjectInstance::Notify (vtable+0x10) skipping objclass==0xb
+# (TPlayer). Then forwards to FUN_0051fec0 (Player notify) and
+# FUN_00497e00 (script-manager notify). Retail-side broadcast helper.
+meth_0x499ff0|meth_0x499ff0_TSector_DispatchNotifyToAll
+FUN_00499ff0|FUN_00499ff0_TSector_DispatchNotifyToAll
+
+
+# ============================================================================
+# TArea + TAreaManager — area.def driven area scripts/triggers
+# ============================================================================
+
+# TArea ctor (TArea::TArea, default-arg variant) — alloc'd 0x260 bytes.
+# Sets defaults: amblight=30 (+0xd0), nightamblight=10 (+0xd4), ambcolor/
+# nightambcolor white (+0xd8/+0xdc bytes 0xff), level=-1, cdplaylistsize=0
+# etc. Param 2 takes a flag byte (0=no-anim-system, 1=link-into-anim-list).
+meth_0x41a1f0|meth_0x41a1f0_TArea_Ctor
+FUN_0041a1f0|FUN_0041a1f0_TArea_Ctor
+
+# TArea::~TArea — Exit-equivalent cleanup (clears PLAYERIN bit, kills
+# music, kills ambient sounds, unloads scripts via FUN_004967a0
+# (ScriptManager::Clear) when LOADSCRIPTS bit set), then frees rects buf
+# (+0x4c). Note: source has trivial `~TArea() { Exit(); }`; retail
+# inlined the dtor and merged Exit body.
+meth_0x41a3b0|meth_0x41a3b0_TArea_Dtor
+FUN_0041a3b0|FUN_0041a3b0_TArea_Dtor
+
+# TArea::Load(name, token) — the AREA.DEF block parser. References the
+# AMBLIGHT (0x41a829), AMBCOLOR (0x41a868), and SCRIPT/RECT/LEVEL/CDPLAYLIST
+# tag handlers. Returns 1 on success.
+meth_0x41a4e0|meth_0x41a4e0_TArea_Load
+FUN_0041a4e0|FUN_0041a4e0_TArea_Load
+
+# TArea::In(pos, level) — early-out on flag bit 0x1 (always-in?), checks
+# (level == -1 || lev == this->level), iterates rects (count at +0x48,
+# base at +0x4c, 16-byte stride) calling SRect::In. flags at +0x44 bit 1
+# = "always-in" retail extension; pre-release didn't have it.
+meth_0x41b0b0|meth_0x41b0b0_TArea_In
+FUN_0041b0b0|FUN_0041b0b0_TArea_In
+
+# TArea::InitCDMusic — sets cdplaynum=-1 (+0x1b8), cdplaystart=tickcount
+# (+0x248), cdplaywait=0 (+0x250), cdplaylength=0 (+0x254). Sends
+# stop-cd command via the CDPLAY queue (DAT_0065abd8 = head/tail).
+meth_0x41b1d0|meth_0x41b1d0_TArea_InitCDMusic
+FUN_0041b1d0|FUN_0041b1d0_TArea_InitCDMusic
+
+# TArea::PlayCDMusic — handles cd track scheduling. Random-vs-sequential
+# branch on cdplayisrandom (+0x240), calls FUN_0049a480 (CDTrackLength)
+# and FUN_0049a300 (CDPlayTrack). Wait clamped to <=10000ms, default
+# 30000 if track length unknown.
+meth_0x41b240|meth_0x41b240_TArea_PlayCDMusic
+FUN_0041b240|FUN_0041b240_TArea_PlayCDMusic
+
+# TArea::GetCurrentAmbient(&ambient, &color) — gated on flag bit 0x8
+# (DONIGHT). On daytime flag: returns amblight/ambcolor; on night:
+# nightamblight/nightambcolor; in-between: blends by daylight (0..255)
+# with the magic 0x80808081/0xff div trick. Confirmed source-level match.
+meth_0x41b3c0|meth_0x41b3c0_TArea_GetCurrentAmbient
+FUN_0041b3c0|FUN_0041b3c0_TArea_GetCurrentAmbient
+
+# TArea::Pulse — handles per-area updates. Strings:
+# "BASEMIDNIGHT","BASEMORNING","BASEDAYTIME","BASENOON","BASEEVENING",
+# "BASENIGHT" (day-name table); "FULLBASEITWAS" / "BASEITWAS" / "BASEITWAS_REV"
+# localization keys. Calls FUN_0049d800 (TextResource::Lookup) and
+# FUN_0054d170 (PrintLine). Calls GetCurrentAmbient + SetAmbient
+# (FUN_00453640) + FadeAmbient (FUN_004536b0) when daylight changes.
+meth_0x41b770|meth_0x41b770_TArea_Pulse
+FUN_0041b770|FUN_0041b770_TArea_Pulse
+
+# TArea::Enter — sets PLAYERIN bit (0x2), opens TScript at +0x25c, inits
+# CD music (bit 0x20), inits ambient sounds (bit 0x40), sets ambient
+# (bit 0x4: GetCurrentAmbient+SetAmbient or FadeAmbient based on
+# distance-from-last threshold 0x401), loads master.s script (bit 0x10:
+# strcmp against "master.s" for retail-error sanity, calls FUN_00496490
+# = ScriptManager::Load). Strings:
+# "master.s","The MASTER.S script file can not...",
+# "FULLBASEENTERED","FULLBASEENTEREDREV","BASEENTERED" — localization keys
+# for area-entry messages.
+meth_0x41ba00|meth_0x41ba00_TArea_Enter
+FUN_0041ba00|FUN_0041ba00_TArea_Enter
+
+# TArea::Exit — clears PLAYERIN, closes script (+0x25c), stops CD music
+# queue, kills ambient sounds, unloads scripts. Standalone (not inlined
+# into ~TArea here, despite both bodies looking similar).
+meth_0x41bd10|meth_0x41bd10_TArea_Exit
+FUN_0041bd10|FUN_0041bd10_TArea_Exit
+
+# TArea scalar deleting destructor — wraps FUN_0041a3b0.
+meth_0x41c790|meth_0x41c790_TArea_ScalarDtor
+FUN_0041c790|FUN_0041c790_TArea_ScalarDtor
+
+# TAreaManager::Initialize — clears the static lastpos/lastlevel/lastdayflag
+# globals (-100000=0xfffe7960, lastlevel=0xff), calls Load. Returns 1 on
+# success, 0 on Load failure.
+meth_0x41bf00|meth_0x41bf00_TAreaMgr_Initialize
+FUN_0041bf00|FUN_0041bf00_TAreaMgr_Initialize
+
+# TAreaManager::Close — frees every TArea in areas[].
+meth_0x41bfa0|meth_0x41bfa0_TAreaMgr_Close
+FUN_0041bfa0|FUN_0041bfa0_TAreaMgr_Close
+
+# TAreaManager::Load — reads ClassDefPath\area.def, parses sequential
+# `AREA "name" / BEGIN / ... / END` blocks via TToken+DefineGet, allocates
+# a TArea per block, calls TArea::Load. Strings:
+# "area.def" (DAT_005c6db8), "Syntax error in header",
+# "AREA \"name\" expected","Error loading area",
+# "Syntax error between area blocks". Confirmed source-level match.
+meth_0x41c000|meth_0x41c000_TAreaMgr_Load
+FUN_0041c000|FUN_0041c000_TAreaMgr_Load
+
+# TAreaManager::Pulse — finds the area containing player (via TArea::In),
+# fires Exit on areas that lost PLAYERIN, fires Enter on the new one,
+# then Pulses every area with PLAYERIN. Mirrors source body exactly.
+meth_0x41c410|meth_0x41c410_TAreaMgr_Pulse
+FUN_0041c410|FUN_0041c410_TAreaMgr_Pulse

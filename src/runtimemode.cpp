@@ -37,28 +37,13 @@ class TGameModeImpl final : public IRuntimeMode
 
         // Game-logic tick over the active 3x3 window centered on the
         // player. UpdateActiveWindow re-fills MapPane.sectors[][];
-        // PulseObjects runs per-instance Pulse() (AI / animator state);
-        // MoveObjects applies the movement step from movebits set during
-        // Pulse.
+        // NextFrameObjects owns the authoritative 24 Hz animation frame
+        // advance; PulseObjects runs per-instance AI/state; MoveObjects
+        // applies movement from movebits set during Pulse.
         MapPane.UpdateActiveWindow();
+        MapPane.NextFrameObjects();
         MapPane.PulseObjects();
         MapPane.MoveObjects();
-
-        // Camera follow: anchor the renderer's camera on the player.
-        // The camera is a real entity in world space -- it tracks
-        // Locke's full position (including Z). Architectural rule:
-        // the camera depends on objects (it follows the player), but
-        // no object's rendered position is allowed to depend on the
-        // camera. Object screen positions are computed from absolute
-        // world coords; camera position only shifts the screen-space
-        // viewport origin.
-        if (Player && PlayScreen.MapRenderer())
-        {
-            S3DPoint p;
-            Player->GetPos(p);
-            PlayScreen.MapRenderer()->SetCameraWorld(
-                Player->GetLevel(), p.x, p.y, p.z);
-        }
     }
 
     bool HandleKey(int32_t key, bool down) override

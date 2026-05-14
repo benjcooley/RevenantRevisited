@@ -320,7 +320,7 @@ void cls_0x5a7e98::meth_0x4d96c0()
       return;
     }
     pbVar1 = *(byte **)(iVar4 + 0x38);
-    if ((pbVar1 != (byte *)0x0) && (uVar3 = FUN_0059a530(uVar3,(byte *)uVar3,pbVar1), uVar3 != 0)) {
+    if ((pbVar1 != (byte *)0x0) && (uVar3 = FUN_0059a530_stricmp(uVar3,(byte *)uVar3,pbVar1), uVar3 != 0)) {
       meth_0x4d92d0(this);
       return;
     }

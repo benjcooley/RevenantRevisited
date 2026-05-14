@@ -32,7 +32,7 @@ void __thiscall OOAnalyzer::cls_0x5a9900::virt_meth_0x4e3960(cls_0x5a9900 *this,
   dword dVar1;
   dword in_stack_00000008;
   
-  cls_0x5b8e94::virt_meth_0x4df0f0((cls_0x5b8e94 *)this,param_1);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x4df0f0((cls_0x5b8e94_TObjectInstance *)this,param_1);
   if (param_1 == 1) {
     if (this->mbr_0x184 != in_stack_00000008) {
       return;

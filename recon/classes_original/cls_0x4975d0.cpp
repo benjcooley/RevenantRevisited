@@ -15,7 +15,7 @@ Length: 32792 Alignment: 1
 
 // Function at 004975d0
 
-undefined4 __thiscall OOAnalyzer::cls_0x4975d0::meth_0x4975d0(cls_0x4975d0 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x4975d0::meth_0x4975d0_TGameState_FindStateValue(cls_0x4975d0 *this)
 
 {
   undefined **ppuVar1;
@@ -28,7 +28,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x4975d0::meth_0x4975d0(cls_0x4975d0 *this
   if (PTR_DAT_005da0b0 != (undefined *)0x0) {
     ppuVar3 = &PTR_DAT_005da0b0;
     do {
-      iVar2 = FUN_0059a530();
+      iVar2 = FUN_0059a530_stricmp();
       if (iVar2 == 0) {
         if (-1 < iVar5) {
           return (&DAT_005da0b4)[iVar5 * 2];
@@ -43,7 +43,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x4975d0::meth_0x4975d0(cls_0x4975d0 *this
   uVar4 = 0;
   if (0 < (int)this->mbr_0x0) {
     do {
-      iVar5 = FUN_0059a530();
+      iVar5 = FUN_0059a530_stricmp();
       if (iVar5 == 0) goto LAB_00497634;
       uVar4 = uVar4 + 1;
     } while ((int)uVar4 < (int)this->mbr_0x0);
@@ -79,16 +79,16 @@ OOAnalyzer::cls_0x4975d0::meth_0x497700(cls_0x4975d0 *this,undefined4 param_1,un
            (*(int *)(this->mbr_0x8014 + uVar5 * 4) != 0)) && (in_stack_0000000c != 0)) &&
          ((((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar5 * 4), pcVar1 != (char *)0x0 &&
             (*pcVar1 != '\0')) &&
-           (iVar3 = FUN_0059a530(pcVar1,*(undefined4 *)(in_stack_0000000c + 0x38)), iVar3 == 0)) ||
+           (iVar3 = FUN_0059a530_stricmp(pcVar1,*(undefined4 *)(in_stack_0000000c + 0x38)), iVar3 == 0)) ||
           (((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar5 * 4), pcVar1 != (char *)0x0 &&
             (*pcVar1 != '\0')) &&
-           (iVar3 = FUN_0059a530(pcVar1,**(undefined4 **)(in_stack_0000000c + 0x4c)), iVar3 == 0))))
+           (iVar3 = FUN_0059a530_stricmp(pcVar1,**(undefined4 **)(in_stack_0000000c + 0x4c)), iVar3 == 0))))
          )) {
         iVar6 = 0;
         iVar3 = *(int *)(this->mbr_0x8014 + uVar5 * 4);
         if (0 < *(int *)(iVar3 + 0x24)) {
           do {
-            iVar4 = FUN_0059a530(*(int *)(*(int *)(iVar3 + 0x34) + iVar6 * 4) + 8,param_1);
+            iVar4 = FUN_0059a530_stricmp(*(int *)(*(int *)(iVar3 + 0x34) + iVar6 * 4) + 8,param_1);
             if (iVar4 == 0) {
               piVar2 = *(int **)(*(int *)(iVar3 + 0x34) + iVar6 * 4);
               if (*piVar2 == 0) {
@@ -128,16 +128,16 @@ int __thiscall OOAnalyzer::cls_0x4975d0::meth_0x497800(cls_0x4975d0 *this,undefi
            (*(int *)(this->mbr_0x8014 + uVar5 * 4) != 0)) && (in_stack_00000008 != 0)) &&
          ((((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar5 * 4), pcVar1 != (char *)0x0 &&
             (*pcVar1 != '\0')) &&
-           (iVar3 = FUN_0059a530(pcVar1,*(undefined4 *)(in_stack_00000008 + 0x38)), iVar3 == 0)) ||
+           (iVar3 = FUN_0059a530_stricmp(pcVar1,*(undefined4 *)(in_stack_00000008 + 0x38)), iVar3 == 0)) ||
           (((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar5 * 4), pcVar1 != (char *)0x0 &&
             (*pcVar1 != '\0')) &&
-           (iVar3 = FUN_0059a530(pcVar1,**(undefined4 **)(in_stack_00000008 + 0x4c)), iVar3 == 0))))
+           (iVar3 = FUN_0059a530_stricmp(pcVar1,**(undefined4 **)(in_stack_00000008 + 0x4c)), iVar3 == 0))))
          )) {
         iVar6 = 0;
         iVar3 = *(int *)(this->mbr_0x8014 + uVar5 * 4);
         if (0 < *(int *)(iVar3 + 0x24)) {
           do {
-            iVar4 = FUN_0059a530(*(int *)(*(int *)(iVar3 + 0x34) + iVar6 * 4) + 8,param_1);
+            iVar4 = FUN_0059a530_stricmp(*(int *)(*(int *)(iVar3 + 0x34) + iVar6 * 4) + 8,param_1);
             if (iVar4 == 0) {
               piVar2 = *(int **)(*(int *)(iVar3 + 0x34) + iVar6 * 4);
               if ((*piVar2 == 0) && (iVar3 = *(int *)piVar2[1], iVar3 != -20000000)) {
@@ -186,16 +186,16 @@ LAB_00497926:
        (*(int *)(this->mbr_0x8014 + uVar7 * 4) != 0)) && (in_stack_0000000c != 0)) &&
      ((((pcVar10 = **(char ***)(this->mbr_0x8014 + uVar7 * 4), pcVar10 != (char *)0x0 &&
         (*pcVar10 != '\0')) &&
-       (iVar3 = FUN_0059a530(pcVar10,*(undefined4 *)(in_stack_0000000c + 0x38)), iVar3 == 0)) ||
+       (iVar3 = FUN_0059a530_stricmp(pcVar10,*(undefined4 *)(in_stack_0000000c + 0x38)), iVar3 == 0)) ||
       (((pcVar10 = **(char ***)(this->mbr_0x8014 + uVar7 * 4), pcVar10 != (char *)0x0 &&
         (*pcVar10 != '\0')) &&
-       (iVar3 = FUN_0059a530(pcVar10,**(undefined4 **)(in_stack_0000000c + 0x4c)), iVar3 == 0))))))
+       (iVar3 = FUN_0059a530_stricmp(pcVar10,**(undefined4 **)(in_stack_0000000c + 0x4c)), iVar3 == 0))))))
   {
     iVar9 = 0;
     iVar3 = *(int *)(this->mbr_0x8014 + uVar7 * 4);
     if (0 < *(int *)(iVar3 + 0x24)) {
       do {
-        iVar4 = FUN_0059a530(*(int *)(*(int *)(iVar3 + 0x34) + iVar9 * 4) + 8,param_1);
+        iVar4 = FUN_0059a530_stricmp(*(int *)(*(int *)(iVar3 + 0x34) + iVar9 * 4) + 8,param_1);
         if (iVar4 == 0) {
           piVar2 = *(int **)(*(int *)(iVar3 + 0x34) + iVar9 * 4);
           if (*piVar2 == 1) {
@@ -263,16 +263,16 @@ int __thiscall OOAnalyzer::cls_0x4975d0::meth_0x497a30(cls_0x4975d0 *this,undefi
            (*(int *)(this->mbr_0x8014 + uVar5 * 4) != 0)) && (in_stack_00000008 != 0)) &&
          ((((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar5 * 4), pcVar1 != (char *)0x0 &&
             (*pcVar1 != '\0')) &&
-           (iVar3 = FUN_0059a530(pcVar1,*(undefined4 *)(in_stack_00000008 + 0x38)), iVar3 == 0)) ||
+           (iVar3 = FUN_0059a530_stricmp(pcVar1,*(undefined4 *)(in_stack_00000008 + 0x38)), iVar3 == 0)) ||
           (((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar5 * 4), pcVar1 != (char *)0x0 &&
             (*pcVar1 != '\0')) &&
-           (iVar3 = FUN_0059a530(pcVar1,**(undefined4 **)(in_stack_00000008 + 0x4c)), iVar3 == 0))))
+           (iVar3 = FUN_0059a530_stricmp(pcVar1,**(undefined4 **)(in_stack_00000008 + 0x4c)), iVar3 == 0))))
          )) {
         iVar6 = 0;
         iVar3 = *(int *)(this->mbr_0x8014 + uVar5 * 4);
         if (0 < *(int *)(iVar3 + 0x24)) {
           do {
-            iVar4 = FUN_0059a530(*(int *)(*(int *)(iVar3 + 0x34) + iVar6 * 4) + 8,param_1);
+            iVar4 = FUN_0059a530_stricmp(*(int *)(*(int *)(iVar3 + 0x34) + iVar6 * 4) + 8,param_1);
             if (iVar4 == 0) {
               piVar2 = *(int **)(*(int *)(iVar3 + 0x34) + iVar6 * 4);
               if ((*piVar2 == 1) && (iVar3 = piVar2[1], iVar3 != 0)) {
@@ -311,16 +311,16 @@ int __thiscall OOAnalyzer::cls_0x4975d0::meth_0x497b40(cls_0x4975d0 *this,undefi
            (*(int *)(this->mbr_0x8014 + uVar4 * 4) != 0)) && (in_stack_00000008 != 0)) &&
          ((((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar4 * 4), pcVar1 != (char *)0x0 &&
             (*pcVar1 != '\0')) &&
-           (iVar2 = FUN_0059a530(pcVar1,*(undefined4 *)(in_stack_00000008 + 0x38)), iVar2 == 0)) ||
+           (iVar2 = FUN_0059a530_stricmp(pcVar1,*(undefined4 *)(in_stack_00000008 + 0x38)), iVar2 == 0)) ||
           (((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar4 * 4), pcVar1 != (char *)0x0 &&
             (*pcVar1 != '\0')) &&
-           (iVar2 = FUN_0059a530(pcVar1,**(undefined4 **)(in_stack_00000008 + 0x4c)), iVar2 == 0))))
+           (iVar2 = FUN_0059a530_stricmp(pcVar1,**(undefined4 **)(in_stack_00000008 + 0x4c)), iVar2 == 0))))
          )) {
         iVar5 = 0;
         iVar2 = *(int *)(this->mbr_0x8014 + uVar4 * 4);
         if (0 < *(int *)(iVar2 + 0x24)) {
           do {
-            iVar3 = FUN_0059a530(*(int *)(*(int *)(iVar2 + 0x34) + iVar5 * 4) + 8,param_1);
+            iVar3 = FUN_0059a530_stricmp(*(int *)(*(int *)(iVar2 + 0x34) + iVar5 * 4) + 8,param_1);
             if (iVar3 == 0) {
               iVar2 = **(int **)(*(int *)(iVar2 + 0x34) + iVar5 * 4);
               if (iVar2 != -1) {

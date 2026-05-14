@@ -13,7 +13,7 @@ void cls_0x443330::meth_0x443330()
   dword dVar2;
   int in_stack_00000004;
   
-  iVar1 = FUN_00452690(in_stack_00000004,0);
+  iVar1 = FUN_00452690_TMapPane_GetInstance(in_stack_00000004,0);
   if ((iVar1 != 0) &&
      ((this->mbr_0x17c != (int)*(short *)(iVar1 + 4) ||
       (this->mbr_0x180 != (int)*(short *)(iVar1 + 6))))) {

@@ -104,7 +104,7 @@ void cls_0x5a502c::virt_meth_0x46caf0()
           if (((this->mbr_0x1d0 != 0) && (iVar4 = *(int *)(this->mbr_0x180 + 0x98), 0 < iVar4)) &&
              (DAT_00659c68 == 0)) {
             DAT_00659c68 = 1;
-            FUN_00483300(0,iVar4 + -1);
+            FUN_00483300_RandomRange(0,iVar4 + -1);
             cls_0x5a3d44::meth_0x430b80((cls_0x5a3d44 *)this->mbr_0x180);
             this->mbr_0x1cc = 1;
           }

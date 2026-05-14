@@ -14,7 +14,7 @@ Length: 32796 Alignment: 1
 
 // Function at 00497370
 
-cls_0x492170 * __thiscall OOAnalyzer::cls_0x497370::meth_0x497370(cls_0x497370 *this)
+cls_0x492170 * __thiscall OOAnalyzer::cls_0x497370::meth_0x497370_TScriptManager_ObjectScript(cls_0x497370 *this)
 
 {
   char *pcVar1;
@@ -31,7 +31,7 @@ cls_0x492170 * __thiscall OOAnalyzer::cls_0x497370::meth_0x497370(cls_0x497370 *
           (*(int *)(this->mbr_0x8014 + uVar5 * 4) != 0)) &&
          (((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar5 * 4), pcVar1 != (char *)0x0 &&
            (*pcVar1 != '\0')) &&
-          (iVar2 = FUN_0059a530(pcVar1,*(undefined4 *)(in_stack_00000004 + 0x38)), iVar2 == 0)))) {
+          (iVar2 = FUN_0059a530_stricmp(pcVar1,*(undefined4 *)(in_stack_00000004 + 0x38)), iVar2 == 0)))) {
         pcVar3 = (cls_0x492170 *)FUN_00482fb0(0xe8);
         if (pcVar3 == (cls_0x492170 *)0x0) goto LAB_00497498;
         pcVar3 = cls_0x492170::cls_0x492170(pcVar3,in_stack_00000004);
@@ -47,7 +47,7 @@ cls_0x492170 * __thiscall OOAnalyzer::cls_0x497370::meth_0x497370(cls_0x497370 *
          ((*(int *)(this->mbr_0x8014 + uVar5 * 4) != 0 &&
           (((pcVar1 = **(char ***)(this->mbr_0x8014 + uVar5 * 4), pcVar1 != (char *)0x0 &&
             (*pcVar1 != '\0')) &&
-           (iVar2 = FUN_0059a530(pcVar1,**(undefined4 **)(in_stack_00000004 + 0x4c)), iVar2 == 0))))
+           (iVar2 = FUN_0059a530_stricmp(pcVar1,**(undefined4 **)(in_stack_00000004 + 0x4c)), iVar2 == 0))))
          )) {
         pcVar3 = (cls_0x492170 *)FUN_00482fb0(0xe8);
         if (pcVar3 == (cls_0x492170 *)0x0) {

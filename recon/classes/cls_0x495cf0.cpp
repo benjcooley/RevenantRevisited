@@ -47,7 +47,7 @@ Length: 32836 Alignment: 1
 /* WARNING: Removing unreachable block (ram,0x00495f5a) */
 /* WARNING: Removing unreachable block (ram,0x00495f5d) */
 
-void __thiscall OOAnalyzer::cls_0x495cf0::meth_0x495cf0(cls_0x495cf0 *this)
+void __thiscall OOAnalyzer::cls_0x495cf0::meth_0x495cf0_TGameState_Load(cls_0x495cf0 *this)
 
 {
   undefined *puVar1;
@@ -110,7 +110,7 @@ void __thiscall OOAnalyzer::cls_0x495cf0::meth_0x495cf0(cls_0x495cf0 *this)
 
 // Function at 00496240
 
-undefined4 __thiscall OOAnalyzer::cls_0x495cf0::meth_0x496240(cls_0x495cf0 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x495cf0::meth_0x496240_TScriptManager_Initialize(cls_0x495cf0 *this)
 
 {
   uint uVar1;
@@ -156,12 +156,12 @@ undefined4 __thiscall OOAnalyzer::cls_0x495cf0::meth_0x496240(cls_0x495cf0 *this
   }
   this->mbr_0x8030 = 0;
   this->mbr_0x802c = 0;
-  iVar2 = meth_0x496490(this);
+  iVar2 = meth_0x496490_TScriptManager_Load(this);
   if (iVar2 == 0) {
     FUN_00481c10(s_Unable_to_load_MASTER_S_file_005da4e8,0);
   }
   if (DAT_0066829c == 0) {
-    iVar2 = meth_0x495cf0(this);
+    iVar2 = meth_0x495cf0_TGameState_Load(this);
     if (iVar2 == 0) {
       FUN_00481c10(s_Unable_to_load_STATE_DEF_file_005da514,0);
     }
@@ -173,7 +173,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x495cf0::meth_0x496240(cls_0x495cf0 *this
 
 // Function at 00496490
 
-undefined4 __thiscall OOAnalyzer::cls_0x495cf0::meth_0x496490(cls_0x495cf0 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x495cf0::meth_0x496490_TScriptManager_Load(cls_0x495cf0 *this)
 
 {
   int iVar1;
@@ -223,14 +223,14 @@ undefined4 __thiscall OOAnalyzer::cls_0x495cf0::meth_0x496490(cls_0x495cf0 *this
     if (iVar3 != 0) {
       FUN_00483540(iVar2,iVar1);
     }
-    meth_0x496860(this,iVar2,in_stack_00000004);
+    meth_0x496860_TScriptManager_ParseScripts(this,iVar2,in_stack_00000004);
   }
   FUN_004830f0(iVar2);
   FUN_004a1540(iVar4);
   iVar4 = 0;
   if (0 < (int)this->mbr_0x802c) {
     do {
-      iVar1 = FUN_0059a530(*(undefined4 *)(this->mbr_0x803c + iVar4 * 4),in_stack_00000004);
+      iVar1 = FUN_0059a530_stricmp(*(undefined4 *)(this->mbr_0x803c + iVar4 * 4),in_stack_00000004);
       if (iVar1 == 0) {
         if ((-1 < iVar4) && (iVar4 = *(int *)(this->mbr_0x803c + iVar4 * 4), iVar4 != 0)) {
           *(undefined4 *)(iVar4 + 0x80) = in_stack_00000008;
@@ -258,7 +258,7 @@ LAB_00496638:
 
 // Function at 004967a0
 
-void __thiscall OOAnalyzer::cls_0x495cf0::meth_0x4967a0(cls_0x495cf0 *this)
+void __thiscall OOAnalyzer::cls_0x495cf0::meth_0x4967a0_TScriptManager_Clear(cls_0x495cf0 *this)
 
 {
   int iVar1;
@@ -274,7 +274,7 @@ void __thiscall OOAnalyzer::cls_0x495cf0::meth_0x4967a0(cls_0x495cf0 *this)
          ((iVar1 = *(int *)(this->mbr_0x8014 + uVar3 * 4),
           *(int *)(iVar1 + 0x38) == in_stack_00000004 && (iVar1 != 0)))) {
         meth_0x496f20(this,uVar3);
-        FUN_004948e0();
+        FUN_004948e0_TScriptProto_Dtor();
         FUN_004830f0(iVar1);
       }
       uVar3 = uVar3 + 1;
@@ -298,7 +298,7 @@ void __thiscall OOAnalyzer::cls_0x495cf0::meth_0x4967a0(cls_0x495cf0 *this)
 // Function at 00496860
 
 void __thiscall
-OOAnalyzer::cls_0x495cf0::meth_0x496860(cls_0x495cf0 *this,byte **param_1,undefined4 param_2)
+OOAnalyzer::cls_0x495cf0::meth_0x496860_TScriptManager_ParseScripts(cls_0x495cf0 *this,byte **param_1,undefined4 param_2)
 
 {
   uint *puVar1;
@@ -458,10 +458,10 @@ joined_r0x00496ddb:
       param_1 = (byte **)0x0;
     }
     else {
-      param_1 = (byte **)FUN_004946f0(0,in_stack_0000000c,param_2,0);
+      param_1 = (byte **)FUN_004946f0_TScriptProto_Ctor(0,in_stack_0000000c,param_2,0);
     }
     local_4 = CONCAT31(local_4._1_3_,1);
-    iVar10 = FUN_00494e20(&local_4c);
+    iVar10 = FUN_00494e20_TScriptProto_ParseScript(&local_4c);
     if (iVar10 != -1) {
       uVar9 = 0;
       if (0 < (int)this->mbr_0x8004) {
@@ -502,7 +502,7 @@ LAB_00496aa1:
       goto LAB_00496be3;
     }
     if (param_1 != (byte **)0x0) {
-      FUN_004948e0();
+      FUN_004948e0_TScriptProto_Dtor();
       FUN_004830f0(param_1);
     }
     local_4 = 3;
@@ -537,7 +537,7 @@ LAB_00496b06:
   if (iVar10 == 0) {
 LAB_00496baf:
     if (param_1 != (byte **)0x0) {
-      FUN_004948e0();
+      FUN_004948e0_TScriptProto_Dtor();
       FUN_004830f0(param_1);
     }
 LAB_00496bc3:
@@ -549,7 +549,7 @@ LAB_00496bc3:
     meth_0x496f20(this,uVar9);
     cls_0x45f7c0::meth_0x41cb40((cls_0x45f7c0 *)&this->mbr_0x8004);
     if (piVar4 != (int *)0x0) {
-      FUN_004948e0();
+      FUN_004948e0_TScriptProto_Dtor();
       FUN_004830f0(piVar4);
     }
     cls_0x45f7c0::meth_0x41c910((cls_0x45f7c0 *)&this->mbr_0x8004,param_1);
@@ -666,7 +666,7 @@ void __thiscall OOAnalyzer::cls_0x495cf0::meth_0x4970b0(cls_0x495cf0 *this)
   if (0 < (int)this->mbr_0x802c) {
     do {
       uVar1 = *(undefined4 *)(this->mbr_0x803c + iVar3 * 4);
-      iVar2 = meth_0x496490(this);
+      iVar2 = meth_0x496490_TScriptManager_Load(this);
       if (iVar2 != 0) {
         if (DAT_00668154 == 0) {
           FUN_0054d170(&DAT_0065c5d0,s_Unable_to_reload_script_file___s_005da690,uVar1);

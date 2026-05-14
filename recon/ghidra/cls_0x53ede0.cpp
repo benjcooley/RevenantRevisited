@@ -29,7 +29,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x53ede0::meth_0x53ede0(cls_0x53ede0 *this
   pcVar4 = this;
   if (0 < (int)this->mbr_0x4) {
     do {
-      uVar1 = FUN_0059a530((uint)pcVar4,(byte *)(*(int *)(this->mbr_0x14 + iVar6 * 4) + 0x1c),
+      uVar1 = FUN_0059a530_stricmp((uint)pcVar4,(byte *)(*(int *)(this->mbr_0x14 + iVar6 * 4) + 0x1c),
                            in_stack_00000004);
       if (uVar1 == 0) {
         return *(undefined4 *)(this->mbr_0x14 + iVar6 * 4);
@@ -44,7 +44,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x53ede0::meth_0x53ede0(cls_0x53ede0 *this
           if (uVar1 == 0) {
             uVar3 = piVar2[5];
           }
-          uVar1 = FUN_0059a530(uVar1,(byte *)(uVar3 + 4),in_stack_00000004);
+          uVar1 = FUN_0059a530_stricmp(uVar1,(byte *)(uVar3 + 4),in_stack_00000004);
           if (uVar1 == 0) {
             return *(undefined4 *)(this->mbr_0x14 + iVar6 * 4);
           }

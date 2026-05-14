@@ -35,7 +35,7 @@ void cls_0x5b93c4::virt_meth_0x435150(undefined4 param_1, undefined4 param_2, ui
   this->virt_meth_0x434e40();
   this->mbr_0x60 = param_3;
   if (param_10 == (byte *)0x0) goto LAB_004351de;
-  uVar3 = FUN_0059a530(extraout_ECX,param_10,(byte *)s_widgets_005cd8e8);
+  uVar3 = FUN_0059a530_stricmp(extraout_ECX,param_10,(byte *)s_widgets_005cd8e8);
   if (uVar3 != 0) {
     cls_0x5b98b8::meth_0x435990((cls_0x5b98b8 *)this);
     goto LAB_004351de;
@@ -895,7 +895,7 @@ undefined4 cls_0x5b93c4::meth_0x442e10()
   local_18c = (byte *)0x0;
   pbVar14 = (byte *)this->mbr_0x194;
   while (pbVar15 = pbVar14, pbVar15 != (byte *)0x0) {
-    uVar10 = FUN_0059a530(uVar10,in_stack_00000004,pbVar15);
+    uVar10 = FUN_0059a530_stricmp(uVar10,in_stack_00000004,pbVar15);
     if (uVar10 == 0) {
       return *(undefined4 *)(pbVar15 + 0x50);
     }
@@ -987,7 +987,7 @@ int cls_0x5b93c4::meth_0x4430f0()
        ((((uVar2 == 6 ||
           ((((uVar2 == 0x11 || (uVar2 == 0x16)) || (uVar2 == 0x10)) ||
            ((uVar2 == 0x15 || (uVar2 == 0x17)))))) || (uVar2 == 3)) || (uVar2 == 8)))))))) {
-    if ((uVar2 < DAT_0065a258) && (iVar5 = (&DAT_0065a148)[uVar2], iVar5 != 0)) {
+    if ((uVar2 < DAT_0065a258_TObjectClass_numclasses) && (iVar5 = (&DAT_0065a148_TObjectClass_classes)[uVar2], iVar5 != 0)) {
       uVar2 = this->mbr_0x180;
       if ((*(int *)(iVar5 + 0x34) == 0) ||
          ((*(uint *)(iVar5 + 0x24) <= uVar2 || (*(int *)(*(int *)(iVar5 + 0x34) + uVar2 * 4) == 0)))
@@ -1027,7 +1027,7 @@ int cls_0x5b93c4::meth_0x4430f0()
     return -1;
   }
   cls_0x4405d0::meth_0x4405d0((cls_0x4405d0 *)&DAT_00656e78,iVar5);
-  FUN_00452690(iVar5,0);
+  FUN_00452690_TMapPane_GetInstance(iVar5,0);
   return iVar5;
 }
 
@@ -1110,30 +1110,30 @@ LAB_0052fff0:
     goto LAB_0053051d;
   }
   if ((this->mbr_0x17c & 2) == 0) goto LAB_0053051d;
-  this_00 = (cls_0x4746d0 *)(-(uint)(2 < DAT_0065a258) & DAT_0065a150);
+  this_00 = (cls_0x4746d0 *)(-(uint)(2 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a150);
   uVar6 = cls_0x4746d0::meth_0x475210(this_00,*(undefined4 *)(this->mbr_0x198 + 8 + dVar10 * 0x48));
   if (uVar6 == 0xffffffff) {
-    this_00 = (cls_0x4746d0 *)(-(uint)(1 < DAT_0065a258) & DAT_0065a14c);
+    this_00 = (cls_0x4746d0 *)(-(uint)(1 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a14c);
     uVar6 = cls_0x4746d0::meth_0x475210
                       (this_00,*(undefined4 *)(this->mbr_0x198 + 8 + this->mbr_0x188 * 0x48));
     if (uVar6 != 0xffffffff) goto LAB_00530291;
-    this_00 = (cls_0x4746d0 *)(-(uint)(4 < DAT_0065a258) & DAT_0065a158);
+    this_00 = (cls_0x4746d0 *)(-(uint)(4 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a158);
     uVar6 = cls_0x4746d0::meth_0x475210
                       (this_00,*(undefined4 *)(this->mbr_0x198 + 8 + this->mbr_0x188 * 0x48));
     if (uVar6 != 0xffffffff) goto LAB_00530291;
-    this_00 = (cls_0x4746d0 *)(-(uint)(0x12 < DAT_0065a258) & DAT_0065a190);
+    this_00 = (cls_0x4746d0 *)(-(uint)(0x12 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a190);
     uVar6 = cls_0x4746d0::meth_0x475210
                       (this_00,*(undefined4 *)(this->mbr_0x198 + 8 + this->mbr_0x188 * 0x48));
     if (uVar6 != 0xffffffff) goto LAB_00530291;
-    this_00 = (cls_0x4746d0 *)(-(uint)(5 < DAT_0065a258) & DAT_0065a15c);
+    this_00 = (cls_0x4746d0 *)(-(uint)(5 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a15c);
     uVar6 = cls_0x4746d0::meth_0x475210
                       (this_00,*(undefined4 *)(this->mbr_0x198 + 8 + this->mbr_0x188 * 0x48));
     if (uVar6 != 0xffffffff) goto LAB_00530291;
-    this_00 = (cls_0x4746d0 *)(-(uint)(0x11 < DAT_0065a258) & DAT_0065a18c);
+    this_00 = (cls_0x4746d0 *)(-(uint)(0x11 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a18c);
     uVar6 = cls_0x4746d0::meth_0x475210
                       (this_00,*(undefined4 *)(this->mbr_0x198 + 8 + this->mbr_0x188 * 0x48));
     if (uVar6 != 0xffffffff) goto LAB_00530291;
-    this_00 = (cls_0x4746d0 *)(-(uint)(0x15 < DAT_0065a258) & DAT_0065a19c);
+    this_00 = (cls_0x4746d0 *)(-(uint)(0x15 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a19c);
     uVar6 = cls_0x4746d0::meth_0x475210
                       (this_00,*(undefined4 *)(this->mbr_0x198 + 8 + this->mbr_0x188 * 0x48));
     if (uVar6 != 0xffffffff) goto LAB_00530291;
@@ -1212,7 +1212,7 @@ LAB_00530291:
     cls_0x477870::meth_0x46dfb0(&local_1c);
     dVar10 = local_1c.mbr_0x18;
     while (local_1c.mbr_0x18 = dVar10, dVar10 != 0) {
-      uVar6 = FUN_0059a530(*(uint *)(dVar10 + 0x38),(byte *)*(uint *)(dVar10 + 0x38),
+      uVar6 = FUN_0059a530_stricmp(*(uint *)(dVar10 + 0x38),(byte *)*(uint *)(dVar10 + 0x38),
                            *(byte **)(this->mbr_0x198 + 8 + this->mbr_0x188 * 0x48));
       if ((uVar6 == 0) && (iVar5 = FUN_00470070(dVar10), iVar5 == 0)) goto LAB_0053051d;
       cls_0x477870::meth_0x46dfb0(&local_1c);
@@ -1278,7 +1278,7 @@ undefined4 cls_0x5b93c4::virt_meth_0x5339b0()
   local_c = ExceptionList;
   ExceptionList = &local_c;
   this->virt_meth_0x434e40();
-  FUN_00483300(0,4);
+  FUN_00483300_RandomRange(0,4);
   iVar1 = cls_0x41c7d0::meth_0x49c430((cls_0x41c7d0 *)&DAT_00667548);
   if ((-1 < iVar1) &&
      (iVar2 = cls_0x41c7d0::meth_0x49b650((cls_0x41c7d0 *)&DAT_00667548), iVar2 != 0)) {
@@ -2097,7 +2097,7 @@ LAB_005481fa:
                       if ((local_20c == 4) && (iVar9 = 0, 0 < iStack_1d4)) {
                         pbVar14 = abStack_b4;
                         do {
-                          uVar10 = FUN_0059a530((uint)local_1f4,pbVar14,(byte *)local_1f4);
+                          uVar10 = FUN_0059a530_stricmp((uint)local_1f4,pbVar14,(byte *)local_1f4);
                           if (uVar10 == 0) {
                             puStack_1cc = auStack_108 + iVar9;
                             FUN_00479580((byte *)&local_21c);
@@ -2163,7 +2163,7 @@ LAB_005481fa:
                           pbVar14 = abStack_b4;
                           uVar10 = extraout_ECX_01;
                           do {
-                            uVar10 = FUN_0059a530(uVar10,pbVar14,pbStack_1ac);
+                            uVar10 = FUN_0059a530_stricmp(uVar10,pbVar14,pbStack_1ac);
                             if (uVar10 == 0) {
                               puStack_1cc = auStack_108 + iVar11;
                               break;
@@ -2219,7 +2219,7 @@ LAB_005481fa:
                               cls_0x5b98b8::meth_0x546de0((cls_0x5b98b8 *)this,uVar4,iStack_228);
                             }
                             else {
-                              uVar10 = FUN_0059a530(uVar10,(byte *)this->mbr_0x190,&DAT_005e55f4);
+                              uVar10 = FUN_0059a530_stricmp(uVar10,(byte *)this->mbr_0x190,&DAT_005e55f4);
                               if ((uVar10 == 0) || (iStack_190 != 0)) {
                                 if ((int)this->mbr_0x1ac < (int)this->mbr_0x1b0) {
                                   uStack_1b6 = 6;
@@ -2236,7 +2236,7 @@ LAB_005481fa:
                                 }
                               }
                               else {
-                                uVar10 = FUN_0059a530(extraout_ECX_06,(byte *)this->mbr_0x190,
+                                uVar10 = FUN_0059a530_stricmp(extraout_ECX_06,(byte *)this->mbr_0x190,
                                                       &DAT_005e55fc);
                                 if ((uVar10 == 0) || (pcStack_19c != (cls_0x5a3c68 *)0x0)) {
                                   if ((int)this->mbr_0x1ac < 1) {
@@ -2450,7 +2450,7 @@ LAB_00547dcd:
                   pbVar14 = abStack_b4;
                   uVar10 = extraout_ECX;
                   do {
-                    uVar10 = FUN_0059a530(uVar10,pbVar14,(byte *)local_1f4);
+                    uVar10 = FUN_0059a530_stricmp(uVar10,pbVar14,(byte *)local_1f4);
                     if (uVar10 == 0) {
                       puVar13 = auStack_108 + iVar7;
                       if (iVar7 < iStack_1d4) goto LAB_00547df9;

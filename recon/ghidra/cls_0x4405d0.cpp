@@ -87,7 +87,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x4405d0::meth_0x4406e0(cls_0x4405d0 *this
   if (0 < (int)this->mbr_0x57c) {
     pdVar3 = &this->mbr_0x17c;
     do {
-      piVar1 = (int *)FUN_00452690(*pdVar3,0);
+      piVar1 = (int *)FUN_00452690_TMapPane_GetInstance(*pdVar3,0);
       if (piVar1 != (int *)0x0) {
         if ((piVar1[2] & 0x400U) != 0) {
           (**(code **)(*piVar1 + 0x40))(piVar1[2] & 0xfffffbff);
@@ -96,7 +96,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x4405d0::meth_0x4406e0(cls_0x4405d0 *this
           }
         }
         if (-1 < piVar1[0x14]) {
-          piVar1 = (int *)FUN_00452690(piVar1[0x14],0);
+          piVar1 = (int *)FUN_00452690_TMapPane_GetInstance(piVar1[0x14],0);
           if ((piVar1 != (int *)0x0) && ((piVar1[2] & 0x400U) != 0)) {
             (**(code **)(*piVar1 + 0x40))(piVar1[2] & 0xfffffbff);
             if ((*(byte *)(piVar1 + 2) & 8) == 0) {
@@ -110,7 +110,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x4405d0::meth_0x4406e0(cls_0x4405d0 *this
     } while (iVar2 < (int)this->mbr_0x57c);
   }
   (**(code **)(this->mbr_0x0 + 0x2c))(1);
-  iVar2 = FUN_00452690((&this->mbr_0x17c)[this->mbr_0x580],0);
+  iVar2 = FUN_00452690_TMapPane_GetInstance((&this->mbr_0x17c)[this->mbr_0x580],0);
   if (iVar2 != 0) {
     TCharacter::meth_0x454920((TCharacter *)&DAT_006668d8);
   }
@@ -228,7 +228,7 @@ void __thiscall OOAnalyzer::cls_0x4405d0::meth_0x440b20(cls_0x4405d0 *this)
     pdVar5 = &this->mbr_0x594;
     do {
       this->mbr_0x588 = 1;
-      piVar3 = (int *)FUN_00452690(*pdVar4,0);
+      piVar3 = (int *)FUN_00452690_TMapPane_GetInstance(*pdVar4,0);
       if (piVar3 != (int *)0x0) {
         pdVar5[-2] = piVar3[4];
         dVar2 = piVar3[5];
@@ -241,7 +241,7 @@ void __thiscall OOAnalyzer::cls_0x4405d0::meth_0x440b20(cls_0x4405d0 *this)
           (**(code **)(*piVar3 + 0x40))(piVar3[2] | 0x400);
         }
         if ((((-1 < piVar3[0x14]) &&
-             (piVar3 = (int *)FUN_00452690(piVar3[0x14],0), piVar3 != (int *)0x0)) &&
+             (piVar3 = (int *)FUN_00452690_TMapPane_GetInstance(piVar3[0x14],0), piVar3 != (int *)0x0)) &&
             ((piVar3[2] & 2U) == 0)) && ((piVar3[2] & 0x400U) == 0)) {
           TCharacter::meth_0x454920((TCharacter *)&DAT_006668d8);
           (**(code **)(*piVar3 + 0x40))(piVar3[2] | 0x400);
@@ -270,7 +270,7 @@ void __thiscall OOAnalyzer::cls_0x4405d0::meth_0x440c60(cls_0x4405d0 *this)
   if (0 < (int)this->mbr_0x57c) {
     pdVar3 = &this->mbr_0x17c;
     do {
-      piVar1 = (int *)FUN_00452690(*pdVar3,0);
+      piVar1 = (int *)FUN_00452690_TMapPane_GetInstance(*pdVar3,0);
       if (piVar1 != (int *)0x0) {
         if (((piVar1[2] & 0x400U) != 0) &&
            ((**(code **)(*piVar1 + 0x40))(piVar1[2] & 0xfffffbff), (*(byte *)(piVar1 + 2) & 8) == 0)
@@ -278,7 +278,7 @@ void __thiscall OOAnalyzer::cls_0x4405d0::meth_0x440c60(cls_0x4405d0 *this)
           TCharacter::meth_0x454920((TCharacter *)&DAT_006668d8);
         }
         if ((((-1 < piVar1[0x14]) &&
-             (piVar1 = (int *)FUN_00452690(piVar1[0x14],0), piVar1 != (int *)0x0)) &&
+             (piVar1 = (int *)FUN_00452690_TMapPane_GetInstance(piVar1[0x14],0), piVar1 != (int *)0x0)) &&
             ((piVar1[2] & 0x400U) != 0)) &&
            ((**(code **)(*piVar1 + 0x40))(piVar1[2] & 0xfffffbff), (*(byte *)(piVar1 + 2) & 8) == 0)
            ) {
@@ -310,7 +310,7 @@ void __thiscall OOAnalyzer::cls_0x4405d0::meth_0x440d20(cls_0x4405d0 *this)
     pdVar4 = &this->mbr_0x58c;
     pdVar3 = &this->mbr_0x17c;
     do {
-      piVar1 = (int *)FUN_00452690(*pdVar3,0);
+      piVar1 = (int *)FUN_00452690_TMapPane_GetInstance(*pdVar3,0);
       (**(code **)(*piVar1 + 8))(pdVar4,0xffffffff,0);
       iVar2 = iVar2 + 1;
       pdVar3 = pdVar3 + 1;
@@ -335,7 +335,7 @@ void __thiscall OOAnalyzer::cls_0x4405d0::meth_0x440d70(cls_0x4405d0 *this)
   int in_stack_00000004;
   undefined local_10 [16];
   
-  piVar3 = (int *)FUN_00452690((&this->mbr_0x17c)[this->mbr_0x580],0);
+  piVar3 = (int *)FUN_00452690_TMapPane_GetInstance((&this->mbr_0x17c)[this->mbr_0x580],0);
   if ((piVar3 != (int *)0x0) && (*(short *)(piVar3 + 1) == 9)) {
     iVar1 = piVar3[4];
     (**(code **)(*piVar3 + 0xf4))(local_10);

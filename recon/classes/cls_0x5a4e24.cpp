@@ -92,7 +92,7 @@ OOAnalyzer::cls_0x5a4e24::virt_meth_0x4697a0
   int in_stack_00000014;
   
   *param_2 = 0;
-  iVar1 = FUN_0059a530(param_1,s_startpos_005d3c74);
+  iVar1 = FUN_0059a530_stricmp(param_1,s_startpos_005d3c74);
   if (iVar1 != 0) {
     uVar3 = cls_0x5b93c4::virt_meth_0x436ea0((cls_0x5b93c4 *)this);
     return uVar3;
@@ -129,7 +129,7 @@ void __thiscall OOAnalyzer::cls_0x5a4e24::virt_meth_0x469890(cls_0x5a4e24 *this)
   if (((DAT_00668128 != 0) && (this->mbr_0x188 != 0)) && (this->mbr_0x184 == 0)) {
     this->mbr_0x188 = 0;
     this->mbr_0x184 = 1;
-    FUN_00483300(0,*(int *)(this->mbr_0x17c + 0x98) + -1);
+    FUN_00483300_RandomRange(0,*(int *)(this->mbr_0x17c + 0x98) + -1);
     cls_0x5a3d44::meth_0x430b80((cls_0x5a3d44 *)this->mbr_0x17c);
     pcVar1 = this->vftptr_0x0;
     cls_0x5b98b8::meth_0x436980((cls_0x5b98b8 *)this);

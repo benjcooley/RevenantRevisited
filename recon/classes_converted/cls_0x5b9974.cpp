@@ -69,7 +69,7 @@ void cls_0x5b9974::virt_meth_0x53c7c0()
 {
   dword dVar1;
   
-  TObjectInstance::virt_meth_0x48fda0(&this->TObjectInstance);
+  TObjectInstance::virt_meth_0x48fda0_TScreen_DrawBackground(&this->TObjectInstance);
   dVar1 = this->mbr_0x70 - 1;
   this->mbr_0x70 = dVar1;
   if (dVar1 == 0) {
@@ -94,7 +94,7 @@ void cls_0x5b9974::virt_meth_0x53c7f0()
     uVar1 = cls_0x46d6b0::meth_0x46d710((cls_0x46d6b0 *)this->mbr_0x78);
     cls_0x5a68d8::meth_0x4bd680((cls_0x5a68d8 *)PTR_DAT_005d79e0,0,0,uVar1,uVar2);
   }
-  TObjectInstance::virt_meth_0x48ff00(&this->TObjectInstance);
+  TObjectInstance::virt_meth_0x48ff00_TScreen_Animate(&this->TObjectInstance);
   (this->TObjectInstance).mbr_0x50 = 0;
   return;
 }

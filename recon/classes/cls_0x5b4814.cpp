@@ -192,7 +192,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b4814::virt_meth_0x515150(cls_0x5b4
     this_00[0xe].mbr_0xc = 1;
     local_4 = CONCAT31(local_4._1_3_,5);
     this_00->vftptr_0x0 = (cls_0x5a47f0__vftable_5a47f0 *)&PTR_virt_meth_0x5156c0_005b4a18;
-    dVar2 = cls_0x5b8e94::meth_0x4df070((cls_0x5b8e94 *)this_00->mbr_0x4);
+    dVar2 = cls_0x5b8e94_TObjectInstance::meth_0x4df070((cls_0x5b8e94_TObjectInstance *)this_00->mbr_0x4);
     this_00[0xe].mbr_0x14 = dVar2;
     ExceptionList = local_c;
     return this_00;

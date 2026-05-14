@@ -24,7 +24,7 @@ Length: 32836 Alignment: 1
 
 // Function at 00496330
 
-void __thiscall OOAnalyzer::cls_0x496330::meth_0x496330(cls_0x496330 *this)
+void __thiscall OOAnalyzer::cls_0x496330::meth_0x496330_TScriptManager_Close(cls_0x496330 *this)
 
 {
   cls_0x4922c0 *this_00;
@@ -37,7 +37,7 @@ void __thiscall OOAnalyzer::cls_0x496330::meth_0x496330(cls_0x496330 *this)
   char local_104 [260];
   
   if (DAT_00668154 != 0) {
-    meth_0x496690(this,s_master_s_005da534);
+    meth_0x496690_TScriptManager_Save(this,s_master_s_005da534);
     FUN_0058b100(local_104,&DAT_005da4d4);
   }
   iVar4 = 0;
@@ -71,7 +71,7 @@ void __thiscall OOAnalyzer::cls_0x496330::meth_0x496330(cls_0x496330 *this)
     do {
       if ((-1 < iVar4) &&
          (ppvVar1 = *(LPCVOID **)(this->mbr_0x8014 + iVar4 * 4), ppvVar1 != (LPCVOID *)0x0)) {
-        FUN_004948e0(ppvVar1);
+        FUN_004948e0_TScriptProto_Dtor(ppvVar1);
         FUN_004830f0(ppvVar1);
       }
       cls_0x45f7c0::meth_0x41cb40((cls_0x45f7c0 *)pdVar6);
@@ -114,7 +114,7 @@ void __thiscall OOAnalyzer::cls_0x496330::meth_0x496330(cls_0x496330 *this)
 
 // Function at 00496690
 
-undefined4 __thiscall OOAnalyzer::cls_0x496330::meth_0x496690(cls_0x496330 *this,undefined4 param_1)
+undefined4 __thiscall OOAnalyzer::cls_0x496330::meth_0x496690_TScriptManager_Save(cls_0x496330 *this,undefined4 param_1)
 
 {
   FILE *pFVar1;

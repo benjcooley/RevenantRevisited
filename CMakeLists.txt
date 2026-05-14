@@ -154,6 +154,10 @@ add_executable(test_anim_system
   tools/test_anim_system.cpp
   src/animsystem.cpp)
 
+add_executable(test_asset_cache
+  tools/test_asset_cache.cpp
+  src/assetcache.cpp)
+
 add_executable(test_transform
   tools/test_transform.cpp
   src/transform.cpp

@@ -46,10 +46,10 @@ cls_0x5b4ecc * __thiscall cls_0x5b4ecc::~cls_0x5b4ecc(cls_0x5b4ecc *this)
 
 // Function at 00520930
 
-cls_0x5b4f30 * cls_0x5b4ecc::virt_meth_0x520930(undefined4 param_1)
+cls_0x5b4f30_TPlayer * cls_0x5b4ecc::virt_meth_0x520930(undefined4 param_1)
 
 {
-  cls_0x5b4f30 *pcVar1;
+  cls_0x5b4f30_TPlayer *pcVar1;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -58,15 +58,15 @@ cls_0x5b4f30 * cls_0x5b4ecc::virt_meth_0x520930(undefined4 param_1)
   puStack_8 = &LAB_005a127b;
   local_c = ExceptionList;
   ExceptionList = &local_c;
-  pcVar1 = (cls_0x5b4f30 *)FUN_00482fb0(0x674);
+  pcVar1 = (cls_0x5b4f30_TPlayer *)FUN_00482fb0(0x674);
   local_4 = 0;
-  if (pcVar1 != (cls_0x5b4f30 *)0x0) {
-    pcVar1 = cls_0x5b4f30::cls_0x5b4f30(pcVar1,param_1);
+  if (pcVar1 != (cls_0x5b4f30_TPlayer *)0x0) {
+    pcVar1 = cls_0x5b4f30_TPlayer::cls_0x5b4f30_TPlayer(pcVar1,param_1);
     ExceptionList = local_c;
     return pcVar1;
   }
   ExceptionList = local_c;
-  return (cls_0x5b4f30 *)0x0;
+  return (cls_0x5b4f30_TPlayer *)0x0;
 }
 
 

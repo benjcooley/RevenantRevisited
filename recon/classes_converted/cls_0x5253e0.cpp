@@ -11,7 +11,7 @@ void cls_0x5253e0::meth_0x5253e0()
 {
   uint uVar1;
   
-  uVar1 = FUN_0059a530((uint)this,(byte *)this->mbr_0x38,(byte *)s_DunFireWallS_005e2fc4);
+  uVar1 = FUN_0059a530_stricmp((uint)this,(byte *)this->mbr_0x38,(byte *)s_DunFireWallS_005e2fc4);
   if (uVar1 == 0) {
     this->mbr_0xfc = 0x80;
   }

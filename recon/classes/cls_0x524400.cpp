@@ -21,7 +21,7 @@ void __thiscall OOAnalyzer::cls_0x524400::meth_0x524400(cls_0x524400 *this)
 {
   int iVar1;
   
-  iVar1 = FUN_0059a530(this->mbr_0x38,s_ArrowWallS_005e2f50);
+  iVar1 = FUN_0059a530_stricmp(this->mbr_0x38,s_ArrowWallS_005e2f50);
   if (iVar1 == 0) {
     this->mbr_0xfc = 0x80;
   }

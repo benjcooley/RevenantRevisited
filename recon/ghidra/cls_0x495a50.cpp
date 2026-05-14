@@ -27,7 +27,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x495a50::meth_0x495a50(cls_0x495a50 *this
   pcVar3 = this;
   if (0 < (int)this->mbr_0x24) {
     do {
-      uVar2 = FUN_0059a530((uint)pcVar3,(byte *)(*(int *)(this->mbr_0x34 + iVar4 * 4) + 8),
+      uVar2 = FUN_0059a530_stricmp((uint)pcVar3,(byte *)(*(int *)(this->mbr_0x34 + iVar4 * 4) + 8),
                            in_stack_00000004);
       if (uVar2 == 0) {
         piVar1 = *(int **)(this->mbr_0x34 + iVar4 * 4);

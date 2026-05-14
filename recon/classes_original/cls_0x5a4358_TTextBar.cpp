@@ -433,8 +433,8 @@ LAB_0043e5e1:
     FUN_0043a020(uVar4);
   }
 LAB_0043e61f:
-  uVar4 = cls_0x5a5320::meth_0x48ed60((cls_0x5a5320 *)&DAT_0065caf0);
-  cls_0x5a5320::meth_0x48eea0((cls_0x5a5320 *)&DAT_0065caf0,uVar4);
+  uVar4 = cls_0x5a5320_TPlayScreen::meth_0x48ed60((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
+  cls_0x5a5320_TPlayScreen::meth_0x48eea0((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0,uVar4);
   this->mbr_0xa8 = (dword)puVar2;
   return;
 }

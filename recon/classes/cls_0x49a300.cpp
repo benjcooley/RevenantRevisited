@@ -93,7 +93,7 @@ void __thiscall OOAnalyzer::cls_0x49a300::meth_0x49a4d0(cls_0x49a300 *this)
         this->mbr_0x3c = dVar2;
       }
       do {
-        dVar2 = FUN_00483300(0,this->mbr_0x3c - 1);
+        dVar2 = FUN_00483300_RandomRange(0,this->mbr_0x3c - 1);
         iVar1 = 0;
         pdVar3 = &this->mbr_0x30;
         do {

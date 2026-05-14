@@ -218,61 +218,61 @@ OOAnalyzer::cls_0x5a3544::virt_meth_0x405770(cls_0x5a3544 *this,undefined4 param
   int iVar1;
   undefined4 uVar2;
   
-  iVar1 = FUN_0059a530(param_1,&DAT_005c5c14);
+  iVar1 = FUN_0059a530_stricmp(param_1,&DAT_005c5c14);
   if (iVar1 == 0) {
     this->mbr_0x2c = 0;
     FUN_00479580();
     return 1;
   }
-  iVar1 = FUN_0059a530(param_1,s_normal_005c5c1c);
+  iVar1 = FUN_0059a530_stricmp(param_1,s_normal_005c5c1c);
   if (iVar1 == 0) {
     this->mbr_0x2c = 1;
     FUN_00479580();
     return 1;
   }
-  iVar1 = FUN_0059a530(param_1,s_alpha_005c5c24);
+  iVar1 = FUN_0059a530_stricmp(param_1,s_alpha_005c5c24);
   if (iVar1 == 0) {
     this->mbr_0x2c = 2;
     FUN_00479580();
     return 1;
   }
-  iVar1 = FUN_0059a530(param_1,s_litalpha_005c5c2c);
+  iVar1 = FUN_0059a530_stricmp(param_1,s_litalpha_005c5c2c);
   if (iVar1 == 0) {
     this->mbr_0x2c = 4;
     FUN_00479580();
     return 1;
   }
-  iVar1 = FUN_0059a530(param_1,&PTR_null_005c5c38);
+  iVar1 = FUN_0059a530_stricmp(param_1,&PTR_null_005c5c38);
   if (iVar1 == 0) {
     this->mbr_0x2c = 8;
     FUN_00479580();
     return 1;
   }
-  iVar1 = FUN_0059a530(param_1,s_litadd_005c5c3c);
+  iVar1 = FUN_0059a530_stricmp(param_1,s_litadd_005c5c3c);
   if (iVar1 == 0) {
     this->mbr_0x2c = 0x10;
     FUN_00479580();
     return 1;
   }
-  iVar1 = FUN_0059a530(param_1,s_nocheckz_005c5c44);
+  iVar1 = FUN_0059a530_stricmp(param_1,s_nocheckz_005c5c44);
   if (iVar1 == 0) {
     this->mbr_0x2c = 0x41;
     FUN_00479580();
     return 1;
   }
-  iVar1 = FUN_0059a530(param_1,s_litalphaz_005c5c50);
+  iVar1 = FUN_0059a530_stricmp(param_1,s_litalphaz_005c5c50);
   if (iVar1 == 0) {
     this->mbr_0x2c = 0x44;
     FUN_00479580();
     return 1;
   }
-  iVar1 = FUN_0059a530(param_1,s_litaddz_005c5c5c);
+  iVar1 = FUN_0059a530_stricmp(param_1,s_litaddz_005c5c5c);
   if (iVar1 == 0) {
     this->mbr_0x2c = 0x50;
     FUN_00479580();
     return 1;
   }
-  iVar1 = FUN_0059a530(param_1,s_alphaadd_005c5c64);
+  iVar1 = FUN_0059a530_stricmp(param_1,s_alphaadd_005c5c64);
   if (iVar1 == 0) {
     this->mbr_0x2c = 0x20;
     FUN_00479580();

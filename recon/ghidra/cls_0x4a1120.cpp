@@ -26,7 +26,7 @@ int __thiscall OOAnalyzer::cls_0x4a1120::meth_0x4a1120(cls_0x4a1120 *this)
     do {
       pbVar1 = *(byte **)(this->mbr_0x10 + iVar3 * 4);
       if ((((pbVar1 != (byte *)0x0) && (*(uint *)(pbVar1 + 400) != 0)) && ((*pbVar1 & 1) != 0)) &&
-         (uVar2 = FUN_0059a530(*(uint *)(pbVar1 + 400),pbVar1 + 0x110,in_stack_00000004), uVar2 == 0
+         (uVar2 = FUN_0059a530_stricmp(*(uint *)(pbVar1 + 400),pbVar1 + 0x110,in_stack_00000004), uVar2 == 0
          )) {
         return iVar3;
       }

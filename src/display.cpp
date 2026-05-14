@@ -143,6 +143,7 @@ bool TDisplay::Close()
 {
     if (imgui_initialized) {
         EditorIcons::Shutdown();
+        EditorFonts::Shutdown();
         simgui_shutdown();
         imgui_initialized = false;
     }

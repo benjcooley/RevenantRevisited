@@ -32,7 +32,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x53ed70::meth_0x53ed70(cls_0x53ed70 *this
           if (iVar2 == 0) {
             iVar2 = piVar1[5];
           }
-          iVar2 = FUN_0059a530(iVar2 + 0x24);
+          iVar2 = FUN_0059a530_stricmp(iVar2 + 0x24);
           if (iVar2 == 0) {
             return *(undefined4 *)(this->mbr_0x14 + iVar4 * 4);
           }
@@ -69,7 +69,7 @@ int __thiscall OOAnalyzer::cls_0x53ed70::meth_0x53ef90(cls_0x53ed70 *this)
           if (iVar2 == 0) {
             iVar2 = piVar1[5];
           }
-          iVar2 = FUN_0059a530(iVar2 + 0x24);
+          iVar2 = FUN_0059a530_stricmp(iVar2 + 0x24);
           if (iVar2 == 0) {
             iVar4 = *(int *)(this->mbr_0x14 + iVar4 * 4);
             iVar3 = *(int *)(*(int *)(iVar4 + 0x10) + iVar3 * 4);
@@ -111,7 +111,7 @@ int __thiscall OOAnalyzer::cls_0x53ed70::meth_0x53f010(cls_0x53ed70 *this)
           if (iVar2 == 0) {
             iVar2 = piVar1[5];
           }
-          iVar2 = FUN_0059a530(iVar2 + 4);
+          iVar2 = FUN_0059a530_stricmp(iVar2 + 4);
           if (iVar2 == 0) {
             iVar4 = *(int *)(this->mbr_0x14 + iVar4 * 4);
             iVar3 = *(int *)(*(int *)(iVar4 + 0x10) + iVar3 * 4);

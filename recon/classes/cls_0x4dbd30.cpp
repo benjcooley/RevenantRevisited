@@ -20,7 +20,7 @@ OOAnalyzer::cls_0x4dbd30::meth_0x4dbd30(cls_0x4dbd30 *this,undefined4 param_1,un
 {
   char cVar1;
   undefined4 uVar2;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   int iVar3;
   uint uVar4;
   uint uVar5;
@@ -47,10 +47,10 @@ OOAnalyzer::cls_0x4dbd30::meth_0x4dbd30(cls_0x4dbd30 *this,undefined4 param_1,un
     local_2a = DAT_00666970;
     local_20 = this->mbr_0xc8;
     local_34 = 0x19;
-    uVar2 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_34);
-    this_00 = (cls_0x5a7b98 *)FUN_00452690(uVar2,0);
-    if (this_00 != (cls_0x5a7b98 *)0x0) {
-      cls_0x5a7b98::meth_0x4def90(this_00,this,0,0);
+    uVar2 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_34);
+    this_00 = (cls_0x5a7b98_TCharacter *)FUN_00452690_TMapPane_GetInstance(uVar2,0);
+    if (this_00 != (cls_0x5a7b98_TCharacter *)0x0) {
+      cls_0x5a7b98_TCharacter::meth_0x4def90(this_00,this,0,0);
       if (in_stack_0000000c != (char *)0x0) {
         uVar4 = 0xffffffff;
         do {
@@ -88,22 +88,22 @@ OOAnalyzer::cls_0x4dbd30::meth_0x4dbd30(cls_0x4dbd30 *this,undefined4 param_1,un
 void __thiscall OOAnalyzer::cls_0x4dbd30::meth_0x4dbe10(cls_0x4dbd30 *this)
 
 {
-  cls_0x5b8e94 *this_00;
+  cls_0x5b8e94_TObjectInstance *this_00;
   int iVar1;
   int in_stack_00000004;
   cls_0x44ceb0 local_48;
   
   if (in_stack_00000004 != 0) {
     cls_0x44ceb0::cls_0x44ceb0(&local_48,&this->field_0x10,0x400,0x60,0,0);
-    this_00 = (cls_0x5b8e94 *)local_48.mbr_0xc;
-    while (this_00 != (cls_0x5b8e94 *)0x0) {
+    this_00 = (cls_0x5b8e94_TObjectInstance *)local_48.mbr_0xc;
+    while (this_00 != (cls_0x5b8e94_TObjectInstance *)0x0) {
       local_48.mbr_0xc = (dword)this_00;
-      if (((this_00 != (cls_0x5b8e94 *)0x0) && (this_00->mbr_0x4 == 0x19)) &&
-         (iVar1 = FUN_0059a530(*(undefined4 *)this_00->mbr_0x4c), iVar1 == 0)) {
-        cls_0x5b8e94::meth_0x4defe0(this_00);
+      if (((this_00 != (cls_0x5b8e94_TObjectInstance *)0x0) && (this_00->mbr_0x4 == 0x19)) &&
+         (iVar1 = FUN_0059a530_stricmp(*(undefined4 *)this_00->mbr_0x4c), iVar1 == 0)) {
+        cls_0x5b8e94_TObjectInstance::meth_0x4defe0(this_00);
       }
       cls_0x44ceb0::meth_0x44d080(&local_48);
-      this_00 = (cls_0x5b8e94 *)local_48.mbr_0xc;
+      this_00 = (cls_0x5b8e94_TObjectInstance *)local_48.mbr_0xc;
     }
   }
   return;

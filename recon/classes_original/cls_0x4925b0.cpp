@@ -41,13 +41,13 @@ OOAnalyzer::cls_0x4925b0::meth_0x4925b0(cls_0x4925b0 *this,int param_1,int param
             }
           }
           else {
-            iVar2 = FUN_0059a530(piVar4 + 2,param_2);
+            iVar2 = FUN_0059a530_stricmp(piVar4 + 2,param_2);
             if (iVar2 == 0) {
               return 1;
             }
             if (in_stack_0000000c == 0) goto LAB_00492619;
           }
-          iVar2 = FUN_0059a530(piVar4 + 2);
+          iVar2 = FUN_0059a530_stricmp(piVar4 + 2);
           if (iVar2 == 0) {
             return 1;
           }

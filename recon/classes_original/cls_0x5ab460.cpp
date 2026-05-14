@@ -40,10 +40,10 @@ void __thiscall OOAnalyzer::cls_0x5ab460::virt_meth_0x4ec890(cls_0x5ab460 *this)
   dword dVar1;
   int iVar2;
   
-  cls_0x5b8e94::virt_meth_0x4de800((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x4de800((cls_0x5b8e94_TObjectInstance *)this);
   this->mbr_0x188 = this->mbr_0x188 + 1;
-  if ((cls_0x5a7b98 *)this->mbr_0x184 != (cls_0x5a7b98 *)0x0) {
-    cls_0x5a7b98::meth_0x4cee70((cls_0x5a7b98 *)this->mbr_0x184);
+  if ((cls_0x5a7b98_TCharacter *)this->mbr_0x184 != (cls_0x5a7b98_TCharacter *)0x0) {
+    cls_0x5a7b98_TCharacter::meth_0x4cee70_Stop((cls_0x5a7b98_TCharacter *)this->mbr_0x184);
     dVar1 = this->mbr_0x188;
     if ((int)dVar1 < 0xf0) {
       if (((((int *)this->mbr_0x184)[2] & 0x2000000U) == 0) ||
@@ -71,7 +71,7 @@ void __thiscall OOAnalyzer::cls_0x5ab460::virt_meth_0x4ec9d0(cls_0x5ab460 *this,
   dword dVar1;
   dword in_stack_00000008;
   
-  cls_0x5b8e94::virt_meth_0x4df0f0((cls_0x5b8e94 *)this,param_1);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x4df0f0((cls_0x5b8e94_TObjectInstance *)this,param_1);
   if (param_1 == 1) {
     if (this->mbr_0x184 != in_stack_00000008) {
       return;

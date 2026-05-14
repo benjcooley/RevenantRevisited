@@ -1,0 +1,140 @@
+# Format: BARE_TOKEN|RENAMED_TOKEN  — one per line, # comments ignored.
+# TExit / OBJCLASS_EXIT-class identifications.
+#
+# All doors and exits in retail are OBJCLASS_EXIT (id=10). There is NO
+# separate TDoor class — door imagery types ("Door", "Halfdoor", "CryptDoor",
+# "PortEW", "PortNS", "Door1", "Door2", "DragonEnt", ...) are all registered
+# as TYPES under CLASS "EXIT" in legacy/Class.Def.
+
+# ============================================================================
+# TExit core class registration (TObjectClass static "EXIT", id=10)
+# Already labelled by agent_inventory.txt:
+#   DAT_0066d1f0  ExitClass
+#   FUN_0050c660  ExitClass_StaticInit
+# Add the missing chunks.
+# ============================================================================
+
+# ExitClass static dtor thunk
+FUN_0050c690|FUN_0050c690_ExitClass_StaticDtorThunk
+
+# Master TBuilder<TExit> registration ("EXIT" -> ExitClass) — first DEFSTAT block
+# at 0x0050c6a0 begins TExit::Initialize-equivalent class metadata setup.
+FUN_0050c6a0|FUN_0050c6a0_DefStat_Exit_Openable
+FUN_0050c6d0|FUN_0050c6d0_DefStat_Exit_Facing
+FUN_0050c700|FUN_0050c700_DefStat_Exit_UseCenter
+FUN_0050c730|FUN_0050c730_DefStat_Exit_StopMoving
+FUN_0050c760|FUN_0050c760_DefStat_Exit_Delay
+
+
+# ============================================================================
+# TExit module-level state (was static-class-scoped in source via comment,
+# actually module-globals because the 1998 compiler couldn't grok statics).
+# ============================================================================
+
+DAT_0066d1c4|DAT_0066d1c4_TExit_exitlist
+DAT_0066d24c|DAT_0066d24c_TExit_exitlistdirty
+
+
+# ============================================================================
+# TExit methods — confirmed by string-anchor + behaviour match
+# ============================================================================
+
+# bool TExit::AddExit(char* name, TObjectInstance* inst, bool getamb)
+# Source-side: src/exit.cpp:226. Anchor: iterates exitlist, calls GetExitStrip.
+FUN_0050cfc0|FUN_0050cfc0_TExit_AddExit
+
+# TExit::ReadExitList(reload) — opens "exit.def", parses lines.
+# (1 arg = reload bool; called by AddExit and Initialize.)
+FUN_0050c8f0|FUN_0050c8f0_TExit_ReadExitList
+
+# TExit::WriteExitList — flushes exitlist back to disk if dirty.
+# Anchor: format string "%s (%d, %d, %d) level %d mapindex 0x%x ambient ..."
+# at 0x005e1788. Source-side: src/exit.cpp:116.
+FUN_0050cca0|FUN_0050cca0_TExit_WriteExitList
+
+# TExit::DestroyExitList — frees exitlist (called from TExit::Close).
+# (Likely FUN_0050c880 or near; not yet pinpointed — left BARE for now.)
+
+# TExit::FindExit(char* name) — linear stricmp scan (used by Activate, AddExit).
+# (Likely inlined in retail; no separate function.)
+
+# bool TExit::Use(TObjectInstance* user, int32_t with) at 0x0050d1a0
+# Anchor: vt[0x1f0]/vt[0x208] open/locked checks, "DOORLOCKED" string ref.
+# RETAIL DIFF: state-toggle moved to TExit::OnUsed (script "user" handler).
+FUN_0050d1a0|FUN_0050d1a0_TExit_Use
+
+# TExit::OnUsed(user) at 0x0050d230 — RETAIL-ONLY direction-aware door toggle.
+# Selects opening_out vs opening_in based on which side `user` stands on.
+# Triggered by the script-system's "user" event handler.
+FUN_0050d230|FUN_0050d230_TExit_OnUsed
+
+# Helper: TExit::UserOnFrontSide(user) at 0x0050d2b0
+# Returns 1 if user is on the door's front (facing) side, 0 otherwise.
+FUN_0050d2b0|FUN_0050d2b0_TExit_UserOnFrontSide
+
+# TExit::Activate(user, forced) at 0x0050d3a0
+# Anchor: "user" string at 0x005e17d8 → script trigger event.
+# Source-side: src/exit.cpp:342.
+# RETAIL DIFFS:
+#   - locked guard up-front
+#   - script trigger uses string event "user", not enum TRIGGER_ACTIVATE
+#   - multiplayer client-bail at top, server-broadcast at end
+#   - source's "Door"-typename push hack (target += vect) is GONE
+FUN_0050d3a0|FUN_0050d3a0_TExit_Activate
+
+# TExit::Unactivate at 0x0050d510 — calls SetExitState(2 = CLOSING_OUT).
+FUN_0050d510|FUN_0050d510_TExit_Unactivate
+
+# TExit::SetExitState(int es) at 0x0050d530
+# RETAIL DIFF: 6-state enum (OPENING_OUT/OPEN/CLOSING_OUT/CLOSED/OPENING_IN/CLOSING_IN)
+# vs source 4-state (CLOSED/OPEN/CLOSING/OPENING).
+# Anchors: "openingout", "closingout", "openingin", "closingin", "closed to open",
+#   "open to closed", "open", "closed" (string literals 0x005e17e0..0x005e185f).
+FUN_0050d530|FUN_0050d530_TExit_SetExitState
+
+# TExit::Pulse at 0x0050d640
+# Anchors: "CLOSING", "OPENING" state-name compares; "Door1", "Door2",
+#   "PortEW", "PortNS" objtype gating.
+# RETAIL DIFFS (vs src/exit.cpp:403):
+#   - state auto-step driven by anim-track *name* match, not enum
+#   - per-character iteration (NPCs can trip exits, not just Player)
+#   - auto-activation gated to specific objtypes only
+FUN_0050d640|FUN_0050d640_TExit_Pulse
+
+
+# ============================================================================
+# TExit subclasses (sit in the exit.cpp module's address range)
+# ============================================================================
+
+# TPressPlate ("PressPlate" type) — registered at 0x0050da00.
+DAT_0066d1e0|DAT_0066d1e0_PressPlateBuilder
+FUN_0050da00|FUN_0050da00_PressPlateBuilder_StaticInit
+FUN_0050da20|FUN_0050da20_TPressPlate_Activate
+FUN_0050da50|FUN_0050da50_TPressPlate_Unactivate
+
+# TUpBlock ("UpBlock" type) — registered at 0x0050da60.
+DAT_0066d230|DAT_0066d230_UpBlockBuilder
+FUN_0050da60|FUN_0050da60_UpBlockBuilder_StaticInit
+FUN_0050da80|FUN_0050da80_TUpBlock_Pulse
+FUN_0050dae0|FUN_0050dae0_TUpBlock_Use
+
+
+# ============================================================================
+# Cross-class anchors used by TExit
+# ============================================================================
+
+# TCharacter::SetOnExit() at 0x004cdf30
+# Sets OF_ONEXIT bit (0x100000) and exittimestamp = CurrentScreen->FrameCount().
+# Confirms retail uses identical "exittimestamp" anti-bounce mechanism as source.
+FUN_004cdf30|FUN_004cdf30_TCharacter_SetOnExit
+
+
+# ============================================================================
+# Door-related globals for the localized "It seems to be locked." string
+# ============================================================================
+
+# String table id passed to FUN_0049d800 (string-resource lookup). At 0x005e17cc.
+DAT_005e17cc|DAT_005e17cc_str_DOORLOCKED_id
+
+# Script-event names referenced by TExit::Activate / OnUsed.
+DAT_005e17d8|DAT_005e17d8_str_event_user

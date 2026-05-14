@@ -13,7 +13,7 @@ Length: 16 Alignment: 1
 
 // Function at 00498eb0
 
-void __thiscall OOAnalyzer::cls_0x498eb0::meth_0x498eb0(cls_0x498eb0 *this)
+void __thiscall OOAnalyzer::cls_0x498eb0::meth_0x498eb0_TSector_GetMaxScreenRect(cls_0x498eb0 *this)
 
 {
   int *piVar1;
@@ -57,7 +57,7 @@ void __thiscall OOAnalyzer::cls_0x498eb0::meth_0x498eb0(cls_0x498eb0 *this)
 
 // Function at 00498f60
 
-void __thiscall OOAnalyzer::cls_0x498eb0::meth_0x498f60(cls_0x498eb0 *this)
+void __thiscall OOAnalyzer::cls_0x498eb0::meth_0x498f60_TSector_GetMaxMapRect(cls_0x498eb0 *this)
 
 {
   int iVar1;

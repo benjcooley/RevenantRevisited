@@ -25,7 +25,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x4c58f0::meth_0x4c58f0(cls_0x4c58f0 *this
   pdVar2 = &this->mbr_0x1c4;
   do {
     if (pdVar2[-1] == in_stack_00000004) {
-      iVar1 = cls_0x5a5320::meth_0x47e920((cls_0x5a5320 *)&DAT_0065caf0);
+      iVar1 = cls_0x5a5320_TPlayScreen::meth_0x47e920((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
       if ((int)(iVar1 - *pdVar2) < 0x438) {
         return 1;
       }

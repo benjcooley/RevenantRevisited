@@ -584,12 +584,12 @@ undefined4 * __thiscall OOAnalyzer::cls_0x49ead0::meth_0x49f470(cls_0x49ead0 *th
       cVar5 = param_1[local_5c];
       param_1[local_5c] = '\0';
       dVar6 = (this->cls_0x41c7f0).mbr_0x14;
-      if ((dVar6 == 0) || (iVar8 = FUN_0059a530(param_1,dVar6), iVar8 != 0)) {
+      if ((dVar6 == 0) || (iVar8 = FUN_0059a530_stricmp(param_1,dVar6), iVar8 != 0)) {
         iVar8 = 0;
         if (0 < (int)(this->cls_0x41c7f0).mbr_0x0) {
           do {
             in_stack_00000008 = *(undefined4 **)((this->cls_0x41c7f0).mbr_0x10 + iVar8 * 4);
-            iVar10 = FUN_0059a530(param_1,in_stack_00000008);
+            iVar10 = FUN_0059a530_stricmp(param_1,in_stack_00000008);
             if (iVar10 == 0) {
               (this->cls_0x41c7f0).mbr_0x14 = (dword)in_stack_00000008;
               goto LAB_0049f799;
@@ -1035,7 +1035,7 @@ int __thiscall OOAnalyzer::cls_0x49ead0::meth_0x4a0180(cls_0x49ead0 *this,cls_0x
   if (iVar7 < (int)(this->cls_0x41c7f0).mbr_0x0) {
     do {
       iVar6 = *(int *)((this->cls_0x41c7f0).mbr_0x10 + iVar7 * 4);
-      if ((iVar6 != 0) && (iVar5 = FUN_0059a530(local_104,*(undefined4 *)(iVar6 + 0xc)), iVar5 == 0)
+      if ((iVar6 != 0) && (iVar5 = FUN_0059a530_stricmp(local_104,*(undefined4 *)(iVar6 + 0xc)), iVar5 == 0)
          ) {
         pcVar4 = *(char **)(iVar6 + 0x10);
         cVar2 = *pcVar4;

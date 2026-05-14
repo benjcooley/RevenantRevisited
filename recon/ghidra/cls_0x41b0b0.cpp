@@ -15,7 +15,7 @@ Length: 76 Alignment: 1
 // Function at 0041b0b0
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x41b0b0::meth_0x41b0b0(cls_0x41b0b0 *this,undefined4 *param_1)
+OOAnalyzer::cls_0x41b0b0::meth_0x41b0b0_TArea_In(cls_0x41b0b0 *this,undefined4 *param_1)
 
 {
   dword *this_00;

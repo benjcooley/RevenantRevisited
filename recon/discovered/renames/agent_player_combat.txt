@@ -1,0 +1,64 @@
+# Format: BARE_TOKEN|RENAMED_TOKEN  — one per line, # comments ignored.
+# Player combat input chain — closes out the two unidentified TPlayer Pulse
+# helpers and wires up the keybind -> ButtonAttack -> DoAttack path on the
+# TCharacter side.
+
+# ---- 0x4cf000 = TCharacter::SetWalkMode (NOT player-specific) -----------
+# Source: src/character.cpp:2883
+# Builds aniname from current root via vtable 0x304/0x308/0x30c
+# (GetCombatRoot/GetBowRoot/GetTorchRoot), validates HasActionAni, fires
+# script signal SCMD_SETWALKMODE (id 0x26 -> FUN_0057d9d0), allocates the
+# new root via TActionBlock::CopyCtor (FUN_004daae0), and if IsMoving
+# (root->action 2/4/0x1a) appends "r"/"f" suffix for the directional step.
+# Direction-suffix string anchors at 0x5e00f0 / 0x5e00f4 / 0x5e00f8 = "r","r","f".
+# Ref count 16 callers — top-level TCharacter mode helper.
+meth_0x4cf000|meth_0x4cf000_SetWalkMode
+FUN_004cf000|FUN_004cf000_SetWalkMode
+
+# ---- 0x4cf490 = TCharacter::SetRunMode (NOT player-specific) ------------
+# Source: src/character.cpp:2944
+# Same shape as SetWalkMode but appends "run" before direction suffixes:
+#   - DAT_005e011c/0120/0124 = "run" (literal suffix appended to root)
+#   - DAT_005e0128/012c/0130 = "l","r","f" (direction variants)
+#   - DAT_005e0134/0138       = "f","l" (used by the " to " transition)
+#   - script signal id 0x28 -> SCMD_SETRUNMODE (vs 0x26 for walk).
+# Calls SetWalkMode (0x4cf000) when current root is "sneak" (so it can
+# transition out of sneak before entering combat-run).
+meth_0x4cf490|meth_0x4cf490_SetRunMode
+FUN_004cf490|FUN_004cf490_SetRunMode
+
+# ---- 0x4d2480 = TCharacter::ButtonAttack (the input-side dispatcher) ----
+# Source: src/character.cpp:3583
+# 6-arg fn (this, buttonid, ...). Verifies chain validity:
+#   if (mbr_0x58 (lastattack) &&                  // had a last attack
+#       mbr_0x58[0x24] & 0x4000 (CA_CHAIN) &&     // it was a chain attack
+#       FUN_0047e920() (PlayScreen.GameFrame()) - mbr_0x59 (lastattackticks)
+#         <= mbr_0x58[0xc0] (chainexptime) &&     // not expired
+#       mbr_0x5b (chainhits) < 3 (MAXCHAINHITS))  // under cap
+#     mbr_0x5b++; return 1;                       // bump chain, no new attack
+# Otherwise calls FindButtonAttack (0x4d1ff0) -> DoAttack (0x4d2120).
+# Field offsets confirmed against character.h ordering: lastattack=0x160,
+# lastattackticks=0x164, chainhits=0x16c.
+meth_0x4d2480|meth_0x4d2480_ButtonAttack
+FUN_004d2480|FUN_004d2480_ButtonAttack
+
+# ---- 0x47e920 = PlayScreen::GameFrame ---
+# Read once per ButtonAttack chain check; matches GameFrame() in src/playscreen.h
+# (returns the frame counter that lastattackticks is compared against).
+FUN_0047e920|FUN_0047e920_PlayScreen_GameFrame
+
+# ---- 0x57d9d0 / 0x57dc70 = script-event dispatch helpers ----
+# 0x57d9d0(this, cmdid, arg1, arg2, arg3) fires a script event into the
+# scripting subsystem (returns nonzero when a hooked handler exists, then
+# 0x57dc70 runs the queued handler). cmdid 0x26 = SETWALKMODE,
+# cmdid 0x28 = SETRUNMODE; cmdid table covers ~0x40 commands.
+FUN_0057d9d0|FUN_0057d9d0_FireScriptEvent
+FUN_0057dc70|FUN_0057dc70_RunQueuedScriptEvent
+
+# ---- 0x4daae0 / 0x4dadd0 = TActionBlock helpers (already partly named) --
+# 0x4daae0 is TActionBlock::CopyCtor(src, name, action) (already labeled
+# in renames/agent_actionsmap.txt as cls_TActionBlock_CopyCtor_4daae0).
+# 0x4dadd0 is StName(buf, suffix) — appends suffix to buf inplace, returns
+# buf. Used heavily in the SetWalkMode/SetRunMode name-construction loops
+# to map a root anim name into a directional/transition variant.
+FUN_004dadd0|FUN_004dadd0_StName

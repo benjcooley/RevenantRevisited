@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5b8e94
+// Decompiled methods and structure for class: cls_0x5b8e94_TObjectInstance
 
 /*
-/OOAnalyzer/cls_0x5b8e94
+/OOAnalyzer/cls_0x5b8e94_TObjectInstance
 pack(disabled)
-Structure cls_0x5b8e94 {
-   0   cls_0x5b8e94::vftable_5b8e94 *   4   vftptr_0x0   "pointer to cls_0x5b8e94::vftable_5b8e94"
+Structure cls_0x5b8e94_TObjectInstance {
+   0   cls_0x5b8e94_TObjectInstance::vftable_5b8e94 *   4   vftptr_0x0   "pointer to cls_0x5b8e94_TObjectInstance::vftable_5b8e94"
    4   word   2   mbr_0x4   "Unsigned Word (dw, 2-bytes)"
    6   word   2   mbr_0x6   "Unsigned Word (dw, 2-bytes)"
    8   dword   4   mbr_0x8   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -127,7 +127,7 @@ Length: 1352 Alignment: 1
 
 // Function at 0046e8b0
 
-bool __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46e8b0(cls_0x5b8e94 *this)
+bool __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46e8b0_CreateAnimator(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -156,7 +156,7 @@ bool __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46e8b0(cls_0x5b8e94 *this)
 
 // Function at 0046e900
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46e900(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46e900_FreeAnimator(cls_0x5b8e94_TObjectInstance *this)
 
 {
   if ((int *)this->mbr_0x58 != (int *)0x0) {
@@ -173,7 +173,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46e900(cls_0x5b8e94 *this)
 
 // Function at 0046e930
 
-int __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46e930(cls_0x5b8e94 *this)
+int __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46e930_NeedsAnimator(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
@@ -192,7 +192,7 @@ int __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46e930(cls_0x5b8e94 *this)
 
 // Function at 0046e970
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46e970(cls_0x5b8e94 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46e970_Animate(cls_0x5b8e94_TObjectInstance *this,int param_1)
 
 {
   cls_0x5b8e94__vftable_5b8e94 *pcVar1;
@@ -206,7 +206,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46e970(cls_0x5b8e94 *this,
     (*this->vftptr_0x0->virt_meth_0x472e90_64)(this);
   }
   if (((this->mbr_0x8 & 0x800000) != 0) && ((DAT_0066829c == 0 || (DAT_0067682c != 0)))) {
-    iVar3 = FUN_00483300(0,3);
+    iVar3 = FUN_00483300_RandomRange(0,3);
     if (iVar3 == 0) {
       (*this->vftptr_0x0->virt_meth_0x472e90_64)(this);
     }
@@ -226,7 +226,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46e970(cls_0x5b8e94 *this,
 
 // Function at 0046ea20
 
-int __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46ea20(cls_0x5b8e94 *this)
+int __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46ea20_Distance(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
@@ -260,7 +260,7 @@ int __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46ea20(cls_0x5b8e94 *this)
 
 // Function at 0046f160
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f160(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46f160(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined4 uVar1;
@@ -280,7 +280,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f160(cls_0x5b8e94 
 
 // Function at 0046f190
 
-int __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f190(cls_0x5b8e94 *this)
+int __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46f190(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
@@ -302,7 +302,7 @@ int __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f190(cls_0x5b8e94 *this)
 
 // Function at 0046f1e0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f1e0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46f1e0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   short sVar1;
@@ -341,7 +341,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f1e0(cls_0x5b8e94 *this)
 
 // Function at 0046f250
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f250(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46f250(cls_0x5b8e94_TObjectInstance *this)
 
 {
   uint uVar1;
@@ -364,10 +364,10 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f250(cls_0x5b8e94 
      ((((uVar1 & 0x400) == 0 || ((uVar1 & 4) != 0)) && ((short)this->mbr_0x7c < 0)))) {
     puStack_1c = auStack_10;
     (*this->vftptr_0x0->virt_meth_0x471020_244)(this);
-    cls_0x5a5320::meth_0x4548a0((cls_0x5a5320 *)&DAT_006668d8,&stack0xffffffec);
+    cls_0x5a5320_TPlayScreen::meth_0x4548a0((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&stack0xffffffec);
   }
   puStack_1c = (undefined *)0x0;
-  cls_0x5a5320::meth_0x452750((cls_0x5a5320 *)&DAT_006668d8,this);
+  cls_0x5a5320_TPlayScreen::meth_0x452750((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,this);
   puStack_1c = (undefined *)0x413;
   FUN_00456790(s_d__revenant_Object_cpp_005d4810);
   this->mbr_0x62 = this->mbr_0x5c;
@@ -377,7 +377,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f250(cls_0x5b8e94 
   (*this->vftptr_0x0->virt_meth_0x471b50_344)(this);
   (*this->vftptr_0x0->virt_meth_0x46f1e0_320)(this);
   FUN_004567c0();
-  cls_0x5a5320::meth_0x452750((cls_0x5a5320 *)&DAT_006668d8,this);
+  cls_0x5a5320_TPlayScreen::meth_0x452750((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,this);
   iVar2 = (**(code **)(*(int *)this->mbr_0x54 + 0x38))(this);
   if (iVar2 == 0) {
     (*this->vftptr_0x0->virt_meth_0x46e900_44)(this);
@@ -390,7 +390,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f250(cls_0x5b8e94 
   if ((((uVar1 & 8) == 0) && (((uVar1 & 0x400) == 0 || ((uVar1 & 4) != 0)))) &&
      ((short)this->mbr_0x7c < 0)) {
     (*this->vftptr_0x0->virt_meth_0x471020_244)(this);
-    cls_0x5a5320::meth_0x4548a0((cls_0x5a5320 *)&DAT_006668d8,&puStack_1c);
+    cls_0x5a5320_TPlayScreen::meth_0x4548a0((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&puStack_1c);
   }
   return 1;
 }
@@ -399,12 +399,12 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f250(cls_0x5b8e94 
 
 // Function at 0046f3a0
 
-bool __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f3a0(cls_0x5b8e94 *this)
+bool __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46f3a0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
   
-  iVar1 = cls_0x5a5320::meth_0x451090((cls_0x5a5320 *)&DAT_006668d8);
+  iVar1 = cls_0x5a5320_TPlayScreen::meth_0x451090((cls_0x5a5320_TPlayScreen *)&DAT_006668d8);
   return -1 < iVar1;
 }
 
@@ -412,12 +412,12 @@ bool __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f3a0(cls_0x5b8e94 *this)
 
 // Function at 0046f3d0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f3d0(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46f3d0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int *piVar1;
-  cls_0x5b8e94 *pcVar2;
-  cls_0x5b8e94 *pcVar3;
+  cls_0x5b8e94_TObjectInstance *pcVar2;
+  cls_0x5b8e94_TObjectInstance *pcVar3;
   undefined uVar4;
   undefined3 extraout_var;
   undefined3 extraout_var_00;
@@ -426,17 +426,17 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f3d0(cls_0x5b8e94 
   undefined3 extraout_var_01;
   undefined3 extraout_var_02;
   undefined3 extraout_var_03;
-  cls_0x5b4f30 *pcVar7;
+  cls_0x5b4f30_TPlayer *pcVar7;
   undefined3 extraout_var_04;
   undefined3 extraout_var_05;
   undefined3 extraout_var_06;
   undefined3 extraout_var_07;
   undefined3 extraout_var_08;
-  cls_0x5b8e94 *pcVar8;
+  cls_0x5b8e94_TObjectInstance *pcVar8;
   cls_0x5b8e94__vftable_5b8e94 *pcVar9;
   int unaff_EBX;
-  cls_0x5b8e94 *unaff_retaddr;
-  cls_0x5b4f30 *in_stack_00000004;
+  cls_0x5b8e94_TObjectInstance *unaff_retaddr;
+  cls_0x5b4f30_TPlayer *in_stack_00000004;
   uint in_stack_00000008;
   cls_0x477870 cStack_1c;
   
@@ -460,10 +460,10 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f3d0(cls_0x5b8e94 
       piVar1 = (int *)cStack_1c.mbr_0x18;
       while (piVar1 != (int *)0x0) {
         cStack_1c.mbr_0x18 = (dword)piVar1;
-        iVar6 = FUN_0059a530(piVar1[0xe],s_Pouch_005d4828);
+        iVar6 = FUN_0059a530_stricmp(piVar1[0xe],s_Pouch_005d4828);
         if (((iVar6 == 0) && (iVar6 = (**(code **)(*piVar1 + 0x7c))(0), iVar6 != 0)) &&
            (*(short *)(iVar6 + 4) ==
-            *(short *)&(in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x4)) {
+            *(short *)&(in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x4)) {
           uVar5 = (**(code **)(*piVar1 + 0x58))(in_stack_00000004,in_stack_00000008);
           return uVar5;
         }
@@ -484,46 +484,46 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46f3d0(cls_0x5b8e94 
   uVar4 = (*this->vftptr_0x0->virt_meth_0x477d50_368)(this);
   if (CONCAT31(extraout_var_02,uVar4) == 0) {
     cls_0x477870::cls_0x477870(&cStack_1c,this);
-    while ((cls_0x5b4f30 *)cStack_1c.mbr_0x18 != (cls_0x5b4f30 *)0x0) {
-      pcVar7 = (cls_0x5b4f30 *)cStack_1c.mbr_0x18;
-      if ((int)*(short *)&(((cls_0x5a7b98 *)cStack_1c.mbr_0x18)->cls_0x5a50e8).field_0x7c ==
+    while ((cls_0x5b4f30_TPlayer *)cStack_1c.mbr_0x18 != (cls_0x5b4f30_TPlayer *)0x0) {
+      pcVar7 = (cls_0x5b4f30_TPlayer *)cStack_1c.mbr_0x18;
+      if ((int)*(short *)&(((cls_0x5a7b98_TCharacter *)cStack_1c.mbr_0x18)->cls_0x5a50e8).field_0x7c ==
           in_stack_00000008) goto LAB_0046f532;
       cls_0x477870::meth_0x46dfb0(&cStack_1c);
     }
-    pcVar7 = (cls_0x5b4f30 *)0x0;
+    pcVar7 = (cls_0x5b4f30_TPlayer *)0x0;
   }
   else {
     uVar4 = (*this->vftptr_0x0->virt_meth_0x477d50_368)(this);
-    pcVar7 = (cls_0x5b4f30 *)
-             cls_0x5b4f30::meth_0x4701f0((cls_0x5b4f30 *)CONCAT31(extraout_var_03,uVar4));
+    pcVar7 = (cls_0x5b4f30_TPlayer *)
+             cls_0x5b4f30_TPlayer::meth_0x4701f0((cls_0x5b4f30_TPlayer *)CONCAT31(extraout_var_03,uVar4));
   }
 LAB_0046f532:
   if (pcVar7 != in_stack_00000004) {
-    (*((in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.vftptr_0x0)->FUN_00470f00_296)();
-    pcVar3 = (cls_0x5b8e94 *)this->mbr_0x64;
+    (*((in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.vftptr_0x0)->FUN_00470f00_296)();
+    pcVar3 = (cls_0x5b8e94_TObjectInstance *)this->mbr_0x64;
     pcVar8 = this;
-    while (pcVar2 = pcVar3, pcVar2 != (cls_0x5b8e94 *)0x0) {
+    while (pcVar2 = pcVar3, pcVar2 != (cls_0x5b8e94_TObjectInstance *)0x0) {
       pcVar8 = pcVar2;
-      pcVar3 = (cls_0x5b8e94 *)pcVar2->mbr_0x64;
+      pcVar3 = (cls_0x5b8e94_TObjectInstance *)pcVar2->mbr_0x64;
     }
-    pcVar8 = (cls_0x5b8e94 *)(-(uint)(pcVar8 != this) & (uint)pcVar8);
-    if (pcVar8 == (cls_0x5b8e94 *)0x0) {
+    pcVar8 = (cls_0x5b8e94_TObjectInstance *)(-(uint)(pcVar8 != this) & (uint)pcVar8);
+    if (pcVar8 == (cls_0x5b8e94_TObjectInstance *)0x0) {
       pcVar8 = this;
     }
-    if ((in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x64 != 0) {
-      uVar5 = *(undefined4 *)&(in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.field_0x40;
+    if ((in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x64 != 0) {
+      uVar5 = *(undefined4 *)&(in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.field_0x40;
       uVar4 = (*pcVar8->vftptr_0x0->virt_meth_0x470330_172)(pcVar8);
       if (CONCAT31(extraout_var_04,uVar4) != 0) {
-        unaff_retaddr = (cls_0x5b8e94 *)(in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x64;
+        unaff_retaddr = (cls_0x5b8e94_TObjectInstance *)(in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x64;
         unaff_EBX = 1;
       }
-      if ((in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x64 != 0) {
+      if ((in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x64 != 0) {
         DAT_00676e5d._0_1_ = 1;
-        (*((in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.vftptr_0x0)->FUN_0046faf0_96)(uVar5);
+        (*((in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.vftptr_0x0)->FUN_0046faf0_96)(uVar5);
         DAT_00676e5d._0_1_ = 0;
       }
     }
-    uVar4 = (*((in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.vftptr_0x0)->FUN_0046fee0_152)(this);
+    uVar4 = (*((in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.vftptr_0x0)->FUN_0046fee0_152)(this);
     if (CONCAT31(extraout_var_05,uVar4) != 0) {
       if (unaff_EBX == 0) {
         cls_0x57d9d0::meth_0x585880((cls_0x57d9d0 *)&UNK_00676e04.field_0x4);
@@ -531,9 +531,9 @@ LAB_0046f532:
       else {
         cls_0x57d9d0::meth_0x585ab0((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,this,in_stack_00000004);
       }
-      if (in_stack_00000004 != (cls_0x5b4f30 *)0x0) {
-        cls_0x5b4f30::meth_0x46e630(in_stack_00000004);
-        (*((in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.vftptr_0x0)->virt_meth_0x477840_0)
+      if (in_stack_00000004 != (cls_0x5b4f30_TPlayer *)0x0) {
+        cls_0x5b4f30_TPlayer::meth_0x46e630(in_stack_00000004);
+        (*((in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.vftptr_0x0)->virt_meth_0x477840_0)
                   ((cls_0x5a50e8 *)in_stack_00000004);
       }
       UNK_0065d53c._12_4_ = 1;
@@ -541,30 +541,30 @@ LAB_0046f532:
       DAT_0065b02c._76_4_ = 1;
       return 1;
     }
-    if (pcVar7 != (cls_0x5b4f30 *)0x0) {
+    if (pcVar7 != (cls_0x5b4f30_TPlayer *)0x0) {
       DAT_00676e5d._0_1_ = 1;
-      (*((pcVar7->cls_0x5a7b98).cls_0x5a50e8.vftptr_0x0)->FUN_0046faf0_96)();
+      (*((pcVar7->cls_0x5a7b98_TCharacter).cls_0x5a50e8.vftptr_0x0)->FUN_0046faf0_96)();
       DAT_00676e5d._0_1_ = 0;
     }
     iVar6 = cls_0x45f7c0::meth_0x41c840((cls_0x45f7c0 *)&this->mbr_0x68);
     if (iVar6 < 0) {
       return 0;
     }
-    if (*(int *)&(in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.field_0x40 < 1) {
+    if (*(int *)&(in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.field_0x40 < 1) {
       uVar5 = FUN_0044ce30();
-      *(undefined4 *)&(in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.field_0x40 = uVar5;
+      *(undefined4 *)&(in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.field_0x40 = uVar5;
     }
-    *(short *)&(in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.field_0x7e = (short)iVar6;
-    *(undefined2 *)&(in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.field_0x7c = 0;
-    (in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x64 = (dword)this;
-    (in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x18 = 0;
-    (in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x14 = 0;
-    (in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x10 = 0;
-    (in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0xe = 0;
-    (in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x44 = 0;
-    if (pcVar7 != (cls_0x5b4f30 *)0x0) {
+    *(short *)&(in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.field_0x7e = (short)iVar6;
+    *(undefined2 *)&(in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.field_0x7c = 0;
+    (in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x64 = (dword)this;
+    (in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x18 = 0;
+    (in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x14 = 0;
+    (in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x10 = 0;
+    (in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0xe = 0;
+    (in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x44 = 0;
+    if (pcVar7 != (cls_0x5b4f30_TPlayer *)0x0) {
       DAT_00676e5d._0_1_ = 1;
-      if (unaff_retaddr == (cls_0x5b8e94 *)0x0) {
+      if (unaff_retaddr == (cls_0x5b8e94_TObjectInstance *)0x0) {
         pcVar9 = this->vftptr_0x0;
         pcVar8 = this;
       }
@@ -575,20 +575,20 @@ LAB_0046f532:
       (*pcVar9->virt_meth_0x46f3d0_88)(pcVar8);
       DAT_00676e5d._0_1_ = 0;
     }
-    iVar6 = FUN_0059a530((in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.mbr_0x38,s_Swag_Bag_005d4830
+    iVar6 = FUN_0059a530_stricmp((in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x38,s_Swag_Bag_005d4830
                         );
     if (((((iVar6 == 0) && (this->mbr_0x4 == 0xb)) &&
          ((this->mbr_0x494 != 0 &&
           ((iVar6 = cls_0x45f7c0::meth_0x51f840((cls_0x45f7c0 *)&DAT_0065a890), -1 < iVar6 &&
            (iVar6 = *(int *)(DAT_0065a8b4 + iVar6 * 4), iVar6 != 0)))))) &&
-        (pcVar8 = (cls_0x5b8e94 *)
-                  cls_0x45f7c0::meth_0x51eea0
+        (pcVar8 = (cls_0x5b8e94_TObjectInstance *)
+                  cls_0x45f7c0::meth_0x51eea0_TPlayerManager_GetPlayer
                             ((cls_0x45f7c0 *)&DAT_0065a890,*(undefined4 *)(iVar6 + 0x4c)),
-        pcVar8 != (cls_0x5b8e94 *)0x0)) &&
+        pcVar8 != (cls_0x5b8e94_TObjectInstance *)0x0)) &&
        ((pcVar8 != this &&
         (uVar4 = (*pcVar8->vftptr_0x0->virt_meth_0x470280_168)(pcVar8),
         CONCAT31(extraout_var_06,uVar4) != 0)))) {
-      (*((in_stack_00000004->cls_0x5a7b98).cls_0x5a50e8.vftptr_0x0)->virt_meth_0x477d60_372)
+      (*((in_stack_00000004->cls_0x5a7b98_TCharacter).cls_0x5a50e8.vftptr_0x0)->virt_meth_0x477d60_372)
                 (in_stack_00000004);
     }
     if (unaff_EBX == 0) {
@@ -597,13 +597,13 @@ LAB_0046f532:
     else {
       cls_0x57d9d0::meth_0x585ab0((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,this,in_stack_00000004);
     }
-    if ((DAT_0065d674 != (cls_0x5b8e94 *)0x0) &&
+    if ((DAT_0065d674 != (cls_0x5b8e94_TObjectInstance *)0x0) &&
        ((((this == DAT_0065d674 ||
           (uVar4 = (*DAT_0065d674->vftptr_0x0->virt_meth_0x477d50_368)(DAT_0065d674),
-          this == (cls_0x5b8e94 *)CONCAT31(extraout_var_07,uVar4))) ||
+          this == (cls_0x5b8e94_TObjectInstance *)CONCAT31(extraout_var_07,uVar4))) ||
          (unaff_retaddr == DAT_0065d674)) ||
         (uVar4 = (*DAT_0065d674->vftptr_0x0->virt_meth_0x477d50_368)(DAT_0065d674),
-        unaff_retaddr == (cls_0x5b8e94 *)CONCAT31(extraout_var_08,uVar4))))) {
+        unaff_retaddr == (cls_0x5b8e94_TObjectInstance *)CONCAT31(extraout_var_08,uVar4))))) {
       UNK_0065d53c._12_4_ = 1;
       (**(code **)(DAT_0065d4f8 + 0x90))();
     }
@@ -618,7 +618,7 @@ LAB_0046f532:
 
 // Function at 0046faf0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46faf0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46faf0_RemoveFromInventory(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
@@ -638,7 +638,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46faf0(cls_0x5b8e94 *this)
     if ((((this->mbr_0x64 != 0) && (*(short *)(this->mbr_0x64 + 4) == 0xb)) &&
         (0xff < (short)this->mbr_0x7c)) && ((short)this->mbr_0x7c < 0x10b)) {
       (*this->vftptr_0x0->virt_meth_0x477d70_392)(this);
-      cls_0x5a7b98::meth_0x5199b0((cls_0x5a7b98 *)this->mbr_0x64,0);
+      cls_0x5a7b98_TCharacter::meth_0x5199b0((cls_0x5a7b98_TCharacter *)this->mbr_0x64,0);
     }
     cls_0x45f7c0::meth_0x41cb80((cls_0x45f7c0 *)(this->mbr_0x64 + 0x68));
     iVar4 = 0;
@@ -675,7 +675,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46faf0(cls_0x5b8e94 *this)
 // Function at 0046fc40
 
 int __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x46fc40(cls_0x5b8e94 *this,int *param_1,int *param_2)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46fc40(cls_0x5b8e94_TObjectInstance *this,int *param_1,int *param_2)
 
 {
   int iVar1;
@@ -726,8 +726,8 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x46fc40(cls_0x5b8e94 *this,int *param_1,int
 // Function at 0046fd30
 
 int __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x46fd30
-          (cls_0x5b8e94 *this,undefined4 param_1,undefined4 param_2)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46fd30
+          (cls_0x5b8e94_TObjectInstance *this,undefined4 param_1,undefined4 param_2)
 
 {
   undefined uVar1;
@@ -777,7 +777,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x46fd30
 
 // Function at 0046fea0
 
-uint __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46fea0(cls_0x5b8e94 *this)
+uint __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46fea0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -800,7 +800,7 @@ uint __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46fea0(cls_0x5b8e94 *this)
 
 // Function at 0046fee0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46fee0(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x46fee0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   return 0;
@@ -813,7 +813,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x46fee0(cls_0x5b8e94 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x4705f0(cls_0x5b8e94 *this,cls_0x5b4f30 *param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4705f0(cls_0x5b8e94_TObjectInstance *this,cls_0x5b4f30_TPlayer *param_1)
 
 {
   word wVar1;
@@ -831,20 +831,20 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x4705f0(cls_0x5b8e94 *this,cls_0x5b4f30 *pa
   undefined **ppuVar12;
   undefined4 uVar13;
   undefined *apuStack_64 [2];
-  cls_0x5b4f30 *pcStack_5c;
+  cls_0x5b4f30_TPlayer *pcStack_5c;
   undefined4 uStack_28;
   
   if (DAT_0066829c != 0) {
-    if (((*(short *)&(param_1->cls_0x5a7b98).cls_0x5a50e8.mbr_0x4 == 0xb) &&
-        (((param_1->cls_0x5a7b98).mbr_0x36c & 2) != 0)) && (this->mbr_0x4 != 0x11)) {
-      cls_0x5b4f30::meth_0x51d680(param_1);
+    if (((*(short *)&(param_1->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x4 == 0xb) &&
+        (((param_1->cls_0x5a7b98_TCharacter).mbr_0x36c & 2) != 0)) && (this->mbr_0x4 != 0x11)) {
+      cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState(param_1);
     }
     if ((this->mbr_0x4 == 5) || (this->mbr_0x4 == 0x11)) {
       if (DAT_00676e5c != '\0') goto LAB_00470682;
     }
     else if (DAT_0067682c == 0) {
       if (DAT_00676e5c == '\0') {
-        pcStack_5c = (cls_0x5b4f30 *)0x47065a;
+        pcStack_5c = (cls_0x5b4f30_TPlayer *)0x47065a;
         cVar5 = cls_0x57d9d0::meth_0x5847c0((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,this,param_1);
         if (cVar5 != '\0') {
           return 1;
@@ -852,11 +852,11 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x4705f0(cls_0x5b8e94 *this,cls_0x5b4f30 *pa
       }
       goto LAB_00470682;
     }
-    pcStack_5c = (cls_0x5b4f30 *)0x470682;
+    pcStack_5c = (cls_0x5b4f30_TPlayer *)0x470682;
     cls_0x57d9d0::meth_0x584710((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,this,param_1);
   }
 LAB_00470682:
-  piVar7 = (int *)FUN_00452690();
+  piVar7 = (int *)FUN_00452690_TMapPane_GetInstance();
   if (piVar7 == (int *)0x0) {
     if (this->mbr_0x84 != 0) {
       apuStack_64[1] = *(undefined **)this->mbr_0x4c;
@@ -864,10 +864,10 @@ LAB_00470682:
       pcStack_5c = param_1;
       FUN_00492640(7);
     }
-    if ((param_1 != (cls_0x5b4f30 *)0x0) && ((param_1->cls_0x5a7b98).cls_0x5a50e8.mbr_0x84 != 0)) {
+    if ((param_1 != (cls_0x5b4f30_TPlayer *)0x0) && ((param_1->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x84 != 0)) {
       apuStack_64[0] = (undefined *)this->mbr_0x38;
       apuStack_64[1] = (undefined *)0x0;
-      pcStack_5c = (cls_0x5b4f30 *)this;
+      pcStack_5c = (cls_0x5b4f30_TPlayer *)this;
       FUN_00492640(7);
     }
   }
@@ -890,13 +890,13 @@ LAB_00470682:
       if (iVar8 == 1) {
         piVar4 = (int *)this->mbr_0x64;
         if (piVar4 != (int *)0x0) {
-          pcStack_5c = (cls_0x5b4f30 *)0x47078e;
+          pcStack_5c = (cls_0x5b4f30_TPlayer *)0x47078e;
           (*this->vftptr_0x0->virt_meth_0x46faf0_96)(this);
-          pcStack_5c = (cls_0x5b4f30 *)0x470795;
+          pcStack_5c = (cls_0x5b4f30_TPlayer *)0x470795;
           (**(code **)(*piVar7 + 0x60))();
         }
         uVar10 = _DAT_00666970;
-        pcStack_5c = (cls_0x5b4f30 *)0x0;
+        pcStack_5c = (cls_0x5b4f30_TPlayer *)0x0;
         apuStack_64[0] = &stack0xffffffb8;
         apuStack_64[1] = (undefined *)_DAT_00666970;
         (*this->vftptr_0x0->virt_meth_0x46ed70_8)(this);
@@ -922,10 +922,10 @@ LAB_00470682:
         }
         apuStack_64[0] = (undefined *)CONCAT22(wVar3 + 1,wVar1);
         uVar13 = 0;
-        pcStack_5c = (cls_0x5b4f30 *)CONCAT22(DAT_00666970,pcStack_5c._0_2_);
+        pcStack_5c = (cls_0x5b4f30_TPlayer *)CONCAT22(DAT_00666970,pcStack_5c._0_2_);
         apuStack_64[1] = (undefined *)0x0;
-        uVar10 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,apuStack_64);
-        piVar7 = (int *)FUN_00452690(uVar10,uVar13);
+        uVar10 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,apuStack_64);
+        piVar7 = (int *)FUN_00452690_TMapPane_GetInstance(uVar10,uVar13);
         if ((piVar7 != (int *)0x0) && (piVar4 != (int *)0x0)) {
           (**(code **)(*piVar4 + 0x50))(*(undefined4 *)(piVar7[0x13] + 0x1c),uStack_28,0xffffffff);
           (**(code **)(*piVar7 + 0x40))(piVar7[2] | 0x1000);
@@ -941,7 +941,7 @@ LAB_00470682:
 
 // Function at 004708e0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4708e0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4708e0_OnScreen(cls_0x5b8e94_TObjectInstance *this)
 
 {
   if ((int *)this->mbr_0x58 != (int *)0x0) {
@@ -949,7 +949,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4708e0(cls_0x5b8e94 *this)
   }
   if ((this->mbr_0x84 != 0) && ((this->mbr_0x8 & 0x200000) == 0)) {
     (*this->vftptr_0x0->virt_meth_0x477d30_340)(this);
-    cls_0x4922c0::meth_0x4933d0((cls_0x4922c0 *)this->mbr_0x84);
+    cls_0x4922c0::meth_0x4933d0_TScript_Continue((cls_0x4922c0 *)this->mbr_0x84);
   }
   return;
 }
@@ -958,7 +958,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4708e0(cls_0x5b8e94 *this)
 
 // Function at 00470920
 
-uint __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470920(cls_0x5b8e94 *this)
+uint __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x470920(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword *pdVar1;
@@ -987,7 +987,7 @@ uint __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470920(cls_0x5b8e94 *this)
   dStack_14 = this->mbr_0x14;
   dStack_10 = this->mbr_0x18;
   uVar7 = 0;
-  iVar4 = FUN_00452e10(pdVar1,this->mbr_0xe,0);
+  iVar4 = FUN_00452e10_GetWalkHeight(pdVar1,this->mbr_0xe,0);
   dVar5 = this->mbr_0x18;
   dVar8 = iVar4 + 1;
   if ((((int)dVar5 < (int)dVar8) || (dVar8 == 1)) && ((this->mbr_0x8 & 0x1000000) == 0)) {
@@ -1002,7 +1002,7 @@ uint __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470920(cls_0x5b8e94 *this)
       this->mbr_0x24 = (dVar8 - dVar5) + 1;
     }
   }
-  FUN_0046db20(this->mbr_0xb0,this->mbr_0xb4,&iStack_c,0);
+  FUN_0046db20_ConvertToVector(this->mbr_0xb0,this->mbr_0xb4,&iStack_c,0);
   dStack_4 = this->mbr_0xb8;
   this->mbr_0x30 = this->mbr_0x30 + dStack_4;
   this->mbr_0x2c = this->mbr_0x2c + iStack_8;
@@ -1076,7 +1076,7 @@ uint __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470920(cls_0x5b8e94 *this)
 
 // Function at 00470ca0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470ca0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x470ca0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   if ((int *)this->mbr_0x58 != (int *)0x0) {
@@ -1089,7 +1089,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470ca0(cls_0x5b8e94 *this)
 
 // Function at 00470cc0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470cc0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x470cc0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   short sVar1;
@@ -1180,7 +1180,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470cc0(cls_0x5b8e94 *this)
 
 // Function at 00470e40
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470e40(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x470e40(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -1209,7 +1209,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470e40(cls_0x5b8e94 *this)
     this->mbr_0x9c = dVar2;
   }
   if ((this->mbr_0x4 == 0xb) || (this->mbr_0x4 == 0xc)) {
-    if (this == (cls_0x5b8e94 *)0x0) {
+    if (this == (cls_0x5b8e94_TObjectInstance *)0x0) {
       dVar2 = 0;
     }
     else {
@@ -1224,7 +1224,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470e40(cls_0x5b8e94 *this)
 
 // Function at 00470f00
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470f00(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x470f00(cls_0x5b8e94_TObjectInstance *this)
 
 {
   if (this->mbr_0x58 != 0) {
@@ -1245,12 +1245,12 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x470f00(cls_0x5b8e94 *this)
 
 // Function at 00471260
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x471260(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::meth_0x471260(cls_0x5b8e94_TObjectInstance *this)
 
 {
   if ((this->mbr_0x84 != 0) && ((this->mbr_0x8 & 0x200000) == 0)) {
     (*this->vftptr_0x0->virt_meth_0x477d30_340)(this);
-    cls_0x4922c0::meth_0x4933d0((cls_0x4922c0 *)this->mbr_0x84);
+    cls_0x4922c0::meth_0x4933d0_TScript_Continue((cls_0x4922c0 *)this->mbr_0x84);
   }
   return;
 }
@@ -1260,8 +1260,8 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x471260(cls_0x5b8e94 *this)
 // Function at 00471900
 
 void __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x471900
-          (cls_0x5b8e94 *this,undefined4 param_1,undefined4 param_2)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x471900
+          (cls_0x5b8e94_TObjectInstance *this,undefined4 param_1,undefined4 param_2)
 
 {
   undefined *in_stack_0000000c;
@@ -1279,7 +1279,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x471900
 
 // Function at 00471b50
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x471b50(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x471b50_SetNotify(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword in_stack_00000004;
@@ -1292,7 +1292,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x471b50(cls_0x5b8e94 *this)
 
 // Function at 00471ba0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x471ba0(cls_0x5b8e94 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x471ba0_Notify(cls_0x5b8e94_TObjectInstance *this,int param_1)
 
 {
   cls_0x4922c0 *pcVar1;
@@ -1314,7 +1314,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x471ba0(cls_0x5b8e94 *this,
   }
   else if ((((param_1 == 8) && (this->mbr_0x84 == 0)) && ((this->mbr_0x8 & 0x40000000) == 0)) &&
           ((this->mbr_0x4 != 9 || (this->mbr_0x38 != *(dword *)this->mbr_0x4c)))) {
-    cls_0x497370::meth_0x497370((cls_0x497370 *)&DAT_0065def0);
+    cls_0x497370::meth_0x497370_TScriptManager_ObjectScript((cls_0x497370 *)&DAT_0065def0);
     cls_0x5a50e8::meth_0x471150((cls_0x5a50e8 *)this);
   }
   pcVar1 = (cls_0x4922c0 *)this->mbr_0x84;
@@ -1364,7 +1364,7 @@ LAB_00471c8d:
 // Function at 00472310
 
 void __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x472310(cls_0x5b8e94 *this,int param_1,int param_2)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x472310(cls_0x5b8e94_TObjectInstance *this,int param_1,int param_2)
 
 {
   int iVar1;
@@ -1377,11 +1377,11 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x472310(cls_0x5b8e94 *this,int param_1,int 
     *(int **)(param_1 + 4) = *(int **)(param_1 + 4) + 1;
     if ((param_2 < 0x801) && (0 < param_2)) {
       do {
-        iVar3 = FUN_00471ce0(param_1,iVar1);
+        iVar3 = FUN_00471ce0_CreateObjectFromStream(param_1,iVar1);
         if (iVar3 != 0) {
           uVar2 = cls_0x45f7c0::meth_0x41c840((cls_0x45f7c0 *)&this->mbr_0x68);
           *(undefined2 *)(iVar3 + 0x7e) = uVar2;
-          *(cls_0x5b8e94 **)(iVar3 + 100) = this;
+          *(cls_0x5b8e94_TObjectInstance **)(iVar3 + 100) = this;
         }
         param_2 = param_2 + -1;
       } while (param_2 != 0);
@@ -1394,7 +1394,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x472310(cls_0x5b8e94 *this,int param_1,int 
 
 // Function at 00472380
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472380(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x472380(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword *pdVar1;
@@ -1411,7 +1411,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472380(cls_0x5b8e94 *this)
   }
   else {
     uVar2 = (*this->vftptr_0x0->virt_meth_0x477d50_368)(this);
-    dVar3 = cls_0x5a7b98::meth_0x470040((cls_0x5a7b98 *)CONCAT31(extraout_var_00,uVar2));
+    dVar3 = cls_0x5a7b98_TCharacter::meth_0x470040((cls_0x5a7b98_TCharacter *)CONCAT31(extraout_var_00,uVar2));
   }
   if ((int)((in_stack_00000004->mbr_0xc + in_stack_00000004->mbr_0x4) - in_stack_00000004->mbr_0x8)
       < 4) {
@@ -1441,7 +1441,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472380(cls_0x5b8e94 *this)
 
 // Function at 00472430
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472430(cls_0x5b8e94 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x472430(cls_0x5b8e94_TObjectInstance *this,int param_1)
 
 {
   byte bVar1;
@@ -1673,8 +1673,8 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472430(cls_0x5b8e94 *this,
     *(byte **)(iVar11 + 4) = pbVar5 + 0x13;
     this->mbr_0x8 = uVar13 | 0x4004;
   }
-  if ((uint)(int)(short)this->mbr_0x4 < DAT_0065a258) {
-    dVar12 = (&DAT_0065a148)[(short)this->mbr_0x4];
+  if ((uint)(int)(short)this->mbr_0x4 < DAT_0065a258_TObjectClass_numclasses) {
+    dVar12 = (&DAT_0065a148_TObjectClass_classes)[(short)this->mbr_0x4];
   }
   else {
     dVar12 = 0;
@@ -1723,7 +1723,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472430(cls_0x5b8e94 *this,
   }
   if (((this->mbr_0x8 & 0x40000000) == 0) &&
      ((this->mbr_0x4 != 9 || (this->mbr_0x38 != *(dword *)this->mbr_0x4c)))) {
-    cls_0x497370::meth_0x497370((cls_0x497370 *)&DAT_0065def0);
+    cls_0x497370::meth_0x497370_TScriptManager_ObjectScript((cls_0x497370 *)&DAT_0065def0);
     cls_0x5a50e8::meth_0x471150((cls_0x5a50e8 *)this);
   }
   return;
@@ -1733,7 +1733,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472430(cls_0x5b8e94 *this,
 
 // Function at 00472980
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472980(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x472980(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte bVar1;
@@ -1968,7 +1968,7 @@ LAB_004729cb:
 
 // Function at 00472e90
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472e90(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x472e90_SetFlags(cls_0x5b8e94_TObjectInstance *this)
 
 {
   uint uVar1;
@@ -1991,7 +1991,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472e90(cls_0x5b8e94 *this)
   if ((this->mbr_0x44 != 0) &&
      ((((uVar1 & 0x400000) == 0 && ((this->mbr_0x8 & 0x400000) != 0)) ||
       (((uVar1 & 0x400000) != 0 && ((this->mbr_0x8 & 0x400000) == 0)))))) {
-    cls_0x5a5320::meth_0x452750((cls_0x5a5320 *)&DAT_006668d8,this);
+    cls_0x5a5320_TPlayScreen::meth_0x452750((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,this);
   }
   if (((uVar1 & 4) == 0) && ((*(byte *)&this->mbr_0x8 & 4) != 0)) {
     (*this->vftptr_0x0->virt_meth_0x470e40_292)(this);
@@ -2010,11 +2010,11 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x472e90(cls_0x5b8e94 *this)
 // Function at 00472f80
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x472f80(cls_0x5b8e94 *this,uint param_1,char *param_2)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x472f80_GetProperty(cls_0x5b8e94_TObjectInstance *this,uint param_1,char *param_2)
 
 {
   char cVar1;
-  cls_0x5b8e94 *pcVar2;
+  cls_0x5b8e94_TObjectInstance *pcVar2;
   byte bVar3;
   int iVar4;
   char *pcVar5;
@@ -2032,7 +2032,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x472f80(cls_0x5b8e94 *this,uint param_1,cha
   int in_stack_0000000c;
   undefined4 local_2b4;
   int local_2b0;
-  cls_0x5b8e94 *local_2ac;
+  cls_0x5b8e94_TObjectInstance *local_2ac;
   undefined4 local_2a8;
   char acStack_268 [4];
   undefined local_264 [100];
@@ -2045,7 +2045,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x472f80(cls_0x5b8e94 *this,uint param_1,cha
   local_2b4 = 0;
   *param_2 = '\0';
   local_2ac = this;
-  iVar4 = FUN_0059a530(param_1,&DAT_005d4b5c);
+  iVar4 = FUN_0059a530_stricmp(param_1,&DAT_005d4b5c);
   if (iVar4 == 0) {
     iVar4 = 0;
     pcVar5 = *(char **)this->mbr_0x4c;
@@ -2085,11 +2085,11 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x472f80(cls_0x5b8e94 *this,uint param_1,cha
     }
   }
   else {
-    iVar4 = FUN_0059a530(param_1,s_objtype_005d4b64);
+    iVar4 = FUN_0059a530_stricmp(param_1,s_objtype_005d4b64);
     if (iVar4 != 0) {
-      iVar4 = FUN_0059a530(param_1,s_objclass_005d4b6c);
+      iVar4 = FUN_0059a530_stricmp(param_1,s_objclass_005d4b6c);
       if (iVar4 != 0) {
-        local_2b0 = FUN_0059a530(param_1,s_statmod_005d4b80);
+        local_2b0 = FUN_0059a530_stricmp(param_1,s_statmod_005d4b80);
         pcVar2 = local_2ac;
         if (local_2b0 == 0) {
           iVar12 = 0;
@@ -2124,13 +2124,13 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x472f80(cls_0x5b8e94 *this,uint param_1,cha
                   puVar16 = (undefined4 *)((int)puVar16 + 1);
                 }
                 FUN_0059bd3e((int)&local_2a8 + 1);
-                if (local_2ac == (cls_0x5b8e94 *)0x0) {
+                if (local_2ac == (cls_0x5b8e94_TObjectInstance *)0x0) {
                   pcVar5 = s__s_s__d_005d4b88;
                 }
-                else if (local_2ac == (cls_0x5b8e94 *)0x1) {
+                else if (local_2ac == (cls_0x5b8e94_TObjectInstance *)0x1) {
                   pcVar5 = s__s_s__d___005d4b94;
                 }
-                else if (local_2ac == (cls_0x5b8e94 *)0x2) {
+                else if (local_2ac == (cls_0x5b8e94_TObjectInstance *)0x2) {
                   pcVar5 = s__s_s___d__005d4ba0;
                 }
                 else {
@@ -2150,7 +2150,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x472f80(cls_0x5b8e94 *this,uint param_1,cha
         }
         else {
           pcVar5 = s_experience_005d4bb8;
-          iVar4 = FUN_0059a530(param_1,s_experience_005d4bb8);
+          iVar4 = FUN_0059a530_stricmp(param_1,s_experience_005d4bb8);
           if (iVar4 == 0) {
             uVar6 = 0;
             if ((this->mbr_0x4 == 0xc) && (DAT_00667fcc != (cls_0x51a5b0 *)0x0)) {
@@ -2167,7 +2167,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x472f80(cls_0x5b8e94 *this,uint param_1,cha
           while( true ) {
             if ((psVar14 == (short *)0x0) || ((uint)(int)*psVar14 <= uVar9)) goto LAB_004733dc;
             uVar10 = param_1;
-            iVar12 = FUN_0059a530(iVar4,param_1);
+            iVar12 = FUN_0059a530_stricmp(iVar4,param_1);
             if (iVar12 == 0) break;
             iVar4 = iVar4 + 0x50;
             uVar9 = uVar9 + 1;
@@ -2194,7 +2194,7 @@ LAB_004733dc:
               return unaff_EBX;
             }
             uVar10 = param_1;
-            iVar12 = FUN_0059a530(iVar4,param_1);
+            iVar12 = FUN_0059a530_stricmp(iVar4,param_1);
             if (iVar12 == 0) break;
             iVar4 = iVar4 + 0x50;
             uVar9 = uVar9 + 1;
@@ -2315,7 +2315,7 @@ LAB_00473433:
 // Function at 00473460
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x473460(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x473460(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   dword dVar1;
@@ -2328,9 +2328,9 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x473460(cls_0x5b8e94 *this,undefined4 param
   undefined4 in_stack_00000008;
   cls_0x4782d0 local_c;
   
-  iVar3 = FUN_0059a530(param_1,&DAT_005d4bcc);
+  iVar3 = FUN_0059a530_stricmp(param_1,&DAT_005d4bcc);
   if (iVar3 == 0) {
-    cls_0x5b4f30::meth_0x46e6f0((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e6f0((cls_0x5b4f30_TPlayer *)this);
     (*this->vftptr_0x0->virt_meth_0x4735c0_208)(this);
     return 1;
   }
@@ -2338,7 +2338,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x473460(cls_0x5b8e94 *this,undefined4 param
   while( true ) {
     if (((short *)local_c.mbr_0x0 == (short *)0x0) ||
        ((uint)(int)*(short *)local_c.mbr_0x0 <= local_c.mbr_0x8)) goto LAB_00473528;
-    iVar3 = FUN_0059a530(local_c.mbr_0x4,param_1);
+    iVar3 = FUN_0059a530_stricmp(local_c.mbr_0x4,param_1);
     if (iVar3 == 0) break;
     local_c.mbr_0x4 = local_c.mbr_0x4 + 0x50;
     local_c.mbr_0x8 = local_c.mbr_0x8 + 1;
@@ -2360,7 +2360,7 @@ LAB_00473528:
       return 0;
     }
     if ((uint)(int)*psVar7 <= uVar6) break;
-    iVar5 = FUN_0059a530(iVar3,param_1);
+    iVar5 = FUN_0059a530_stricmp(iVar3,param_1);
     if (iVar5 == 0) {
       if ((int)uVar6 < 0) {
         return 0;
@@ -2385,7 +2385,7 @@ LAB_00473528:
 
 // Function at 00473600
 
-uint __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x473600(cls_0x5b8e94 *this)
+uint __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x473600_GetStat(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte bVar1;
@@ -2400,7 +2400,7 @@ uint __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x473600(cls_0x5b8e94 *this)
   while( true ) {
     if (((short *)local_c.mbr_0x0 == (short *)0x0) ||
        ((uint)(int)*(short *)local_c.mbr_0x0 <= local_c.mbr_0x8)) goto LAB_00473674;
-    iVar2 = FUN_0059a530(local_c.mbr_0x4,in_stack_00000004);
+    iVar2 = FUN_0059a530_stricmp(local_c.mbr_0x4,in_stack_00000004);
     if (iVar2 == 0) break;
     local_c.mbr_0x4 = local_c.mbr_0x4 + 0x50;
     local_c.mbr_0x8 = local_c.mbr_0x8 + 1;
@@ -2420,7 +2420,7 @@ LAB_00473674:
     if ((uint)(int)*psVar5 <= uVar4) {
       return 0;
     }
-    iVar3 = FUN_0059a530(iVar2,in_stack_00000004);
+    iVar3 = FUN_0059a530_stricmp(iVar2,in_stack_00000004);
     if (iVar3 == 0) break;
     iVar2 = iVar2 + 0x50;
     uVar4 = uVar4 + 1;
@@ -2439,7 +2439,7 @@ LAB_00473674:
 
 // Function at 004736f0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4736f0(cls_0x5b8e94 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4736f0(cls_0x5b8e94_TObjectInstance *this,int param_1)
 
 {
   dword dVar1;
@@ -2458,7 +2458,7 @@ LAB_00473751:
       cls_0x4782d0::meth_0x4785c0(&local_c);
       iVar3 = cls_0x4782d0::meth_0x478300(&local_c);
       if (iVar3 != 0) {
-        while (iVar3 = FUN_0059a530(local_c.mbr_0x4,param_1), iVar3 != 0) {
+        while (iVar3 = FUN_0059a530_stricmp(local_c.mbr_0x4,param_1), iVar3 != 0) {
           local_c.mbr_0x4 = local_c.mbr_0x4 + 0x50;
           local_c.mbr_0x8 = local_c.mbr_0x8 + 1;
           iVar3 = cls_0x4782d0::meth_0x478300(&local_c);
@@ -2486,7 +2486,7 @@ LAB_00473856:
       }
       return;
     }
-    iVar3 = FUN_0059a530(local_c.mbr_0x4,param_1);
+    iVar3 = FUN_0059a530_stricmp(local_c.mbr_0x4,param_1);
     if (iVar3 == 0) {
       if (-1 < (int)local_c.mbr_0x8) {
         uVar2 = (*this->vftptr_0x0->virt_meth_0x477aa0_220)(this);
@@ -2508,7 +2508,7 @@ LAB_00473856:
 
 // Function at 004778c0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4778c0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4778c0_SetStateByName(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5b8e94__vftable_5b8e94 *pcVar1;
@@ -2523,7 +2523,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4778c0(cls_0x5b8e94 *this)
 
 // Function at 00477990
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x477990(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x477990(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -2541,7 +2541,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x477990(cls_0x5b8e94 
 
 // Function at 00477a60
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x477a60(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x477a60(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
@@ -2558,7 +2558,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x477a60(cls_0x5b8e94 
 
 // Function at 00477aa0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x477aa0(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x477aa0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   uint in_stack_00000004;
@@ -2573,7 +2573,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x477aa0(cls_0x5b8e94 
 
 // Function at 004bf730
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bf730(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4bf730(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -2583,7 +2583,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bf730(cls_0x5b8e94 *this)
   int iVar3;
   int iVar4;
   
-  virt_meth_0x46faf0(this);
+  virt_meth_0x46faf0_RemoveFromInventory(this);
   uVar1 = (*this->vftptr_0x0[1].virt_meth_0x477900_36)(this);
   if ((CONCAT31(extraout_var,uVar1) != 0) && (this->mbr_0x64 == DAT_0065d674)) {
     uVar1 = (*this->vftptr_0x0->virt_meth_0x477db0_408)(this);
@@ -2609,7 +2609,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bf730(cls_0x5b8e94 *this)
 
 // Function at 004bfcb0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bfcb0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4bfcb0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -2623,7 +2623,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bfcb0(cls_0x5b8e94 *this)
   undefined4 in_stack_00000008;
   undefined *in_stack_0000000c;
   
-  iVar2 = FUN_0059a530(this->mbr_0x38,s_Arrow_005df380);
+  iVar2 = FUN_0059a530_stricmp(this->mbr_0x38,s_Arrow_005df380);
   if (iVar2 == 0) {
     uVar1 = (*this->vftptr_0x0->virt_meth_0x477db0_408)(this);
     if (CONCAT31(extraout_var,uVar1) < 0x20) {
@@ -2668,7 +2668,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bfcb0(cls_0x5b8e94 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-int * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bfda0(cls_0x5b8e94 *this)
+int * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4bfda0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -2685,7 +2685,7 @@ int * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bfda0(cls_0x5b8e94 *this
   int *piVar5;
   int iVar6;
   
-  iVar2 = FUN_0059a530(this->mbr_0x38,s_Arrow_005df388);
+  iVar2 = FUN_0059a530_stricmp(this->mbr_0x38,s_Arrow_005df388);
   if (iVar2 == 0) {
     uVar1 = (*this->vftptr_0x0->virt_meth_0x477db0_408)(this);
     if (CONCAT31(extraout_var,uVar1) < 0x20) {
@@ -2752,7 +2752,7 @@ int * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bfda0(cls_0x5b8e94 *this
 
 // Function at 004bff60
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bff60(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4bff60(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -2799,7 +2799,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4bff60(cls_0x5b8e94 *this)
 
 // Function at 004c0020
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0020(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c0020(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -2839,7 +2839,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0020(cls_0x5b8e94 
 
 // Function at 004c0880
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0880(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c0880(cls_0x5b8e94_TObjectInstance *this)
 
 {
   if (0 < (int)this->mbr_0xdc) {
@@ -2850,7 +2850,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0880(cls_0x5b8e94 *this)
       ((this->mbr_0x20 == 0 && (this->mbr_0x24 == 0)))))) {
     (*this->vftptr_0x0->virt_meth_0x472e90_64)(this);
   }
-  virt_meth_0x4708e0(this);
+  virt_meth_0x4708e0_OnScreen(this);
   return;
 }
 
@@ -2859,7 +2859,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0880(cls_0x5b8e94 *this)
 // Function at 004c08e0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c08e0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c08e0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -2891,7 +2891,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c08e0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 004c09e0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c09e0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c09e0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -2908,7 +2908,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c09e0(cls_0x5b8
 // Function at 004c0a10
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0a10(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c0a10(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -2940,7 +2940,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0a10(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 004c0a90
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0a90(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c0a90(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -2957,7 +2957,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0a90(cls_0x5b8
 // Function at 004c0ac0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0ac0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c0ac0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -2989,7 +2989,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0ac0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 004c0b40
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0b40(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c0b40(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3006,7 +3006,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0b40(cls_0x5b8
 // Function at 004c0b70
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0b70(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c0b70(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -3038,7 +3038,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0b70(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 004c0bf0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0bf0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c0bf0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3054,7 +3054,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0bf0(cls_0x5b8
 
 // Function at 004c0e10
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0e10(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c0e10(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3071,7 +3071,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c0e10(cls_0x5b8
 // Function at 004c10b0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c10b0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4c10b0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -3100,7 +3100,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x4c10b0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 004dd370
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4dd370(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4dd370(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -3110,7 +3110,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4dd370(cls_0x5b8e94 
   
   uVar1 = (*this->vftptr_0x0->virt_meth_0x528ee0_496)(this,unaff_ESI);
   if ((CONCAT31(extraout_var,uVar1) == 0) &&
-     (iVar2 = cls_0x5a7b98::meth_0x470040((cls_0x5a7b98 *)this), iVar2 < 1)) {
+     (iVar2 = cls_0x5a7b98_TCharacter::meth_0x470040((cls_0x5a7b98_TCharacter *)this), iVar2 < 1)) {
     return 0xffffffff;
   }
   if ((*(byte *)&this->mbr_0x8 & 0x80) != 0) {
@@ -3124,7 +3124,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4dd370(cls_0x5b8e94 
 // Function at 004dd3e0
 
 void __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x4dd3e0(cls_0x5b8e94 *this,int param_1,int param_2)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4dd3e0(cls_0x5b8e94_TObjectInstance *this,int param_1,int param_2)
 
 {
   cls_0x5b8e94__vftable_5b8e94 *pcVar1;
@@ -3147,7 +3147,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x4dd3e0(cls_0x5b8e94 *this,int param_1,int 
 
 // Function at 004dd470
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4dd470(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4dd470(cls_0x5b8e94_TObjectInstance *this)
 
 {
   virt_meth_0x472980(this);
@@ -3158,7 +3158,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4dd470(cls_0x5b8e94 *this)
 
 // Function at 004ddd40
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4ddd40(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4ddd40(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3174,7 +3174,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4ddd40(cls_0x5b8
 
 // Function at 004de060
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4de060(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4de060(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3190,7 +3190,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4de060(cls_0x5b8
 
 // Function at 004de120
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4de120(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4de120(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3206,7 +3206,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4de120(cls_0x5b8
 
 // Function at 004de800
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4de800(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4de800(cls_0x5b8e94_TObjectInstance *this)
 
 {
   short sVar1;
@@ -3249,7 +3249,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4de800(cls_0x5b8e94 *this)
     this->mbr_0x138 = this->mbr_0x138 - 1;
     return;
   }
-  virt_meth_0x4708e0(this);
+  virt_meth_0x4708e0_OnScreen(this);
   if (((this->mbr_0xd8 == 0) || (iVar6 = *(int *)(this->mbr_0xd8 + 0x11c), iVar6 == 0)) ||
      (*(int *)(iVar6 + 0xb0) < 1)) {
     bVar2 = false;
@@ -3260,7 +3260,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4de800(cls_0x5b8e94 *this)
   if (DAT_005d7a18 == 0) {
     if ((*(byte *)&this->mbr_0x8 & 4) != 0) {
 LAB_004de916:
-      cls_0x5b4f30::meth_0x4713c0((cls_0x5b4f30 *)this);
+      cls_0x5b4f30_TPlayer::meth_0x4713c0((cls_0x5b4f30_TPlayer *)this);
     }
 LAB_004de91d:
     if (bVar2) {
@@ -3285,18 +3285,18 @@ LAB_004de91d:
         dVar4 = (int)(this->mbr_0x148 * dVar4) / *(int *)(*(int *)(this->mbr_0xd8 + 0x11c) + 0xc4);
       }
       *(dword *)&this->mbr_0x144 = dVar4;
-      cls_0x5b4f30::meth_0x4714e0((cls_0x5b4f30 *)this);
+      cls_0x5b4f30_TPlayer::meth_0x4714e0((cls_0x5b4f30_TPlayer *)this);
     }
   }
   else {
     if ((*(byte *)&this->mbr_0x8 & 4) != 0) goto LAB_004de91d;
     if (bVar2) {
-      this_00 = (cls_0x4f54d0 *)cls_0x5b4f30::meth_0x4f6ea0((cls_0x5b4f30 *)this);
+      this_00 = (cls_0x4f54d0 *)cls_0x5b4f30_TPlayer::meth_0x4f6ea0((cls_0x5b4f30_TPlayer *)this);
       cls_0x4f54d0::meth_0x4f54d0(this_00);
-      cls_0x5b4f30::meth_0x471820((cls_0x5b4f30 *)this);
-      cls_0x5b4f30::meth_0x4714e0((cls_0x5b4f30 *)this);
-      cls_0x5b4f30::meth_0x4715e0((cls_0x5b4f30 *)this);
-      cls_0x5b4f30::meth_0x4716c0((cls_0x5b4f30 *)this);
+      cls_0x5b4f30_TPlayer::meth_0x471820((cls_0x5b4f30_TPlayer *)this);
+      cls_0x5b4f30_TPlayer::meth_0x4714e0((cls_0x5b4f30_TPlayer *)this);
+      cls_0x5b4f30_TPlayer::meth_0x4715e0((cls_0x5b4f30_TPlayer *)this);
+      cls_0x5b4f30_TPlayer::meth_0x4716c0((cls_0x5b4f30_TPlayer *)this);
       goto LAB_004de916;
     }
   }
@@ -3344,7 +3344,7 @@ LAB_004de91d:
       }
     }
     else {
-      FUN_0046db20(this->mbr_0x124,this->mbr_0x128,&local_b8,0);
+      FUN_0046db20_ConvertToVector(this->mbr_0x124,this->mbr_0x128,&local_b8,0);
       iVar13 = iVar13 + (int)local_b4;
       iVar14 = iVar14 + (int)local_b8;
       local_90 = iVar6 + (int)local_b0;
@@ -3390,7 +3390,7 @@ LAB_004de91d:
       sVar1 = *(short *)(this->mbr_0xe4 + 4);
       if ((sVar1 == 0xc) || (sVar1 == 0xb)) {
         if ((*(int *)(this->mbr_0xe4 + 0xe0) == 0) ||
-           (iVar6 = FUN_004dab80(&this->mbr_0x15c), iVar6 == 0)) {
+           (iVar6 = FUN_004dab80_TActionBlock_Is(&this->mbr_0x15c), iVar6 == 0)) {
           pcVar12 = this->vftptr_0x0;
         }
         else {
@@ -3501,7 +3501,7 @@ switchD_004deda2_caseD_4:
 
 // Function at 004def30
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4def30(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4def30(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
@@ -3513,7 +3513,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4def30(cls_0x5b8e94 *this)
       (0 < *(int *)(iVar1 + 0xc4))))) {
     this->mbr_0x140 = *(dword *)(iVar1 + 0xc4);
   }
-  virt_meth_0x472e90(this);
+  virt_meth_0x472e90_SetFlags(this);
   return;
 }
 
@@ -3521,7 +3521,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4def30(cls_0x5b8e94 *this)
 
 // Function at 004defe0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4defe0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::meth_0x4defe0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword dVar1;
@@ -3560,7 +3560,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4defe0(cls_0x5b8e94 *this)
 
 // Function at 004df070
 
-dword __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4df070(cls_0x5b8e94 *this)
+dword __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::meth_0x4df070(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
@@ -3579,7 +3579,7 @@ dword __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4df070(cls_0x5b8e94 *this)
     local_c = *(undefined4 *)(iVar1 + 0x10);
     local_8 = *(undefined4 *)(iVar1 + 0x14);
     local_4 = *(undefined4 *)(iVar1 + 0x18);
-    dVar2 = FUN_0046dc60(&this->mbr_0x10,&local_c);
+    dVar2 = FUN_0046dc60_AngleToPP(&this->mbr_0x10,&local_c);
     this->mbr_0xe0 = dVar2;
     return dVar2;
   }
@@ -3592,7 +3592,7 @@ dword __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4df070(cls_0x5b8e94 *this)
 
 // Function at 004df0f0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4df0f0(cls_0x5b8e94 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4df0f0(cls_0x5b8e94_TObjectInstance *this,int param_1)
 
 {
   dword dVar1;
@@ -3604,7 +3604,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4df0f0(cls_0x5b8e94 *this,
   uint uVar6;
   dword in_stack_00000008;
   
-  virt_meth_0x471ba0(this,param_1);
+  virt_meth_0x471ba0_Notify(this,param_1);
   if (param_1 == 1) {
     if (this->mbr_0xe4 != in_stack_00000008) goto LAB_004df14e;
   }
@@ -3661,7 +3661,7 @@ LAB_004df14e:
 
 // Function at 004e9cc0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4e9cc0(cls_0x5b8e94 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4e9cc0(cls_0x5b8e94_TObjectInstance *this,int param_1)
 
 {
   dword dVar1;
@@ -3698,7 +3698,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4e9cc0(cls_0x5b8e94 *this,
 // Function at 004f4a30
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f4a30(cls_0x5b8e94 *this,int param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4f4a30(cls_0x5b8e94_TObjectInstance *this,int param_1)
 
 {
   uint uVar1;
@@ -3735,7 +3735,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f4a30(cls_0x5b8e94 *this,int param_1)
 
 // Function at 004f4ec0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f4ec0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4f4ec0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3751,7 +3751,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f4ec0(cls_0x5b8
 
 // Function at 004f6110
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f6110(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4f6110(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3767,7 +3767,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f6110(cls_0x5b8
 
 // Function at 004f6140
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f6140(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4f6140(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -3799,7 +3799,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f6140(cls_0x5b8
 
 // Function at 004f6bc0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f6bc0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4f6bc0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3815,7 +3815,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f6bc0(cls_0x5b8
 
 // Function at 004f79b0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f79b0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4f79b0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3831,7 +3831,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f79b0(cls_0x5b8
 
 // Function at 004f7d20
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f7d20(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4f7d20(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3847,7 +3847,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4f7d20(cls_0x5b8
 
 // Function at 004fa390
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4fa390(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4fa390(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -3863,7 +3863,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4fa390(cls_0x5b8
 
 // Function at 004fa440
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4fa440(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4fa440(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -3897,15 +3897,15 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4fa440(cls_0x5b8
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-dword __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4fa540(cls_0x5b8e94 *this)
+dword __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::meth_0x4fa540(cls_0x5b8e94_TObjectInstance *this)
 
 {
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   int *piVar1;
   dword dVar2;
   float fVar3;
   float fVar4;
-  cls_0x5a7b98 *pcVar5;
+  cls_0x5a7b98_TCharacter *pcVar5;
   undefined uVar6;
   int iVar7;
   dword dVar8;
@@ -3933,25 +3933,25 @@ dword __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4fa540(cls_0x5b8e94 *this)
     this->mbr_0x508 = 0;
     goto LAB_004fa989;
   }
-  iVar7 = FUN_0059a530(*(int *)(this->mbr_0xd8 + 0x120) + 4,s_Physical_Paralysis_005e122c);
+  iVar7 = FUN_0059a530_stricmp(*(int *)(this->mbr_0xd8 + 0x120) + 4,s_Physical_Paralysis_005e122c);
   if (iVar7 == 0) {
     this->mbr_0x404 = 1;
     this->mbr_0x444 = 0xf0;
   }
   else {
-    iVar7 = FUN_0059a530(*(int *)(this->mbr_0xd8 + 0x120) + 4,s_Neural_Paralysis_005e1240);
+    iVar7 = FUN_0059a530_stricmp(*(int *)(this->mbr_0xd8 + 0x120) + 4,s_Neural_Paralysis_005e1240);
     if (iVar7 == 0) {
       this->mbr_0x404 = 2;
       this->mbr_0x444 = 0x168;
     }
     else {
-      iVar7 = FUN_0059a530(*(int *)(this->mbr_0xd8 + 0x120) + 4,s_Full_Paralysis_005e1254);
+      iVar7 = FUN_0059a530_stricmp(*(int *)(this->mbr_0xd8 + 0x120) + 4,s_Full_Paralysis_005e1254);
       if (iVar7 == 0) {
         this->mbr_0x404 = 3;
         this->mbr_0x444 = 0x168;
       }
       else {
-        iVar7 = FUN_0059a530(*(int *)(this->mbr_0xd8 + 0x120) + 4,s_Paralize4_005e1264);
+        iVar7 = FUN_0059a530_stricmp(*(int *)(this->mbr_0xd8 + 0x120) + 4,s_Paralize4_005e1264);
         if (iVar7 == 0) {
           this->mbr_0x404 = 4;
           this->mbr_0x444 = 200;
@@ -3959,8 +3959,8 @@ dword __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4fa540(cls_0x5b8e94 *this)
       }
     }
   }
-  this_00 = *(cls_0x5a7b98 **)(this->mbr_0xd8 + 4);
-  if (this_00 == (cls_0x5a7b98 *)0x0) {
+  this_00 = *(cls_0x5a7b98_TCharacter **)(this->mbr_0xd8 + 4);
+  if (this_00 == (cls_0x5a7b98_TCharacter *)0x0) {
     this->mbr_0x3b0 = 0;
     this->mbr_0x510 = 0;
     this->mbr_0x50c = 0;
@@ -4018,19 +4018,19 @@ joined_r0x004fa7b1:
     }
     if (((this->mbr_0x404 == 3) || (this->mbr_0x544 == 0)) &&
        (cls_0x44ceb0::cls_0x44ceb0(&cStack_48,&local_54,300,0xe0,2,0),
-       (cls_0x5a7b98 *)cStack_48.mbr_0xc != (cls_0x5a7b98 *)0x0)) {
+       (cls_0x5a7b98_TCharacter *)cStack_48.mbr_0xc != (cls_0x5a7b98_TCharacter *)0x0)) {
       do {
-        pcVar5 = (cls_0x5a7b98 *)cStack_48.mbr_0xc;
-        if (((cls_0x5a7b98 *)cStack_48.mbr_0xc != this_00) &&
+        pcVar5 = (cls_0x5a7b98_TCharacter *)cStack_48.mbr_0xc;
+        if (((cls_0x5a7b98_TCharacter *)cStack_48.mbr_0xc != this_00) &&
            (uVar6 = (*((cls_0x5a50e8 *)cStack_48.mbr_0xc)->vftptr_0x0->virt_meth_0x477e50_448)
                               ((void *)cStack_48.mbr_0xc),
            CONCAT31(extraout_var,uVar6) != 0 && -1 < extraout_var)) {
           fStack_60 = (float)(pcVar5->cls_0x5a50e8).mbr_0x10;
           fStack_5c = (float)(pcVar5->cls_0x5a50e8).mbr_0x14;
           dStack_58 = (pcVar5->cls_0x5a50e8).mbr_0x18;
-          iVar7 = FUN_0046de60(&local_54,&fStack_60);
+          iVar7 = FUN_0046de60_Distance2D(&local_54,&fStack_60);
           if ((iVar7 < 0x191) &&
-             ((iVar7 = cls_0x5a7b98::meth_0x4c89c0(this_00), iVar7 != 0 &&
+             ((iVar7 = cls_0x5a7b98_TCharacter::meth_0x4c89c0_IsEnemy(this_00), iVar7 != 0 &&
               (*(int *)(*(int *)&(pcVar5->cls_0x5a50e8).field_0xfc + 0x454) == 0)))) {
             (&this->mbr_0x3b0)[this->mbr_0x544] = (dword)pcVar5;
             dVar8 = this->mbr_0x544;
@@ -4051,7 +4051,7 @@ joined_r0x004fa7b1:
           }
         }
         cls_0x44ceb0::meth_0x44d080(&cStack_48);
-      } while ((cls_0x5a7b98 *)cStack_48.mbr_0xc != (cls_0x5a7b98 *)0x0);
+      } while ((cls_0x5a7b98_TCharacter *)cStack_48.mbr_0xc != (cls_0x5a7b98_TCharacter *)0x0);
       this->mbr_0x401 = 1;
       goto LAB_004fa989;
     }
@@ -4090,20 +4090,20 @@ LAB_004fa989:
     iVar9 = 0;
     pdVar13 = &this->mbr_0x44c;
     do {
-      iVar11 = FUN_00483300(0xfffffff1,0xf);
+      iVar11 = FUN_00483300_RandomRange(0xfffffff1,0xf);
       pdVar13[-1] = (dword)((float)iVar11 * _DAT_005a3538 + fVar3);
-      iVar11 = FUN_00483300(0xfffffff1,0xf);
+      iVar11 = FUN_00483300_RandomRange(0xfffffff1,0xf);
       *pdVar13 = (dword)((float)iVar11 * _DAT_005a3538 + fVar4);
-      iVar11 = FUN_00483300(0xfffffffb,5);
+      iVar11 = FUN_00483300_RandomRange(0xfffffffb,5);
       pdVar13[1] = (dword)((float)iVar11 * _DAT_005a3538 + (float)(iVar7 + 0x3c));
-      iVar11 = FUN_00483300(0xfffffff1,0xf);
+      iVar11 = FUN_00483300_RandomRange(0xfffffff1,0xf);
       pdVar13[-0xb2] = (dword)((float)iVar11 * _DAT_005a3538);
-      iVar11 = FUN_00483300(0xfffffff1,0xf);
+      iVar11 = FUN_00483300_RandomRange(0xfffffff1,0xf);
       pdVar13[-0xb1] = (dword)((float)iVar11 * _DAT_005a3538);
-      iVar11 = FUN_00483300(0xfffffffb,0);
+      iVar11 = FUN_00483300_RandomRange(0xfffffffb,0);
       pdVar13[-0xb0] = (dword)((float)iVar11 * _DAT_005a350c);
       iVar11 = __ftol();
-      dVar10 = FUN_00483300(0,iVar11 * 100);
+      dVar10 = FUN_00483300_RandomRange(0,iVar11 * 100);
       pdVar12[-0x1e] = (dword)((float)dVar10 * _DAT_005a350c + (float)this->mbr_0x3a4);
       *pdVar12 = 0x3f800000;
       pdVar12[-0xf] = 0x3e75c28f;
@@ -4127,20 +4127,20 @@ LAB_004fa989:
     iVar9 = 0;
     pdVar13 = &this->mbr_0x44c;
     do {
-      iVar11 = FUN_00483300(0xfffffff1,0xf);
+      iVar11 = FUN_00483300_RandomRange(0xfffffff1,0xf);
       pdVar13[-1] = (dword)((float)iVar11 * _DAT_005a3538 + fVar3);
-      iVar11 = FUN_00483300(0xfffffff1,0xf);
+      iVar11 = FUN_00483300_RandomRange(0xfffffff1,0xf);
       *pdVar13 = (dword)((float)iVar11 * _DAT_005a3538 + fVar4);
-      iVar11 = FUN_00483300(0xfffffffb,5);
+      iVar11 = FUN_00483300_RandomRange(0xfffffffb,5);
       pdVar13[1] = (dword)((float)iVar11 * _DAT_005a3538 + (float)(iVar7 + 0x3c));
-      iVar11 = FUN_00483300(0xffffffc9,0x37);
+      iVar11 = FUN_00483300_RandomRange(0xffffffc9,0x37);
       pdVar13[-0xb2] = (dword)((((float)iVar11 + fStack_60) * _DAT_005a4960) / fStack_68);
-      iVar11 = FUN_00483300(0xffffffc9,0x37);
+      iVar11 = FUN_00483300_RandomRange(0xffffffc9,0x37);
       pdVar13[-0xb1] = (dword)((((float)iVar11 + fStack_5c) * _DAT_005a4960) / fStack_68);
-      iVar11 = FUN_00483300(0xfffffffb,0);
+      iVar11 = FUN_00483300_RandomRange(0xfffffffb,0);
       pdVar13[-0xb0] = (dword)((float)iVar11 * _DAT_005a350c);
       iVar11 = __ftol();
-      iVar11 = FUN_00483300(0,iVar11 * 100);
+      iVar11 = FUN_00483300_RandomRange(0,iVar11 * 100);
       pdVar12[-0x1e] = (dword)((float)iVar11 * _DAT_005a350c + (float)this->mbr_0x3a4);
       *pdVar12 = 0x3f800000;
       pdVar12[-0xf] = 0x3e75c28f;
@@ -4172,7 +4172,7 @@ LAB_004fa989:
 
 // Function at 004fb560
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4fb560(cls_0x5b8e94 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4fb560(cls_0x5b8e94_TObjectInstance *this,int param_1)
 
 {
   dword dVar1;
@@ -4205,7 +4205,7 @@ LAB_004fb5a7:
 
 // Function at 004fd8c0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4fd8c0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4fd8c0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
@@ -4239,35 +4239,35 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4fd8c0(cls_0x5b8e94 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4fe800(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::meth_0x4fe800(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int *piVar1;
   int iVar2;
   dword dVar3;
   float fVar4;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   undefined uVar5;
   int iVar6;
   dword dVar7;
   int3 extraout_var;
-  cls_0x5a7b98 *this_01;
+  cls_0x5a7b98_TCharacter *this_01;
   cls_0x44ceb0 local_48;
   
-  iVar6 = FUN_00483300(0,1);
+  iVar6 = FUN_00483300_RandomRange(0,1);
   if (iVar6 == 0) {
-    dVar7 = FUN_00483300(0x96,200);
+    dVar7 = FUN_00483300_RandomRange(0x96,200);
     this->mbr_0x1a0 = dVar7;
-    iVar6 = FUN_00483300(0x96,200);
+    iVar6 = FUN_00483300_RandomRange(0x96,200);
     dVar7 = -iVar6;
   }
   else {
-    iVar6 = FUN_00483300(0x96,200);
+    iVar6 = FUN_00483300_RandomRange(0x96,200);
     this->mbr_0x1a0 = -iVar6;
-    dVar7 = FUN_00483300(0x96,200);
+    dVar7 = FUN_00483300_RandomRange(0x96,200);
   }
   this->mbr_0x1a4 = dVar7;
-  this_01 = (cls_0x5a7b98 *)0x0;
+  this_01 = (cls_0x5a7b98_TCharacter *)0x0;
   fVar4 = (float)this->mbr_0x1a0 * _DAT_005a9d80;
   this->mbr_0x1a8 = 0x15e;
   this->mbr_0x19c = 0x418c0000;
@@ -4275,16 +4275,16 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x4fe800(cls_0x5b8e94 *this)
   this->mbr_0x194 = (dword)fVar4;
   this->mbr_0x198 = (dword)((float)this->mbr_0x1a4 * _DAT_005a9d80);
   if (this->mbr_0xd8 != 0) {
-    this_01 = *(cls_0x5a7b98 **)(this->mbr_0xd8 + 4);
+    this_01 = *(cls_0x5a7b98_TCharacter **)(this->mbr_0xd8 + 4);
   }
   cls_0x44ceb0::cls_0x44ceb0(&local_48,&this->mbr_0x10,400,0xe0,2,0);
-  this_00 = (cls_0x5a7b98 *)local_48.mbr_0xc;
+  this_00 = (cls_0x5a7b98_TCharacter *)local_48.mbr_0xc;
   do {
-    if (this_00 == (cls_0x5a7b98 *)0x0) {
+    if (this_00 == (cls_0x5a7b98_TCharacter *)0x0) {
 LAB_004fe951:
       dVar7 = this->mbr_0x188;
       if (dVar7 == 0) {
-        if (this_01 != (cls_0x5a7b98 *)0x0) {
+        if (this_01 != (cls_0x5a7b98_TCharacter *)0x0) {
           dVar7 = (this_01->cls_0x5a50e8).mbr_0x14;
           dVar3 = (this_01->cls_0x5a50e8).mbr_0x18;
           this->mbr_0x1a0 = this->mbr_0x1a0 + (this_01->cls_0x5a50e8).mbr_0x10;
@@ -4305,19 +4305,19 @@ LAB_004fe951:
     }
     local_48.mbr_0xc = (dword)this_00;
     if (((((this_00 != this_01) &&
-          (iVar6 = FUN_0046de60(&this->mbr_0x10,&(this_00->cls_0x5a50e8).mbr_0x10), iVar6 < 0x191))
+          (iVar6 = FUN_0046de60_Distance2D(&this->mbr_0x10,&(this_00->cls_0x5a50e8).mbr_0x10), iVar6 < 0x191))
          && (uVar5 = (*((this_00->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(this_00),
             CONCAT31(extraout_var,uVar5) != 0 && -1 < extraout_var)) &&
-        ((this_01 == (cls_0x5a7b98 *)0x0 ||
-         (iVar6 = cls_0x5a7b98::meth_0x4c89c0(this_01), iVar6 != 0)))) &&
-       ((this_00 == (cls_0x5a7b98 *)0x0 ||
+        ((this_01 == (cls_0x5a7b98_TCharacter *)0x0 ||
+         (iVar6 = cls_0x5a7b98_TCharacter::meth_0x4c89c0_IsEnemy(this_01), iVar6 != 0)))) &&
+       ((this_00 == (cls_0x5a7b98_TCharacter *)0x0 ||
         ((piVar1 = (int *)(this_00->cls_0x5a50e8).mbr_0xd8, piVar1 == (int *)0x0 || (*piVar1 != 0xc)
          ))))) {
       this->mbr_0x188 = (dword)this_00;
       goto LAB_004fe951;
     }
     cls_0x44ceb0::meth_0x44d080(&local_48);
-    this_00 = (cls_0x5a7b98 *)local_48.mbr_0xc;
+    this_00 = (cls_0x5a7b98_TCharacter *)local_48.mbr_0xc;
   } while( true );
 }
 
@@ -4325,7 +4325,7 @@ LAB_004fe951:
 
 // Function at 004ffbf0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4ffbf0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x4ffbf0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword dVar1;
@@ -4343,7 +4343,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x4ffbf0(cls_0x5b8e94 *this)
 
 // Function at 00500020
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500020(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500020(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4359,7 +4359,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500020(cls_0x5b8
 
 // Function at 005001c0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5001c0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5001c0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4375,7 +4375,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5001c0(cls_0x5b8
 
 // Function at 005001f0
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5001f0(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5001f0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -4407,7 +4407,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5001f0(cls_0x5b8
 
 // Function at 00500350
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500350(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500350(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4423,7 +4423,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500350(cls_0x5b8
 
 // Function at 00500380
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500380(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500380(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -4455,7 +4455,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500380(cls_0x5b8
 
 // Function at 005004e0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5004e0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5004e0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4471,7 +4471,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5004e0(cls_0x5b8
 
 // Function at 00500510
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500510(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500510(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -4503,7 +4503,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500510(cls_0x5b8
 
 // Function at 00500660
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500660(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500660(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4519,7 +4519,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500660(cls_0x5b8
 
 // Function at 00500690
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500690(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500690(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -4551,7 +4551,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500690(cls_0x5b8
 
 // Function at 00500800
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500800(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500800(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4567,7 +4567,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500800(cls_0x5b8
 
 // Function at 00500830
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500830(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500830(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -4599,7 +4599,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500830(cls_0x5b8
 
 // Function at 00500990
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500990(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500990(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4615,7 +4615,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500990(cls_0x5b8
 
 // Function at 005009c0
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5009c0(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5009c0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -4647,7 +4647,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5009c0(cls_0x5b8
 
 // Function at 00500b20
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500b20(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500b20(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4663,7 +4663,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500b20(cls_0x5b8
 
 // Function at 00500b50
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500b50(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500b50(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -4695,7 +4695,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500b50(cls_0x5b8
 
 // Function at 00500c80
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500c80(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500c80(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4712,7 +4712,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500c80(cls_0x5b8
 // Function at 00500cb0
 
 cls_0x5a85ac * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x500cb0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500cb0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a85ac *this_00;
@@ -4742,7 +4742,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x500cb0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00500d10
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500d10(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500d10(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4759,7 +4759,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500d10(cls_0x5b8
 // Function at 00500d40
 
 cls_0x5a85ac * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x500d40(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500d40(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a85ac *this_00;
@@ -4789,7 +4789,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x500d40(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00500da0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500da0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500da0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4806,7 +4806,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500da0(cls_0x5b8
 // Function at 00500dd0
 
 cls_0x5a85ac * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x500dd0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500dd0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a85ac *this_00;
@@ -4836,7 +4836,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x500dd0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00500e30
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500e30(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500e30(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4853,7 +4853,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500e30(cls_0x5b8
 // Function at 00500e60
 
 cls_0x5a85ac * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x500e60(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500e60(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a85ac *this_00;
@@ -4883,7 +4883,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x500e60(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00500ec0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500ec0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500ec0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4900,7 +4900,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500ec0(cls_0x5b8
 // Function at 00500ef0
 
 cls_0x5a85ac * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x500ef0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500ef0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a85ac *this_00;
@@ -4930,7 +4930,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x500ef0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00500f50
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500f50(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500f50(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4947,7 +4947,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500f50(cls_0x5b8
 // Function at 00500f80
 
 cls_0x5a85ac * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x500f80(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500f80(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a85ac *this_00;
@@ -4977,7 +4977,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x500f80(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00500fe0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500fe0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x500fe0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -4993,7 +4993,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x500fe0(cls_0x5b8
 
 // Function at 00501010
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x501010(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x501010(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -5025,7 +5025,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x501010(cls_0x5b8
 
 // Function at 00501650
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x501650(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x501650(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5041,7 +5041,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x501650(cls_0x5b8
 
 // Function at 00501680
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x501680(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x501680(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -5073,20 +5073,20 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x501680(cls_0x5b8
 
 // Function at 00501790
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x501790(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x501790(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int *piVar1;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   
   virt_meth_0x4de800(this);
   if (this->mbr_0x184 == 2) {
     piVar1 = *(int **)(((cls_0x5b99c0 *)this->mbr_0xd8)->mbr_0x4 + 0xe0);
     if ((piVar1 != (int *)0x0) &&
        (((*piVar1 == 3 || ((piVar1 != (int *)0x0 && (*piVar1 == 0x19)))) &&
-        (this_00 = (cls_0x5a7b98 *)piVar1[0x11], this_00 != (cls_0x5a7b98 *)0x0)))) {
+        (this_00 = (cls_0x5a7b98_TCharacter *)piVar1[0x11], this_00 != (cls_0x5a7b98_TCharacter *)0x0)))) {
       cls_0x5b99c0::meth_0x53f560((cls_0x5b99c0 *)this->mbr_0xd8);
-      cls_0x5a7b98::meth_0x4d3750(this_00,&this->mbr_0x10);
+      cls_0x5a7b98_TCharacter::meth_0x4d3750(this_00,&this->mbr_0x10);
     }
   }
   return;
@@ -5098,7 +5098,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x501790(cls_0x5b8e94 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x502470(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x502470(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
@@ -5143,10 +5143,10 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x502470(cls_0x5b8e94 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x504920(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x504920(cls_0x5b8e94_TObjectInstance *this)
 
 {
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   int *piVar1;
   dword dVar2;
   float10 fVar3;
@@ -5154,8 +5154,8 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x504920(cls_0x5b8e94 *this)
   
   virt_meth_0x4de800(this);
   if (this->mbr_0x190 != 0) {
-    this_00 = (cls_0x5a7b98 *)this->mbr_0xe4;
-    if (this_00 == (cls_0x5a7b98 *)0x0) {
+    this_00 = (cls_0x5a7b98_TCharacter *)this->mbr_0xe4;
+    if (this_00 == (cls_0x5a7b98_TCharacter *)0x0) {
       this->mbr_0x194 = 0;
     }
     else if (*(short *)&(this_00->cls_0x5a50e8).mbr_0x4 == 0xc) {
@@ -5166,11 +5166,11 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x504920(cls_0x5b8e94 *this)
         piVar1 = (int *)(this_00->cls_0x5a50e8).mbr_0xe0;
         if ((piVar1 == (int *)0x0) ||
            ((*piVar1 != 3 && ((piVar1 == (int *)0x0 || (*piVar1 != 0x19)))))) {
-          dVar2 = cls_0x5a7b98::meth_0x46ea90(this_00);
+          dVar2 = cls_0x5a7b98_TCharacter::meth_0x46ea90_AngleTo(this_00);
           this->mbr_0x194 = dVar2;
         }
         else {
-          dVar2 = cls_0x5a7b98::meth_0x46ea90(this_00);
+          dVar2 = cls_0x5a7b98_TCharacter::meth_0x46ea90_AngleTo(this_00);
           this->mbr_0x194 = dVar2;
         }
       }
@@ -5195,7 +5195,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x504920(cls_0x5b8e94 *this)
 
 // Function at 00505290
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x505290(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x505290(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword dVar1;
@@ -5219,35 +5219,35 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x505290(cls_0x5b8e94 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x507330(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::meth_0x507330(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int *piVar1;
   int iVar2;
   dword dVar3;
   float fVar4;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   undefined uVar5;
   int iVar6;
   dword dVar7;
   int3 extraout_var;
-  cls_0x5a7b98 *this_01;
+  cls_0x5a7b98_TCharacter *this_01;
   cls_0x44ceb0 local_48;
   
-  iVar6 = FUN_00483300(0,1);
+  iVar6 = FUN_00483300_RandomRange(0,1);
   if (iVar6 == 0) {
-    dVar7 = FUN_00483300(0x96,200);
+    dVar7 = FUN_00483300_RandomRange(0x96,200);
     this->mbr_0x1a0 = dVar7;
-    iVar6 = FUN_00483300(0x96,200);
+    iVar6 = FUN_00483300_RandomRange(0x96,200);
     dVar7 = -iVar6;
   }
   else {
-    iVar6 = FUN_00483300(0x96,200);
+    iVar6 = FUN_00483300_RandomRange(0x96,200);
     this->mbr_0x1a0 = -iVar6;
-    dVar7 = FUN_00483300(0x96,200);
+    dVar7 = FUN_00483300_RandomRange(0x96,200);
   }
   this->mbr_0x1a4 = dVar7;
-  this_01 = (cls_0x5a7b98 *)0x0;
+  this_01 = (cls_0x5a7b98_TCharacter *)0x0;
   fVar4 = (float)this->mbr_0x1a0 * _DAT_005a9d80;
   this->mbr_0x1a8 = 0x15e;
   this->mbr_0x19c = 0x418c0000;
@@ -5255,16 +5255,16 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x507330(cls_0x5b8e94 *this)
   this->mbr_0x194 = (dword)fVar4;
   this->mbr_0x198 = (dword)((float)this->mbr_0x1a4 * _DAT_005a9d80);
   if (this->mbr_0xd8 != 0) {
-    this_01 = *(cls_0x5a7b98 **)(this->mbr_0xd8 + 4);
+    this_01 = *(cls_0x5a7b98_TCharacter **)(this->mbr_0xd8 + 4);
   }
   cls_0x44ceb0::cls_0x44ceb0(&local_48,&this->mbr_0x10,400,0xe0,2,0);
-  this_00 = (cls_0x5a7b98 *)local_48.mbr_0xc;
+  this_00 = (cls_0x5a7b98_TCharacter *)local_48.mbr_0xc;
   do {
-    if (this_00 == (cls_0x5a7b98 *)0x0) {
+    if (this_00 == (cls_0x5a7b98_TCharacter *)0x0) {
 LAB_00507481:
       dVar7 = this->mbr_0x188;
       if (dVar7 == 0) {
-        if (this_01 != (cls_0x5a7b98 *)0x0) {
+        if (this_01 != (cls_0x5a7b98_TCharacter *)0x0) {
           dVar7 = (this_01->cls_0x5a50e8).mbr_0x14;
           dVar3 = (this_01->cls_0x5a50e8).mbr_0x18;
           this->mbr_0x1a0 = this->mbr_0x1a0 + (this_01->cls_0x5a50e8).mbr_0x10;
@@ -5285,19 +5285,19 @@ LAB_00507481:
     }
     local_48.mbr_0xc = (dword)this_00;
     if (((((this_00 != this_01) &&
-          (iVar6 = FUN_0046de60(&this->mbr_0x10,&(this_00->cls_0x5a50e8).mbr_0x10), iVar6 < 0x191))
+          (iVar6 = FUN_0046de60_Distance2D(&this->mbr_0x10,&(this_00->cls_0x5a50e8).mbr_0x10), iVar6 < 0x191))
          && (uVar5 = (*((this_00->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x477e50_448)(this_00),
             CONCAT31(extraout_var,uVar5) != 0 && -1 < extraout_var)) &&
-        ((this_01 == (cls_0x5a7b98 *)0x0 ||
-         (iVar6 = cls_0x5a7b98::meth_0x4c89c0(this_01), iVar6 != 0)))) &&
-       ((this_00 == (cls_0x5a7b98 *)0x0 ||
+        ((this_01 == (cls_0x5a7b98_TCharacter *)0x0 ||
+         (iVar6 = cls_0x5a7b98_TCharacter::meth_0x4c89c0_IsEnemy(this_01), iVar6 != 0)))) &&
+       ((this_00 == (cls_0x5a7b98_TCharacter *)0x0 ||
         ((piVar1 = (int *)(this_00->cls_0x5a50e8).mbr_0xd8, piVar1 == (int *)0x0 || (*piVar1 != 0xc)
          ))))) {
       this->mbr_0x188 = (dword)this_00;
       goto LAB_00507481;
     }
     cls_0x44ceb0::meth_0x44d080(&local_48);
-    this_00 = (cls_0x5a7b98 *)local_48.mbr_0xc;
+    this_00 = (cls_0x5a7b98_TCharacter *)local_48.mbr_0xc;
   } while( true );
 }
 
@@ -5305,7 +5305,7 @@ LAB_00507481:
 
 // Function at 00508ff0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x508ff0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x508ff0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5321,7 +5321,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x508ff0(cls_0x5b8
 
 // Function at 00509020
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509020(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x509020(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -5353,7 +5353,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509020(cls_0x5b8
 
 // Function at 005091c0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5091c0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5091c0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5369,7 +5369,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5091c0(cls_0x5b8
 
 // Function at 005091f0
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5091f0(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5091f0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -5401,7 +5401,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5091f0(cls_0x5b8
 
 // Function at 00509550
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509550(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x509550(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5417,7 +5417,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509550(cls_0x5b8
 
 // Function at 00509580
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509580(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x509580(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -5449,7 +5449,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509580(cls_0x5b8
 
 // Function at 00509a00
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509a00(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x509a00(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5465,7 +5465,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509a00(cls_0x5b8
 
 // Function at 00509b90
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509b90(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x509b90(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5481,7 +5481,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509b90(cls_0x5b8
 
 // Function at 00509bc0
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509bc0(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x509bc0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -5513,7 +5513,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509bc0(cls_0x5b8
 
 // Function at 00509d20
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509d20(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x509d20(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5530,7 +5530,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509d20(cls_0x5b8
 // Function at 00509d50
 
 cls_0x5a85ac * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x509d50(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x509d50(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a85ac *this_00;
@@ -5563,7 +5563,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x509d50(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00509df0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509df0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x509df0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5579,7 +5579,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x509df0(cls_0x5b8
 
 // Function at 0050a1f0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a1f0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50a1f0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5595,7 +5595,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a1f0(cls_0x5b8
 
 // Function at 0050a220
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a220(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50a220(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -5627,7 +5627,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a220(cls_0x5b8
 
 // Function at 0050a390
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a390(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50a390(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5643,7 +5643,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a390(cls_0x5b8
 
 // Function at 0050a3c0
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a3c0(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50a3c0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -5675,7 +5675,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a3c0(cls_0x5b8
 
 // Function at 0050a490
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a490(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50a490(cls_0x5b8e94_TObjectInstance *this)
 
 {
   meth_0x4defe0(this);
@@ -5687,7 +5687,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a490(cls_0x5b8e94 *this)
 
 // Function at 0050a4b0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a4b0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50a4b0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -5703,7 +5703,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50a4b0(cls_0x5b8
 
 // Function at 0050d1a0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d1a0(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50d1a0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -5719,8 +5719,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d1a0(cls_0x5b8e94 
   if (CONCAT31(extraout_var,uVar1) == 0) {
     return 0;
   }
-  FUN_00452690(in_stack_0000000c,0);
-  iVar2 = cls_0x5a7b98::meth_0x4dd480((cls_0x5a7b98 *)this,in_stack_00000008);
+  FUN_00452690_TMapPane_GetInstance(in_stack_0000000c,0);
+  iVar2 = cls_0x5a7b98_TCharacter::meth_0x4dd480_UseContainer((cls_0x5a7b98_TCharacter *)this,in_stack_00000008);
   if ((iVar2 == 0) &&
      (uVar1 = (*this->vftptr_0x0[1].virt_meth_0x4778c0_20)(this),
      CONCAT31(extraout_var_00,uVar1) != 0)) {
@@ -5739,7 +5739,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d1a0(cls_0x5b8e94 
 
 // Function at 0050d370
 
-int __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d370(cls_0x5b8e94 *this)
+int __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50d370(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -5758,7 +5758,7 @@ int __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d370(cls_0x5b8e94 *this)
 
 // Function at 0050d3a0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d3a0(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50d3a0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword dVar1;
@@ -5767,14 +5767,14 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d3a0(cls_0x5b8e94 
   undefined3 extraout_var;
   undefined3 extraout_var_00;
   int iVar4;
-  cls_0x5a7b98 *in_stack_00000004;
+  cls_0x5a7b98_TCharacter *in_stack_00000004;
   int in_stack_00000008;
   undefined4 uStack_1c;
   
   if ((DAT_0066829c != 0) && (DAT_0067682c == 0)) {
     return 0;
   }
-  if (in_stack_00000004 == (cls_0x5a7b98 *)0x0) {
+  if (in_stack_00000004 == (cls_0x5a7b98_TCharacter *)0x0) {
     in_stack_00000004 = DAT_00667fcc;
   }
   uStack_1c = 0x50d3dd;
@@ -5783,7 +5783,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d3a0(cls_0x5b8e94 
     return 0;
   }
   if ((this->mbr_0x84 != 0) && (in_stack_00000008 == 0)) {
-    FUN_00492640(6,0,0,in_stack_00000004,&DAT_005e17d8,0);
+    FUN_00492640(6,0,0,in_stack_00000004,&DAT_005e17d8_str_event_user,0);
     return 1;
   }
   uStack_1c = DAT_0066d1cc;
@@ -5792,7 +5792,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d3a0(cls_0x5b8e94 
     return 0;
   }
   dVar1 = this->mbr_0x38;
-  puVar2 = DAT_0066d1c4;
+  puVar2 = DAT_0066d1c4_TExit_exitlist;
   do {
     if (puVar2 == (undefined4 *)0x0) {
 LAB_0050d463:
@@ -5801,14 +5801,14 @@ LAB_0050d463:
       }
       return 0;
     }
-    iVar4 = FUN_0059a530(*puVar2,dVar1);
+    iVar4 = FUN_0059a530_stricmp(*puVar2,dVar1);
     if (iVar4 == 0) {
       if (puVar2 != (undefined4 *)0x0) {
-        if (in_stack_00000004 == (cls_0x5a7b98 *)(-(uint)((DAT_006669b0 & 1) != 0) & DAT_006669b4))
+        if (in_stack_00000004 == (cls_0x5a7b98_TCharacter *)(-(uint)((DAT_006669b0 & 1) != 0) & DAT_006669b4))
         {
           DAT_006669b0 = DAT_006669b0 | 8;
         }
-        cls_0x5a7b98::meth_0x4d4790(in_stack_00000004);
+        cls_0x5a7b98_TCharacter::meth_0x4d4790_SetFighting(in_stack_00000004);
         (*((in_stack_00000004->cls_0x5a50e8).vftptr_0x0)->virt_meth_0x46ed70_8)(in_stack_00000004);
         if (DAT_0066829c == 0) {
           return 1;
@@ -5830,7 +5830,7 @@ LAB_0050d463:
 
 // Function at 0050d510
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d510(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50d510(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -5839,7 +5839,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d510(cls_0x5b8e94 *this)
   
   uVar1 = (*this->vftptr_0x0->virt_meth_0x528ee0_496)(this,unaff_ESI);
   if (CONCAT31(extraout_var,uVar1) != 0) {
-    cls_0x5a7b98::meth_0x50d530((cls_0x5a7b98 *)this);
+    cls_0x5a7b98_TCharacter::meth_0x50d530((cls_0x5a7b98_TCharacter *)this);
   }
   return;
 }
@@ -5848,7 +5848,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d510(cls_0x5b8e94 *this)
 
 // Function at 0050d640
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d640(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50d640(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte bVar1;
@@ -5879,7 +5879,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d640(cls_0x5b8e94 *this)
   int iStack_c;
   int iStack_8;
   
-  virt_meth_0x4708e0(this);
+  virt_meth_0x4708e0_OnScreen(this);
   if (DAT_00668154 == 0) {
     uVar4 = (*this->vftptr_0x0->virt_meth_0x477d30_340)(this);
     if ((((CONCAT31(extraout_var,uVar4) != 0) &&
@@ -5895,33 +5895,33 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d640(cls_0x5b8e94 *this)
         uVar4 = (*this->vftptr_0x0->virt_meth_0x477900_36)(this);
         uVar6 = (**(code **)(**(int **)(CONCAT31(extraout_var_04,uVar4) + 8) + 0x88))(this->mbr_0xc)
         ;
-        iVar5 = FUN_0059a530(uVar6,s_CLOSING_005e1860);
+        iVar5 = FUN_0059a530_stricmp(uVar6,s_CLOSING_005e1860);
         if (iVar5 == 0) {
-          cls_0x5a7b98::meth_0x50d530((cls_0x5a7b98 *)this);
+          cls_0x5a7b98_TCharacter::meth_0x50d530((cls_0x5a7b98_TCharacter *)this);
         }
-        iVar5 = FUN_0059a530(uVar6,s_OPENING_005e1868);
+        iVar5 = FUN_0059a530_stricmp(uVar6,s_OPENING_005e1868);
         if (iVar5 == 0) {
-          cls_0x5a7b98::meth_0x50d530((cls_0x5a7b98 *)this);
+          cls_0x5a7b98_TCharacter::meth_0x50d530((cls_0x5a7b98_TCharacter *)this);
         }
       }
     }
     if (((DAT_00668154 == 0) &&
-        (iVar5 = cls_0x5a7b98::meth_0x46e8a0((cls_0x5a7b98 *)this), iVar5 != 0)) &&
+        (iVar5 = cls_0x5a7b98_TCharacter::meth_0x46e8a0((cls_0x5a7b98_TCharacter *)this), iVar5 != 0)) &&
        ((DAT_0067682c != 0 || (DAT_0066829c == 0)))) {
       (*this->vftptr_0x0[1].virt_meth_0x46fea0_136)(this);
       this->mbr_0xe4 = this->mbr_0xe4 & 0xfffffffa;
       iVar10 = 0;
-      iVar5 = cls_0x45f7c0::meth_0x51ee70((cls_0x45f7c0 *)&DAT_0065a890);
+      iVar5 = cls_0x45f7c0::meth_0x51ee70_TPlayerManager_NumPlayers((cls_0x45f7c0 *)&DAT_0065a890);
       if (0 < iVar5) {
         do {
           this_00 = (cls_0x4cdf30 *)
-                    cls_0x45f7c0::meth_0x51eea0((cls_0x45f7c0 *)&DAT_0065a890,iVar10);
+                    cls_0x45f7c0::meth_0x51eea0_TPlayerManager_GetPlayer((cls_0x45f7c0 *)&DAT_0065a890,iVar10);
           if (this_00 != (cls_0x4cdf30 *)0x0) {
             iVar5 = (iStack_14 * 0x10 - this->mbr_0x10) + *(int *)&this_00->field_0x10;
             iVar10 = iStack_10 * 0x10 + (*(int *)&this_00->field_0x14 - this->mbr_0x14);
             iVar5 = (int)(iVar5 + (iVar5 >> 0x1f & 0xfU)) >> 4;
             iVar10 = (int)(iVar10 + (iVar10 >> 0x1f & 0xfU)) >> 4;
-            piVar7 = (int *)cls_0x5a7b98::meth_0x46e8a0((cls_0x5a7b98 *)this);
+            piVar7 = (int *)cls_0x5a7b98_TCharacter::meth_0x46e8a0((cls_0x5a7b98_TCharacter *)this);
             (**(code **)(*piVar7 + 0xc4))(this->mbr_0xc);
             if (((-1 < iVar5) && (-1 < iVar10)) && ((iVar5 < iStack_c && (iVar10 < iStack_8)))) {
               pbVar8 = &DAT_005e1870;
@@ -6014,7 +6014,7 @@ LAB_0050d8f8:
                         this->mbr_0xe4 = uVar2 | 5;
                       }
                       cls_0x4cdf30::meth_0x4cdf30(this_00);
-                      *(cls_0x5b8e94 **)&this_00->field_0xe4 = this;
+                      *(cls_0x5b8e94_TObjectInstance **)&this_00->field_0xe4 = this;
                     }
                   }
                 }
@@ -6022,7 +6022,7 @@ LAB_0050d8f8:
             }
           }
           iVar10 = iStack_18 + 1;
-          iVar5 = cls_0x45f7c0::meth_0x51ee70((cls_0x45f7c0 *)&DAT_0065a890);
+          iVar5 = cls_0x45f7c0::meth_0x51ee70_TPlayerManager_NumPlayers((cls_0x45f7c0 *)&DAT_0065a890);
           iStack_18 = iVar10;
         } while (iVar10 < iVar5);
       }
@@ -6039,7 +6039,7 @@ LAB_0050d8f8:
 
 // Function at 0050d9c0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d9c0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50d9c0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword dVar1;
@@ -6062,7 +6062,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50d9c0(cls_0x5b8e94 *this)
 
 // Function at 0050df50
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50df50(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50df50(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6079,7 +6079,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50df50(cls_0x5b8
 // Function at 0050df80
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x50df80(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50df80(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -6112,7 +6112,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x50df80(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 0050e400
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50e400(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50e400(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6128,7 +6128,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50e400(cls_0x5b8
 
 // Function at 0050e4e0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50e4e0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50e4e0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6144,7 +6144,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50e4e0(cls_0x5b8
 
 // Function at 0050ea80
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50ea80(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50ea80(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -6169,7 +6169,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50ea80(cls_0x5b8e94 
 // Function at 0050eb80
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x50eb80(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50eb80(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -6198,7 +6198,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x50eb80(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 0050ed80
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50ed80(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50ed80(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6215,7 +6215,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50ed80(cls_0x5b8
 // Function at 0050edb0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x50edb0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50edb0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -6244,7 +6244,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x50edb0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 0050ee10
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50ee10(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50ee10(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6260,7 +6260,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50ee10(cls_0x5b8
 
 // Function at 0050f640
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50f640(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50f640(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -6293,7 +6293,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50f640(cls_0x5b8
 // Function at 0050f820
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x50f820(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50f820(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -6323,7 +6323,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x50f820(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 0050f890
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50f890(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50f890(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6339,7 +6339,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50f890(cls_0x5b8
 
 // Function at 0050fa30
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50fa30(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50fa30(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6355,7 +6355,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50fa30(cls_0x5b8
 
 // Function at 0050fbd0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50fbd0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50fbd0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6372,7 +6372,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50fbd0(cls_0x5b8
 // Function at 0050fd30
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x50fd30(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50fd30(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -6401,7 +6401,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x50fd30(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 0050fdf0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50fdf0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50fdf0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6418,7 +6418,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x50fdf0(cls_0x5b8
 // Function at 0050ffd0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x50ffd0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x50ffd0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -6448,7 +6448,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x50ffd0(cls_0x5b8e94 *this,undefined4 param
 // Function at 00517050
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5b8e94::meth_0x517050(cls_0x5b8e94 *this,char *param_1,uint param_2)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::meth_0x517050(cls_0x5b8e94_TObjectInstance *this,char *param_1,uint param_2)
 
 {
   char cVar1;
@@ -6515,7 +6515,7 @@ OOAnalyzer::cls_0x5b8e94::meth_0x517050(cls_0x5b8e94 *this,char *param_1,uint pa
   }
   puVar3[1] = param_2;
   puVar3[2] = in_stack_0000000c;
-  uVar5 = cls_0x5a5320::meth_0x47e940((cls_0x5a5320 *)&DAT_0065caf0);
+  uVar5 = cls_0x5a5320_TPlayScreen::meth_0x47e940((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
   *(undefined4 *)((&this->mbr_0xd8)[iVar8] + 0xc) = uVar5;
   return 1;
 }
@@ -6524,7 +6524,7 @@ OOAnalyzer::cls_0x5b8e94::meth_0x517050(cls_0x5b8e94 *this,char *param_1,uint pa
 
 // Function at 00522010
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x522010(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x522010(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6541,7 +6541,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x522010(cls_0x5b8
 // Function at 00523530
 
 cls_0x5a85ac * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x523530(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x523530(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   dword dVar1;
@@ -6581,7 +6581,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x523530(cls_0x5b8e94 *this,undefined4 param
 // Function at 005235e0
 
 cls_0x5a85ac * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x5235e0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5235e0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a85ac *this_00;
@@ -6621,7 +6621,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x5235e0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 005236b0
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5236b0(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5236b0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -6653,7 +6653,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5236b0(cls_0x5b8
 
 // Function at 00523880
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x523880(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x523880(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6669,7 +6669,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x523880(cls_0x5b8
 
 // Function at 005238b0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5238b0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5238b0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6685,22 +6685,22 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5238b0(cls_0x5b8
 
 // Function at 00523a70
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x523a70(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x523a70(cls_0x5b8e94_TObjectInstance *this)
 
 {
   int iVar1;
   
   if (this->mbr_0x64 != 0) {
-    iVar1 = FUN_0059a530(**(undefined4 **)(this->mbr_0x64 + 0x4c),s_Spell_Pouch_005e2dc4);
+    iVar1 = FUN_0059a530_stricmp(**(undefined4 **)(this->mbr_0x64 + 0x4c),s_Spell_Pouch_005e2dc4);
     if (iVar1 != 0) {
-      iVar1 = FUN_0059a530(**(undefined4 **)(this->mbr_0x64 + 0x4c),s_SpellPouch_005e2dd0);
+      iVar1 = FUN_0059a530_stricmp(**(undefined4 **)(this->mbr_0x64 + 0x4c),s_SpellPouch_005e2dd0);
       if (iVar1 != 0) goto LAB_00523ac5;
     }
     UNK_006661c4._60_4_ = 1;
     (**(code **)(DAT_006661b0 + 0x90))();
   }
 LAB_00523ac5:
-  virt_meth_0x46faf0(this);
+  virt_meth_0x46faf0_RemoveFromInventory(this);
   return;
 }
 
@@ -6708,7 +6708,7 @@ LAB_00523ac5:
 
 // Function at 00523b90
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x523b90(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x523b90(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6724,7 +6724,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x523b90(cls_0x5b8
 
 // Function at 00523da0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x523da0(cls_0x5b8e94 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x523da0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte bVar1;
@@ -6743,7 +6743,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x523da0(cls_0x5b8e94 
 // Function at 00523de0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x523de0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x523de0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -6773,7 +6773,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x523de0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00523fd0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x523fd0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x523fd0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6790,7 +6790,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x523fd0(cls_0x5b8
 // Function at 005240f0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x5240f0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5240f0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -6819,7 +6819,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x5240f0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 005241b0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5241b0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5241b0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -6835,7 +6835,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5241b0(cls_0x5b8
 
 // Function at 00524ce0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x524ce0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x524ce0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -6845,7 +6845,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x524ce0(cls_0x5b8e94 *this)
   undefined3 extraout_var_02;
   int3 extraout_var_03;
   uint uVar2;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   undefined4 unaff_ESI;
   
   uVar1 = (*this->vftptr_0x0[1].virt_meth_0x477930_60)(this);
@@ -6864,7 +6864,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x524ce0(cls_0x5b8e94 *this)
   if (CONCAT31(extraout_var_02,uVar1) != 0) {
     uVar1 = (*this->vftptr_0x0[1].virt_meth_0x46e900_44)(this);
     if (CONCAT31(extraout_var_03,uVar1) != 0 && -1 < extraout_var_03) {
-      uVar2 = cls_0x5a7b98::meth_0x58eb90(this_00);
+      uVar2 = cls_0x5a7b98_TCharacter::meth_0x58eb90(this_00);
       if (this->mbr_0xe4 <= uVar2) {
         (*this->vftptr_0x0[1].virt_meth_0x477920_56)(this);
         this->mbr_0xd8 = 0;
@@ -6879,7 +6879,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x524ce0(cls_0x5b8e94 *this)
 
 // Function at 005267d0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5267d0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5267d0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -6888,7 +6888,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5267d0(cls_0x5b8e94 *this)
   undefined3 extraout_var_01;
   int3 extraout_var_02;
   uint uVar2;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   
   uVar1 = (*this->vftptr_0x0[1].virt_meth_0x477930_60)(this);
   if (CONCAT31(extraout_var,uVar1) != 0) {
@@ -6903,7 +6903,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5267d0(cls_0x5b8e94 *this)
   if (CONCAT31(extraout_var_01,uVar1) != 0) {
     uVar1 = (*this->vftptr_0x0[1].virt_meth_0x46e900_44)(this);
     if (CONCAT31(extraout_var_02,uVar1) != 0 && -1 < extraout_var_02) {
-      uVar2 = cls_0x5a7b98::meth_0x58eb90(this_00);
+      uVar2 = cls_0x5a7b98_TCharacter::meth_0x58eb90(this_00);
       if (this->mbr_0xe4 <= uVar2) {
         (*this->vftptr_0x0[1].virt_meth_0x477920_56)(this);
         this->mbr_0xd8 = 0;
@@ -6918,7 +6918,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5267d0(cls_0x5b8e94 *this)
 
 // Function at 00526e20
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x526e20(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x526e20(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword dVar1;
@@ -6961,7 +6961,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x526e20(cls_0x5b8e94 *this)
 
 // Function at 00526f00
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x526f00(cls_0x5b8e94 *this,int param_1,int param_2)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::meth_0x526f00(cls_0x5b8e94_TObjectInstance *this,int param_1,int param_2)
 
 {
   int iVar1;
@@ -6999,8 +6999,8 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x526f00(cls_0x5b8e94 *this,int p
   local_28 = this->mbr_0x10 + param_1;
   local_2a = DAT_00666970;
   local_30 = 8;
-  uVar2 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_34);
-  FUN_00452690(uVar2,uVar5);
+  uVar2 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_34);
+  FUN_00452690_TMapPane_GetInstance(uVar2,uVar5);
   return;
 }
 
@@ -7008,13 +7008,13 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::meth_0x526f00(cls_0x5b8e94 *this,int p
 
 // Function at 005273d0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5273d0(cls_0x5b8e94 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5273d0(cls_0x5b8e94_TObjectInstance *this,int param_1)
 
 {
   dword dVar1;
   dword in_stack_00000008;
   
-  virt_meth_0x471ba0(this,param_1);
+  virt_meth_0x471ba0_Notify(this,param_1);
   if (param_1 == 1) {
     if (this->mbr_0x100 == in_stack_00000008) {
 LAB_00527413:
@@ -7057,7 +7057,7 @@ LAB_00527431:
 // Function at 00527460
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x527460(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527460(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7077,7 +7077,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527460(cls_0x5b8e94 *this,undefined4 param
     this_00->mbr_0xd8 = 0;
     this_00->mbr_0x8 = this_00->mbr_0x8 | 0x8001;
     this_00->vftptr_0x0 = (cls_0x5a50e8__vftable_5a50e8 *)&PTR_virt_meth_0x527550_005b67cc;
-    iVar1 = FUN_0059a530(this_00->mbr_0x38,s_ArrowWallS_005e2f50);
+    iVar1 = FUN_0059a530_stricmp(this_00->mbr_0x38,s_ArrowWallS_005e2f50);
     if (iVar1 == 0) {
       *(undefined4 *)&this_00->field_0xfc = 0x80;
     }
@@ -7098,7 +7098,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527460(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00527550
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527550(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527550(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7115,7 +7115,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527550(cls_0x5b8
 // Function at 00527580
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x527580(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527580(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7135,7 +7135,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527580(cls_0x5b8e94 *this,undefined4 param
     this_00->mbr_0xd8 = 0;
     this_00->mbr_0x8 = this_00->mbr_0x8 | 0x8001;
     this_00->vftptr_0x0 = (cls_0x5a50e8__vftable_5a50e8 *)&PTR_virt_meth_0x527550_005b67cc;
-    iVar1 = FUN_0059a530(this_00->mbr_0x38,s_ArrowWallS_005e2f50);
+    iVar1 = FUN_0059a530_stricmp(this_00->mbr_0x38,s_ArrowWallS_005e2f50);
     if (iVar1 == 0) {
       *(undefined4 *)&this_00->field_0xfc = 0x80;
     }
@@ -7157,7 +7157,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527580(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00527660
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527660(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527660(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7174,7 +7174,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527660(cls_0x5b8
 // Function at 00527690
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x527690(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527690(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7210,7 +7210,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527690(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00527750
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527750(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527750(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7227,7 +7227,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527750(cls_0x5b8
 // Function at 00527780
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x527780(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527780(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7264,7 +7264,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527780(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00527840
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527840(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527840(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7281,7 +7281,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527840(cls_0x5b8
 // Function at 00527870
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x527870(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527870(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7312,7 +7312,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527870(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00527920
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527920(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527920(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7329,7 +7329,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527920(cls_0x5b8
 // Function at 00527950
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x527950(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527950(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7360,7 +7360,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527950(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00527a00
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527a00(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527a00(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7377,7 +7377,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527a00(cls_0x5b8
 // Function at 00527a30
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x527a30(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527a30(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7397,7 +7397,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527a30(cls_0x5b8e94 *this,undefined4 param
     this_00->mbr_0xd8 = 0;
     this_00->mbr_0x8 = this_00->mbr_0x8 | 0x8001;
     this_00->vftptr_0x0 = (cls_0x5a50e8__vftable_5a50e8 *)&PTR_virt_meth_0x527b20_005b7534;
-    iVar1 = FUN_0059a530(this_00->mbr_0x38,s_DunFireWallS_005e2fc4);
+    iVar1 = FUN_0059a530_stricmp(this_00->mbr_0x38,s_DunFireWallS_005e2fc4);
     if (iVar1 == 0) {
       *(undefined4 *)&this_00->field_0xfc = 0x80;
     }
@@ -7419,7 +7419,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527a30(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00527b20
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527b20(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527b20(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7436,7 +7436,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527b20(cls_0x5b8
 // Function at 00527b50
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x527b50(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527b50(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7456,7 +7456,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527b50(cls_0x5b8e94 *this,undefined4 param
     this_00->mbr_0xd8 = 0;
     this_00->mbr_0x8 = this_00->mbr_0x8 | 0x8001;
     this_00->vftptr_0x0 = (cls_0x5a50e8__vftable_5a50e8 *)&PTR_virt_meth_0x527b20_005b7534;
-    iVar1 = FUN_0059a530(this_00->mbr_0x38,s_DunFireWallS_005e2fc4);
+    iVar1 = FUN_0059a530_stricmp(this_00->mbr_0x38,s_DunFireWallS_005e2fc4);
     if (iVar1 == 0) {
       *(undefined4 *)&this_00->field_0xfc = 0x80;
     }
@@ -7479,7 +7479,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527b50(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00527ef0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527ef0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527ef0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7496,7 +7496,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527ef0(cls_0x5b8
 // Function at 00527f20
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x527f20(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527f20(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7528,7 +7528,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x527f20(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00527fd0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527fd0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x527fd0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7545,7 +7545,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x527fd0(cls_0x5b8
 // Function at 00528000
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x528000(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528000(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7578,7 +7578,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x528000(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 005280a0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5280a0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5280a0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7595,7 +7595,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5280a0(cls_0x5b8
 // Function at 005280d0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x5280d0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5280d0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7628,7 +7628,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x5280d0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00528170
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528170(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528170(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7645,7 +7645,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528170(cls_0x5b8
 // Function at 005281a0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x5281a0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5281a0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7678,7 +7678,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x5281a0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00528240
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528240(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528240(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7695,7 +7695,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528240(cls_0x5b8
 // Function at 00528270
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x528270(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528270(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7728,7 +7728,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x528270(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00528310
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528310(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528310(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7745,7 +7745,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528310(cls_0x5b8
 // Function at 00528340
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x528340(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528340(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7778,7 +7778,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x528340(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 005283e0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5283e0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5283e0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7794,20 +7794,20 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5283e0(cls_0x5b8
 
 // Function at 00528430
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528430(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528430(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
   undefined3 extraout_var;
   undefined3 extraout_var_00;
   int iVar2;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   
   (*this->vftptr_0x0[1].virt_meth_0x477920_56)(this);
   uVar1 = (*this->vftptr_0x0[1].virt_meth_0x46e900_44)(this);
   if (CONCAT31(extraout_var,uVar1) != 0) {
     uVar1 = (*this->vftptr_0x0[1].virt_meth_0x46e900_44)(this);
-    iVar2 = cls_0x5a7b98::meth_0x58eb90(this_00);
+    iVar2 = cls_0x5a7b98_TCharacter::meth_0x58eb90(this_00);
     this->mbr_0xe4 = CONCAT31(extraout_var_00,uVar1) + iVar2;
   }
   return;
@@ -7818,7 +7818,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528430(cls_0x5b8e94 *this)
 // Function at 00528600
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x528600(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528600(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7848,7 +7848,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x528600(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 005286e0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5286e0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5286e0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   undefined uVar1;
@@ -7858,7 +7858,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5286e0(cls_0x5b8e94 *this)
   undefined3 extraout_var_02;
   int3 extraout_var_03;
   uint uVar2;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   undefined4 unaff_ESI;
   
   uVar1 = (*this->vftptr_0x0[1].virt_meth_0x477930_60)(this);
@@ -7877,7 +7877,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5286e0(cls_0x5b8e94 *this)
   if (CONCAT31(extraout_var_02,uVar1) != 0) {
     uVar1 = (*this->vftptr_0x0[1].virt_meth_0x46e900_44)(this);
     if (CONCAT31(extraout_var_03,uVar1) != 0 && -1 < extraout_var_03) {
-      uVar2 = cls_0x5a7b98::meth_0x58eb90(this_00);
+      uVar2 = cls_0x5a7b98_TCharacter::meth_0x58eb90(this_00);
       if (this->mbr_0xe4 <= uVar2) {
         (*this->vftptr_0x0[1].virt_meth_0x477920_56)(this);
         this->mbr_0xd8 = 0;
@@ -7891,7 +7891,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5286e0(cls_0x5b8e94 *this)
 
 // Function at 00528770
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528770(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528770(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -7907,7 +7907,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528770(cls_0x5b8
 
 // Function at 00528980
 
-cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528980(cls_0x5b8e94 *this)
+cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528980(cls_0x5b8e94_TObjectInstance *this)
 
 {
   cls_0x5a47f0 *this_00;
@@ -7940,7 +7940,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528980(cls_0x5b8
 // Function at 00528a90
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x528a90(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528a90(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -7970,12 +7970,12 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x528a90(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00528b00
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528b00(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528b00_Dtor(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
   
-  ~cls_0x5b8e94(this);
+  ~cls_0x5b8e94_TObjectInstance(this);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }
@@ -7986,13 +7986,13 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528b00(cls_0x5b8
 
 // Function at 00528b20
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::~cls_0x5b8e94(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::~cls_0x5b8e94_TObjectInstance(cls_0x5b8e94_TObjectInstance *this)
 
 {
-  cls_0x5b8e94 *pcVar1;
+  cls_0x5b8e94_TObjectInstance *pcVar1;
   
   this->vftptr_0x0 = &cls_0x5b8e94__vftable_5b8e94_005b8e94;
-  pcVar1 = (cls_0x5b8e94 *)cls_0x5a50e8::~cls_0x5a50e8((cls_0x5a50e8 *)this);
+  pcVar1 = (cls_0x5b8e94_TObjectInstance *)cls_0x5a50e8::~cls_0x5a50e8((cls_0x5a50e8 *)this);
   return pcVar1;
 }
 
@@ -8000,7 +8000,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::~cls_0x5b8e94(cls_0x5b8e94 *
 
 // Function at 00528ea0
 
-void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528ea0(cls_0x5b8e94 *this)
+void __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528ea0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   dword dVar1;
@@ -8024,7 +8024,7 @@ void __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x528ea0(cls_0x5b8e94 *this)
 // Function at 00528ee0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x528ee0(cls_0x5b8e94 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x528ee0(cls_0x5b8e94_TObjectInstance *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;
@@ -8053,7 +8053,7 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x528ee0(cls_0x5b8e94 *this,undefined4 param
 
 // Function at 00529120
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x529120(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x529120(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -8069,7 +8069,7 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x529120(cls_0x5b8
 
 // Function at 005421d0
 
-cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5421d0(cls_0x5b8e94 *this)
+cls_0x5b8e94_TObjectInstance * __thiscall OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x5421d0(cls_0x5b8e94_TObjectInstance *this)
 
 {
   byte in_stack_00000004;
@@ -8086,8 +8086,8 @@ cls_0x5b8e94 * __thiscall OOAnalyzer::cls_0x5b8e94::virt_meth_0x5421d0(cls_0x5b8
 // Function at 00542200
 
 cls_0x5b99c0 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x542200
-          (cls_0x5b8e94 *this,undefined4 param_1,undefined4 param_2,undefined4 param_3,
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x542200
+          (cls_0x5b8e94_TObjectInstance *this,undefined4 param_1,undefined4 param_2,undefined4 param_3,
           undefined4 param_4,undefined4 param_5,undefined4 param_6)
 
 {
@@ -8116,8 +8116,8 @@ OOAnalyzer::cls_0x5b8e94::virt_meth_0x542200
 // Function at 00542290
 
 cls_0x5b99c0 * __thiscall
-OOAnalyzer::cls_0x5b8e94::virt_meth_0x542290
-          (cls_0x5b8e94 *this,undefined4 param_1,undefined4 param_2,undefined4 param_3,
+OOAnalyzer::cls_0x5b8e94_TObjectInstance::virt_meth_0x542290
+          (cls_0x5b8e94_TObjectInstance *this,undefined4 param_1,undefined4 param_2,undefined4 param_3,
           undefined4 param_4,undefined4 param_5,undefined4 param_6)
 
 {

@@ -55,14 +55,14 @@ void __thiscall OOAnalyzer::cls_0x5a9194::virt_meth_0x4e1770(cls_0x5a9194 *this)
 {
   int iVar1;
   int *piVar2;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   
   if (((((this->mbr_0xd8 != 0) && (iVar1 = *(int *)(this->mbr_0xd8 + 4), iVar1 != 0)) &&
        (piVar2 = *(int **)(iVar1 + 0xe0), piVar2 != (int *)0x0)) &&
       ((*piVar2 == 3 || ((piVar2 != (int *)0x0 && (*piVar2 == 0x19)))))) &&
-     (this_00 = (cls_0x5a7b98 *)piVar2[0x11], this_00 != (cls_0x5a7b98 *)0x0)) {
-    cls_0x5a7b98::meth_0x4d3590(this_00);
-    cls_0x5a7b98::meth_0x4d3750(this_00,&this->mbr_0x10);
+     (this_00 = (cls_0x5a7b98_TCharacter *)piVar2[0x11], this_00 != (cls_0x5a7b98_TCharacter *)0x0)) {
+    cls_0x5a7b98_TCharacter::meth_0x4d3590_Burn(this_00);
+    cls_0x5a7b98_TCharacter::meth_0x4d3750(this_00,&this->mbr_0x10);
     cls_0x5b99c0::meth_0x53f560((cls_0x5b99c0 *)this->mbr_0xd8);
   }
   this->mbr_0x184 = 0;
@@ -83,7 +83,7 @@ void __thiscall OOAnalyzer::cls_0x5a9194::virt_meth_0x4e17f0(cls_0x5a9194 *this)
   dword dVar4;
   uint uVar5;
   
-  cls_0x5b8e94::virt_meth_0x4de800((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x4de800((cls_0x5b8e94_TObjectInstance *)this);
   dVar4 = this->mbr_0x184 + 1;
   this->mbr_0x184 = dVar4;
   if (99 < (int)dVar4) {

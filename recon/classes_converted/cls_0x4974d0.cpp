@@ -6,7 +6,7 @@
 
 // Function at 004974d0
 
-undefined4 cls_0x4974d0::meth_0x4974d0()
+undefined4 cls_0x4974d0::meth_0x4974d0_TGameState_SaveStream()
 
 {
   char cVar1;

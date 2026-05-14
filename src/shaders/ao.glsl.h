@@ -29,6 +29,7 @@ layout(std140) uniform params {
     vec4 vp;
     vec4 recon;
     vec4 ao_settings;
+    vec4 camera;
 };
 in vec2 v_uv;
 uniform sampler2D albedo_tex;
@@ -36,9 +37,17 @@ uniform sampler2D normal_tex;
 uniform sampler2D depth_tex;
 layout(location = 0) out float out_ao;
 vec3 reconstruct_world(vec2 uv, float d, float fbw, float fbh) {
-    float S = uv.x * fbw - vp.x;
-    float T = uv.y * fbh - vp.y;
+    // Framebuffer pixels are scaled by the active camera zoom/resolution.
+    // Undo that first so the iso inverse sees the same units as WorldToScreen.
+    float zoom = max(camera.x, 0.0001);
+    float S = (uv.x * fbw - vp.x) / zoom;
+    float T = (uv.y * fbh - vp.y) / zoom;
     float scene_z = d * vp.w + vp.z;
+    if (recon.w > 0.5) {
+        float focal = max(recon.z, 1.0);
+        S = (S / focal) * scene_z;
+        T = (T / focal) * scene_z;
+    }
     float K = recon.z - scene_z;
     float wz = (K - 2.0 * T * ISO_COS30) / ISO_WZ_DENOM;
     float sum_r = 2.0 * (T + wz * ISO_COS30);

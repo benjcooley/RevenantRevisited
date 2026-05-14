@@ -107,7 +107,7 @@ OOAnalyzer::cls_0x45d610::meth_0x45d660(cls_0x45d610 *this,cls_0x5a68d8 *param_1
   this->mbr_0xac = local_10;
   this->mbr_0xa4 = local_18;
   this->mbr_0xa8 = local_14;
-  cls_0x5a5320::meth_0x4546a0((cls_0x5a5320 *)&DAT_006668d8);
+  cls_0x5a5320_TPlayScreen::meth_0x4546a0((cls_0x5a5320_TPlayScreen *)&DAT_006668d8);
   DAT_0065847c = DAT_006680b0;
   this->mbr_0x8f8 = 1;
   DAT_006680b0 = 1;

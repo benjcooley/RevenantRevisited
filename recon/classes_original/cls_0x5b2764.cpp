@@ -21,20 +21,20 @@ void __thiscall OOAnalyzer::cls_0x5b2764::virt_meth_0x50d230(cls_0x5b2764 *this)
   
   wVar1 = this->mbr_0xc;
   if ((wVar1 == 1) || (wVar1 == 0)) {
-    iVar2 = cls_0x5a7b98::meth_0x50d2b0((cls_0x5a7b98 *)this);
+    iVar2 = cls_0x5a7b98_TCharacter::meth_0x50d2b0((cls_0x5a7b98_TCharacter *)this);
     if (iVar2 != 0) {
-      cls_0x5a7b98::meth_0x50d530((cls_0x5a7b98 *)this);
+      cls_0x5a7b98_TCharacter::meth_0x50d530((cls_0x5a7b98_TCharacter *)this);
       return;
     }
-    cls_0x5a7b98::meth_0x50d530((cls_0x5a7b98 *)this);
+    cls_0x5a7b98_TCharacter::meth_0x50d530((cls_0x5a7b98_TCharacter *)this);
   }
   else if ((wVar1 == 3) || (wVar1 == 2)) {
-    iVar2 = cls_0x5a7b98::meth_0x50d2b0((cls_0x5a7b98 *)this);
+    iVar2 = cls_0x5a7b98_TCharacter::meth_0x50d2b0((cls_0x5a7b98_TCharacter *)this);
     if (iVar2 != 0) {
-      cls_0x5a7b98::meth_0x50d530((cls_0x5a7b98 *)this);
+      cls_0x5a7b98_TCharacter::meth_0x50d530((cls_0x5a7b98_TCharacter *)this);
       return;
     }
-    cls_0x5a7b98::meth_0x50d530((cls_0x5a7b98 *)this);
+    cls_0x5a7b98_TCharacter::meth_0x50d530((cls_0x5a7b98_TCharacter *)this);
     return;
   }
   return;

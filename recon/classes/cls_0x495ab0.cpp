@@ -29,7 +29,7 @@ void __thiscall OOAnalyzer::cls_0x495ab0::meth_0x495ab0(cls_0x495ab0 *this,undef
   
   iVar6 = 0;
   if (0 < (int)this->mbr_0x24) {
-    while (iVar3 = FUN_0059a530(*(int *)(this->mbr_0x34 + iVar6 * 4) + 8,param_1), iVar3 != 0) {
+    while (iVar3 = FUN_0059a530_stricmp(*(int *)(this->mbr_0x34 + iVar6 * 4) + 8,param_1), iVar3 != 0) {
       iVar6 = iVar6 + 1;
       if ((int)this->mbr_0x24 <= iVar6) {
         return;

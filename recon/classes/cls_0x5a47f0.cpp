@@ -31,11 +31,11 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5a47f0::cls_0x5a47f0(cls_0x5a47f0 *t
 
 {
   dword dVar1;
-  cls_0x5a7b98 *in_stack_00000004;
+  cls_0x5a7b98_TCharacter *in_stack_00000004;
   
   this->vftptr_0x0 = &cls_0x5a47f0__vftable_5a47f0_005a47f0;
   this->mbr_0x4 = (dword)in_stack_00000004;
-  dVar1 = cls_0x5a7b98::meth_0x46e8a0(in_stack_00000004);
+  dVar1 = cls_0x5a7b98_TCharacter::meth_0x46e8a0(in_stack_00000004);
   this->mbr_0x8 = dVar1;
   this->mbr_0x10 = 0xffffffff;
   this->mbr_0x18 = 0xffffffff;

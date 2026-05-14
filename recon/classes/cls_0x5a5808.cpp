@@ -127,7 +127,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c780(cls_0x5a5808 
 void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c7c0(cls_0x5a5808 *this)
 
 {
-  cls_0x5a5320::virt_meth_0x491970((cls_0x5a5320 *)&DAT_0065b028);
+  cls_0x5a5320_TPlayScreen::virt_meth_0x491970((cls_0x5a5320_TPlayScreen *)&DAT_0065b028);
   cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)&DAT_0065c6f8);
   cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
   return;

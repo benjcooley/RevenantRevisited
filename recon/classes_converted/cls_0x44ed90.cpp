@@ -20,7 +20,7 @@ void cls_0x44ed90::meth_0x44ed90()
   FUN_0046dad0((this->mbr_0x78 - this->mbr_0x4) + DAT_00668510,
                (this->mbr_0x7c - this->mbr_0x8) + DAT_00668514,local_c,
                *(int *)(DAT_00667fcc + 0x18) + 0x32);
-  FUN_0046dc60(&local_18,local_c);
+  FUN_0046dc60_AngleToPP(&local_18,local_c);
   return;
 }
 

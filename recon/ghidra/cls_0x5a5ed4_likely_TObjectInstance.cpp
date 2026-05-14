@@ -633,7 +633,7 @@ void __thiscall OOAnalyzer::TObjectInstance::meth_0x48fcc0(TObjectInstance *this
 
 // Function at 0048fda0
 
-void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x48fda0(TObjectInstance *this)
+void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x48fda0_TScreen_DrawBackground(TObjectInstance *this)
 
 {
   dword dVar1;
@@ -643,17 +643,17 @@ void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x48fda0(TObjectInstance 
   
   (**(code **)(*(int *)PTR_DAT_005d79e0 + 0x24))();
   if ((DAT_0066829c != 0) && (0 < (int)this->mbr_0x1c)) {
-    if (DAT_00667fcc == (cls_0x5b4f30 *)0x0) goto LAB_0048fe30;
+    if (DAT_00667fcc == (cls_0x5b4f30_TPlayer *)0x0) goto LAB_0048fe30;
     if (((0x77 < (int)(this->mbr_0x48 - DAT_00668504)) &&
         (((DAT_00667fcc->TPlayScreen).TScreen.mbr_0x8 & 0x2800080) == 0)) &&
        ((*(byte *)&(DAT_00667fcc->TPlayScreen).mbr_0x36c & 2) == 0)) {
-      cls_0x5b4f30::meth_0x51d680(DAT_00667fcc);
+      cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState(DAT_00667fcc);
     }
   }
-  if (((DAT_00667fcc != (cls_0x5b4f30 *)0x0) && (DAT_006682bc != 0)) &&
+  if (((DAT_00667fcc != (cls_0x5b4f30_TPlayer *)0x0) && (DAT_006682bc != 0)) &&
      (((*(byte *)&(DAT_00667fcc->TPlayScreen).mbr_0x36c & 2) != 0 &&
       (((DAT_00667fcc->TPlayScreen).TScreen.mbr_0x110 & 0x100000) != 0)))) {
-    cls_0x5b4f30::meth_0x51d680(DAT_00667fcc);
+    cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState(DAT_00667fcc);
   }
 LAB_0048fe30:
   dVar1 = this->mbr_0x1c;
@@ -694,7 +694,7 @@ LAB_0048fe30:
 
 // Function at 0048ff00
 
-void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x48ff00(TObjectInstance *this)
+void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x48ff00_TScreen_Animate(TObjectInstance *this)
 
 {
   dword dVar1;
@@ -757,7 +757,7 @@ void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x48ff00(TObjectInstance 
 
 // Function at 00490030
 
-void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x490030(TObjectInstance *this)
+void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x490030_TScreen_MouseClick(TObjectInstance *this)
 
 {
   dword dVar1;
@@ -805,7 +805,7 @@ void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x490030(TObjectInstance 
 
 // Function at 004901e0
 
-void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x4901e0(TObjectInstance *this)
+void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x4901e0_TScreen_KeyPress(TObjectInstance *this)
 
 {
   dword dVar1;
@@ -855,7 +855,7 @@ void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x4901e0(TObjectInstance 
 
 // Function at 004903b0
 
-void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x4903b0(TObjectInstance *this)
+void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x4903b0_TScreen_Joystick(TObjectInstance *this)
 
 {
   dword dVar1;
@@ -918,7 +918,7 @@ void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x4903b0(TObjectInstance 
 
 // Function at 00490660
 
-void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x490660(TObjectInstance *this)
+void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x490660_TScreen_TimerTick(TObjectInstance *this)
 
 {
   dword dVar1;
@@ -1132,7 +1132,7 @@ void __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x491870(TObjectInstance 
 
 // Function at 00492060
 
-TObjectInstance * __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x492060(TObjectInstance *this)
+TObjectInstance * __thiscall OOAnalyzer::TObjectInstance::virt_meth_0x492060_TScreen_Dtor(TObjectInstance *this)
 
 {
   byte in_stack_00000004;

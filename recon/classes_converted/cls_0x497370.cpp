@@ -6,7 +6,7 @@
 
 // Function at 00497370
 
-cls_0x492170 * cls_0x497370::meth_0x497370()
+cls_0x492170 * cls_0x497370::meth_0x497370_TScriptManager_ObjectScript()
 
 {
   byte *pbVar1;
@@ -23,7 +23,7 @@ cls_0x492170 * cls_0x497370::meth_0x497370()
           (*(int *)(this->mbr_0x8014 + uVar5 * 4) != 0)) &&
          (((pbVar1 = **(byte ***)(this->mbr_0x8014 + uVar5 * 4), pbVar1 != (byte *)0x0 &&
            (*pbVar1 != 0)) &&
-          (uVar2 = FUN_0059a530(*(uint *)(in_stack_00000004 + 0x38),pbVar1,
+          (uVar2 = FUN_0059a530_stricmp(*(uint *)(in_stack_00000004 + 0x38),pbVar1,
                                 (byte *)*(uint *)(in_stack_00000004 + 0x38)), uVar2 == 0)))) {
         pcVar3 = (cls_0x492170 *)FUN_00482fb0(0xe8);
         if (pcVar3 == (cls_0x492170 *)0x0) goto LAB_00497498;
@@ -40,7 +40,7 @@ cls_0x492170 * cls_0x497370::meth_0x497370()
          ((*(int *)(this->mbr_0x8014 + uVar5 * 4) != 0 &&
           (((pbVar1 = **(byte ***)(this->mbr_0x8014 + uVar5 * 4), pbVar1 != (byte *)0x0 &&
             (*pbVar1 != 0)) &&
-           (uVar2 = FUN_0059a530(**(uint **)(in_stack_00000004 + 0x4c),pbVar1,
+           (uVar2 = FUN_0059a530_stricmp(**(uint **)(in_stack_00000004 + 0x4c),pbVar1,
                                  (byte *)**(uint **)(in_stack_00000004 + 0x4c)), uVar2 == 0)))))) {
         pcVar3 = (cls_0x492170 *)FUN_00482fb0(0xe8);
         if (pcVar3 == (cls_0x492170 *)0x0) {

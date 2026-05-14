@@ -8,10 +8,22 @@
 
 #include <cmath>
 
-double  TTime::m_time             = 0.0;
-double  TTime::m_deltaTime        = 0.0;
-int64_t TTime::m_frameCount       = 0;
-int64_t TTime::m_legacyFrameCount = 0;
+double  TTime::m_time                = 0.0;
+double  TTime::m_deltaTime           = 0.0;
+double  TTime::m_realDeltaTime       = 0.0;
+double  TTime::m_legacyFrameFraction = 0.0;
+double  TTime::m_timeScale           = 1.0;
+int64_t TTime::m_frameCount          = 0;
+int64_t TTime::m_legacyFrameCount    = 0;
+
+void TTime::SetTimeScale(double scale)
+{
+    if (scale < 0.0)
+        scale = 0.0;
+    if (scale > 4.0)
+        scale = 4.0;
+    m_timeScale = scale;
+}
 
 void TTime::BeginFrame(double dt_seconds)
 {
@@ -23,17 +35,18 @@ void TTime::BeginFrame(double dt_seconds)
     if (dt_seconds > 0.1)
         dt_seconds = 0.1;
 
-    m_deltaTime = dt_seconds;
-    m_time     += dt_seconds;
+    m_realDeltaTime = dt_seconds;
+    m_deltaTime = dt_seconds * m_timeScale;
+    m_time     += m_deltaTime;
     m_frameCount++;
 
-    // Advance toward floor(time * 24), but cap at real frame count so each
-    // legacy frame is backed by at least one real Pulse. When the renderer
-    // runs slower than 24 Hz, the legacy counter slows with it — the game
-    // stretches rather than skipping ticks.
-    int64_t target = static_cast<int64_t>(m_time * LegacyFramerate);
-    if (target > m_frameCount)
-        target = m_frameCount;
+    // Advance toward floor(scaled_time * 24). At slow scales this yields many
+    // render frames between legacy ticks; at fast scales TScreen may process
+    // multiple fixed legacy ticks before drawing.
+    const double legacy_time = m_time * LegacyFramerate;
+    int64_t target = static_cast<int64_t>(std::floor(legacy_time));
+    double fraction = legacy_time - static_cast<double>(target);
+    m_legacyFrameFraction = fraction;
     if (target > m_legacyFrameCount)
         m_legacyFrameCount = target;
 }

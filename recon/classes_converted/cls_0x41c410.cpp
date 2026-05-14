@@ -8,7 +8,7 @@
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void cls_0x41c410::meth_0x41c410()
+void cls_0x41c410::meth_0x41c410_TAreaMgr_Pulse()
 
 {
   int iVar1;
@@ -27,7 +27,7 @@ void cls_0x41c410::meth_0x41c410()
   if (0 < (int)this->mbr_0x4) {
     do {
       if ((iVar5 == 0) ||
-         (iVar4 = cls_0x41b0b0::meth_0x41b0b0
+         (iVar4 = cls_0x41b0b0::meth_0x41b0b0_TArea_In
                             (*(cls_0x41b0b0 **)(this->mbr_0x14 + iVar5 * 4),&local_c), iVar4 != 0))
       {
         local_14 = iVar5;
@@ -56,13 +56,13 @@ void cls_0x41c410::meth_0x41c410()
               cls_0x41c7d0::meth_0x41c7d0((cls_0x41c7d0 *)&DAT_00667548,iVar4 + 0x138);
             }
             if ((DAT_0066829c == 0) && ((*(byte *)(iVar4 + 0x44) & 0x10) != 0)) {
-              cls_0x495cf0::meth_0x4967a0((cls_0x495cf0 *)&DAT_0065def0);
+              cls_0x495cf0::meth_0x4967a0_TScriptManager_Clear((cls_0x495cf0 *)&DAT_0065def0);
             }
           }
           iVar5 = iVar5 + 1;
         } while (iVar5 < (int)this->mbr_0x4);
       }
-      cls_0x41b240::meth_0x41ba00(*(cls_0x41b240 **)(this->mbr_0x14 + local_14 * 4));
+      cls_0x41b240::meth_0x41ba00_TArea_Enter(*(cls_0x41b240 **)(this->mbr_0x14 + local_14 * 4));
       dVar2 = *(dword *)(this->mbr_0x14 + local_14 * 4);
       this->mbr_0x18 = dVar2;
       if ((*(uint *)(dVar2 + 0x44) & 0x4000) != 0) {
@@ -80,7 +80,7 @@ void cls_0x41c410::meth_0x41c410()
     do {
       this_00 = *(cls_0x41b240 **)(this->mbr_0x14 + iVar5 * 4);
       if ((*(byte *)&this_00->mbr_0x44 & 2) != 0) {
-        cls_0x41b240::meth_0x41b770(this_00);
+        cls_0x41b240::meth_0x41b770_TArea_Pulse(this_00);
       }
       iVar5 = iVar5 + 1;
     } while (iVar5 < (int)this->mbr_0x4);

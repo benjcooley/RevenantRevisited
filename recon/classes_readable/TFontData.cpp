@@ -49,7 +49,7 @@ int TFontData::meth_0x4746d0(byte *param_1, byte *param_2, undefined param_3, un
     piVar16 = &DAT_00659d48;
     ExceptionList = &pvStack_c;
     do {
-      uVar5 = FUN_0059a530(*(uint *)(*piVar16 + 4),param_1,(byte *)*(uint *)(*piVar16 + 4));
+      uVar5 = FUN_0059a530_stricmp(*(uint *)(*piVar16 + 4),param_1,(byte *)*(uint *)(*piVar16 + 4));
       if (uVar5 == 0) {
         local_80 = (&DAT_00659d48)[iVar17];
         if (local_80 != 0) goto LAB_00474779;
@@ -64,7 +64,7 @@ int TFontData::meth_0x4746d0(byte *param_1, byte *param_2, undefined param_3, un
   if (0 < DAT_0065a248) {
     piVar16 = &DAT_00659d48;
     do {
-      uVar5 = FUN_0059a530(*(uint *)(*piVar16 + 4),pbVar18,(byte *)*(uint *)(*piVar16 + 4));
+      uVar5 = FUN_0059a530_stricmp(*(uint *)(*piVar16 + 4),pbVar18,(byte *)*(uint *)(*piVar16 + 4));
       if (uVar5 == 0) {
         local_80 = (&DAT_00659d48)[iVar17];
         goto LAB_00474779;
@@ -76,7 +76,7 @@ int TFontData::meth_0x4746d0(byte *param_1, byte *param_2, undefined param_3, un
   local_80 = 0;
 LAB_00474779:
   if (_param_3 == 0) {
-    iVar17 = FUN_00483300(0,0xff);
+    iVar17 = FUN_00483300_RandomRange(0,0xff);
     DVar6 = GetTickCount();
     _param_3 = (iVar17 << 8 | DVar6 & 0xff) << 0x10 | DAT_00659d44 & 0xffff;
     DAT_00659d44._0_2_ = (short)DAT_00659d44 + 1;
@@ -266,7 +266,7 @@ LAB_00474779:
 
 // Function at 00474bb0
 
-int TFontData::meth_0x474bb0(int param_1, uint param_2)
+int TFontData::meth_0x474bb0_NewObject(int param_1, uint param_2)
 
 {
   void *pvVar1;
@@ -362,7 +362,7 @@ LAB_0047525c:
       uVar5 = uVar5 + 1;
     }
     if (in_stack_00000008 == 0) {
-      uVar3 = FUN_0059a530((uint)*ppcVar1,(byte *)*ppcVar1,param_1);
+      uVar3 = FUN_0059a530_stricmp((uint)*ppcVar1,(byte *)*ppcVar1,param_1);
       if (uVar3 == 0) {
         return uVar5;
       }

@@ -612,7 +612,7 @@ void TObjectInstance::meth_0x48fcc0(undefined4 param_1)
 
 // Function at 0048fda0
 
-void TObjectInstance::virt_meth_0x48fda0()
+void TObjectInstance::virt_meth_0x48fda0_TScreen_DrawBackground()
 
 {
   dword dVar1;
@@ -622,17 +622,17 @@ void TObjectInstance::virt_meth_0x48fda0()
   
   (**(code **)(*(int *)PTR_DAT_005d79e0 + 0x24))();
   if ((DAT_0066829c != 0) && (0 < (int)this->mbr_0x1c)) {
-    if (DAT_00667fcc == (cls_0x5b4f30 *)0x0) goto LAB_0048fe30;
+    if (DAT_00667fcc == (cls_0x5b4f30_TPlayer *)0x0) goto LAB_0048fe30;
     if (((0x77 < (int)(this->mbr_0x48 - DAT_00668504)) &&
         (((DAT_00667fcc->TPlayScreen).TScreen.mbr_0x8 & 0x2800080) == 0)) &&
        ((*(byte *)&(DAT_00667fcc->TPlayScreen).mbr_0x36c & 2) == 0)) {
-      cls_0x5b4f30::meth_0x51d680(DAT_00667fcc);
+      cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState(DAT_00667fcc);
     }
   }
-  if (((DAT_00667fcc != (cls_0x5b4f30 *)0x0) && (DAT_006682bc != 0)) &&
+  if (((DAT_00667fcc != (cls_0x5b4f30_TPlayer *)0x0) && (DAT_006682bc != 0)) &&
      (((*(byte *)&(DAT_00667fcc->TPlayScreen).mbr_0x36c & 2) != 0 &&
       (((DAT_00667fcc->TPlayScreen).TScreen.mbr_0x110 & 0x100000) != 0)))) {
-    cls_0x5b4f30::meth_0x51d680(DAT_00667fcc);
+    cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState(DAT_00667fcc);
   }
 LAB_0048fe30:
   dVar1 = this->mbr_0x1c;
@@ -673,7 +673,7 @@ LAB_0048fe30:
 
 // Function at 0048ff00
 
-void TObjectInstance::virt_meth_0x48ff00()
+void TObjectInstance::virt_meth_0x48ff00_TScreen_Animate()
 
 {
   dword dVar1;
@@ -736,7 +736,7 @@ void TObjectInstance::virt_meth_0x48ff00()
 
 // Function at 00490030
 
-void TObjectInstance::virt_meth_0x490030()
+void TObjectInstance::virt_meth_0x490030_TScreen_MouseClick()
 
 {
   dword dVar1;
@@ -784,7 +784,7 @@ void TObjectInstance::virt_meth_0x490030()
 
 // Function at 004901e0
 
-void TObjectInstance::virt_meth_0x4901e0()
+void TObjectInstance::virt_meth_0x4901e0_TScreen_KeyPress()
 
 {
   dword dVar1;
@@ -834,7 +834,7 @@ void TObjectInstance::virt_meth_0x4901e0()
 
 // Function at 004903b0
 
-void TObjectInstance::virt_meth_0x4903b0()
+void TObjectInstance::virt_meth_0x4903b0_TScreen_Joystick()
 
 {
   dword dVar1;
@@ -897,7 +897,7 @@ void TObjectInstance::virt_meth_0x4903b0()
 
 // Function at 00490660
 
-void TObjectInstance::virt_meth_0x490660()
+void TObjectInstance::virt_meth_0x490660_TScreen_TimerTick()
 
 {
   dword dVar1;
@@ -1111,7 +1111,7 @@ void TObjectInstance::virt_meth_0x491870()
 
 // Function at 00492060
 
-TObjectInstance * TObjectInstance::virt_meth_0x492060()
+TObjectInstance * TObjectInstance::virt_meth_0x492060_TScreen_Dtor()
 
 {
   byte in_stack_00000004;

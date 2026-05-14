@@ -43,14 +43,14 @@ OOAnalyzer::cls_0x4925b0::meth_0x4925b0(cls_0x4925b0 *this,uint param_1,byte *pa
             }
           }
           else {
-            uVar2 = FUN_0059a530(param_1,(byte *)(puVar4 + 2),param_2);
+            uVar2 = FUN_0059a530_stricmp(param_1,(byte *)(puVar4 + 2),param_2);
             if (uVar2 == 0) {
               return 1;
             }
             uVar2 = extraout_ECX;
             if (in_stack_0000000c == (byte *)0x0) goto LAB_00492619;
           }
-          uVar2 = FUN_0059a530(uVar2,(byte *)(puVar4 + 2),in_stack_0000000c);
+          uVar2 = FUN_0059a530_stricmp(uVar2,(byte *)(puVar4 + 2),in_stack_0000000c);
           if (uVar2 == 0) {
             return 1;
           }

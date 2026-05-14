@@ -113,10 +113,10 @@ TScreen::TScreen()
   }
   DAT_006669fc = DAT_006669fc | 8;
   (*pcVar3->FUN_00472e90_64)(this->mbr_0x8 | 0x40000);
-  bVar10 = (uint)(int)*(short *)&this->mbr_0x4 < DAT_0065a258;
+  bVar10 = (uint)(int)*(short *)&this->mbr_0x4 < DAT_0065a258_TObjectClass_numclasses;
   this->mbr_0x54 = (dword)in_stack_00000004;
   if (bVar10) {
-    dVar4 = (&DAT_0065a148)[*(short *)&this->mbr_0x4];
+    dVar4 = (&DAT_0065a148_TObjectClass_classes)[*(short *)&this->mbr_0x4];
   }
   else {
     dVar4 = 0;
@@ -190,7 +190,7 @@ switchD_0046e343_caseD_5:
   if (((this->mbr_0x8 & 0x40000000) == 0) &&
      (((*(short *)&this->mbr_0x4 != 9 || (this->mbr_0x38 != *(dword *)this->mbr_0x4c)) &&
       ((this->mbr_0x8 & 0x8000000) == 0)))) {
-    cls_0x497370::meth_0x497370((cls_0x497370 *)&DAT_0065def0);
+    cls_0x497370::meth_0x497370_TScriptManager_ObjectScript((cls_0x497370 *)&DAT_0065def0);
     meth_0x471150(this);
   }
   ExceptionList = unaff_EBX;
@@ -205,7 +205,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -222,7 +222,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   local_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -258,10 +258,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -375,7 +375,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -392,7 +392,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -428,10 +428,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -484,7 +484,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -501,7 +501,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -537,10 +537,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -593,7 +593,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -610,7 +610,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -646,10 +646,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -702,7 +702,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -719,7 +719,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -755,10 +755,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -811,7 +811,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -828,7 +828,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -864,10 +864,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -920,7 +920,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -937,7 +937,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -973,10 +973,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -1029,7 +1029,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -1046,7 +1046,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -1082,10 +1082,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -1138,7 +1138,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -1155,7 +1155,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -1191,10 +1191,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -1247,7 +1247,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -1264,7 +1264,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -1300,10 +1300,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -1356,7 +1356,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -1373,7 +1373,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -1409,10 +1409,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -1465,7 +1465,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -1482,7 +1482,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -1518,10 +1518,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -1574,7 +1574,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -1591,7 +1591,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -1627,10 +1627,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -1683,7 +1683,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -1700,7 +1700,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -1736,10 +1736,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -1792,7 +1792,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -1809,7 +1809,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -1845,10 +1845,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -1901,7 +1901,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -1918,7 +1918,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -1954,10 +1954,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2010,7 +2010,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -2027,7 +2027,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -2063,10 +2063,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2119,7 +2119,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -2136,7 +2136,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -2172,10 +2172,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2228,7 +2228,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -2245,7 +2245,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -2281,10 +2281,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2337,7 +2337,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -2354,7 +2354,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -2390,10 +2390,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2446,7 +2446,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -2463,7 +2463,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -2499,10 +2499,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2555,7 +2555,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -2572,7 +2572,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -2608,10 +2608,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2664,7 +2664,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -2681,7 +2681,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -2717,10 +2717,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2773,7 +2773,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -2790,7 +2790,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -2826,10 +2826,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2882,7 +2882,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -2899,7 +2899,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -2935,10 +2935,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -2991,7 +2991,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3008,7 +3008,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -3044,10 +3044,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -3100,7 +3100,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3117,7 +3117,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -3153,10 +3153,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -3209,7 +3209,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3226,7 +3226,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -3262,10 +3262,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -3318,7 +3318,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3335,7 +3335,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -3371,10 +3371,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -3427,7 +3427,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3444,7 +3444,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -3480,10 +3480,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -3536,7 +3536,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3553,7 +3553,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -3589,10 +3589,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -3645,7 +3645,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3662,7 +3662,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -3698,10 +3698,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -3754,7 +3754,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3771,7 +3771,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -3807,10 +3807,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -3863,7 +3863,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3880,7 +3880,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -3916,10 +3916,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -3972,7 +3972,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -3989,7 +3989,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -4025,10 +4025,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -4081,7 +4081,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -4098,7 +4098,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -4134,10 +4134,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -4190,7 +4190,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -4207,7 +4207,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -4243,10 +4243,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -4299,7 +4299,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -4316,7 +4316,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -4352,10 +4352,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -4408,7 +4408,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -4425,7 +4425,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -4461,10 +4461,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -4517,7 +4517,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -4534,7 +4534,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -4570,10 +4570,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -4626,7 +4626,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -4643,7 +4643,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -4679,10 +4679,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -4735,7 +4735,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -4752,7 +4752,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -4788,10 +4788,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -4844,7 +4844,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -4861,7 +4861,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -4897,10 +4897,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -4953,7 +4953,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -4970,7 +4970,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5006,10 +5006,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -5062,7 +5062,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -5079,7 +5079,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5115,10 +5115,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -5171,7 +5171,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -5188,7 +5188,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5224,10 +5224,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -5280,7 +5280,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -5297,7 +5297,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5333,10 +5333,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -5389,7 +5389,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -5406,7 +5406,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5442,10 +5442,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -5498,7 +5498,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -5515,7 +5515,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5551,10 +5551,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -5607,7 +5607,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -5624,7 +5624,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5660,10 +5660,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -5716,7 +5716,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -5733,7 +5733,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5769,10 +5769,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -5825,7 +5825,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -5842,7 +5842,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5878,10 +5878,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -5934,7 +5934,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -5951,7 +5951,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -5987,10 +5987,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -6043,7 +6043,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -6060,7 +6060,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -6096,10 +6096,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -6152,7 +6152,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -6169,7 +6169,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -6205,10 +6205,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -6261,7 +6261,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -6278,7 +6278,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -6314,10 +6314,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -6370,7 +6370,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -6387,7 +6387,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -6423,10 +6423,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -6479,7 +6479,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -6496,7 +6496,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -6532,10 +6532,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -6588,7 +6588,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -6605,7 +6605,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -6641,10 +6641,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -6697,7 +6697,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -6714,7 +6714,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -6750,10 +6750,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -6806,7 +6806,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -6823,7 +6823,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -6859,10 +6859,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -6915,7 +6915,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -6932,7 +6932,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -6968,10 +6968,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -7024,7 +7024,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -7041,7 +7041,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -7077,10 +7077,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -7133,7 +7133,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -7150,7 +7150,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -7186,10 +7186,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -7242,7 +7242,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -7259,7 +7259,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -7295,10 +7295,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -7351,7 +7351,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -7368,7 +7368,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -7404,10 +7404,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -7460,7 +7460,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -7477,7 +7477,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -7513,10 +7513,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -7569,7 +7569,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -7586,7 +7586,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -7622,10 +7622,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -7678,7 +7678,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -7695,7 +7695,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -7731,10 +7731,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -7787,7 +7787,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -7804,7 +7804,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -7840,10 +7840,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -7896,7 +7896,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -7913,7 +7913,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -7949,10 +7949,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8005,7 +8005,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -8022,7 +8022,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -8058,10 +8058,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8114,7 +8114,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -8131,7 +8131,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -8167,10 +8167,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8223,7 +8223,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -8240,7 +8240,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -8276,10 +8276,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8332,7 +8332,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -8349,7 +8349,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -8385,10 +8385,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8441,7 +8441,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -8458,7 +8458,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -8494,10 +8494,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8550,7 +8550,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -8567,7 +8567,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -8603,10 +8603,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8659,7 +8659,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -8676,7 +8676,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -8712,10 +8712,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8768,7 +8768,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -8785,7 +8785,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -8821,10 +8821,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8877,7 +8877,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -8894,7 +8894,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -8930,10 +8930,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -8986,7 +8986,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -9003,7 +9003,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -9039,10 +9039,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -9095,7 +9095,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -9112,7 +9112,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -9148,10 +9148,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -9204,7 +9204,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -9221,7 +9221,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -9257,10 +9257,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -9319,22 +9319,22 @@ void TScreen::meth_0x526c90()
   uint extraout_ECX_02;
   uint extraout_ECX_03;
   
-  uVar1 = FUN_0059a530((uint)this,(byte *)this->mbr_0x38,(byte *)s_RunFireHead1S_005e3074);
+  uVar1 = FUN_0059a530_stricmp((uint)this,(byte *)this->mbr_0x38,(byte *)s_RunFireHead1S_005e3074);
   if (uVar1 != 0) {
-    uVar1 = FUN_0059a530(extraout_ECX,(byte *)this->mbr_0x38,(byte *)s_RunFireHead2S_005e3084);
+    uVar1 = FUN_0059a530_stricmp(extraout_ECX,(byte *)this->mbr_0x38,(byte *)s_RunFireHead2S_005e3084);
     if (uVar1 != 0) {
-      uVar1 = FUN_0059a530(extraout_ECX_00,(byte *)this->mbr_0x38,(byte *)s_RunFireHead1E_005e3094);
+      uVar1 = FUN_0059a530_stricmp(extraout_ECX_00,(byte *)this->mbr_0x38,(byte *)s_RunFireHead1E_005e3094);
       if (uVar1 != 0) {
-        uVar1 = FUN_0059a530(extraout_ECX_01,(byte *)this->mbr_0x38,(byte *)s_RunFireHead2E_005e30a4
+        uVar1 = FUN_0059a530_stricmp(extraout_ECX_01,(byte *)this->mbr_0x38,(byte *)s_RunFireHead2E_005e30a4
                             );
         if (uVar1 != 0) {
-          uVar1 = FUN_0059a530(extraout_ECX_02,(byte *)this->mbr_0x38,
+          uVar1 = FUN_0059a530_stricmp(extraout_ECX_02,(byte *)this->mbr_0x38,
                                (byte *)s_RunFireHeadN_005e30b4);
           if (uVar1 == 0) {
             this->mbr_0x110 = 0;
           }
           else {
-            uVar1 = FUN_0059a530(extraout_ECX_03,(byte *)this->mbr_0x38,
+            uVar1 = FUN_0059a530_stricmp(extraout_ECX_03,(byte *)this->mbr_0x38,
                                  (byte *)s_RunFireHeadW_005e30c4);
             if (uVar1 == 0) {
               this->mbr_0x110 = 0xc0;
@@ -9367,7 +9367,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -9384,7 +9384,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -9420,10 +9420,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -9476,7 +9476,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -9493,7 +9493,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -9529,10 +9529,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -9585,7 +9585,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -9602,7 +9602,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -9638,10 +9638,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -9694,7 +9694,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -9711,7 +9711,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -9747,10 +9747,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -9803,7 +9803,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -9820,7 +9820,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -9856,10 +9856,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -9912,7 +9912,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -9929,7 +9929,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -9965,10 +9965,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -10021,7 +10021,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -10038,7 +10038,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -10074,10 +10074,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -10130,7 +10130,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -10147,7 +10147,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -10183,10 +10183,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -10239,7 +10239,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -10256,7 +10256,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -10292,10 +10292,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -10348,7 +10348,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -10365,7 +10365,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -10401,10 +10401,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -10457,7 +10457,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -10474,7 +10474,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -10510,10 +10510,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -10566,7 +10566,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -10583,7 +10583,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -10619,10 +10619,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -10675,7 +10675,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -10692,7 +10692,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -10728,10 +10728,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -10784,7 +10784,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -10801,7 +10801,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -10837,10 +10837,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -10893,7 +10893,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -10910,7 +10910,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -10946,10 +10946,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -11002,7 +11002,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -11019,7 +11019,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -11055,10 +11055,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -11111,7 +11111,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -11128,7 +11128,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -11164,10 +11164,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -11220,7 +11220,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -11237,7 +11237,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -11273,10 +11273,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }
@@ -11329,7 +11329,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
 
 {
   TPlayScreen *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   LPCVOID pvVar1;
   cls_0x4922c0 *this_02;
   TScreen *pcVar2;
@@ -11346,7 +11346,7 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   this->vftptr_0x0 = &TScreen__vftable_5a50e8_005a50e8;
   uStack_4 = 1;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (DAT_0065d674 == this) {
     cls_0x5b93c4::meth_0x5391a0((cls_0x5b93c4 *)&DAT_0065d4f8);
@@ -11382,10 +11382,10 @@ TScreen * __thiscall TScreen::~TScreen(TScreen *this)
   iVar4 = 0;
   if (0 < *(int *)&this->field_0x68) {
     do {
-      this_01 = *(cls_0x5b4f30 **)(*(int *)&this->field_0x78 + iVar4 * 4);
-      if (this_01 != (cls_0x5b4f30 *)0x0) {
+      this_01 = *(cls_0x5b4f30_TPlayer **)(*(int *)&this->field_0x78 + iVar4 * 4);
+      if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
         (this_01->TPlayScreen).TScreen.mbr_0x64 = 0;
-        cls_0x5b4f30::meth_0x46e630(this_01);
+        cls_0x5b4f30_TPlayer::meth_0x46e630(this_01);
         (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477840_0)
                   ((TScreen *)this_01);
       }

@@ -40,7 +40,7 @@ void __thiscall OOAnalyzer::cls_0x5b79ac::virt_meth_0x525fc0(cls_0x5b79ac *this,
   dword dVar1;
   dword in_stack_00000008;
   
-  SoftwareRenderer::virt_meth_0x471ba0((SoftwareRenderer *)this,param_1);
+  SoftwareRenderer::virt_meth_0x471ba0_Notify((SoftwareRenderer *)this,param_1);
   if (param_1 == 1) {
     if (this->mbr_0x100 != in_stack_00000008) {
       return;
@@ -171,7 +171,7 @@ OOAnalyzer::cls_0x5b79ac::virt_meth_0x527d00(cls_0x5b79ac *this,undefined4 param
     this_00->mbr_0x8 = this_00->mbr_0x8 | 0x8001;
     local_4 = CONCAT31(local_4._1_3_,1);
     this_00->vftptr_0x0 = (TScreen__vftable_5a50e8 *)&PTR_virt_meth_0x527de0_005b7a10;
-    uVar1 = FUN_0059a530(extraout_ECX,(byte *)this_00->mbr_0x38,(byte *)s_CavFGeyser_005e3044);
+    uVar1 = FUN_0059a530_stricmp(extraout_ECX,(byte *)this_00->mbr_0x38,(byte *)s_CavFGeyser_005e3044);
     if (uVar1 == 0) {
       pcVar3 = s_fgeyser_005e3050;
     }
@@ -234,7 +234,7 @@ OOAnalyzer::cls_0x5b79ac::virt_meth_0x527e10(cls_0x5b79ac *this,undefined4 param
     this_00->mbr_0x8 = this_00->mbr_0x8 | 0x8001;
     local_4 = CONCAT31(local_4._1_3_,1);
     this_00->vftptr_0x0 = (TScreen__vftable_5a50e8 *)&PTR_virt_meth_0x527de0_005b7a10;
-    uVar1 = FUN_0059a530(extraout_ECX,(byte *)this_00->mbr_0x38,(byte *)s_CavFGeyser_005e3044);
+    uVar1 = FUN_0059a530_stricmp(extraout_ECX,(byte *)this_00->mbr_0x38,(byte *)s_CavFGeyser_005e3044);
     if (uVar1 == 0) {
       pcVar3 = s_fgeyser_005e3050;
     }

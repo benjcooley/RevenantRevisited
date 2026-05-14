@@ -47,7 +47,7 @@ OOAnalyzer::cls_0x475a80::meth_0x475a80(cls_0x475a80 *this,int param_1,uint para
         if (local_114 < 1) {
           return 0xffffffff;
         }
-        iVar4 = FUN_00483300(0,local_114 + -1);
+        iVar4 = FUN_00483300_RandomRange(0,local_114 + -1);
         return local_100[iVar4];
       }
       if ((char **)*piVar9 != (char **)0x0) break;

@@ -400,25 +400,25 @@ void cls_0x5a5d64::meth_0x530670(char *param_1)
   undefined4 local_48 [18];
   
   if ((this->mbr_0x17c & 0x10) != 0) {
-    pcVar9 = (cls_0x4746d0 *)(-(uint)(2 < DAT_0065a258) & DAT_0065a150);
+    pcVar9 = (cls_0x4746d0 *)(-(uint)(2 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a150);
     uVar2 = cls_0x4746d0::meth_0x475210(pcVar9,param_1);
     if (uVar2 == 0xffffffff) {
-      pcVar9 = (cls_0x4746d0 *)(-(uint)(1 < DAT_0065a258) & DAT_0065a14c);
+      pcVar9 = (cls_0x4746d0 *)(-(uint)(1 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a14c);
       uVar2 = cls_0x4746d0::meth_0x475210(pcVar9,param_1);
       if (uVar2 == 0xffffffff) {
-        pcVar9 = (cls_0x4746d0 *)(-(uint)(4 < DAT_0065a258) & DAT_0065a158);
+        pcVar9 = (cls_0x4746d0 *)(-(uint)(4 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a158);
         uVar2 = cls_0x4746d0::meth_0x475210(pcVar9,param_1);
         if (uVar2 == 0xffffffff) {
-          pcVar9 = (cls_0x4746d0 *)(-(uint)(0x12 < DAT_0065a258) & DAT_0065a190);
+          pcVar9 = (cls_0x4746d0 *)(-(uint)(0x12 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a190);
           uVar2 = cls_0x4746d0::meth_0x475210(pcVar9,param_1);
           if (uVar2 == 0xffffffff) {
-            pcVar9 = (cls_0x4746d0 *)(-(uint)(5 < DAT_0065a258) & DAT_0065a15c);
+            pcVar9 = (cls_0x4746d0 *)(-(uint)(5 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a15c);
             uVar2 = cls_0x4746d0::meth_0x475210(pcVar9,param_1);
             if (uVar2 == 0xffffffff) {
-              pcVar9 = (cls_0x4746d0 *)(-(uint)(0x11 < DAT_0065a258) & DAT_0065a18c);
+              pcVar9 = (cls_0x4746d0 *)(-(uint)(0x11 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a18c);
               uVar2 = cls_0x4746d0::meth_0x475210(pcVar9,param_1);
               if (uVar2 == 0xffffffff) {
-                pcVar9 = (cls_0x4746d0 *)(-(uint)(0x15 < DAT_0065a258) & DAT_0065a19c);
+                pcVar9 = (cls_0x4746d0 *)(-(uint)(0x15 < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a19c);
                 uVar2 = cls_0x4746d0::meth_0x475210(pcVar9,param_1);
                 if (uVar2 == 0xffffffff) {
                   return;
@@ -488,8 +488,8 @@ void cls_0x5a5d64::meth_0x530670(char *param_1)
     return;
   }
   uVar2 = ((this->mbr_0x17c & 4) != 0) + 1;
-  if (uVar2 < DAT_0065a258) {
-    pcVar9 = (cls_0x4746d0 *)(&DAT_0065a148)[uVar2];
+  if (uVar2 < DAT_0065a258_TObjectClass_numclasses) {
+    pcVar9 = (cls_0x4746d0 *)(&DAT_0065a148_TObjectClass_classes)[uVar2];
   }
   else {
     pcVar9 = (cls_0x4746d0 *)0x0;

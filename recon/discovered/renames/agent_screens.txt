@@ -1,0 +1,224 @@
+# Agent: TScreen / TPlayScreen / TLogoScreen identifications
+# Date: 2026-05-06
+#
+# Methodology: vtable layout match against src/screen.h and src/playscreen.h
+# virtuals declaration order, plus string-anchor verification of override
+# bodies (decompiled snippets in recon/discovered/cls_0x5a5*.cpp).
+#
+# Class addresses:
+#   TScreen      -> cls_0x5a5ed4 (vtable @ 0x5a5ed4, 19 slots, 76 bytes)
+#                   All slots point to default-implementation stubs in 0x46cf2x
+#                   and 0x48f**-0x49***** ranges. Verified via 0x4920a0
+#                   (Initialize default) which contains exactly:
+#                       *(this+0x54) = 0; return 0;
+#                   matching screen.h `virtual bool Initialize() { return false; }`.
+#
+#   TPlayScreen  -> cls_0x5a5320 (vtable @ 0x5a5320, contains 13 TScreen
+#                   overrides starting with virt_meth_0x47a660 at slot 1).
+#                   Initialize references the literal "Initializing TPlayScreen\n"
+#                   (string @ 005d701c) plus all the retail playscrn.dat /
+#                   EquipPane.dat / SpellPane.dat / SideBarTabs.dat / Inventory.dat
+#                   / BottomBar.dat / SpellScroll.dat / Dialog.dat / Portraits.dat
+#                   / StatsPane.dat / mpingamenotex.dat / createcharnotex.dat /
+#                   loadbar.dat / loadscreen.bmp loads — exactly what TPlayScreen
+#                   does at boot. NOTE: cls_0x5a5320 was previously identified as
+#                   TMapPane in REVSYNC notes attached to its decomp file -
+#                   that's wrong; the real TMapPane methods are non-virtual and
+#                   live in 0x00450000-0x00460000 (see agent_actionsmap.txt).
+#                   The 5a5320 vftable's huge slot list (348+) is OOAnalyzer
+#                   bundling adjacent rdata vtables; the actual TPlayScreen
+#                   vtable proper is the first 13 slots.
+#
+#   TLogoScreen  -> cls_0x5a5d18 (vtable @ 0x5a5d18, 19 slots, 76 bytes).
+#                   Initialize (slot 1, virt_meth_0x53a2c0) loads "menus.dat"
+#                   and creates menu items "MenuNewGame" / "MenuLoadGame" /
+#                   "MenuMulti" / "MenuOptions" / "MenuExit". Animate (slot 5,
+#                   virt_meth_0x53a6d0) draws "MainMenu" sprite at (0,0,16) and
+#                   formats "Revenant   v%d.%02d" version text — exact match to
+#                   the title/main-menu screen in src/logoscreen.cpp.
+#
+# Confidence: HIGH on all class anchors (string evidence is unambiguous).
+# Confidence: HIGH on slot 0..6+8+10+12 method assignments — they fall in the
+# screen.h/playscreen.h declaration order and override bodies reference the
+# right anchors. Slots 7/9/11 default-inherit TScreen base methods.
+#
+# Recon-mapping correction note:
+#   - recon/mappings/TScreen_cls_0x50bf20_map.yaml is REJECTED already (its
+#     own header disputes the match). The correct TScreen address is
+#     cls_0x5a5ed4. Keep the yaml as-is for now but flag for replacement.
+
+
+# ============================================================================
+# TScreen base — vtable @ 0x5a5ed4, 13 logical screen virtuals, 19 vtable slots
+# ============================================================================
+
+# Class label
+cls_0x5a5ed4|cls_0x5a5ed4_TScreen
+
+# TScreen::~TScreen — slot 0 vector deleting destructor
+virt_meth_0x492060|virt_meth_0x492060_TScreen_Dtor
+meth_0x492060|meth_0x492060_TScreen_Dtor
+FUN_00492060|FUN_00492060_TScreen_Dtor
+
+# TScreen::Initialize default — `*(this+0x54)=0; return 0;`
+# matches `virtual bool Initialize() { return false; }`
+virt_meth_0x4920a0|virt_meth_0x4920a0_TScreen_Initialize
+meth_0x4920a0|meth_0x4920a0_TScreen_Initialize
+FUN_004920a0|FUN_004920a0_TScreen_Initialize
+
+# TScreen::Close default — empty stub
+virt_meth_0x4920b0|virt_meth_0x4920b0_TScreen_Close
+meth_0x4920b0|meth_0x4920b0_TScreen_Close
+FUN_004920b0|FUN_004920b0_TScreen_Close
+
+# TScreen::Pulse default — slot 3
+virt_meth_0x46cf20|virt_meth_0x46cf20_TScreen_Pulse
+meth_0x46cf20|meth_0x46cf20_TScreen_Pulse
+FUN_0046cf20|FUN_0046cf20_TScreen_Pulse
+
+# TScreen::DrawBackground default — slot 4
+virt_meth_0x48fda0|virt_meth_0x48fda0_TScreen_DrawBackground
+meth_0x48fda0|meth_0x48fda0_TScreen_DrawBackground
+FUN_0048fda0|FUN_0048fda0_TScreen_DrawBackground
+
+# TScreen::Animate default — slot 5; iterates panes calling each pane.Animate
+virt_meth_0x48ff00|virt_meth_0x48ff00_TScreen_Animate
+meth_0x48ff00|meth_0x48ff00_TScreen_Animate
+FUN_0048ff00|FUN_0048ff00_TScreen_Animate
+
+# TScreen::MouseClick default — slot 6
+virt_meth_0x490030|virt_meth_0x490030_TScreen_MouseClick
+meth_0x490030|meth_0x490030_TScreen_MouseClick
+FUN_00490030|FUN_00490030_TScreen_MouseClick
+
+# TScreen::MouseMove default — slot 7
+virt_meth_0x490110|virt_meth_0x490110_TScreen_MouseMove
+meth_0x490110|meth_0x490110_TScreen_MouseMove
+FUN_00490110|FUN_00490110_TScreen_MouseMove
+
+# TScreen::KeyPress default — slot 8
+virt_meth_0x4901e0|virt_meth_0x4901e0_TScreen_KeyPress
+meth_0x4901e0|meth_0x4901e0_TScreen_KeyPress
+FUN_004901e0|FUN_004901e0_TScreen_KeyPress
+
+# TScreen::CharPress default — slot 9
+virt_meth_0x4902c0|virt_meth_0x4902c0_TScreen_CharPress
+meth_0x4902c0|meth_0x4902c0_TScreen_CharPress
+FUN_004902c0|FUN_004902c0_TScreen_CharPress
+
+# TScreen::Joystick default — slot 10
+virt_meth_0x4903b0|virt_meth_0x4903b0_TScreen_Joystick
+meth_0x4903b0|meth_0x4903b0_TScreen_Joystick
+FUN_004903b0|FUN_004903b0_TScreen_Joystick
+
+# TScreen::Redraw default — slot 11
+virt_meth_0x490530|virt_meth_0x490530_TScreen_Redraw
+meth_0x490530|meth_0x490530_TScreen_Redraw
+FUN_00490530|FUN_00490530_TScreen_Redraw
+
+# TScreen::TimerTick default — slot 12
+virt_meth_0x490660|virt_meth_0x490660_TScreen_TimerTick
+meth_0x490660|meth_0x490660_TScreen_TimerTick
+FUN_00490660|FUN_00490660_TScreen_TimerTick
+
+
+# ============================================================================
+# TPlayScreen — vtable @ 0x5a5320 (TScreen overrides at slots 0-6, 8, 10, 12)
+# Slots 7/9/11 keep TScreen defaults (MouseMove/CharPress/Redraw).
+# ============================================================================
+
+# Class label
+cls_0x5a5320|cls_0x5a5320_TPlayScreen
+
+# TPlayScreen::~TPlayScreen — slot 0
+virt_meth_0x47f510|virt_meth_0x47f510_TPlayScreen_Dtor
+meth_0x47f510|meth_0x47f510_TPlayScreen_Dtor
+FUN_0047f510|FUN_0047f510_TPlayScreen_Dtor
+
+# TPlayScreen::Initialize — slot 1; loads "Initializing TPlayScreen", and the
+# full retail interface stack (loadscreen.bmp / loadbar.dat / EquipPane.dat /
+# SpellPane.dat / SpellIcons.dat / StatusBar*.dat / SideBarTabs*.dat /
+# Inventory.dat / BottomBar.dat / SpellScroll.dat / Dialog.dat / Portraits.dat /
+# StatsPane.dat / mpingamenotex.dat / createcharnotex.dat). Decisive anchor.
+virt_meth_0x47a660|virt_meth_0x47a660_TPlayScreen_Initialize
+meth_0x47a660|meth_0x47a660_TPlayScreen_Initialize
+FUN_0047a660|FUN_0047a660_TPlayScreen_Initialize
+
+# TPlayScreen::Close — slot 2; tears down all the dat-loaded panes/globals.
+virt_meth_0x47b290|virt_meth_0x47b290_TPlayScreen_Close
+meth_0x47b290|meth_0x47b290_TPlayScreen_Close
+FUN_0047b290|FUN_0047b290_TPlayScreen_Close
+
+# TPlayScreen::Pulse — slot 3; ~2100-byte body, drives fullscreen/interface
+# mode transitions, manages overhang dirty rects, sets viewport.
+virt_meth_0x47b4d0|virt_meth_0x47b4d0_TPlayScreen_Pulse
+meth_0x47b4d0|meth_0x47b4d0_TPlayScreen_Pulse
+FUN_0047b4d0|FUN_0047b4d0_TPlayScreen_Pulse
+
+# TPlayScreen::DrawBackground — slot 4; references "system is autosaving",
+# "Please wait...", "Autosave [", "newgame", "Loading Game \"%s\"... Please Wait",
+# "loadgamefmt", "New Game" — autosave/loadgame overlay rendering.
+virt_meth_0x47bd20|virt_meth_0x47bd20_TPlayScreen_DrawBackground
+meth_0x47bd20|meth_0x47bd20_TPlayScreen_DrawBackground
+FUN_0047bd20|FUN_0047bd20_TPlayScreen_DrawBackground
+
+# TPlayScreen::Animate — slot 5; processes deferred next-pane queued via
+# SetNextPane (param+0x69c) then calls TScreen::Animate (0x48ff00).
+virt_meth_0x47b4a0|virt_meth_0x47b4a0_TPlayScreen_Animate
+meth_0x47b4a0|meth_0x47b4a0_TPlayScreen_Animate
+FUN_0047b4a0|FUN_0047b4a0_TPlayScreen_Animate
+
+# TPlayScreen::MouseClick — slot 6
+virt_meth_0x47c2c0|virt_meth_0x47c2c0_TPlayScreen_MouseClick
+meth_0x47c2c0|meth_0x47c2c0_TPlayScreen_MouseClick
+FUN_0047c2c0|FUN_0047c2c0_TPlayScreen_MouseClick
+
+# TPlayScreen::KeyPress — slot 8; references "PAUSE" sprite (system pause).
+virt_meth_0x47c400|virt_meth_0x47c400_TPlayScreen_KeyPress
+meth_0x47c400|meth_0x47c400_TPlayScreen_KeyPress
+FUN_0047c400|FUN_0047c400_TPlayScreen_KeyPress
+
+# TPlayScreen::Joystick — slot 10; also references "PAUSE" sprite.
+virt_meth_0x47ce80|virt_meth_0x47ce80_TPlayScreen_Joystick
+meth_0x47ce80|meth_0x47ce80_TPlayScreen_Joystick
+FUN_0047ce80|FUN_0047ce80_TPlayScreen_Joystick
+
+# TPlayScreen::TimerTick — slot 12; references "ss.bmp" (screenshot),
+# "Updating script files...", "Reloading rules files...", "exitgameyn".
+# F-key shortcuts (F12 screenshot, script/rules reload, ESC exit confirm).
+virt_meth_0x47c630|virt_meth_0x47c630_TPlayScreen_TimerTick
+meth_0x47c630|meth_0x47c630_TPlayScreen_TimerTick
+FUN_0047c630|FUN_0047c630_TPlayScreen_TimerTick
+
+
+# ============================================================================
+# TLogoScreen — vtable @ 0x5a5d18 (TScreen overrides at slots 0,1,2,5)
+# All other slots keep TScreen defaults — title/main-menu is mostly passive.
+# ============================================================================
+
+# Class label
+cls_0x5a5d18|cls_0x5a5d18_TLogoScreen
+
+# TLogoScreen::~TLogoScreen — slot 0
+virt_meth_0x488ea0|virt_meth_0x488ea0_TLogoScreen_Dtor
+meth_0x488ea0|meth_0x488ea0_TLogoScreen_Dtor
+FUN_00488ea0|FUN_00488ea0_TLogoScreen_Dtor
+
+# TLogoScreen::Initialize — slot 1; loads "menus.dat", creates menu entries
+# "MenuNewGame", "MenuLoadGame", "MenuMulti", "MenuOptions", "MenuExit",
+# attaches per-button callbacks. Sets up cursor sprite. Returns 1 on success.
+virt_meth_0x53a2c0|virt_meth_0x53a2c0_TLogoScreen_Initialize
+meth_0x53a2c0|meth_0x53a2c0_TLogoScreen_Initialize
+FUN_0053a2c0|FUN_0053a2c0_TLogoScreen_Initialize
+
+# TLogoScreen::Close — slot 2; small cleanup (~50 bytes), no string anchors.
+virt_meth_0x53a680|virt_meth_0x53a680_TLogoScreen_Close
+meth_0x53a680|meth_0x53a680_TLogoScreen_Close
+FUN_0053a680|FUN_0053a680_TLogoScreen_Close
+
+# TLogoScreen::Animate — slot 5; draws "MainMenu" backdrop at (0,0,16) then
+# version text formatted with "Revenant   v%d.%02d" (DAT_005d79dc/dd are the
+# version major/minor bytes). Exact match to title-screen Animate behavior.
+virt_meth_0x53a6d0|virt_meth_0x53a6d0_TLogoScreen_Animate
+meth_0x53a6d0|meth_0x53a6d0_TLogoScreen_Animate
+FUN_0053a6d0|FUN_0053a6d0_TLogoScreen_Animate

@@ -1,0 +1,209 @@
+# Agent: TActionBlock / TMapPane / TMapIterator identifications
+# Date: 2026-05-06
+#
+# Methodology: decompile candidate functions, match against legacy mappane.cpp
+# and complexobj.cpp source. All entries below are >70% confidence and most
+# are >95% (verified against literal source-code patterns or string anchors).
+#
+# Class addresses:
+#   TActionBlock  - 100-byte struct, NOT a vtable (no virtual fns).
+#                   Identified by ctor signatures (FUN_004da9f0, FUN_004daa70,
+#                   FUN_004daae0) and operator calls in TCharacter sneak code.
+#   TMapPane      - large class (>2300 bytes). recon yaml maps cls_0x42f9f0
+#                   but that's wrong; that's a 120-byte pane subclass.
+#                   The real TMapPane methods cluster at 0x00450000-0x00460000.
+#                   Path string anchor: s_d__revenant_MapPane_cpp_005d0468.
+#                   No clean vtable address yet; methods are non-virtual.
+#   TMapIterator  - small struct (~72 bytes retail). NOT a vtable class.
+#                   Identified via FUN_0045f800 ctor thunk + FUN_0044cf80 init.
+
+# ============================================================================
+# TActionBlock methods (identified by direct legacy-source match)
+# ============================================================================
+
+# TActionBlock(char *n, ACTION a) - sets default fields then strcpy(name, n).
+# Sets *param_1=1 (action=ACTION_ANIMATE), [9]=0xffffffff (frame=-1),
+# [0xd]=0x10 (turnrate=16), [0x18]=1 (firsttime=1).  113 bytes.
+FUN_004da9f0|FUN_004da9f0_TActionBlock_Ctor1
+
+# TActionBlock(char *n, char *str, ACTION a) - sprintf("%s%s", n, str) form.
+# Same default-field pattern, calls FUN_0058b100 (sprintf) with format
+# &DAT_005e0770 = "%s%s".  106 bytes.
+FUN_004daa70|FUN_004daa70_TActionBlock_Ctor2
+
+# TActionBlock(TActionBlock &ab, char *str, ACTION a) - copy ctor with overrides.
+# memcpy(this, &ab, 100) -- copies 0x19=25 dwords; if str!=NULL strcpy(name, str);
+# if (a != ACTION_NONE) action = a.  76 bytes.  Strong evidence: copies exactly
+# 100 bytes -> retail TActionBlock size = 100 bytes.
+FUN_004daae0|FUN_004daae0_TActionBlock_CopyCtor
+
+# TActionBlock::Is(char *s) - wildcard pattern match: ?, *, [..], #, regular.
+# Uses tolower (FUN_0058cc2c) and isdigit (FUN_0058af1a). 168 bytes.
+# Exact algorithm match against legacy complexobj.cpp:62.
+FUN_004dab80|FUN_004dab80_TActionBlock_Is
+
+# TActionBlock::IsRight(char *state) - strnicmp(name, state, len) &&
+# name[len]=='r' && name[len+1]==0.  72 bytes.  FUN_0059a600 = strnicmp.
+FUN_004dac30|FUN_004dac30_TActionBlock_IsRight
+
+# TActionBlock::IsLeft(char *state) - same pattern as IsRight but checks 'l'.
+# 72 bytes.
+FUN_004dac80|FUN_004dac80_TActionBlock_IsLeft
+
+# ============================================================================
+# TComplexObject vtable (vtable @ 0x5a7b98 since TCharacter inherits it).
+# Layout: this->doing @ 0xd8, ->desired @ 0xdc, ->root @ 0xe0.
+# TActionBlock layout: action@0, name@4, frame@0x24, wait@0x28, angle@0x2c,
+# moveangle@0x30, turnrate@0x34, target@0x38..0x43, obj@0x44, attack@0x48,
+# impact@0x4c, damage@0x50, data@0x54, ?@0x58, flags@0x5c, firsttime@0x60.
+# (flags-bit layout: 0x10=priority, 0x20=interrupt, 0x40=??, 0x400=noroot.)
+# ============================================================================
+
+# TComplexObject::SetRoot(TActionBlock*) - vtable[126] (offset 0x1f8).
+# Checks ab->noroot (flags & 0x400); frees old root (data@0x5c) if not
+# doing/desired; sets root, sets root->flags |= 0x40, clears interrupt(0x20).
+FUN_004db2d0|FUN_004db2d0_TComplexObject_SetRoot
+
+# TComplexObject::SetDoing(TActionBlock*) - vtable[128] (offset 0x200).
+# Frees old doing if not root/desired, installs new, clears root->interrupt.
+FUN_004db340|FUN_004db340_TComplexObject_SetDoing
+
+# TComplexObject::SetDesired(TActionBlock*) - vtable[130] (offset 0x208).
+# If ab==NULL substitutes root. Frees old desired (and its data@0x5c).
+# If ab->interrupt and doing!=ab and !doing->priority -> calls TryCommand.
+FUN_004db3a0|FUN_004db3a0_TComplexObject_SetDesired
+
+# TComplexObject::UpdateAction(int bits) - vtable[132] (offset 0x210).
+# Calls vtable[0x21c]=ResolveAction; clears doing->firsttime; if comstate==0
+# and doing->priority clears priority; calls vtable[0x214]=ForceCommand on
+# desired then on root. Matches legacy complexobj.cpp:217.
+FUN_004db1d0|FUN_004db1d0_TComplexObject_UpdateAction
+
+# TComplexObject::ForceCommand(TActionBlock* ab, ?, ?) - vtable[133] (0x214).
+# Wrapper: if priority/interrupt allows it, calls TryCommand (slot 0x218).
+# 115 bytes; matches legacy ForceCommand (small wrapper).
+FUN_004db450|FUN_004db450_TComplexObject_ForceCommand
+
+# TComplexObject::TryCommand(TActionBlock* ab, ?, int bits) - vtable[134] (0x218).
+# Heavy state-search: calls FindState (vtable[0x138]) and FindTransitionState
+# (vtable[0x13c]); manages transition flag (ab->flags bit 2) on success;
+# applies SetDoing+SetDesired afterwards. 1049 bytes.
+FUN_004db4d0|FUN_004db4d0_TComplexObject_TryCommand
+
+# TComplexObject::ResolveAction(int bits) - vtable[135] (offset 0x21c).
+# Trivial base: returns COM_IMPOSSIBLE(3) if doing==NULL else 0. 18 bytes.
+# TCharacter does NOT override at this slot in retail (slot 135 still points
+# here in TCharacter's vtable @ 0x5a7b98); the action dispatch in retail is
+# done elsewhere.  Matches legacy complexobj.cpp:249.
+FUN_004db2b0|FUN_004db2b0_TComplexObject_ResolveAction
+
+# ============================================================================
+# TMapIterator (struct, NOT a class - no vtable)
+# Retail layout (~72 bytes): flags@0, objset@4, ?, ?, sx@0x10, sy@0x14,
+# ?, sector@0x18(?), level@0x24, sect-rect@0x28..0x37, sector-min/max@0x38..0x47.
+# Major retail change vs legacy: flat sector array (DAT_00668588), per-level
+# filtering, inventory recursion via FUN_00470040/0x110.
+# Flag bits in retail: 0x80=CHECK_NOINVENT(was 0x20), 0x10=CHECK_INVIS,
+# 0x08=CHECK_MOVING - REORDERED from legacy.
+# ============================================================================
+
+# TMapIterator::Initialize(SRect* sr, int flags, int objset, ?, int level)
+# Sets up SRect from sr, default flags-or-CHECK_RECT(3) if no rect-flag set,
+# initializes sx=-1 sy=0 etc, computes sector range from current map pos
+# (DAT_00667fcc=Player level), then calls NextItem to advance to first item.
+# 241 bytes.
+FUN_0044cf80|FUN_0044cf80_TMapIterator_Initialize
+
+# TMapIterator::NextItem() - 859 bytes. Iterates flat sector array
+# (DAT_00668578 count, DAT_00668588 array), per-level filter via param_1[9],
+# CHECK_INVIS / CHECK_MOVING via flags 0x10/0x08, screen-rect / map-rect
+# checks. Recurses inventory unless CHECK_NOINVENT(0x80) or via
+# FUN_00470040(NumInventory) / FUN_00470110(GetInventory).
+FUN_0044d080|FUN_0044d080_TMapIterator_NextItem
+
+# TMapIterator::TMapIterator(SRect* sr, int flags, int objset) - thunk ctor
+# that calls Initialize and returns this. 41 bytes.
+FUN_0045f800|FUN_0045f800_TMapIterator_Ctor
+
+# ============================================================================
+# TMapPane methods (non-virtual; cluster around 0x00450000-0x00460000).
+# Source-path anchor: s_d__revenant_MapPane_cpp_005d0468 / 005d03c4.
+# Fatal-string anchor: s_Tried_to_delete_an_object_not_in_005d03f4.
+# ============================================================================
+
+# TMapPane::NewObject(SObjectDef* def) - allocates instance via FUN_00474bb0,
+# adds shadow if class is OC_DOOR(0xc) or 0xb, calls AddObject; on failure
+# removes the shadow via FUN_00451610 (RemoveObject). 582 bytes. param_2=def
+# (short class id).  Calls FUN_00474bb0 (object factory), FUN_00451cb0
+# (AddShadow), FUN_00451090 (AddObject). Path string @ s_d_revenant_MapPane_cpp.
+FUN_00450e40|FUN_00450e40_TMapPane_NewObject
+
+# TMapPane::AddObject(PTObjectInstance oi) - LOCKSECTORS(file=MapPane.cpp,
+# line=0x727=1831), TSector::AddObject via FUN_00498fb0, MakeIndex via
+# rand+GetTickCount, TransferWalkmap via FUN_00452750, then calls Notify
+# observers (param_1+0x130 = numbgrects, +0x144 = bgrects array). 578 bytes.
+FUN_00451090|FUN_00451090_TMapPane_AddObject
+
+# TMapPane::AddShadow(PTObjectInstance oi) - if class==0xe(shadow) returns -1;
+# builds "shadow_%s" name from oi's typename; calls NewObject; stores shadow
+# index back into oi+0x50. Direct match to legacy line 1528. 180 bytes.
+FUN_00451cb0|FUN_00451cb0_TMapPane_AddShadow
+
+# TMapPane::RemoveObject(PTObjectInstance inst) - the pointer overload.
+# Recursively removes shadow first (param_2[0x14]=shadow index), then
+# TSector::RemoveObject via FUN_00499250, then walkmap-clear with mutex
+# (LOCKSECTORS, file=MapPane.cpp line=0x800=2048).  557 bytes.
+FUN_00451610|FUN_00451610_TMapPane_RemoveObject
+
+# TMapPane::DeleteObject(PTObjectInstance obj) - if obj==NULL FATAL with
+# legacy string "Tried to delete an object not in the sector...".  528 bytes.
+# Exact match to legacy mappane.cpp:1466.
+FUN_00451840|FUN_00451840_TMapPane_DeleteObject
+
+# TMapPane::FindObjectsInRange(S3DPoint pos, int* array, int width, int height,
+# int objclass, int maxnum, int objset) - allocates working buf if maxnum>=0x41,
+# uses TMapIterator (FUN_0044cf80 init, FUN_0044d080 next), filters by
+# objclass==-1 || obj->classid==objclass, sorts by squared distance, returns
+# count. 1046 bytes.  Matches legacy 1610.
+FUN_00452060|FUN_00452060_TMapPane_FindObjectsInRange
+
+# TMapPane::GetInstance(int index, int objset) - sets up TMapIterator with
+# CHECK_NOINVENT(0x80), walks until obj.mapindex(at offset 0x40)==index;
+# falls back to FUN_0051f330 for off-map (inactive) objects. 94 bytes.
+# Matches legacy 1753.
+FUN_00452690|FUN_00452690_TMapPane_GetInstance
+
+# TMapPane::CenterOnPos(S3DPoint& pos, int level, BOOL scroll) - sets
+# centeron struct fields at this+0xd8 (flags), 0xdc (obj), 0xe0..0xeb
+# (pos), 0xec (level). Sets CENTERON_POS(2) | CENTERON_SCROLL(scroll?4:0)=
+# (param_4 & ~1) | 2. 125 bytes. Special case: if old centered on Player,
+# clear obj first.
+FUN_00453940|FUN_00453940_TMapPane_CenterOnPos
+
+# ============================================================================
+# Helpers found while tracing
+# ============================================================================
+
+# operator new (or malloc) used to allocate TActionBlocks (size 100=0x64).
+# Also used widely for other heap objects.  No rename - too generic.
+
+# TCharacter "sneak" action handler - allocates TActionBlock copy of root
+# named "sneak" (s_sneak_005e00fc), then if root->action == ACTION_MOVE(2)
+# allocates a directional sneak ("sneakr" or "sneakf") with action=2.
+# Calls vtable[0x208]=SetDesired afterwards.  Identified via "sneak"/
+# "sneakr"/"sneakf" string refs.
+FUN_004cf2e0|FUN_004cf2e0_TCharacter_StartSneak
+
+# TCharacter combat-flash effect - creates a "combatflash" object near the
+# character's pos, animates it for a random duration. Identified via
+# s_combatflash_005df9ac string ref. 208 bytes.
+FUN_004c8500|FUN_004c8500_TCharacter_CombatFlash
+
+# TCharacter ResolvePivot-like helper - returns 2 normally, 0 on root-name
+# match + face match. param_2 is TActionBlock; reads name@4, angle@0x2c.
+# 131 bytes. (Likely a small Resolve* family member.)
+FUN_004c8470|FUN_004c8470_TCharacter_ResolvePivot
+
+# Object "Is" helper that wraps TActionBlock::Is(name) - used in AI to test
+# doing/root/desired against name strings ("waypoint", "sneak", etc.)
+# Same fn as TActionBlock::Is - already renamed.

@@ -205,7 +205,7 @@ LAB_00460836:
         else {
           puVar7[1] = this->mbr_0x4;
           cls_0x45f7c0::meth_0x41c840((cls_0x45f7c0 *)&this->mbr_0x4);
-          iVar6 = FUN_0059a530(puVar7 + 0x16,&DAT_0065c958);
+          iVar6 = FUN_0059a530_stricmp(puVar7 + 0x16,&DAT_0065c958);
           if (iVar6 == 0) {
             this->mbr_0x18 = this->mbr_0x4 - 1;
           }
@@ -255,7 +255,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x460620::meth_0x460dc0(cls_0x460620 *this
   local_414 = this;
   if ((this->mbr_0x0 != 0) && (iVar6 = 0, 0 < (int)this->mbr_0x4)) {
     do {
-      iVar2 = FUN_0059a530(*(int *)(this->mbr_0x14 + iVar6 * 4) + 0x58,param_1);
+      iVar2 = FUN_0059a530_stricmp(*(int *)(this->mbr_0x14 + iVar6 * 4) + 0x58,param_1);
       if (iVar2 == 0) {
         if (*(int *)(this->mbr_0x14 + iVar6 * 4) != 0) {
           return 0;
@@ -366,7 +366,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x460620::meth_0x460dc0(cls_0x460620 *this
   FUN_0058b56e(uVar3,s____Major_version_indicates_a_new_005d1a64);
   FUN_0058b56e(uVar3,s_GAMEVERSION_1_0_005d1ac4);
   FUN_0058b56e(uVar3,s____Unique_id_generated_by__genui_005d1ad8);
-  uVar4 = FUN_00483300(0,0xffffffff);
+  uVar4 = FUN_00483300_RandomRange(0,0xffffffff);
   FUN_0058b56e(uVar3,s_UNIQUEID__8x_005d1b40,uVar4);
   FUN_0058b56e(uVar3,s____Type_of_module__and_other_opt_005d1b54);
   if (in_stack_00000008 == 1) {

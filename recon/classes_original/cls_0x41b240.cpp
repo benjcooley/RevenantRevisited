@@ -41,7 +41,7 @@ Length: 608 Alignment: 1
 
 // Function at 0041b240
 
-void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b240(cls_0x41b240 *this)
+void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b240_TArea_PlayCDMusic(cls_0x41b240 *this)
 
 {
   int iVar1;
@@ -65,7 +65,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b240(cls_0x41b240 *this)
         }
         else {
           do {
-            dVar4 = FUN_00483300(0,this->mbr_0x1bc - 1);
+            dVar4 = FUN_00483300_RandomRange(0,this->mbr_0x1bc - 1);
             if (dVar4 != this->mbr_0x1b8) break;
           } while (1 < (int)this->mbr_0x1bc);
           this->mbr_0x1b8 = dVar4;
@@ -105,7 +105,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b240(cls_0x41b240 *this)
 
 // Function at 0041b3c0
 
-void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b3c0(cls_0x41b240 *this,dword *param_1)
+void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b3c0_TArea_GetCurrentAmbient(cls_0x41b240 *this,dword *param_1)
 
 {
   dword dVar1;
@@ -168,7 +168,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b550(cls_0x41b240 *this)
   
   if ((this->mbr_0x44 & 0x100) != 0) {
     if ((this->mbr_0x44 & 0x800) != 0) {
-      cls_0x5a5320::meth_0x450d20((cls_0x5a5320 *)&DAT_006668d8);
+      cls_0x5a5320_TPlayScreen::meth_0x450d20((cls_0x5a5320_TPlayScreen *)&DAT_006668d8);
     }
     uVar1 = this->mbr_0x44;
     if ((uVar1 & 0x400) != 0) {
@@ -184,10 +184,10 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b550(cls_0x41b240 *this)
       DAT_006671f4._8_4_ = (undefined4)this->mbr_0xec;
     }
     if ((uVar1 & 0x2000) != 0) {
-      cls_0x5a5320::meth_0x45a990((cls_0x5a5320 *)&DAT_006668d8,this->mbr_0xfc,this->mbr_0x100);
+      cls_0x5a5320_TPlayScreen::meth_0x45a990((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,this->mbr_0xfc,this->mbr_0x100);
     }
     if ((this->mbr_0x44 & 0x200) != 0) {
-      cls_0x5a5320::meth_0x45aa80((cls_0x5a5320 *)&DAT_006668d8);
+      cls_0x5a5320_TPlayScreen::meth_0x45aa80((cls_0x5a5320_TPlayScreen *)&DAT_006668d8);
     }
   }
   return;
@@ -238,7 +238,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b690(cls_0x41b240 *this)
 
 // Function at 0041b770
 
-void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
+void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770_TArea_Pulse(cls_0x41b240 *this)
 
 {
   int iVar1;
@@ -260,7 +260,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
   int local_20;
   
   if (((*(byte *)&this->mbr_0x44 & 0x20) != 0) && (0 < (int)this->mbr_0x1bc)) {
-    meth_0x41b240(this);
+    meth_0x41b240_TArea_PlayCDMusic(this);
   }
   iVar1 = cls_0x47ea00::meth_0x47eab0((cls_0x47ea00 *)&DAT_0065caf0);
   if ((*(byte *)&this->mbr_0x44 & 8) != 0) {
@@ -285,9 +285,9 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
     }
     dVar4 = cls_0x47ea00::meth_0x47ea00((cls_0x47ea00 *)&DAT_0065caf0);
     if (dVar4 != this->mbr_0xe0) {
-      meth_0x41b3c0(this,&local_54);
-      cls_0x5a5320::meth_0x453640((cls_0x5a5320 *)&DAT_006668d8,local_54);
-      cls_0x5a5320::meth_0x4536b0((cls_0x5a5320 *)&DAT_006668d8,local_50);
+      meth_0x41b3c0_TArea_GetCurrentAmbient(this,&local_54);
+      cls_0x5a5320_TPlayScreen::meth_0x453640((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,local_54);
+      cls_0x5a5320_TPlayScreen::meth_0x4536b0((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,local_50);
       this->mbr_0xe0 = dVar4;
     }
   }
@@ -305,8 +305,8 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
       local_2a = DAT_00666970;
       local_24 = DAT_0066698c;
       local_20 = DAT_00666990;
-      uVar3 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_34);
-      piVar5 = (int *)FUN_00452690(uVar3,0);
+      uVar3 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_34);
+      piVar5 = (int *)FUN_00452690_TMapPane_GetInstance(uVar3,0);
       *(int **)(this->mbr_0x25c + 0x1c) = piVar5;
       if (piVar5 != (int *)0x0) {
         (**(code **)(*piVar5 + 0x40))(piVar5[2] | 0x80000);
@@ -329,7 +329,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41ba00(cls_0x41b240 *this)
+void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41ba00_TArea_Enter(cls_0x41b240 *this)
 
 {
   byte bVar1;
@@ -394,7 +394,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41ba00(cls_0x41b240 *this)
     }
   }
   if ((*(byte *)&this->mbr_0x44 & 4) != 0) {
-    meth_0x41b3c0(this,local_210);
+    meth_0x41b3c0_TArea_GetCurrentAmbient(this,local_210);
     if (iVar9 == DAT_005e91ec) {
       iVar9 = iVar10 - DAT_005e91f0;
       if (iVar9 < 0) {
@@ -409,20 +409,20 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41ba00(cls_0x41b240 *this)
         iVar5 = iVar10;
       }
       if ((iVar10 - (iVar5 >> 1)) + iVar9 < 0x401) {
-        cls_0x5a5320::meth_0x453720((cls_0x5a5320 *)&DAT_006668d8,local_210[0],local_214,0x48);
+        cls_0x5a5320_TPlayScreen::meth_0x453720((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,local_210[0],local_214,0x48);
         goto LAB_0041bb8f;
       }
     }
-    cls_0x5a5320::meth_0x453640((cls_0x5a5320 *)&DAT_006668d8,local_210[0]);
-    cls_0x5a5320::meth_0x4536b0((cls_0x5a5320 *)&DAT_006668d8,local_214);
+    cls_0x5a5320_TPlayScreen::meth_0x453640((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,local_210[0]);
+    cls_0x5a5320_TPlayScreen::meth_0x4536b0((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,local_214);
   }
 LAB_0041bb8f:
   if ((DAT_0066829c == 0) && ((*(byte *)&this->mbr_0x44 & 0x10) != 0)) {
-    iVar9 = FUN_0059a530(&this->mbr_0x50,s_master_s_005c6d0c);
+    iVar9 = FUN_0059a530_stricmp(&this->mbr_0x50,s_master_s_005c6d0c);
     if (iVar9 == 0) {
       FUN_00481c10(s_The_MASTER_S_script_file_can_not_005c6d18,0);
     }
-    cls_0x495cf0::meth_0x496490((cls_0x495cf0 *)&DAT_0065def0);
+    cls_0x495cf0::meth_0x496490_TScriptManager_Load((cls_0x495cf0 *)&DAT_0065def0);
   }
   meth_0x41b690(this);
   if ((this->mbr_0x44 & 0x3400) != 0) {

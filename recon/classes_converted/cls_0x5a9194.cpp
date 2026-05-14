@@ -17,7 +17,7 @@ void cls_0x5a9194::virt_meth_0x4e1770()
        (piVar2 = *(int **)(iVar1 + 0xe0), piVar2 != (int *)0x0)) &&
       ((*piVar2 == 3 || ((piVar2 != (int *)0x0 && (*piVar2 == 0x19)))))) &&
      (this_00 = (TPlayScreen *)piVar2[0x11], this_00 != (TPlayScreen *)0x0)) {
-    TPlayScreen::meth_0x4d3590(this_00);
+    TPlayScreen::meth_0x4d3590_Burn(this_00);
     TPlayScreen::meth_0x4d3750(this_00,&this->mbr_0x10);
     cls_0x5b99c0::meth_0x53f560((cls_0x5b99c0 *)this->mbr_0xd8);
   }

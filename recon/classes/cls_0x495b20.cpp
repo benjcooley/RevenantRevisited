@@ -23,7 +23,7 @@ int __thiscall OOAnalyzer::cls_0x495b20::meth_0x495b20(cls_0x495b20 *this)
   iVar3 = 0;
   if (0 < (int)this->mbr_0x24) {
     do {
-      iVar2 = FUN_0059a530(*(int *)(this->mbr_0x34 + iVar3 * 4) + 8);
+      iVar2 = FUN_0059a530_stricmp(*(int *)(this->mbr_0x34 + iVar3 * 4) + 8);
       if (iVar2 == 0) {
         piVar1 = *(int **)(this->mbr_0x34 + iVar3 * 4);
         if (*piVar1 != 1) {

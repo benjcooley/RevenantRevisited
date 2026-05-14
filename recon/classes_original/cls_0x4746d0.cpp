@@ -62,7 +62,7 @@ OOAnalyzer::cls_0x4746d0::meth_0x4746d0
     piVar14 = &DAT_00659d48;
     ExceptionList = &pvStack_c;
     do {
-      iVar4 = FUN_0059a530(param_1,*(undefined4 *)(*piVar14 + 4));
+      iVar4 = FUN_0059a530_stricmp(param_1,*(undefined4 *)(*piVar14 + 4));
       if (iVar4 == 0) {
         local_80 = (&DAT_00659d48)[iVar15];
         if (local_80 != 0) goto LAB_00474779;
@@ -77,7 +77,7 @@ OOAnalyzer::cls_0x4746d0::meth_0x4746d0
   if (0 < DAT_0065a248) {
     piVar14 = &DAT_00659d48;
     do {
-      iVar4 = FUN_0059a530(dVar10,*(undefined4 *)(*piVar14 + 4));
+      iVar4 = FUN_0059a530_stricmp(dVar10,*(undefined4 *)(*piVar14 + 4));
       if (iVar4 == 0) {
         local_80 = (&DAT_00659d48)[iVar15];
         goto LAB_00474779;
@@ -89,7 +89,7 @@ OOAnalyzer::cls_0x4746d0::meth_0x4746d0
   local_80 = 0;
 LAB_00474779:
   if (_param_3 == 0) {
-    iVar15 = FUN_00483300(0,0xff);
+    iVar15 = FUN_00483300_RandomRange(0,0xff);
     DVar5 = GetTickCount();
     _param_3 = (iVar15 << 8 | DVar5 & 0xff) << 0x10 | DAT_00659d44 & 0xffff;
     DAT_00659d44._0_2_ = (short)DAT_00659d44 + 1;
@@ -280,7 +280,7 @@ LAB_00474779:
 
 // Function at 00474bb0
 
-int __thiscall OOAnalyzer::cls_0x4746d0::meth_0x474bb0(cls_0x4746d0 *this,int param_1,int param_2)
+int __thiscall OOAnalyzer::cls_0x4746d0::meth_0x474bb0_NewObject(cls_0x4746d0 *this,int param_1,int param_2)
 
 {
   void *pvVar1;
@@ -376,7 +376,7 @@ LAB_0047525c:
       uVar4 = uVar4 + 1;
     }
     if (in_stack_00000008 == 0) {
-      iVar2 = FUN_0059a530(*puVar1,param_1);
+      iVar2 = FUN_0059a530_stricmp(*puVar1,param_1);
       if (iVar2 == 0) {
         return uVar4;
       }

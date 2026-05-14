@@ -376,9 +376,17 @@ int32_t TSector::SetObject(TObjectInstance* oi, int32_t item)
 // Removes an object from the sector
 TObjectInstance* TSector::RemoveObject(int32_t item)
 {
+    // TVirtualArray::Remove doesn't compact; slots vacated earlier in
+    // the same frame return null. Guard before ForceSector — the dtor
+    // already does the same null skip when iterating live slots.
+    // Without this, TMapPane::TransferObject ate a SIGSEGV when AI
+    // movement triggered a sector transfer for an object whose old
+    // index pointed at a now-empty slot.
     TObjectInstance* oi = objects[item];
     objects.Remove(item);
-    oi->ForceSector(nullptr);
+
+    if (oi)
+        oi->ForceSector(nullptr);
 
   // Remove object from sets
     for (int32_t d = 1; d < NUMOBJSETS; d++)

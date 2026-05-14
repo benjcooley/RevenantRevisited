@@ -30,7 +30,7 @@ void __thiscall OOAnalyzer::cls_0x5a9674::virt_meth_0x4e3000(cls_0x5a9674 *this)
 
 {
   this->mbr_0x184 = 0;
-  cls_0x5a7b98::meth_0x471b60((cls_0x5a7b98 *)this);
+  cls_0x5a7b98_TCharacter::meth_0x471b60((cls_0x5a7b98_TCharacter *)this);
   this->mbr_0x188 = 0;
   return;
 }
@@ -45,7 +45,7 @@ void __thiscall OOAnalyzer::cls_0x5a9674::virt_meth_0x4e30e0(cls_0x5a9674 *this,
   dword dVar1;
   dword in_stack_00000008;
   
-  cls_0x5b8e94::virt_meth_0x4df0f0((cls_0x5b8e94 *)this,param_1);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x4df0f0((cls_0x5b8e94_TObjectInstance *)this,param_1);
   if (param_1 == 1) {
     if (this->mbr_0x184 != in_stack_00000008) {
       return;

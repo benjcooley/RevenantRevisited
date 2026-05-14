@@ -4,7 +4,7 @@
 /OOAnalyzer/cls_0x5a4f28
 pack(disabled)
 Structure cls_0x5a4f28 {
-   0   cls_0x5a5ed4   112   cls_0x5a5ed4   "Component (member) class."
+   0   cls_0x5a5ed4_TScreen   112   cls_0x5a5ed4_TScreen   "Component (member) class."
    112   dword   4   mbr_0x70   "Unsigned Double-Word (ddw, 4-bytes)"
    116   dword   4   mbr_0x74   "Unsigned Double-Word (ddw, 4-bytes)"
    120   dword   4   mbr_0x78   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -40,7 +40,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4f28::virt_meth_0x46a510(cls_0x5a4f28 
   pvStack_c = ExceptionList;
   pcStack_28 = s_cursor_005d3eb0;
   ExceptionList = &pvStack_c;
-  (this->cls_0x5a5ed4).mbr_0x54 = 0;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x54 = 0;
   cStack_2c.mbr_0x0 = 0x46a543;
   pcStack_28 = (char *)cls_0x46d6b0::meth_0x46d710(this_00);
   cStack_2c.mbr_0x0 = 0x46a549;
@@ -52,8 +52,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4f28::virt_meth_0x46a510(cls_0x5a4f28 
   local_10 = &cStack_2c;
   cls_0x419dd0::cls_0x419dd0(&cStack_2c);
   (**(code **)(dVar1 + 0x30))(8);
-  (this->cls_0x5a5ed4).mbr_0x40 = (dword)&this->mbr_0x70;
-  (this->cls_0x5a5ed4).mbr_0x44 = (dword)&this->mbr_0x70;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x40 = (dword)&this->mbr_0x70;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x44 = (dword)&this->mbr_0x70;
   this_01 = (cls_0x5a4494 *)FUN_00482fb0(400);
   local_10 = (cls_0x419dd0 *)0x0;
   if (this_01 == (cls_0x5a4494 *)0x0) {
@@ -108,13 +108,13 @@ void __thiscall OOAnalyzer::cls_0x5a4f28::virt_meth_0x46a620(cls_0x5a4f28 *this)
 cls_0x5a4f28 * __thiscall OOAnalyzer::cls_0x5a4f28::cls_0x5a4f28(cls_0x5a4f28 *this)
 
 {
-  cls_0x5a5ed4::cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   this->mbr_0x70 = (dword)&cls_0x5a4c30__vftable_5a4c30_005a4c30;
   this->mbr_0x78 = 0;
   this->mbr_0x7c = 0;
   this->mbr_0x80 = 0;
   this->mbr_0x74 = 0;
-  (this->cls_0x5a5ed4).vftptr_0x0 =
+  (this->cls_0x5a5ed4_TScreen).vftptr_0x0 =
        (cls_0x5a5ed4__vftable_5a5ed4 *)&cls_0x5a4f28__vftable_5a4f28_005a4f28;
   return this;
 }
@@ -128,7 +128,7 @@ cls_0x5a4f28 * __thiscall OOAnalyzer::cls_0x5a4f28::virt_meth_0x46d440(cls_0x5a4
 {
   byte in_stack_00000004;
   
-  cls_0x5a5ed4::~cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }
@@ -149,7 +149,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4f28::meth_0x48ee10(cls_0x5a4f28 *this
   int in_stack_00000004;
   cls_0x492080 local_c;
   
-  this_00 = &(this->cls_0x5a5ed4).cls_0x41c7f0;
+  this_00 = &(this->cls_0x5a5ed4_TScreen).cls_0x41c7f0;
   cls_0x492080::meth_0x492080(&local_c);
   while( true ) {
     if (((uint *)local_c.mbr_0x0 == (uint *)0x0) || (*(uint *)local_c.mbr_0x0 <= local_c.mbr_0x8))
@@ -165,7 +165,7 @@ LAB_0048ee5b:
   dVar1 = this_00->mbr_0x0;
   iVar2 = 0;
   if (0 < (int)dVar1) {
-    piVar3 = (int *)(this->cls_0x5a5ed4).cls_0x41c7f0.mbr_0x10;
+    piVar3 = (int *)(this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x10;
     do {
       if (*piVar3 == in_stack_00000004) {
         cls_0x45f7c0::meth_0x41cb40((cls_0x45f7c0 *)this_00);
@@ -196,13 +196,13 @@ void __thiscall OOAnalyzer::cls_0x5a4f28::meth_0x48ef30(cls_0x5a4f28 *this)
   iVar3 = 0;
   bVar1 = false;
   local_4 = 0;
-  if (0 < (int)(this->cls_0x5a5ed4).mbr_0x1c) {
-    puVar2 = (uint *)&(this->cls_0x5a5ed4).field_0x30;
+  if (0 < (int)(this->cls_0x5a5ed4_TScreen).mbr_0x1c) {
+    puVar2 = (uint *)&(this->cls_0x5a5ed4_TScreen).field_0x30;
     puVar4 = puVar2;
     do {
       if (puVar4[-4] == in_stack_00000004) {
         if ((*puVar4 & 0x100) != 0) {
-          (*((this->cls_0x5a5ed4).vftptr_0x0)->virt_meth_0x46cf30_60)(this);
+          (*((this->cls_0x5a5ed4_TScreen).vftptr_0x0)->virt_meth_0x46cf30_60)(this);
         }
         bVar1 = true;
       }
@@ -214,14 +214,14 @@ void __thiscall OOAnalyzer::cls_0x5a4f28::meth_0x48ef30(cls_0x5a4f28 *this)
       }
       iVar3 = iVar3 + 1;
       puVar4 = puVar4 + 1;
-    } while (iVar3 < (int)(this->cls_0x5a5ed4).mbr_0x1c);
+    } while (iVar3 < (int)(this->cls_0x5a5ed4_TScreen).mbr_0x1c);
   }
-  (this->cls_0x5a5ed4).mbr_0x1c = local_4;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x1c = local_4;
   if (bVar1) {
-    (*((this->cls_0x5a5ed4).vftptr_0x0)->virt_meth_0x490960_64)(&this->cls_0x5a5ed4,0x102);
+    (*((this->cls_0x5a5ed4_TScreen).vftptr_0x0)->virt_meth_0x490960_64)(&this->cls_0x5a5ed4_TScreen,0x102);
   }
-  if (0 < (int)(this->cls_0x5a5ed4).mbr_0x1c) {
-    (*((this->cls_0x5a5ed4).vftptr_0x0)->virt_meth_0x490960_64)(&this->cls_0x5a5ed4,0x101);
+  if (0 < (int)(this->cls_0x5a5ed4_TScreen).mbr_0x1c) {
+    (*((this->cls_0x5a5ed4_TScreen).vftptr_0x0)->virt_meth_0x490960_64)(&this->cls_0x5a5ed4_TScreen,0x101);
   }
   return;
 }

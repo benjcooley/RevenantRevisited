@@ -287,18 +287,17 @@ SParticleBucketDesc BuildRuntimeBucketDesc(const SParticleEffectDef& effect_def,
 
     S3DTex tex = {};
     img3d->GetTexture(bucket_def.texture_slot, &tex);
-    if (!tex.surface.id)
-        FatalError("[particle] effect bucket texture surface is invalid");
+    if (tex.htexture == kInvalidTexture)
+        FatalError("[particle] effect bucket texture handle is invalid");
 
-    const sg_image_info info = sg_query_image_info(tex.surface);
-    const int32_t texture_width = info.width > 0 ? info.width : int32_t(tex.desc.width);
-    const int32_t texture_height = info.height > 0 ? info.height : int32_t(tex.desc.height);
+    const int32_t texture_width = int32_t(tex.desc.width);
+    const int32_t texture_height = int32_t(tex.desc.height);
     if (texture_width <= 0 || texture_height <= 0)
     {
         char err[256];
         snprintf(err, sizeof(err),
-                 "[particle] effect bucket texture dimensions invalid info=%dx%d desc=%ux%u",
-                 info.width, info.height, tex.desc.width, tex.desc.height);
+                 "[particle] effect bucket texture dimensions invalid desc=%ux%u",
+                 tex.desc.width, tex.desc.height);
         FatalError(err);
     }
 
@@ -306,7 +305,7 @@ SParticleBucketDesc BuildRuntimeBucketDesc(const SParticleEffectDef& effect_def,
     desc.name = bucket_def.name;
     desc.blend = bucket_def.additive ? EParticleBlendMode::Additive : EParticleBlendMode::Alpha;
     desc.sort = EParticleSortMode::None;
-    desc.image = tex.surface;
+    desc.texture = tex.htexture;
     desc.texture_width = texture_width;
     desc.texture_height = texture_height;
     desc.default_width = bucket_def.width;
@@ -604,22 +603,16 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
 
     S3DTex primary_tex = {};
     img3d->GetTexture(primary_bucket.texture_slot, &primary_tex);
-    if (!primary_tex.surface.id)
-        FatalError("[particle] FLAME effect texture surface is invalid");
+    if (primary_tex.htexture == kInvalidTexture)
+        FatalError("[particle] FLAME effect texture handle is invalid");
 
-    const sg_image_info primary_info = sg_query_image_info(primary_tex.surface);
-    const int32_t primary_texture_width = primary_info.width > 0
-        ? primary_info.width
-        : int32_t(primary_tex.desc.width);
-    const int32_t primary_texture_height = primary_info.height > 0
-        ? primary_info.height
-        : int32_t(primary_tex.desc.height);
+    const int32_t primary_texture_width = int32_t(primary_tex.desc.width);
+    const int32_t primary_texture_height = int32_t(primary_tex.desc.height);
     if (primary_texture_width <= 0 || primary_texture_height <= 0)
     {
         char err[256];
         snprintf(err, sizeof(err),
-                 "[particle] FLAME effect texture dimensions invalid info=%dx%d desc=%ux%u",
-                 primary_info.width, primary_info.height,
+                 "[particle] FLAME effect texture dimensions invalid desc=%ux%u",
                  primary_tex.desc.width, primary_tex.desc.height);
         FatalError(err);
     }
@@ -627,7 +620,7 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
     if (needs_flipbook)
     {
         auto flipbook = std::make_unique<TFlipbookBillboardComponent>();
-        flipbook->Configure(primary_tex.surface,
+        flipbook->Configure(primary_tex.htexture,
                             primary_texture_width, primary_texture_height,
                             primary_bucket.atlas_cols,
                             primary_bucket.atlas_rows,
@@ -642,8 +635,8 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
             ParticleFatal("[particle] FLAME uv rect expression compile failed: " + expr_error);
         flipbook->SetDebugSolid(def.debug_solid);
         inst->AddComponent(std::move(flipbook));
-        log_info("[flame-component] attached flipbook component tex=%dx%d img=%u",
-                 primary_texture_width, primary_texture_height, primary_tex.surface.id);
+        log_info("[flame-component] attached flipbook component tex=%dx%d handle=%u",
+                 primary_texture_width, primary_texture_height, primary_tex.htexture);
     }
 
     if (needs_particle_effect)

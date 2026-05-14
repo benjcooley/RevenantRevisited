@@ -45,7 +45,7 @@ void __thiscall OOAnalyzer::cls_0x5b0a28::virt_meth_0x502b70(cls_0x5b0a28 *this)
 {
   dword dVar1;
   
-  cls_0x5b8e94::virt_meth_0x4de800((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x4de800((cls_0x5b8e94_TObjectInstance *)this);
   if (this->mbr_0x188 == 0) {
     dVar1 = this->mbr_0x184;
     this->mbr_0x184 = dVar1 + 1;
@@ -66,7 +66,7 @@ void __thiscall OOAnalyzer::cls_0x5b0a28::virt_meth_0x502b70(cls_0x5b0a28 *this)
       this->mbr_0x188 = 0x19;
     }
     if (3 < (int)this->mbr_0x184) {
-      cls_0x5b8e94::meth_0x4defe0((cls_0x5b8e94 *)this);
+      cls_0x5b8e94_TObjectInstance::meth_0x4defe0((cls_0x5b8e94_TObjectInstance *)this);
     }
   }
   this->mbr_0x188 = this->mbr_0x188 - 1;

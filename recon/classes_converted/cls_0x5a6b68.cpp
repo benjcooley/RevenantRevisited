@@ -32,7 +32,7 @@ cls_0x5a6b68 * __thiscall cls_0x5a6b68::~cls_0x5a6b68(cls_0x5a6b68 *this)
   ;
   local_4 = 0;
   if (((this->TScreen).mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   uVar2 = (*((this->TScreen).vftptr_0x0)->FUN_00477aa0_220)(DAT_0066c9b4);
   pcVar1 = (this->TScreen).vftptr_0x0;
@@ -151,7 +151,7 @@ cls_0x5a6b68 * __thiscall cls_0x5a6b68::~cls_0x5a6b68(cls_0x5a6b68 *this)
   ;
   uStack_4 = 0;
   if (((this->TScreen).mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   uVar2 = (*((this->TScreen).vftptr_0x0)->FUN_00477aa0_220)(DAT_0066c9b4);
   pcVar1 = (this->TScreen).vftptr_0x0;
@@ -238,7 +238,7 @@ cls_0x5a6b68 * __thiscall cls_0x5a6b68::~cls_0x5a6b68(cls_0x5a6b68 *this)
   ;
   uStack_4 = 0;
   if (((this->TScreen).mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   uVar2 = (*((this->TScreen).vftptr_0x0)->FUN_00477aa0_220)(DAT_0066c9b4);
   pcVar1 = (this->TScreen).vftptr_0x0;
@@ -325,7 +325,7 @@ cls_0x5a6b68 * __thiscall cls_0x5a6b68::~cls_0x5a6b68(cls_0x5a6b68 *this)
   ;
   uStack_4 = 0;
   if (((this->TScreen).mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   uVar2 = (*((this->TScreen).vftptr_0x0)->FUN_00477aa0_220)(DAT_0066c9b4);
   pcVar1 = (this->TScreen).vftptr_0x0;
@@ -412,7 +412,7 @@ cls_0x5a6b68 * __thiscall cls_0x5a6b68::~cls_0x5a6b68(cls_0x5a6b68 *this)
   ;
   uStack_4 = 0;
   if (((this->TScreen).mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   uVar2 = (*((this->TScreen).vftptr_0x0)->FUN_00477aa0_220)(DAT_0066c9b4);
   pcVar1 = (this->TScreen).vftptr_0x0;
@@ -515,7 +515,7 @@ cls_0x5a6b68 * __thiscall cls_0x5a6b68::~cls_0x5a6b68(cls_0x5a6b68 *this)
   ;
   uStack_4 = 0;
   if (((this->TScreen).mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   uVar2 = (*((this->TScreen).vftptr_0x0)->FUN_00477aa0_220)(DAT_0066c9b4);
   pcVar1 = (this->TScreen).vftptr_0x0;

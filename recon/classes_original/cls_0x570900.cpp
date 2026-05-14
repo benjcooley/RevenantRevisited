@@ -25,7 +25,7 @@ void __thiscall OOAnalyzer::cls_0x570900::meth_0x570900(cls_0x570900 *this)
   int *piVar3;
   cls_0x570900 *pcVar4;
   cls_0x588410 *this_00;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   undefined4 uVar5;
   dword *pdVar6;
   dword dVar7;
@@ -46,14 +46,14 @@ void __thiscall OOAnalyzer::cls_0x570900::meth_0x570900(cls_0x570900 *this)
     ExceptionList = &pvStack_c;
     if ((int)this->mbr_0x34 < 0) goto LAB_005709b0;
     ExceptionList = &pvStack_c;
-    this_01 = (cls_0x5b4f30 *)
-              cls_0x45f7c0::meth_0x51eea0((cls_0x45f7c0 *)&DAT_0065a890,this->mbr_0x34);
+    this_01 = (cls_0x5b4f30_TPlayer *)
+              cls_0x45f7c0::meth_0x51eea0_TPlayerManager_GetPlayer((cls_0x45f7c0 *)&DAT_0065a890,this->mbr_0x34);
   }
-  if ((this_01 != (cls_0x5b4f30 *)0x0) && (this_01 != DAT_00667fcc)) {
-    cls_0x5b4f30::meth_0x51d680(this_01);
+  if ((this_01 != (cls_0x5b4f30_TPlayer *)0x0) && (this_01 != DAT_00667fcc)) {
+    cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState(this_01);
     uVar8 = 0;
-    (*((this_01->cls_0x5a7b98).cls_0x5a50e8.vftptr_0x0)->virt_meth_0x477650_384)(this_01);
-    dVar7 = (this_01->cls_0x5a7b98).cls_0x5a50e8.mbr_0x38;
+    (*((this_01->cls_0x5a7b98_TCharacter).cls_0x5a50e8.vftptr_0x0)->virt_meth_0x477650_384)(this_01);
+    dVar7 = (this_01->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x38;
     uVar5 = cls_0x45f7c0::meth_0x49d800((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310);
     FUN_0058b100(local_90,uVar5,dVar7,uVar8);
     cls_0x5701f0::meth_0x5701f0((cls_0x5701f0 *)&UNK_00676268.field_0x400,0xffffffff);
@@ -133,7 +133,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x570900::meth_0x570c00(cls_0x570900 *this
     return DAT_00667fcc;
   }
   if (-1 < (int)this->mbr_0x34) {
-    uVar1 = cls_0x45f7c0::meth_0x51eea0((cls_0x45f7c0 *)&DAT_0065a890,this->mbr_0x34);
+    uVar1 = cls_0x45f7c0::meth_0x51eea0_TPlayerManager_GetPlayer((cls_0x45f7c0 *)&DAT_0065a890,this->mbr_0x34);
     return uVar1;
   }
   return 0;

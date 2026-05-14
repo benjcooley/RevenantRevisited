@@ -84,7 +84,7 @@ void __thiscall OOAnalyzer::cls_0x5b4308::meth_0x50af40(cls_0x5b4308 *this)
   int *piVar10;
   int iVar11;
   
-  iVar7 = FUN_00483300(1,100);
+  iVar7 = FUN_00483300_RandomRange(1,100);
   if (iVar7 <= (int)this->mbr_0x8) {
     iVar7 = 0;
     if (0 < (int)this->mbr_0x84) {
@@ -100,16 +100,16 @@ void __thiscall OOAnalyzer::cls_0x5b4308::meth_0x50af40(cls_0x5b4308 *this)
       ((int *)this->mbr_0x80)[iVar7 * 0x12] = 1;
       uVar8 = __ftol();
       uVar8 = __ftol(uVar8);
-      iVar7 = FUN_00483300(uVar8);
+      iVar7 = FUN_00483300_RandomRange(uVar8);
       *(float *)(iVar11 + 4 + this->mbr_0x80) = (float)iVar7 + (float)this->mbr_0xc;
       uVar8 = __ftol();
       uVar8 = __ftol(uVar8);
-      iVar9 = FUN_00483300(uVar8);
+      iVar9 = FUN_00483300_RandomRange(uVar8);
       iVar7 = iVar11 + this->mbr_0x80;
       *(float *)(iVar11 + 8 + this->mbr_0x80) = (float)iVar9 + (float)this->mbr_0x10;
       uVar8 = __ftol();
       uVar8 = __ftol(uVar8);
-      iVar9 = FUN_00483300(uVar8);
+      iVar9 = FUN_00483300_RandomRange(uVar8);
       dVar1 = this->mbr_0x30;
       dVar2 = this->mbr_0x34;
       dVar3 = this->mbr_0x38;
@@ -119,68 +119,68 @@ void __thiscall OOAnalyzer::cls_0x5b4308::meth_0x50af40(cls_0x5b4308 *this)
       *(dword *)(iVar7 + 0x30) = dVar3;
       uVar8 = __ftol();
       uVar8 = __ftol(uVar8);
-      iVar7 = FUN_00483300(uVar8);
+      iVar7 = FUN_00483300_RandomRange(uVar8);
       *(float *)(iVar11 + 0x1c + this->mbr_0x80) = (float)iVar7 + (float)this->mbr_0x24;
       uVar8 = __ftol();
       uVar8 = __ftol(uVar8);
-      iVar7 = FUN_00483300(uVar8);
+      iVar7 = FUN_00483300_RandomRange(uVar8);
       *(float *)(iVar11 + 0x20 + this->mbr_0x80) = (float)iVar7 + (float)this->mbr_0x28;
       uVar8 = __ftol();
       uVar8 = __ftol(uVar8);
-      iVar7 = FUN_00483300(uVar8);
+      iVar7 = FUN_00483300_RandomRange(uVar8);
       *(float *)(iVar11 + 0x24 + this->mbr_0x80) = (float)iVar7 + (float)this->mbr_0x2c;
       if (_DAT_005a3530 <= (float)this->mbr_0x54) {
         if ((float)this->mbr_0x54 == _DAT_005a3530) {
           uVar8 = __ftol();
           uVar8 = __ftol(uVar8);
-          iVar7 = FUN_00483300(uVar8);
+          iVar7 = FUN_00483300_RandomRange(uVar8);
           fVar4 = (float)iVar7;
         }
         else {
           uVar8 = __ftol();
-          iVar7 = FUN_00483300(0,uVar8);
+          iVar7 = FUN_00483300_RandomRange(0,uVar8);
           fVar4 = (float)iVar7;
         }
       }
       else {
         uVar8 = __ftol(0);
-        iVar7 = FUN_00483300(uVar8);
+        iVar7 = FUN_00483300_RandomRange(uVar8);
         fVar4 = (float)iVar7;
       }
       if (_DAT_005a3530 <= (float)this->mbr_0x58) {
         if ((float)this->mbr_0x58 == _DAT_005a3530) {
           uVar8 = __ftol();
           uVar8 = __ftol(uVar8);
-          iVar7 = FUN_00483300(uVar8);
+          iVar7 = FUN_00483300_RandomRange(uVar8);
           fVar5 = (float)iVar7;
         }
         else {
           uVar8 = __ftol();
-          iVar7 = FUN_00483300(0,uVar8);
+          iVar7 = FUN_00483300_RandomRange(0,uVar8);
           fVar5 = (float)iVar7;
         }
       }
       else {
         uVar8 = __ftol(0);
-        iVar7 = FUN_00483300(uVar8);
+        iVar7 = FUN_00483300_RandomRange(uVar8);
         fVar5 = (float)iVar7;
       }
       if (_DAT_005a3530 <= (float)this->mbr_0x5c) {
         if ((float)this->mbr_0x54 == _DAT_005a3530) {
           uVar8 = __ftol();
           uVar8 = __ftol(uVar8);
-          iVar7 = FUN_00483300(uVar8);
+          iVar7 = FUN_00483300_RandomRange(uVar8);
           fVar6 = (float)iVar7;
         }
         else {
           uVar8 = __ftol();
-          iVar7 = FUN_00483300(0,uVar8);
+          iVar7 = FUN_00483300_RandomRange(0,uVar8);
           fVar6 = (float)iVar7;
         }
       }
       else {
         uVar8 = __ftol(0);
-        iVar7 = FUN_00483300(uVar8);
+        iVar7 = FUN_00483300_RandomRange(uVar8);
         fVar6 = (float)iVar7;
       }
       dVar1 = this->mbr_0x80;
@@ -191,12 +191,12 @@ void __thiscall OOAnalyzer::cls_0x5b4308::meth_0x50af40(cls_0x5b4308 *this)
       *(float *)(iVar7 + 0x18) = fVar6 + (float)this->mbr_0x50;
       *(dword *)(iVar7 + 0x34) = dVar2;
       iVar7 = iVar11 + dVar1;
-      uVar8 = FUN_00483300(this->mbr_0x70,this->mbr_0x74);
+      uVar8 = FUN_00483300_RandomRange(this->mbr_0x70,this->mbr_0x74);
       dVar1 = this->mbr_0x80;
       *(undefined4 *)(iVar7 + 0x38) = uVar8;
       *(dword *)(iVar7 + 0x3c) = this->mbr_0x78;
       iVar11 = iVar11 + dVar1;
-      uVar8 = FUN_00483300(0,1);
+      uVar8 = FUN_00483300_RandomRange(0,1);
       dVar1 = this->mbr_0x7c;
       *(undefined4 *)(iVar11 + 0x40) = uVar8;
       *(dword *)(iVar11 + 0x44) = dVar1;

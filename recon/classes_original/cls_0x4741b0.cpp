@@ -40,7 +40,7 @@ uint __thiscall OOAnalyzer::cls_0x4741b0::meth_0x474210(cls_0x4741b0 *this)
   dVar2 = this->mbr_0x4;
   for (uVar3 = 0; (this != (cls_0x4741b0 *)0x0 && (uVar3 < (uint)(int)(short)this->mbr_0x0));
       uVar3 = uVar3 + 1) {
-    iVar1 = FUN_0059a530(dVar2);
+    iVar1 = FUN_0059a530_stricmp(dVar2);
     if (iVar1 == 0) {
       return uVar3;
     }

@@ -6,7 +6,6 @@
 
 #include "meshextract.h"
 
-#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -22,26 +21,6 @@ static_assert(sizeof(SMeshVertex) == 32, "SMeshVertex must be 32 bytes");
 static_assert(sizeof(S3DFace)    == 6,  "S3DFace must be 6 bytes (3x uint16)");
 
 namespace {
-
-SAnimQuat QuatFromEulerXYZ(float x, float y, float z)
-{
-    const float cx = std::cos(x * 0.5f), sx = std::sin(x * 0.5f);
-    const float cy = std::cos(y * 0.5f), sy = std::sin(y * 0.5f);
-    const float cz = std::cos(z * 0.5f), sz = std::sin(z * 0.5f);
-
-    SAnimQuat qx = { sx, 0.0f, 0.0f, cx };
-    SAnimQuat qy = { 0.0f, sy, 0.0f, cy };
-    SAnimQuat qz = { 0.0f, 0.0f, sz, cz };
-    auto mul = [](const SAnimQuat& a, const SAnimQuat& b) -> SAnimQuat {
-        return {
-            a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-            a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
-            a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
-            a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
-        };
-    };
-    return NormalizeQuat(mul(mul(qz, qy), qx));
-}
 
 void MatrixMulLocal(const float a[16], const float b[16], float out[16])
 {
@@ -340,69 +319,6 @@ void BuildAnimatedObjectMatrix(T3DImagery* img, int32_t objnum,
     for (int32_t r = 0; r < 4; ++r)
         for (int32_t c = 0; c < 4; ++c)
             out16[r * 4 + c] = m.Elements[c][r];
-}
-
-SAnimPose SampleI3DAnimPose(T3DImagery* img, int32_t state, int32_t frame)
-{
-    return SampleI3DAnimPose(img, state, frame, -1, 0);
-}
-
-SAnimPose SampleI3DAnimPose(T3DImagery* img, int32_t state, int32_t frame,
-                            int32_t prevstate, int32_t prevframe)
-{
-    SAnimPose pose;
-    if (!img || state < 0 || state >= img->NumStates())
-        return pose;
-
-    img->SetPrevState(prevstate, prevframe);
-    for (int32_t objnum = 0; objnum < img->NumObjects(); ++objnum)
-    {
-        if (img->IsHidden(objnum, state))
-            continue;
-
-        hmm_vec3 pos = {};
-        hmm_vec3 rot = {};
-        hmm_vec3 scl = {1.0f, 1.0f, 1.0f};
-        if (!img->GetAniKey(objnum, state, frame, pos, rot, scl))
-            continue;
-
-        const uint16_t target = uint16_t(objnum);
-        pose.Set(AnimTrack(target, EAnimChannel::PosX), pos.X);
-        pose.Set(AnimTrack(target, EAnimChannel::PosY), pos.Y);
-        pose.Set(AnimTrack(target, EAnimChannel::PosZ), pos.Z);
-        pose.Set(AnimTrack(target, EAnimChannel::ScaleX), scl.X);
-        pose.Set(AnimTrack(target, EAnimChannel::ScaleY), scl.Y);
-        pose.Set(AnimTrack(target, EAnimChannel::ScaleZ), scl.Z);
-        pose.SetQuat(target, QuatFromEulerXYZ(rot.X, rot.Y, rot.Z));
-    }
-    return pose;
-}
-
-SAnimPose BlendI3DAnimPoses(const SAnimPose& a, const SAnimPose& b, float t)
-{
-    SAnimPose out = a;
-    std::vector<uint16_t> quat_targets;
-    for (const auto& kv : b.values)
-    {
-        const AnimTrackId id = kv.first;
-        const uint16_t channel = AnimTrackChannel(id);
-        const uint16_t target = AnimTrackTarget(id);
-        if (channel == uint16_t(EAnimChannel::RotX) ||
-            channel == uint16_t(EAnimChannel::RotY) ||
-            channel == uint16_t(EAnimChannel::RotZ) ||
-            channel == uint16_t(EAnimChannel::RotW))
-        {
-            quat_targets.push_back(target);
-            continue;
-        }
-        const float av = a.Get(id, kv.second);
-        out.Set(id, av + (kv.second - av) * t);
-    }
-    std::sort(quat_targets.begin(), quat_targets.end());
-    quat_targets.erase(std::unique(quat_targets.begin(), quat_targets.end()), quat_targets.end());
-    for (uint16_t target : quat_targets)
-        out.SetQuat(target, NlerpQuat(a.GetQuat(target), b.GetQuat(target), t));
-    return out;
 }
 
 void MatrixFromAnimPoseObject(const SAnimPose& pose, uint16_t target, float out16[16])

@@ -14,7 +14,7 @@ Length: 16392 Alignment: 1
 
 // Function at 004974d0
 
-undefined4 __thiscall OOAnalyzer::cls_0x4974d0::meth_0x4974d0(cls_0x4974d0 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x4974d0::meth_0x4974d0_TGameState_SaveStream(cls_0x4974d0 *this)
 
 {
   char cVar1;

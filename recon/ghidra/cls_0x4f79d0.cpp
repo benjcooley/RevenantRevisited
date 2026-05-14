@@ -30,7 +30,7 @@ cls_0x4f79d0 * __thiscall OOAnalyzer::cls_0x4f79d0::~cls_0x4f79d0(cls_0x4f79d0 *
   this->mbr_0x0 = (dword)&PTR_virt_meth_0x4f79b0_005aa89c;
   local_4 = 0;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if ((LPCVOID)this->mbr_0x18c != (LPCVOID)0x0) {
     FUN_004830f0((LPCVOID)this->mbr_0x18c);

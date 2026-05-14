@@ -67,7 +67,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4d6c::virt_meth_0x465a50(cls_0x5a4d6c 
   dword dVar3;
   uint uVar4;
   undefined4 uVar5;
-  cls_0x5b4f30 *this_00;
+  cls_0x5b4f30_TPlayer *this_00;
   undefined4 *puVar6;
   uint uVar7;
   int iVar8;
@@ -79,12 +79,12 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4d6c::virt_meth_0x465a50(cls_0x5a4d6c 
   bool bVar14;
   
   dVar3 = FUN_004a1ec0(100,100,*(uint *)(PTR_DAT_005d79e0 + 0x38) & 0x3001f,0);
-  uVar7 = DAT_0065a258;
+  uVar7 = DAT_0065a258_TObjectClass_numclasses;
   this->mbr_0x27c = dVar3;
   iVar8 = 0;
   uVar4 = 0;
   if (0 < (int)uVar7) {
-    piVar10 = &DAT_0065a148;
+    piVar10 = &DAT_0065a148_TObjectClass_classes;
     bVar14 = uVar7 != 0;
     do {
       if (((bVar14) && (*piVar10 != 0)) && (iVar2 = *(int *)(*piVar10 + 0x24), iVar8 < iVar2)) {
@@ -131,9 +131,9 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4d6c::virt_meth_0x465a50(cls_0x5a4d6c 
   this->mbr_0x1f4 = 1;
   this->mbr_0x1f0 = 1;
   if (this->mbr_0x194 == 2) {
-    this_00 = (cls_0x5b4f30 *)FUN_00474e20(s_Locke_005d330c,0,0xffffffff,1);
+    this_00 = (cls_0x5b4f30_TPlayer *)FUN_00474e20_NewObjectByName(s_Locke_005d330c,0,0xffffffff,1);
     this->mbr_0x1f8 = (dword)this_00;
-    cls_0x5b4f30::meth_0x46e6f0(this_00);
+    cls_0x5b4f30_TPlayer::meth_0x46e6f0(this_00);
   }
   (*this->vftptr_0x0->FUN_00435de0_80)();
   uVar5 = 0;

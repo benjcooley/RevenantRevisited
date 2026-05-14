@@ -18,9 +18,9 @@ void __thiscall OOAnalyzer::cls_0x544630::meth_0x544630(cls_0x544630 *this)
 {
   int in_stack_00000004;
   
-  if (((0 < in_stack_00000004) && (in_stack_00000004 < 5)) && (DAT_00667fcc != (cls_0x5a7b98 *)0x0))
+  if (((0 < in_stack_00000004) && (in_stack_00000004 < 5)) && (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0))
   {
-    cls_0x5a7b98::meth_0x51b5d0(DAT_00667fcc);
+    cls_0x5a7b98_TCharacter::meth_0x51b5d0(DAT_00667fcc);
   }
   return;
 }

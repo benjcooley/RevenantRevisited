@@ -144,61 +144,61 @@ undefined4 cls_0x5a3544::virt_meth_0x405770(byte *param_1)
   uint extraout_ECX_07;
   byte *in_stack_00000008;
   
-  uVar1 = FUN_0059a530((uint)this,param_1,&DAT_005c5c14);
+  uVar1 = FUN_0059a530_stricmp((uint)this,param_1,&DAT_005c5c14);
   if (uVar1 == 0) {
     this->mbr_0x2c = 0;
     FUN_00479580(in_stack_00000008);
     return 1;
   }
-  uVar1 = FUN_0059a530(extraout_ECX,param_1,(byte *)s_normal_005c5c1c);
+  uVar1 = FUN_0059a530_stricmp(extraout_ECX,param_1,(byte *)s_normal_005c5c1c);
   if (uVar1 == 0) {
     this->mbr_0x2c = 1;
     FUN_00479580(in_stack_00000008);
     return 1;
   }
-  uVar1 = FUN_0059a530(extraout_ECX_00,param_1,(byte *)s_alpha_005c5c24);
+  uVar1 = FUN_0059a530_stricmp(extraout_ECX_00,param_1,(byte *)s_alpha_005c5c24);
   if (uVar1 == 0) {
     this->mbr_0x2c = 2;
     FUN_00479580(in_stack_00000008);
     return 1;
   }
-  uVar1 = FUN_0059a530(extraout_ECX_01,param_1,(byte *)s_litalpha_005c5c2c);
+  uVar1 = FUN_0059a530_stricmp(extraout_ECX_01,param_1,(byte *)s_litalpha_005c5c2c);
   if (uVar1 == 0) {
     this->mbr_0x2c = 4;
     FUN_00479580(in_stack_00000008);
     return 1;
   }
-  uVar1 = FUN_0059a530(extraout_ECX_02,param_1,(byte *)&PTR_null_005c5c38);
+  uVar1 = FUN_0059a530_stricmp(extraout_ECX_02,param_1,(byte *)&PTR_null_005c5c38);
   if (uVar1 == 0) {
     this->mbr_0x2c = 8;
     FUN_00479580(in_stack_00000008);
     return 1;
   }
-  uVar1 = FUN_0059a530(extraout_ECX_03,param_1,(byte *)s_litadd_005c5c3c);
+  uVar1 = FUN_0059a530_stricmp(extraout_ECX_03,param_1,(byte *)s_litadd_005c5c3c);
   if (uVar1 == 0) {
     this->mbr_0x2c = 0x10;
     FUN_00479580(in_stack_00000008);
     return 1;
   }
-  uVar1 = FUN_0059a530(extraout_ECX_04,param_1,(byte *)s_nocheckz_005c5c44);
+  uVar1 = FUN_0059a530_stricmp(extraout_ECX_04,param_1,(byte *)s_nocheckz_005c5c44);
   if (uVar1 == 0) {
     this->mbr_0x2c = 0x41;
     FUN_00479580(in_stack_00000008);
     return 1;
   }
-  uVar1 = FUN_0059a530(extraout_ECX_05,param_1,(byte *)s_litalphaz_005c5c50);
+  uVar1 = FUN_0059a530_stricmp(extraout_ECX_05,param_1,(byte *)s_litalphaz_005c5c50);
   if (uVar1 == 0) {
     this->mbr_0x2c = 0x44;
     FUN_00479580(in_stack_00000008);
     return 1;
   }
-  uVar1 = FUN_0059a530(extraout_ECX_06,param_1,(byte *)s_litaddz_005c5c5c);
+  uVar1 = FUN_0059a530_stricmp(extraout_ECX_06,param_1,(byte *)s_litaddz_005c5c5c);
   if (uVar1 == 0) {
     this->mbr_0x2c = 0x50;
     FUN_00479580(in_stack_00000008);
     return 1;
   }
-  uVar1 = FUN_0059a530(extraout_ECX_07,param_1,(byte *)s_alphaadd_005c5c64);
+  uVar1 = FUN_0059a530_stricmp(extraout_ECX_07,param_1,(byte *)s_alphaadd_005c5c64);
   if (uVar1 == 0) {
     this->mbr_0x2c = 0x20;
     FUN_00479580(in_stack_00000008);

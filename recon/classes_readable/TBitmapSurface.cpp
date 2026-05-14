@@ -6,7 +6,7 @@
 
 // Function at 0041b0b0
 
-undefined4 TBitmapSurface::meth_0x41b0b0(undefined4 *param_1)
+undefined4 TBitmapSurface::meth_0x41b0b0_TArea_In(undefined4 *param_1)
 
 {
   dword *this_00;

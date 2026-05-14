@@ -153,7 +153,7 @@ dword __thiscall OOAnalyzer::cls_0x44ceb0::meth_0x44d080(cls_0x44ceb0 *this)
   cls_0x498eb0 *this_01;
   uint uVar1;
   dword dVar2;
-  cls_0x5b4f30 *this_02;
+  cls_0x5b4f30_TPlayer *this_02;
   bool bVar3;
   int iVar4;
   int *piVar5;
@@ -227,13 +227,13 @@ LAB_0044d3c6:
 LAB_0044d1b1:
               if ((uVar1 & 1) == 0) {
                 if (((uVar1 & 0x40) == 0) ||
-                   (((cls_0x498eb0::meth_0x498f60(this_01), (int)this->mbr_0x28 <= local_8 &&
+                   (((cls_0x498eb0::meth_0x498f60_TSector_GetMaxMapRect(this_01), (int)this->mbr_0x28 <= local_8 &&
                      (local_10 <= (int)this->mbr_0x30)) &&
                     (((int)this->mbr_0x2c <= local_4 && (local_c <= (int)this->mbr_0x34))))))
                 goto LAB_0044d231;
               }
               else {
-                cls_0x498eb0::meth_0x498eb0(this_01);
+                cls_0x498eb0::meth_0x498eb0_TSector_GetMaxScreenRect(this_01);
                 if (((((int)this->mbr_0x28 <= local_18) && (local_20 <= (int)this->mbr_0x30)) &&
                     ((int)this->mbr_0x2c <= local_14)) && (local_1c <= (int)this->mbr_0x34)) {
 LAB_0044d231:
@@ -294,13 +294,13 @@ LAB_0044d231:
         }
       }
       if ((((*(byte *)&this->mbr_0x0 & 4) == 0) ||
-          (this_02 = (cls_0x5b4f30 *)this->mbr_0xc,
+          (this_02 = (cls_0x5b4f30_TPlayer *)this->mbr_0xc,
           (*(byte *)&(this_02->TPlayScreen).TScreen.mbr_0x8 & 4) == 0)) ||
          (((this_02->TPlayScreen).TScreen.field_0x89 == '\0' || ((bVar3 && (dVar8 != 0)))))) {
         if ((bVar3) && (dVar8 == 0)) goto LAB_0044d3ba;
       }
       else {
-        cls_0x5b4f30::meth_0x471430(this_02);
+        cls_0x5b4f30_TPlayer::meth_0x471430(this_02);
         if ((((iStack_28 < (int)this->mbr_0x28) || ((int)this->mbr_0x30 < local_30)) ||
             (iStack_24 < (int)this->mbr_0x2c)) || ((int)this->mbr_0x34 < iStack_2c)) {
           dVar8 = 0;

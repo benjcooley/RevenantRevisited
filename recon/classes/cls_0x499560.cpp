@@ -15,7 +15,7 @@ Length: 16 Alignment: 1
 // Function at 00499560
 
 void __thiscall
-OOAnalyzer::cls_0x499560::meth_0x499560
+OOAnalyzer::cls_0x499560::meth_0x499560_TSector_WalkmapHandler
           (cls_0x499560 *this,int param_1,int param_2,int param_3,int param_4,int param_5,
           int param_6,int param_7,int param_8,int param_9)
 

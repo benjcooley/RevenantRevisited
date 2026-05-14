@@ -1,0 +1,170 @@
+# Player initialization / new-game flow — agent identifications.
+# Anchors: "Locke" string at 0x5e2950 referenced by FUN_00465a50 (char-create
+# screen Init) and FUN_0051b420 (GetOnYerHog cheat). vtable address 0x5b4f30
+# referenced only at 0x518547/0x518595 → unique to TPlayer ctor at 0x518450.
+
+# ============================================================================
+# TPlayer non-virtual init / clear / ctor
+# ============================================================================
+
+# 0x518450: TPlayer ctor (TObjectImagery* / SObjectDef*). Calls TCharacter
+# ctor (FUN_004c16b0), allocates equipment array (1 elem * 8 bytes at +0xd4)
+# and quickspells array (4 elems * 8 bytes at +0xd7), sets vtable to 0x5b4f30
+# at slot 0xc5+0xd → secondary vtable PTR_LAB_005b5354 (TPlayerManager-side?),
+# then calls TPlayer::ClearPlayer (FUN_00518750) to populate stats.
+meth_0x518450|meth_0x518450_TPlayer_Ctor
+FUN_00518450|FUN_00518450_TPlayer_Ctor
+
+# 0x518750: TPlayer::ClearPlayer — THE player-init. 844-byte body. Called
+# from ctor + from PlayerManager::Clear (FUN_0051eda0). Does:
+#   1. Clears mbrs 0xde, 0xe6/0xe7, 0x199 (=-1), bitfield ranges 0x124..18,
+#      0x15c..38, 0xa8..0xb (= 11 equipment slots = NUM_EQ_SLOTS), header
+#      stats, 0xb3..7 (= quickspells+misc), 0xbb/0xbc (talisman counts).
+#   2. Reads chardata->classdata->statreqs[6] at offset
+#      this->chardata(+0x3f*4=+0xfc) ->classdata(+0x190=+400) ->+0x20.
+#      Sums absolute values of statreqs[0..5].
+#      Computes per-stat-budget = (0x54 - sum) / 6 + 1 = (84-sum)/6+1 in
+#      fixed-point .16. statreqs > 0  → that stat is hardcoded to that value;
+#      statreqs == 0 → that stat gets one share of the remaining budget.
+#      vt[0xe8](slot 58 = SetObjStat) called for stat IDs 0x22..0x27.
+#      ⇒ retail stat IDs map: PLRSTAT_FIRST = 0x22 (34); PLRSTAT_STRN..LUCK
+#         occupy 0x22..0x27 in source-id order.
+#   3. Skill init loop: 11 iterations setting SetObjStat(0x49+i, 0x1e=30).
+#      ⇒ SK_FIRST = 0x49 (73); each starting skill = 30.
+#   4. Resets talisman list (0xd4) — re-walks chardata's spells (vt[0x12]+0x1c
+#      count, FUN_0051ff30 lookup) and rebuilds quickspell-construct entry.
+#   5. Calls FUN_0051c660 (~600-byte fn that recomputes stat-derived stats
+#      including MaxHealth/MaxFatigue/MaxMana via vt[0x1d8/0x1e0/0x1e8] and
+#      sets current values via vt[0x1c4/0x1cc/0x1d4]).
+#   6. SetExp(0)/exp-derived stat (uses FUN_0047e920/40 = global counters).
+#   7. Clears 60-byte attack-impact log at +0xe8 (10*6 entries).
+meth_0x518750|meth_0x518750_TPlayer_ClearPlayer
+FUN_00518750|FUN_00518750_TPlayer_ClearPlayer
+
+# 0x51c660: TPlayer::RefreshStats (or "RecalcStats"). Called from
+# ClearPlayer + Load. ~1500 bytes. Uses Equip/Pulse machinery to recompute
+# stat-derived values. Body is verbose; unique fingerprint: sets all the
+# equipment-derived modifier fields and calls vt[0x1d8/0x1e0/0x1e8] (Max
+# accessors).
+meth_0x51c660|meth_0x51c660_TPlayer_RefreshStats
+FUN_0051c660|FUN_0051c660_TPlayer_RefreshStats
+
+# 0x4c18a0: TCharacter::ClearChar — invoked from PlayerManager::Clear and
+# every TCharacter ctor. 577 bytes. Sets:
+#   - chardata pointer (+0xfc) via FUN_0048c780(objtype, objclass)
+#   - flag bits 0xc028, hand-damage from chardata, walk speeds, sight ranges
+#   - 11 equipment slot ptrs to 0
+#   - calls vt[0x1d8/0x1e0/0x1e8] four times to seed Health/Fatigue/Mana/?
+#     (these are the "Max" getters; results stored at +0x4e..0x51)
+#   - SetWalkMode(0) via vt[0x1b4]
+meth_0x4c18a0|meth_0x4c18a0_TCharacter_ClearChar
+FUN_004c18a0|FUN_004c18a0_TCharacter_ClearChar
+
+# ============================================================================
+# Save/load and PlayerManager integration
+# ============================================================================
+
+# 0x471ce0: TObjectClass::CreateFromStream — reads class+type+offsets from
+# stream header, looks up SObjectDef in name table (DAT_00659d28), calls
+# TObjectClass::NewObject (FUN_00474bb0), then Load on it. Called from
+# TArea::Load and from LoadGame.
+meth_0x471ce0|meth_0x471ce0_CreateObjectFromStream
+FUN_00471ce0|FUN_00471ce0_CreateObjectFromStream
+
+# 0x474e20: NewObjectByName(char *name, def, ?, ?) — bsearch the global
+# name table (DAT_00659d40, count DAT_00659d30) for a class with that
+# name, populate a stack SObjectDef from the type/class info (line 62-63
+# write objtype/objclass words from the table), call NewObject. Used by
+# the char-create screen ("Locke") and by NewGame.
+meth_0x474e20|meth_0x474e20_NewObjectByName
+FUN_00474e20|FUN_00474e20_NewObjectByName
+
+# 0x465a50: TCharCreateScreen::Initialize. References s_createchar_005d3300,
+# s_widgets_005d32f8, s_Locke_005d330c, s_Player_Name_005d3314,
+# s_PLYRVALUES/STATS/SKILLS/MPSTATINFO* localization strings.
+# At line 69: param_1[0x65]==2 branch creates Locke via FUN_00474e20("Locke",
+# 0, -1, 1) and stores in param_1[0x7e].
+meth_0x465a50|meth_0x465a50_TCharCreateScreen_Initialize
+FUN_00465a50|FUN_00465a50_TCharCreateScreen_Initialize
+
+# 0x48df70: LoadGame(name, flags). Called by FUN_0048e610 ("newgame"
+# wrapper) and by F-key reload. Path: builds <save>/Single|Multi/<name>
+# path, opens "game.sav", reads header (FUN_004a15a0 with size 0x80 then
+# optional 0x200), allocates body buffer, deserializes object array via
+# CreateObjectFromStream loop. After each player-class object created:
+#   - FUN_0051f0a0(player, 0xffffffff)  → TPlayerManager::AddPlayer(p,-1)
+#   - FUN_0051d680(player, ...)         → SetPlayerState
+#   - if flag != 0: FUN_0051f060(player) → SetMainPlayer
+# Calls FUN_00460d60 + FUN_004609f0 to load the saved area sector.
+meth_0x48df70|meth_0x48df70_LoadGame
+FUN_0048df70|FUN_0048df70_LoadGame
+
+# 0x48e610: LoadNewGame() wrapper. Just calls LoadGame("newgame", 1).
+# Triggered by the "MenuNewGame" button. Loads the canonical newgame.sav
+# (data/Modules/Demo/newgame.sav) which holds the freshly-initialized
+# Locke + starting equipment + starting map.
+meth_0x48e610|meth_0x48e610_LoadNewGame
+FUN_0048e610|FUN_0048e610_LoadNewGame
+
+# 0x48d720: SaveGame(name, flags). 2066 bytes. Called from autosave + from
+# the Save dialog. The "newgame" path is the FIRST branch (param_2 ==
+# "newgame" with editor build flag) — saves to data/Modules/Demo/newgame.sav.
+# Otherwise builds <save>/Single|Multi/<name>/ directory, deletes old
+# game.sav + ss.bmp, copies CurMap, then writes new game.sav with player
+# list (param_1[6]/[7]) + each player serialized via FUN_00472110
+# (TObjectClass::SaveToStream).
+meth_0x48d720|meth_0x48d720_SaveGame
+FUN_0048d720|FUN_0048d720_SaveGame
+
+# 0x51eda0: TPlayerManager::Clear. Called from TLogoScreen::Initialize
+# (so the title menu always starts with empty player list), LoadGame
+# pre-deserialize, and from the multiplayer disconnect path. For each
+# slot: ClearChar (TCharacter+0x4c18a0) + ClearPlayer (TPlayer+0x518750),
+# then SetMainPlayerNum(-1) (FUN_0051eef0), then operator delete + clear
+# array. Matches src/player.h `TPlayerManager::Clear()` exactly.
+meth_0x51eda0|meth_0x51eda0_TPlayerManager_Clear
+FUN_0051eda0|FUN_0051eda0_TPlayerManager_Clear
+
+# 0x51f0a0: TPlayerManager::AddPlayer(p, slot=-1 means append). Returns
+# index. Replaces existing player in slot; refuses if slot already taken.
+meth_0x51f0a0|meth_0x51f0a0_TPlayerManager_AddPlayer
+FUN_0051f0a0|FUN_0051f0a0_TPlayerManager_AddPlayer
+
+# 0x51ee70: TPlayerManager::NumPlayers (trivial getter on the singleton)
+meth_0x51ee70|meth_0x51ee70_TPlayerManager_NumPlayers
+FUN_0051ee70|FUN_0051ee70_TPlayerManager_NumPlayers
+
+# 0x51eea0: TPlayerManager::GetPlayer(index) — array indexed access
+meth_0x51eea0|meth_0x51eea0_TPlayerManager_GetPlayer
+FUN_0051eea0|FUN_0051eea0_TPlayerManager_GetPlayer
+
+# 0x51eef0: TPlayerManager::SetMainPlayerNum
+meth_0x51eef0|meth_0x51eef0_TPlayerManager_SetMainPlayerNum
+FUN_0051eef0|FUN_0051eef0_TPlayerManager_SetMainPlayerNum
+
+# 0x51f060: TPlayerManager::SetMainPlayer(p) — finds p in array and sets
+# mainplayernum to that index.
+meth_0x51f060|meth_0x51f060_TPlayerManager_SetMainPlayer
+FUN_0051f060|FUN_0051f060_TPlayerManager_SetMainPlayer
+
+# ============================================================================
+# Stat-id constants discovered from ClearPlayer's stat init
+# ============================================================================
+# Verified mappings (retail SObjectDef-stat-id → source enum):
+#   0x22 (34) = PLRSTAT_FIRST + 0  = PLRSTAT_STRN  (Strength)
+#   0x23 (35) = PLRSTAT_FIRST + 1  = PLRSTAT_CONS  (Constitution)
+#   0x24 (36) = PLRSTAT_FIRST + 2  = PLRSTAT_AGIL  (Agility)
+#   0x25 (37) = PLRSTAT_FIRST + 3  = PLRSTAT_RFLX  (Reflexes)
+#   0x26 (38) = PLRSTAT_FIRST + 4  = PLRSTAT_MIND  (Mind)
+#   0x27 (39) = PLRSTAT_FIRST + 5  = PLRSTAT_LUCK  (Luck)
+#   0x49 (73) = SK_FIRST     + 0  = SK_ATTACK
+#   ...
+#   0x53 (83) = SK_FIRST     + 10 = SK_LOCKPICK
+# Implies: CHRFLAGS [0..2], CHRSTATS [3..5] (Health/Fatigue/Mana cur),
+#          PLRVALS  [6..7] (Level/Exp), then PLRSTATS  starting at 0x22=34.
+# Source enum addition matches — assert: PLRSTAT_FIRST = 8+? (actually
+# CHRFLAG_FIRST=0, CHRFLAG=3, CHRSTAT=3, PLRVAL=2 → PLRSTAT_FIRST = 8 in
+# source). Retail starts at 0x22=34. Implies 26 type-private CLASS.DEF
+# stats live between PLRVAL and PLRSTAT in retail's SObjectDef stat layout
+# (chardata-private flags). Treat retail IDs as opaque; use the source enum
+# offsets in our port.

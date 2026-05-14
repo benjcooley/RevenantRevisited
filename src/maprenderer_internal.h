@@ -8,8 +8,7 @@
 #include "revenant.h"
 #include "sector.h"
 
-#include <sokol_gfx.h>
-
+#include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -28,8 +27,7 @@ struct SSectorTileTex {
         int32_t  bbox_y1 = -0x7FFFFFFF;
     };
     void*    bm_key = nullptr;
-    sg_image color = {};
-    sg_image depth = {};
+    RendererImagePairHandle image_pair = 0;
     int32_t  w = 0, h = 0;
     float    z_local_min = 0.0f;
     float    z_local_max = 0.0f;
@@ -37,6 +35,10 @@ struct SSectorTileTex {
     uint32_t bm_flags = 0;
     int32_t  opaque_count = 0;
     int32_t  pixel_count = 0;
+    // Number of sector/object references seen by the last residency scan.
+    // Zero is diagnostic only for now: resident assets are retained until
+    // explicit renderer/game shutdown, not evicted from ordinary map changes.
+    uint32_t ref_count = 0;
     std::vector<float>   cpu_depth_local;
     std::vector<uint8_t> cpu_opaque;
     SDepthDump z_dump;
@@ -77,6 +79,9 @@ struct SSectorMeshAsset {
     int32_t         texslot = -1;
     int32_t         uv_variant = 0;
     MeshHandle      handle = 0;
+    // See SSectorTileTex::ref_count. Draw items do not own this ref; the
+    // sector/map residency scan records source-data references separately.
+    uint32_t        ref_count = 0;
     bool            helper_material = false;
     bool            helper_shadow_plane = false;
     float           diffuse[4] = {1,1,1,1};
@@ -93,6 +98,11 @@ struct SMapRenderStats;
 
 struct SSectorDrawableInst {
     ESectorDrawableKind kind = ESectorDrawableKind::Tile;
+    // Non-owning index into the map/level resident asset cache. A draw item
+    // means "submit this instance"; it must not be treated as GPU residency
+    // ownership, and destroying/rebuilding draw items must not evict assets.
+    // As I2D/I3D assets come online, this should collapse toward a typed
+    // TAssetRef<TObjectImagery/T3DImagery> plus per-instance placement/state.
     int32_t   asset_idx = -1;
     S3DPoint  world_pos = {0,0,0};
     int32_t   regx = 0, regy = 0, regz = 0;
@@ -118,7 +128,7 @@ struct SSectorDrawableInst {
 struct SMapRenderContext {
     const std::vector<SSectorTileTex>* tile_assets = nullptr;
     const std::vector<SSectorMeshAsset>* mesh_assets = nullptr;
-    sg_image debug_green_img = {};
+    TTextureHandle debug_green_texture = kInvalidTexture;
     S3DPoint sectorCameraWorld = {0,0,0};
     int32_t cam_ox = 0, cam_oy = 0;
     int32_t vw = 0, vh = 0;
@@ -142,9 +152,14 @@ struct SMapRenderContext {
 };
 
 struct SMapRenderStats {
+    int32_t draw_candidates = 0;
     int32_t draw_submitted = 0;
+    int32_t draw_visible_submitted = 0;
+    int32_t draw_gbuffer_border_submitted = 0;
     int32_t draw_invalid_img = 0;
     int32_t draw_offscreen = 0;
+    int32_t point_lights_considered = 0;
+    int32_t point_lights_submitted = 0;
     int32_t mesh_submitted = 0;
     int32_t mesh_skipped = 0;
     int32_t mesh_project_logged = 0;
@@ -156,10 +171,32 @@ struct SMapRenderStats {
 // last frame without re-running the render. Updated at the end of each
 // RenderFrame (see maprenderer.cpp Submit / EndTilePass).
 struct SMapDrawCounts {
-    int32_t total_drawables  = 0;
+    int32_t total_drawables  = 0;   // resident draw records for the loaded map
+    int32_t draw_candidates  = 0;   // records visited by this frame's sector-bin pass
+    int32_t resident_lights  = 0;   // all point lights in the resident map
+    int32_t active_lights    = 0;   // point-light records in this frame's sector window
+    int32_t point_lights_considered = 0;
+    int32_t point_lights_submitted = 0;
     int32_t tiles_submitted  = 0;
+    int32_t tiles_visible_submitted = 0;
+    int32_t tiles_gbuffer_border_submitted = 0;
     int32_t meshes_submitted = 0;
     int32_t offscreen_culled = 0;
+};
+
+struct SMapFrameTimings {
+    float total_ms = 0.0f;
+    float sync_ms = 0.0f;
+    float animate_ms = 0.0f;
+    float refresh_ms = 0.0f;
+    float setup_ms = 0.0f;
+    float depth_fit_ms = 0.0f;
+    float render_state_ms = 0.0f;
+    float point_lights_ms = 0.0f;
+    float begin_pass_ms = 0.0f;
+    float submit_ms = 0.0f;
+    float end_tile_pass_ms = 0.0f;
+    float lighting_pass_ms = 0.0f;
 };
 
 struct FVec3 {
@@ -205,13 +242,28 @@ inline int64_t MapRendererSectorBinKey(int32_t sx, int32_t sy)
 
 struct TMapRenderer::Impl
 {
+    // Map-renderer metadata over resident drawable assets. The actual GPU
+    // resources live in TRenderer, and renderer refs are owned by CPU/source
+    // asset wrappers (I2D/I3D/etc.), not by draw records. This layer remembers
+    // source pointers, culling data, material hints, and renderer handles.
+    // Local ref_counts are source-usage diagnostics from loaded maps/sectors.
     std::vector<SSectorTileTex>  sectorTileTex;
     std::vector<SSectorMeshAsset> sectorMeshAsset;
+    // Bitmap pointer -> sectorTileTex index. Animated effects refresh their
+    // frame texture every render frame, so this lookup must stay O(1) against
+    // resident asset count. Draw items still do not own renderer assets.
+    std::unordered_map<PTBitmap, int32_t> sectorTileTexByBitmap;
+
+    // Non-owning draw intents derived from the current map contents. Rebuilds
+    // here should be cheap bookkeeping over resident assets.
     std::vector<SSectorDrawableInst> sectorDrawInst;
     std::unordered_map<int64_t, std::vector<int32_t>> sectorDrawBins;
+    // Per-frame visible/padded-sector candidate list. Capacity is retained so
+    // camera movement only rewrites indices; it does not allocate draw records.
+    std::vector<int32_t> frameDrawIndices;
     // Borrowed reference to the active TGameMap (owned by TMapManager).
-    // Renderer iterates currentMap->Sectors() per frame; SafeRef keeps
-    // it null after a map unload via the (id, gen) handle pattern.
+    // The map keeps a full level resident; renderer draw/light records are
+    // non-owning views over that resident level data.
     TSafeRef<TGameMap> currentMap;
 
     // Listener handle on currentMap.Get() (TGameMap::AddListener id).
@@ -219,15 +271,21 @@ struct TMapRenderer::Impl
     uint32_t mapListenerId = 0;
 
     // Camera anchor for RebuildForCurrentMap. Set from --level / --sector
-    // at boot; used by the camera-anchor logic when rebuilding draw
-    // caches. Defaults to "level origin" so post-boot level swaps with
+    // at boot; used by the camera-anchor logic when rebuilding draw records.
+    // Defaults to "level origin" so post-boot level swaps with
     // no explicit anchor center on the new level's content.
     int32_t initialAnchorSx       = 0;
     int32_t initialAnchorSy       = 0;
     bool    useInitialLevelOrigin = true;
+    int32_t residentPointLightCount = 0;
     std::vector<SSectorLight> sectorLights;
+    std::unordered_map<int64_t, std::vector<int32_t>> sectorLightBins;
+    // Per-frame light candidates are binned by sector just like draw records.
+    // Point lights are then projected/radius-tested before the renderer sees
+    // them; walking the map must not scan every resident light.
+    std::vector<int32_t> frameLightIndices;
     int32_t dlightTexIdx = -1;
-    sg_image debugGreenImage = {};
+    TTextureHandle debugGreenTexture = kInvalidTexture;
     float sectorSceneZMin = 500.0f;
     float sectorSceneZMax = 5000.0f;
     int32_t sectorCenterOx = 0;
@@ -235,13 +293,19 @@ struct TMapRenderer::Impl
     S3DPoint sectorWorldCenter = {0,0,0};
     S3DPoint sectorCameraWorld = {0,0,0};
     int32_t  cameraLevel = 0;
+    int32_t  drawRecordLevel = -1;
+    int32_t  drawRangeMinSx = 0;
+    int32_t  drawRangeMaxSx = -1;
+    int32_t  drawRangeMinSy = 0;
+    int32_t  drawRangeMaxSy = -1;
 
-    // Last observed sum of TSector::ContentVer() across sectorsKept.
-    // Compared at frame start; if the live sum has advanced (any
-    // sector mutated its objects[] array via Add/Remove/Set), the
-    // renderer rebuilds the per-instance drawable cache. Initial
-    // -1 forces a build on first use after InitializeFromStartupArgs.
+    // Last observed sector-content signature across the resident map.
+    // Draw records are a padded camera-window view, so any map-content change
+    // can move an object into or out of that window. Source/GPU assets remain
+    // resident; draw records are rebuilt as non-owning intent records.
     int64_t lastSyncedSectorVerSum = -1;
+    int32_t lastSyncedObjectSetCount = -1;
+    uint64_t lastSyncedObjectSetHash = 0;
     bool sectorShowTileBboxes = false;
     bool sectorShowTileLocators = false;
     bool sectorShowTileLabels = true;
@@ -262,9 +326,11 @@ struct TMapRenderer::Impl
     float sectorPerspectiveZOffset = 0.0f;
     float sectorPerspectiveZScale = 1.0f;
     float sectorPerspectiveTileScale = 1.02f;
-    int32_t sectorPerspectiveSteps = 32;
-    int32_t sectorPerspectiveRefine = 5;
-    int32_t sectorPerspectiveDebugMode = 0; // 0 normal, 1 checkerboard, 2 hit class
+    float sectorPerspectiveProxyRasterScale = 1.0f;
+    int32_t sectorPerspectiveProjectionMode = 2; // 0 flat, 1 volume reference, 2 relief/SPOM.
+    int32_t sectorPerspectiveSteps = 12;
+    int32_t sectorPerspectiveRefine = 4;
+    int32_t sectorPerspectiveDebugMode = 0; // 0 normal, 1 proxy fill, 2 hit class, 3 proxy wire
     // World-space mesh scale was historically Z=1.5 to push mesh
     // height into the tile coordinate space at draw time. That scale
     // has moved to TSector::Load (positions) + a mesh-local matrix
@@ -294,8 +360,6 @@ struct TMapRenderer::Impl
     float ao_max_dist  = 96.0f;
     float puck_u = 0.56f;
     float puck_v = 0.50f;
-    float sdir_off_x = 0.0f;
-    float sdir_off_y = 0.0f;
     float sdir_wz_mul = 1.0f;
     float depth_mul = 1.0f;
     float normal_hardness = 0.5f;
@@ -316,14 +380,20 @@ struct TMapRenderer::Impl
     int32_t lighting_mode = 1;
     bool  sun_shadow = true;
     SMapDrawCounts last_draw_counts;   // updated each RenderFrame, read by the editor
-    float sun_shadow_step = 24.0f;
+    SMapFrameTimings last_frame_timings;
+    // Shadow mask default: one hard ray per low-res mask pixel, then a
+    // separable blur. The samples field is compatibility plumbing only;
+    // soft edges must not multiply ray-march cost.
+    float sun_shadow_step = 32.0f;
     float sun_shadow_soft = 3.0f;
-    int32_t sun_shadow_max = 32;
+    int32_t sun_shadow_max = 64;
+    int32_t sun_shadow_samples = 1;
+    float sun_shadow_depth_cutoff = 16.0f;
+    float sun_shadow_bias = 2.0f;
+    std::vector<uint8_t> coverageScratch;
     float debugSceneZMinFit = 0.0f;
     float debugSceneZMaxFit = 0.0f;
     int32_t debugFitTiles = 0;
-    int64_t lastLegacyAnimTick = -1;
-
     void rebuildBins()
     {
         sectorDrawBins.clear();
@@ -334,13 +404,58 @@ struct TMapRenderer::Impl
             const int32_t sy = MapRendererFloorDiv(inst.world_pos.y, SECTORHEIGHT);
             sectorDrawBins[MapRendererSectorBinKey(sx, sy)].push_back(i);
         }
+
+        sectorLightBins.clear();
+        for (int32_t i = 0; i < int32_t(sectorLights.size()); ++i)
+        {
+            const S3DPoint p = sectorLightPos(sectorLights[i]);
+            const int32_t sx = MapRendererFloorDiv(p.x, SECTORWIDTH);
+            const int32_t sy = MapRendererFloorDiv(p.y, SECTORHEIGHT);
+            sectorLightBins[MapRendererSectorBinKey(sx, sy)].push_back(i);
+        }
     }
-    // Camera-relative XY for the iso projection origin, with object
-    // world Z passed through unchanged. Object screen positions must
-    // depend only on world coords (the camera follows objects, not the
-    // other way around). Subtracting camera.z here would couple
-    // every object's screen Y to the camera height -- which is the
-    // bug behind floating-Locke / NPCs-rise-on-stairs.
+
+    void clearDrawRecords()
+    {
+        sectorDrawInst.clear();
+        sectorDrawBins.clear();
+        sectorTileTexByBitmap.clear();
+        frameDrawIndices.clear();
+        sectorLights.clear();
+        sectorLightBins.clear();
+        frameLightIndices.clear();
+        residentPointLightCount = 0;
+        drawRangeMinSx = 0;
+        drawRangeMaxSx = -1;
+        drawRangeMinSy = 0;
+        drawRangeMaxSy = -1;
+        lastSyncedSectorVerSum = -1;
+        lastSyncedObjectSetCount = -1;
+        lastSyncedObjectSetHash = 0;
+    }
+
+    void resetAssetRefCounts()
+    {
+        for (auto& t : sectorTileTex)
+            t.ref_count = 0;
+        for (auto& m : sectorMeshAsset)
+            m.ref_count = 0;
+    }
+
+    void clearResidentAssetMetadataForShutdown()
+    {
+        sectorTileTex.clear();
+        // GPU resources are owned by TRenderer's asset registries and are
+        // destroyed by TRenderer::Shutdown. These records are renderer-facing
+        // metadata and non-owning handles.
+        sectorMeshAsset.clear();
+        dlightTexIdx = -1;
+    }
+
+    // Camera-relative XY for the iso projection origin, with object world Z
+    // passed through unchanged. Depth and per-object local projection must not
+    // subtract camera.z; the viewport origin may compensate the followed
+    // height as one late camera shift so the whole view moves together.
     S3DPoint sectorCameraRel(const S3DPoint& world) const
     {
         return { world.x - sectorCameraWorld.x, world.y - sectorCameraWorld.y, world.z };
@@ -380,9 +495,13 @@ struct TMapRenderer::Impl
     }
     void sectorCameraOriginScreen(int32_t& sx, int32_t& sy) const
     {
+        // Logical 640x480 camera-space origin. MapRenderer scales this into
+        // the physical render target so changing resolution does not widen the
+        // world camera view.
         WorldToScreen(sectorWorldCenter, sx, sy);
         sx += sectorCenterOx;
         sy += sectorCenterOy;
+        sy += int32_t((int64_t(sectorCameraWorld.z) * 867) / 1000);
     }
     S3DPoint sectorLightPos(const SSectorLight& L) const
     {

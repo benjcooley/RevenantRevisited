@@ -64,13 +64,13 @@ cls_0x5a52d8::cls_0x5a52d8 *this,dword param_1,undefined2 param_2,undefined4 par
   this->mbr_0x4 = param_1;
   local_4 = CONCAT31(local_4._1_3_,6);
   this->mbr_0x10 = in_stack_00000010;
-  iVar4 = DAT_0065a258;
+  iVar4 = DAT_0065a258_TObjectClass_numclasses;
   this->vftptr_0x0 = &cls_0x5a52d8__vftable_5a52d8_005a52d8;
   this->mbr_0x8 = _param_2;
   this->mbr_0xc = (word)param_3;
-  (&DAT_0065a148)[_param_2] = this;
+  (&DAT_0065a148_TObjectClass_classes)[_param_2] = this;
   if (iVar4 <= (int)_param_2) {
-    DAT_0065a258 = _param_2 + 1;
+    DAT_0065a258_TObjectClass_numclasses = _param_2 + 1;
   }
   dVar2 = this_00->mbr_0x0;
   iVar4 = 0;

@@ -39,6 +39,30 @@ static void test_linear_and_step_tracks()
     assert(near(step.Sample(1.0f), 5.0f));
 }
 
+static void test_loop_final_frame_interval()
+{
+    constexpr float frame = 1.0f / 24.0f;
+    constexpr int frame_count = 8;
+    const float duration = frame_count * frame;
+
+    SAnimTrack linear;
+    linear.id = AnimTrack(0, EAnimChannel::PosX);
+    linear.kind = EAnimTrackKind::Linear;
+    for (int i = 0; i < frame_count; ++i)
+        linear.keys.push_back({i * frame, float(i)});
+
+    // Frame 7 owns the full interval [7/24, 8/24). It is not an
+    // instantaneous endpoint at 7/24.
+    assert(near(linear.Sample(7.0f * frame + 0.25f * frame, duration, true), 5.25f));
+    assert(near(linear.Sample(7.0f * frame + 0.50f * frame, duration, true), 3.50f));
+    assert(near(linear.Sample(duration, duration, true), 0.0f));
+
+    SAnimTrack step = linear;
+    step.kind = EAnimTrackKind::Step;
+    assert(near(step.Sample(7.0f * frame + 0.50f * frame, duration, true), 7.0f));
+    assert(near(step.Sample(duration, duration, true), 0.0f));
+}
+
 static void test_clip_and_layer_blend()
 {
     SAnimClip a;
@@ -93,13 +117,61 @@ static void test_quaternion_blend()
     assert(near(q.w, inv_sqrt2, 1e-3f));
 }
 
+static void test_fixed_pose_buffer_blend_two_layers()
+{
+    SAnimPoseLayout layout;
+    layout.ConfigureBoneLocalTRS(1);
+    const int32_t base = layout.BoneOffset(0);
+    layout.SetChannelFlags(base + ANIM_BONE_POS_Y, 1, uint8_t(ANIM_POSE_CHANNEL_BOOL));
+
+    SAnimPoseBuffer a;
+    SAnimPoseBuffer b;
+    SAnimPoseBuffer out;
+    a.Configure(layout);
+    b.Configure(layout);
+    out.Configure(layout);
+
+    a.values[base + ANIM_BONE_POS_X] = 0.0f;
+    a.values[base + ANIM_BONE_POS_Y] = 0.0f;
+    b.values[base + ANIM_BONE_POS_X] = 10.0f;
+    b.values[base + ANIM_BONE_POS_Y] = 1.0f;
+    a.values[base + ANIM_BONE_SCALE_X] = 1.0f;
+    b.values[base + ANIM_BONE_SCALE_X] = 3.0f;
+    a.values[base + ANIM_BONE_ROT_Z] = 0.0f;
+    a.values[base + ANIM_BONE_ROT_W] = 1.0f;
+    b.values[base + ANIM_BONE_ROT_Z] = 1.0f;
+    b.values[base + ANIM_BONE_ROT_W] = 0.0f;
+
+    AnimPoseBlendTwo(layout, a.Data(), b.Data(), 0.25f, out.Data(), out.Count());
+
+    assert(near(out.values[base + ANIM_BONE_POS_X], 2.5f));
+    assert(near(out.values[base + ANIM_BONE_POS_Y], 0.0f));
+    assert(near(out.values[base + ANIM_BONE_SCALE_X], 1.5f));
+    const float qlen =
+        out.values[base + ANIM_BONE_ROT_X] * out.values[base + ANIM_BONE_ROT_X] +
+        out.values[base + ANIM_BONE_ROT_Y] * out.values[base + ANIM_BONE_ROT_Y] +
+        out.values[base + ANIM_BONE_ROT_Z] * out.values[base + ANIM_BONE_ROT_Z] +
+        out.values[base + ANIM_BONE_ROT_W] * out.values[base + ANIM_BONE_ROT_W];
+    assert(near(qlen, 1.0f, 1e-3f));
+
+    b.values[base + ANIM_BONE_ROT_Z] = -0.17364818f;
+    b.values[base + ANIM_BONE_ROT_W] = -0.98480775f;
+    AnimPoseBlendTwo(layout, a.Data(), b.Data(), 0.5f, out.Data(), out.Count());
+    assert(out.values[base + ANIM_BONE_ROT_Z] > 0.0f);
+    assert(out.values[base + ANIM_BONE_ROT_W] > 0.99f);
+
+    AnimPoseBlendTwo(layout, a.Data(), b.Data(), 0.75f, out.Data(), out.Count());
+    assert(near(out.values[base + ANIM_BONE_POS_Y], 1.0f));
+}
+
 int main()
 {
     test_track_id();
     test_linear_and_step_tracks();
+    test_loop_final_frame_interval();
     test_clip_and_layer_blend();
     test_quaternion_blend();
+    test_fixed_pose_buffer_blend_two_layers();
     std::cout << "anim system tests passed\n";
     return 0;
 }
-

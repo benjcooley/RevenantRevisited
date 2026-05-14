@@ -16,7 +16,7 @@ Length: 28 Alignment: 1
 
 // Function at 0041bf00
 
-undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41bf00(cls_0x41bf00 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41bf00_TAreaMgr_Initialize(cls_0x41bf00 *this)
 
 {
   dword *this_00;
@@ -29,7 +29,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41bf00(cls_0x41bf00 *this
     if (0 < (int)this->mbr_0x4) {
       do {
         if ((-1 < iVar2) && (iVar1 = *(int *)(this->mbr_0x14 + iVar2 * 4), iVar1 != 0)) {
-          FUN_0041a3b0();
+          FUN_0041a3b0_TArea_Dtor();
           FUN_004830f0(iVar1);
         }
         cls_0x45f7c0::meth_0x41cb40((cls_0x45f7c0 *)this_00);
@@ -44,7 +44,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41bf00(cls_0x41bf00 *this
     DAT_005e91ec = 0xff;
     DAT_005e91f8._4_4_ = 0xffffffff;
     DAT_005e91e8 = 0xffffffff;
-    iVar2 = meth_0x41c000(this);
+    iVar2 = meth_0x41c000_TAreaMgr_Load(this);
     if (iVar2 == 0) {
       return 0;
     }
@@ -57,7 +57,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41bf00(cls_0x41bf00 *this
 
 // Function at 0041bfa0
 
-void __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41bfa0(cls_0x41bf00 *this)
+void __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41bfa0_TAreaMgr_Close(cls_0x41bf00 *this)
 
 {
   dword *this_00;
@@ -69,7 +69,7 @@ void __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41bfa0(cls_0x41bf00 *this)
   if (0 < (int)this->mbr_0x4) {
     do {
       if ((-1 < iVar2) && (iVar1 = *(int *)(this->mbr_0x14 + iVar2 * 4), iVar1 != 0)) {
-        FUN_0041a3b0();
+        FUN_0041a3b0_TArea_Dtor();
         FUN_004830f0(iVar1);
       }
       cls_0x45f7c0::meth_0x41cb40((cls_0x45f7c0 *)this_00);
@@ -87,7 +87,7 @@ void __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41bfa0(cls_0x41bf00 *this)
 
 // Function at 0041c000
 
-undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41c000(cls_0x41bf00 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41c000_TAreaMgr_Load(cls_0x41bf00 *this)
 
 {
   dword *this_00;
@@ -140,7 +140,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41c000(cls_0x41bf00 *this
   if (0 < (int)this->mbr_0x4) {
     do {
       if ((-1 < iVar7) && (*(int *)(this->mbr_0x14 + iVar7 * 4) != 0)) {
-        FUN_0041c790(1);
+        FUN_0041c790_TArea_ScalarDtor(1);
       }
       cls_0x45f7c0::meth_0x41cb40((cls_0x45f7c0 *)this_00);
       iVar7 = iVar7 + 1;
@@ -156,7 +156,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41c000(cls_0x41bf00 *this
     dVar3 = 0;
   }
   else {
-    dVar3 = FUN_0041a1f0(1);
+    dVar3 = FUN_0041a1f0_TArea_Ctor(1);
   }
   local_4 = 0xffffffff;
   this->mbr_0x18 = dVar3;
@@ -244,10 +244,10 @@ undefined4 __thiscall OOAnalyzer::cls_0x41bf00::meth_0x41c000(cls_0x41bf00 *this
       local_258 = FUN_00482fb0(0x260);
       local_4._0_1_ = 4;
       if (local_258 != 0) {
-        FUN_0041a1f0(0);
+        FUN_0041a1f0_TArea_Ctor(0);
       }
       local_4 = CONCAT31(local_4._1_3_,2);
-      iVar7 = FUN_0041a4e0(local_254,&local_298);
+      iVar7 = FUN_0041a4e0_TArea_Load(local_254,&local_298);
       if (iVar7 == 0) {
         FUN_00479950(s_Error_loading_area_005c6e1c,0);
       }

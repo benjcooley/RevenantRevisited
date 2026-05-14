@@ -12,7 +12,7 @@ Length: 4 Alignment: 1
 
 // Function at 00499710
 
-void __thiscall OOAnalyzer::cls_0x499710::meth_0x499710(cls_0x499710 *this)
+void __thiscall OOAnalyzer::cls_0x499710::meth_0x499710_TSector_ClearWalkmap(cls_0x499710 *this)
 
 {
   int iVar1;

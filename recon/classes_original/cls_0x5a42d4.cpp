@@ -92,7 +92,7 @@ void __thiscall OOAnalyzer::cls_0x5a42d4::virt_meth_0x43dad0(cls_0x5a42d4 *this)
   this->mbr_0x60 = 0;
   FUN_004830f0(this->mbr_0x64);
   this->mbr_0x64 = 0;
-  cls_0x5a5320::virt_meth_0x491970((cls_0x5a5320 *)this);
+  cls_0x5a5320_TPlayScreen::virt_meth_0x491970((cls_0x5a5320_TPlayScreen *)this);
   return;
 }
 

@@ -41,7 +41,7 @@ cls_0x5a761c * __thiscall OOAnalyzer::cls_0x5a761c::~cls_0x5a761c(cls_0x5a761c *
   undefined4 *puVar1;
   int *piVar2;
   int iVar3;
-  cls_0x5a7b98 *pcVar4;
+  cls_0x5a7b98_TCharacter *pcVar4;
   int iVar5;
   void *local_c;
   undefined *puStack_8;
@@ -94,7 +94,7 @@ cls_0x5a761c * __thiscall OOAnalyzer::cls_0x5a761c::~cls_0x5a761c(cls_0x5a761c *
   local_4 = (uint)local_4._1_3_ << 8;
   FUN_004830f0(this->mbr_0x180);
   local_4 = 0xffffffff;
-  pcVar4 = cls_0x5a7b98::~cls_0x5a7b98((cls_0x5a7b98 *)this);
+  pcVar4 = cls_0x5a7b98_TCharacter::~cls_0x5a7b98_TCharacter((cls_0x5a7b98_TCharacter *)this);
   ExceptionList = local_c;
   return (cls_0x5a761c *)pcVar4;
 }
@@ -103,11 +103,11 @@ cls_0x5a761c * __thiscall OOAnalyzer::cls_0x5a761c::~cls_0x5a761c(cls_0x5a761c *
 
 // Function at 004d7550
 
-cls_0x5a7b98 * __thiscall
+cls_0x5a7b98_TCharacter * __thiscall
 OOAnalyzer::cls_0x5a761c::virt_meth_0x4d7550(cls_0x5a761c *this,undefined4 param_1)
 
 {
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   uint uVar1;
   int iVar2;
   undefined4 *puVar3;
@@ -119,9 +119,9 @@ OOAnalyzer::cls_0x5a761c::virt_meth_0x4d7550(cls_0x5a761c *this,undefined4 param
   puStack_8 = &LAB_0059ea69;
   local_c = ExceptionList;
   ExceptionList = &local_c;
-  this_00 = (cls_0x5a7b98 *)FUN_00482fb0(0x2a0);
+  this_00 = (cls_0x5a7b98_TCharacter *)FUN_00482fb0(0x2a0);
   local_4 = 0;
-  if (this_00 != (cls_0x5a7b98 *)0x0) {
+  if (this_00 != (cls_0x5a7b98_TCharacter *)0x0) {
     cls_0x5a50e8::cls_0x5a50e8((cls_0x5a50e8 *)this_00);
     local_4._0_1_ = 1;
     (this_00->cls_0x5a50e8).vftptr_0x0 =
@@ -129,7 +129,7 @@ OOAnalyzer::cls_0x5a761c::virt_meth_0x4d7550(cls_0x5a761c *this,undefined4 param
     *(undefined4 *)&(this_00->cls_0x5a50e8).field_0xdc = 0;
     (this_00->cls_0x5a50e8).mbr_0xd8 = 0;
     (this_00->cls_0x5a50e8).mbr_0xe0 = 0;
-    cls_0x5a7b98::meth_0x4db000(this_00);
+    cls_0x5a7b98_TCharacter::meth_0x4db000(this_00);
     local_4._0_1_ = 2;
     cls_0x41c7f0::cls_0x41c7f0(&this_00->cls_0x41c7f0,0x20);
     puVar3 = (undefined4 *)(this_00->cls_0x41c7f0).mbr_0x10;
@@ -149,12 +149,12 @@ OOAnalyzer::cls_0x5a761c::virt_meth_0x4d7550(cls_0x5a761c *this,undefined4 param
     local_4 = CONCAT31(local_4._1_3_,3);
     (this_00->cls_0x5a50e8).vftptr_0x0 =
          (cls_0x5a50e8__vftable_5a50e8 *)&PTR_virt_meth_0x4d6c00_005a7848;
-    cls_0x5a7b98::meth_0x4c18a0(this_00);
+    cls_0x5a7b98_TCharacter::meth_0x4c18a0_TCharacter_ClearChar(this_00);
     ExceptionList = local_c;
     return this_00;
   }
   ExceptionList = local_c;
-  return (cls_0x5a7b98 *)0x0;
+  return (cls_0x5a7b98_TCharacter *)0x0;
 }
 
 

@@ -31,7 +31,7 @@ void __thiscall OOAnalyzer::cls_0x52b9f0::meth_0x52b9f0(cls_0x52b9f0 *this)
   undefined *this_00;
   char cVar1;
   byte bVar2;
-  cls_0x5a7b98 *pcVar3;
+  cls_0x5a7b98_TCharacter *pcVar3;
   byte *pbVar4;
   int iVar5;
   int iVar6;
@@ -60,7 +60,7 @@ void __thiscall OOAnalyzer::cls_0x52b9f0::meth_0x52b9f0(cls_0x52b9f0 *this)
   local_4 = 0xffffffff;
   puStack_8 = &LAB_005a18b2;
   local_c = ExceptionList;
-  if (DAT_00667fcc == (cls_0x5a7b98 *)0x0) {
+  if (DAT_00667fcc == (cls_0x5a7b98_TCharacter *)0x0) {
     return;
   }
   ExceptionList = &local_c;
@@ -70,7 +70,7 @@ void __thiscall OOAnalyzer::cls_0x52b9f0::meth_0x52b9f0(cls_0x52b9f0 *this)
   this->mbr_0x110 = (int)this->mbr_0x11c >> 6;
   this->mbr_0x134 = this->mbr_0x138;
   this->mbr_0x13c = this->mbr_0x140;
-  cls_0x5a7b98::meth_0x46eb40(pcVar3,&this->mbr_0x138);
+  cls_0x5a7b98_TCharacter::meth_0x46eb40(pcVar3,&this->mbr_0x138);
   pcVar3 = DAT_00667fcc;
   iVar6 = DAT_0065a784;
   if (this->mbr_0x60 == 0) {

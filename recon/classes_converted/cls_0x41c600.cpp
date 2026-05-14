@@ -41,7 +41,7 @@ void cls_0x41c600::meth_0x41c600()
           cls_0x41c7d0::meth_0x49b8e0((cls_0x41c7d0 *)&DAT_00667548,uVar3);
         }
         if ((DAT_0066829c == 0) && ((*(byte *)(iVar1 + 0x44) & 0x10) != 0)) {
-          cls_0x495cf0::meth_0x4967a0((cls_0x495cf0 *)&DAT_0065def0);
+          cls_0x495cf0::meth_0x4967a0_TScriptManager_Clear((cls_0x495cf0 *)&DAT_0065def0);
         }
       }
       iVar4 = iVar4 + 1;

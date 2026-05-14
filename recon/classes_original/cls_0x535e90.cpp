@@ -43,7 +43,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x535e90::meth_0x535e90(cls_0x535e90 *this
     ExceptionList = &local_c;
     this->mbr_0x1ec = DAT_0065d0d0;
     pdStack_2c = (dword *)0x535ef4;
-    cls_0x5a5320::meth_0x47c580((cls_0x5a5320 *)&DAT_0065caf0);
+    cls_0x5a5320_TPlayScreen::meth_0x47c580((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
     dStack_28 = 0x160;
     pdStack_2c = (dword *)0x535efe;
     iVar1 = FUN_00482fb0();

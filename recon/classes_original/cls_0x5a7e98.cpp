@@ -355,7 +355,7 @@ void __thiscall OOAnalyzer::cls_0x5a7e98::meth_0x4d96c0(cls_0x5a7e98 *this)
       return;
     }
     iVar3 = *(int *)(iVar3 + 0x38);
-    if ((iVar3 != 0) && (iVar3 = FUN_0059a530(this->mbr_0x3b4,iVar3), iVar3 != 0)) {
+    if ((iVar3 != 0) && (iVar3 = FUN_0059a530_stricmp(this->mbr_0x3b4,iVar3), iVar3 != 0)) {
       meth_0x4d92d0(this);
       return;
     }

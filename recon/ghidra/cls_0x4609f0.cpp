@@ -139,7 +139,7 @@ LAB_00460b5e:
              in_stack_ffffff00,in_stack_ffffff04,in_stack_ffffff08,in_stack_ffffff0c,
              in_stack_ffffff10,in_stack_ffffff14,in_stack_ffffff18,in_stack_ffffff1c);
   cls_0x41c7d0::meth_0x49b220((cls_0x41c7d0 *)&DAT_00667548);
-  cls_0x41bf00::meth_0x41c000((cls_0x41bf00 *)&DAT_0065b8b0);
+  cls_0x41bf00::meth_0x41c000_TAreaMgr_Load((cls_0x41bf00 *)&DAT_0065b8b0);
   return 1;
 }
 
@@ -228,7 +228,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x4609f0::meth_0x460d00(cls_0x4609f0 *this
       puVar1 = *(uint **)(this->mbr_0x14 + iVar3 * 4);
       uVar2 = *puVar1 & in_stack_00000008;
       if ((uVar2 == in_stack_00000008) &&
-         (uVar2 = FUN_0059a530(uVar2,(byte *)(puVar1 + 0x16),param_1), uVar2 == 0)) {
+         (uVar2 = FUN_0059a530_stricmp(uVar2,(byte *)(puVar1 + 0x16),param_1), uVar2 == 0)) {
         return *(undefined4 *)(this->mbr_0x14 + iVar3 * 4);
       }
       iVar3 = iVar3 + 1;
@@ -258,7 +258,7 @@ int __thiscall OOAnalyzer::cls_0x4609f0::meth_0x460d60(cls_0x4609f0 *this,byte *
         puVar1 = *(uint **)(this->mbr_0x14 + iVar4 * 4);
         uVar2 = in_stack_00000008 & *puVar1;
         if (uVar2 == in_stack_00000008) {
-          uVar2 = FUN_0059a530(uVar2,(byte *)(puVar1 + 0x16),param_1);
+          uVar2 = FUN_0059a530_stricmp(uVar2,(byte *)(puVar1 + 0x16),param_1);
           if (uVar2 == 0) {
             return iVar3;
           }

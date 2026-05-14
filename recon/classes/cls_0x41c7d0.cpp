@@ -701,7 +701,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x41c7d0::meth_0x49afd0(cls_0x41c7d0 *this
   _strncpy(pcVar2,s_sound_effects__005da80c,iVar4 + 0x103);
   pcVar2[iVar4 + 0x103] = '\0';
   FUN_0059bd3e(pdVar6);
-  iVar4 = FUN_0059a530(&this->mbr_0xc8,pdVar6);
+  iVar4 = FUN_0059a530_stricmp(&this->mbr_0xc8,pdVar6);
   if (iVar4 != 0) {
     meth_0x49ad20(this);
   }
@@ -744,7 +744,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x41c7d0::meth_0x49afd0(cls_0x41c7d0 *this
   _strncpy(pcVar2,&DAT_005da824,iVar4 + 0x103);
   pcVar2[iVar4 + 0x103] = '\0';
   FUN_0059bd3e(pdVar6);
-  iVar4 = FUN_0059a530(pdVar1,pdVar6);
+  iVar4 = FUN_0059a530_stricmp(pdVar1,pdVar6);
   if (iVar4 != 0) {
     meth_0x49ad20(this);
   }
@@ -1234,7 +1234,7 @@ OOAnalyzer::cls_0x41c7d0::meth_0x49b990
       } while (iVar5 < 0x10);
       bVar3 = false;
       if (((*(byte *)(iVar1 + 0x18) & 2) == 0) &&
-         ((((iVar5 = FUN_0046de60(&iStack_18,&local_c), in_stack_00000014 <= iVar5 ||
+         ((((iVar5 = FUN_0046de60_Distance2D(&iStack_18,&local_c), in_stack_00000014 <= iVar5 ||
             (this->mbr_0x34 != 0)) && (-1 < iVar4)) && (DAT_0066811c == 0)))) {
         iVar5 = _AIL_set_3D_sample_file_8((&this->mbr_0x7c)[iVar4],*(undefined4 *)(iVar1 + 0x10));
         bVar3 = true;
@@ -1279,9 +1279,9 @@ OOAnalyzer::cls_0x41c7d0::meth_0x49b990
           uVar7 = DAT_005d7aa0 + -0x7f + _param_2;
           uVar7 = uVar7 & ((int)uVar7 < 0) - 1;
           if (DAT_0066811c != 0) {
-            iVar5 = FUN_0046de60(&iStack_18,&local_c);
+            iVar5 = FUN_0046de60_Distance2D(&iStack_18,&local_c);
             if ((float)iVar5 < _DAT_005a3698) {
-              FUN_0046de60(&iStack_18,&local_c);
+              FUN_0046de60_Distance2D(&iStack_18,&local_c);
             }
             uVar7 = __ftol();
           }

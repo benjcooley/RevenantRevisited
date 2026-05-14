@@ -36,7 +36,7 @@ uint cls_0x4741b0::meth_0x474210()
   pcVar2 = this;
   for (uVar4 = 0; (this != (cls_0x4741b0 *)0x0 && (uVar4 < (uint)(int)(short)this->mbr_0x0));
       uVar4 = uVar4 + 1) {
-    uVar1 = FUN_0059a530((uint)pcVar2,pbVar3,in_stack_00000004);
+    uVar1 = FUN_0059a530_stricmp((uint)pcVar2,pbVar3,in_stack_00000004);
     if (uVar1 == 0) {
       return uVar4;
     }

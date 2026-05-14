@@ -252,8 +252,8 @@ void cls_0x5a58c0::virt_meth_0x537a30()
 void cls_0x5a58c0::virt_meth_0x538210(int param_1, dword param_2)
 
 {
-  cls_0x5b4f30 *this_00;
-  cls_0x5b4f30 *pcVar1;
+  cls_0x5b4f30_TPlayer *this_00;
+  cls_0x5b4f30_TPlayer *pcVar1;
   undefined uVar2;
   int iVar3;
   int *piVar4;
@@ -270,8 +270,8 @@ void cls_0x5a58c0::virt_meth_0x538210(int param_1, dword param_2)
   char *pcVar11;
   
   this->virt_meth_0x436530(param_1,param_2);
-  this_00 = (cls_0x5b4f30 *)this->mbr_0x17c;
-  if (this_00 == (cls_0x5b4f30 *)0x0) {
+  this_00 = (cls_0x5b4f30_TPlayer *)this->mbr_0x17c;
+  if (this_00 == (cls_0x5b4f30_TPlayer *)0x0) {
     return;
   }
   if (param_1 == 5) {
@@ -288,7 +288,7 @@ void cls_0x5a58c0::virt_meth_0x538210(int param_1, dword param_2)
       return;
     }
     if (DAT_0065c9e0 != 0) {
-      iVar3 = cls_0x5b4f30::meth_0x4701f0(this_00);
+      iVar3 = cls_0x5b4f30_TPlayer::meth_0x4701f0(this_00);
       if (iVar3 != 0) {
         TCharacter::meth_0x47eff0((TCharacter *)&DAT_0065caf0);
         cls_0x5a5ba0::virt_meth_0x5496a0((cls_0x5a5ba0 *)&DAT_0065b140);
@@ -309,7 +309,7 @@ void cls_0x5a58c0::virt_meth_0x538210(int param_1, dword param_2)
     if (-1 < DAT_0065b090) {
       return;
     }
-    piVar4 = (int *)cls_0x5b4f30::meth_0x4701f0((cls_0x5b4f30 *)this->mbr_0x17c);
+    piVar4 = (int *)cls_0x5b4f30_TPlayer::meth_0x4701f0((cls_0x5b4f30_TPlayer *)this->mbr_0x17c);
     if (piVar4 != (int *)0x0) {
       uVar5 = (**(code **)(*piVar4 + 0xd4))(s_eqslot_005e41f4);
       if ((*(short *)(piVar4 + 1) == 3) && ((TPlayScreen *)piVar4[0x19] == DAT_00667fcc)) {
@@ -345,7 +345,7 @@ void cls_0x5a58c0::virt_meth_0x538210(int param_1, dword param_2)
         if (*(short *)(piVar4 + 1) != 6) {
           return;
         }
-        TPlayScreen::meth_0x4cf000(DAT_00667fcc);
+        TPlayScreen::meth_0x4cf000_SetWalkMode(DAT_00667fcc);
         return;
       }
       uVar7 = cls_0x45f7c0::meth_0x49d800((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310);
@@ -404,8 +404,8 @@ void cls_0x5a58c0::virt_meth_0x538210(int param_1, dword param_2)
            (((2 < iVar3 / 0x2c || (0x27 < iVar6 % 0x2d)) || (0x27 < iVar3 % 0x2c)))))) ||
          (dVar8 = (iVar6 / 0x2d) * 3 + this->mbr_0x188 + iVar3 / 0x2c, (int)dVar8 < 0))
       goto LAB_00538728;
-      piVar4 = (int *)cls_0x5b4f30::meth_0x4701f0(this_00);
-      piVar9 = (int *)cls_0x5b4f30::meth_0x4701f0((cls_0x5b4f30 *)this->mbr_0x17c);
+      piVar4 = (int *)cls_0x5b4f30_TPlayer::meth_0x4701f0(this_00);
+      piVar9 = (int *)cls_0x5b4f30_TPlayer::meth_0x4701f0((cls_0x5b4f30_TPlayer *)this->mbr_0x17c);
       if (piVar4 == (int *)0x0) goto LAB_00538728;
       if (piVar9 != (int *)0x0) {
         if (this->mbr_0x18c == 0) {
@@ -445,8 +445,8 @@ LAB_00538900:
       if (DAT_0065b878 < 0) {
         if (-1 < DAT_0065b090) {
           DAT_0065b02c._76_4_ = 1;
-          piVar9 = (int *)cls_0x5b4f30::meth_0x4701f0(DAT_0065b088);
-          piVar10 = (int *)cls_0x5b4f30::meth_0x4701f0((cls_0x5b4f30 *)this->mbr_0x17c);
+          piVar9 = (int *)cls_0x5b4f30_TPlayer::meth_0x4701f0(DAT_0065b088);
+          piVar10 = (int *)cls_0x5b4f30_TPlayer::meth_0x4701f0((cls_0x5b4f30_TPlayer *)this->mbr_0x17c);
           piVar4 = DAT_0065d674;
           if (piVar9 == (int *)0x0) {
             return;
@@ -481,7 +481,7 @@ LAB_00538900:
         goto LAB_00538728;
       }
       piVar4 = (int *)(&DAT_00667fcc->mbr_0x2a0)[DAT_0065b878];
-      piVar9 = (int *)cls_0x5b4f30::meth_0x4701f0(this_00);
+      piVar9 = (int *)cls_0x5b4f30_TPlayer::meth_0x4701f0(this_00);
       if ((piVar4 != (int *)0x0) && (-1 < (int)dVar8)) {
         if (piVar9 == (int *)0x0) {
           TPlayScreen::meth_0x5199b0(DAT_00667fcc,0);
@@ -521,14 +521,14 @@ LAB_00538a70:
       }
 LAB_00538acf:
       if (*(short *)(piVar4 + 1) == 6) {
-        TPlayScreen::meth_0x4cf000(DAT_00667fcc);
+        TPlayScreen::meth_0x4cf000_SetWalkMode(DAT_00667fcc);
       }
       goto LAB_00538728;
     }
   }
   else {
-    pcVar1 = (cls_0x5b4f30 *)(this_00->TPlayScreen).TScreen.mbr_0x64;
-    if (pcVar1 == (cls_0x5b4f30 *)0x0) goto LAB_00538728;
+    pcVar1 = (cls_0x5b4f30_TPlayer *)(this_00->TPlayScreen).TScreen.mbr_0x64;
+    if (pcVar1 == (cls_0x5b4f30_TPlayer *)0x0) goto LAB_00538728;
     if ((int)this->mbr_0x180 < 0) {
       if (this_00 != pcVar1) {
         this->mbr_0x17c = (dword)pcVar1;
@@ -547,7 +547,7 @@ LAB_00538acf:
       }
       goto LAB_00538728;
     }
-    iVar3 = cls_0x5b4f30::meth_0x4701f0(this_00);
+    iVar3 = cls_0x5b4f30_TPlayer::meth_0x4701f0(this_00);
     if ((iVar3 == 0) ||
        (iVar6 = (**(code **)(**(int **)(this->mbr_0x17c + 100) + 0x94))(), 0xfe < iVar6))
     goto LAB_00538728;
@@ -621,7 +621,7 @@ void cls_0x5a58c0::virt_meth_0x538c10(int param_1, int param_2)
           return;
         }
       }
-      piVar2 = (int *)cls_0x5b4f30::meth_0x4701f0((cls_0x5b4f30 *)this->mbr_0x17c);
+      piVar2 = (int *)cls_0x5b4f30_TPlayer::meth_0x4701f0((cls_0x5b4f30_TPlayer *)this->mbr_0x17c);
       if ((piVar2 != (int *)0x0) && (iVar1 = (**(code **)(*piVar2 + 0x130))(), iVar1 != 0)) {
         iVar4 = (int)(this->mbr_0x190 - 8) % 0x2d;
         iVar5 = (int)(this->mbr_0x194 - 0x2a) % 0x2c;

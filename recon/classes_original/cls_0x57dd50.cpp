@@ -28,7 +28,7 @@ void __thiscall OOAnalyzer::cls_0x57dd50::meth_0x57dd50(cls_0x57dd50 *this)
   int **ppiVar4;
   dword dVar5;
   
-  dVar5 = cls_0x5a5320::meth_0x47e940((cls_0x5a5320 *)&DAT_0065caf0);
+  dVar5 = cls_0x5a5320_TPlayScreen::meth_0x47e940((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
   if ((int)dVar5 < (int)this->mbr_0x98) {
     while ((*(int *)this->mbr_0x8c != 0 &&
            (ppdVar1 = (dword **)((int *)this->mbr_0x8c)[2], ppdVar1 != (dword **)0x0))) {

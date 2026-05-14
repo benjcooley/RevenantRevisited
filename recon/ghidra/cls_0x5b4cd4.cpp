@@ -284,16 +284,16 @@ void __thiscall OOAnalyzer::cls_0x5b4cd4::meth_0x517240(cls_0x5b4cd4 *this)
     dVar1 = this->mbr_0x18;
     iVar5 = 0x14;
     do {
-      dVar2 = FUN_00483300(0,0xff);
+      dVar2 = FUN_00483300_RandomRange(0,0xff);
       piVar4 = &local_4c;
       iVar7 = 0;
-      iVar3 = FUN_00483300(0x32,0x96);
-      FUN_0046db20(dVar2,iVar3,piVar4,iVar7);
+      iVar3 = FUN_00483300_RandomRange(0x32,0x96);
+      FUN_0046db20_ConvertToVector(dVar2,iVar3,piVar4,iVar7);
       local_48 = local_48 + local_3c;
       local_4c = local_4c + local_40;
       iVar5 = iVar5 + -1;
       local_44 = dVar1 + 10;
-      FUN_004530a0(&local_4c,(uint)*(ushort *)((int)&this->mbr_0xc + 2),0x10,&local_54,&local_50,
+      FUN_004530a0_GetWalkHeightRadius(&local_4c,(uint)*(ushort *)((int)&this->mbr_0xc + 2),0x10,&local_54,&local_50,
                    &local_58);
       if (local_54 < 5) {
         if (local_58 == 0) goto LAB_00517328;
@@ -304,7 +304,7 @@ void __thiscall OOAnalyzer::cls_0x5b4cd4::meth_0x517240(cls_0x5b4cd4 *this)
     } while (iVar5 != 0);
     if (local_58 == 0) {
 LAB_00517328:
-      this_01 = (cls_0x4746d0 *)(-(uint)(0xc < DAT_0065a258) & DAT_0065a178);
+      this_01 = (cls_0x4746d0 *)(-(uint)(0xc < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a178);
       iVar5 = cls_0x4746d0::meth_0x475210
                         (this_01,*(undefined4 *)(&this->mbr_0xd8)[in_stack_00000004]);
       if (-1 < iVar5) {
@@ -322,7 +322,7 @@ LAB_00517328:
         local_30 = 0;
         local_24 = local_48;
         iVar5 = TCharacter::meth_0x450e40((TCharacter *)&DAT_006668d8,&local_34);
-        this_00 = (TPlayScreen *)FUN_00452690(iVar5,uVar8);
+        this_00 = (TPlayScreen *)FUN_00452690_TMapPane_GetInstance(iVar5,uVar8);
         if (this_00 != (TPlayScreen *)0x0) {
           piVar4 = (int *)TPlayScreen::meth_0x46e8a0(this_00);
           (**(code **)(*piVar4 + 0xc))();

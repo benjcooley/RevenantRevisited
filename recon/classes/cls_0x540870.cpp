@@ -30,7 +30,7 @@ int __thiscall OOAnalyzer::cls_0x540870::meth_0x540870(cls_0x540870 *this)
       if ((this->mbr_0x10 != 0) && (uVar4 < this->mbr_0x0)) {
         iVar2 = *(int *)(this->mbr_0x10 + uVar4 * 4);
         if (iVar2 != 0) {
-          iVar2 = FUN_0059a530(*(int *)(iVar2 + 0x120) + 4,in_stack_00000004);
+          iVar2 = FUN_0059a530_stricmp(*(int *)(iVar2 + 0x120) + 4,in_stack_00000004);
           if (iVar2 == 0) {
             iVar3 = iVar3 + 1;
           }

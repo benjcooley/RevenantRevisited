@@ -4,7 +4,7 @@
 /OOAnalyzer/cls_0x5b9374
 pack(disabled)
 Structure cls_0x5b9374 {
-   0   cls_0x5a5ed4   112   cls_0x5a5ed4   "Component (member) class."
+   0   cls_0x5a5ed4_TScreen   112   cls_0x5a5ed4_TScreen   "Component (member) class."
 }
 Length: 112 Alignment: 1
 
@@ -18,7 +18,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b9374::virt_meth_0x5338a0(cls_0x5b9374 
   int iVar1;
   undefined4 uVar2;
   
-  (this->cls_0x5a5ed4).mbr_0x54 = 0;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x54 = 0;
   DAT_0066f6f4 = FUN_0047f670(s_death_dat_005e3ebc,0xffffffff,0);
   iVar1 = cls_0x5b93c4::virt_meth_0x5339b0((cls_0x5b93c4 *)&DAT_0066f500);
   if (iVar1 == 0) {
@@ -37,8 +37,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b9374::virt_meth_0x5338a0(cls_0x5b9374 
 cls_0x5b9374 * __thiscall OOAnalyzer::cls_0x5b9374::cls_0x5b9374(cls_0x5b9374 *this)
 
 {
-  cls_0x5a5ed4::cls_0x5a5ed4(&this->cls_0x5a5ed4);
-  (this->cls_0x5a5ed4).vftptr_0x0 =
+  cls_0x5a5ed4_TScreen::cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
+  (this->cls_0x5a5ed4_TScreen).vftptr_0x0 =
        (cls_0x5a5ed4__vftable_5a5ed4 *)&cls_0x5b9374__vftable_5b9374_005b9374;
   return this;
 }
@@ -52,7 +52,7 @@ cls_0x5b9374 * __thiscall OOAnalyzer::cls_0x5b9374::virt_meth_0x533c90(cls_0x5b9
 {
   byte in_stack_00000004;
   
-  cls_0x5a5ed4::~cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }

@@ -6,7 +6,7 @@
 
 // Function at 004942b0
 
-void cls_0x4942b0::meth_0x4942b0()
+void cls_0x4942b0::meth_0x4942b0_TScript_Resume()
 
 {
   this->mbr_0x4c = this->mbr_0x4c & 0xfffeffff;

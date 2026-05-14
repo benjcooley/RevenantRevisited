@@ -6,7 +6,7 @@
 
 // Function at 00499560
 
-void cls_0x499560::meth_0x499560(int param_1, int param_2, int param_3, int param_4, int param_5, int param_6, int param_7, int param_8, int param_9)
+void cls_0x499560::meth_0x499560_TSector_WalkmapHandler(int param_1, int param_2, int param_3, int param_4, int param_5, int param_6, int param_7, int param_8, int param_9)
 
 {
   int iVar1;

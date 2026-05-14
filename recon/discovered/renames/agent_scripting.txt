@@ -1,0 +1,112 @@
+# Format: BARE_TOKEN|RENAMED_TOKEN  — one per line, # comments ignored.
+# Scripting + persistence: TScript / TScriptProto / TScriptManager / TGameState.
+# Anchored on retail string literals: "ALWAYS","TRIGGER","PROXIMITY","CUBE",
+# "DIALOG","GIVE","COMBAT","DEAD" (in ParseScript), "CONTEXT","OBJTYPE",
+# "OBJECT","PARENT" (in ParseCriteria), "BEGIN without matching END" (Continue/
+# Jump), "Bad token in trigger block" (Continue), "master.s" / "state.def"
+# (Initialize/Close/Load/Save), "Unable to load MASTER.S file" /
+# "Unable to load STATE.DEF file" (retail-specific FatalError strings),
+# "Invalid init value for game state in %s" / "Expected gamestate identifier
+# in %s" (TGameState::Load text path).
+
+# ---- TScriptProto::ParseCriteria(TToken&) — CONTEXT/OBJTYPE/OBJECT/PARENT ----
+FUN_00494c50|FUN_00494c50_TScriptProto_ParseCriteria
+meth_0x494c50|meth_0x494c50_TScriptProto_ParseCriteria
+
+# ---- TScriptProto::ParseScript(TToken&) — ALWAYS/TRIGGER/PROXIMITY/CUBE/... ----
+FUN_00494e20|FUN_00494e20_TScriptProto_ParseScript
+meth_0x494e20|meth_0x494e20_TScriptProto_ParseScript
+
+# ---- TScriptProto::TScriptProto(parent, owner, filename, buffer) ----
+FUN_004946f0|FUN_004946f0_TScriptProto_Ctor
+meth_0x4946f0|meth_0x4946f0_TScriptProto_Ctor
+
+# ---- TScriptProto::~TScriptProto() — frees name/text/filename/triggers ----
+FUN_004948e0|FUN_004948e0_TScriptProto_Dtor
+meth_0x4948e0|meth_0x4948e0_TScriptProto_Dtor
+
+# ---- TScript::TScript(prototype, ?) — sets COND_UNDEF (0xdeaf) at +0x58 ----
+FUN_00492170|FUN_00492170_TScript_Ctor
+meth_0x492170|meth_0x492170_TScript_Ctor
+
+# ---- TScript::Triggered — switch on trigger byte (NONE/TRIGGER/PROXIMITY/CUBE/COMBAT) ----
+FUN_00492d70|FUN_00492d70_TScript_Triggered
+meth_0x492d70|meth_0x492d70_TScript_Triggered
+
+# ---- TScript::Continue — script interpreter loop, "BEGIN without matching END" ----
+FUN_004933d0|FUN_004933d0_TScript_Continue
+meth_0x4933d0|meth_0x4933d0_TScript_Continue
+
+# ---- TScript::End — clears trigger, priority=-1 ----
+FUN_00493e40|FUN_00493e40_TScript_End
+meth_0x493e40|meth_0x493e40_TScript_End
+
+# ---- TScript::Jump(context, label) — "Jump to an unknown label attempted" ----
+FUN_00493fa0|FUN_00493fa0_TScript_Jump
+meth_0x493fa0|meth_0x493fa0_TScript_Jump
+
+# ---- TScript::Break — sets SCRIPT_PAUSED bit (1<<16) at +0x4c ----
+FUN_004942a0|FUN_004942a0_TScript_Break
+meth_0x4942a0|meth_0x4942a0_TScript_Break
+
+# ---- TScript::Resume — clears SCRIPT_PAUSED bit (1<<16) at +0x4c ----
+FUN_004942b0|FUN_004942b0_TScript_Resume
+meth_0x4942b0|meth_0x4942b0_TScript_Resume
+
+# ---- TScript::SetText(buf) — strdups buf into +0xe0, clears flags except 0x20000 ----
+FUN_004944c0|FUN_004944c0_TScript_SetText
+meth_0x4944c0|meth_0x4944c0_TScript_SetText
+
+# ---- TScriptManager::Initialize — Load("master.s") + gamestate.Load("state.def") ----
+FUN_00496240|FUN_00496240_TScriptManager_Initialize
+meth_0x496240|meth_0x496240_TScriptManager_Initialize
+
+# ---- TScriptManager::Close — Save("master.s") + gamestate.Save("state.def") + free ----
+FUN_00496330|FUN_00496330_TScriptManager_Close
+meth_0x496330|meth_0x496330_TScriptManager_Close
+
+# ---- TScriptManager::Load — opens master.s, slurps into buffer, calls ParseScripts ----
+FUN_00496490|FUN_00496490_TScriptManager_Load
+meth_0x496490|meth_0x496490_TScriptManager_Load
+
+# ---- TScriptManager::Save — writes "Revenant Script File" header + scripts ----
+FUN_00496690|FUN_00496690_TScriptManager_Save
+meth_0x496690|meth_0x496690_TScriptManager_Save
+
+# ---- TScriptManager::Clear(owner) — removes scripts whose proto.owner == arg ----
+FUN_004967a0|FUN_004967a0_TScriptManager_Clear
+meth_0x4967a0|meth_0x4967a0_TScriptManager_Clear
+
+# ---- TScriptManager::ParseScripts(buffer, filename, owner) — TToken loop ----
+FUN_00496860|FUN_00496860_TScriptManager_ParseScripts
+meth_0x496860|meth_0x496860_TScriptManager_ParseScripts
+
+# ---- TScriptManager::AddScript — builds an "OBJECT %s BEGIN END" stub proto + TScript ----
+FUN_00497120|FUN_00497120_TScriptManager_AddScript
+meth_0x497120|meth_0x497120_TScriptManager_AddScript
+
+# ---- TScriptManager::ObjectScript(inst) — finds proto by inst.name or inst.parent.name ----
+FUN_00497370|FUN_00497370_TScriptManager_ObjectScript
+meth_0x497370|meth_0x497370_TScriptManager_ObjectScript
+
+# ---- TScriptManager::ReloadStates — wraps gamestate.Load("state.def") ----
+FUN_004975c0|FUN_004975c0_TScriptManager_ReloadStates
+meth_0x4975c0|meth_0x4975c0_TScriptManager_ReloadStates
+
+# ---- TGameState::Load(filename) — text path: "Invalid init value for game state in %s" ----
+FUN_00495cf0|FUN_00495cf0_TGameState_Load
+meth_0x495cf0|meth_0x495cf0_TGameState_Load
+
+# ---- TGameState::LoadStream(TInputStream&) — binary path used by TSaveGame, XOR-0x80
+# obfuscates state names; pairs with TGameState::SaveStream below ----
+FUN_00496110|FUN_00496110_TGameState_LoadStream
+meth_0x496110|meth_0x496110_TGameState_LoadStream
+
+# ---- TGameState::SaveStream(TOutputStream&) — binary path; XOR-0x80 obfuscates names ----
+FUN_004974d0|FUN_004974d0_TGameState_SaveStream
+meth_0x4974d0|meth_0x4974d0_TGameState_SaveStream
+
+# ---- TGameState::FindStateValue(name) — first checks built-in name->int table at
+# 0x005da0b0, then linear-scans numstates entries; returns 0xfeced300 on miss ----
+FUN_004975d0|FUN_004975d0_TGameState_FindStateValue
+meth_0x4975d0|meth_0x4975d0_TGameState_FindStateValue

@@ -26,7 +26,7 @@ void __thiscall OOAnalyzer::cls_0x496e20::meth_0x496e20(cls_0x496e20 *this)
          (*(int *)(this->mbr_0x8028 + uVar1 * 4) != 0)) {
         this_00 = *(cls_0x4922c0 **)(this->mbr_0x8028 + uVar1 * 4);
         if (this_00->mbr_0x48 != 0) {
-          cls_0x4922c0::meth_0x493e40(this_00);
+          cls_0x4922c0::meth_0x493e40_TScript_End(this_00);
         }
         this_00->mbr_0x48 = 0;
         this_00->mbr_0x8 = this_00->mbr_0x4;

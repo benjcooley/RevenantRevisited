@@ -152,7 +152,7 @@ LAB_00540d26:
 void __thiscall OOAnalyzer::cls_0x5b9bdc::virt_meth_0x542340(cls_0x5b9bdc *this)
 
 {
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   int iVar1;
   uint uVar2;
   
@@ -162,7 +162,7 @@ void __thiscall OOAnalyzer::cls_0x5b9bdc::virt_meth_0x542340(cls_0x5b9bdc *this)
     do {
       if ((((this->mbr_0x14c != 0) && (uVar2 < this->mbr_0x13c)) &&
           (*(int *)(this->mbr_0x14c + uVar2 * 4) != 0)) &&
-         (this_00 = *(cls_0x5a7b98 **)(this->mbr_0x14c + uVar2 * 4), this_00 != (cls_0x5a7b98 *)0x0)
+         (this_00 = *(cls_0x5a7b98_TCharacter **)(this->mbr_0x14c + uVar2 * 4), this_00 != (cls_0x5a7b98_TCharacter *)0x0)
          ) {
         if (((this->mbr_0x11c != 0) && (*(int *)(this->mbr_0x11c + 200) != 0)) &&
            ((0 < (int)this->mbr_0xc && ((int *)this->mbr_0x10 != (int *)0x0)))) {
@@ -170,7 +170,7 @@ void __thiscall OOAnalyzer::cls_0x5b9bdc::virt_meth_0x542340(cls_0x5b9bdc *this)
         }
         (*((this_00->cls_0x5a50e8).vftptr_0x0)->FUN_00472e90_64)
                   ((this_00->cls_0x5a50e8).mbr_0x8 | 0x1000);
-        cls_0x5a7b98::meth_0x4de7d0(this_00);
+        cls_0x5a7b98_TCharacter::meth_0x4de7d0(this_00);
         FUN_00540af0(this_00,(this_00->cls_0x5a50e8).mbr_0x10,0);
       }
       uVar2 = uVar2 + 1;

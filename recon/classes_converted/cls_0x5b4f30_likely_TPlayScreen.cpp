@@ -1,12 +1,12 @@
 #include "classes_all.h"
 
-// Decompiled methods and structure for class: cls_0x5b4f30
+// Decompiled methods and structure for class: cls_0x5b4f30_TPlayer
 
 
 
 // Function at 0046e630
 
-void cls_0x5b4f30::meth_0x46e630()
+void cls_0x5b4f30_TPlayer::meth_0x46e630()
 
 {
   dword dVar1;
@@ -15,7 +15,7 @@ void cls_0x5b4f30::meth_0x46e630()
   
   dVar1 = (this->TPlayScreen).TScreen.mbr_0x44;
   if ((dVar1 == 0) || (DAT_006687a4 != dVar1)) {
-    FUN_00499ff0(1,this);
+    FUN_00499ff0_TSector_DispatchNotifyToAll(1,this);
   }
   else {
     (this->TPlayScreen).TScreen.mbr_0x44 = 0;
@@ -49,7 +49,7 @@ void cls_0x5b4f30::meth_0x46e630()
 
 // Function at 0046e6f0
 
-void cls_0x5b4f30::meth_0x46e6f0()
+void cls_0x5b4f30_TPlayer::meth_0x46e6f0()
 
 {
   char cVar1;
@@ -118,7 +118,7 @@ void cls_0x5b4f30::meth_0x46e6f0()
      ((*(short *)&(this->TPlayScreen).TScreen.mbr_0x4 != 9 ||
       ((this->TPlayScreen).TScreen.mbr_0x38 !=
        *(dword *)(this->TPlayScreen).TScreen.mbr_0x4c)))) {
-    cls_0x497370::meth_0x497370((cls_0x497370 *)&DAT_0065def0);
+    cls_0x497370::meth_0x497370_TScriptManager_ObjectScript((cls_0x497370 *)&DAT_0065def0);
     TScreen::meth_0x471150((TScreen *)this);
   }
   return;
@@ -128,12 +128,12 @@ void cls_0x5b4f30::meth_0x46e6f0()
 
 // Function at 00470090
 
-int cls_0x5b4f30::meth_0x470090()
+int cls_0x5b4f30_TPlayer::meth_0x470090()
 
 {
   undefined uVar1;
   undefined3 extraout_var;
-  cls_0x5b4f30 *this_00;
+  cls_0x5b4f30_TPlayer *this_00;
   undefined3 extraout_var_01;
   int iVar2;
   cls_0x477870 cStack_1c;
@@ -145,7 +145,7 @@ int cls_0x5b4f30::meth_0x470090()
   while (iVar2 != 0) {
     uVar1 = (*((((TPlayScreen *)cStack_1c.mbr_0x4)->TScreen).vftptr_0x0)->
               virt_meth_0x477d50_368)((void *)cStack_1c.mbr_0x4);
-    this_00 = (cls_0x5b4f30 *)CONCAT31(extraout_var_00,uVar1);
+    this_00 = (cls_0x5b4f30_TPlayer *)CONCAT31(extraout_var_00,uVar1);
     uVar1 = (*((this_00->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477d50_368)(this_00);
     cStack_1c.mbr_0x4 = (dword)this_00;
     iVar2 = CONCAT31(extraout_var_01,uVar1);
@@ -169,12 +169,12 @@ int cls_0x5b4f30::meth_0x470090()
 
 // Function at 00470160
 
-int cls_0x5b4f30::meth_0x470160()
+int cls_0x5b4f30_TPlayer::meth_0x470160()
 
 {
   undefined uVar1;
   undefined3 extraout_var;
-  cls_0x5b4f30 *this_00;
+  cls_0x5b4f30_TPlayer *this_00;
   undefined3 extraout_var_01;
   int iVar2;
   int in_stack_00000004;
@@ -187,7 +187,7 @@ int cls_0x5b4f30::meth_0x470160()
   while (iVar2 != 0) {
     uVar1 = (*((((TPlayScreen *)cStack_1c.mbr_0x4)->TScreen).vftptr_0x0)->
               virt_meth_0x477d50_368)((void *)cStack_1c.mbr_0x4);
-    this_00 = (cls_0x5b4f30 *)CONCAT31(extraout_var_00,uVar1);
+    this_00 = (cls_0x5b4f30_TPlayer *)CONCAT31(extraout_var_00,uVar1);
     uVar1 = (*((this_00->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477d50_368)(this_00);
     cStack_1c.mbr_0x4 = (dword)this_00;
     iVar2 = CONCAT31(extraout_var_01,uVar1);
@@ -215,12 +215,12 @@ int cls_0x5b4f30::meth_0x470160()
 
 // Function at 004701f0
 
-int cls_0x5b4f30::meth_0x4701f0()
+int cls_0x5b4f30_TPlayer::meth_0x4701f0()
 
 {
   undefined uVar1;
   undefined3 extraout_var;
-  cls_0x5b4f30 *this_00;
+  cls_0x5b4f30_TPlayer *this_00;
   undefined3 extraout_var_01;
   int in_stack_00000004;
   cls_0x477870 cStack_1c;
@@ -233,7 +233,7 @@ int cls_0x5b4f30::meth_0x4701f0()
   while (iVar2 != 0) {
     uVar1 = (*((((TPlayScreen *)cStack_1c.mbr_0x4)->TScreen).vftptr_0x0)->
               virt_meth_0x477d50_368)((void *)cStack_1c.mbr_0x4);
-    this_00 = (cls_0x5b4f30 *)CONCAT31(extraout_var_00,uVar1);
+    this_00 = (cls_0x5b4f30_TPlayer *)CONCAT31(extraout_var_00,uVar1);
     uVar1 = (*((this_00->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477d50_368)(this_00);
     cStack_1c.mbr_0x4 = (dword)this_00;
     iVar2 = CONCAT31(extraout_var_01,uVar1);
@@ -259,7 +259,7 @@ int cls_0x5b4f30::meth_0x4701f0()
 
 // Function at 004713c0
 
-void cls_0x5b4f30::meth_0x4713c0()
+void cls_0x5b4f30_TPlayer::meth_0x4713c0()
 
 {
   uint uVar1;
@@ -280,7 +280,7 @@ void cls_0x5b4f30::meth_0x4713c0()
 
 // Function at 00471430
 
-void cls_0x5b4f30::meth_0x471430()
+void cls_0x5b4f30_TPlayer::meth_0x471430()
 
 {
   uint uVar1;
@@ -317,7 +317,7 @@ void cls_0x5b4f30::meth_0x471430()
 
 // Function at 004714e0
 
-void cls_0x5b4f30::meth_0x4714e0()
+void cls_0x5b4f30_TPlayer::meth_0x4714e0()
 
 {
   byte bVar1;
@@ -357,7 +357,7 @@ void cls_0x5b4f30::meth_0x4714e0()
 
 // Function at 004715e0
 
-void cls_0x5b4f30::meth_0x4715e0()
+void cls_0x5b4f30_TPlayer::meth_0x4715e0()
 
 {
   dword dVar1;
@@ -396,7 +396,7 @@ void cls_0x5b4f30::meth_0x4715e0()
 
 // Function at 004716c0
 
-void cls_0x5b4f30::meth_0x4716c0()
+void cls_0x5b4f30_TPlayer::meth_0x4716c0()
 
 {
   int iVar1;
@@ -453,7 +453,7 @@ void cls_0x5b4f30::meth_0x4716c0()
 
 // Function at 00471820
 
-void cls_0x5b4f30::meth_0x471820()
+void cls_0x5b4f30_TPlayer::meth_0x471820()
 
 {
   dword dVar1;
@@ -491,13 +491,13 @@ void cls_0x5b4f30::meth_0x471820()
 
 // Function at 00472db0
 
-void cls_0x5b4f30::meth_0x472db0(byte *param_1)
+void cls_0x5b4f30_TPlayer::meth_0x472db0(byte *param_1)
 
 {
   TScreen__vftable_5a50e8 *pcVar1;
   uint uVar2;
-  cls_0x5b4f30 *pcVar3;
-  cls_0x5b4f30 *extraout_ECX;
+  cls_0x5b4f30_TPlayer *pcVar3;
+  cls_0x5b4f30_TPlayer *extraout_ECX;
   undefined **ppuVar4;
   int iVar5;
   int in_stack_00000008;
@@ -506,7 +506,7 @@ void cls_0x5b4f30::meth_0x472db0(byte *param_1)
   ppuVar4 = &PTR_s_IMMOBILE_005d4770;
   pcVar3 = this;
   do {
-    uVar2 = FUN_0059a530((uint)pcVar3,*ppuVar4,param_1);
+    uVar2 = FUN_0059a530_stricmp((uint)pcVar3,*ppuVar4,param_1);
     if (uVar2 == 0) {
       if (-1 < iVar5) {
         pcVar1 = (this->TPlayScreen).TScreen.vftptr_0x0;
@@ -531,12 +531,12 @@ void cls_0x5b4f30::meth_0x472db0(byte *param_1)
 
 // Function at 00472e30
 
-bool cls_0x5b4f30::meth_0x472e30()
+bool cls_0x5b4f30_TPlayer::meth_0x472e30()
 
 {
   uint uVar1;
-  cls_0x5b4f30 *pcVar2;
-  cls_0x5b4f30 *extraout_ECX;
+  cls_0x5b4f30_TPlayer *pcVar2;
+  cls_0x5b4f30_TPlayer *extraout_ECX;
   undefined **ppuVar3;
   int iVar4;
   byte *in_stack_00000004;
@@ -545,7 +545,7 @@ bool cls_0x5b4f30::meth_0x472e30()
   ppuVar3 = &PTR_s_IMMOBILE_005d4770;
   pcVar2 = this;
   do {
-    uVar1 = FUN_0059a530((uint)pcVar2,*ppuVar3,in_stack_00000004);
+    uVar1 = FUN_0059a530_stricmp((uint)pcVar2,*ppuVar3,in_stack_00000004);
     if (uVar1 == 0) {
       if (iVar4 < 0) {
         return false;
@@ -563,7 +563,7 @@ bool cls_0x5b4f30::meth_0x472e30()
 
 // Function at 00477670
 
-undefined4 cls_0x5b4f30::meth_0x477670()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x477670()
 
 {
   short sVar1;
@@ -605,13 +605,13 @@ undefined4 cls_0x5b4f30::meth_0x477670()
 
 // Function at 004ced20
 
-int cls_0x5b4f30::meth_0x4ced20()
+int cls_0x5b4f30_TPlayer::meth_0x4ced20()
 
 {
   int iVar1;
   undefined4 in_stack_00000004;
   
-  iVar1 = TPlayScreen::meth_0x4ce350(&this->TPlayScreen);
+  iVar1 = TPlayScreen::meth_0x4ce350_Walk(&this->TPlayScreen);
   if (iVar1 != 0) {
     cls_0x57d9d0::meth_0x583e80
               ((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,this,0x1c,in_stack_00000004,1);
@@ -625,7 +625,7 @@ int cls_0x5b4f30::meth_0x4ced20()
 
 /* WARNING: Type propagation algorithm not settling */
 
-undefined4 cls_0x5b4f30::meth_0x4cf2e0()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4cf2e0()
 
 {
   dword dVar1;
@@ -662,7 +662,7 @@ undefined4 cls_0x5b4f30::meth_0x4cf2e0()
     return 0;
   }
   dVar1 = (this->TPlayScreen).TScreen.mbr_0xe0;
-  if ((dVar1 != 0) && (iVar4 = FUN_004dab80(dVar1,s_sneak_005c618c), iVar4 != 0)) {
+  if ((dVar1 != 0) && (iVar4 = FUN_004dab80_TActionBlock_Is(dVar1,s_sneak_005c618c), iVar4 != 0)) {
     ExceptionList = local_c;
     return 1;
   }
@@ -709,18 +709,18 @@ undefined4 cls_0x5b4f30::meth_0x4cf2e0()
 
 // Function at 004d01e0
 
-undefined4 cls_0x5b4f30::meth_0x4d01e0()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d01e0()
 
 {
   short sVar1;
   undefined uVar2;
   int3 extraout_var;
   int iVar3;
-  cls_0x5b4f30 *pcVar4;
+  cls_0x5b4f30_TPlayer *pcVar4;
   undefined3 extraout_var_00;
   undefined4 uVar5;
   int *piVar6;
-  cls_0x5b4f30 *this_00;
+  cls_0x5b4f30_TPlayer *this_00;
   char *pcVar7;
   dword dStack_ac;
   dword dStack_a8;
@@ -740,7 +740,7 @@ undefined4 cls_0x5b4f30::meth_0x4d01e0()
   dStack_ac = (this->TPlayScreen).TScreen.mbr_0x10;
   dStack_a8 = (this->TPlayScreen).TScreen.mbr_0x14;
   dStack_a4 = (this->TPlayScreen).TScreen.mbr_0x18;
-  FUN_0046db20((uint)(this->TPlayScreen).TScreen.mbr_0x36,0x3c,&iStack_98,0);
+  FUN_0046db20_ConvertToVector((uint)(this->TPlayScreen).TScreen.mbr_0x36,0x3c,&iStack_98,0);
   dStack_a4 = dStack_a4 + iStack_90;
   dStack_ac = dStack_ac + iStack_98;
   dStack_a8 = dStack_a8 + iStack_94;
@@ -748,7 +748,7 @@ undefined4 cls_0x5b4f30::meth_0x4d01e0()
                     ((TCharacter *)&DAT_006668d8,&dStack_ac,
                      (char)(this->TPlayScreen).TScreen.mbr_0xe,aiStack_28,0x3c,0,0xffffffff,10
                     );
-  this_00 = (cls_0x5b4f30 *)0x0;
+  this_00 = (cls_0x5b4f30_TPlayer *)0x0;
   uVar5 = iStack_a0;
   if (iVar3 < 1) {
 LAB_004d0309:
@@ -762,15 +762,15 @@ LAB_004d0309:
   piVar6 = aiStack_28;
   iStack_a0 = iVar3;
   do {
-    pcVar4 = (cls_0x5b4f30 *)FUN_00452690(*piVar6,0);
-    if (((pcVar4 != (cls_0x5b4f30 *)0x0) &&
+    pcVar4 = (cls_0x5b4f30_TPlayer *)FUN_00452690_TMapPane_GetInstance(*piVar6,0);
+    if (((pcVar4 != (cls_0x5b4f30_TPlayer *)0x0) &&
         ((*(byte *)&(pcVar4->TPlayScreen).TScreen.mbr_0x8 & 0x80) == 0)) &&
        (((sVar1 = *(short *)&(pcVar4->TPlayScreen).TScreen.mbr_0x4, sVar1 == 5 ||
          (sVar1 == 10)) ||
         ((((sVar1 == 0xb || (sVar1 == 0xc)) && (pcVar4 != this)) &&
-         (iVar3 = TPlayScreen::meth_0x4c89c0(&this->TPlayScreen), iVar3 == 0)))))) {
+         (iVar3 = TPlayScreen::meth_0x4c89c0_IsEnemy(&this->TPlayScreen), iVar3 == 0)))))) {
       uVar2 = (*((this->TPlayScreen).TScreen.vftptr_0x0)->FUN_0046ea20_4)(pcVar4);
-      if ((this_00 == (cls_0x5b4f30 *)0x0) || (CONCAT31(extraout_var_00,uVar2) <= iStack_9c)) {
+      if ((this_00 == (cls_0x5b4f30_TPlayer *)0x0) || (CONCAT31(extraout_var_00,uVar2) <= iStack_9c)) {
         this_00 = pcVar4;
         iStack_9c = CONCAT31(extraout_var_00,uVar2);
       }
@@ -779,7 +779,7 @@ LAB_004d0309:
     iStack_a0 = iStack_a0 + -1;
   } while (iStack_a0 != 0);
   uVar5 = 0;
-  if (this_00 == (cls_0x5b4f30 *)0x0) goto LAB_004d0309;
+  if (this_00 == (cls_0x5b4f30_TPlayer *)0x0) goto LAB_004d0309;
   if (this != DAT_00667fcc) goto LAB_004d0411;
   sVar1 = *(short *)&(this_00->TPlayScreen).TScreen.mbr_0x4;
   if ((sVar1 == 0xb) || (sVar1 == 0xc)) {
@@ -813,19 +813,19 @@ LAB_004d0411:
 
 // Function at 004d0430
 
-undefined4 cls_0x5b4f30::meth_0x4d0430()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d0430()
 
 {
   undefined uVar1;
   int3 extraout_var;
   int iVar2;
-  cls_0x5b4f30 *this_00;
+  cls_0x5b4f30_TPlayer *this_00;
   undefined3 extraout_var_00;
   undefined3 extraout_var_01;
   undefined3 extraout_var_02;
   undefined4 uVar3;
   int *piVar4;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   dword dStack_ac;
   dword dStack_a8;
   dword dStack_a4;
@@ -843,7 +843,7 @@ undefined4 cls_0x5b4f30::meth_0x4d0430()
   dStack_ac = (this->TPlayScreen).TScreen.mbr_0x10;
   dStack_a8 = (this->TPlayScreen).TScreen.mbr_0x14;
   dStack_a4 = (this->TPlayScreen).TScreen.mbr_0x18;
-  FUN_0046db20((uint)(this->TPlayScreen).TScreen.mbr_0x36,0x28,&iStack_98,0);
+  FUN_0046db20_ConvertToVector((uint)(this->TPlayScreen).TScreen.mbr_0x36,0x28,&iStack_98,0);
   dStack_a4 = dStack_a4 + iStack_90;
   dStack_ac = dStack_ac + iStack_98;
   dStack_a8 = dStack_a8 + iStack_94;
@@ -851,14 +851,14 @@ undefined4 cls_0x5b4f30::meth_0x4d0430()
                     ((TCharacter *)&DAT_006668d8,&dStack_ac,
                      (char)(this->TPlayScreen).TScreen.mbr_0xe,aiStack_8c,0x50,0,0xffffffff,10
                     );
-  this_01 = (cls_0x5b4f30 *)0x0;
+  this_01 = (cls_0x5b4f30_TPlayer *)0x0;
   uVar3 = iStack_a0;
   if (0 < iVar2) {
     piVar4 = aiStack_8c;
     iStack_a0 = iVar2;
     do {
-      this_00 = (cls_0x5b4f30 *)FUN_00452690(*piVar4,0);
-      if ((this_00 != (cls_0x5b4f30 *)0x0) && (this_00 != this)) {
+      this_00 = (cls_0x5b4f30_TPlayer *)FUN_00452690_TMapPane_GetInstance(*piVar4,0);
+      if ((this_00 != (cls_0x5b4f30_TPlayer *)0x0) && (this_00 != this)) {
         uVar1 = (*((this_00->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477a20_192)
                           (this_00);
         if (CONCAT31(extraout_var_00,uVar1) == -1) {
@@ -868,7 +868,7 @@ undefined4 cls_0x5b4f30::meth_0x4d0430()
         }
         if ((*(byte *)&(this_00->TPlayScreen).TScreen.mbr_0x8 & 0x80) == 0) {
           uVar1 = (*((this->TPlayScreen).TScreen.vftptr_0x0)->FUN_0046ea20_4)(this_00);
-          if ((this_01 == (cls_0x5b4f30 *)0x0) || (CONCAT31(extraout_var_02,uVar1) <= iStack_a0)) {
+          if ((this_01 == (cls_0x5b4f30_TPlayer *)0x0) || (CONCAT31(extraout_var_02,uVar1) <= iStack_a0)) {
             this_01 = this_00;
             iStack_a0 = CONCAT31(extraout_var_02,uVar1);
           }
@@ -879,7 +879,7 @@ LAB_004d0532:
       iStack_a0 = iStack_a0 + -1;
     } while (iStack_a0 != 0);
     uVar3 = 0;
-    if (this_01 != (cls_0x5b4f30 *)0x0) {
+    if (this_01 != (cls_0x5b4f30_TPlayer *)0x0) {
       if (this == DAT_00667fcc) {
         TPlayScreen::meth_0x46e7d0(&this_01->TPlayScreen,auStack_64);
         iVar2 = cls_0x45f7c0::meth_0x49d6d0((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310);
@@ -908,7 +908,7 @@ LAB_004d0532:
 
 // Function at 004d0aa0
 
-undefined4 cls_0x5b4f30::meth_0x4d0aa0()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d0aa0()
 
 {
   int *piVar1;
@@ -938,8 +938,8 @@ undefined4 cls_0x5b4f30::meth_0x4d0aa0()
   if ((piVar1 != (int *)0x0) && (*piVar1 == 0x19)) {
     in_stack_ffffffe4 = (byte *)((this->TPlayScreen).TScreen.mbr_0xd8 + 4);
     ExceptionList = &local_c;
-    pbVar6 = (byte *)FUN_004dadd0(piVar1 + 1,&DAT_005e02fc);
-    uVar7 = FUN_0059a530(extraout_ECX,pbVar6,in_stack_ffffffe4);
+    pbVar6 = (byte *)FUN_004dadd0_StName(piVar1 + 1,&DAT_005e02fc);
+    uVar7 = FUN_0059a530_stricmp(extraout_ECX,pbVar6,in_stack_ffffffe4);
     if (uVar7 != 0) {
       in_stack_ffffffe4 = (byte *)0x4d0b17;
       uVar4 = (*((this->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477e50_448)(this);
@@ -977,7 +977,7 @@ undefined4 cls_0x5b4f30::meth_0x4d0aa0()
         piVar1 = (int *)(this->TPlayScreen).TScreen.mbr_0xd8;
         if ((piVar1 != (int *)0x0) &&
            (((iVar8 = *piVar1, iVar8 == 2 || (iVar8 == 4)) || (iVar8 == 0x1a)))) {
-          TPlayScreen::meth_0x4cee70(&this->TPlayScreen);
+          TPlayScreen::meth_0x4cee70_Stop(&this->TPlayScreen);
         }
         this_00 = (cls_0x4da9f0 *)FUN_00482fb0(100);
         if (this_00 == (cls_0x4da9f0 *)0x0) {
@@ -1006,7 +1006,7 @@ undefined4 cls_0x5b4f30::meth_0x4d0aa0()
 
 // Function at 004d0c70
 
-undefined4 cls_0x5b4f30::meth_0x4d0c70()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d0c70()
 
 {
   byte bVar1;
@@ -1024,8 +1024,8 @@ undefined4 cls_0x5b4f30::meth_0x4d0c70()
   piVar2 = (int *)(this->TPlayScreen).TScreen.mbr_0xe0;
   if ((piVar2 != (int *)0x0) && (*piVar2 == 0x19)) {
     pbVar8 = (byte *)((this->TPlayScreen).TScreen.mbr_0xd8 + 4);
-    pbVar5 = (byte *)FUN_004dadd0(piVar2 + 1,&DAT_005e02fc);
-    uVar6 = FUN_0059a530(extraout_ECX,pbVar5,pbVar8);
+    pbVar5 = (byte *)FUN_004dadd0_StName(piVar2 + 1,&DAT_005e02fc);
+    uVar6 = FUN_0059a530_stricmp(extraout_ECX,pbVar5,pbVar8);
     if ((uVar6 == 0) &&
        (uVar4 = (*((this->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477e50_448)(this),
        CONCAT31(extraout_var,uVar4) != 0 && -1 < extraout_var)) {
@@ -1070,7 +1070,7 @@ undefined4 cls_0x5b4f30::meth_0x4d0c70()
 
 // Function at 004d0dc0
 
-void cls_0x5b4f30::meth_0x4d0dc0()
+void cls_0x5b4f30_TPlayer::meth_0x4d0dc0()
 
 {
   meth_0x4d0c70(this);
@@ -1081,7 +1081,7 @@ void cls_0x5b4f30::meth_0x4d0dc0()
 
 // Function at 004d0de0
 
-void cls_0x5b4f30::meth_0x4d0de0()
+void cls_0x5b4f30_TPlayer::meth_0x4d0de0()
 
 {
   meth_0x4d0c70(this);
@@ -1092,7 +1092,7 @@ void cls_0x5b4f30::meth_0x4d0de0()
 
 // Function at 004d0fd0
 
-int cls_0x5b4f30::meth_0x4d0fd0()
+int cls_0x5b4f30_TPlayer::meth_0x4d0fd0()
 
 {
   int iVar1;
@@ -1110,7 +1110,7 @@ int cls_0x5b4f30::meth_0x4d0fd0()
 
 // Function at 004d1000
 
-int cls_0x5b4f30::meth_0x4d1000()
+int cls_0x5b4f30_TPlayer::meth_0x4d1000()
 
 {
   int iVar1;
@@ -1119,7 +1119,7 @@ int cls_0x5b4f30::meth_0x4d1000()
   if (in_stack_00000004 == 0) {
     return 0;
   }
-  TPlayScreen::meth_0x46ea90(&this->TPlayScreen);
+  TPlayScreen::meth_0x46ea90_AngleTo(&this->TPlayScreen);
   iVar1 = TPlayScreen::meth_0x4d0e00(&this->TPlayScreen);
   if (iVar1 != 0) {
     cls_0x57d9d0::meth_0x583f60
@@ -1133,7 +1133,7 @@ int cls_0x5b4f30::meth_0x4d1000()
 
 // Function at 004d1050
 
-bool cls_0x5b4f30::meth_0x4d1050()
+bool cls_0x5b4f30_TPlayer::meth_0x4d1050()
 
 {
   int *piVar1;
@@ -1145,8 +1145,8 @@ bool cls_0x5b4f30::meth_0x4d1050()
   piVar1 = (int *)(this->TPlayScreen).TScreen.mbr_0xe0;
   if ((piVar1 != (int *)0x0) && (*piVar1 == 0x19)) {
     pbVar4 = (byte *)((this->TPlayScreen).TScreen.mbr_0xd8 + 4);
-    pbVar2 = (byte *)FUN_004dadd0(piVar1 + 1,&DAT_005e02fc);
-    uVar3 = FUN_0059a530(extraout_ECX,pbVar2,pbVar4);
+    pbVar2 = (byte *)FUN_004dadd0_StName(piVar1 + 1,&DAT_005e02fc);
+    uVar3 = FUN_0059a530_stricmp(extraout_ECX,pbVar2,pbVar4);
     return uVar3 == 0;
   }
   return false;
@@ -1156,7 +1156,7 @@ bool cls_0x5b4f30::meth_0x4d1050()
 
 // Function at 004d1dd0
 
-undefined4 cls_0x5b4f30::meth_0x4d1dd0(undefined param_1, undefined param_2, undefined param_3, undefined param_4, undefined param_5, undefined4 param_6, undefined param_7, int param_8)
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d1dd0(undefined param_1, undefined param_2, undefined param_3, undefined param_4, undefined param_5, undefined4 param_6, undefined param_7, int param_8)
 
 {
   int iVar1;
@@ -1173,7 +1173,7 @@ undefined4 cls_0x5b4f30::meth_0x4d1dd0(undefined param_1, undefined param_2, und
     iVar2 = 0;
     if (0 < *(int *)(*(int *)&(this->TPlayScreen).TScreen.field_0xfc + 0xcc)) {
       do {
-        iVar1 = TPlayScreen::meth_0x4d1120(&this->TPlayScreen,iVar2);
+        iVar1 = TPlayScreen::meth_0x4d1120_IsValidAttack(&this->TPlayScreen,iVar2);
         if (iVar1 != 0) {
           *_param_3 = iVar2;
           return 1;
@@ -1190,7 +1190,7 @@ undefined4 cls_0x5b4f30::meth_0x4d1dd0(undefined param_1, undefined param_2, und
 
 // Function at 004d2480
 
-undefined4 cls_0x5b4f30::meth_0x4d2480()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d2480_ButtonAttack()
 
 {
   int *piVar1;
@@ -1233,7 +1233,7 @@ undefined4 cls_0x5b4f30::meth_0x4d2480()
     if ((piVar1 == (int *)0x0) ||
        (((iVar4 = *piVar1, iVar4 != 3 && ((piVar1 == (int *)0x0 || (iVar4 != 0x19)))) ||
         (this_00 = (TPlayScreen *)piVar1[0x11], this_00 == (TPlayScreen *)0x0)))) {
-      iVar4 = TPlayScreen::meth_0x4cd690
+      iVar4 = TPlayScreen::meth_0x4cd690_FindCharacters
                         (&this->TPlayScreen,&uStack_4,1,0xff,
                          (this->TPlayScreen).TScreen.mbr_0x36,0x20);
       this_00 = (TPlayScreen *)((iVar4 < 1) - 1 & uStack_4);
@@ -1265,8 +1265,8 @@ undefined4 cls_0x5b4f30::meth_0x4d2480()
         (this->TPlayScreen).mbr_0x290 = 1;
       }
       (this->TPlayScreen).mbr_0x28c = in_stack_00000004;
-      if ((iStack_20 != 0) && (iVar4 = FUN_00483300(0,10), iVar4 == 0)) {
-        FUN_00483300(1,0x32);
+      if ((iStack_20 != 0) && (iVar4 = FUN_00483300_RandomRange(0,10), iVar4 == 0)) {
+        FUN_00483300_RandomRange(1,0x32);
         pcVar2 = (this_00->TScreen).vftptr_0x0;
         iStack_24 = -1;
         this_00->mbr_0x120 = 0;
@@ -1274,8 +1274,8 @@ undefined4 cls_0x5b4f30::meth_0x4d2480()
         (*pcVar2->virt_meth_0x477e80_460)(this_00);
         iStack_1c = 0;
         do {
-          iVar4 = TPlayScreen::meth_0x4d1ff0(this_00);
-          if ((iVar4 != 0) || (iVar4 = TPlayScreen::meth_0x4d1eb0(this_00), iVar4 != 0)) {
+          iVar4 = TPlayScreen::meth_0x4d1ff0_FindButtonAttack(this_00);
+          if ((iVar4 != 0) || (iVar4 = TPlayScreen::meth_0x4d1eb0_FindPcntAttack(this_00), iVar4 != 0)) {
             iVar5 = *(int *)&(this_00->TScreen).field_0xfc;
             iVar7 = *(int *)(*(int *)(iVar5 + 0xdc) + unaff_EBX * 4);
             if (iVar7 == 0) {
@@ -1286,13 +1286,13 @@ undefined4 cls_0x5b4f30::meth_0x4d2480()
           }
           iStack_1c = iStack_1c + 1;
         } while (iStack_1c < 10);
-        if ((iVar4 != 0) && (iVar4 = TPlayScreen::meth_0x4d2120(this_00), iVar4 != 0)) {
+        if ((iVar4 != 0) && (iVar4 = TPlayScreen::meth_0x4d2120_DoAttack(this_00), iVar4 != 0)) {
           return 0;
         }
       }
     }
-    iVar4 = FUN_00483300(1,0x32);
-    iVar5 = FUN_00483300(1,0x32);
+    iVar4 = FUN_00483300_RandomRange(1,0x32);
+    iVar5 = FUN_00483300_RandomRange(1,0x32);
     auStack_c[0] = 0xffffffff;
     uStack_10 = 0xffffffff;
     uStack_14 = 0xffffffff;
@@ -1304,7 +1304,7 @@ undefined4 cls_0x5b4f30::meth_0x4d2480()
     iVar4 = meth_0x4d1dd0(this,unaff_retaddr,(char)iVar4 + (char)iVar5,(char)auStack_c,
                           (char)&uStack_10,(char)&uStack_14,&uStack_18,(char)&iStack_20,0);
     if (iVar4 != 0) {
-      uVar6 = TPlayScreen::meth_0x4d2120(&this->TPlayScreen);
+      uVar6 = TPlayScreen::meth_0x4d2120_DoAttack(&this->TPlayScreen);
       return uVar6;
     }
   }
@@ -1315,7 +1315,7 @@ undefined4 cls_0x5b4f30::meth_0x4d2480()
 
 // Function at 004d27f0
 
-undefined4 cls_0x5b4f30::meth_0x4d27f0()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d27f0()
 
 {
   dword dVar1;
@@ -1345,10 +1345,10 @@ undefined4 cls_0x5b4f30::meth_0x4d27f0()
         return 0;
       }
     }
-    TPlayScreen::meth_0x4cd690
+    TPlayScreen::meth_0x4cd690_FindCharacters
               (&this->TPlayScreen,auStack_4,1,0,(this->TPlayScreen).TScreen.mbr_0x36,0x20);
-    iVar3 = FUN_00483300(1,0x32);
-    iVar4 = FUN_00483300(1,0x32);
+    iVar3 = FUN_00483300_RandomRange(1,0x32);
+    iVar4 = FUN_00483300_RandomRange(1,0x32);
     uStack_8 = 0xffffffff;
     uStack_c = 0xffffffff;
     uStack_10 = 0xffffffff;
@@ -1357,7 +1357,7 @@ undefined4 cls_0x5b4f30::meth_0x4d27f0()
     iVar3 = meth_0x4d1dd0(this,in_stack_00000004,(char)iVar3 + (char)iVar4,(char)&uStack_8,
                           (char)&uStack_c,(char)&uStack_10,&uStack_14,(char)&uStack_18,1);
     if (iVar3 != 0) {
-      uVar5 = TPlayScreen::meth_0x4d2120(&this->TPlayScreen);
+      uVar5 = TPlayScreen::meth_0x4d2120_DoAttack(&this->TPlayScreen);
       return uVar5;
     }
   }
@@ -1368,7 +1368,7 @@ undefined4 cls_0x5b4f30::meth_0x4d27f0()
 
 // Function at 004d2be0
 
-undefined4 cls_0x5b4f30::meth_0x4d2be0()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d2be0()
 
 {
   char cVar1;
@@ -1419,7 +1419,7 @@ undefined4 cls_0x5b4f30::meth_0x4d2be0()
     }
     if ((*(short *)&(this->TPlayScreen).TScreen.mbr_0x4 == 0xb) &&
        (((this->TPlayScreen).mbr_0x36c & 2) != 0)) {
-      meth_0x51d680(this);
+      meth_0x51d680_SetPlayerState(this);
     }
     if (((DAT_0066829c == 0) ||
         (uVar6 = (*((this->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477570_376)(this),
@@ -1450,7 +1450,7 @@ undefined4 cls_0x5b4f30::meth_0x4d2be0()
       case 7:
         in_stack_00000004 = s_leapfl_005e0398;
       }
-      pcVar7 = (char *)FUN_004dadd0((this->TPlayScreen).TScreen.mbr_0xe0 + 4,in_stack_00000004
+      pcVar7 = (char *)FUN_004dadd0_StName((this->TPlayScreen).TScreen.mbr_0xe0 + 4,in_stack_00000004
                                    );
       uVar9 = 0xffffffff;
       do {
@@ -1505,7 +1505,7 @@ undefined4 cls_0x5b4f30::meth_0x4d2be0()
 
 // Function at 004d30f0
 
-undefined4 cls_0x5b4f30::meth_0x4d30f0()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d30f0()
 
 {
   int *piVar1;
@@ -1513,7 +1513,7 @@ undefined4 cls_0x5b4f30::meth_0x4d30f0()
   piVar1 = (int *)(this->TPlayScreen).TScreen.mbr_0xe0;
   if (((piVar1 != (int *)0x0) &&
       (((*piVar1 == 3 || ((piVar1 != (int *)0x0 && (*piVar1 == 0x19)))) &&
-       (this != (cls_0x5b4f30 *)0x0)))) &&
+       (this != (cls_0x5b4f30_TPlayer *)0x0)))) &&
      ((piVar1 = (int *)(this->TPlayScreen).TScreen.mbr_0xd8, piVar1 != (int *)0x0 &&
       (*piVar1 == 8)))) {
     piVar1[10] = 0;
@@ -1526,7 +1526,7 @@ undefined4 cls_0x5b4f30::meth_0x4d30f0()
 
 // Function at 004d3150
 
-undefined4 cls_0x5b4f30::meth_0x4d3150()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d3150()
 
 {
   char cVar1;
@@ -1573,7 +1573,7 @@ undefined4 cls_0x5b4f30::meth_0x4d3150()
       return 0;
     }
   }
-  if (this == (cls_0x5b4f30 *)0x0) {
+  if (this == (cls_0x5b4f30_TPlayer *)0x0) {
     ExceptionList = pvStack_14;
     return 0;
   }
@@ -1607,7 +1607,7 @@ undefined4 cls_0x5b4f30::meth_0x4d3150()
   }
   if ((*(short *)&(this->TPlayScreen).TScreen.mbr_0x4 == 0xb) &&
      (((this->TPlayScreen).mbr_0x36c & 2) != 0)) {
-    meth_0x51d680(this);
+    meth_0x51d680_SetPlayerState(this);
   }
   if (((DAT_0066829c != 0) &&
       (uVar5 = (*((this->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477570_376)(this),
@@ -1639,7 +1639,7 @@ undefined4 cls_0x5b4f30::meth_0x4d3150()
     puVar10 = (undefined4 *)((int)puVar10 + 1);
     puVar13 = (undefined4 *)((int)puVar13 + 1);
   }
-  iVar6 = FUN_004dab80((this->TPlayScreen).TScreen.mbr_0xe0,&DAT_005e064c);
+  iVar6 = FUN_004dab80_TActionBlock_Is((this->TPlayScreen).TScreen.mbr_0xe0,&DAT_005e064c);
   if (iVar6 != 0) {
     uStack_20 = 0x68;
   }
@@ -1832,7 +1832,7 @@ switchD_004d3303_caseD_8:
 
 // Function at 004d4610
 
-undefined4 cls_0x5b4f30::meth_0x4d4610()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d4610()
 
 {
   dword dVar1;
@@ -1842,7 +1842,7 @@ undefined4 cls_0x5b4f30::meth_0x4d4610()
   int3 extraout_var;
   undefined3 extraout_var_00;
   int iVar4;
-  cls_0x5b4f30 *pcVar5;
+  cls_0x5b4f30_TPlayer *pcVar5;
   undefined4 uVar6;
   undefined1 unaff_retaddr;
   undefined1 in_stack_00000004;
@@ -1861,15 +1861,15 @@ undefined4 cls_0x5b4f30::meth_0x4d4610()
   this_00 = (SoftwareRenderer *)cStack_4c.mbr_0xc;
   while (this_00 != (SoftwareRenderer *)0x0) {
     cStack_4c.mbr_0xc = (dword)this_00;
-    iVar4 = FUN_0046de60((int *)&stack0xffffffa8,(int *)&this_00->mbr_0x10);
+    iVar4 = FUN_0046de60_Distance2D((int *)&stack0xffffffa8,(int *)&this_00->mbr_0x10);
     if (((iVar4 < 0x81) && (this_00->mbr_0x4 == 0x19)) && (dVar1 = this_00->mbr_0xd8, dVar1 != 0)) {
       if (*(int *)(dVar1 + 0xc) < 1) {
-        pcVar5 = (cls_0x5b4f30 *)0x0;
+        pcVar5 = (cls_0x5b4f30_TPlayer *)0x0;
       }
       else {
-        pcVar5 = *(cls_0x5b4f30 **)(dVar1 + 0x10);
+        pcVar5 = *(cls_0x5b4f30_TPlayer **)(dVar1 + 0x10);
       }
-      if ((pcVar5 == this) || ((cls_0x5b4f30 *)this_00->mbr_0xe4 == this)) {
+      if ((pcVar5 == this) || ((cls_0x5b4f30_TPlayer *)this_00->mbr_0xe4 == this)) {
         SoftwareRenderer::meth_0x4defe0(this_00);
       }
     }
@@ -1899,7 +1899,7 @@ undefined4 cls_0x5b4f30::meth_0x4d4610()
 
 // Function at 004d56c0
 
-void cls_0x5b4f30::meth_0x4d56c0()
+void cls_0x5b4f30_TPlayer::meth_0x4d56c0()
 
 {
   undefined uVar1;
@@ -1929,7 +1929,7 @@ void cls_0x5b4f30::meth_0x4d56c0()
 
 // Function at 004d5790
 
-dword cls_0x5b4f30::meth_0x4d5790()
+dword cls_0x5b4f30_TPlayer::meth_0x4d5790()
 
 {
   return (this->TPlayScreen).mbr_0x194;
@@ -1939,7 +1939,7 @@ dword cls_0x5b4f30::meth_0x4d5790()
 
 // Function at 004d5900
 
-undefined4 cls_0x5b4f30::meth_0x4d5900()
+undefined4 cls_0x5b4f30_TPlayer::meth_0x4d5900()
 
 {
   char cVar1;
@@ -2061,7 +2061,7 @@ undefined4 cls_0x5b4f30::meth_0x4d5900()
       puVar11 = (undefined4 *)((int)puVar11 + 1);
       puVar14 = (undefined4 *)((int)puVar14 + 1);
     }
-    TPlayScreen::meth_0x4ce1b0(&this->TPlayScreen,local_74);
+    TPlayScreen::meth_0x4ce1b0_BuildActionName(&this->TPlayScreen,local_74);
   }
   cVar4 = (*(this->TPlayScreen).TScreen.vftptr_0x0[1].virt_meth_0x477840_0)
                     ((TScreen *)this);
@@ -2128,7 +2128,7 @@ undefined4 cls_0x5b4f30::meth_0x4d5900()
 
 // Function at 004d6550
 
-void cls_0x5b4f30::meth_0x4d6550()
+void cls_0x5b4f30_TPlayer::meth_0x4d6550()
 
 {
   undefined4 uVar1;
@@ -2144,7 +2144,7 @@ void cls_0x5b4f30::meth_0x4d6550()
 
 // Function at 004f6ea0
 
-dword cls_0x5b4f30::meth_0x4f6ea0()
+dword cls_0x5b4f30_TPlayer::meth_0x4f6ea0()
 
 {
   return (this->TPlayScreen).TScreen.mbr_0xd8;
@@ -2154,7 +2154,7 @@ dword cls_0x5b4f30::meth_0x4f6ea0()
 
 // Function at 00518450
 
-cls_0x5b4f30::cls_0x5b4f30 *this,undefined4 param_1)
+cls_0x5b4f30_TPlayer::cls_0x5b4f30_TPlayer *this,undefined4 param_1)
 
 {
   undefined4 *puVar1;
@@ -2208,7 +2208,7 @@ cls_0x5b4f30::cls_0x5b4f30 *this,undefined4 param_1)
   local_4 = CONCAT31(local_4._1_3_,4);
   (this->TPlayScreen).TScreen.vftptr_0x0 =
        (TScreen__vftable_5a50e8 *)&cls_0x5b4f30__vftable_5b4f30_005b4f30;
-  meth_0x518750(this);
+  meth_0x518750_TPlayer_ClearPlayer(this);
   ExceptionList = local_c;
   return this;
 }
@@ -2217,15 +2217,15 @@ cls_0x5b4f30::cls_0x5b4f30 *this,undefined4 param_1)
 
 // Function at 00518570
 
-cls_0x5b4f30 * __thiscall cls_0x5b4f30::~cls_0x5b4f30(cls_0x5b4f30 *this)
+cls_0x5b4f30_TPlayer * __thiscall cls_0x5b4f30_TPlayer::~cls_0x5b4f30_TPlayer(cls_0x5b4f30_TPlayer *this)
 
 {
   undefined *puVar1;
   LPCVOID pvVar2;
   undefined4 *puVar3;
   int iVar4;
-  cls_0x5b4f30 *pcVar5;
-  cls_0x5b4f30 **ppcVar6;
+  cls_0x5b4f30_TPlayer *pcVar5;
+  cls_0x5b4f30_TPlayer **ppcVar6;
   int iVar7;
   dword *pdVar8;
   void *local_c;
@@ -2317,7 +2317,7 @@ LAB_0051866b:
   local_4 = (uint)local_4._1_3_ << 8;
   FUN_004830f0(*(LPCVOID *)&(this->TPlayScreen).field_0x2fc);
   local_4 = 0xffffffff;
-  pcVar5 = (cls_0x5b4f30 *)cls_0x5a761c::~cls_0x5a761c((cls_0x5a761c *)this);
+  pcVar5 = (cls_0x5b4f30_TPlayer *)cls_0x5a761c::~cls_0x5a761c((cls_0x5a761c *)this);
   ExceptionList = local_c;
   return pcVar5;
 }
@@ -2326,7 +2326,7 @@ LAB_0051866b:
 
 // Function at 00518750
 
-void cls_0x5b4f30::meth_0x518750()
+void cls_0x5b4f30_TPlayer::meth_0x518750_TPlayer_ClearPlayer()
 
 {
   undefined *this_00;
@@ -2448,7 +2448,7 @@ void cls_0x5b4f30::meth_0x518750()
       iVar9 = iVar9 + 1;
     } while (iVar9 < *(short *)(dVar5 + 0x1c));
   }
-  TPlayScreen::meth_0x51c660(&this->TPlayScreen);
+  TPlayScreen::meth_0x51c660_TPlayer_RefreshStats(&this->TPlayScreen);
   (this->TPlayScreen).field_0x4f0 = 0;
   (this->TPlayScreen).mbr_0x36c = 1;
   meth_0x472db0(this,&DAT_005e2714);
@@ -2513,7 +2513,7 @@ void cls_0x5b4f30::meth_0x518750()
 
 // Function at 00518ed0
 
-void cls_0x5b4f30::virt_meth_0x518ed0()
+void cls_0x5b4f30_TPlayer::virt_meth_0x518ed0()
 
 {
   int iVar1;
@@ -2558,7 +2558,7 @@ void cls_0x5b4f30::virt_meth_0x518ed0()
 
 // Function at 00519050
 
-void cls_0x5b4f30::meth_0x519050(int param_1, int param_2)
+void cls_0x5b4f30_TPlayer::meth_0x519050(int param_1, int param_2)
 
 {
   int iVar1;
@@ -2576,7 +2576,7 @@ void cls_0x5b4f30::meth_0x519050(int param_1, int param_2)
         cls_0x57d9d0::meth_0x587420((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,this,param_1,param_2);
       }
       if ((in_stack_0000000c != 0) && (*(short *)(in_stack_0000000c + 4) == 0xb)) {
-        FUN_00483300(0,4);
+        FUN_00483300_RandomRange(0,4);
         iVar1 = cls_0x45f7c0::meth_0x49d6d0((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310);
         if (iVar1 < 0) {
           FUN_004811b0(local_80,0x80,(byte *)s___s__killed___s__Plyr___d_Monst__005e275c);
@@ -2598,7 +2598,7 @@ void cls_0x5b4f30::meth_0x519050(int param_1, int param_2)
 
 // Function at 00519850
 
-char cls_0x5b4f30::virt_meth_0x519850()
+char cls_0x5b4f30_TPlayer::virt_meth_0x519850()
 
 {
   int *piVar1;
@@ -2663,7 +2663,7 @@ char cls_0x5b4f30::virt_meth_0x519850()
 
 // Function at 00519ea0
 
-bool cls_0x5b4f30::meth_0x519ea0()
+bool cls_0x5b4f30_TPlayer::meth_0x519ea0()
 
 {
   dword dVar1;
@@ -2705,7 +2705,7 @@ LAB_00519f9f:
       iVar4 = TPlayScreen::meth_0x5199b0(&this->TPlayScreen,piVar6);
       return iVar4 != 0;
     }
-    uVar2 = FUN_0059a530(uVar2,*(byte **)(local_38.mbr_0x18 + 0x38),(byte *)in_stack_00000004);
+    uVar2 = FUN_0059a530_stricmp(uVar2,*(byte **)(local_38.mbr_0x18 + 0x38),(byte *)in_stack_00000004);
     piVar5 = (int *)local_38.mbr_0x18;
     if (uVar2 == 0) {
       piVar3 = (int *)(**(code **)(*(int *)local_38.mbr_0x18 + 0x188))();
@@ -2722,7 +2722,7 @@ LAB_00519f9f:
     cls_0x477870::meth_0x46dfb0(&local_1c);
     uVar2 = extraout_ECX_00;
     while (piVar5 = piVar6, (int *)local_1c.mbr_0x18 != (int *)0x0) {
-      uVar2 = FUN_0059a530(uVar2,*(byte **)(local_1c.mbr_0x18 + 0x38),(byte *)in_stack_00000004);
+      uVar2 = FUN_0059a530_stricmp(uVar2,*(byte **)(local_1c.mbr_0x18 + 0x38),(byte *)in_stack_00000004);
       piVar5 = (int *)local_1c.mbr_0x18;
       if (uVar2 == 0) {
         piVar3 = (int *)(**(code **)(*(int *)local_1c.mbr_0x18 + 0x188))();
@@ -2741,7 +2741,7 @@ LAB_00519f9f:
 
 // Function at 0051a480
 
-int cls_0x5b4f30::virt_meth_0x51a480()
+int cls_0x5b4f30_TPlayer::virt_meth_0x51a480()
 
 {
   int iVar1;
@@ -2766,7 +2766,7 @@ int cls_0x5b4f30::virt_meth_0x51a480()
 
 // Function at 0051a4e0
 
-int cls_0x5b4f30::virt_meth_0x51a4e0()
+int cls_0x5b4f30_TPlayer::virt_meth_0x51a4e0()
 
 {
   int iVar1;
@@ -2784,7 +2784,7 @@ int cls_0x5b4f30::virt_meth_0x51a4e0()
 
 // Function at 0051a520
 
-int cls_0x5b4f30::virt_meth_0x51a520()
+int cls_0x5b4f30_TPlayer::virt_meth_0x51a520()
 
 {
   undefined uVar1;
@@ -2803,7 +2803,7 @@ int cls_0x5b4f30::virt_meth_0x51a520()
 
 // Function at 0051a550
 
-int cls_0x5b4f30::virt_meth_0x51a550()
+int cls_0x5b4f30_TPlayer::virt_meth_0x51a550()
 
 {
   undefined uVar1;
@@ -2822,7 +2822,7 @@ int cls_0x5b4f30::virt_meth_0x51a550()
 
 // Function at 0051b2f0
 
-void cls_0x5b4f30::virt_meth_0x51b2f0(undefined4 param_1)
+void cls_0x5b4f30_TPlayer::virt_meth_0x51b2f0(undefined4 param_1)
 
 {
   int *piVar1;
@@ -2844,7 +2844,7 @@ void cls_0x5b4f30::virt_meth_0x51b2f0(undefined4 param_1)
 
 // Function at 0051b340
 
-char * cls_0x5b4f30::virt_meth_0x51b340()
+char * cls_0x5b4f30_TPlayer::virt_meth_0x51b340_GetCombatRoot()
 
 {
   int iVar1;
@@ -2875,7 +2875,7 @@ char * cls_0x5b4f30::virt_meth_0x51b340()
 
 // Function at 0051b420
 
-void cls_0x5b4f30::meth_0x51b420()
+void cls_0x5b4f30_TPlayer::meth_0x51b420_GetOnYerHog()
 
 {
   int *piVar1;
@@ -2942,7 +2942,7 @@ void cls_0x5b4f30::meth_0x51b420()
 
 // Function at 0051d680
 
-void cls_0x5b4f30::meth_0x51d680()
+void cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState()
 
 {
   dword dVar1;
@@ -2955,7 +2955,7 @@ void cls_0x5b4f30::meth_0x51d680()
   if ((((in_stack_00000004 & 2) != 0) &&
       (piVar2 = (int *)(this->TPlayScreen).TScreen.mbr_0xd8, piVar2 != (int *)0x0)) &&
      ((iVar3 = *piVar2, iVar3 == 2 || ((iVar3 == 4 || (iVar3 == 0x1a)))))) {
-    TPlayScreen::meth_0x4cee70(&this->TPlayScreen);
+    TPlayScreen::meth_0x4cee70_Stop(&this->TPlayScreen);
   }
   if (DAT_0066829c != 0) {
     if (this == DAT_00667fcc) {
@@ -2982,7 +2982,7 @@ void cls_0x5b4f30::meth_0x51d680()
         }
       }
       if (((in_stack_00000004 & 0x10) == 0) &&
-         ((cls_0x5b4f30 *)(-(uint)((DAT_006669b0 & 1) != 0) & DAT_006669b4) != this)) {
+         ((cls_0x5b4f30_TPlayer *)(-(uint)((DAT_006669b0 & 1) != 0) & DAT_006669b4) != this)) {
         TCharacter::meth_0x4538d0((TCharacter *)&DAT_006668d8,this);
       }
     }
@@ -3002,7 +3002,7 @@ void cls_0x5b4f30::meth_0x51d680()
 
 // Function at 0051db30
 
-void cls_0x5b4f30::meth_0x51db30(int param_1)
+void cls_0x5b4f30_TPlayer::meth_0x51db30(int param_1)
 
 {
   undefined uVar1;
@@ -3178,7 +3178,7 @@ LAB_0051dd53:
 
 // Function at 0051ddf0
 
-void cls_0x5b4f30::meth_0x51ddf0()
+void cls_0x5b4f30_TPlayer::meth_0x51ddf0()
 
 {
   undefined uVar1;
@@ -3270,12 +3270,12 @@ LAB_0051df05:
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-undefined4 cls_0x5b4f30::meth_0x51e0a0(uint *param_1)
+undefined4 cls_0x5b4f30_TPlayer::meth_0x51e0a0_SavePlayerFile(uint *param_1)
 
 {
   char cVar1;
   int iVar2;
-  cls_0x5b4f30 *pcVar3;
+  cls_0x5b4f30_TPlayer *pcVar3;
   uint *puVar4;
   FILE *pFVar5;
   undefined4 uVar6;
@@ -3413,7 +3413,7 @@ LAB_0051e12b:
 
 // Function at 0051e420
 
-void cls_0x5b4f30::meth_0x51e420()
+void cls_0x5b4f30_TPlayer::meth_0x51e420()
 
 {
   int *piVar1;
@@ -3435,7 +3435,7 @@ void cls_0x5b4f30::meth_0x51e420()
 
 // Function at 0051e4d0
 
-void cls_0x5b4f30::meth_0x51e4d0()
+void cls_0x5b4f30_TPlayer::meth_0x51e4d0()
 
 {
   byte bVar1;
@@ -3507,7 +3507,7 @@ LAB_0051e552:
 
 // Function at 0051e5a0
 
-void cls_0x5b4f30::meth_0x51e5a0()
+void cls_0x5b4f30_TPlayer::meth_0x51e5a0()
 
 {
   int iVar1;
@@ -3526,7 +3526,7 @@ void cls_0x5b4f30::meth_0x51e5a0()
 
 // Function at 0051e5f0
 
-void cls_0x5b4f30::meth_0x51e5f0()
+void cls_0x5b4f30_TPlayer::meth_0x51e5f0()
 
 {
   TScreen__vftable_5a50e8 *pcVar1;
@@ -3555,7 +3555,7 @@ void cls_0x5b4f30::meth_0x51e5f0()
   iVar5 = (((CONCAT31(extraout_var,uVar2) * 0x1e) / 0x1e) * 0x2cb) / 100 - iVar5;
   if ((iVar5 < 0) || ((0 < iVar5 && (in_stack_00000008 != 0)))) {
     while (iVar5 != 0) {
-      iVar6 = FUN_00483300(0,10);
+      iVar6 = FUN_00483300_RandomRange(0,10);
       iVar6 = iVar6 + 0x28;
       uVar2 = (*((this->TPlayScreen).TScreen.vftptr_0x0)->FUN_00477aa0_220)(iVar6);
       if (iVar5 < 0) {
@@ -3599,7 +3599,7 @@ void cls_0x5b4f30::meth_0x51e5f0()
 
 // Function at 0051e740
 
-void cls_0x5b4f30::meth_0x51e740()
+void cls_0x5b4f30_TPlayer::meth_0x51e740()
 
 {
   TScreen__vftable_5a50e8 *pcVar1;
@@ -3683,7 +3683,7 @@ void cls_0x5b4f30::meth_0x51e740()
 
 // Function at 0051e8f0
 
-void cls_0x5b4f30::meth_0x51e8f0()
+void cls_0x5b4f30_TPlayer::meth_0x51e8f0()
 
 {
   (*((this->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x46fde0_132)(this);
@@ -3694,25 +3694,25 @@ void cls_0x5b4f30::meth_0x51e8f0()
 
 // Function at 0051e900
 
-void cls_0x5b4f30::meth_0x51e900()
+void cls_0x5b4f30_TPlayer::meth_0x51e900()
 
 {
   undefined uVar1;
   undefined3 extraout_var;
   int in_stack_00000004;
-  cls_0x5b4f30 *this_00;
+  cls_0x5b4f30_TPlayer *this_00;
   
   cls_0x57d9d0::meth_0x583f60((cls_0x57d9d0 *)&UNK_00676e04.field_0x4,this,0x49,in_stack_00000004,0)
   ;
   DAT_00676e5d._0_1_ = 1;
   uVar1 = (*((this->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x470280_168)(this);
-  this_00 = (cls_0x5b4f30 *)CONCAT31(extraout_var,uVar1);
+  this_00 = (cls_0x5b4f30_TPlayer *)CONCAT31(extraout_var,uVar1);
   if (in_stack_00000004 < 1) {
-    if (this_00 != (cls_0x5b4f30 *)0x0) {
+    if (this_00 != (cls_0x5b4f30_TPlayer *)0x0) {
       FUN_0046e6d0(this_00);
     }
   }
-  else if (this_00 == (cls_0x5b4f30 *)0x0) {
+  else if (this_00 == (cls_0x5b4f30_TPlayer *)0x0) {
     (*((this->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x46f940_84)(this);
   }
   else {
@@ -3731,7 +3731,7 @@ void cls_0x5b4f30::meth_0x51e900()
 
 // Function at 0051e9a0
 
-int cls_0x5b4f30::meth_0x51e9a0()
+int cls_0x5b4f30_TPlayer::meth_0x51e9a0()
 
 {
   int iVar1;
@@ -3775,7 +3775,7 @@ int cls_0x5b4f30::meth_0x51e9a0()
 
 // Function at 0051ea40
 
-void cls_0x5b4f30::meth_0x51ea40()
+void cls_0x5b4f30_TPlayer::meth_0x51ea40()
 
 {
   undefined uVar1;
@@ -3876,7 +3876,7 @@ void cls_0x5b4f30::meth_0x51ea40()
 
 // Function at 0051ec20
 
-void cls_0x5b4f30::virt_meth_0x51ec20(int param_1)
+void cls_0x5b4f30_TPlayer::virt_meth_0x51ec20_RemoveItem(int param_1)
 
 {
   dword dVar1;
@@ -3909,12 +3909,12 @@ LAB_0051ec64:
 
 // Function at 0051ff00
 
-cls_0x5b4f30 * cls_0x5b4f30::virt_meth_0x51ff00()
+cls_0x5b4f30_TPlayer * cls_0x5b4f30_TPlayer::virt_meth_0x51ff00_dtor()
 
 {
   byte in_stack_00000004;
   
-  ~cls_0x5b4f30(this);
+  ~cls_0x5b4f30_TPlayer(this);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }
@@ -3925,7 +3925,7 @@ cls_0x5b4f30 * cls_0x5b4f30::virt_meth_0x51ff00()
 
 // Function at 00520630
 
-int cls_0x5b4f30::virt_meth_0x520630()
+int cls_0x5b4f30_TPlayer::virt_meth_0x520630_MaxHealth()
 
 {
   int iVar1;
@@ -3958,7 +3958,7 @@ int cls_0x5b4f30::virt_meth_0x520630()
 
 // Function at 005206d0
 
-int cls_0x5b4f30::virt_meth_0x5206d0()
+int cls_0x5b4f30_TPlayer::virt_meth_0x5206d0_MaxFatigue()
 
 {
   int iVar1;
@@ -3991,7 +3991,7 @@ int cls_0x5b4f30::virt_meth_0x5206d0()
 
 // Function at 00520770
 
-int cls_0x5b4f30::virt_meth_0x520770()
+int cls_0x5b4f30_TPlayer::virt_meth_0x520770_MaxMana()
 
 {
   int iVar1;
@@ -4024,7 +4024,7 @@ int cls_0x5b4f30::virt_meth_0x520770()
 
 // Function at 00520860
 
-int cls_0x5b4f30::virt_meth_0x520860()
+int cls_0x5b4f30_TPlayer::virt_meth_0x520860_StealthMod()
 
 {
   int *piVar1;

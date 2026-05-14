@@ -6,7 +6,7 @@
 
 // Function at 00499500
 
-void SAutoMapData::meth_0x499500()
+void SAutoMapData::meth_0x499500_TSector_InitLights()
 
 {
   int *piVar1;

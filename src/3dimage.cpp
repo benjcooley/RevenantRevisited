@@ -7,7 +7,7 @@
 // *  buffers replaced by sokol-facing stubs. Animation-key decoders,      *
 // *  matrix builders, tag/sound wiring, and mesh loading are unchanged    *
 // *  portable logic. AddTexture / LoadTexture / RemoveTexture and         *
-// *  AddMaterial are now #if 0 stubs — they'll grow real sg_image uploads *
+// *  AddMaterial is now handle-based; concrete GPU objects stay in renderer *
 // *  in Phase 3.                                                          *
 // *************************************************************************
 
@@ -24,8 +24,11 @@
 #include "logging.h"
 #include "mappane.h"
 #include "math3d.h"
+#include "i3danimpose.h"
 #include "parse.h"
+#include "renderer.h"
 #include "sound.h"
+#include "time.h"
 
 T3DAnimatorBuilder T3DAnimatorBuilderInstance;  // Register default builder
 
@@ -135,6 +138,19 @@ static bool DecodeTextureFrameRGBA(const SSurfaceDesc* srcsd, const void* srcpix
     }
 
     return false;
+}
+
+static uint64_t I3DTextureAssetKey(AssetUid asset_id, int32_t texture_index, int32_t frame_index)
+{
+    uint64_t hash = 1469598103934665603ull;
+    auto mix = [&hash](uint64_t value) {
+        hash ^= value;
+        hash *= 1099511628211ull;
+    };
+    mix(asset_id);
+    mix(uint64_t(uint32_t(texture_index)));
+    mix(uint64_t(uint32_t(frame_index)));
+    return hash ? hash : 1ull;
 }
 
 // Use the shared row-vector matrix helpers from math3d.cpp directly so the
@@ -1162,7 +1178,13 @@ bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t 
                 else
                     num = 0;
 
-                if ((num <= 0) || (curframe + frames >= frame))
+                // `frames` is a duration, not an inclusive end index. A key
+                // run starting at curframe covers [curframe, curframe+frames).
+                // Using >= here makes every one-frame key last two integer
+                // frames: frame 1 still samples key 0, the displayed final
+                // frame samples the second-to-last key, and loop playback
+                // visibly goes second-last -> first -> held first.
+                if ((num <= 0) || (frame < curframe + frames))
                 {
                     GetAniKey32(curkey, keys, numkeys,
                         posidx, rotidx, sclidx, pos, rot, scl);
@@ -1181,7 +1203,7 @@ bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t 
     return true;
 }
 
-#define INTERFRAMES 5
+constexpr int32_t kLegacyTransitionBlendFrames = 5;
 
 static void InterpolatePoints(hmm_vec3& v1, hmm_vec3& v2, float& i)
 {
@@ -1229,7 +1251,7 @@ bool T3DImagery::GetAniKey(int32_t objnum, int32_t state, int32_t frame,
         !stricmp(endstate, begstate))
         return true;
 
-    int32_t iframes = INTERFRAMES;
+    int32_t iframes = kLegacyTransitionBlendFrames;
 
     float i = 1.0f;
     hmm_vec3 ipos, irot, iscl;
@@ -1461,17 +1483,14 @@ bool T3DImagery::RenderObject(S3DAnimObj* animobj, int32_t state, int32_t frame,
         }
 
         TTextureHandle htexture = kInvalidTexture;
-        sg_image       texsurface = {0};
         if (!hastextures || !UseTextures) { /* leave invalid */ }
         else if (animobj->flags & OBJ3D_TEX)
         {
             htexture   = animobj->htextures[t];
-            texsurface = animobj->surfaces[t];
         }
         else if (t > 0)
         {
             htexture   = textures[t - 1].htexture;
-            texsurface = textures[t - 1].surface;
         }
 
         uint32_t holdtex = 0;
@@ -1484,7 +1503,7 @@ bool T3DImagery::RenderObject(S3DAnimObj* animobj, int32_t state, int32_t frame,
 #endif
         }
         if (holdtex != htexture)
-            Scene3D.SetTexture(htexture, texsurface);
+            Scene3D.SetTexture(htexture);
 
         Scene3D.DrawIndexedPrimitive(
             ERender3DPrim::TriangleList,
@@ -1609,13 +1628,15 @@ int32_t T3DImagery::AddTexture(SSurfaceDesc* srcsd,
 {
     S3DTex tex;
     std::memset(&tex, 0, sizeof(S3DTex));
-    if (!LoadTexture(&tex, srcsd, pixels, frames, palette, false))
+    const int32_t texture_index = textures.NumItems();
+    if (!LoadTexture(&tex, srcsd, pixels, frames, palette, false, texture_index))
         return -1;
     return textures.Add(tex);
 }
 
 bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
-    OFFSET* pixels, int32_t frames, void* palette, bool copyframes)
+    OFFSET* pixels, int32_t frames, void* palette, bool copyframes,
+    int32_t texture_index)
 {
     // Retail D3D3 required square, power-of-two textures in 8..512. Modern
     // GPUs (sokol backends) don't care; log a debug note instead of fatal-ing.
@@ -1639,17 +1660,12 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
 
     if (frames > 1)
     {
-        tex->framesurfs = new sg_image[frames];
         tex->framehtexs = new TTextureHandle[frames];
         for (int32_t f = 0; f < frames; f++)
-        {
-            tex->framesurfs[f] = sg_image{0};
             tex->framehtexs[f] = kInvalidTexture;
-        }
     }
     else
     {
-        tex->framesurfs = nullptr;
         tex->framehtexs = nullptr;
     }
 
@@ -1665,33 +1681,40 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
         if (!DecodeTextureFrameRGBA(srcsd, frame_pixels, palette, rgba))
             continue;
 
-        sg_image_desc id = {};
-        id.width = (int)srcsd->width;
-        id.height = (int)srcsd->height;
-        id.pixel_format = SG_PIXELFORMAT_RGBA8;
-        id.min_filter = SG_FILTER_LINEAR;
-        id.mag_filter = SG_FILTER_LINEAR;
-        id.data.subimage[0][0] = { rgba.data(), rgba.size() };
-        id.label = "i3d.texture";
-        sg_image img = sg_make_image(&id);
+        TTextureHandle htexture = kInvalidTexture;
+        if (Renderer)
+        {
+            const uint64_t key = I3DTextureAssetKey(AssetId(), texture_index, f);
+            htexture = Renderer->RegisterTextureAsset(key,
+                                                       rgba.data(),
+                                                       rgba.size(),
+                                                       int32_t(srcsd->width),
+                                                       int32_t(srcsd->height),
+                                                       ERendererTextureFormat::RGBA8,
+                                                       uint64_t(rgba.size()));
+            if (htexture != kInvalidTexture)
+            {
+                Renderer->AddTextureAssetRef(htexture);
+                AddReferencedResource(
+                    EAssetReferencedResourceKind::RendererTexture,
+                    key,
+                    htexture,
+                    "i3d.texture",
+                    [htexture]() {
+                        if (Renderer)
+                            Renderer->ReleaseTextureAssetRef(htexture);
+                    });
+            }
+        }
 
         if (frames > 1)
-        {
-            tex->framesurfs[f] = img;
-            tex->framehtexs[f] = 0;
-        }
+            tex->framehtexs[f] = htexture;
         else
-        {
-            tex->surface = img;
-            tex->htexture = 0;
-        }
+            tex->htexture = htexture;
     }
 
     if (frames > 1)
-    {
-        tex->surface = tex->framesurfs[0];
         tex->htexture = tex->framehtexs[0];
-    }
 
     return true;
 }
@@ -1699,20 +1722,11 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
 void T3DImagery::RemoveTexture(int32_t texnum)
 {
     S3DTex* t = &textures[texnum];
-    const uint32_t active_id = t->surface.id;
-
-    if (t->surface.id) sg_destroy_image(t->surface);
-    t->surface  = sg_image{0};
     t->htexture = kInvalidTexture;
 
-    if (t->framesurfs)
+    if (t->framehtexs)
     {
-        for (int32_t i = 0; i < t->numframes; ++i)
-            if (t->framesurfs[i].id && t->framesurfs[i].id != active_id)
-                sg_destroy_image(t->framesurfs[i]);
-        delete[] t->framesurfs;
         delete[] t->framehtexs;
-        t->framesurfs = nullptr;
         t->framehtexs = nullptr;
     }
     t->numframes = 0;
@@ -1742,6 +1756,9 @@ TTextureHandle T3DImagery::GetTextureHandle(int32_t texnum)
 
 void T3DImagery::ClearTextures()
 {
+    // T3DImagery is the source asset. It owns renderer texture refs; the
+    // renderer owns the actual GPU objects.
+    ReleaseReferencedResources(EAssetReferencedResourceKind::RendererTexture);
     for (int32_t c = 0; c < textures.NumItems(); c++)
         RemoveTexture(c);
     textures.Clear();
@@ -1767,13 +1784,12 @@ bool T3DImagery::SetTextureFrame(int32_t texnum, int32_t framenum)
 
     if (!textures[texnum].copyframes)
     {
-        textures[texnum].surface  = textures[texnum].framesurfs[framenum];
         textures[texnum].htexture = textures[texnum].framehtexs[framenum];
         textures[texnum].framenum = framenum;
         return true;
     }
 
-#if 0 // TODO(port): copy frame pixels into the active sg_image — Phase 3
+#if 0 // TODO(port): copy frame pixels into a renderer-owned texture -- Phase 3
 #endif
     textures[texnum].framenum = framenum;
     return true;
@@ -2083,6 +2099,10 @@ void T3DAnimator::Initialize()
     inst->SetFlags(OF_MOVING);
 
     SetupObjects();
+    ConfigureI3DLegacyPoseLayout(Get3DImagery(), pose_layout);
+    pose_current.Configure(pose_layout);
+    pose_next.Configure(pose_layout);
+    pose_blended.Configure(pose_layout);
 
     animid = Scene3D.AddAnimator(this);
 }
@@ -2095,6 +2115,18 @@ void T3DAnimator::Close()
         RemoveObject(c);
 
     animobjs.DeleteAll();
+    pose_current = {};
+    pose_next = {};
+    pose_blended = {};
+    pose_layout = {};
+    pose_update_render_frame = -1;
+    pose_update_state = -1;
+    pose_update_frame = -1;
+    pose_update_next_state = -1;
+    pose_update_next_frame = -1;
+    pose_update_prev_state = -1;
+    pose_update_prev_frame = -1;
+    pose_update_frame_frac = -1.0f;
 
     TObjectAnimator::Close();
 }
@@ -2217,33 +2249,251 @@ void T3DAnimator::Pulse()
 // Estimated 1-2 hours of careful work + smoke testing. Deferred
 // (as of c3a8f21) so the AI / combat bring-up doesn't block on it.
 // ---------------------------------------------------------------------------
+struct SLegacyRenderKey
+{
+    int32_t state = -1;
+    int32_t frame = 0;
+};
+
+static int32_t FindTaggedContinuationState(T3DImagery* img, int32_t state)
+{
+    if (!img || state < 0 || state >= img->NumStates())
+        return -1;
+
+    char* endtag = img->FindTag((char*)"end", state);
+    if (!endtag || !*endtag)
+        return -1;
+
+    int32_t same_state = -1;
+    for (int32_t candidate = 0; candidate < img->NumStates(); ++candidate)
+    {
+        if (img->GetAniLength(candidate) <= 0)
+            continue;
+
+        char* begtag = img->FindTag((char*)"beg", candidate);
+        if (!begtag || stricmp(endtag, begtag) != 0)
+            continue;
+
+        if (candidate != state)
+            return candidate;
+        same_state = candidate;
+    }
+    return same_state;
+}
+
+static SLegacyRenderKey NextRenderKey(TObjectInstance* inst, T3DImagery* img,
+                                      int32_t state, int32_t frame)
+{
+    if (!inst || !img || state < 0)
+        return { state, frame };
+
+    const int32_t statesize = inst->IsInInventory()
+        ? img->GetInvAniLength(state)
+        : img->GetAniLength(state);
+    const int32_t stateflags = inst->IsInInventory()
+        ? img->GetInvAniFlags(state)
+        : img->GetAniFlags(state);
+    const int32_t rate = inst->GetFrameRate();
+
+    if (statesize <= 1 || rate == 0)
+        return { state, frame };
+
+    const int32_t next = frame + rate;
+    if (rate < 0)
+    {
+        if (next < 0)
+        {
+            if (stateflags & AF_LOOPING)
+                return { state, statesize - 1 };
+            if (stateflags & AF_PINGPONG)
+                return { state, statesize > 1 ? 1 : 0 };
+            return { state, 0 };
+        }
+        return { state, next };
+    }
+
+    if (next >= statesize)
+    {
+        if (stateflags & AF_LOOPING)
+            return { state, 0 };
+        if (stateflags & AF_PINGPONG)
+            return { state, statesize - 1 };
+
+        // Non-looping retail movement steps often chain into the next step by
+        // state tags. The final frame still owns a full 1/24s interval; when
+        // an authored continuation exists, render that interval toward frame 0
+        // of the continuation instead of holding the last key.
+        if (!inst->IsInInventory())
+        {
+            const int32_t continuation = FindTaggedContinuationState(img, state);
+            if (continuation >= 0)
+                return { continuation, 0 };
+        }
+
+        return { state, statesize - 1 };
+    }
+    return { state, next };
+}
+
+void T3DAnimator::UpdateLegacyTransitionWindow(T3DImagery* img,
+                                               int32_t state,
+                                               int32_t frame,
+                                               int32_t prevstate,
+                                               int32_t prevframe)
+{
+    const bool transition_changed =
+        state != pose_transition_state ||
+        prevstate != pose_transition_prev_state ||
+        prevframe != pose_transition_prev_frame;
+
+    if (transition_changed)
+    {
+        pose_transition_state = state;
+        pose_transition_prev_state = prevstate;
+        pose_transition_prev_frame = prevframe;
+        pose_transition_last_frame = frame;
+        pose_transition_highest_frame = frame;
+        pose_transition_active =
+            img &&
+            state >= 0 && state < img->NumStates() &&
+            prevstate >= 0 && prevstate < img->NumStates();
+        return;
+    }
+
+    if (frame > pose_transition_highest_frame)
+        pose_transition_highest_frame = frame;
+
+    const bool wrapped_loop =
+        img &&
+        state >= 0 && state < img->NumStates() &&
+        (img->GetAniFlags(state) & AF_LOOPING) &&
+        pose_transition_last_frame >= 0 &&
+        frame < pose_transition_last_frame;
+
+    if (wrapped_loop ||
+        pose_transition_highest_frame >= kLegacyTransitionBlendFrames)
+        pose_transition_active = false;
+
+    pose_transition_last_frame = frame;
+}
+
 void T3DAnimator::UpdateBoneTransforms()
 {
     if (!inst) return;
     T3DImagery* img = Get3DImagery();
     if (!img) return;
 
+    // Skeletons are stable for a given I3D imagery. If code ever swaps the
+    // imagery under a live animator, resize here once for that structural
+    // change; steady-state frames must only reuse the existing buffers.
+    const int32_t expected_bones = img->NumObjects();
+    if (pose_layout.bone_count != expected_bones ||
+        pose_current.Count() != pose_layout.channel_count)
+    {
+        ConfigureI3DLegacyPoseLayout(img, pose_layout);
+        pose_current.Configure(pose_layout);
+        pose_next.Configure(pose_layout);
+        pose_blended.Configure(pose_layout);
+        pose_update_render_frame = -1;
+    }
+    if (!pose_layout.IsValid())
+        return;
+
     const int32_t s = inst->GetState();
     const int32_t f = inst->GetFrame();
+    const SLegacyRenderKey nextkey = NextRenderKey(inst, img, s, f);
+    const float framefrac = (float)TTime::LegacyFrameFraction();
+    const int64_t render_frame = TTime::FrameCount();
+    const int32_t prevstate = inst->GetPrevState();
+    const int32_t prevframe = inst->GetPrevFrame();
+    UpdateLegacyTransitionWindow(img, s, f, prevstate, prevframe);
+    const bool use_transition_blend =
+        pose_transition_active && f < kLegacyTransitionBlendFrames;
+    const int32_t sample_prevstate = use_transition_blend ? prevstate : -1;
+    const int32_t sample_prevframe = use_transition_blend ? prevframe : 0;
 
-    // CalcObjectMatrix samples the imagery's anim keys via GetAniKey
-    // and (since C3b) mirrors the per-bone local TRS into bone.transform
-    // alongside its own legacy `bone->matrix` build. Iterating in
-    // animobj order is safe because parents always come before
-    // children in the array, so the legacy parent-chain compose at
-    // the end of CalcObjectMatrix sees a freshly-computed parent
-    // matrix on every visit.
+    if (pose_update_render_frame == render_frame &&
+        pose_update_state == s &&
+        pose_update_frame == f &&
+        pose_update_next_state == nextkey.state &&
+        pose_update_next_frame == nextkey.frame &&
+        pose_update_prev_state == sample_prevstate &&
+        pose_update_prev_frame == sample_prevframe &&
+        pose_update_frame_frac == framefrac)
+        return;
+
+    const float* pose = nullptr;
+    if (!SampleI3DLegacyFrameBlendToPose(img, pose_layout, s, f,
+            nextkey.state, nextkey.frame,
+            framefrac, sample_prevstate, sample_prevframe,
+            pose_current.Data(), pose_next.Data(), pose_blended.Data(),
+            pose_current.Count(), &pose) || !pose)
+        return;
+
     for (int32_t c = 0; c < animobjs.NumItems(); c++)
     {
         S3DAnimObj* obj = animobjs[c];
         if (!obj) continue;
-        img->CalcObjectMatrix(obj, s, f, /*pos*/nullptr, /*calcparents*/false);
+
+        const bool hastrans =
+            (obj->flags & (OBJ3D_ROTMASK | OBJ3D_POSMASK | OBJ3D_SCLMASK)) != 0;
+        if (hastrans || (obj->flags & OBJ3D_ADDTOANI))
+        {
+            // Quarantined legacy matrix path for the small set of objects that
+            // layer authored masks/transforms over animation. The ordinary bone
+            // path below is fixed-buffer pose data only.
+            img->SetPrevState(sample_prevstate, sample_prevframe);
+            img->CalcObjectMatrix(obj, s, f, /*pos*/nullptr, /*calcparents*/false);
+            continue;
+        }
+
+        const int32_t target = (obj->flags & OBJ3D_ANIMTRACK)
+            ? obj->animtrack
+            : obj->objnum;
+        const int32_t base = pose_layout.BoneOffset(target);
+        if (base < 0 || base + ANIM_BONE_STRIDE > pose_layout.channel_count)
+            continue;
+
+        obj->pos = {
+            pose[base + ANIM_BONE_POS_X],
+            pose[base + ANIM_BONE_POS_Y],
+            pose[base + ANIM_BONE_POS_Z],
+        };
+        obj->scl = {
+            pose[base + ANIM_BONE_SCALE_X],
+            pose[base + ANIM_BONE_SCALE_Y],
+            pose[base + ANIM_BONE_SCALE_Z],
+        };
+        const SAnimQuat q = {
+            pose[base + ANIM_BONE_ROT_X],
+            pose[base + ANIM_BONE_ROT_Y],
+            pose[base + ANIM_BONE_ROT_Z],
+            pose[base + ANIM_BONE_ROT_W],
+        };
+        obj->transform.SetLocalPos(obj->pos);
+        obj->transform.SetLocalRot(q);
+        obj->transform.SetLocalScl(obj->scl);
+
+        // Keep the old per-bone matrix mirror alive for attachment/render
+        // paths that have not moved to TTransform yet. This is composition of
+        // already-written local transforms, not another legacy key sample.
+        obj->matrix = obj->transform.LocalMatrix();
+        if (obj->parent)
+            MtxMultiply(&obj->matrix, &obj->matrix, &obj->parent->matrix);
     }
 
     // Single top-down sweep on the instance's transform resolves all
     // bone globals in dependency order. Cheap because by here every
     // dirty bone's local matrix is already cached.
     inst->Transform().RefreshHierarchy();
+    pose_update_render_frame = render_frame;
+    pose_update_state = s;
+    pose_update_frame = f;
+    pose_update_next_state = nextkey.state;
+    pose_update_next_frame = nextkey.frame;
+    pose_update_prev_state = sample_prevstate;
+    pose_update_prev_frame = sample_prevframe;
+    pose_update_frame_frac = framefrac;
 }
 
 void T3DAnimator::Animate(bool draw)
@@ -2446,12 +2696,7 @@ S3DAnimObj* T3DAnimator::NewObject(int32_t objnum, int32_t newflags)
     obj->verttype  = ERender3DVertex::Vertex;
     obj->hmaterial = Get3DImagery()->GetMaterialHandle(o.material);
     for (int32_t c = 0; c < MAXTEXTURES; c++)
-    {
         obj->htextures[c] = Get3DImagery()->GetTextureHandle(c);
-        S3DTex tex;
-        Get3DImagery()->GetTexture(c, &tex);
-        obj->surfaces[c] = tex.surface;
-    }
 
     if (newflags & OBJ3D_COPYVERTS)
         GetVerts(obj, obj->verttype);
@@ -2567,11 +2812,19 @@ void T3DAnimator::EnableObject(int32_t objnum, bool enable)
 
 bool T3DAnimator::GetObjectMatrix(int32_t objnum, hmm_mat4* m)
 {
-    if (objnum < 0)
+    if (objnum < 0 || !m)
         return false;
 
     S3DAnimObj* animobj = GetObject(objnum);
-    Get3DImagery()->CalcObjectMatrixCopy(animobj, inst->GetState(), inst->GetFrame(), m, 0);
+    if (!animobj)
+        return false;
+
+    // Attachment/effect callers historically receive a character-local bone
+    // matrix and apply the character root themselves. Keep that contract, but
+    // source the matrix from the current blended pose instead of resampling an
+    // integer legacy frame through CalcObjectMatrix.
+    UpdateBoneTransforms();
+    *m = animobj->matrix;
     return true;
 }
 

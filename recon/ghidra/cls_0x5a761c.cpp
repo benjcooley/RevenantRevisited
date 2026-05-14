@@ -149,7 +149,7 @@ OOAnalyzer::cls_0x5a761c::virt_meth_0x4d7550(cls_0x5a761c *this,undefined4 param
     local_4 = CONCAT31(local_4._1_3_,3);
     (this_00->TScreen).vftptr_0x0 =
          (TScreen__vftable_5a50e8 *)&PTR_virt_meth_0x4d6c00_005a7848;
-    TPlayScreen::meth_0x4c18a0(this_00);
+    TPlayScreen::meth_0x4c18a0_TCharacter_ClearChar(this_00);
     ExceptionList = local_c;
     return this_00;
   }

@@ -8,6 +8,8 @@
 
 #include "revenant.h"
 
+#include <sokol_gfx.h>
+
 #include "blit.h"
 #include "graphics.h"
 
@@ -327,5 +329,4 @@ class TSurface
     sg_image_desc img_desc;  // Sokol image description/config
     bool needs_restore;      // True if surface resources need recreation
 };
-
 

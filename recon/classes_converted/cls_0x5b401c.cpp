@@ -45,7 +45,7 @@ void cls_0x5b401c::virt_meth_0x510220()
         pdVar6 = &this->mbr_0x1c;
         iVar7 = 0;
         iVar4 = SoftwareRenderer::meth_0x4df070((SoftwareRenderer *)this);
-        FUN_0046db20(iVar4,dVar5,(int *)pdVar6,iVar7);
+        FUN_0046db20_ConvertToVector(iVar4,dVar5,(int *)pdVar6,iVar7);
         dVar5 = this->mbr_0x188;
         this->mbr_0x8 = this->mbr_0x8 & 0xfffffffe | 0x10008;
         this->mbr_0x24 = -((int)(dVar5 + ((int)dVar5 >> 0x1f & 0xfU)) >> 4);
@@ -75,7 +75,7 @@ void cls_0x5b401c::virt_meth_0x510220()
               (uVar3 = (*this->vftptr_0x0->virt_meth_0x410aa0_4)(this),
               CONCAT31(extraout_var_00,uVar3) < 0x21)) &&
              ((this_00 == (TPlayScreen *)0x0 ||
-              (iVar4 = TPlayScreen::meth_0x4c89c0(this_00), iVar4 != 0)))) goto LAB_00510310;
+              (iVar4 = TPlayScreen::meth_0x4c89c0_IsEnemy(this_00), iVar4 != 0)))) goto LAB_00510310;
           cls_0x44ceb0::meth_0x44d080((cls_0x44ceb0 *)&stack0xffffffb4);
           cStack_48.mbr_0xc = cStack_48.mbr_0x8;
         }

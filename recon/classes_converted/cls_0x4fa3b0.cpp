@@ -20,7 +20,7 @@ cls_0x4fa3b0 * __thiscall cls_0x4fa3b0::~cls_0x4fa3b0(cls_0x4fa3b0 *this)
   this->mbr_0x0 = (dword)&PTR_virt_meth_0x4fa390_005ada3c;
   local_4 = 0;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   if (0 < (int)this->mbr_0x1a4) {
     cls_0x41c7d0::meth_0x49bd90((cls_0x41c7d0 *)&DAT_00667548);

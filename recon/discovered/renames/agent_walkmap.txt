@@ -1,0 +1,58 @@
+# Format: BARE_TOKEN|RENAMED_TOKEN  — one per line, # comments ignored.
+# Walkmap / movement helpers (TCharacter::Move chain + TMapPane walkmap reads).
+# Anchors used:
+#   - agent_tcharacter.txt mapped 0x4c46d0 = TCharacter::Move (vtable wrapper)
+#     and 0x4c3bc0 = MoveStep (the real per-tick locomotion).
+#   - 0x4c39d0 is the only callee inside MoveStep that takes (this, &newpos,
+#     bits, &out_height, &out_bychar) and is dispatched 7+ times during the
+#     "is this position safe?" tests + shove probing — matches the source-level
+#     signature of TCharacter::Blocked exactly.
+#   - 0x452e10 is the thiscall MapPane.GetWalkHeight(pos, sectorhint, *out)
+#     called via MOV ECX,0x6668d8 (= &MapPane). Reads packed walkmap as
+#     `(*(ushort*)cell) >> 10` — confirms top 6 bits = height.
+#   - 0x4530a0 is the matching GetWalkHeightRadius (writes mindelta/maxdelta
+#     into globals at DAT_00658328 and reads radius LUT at DAT_005e9200).
+#   - 0x4d4db0 is CharBlocking; tail-called from Blocked when the walkmap
+#     test passes but only if a character may block.
+#   - 0x46db20 is ConvertToVector (angle, dist, &out, _zero) — used in shove
+#     probing inside MoveStep.
+
+# ---- TCharacter::Move (vtable wrapper) — calls MoveStep up to 10 times in a
+# tight loop while position changes AND MOVE_MOVED is set. Used by movetopos. ----
+meth_0x4c46d0|meth_0x4c46d0_Move
+FUN_004c46d0|FUN_004c46d0_Move
+
+# ---- TCharacter::MoveStep — the body of the source-level Move():
+# walk-height clamp / fall, build delta from speed*moveangle (or movetopos
+# delta), split into nummoves sub-steps, run Blocked at each, do shove
+# probing on block. Field 0x47 (shovedir) holds the chosen offset. ----
+meth_0x4c3bc0|meth_0x4c3bc0_MoveStep
+FUN_004c3bc0|FUN_004c3bc0_MoveStep
+
+# ---- TCharacter::Blocked(this, &newpos, bits, &out_height, &out_bychar) ----
+meth_0x4c39d0|meth_0x4c39d0_Blocked
+FUN_004c39d0|FUN_004c39d0_Blocked
+
+# ---- TCharacter::CharBlocking(this, &newpos, radius) — tail of Blocked ----
+meth_0x4d4db0|meth_0x4d4db0_CharBlocking
+FUN_004d4db0|FUN_004d4db0_CharBlocking
+
+# ---- TMapPane::GetWalkHeight(pos, face/sectorhint, *out) — packed walkmap
+# read: `*out = ((ushort)cell) >> 10`. Top 6 bits = height, low 10 = group. ----
+meth_0x452e10|meth_0x452e10_GetWalkHeight
+FUN_00452e10|FUN_00452e10_GetWalkHeight
+
+# ---- TMapPane::GetWalkHeightRadius(pos, sectorhint, radius, *outheight,
+# *out_mindelta, *out_maxdelta) — radius walk over walkmap cells. ----
+meth_0x4530a0|meth_0x4530a0_GetWalkHeightRadius
+FUN_004530a0|FUN_004530a0_GetWalkHeightRadius
+
+# ---- ConvertToVector(angle&0xff, dist, *out, swap?) — used in shove probe.
+# Already identified elsewhere; rename for traceability. ----
+FUN_0046db20|FUN_0046db20_ConvertToVector
+
+# ---- Sector lookup helpers used by walkmap reads ----
+# 0x499e10: TMapPane::GetSector(sectorx, sectory) (or sector-cache lookup).
+# 0x499720: cell-coord helper called after walkmap read (refcount/release?).
+FUN_00499e10|FUN_00499e10_FindSectorAt
+FUN_00499720|FUN_00499720_ReleaseWalkCell

@@ -168,7 +168,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a34a0::virt_meth_0x40d4a0(cls_0x5a34a0 
   dword *this_01;
   byte *in_stack_00000008;
   
-  uVar5 = FUN_0059a530((uint)this,param_1,&DAT_005c612c);
+  uVar5 = FUN_0059a530_stricmp((uint)this,param_1,&DAT_005c612c);
   if (uVar5 != 0) {
     return 0;
   }

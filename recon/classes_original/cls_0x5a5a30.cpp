@@ -220,13 +220,13 @@ void __thiscall OOAnalyzer::cls_0x5a5a30::virt_meth_0x5444c0(cls_0x5a5a30 *this)
       do {
         piVar2 = (int *)cls_0x5b98b8::meth_0x436900((cls_0x5b98b8 *)this);
         if ((piVar2 != (int *)0x0) && (piVar2[4] == 4)) {
-          if ((DAT_00667fcc != (cls_0x5a7b98 *)0x0) &&
-             (iVar3 = cls_0x5a7b98::meth_0x51b560(DAT_00667fcc), iVar3 != 0)) {
-            if (DAT_00667fcc == (cls_0x5a7b98 *)0x0) {
+          if ((DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) &&
+             (iVar3 = cls_0x5a7b98_TCharacter::meth_0x51b560(DAT_00667fcc), iVar3 != 0)) {
+            if (DAT_00667fcc == (cls_0x5a7b98_TCharacter *)0x0) {
               pcVar4 = &UNK_00670228.field_0x414;
             }
             else {
-              pcVar4 = (char *)cls_0x5a7b98::meth_0x51b560(DAT_00667fcc);
+              pcVar4 = (char *)cls_0x5a7b98_TCharacter::meth_0x51b560(DAT_00667fcc);
             }
             iVar3 = -1;
             do {
@@ -236,13 +236,13 @@ void __thiscall OOAnalyzer::cls_0x5a5a30::virt_meth_0x5444c0(cls_0x5a5a30 *this)
               pcVar4 = pcVar4 + 1;
             } while (cVar1 != '\0');
             if (iVar3 != -2) {
-              if (DAT_00667fcc != (cls_0x5a7b98 *)0x0) {
-                cls_0x5a7b98::meth_0x51b560(DAT_00667fcc);
+              if (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) {
+                cls_0x5a7b98_TCharacter::meth_0x51b560(DAT_00667fcc);
               }
               iVar3 = cls_0x53ed70::meth_0x53ed70((cls_0x53ed70 *)((int)&UNK_00667c34 + 4));
-              if ((iVar3 != 0) && (DAT_00667fcc != (cls_0x5a7b98 *)0x0)) {
-                cls_0x5a7b98::meth_0x51b560(DAT_00667fcc);
-                iVar3 = cls_0x5a7b98::meth_0x51b7c0(DAT_00667fcc);
+              if ((iVar3 != 0) && (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0)) {
+                cls_0x5a7b98_TCharacter::meth_0x51b560(DAT_00667fcc);
+                iVar3 = cls_0x5a7b98_TCharacter::meth_0x51b7c0(DAT_00667fcc);
                 if (iVar3 != 0) {
                   (**(code **)(*piVar2 + 0x1c))(piVar2[5] & 0xfffffffb);
                   goto LAB_005445d3;

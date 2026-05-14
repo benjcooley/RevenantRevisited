@@ -33,7 +33,7 @@ void __thiscall OOAnalyzer::cls_0x43f8b0::meth_0x43f8b0(cls_0x43f8b0 *this)
   dword in_stack_00000004;
   
   this->mbr_0xa0 = in_stack_00000004;
-  iVar2 = cls_0x497370::meth_0x497370((cls_0x497370 *)&DAT_0065def0);
+  iVar2 = cls_0x497370::meth_0x497370_TScriptManager_ObjectScript((cls_0x497370 *)&DAT_0065def0);
   if (*(int *)(iVar2 + 8) == 0) {
     pcVar3 = (char *)0x0;
   }

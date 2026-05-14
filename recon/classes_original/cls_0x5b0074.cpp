@@ -450,7 +450,7 @@ void __thiscall OOAnalyzer::cls_0x5b0074::virt_meth_0x4fe590(cls_0x5b0074 *this)
     this->mbr_0x100 = (dword)fVar1;
     if (fVar1 <= _DAT_005a3530) {
       this->mbr_0x100 = 0;
-      cls_0x5b8e94::meth_0x4defe0((cls_0x5b8e94 *)this->mbr_0x4);
+      cls_0x5b8e94_TObjectInstance::meth_0x4defe0((cls_0x5b8e94_TObjectInstance *)this->mbr_0x4);
       return;
     }
   }

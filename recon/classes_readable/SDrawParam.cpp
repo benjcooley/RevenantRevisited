@@ -15,7 +15,7 @@ void SDrawParam::virt_meth_0x4ec890()
   this->virt_meth_0x4de800();
   this->sx = this->sx + 1;
   if ((TPlayScreen *)this->dheight != (TPlayScreen *)0x0) {
-    TPlayScreen::meth_0x4cee70((TPlayScreen *)this->dheight);
+    TPlayScreen::meth_0x4cee70_Stop((TPlayScreen *)this->dheight);
     dVar1 = this->sx;
     if ((int)dVar1 < 0xf0) {
       if (((((int *)this->dheight)[2] & 0x2000000U) == 0) ||

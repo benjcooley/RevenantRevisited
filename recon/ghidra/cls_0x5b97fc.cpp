@@ -78,10 +78,10 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b97fc::virt_meth_0x53bfa0(cls_0x5b97fc 
   }
   if (in_stack_00000008 == 3000) {
     pbVar1 = (byte *)(param_1 + 0x18);
-    uVar3 = FUN_0059a530(extraout_ECX,&DAT_005e4688,pbVar1);
-    if ((uVar3 != 0) && (uVar3 = FUN_0059a530(extraout_ECX_00,&DAT_005e468c,pbVar1), uVar3 != 0)) {
-      uVar3 = FUN_0059a530(extraout_ECX_01,(byte *)s_cancel_005e4690,pbVar1);
-      if ((uVar3 != 0) && (uVar3 = FUN_0059a530(extraout_ECX_02,&DAT_005e4698,pbVar1), uVar3 != 0))
+    uVar3 = FUN_0059a530_stricmp(extraout_ECX,&DAT_005e4688,pbVar1);
+    if ((uVar3 != 0) && (uVar3 = FUN_0059a530_stricmp(extraout_ECX_00,&DAT_005e468c,pbVar1), uVar3 != 0)) {
+      uVar3 = FUN_0059a530_stricmp(extraout_ECX_01,(byte *)s_cancel_005e4690,pbVar1);
+      if ((uVar3 != 0) && (uVar3 = FUN_0059a530_stricmp(extraout_ECX_02,&DAT_005e4698,pbVar1), uVar3 != 0))
       {
         return 1;
       }

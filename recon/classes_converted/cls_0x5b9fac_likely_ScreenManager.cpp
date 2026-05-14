@@ -30,15 +30,15 @@ void cls_0x5b9fac::virt_meth_0x4e4120()
       fVar2 = (float)*pdVar4 - _DAT_005a8a84;
       *pdVar4 = (dword)fVar2;
       if (fVar2 <= _DAT_005a3530) {
-        iVar1 = FUN_00483300(-0x14,0x14);
+        iVar1 = FUN_00483300_RandomRange(-0x14,0x14);
         pdVar5[-2] = (dword)(float)iVar1;
-        iVar1 = FUN_00483300(-0x14,0x14);
+        iVar1 = FUN_00483300_RandomRange(-0x14,0x14);
         pdVar5[-1] = (dword)(float)iVar1;
         *pdVar5 = 0;
-        iVar1 = FUN_00483300(1,3);
+        iVar1 = FUN_00483300_RandomRange(1,3);
         pdVar4[10] = (dword)((float)iVar1 * _DAT_005a356c);
         *pdVar4 = 0x40000000;
-        fVar2 = (float)FUN_00483300(-5,0);
+        fVar2 = (float)FUN_00483300_RandomRange(-5,0);
         pdVar4[0x14] = (dword)fVar2;
       }
     }

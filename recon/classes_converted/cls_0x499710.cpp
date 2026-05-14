@@ -6,7 +6,7 @@
 
 // Function at 00499710
 
-void cls_0x499710::meth_0x499710()
+void cls_0x499710::meth_0x499710_TSector_ClearWalkmap()
 
 {
   int iVar1;

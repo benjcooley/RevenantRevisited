@@ -12,7 +12,7 @@ Length: 80 Alignment: 1
 
 // Function at 004942b0
 
-void __thiscall OOAnalyzer::cls_0x4942b0::meth_0x4942b0(cls_0x4942b0 *this)
+void __thiscall OOAnalyzer::cls_0x4942b0::meth_0x4942b0_TScript_Resume(cls_0x4942b0 *this)
 
 {
   this->mbr_0x4c = this->mbr_0x4c & 0xfffeffff;

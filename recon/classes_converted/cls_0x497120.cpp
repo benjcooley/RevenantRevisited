@@ -6,7 +6,7 @@
 
 // Function at 00497120
 
-cls_0x492170 * cls_0x497120::meth_0x497120(undefined4 param_1, uint param_2, char *param_3)
+cls_0x492170 * cls_0x497120::meth_0x497120_TScriptManager_AddScript(undefined4 param_1, uint param_2, char *param_3)
 
 {
   char cVar1;
@@ -53,7 +53,7 @@ cls_0x492170 * cls_0x497120::meth_0x497120(undefined4 param_1, uint param_2, cha
   if (0 < (int)this->mbr_0x8004) {
     do {
       ExceptionList = ppvVar2;
-      uVar3 = FUN_0059a530(param_2,**(byte ***)(this->mbr_0x8014 + iVar7 * 4),(byte *)param_2);
+      uVar3 = FUN_0059a530_stricmp(param_2,**(byte ***)(this->mbr_0x8014 + iVar7 * 4),(byte *)param_2);
       if (uVar3 == 0) {
         if (*(int *)(this->mbr_0x8014 + iVar7 * 4) != 0) goto LAB_00497314;
         break;
@@ -99,10 +99,10 @@ cls_0x492170 * cls_0x497120::meth_0x497120(undefined4 param_1, uint param_2, cha
     ppcVar4 = (char **)0x0;
   }
   else {
-    ppcVar4 = FUN_004946f0(local_90,(char *)0x0,param_3,in_stack_00000010,(char *)0x0);
+    ppcVar4 = FUN_004946f0_TScriptProto_Ctor(local_90,(char *)0x0,param_3,in_stack_00000010,(char *)0x0);
   }
   local_4 = CONCAT31(local_4._1_3_,1);
-  FUN_00494e20(ppcVar4,&local_e4);
+  FUN_00494e20_TScriptProto_ParseScript(ppcVar4,&local_e4);
   cls_0x45f7c0::meth_0x41c840((cls_0x45f7c0 *)&this->mbr_0x8004);
   local_4 = 3;
   FUN_004830f0(local_bc);

@@ -28,6 +28,7 @@
 
 #include <cstring>
 
+#include "3dimage.h"
 #include "display.h"
 #include "editor.h"
 #include "editorstub.h"
@@ -463,9 +464,8 @@ void TPlayScreen::Update()
     // + pulse itself).
     CurrentMode()->Tick();
 
-    // Advance per-frame counters. The map renderer ticks its own animator
-    // off LegacyFrameCount(), so we just track our own session bookkeeping
-    // here.
+    // Advance fixed-tick counters. CurrentMode()->Tick() owns gameplay frame
+    // advancement; the renderer only samples/interpolates the current pose.
     ++gameframes;
     gametime = lastsessionframes
              + (gameframes - sessionstart) * 100 / kGameFrameRate;
@@ -475,6 +475,17 @@ void TPlayScreen::Update()
 void TPlayScreen::RenderFrame()
 {
     if (!mapRenderer) return;
+    // Late camera update: gameplay has already moved the player for this
+    // fixed tick, so follow from the final transform immediately before
+    // rendering. The renderer compensates the camera origin by the followed
+    // height so Locke stays centered while walking up/down terrain.
+    if (CurrentMode() == GameMode() && Player)
+    {
+        S3DPoint p;
+        Player->GetPos(p);
+        mapRenderer->SetCameraWorld(Player->GetLevel(), p.x, p.y, p.z);
+    }
+
     // While the editor is paused and nothing is dirty, skip the world
     // render entirely. The renderer's lit_target persists, so the Game
     // View panel keeps displaying the previously rendered frame.
@@ -503,118 +514,132 @@ static void DrawPlayerStatusOverlay()
     int32_t r_min = 0, r_max = 0, r_h = 0;
     MapPane.GetWalkHeightRadius(p, radius, r_min, r_max, r_h);
     const TCharacter* blocker = ((TCharacter*)Player)->CharBlocking();
+    const bool z_blocks    = std::abs(z_delta) > 32;
+    const bool no_floor    = (walk == 0);
+    const bool slope_min   = std::abs(r_min) > 32;
+    const bool slope_max   = std::abs(r_max) > 32;
+    const bool char_blocks = (blocker != nullptr);
+
+    TObjectInstance* pinst = static_cast<TObjectInstance*>(Player);
+    const int32_t st_idx   = pinst->GetState();
+    const int32_t st_total = Player->NumStates();
+    TObjectImagery* img    = Player->GetImagery();
+    const int32_t fr_total = img ? img->GetAniLength(st_idx) : 0;
+    const uint32_t ani_fl  = Player->GetAniFlags();
+    char flagstr[64] = {};
+    int  fpos = 0;
+    auto add_flag = [&](const char* tag, uint32_t mask) {
+        if ((ani_fl & mask) && fpos < int(sizeof(flagstr)) - 12) {
+            fpos += std::snprintf(flagstr + fpos, sizeof(flagstr) - fpos,
+                                  fpos ? "|%s" : "%s", tag);
+        }
+    };
+    add_flag("LOOP", AF_LOOPING);
+    add_flag("PP",   AF_PINGPONG);
+    add_flag("ROOT", AF_ROOT);
+    add_flag("R2R",  AF_ROOT2ROOT);
+    add_flag("FLY",  AF_FLY);
+    add_flag("MOVE", AF_MOVE);
+    const int32_t prev_idx = pinst->GetPrevState();
+    const char* prev_name = (img && prev_idx >= 0 && prev_idx < img->NumStates())
+        ? img->GetAniName(prev_idx)
+        : "?";
+
+    TCharacter* pc = static_cast<TCharacter*>(Player);
+    const SCharData* pcd = pc->GetCharData();
 
     ImGui::SetNextWindowPos(ImVec2(8, 8), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(460, 340), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowBgAlpha(0.55f);
-    if (ImGui::Begin("Player Debug", nullptr,
-                     ImGuiWindowFlags_NoNav | ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::Begin("Player Debug", nullptr, ImGuiWindowFlags_NoNav))
     {
-        ImGui::Text("pos     : (%d, %d, %d)  level=%d", p.x, p.y, p.z, lvl);
-        ImGui::Text("sector  : %d_%d", sx_world, sy_world);
-        ImGui::Text("walkmap : %d  (z-walk = %d)", walk, z_delta);
-        ImGui::Text("radius  : %d   r_h=%d  min=%d  max=%d",
-                    radius, r_h, r_min, r_max);
-        const bool z_blocks    = std::abs(z_delta) > 32;
-        const bool no_floor    = (walk == 0);
-        const bool slope_min   = std::abs(r_min) > 32;
-        const bool slope_max   = std::abs(r_max) > 32;
-        const bool char_blocks = (blocker != nullptr);
-        ImGui::Text("would block: %s%s%s%s%s%s",
-                    z_blocks    ? "Z>32 "       : "",
-                    no_floor    ? "no-floor "   : "",
-                    slope_min   ? "min>32 "     : "",
-                    slope_max   ? "max>32 "     : "",
-                    char_blocks ? "char-blk "   : "",
-                    (!z_blocks && !no_floor && !slope_min && !slope_max && !char_blocks)
-                                ? "no" : "");
-        ImGui::Text("moving  : %s   moveangle=%d   anim=%s",
-                    Player->IsMoving() ? "yes" : "no",
-                    Player->GetMoveAngle(),
-                    state_name ? state_name : "?");
-        // Animation state breakout. state index by itself is opaque;
-        // pair it with frame/total + decoded ani-flags so the cycle bug
-        // ("walkf done but never advances") is readable at a glance.
-        // TComplexObject overrides GetState() to return const char*
-        // (the action-block name). Reach the integer state index via
-        // the TObjectInstance base.
-        const int32_t st_idx   = static_cast<TObjectInstance*>(Player)->GetState();
-        const int32_t st_total = Player->NumStates();
-        TObjectImagery* img    = Player->GetImagery();
-        const int32_t fr_total = img ? img->GetAniLength(st_idx) : 0;
-        const uint32_t ani_fl  = Player->GetAniFlags();
-        char flagstr[64] = {};
-        int  fpos = 0;
-        auto add = [&](const char* tag, uint32_t mask) {
-            if ((ani_fl & mask) && fpos < int(sizeof(flagstr)) - 12) {
-                fpos += std::snprintf(flagstr + fpos, sizeof(flagstr) - fpos,
-                                      fpos ? "|%s" : "%s", tag);
-            }
-        };
-        add("LOOP", AF_LOOPING);
-        add("PP",   AF_PINGPONG);
-        add("ROOT", AF_ROOT);
-        add("R2R",  AF_ROOT2ROOT);
-        add("FLY",  AF_FLY);
-        add("MOVE", AF_MOVE);
-        ImGui::Text("anim    : %s  state=%d/%d  frame=%d/%d  flags=%s  done=%s",
-                    state_name ? state_name : "?",
-                    st_idx, st_total, Player->GetFrame(), fr_total,
-                    fpos ? flagstr : "-",
-                    Player->CommandDone() ? "yes" : "no");
-        ImGui::Text("framerate=%d  HasAnimator=%s",
-                    Player->GetFrameRate(),
-                    Player->HasAnimator() ? "yes" : "NO");
-
-      // Combat diagnostics. After the keybind dispatch fix the swing key
-      // calls Player->Swing() but the result depends on the chardata having
-      // attacks loaded for OBJCLASS_PLAYER + correct action animations.
-        TCharacter* pc = static_cast<TCharacter*>(Player);
-        const SCharData* pcd = pc->GetCharData();
-        ImGui::Text("mode    : combat=%d bow=%d walk=%d sneak=%d run=%d",
-                    pc->IsCombat() ? 1 : 0,
-                    pc->IsBowMode() ? 1 : 0,
-                    pc->IsWalkMode() ? 1 : 0,
-                    pc->IsSneakMode() ? 1 : 0,
-                    pc->IsRunMode() ? 1 : 0);
-        ImGui::Text("doing   : action=%d name=\"%s\"",
-                    pc->DoingAction(), pc->DoingName());
-        ImGui::Text("root    : action=%d name=\"%s\"",
-                    pc->RootAction(), pc->RootName());
-        if (pcd)
-            ImGui::Text("chardata: name=\"%s\" numattacks=%d combatrng=%d/%d attkrng=%d",
-                        pcd->name, pcd->attacks.NumItems(),
-                        pcd->combatrangemin, pcd->combatrangemax, pcd->maxattackrange);
-        else
-            ImGui::Text("chardata: NULL");
-        ImGui::Text("hasAni  : combat=%d swing=%d thrust=%d chop=%d",
-                    Player->HasActionAni("combat") ? 1 : 0,
-                    Player->HasActionAni("swing")  ? 1 : 0,
-                    Player->HasActionAni("thrust") ? 1 : 0,
-                    Player->HasActionAni("chop")   ? 1 : 0);
-
-      // Per-button attack triage: for each attack on the player's chardata
-      // with button==N, walk every IsValidAttack gate and count survivors.
-      // If pass-final == 0 we know which gate killed all attacks.
-        if (pcd)
+        if (ImGui::BeginTabBar("PlayerDebugTabs"))
         {
-            const int32_t wt   = pc->WeaponType();
-            const int32_t wbit = 1 << wt;
-            TPlayer* tpl = (Player->ObjClass() == OBJCLASS_PLAYER) ? (TPlayer*)Player : nullptr;
-            const int32_t skAtk = tpl ? tpl->Skill(SK_ATTACK) : 999;
-            ImGui::Text("player  : weapontype=%d (mask=0x%x)  attackskill=%d  fatigue=%d/%d",
-                        wt, wbit, skAtk, pc->Fatigue(), pc->MaxFatigue());
-            if (tpl)
+            if (ImGui::BeginTabItem("Move"))
             {
-                ImGui::Text("stats   : Lv=%d Exp=%d  STR=%d CON=%d AGI=%d RFL=%d MND=%d LCK=%d",
-                            tpl->Level(), tpl->Exp(),
-                            tpl->Strn(), tpl->Cons(), tpl->Agil(),
-                            tpl->Rflx(), tpl->Mind(), tpl->Luck());
-                ImGui::Text("max     : H=%d/%d F=%d/%d M=%d/%d  classdata=%s",
-                            tpl->Health(), tpl->MaxHealth(),
-                            tpl->Fatigue(), tpl->MaxFatigue(),
-                            tpl->Mana(), tpl->MaxMana(),
-                            (pcd->classdata ? pcd->classdata->name : "(NULL)"));
-                if (pcd->classdata)
+                ImGui::Text("pos     : (%d, %d, %d)  level=%d", p.x, p.y, p.z, lvl);
+                ImGui::Text("sector  : %d_%d", sx_world, sy_world);
+                ImGui::Text("walkmap : %d  (z-walk = %d)", walk, z_delta);
+                ImGui::Text("radius  : %d   r_h=%d  min=%d  max=%d",
+                            radius, r_h, r_min, r_max);
+                ImGui::Text("would block: %s%s%s%s%s%s",
+                            z_blocks    ? "Z>32 "       : "",
+                            no_floor    ? "no-floor "   : "",
+                            slope_min   ? "min>32 "     : "",
+                            slope_max   ? "max>32 "     : "",
+                            char_blocks ? "char-blk "   : "",
+                            (!z_blocks && !no_floor && !slope_min &&
+                             !slope_max && !char_blocks) ? "no" : "");
+                ImGui::Text("moving  : %s   moveangle=%d   anim=%s",
+                            Player->IsMoving() ? "yes" : "no",
+                            Player->GetMoveAngle(),
+                            state_name ? state_name : "?");
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Anim"))
+            {
+                ImGui::Text("anim    : %s", state_name ? state_name : "?");
+                ImGui::Text("state   : %d/%d  frame=%d  last=%d  count=%d  rate=%d",
+                            st_idx, st_total, pinst->GetFrame(),
+                            fr_total > 0 ? fr_total - 1 : -1,
+                            fr_total, pinst->GetFrameRate());
+                ImGui::Text("flags   : %s  done=%s  animator=%s",
+                            fpos ? flagstr : "-",
+                            Player->CommandDone() ? "yes" : "no",
+                            Player->HasAnimator() ? "yes" : "NO");
+                ImGui::Text("prev    : state=%d \"%s\"  frame=%d",
+                            prev_idx, prev_name, pinst->GetPrevFrame());
+                if (T3DAnimator* d3 = dynamic_cast<T3DAnimator*>(pinst->GetAnimator()))
+                {
+                    ImGui::Text("bridge  : transition=%d state=%d prev=%d/%d",
+                                d3->DebugTransitionActive() ? 1 : 0,
+                                d3->DebugTransitionState(),
+                                d3->DebugTransitionPrevState(),
+                                d3->DebugTransitionPrevFrame());
+                    ImGui::Text("bridge  : last=%d high=%d",
+                                d3->DebugTransitionLastFrame(),
+                                d3->DebugTransitionHighestFrame());
+                    ImGui::Text("render  : frame=%d next=%d/%d frac=%.3f",
+                                d3->DebugPoseUpdateFrame(),
+                                d3->DebugPoseUpdateNextState(),
+                                d3->DebugPoseUpdateNextFrame(),
+                                d3->DebugPoseUpdateFrameFrac());
+                }
+                ImGui::Separator();
+                ImGui::Text("sets    : total=%u same=%u",
+                            pinst->DebugStateSetCount(),
+                            pinst->DebugSameStateSetCount());
+                ImGui::Text("last set: %d->%d at frame=%d gf=%d",
+                            pinst->DebugLastStateSetFrom(),
+                            pinst->DebugLastStateSetTo(),
+                            pinst->DebugLastStateSetFrame(),
+                            pinst->DebugLastStateSetGameFrame());
+                ImGui::Text("wraps   : total=%u",
+                            pinst->DebugLoopWrapCount());
+                ImGui::Text("last wrap: state=%d frame=%d gf=%d",
+                            pinst->DebugLastLoopWrapState(),
+                            pinst->DebugLastLoopWrapFrame(),
+                            pinst->DebugLastLoopWrapGameFrame());
+                ImGui::Separator();
+                ImGui::Text("doing   : action=%d name=\"%s\"",
+                            pc->DoingAction(), pc->DoingName());
+                ImGui::Text("desired : action=%d name=\"%s\"",
+                            pc->DesiredAction(), pc->DesiredName());
+                ImGui::Text("root    : action=%d name=\"%s\"",
+                            pc->RootAction(), pc->RootName());
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Combat"))
+            {
+                ImGui::Text("mode    : combat=%d bow=%d walk=%d sneak=%d run=%d",
+                            pc->IsCombat() ? 1 : 0,
+                            pc->IsBowMode() ? 1 : 0,
+                            pc->IsWalkMode() ? 1 : 0,
+                            pc->IsSneakMode() ? 1 : 0,
+                            pc->IsRunMode() ? 1 : 0);
+                if (pcd && pcd->classdata)
                 {
                     const SClassData* cd = pcd->classdata;
                     ImGui::Text("classmod: H=%d F=%d M=%d  statreqs=[%d,%d,%d,%d,%d,%d]",
@@ -622,50 +647,91 @@ static void DrawPlayerStatusOverlay()
                                 cd->statreqs[0], cd->statreqs[1], cd->statreqs[2],
                                 cd->statreqs[3], cd->statreqs[4], cd->statreqs[5]);
                 }
+                if (pcd)
+                    ImGui::Text("chardata: name=\"%s\" numattacks=%d combatrng=%d/%d attkrng=%d",
+                                pcd->name, pcd->attacks.NumItems(),
+                                pcd->combatrangemin, pcd->combatrangemax,
+                                pcd->maxattackrange);
+                else
+                    ImGui::Text("chardata: NULL");
+                ImGui::Text("hasAni  : combat=%d swing=%d thrust=%d chop=%d",
+                            Player->HasActionAni("combat") ? 1 : 0,
+                            Player->HasActionAni("swing")  ? 1 : 0,
+                            Player->HasActionAni("thrust") ? 1 : 0,
+                            Player->HasActionAni("chop")   ? 1 : 0);
+                ImGui::EndTabItem();
             }
-            for (int btn = 1; btn <= 3; ++btn)
+
+            if (pcd && ImGui::BeginTabItem("Attacks"))
             {
-                int with_button = 0, after_anim = 0, after_mode = 0,
-                    after_weapon = 0, after_skill = 0, after_wskill = 0,
-                    after_fatigue = 0;
-                const char* first_pass = nullptr;
-                for (int32_t i = 0; i < pcd->attacks.NumItems(); ++i)
+                const int32_t wt   = pc->WeaponType();
+                const int32_t wbit = 1 << wt;
+                TPlayer* tpl = (Player->ObjClass() == OBJCLASS_PLAYER) ? (TPlayer*)Player : nullptr;
+                const int32_t skAtk = tpl ? tpl->Skill(SK_ATTACK) : 999;
+                ImGui::Text("player  : weapontype=%d mask=0x%x attackskill=%d",
+                            wt, wbit, skAtk);
+                ImGui::Text("fatigue : %d/%d", pc->Fatigue(), pc->MaxFatigue());
+                if (tpl)
                 {
-                    const SCharAttackData& ad = pcd->attacks[i];
-                    if (ad.button != btn) continue;
-                    ++with_button;
-                    if (!Player->HasActionAni(ad.attackname)) continue;
-                    ++after_anim;
-                    bool mode_ok = true;
-                    if ((ad.flags & CA_SNEAKMODE) && !pc->IsSneakMode()) mode_ok = false;
-                    else if ((ad.flags & CA_WALKMODE) && !pc->IsWalkMode()) mode_ok = false;
-                    else if ((ad.flags & CA_BOWMODE) && !pc->IsBowMode()) mode_ok = false;
-                    else if (!pc->IsCombat()) mode_ok = false;
-                    if (!mode_ok) continue;
-                    ++after_mode;
-                    if (Player->ObjClass() == OBJCLASS_PLAYER)
-                    {
-                        TPlayer* pl = (TPlayer*)Player;
-                        if (!(ad.weaponmask & wbit)) continue;
-                        ++after_weapon;
-                        if (pl->Skill(SK_ATTACK) < ad.attackskill) continue;
-                        ++after_skill;
-                        if (pl->WeaponSkill(wt) < ad.weaponskill) continue;
-                        ++after_wskill;
-                    }
-                    else
-                    {
-                        after_weapon = after_skill = after_wskill = after_mode;
-                    }
-                    if (pc->Fatigue() < ad.fatigue) continue;
-                    ++after_fatigue;
-                    if (!first_pass) first_pass = ad.attackname;
+                    ImGui::Text("stats   : Lv=%d Exp=%d STR=%d CON=%d AGI=%d RFL=%d MND=%d LCK=%d",
+                                tpl->Level(), tpl->Exp(),
+                                tpl->Strn(), tpl->Cons(), tpl->Agil(),
+                                tpl->Rflx(), tpl->Mind(), tpl->Luck());
+                    ImGui::Text("max     : H=%d/%d F=%d/%d M=%d/%d classdata=%s",
+                                tpl->Health(), tpl->MaxHealth(),
+                                tpl->Fatigue(), tpl->MaxFatigue(),
+                                tpl->Mana(), tpl->MaxMana(),
+                                (pcd->classdata ? pcd->classdata->name : "(NULL)"));
                 }
-                ImGui::Text("btn%d: btn=%d ani=%d mode=%d wpn=%d skl=%d wsk=%d fat=%d  [%s]",
-                            btn, with_button, after_anim, after_mode,
-                            after_weapon, after_skill, after_wskill, after_fatigue,
-                            first_pass ? first_pass : "(rejected)");
+                ImGui::Separator();
+                for (int btn = 1; btn <= 3; ++btn)
+                {
+                    int with_button = 0, after_anim = 0, after_mode = 0,
+                        after_weapon = 0, after_skill = 0, after_wskill = 0,
+                        after_fatigue = 0;
+                    const char* first_pass = nullptr;
+                    for (int32_t i = 0; i < pcd->attacks.NumItems(); ++i)
+                    {
+                        const SCharAttackData& ad = pcd->attacks[i];
+                        if (ad.button != btn) continue;
+                        ++with_button;
+                        if (!Player->HasActionAni(ad.attackname)) continue;
+                        ++after_anim;
+                        bool mode_ok = true;
+                        if ((ad.flags & CA_SNEAKMODE) && !pc->IsSneakMode()) mode_ok = false;
+                        else if ((ad.flags & CA_WALKMODE) && !pc->IsWalkMode()) mode_ok = false;
+                        else if ((ad.flags & CA_BOWMODE) && !pc->IsBowMode()) mode_ok = false;
+                        else if (!pc->IsCombat()) mode_ok = false;
+                        if (!mode_ok) continue;
+                        ++after_mode;
+                        if (Player->ObjClass() == OBJCLASS_PLAYER)
+                        {
+                            TPlayer* pl = (TPlayer*)Player;
+                            if (!(ad.weaponmask & wbit)) continue;
+                            ++after_weapon;
+                            if (pl->Skill(SK_ATTACK) < ad.attackskill) continue;
+                            ++after_skill;
+                            if (pl->WeaponSkill(wt) < ad.weaponskill) continue;
+                            ++after_wskill;
+                        }
+                        else
+                        {
+                            after_weapon = after_skill = after_wskill = after_mode;
+                        }
+                        if (pc->Fatigue() < ad.fatigue) continue;
+                        ++after_fatigue;
+                        if (!first_pass) first_pass = ad.attackname;
+                    }
+                    ImGui::Text("btn%d: btn=%d ani=%d mode=%d wpn=%d skl=%d wsk=%d fat=%d [%s]",
+                                btn, with_button, after_anim, after_mode,
+                                after_weapon, after_skill, after_wskill,
+                                after_fatigue,
+                                first_pass ? first_pass : "(rejected)");
+                }
+                ImGui::EndTabItem();
             }
+
+            ImGui::EndTabBar();
         }
     }
     ImGui::End();
@@ -757,11 +823,33 @@ static void DrawClosestMonsterOverlay()
     else
         ImGui::Text("chardata: NULL");
     const char* anim = closest->GetStateName();
-    ImGui::Text("anim    : %s", anim ? anim : "?");
+    TObjectInstance* cinst = static_cast<TObjectInstance*>(closest);
+    TObjectImagery* cimg = closest->GetImagery();
+    const int32_t cstate = cinst->GetState();
+    const int32_t clen = cimg ? cimg->GetAniLength(cstate) : 0;
+    ImGui::Text("anim    : %s  state=%d frame=%d/%d prev=(%d,%d) done=%d",
+                anim ? anim : "?",
+                cstate, cinst->GetFrame(), clen,
+                cinst->GetPrevState(), cinst->GetPrevFrame(),
+                closest->CommandDone() ? 1 : 0);
+    ImGui::Text("sets    : total=%u same=%u last %d->%d frame=%d gf=%d",
+                cinst->DebugStateSetCount(),
+                cinst->DebugSameStateSetCount(),
+                cinst->DebugLastStateSetFrom(),
+                cinst->DebugLastStateSetTo(),
+                cinst->DebugLastStateSetFrame(),
+                cinst->DebugLastStateSetGameFrame());
+    ImGui::Text("wraps   : total=%u last state=%d frame=%d gf=%d",
+                cinst->DebugLoopWrapCount(),
+                cinst->DebugLastLoopWrapState(),
+                cinst->DebugLastLoopWrapFrame(),
+                cinst->DebugLastLoopWrapGameFrame());
 
     ImGui::Text("doing   : action=%d name=\"%s\"  target=(%d,%d)",
                 closest->DoingAction(), closest->DoingName(),
                 closest->DoingTargetX(), closest->DoingTargetY());
+    ImGui::Text("desired : action=%d name=\"%s\"",
+                closest->DesiredAction(), closest->DesiredName());
     ImGui::Text("root    : action=%d name=\"%s\"",
                 closest->RootAction(), closest->RootName());
     ImGui::Text("attack  : nextattack=%d radius=%d numattacks=%d",

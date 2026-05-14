@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a5d18
+// Decompiled methods and structure for class: cls_0x5a5d18_TLogoScreen
 
 /*
-/OOAnalyzer/cls_0x5a5d18
+/OOAnalyzer/cls_0x5a5d18_TLogoScreen
 pack(disabled)
-Structure cls_0x5a5d18 {
-   0   cls_0x5a5ed4   112   cls_0x5a5ed4   "Component (member) class."
+Structure cls_0x5a5d18_TLogoScreen {
+   0   cls_0x5a5ed4_TScreen   112   cls_0x5a5ed4_TScreen   "Component (member) class."
    112   dword   4   mbr_0x70   "Unsigned Double-Word (ddw, 4-bytes)"
    116   dword   4   mbr_0x74   "Unsigned Double-Word (ddw, 4-bytes)"
    120   dword   4   mbr_0x78   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -18,16 +18,16 @@ Length: 140 Alignment: 1
 
 // Function at 00488e70
 
-cls_0x5a5d18 * __thiscall OOAnalyzer::cls_0x5a5d18::cls_0x5a5d18(cls_0x5a5d18 *this)
+cls_0x5a5d18_TLogoScreen * __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::cls_0x5a5d18_TLogoScreen(cls_0x5a5d18_TLogoScreen *this)
 
 {
-  cls_0x5a5ed4::cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   this->mbr_0x70 = (dword)&cls_0x5a4c30__vftable_5a4c30_005a4c30;
   this->mbr_0x78 = 0;
   this->mbr_0x7c = 0;
   this->mbr_0x80 = 0;
   this->mbr_0x74 = 0;
-  (this->cls_0x5a5ed4).vftptr_0x0 =
+  (this->cls_0x5a5ed4_TScreen).vftptr_0x0 =
        (cls_0x5a5ed4__vftable_5a5ed4 *)&cls_0x5a5d18__vftable_5a5d18_005a5d18;
   return this;
 }
@@ -36,15 +36,15 @@ cls_0x5a5d18 * __thiscall OOAnalyzer::cls_0x5a5d18::cls_0x5a5d18(cls_0x5a5d18 *t
 
 // Function at 00488ea0
 
-cls_0x5a5d18 * __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x488ea0(cls_0x5a5d18 *this)
+cls_0x5a5d18_TLogoScreen * __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::virt_meth_0x488ea0_TLogoScreen_Dtor(cls_0x5a5d18_TLogoScreen *this)
 
 {
   int iVar1;
   byte in_stack_00000004;
   
-  cls_0x5a5ed4::~cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   if ((in_stack_00000004 & 1) != 0) {
-    if (this != (cls_0x5a5d18 *)0x0) {
+    if (this != (cls_0x5a5d18_TLogoScreen *)0x0) {
       iVar1 = FUN_0058cff3(this);
       DAT_0065ba08 = DAT_0065ba08 - iVar1;
     }
@@ -57,7 +57,7 @@ cls_0x5a5d18 * __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x488ea0(cls_0x5a5
 
 // Function at 0053a2c0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x53a2c0(cls_0x5a5d18 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::virt_meth_0x53a2c0_TLogoScreen_Initialize(cls_0x5a5d18_TLogoScreen *this)
 
 {
   uint *puVar1;
@@ -82,9 +82,9 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x53a2c0(cls_0x5a5d18 
   puStack_8 = &LAB_005a1be2;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  (this->cls_0x5a5ed4).mbr_0x54 = 0;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x54 = 0;
   pcStack_28 = (char *)0x53a2ed;
-  cls_0x45f7c0::meth_0x51eda0((cls_0x45f7c0 *)&DAT_0065a890);
+  cls_0x45f7c0::meth_0x51eda0_TPlayerManager_Clear((cls_0x45f7c0 *)&DAT_0065a890);
   pcStack_28 = (char *)0x53a2f2;
   FUN_00446cb0();
   pcStack_28 = (char *)0x0;
@@ -102,8 +102,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x53a2c0(cls_0x5a5d18 
   local_10 = &cStack_2c;
   cls_0x419dd0::cls_0x419dd0(&cStack_2c);
   (**(code **)(dVar2 + 0x30))(8);
-  (this->cls_0x5a5ed4).mbr_0x40 = (dword)&this->mbr_0x70;
-  (this->cls_0x5a5ed4).mbr_0x44 = (dword)&this->mbr_0x70;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x40 = (dword)&this->mbr_0x70;
+  (this->cls_0x5a5ed4_TScreen).mbr_0x44 = (dword)&this->mbr_0x70;
   this_00 = (cls_0x5a4494 *)FUN_00482fb0(0x17c);
   puVar6 = PTR_DAT_005d79e0;
   local_10 = (cls_0x419dd0 *)0x0;
@@ -201,7 +201,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x53a2c0(cls_0x5a5d18 
 
 // Function at 0053a680
 
-void __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x53a680(cls_0x5a5d18 *this)
+void __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::virt_meth_0x53a680_TLogoScreen_Close(cls_0x5a5d18_TLogoScreen *this)
 
 {
   cls_0x5a4f28::meth_0x48ee10((cls_0x5a4f28 *)this);

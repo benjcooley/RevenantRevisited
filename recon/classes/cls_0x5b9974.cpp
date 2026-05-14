@@ -4,7 +4,7 @@
 /OOAnalyzer/cls_0x5b9974
 pack(disabled)
 Structure cls_0x5b9974 {
-   0   cls_0x5a5ed4   112   cls_0x5a5ed4   "Component (member) class."
+   0   cls_0x5a5ed4_TScreen   112   cls_0x5a5ed4_TScreen   "Component (member) class."
    112   dword   4   mbr_0x70   "Unsigned Double-Word (ddw, 4-bytes)"
    116   dword   4   mbr_0x74   "Unsigned Double-Word (ddw, 4-bytes)"
    120   dword   4   mbr_0x78   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -33,7 +33,7 @@ OOAnalyzer::cls_0x5b9974::cls_0x5b9974
   char *pcVar3;
   dword in_stack_00000014;
   
-  cls_0x5a5ed4::cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   this->mbr_0x70 = param_3;
   this->mbr_0x74 = param_4;
   uVar2 = 0xffffffff;
@@ -49,7 +49,7 @@ OOAnalyzer::cls_0x5b9974::cls_0x5b9974
   this->mbr_0xcc = 0;
   this->mbr_0xd0 = 0;
   this->mbr_0xc4 = 0;
-  (this->cls_0x5a5ed4).vftptr_0x0 =
+  (this->cls_0x5a5ed4_TScreen).vftptr_0x0 =
        (cls_0x5a5ed4__vftable_5a5ed4 *)&cls_0x5b9974__vftable_5b9974_005b9974;
   _strncpy((char *)&this->mbr_0x7c,param_2,~uVar2 - 1);
   *(undefined *)((~uVar2 - 1) + (int)&this->mbr_0x7c) = 0;
@@ -88,12 +88,12 @@ void __thiscall OOAnalyzer::cls_0x5b9974::virt_meth_0x53c7c0(cls_0x5b9974 *this)
 {
   dword dVar1;
   
-  cls_0x5a5ed4::virt_meth_0x48fda0(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::virt_meth_0x48fda0_TScreen_DrawBackground(&this->cls_0x5a5ed4_TScreen);
   dVar1 = this->mbr_0x70 - 1;
   this->mbr_0x70 = dVar1;
   if (dVar1 == 0) {
-    (this->cls_0x5a5ed4).cls_0x41c7f0.mbr_0x14 = this->mbr_0xbc;
-    cls_0x5a5320::meth_0x48ea40((cls_0x5a5320 *)this);
+    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x14 = this->mbr_0xbc;
+    cls_0x5a5320_TPlayScreen::meth_0x48ea40((cls_0x5a5320_TPlayScreen *)this);
   }
   return;
 }
@@ -108,13 +108,13 @@ void __thiscall OOAnalyzer::cls_0x5b9974::virt_meth_0x53c7f0(cls_0x5b9974 *this)
   undefined4 uVar1;
   undefined4 uVar2;
   
-  if ((this->cls_0x5a5ed4).mbr_0x50 != 0) {
+  if ((this->cls_0x5a5ed4_TScreen).mbr_0x50 != 0) {
     uVar2 = 0x10;
     uVar1 = cls_0x46d6b0::meth_0x46d710((cls_0x46d6b0 *)this->mbr_0x78);
     cls_0x5a68d8::meth_0x4bd680((cls_0x5a68d8 *)PTR_DAT_005d79e0,0,0,uVar1,uVar2);
   }
-  cls_0x5a5ed4::virt_meth_0x48ff00(&this->cls_0x5a5ed4);
-  (this->cls_0x5a5ed4).mbr_0x50 = 0;
+  cls_0x5a5ed4_TScreen::virt_meth_0x48ff00_TScreen_Animate(&this->cls_0x5a5ed4_TScreen);
+  (this->cls_0x5a5ed4_TScreen).mbr_0x50 = 0;
   return;
 }
 
@@ -127,7 +127,7 @@ cls_0x5b9974 * __thiscall OOAnalyzer::cls_0x5b9974::virt_meth_0x53c8a0(cls_0x5b9
 {
   byte in_stack_00000004;
   
-  cls_0x5a5ed4::~cls_0x5a5ed4(&this->cls_0x5a5ed4);
+  cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(&this->cls_0x5a5ed4_TScreen);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }

@@ -31,7 +31,7 @@ int __thiscall OOAnalyzer::cls_0x46d6b0::meth_0x46d6b0(cls_0x46d6b0 *this)
     pcVar3 = this;
     do {
       if (((*pdVar4 != 0) && (pbVar1 = (byte *)(*pdVar4 + (int)pdVar4), pbVar1 != (byte *)0x0)) &&
-         (uVar2 = FUN_0059a530((uint)pcVar3,pbVar1,in_stack_00000004), pcVar3 = extraout_ECX,
+         (uVar2 = FUN_0059a530_stricmp((uint)pcVar3,pbVar1,in_stack_00000004), pcVar3 = extraout_ECX,
          uVar2 == 0)) {
         if ((&this->mbr_0x404)[iVar5] == 0) {
           return 0;
@@ -67,7 +67,7 @@ int __thiscall OOAnalyzer::cls_0x46d6b0::meth_0x46d710(cls_0x46d6b0 *this)
     pcVar3 = this;
     do {
       if (((*pdVar4 != 0) && (pbVar1 = (byte *)(*pdVar4 + (int)pdVar4), pbVar1 != (byte *)0x0)) &&
-         (uVar2 = FUN_0059a530((uint)pcVar3,pbVar1,in_stack_00000004), pcVar3 = extraout_ECX,
+         (uVar2 = FUN_0059a530_stricmp((uint)pcVar3,pbVar1,in_stack_00000004), pcVar3 = extraout_ECX,
          uVar2 == 0)) {
         if ((&this->mbr_0x404)[iVar5] != 0) {
           iVar5 = (int)&this->mbr_0x404 + (&this->mbr_0x404)[iVar5] + iVar5 * 4;

@@ -672,7 +672,7 @@ undefined4 cls_0x41c7d0::meth_0x49afd0()
   _strncpy(pcVar2,s_sound_effects__005da80c,iVar4 + 0x103);
   pcVar2[iVar4 + 0x103] = '\0';
   FUN_0059bd3e(pdVar6);
-  uVar5 = FUN_0059a530(extraout_ECX,(byte *)&this->mbr_0xc8,(byte *)pdVar6);
+  uVar5 = FUN_0059a530_stricmp(extraout_ECX,(byte *)&this->mbr_0xc8,(byte *)pdVar6);
   if (uVar5 != 0) {
     meth_0x49ad20(this);
   }
@@ -715,7 +715,7 @@ undefined4 cls_0x41c7d0::meth_0x49afd0()
   _strncpy(pcVar2,&DAT_005da824,iVar4 + 0x103);
   pcVar2[iVar4 + 0x103] = '\0';
   FUN_0059bd3e(pdVar6);
-  uVar5 = FUN_0059a530(extraout_ECX_00,(byte *)pdVar1,(byte *)pdVar6);
+  uVar5 = FUN_0059a530_stricmp(extraout_ECX_00,(byte *)pdVar1,(byte *)pdVar6);
   if (uVar5 != 0) {
     meth_0x49ad20(this);
   }
@@ -1211,7 +1211,7 @@ undefined4 cls_0x41c7d0::meth_0x49b990(undefined param_1, undefined param_2, int
       } while (iVar6 < 0x10);
       bVar3 = false;
       if (((*(byte *)(iVar1 + 0x18) & 2) == 0) &&
-         ((((iVar6 = FUN_0046de60(&iStack_18,&local_c), in_stack_00000014 <= iVar6 ||
+         ((((iVar6 = FUN_0046de60_Distance2D(&iStack_18,&local_c), in_stack_00000014 <= iVar6 ||
             (this->mbr_0x34 != 0)) && (-1 < iVar7)) && (DAT_0066811c == 0)))) {
         iVar6 = _AIL_set_3D_sample_file_8((&this->mbr_0x7c)[iVar7],*(undefined4 *)(iVar1 + 0x10));
         bVar3 = true;
@@ -1256,9 +1256,9 @@ undefined4 cls_0x41c7d0::meth_0x49b990(undefined param_1, undefined param_2, int
           uVar5 = DAT_005d7aa0 + -0x7f + _param_2;
           uVar5 = uVar5 & ((int)uVar5 < 0) - 1;
           if (DAT_0066811c != 0) {
-            iVar6 = FUN_0046de60(&iStack_18,&local_c);
+            iVar6 = FUN_0046de60_Distance2D(&iStack_18,&local_c);
             if ((float)iVar6 < _DAT_005a3698) {
-              FUN_0046de60(&iStack_18,&local_c);
+              FUN_0046de60_Distance2D(&iStack_18,&local_c);
             }
             lVar9 = __ftol();
             uVar5 = (uint)lVar9;

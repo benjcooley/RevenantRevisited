@@ -164,7 +164,7 @@ OOAnalyzer::cls_0x5a34a0::virt_meth_0x40d4a0(cls_0x5a34a0 *this,undefined4 param
   bool bVar8;
   int in_stack_00000008;
   
-  iVar4 = FUN_0059a530(param_1,&DAT_005c612c);
+  iVar4 = FUN_0059a530_stricmp(param_1,&DAT_005c612c);
   if (iVar4 != 0) {
     return 0;
   }

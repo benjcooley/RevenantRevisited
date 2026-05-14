@@ -64,7 +64,7 @@ undefined4 cls_0x5a4e24::virt_meth_0x4697a0(byte *param_1, char *param_2, undefi
   int in_stack_00000014;
   
   *param_2 = '\0';
-  uVar1 = FUN_0059a530((uint)this,param_1,(byte *)s_startpos_005d3c74);
+  uVar1 = FUN_0059a530_stricmp((uint)this,param_1,(byte *)s_startpos_005d3c74);
   if (uVar1 != 0) {
     uVar3 = this->virt_meth_0x436ea0();
     return uVar3;
@@ -94,7 +94,7 @@ void cls_0x5a4e24::virt_meth_0x469890()
   if (((DAT_00668128 != 0) && (this->mbr_0x188 != 0)) && (this->mbr_0x184 == 0)) {
     this->mbr_0x188 = 0;
     this->mbr_0x184 = 1;
-    FUN_00483300(0,*(int *)(this->mbr_0x17c + 0x98) + -1);
+    FUN_00483300_RandomRange(0,*(int *)(this->mbr_0x17c + 0x98) + -1);
     cls_0x5a3d44::meth_0x430b80((cls_0x5a3d44 *)this->mbr_0x17c);
     pcVar1 = this->vftptr_0x0;
     cls_0x5b98b8::meth_0x436980((cls_0x5b98b8 *)this);

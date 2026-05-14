@@ -28,6 +28,7 @@
 #include "math3d.h"
 #include "meshextract.h"
 #include "object.h"
+#include "player.h"
 #include "runtimemode.h"
 #include "revenant.h"
 #include "revdefs.h"
@@ -38,9 +39,11 @@
 #include "time.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -63,6 +66,26 @@ struct SSectorSurfaceProbe {
     float scene_z = 0.0f;
 };
 
+struct SMapContentSignature {
+    int64_t version_sum = 0;
+    int32_t object_count = 0;
+    uint64_t object_hash = 1469598103934665603ull;
+};
+
+struct SMapCameraViewport {
+    float scale = 1.0f;
+    float offset_x = 0.0f;
+    float offset_y = 0.0f;
+};
+
+using SMapFrameClock = std::chrono::steady_clock;
+
+static float FrameProfileMs(SMapFrameClock::time_point start,
+                            SMapFrameClock::time_point end)
+{
+    return std::chrono::duration<float, std::milli>(end - start).count();
+}
+
 static bool IsTerrainGridTileName(const char* name)
 {
     if (!name || !*name)
@@ -77,6 +100,141 @@ constexpr float kIsoCos30     = 867.0f / 1000.0f;
 constexpr float kCamForwardWU = 2750.0f;
 constexpr float kSectorDepthNearWU = -1024.0f;
 constexpr float kSectorDepthFarWU  = 16384.0f;
+
+static SMapCameraViewport ComputeMapCameraViewport(int32_t viewport_w, int32_t viewport_h)
+{
+    // The gameplay camera is authored against the classic 640x480 view.
+    // Higher render resolutions cover the framebuffer with that virtual view
+    // instead of expanding world coverage and changing the ortho camera scale.
+    // Non-4:3 modes crop one axis; they must not reveal extra world.
+    SMapCameraViewport v = {};
+    if (viewport_w <= 0 || viewport_h <= 0)
+        return v;
+
+    const float sx = float(viewport_w) / float(WIDTH);
+    const float sy = float(viewport_h) / float(HEIGHT);
+    v.scale = (std::max)(0.0001f, (std::max)(sx, sy));
+    v.offset_x = (float(viewport_w) - float(WIDTH) * v.scale) * 0.5f;
+    v.offset_y = (float(viewport_h) - float(HEIGHT) * v.scale) * 0.5f;
+    return v;
+}
+
+static int32_t ScalePixel(float scale, float value)
+{
+    return (std::max)(1, int32_t(std::lround(value * scale)));
+}
+
+static void MixMapSignature(uint64_t& hash, uint64_t value)
+{
+    hash ^= value;
+    hash *= 1099511628211ull;
+}
+
+static void AccumulateObjectSignature(uint64_t& hash, uint64_t object_hash)
+{
+    const uint64_t rotated = (object_hash << 31) | (object_hash >> 33);
+    hash += object_hash * 0x9E3779B185EBCA87ull;
+    hash ^= rotated;
+}
+
+static uint64_t RendererSourcePointerKey(uint32_t domain, const void* ptr)
+{
+    uint64_t hash = 1469598103934665603ull;
+    MixMapSignature(hash, domain);
+    MixMapSignature(hash, uint64_t(uintptr_t(ptr) >> 4));
+    return hash ? hash : 1ull;
+}
+
+static uint64_t RendererI3DMeshKey(AssetUid asset_id, int32_t objnum, int32_t texslot)
+{
+    uint64_t hash = asset_id ? asset_id : 1469598103934665603ull;
+    MixMapSignature(hash, 0x4933444Du); // 'I3DM'
+    MixMapSignature(hash, uint64_t(uint32_t(objnum)));
+    MixMapSignature(hash, uint64_t(uint32_t(texslot + 1)));
+    return hash ? hash : 1ull;
+}
+
+static int64_t ComputeMapContentVersionSum(const TGameMap* map)
+{
+    int64_t sum = 0;
+    if (!map)
+        return sum;
+    for (TSector* sec : map->Sectors())
+        if (sec)
+            sum += sec->ContentVer();
+    return sum;
+}
+
+static void AddRendererImagePairSourceRef(TObjectImagery* img,
+                                          uint64_t key,
+                                          RendererImagePairHandle handle)
+{
+    if (!Renderer || !img || handle == 0 ||
+        img->ReferencedResourceHandle(EAssetReferencedResourceKind::RendererImagePair, key) != 0)
+        return;
+
+    Renderer->AddImagePairAssetRef(handle);
+    img->AddReferencedResource(
+        EAssetReferencedResourceKind::RendererImagePair,
+        key,
+        handle,
+        "i2d.tile.image_pair",
+        [handle]() {
+            if (Renderer)
+                Renderer->ReleaseImagePairAssetRef(handle);
+        });
+}
+
+static void AddRendererMeshSourceRef(TObjectImagery* img, uint64_t key, MeshHandle handle)
+{
+    if (!Renderer || !img || handle == 0 ||
+        img->ReferencedResourceHandle(EAssetReferencedResourceKind::RendererMesh, key) != 0)
+        return;
+
+    Renderer->AddMeshAssetRef(handle);
+    img->AddReferencedResource(
+        EAssetReferencedResourceKind::RendererMesh,
+        key,
+        handle,
+        "i3d.mesh",
+        [handle]() {
+            if (Renderer)
+                Renderer->ReleaseMeshAssetRef(handle);
+        });
+}
+
+static SMapContentSignature ComputeMapContentSignature(const TGameMap* map)
+{
+    SMapContentSignature sig = {};
+    if (!map)
+        return sig;
+
+    for (TSector* sec : map->Sectors())
+    {
+        if (!sec)
+            continue;
+
+        sig.version_sum += sec->ContentVer();
+        for (int32_t i = 0; i < sec->NumItems(); ++i)
+        {
+            TObjectInstance* oi = sec->GetInstance(i);
+            if (!oi)
+                continue;
+
+            ++sig.object_count;
+            // Object identity, not location. Sector transfers advance
+            // ContentVer but keep this signature stable, which lets the
+            // renderer update bins without rebuilding resident assets.
+            uint64_t object_hash = 1469598103934665603ull;
+            MixMapSignature(object_hash, uint64_t(uintptr_t(oi) >> 4));
+            MixMapSignature(object_hash, uint32_t(oi->GetMapIndex()));
+            MixMapSignature(object_hash, uint32_t(oi->ObjClass()));
+            MixMapSignature(object_hash, uint32_t(oi->ObjType()));
+            AccumulateObjectSignature(sig.object_hash, object_hash);
+        }
+    }
+    return sig;
+}
 
 inline std::filesystem::path NormalizeFsPath(const char* path)
 {
@@ -107,15 +265,16 @@ inline void ProjectCameraRelToScreen(const SMapRenderContext& ctx,
 {
     int32_t iso_x = 0, iso_y = 0;
     WorldToScreen(rel, iso_x, iso_y);
-    sx = float(iso_x);
-    sy = float(iso_y);
+    const float zoom = (std::max)(ctx.camera_zoom, 0.0001f);
+    sx = float(iso_x) * zoom;
+    sy = float(iso_y) * zoom;
     if (!ctx.perspective_camera)
         return;
 
     const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
-    const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
-    sx *= focal_zoom / z;
-    sy *= focal_zoom / z;
+    const float focal_zoom = (std::max)(ctx.cam_forward * zoom, 1.0f);
+    sx = float(iso_x) * focal_zoom / z;
+    sy = float(iso_y) * focal_zoom / z;
 }
 
 inline void ProjectWorldPointToScreen(const SMapRenderContext& ctx,
@@ -147,6 +306,63 @@ inline int64_t SectorBinKey(int32_t sx, int32_t sy)
     return (int64_t(sx) << 32) ^ uint32_t(sy);
 }
 
+struct SSectorCullRange {
+    int32_t min_sx = 0;
+    int32_t max_sx = -1;
+    int32_t min_sy = 0;
+    int32_t max_sy = -1;
+};
+
+template <typename TImpl>
+static void StoreDrawRecordRange(TImpl& s, const SSectorCullRange& r)
+{
+    s.drawRangeMinSx = r.min_sx;
+    s.drawRangeMaxSx = r.max_sx;
+    s.drawRangeMinSy = r.min_sy;
+    s.drawRangeMaxSy = r.max_sy;
+}
+
+template <typename TImpl>
+static SSectorCullRange ComputeRenderSectorRange(const TImpl& s,
+                                                 int32_t vw, int32_t vh,
+                                                 int32_t cam_ox, int32_t cam_oy,
+                                                 float camera_forward,
+                                                 float camera_zoom)
+{
+    S3DPoint c0, c1, c2, c3;
+    const float cull_zoom = camera_zoom > 0.01f ? camera_zoom : 1.0f;
+    const float cull_scale = 1.0f / cull_zoom;
+    (void)camera_forward;
+    // Perspective projection can make far-away map tiles collapse toward the
+    // screen center. That is a fine projection effect, but it is not license
+    // to submit the whole map. The renderer's candidate window is the bounded
+    // gameplay camera rectangle, with submit-time tests handling the exact
+    // tile volume inside that rectangle.
+    auto unzoomScreen = [cull_scale](int32_t v) -> int32_t {
+        return int32_t(std::floor(float(v) * cull_scale));
+    };
+    ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
+                  unzoomScreen(-cam_oy - TRenderer::kGBufPad), c0, 0);
+    ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
+                  unzoomScreen(-cam_oy - TRenderer::kGBufPad), c1, 0);
+    ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
+                  unzoomScreen(vh - cam_oy + TRenderer::kGBufPad), c2, 0);
+    ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
+                  unzoomScreen(vh - cam_oy + TRenderer::kGBufPad), c3, 0);
+
+    const int32_t min_wx = (std::min)((std::min)(c0.x, c1.x), (std::min)(c2.x, c3.x)) + s.sectorCameraWorld.x - SECTORWIDTH;
+    const int32_t max_wx = (std::max)((std::max)(c0.x, c1.x), (std::max)(c2.x, c3.x)) + s.sectorCameraWorld.x + SECTORWIDTH;
+    const int32_t min_wy = (std::min)((std::min)(c0.y, c1.y), (std::min)(c2.y, c3.y)) + s.sectorCameraWorld.y - SECTORHEIGHT;
+    const int32_t max_wy = (std::max)((std::max)(c0.y, c1.y), (std::max)(c2.y, c3.y)) + s.sectorCameraWorld.y + SECTORHEIGHT;
+
+    SSectorCullRange r;
+    r.min_sx = FloorDiv(min_wx, SECTORWIDTH);
+    r.max_sx = FloorDiv(max_wx, SECTORWIDTH);
+    r.min_sy = FloorDiv(min_wy, SECTORHEIGHT);
+    r.max_sy = FloorDiv(max_wy, SECTORHEIGHT);
+    return r;
+}
+
 void SubmitParticleBillboards(const SMapRenderContext& ctx, SMapRenderStats& stats)
 {
     TParticleManager& particles = ParticleManager();
@@ -157,9 +373,9 @@ void SubmitParticleBillboards(const SMapRenderContext& ctx, SMapRenderStats& sta
             continue;
 
         const SParticleBucketDesc& desc = bucket->Desc();
-        const bool debug_solid = desc.debug_solid && ctx.debug_green_img.id;
-        const sg_image image = debug_solid ? ctx.debug_green_img : desc.image;
-        if (!image.id)
+        const bool debug_solid = desc.debug_solid && ctx.debug_green_texture != kInvalidTexture;
+        const TTextureHandle texture = debug_solid ? ctx.debug_green_texture : desc.texture;
+        if (texture == kInvalidTexture)
             continue;
 
         for (int32_t particle_index = 0; particle_index < bucket->Count(); ++particle_index)
@@ -177,7 +393,7 @@ void SubmitParticleBillboards(const SMapRenderContext& ctx, SMapRenderStats& sta
             float scene_z = 0.0f;
             ProjectWorldPointToScreen(ctx, world_pos, sx, sy, &scene_z);
 
-            float overlay_scale = 1.0f;
+            float overlay_scale = (std::max)(ctx.camera_zoom, 0.0001f);
             if (ctx.perspective_camera)
             {
                 const float z = (std::max)(scene_z, 1.0f);
@@ -213,7 +429,7 @@ void SubmitParticleBillboards(const SMapRenderContext& ctx, SMapRenderStats& sta
             }
 
             SOverlaySubmit sub = {};
-            sub.color_img = image;
+            sub.texture = texture;
             sub.dst_x = dst_x;
             sub.dst_y = dst_y;
             sub.dst_w = w;
@@ -281,25 +497,38 @@ static bool TileCameraVolumeVisible(const SMapRenderContext& ctx,
                                     const S3DPoint& rel,
                                     int32_t regx, int32_t regy,
                                     int32_t w, int32_t h,
-                                    float zraw_min, float zraw_max)
+                                    float zraw_min, float zraw_max,
+                                    float pad_px = float(TRenderer::kGBufPad))
 {
-    int32_t sx_i = 0, sy_i = 0;
-    WorldToScreen(rel, sx_i, sy_i);
-    const float anchor_x = float(sx_i);
-    const float anchor_y = float(sy_i);
+    float anchor_x = 0.0f, anchor_y = 0.0f;
+    if (ctx.perspective_camera)
+    {
+        int32_t sx_i = 0, sy_i = 0;
+        WorldToScreen(rel, sx_i, sy_i);
+        anchor_x = float(sx_i);
+        anchor_y = float(sy_i);
+    }
+    else
+    {
+        ProjectCameraRelToScreen(ctx, rel, anchor_x, anchor_y);
+    }
 
-    const float scale = ctx.perspective_camera ? (ctx.tile_scale > 0.0f ? ctx.tile_scale : 1.0f) : 1.0f;
+    const float scale = ctx.perspective_camera
+        ? (ctx.tile_scale > 0.0f ? ctx.tile_scale : 1.0f)
+        : (std::max)(ctx.camera_zoom, 0.0001f);
     const float x0 = anchor_x - float(regx) * scale;
     const float x1 = anchor_x + (float(w) - float(regx)) * scale;
     const float y0 = anchor_y - float(regy) * scale;
     const float y1 = anchor_y + (float(h) - float(regy)) * scale;
-
     if (!ctx.perspective_camera)
     {
-        const float vx0 = -float(ctx.cam_ox);
-        const float vy0 = -float(ctx.cam_oy);
-        const float vx1 = float(ctx.vw - ctx.cam_ox);
-        const float vy1 = float(ctx.vh - ctx.cam_oy);
+        // Callers choose either the visible presentation rect (pad=0) or the
+        // padded G-buffer rect (pad=kGBufPad) depending on whether the draw
+        // contributes only color or also feeds screen-space occlusion.
+        const float vx0 = -float(ctx.cam_ox) - pad_px;
+        const float vy0 = -float(ctx.cam_oy) - pad_px;
+        const float vx1 = float(ctx.vw - ctx.cam_ox) + pad_px;
+        const float vy1 = float(ctx.vh - ctx.cam_oy) + pad_px;
         return x1 >= vx0 && x0 <= vx1 && y1 >= vy0 && y0 <= vy1;
     }
 
@@ -310,10 +539,10 @@ static bool TileCameraVolumeVisible(const SMapRenderContext& ctx,
     z1 = (std::max)(z1, z0 + 1.0f);
 
     const float focal_zoom = (std::max)(ctx.cam_forward * (ctx.camera_zoom > 0.0f ? ctx.camera_zoom : 1.0f), 1.0f);
-    const float left   = -float(ctx.cam_ox);
-    const float right  =  float(ctx.vw - ctx.cam_ox);
-    const float top    = -float(ctx.cam_oy);
-    const float bottom =  float(ctx.vh - ctx.cam_oy);
+    const float left   = -float(ctx.cam_ox) - pad_px;
+    const float right  =  float(ctx.vw - ctx.cam_ox) + pad_px;
+    const float top    = -float(ctx.cam_oy) - pad_px;
+    const float bottom =  float(ctx.vh - ctx.cam_oy) + pad_px;
 
     bool any_left = false, any_right = false, any_top = false, any_bottom = false;
     for (float z : { z0, z1 })
@@ -495,7 +724,8 @@ static void ComputeAuthoredLocalDepthRange(int32_t wwidth, int32_t wlength, int3
 }
 
 static bool UploadTileBitmap(PTBitmap bm,
-                             sg_image* out_color, sg_image* out_depth,
+                             RendererImagePairHandle* out_image_pair,
+                             uint64_t* out_key,
                              int32_t* out_w, int32_t* out_h,
                              float* out_z_local_min = nullptr,
                              float* out_z_local_max = nullptr,
@@ -505,7 +735,7 @@ static bool UploadTileBitmap(PTBitmap bm,
                              std::vector<float>* out_cpu_depth_local = nullptr,
                              std::vector<uint8_t>* out_cpu_opaque = nullptr)
 {
-    if (!bm || bm->width <= 0 || bm->height <= 0) return false;
+    if (!Renderer || !out_image_pair || !bm || bm->width <= 0 || bm->height <= 0) return false;
     const bool is_8bit = (bm->flags & BM_8BIT) != 0;
     const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
     const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
@@ -626,26 +856,15 @@ static bool UploadTileBitmap(PTBitmap bm,
         z_dump.bbox_x0 = z_dump.bbox_y0 = 0;
         z_dump.bbox_x1 = z_dump.bbox_y1 = 0;
     }
-    sg_image_desc cd = {};
-    cd.width = w; cd.height = h;
-    cd.pixel_format = SG_PIXELFORMAT_RGBA8;
-    cd.min_filter = SG_FILTER_LINEAR;
-    cd.mag_filter = SG_FILTER_LINEAR;
-    cd.wrap_u = cd.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    cd.data.subimage[0][0].ptr  = rgba.get();
-    cd.data.subimage[0][0].size = npx * 4;
-    cd.label = "tile.color.bm";
-    *out_color = sg_make_image(&cd);
-    sg_image_desc dd = {};
-    dd.width = w; dd.height = h;
-    dd.pixel_format = SG_PIXELFORMAT_R32F;
-    dd.min_filter = SG_FILTER_LINEAR;
-    dd.mag_filter = SG_FILTER_LINEAR;
-    dd.wrap_u = dd.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    dd.data.subimage[0][0].ptr  = dflt.get();
-    dd.data.subimage[0][0].size = npx * sizeof(float);
-    dd.label = "tile.depth.bm";
-    *out_depth = sg_make_image(&dd);
+    const uint64_t key = RendererSourcePointerKey(1u, bm);
+    const uint64_t gpu_bytes = uint64_t(npx) * (4u + uint64_t(sizeof(float)));
+    *out_image_pair = Renderer->RegisterImagePairAsset(key,
+                                                       rgba.get(), npx * 4,
+                                                       dflt.get(), npx * sizeof(float),
+                                                       w, h, gpu_bytes);
+    if (!*out_image_pair)
+        return false;
+    if (out_key) *out_key = key;
     *out_w = w; *out_h = h;
     if (out_z_local_min) *out_z_local_min = z_local_min;
     if (out_z_local_max) *out_z_local_max = z_local_max;
@@ -659,19 +878,24 @@ static bool UploadTileBitmap(PTBitmap bm,
         for (size_t i = 0; i < npx; ++i)
             (*out_cpu_opaque)[i] = rgba[i * 4 + 3] ? 1 : 0;
     }
-    return sg_query_image_state(*out_color) == SG_RESOURCESTATE_VALID &&
-           sg_query_image_state(*out_depth) == SG_RESOURCESTATE_VALID;
+    return true;
 }
 
 static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
+                                 std::unordered_map<PTBitmap, int32_t>& by_bitmap,
                                  PTBitmap bm,
                                  TObjectInstance* oi,
                                  TObjectImagery* img,
                                  int32_t state)
 {
     if (!bm) return -1;
-    for (size_t t = 0; t < cache.size(); ++t)
-        if (cache[t].bm_key == bm) return int32_t(t);
+    auto found = by_bitmap.find(bm);
+    if (found != by_bitmap.end())
+    {
+        const int32_t idx = found->second;
+        if ((uint32_t)idx < (uint32_t)cache.size() && cache[size_t(idx)].bm_key == bm)
+            return idx;
+    }
 
     SSectorTileTex tex = {};
     tex.bm_key = bm;
@@ -682,17 +906,20 @@ static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
     tex.debug_regy = img ? img->GetRegY(state) : 0;
     tex.debug_regz = img ? img->GetRegZ(state) : 0;
     uint32_t bm_flags = 0;
-    if (!UploadTileBitmap(bm, &tex.color, &tex.depth, &tex.w, &tex.h,
+    uint64_t renderer_key = 0;
+    if (!UploadTileBitmap(bm, &tex.image_pair, &renderer_key, &tex.w, &tex.h,
                           &tex.z_local_min, &tex.z_local_max,
                           &tex.z_dump, &tex.has_alpha, &bm_flags,
                           &tex.cpu_depth_local, &tex.cpu_opaque))
         return -1;
+    AddRendererImagePairSourceRef(img, renderer_key, tex.image_pair);
     tex.pixel_count = tex.w * tex.h;
     for (uint8_t opaque : tex.cpu_opaque)
         if (opaque) ++tex.opaque_count;
     tex.bm_flags = bm_flags;
     const int32_t idx = int32_t(cache.size());
     cache.push_back(std::move(tex));
+    by_bitmap[bm] = idx;
     return idx;
 }
 
@@ -788,28 +1015,40 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         if (!ctx.show_tiles || !ctx.tile_assets) return;
         if (!ctx.show_gizmos && (oi->IsLight() || oi->ObjClass() == OBJCLASS_HELPER)) return;
         const auto& tex = (*ctx.tile_assets)[asset_idx];
-        S3DPoint sp;
+        const SRendererImagePairInfo* image_pair = Renderer ? Renderer->ImagePairInfo(tex.image_pair) : nullptr;
         const S3DPoint rel = {world_pos.x - ctx.sectorCameraWorld.x, world_pos.y - ctx.sectorCameraWorld.y, world_pos.z};
-        WorldToScreen(rel, sp.x, sp.y);
+        int32_t anchor_cam_x = 0, anchor_cam_y = 0;
+        WorldToScreen(rel, anchor_cam_x, anchor_cam_y);
+        float spx = 0.0f, spy = 0.0f;
+        ProjectCameraRelToScreen(ctx, rel, spx, spy);
+        const float sprite_scale = (std::max)(ctx.camera_zoom, 0.0001f);
         const float anchor_scene = CameraDepth(rel, ctx.cam_forward) - ctx.depth_mul * float(regz);
         const float anchor_scene_norm = std::fabs(ctx.zspan) > 1e-6f ? (anchor_scene - ctx.z_near) / ctx.zspan : 0.5f;
-        const int32_t dx = sp.x - regx + ctx.cam_ox;
-        const int32_t dy = sp.y - regy + ctx.cam_oy;
-        if (!tex.color.id || !tex.depth.id) { ++stats.draw_invalid_img; return; }
-        const bool onscreen = TileCameraVolumeVisible(
+        const int32_t dx = int32_t(std::lround(spx - float(regx) * sprite_scale)) + ctx.cam_ox;
+        const int32_t dy = int32_t(std::lround(spy - float(regy) * sprite_scale)) + ctx.cam_oy;
+        const int32_t dst_w = ScalePixel(sprite_scale, float(tex.w));
+        const int32_t dst_h = ScalePixel(sprite_scale, float(tex.h));
+        if (!image_pair) { ++stats.draw_invalid_img; return; }
+        const bool visually_visible = TileCameraVolumeVisible(
+            ctx, rel, regx, regy, tex.w, tex.h,
+            has_authored_local_dz ? authored_local_dz_min : (tex.z_local_min - float(regz)),
+            has_authored_local_dz ? authored_local_dz_max : (tex.z_local_max - float(regz)),
+            0.0f);
+        const bool gbuffer_visible = TileCameraVolumeVisible(
             ctx, rel, regx, regy, tex.w, tex.h,
             has_authored_local_dz ? authored_local_dz_min : (tex.z_local_min - float(regz)),
             has_authored_local_dz ? authored_local_dz_max : (tex.z_local_max - float(regz)));
-        if (!onscreen) {
+        const bool visual_only = tex.has_alpha || oi->IsLight() || oi->ObjClass() == OBJCLASS_EFFECT;
+        if ((visual_only && !visually_visible) || (!visual_only && !gbuffer_visible)) {
             ++stats.draw_offscreen;
             return;       // <-- BUG FIX: was falling through and submitting
         }
-        if (ctx.cov)
+        if (ctx.cov && visually_visible)
         {
             int32_t cx0 = dx / ctx.cov_cell_px; if (cx0 < 0) cx0 = 0;
             int32_t cy0 = dy / ctx.cov_cell_px; if (cy0 < 0) cy0 = 0;
-            int32_t cx1 = (dx + tex.w + ctx.cov_cell_px - 1) / ctx.cov_cell_px;
-            int32_t cy1 = (dy + tex.h + ctx.cov_cell_px - 1) / ctx.cov_cell_px;
+            int32_t cx1 = (dx + dst_w + ctx.cov_cell_px - 1) / ctx.cov_cell_px;
+            int32_t cy1 = (dy + dst_h + ctx.cov_cell_px - 1) / ctx.cov_cell_px;
             if (cx1 > ctx.cov_cw) cx1 = ctx.cov_cw;
             if (cy1 > ctx.cov_ch) cy1 = ctx.cov_ch;
             for (int32_t cy = cy0; cy < cy1; ++cy)
@@ -817,12 +1056,13 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                     (*ctx.cov)[size_t(cy) * size_t(ctx.cov_cw) + size_t(cx)] = 1;
         }
         ++stats.draw_submitted;
+        if (visually_visible) ++stats.draw_visible_submitted;
+        else ++stats.draw_gbuffer_border_submitted;
         if (oi->IsLight() || oi->ObjClass() == OBJCLASS_EFFECT)
         {
-            float light_sx = float(sp.x);
-            float light_sy = float(sp.y);
-            ProjectCameraRelToScreen(ctx, rel, light_sx, light_sy);
-            float overlay_scale = 1.0f;
+            float light_sx = spx;
+            float light_sy = spy;
+            float overlay_scale = (std::max)(ctx.camera_zoom, 0.0001f);
             if (ctx.perspective_camera)
             {
                 const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
@@ -830,7 +1070,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 overlay_scale = focal_zoom / z;
             }
             SOverlaySubmit sub = {};
-            sub.color_img = tex.color;
+            sub.image_pair = tex.image_pair;
             sub.dst_x = int32_t(std::lround(light_sx - float(regx) * overlay_scale)) + ctx.cam_ox;
             sub.dst_y = int32_t(std::lround(light_sy - float(regy) * overlay_scale)) + ctx.cam_oy;
             sub.dst_w = (std::max)(1, int32_t(std::lround(float(tex.w) * overlay_scale)));
@@ -839,12 +1079,13 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             return;
         }
         STileSubmit sub = {};
-        sub.color_img   = tex.color;
-        sub.depth_img   = tex.depth;
+        sub.image_pair  = tex.image_pair;
         sub.dst_x       = dx;
         sub.dst_y       = dy;
-        sub.dst_w       = tex.w;
-        sub.dst_h       = tex.h;
+        sub.dst_w       = dst_w;
+        sub.dst_h       = dst_h;
+        sub.src_w       = tex.w;
+        sub.src_h       = tex.h;
         sub.anchor_z    = anchor_scene_norm;
         sub.depth_mul   = std::fabs(ctx.zspan) > 1e-6f ? ctx.depth_mul / ctx.zspan : 0.0f;
         sub.normal_mul  = 1.0f;
@@ -853,6 +1094,22 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         sub.root_wz     = float(world_pos.z);
         sub.anchor_px_x = float(regx);
         sub.anchor_px_y = float(regy);
+        if (tex.z_dump.sample_count > 0)
+        {
+            sub.coverage_px_x0 = float(tex.z_dump.bbox_x0);
+            sub.coverage_px_y0 = float(tex.z_dump.bbox_y0);
+            sub.coverage_px_x1 = float(tex.z_dump.bbox_x1);
+            sub.coverage_px_y1 = float(tex.z_dump.bbox_y1);
+        }
+        else
+        {
+            sub.coverage_px_x0 = 0.0f;
+            sub.coverage_px_y0 = 0.0f;
+            sub.coverage_px_x1 = float(tex.w);
+            sub.coverage_px_y1 = float(tex.h);
+        }
+        sub.anchor_cam_x = float(anchor_cam_x);
+        sub.anchor_cam_y = float(anchor_cam_y);
         sub.zraw_to_wu  = ctx.depth_mul;
         sub.zraw_min    = tex.z_local_min;
         sub.zraw_max    = tex.z_local_max;
@@ -871,24 +1128,24 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             return;
 
         auto* flipbook = oi->GetComponent<TFlipbookBillboardComponent>();
-        if (!flipbook && !ctx.debug_green_img.id) return;
-        const bool debug_solid = flipbook && flipbook->DebugSolid() && ctx.debug_green_img.id;
-        const sg_image image = debug_solid ? ctx.debug_green_img : flipbook->Image();
-        if (!image.id) return;
+        if (!flipbook && ctx.debug_green_texture == kInvalidTexture) return;
+        const bool debug_solid = flipbook && flipbook->DebugSolid() && ctx.debug_green_texture != kInvalidTexture;
+        const TTextureHandle texture = debug_solid ? ctx.debug_green_texture : flipbook->Texture();
+        if (texture == kInvalidTexture) return;
         static bool logged_billboard_submit = false;
         if (!logged_billboard_submit)
         {
             logged_billboard_submit = true;
-            log_info("[component-render] submit billboard inst=%p class='%s' type='%s' debug=%d image=%u green=%u",
+            log_info("[component-render] submit billboard inst=%p class='%s' type='%s' debug=%d texture=%u green=%u",
                      (void*)oi, oi->GetClassName(), oi->GetTypeName(),
-                     debug_solid ? 1 : 0, image.id, ctx.debug_green_img.id);
+                     debug_solid ? 1 : 0, texture, ctx.debug_green_texture);
         }
         const S3DPoint billboard_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
         const S3DPoint billboard_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
         const S3DPoint rel = billboard_world - billboard_camera;
         float sx = 0.0f, sy = 0.0f;
         ProjectCameraRelToScreen(ctx, rel, sx, sy);
-        float overlay_scale = 1.0f;
+        float overlay_scale = (std::max)(ctx.camera_zoom, 0.0001f);
         if (ctx.perspective_camera)
         {
             const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
@@ -900,7 +1157,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         const int32_t w = (std::max)(1, int32_t(std::lround(billboard_width * overlay_scale)));
         const int32_t h = (std::max)(1, int32_t(std::lround(billboard_height * overlay_scale)));
         SOverlaySubmit sub = {};
-        sub.color_img = image;
+        sub.texture = texture;
         sub.dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
         sub.dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
         sub.dst_w = w;
@@ -926,19 +1183,22 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img);
         if (!meshimg) { ++stats.mesh_skipped; return; }
 
-        // Cheap viewport cull: project the mesh anchor to screen pixels
-        // and skip if it's well outside the viewport. Margin of ~256 px
-        // covers tall/wide meshes whose bounds extend past the anchor.
+        // Cheap padded-G-buffer cull: project the mesh anchor to screen
+        // pixels and skip only once it is well outside the drawable border.
+        // The object-size margin covers tall/wide meshes whose bounds extend
+        // past the anchor; kGBufPad preserves offscreen shadow occluders.
         {
             const S3DPoint mesh_world  = MapRendererMeshWorld(world_pos,             ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             const S3DPoint rel = { mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z };
-            S3DPoint sp; WorldToScreen(rel, sp.x, sp.y);
-            const int32_t px = sp.x + ctx.cam_ox;
-            const int32_t py = sp.y + ctx.cam_oy;
-            constexpr int32_t kMargin = 256;
-            if (px + kMargin <= 0 || py + kMargin <= 0 ||
-                px - kMargin >= ctx.vw || py - kMargin >= ctx.vh)
+            float spx = 0.0f, spy = 0.0f;
+            ProjectCameraRelToScreen(ctx, rel, spx, spy);
+            const int32_t px = int32_t(std::lround(spx)) + ctx.cam_ox;
+            const int32_t py = int32_t(std::lround(spy)) + ctx.cam_oy;
+            const int32_t kMargin = ScalePixel(ctx.camera_zoom, 256.0f);
+            const int32_t pad = TRenderer::kGBufPad;
+            if (px + kMargin <= -pad || py + kMargin <= -pad ||
+                px - kMargin >= ctx.vw + pad || py - kMargin >= ctx.vh + pad)
             {
                 ++stats.mesh_skipped;
                 return;
@@ -950,21 +1210,11 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             ++stats.mesh_skipped;
             return;
         }
-        // C4: read the world-space mesh matrix straight off the bone's
-        // TTransform, populated each frame by T3DAnimator::Animate ->
-        // UpdateBoneTransforms -> RefreshHierarchy. The bone's
-        // transform.Matrix() chains through (parent bones ->) inst's
-        // transform_ which carries object world pos / rot + the
-        // (1, 1, WORLD3D_Z_SCALE) Z stretch, so no separate root
-        // compose or Z-scale post-multiply is needed.
-        //
-        // Fallback paths kept for cases that don't have a live
-        // animator-with-bones to read from:
-        //   * force_mesh_preview_pose (editor preview): bones aren't
-        //     animator-driven; use BuildStaticObjectMatrix as before.
-        //   * No animator on the instance: fall back to the legacy
-        //     pose-sample compose for safety.
-        bool pose_key_ok = false;
+        // Runtime meshes read world matrices from live animator bones. The
+        // frame loop creates/updates needed animators before submit, so render
+        // submission must not sample legacy I3D pose data or allocate fallback
+        // poses here. Editor preview is the one explicit exception: it asks for
+        // a static matrix path through force_mesh_preview_pose.
         float world_renderer[16];
         bool used_bone_xform = false;
         if (!ctx.force_mesh_preview_pose)
@@ -975,7 +1225,6 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 S3DAnimObj* bone = d3->GetObject(asset.objnum);
                 if (bone)
                 {
-                    pose_key_ok = true;
                     const hmm_mat4& bone_world = bone->transform.Matrix();
                     TransposeSourceToRenderer(bone_world, world_renderer);
                     used_bone_xform = true;
@@ -984,17 +1233,14 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         }
         if (!used_bone_xform)
         {
-            float local_renderer[16];
             if (!ctx.force_mesh_preview_pose)
             {
-                const SAnimPose pose = SampleI3DAnimPose(meshimg, state, frame);
-                pose_key_ok = pose.Has(AnimTrack(uint16_t(asset.objnum), EAnimChannel::PosX));
-                BuildAnimPoseObjectMatrix(meshimg, pose, state, asset.objnum, local_renderer);
+                ++stats.mesh_skipped;
+                return;
             }
-            else
-            {
-                BuildStaticObjectMatrix(meshimg, asset.objnum, 0, 0, local_renderer);
-            }
+
+            float local_renderer[16];
+            BuildStaticObjectMatrix(meshimg, asset.objnum, 0, 0, local_renderer);
             // Mesh-local Z stretch -- only on the legacy compose path;
             // the bone-transform path already has it baked in via
             // inst.transform_'s SetLocalScl.
@@ -1076,25 +1322,32 @@ float TMapRenderer::Impl::sectorCameraForward(int32_t viewport_h) const
     constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
     const float half_fov = fov * 0.5f * kDegToRad;
     const float t = std::tan(half_fov);
-    return t > 1.0e-5f ? (float(viewport_h) * 0.5f) / t : kMapRendererCamForwardWU;
+    // The map camera is calibrated in logical 640x480 pixels, then scaled to
+    // the physical render target. Keep the focal length in that logical space;
+    // the viewport scale is applied separately as camera_zoom.
+    return t > 1.0e-5f ? (float(viewport_h) * 0.5f) / t
+                       : kMapRendererCamForwardWU;
 }
 
 void TMapRenderer::Impl::sectorProjectWorldForViewport(const S3DPoint& world,
                                                        int32_t viewport_h,
                                                        S3DPoint& screen) const
 {
+    (void)viewport_h;
     // Keep CPU-projected world markers in the same coordinate convention as
     // the GPU mesh shader: camera-relative X/Y, absolute world Z.
+    // This helper returns logical 640x480 camera coordinates. Physical render
+    // targets apply ComputeMapCameraViewport scale/offset at the call site.
     const S3DPoint rel = { world.x - sectorCameraWorld.x,
                            world.y - sectorCameraWorld.y,
                            world.z };
     WorldToScreen(rel, screen.x, screen.y);
-    const float scene_z = sectorCameraDepth(rel, viewport_h);
+    const float scene_z = sectorCameraDepth(rel, HEIGHT);
     screen.z = int32_t(scene_z);
     if (!sectorPerspectiveCamera)
         return;
 
-    const float focal_zoom = (std::max)(sectorCameraForward(viewport_h) * sectorCameraZoom, 1.0f);
+    const float focal_zoom = (std::max)(sectorCameraForward(HEIGHT) * sectorCameraZoom, 1.0f);
     const float z = (std::max)(scene_z, 1.0f);
     screen.x = int32_t(std::lround(float(screen.x) * focal_zoom / z));
     screen.y = int32_t(std::lround(float(screen.y) * focal_zoom / z));
@@ -1135,103 +1388,25 @@ void TMapRenderer::SyncContentsCache()
     if (!impl) return;
     Impl& s = *impl;
 
-    // Sum of ContentVer() across loaded sectors. Cheap to compute, and
-    // monotonic per-sector — any Add/Remove/Set in any sector advances
-    // the sum, even if mutations cancel out object-count-wise. (See
-    // memory/feedback_versions_over_flags.md on why versions over
-    // dirty flags: a skipped read can never miss a click.)
     TGameMap* m = s.currentMap.Get();
     if (!m) return;
-    const std::vector<TSector*>& kept = m->Sectors();
 
-    int64_t cur_sum = 0;
-    for (TSector* sec : kept)
-        if (sec) cur_sum += sec->ContentVer();
-    if (cur_sum == s.lastSyncedSectorVerSum) return;
-    s.lastSyncedSectorVerSum = cur_sum;
-
-    // V1: rebuild tile drawables only. Mesh/light entries stay stale
-    // until full sector reload (a separate inch). Tile path covers
-    // the editor's current paste/duplicate test cases.
-    //
-    // Strategy: drop existing tile entries from sectorDrawInst and
-    // rebuild from the current map's sectors. Reuse the cached sectorTileTex (keyed
-    // by bm pointer) — instances whose imagery isn't already cached
-    // are skipped, with a one-shot warning log.
-    std::vector<SSectorDrawableInst> rebuilt;
-    rebuilt.reserve(s.sectorDrawInst.size());
-
-    // Keep non-tile entries verbatim (mesh, etc.). They go stale on
-    // mutation but at least don't disappear after a paste.
-    int32_t kept_non_tile = 0;
-    for (const auto& d : s.sectorDrawInst) {
-        if (d.kind != ESectorDrawableKind::Tile) {
-            rebuilt.push_back(d);
-            ++kept_non_tile;
-        }
+    const int64_t version_sum = ComputeMapContentVersionSum(m);
+    if (version_sum == s.lastSyncedSectorVerSum)
+    {
+        return;
     }
 
-    int32_t tile_skipped_no_cache = 0;
-    int32_t tile_rebuilt = 0;
-    for (TSector* sec : kept) {
-        if (!sec) continue;
-        for (int32_t i = 0; i < sec->NumItems(); ++i) {
-            TObjectInstance* oi = sec->GetInstance(i);
-            if (!oi) continue;
-            if (oi->ObjClass() != OBJCLASS_TILE) continue;
+    // Camera motion is not content. A cache rebuild is only justified when
+    // loaded sector contents change; ordinary movement through the map should
+    // only update the per-frame candidate list and submit-time culling.
+    RebuildForCurrentMap();
 
-            TObjectImagery* img = oi->GetImagery();
-            if (!img) continue;
-            SImageryHeader* hdr = img->GetHeader();
-            SImageryBody*   body = img->GetBody();
-            if (!hdr || !body) continue;
-            if (hdr->imageryid != OBJIMAGE_ANIMATION) continue;
-            const int32_t st = oi->GetState();
-            if (st < 0 || st >= hdr->numstates) continue;
-            auto* ab = (SAnimImageryBody*)body;
-            PTBitmap bm = (TBitmap*)ab->states[st].still;
-            if (!bm) continue;
-
-            // Look up cached texture. Skip if not present (caller
-            // would need a full reload to register a new bitmap).
-            int32_t tex_idx = -1;
-            for (size_t t = 0; t < s.sectorTileTex.size(); ++t)
-                if (s.sectorTileTex[t].bm_key == bm) { tex_idx = (int32_t)t; break; }
-            if (tex_idx < 0) { ++tile_skipped_no_cache; continue; }
-
-            SSectorDrawableInst winst = {};
-            winst.kind = ESectorDrawableKind::Tile;
-            winst.asset_idx = tex_idx;
-            winst.world_pos = oi->Pos();
-            winst.regx = img->GetRegX(st);
-            winst.regy = img->GetRegY(st);
-            winst.regz = img->GetRegZ(st);
-            winst.src = TSafeRef<>(oi);
-            winst.debug_sector_level = sec->SectorLevel();
-            winst.debug_sector_x = sec->SectorX();
-            winst.debug_sector_y = sec->SectorY();
-            winst.debug_sector_slot = i;
-            int32_t wwidth = 0, wlength = 0, wheight = 0;
-            img->GetWorldBoundBox(st, wwidth, wlength, wheight);
-            winst.wwidth = wwidth; winst.wlength = wlength; winst.wheight = wheight;
-            winst.wregx = img->GetWorldRegX(st);
-            winst.wregy = img->GetWorldRegY(st);
-            winst.wregz = img->GetWorldRegZ(st);
-            ComputeAuthoredLocalDepthRange(wwidth, wlength, wheight,
-                                           winst.wregx, winst.wregy, winst.wregz,
-                                           winst.has_authored_local_dz,
-                                           winst.authored_local_dz_min,
-                                           winst.authored_local_dz_max);
-            rebuilt.push_back(winst);
-            ++tile_rebuilt;
-        }
-    }
-
-    s.sectorDrawInst = std::move(rebuilt);
-    s.rebuildBins();
-
-    log_info("[mr-sync] tile rebuild: kept_mesh=%d tile=%d skipped(no cache)=%d  ver_sum=%lld",
-             kept_non_tile, tile_rebuilt, tile_skipped_no_cache, (long long)cur_sum);
+    log_info("[mr-sync] content rebuild: records=%zu range=(%d..%d,%d..%d) lights=%zu/%d ver_sum=%lld objects=%d",
+             s.sectorDrawInst.size(),
+             s.drawRangeMinSx, s.drawRangeMaxSx, s.drawRangeMinSy, s.drawRangeMaxSy,
+             s.sectorLights.size(), s.residentPointLightCount,
+             (long long)s.lastSyncedSectorVerSum, s.lastSyncedObjectSetCount);
 }
 
 void TMapRenderer::SetCameraWorld(int32_t level, int32_t world_x, int32_t world_y, int32_t world_z)
@@ -1250,7 +1425,14 @@ TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
     SDrawCounts out;
     if (!impl) return out;
     out.total_drawables  = impl->last_draw_counts.total_drawables;
+    out.draw_candidates  = impl->last_draw_counts.draw_candidates;
+    out.resident_lights  = impl->last_draw_counts.resident_lights;
+    out.active_lights    = impl->last_draw_counts.active_lights;
+    out.point_lights_considered = impl->last_draw_counts.point_lights_considered;
+    out.point_lights_submitted = impl->last_draw_counts.point_lights_submitted;
     out.tiles_submitted  = impl->last_draw_counts.tiles_submitted;
+    out.tiles_visible_submitted = impl->last_draw_counts.tiles_visible_submitted;
+    out.tiles_gbuffer_border_submitted = impl->last_draw_counts.tiles_gbuffer_border_submitted;
     out.meshes_submitted = impl->last_draw_counts.meshes_submitted;
     out.offscreen_culled = impl->last_draw_counts.offscreen_culled;
     return out;
@@ -1530,11 +1712,9 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     if (post_load_hook)
         post_load_hook(keep_lvl, keep_sx, keep_sy);
 
-    // Bind the renderer to the now-loaded TGameMap, passing the
-    // parsed --sector anchor (or defaulting to level-origin if
-    // --level was given alone). SetMap subscribes to the map's
-    // events and triggers RebuildForCurrentMap, which (re)builds
-    // the draw / camera / light caches against the live sectors.
+    // Bind the renderer to the now-loaded TGameMap. SetMap subscribes to map
+    // events and triggers RebuildForCurrentMap, which builds non-owning draw
+    // and light records over the level-resident asset cache.
     SetMap(gmap, use_level_origin, keep_sx, keep_sy);
 
     DebugUI::RegisterContributor(this);
@@ -1545,15 +1725,24 @@ void TMapRenderer::SetMap(TGameMap* m, bool use_level_origin,
                           int32_t anchor_sx, int32_t anchor_sy)
 {
     Impl& s = *impl;
+    TGameMap* old = s.currentMap.Get();
 
     // Unsubscribe from the old map's events before flipping the ref.
-    if (TGameMap* old = s.currentMap.Get(); old && s.mapListenerId)
+    if (old && s.mapListenerId)
     {
         old->RemoveListener(s.mapListenerId);
         s.mapListenerId = 0;
     }
+    if (old != m)
+    {
+        s.clearDrawRecords();
+        // Resident assets are cumulative for the session. Switching maps only
+        // invalidates draw/light records; assets remain pinned in the renderer
+        // cache even if their ref count drops to zero.
+    }
 
     s.currentMap = m;
+    s.drawRecordLevel = -1;
 
     if (m)
     {
@@ -1563,63 +1752,193 @@ void TMapRenderer::SetMap(TGameMap* m, bool use_level_origin,
         s.initialAnchorSx       = anchor_sx;
         s.initialAnchorSy       = anchor_sy;
 
-        // Subscribe -- Loaded / Updated trigger a full rebuild;
-        // Unloaded clears the ref before the underlying sectors are
-        // freed so subsequent draws don't dereference a dead map.
+        // Subscribe to map lifetime/content events. Loaded implies a fresh
+        // level scan; Updated can often be reconciled without touching GPU
+        // assets. Unloaded drops non-owning records, but resident assets are
+        // retained until explicit renderer/game shutdown.
         s.mapListenerId = m->AddListener(
             [this](EGameMapEvent ev, TGameMap* /*map*/) {
                 if (ev == EGameMapEvent::Unloaded)
                 {
                     impl->currentMap.Clear();
                     impl->mapListenerId = 0;
+                    impl->clearDrawRecords();
+                    return;
                 }
-                RebuildForCurrentMap();
+                if (ev == EGameMapEvent::Updated)
+                    SyncContentsCache();
+                else
+                    RebuildForCurrentMap();
             });
     }
 
     RebuildForCurrentMap();
 }
 
+template <typename TImpl>
+static void CountExistingAssetRefForObject(TImpl& s, TObjectInstance* oi)
+{
+    if (!oi)
+        return;
+
+    TObjectImagery* img = oi->GetImagery();
+    if (!img)
+        return;
+    SImageryHeader* hdr = img->GetHeader();
+    SImageryBody* body = img->GetBody();
+    if (!hdr || !body)
+        return;
+
+    const int32_t st = oi->GetState();
+    if (hdr->imageryid == OBJIMAGE_MESH3D)
+    {
+        T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img);
+        if (!meshimg || st < 0 || st >= hdr->numstates)
+            return;
+
+        for (SSectorMeshAsset& asset : s.sectorMeshAsset)
+        {
+            if (asset.imagery_key != img)
+                continue;
+            if (asset.objnum < 0 || asset.objnum >= meshimg->NumObjects())
+                continue;
+            if (meshimg->IsHidden(asset.objnum, st))
+                continue;
+
+            ++asset.ref_count;
+        }
+        return;
+    }
+
+    PTBitmap bm = nullptr;
+    if (oi->ObjClass() == OBJCLASS_EFFECT && hdr->imageryid == OBJIMAGE_ANIMATION)
+    {
+        TAnimImagery* anim_img = dynamic_cast<TAnimImagery*>(img);
+        PTAnimation anim = (anim_img && st >= 0 && st < anim_img->NumStates()) ? anim_img->GetAnimation(st) : nullptr;
+        bm = anim ? anim->GetFrame(oi->GetFrame()) : nullptr;
+    }
+    else if (oi->ObjClass() == OBJCLASS_TILE && hdr->imageryid == OBJIMAGE_ANIMATION)
+    {
+        if (st < 0 || st >= hdr->numstates)
+            return;
+        auto* ab = (SAnimImageryBody*)body;
+        bm = (TBitmap*)ab->states[st].still;
+    }
+
+    if (!bm)
+        return;
+
+    for (SSectorTileTex& tex : s.sectorTileTex)
+    {
+        if (tex.bm_key != bm)
+            continue;
+
+        ++tex.ref_count;
+        return;
+    }
+}
+
+template <typename TImpl>
+static void RecomputeLoadedMapAssetRefs(TImpl& s)
+{
+    // Draw records are non-owning and map switches are not unloads. Reference
+    // counts are therefore recomputed from all maps currently cached by
+    // TMapManager, not from whatever the current camera happens to draw.
+    s.resetAssetRefCounts();
+    MapManager.ForEachLoadedMap(
+        [&s](TGameMap* map) {
+            if (!map)
+                return;
+            for (TSector* sec : map->Sectors())
+            {
+                if (!sec)
+                    continue;
+                for (int32_t i = 0; i < sec->NumItems(); ++i)
+                    CountExistingAssetRefForObject(s, sec->GetInstance(i));
+            }
+        });
+}
+
 void TMapRenderer::RebuildForCurrentMap()
 {
     Impl& s = *impl;
 
-    // Clear all per-map caches first. Level-swap path destroys GPU
-    // textures from the prior level; first-time build is a no-op
-    // since the vectors are empty.
-    for (auto& t : s.sectorTileTex)
-    {
-        if (t.color.id) sg_destroy_image(t.color);
-        if (t.depth.id) sg_destroy_image(t.depth);
-    }
-    s.sectorTileTex.clear();
-    s.sectorMeshAsset.clear();
-    s.sectorDrawInst.clear();
-    s.sectorDrawBins.clear();
-    s.sectorLights.clear();
-    s.lastSyncedSectorVerSum = -1;
+    // Rebuild non-owning draw/light records only. This scan may register new
+    // renderer assets, but draw records do not own them. A final residency pass
+    // below recomputes asset refs from all loaded maps; zero-ref assets are
+    // retained until explicit shutdown or a future eviction policy.
+    s.clearDrawRecords();
+    s.resetAssetRefCounts();
 
     TGameMap* map = s.currentMap.Get();
     if (!map) return;
+    const bool preserve_camera = (s.drawRecordLevel == map->Level());
+    const int32_t saved_camera_level = s.cameraLevel;
+    const S3DPoint saved_camera_world = s.sectorCameraWorld;
 
     // Pull anchor + level state from Impl (set by
     // InitializeFromStartupArgs at boot, reused on level swaps).
-    const int32_t keep_lvl = s.cameraLevel;
     const int32_t keep_sx  = s.initialAnchorSx;
     const int32_t keep_sy  = s.initialAnchorSy;
     const bool    use_level_origin = s.useInitialLevelOrigin;
 
-    // Build local `loaded` from the current map. The rest of this
-    // function (lifted from the legacy InitializeFromStartupArgs body)
-    // expects this vector for camera-anchor / draw_work iteration.
+    // Build draw records from every resident sector. Visibility/camera culling
+    // happens at submit time; draw records are not a GPU residency mechanism.
     struct SLoaded { int32_t lvl, sx, sy; TSector* sec; };
     std::vector<SLoaded> loaded;
+    loaded.reserve(map->Sectors().size());
+    bool have_bounds = false;
+    int32_t min_sx = 0, max_sx = 0, min_sy = 0, max_sy = 0;
     for (TSector* sec : map->Sectors())
     {
-        if (!sec) continue;
+        if (!sec)
+            continue;
         loaded.push_back({ sec->SectorLevel(), sec->SectorX(), sec->SectorY(), sec });
+        if (!have_bounds)
+        {
+            min_sx = max_sx = sec->SectorX();
+            min_sy = max_sy = sec->SectorY();
+            have_bounds = true;
+        }
+        else
+        {
+            min_sx = (std::min)(min_sx, sec->SectorX());
+            max_sx = (std::max)(max_sx, sec->SectorX());
+            min_sy = (std::min)(min_sy, sec->SectorY());
+            max_sy = (std::max)(max_sy, sec->SectorY());
+        }
     }
-    if (loaded.empty()) return;
+    if (loaded.empty())
+        return;
+
+    int32_t focus_sx = keep_sx;
+    int32_t focus_sy = keep_sy;
+    S3DPoint cull_camera_world = s.sectorCameraWorld;
+    bool focus_from_player = false;
+    if (Player && Player->GetLevel() == map->Level())
+    {
+        S3DPoint p;
+        Player->GetPos(p);
+        focus_sx = p.x >> SECTORWSHIFT;
+        focus_sy = p.y >> SECTORHSHIFT;
+        cull_camera_world = p;
+        focus_from_player = true;
+    }
+    else if (use_level_origin && have_bounds)
+    {
+        focus_sx = (min_sx + max_sx) / 2;
+        focus_sy = (min_sy + max_sy) / 2;
+    }
+    if (!focus_from_player && !preserve_camera)
+    {
+        cull_camera_world = {
+            focus_sx * SECTORWIDTH + SECTORWIDTH / 2,
+            focus_sy * SECTORHEIGHT + SECTORHEIGHT / 2,
+            0
+        };
+    }
+    s.sectorCameraWorld = cull_camera_world;
+    s.drawRecordLevel = map->Level();
 
     std::vector<SSectorDrawableInst> draw_work;
     int32_t total_tiles = 0, non_2d = 0, bad_state = 0, no_still = 0, upload_fail = 0, no_img = 0, no_body = 0;
@@ -1653,7 +1972,13 @@ void TMapRenderer::RebuildForCurrentMap()
             }
             const int32_t st = oi->GetState();
             if (T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img))
+            {
                 meshimg->AttachAnimatorComponents(oi);
+                if (oi->NeedsAnimator() && !oi->HasAnimator())
+                    oi->OnScreen();
+                if (!oi->IsAnimated() && oi->HasAnimator())
+                    oi->Animate(false);
+            }
 
             TFlipbookBillboardComponent* flipbook = oi->GetComponent<TFlipbookBillboardComponent>();
             if (flipbook)
@@ -1662,10 +1987,10 @@ void TMapRenderer::RebuildForCurrentMap()
                 if (!logged_billboard_build)
                 {
                     logged_billboard_build = true;
-                    log_info("[component-render] build billboard inst=%p class='%s' type='%s' debug=%d image=%u src=(%d,%d %dx%d) tex=%dx%d",
+                    log_info("[component-render] build billboard inst=%p class='%s' type='%s' debug=%d texture=%u src=(%d,%d %dx%d) tex=%dx%d",
                              (void*)oi, oi->GetClassName(), oi->GetTypeName(),
                              flipbook->DebugSolid() ? 1 : 0,
-                             flipbook->Image().id,
+                             flipbook->Texture(),
                              flipbook->SourceX(), flipbook->SourceY(),
                              flipbook->SourceWidth(), flipbook->SourceHeight(),
                              flipbook->TextureWidth(), flipbook->TextureHeight());
@@ -1731,14 +2056,10 @@ void TMapRenderer::RebuildForCurrentMap()
                                 continue;
                             }
 
-                            sg_image albedo = {};
+                            TTextureHandle albedo = kInvalidTexture;
                             if (texslot > 0)
-                            {
-                                S3DTex tex = {};
-                                meshimg->GetTexture(texslot - 1, &tex);
-                                albedo = tex.surface;
-                            }
-                            if (!albedo.id && oi->ObjClass() == OBJCLASS_HELPER)
+                                albedo = meshimg->GetTextureHandle(texslot - 1);
+                            if (albedo == kInvalidTexture && oi->ObjClass() == OBJCLASS_HELPER)
                             {
                                 S3DObj o = {};
                                 meshimg->GetObject(objnum, &o);
@@ -1747,29 +2068,20 @@ void TMapRenderer::RebuildForCurrentMap()
                                     S3DMat mat = {};
                                     meshimg->GetMaterial(o.material, &mat);
                                     if (mat.texture >= 0 && mat.texture < meshimg->NumTextures())
-                                    {
-                                        S3DTex tex = {};
-                                        meshimg->GetTexture(mat.texture, &tex);
-                                        albedo = tex.surface;
-                                    }
+                                        albedo = meshimg->GetTextureHandle(mat.texture);
                                 }
                             }
-                            if (!albedo.id)
-                            {
-                                sg_image_desc idesc = {};
-                                static uint32_t white = 0xFFFFFFFFu;
-                                idesc.width = 1; idesc.height = 1;
-                                idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
-                                idesc.data.subimage[0][0] = { &white, sizeof(white) };
-                                idesc.label = "maprenderer.mesh.fallback";
-                                albedo = sg_make_image(&idesc);
-                            }
+                            if (albedo == kInvalidTexture)
+                                albedo = Renderer ? Renderer->WhiteTextureHandle() : kInvalidTexture;
 
-                            MeshHandle h = Renderer->RegisterMesh(
+                            const uint64_t mesh_key = RendererI3DMeshKey(meshimg->AssetId(), objnum, texslot);
+                            MeshHandle h = Renderer->RegisterMeshAsset(
+                                mesh_key,
                                 verts.data(), int32_t(verts.size()),
                                 indices.data(), int32_t(indices.size()),
                                 albedo);
                             if (!h) { ++mesh_upload_fail; continue; }
+                            AddRendererMeshSourceRef(meshimg, mesh_key, h);
 
                             SSectorMeshAsset asset = {};
                             asset.imagery_key = img;
@@ -1841,14 +2153,10 @@ void TMapRenderer::RebuildForCurrentMap()
                             std::vector<uint16_t> indices;
                             if (ExtractSubMesh(meshimg, objnum, verts, indices))
                             {
-                                sg_image albedo = {};
+                                TTextureHandle albedo = kInvalidTexture;
                                 if (meshimg->NumTextures() > 0)
-                                {
-                                    S3DTex tex = {};
-                                    meshimg->GetTexture(0, &tex);
-                                    albedo = tex.surface;
-                                }
-                                if (!albedo.id && oi->ObjClass() == OBJCLASS_HELPER)
+                                    albedo = meshimg->GetTextureHandle(0);
+                                if (albedo == kInvalidTexture && oi->ObjClass() == OBJCLASS_HELPER)
                                 {
                                     S3DObj o = {};
                                     meshimg->GetObject(objnum, &o);
@@ -1857,29 +2165,20 @@ void TMapRenderer::RebuildForCurrentMap()
                                         S3DMat mat = {};
                                         meshimg->GetMaterial(o.material, &mat);
                                         if (mat.texture >= 0 && mat.texture < meshimg->NumTextures())
-                                        {
-                                            S3DTex tex = {};
-                                            meshimg->GetTexture(mat.texture, &tex);
-                                            albedo = tex.surface;
-                                        }
+                                            albedo = meshimg->GetTextureHandle(mat.texture);
                                     }
                                 }
-                                if (!albedo.id)
-                                {
-                                    sg_image_desc idesc = {};
-                                    static uint32_t white = 0xFFFFFFFFu;
-                                    idesc.width = 1; idesc.height = 1;
-                                    idesc.pixel_format = SG_PIXELFORMAT_RGBA8;
-                                    idesc.data.subimage[0][0] = { &white, sizeof(white) };
-                                    idesc.label = "maprenderer.mesh.whole_fallback";
-                                    albedo = sg_make_image(&idesc);
-                                }
-                                MeshHandle h = Renderer->RegisterMesh(
+                                if (albedo == kInvalidTexture)
+                                    albedo = Renderer ? Renderer->WhiteTextureHandle() : kInvalidTexture;
+                                const uint64_t mesh_key = RendererI3DMeshKey(meshimg->AssetId(), objnum, -1);
+                                MeshHandle h = Renderer->RegisterMeshAsset(
+                                    mesh_key,
                                     verts.data(), int32_t(verts.size()),
                                     indices.data(), int32_t(indices.size()),
                                     albedo);
                                 if (h)
                                 {
+                                    AddRendererMeshSourceRef(meshimg, mesh_key, h);
                                     SSectorMeshAsset asset = {};
                                     asset.imagery_key = img;
                                     asset.objnum = objnum;
@@ -1953,7 +2252,7 @@ void TMapRenderer::RebuildForCurrentMap()
                 PTBitmap bm = anim ? anim->GetFrame(oi->GetFrame()) : nullptr;
                 if (!bm) { ++no_still; continue; }
 
-                const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, bm, oi, img, st);
+                const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
                 if (tex_idx < 0) { ++upload_fail; continue; }
 
                 SSectorDrawableInst einst = {};
@@ -1995,11 +2294,13 @@ void TMapRenderer::RebuildForCurrentMap()
                 t.debug_regy = img->GetRegY(st);
                 t.debug_regz = img->GetRegZ(st);
                 uint32_t bm_flags = 0;
-                if (!UploadTileBitmap(bm, &t.color, &t.depth, &t.w, &t.h,
+                uint64_t renderer_key = 0;
+                if (!UploadTileBitmap(bm, &t.image_pair, &renderer_key, &t.w, &t.h,
                                       &t.z_local_min, &t.z_local_max,
                                       &t.z_dump, &t.has_alpha, &bm_flags,
                                       &t.cpu_depth_local, &t.cpu_opaque))
                 { ++upload_fail; continue; }
+                AddRendererImagePairSourceRef(img, renderer_key, t.image_pair);
                 t.pixel_count = t.w * t.h;
                 for (uint8_t opaque : t.cpu_opaque)
                     if (opaque) ++t.opaque_count;
@@ -2031,10 +2332,10 @@ void TMapRenderer::RebuildForCurrentMap()
             draw_work.push_back(winst);
         }
     }
-    const int32_t focus_wx0 = (keep_sx - 1) * SECTORWIDTH;
-    const int32_t focus_wx1 = (keep_sx + 2) * SECTORWIDTH;
-    const int32_t focus_wy0 = (keep_sy - 1) * SECTORHEIGHT;
-    const int32_t focus_wy1 = (keep_sy + 2) * SECTORHEIGHT;
+    const int32_t focus_wx0 = (focus_sx - 1) * SECTORWIDTH;
+    const int32_t focus_wx1 = (focus_sx + 2) * SECTORWIDTH;
+    const int32_t focus_wy0 = (focus_sy - 1) * SECTORHEIGHT;
+    const int32_t focus_wy1 = (focus_sy + 2) * SECTORHEIGHT;
     struct SViewBounds { int32_t sx_min=INT32_MAX,sx_max=INT32_MIN,sy_min=INT32_MAX,sy_max=INT32_MIN,wx_min=INT32_MAX,wx_max=INT32_MIN,wy_min=INT32_MAX,wy_max=INT32_MIN,count=0; } focus_bounds, all_bounds;
     struct SOccupiedSectorStat {
         int32_t sx = 0, sy = 0;
@@ -2075,13 +2376,11 @@ void TMapRenderer::RebuildForCurrentMap()
             accumulate_bounds(focus_bounds, w.world_pos, sp, w.regx, w.regy, tex.w, tex.h);
     }
     const SViewBounds& view_bounds = (use_level_origin || focus_bounds.count <= 0) ? all_bounds : focus_bounds;
-    const int32_t tw = Display.IsActive() ? Display.Width()  : 1024;
-    const int32_t th = Display.IsActive() ? Display.Height() : 768;
     const int32_t bw = view_bounds.sx_max - view_bounds.sx_min;
     const int32_t bh = view_bounds.sy_max - view_bounds.sy_min;
     if (use_level_origin) {
-        s.sectorCenterOx = tw / 2;
-        s.sectorCenterOy = th / 2;
+        s.sectorCenterOx = WIDTH / 2;
+        s.sectorCenterOy = HEIGHT / 2;
         s.sectorWorldCenter = {0,0,0};
         const int32_t level_cx = (all_bounds.wx_min + all_bounds.wx_max) / 2;
         const int32_t level_cy = (all_bounds.wy_min + all_bounds.wy_max) / 2;
@@ -2116,21 +2415,28 @@ void TMapRenderer::RebuildForCurrentMap()
         s.sectorCameraWorld.z = 0;
     } else {
         if (focus_bounds.count <= 0)
-            log_warn("[sector] focus sector %d_%d has no tile anchors; centering exact sector coordinates", keep_sx, keep_sy);
+            log_warn("[sector] focus sector %d_%d has no tile anchors; centering exact sector coordinates", focus_sx, focus_sy);
         s.sectorWorldCenter = {
-            keep_sx * SECTORWIDTH + SECTORWIDTH / 2,
-            keep_sy * SECTORHEIGHT + SECTORHEIGHT / 2,
+            focus_sx * SECTORWIDTH + SECTORWIDTH / 2,
+            focus_sy * SECTORHEIGHT + SECTORHEIGHT / 2,
             0
         };
         s.sectorCameraWorld = s.sectorWorldCenter;
         S3DPoint sector_center_screen;
         WorldToScreen(s.sectorWorldCenter, sector_center_screen);
-        s.sectorCenterOx = tw / 2 - sector_center_screen.x;
-        s.sectorCenterOy = th / 2 - sector_center_screen.y;
+        s.sectorCenterOx = WIDTH / 2 - sector_center_screen.x;
+        s.sectorCenterOy = HEIGHT / 2 - sector_center_screen.y;
+    }
+    if (preserve_camera)
+    {
+        s.cameraLevel = saved_camera_level;
+        s.sectorCameraWorld = saved_camera_world;
     }
 
+    StoreDrawRecordRange(s, SSectorCullRange{ min_sx, max_sx, min_sy, max_sy });
+
     float sz_min = FLT_MAX, sz_max = -FLT_MAX;
-    const float init_camera_forward = s.sectorCameraForward(th);
+    const float init_camera_forward = s.sectorCameraForward(HEIGHT);
     for (const auto& w : draw_work)
     {
         // Z stays absolute world (don't subtract camera.z) so depth ordering
@@ -2153,9 +2459,15 @@ void TMapRenderer::RebuildForCurrentMap()
         }
         sz_min = (std::min)(sz_min, z0); sz_max = (std::max)(sz_max, z1);
     }
+    if (!(sz_min < sz_max))
+    {
+        sz_min = kSectorDepthNearWU;
+        sz_max = kSectorDepthFarWU;
+    }
     s.sectorSceneZMin = sz_min; s.sectorSceneZMax = sz_max;
     s.sectorDrawInst = std::move(draw_work);
-    s.rebuildBins();
+    RecomputeLoadedMapAssetRefs(s);
+    int32_t resident_lights = 0;
     for (auto& Ls : loaded)
     {
         TSector* sec = Ls.sec;
@@ -2165,9 +2477,16 @@ void TMapRenderer::RebuildForCurrentMap()
             if (!oi || !oi->IsLight()) continue;
             PSLightDef ld = oi->GetLightDef();
             if (!ld || ld->intensity == 0) continue;
+            ++resident_lights;
             s.sectorLights.push_back({ TSafeRef<>(oi), true });
         }
     }
+    s.residentPointLightCount = resident_lights;
+    s.rebuildBins();
+    const SMapContentSignature sig = ComputeMapContentSignature(map);
+    s.lastSyncedSectorVerSum = sig.version_sum;
+    s.lastSyncedObjectSetCount = sig.object_count;
+    s.lastSyncedObjectSetHash = sig.object_hash;
 }
 
 void TMapRenderer::Shutdown()
@@ -2186,21 +2505,12 @@ void TMapRenderer::Shutdown()
         s.mapListenerId = 0;
     }
 
-    for (auto& t : s.sectorTileTex)
-    {
-        if (t.color.id) sg_destroy_image(t.color);
-        if (t.depth.id) sg_destroy_image(t.depth);
-    }
-    s.sectorTileTex.clear();
-    s.dlightTexIdx = -1;
-    if (s.debugGreenImage.id) { sg_destroy_image(s.debugGreenImage); s.debugGreenImage = {}; }
-    s.sectorDrawInst.clear();
-    s.sectorDrawBins.clear();
-    s.sectorMeshAsset.clear();
+    s.clearResidentAssetMetadataForShutdown();
+    s.debugGreenTexture = kInvalidTexture;
+    s.clearDrawRecords();
     // Sectors are owned by TGameMap (via TMapManager); the renderer
     // just borrowed via the SafeRef. Drop the ref without freeing.
     s.currentMap.Clear();
-    s.sectorLights.clear();
     s.lightDragIdx = -1;
     s.sectorDragging = false;
     DebugUI::UnregisterContributor(this);
@@ -2211,65 +2521,70 @@ void TMapRenderer::RenderFrame()
     Impl& s = *impl;
     if (!Display.IsActive() || !Display.BackBuffer())
         return;
-    // Reconcile per-instance drawable cache against current sector
-    // contents BEFORE the empty-cache early-return; otherwise an
-    // initial empty cache (or a paste from empty) never kicks the
-    // rebuild even when sectors have content.
+
+    SMapFrameTimings timings = {};
+    const auto frame_begin = SMapFrameClock::now();
+    auto phase_begin = frame_begin;
+    auto mark_phase = [&](float& slot) {
+        const auto now = SMapFrameClock::now();
+        slot = FrameProfileMs(phase_begin, now);
+        phase_begin = now;
+    };
+    auto finish_timings = [&]() {
+        const auto now = SMapFrameClock::now();
+        timings.total_ms = FrameProfileMs(frame_begin, now);
+        s.last_frame_timings = timings;
+    };
+
+    // Reconcile draw intent against map contents. Camera movement affects only
+    // submit-time culling, never draw-list or GPU-asset residency.
     SyncContentsCache();
-    if (s.sectorDrawInst.empty())
-        return;
+    mark_phase(timings.sync_ms);
 
-    const int64_t legacy_tick = TTime::LegacyFrameCount();
     TGameMap* current_map = s.currentMap.Get();
-    if (current_map && legacy_tick != s.lastLegacyAnimTick)
+    if (s.sectorDrawInst.empty())
     {
-        const bool first_tick = (s.lastLegacyAnimTick < 0);
-        s.lastLegacyAnimTick = legacy_tick;
-        const std::vector<TSector*>& kept = current_map->Sectors();
-
-        for (TSector* sec : kept)
-        {
-            if (!sec) continue;
-            for (int32_t i = 0; i < sec->NumItems(); ++i)
-            {
-                TObjectInstance* oi = sec->GetInstance(i);
-                if (!oi) continue;
-                if (!first_tick && oi->IsAnimated())
-                    oi->NextFrame();
-            }
-        }
-        for (TSector* sec : kept)
-        {
-            if (!sec) continue;
-            for (int32_t i = 0; i < sec->NumItems(); ++i)
-            {
-                TObjectInstance* oi = sec->GetInstance(i);
-                if (!oi || !oi->IsAnimated()) continue;
-                if (oi->NeedsAnimator() && !oi->HasAnimator())
-                    oi->OnScreen();
-                oi->Animate(false);
-            }
-        }
+        finish_timings();
+        return;
     }
 
-    // Baseline per-frame drawable refresh: sync instance-backed state after
-    // the world simulation has advanced. Drawable-specific enrichments can be
-    // layered on top of this later.
-    for (auto& inst : s.sectorDrawInst)
+    if (current_map)
     {
+        for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_ANIMATE); i; i++)
+        {
+            TObjectInstance* oi = i.Item();
+            if (!oi || !oi->IsAnimated()) continue;
+            if (oi->NeedsAnimator() && !oi->HasAnimator())
+                oi->OnScreen();
+            // Authoritative 24 Hz frame advancement lives in the game/map
+            // tick path (TMapPane::Pulse in the legacy pane path, or
+            // TGameModeImpl::Tick in the modern game path). The renderer only
+            // refreshes/samples poses for the current draw. Calling NextFrame()
+            // here double-advances live gameplay animation and skips authored
+            // keys at loop boundaries.
+            oi->Animate(false);
+        }
+    }
+    mark_phase(timings.animate_ms);
+
+    auto refresh_draw_inst = [&](SSectorDrawableInst& inst) {
         TObjectInstance* oi = inst.src.Get();
-        if (!oi) continue;
+        if (!oi) return;
+        const int32_t old_state = inst.state;
+        const int32_t old_frame = inst.frame;
         inst.world_pos = oi->Pos();
         inst.state = oi->GetState();
         inst.frame = oi->GetFrame();
         if (oi->ObjClass() == OBJCLASS_EFFECT)
         {
+            if (inst.asset_idx >= 0 && inst.state == old_state && inst.frame == old_frame)
+                return;
             TObjectImagery* img = oi->GetImagery();
             TAnimImagery* anim_img = dynamic_cast<TAnimImagery*>(img);
             const int32_t st = oi->GetState();
             PTAnimation anim = (anim_img && st >= 0 && st < anim_img->NumStates()) ? anim_img->GetAnimation(st) : nullptr;
             PTBitmap bm = anim ? anim->GetFrame(oi->GetFrame()) : nullptr;
-            const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, bm, oi, img, st);
+            const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
             if (tex_idx >= 0)
             {
                 inst.asset_idx = tex_idx;
@@ -2291,29 +2606,90 @@ void TMapRenderer::RenderFrame()
                 inst.regz = img->GetRegZ(st);
             }
         }
-    }
+    };
     const int32_t vw = Display.Width();
     const int32_t vh = Display.Height();
-    const float camera_forward = s.sectorCameraForward(vh);
-    int32_t cam_ox = 0, cam_oy = 0;
-    s.sectorCameraOriginScreen(cam_ox, cam_oy);
+    const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
+    const float effective_camera_zoom = s.sectorCameraZoom * camera_view.scale;
+    const float camera_forward = s.sectorCameraForward(HEIGHT);
+    int32_t cam_ox_logical = 0, cam_oy_logical = 0;
+    s.sectorCameraOriginScreen(cam_ox_logical, cam_oy_logical);
+    const int32_t cam_ox = int32_t(std::lround(camera_view.offset_x + float(cam_ox_logical) * camera_view.scale));
+    const int32_t cam_oy = int32_t(std::lround(camera_view.offset_y + float(cam_oy_logical) * camera_view.scale));
+
+    SMapRenderContext projectctx = {};
+    projectctx.sectorCameraWorld = s.sectorCameraWorld;
+    projectctx.cam_ox = cam_ox;
+    projectctx.cam_oy = cam_oy;
+    projectctx.vw = vw;
+    projectctx.vh = vh;
+    projectctx.cam_forward = camera_forward;
+    projectctx.camera_zoom = effective_camera_zoom;
+    projectctx.tile_scale = s.sectorPerspectiveTileScale;
+    projectctx.z_near = s.z_near;
+    projectctx.z_far = s.z_far;
+    projectctx.zspan = s.z_far - s.z_near;
+    projectctx.depth_mul = s.depth_mul;
+    projectctx.perspective_camera = s.sectorPerspectiveCamera;
+    const SSectorCullRange render_range =
+        ComputeRenderSectorRange(s, vw, vh, cam_ox, cam_oy, camera_forward,
+                                 effective_camera_zoom);
+    s.frameDrawIndices.clear();
+    for (int32_t sy = render_range.min_sy; sy <= render_range.max_sy; ++sy)
+    for (int32_t sx = render_range.min_sx; sx <= render_range.max_sx; ++sx)
+    {
+        auto it = s.sectorDrawBins.find(SectorBinKey(sx, sy));
+        if (it == s.sectorDrawBins.end())
+            continue;
+        s.frameDrawIndices.insert(s.frameDrawIndices.end(), it->second.begin(), it->second.end());
+    }
+    s.frameLightIndices.clear();
+    constexpr int32_t kLightSectorPad = 2;
+    for (int32_t sy = render_range.min_sy - kLightSectorPad; sy <= render_range.max_sy + kLightSectorPad; ++sy)
+    for (int32_t sx = render_range.min_sx - kLightSectorPad; sx <= render_range.max_sx + kLightSectorPad; ++sx)
+    {
+        auto it = s.sectorLightBins.find(SectorBinKey(sx, sy));
+        if (it == s.sectorLightBins.end())
+            continue;
+        s.frameLightIndices.insert(s.frameLightIndices.end(), it->second.begin(), it->second.end());
+    }
+    mark_phase(timings.setup_ms);
+
+    // Only the records in the current padded render range need per-frame
+    // instance refresh. The resident draw list can be much larger than the
+    // submit window, and walking the whole map here was pure CPU drag.
+    for (int32_t idx : s.frameDrawIndices)
+        if (idx >= 0 && idx < int32_t(s.sectorDrawInst.size()))
+            refresh_draw_inst(s.sectorDrawInst[idx]);
+    mark_phase(timings.refresh_ms);
 
     float scene_z_min_fit = FLT_MAX, scene_z_max_fit = -FLT_MAX;
     int32_t fit_tiles = 0;
-    for (const auto& inst : s.sectorDrawInst)
+    for (int32_t idx : s.frameDrawIndices)
     {
+        if (idx < 0 || idx >= int32_t(s.sectorDrawInst.size()))
+            continue;
+        const auto& inst = s.sectorDrawInst[idx];
         const float camera_z = (inst.kind == ESectorDrawableKind::Mesh)
-            ? s.sectorCameraSceneZMesh(inst, vh)
-            : s.sectorCameraSceneZ(inst, vh);
+            ? s.sectorCameraSceneZMesh(inst, HEIGHT)
+            : s.sectorCameraSceneZ(inst, HEIGHT);
         float z0 = camera_z - 512.0f;
         float z1 = camera_z + 512.0f;
         if (inst.kind == ESectorDrawableKind::Tile)
         {
             const auto& tex = s.sectorTileTex[inst.asset_idx];
-            S3DPoint sp; s.sectorProjectWorldForViewport(inst.world_pos, vh, sp);
-            const int32_t x0 = sp.x - inst.regx + cam_ox, y0 = sp.y - inst.regy + cam_oy;
-            const int32_t x1 = x0 + tex.w, y1 = y0 + tex.h;
-            if (x1 <= 0 || y1 <= 0 || x0 >= vw || y0 >= vh) continue;
+            float spx = 0.0f, spy = 0.0f;
+            ProjectWorldPointToScreen(projectctx, inst.world_pos, spx, spy);
+            const int32_t x0 = int32_t(std::lround(spx - float(inst.regx) * effective_camera_zoom)) + cam_ox;
+            const int32_t y0 = int32_t(std::lround(spy - float(inst.regy) * effective_camera_zoom)) + cam_oy;
+            const int32_t x1 = x0 + ScalePixel(effective_camera_zoom, float(tex.w));
+            const int32_t y1 = y0 + ScalePixel(effective_camera_zoom, float(tex.h));
+            // Fit depth against the same padded rectangle the renderer fills
+            // for occlusion. Presented albedo is still cropped to the visible
+            // display rect, but offscreen border occluders need correct z.
+            const int32_t pad = TRenderer::kGBufPad;
+            if (x1 <= -pad || y1 <= -pad || x0 >= vw + pad || y0 >= vh + pad)
+                continue;
             z0 = inst.has_authored_local_dz ? (camera_z + s.depth_mul * inst.authored_local_dz_min)
                                             : (camera_z + s.depth_mul * (tex.z_local_min - float(inst.regz)));
             z1 = inst.has_authored_local_dz ? (camera_z + s.depth_mul * inst.authored_local_dz_max)
@@ -2336,6 +2712,7 @@ void TMapRenderer::RenderFrame()
         s.z_near = (std::min)(s.z_near, scene_z_min_fit - kFitZMargin);
         s.z_far  = (std::max)(s.z_far,  scene_z_max_fit + kFitZMargin);
     }
+    mark_phase(timings.depth_fit_ms);
 
     if (s.animate)
     {
@@ -2353,11 +2730,11 @@ void TMapRenderer::RenderFrame()
     }
     {
         const float r2 = s.puck_u * s.puck_u + s.puck_v * s.puck_v;
-        const float cam_x_shadow = -s.puck_u;
-        const float cam_y_shadow = -s.puck_v;
-        const float cam_x_light = -cam_x_shadow;
-        const float cam_y_light = -cam_y_shadow;
-        const float cam_z = std::sqrt(fmaxf(0.0f, 1.0f - r2));
+        // The puck describes incoming light in screen space; the renderer
+        // uses the opposite vector, from the receiver back toward the sun.
+        const float to_sun_screen_x = s.puck_u;
+        const float to_sun_screen_y = s.puck_v;
+        const float to_sun_center = std::sqrt(fmaxf(0.0f, 1.0f - r2));
         const float fx = kIsoCos30, fy = kIsoCos30, fz = 1.0f;
         const float fn = std::sqrt(fx*fx + fy*fy + fz*fz);
         const float FwX = fx / fn, FwY = fy / fn, FwZ = fz / fn;
@@ -2367,12 +2744,16 @@ void TMapRenderer::RenderFrame()
         const float UwX = -FwY * RwZ + FwZ * RwY;
         const float UwY = -FwZ * RwX + FwX * RwZ;
         const float UwZ = -FwX * RwY + FwY * RwX;
-        s.dir[0] = cam_x_shadow * RwX + cam_y_shadow * UwX + cam_z * FwX;
-        s.dir[1] = cam_x_shadow * RwY + cam_y_shadow * UwY + cam_z * FwY;
-        s.dir[2] = cam_x_shadow * RwZ + cam_y_shadow * UwZ + cam_z * FwZ;
-        s.light_dir[0] = cam_x_light * RwX + cam_y_light * UwX + cam_z * FwX;
-        s.light_dir[1] = cam_x_light * RwY + cam_y_light * UwY + cam_z * FwY;
-        s.light_dir[2] = cam_x_light * RwZ + cam_y_light * UwZ + cam_z * FwZ;
+        s.light_dir[0] = to_sun_screen_x * RwX + to_sun_screen_y * UwX + to_sun_center * FwX;
+        s.light_dir[1] = to_sun_screen_x * RwY + to_sun_screen_y * UwY + to_sun_center * FwY;
+        s.light_dir[2] = to_sun_screen_x * RwZ + to_sun_screen_y * UwZ + to_sun_center * FwZ;
+        // Shadow ray invariant: this vector points from a receiver toward
+        // the sun, exactly like the lighting vector. Cast direction emerges
+        // from marching receivers toward the light and finding vertical
+        // occluders; do not store an opposite "shadow direction" here.
+        s.dir[0] = s.light_dir[0];
+        s.dir[1] = s.light_dir[1];
+        s.dir[2] = s.light_dir[2];
     }
     // Global debug UI owns the ImGui shell; it will call DrawDebugTab() on
     // this renderer as a contributor.
@@ -2380,8 +2761,9 @@ void TMapRenderer::RenderFrame()
     Renderer->SetLight(s.light_dir[0], s.light_dir[1], s.light_dir[2], s.intensity, s.color[0], s.color[1], s.color[2], s.ambient);
     Renderer->SetAmbientColor(s.ambient_color[0], s.ambient_color[1], s.ambient_color[2]);
     Renderer->SetAmbientOcclusion(s.ao_enable, s.ao_radius_px, s.ao_strength, s.ao_bias, s.ao_max_dist);
-    Renderer->SetShadowWorldDir(s.dir[0], s.dir[1], s.dir[2]);
-    Renderer->SetShadowVariance(s.sdir_off_x, s.sdir_off_y, s.sdir_wz_mul);
+    Renderer->SetShadowWorldDir(s.light_dir[0], s.light_dir[1], s.light_dir[2]);
+    Renderer->SetSunShadowRaycast(s.sun_shadow_samples, s.sun_shadow_depth_cutoff,
+                                  s.sun_shadow_bias, s.sdir_wz_mul);
     Renderer->SetNormalLightingHardness(s.normal_hardness);
     Renderer->SetNormalRadius(s.normal_radius);
     Renderer->SetEdgeThreshold(s.edge_thr);
@@ -2389,43 +2771,54 @@ void TMapRenderer::RenderFrame()
     Renderer->SetLightingMode(s.lighting_mode);
     Renderer->SetSunShadow(s.sun_shadow, s.sun_shadow_step, s.sun_shadow_soft, s.sun_shadow_max);
     Renderer->SetPerspectiveDebugMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveDebugMode : 0);
+    Renderer->SetPerspectiveProjectionMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveProjectionMode : 0);
+    Renderer->SetPerspectiveProxyRasterScale(s.sectorPerspectiveCamera ? s.sectorPerspectiveProxyRasterScale : 1.0f);
     Renderer->SetPerspectiveRaycastParams(s.sectorPerspectiveSteps, s.sectorPerspectiveRefine);
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy), s.z_near, s.z_far,
                                       float(s.sectorCameraWorld.x), float(s.sectorCameraWorld.y),
                                       camera_forward, s.sectorPerspectiveCamera ? 1.0f : 0.0f,
-                                      s.sectorCameraZoom,
+                                      effective_camera_zoom,
                                       s.sectorPerspectiveZOffset,
                                       s.sectorPerspectiveZScale,
                                       s.sectorPerspectiveTileScale);
+    mark_phase(timings.render_state_ms);
+
+    SMapRenderStats stats = {};
 
     Renderer->ClearPointLights();
     if (s.lights_on)
     {
         S3DPoint vc_rel;
-        ScreenToWorld(vw / 2 - cam_ox, vh / 2 - cam_oy, vc_rel, 0);
+        ScreenToWorld(int32_t(std::lround(float(vw / 2 - cam_ox) / (std::max)(effective_camera_zoom, 0.0001f))),
+                      int32_t(std::lround(float(vh / 2 - cam_oy) / (std::max)(effective_camera_zoom, 0.0001f))),
+                      vc_rel, 0);
         const S3DPoint vc_w = vc_rel + s.sectorCameraWorld;
         struct Pick { int32_t light_idx; float d2_to_view; };
         Pick picks[TRenderer::kMaxPointLights];
         int32_t pick_n = 0;
-        for (int32_t i = 0; i < int32_t(s.sectorLights.size()); ++i)
+        for (int32_t light_idx : s.frameLightIndices)
         {
-            const SSectorLight& L = s.sectorLights[i];
+            if (light_idx < 0 || light_idx >= int32_t(s.sectorLights.size()))
+                continue;
+            ++stats.point_lights_considered;
+            const SSectorLight& L = s.sectorLights[light_idx];
             if (!L.enabled) continue;
             const S3DPoint wp = s.sectorLightPos(L);
-            S3DPoint sp; s.sectorProjectWorldForViewport(wp, vh, sp);
-            const int32_t sx = sp.x + cam_ox;
-            const int32_t sy = sp.y + cam_oy;
-            const float r_px = s.sectorLightRadius(L) * s.radius_mul;
+            float spx = 0.0f, spy = 0.0f;
+            ProjectWorldPointToScreen(projectctx, wp, spx, spy);
+            const int32_t sx = int32_t(std::lround(spx)) + cam_ox;
+            const int32_t sy = int32_t(std::lround(spy)) + cam_oy;
+            const float r_px = s.sectorLightRadius(L) * s.radius_mul * effective_camera_zoom;
             if (sx + r_px < 0 || sx - r_px >= vw) continue;
             if (sy + r_px < 0 || sy - r_px >= vh) continue;
             const float dx = float(wp.x - vc_w.x), dy = float(wp.y - vc_w.y), dz = float(wp.z - vc_w.z);
             const float d2 = dx*dx + dy*dy + dz*dz;
-            if (pick_n < TRenderer::kMaxPointLights) picks[pick_n++] = { i, d2 };
+            if (pick_n < TRenderer::kMaxPointLights) picks[pick_n++] = { light_idx, d2 };
             else {
                 int32_t worst = 0;
                 for (int32_t k = 1; k < pick_n; ++k)
                     if (picks[k].d2_to_view > picks[worst].d2_to_view) worst = k;
-                if (d2 < picks[worst].d2_to_view) picks[worst] = { i, d2 };
+                if (d2 < picks[worst].d2_to_view) picks[worst] = { light_idx, d2 };
             }
         }
         for (int32_t k = 0; k < pick_n; ++k)
@@ -2438,67 +2831,36 @@ void TMapRenderer::RenderFrame()
                                     rgb[0], rgb[1], rgb[2],
                                     s.sectorLightIntensity(L) * s.intensity_mul);
         }
+        stats.point_lights_submitted = pick_n;
     }
+    mark_phase(timings.point_lights_ms);
 
     const float zspan = s.z_far - s.z_near;
     Renderer->BeginTilePass(0.12f, 0.16f, 0.10f, 1.0f);
-    static bool draw_stats_logged = false;
-    S3DPoint c0, c1, c2, c3;
-    const float cull_zoom = s.sectorCameraZoom > 0.01f ? s.sectorCameraZoom : 1.0f;
-    float cull_scale = 1.0f / cull_zoom;
-    if (s.sectorPerspectiveCamera)
-    {
-        const float max_depth = (std::max)(camera_forward, s.debugSceneZMaxFit + 1024.0f);
-        const float focal_zoom = (std::max)(camera_forward * cull_zoom, 1.0f);
-        cull_scale = (std::max)(cull_scale, max_depth / focal_zoom);
-        cull_scale *= (std::max)(s.sectorPerspectiveTileScale, 1.0f);
-    }
-    auto unzoomScreen = [cull_scale](int32_t v) -> int32_t {
-        return int32_t(std::floor(float(v) * cull_scale));
-    };
-    ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
-                  unzoomScreen(-cam_oy - TRenderer::kGBufPad), c0, 0);
-    ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
-                  unzoomScreen(-cam_oy - TRenderer::kGBufPad), c1, 0);
-    ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
-                  unzoomScreen(vh - cam_oy + TRenderer::kGBufPad), c2, 0);
-    ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
-                  unzoomScreen(vh - cam_oy + TRenderer::kGBufPad), c3, 0);
-    const int32_t min_wx = (std::min)((std::min)(c0.x, c1.x), (std::min)(c2.x, c3.x)) + s.sectorCameraWorld.x - SECTORWIDTH;
-    const int32_t max_wx = (std::max)((std::max)(c0.x, c1.x), (std::max)(c2.x, c3.x)) + s.sectorCameraWorld.x + SECTORWIDTH;
-    const int32_t min_wy = (std::min)((std::min)(c0.y, c1.y), (std::min)(c2.y, c3.y)) + s.sectorCameraWorld.y - SECTORHEIGHT;
-    const int32_t max_wy = (std::max)((std::max)(c0.y, c1.y), (std::max)(c2.y, c3.y)) + s.sectorCameraWorld.y + SECTORHEIGHT;
-    const int32_t min_sx = FloorDiv(min_wx, SECTORWIDTH);
-    const int32_t max_sx = FloorDiv(max_wx, SECTORWIDTH);
-    const int32_t min_sy = FloorDiv(min_wy, SECTORHEIGHT);
-    const int32_t max_sy = FloorDiv(max_wy, SECTORHEIGHT);
+    mark_phase(timings.begin_pass_ms);
 
     constexpr int32_t kCovCellPx = 32;
     const int32_t cov_cw = (vw + kCovCellPx - 1) / kCovCellPx;
     const int32_t cov_ch = (vh + kCovCellPx - 1) / kCovCellPx;
-    std::vector<uint8_t> cov(size_t(cov_cw) * size_t(cov_ch), 0);
-    if (!s.debugGreenImage.id)
-    {
-        static const uint32_t kGreen = 0xFF00FF00u;
-        sg_image_desc desc = {};
-        desc.width = 1;
-        desc.height = 1;
-        desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-        desc.data.subimage[0][0] = { &kGreen, sizeof(kGreen) };
-        desc.label = "maprenderer.debug.green";
-        s.debugGreenImage = sg_make_image(&desc);
-    }
+    const size_t cov_count = size_t(cov_cw) * size_t(cov_ch);
+    if (s.coverageScratch.size() != cov_count)
+        s.coverageScratch.resize(cov_count);
+    std::fill(s.coverageScratch.begin(), s.coverageScratch.end(), uint8_t(0));
+    if (Renderer && s.debugGreenTexture == kInvalidTexture)
+        s.debugGreenTexture = Renderer->SolidColorTexture(0x4D4150475245454Eull,
+                                                          0xFF00FF00u,
+                                                          "maprenderer.debug.green");
     SMapRenderContext drawctx = {};
     drawctx.tile_assets = &s.sectorTileTex;
     drawctx.mesh_assets = &s.sectorMeshAsset;
-    drawctx.debug_green_img = s.debugGreenImage;
+    drawctx.debug_green_texture = s.debugGreenTexture;
     drawctx.sectorCameraWorld = s.sectorCameraWorld;
     drawctx.cam_ox = cam_ox;
     drawctx.cam_oy = cam_oy;
     drawctx.vw = vw;
     drawctx.vh = vh;
     drawctx.cam_forward = camera_forward;
-    drawctx.camera_zoom = s.sectorCameraZoom;
+    drawctx.camera_zoom = effective_camera_zoom;
     drawctx.tile_scale = s.sectorPerspectiveTileScale;
     drawctx.z_near = s.z_near;
     drawctx.z_far = s.z_far;
@@ -2518,46 +2880,88 @@ void TMapRenderer::RenderFrame()
     drawctx.cov_cell_px = kCovCellPx;
     drawctx.cov_cw = cov_cw;
     drawctx.cov_ch = cov_ch;
-    drawctx.cov = &cov;
-    SMapRenderStats stats = {};
+    drawctx.cov = &s.coverageScratch;
     ParticleManager().BeginDrawPulsePass();
-    for (int32_t sy = min_sy; sy <= max_sy; ++sy)
-    for (int32_t sx = min_sx; sx <= max_sx; ++sx)
+    for (int32_t idx : s.frameDrawIndices)
     {
-        auto it = s.sectorDrawBins.find(SectorBinKey(sx, sy));
-        if (it == s.sectorDrawBins.end()) continue;
-        for (int32_t idx : it->second)
+        if (idx < 0 || idx >= int32_t(s.sectorDrawInst.size()))
+            continue;
+        ++stats.draw_candidates;
+        // obj_id = drawable index + 1 (0 reserved for "no object").
+        // OR editor-state flag bits into obj_id for any selected
+        // drawable. We compare by map index (the universal id all
+        // TSafeRef<T> share) so the test handles any selectable
+        // type without committing to TObjectInstance here.
+        uint32_t obj_id = uint32_t(idx) + 1u;
+        // Selection highlight is an editor-only visual; suppress in
+        // game mode even if the editor's selection set is non-empty.
+        if (EditorOverlaysEnabled())
         {
-            // obj_id = drawable index + 1 (0 reserved for "no object").
-            // OR editor-state flag bits into obj_id for any selected
-            // drawable. We compare by map index (the universal id all
-            // TSafeRef<T> share) so the test handles any selectable
-            // type without committing to TObjectInstance here.
-            uint32_t obj_id = uint32_t(idx) + 1u;
-            // Selection highlight is an editor-only visual; suppress in
-            // game mode even if the editor's selection set is non-empty.
-            if (EditorOverlaysEnabled())
-            {
-                const int32_t mi = s.sectorDrawInst[idx].src.MapIndex();
-                if (mi >= 0 && s.selectedMapIndices.count(mi))
-                    obj_id |= kObjFlagSelected;
-            }
-            if (TObjectInstance* oi = s.sectorDrawInst[idx].src.Get())
-                if (TParticleEffectComponent* particle_effect = oi->GetComponent<TParticleEffectComponent>())
-                    particle_effect->DrawPulse();
-            s.sectorDrawInst[idx].Submit(drawctx, stats, obj_id);
+            const int32_t mi = s.sectorDrawInst[idx].src.MapIndex();
+            if (mi >= 0 && s.selectedMapIndices.count(mi))
+                obj_id |= kObjFlagSelected;
         }
+        if (TObjectInstance* oi = s.sectorDrawInst[idx].src.Get())
+            if (TParticleEffectComponent* particle_effect = oi->GetComponent<TParticleEffectComponent>())
+                particle_effect->DrawPulse();
+        s.sectorDrawInst[idx].Submit(drawctx, stats, obj_id);
     }
     SubmitParticleBillboards(drawctx, stats);
+    mark_phase(timings.submit_ms);
     // Mirror this frame's counts into the impl so the editor status bar
     // can read them without re-running the render.
     s.last_draw_counts.total_drawables  = int32_t(s.sectorDrawInst.size());
+    s.last_draw_counts.draw_candidates  = stats.draw_candidates;
+    s.last_draw_counts.resident_lights  = s.residentPointLightCount;
+    s.last_draw_counts.active_lights    = int32_t(s.frameLightIndices.size());
+    s.last_draw_counts.point_lights_considered = stats.point_lights_considered;
+    s.last_draw_counts.point_lights_submitted = stats.point_lights_submitted;
     s.last_draw_counts.tiles_submitted  = stats.draw_submitted;
+    s.last_draw_counts.tiles_visible_submitted = stats.draw_visible_submitted;
+    s.last_draw_counts.tiles_gbuffer_border_submitted = stats.draw_gbuffer_border_submitted;
     s.last_draw_counts.meshes_submitted = stats.mesh_submitted;
     s.last_draw_counts.offscreen_culled = stats.draw_offscreen;
 
     Renderer->EndTilePass();
+    mark_phase(timings.end_tile_pass_ms);
     Renderer->RunLightingPass();
+    mark_phase(timings.lighting_pass_ms);
+    finish_timings();
+
+    static int64_t last_spike_frame = -1000000;
+    const float spike_ms = timings.total_ms;
+    if (spike_ms >= 34.0f && (last_spike_frame < 0 || last_spike_frame + 30 <= TTime::FrameCount()))
+    {
+        last_spike_frame = TTime::FrameCount();
+        const SRendererTilePassStats tile_stats =
+            Renderer ? Renderer->GetLastTilePassStats() : SRendererTilePassStats{};
+        log_info("[mr-frame] %.2f ms sync=%.2f anim=%.2f refresh=%.2f setup=%.2f zfit=%.2f state=%.2f lights=%.2f begin=%.2f submit=%.2f endtile=%.2f lighting=%.2f records=%zu candidates=%d lights=%d/%d tiles=%d meshes=%d tilepx=%llu/%llu rects=%u/%u proxy=%u hull=%u/%u",
+                 timings.total_ms,
+                 timings.sync_ms,
+                 timings.animate_ms,
+                 timings.refresh_ms,
+                 timings.setup_ms,
+                 timings.depth_fit_ms,
+                 timings.render_state_ms,
+                 timings.point_lights_ms,
+                 timings.begin_pass_ms,
+                 timings.submit_ms,
+                 timings.end_tile_pass_ms,
+                 timings.lighting_pass_ms,
+                 s.sectorDrawInst.size(),
+                 s.last_draw_counts.draw_candidates,
+                 s.last_draw_counts.active_lights,
+                 s.last_draw_counts.resident_lights,
+                 s.last_draw_counts.tiles_submitted,
+                 s.last_draw_counts.meshes_submitted,
+                 (unsigned long long)tile_stats.tile_clipped_pixels,
+                 (unsigned long long)tile_stats.tile_projected_pixels,
+                 tile_stats.tile_draws,
+                 tile_stats.tile_rects_culled,
+                 tile_stats.tile_proxy_draws,
+                 tile_stats.tile_tight_proxy_draws,
+                 tile_stats.tile_tight_proxy_points);
+    }
 }
 
 void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)
@@ -2569,16 +2973,32 @@ void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)
         int32_t picked = -1;
         if (!ctrl_pan && s.sectorShowGizmos)
         {
-            int32_t cam_ox = 0, cam_oy = 0;
-            s.sectorCameraOriginScreen(cam_ox, cam_oy);
+            const int32_t vw = Display.IsActive() ? Display.Width() : WIDTH;
+            const int32_t vh = Display.IsActive() ? Display.Height() : HEIGHT;
+            const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
+            int32_t cam_ox_logical = 0, cam_oy_logical = 0;
+            s.sectorCameraOriginScreen(cam_ox_logical, cam_oy_logical);
+            const int32_t cam_ox = int32_t(std::lround(camera_view.offset_x + float(cam_ox_logical) * camera_view.scale));
+            const int32_t cam_oy = int32_t(std::lround(camera_view.offset_y + float(cam_oy_logical) * camera_view.scale));
+            SMapRenderContext pickctx = {};
+            pickctx.sectorCameraWorld = s.sectorCameraWorld;
+            pickctx.cam_ox = cam_ox;
+            pickctx.cam_oy = cam_oy;
+            pickctx.vw = vw;
+            pickctx.vh = vh;
+            pickctx.cam_forward = s.sectorCameraForward(HEIGHT);
+            pickctx.camera_zoom = s.sectorCameraZoom * camera_view.scale;
+            pickctx.tile_scale = s.sectorPerspectiveTileScale;
+            pickctx.perspective_camera = s.sectorPerspectiveCamera;
             float best_d2 = 24.0f * 24.0f;
             for (size_t i = 0; i < s.sectorLights.size(); ++i)
             {
                 const SSectorLight& L = s.sectorLights[i];
                 if (!L.enabled) continue;
-                S3DPoint sp; s.sectorProjectWorldForViewport(s.sectorLightPos(L), Display.IsActive() ? Display.Height() : 0, sp);
-                const float dx = float((sp.x + cam_ox) - x);
-                const float dy = float((sp.y + cam_oy) - y);
+                float spx = 0.0f, spy = 0.0f;
+                ProjectWorldPointToScreen(pickctx, s.sectorLightPos(L), spx, spy);
+                const float dx = float((int32_t(std::lround(spx)) + cam_ox) - x);
+                const float dy = float((int32_t(std::lround(spy)) + cam_oy) - y);
                 const float d2 = dx*dx + dy*dy;
                 if (d2 < best_d2) { best_d2 = d2; picked = int32_t(i); }
             }
@@ -2628,15 +3048,28 @@ void TMapRenderer::HandleMouseMove(int32_t button, int32_t x, int32_t y)
         S3DPoint newpos = s.lightDragStartOiPos;
         if (ShiftDown)
         {
+            const int32_t vw = Display.IsActive() ? Display.Width() : WIDTH;
+            const int32_t vh = Display.IsActive() ? Display.Height() : HEIGHT;
+            const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
+            const float effective_camera_zoom = (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
             const int32_t dy = y - s.lightDragStartSY;
-            newpos.z = s.lightDragStartOiPos.z - dy;
+            newpos.z = s.lightDragStartOiPos.z - int32_t(std::lround(float(dy) / effective_camera_zoom));
         }
         else
         {
-            int32_t cam_ox = 0, cam_oy = 0;
-            s.sectorCameraOriginScreen(cam_ox, cam_oy);
+            const int32_t vw = Display.IsActive() ? Display.Width() : WIDTH;
+            const int32_t vh = Display.IsActive() ? Display.Height() : HEIGHT;
+            const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
+            const float effective_camera_zoom = (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
+            int32_t cam_ox_logical = 0, cam_oy_logical = 0;
+            s.sectorCameraOriginScreen(cam_ox_logical, cam_oy_logical);
+            const int32_t cam_ox = int32_t(std::lround(camera_view.offset_x + float(cam_ox_logical) * camera_view.scale));
+            const int32_t cam_oy = int32_t(std::lround(camera_view.offset_y + float(cam_oy_logical) * camera_view.scale));
             S3DPoint wp_rel;
-            ScreenToWorld(x - cam_ox, y - cam_oy, wp_rel, int32_t(s.lightDragStartOiPos.z));
+            ScreenToWorld(int32_t(std::lround(float(x - cam_ox) / effective_camera_zoom)),
+                          int32_t(std::lround(float(y - cam_oy) / effective_camera_zoom)),
+                          wp_rel,
+                          int32_t(s.lightDragStartOiPos.z));
             newpos.x = wp_rel.x + s.sectorCameraWorld.x;
             newpos.y = wp_rel.y + s.sectorCameraWorld.y;
             newpos.z = s.lightDragStartOiPos.z;
@@ -2649,8 +3082,15 @@ void TMapRenderer::HandleMouseMove(int32_t button, int32_t x, int32_t y)
         return;
     }
     if (!s.sectorDragging) return;
+    const int32_t vw = Display.IsActive() ? Display.Width() : WIDTH;
+    const int32_t vh = Display.IsActive() ? Display.Height() : HEIGHT;
+    const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
+    const float effective_camera_zoom = (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
     S3DPoint drag_delta_w = {0,0,0};
-    ScreenToWorld(x - s.dragStartX, y - s.dragStartY, drag_delta_w, 0);
+    ScreenToWorld(int32_t(std::lround(float(x - s.dragStartX) / effective_camera_zoom)),
+                  int32_t(std::lround(float(y - s.dragStartY) / effective_camera_zoom)),
+                  drag_delta_w,
+                  0);
     s.sectorCameraWorld.x = s.dragCameraStartWorld.x - drag_delta_w.x;
     s.sectorCameraWorld.y = s.dragCameraStartWorld.y - drag_delta_w.y;
     s.sectorCameraWorld.z = s.dragCameraStartWorld.z;

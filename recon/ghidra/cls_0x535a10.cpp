@@ -154,7 +154,7 @@ void __thiscall OOAnalyzer::cls_0x535a10::meth_0x536010(cls_0x535a10 *this)
       if (((this->mbr_0x18c != 0) && (uVar3 < this->mbr_0x17c)) &&
          (*(int *)(this->mbr_0x18c + uVar3 * 4) != 0)) {
         this_00 = (cls_0x4d6000 *)
-                  FUN_00452690(*(int *)(*(int *)(this->mbr_0x18c + uVar3 * 4) + 4),2);
+                  FUN_00452690_TMapPane_GetInstance(*(int *)(*(int *)(this->mbr_0x18c + uVar3 * 4) + 4),2);
         if (this_00 != (cls_0x4d6000 *)0x0) {
           cls_0x4d6000::meth_0x4d6000(this_00);
         }
@@ -266,7 +266,7 @@ void __thiscall OOAnalyzer::cls_0x535a10::meth_0x5360f0(cls_0x535a10 *this)
         FUN_00471290(this->mbr_0x194,extraout_DL,s_Finish_005e3f54);
       }
       if ((this->mbr_0x194 != 0) && (iVar2 = *(int *)(this->mbr_0x194 + 0xd8), iVar2 != 0)) {
-        iVar2 = FUN_004dab80(iVar2,&DAT_005e3f5c);
+        iVar2 = FUN_004dab80_TActionBlock_Is(iVar2,&DAT_005e3f5c);
         if (iVar2 != 0) {
           *(undefined4 *)(this->mbr_0x194 + 0x108) = 1;
         }

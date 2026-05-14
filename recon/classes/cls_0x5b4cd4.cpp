@@ -256,7 +256,7 @@ void __thiscall OOAnalyzer::cls_0x5b4cd4::meth_0x517240(cls_0x5b4cd4 *this)
   dword dVar2;
   undefined4 uVar3;
   undefined4 uVar4;
-  cls_0x5a7b98 *this_00;
+  cls_0x5a7b98_TCharacter *this_00;
   int *piVar5;
   int iVar6;
   int iVar7;
@@ -285,14 +285,14 @@ void __thiscall OOAnalyzer::cls_0x5b4cd4::meth_0x517240(cls_0x5b4cd4 *this)
     dVar1 = this->mbr_0x18;
     iVar7 = 0x14;
     do {
-      dVar2 = FUN_00483300(0,0xff);
-      uVar3 = FUN_00483300(0x32,0x96,&local_4c,0);
-      FUN_0046db20(dVar2,uVar3);
+      dVar2 = FUN_00483300_RandomRange(0,0xff);
+      uVar3 = FUN_00483300_RandomRange(0x32,0x96,&local_4c,0);
+      FUN_0046db20_ConvertToVector(dVar2,uVar3);
       local_48 = local_48 + local_3c;
       local_4c = local_4c + local_40;
       iVar7 = iVar7 + -1;
       local_44 = dVar1 + 10;
-      FUN_004530a0(&local_4c,*(undefined2 *)((int)&this->mbr_0xc + 2),0x10,&local_54,local_50,
+      FUN_004530a0_GetWalkHeightRadius(&local_4c,*(undefined2 *)((int)&this->mbr_0xc + 2),0x10,&local_54,local_50,
                    &local_58);
       if (local_54 < 5) {
         if (local_58 == 0) goto LAB_00517328;
@@ -303,7 +303,7 @@ void __thiscall OOAnalyzer::cls_0x5b4cd4::meth_0x517240(cls_0x5b4cd4 *this)
     } while (iVar7 != 0);
     if (local_58 == 0) {
 LAB_00517328:
-      this_01 = (cls_0x4746d0 *)(-(uint)(0xc < DAT_0065a258) & DAT_0065a178);
+      this_01 = (cls_0x4746d0 *)(-(uint)(0xc < DAT_0065a258_TObjectClass_numclasses) & DAT_0065a178);
       iVar7 = cls_0x4746d0::meth_0x475210
                         (this_01,*(undefined4 *)(&this->mbr_0xd8)[in_stack_00000004]);
       if (-1 < iVar7) {
@@ -320,10 +320,10 @@ LAB_00517328:
         local_20 = local_44;
         local_30 = 0;
         local_24 = local_48;
-        uVar4 = cls_0x5a5320::meth_0x450e40((cls_0x5a5320 *)&DAT_006668d8,&local_34);
-        this_00 = (cls_0x5a7b98 *)FUN_00452690(uVar4,uVar3);
-        if (this_00 != (cls_0x5a7b98 *)0x0) {
-          piVar5 = (int *)cls_0x5a7b98::meth_0x46e8a0(this_00);
+        uVar4 = cls_0x5a5320_TPlayScreen::meth_0x450e40((cls_0x5a5320_TPlayScreen *)&DAT_006668d8,&local_34);
+        this_00 = (cls_0x5a7b98_TCharacter *)FUN_00452690_TMapPane_GetInstance(uVar4,uVar3);
+        if (this_00 != (cls_0x5a7b98_TCharacter *)0x0) {
+          piVar5 = (int *)cls_0x5a7b98_TCharacter::meth_0x46e8a0(this_00);
           (**(code **)(*piVar5 + 0xc))();
           cls_0x5877a0::meth_0x587880((cls_0x5877a0 *)&UNK_00676e04.field_0x4);
           FUN_005169b0(this_00,*(undefined4 *)((&this->mbr_0xd8)[in_stack_00000004] + 8));
@@ -375,7 +375,7 @@ cls_0x5a47f0 * __thiscall OOAnalyzer::cls_0x5b4cd4::virt_meth_0x517530(cls_0x5b4
 void __thiscall OOAnalyzer::cls_0x5b4cd4::virt_meth_0x517640(cls_0x5b4cd4 *this)
 
 {
-  cls_0x5b8e94::virt_meth_0x470f00((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x470f00((cls_0x5b8e94_TObjectInstance *)this);
   this->mbr_0xf0 = 1;
   return;
 }
@@ -387,7 +387,7 @@ void __thiscall OOAnalyzer::cls_0x5b4cd4::virt_meth_0x517640(cls_0x5b4cd4 *this)
 void __thiscall OOAnalyzer::cls_0x5b4cd4::virt_meth_0x517660(cls_0x5b4cd4 *this)
 
 {
-  cls_0x5b8e94::virt_meth_0x470e40((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x470e40((cls_0x5b8e94_TObjectInstance *)this);
   this->mbr_0xf0 = 0;
   return;
 }

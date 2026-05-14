@@ -4,21 +4,20 @@
 // *           editoricons.h - Object-category icons for the editor        *
 // *************************************************************************
 //
-// Loads PNG icons from REV_EDITOR_DATA_DIR/icons/<category>.png as sokol
-// images, keyed by OBJCLASS_*. Inventory item classes (WEAPON, ARMOR ...
+// Loads PNG icons from REV_EDITOR_DATA_DIR/icons/<category>.png as renderer
+// textures, keyed by OBJCLASS_*. Inventory item classes (WEAPON, ARMOR ...
 // MAPSCROLL) all collapse onto the single "ITEM" icon. Categories with
-// no icon return a zeroed sg_image so callers can branch on `id == 0`.
+// no icon return kInvalidTexture.
 //
 // Lifecycle:
-//   EditorIcons::Build();    // call once after sokol_gfx is up
-//   ImGui::Image((ImTextureID)(uintptr_t) EditorIcons::ForObjClass(c).id, sz);
-//   EditorIcons::Shutdown(); // free the textures on app exit
+//   EditorIcons::Build();    // call once after the renderer is up
+//   EditorIcons::Shutdown(); // releases the renderer refs on app exit
 //
 // *************************************************************************
 
 #pragma once
 
-#include <sokol_gfx.h>
+#include "render3d_types.h"
 
 #include <cstdint>
 
@@ -27,10 +26,10 @@ namespace EditorIcons {
 void     Build();
 void     Shutdown();
 
-// sg_image{0} when no icon exists for the class.
-sg_image ForObjClass(int32_t obj_class);
+// kInvalidTexture when no icon exists for the class.
+TTextureHandle ForObjClass(int32_t obj_class);
 
 // Generic / sector folder icon.
-sg_image Sector();
+TTextureHandle Sector();
 
 } // namespace EditorIcons

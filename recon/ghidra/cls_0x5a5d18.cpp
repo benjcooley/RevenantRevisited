@@ -1,9 +1,9 @@
-// Decompiled methods and structure for class: cls_0x5a5d18
+// Decompiled methods and structure for class: cls_0x5a5d18_TLogoScreen
 
 /*
-/OOAnalyzer/cls_0x5a5d18
+/OOAnalyzer/cls_0x5a5d18_TLogoScreen
 pack(disabled)
-Structure cls_0x5a5d18 {
+Structure cls_0x5a5d18_TLogoScreen {
    0   TObjectInstance   112   TObjectInstance   "Component (member) class."
    112   dword   4   mbr_0x70   "Unsigned Double-Word (ddw, 4-bytes)"
    116   dword   4   mbr_0x74   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -18,7 +18,7 @@ Length: 140 Alignment: 1
 
 // Function at 00488e70
 
-cls_0x5a5d18 * __thiscall OOAnalyzer::cls_0x5a5d18::cls_0x5a5d18(cls_0x5a5d18 *this)
+cls_0x5a5d18_TLogoScreen * __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::cls_0x5a5d18_TLogoScreen(cls_0x5a5d18_TLogoScreen *this)
 
 {
   TObjectInstance::TObjectInstance(&this->TObjectInstance);
@@ -36,7 +36,7 @@ cls_0x5a5d18 * __thiscall OOAnalyzer::cls_0x5a5d18::cls_0x5a5d18(cls_0x5a5d18 *t
 
 // Function at 00488ea0
 
-cls_0x5a5d18 * __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x488ea0(cls_0x5a5d18 *this)
+cls_0x5a5d18_TLogoScreen * __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::virt_meth_0x488ea0_TLogoScreen_Dtor(cls_0x5a5d18_TLogoScreen *this)
 
 {
   SIZE_T SVar1;
@@ -44,7 +44,7 @@ cls_0x5a5d18 * __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x488ea0(cls_0x5a5
   
   TObjectInstance::~TObjectInstance(&this->TObjectInstance);
   if ((in_stack_00000004 & 1) != 0) {
-    if (this != (cls_0x5a5d18 *)0x0) {
+    if (this != (cls_0x5a5d18_TLogoScreen *)0x0) {
       SVar1 = FUN_0058cff3(this);
       DAT_0065ba08 = DAT_0065ba08 - SVar1;
     }
@@ -57,7 +57,7 @@ cls_0x5a5d18 * __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x488ea0(cls_0x5a5
 
 // Function at 0053a2c0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x53a2c0(cls_0x5a5d18 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::virt_meth_0x53a2c0_TLogoScreen_Initialize(cls_0x5a5d18_TLogoScreen *this)
 
 {
   uint *puVar1;
@@ -82,7 +82,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x53a2c0(cls_0x5a5d18 
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
   (this->TObjectInstance).mbr_0x54 = 0;
-  cls_0x45f7c0::meth_0x51eda0((cls_0x45f7c0 *)&DAT_0065a890);
+  cls_0x45f7c0::meth_0x51eda0_TPlayerManager_Clear((cls_0x45f7c0 *)&DAT_0065a890);
   FUN_00446cb0();
   DAT_0066fcac = FUN_0047f670((cls_0x49ead0 *)s_menus_dat_005e43dc,(void *)0xffffffff,0,unaff_EDI);
   iVar7 = cls_0x46d6b0::meth_0x46d710(DAT_0065abc0);
@@ -191,7 +191,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x53a2c0(cls_0x5a5d18 
 
 // Function at 0053a680
 
-void __thiscall OOAnalyzer::cls_0x5a5d18::virt_meth_0x53a680(cls_0x5a5d18 *this)
+void __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::virt_meth_0x53a680_TLogoScreen_Close(cls_0x5a5d18_TLogoScreen *this)
 
 {
   cls_0x5a4f28::meth_0x48ee10((cls_0x5a4f28 *)this);

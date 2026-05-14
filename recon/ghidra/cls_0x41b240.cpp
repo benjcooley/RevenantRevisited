@@ -41,7 +41,7 @@ Length: 608 Alignment: 1
 
 // Function at 0041b240
 
-void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b240(cls_0x41b240 *this)
+void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b240_TArea_PlayCDMusic(cls_0x41b240 *this)
 
 {
   int iVar1;
@@ -65,7 +65,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b240(cls_0x41b240 *this)
         }
         else {
           do {
-            dVar4 = FUN_00483300(0,this->mbr_0x1bc - 1);
+            dVar4 = FUN_00483300_RandomRange(0,this->mbr_0x1bc - 1);
             if (dVar4 != this->mbr_0x1b8) break;
           } while (1 < (int)this->mbr_0x1bc);
           this->mbr_0x1b8 = dVar4;
@@ -105,7 +105,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b240(cls_0x41b240 *this)
 
 // Function at 0041b3c0
 
-void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b3c0(cls_0x41b240 *this,dword *param_1)
+void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b3c0_TArea_GetCurrentAmbient(cls_0x41b240 *this,dword *param_1)
 
 {
   dword dVar1;
@@ -238,7 +238,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b690(cls_0x41b240 *this)
 
 // Function at 0041b770
 
-void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
+void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770_TArea_Pulse(cls_0x41b240 *this)
 
 {
   int iVar1;
@@ -262,7 +262,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
   int local_20;
   
   if (((*(byte *)&this->mbr_0x44 & 0x20) != 0) && (0 < (int)this->mbr_0x1bc)) {
-    meth_0x41b240(this);
+    meth_0x41b240_TArea_PlayCDMusic(this);
   }
   iVar1 = cls_0x47ea00::meth_0x47eab0((cls_0x47ea00 *)&DAT_0065caf0);
   if ((*(byte *)&this->mbr_0x44 & 8) != 0) {
@@ -285,7 +285,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
     }
     dVar4 = cls_0x47ea00::meth_0x47ea00((cls_0x47ea00 *)&DAT_0065caf0);
     if (dVar4 != this->mbr_0xe0) {
-      meth_0x41b3c0(this,&local_54);
+      meth_0x41b3c0_TArea_GetCurrentAmbient(this,&local_54);
       TCharacter::meth_0x453640((TCharacter *)&DAT_006668d8,local_54);
       TCharacter::meth_0x4536b0((TCharacter *)&DAT_006668d8,local_50);
       this->mbr_0xe0 = dVar4;
@@ -306,7 +306,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
       local_24 = DAT_0066698c;
       local_20 = DAT_00666990;
       iVar2 = TCharacter::meth_0x450e40((TCharacter *)&DAT_006668d8,&local_34);
-      piVar5 = (int *)FUN_00452690(iVar2,0);
+      piVar5 = (int *)FUN_00452690_TMapPane_GetInstance(iVar2,0);
       *(int **)(this->mbr_0x25c + 0x1c) = piVar5;
       if (piVar5 != (int *)0x0) {
         (**(code **)(*piVar5 + 0x40))(piVar5[2] | 0x80000);
@@ -329,7 +329,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41b770(cls_0x41b240 *this)
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41ba00(cls_0x41b240 *this)
+void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41ba00_TArea_Enter(cls_0x41b240 *this)
 
 {
   byte bVar1;
@@ -403,7 +403,7 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41ba00(cls_0x41b240 *this)
     }
   }
   if ((*(byte *)&this->mbr_0x44 & 4) != 0) {
-    meth_0x41b3c0(this,local_210);
+    meth_0x41b3c0_TArea_GetCurrentAmbient(this,local_210);
     if (iVar8 == DAT_005e91ec) {
       iVar8 = iVar9 - DAT_005e91f0;
       if (iVar8 < 0) {
@@ -429,11 +429,11 @@ void __thiscall OOAnalyzer::cls_0x41b240::meth_0x41ba00(cls_0x41b240 *this)
   }
 LAB_0041bb8f:
   if ((DAT_0066829c == 0) && ((*(byte *)&this->mbr_0x44 & 0x10) != 0)) {
-    uVar6 = FUN_0059a530(dVar10,(byte *)&this->mbr_0x50,(byte *)s_master_s_005c6d0c);
+    uVar6 = FUN_0059a530_stricmp(dVar10,(byte *)&this->mbr_0x50,(byte *)s_master_s_005c6d0c);
     if (uVar6 == 0) {
       FUN_00481c10((byte *)s_The_MASTER_S_script_file_can_not_005c6d18);
     }
-    cls_0x495cf0::meth_0x496490((cls_0x495cf0 *)&DAT_0065def0);
+    cls_0x495cf0::meth_0x496490_TScriptManager_Load((cls_0x495cf0 *)&DAT_0065def0);
   }
   meth_0x41b690(this);
   if ((this->mbr_0x44 & 0x3400) != 0) {

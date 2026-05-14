@@ -19,7 +19,7 @@ void cls_0x4959f0::meth_0x4959f0(byte *param_1)
   iVar4 = 0;
   pcVar3 = this;
   if (0 < (int)this->mbr_0x24) {
-    while (uVar2 = FUN_0059a530((uint)pcVar3,(byte *)(*(int *)(this->mbr_0x34 + iVar4 * 4) + 8),
+    while (uVar2 = FUN_0059a530_stricmp((uint)pcVar3,(byte *)(*(int *)(this->mbr_0x34 + iVar4 * 4) + 8),
                                 param_1), uVar2 != 0) {
       iVar4 = iVar4 + 1;
       pcVar3 = extraout_ECX;

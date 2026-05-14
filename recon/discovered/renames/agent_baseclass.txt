@@ -1,0 +1,252 @@
+# Format: BARE_TOKEN|RENAMED_TOKEN  — one per line, # comments ignored.
+# TObjectInstance (cls_0x5b8e94) and TComplexObject method identifications.
+#
+# Class anchors:
+#   - cls_0x5b8e94 = TObjectInstance — vtable address 0x5b8e94. 125 vtable
+#     slots (length 500). All slot addresses are a strict prefix of TCharacter's
+#     vtable cls_0x5a7b98 with TCharacter overrides at slots {0,16,272,324,
+#     348,352,356} and 13 new slots appended at offsets 496..544.
+#   - TComplexObject is *not* instantiated standalone — its base-class
+#     "vtable" is folded into TCharacter's. We can still identify TComplexObject
+#     methods by code-section adjacency (0x4d6c20-0x4dbXXX cluster, between
+#     TObjectInstance ~0x46-0x47 range and TCharacter ~0x4c range) and by
+#     signature matches against complexobj.h declarations (HasActionAni,
+#     ObjVersion, DefaultRootState, IsFinalState, Load, Save, etc.).
+#
+# Field offsets discovered for TObjectInstance (cls_0x5b8e94):
+#   +0x10/+0x14/+0x18  = pos.{x,y,z}    (S3DPoint, used by Distance/SetPos)
+#   +0x58              = animator       (TObjectAnimator*)
+#   +0x80              = notifyflags    (set by SetNotify, no-arg)
+#   +0x84              = script         (TScript*, used by Notify)
+# For TComplexObject (in TCharacter layout):
+#   +0xd8 = doing      (PTActionBlock)
+#   +0xdc = root       (PTActionBlock)
+#   +0xe0 = desired    (PTActionBlock)
+
+
+# ============================================================================
+# Class label
+# ============================================================================
+
+cls_0x5b8e94|cls_0x5b8e94_TObjectInstance
+
+
+# ============================================================================
+# TObjectInstance methods — identified by body-pattern + signature match
+# ============================================================================
+
+# Distance(other) — |dx|, |dy| at obj+0x10/+0x14, normalize to <256, lookup
+# 256x256 LUT at DAT_005e9200, scale by shift count. Classic integer
+# distance LUT.
+virt_meth_0x46ea20|virt_meth_0x46ea20_Distance
+meth_0x46ea20|meth_0x46ea20_Distance
+FUN_0046ea20|FUN_0046ea20_Distance
+
+# SetPos(newpos, newlevel, override) — checks if pos changed, transfers
+# sector via FUN_00459f50 + clears/sets +0x400000 flag, copies pos to
+# +0x10/+0x14/+0x18, updates level at +0xe (short).
+virt_meth_0x46ed70|virt_meth_0x46ed70_SetPos
+meth_0x46ed70|meth_0x46ed70_SetPos
+FUN_0046ed70|FUN_0046ed70_SetPos
+
+# MoveTo(newpos) — single-line wrapper: vtable[+8](newpos, -1, 0). That's
+# SetPos(newpos, -1, false). Default-arg forwarder. Slot offset 12.
+virt_meth_0x4778a0|virt_meth_0x4778a0_MoveTo
+meth_0x4778a0|meth_0x4778a0_MoveTo
+FUN_004778a0|FUN_004778a0_MoveTo
+
+# Notify(notify, ptr) — the TObjectInstance base. Handles param_2==5 and
+# param_2==8 (script-deleted/added equivalents); operates on +0x84 (script)
+# and clears nested target pointers in script. Subclasses (TCharacter,
+# TComplexObject) extend this and call back via vtable.
+virt_meth_0x471ba0|virt_meth_0x471ba0_Notify
+meth_0x471ba0|meth_0x471ba0_Notify
+FUN_00471ba0|FUN_00471ba0_Notify
+
+# CreateAnimator() — bool. Slot 40 in vtable. Tests +0x58 (animator), calls
+# vtable[+0x1a0] (NeedsAnimator?) twice with the count compared against
+# DAT_005d79e4 (animator-count cap), then cl->vtable[+0x34] to allocate
+# animator, stores into +0x58, calls animator->vtable[+0x18] (Init?).
+virt_meth_0x46e8b0|virt_meth_0x46e8b0_CreateAnimator
+meth_0x46e8b0|meth_0x46e8b0_CreateAnimator
+FUN_0046e8b0|FUN_0046e8b0_CreateAnimator
+
+# FreeAnimator() — slot 44. Tests +0x58, calls animator->vtable[+0x1c]
+# (Term/Cleanup), animator->vtable[+0] (dtor with arg=1 → scalar deleting),
+# zeros +0x58.
+virt_meth_0x46e900|virt_meth_0x46e900_FreeAnimator
+meth_0x46e900|meth_0x46e900_FreeAnimator
+FUN_0046e900|FUN_0046e900_FreeAnimator
+
+# NeedsAnimator() — slot 48. const-style. Returns bool: if no animator
+# (+0x58==0) and cl set, queries cl->vtable[+0x38] (class-level
+# NeedsAnimator); on yes + flag check, calls vtable[+0x40] (SetFlag) to
+# combine bits. Pattern matches NeedsAnimator dispatch.
+virt_meth_0x46e930|virt_meth_0x46e930_NeedsAnimator
+meth_0x46e930|meth_0x46e930_NeedsAnimator
+FUN_0046e930|FUN_0046e930_NeedsAnimator
+
+# Empty stub — many vtable slots in TObjectInstance vtable point here. Used
+# as a default no-op for virtuals that have an empty inline body in source
+# (e.g. SignalAddedToInventory, OnScreen, OffScreen defaults).
+virt_meth_0x46ea10|virt_meth_0x46ea10_NoOp
+
+# AddToInventory(name, slot, ?) — searches sorted name table at DAT_00659d40
+# (binary search with FUN_0059a530=stricmp); on match builds an SObjectDef
+# (objclass[+8]/objtype[+0x20]/lookup at +0x22) on stack, calls
+# FUN_00474bb0 to construct, then vtable[+0x58] (AddInventory by inst).
+# Maps to virtual bool AddToInventory(const char *name, ...).
+virt_meth_0x46f940|virt_meth_0x46f940_AddInventoryByName
+meth_0x46f940|meth_0x46f940_AddInventoryByName
+FUN_0046f940|FUN_0046f940_AddInventoryByName
+
+# AddToInventory(objclass, ...) — sibling of 0x46f940 but searches by
+# numeric id (DAT_00659d18 table indexed by +0x1c) rather than name string.
+# Same SObjectDef build / FUN_00474bb0 / vtable[+0x50] route.
+virt_meth_0x46f7e0|virt_meth_0x46f7e0_AddInventoryByClass
+meth_0x46f7e0|meth_0x46f7e0_AddInventoryByClass
+FUN_0046f7e0|FUN_0046f7e0_AddInventoryByClass
+
+# RemoveFromInventory() — clears +0x19 (parent inventory ptr at byte
+# offset 0x64), touches +0x68/+0x78 (parent's slot list), resets +0x7e
+# (inventnum) and +0x7c, fires script-undo via FUN_005859c0 +
+# FUN_0041cb80 + DAT_0065d4f8/DAT_0065d674 (script manager hooks).
+virt_meth_0x46faf0|virt_meth_0x46faf0_RemoveFromInventory
+meth_0x46faf0|meth_0x46faf0_RemoveFromInventory
+FUN_0046faf0|FUN_0046faf0_RemoveFromInventory
+
+# SetState(state, ?) — wrapper that calls vtable[+0x138] (FindState by
+# name) then vtable[+0x18] (SetState by index). MSVC frequently emits both
+# overloads; this is the const char* form forwarding to the int form.
+virt_meth_0x4778c0|virt_meth_0x4778c0_SetStateByName
+meth_0x4778c0|meth_0x4778c0_SetStateByName
+FUN_004778c0|FUN_004778c0_SetStateByName
+
+# SetFlag(newflags) / SetFlags — manages flags at +8. Has special-case
+# blending of bits 0x20000000, 0x200, 0x400000, 0x4 (state ↔ flag transitions);
+# calls FUN_00451a50 (notify-flag-change), FUN_00452750 (state machine),
+# vtable[+0x124]/[+0x128] (Activate/Deactivate or OnScreen/OffScreen pair).
+# Net "set object flags" with side effects.
+virt_meth_0x472e90|virt_meth_0x472e90_SetFlags
+meth_0x472e90|meth_0x472e90_SetFlags
+FUN_00472e90|FUN_00472e90_SetFlags
+
+# SetNotify(flags) — single-line `*(this+0x80) = flags`. Tiny setter for
+# notifyflags member.
+virt_meth_0x471b50|virt_meth_0x471b50_SetNotify
+meth_0x471b50|meth_0x471b50_SetNotify
+FUN_00471b50|FUN_00471b50_SetNotify
+
+# Pulse base — slot at offset 16 in TObjectInstance vtable (overridden by
+# TCharacter::Notify at 0x4dbc70 — wait, slot offset 16 IS Notify, not Pulse;
+# leaving Pulse identification to TComplexObject below).
+
+# BgDrawMode() — slot offset 312 area. Returns 1/3/4 based on flag bits at
+# +8 ({0x4, 0x488}) and queries cl->vtable[+0x2c] for class draw mode.
+virt_meth_0x4710a0|virt_meth_0x4710a0_BgDrawMode
+meth_0x4710a0|meth_0x4710a0_BgDrawMode
+FUN_004710a0|FUN_004710a0_BgDrawMode
+
+# OnScreen / scene-add hook — accesses +0x16 (animator) animate-call,
+# +0x21 (script ptr at byte +0x84), invokes FUN_004933d0 (script-call).
+# Likely OnScreen or comparable callback.
+virt_meth_0x4708e0|virt_meth_0x4708e0_OnScreen
+meth_0x4708e0|meth_0x4708e0_OnScreen
+FUN_004708e0|FUN_004708e0_OnScreen
+
+# Animate(draw) — ratchets animation counter via vtable[+0x1c0]/[+0x1c4]
+# accessors, plus flag-bit toggling at +8 (0x800000, 0x2000000). Matches
+# `virtual void Animate(bool draw)` at line 1037.
+virt_meth_0x46e970|virt_meth_0x46e970_Animate
+meth_0x46e970|meth_0x46e970_Animate
+FUN_0046e970|FUN_0046e970_Animate
+
+# GetProperty(name, outbuf, len) — string-key dispatcher: handles "objtype",
+# "objclass", "statmod", "experience", "CLASS", and falls back to
+# class-name munging (alphanumerics only). Format strings "%s_%s_%d" etc.
+# at DAT_005d4b88..005d4bac. This is the script-side property-fetch.
+virt_meth_0x472f80|virt_meth_0x472f80_GetProperty
+meth_0x472f80|meth_0x472f80_GetProperty
+FUN_00472f80|FUN_00472f80_GetProperty
+
+# GetStat(name) — walks the 0x50-stride statdata table at +0x12 (cl), uses
+# stricmp (FUN_0059a530), returns matched stat value at +0x10 of the
+# class-stat block. Pure name→value lookup.
+virt_meth_0x473600|virt_meth_0x473600_GetStat
+meth_0x473600|meth_0x473600_GetStat
+FUN_00473600|FUN_00473600_GetStat
+
+# Scalar deleting destructor (~TObjectInstance) — slot 0 of cls_0x5b8e94
+# vtable. Calls 0x528b20 (real dtor) then optionally heap-frees via
+# FUN_004830f0. Standard MSVC `vector deleting destructor` shim.
+virt_meth_0x528b00|virt_meth_0x528b00_Dtor
+meth_0x528b00|meth_0x528b00_Dtor
+FUN_00528b00|FUN_00528b00_Dtor
+
+
+# ============================================================================
+# TComplexObject methods — code-section cluster 0x4d6c20-0x4dbXXX,
+# identified by signature/string matches against complexobj.h
+# ============================================================================
+
+# HasActionAni(name, from) — test FindState(name)>=0 OR
+# FindTransitionState(from?from:root->name, name)>=0. Exactly the
+# inline body in complexobj.h. Slot 496.
+virt_meth_0x4d6c20|virt_meth_0x4d6c20_HasActionAni
+meth_0x4d6c20|meth_0x4d6c20_HasActionAni
+FUN_004d6c20|FUN_004d6c20_HasActionAni
+
+# ObjVersion — `return 1` (matches TComplexObject::ObjVersion()
+# in complexobj.h). Slot 348.
+virt_meth_0x4d6c80|virt_meth_0x4d6c80_ObjVersion
+meth_0x4d6c80|meth_0x4d6c80_ObjVersion
+FUN_004d6c80|FUN_004d6c80_ObjVersion
+
+# IsFinalState — `return 0` (default false). Bare `return 0;` body matches
+# only a small set of source virtuals; in this code cluster the matching
+# member is TComplexObject::IsFinalState.
+virt_meth_0x4d6cc0|virt_meth_0x4d6cc0_IsFinalState
+meth_0x4d6cc0|meth_0x4d6cc0_IsFinalState
+FUN_004d6cc0|FUN_004d6cc0_IsFinalState
+
+# DefaultRootState — `return "still"` (s_still_005e0624). Exact match to
+# `virtual const char *DefaultRootState() { return "still"; }` in
+# complexobj.h.
+virt_meth_0x4d6cd0|virt_meth_0x4d6cd0_DefaultRootState
+meth_0x4d6cd0|meth_0x4d6cd0_DefaultRootState
+FUN_004d6cd0|FUN_004d6cd0_DefaultRootState
+
+# Load(stream, version, objversion) — allocates 100-byte TActionBlock,
+# fills 25 fields, reads strings via FUN_0049ce00 (string-stream-read),
+# calls vtable[+0x1f8]/[+0x200]/[+0x208] (SetRoot/SetDoing/SetDesired),
+# resolves state via vtable[+0x138]=FindState. Matches
+# TComplexObject::Load.
+virt_meth_0x4db930|virt_meth_0x4db930_Load
+meth_0x4db930|meth_0x4db930_Load
+FUN_004db930|FUN_004db930_Load
+
+# Save(stream) — writes a byte (object version), then character of
+# doing->name[0] (mbr_0xe0[0] = doing's first char), then a string-length
+# prefix and bytes from doing->name. Pattern matches TComplexObject::Save
+# (writes ObjVersion + doing-name).
+virt_meth_0x4dbb80|virt_meth_0x4dbb80_Save
+meth_0x4dbb80|meth_0x4dbb80_Save
+FUN_004dbb80|FUN_004dbb80_Save
+
+# Notify override — calls TObjectInstance::Notify (0x471ba0) then nulls out
+# obj-pointer (+0x44) on the 3 PTActionBlock fields at +0xd8/+0xdc/+0xe0
+# (doing/root/desired) when notify == 1 (deleted) or 2 (inventoried). This
+# is the TCharacter slot-16 override; per the source comment in
+# complexobj.h it implements "check root,desired, and doing for deleted
+# target obj". TCharacter inherits this directly (TCharacter doesn't
+# override Notify), so 0x4dbc70 is shared by TComplexObject and TCharacter.
+virt_meth_0x4dbc70|virt_meth_0x4dbc70_Notify
+meth_0x4dbc70|meth_0x4dbc70_Notify
+FUN_004dbc70|FUN_004dbc70_Notify
+
+# SetDoing(ab) — `if (doing != ab) { free old non-shared; doing = ab; }`
+# then clears flag bit 0x20 in the *desired*-block's flags (+0xe0 + 0x60).
+# Operates on +0xd8 = doing.
+virt_meth_0x4db340|virt_meth_0x4db340_SetDoing
+meth_0x4db340|meth_0x4db340_SetDoing
+FUN_004db340|FUN_004db340_SetDoing

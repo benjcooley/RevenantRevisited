@@ -49,7 +49,7 @@ cls_0x5b99c0::cls_0x5b99c0 *this,dword param_1,dword *param_2,dword param_3,dwor
     }
     if ((*(int *)(param_5 + 200) != 0) && (0 < (int)param_3)) {
       do {
-        iVar2 = FUN_00483300(0,100);
+        iVar2 = FUN_00483300_RandomRange(0,100);
         if (iVar2 < *(int *)(param_5 + 200)) {
           (**(code **)(*(int *)*pdVar4 + 0x1b4))(1);
         }
@@ -111,7 +111,7 @@ void cls_0x5b99c0::meth_0x53f560()
       iVar2 = iVar2 - (int)lVar4;
     }
     piVar1 = (int *)this->mbr_0x4;
-    iVar3 = FUN_00483300(iVar3,iVar2);
+    iVar3 = FUN_00483300_RandomRange(iVar3,iVar2);
     if ((piVar1 != (int *)0x0) && (*(short *)(piVar1 + 1) == 0xb)) {
       iVar2 = (**(code **)(*piVar1 + 0x3cc))();
       iVar3 = ((iVar2 + 100) * iVar3) / 100;

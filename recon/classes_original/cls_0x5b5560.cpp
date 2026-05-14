@@ -45,7 +45,7 @@ cls_0x5b5560 * __thiscall OOAnalyzer::cls_0x5b5560::~cls_0x5b5560(cls_0x5b5560 *
   this->vftptr_0x0 = &cls_0x5b5560__vftable_5b5560_005b5560;
   local_4 = 0;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   FUN_004830f0(this->mbr_0xd8);
   local_4 = 0xffffffff;
@@ -71,7 +71,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b5560::virt_meth_0x520eb0(cls_0x5b5560 
   undefined4 uVar7;
   undefined4 uVar8;
   
-  iVar1 = cls_0x5b8e94::virt_meth_0x4705f0((cls_0x5b8e94 *)this,param_1);
+  iVar1 = cls_0x5b8e94_TObjectInstance::virt_meth_0x4705f0((cls_0x5b8e94_TObjectInstance *)this,param_1);
   if (iVar1 != 0) {
     return 1;
   }
@@ -100,8 +100,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b5560::virt_meth_0x520eb0(cls_0x5b5560 
       }
       (**(code **)*puVar5)();
       cls_0x5b96f4::meth_0x48ed90((cls_0x5b96f4 *)&DAT_0065caf0);
-      uVar3 = cls_0x5a5320::meth_0x48ed60((cls_0x5a5320 *)&DAT_0065caf0);
-      cls_0x5a5320::meth_0x48eea0((cls_0x5a5320 *)&DAT_0065caf0,uVar3);
+      uVar3 = cls_0x5a5320_TPlayScreen::meth_0x48ed60((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
+      cls_0x5a5320_TPlayScreen::meth_0x48eea0((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0,uVar3);
       iVar1 = cls_0x41c7d0::meth_0x49c430((cls_0x41c7d0 *)&DAT_00667548);
       if ((-1 < iVar1) &&
          (iVar4 = cls_0x41c7d0::meth_0x49b650((cls_0x41c7d0 *)&DAT_00667548), iVar4 != 0)) {

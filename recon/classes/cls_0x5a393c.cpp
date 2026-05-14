@@ -91,7 +91,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a393c::virt_meth_0x40f5b0(cls_0x5a393c 
   FUN_00417000(&local_e0);
   this->mbr_0xec = 0;
   if ((this->mbr_0x38 == 0) ||
-     (iVar9 = FUN_0059a530(*(undefined4 *)(*(int *)(this->mbr_0x4 + 0x48) + 4),s_Armor_005c6174),
+     (iVar9 = FUN_0059a530_stricmp(*(undefined4 *)(*(int *)(this->mbr_0x4 + 0x48) + 4),s_Armor_005c6174),
      iVar9 == 0)) {
     while( true ) {
       pcVar2 = (cls_0x5a486c *)this->mbr_0x8;
@@ -118,7 +118,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a393c::virt_meth_0x40f5b0(cls_0x5a393c 
       iVar16 = *(int *)(dVar19 + 0x48);
       puVar21[5] = 0;
       puVar21[6] = 0;
-      iVar16 = FUN_0059a530(*(undefined4 *)(iVar16 + 4),s_Armor_005c617c);
+      iVar16 = FUN_0059a530_stricmp(*(undefined4 *)(iVar16 + 4),s_Armor_005c617c);
       if (iVar16 == 0) {
         puVar21[0xd2] = 2;
         puVar21[10] = 0;
@@ -319,7 +319,7 @@ LAB_0040fab2:
   }
   if ((('\0' < (char)bVar1) && (this->mbr_0x38 == 0)) &&
      ((DAT_00668154 == 0 &&
-      (iVar16 = FUN_0059a530(*(undefined4 *)(*(int *)(this->mbr_0x4 + 0x48) + 4),s_Armor_005c6184),
+      (iVar16 = FUN_0059a530_stricmp(*(undefined4 *)(*(int *)(this->mbr_0x4 + 0x48) + 4),s_Armor_005c6184),
       iVar16 != 0)))) {
     dVar19 = this->mbr_0x8;
     uVar22 = 0;
@@ -773,7 +773,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a393c::virt_meth_0x419590(cls_0x5a393c 
   int iStack_18;
   
   if ((this->mbr_0x38 == 0) || (*(int *)(this->mbr_0x38 + 0x144) == 0)) {
-    iVar4 = cls_0x5a7b98::meth_0x46e8a0((cls_0x5a7b98 *)this->mbr_0x4);
+    iVar4 = cls_0x5a7b98_TCharacter::meth_0x46e8a0((cls_0x5a7b98_TCharacter *)this->mbr_0x4);
     if (iVar4 == 0) {
       return 0;
     }

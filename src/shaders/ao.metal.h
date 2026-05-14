@@ -34,13 +34,16 @@ using namespace metal;
 struct params { float4 vp; float4 recon; float4 ao_settings; float4 camera; };
 struct vs_out { float4 pos [[position]]; float2 uv; };
 float3 reconstruct_world(float2 uv, float d, constant params& p, float fbw, float fbh) {
-    float S = uv.x * fbw - p.vp.x;
-    float T = uv.y * fbh - p.vp.y;
+    // Framebuffer pixels are scaled by the active camera zoom/resolution.
+    // Undo that first so the iso inverse sees the same units as WorldToScreen.
+    float zoom = max(p.camera.x, 0.0001);
+    float S = (uv.x * fbw - p.vp.x) / zoom;
+    float T = (uv.y * fbh - p.vp.y) / zoom;
     float scene_z = d * p.vp.w + p.vp.z;
     if (p.recon.w > 0.5) {
-        float focal_zoom = max(p.recon.z * max(p.camera.x, 0.0001), 1.0);
-        S = (S / focal_zoom) * scene_z;
-        T = (T / focal_zoom) * scene_z;
+        float focal = max(p.recon.z, 1.0);
+        S = (S / focal) * scene_z;
+        T = (T / focal) * scene_z;
     }
     float K = p.recon.z - scene_z;
     float wz = (K - 2.0 * T * ISO_COS30) / ISO_WZ_DENOM;

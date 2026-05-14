@@ -15,7 +15,7 @@ Length: 32796 Alignment: 1
 // Function at 00497120
 
 cls_0x492170 * __thiscall
-OOAnalyzer::cls_0x497120::meth_0x497120
+OOAnalyzer::cls_0x497120::meth_0x497120_TScriptManager_AddScript
           (cls_0x497120 *this,undefined4 param_1,undefined4 param_2,undefined4 param_3)
 
 {
@@ -63,7 +63,7 @@ OOAnalyzer::cls_0x497120::meth_0x497120
   if (0 < (int)this->mbr_0x8004) {
     do {
       ExceptionList = ppvVar2;
-      iVar3 = FUN_0059a530(**(undefined4 **)(this->mbr_0x8014 + iVar7 * 4),param_2);
+      iVar3 = FUN_0059a530_stricmp(**(undefined4 **)(this->mbr_0x8014 + iVar7 * 4),param_2);
       if (iVar3 == 0) {
         if (*(int *)(this->mbr_0x8014 + iVar7 * 4) != 0) goto LAB_00497314;
         break;
@@ -106,10 +106,10 @@ OOAnalyzer::cls_0x497120::meth_0x497120
   local_90 = FUN_00482fb0(0x4c);
   local_4._0_1_ = 2;
   if (local_90 != 0) {
-    FUN_004946f0(0,param_3,in_stack_00000010,0);
+    FUN_004946f0_TScriptProto_Ctor(0,param_3,in_stack_00000010,0);
   }
   local_4 = CONCAT31(local_4._1_3_,1);
-  FUN_00494e20(&local_e4);
+  FUN_00494e20_TScriptProto_ParseScript(&local_e4);
   cls_0x45f7c0::meth_0x41c840((cls_0x45f7c0 *)&this->mbr_0x8004);
   local_4 = 3;
   FUN_004830f0(local_bc);

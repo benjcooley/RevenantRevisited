@@ -26,7 +26,7 @@ int __thiscall OOAnalyzer::cls_0x46d6b0::meth_0x46d6b0(cls_0x46d6b0 *this)
     pdVar2 = &this->mbr_0x4;
     do {
       if (((*pdVar2 != 0) && (iVar1 = *pdVar2 + (int)pdVar2, iVar1 != 0)) &&
-         (iVar1 = FUN_0059a530(iVar1), iVar1 == 0)) {
+         (iVar1 = FUN_0059a530_stricmp(iVar1), iVar1 == 0)) {
         if ((&this->mbr_0x404)[iVar3] == 0) {
           return 0;
         }
@@ -56,7 +56,7 @@ int __thiscall OOAnalyzer::cls_0x46d6b0::meth_0x46d710(cls_0x46d6b0 *this)
     pdVar2 = &this->mbr_0x4;
     do {
       if (((*pdVar2 != 0) && (iVar1 = *pdVar2 + (int)pdVar2, iVar1 != 0)) &&
-         (iVar1 = FUN_0059a530(iVar1), iVar1 == 0)) {
+         (iVar1 = FUN_0059a530_stricmp(iVar1), iVar1 == 0)) {
         if ((&this->mbr_0x404)[iVar3] != 0) {
           iVar3 = (int)&this->mbr_0x404 + (&this->mbr_0x404)[iVar3] + iVar3 * 4;
           if (iVar3 != 0) {

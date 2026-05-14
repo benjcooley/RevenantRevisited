@@ -346,7 +346,7 @@ void cls_0x5a5c60::virt_meth_0x535610(int param_1)
           if (((*(int *)&this->field_0x18c != 0) && (local_4 < *(uint *)&this->field_0x17c)) &&
              (*(int *)(*(int *)&this->field_0x18c + local_4 * 4) != 0)) {
             this_00 = (cls_0x4d6000 *)
-                      FUN_00452690(*(int *)(*(int *)(*(int *)&this->field_0x18c + local_4 * 4) + 4),
+                      FUN_00452690_TMapPane_GetInstance(*(int *)(*(int *)(*(int *)&this->field_0x18c + local_4 * 4) + 4),
                                    2);
             if (this_00 != (cls_0x4d6000 *)0x0) {
               cls_0x4d6000::meth_0x4d6000(this_00);
@@ -404,7 +404,7 @@ void cls_0x5a5c60::virt_meth_0x535760(int param_1)
          ((local_4 < *(uint *)&this->field_0x17c &&
           (*(int *)(*(int *)&this->field_0x18c + local_4 * 4) != 0)))) {
         this_00 = (cls_0x4d6000 *)
-                  FUN_00452690(*(int *)(*(int *)(*(int *)&this->field_0x18c + local_4 * 4) + 4),2);
+                  FUN_00452690_TMapPane_GetInstance(*(int *)(*(int *)(*(int *)&this->field_0x18c + local_4 * 4) + 4),2);
         if (this_00 != (cls_0x4d6000 *)0x0) {
           cls_0x4d6000::meth_0x4d6000(this_00);
         }

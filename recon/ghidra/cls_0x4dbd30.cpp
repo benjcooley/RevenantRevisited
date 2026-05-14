@@ -47,7 +47,7 @@ OOAnalyzer::cls_0x4dbd30::meth_0x4dbd30(cls_0x4dbd30 *this,undefined4 param_1,un
     local_20 = this->mbr_0xc8;
     local_34 = 0x19;
     iVar2 = TCharacter::meth_0x450e40((TCharacter *)&DAT_006668d8,&local_34);
-    this_00 = (TPlayScreen *)FUN_00452690(iVar2,0);
+    this_00 = (TPlayScreen *)FUN_00452690_TMapPane_GetInstance(iVar2,0);
     if (this_00 != (TPlayScreen *)0x0) {
       TPlayScreen::meth_0x4def90(this_00,this,0,0);
       if (in_stack_0000000c != (char *)0x0) {
@@ -101,7 +101,7 @@ void __thiscall OOAnalyzer::cls_0x4dbd30::meth_0x4dbe10(cls_0x4dbd30 *this)
     while (this_00 != (SoftwareRenderer *)0x0) {
       local_48.mbr_0xc = (dword)this_00;
       if (((this_00 != (SoftwareRenderer *)0x0) && (this_00->mbr_0x4 == 0x19)) &&
-         (uVar1 = FUN_0059a530(uVar1,*(byte **)this_00->mbr_0x4c,in_stack_00000004), uVar1 == 0)) {
+         (uVar1 = FUN_0059a530_stricmp(uVar1,*(byte **)this_00->mbr_0x4c,in_stack_00000004), uVar1 == 0)) {
         SoftwareRenderer::meth_0x4defe0(this_00);
       }
       cls_0x44ceb0::meth_0x44d080(&local_48);

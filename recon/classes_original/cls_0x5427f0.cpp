@@ -17,8 +17,8 @@ Length: 332 Alignment: 1
 void __thiscall OOAnalyzer::cls_0x5427f0::meth_0x5427f0(cls_0x5427f0 *this)
 
 {
-  if (DAT_00667fcc != (cls_0x5a7b98 *)0x0) {
-    cls_0x5a7b98::meth_0x51b580(DAT_00667fcc,this->mbr_0x148);
+  if (DAT_00667fcc != (cls_0x5a7b98_TCharacter *)0x0) {
+    cls_0x5a7b98_TCharacter::meth_0x51b580(DAT_00667fcc,this->mbr_0x148);
     (**(code **)(this->mbr_0x0 + 0x1c))(this->mbr_0x14 | 0x20);
   }
   return;

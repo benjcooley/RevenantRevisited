@@ -72,7 +72,7 @@ void __thiscall OOAnalyzer::cls_0x5b5808::virt_meth_0x5212c0(cls_0x5b5808 *this)
   if (this->mbr_0x180 != 0) {
     FUN_00482f80(this->mbr_0x180);
   }
-  cls_0x5a5320::meth_0x48ed60((cls_0x5a5320 *)&DAT_0065caf0);
+  cls_0x5a5320_TPlayScreen::meth_0x48ed60((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
   cls_0x5a4f28::meth_0x48ef30((cls_0x5a4f28 *)&DAT_0065caf0);
   cls_0x5a4f28::meth_0x48ee10((cls_0x5a4f28 *)&DAT_0065caf0);
   this->mbr_0x17c = 0;

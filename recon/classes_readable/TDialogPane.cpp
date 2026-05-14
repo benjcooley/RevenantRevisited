@@ -15,7 +15,7 @@ void TDialogPane::meth_0x570900()
   TDialogPane *pcVar4;
   TLightningAnimator *this_00;
   dword dVar5;
-  cls_0x5b4f30 *this_01;
+  cls_0x5b4f30_TPlayer *this_01;
   byte *pbVar6;
   dword *pdVar7;
   TDialogPane *local_90 [32];
@@ -34,11 +34,11 @@ void TDialogPane::meth_0x570900()
     ExceptionList = &pvStack_c;
     if ((int)this->grabslot < 0) goto LAB_005709b0;
     ExceptionList = &pvStack_c;
-    this_01 = (cls_0x5b4f30 *)
-              cls_0x45f7c0::meth_0x51eea0((cls_0x45f7c0 *)&DAT_0065a890,this->grabslot);
+    this_01 = (cls_0x5b4f30_TPlayer *)
+              cls_0x45f7c0::meth_0x51eea0_TPlayerManager_GetPlayer((cls_0x45f7c0 *)&DAT_0065a890,this->grabslot);
   }
-  if ((this_01 != (cls_0x5b4f30 *)0x0) && (this_01 != DAT_00667fcc)) {
-    cls_0x5b4f30::meth_0x51d680(this_01);
+  if ((this_01 != (cls_0x5b4f30_TPlayer *)0x0) && (this_01 != DAT_00667fcc)) {
+    cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState(this_01);
     (*((this_01->TPlayScreen).TScreen.vftptr_0x0)->virt_meth_0x477650_384)(this_01);
     pbVar6 = (byte *)cls_0x45f7c0::meth_0x49d800((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310);
     FUN_0058b100((char *)local_90,pbVar6);
@@ -119,7 +119,7 @@ undefined4 TDialogPane::meth_0x570c00()
     return DAT_00667fcc;
   }
   if (-1 < (int)this->grabslot) {
-    uVar1 = cls_0x45f7c0::meth_0x51eea0((cls_0x45f7c0 *)&DAT_0065a890,this->grabslot);
+    uVar1 = cls_0x45f7c0::meth_0x51eea0_TPlayerManager_GetPlayer((cls_0x45f7c0 *)&DAT_0065a890,this->grabslot);
     return uVar1;
   }
   return 0;

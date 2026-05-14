@@ -423,10 +423,10 @@ _STRUCTDEF(S3DMaterial)
 struct S3DMaterial
 {
     uint32_t    size;
-    sg_color    diffuse;
-    sg_color    ambient;
-    sg_color    specular;
-    sg_color    emissive;
+    SRenderColor diffuse;
+    SRenderColor ambient;
+    SRenderColor specular;
+    SRenderColor emissive;
     float       power;
     uint32_t    hTexture;
     uint32_t    rampSize;

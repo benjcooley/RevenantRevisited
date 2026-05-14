@@ -1,0 +1,52 @@
+# Format: BARE_TOKEN|RENAMED_TOKEN  — one per line, # comments ignored.
+# TCharacter::AI_PerMonster (meth_0x4c9b70) dispatcher + Solifuge-spawned
+# Araknid context. Findings: AI_PerMonster only special-cases four boss/named
+# monsters by string-compare on TCharacter->name (mbr_0x4c via vt0). Anything
+# else (including the Araknid mob) returns 0 ⇒ falls through to generic AI.
+#
+# Per-name dispatch (this->mbr_0x280 = type id, this->mbr_0x284 = state buf):
+#   "Baez"     → 1, state 0x58 (0x16 ints)  // partner / quest NPC
+#   "Solifuge" → 2, state 0x34 (0x0d ints)  // big cave-spider boss
+#   "Jhaga"    → 3, state 0x5c (0x17 ints)  // priest? jtele/cinv2 caster
+#   "Yhagoro"  → 4, state 0x0c (3 ints)     // simple combat/walk toggle
+#   <else>     → -1, switch default returns 0  (no per-monster AI)
+#
+# Araknid: NOT in the dispatch table. Its AI is the generic TCharacter::AI
+# (FUN_004c8b60) path. Araknid only appears INSIDE Solifuge's case 2 as a
+# spawnable minion (50/50 with Artikulid in slots 1 & 2; slot 0 spawns
+# Recluse or Arakna with the same coin flip).
+
+# ---- The dispatcher itself ----
+meth_0x4c9b70|meth_0x4c9b70_AI_PerMonster
+FUN_004c9b70|FUN_004c9b70_AI_PerMonster
+
+# ---- String literals used as monster-name anchors in the dispatcher ----
+DAT_005dfa14|s_Baez_005dfa14
+s_Solifuge_005dfa1c|s_Solifuge_005dfa1c
+s_Jhaga_005dfa28|s_Jhaga_005dfa28
+s_Yhagoro_005dfa30|s_Yhagoro_005dfa30
+
+# ---- Solifuge minion spawn names (case 2 only, NOT the dispatcher) ----
+s_Recluse_005dfe58|s_Recluse_005dfe58
+s_Arakna_005dfe60|s_Arakna_005dfe60
+s_Artikulid_005dfe68|s_Artikulid_005dfe68
+s_Araknid_005dfe74|s_Araknid_005dfe74
+
+# ---- Helpers used by the Solifuge-spawn path (interesting for porting) ----
+# Class-name aware action-block name builder: prepends "c"/"i" prefix based on
+# this->vt0x310 lookup, then appends the suffix arg (e.g. "intmiss"/"walk").
+meth_0x4ce1b0|meth_0x4ce1b0_BuildActionName
+FUN_004ce1b0|FUN_004ce1b0_BuildActionName
+
+# Random in [lo,hi] (already widely identified elsewhere — pin here too).
+FUN_00483300|FUN_00483300_RandomRange
+
+# TMapPane::NewObject(def, layer) — creates an instance from a TObjectDef.
+# Already partially identified; pinning here for the Araknid-spawn path.
+FUN_00450e40|FUN_00450e40_TMapPane_NewObject
+
+# TMapPane::GetInstance(idx, /*ignored*/) — already pinned in repo.
+FUN_00452690|FUN_00452690_TMapPane_GetInstance
+
+# TActionBlock::Is(name) — already pinned in repo.
+FUN_004dab80|FUN_004dab80_TActionBlock_Is

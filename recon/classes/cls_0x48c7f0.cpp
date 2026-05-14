@@ -32,8 +32,8 @@ void __thiscall OOAnalyzer::cls_0x48c7f0::meth_0x48c7f0(cls_0x48c7f0 *this)
   dword in_stack_00000004;
   
   uVar4 = 0;
-  ppcVar5 = (cls_0x4746d0 **)&DAT_0065a148;
-  while (((DAT_0065a258 <= uVar4 || (this_00 = *ppcVar5, this_00 == (cls_0x4746d0 *)0x0)) ||
+  ppcVar5 = (cls_0x4746d0 **)&DAT_0065a148_TObjectClass_classes;
+  while (((DAT_0065a258_TObjectClass_numclasses <= uVar4 || (this_00 = *ppcVar5, this_00 == (cls_0x4746d0 *)0x0)) ||
          (iVar1 = cls_0x4746d0::meth_0x475210(this_00,in_stack_00000004), iVar1 < 0))) {
     ppcVar5 = ppcVar5 + 1;
     uVar4 = uVar4 + 1;
@@ -45,7 +45,7 @@ LAB_0048c836:
         iVar1 = 0;
         if (0 < (int)this->mbr_0x2c) {
           do {
-            iVar3 = FUN_0059a530(*(undefined4 *)(this->mbr_0x3c + iVar1 * 4),in_stack_00000004);
+            iVar3 = FUN_0059a530_stricmp(*(undefined4 *)(this->mbr_0x3c + iVar1 * 4),in_stack_00000004);
             if (iVar3 == 0) {
               cls_0x48af30::meth_0x48af30(*(cls_0x48af30 **)(this->mbr_0x3c + iVar1 * 4));
               return;
@@ -58,7 +58,7 @@ LAB_0048c836:
       case 2:
         iVar1 = 0;
         if (0 < (int)this->mbr_0x40) {
-          while (iVar3 = FUN_0059a530(*(undefined4 *)(this->mbr_0x50 + iVar1 * 4),in_stack_00000004)
+          while (iVar3 = FUN_0059a530_stricmp(*(undefined4 *)(this->mbr_0x50 + iVar1 * 4),in_stack_00000004)
                 , iVar3 != 0) {
             iVar1 = iVar1 + 1;
             if ((int)this->mbr_0x40 <= iVar1) {
@@ -72,7 +72,7 @@ LAB_0048c836:
       case 0xc:
         iVar1 = 0;
         if (0 < (int)this->mbr_0x18) {
-          while (iVar3 = FUN_0059a530(*(undefined4 *)(this->mbr_0x28 + iVar1 * 4),in_stack_00000004)
+          while (iVar3 = FUN_0059a530_stricmp(*(undefined4 *)(this->mbr_0x28 + iVar1 * 4),in_stack_00000004)
                 , iVar3 != 0) {
             iVar1 = iVar1 + 1;
             if ((int)this->mbr_0x18 <= iVar1) {
@@ -106,9 +106,9 @@ undefined4 __thiscall OOAnalyzer::cls_0x48c7f0::meth_0x48c930(cls_0x48c7f0 *this
   
   local_4 = 0xffffffff;
   uVar5 = 0;
-  ppcVar4 = (cls_0x4746d0 **)&DAT_0065a148;
+  ppcVar4 = (cls_0x4746d0 **)&DAT_0065a148_TObjectClass_classes;
   do {
-    if (((uVar5 < DAT_0065a258) && (this_00 = *ppcVar4, this_00 != (cls_0x4746d0 *)0x0)) &&
+    if (((uVar5 < DAT_0065a258_TObjectClass_numclasses) && (this_00 = *ppcVar4, this_00 != (cls_0x4746d0 *)0x0)) &&
        (iVar1 = cls_0x4746d0::meth_0x475210(this_00,param_1), -1 < iVar1)) {
       local_4 = this_00->mbr_0x8;
       break;
@@ -121,7 +121,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x48c7f0::meth_0x48c930(cls_0x48c7f0 *this
     iVar1 = 0;
     if (0 < (int)this->mbr_0x2c) {
       do {
-        iVar2 = FUN_0059a530(*(undefined4 *)(this->mbr_0x3c + iVar1 * 4),param_1);
+        iVar2 = FUN_0059a530_stricmp(*(undefined4 *)(this->mbr_0x3c + iVar1 * 4),param_1);
         if (iVar2 == 0) {
           iVar1 = *(int *)(this->mbr_0x3c + iVar1 * 4);
           *(undefined4 *)(iVar1 + 0xc4) = in_stack_00000008;
@@ -136,7 +136,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x48c7f0::meth_0x48c930(cls_0x48c7f0 *this
   case 2:
     iVar1 = 0;
     if (0 < (int)this->mbr_0x40) {
-      while (iVar2 = FUN_0059a530(*(undefined4 *)(this->mbr_0x50 + iVar1 * 4),param_1), iVar2 != 0)
+      while (iVar2 = FUN_0059a530_stricmp(*(undefined4 *)(this->mbr_0x50 + iVar1 * 4),param_1), iVar2 != 0)
       {
         iVar1 = iVar1 + 1;
         if ((int)this->mbr_0x40 <= iVar1) {
@@ -156,7 +156,7 @@ LAB_0048ca61:
     iVar1 = 0;
     if (0 < (int)this->mbr_0x18) {
       do {
-        iVar2 = FUN_0059a530(*(undefined4 *)(this->mbr_0x28 + iVar1 * 4),param_1);
+        iVar2 = FUN_0059a530_stricmp(*(undefined4 *)(this->mbr_0x28 + iVar1 * 4),param_1);
         if (iVar2 == 0) {
           dVar3 = this->mbr_0x28;
           goto LAB_0048ca61;

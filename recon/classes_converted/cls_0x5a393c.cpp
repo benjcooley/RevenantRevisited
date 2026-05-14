@@ -84,7 +84,7 @@ undefined4 cls_0x5a393c::virt_meth_0x40f5b0()
   this->mbr_0xec = 0;
   pcVar17 = extraout_ECX;
   if ((this->mbr_0x38 == 0) ||
-     (uVar9 = FUN_0059a530((uint)extraout_ECX,*(byte **)(*(int *)(this->mbr_0x4 + 0x48) + 4),
+     (uVar9 = FUN_0059a530_stricmp((uint)extraout_ECX,*(byte **)(*(int *)(this->mbr_0x4 + 0x48) + 4),
                            (byte *)s_Armor_005c6174), pcVar17 = extraout_ECX_00, uVar9 == 0)) {
     while( true ) {
       pcVar2 = (cls_0x5a486c *)this->mbr_0x8;
@@ -112,7 +112,7 @@ undefined4 cls_0x5a393c::virt_meth_0x40f5b0()
       uVar9 = *(uint *)(dVar21 + 0x48);
       puVar24[5] = 0;
       puVar24[6] = 0;
-      uVar9 = FUN_0059a530(uVar9,*(byte **)(uVar9 + 4),(byte *)s_Armor_005c617c);
+      uVar9 = FUN_0059a530_stricmp(uVar9,*(byte **)(uVar9 + 4),(byte *)s_Armor_005c617c);
       if (uVar9 == 0) {
         puVar24[0xd2] = 2;
         puVar24[10] = 0;
@@ -324,7 +324,7 @@ LAB_0040fab2:
   }
   if ((('\0' < (char)bVar1) && (this->mbr_0x38 == 0)) &&
      ((DAT_00668154 == 0 &&
-      (uVar9 = FUN_0059a530((uint)pcVar17,*(byte **)(*(int *)(this->mbr_0x4 + 0x48) + 4),
+      (uVar9 = FUN_0059a530_stricmp((uint)pcVar17,*(byte **)(*(int *)(this->mbr_0x4 + 0x48) + 4),
                             (byte *)s_Armor_005c6184), uVar9 != 0)))) {
     dVar21 = this->mbr_0x8;
     uVar9 = 0;

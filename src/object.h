@@ -785,6 +785,16 @@ class TObjectInstance : protected SObjectDef
         // Gets the current framerate
     void SetFrameRate(int32_t newframerate) { framerate = newframerate; }
         // Sets the current framerate
+    uint32_t DebugStateSetCount() const { return anim_state_set_count; }
+    uint32_t DebugSameStateSetCount() const { return anim_same_state_set_count; }
+    uint32_t DebugLoopWrapCount() const { return anim_loop_wrap_count; }
+    int32_t DebugLastStateSetFrom() const { return anim_last_state_set_from; }
+    int32_t DebugLastStateSetTo() const { return anim_last_state_set_to; }
+    int32_t DebugLastStateSetFrame() const { return anim_last_state_set_frame; }
+    int32_t DebugLastStateSetGameFrame() const { return anim_last_state_set_game_frame; }
+    int32_t DebugLastLoopWrapState() const { return anim_last_loop_wrap_state; }
+    int32_t DebugLastLoopWrapFrame() const { return anim_last_loop_wrap_frame; }
+    int32_t DebugLastLoopWrapGameFrame() const { return anim_last_loop_wrap_game_frame; }
     TObjectImagery* GetImagery() const;
         // Returns object's imagery
     virtual bool HasAnimator() const { return GetComponent<TObjectAnimator>() != nullptr; }
@@ -1269,6 +1279,16 @@ class TObjectInstance : protected SObjectDef
     short frame, framerate;     // Frame number and framerate for object
     uint16_t prevstate;         // Previous state
     short prevframe;            // Previous state's last frame (not previous frame for this state)
+    uint32_t anim_state_set_count;       // Debug: SetState calls after initialization
+    uint32_t anim_same_state_set_count;  // Debug: SetState(newstate == state)
+    uint32_t anim_loop_wrap_count;       // Debug: AF_LOOPING wraps in NextFrame
+    int32_t anim_last_state_set_from;
+    int32_t anim_last_state_set_to;
+    int32_t anim_last_state_set_frame;
+    int32_t anim_last_state_set_game_frame;
+    int32_t anim_last_loop_wrap_state;
+    int32_t anim_last_loop_wrap_frame;
+    int32_t anim_last_loop_wrap_game_frame;
     // Animator + visual components live here. The animator was a dedicated
     // pointer field; it is now stored as a TObjectComponent and looked up
     // through GetAnimator() / GetComponent<TObjectAnimator>().

@@ -546,7 +546,7 @@ cls_0x5b4a7c * __thiscall OOAnalyzer::cls_0x5b4a7c::~cls_0x5b4a7c(cls_0x5b4a7c *
   this->vftptr_0x0 = &cls_0x5b4a7c__vftable_5b4a7c_005b4a7c;
   local_4 = 0;
   if ((this->mbr_0x8 & 0x80000000) == 0) {
-    cls_0x5b4f30::meth_0x46e630((cls_0x5b4f30 *)this);
+    cls_0x5b4f30_TPlayer::meth_0x46e630((cls_0x5b4f30_TPlayer *)this);
   }
   uVar1 = (*this->vftptr_0x0->FUN_00477aa0_220)(DAT_0066d694);
   if (CONCAT31(extraout_var,uVar1) < 0x40) {
@@ -623,7 +623,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b4a7c::virt_meth_0x515b50(cls_0x5b4a7c 
   undefined4 uVar5;
   int *in_stack_00000004;
   
-  cls_0x5b8e94::virt_meth_0x46fee0((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x46fee0((cls_0x5b8e94_TObjectInstance *)this);
   piVar3 = (int *)(**(code **)(*in_stack_00000004 + 0xa8))(&DAT_005e1d98);
   if (((piVar3 != (int *)0x0) && (*(short *)&this->mbr_0x4 == *(short *)(piVar3 + 1))) &&
      (*(short *)((int)&this->mbr_0x4 + 2) == *(short *)((int)piVar3 + 6))) {
@@ -654,7 +654,7 @@ void __thiscall OOAnalyzer::cls_0x5b4a7c::virt_meth_0x515c00(cls_0x5b4a7c *this)
   int iVar3;
   int iVar4;
   
-  cls_0x5b8e94::virt_meth_0x46faf0((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x46faf0_RemoveFromInventory((cls_0x5b8e94_TObjectInstance *)this);
   if (this->mbr_0x64 == DAT_0065d674) {
     uVar1 = (*this->vftptr_0x0->virt_meth_0x516920_408)(this);
     uVar2 = CONCAT31(extraout_var,uVar1);
@@ -792,7 +792,7 @@ void __thiscall OOAnalyzer::cls_0x5b4a7c::virt_meth_0x515f40(cls_0x5b4a7c *this)
   int in_stack_00000004;
   
   (*this->vftptr_0x0->FUN_00472e90_64)(this->mbr_0x8 & 0xfbffffff);
-  cls_0x5b8e94::virt_meth_0x472430((cls_0x5b8e94 *)this,unaff_retaddr);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x472430((cls_0x5b8e94_TObjectInstance *)this,unaff_retaddr);
   if (in_stack_00000004 < 5) {
     iVar1 = **(int **)(unaff_retaddr + 4);
     *(int **)(unaff_retaddr + 4) = *(int **)(unaff_retaddr + 4) + 1;
@@ -996,26 +996,26 @@ void __thiscall OOAnalyzer::cls_0x5b4a7c::virt_meth_0x516660(cls_0x5b4a7c *this)
   iVar2 = CONCAT31(extraout_var,uVar1);
   if (iVar2 < 0xb) {
     (*this->vftptr_0x0->FUN_0046f250_24)(0);
-    cls_0x5b8e94::virt_meth_0x46f3a0((cls_0x5b8e94 *)this);
+    cls_0x5b8e94_TObjectInstance::virt_meth_0x46f3a0((cls_0x5b8e94_TObjectInstance *)this);
     return;
   }
   if (iVar2 < 0x65) {
     (*this->vftptr_0x0->FUN_0046f250_24)(2);
-    cls_0x5b8e94::virt_meth_0x46f3a0((cls_0x5b8e94 *)this);
+    cls_0x5b8e94_TObjectInstance::virt_meth_0x46f3a0((cls_0x5b8e94_TObjectInstance *)this);
     return;
   }
   if (iVar2 < 0x12d) {
     (*this->vftptr_0x0->FUN_0046f250_24)(4);
-    cls_0x5b8e94::virt_meth_0x46f3a0((cls_0x5b8e94 *)this);
+    cls_0x5b8e94_TObjectInstance::virt_meth_0x46f3a0((cls_0x5b8e94_TObjectInstance *)this);
     return;
   }
   if (iVar2 < 0x1f5) {
     (*this->vftptr_0x0->FUN_0046f250_24)(6);
-    cls_0x5b8e94::virt_meth_0x46f3a0((cls_0x5b8e94 *)this);
+    cls_0x5b8e94_TObjectInstance::virt_meth_0x46f3a0((cls_0x5b8e94_TObjectInstance *)this);
     return;
   }
   (*this->vftptr_0x0->FUN_0046f250_24)(8);
-  cls_0x5b8e94::virt_meth_0x46f3a0((cls_0x5b8e94 *)this);
+  cls_0x5b8e94_TObjectInstance::virt_meth_0x46f3a0((cls_0x5b8e94_TObjectInstance *)this);
   return;
 }
 

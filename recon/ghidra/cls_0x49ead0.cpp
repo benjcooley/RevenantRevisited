@@ -592,12 +592,12 @@ undefined4 * __thiscall OOAnalyzer::cls_0x49ead0::meth_0x49f470(cls_0x49ead0 *th
       param_1[local_5c] = 0;
       pbVar13 = (byte *)(this->cls_0x41c7f0).mbr_0x14;
       if ((pbVar13 == (byte *)0x0) ||
-         (uVar10 = FUN_0059a530(uVar8,param_1,pbVar13), uVar8 = extraout_ECX_00, uVar10 != 0)) {
+         (uVar10 = FUN_0059a530_stricmp(uVar8,param_1,pbVar13), uVar8 = extraout_ECX_00, uVar10 != 0)) {
         iVar11 = 0;
         if (0 < (int)(this->cls_0x41c7f0).mbr_0x0) {
           do {
             in_stack_00000008 = *(undefined4 **)((this->cls_0x41c7f0).mbr_0x10 + iVar11 * 4);
-            uVar8 = FUN_0059a530(uVar8,param_1,(byte *)in_stack_00000008);
+            uVar8 = FUN_0059a530_stricmp(uVar8,param_1,(byte *)in_stack_00000008);
             if (uVar8 == 0) {
               (this->cls_0x41c7f0).mbr_0x14 = (dword)in_stack_00000008;
               goto LAB_0049f799;
@@ -1047,7 +1047,7 @@ int __thiscall OOAnalyzer::cls_0x49ead0::meth_0x4a0180(cls_0x49ead0 *this,cls_0x
     do {
       iVar4 = *(int *)((this->cls_0x41c7f0).mbr_0x10 + iVar8 * 4);
       if ((iVar4 != 0) &&
-         (uVar6 = FUN_0059a530((uint)local_104,(byte *)local_104,*(byte **)(iVar4 + 0xc)),
+         (uVar6 = FUN_0059a530_stricmp((uint)local_104,(byte *)local_104,*(byte **)(iVar4 + 0xc)),
          uVar6 == 0)) {
         pcVar5 = *(char **)(iVar4 + 0x10);
         cVar2 = *pcVar5;

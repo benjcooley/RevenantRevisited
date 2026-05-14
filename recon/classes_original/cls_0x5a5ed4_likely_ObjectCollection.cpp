@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a5ed4
+// Decompiled methods and structure for class: cls_0x5a5ed4_TScreen
 
 /*
-/OOAnalyzer/cls_0x5a5ed4
+/OOAnalyzer/cls_0x5a5ed4_TScreen
 pack(disabled)
-Structure cls_0x5a5ed4 {
-   0   cls_0x5a5ed4::vftable_5a5ed4 *   4   vftptr_0x0   "pointer to cls_0x5a5ed4::vftable_5a5ed4"
+Structure cls_0x5a5ed4_TScreen {
+   0   cls_0x5a5ed4_TScreen::vftable_5a5ed4 *   4   vftptr_0x0   "pointer to cls_0x5a5ed4_TScreen::vftable_5a5ed4"
    4   cls_0x41c7f0   24   cls_0x41c7f0   "Component (member) class."
    28   dword   4   mbr_0x1c   "Unsigned Double-Word (ddw, 4-bytes)"
    64   dword   4   mbr_0x40   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -26,15 +26,15 @@ Length: 112 Alignment: 1
 
 // Function at 0046d010
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
-  cls_0x5a5ed4 *pcVar2;
+  cls_0x5a5ed4_TScreen *pcVar2;
   
   dVar1 = (this->cls_0x41c7f0).mbr_0x10;
   this->vftptr_0x0 = &cls_0x5a5ed4__vftable_5a5ed4_005a5ed4;
-  pcVar2 = (cls_0x5a5ed4 *)FUN_004830f0(dVar1);
+  pcVar2 = (cls_0x5a5ed4_TScreen *)FUN_004830f0(dVar1);
   return pcVar2;
 }
 
@@ -42,15 +42,15 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *
 
 // Function at 0046d150
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
-  cls_0x5a5ed4 *pcVar2;
+  cls_0x5a5ed4_TScreen *pcVar2;
   
   dVar1 = (this->cls_0x41c7f0).mbr_0x10;
   this->vftptr_0x0 = &cls_0x5a5ed4__vftable_5a5ed4_005a5ed4;
-  pcVar2 = (cls_0x5a5ed4 *)FUN_004830f0(dVar1);
+  pcVar2 = (cls_0x5a5ed4_TScreen *)FUN_004830f0(dVar1);
   return pcVar2;
 }
 
@@ -58,15 +58,15 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *
 
 // Function at 0046d380
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
-  cls_0x5a5ed4 *pcVar2;
+  cls_0x5a5ed4_TScreen *pcVar2;
   
   dVar1 = (this->cls_0x41c7f0).mbr_0x10;
   this->vftptr_0x0 = &cls_0x5a5ed4__vftable_5a5ed4_005a5ed4;
-  pcVar2 = (cls_0x5a5ed4 *)FUN_004830f0(dVar1);
+  pcVar2 = (cls_0x5a5ed4_TScreen *)FUN_004830f0(dVar1);
   return pcVar2;
 }
 
@@ -74,15 +74,15 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *
 
 // Function at 0046d460
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
-  cls_0x5a5ed4 *pcVar2;
+  cls_0x5a5ed4_TScreen *pcVar2;
   
   dVar1 = (this->cls_0x41c7f0).mbr_0x10;
   this->vftptr_0x0 = &cls_0x5a5ed4__vftable_5a5ed4_005a5ed4;
-  pcVar2 = (cls_0x5a5ed4 *)FUN_004830f0(dVar1);
+  pcVar2 = (cls_0x5a5ed4_TScreen *)FUN_004830f0(dVar1);
   return pcVar2;
 }
 
@@ -90,15 +90,15 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *
 
 // Function at 0047f530
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
-  cls_0x5a5ed4 *pcVar2;
+  cls_0x5a5ed4_TScreen *pcVar2;
   
   dVar1 = (this->cls_0x41c7f0).mbr_0x10;
   this->vftptr_0x0 = &cls_0x5a5ed4__vftable_5a5ed4_005a5ed4;
-  pcVar2 = (cls_0x5a5ed4 *)FUN_004830f0(dVar1);
+  pcVar2 = (cls_0x5a5ed4_TScreen *)FUN_004830f0(dVar1);
   return pcVar2;
 }
 
@@ -106,15 +106,15 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *
 
 // Function at 00487460
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
-  cls_0x5a5ed4 *pcVar2;
+  cls_0x5a5ed4_TScreen *pcVar2;
   
   dVar1 = (this->cls_0x41c7f0).mbr_0x10;
   this->vftptr_0x0 = &cls_0x5a5ed4__vftable_5a5ed4_005a5ed4;
-  pcVar2 = (cls_0x5a5ed4 *)FUN_004830f0(dVar1);
+  pcVar2 = (cls_0x5a5ed4_TScreen *)FUN_004830f0(dVar1);
   return pcVar2;
 }
 
@@ -122,15 +122,15 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *
 
 // Function at 00488ee0
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
-  cls_0x5a5ed4 *pcVar2;
+  cls_0x5a5ed4_TScreen *pcVar2;
   
   dVar1 = (this->cls_0x41c7f0).mbr_0x10;
   this->vftptr_0x0 = &cls_0x5a5ed4__vftable_5a5ed4_005a5ed4;
-  pcVar2 = (cls_0x5a5ed4 *)FUN_004830f0(dVar1);
+  pcVar2 = (cls_0x5a5ed4_TScreen *)FUN_004830f0(dVar1);
   return pcVar2;
 }
 
@@ -138,7 +138,7 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *
 
 // Function at 0048e880
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   cls_0x41c7f0::cls_0x41c7f0(&this->cls_0x41c7f0,0x20);
@@ -161,15 +161,15 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::cls_0x5a5ed4(cls_0x5a5ed4 *t
 
 // Function at 0048e8d0
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
-  cls_0x5a5ed4 *pcVar2;
+  cls_0x5a5ed4_TScreen *pcVar2;
   
   dVar1 = (this->cls_0x41c7f0).mbr_0x10;
   this->vftptr_0x0 = &cls_0x5a5ed4__vftable_5a5ed4_005a5ed4;
-  pcVar2 = (cls_0x5a5ed4 *)FUN_004830f0(dVar1);
+  pcVar2 = (cls_0x5a5ed4_TScreen *)FUN_004830f0(dVar1);
   return pcVar2;
 }
 
@@ -177,7 +177,7 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *
 
 // Function at 0048f0f0
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f0f0(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::meth_0x48f0f0(cls_0x5a5ed4_TScreen *this)
 
 {
   void *local_14;
@@ -199,7 +199,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f0f0(cls_0x5a5ed4 *this)
 
 // Function at 0048f180
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f180(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::meth_0x48f180(cls_0x5a5ed4_TScreen *this)
 
 {
   int *piVar1;
@@ -273,7 +273,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f180(cls_0x5a5ed4 *this)
     }
   }
   DAT_0065abdc = iVar2;
-  if ((DAT_0065bb14 != (cls_0x5a5ed4 *)0x0) && (this != DAT_0065bb14)) {
+  if ((DAT_0065bb14 != (cls_0x5a5ed4_TScreen *)0x0) && (this != DAT_0065bb14)) {
     meth_0x48f180(DAT_0065bb14);
   }
   ExceptionList = local_14;
@@ -284,7 +284,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f180(cls_0x5a5ed4 *this)
 
 // Function at 0048f340
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f340(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::meth_0x48f340(cls_0x5a5ed4_TScreen *this)
 
 {
   int *piVar1;
@@ -336,7 +336,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f340(cls_0x5a5ed4 *this)
 
 // Function at 0048f450
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f450(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::meth_0x48f450(cls_0x5a5ed4_TScreen *this)
 
 {
   int *piVar1;
@@ -387,7 +387,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f450(cls_0x5a5ed4 *this)
 
 // Function at 0048f560
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f560(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::meth_0x48f560(cls_0x5a5ed4_TScreen *this)
 
 {
   int *piVar1;
@@ -441,7 +441,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f560(cls_0x5a5ed4 *this)
 
 // Function at 0048f680
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f680(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::meth_0x48f680(cls_0x5a5ed4_TScreen *this)
 
 {
   int iVar1;
@@ -483,7 +483,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f680(cls_0x5a5ed4 *this)
 
 // Function at 0048f760
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48f760(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::meth_0x48f760(cls_0x5a5ed4_TScreen *this)
 
 {
   int *piVar1;
@@ -533,7 +533,7 @@ LAB_0048f7ba:
       (**(code **)(*(int *)this->mbr_0x44 + 0x14))();
     }
   }
-  if ((DAT_0065bb14 != (cls_0x5a5ed4 *)0x0) && (this != DAT_0065bb14)) {
+  if ((DAT_0065bb14 != (cls_0x5a5ed4_TScreen *)0x0) && (this != DAT_0065bb14)) {
     meth_0x48f760(DAT_0065bb14);
   }
   ExceptionList = local_14;
@@ -545,7 +545,7 @@ LAB_0048f7ba:
 // Function at 0048f950
 
 void __thiscall
-OOAnalyzer::cls_0x5a5ed4::meth_0x48f950(cls_0x5a5ed4 *this,undefined4 param_1,undefined4 param_2)
+OOAnalyzer::cls_0x5a5ed4_TScreen::meth_0x48f950(cls_0x5a5ed4_TScreen *this,undefined4 param_1,undefined4 param_2)
 
 {
   int iVar1;
@@ -589,7 +589,7 @@ OOAnalyzer::cls_0x5a5ed4::meth_0x48f950(cls_0x5a5ed4 *this,undefined4 param_1,un
 
 // Function at 0048fcc0
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48fcc0(cls_0x5a5ed4 *this,undefined4 param_1)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::meth_0x48fcc0(cls_0x5a5ed4_TScreen *this,undefined4 param_1)
 
 {
   int iVar1;
@@ -633,7 +633,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::meth_0x48fcc0(cls_0x5a5ed4 *this,undef
 
 // Function at 0048fda0
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x48fda0(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x48fda0_TScreen_DrawBackground(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
@@ -643,17 +643,17 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x48fda0(cls_0x5a5ed4 *this)
   
   (**(code **)(*(int *)PTR_DAT_005d79e0 + 0x24))();
   if ((DAT_0066829c != 0) && (0 < (int)this->mbr_0x1c)) {
-    if (DAT_00667fcc == (cls_0x5b4f30 *)0x0) goto LAB_0048fe30;
+    if (DAT_00667fcc == (cls_0x5b4f30_TPlayer *)0x0) goto LAB_0048fe30;
     if (((0x77 < (int)(this->mbr_0x48 - DAT_00668504)) &&
-        (((DAT_00667fcc->cls_0x5a7b98).cls_0x5a50e8.mbr_0x8 & 0x2800080) == 0)) &&
-       ((*(byte *)&(DAT_00667fcc->cls_0x5a7b98).mbr_0x36c & 2) == 0)) {
-      cls_0x5b4f30::meth_0x51d680(DAT_00667fcc);
+        (((DAT_00667fcc->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x8 & 0x2800080) == 0)) &&
+       ((*(byte *)&(DAT_00667fcc->cls_0x5a7b98_TCharacter).mbr_0x36c & 2) == 0)) {
+      cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState(DAT_00667fcc);
     }
   }
-  if (((DAT_00667fcc != (cls_0x5b4f30 *)0x0) && (DAT_006682bc != 0)) &&
-     (((*(byte *)&(DAT_00667fcc->cls_0x5a7b98).mbr_0x36c & 2) != 0 &&
-      (((DAT_00667fcc->cls_0x5a7b98).cls_0x5a50e8.mbr_0x110 & 0x100000) != 0)))) {
-    cls_0x5b4f30::meth_0x51d680(DAT_00667fcc);
+  if (((DAT_00667fcc != (cls_0x5b4f30_TPlayer *)0x0) && (DAT_006682bc != 0)) &&
+     (((*(byte *)&(DAT_00667fcc->cls_0x5a7b98_TCharacter).mbr_0x36c & 2) != 0 &&
+      (((DAT_00667fcc->cls_0x5a7b98_TCharacter).cls_0x5a50e8.mbr_0x110 & 0x100000) != 0)))) {
+    cls_0x5b4f30_TPlayer::meth_0x51d680_SetPlayerState(DAT_00667fcc);
   }
 LAB_0048fe30:
   dVar1 = this->mbr_0x1c;
@@ -694,7 +694,7 @@ LAB_0048fe30:
 
 // Function at 0048ff00
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x48ff00(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x48ff00_TScreen_Animate(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
@@ -757,7 +757,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x48ff00(cls_0x5a5ed4 *this)
 
 // Function at 00490030
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490030(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x490030_TScreen_MouseClick(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
@@ -805,7 +805,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490030(cls_0x5a5ed4 *this)
 
 // Function at 004901e0
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x4901e0(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x4901e0_TScreen_KeyPress(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
@@ -855,7 +855,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x4901e0(cls_0x5a5ed4 *this)
 
 // Function at 004903b0
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x4903b0(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x4903b0_TScreen_Joystick(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
@@ -918,7 +918,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x4903b0(cls_0x5a5ed4 *this)
 
 // Function at 00490660
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490660(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x490660_TScreen_TimerTick(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
@@ -968,7 +968,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490660(cls_0x5a5ed4 *this)
 
 // Function at 00490760
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490760(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x490760(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
@@ -1018,7 +1018,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490760(cls_0x5a5ed4 *this)
 
 // Function at 00490860
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490860(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x490860(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
@@ -1068,7 +1068,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490860(cls_0x5a5ed4 *this)
 
 // Function at 00490960
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490960(cls_0x5a5ed4 *this,int param_1)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x490960(cls_0x5a5ed4_TScreen *this,int param_1)
 
 {
   dword dVar1;
@@ -1097,7 +1097,7 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x490960(cls_0x5a5ed4 *this,
 
 // Function at 00491870
 
-void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x491870(cls_0x5a5ed4 *this)
+void __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x491870(cls_0x5a5ed4_TScreen *this)
 
 {
   int *piVar1;
@@ -1132,12 +1132,12 @@ void __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x491870(cls_0x5a5ed4 *this)
 
 // Function at 00492060
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x492060(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::virt_meth_0x492060_TScreen_Dtor(cls_0x5a5ed4_TScreen *this)
 
 {
   byte in_stack_00000004;
   
-  ~cls_0x5a5ed4(this);
+  ~cls_0x5a5ed4_TScreen(this);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }
@@ -1148,15 +1148,15 @@ cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::virt_meth_0x492060(cls_0x5a5
 
 // Function at 00533cb0
 
-cls_0x5a5ed4 * __thiscall OOAnalyzer::cls_0x5a5ed4::~cls_0x5a5ed4(cls_0x5a5ed4 *this)
+cls_0x5a5ed4_TScreen * __thiscall OOAnalyzer::cls_0x5a5ed4_TScreen::~cls_0x5a5ed4_TScreen(cls_0x5a5ed4_TScreen *this)
 
 {
   dword dVar1;
-  cls_0x5a5ed4 *pcVar2;
+  cls_0x5a5ed4_TScreen *pcVar2;
   
   dVar1 = (this->cls_0x41c7f0).mbr_0x10;
   this->vftptr_0x0 = &cls_0x5a5ed4__vftable_5a5ed4_005a5ed4;
-  pcVar2 = (cls_0x5a5ed4 *)FUN_004830f0(dVar1);
+  pcVar2 = (cls_0x5a5ed4_TScreen *)FUN_004830f0(dVar1);
   return pcVar2;
 }
 

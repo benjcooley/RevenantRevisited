@@ -1648,7 +1648,7 @@ OOAnalyzer::cls_0x5a486c::meth_0x40af50
           *(undefined2 *)((int)puVar12 + 3) = uVar4;
           return;
         case 2:
-          iVar8 = FUN_00483300(0,5);
+          iVar8 = FUN_00483300_RandomRange(0,5);
           cVar6 = s_bigsword_005c5e8c[8];
           uVar9 = s_bigsword_005c5e8c._4_4_;
           uVar3 = s_sword_005c5e84._4_2_;
@@ -1758,7 +1758,7 @@ OOAnalyzer::cls_0x5a486c::meth_0x40af50
       return;
     }
     if ((*(int *)(param_1 + 0xe0) != 0) &&
-       (iVar8 = FUN_004dab80(*(int *)(param_1 + 0xe0),s_sneak_005c618c), iVar8 != 0)) {
+       (iVar8 = FUN_004dab80_TActionBlock_Is(*(int *)(param_1 + 0xe0),s_sneak_005c618c), iVar8 != 0)) {
       *in_stack_00000010 = 0x40;
       return;
     }

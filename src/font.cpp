@@ -10,6 +10,7 @@
 #include "fonttable.h"
 #include "graphics.h"
 #include "logging.h"
+#include "renderer.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -153,24 +154,25 @@ const SFontAtlas* BuildFontAtlas(TFont* font)
         BlitBitmap16ToRGBA8(rgba, (int32_t)pitch, r.x, r.y, bm);
     }
 
-    sg_image_desc d = {};
-    d.width        = atlas->width;
-    d.height       = atlas->height;
-    d.pixel_format = SG_PIXELFORMAT_RGBA8;
-    d.min_filter   = SG_FILTER_NEAREST;
-    d.mag_filter   = SG_FILTER_NEAREST;
-    d.wrap_u       = SG_WRAP_CLAMP_TO_EDGE;
-    d.wrap_v       = SG_WRAP_CLAMP_TO_EDGE;
-    d.data.subimage[0][0].ptr  = rgba;
-    d.data.subimage[0][0].size = bytes;
-    d.label = "font.atlas";
-    atlas->image = sg_make_image(&d);
+    if (Renderer)
+    {
+        atlas->texture = Renderer->RegisterTextureAsset(0,
+                                                        rgba,
+                                                        bytes,
+                                                        atlas->width,
+                                                        atlas->height,
+                                                        ERendererTextureFormat::RGBA8,
+                                                        bytes,
+                                                        ERendererTextureFilter::Nearest);
+        if (atlas->texture != kInvalidTexture)
+            Renderer->AddTextureAssetRef(atlas->texture);
+    }
 
     std::free(rgba);
 
-    if (!atlas->image.id)
+    if (atlas->texture == kInvalidTexture)
     {
-        log_error("[font] BuildFontAtlas: sg_make_image failed");
+        log_error("[font] BuildFontAtlas: texture upload failed");
         return nullptr;
     }
 
@@ -192,8 +194,8 @@ void DestroyAllFontAtlases()
     for (auto& [font, atlas] : g_fontAtlases)
     {
         if (!atlas) continue;
-        if (atlas->image.id)
-            sg_destroy_image(atlas->image);
+        if (Renderer && atlas->texture != kInvalidTexture)
+            Renderer->ReleaseTextureAssetRef(atlas->texture);
         delete atlas;
     }
     g_fontAtlases.clear();

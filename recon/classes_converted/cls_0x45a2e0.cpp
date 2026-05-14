@@ -23,7 +23,7 @@ void cls_0x45a2e0::meth_0x45a2e0()
   int local_8;
   int local_4;
   
-  this_00 = (cls_0x499720 *)FUN_00499e10(_DAT_00666970,this->mbr_0x68,this->mbr_0x6c);
+  this_00 = (cls_0x499720 *)FUN_00499e10_TSector_FindLoadedSector(_DAT_00666970,this->mbr_0x68,this->mbr_0x6c);
   if (this_00 != (cls_0x499720 *)0x0) {
     iVar3 = 0;
     do {
@@ -56,7 +56,7 @@ void cls_0x45a2e0::meth_0x45a2e0()
               if (iVar2 == 0) {
                 local_c = iVar4;
                 local_8 = iVar3;
-                cls_0x499720::meth_0x499750(this_00,iVar4,iVar3);
+                cls_0x499720::meth_0x499750_TSector_SetWalkmap(this_00,iVar4,iVar3);
                 break;
               }
             }

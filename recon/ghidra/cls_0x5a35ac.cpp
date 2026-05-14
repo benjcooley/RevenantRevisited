@@ -2605,7 +2605,7 @@ void __thiscall OOAnalyzer::cls_0x5a35ac::virt_meth_0x40cf50(cls_0x5a35ac *this)
   if (0 < DAT_005e872c) {
     puVar5 = &DAT_005e851c;
     do {
-      uVar4 = FUN_0059a530(*puVar5,pbVar1,*(byte **)(*puVar5 + 4));
+      uVar4 = FUN_0059a530_stricmp(*puVar5,pbVar1,*(byte **)(*puVar5 + 4));
       if (uVar4 == 0) {
         this = (cls_0x5a35ac *)(&DAT_005e851c)[iVar3];
         if ((cls_0x5a486c *)this != (cls_0x5a486c *)&DAT_005e8508) goto LAB_0040d076;
@@ -2617,17 +2617,17 @@ void __thiscall OOAnalyzer::cls_0x5a35ac::virt_meth_0x40cf50(cls_0x5a35ac *this)
     } while (iVar3 < DAT_005e872c);
   }
   pbVar2 = *(byte **)(*(int *)(in_stack_00000008 + 0x48) + 4);
-  uVar4 = FUN_0059a530((uint)this,pbVar2,(byte *)s_weapon_005c6048);
+  uVar4 = FUN_0059a530_stricmp((uint)this,pbVar2,(byte *)s_weapon_005c6048);
   if ((((uVar4 == 0) ||
-       (uVar4 = FUN_0059a530(extraout_ECX_02,pbVar2,(byte *)s_armor_005c6050), uVar4 == 0)) ||
-      (uVar4 = FUN_0059a530(extraout_ECX_03,pbVar2,(byte *)s_lightsource_005c6058), uVar4 == 0)) ||
-     ((uVar4 = FUN_0059a530(extraout_ECX_04,pbVar2,&DAT_005c6064), uVar4 == 0 &&
-      (uVar4 = FUN_0059a530(extraout_ECX_05,pbVar1,(byte *)s_arrow_005c606c), uVar4 == 0)))) {
+       (uVar4 = FUN_0059a530_stricmp(extraout_ECX_02,pbVar2,(byte *)s_armor_005c6050), uVar4 == 0)) ||
+      (uVar4 = FUN_0059a530_stricmp(extraout_ECX_03,pbVar2,(byte *)s_lightsource_005c6058), uVar4 == 0)) ||
+     ((uVar4 = FUN_0059a530_stricmp(extraout_ECX_04,pbVar2,&DAT_005c6064), uVar4 == 0 &&
+      (uVar4 = FUN_0059a530_stricmp(extraout_ECX_05,pbVar1,(byte *)s_arrow_005c606c), uVar4 == 0)))) {
     iVar3 = 0;
     if (0 < DAT_005e872c) {
       piVar6 = &DAT_005e851c;
       do {
-        uVar4 = FUN_0059a530(*(uint *)(*piVar6 + 4),(byte *)s_equip_005c6074,
+        uVar4 = FUN_0059a530_stricmp(*(uint *)(*piVar6 + 4),(byte *)s_equip_005c6074,
                              (byte *)*(uint *)(*piVar6 + 4));
         if (uVar4 == 0) {
 LAB_0040d0bc:
@@ -2644,7 +2644,7 @@ LAB_0040d0bc:
     if (0 < DAT_005e872c) {
       puVar5 = &DAT_005e851c;
       do {
-        uVar4 = FUN_0059a530(*puVar5,pbVar2,*(byte **)(*puVar5 + 4));
+        uVar4 = FUN_0059a530_stricmp(*puVar5,pbVar2,*(byte **)(*puVar5 + 4));
         if (uVar4 == 0) goto LAB_0040d0bc;
         iVar3 = iVar3 + 1;
         puVar5 = puVar5 + 1;

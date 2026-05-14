@@ -8,6 +8,7 @@
 
 #include "revenant.h"
 
+#include "assetcache.h"
 #include "objectcomponent.h"
 #include "imageres.h"
 
@@ -87,15 +88,24 @@ struct SImageryEntry
     TObjectImagery*     imagery;       // Pointer to imagery
 };
 
-class TObjectImagery
+class TObjectImagery : public TAsset
 {
   public:
     TObjectImagery(int32_t id);
-    virtual ~TObjectImagery();
+    ~TObjectImagery() override;
     virtual bool Restore() { return true; }
       // Restors lost surfaces, textures, etc.
     int32_t ImageryId() { return imageryid; }
       // Returns the id of this imagery (OBJIMAGE_ANIMATION, OBJIMAGE_MESH3D, etc.)
+
+    // TAsset contract. TObjectImagery is the source asset: TAnimImagery and
+    // T3DImagery specialize behavior, but ownership/ref tracking starts here.
+    [[nodiscard]] AssetUid AssetId() const override;
+    [[nodiscard]] EAssetKind AssetKind() const override;
+    [[nodiscard]] const char* AssetPath() const override;
+    [[nodiscard]] const char* AssetName() const override;
+    [[nodiscard]] const char* AssetDebugName() const override;
+    [[nodiscard]] TAssetRef<TObjectImagery> AssetRef() const { return TAssetRef<TObjectImagery>(this); }
 
   // Main imagery functions..
     static int32_t RegisterImagery(char *filename, SImageryHeader* header = nullptr, uint32_t headersize = 0);
