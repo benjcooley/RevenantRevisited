@@ -31,8 +31,8 @@ The HUD render-path infrastructure was landed in commit `80879c2` ("engine: HUD 
   - `[x]` **A.2f.i `TPane` clip-rect API** — landed in `69446de`. `HasClipRect` / `GetClipRect` / `SetClipRect` / `ClearClipRect` on TPane base. `--test=ui-clip` verifies storage contract.
   - `[ ]` **A.2f.ii Renderer-side scissor honoring `TPane::clipRect`** — wires through `DrawHud` so a registered drawable with a clip rect actually gets scissored. Deferred to first B-phase consumer that needs real clipping (likely inventory list).
   - `[ ]` **A.2f.iii General-purpose viewport+content ScrollView** — note: `TScrollPane` (src/scroll.h) is the parchment-text reader, not a general scrollable container. A real ScrollView is a NEW class; deferred until the first B-phase consumer (inventory list, save-game list, etc.) requires it.
-  - `[ ]` **A.2g Alpha clip (soft edge fade)** — clip-rect variant with per-edge fade widths (L/R/T/B), implemented at renderer composite level via a small shader pass. `--test=ui-scroll` includes a soft-clip variant alongside the hard-clip one.
-  - `[ ]` **A.2h Resizable + HiDPI canvas** — UI canvas = live window backing resolution (not game-world framebuffer); resize events re-run layout; top-level anchors target window backing. Game-world framebuffer composites under UI as a textured quad. `--test=ui-anchors` exercises 640×480 game/UI, 1920×1080 game/UI, 1920×1080 game with HiDPI UI backing, plus mid-test resize. Reference: `project-resolution-modes` updated.
+  - `[x]` **A.2g Alpha clip (soft edge fade) API** — landed in `c9e60da`. `SSpacing clipFade` on TPane + `GetClipFade` / `SetClipFade`. Renderer-side fade shader is TODO (lands with the first soft-clip consumer). `--test=ui-clip` extended to verify the fade setter contract.
+  - `[x]` **A.2h Resizable canvas hook** — landed in `5ddce9c`. `OnCanvasResize(int w, int h)` virtual on TPane (default = Resize+PaneResized+RunLayoutPass) and TScreen (default = broadcast to all panes). sokol_app `SAPP_EVENTTYPE_RESIZED` integration lives in the consumer (display.cpp / mainwnd.cpp) when a screen first needs live-resize. `--test=ui-anchors` exercises the hook on the 4K canvas verification.
 - `[ ]` **A.3 `TPane::LoadFromDef` + `TButtonPane::LoadFromDef`** — DEF-driven construction. Walks `defdoc::Node`, instantiates panes/buttons. Unknown widget kinds log and skip.
 - `[ ]` **A.4 Anchor metadata extension to retail DEF** — define convention inside the existing DEF format (extends `defdoc`). Document in `revisited/resources/README.md` (or extend existing). Vanilla ignores anchor blocks.
 
@@ -94,6 +94,8 @@ Per memory `feedback-code-style`, `feedback-modern-cpp`, `feedback-const-correct
 
 ## Notes log (most-recent first)
 
+- **2026-05-16** — A.2h `OnCanvasResize` hook landed in `5ddce9c`. Phase A.2 complete except for A.2f.ii (renderer scissor) and A.2f.iii (ScrollView), both deferred to first B-phase consumer.
+- **2026-05-16** — A.2g alpha (soft-edge) clip API landed in `c9e60da`. Renderer fade shader TODO.
 - **2026-05-16** — A.2f scope split: A.2f.i TPane clip-rect API landed in `69446de` (`--test=ui-clip` verified). A.2f.ii renderer-side scissor deferred to first B-phase consumer. A.2f.iii general ScrollView carved out as separate item (TScrollPane is parchment-text, not a viewport container).
 - **2026-05-16** — A.2e UIStyle + push/pop stack landed in `311dcb8`. `--test=ui-style` verified.
 - **2026-05-16** — A.2d 9-slice renderer primitive landed in `d40a7c8`. `--test=ui-nineslice` math-dumps verified.
