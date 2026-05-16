@@ -51,12 +51,23 @@ void LogTree(const TAnchorTestPane* p, int32_t indent = 0)
         LogTree(static_cast<const TAnchorTestPane*>(c), indent + 2);
 }
 
-void RunAtCanvas(int32_t w, int32_t h, const char* label)
+void RunAtCanvas(int32_t w, int32_t h, const char* label, bool viaOnCanvasResize = false)
 {
-    log_info("[ui-anchors] === %s: canvas %dx%d ===", label, w, h);
-    g_root->Resize(0, 0, w, h);
-    g_root->PaneResized();
-    g_root->RunLayoutPass();
+    log_info("[ui-anchors] === %s: canvas %dx%d%s ===",
+             label, w, h, viaOnCanvasResize ? " (via OnCanvasResize hook)" : "");
+    if (viaOnCanvasResize)
+    {
+        // A.2h: same end result as the manual three-step, exercised via
+        // the canvas-resize virtual. Verifies the hook wraps the pattern
+        // correctly.
+        g_root->OnCanvasResize(w, h);
+    }
+    else
+    {
+        g_root->Resize(0, 0, w, h);
+        g_root->PaneResized();
+        g_root->RunLayoutPass();
+    }
     LogTree(g_root.get());
 }
 
@@ -95,7 +106,7 @@ bool InitializeUIAnchorMode()
 
     RunAtCanvas(640,  480,  "retail 4:3");
     RunAtCanvas(1920, 1080, "revisited 16:9");
-    RunAtCanvas(3840, 2160, "HiDPI 4K");
+    RunAtCanvas(3840, 2160, "HiDPI 4K",            /*viaOnCanvasResize=*/true);
 
     return true;
 }

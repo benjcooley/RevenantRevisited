@@ -363,6 +363,16 @@ class TPane
     virtual void  LayoutChildren();
     void          RunLayoutPass();
     SSize         GetMeasured() const { return measured; }
+
+  // Canvas-resize hook (A.2h). Called by TScreen when the parent canvas
+  // (window backing) changes size, e.g. via a sokol_app SAPP_EVENTTYPE_RESIZED
+  // event forwarded to the active screen. The default impl resizes this
+  // pane to fill the new canvas at (0,0) and runs a layout pass -- ideal
+  // for a screen-root pane that anchors HUD widgets to canvas edges
+  // (project-resolution-modes: UI canvas = live window backing). Override
+  // to react differently (e.g. a centered fixed-size pane that wants to
+  // stay centered without stretching, or a pane that ignores resize).
+    virtual void OnCanvasResize(int32_t newCanvasW, int32_t newCanvasH);
 };
 
 // ********************************
@@ -490,6 +500,14 @@ class TScreen
       // Get the current frame number since this screen was initialized
     void ResetFrameCount() { screenframes = 0; }
       // Resets the screen framecount
+
+  // Canvas-resize broadcast (A.2h). Forwards a new canvas size to every
+  // registered pane's OnCanvasResize. Call this from the sokol_app event
+  // handler when SAPP_EVENTTYPE_RESIZED fires (display.cpp / mainwnd.cpp).
+  // Each pane interprets it as appropriate; the TPane default wraps
+  // Resize+PaneResized+RunLayoutPass so screen-root panes get
+  // resize-and-relayout for free.
+    virtual void OnCanvasResize(int32_t newCanvasW, int32_t newCanvasH);
 
   private:
     bool BeginScreen();
