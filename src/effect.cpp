@@ -61,6 +61,7 @@
 #include "3dimage.h"
 #include "character.h"
 #include "defdoc.h"
+#include "mappane.h"
 #include "revutils.h"
 #include "logging.h"
 #include "time.h"
@@ -619,7 +620,16 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
         return;
 
     T3DImagery* img3d = dynamic_cast<T3DImagery*>(imagery);
-    if (!img3d || img3d->NumTextures() <= 0)
+    if (!img3d)
+        return;
+    // Force lazy mesh init. NumTextures() itself is not init-triggering
+    // (texture slots are only populated by InitializeMesh / OldInitializeMesh),
+    // but NumObjects() is — so a quick poke through that path materializes
+    // the texture slots before we read them. Otherwise spawning a flame
+    // via SpawnForTest immediately after LoadImagery sees NumTextures==0
+    // and silently bails.
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
     {
         // Constructors can run before T3DImagery has initialized texture
         // slots. The animator-builder hook calls us again after mesh init.
@@ -687,3 +697,79 @@ class TFlameAnimatorComponentBuilder : public T3DAnimatorBuilder
 };
 
 static TFlameAnimatorComponentBuilder g_flame_animator_component_builder;
+
+// Standalone spawn path used by the --test=vfx harness. The in-game spawn
+// route is `MapPane::NewObject(SObjectDef*)`, which threads the instance
+// into a loaded sector via the object-class registry; that's overkill (and
+// requires a live area / sector) for previewing a single effect. Here we
+// take the imagery-only ctor, attach the visual components by hand, and
+// give the instance a fresh map index so its components Activate (their
+// RegisterUpdate hooks need to be in the global update list for the
+// flipbook frame counter to tick). The caller `delete`s the returned
+// pointer when done; the destructor releases the imagery refcount and
+// detaches the components.
+TFlameEffect* TFlameEffect::SpawnForTest(const S3DPoint& origin)
+{
+    constexpr const char* kImageryPath = "Magic\\flame.i3d";
+
+    const int32_t img_id = TObjectImagery::FindImagery(kImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[flame] SpawnForTest: FindImagery('%s') failed", kImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[flame] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[flame] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Use the imagery-only ctor; we don't have (or want) an SObjectDef /
+    // OBJCLASS_EFFECT registry entry for a preview-only instance. Note
+    // that this leaves `objclass == -1`; the destructor's component +
+    // imagery cleanup runs regardless (see TObjectInstance::~TObjectInstance).
+    auto* flame = new TFlameEffect(base);
+    flame->ForcePos(origin);
+
+    // OnAttach (which RegisterUpdates the flipbook ticker) only fires once
+    // the instance has a map index, since AddComponent gates Activate() on
+    // GetMapIndex() >= 0. Stamp one in now so subsequent AddComponent calls
+    // (and any future ones from the harness) activate immediately. The
+    // visual component on the existing instance was added inside the ctor
+    // before the map index existed — re-Activate it explicitly so its
+    // OnAttach RegisterUpdate fires too.
+    flame->SetMapIndex(MapPane.MakeIndex());
+
+    // Activate every owned component now that the instance has a map
+    // index. The ctor's AddComponent calls ran *before* SetMapIndex, so
+    // the auto-Activate path in AddComponent (gated on GetMapIndex() >= 0)
+    // was skipped — re-fire OnAttach (and any RegisterUpdate inside) here.
+    flame->ActivateComponents();
+
+    if (!flame->GetComponent<TFlipbookBillboardComponent>())
+    {
+        log_error("[flame] SpawnForTest: flipbook component missing after ctor "
+                  "(T3DImagery has %d textures, %d objects) — asset may be "
+                  "missing texture slot 0",
+                  img3d->NumTextures(), img3d->NumObjects());
+        delete flame;
+        return nullptr;
+    }
+
+    log_info("[flame] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "textures=%d",
+             kImageryPath, flame->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             img3d->NumTextures());
+    return flame;
+}

@@ -831,6 +831,13 @@ class TObjectInstance : protected SObjectDef
         // Adds an owned component and returns its component slot, or -1.
     void RemoveComponent(int32_t component_slot);
         // Deletes and removes the owned component in the given slot.
+    void ActivateComponents();
+        // Calls Activate() (and thus OnAttach() / RegisterUpdate hooks) on
+        // every owned component that isn't already active. AddComponent
+        // normally activates the new component automatically, but only
+        // when the owner already has a positive mapindex; standalone
+        // instances built up component-then-mapindex (e.g. the --test=vfx
+        // harness) call this once after SetMapIndex to bring them online.
     TObjectComponent* GetComponent(int32_t component_slot) const;
         // Returns the component in the given slot, or nullptr.
     int32_t NumComponents() const { return int32_t(components.size()); }
