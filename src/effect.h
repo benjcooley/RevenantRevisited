@@ -34,6 +34,7 @@ _CLASSDEF(TEffect)
 _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
+#include "renderer.h"   // EFxDebugMode, SBillboardDrawItem, TRenderer
 
 // ***********
 // * TEffect *
@@ -67,6 +68,16 @@ class TEffect : public TObjectInstance
 // Runtime visual component for effects rendered as animated billboard
 // flipbooks. It is not serialized; effect builders attach/configure it from
 // existing object/imagery definitions.
+//
+// Submission path: each frame, MapRenderer's per-instance Submit walk
+// calls Submit(*Renderer, *oi). The component fills out an
+// SBillboardDrawItem (world-space, world-unit size, normalized uv_rect)
+// and hands it to Renderer->SubmitFxBillboard; the renderer's fx_pass
+// drains the queue after RunLightingPass (see docs/vfx/PHASE1_SPINE.md).
+//
+// Diagnostic ladder is per-instance EFxDebugMode; the shader branches per
+// PHASE1_SPINE.md §6 so the same pipeline serves Normal / SolidColor /
+// FullTexture / CurrentFrame.
 class TFlipbookBillboardComponent : public TObjectComponent
 {
   public:
@@ -88,7 +99,7 @@ class TFlipbookBillboardComponent : public TObjectComponent
         additive_blend = additive;
         replaces_default_visual = replaces_default;
     }
-    void SetDebugSolid(bool enable) { debug_solid = enable; }
+    void SetDebugMode(EFxDebugMode mode) { debug_mode = mode; }
     bool SetFrameExpression(const char* expr, std::string* error = nullptr)
         { return frame_expr.Compile(expr, error); }
     bool SetUvRectExpression(const char* expr, std::string* error = nullptr)
@@ -99,16 +110,15 @@ class TFlipbookBillboardComponent : public TObjectComponent
 
     [[nodiscard]] bool ReplacesDefaultVisual() const { return replaces_default_visual; }
     [[nodiscard]] TTextureHandle Texture() const { return texture_handle; }
-    [[nodiscard]] int32_t TextureWidth() const { return tex_w; }
-    [[nodiscard]] int32_t TextureHeight() const { return tex_h; }
-    [[nodiscard]] int32_t SourceX() const { float r[4]; UvRect(r); return int32_t(r[0] * float(tex_w)); }
-    [[nodiscard]] int32_t SourceY() const { float r[4]; UvRect(r); return int32_t(r[1] * float(tex_h)); }
-    [[nodiscard]] int32_t SourceWidth() const { float r[4]; UvRect(r); const int32_t w = int32_t(r[2] * float(tex_w)); return w > 0 ? w : 1; }
-    [[nodiscard]] int32_t SourceHeight() const { float r[4]; UvRect(r); const int32_t h = int32_t(r[3] * float(tex_h)); return h > 0 ? h : 1; }
     [[nodiscard]] float Width() const { return size_w; }
     [[nodiscard]] float Height() const { return size_h; }
     [[nodiscard]] bool AdditiveBlend() const { return additive_blend; }
-    [[nodiscard]] bool DebugSolid() const { return debug_solid; }
+    [[nodiscard]] EFxDebugMode DebugMode() const { return debug_mode; }
+
+    // Fill an SBillboardDrawItem from current component state and submit
+    // it to the renderer's FX queue. Called from the per-instance Submit
+    // walk in maprenderer.cpp.
+    void Submit(TRenderer& renderer, const TObjectInstance& inst) const;
 
   protected:
     void OnUpdate() override
@@ -159,7 +169,7 @@ class TFlipbookBillboardComponent : public TObjectComponent
     float size_w = 1.0f, size_h = 1.0f;
     bool additive_blend = true;
     bool replaces_default_visual = true;
-    bool debug_solid = false;
+    EFxDebugMode debug_mode = EFxDebugMode::Normal;
 };
 
 struct SParticleBucketEffectDef
