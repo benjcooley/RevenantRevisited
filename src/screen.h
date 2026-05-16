@@ -12,6 +12,53 @@
 
 #include <vector>
 
+// ****************************************************************************
+// * Retained-mode layout primitives (A.2b)                                   *
+// *                                                                          *
+// * Rudimentary 2-pass measure/layout (Unity IMGUI-ish / single-axis flex).  *
+// * See docs/ui/ARCHITECTURE.md sec 2.1 and memory project-ui-layout-system  *
+// * for the "what NOT to build" list. These types are intentionally small.   *
+// *                                                                          *
+// * Container panes (layoutKind != None) measure children bottom-up, then    *
+// * arrange them top-down inside their content rect (own rect minus padding).*
+// * Per-child sizing policy controls how leftover space is distributed:      *
+// * Fixed children get their preferred size; Greedy children share the       *
+// * remainder weighted by greedyWeight.                                      *
+// *                                                                          *
+// * Non-container panes (layoutKind == None, the default) ignore all of      *
+// * this and continue using their explicit x/y/w/h. Vanilla retail panes     *
+// * pay zero cost.                                                           *
+// ****************************************************************************
+
+enum class SLayoutKind  : uint8_t { None, Vertical, Horizontal };
+enum class SSizePolicy  : uint8_t { Fixed, Greedy };
+
+struct SSpacing  // left/top/right/bottom in pixels; default zero
+{
+    int32_t left   = 0;
+    int32_t top    = 0;
+    int32_t right  = 0;
+    int32_t bottom = 0;
+
+    constexpr SSpacing() = default;
+    constexpr SSpacing(int32_t l, int32_t t, int32_t r, int32_t b)
+      : left(l), top(t), right(r), bottom(b) {}
+    constexpr explicit SSpacing(int32_t uniform)
+      : left(uniform), top(uniform), right(uniform), bottom(uniform) {}
+
+    [[nodiscard]] constexpr int32_t Horizontal() const { return left + right; }
+    [[nodiscard]] constexpr int32_t Vertical()   const { return top + bottom; }
+};
+
+struct SSize     // preferred / arranged size for a layout node
+{
+    int32_t w = 0;
+    int32_t h = 0;
+
+    constexpr SSize() = default;
+    constexpr SSize(int32_t pw, int32_t ph) : w(pw), h(ph) {}
+};
+
 // ******************************
 // * TPane - Screen pane object *
 // ******************************
@@ -43,6 +90,22 @@ class TPane
     TPane* parent = nullptr;
     std::vector<TPane*> children;
 
+    // Layout policy (A.2b). Defaults below make the pane a leaf with no
+    // container behavior and Fixed sizing -- vanilla retail panes behave
+    // exactly as before until something explicitly opts in.
+    SLayoutKind layoutKind   = SLayoutKind::None;
+    SSizePolicy hsizePolicy  = SSizePolicy::Fixed;
+    SSizePolicy vsizePolicy  = SSizePolicy::Fixed;
+    float       greedyWeight = 1.0f;   // share when Greedy among siblings
+    SSpacing    padding;               // inside container, around children
+    SSpacing    margin;                // outside this pane, inside parent
+    int32_t     spacing      = 0;      // between siblings in V/H container
+
+    // Cached measure result -- populated by MeasureSelf() during pass 1,
+    // consumed by parents during pass 2 to compute arrange rects. Not part
+    // of the public API; do not read directly.
+    SSize       measured;
+
    public:
 
     TPane() {}
@@ -59,38 +122,38 @@ class TPane
       // Initializes pane before it is displayed
     virtual void Close();
       // Called for pane to delete internal structures before closing
-    bool IsOpen() { return isopen; }
+    bool IsOpen() const { return isopen; }
 
   // Pane state variables
-    int32_t GetPosX() { return x; }
+    int32_t GetPosX() const { return x; }
       // Gets pane screen x pos
-    int32_t GetPosY() { return y; }
+    int32_t GetPosY() const { return y; }
       // Gets pane screen y pos
-    int32_t GetWidth() { return width; }
+    int32_t GetWidth() const { return width; }
       // Gets width
-    int32_t GetHeight() { return height; }
+    int32_t GetHeight() const { return height; }
       // Gets height
-    void GetRect(SRect &r) { r.left = x; r.top = y; r.right = r.left + width - 1; r.bottom = r.top + height - 1; }
+    void GetRect(SRect &r) const { r.left = x; r.top = y; r.right = r.left + width - 1; r.bottom = r.top + height - 1; }
       // Gets the pane's rectangle
-    bool InPane(int32_t x, int32_t y) { return (x >= 0 && y >= 0 && x < width && y < height); }
+    bool InPane(int32_t px, int32_t py) const { return (px >= 0 && py >= 0 && px < width && py < height); }
       // Quick bounds checker
-    bool IsDirty() { return dirty; }
+    bool IsDirty() const { return dirty; }
       // Get update status
 
   // Scrolling functions
     void SetScrollPos(int32_t sx, int32_t sy) { newscrollx = sx; newscrolly = sy; }
-      // Sets scroll position of pane for next frame (returned with GetNewScrollX, ScrollY)         
-    int32_t GetScrollX() { return scrollx; }
+      // Sets scroll position of pane for next frame (returned with GetNewScrollX, ScrollY)
+    int32_t GetScrollX() const { return scrollx; }
       // Gets pane draw origin x pos for current frame
-    int32_t GetScrollY() { return scrolly; }
+    int32_t GetScrollY() const { return scrolly; }
       // Gets pane draw origin y pos for current frame
-    int32_t GetOldScrollX() { return oldscrollx; }
+    int32_t GetOldScrollX() const { return oldscrollx; }
       // Gets pane draw origin x pos for previous frame
-    int32_t GetOldScrollY() { return oldscrolly; }
+    int32_t GetOldScrollY() const { return oldscrolly; }
       // Gets pane draw origin y pos for previous frame
-    int32_t GetNewScrollX() { return newscrollx; }
+    int32_t GetNewScrollX() const { return newscrollx; }
       // Gets pane draw origin x pos for next frame
-    int32_t GetNewScrollY() { return newscrolly; }
+    int32_t GetNewScrollY() const { return newscrolly; }
       // Gets pane draw origin y pos for next frame
 
   // Background stuff
@@ -102,7 +165,7 @@ class TPane
       // Sets the special primary background buffer for this pane (used for scrolling)
     virtual void ClearBackgroundBuffer() { backgroundbuffer = -1; }
       // Clears the special primary background buffer for this pane
-    int32_t GetBackgroundBuffer() { return backgroundbuffer; }
+    int32_t GetBackgroundBuffer() const { return backgroundbuffer; }
       // Gets restore buffer index.
     void UpdateBackgroundScrollPos();
       // Called by the screen TimerTick() function to update bg buf's scroll pos
@@ -125,7 +188,7 @@ class TPane
       // Sets the pane's x, y position for next frame
     void SetSize(int32_t nwidth, int32_t nheight) { newwidth = nwidth; newheight = nheight; }
       // Sets the pane's width, height position for next frame
-    bool WasResized()
+    bool WasResized() const
         { return x != newx || y != newy || width != newwidth || height != newheight; }
       // True if any changes to position or size was made during the previous frame
     virtual void SetClipRect();
@@ -208,6 +271,52 @@ class TPane
     void RemoveChild(TPane* child);
     TPane* GetParent() const { return parent; }
     const std::vector<TPane*>& Children() const { return children; }
+
+  // Layout configuration (A.2b). Defaults match SLayoutKind::None, Fixed,
+  // zero padding/margin -- vanilla pane behavior. Setters bump dirty so the
+  // next layout pass re-evaluates.
+    SLayoutKind GetLayoutKind() const   { return layoutKind; }
+    void SetLayoutKind(SLayoutKind k)   { layoutKind = k; SetDirty(true); }
+
+    SSizePolicy GetHSizePolicy() const  { return hsizePolicy; }
+    SSizePolicy GetVSizePolicy() const  { return vsizePolicy; }
+    void SetSizePolicy(SSizePolicy h, SSizePolicy v)
+        { hsizePolicy = h; vsizePolicy = v; SetDirty(true); }
+
+    float GetGreedyWeight() const       { return greedyWeight; }
+    void  SetGreedyWeight(float w)      { greedyWeight = w; SetDirty(true); }
+
+    const SSpacing& GetPadding() const  { return padding; }
+    void SetPadding(const SSpacing& p)  { padding = p; SetDirty(true); }
+
+    const SSpacing& GetMargin() const   { return margin; }
+    void SetMargin(const SSpacing& m)   { margin = m; SetDirty(true); }
+
+    int32_t GetSpacing() const          { return spacing; }
+    void    SetSpacing(int32_t s)       { spacing = s; SetDirty(true); }
+
+  // Two-pass layout (A.2b).
+  //
+  // MeasureSelf: pass 1, bottom-up. Returns this pane's preferred size given
+  // a parent constraint. Default: leaf panes return their explicit
+  // (newwidth, newheight); container panes recurse into children, accumulate
+  // along their axis, and add padding. Subclasses override when preferred
+  // size depends on content (text label, scaled image, etc.).
+  //
+  // LayoutChildren: pass 2, top-down. Called on container panes after their
+  // own rect is set. Computes each child's arrange rect inside this pane's
+  // content rect, applying child margin / sizing policy. Default no-op when
+  // layoutKind == None.
+  //
+  // RunLayoutPass: convenience entry point. Performs MeasureSelf with the
+  // pane's current size as the constraint, then LayoutChildren recursively.
+  // Callers invoke this when they've changed the tree or this pane's size
+  // and want layout up to date. No auto-invocation from TScreen yet -- A.2b
+  // is purely additive.
+    virtual SSize MeasureSelf(const SSize& parentConstraint);
+    virtual void  LayoutChildren();
+    void          RunLayoutPass();
+    SSize         GetMeasured() const { return measured; }
 };
 
 // ********************************

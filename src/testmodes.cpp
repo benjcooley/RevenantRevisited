@@ -28,6 +28,7 @@
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
+#include "uilayouttest.h"
 
 #include <cmath>
 #include <cctype>
@@ -2236,6 +2237,8 @@ bool Initialize(const char* mode)
         return InitializeI3DMode();
     if (strcmp(mode, "font") == 0)
         return InitializeFontMode();
+    if (strcmp(mode, "ui-layout") == 0)
+        return InitializeUILayoutMode();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2253,6 +2256,8 @@ void Close(const char* mode)
         CloseI3DStaticMode();
     if (strcmp(mode, "water3d") == 0)
         CloseI3DStaticMode();
+    if (strcmp(mode, "ui-layout") == 0)
+        CloseUILayoutMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2279,6 +2284,8 @@ void Render(const char* mode)
         return RenderTTFMode();
     if (strcmp(mode, "text") == 0)
         return RenderTextMode();
+    if (strcmp(mode, "ui-layout") == 0)
+        return RenderUILayoutMode();
     return RenderBlankMode();
 }
 
