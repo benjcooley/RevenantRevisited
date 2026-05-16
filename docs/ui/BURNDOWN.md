@@ -8,6 +8,17 @@ Last updated: 2026-05-16
 
 ---
 
+## Inherited from HEAD (`80879c2`) — built before this burndown
+
+The HUD render-path infrastructure was landed in commit `80879c2` ("engine: HUD architecture, world->pixel camera matrix, mode-aware cursor") prior to the burndown being committed. The rest of the burndown builds on top of these — they're not in scope for re-doing:
+
+- **HUD render path:** `THudDrawable` base class + `Renderer->AddHud(d, z)` / `RemoveHud(d)` / `DrawHud()`. Z-ordered draws inside the swapchain pass — replaces the prior surface-cache/blit-to-2D-overlay. See [src/renderer.h:271+](../../src/renderer.h#L271) and [src/renderer.cpp:3535+](../../src/renderer.cpp#L3535).
+- **Renderer-side HUD draw primitives:** `Renderer->DrawBitmap(PTBitmap, x, y)` and `Renderer->DrawSurface(TSurface*, x, y)` are the inside-`Draw()` primitives every HUD widget will call. Bitmap → texture cache lives in the renderer.
+- **`GameData` (`playscrn.dat`) loaded** by `PlayScreen::Initialize` ([src/playscreen.cpp:206](../../src/playscreen.cpp#L206)). HUD/cursor bitmap resources resolve through it.
+- **OS cursor / game cursor swap on ImGui ownership** — editor panels & menus get the OS pointer, the playfield gets the game cursor, never both. Lives in cursor code.
+
+**Implication:** the panes brought up in Phase B do their drawing by subclassing `THudDrawable` (or by being composed inside something that does), registering with `Renderer->AddHud(this, z)`, and issuing `Renderer->DrawBitmap` / `DrawSurface` from `Draw()`. The retained-mode `TPane` evolution in A.2 must integrate with this — not replace it.
+
 ## Phase A — Foundational evolutions
 
 - `[ ]` **A.1 `Revisited::IsEnabled()` accessor** — implement the TBD accessor flagged in [revisited/README.md](../../revisited/README.md). Reads `[Revisited]` section of `<SavePath>/Revenant.ini` via the existing INI API. Single public function. Default per key = false. *Small, lands in main.*
@@ -27,7 +38,7 @@ Last updated: 2026-05-16
 
 - `[ ]` **B.1 `TTextBar`** — vertical slice; first pane on the retained-mode tree end-to-end + `--test=ui-textbar`.
 - `[ ]` **B.2 `THealthBar`, `TStaminaBar`** (`TStatusBar` subclasses) + `--test=ui-statusbars`.
-- `[ ]` **B.3 `TCursorHud`** + resolve Win32-clipping `#if 0` in [src/cursor.cpp](../../src/cursor.cpp).
+- `[x]` **B.3 `TCursorHud`** — landed in `80879c2` as a `THudDrawable` subclass registered at z=0 (below other HUD), with OS-pointer / game-cursor swap on ImGui ownership. See [src/cursor.h:32](../../src/cursor.h#L32). Win32-clipping `#if 0` still pending if/when relevant; deferred (cursor works without it).
 - `[ ]` **B.4 `TQuickSpellPane`** + `--test=ui-quickspells`.
 - `[ ]` **B.5 `TMultiCtrlPane`** — 4-button switcher with 1/2/3/4 keys.
 - `[ ]` **B.6 `TInventory`** — drag-and-drop, container traversal + `--test=ui-inventory`.
@@ -81,6 +92,7 @@ Per memory `feedback-code-style`, `feedback-modern-cpp`, `feedback-const-correct
 
 ## Notes log (most-recent first)
 
+- **2026-05-16** — Reconciled with `feature/ui` HEAD `80879c2`. HUD render-path infrastructure (`THudDrawable` + `AddHud`/`RemoveHud`/`DrawHud` + `Renderer->DrawBitmap`/`DrawSurface` + `GameData` load) landed prior to this burndown; documented as "Inherited from HEAD" section. B.3 (`TCursorHud`) marked done — cursor works via `THudDrawable` subclass with ImGui-ownership pointer swap.
 - **2026-05-16** — A.2 added **A.2h** for resizable + HiDPI: UI canvas = live window backing, decoupled from game-world framebuffer. Game world composites under UI as a textured quad. Layout re-runs on resize. `project-resolution-modes` rewritten to make game-world resolution and UI canvas resolution two distinct concepts.
 - **2026-05-16** — A.2 added clip rect on `TPane` base + `TScrollPane` viewport/content evolution + alpha (soft-edge) clip variant (A.2f, A.2g). `--test=ui-scroll` covers both hard and soft clip. `project-ui-layout-system` memory updated.
 - **2026-05-16** — A.2 expanded with concrete sub-items: layout (2-pass V/H + margin/padding + fixed/greedy), anchors, **proper 9-slice rendering** (no existing impl in `src/` to evolve — built fresh from retail widget atlases), and a `UIStyle` struct (ImGui/Unity style-asset model, no themable cascade). New memory: `project-ui-layout-system`.
