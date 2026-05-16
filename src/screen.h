@@ -267,12 +267,20 @@ class TScreen
     virtual void Redraw() { dirty = true; }
       // Redraw the current screen
 
-  // Screen loops
+  // Screen loops. See docs/FRAME_PIPELINE.md for the full picture.
+    virtual void Tick();
+      // Advance simulation. Catches up any pending 24Hz Pulses via
+      // TTime::LegacyFrameCount. Pure logic, no drawing. Called by
+      // AppFrame once per real frame.
+    virtual void DrawFrame();
+      // Render one frame. Opens the Overlay2D pass on the backbuffer,
+      // calls Animate(true), draws the cursor, closes the pass. Does
+      // NOT mutate gameplay state. Called by AppFrame after Tick().
+    [[deprecated("call Tick() and DrawFrame() instead")]]
     virtual bool TimerTick(bool draw);
-      // Runs one non-blocking tick: catches up any pending 24Hz Pulses (via
-      // TTime::LegacyFrameCount), then DrawBackground/Animate. Called once per
-      // sokol AppFrame by revmain; subclasses rarely need to override.
-      // Returns !done — false means the screen has asked to end.
+      // Legacy wrapper: Tick() + (draw ? DrawFrame() : nothing). Kept
+      // for test modes and any caller not yet migrated. Returns !done.
+      // TODO(frame-pipeline): remove once last caller migrates.
 
     static TScreen* ShowScreen(TScreen* screen, int32_t ticks);
       // Begins a screen: sets CurrentScreen and calls Initialize. Returns the

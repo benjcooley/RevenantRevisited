@@ -40,6 +40,12 @@ class IRuntimeMode
     // should NOT fall through to the screen's default handling.
     virtual bool HandleKey       (int32_t /*key*/, bool /*down*/)                  { return false; }
     virtual bool HandleMouseClick(int32_t /*button*/, int32_t /*x*/, int32_t /*y*/) { return false; }
+    virtual bool HandleMouseMove (int32_t /*button*/, int32_t /*x*/, int32_t /*y*/) { return false; }
+
+    // 2D drawing for the mode happens via Renderer->AddHudItem in
+    // OnEnter and Renderer->RemoveHudItem in OnExit. No per-frame
+    // drawing hook on the mode -- the renderer iterates registered
+    // HUD items each frame in z-order. See docs/FRAME_PIPELINE.md.
 };
 
 // Returns the currently active mode. Never null after engine init -- the

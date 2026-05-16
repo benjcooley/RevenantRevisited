@@ -128,6 +128,7 @@ class TPlayScreen : public TScreen
 
     // ---- Input ---------------------------------------------------------
     void MouseClick(int32_t button, int32_t x, int32_t y) override;
+    void MouseMove (int32_t button, int32_t x, int32_t y) override;
     void KeyPress  (int32_t key, bool down)               override;
     virtual void Joystick(int32_t key, bool down);
     virtual void Command (GAMECOMMAND command);

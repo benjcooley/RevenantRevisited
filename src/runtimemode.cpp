@@ -7,13 +7,20 @@
 #include "runtimemode.h"
 
 #include "ctrlmap.h"
+#include "cursor.h"
+#include "imgui.h"
 #include "logging.h"
 #include "mappane.h"
 #include "maprenderer.h"
+#include "multi.h"
 #include "object.h"
 #include "player.h"
 #include "playscreen.h"
+#include "renderer.h"
 #include "revenant.h"
+#include "revtypes.h"
+
+#include <sokol_app.h>
 
 namespace
 {
@@ -23,11 +30,60 @@ class TGameModeImpl final : public IRuntimeMode
   public:
     const char* Name() const override { return "game"; }
 
-    void OnEnter() override { log_info("[runtimemode] enter game mode"); }
-    void OnExit()  override { log_info("[runtimemode] exit game mode");  }
+    void OnEnter() override
+    {
+        log_info("[runtimemode] enter game mode");
+        // Hide the OS pointer -- the game draws its own cursor via
+        // TCursorHud, and the platform arrow on top would be visual
+        // double-vision. Editor mode reverses this in its OnEnter.
+        sapp_show_mouse(false);
+
+        // Seed the default game cursor once. MapPane.MouseMove /
+        // MouseClick swap it (wedge / hand / sword) as the mouse moves
+        // over targets and as right-drag movement starts/ends.
+        if (GameData)
+        {
+            if (PTBitmap cursor = GameData->Bitmap("cursor"))
+                SetMouseBitmap(cursor);
+            else
+                log_warn("[runtimemode] GameData->Bitmap(\"cursor\") returned null");
+        }
+
+        // Register the cursor as a HUD drawable at the lowest z.
+        // Cursor draws after the map (Scene3D pass already done) but
+        // BEFORE any HUD panels -- panels are opaque widgets and
+        // should paint over the cursor where they overlap, so the
+        // cursor "lives" in the playfield layer of the HUD stack.
+        if (Renderer)
+            Renderer->AddHud(&cursor_hud, /*z=*/0.0f);
+    }
+    void OnExit() override
+    {
+        log_info("[runtimemode] exit game mode");
+        if (Renderer)
+            Renderer->RemoveHud(&cursor_hud);
+        // Restore OS pointer for the next mode (editor, menu, etc.).
+        sapp_show_mouse(true);
+    }
+
+  private:
+    TCursorHud cursor_hud;
+    bool       os_cursor_visible = false;  // last-set OS cursor state
 
     void Tick() override
     {
+        // Hand the cursor back to the OS while ImGui wants the mouse
+        // (debug panels, menus, modal popups) and reclaim it while
+        // the mouse is over the playfield. TCursorHud::Draw mirrors
+        // the same predicate and suppresses the game cursor in that
+        // case so we never show both.
+        const bool imgui_owns_mouse = ImGui::GetIO().WantCaptureMouse;
+        if (imgui_owns_mouse != os_cursor_visible)
+        {
+            sapp_show_mouse(imgui_owns_mouse);
+            os_cursor_visible = imgui_owns_mouse;
+        }
+
         // Drive player movement from the latest command-flag state.
         // Mouse-click walk-to is the primary input path; keyboard
         // arrows are the secondary fallback. UpdateMove translates
@@ -138,11 +194,30 @@ class TGameModeImpl final : public IRuntimeMode
         return false;
     }
 
-    bool HandleMouseClick(int32_t /*button*/, int32_t /*x*/, int32_t /*y*/) override
+    bool HandleMouseClick(int32_t button, int32_t x, int32_t y) override
     {
-        // Game-mode click (walk-to / pick / interact) is not wired yet.
-        // Importantly we do NOT forward to TMapRenderer::HandleMouseClick
-        // here -- that path is editor gizmo / drag logic.
+        // TODO(input): retail MapPane.MouseClick is unsafe under the new
+        // renderer-owned-sectors architecture -- it touches pane state
+        // (posx/posy/scroll), Notify-iterates sectors that MapPane no
+        // longer owns, and synthesizes fake joystick keys. Calling it
+        // directly crashes on right-click.
+        //
+        // Right path: extract the gameplay-only subset (right-down ->
+        // start move, right-up -> stop move, left-down -> attack
+        // request) into a thin GameInput layer that touches Player +
+        // ControlMap without needing pane state. For now just log so
+        // we can confirm events arrive.
+        log_info("[gameinput] click button=%d at (%d,%d) -- not wired", button, x, y);
+        (void)button; (void)x; (void)y;
+        return false;
+    }
+
+    bool HandleMouseMove(int32_t button, int32_t x, int32_t y) override
+    {
+        // Same TODO as HandleMouseClick. The wedge-cursor / bow-aim
+        // logic in MapPane.MouseMove depends on uninitialized pane
+        // state; revisit when we have a GameInput layer.
+        (void)button; (void)x; (void)y;
         return false;
     }
 };
@@ -152,8 +227,52 @@ class TEditorModeImpl final : public IRuntimeMode
   public:
     const char* Name() const override { return "editor"; }
 
-    void OnEnter() override { log_info("[runtimemode] enter editor mode"); }
-    void OnExit()  override { log_info("[runtimemode] exit editor mode");  }
+    void OnEnter() override
+    {
+        log_info("[runtimemode] enter editor mode");
+        // Editor uses the OS pointer (with the editor's own tool
+        // cursors swapped in via SetMouseBitmap when a specific tool
+        // wants it). Show the OS cursor explicitly so it's correct
+        // regardless of what the previous mode left it as.
+        sapp_show_mouse(true);
+
+        // Restore the editor's own camera. Otherwise we'd inherit
+        // whatever camera position game mode last set (= Locke's last
+        // location), which is jarring -- the editor's view should stay
+        // wherever the user last left it. First entry of a session
+        // skips the restore so the renderer's natural startup centering
+        // (BuildAndCenter -> startup_sector pick) is preserved.
+        if (cam_saved)
+        {
+            if (TMapRenderer* mr = PlayScreen.MapRenderer())
+                mr->SetCameraWorld(cam_level, cam_world.x, cam_world.y, cam_world.z);
+        }
+    }
+    void OnExit() override
+    {
+        log_info("[runtimemode] exit editor mode");
+        // Snapshot the editor camera so it survives the round-trip
+        // through game mode (which retargets the camera to Locke every
+        // frame in TPlayScreen::RenderFrame).
+        if (TMapRenderer* mr = PlayScreen.MapRenderer())
+        {
+            cam_world = mr->CameraWorld();
+            cam_level = mr->CameraLevel();
+            cam_saved = true;
+        }
+    }
+
+  private:
+    S3DPoint cam_world  = {0, 0, 0};
+    int32_t  cam_level  = 0;
+    bool     cam_saved  = false;
+
+  public:
+
+    // Editor mode owns no game-mode HUD overlay. Editor-specific
+    // overlays (gizmos, selection outlines) draw via debugui / the
+    // renderer's editor decoration passes, gated on
+    // EditorOverlaysEnabled().
 
     void Tick() override
     {

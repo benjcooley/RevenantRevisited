@@ -35,6 +35,8 @@ bool Double3D, Triple3D;
 
 int32_t Ambient3D = 100;
 int32_t LightRange3D = 100;
+int32_t LightMult3D = 250;       // retail revenant.ini default; per-light intensity scale (percent)
+bool    EnhancedLighting = true; // retail revenant.ini default
 
 // DLS brightness routine (gives brightness given distance).
 extern double GetLightBrightness(int32_t dist, int32_t intensity, int32_t multiplier);

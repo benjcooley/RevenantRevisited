@@ -24,12 +24,19 @@
 #include "renderer.h"
 
 #include <sokol_gfx.h>
+#include <sokol_app.h>
+
+#include "bitmap.h"
+#include "bitmapdecode.h"
+#include "logging.h"
+#include "surface.h"
 
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
 #include <cstring>
 #include <utility>
+#include <vector>
 
 #include "logging.h"
 #include "revenant.h"
@@ -2872,7 +2879,7 @@ void TRenderer::RunLightingPass()
     u[o++] = light.dir[0]; u[o++] = light.dir[1]; u[o++] = light.dir[2]; u[o++] = light.intensity;
     u[o++] = light.color[0]; u[o++] = light.color[1]; u[o++] = light.color[2]; u[o++] = light.ambient;
     u[o++] = light.ambient_color[0]; u[o++] = light.ambient_color[1];
-    u[o++] = light.ambient_color[2]; u[o++] = 0.0f;
+    u[o++] = light.ambient_color[2]; u[o++] = light.light_ceiling;
     u[o++] = float(light.view_mode);
     u[o++] = float(light.plight_count);
     u[o++] = float(light.mode);
@@ -3296,6 +3303,11 @@ void TRenderer::SetAmbientColor(float r, float g, float b)
     light.ambient_color[2] = b;
 }
 
+void TRenderer::SetLightCeiling(float ceiling)
+{
+    light.light_ceiling = (ceiling > 0.0f) ? ceiling : 0.0f;
+}
+
 void TRenderer::SetAmbientOcclusion(bool enable, float radius_px, float strength,
                                     float bias, float max_dist_wu)
 {
@@ -3440,6 +3452,41 @@ void TRenderer::Composite(sg_image img,
               1, 1);
 }
 
+void TRenderer::CompositeSwapchain(sg_image img,
+                                   int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                   int32_t target_w, int32_t target_h,
+                                   int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                   int32_t src_tex_w, int32_t src_tex_h)
+{
+    // Same blit math as the RT variant below, but uses the swapchain-
+    // format pipeline so it can be called inside sg_begin_default_pass.
+    if (!img.id || !composite_pip_swap.id) return;
+    if (target_w <= 0 || target_h <= 0) return;
+    if (src_tex_w <= 0 || src_tex_h <= 0) return;
+
+    sg_apply_pipeline(composite_pip_swap);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = composite_vbuf;
+    bind.fs_images[0]      = img;
+    sg_apply_bindings(&bind);
+
+    const float nx = (2.0f * dst_x / target_w) - 1.0f;
+    const float nw = (2.0f * dst_w) / target_w;
+    const float ny = 1.0f - (2.0f * (dst_y + dst_h) / target_h);
+    const float nh = (2.0f * dst_h) / target_h;
+
+    const float u0 = float(src_x) / float(src_tex_w);
+    const float v0 = float(src_y) / float(src_tex_h);
+    const float uw = float(src_w) / float(src_tex_w);
+    const float vh = float(src_h) / float(src_tex_h);
+
+    const float uniforms[12] = { nx, ny, nw, nh,  u0, v0, uw, vh,  0.0f, 0.0f, 0.0f, 0.0f };
+    const sg_range u_range = { uniforms, sizeof(uniforms) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
+    sg_draw(0, 6, 1);
+}
+
 void TRenderer::Composite(sg_image img,
                           int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                           int32_t target_w, int32_t target_h,
@@ -3482,6 +3529,120 @@ void TRenderer::Composite(sg_image img,
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
     sg_draw(0, 6, 1);
+}
+
+// *************************************************************************
+// * HUD layer  --  DrawBitmap / DrawSurface / AddHudItem / DrawHud         *
+// *                                                                        *
+// * Composites cached HUD content on top of the 3D scene during the        *
+// * swapchain pass. Called from TDisplay::FlipPage between PresentToSwap-  *
+// * chain (Scene3D) and simgui_render (debug UI). Items are sorted by z    *
+// * ascending; ties break by registration sequence. See renderer.h API     *
+// * and docs/FRAME_PIPELINE.md.                                            *
+// *************************************************************************
+
+TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm)
+{
+    if (!bm || bm->width <= 0 || bm->height <= 0)
+        return kInvalidTexture;
+
+    const uintptr_t key = uintptr_t(bm);
+    if (auto it = bitmap_texture_cache.find(key); it != bitmap_texture_cache.end())
+        return it->second;
+
+    const int32_t w = bm->width;
+    const int32_t h = bm->height;
+    const int32_t pitch = w * 4;
+    std::vector<uint8_t> rgba(size_t(pitch) * size_t(h), 0);
+    if (!DecodeBitmapToRGBA(bm, rgba.data(), pitch, 0, 0))
+    {
+        log_warn("[renderer] DrawBitmap: DecodeBitmapToRGBA failed for bitmap %p (%dx%d, flags=0x%x)",
+                 (void*)bm, w, h, bm->flags);
+        bitmap_texture_cache[key] = kInvalidTexture;
+        return kInvalidTexture;
+    }
+
+    const TTextureHandle tex = RegisterTextureAsset(
+        key, rgba.data(), rgba.size(), w, h,
+        ERendererTextureFormat::RGBA8,
+        uint64_t(rgba.size()),
+        ERendererTextureFilter::Nearest);
+    bitmap_texture_cache[key] = tex;
+    return tex;
+}
+
+void TRenderer::DrawBitmap(PTBitmap bm, int32_t x, int32_t y)
+{
+    if (!bm) return;
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    const sg_image img = TextureImage(tex);
+    if (!img.id) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    CompositeSwapchain(img, x, y, bm->width, bm->height, target_w, target_h,
+                       0, 0, bm->width, bm->height,
+                       bm->width, bm->height);
+}
+
+void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
+{
+    if (!surf) return;
+    const sg_image img = surf->GetSGImage();
+    if (!img.id) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    const int32_t sw = surf->Width();
+    const int32_t sh = surf->Height();
+    CompositeSwapchain(img, x, y, sw, sh, target_w, target_h,
+                       0, 0, sw, sh, sw, sh);
+}
+
+void TRenderer::AddHud(THudDrawable* d, float z)
+{
+    if (!d) return;
+    // Defensive: avoid duplicate registration (same drawable twice
+    // would draw itself twice each frame, almost always a caller bug).
+    auto it = std::find_if(hud_drawables.begin(), hud_drawables.end(),
+                           [&](const SHudRegistration& r){ return r.drawable == d; });
+    if (it != hud_drawables.end())
+    {
+        it->z = z;  // Re-AddHud with new z is allowed; updates in place.
+        return;
+    }
+    hud_drawables.push_back({ d, z });
+}
+
+void TRenderer::RemoveHud(THudDrawable* d)
+{
+    if (!d) return;
+    auto it = std::find_if(hud_drawables.begin(), hud_drawables.end(),
+                           [&](const SHudRegistration& r){ return r.drawable == d; });
+    if (it != hud_drawables.end())
+        hud_drawables.erase(it);
+}
+
+void TRenderer::SetHudZ(THudDrawable* d, float z)
+{
+    if (!d) return;
+    auto it = std::find_if(hud_drawables.begin(), hud_drawables.end(),
+                           [&](const SHudRegistration& r){ return r.drawable == d; });
+    if (it != hud_drawables.end())
+        it->z = z;
+}
+
+void TRenderer::DrawHud()
+{
+    if (hud_drawables.empty()) return;
+    // Stable sort by z ascending; ties keep insertion order. List is
+    // tiny (cursor + a few HUD panels in practice) so the sort is
+    // effectively free.
+    std::stable_sort(hud_drawables.begin(), hud_drawables.end(),
+                     [](const SHudRegistration& a, const SHudRegistration& b) {
+                         return a.z < b.z;
+                     });
+    for (const SHudRegistration& r : hud_drawables)
+        if (r.drawable) r.drawable->Draw();
 }
 
 // *************************************************************************

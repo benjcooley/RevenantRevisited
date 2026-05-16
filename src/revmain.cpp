@@ -231,7 +231,14 @@ bool Force16Bit = false;    // Forces video mode to assume 16 bit
 bool FullScreen = false;    // Full screen mode
 bool ShowZBuffer      = false;  // Show Z buffer for debugging
 bool ShowNormalBuffer = false;  // Show normal buffer for debugging
-bool UnlockImmediately = true; // Unlock DD Surf after lock (for debugging, allows stepping through draw code)
+// UnlockImmediately = true was a DirectDraw-era debug aid (let you
+// step through the CPU rasterizer with the surface unlocked). Under
+// the sokol GPU path, Unlock() is where the CPU staging buffer is
+// uploaded to the GPU texture -- unlocking BEFORE the rasterizer writes
+// uploads the (zeroed) buffer and the actual pixels never make it to
+// the GPU. Every Display.Put / Display.Box silently no-ops.
+// Default must be false on the new path.
+bool UnlockImmediately = false;
 
 // Video capture globals (set in command line parse, used after display is initialized)
 static bool dovideocap = false;
@@ -1691,9 +1698,11 @@ void GetINISettings()
         strcat(BaseMapPath, "\\");
 
     INISetSection("Lighting");
-    MaxLights = INIGetInt("MaxLights", 1);  
+    MaxLights = INIGetInt("MaxLights", 1);
     Ambient3D = INIGetInt("Ambient3D", 100);
     LightRange3D = INIGetInt("LightRange3D", 180);
+    LightMult3D = INIGetInt("LightMult3D", 250);
+    EnhancedLighting = INIGetYesNo("EnhancedLighting", true);
 
     INISetSection("Options");
     DoubleTapTicks = INIGetInt("DoubleTapTicks", 6);
@@ -2367,8 +2376,14 @@ static void AppFrame()
             CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
     }
 
-    CurrentScreen->TimerTick(true);
+    // Tick / Draw split (see docs/FRAME_PIPELINE.md). Tick catches up
+    // missed legacy 24Hz pulses (pure sim, no draw calls); DrawFrame
+    // opens the Overlay2D pass on the backbuffer and runs the screen's
+    // 2D draw work. Anything in the active screen's Pulse goes through
+    // Tick; anything in its Animate goes through DrawFrame.
+    CurrentScreen->Tick();
     TObjectComponent::RunUpdateList();
+    CurrentScreen->DrawFrame();
     DebugUI::DrawFrame();
 
     // Present the frame: composite backbuffer onto the swapchain and commit

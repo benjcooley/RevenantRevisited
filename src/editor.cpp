@@ -73,6 +73,12 @@ namespace {
 
 constexpr int32_t kGameViewW = 640;
 constexpr int32_t kGameViewH = 480;
+
+// Cached during DrawGameViewPanel each frame; consumed by
+// EditorGameViewRect() so debug overlays (debugui gizmo arrows etc.)
+// can project into the same rect where the lit_target ImGui::Image
+// actually lands. Zero rect = panel not laid out yet this frame.
+SEditorRect g_cached_game_view_rect = { 0, 0, 0, 0 };
 constexpr const char* kDockSpaceName = "##editor_dockspace";
 constexpr const char* kPrefBuiltLayout    = "layout.imgui.built";
 constexpr const char* kPrefSceneShowEmpty = "scene.show_empty_sectors";
@@ -1039,8 +1045,11 @@ void DrawGameViewPanel()
             ImGui::SetCursorScreenPos(img_min);
             ImGui::Image((ImTextureID)lit,
                          ImVec2(gw, gh), uv0, uv1);
+            g_cached_game_view_rect = { int32_t(img_min.x), int32_t(img_min.y),
+                                       int32_t(gw),        int32_t(gh) };
         } else {
             ImGui::Dummy(ImVec2(avail.x, avail.y));
+            g_cached_game_view_rect = { 0, 0, 0, 0 };
         }
 
         // ----- Selection / gizmo overlay over the game image ---------
@@ -1916,9 +1925,13 @@ bool EditorShouldRenderWorld() { return true; }
 SEditorRect EditorGameViewRect()
 {
     if (!Editor) return { 0, 0, sapp_width(), sapp_height() };
-    // Approximate: the central dock node's rect. ImGui internals expose
-    // it but most callers just need a sane non-zero rect; use the full
-    // window for now.
+    // DrawGameViewPanel caches the lit_target's ImGui::Image rect each
+    // frame (centered 640x480 sub-rect inside the Game View panel).
+    // Debug overlays consume this so the gizmo arrows / locators land
+    // on the same pixels as the rendered scene. If the panel hasn't
+    // been laid out yet (first frame), fall back to the full window.
+    if (g_cached_game_view_rect.w > 0 && g_cached_game_view_rect.h > 0)
+        return g_cached_game_view_rect;
     return { 0, 0, sapp_width(), sapp_height() };
 }
 

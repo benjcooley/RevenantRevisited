@@ -11,7 +11,6 @@
 #include "display.h"
 #include "mainwnd.h"
 #include "timer.h"
-#include "cursor.h"
 #include "mappane.h"
 #include "screen.h"
 #include "sound.h"
@@ -471,15 +470,15 @@ void TScreen::EndCurrentScreen()
 // Input is delivered out-of-band via AppEvent, so there is no message pump
 // here any more. Returns false when the screen has set `done` — AppFrame
 // uses that as the signal to EndCurrentScreen and advance.
-bool TScreen::TimerTick(bool draw)
+// Sim half of the frame: catch up any pending 24Hz Pulses. Pure logic;
+// must not produce sokol draw calls. See docs/FRAME_PIPELINE.md.
+void TScreen::Tick()
 {
     if (Closing)
-        return false;
+        return;
 
-    Display.Reset();
-
-    // Resize panes that asked for it before we pulse (panes may set new map
-    // position in their Pulse, which depends on post-resize dimensions).
+    // Resize panes that asked for it before we pulse (panes may set new
+    // map position in their Pulse, which depends on post-resize dims).
     for (int32_t loop = 0; loop < panes.NumItems(); loop++)
     {
         if (!panes.Used(loop))
@@ -488,8 +487,8 @@ bool TScreen::TimerTick(bool draw)
             panes[loop]->PaneResized();
     }
 
-    // Catch up missed Pulses. At 1x / 60Hz this is 0 or 1 per call; debug
-    // time scales deliberately alter that cadence.
+    // Catch up missed Pulses. At 1x / 60Hz this is 0 or 1 per call;
+    // debug time scales deliberately alter that cadence.
     const int64_t lf = TTime::LegacyFrameCount();
     while (lastPulseLegacyFrame < lf)
     {
@@ -497,8 +496,32 @@ bool TScreen::TimerTick(bool draw)
         lastPulseLegacyFrame++;
         screenframes++;
     }
+}
 
-    // Propagate dirty + update pane scroll after pulsing.
+// Draw half of the frame. Two-phase to keep sokol's "one pass active
+// at a time" rule:
+//
+//   Phase 1 — Animate (3D scene + screen-owned passes). The screen
+//             manages its own sokol passes here (TMapRenderer opens
+//             G-buffer, light, etc. on its own offscreen targets).
+//             NO overlay pass is open during Animate, so screens are
+//             free to call sg_begin_pass.
+//
+//   Phase 2 — Overlay2D pass on the backbuffer. While this is open
+//             every legacy Display.Put / Blit / Line lands in the
+//             backbuffer texture. We bracket DrawBackground (pane
+//             backdrops drawn on top of 3D) and DrawMouseCursor
+//             inside this pass. FlipPage then composites the
+//             backbuffer over the 3D scene with alpha blend.
+//
+// See docs/FRAME_PIPELINE.md.
+void TScreen::DrawFrame()
+{
+    if (Closing || !Display.IsActive())
+        return;
+
+    // Propagate dirty + update pane scroll. Cheap; safe to run draw-side
+    // since Pulse already happened.
     for (int32_t loop = 0; loop < panes.NumItems(); loop++)
     {
         if (!panes.Used(loop))
@@ -508,20 +531,44 @@ bool TScreen::TimerTick(bool draw)
         panes[loop]->UpdateBackgroundScrollPos();
     }
 
-    if (draw && !firstframe)
-    {
-        Display.Reset();
-        DrawBackground();
-        // TODO(port): Display.RestoreBackgroundAreas() — CPU background
-        // caching obsolete under sokol GPU compositor.
-    }
+    // --- Phase 1: 3D scene + screen-owned passes -------------------------
+    Display.Reset();
+    Animate(true);
+
+    // --- Phase 2: Overlay2D -- legacy 2D blits land in the backbuffer ----
+    // Overlay2D pass (legacy Display.Put backbuffer fallback). HUD
+    // drawing now goes through Renderer's HUD items (registered in the
+    // runtime mode's OnEnter, drawn by Renderer->DrawHud inside the
+    // swapchain pass in FlipPage). The overlay backbuffer is still
+    // opened so any not-yet-migrated Display.Put caller (DrawBackground,
+    // etc.) has a pass to draw into, even if those draws don't currently
+    // surface visually under sokol.
+    Display.BeginOverlay();
 
     Display.Reset();
-    Animate(draw);
+    if (!firstframe)
+    {
+        DrawBackground();
+    }
 
-    // TODO(port): DrawMouseCursor — cursor currently drawn by MainWindow.
+    Display.EndOverlay();
 
     firstframe = false;
+}
+
+// Legacy entry point. Kept so callers in test modes and anywhere we
+// haven't migrated yet continue to work. New code should call Tick()
+// and DrawFrame() separately. TODO(frame-pipeline): remove once last
+// caller migrates.
+bool TScreen::TimerTick(bool draw)
+{
+    if (Closing)
+        return false;
+
+    Tick();
+    if (draw)
+        DrawFrame();
+
     return !done;
 }
 

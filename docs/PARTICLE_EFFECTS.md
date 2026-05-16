@@ -8,6 +8,12 @@ The first production use case is the torch/flame effect, but the architecture is
 intended to grow into smoke, sparks, ribbons, trails, spell impacts, water
 mist, magic glows, and other Revenant effects.
 
+> **Operational plan & burndown** for restoring every retail VFX through this
+> engine lives in [vfx/README.md](vfx/README.md). The per-effect status table
+> is [vfx/INVENTORY.md](vfx/INVENTORY.md). The `--test=vfx` harness is spec'd
+> in [vfx/TEST_MODE.md](vfx/TEST_MODE.md). This file remains the **engine
+> architecture spec** — the VFX docs are the operational layer on top.
+
 ## 1. Design Goals
 
 The system must preserve these invariants:

@@ -72,9 +72,20 @@ class TDisplay : public TSurface
     // Restore after alt-tab -- legacy stub on sokol.
     bool Restore();
 
-    // Present the frame. If TRenderer produced any G-buffer / lit output
-    // this frame, PresentToSwapchain composites it onto the swapchain;
-    // otherwise the backbuffer is blitted. ImGui is always rendered last.
+    // Open / close the Overlay2D sokol pass on the backbuffer texture.
+    // Every legacy Display.Put / Display.Blit / Display.Line / etc. is
+    // a draw into the current sokol pass. Without an open pass they
+    // silently no-op. Screens normally don't call these directly --
+    // TScreen::DrawFrame brackets the screen's Animate() with them.
+    // Idempotent: nested Begin/End calls collapse to a single pass.
+    // See docs/FRAME_PIPELINE.md.
+    void BeginOverlay();
+    void EndOverlay();
+    [[nodiscard]] bool OverlayOpen() const { return overlay_pass_open; }
+
+    // Present the frame. Composites Scene3D (from TRenderer) then
+    // Overlay2D (this backbuffer) then DebugUI (ImGui) onto the
+    // swapchain in that order. ImGui is always rendered last.
     bool FlipPage(bool Wait = true);
 
   private:
@@ -85,4 +96,5 @@ class TDisplay : public TSurface
     TSurface* zbuffer     = nullptr;
     TSurface* savezbuffer = nullptr;
     bool      imgui_initialized = false;
+    bool      overlay_pass_open = false;
 };

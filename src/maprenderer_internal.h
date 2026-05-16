@@ -320,6 +320,10 @@ struct TMapRenderer::Impl
     // TSafeRef<T> (instance, light, sector entry, ...) can be marked
     // without committing to a single concrete type at this layer.
     std::unordered_set<int32_t> selectedMapIndices;
+    // Retail default is orthographic; perspective camera is an opt-in
+    // modern mode. Defaults below ([sun_shadow], [ao_enable],
+    // [lighting_mode]) follow the same "retail by default, modern via
+    // settings" rule.
     bool sectorPerspectiveCamera = false;
     float sectorPerspectiveFovDeg = 6.0f;
     float sectorCameraZoom = 1.0f;
@@ -349,17 +353,51 @@ struct TMapRenderer::Impl
 
     float dir[3]       = { 0.28f, -0.025f, 0.431f };
     float light_dir[3] = { 0.28f, -0.025f, 0.431f };
+    // Axis the sun rotates AROUND (world space). The sun's to-light
+    // vector sweeps a great circle on the plane perpendicular to this
+    // axis, driven by time-of-day. Conventions (per user, 2026):
+    //   +Y = south, +Z = up
+    //   noon  -> sun near zenith (projected world-up onto orbit plane)
+    //   06:00 / 18:00 -> sun near the horizon plane
+    //   midnight -> sun directly opposite noon
+    //
+    // Seasonal interpretation (for a northern-latitude location):
+    //   axis.z =  0     -> summer  (sun climbs high, peaks near zenith)
+    //   axis.z = -0.3   -> spring / autumn (sun peaks ~17° south of zenith)
+    //   axis.z = -0.6   -> winter  (sun stays low in the southern sky)
+    // For southern-latitude locations, flip the Y sign.
+    //
+    // Default = late-autumn northern temperate: axis tilted slightly
+    // downward (-Z) so the sun peaks meaningfully south of zenith.
+    // Normalize is applied at use time.
+    float sun_rotation_axis[3] = { 0.0f, 1.0f, -0.3f };
     float intensity    = 1.4f;
     float color[3]     = { 1.0f, 1.0f, 1.0f };
     float ambient_color[3] = { 1.0f, 1.0f, 1.0f };
     float ambient      = 0.15f;
-    bool  ao_enable    = true;
+    // AMBLIGHT is authored in arbitrary integer units (Demo-module values
+    // run 4..35; retail goes higher). The retail DirectX renderer mapped
+    // them through 8-bit palette lookups whose non-linear brightness
+    // boost we don't replicate in the linear-space GPU path, so the
+    // divisor is a tunable in the Lighting tab. Lower = brighter.
+    //   s.ambient = AMBLIGHT * Ambient3D / (ambient_divisor * 100)
+    // Default 20 matches retail Misthaven daytime to eye. Tune via the
+    // Lighting tab; the per-area AMBLIGHT/AMBCOLOR set elsewhere is the
+    // authored signal, this is just the curve we map it through.
+    float ambient_divisor = 20.0f;
+    // Ceiling on the summed deferred light (ambient + per-point-lights).
+    // Originally 1.0 to prevent 3D-object white-out from stacked point
+    // lights, but that also caps ambient overbright. Bumped up so the
+    // dim base ambient * dark albedo combo can be pushed brighter
+    // without immediately burning where torches stack. Tunable.
+    float light_ceiling = 1.5f;
+    // Retail had no synthesized AO; baked occlusion lived in the tile
+    // depth maps. Off by default; on in modern mode.
+    bool  ao_enable    = false;
     float ao_radius_px = 12.0f;
     float ao_strength  = 1.0f;
     float ao_bias      = 0.15f;
     float ao_max_dist  = 96.0f;
-    float puck_u = 0.56f;
-    float puck_v = 0.50f;
     float sdir_wz_mul = 1.0f;
     float depth_mul = 1.0f;
     float normal_hardness = 0.5f;
@@ -374,11 +412,18 @@ struct TMapRenderer::Impl
     bool  animate = false;
     int32_t tick = 0;
     int32_t view_mode = 0;
+    // lighting_mode 0 = classic retail (area.def AMBLIGHT/AMBCOLOR + TLight
+    // positional contributions, no synthesized sun). lighting_mode 1 =
+    // modern directional w/ sun-shadow + AO multiplier; eventually keyed
+    // off Revisited.rvr override AREA.DEF entries. Default to classic so
+    // the retail look is what you get without touching the debug UI.
     bool lights_on = true;
     float radius_mul = 1.0f;
     float intensity_mul = 1.0f;
-    int32_t lighting_mode = 1;
-    bool  sun_shadow = true;
+    int32_t lighting_mode = 0;
+    // Retail had no synthesized sun shadow ray-march; objects cast
+    // alpha-blob shadows handled separately. Off by default.
+    bool  sun_shadow = false;
     SMapDrawCounts last_draw_counts;   // updated each RenderFrame, read by the editor
     SMapFrameTimings last_frame_timings;
     // Shadow mask default: one hard ray per low-res mask pixel, then a
@@ -498,6 +543,19 @@ struct TMapRenderer::Impl
         // Logical 640x480 camera-space origin. MapRenderer scales this into
         // the physical render target so changing resolution does not widen the
         // world camera view.
+        //
+        // The cameraWorld.z * iso_cos30 term keeps a world point at
+        // (cam.x, cam.y, cam.z) projecting to HEIGHT/2 -- i.e. Locke
+        // stays vertically centered on screen as he climbs. The scene
+        // render uses cam_ox/cam_oy (this value) as a screen-space
+        // shift for tiles, meshes, and the deferred ortho projection
+        // (maprenderer.cpp:418/990/1031/1165/546-549), so overlays must
+        // include the same term to land on the same pixels.
+        //
+        // NOTE: GetViewProj() pins its LookAt target Z to 0, but that
+        // path is *only* used by editor.cpp for ImGuizmo matrices, not
+        // for the actual scene render -- don't be tempted to drop the
+        // cam.z term here.
         WorldToScreen(sectorWorldCenter, sx, sy);
         sx += sectorCenterOx;
         sy += sectorCenterOy;
@@ -535,7 +593,12 @@ struct TMapRenderer::Impl
     {
         TObjectInstance* oi = L.ref.Get();
         PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
-        return (!ld || ld->multiplier <= 0) ? 0.0f : float(ld->multiplier) / 10.0f;
+      // SLightDef.multiplier is a percent (retail authoring 0..100,
+      // occasionally higher for "supernova" effects). 100 -> base 1.0
+      // intensity; LightMult3D (default 250 = 2.5x) is applied at
+      // submission time. The earlier /10.0f produced 10x base intensity
+      // and burned 3D objects in close-range lights.
+        return (!ld || ld->multiplier <= 0) ? 0.0f : float(ld->multiplier) / 100.0f;
     }
     const char* sectorLightClassName(const SSectorLight& L) const
     {

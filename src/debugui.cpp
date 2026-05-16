@@ -9,9 +9,13 @@
 
 #include "assetcache.h"
 #include "display.h"
+#include "editor.h"
 #include "imgui.h"
+#include "playscreen.h"
 #include "runtimemode.h"
 #include "time.h"
+
+#include <HandmadeMath.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -157,81 +161,17 @@ void TMapRenderer::DrawDebugTab()
     auto mb = [](uint64_t bytes) { return double(bytes) / (1024.0 * 1024.0); };
     const SMapFrameTimings& ft = s.last_frame_timings;
 
-    ImGui::Text("frame: %.2f ms (ema %.2f ms)  draw-records=%zu candidates=%d lights=%d/%d",
-                dt * 1000.0f, dt_ema * 1000.0f,
-                s.sectorDrawInst.size(),
-                s.last_draw_counts.draw_candidates,
-                s.last_draw_counts.active_lights,
-                s.last_draw_counts.resident_lights);
-    ImGui::Text("trace: total %.2f  sync %.2f  refresh %.2f  submit %.2f  endtile %.2f  lighting %.2f",
-                ft.total_ms, ft.sync_ms, ft.refresh_ms, ft.submit_ms,
-                ft.end_tile_pass_ms, ft.lighting_pass_ms);
-    ImGui::Text("resident map objects=%d draw range=(%d..%d, %d..%d)",
-                s.lastSyncedObjectSetCount,
-                s.drawRangeMinSx, s.drawRangeMaxSx,
-                s.drawRangeMinSy, s.drawRangeMaxSy);
-    ImGui::Text("sim: scale=%.3gx dt=%.2f ms legacy=%lld + %.3f",
-                TTime::TimeScale(),
-                sim_dt * 1000.0f,
-                (long long)TTime::LegacyFrameCount(),
-                TTime::LegacyFrameFraction());
-    float time_scale = float(TTime::TimeScale());
-    ImGui::SetNextItemWidth(180.0f);
-    if (ImGui::SliderFloat("time scale", &time_scale, 0.0f, 4.0f, "%.3fx"))
-        TTime::SetTimeScale(time_scale);
-    ImGui::TextUnformatted("presets:");
-    ImGui::SameLine();
-    if (ImGui::RadioButton("1x##timescale", TTime::TimeScale() == 1.0))
-        TTime::SetTimeScale(1.0);
-    ImGui::SameLine();
-    if (ImGui::RadioButton("1/2##timescale", TTime::TimeScale() == 0.5))
-        TTime::SetTimeScale(0.5);
-    ImGui::SameLine();
-    if (ImGui::RadioButton("1/4##timescale", TTime::TimeScale() == 0.25))
-        TTime::SetTimeScale(0.25);
-    ImGui::SameLine();
-    if (ImGui::RadioButton("1/8##timescale", TTime::TimeScale() == 0.125))
-        TTime::SetTimeScale(0.125);
-    ImGui::SameLine();
-    if (ImGui::RadioButton("2x##timescale", TTime::TimeScale() == 2.0))
-        TTime::SetTimeScale(2.0);
-    ImGui::SameLine();
-    if (ImGui::RadioButton("4x##timescale", TTime::TimeScale() == 4.0))
-        TTime::SetTimeScale(4.0);
-    ImGui::Text("mouse=(%.0f,%.0f) dragging=%d cam=(%d,%d,%d)",
-                io.MousePos.x, io.MousePos.y,
-                s.sectorDragging ? 1 : 0,
-                s.sectorCameraWorld.x, s.sectorCameraWorld.y, s.sectorCameraWorld.z);
+    // Persistent header: just frame pacing. Anything more detailed lives
+    // in a tab. Keeps the top of the window readable.
+    ImGui::Text("%.2f ms (ema %.2f)   sim %.2gx", dt * 1000.0f, dt_ema * 1000.0f, TTime::TimeScale());
     ImGui::Separator();
 
     if (ImGui::BeginTabBar("map_debug_tabs"))
     {
-        if (ImGui::BeginTabItem("View")) {
-            ImGui::Text("resident draw records=%d frame candidates=%d",
-                        s.last_draw_counts.total_drawables,
-                        s.last_draw_counts.draw_candidates);
-            ImGui::Text("point lights: active=%d resident=%d considered=%d submitted=%d",
-                        s.last_draw_counts.active_lights,
-                        s.last_draw_counts.resident_lights,
-                        s.last_draw_counts.point_lights_considered,
-                        s.last_draw_counts.point_lights_submitted);
-            ImGui::Text("submitted: tiles=%d visible=%d gbuf-border=%d",
-                        s.last_draw_counts.tiles_submitted,
-                        s.last_draw_counts.tiles_visible_submitted,
-                        s.last_draw_counts.tiles_gbuffer_border_submitted);
-            ImGui::Text("submitted: meshes=%d culled=%d gbuf-pad=%d",
-                        s.last_draw_counts.meshes_submitted,
-                        s.last_draw_counts.offscreen_culled,
-                        TRenderer::kGBufPad);
-            ImGui::Text("tile raster: draws=%u proxy=%u hull=%u/%u rect-culled=%u px=%llu/%llu",
-                        tile_stats.tile_draws,
-                        tile_stats.tile_proxy_draws,
-                        tile_stats.tile_tight_proxy_draws,
-                        tile_stats.tile_tight_proxy_points,
-                        tile_stats.tile_rects_culled,
-                        (unsigned long long)tile_stats.tile_clipped_pixels,
-                        (unsigned long long)tile_stats.tile_projected_pixels);
-            ImGui::Separator();
+        // -------- Scene --------------------------------------------------
+        // What to display + how the camera sees it. Per-frame stats moved
+        // to the Perf tab.
+        if (ImGui::BeginTabItem("Scene")) {
             ImGui::TextUnformatted("view:");
             ImGui::SameLine(); if (ImGui::RadioButton("lit",     s.view_mode == 0)) s.view_mode = 0;
             ImGui::SameLine(); if (ImGui::RadioButton("albedo",  s.view_mode == 1)) s.view_mode = 1;
@@ -242,15 +182,18 @@ void TMapRenderer::DrawDebugTab()
             ImGui::SameLine(); if (ImGui::RadioButton("points",  s.view_mode == 4)) s.view_mode = 4;
             ImGui::SameLine(); if (ImGui::RadioButton("shadow",  s.view_mode == 6)) s.view_mode = 6;
             ImGui::SameLine(); if (ImGui::RadioButton("ao",      s.view_mode == 7)) s.view_mode = 7;
-            ImGui::Separator();
-            ImGui::TextUnformatted("mode:");
+
+            ImGui::TextUnformatted("lighting mode:");
             ImGui::SameLine(); if (ImGui::RadioButton("retail 1998", s.lighting_mode == 0)) s.lighting_mode = 0;
             ImGui::SameLine(); if (ImGui::RadioButton("modern",      s.lighting_mode == 1)) s.lighting_mode = 1;
+
             ImGui::Separator();
+            ImGui::SliderFloat("zoom", &s.sectorCameraZoom, 0.25f, 4.0f, "%.2fx", ImGuiSliderFlags_Logarithmic);
+
             ImGui::Checkbox("perspective camera", &s.sectorPerspectiveCamera);
             ImGui::BeginDisabled(!s.sectorPerspectiveCamera);
             ImGui::SliderFloat("FOV", &s.sectorPerspectiveFovDeg, 2.0f, 20.0f, "%.1f deg");
-            ImGui::TextUnformatted("debug:");
+            ImGui::TextUnformatted("perspective debug:");
             ImGui::SameLine(); if (ImGui::RadioButton("normal##perspdbg", s.sectorPerspectiveDebugMode == 0)) s.sectorPerspectiveDebugMode = 0;
             ImGui::SameLine(); if (ImGui::RadioButton("proxy fill##perspdbg", s.sectorPerspectiveDebugMode == 1)) s.sectorPerspectiveDebugMode = 1;
             ImGui::SameLine(); if (ImGui::RadioButton("hits##perspdbg", s.sectorPerspectiveDebugMode == 2)) s.sectorPerspectiveDebugMode = 2;
@@ -266,190 +209,322 @@ void TMapRenderer::DrawDebugTab()
             ImGui::SliderFloat("screen z offset", &s.sectorPerspectiveZOffset, -2048.0f, 2048.0f, "%.0f");
             ImGui::SliderFloat("screen z scale", &s.sectorPerspectiveZScale, 0.1f, 4.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
             ImGui::EndDisabled();
-            ImGui::SliderFloat("zoom", &s.sectorCameraZoom, 0.25f, 4.0f, "%.2fx", ImGuiSliderFlags_Logarithmic);
+
+            ImGui::Separator();
             const float focal = s.sectorCameraForward(HEIGHT);
-            ImGui::Text("camera forward: %.0f wu", focal);
+            ImGui::Text("camera world=(%d,%d,%d)  forward=%.0f wu",
+                        s.sectorCameraWorld.x, s.sectorCameraWorld.y, s.sectorCameraWorld.z, focal);
+            ImGui::Text("mouse=(%.0f,%.0f) dragging=%d",
+                        io.MousePos.x, io.MousePos.y, s.sectorDragging ? 1 : 0);
             ImGui::EndTabItem();
         }
 
+        // -------- Perf ---------------------------------------------------
+        // Everything pacing-related: render timings, draw/submit counts,
+        // asset refcounts, simulation timescale.
         if (ImGui::BeginTabItem("Perf")) {
-            ImGui::Text("total %.2f ms", ft.total_ms);
-            ImGui::Separator();
-            ImGui::Text("sync/cache       %.2f ms", ft.sync_ms);
-            ImGui::Text("animate          %.2f ms", ft.animate_ms);
-            ImGui::Text("refresh records  %.2f ms", ft.refresh_ms);
-            ImGui::Text("camera/setup     %.2f ms", ft.setup_ms);
-            ImGui::Text("depth fit        %.2f ms", ft.depth_fit_ms);
-            ImGui::Text("renderer state   %.2f ms", ft.render_state_ms);
-            ImGui::Text("point lights     %.2f ms", ft.point_lights_ms);
-            ImGui::Text("begin pass       %.2f ms", ft.begin_pass_ms);
-            ImGui::Text("submit build     %.2f ms", ft.submit_ms);
-            ImGui::Text("end tile pass    %.2f ms", ft.end_tile_pass_ms);
-            ImGui::Text("lighting pass    %.2f ms", ft.lighting_pass_ms);
-            ImGui::Separator();
-            ImGui::Text("records=%d candidates=%d tiles=%d meshes=%d",
-                        s.last_draw_counts.total_drawables,
-                        s.last_draw_counts.draw_candidates,
-                        s.last_draw_counts.tiles_submitted,
-                        s.last_draw_counts.meshes_submitted);
-            ImGui::Text("tile raster draws=%u proxy=%u hull=%u/%u rect-culled=%u clipped/projected px=%llu/%llu",
-                        tile_stats.tile_draws,
-                        tile_stats.tile_proxy_draws,
-                        tile_stats.tile_tight_proxy_draws,
-                        tile_stats.tile_tight_proxy_points,
-                        tile_stats.tile_rects_culled,
-                        (unsigned long long)tile_stats.tile_clipped_pixels,
-                        (unsigned long long)tile_stats.tile_projected_pixels);
-            ImGui::Text("lights considered=%d submitted=%d active=%d resident=%d",
-                        s.last_draw_counts.point_lights_considered,
-                        s.last_draw_counts.point_lights_submitted,
-                        s.last_draw_counts.active_lights,
-                        s.last_draw_counts.resident_lights);
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Assets")) {
-            ImGui::Text("source assets: %zu", AssetCache.AssetCount());
-            ImGui::Separator();
-            ImGui::Text("map tile assets: %zu", s.sectorTileTex.size());
-            ImGui::Text("  refs=%llu zero=%u",
-                        (unsigned long long)map_tile_refs,
-                        map_tile_zero_refs);
-            ImGui::Text("map mesh assets: %zu", s.sectorMeshAsset.size());
-            ImGui::Text("  refs=%llu zero=%u",
-                        (unsigned long long)map_mesh_refs,
-                        map_mesh_zero_refs);
-            ImGui::Separator();
-            ImGui::Text("gpu image pairs: %u", gpu_stats.image_pair_count);
-            ImGui::Text("  refs=%llu zero=%u bytes=%.1f MB",
-                        (unsigned long long)gpu_stats.image_pair_ref_total,
-                        gpu_stats.image_pair_zero_ref_count,
-                        mb(gpu_stats.image_pair_gpu_bytes));
-            ImGui::Text("gpu textures: %u", gpu_stats.texture_count);
-            ImGui::Text("  refs=%llu zero=%u bytes=%.1f MB",
-                        (unsigned long long)gpu_stats.texture_ref_total,
-                        gpu_stats.texture_zero_ref_count,
-                        mb(gpu_stats.texture_gpu_bytes));
-            ImGui::Text("gpu meshes: %u", gpu_stats.mesh_count);
-            ImGui::Text("  refs=%llu zero=%u bytes=%.1f MB",
-                        (unsigned long long)gpu_stats.mesh_ref_total,
-                        gpu_stats.mesh_zero_ref_count,
-                        mb(gpu_stats.mesh_gpu_bytes));
-            ImGui::Text("  vertex=%.1f MB index=%.1f MB",
-                        mb(gpu_stats.mesh_vertex_bytes),
-                        mb(gpu_stats.mesh_index_bytes));
-            ImGui::Separator();
-            ImGui::Text("renderer pools: buffers=%u/%d images=%u/%d",
-                        gpu_stats.renderer_buffer_count,
-                        gpu_stats.buffer_pool_size,
-                        gpu_stats.renderer_image_count,
-                        gpu_stats.image_pool_size);
-            ImGui::Text("mesh cache: keyed=%u unkeyed=%u",
-                        gpu_stats.keyed_mesh_count,
-                        gpu_stats.unkeyed_mesh_count);
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Light")) {
-            ImGui::Checkbox("animate (sweep sun across sky)", &s.animate);
-            const float side = 140.0f;
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            const ImVec2 p0 = ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton("sun_puck", ImVec2(side, side));
-            const bool active = ImGui::IsItemActive();
-            const ImVec2 center = ImVec2(p0.x + side * 0.5f, p0.y + side * 0.5f);
-            const float radius = side * 0.5f - 4.0f;
-            if (active) {
-                const ImVec2 m = ImGui::GetIO().MousePos;
-                float u = (m.x - center.x) / radius;
-                float v = (center.y - m.y) / radius;
-                const float r2 = u*u + v*v;
-                if (r2 > 1.0f) { const float k = 1.0f / std::sqrt(r2); u *= k; v *= k; }
-                s.puck_u = u; s.puck_v = v;
+            if (ImGui::CollapsingHeader("Frame timing", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Text("total           %.2f ms", ft.total_ms);
+                ImGui::Text("  sync/cache    %.2f ms", ft.sync_ms);
+                ImGui::Text("  animate       %.2f ms", ft.animate_ms);
+                ImGui::Text("  refresh recs  %.2f ms", ft.refresh_ms);
+                ImGui::Text("  camera/setup  %.2f ms", ft.setup_ms);
+                ImGui::Text("  depth fit     %.2f ms", ft.depth_fit_ms);
+                ImGui::Text("  renderer st.  %.2f ms", ft.render_state_ms);
+                ImGui::Text("  point lights  %.2f ms", ft.point_lights_ms);
+                ImGui::Text("  begin pass    %.2f ms", ft.begin_pass_ms);
+                ImGui::Text("  submit build  %.2f ms", ft.submit_ms);
+                ImGui::Text("  end tile pass %.2f ms", ft.end_tile_pass_ms);
+                ImGui::Text("  lighting pass %.2f ms", ft.lighting_pass_ms);
             }
-            dl->AddCircleFilled(center, radius, IM_COL32(30,32,38,255), 48);
-            dl->AddCircle(center, radius, IM_COL32(120,120,130,255), 48, 1.5f);
-            dl->AddLine(ImVec2(center.x - radius, center.y), ImVec2(center.x + radius, center.y), IM_COL32(70,70,80,255));
-            dl->AddLine(ImVec2(center.x, center.y - radius), ImVec2(center.x, center.y + radius), IM_COL32(70,70,80,255));
-            const ImVec2 dot = ImVec2(center.x + s.puck_u * radius, center.y - s.puck_v * radius);
-            dl->AddCircleFilled(dot, 5.0f, IM_COL32(255,220,80,255), 16);
-            dl->AddCircle(dot, 5.0f, IM_COL32(40,30,0,255), 16, 1.5f);
+
+            if (ImGui::CollapsingHeader("Draw counts", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Text("records=%d candidates=%d",
+                            s.last_draw_counts.total_drawables,
+                            s.last_draw_counts.draw_candidates);
+                ImGui::Text("tiles submitted=%d visible=%d gbuf-border=%d",
+                            s.last_draw_counts.tiles_submitted,
+                            s.last_draw_counts.tiles_visible_submitted,
+                            s.last_draw_counts.tiles_gbuffer_border_submitted);
+                ImGui::Text("meshes submitted=%d culled=%d gbuf-pad=%d",
+                            s.last_draw_counts.meshes_submitted,
+                            s.last_draw_counts.offscreen_culled,
+                            TRenderer::kGBufPad);
+                ImGui::Text("tile raster: draws=%u proxy=%u hull=%u/%u rect-culled=%u",
+                            tile_stats.tile_draws,
+                            tile_stats.tile_proxy_draws,
+                            tile_stats.tile_tight_proxy_draws,
+                            tile_stats.tile_tight_proxy_points,
+                            tile_stats.tile_rects_culled);
+                ImGui::Text("tile pixels: clipped=%llu projected=%llu",
+                            (unsigned long long)tile_stats.tile_clipped_pixels,
+                            (unsigned long long)tile_stats.tile_projected_pixels);
+                ImGui::Text("lights: considered=%d submitted=%d active=%d resident=%d",
+                            s.last_draw_counts.point_lights_considered,
+                            s.last_draw_counts.point_lights_submitted,
+                            s.last_draw_counts.active_lights,
+                            s.last_draw_counts.resident_lights);
+                ImGui::Text("map: resident=%d range=(%d..%d, %d..%d)",
+                            s.lastSyncedObjectSetCount,
+                            s.drawRangeMinSx, s.drawRangeMaxSx,
+                            s.drawRangeMinSy, s.drawRangeMaxSy);
+            }
+
+            if (ImGui::CollapsingHeader("Assets")) {
+                ImGui::Text("source assets: %zu", AssetCache.AssetCount());
+                ImGui::Text("map tile assets: %zu  refs=%llu zero=%u",
+                            s.sectorTileTex.size(),
+                            (unsigned long long)map_tile_refs,
+                            map_tile_zero_refs);
+                ImGui::Text("map mesh assets: %zu  refs=%llu zero=%u",
+                            s.sectorMeshAsset.size(),
+                            (unsigned long long)map_mesh_refs,
+                            map_mesh_zero_refs);
+                ImGui::Text("gpu image pairs: %u  refs=%llu zero=%u  %.1f MB",
+                            gpu_stats.image_pair_count,
+                            (unsigned long long)gpu_stats.image_pair_ref_total,
+                            gpu_stats.image_pair_zero_ref_count,
+                            mb(gpu_stats.image_pair_gpu_bytes));
+                ImGui::Text("gpu textures:    %u  refs=%llu zero=%u  %.1f MB",
+                            gpu_stats.texture_count,
+                            (unsigned long long)gpu_stats.texture_ref_total,
+                            gpu_stats.texture_zero_ref_count,
+                            mb(gpu_stats.texture_gpu_bytes));
+                ImGui::Text("gpu meshes:      %u  refs=%llu zero=%u  %.1f MB (v=%.1f i=%.1f)",
+                            gpu_stats.mesh_count,
+                            (unsigned long long)gpu_stats.mesh_ref_total,
+                            gpu_stats.mesh_zero_ref_count,
+                            mb(gpu_stats.mesh_gpu_bytes),
+                            mb(gpu_stats.mesh_vertex_bytes),
+                            mb(gpu_stats.mesh_index_bytes));
+                ImGui::Text("renderer pools: buffers=%u/%d images=%u/%d",
+                            gpu_stats.renderer_buffer_count,
+                            gpu_stats.buffer_pool_size,
+                            gpu_stats.renderer_image_count,
+                            gpu_stats.image_pool_size);
+                ImGui::Text("mesh cache: keyed=%u unkeyed=%u",
+                            gpu_stats.keyed_mesh_count,
+                            gpu_stats.unkeyed_mesh_count);
+            }
+
+            if (ImGui::CollapsingHeader("Simulation pacing")) {
+                ImGui::Text("scale=%.3gx  dt=%.2f ms  legacy=%lld + %.3f",
+                            TTime::TimeScale(),
+                            sim_dt * 1000.0f,
+                            (long long)TTime::LegacyFrameCount(),
+                            TTime::LegacyFrameFraction());
+                float time_scale = float(TTime::TimeScale());
+                ImGui::SetNextItemWidth(180.0f);
+                if (ImGui::SliderFloat("time scale", &time_scale, 0.0f, 4.0f, "%.3fx"))
+                    TTime::SetTimeScale(time_scale);
+                ImGui::TextUnformatted("presets:");
+                ImGui::SameLine(); if (ImGui::RadioButton("1x##ts",   TTime::TimeScale() == 1.0))   TTime::SetTimeScale(1.0);
+                ImGui::SameLine(); if (ImGui::RadioButton("1/2##ts",  TTime::TimeScale() == 0.5))   TTime::SetTimeScale(0.5);
+                ImGui::SameLine(); if (ImGui::RadioButton("1/4##ts",  TTime::TimeScale() == 0.25))  TTime::SetTimeScale(0.25);
+                ImGui::SameLine(); if (ImGui::RadioButton("1/8##ts",  TTime::TimeScale() == 0.125)) TTime::SetTimeScale(0.125);
+                ImGui::SameLine(); if (ImGui::RadioButton("2x##ts",   TTime::TimeScale() == 2.0))   TTime::SetTimeScale(2.0);
+                ImGui::SameLine(); if (ImGui::RadioButton("4x##ts",   TTime::TimeScale() == 4.0))   TTime::SetTimeScale(4.0);
+            }
+            ImGui::EndTabItem();
+        }
+
+        // -------- Lighting -----------------------------------------------
+        // Everything tone/brightness/ambient + point-light controls.
+        // Shadow / AO / normal-reconstruction params live on Effects.
+        if (ImGui::BeginTabItem("Lighting")) {
+            // ---- Sun orbit ----------------------------------------------
+            // Sun rotates AROUND `rotation axis` on the plane perpendicular
+            // to it. Noon = world up projected onto that plane; midnight =
+            // opposite. Quick-pick buttons cover the conventional axes
+            // (Y = east-rises / west-sets; X = north-south orbit).
+            ImGui::SeparatorText("Sun orbit");
+            ImGui::Checkbox("animate (sweep sun ignoring clock)", &s.animate);
+            ImGui::SliderFloat3("rotation axis (xyz)", s.sun_rotation_axis, -1.0f, 1.0f, "%.2f");
+            if (ImGui::Button("Y axis (E-W sun)"))  { s.sun_rotation_axis[0] = 0; s.sun_rotation_axis[1] = 1; s.sun_rotation_axis[2] = 0; }
             ImGui::SameLine();
-            ImGui::BeginGroup();
-            ImGui::Text("sun puck");
-            ImGui::Text("u=%.2f  v=%.2f", s.puck_u, s.puck_v);
-            ImGui::Text("to sun=(%.2f, %.2f, %.2f)", s.light_dir[0], s.light_dir[1], s.light_dir[2]);
-            ImGui::EndGroup();
+            if (ImGui::Button("X axis (N-S sun)"))  { s.sun_rotation_axis[0] = 1; s.sun_rotation_axis[1] = 0; s.sun_rotation_axis[2] = 0; }
+            ImGui::SameLine();
+            if (ImGui::Button("diagonal"))           { s.sun_rotation_axis[0] = 0.7071f; s.sun_rotation_axis[1] = 0.7071f; s.sun_rotation_axis[2] = 0; }
+            ImGui::Text("sun dir: (%+.2f, %+.2f, %+.2f)",
+                        s.light_dir[0], s.light_dir[1], s.light_dir[2]);
+
+            ImGui::Separator();
             ImGui::SliderFloat("intensity", &s.intensity, 0.0f, 4.0f);
             ImGui::ColorEdit3("sun color", s.color);
-            ImGui::ColorEdit3("ambient color", s.ambient_color);
-            ImGui::SliderFloat("ambient", &s.ambient, 0.0f, 10.0f);
+
+            // Ambient color + the live ambient term get overwritten each
+            // frame from the active TArea (AMBLIGHT/AMBCOLOR via MapPane).
+            // Show them read-only, and expose the tunable divisor that
+            // controls the scaling from AMBLIGHT's arbitrary units to
+            // the 0..1 shader value. See maprenderer.cpp ambient bridge.
+            ImGui::BeginDisabled(true);
+            ImGui::ColorEdit3("ambient color (from area.def)", s.ambient_color);
+            ImGui::SliderFloat("ambient (live)", &s.ambient, 0.0f, 1.0f);
+            ImGui::EndDisabled();
+            ImGui::SliderFloat("ambient divisor", &s.ambient_divisor,
+                               10.0f, 100.0f, "%.1f");
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(
+                    "ambient = AMBLIGHT * Ambient3D / (divisor * 100)\n"
+                    "Lower = brighter ambient. AMBLIGHT is authored in\n"
+                    "arbitrary units. At divisor=100 with AMBLIGHT=30\n"
+                    "and Ambient3D=100, s.ambient = 0.30. Drop the\n"
+                    "divisor to push ambient overbright (paired with\n"
+                    "light_ceiling > 1.0 below).");
+
+            ImGui::SliderFloat("light ceiling", &s.light_ceiling,
+                               0.25f, 8.0f, "%.2f",
+                               ImGuiSliderFlags_Logarithmic);
+            ImGui::SameLine();
+            ImGui::TextDisabled("(?)");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(
+                    "Per-channel clamp on summed light (ambient +\n"
+                    "point lights) before albedo multiply. Caps\n"
+                    "burn-out from stacked point lights. > 1.0 allows\n"
+                    "overbright; the linear-space GPU path needs this\n"
+                    "to match retail's non-linear palette boost.");
+
+            // ---- Time of day --------------------------------------------
+            // Drives the day/night ambient blend in TArea::Pulse. The
+            // current minute, daylight scalar (0..255 sun curve), and
+            // coarse DayTimeFlag bucket are all derived from
+            // PlayScreen.gametime; SetGameTime jumps that clock forward
+            // or backward, after which the next TArea::Pulse picks up
+            // the new value and FadeAmbient interpolates accordingly.
+            ImGui::Separator();
+            const int32_t day_minutes = 24 * 60;
+            int32_t tod_min = PlayScreen.TimeOfDay() % day_minutes;
+            if (tod_min < 0) tod_min += day_minutes;
+            const int32_t hh = tod_min / 60;
+            const int32_t mm = tod_min % 60;
+            const int32_t daylight = PlayScreen.Daylight();
+            static const char* kDayNames[6] = {
+                "Midnight", "Morning", "Daytime", "Noon", "Evening", "Night"
+            };
+            const int32_t df = PlayScreen.DayTimeFlag();
+            const char* day_name = (df >= 0 && df < 6) ? kDayNames[df] : "?";
+
+            ImGui::Text("time: %02d:%02d  daylight=%d/255  flag=%s",
+                        hh, mm, daylight, day_name);
+
+            int set_min = tod_min;
+            if (ImGui::SliderInt("time-of-day (minutes)", &set_min,
+                                 0, day_minutes - 1, "%d min"))
+            {
+                // gametime is centi-seconds; 1 minute = 6000.
+                PlayScreen.SetGameTime(set_min * 6000);
+            }
+
+            auto set_minute = [](int32_t m) {
+                PlayScreen.SetGameTime(m * 6000);
+            };
+            if (ImGui::Button("Midnight (00:00)")) set_minute(0);
+            ImGui::SameLine();
+            if (ImGui::Button("Sunrise (06:00)")) set_minute(6 * 60);
+            ImGui::SameLine();
+            if (ImGui::Button("Noon (12:00)"))    set_minute(12 * 60);
+            ImGui::SameLine();
+            if (ImGui::Button("Sunset (19:00)"))  set_minute(19 * 60);
+            ImGui::SameLine();
+            if (ImGui::Button("Night (22:00)"))   set_minute(22 * 60);
+
+            // ---- Point lights -------------------------------------------
+            // Per-instance lights placed by level designers. Multipliers
+            // affect all point lights uniformly; per-light list lets you
+            // toggle individual ones for debugging.
+            ImGui::Separator();
+            ImGui::Text("point lights: active=%zu resident=%d submitted=%d",
+                        s.sectorLights.size(),
+                        s.residentPointLightCount,
+                        s.last_draw_counts.point_lights_submitted);
+            ImGui::Checkbox("lights enabled",    &s.lights_on);
+            ImGui::SliderFloat("radius x",       &s.radius_mul,    0.1f, 8.0f,   "%.2f", ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("intensity x",    &s.intensity_mul, 0.0f, 100.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            if (ImGui::TreeNode("per-light list")) {
+                for (size_t i = 0; i < s.sectorLights.size(); ++i) {
+                    SSectorLight& L = s.sectorLights[i];
+                    float rgb[3]; lightColor(L, rgb);
+                    const char* cn = lightClassName(L);
+                    ImGui::PushID(int(i));
+                    ImGui::Checkbox("##on", &L.enabled);
+                    ImGui::SameLine();
+                    ImGui::Text("%zu %s  r=%.0f  (%.2f,%.2f,%.2f) int=%.2f",
+                                i, cn ? cn : "?", lightRadius(L),
+                                rgb[0], rgb[1], rgb[2], lightIntensity(L));
+                    ImGui::PopID();
+                }
+                ImGui::TreePop();
+            }
+
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Shadows")) {
+        // -------- Effects ------------------------------------------------
+        // Modern-mode-only post stages: sun shadows, screen-space AO,
+        // normal reconstruction. All gated on lighting_mode==1 because
+        // the retail 1998 path doesn't use them.
+        if (ImGui::BeginTabItem("Effects")) {
             ImGui::BeginDisabled(s.lighting_mode == 0);
-            ImGui::Checkbox("sun shadows", &s.sun_shadow);
-            ImGui::SliderFloat("step wu", &s.sun_shadow_step, 1.0f, 256.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
-            ImGui::SliderInt("max steps", &s.sun_shadow_max, 4, 512);
-            ImGui::SliderFloat("soft edge radius px", &s.sun_shadow_soft, 0.0f, 48.0f, "%.1f");
-            ImGui::SliderFloat("depth cutoff wu", &s.sun_shadow_depth_cutoff, 1.0f, 128.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
-            ImGui::SliderFloat("bias wu", &s.sun_shadow_bias, -10.0f, 10.0f, "%.2f");
-            ImGui::SliderFloat("wz mul", &s.sdir_wz_mul, 0.05f, 8.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
-            ImGui::Text("reach %.0f wu", s.sun_shadow_step * float(s.sun_shadow_max));
-            ImGui::Text("shadow mask: half-res hard ray, then separable blur");
-            ImGui::Text("approx full-res ray reads/pixel: %.1f", 0.25f * float(s.sun_shadow_max));
-            if (ImGui::Button("soft default")) {
-                s.sun_shadow_step = 32.0f;
-                s.sun_shadow_soft = 3.0f;
-                s.sun_shadow_max = 64;
-                s.sun_shadow_samples = 1;
-                s.sun_shadow_depth_cutoff = 16.0f;
-                s.sun_shadow_bias = 2.0f;
-                s.sdir_wz_mul = 1.0f;
+            if (s.lighting_mode == 0)
+                ImGui::TextDisabled("(disabled in retail-1998 lighting mode)");
+
+            if (ImGui::CollapsingHeader("Sun shadows", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Checkbox("sun shadows", &s.sun_shadow);
+                ImGui::SliderFloat("step wu",  &s.sun_shadow_step, 1.0f, 256.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+                ImGui::SliderInt("max steps",  &s.sun_shadow_max, 4, 512);
+                ImGui::SliderFloat("soft edge radius px", &s.sun_shadow_soft, 0.0f, 48.0f, "%.1f");
+                ImGui::SliderFloat("depth cutoff wu", &s.sun_shadow_depth_cutoff, 1.0f, 128.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+                ImGui::SliderFloat("bias wu",  &s.sun_shadow_bias, -10.0f, 10.0f, "%.2f");
+                ImGui::SliderFloat("wz mul",   &s.sdir_wz_mul, 0.05f, 8.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+                ImGui::Text("reach %.0f wu", s.sun_shadow_step * float(s.sun_shadow_max));
+                ImGui::Text("approx full-res ray reads/pixel: %.1f", 0.25f * float(s.sun_shadow_max));
+                if (ImGui::Button("soft default")) {
+                    s.sun_shadow_step = 32.0f; s.sun_shadow_soft = 3.0f;
+                    s.sun_shadow_max = 64; s.sun_shadow_samples = 1;
+                    s.sun_shadow_depth_cutoff = 16.0f; s.sun_shadow_bias = 2.0f;
+                    s.sdir_wz_mul = 1.0f;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("hard baseline")) {
+                    s.sun_shadow_step = 16.0f; s.sun_shadow_soft = 0.0f;
+                    s.sun_shadow_max = 128; s.sun_shadow_samples = 1;
+                    s.sun_shadow_depth_cutoff = 16.0f; s.sun_shadow_bias = 2.0f;
+                    s.sdir_wz_mul = 1.0f;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("slow diagnostic")) {
+                    s.sun_shadow_step = 8.0f; s.sun_shadow_soft = 2.0f;
+                    s.sun_shadow_max = 512; s.sun_shadow_samples = 1;
+                    s.sun_shadow_depth_cutoff = 16.0f; s.sun_shadow_bias = 2.0f;
+                    s.sdir_wz_mul = 1.0f;
+                }
             }
-            ImGui::SameLine();
-            if (ImGui::Button("hard baseline")) {
-                s.sun_shadow_step = 16.0f;
-                s.sun_shadow_soft = 0.0f;
-                s.sun_shadow_max = 128;
-                s.sun_shadow_samples = 1;
-                s.sun_shadow_depth_cutoff = 16.0f;
-                s.sun_shadow_bias = 2.0f;
-                s.sdir_wz_mul = 1.0f;
+
+            if (ImGui::CollapsingHeader("Ambient occlusion")) {
+                ImGui::Checkbox("ambient occlusion", &s.ao_enable);
+                ImGui::SliderFloat("ao radius px", &s.ao_radius_px, 1.0f, 48.0f);
+                ImGui::SliderFloat("ao strength",  &s.ao_strength,  0.0f, 12.0f);
+                ImGui::SliderFloat("ao bias",      &s.ao_bias,      0.0f, 0.5f);
+                ImGui::SliderFloat("ao max wu",    &s.ao_max_dist,  8.0f, 320.0f, "%.0f");
             }
-            ImGui::SameLine();
-            if (ImGui::Button("slow diagnostic")) {
-                s.sun_shadow_step = 8.0f;
-                s.sun_shadow_soft = 2.0f;
-                s.sun_shadow_max = 512;
-                s.sun_shadow_samples = 1;
-                s.sun_shadow_depth_cutoff = 16.0f;
-                s.sun_shadow_bias = 2.0f;
-                s.sdir_wz_mul = 1.0f;
+
+            if (ImGui::CollapsingHeader("Normal reconstruction")) {
+                ImGui::SliderFloat("depth_mul",     &s.depth_mul,       0.0f, 128.0f);
+                ImGui::SliderFloat("hardness",      &s.normal_hardness, 0.0f, 1.0f);
+                ImGui::SliderFloat("normal_radius", &s.normal_radius,   0.5f, 8.0f);
+                ImGui::SliderFloat("edge_thr",      &s.edge_thr,        1.0f, 2048.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
             }
             ImGui::EndDisabled();
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("AO")) {
-            ImGui::Checkbox("ambient occlusion", &s.ao_enable);
-            ImGui::SliderFloat("ao radius px", &s.ao_radius_px, 1.0f, 48.0f);
-            ImGui::SliderFloat("ao strength",  &s.ao_strength,  0.0f, 12.0f);
-            ImGui::SliderFloat("ao bias",      &s.ao_bias,      0.0f, 0.5f);
-            ImGui::SliderFloat("ao max wu",    &s.ao_max_dist,  8.0f, 320.0f, "%.0f");
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Normals")) {
-            ImGui::SliderFloat("depth_mul",     &s.depth_mul,     0.0f, 128.0f);
-            ImGui::SliderFloat("hardness",      &s.normal_hardness, 0.0f, 1.0f);
-            ImGui::SliderFloat("normal_radius", &s.normal_radius, 0.5f, 8.0f);
-            ImGui::SliderFloat("edge_thr",      &s.edge_thr,      1.0f, 2048.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Debug")) {
+        // -------- Map ----------------------------------------------------
+        // Sector / character / locator visibility, world-space probes,
+        // z-range clipping. Used during level inspection.
+        if (ImGui::BeginTabItem("Map")) {
             std::vector<TObjectInstance*> character_list;
             character_list.reserve(64);
             TGameMap* dbg_map = s.currentMap.Get();
@@ -544,39 +619,35 @@ void TMapRenderer::DrawDebugTab()
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Point Lights")) {
-            ImGui::Text("point lights: active=%zu resident=%d submitted=%d",
-                        s.sectorLights.size(),
-                        s.residentPointLightCount,
-                        s.last_draw_counts.point_lights_submitted);
-            ImGui::Checkbox("lights enabled",    &s.lights_on);
-            ImGui::SliderFloat("radius x",       &s.radius_mul,    0.1f, 8.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
-            ImGui::SliderFloat("intensity x",    &s.intensity_mul, 0.0f, 100.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
-            if (ImGui::TreeNode("per-light")) {
-                for (size_t i = 0; i < s.sectorLights.size(); ++i) {
-                    SSectorLight& L = s.sectorLights[i];
-                    float rgb[3]; lightColor(L, rgb);
-                    const char* cn = lightClassName(L);
-                    ImGui::PushID(int(i));
-                    ImGui::Checkbox("##on", &L.enabled);
-                    ImGui::SameLine();
-                    ImGui::Text("%zu %s  r=%.0f  (%.2f,%.2f,%.2f) int=%.2f",
-                                i, cn ? cn : "?", lightRadius(L),
-                                rgb[0], rgb[1], rgb[2], lightIntensity(L));
-                    ImGui::PopID();
-                }
-                ImGui::TreePop();
-            }
-            ImGui::EndTabItem();
-        }
-
         ImGui::EndTabBar();
     }
 
     if (s.sectorShowMeshLocators && EditorOverlaysEnabled())
     {
-        int32_t cam_ox = 0, cam_oy = 0;
-        s.sectorCameraOriginScreen(cam_ox, cam_oy);
+        TMapRenderer* mr = PlayScreen.MapRenderer();
+
+        // Ask the renderer for the single world->pixel matrix for the
+        // rect where the rendered scene actually lands. Editor mode:
+        // the lit_target ImGui::Image inside the Game View panel. Game
+        // mode (fallback): the whole swapchain. The matrix bakes in
+        // the iso camera + ortho + viewport in one go -- gizmos just
+        // do a 4x4 multiply, no piecewise math.
+        SEditorRect dst{};
+        if (EditorOverlaysEnabled()) {
+            dst = EditorGameViewRect();
+        } else {
+            dst = { 0, 0, int32_t(io.DisplaySize.x), int32_t(io.DisplaySize.y) };
+        }
+        float mat[16];
+        if (mr) mr->GetWorldToPixel(dst.x, dst.y, dst.w, dst.h, mat);
+        else    { for (int i = 0; i < 16; ++i) mat[i] = (i % 5 == 0) ? 1.0f : 0.0f; }
+        const hmm_mat4& M = *reinterpret_cast<const hmm_mat4*>(mat);
+        auto Project = [&](const S3DPoint& w) {
+            hmm_vec4 p = HMM_MultiplyMat4ByVec4(
+                M, HMM_Vec4(float(w.x), float(w.y), float(w.z), 1.0f));
+            return ImVec2(p.X, p.Y);
+        };
+
         ImDrawList* dl = ImGui::GetForegroundDrawList();
         int shown = 0;
         for (const auto& inst : s.sectorDrawInst)
@@ -589,31 +660,11 @@ void TMapRenderer::DrawDebugTab()
                 continue;
 
             const int32_t len = int32_t(s.debug_arrow_len_wu);
-            S3DPoint root = inst.world_pos;
-            S3DPoint px = root; px.x += len;
-            S3DPoint py = root; py.y += len;
-            S3DPoint pz = root; pz.z += len;
-
-            S3DPoint sr, sx, sy, sz;
-            if (inst.kind == ESectorDrawableKind::Mesh)
-            {
-                s.sectorProjectMeshWorld(root, sr);
-                s.sectorProjectMeshWorld(px, sx);
-                s.sectorProjectMeshWorld(py, sy);
-                s.sectorProjectMeshWorld(pz, sz);
-            }
-            else
-            {
-                s.sectorProjectWorld(root, sr);
-                s.sectorProjectWorld(px, sx);
-                s.sectorProjectWorld(py, sy);
-                s.sectorProjectWorld(pz, sz);
-            }
-
-            const ImVec2 a (float(sr.x + cam_ox), float(sr.y + cam_oy));
-            const ImVec2 ax(float(sx.x + cam_ox), float(sx.y + cam_oy));
-            const ImVec2 ay(float(sy.x + cam_ox), float(sy.y + cam_oy));
-            const ImVec2 az(float(sz.x + cam_ox), float(sz.y + cam_oy));
+            const S3DPoint root = inst.world_pos;
+            const ImVec2 a  = Project(root);
+            const ImVec2 ax = Project({ root.x + len, root.y,       root.z       });
+            const ImVec2 ay = Project({ root.x,       root.y + len, root.z       });
+            const ImVec2 az = Project({ root.x,       root.y,       root.z + len });
 
             if ((a.x < -64 || a.x > io.DisplaySize.x + 64 ||
                  a.y < -64 || a.y > io.DisplaySize.y + 64) && shown >= 32)

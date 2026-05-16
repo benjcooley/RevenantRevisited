@@ -9,10 +9,13 @@
 #include "bitmap.h"
 #include "bmsurface.h"
 #include "display.h"
+#include "imgui.h"
+#include "logging.h"
 #include "mainwnd.h"
 #include "multi.h"
 #include "object.h"
 #include "playscreen.h"
+#include "renderer.h"
 
 // Globals for storing current mouse imagery
 PTBitmap MouseCursor = nullptr;
@@ -98,17 +101,32 @@ void DrawMouseShadow(int32_t x, int32_t y, int32_t width, int32_t height)
     Display.Put(cursorx + shadowoffsetx, cursory + shadowoffsety, MouseShadow, DM_TRANSPARENT | DM_USEREG | DM_ALIAS);
 }
 
-void DrawMouseCursor()
+void TCursorHud::Draw()
 {
-    // draw the bitmap first so that the cursor appears over the top of it
+    // Renderer invokes this inside the swapchain pass between the
+    // 3D scene present and the ImGui debug overlay. We're inside an
+    // active pass -- can issue Renderer->DrawBitmap calls directly.
+    if (!Renderer) return;
+
+    // Suppress the game cursor while ImGui owns the mouse (the OS
+    // pointer is visible in that case -- see TGameModeImpl::Tick which
+    // toggles sapp_show_mouse on the same predicate). Showing both
+    // would be visual double-vision.
+    if (ImGui::GetIO().WantCaptureMouse)
+        return;
+
+
+
+    // Drag bitmap (e.g. inventory item being dragged) goes first so
+    // the cursor sits above it.
     if (DragBitmap)
-        Display.Put(cursorx - grabx, cursory - graby, DragBitmap, DM_TRANSPARENT | DM_USEREG);
+        Renderer->DrawBitmap(DragBitmap, cursorx - grabx, cursory - graby);
 
     if (MouseCursor && !MouseCursorAdd)
-        Display.Put(cursorx, cursory, MouseCursor, DM_TRANSPARENT | DM_USEREG | DM_ALIAS);
+        Renderer->DrawBitmap(MouseCursor, cursorx, cursory);
 
     if (MouseCursorAdd)
-        Display.Put(cursorx, cursory, MouseCursorAdd, DM_TRANSPARENT | DM_USEREG | DM_ALIAS);
+        Renderer->DrawBitmap(MouseCursorAdd, cursorx, cursory);
 
     if (cleardragbitmap)
     {

@@ -268,6 +268,31 @@ struct STransparentWorldSubmit
     SHelperMeshSubmit     helper = {};
 };
 
+// THudDrawable -- base class for everything that draws into the HUD layer.
+//
+// HUD widgets (cursor, status bars, dialog box, hover highlights, ...)
+// subclass THudDrawable and override Draw(). Register with
+// Renderer->AddHud(this, z); remove with Renderer->RemoveHud(this).
+// The renderer owns the registration metadata (z, ordering) -- the
+// drawable just knows how to draw itself.
+//
+// The renderer iterates registered drawables in z-order each frame
+// and invokes Draw() inside the active swapchain pass; Draw() issues
+// Renderer->DrawBitmap / DrawSurface / other renderer calls directly.
+//
+// Two common patterns:
+//   - Cached panel: hold a TSurface, refresh it outside the draw path
+//                   when its contents change, and just call
+//                   Renderer->DrawSurface(...) from Draw().
+//   - Live overlay: do per-frame work in Draw() and issue draw calls
+//                   directly (e.g. cursor, debug arrows, floating text).
+class THudDrawable
+{
+  public:
+    virtual ~THudDrawable() = default;
+    virtual void Draw() = 0;
+};
+
 class TRenderer
 {
 public:
@@ -381,6 +406,12 @@ public:
                   float r, float g, float b, float ambient);
     // Ambient floor color, applied independently of the sun's tint.
     void SetAmbientColor(float r, float g, float b);
+    // Ceiling on summed deferred light (ambient + per-point-lights),
+    // applied per-channel before multiplying albedo. Default 1.5 lets
+    // ambient push slightly overbright (helps the linear-space GPU
+    // path match retail's non-linear palette boost) while still capping
+    // stacked point-light blow-out. Range typical [0.5..4.0].
+    void SetLightCeiling(float ceiling);
     // Z-buffer-based screen-space ambient occlusion.
     void SetAmbientOcclusion(bool enable, float radius_px, float strength,
                              float bias, float max_dist_wu);
@@ -487,6 +518,42 @@ public:
     // sub-rect of the padded G-buffer. Returns true if it drew anything.
     bool PresentToSwapchain();
 
+    // -------- HUD layer ----------------------------------------------------
+    // HUD layer composites on top of the 3D scene during the swapchain
+    // pass. Each HUD widget subclasses THudDrawable and implements
+    // Draw(); the renderer iterates the registered drawables in z-order
+    // (ascending; lower draws first, higher paints over) and calls
+    // Draw() on each. Inside Draw(), the widget issues DrawBitmap /
+    // DrawSurface calls -- it's running inside an active swapchain
+    // pass. See docs/FRAME_PIPELINE.md.
+    //
+    // Ownership: the caller owns the drawable. AddHud just registers
+    // the pointer; RemoveHud unregisters. The drawable's lifetime is
+    // the caller's responsibility (typical pattern: unique_ptr member
+    // on the owning object; add in ctor / OnEnter, remove in dtor /
+    // OnExit).
+
+    // PTBitmap -> cached GPU texture, then quad blit. The renderer
+    // caches by bitmap identity so repeat calls cost an unordered_map
+    // lookup. Caller never sees TTextureHandle for HUD purposes.
+    void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y);
+    // TSurface -> quad blit, sized to the surface. Used for cached HUD
+    // panels (char stats, game log, ...) that own their own surface
+    // and refresh outside the draw path.
+    void DrawSurface(TSurface* surf, int32_t x, int32_t y);
+
+    void AddHud   (class THudDrawable* d, float z = 0.0f);
+    void RemoveHud(class THudDrawable* d);
+    // Re-register with a new z (cheaper than remove+add). No-op if d
+    // wasn't registered.
+    void SetHudZ  (class THudDrawable* d, float z);
+
+    // Called by TDisplay::FlipPage between Scene3D present and ImGui.
+    // Sorts registered drawables by z ascending (ties keep insertion
+    // order) and invokes Draw() on each inside the active swapchain
+    // pass.
+    void DrawHud();
+
     // Where to composite the game image onto the swapchain. Default is
     // the entire window. Editor mode disables this (the game render
     // arrives in the editor's Game View panel via ImGui::Image of the
@@ -507,6 +574,25 @@ public:
     [[nodiscard]] int32_t  GBufPad()     const { return kGBufPad; }
 
 private:
+    // ---- HUD state (DrawBitmap/DrawSurface/AddHud/DrawHud) --------------
+    // PTBitmap -> cached GPU texture. Key is the bitmap pointer; cache
+    // entry holds the registered TTextureHandle so successive DrawBitmap
+    // calls for the same bitmap are O(1).
+    std::unordered_map<uintptr_t, TTextureHandle> bitmap_texture_cache;
+    // Get-or-create a TTextureHandle for the given bitmap.
+    TTextureHandle BitmapAsTexture(PTBitmap bm);
+
+    // Registered HUD drawables + their z-order. Renderer owns this
+    // metadata; the drawable itself doesn't carry z. Sorted on demand
+    // in DrawHud; insertion is O(1) push_back; removal / SetHudZ
+    // search linearly (HUD count is small in practice).
+    struct SHudRegistration
+    {
+        THudDrawable* drawable = nullptr;
+        float         z        = 0.0f;
+    };
+    std::vector<SHudRegistration> hud_drawables;
+
     [[nodiscard]] sg_image TextureImage(TTextureHandle handle) const;
     [[nodiscard]] sg_image ImagePairColor(RendererImagePairHandle handle) const;
     [[nodiscard]] sg_image ImagePairDepth(RendererImagePairHandle handle) const;
@@ -522,6 +608,15 @@ private:
                    bool additive_blend = false,
                    bool chroma_key = false,
                    const float* chroma_key_rgb = nullptr);
+    // Swapchain-target variant of the sub-rect composite. Same math
+    // as the RT variant but uses composite_pip_swap so the pipeline's
+    // color attachment pixel format matches the default pass. Used by
+    // the HUD layer (DrawBitmap / DrawSurface from inside DrawHud).
+    void CompositeSwapchain(sg_image img,
+                            int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                            int32_t target_w, int32_t target_h,
+                            int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                            int32_t src_tex_w, int32_t src_tex_h);
 
     int32_t width  = 0;
     int32_t height = 0;
@@ -661,6 +756,7 @@ private:
         float normal_lighting_hardness = 0.5f;
         int32_t view_mode      = 0;
         int32_t mode           = 1;       // 0 retail, 1 modern
+        float   light_ceiling  = 1.5f;    // max summed light per channel; uploaded as ambient_col.w
         bool    sun_shadow_enable     = true;
         // Interactive default: one correct low-res ray plus a cheap separable
         // mask blur. Softness never multiplies the ray-march cost.

@@ -79,7 +79,7 @@ Only after Phase 3 is stable.
 
 1. Use `recon/` to diff shipped release behavior against our pre-release snapshot. Prioritize the systems the user called out as WIP at snapshot time:
    - scripting (TScriptManager)
-   - spell effects
+   - **spell effects / VFX** — operational plan in [vfx/README.md](vfx/README.md), burndown in [vfx/INVENTORY.md](vfx/INVENTORY.md); verified through `--test=vfx` ([vfx/TEST_MODE.md](vfx/TEST_MODE.md)).
    - automap
    - in-game editor
    - (multiplayer deferred — author notes it shipped broken)
