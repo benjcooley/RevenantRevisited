@@ -262,13 +262,16 @@ void HandleKeyPress(int32_t key, bool down)
 // * Built-in test effects                                                 *
 // *************************************************************************
 //
-// These four effects exist solely to validate the Phase 1 FX submission
-// pipelines end-to-end. They are placeholders -- real per-effect ports
-// in Phase 2 will replace them with the actual TFlameEffect /
-// TBloodEffect / TStripEffect / TFlareAnimator implementations.
+// These four effects validate the Phase 1 FX submission pipelines
+// end-to-end. The FB (F01) and PE (B01) slots are real per-effect Phase 2
+// ports (`TFlameEffect`, `TBloodEffect`) — the lambdas here are thin
+// shims that defer all spawn / kinematic / draw work to the effect class.
+// The SR (X16) and LS (X17) slots are still placeholders pending their
+// own Phase 2 ports (`TStripEffect`, `TFlareAnimator`).
 //
-// FB / PE / SR / LS pipelines each get one test entry; smoke and ribbon
-// also have static texture handles created lazily on first spawn.
+// Ribbon + flare each keep a static solid-color texture handle created
+// lazily on first spawn; the real effects bring their own textures via
+// the imagery cache (see TFlameEffect::SpawnForTest / TBloodEffect::SpawnForTest).
 //
 // *************************************************************************
 
@@ -277,14 +280,6 @@ namespace {
 TTextureHandle WhiteTexture()
 {
     return Renderer ? Renderer->WhiteTextureHandle() : kInvalidTexture;
-}
-
-TTextureHandle GreyParticleTexture()
-{
-    if (!Renderer) return kInvalidTexture;
-    return Renderer->SolidColorTexture(0x46584353504B45ull,  // "FXSMOKE"
-                                       0xFFB0B0B0u,
-                                       "vfx.smoke.solid");
 }
 
 TTextureHandle BlueRibbonTexture()
@@ -342,84 +337,40 @@ void FlameSubmit(void* cp, EFxDebugMode dbg)
     flipbook->Submit(*Renderer, *c->flame);
 }
 
-// --- PE: smoke plume placeholder via TParticleBucket ---------------------
-// Spawns ~32 particles in a column; recycles when they reach the top.
-struct SSmokeCtx {
-    TParticleBucket* bucket = nullptr;
-    float age = 0.0f;
-    float spawn_accum = 0.0f;
+// --- PE: real TBloodEffect (bloodimagery, Misc/Blood.I3D) ---------------
+// Spawns a sector-less TBloodEffect at world origin via SpawnForTest and
+// drives its owned TParticleBucket through SubmitFxParticleBucket() each
+// frame. Mirrors the F01 / TFlameEffect pattern: the harness lambda is a
+// thin shim; all the spawn / kinematic / draw logic lives on the real
+// effect class. See effect.cpp's TBloodEffect block for the scope
+// boundary (Phase 2.2 = PE pipeline gate; Phase 2.2.1 = faithful retail
+// kinematics).
+struct SBloodCtx {
+    TBloodEffect* blood = nullptr;
 };
 
-void* SmokeSpawn()
+void* BloodSpawn()
 {
-    auto* c = new SSmokeCtx();
-    SParticleBucketDesc desc = {};
-    desc.name = "vfx.smoke";
-    desc.blend = EParticleBlendMode::Alpha;
-    desc.texture = GreyParticleTexture();
-    desc.texture_width = 1;
-    desc.texture_height = 1;
-    desc.default_width  = 28.0f;
-    desc.default_height = 28.0f;
-    SParticleBufferLayout layout = {};
-    ParticleLayoutAddVar(layout, EParticleVar::OwnerId);
-    ParticleLayoutAddVar(layout, EParticleVar::Life);
-    ParticleLayoutAddVar(layout, EParticleVar::Age);
-    ParticleLayoutAddVar(layout, EParticleVar::DrawPos);
-    ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
-    ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
-    c->bucket = ParticleManager().GetOrCreateGlobalBucket(desc, layout);
+    auto* c = new SBloodCtx();
+    c->blood = TBloodEffect::SpawnForTest(S3DPoint{0, 0, 0});
+    if (!c->blood)
+        log_warn("[vfx] TBloodEffect::SpawnForTest returned null; B01 entry will draw nothing");
     return c;
 }
 
-void SmokeDestroy(void* cp)
+void BloodDestroy(void* cp)
 {
-    auto* c = static_cast<SSmokeCtx*>(cp);
-    if (c->bucket)
-        c->bucket->KillParticlesByOwner(7.0f);
+    auto* c = static_cast<SBloodCtx*>(cp);
+    delete c->blood;
     delete c;
 }
 
-void SmokeSubmit(void* cp, EFxDebugMode dbg)
+void BloodSubmit(void* cp, EFxDebugMode dbg)
 {
-    auto* c = static_cast<SSmokeCtx*>(cp);
-    if (!c->bucket) return;
-    const float dt = float(TTime::DeltaTime());
-    c->age += dt;
-
-    // Advance existing particles (simple Euler rise).
-    for (int32_t i = 0; i < c->bucket->Count(); ++i)
-    {
-        if (float* dp = c->bucket->VarPtr(i, EParticleVar::DrawPos))
-            dp[2] += dt * 70.0f;
-        if (float* age = c->bucket->VarPtr(i, EParticleVar::Age))
-            *age += dt;
-    }
-
-    // Spawn ~12 / sec, cap at 32 live.
-    c->spawn_accum += dt * 12.0f;
-    while (c->spawn_accum >= 1.0f && c->bucket->Count() < 32)
-    {
-        c->spawn_accum -= 1.0f;
-        const int32_t pi = c->bucket->AddParticle(7.0f, 1.5f);
-        if (pi < 0) break;
-        if (float* dp = c->bucket->VarPtr(pi, EParticleVar::DrawPos))
-        {
-            dp[0] = (float(std::rand()) / float(RAND_MAX) - 0.5f) * 20.0f;
-            dp[1] = (float(std::rand()) / float(RAND_MAX) - 0.5f) * 20.0f;
-            dp[2] = 0.0f;
-        }
-        if (float* dc = c->bucket->VarPtr(pi, EParticleVar::DrawColor))
-        {
-            dc[0] = 0.7f; dc[1] = 0.7f; dc[2] = 0.7f; dc[3] = 0.6f;
-        }
-        if (float* ds = c->bucket->VarPtr(pi, EParticleVar::DrawScl))
-        {
-            ds[0] = 28.0f; ds[1] = 28.0f;
-        }
-    }
-
-    Renderer->SubmitFxParticleBucket(*c->bucket, dbg);
+    auto* c = static_cast<SBloodCtx*>(cp);
+    if (!c->blood)
+        return;
+    c->blood->TickAndSubmitForTest(dbg);
 }
 
 // --- SR: static ribbon placeholder ---------------------------------------
@@ -529,14 +480,14 @@ struct SVfxTestBootstrap {
         flame.destroy  = [](void* c) { FlameDestroy(c); };
         VfxTest::DeferredRegister(flame);
 
-        VfxTest::SEffect smoke = {};
-        smoke.id       = "TSmokeEffect.placeholder";
-        smoke.family   = "particles";
-        smoke.pipeline = "PE";
-        smoke.factory  = []() -> void* { return SmokeSpawn(); };
-        smoke.submit   = [](void* c, EFxDebugMode d) { SmokeSubmit(c, d); };
-        smoke.destroy  = [](void* c) { SmokeDestroy(c); };
-        VfxTest::DeferredRegister(smoke);
+        VfxTest::SEffect blood = {};
+        blood.id       = "TBloodEffect";
+        blood.family   = "blood";
+        blood.pipeline = "PE";
+        blood.factory  = []() -> void* { return BloodSpawn(); };
+        blood.submit   = [](void* c, EFxDebugMode d) { BloodSubmit(c, d); };
+        blood.destroy  = [](void* c) { BloodDestroy(c); };
+        VfxTest::DeferredRegister(blood);
 
         VfxTest::SEffect ribbon = {};
         ribbon.id       = "TStripEffect.placeholder";

@@ -1989,19 +1989,55 @@ _CLASSDEF(TBloodEffect)
 class TBloodEffect : public TEffect
 {
   private:
-    int32_t height, hangle, vangle, hspread, vspread, num;
+    int32_t height = 0;
+    int32_t hangle = 0;
+    int32_t vangle = 0;
+    int32_t hspread = 0;
+    int32_t vspread = 0;
+    int32_t num = 0;
+
+    // --- Phase 2.2 PE-pipeline scaffold ---------------------------------
+    // Bucket borrowed from the global TParticleManager. Created lazily by
+    // SpawnForTest (the in-game spawn path will move to TBloodSystem +
+    // TBloodAnimator once those are ported — tracked as B01a follow-up).
+    // The bucket itself outlives this effect; per-instance particles are
+    // disambiguated by `owner_particle_id_` (= GetMapIndex()) and killed
+    // off in the destructor via TParticleBucket::KillParticlesByOwner.
+    TParticleBucket* bucket_ = nullptr;
+    float owner_particle_id_ = -1.0f;
+    float spawn_accum_ = 0.0f;
+    float age_ = 0.0f;
+
   public:
     TBloodEffect(TObjectImagery* newim) : TEffect(newim) {  }
     TBloodEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    virtual ~TBloodEffect() {}
+    ~TBloodEffect() override;
 
-    virtual void OffScreen() { KillThisEffect(); }
+    void OffScreen() override { KillThisEffect(); }
 
     virtual void Initialize();
     virtual void Pulse();
 
     virtual void SetParams(int32_t he, int32_t ha, int32_t va, int32_t hs, int32_t vs, int32_t nu) { height = he; hangle = ha; vangle = va; hspread = hs, vspread = vs; num = nu; }
     virtual void GetParams(int32_t *he, int32_t *ha, int32_t *va, int32_t *hs, int32_t *vs, int32_t *nu) { *he = height; *ha = hangle; *va = vangle; *hs = hspread; *vs = vspread; *nu = num; }
+
+    // Spawn a standalone TBloodEffect for the --test=vfx harness. Loads
+    // `Misc\Blood.I3D` (the canonical bloodimagery — see playscreen.cpp
+    // load), allocates / reuses a global PE bucket keyed off the blood
+    // texture, and stamps the instance with a fresh map index so its
+    // particles can be tracked by owner. Returns nullptr if the imagery
+    // can't be loaded. The caller owns the returned pointer and must
+    // `delete` it to release the imagery refcount and evict its particles.
+    //
+    // PE-pipeline scope: validates the bucket/submit path end-to-end
+    // through the real effect class lineage; faithful retail kinematics
+    // (gravity, splat-sticking, surface decals) follow in Phase 2.2.1.
+    [[nodiscard]] static TBloodEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Drive the owned bucket forward by one frame (spawn + Euler integrate
+    // + fade), then submit it to the FX queue. Idempotent if the effect
+    // has no bucket yet (e.g. SpawnForTest fell through).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
 };
 
 // *******************
