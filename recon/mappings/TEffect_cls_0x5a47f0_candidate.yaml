@@ -1,0 +1,73 @@
+# TEffect (base class) - MEDIUM-HIGH CONFIDENCE CANDIDATE
+# (Supersedes the demoted "cls_0x5a47f0 = TLightningAnimator" mapping —
+# extraction pass 2 confirms cls_0x5a47f0 is the slim TEffect base.)
+source_class: "TEffect"
+ghidra_class: "cls_0x5a47f0"
+confidence: "MEDIUM-HIGH"
+
+# Evidence:
+#   - cls_0x5a47f0 is a 60-byte structure with vftable_5a47f0, allocated
+#     fresh by EVERY confirmed leaf effect class's virtual creator (the
+#     covariant return type of `cls_0x5a47f0 *` from each leaf's CreateInstance
+#     pattern). This is the classic TEffect base pattern.
+#   - cls_0x5a47f0 ctor (at 0x445940) signature:
+#         cls_0x5a47f0 *__thiscall(cls_0x5a47f0 *this, TCharacter *owner)
+#     and it stores the TCharacter * at mbr_0x4 and calls
+#     TCharacter::meth_0x46e8a0 to seed mbr_0x8. This matches the
+#     TEffect(TCharacter *) idiom in pre-release source: every TEffect owns
+#     a back-pointer to its character + a cached imagery handle.
+#   - Init state in ctor:
+#         mbr_0x4  = owner_TCharacter
+#         mbr_0x8  = owner->meth_0x46e8a0()    (likely owner->imagery cache)
+#         mbr_0xc  = 0
+#         mbr_0x10 = -1                         (sound channel?)
+#         mbr_0x14 = 0
+#         mbr_0x18 = -1                         (frame/anim ID?)
+#         mbr_0x1c = 1                          (active=true)
+#         mbr_0x20..0x30 = 0
+#         mbr_0x34, 0x35 = 0  (bytes — flags)
+#         mbr_0x2c = 1
+#         mbr_0x38 = 0
+#   - Dtor at 0x448380: deletes mbr_0x38 (heap-owned sub-buffer) — typical
+#     of TEffect's optional dynamic per-instance state.
+#   - Used as the BASE in every leaf effect's creator: each leaf class
+#     allocates its own size (0x100..0x578), constructs as cls_0x5a47f0
+#     via cls_0x5a47f0::cls_0x5a47f0(this_00), then patches the vftable
+#     pointer to the leaf's own.
+#
+# Caveats / future work:
+#   - Ghidra reports Length: 60, but leaf classes' allocations are 0x100+;
+#     so the 60-byte view is the slim vftable+state-only view. The wider
+#     "TEffect + TObjectInstance" composite layout would explain the
+#     larger sizes — but at this point cls_0x5a47f0 is unambiguously the
+#     TEffect-base vftable+ctor entry.
+#   - Source-side TEffect declaration in src/effect.h should be diffed
+#     against this layout to confirm member order. Until done, keep as
+#     MEDIUM-HIGH (not confirmed).
+#   - cls_0x5b0074, cls_0x5a7e38 may be intermediate bases (TObjectInstance
+#     and possibly a TAnimatedObjectInstance) — both have spurious "Length"
+#     in the thousands due to Ghidra absorbing concatenated free functions.
+#     Treat as fuzzy until vtable shape is reconciled.
+
+fields:
+  - { offset: 0x00, type: "ptr",     name: "vftptr" }
+  - { offset: 0x04, type: "TCharacter*", name: "owner" }
+  - { offset: 0x08, type: "dword",   name: "imagery_cache_or_owner_field" }
+  - { offset: 0x0c, type: "dword",   name: "field_0c" }
+  - { offset: 0x10, type: "int32",   name: "sound_or_chan_id   (init -1)" }
+  - { offset: 0x14, type: "dword",   name: "field_14" }
+  - { offset: 0x18, type: "int32",   name: "anim_or_frame_id   (init -1)" }
+  - { offset: 0x1c, type: "dword",   name: "active   (init 1)" }
+  - { offset: 0x20, type: "dword",   name: "field_20" }
+  - { offset: 0x24, type: "dword",   name: "field_24" }
+  - { offset: 0x28, type: "dword",   name: "field_28" }
+  - { offset: 0x2c, type: "dword",   name: "field_2c   (init 1)" }
+  - { offset: 0x30, type: "dword",   name: "field_30" }
+  - { offset: 0x34, type: "byte",    name: "flag_34" }
+  - { offset: 0x35, type: "byte",    name: "flag_35" }
+  - { offset: 0x38, type: "ptr",     name: "heap_sub_buffer   (freed in dtor)" }
+
+methods:
+  # 0x445940 - TEffect::TEffect(TCharacter *owner)
+  # 0x445990 - TEffect::~TEffect (non-virtual variant — frees mbr_0x38)
+  # 0x448380 - TEffect::~TEffect (vtbl-slot variant; same frees + optional self-delete)

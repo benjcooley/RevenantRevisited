@@ -1,0 +1,24 @@
+# TFlareAnimator - MEDIUM CONFIDENCE CANDIDATE
+# (Specifically the "IrisFlare" variant — TFlareAnimator handles multiple
+# flare types per imagery loader; "IrisFlare" is the Iris-god-specific one.)
+source_class: "TFlareAnimator"
+ghidra_class: "cls_0x5a9f2c"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "IrisFlare" string at .rdata 005e110c has 1 XREF: 004e5fa0 in cls_0x5a9f2c
+#     (delta +0xba0 in fn 0x4e5400).
+#   - "SetVortex" string at .rdata 005e1118 first XREF at 0x4e6600 also lands
+#     in cls_0x5a9f2c (+0x590 in fn 0x4e6070), suggesting this class
+#     additionally handles a vortex-flare hybrid OR this is shared with
+#     TVortexEffect. Second SetVortex XREF lands in cls_0x4e6620 (next class).
+#   - cls_0x5a9f2c size 452 bytes, 8 methods, self-allocated 0x154 bytes.
+#   - Inherits from TEffect chain.
+#
+# Open: confirm TFlareAnimator vs TIrisFlareAnimator (no such class declared
+# in pre-release source). "IrisFlare" being a 1-XREF loader keyword (not
+# RegisterObjectClass) supports TFlareAnimator-with-Iris-variant rather than
+# a distinct class.
+
+fields:
+methods:

@@ -1,0 +1,25 @@
+# TRibbonAnimator - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TRibbonAnimator"
+ghidra_class: "cls_0x5b9fac"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "Ribbon" string at .rdata 005e10dc has 1 XREF: 004e43e0 in cls_0x5b9fac
+#     (delta +0x2c0 in fn 0x4e4120).
+#   - The same registrar fn also handles XREFs for the FONT keywords
+#     CYANFONT/REDFONT/GREENFONT/BLUEFONT (005e10b0/bc/c4/d0) at deltas
+#     0x240/0x260/0x280/0x2a0 in fn 0x4e4120 — those are the variant tags
+#     loaded alongside the ribbon imagery. This means cls_0x5b9fac is the
+#     loader/registrar for ALL these (consistent with TRibbonAnimator
+#     handling colored variants).
+#   - cls_0x5b9fac size 2492 bytes, 17 methods, self-allocated 0x1f0 bytes.
+#     The 2492 vs 0x1f0=496 discrepancy is the standard Ghidra
+#     "size = max-addressed-offset" inflation, not real class size.
+#   - Inherits from TEffect chain (cls_0x5b0074::~cls_0x5b0074).
+#
+# Open: cls_0x5b9fac's 17 methods are large — could subsume both
+# TRibbonAnimator + sibling animators (e.g. TRibbonEffect). Confirm by
+# vtable shape vs source.
+
+fields:
+methods:

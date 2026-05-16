@@ -1,0 +1,21 @@
+# TAmbSoundEffect - MEDIUM CONFIDENCE CANDIDATE
+# (Registered as "Speaker" — TAmbSoundEffect's in-engine type name appears
+# to be Speaker per script convention.)
+source_class: "TAmbSoundEffect"
+ghidra_class: "cls_0x5ad9d4"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "Speaker" string at .rdata 005e1224 has 2 XREFs:
+#       004f4510 (delta +0xd0 in fn 0x4f4440, owner cls_0x5ad9d4)
+#       004f48d0 (delta +0x490 in fn 0x4f4440, owner cls_0x5ad9d4)
+#     Both XREFs in one registration fn inside cls_0x5ad9d4.
+#   - "Fizzle" at 005e121c has a second XREF at 0x4f3f70 also in cls_0x5ad9d4
+#     (+0x60 in fn 0x4f3f10) — likely a death/extinguish hook for an audio
+#     speaker effect (sound stops with a fizzle).
+#   - cls_0x5ad9d4 size 380 bytes, 6 methods, self-allocated 0x17c bytes.
+#   - Inherits from TEffect chain.
+#   - Skip-render row in INVENTORY (X02) — audio-only.
+
+fields:
+methods:

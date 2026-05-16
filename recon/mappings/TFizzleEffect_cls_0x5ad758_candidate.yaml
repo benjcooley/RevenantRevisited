@@ -1,0 +1,25 @@
+# TFizzleEffect - LOW-MEDIUM CONFIDENCE CANDIDATE
+# (No TFizzleEffect class in pre-release source — likely a spell-fail
+# visual implemented as a generic TEffect variant. May not be a distinct
+# C++ class but rather a script-registered TParticleSystem instance.)
+source_class: "TFizzleEffect"
+ghidra_class: "cls_0x5ad758"
+confidence: "LOW-MEDIUM"
+
+# Evidence:
+#   - "Fizzle" string at .rdata 005e121c has 2 XREFs:
+#       004f3ef0 (delta +0x580 in fn 0x4f3970, owner cls_0x5ad758)
+#       004f3f70 (delta +0x60 in fn 0x4f3f10, owner cls_0x5ad9d4)
+#     The XREFs split across TWO classes — registrar pattern suggests
+#     cls_0x5ad758 owns the "Fizzle" effect, and cls_0x5ad9d4 (TAmbSoundEffect)
+#     hooks it for a sound cue. The fact that two distinct classes both
+#     touch "Fizzle" is consistent with a global magic-fail visual + audio.
+#   - cls_0x5ad758 size 272 bytes, 5 methods, self-allocated 0x110 bytes.
+#   - Inherits from TEffect chain.
+#
+# Open: in source TFizzleEffect doesn't exist as a named class. May be the
+# generic TParticleSystem driven by a script-side "Fizzle" effect def.
+# Treat name as placeholder; promote only after source-side check.
+
+fields:
+methods:
