@@ -351,6 +351,17 @@ void TPane::RunLayoutPass()
     SetDirty(false);   // any layout work for this subtree is now current
 }
 
+void TPane::OnCanvasResize(int32_t newCanvasW, int32_t newCanvasH)
+{
+    // Default screen-root behavior: stretch to fill the new canvas at
+    // (0,0), commit the resize, and re-run layout (which anchors any
+    // anchored children against the new content rect). Subclasses that
+    // want different semantics (centered fixed-size, no-op, ...) override.
+    Resize(0, 0, newCanvasW, newCanvasH);
+    PaneResized();
+    RunLayoutPass();
+}
+
 // ----------------------------------------------------------------------------
 // TScreen
 // ----------------------------------------------------------------------------
@@ -358,6 +369,17 @@ void TPane::RunLayoutPass()
 TScreen::TScreen()
 {
     nextscreen = nullptr;
+}
+
+void TScreen::OnCanvasResize(int32_t newCanvasW, int32_t newCanvasH)
+{
+    // Broadcast to all registered panes. Hidden panes still receive the
+    // event so their layout stays current for when they're shown again.
+    for (int32_t i = 0; i < panes.NumItems(); ++i)
+    {
+        if (panes.Used(i) && panes[i])
+            panes[i]->OnCanvasResize(newCanvasW, newCanvasH);
+    }
 }
 
 TScreen::~TScreen()
