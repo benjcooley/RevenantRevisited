@@ -36,6 +36,7 @@
     #include "ao.metal.h"
     #include "shadow.metal.h"
     #include "light.metal.h"
+    #include "fx.metal.h"
 
     inline constexpr const char* kCompositeVs = kCompositeVsMetal;
     inline constexpr const char* kCompositeFs = kCompositeFsMetal;
@@ -50,6 +51,12 @@
     inline constexpr const char* kShadowBlurFs = kShadowBlurFsMetal;
     inline constexpr const char* kLightVs     = kLightVsMetal;
     inline constexpr const char* kLightFs     = kLightFsMetal;
+    inline constexpr const char* kFxBillboardVs = kFxBillboardVsMetal;
+    inline constexpr const char* kFxBillboardFs = kFxBillboardFsMetal;
+    inline constexpr const char* kFxParticleVs  = kFxParticleVsMetal;
+    inline constexpr const char* kFxParticleFs  = kFxParticleFsMetal;
+    inline constexpr const char* kFxStripVs     = kFxStripVsMetal;
+    inline constexpr const char* kFxStripFs     = kFxStripFsMetal;
     inline constexpr const char* kShaderVsEntry = "_main";
     inline constexpr const char* kShaderFsEntry = "_main";
 #elif defined(SOKOL_GLCORE33) || defined(SOKOL_GLES3)
@@ -59,6 +66,7 @@
     #include "ao.glsl.h"
     #include "shadow.glsl.h"
     #include "light.glsl.h"
+    #include "fx.glsl.h"
 
     inline constexpr const char* kCompositeVs = kCompositeVsGlsl;
     inline constexpr const char* kCompositeFs = kCompositeFsGlsl;
@@ -73,6 +81,12 @@
     inline constexpr const char* kShadowBlurFs = kShadowBlurFsGlsl;
     inline constexpr const char* kLightVs     = kLightVsGlsl;
     inline constexpr const char* kLightFs     = kLightFsGlsl;
+    inline constexpr const char* kFxBillboardVs = kFxBillboardVsGlsl;
+    inline constexpr const char* kFxBillboardFs = kFxBillboardFsGlsl;
+    inline constexpr const char* kFxParticleVs  = kFxParticleVsGlsl;
+    inline constexpr const char* kFxParticleFs  = kFxParticleFsGlsl;
+    inline constexpr const char* kFxStripVs     = kFxStripVsGlsl;
+    inline constexpr const char* kFxStripFs     = kFxStripFsGlsl;
     inline constexpr const char* kShaderVsEntry = "main";
     inline constexpr const char* kShaderFsEntry = "main";
 #elif defined(SOKOL_D3D11)
@@ -82,6 +96,7 @@
     #include "ao.hlsl.h"
     #include "shadow.hlsl.h"
     #include "light.hlsl.h"
+    #include "fx.hlsl.h"
 
     inline constexpr const char* kCompositeVs = kCompositeVsHlsl;
     inline constexpr const char* kCompositeFs = kCompositeFsHlsl;
@@ -96,6 +111,12 @@
     inline constexpr const char* kShadowBlurFs = kShadowBlurFsHlsl;
     inline constexpr const char* kLightVs     = kLightVsHlsl;
     inline constexpr const char* kLightFs     = kLightFsHlsl;
+    inline constexpr const char* kFxBillboardVs = kFxBillboardVsHlsl;
+    inline constexpr const char* kFxBillboardFs = kFxBillboardFsHlsl;
+    inline constexpr const char* kFxParticleVs  = kFxParticleVsHlsl;
+    inline constexpr const char* kFxParticleFs  = kFxParticleFsHlsl;
+    inline constexpr const char* kFxStripVs     = kFxStripVsHlsl;
+    inline constexpr const char* kFxStripFs     = kFxStripFsHlsl;
     inline constexpr const char* kShaderVsEntry = "main_vs";
     inline constexpr const char* kShaderFsEntry = "main_ps";
 #else

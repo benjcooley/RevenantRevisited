@@ -64,13 +64,15 @@ other rows.
 | I03 | `TParticle3DAnimator`          | PE infra | effect.cpp      | not-extracted | src/effect.h                     | not-started   | -     | needs Ghidra extraction |
 | I04 | `TSubParticleAnimator`         | PE infra | effectcomp.cpp  | not-extracted | src/effectcomp.h                 | not-started   | -     | sub-particle spawning; needs Ghidra extraction |
 | I05 | `TParticleEffectManager`       | PE infra | effect2.cpp     | not-extracted | src/effect2.cpp                  | not-started   | -     | global manager / parser of particle defs; needs Ghidra extraction |
-| I06 | `TFlipbookBillboardComponent`  | FB infra | (port-only)     | n/a        | src/effect.h:70                  | wip           | -     | infra exists, not yet wired to renderer |
+| I06 | `TFlipbookBillboardComponent`  | FB infra | (port-only)     | n/a        | src/effect.h:70                  | done          | phase1-foundation | wired to renderer via `Submit(TRenderer&, const TObjectInstance&)`; uses `EFxDebugMode` + `SBillboardDrawItem`; legacy `SubmitParticleBillboards` shim deleted (Phase 1 spine complete) |
+| I07 | FX submission API + bucket batcher | infra | (port-only) | n/a | src/renderer.{h,cpp}, src/shaders/fx.* | done | phase1-foundation | `SubmitFxBillboard / SubmitFxParticleBucket / SubmitFxStrip` + per-pipeline dynamic instance VB + new `fx_pass` after `RunLightingPass`; per-bucket back-to-front sort; per-instance `EFxDebugMode`. Metal shaders authored; GLSL/HLSL stubs filled but not visually validated (Apple-only host). |
+| I08 | `--test=vfx` browser harness   | infra    | (port-only)     | n/a        | src/vfxtest.{h,cpp}, src/testmodes.cpp | done | phase1-foundation | data-driven registry, Left/Right cycles effects, R restarts, Space/. pause-step, D and 1–4 cycle debug mode, ESC quits. Four placeholder effects registered (FB / PE / SR / LS); see X14–X17. |
 
 ### Fire family
 
 | #   | Class                | Pipeline | Retail src      | Recon file | Port file               | Status        | Owner | Notes |
 |-----|----------------------|----------|-----------------|------------|-------------------------|---------------|-------|-------|
-| F01 | `TFlameEffect`       | FB       | effect.cpp      | not-extracted | src/effect.cpp:577      | debug-solid   | -     | only currently-registered effect; canonical FB proof; needs Ghidra extraction |
+| F01 | `TFlameEffect`       | FB       | effect.cpp      | not-extracted | src/effect.cpp:577      | debug-solid   | phase1-foundation | wired through new `TFlipbookBillboardComponent::Submit` -> `SubmitFxBillboard`; in-sector path verified (build clean). Still `debug-solid` because `--test=vfx` uses the X14 placeholder rather than a live `TFlameEffect` instance (needs a real loaded sector to exercise). Phase 2 should drop the placeholder once a real flame is spawned in-test. |
 | F02 | `TFlameAnimator`     | FB       | effect.cpp      | not-extracted | src/effect.cpp          | not-started   | -     | bridge animator → TFlameEffect; needs Ghidra extraction |
 | F03 | `TFireEffect`        | FB+PE    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | "fire" generic — likely ambient flame patch; needs Ghidra extraction |
 | F04 | `TFireAnimator`      | FB       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | bridge → TFireEffect; confirm distinct from TFlameAnimator; needs Ghidra extraction |
@@ -171,6 +173,10 @@ other rows.
 | X11 | `TRibbonAnimator`  | SR          | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | trailing ribbon; added during mapping pass; needs Ghidra extraction |
 | X12 | `TAmbSoundAnimator`| -           | effect.cpp      | not-extracted | src/effect.h            | skip-render   | -     | bridge → TAmbSoundEffect; added during mapping pass; needs Ghidra extraction |
 | X13 | `TTest3DAnimator`  | -           | effect.cpp      | not-extracted | src/effect.h            | not-in-1999   | -     | dev-only 3D test animator; confirm not-shipped; added during mapping pass |
+| X14 | placeholder flame (vfx test) | FB | n/a | n/a | src/vfxtest.cpp | wip | phase1-foundation | Phase-1 test entry that exercises the FB pipeline via direct `SubmitFxBillboard`. Replace with a real `TFlameEffect.SpawnForTest` once a standalone-spawn path exists (current `TFlameEffect` needs `T3DImagery` w/ texture slots, not available in the harness). |
+| X15 | placeholder smoke (vfx test) | PE | n/a | n/a | src/vfxtest.cpp | wip | phase1-foundation | Phase-1 test entry: creates a `TParticleBucket` directly and drives it via `SubmitFxParticleBucket`. Phase-2 should replace with a real `TBloodEffect` / `TSmokeEffect` port. |
+| X16 | placeholder ribbon (vfx test) | SR | n/a | n/a | src/vfxtest.cpp | wip | phase1-foundation | Phase-1 test entry: static 16-segment ribbon via `SubmitFxStrip`. Replace with a real `TStripEffect` Phase-2 port. |
+| X17 | placeholder flare (vfx test) | LS | n/a | n/a | src/vfxtest.cpp | wip | phase1-foundation | Phase-1 test entry: pulses a `Renderer->AddPointLight` plus an additive billboard for the glow. Replace with a real `TFlareAnimator` Phase-2 port. |
 
 ### Discovery rows (user-named effects with no obvious 1:1 retail class)
 
