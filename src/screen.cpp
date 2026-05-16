@@ -6,6 +6,8 @@
 
 #include <stdio.h>
 
+#include <algorithm>
+
 #include "revenant.h"
 #include "bitmap.h"
 #include "display.h"
@@ -70,6 +72,204 @@ void TPane::RemoveChild(TPane* child)
             return;
         }
     }
+}
+
+// ----------------------------------------------------------------------------
+// TPane two-pass layout (A.2b)
+//
+// Measure: bottom-up.  Each pane reports its preferred size for the given
+//          parent constraint. Leaves use their explicit (newwidth, newheight);
+//          containers recurse and aggregate along their axis.
+// Arrange: top-down.    Container parents assign final rects to children
+//          inside their own content rect, honoring per-child margin and
+//          sizing policy.
+// ----------------------------------------------------------------------------
+
+SSize TPane::MeasureSelf(const SSize& parentConstraint)
+{
+    if (layoutKind == SLayoutKind::None)
+    {
+        // Leaf / explicit-rect pane. Preferred size = the rect the caller
+        // configured. parentConstraint is ignored intentionally; non-container
+        // panes don't react to their parent.
+        measured = SSize(newwidth, newheight);
+        return measured;
+    }
+
+    // Container. Subtract this pane's own padding from the available
+    // constraint passed to children.
+    const SSize childConstraint{
+        parentConstraint.w - padding.Horizontal(),
+        parentConstraint.h - padding.Vertical()
+    };
+
+    int32_t totalAlong = 0;   // sum of child sizes along the layout axis
+    int32_t maxCross   = 0;   // max child size on the cross axis
+    int32_t visible    = 0;   // counted children (for spacing)
+
+    for (TPane* c : children)
+    {
+        if (!c)
+            continue;
+        // Margin reduces what the child can ask for; pass through the rest.
+        const SSize cConstraint{
+            childConstraint.w - c->margin.Horizontal(),
+            childConstraint.h - c->margin.Vertical()
+        };
+        const SSize cm = c->MeasureSelf(cConstraint);
+
+        if (layoutKind == SLayoutKind::Vertical)
+        {
+            totalAlong += cm.h + c->margin.Vertical();
+            maxCross    = (std::max)(maxCross, cm.w + c->margin.Horizontal());
+        }
+        else  // Horizontal
+        {
+            totalAlong += cm.w + c->margin.Horizontal();
+            maxCross    = (std::max)(maxCross, cm.h + c->margin.Vertical());
+        }
+        ++visible;
+    }
+
+    if (visible > 1)
+        totalAlong += spacing * (visible - 1);
+
+    if (layoutKind == SLayoutKind::Vertical)
+        measured = SSize(maxCross + padding.Horizontal(),
+                         totalAlong + padding.Vertical());
+    else
+        measured = SSize(totalAlong + padding.Horizontal(),
+                         maxCross + padding.Vertical());
+
+    return measured;
+}
+
+void TPane::LayoutChildren()
+{
+    if (layoutKind == SLayoutKind::None || children.empty())
+        return;
+
+    // Content rect = own rect minus padding (origin in this pane's
+    // coordinate space; child positions are relative to the pane in the
+    // same screen-coords that x/y use).
+    const int32_t contentX = x + padding.left;
+    const int32_t contentY = y + padding.top;
+    const int32_t contentW = (std::max)(0, width  - padding.Horizontal());
+    const int32_t contentH = (std::max)(0, height - padding.Vertical());
+
+    // Phase 1 of arrange: along-axis sizing.
+    //
+    // For Vertical: along=h, cross=w. Each child contributes its measured
+    // along-axis size if Fixed, plus its along-axis margin. Greedy children
+    // contribute 0 to the fixed total; the leftover is divided among them
+    // by greedyWeight after all fixeds are tallied.
+
+    auto alongOf = [&](TPane* c) -> int32_t {
+        return layoutKind == SLayoutKind::Vertical ? c->measured.h : c->measured.w;
+    };
+    auto alongMarginOf = [&](TPane* c) -> int32_t {
+        return layoutKind == SLayoutKind::Vertical ? c->margin.Vertical()
+                                                   : c->margin.Horizontal();
+    };
+    auto alongPolicyOf = [&](TPane* c) -> SSizePolicy {
+        return layoutKind == SLayoutKind::Vertical ? c->vsizePolicy : c->hsizePolicy;
+    };
+
+    int32_t visible = 0;
+    int32_t fixedAlong = 0;
+    float   weightSum  = 0.0f;
+
+    for (TPane* c : children)
+    {
+        if (!c) continue;
+        ++visible;
+        fixedAlong += alongMarginOf(c);
+        if (alongPolicyOf(c) == SSizePolicy::Greedy)
+            weightSum += (std::max)(0.0f, c->greedyWeight);
+        else
+            fixedAlong += alongOf(c);
+    }
+    if (visible > 1)
+        fixedAlong += spacing * (visible - 1);
+
+    const int32_t alongAvail = (layoutKind == SLayoutKind::Vertical ? contentH : contentW);
+    const int32_t greedyAvail = (std::max)(0, alongAvail - fixedAlong);
+
+    // Phase 2 of arrange: walk children in order, place each.
+    int32_t cursor = (layoutKind == SLayoutKind::Vertical ? contentY : contentX);
+    bool first = true;
+    for (TPane* c : children)
+    {
+        if (!c) continue;
+
+        if (!first)
+            cursor += spacing;
+        first = false;
+
+        // Per-child along/cross sizes after policy.
+        int32_t childAlong;
+        if (alongPolicyOf(c) == SSizePolicy::Greedy && weightSum > 0.0f)
+            childAlong = static_cast<int32_t>(
+                (std::max)(0.0f, c->greedyWeight) / weightSum * float(greedyAvail));
+        else
+            childAlong = alongOf(c);
+
+        // Cross sizing: Greedy fills the cross-axis content; Fixed uses measured.
+        int32_t childCrossAvail = (layoutKind == SLayoutKind::Vertical
+            ? contentW - c->margin.Horizontal()
+            : contentH - c->margin.Vertical());
+        childCrossAvail = (std::max)(0, childCrossAvail);
+
+        int32_t childCross;
+        auto crossPolicy = (layoutKind == SLayoutKind::Vertical
+            ? c->hsizePolicy : c->vsizePolicy);
+        auto crossMeasured = (layoutKind == SLayoutKind::Vertical
+            ? c->measured.w : c->measured.h);
+        if (crossPolicy == SSizePolicy::Greedy)
+            childCross = childCrossAvail;
+        else
+            childCross = (std::min)(crossMeasured, childCrossAvail);
+
+        // Place the child. Vertical: cursor is Y; cross-axis is X (with margin.left).
+        int32_t cx, cy, cw, ch;
+        if (layoutKind == SLayoutKind::Vertical)
+        {
+            cx = contentX + c->margin.left;
+            cy = cursor   + c->margin.top;
+            cw = childCross;
+            ch = childAlong;
+            cursor += childAlong + c->margin.Vertical();
+        }
+        else
+        {
+            cx = cursor   + c->margin.left;
+            cy = contentY + c->margin.top;
+            cw = childAlong;
+            ch = childCross;
+            cursor += childAlong + c->margin.Horizontal();
+        }
+
+        // Apply through the same channel as explicit caller mutation, so
+        // WasResized() and the next-frame-commit path stay consistent.
+        c->Resize(cx, cy, cw, ch);
+        c->PaneResized();   // commit immediately -- layout passes don't defer
+
+        // Recurse into the child's own children if it's a container.
+        if (c->layoutKind != SLayoutKind::None)
+            c->LayoutChildren();
+    }
+}
+
+void TPane::RunLayoutPass()
+{
+    // Pass 1: measure (bottom-up). The root pane measures against its own
+    // current size as a constraint -- callers that want the root to size to
+    // a viewport (window, sokol_app drawable, etc.) should Resize/PaneResized
+    // the root first.
+    MeasureSelf(SSize(width, height));
+    // Pass 2: arrange (top-down).
+    LayoutChildren();
+    SetDirty(false);   // any layout work for this subtree is now current
 }
 
 // ----------------------------------------------------------------------------
