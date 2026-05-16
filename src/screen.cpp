@@ -24,6 +24,58 @@ extern bool LoaderWait;
 
 // Screen Display Functions
 
+// ----------------------------------------------------------------------------
+// TPane retained-mode hierarchy (A.2a). See screen.h for ownership notes.
+// ----------------------------------------------------------------------------
+
+TPane::~TPane()
+{
+    if (parent)
+        parent->RemoveChild(this);
+    for (TPane* c : children)
+        if (c && c->parent == this)
+            c->parent = nullptr;
+    children.clear();
+}
+
+void TPane::AddChild(TPane* child)
+{
+    if (!child || child == this)
+        return;
+    // If the child is already parented somewhere (including us), unlink it
+    // from its previous parent first so the back-pointer stays single-valued.
+    if (child->parent)
+        child->parent->RemoveChild(child);
+    child->parent = this;
+    children.push_back(child);
+    // A new child counts as a change in this subtree; propagate dirty up so
+    // any cached layout / draw work in ancestors gets re-evaluated.
+    SetDirty(true);
+}
+
+void TPane::RemoveChild(TPane* child)
+{
+    if (!child)
+        return;
+    for (auto it = children.begin(); it != children.end(); ++it)
+    {
+        if (*it == child)
+        {
+            children.erase(it);
+            // Only clear the back-pointer if it still references us; protects
+            // against the child having been re-parented before we got here.
+            if (child->parent == this)
+                child->parent = nullptr;
+            SetDirty(true);
+            return;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TScreen
+// ----------------------------------------------------------------------------
+
 TScreen::TScreen()
 {
     nextscreen = nullptr;

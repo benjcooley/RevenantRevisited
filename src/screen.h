@@ -10,6 +10,8 @@
 
 #include "revenant.h"
 
+#include <vector>
+
 // ******************************
 // * TPane - Screen pane object *
 // ******************************
@@ -34,12 +36,23 @@ class TPane
     bool dirty;                               // Pane needs update
     int32_t  backgroundbuffer;                // Background buffer index
 
+    // Retained-mode tree (A.2a). Non-owning — lifetime of children is managed
+    // by whoever created them, matching TScreen's TPaneArray convention.
+    // Empty by default; vanilla screens that never call AddChild still walk
+    // through TScreen's flat pane array exactly as before.
+    TPane* parent = nullptr;
+    std::vector<TPane*> children;
+
    public:
 
     TPane() {}
     TPane(int32_t px, int32_t py, int32_t pw, int32_t ph, bool phide = false)
       { newx = x = px; newy = y = py; newwidth = width = pw; newheight = height = ph; hidden = phide; }
       // Create pane
+
+    virtual ~TPane();
+      // Unlinks from parent + nulls children's back-pointers. Children are not
+      // deleted (non-owning). See AddChild for ownership notes.
 
   // Init & Close functions
     virtual bool Initialize();
@@ -117,10 +130,14 @@ class TPane
       // True if any changes to position or size was made during the previous frame
     virtual void SetClipRect();
       // Sets the display's origin and clipping rectangle to clip this pane
-    virtual void Update() { dirty = true; }
+    virtual void Update() { SetDirty(true); }
       // Flag the pane as needing a background update
-    virtual void SetDirty(bool newdirty) { dirty = newdirty; }
-      // For setting the update status explicitly
+    virtual void SetDirty(bool newdirty)
+      { dirty = newdirty; if (newdirty && parent) parent->SetDirty(true); }
+      // For setting the update status explicitly. Marking dirty propagates
+      // up the parent chain so the renderer / layout cache knows the subtree
+      // needs work; marking clean does NOT propagate (siblings may still be
+      // dirty).
     
     virtual void Show() { hidden = false; ignoreinput = false; Update(); }
       // Draws pane's imagery to backbuffer
@@ -168,9 +185,29 @@ class TPane
   // Converts points in pane to points on the screen
     void PaneToScreen(int32_t panex, int32_t paney, int32_t &screenx, int32_t &screeny)
       { screenx = x + panex - scrollx; screeny = y + paney - scrolly; }
-    void PaneToScreen(SRect &r) 
+    void PaneToScreen(SRect &r)
       { r.left = x + r.left - scrollx; r.top = y + r.top - scrolly;
         r.right = x + r.right - scrollx; r.bottom = y + r.bottom - scrolly; }
+
+  // Retained-mode hierarchy (A.2a).
+  //
+  // Ownership is non-owning: children pointers are weak references, exactly
+  // like TScreen's TPaneArray. The caller that allocated the child is also
+  // responsible for deleting it. AddChild / RemoveChild only maintain the
+  // parent/child pointer relationship.
+  //
+  // If a pane gets deleted (its dtor runs), it unlinks itself from its
+  // parent's children vector and nulls its children's parent pointers, so
+  // neither side ends up dangling.
+  //
+  // No existing pane in the codebase uses this today -- screens still
+  // manage a flat TPaneArray. Children only come into play for panes that
+  // explicitly opt in (Phase A.2b/A.2c containers, A.2f scrollable
+  // content viewports, etc.).
+    void AddChild(TPane* child);
+    void RemoveChild(TPane* child);
+    TPane* GetParent() const { return parent; }
+    const std::vector<TPane*>& Children() const { return children; }
 };
 
 // ********************************
