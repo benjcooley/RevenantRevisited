@@ -29,6 +29,7 @@
 #include "time.h"
 #include "tile.h"
 #include "uianchortest.h"
+#include "uicliptest.h"
 #include "uilayouttest.h"
 #include "uinineslicetest.h"
 #include "uistyletest.h"
@@ -2248,6 +2249,8 @@ bool Initialize(const char* mode)
         return InitializeUINineSliceMode();
     if (strcmp(mode, "ui-style") == 0)
         return InitializeUIStyleMode();
+    if (strcmp(mode, "ui-clip") == 0)
+        return InitializeUIClipMode();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2273,6 +2276,8 @@ void Close(const char* mode)
         CloseUINineSliceMode();
     if (strcmp(mode, "ui-style") == 0)
         CloseUIStyleMode();
+    if (strcmp(mode, "ui-clip") == 0)
+        CloseUIClipMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2307,6 +2312,8 @@ void Render(const char* mode)
         return RenderUINineSliceMode();
     if (strcmp(mode, "ui-style") == 0)
         return RenderUIStyleMode();
+    if (strcmp(mode, "ui-clip") == 0)
+        return RenderUIClipMode();
     return RenderBlankMode();
 }
 
