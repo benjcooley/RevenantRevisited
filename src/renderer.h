@@ -542,6 +542,24 @@ public:
     // and refresh outside the draw path.
     void DrawSurface(TSurface* surf, int32_t x, int32_t y);
 
+    // 9-slice blit (A.2d). Treats `bm` as a stretchable panel: the four
+    // corner pieces render verbatim at their source size; the four edges
+    // stretch along their long axis; the center fills. `l/t/r/b` are inset
+    // pixel counts into the source bitmap that mark the inner rect (the
+    // edges/center region). `(dx, dy, dw, dh)` is the screen-space target
+    // rect to draw into.
+    //
+    // If insets sum to more than the bitmap (e.g. l+r > bm->width) the
+    // insets are clamped to bm->width/2 and bm->height/2 so the math
+    // stays sane. Zero / degenerate dest pieces are skipped silently.
+    //
+    // Used by panes that want stretchable backgrounds (buttons, dialog
+    // frames, panels). Source atoms typically come from retail widget
+    // atlases (widgetstex.dat, medgold.dat, ...).
+    void DrawNineSlice(PTBitmap bm,
+                       int32_t l, int32_t t, int32_t r, int32_t b,
+                       int32_t dx, int32_t dy, int32_t dw, int32_t dh);
+
     void AddHud   (class THudDrawable* d, float z = 0.0f);
     void RemoveHud(class THudDrawable* d);
     // Re-register with a new z (cheaper than remove+add). No-op if d

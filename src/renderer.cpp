@@ -3598,6 +3598,65 @@ void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
                        0, 0, sw, sh, sw, sh);
 }
 
+void TRenderer::DrawNineSlice(PTBitmap bm,
+                              int32_t l, int32_t t, int32_t r, int32_t b,
+                              int32_t dx, int32_t dy, int32_t dw, int32_t dh)
+{
+    if (!bm) return;
+    if (dw <= 0 || dh <= 0) return;
+
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    const sg_image img = TextureImage(tex);
+    if (!img.id) return;
+
+    const int32_t sw = bm->width;
+    const int32_t sh = bm->height;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+
+    // Clamp insets to half the source (and ensure non-negative) so any
+    // crazy caller input stays sane. Same clamp applies to dest pieces.
+    l = (std::max)(0, (std::min)(l, sw / 2));
+    r = (std::max)(0, (std::min)(r, sw / 2));
+    t = (std::max)(0, (std::min)(t, sh / 2));
+    b = (std::max)(0, (std::min)(b, sh / 2));
+
+    // Source columns: [0..l), [l..sw-r), [sw-r..sw)
+    // Source rows:    [0..t), [t..sh-b), [sh-b..sh)
+    const int32_t sx0 = 0,         sx1 = l,            sx2 = sw - r;
+    const int32_t sy0 = 0,         sy1 = t,            sy2 = sh - b;
+    const int32_t sw0 = l,         sw1 = sw - l - r,   sw2 = r;
+    const int32_t sh0 = t,         sh1 = sh - t - b,   sh2 = b;
+
+    // Dest pieces: corners fixed at their source size; edges/center
+    // get the remainder. If target is narrower/shorter than the corners,
+    // the middle pieces collapse and the lambda below skips them.
+    const int32_t dx0 = dx,        dx1 = dx + l,       dx2 = dx + dw - r;
+    const int32_t dy0 = dy,        dy1 = dy + t,       dy2 = dy + dh - b;
+    const int32_t dw0 = l,         dw1 = dw - l - r,   dw2 = r;
+    const int32_t dh0 = t,         dh1 = dh - t - b,   dh2 = b;
+
+    auto blit = [&](int32_t bdx, int32_t bdy, int32_t bdw, int32_t bdh,
+                    int32_t bsx, int32_t bsy, int32_t bsw, int32_t bsh)
+    {
+        if (bdw <= 0 || bdh <= 0 || bsw <= 0 || bsh <= 0)
+            return;
+        CompositeSwapchain(img, bdx, bdy, bdw, bdh, target_w, target_h,
+                           bsx, bsy, bsw, bsh, sw, sh);
+    };
+
+    blit(dx0, dy0, dw0, dh0, sx0, sy0, sw0, sh0);  // TL corner
+    blit(dx1, dy0, dw1, dh0, sx1, sy0, sw1, sh0);  // top edge
+    blit(dx2, dy0, dw2, dh0, sx2, sy0, sw2, sh0);  // TR corner
+    blit(dx0, dy1, dw0, dh1, sx0, sy1, sw0, sh1);  // left edge
+    blit(dx1, dy1, dw1, dh1, sx1, sy1, sw1, sh1);  // center
+    blit(dx2, dy1, dw2, dh1, sx2, sy1, sw2, sh1);  // right edge
+    blit(dx0, dy2, dw0, dh2, sx0, sy2, sw0, sh2);  // BL corner
+    blit(dx1, dy2, dw1, dh2, sx1, sy2, sw1, sh2);  // bottom edge
+    blit(dx2, dy2, dw2, dh2, sx2, sy2, sw2, sh2);  // BR corner
+}
+
 void TRenderer::AddHud(THudDrawable* d, float z)
 {
     if (!d) return;
