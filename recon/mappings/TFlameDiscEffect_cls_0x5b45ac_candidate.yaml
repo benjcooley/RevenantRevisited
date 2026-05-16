@@ -1,0 +1,20 @@
+# TFlameDiscEffect - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TFlameDiscEffect"
+ghidra_class: "cls_0x5b45ac"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "FLAMEDISC" string at .rdata 005e1b4c second XREF at 0x00512c40 lands
+#     at +0x50 in fn 0x512bf0 in cls_0x5b45ac.
+#   - "lightning" sound key second XREF at 0x00512c16 also lands +0x26 in
+#     this class.
+#   - cls_0x5b45ac size 401 bytes, 4 methods, self-allocated 0x1cc bytes.
+#   - Inherits from cls_0x5a50e8 (MissileEffect hierarchy).
+#
+# Pairs with cls_0x5b4534 (TFireColumnEffect candidate) which also has
+# FLAMEDISC at +0x710. Inferred split: FireColumn loads the FLAMEDISC
+# imagery as one of its frames (sharing assets), and a separate
+# TFlameDiscEffect (this class) is the standalone spinning-disc projectile.
+
+fields:
+methods:

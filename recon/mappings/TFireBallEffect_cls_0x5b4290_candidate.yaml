@@ -1,0 +1,26 @@
+# TFireBallEffect - MEDIUM CONFIDENCE CANDIDATE
+# (Note: distinct from the previously demoted cls_0x41cdd0 -> TFireBallAnimator
+# mapping, which was a hash/LRU cache and definitely wrong.)
+source_class: "TFireBallEffect"
+ghidra_class: "cls_0x5b4290"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "FireBall" string at .rdata 005e1b28 second XREF at 0x00510ce0 lands
+#     at delta +0x110 in fn 0x510bd0 in cls_0x5b4290.
+#   - "FIRECOLUMN" at 005e1b34 XREF at 0x005123d0 lands at +0x280 in
+#     cls_0x5b4290 — so this class also handles "FIRECOLUMN" registration.
+#   - "FIRESHOOT" at 005e1a78 XREF at 0x00510d0d (+0x13d in fn 0x510bd0).
+#   - "FIREHIT" at 005e1a84 XREF at 0x005111be (+0x5ee).
+#     The FIREHIT/FIRESHOOT pair is a fireball's launch+impact event names.
+#   - cls_0x5b4290 size 1224 bytes, 10 methods, self-allocated 0x4cc bytes.
+#   - Inherits from cls_0x5a50e8 base (MissileEffect hierarchy).
+#
+# Caveat: cls_0x5b4290 may actually be a SHARED class for FireBall AND
+# FireColumn (both registered here). Could be TFireProjectileEffect with
+# a "type" enum distinguishing variants, OR Ghidra has merged two adjacent
+# classes. Inspect the vtable shape to decide; for now treat as
+# TFireBallEffect since FireBall is its primary type token.
+
+fields:
+methods:

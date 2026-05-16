@@ -1,0 +1,32 @@
+# TFireColumnEffect / TFlameDiscEffect - MEDIUM CONFIDENCE CANDIDATE
+# (Two registry names land in this class — likely TFireColumnEffect AND
+# TFlameDiscEffect are merged by Ghidra OR this is a generic
+# fire-column/disc class with mode switching.)
+source_class: "TFireColumnEffect"
+ghidra_class: "cls_0x5b4534"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "FireColumn" string at .rdata 005e1b40 XREF at 0x00512470 lands
+#     at +0x40 in fn 0x512430 in cls_0x5b4534.
+#   - "FLAMEDISC" at 005e1b4c XREFs:
+#       0x00512b40 at +0x710 in cls_0x5b4534
+#       0x00512c40 at +0x50  in cls_0x5b45ac (next-door class)
+#   - "lightning" sound key (005e1aec) XREF lands at +0x772 in cls_0x5b4534
+#     (so cls_0x5b4534 plays a "lightning" sound — possibly a FlameDisc's
+#     electrical sparks variant).
+#   - "MissileEffect.cpp" assert string XREFs lie at 0x512740/0x51276d/0x512792/
+#     0x512b20 — all within cls_0x5b4534's method 0x512740 range. This
+#     CONFIRMS cls_0x5b4534 is a (or the?) MissileEffect.cpp class.
+#   - cls_0x5b4534 size 636 bytes, 6 methods, self-allocated 0x27c bytes.
+#   - Inherits from cls_0x5a50e8 base (MissileEffect hierarchy).
+#
+# cls_0x5b45ac (next-door, 401 bytes, alloc 0x1cc) is a separate class
+# that also touches FLAMEDISC — probably TFlameDiscEffect proper, with
+# cls_0x5b4534 being TFireColumnEffect. Need vtable comparison to confirm.
+
+fields:
+methods:
+  # 0x512430 - FireColumn registrar
+  # 0x512740 - method with MissileEffect.cpp assert (one of the asserting
+  #            invariants from the retail debug build)
