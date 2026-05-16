@@ -1,0 +1,50 @@
+# TLightningAnimator - MEDIUM-HIGH CONFIDENCE CANDIDATE
+# (Supersedes the demoted cls_0x5a47f0 mapping — see EXTRACTION_PASS_2026-05-16.md.)
+source_class: "TLightningAnimator"
+ghidra_class: "cls_0x5b0a28"
+confidence: "MEDIUM-HIGH"
+
+# Evidence (XREF-driven):
+#   - "LightningStorm" string at .rdata 005e1598 has 2 XREFs:
+#       00503520 (delta +0x9b0 in fn 0x502b70, owner cls_0x5b0a28)
+#       00503720 (separate class — cls_0x503540, looks like cls_0x5b0a28's
+#                 sibling/helper) — secondary callsite, not in this class.
+#   - "ENERGYSPRAY" (005e14b8) and "EnergySpray" (005e158c) XREFs at
+#       0x502c5c and 0x502c30 both land at delta +0xec/+0xc0 in cls_0x5b0a28's
+#       virt_meth_0x502b70 — the single visible function in this class.
+#   - "rhand" (005e14c4) at 0x502dd0 — same function (+0x260).
+#   - **`d:\revenant\Effect3.cpp`** asserts: the assert string at .rdata
+#       005e14cc (the path) has its check landing in this class's fn — this
+#       is the Effect3.cpp-containing class.
+#   - cls_0x5b0a28 size 1400 bytes, 5 methods.
+#     - virt_meth_0x502b70 — the registrar + per-frame Update (calls
+#       TObjectInstance::4de800 on this, increments mbr_0x184 counter, sets
+#       mbr_0x188 timer based on counter value — classic strike-cycle state
+#       machine consistent with a lightning storm).
+#     - virt_meth_0x509360 — vtbl dtor wrapper.
+#     - virt_meth_0x509390 — virtual creator: allocates 0x578 (1400) bytes,
+#       constructs as cls_0x5a47f0 base then patches vftable to this class.
+#       Returns cls_0x5a47f0 * (covariant return for TEffect *).
+#     - virt_meth_0x509430 — wrapper around ~cls_0x5b0a28.
+#     - ~cls_0x5b0a28 — chains through cls_0x5a7e38::virt_meth_0x40de10
+#       then cls_0x5b0074::~cls_0x5b0074. (Same TEffect-base chain as all
+#       leaf effect classes.)
+#
+# Open question: is this TLightningAnimator or TStormAnimator? The source
+# pre-release tree has both:
+#   - `TLightningAnimator` in stripeffect.h (single bolt animation)
+#   - `TStormAnimator` in effectcomp.cpp (multi-bolt storm w/ instances)
+# The "LightningStorm" registry name + the 1400-byte size + the multi-strike
+# state machine in fn 0x502b70 + the secondary class cls_0x503540 (likely
+# the per-bolt SStormInstance) strongly fits TLightningAnimator from Effect3.cpp
+# acting AS a "LightningStorm" composite. Could also be TStormAnimator templated
+# as LightningStorm. Confirm by source-side compare of TLightningAnimator's
+# member set against this class's mbr_0x4..mbr_0x574 layout.
+
+fields:
+methods:
+  # 0x502b70 - registrar + Update (state machine)
+  # 0x509360 - vtbl dtor wrapper
+  # 0x509390 - virtual CreateInstance (alloc 0x578)
+  # 0x509430 - delete wrapper
+  # 0x509450 - ~TLightningAnimator
