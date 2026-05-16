@@ -107,6 +107,48 @@ Bump the status as each stage clears. Do not skip stages.
 - **World-space throughout** in any deferred-lighting path.
 - **Renderer stays game-agnostic.** Effect-specific code lives in `src/`, not in the core renderer. The renderer exposes generic submission (`SBillboardDrawItem`, `SParticleDrawItem`, etc.).
 
+### 3.5 Dual-track porting: engine vs direct mesh port
+
+Many retail effects are **composites** of a bone-animated I3D mesh + particles
++ light. (Meteor body + flame trail + impact spark; fire-column animated core
++ ember swirl; tornado funnel mesh + dust particles; dragon-fire ball mesh +
+ember tail.) The data-driven engine handles the particles / strips /
+billboards. The I3D mesh subsystem does **not** belong in that engine — port
+it directly from retail animation code instead.
+
+**Two tracks for any given effect:**
+
+| Track                       | Use when                                                          | Where it lives                                                   |
+|-----------------------------|-------------------------------------------------------------------|------------------------------------------------------------------|
+| **Engine extension**        | Behavior is billboards, particles, strips, light-pulse, blend-mode permutation. | Effect definition + (rare) new engine capability per §3.2 above. |
+| **Direct retail mesh port** | Behavior requires a bone-animated I3D mesh, per-frame pose updates, mesh-specific state (rotation, scale tween, anim curve). | New C++ class in `src/`, modelled on retail decomp. Held as an `IM` component of the effect.  |
+
+**How the two combine:** the effect class owns *both*. It instantiates an
+I3D-mesh component (using existing renderer mesh-submit path — **not** a new
+sokol pipeline), spawns particle buckets through the VFX engine, optionally
+registers a `Renderer->AddPointLight` each frame, and coordinates their
+lifecycle. Lifecycle goes through `RegisterUpdate` like any other component.
+
+**Rules of thumb:**
+
+- If the retail class is mostly bone math + animation table lookups + I3D
+  draw → it's a direct port. Don't shoehorn it into the expression VM.
+- If the retail class is mostly `SpawnParticle()` calls + simple geometry →
+  it's an engine effect definition.
+- Composites: factor cleanly. The mesh half is a port; the particle half is
+  a def. They share an owner.
+- The renderer's existing `SMeshSubmit` / skinned-mesh path is already there
+  — don't add a new sokol pipeline for `IM`. (PHASE1_SPINE.md §1 lists this
+  explicitly: MP/IM mesh-paths reuse `SMeshSubmit`, no new pipeline.)
+- Preserve retail mesh code under `attic/` or `#ifdef UNUSED` if you replace
+  rather than evolve it — per project-wide rule.
+
+This rule reconciles PARTICLE_EFFECTS.md §15 ("don't port D3D animators
+one-by-one as bespoke renderers") with the reality that some retail
+animators *are* legitimate I3D-mesh code that has no place in a particle
+engine. §15 stands for particle/billboard/strip animators; the I3D-mesh
+slice is the explicit carve-out.
+
 ## 4. Verifying
 
 ### 4.1 Visual check via `--test=vfx`
