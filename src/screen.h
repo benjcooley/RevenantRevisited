@@ -119,6 +119,14 @@ class TPane
     // of the public API; do not read directly.
     SSize       measured;
 
+    // Clip rect (A.2f). When set, the pane signals that its draw output
+    // should be clipped to this screen-space rectangle. Renderer-side
+    // scissoring is a TODO -- it lands when the first B-phase pane that
+    // wants real clipping wires it through DrawHud. The API exists now
+    // so consumers can opt in cleanly when the renderer side arrives.
+    bool        hasClip = false;
+    SRect       clipRect{};
+
    public:
 
     TPane() {}
@@ -310,6 +318,14 @@ class TPane
 
     SAnchor GetAnchor() const           { return anchor; }
     void    SetAnchor(SAnchor a)        { anchor = a; SetDirty(true); }
+
+  // Clip rect (A.2f). Screen-space rectangle the pane wants clipped to.
+  // No-op for vanilla panes that never opt in. Renderer-side scissoring
+  // is the next consumer's job -- the API is the A.2f deliverable.
+    bool HasClipRect() const            { return hasClip; }
+    void GetClipRect(SRect& out) const  { out = clipRect; }
+    void SetClipRect(const SRect& r)    { clipRect = r; hasClip = true; SetDirty(true); }
+    void ClearClipRect()                { hasClip = false; SetDirty(true); }
 
   // Two-pass layout (A.2b).
   //
