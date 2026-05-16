@@ -92,6 +92,19 @@ SSize TPane::MeasureSelf(const SSize& parentConstraint)
         // Leaf / explicit-rect pane. Preferred size = the rect the caller
         // configured. parentConstraint is ignored intentionally; non-container
         // panes don't react to their parent.
+        //
+        // Still recurse into children so anchored descendants (A.2c) have a
+        // valid `measured` size for LayoutChildren to read. Children's
+        // measured sizes don't affect this pane's own measurement.
+        for (TPane* c : children)
+        {
+            if (!c) continue;
+            const SSize cConstraint{
+                parentConstraint.w - c->margin.Horizontal(),
+                parentConstraint.h - c->margin.Vertical()
+            };
+            c->MeasureSelf(cConstraint);
+        }
         measured = SSize(newwidth, newheight);
         return measured;
     }
@@ -146,7 +159,7 @@ SSize TPane::MeasureSelf(const SSize& parentConstraint)
 
 void TPane::LayoutChildren()
 {
-    if (layoutKind == SLayoutKind::None || children.empty())
+    if (children.empty())
         return;
 
     // Content rect = own rect minus padding (origin in this pane's
@@ -156,6 +169,72 @@ void TPane::LayoutChildren()
     const int32_t contentY = y + padding.top;
     const int32_t contentW = (std::max)(0, width  - padding.Horizontal());
     const int32_t contentH = (std::max)(0, height - padding.Vertical());
+
+    // None-layout parents (A.2c): position any anchored children against the
+    // content rect. Non-anchored children keep their explicit (x, y) so this
+    // path stays vanilla for everything that hasn't opted in.
+    if (layoutKind == SLayoutKind::None)
+    {
+        for (TPane* c : children)
+        {
+            if (!c || c->anchor == SAnchor::None)
+                continue;
+
+            // Use the child's measured size (populated by MeasureSelf) as
+            // the anchored box; falls back to the explicit width/height
+            // for leaves that never set anything.
+            const int32_t cw = c->measured.w > 0 ? c->measured.w : c->GetWidth();
+            const int32_t ch = c->measured.h > 0 ? c->measured.h : c->GetHeight();
+
+            int32_t cx = contentX, cy = contentY;
+            switch (c->anchor)
+            {
+              case SAnchor::TopLeft:
+              case SAnchor::CenterLeft:
+              case SAnchor::BottomLeft:
+                cx = contentX + c->margin.left;
+                break;
+              case SAnchor::TopCenter:
+              case SAnchor::Center:
+              case SAnchor::BottomCenter:
+                cx = contentX + (contentW - cw) / 2;
+                break;
+              case SAnchor::TopRight:
+              case SAnchor::CenterRight:
+              case SAnchor::BottomRight:
+                cx = contentX + contentW - cw - c->margin.right;
+                break;
+              default:
+                break;
+            }
+            switch (c->anchor)
+            {
+              case SAnchor::TopLeft:
+              case SAnchor::TopCenter:
+              case SAnchor::TopRight:
+                cy = contentY + c->margin.top;
+                break;
+              case SAnchor::CenterLeft:
+              case SAnchor::Center:
+              case SAnchor::CenterRight:
+                cy = contentY + (contentH - ch) / 2;
+                break;
+              case SAnchor::BottomLeft:
+              case SAnchor::BottomCenter:
+              case SAnchor::BottomRight:
+                cy = contentY + contentH - ch - c->margin.bottom;
+                break;
+              default:
+                break;
+            }
+
+            c->Resize(cx, cy, cw, ch);
+            c->PaneResized();
+            if (c->layoutKind != SLayoutKind::None)
+                c->LayoutChildren();
+        }
+        return;
+    }
 
     // Phase 1 of arrange: along-axis sizing.
     //

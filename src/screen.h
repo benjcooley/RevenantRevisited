@@ -33,6 +33,18 @@
 enum class SLayoutKind  : uint8_t { None, Vertical, Horizontal };
 enum class SSizePolicy  : uint8_t { Fixed, Greedy };
 
+// 3x3 grid of anchor points + None default. An anchored child is positioned
+// against its parent's content rect (own rect minus padding), keeping its
+// own size; margin acts as inset from the anchored edge. Only applies when
+// the parent's layoutKind == None -- V/H containers position children via
+// the flex pass. Default None preserves vanilla "use explicit (x,y)".
+enum class SAnchor : uint8_t {
+    None,
+    TopLeft,    TopCenter,    TopRight,
+    CenterLeft, Center,       CenterRight,
+    BottomLeft, BottomCenter, BottomRight,
+};
+
 struct SSpacing  // left/top/right/bottom in pixels; default zero
 {
     int32_t left   = 0;
@@ -96,9 +108,10 @@ class TPane
     SLayoutKind layoutKind   = SLayoutKind::None;
     SSizePolicy hsizePolicy  = SSizePolicy::Fixed;
     SSizePolicy vsizePolicy  = SSizePolicy::Fixed;
+    SAnchor     anchor       = SAnchor::None;  // anchor against None-layout parent
     float       greedyWeight = 1.0f;   // share when Greedy among siblings
     SSpacing    padding;               // inside container, around children
-    SSpacing    margin;                // outside this pane, inside parent
+    SSpacing    margin;                // outside this pane, inside parent (and inset from anchored edge)
     int32_t     spacing      = 0;      // between siblings in V/H container
 
     // Cached measure result -- populated by MeasureSelf() during pass 1,
@@ -294,6 +307,9 @@ class TPane
 
     int32_t GetSpacing() const          { return spacing; }
     void    SetSpacing(int32_t s)       { spacing = s; SetDirty(true); }
+
+    SAnchor GetAnchor() const           { return anchor; }
+    void    SetAnchor(SAnchor a)        { anchor = a; SetDirty(true); }
 
   // Two-pass layout (A.2b).
   //
