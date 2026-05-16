@@ -773,3 +773,329 @@ TFlameEffect* TFlameEffect::SpawnForTest(const S3DPoint& origin)
              img3d->NumTextures());
     return flame;
 }
+
+// *************************************************************************
+// * TBloodEffect - PE-pipeline minimum-viable spawn for --test=vfx        *
+// *************************************************************************
+//
+// Scope: Phase 2.2 pipeline validator. This is *not* a faithful port of
+// retail TBloodSystem kinematics (gravity, splat-sticking, surface-decal
+// blood splats). Those land in Phase 2.2.1 once TBloodSystem +
+// TBloodAnimator are mapped against the retail Ghidra output
+// (recon/classes/cls_0x5acaa8.cpp — the merged Blood+Mist+WaterFall file
+// flagged in INVENTORY for split-before-port).
+//
+// What this *does* deliver:
+//   1. A real `TBloodEffect` instance that owns its lifecycle.
+//   2. A `TParticleBucket` allocated from `ParticleManager()` and submitted
+//      every frame via `Renderer->SubmitFxParticleBucket()` — exercising
+//      the PE pipeline end-to-end through the real effect class lineage.
+//   3. The bucket's texture is sourced from the canonical bloodimagery
+//      (`Misc\Blood.I3D`, the same asset playscreen.cpp:236 loads), so
+//      this validates 3D-imagery → particle-texture wiring too.
+//   4. Spawns red, downward + outward droplets with brief lifetime — the
+//      "vaguely like a blood spray" bar the scope sets explicitly.
+//
+// What this does *not* deliver:
+//   - Faithful retail TBloodSystem droplet/splat state machine.
+//   - Surface intersection for decals.
+//   - The TBloodAnimator <-> TParticleSystem dispatch glue.
+//
+// Per the time-box rule, all of the above are deferred to Phase 2.2.1
+// rather than blocking this row on TBloodSystem reverse-engineering.
+namespace {
+
+constexpr const char* kBloodImageryPath  = "Misc\\Blood.I3D";
+constexpr const char* kBloodBucketName   = "vfx.blood.droplets";
+
+// Monotonic counter for per-instance owner_particle_id so multiple
+// concurrent spawns don't share particles in the global bucket. The
+// usual ownership stamp is GetMapIndex(), but particles allocated via
+// SpawnForTest live in the *global* TParticleManager bucket where map
+// indices aren't unique across the whole engine — a dedicated 1000+
+// range avoids stomping any real map-index-derived ids.
+float NextBloodOwnerId()
+{
+    static float next = 1000.0f;
+    const float v = next;
+    next += 1.0f;
+    return v;
+}
+
+// Lazily allocate the shared droplet bucket against the blood imagery's
+// texture slot 0. Returns nullptr if the texture handle isn't available
+// yet (caller logs + bails).
+TParticleBucket* AcquireBloodBucket(T3DImagery* img3d)
+{
+    if (TParticleBucket* existing = ParticleManager().FindGlobalBucket(kBloodBucketName))
+        return existing;
+
+    // Mirror TFlameEffect::AttachVisualComponent's lazy-mesh-init poke:
+    // NumTextures() doesn't trigger init by itself, NumObjects() does.
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[blood] AcquireBloodBucket: imagery has 0 textures after "
+                  "lazy-init poke (objects=%d)", img3d->NumObjects());
+        return nullptr;
+    }
+
+    S3DTex tex = {};
+    img3d->GetTexture(0, &tex);
+    if (tex.htexture == kInvalidTexture)
+    {
+        log_error("[blood] AcquireBloodBucket: texture slot 0 handle invalid");
+        return nullptr;
+    }
+
+    SParticleBucketDesc desc = {};
+    desc.name           = kBloodBucketName;
+    desc.scope          = EParticleBucketScope::Global;
+    desc.blend          = EParticleBlendMode::Alpha;
+    desc.sort           = EParticleSortMode::None;
+    desc.texture        = tex.htexture;
+    desc.texture_width  = int32_t(tex.desc.width  > 0 ? tex.desc.width  : 1);
+    desc.texture_height = int32_t(tex.desc.height > 0 ? tex.desc.height : 1);
+    // Blood imagery has multiple sprite frames; for the Phase 2.2 stage
+    // gate we just blit the whole sheet — a Phase 2.2.1 follow-up will
+    // wire the proper frame UV picker once TBloodSystem.SBloodParticle's
+    // size/stage fields are mapped from retail.
+    desc.default_width  = 16.0f;
+    desc.default_height = 16.0f;
+
+    SParticleBufferLayout layout = {};
+    ParticleLayoutAddVar(layout, EParticleVar::OwnerId);
+    ParticleLayoutAddVar(layout, EParticleVar::Life);
+    ParticleLayoutAddVar(layout, EParticleVar::Age);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawPos);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
+    // EmitVel stores per-particle velocity (world-units / sec) so the
+    // tick step can integrate without re-randomizing every frame.
+    ParticleLayoutAddVar(layout, EParticleVar::EmitVel);
+
+    TParticleBucket* bucket = ParticleManager().GetOrCreateGlobalBucket(desc, layout);
+    log_info("[blood] AcquireBloodBucket: bucket='%s' tex=%dx%d handle=%u",
+             kBloodBucketName, desc.texture_width, desc.texture_height,
+             tex.htexture);
+    return bucket;
+}
+
+} // namespace
+
+TBloodEffect::~TBloodEffect()
+{
+    // Evict our particles from the shared bucket. Bucket itself stays
+    // alive on the manager — it's reused across spawn cycles in the
+    // --test=vfx harness (Left/Right cycling destroys + respawns).
+    if (bucket_ && owner_particle_id_ >= 0.0f)
+        bucket_->KillParticlesByOwner(owner_particle_id_);
+}
+
+// Retail TBloodEffect::Initialize / Pulse are the in-game spawn-path
+// hooks (decompiled body lives in recon/classes/cls_0x5acaa8.cpp, merged
+// with Mist + WaterFall — see INVENTORY B01 notes). For Phase 2.2
+// (PE-pipeline validator) we provide empty bodies so the vtable links;
+// the `--test=vfx` path drives spawn + tick through SpawnForTest +
+// TickAndSubmitForTest instead. Faithful retail kinematics + the
+// SObjectDef-driven Pulse cycle land in Phase 2.2.1.
+void TBloodEffect::Initialize()
+{
+    // Phase 2.2.1: port body from recon/classes/cls_0x5acaa8.cpp once the
+    // Ghidra merge is split into TBloodEffect / TMistEffect / TWaterFallEffect.
+}
+
+void TBloodEffect::Pulse()
+{
+    TEffect::Pulse();
+    // Phase 2.2.1: port body from recon. The PE-pipeline harness uses
+    // TickAndSubmitForTest, which doesn't depend on Pulse() — but the
+    // in-game spawn path will once Phase 2.2.1 lands.
+}
+
+TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
+{
+    const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[blood] SpawnForTest: FindImagery('%s') failed", kBloodImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[blood] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kBloodImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[blood] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kBloodImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* blood = new TBloodEffect(base);
+    blood->ForcePos(origin);
+    blood->SetMapIndex(MapPane.MakeIndex());
+    blood->ActivateComponents();
+
+    blood->bucket_ = AcquireBloodBucket(img3d);
+    if (!blood->bucket_)
+    {
+        // Imagery loaded but bucket couldn't be built (texture not ready
+        // / asset structurally unexpected). The TBloodEffect itself is
+        // still valid — TickAndSubmitForTest is a no-op without a bucket
+        // so the harness still navigates past B01 cleanly.
+        log_warn("[blood] SpawnForTest: bucket unavailable — B01 will draw nothing");
+        return blood;
+    }
+    blood->owner_particle_id_ = NextBloodOwnerId();
+
+    log_info("[blood] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "owner_id=%.0f textures=%d",
+             kBloodImageryPath, blood->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             blood->owner_particle_id_, img3d->NumTextures());
+    return blood;
+}
+
+void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!bucket_ || !Renderer)
+        return;
+
+    const float dt = float(TTime::DeltaTime());
+    age_ += dt;
+
+    // 1. Integrate existing particles owned by this instance.
+    //    Simple Euler with constant downward acceleration ("gravity").
+    //    Faithful retail kinematics + splat-stick deferred to 2.2.1.
+    constexpr float kGravity = -480.0f;   // wu / s^2 (rough, looks right at default scale)
+    for (int32_t i = 0; i < bucket_->Count(); ++i)
+    {
+        const float* owner = bucket_->VarPtr(i, EParticleVar::OwnerId);
+        if (!owner || *owner != owner_particle_id_)
+            continue;
+        float* vel = bucket_->VarPtr(i, EParticleVar::EmitVel);
+        float* pos = bucket_->VarPtr(i, EParticleVar::DrawPos);
+        float* age = bucket_->VarPtr(i, EParticleVar::Age);
+        float* life_p = bucket_->VarPtr(i, EParticleVar::Life);
+        float* col = bucket_->VarPtr(i, EParticleVar::DrawColor);
+        if (vel)
+            vel[2] += kGravity * dt;
+        if (pos && vel)
+        {
+            pos[0] += vel[0] * dt;
+            pos[1] += vel[1] * dt;
+            pos[2] += vel[2] * dt;
+        }
+        if (age)
+            *age += dt;
+        // Fade alpha across the second half of the particle's life so the
+        // droplets vanish instead of popping. Life is set at AddParticle
+        // time and never mutated after, so we read it here as a constant.
+        if (col && age && life_p && *life_p > 0.0f)
+        {
+            const float t = *age / *life_p;
+            const float raw  = 1.0f - 2.0f * (t - 0.5f);
+            const float fade = t < 0.5f ? 1.0f : (raw < 0.0f ? 0.0f : raw);
+            col[3] = fade;
+        }
+    }
+
+    // 2. Spawn ~24 droplets / second, capped at 40 live for this owner.
+    //    Burst-shaped initial velocity: downward + radial outward cone.
+    constexpr int32_t kMaxLive    = 40;
+    constexpr float   kSpawnRate  = 24.0f;
+    constexpr float   kLife       = 1.4f;
+    spawn_accum_ += dt * kSpawnRate;
+
+    int32_t live_for_owner = 0;
+    for (int32_t i = 0; i < bucket_->Count(); ++i)
+    {
+        const float* o = bucket_->VarPtr(i, EParticleVar::OwnerId);
+        if (o && *o == owner_particle_id_)
+            ++live_for_owner;
+    }
+
+    const S3DPoint& p = Pos();
+    while (spawn_accum_ >= 1.0f && live_for_owner < kMaxLive)
+    {
+        spawn_accum_ -= 1.0f;
+        const int32_t pi = bucket_->AddParticle(owner_particle_id_, kLife);
+        if (pi < 0)
+            break;
+        ++live_for_owner;
+
+        // Random in a downward-biased cone. rand()/RAND_MAX is good
+        // enough for a visual burst; bucket has no seeded RNG yet.
+        const float u1 = float(std::rand()) / float(RAND_MAX);
+        const float u2 = float(std::rand()) / float(RAND_MAX);
+        const float angle  = u1 * 6.28318530718f;
+        const float radial = 60.0f + 80.0f * u2;   // wu/s
+        const float upward = 140.0f + 80.0f * u2;  // wu/s — initial upward burst
+        const float vx = std::cos(angle) * radial;
+        const float vy = std::sin(angle) * radial;
+        const float vz = upward;
+
+        if (float* dp = bucket_->VarPtr(pi, EParticleVar::DrawPos))
+        {
+            dp[0] = float(p.x);
+            dp[1] = float(p.y);
+            dp[2] = float(p.z) + 30.0f;  // emit a touch above the origin
+        }
+        if (float* vel = bucket_->VarPtr(pi, EParticleVar::EmitVel))
+        {
+            vel[0] = vx; vel[1] = vy; vel[2] = vz;
+        }
+        if (float* ds = bucket_->VarPtr(pi, EParticleVar::DrawScl))
+        {
+            const float s = 8.0f + 6.0f * u1;
+            ds[0] = s; ds[1] = s; ds[2] = 1.0f;
+        }
+        if (float* col = bucket_->VarPtr(pi, EParticleVar::DrawColor))
+        {
+            // Deep arterial red with a touch of variation. Alpha fades
+            // in TickAndSubmitForTest's integrator above.
+            col[0] = 0.55f + 0.25f * u2;
+            col[1] = 0.04f + 0.05f * u1;
+            col[2] = 0.04f + 0.05f * u2;
+            col[3] = 1.0f;
+        }
+    }
+    // Drain leftover fractional spawn budget when we're at the cap so it
+    // doesn't accumulate into a backlog burst when particles expire.
+    if (live_for_owner >= kMaxLive && spawn_accum_ > 1.0f)
+        spawn_accum_ = 1.0f;
+
+    // 3. Reap expired particles (age > life) for this owner. The bucket's
+    //    AddParticle / KillParticlesByOwner are the only mutators; we
+    //    swap-and-pop by owner-stamping dead particles back to a sentinel
+    //    then killing that sentinel in one pass.
+    constexpr float kDeadSentinel = -7777.0f;
+    bool any_dead = false;
+    for (int32_t i = 0; i < bucket_->Count(); ++i)
+    {
+        const float* o = bucket_->VarPtr(i, EParticleVar::OwnerId);
+        const float* a = bucket_->VarPtr(i, EParticleVar::Age);
+        const float* l = bucket_->VarPtr(i, EParticleVar::Life);
+        if (!o || *o != owner_particle_id_) continue;
+        if (a && l && *l > 0.0f && *a >= *l)
+        {
+            if (float* mut_o = bucket_->VarPtr(i, EParticleVar::OwnerId))
+            {
+                *mut_o = kDeadSentinel;
+                any_dead = true;
+            }
+        }
+    }
+    if (any_dead)
+        bucket_->KillParticlesByOwner(kDeadSentinel);
+
+    // 4. Hand the bucket to the FX queue. The renderer drains it inside
+    //    RunLightingPass.
+    Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+}
