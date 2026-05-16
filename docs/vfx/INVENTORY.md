@@ -72,7 +72,7 @@ other rows.
 
 | #   | Class                | Pipeline | Retail src      | Recon file | Port file               | Status        | Owner | Notes |
 |-----|----------------------|----------|-----------------|------------|-------------------------|---------------|-------|-------|
-| F01 | `TFlameEffect`       | FB       | effect.cpp      | not-extracted | src/effect.cpp:577      | debug-solid   | phase1-foundation | wired through new `TFlipbookBillboardComponent::Submit` -> `SubmitFxBillboard`; in-sector path verified (build clean). Still `debug-solid` because `--test=vfx` uses the X14 placeholder rather than a live `TFlameEffect` instance (needs a real loaded sector to exercise). Phase 2 should drop the placeholder once a real flame is spawned in-test. |
+| F01 | `TFlameEffect`       | FB       | effect.cpp      | not-extracted | src/effect.cpp:577      | claimed       | phase2-flame | claimed 2026-05-16; replacing X14 placeholder with real `TFlameEffect::SpawnForTest` (loads `Magic\flame.i3d`, spawns sector-less instance, drives flipbook->Submit each frame) |
 | F02 | `TFlameAnimator`     | FB       | effect.cpp      | not-extracted | src/effect.cpp          | not-started   | -     | bridge animator → TFlameEffect; needs Ghidra extraction |
 | F03 | `TFireEffect`        | FB+PE    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | "fire" generic — likely ambient flame patch; needs Ghidra extraction |
 | F04 | `TFireAnimator`      | FB       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | bridge → TFireEffect; confirm distinct from TFlameAnimator; needs Ghidra extraction |
