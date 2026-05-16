@@ -21,7 +21,7 @@ The HUD render-path infrastructure was landed in commit `80879c2` ("engine: HUD 
 
 ## Phase A — Foundational evolutions
 
-- `[ ]` **A.1 `Revisited::IsEnabled()` accessor** — implement the TBD accessor flagged in [revisited/README.md](../../revisited/README.md). Reads `[Revisited]` section of `<SavePath>/Revenant.ini` via the existing INI API. Single public function. Default per key = false. *Small, lands in main.*
+- `[x]` **A.1 `Revisited::IsEnabled()` accessor** — landed in `45fe058` as `src/revisited.{h,cpp}`. Reads `[Revisited]` section of `<SavePath>/Revenant.ini` via existing INI API; default per key = false. No call sites yet — wires to first Revisited-gated A.2 feature.
 - `[ ]` **A.2 `TPane` retained-mode evolution** (`feedback-ui-retained-mode`, `project-ui-layout-system`). *Invasive — use worktree.* Sub-items, all on existing `TPane` in [src/screen.h](../../src/screen.h) / [src/screen.cpp](../../src/screen.cpp):
   - `[ ]` **A.2a Hierarchy** — parent + children + dirty propagation. Vanilla path unchanged.
   - `[ ]` **A.2b 2-pass measure→layout** — vertical/horizontal containers, margin/padding, fixed/greedy sizing policies. Container kind is opt-in per parent; degenerates to explicit-rect for retail panes. `--test=ui-layout` synthesizes a V container with mixed fixed/greedy children.
@@ -92,6 +92,7 @@ Per memory `feedback-code-style`, `feedback-modern-cpp`, `feedback-const-correct
 
 ## Notes log (most-recent first)
 
+- **2026-05-16** — A.1 `Revisited::IsEnabled()` shipped as `src/revisited.{h,cpp}` (commit `45fe058`). Awaiting first call site.
 - **2026-05-16** — Reconciled with `feature/ui` HEAD `80879c2`. HUD render-path infrastructure (`THudDrawable` + `AddHud`/`RemoveHud`/`DrawHud` + `Renderer->DrawBitmap`/`DrawSurface` + `GameData` load) landed prior to this burndown; documented as "Inherited from HEAD" section. B.3 (`TCursorHud`) marked done — cursor works via `THudDrawable` subclass with ImGui-ownership pointer swap.
 - **2026-05-16** — A.2 added **A.2h** for resizable + HiDPI: UI canvas = live window backing, decoupled from game-world framebuffer. Game world composites under UI as a textured quad. Layout re-runs on resize. `project-resolution-modes` rewritten to make game-world resolution and UI canvas resolution two distinct concepts.
 - **2026-05-16** — A.2 added clip rect on `TPane` base + `TScrollPane` viewport/content evolution + alpha (soft-edge) clip variant (A.2f, A.2g). `--test=ui-scroll` covers both hard and soft clip. `project-ui-layout-system` memory updated.
