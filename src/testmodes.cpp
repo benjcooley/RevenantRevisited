@@ -32,6 +32,7 @@
 #include "uicliptest.h"
 #include "uilayouttest.h"
 #include "uinineslicetest.h"
+#include "uistatusbartest.h"
 #include "uistyletest.h"
 #include "uitextbartest.h"
 
@@ -2254,6 +2255,8 @@ bool Initialize(const char* mode)
         return InitializeUIClipMode();
     if (strcmp(mode, "ui-textbar") == 0)
         return InitializeUITextBarMode();
+    if (strcmp(mode, "ui-statusbars") == 0)
+        return InitializeUIStatusBarMode();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2283,6 +2286,8 @@ void Close(const char* mode)
         CloseUIClipMode();
     if (strcmp(mode, "ui-textbar") == 0)
         CloseUITextBarMode();
+    if (strcmp(mode, "ui-statusbars") == 0)
+        CloseUIStatusBarMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2321,6 +2326,8 @@ void Render(const char* mode)
         return RenderUIClipMode();
     if (strcmp(mode, "ui-textbar") == 0)
         return RenderUITextBarMode();
+    if (strcmp(mode, "ui-statusbars") == 0)
+        return RenderUIStatusBarMode();
     return RenderBlankMode();
 }
 
