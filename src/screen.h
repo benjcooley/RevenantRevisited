@@ -127,6 +127,14 @@ class TPane
     bool        hasClip = false;
     SRect       clipRect{};
 
+    // Alpha (soft-edge) clip widths (A.2g). Per-edge fade-in distance from
+    // each clip-rect edge in pixels. 0 = hard clip on that edge (the
+    // default; behaves exactly like A.2f hard-clip). Non-zero values
+    // signal a shader-side fade: content alpha ramps 0->1 across that
+    // distance from the edge. Render-side implementation is TODO (lands
+    // with the first scroll consumer that wants soft visual edges).
+    SSpacing    clipFade{};
+
    public:
 
     TPane() {}
@@ -326,6 +334,12 @@ class TPane
     void GetClipRect(SRect& out) const  { out = clipRect; }
     void SetClipRect(const SRect& r)    { clipRect = r; hasClip = true; SetDirty(true); }
     void ClearClipRect()                { hasClip = false; SetDirty(true); }
+
+  // Alpha (soft-edge) clip widths (A.2g). Per-edge fade-in pixel distances.
+  // Zero on an edge = hard clip on that edge. Only meaningful when a clip
+  // rect is set. Render-side fade shader is TODO.
+    const SSpacing& GetClipFade() const { return clipFade; }
+    void SetClipFade(const SSpacing& f) { clipFade = f; SetDirty(true); }
 
   // Two-pass layout (A.2b).
   //
