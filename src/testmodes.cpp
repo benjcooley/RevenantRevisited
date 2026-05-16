@@ -25,6 +25,7 @@
 #include "render_metadata.h"
 #include "renderer.h"
 #include "revenant.h"
+#include "vfxtest.h"
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
@@ -2236,6 +2237,8 @@ bool Initialize(const char* mode)
         return InitializeI3DMode();
     if (strcmp(mode, "font") == 0)
         return InitializeFontMode();
+    if (strcmp(mode, "vfx") == 0)
+        return VfxTest::Initialize();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2253,6 +2256,8 @@ void Close(const char* mode)
         CloseI3DStaticMode();
     if (strcmp(mode, "water3d") == 0)
         CloseI3DStaticMode();
+    if (strcmp(mode, "vfx") == 0)
+        VfxTest::Close();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2279,6 +2284,8 @@ void Render(const char* mode)
         return RenderTTFMode();
     if (strcmp(mode, "text") == 0)
         return RenderTextMode();
+    if (strcmp(mode, "vfx") == 0)
+        return VfxTest::Render();
     return RenderBlankMode();
 }
 
@@ -2345,6 +2352,11 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleKeyPress(const char* mode, int32_t key, bool down)
 {
+    if (strcmp(mode, "vfx") == 0)
+    {
+        VfxTest::HandleKeyPress(key, down);
+        return;
+    }
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleKeyPress(key, down);
 }
