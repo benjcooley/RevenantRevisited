@@ -573,6 +573,31 @@ bool SaveBlendState()    { return true; }
 bool SetBlendState()     { return true; }
 bool RestoreBlendState() { return true; }
 
+void TFlipbookBillboardComponent::Submit(TRenderer& renderer, const TObjectInstance& inst) const
+{
+    if (texture_handle == kInvalidTexture)
+        return;
+
+    SBillboardDrawItem item = {};
+    const S3DPoint& p = inst.Pos();
+    item.world_pos[0] = float(p.x);
+    item.world_pos[1] = float(p.y);
+    item.world_pos[2] = float(p.z);
+    item.size_wu[0]   = size_w;
+    item.size_wu[1]   = size_h;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    UvRect(item.uv_rect);
+    item.key.texture     = texture_handle;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(additive_blend ? EFxBlend::Additive : EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    renderer.SubmitFxBillboard(item);
+}
+
 DEFINE_BUILDER("FLAME", TFlameEffect)
 REGISTER_BUILDER(TFlameEffect)
 
@@ -633,7 +658,8 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
             ParticleFatal("[particle] FLAME frame expression compile failed: " + expr_error);
         if (!flipbook->SetUvRectExpression(primary_bucket.uv_rect_expr.c_str(), &expr_error))
             ParticleFatal("[particle] FLAME uv rect expression compile failed: " + expr_error);
-        flipbook->SetDebugSolid(def.debug_solid);
+        flipbook->SetDebugMode(def.debug_solid ? EFxDebugMode::SolidColor
+                                               : EFxDebugMode::Normal);
         inst->AddComponent(std::move(flipbook));
         log_info("[flame-component] attached flipbook component tex=%dx%d handle=%u",
                  primary_texture_width, primary_texture_height, primary_tex.htexture);
