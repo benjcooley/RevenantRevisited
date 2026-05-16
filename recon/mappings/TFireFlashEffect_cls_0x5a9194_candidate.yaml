@@ -1,0 +1,29 @@
+# TFireFlashEffect (+ TFireWindEffect + TBurnEffect composite)
+# LOW-MEDIUM CONFIDENCE - giant Ghidra-merged file
+source_class: "TFireFlashEffect"
+ghidra_class: "cls_0x5a9194"
+confidence: "LOW-MEDIUM"
+
+# Evidence:
+#   - "FireFlash" string at .rdata 005e1080 XREFs:
+#       0x4e1750 -> cls_0x5a89b4 (+0x23b0)
+#       0x4e18a0 -> cls_0x5a9194 (+0xb0)
+#     The first XREF is in a DIFFERENT class (cls_0x5a89b4 — a registrar
+#     region), the second is in cls_0x5a9194.
+#   - "FireWind" 005e108c -> both XREFs (0x4e2250 +0xa60, 0x4e23e0 +0xbf0)
+#     in cls_0x5a9194.
+#   - "BURN" 005e1098 -> 0x4e2f80 (+0x1790) also in cls_0x5a9194.
+#   - cls_0x5a9194 size 13504 bytes, only 6 methods — this is a MASSIVELY
+#     merged Ghidra file (allocates 0x34c0 = 13504 bytes per virtual creator,
+#     so the size is self-consistent, but the class can't really be that big
+#     in source).
+#   - Inherits from TEffect chain (cls_0x5b0074::~cls_0x5b0074 in dtor).
+#
+# Open: cls_0x5a9194's actual identity is murky. The 13504-byte size
+# matches a composite effect manager (TParticleEffectManager? holds all
+# registered effect class slots?) more than a single effect. Promote with
+# extreme caution. Multiple INVENTORY rows (TFireFlashEffect, TFireWindEffect,
+# TBurnEffect) may map to fragments of this Ghidra file once it's split.
+
+fields:
+methods:

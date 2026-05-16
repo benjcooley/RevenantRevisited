@@ -1,0 +1,19 @@
+# TIcedEffect overlap note - INFORMATIONAL
+# Not a primary mapping; clarifies "Iced" registry routing.
+
+# The "Iced" effect-name string at .rdata 005e1184 has 2 XREFs:
+#     0x4ec860 -> cls_0x5aaf28 (+0x1730 in fn 0x4eb130)
+#     0x4eca40 -> cls_0x5ab460 (+0x70 in fn 0x4ec9d0)
+# cls_0x5aaf28 is the confirmed-candidate TIceBoltEffect.
+# cls_0x5ab460 is the TStormAnimator candidate (Tornado/Sandswirl/Quicksand).
+#
+# Interpretation: TIceBoltEffect's update method *applies* the "Iced"
+# status effect to its target (one XREF), and TStormAnimator separately
+# can also apply "Iced" (e.g. when an ice-storm targets a character).
+# There is no standalone TIcedEffect class in retail — "Iced" is a status
+# tag posted by other effects, not a TEffect-derived class.
+#
+# INVENTORY row I22 (TIcedEffect "VO frozen status overlay") should
+# therefore be RE-EVALUATED: it may not have its own C++ class at all,
+# but rather be a script-side status tag implemented by character/imagery
+# overlay code rather than a TEffect. Confirm by source-side audit.
