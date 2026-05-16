@@ -23,7 +23,7 @@ The HUD render-path infrastructure was landed in commit `80879c2` ("engine: HUD 
 
 - `[x]` **A.1 `Revisited::IsEnabled()` accessor** — landed in `45fe058` as `src/revisited.{h,cpp}`. Reads `[Revisited]` section of `<SavePath>/Revenant.ini` via existing INI API; default per key = false. No call sites yet — wires to first Revisited-gated A.2 feature.
 - `[ ]` **A.2 `TPane` retained-mode evolution** (`feedback-ui-retained-mode`, `project-ui-layout-system`). *Invasive — use worktree.* Sub-items, all on existing `TPane` in [src/screen.h](../../src/screen.h) / [src/screen.cpp](../../src/screen.cpp):
-  - `[ ]` **A.2a Hierarchy** — parent + children + dirty propagation. Vanilla path unchanged.
+  - `[x]` **A.2a Hierarchy** — landed in `810bbb9`. `TPane` gained `parent` + `children` (non-owning, matches TScreen's TPaneArray convention) + `AddChild`/`RemoveChild`/`GetParent`/`Children()`. `SetDirty(true)` propagates up parent chain; `SetDirty(false)` does not. Added missing `virtual ~TPane()` that unlinks from parent and nulls children's back-pointers. Vanilla path unchanged — no existing pane uses AddChild.
   - `[ ]` **A.2b 2-pass measure→layout** — vertical/horizontal containers, margin/padding, fixed/greedy sizing policies. Container kind is opt-in per parent; degenerates to explicit-rect for retail panes. `--test=ui-layout` synthesizes a V container with mixed fixed/greedy children.
   - `[ ]` **A.2c Anchors** — top-left / top-right / bottom-center / center / etc. + native-size pin. Activates only when canvas size differs from explicit rect. `--test=ui-anchors` shows correct positions at 640×480 and 1920×1080.
   - `[ ]` **A.2d 9-slice rendering** — bitmap + 4 insets (L/R/T/B); corners verbatim, edges tile/stretch, center fill. Source atoms from retail widget atlases (`widgetstex.dat`, `medgold.dat`, etc.). `--test=ui-nineslice` renders one source atom at several target sizes.
@@ -92,6 +92,7 @@ Per memory `feedback-code-style`, `feedback-modern-cpp`, `feedback-const-correct
 
 ## Notes log (most-recent first)
 
+- **2026-05-16** — A.2a TPane parent/children/dirty propagation landed in `810bbb9`. Added missing virtual dtor as fold-in fix.
 - **2026-05-16** — A.1 `Revisited::IsEnabled()` shipped as `src/revisited.{h,cpp}` (commit `45fe058`). Awaiting first call site.
 - **2026-05-16** — Reconciled with `feature/ui` HEAD `80879c2`. HUD render-path infrastructure (`THudDrawable` + `AddHud`/`RemoveHud`/`DrawHud` + `Renderer->DrawBitmap`/`DrawSurface` + `GameData` load) landed prior to this burndown; documented as "Inherited from HEAD" section. B.3 (`TCursorHud`) marked done — cursor works via `THudDrawable` subclass with ImGui-ownership pointer swap.
 - **2026-05-16** — A.2 added **A.2h** for resizable + HiDPI: UI canvas = live window backing, decoupled from game-world framebuffer. Game world composites under UI as a textured quad. Layout re-runs on resize. `project-resolution-modes` rewritten to make game-world resolution and UI canvas resolution two distinct concepts.
