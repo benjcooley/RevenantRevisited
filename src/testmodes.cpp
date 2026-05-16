@@ -28,6 +28,7 @@
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
+#include "uianchortest.h"
 #include "uilayouttest.h"
 
 #include <cmath>
@@ -2239,6 +2240,8 @@ bool Initialize(const char* mode)
         return InitializeFontMode();
     if (strcmp(mode, "ui-layout") == 0)
         return InitializeUILayoutMode();
+    if (strcmp(mode, "ui-anchors") == 0)
+        return InitializeUIAnchorMode();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2258,6 +2261,8 @@ void Close(const char* mode)
         CloseI3DStaticMode();
     if (strcmp(mode, "ui-layout") == 0)
         CloseUILayoutMode();
+    if (strcmp(mode, "ui-anchors") == 0)
+        CloseUIAnchorMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2286,6 +2291,8 @@ void Render(const char* mode)
         return RenderTextMode();
     if (strcmp(mode, "ui-layout") == 0)
         return RenderUILayoutMode();
+    if (strcmp(mode, "ui-anchors") == 0)
+        return RenderUIAnchorMode();
     return RenderBlankMode();
 }
 
