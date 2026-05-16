@@ -33,12 +33,19 @@ std::unique_ptr<TClipTestPane> g_pane;
 
 void LogClip(const char* label)
 {
+    const SSpacing& fade = g_pane->GetClipFade();
+    const bool soft = fade.left || fade.top || fade.right || fade.bottom;
     if (g_pane->HasClipRect())
     {
         SRect r;
         g_pane->GetClipRect(r);
-        log_info("[ui-clip] %-22s has_clip=YES rect=(L%d T%d R%d B%d)",
-                 label, r.left, r.top, r.right, r.bottom);
+        if (soft)
+            log_info("[ui-clip] %-22s has_clip=YES rect=(L%d T%d R%d B%d) fade=(L%d T%d R%d B%d)",
+                     label, r.left, r.top, r.right, r.bottom,
+                     fade.left, fade.top, fade.right, fade.bottom);
+        else
+            log_info("[ui-clip] %-22s has_clip=YES rect=(L%d T%d R%d B%d) (hard)",
+                     label, r.left, r.top, r.right, r.bottom);
     }
     else
     {
@@ -71,7 +78,17 @@ bool InitializeUIClipMode()
     g_pane->SetClipRect(r1);
     LogClip("after re-set");
 
-    log_info("[ui-clip] (renderer-side scissor wiring deferred to first B-phase consumer)");
+    log_info("[ui-clip] === A.2g soft-edge fade ===");
+    g_pane->SetClipFade(SSpacing(0, 12, 0, 12));   // soft on top + bottom
+    LogClip("after fade T12 B12");
+
+    g_pane->SetClipFade(SSpacing(8, 8, 8, 8));     // soft on all edges
+    LogClip("after fade L8 T8 R8 B8");
+
+    g_pane->SetClipFade(SSpacing{});               // reset to hard
+    LogClip("after fade reset (hard)");
+
+    log_info("[ui-clip] (renderer-side scissor + fade shader wiring deferred to first B-phase consumer)");
     return true;
 }
 
