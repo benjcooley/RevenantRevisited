@@ -666,24 +666,39 @@ TObjectInstance::~TObjectInstance()
         mapindex = -1;
     }
 
-    if (objclass == -1)
-        return;
-
-    if (Inventory.GetContainer() == this)
-        Inventory.SetContainer(nullptr);
-
+    // Component / imagery / dynamic-light cleanup must run for any instance
+    // that successfully ran a TObjectInstance ctor, even one constructed via
+    // the imagery-only path (objclass stays -1, but `imagery` and any
+    // attached components are live and own resources). Earlier this teardown
+    // sat below the objclass==-1 early-return and leaked the imagery refcount
+    // plus any components added through AddComponent(). The objclass!=-1
+    // gate now guards only the post-init bookkeeping that genuinely depends
+    // on cl / inf / inventory / sector / script being populated.
     for (const auto& component_ptr : components)
         if (TObjectComponent* component = component_ptr.get())
             component->Detach();
     components.clear();
 
     TObjectImagery::FreeImagery(imagery);
+    imagery = nullptr;
 
     if (lightdef.lightindex != -1)
+    {
         Scene3D.DeleteLight(lightdef.lightindex);
+        lightdef.lightindex = -1;
+    }
 
     if (lightdef.lightid != -1)
+    {
         FreeLightIndex(lightdef.lightid);
+        lightdef.lightid = -1;
+    }
+
+    if (objclass == -1)
+        return;
+
+    if (Inventory.GetContainer() == this)
+        Inventory.SetContainer(nullptr);
 
     // recursively delete all the objects in its inventory
     for (TInventoryIterator i(this); i; i++)
@@ -794,6 +809,13 @@ int32_t TObjectInstance::AddComponent(std::unique_ptr<TObjectComponent> componen
     if (GetMapIndex() >= 0)
         raw->Activate();
     return slot;
+}
+
+void TObjectInstance::ActivateComponents()
+{
+    for (const auto& component_ptr : components)
+        if (TObjectComponent* c = component_ptr.get())
+            c->Activate();
 }
 
 void TObjectInstance::RemoveComponent(int32_t component_slot)

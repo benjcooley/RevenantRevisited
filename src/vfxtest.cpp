@@ -21,7 +21,9 @@
 #include "vfxtest.h"
 
 #include "display.h"
+#include "effect.h"
 #include "logging.h"
+#include "object.h"
 #include "particlefx.h"
 #include "renderer.h"
 #include "revenant.h"     // VK_LEFT, VK_RIGHT, VK_SPACE
@@ -277,14 +279,6 @@ TTextureHandle WhiteTexture()
     return Renderer ? Renderer->WhiteTextureHandle() : kInvalidTexture;
 }
 
-TTextureHandle OrangeFlameTexture()
-{
-    if (!Renderer) return kInvalidTexture;
-    return Renderer->SolidColorTexture(0x4658464C414D45ull,  // "FXFLAME"
-                                       0xFF1880FFu,           // ABGR: warm orange
-                                       "vfx.flame.solid");
-}
-
 TTextureHandle GreyParticleTexture()
 {
     if (!Renderer) return kInvalidTexture;
@@ -309,37 +303,43 @@ TTextureHandle GoldFlareTexture()
                                        "vfx.flare.solid");
 }
 
-// --- FB: torch-flame placeholder -----------------------------------------
-// Mimics what TFlipbookBillboardComponent::Submit does for a flame at
-// world origin. One persistent billboard with a tiny vertical "wobble".
+// --- FB: real TFlameEffect (TorchFlame, Magic/flame.i3d) -----------------
+// Spawns a sector-less TFlameEffect at world origin via SpawnForTest and
+// drives its flipbook component each frame through the same Submit path
+// the in-game per-instance walk uses (maprenderer.cpp Billboard branch).
+// SpawnForTest is allowed to fail if the imagery archive isn't mounted /
+// the asset is missing; in that case we register a no-op submit so the
+// harness still navigates past F01 instead of crashing.
 struct SFlameCtx {
-    float age = 0.0f;
+    TFlameEffect* flame = nullptr;
 };
 
-void* FlameSpawn()    { return new SFlameCtx(); }
-void  FlameDestroy(void* c) { delete static_cast<SFlameCtx*>(c); }
-void  FlameSubmit(void* cp, EFxDebugMode dbg)
+void* FlameSpawn()
+{
+    auto* c = new SFlameCtx();
+    c->flame = TFlameEffect::SpawnForTest(S3DPoint{0, 0, 0});
+    if (!c->flame)
+        log_warn("[vfx] TFlameEffect::SpawnForTest returned null; F01 entry will draw nothing");
+    return c;
+}
+
+void FlameDestroy(void* cp)
 {
     auto* c = static_cast<SFlameCtx*>(cp);
-    c->age += float(TTime::DeltaTime());
-    SBillboardDrawItem it = {};
-    it.world_pos[0] = 0.0f;
-    it.world_pos[1] = 0.0f;
-    it.world_pos[2] = 40.0f + 4.0f * std::sin(c->age * 6.0f);
-    it.size_wu[0]   = 60.0f;
-    it.size_wu[1]   = 100.0f + 8.0f * std::sin(c->age * 4.0f);
-    it.color_rgba[0] = 1.0f;
-    it.color_rgba[1] = 0.55f;
-    it.color_rgba[2] = 0.18f;
-    it.color_rgba[3] = 1.0f;
-    it.uv_rect[0] = 0.0f; it.uv_rect[1] = 0.0f;
-    it.uv_rect[2] = 1.0f; it.uv_rect[3] = 1.0f;
-    it.key.texture     = OrangeFlameTexture();
-    it.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    it.key.blend       = uint8_t(EFxBlend::Additive);
-    it.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    it.debug_mode      = dbg;
-    Renderer->SubmitFxBillboard(it);
+    delete c->flame;
+    delete c;
+}
+
+void FlameSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFlameCtx*>(cp);
+    if (!c->flame || !Renderer)
+        return;
+    auto* flipbook = c->flame->GetComponent<TFlipbookBillboardComponent>();
+    if (!flipbook || flipbook->Texture() == kInvalidTexture)
+        return;
+    flipbook->SetDebugMode(dbg);
+    flipbook->Submit(*Renderer, *c->flame);
 }
 
 // --- PE: smoke plume placeholder via TParticleBucket ---------------------
@@ -521,7 +521,7 @@ namespace {
 struct SVfxTestBootstrap {
     SVfxTestBootstrap() {
         VfxTest::SEffect flame = {};
-        flame.id       = "TFlameEffect.placeholder";
+        flame.id       = "TFlameEffect";
         flame.family   = "fire";
         flame.pipeline = "FB";
         flame.factory  = []() -> void* { return FlameSpawn(); };
