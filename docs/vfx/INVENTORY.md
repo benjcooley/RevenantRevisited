@@ -78,18 +78,18 @@ other rows.
 | F04 | `TFireAnimator`      | FB       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | bridge → TFireEffect; confirm distinct from TFlameAnimator; needs Ghidra extraction |
 | F05 | `TFireSwarmEffect`   | PE       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | swarm of small fire particles; needs Ghidra extraction |
 | F06 | `TFaultFireEffect`   | PE       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | "Fault Fire" spell variant; needs Ghidra extraction |
-| F07 | `TFireBallEffect`    | MP+SR+LS | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | mesh + trail + dynamic light; needs Ghidra extraction |
-| F08 | `TFireBallAnimator`  | -        | MissileEffect.cpp | cls_0x41cdd0.cpp | src/missileeffect.h     | not-started   | -     | bridge → TFireBallEffect; PERFECT fingerprint match (44-byte/11-field) per recon/mappings/TFireBallAnimator_cls_0x41cdd0_map.yaml |
-| F09 | `TFireColumnEffect`  | CX       | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | column of fire — composite; needs Ghidra extraction |
+| F07 | `TFireBallEffect`    | IM+PE+LS | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | I3D mesh ball + ember trail (PE) + dynamic light (LS); **mesh is a direct retail port** (see AGENT_GUIDE §3.5), particles + light through the engine. Needs Ghidra extraction. |
+| F08 | `TFireBallAnimator`  | -        | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | **2026-05-16 extraction-pass DEMOTED:** the existing `cls_0x41cdd0` mapping is almost certainly wrong — that class is a hash/LRU cache (lock/unlock around every op, parallel arrays sized 0x1000/0x2000, LRU counter, no vtable). See recon/mappings/EXTRACTION_PASS_2026-05-16.md. Old yaml kept at recon/mappings/TFireBallAnimator_cls_0x41cdd0_map.yaml for traceability but should be deleted by the next confirmed mapping. |
+| F09 | `TFireColumnEffect`  | IM+PE+LS | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | animated I3D mesh core + ember swirl + light. Mesh = direct retail port. Needs Ghidra extraction. |
 | F10 | `TFireColumnAnimator`| -        | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | bridge → TFireColumnEffect; needs Ghidra extraction |
-| F11 | `TFlameDiscEffect`   | MP       | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | spinning flame disc projectile; needs Ghidra extraction |
+| F11 | `TFlameDiscEffect`   | IM+PE    | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | spinning I3D disc mesh + trail particles. Mesh = direct retail port. Needs Ghidra extraction. |
 
 ### Ice family
 
 | #   | Class               | Pipeline | Retail src      | Recon file | Port file               | Status        | Owner | Notes |
 |-----|---------------------|----------|-----------------|------------|-------------------------|---------------|-------|-------|
 | I20 | `TIceEffect`        | PE       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | ice shard burst; needs Ghidra extraction |
-| I21 | `TIceBoltEffect`    | MP+SR    | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | bolt projectile; needs Ghidra extraction |
+| I21 | `TIceBoltEffect`    | IM+SR    | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | I3D bolt mesh + ice-strip trail. Mesh = direct retail port. Candidate match: cls_0x5aaf28 (see recon/mappings/TIceBoltEffect_cls_0x5aaf28_candidate.yaml). |
 | I22 | `TIcedEffect`       | VO       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | "frozen" status overlay on target; needs Ghidra extraction |
 
 ### Blood / gore
@@ -99,7 +99,7 @@ other rows.
 | B01 | `TBloodEffect`   | PE       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | spray on hit; needs Ghidra extraction |
 | B02 | `TBloodAnimator` | -        | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | bridge; needs Ghidra extraction |
 | B03 | `TBloodSystem`   | PE       | effectcomp.cpp  | not-extracted | src/effectcomp.h        | not-started   | -     | particle system specialization for blood; needs Ghidra extraction |
-| B04 | `TPulpEffect`    | PE+mesh  | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | gore + body parts — heavier than blood; needs Ghidra extraction |
+| B04 | `TPulpEffect`    | PE+IM    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | gore + I3D body-part meshes — body parts are direct retail port, blood splash is engine PE. Needs Ghidra extraction. |
 
 ### Magic / spells (status & overlay)
 
@@ -110,16 +110,16 @@ other rows.
 | M03 | `THealEffect`   | VO+PE    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | healing spell visual; needs Ghidra extraction |
 | M04 | `TBurnEffect`   | VO       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | burn-status overlay; needs Ghidra extraction |
 | M05 | `TMistEffect`   | VO       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | **likely Misthaven teleport** — verify via spell registry; needs Ghidra extraction |
-| M06 | `TSpellBlock`   | VO+mesh  | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | spell shield / block visual; needs Ghidra extraction |
-| M07 | `TPhotonEffect` | MP+LS    | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | photon magic projectile; needs Ghidra extraction |
+| M06 | `TSpellBlock`   | IM+VO    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | I3D shield mesh + overlay glow. Mesh = direct retail port. Needs Ghidra extraction. |
+| M07 | `TPhotonEffect` | IM+LS    | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | photon magic projectile (I3D mesh + light). Mesh = direct retail port. Candidate match: cls_0x5aacac maps to "DragonFire" registry entry (see recon/mappings/TPhotonEffect_cls_0x5aacac_candidate.yaml). |
 | M08 | `TPixieEffect`  | PE+LS    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | fairy dust; needs Ghidra extraction |
 
 ### Weather / large area
 
 | #   | Class                  | Pipeline | Retail src      | Recon file | Port file               | Status        | Owner | Notes |
 |-----|------------------------|----------|-----------------|------------|-------------------------|---------------|-------|-------|
-| W01 | `TMeteorStormEffect`   | CX       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | mesh + particles + lights + strips; needs Ghidra extraction |
-| W02 | `TTornadoEffect`       | PE+SR    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | needs Ghidra extraction |
+| W01 | `TMeteorStormEffect`   | IM+PE+LS+SR | effect.cpp   | not-extracted | src/effect.h            | not-started   | -     | meteor I3D mesh (per shot) + ember tail + impact-particle burst + flash light + optional strip. Mesh = direct retail port (likely the most ambitious composite in the catalog). Needs Ghidra extraction. |
+| W02 | `TTornadoEffect`       | IM?+PE+SR | effect.cpp     | not-extracted | src/effect.h            | not-started   | -     | funnel may be I3D mesh or pure PE (confirm on extraction); dust particles + lift strips are engine. Needs Ghidra extraction. |
 | W03 | `TVortexEffect`        | PE+SR    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | spiral magic; needs Ghidra extraction |
 | W04 | `TSandswirlEffect`     | PE       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | desert dust; needs Ghidra extraction |
 | W05 | `TQuicksandEffect`     | PE       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | hazard surface; needs Ghidra extraction |
@@ -139,9 +139,9 @@ other rows.
 
 | #   | Class           | Pipeline | Retail src      | Recon file | Port file               | Status        | Owner | Notes |
 |-----|-----------------|----------|-----------------|------------|-------------------------|---------------|-------|-------|
-| L01 | `TLightSource`  | LS       | lightsource.cpp | cls_0x5427f0.cpp | (port pending)          | not-started   | -     | dynamic light primitive; 332-byte struct, HIGH fingerprint match (size 663) — single primary method calls into TCharacter |
+| L01 | `TLightSource`  | LS       | lightsource.cpp | not-extracted | (port pending)          | not-started   | -     | **2026-05-16 extraction-pass DEMOTED:** the existing `cls_0x5427f0` mapping is suspect — that class is 332 bytes / 3 fields, its sole method calls TCharacter::method_0x51b580 to attach a light index. Looks like a "light attached to character" helper, not the TLightSource data class. The "HIGH fingerprint match" in class_matches.json was file-size matching (663-byte src file ≈ 663-byte decompiled file) — neither score reflects struct-level evidence. |
 | L02 | `THaloEffect`   | FB+LS    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | halo ring; needs Ghidra extraction |
-| L03 | `TBallAnimator` | MP       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | glowing sphere mesh; needs Ghidra extraction |
+| L03 | `TBallAnimator` | IM+LS    | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | glowing I3D sphere mesh + light. Mesh = direct retail port. Needs Ghidra extraction. |
 
 ### Strip / trail / projectile-shared
 
@@ -150,11 +150,11 @@ other rows.
 | S01 | `TStripEffect`         | SR       | stripeffect.cpp | not-extracted | src/stripeffect.h       | not-started   | -     | base strip — sword slash uses this; needs Ghidra extraction |
 | S02 | `TWindStripEffect`     | SR       | stripeffect.cpp | not-extracted | src/stripeffect.h       | not-started   | -     | wind streak; needs Ghidra extraction |
 | S03 | `TWindStripAnimator`   | -        | stripeffect.cpp | not-extracted | src/stripeffect.h       | not-started   | -     | bridge; needs Ghidra extraction |
-| S04 | `TLightningAnimator`   | SR       | stripeffect.cpp | cls_0x5a47f0.cpp | src/stripeffect.h       | not-started   | -     | jagged bolt strip; HIGH fingerprint match (52→60 bytes, 13→15 fields) per recon/mappings/TLightningAnimator_cls_0x5a47f0_map.yaml; also has cls_0x5a47f0__vftable_5a47f0.cpp |
+| S04 | `TLightningAnimator`   | SR       | stripeffect.cpp | not-extracted | src/stripeffect.h       | not-started   | -     | **2026-05-16 extraction-pass DEMOTED:** the existing `cls_0x5a47f0` mapping is suspect — that class is allocated by *other* effect classes (e.g. cls_0x5ac340 Ripple candidate) as a generic 0x104-byte animator instance, strongly suggesting cls_0x5a47f0 is `T3DAnimator` (the base) rather than `TLightningAnimator` specifically. See recon/mappings/EXTRACTION_PASS_2026-05-16.md. Old yaml kept for traceability. Note: cls_0x5b0a28 (the class containing the `d:\revenant\Effect3.cpp` assert) references the "LightningStorm" registry string and is a *better* candidate for TLightningAnimator. |
 | S05 | `TShockAnimator`       | SR       | effectcomp.cpp  | not-extracted | src/effectcomp.h        | not-started   | -     | shockwave ring; needs Ghidra extraction |
 | S06 | `TStripAnimator`       | SR       | effectcomp.cpp  | not-extracted | src/effectcomp.h        | not-started   | -     | generic strip animator; needs Ghidra extraction |
 | S07 | `TStreamerEffect`      | SR       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | banner / streamer trail; needs Ghidra extraction |
-| S08 | `TMissileEffect`       | MP       | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | generic projectile base; needs Ghidra extraction |
+| S08 | `TMissileEffect`       | IM       | MissileEffect.cpp | not-extracted | src/missileeffect.h     | not-started   | -     | generic I3D-mesh projectile base — parent of F07/F09/F11/I21/M07/L03. Mesh = direct retail port; first composite to port should be this base class so the derived effects share infrastructure. Needs Ghidra extraction. |
 
 ### Misc / other
 

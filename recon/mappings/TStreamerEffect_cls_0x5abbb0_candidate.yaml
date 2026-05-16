@@ -1,0 +1,42 @@
+# TStreamerEffect (or TStreamerAnimator) - MEDIUM CONFIDENCE CANDIDATE
+# DO NOT promote to confirmed without the user/secondary reviewer signing off.
+source_class: "TStreamerEffect"
+ghidra_class: "cls_0x5abbb0"
+confidence: "MEDIUM"
+
+# Evidence (see ../mappings/EXTRACTION_PASS_2026-05-16.md for the full method):
+#   - Effect-name string "Streamer" at .rdata 005e11ac has 2 XREFs:
+#       004ef8b0 (delta +0xdd0 in fn 0x4eeae0, owner cls_0x5abbb0)
+#       004efa70 (delta +0xf90 in fn 0x4eeae0, owner cls_0x5abbb0)
+#     Both XREFs land cleanly inside cls_0x5abbb0's own functions — no
+#     gap-classes between them. Two callsites in the same registration
+#     function = (very likely) the class's own "GetClass()" return + a
+#     RegisterObjectClass("Streamer", ...) line.
+#   - cls_0x5abbb0 size 392 bytes, 5 methods, vtable 108 bytes (27 vmethods).
+#   - cls_0x5abbb0 inherits from cls_0x5b0074 (likely TEffect base) — confirmed
+#     by destructor chain ~cls_0x5b0074(this).
+#   - Sibling structure: cls_0x5abbb0's fields at 0x4..0xfc are the standard
+#     "TEffect base" pattern shared with cls_0x5abe4c, cls_0x5ac340, cls_0x5ac83c,
+#     cls_0x5ad4e4, cls_0x5ac5b0, cls_0x5acf9c — all near-identical layouts up
+#     to offset 0x100, then per-class fields.
+#
+# Open questions:
+#   - Is this TStreamerEffect (the TEffect-derived shell) or TStreamerAnimator?
+#     The 392-byte size matches an animator better than a full TEffect (which
+#     would inherit TObjectInstance's 1352 bytes per CLASS_MAPPING.md).
+#     BUT the class inherits from cls_0x5b0074 (which calls TObjectInstance dtor)
+#     so it might be TStreamerEffect after all if cls_0x5b0074 is a slim TEffect
+#     that aggregates a TObjectInstance pointer rather than inheriting.
+#     Resolve by reading cls_0x5b0074's struct vs src/effect.h:TEffect.
+
+fields:
+  # Field mapping deferred — TEffect base structure must be solved first
+  # so per-class fields (offset > base size) can be cleanly named.
+
+methods:
+  # Function entry points in cls_0x5abbb0:
+  #   0x4eeae0  ctor / "Streamer"-name registrar
+  #   0x4eebf0  virt slot
+  #   0x4f7080  virt slot
+  #   0x4f7950  virt slot
+  #   0x4f8260  virt slot

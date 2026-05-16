@@ -1,0 +1,17 @@
+# TPixieEffect (or TPixieAnimator) - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TPixieEffect"
+ghidra_class: "cls_0x5ad4e4"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "Pixie" string at .rdata 005e1214 has 2 XREFs:
+#       004f37c0 (delta +0x310 in fn 0x4f34b0, owner cls_0x5ad4e4)
+#       004f3800 (delta +0x350 in fn 0x4f34b0, owner cls_0x5ad4e4)
+#   - cls_0x5ad4e4 size 272 bytes, 7 methods, vtable 112 bytes (28 vmethods).
+#   - Inherits from cls_0x5b0074 (TEffect candidate).
+#   - Note: 272 bytes is on the smaller side — could be a more specialized
+#     Effect (no per-particle storage) or could be the Animator (TPixieAnimator
+#     has only a few own fields in src/effect.h:2213).
+
+fields:
+methods:

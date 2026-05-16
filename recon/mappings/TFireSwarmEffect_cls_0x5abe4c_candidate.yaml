@@ -1,0 +1,20 @@
+# TFireSwarmEffect (or TFireSwarmAnimator) - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TFireSwarmEffect"
+ghidra_class: "cls_0x5abe4c"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "FireSwarm" string at .rdata 005e11b8 has 2 XREFs:
+#       004f00d0 (delta +0x380 in fn 0x4efd50, owner cls_0x5abe4c)
+#       004f0110 (delta +0x3c0 in fn 0x4efd50, owner cls_0x5abe4c)
+#   - cls_0x5abe4c size 392 bytes, 6 methods, vtable 104 bytes (26 vmethods).
+#   - Inherits from cls_0x5b0074 (TEffect candidate) per dtor chain.
+#   - Shares "TEffect base" field layout with sibling effect classes.
+# Open questions: Effect vs Animator — same as TStreamerEffect candidate yaml.
+
+fields:
+  # Deferred until TEffect base is solved.
+
+methods:
+  # 0x4efd50  ctor / "FireSwarm"-name registrar
+  # (5 additional virt slots — see cls_0x5abe4c.cpp)

@@ -1,0 +1,14 @@
+# TIceBoltEffect (or TIceBoltAnimator) - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TIceBoltEffect"
+ghidra_class: "cls_0x5aaf28"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "IceBolt" string at .rdata 005e117c has 2 XREFs:
+#       004eb1f0 (delta +0xc0 in fn 0x4eb130, owner cls_0x5aaf28)
+#       004eb550 (delta +0x420 in fn 0x4eb130, owner cls_0x5aaf28)
+#   - cls_0x5aaf28 size 340 bytes, 6 methods, vtable 100 bytes (25 vmethods).
+#   - Inherits from cls_0x5b0074 (TEffect candidate).
+
+fields:
+methods:
