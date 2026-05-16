@@ -29,7 +29,10 @@
 #include <cstring>
 
 #include "3dimage.h"
+#include "area.h"
+#include "cursor.h"
 #include "display.h"
+#include "multi.h"
 #include "editor.h"
 #include "editorstub.h"
 #include "imagery.h"
@@ -193,6 +196,20 @@ bool TPlayScreen::Initialize()
     // TScreen's base Initialize() returns false (it's a "must override"
     // hook); skip it and do our own setup.
 
+    // Load the play-screen multi-resource (cursors, gameplay bitmaps,
+    // fonts referenced by HUD widgets). Retail did this at the top of
+    // TPlayScreen::Initialize (legacy/playscreen.cpp:179). Anything
+    // touching GameData->Bitmap("cursor") / Font(...) / Animation(...)
+    // before this load would see a null pointer.
+    if (!GameData)
+    {
+        GameData = TMulti::LoadMulti((char*)"playscrn.dat");
+        if (!GameData)
+            log_warn("[playscreen] failed to load playscrn.dat -- GameData stays null");
+        else
+            log_info("[playscreen] playscrn.dat loaded");
+    }
+
     log_info("[playscreen] booting map renderer");
     // Spin up the map renderer. InitializeFromStartupArgs reads --level
     // and --sector to pick the starting world; with neither set, we fall
@@ -227,6 +244,23 @@ bool TPlayScreen::Initialize()
                           g_defaultGameControls);
 
     EditorLoadState();
+
+    // Load the active module's area.def (forest / Misthaven / House
+    // Interior / etc.). Until this runs, area->Enter() never fires and
+    // MapPane stays at its default ambient. The Ahkuilon module ZIP is
+    // already mounted by InitGlobals so AreaManager.Initialize finds
+    // area.def via rev_fopen + VFS.
+    if (!AreaManager.Initialize())
+        log_warn("[playscreen] AreaManager.Initialize failed; ambient will fall back to MapPane defaults");
+
+    // Runtime mode owns mode-specific UI state (cursor, overlay
+    // visibility, etc.). At static init g_currentMode defaults to game
+    // mode, but OnEnter() is only invoked by SetCurrentMode for
+    // *transitions* -- so the initial mode never gets its setup hook
+    // fired. Invoke it explicitly here so the game cursor (and any
+    // future game-mode init) is in place from the first frame.
+    if (CurrentMode())
+        CurrentMode()->OnEnter();
 
     log_info("[playscreen] initialize done");
     return true;
@@ -416,6 +450,7 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
 
 void TPlayScreen::Close()
 {
+    AreaManager.Close();
     if (mapRenderer)
     {
         mapRenderer->Shutdown();
@@ -463,6 +498,12 @@ void TPlayScreen::Update()
     // follow. Editor mode's Tick is a no-op (the editor drives camera
     // + pulse itself).
     CurrentMode()->Tick();
+
+    // Tick the area system: detects player Enter/Exit of each TArea's
+    // RECTs, runs day/night ambient interpolation, fires CDPLAYLIST /
+    // AUDIOENV transitions. Must run after CurrentMode()->Tick() so
+    // MapPane.GetMapPos reflects this frame's player position.
+    AreaManager.Pulse();
 
     // Advance fixed-tick counters. CurrentMode()->Tick() owns gameplay frame
     // advancement; the renderer only samples/interpolates the current pose.
@@ -901,9 +942,18 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 {
     TScreen::MouseClick(button, x, y);
     // Route to the active runtime mode; editor mode forwards to the
-    // renderer's gizmo / drag picker, game mode keeps the click for
-    // future walk-to / interact wiring.
+    // renderer's gizmo / drag picker, game mode forwards to MapPane's
+    // gameplay click handler (movement / interact / combat).
     CurrentMode()->HandleMouseClick(button, x, y);
+}
+
+void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
+{
+    TScreen::MouseMove(button, x, y);
+    // Game mode -> MapPane.MouseMove (drives wedge cursor while walking,
+    // bow aim, etc.). Editor mode default no-op until we wire its
+    // hover/drag overlays.
+    CurrentMode()->HandleMouseMove(button, x, y);
 }
 
 void TPlayScreen::Joystick(int32_t /*key*/, bool /*down*/)

@@ -214,6 +214,14 @@ void main() {
             light += plight_col[i].rgb * plight_col[i].w * attn * pterm;
         }
     }
+  // Brightness cap: deferred lighting can sum > 1.0 across several
+  // point lights at close range, which "burns" 3D objects (white-out)
+  // since the framebuffer just clips. Retail forward-lit meshes with
+  // per-vertex normalisation, so we approximate by clamping. The
+  // ceiling comes from ambient_col.w (tunable; default 1.5 allows
+  // ambient overbright while still capping stacked point lights).
+    float light_ceiling = max(ambient_col.w, 1e-3);
+    light = min(light, vec3(light_ceiling));
     frag_color = vec4(alb.rgb * light, 1.0);
 }
 )GLSL";

@@ -133,6 +133,8 @@ extern int32_t DirLightPercent;
 extern int32_t MaxLights;           // Maximum number of lights that can affect a 3d object
 extern int32_t Ambient3D;           // Adjust this below 100 for darker ambient, or above for lighter
 extern int32_t LightRange3D;        // Adjust this below 100 to decrease 3D light range, or above to increase
+extern int32_t LightMult3D;         // Per-point-light intensity multiplier percent (retail default 250 = 2.5x)
+extern bool    EnhancedLighting;    // [Lighting]EnhancedLighting Yes/No — retail "fancier 3D lighting" toggle
 
 // Whether map pane is full screen or not
 extern bool FullScreen;

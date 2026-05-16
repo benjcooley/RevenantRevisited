@@ -119,13 +119,23 @@ class TMapRenderer
     [[nodiscard]] bool IsMapIndexSelected(int32_t mapindex) const;
 
     // Iso view + orthographic projection matrices that match the rendered
-    // image pixel-for-pixel. Used by editor overlays (ImGuizmo, selection
-    // bounding boxes, axis triads) so on-screen widgets land on the same
-    // pixels as the world objects beneath them. Both outputs are 16-float
-    // column-major (OpenGL/HMM convention). vp_w/vp_h are the rendered
-    // image's pixel dimensions (640x480 for the engine's lit_target).
+    // image pixel-for-pixel. Used by ImGuizmo (which wants view and proj
+    // separately). Most overlays should prefer GetWorldToPixel() below
+    // which composes the whole world->screen chain into one matrix.
+    // Both outputs are 16-float column-major (OpenGL/HMM convention).
     void GetViewProj(float view_out[16], float proj_out[16],
                      int32_t vp_w, int32_t vp_h) const;
+
+    // Combined world-to-pixel transform for the destination rect that
+    // the rendered scene image lands in (editor: Game View ImGui::Image
+    // rect; game: swapchain present rect). Returns a column-major 4x4
+    // that maps a world point (x, y, z, 1) directly to (pixel.x,
+    // pixel.y, depth, w) -- callers do a single matrix multiply, no
+    // hand-rolled iso projection + cam.z fixups + logical-to-physical
+    // scaling. This is the canonical world->screen camera matrix.
+    void GetWorldToPixel(int32_t dst_x, int32_t dst_y,
+                         int32_t dst_w, int32_t dst_h,
+                         float out_mat44[16]) const;
 
     // Loaded-sector access for the editor's scene tree. Pointers stay
     // valid as long as the map renderer doesn't unload them; copy if

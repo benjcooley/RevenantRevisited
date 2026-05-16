@@ -211,6 +211,9 @@ float4 main_ps(vs_out in_) : SV_Target0 {
             light += plight_col[i].rgb * plight_col[i].w * attn * pterm;
         }
     }
+  // Brightness cap (see light.glsl.h for rationale).
+    float light_ceiling = max(ambient_col.w, 1e-3);
+    light = min(light, float3(light_ceiling, light_ceiling, light_ceiling));
     return float4(alb.rgb * light, 1.0);
 }
 )HLSL";

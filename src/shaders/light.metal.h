@@ -218,6 +218,9 @@ fragment float4 _main(vs_out in [[stage_in]],
             light += p.plight_col[i].rgb * p.plight_col[i].w * attn * pterm;
         }
     }
+  // Brightness cap (see light.glsl.h for rationale).
+    float light_ceiling = max(p.ambient_col.w, 1e-3f);
+    light = min(light, float3(light_ceiling));
     float3 col = alb.rgb * light;
 
     // Editor outline: each id_target pixel carries flag bits in the top

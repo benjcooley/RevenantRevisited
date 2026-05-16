@@ -556,14 +556,17 @@ class TMapPane : public TPane
     int32_t wmrevealx, wmrevealy;                   // Start of walkmap cutaway
     int32_t wmrevealsizex, wmrevealsizey;           // Size of walkmap cutaway
 
-  // Ambient lighting values    
-    int32_t ambient;                                // Ambient light value
-    SColor ambcolor;                                // Ambient light color
-    bool ambientchanged;                            // true when ambient needs to be reset
-    int32_t oldambient, newambient;                 // Ambient fade old and new values
-    SColor oldambcolor, newambcolor;                // Ambient fade old and new color
-    int32_t totambfadeframes, ambfadeframes;        // Ambient fade frame values
-    int32_t totambfadesteps, ambfadesteps;          // Ambient fade step values
+  // Ambient lighting values. Defaults match TArea ctor (area.cpp:35-38)
+  // so even uncovered levels (no area.def entry hitting the player's
+  // current level) get a usable retail-default tint instead of black.
+    int32_t ambient = 30;                           // Ambient light value
+    SColor ambcolor = {255, 255, 255};              // Ambient light color
+    bool ambientchanged = true;                     // true when ambient needs to be reset
+    int32_t oldambient = 30, newambient = 30;       // Ambient fade old and new values
+    SColor oldambcolor = {255, 255, 255};
+    SColor newambcolor = {255, 255, 255};           // Ambient fade target color
+    int32_t totambfadeframes = 0, ambfadeframes = 0;
+    int32_t totambfadesteps  = 0, ambfadesteps  = 0;
 };
 
 inline void PosToScreen(int32_t posx, int32_t posy, int32_t posz, int32_t &screenx, int32_t &screeny)

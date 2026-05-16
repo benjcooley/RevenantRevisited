@@ -25,6 +25,7 @@
 #include "logging.h"
 #include "mapmanager.h"
 #include "mappane.h"
+#include "playscreen.h"
 #include "math3d.h"
 #include "meshextract.h"
 #include "object.h"
@@ -303,7 +304,10 @@ inline int32_t FloorDiv(int32_t v, int32_t d)
 
 inline int64_t SectorBinKey(int32_t sx, int32_t sy)
 {
-    return (int64_t(sx) << 32) ^ uint32_t(sy);
+    // Cast through uint32_t first so a negative sx doesn't trip UBSan's
+    // "left shift of negative value" rule. We only care that the (sx, sy)
+    // bit-pattern round-trips uniquely; the int64 carries both halves.
+    return (int64_t(uint32_t(sx)) << 32) ^ uint64_t(uint32_t(sy));
 }
 
 struct SSectorCullRange {
@@ -1375,6 +1379,48 @@ S3DPoint TMapRenderer::CameraWorld() const
     return impl ? impl->sectorCameraWorld : S3DPoint{0, 0, 0};
 }
 
+void TMapRenderer::GetWorldToPixel(int32_t dst_x, int32_t dst_y,
+                                   int32_t dst_w, int32_t dst_h,
+                                   float out_mat44[16]) const
+{
+    if (!out_mat44) return;
+    hmm_mat4 m = HMM_Mat4d(1.0f);
+    if (impl && dst_w > 0 && dst_h > 0 && Display.IsActive())
+    {
+        // The scene renders into a (Display.Width x Display.Height)
+        // image with the overscan-fit scale ComputeMapCameraViewport
+        // returns (scale = max(sx, sy), so the wider axis crops the
+        // narrower). The visible logical-world rect is therefore
+        // (Display.Width / scale) x (Display.Height / scale) -- this
+        // is the rectangle of the scene that actually ends up inside
+        // the destination image. We project into THAT, not dst_w/h
+        // directly, so the matrix is in true scene-world units.
+        // The viewport step then stretches that region into dst_w x
+        // dst_h, picking up the panel's non-uniform stretch when the
+        // window aspect doesn't match the panel aspect.
+        const int32_t lit_w = Display.Width();
+        const int32_t lit_h = Display.Height();
+        const SMapCameraViewport vp = ComputeMapCameraViewport(lit_w, lit_h);
+        const float scene_scale = (vp.scale > 1e-4f) ? vp.scale : 1.0f;
+        const int32_t vis_w = int32_t(std::lround(float(lit_w) / scene_scale));
+        const int32_t vis_h = int32_t(std::lround(float(lit_h) / scene_scale));
+
+        float view_m[16], proj_m[16];
+        GetViewProj(view_m, proj_m, vis_w, vis_h);
+        const hmm_mat4 view = *reinterpret_cast<const hmm_mat4*>(view_m);
+        const hmm_mat4 proj = *reinterpret_cast<const hmm_mat4*>(proj_m);
+
+        // NDC ([-1,+1]^2, y-up) -> pixel rect (top-left dst_x/y, y-down).
+        hmm_mat4 viewport = HMM_Mat4d(1.0f);
+        viewport.Elements[0][0] =  float(dst_w) * 0.5f;
+        viewport.Elements[1][1] = -float(dst_h) * 0.5f;
+        viewport.Elements[3][0] =  float(dst_x) + float(dst_w) * 0.5f;
+        viewport.Elements[3][1] =  float(dst_y) + float(dst_h) * 0.5f;
+        m = HMM_MultiplyMat4(viewport, HMM_MultiplyMat4(proj, view));
+    }
+    std::memcpy(out_mat44, &m, sizeof(float) * 16);
+}
+
 TSector* TMapRenderer::FindLoadedSector(int32_t level, int32_t sector_x, int32_t sector_y) const
 {
     if (!impl) return nullptr;
@@ -1507,14 +1553,18 @@ void TMapRenderer::GetViewProj(float view_out[16], float proj_out[16],
     constexpr float kOffZ  = -0.6324f;
     constexpr float D      = 100000.0f;
 
-    // GPU view target uses camera X/Y but a constant Z. The camera follows
-    // Locke's full position (including Z) so other systems (lighting, fog,
-    // etc.) can read his height; but the LookAt target's Z must not move
-    // with him -- otherwise the entire scene scrolls vertically and the
-    // user sees objects "rise" with the player on stairs.
+    // Camera target tracks the full camera world position (X, Y, Z).
+    // The legacy tile/mesh pass achieves the same effect by projecting
+    // with absolute world Z and then adding cam.z*iso_cos30 into cam_oy
+    // (see sectorCameraOriginScreen) -- algebraically that's identical
+    // to subtracting cam.z from each world point's Z before iso
+    // projection, i.e. a LookAt target at (cam.x, cam.y, cam.z). A
+    // matrix built with target.z=0 disagreed with the actual scene
+    // pixels whenever Locke was off sea level, and ImGuizmo / overlays
+    // drifted accordingly.
     const hmm_vec3 target = HMM_Vec3(float(s.sectorCameraWorld.x),
                                      float(s.sectorCameraWorld.y),
-                                     0.0f);
+                                     float(s.sectorCameraWorld.z));
     const hmm_vec3 eye    = HMM_Vec3(target.X + kOffX * D,
                                      target.Y + kOffY * D,
                                      target.Z + kOffZ * D);
@@ -2714,43 +2764,66 @@ void TMapRenderer::RenderFrame()
     }
     mark_phase(timings.depth_fit_ms);
 
-    if (s.animate)
+    // Sun direction is driven by the rotation axis + time-of-day. The sun
+    // travels a great circle on the plane perpendicular to sun_axis:
+    //
+    //   noon     -> projected world-up (+Z) onto that plane
+    //   midnight -> -projected world-up
+    //   sunrise  -> 90° before noon along the orbit
+    //   sunset   -> 90° after noon
+    //
+    // Rotation uses Rodrigues' formula reduced for an in-plane vector
+    // (axis . noon == 0 because noon is the projection of up):
+    //   sun = noon * cos(theta) - cross(axis, noon) * sin(theta)
+    //
+    // Sign chosen so a +Y axis (north) produces sun-rises-in-east (+X)
+    // at 06:00, matching real-world convention. The `animate` flag
+    // overrides time-of-day with a synthetic sweep for offline tuning.
     {
-        ++s.tick;
-        const float t = float(s.tick) * (6.2831853f / 180.0f);
-        s.puck_u = 0.8f * std::cos(t);
-        s.puck_v = 0.5f + 0.4f * std::sin(t);
-    }
-    {
-        const float r2 = s.puck_u * s.puck_u + s.puck_v * s.puck_v;
-        if (r2 > 1.0f) {
-            const float k = 1.0f / std::sqrt(r2);
-            s.puck_u *= k; s.puck_v *= k;
+        // Normalize sun_axis (defensive — slider input can drop near zero).
+        float ax = s.sun_rotation_axis[0], ay = s.sun_rotation_axis[1], az = s.sun_rotation_axis[2];
+        float an = std::sqrt(ax*ax + ay*ay + az*az);
+        if (an < 1e-4f) { ax = 0.0f; ay = 1.0f; az = 0.0f; an = 1.0f; }
+        ax /= an; ay /= an; az /= an;
+
+        // Noon vector = world up (+Z) projected onto the plane normal
+        // to the axis, then normalized. Falls back to +X if the axis is
+        // parallel to +Z (degenerate case — sun would have nowhere to
+        // sweep around vertical).
+        float nx = 0.0f - ax * az;  // up = (0,0,1); up - axis * (axis.up)
+        float ny = 0.0f - ay * az;
+        float nz = 1.0f - az * az;
+        float nn = std::sqrt(nx*nx + ny*ny + nz*nz);
+        if (nn < 1e-4f) { nx = 1.0f; ny = 0.0f; nz = 0.0f; nn = 1.0f; }
+        nx /= nn; ny /= nn; nz /= nn;
+
+        // cross(axis, noon)
+        const float cx = ay * nz - az * ny;
+        const float cy = az * nx - ax * nz;
+        const float cz = ax * ny - ay * nx;
+
+        // theta from time-of-day (0 = midnight; map so noon -> 0).
+        float theta;
+        if (s.animate) {
+            ++s.tick;
+            theta = float(s.tick) * (6.2831853f / 180.0f);
+        } else {
+            const int32_t day_minutes = 24 * 60;
+            int32_t tod = PlayScreen.TimeOfDay() % day_minutes;
+            if (tod < 0) tod += day_minutes;
+            const float t = float(tod) / float(day_minutes);  // 0..1
+            theta = 6.2831853f * (t - 0.5f);                  // -π .. +π, 0 at noon
         }
-    }
-    {
-        const float r2 = s.puck_u * s.puck_u + s.puck_v * s.puck_v;
-        // The puck describes incoming light in screen space; the renderer
-        // uses the opposite vector, from the receiver back toward the sun.
-        const float to_sun_screen_x = s.puck_u;
-        const float to_sun_screen_y = s.puck_v;
-        const float to_sun_center = std::sqrt(fmaxf(0.0f, 1.0f - r2));
-        const float fx = kIsoCos30, fy = kIsoCos30, fz = 1.0f;
-        const float fn = std::sqrt(fx*fx + fy*fy + fz*fz);
-        const float FwX = fx / fn, FwY = fy / fn, FwZ = fz / fn;
-        const float rx = 1.0f, ry = -1.0f, rz = 0.0f;
-        const float rn = std::sqrt(rx*rx + ry*ry + rz*rz);
-        const float RwX = rx / rn, RwY = ry / rn, RwZ = rz / rn;
-        const float UwX = -FwY * RwZ + FwZ * RwY;
-        const float UwY = -FwZ * RwX + FwX * RwZ;
-        const float UwZ = -FwX * RwY + FwY * RwX;
-        s.light_dir[0] = to_sun_screen_x * RwX + to_sun_screen_y * UwX + to_sun_center * FwX;
-        s.light_dir[1] = to_sun_screen_x * RwY + to_sun_screen_y * UwY + to_sun_center * FwY;
-        s.light_dir[2] = to_sun_screen_x * RwZ + to_sun_screen_y * UwZ + to_sun_center * FwZ;
-        // Shadow ray invariant: this vector points from a receiver toward
-        // the sun, exactly like the lighting vector. Cast direction emerges
-        // from marching receivers toward the light and finding vertical
-        // occluders; do not store an opposite "shadow direction" here.
+        const float ct = std::cos(theta);
+        const float st = std::sin(theta);
+
+        s.light_dir[0] = nx * ct - cx * st;
+        s.light_dir[1] = ny * ct - cy * st;
+        s.light_dir[2] = nz * ct - cz * st;
+
+        // Shadow ray invariant: same vector as lighting (from receiver
+        // toward sun). Cast direction emerges from ray-march, not from
+        // a stored "shadow direction."
         s.dir[0] = s.light_dir[0];
         s.dir[1] = s.light_dir[1];
         s.dir[2] = s.light_dir[2];
@@ -2758,8 +2831,34 @@ void TMapRenderer::RenderFrame()
     // Global debug UI owns the ImGui shell; it will call DrawDebugTab() on
     // this renderer as a contributor.
 
+    // Pull the per-area ambient base from MapPane. TArea::Enter writes
+    // AMBLIGHT/AMBCOLOR (or the daylight-interpolated night variant) into
+    // MapPane every time the player enters an area; the renderer is the
+    // only consumer that has to push it onward to the GPU.
+    //
+    // Scaling: AMBLIGHT is an arbitrary-units integer authored by level
+    // designers (Demo-module range 4..35; retail levels run higher). The
+    // retail DirectX renderer mapped these through palette lookups whose
+    // final pixel-multiplier behaviour we don't have a closed form for,
+    // so the divisor `s.ambient_divisor` is a tunable in the debug UI
+    // (Lighting tab) seeded to ~1200 from observation of retail
+    // screenshots. [Lighting]Ambient3D is an additional percent
+    // multiplier on top.
+    {
+        const int32_t mp_ambient   = MapPane.GetAmbientLight();
+        const SColor& mp_color     = MapPane.GetAmbientColor();
+        const float   divisor      = (s.ambient_divisor > 0.0f) ? s.ambient_divisor : 1.0f;
+        const float   amb_scale    =
+            float(mp_ambient) * float(Ambient3D) / (divisor * 100.0f);
+        s.ambient          = amb_scale;
+        s.ambient_color[0] = float(mp_color.red)   / 255.0f;
+        s.ambient_color[1] = float(mp_color.green) / 255.0f;
+        s.ambient_color[2] = float(mp_color.blue)  / 255.0f;
+    }
+
     Renderer->SetLight(s.light_dir[0], s.light_dir[1], s.light_dir[2], s.intensity, s.color[0], s.color[1], s.color[2], s.ambient);
     Renderer->SetAmbientColor(s.ambient_color[0], s.ambient_color[1], s.ambient_color[2]);
+    Renderer->SetLightCeiling(s.light_ceiling);
     Renderer->SetAmbientOcclusion(s.ao_enable, s.ao_radius_px, s.ao_strength, s.ao_bias, s.ao_max_dist);
     Renderer->SetShadowWorldDir(s.light_dir[0], s.light_dir[1], s.light_dir[2]);
     Renderer->SetSunShadowRaycast(s.sun_shadow_samples, s.sun_shadow_depth_cutoff,
@@ -2821,15 +2920,20 @@ void TMapRenderer::RenderFrame()
                 if (d2 < picks[worst].d2_to_view) picks[worst] = { light_idx, d2 };
             }
         }
+      // Retail [Lighting]LightMult3D is a per-light intensity scale in
+      // percent (default 250 = 2.5x). Apply on top of the editor-tunable
+      // intensity_mul so debug overrides still compose.
+        const float light_mult = float(LightMult3D) / 100.0f;
+        const float range_mul  = float(LightRange3D) / 100.0f;
         for (int32_t k = 0; k < pick_n; ++k)
         {
             const SSectorLight& L = s.sectorLights[picks[k].light_idx];
             const S3DPoint wp = s.sectorLightPos(L);
             float rgb[3]; s.sectorLightColor(L, rgb);
             Renderer->AddPointLight(float(wp.x), float(wp.y), float(wp.z),
-                                    s.sectorLightRadius(L) * s.radius_mul,
+                                    s.sectorLightRadius(L) * s.radius_mul * range_mul,
                                     rgb[0], rgb[1], rgb[2],
-                                    s.sectorLightIntensity(L) * s.intensity_mul);
+                                    s.sectorLightIntensity(L) * s.intensity_mul * light_mult);
         }
         stats.point_lights_submitted = pick_n;
     }

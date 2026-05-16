@@ -10,6 +10,10 @@
 
 # Reference copies (kept locally, not tracked)
 /legacy
+# Hand-extracted contents of data/resources.rvr and data/Modules/*.rvm —
+# kept local for grepping; the .rvr/.rvm archives are authoritative.
+/data/resources_unzipped
+/data/Modules/Ahkuilon_unzipped
 
 # Editor / OS
 .DS_Store

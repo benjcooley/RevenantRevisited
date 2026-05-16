@@ -189,10 +189,39 @@ bool TDisplay::Restore()
 // (lit_target, post-deferred-lighting) onto the swapchain; fall back to
 // the legacy 2D backbuffer if TRenderer produced no 3D output. ImGui is
 // always rendered last inside the same pass.
+// Open the Overlay2D sokol pass on the 2D backbuffer with a transparent
+// clear. The backbuffer image is RGBA8 with an alpha channel; FlipPage's
+// composite step expects alpha = 0 to mean "no overlay here, show the
+// 3D scene through." Idempotent (a second Begin without an End between
+// is a no-op so internal helpers can bracket sections without fear).
+// See docs/FRAME_PIPELINE.md.
+void TDisplay::BeginOverlay()
+{
+    if (overlay_pass_open || !backbuffer)
+        return;
+
+    backbuffer->StartPass(0.0f, 0.0f, 0.0f, 0.0f);
+    overlay_pass_open = true;
+}
+
+void TDisplay::EndOverlay()
+{
+    if (!overlay_pass_open || !backbuffer)
+        return;
+
+    backbuffer->EndPass();
+    overlay_pass_open = false;
+}
+
 bool TDisplay::FlipPage(bool /*Wait*/)
 {
     if (!backbuffer)
         return false;
+
+    // Defensive: if a screen forgot to close the overlay pass before
+    // FlipPage, close it now. Better to recover than crash.
+    if (overlay_pass_open)
+        EndOverlay();
 
     sg_pass_action pa = {};
     pa.colors[0].action = SG_ACTION_CLEAR;
@@ -202,13 +231,16 @@ bool TDisplay::FlipPage(bool /*Wait*/)
 
     sg_begin_default_pass(&pa, sapp_width(), sapp_height());
 
-    const bool presented_3d = Renderer ? Renderer->PresentToSwapchain() : false;
-    if (!presented_3d) {
-        // UI/widget frame -- composite the 2D backbuffer onto the swapchain.
-        if (Renderer) Renderer->Composite(backbuffer);
+    // Layered composite: Scene3D, then Overlay2D, then DebugUI. The
+    // composite pipeline alpha-blends, so a fully-transparent overlay
+    // leaves the 3D scene visible. See docs/FRAME_PIPELINE.md.
+    if (Renderer) {
+        Renderer->PresentToSwapchain();   // Scene3D (no-op if nothing drew)
+        Renderer->Composite(backbuffer);  // Overlay2D (legacy CPU-raster fallback; mostly empty)
+        Renderer->DrawHud();              // HUD items (cursor, stat panels, ...)
     }
+    simgui_render();                      // DebugUI
 
-    simgui_render();
     sg_end_pass();
     sg_commit();
 

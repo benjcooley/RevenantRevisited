@@ -503,37 +503,55 @@ bool TAreaManager::Load()
     return true;
 }
 
-// Called by the game screen Pulse() function to update area stuff
+// Called by the game screen Pulse() function to update area stuff.
+//
+// Retail behavior (recon/classes_original/cls_0x41c410.cpp:41c410:35-94):
+// area.def is an ordered list; specific sub-areas (with RECTs) follow
+// general areas (no RECT) so the SPECIFIC entry overrides. Resolution
+// is "single active area, last match wins":
+//
+//   * Iterate all areas, remember the LAST one whose In(pos, level) is true.
+//   * Exit() every previously-active area that isn't the winner.
+//   * Enter() the winner (if it wasn't already entered).
+//   * Pulse() only the winner.
+//
+// This matters because Enter() also runs SCRIPT and AMBSOUND/AUDIOENV/
+// CDPLAYLIST hooks — firing those for both Forest AND Misthaven simultaneously
+// would double-load scripts and mismatch audio.
 void TAreaManager::Pulse()
 {
     S3DPoint pos;
-    int32_t level;
-    int32_t c;
-
     MapPane.GetMapPos(pos);
-    level = MapPane.GetMapLevel();
+    const int32_t level = MapPane.GetMapLevel();
 
-    for (c = 0; c < areas.NumItems(); c++)
+  // Find the last matching area.
+    PTArea winner = nullptr;
+    for (int32_t c = 0; c < areas.NumItems(); c++)
     {
-        PTArea area = areas[c];
-
-        bool in = area->In(pos, level);
-        
-        if (in && !(area->GetFlags() & AREA_PLAYERIN))
-            area->Enter(); // In with the new
-        else if (!in && (area->GetFlags() & AREA_PLAYERIN))
-            area->Exit();  // This should never happen!  But just in case..
+        if (areas[c]->In(pos, level))
+            winner = areas[c];
     }
-    
-    for (c = 0; c < areas.NumItems(); c++)
+
+  // Exit every previously-active area that isn't the winner.
+    for (int32_t c = 0; c < areas.NumItems(); c++)
     {
         PTArea area = areas[c];
-
+        if (area == winner)
+            continue;
         if (area->GetFlags() & AREA_PLAYERIN)
-            area->Pulse();
+            area->Exit();
     }
 
-  // Save last pos/level
+  // Enter the winner (if any) and Pulse it.
+    if (winner)
+    {
+        if (!(winner->GetFlags() & AREA_PLAYERIN))
+            winner->Enter();
+        winner->Pulse();
+    }
+
+  // Save last pos/level so distance-gated crossfade in TArea::Enter
+  // can decide between snap and FadeAmbient.
     lastpos = pos;
     lastlevel = level;
 }

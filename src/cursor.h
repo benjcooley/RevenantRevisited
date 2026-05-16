@@ -7,6 +7,7 @@
 #pragma once
 
 #include "revenant.h"
+#include "renderer.h"  // THudDrawable
 
 extern int32_t cursorx;
 extern int32_t cursory;
@@ -24,7 +25,16 @@ void ClearDragBitmap();
 void SetDragObj(TObjectInstance* inst);
 TObjectInstance* GetDragObj();
 
-void DrawMouseCursor();
+// Cursor HUD drawable. Registered by the active runtime mode (game
+// mode adds in OnEnter, removes in OnExit). Draws the current mouse
+// cursor bitmap at (cursorx, cursory) inside the swapchain pass.
+// Conventional z = 0 so HUD panels (z > 0) paint over it.
+class TCursorHud : public THudDrawable
+{
+  public:
+    void Draw() override;
+};
+
 void DrawMouseShadow();
 
 void RestrictCursor();
