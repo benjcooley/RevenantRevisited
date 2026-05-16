@@ -300,6 +300,15 @@ class TFlameEffect : public TEffect
 
     static void AttachVisualComponent(TObjectInstance* inst, TObjectImagery* imagery);
 
+    // Spawn a standalone TFlameEffect for the --test=vfx harness. Loads the
+    // canonical TorchFlame imagery (`Magic\flame.i3d`), constructs a
+    // sector-less instance pinned to world `origin`, and attaches the
+    // flipbook + particle components. Returns nullptr if the imagery can't
+    // be loaded (asset missing / not yet ready). The caller owns the
+    // returned pointer and must `delete` it to release the imagery refcount
+    // and the attached components.
+    [[nodiscard]] static TFlameEffect* SpawnForTest(const S3DPoint& origin);
+
   private:
     void InitializeVisualComponent(TObjectImagery* imagery);
 };
