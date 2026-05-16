@@ -30,6 +30,7 @@
 #include "tile.h"
 #include "uianchortest.h"
 #include "uilayouttest.h"
+#include "uinineslicetest.h"
 
 #include <cmath>
 #include <cctype>
@@ -2242,6 +2243,8 @@ bool Initialize(const char* mode)
         return InitializeUILayoutMode();
     if (strcmp(mode, "ui-anchors") == 0)
         return InitializeUIAnchorMode();
+    if (strcmp(mode, "ui-nineslice") == 0)
+        return InitializeUINineSliceMode();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2263,6 +2266,8 @@ void Close(const char* mode)
         CloseUILayoutMode();
     if (strcmp(mode, "ui-anchors") == 0)
         CloseUIAnchorMode();
+    if (strcmp(mode, "ui-nineslice") == 0)
+        CloseUINineSliceMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2293,6 +2298,8 @@ void Render(const char* mode)
         return RenderUILayoutMode();
     if (strcmp(mode, "ui-anchors") == 0)
         return RenderUIAnchorMode();
+    if (strcmp(mode, "ui-nineslice") == 0)
+        return RenderUINineSliceMode();
     return RenderBlankMode();
 }
 
