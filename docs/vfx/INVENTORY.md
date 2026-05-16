@@ -33,10 +33,18 @@ Maps to engine pipelines per [README.md §4 Phase 1](README.md) and PARTICLE_EFF
 | `PE`  | Particle emitter          | blood, sparks, smoke, dust              |
 | `SR`  | Strip / ribbon            | sword trail, lightning, wind streak     |
 | `MP`  | Mesh projectile           | fireball, ice bolt, photon              |
+| `IM`  | I3D mesh effect component | bone-animated mesh owned by an effect (meteor body, fire-column core, tornado funnel, dragon-fire). Uses existing renderer mesh path via `SMeshSubmit` / skinned-mesh path; **not** a new sokol pipeline. |
 | `LS`  | Light source              | dynamic light coupling                  |
 | `VO`  | Volumetric / overlay      | mist, ice freeze, burn glow             |
-| `CX`  | Composite (multi-pipeline)| meteor storm, tornado, waterfall        |
+| `CX`  | Composite (multi-pipeline)| meteor storm, tornado, waterfall — typically `IM + PE + LS` |
 | `-`   | No render output          | ambient sound, infra base class         |
+
+> **IM is not a new renderer pipeline.** It denotes an effect class whose
+> primary visual is an I3D bone-animated mesh — the renderer already supports
+> these via `SMeshSubmit` / the existing skinned-mesh path. The effect class
+> owns the I3D instance, advances its animation, and composes it with
+> particles / strips / lights through the VFX engine. See
+> [AGENT_GUIDE.md §3.5](AGENT_GUIDE.md) (dual-track porting).
 
 ### Column reference
 
