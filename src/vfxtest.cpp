@@ -190,9 +190,12 @@ void Render()
     const int32_t cam_oy = vh / 2;
 
     // Neutral 3D scene: directional sun, modern lighting, no shadows/AO.
-    // Camera centred at world origin, kCam world-units back.
-    Renderer->SetLight(0.6f, -0.6f, 0.4f, 1.0f, 1.0f, 1.0f, 1.0f, 0.25f);
-    Renderer->SetAmbientColor(0.55f, 0.55f, 0.55f);
+    // Camera centred at world origin, kCam world-units back. Scene is
+    // deliberately bright + neutral so effects read clearly against the
+    // background regardless of their own color; effects render in the
+    // post-lighting fx_pass so the sun/ambient don't tint them anyway.
+    Renderer->SetLight(0.6f, -0.6f, 0.4f, 1.0f, 1.0f, 1.0f, 1.0f, 0.85f);
+    Renderer->SetAmbientColor(0.80f, 0.80f, 0.80f);
     Renderer->SetAmbientOcclusion(false, 12.0f, 1.0f, 0.15f, 96.0f);
     Renderer->SetNormalLightingHardness(1.0f);
     Renderer->SetLightingMode(1);
@@ -230,8 +233,9 @@ void Render()
     }
 
     // Step 2: empty tile pass (clear-only) + lighting. RunLightingPass
-    // drains the FX queue at the tail.
-    Renderer->BeginTilePass(0.08f, 0.10f, 0.13f, 1.0f);
+    // drains the FX queue at the tail. Mid-gray clear so coloured
+    // effects (red blood, yellow flame, white flare) all read clearly.
+    Renderer->BeginTilePass(0.45f, 0.46f, 0.50f, 1.0f);
     Renderer->EndTilePass();
     Renderer->RunLightingPass();
 }
