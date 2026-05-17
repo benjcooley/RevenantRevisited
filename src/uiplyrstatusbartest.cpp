@@ -81,25 +81,23 @@ constexpr int32_t kBarDimYOffset   = 51;      // dim row = bright + 51 (3 rows d
 // Retail bar coordinates from
 // recon/discovered/cls_0x5a54e4_TPlyrStatusBar_slot23_TwoPassDraw_54af20.cpp.
 //
-// Per user 2026-05-17: the (0x44, 0xf) coords passed to the char's
-// draw method are the SHADOW position, not the bar itself. The bar is
-// drawn at (-4, -4) from the shadow per FUN_00438d80(buf, 4, 4)
-// shadow-offset setup that immediately precedes each bar draw block.
-// Bar coords (after subtracting the (4, 4) shadow offset):
-//   Health  : (x=0x40=64, y=0x0b=11)   (shadow at (0x44, 0xf) = (68, 15))
-//   Mana    : (x=0x40=64, y=0x1b=27)   (shadow at (0x44, 0x1f))
-//   Stamina : (x=0x40=64, y=0x28=40)   (shadow at (0x44, 0x2c))
+// Per FUN_0054a5d0_TPlyrStatusBar_BarRender_Helper body, params 4/5
+// (= caller's first two args) go DIRECTLY to FUN_00414d70 as dst x/y —
+// they ARE the bar position, not the shadow. The (+4, +4) shadow
+// offset is applied separately by the pre-bar shadow pass via
+// FUN_00438d80(buf, 4, 4) + the vtable+0x5c blit.
 //
-// RIGHT (target) shadow X offsets (line 657/672/686):
-//   pane_width - 0xc1 / 0x91 / 0x79  — these are SHADOW positions too.
-//   Actual bar X = shadow_x - 4.
+// LEFT (player) bars (slot 23 lines 484/499/511):
+//   Health  : (x=0x44=68, y=0x0f=15)
+//   Mana    : (x=0x44=68, y=0x1f=31)
+//   Stamina : (x=0x44=68, y=0x2c=44)
+//
+// RIGHT (target) bars (lines 657/672/686): x = pane_width - <offset>.
 constexpr int32_t kBarShadowOffX   = 4;
 constexpr int32_t kBarShadowOffY   = 4;
-constexpr int32_t kBarFillX        = 0x44 - kBarShadowOffX;  // 64 (bar X)
-constexpr int32_t kBarRowY[3]      = { 0x0f - kBarShadowOffY,
-                                       0x1f - kBarShadowOffY,
-                                       0x2c - kBarShadowOffY };  // 11, 27, 40
-constexpr int32_t kTargetBarOff[3] = { 0xc1, 0x91, 0x79 };       // shadow offsets
+constexpr int32_t kBarFillX        = 0x44;                          // 68
+constexpr int32_t kBarRowY[3]      = { 0x0f, 0x1f, 0x2c };          // 15, 31, 44
+constexpr int32_t kTargetBarOff[3] = { 0xc1, 0x91, 0x79 };          // 193, 145, 121
 
 // Surface-local coordinates extracted from FUN_0054a0a0 (PLAYER side
 // draw helper) — surface is 128x64 (the +0x6c mosaic surface):
@@ -294,7 +292,9 @@ bool InitializeUIPlyrStatusBarMode()
 
 void RenderUIPlyrStatusBarMode()
 {
-    Display.BackBuffer()->StartPass(0.08f, 0.10f, 0.14f, 1.0f);
+    // Lighter gray bg so dropshadows are visible against the background
+    // (the test mode doesn't have the actual playfield behind the panel).
+    Display.BackBuffer()->StartPass(0.55f, 0.55f, 0.58f, 1.0f);
     Display.BackBuffer()->EndPass();
 }
 
