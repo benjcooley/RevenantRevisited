@@ -52,6 +52,48 @@ update each row's `Owner` to the same handle, and note `clusters with: <other id
 
 ## 3. Doing the work
 
+### 3.0 Forensics first (MANDATORY pre-step for every effect)
+
+**Before writing any port code for an effect, complete the forensic
+write-up.** This is a hard prerequisite — not optional. We don't ship
+"plausible" behaviour and call it done; we ship behaviour grounded in
+retail evidence, with explicit notes on anything we deliberately
+deviated from.
+
+The forensic pass for an effect produces this body of notes appended
+to its INVENTORY row (or a separate `docs/vfx/forensics/<id>.md` file
+if it grows beyond one paragraph):
+
+1. **Retail constants** — every numeric the effect uses (counts,
+   speeds, lifetimes, gravities, blend factors, atlas dims). Pull
+   them from pre-release `src/effect{,comp}.cpp` macros AND
+   cross-check the recon decomp if the class is mapped. Note
+   anything that disagrees between pre-release source and retail
+   recon — retail wins for behaviour per §3.1, but the divergence
+   itself is information.
+2. **Spawn / emit shape** — how many particles per trigger, what
+   trigger semantics (one-shot? duration? continuous? loop?),
+   initial direction (radial cone? caller-supplied vector?
+   character-attached vector?), spread distribution.
+3. **Per-frame integration** — gravity/drag/wind, alpha curve,
+   scale curve, frame-cell curve, death condition (life-elapsed,
+   ground-impact, owner-state).
+4. **Render passes** — single-pass alpha? Two-pass alpha+additive
+   overlay (TBloodSystem-style)? Lit or unlit? Per-frame texture
+   swap? UV pick from atlas?
+5. **Caller / trigger sites** — what game code spawns this
+   effect and with what context. Hit resolution? Spell cast?
+   Environment timer? Script event?
+6. **Gaps / unknowns** — anything still ambiguous. Mark explicitly
+   what's documented vs guessed.
+
+Only after the row's notes carry these facts do you start the port.
+Reason: a port grounded in evidence is reviewable against the
+evidence; a port grounded in vibes can't be verified at all and
+guarantees rework. The blood port (B01) is the example: it shipped
+with the forensics gap labelled, so the author could see exactly
+which choices were retail-faithful and which were placeholders.
+
 ### 3.1 Source-of-truth order
 
 For any given effect:
