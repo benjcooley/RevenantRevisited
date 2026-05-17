@@ -1827,7 +1827,7 @@ _CLASSDEF(TRippleEffect)
 class TRippleEffect : public TEffect
 {
   private:
-     int32_t len;
+     int32_t len = 0;
   public:
     TRippleEffect(TObjectImagery* newim) : TEffect(newim) { }
     TRippleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
@@ -1838,6 +1838,40 @@ class TRippleEffect : public TEffect
 
     virtual int32_t GetLength() { return len; }
     virtual void SetLength(int32_t length) { len = length; }
+
+    // Spawn a standalone TRippleEffect for the --test=vfx harness. No
+    // imagery lookup — the ripple's atlas is built procedurally via
+    // `Renderer->RegisterTextureAsset` (see effect.cpp). Constructs a
+    // sector-less instance pinned to world `origin`, stamps a fresh
+    // map index, and seeds the per-instance animator state. Returns
+    // nullptr if the renderer isn't ready. The caller owns the
+    // returned pointer and `delete`s it when done.
+    [[nodiscard]] static TRippleEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness; mirrors B01 / S01. Grows
+    // the ring scale, cycles the 4x4 atlas frame, fades alpha during the
+    // dissipation phase, and submits one screen-aligned billboard via
+    // SubmitFxBillboard. Self-killed when the lifetime elapses (caller
+    // detects via `IsAlive()` and respawns on next retrigger tick).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the ripple's `frameon > length && ripframe == 15`
+    // condition fires (matching pre-release TRippleAnimator::Animate's
+    // OF_KILL gate). The harness uses this to early-out after death.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Per-instance animator state. Pre-release split this across
+    // TRippleEffect (just `len`) + TRippleAnimator (frameon, ripframe,
+    // scale). For the standalone test-harness port we collapse the two
+    // into the effect class; there's no caller-side rig that needs the
+    // animator/effect separation, and the H03 row's pre-release source
+    // bodies live cleanly as one unit.
+    int32_t frameon_  = 0;        // monotonic frame counter (sim-tick-gated)
+    int32_t ripframe_ = 0;        // 0..15 cycle index into rippleframeof[]
+    float   scale_    = 0.5f;     // ring scale; grows by 1/16 per sim tick
+    bool    alive_    = true;
+    double  sim_accum_ms_ = 0.0;  // sim-tick gate accumulator
 };
 
 // *******************

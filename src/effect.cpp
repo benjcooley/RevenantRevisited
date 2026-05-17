@@ -1104,3 +1104,275 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     //    RunLightingPass.
     Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
 }
+
+// *************************************************************************
+// * TRippleEffect - FB-pipeline standalone-spawn for --test=vfx (H03)     *
+// *************************************************************************
+//
+// Scope: Phase 2 H03 row. Ports the water-ring visual from
+// `TRippleAnimator` (src/effect_old.cpp:10683-10947) to the FB pipeline,
+// reusing the F01 standalone-spawn pattern.
+//
+// What this *does* deliver:
+//   1. A real `TRippleEffect` instance that owns its lifecycle.
+//   2. A procedural 4x4 atlas of expanding concentric-ring frames built
+//      via `Renderer->RegisterTextureAsset` (no I3D asset on disk for
+//      "ripple" — see INVENTORY H03 gap 7.2). Atlas frame layout mirrors
+//      the pre-release `SetAnimFrame` UV math (`u = (frame%4)*0.25;
+//      v = (frame/4)*0.25`) so the same `rippleframeof[]` reorder table
+//      drives the right cell.
+//   3. Per-frame ring scale growth + atlas frame cycle, sim-tick-gated
+//      to retail's 24 Hz cadence (pre-release was ungated which would
+//      run 2.5x too fast at 60 fps).
+//   4. Submission as a single screen-aligned SBillboardDrawItem each
+//      frame (the camera in vfxtest looks straight forward so a ring
+//      reads as a ring; a flat-on-ground orientation would require a
+//      new ground-quad pipeline which is out of scope here).
+//
+// What this does *not* deliver:
+//   - Splash droplet sub-emit (H03a; needs PE bucket + recursive ripple
+//     spawn — folded in when H04 TDripEffect lands).
+//   - In-game spawn path through TDripAnimator (H04 dependency).
+//   - Real I3D ripple imagery (H03b if/when asset is identified).
+//
+namespace {
+
+constexpr int32_t kRippleAtlasCols     = 4;
+constexpr int32_t kRippleAtlasRows     = 4;
+constexpr int32_t kRippleAtlasCellPx   = 32;   // 32x32 per cell -> 128x128 atlas
+constexpr int32_t kRippleAtlasSizePx   = kRippleAtlasCols * kRippleAtlasCellPx;
+constexpr int32_t kRippleAtlasFrames   = kRippleAtlasCols * kRippleAtlasRows;
+constexpr int32_t kRippleDefaultLength = 96;     // ~4 sec at 24 Hz, "big" ripple by retail RIPPLE_SMALLDURATION=24 cutoff
+constexpr int32_t kRippleSimTickMs     = 1000 / 24;
+constexpr float   kRippleScaleStep     = 1.0f / 16.0f;   // pre-release: scale += 1/16 per Animate (was per render frame; now per sim tick)
+constexpr float   kRippleBaseSizeWu    = 80.0f;          // base ring diameter in world units; scale * this = actual diameter
+
+// Pre-release frame-reorder table from effect_old.cpp:10864. Each row of
+// 4 atlas cells is mirrored — the animator's logical frame index gets
+// remapped before becoming the rendered cell.
+constexpr int8_t kRippleFrameOf[16] = {
+    3, 2, 1, 0,
+    7, 6, 5, 4,
+    11, 10, 9, 8,
+    15, 14, 13, 12,
+};
+
+// Procedural 4x4 atlas of expanding concentric rings. Each cell is a
+// kRippleAtlasCellPx square; cell index N represents the ripple at
+// progress t = N / 15. Inside each cell we draw a soft ring at radius
+// = base_radius + t * grow_radius with alpha falling smoothly off both
+// sides of the ring; later cells (t > 0.5) also fade the whole-cell
+// alpha to simulate the ripple dissipating into the water surface.
+//
+// Used over RGBA so we can keep a clean premultiplied alpha + bright
+// rim, identical to S01 LightningGlowTexture's blend-friendly pattern.
+TTextureHandle RippleAtlasTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x4658524950504C45ull;   // "FXRIPPLE"
+
+    static uint8_t pixels[kRippleAtlasSizePx * kRippleAtlasSizePx * 4];
+
+    for (int32_t cell = 0; cell < kRippleAtlasFrames; ++cell)
+    {
+        const float t          = float(cell) / float(kRippleAtlasFrames - 1);   // 0..1 over the 16 cells
+        const float ring_r     = 0.18f + t * 0.30f;   // ring radius in cell-uv space (0..0.5 max)
+        const float ring_thick = 0.06f + (1.0f - t) * 0.04f;   // thinner ring as it ages
+        // Whole-cell alpha: full for the first half (expansion), then
+        // fade to zero across the second half (dissipation). Matches the
+        // pre-release atlas's 0..3 expand loop / 4..15 dissipate split.
+        const float cell_alpha = (t < 0.4f) ? 1.0f
+                               : (t > 0.95f) ? 0.0f
+                               : (1.0f - (t - 0.4f) / 0.55f);
+
+        const int32_t cell_col = cell % kRippleAtlasCols;
+        const int32_t cell_row = cell / kRippleAtlasCols;
+        const int32_t base_x   = cell_col * kRippleAtlasCellPx;
+        const int32_t base_y   = cell_row * kRippleAtlasCellPx;
+
+        for (int32_t py = 0; py < kRippleAtlasCellPx; ++py)
+        {
+            for (int32_t px = 0; px < kRippleAtlasCellPx; ++px)
+            {
+                const float u  = (float(px) + 0.5f) / float(kRippleAtlasCellPx);
+                const float v  = (float(py) + 0.5f) / float(kRippleAtlasCellPx);
+                const float dx = u - 0.5f;
+                const float dy = v - 0.5f;
+                const float r  = std::sqrt(dx * dx + dy * dy);
+                // Ring intensity: peaks at r == ring_r, falls off linearly
+                // over ring_thick on each side. Cubic shaping makes the
+                // rim feel more "watery" than a flat band.
+                const float d  = std::fabs(r - ring_r);
+                float inten    = (d < ring_thick) ? (1.0f - d / ring_thick) : 0.0f;
+                inten          = inten * inten * inten;   // cubic for tighter rim
+                // Killing pixels outside the cell's natural disc keeps a
+                // future texture-bleed-safe edge if the renderer ever
+                // bilinear-samples across cells.
+                if (r > 0.48f)
+                    inten = 0.0f;
+
+                const float a8 = inten * cell_alpha;
+                const float a8_clamped = (a8 < 0.0f) ? 0.0f : ((a8 > 1.0f) ? 1.0f : a8);
+                const uint8_t byte = uint8_t(a8_clamped * 255.0f);
+                const int32_t out_x = base_x + px;
+                const int32_t out_y = base_y + py;
+                const int32_t idx   = (out_y * kRippleAtlasSizePx + out_x) * 4;
+                pixels[idx + 0] = byte;   // premultiplied alpha: rgb == a (white * a)
+                pixels[idx + 1] = byte;
+                pixels[idx + 2] = byte;
+                pixels[idx + 3] = byte;
+            }
+        }
+    }
+
+    return Renderer->RegisterTextureAsset(kKey, pixels, sizeof(pixels),
+                                          kRippleAtlasSizePx, kRippleAtlasSizePx,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(pixels)));
+}
+
+}   // namespace
+
+void TRippleEffect::Initialize()
+{
+    // Pre-release TRippleEffect::Initialize is empty (effect_old.cpp:10689).
+    // All the animator state lives on our collapsed effect-class members.
+}
+
+void TRippleEffect::Pulse()
+{
+    TEffect::Pulse();
+    // Pre-release Pulse just chains to base (effect_old.cpp:10693). The
+    // visible per-frame work runs through TickAndSubmitForTest from the
+    // harness; the in-game caller path is H04-blocked (no live ripple
+    // spawn site exists in the port today — see INVENTORY H03 §5).
+}
+
+TRippleEffect* TRippleEffect::SpawnForTest(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[ripple] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // No imagery — the ripple atlas is procedural (see gap 7.2).
+    auto* ripple = new TRippleEffect(static_cast<TObjectImagery*>(nullptr));
+    ripple->ForcePos(origin);
+    ripple->SetMapIndex(MapPane.MakeIndex());
+    ripple->SetLength(kRippleDefaultLength);
+    ripple->ActivateComponents();
+
+    // Pre-register the atlas so the first frame's Submit doesn't pay
+    // the bake cost (the byte arr is ~64KB; cheap, but log it once so
+    // we know it landed).
+    const TTextureHandle tex = RippleAtlasTexture();
+    if (tex == kInvalidTexture)
+    {
+        log_warn("[ripple] SpawnForTest: atlas texture register failed; H03 will draw nothing");
+    }
+
+    log_info("[ripple] SpawnForTest: map_index=%d origin=(%d,%d,%d) length=%d tex=%u",
+             ripple->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             ripple->GetLength(), tex);
+    return ripple;
+}
+
+void TRippleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer)
+        return;
+
+    // Sim-tick gate (24 Hz). Pre-release animator was ungated -- at
+    // modern render rates the ring grows + cycles too fast, so we drive
+    // animator math off TTime::DeltaTime accumulated to retail's tick.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kRippleSimTickMs))
+    {
+        sim_accum_ms_ -= double(kRippleSimTickMs);
+        ++frameon_;
+
+        // Pre-release: ripframe advances every other animator frame.
+        if ((frameon_ % 2) == 0)
+        {
+            if (frameon_ <= len - 24)
+            {
+                ripframe_ = (ripframe_ + 1) & 3;       // 0..3 expansion loop
+            }
+            else
+            {
+                if (frameon_ > len - 24 && ripframe_ < 4)
+                {
+                    // Jump into the dissipation sequence. Short ripples
+                    // (len <= 24) start partway through the dissipation
+                    // to compress the wind-down.
+                    ripframe_ = (len > 24) ? 4 : (4 + (24 - len) / 2);
+                }
+                else
+                {
+                    ++ripframe_;
+                    if (ripframe_ > 15)
+                        ripframe_ = 15;
+                }
+            }
+        }
+
+        scale_ += kRippleScaleStep;
+
+        if (frameon_ > len && ripframe_ == 15)
+        {
+            alive_ = false;
+            return;
+        }
+    }
+
+    // Submit one screen-aligned billboard sized by current scale, UV-
+    // rectangled to the current atlas cell. Atlas frame indirection
+    // mirrors pre-release `SetAnimFrame(rippleframeof[15 - ripframe], obj)`.
+    const int32_t logical_frame = 15 - ripframe_;
+    const int32_t safe_logical  = (logical_frame < 0) ? 0
+                                : (logical_frame > 15) ? 15
+                                : logical_frame;
+    const int32_t cell          = kRippleFrameOf[safe_logical];
+    const int32_t col           = cell % kRippleAtlasCols;
+    const int32_t row           = cell / kRippleAtlasCols;
+    const float   uv_w          = 1.0f / float(kRippleAtlasCols);
+    const float   uv_h          = 1.0f / float(kRippleAtlasRows);
+
+    const TTextureHandle tex = RippleAtlasTexture();
+    if (tex == kInvalidTexture)
+        return;
+
+    const S3DPoint& p = Pos();
+    SBillboardDrawItem item = {};
+    item.world_pos[0] = float(p.x);
+    item.world_pos[1] = float(p.y);
+    // Lift z slightly so the ring doesn't z-fight the ground in scenes
+    // that have one. (vfxtest's empty tile pass has no ground; harmless.)
+    item.world_pos[2] = float(p.z) + 1.0f;
+
+    const float diameter = kRippleBaseSizeWu * scale_;
+    item.size_wu[0]   = diameter;
+    item.size_wu[1]   = diameter;
+    item.color_rgba[0] = 0.85f;   // soft cool-white water tint
+    item.color_rgba[1] = 0.92f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;    // per-pixel alpha lives in the atlas
+
+    item.uv_rect[0] = float(col) * uv_w;
+    item.uv_rect[1] = float(row) * uv_h;
+    item.uv_rect[2] = uv_w;
+    item.uv_rect[3] = uv_h;
+
+    item.key.texture     = tex;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    // PremulAlpha pairs with the premultiplied procedural atlas
+    // (rgb == a, see RippleAtlasTexture loop). Same blend choice as
+    // S01 LightningGlowTexture; reads as a translucent ring with a
+    // bright crisp rim and no dark-fringe artifacts on the soft edge.
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    Renderer->SubmitFxBillboard(item);
+}
