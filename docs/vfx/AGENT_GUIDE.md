@@ -84,7 +84,39 @@ if it grows beyond one paragraph):
 5. **Caller / trigger sites** — what game code spawns this
    effect and with what context. Hit resolution? Spell cast?
    Environment timer? Script event?
-6. **Gaps / unknowns** — anything still ambiguous. Mark explicitly
+6. **Test-mode rig requirements** — what does the harness need to
+   exercise this effect on the *real* code path? Not every effect
+   is standalone-spawnable like a torch flame. Categories so far:
+   - **Standalone** — `SpawnForTest(origin)` is enough (F01 flame,
+     B01 blood, S01 lightning). No external state needed.
+   - **Character-attached** — needs a character imagery loaded +
+     TCharAnimator running so the effect's owner exists. Status
+     overlays (TBurnEffect / TAuraEffect / TIcedEffect), aura
+     glows, healing visuals.
+   - **Character + weapon + attack-anim** — needs a character
+     with a weapon equipped and a swing animation cycling so the
+     effect's per-tick logic has live weapon-extents to scan.
+     TWeaponSwipe.
+   - **Projectile (source→target)** — needs a launch point, a
+     target point, and a way to advance the projectile along a
+     vector each tick. TMissileEffect / TFireBallEffect /
+     TIceBoltEffect / TPhotonEffect.
+   - **Spell-cast (caster→ground)** — needs a caster character
+     plus a ground-impact point. Spell visuals that originate at
+     a hand and play out at a target location.
+   - **Environment-context** — needs a sector / ground plane /
+     water surface to anchor against. TWaterFallEffect, ambient
+     drips, ripples on water.
+
+   Identify which category fits, list exactly what mock objects /
+   loaders / loops the test harness must construct, and whether
+   the rig is reusable from an existing harness primitive or
+   needs to be built. The library of rig primitives grows
+   incrementally — when a new category appears, add the primitive
+   to vfxtest.{h,cpp} as `Rig*` helpers (e.g. `CharacterRig`,
+   `CharacterWithWeaponRig`, `ProjectileRig`) so the next effect
+   in the same category reuses it.
+7. **Gaps / unknowns** — anything still ambiguous. Mark explicitly
    what's documented vs guessed.
 
 Only after the row's notes carry these facts do you start the port.
