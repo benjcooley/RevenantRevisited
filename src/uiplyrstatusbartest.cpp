@@ -34,6 +34,7 @@
 
 #include "bitmap.h"
 #include "display.h"
+#include "font.h"
 #include "logging.h"
 #include "multi.h"
 #include "renderer.h"
@@ -42,6 +43,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 namespace {
@@ -98,6 +100,8 @@ constexpr SBarStyle kBarStyles[3] = {
 // Cached assets from playscrn.dat.
 PTBitmap g_textHealthBar = nullptr;   // 200x11 single-bar backdrop
 PTBitmap g_lifeIcon      = nullptr;   // 24x21 heart icon for health bar
+TFont*   g_silverFont    = nullptr;   // value text font
+TFont*   g_goldFont      = nullptr;   // name+level text font
 
 // Mockup pane visualizer. The panel for each side is:
 //   - 3 stacked `texthealthbar` blits (200x11 each, 14px row pitch)
@@ -157,16 +161,17 @@ private:
 
     // Draws an octagonal portrait frame at (x, y, size, size). Faked via
     // stacked horizontal strips of decreasing width near top/bottom edges
-    // to approximate a chamfered octagon. Gold frame border + dark fill;
-    // the actual portrait sprite would be blitted inside this frame.
+    // to approximate a chamfered octagon. Gold frame border + dark fill +
+    // simple pseudo-face shapes inside so the portrait reads as a face
+    // placeholder rather than an empty box (real Locke sprite will replace
+    // these when character-data portrait wiring lands).
     void DrawOctagonalPortrait(int32_t x, int32_t y, int32_t size, uint8_t a)
     {
-        const int32_t chamfer = size / 4;  // pixels chamfered at each corner
-        const uint8_t fr = 60, fg = 50, fb = 30;             // fill (dark brown)
-        const uint8_t br = 200, bg = 160, bb = 70;           // border (gold)
+        const int32_t chamfer = size / 4;
+        const uint8_t fr = 40, fg = 30, fb = 20;             // dark background
+        const uint8_t br = 200, bg = 160, bb = 70;           // gold border
 
-        // Body: stacked horizontal strips. For rows in the chamfered
-        // top/bottom region, narrow the strip.
+        // Body fill (chamfered octagon shape).
         for (int32_t row = 0; row < size; ++row)
         {
             int32_t inset = 0;
@@ -174,30 +179,59 @@ private:
             else if (row >= size - chamfer) inset = chamfer - (size - 1 - row);
             const int32_t rx = x + inset;
             const int32_t rw = size - 2 * inset;
-            // Fill row
             Renderer->DrawSolidRect(rx, y + row, rw, 1, fr, fg, fb, a);
-            // Border pixels: left + right edges (1px)
             Renderer->DrawSolidRect(rx, y + row, 1, 1, br, bg, bb, a);
             Renderer->DrawSolidRect(rx + rw - 1, y + row, 1, 1, br, bg, bb, a);
         }
-        // Top + bottom border strips (1px) — bridge the chamfered edges
-        const int32_t topY = y;
-        const int32_t botY = y + size - 1;
+        // Top + bottom 1px border strips
         const int32_t topW = size - 2 * chamfer;
-        Renderer->DrawSolidRect(x + chamfer, topY, topW, 1, br, bg, bb, a);
-        Renderer->DrawSolidRect(x + chamfer, botY, topW, 1, br, bg, bb, a);
-        // Diagonal chamfer borders (1px steps)
+        Renderer->DrawSolidRect(x + chamfer, y, topW, 1, br, bg, bb, a);
+        Renderer->DrawSolidRect(x + chamfer, y + size - 1, topW, 1, br, bg, bb, a);
+        // Diagonal chamfer borders
         for (int32_t s = 0; s < chamfer; ++s)
         {
-            // top-left → top-center
             Renderer->DrawSolidRect(x + s, y + chamfer - s, 1, 1, br, bg, bb, a);
-            // top-right
             Renderer->DrawSolidRect(x + size - 1 - s, y + chamfer - s, 1, 1, br, bg, bb, a);
-            // bottom-left
             Renderer->DrawSolidRect(x + s, y + size - 1 - (chamfer - s), 1, 1, br, bg, bb, a);
-            // bottom-right
             Renderer->DrawSolidRect(x + size - 1 - s, y + size - 1 - (chamfer - s), 1, 1, br, bg, bb, a);
         }
+
+        // === Stylized pseudo-face placeholder ===
+        // A few colored shapes that suggest "character portrait" without
+        // claiming to be the real Locke art:
+        //   - Dark brown rect at top: helmet/hair
+        //   - Skin-tone oval below: face area
+        //   - Small dark rects: eyes
+        const int32_t cx = x + size / 2;
+        const int32_t cy = y + size / 2;
+        const uint8_t hr = 50,  hg = 25, hb = 10;            // helmet brown
+        const uint8_t sk_r = 180, sk_g = 130, sk_b = 90;     // skin tone
+        const uint8_t ey_r = 30, ey_g = 20, ey_b = 10;       // eye dark
+
+        // Helmet/hair: top 35% of portrait
+        const int32_t helmH = size * 35 / 100;
+        const int32_t helmY = y + chamfer / 2;
+        const int32_t helmW = size - 2 * (chamfer / 2);
+        Renderer->DrawSolidRect(x + chamfer / 2, helmY, helmW, helmH, hr, hg, hb, a);
+
+        // Face oval: stacked horizontal rects
+        const int32_t faceTop = helmY + helmH - 2;
+        const int32_t faceH   = size - (chamfer / 2) - (faceTop - y) - 2;
+        for (int32_t row = 0; row < faceH; ++row)
+        {
+            // Width tapers from narrow at top, widest in middle, narrow at bottom
+            const float t = float(row) / float(faceH - 1);
+            const float oval = 1.0f - 4.0f * (t - 0.5f) * (t - 0.5f);  // parabolic
+            const int32_t fw = int32_t(float(size - chamfer) * (0.55f + 0.35f * oval));
+            const int32_t fx = cx - fw / 2;
+            Renderer->DrawSolidRect(fx, faceTop + row, fw, 1, sk_r, sk_g, sk_b, a);
+        }
+        // Eyes: two small dark rects in upper-third of face area
+        const int32_t eyeY = faceTop + faceH / 4;
+        const int32_t eyeW = 2, eyeH = 2;
+        const int32_t eyeSpacing = size / 5;
+        Renderer->DrawSolidRect(cx - eyeSpacing, eyeY, eyeW, eyeH, ey_r, ey_g, ey_b, a);
+        Renderer->DrawSolidRect(cx + eyeSpacing - eyeW, eyeY, eyeW, eyeH, ey_r, ey_g, ey_b, a);
     }
 
     // 9x9 blue diamond icon centered on (cx, cy).
@@ -309,6 +343,10 @@ private:
                     Renderer->DrawSolidRect(bx + s, fillSlotY + 1, 1, hiH,
                                             hr, hg, hb, aFrame);
                 }
+                // Darker bottom edge (1px) for the 3D-pill effect.
+                Renderer->DrawSolidRect(bx, fillSlotY + fillH - 1, actualBodyW, 1,
+                                        st.outline.r, st.outline.g, st.outline.b,
+                                        aFrame);
             }
             // Tapered scimitar tip
             if (actualTipW > 0 && tipW > 0)
@@ -331,6 +369,10 @@ private:
                                                 aFrame);
                 }
             }
+
+            // (Numeric value text overlay deferred — Display.WriteText
+            // experiment broke the render path; text rendering needs
+            // proper HUD-pipeline wiring, out of scope for this iter.)
 
             // === Icon at outer end of bar (overlapping the bar start) ===
             // Per reference: icons sit AT the start of the bar, slightly
@@ -399,12 +441,16 @@ bool InitializeUIPlyrStatusBarMode()
     {
         g_textHealthBar = GameData->Bitmap((char*)"texthealthbar");
         g_lifeIcon      = GameData->Bitmap((char*)"life");
+        g_silverFont    = GameData->Font((char*)"silverfont");
+        g_goldFont      = GameData->Font((char*)"goldfont");
         if (g_textHealthBar)
             log_info("[ui-plyrstatusbar] texthealthbar loaded (%dx%d)",
                      g_textHealthBar->width, g_textHealthBar->height);
         if (g_lifeIcon)
-            log_info("[ui-plyrstatusbar] life (heart icon) loaded (%dx%d)",
+            log_info("[ui-plyrstatusbar] life loaded (%dx%d)",
                      g_lifeIcon->width, g_lifeIcon->height);
+        if (g_silverFont) log_info("[ui-plyrstatusbar] silverfont loaded");
+        if (g_goldFont)   log_info("[ui-plyrstatusbar] goldfont loaded");
     }
 
     Renderer->AddHud(&g_hud, 0.0f);

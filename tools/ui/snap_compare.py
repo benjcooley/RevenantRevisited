@@ -270,7 +270,7 @@ def main() -> int:
                     help="how many frames to capture (default 4)")
     ap.add_argument("--interval-ms", type=int, default=1500,
                     help="ms between frame captures (default 1500)")
-    ap.add_argument("--warmup-ms", type=int, default=4000,
+    ap.add_argument("--warmup-ms", type=int, default=7000,
                     help="ms to wait after launch before first capture")
     ap.add_argument("--out", type=Path,
                     default=Path("/tmp/ui_ab.png"))
