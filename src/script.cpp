@@ -2,6 +2,18 @@
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
 // *                    Script.cpp - Script functions                      *
+// *                                                                       *
+// * REVSYNC: per-method retail sync 2026-05-17. See script.h header for   *
+// * the class-level map; individual method `REVSYNC:` markers below cite  *
+// * the recon/discovered/cls_*.cpp addresses each implementation was      *
+// * cross-checked against.                                                *
+// *                                                                       *
+// * Hot-path note: TScript::Continue / Triggered keep the pre-release C++ *
+// * because the retail bodies hook engine subsystems (dialog HUD, player  *
+// * FSM, multi-context vftable slots 0x148/0x14c/0x154/0x1c0) that have   *
+// * not been ported yet. The trigger machine shape — TRIGGER_* opcodes,   *
+// * priority gating, MAXITERATIONS infinite-loop guard, BEGIN/END depth   *
+// * stack — matches retail. TODO(revsync) markers flag each divergence.   *
 // *************************************************************************
 
 #include <stdio.h>
@@ -27,10 +39,10 @@ bool TScript::pauseall = false;
 TObjectInstance* TakenObject = nullptr;
 TObjectInstance* DroppedObject = nullptr;
 
-void ScriptError(char *buf, int32_t linenum)
+void ScriptError(const char *buf, int32_t linenum)
 {
     char buf2[100];
-    sprintf(buf2, "Script error at line %d: %s\n", linenum, buf);
+    snprintf(buf2, sizeof(buf2), "Script error at line %d: %s\n", linenum, buf);
     if (Editor)
         Output(buf2);
     else
@@ -47,118 +59,108 @@ void SkipBlock(TToken &t)
 // * TScript *
 // ***********
 
+// REVSYNC: ctor @ 0x00492170
 TScript::TScript(TScriptProto* prototype)
 {
     topproto = curproto = prototype;
-    ip = nullptr;
-    priority = 0;
-    depth = 0;
-    lastpriority = 0;
-    newtrigger = 0;
-    newtriggerstr[0] = '\0';
+    proto = prototype;
     block[0].conditional = COND_UNDEF;
     block[0].loopstart = 0;
 }
 
-TScript::TScript() 
-{ 
-    topproto = curproto = nullptr; 
-    ip = nullptr; 
-    priority = 0; 
-    depth = 0; 
-    newtrigger = 0; 
-    lastpriority = 0;
-    block[depth].conditional = COND_UNDEF;
-    block[depth].loopstart = 0;
-//  ScriptManager.AddScript(this); 
+TScript::TScript()
+{
+    block[0].conditional = COND_UNDEF;
+    block[0].loopstart = 0;
 }
 
 TScript::~TScript()
 {
 }
 
+// REVSYNC: SetText @ 0x004944c0 — retail allocates via FUN_00482ef0 (strdup-like) and
+// clears the upper script flags except bit 0x20000 (paused-by-context). Our pre-release
+// path mirrors only the proto-buffer side; the flag bookkeeping isn't observable
+// because our Continue() doesn't gate on those bits.
 void TScript::SetText(char *buf)
 {
-    topproto->SetBuffer(buf);
+    if (topproto)
+        topproto->SetBuffer(buf);
     ScriptManager.SetScriptsDirty();
 }
- 
-void TScript::Start(TScriptProto* proto, int32_t pos, int32_t newpriority)
+
+void TScript::Start(TScriptProto* startproto, int32_t pos, int32_t /*newpriority*/)
 {
-    if (!proto)
+    if (!startproto)
         curproto = topproto;
     else
-        curproto = proto;
+        curproto = startproto;
 
-    if (pos < 0 || pos >= curproto->Length())
+    if (!curproto || pos < 0 || pos >= curproto->Length())
         return;
 
     ip = curproto->Text() + pos;
 }
 
-void TScript::StartTrigger(TScriptProto* proto, PSScriptTrigger st)
+void TScript::StartTrigger(TScriptProto* startproto, PSScriptTrigger st)
 {
-    Start(proto, st->pos, st->priority);
+    Start(startproto, st->pos, st->priority);
     trigger = st->type;         // Set current trigger we're going to do
     newtrigger = 0;             // Set manual new trigger (if any) to 0
     newtriggerstr[0] = '\0';    // Set manual new trigger key (if any) to nullptr
+    curtrigger = st;
 }
 
-bool TScript::Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* context)
+// REVSYNC: Triggered @ 0x00492d70 — retail body is 199 lines of engine-coupled
+// logic (dialog FSM, player combat state, vftable slot 0x8c/0x154/0x1c0 calls).
+// We keep the pre-release per-trigger-type switch because it produces the right
+// observable behaviour for the trigger types our ported engine actually emits.
+// TODO(revsync): once Player/Dialog/Combat are retail-synced, replace this with
+// the retail Triggered body and route through the new VFT slots.
+bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance* context)
 {
     bool retval = false;
 
   // Are we already doing this trigger?
-    if (curtrigger == st || st->priority < priority)
+    if (curtrigger == st || st->priority < curpriority)
         return false;
 
   // ******************
   // !!!!!REMEMBER!!!!!
   // ******************
-  
-  // This function is being called often, so 
-  // make sure you don't do anything to intense
-  // here.  KEEP IT SIMPLE AND FAST!
+  //
+  // This function is being called often, so make sure you don't do anything
+  // too intense here. KEEP IT SIMPLE AND FAST!
 
     switch (st->type)
     {
       case TRIGGER_ALWAYS:      // This trigger will always fire if it has a higherer priority
-      {
         retval = true;
         break;
-      }
-      case TRIGGER_TRIGGER:     // This is the manually fired trigger (triggered by script 'trigger' command)
-      {
-        if (newtrigger == TRIGGER_TRIGGER && 
-          !stricmp(st->name, newtriggerstr))
+
+      case TRIGGER_TRIGGER:     // Manually fired trigger (script 'trigger' command)
+        if (newtrigger == TRIGGER_TRIGGER && !stricmp(st->name, newtriggerstr))
             retval = true;
         break;
-      }
-      case TRIGGER_DIALOG:      // This trigger is triggered by clicking on a friendly character
-      {
+
+      case TRIGGER_DIALOG:      // Player clicked a friendly character
         if (newtrigger == TRIGGER_DIALOG)
             retval = true;
         break;
-      }
-      case TRIGGER_PROXIMITY:   // This allow you to set a floating proximity field for a character
-      {                         // Slightly slow, so be careful where you use this
+
+      case TRIGGER_PROXIMITY:   // Floating proximity field — slightly slow
         if (newtrigger == TRIGGER_PROXIMITY)
             retval = true;
-        else 
+        else if (Player && !stricmp(st->name, Player->GetName()))
+            retval = context->Pos().InRange(Player->Pos(), st->dist);
+        else
         {
-            if (Player && !stricmp(st->name, Player->GetName()))
-                retval = context->Pos().InRange(Player->Pos(), st->dist);
-            else
-            {
-//              TObjectInstance* inst = MapPane.ObjectInRange(context->Pos(), st->dist, OBJSET_CHARACTER);
-//              if (st->name[0] == '\0' || !stricmp(st->name, inst->GetName()))
-//                  retval = true;
-            }
+            // TODO(revsync): retail also walks the moving-object set here
+            //   (FUN_00492d70 LAB_00492ea2 path). Disabled in pre-release.
         }
         break;
-      }
-      case TRIGGER_CUBE:        // Nice and fast cube trigger
-      {
+
+      case TRIGGER_CUBE:        // Fast cube trigger
         if (newtrigger == TRIGGER_CUBE)
             retval = true;
         else if (!stricmp(st->name, context->GetName()))
@@ -171,53 +173,43 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* c
             if (st->cube.In(Player->Pos()))
                 retval = true;
         }
-        else 
+        else
         {
             TObjectInstance* inst = MapPane.ObjectInCube(&st->cube, OBJSET_MOVING);
             if (inst && (st->name[0] == '\0' || !stricmp(st->name, inst->GetName())))
                 retval = true;
         }
         break;
-      }
-      case TRIGGER_ACTIVATE:    // This trigger is triggered when object is activated
-      {
+
+      case TRIGGER_ACTIVATE:    // Object activated
         if (newtrigger == TRIGGER_ACTIVATE)
             retval = true;
         break;
-      }
-      case TRIGGER_USE:         // Triggered when character uses an object
-      {
-        if (newtrigger == TRIGGER_USE && 
-          !stricmp(st->name, newtriggerstr))
+
+      case TRIGGER_USE:         // Character used an object
+        if (newtrigger == TRIGGER_USE && !stricmp(st->name, newtriggerstr))
             retval = true;
         break;
-      }
-      case TRIGGER_GIVE:        // Triggered when this character give another char an object
-      {
-        if (newtrigger == TRIGGER_GIVE && 
-          !stricmp(st->name, newtriggerstr))
+
+      case TRIGGER_GIVE:        // Character gave another char an object
+        if (newtrigger == TRIGGER_GIVE && !stricmp(st->name, newtriggerstr))
             retval = true;
         break;
-      }
-      case TRIGGER_GET:         // Triggered when this character gets an object
-      {
-        if (newtrigger == TRIGGER_GET && 
-          !stricmp(st->name, newtriggerstr))
+
+      case TRIGGER_GET:         // Character got an object
+        if (newtrigger == TRIGGER_GET && !stricmp(st->name, newtriggerstr))
             retval = true;
         break;
-      }
-      case TRIGGER_COMBAT:      // Triggered when this character enters combat mode
-      {
+
+      case TRIGGER_COMBAT:      // Entered combat mode
         if (newtrigger == TRIGGER_COMBAT)
             retval = true;
         break;
-      }
-      case TRIGGER_DEAD:        // Triggered when we die (Blahhh.. uuhhhh!!)
-      {
+
+      case TRIGGER_DEAD:        // Died (Blahhh.. uuhhhh!!)
         if (newtrigger == TRIGGER_DEAD)
             retval = true;
         break;
-      }
     }
 
     return retval;
@@ -225,9 +217,16 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* c
 
 #define MAXITERATIONS   6000            // for catching endless loops
 
+// REVSYNC: Continue @ 0x004933d0 — see header note. The retail body is 458 lines
+// of engine-coupled logic; we keep the pre-release executor which matches the
+// retail outer loop (trigger scan → token interpreter → CMD_* flag handling →
+// MAXITERATIONS guard) but skips the context-vftable plumbing.
 void TScript::Continue(TObjectInstance* context)
 {
     if (priority & SCRIPT_PAUSED || pauseall)
+        return;
+
+    if (!curproto)
         return;
 
   // Setup stream and token
@@ -237,28 +236,27 @@ void TScript::Continue(TObjectInstance* context)
     // Check Triggers For Interruption
     // *******************************
 
-    TScriptProto* proto = topproto;
+    TScriptProto* p = topproto;
     bool foundtrigger = false;
-    while (proto)
+    while (p)
     {
-        for (int32_t c = 0; c < proto->NumTriggers(); c++)
+        for (int32_t c = 0; c < p->NumTriggers(); c++)
         {
-            if (Triggered(&proto->triggers[c], priority, context))  // Check to see if script is triggered
+            if (Triggered(&p->triggers[c], priority, context))
             {
                 foundtrigger = true;
-                StartTrigger(proto, &proto->triggers[c]);
+                StartTrigger(p, &p->triggers[c]);
                 break;
             }
         }
         if (foundtrigger)
             break;
-        proto = proto->ParentProto();
+        p = p->ParentProto();
     }
 
     // Now Continue Script
     // *******************
 
-    // now execute the current thread
     s.SetPos((uint32_t)(uintptr_t)ip);
 
     int32_t iterations = MAXITERATIONS;
@@ -267,13 +265,13 @@ void TScript::Continue(TObjectInstance* context)
     {
       // Prevent main char self running demo script from interrupting this script...
         if (Player && context != Player && Player->GetScript() &&
-            Player->GetScript()->Running() && 
+            Player->GetScript()->Running() &&
             Player->GetScript()->GetTrigger() == TRIGGER_ALWAYS)
         {
             Player->GetScript()->End();
         }
 
-        uint32_t thisline = s.GetPos();            // hang onto it in case of loop
+        uint32_t thisline = s.GetPos();
         if (thisline > (uint32_t)(uintptr_t)ip && !isspace(*((char *)(uintptr_t)thisline)) &&
                                     !isspace(*((char *)(uintptr_t)thisline - 1)))
             thisline--;                         // token code jacks the pointer sometimes
@@ -283,17 +281,14 @@ void TScript::Continue(TObjectInstance* context)
 
         if (t.Type() == TKN_SYMBOL && t.Code() == ':')
         {
-            // label - ignore this line
             t.SkipLine();
         }
         else if (t.Type() == TKN_IDENT || t.Type() == TKN_KEYWORD)
         {
-            // call the command interpreter
             int32_t bits = CommandInterpreter(context, t);  // ****** MAIN COMMAND PROCESSOR HERE *****
 
-            // interpret the return code(s)
             if (bits & CMD_DELETED)
-                return;                 // ack!
+                return;
 
             if (bits & CMD_CONDTRUE)
             {
@@ -350,7 +345,7 @@ void TScript::Continue(TObjectInstance* context)
 
             if (bits & CMD_WAIT)
             {
-                ip = (char *)s.GetPos();
+                ip = (char *)(uintptr_t)s.GetPos();
                 break;
             }
 
@@ -362,7 +357,6 @@ void TScript::Continue(TObjectInstance* context)
         else
             ScriptError("Bad token in trigger block", t.LineNum());
 
-        // skip over any extra crap on the line
         while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
             t.Get();
 
@@ -376,18 +370,24 @@ void TScript::Continue(TObjectInstance* context)
         }
     }
 
-    // Nothing to trigger
     if (ip == nullptr) // Script done
     {
         lastpriority = 0;
-        if (!DialogPane.IsHidden() &&               // Dialog pane is still up and...
-          DialogPane.GetCharacter() == context)     // This script was using the dialog pane
+        if (!DialogPane.IsHidden() &&
+            DialogPane.GetCharacter() == context)
             DialogPane.Hide();
     }
 }
 
-void TScript::Jump(TObjectInstance* context, char *label)
+// REVSYNC: Jump @ 0x00493fa0 — retail walks to the current trigger by counting
+// BEGIN/END pairs (1000-newpriority iterations) then matches `:label`. Our
+// pre-release port has the same control-flow shape; the priority counter
+// initial value matches.
+void TScript::Jump(TObjectInstance* /*context*/, char *label)
 {
+    if (!curproto || !curproto->text)
+        return;
+
     TStringParseStream s(curproto->text, strlen(curproto->text));
     TToken t(s);
 
@@ -417,7 +417,6 @@ void TScript::Jump(TObjectInstance* context, char *label)
             t.Get();
             if (t.Is(label))
             {
-                // we have a match
                 t.SkipLine();
                 break;
             }
@@ -426,20 +425,26 @@ void TScript::Jump(TObjectInstance* context, char *label)
         t.LineGet();
     }
 
-    ip = (char *)s.GetPos();        // save the new position
+    ip = (char *)(uintptr_t)s.GetPos();
     depth = 1;          // a bit hacky - probably needs to count the begin/end pairs..
 }
 
+// REVSYNC: Break @ 0x004942a0
 void TScript::Break()
 {
     priority |= SCRIPT_PAUSED;
 }
 
+// REVSYNC: Resume @ 0x004942b0
 void TScript::Resume()
 {
     priority &= ~SCRIPT_PAUSED;
 }
 
+// REVSYNC: End @ 0x00493e40 — retail additionally rolls back PlayerFSM bits
+// (FUN_0051d680_SetPlayerState) on flags 1/2/4/8. Those subsystems aren't
+// ported yet; basic IP/priority teardown matches.
+// TODO(revsync): re-port flag rollback once Player FSM exists.
 void TScript::End()
 {
     ip = nullptr;
@@ -450,25 +455,40 @@ void TScript::End()
 // * TScriptProto *
 // ****************
 
+TScriptProto::TScriptProto() = default;
+
+// REVSYNC: ctor @ 0x004946f0 — (parent, owner, filename, buffer). Retail allocates
+// the trigger array struct (0x50 bytes) and zeros it (which `triggers` does via
+// its member ctor), strdup's filename, and if buffer is non-null kicks off
+// ParseScript via the inline TStringParseStream / TToken in the ctor frame.
 TScriptProto::TScriptProto(TScriptProto* pparent, void *powner, char *pfilename, char *pbuffer)
 {
     parent = pparent;
     owner = powner;
-    filename = new char[strlen(pfilename) + 1];
-    strcpy(filename, pfilename);
-    name = nullptr;
-    text = nullptr;
-    len = 0;
+    if (pfilename)
+    {
+        filename = new char[strlen(pfilename) + 1];
+        strcpy(filename, pfilename);
+    }
     if (pbuffer)
-        SetBuffer(pbuffer);
+    {
+        TStringParseStream s(pbuffer, strlen(pbuffer));
+        TToken t(s);
+        t.LineGet();
+        ParseScript(t);
+    }
 }
 
+// REVSYNC: dtor @ 0x004948e0 — frees name/filename/text plus walks the trigger
+// array slots (which TVirtualArray does for us in its dtor). Retail also walks
+// param_1[+0x1c]/+0x20 a second time to clear a tail allocation; that's the
+// TVirtualArray's interior buffer which our destructor handles automatically.
 TScriptProto::~TScriptProto()
 {
     if (name)
-        free(name);
+        delete[] name;
     if (filename)
-        free(filename);
+        delete[] filename;
     if (text)
         free(text);
 }
@@ -477,7 +497,6 @@ bool TScriptProto::FitsCriteria(TObjectInstance* inst)
 {
     if (name && *name && stricmp(name, inst->GetName()) == 0)
         return true;
-
     return false;
 }
 
@@ -490,13 +509,13 @@ void TScriptProto::SetBuffer(char *buffer)
         free(text);
 
     text = strdup(buffer);
-    len = strlen(text);
+    len = (int32_t)strlen(text);
 
     TStringParseStream s(text, len);
     TToken t(s);
 
     t.LineGet();
-//  ParseScript(t); 
+//  ParseScript(t);
 }
 
 void TScriptProto::GetBuffer(char *buffer, int32_t buflen)
@@ -507,6 +526,7 @@ void TScriptProto::GetBuffer(char *buffer, int32_t buflen)
     strncpyz(buffer, text, buflen);
 }
 
+// REVSYNC: ParseCriteria @ 0x00494c50.
 bool TScriptProto::ParseCriteria(TToken &t)
 {
     if (t.Is("CONTEXT") || t.Is("OBJTYPE") || t.Is("OBJECT"))
@@ -514,17 +534,21 @@ bool TScriptProto::ParseCriteria(TToken &t)
         t.WhiteGet();
         if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
             ScriptError("Expected object context identifier", t.LineNum());
-        name = strdup(t.Text());
+
+        if (name)
+            delete[] name;
+        name = new char[strlen(t.Text()) + 1];
+        strcpy(name, t.Text());
+
         t.WhiteGet();
 
         if (t.Is("PARENT"))
         {
             t.WhiteGet();
-
             if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
                 ScriptError("Expected object parent identifier", t.LineNum());
 
-            parent = ScriptManager.FindScriptProto((char*)t.Text());
+            parent = ScriptManager.FindScriptProto(t.Text());
 
             t.WhiteGet();
         }
@@ -543,6 +567,9 @@ bool TScriptProto::ParseCriteria(TToken &t)
 #define TRIGBUFGROW 512
 #define MAXTRIGSIZE 256
 
+// REVSYNC: ParseScript @ 0x00494e20. Trigger tag→type mapping verified against
+// the retail switch ladder. Cube parsing canonicalises (x1,y1,z1)..(x2,y2,z2)
+// into (min,max) per retail.
 int32_t TScriptProto::ParseScript(TToken &t)
 {
     char buf[80];
@@ -550,6 +577,7 @@ int32_t TScriptProto::ParseScript(TToken &t)
 
   // Clear current list of triggers before we begin
     triggers.Clear();
+    numtriggers = 0;
 
   // Skip initial blanks
     t.SkipBlanks();
@@ -560,37 +588,34 @@ int32_t TScriptProto::ParseScript(TToken &t)
     t.SkipBlanks();
     if (!t.Is("BEGIN"))
         ScriptError("Object block BEGIN expected", t.LineNum());
-    
+
     while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
         t.Get();
 
   // Mark line after begin as beginning of script buffer
     uint32_t start = t.GetPos();
-    int32_t depth = 0;
 
   // Now get first trigger token
     t.LineGet();
-    
+
   // Iterate through the triggers and setup trigger list
     while (t.Type() != TKN_EOF && !t.Is("END"))
     {
-      // Parse trigger tags now
         if (t.Type() != TKN_IDENT)
             ScriptError("Trigger identifier expected", t.LineNum());
 
-      // Setup basic trigger structure
         SScriptTrigger st;
         memset(&st, 0, sizeof(SScriptTrigger));
         st.type = 0;
 
-      // Tags...
-        strcpy(trigname, t.Text());
-        if (t.Is("ALWAYS"))                 // ALWAYS trigger
+        strncpyz(trigname, t.Text(), sizeof(trigname));
+
+        if (t.Is("ALWAYS"))
         {
             t.WhiteGet();
             st.type = TRIGGER_ALWAYS;
         }
-        else if (t.Is("TRIGGER"))                   // ALWAYS trigger
+        else if (t.Is("TRIGGER"))
         {
             t.WhiteGet();
             st.type = TRIGGER_TRIGGER;
@@ -601,17 +626,17 @@ int32_t TScriptProto::ParseScript(TToken &t)
                 t.WhiteGet();
             }
         }
-        else if (t.Is("DIALOG"))            // DIALOG trigger
+        else if (t.Is("DIALOG"))
         {
             t.WhiteGet();
             st.type = TRIGGER_DIALOG;
         }
-        else if (t.Is("PROXIMITY"))         // CUBE trigger
+        else if (t.Is("PROXIMITY"))
         {
             t.WhiteGet();
 
             st.type = TRIGGER_PROXIMITY;
-            st.dist = 256;
+            st.dist = 256;          // REVSYNC: retail default uStack_338 = 0x100
 
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
@@ -622,7 +647,7 @@ int32_t TScriptProto::ParseScript(TToken &t)
             if (t.Type() == TKN_NUMBER)
                 Parse(t, "%i", &st.dist);
         }
-        else if (t.Is("CUBE"))              // CUBE trigger
+        else if (t.Is("CUBE"))
         {
             t.WhiteGet();
 
@@ -634,7 +659,10 @@ int32_t TScriptProto::ParseScript(TToken &t)
                 t.WhiteGet();
             }
             else
-                strncpyz(st.name, name, MAXSCRIPTNAME);
+            {
+                if (name) strncpyz(st.name, name, MAXSCRIPTNAME);
+                else st.name[0] = '\0';
+            }
 
             int32_t x1, y1, z1, x2, y2, z2;
 
@@ -648,38 +676,44 @@ int32_t TScriptProto::ParseScript(TToken &t)
             st.cube.end.y = max(y1, y2);
             st.cube.end.z = max(z1, z2);
         }
-        else if (t.Is("ACTIVATE"))          // ACTIVATE trigger
+        else if (t.Is("ACTIVATE"))
         {
             t.WhiteGet();
             st.type = TRIGGER_ACTIVATE;
         }
-        else if (t.Is("USE"))               // USE trigger
+        else if (t.Is("USE"))
         {
             t.WhiteGet();
             st.type = TRIGGER_USE;
-            
+
+            // REVSYNC: retail (LAB_00494ffb path) falls back to proto->name when
+            //   no identifier follows USE. Pre-release left it empty.
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
                 strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
                 t.WhiteGet();
             }
+            else if (name)
+            {
+                strncpyz(st.name, name, MAXSCRIPTNAME);
+            }
         }
-        else if (t.Is("GIVE"))              // GIVE trigger
+        else if (t.Is("GIVE"))
         {
             t.WhiteGet();
             st.type = TRIGGER_GIVE;
-            
+
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
                 strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
                 t.WhiteGet();
             }
         }
-        else if (t.Is("GET"))               // GET trigger
+        else if (t.Is("GET"))
         {
             t.WhiteGet();
             st.type = TRIGGER_GET;
-            
+
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
                 strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
@@ -696,15 +730,18 @@ int32_t TScriptProto::ParseScript(TToken &t)
             t.WhiteGet();
             st.type = TRIGGER_DEAD;
         }
-        else 
+        else
         {
-            sprintf(buf, "Unknown trigger %s", t.Text());
+            // REVSYNC: retail aborts the whole file on unknown trigger
+            //   (LOAD STOPPED, returns 0xffffffff). We escalate to a
+            //   non-fatal error to keep editing flow tolerant.
+            snprintf(buf, sizeof(buf), "Unknown trigger %s", t.Text());
             ScriptError(buf, t.LineNum());
         }
 
         if (t.Type() != TKN_RETURN)
         {
-            sprintf(buf, "Bad parameter for %s trigger", trigname);
+            snprintf(buf, sizeof(buf), "Bad parameter for %s trigger", trigname);
             ScriptError(buf, t.LineNum());
             t.SkipLine();
         }
@@ -737,6 +774,7 @@ int32_t TScriptProto::ParseScript(TToken &t)
     // text. start/GetPos are offsets into the parser's source buffer, which
     // has the same contents. The "-4" trims the trailing "END\n".
     int32_t bodylen = (int32_t)(t.GetPos() - start - 4);
+    if (bodylen < 0) bodylen = 0;
     char *newtext = (char *)malloc(bodylen + 1);
     if (text)
     {
@@ -767,6 +805,7 @@ bool TScriptProto::WriteScript(FILE *fp)
 // * TGameState *
 // **************
 
+// REVSYNC: Load @ 0x00495cf0 — text .def parser.
 bool TGameState::Load(char *filename)
 {
     char fname[MAXPATHLEN];
@@ -781,6 +820,15 @@ bool TGameState::Load(char *filename)
 
     t.LineGet();
 
+    // Free any existing names before we reset numstates.
+    for (int32_t i = 0; i < numstates; i++)
+    {
+        if (statename[i])
+        {
+            delete[] statename[i];
+            statename[i] = nullptr;
+        }
+    }
     numstates = 0;
 
     while (t.Type() != TKN_EOF)
@@ -806,7 +854,6 @@ bool TGameState::Load(char *filename)
         }
         else
             FatalError("Expected gamestate identifier in %s", filename);
-
     }
 
     fclose(fp);
@@ -837,13 +884,42 @@ bool TGameState::Save(char *filename)
     return true;
 }
 
+// REVSYNC: LoadStream @ 0x00496110 — binary save-game format.
+//   On-disk layout (little-endian, 32-bit):
+//     int32 count
+//     count × { uint8 namebytes[] terminated by NUL, all bytes XOR'd with 0x80;
+//               int32 value }
+// Names are unxor'd on load; if the unxor'd name already exists in our table
+// only its value is overwritten, otherwise a new entry is appended.
+// TODO(revsync): TSaveGame currently uses the pre-release format. Wire this in
+// when savegame.cpp is retail-synced.
+bool TGameState::LoadStream(TParseStream & /*stream*/)
+{
+    // Stub — TParseStream doesn't expose a binary read API at this level. The
+    // retail decomp uses raw pointer increments on a memory-mapped buffer
+    // (*(int**)(stream+4)). When savegame ports its file IO we'll add a
+    // matching helper. Returning true keeps the current pre-release behaviour
+    // (which just calls Load("state.def") via ReloadStates) intact.
+    return true;
+}
+
+bool TGameState::SaveStream(TParseStream & /*stream*/)
+{
+    // Stub — see LoadStream. TODO(revsync) parallel to LoadStream.
+    return true;
+}
+
 // ******************
 // * TScriptManager *
 // ******************
 
+// REVSYNC: Initialize @ 0x00496240 — clears the 3 internal arrays then loads
+// master.s + state.def. Retail zeros raw memory; we rely on the array ctors.
 bool TScriptManager::Initialize()
 {
     scripts.Clear();
+    instances.Clear();
+    fileowners.Clear();
 
     const bool master_ok = Load("master.s");
     const bool state_ok  = gamestate.Load("state.def");
@@ -855,6 +931,9 @@ bool TScriptManager::Initialize()
     return master_ok && state_ok;
 }
 
+// REVSYNC: Close @ 0x00496330 — Save if editor + delete instances + delete
+// protos + delete file/owner records. Retail also clears the empty TVirtualArray
+// slots; our containers do that in their destructors.
 void TScriptManager::Close()
 {
     if (Editor)
@@ -863,9 +942,28 @@ void TScriptManager::Close()
         gamestate.Save("state.def");
     }
 
+    // Delete live script instances first (retail: ScriptManager destroys
+    // before protos, since instances reference protos).
+    for (int32_t i = 0; i < instances.NumItems(); i++)
+    {
+        if (instances.Used(i))
+            instances.Delete(i);
+    }
+    instances.Clear();
+
+    // Delete protos.
     scripts.DeleteAll();
+
+    // Free file/owner records.
+    for (int32_t i = 0; i < fileowners.NumItems(); i++)
+    {
+        if (fileowners.Used(i))
+            fileowners.Delete(i);
+    }
+    fileowners.Clear();
 }
 
+// REVSYNC: Load @ 0x00496490 — slurps file, ParseScripts, registers owner.
 bool TScriptManager::Load(char *filename, void *owner)
 {
     char fname[MAXPATHLEN];
@@ -881,17 +979,17 @@ bool TScriptManager::Load(char *filename, void *owner)
     fseek(fp, 0, SEEK_END);
     int32_t bufsize = (int32_t)ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    char *buffer = new char[bufsize+1];
+    char *buffer = new char[bufsize + 1];
 
     if (fread(buffer, 1, bufsize, fp) < (size_t)bufsize)
         retval = false;
     else
     {
-        buffer[bufsize] = 0;            // null-terminate it
+        buffer[bufsize] = 0;
         ParseScripts(buffer, filename, owner);
     }
 
-    delete buffer;
+    delete[] buffer;
     fclose(fp);
 
     if (MapPane.IsOpen())
@@ -899,11 +997,34 @@ bool TScriptManager::Load(char *filename, void *owner)
 
     scriptsdirty = false;
 
+    // REVSYNC: register filename↔owner pair (retail trails the parse with this).
+    // If a record for this filename already exists, just refresh its owner;
+    // otherwise allocate a new record and add it.
+    bool found = false;
+    for (int32_t i = 0; i < fileowners.NumItems(); i++)
+    {
+        if (!fileowners.Used(i)) continue;
+        if (!stricmp(fileowners[i]->filename, filename))
+        {
+            fileowners[i]->owner = owner;
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+    {
+        SScriptFileOwner *rec = new SScriptFileOwner();
+        strncpyz(rec->filename, filename, sizeof(rec->filename));
+        rec->owner = owner;
+        fileowners.Add(rec);
+    }
+
     log_info("[script] Load('%s'): +%d proto(s) (total %d)", filename,
              scripts.NumItems() - before, scripts.NumItems());
     return retval;
 }
 
+// REVSYNC: Save @ 0x00496690 — text serialise dirty protos for the owner.
 bool TScriptManager::Save(char *filename, void *owner)
 {
     if (!scriptsdirty)
@@ -941,6 +1062,9 @@ bool TScriptManager::Save(char *filename, void *owner)
     return retval;
 }
 
+// REVSYNC: Clear @ 0x004967a0 — drop protos AND file/owner records for owner.
+// Retail walks the file/owner list backwards (so Collapse() doesn't shift
+// indexes under us); we mirror that.
 void TScriptManager::Clear(void *owner)
 {
     for (int32_t c = 0; c < scripts.NumItems(); c++)
@@ -951,28 +1075,41 @@ void TScriptManager::Clear(void *owner)
         if (scripts[c]->owner == owner)
         {
             MapPane.Notify(N_SCRIPTDELETED, scripts[c]);
-
             scripts.Delete(c);
         }
     }
-}   
 
-TScriptProto* TScriptManager::FindScriptProto(char *name)
+    // REVSYNC: also prune file/owner records for this owner (retail second loop)
+    for (int32_t c = fileowners.NumItems() - 1; c >= 0; c--)
+    {
+        if (!fileowners.Used(c)) continue;
+        if (fileowners[c]->owner == owner)
+            fileowners.Delete(c);
+    }
+}
+
+TScriptProto* TScriptManager::FindScriptProto(const char *fname)
 {
     for (int32_t c = 0; c < scripts.NumItems(); c++)
     {
-        if (!stricmp(scripts[c]->name, name))
+        if (!scripts.Used(c)) continue;
+        if (scripts[c]->name && !stricmp(scripts[c]->name, fname))
             return scripts[c];
     }
-    
+
     return nullptr;
 }
 
+// REVSYNC: ReloadStates @ 0x004975c0
 bool TScriptManager::ReloadStates()
 {
     return gamestate.Load("state.def");
 }
 
+// REVSYNC: ParseScripts @ 0x00496860 — chunk buffer into TScriptProtos. Retail
+// also handles a hot-reload diff path (mark-protos-stale → reparse → reattach
+// to instances) which we don't exercise in the cold-load case; the per-proto
+// allocation + ParseScript + registry insertion is identical.
 void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
 {
     TStringParseStream s(buffer, strlen(buffer));
@@ -982,11 +1119,11 @@ void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
 
     while (t.Type() != TKN_EOF)
     {
-        TScriptProto* script = new TScriptProto(nullptr, owner, filename, buffer);
+        TScriptProto* script = new TScriptProto(nullptr, owner, filename, nullptr);
         script->ParseScript(t);
 
         int32_t c;
-        for (c = 0; c < scripts.NumItems(); c++) // Add into unused entries
+        for (c = 0; c < scripts.NumItems(); c++)
         {
             if (!scripts.Used(c))
             {
@@ -999,39 +1136,109 @@ void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
     }
 }
 
-
-// This finds all the scripts which apply to a given object instance and put pointers to
-// them into the new script object (which is returned).
+// REVSYNC: ObjectScript @ 0x00497370 — match proto by instance name first
+// (against inst+0x38 in retail), then fall back to class/type-name lookup
+// (against inst+0x4c → TObjectClass.name in retail). Retail allocates the new
+// TScript via FUN_00482fb0(0xe8) then runs the ctor; the `FUN_0041c840`
+// follow-up call returns a registry id stored at +0x14 — we don't need that
+// runtime id in our port (no global instance handle table).
 PTScript TScriptManager::ObjectScript(TObjectInstance* inst)
 {
-    for (int32_t c = 0; c < scripts.NumItems(); c++)
-    {
-        if (!scripts.Used(c))
-            continue;
+    if (!inst) return nullptr;
 
-        if (scripts[c]->FitsCriteria(inst))
+    // Pass 1: match instance name.
+    const char *instname = inst->GetName();
+    if (instname && *instname)
+    {
+        for (int32_t c = 0; c < scripts.NumItems(); c++)
         {
-            PTScript newscript = new TScript(scripts[c]);
-            return newscript;
+            if (!scripts.Used(c)) continue;
+            TScriptProto *sp = scripts[c];
+            if (!sp->name || !*sp->name) continue;
+            if (stricmp(sp->name, instname) == 0)
+            {
+                PTScript ns = new TScript(sp);
+                instances.Add(ns);
+                log_info("[script] attached '%s' -> obj %s", sp->name, instname);
+                return ns;
+            }
+        }
+    }
+
+    // Pass 2: match class/type name.
+    TObjectClass *cls = TObjectClass::GetClass(inst->ObjClass());
+    if (cls && cls->ClassName() && *cls->ClassName())
+    {
+        const char *classname = cls->ClassName();
+        for (int32_t c = 0; c < scripts.NumItems(); c++)
+        {
+            if (!scripts.Used(c)) continue;
+            TScriptProto *sp = scripts[c];
+            if (!sp->name || !*sp->name) continue;
+            if (stricmp(sp->name, classname) == 0)
+            {
+                PTScript ns = new TScript(sp);
+                instances.Add(ns);
+                log_info("[script] attached '%s' -> obj %s (class match)", sp->name,
+                         instname ? instname : "(unnamed)");
+                return ns;
+            }
         }
     }
 
     return nullptr;
 }
 
-struct { char *name; int32_t val; } LocalScriptVals[] =
+// REVSYNC: AddScript @ 0x00497120 — editor / scripted dynamic-proto path. Retail
+// builds a synthetic OBJECT block in a scratch buffer if no matching proto
+// exists, parses it via ParseScript, then ctors a new TScript bound to the
+// proto. Used by the editor's Insert-script and by a couple of script commands.
+// Not exercised on the current boot path; preserved for parity.
+PTScript TScriptManager::AddScript(TObjectInstance* /*inst*/, char *name, void *owner, char *buffer)
 {
-    { "Name",               0   },
-    { "IsShopObject",       0   },
-    { "Tab",                0   },
+    // Find or create the matching proto.
+    TScriptProto *sp = nullptr;
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+    {
+        if (!scripts.Used(c)) continue;
+        if (scripts[c]->name && !stricmp(scripts[c]->name, name))
+        {
+            sp = scripts[c];
+            break;
+        }
+    }
 
-    { nullptr }        // terminator
+    if (!sp)
+    {
+        const size_t synthlen = (buffer ? strlen(buffer) : 0) + strlen(name) + 32;
+        char *synth = new char[synthlen];
+        snprintf(synth, synthlen, "OBJECT %s\r\nBEGIN\r\n%s\r\nEND\r\n", name,
+                 buffer ? buffer : "");
+
+        sp = new TScriptProto(nullptr, owner, name, synth);
+        scripts.Add(sp);
+        delete[] synth;
+    }
+
+    PTScript ns = new TScript(sp);
+    instances.Add(ns);
+    return ns;
+}
+
+// REVSYNC: LocalScriptVals — retail static table at PTR_DAT_005da0b0; same
+// {Name, IsShopObject, Tab} entries pre-release used.
+static struct { const char *name; int32_t val; } LocalScriptVals[] =
+{
+    { "Name",               0 },
+    { "IsShopObject",       0 },
+    { "Tab",                0 },
+    { nullptr,              0 }     // terminator
 };
 
-int32_t TScriptManager::FindLocalVal(char *name)
+int32_t TScriptManager::FindLocalVal(const char *fname)
 {
     for (int32_t i = 0; LocalScriptVals[i].name; i++)
-        if (stricmp(name, LocalScriptVals[i].name) == 0)
+        if (stricmp(fname, LocalScriptVals[i].name) == 0)
             return i;
 
     return -1;
@@ -1051,13 +1258,14 @@ int32_t TScriptManager::GetLocalVal(int32_t index)
     return 0;
 }
 
-int32_t TScriptManager::GameState(char *name)
+// REVSYNC: GameState lookup @ 0x004975d0 — local table first then global gamestate.
+int32_t TScriptManager::GameState(const char *fname)
 {
     // first check the constants set up by the currently executing script trigger
-    int32_t index = FindLocalVal(name);
+    int32_t index = FindLocalVal(fname);
     if (index >= 0)
         return GetLocalVal(index);
 
     // if it's not there, check the game state variables (globals)
-    return gamestate.State(name);
+    return gamestate.State(fname);
 }
