@@ -129,8 +129,14 @@ public:
         const float targetS = 0.30f + 0.05f * float(std::sin(t * 1.7 + 2.5));
 
         // === LEFT (player) ===
-        // No BackPanel blit — TPlyrStatusBar's recon bodies don't
-        // reference BackPanel anywhere; that asset is dead/unused.
+        // BackPanel is the BACKDROP that UI elements are drawn on top
+        // of (per user 2026-05-17). The retail pane's surface system
+        // composites BackPanel as the pane's background before slot 23
+        // overlays bars/icons/portrait/text. TPlyrStatusBar's slot 23
+        // doesn't explicitly call BackPanel; the surface system does.
+        // Our test mode draws it directly here so the composition has
+        // the same backdrop the pane's surface would provide.
+        Renderer->DrawBitmap(g_backPanel, kPanelX, kPanelY);
         DrawBar(false, kBarHealthAtlasY,  0, playerH);
         DrawBar(false, kBarManaAtlasY,    1, playerM);
         DrawBar(false, kBarStaminaAtlasY, 2, playerS);
@@ -151,9 +157,9 @@ public:
             // Right-edge X for the backdrop chrome: mirror the LEFT pane
             // position. The retail BackPanel is the same bitmap drawn at
             // (pane_width - panel_w) for the right side.
-            // No BackPanel blit (see note above).
-            const int32_t rightPanelX = paneW - kPanelX - 128;  // approximate panel right-edge anchor
-            (void)rightPanelX;
+            // RIGHT-side backdrop mirrored.
+            const int32_t rightPanelX = paneW - kPanelX - g_backPanel->width;
+            Renderer->DrawBitmap(g_backPanel, rightPanelX, kPanelY);
             DrawBar(true, kBarHealthAtlasY,  0, targetH);
             DrawBar(true, kBarManaAtlasY,    1, targetM);
             DrawBar(true, kBarStaminaAtlasY, 2, targetS);
