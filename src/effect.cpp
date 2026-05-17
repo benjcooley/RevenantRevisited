@@ -867,15 +867,19 @@ void TParticleEffectManager::StartRuntime(SRuntime& runtime, TObjectInstance* ow
         }
     }
 
-    // One-shot burst: emit at attach time. Steady-state spawn_count is
-    // handled lazily by IntegrateEffect (so the population restocks
-    // after kill_expr fires).
+    // One-shot burst AND steady-state population: emit at attach time so
+    // the bucket is visible immediately (the integration loop's per-frame
+    // top-up handles restocks after kill_expr fires).
     for (SBucketRuntime& brt : runtime.bucket_runtimes)
     {
         if (brt.bucket_def && brt.bucket_def->spawn_burst > 0 && brt.spawned_burst == 0)
         {
             EmitSpawnTopup(brt, owner, runtime.owner_particle_id);
             brt.spawned_burst = brt.bucket_def->spawn_burst;
+        }
+        else if (brt.bucket_def && brt.bucket_def->spawn_count > 0)
+        {
+            EmitSpawnTopup(brt, owner, runtime.owner_particle_id);
         }
     }
 }
@@ -1337,7 +1341,95 @@ void TBloodEffect::Pulse()
     // in-game spawn path will once Phase 2.2.1 lands.
 }
 
+// Cached parsed effect def (lazy on first use). Mirrors TorchFlameDef().
+const SParticleEffectDef& BloodEffectDef()
+{
+    static const SParticleEffectDef def = ParseParticleEffectDef("Blood");
+    return def;
+}
+
+// Engine-driven SpawnForTest. Loads Misc\Blood.I3D (still needed -- the
+// effect instance refcount must own an imagery for the engine's component
+// lifecycle to be valid), constructs the TBloodEffect, attaches a
+// TParticleEffectComponent configured with the Blood def, and pulses it
+// once so the engine StartRuntime path runs the spawn_burst.
+//
+// Per-particle dynamics (cone spawn, gravity arc, alpha fade) live in
+// the effects.def `Blood` block; this method is now ~30 lines of
+// component wiring instead of ~95 lines of bespoke spawn-init.
 TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
+{
+    const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[blood] SpawnForTest: FindImagery('%s') failed", kBloodImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[blood] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kBloodImageryPath);
+        return nullptr;
+    }
+
+    auto* blood = new TBloodEffect(base);
+    blood->ForcePos(origin);
+    blood->SetMapIndex(MapPane.MakeIndex());
+    blood->ActivateComponents();
+
+    // Attach the engine-driven particle component. spawn_burst = 10
+    // in effects.def -> StartRuntime fires the cone burst at this point.
+    auto particle_effect = std::make_unique<TParticleEffectComponent>();
+    particle_effect->Configure(&BloodEffectDef());
+    blood->AddComponent(std::move(particle_effect));
+
+    // Drive one DrawPulse so StartRuntime + EmitSpawnTopup fire now (the
+    // harness's first TickAndSubmitForTest happens later in the frame and
+    // would otherwise miss this frame's submit -- we want the burst alive
+    // immediately on Spawn).
+    if (auto* pe = blood->GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    // Cache the bucket pointer for direct submission in TickAndSubmit.
+    blood->bucket_ = ParticleManager().FindGlobalBucket("blood_droplets");
+    blood->owner_particle_id_ = float(blood->GetMapIndex());
+
+    log_info("[blood] SpawnForTest (engine-driven): map_index=%d origin=(%d,%d,%d) "
+             "bucket=%p def=Blood",
+             blood->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             (void*)blood->bucket_);
+    return blood;
+}
+
+void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+
+    // Drive the engine's per-frame integration (tick_expr + kill_expr +
+    // age update + reap). DrawPulse is the standard per-frame entry on
+    // TParticleEffectComponent -- the harness reuses it here instead of
+    // re-implementing the integration loop.
+    if (auto* pe = GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    // Submit the global bucket to the FX queue. The bucket holds particles
+    // from every TBloodEffect instance currently live; the renderer doesn't
+    // care which instance owns which particle for rendering -- only the
+    // owner_id matters for kill/respawn bookkeeping (handled in the engine).
+    if (bucket_)
+        Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+}
+
+#if 0
+// REVISITED: replaced by effects.def Blood declaration, kept for reference
+// until migration of all 5 bespoke effects (B01/M05/F03/H03/H04) lands.
+// The original bespoke spawn/tick body integrated 10 droplets with polar
+// cone init, kGravity = -480 wu/s^2 Euler, held-then-linear-fade alpha
+// curve, age-based reap. All of that is now expressed in the effects.def
+// Blood block's spawn_expr / tick_expr / kill_expr.
+TBloodEffect* TBloodEffect::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
     const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
     if (img_id < 0)
@@ -1433,7 +1525,7 @@ TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
     return blood;
 }
 
-void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+void TBloodEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     if (!bucket_ || !Renderer)
         return;
@@ -1510,6 +1602,7 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     //    RunLightingPass.
     Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
 }
+#endif // bespoke TBloodEffect spawn/tick preserved-old-code
 
 // *************************************************************************
 // * TRippleEffect - FB-pipeline standalone-spawn for --test=vfx (H03)     *
@@ -1999,7 +2092,87 @@ TMistEffect::~TMistEffect()
 void TMistEffect::Initialize() {}
 void TMistEffect::Pulse()      { TEffect::Pulse(); }
 
+// Cached parsed effect def. Lazy on first use.
+const SParticleEffectDef& MistEffectDef()
+{
+    static const SParticleEffectDef def = ParseParticleEffectDef("Mist");
+    return def;
+}
+
+// Engine-driven SpawnForTest. Loads Magic\mist.i3d (still needed for the
+// instance refcount / component lifecycle), attaches a TParticleEffectComponent
+// configured with the Mist def, and pulses it once so the engine fills the
+// 50-drop steady-state population via spawn_count.
+//
+// Per-particle dynamics (spawn envelope, gravity, respawn-on-landing) live in
+// the effects.def `Mist` block; this method is now ~25 lines of component
+// wiring instead of ~85 lines of bespoke spawn-loop + 24 Hz integration.
 TMistEffect* TMistEffect::SpawnForTest(const S3DPoint& origin)
+{
+    const int32_t img_id = TObjectImagery::FindImagery(kMistImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[mist] SpawnForTest: FindImagery('%s') failed", kMistImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[mist] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kMistImageryPath);
+        return nullptr;
+    }
+
+    auto* mist = new TMistEffect(base);
+    mist->ForcePos(origin);
+    mist->SetMapIndex(MapPane.MakeIndex());
+    mist->ActivateComponents();
+
+    // Engine-driven particle component. spawn_count = 50 + tick_hz = 24 +
+    // kill_expr "pos.z <= emit_pos.z" gives the continuous respawn-in-place
+    // wisp pattern from retail TMistAnimator.
+    auto particle_effect = std::make_unique<TParticleEffectComponent>();
+    particle_effect->Configure(&MistEffectDef());
+    mist->AddComponent(std::move(particle_effect));
+
+    // Drive one DrawPulse so StartRuntime fires and EmitSpawnTopup fills
+    // the 50-drop population NOW (visible from frame 1, matching Static
+    // preview style expectations).
+    if (auto* pe = mist->GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    mist->bucket_ = ParticleManager().FindGlobalBucket("mist_drops");
+    mist->owner_particle_id_ = float(mist->GetMapIndex());
+
+    log_info("[mist] SpawnForTest (engine-driven): map_index=%d origin=(%d,%d,%d) "
+             "bucket=%p def=Mist",
+             mist->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             (void*)mist->bucket_);
+    return mist;
+}
+
+void TMistEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+
+    // Drive the engine's per-frame integration.
+    if (auto* pe = GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    if (bucket_)
+        Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+}
+
+#if 0
+// REVISITED: replaced by effects.def Mist declaration, kept for reference
+// until migration of all 5 bespoke effects (B01/M05/F03/H03/H04) lands.
+// The original bespoke spawn/tick body seeded 50 long-lived drops with
+// retail-faithful pos/vel envelope, gated integration to 24 Hz sim ticks,
+// applied RIPPLE_GRAVITY=0.37 per-tick, and respawned drops in-place on
+// landing. All of that is now expressed in the effects.def Mist block's
+// spawn_expr / tick_expr / kill_expr with tick_hz=24.
+TMistEffect* TMistEffect::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
     const int32_t img_id = TObjectImagery::FindImagery(kMistImageryPath);
     if (img_id < 0)
@@ -2089,7 +2262,7 @@ TMistEffect* TMistEffect::SpawnForTest(const S3DPoint& origin)
     return mist;
 }
 
-void TMistEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+void TMistEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     if (!bucket_ || !Renderer)
         return;
@@ -2144,6 +2317,7 @@ void TMistEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 
     Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
 }
+#endif // bespoke TMistEffect spawn/tick preserved-old-code
 
 // *************************************************************************
 // * TDripEffect - PE-pipeline single-drop ceiling emitter for --test=vfx  *
