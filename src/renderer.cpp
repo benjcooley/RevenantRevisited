@@ -4428,7 +4428,12 @@ void TRenderer::DrainFxQueue()
             scratch.push_back(float(uint8_t(it.debug_mode)));
             scratch.push_back(it.rotation_rad);
             scratch.push_back(float(uint8_t(it.light_mode)));
-            // pad to kFxParticleInstanceFloats (20)
+            // pad to kFxParticleInstanceFloats (20). Off-by-one here
+            // would shift every subsequent instance's read by 4 bytes
+            // (stride mismatch), corrupting world_pos / size_wu /
+            // rotation_rad across instances and producing trapezoidal
+            // quad distortions. Keep count synced with the constant.
+            scratch.push_back(0.0f);
             scratch.push_back(0.0f);
             scratch.push_back(0.0f);
             scratch.push_back(0.0f);
