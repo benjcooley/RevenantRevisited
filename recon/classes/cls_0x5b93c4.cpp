@@ -1309,7 +1309,7 @@ LAB_0053051d:
 
 // Function at 005339b0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x5339b0(cls_0x5b93c4 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x5339b0_TDeathPane_Initialize(cls_0x5b93c4 *this)
 
 {
   int iVar1;
@@ -1378,7 +1378,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x5339b0(cls_0x5b93c4 
 
 // Function at 00533c00
 
-void __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x533c00(cls_0x5b93c4 *this)
+void __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x533c00_TDeathPane_Close(cls_0x5b93c4 *this)
 
 {
   cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
@@ -1389,7 +1389,7 @@ void __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x533c00(cls_0x5b93c4 *this)
 
 // Function at 00533c10
 
-void __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x533c10(cls_0x5b93c4 *this)
+void __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x533c10_TDeathPane_DrawBackground(cls_0x5b93c4 *this)
 
 {
   undefined4 uVar1;

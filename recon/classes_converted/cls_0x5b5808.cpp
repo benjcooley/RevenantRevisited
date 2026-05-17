@@ -1,12 +1,12 @@
 #include "classes_all.h"
 
-// Decompiled methods and structure for class: cls_0x5b5808
+// Decompiled methods and structure for class: cls_0x5b5808_TBookPane
 
 
 
 // Function at 00444e30
 
-void cls_0x5b5808::meth_0x444e30(undefined4 param_1, undefined4 param_2, undefined4 param_3, undefined4 param_4, undefined4 param_5, undefined4 param_6, undefined4 param_7, undefined4 param_8, undefined4 param_9, undefined4 param_10, undefined4 param_11, undefined4 param_12, undefined4 param_13, undefined4 param_14, undefined4 param_15, undefined4 param_16)
+void cls_0x5b5808_TBookPane::meth_0x444e30(undefined4 param_1, undefined4 param_2, undefined4 param_3, undefined4 param_4, undefined4 param_5, undefined4 param_6, undefined4 param_7, undefined4 param_8, undefined4 param_9, undefined4 param_10, undefined4 param_11, undefined4 param_12, undefined4 param_13, undefined4 param_14, undefined4 param_15, undefined4 param_16)
 
 {
   cls_0x5a3c68 *this_00;
@@ -35,7 +35,7 @@ void cls_0x5b5808::meth_0x444e30(undefined4 param_1, undefined4 param_2, undefin
 
 // Function at 005212c0
 
-void cls_0x5b5808::virt_meth_0x5212c0()
+void cls_0x5b5808_TBookPane::virt_meth_0x5212c0_TScrollPane_Close()
 
 {
   this->virt_meth_0x434f30();
@@ -54,7 +54,7 @@ void cls_0x5b5808::virt_meth_0x5212c0()
 
 // Function at 00521530
 
-void cls_0x5b5808::virt_meth_0x521530(undefined4 param_1)
+void cls_0x5b5808_TBookPane::virt_meth_0x521530(undefined4 param_1)
 
 {
   dword dVar1;
@@ -121,7 +121,7 @@ void cls_0x5b5808::virt_meth_0x521530(undefined4 param_1)
 
 // Function at 00521e60
 
-cls_0x5b5808::cls_0x5b5808()
+cls_0x5b5808_TBookPane::cls_0x5b5808_TBookPane()
 
 {
   this->mbr_0xc = 0x280;
@@ -147,12 +147,12 @@ cls_0x5b5808::cls_0x5b5808()
 
 // Function at 00521ec0
 
-cls_0x5b5808 * cls_0x5b5808::virt_meth_0x521ec0()
+cls_0x5b5808_TBookPane * cls_0x5b5808_TBookPane::virt_meth_0x521ec0()
 
 {
   byte in_stack_00000004;
   
-  ~cls_0x5b5808(this);
+  ~cls_0x5b5808_TBookPane(this);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }
@@ -163,10 +163,10 @@ cls_0x5b5808 * cls_0x5b5808::virt_meth_0x521ec0()
 
 // Function at 00521ee0
 
-cls_0x5b5808 * __thiscall cls_0x5b5808::~cls_0x5b5808(cls_0x5b5808 *this)
+cls_0x5b5808_TBookPane * __thiscall cls_0x5b5808_TBookPane::~cls_0x5b5808_TBookPane(cls_0x5b5808_TBookPane *this)
 
 {
-  cls_0x5b5808 *pcVar1;
+  cls_0x5b5808_TBookPane *pcVar1;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -181,7 +181,7 @@ cls_0x5b5808 * __thiscall cls_0x5b5808::~cls_0x5b5808(cls_0x5b5808 *this)
   local_4 = 1;
   this->virt_meth_0x434f30();
   local_4 = 0xffffffff;
-  pcVar1 = (cls_0x5b5808 *)FUN_004830f0(*(LPCVOID *)&this->field_0x98);
+  pcVar1 = (cls_0x5b5808_TBookPane *)FUN_004830f0(*(LPCVOID *)&this->field_0x98);
   ExceptionList = local_c;
   return pcVar1;
 }
@@ -190,7 +190,7 @@ cls_0x5b5808 * __thiscall cls_0x5b5808::~cls_0x5b5808(cls_0x5b5808 *this)
 
 // Function at 00521fb0
 
-TScreen * cls_0x5b5808::virt_meth_0x521fb0(undefined4 param_1)
+TScreen * cls_0x5b5808_TBookPane::virt_meth_0x521fb0(undefined4 param_1)
 
 {
   TScreen *this_00;

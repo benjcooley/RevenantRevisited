@@ -1,6 +1,6 @@
-// FUN_005217e0 @ 005217e0 size=568
+// FUN_005217e0_TBookPane_Initialize @ 005217e0 size=568
 
-undefined4 __fastcall FUN_005217e0(int param_1)
+undefined4 __fastcall FUN_005217e0_TBookPane_Initialize(int param_1)
 
 {
   undefined4 uVar1;
@@ -17,7 +17,7 @@ undefined4 __fastcall FUN_005217e0(int param_1)
   undefined4 uVar12;
   undefined4 uVar13;
   
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   *(undefined4 *)(param_1 + 400) = 0xd8;
   *(undefined4 *)(param_1 + 0x188) = 0;
   *(undefined4 *)(param_1 + 0x18c) = 0;

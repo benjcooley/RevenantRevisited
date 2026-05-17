@@ -1,11 +1,11 @@
-// Decompiled methods and structure for class: cls_0x5b5808::vftable_5b5808
+// Decompiled methods and structure for class: cls_0x5b5808_TBookPane::vftable_5b5808
 
 /*
-/OOAnalyzer/cls_0x5b5808::vftable_5b5808
+/OOAnalyzer/cls_0x5b5808_TBookPane::vftable_5b5808
 pack(disabled)
-Structure cls_0x5b5808::vftable_5b5808 {
-   0   virt_meth_0x5217e0 *   4   virt_meth_0x5217e0_0   "virtual function table entry."
-   4   virt_meth_0x5212c0 *   4   virt_meth_0x5212c0_4   "virtual function table entry."
+Structure cls_0x5b5808_TBookPane::vftable_5b5808 {
+   0   virt_meth_0x5217e0_TBookPane_Initialize *   4   virt_meth_0x5217e0_0   "virtual function table entry."
+   4   virt_meth_0x5212c0_TScrollPane_Close *   4   virt_meth_0x5212c0_4   "virtual function table entry."
    8   virt_meth_0x435010 *   4   virt_meth_0x435010_8   "virtual function table entry."
    12   virt_meth_0x444f40 *   4   virt_meth_0x444f40_12   "virtual function table entry."
    16   virt_meth_0x444f50 *   4   virt_meth_0x444f50_16   "virtual function table entry."
@@ -24,7 +24,7 @@ Structure cls_0x5b5808::vftable_5b5808 {
    68   virt_meth_0x445020 *   4   virt_meth_0x445020_68   "virtual function table entry."
    72   virt_meth_0x445030 *   4   virt_meth_0x445030_72   "virtual function table entry."
    76   virt_meth_0x435d70 *   4   virt_meth_0x435d70_76   "virtual function table entry."
-   80   virt_meth_0x521a20 *   4   virt_meth_0x521a20_80   "virtual function table entry."
+   80   virt_meth_0x521a20_TBookPane_DrawBackground *   4   virt_meth_0x521a20_80   "virtual function table entry."
    84   virt_meth_0x4451e0 *   4   virt_meth_0x4451e0_84   "virtual function table entry."
    88   virt_meth_0x435f90 *   4   virt_meth_0x435f90_88   "virtual function table entry."
    92   virt_meth_0x436090 *   4   virt_meth_0x436090_92   "virtual function table entry."

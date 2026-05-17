@@ -1,6 +1,6 @@
-// FUN_005339b0 @ 005339b0 size=590
+// FUN_005339b0_TDeathPane_Initialize @ 005339b0 size=590
 
-undefined4 __fastcall FUN_005339b0(int param_1)
+undefined4 __fastcall FUN_005339b0_TDeathPane_Initialize(int param_1)
 
 {
   int iVar1;
@@ -17,13 +17,13 @@ undefined4 __fastcall FUN_005339b0(int param_1)
   puStack_8 = &LAB_005a19c1;
   local_c = ExceptionList;
   ExceptionList = &local_c;
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   local_20[0] = s_goluc01_005e3ef0;
   local_20[1] = s_goand01_005e3ef8;
   local_20[2] = s_gojha01_005e3f00;
   local_20[3] = s_gooli01_005e3f08;
   local_10 = s_gosar00_005e3f10;
-  iVar1 = FUN_00483300(0,4);
+  iVar1 = FUN_00483300_RandomRange(0,4);
   iVar1 = FUN_0049c430(local_20[iVar1]);
   if (-1 < iVar1) {
     iVar2 = FUN_0049b650(iVar1);

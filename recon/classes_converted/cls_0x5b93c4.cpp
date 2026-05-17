@@ -1242,7 +1242,7 @@ LAB_0053051d:
 
 // Function at 005339b0
 
-undefined4 cls_0x5b93c4::virt_meth_0x5339b0()
+undefined4 cls_0x5b93c4::virt_meth_0x5339b0_TDeathPane_Initialize()
 
 {
   int iVar1;
@@ -1311,7 +1311,7 @@ undefined4 cls_0x5b93c4::virt_meth_0x5339b0()
 
 // Function at 00533c00
 
-void cls_0x5b93c4::virt_meth_0x533c00()
+void cls_0x5b93c4::virt_meth_0x533c00_TDeathPane_Close()
 
 {
   this->virt_meth_0x434f30();
@@ -1322,7 +1322,7 @@ void cls_0x5b93c4::virt_meth_0x533c00()
 
 // Function at 00533c10
 
-void cls_0x5b93c4::virt_meth_0x533c10()
+void cls_0x5b93c4::virt_meth_0x533c10_TDeathPane_DrawBackground()
 
 {
   undefined4 uVar1;

@@ -14,7 +14,7 @@ undefined4 cls_0x5b9374::virt_meth_0x5338a0()
   
   (this->TObjectInstance).mbr_0x54 = 0;
   DAT_0066f6f4 = FUN_0047f670((cls_0x49ead0 *)s_death_dat_005e3ebc,(void *)0xffffffff,0,unaff_ESI);
-  iVar1 = cls_0x5b93c4::virt_meth_0x5339b0((cls_0x5b93c4 *)&DAT_0066f500);
+  iVar1 = cls_0x5b93c4::virt_meth_0x5339b0_TDeathPane_Initialize((cls_0x5b93c4 *)&DAT_0066f500);
   if (iVar1 == 0) {
     FUN_00481c10((byte *)s_Trouble_initializing_Death_pane_005e3ec8);
   }

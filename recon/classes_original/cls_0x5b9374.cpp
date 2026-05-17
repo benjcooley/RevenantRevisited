@@ -20,7 +20,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b9374::virt_meth_0x5338a0(cls_0x5b9374 
   
   (this->cls_0x5a5ed4_TScreen).mbr_0x54 = 0;
   DAT_0066f6f4 = FUN_0047f670(s_death_dat_005e3ebc,0xffffffff,0);
-  iVar1 = cls_0x5b93c4::virt_meth_0x5339b0((cls_0x5b93c4 *)&DAT_0066f500);
+  iVar1 = cls_0x5b93c4::virt_meth_0x5339b0_TDeathPane_Initialize((cls_0x5b93c4 *)&DAT_0066f500);
   if (iVar1 == 0) {
     FUN_00481c10(s_Trouble_initializing_Death_pane_005e3ec8,0);
   }

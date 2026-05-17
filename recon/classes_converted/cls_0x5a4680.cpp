@@ -38,8 +38,8 @@ bool cls_0x5a4680::virt_meth_0x441bd0()
         puVar4 = (&PTR_DAT_005ceca0)[iVar8 * 3];
         puVar9 = &DAT_005ceca8 + iVar8 * 6;
         do {
-          cls_0x5b5808::meth_0x444e30
-                    ((cls_0x5b5808 *)this,puVar4,iVar6,local_c,iVar2,iVar3,
+          cls_0x5b5808_TBookPane::meth_0x444e30
+                    ((cls_0x5b5808_TBookPane *)this,puVar4,iVar6,local_c,iVar2,iVar3,
                      CONCAT22((short)((uint)iVar5 >> 0x10),*puVar9),*(undefined4 *)(puVar9 + -2),0,0
                      ,0,0,0,0xffffffff,0,0,0);
           iVar8 = local_10 + 1;

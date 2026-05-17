@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5b5808
+// Decompiled methods and structure for class: cls_0x5b5808_TBookPane
 
 /*
-/OOAnalyzer/cls_0x5b5808
+/OOAnalyzer/cls_0x5b5808_TBookPane
 pack(disabled)
-Structure cls_0x5b5808 {
-   0   cls_0x5b5808::vftable_5b5808 *   4   vftptr_0x0   "pointer to cls_0x5b5808::vftable_5b5808"
+Structure cls_0x5b5808_TBookPane {
+   0   cls_0x5b5808_TBookPane::vftable_5b5808 *   4   vftptr_0x0   "pointer to cls_0x5b5808_TBookPane::vftable_5b5808"
    4   dword   4   mbr_0x4   "Unsigned Double-Word (ddw, 4-bytes)"
    8   dword   4   mbr_0x8   "Unsigned Double-Word (ddw, 4-bytes)"
    12   dword   4   mbr_0xc   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -31,8 +31,8 @@ Length: 408 Alignment: 1
 // Function at 00444e30
 
 void __thiscall
-OOAnalyzer::cls_0x5b5808::meth_0x444e30
-          (cls_0x5b5808 *this,undefined4 param_1,undefined4 param_2,undefined4 param_3,
+OOAnalyzer::cls_0x5b5808_TBookPane::meth_0x444e30
+          (cls_0x5b5808_TBookPane *this,undefined4 param_1,undefined4 param_2,undefined4 param_3,
           undefined4 param_4,undefined4 param_5,undefined4 param_6,undefined4 param_7,
           undefined4 param_8,undefined4 param_9,undefined4 param_10,undefined4 param_11,
           undefined4 param_12,undefined4 param_13,undefined4 param_14,undefined4 param_15,
@@ -65,7 +65,7 @@ OOAnalyzer::cls_0x5b5808::meth_0x444e30
 
 // Function at 005212c0
 
-void __thiscall OOAnalyzer::cls_0x5b5808::virt_meth_0x5212c0(cls_0x5b5808 *this)
+void __thiscall OOAnalyzer::cls_0x5b5808_TBookPane::virt_meth_0x5212c0_TScrollPane_Close(cls_0x5b5808_TBookPane *this)
 
 {
   cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
@@ -84,7 +84,7 @@ void __thiscall OOAnalyzer::cls_0x5b5808::virt_meth_0x5212c0(cls_0x5b5808 *this)
 
 // Function at 00521530
 
-void __thiscall OOAnalyzer::cls_0x5b5808::virt_meth_0x521530(cls_0x5b5808 *this,undefined4 param_1)
+void __thiscall OOAnalyzer::cls_0x5b5808_TBookPane::virt_meth_0x521530(cls_0x5b5808_TBookPane *this,undefined4 param_1)
 
 {
   dword dVar1;
@@ -151,7 +151,7 @@ void __thiscall OOAnalyzer::cls_0x5b5808::virt_meth_0x521530(cls_0x5b5808 *this,
 
 // Function at 00521e60
 
-cls_0x5b5808 * __thiscall OOAnalyzer::cls_0x5b5808::cls_0x5b5808(cls_0x5b5808 *this)
+cls_0x5b5808_TBookPane * __thiscall OOAnalyzer::cls_0x5b5808_TBookPane::cls_0x5b5808_TBookPane(cls_0x5b5808_TBookPane *this)
 
 {
   this->mbr_0xc = 0x280;
@@ -177,12 +177,12 @@ cls_0x5b5808 * __thiscall OOAnalyzer::cls_0x5b5808::cls_0x5b5808(cls_0x5b5808 *t
 
 // Function at 00521ec0
 
-cls_0x5b5808 * __thiscall OOAnalyzer::cls_0x5b5808::virt_meth_0x521ec0(cls_0x5b5808 *this)
+cls_0x5b5808_TBookPane * __thiscall OOAnalyzer::cls_0x5b5808_TBookPane::virt_meth_0x521ec0(cls_0x5b5808_TBookPane *this)
 
 {
   byte in_stack_00000004;
   
-  ~cls_0x5b5808(this);
+  ~cls_0x5b5808_TBookPane(this);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }
@@ -193,10 +193,10 @@ cls_0x5b5808 * __thiscall OOAnalyzer::cls_0x5b5808::virt_meth_0x521ec0(cls_0x5b5
 
 // Function at 00521ee0
 
-cls_0x5b5808 * __thiscall OOAnalyzer::cls_0x5b5808::~cls_0x5b5808(cls_0x5b5808 *this)
+cls_0x5b5808_TBookPane * __thiscall OOAnalyzer::cls_0x5b5808_TBookPane::~cls_0x5b5808_TBookPane(cls_0x5b5808_TBookPane *this)
 
 {
-  cls_0x5b5808 *pcVar1;
+  cls_0x5b5808_TBookPane *pcVar1;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -211,7 +211,7 @@ cls_0x5b5808 * __thiscall OOAnalyzer::cls_0x5b5808::~cls_0x5b5808(cls_0x5b5808 *
   local_4 = 1;
   cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
   local_4 = 0xffffffff;
-  pcVar1 = (cls_0x5b5808 *)FUN_004830f0(*(undefined4 *)&this->field_0x98);
+  pcVar1 = (cls_0x5b5808_TBookPane *)FUN_004830f0(*(undefined4 *)&this->field_0x98);
   ExceptionList = local_c;
   return pcVar1;
 }
@@ -221,7 +221,7 @@ cls_0x5b5808 * __thiscall OOAnalyzer::cls_0x5b5808::~cls_0x5b5808(cls_0x5b5808 *
 // Function at 00521fb0
 
 cls_0x5a50e8 * __thiscall
-OOAnalyzer::cls_0x5b5808::virt_meth_0x521fb0(cls_0x5b5808 *this,undefined4 param_1)
+OOAnalyzer::cls_0x5b5808_TBookPane::virt_meth_0x521fb0(cls_0x5b5808_TBookPane *this,undefined4 param_1)
 
 {
   cls_0x5a50e8 *this_00;

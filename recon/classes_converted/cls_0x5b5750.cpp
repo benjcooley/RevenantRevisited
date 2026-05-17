@@ -1,12 +1,12 @@
 #include "classes_all.h"
 
-// Decompiled methods and structure for class: cls_0x5b5750
+// Decompiled methods and structure for class: cls_0x5b5750_TScrollPane
 
 
 
 // Function at 00521360
 
-void cls_0x5b5750::virt_meth_0x521360()
+void cls_0x5b5750_TScrollPane::virt_meth_0x521360_TScrollPane_DrawBackground()
 
 {
   char cVar1;
@@ -94,7 +94,7 @@ void cls_0x5b5750::virt_meth_0x521360()
 
 // Function at 00521d70
 
-cls_0x5b5750::cls_0x5b5750()
+cls_0x5b5750_TScrollPane::cls_0x5b5750_TScrollPane()
 
 {
   this->mbr_0xc = 0x280;
@@ -120,12 +120,12 @@ cls_0x5b5750::cls_0x5b5750()
 
 // Function at 00521dd0
 
-cls_0x5b5750 * cls_0x5b5750::virt_meth_0x521dd0()
+cls_0x5b5750_TScrollPane * cls_0x5b5750_TScrollPane::virt_meth_0x521dd0()
 
 {
   byte in_stack_00000004;
   
-  ~cls_0x5b5750(this);
+  ~cls_0x5b5750_TScrollPane(this);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }
@@ -136,10 +136,10 @@ cls_0x5b5750 * cls_0x5b5750::virt_meth_0x521dd0()
 
 // Function at 00521df0
 
-cls_0x5b5750 * __thiscall cls_0x5b5750::~cls_0x5b5750(cls_0x5b5750 *this)
+cls_0x5b5750_TScrollPane * __thiscall cls_0x5b5750_TScrollPane::~cls_0x5b5750_TScrollPane(cls_0x5b5750_TScrollPane *this)
 
 {
-  cls_0x5b5750 *pcVar1;
+  cls_0x5b5750_TScrollPane *pcVar1;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -154,7 +154,7 @@ cls_0x5b5750 * __thiscall cls_0x5b5750::~cls_0x5b5750(cls_0x5b5750 *this)
   local_4 = 1;
   this->virt_meth_0x434f30();
   local_4 = 0xffffffff;
-  pcVar1 = (cls_0x5b5750 *)FUN_004830f0(*(LPCVOID *)&this->field_0x98);
+  pcVar1 = (cls_0x5b5750_TScrollPane *)FUN_004830f0(*(LPCVOID *)&this->field_0x98);
   ExceptionList = local_c;
   return pcVar1;
 }

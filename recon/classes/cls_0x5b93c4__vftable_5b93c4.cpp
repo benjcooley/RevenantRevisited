@@ -4,7 +4,7 @@
 /OOAnalyzer/cls_0x5b93c4::vftable_5b93c4
 pack(disabled)
 Structure cls_0x5b93c4::vftable_5b93c4 {
-   0   virt_meth_0x5339b0 *   4   virt_meth_0x5339b0_0   "virtual function table entry."
+   0   virt_meth_0x5339b0_TDeathPane_Initialize *   4   virt_meth_0x5339b0_0   "virtual function table entry."
    4   virt_meth_0x533d90 *   4   virt_meth_0x533d90_4   "virtual function table entry."
    8   virt_meth_0x435010 *   4   virt_meth_0x435010_8   "virtual function table entry."
    12   virt_meth_0x444f40 *   4   virt_meth_0x444f40_12   "virtual function table entry."
@@ -24,7 +24,7 @@ Structure cls_0x5b93c4::vftable_5b93c4 {
    68   virt_meth_0x445020 *   4   virt_meth_0x445020_68   "virtual function table entry."
    72   virt_meth_0x445030 *   4   virt_meth_0x445030_72   "virtual function table entry."
    76   virt_meth_0x435d70 *   4   virt_meth_0x435d70_76   "virtual function table entry."
-   80   virt_meth_0x533c10 *   4   virt_meth_0x533c10_80   "virtual function table entry."
+   80   virt_meth_0x533c10_TDeathPane_DrawBackground *   4   virt_meth_0x533c10_80   "virtual function table entry."
    84   virt_meth_0x4451e0 *   4   virt_meth_0x4451e0_84   "virtual function table entry."
    88   virt_meth_0x435f90 *   4   virt_meth_0x435f90_88   "virtual function table entry."
    92   virt_meth_0x436090 *   4   virt_meth_0x436090_92   "virtual function table entry."
@@ -50,7 +50,7 @@ Structure cls_0x5b93c4::vftable_5b93c4 {
    172   virt_meth_0x436ec0 *   4   virt_meth_0x436ec0_172   "virtual function table entry."
    176   virt_meth_0x437000 *   4   virt_meth_0x437000_176   "virtual function table entry."
    180   virt_meth_0x437080 *   4   virt_meth_0x437080_180   "virtual function table entry."
-   184   virt_meth_0x533c00 *   4   virt_meth_0x533c00_184   "virtual function table entry."
+   184   virt_meth_0x533c00_TDeathPane_Close *   4   virt_meth_0x533c00_184   "virtual function table entry."
 }
 Length: 188 Alignment: 1
 

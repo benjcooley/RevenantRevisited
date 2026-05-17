@@ -1,6 +1,6 @@
-// FUN_00521080 @ 00521080 size=563
+// FUN_00521080_TScrollPane_Initialize @ 00521080 size=563
 
-undefined4 __fastcall FUN_00521080(int param_1)
+undefined4 __fastcall FUN_00521080_TScrollPane_Initialize(int param_1)
 
 {
   undefined4 uVar1;
@@ -17,7 +17,7 @@ undefined4 __fastcall FUN_00521080(int param_1)
   undefined4 uVar12;
   undefined4 uVar13;
   
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   *(undefined4 *)(param_1 + 400) = 0x1ae;
   *(undefined4 *)(param_1 + 0x188) = 0;
   *(undefined4 *)(param_1 + 0x18c) = 0;

@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5b5750
+// Decompiled methods and structure for class: cls_0x5b5750_TScrollPane
 
 /*
-/OOAnalyzer/cls_0x5b5750
+/OOAnalyzer/cls_0x5b5750_TScrollPane
 pack(disabled)
-Structure cls_0x5b5750 {
-   0   cls_0x5b5750::vftable_5b5750 *   4   vftptr_0x0   "pointer to cls_0x5b5750::vftable_5b5750"
+Structure cls_0x5b5750_TScrollPane {
+   0   cls_0x5b5750_TScrollPane::vftable_5b5750 *   4   vftptr_0x0   "pointer to cls_0x5b5750_TScrollPane::vftable_5b5750"
    4   dword   4   mbr_0x4   "Unsigned Double-Word (ddw, 4-bytes)"
    8   dword   4   mbr_0x8   "Unsigned Double-Word (ddw, 4-bytes)"
    12   dword   4   mbr_0xc   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -30,7 +30,7 @@ Length: 408 Alignment: 1
 
 // Function at 00521360
 
-void __thiscall OOAnalyzer::cls_0x5b5750::virt_meth_0x521360(cls_0x5b5750 *this)
+void __thiscall OOAnalyzer::cls_0x5b5750_TScrollPane::virt_meth_0x521360_TScrollPane_DrawBackground(cls_0x5b5750_TScrollPane *this)
 
 {
   char cVar1;
@@ -118,7 +118,7 @@ void __thiscall OOAnalyzer::cls_0x5b5750::virt_meth_0x521360(cls_0x5b5750 *this)
 
 // Function at 00521d70
 
-cls_0x5b5750 * __thiscall OOAnalyzer::cls_0x5b5750::cls_0x5b5750(cls_0x5b5750 *this)
+cls_0x5b5750_TScrollPane * __thiscall OOAnalyzer::cls_0x5b5750_TScrollPane::cls_0x5b5750_TScrollPane(cls_0x5b5750_TScrollPane *this)
 
 {
   this->mbr_0xc = 0x280;
@@ -144,12 +144,12 @@ cls_0x5b5750 * __thiscall OOAnalyzer::cls_0x5b5750::cls_0x5b5750(cls_0x5b5750 *t
 
 // Function at 00521dd0
 
-cls_0x5b5750 * __thiscall OOAnalyzer::cls_0x5b5750::virt_meth_0x521dd0(cls_0x5b5750 *this)
+cls_0x5b5750_TScrollPane * __thiscall OOAnalyzer::cls_0x5b5750_TScrollPane::virt_meth_0x521dd0(cls_0x5b5750_TScrollPane *this)
 
 {
   byte in_stack_00000004;
   
-  ~cls_0x5b5750(this);
+  ~cls_0x5b5750_TScrollPane(this);
   if ((in_stack_00000004 & 1) != 0) {
     FUN_004830f0(this);
   }
@@ -160,10 +160,10 @@ cls_0x5b5750 * __thiscall OOAnalyzer::cls_0x5b5750::virt_meth_0x521dd0(cls_0x5b5
 
 // Function at 00521df0
 
-cls_0x5b5750 * __thiscall OOAnalyzer::cls_0x5b5750::~cls_0x5b5750(cls_0x5b5750 *this)
+cls_0x5b5750_TScrollPane * __thiscall OOAnalyzer::cls_0x5b5750_TScrollPane::~cls_0x5b5750_TScrollPane(cls_0x5b5750_TScrollPane *this)
 
 {
-  cls_0x5b5750 *pcVar1;
+  cls_0x5b5750_TScrollPane *pcVar1;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -178,7 +178,7 @@ cls_0x5b5750 * __thiscall OOAnalyzer::cls_0x5b5750::~cls_0x5b5750(cls_0x5b5750 *
   local_4 = 1;
   cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
   local_4 = 0xffffffff;
-  pcVar1 = (cls_0x5b5750 *)FUN_004830f0(*(undefined4 *)&this->field_0x98);
+  pcVar1 = (cls_0x5b5750_TScrollPane *)FUN_004830f0(*(undefined4 *)&this->field_0x98);
   ExceptionList = local_c;
   return pcVar1;
 }
