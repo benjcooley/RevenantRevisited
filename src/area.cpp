@@ -42,11 +42,17 @@ TArea::TArea()
     level = -1; // All levels
     rects.Clear();
 
-  // CD audio music playing
+  // Music playlist
     cdplaynum = 0;
     cdplaylistsize = 0;
     cdplayisrandom = false;
     cdplaypause = 0;
+
+  // Ambient sound + audio environment + background effect
+    ambsound[0] = '\0';
+    ambsoundid  = -1;
+    audioenv    = 0;
+    bgeffect[0] = '\0';
 }
 
 // Gets rid of area
@@ -183,11 +189,36 @@ bool TArea::Load(char *aname, TToken &t)
 
             flags |= AREA_PLAYCDMUSIC;
         }
+        else if (t.Is("AMBSOUND"))
+        {
+            // AMBSOUND "<name>" — looping background SFX. Name resolves
+            // through SoundPlayer.FindSound, so it can come from disk OR
+            // resources.rvr.
+            if (!Parse(t, "AMBSOUND %s\n", ambsound))
+                t.Error("'AMBSOUND \"name\"' expected");
+            flags |= AREA_PLAYAMBIENT;
+        }
+        else if (t.Is("AUDIOENV"))
+        {
+            // AUDIOENV <preset-id> — EAX environment (reverb) preset. We
+            // parse + store it; routing to a miniaudio reverb effect is a
+            // follow-up. 0 (GENERIC) is the no-op default.
+            if (!Parse(t, "AUDIOENV %i\n", &audioenv))
+                t.Error("'AUDIOENV <preset-id>' expected");
+        }
+        else if (t.Is("BGEFFECT"))
+        {
+            // BGEFFECT "<name>" — area-scoped background visual effect
+            // (e.g. lab plasma haze). Owned by the VFX track; gameflow
+            // just records the name so the VFX system can pick it up
+            // when an area becomes active.
+            if (!Parse(t, "BGEFFECT %s\n", bgeffect))
+                t.Error("'BGEFFECT \"name\"' expected");
+        }
         else
         {
-            // Retail added area tags (AUDIOENV, ...) not in the pre-release
-            // source. Skip to the next line rather than aborting.
-            log_warn("[area] skipping unknown tag '%s'", t.Text());
+            // Truly unknown tag — log once per area and skip the line.
+            log_warn("[area] '%s': skipping unknown tag '%s'", name, t.Text());
             while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
                 t.Get();
             t.LineGet();
@@ -229,19 +260,53 @@ bool TArea::In(S3DPoint &pos, int32_t lev)
     return false;
 }
 
-// Initializes ambient sounds for area
+// Ambient SFX (AMBSOUND "<name>") — mount the named sound, mark it
+// looping, and start it at a low background level. Volume is in
+// DirectSound hundredths-of-a-dB attenuation (0 = full, -10000 = mute);
+// -2000 ≈ -10dB keeps the loop comfortably behind in-world SFX + music.
+static constexpr int32_t kAmbientVolume = -2000;
+
 void TArea::InitAmbientSounds()
 {
+    if (!ambsound[0]) return;
+
+    ambsoundid = SoundPlayer.FindSound(ambsound);
+    if (ambsoundid < 0) {
+        log_warn("[area] '%s': AMBSOUND '%s' not found in sound registry", name, ambsound);
+        return;
+    }
+    if (!SoundPlayer.Mount(ambsoundid)) {
+        log_warn("[area] '%s': AMBSOUND '%s' failed to mount", name, ambsound);
+        ambsoundid = -1;
+        return;
+    }
+
+    if (PTSound s = SoundPlayer.GetSound(ambsoundid))
+        s->SetLooping(true);
+
+    SoundPlayer.Play(ambsoundid, kAmbientVolume, /*freq*/ 0, /*spos*/ nullptr);
+    log_info("[area] '%s': ambient '%s' looping", name, ambsound);
 }
 
-// Deinitializes ambient sounds for area
 void TArea::CloseAmbientSounds()
 {
+    if (ambsoundid < 0) return;
+    SoundPlayer.Stop(ambsoundid);
+    SoundPlayer.Unmount(ambsoundid);
+    ambsoundid = -1;
 }
 
 void TArea::PlayAmbientSounds()
 {
-    // Play ambient sound effects here
+    // Loop is supposed to run continuously while we're in the area; this
+    // is a defensive restart in case anything stops it (engine pause that
+    // didn't resume cleanly, UpdateDying flagging a duplicate as dying,
+    // etc.). No-op when already playing.
+    if (ambsoundid < 0) return;
+    if (PTSound s = SoundPlayer.GetSound(ambsoundid)) {
+        if (!s->IsPlaying())
+            SoundPlayer.Play(ambsoundid, kAmbientVolume, /*freq*/ 0, /*spos*/ nullptr);
+    }
 }
 
 // Resolve a 1998-era CD track number (the AREA.DEF CDPLAYLIST values) to
@@ -433,6 +498,11 @@ void TArea::Enter()
   // Put "Entered" line in the status line
     if (Player)
         TextBar.Print("%s entered %s", Player->GetName(), name);
+
+    log_info("[area] entered '%s' (level=%d, audioenv=%d%s%s%s)", name, this->level,
+             audioenv,
+             ambsound[0] ? ", ambsound=" : "", ambsound[0] ? ambsound : "",
+             bgeffect[0] ? ", bgeffect set" : "");
 }
 
 // Called when the player exits the area

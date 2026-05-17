@@ -36,13 +36,22 @@ class TArea
     SColor ambcolor, nightambcolor;     // Ambient color
     int32_t lastdaylight;               // Last daylight value
 
-  // Ambient sound stuff
+  // Ambient sound (AMBSOUND tag): a single sound, looped at low volume
+  // for the duration of the player's time inside the area. Sourced from
+  // the SoundPlayer registry (effects/ + language/ + sound.def union),
+  // so the name is just the basename without extension — e.g.
+  // AMBSOUND "cave" looks up SoundPlayer.FindSound("cave").
+    char ambsound[MAXNAMELEN];          // empty → no ambient sound
+    int32_t ambsoundid;                 // cached SoundPlayer id while mounted, -1 otherwise
+    int32_t audioenv;                   // EAX environment preset id (AUDIOENV); 0 = generic
+    char bgeffect[MAXNAMELEN];          // visual background effect name (BGEFFECT) — gameflow stores it, VFX track owns rendering
+
     void InitAmbientSounds();
-      // Initializes ambient sounds for area
+      // Mounts + starts the ambient sound looping at low volume.
     void CloseAmbientSounds();
-      // Deinitializes ambient sounds for area
+      // Stops + unmounts the ambient sound.
     void PlayAmbientSounds();
-      // Plays ambient sound effects when music not playing
+      // Per-tick check; keeps the loop running if anything stops it.
 
   // CD audio music playing
     int32_t cdplaynum;                      // Current track to play
