@@ -58,49 +58,48 @@ PTBitmap g_lockeFace    = nullptr;
 constexpr int32_t kPanelX = 4;
 constexpr int32_t kPanelY = 4;
 
-// Bars atlas (128x128) row layout — measured from /tmp/dump_statusbar3/01_Bars.png.
-// 3 BRIGHT rows (filled) followed by 3 DIM rows (track/empty):
-//   y=0..11   bright red  (health filled)
-//   y=16..27  bright purple (mana filled)
-//   y=32..43  bright yellow (stamina filled)
-//   y=48..59  dim red     (health empty/track)
-//   y=64..75  dim purple
-//   y=80..91  dim yellow
-//
-// Per FUN_0054a5d0 (bar render helper), bar visible width = 0x77=119
-// and the bar is composed of 4 sections: left cap + filled + empty +
-// right cap. cap width = 6 (recon arg uVar23 = param_13).
-constexpr int32_t kBarAtlasW       = 128;     // full atlas width
-constexpr int32_t kBarMaxW         = 0x77;    // 119 — visible bar width
-constexpr int32_t kBarRowH         = 12;
-constexpr int32_t kBarCapW         = 6;       // margin/cap width per recon
+// Bars atlas — proven values from FUN_0054a5d0 helper:
+//   bar width  = param_12 = 0x77 = 119
+//   bar height = param_11 = 0x11 = 17
+//   cap width  = param_13 = 6
+// Atlas rows pitched at 17 (height 17, 0-spacing) starting at y=0:
+//   y=0  bright health (red)
+//   y=17 bright mana (purple)
+//   y=34 bright stamina (yellow)
+//   y=51 dim health  (track / empty)
+//   y=68 dim mana    (track)
+//   y=85 dim stamina (track)
+constexpr int32_t kBarAtlasW       = 128;
+constexpr int32_t kBarMaxW         = 0x77;    // 119
+constexpr int32_t kBarRowH         = 0x11;    // 17 per recon arg param_11
+constexpr int32_t kBarCapW         = 6;
 constexpr int32_t kBarHealthAtlasY = 0;
-constexpr int32_t kBarManaAtlasY   = 16;
-constexpr int32_t kBarStaminaAtlasY = 32;
-constexpr int32_t kBarDimYOffset   = 48;      // dim row = bright row + 48
+constexpr int32_t kBarManaAtlasY   = 17;
+constexpr int32_t kBarStaminaAtlasY = 34;
+constexpr int32_t kBarDimYOffset   = 51;      // dim row = bright + 51 (3 rows down)
 
 // Retail bar coordinates from
 // recon/discovered/cls_0x5a54e4_TPlyrStatusBar_slot23_TwoPassDraw_54af20.cpp.
 //
-// LEFT (player) bars — slot 23 lines 484/499/511, hi-res branch:
-//   Health  : (x=0x44=68, y=0x0f=15)
-//   Mana    : (x=0x44=68, y=0x1f=31)
-//   Stamina : (x=0x44=68, y=0x2c=44)
+// Per user 2026-05-17: the (0x44, 0xf) coords passed to the char's
+// draw method are the SHADOW position, not the bar itself. The bar is
+// drawn at (-4, -4) from the shadow per FUN_00438d80(buf, 4, 4)
+// shadow-offset setup that immediately precedes each bar draw block.
+// Bar coords (after subtracting the (4, 4) shadow offset):
+//   Health  : (x=0x40=64, y=0x0b=11)   (shadow at (0x44, 0xf) = (68, 15))
+//   Mana    : (x=0x40=64, y=0x1b=27)   (shadow at (0x44, 0x1f))
+//   Stamina : (x=0x40=64, y=0x28=40)   (shadow at (0x44, 0x2c))
 //
-// RIGHT (target) bars — slot 23 lines 657/672/686, hi-res branch:
-//   x is computed as `*(int *)(param_1 + 0xc) - <offset>` where +0xc
-//   is the pane width. Per-bar offsets:
-//     Health  : pane_width - 0xc1 = pane_width - 193
-//     Mana    : pane_width - 0x91 = pane_width - 145
-//     Stamina : pane_width - 0x79 = pane_width - 121
-//   Y values are the same as LEFT (15/31/44).
-//
-// Row pitch is non-uniform (16 then 13). Coords are PANE-relative
-// (the pane spans the full screen width in retail; here the test mode
-// uses screen width for pane width).
-constexpr int32_t kBarFillX        = 0x44;                  // 68
-constexpr int32_t kBarRowY[3]      = { 0x0f, 0x1f, 0x2c };  // 15, 31, 44
-constexpr int32_t kTargetBarOff[3] = { 0xc1, 0x91, 0x79 };  // 193, 145, 121
+// RIGHT (target) shadow X offsets (line 657/672/686):
+//   pane_width - 0xc1 / 0x91 / 0x79  — these are SHADOW positions too.
+//   Actual bar X = shadow_x - 4.
+constexpr int32_t kBarShadowOffX   = 4;
+constexpr int32_t kBarShadowOffY   = 4;
+constexpr int32_t kBarFillX        = 0x44 - kBarShadowOffX;  // 64 (bar X)
+constexpr int32_t kBarRowY[3]      = { 0x0f - kBarShadowOffY,
+                                       0x1f - kBarShadowOffY,
+                                       0x2c - kBarShadowOffY };  // 11, 27, 40
+constexpr int32_t kTargetBarOff[3] = { 0xc1, 0x91, 0x79 };       // shadow offsets
 
 // Surface-local coordinates extracted from FUN_0054a0a0 (PLAYER side
 // draw helper) — surface is 128x64 (the +0x6c mosaic surface):
@@ -203,8 +202,10 @@ private:
     {
         if (!g_bars) return;
         const int32_t paneW = Display.Width();
+        // Subtract shadow offset for target side too (recon line 657: bar_x =
+        // pane_width - 0xc1 is the SHADOW X; actual bar X = shadow_x - 4).
         const int32_t dstX = isRight
-            ? paneW - kTargetBarOff[row]
+            ? paneW - kTargetBarOff[row] - kBarShadowOffX
             : kPanelX + kBarFillX;
         const int32_t dstY = kPanelY + kBarRowY[row];
         const float clamped = level < 0.0f ? 0.0f : (level > 1.0f ? 1.0f : level);
