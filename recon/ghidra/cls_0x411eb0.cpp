@@ -1349,11 +1349,11 @@ OOAnalyzer::cls_0x411eb0::meth_0x414550
       DAT_005e91c0 = uVar4;
       return 1;
     }
-    FUN_004aacb0(param_1,param_2,(param_1 - iVar14) + 1,(param_2 - iVar12) + 1);
+    FUN_004aacb0_BlitEffect_Iterate(param_1,param_2,(param_1 - iVar14) + 1,(param_2 - iVar12) + 1);
     DAT_005e91c0 = uVar4;
     return 1;
   }
-  FUN_004aacb0(param_1,param_2,(param_1 - iVar14) + 1,(param_2 - iVar12) + 1);
+  FUN_004aacb0_BlitEffect_Iterate(param_1,param_2,(param_1 - iVar14) + 1,(param_2 - iVar12) + 1);
   DAT_005e91c0 = uVar4;
   return 1;
 }

@@ -102,7 +102,7 @@ undefined4 * __thiscall FUN_00430090_DefWidget_TDefListbox_ctor(undefined4 *para
         param_1[0x24] = iVar6;
         param_1[0x25] = 1;
         piStack_30 = piStack_38;
-        FUN_00419dd0(param_1 + 0x4b);
+        FUN_00419dd0_BlitEffect_SetField(param_1 + 0x4b);
         iVar6 = FUN_0042f700(param_1[0x24],piVar4,piVar5,param_1[0x49]);
         if (iVar6 == 0) {
           ExceptionList = local_c;

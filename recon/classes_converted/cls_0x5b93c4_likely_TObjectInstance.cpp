@@ -171,7 +171,7 @@ void cls_0x5b93c4::virt_meth_0x435cb0()
   }
   piVar1 = (int *)this->mbr_0x84;
   if (piVar1 != (int *)0x0) {
-    FUN_00438d80(local_54,0,0,0,0,piVar1[1],piVar1[2],0x80000000);
+    FUN_00438d80_BlitEffect_StructInit(local_54,0,0,0,0,piVar1[1],piVar1[2],0x80000000);
     (**(code **)(*piVar1 + 0x5c))(local_54,piVar1,0,0);
   }
   iVar2 = 0;
@@ -288,12 +288,12 @@ void cls_0x5b93c4::virt_meth_0x436090()
       (**(code **)(*piVar1 + 0x1c))(1);
       puVar3 = PTR_DAT_005d79e0;
       dVar2 = this->mbr_0x64;
-      FUN_00438d80((undefined4 *)&stack0xffffffa8,0,0,0,0,*(undefined4 *)(dVar2 + 4),
+      FUN_00438d80_BlitEffect_StructInit((undefined4 *)&stack0xffffffa8,0,0,0,0,*(undefined4 *)(dVar2 + 4),
                    *(undefined4 *)(dVar2 + 8),0x100);
       (**(code **)(*(int *)puVar3 + 0x5c))(&stack0xffffffa8,dVar2,0,0);
     }
   }
-  FUN_004aacb0(this->mbr_0x4,this->mbr_0x8,this->mbr_0xc,this->mbr_0x10);
+  FUN_004aacb0_BlitEffect_Iterate(this->mbr_0x4,this->mbr_0x8,this->mbr_0xc,this->mbr_0x10);
   return;
 }
 
@@ -2593,7 +2593,7 @@ LAB_00547df9:
           if (*(short *)(this->mbr_0x198 + 4) == 0xc) {
             dVar3 = this->mbr_0x188;
             piVar8 = (int *)this->mbr_0x184;
-            FUN_00438d80(auStack_6c,unaff_EBX,unaff_EBP,0,0,*(undefined4 *)(dVar3 + 4),
+            FUN_00438d80_BlitEffect_StructInit(auStack_6c,unaff_EBX,unaff_EBP,0,0,*(undefined4 *)(dVar3 + 4),
                          *(undefined4 *)(dVar3 + 8),0x100);
             (**(code **)(*piVar8 + 0x5c))(auStack_6c,dVar3,0,0);
           }

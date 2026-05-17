@@ -19,7 +19,7 @@ undefined4 __fastcall FUN_0053cc30_TSideTabsPane_Initialize(int *param_1)
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
   FUN_00434e40_TButtonPane_Initialize();
-  FUN_00429950(0xff,0);
+  FUN_00429950_BlitEffect_PackRGB(0xff,0);
   FUN_004384a0();
   iVar3 = FUN_0046d710();
   param_1[0x5f] = iVar3;

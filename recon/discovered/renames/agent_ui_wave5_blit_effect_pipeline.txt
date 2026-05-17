@@ -1,0 +1,75 @@
+# Wave-5 renames — retail blit effect pipeline (shadows, glows, etc.)
+# Date: 2026-05-17
+# Brief: per memory project-retail-blit-effect-pipeline
+#
+# Each function below was extracted from the binary and analyzed (see
+# recon/discovered/FUN_004*.cpp). Evidence chain in the memory doc.
+# Renames are conservative — only functions whose role is established
+# from reading the body.
+#
+# === EFFECT REGISTRY ===
+# Global 10-entry effect slot array (each entry 19 ints / 0x4c bytes):
+#   DAT_00669af0 .. DAT_00669e0c
+# Plus pending-effect count:
+#   DAT_0066a8fc
+
+FUN_004aa850|FUN_004aa850_BlitEffect_Setup
+meth_0x4aa850|meth_0x4aa850_BlitEffect_Setup
+# Setup(srcX, srcY, offX, offY, type) -> slot index 0..9 or -1.
+# Allocates 2 scratch buffers per slot (malloc 0xa00 each).
+
+FUN_004aa7c0|FUN_004aa7c0_BlitEffect_AddOrUpdate
+meth_0x4aa7c0|meth_0x4aa7c0_BlitEffect_AddOrUpdate
+# AddOrUpdate(slot, srcX, srcY, offX, offY) — patches fields of existing slot.
+
+# === EFFECT DISPATCH (per-blit) ===
+
+FUN_004aa280|FUN_004aa280_BlitWithEffects
+meth_0x4aa280|meth_0x4aa280_BlitWithEffects
+# vtable[+0x5c] on the TDisplay-like global (DAT_005d79e0 -> DAT_0065a580).
+# Calls primary blit, then iterates DAT_0066a8fc pending effects calling
+# BlitEffect_Iterate for each.
+
+FUN_004aacb0|FUN_004aacb0_BlitEffect_Iterate
+meth_0x4aacb0|meth_0x4aacb0_BlitEffect_Iterate
+# Iterate(dstX, dstY, dstW, dstH, srcId) — scans 10 effect slots, calls
+# BlitEffect_Apply for each active slot intersecting the blit rect.
+
+FUN_004aaeb0|FUN_004aaeb0_BlitEffect_Apply
+meth_0x4aaeb0|meth_0x4aaeb0_BlitEffect_Apply
+# Apply(this, slot, x, y, w, h, srcId, flags) — large 2737-byte body
+# that handles rect intersection + actual effect render (shadow/glow/etc).
+
+# === BLIT PRIMITIVE ===
+
+FUN_004bd490|FUN_004bd490_Blit
+meth_0x4bd490|meth_0x4bd490_Blit
+# (this, params, source, p4, p5) — the actual blit primitive called by
+# BlitWithEffects. Has size-compatibility checks; dispatches to vtable+0x50
+# of source or this for the per-pixel work.
+
+# === EFFECT STRUCT HELPERS ===
+
+FUN_00438d80|FUN_00438d80_BlitEffect_StructInit
+meth_0x438d80|meth_0x438d80_BlitEffect_StructInit
+# (buf, p2..p8) — writes specific fields of a 22-int blit-effect struct.
+# Caller typically only sets the (X, Y) offset fields, e.g.
+# FUN_00438d80(buf, 4, 4) for a (+4, +4) shadow offset.
+
+FUN_00429950|FUN_00429950_BlitEffect_PackRGB
+meth_0x429950|meth_0x429950_BlitEffect_PackRGB
+# (buf, r, g, b) — packs 3 byte color components into a 4-byte struct
+# field; param[3] = 0.
+
+FUN_00419dd0|FUN_00419dd0_BlitEffect_SetField
+meth_0x419dd0|meth_0x419dd0_BlitEffect_SetField
+# (dst, src) — single int copy *dst = *src. Used to set one field of
+# the blit-effect struct from a temp value.
+
+# === COMPOSITE BLIT (text/glyph paths) ===
+
+FUN_004be2b0|FUN_004be2b0_CompositeBuffer
+meth_0x4be2b0|meth_0x4be2b0_CompositeBuffer
+# (x, y, w, h, srcBuf) — blits a CPU-side composite buffer (e.g. rendered
+# text+glow) into a surface. Used in slot 23 value-text rendering for each
+# stat field.

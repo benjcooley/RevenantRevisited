@@ -1735,7 +1735,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x450dc0(TCharacter *this)
   (this->TObjectInstance).cls_0x41c7f0.mbr_0xc = DAT_0065c5c4;
   cls_0x411eb0::meth_0x412150
             ((cls_0x411eb0 *)((int)&DAT_0065a578 + 4),DAT_006663d8,dVar1,DAT_00667c30);
-  FUN_004aa7c0((this->TObjectInstance).mbr_0x58,DAT_006663d8,DAT_006663d4,DAT_00667c30,DAT_0065c5c4);
+  FUN_004aa7c0_BlitEffect_AddOrUpdate((this->TObjectInstance).mbr_0x58,DAT_006663d8,DAT_006663d4,DAT_00667c30,DAT_0065c5c4);
   (*((this->TObjectInstance).vftptr_0x0)->virt_meth_0x490530_44)(this);
   DAT_00658d94 = 1;
   return;
@@ -4240,7 +4240,7 @@ void __thiscall OOAnalyzer::TCharacter::meth_0x4562a0(TCharacter *this)
     piVar1 = &DAT_006584cc;
     do {
       if ((piVar1[4] != 0) && (piVar1[5] == 0)) {
-        cls_0x4aaeb0::meth_0x4aaeb0
+        cls_0x4aaeb0::meth_0x4aaeb0_BlitEffect_Apply
                   ((cls_0x4aaeb0 *)PTR_DAT_005d79e0,(this->TObjectInstance).mbr_0x58,piVar1[-1],*piVar1
                    ,(piVar1[1] - piVar1[-1]) + 1,(piVar1[2] - *piVar1) + 1);
         piVar1[5] = 1;
@@ -4477,7 +4477,7 @@ void __thiscall OOAnalyzer::TCharacter::meth_0x456810(TCharacter *this,int **par
       if (this->mbr_0x868 == 0) {
         dVar5 = this->mbr_0x858;
         piVar7 = (int *)this->mbr_0x85c;
-        FUN_00438d80((undefined4 *)&stack0xffffff84,dVar1,dVar4,dVar1,dVar4,(unaff_EDI - dVar1) + 1,
+        FUN_00438d80_BlitEffect_StructInit((undefined4 *)&stack0xffffff84,dVar1,dVar4,dVar1,dVar4,(unaff_EDI - dVar1) + 1,
                      (unaff_ESI - dVar4) + 1,&DAT_00400406);
         (**(code **)(*piVar7 + 0x5c))(&stack0xffffff84,dVar5,0,0);
         dVar5 = dStack_20;
@@ -6354,7 +6354,7 @@ void __thiscall OOAnalyzer::TCharacter::meth_0x45b080(TCharacter *this)
       uStack_8 = (cls_0x5a68d8 *)0xffffffff;
       this->mbr_0x864 = (dword)pcVar3;
       (*pcVar1->virt_meth_0x419ea0_72)(pcVar3);
-      FUN_004aa850((this->TObjectInstance).cls_0x41c7f0.mbr_0x0,
+      FUN_004aa850_BlitEffect_Setup((this->TObjectInstance).cls_0x41c7f0.mbr_0x0,
                    (this->TObjectInstance).cls_0x41c7f0.mbr_0x4,
                    (this->TObjectInstance).cls_0x41c7f0.mbr_0x8,
                    (this->TObjectInstance).cls_0x41c7f0.mbr_0xc,this->mbr_0x864);
@@ -6466,7 +6466,7 @@ void __thiscall OOAnalyzer::TCharacter::meth_0x45b080(TCharacter *this)
       uStack_8 = (cls_0x5a68d8 *)0xffffffff;
       this->mbr_0x864 = (dword)pcVar3;
       (*pcVar1->virt_meth_0x419ea0_72)(pcVar3);
-      FUN_004aa850((this->TObjectInstance).cls_0x41c7f0.mbr_0x0,
+      FUN_004aa850_BlitEffect_Setup((this->TObjectInstance).cls_0x41c7f0.mbr_0x0,
                    (this->TObjectInstance).cls_0x41c7f0.mbr_0x4,
                    (this->TObjectInstance).cls_0x41c7f0.mbr_0x8,
                    (this->TObjectInstance).cls_0x41c7f0.mbr_0xc,this->mbr_0x864);
@@ -7665,7 +7665,7 @@ void __thiscall OOAnalyzer::TCharacter::meth_0x45f1e0(TCharacter *this)
     (**(code **)(*(int *)PTR_DAT_005d79e0 + 0x24))();
     piVar2 = DAT_00658428;
     piStack_b8 = (int *)this->mbr_0x85c;
-    FUN_00438d80(auStack_54,0,0,this->mbr_0x88,this->mbr_0x8c,0x200,0x200,4);
+    FUN_00438d80_BlitEffect_StructInit(auStack_54,0,0,this->mbr_0x88,this->mbr_0x8c,0x200,0x200,4);
     (**(code **)(*piVar2 + 0x5c))(auStack_54,piStack_b8,0,0);
     puVar5 = (ushort *)(**(code **)(*DAT_00658428 + 0x2c))();
     puVar6 = (ushort *)(**(code **)(*DAT_00658444 + 0x2c))();
@@ -7679,7 +7679,7 @@ void __thiscall OOAnalyzer::TCharacter::meth_0x45f1e0(TCharacter *this)
     piVar2 = DAT_00658444;
     if ((this->mbr_0x8fc != 0) && (DAT_00658450 != (int *)0x0)) {
       piStack_b8 = DAT_00658450;
-      FUN_00438d80(auStack_54,(((int)dVar8 >> 9) - this->mbr_0x900) * 0x40,
+      FUN_00438d80_BlitEffect_StructInit(auStack_54,(((int)dVar8 >> 9) - this->mbr_0x900) * 0x40,
                    (((int)dVar1 >> 9) - this->mbr_0x904) * 0x40,0,0,DAT_00658444[1],DAT_00658444[2],
                    0x80000000);
       (**(code **)(*piStack_b8 + 0x5c))(auStack_54,piVar2,0,0);
@@ -8641,7 +8641,7 @@ undefined4 __thiscall OOAnalyzer::TCharacter::meth_0x48eea0(TCharacter *this,int
     (this->TObjectInstance).mbr_0x1c = (this->TObjectInstance).mbr_0x1c + 1;
     (*((this->TObjectInstance).vftptr_0x0)->virt_meth_0x490960_64)(&this->TObjectInstance,0x101);
     if ((in_stack_00000008 & 0x100) != 0) {
-      FUN_004aacb0(0,0,*(int *)(PTR_DAT_005d79e0 + 4),*(int *)(PTR_DAT_005d79e0 + 8));
+      FUN_004aacb0_BlitEffect_Iterate(0,0,*(int *)(PTR_DAT_005d79e0 + 4),*(int *)(PTR_DAT_005d79e0 + 8));
     }
     uVar2 = 1;
     if ((this->TObjectInstance).mbr_0x1c == 1) {
@@ -8824,7 +8824,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x52d8c0(TCharacter *this)
     *(undefined *)&(this->TObjectInstance).mbr_0x64 = 0;
   }
   if ((this->TObjectInstance).mbr_0x50 != 0) {
-    FUN_004aacb0((this->TObjectInstance).cls_0x41c7f0.mbr_0x0,(this->TObjectInstance).cls_0x41c7f0.mbr_0x4
+    FUN_004aacb0_BlitEffect_Iterate((this->TObjectInstance).cls_0x41c7f0.mbr_0x0,(this->TObjectInstance).cls_0x41c7f0.mbr_0x4
                  ,(this->TObjectInstance).cls_0x41c7f0.mbr_0x8,
                  (this->TObjectInstance).cls_0x41c7f0.mbr_0xc);
   }
@@ -8875,7 +8875,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x52d910(TCharacter *this)
   dVar5 = (this->TObjectInstance).cls_0x41c7f0.mbr_0x0;
   local_4 = 0xffffffff;
   (this->TObjectInstance).mbr_0x60 = (dword)pcVar6;
-  FUN_004aa850(dVar5,dVar4,dVar3,dVar2,(int)pcVar6);
+  FUN_004aa850_BlitEffect_Setup(dVar5,dVar4,dVar3,dVar2,(int)pcVar6);
   (*((this->TObjectInstance).vftptr_0x0)->virt_meth_0x48ff00_20)(&this->TObjectInstance);
   ExceptionList = this_00;
   return;
@@ -8923,7 +8923,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x52da00(TCharacter *this)
   (this->TObjectInstance).cls_0x41c7f0.mbr_0x4 = dVar3;
   (this->TObjectInstance).cls_0x41c7f0.mbr_0x8 = dVar2;
   (this->TObjectInstance).cls_0x41c7f0.mbr_0xc = dVar1;
-  FUN_004aa7c0(dVar5,dVar4,dVar3,dVar2,dVar1);
+  FUN_004aa7c0_BlitEffect_AddOrUpdate(dVar5,dVar4,dVar3,dVar2,dVar1);
   (*((this->TObjectInstance).vftptr_0x0)->virt_meth_0x490530_44)(this);
   iVar6 = meth_0x47ed20((TCharacter *)&DAT_0065caf0);
   if (iVar6 == 2) {
@@ -9107,7 +9107,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x53c900(TCharacter *this)
       (*(char *)&(this->TObjectInstance).mbr_0x6c != '\0')) ||
      (*(char *)((int)&(this->TObjectInstance).mbr_0x6c + 3) != '\0')) {
     if ((this->TObjectInstance).mbr_0x50 != 0) {
-      FUN_004aacb0((this->TObjectInstance).cls_0x41c7f0.mbr_0x0,
+      FUN_004aacb0_BlitEffect_Iterate((this->TObjectInstance).cls_0x41c7f0.mbr_0x0,
                    (this->TObjectInstance).cls_0x41c7f0.mbr_0x4,
                    (this->TObjectInstance).cls_0x41c7f0.mbr_0x8,
                    (this->TObjectInstance).cls_0x41c7f0.mbr_0xc);
@@ -9162,7 +9162,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x53c970(TCharacter *this)
   dVar5 = (this->TObjectInstance).cls_0x41c7f0.mbr_0x0;
   local_4 = 0xffffffff;
   (this->TObjectInstance).mbr_0x68 = (dword)pcVar6;
-  FUN_004aa850(dVar5,dVar4,dVar3,dVar2,(int)pcVar6);
+  FUN_004aa850_BlitEffect_Setup(dVar5,dVar4,dVar3,dVar2,(int)pcVar6);
   (*((this->TObjectInstance).vftptr_0x0)->virt_meth_0x48ff00_20)(&this->TObjectInstance);
   ExceptionList = this_00;
   return;
@@ -9209,7 +9209,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x53ca60(TCharacter *this)
   (this->TObjectInstance).cls_0x41c7f0.mbr_0x4 = dVar3;
   (this->TObjectInstance).cls_0x41c7f0.mbr_0x8 = dVar2;
   (this->TObjectInstance).cls_0x41c7f0.mbr_0xc = dVar1;
-  FUN_004aa7c0(dVar5,dVar4,dVar3,dVar2,dVar1);
+  FUN_004aa7c0_BlitEffect_AddOrUpdate(dVar5,dVar4,dVar3,dVar2,dVar1);
   (*((this->TObjectInstance).vftptr_0x0)->virt_meth_0x490530_44)(this);
   return;
 }
@@ -10289,7 +10289,7 @@ void __thiscall OOAnalyzer::TCharacter::meth_0x54cbb0(TCharacter *this)
       }
       else {
         dVar5 = this->mbr_0x8c;
-        FUN_00438d80(auStack_54,0,iVar9,0,this->mbr_0x7c,(this->TObjectInstance).cls_0x41c7f0.mbr_0x8,
+        FUN_00438d80_BlitEffect_StructInit(auStack_54,0,iVar9,0,this->mbr_0x7c,(this->TObjectInstance).cls_0x41c7f0.mbr_0x8,
                      this->mbr_0x78,0x120);
         (**(code **)(*(int *)puVar6 + 0x5c))(auStack_54,dVar5,0,0);
       }
@@ -10400,14 +10400,14 @@ void __thiscall OOAnalyzer::TCharacter::meth_0x54cd40(TCharacter *this)
           (**(code **)(*(int *)this->mbr_0x88 + 100))
                     (0,dVar4,((int *)this->mbr_0x88)[1],this->mbr_0x78,0);
           piStack_144 = (int *)this->mbr_0x88;
-          FUN_00438d80(auStack_94,0,dVar4,0,0,*(undefined4 *)(this->mbr_0x84 + 4),
+          FUN_00438d80_BlitEffect_StructInit(auStack_94,0,dVar4,0,0,*(undefined4 *)(this->mbr_0x84 + 4),
                        *(undefined4 *)(this->mbr_0x84 + 8),0x100);
           puVar1 = auStack_94;
           iVar3 = *piStack_144;
         }
         else {
           piStack_144 = (int *)this->mbr_0x88;
-          FUN_00438d80(auStack_e8,0,dVar4,0,0,*(undefined4 *)(this->mbr_0x84 + 4),
+          FUN_00438d80_BlitEffect_StructInit(auStack_e8,0,dVar4,0,0,*(undefined4 *)(this->mbr_0x84 + 4),
                        *(undefined4 *)(this->mbr_0x84 + 8),0x80000000);
           puVar1 = auStack_e8;
           iVar3 = *piStack_144;

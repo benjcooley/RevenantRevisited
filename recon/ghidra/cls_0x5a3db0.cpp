@@ -416,7 +416,7 @@ void __thiscall OOAnalyzer::cls_0x5a3db0::meth_0x4326e0(cls_0x5a3db0 *this,cls_0
     if (*(char *)puVar11 != '\0') {
       cStack_ac.mbr_0x0 = uStack_a8;
       cls_0x419dd0::cls_0x419dd0(&cStack_ac);
-      cls_0x5a68d8::meth_0x4be2b0
+      cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
                 (param_1,(char)dVar3 + (char)dVar2 + (char)dVar4,(char)dVar12,(char)iVar15,
                  (((dVar6 - dVar7) - dVar8) - dVar9) - dVar5,(char)puVar11,0);
     }

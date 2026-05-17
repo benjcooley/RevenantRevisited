@@ -1538,7 +1538,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x450dc0()
   (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0xc = DAT_0065c5c4;
   cls_0x411eb0::meth_0x412150
             ((cls_0x411eb0 *)((int)&DAT_0065a578 + 4),DAT_006663d8,dVar1,DAT_00667c30);
-  FUN_004aa7c0((this->cls_0x5a5ed4_TScreen).mbr_0x58,DAT_006663d8,DAT_006663d4,DAT_00667c30,DAT_0065c5c4);
+  FUN_004aa7c0_BlitEffect_AddOrUpdate((this->cls_0x5a5ed4_TScreen).mbr_0x58,DAT_006663d8,DAT_006663d4,DAT_00667c30,DAT_0065c5c4);
   (*((this->cls_0x5a5ed4_TScreen).vftptr_0x0)->virt_meth_0x490530_44)(this);
   DAT_00658d94 = 1;
   return;
@@ -4006,7 +4006,7 @@ void cls_0x5a5320_TPlayScreen::meth_0x4562a0()
     piVar1 = &DAT_006584cc;
     do {
       if ((piVar1[4] != 0) && (piVar1[5] == 0)) {
-        cls_0x4aaeb0::meth_0x4aaeb0
+        cls_0x4aaeb0::meth_0x4aaeb0_BlitEffect_Apply
                   ((cls_0x4aaeb0 *)PTR_DAT_005d79e0,(this->cls_0x5a5ed4_TScreen).mbr_0x58,piVar1[-1],*piVar1
                    ,(piVar1[1] - piVar1[-1]) + 1,(piVar1[2] - *piVar1) + 1);
         piVar1[5] = 1;
@@ -4241,7 +4241,7 @@ void cls_0x5a5320_TPlayScreen::meth_0x456810(int *param_1)
       if (this->mbr_0x868 == 0) {
         dVar6 = this->mbr_0x858;
         piVar1 = (int *)this->mbr_0x85c;
-        FUN_00438d80(&stack0xffffff84,dVar2,dVar5,dVar2,dVar5,(unaff_EDI - dVar2) + 1,
+        FUN_00438d80_BlitEffect_StructInit(&stack0xffffff84,dVar2,dVar5,dVar2,dVar5,(unaff_EDI - dVar2) + 1,
                      (unaff_ESI - dVar5) + 1,&DAT_00400406);
         (**(code **)(*piVar1 + 0x5c))(&stack0xffffff84,dVar6,0,0);
         dVar6 = dStack_20;
@@ -6113,7 +6113,7 @@ void cls_0x5a5320_TPlayScreen::meth_0x45b080()
       local_c = (cls_0x5a68d8 *)0xffffffff;
       this->mbr_0x864 = (dword)pcVar3;
       (*pcVar1->virt_meth_0x419ea0_72)(pcVar3);
-      FUN_004aa850((this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0,
+      FUN_004aa850_BlitEffect_Setup((this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0,
                    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x4,
                    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x8,
                    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0xc,this->mbr_0x864);
@@ -6230,7 +6230,7 @@ void cls_0x5a5320_TPlayScreen::meth_0x45b080()
       local_c = (cls_0x5a68d8 *)0xffffffff;
       this->mbr_0x864 = (dword)pcVar3;
       (*pcVar1->virt_meth_0x419ea0_72)(pcVar3);
-      FUN_004aa850((this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0,
+      FUN_004aa850_BlitEffect_Setup((this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0,
                    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x4,
                    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x8,
                    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0xc,this->mbr_0x864);
@@ -7455,7 +7455,7 @@ void cls_0x5a5320_TPlayScreen::meth_0x45f1e0()
     (**(code **)(*(int *)PTR_DAT_005d79e0 + 0x24))();
     piVar1 = DAT_00658428;
     piStack_b8 = (int *)this->mbr_0x85c;
-    FUN_00438d80(auStack_54,0,0,this->mbr_0x88,this->mbr_0x8c,0x200,0x200,4);
+    FUN_00438d80_BlitEffect_StructInit(auStack_54,0,0,this->mbr_0x88,this->mbr_0x8c,0x200,0x200,4);
     (**(code **)(*piVar1 + 0x5c))(auStack_54,piStack_b8,0,0);
     iVar4 = (**(code **)(*DAT_00658428 + 0x2c))();
     iVar5 = (**(code **)(*DAT_00658444 + 0x2c))();
@@ -7470,7 +7470,7 @@ void cls_0x5a5320_TPlayScreen::meth_0x45f1e0()
     piVar1 = DAT_00658444;
     if ((this->mbr_0x8fc != 0) && (DAT_00658450 != (int *)0x0)) {
       piStack_b8 = DAT_00658450;
-      FUN_00438d80(auStack_54,(iVar8 - this->mbr_0x900) * 0x40,(iVar7 - this->mbr_0x904) * 0x40,0,0,
+      FUN_00438d80_BlitEffect_StructInit(auStack_54,(iVar8 - this->mbr_0x900) * 0x40,(iVar7 - this->mbr_0x904) * 0x40,0,0,
                    DAT_00658444[1],DAT_00658444[2],0x80000000);
       (**(code **)(*piStack_b8 + 0x5c))(auStack_54,piVar1,0,0);
     }
@@ -8418,7 +8418,7 @@ undefined4 cls_0x5a5320_TPlayScreen::meth_0x48eea0(int param_1)
     (this->cls_0x5a5ed4_TScreen).mbr_0x1c = (this->cls_0x5a5ed4_TScreen).mbr_0x1c + 1;
     (*((this->cls_0x5a5ed4_TScreen).vftptr_0x0)->virt_meth_0x490960_64)(&this->cls_0x5a5ed4_TScreen,0x101);
     if ((in_stack_00000008 & 0x100) != 0) {
-      FUN_004aacb0(0,0,*(undefined4 *)(PTR_DAT_005d79e0 + 4),*(undefined4 *)(PTR_DAT_005d79e0 + 8),6
+      FUN_004aacb0_BlitEffect_Iterate(0,0,*(undefined4 *)(PTR_DAT_005d79e0 + 4),*(undefined4 *)(PTR_DAT_005d79e0 + 8),6
                   );
     }
     uVar2 = 1;
@@ -8606,7 +8606,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x52d8c0()
     *(undefined *)&(this->cls_0x5a5ed4_TScreen).mbr_0x64 = 0;
   }
   if ((this->cls_0x5a5ed4_TScreen).mbr_0x50 != 0) {
-    FUN_004aacb0((this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0,(this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x4
+    FUN_004aacb0_BlitEffect_Iterate((this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0,(this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x4
                  ,(this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x8,
                  (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0xc,uVar1);
   }
@@ -8657,7 +8657,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x52d910()
   dVar5 = (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0;
   local_4 = 0xffffffff;
   (this->cls_0x5a5ed4_TScreen).mbr_0x60 = (dword)pcVar6;
-  FUN_004aa850(dVar5,dVar4,dVar3,dVar2,pcVar6);
+  FUN_004aa850_BlitEffect_Setup(dVar5,dVar4,dVar3,dVar2,pcVar6);
   (*((this->cls_0x5a5ed4_TScreen).vftptr_0x0)->virt_meth_0x48ff00_20)(&this->cls_0x5a5ed4_TScreen);
   ExceptionList = this_00;
   return;
@@ -8705,7 +8705,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x52da00()
   (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x4 = dVar3;
   (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x8 = dVar2;
   (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0xc = dVar1;
-  FUN_004aa7c0(dVar5,dVar4,dVar3,dVar2,dVar1);
+  FUN_004aa7c0_BlitEffect_AddOrUpdate(dVar5,dVar4,dVar3,dVar2,dVar1);
   (*((this->cls_0x5a5ed4_TScreen).vftptr_0x0)->virt_meth_0x490530_44)(this);
   iVar6 = meth_0x47ed20((cls_0x5a5320_TPlayScreen *)&DAT_0065caf0);
   if (iVar6 == 2) {
@@ -8896,7 +8896,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x53c900()
   if ((((DAT_0065d194 != 0) || (DAT_0065d198 != 0)) || (cVar1 != '\0')) ||
      (*(char *)((int)&(this->cls_0x5a5ed4_TScreen).mbr_0x6c + 3) != '\0')) {
     if ((this->cls_0x5a5ed4_TScreen).mbr_0x50 != 0) {
-      FUN_004aacb0((this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0,
+      FUN_004aacb0_BlitEffect_Iterate((this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0,
                    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x4,
                    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x8,
                    (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0xc,uVar2);
@@ -8951,7 +8951,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x53c970()
   dVar5 = (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x0;
   local_4 = 0xffffffff;
   (this->cls_0x5a5ed4_TScreen).mbr_0x68 = (dword)pcVar6;
-  FUN_004aa850(dVar5,dVar4,dVar3,dVar2,pcVar6);
+  FUN_004aa850_BlitEffect_Setup(dVar5,dVar4,dVar3,dVar2,pcVar6);
   (*((this->cls_0x5a5ed4_TScreen).vftptr_0x0)->virt_meth_0x48ff00_20)(&this->cls_0x5a5ed4_TScreen);
   ExceptionList = this_00;
   return;
@@ -8998,7 +8998,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x53ca60()
   (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x4 = dVar3;
   (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x8 = dVar2;
   (this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0xc = dVar1;
-  FUN_004aa7c0(dVar5,dVar4,dVar3,dVar2,dVar1);
+  FUN_004aa7c0_BlitEffect_AddOrUpdate(dVar5,dVar4,dVar3,dVar2,dVar1);
   (*((this->cls_0x5a5ed4_TScreen).vftptr_0x0)->virt_meth_0x490530_44)(this);
   return;
 }
@@ -10084,7 +10084,7 @@ void cls_0x5a5320_TPlayScreen::meth_0x54cbb0()
       }
       else {
         dVar5 = this->mbr_0x8c;
-        FUN_00438d80(auStack_54,0,iVar9,0,this->mbr_0x7c,(this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x8,
+        FUN_00438d80_BlitEffect_StructInit(auStack_54,0,iVar9,0,this->mbr_0x7c,(this->cls_0x5a5ed4_TScreen).cls_0x41c7f0.mbr_0x8,
                      this->mbr_0x78,0x120);
         (**(code **)(*(int *)puVar6 + 0x5c))(auStack_54,dVar5,0,0);
       }
@@ -10196,13 +10196,13 @@ void cls_0x5a5320_TPlayScreen::meth_0x54cd40()
           (**(code **)(*(int *)this->mbr_0x88 + 100))
                     (0,dVar5,((int *)this->mbr_0x88)[1],this->mbr_0x78,0);
           piStack_144 = (int *)this->mbr_0x88;
-          FUN_00438d80(auStack_94,0,dVar5,0,0);
+          FUN_00438d80_BlitEffect_StructInit(auStack_94,0,dVar5,0,0);
           puVar2 = auStack_94;
           iVar4 = *piStack_144;
         }
         else {
           piStack_144 = (int *)this->mbr_0x88;
-          FUN_00438d80(auStack_e8,0,dVar5,0,0);
+          FUN_00438d80_BlitEffect_StructInit(auStack_e8,0,dVar5,0,0);
           puVar2 = auStack_e8;
           iVar4 = *piStack_144;
         }

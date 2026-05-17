@@ -6,7 +6,7 @@
 
 // Function at 004aaeb0
 
-undefined4 cls_0x4aaeb0::meth_0x4aaeb0(int param_1, int param_2, int param_3, int param_4, int param_5)
+undefined4 cls_0x4aaeb0::meth_0x4aaeb0_BlitEffect_Apply(int param_1, int param_2, int param_3, int param_4, int param_5)
 
 {
   int *piVar1;
@@ -78,7 +78,7 @@ undefined4 cls_0x4aaeb0::meth_0x4aaeb0(int param_1, int param_2, int param_3, in
         }
         iVar7 = *(int *)(unaff_EDI + 0x8c);
         piVar1 = (int *)(&DAT_00669b14)[param_1 * 0x13];
-        FUN_00438d80(&local_64,param_2,param_3,
+        FUN_00438d80_BlitEffect_StructInit(&local_64,param_2,param_3,
                      ((&DAT_00669af4)[param_1 * 0x13] - (&DAT_00669afc)[param_1 * 0x13]) + param_2,
                      ((&DAT_00669af8)[param_1 * 0x13] - (&DAT_00669b00)[param_1 * 0x13]) + param_3,
                      unaff_retaddr,param_1,uVar5);
@@ -106,7 +106,7 @@ undefined4 cls_0x4aaeb0::meth_0x4aaeb0(int param_1, int param_2, int param_3, in
         }
         iVar2 = (&DAT_00669b14)[param_1 * 0x13];
         piVar1 = *(int **)(unaff_EDI + 0x8c);
-        FUN_00438d80(&local_64,
+        FUN_00438d80_BlitEffect_StructInit(&local_64,
                      ((&DAT_00669af4)[param_1 * 0x13] - (&DAT_00669afc)[param_1 * 0x13]) + param_2,
                      (param_3 - (&DAT_00669b00)[param_1 * 0x13]) + (&DAT_00669af8)[param_1 * 0x13],
                      param_2,param_3,unaff_retaddr,param_1,uVar5);
@@ -192,26 +192,26 @@ undefined4 cls_0x4aaeb0::meth_0x4aaeb0(int param_1, int param_2, int param_3, in
                       goto switchD_004ab571_caseD_f;
                     case 1:
                       iVar4 = (iVar8 - param_2) + 1;
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,iVar4,local_94 - param_3);
-                      meth_0x4aaeb0(this,param_1,local_8c + 1,local_94,(iVar8 - (local_8c + 1)) + 1,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,iVar4,local_94 - param_3);
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,local_8c + 1,local_94,(iVar8 - (local_8c + 1)) + 1,
                                     iVar7);
-                      meth_0x4aaeb0(this,param_1,param_2,local_88 + 1,iVar4,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,local_88 + 1,iVar4,
                                     (iVar9 - (local_88 + 1)) + 1);
                       goto switchD_004ab571_caseD_f;
                     case 2:
                       iVar8 = (iVar8 - param_2) + 1;
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,iVar8,local_94 - param_3);
-                      meth_0x4aaeb0(this,param_1,param_2,local_94,local_84 - param_2,iVar7);
-                      meth_0x4aaeb0(this,param_1,param_2,local_88 + 1,iVar8,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,iVar8,local_94 - param_3);
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,local_94,local_84 - param_2,iVar7);
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,local_88 + 1,iVar8,
                                     (iVar9 - (local_88 + 1)) + 1);
                       goto switchD_004ab571_caseD_f;
                     case 3:
                       iVar8 = (iVar8 - param_2) + 1;
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,iVar8,local_94 - param_3);
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,iVar8,local_94 - param_3);
                       goto LAB_004ab6b7;
                     case 4:
                       iVar7 = (local_88 - param_3) + 1;
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,local_84 - param_2,iVar7);
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,local_84 - param_2,iVar7);
                       local_8c = local_8c + 1;
                       local_84 = (iVar8 - local_8c) + 1;
                       break;
@@ -228,50 +228,50 @@ undefined4 cls_0x4aaeb0::meth_0x4aaeb0(int param_1, int param_2, int param_3, in
                     case 7:
                       goto switchD_004ab571_caseD_7;
                     case 8:
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,(iVar8 - param_2) + 1,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,(iVar8 - param_2) + 1,
                                     local_94 - param_3);
                       iVar9 = (iVar9 - local_94) + 1;
-                      meth_0x4aaeb0(this,param_1,param_2,local_94,local_84 - param_2,iVar9);
-                      meth_0x4aaeb0(this,param_1,local_8c + 1,local_94,(iVar8 - (local_8c + 1)) + 1,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,local_94,local_84 - param_2,iVar9);
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,local_8c + 1,local_94,(iVar8 - (local_8c + 1)) + 1,
                                     iVar9);
                       goto switchD_004ab571_caseD_f;
                     case 9:
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,(iVar8 - param_2) + 1,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,(iVar8 - param_2) + 1,
                                     local_94 - param_3);
-                      meth_0x4aaeb0(this,param_1,local_8c + 1,local_94,(iVar8 - (local_8c + 1)) + 1,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,local_8c + 1,local_94,(iVar8 - (local_8c + 1)) + 1,
                                     (iVar9 - local_94) + 1);
                       goto switchD_004ab571_caseD_f;
                     case 10:
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,(iVar8 - param_2) + 1,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,(iVar8 - param_2) + 1,
                                     local_94 - param_3);
-                      meth_0x4aaeb0(this,param_1,param_2,local_94,local_84 - param_2,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,local_94,local_84 - param_2,
                                     (iVar9 - local_94) + 1);
                       goto switchD_004ab571_caseD_f;
                     case 0xb:
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,(iVar8 - param_2) + 1,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,(iVar8 - param_2) + 1,
                                     local_94 - param_3);
                       goto switchD_004ab571_caseD_f;
                     case 0xc:
                       iVar9 = (iVar9 - param_3) + 1;
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,local_84 - param_2,iVar9);
-                      meth_0x4aaeb0(this,param_1,local_8c + 1,param_3,(iVar8 - (local_8c + 1)) + 1,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,local_84 - param_2,iVar9);
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,local_8c + 1,param_3,(iVar8 - (local_8c + 1)) + 1,
                                     iVar9);
                       goto switchD_004ab571_caseD_f;
                     case 0xd:
-                      meth_0x4aaeb0(this,param_1,local_8c + 1,param_3,(iVar8 - (local_8c + 1)) + 1,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,local_8c + 1,param_3,(iVar8 - (local_8c + 1)) + 1,
                                     (iVar9 - param_3) + 1);
                       goto switchD_004ab571_caseD_f;
                     case 0xe:
-                      meth_0x4aaeb0(this,param_1,param_2,param_3,local_84 - param_2,
+                      meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,param_3,local_84 - param_2,
                                     (iVar9 - param_3) + 1);
                     default:
                       goto switchD_004ab571_caseD_f;
                     }
-                    meth_0x4aaeb0(this,param_1,local_8c,param_3,local_84,iVar7);
+                    meth_0x4aaeb0_BlitEffect_Apply(this,param_1,local_8c,param_3,local_84,iVar7);
 switchD_004ab571_caseD_7:
                     iVar8 = (iVar8 - param_2) + 1;
 LAB_004ab6b7:
-                    meth_0x4aaeb0(this,param_1,param_2,local_88 + 1,iVar8,
+                    meth_0x4aaeb0_BlitEffect_Apply(this,param_1,param_2,local_88 + 1,iVar8,
                                   (iVar9 - (local_88 + 1)) + 1);
                     goto switchD_004ab571_caseD_f;
                   }

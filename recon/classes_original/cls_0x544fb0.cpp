@@ -76,7 +76,7 @@ void __thiscall OOAnalyzer::cls_0x544fb0::meth_0x544fb0(cls_0x544fb0 *this)
             puStack_70 = (undefined4 *)0x80000000;
             pcStack_74 = (char *)0x501;
             cls_0x419dd0::cls_0x419dd0(&cStack_78);
-            iVar3 = cls_0x5a68d8::meth_0x4be2b0
+            iVar3 = cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
                               ((cls_0x5a68d8 *)this->mbr_0x180,0,0,0x84,1,(char)iVar7,0);
             iVar7 = DAT_0065a9d8;
             iVar4 = iVar3 * *(int *)(iVar4 + 0x50) + 0x5b;
@@ -293,7 +293,7 @@ void __thiscall OOAnalyzer::cls_0x544fb0::meth_0x546830(cls_0x544fb0 *this)
           cls_0x419dd0::cls_0x419dd0(&cStack_88);
           uVar13 = 0;
           uVar3 = cls_0x45f7c0::meth_0x49d800((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310);
-          iVar6 = cls_0x5a68d8::meth_0x4be2b0
+          iVar6 = cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
                             ((cls_0x5a68d8 *)this->mbr_0x180,0,0,0x84,1,uVar3,uVar13);
           iVar6 = iVar6 * *(int *)(local_64 + 0x50) + 0x5b;
           if ((short)this->mbr_0x1a6 <= (short)this->mbr_0x1a4) {
