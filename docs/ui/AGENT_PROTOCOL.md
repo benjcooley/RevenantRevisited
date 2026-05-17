@@ -92,6 +92,34 @@ OOAnalyzer's class recovery is not perfect. Several failure modes you'll encount
 - **Field offsets that imply incompatible struct layouts.** Fields at `mbr_0x10..0x40` for one purpose then `mbr_0x80..0xc0` for an unrelated purpose with no overlap is a hint the offsets came from two different originals.
 - **Vtable slots beyond what the src hierarchy needs.** A pure leaf class shouldn't have 40 virtual slots.
 
+### Sibling rule — static methods + bare functions are commonly MISSING from recon
+
+The opposite of merging: Ghidra's class-tracing **misses** static methods and bare / free functions during its OOAnalyzer pass. They have to be **hand-decompiled via the Ghidra CLI when referenced**, not assumed-present in `recon/classes_*/` or `recon/discovered/`.
+
+**Expect this to be common, not exceptional.** When you hit a reference to `FUN_00XXXXXX` or `meth_0xXXXXXX` and there's no body for it anywhere in the recon tree:
+
+1. **Don't treat it as a dead-end.** It's normal — the function exists in the binary but wasn't picked up by class tracing.
+2. **Extract it on demand** via `DecompileAddr.java`:
+   ```sh
+   /opt/homebrew/Cellar/ghidra/12.0.4/libexec/support/analyzeHeadless \
+     /Users/benjamincooley/projects/RevenantRevisited/RevenantRevisited/data RevenantDev \
+     -process Revenant.exe -noanalysis -readOnly \
+     -scriptPath /Users/benjamincooley/projects/RevenantRevisited/worktrees/ui/recon/ghidra_scripts \
+     -postScript DecompileAddr.java 0x00XXXXXX /tmp/recon_ui/extracted_XXXXXX.cpp
+   ```
+3. **Save the extraction** to `recon/discovered/` following the established naming convention:
+   - If you've identified its class + role: `cls_0xCCCC_TClassName_MethodName_XXXXXX.cpp`
+   - If it's a bare function with identified role: `util_RoleName_XXXXXX.cpp` or `cls_misc_RoleName_XXXXXX.cpp` (see existing `cls_misc_*` and `util_*` files for the pattern)
+   - If purpose unknown yet: `FUN_00XXXXXX.cpp` is acceptable as a placeholder until you can name it
+
+Function types that are commonly missing this way:
+- Pane / screen init wrappers (Wave-1A's pane init functions like FUN_00549740 are likely in this category)
+- C-style free functions in source files (helpers / utilities / format routines)
+- Static methods on classes (C++ static — no `this`, looks like a free function in the binary)
+- Helper functions called from class methods that don't follow `this`-pointer conventions Ghidra recognizes
+
+This is also why the established `discovered/` workflow exists with `util_*` and `cls_misc_*` prefixes — past agents already hit this case repeatedly. Build on the pattern rather than asking "is this missing on purpose?"
+
 ### Disposition when merging suspected
 
 - **Document the suspicion in the brief.** "Candidate identification: `cls_0xXXXX` may correspond to BOTH `TStatPane` AND `TEquipPane` (decomp may have merged them via shared vtable). Evidence for split-not-merged: ..."
