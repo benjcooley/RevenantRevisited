@@ -30,6 +30,7 @@
 #include "revenant.h"     // VK_LEFT, VK_RIGHT, VK_SPACE
 #include "stripeffect.h"  // TStripEffect (S01 SR-pipeline port)
 #include "surface.h"
+#include "testconfig.h"  // StartupVfxId, StartupVfxHideUi
 #include "time.h"
 
 #include <algorithm>
@@ -303,7 +304,28 @@ bool Initialize()
 
     if (!g_state.catalogue.empty())
     {
+        // --vfx=<id> CLI flag: pre-select an effect by id (case-
+        // sensitive match against catalogue entry's id). Falls back
+        // to first alphabetically-sorted entry if no match.
         g_state.active_idx = 0;
+        if (StartupVfxId[0])
+        {
+            bool matched = false;
+            for (int32_t i = 0; i < int32_t(g_state.catalogue.size()); ++i)
+            {
+                if (g_state.catalogue[i].id == StartupVfxId)
+                {
+                    g_state.active_idx = i;
+                    matched = true;
+                    log_info("[vfx] --vfx='%s' matched entry %d",
+                             StartupVfxId, i);
+                    break;
+                }
+            }
+            if (!matched)
+                log_warn("[vfx] --vfx='%s' did not match any entry; "
+                         "using default index 0", StartupVfxId);
+        }
         SpawnActive();
     }
     else
@@ -404,7 +426,8 @@ void Render()
     Renderer->EndTilePass();
     Renderer->RunLightingPass();
 
-    DrawBrowserPanel();
+    if (!StartupVfxHideUi)
+        DrawBrowserPanel();
 }
 
 void HandleKeyPress(int32_t key, bool down)
