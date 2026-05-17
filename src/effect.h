@@ -19,6 +19,7 @@
 #include "object.h"
 #include "sound.h"
 #include "spell.h"
+#include "time.h"   // TTime::LegacyFrameCount() for flipbook 24 Hz gate
 
 bool SaveBlendState();
 bool RestoreBlendState();
