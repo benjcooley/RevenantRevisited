@@ -1984,11 +1984,16 @@ class THaloAnimator : public T3DAnimator
 // both intact). Recon: not extracted (only Teleporter string XREFs at
 // 0x004e6a20 / 0x004e6a40 are visible). Forensics: docs/vfx/M09_FORENSICS.md.
 //
-// Port shape: bespoke FB pipeline + procedural cool-blue-violet glow
-// texture + 5 stacked screen-aligned billboards with the pre-release
-// triangle-wave per-flare envelope. Visual primitive; gameflow wires
-// the actual character SetPos payload separately via GetState() polling
-// of the OUT→MOVE transition. See M09_FORENSICS.md §3, §7.6.
+// Port shape (M09b, real mesh draw): loads the variant's I3D imagery
+// (Magic\teleportation.I3D or Magic\gvortex.I3D), pulls sub-object 1
+// (the cylinder geometry) via ExtractSubMesh, registers it as a single
+// MeshHandle, then stamps it 5x per frame via SubmitHelperMesh in the
+// additive-blended helper pass — pre-release's
+// `for (z=0..4) RenderObject(obj)` loop with rot.z = rotation + z*0.5
+// (radians) and per-flare scale envelope. Visual primitive; gameflow
+// wires the actual character SetPos payload separately via GetPhase()
+// polling of the OUT→MOVE transition. See M09_FORENSICS.md §3, §7.6,
+// and the M09b section for the I3D draw path.
 //
 // Lifecycle: INIT (1 tick) → OUT (50) → MOVE (1, payload) → IN (≤49)
 // at 24 Hz; total ~4.17 s.
@@ -2011,7 +2016,10 @@ class TTeleporterEffect : public TEffect
   public:
     TTeleporterEffect(TObjectImagery* newim) : TEffect(newim) { }
     TTeleporterEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    ~TTeleporterEffect() override = default;
+    // M09b: destructor releases the per-instance entry in the mesh-
+    // binding side table (defined in effect.cpp). Not =default so the
+    // header doesn't drag in the imagery API.
+    ~TTeleporterEffect() override;
 
     void OffScreen() override { KillThisEffect(); }
 
@@ -2019,20 +2027,42 @@ class TTeleporterEffect : public TEffect
     virtual void Pulse();
 
     // Spawn a standalone TTeleporterEffect for the --test=vfx harness.
-    // No imagery lookup — the cylinder-glow texture is built
-    // procedurally (the I3D mesh path is M09b; see M09_FORENSICS.md
-    // §7.2). Constructs a sector-less instance pinned to world
-    // `origin`, stamps a fresh map index, seeds the per-flare position
-    // table from the pre-release Initialize body. Returns nullptr if
-    // the renderer isn't ready. Caller owns the returned pointer and
-    // `delete`s it.
-    [[nodiscard]] static TTeleporterEffect* SpawnForTest(const S3DPoint& origin);
+    // Loads `imagery_path` (default: gvortex.I3D, the Misthaven recall
+    // asset — the user's headline ask) and pulls the cylinder mesh out
+    // for later per-frame stamping. Constructs a sector-less instance
+    // pinned to world `origin`, stamps a fresh map index, seeds the
+    // per-flare position table from the pre-release Initialize body.
+    // Returns nullptr if the renderer isn't ready or the imagery can't
+    // be loaded. Caller owns the returned pointer and `delete`s it.
+    [[nodiscard]] static TTeleporterEffect* SpawnForTest(
+        const S3DPoint& origin,
+        const char* imagery_path = "Magic\\gvortex.I3D");
 
-    // Per-frame tick + submit for the harness; mirrors L02 / F03.
-    // Sim-tick-gated (24 Hz) advance of the OUT→IN envelope, then one
-    // screen-aligned additive billboard per visible flare. Self-killed
-    // when animator life >= 100 ticks (pre-release effect_old.cpp:5818).
-    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+    // Per-frame sim-tick advance: drains the 24 Hz sim accumulator into
+    // pre-release Animate kinematics (rotation, iteration morph, p[i]
+    // squeeze) and ticks Pulse() for the phase state machine. Called
+    // first each frame by the harness, before the tile pass opens.
+    void TickForTest();
+
+    // Per-frame mesh submission. Stamps the loaded I3D cylinder asset
+    // 5x with per-flare rot.z + scale (the pre-release
+    // `for(z=0..4) RenderObject(obj)` loop), each through
+    // SubmitHelperMesh (additive, double-sided). MUST be called after
+    // Renderer->BeginTilePass — that call clears the
+    // transparent_world_queue which holds pending SubmitHelperMesh
+    // entries. The vfxtest harness routes this through SEffect::
+    // submit_world; see vfxtest.cpp Render() Step 3.
+    void SubmitWorldForTest(EFxDebugMode debug_mode);
+
+    // Convenience wrapper: TickForTest + SubmitWorldForTest in sequence.
+    // Useful for callers that don't care about the tile-pass split (e.g.
+    // headless harness probes). NOT used by the vfxtest browser path
+    // because the tile-pass timing matters there.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode)
+    {
+        TickForTest();
+        SubmitWorldForTest(debug_mode);
+    }
 
     // Phase enum for gameflow's payload coupling. Gameflow polls this
     // and fires its caster->SetPos(destination) on the OUT→MOVE
@@ -2060,7 +2090,7 @@ class TTeleporterEffect : public TEffect
     float   flare_p_z_[5]    = {0,0,0,0,0};
     int32_t iterations_      = 0;    // OUT-phase morph counter (caps at 50)
     int32_t ticks_           = 0;    // render-envelope clock (`% 100` per pre-release)
-    float   rotation_rad_    = 0.0f; // continuous spin, +0.1 / sim tick
+    float   rotation_rad_    = 0.0f; // continuous spin, +0.1 rad / sim tick
 
     // sim-tick gate accumulator (same pattern as F01 / H03 / M05 / L02 / F03).
     double  sim_accum_ms_    = 0.0;

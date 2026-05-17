@@ -62,6 +62,7 @@
 #include "character.h"
 #include "defdoc.h"
 #include "mappane.h"
+#include "meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
 #include "revutils.h"
 #include "logging.h"
 #include "time.h"
@@ -71,7 +72,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -3311,31 +3315,35 @@ void TFireEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 }
 
 // *************************************************************************
-// * TTeleporterEffect — FB-pipeline rotating glow column (M09 Misthaven)  *
+// * TTeleporterEffect — I3D cylinder rotating glow column (M09 Misthaven) *
 // *************************************************************************
 //
 // Per-INVENTORY M09 + docs/vfx/M09_FORENSICS.md (pre-release authoritative
 // — recon not yet extracted, flagged as M09a follow-up; the pre-release
 // body lives at src/effect_old.cpp:5444-5880 intact).
 //
-// What this delivers (Phase B):
+// What this delivers (Phase B + M09b real-mesh upgrade):
 //   1. A real `TTeleporterEffect` instance owning its lifecycle.
 //   2. Pre-release 4-phase state machine (Init→Out→Move→In) running on the
 //      24 Hz sim tick (~4.17 s total).
-//   3. Visual: 5 stacked screen-aligned glow billboards driven by the
-//      pre-release per-flare triangle-wave envelope (see M09_FORENSICS.md
-//      §1, §2). Procedural cool-blue-violet glow texture (matches the
-//      spell.def "LIGHT COLOR 50, 50, 255" Teleport tint).
+//   3. Visual: the real I3D mesh from Magic\gvortex.I3D (Misthaven recall)
+//      or Magic\teleportation.I3D (Teleport variants), pulled at spawn
+//      via meshextract::ExtractSubMesh and stamped 5x per frame via
+//      SubmitHelperMesh (additive helper-mesh pass) — one per "flare" in
+//      the pre-release `for (z=0..4) RenderObject(obj)` loop, with
+//      rot.z = rotation_rad + z * 0.5f (radians) giving each cylinder a
+//      distinct phase offset so their walls beat against each other as
+//      they spin (the source of the shimmer pattern that reads as
+//      "teleport vortex"). Per-flare scale + position morph drives the
+//      grow-then-shrink triangle wave (effect_old.cpp:5838-5860).
 //   4. Payload-coupling hook: GetPhase() returns the live ETeleporterPhase
 //      so gameflow can fire its caster->SetPos(destination) on the
 //      Out→Move transition (M09_FORENSICS.md §7.6 option (a)).
 //
 // What this does NOT deliver (deferred — see forensics):
-//   - Real I3D mesh draw of `Magic\teleportation.I3D` / `gvortex.I3D`
-//     (M09b — comes with the wider mesh-load infra alongside M07/M06/X09).
-//   - Per-spell-variant texture / tint (v1 ships one cool-blue-violet
-//     texture that reads correctly for both player Teleport and
-//     Misthaven recall; the user's headline ask).
+//   - Per-spell-variant tint multiply (v1 uses the I3D's own texture
+//     unchanged; the spell.def LIGHT COLOR multiply lands when the
+//     real spell dispatch path drives variant selection).
 //   - Caster fade timing (M09c — gameflow concern; the harness rig
 //     doesn't route SetFade through its background render path).
 //   - In-game spawn through the spell.def `"Teleporter"` registration
@@ -3352,7 +3360,8 @@ constexpr int32_t kTeleIterationsCap      = 50;   // OUT-phase morph counter (ef
 constexpr int32_t kTeleMidWideningAt      = 25;   // when iter >= 25, p[1]/p[2] expand horizontally
 constexpr float   kTeleMidWideningStep    = 0.5f; // p[1].x +=, p[2].x -= per sim tick
 constexpr float   kTeleVerticalSqueezeStep = 1.0f;// p[3].z -=, p[4].z += per sim tick
-constexpr float   kTeleRotationStep       = 0.1f; // rotation += per sim tick (~95°/s)
+constexpr float   kTeleRotationStep       = 0.1f; // rotation += per sim tick (radians; ~137°/s at 24 Hz)
+constexpr float   kTeleFlarePhaseStep     = 0.5f; // per-flare rot.z offset (radians) — effect_old.cpp:5843
 
 // --- Render envelope (effect_old.cpp:5838-5860) -------------------------
 // Triangle-wave clock: ticks_in_phase < 50 → growing, else mirror-shrink.
@@ -3363,108 +3372,350 @@ constexpr int32_t kTelePhaseClockPeriod   = 100;  // ticks_in_phase = ticks % 10
 constexpr int32_t kTelePhaseHalf          = 50;   // grow vs shrink split point
 constexpr float   kTelePhaseNormalizer    = 30.0f;// (effective_t / 30) in pre-release math
 
-// --- Port-specific scale factors ----------------------------------------
-// Pre-release per-flare scl.xy / scl.z are multipliers on the bound I3D
-// mesh's baseline geometry (cylinder body ~20-40 wu diameter judging
-// from teleportation.I3D's 105KB asset size). For our procedural-
-// billboard stand-in we have no underlying mesh, so the scl values are
-// *world-unit* sizes directly. We multiply by a baseline that reads
-// as "engulfs the caster". CharacterRig calibration: Locke's bbox
-// half-height ≈ 40 wu mesh-space × 3.5 display scale = 140 wu visible
-// half-height (full ~280 wu), bbox width ≈ 80 wu visible. So:
-//   - peak radius (pre-release 2.5 units) → ~150 wu wide column
-//     (= 60 wu/unit × 2.5 units) to engulf bbox width with margin.
-//   - peak height (pre-release 5 units for innermost flare) →
-//     ~280 wu tall (= 56 wu/unit × 5 units) to engulf body height.
-// The CharacterRoot anchor returns inst->Pos() which is the bbox-
-// CENTER (not feet) per the rig's recentre logic at
-// src/vfxtest.cpp:561-563. So our local Z offsets are measured from
-// body center, not from ground.
-constexpr float   kTeleBillboardWuPerUnit = 60.0f; // multiplies pre-release scl.xy
-constexpr float   kTeleHeightWuPerUnit    = 56.0f; // multiplies pre-release scl.z
-constexpr float   kTeleHeightLiftWu       = 0.0f;  // (anchor is bbox center, not floor)
-// Pre-release `p[i].z = 25..65` (±20 envelope around 45) maps to our
-// world wu centered on the caster's body center (z=0 at the
-// CharacterRoot anchor). The full span ±20 pre-release units becomes
-// ±80 wu in our scale (mid-thigh to upper-shoulders on a 280-wu
-// character). Base height 0 = body center (mid-torso).
-constexpr float   kTeleFlareBaseHeightWu   = 0.0f;
-constexpr float   kTeleFlareHeightSpreadWu = 80.0f;
+// Pre-release p[i] base positions are in I3D-imagery local coordinates;
+// the imagery's intrinsic mesh scale defines the world-wu output. To
+// map p[i].x/z (units of ~5..65 in pre-release) into the world space
+// around the caster (anchor = bbox center), we apply a single scalar
+// converter calibrated visually so the 5-cyl stack engulfs Locke's
+// body. The CharacterRig recenters the anchor on bbox center, so our
+// local p_z is measured from body center (z=0 at anchor) — not feet.
+//
+// VFXRIG calibration: the rig draws Locke at 3.5x display scale
+// (see src/vfxtest.cpp:408 `rig.scale = 280/bbox_w`), but
+// CharacterRoot anchor returns inst->Pos() in true world space
+// (un-scaled). For the effect to read at the visual size of the
+// drawn character, both p[i] offsets AND mesh extents must be scaled
+// up to the rig's display scale.
+constexpr float   kTeleRigVisualScale     = 3.5f; // matches src/vfxtest.cpp:408 default rig scale
+constexpr float   kTelePLocalToWu         = 1.0f * kTeleRigVisualScale;
+// Pre-release scl envelope produces scl.xy in 0..6.6 and scl.z in 0..10.
+// These multiply the imagery's intrinsic geometry. The gvortex / teleportation
+// I3D assets have small per-sub-object intrinsic extents (the cyl is
+// authored in tight local-units; with the rig drawn 3.5x display-scaled
+// they need a matching scale-up to read at character size). The pre-
+// release multiplier was designed when characters were drawn at intrinsic
+// 1:1 scale — for our 3.5x rig we apply that factor here.
+constexpr float   kTeleMeshScaleMultiplier = kTeleRigVisualScale;
 
 constexpr int32_t kTeleSimTickMs          = 1000 / 24; // 24 Hz cadence (family-consistent)
 
-// --- Procedural cool-blue-violet cylinder-glow texture ------------------
-// 64x64 RGBA8, premultiplied alpha. Soft-rim "vertical glow strip"
-// gradient: bright at center, fades to transparent at edges. Same
-// shape family as L02 HaloRingTexture / F03 FireScatterTexture
-// (procedural sprite, premul alpha, AdditiveStraight blend pair).
+// --- I3D mesh load + cache for the cylinder ----------------------------
+// One MeshHandle list (sub-objects × texslots) per imagery path. Lazy-
+// loaded on first SpawnForTest; reused across all TTeleporterEffect
+// instances targeting the same variant. Static lifetime — meshes get
+// freed at renderer shutdown when ResetAssetRefCounts runs.
 //
-// Tint chosen to match spell.def's "Teleport" LIGHT COLOR (50,50,255)
-// — a deep cool blue. Slight violet shift toward the rim reads as
-// "arcane magic". Cyan-white core gives the glow a hot center.
-constexpr int32_t kTeleTexPx = 64;
-
-TTextureHandle TeleporterGlowTexture()
+// We extract the full imagery (all sub-objects × all texture slots)
+// rather than only pre-release's `GetObject(1)`. Rationale per
+// M09_FORENSICS.md §M09b: the asset is a composite (gvortex.I3D ships
+// 12 sub-objects — 5 `blast`, 2 `cylinder`, 4 `#$flare`, 1 `box01`
+// pivot — authored to draw together). Pre-release rendered only
+// sub-obj 1 stamped 5×, which produces a tall thin shape — visually
+// inconsistent with the "rotating vortex of cylinders + flares + blasts"
+// shape the asset's geometry telegraphs. We preserve the 5× stamping
+// (each stamp = full asset draw with its own rot.z + scale) since
+// that's the pre-release intent for "5 cylinders rotating at phase
+// offsets" — but each stamp draws the WHOLE asset composite, not one
+// sub-object.
+struct STeleSubMesh
 {
-    if (!Renderer) return kInvalidTexture;
-    constexpr uint64_t kKey = 0x4658544c50000000ull;   // "FXTLP\0\0\0"
+    MeshHandle  handle  = 0;
+    int32_t     objnum  = -1;
+    int32_t     texslot = -1;
+    float       parent_matrix[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+};
 
-    static uint8_t pixels[kTeleTexPx * kTeleTexPx * 4];
+struct STeleMeshAsset
+{
+    std::string             path;
+    std::vector<STeleSubMesh> subs;
+    int32_t                 num_objects = 0;
+    int32_t                 total_verts = 0;
+    int32_t                 total_faces = 0;
+    float                   intrinsic_radius_wu = 1.0f; // half max XY of bbox at scl=1
+    float                   intrinsic_height_wu = 1.0f; // Z extent of bbox at scl=1
+};
 
-    // Endpoints: hot cyan-white core fades to violet-blue rim. Premul
-    // alpha — rgb scales with intensity so AdditiveStraight reads the
-    // tinted contribution cleanly.
-    constexpr float kCoreR = 0.85f, kCoreG = 0.95f, kCoreB = 1.00f;   // cyan-white
-    constexpr float kRimR  = 0.30f, kRimG  = 0.30f, kRimB  = 1.00f;   // deep blue-violet
+std::vector<STeleMeshAsset>& TeleMeshCache()
+{
+    static std::vector<STeleMeshAsset> cache;
+    return cache;
+}
 
-    for (int32_t py = 0; py < kTeleTexPx; ++py)
+// Find existing cached mesh for `path`, or build it. Returns nullptr if
+// the imagery can't be loaded or has no usable sub-object.
+//
+// Per pre-release `obj = GetObject(1)` (effect_old.cpp:5830) we pull
+// sub-object **1** first; if that's empty (assets vary) we fall back to
+// the largest sub-object by face count (M09_FORENSICS.md §M09b/7).
+const STeleMeshAsset* GetOrLoadTeleMesh(const char* path)
+{
+    if (!path || !*path || !Renderer) return nullptr;
+
+    auto& cache = TeleMeshCache();
+    for (const auto& a : cache)
+        if (a.path == path) return &a;
+
+    // The teleporter imageries (gvortex / teleportation / jtele) aren't
+    // referenced by any TObjectClass::AddType, so they're absent from the
+    // FindImagery registry until something asks for them. RegisterImagery
+    // loads the on-disk header and inserts it idempotently (a second call
+    // for the same filename returns the existing id).
+    char path_buf[256];
+    std::strncpy(path_buf, path, sizeof(path_buf) - 1);
+    path_buf[sizeof(path_buf) - 1] = '\0';
+    int32_t img_id = TObjectImagery::FindImagery(path_buf);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(path_buf);
+    if (img_id < 0)
     {
-        for (int32_t px = 0; px < kTeleTexPx; ++px)
-        {
-            const float u  = (float(px) + 0.5f) / float(kTeleTexPx);
-            const float v  = (float(py) + 0.5f) / float(kTeleTexPx);
-            const float dx = u - 0.5f;
-            const float dy = v - 0.5f;
-            const float r  = std::sqrt(dx * dx + dy * dy) * 2.0f;
-
-            // Soft radial falloff: bright core for r<0.25, smooth fade
-            // to alpha=0 by r==0.95, hard cut beyond. Cubic shape on
-            // the inner falloff gives a defined hot center; linear on
-            // the outer keeps the rim soft.
-            float inten;
-            if (r >= 0.95f)
-                inten = 0.0f;
-            else if (r < 0.25f)
-            {
-                const float t = r / 0.25f;
-                inten = 1.0f - 0.20f * (t * t);
-            }
-            else
-                inten = 0.80f * (1.0f - (r - 0.25f) / 0.70f);
-
-            if (inten < 0.0f) inten = 0.0f;
-            if (inten > 1.0f) inten = 1.0f;
-
-            const float tr = r > 1.0f ? 1.0f : r;
-            const float rr = kCoreR + (kRimR - kCoreR) * tr;
-            const float gg = kCoreG + (kRimG - kCoreG) * tr;
-            const float bb = kCoreB + (kRimB - kCoreB) * tr;
-
-            const int32_t idx = (py * kTeleTexPx + px) * 4;
-            pixels[idx + 0] = uint8_t(rr * inten * 255.0f);
-            pixels[idx + 1] = uint8_t(gg * inten * 255.0f);
-            pixels[idx + 2] = uint8_t(bb * inten * 255.0f);
-            pixels[idx + 3] = uint8_t(inten * 255.0f);
-        }
+        log_error("[teleporter] RegisterImagery('%s') failed (asset missing?)", path);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[teleporter] LoadImagery(id=%d '%s') failed", img_id, path);
+        return nullptr;
+    }
+    T3DImagery* img = dynamic_cast<T3DImagery*>(base);
+    if (!img)
+    {
+        log_error("[teleporter] imagery '%s' is not a T3DImagery", path);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
     }
 
-    return Renderer->RegisterTextureAsset(kKey, pixels, sizeof(pixels),
-                                          kTeleTexPx, kTeleTexPx,
-                                          ERendererTextureFormat::RGBA8,
-                                          uint64_t(sizeof(pixels)));
+    const int32_t num_objects = img->NumObjects();
+    if (num_objects <= 0)
+    {
+        log_error("[teleporter] imagery '%s' has 0 sub-objects", path);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Log every sub-object's structure (auditable choice for which got
+    // included).
+    for (int32_t i = 0; i < num_objects; ++i)
+    {
+        const int32_t nf = img->NumObjFaces(i);
+        const int32_t nv = img->NumObjVerts(i);
+        const char* nm = img->GetObjectName(i);
+        log_info("[teleporter]   '%s' sub-obj %d name='%s' verts=%d faces=%d",
+                 path, i, nm ? nm : "(null)", nv, nf);
+    }
+
+    // Log textures so we can audit alpha/chroma-key convention.
+    const int32_t num_textures = img->NumTextures();
+    log_info("[teleporter]   imagery '%s' num_textures=%d num_materials=%d",
+             path, num_textures, img->NumMaterials());
+    for (int32_t t = 0; t < num_textures; ++t)
+    {
+        S3DTex tex = {};
+        img->GetTexture(t, &tex);
+        log_info("[teleporter]     tex[%d]: handle=%u frames=%d "
+                 "w=%u h=%u alphaBitDepth=%u",
+                 t, tex.htexture, tex.numframes,
+                 tex.desc.width, tex.desc.height,
+                 tex.desc.alphaBitDepth);
+    }
+
+    // Pull the asset's parent transform for each sub-object (state 0,
+    // frame 0) so the per-sub-object meshes draw with their authored
+    // relative positions inside our per-flare transform.
+    STeleMeshAsset asset;
+    asset.path        = path;
+    asset.num_objects = num_objects;
+
+    float minx = 1e30f, maxx = -1e30f;
+    float miny = 1e30f, maxy = -1e30f;
+    float minz = 1e30f, maxz = -1e30f;
+    bool bbox_init = false;
+
+    for (int32_t objnum = 0; objnum < num_objects; ++objnum)
+    {
+        if (img->IsHidden(objnum, 0)) continue;
+
+        float parent_matrix[16];
+        BuildStaticObjectMatrix(img, objnum, 0, 0, parent_matrix);
+
+        const int32_t texslots = num_textures + 1;   // +1 for slot 0 (untextured)
+        bool obj_got_any = false;
+        for (int32_t texslot = 0; texslot < texslots; ++texslot)
+        {
+            std::vector<SMeshVertex> verts;
+            std::vector<uint16_t>    indices;
+            if (!ExtractSubMeshTextureSlot(img, objnum, texslot, verts, indices))
+                continue;
+            if (verts.empty() || indices.empty()) continue;
+
+            // Pick the texture: texslot==0 means untextured (use
+            // material if HELPER-style, else white). texslot>=1 maps to
+            // texture index texslot-1.
+            TTextureHandle albedo = Renderer->WhiteTextureHandle();
+            if (texslot > 0 && texslot - 1 < num_textures)
+            {
+                S3DTex tex = {};
+                img->GetTexture(texslot - 1, &tex);
+                if (tex.htexture != kInvalidTexture) albedo = tex.htexture;
+            }
+            else if (texslot == 0)
+            {
+                // Untextured slot — try material color via S3DObj.material.
+                S3DObj o = {};
+                img->GetObject(objnum, &o);
+                if (o.material >= 0 && o.material < img->NumMaterials())
+                {
+                    S3DMat mat = {};
+                    img->GetMaterial(o.material, &mat);
+                    if (mat.texture >= 0 && mat.texture < num_textures)
+                        albedo = img->GetTextureHandle(mat.texture);
+                }
+            }
+
+            const MeshHandle h = Renderer->RegisterMesh(
+                verts.data(), int32_t(verts.size()),
+                indices.data(), int32_t(indices.size()),
+                albedo);
+            if (!h)
+            {
+                log_warn("[teleporter] RegisterMesh failed for '%s' sub-obj "
+                         "%d texslot %d (%zu verts, %zu indices)",
+                         path, objnum, texslot,
+                         verts.size(), indices.size());
+                continue;
+            }
+
+            STeleSubMesh sub;
+            sub.handle  = h;
+            sub.objnum  = objnum;
+            sub.texslot = texslot;
+            std::memcpy(sub.parent_matrix, parent_matrix,
+                        sizeof(sub.parent_matrix));
+            asset.subs.push_back(sub);
+            asset.total_verts += int32_t(verts.size());
+            asset.total_faces += int32_t(indices.size() / 3);
+            obj_got_any = true;
+
+            // Update bbox using the parent-transformed verts.
+            for (const auto& v : verts)
+            {
+                const float x = v.pos[0], y = v.pos[1], z = v.pos[2];
+                const float wx = parent_matrix[0]*x + parent_matrix[1]*y + parent_matrix[2] *z + parent_matrix[3];
+                const float wy = parent_matrix[4]*x + parent_matrix[5]*y + parent_matrix[6] *z + parent_matrix[7];
+                const float wz = parent_matrix[8]*x + parent_matrix[9]*y + parent_matrix[10]*z + parent_matrix[11];
+                if (!bbox_init) {
+                    minx = maxx = wx; miny = maxy = wy; minz = maxz = wz;
+                    bbox_init = true;
+                } else {
+                    minx = std::fmin(minx, wx); maxx = std::fmax(maxx, wx);
+                    miny = std::fmin(miny, wy); maxy = std::fmax(maxy, wy);
+                    minz = std::fmin(minz, wz); maxz = std::fmax(maxz, wz);
+                }
+            }
+        }
+        (void)obj_got_any;
+    }
+
+    if (asset.subs.empty())
+    {
+        log_error("[teleporter] '%s' produced no submittable sub-meshes "
+                  "(num_objects=%d num_textures=%d)",
+                  path, num_objects, num_textures);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    asset.intrinsic_radius_wu = bbox_init
+        ? 0.5f * std::fmax(maxx - minx, maxy - miny)
+        : 1.0f;
+    asset.intrinsic_height_wu = bbox_init ? (maxz - minz) : 1.0f;
+    cache.push_back(std::move(asset));
+
+    // Free the loaded imagery — RegisterMesh has already uploaded the
+    // verts to GPU buffers and the texture handles are renderer-owned.
+    TObjectImagery::FreeImagery(base);
+
+    const STeleMeshAsset& a = cache.back();
+    log_info("[teleporter] loaded '%s' num_objects=%d submeshes=%zu "
+             "total_verts=%d total_faces=%d "
+             "intrinsic_radius=%.1f intrinsic_height=%.1f",
+             path, a.num_objects, a.subs.size(),
+             a.total_verts, a.total_faces,
+             double(a.intrinsic_radius_wu), double(a.intrinsic_height_wu));
+    return &a;
+}
+
+// Per-effect mesh binding. Held in a side table keyed by effect ptr
+// rather than as a TTeleporterEffect member to keep the header
+// imagery-API-free. (Same lookup pattern as ParticleEffectComponent's
+// bucket binding.)
+struct STeleBinding
+{
+    const STeleMeshAsset* asset = nullptr;
+};
+std::unordered_map<const TTeleporterEffect*, STeleBinding>& TeleBindings()
+{
+    static std::unordered_map<const TTeleporterEffect*, STeleBinding> bindings;
+    return bindings;
+}
+
+// Row-major 4x4 multiply: out = a * b.
+void MatMul16Local(const float a[16], const float b[16], float out[16])
+{
+    for (int32_t r = 0; r < 4; ++r)
+        for (int32_t c = 0; c < 4; ++c)
+        {
+            float s = 0.0f;
+            for (int32_t k = 0; k < 4; ++k)
+                s += a[r * 4 + k] * b[k * 4 + c];
+            out[r * 4 + c] = s;
+        }
+}
+
+// Compose a row-major 4x4 affine matrix:
+//   M = T(tx, ty, tz) * Rz(theta) * S(sx, sy, sz)
+// stored in the renderer's row-major convention (translation in
+// out16[3]/[7]/[11], affine rotation+scale in upper-3×3 row blocks).
+void ComposeFlareMatrix(float tx, float ty, float tz,
+                        float theta_rad,
+                        float sx, float sy, float sz,
+                        float out16[16])
+{
+    const float c = std::cos(theta_rad);
+    const float s = std::sin(theta_rad);
+
+    // Row 0: ( c*sx, -s*sy, 0, tx )
+    out16[0]  = c * sx;
+    out16[1]  = -s * sy;
+    out16[2]  = 0.0f;
+    out16[3]  = tx;
+    // Row 1: ( s*sx,  c*sy, 0, ty )
+    out16[4]  = s * sx;
+    out16[5]  = c * sy;
+    out16[6]  = 0.0f;
+    out16[7]  = ty;
+    // Row 2: ( 0, 0, sz, tz )
+    out16[8]  = 0.0f;
+    out16[9]  = 0.0f;
+    out16[10] = sz;
+    out16[11] = tz;
+    // Row 3: ( 0, 0, 0, 1 )
+    out16[12] = 0.0f;
+    out16[13] = 0.0f;
+    out16[14] = 0.0f;
+    out16[15] = 1.0f;
 }
 
 }   // namespace
+
+TTeleporterEffect::~TTeleporterEffect()
+{
+    // Release the per-instance entry in the mesh-binding side table.
+    // The cached STeleMeshAsset itself is process-static and shared
+    // across instances; we don't free it here.
+    TeleBindings().erase(this);
+}
 
 void TTeleporterEffect::Initialize()
 {
@@ -3532,24 +3783,44 @@ void TTeleporterEffect::Pulse()
     }
 }
 
-TTeleporterEffect* TTeleporterEffect::SpawnForTest(const S3DPoint& origin)
+TTeleporterEffect* TTeleporterEffect::SpawnForTest(const S3DPoint& origin,
+                                                   const char* imagery_path)
 {
     if (!Renderer)
     {
         log_error("[teleporter] SpawnForTest: renderer not initialized");
         return nullptr;
     }
+    if (!imagery_path || !*imagery_path)
+    {
+        log_error("[teleporter] SpawnForTest: null/empty imagery_path");
+        return nullptr;
+    }
 
-    // No imagery — the cylinder-glow texture is procedural (M09_FORENSICS
-    // §7.2). Same pattern as L02 halo / F03 fire / X17 flare.
+    // Load (or fetch cached) the I3D cylinder mesh. This must succeed —
+    // M09b explicitly rejects any procedural fallback per
+    // M09_FORENSICS.md §M09b. If the asset can't be loaded we surface a
+    // clear failure and the harness draws nothing for this slot.
+    const STeleMeshAsset* asset = GetOrLoadTeleMesh(imagery_path);
+    if (!asset)
+    {
+        log_error("[teleporter] SpawnForTest: mesh load failed for '%s'; "
+                  "no procedural fallback per M09b — effect will not draw",
+                  imagery_path);
+        return nullptr;
+    }
+
     auto* tele = new TTeleporterEffect(static_cast<TObjectImagery*>(nullptr));
     tele->ForcePos(origin);
     tele->SetMapIndex(MapPane.MakeIndex());
     tele->ActivateComponents();
 
     // Seed per-flare position table from pre-release Initialize
-    // (effect_old.cpp:5770-5779). Y is unused in our 2D-on-XZ envelope
-    // (we only consume p_x_ and p_z_); kept off the struct.
+    // (effect_old.cpp:5770-5779). Y is unused in our XZ envelope (we
+    // only consume p_x_ and p_z_); pre-release p[i].y = 20 is just the
+    // base height the imagery is positioned at relative to the
+    // effect's origin; with our anchor convention this is folded into
+    // kTeleHeightLiftWu.
     for (int32_t i = 0; i < kTeleFlares; ++i)
         tele->flare_p_z_[i] = 45.0f;   // base height in pre-release units
     tele->flare_p_x_[0] = 0.0f;
@@ -3564,26 +3835,24 @@ TTeleporterEffect* TTeleporterEffect::SpawnForTest(const S3DPoint& origin)
     tele->ticks_ = 0;
     tele->rotation_rad_ = 0.0f;
 
-    // Pre-register the texture so the first frame's submit doesn't pay
-    // the bake cost (~16KB).
-    const TTextureHandle tex = TeleporterGlowTexture();
-    if (tex == kInvalidTexture)
-    {
-        log_warn("[teleporter] SpawnForTest: glow texture register failed; "
-                 "M09 will draw nothing");
-    }
+    // Bind the loaded mesh to this effect instance.
+    TeleBindings()[tele].asset = asset;
 
     log_info("[teleporter] SpawnForTest: map_index=%d origin=(%d,%d,%d) "
-             "flares=%d tex=%u",
+             "flares=%d imagery='%s' submeshes=%zu "
+             "intrinsic_radius=%.1f intrinsic_height=%.1f",
              tele->GetMapIndex(),
              origin.x, origin.y, origin.z,
-             kTeleFlares, tex);
+             kTeleFlares, imagery_path,
+             asset->subs.size(),
+             double(asset->intrinsic_radius_wu),
+             double(asset->intrinsic_height_wu));
     return tele;
 }
 
-void TTeleporterEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+void TTeleporterEffect::TickForTest()
 {
-    if (!alive_ || !Renderer)
+    if (!alive_)
         return;
 
     // 24 Hz sim-tick gate. Pre-release Animate (effect_old.cpp:5787-5820)
@@ -3626,37 +3895,21 @@ void TTeleporterEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         // rate gated to sim-rate by the engine's own gates.)
         Pulse();
     }
+}
 
-    if (!alive_)
+void TTeleporterEffect::SubmitWorldForTest(EFxDebugMode /*debug_mode*/)
+{
+    if (!alive_ || !Renderer)
         return;
 
-    const TTextureHandle tex = TeleporterGlowTexture();
-    if (tex == kInvalidTexture)
+    // Resolve the per-effect mesh binding. No mesh → nothing to draw.
+    auto it = TeleBindings().find(this);
+    if (it == TeleBindings().end() || !it->second.asset)
         return;
+    const STeleMeshAsset& asset = *it->second.asset;
+    if (asset.subs.empty()) return;
 
     const S3DPoint& p = Pos();
-
-    // Build the per-frame billboard template once; per-flare fields
-    // are overwritten in the loop below.
-    SBillboardDrawItem item = {};
-    item.color_rgba[0] = 1.0f;     // tint lives in the texture (premultiplied)
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.uv_rect[0] = 0.0f;
-    item.uv_rect[1] = 0.0f;
-    item.uv_rect[2] = 1.0f;
-    item.uv_rect[3] = 1.0f;
-    item.key.texture     = tex;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    // M09_FORENSICS.md §4: AdditiveStraight against the procedural
-    // premul-alpha glow texture. Pre-release used D3D Alpha blend; the
-    // divergence is justified there (matches L02 halo / F03 fire).
-    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.light_mode      = EFxLightMode::Unlit;   // glow is its own light source
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
 
     // Pre-release render envelope (effect_old.cpp:5838-5860). The
     // triangle-wave clock + per-flare radius/height/spin formulas.
@@ -3666,57 +3919,115 @@ void TTeleporterEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
                                 : (kTelePhaseHalf - (curticks - kTelePhaseHalf));
     const float   t_norm = float(effective_t) / kTelePhaseNormalizer;
 
-    // Render 5 stacked screen-aligned glow billboards. The pre-release
-    // rotation around Z is INVISIBLE to a screen-aligned billboard
-    // (the cylinder's silhouette doesn't change when it spins about its
-    // Z axis from a fixed camera angle), so we don't bake it into the
-    // billboard. The visible shimmer in pre-release came from the
-    // *texture* moving on the cylinder walls as the cylinder rotated;
-    // we approximate that by per-flare phase offset on the radius
-    // formula via the `0.5 * z_index` baked-in scale, which still
-    // produces visible per-flare size variation that reads as
-    // "shimmering layers" against the static glow texture.
+    // For helper-mesh sort_depth we use the effect's own world Z
+    // (smaller = drawn earlier). The 5 stamps share the same anchor;
+    // we offset their sort depths by per-flare z_index so the outermost
+    // (widest, shortest) sits behind the innermost.
+    const float base_sort_depth = float(p.z);
+
+    // Render 5 stacked textured cylinders. The pre-release per-flare
+    // rotation around Z gives each cylinder a distinct phase offset
+    // (0.5 rad ≈ 29° between adjacent stamps); their textured walls
+    // visibly cross each other as they spin, producing the shimmer
+    // pattern that defines the teleport vortex visual.
     for (int32_t z = 0; z < kTeleFlares; ++z)
     {
         const float zf = float(z);
 
-        // Pre-release line 5844: per-cyl height (z-axis scale of cyl
-        // mesh in retail; vertical billboard size here).
+        // Pre-release line 5844: per-cyl height (z-axis scale).
         const float scl_z_units = 10.0f - 5.0f * t_norm - zf;
         if (scl_z_units <= 0.01f)
             continue;   // pre-release cull (effect_old.cpp:5846)
 
-        // Pre-release line 5845: per-cyl radius (x/y scale of cyl
-        // mesh in retail; horizontal billboard size here).
+        // Pre-release line 5845: per-cyl radius (x/y scale).
         const float scl_xy_units = (0.5f * zf) + 2.5f * t_norm;
 
-        const float w_wu = scl_xy_units * kTeleBillboardWuPerUnit;
-        const float h_wu = scl_z_units  * kTeleHeightWuPerUnit;
+        // Pre-release line 5843: per-flare rotation, radians.
+        const float theta_rad = rotation_rad_ + zf * kTeleFlarePhaseStep;
 
-        // Place each flare at its per-flare position offset (pre-release
-        // p[i]). p_z_[i] is in pre-release units; map to world wu via
-        // the same proportions as the height scale.
-        const float local_height_pre = flare_p_z_[z] - 45.0f;     // ±20 envelope
-        const float local_height_wu  = (local_height_pre / 20.0f) * kTeleFlareHeightSpreadWu
-                                       + kTeleFlareBaseHeightWu;
-        // p_x_[z] expands ±5 units during the OUT phase (per the
-        // mid-widening morph at iteration>=25). Map ±5 units → ±60 wu
-        // in our scale so the column visibly thickens at peak.
-        const float local_x_wu       = flare_p_x_[z] * (kTeleBillboardWuPerUnit / 5.0f);
+        // Per-flare local position offset (pre-release p[i] in
+        // imagery-local units). Map to world wu via kTelePLocalToWu.
+        // The p[i].z=45 base is the imagery's mounting height in
+        // pre-release; we treat that as the anchor itself (subtract 45)
+        // so the column sits centred on the anchor. The ±20 z-spread
+        // of p[3]/p[4] then maps directly to vertical offset above/
+        // below the anchor.
+        const float local_x_wu = flare_p_x_[z] * kTelePLocalToWu;
+        const float local_z_wu = (flare_p_z_[z] - 45.0f) * kTelePLocalToWu;
 
-        item.world_pos[0] = float(p.x) + local_x_wu;
-        item.world_pos[1] = float(p.y);
-        item.world_pos[2] = float(p.z) + local_height_wu + kTeleHeightLiftWu;
-        item.size_wu[0]   = w_wu;
-        item.size_wu[1]   = h_wu;
+        // Scale: pre-release scl values multiply imagery intrinsic
+        // geometry. kTeleMeshScaleMultiplier is a global tuning knob
+        // (=1 unless asset reads small/large).
+        const float sx = scl_xy_units * kTeleMeshScaleMultiplier;
+        const float sy = sx;
+        const float sz = scl_z_units  * kTeleMeshScaleMultiplier;
 
-        // Per-flare alpha tint: slightly dimmer flares at the edges of
-        // the stack add depth without losing the bright core. Also
-        // keeps the AdditiveStraight blend from saturating into a flat
-        // white at peak.
-        const float alpha_mult = 1.0f - 0.10f * zf;
-        item.color_rgba[3] = alpha_mult;
+        // Per-flare world transform: T(anchor + local) * Rz(theta) * S(sx,sy,sz).
+        // We compose this once per flare; each sub-mesh of the asset is
+        // then drawn at flare_transform * parent_matrix.
+        float flare_w[16];
+        ComposeFlareMatrix(
+            float(p.x) + local_x_wu,
+            float(p.y),
+            float(p.z) + local_z_wu,
+            theta_rad,
+            sx, sy, sz,
+            flare_w);
 
-        Renderer->SubmitFxBillboard(item);
+        for (const auto& sub : asset.subs)
+        {
+            float world[16];
+            MatMul16Local(flare_w, sub.parent_matrix, world);
+
+            SHelperMeshSubmit m = {};
+            m.mesh           = sub.handle;
+            m.additive_blend = true;   // M09_FORENSICS.md §M09b: additive helper-mesh pass
+            m.shadow_plane   = false;
+            std::memcpy(m.world, world, sizeof(world));
+
+            // Helper-mesh shader: final color = base * (ambient + light * ndl)
+            // + specular + emissive. For an additive glow we want pure
+            // emissive (no scene-light dependency, no specular).
+            // diffuse=1 keeps the texture's RGB; emissive boosts the
+            // overall brightness; ambient=0 + specular=0 keeps the
+            // glow self-luminant.
+            //
+            // Tint comes from the imagery's own texture (the cylinder
+            // wall texture in teleportation.I3D / gvortex.I3D is
+            // already a colored glow); we don't apply a
+            // spell-LIGHT-COLOR multiply here — that's the in-game
+            // spell-dispatch path's job (out of scope for the VFX
+            // primitive).
+            // Helper-mesh FS: col = base*(amb*la.w + lcol*li.w*ndl)
+            //                       + spec*spec*li.w + emissive,
+            // where base = tex.rgb * diffuse.rgb.
+            // For unlit additive glow we want col = tex.rgb * tint.
+            // Setting diffuse=1 + emissive=tint (with ambient=specular=0)
+            // gives: col = 0 + 0 + emissive = emissive (lighting-
+            // independent constant color). To preserve some texture
+            // RGB variation we ALSO route through ambient: ambient.rgb
+            // multiplies base by `light_col_a.w` (scene ambient
+            // intensity, ~0.2-0.4 in default rig lighting).
+            //
+            // Per-flare alpha attenuation: outer flares (higher z_index)
+            // dimmer so the additive accumulation doesn't saturate to
+            // flat white at peak. Pre-release used D3D alpha blending
+            // where this was implicit; our additive needs explicit
+            // attenuation.
+            const float fade = 0.40f - 0.06f * zf;
+            m.diffuse[0]  = 1.0f; m.diffuse[1]  = 1.0f; m.diffuse[2]  = 1.0f; m.diffuse[3]  = 1.0f;
+            m.ambient[0]  = fade; m.ambient[1]  = fade; m.ambient[2]  = fade; m.ambient[3]  = 1.0f;
+            m.specular[0] = 0.0f; m.specular[1] = 0.0f; m.specular[2] = 0.0f; m.specular[3] = 0.0f;
+            // Slight cool-blue emissive baseline so the mesh reads as
+            // "magic vortex" tint even where the texture rgb is dark.
+            m.emissive[0] = 0.10f; m.emissive[1] = 0.15f; m.emissive[2] = 0.25f; m.emissive[3] = 1.0f;
+            m.power       = 1.0f;
+            // Sort: stamp ordering by per-flare z_index (back-to-front
+            // for clean additive layering); sub-meshes within a flare
+            // are insertion-ordered, fine since additive is commutative.
+            m.sort_depth  = base_sort_depth + zf * 0.001f;
+
+            Renderer->SubmitHelperMesh(m);
+        }
     }
 }
