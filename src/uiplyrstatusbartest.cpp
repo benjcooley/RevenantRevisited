@@ -67,10 +67,15 @@ constexpr int32_t kBarStaminaAtlasY = 32;
 
 // Per-bar destination Y inside the BackPanel.
 constexpr int32_t kBarRowPitch  = 14;
-constexpr int32_t kBarSlotY0    = 4;    // first bar row Y inside panel
+constexpr int32_t kBarSlotY0    = 6;    // first bar row Y inside panel
 
-// Bar fill starts here (after icon).
-constexpr int32_t kBarFillX     = 28;
+// Portrait Ring (44x44) sits on the left side of the panel. Bars start
+// after the Ring with a small gap; icons overlap the bars' left edge.
+constexpr int32_t kRingX        = 2;     // Ring offset within panel
+constexpr int32_t kRingY        = 10;
+constexpr int32_t kPortraitX    = 9;     // LockeFace inside Ring
+constexpr int32_t kPortraitY    = 17;
+constexpr int32_t kBarFillX     = 50;    // bars right of Ring
 
 class TPlyrStatusBarRealHud : public THudDrawable
 {
@@ -103,9 +108,10 @@ public:
 
         // Portrait: Ring frame then LockeFace inside it
         if (g_ring)
-            Renderer->DrawBitmap(g_ring, kPanelX + 2, kPanelY + 10);
+            Renderer->DrawBitmap(g_ring, kPanelX + kRingX, kPanelY + kRingY);
         if (g_lockeFace)
-            Renderer->DrawBitmap(g_lockeFace, kPanelX + 9, kPanelY + 17);
+            Renderer->DrawBitmap(g_lockeFace, kPanelX + kPortraitX,
+                                 kPanelY + kPortraitY);
     }
 
 private:
