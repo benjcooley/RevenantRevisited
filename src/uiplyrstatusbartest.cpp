@@ -59,7 +59,11 @@ constexpr int32_t kPanelX = 4;
 constexpr int32_t kPanelY = 4;
 
 // Bars atlas row layout — measured from /tmp/dump_statusbar3/01_Bars.png.
-constexpr int32_t kBarAtlasW       = 128;
+// Atlas itself is 128px wide, but the retail bar render uses a clamped
+// width (per slot 23 args 0x77=119 / 0x4d=77 / 0x35=53 which are likely
+// max-fill widths per stat). Use the shorter visible width.
+constexpr int32_t kBarAtlasW       = 128;     // full atlas width (for subrect math)
+constexpr int32_t kBarMaxW         = 0x77;    // 119 — visible bar max width per recon arg
 constexpr int32_t kBarRowH         = 12;
 constexpr int32_t kBarHealthAtlasY = 0;
 constexpr int32_t kBarManaAtlasY   = 16;
@@ -125,8 +129,8 @@ public:
         const float targetS = 0.30f + 0.05f * float(std::sin(t * 1.7 + 2.5));
 
         // === LEFT (player) ===
-        // BackPanel chrome at panel origin (0,0 in pane coords).
-        Renderer->DrawBitmap(g_backPanel, kPanelX, kPanelY);
+        // No BackPanel blit — TPlyrStatusBar's recon bodies don't
+        // reference BackPanel anywhere; that asset is dead/unused.
         DrawBar(false, kBarHealthAtlasY,  0, playerH);
         DrawBar(false, kBarManaAtlasY,    1, playerM);
         DrawBar(false, kBarStaminaAtlasY, 2, playerS);
@@ -147,8 +151,9 @@ public:
             // Right-edge X for the backdrop chrome: mirror the LEFT pane
             // position. The retail BackPanel is the same bitmap drawn at
             // (pane_width - panel_w) for the right side.
-            const int32_t rightPanelX = paneW - kPanelX - g_backPanel->width;
-            Renderer->DrawBitmap(g_backPanel, rightPanelX, kPanelY);
+            // No BackPanel blit (see note above).
+            const int32_t rightPanelX = paneW - kPanelX - 128;  // approximate panel right-edge anchor
+            (void)rightPanelX;
             DrawBar(true, kBarHealthAtlasY,  0, targetH);
             DrawBar(true, kBarManaAtlasY,    1, targetM);
             DrawBar(true, kBarStaminaAtlasY, 2, targetS);
@@ -157,11 +162,11 @@ public:
             DrawIcon(true, g_fatigueIcon, 2);
             if (g_ring)
                 Renderer->DrawBitmap(g_ring,
-                    rightPanelX + (g_backPanel->width - g_ring->width - kRingX),
+                    paneW - kPanelX - g_ring->width - kRingX,
                     kPanelY + kRingY);
             if (g_lockeFace)
                 Renderer->DrawBitmap(g_lockeFace,
-                    rightPanelX + (g_backPanel->width - g_lockeFace->width - kPortraitX),
+                    paneW - kPanelX - g_lockeFace->width - kPortraitX,
                     kPanelY + kPortraitY);
         }
     }
@@ -171,23 +176,22 @@ private:
     {
         if (!g_bars) return;
         const int32_t paneW = Display.Width();
-        // LEFT: bar X = kBarFillX (68). RIGHT: bar X = paneW - kTargetBarOff[row].
         const int32_t dstX = isRight
             ? paneW - kTargetBarOff[row]
             : kPanelX + kBarFillX;
         const int32_t dstY = kPanelY + kBarRowY[row];
         const float clamped = level < 0.0f ? 0.0f : (level > 1.0f ? 1.0f : level);
-        const int32_t filled = int32_t(float(kBarAtlasW) * clamped);
+        // Bar visible width is kBarMaxW (119 per recon arg), NOT the full
+        // 128 atlas width. Clip the fill at level * kBarMaxW.
+        const int32_t filled = int32_t(float(kBarMaxW) * clamped);
         if (filled > 0)
         {
             if (isRight)
             {
-                // Mirror fill: target bars deplete TOWARD the screen
-                // edge (right). Blit from the right side of the atlas
-                // row so the visible portion ends at the bar's right
-                // edge, not the left.
+                // Right bars deplete toward screen edge. Blit from the
+                // right side of the atlas row.
                 Renderer->DrawBitmapSubrect(g_bars,
-                    dstX + (kBarAtlasW - filled), dstY,
+                    dstX + (kBarMaxW - filled), dstY,
                     kBarAtlasW - filled, atlasY, filled, kBarRowH);
             }
             else
@@ -211,7 +215,7 @@ private:
             ? paneW - kTargetBarOff[row]
             : kPanelX + kBarFillX;
         const int32_t ix = isRight
-            ? barX + kBarAtlasW - icon->width / 2   // icon's right half at bar's right end
+            ? barX + kBarMaxW - icon->width / 2     // icon's right half at bar's right end
             : barX - icon->width + icon->width / 3; // icon's right ~2/3 at bar's start
         const int32_t iy = kPanelY + kBarRowY[row]
                            + kBarRowH / 2 - icon->height / 2;
