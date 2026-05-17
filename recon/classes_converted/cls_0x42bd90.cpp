@@ -6,7 +6,7 @@
 
 // Function at 0042bd90
 
-undefined4 cls_0x42bd90::meth_0x42bd90(cls_0x42bd90 *param_1, int *param_2)
+undefined4 cls_0x42bd90::meth_0x42bd90_DefWidget_BUTTON_attr_parser(cls_0x42bd90 *param_1, int *param_2)
 
 {
   bool bVar1;

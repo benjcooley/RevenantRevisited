@@ -152,7 +152,7 @@ cls_0x5a3d44::cls_0x5a3d44 *this,int *param_1,cls_0x41c7f0 *param_2)
         puVar6 = &DAT_00655b48;
       }
     }
-    iVar7 = cls_0x42f9f0::meth_0x42f9f0((cls_0x42f9f0 *)&this->mbr_0xd8,puVar6,piVar4);
+    iVar7 = cls_0x42f9f0::meth_0x42f9f0_DefWidget_LISTBOX_attr_parser((cls_0x42f9f0 *)&this->mbr_0xd8,puVar6,piVar4);
     if (iVar7 != 0) {
       pdVar2 = (dword *)this->mbr_0xd8;
       if (pdVar2 != (dword *)0x0) {

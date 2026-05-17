@@ -50,7 +50,7 @@ Length: 120 Alignment: 1
 /* WARNING: Removing unreachable block (ram,0x0042fb4a) */
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x42f9f0::meth_0x42f9f0(cls_0x42f9f0 *this,cls_0x42f9f0 *param_1,int *param_2)
+OOAnalyzer::cls_0x42f9f0::meth_0x42f9f0_DefWidget_LISTBOX_attr_parser(cls_0x42f9f0 *this,cls_0x42f9f0 *param_1,int *param_2)
 
 {
   bool bVar1;
@@ -197,7 +197,7 @@ LAB_0042fc04:
       uVar2 = (**(code **)(*param_2 + 0x9c))(s_SCROLLBAR_005cd600);
       return uVar2;
     }
-    iVar4 = cls_0x42d730::meth_0x42d730((cls_0x42d730 *)&this->mbr_0x74,0,param_2);
+    iVar4 = cls_0x42d730::meth_0x42d730_DefWidget_FRAME_attr_parser((cls_0x42d730 *)&this->mbr_0x74,0,param_2);
     if (iVar4 == 0) {
       return 0;
     }

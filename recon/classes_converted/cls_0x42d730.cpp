@@ -10,7 +10,7 @@
 /* WARNING: Removing unreachable block (ram,0x0042d838) */
 /* WARNING: Removing unreachable block (ram,0x0042d83a) */
 
-undefined4 cls_0x42d730::meth_0x42d730(cls_0x42d730 *param_1, int *param_2)
+undefined4 cls_0x42d730::meth_0x42d730_DefWidget_FRAME_attr_parser(cls_0x42d730 *param_1, int *param_2)
 
 {
   char cVar1;

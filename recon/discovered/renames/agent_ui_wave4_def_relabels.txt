@@ -1,0 +1,80 @@
+# Agent: Wave-4C — Wave-2C "widget ctor" → "attr_parser" relabels
+# Date: 2026-05-17
+#
+# Mission (4C.2): Wave-2C labelled seven functions as widget constructors
+# (per the agent_ui_wave2_defengine.txt brief, lines 116-124 in the
+# architecture diagram). Wave-3C flagged these as misnamed -- they are
+# style-ATTRIBUTE PARSERS, not class constructors -- but did not relabel
+# them, per the "don't contradict prior renames without coordination" rule.
+# This wave IS the coordination: I have now pinned the TRUE ctors (see
+# agent_ui_wave4_def_widget_ctors.txt) and can confidently relabel.
+#
+# History preservation: the Wave-2 rename file is NOT modified or deleted;
+# its `ctor` labels remain in git history. This file supplies the new pair
+# (post-Wave-2-name -> Wave-4-corrected-name) to be applied next.
+#
+# ============================================================================
+# Verification methodology
+# ============================================================================
+# For each function, I extracted the body via DecompileAddr.java and checked:
+#   (a) Does it write `*this = &PTR_FUN_005a3xxx` (a per-class instance
+#       vtable)? If yes -> ctor. If no -> not a ctor.
+#   (b) Does it call FUN_0042a350 (the parse-time TWidget base init) or
+#       FUN_0042a210 (the programmatic variant)? If yes -> ctor.
+#   (c) Does it have the signature `(state_struct*, src_state_struct*,
+#       pane*, token)` and call FUN_00479700 (token-lookup) + FUN_0047a410
+#       (token-parse)? If yes -> attr parser (sub-block parser).
+#
+# All 6 functions below failed (a) AND (b), and passed (c). They are
+# definitively style/attribute parsers, not widget class constructors.
+# (FUN_0042aaf0 = BITMAP attr_parser was already correctly named by
+# Wave-3C in its discovered/ file; no rename needed -- only the wave-2
+# file's `_BITMAP` ctor label persists.)
+#
+# ============================================================================
+# Relabels
+# ============================================================================
+#
+# Each function parses the attribute set for its named widget. The "widget"
+# clue in the Wave-2C name was right; only the "_ctor" or implicit-ctor role
+# is wrong. New suffix uses `attr_parser` to match the existing
+# `FUN_0042aaf0_BITMAP_attr_parser.cpp` discovered-file convention (already
+# in the tree).
+#
+# TEXT attr parser -- 644 bytes; parses BGBITMAP / DRAWMODE / RECT / COLOR
+# fields for the TEXT widget. Signature `(out_state, in_state, pane, token)`.
+# No vtable write; called from within the TEXT widget's ParseBody (vtable+4).
+# Wave-2C labelled this "TEXT widget ctor"; corrected.
+FUN_0042b340|FUN_0042b340_DefWidget_TEXT_attr_parser
+meth_0x42b340|meth_0x42b340_DefWidget_TEXT_attr_parser
+#
+# BUTTON attr parser -- 1332 bytes; parses bitmap-name attributes
+# (UPLABELRECT, DOWNLABELRECT, button-state sprite names). No vtable write;
+# pattern matches TEXT parser. Wave-2C labelled this "BUTTON widget ctor";
+# corrected.
+FUN_0042bd90|FUN_0042bd90_DefWidget_BUTTON_attr_parser
+meth_0x42bd90|meth_0x42bd90_DefWidget_BUTTON_attr_parser
+#
+# FRAME attr parser -- 1680 bytes; parses BGBITMAP / FRAME / DRAWMODE /
+# RELR / RELB layout attributes for the FRAME widget. No vtable write.
+# Wave-2C labelled this "FRAME widget ctor"; corrected.
+FUN_0042d730|FUN_0042d730_DefWidget_FRAME_attr_parser
+meth_0x42d730|meth_0x42d730_DefWidget_FRAME_attr_parser
+#
+# LISTBOX attr parser -- 1053 bytes; parses BGBITMAP / FRAME / DRAWMODE
+# plus the RECT/COLOR list-item-region attrs. No vtable write. Wave-2C
+# labelled this "LISTBOX widget ctor"; corrected.
+FUN_0042f9f0|FUN_0042f9f0_DefWidget_LISTBOX_attr_parser
+meth_0x42f9f0|meth_0x42f9f0_DefWidget_LISTBOX_attr_parser
+#
+# EDIT attr parser -- 1253 bytes; parses RECT + UP/DOWN spin-button RELR
+# attributes for the EDIT (with-spin) widget. No vtable write. Wave-2C
+# labelled this "EDIT widget ctor"; corrected.
+FUN_00431750|FUN_00431750_DefWidget_EDIT_attr_parser
+meth_0x431750|meth_0x431750_DefWidget_EDIT_attr_parser
+#
+# DROPLIST attr parser -- 1128 bytes; parses BGBITMAP / FRAME / DRAWMODE /
+# RECT for the DROPLIST widget. No vtable write. Wave-2C labelled this
+# "DROPLIST widget ctor"; corrected.
+FUN_00433170|FUN_00433170_DefWidget_DROPLIST_attr_parser
+meth_0x433170|meth_0x433170_DefWidget_DROPLIST_attr_parser

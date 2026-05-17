@@ -32,7 +32,7 @@ Length: 76 Alignment: 1
 // Function at 0042b340
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x42b340::meth_0x42b340(cls_0x42b340 *this,cls_0x42b340 *param_1,int *param_2)
+OOAnalyzer::cls_0x42b340::meth_0x42b340_DefWidget_TEXT_attr_parser(cls_0x42b340 *this,cls_0x42b340 *param_1,int *param_2)
 
 {
   bool bVar1;

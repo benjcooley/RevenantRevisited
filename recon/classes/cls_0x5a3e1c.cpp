@@ -97,7 +97,7 @@ OOAnalyzer::cls_0x5a3e1c::cls_0x5a3e1c(cls_0x5a3e1c *this,int *param_1,int param
     if ((in_stack_0000000c == 0) && (in_stack_0000000c = 0x655dd0, (uVar1 & 0x10000) == 0)) {
       in_stack_0000000c = 0x655f50;
     }
-    iVar9 = cls_0x433170::meth_0x433170((cls_0x433170 *)&this->mbr_0xc8,in_stack_0000000c,param_1);
+    iVar9 = cls_0x433170::meth_0x433170_DefWidget_DROPLIST_attr_parser((cls_0x433170 *)&this->mbr_0xc8,in_stack_0000000c,param_1);
     if (iVar9 != 0) {
       pdVar2 = (dword *)this->mbr_0xd8;
       if (pdVar2 != (dword *)0x0) {

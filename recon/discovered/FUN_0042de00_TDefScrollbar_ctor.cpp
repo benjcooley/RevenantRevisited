@@ -1,7 +1,7 @@
-// FUN_0042de00_DefWidget_TDefScrollbar_ctor @ 0042de00 size=242
+// FUN_0042de00_DefWidget_TDefScrollbar_ctor_programmatic @ 0042de00 size=242
 
 undefined4 * __thiscall
-FUN_0042de00_DefWidget_TDefScrollbar_ctor(undefined4 *param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4,
+FUN_0042de00_DefWidget_TDefScrollbar_ctor_programmatic(undefined4 *param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4,
             undefined4 param_5,undefined4 param_6,undefined4 param_7,undefined4 param_8,
             undefined4 param_9,undefined4 param_10,undefined4 *param_11)
 

@@ -184,7 +184,7 @@ OOAnalyzer::cls_0x5a3cd8::meth_0x42dfe0(cls_0x5a3cd8 *this,undefined4 param_1,un
      (in_stack_0000000c = &DAT_00655d38, (uVar1 & 0x20000) == 0)) {
     in_stack_0000000c = &DAT_006560f8;
   }
-  iVar5 = cls_0x42d730::meth_0x42d730((cls_0x42d730 *)&this->mbr_0xa4,in_stack_0000000c,param_1);
+  iVar5 = cls_0x42d730::meth_0x42d730_DefWidget_FRAME_attr_parser((cls_0x42d730 *)&this->mbr_0xa4,in_stack_0000000c,param_1);
   if (iVar5 == 0) {
     return 0;
   }

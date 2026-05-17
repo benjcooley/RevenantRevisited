@@ -42,7 +42,7 @@ Length: 172 Alignment: 1
 // Function at 0042bd90
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x42bd90::meth_0x42bd90(cls_0x42bd90 *this,cls_0x42bd90 *param_1,int *param_2)
+OOAnalyzer::cls_0x42bd90::meth_0x42bd90_DefWidget_BUTTON_attr_parser(cls_0x42bd90 *this,cls_0x42bd90 *param_1,int *param_2)
 
 {
   dword dVar1;

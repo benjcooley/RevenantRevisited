@@ -10,7 +10,7 @@
 /* WARNING: Removing unreachable block (ram,0x004318b5) */
 /* WARNING: Removing unreachable block (ram,0x004318b7) */
 
-undefined4 cls_0x431750::meth_0x431750(cls_0x431750 *param_1, int *param_2)
+undefined4 cls_0x431750::meth_0x431750_DefWidget_EDIT_attr_parser(cls_0x431750 *param_1, int *param_2)
 
 {
   char cVar1;

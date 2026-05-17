@@ -52,7 +52,7 @@ OOAnalyzer::cls_0x5a3bfc::cls_0x5a3bfc(cls_0x5a3bfc *this,undefined4 param_1,und
   if (in_stack_0000000c == 0) {
     in_stack_0000000c = 0x6554b8;
   }
-  iVar4 = cls_0x42b340::meth_0x42b340((cls_0x42b340 *)&this->mbr_0x90,in_stack_0000000c,param_1);
+  iVar4 = cls_0x42b340::meth_0x42b340_DefWidget_TEXT_attr_parser((cls_0x42b340 *)&this->mbr_0x90,in_stack_0000000c,param_1);
   if (iVar4 != 0) {
     uVar1 = (this->cls_0x5a3ab8).mbr_0x14;
     if ((uVar1 & 0x40000) == 0) {

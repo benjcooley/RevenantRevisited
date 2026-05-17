@@ -88,7 +88,7 @@ OOAnalyzer::cls_0x5a3db0::cls_0x5a3db0(cls_0x5a3db0 *this,int *param_1,undefined
        (in_stack_0000000c = (Alignment *)0x655ab8, (uVar1 & 0x40000) == 0)) {
       in_stack_0000000c = &DAT_00656180;
     }
-    iVar5 = cls_0x431750::meth_0x431750((cls_0x431750 *)&this->mbr_0xb8,in_stack_0000000c,param_1);
+    iVar5 = cls_0x431750::meth_0x431750_DefWidget_EDIT_attr_parser((cls_0x431750 *)&this->mbr_0xb8,in_stack_0000000c,param_1);
     if (iVar5 != 0) {
       iVar5 = FUN_00479700(s_MAXLEN_005cd76c,0);
       if (iVar5 == 0) {

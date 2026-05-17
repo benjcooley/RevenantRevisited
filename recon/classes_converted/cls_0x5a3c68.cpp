@@ -263,7 +263,7 @@ cls_0x5a3c68::cls_0x5a3c68 *this,undefined4 param_1,undefined4 param_2)
         in_stack_0000000c = 0x6562d8;
       }
     }
-    iVar3 = cls_0x42bd90::meth_0x42bd90((cls_0x42bd90 *)&this->mbr_0x9c,in_stack_0000000c,param_1);
+    iVar3 = cls_0x42bd90::meth_0x42bd90_DefWidget_BUTTON_attr_parser((cls_0x42bd90 *)&this->mbr_0x9c,in_stack_0000000c,param_1);
     if (iVar3 != 0) {
       pdVar1 = (dword *)this->mbr_0x9c;
       if (pdVar1 != (dword *)0x0) {

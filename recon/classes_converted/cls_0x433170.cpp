@@ -10,7 +10,7 @@
 /* WARNING: Removing unreachable block (ram,0x004332b2) */
 /* WARNING: Removing unreachable block (ram,0x004332b4) */
 
-undefined4 cls_0x433170::meth_0x433170(cls_0x433170 *param_1, int *param_2)
+undefined4 cls_0x433170::meth_0x433170_DefWidget_DROPLIST_attr_parser(cls_0x433170 *param_1, int *param_2)
 
 {
   char cVar1;
@@ -190,7 +190,7 @@ LAB_00433367:
     else {
       pdVar6 = &this->mbr_0x7c;
     }
-    iVar7 = cls_0x42f9f0::meth_0x42f9f0((cls_0x42f9f0 *)&this->mbr_0x7c,pdVar6,param_2);
+    iVar7 = cls_0x42f9f0::meth_0x42f9f0_DefWidget_LISTBOX_attr_parser((cls_0x42f9f0 *)&this->mbr_0x7c,pdVar6,param_2);
     if (iVar7 == 0) {
       return 0;
     }

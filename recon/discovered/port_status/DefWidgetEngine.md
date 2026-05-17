@@ -21,19 +21,41 @@ This is engine-identification, NOT a class. Per AGENT_PROTOCOL Rule 2-sibling: m
 
 ## Widget base + subclass constructors
 
-| Addr | Class | Status | Notes |
+**Update (Wave-4C, 2026-05-17):** Wave-2C's "widget ctor" entries below are corrected — those functions are ATTRIBUTE PARSERS, not class constructors. The true parse-time ctors and factories are listed in the "Widget class roster" section that follows. See `docs/ui/briefs/B_r13_def_engine_closeout.md` and `recon/discovered/renames/agent_ui_wave4_def_relabels.txt` for the relabel.
+
+| Addr | Role (corrected) | Status | Notes |
 |---|---|---|---|
-| `0x0042a350` | `TWidget` base attrs ctor | ⚫ not-started | Sets vtable PTR_FUN_005a3ab8. Parses POS/SIZE/NAME/FIELD/INDEX/TEXT/STRINGREF/FLAGS/GROUP/HOTKEY. |
-| `0x0042aaf0` | `BITMAP` widget | ⚫ not-started | Anchors: BITMAP/DRAWMODE strings in body. |
-| `0x0042aed0` | (FRAME-bitmap variant) | ⚫ not-started | Possibly an alternate BITMAP/FRAME variant; needs class identity confirmation. |
-| `0x0042b340` | `TEXT` widget | ⚫ not-started | Anchors: BGBITMAP/FRAME/FONT. |
-| `0x0042bd90` | `BUTTON` widget | ⚫ not-started | Anchors: UPLABELRECT/DOWNLABELRECT. |
-| `0x0042d730` | `FRAME` widget | ⚫ not-started | Anchors: BGBITMAP/FRAME. |
+| `0x0042a350` | `TWidget` base parse-time init (`_TWidgetBase_ParseAttrs`) | ⚫ not-started | Sets vtable PTR_FUN_005a3ab8. Parses POS/SIZE/NAME/FIELD/INDEX/TEXT/STRINGREF/FLAGS/GROUP/HOTKEY. Called by every parse-time widget ctor with its type-id. |
+| `0x0042a210` | `TWidget` base programmatic init (rename pending — 1 caller confirmed) | ⚫ not-started | Sets vtable PTR_FUN_005a3ab8. Direct-arg variant of `0x42a350`; used by helper code (e.g. LISTBOX-internal SCROLLBAR construction). |
+| `0x0042aaf0` | `BITMAP` attr parser | ⚫ not-started | Sub-block parser; called from BITMAP ctor's ParseBody. |
+| `0x0042aed0` | `FRAME` attr parser (BGBITMAP/FRAME/DRAWMODE composite) | ⚫ not-started | Called by `FUN_0042b090` (FRAME ctor). |
+| `0x0042b340` | `TEXT` attr parser | ⚫ not-started | BGBITMAP/DRAWMODE/RECT/COLOR. |
+| `0x0042bd90` | `BUTTON` attr parser | ⚫ not-started | Bitmap-name lookups (UPLABELRECT/DOWNLABELRECT). |
+| `0x0042d730` | `FRAME` attr parser | ⚫ not-started | BGBITMAP/FRAME/DRAWMODE/RELR/RELB. |
 | `0x0042f700` | `LISTBOX` inner FIELD/END | ⚫ not-started | Parses per-row format inside a LISTBOX BEGIN…END block. |
-| `0x0042f9f0` | `LISTBOX` widget | ⚫ not-started | Anchors: BGBITMAP/RECT/FONT. |
-| `0x00431750` | `EDIT` widget | ⚫ not-started | Anchors: BGBITMAP/SPIN. Normal + spin variant in same body. |
-| `0x00433170` | `DROPLIST` widget | ⚫ not-started | Anchors: DROPBUTTON/ITEMRECT/LISTHEIGHT. |
-| (TBD) | `SCROLLBAR` widget | ⚫ not-started | Constructor not yet pinned to a single function — likely in 0x42c-0x431 range. |
+| `0x0042f9f0` | `LISTBOX` attr parser | ⚫ not-started | BGBITMAP/FRAME/DRAWMODE/RECT. |
+| `0x00431750` | `EDIT` attr parser | ⚫ not-started | RECT + UP/DOWN spin RELR. |
+| `0x00433170` | `DROPLIST` attr parser | ⚫ not-started | BGBITMAP/FRAME/DRAWMODE/RECT. |
+
+### Widget class roster (Wave-4C 2026-05-17 — all 8 confirmed)
+
+DAT_00655510 holds 8 records (count DAT_0065617c=8). Each record = `{ class_descriptor_vt*, name* }`. The class descriptor vtable has 3 slots, slot 0 = factory. DispatchControl calls `descriptor_vt[0](pane, token)` → factory allocates the widget + calls the real ctor.
+
+| # | Keyword | Record | DescriptorVT | Factory | Sizeof | Ctor | InstanceVT | TypeID |
+|---|---|---|---|---|---|---|---|---|
+| 1 | BITMAP | 0x655dc8 | 0x5a3b18 | 0x437e00 | 0x98 | **0x42abe0** | 0x5a3b24 | 1 |
+| 2 | FRAME | 0x655508 | 0x5a3b84 | 0x437ee0 | 0xc0 | **0x42b090** | 0x5a3b90 | 2 |
+| 3 | TEXT | 0x656218 | 0x5a3bf0 | 0x437fd0 | 0xe0 | **0x42b5d0** | 0x5a3bfc | 3 |
+| 4 | BUTTON | 0x6562d0 | 0x5a3c5c | 0x4380c0 | 0x148 | **0x42c6a0** | 0x5a3c68 | 4 |
+| 5 | SCROLLBAR | 0x656388 | 0x5a3ccc | 0x438220 | 0x168 | **0x42df00** | 0x5a3cd8 | 5 |
+| 6 | LISTBOX | 0x655f48 | 0x5a3d38 | 0x438380 | 0x1d0 | **0x430090** | 0x5a3d44 | 6 |
+| 7 | EDIT | 0x656210 | 0x5a3da4 | 0x4385c0 | 0x148 | **0x431ca0** | 0x5a3db0 | 7 |
+| 8 | DROPLIST | 0x655dc0 | 0x5a3e10 | 0x438930 | 0x240 | **0x433640** | 0x5a3e1c | 8 |
+
+Helper (programmatic-only):
+- **`0x42de00`** — SCROLLBAR programmatic ctor; same class as parse-time `0x42df00`, different invocation. Called only from LISTBOX ctor for the nested child scrollbar. (Was misidentified by Wave-3C as the SCROLLBAR parse-time ctor.)
+
+Per-widget ctor + factory bodies extracted to `recon/discovered/FUN_<addr>_DefWidget_<Type>_{ctor,factory}.cpp` (8 ctor + 8 factory files).
 
 ## Per-screen activators
 
@@ -73,13 +95,13 @@ See `docs/ui/briefs/B_r10_def_widget_subclasses.md` for full evidence.
 
 Eight register thunks (each a small static-init Ghidra missed) populate the table at program start.
 
-**One widget confirmed this wave:**
+**One widget tentatively confirmed in Wave-3C, full roster pinned in Wave-4C:**
 
 | Addr | Class | Vtable | Status | Notes |
 |---|---|---|---|---|
-| `0x0042de00` | `TDefScrollbar` ctor | `0x5a3cd8` | ✅ confirmed | Type-id 5; range/step defaults 1000/100. Renamed. |
+| `0x0042de00` | `TDefScrollbar` programmatic ctor | `0x5a3cd8` | 🟡 corrected | Wave-3C labelled as the SCROLLBAR ctor; actually the *programmatic-init* variant called by LISTBOX for its nested scrollbar. The parse-time SCROLLBAR ctor is at `0x42df00`. See B.r13 §2. |
 
-**Remaining 7 widget classes have vtable addresses pending Wave-4.** Per-record FindImmRefs will give them in one pass each. See B.r10 §6 for the full pending-work checklist.
+**Remaining 7 widget classes pinned Wave-4C (see "Widget class roster" table above).** Per-record FindImmRefs + per-factory DumpBytes + per-ctor decomp closed out the loop. See `docs/ui/briefs/B_r13_def_engine_closeout.md`.
 
 ## Outstanding work to land a working engine
 

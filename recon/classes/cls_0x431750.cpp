@@ -55,7 +55,7 @@ Length: 144 Alignment: 1
 /* WARNING: Removing unreachable block (ram,0x004318b7) */
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x431750::meth_0x431750(cls_0x431750 *this,cls_0x431750 *param_1,int *param_2)
+OOAnalyzer::cls_0x431750::meth_0x431750_DefWidget_EDIT_attr_parser(cls_0x431750 *this,cls_0x431750 *param_1,int *param_2)
 
 {
   char cVar1;
