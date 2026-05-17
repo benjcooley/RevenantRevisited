@@ -97,6 +97,17 @@ static void EnsureTrackingArea()
 
 bool SetOSCursor(const TBitmap *bm, int32_t hot_x, int32_t hot_y)
 {
+    // Always sync g_currentCursor with the outcome so the cursorUpdate:
+    // callback never shows a stale cursor: if any step below fails,
+    // g_currentCursor goes nil and cursorUpdate: falls through to the
+    // system arrow. That keeps cursor.mm and cursor.cpp's
+    // g_os_cursor_owns_pixels (which mirrors our bool return) in lockstep
+    // -- without this, a failed decode left the OS showing the previous
+    // cursor while cursor.cpp re-enabled the in-game draw, producing the
+    // "OS cursor + app cursor underneath" double-vision bug.
+    [g_currentCursor release];
+    g_currentCursor = nil;
+
     if (!bm) return false;
     if (bm->width <= 0 || bm->height <= 0) return false;
 
@@ -110,6 +121,7 @@ bool SetOSCursor(const TBitmap *bm, int32_t hot_x, int32_t hot_y)
     {
         log_warn("[cursor-os] DecodeBitmapToRGBA failed (%dx%d, flags=0x%x)",
                  w, h, bm->flags);
+        [[NSCursor arrowCursor] set];
         return false;
     }
 
@@ -131,17 +143,25 @@ bool SetOSCursor(const TBitmap *bm, int32_t hot_x, int32_t hot_y)
         if (!rep)
         {
             log_warn("[cursor-os] NSBitmapImageRep alloc failed");
+            [[NSCursor arrowCursor] set];
             return false;
         }
 
         NSImage *img = [[NSImage alloc] initWithSize:NSMakeSize(w, h)];
         [img addRepresentation:rep];
+        // NSImage retained rep; we can drop our +1 from alloc.
+        [rep release];
 
         const NSPoint hot = NSMakePoint(
             (CGFloat)std::clamp((int32_t)hot_x, (int32_t)0, w - 1),
             (CGFloat)std::clamp((int32_t)hot_y, (int32_t)0, h - 1));
 
+        // initWithImage:hotSpot: retains img -- drop our +1 from alloc
+        // after the NSCursor is built. g_currentCursor holds the cursor's
+        // own +1 from alloc; released next time we replace it (above) or
+        // in ResetOSCursor.
         g_currentCursor = [[NSCursor alloc] initWithImage:img hotSpot:hot];
+        [img release];
 
         // Install the tracking area lazily on the first SetOSCursor call
         // (window may not exist yet at static-init time). After that,
@@ -165,6 +185,7 @@ void ResetOSCursor()
         // the arrow on the next mouse enter (e.g. while ImGui captures
         // the mouse, we want the arrow inside our window). The next
         // SetOSCursor call repopulates the cache.
+        [g_currentCursor release];
         g_currentCursor = nil;
         [[NSCursor arrowCursor] set];
     }
