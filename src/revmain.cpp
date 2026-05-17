@@ -2577,6 +2577,20 @@ static void AppEvent(const sapp_event* ev)
         break;
       }
 
+      case SAPP_EVENTTYPE_MOUSE_LEAVE:
+      {
+        // Mouse moved outside our window. [NSCursor set] is process-
+        // local; AppKit normally pops to whatever cursor the next
+        // window/app installs, but if no other window actively manages
+        // its cursor (desktop, an app without cursor rects, ...) our
+        // last [set] persists visually -- so the user sees the game
+        // cursor floating over the desktop. Explicitly hand back to
+        // the system arrow on leave; other apps that DO manage their
+        // cursor will override it the moment the mouse hits them.
+        rev_platform::ResetOSCursor();
+        break;
+      }
+
       case SAPP_EVENTTYPE_MOUSE_MOVE:
       {
         cursorx = (int32_t)ev->mouse_x;
