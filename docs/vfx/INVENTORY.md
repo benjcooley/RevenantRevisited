@@ -376,3 +376,60 @@ Continues the methodology from `recon/mappings/EXTRACTION_PASS_2026-05-16.md`
 
   No `rename_classes.py` run — all yamls remain `_candidate` (MEDIUM/
   MEDIUM-HIGH); promote only after source-side struct compare.
+
+---
+
+## 2026-05-17 — Particle VM extension migration (B01 + M05)
+
+The particle expression VM was extended (Rand01/Rand/Step/Select ops +
+statement-form tick/spawn/kill expressions + bucket-level spawn_burst /
+spawn_count / tick_hz / default_life) so the bespoke per-particle dynamics
+on B01 / M05 / F03 / H03 / H04 can move to data-driven `effects.def`
+declarations.
+
+Full forensics + design doc: `docs/vfx/VM_EXTENSION_FORENSICS.md`.
+
+**Migrated to engine path:**
+- **B01 TBloodEffect** — `data/Resources/effects.def` block `Blood`.
+  Per-particle dynamics now in `spawn_expr` (polar cone init, color
+  jitter) + `tick_expr` (gravity Euler, alpha fade). `default_life = 1.4`
+  drives auto-reap. Bespoke C++ preserved under `#if 0` in
+  `src/effect.cpp` per the project's preserve-old-code rule.
+  Visual parity confirmed via `tools/vfx/snap_grid.py TBloodEffect`
+  vs. `/tmp/blood_engine_grid.png` — red splat bursts in cone
+  arrangement, same alpha-fade envelope as the bespoke port.
+- **M05 TMistEffect** — `data/Resources/effects.def` block `Mist`.
+  Per-particle dynamics now in `spawn_expr` (envelope sample +
+  random upward velocity) + `tick_expr` (gravity-per-tick) +
+  `kill_expr = "step(pos.z, emit_pos.z)"` (respawn on landing).
+  `spawn_count = 50` + `tick_hz = 24` cover the steady-state cadence.
+  Bespoke C++ preserved under `#if 0`. Visual parity confirmed via
+  `tools/vfx/snap_grid.py TMistEffect` vs. `/tmp/mist_engine_grid.png`
+  — drifting cyan-white wisp cluster, indistinguishable from the
+  bespoke `/tmp/mist_grid.png` reference.
+
+**Deferred (feasible-on-paper but kept bespoke):**
+- **F03 TFireEffect** — fully expressible as `spawn_count = 15` +
+  per-quad spawn + integer `frame` counter in `tick_expr` + respawn-
+  on-frame-reaches-30. Skipped because (a) the negative-frame
+  invisible-startup-window adds a `color.a = step(0, frame)`
+  visibility mask that doubles the bucket's per-particle work for
+  no visible difference, and (b) F03 has no live caller in retail
+  (vestigial pre-release WIP per F03 forensics §4) so migration
+  delivers no production value. Re-evaluate when a real fire spawn
+  site exists.
+- **H03 TRippleEffect** — FB pipeline, not PE. The single-billboard-
+  with-scale-envelope shape would need to map onto a 1-particle PE
+  bucket which is a sideways move from clean bespoke C++. The
+  closed-form arithmetic for the `kRippleFrameOf[]` lookup is
+  expressible via existing Floor/Mod/Sub ops, but the migration adds
+  bucket overhead for one billboard.
+- **H04 TDripEffect** — drop kinematics (dead → wait → fall) are
+  bucket-expressible but the `drip → ripple` sub-effect spawn on
+  landing requires cross-effect coupling (TRippleEffect::SpawnForTest
+  called from a callback) that doesn't fit the bucket VM's
+  per-particle eval model. Designing cross-effect spawn from the VM
+  is a separate piece of infrastructure (out of scope per the brief).
+
+The deferred three remain as bespoke C++ in `src/effect.cpp`. None
+of the work blocks future migration if a need arises.

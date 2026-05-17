@@ -941,6 +941,16 @@ void PfxEvalImpl(const std::vector<uint16_t>& code,
                         }
                     }
                 }
+                // StoreVar terminates a statement -- reset the runtime stack
+                // pointer so subsequent statements emit into fresh slots.
+                // The parser resets stack_top=0 after each ParseStatement so
+                // the compiled args for the next statement reference stack[0..]
+                // -- without this reset the runtime sp would keep growing and
+                // src_arg stack refs from later statements would read stale
+                // values from earlier statements' frames.
+                sp = 0;
+                last = PfxVarArg(EParticleVar::TimeFrame);
+                last_lanes = 1;
                 break;
             }
             case EParticleOp::Add:
