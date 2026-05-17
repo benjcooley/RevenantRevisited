@@ -89,6 +89,17 @@ enum class EParticleLightMode : uint8_t
     // Future: LitNormalMapped (per-particle normal), LitHemisphere, ...
 };
 
+// Per-bucket quad orientation. Mirrors renderer's EFxBillboardOrientation
+// (the bucket-particle path maps EParticleOrientation -> EFxBillboardOrientation
+// at submission time). Default ScreenAligned matches the historical
+// camera-aligned billboard expansion -- ground-projected buckets (AoE
+// rings on the floor, ground-decal swarms) opt in to WorldXY.
+enum class EParticleOrientation : uint8_t
+{
+    ScreenAligned = 0,
+    WorldXY,
+};
+
 // Standard transparency-vs-depth knobs. TestNoWrite is what every
 // transparent particle wants; TestWrite lets alpha-tested / mostly-solid
 // particles (decals, sliced impostors) interleave with the world depth.
@@ -135,6 +146,10 @@ struct SParticleBucketDesc
     // render identically after this change (Unlit + TestNoWrite).
     EParticleLightMode light_mode = EParticleLightMode::Unlit;
     EParticleDepthMode depth_mode = EParticleDepthMode::TestNoWrite;
+    // Per-bucket quad orientation. Default ScreenAligned keeps existing
+    // bucket behavior; ground-aligned PE swarms (ground decal rings,
+    // floor-projected glyph particles) set this to WorldXY.
+    EParticleOrientation orientation = EParticleOrientation::ScreenAligned;
     EParticleSortMode sort = EParticleSortMode::None;
     int32_t sort_order = 0;
     // World/Local space for DrawPos. See EParticleBucketSpace comment.

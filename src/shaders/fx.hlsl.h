@@ -29,6 +29,7 @@ struct vs_in {
     float4 color_rgba   : TEXCOORD4;
     float  debug_mode   : TEXCOORD5;
     float  light_mode   : TEXCOORD6;
+    float  orientation  : TEXCOORD7;
 };
 struct vs_out {
     float4 pos      : SV_Position;
@@ -39,7 +40,12 @@ struct vs_out {
     float  debug    : TEXCOORD4;
 };
 vs_out main_vs(vs_in i) {
+    int omode = int(i.orientation + 0.5);
     float3 wp = i.world_pos;
+    if (omode == 1) {
+        wp.x += i.corner.x * i.size_wu.x;
+        wp.y += i.corner.y * i.size_wu.y;
+    }
     float wx = wp.x - camw.x, wy = wp.y - camw.y, wz = wp.z;
     float sum = wx + wy;
     float S = wx - wy;
@@ -48,8 +54,14 @@ vs_out main_vs(vs_in i) {
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
     float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
-    float spx = vp.x + S * persp_scale + i.corner.x * i.size_wu.x * persp_scale;
-    float spy = vp.y + T * persp_scale - i.corner.y * i.size_wu.y * persp_scale;
+    float spx, spy;
+    if (omode == 1) {
+        spx = vp.x + S * persp_scale;
+        spy = vp.y + T * persp_scale;
+    } else {
+        spx = vp.x + S * persp_scale + i.corner.x * i.size_wu.x * persp_scale;
+        spy = vp.y + T * persp_scale - i.corner.y * i.size_wu.y * persp_scale;
+    }
     vs_out o;
     o.pos.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
     o.pos.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
@@ -114,6 +126,7 @@ struct vs_in {
     float  debug_mode   : TEXCOORD5;
     float  rotation_rad : TEXCOORD6;
     float  light_mode   : TEXCOORD7;
+    float  orientation  : TEXCOORD8;
 };
 struct vs_out {
     float4 pos      : SV_Position;
@@ -126,7 +139,12 @@ struct vs_out {
 vs_out main_vs(vs_in i) {
     float ca = cos(i.rotation_rad), sa = sin(i.rotation_rad);
     float2 rc = float2(ca*i.corner.x - sa*i.corner.y, sa*i.corner.x + ca*i.corner.y);
+    int omode = int(i.orientation + 0.5);
     float3 wp = i.world_pos;
+    if (omode == 1) {
+        wp.x += rc.x * i.size_wu.x;
+        wp.y += rc.y * i.size_wu.y;
+    }
     float wx = wp.x - camw.x, wy = wp.y - camw.y, wz = wp.z;
     float sum = wx + wy;
     float S = wx - wy;
@@ -135,8 +153,14 @@ vs_out main_vs(vs_in i) {
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
     float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
-    float spx = vp.x + S * persp_scale + rc.x * i.size_wu.x * persp_scale;
-    float spy = vp.y + T * persp_scale - rc.y * i.size_wu.y * persp_scale;
+    float spx, spy;
+    if (omode == 1) {
+        spx = vp.x + S * persp_scale;
+        spy = vp.y + T * persp_scale;
+    } else {
+        spx = vp.x + S * persp_scale + rc.x * i.size_wu.x * persp_scale;
+        spy = vp.y + T * persp_scale - rc.y * i.size_wu.y * persp_scale;
+    }
     vs_out o;
     o.pos.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
     o.pos.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);

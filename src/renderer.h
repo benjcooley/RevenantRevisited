@@ -173,6 +173,31 @@ enum class EFxDepthMode : uint8_t { TestNoWrite = 0, None = 1, TestWrite = 2 };
 enum class EFxLightMode : uint8_t { Unlit = 0, LitFlat = 1 };
 enum class EFxDebugMode : uint8_t { Normal = 0, SolidColor = 1, FullTexture = 2, CurrentFrame = 3 };
 
+// Per-billboard / per-particle quad orientation. Standard particle-engine
+// knob (cf. Unity Billboard / Stretched / Horizontal / Vertical / Mesh
+// and Unreal "Camera Position" / "Custom" alignment). The default
+// (ScreenAligned) matches the original Phase 1 behaviour: the 4 corners
+// expand along the camera right/up basis after iso projection, so the
+// quad always faces the viewer.
+//
+// WorldXY expands the 4 corners along world +X / +Y at the billboard's
+// world position BEFORE iso projection -- the resulting quad lies flat
+// on the world XY plane and foreshortens correctly under the iso /
+// perspective camera, which is what ground-projected effects (ripples
+// on water, halos on the ground, AoE rings, decal-style overlays) want.
+//
+// Default ScreenAligned preserves existing behaviour for every effect
+// that does not opt in (F01 flame, F03 fire, X17 flare, etc.) -- no
+// migration required for screen-aligned glow/spark sprites.
+enum class EFxBillboardOrientation : uint8_t {
+    ScreenAligned = 0,   // 4 corners expand along camera basis (default)
+    WorldXY       = 1,   // 4 corners expand along world +X / +Y (flat on
+                         // XY plane; correct foreshortening under iso/persp)
+    // Future:
+    //   WorldUpAligned        -- Z-axis-aligned, flame-style
+    //   StretchedAlongVelocity -- motion-streak particles
+};
+
 // Identifies which fx pipeline owns a submission. The renderer keeps one
 // dynamic vertex buffer per pipeline; equality of (texture, pipeline_id,
 // blend, depth_mode) lets adjacent draws coalesce into a single instanced
@@ -209,6 +234,12 @@ struct SBillboardDrawItem
     // multiplier in the FS, not a pipeline variant -- avoids fanning
     // the pipeline count out by 2x.
     EFxLightMode light_mode     = EFxLightMode::Unlit;
+    // Per-instance quad orientation. Default ScreenAligned keeps the
+    // existing screen-aligned billboard expansion (no migration needed
+    // for any pre-orientation-knob effect). Ground/water-projected
+    // effects (H03 ripple, L02 halo, future AoE rings, decal overlays)
+    // opt in to WorldXY.
+    EFxBillboardOrientation orientation = EFxBillboardOrientation::ScreenAligned;
 };
 
 // Same fields as SBillboardDrawItem plus per-instance rotation. Bulk
@@ -224,6 +255,11 @@ struct SParticleDrawItem
     SFxBatchKey  key            = {};
     EFxDebugMode debug_mode     = EFxDebugMode::Normal;
     EFxLightMode light_mode     = EFxLightMode::Unlit;
+    // Per-instance quad orientation. Same shape as SBillboardDrawItem
+    // -- lets PE effects opt into WorldXY for ground-projected particle
+    // swarms (e.g. a ring of glow puffs on the floor). Default
+    // ScreenAligned keeps every existing PE bucket untouched.
+    EFxBillboardOrientation orientation = EFxBillboardOrientation::ScreenAligned;
 };
 
 // A single screen-aligned ribbon segment (world A -> world B). Strips

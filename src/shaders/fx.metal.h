@@ -41,6 +41,21 @@
 //   1 LitFlat : lit_factor = ambient_color + max(0, sun_dir.z) * sun_color
 //               (treats the particle's normal as world-up)
 //
+// Quad orientation is per-instance (EFxBillboardOrientation):
+//   0 ScreenAligned : the 4 corners expand along the camera right / up
+//                     basis AFTER iso projection (existing path). The
+//                     quad always faces the viewer. Default; preserves
+//                     pre-orientation-knob behavior.
+//   1 WorldXY       : the 4 corners are placed in WORLD +X / world +Y
+//                     at the billboard's world position BEFORE iso
+//                     projection, so each corner projects independently
+//                     through the iso math. The resulting quad lies
+//                     flat on the world XY plane and foreshortens
+//                     correctly under iso/perspective -- a circle on
+//                     the floor reads as a horizontally-stretched
+//                     ellipse. Used by ground/water-projected effects
+//                     (H03 ripple, L02 halo, future AoE rings).
+//
 // *************************************************************************
 
 #pragma once
@@ -64,6 +79,7 @@ struct vs_in {
     float4 color_rgba   [[attribute(4)]];
     float  debug_mode   [[attribute(5)]];
     float  light_mode   [[attribute(6)]];
+    float  orientation  [[attribute(7)]];
 };
 struct vs_out {
     float4 pos      [[position]];
@@ -75,10 +91,22 @@ struct vs_out {
 };
 vertex vs_out _main(vs_in in [[stage_in]],
                     constant fx_params& p [[buffer(0)]]) {
-    float3 wp = in.world_pos;
-    float wx = wp.x - p.camw.x;
-    float wy = wp.y - p.camw.y;
-    float wz = wp.z;
+    int omode = int(in.orientation + 0.5);
+
+    // Per-corner world position. ScreenAligned keeps the anchor's
+    // world_pos and offsets in screen-X/Y after iso projection.
+    // WorldXY shifts world_pos along world +X / +Y by (corner * size_wu)
+    // BEFORE iso projection so each corner runs through the iso math
+    // independently -- the quad ends up flat on the world XY plane.
+    float3 wp_corner = in.world_pos;
+    if (omode == 1) {
+        wp_corner.x += in.corner.x * in.size_wu.x;
+        wp_corner.y += in.corner.y * in.size_wu.y;
+    }
+
+    float wx = wp_corner.x - p.camw.x;
+    float wy = wp_corner.y - p.camw.y;
+    float wz = wp_corner.z;
     float sum = wx + wy;
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * 0.867;
@@ -86,8 +114,18 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
     float zoom = max(p.camw.z, 0.0001);
     float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
-    float spx = p.vp.x + S * persp_scale + in.corner.x * in.size_wu.x * persp_scale;
-    float spy = p.vp.y + T * persp_scale - in.corner.y * in.size_wu.y * persp_scale;
+
+    float spx, spy;
+    if (omode == 1) {
+        // WorldXY: corner offset is already in world space; iso projection
+        // alone gives the final screen position.
+        spx = p.vp.x + S * persp_scale;
+        spy = p.vp.y + T * persp_scale;
+    } else {
+        // ScreenAligned: iso-project the anchor, then offset in screen-X/Y.
+        spx = p.vp.x + S * persp_scale + in.corner.x * in.size_wu.x * persp_scale;
+        spy = p.vp.y + T * persp_scale - in.corner.y * in.size_wu.y * persp_scale;
+    }
 
     int lmode = int(in.light_mode + 0.5);
     float3 lit = float3(1.0, 1.0, 1.0);
@@ -188,6 +226,7 @@ struct vs_in {
     float  debug_mode   [[attribute(5)]];
     float  rotation_rad [[attribute(6)]];
     float  light_mode   [[attribute(7)]];
+    float  orientation  [[attribute(8)]];
 };
 struct vs_out {
     float4 pos      [[position]];
@@ -202,10 +241,22 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float ca = cos(in.rotation_rad), sa = sin(in.rotation_rad);
     float2 rc = float2(ca * in.corner.x - sa * in.corner.y,
                        sa * in.corner.x + ca * in.corner.y);
-    float3 wp = in.world_pos;
-    float wx = wp.x - p.camw.x;
-    float wy = wp.y - p.camw.y;
-    float wz = wp.z;
+    int omode = int(in.orientation + 0.5);
+
+    // WorldXY: shift world_pos along world +X / +Y by the rotated
+    // corner * size_wu before iso projection. Per-particle rotation
+    // still applies (rotates the world-XY-plane quad about its world-Z
+    // anchor axis, which reads as in-plane spin for a ground-aligned
+    // particle -- correct for "rotating glyph on the floor" effects).
+    float3 wp_corner = in.world_pos;
+    if (omode == 1) {
+        wp_corner.x += rc.x * in.size_wu.x;
+        wp_corner.y += rc.y * in.size_wu.y;
+    }
+
+    float wx = wp_corner.x - p.camw.x;
+    float wy = wp_corner.y - p.camw.y;
+    float wz = wp_corner.z;
     float sum = wx + wy;
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * 0.867;
@@ -213,8 +264,15 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
     float zoom = max(p.camw.z, 0.0001);
     float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
-    float spx = p.vp.x + S * persp_scale + rc.x * in.size_wu.x * persp_scale;
-    float spy = p.vp.y + T * persp_scale - rc.y * in.size_wu.y * persp_scale;
+
+    float spx, spy;
+    if (omode == 1) {
+        spx = p.vp.x + S * persp_scale;
+        spy = p.vp.y + T * persp_scale;
+    } else {
+        spx = p.vp.x + S * persp_scale + rc.x * in.size_wu.x * persp_scale;
+        spy = p.vp.y + T * persp_scale - rc.y * in.size_wu.y * persp_scale;
+    }
 
     int lmode = int(in.light_mode + 0.5);
     float3 lit = float3(1.0, 1.0, 1.0);

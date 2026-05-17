@@ -235,6 +235,33 @@ declare an `effects.def` block for its particle sub-emitters and
 construct a `TParticleEffectComponent` from C++ rather than from a
 top-level builder registration. The engine doesn't care who calls it.
 
+**Engine-shape decision checklist** (run for every billboard / particle
+submission in the Phase B port):
+
+- [ ] **Blend mode** — pick the `EFxBlend` / `EParticleBlendMode` that
+      matches the retail blend constants from the forensics §4 row
+      (Alpha / Additive / AdditiveStraight / PremulAlpha).
+- [ ] **Depth mode** — `TestNoWrite` is the standard transparent path;
+      pick `TestWrite` only for mostly-opaque alpha-tested impostors;
+      `None` for always-on-top overlays.
+- [ ] **Light mode** — `LitFlat` for blood / debris / lit smoke; `Unlit`
+      for explosions / sparks / additive glows and most overlay effects.
+- [ ] **Orientation** — if the effect is **ground / water / wall-
+      projected** (a decal-like overlay that lies on a surface — ripple
+      on water, halo / heal aura / spell circle on the floor, blood
+      pool, magic glyph, footprint), set `orientation = WorldXY`. If
+      the effect is a **camera-facing glow** (torch flame, fire patch,
+      flare, spark, smoke puff), leave the default `ScreenAligned`.
+      Retail-faithful: if the pre-release Render path applies
+      `RotateX(±π/2)` to the mesh-template plane (tipping the sprite
+      onto the ground), that's a strong signal the effect wants
+      `WorldXY`; if it composes the I3D quad through the camera-basis
+      matrices without any axis flip, it's `ScreenAligned`. Document
+      the retail anchor convention in the row's notes — callers should
+      know whether to snap pos.z to `GroundZAt(x,y)` / `WaterSurfaceZAt(x,y)`
+      before spawning, or whether the harness's z=0 (PickPreviewOrigin)
+      is enough.
+
 ### 3.3 Diagnostic ladder (mandatory)
 
 Per PARTICLE_EFFECTS §3.2, every effect goes through these visible stages

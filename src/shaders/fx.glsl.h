@@ -23,6 +23,7 @@ layout(location = 3) in vec4 uv_rect;
 layout(location = 4) in vec4 color_rgba;
 layout(location = 5) in float debug_mode;
 layout(location = 6) in float light_mode;
+layout(location = 7) in float orientation;
 layout(std140) uniform fx_params {
     vec4 vp;
     vec4 camz;
@@ -37,7 +38,12 @@ out vec4  v_color;
 out vec3  v_lit;
 out float v_debug;
 void main() {
+    int omode = int(orientation + 0.5);
     vec3 wp = world_pos;
+    if (omode == 1) {
+        wp.x += corner.x * size_wu.x;
+        wp.y += corner.y * size_wu.y;
+    }
     float wx = wp.x - camw.x;
     float wy = wp.y - camw.y;
     float wz = wp.z;
@@ -48,8 +54,14 @@ void main() {
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
     float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
-    float spx = vp.x + S * persp_scale + corner.x * size_wu.x * persp_scale;
-    float spy = vp.y + T * persp_scale - corner.y * size_wu.y * persp_scale;
+    float spx, spy;
+    if (omode == 1) {
+        spx = vp.x + S * persp_scale;
+        spy = vp.y + T * persp_scale;
+    } else {
+        spx = vp.x + S * persp_scale + corner.x * size_wu.x * persp_scale;
+        spy = vp.y + T * persp_scale - corner.y * size_wu.y * persp_scale;
+    }
     gl_Position.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
     gl_Position.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     gl_Position.z = scene_z_n;
@@ -102,6 +114,7 @@ layout(location = 4) in vec4 color_rgba;
 layout(location = 5) in float debug_mode;
 layout(location = 6) in float rotation_rad;
 layout(location = 7) in float light_mode;
+layout(location = 8) in float orientation;
 layout(std140) uniform fx_params {
     vec4 vp;
     vec4 camz;
@@ -118,7 +131,12 @@ out float v_debug;
 void main() {
     float ca = cos(rotation_rad), sa = sin(rotation_rad);
     vec2 rc = vec2(ca * corner.x - sa * corner.y, sa * corner.x + ca * corner.y);
+    int omode = int(orientation + 0.5);
     vec3 wp = world_pos;
+    if (omode == 1) {
+        wp.x += rc.x * size_wu.x;
+        wp.y += rc.y * size_wu.y;
+    }
     float wx = wp.x - camw.x;
     float wy = wp.y - camw.y;
     float wz = wp.z;
@@ -129,8 +147,14 @@ void main() {
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
     float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
-    float spx = vp.x + S * persp_scale + rc.x * size_wu.x * persp_scale;
-    float spy = vp.y + T * persp_scale - rc.y * size_wu.y * persp_scale;
+    float spx, spy;
+    if (omode == 1) {
+        spx = vp.x + S * persp_scale;
+        spy = vp.y + T * persp_scale;
+    } else {
+        spx = vp.x + S * persp_scale + rc.x * size_wu.x * persp_scale;
+        spy = vp.y + T * persp_scale - rc.y * size_wu.y * persp_scale;
+    }
     gl_Position.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
     gl_Position.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     gl_Position.z = scene_z_n;
