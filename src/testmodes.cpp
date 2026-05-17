@@ -30,6 +30,7 @@
 #include "tile.h"
 #include "uianchortest.h"
 #include "uicliptest.h"
+#include "uihudmockuptest.h"
 #include "uilayouttest.h"
 #include "uinineslicetest.h"
 #include "uistatusbartest.h"
@@ -2257,6 +2258,8 @@ bool Initialize(const char* mode)
         return InitializeUITextBarMode();
     if (strcmp(mode, "ui-statusbars") == 0)
         return InitializeUIStatusBarMode();
+    if (strcmp(mode, "ui-hud-mockup") == 0)
+        return InitializeUIHudMockupMode();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2288,6 +2291,8 @@ void Close(const char* mode)
         CloseUITextBarMode();
     if (strcmp(mode, "ui-statusbars") == 0)
         CloseUIStatusBarMode();
+    if (strcmp(mode, "ui-hud-mockup") == 0)
+        CloseUIHudMockupMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2328,6 +2333,8 @@ void Render(const char* mode)
         return RenderUITextBarMode();
     if (strcmp(mode, "ui-statusbars") == 0)
         return RenderUIStatusBarMode();
+    if (strcmp(mode, "ui-hud-mockup") == 0)
+        return RenderUIHudMockupMode();
     return RenderBlankMode();
 }
 
