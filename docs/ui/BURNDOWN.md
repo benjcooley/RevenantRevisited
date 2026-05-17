@@ -36,10 +36,79 @@ The HUD render-path infrastructure was landed in commit `80879c2` ("engine: HUD 
 - `[ ]` **A.3 `TPane::LoadFromDef` + `TButtonPane::LoadFromDef`** — DEF-driven construction. Walks `defdoc::Node`, instantiates panes/buttons. Unknown widget kinds log and skip.
 - `[ ]` **A.4 Anchor metadata extension to retail DEF** — define convention inside the existing DEF format (extends `defdoc`). Document in `revisited/resources/README.md` (or extend existing). Vanilla ignores anchor blocks.
 
-## Phase B — HUD bring-up
+## Phase B — HUD bring-up (**RETRACTION — see note below**)
 
-- `[~]` **B.1 `TTextBar`** — step 1: `4df1bcf` (data API contract). Step 2: `7873ac1` (visualizer on HUD pipeline at retail rect 122×336 198×14). Step 3 pending: real text rendering (Display.WriteText → Renderer font primitive) + healthbar bitmap.
-- `[~]` **B.2 `THealthBar`, `TStaminaBar`** — step 1: `495a28c` (data API + retail asset load). Step 2: `7873ac1` (visualizer on HUD pipeline; animated bottom-filling colored gauges at left/right edges; SetLevel sine-cycle). Step 3 pending: tube bitmap rendering via tubedata + tinted composite.
+> **Phase B reset 2026-05-16.** The class/rect set this section originally
+> enumerated (`THealthBar`/`TStaminaBar` as standalone vertical fluid tubes
+> at HEALTHBARX/HEALTHBARY etc, `TInventory` at 16×386 382×85, etc.) does
+> **not match the shipped retail HUD**. It was derived from pre-release
+> `src/` defines + an AI-generated `docs/HUD.md` that the user (the
+> original developer of Revenant) flagged as wrong. The retail HUD is:
+>
+> 1. **Two combined health/mana/character panels** in the upper-left
+>    and upper-right corners of the playfield — not vertical edge tubes.
+> 2. **Right sidebar area** — a full multifunction panel (character /
+>    spell list / automap / inventory).
+> 3. **Bottom quickspell + shelf area** — equipped spells + potion slots
+>    (not a 7×2 inventory grid).
+> 4. **Game log panel** — transparent overlay on the bottom area
+>    (TTextBar is likely this; its retail decomp at
+>    `recon/classes_converted/cls_0x5a4358_likely_TTextBar.cpp` is ~13 KB,
+>    4× the pre-release size, suggesting significant scrolling/multi-line
+>    features beyond the pre-release Print() API).
+> 5. **Dialog overlays** — conditional top-area + bottom-area overlays.
+> 6. **Books / scrolls** — main-game-area overlays, conditional.
+> 7. **Button bar** — small tab area, bottom-right playfield overlay.
+>
+> Reconstruction is in flight; see "Phase B — actual" below.
+
+### Phase B — retracted items
+
+- `[!]` **B.1 `TTextBar`** — data-API contract test (`4df1bcf`) still
+  useful for the pre-release class as a snapshot reference. The
+  visualizer commit (`7873ac1`) painted a yellow fixed-position strip,
+  which is the wrong rendering for what is actually a transparent
+  game-log overlay. The retail decomp shows TTextBar evolved
+  significantly past the pre-release shape — needs a fresh port plan.
+- `[!]` **B.2 `THealthBar`, `TStaminaBar`** — standalone vertical
+  fluid-tube classes have **no basis in the shipped retail UI**.
+  Per user. **The classes are slated for removal**; their work is
+  absorbed by the combined upper-corner character-info panels.
+  - The `HealthBar` / `StaminaBar` *globals* (`src/revmain.cpp:125-126`)
+    are load-bearing: `player.cpp`, `food.cpp`, `spell.cpp`,
+    `effect_old.cpp` all call `HealthBar.ChangeLevel(...)` on gameplay
+    state changes. Removal needs to either re-target those calls to
+    the new character-panel model or refactor `TStatusBar` into a
+    pure value-with-animation data model (no TPane).
+  - Test modes `uistatusbartest.{h,cpp}` and the composite
+    `uihudmockuptest.{h,cpp}` moved to `attic/src/` — they encoded
+    the wrong rects/labels.
+- `[!]` **B.13 `--test=ui-hud-mockup`** — composite wireframe was
+  built on the same wrong layout. Retracted; replaced by a future
+  composite that uses the verified retail panel set.
+
+### Phase B — actual (to be built)
+
+Source of truth: retail decomp in `recon/classes_converted/` (1428
+classes total). Higher-level mappings in
+[recon/docs/CLASS_MAPPING.md](../../recon/docs/CLASS_MAPPING.md) and
+[recon/docs/GHIDRA_CLASS_IDENTIFICATIONS.md](../../recon/docs/GHIDRA_CLASS_IDENTIFICATIONS.md).
+The retail HUD pane roster needs to be **derived from `TPlayScreen`'s
+decomp** (`cls_0x5b4f30_likely_TPlayScreen.cpp` — 119 KB) by tracing
+which classes it constructs and registers. Pending tasks:
+
+- `[ ]` **B.r1 Identify the retail HUD pane classes** — trace
+  `TPlayScreen` init in the decomp; cross-reference any explicit
+  asset-load strings (`*.dat`, `*font`); list each pane's class
+  identity + retail rect + asset references. Output: `docs/ui/RETAIL_HUD.md`.
+- `[ ]` **B.r2 Decide the disposition of `src/statusbar.{h,cpp}`** —
+  re-shape into a value-with-animation model used by the upper-corner
+  character panels, or remove entirely after re-targeting all
+  `HealthBar.ChangeLevel()` callers.
+- `[ ]` **B.r3** Per-pane bring-up of the verified retail panes,
+  same template as the (provisional) B.1 work: data API contract test
+  → HUD-pipeline visualizer → real asset rendering. List populated by
+  B.r1 output.
 - `[x]` **B.3 `TCursorHud`** — landed in `80879c2` as a `THudDrawable` subclass registered at z=0 (below other HUD), with OS-pointer / game-cursor swap on ImGui ownership. See [src/cursor.h:32](../../src/cursor.h#L32). Win32-clipping `#if 0` still pending if/when relevant; deferred (cursor works without it).
 - `[ ]` **B.4 `TQuickSpellPane`** + `--test=ui-quickspells`.
 - `[ ]` **B.5 `TMultiCtrlPane`** — 4-button switcher with 1/2/3/4 keys.
@@ -94,7 +163,8 @@ Per memory `feedback-code-style`, `feedback-modern-cpp`, `feedback-const-correct
 
 ## Notes log (most-recent first)
 
-- **2026-05-16** — Phase B.13 `--test=ui-hud-mockup` (`43e49fb`): **all 7 visible retail HUD panes rendered at retail rects in the new HUD pipeline.** Animated status bars + color-coded outlines for the rest. Verifies layout topology matches `docs/HUD.md`. No per-pane Initialize required (constructors set rects).
+- **2026-05-16** — **Phase B reset.** User (original Revenant developer) flagged that the `docs/HUD.md` layout + the pre-release `src/` rect defines (`HEALTHBARX` etc) do not match the shipped retail HUD. Standalone health/stamina vertical-tube panes are not in the game. `uihudmockuptest.{h,cpp}` and `uistatusbartest.{h,cpp}` moved to `attic/src/`; corresponding dispatch removed from `testmodes.cpp`. Build clean. `statusbar.{h,cpp}` left in `src/` for now because `HealthBar`/`StaminaBar` globals are load-bearing in gameplay; disposition pending (B.r2). New phase items B.r1/B.r2/B.r3 to reconstruct from `recon/` decomp.
+- **2026-05-16** — Phase B.13 `--test=ui-hud-mockup` (`43e49fb`): **all 7 visible retail HUD panes rendered at retail rects in the new HUD pipeline.** Animated status bars + color-coded outlines for the rest. Verifies layout topology matches `docs/HUD.md`. No per-pane Initialize required (constructors set rects). **RETRACTED — see Phase B reset note.**
 - **2026-05-16** — Phase B step 2 for B.1 + B.2 (`7873ac1`): first visible panes on the new HUD pipeline. Each test mode registers a `THudDrawable` visualizer that paints `DrawSolidRect` at the pane's retail rect. Status bars animate level via sine cycle. Pattern is the template for remaining pane bring-ups.
 - **2026-05-16** — `TRenderer::DrawSolidRect` (`a8e36f3`): per-color 1x1 texture cache + existing composite pipeline. Unblocks visual fallback for any pane that hasn't ported its retail draw path.
 - **2026-05-16** — Phase B started. B.1 step 1 (`4df1bcf`, TTextBar data-API contract) and B.2 step 1 (`495a28c`, TStatusBar/THealthBar/TStaminaBar data-API + retail-asset load verification).
