@@ -102,21 +102,48 @@ if it grows beyond one paragraph):
    is standalone-spawnable like a torch flame. Categories so far:
    - **Standalone** — `SpawnForTest(origin)` is enough (F01 flame,
      B01 blood, S01 lightning). No external state needed.
+     Use `EVfxPreviewStyle::Static` / `Combat` / `SpellGround` /
+     `Projectile` depending on the in-game cadence.
    - **Character-attached** — needs a character imagery loaded +
      TCharAnimator running so the effect's owner exists. Status
      overlays (TBurnEffect / TAuraEffect / TIcedEffect), aura
-     glows, healing visuals.
+     glows, healing visuals. **Rig available** as of 2026-05-17:
+     register with `EVfxPreviewStyle::CharacterIdle` and set
+     `SEffect.anchor` to one of CharacterRoot / BoundsCenter /
+     Bone("rhand"|"lhand"|"head"|"chest") / BoneLocalPoint. Use
+     `submit_attached(ctx, dbg, attachment)` instead of `submit`;
+     the rig resolves the anchor every frame and the effect just
+     calls `effect->ForcePos(...)` from the world point. See
+     `TDripEffect.OnHand` in src/vfxtest.cpp for the canonical
+     1-line example. Design + forensics:
+     [CHARACTER_RIG_FORENSICS.md](CHARACTER_RIG_FORENSICS.md).
    - **Character + weapon + attack-anim** — needs a character
      with a weapon equipped and a swing animation cycling so the
      effect's per-tick logic has live weapon-extents to scan.
-     TWeaponSwipe.
+     TWeaponSwipe. **Rig available**: register with
+     `EVfxPreviewStyle::CharacterAttack` and anchor on
+     Bone("weapon") for hilt, BoneLocalPoint("weapon",
+     (0,0,+tipZ)) for tip. The rig picks an `attack*` anim state
+     automatically; cycle to a specific one via the "Next state"
+     button in the rig ImGui panel. Most character meshes name
+     their weapon sub-object `"weapon"` or `"sword"`; per-
+     character fallback list lives in
+     `CHARACTER_RIG_FORENSICS.md §2`.
    - **Projectile (source→target)** — needs a launch point, a
      target point, and a way to advance the projectile along a
      vector each tick. TMissileEffect / TFireBallEffect /
-     TIceBoltEffect / TPhotonEffect.
+     TIceBoltEffect / TPhotonEffect. **Rig pending**.
    - **Spell-cast (caster→ground)** — needs a caster character
      plus a ground-impact point. Spell visuals that originate at
-     a hand and play out at a target location.
+     a hand and play out at a target location. **Rig available**:
+     register with `EVfxPreviewStyle::CharacterCast` and anchor
+     on Bone("rhand") for the cast-from-hand convention (matches
+     `src/spell.cpp:399`'s in-game lookup). The rig picks a
+     `cast*`/`magic*`/`invoke*`/`spell*` anim state automatically.
+     **M09 TTeleporterAnimator (Misthaven recall) is the headline
+     downstream consumer** — its port author should pick this
+     category, anchor on CharacterRoot for the ground burst plus
+     a Bone("rhand") sub-effect for the flourish.
    - **Environment-context** — needs a sector / ground plane /
      water surface to anchor against. TWaterFallEffect, ambient
      drips, ripples on water.
@@ -126,9 +153,9 @@ if it grows beyond one paragraph):
    the rig is reusable from an existing harness primitive or
    needs to be built. The library of rig primitives grows
    incrementally — when a new category appears, add the primitive
-   to vfxtest.{h,cpp} as `Rig*` helpers (e.g. `CharacterRig`,
-   `CharacterWithWeaponRig`, `ProjectileRig`) so the next effect
-   in the same category reuses it.
+   to vfxtest.{h,cpp} as `Rig*` helpers (e.g. `CharacterRig`
+   [done], `ProjectileRig` [pending]) so the next effect in the
+   same category reuses it.
 7. **Gaps / unknowns** — anything still ambiguous. Mark explicitly
    what's documented vs guessed.
 
