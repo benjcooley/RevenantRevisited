@@ -17,6 +17,18 @@ This document is the SOURCE OF TRUTH for what Classic Revenant looks like and ho
 
 If you spot a misread in this doc — fix it. The screenshots are authoritative; this transcription is not.
 
+## Design context — Revenant is a fighting-game-style ARPG
+
+Per the user (original developer): "Revenant is very much that kind of a fighting game." The HUD design follows from that ethos:
+
+- **Two character panels facing off** (Locke vs current target, upper-left vs upper-right) — like Street Fighter / Mortal Kombat health bars facing each other across the screen. The target panel appears the instant the player has a target; it's critical combat real estate, not a peripheral readout.
+- **Three bars per character** (health / mana / stamina) — all three need to be readable at a glance during fast combat exchanges.
+- **Quickspell + potion shelf bottom-prominent** — combat tools always within reach. Fast-access pattern that fighting games use for special moves and inputs.
+- **Game log transparent + multi-color** — combat events stream past without occluding the playfield. Color-coding speeds parsing during action.
+- **Sidebar collapsible** — when combat heats up, the player can hide the sidebar to maximize playfield visibility (`sample_screen_4`).
+
+Treat this as the **lens** for every UI reconstruction call: optimize for **fast combat readability + at-a-glance state + bottom-of-screen action shortcuts**, not menu-driven RPG comfort.
+
 ---
 
 ## Element catalog (per visual evidence)
