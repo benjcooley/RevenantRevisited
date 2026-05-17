@@ -2003,3 +2003,270 @@ void THaloEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     Renderer->AddPointLight(light_wx, light_wy, light_wz, radius,
                             1.0f, 0.85f, 0.40f, intensity);
 }
+
+// *************************************************************************
+// * TFireEffect — FB-pipeline scatter-patch ambient fire (F03)            *
+// *************************************************************************
+//
+// Per-INVENTORY F03 forensics (full body at docs/vfx/INVENTORY.md row F03):
+//
+//   §1 retail src: method bodies live only in
+//      `legacy/walkcode/effect.cpp:201-218` (Pulse + builder) and
+//      `legacy/walkcode/effect.cpp:886-991` (animator). Modern src/effect.cpp
+//      has no `DEFINE_BUILDER("fire", ...)` and no
+//      `REGISTER_3DANIMATOR("Fire", ...)` — vestigial declarations only.
+//   §2 distinct from F01 TFlameEffect: YES. F01 = single torch flipbook +
+//      sparks (1 mesh + particle emitter). F03 = multi-quad scatter patch
+//      (NUMFIRES=15 random XY-offsets in a +/-50 unit patch, each with
+//      independent atlas-frame counter, additive textured billboards).
+//      Different asset (`Misc\Fire.I3D` vs. `Magic\flame.i3d`), different
+//      geometry footprint, different lifetime (spell-killed vs. infinite).
+//   §4 caller / trigger: no live retail caller; legacy/Class.Def:2015
+//      registers "Fire" "Misc\Fire.I3D" 0x119f01e3 as OBJCLASS_EFFECT
+//      but no spell.def variant or ATTACHEFFECT references it.
+//   §6 render passes / rig category: **FB only** (additive textured quads
+//      via SetBlendState; per-quad cycling is sprite atlas frame scrolling
+//      driven by per-quad `f[c]`, NOT a TParticleBucket emitter). The
+//      INVENTORY's prior `FB+PE` guess was incorrect.
+//   §7 gaps: legacy loop bound is 10 not NUMFIRES=15 (pre-release WIP);
+//      this port uses the full 15 as the modern-correct default.
+//
+// Preserved-old-code: pre-release D3D bodies live verbatim at
+// `legacy/walkcode/effect.cpp:204-218,888-991` and are not duplicated
+// here under `#if 0` — the entire legacy/walkcode/ tree is the project's
+// "preserve old code" attic for the WIP effects (see project memory note
+// "preserve old code we'll need").
+
+namespace {
+
+// Pre-release legacy/walkcode/effect.cpp:897-903: each scatter quad
+// starts at xy = random(-50..50, -50..50) with z = 0, frame counter
+// f = random(0..20) - 22 (i.e. -22..-2 startup delay before the quad
+// becomes visible). Quad bounds (+/-50 wu) ~= a small ground patch
+// (the legacy mesh scaled the textured quad by 16 wu — see §6 — so the
+// 15 quads spread across a ~100 wu patch with ~16 wu billboards
+// reads as a "field of small flame puffs"). The harness camera frames
+// roughly +/-500 wu so the patch occupies ~1/5 of the visible scene.
+constexpr int32_t kFirePatchHalfWu        = 50;       // legacy `random(0,100) - 50` extent
+constexpr float   kFireQuadSizeWu         = 32.0f;    // legacy scl=16 (half-size), so full=32
+constexpr int32_t kFireFrameStartLow      = -22;      // legacy `random(0,20) - 22`
+constexpr int32_t kFireFrameStartHighExcl = -2;       // legacy random max+1 (exclusive)
+constexpr int32_t kFireFrameRespawnAt     = 30;       // legacy `f[c] >= 30` respawn gate
+constexpr int32_t kFireSimTickMs          = 1000 / 24;// 24 Hz cadence gate (family-consistent)
+constexpr float   kFireQuadLiftWu         = 4.0f;     // small z lift so quads don't z-fight
+                                                      // the ground plane in harness scene
+
+// Procedural orange/yellow flame-gradient texture. 64x64 RGBA8, single
+// frame (no atlas). Pre-release Misc\Fire.I3D ships an atlas-style
+// flipbook texture, but wiring T3DImagery -> RGBA upload through the
+// modern imagery path for an FB-only rig is overkill at this point
+// (INVENTORY F03 forensics §6); a procedural radial gradient cleanly
+// validates the FB pipeline end-to-end and matches the visual intent
+// ("small additive orange-yellow flame puff"). Same procedural-texture
+// pattern as L02 HaloRingTexture / X17 GoldFlareTexture.
+//
+// Shape: hot bright-yellow core, orange ring, falls off to fully
+// transparent. Premultiplied alpha so the AdditiveStraight blend
+// reads cleanly (rgb tracks the underlying inten * tint product).
+constexpr int32_t kFireTexPx = 64;
+
+TTextureHandle FireScatterTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x4658464952455f30ull;   // "FXFIRE_0"
+
+    static uint8_t pixels[kFireTexPx * kFireTexPx * 4];
+
+    // Tint endpoints — interpolate from yellow-white at the core to
+    // orange-red at the rim. Pre-release legacy material slots were all
+    // zeroed (forensics §6) leaving raw texture-color as the visible
+    // output, so the texture itself carries the entire color identity.
+    constexpr float kCoreR = 1.00f, kCoreG = 0.95f, kCoreB = 0.55f;   // bright yellow
+    constexpr float kRimR  = 1.00f, kRimG  = 0.35f, kRimB  = 0.05f;   // deep orange
+
+    for (int32_t py = 0; py < kFireTexPx; ++py)
+    {
+        for (int32_t px = 0; px < kFireTexPx; ++px)
+        {
+            const float u  = (float(px) + 0.5f) / float(kFireTexPx);
+            const float v  = (float(py) + 0.5f) / float(kFireTexPx);
+            const float dx = u - 0.5f;
+            const float dy = v - 0.5f;
+            // 0 at center, ~0.707 at corners. Normalize so r=1.0 at the
+            // tex edge — past that we cut to fully transparent.
+            const float r  = std::sqrt(dx * dx + dy * dy) * 2.0f;
+
+            // Soft radial falloff: bright core for r < 0.3, smooth fade
+            // to alpha=0 by r==0.95, hard cut beyond.
+            float inten;
+            if (r >= 0.95f)
+                inten = 0.0f;
+            else if (r < 0.3f)
+                inten = 1.0f - 0.25f * (r / 0.3f);     // 1.0 -> 0.75 over the core
+            else
+                inten = 0.75f * (1.0f - (r - 0.3f) / 0.65f);    // 0.75 -> 0 over the rim
+
+            if (inten < 0.0f) inten = 0.0f;
+            if (inten > 1.0f) inten = 1.0f;
+
+            // Interpolate tint core->rim by `r` (clamped to [0,1] in
+            // the visible region).
+            const float tr = r > 1.0f ? 1.0f : r;
+            const float rr = kCoreR + (kRimR - kCoreR) * tr;
+            const float gg = kCoreG + (kRimG - kCoreG) * tr;
+            const float bb = kCoreB + (kRimB - kCoreB) * tr;
+
+            // Premultiplied alpha: rgb == inten * tint, a == inten.
+            const int32_t idx = (py * kFireTexPx + px) * 4;
+            pixels[idx + 0] = uint8_t(rr * inten * 255.0f);
+            pixels[idx + 1] = uint8_t(gg * inten * 255.0f);
+            pixels[idx + 2] = uint8_t(bb * inten * 255.0f);
+            pixels[idx + 3] = uint8_t(inten * 255.0f);
+        }
+    }
+
+    return Renderer->RegisterTextureAsset(kKey, pixels, sizeof(pixels),
+                                          kFireTexPx, kFireTexPx,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(pixels)));
+}
+
+// Re-roll one scatter quad's XY offset + startup frame. Pre-release
+// legacy/walkcode/effect.cpp:897-903 (Initialize) and
+// legacy/walkcode/effect.cpp:940-943 / 963-966 (respawn-in-place) both
+// use the same formula. Factored here so Initialize() + the
+// `f[c] >= 30` respawn gate in TickAndSubmitForTest share one source.
+void RerollFireQuad(SFireScatterQuad& q)
+{
+    q.ox    = float(random(0, 2 * kFirePatchHalfWu) - kFirePatchHalfWu);
+    q.oy    = float(random(0, 2 * kFirePatchHalfWu) - kFirePatchHalfWu);
+    q.frame = random(0, kFireFrameStartHighExcl - kFireFrameStartLow)
+              + kFireFrameStartLow;
+}
+
+}   // namespace
+
+void TFireEffect::Pulse()
+{
+    // Pre-release Pulse (legacy/walkcode/effect.cpp:204-218) damages
+    // characters in range under `spell->GetFire()` and self-kills. The
+    // standalone harness has no spell context — chain to base only.
+    // The in-game caller path is data-script-blocked (no live "fire"
+    // spawn site exists; see INVENTORY F03 §4).
+    TObjectInstance::Pulse();
+}
+
+TFireEffect* TFireEffect::SpawnForTest(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[fire] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    auto* fire = new TFireEffect(static_cast<TObjectImagery*>(nullptr));
+    fire->ForcePos(origin);
+    fire->SetMapIndex(MapPane.MakeIndex());
+
+    // Seed all scatter quads. Pre-release Initialize special-cased
+    // index 0 to (0,0,0) / f=0 (legacy/walkcode/effect.cpp:892-895);
+    // we keep that — the center quad is always visible immediately
+    // and anchors the patch.
+    fire->quads_[0].ox    = 0.0f;
+    fire->quads_[0].oy    = 0.0f;
+    fire->quads_[0].frame = 0;
+    for (int32_t i = 1; i < kFireScatterQuads; ++i)
+        RerollFireQuad(fire->quads_[i]);
+
+    fire->ActivateComponents();
+
+    // Pre-register the texture so the first frame's submit doesn't pay
+    // the bake cost (~16KB; cheap).
+    const TTextureHandle tex = FireScatterTexture();
+    if (tex == kInvalidTexture)
+        log_warn("[fire] SpawnForTest: scatter texture register failed; F03 will draw nothing");
+
+    log_info("[fire] SpawnForTest: map_index=%d origin=(%d,%d,%d) "
+             "quads=%d patch=%dx%d wu tex=%u",
+             fire->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             kFireScatterQuads,
+             2 * kFirePatchHalfWu, 2 * kFirePatchHalfWu, tex);
+    return fire;
+}
+
+void TFireEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer)
+        return;
+
+    // 24 Hz sim-tick gate. Pre-release Animate / Render were ungated;
+    // at modern 60 fps the per-quad frame counter would cycle ~2.5x too
+    // fast (same fix applied in F01 / H03 / M05 / L02).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFireSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFireSimTickMs);
+
+        // Pre-release legacy/walkcode/effect.cpp:937-947 (Animate) and
+        // 957-969 (Render) both advance `f[c]` and respawn-in-place
+        // when `f[c] >= 30`. The Render-side advance is the visible one
+        // (Animate only re-rolls; Render does it too, redundantly). We
+        // do it once here, in the sim-tick gate.
+        //
+        // Legacy quirk preserved-with-note: pre-release looped `c < 10`
+        // even though NUMFIRES=15 (WIP; INVENTORY F03 §7(a)). This port
+        // ticks the full kFireScatterQuads (=15) — the modern-correct
+        // behavior. The legacy quirk is documented in the inventory row,
+        // not replicated.
+        for (int32_t i = 0; i < kFireScatterQuads; ++i)
+        {
+            if (quads_[i].frame >= kFireFrameRespawnAt)
+                RerollFireQuad(quads_[i]);
+            else
+                ++quads_[i].frame;
+        }
+    }
+
+    const TTextureHandle tex = FireScatterTexture();
+    if (tex == kInvalidTexture)
+        return;
+
+    const S3DPoint& p = Pos();
+
+    // FB pipeline: one additive billboard per visible quad. Pre-release
+    // `if (f[c] < 0) continue` (legacy effect.cpp:971-972) — the
+    // startup-delay window keeps a randomly-staggered subset of quads
+    // invisible each frame, which produces the "occasional flickering
+    // flame puff" cadence of an ambient fire. Preserved here.
+    SBillboardDrawItem item = {};
+    item.size_wu[0]   = kFireQuadSizeWu;
+    item.size_wu[1]   = kFireQuadSizeWu;
+    item.color_rgba[0] = 1.0f;     // tint lives in the texture (premultiplied)
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = 0.0f;
+    item.uv_rect[1] = 0.0f;
+    item.uv_rect[2] = 1.0f;
+    item.uv_rect[3] = 1.0f;
+    item.key.texture     = tex;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    // Pre-release SetBlendState in TFireAnimator::Render is
+    // D3DBLEND_ONE / D3DBLEND_ONE additive — AdditiveStraight here
+    // (same choice as L02 halo / H03 ripple / M05 mist).
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+
+    for (int32_t i = 0; i < kFireScatterQuads; ++i)
+    {
+        if (quads_[i].frame < 0)
+            continue;   // startup-delay window — quad not yet visible
+
+        item.world_pos[0] = float(p.x) + quads_[i].ox;
+        item.world_pos[1] = float(p.y) + quads_[i].oy;
+        item.world_pos[2] = float(p.z) + kFireQuadLiftWu;
+        Renderer->SubmitFxBillboard(item);
+    }
+}

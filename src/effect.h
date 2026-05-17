@@ -296,6 +296,24 @@ class TParticleEffectComponent : public TObjectComponent
 
 _CLASSDEF(TFireEffect)
 
+// Number of scatter quads in the ambient-fire patch. Pre-release matches
+// `NUMFIRES` further down (the legacy TFireAnimator declaration).
+// Forensics §6: legacy TFireAnimator::Animate/Render loops over `c < 10`
+// even though `NUMFIRES == 15` — pre-release WIP quirk. The port keeps
+// the full 15-quad scatter as the modern default; INVENTORY F03 gap 7(a)
+// records the legacy 10-loop quirk for traceability.
+inline constexpr int32_t kFireScatterQuads = 15;
+
+// One scatter quad's transient state. Pre-release stored these as parallel
+// arrays `p[NUMFIRES]` / `f[NUMFIRES]` on TFireAnimator; we collapse onto
+// the effect class (matches the H03 / M05 / L02 animator-state collapse).
+struct SFireScatterQuad
+{
+    float   ox = 0.0f;      // x offset from patch origin, in world units
+    float   oy = 0.0f;      // y offset from patch origin, in world units
+    int32_t frame = 0;      // per-quad atlas frame counter (-22..30 cycle)
+};
+
 class TFireEffect : public TEffect
 {
   public:
@@ -303,6 +321,47 @@ class TFireEffect : public TEffect
     TFireEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
 
     virtual void Pulse();
+
+    // Spawn a standalone TFireEffect for the --test=vfx harness (F03
+    // rig). Per INVENTORY F03 forensics §1: no live retail caller exists
+    // (no spell.def variant invokes the bare "fire" builder, no
+    // ATTACHEFFECT "fire") — this harness path IS the canonical Phase-B
+    // exercise route. No imagery lookup: the scatter quads use a
+    // procedural orange/yellow flame-gradient texture built via
+    // `Renderer->RegisterTextureAsset` (the shipped `Misc\fire.i3d`
+    // atlas-tex isn't wired through the modern imagery path yet, and
+    // for an FB-only rig the procedural texture cleanly validates the
+    // pipeline without the asset-load dependency — same call as the
+    // L02 halo). Caller owns the returned pointer.
+    [[nodiscard]] static TFireEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness; mirrors F01 / H03 / M05 /
+    // L02. Drives per-quad atlas-frame cycling (sim-tick-gated at 24 Hz
+    // to match other Fire-family cadence) and submits
+    // `kFireScatterQuads` additive textured billboards via
+    // SubmitFxBillboard each frame. FB pipeline only — see INVENTORY F03
+    // forensics §6 (pre-release renders quads directly, no particle
+    // bucket).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the harness `delete`s the effect. Pre-release Pulse
+    // self-killed via `spell->GetFire()` damage gate; the standalone rig
+    // is permanently alive (no spell context) so this just mirrors the
+    // alive_ flag for parity with F01 / H03 / M05 / L02. The harness's
+    // SpellGround re-fire cadence rotates fresh instances in.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Pre-release TFireAnimator owned `p[NUMFIRES]` + `f[NUMFIRES]`;
+    // collapsed onto the effect class (same pattern as H03 / M05 / L02).
+    // S3DMat `mat[NUMFIRES]` from pre-release is dropped — material slots
+    // were zeroed on init and never re-touched (legacy effect.cpp:909-925),
+    // which has no analog in the modern FB-billboard pipeline (per-item
+    // additive blend is set via key.blend, not per-material).
+    SFireScatterQuad quads_[kFireScatterQuads] {};
+    bool             alive_ = true;
+    double           sim_accum_ms_ = 0.0;
+    int32_t          rng_seed_ = 0;     // per-instance RNG seed; reseeded each lifetime
 };
 
 class TFlameEffect : public TEffect
