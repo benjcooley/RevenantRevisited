@@ -28,6 +28,7 @@
 #include "particlefx.h"
 #include "renderer.h"
 #include "revenant.h"     // VK_LEFT, VK_RIGHT, VK_SPACE
+#include "stripeffect.h"  // TStripEffect (S01 SR-pipeline port)
 #include "surface.h"
 #include "time.h"
 
@@ -433,15 +434,18 @@ void HandleKeyPress(int32_t key, bool down)
 // *************************************************************************
 //
 // These four effects validate the Phase 1 FX submission pipelines
-// end-to-end. The FB (F01) and PE (B01) slots are real per-effect Phase 2
-// ports (`TFlameEffect`, `TBloodEffect`) — the lambdas here are thin
-// shims that defer all spawn / kinematic / draw work to the effect class.
-// The SR (X16) and LS (X17) slots are still placeholders pending their
-// own Phase 2 ports (`TStripEffect`, `TFlareAnimator`).
+// end-to-end. The FB (F01), PE (B01), and SR (S01) slots are real
+// per-effect Phase 2 ports (`TFlameEffect`, `TBloodEffect`,
+// `TStripEffect`) — the lambdas here are thin shims that defer all
+// spawn / kinematic / draw work to the effect class. The LS (X17) slot
+// is still a placeholder pending its own Phase 2 port (`TFlareAnimator`).
 //
-// Ribbon + flare each keep a static solid-color texture handle created
+// The flare placeholder keeps a static solid-color texture handle created
 // lazily on first spawn; the real effects bring their own textures via
-// the imagery cache (see TFlameEffect::SpawnForTest / TBloodEffect::SpawnForTest).
+// the imagery cache (see TFlameEffect::SpawnForTest / TBloodEffect::SpawnForTest)
+// or fall back to the renderer's white texture handle (TStripEffect — the
+// Magic\lightning.* asset hasn't been identified yet; tracked as a S01
+// forensics gap).
 //
 // *************************************************************************
 
@@ -450,14 +454,6 @@ namespace {
 TTextureHandle WhiteTexture()
 {
     return Renderer ? Renderer->WhiteTextureHandle() : kInvalidTexture;
-}
-
-TTextureHandle BlueRibbonTexture()
-{
-    if (!Renderer) return kInvalidTexture;
-    return Renderer->SolidColorTexture(0x46585242424F4Eull,  // "FXRBBON"
-                                       0xFFFFC080u,           // soft blue tint
-                                       "vfx.ribbon.solid");
 }
 
 TTextureHandle GoldFlareTexture()
@@ -543,58 +539,39 @@ void BloodSubmit(void* cp, EFxDebugMode dbg)
     c->blood->TickAndSubmitForTest(dbg);
 }
 
-// --- SR: static ribbon placeholder ---------------------------------------
-struct SRibbonCtx {
-    std::vector<SStripSegment> segs;
+// --- SR: real TStripEffect (S01 lightning bolt) --------------------------
+// Spawns a sector-less TStripEffect at the harness-provided origin via
+// SpawnForTest and drives its segment ring through TickAndSubmitForTest
+// each frame. Mirrors the F01 / B01 pattern: the harness lambda is a thin
+// shim; all spawn / kinematic / draw logic lives on the real effect class.
+// See src/stripeffect.cpp for the SR-pipeline scope boundary (Phase 2.3 =
+// strip-only validator; glow + sparks composite lands in S01a).
+struct SStripCtx {
+    TStripEffect* strip = nullptr;
 };
 
-void* RibbonSpawn(const S3DPoint& origin)
+void* StripSpawn(const S3DPoint& origin)
 {
-    auto* c = new SRibbonCtx();
-    constexpr int32_t N = 16;
-    c->segs.reserve(N);
-    const float ox = float(origin.x);
-    const float oy = float(origin.y);
-    const float oz = float(origin.z);
-    for (int32_t i = 0; i < N; ++i)
-    {
-        const float t0 = float(i)     / float(N);
-        const float t1 = float(i + 1) / float(N);
-        SStripSegment s = {};
-        s.world_a[0] = ox - 150.0f + 300.0f * t0;
-        s.world_a[1] = oy;
-        s.world_a[2] = oz + 60.0f + 30.0f * std::sin(t0 * 6.28f);
-        s.world_b[0] = ox - 150.0f + 300.0f * t1;
-        s.world_b[1] = oy;
-        s.world_b[2] = oz + 60.0f + 30.0f * std::sin(t1 * 6.28f);
-        s.width_a_wu = 8.0f + 16.0f * t0;
-        s.width_b_wu = 8.0f + 16.0f * t1;
-        const float a0 = 1.0f - t0;
-        const float a1 = 1.0f - t1;
-        s.color_a[0] = 0.6f; s.color_a[1] = 0.8f; s.color_a[2] = 1.0f; s.color_a[3] = a0;
-        s.color_b[0] = 0.6f; s.color_b[1] = 0.8f; s.color_b[2] = 1.0f; s.color_b[3] = a1;
-        s.u_a = t0;
-        s.u_b = t1;
-        c->segs.push_back(s);
-    }
+    auto* c = new SStripCtx();
+    c->strip = TStripEffect::SpawnForTest(origin);
+    if (!c->strip)
+        log_warn("[vfx] TStripEffect::SpawnForTest returned null; S01 entry will draw nothing");
     return c;
 }
 
-void RibbonDestroy(void* cp) { delete static_cast<SRibbonCtx*>(cp); }
-
-void RibbonSubmit(void* cp, EFxDebugMode dbg)
+void StripDestroy(void* cp)
 {
-    auto* c = static_cast<SRibbonCtx*>(cp);
-    if (c->segs.empty()) return;
-    SStripDrawItem it = {};
-    it.segments     = c->segs.data();
-    it.num_segments = int32_t(c->segs.size());
-    it.key.texture     = BlueRibbonTexture();
-    it.key.pipeline_id = uint16_t(EFxPipeline::Strip);
-    it.key.blend       = uint8_t(EFxBlend::Alpha);
-    it.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    it.debug_mode      = dbg;
-    Renderer->SubmitFxStrip(it);
+    auto* c = static_cast<SStripCtx*>(cp);
+    delete c->strip;
+    delete c;
+}
+
+void StripSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SStripCtx*>(cp);
+    if (!c->strip)
+        return;
+    c->strip->TickAndSubmitForTest(dbg);
 }
 
 // --- LS: flare + dynamic point light placeholder -------------------------
@@ -675,17 +652,20 @@ struct SVfxTestBootstrap {
         blood.destroy       = [](void* c) { BloodDestroy(c); };
         VfxTest::DeferredRegister(blood);
 
-        VfxTest::SEffect ribbon = {};
-        ribbon.id            = "TStripEffect.placeholder";
-        ribbon.family        = "strip";
-        ribbon.pipeline      = "SR";
-        // Strip / sword-trail is combat-cadence: re-fires across the
-        // screen like a series of swings.
-        ribbon.preview_style = VfxTest::EVfxPreviewStyle::Combat;
-        ribbon.factory       = [](const S3DPoint& o) -> void* { return RibbonSpawn(o); };
-        ribbon.submit        = [](void* c, EFxDebugMode d) { RibbonSubmit(c, d); };
-        ribbon.destroy       = [](void* c) { RibbonDestroy(c); };
-        VfxTest::DeferredRegister(ribbon);
+        VfxTest::SEffect strip = {};
+        strip.id            = "TStripEffect";
+        strip.family        = "strip";
+        strip.pipeline      = "SR";
+        // Lightning bolt is combat-cadence: re-fires across the screen
+        // like successive casts (the in-game cadence is roughly one
+        // bolt per cast-cycle; the harness re-fire every ~0.6s reads
+        // as a flurry of casts, which is fine for the SR-pipeline
+        // validator visual.)
+        strip.preview_style = VfxTest::EVfxPreviewStyle::Combat;
+        strip.factory       = [](const S3DPoint& o) -> void* { return StripSpawn(o); };
+        strip.submit        = [](void* c, EFxDebugMode d) { StripSubmit(c, d); };
+        strip.destroy       = [](void* c) { StripDestroy(c); };
+        VfxTest::DeferredRegister(strip);
 
         VfxTest::SEffect flare = {};
         flare.id            = "TFlareAnimator.placeholder";

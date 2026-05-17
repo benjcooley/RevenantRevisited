@@ -564,7 +564,12 @@ TObjectInstance::TObjectInstance(TObjectImagery* img)
     ClearObject();
     imagery = img;
 
-    if (imagery->NeedsAnimator(this))
+    // Null-imagery is a legitimate state for the --test=vfx harness path
+    // (effects that don't need a TObjectImagery — e.g. TStripEffect S01,
+    // which renders the SR pipeline against the renderer's white texture).
+    // The in-game spawn path always supplies a non-null imagery via the
+    // SObjectDef-based ctor.
+    if (imagery && imagery->NeedsAnimator(this))
         flags |= OF_ANIMATE;
 
     if (ObjClass() != OBJCLASS_TILE && ObjClass() != OBJCLASS_SHADOW)
