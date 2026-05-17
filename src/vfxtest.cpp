@@ -637,6 +637,47 @@ void RippleSubmit(void* cp, EFxDebugMode dbg)
     c->ripple->TickAndSubmitForTest(dbg);
 }
 
+// --- PE: real TMistEffect (Magic/mist.i3d, M05) --------------------------
+// Spawns a sector-less TMistEffect at the harness-provided origin via
+// SpawnForTest and drives its 50 long-lived ascending wisps through
+// TickAndSubmitForTest each frame. Unlike B01 (one-shot 10-droplet
+// burst), this is a *continuous emitter*: drops self-recycle in place
+// on landing, so the bucket count stays steady-state at 50 from spawn
+// to destroy. See INVENTORY M05 forensics §3 for the cadence and §6
+// for the rig category.
+//
+// Static preview style — mist is ambient environmental, never re-fires;
+// the harness destroying-and-respawning would defeat the test value
+// (the per-drop steady-state needs a few seconds to develop). Cycle
+// out and back in with Left/Right to restart.
+struct SMistCtx {
+    TMistEffect* mist = nullptr;
+};
+
+void* MistSpawn(const S3DPoint& origin)
+{
+    auto* c = new SMistCtx();
+    c->mist = TMistEffect::SpawnForTest(origin);
+    if (!c->mist)
+        log_warn("[vfx] TMistEffect::SpawnForTest returned null; M05 entry will draw nothing");
+    return c;
+}
+
+void MistDestroy(void* cp)
+{
+    auto* c = static_cast<SMistCtx*>(cp);
+    delete c->mist;
+    delete c;
+}
+
+void MistSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SMistCtx*>(cp);
+    if (!c->mist)
+        return;
+    c->mist->TickAndSubmitForTest(dbg);
+}
+
 // --- LS: flare + dynamic point light placeholder -------------------------
 struct SFlareCtx {
     float age = 0.0f;
@@ -741,6 +782,18 @@ struct SVfxTestBootstrap {
         ripple.submit        = [](void* c, EFxDebugMode d) { RippleSubmit(c, d); };
         ripple.destroy       = [](void* c) { RippleDestroy(c); };
         VfxTest::DeferredRegister(ripple);
+
+        VfxTest::SEffect mist = {};
+        mist.id            = "TMistEffect";
+        mist.family        = "ambient";
+        mist.pipeline      = "PE";
+        // Mist is a continuous ambient emitter — Static cadence (never
+        // re-fires; cycle out/in to restart). See INVENTORY M05 §6.
+        mist.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        mist.factory       = [](const S3DPoint& o) -> void* { return MistSpawn(o); };
+        mist.submit        = [](void* c, EFxDebugMode d) { MistSubmit(c, d); };
+        mist.destroy       = [](void* c) { MistDestroy(c); };
+        VfxTest::DeferredRegister(mist);
 
         VfxTest::SEffect flare = {};
         flare.id            = "TFlareAnimator.placeholder";

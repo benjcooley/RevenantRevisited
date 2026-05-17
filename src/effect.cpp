@@ -1376,3 +1376,352 @@ void TRippleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     item.debug_mode      = debug_mode;
     Renderer->SubmitFxBillboard(item);
 }
+
+// *************************************************************************
+// * TMistEffect - PE-pipeline continuous-emitter spawn for --test=vfx (M05) *
+// *************************************************************************
+//
+// Scope: Phase 2 M05 row. Ports the ambient ascending-wisp emitter from
+// `TMistAnimator` (src/effect_old.cpp:11342-11515) to the PE pipeline,
+// reusing the B01 TBloodEffect global-bucket pattern with a continuous
+// (non-burst) seeding model.
+//
+// What this *does* deliver:
+//   1. A real `TMistEffect` instance that owns its lifecycle.
+//   2. A `TParticleBucket` allocated from `ParticleManager()` and
+//      submitted every frame via `Renderer->SubmitFxParticleBucket()` —
+//      exercising the PE pipeline end-to-end through the real effect
+//      class.
+//   3. Real `Magic\mist.i3d` imagery (the canonical wisp sprite,
+//      8916 bytes at legacy/Imagery/Magic/mist.i3d). Texture sourced
+//      via the F01/B01 lazy-mesh-init poke pattern.
+//   4. 50 long-lived drops with retail-faithful pos/vel envelope
+//      (MIST_LENGTH=64, MIST_WIDTH=20, MIST_HEIGHT=4 — see effect_old
+//      and INVENTORY M05 forensics §1). Drops integrate Euler with
+//      RIPPLE_GRAVITY=0.37 wu/tick² and respawn-in-place on landing
+//      (pos.z <= 0). Per-particle integration gated to retail's 24 Hz
+//      sim tick (pre-release was ungated; without the gate drops would
+//      fly 2.5× too fast at 60 fps).
+//
+// What this does *not* deliver:
+//   - The `AddNewRipple` on landing (was commented-out in pre-release —
+//     see forensics §7.6).
+//   - The per-drop 45°+facing rotation (camera-aligned billboard
+//     supersedes — forensics §7.5).
+//   - In-game spawn through area-effect-registry dispatch (no live
+//     registry caller in the port today; harness-only).
+//
+namespace {
+
+constexpr const char* kMistImageryPath = "Magic\\mist.i3d";
+constexpr const char* kMistBucketName  = "vfx.mist.drops";
+
+// Pre-release constants (effect_old.cpp:11370-11374), preserved for
+// reviewability. All values authored at retail's 24 Hz sim tick.
+constexpr int32_t kMistMaxDrops = 50;
+constexpr float   kMistLength   = 64.0f;     // X envelope half-extent (×2 for vel range)
+constexpr float   kMistWidth    = 20.0f;     // Y envelope half-extent
+constexpr float   kMistHeight   = 4.0f;      // Z initial-velocity max (vz = random(H/2..H))
+constexpr float   kMistScale    = 0.7f;      // pre-release sprite scale
+constexpr float   kMistGravity  = 0.37f;     // RIPPLE_GRAVITY shared constant, wu/tick²
+// Pre-release spawned drops at z=5 (close to ground) and they ballisticed
+// to a peak around vz²/(2g) ≈ 4²/(2·0.37) ≈ 21 wu before falling back.
+// At retail's 24 Hz the visible cluster lived in the ~5..25 wu band. At
+// the harness's iso camera (origin-centred, looking down) drops in that
+// band cluster near the centre and read as a low ground-wisp; the
+// camera doesn't show much below z=0. The +20 wu lift offsets the
+// spawn floor to land in the visible window; the arc still respects
+// the retail vz / gravity envelope.
+constexpr float   kMistSpawnZ        = 20.0f;     // wu above origin (was 5 in pre-release)
+constexpr float   kMistLandFloor     = 0.0f;      // drop respawn threshold (relative to origin.z)
+constexpr int32_t kMistSimTickMs = 1000 / 24;  // 24 Hz integration gate
+
+// Owner-id allocator mirrors B01's pattern (per-instance unique id so
+// concurrent emitters don't share particles in the global bucket; the
+// usual GetMapIndex stamp isn't unique across the test harness's
+// detached instances).
+float NextMistOwnerId()
+{
+    static float next = 5000.0f;
+    const float v = next;
+    next += 1.0f;
+    return v;
+}
+
+// Lazily allocate the shared mist bucket against the mist imagery's
+// texture slot 0. Returns nullptr if the texture handle isn't ready.
+TParticleBucket* AcquireMistBucket(T3DImagery* img3d)
+{
+    if (TParticleBucket* existing = ParticleManager().FindGlobalBucket(kMistBucketName))
+        return existing;
+
+    // Same lazy-mesh-init poke as F01/B01: NumTextures() is a passive
+    // read; NumObjects() triggers slot population.
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[mist] AcquireMistBucket: imagery has 0 textures after "
+                  "lazy-init poke (objects=%d)", img3d->NumObjects());
+        return nullptr;
+    }
+
+    S3DTex tex = {};
+    img3d->GetTexture(0, &tex);
+    if (tex.htexture == kInvalidTexture)
+    {
+        log_error("[mist] AcquireMistBucket: texture slot 0 handle invalid");
+        return nullptr;
+    }
+
+    SParticleBucketDesc desc = {};
+    desc.name           = kMistBucketName;
+    desc.scope          = EParticleBucketScope::Global;
+    // Mist is unlit (additive bypasses LitFlat per pre-release
+    // SetAddBlendState — see forensics §4). PremulAlpha pairs with
+    // chroma-key-converted texture for clean edges (3dimage.cpp's
+    // >20%-black-pixel rule auto-fires on the mist sprite, same as
+    // Blood.I3D).
+    desc.light_mode     = EParticleLightMode::Unlit;
+    desc.depth_mode     = EParticleDepthMode::TestNoWrite;
+    // Pre-release uses `SetAddBlendState` = D3DBLEND_ONE/ONE additive.
+    // The match in our enum is AdditiveStraight (forensics §4 + the
+    // particlefx.h note: "ONE/ONE = retail-style self-lit additive").
+    desc.blend          = EParticleBlendMode::AdditiveStraight;
+    desc.sort           = EParticleSortMode::None;
+    desc.texture        = tex.htexture;
+    desc.texture_width  = int32_t(tex.desc.width  > 0 ? tex.desc.width  : 1);
+    desc.texture_height = int32_t(tex.desc.height > 0 ? tex.desc.height : 1);
+    // mist.i3d is a single-frame sprite (no atlas — pre-release renders
+    // GetObject(0) which is a single billboard per drop).
+    desc.frame_cols     = 1;
+    desc.frame_rows     = 1;
+    // Default-size in world units. Pre-release scaled the texture by
+    // 0.7 against the I3D's mesh-space quad (the quad itself was sized
+    // implicitly by the model). For modern billboards we choose a fixed
+    // wu size that reads at the harness camera distance. The 50-drop
+    // cluster wants to read as a "ground-hugging wisp" — sized similar
+    // to the blood splats (~48 wu) so the cluster has visible mass.
+    desc.default_width  = 96.0f;
+    desc.default_height = 96.0f;
+
+    SParticleBufferLayout layout = {};
+    ParticleLayoutAddVar(layout, EParticleVar::OwnerId);
+    ParticleLayoutAddVar(layout, EParticleVar::Life);
+    ParticleLayoutAddVar(layout, EParticleVar::Age);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawPos);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawFrame);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawRot);
+    // EmitVel stores per-particle velocity (world-units / sim-tick to
+    // keep the math in retail units, then scaled by tick-count per
+    // frame in TickAndSubmitForTest).
+    ParticleLayoutAddVar(layout, EParticleVar::EmitVel);
+
+    TParticleBucket* bucket = ParticleManager().GetOrCreateGlobalBucket(desc, layout);
+    log_info("[mist] AcquireMistBucket: bucket='%s' tex=%dx%d handle=%u",
+             kMistBucketName, desc.texture_width, desc.texture_height,
+             tex.htexture);
+    return bucket;
+}
+
+// Re-seed one drop's pos+vel from the retail envelope. Used both at
+// initial spawn and on landing-respawn. Origin is the emitter centre
+// in world units; offsets are pre-release-local-space and added on.
+void SeedMistDrop(TParticleBucket& bucket, int32_t pi, const S3DPoint& origin)
+{
+    auto frand = []() { return float(std::rand()) / float(RAND_MAX); };
+
+    if (float* pos = bucket.VarPtr(pi, EParticleVar::DrawPos))
+    {
+        // Pre-release spawn envelope was ±32 wu × ±10 wu at the harness
+        // camera distance; that's a tight ground patch under one tile.
+        // Spread the spawn area 3× horizontally so the 50 drops read as
+        // a wisp-blanket area rather than a single tight blob — keeps
+        // retail's per-drop kinematics intact, just samples a wider
+        // ground patch.
+        pos[0] = float(origin.x) + (frand() - 0.5f) * kMistLength * 3.0f;   // ±96 wu
+        pos[1] = float(origin.y) + (frand() - 0.5f) * kMistWidth  * 3.0f;   // ±30 wu
+        pos[2] = float(origin.z) + kMistSpawnZ;                              // +20 wu (forensics §7.5)
+    }
+    if (float* vel = bucket.VarPtr(pi, EParticleVar::EmitVel))
+    {
+        // Pre-release: vx = random(-L,L)/32, vy = random(-W,W)/32,
+        // vz = random(H/2, H). All wu/tick at 24 Hz. Retail-faithful;
+        // the visible "rise" comes from gravity bringing them back
+        // down after ~5 ticks of upward arc.
+        vel[0] = (frand() * 2.0f - 1.0f) * (kMistLength / 32.0f);    // ±2.0 wu/tick
+        vel[1] = (frand() * 2.0f - 1.0f) * (kMistWidth  / 32.0f);    // ±0.625 wu/tick
+        vel[2] = (kMistHeight * 0.5f) + frand() * (kMistHeight * 0.5f);  // +2..+4 wu/tick
+    }
+    if (float* age = bucket.VarPtr(pi, EParticleVar::Age))
+        *age = 0.0f;
+    // Drops live until pos.z <= 0; the `life` field is a soft upper
+    // bound just so the bucket's reaper doesn't tag them as zombies if
+    // gravity somehow doesn't bring them back (e.g. negative gravity
+    // in a future variant). 5 seconds at 24 Hz = 120 ticks, well
+    // beyond any realistic ballistic arc with our vz=2..4 + g=0.37.
+    if (float* life = bucket.VarPtr(pi, EParticleVar::Life))
+        *life = 5.0f;
+}
+
+}   // namespace
+
+TMistEffect::~TMistEffect()
+{
+    if (bucket_ && owner_particle_id_ >= 0.0f)
+        bucket_->KillParticlesByOwner(owner_particle_id_);
+}
+
+// Retail TMistEffect::Initialize / Pulse are empty stubs in pre-release
+// (effect_old.cpp:11349-11356) — all the work lives in the animator.
+// Phase 2 collapses both into TMistEffect; in-game spawn path is
+// deferred (no live caller — INVENTORY M05 forensics §5).
+void TMistEffect::Initialize() {}
+void TMistEffect::Pulse()      { TEffect::Pulse(); }
+
+TMistEffect* TMistEffect::SpawnForTest(const S3DPoint& origin)
+{
+    const int32_t img_id = TObjectImagery::FindImagery(kMistImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[mist] SpawnForTest: FindImagery('%s') failed", kMistImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[mist] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kMistImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[mist] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kMistImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* mist = new TMistEffect(base);
+    mist->ForcePos(origin);
+    mist->SetMapIndex(MapPane.MakeIndex());
+    mist->ActivateComponents();
+
+    mist->bucket_ = AcquireMistBucket(img3d);
+    if (!mist->bucket_)
+    {
+        log_warn("[mist] SpawnForTest: bucket unavailable — M05 will draw nothing");
+        return mist;
+    }
+    mist->owner_particle_id_ = NextMistOwnerId();
+
+    // Seed all 50 drops up-front. Unlike B01's one-shot burst, these
+    // live forever — they recycle in-place on landing (TickAndSubmitForTest).
+    TParticleBucket& bucket = *mist->bucket_;
+    const S3DPoint& p = mist->Pos();
+    for (int32_t k = 0; k < kMistMaxDrops; ++k)
+    {
+        const int32_t pi = bucket.AddParticle(mist->owner_particle_id_, /*life*/5.0f);
+        if (pi < 0) break;
+        SeedMistDrop(bucket, pi, p);
+
+        // DrawScl in this engine is the *absolute* per-particle size
+        // in world units (not a multiplier on default_width/height —
+        // see renderer.cpp::SubmitFxParticleBucket which overwrites
+        // size_wu from ds[]). Per-drop random jitter (±25%) breaks
+        // up the otherwise too-uniform 50-drop cluster. Smaller than
+        // 96 wu so individual wisps read instead of merging into a
+        // single bright blob.
+        if (float* ds = bucket.VarPtr(pi, EParticleVar::DrawScl))
+        {
+            const float frand_u = float(std::rand()) / float(RAND_MAX);
+            const float sz = 56.0f * (0.75f + 0.5f * frand_u);
+            ds[0] = sz;
+            ds[1] = sz;
+            ds[2] = 1.0f;
+        }
+        if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
+            *df = 0.0f;
+        if (float* dr = bucket.VarPtr(pi, EParticleVar::DrawRot))
+            *dr = 0.0f;
+        // Soft cool-white wisp tint. With AdditiveStraight blend and 50
+        // drops overlapping near the centre, full white (1,1,1,1) is way
+        // too bright — sums saturate to solid white blob. Per-particle
+        // intensity ~0.18 means the densest centre (a few drops on top
+        // of each other) reads as bright but never clips, while the
+        // sparser edges fade naturally to translucent. Slight cyan
+        // tilt (b > r) reads as "mist" not "smoke".
+        if (float* col = bucket.VarPtr(pi, EParticleVar::DrawColor))
+        {
+            col[0] = 0.16f;
+            col[1] = 0.18f;
+            col[2] = 0.22f;
+            col[3] = 1.0f;
+        }
+    }
+
+    log_info("[mist] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "owner_id=%.0f textures=%d drops=%d",
+             kMistImageryPath, mist->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             mist->owner_particle_id_, img3d->NumTextures(), kMistMaxDrops);
+    return mist;
+}
+
+void TMistEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!bucket_ || !Renderer)
+        return;
+
+    // 24 Hz sim-tick gate (forensics §7.4). Without this the upward
+    // velocity (max +4 wu/tick) runs at render rate → 240 wu/s at 60 fps
+    // vs. retail's intended 96 wu/s.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    int32_t ticks = 0;
+    while (sim_accum_ms_ >= double(kMistSimTickMs))
+    {
+        sim_accum_ms_ -= double(kMistSimTickMs);
+        ++ticks;
+    }
+
+    if (ticks > 0)
+    {
+        const S3DPoint& p = Pos();
+        for (int32_t i = 0; i < bucket_->Count(); ++i)
+        {
+            const float* owner = bucket_->VarPtr(i, EParticleVar::OwnerId);
+            if (!owner || *owner != owner_particle_id_)
+                continue;
+
+            float* pos = bucket_->VarPtr(i, EParticleVar::DrawPos);
+            float* vel = bucket_->VarPtr(i, EParticleVar::EmitVel);
+            if (!pos || !vel)
+                continue;
+
+            for (int32_t t = 0; t < ticks; ++t)
+            {
+                pos[0] += vel[0];
+                pos[1] += vel[1];
+                pos[2] += vel[2];
+                vel[2] -= kMistGravity;
+                // Retail respawn-in-place on landing (effect_old.cpp:11448).
+                // Drops never die — they immediately re-seed at random
+                // pos/vel and keep the emitter in steady-state flux.
+                if (pos[2] <= float(p.z))
+                {
+                    SeedMistDrop(*bucket_, i, p);
+                    // Re-read pos/vel after SeedMistDrop (they pointed
+                    // into the same slot; values changed, pointers
+                    // unchanged in this bucket impl, but stop the
+                    // inner-tick-loop to avoid double-integrating a
+                    // fresh drop in this same frame).
+                    break;
+                }
+            }
+        }
+    }
+
+    Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+}
