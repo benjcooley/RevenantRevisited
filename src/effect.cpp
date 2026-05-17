@@ -856,23 +856,23 @@ TParticleBucket* AcquireBloodBucket(T3DImagery* img3d)
     // multiplies its dark-red base color by (ambient + sun_term) so it
     // doesn't render flat-dark like an unlit overlay would. Explicit
     // TestNoWrite (default) makes the depth-mode choice readable here.
-    desc.blend          = EParticleBlendMode::Alpha;
-    // TODO debug 2026-05-16: temporarily Unlit to isolate whether the
-    // LitFlat path was zero-ing blood out. Switch back once light.ambient
-    // wiring in vfxtest is confirmed nonzero.
     desc.light_mode     = EParticleLightMode::Unlit;
     desc.depth_mode     = EParticleDepthMode::TestNoWrite;
+    // PremulAlpha works correctly with the chroma-key-converted
+    // Blood.I3D texture (alpha=0 in the black bg, rgb already
+    // premultiplied since opaque pixels have alpha=1). This removes
+    // the dark-red fringe that straight-alpha bilinear interpolation
+    // produced at the splat edges.
+    desc.blend          = EParticleBlendMode::PremulAlpha;
     desc.sort           = EParticleSortMode::None;
     desc.texture        = tex.htexture;
     desc.texture_width  = int32_t(tex.desc.width  > 0 ? tex.desc.width  : 1);
     desc.texture_height = int32_t(tex.desc.height > 0 ? tex.desc.height : 1);
-    // Blood.I3D is a 4×4 sprite atlas (guess — verify visually). Per-
-    // particle DrawFrame picks one cell so each droplet is one sprite
-    // instead of the whole sheet. If the grid turns out to be different
-    // (8×8 of 16-px droplets, 2×2 of large splats, etc.), only this and
-    // the spawn-side DrawFrame randomization need tuning.
-    desc.frame_cols     = 4;
-    desc.frame_rows     = 4;
+    // Blood.I3D verified by direct atlas dump: 2×2 grid of 64×64
+    // splat variants (cluster / X / oval / dot) on a pure-black bg.
+    // The second texture in the I3D is a stencil mask, not yet used.
+    desc.frame_cols     = 2;
+    desc.frame_rows     = 2;
     desc.default_width  = 32.0f;
     desc.default_height = 32.0f;
 
@@ -884,6 +884,10 @@ TParticleBucket* AcquireBloodBucket(T3DImagery* img3d)
     ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
     ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
     ParticleLayoutAddVar(layout, EParticleVar::DrawFrame);
+    // Per-particle rotation (radians). Retail blood used a random
+    // birth orientation so successive splats didn't all face the
+    // same way -- we mirror that.
+    ParticleLayoutAddVar(layout, EParticleVar::DrawRot);
     // EmitVel stores per-particle velocity (world-units / sec) so the
     // tick step can integrate without re-randomizing every frame.
     ParticleLayoutAddVar(layout, EParticleVar::EmitVel);
@@ -968,11 +972,58 @@ TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
     }
     blood->owner_particle_id_ = NextBloodOwnerId();
 
+    // Spawn the entire burst right at construction. Blood is a discrete
+    // impact: a single splat at one wound point. The harness drives
+    // re-trigger by destroying and respawning this effect at varying
+    // positions per its EVfxPreviewStyle::Combat setting.
+    constexpr int32_t kBurstCount = 10;
+    constexpr float   kLife       = 1.4f;
+    TParticleBucket& bucket = *blood->bucket_;
+    const S3DPoint& p = blood->Pos();
+    for (int32_t k = 0; k < kBurstCount; ++k)
+    {
+        const int32_t pi = bucket.AddParticle(blood->owner_particle_id_, kLife);
+        if (pi < 0) break;
+        const float u1 = float(std::rand()) / float(RAND_MAX);
+        const float u2 = float(std::rand()) / float(RAND_MAX);
+        const float angle  = u1 * 6.28318530718f;
+        const float radial = 60.0f + 80.0f * u2;     // wu/s
+        const float upward = 140.0f + 80.0f * u2;    // wu/s (initial upward burst)
+        if (float* dp = bucket.VarPtr(pi, EParticleVar::DrawPos))
+        {
+            dp[0] = float(p.x);
+            dp[1] = float(p.y);
+            dp[2] = float(p.z) + 30.0f;
+        }
+        if (float* vel = bucket.VarPtr(pi, EParticleVar::EmitVel))
+        {
+            vel[0] = std::cos(angle) * radial;
+            vel[1] = std::sin(angle) * radial;
+            vel[2] = upward;
+        }
+        if (float* ds = bucket.VarPtr(pi, EParticleVar::DrawScl))
+        {
+            const float s = 24.0f + 16.0f * u1;
+            ds[0] = s; ds[1] = s; ds[2] = 1.0f;
+        }
+        if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
+            *df = float(std::rand() % 4);                 // pick 1 of 4 splat variants
+        if (float* dr = bucket.VarPtr(pi, EParticleVar::DrawRot))
+            *dr = float(std::rand()) / float(RAND_MAX) * 6.28318530718f;
+        if (float* col = bucket.VarPtr(pi, EParticleVar::DrawColor))
+        {
+            col[0] = 1.00f - 0.20f * u2;
+            col[1] = 0.10f + 0.10f * u1;
+            col[2] = 0.10f + 0.05f * u2;
+            col[3] = 1.0f;
+        }
+    }
+
     log_info("[blood] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "owner_id=%.0f textures=%d",
+             "owner_id=%.0f textures=%d burst=%d",
              kBloodImageryPath, blood->GetMapIndex(),
              origin.x, origin.y, origin.z,
-             blood->owner_particle_id_, img3d->NumTextures());
+             blood->owner_particle_id_, img3d->NumTextures(), kBurstCount);
     return blood;
 }
 
@@ -987,6 +1038,9 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     // 1. Integrate existing particles owned by this instance.
     //    Simple Euler with constant downward acceleration ("gravity").
     //    Faithful retail kinematics + splat-stick deferred to 2.2.1.
+    //    All burst particles were spawned in SpawnForTest -- we never
+    //    spawn more here. The harness re-triggers by destroying this
+    //    effect and spawning a fresh one (EVfxPreviewStyle::Combat).
     constexpr float kGravity = -480.0f;   // wu / s^2 (rough; looks right at default scale)
     for (int32_t i = 0; i < bucket_->Count(); ++i)
     {
@@ -1008,94 +1062,21 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         }
         if (age)
             *age += dt;
-        // Fade alpha across the second half of the particle's life so the
-        // droplets vanish instead of popping. Life is set at AddParticle
-        // time and never mutated after, so we read it here as a constant.
+        // Alpha curve: hold at full opacity for the first half of
+        // life, then linearly fade to 0 over the second half. The
+        // shader pairs (sampled premul) * (tint.a) so the fade is
+        // proportional in both rgb and alpha -- no pink shift.
         if (col && age && life_p && *life_p > 0.0f)
         {
             const float t = *age / *life_p;
-            const float raw  = 1.0f - 2.0f * (t - 0.5f);
-            const float fade = t < 0.5f ? 1.0f : (raw < 0.0f ? 0.0f : raw);
+            const float fade = (t < 0.5f) ? 1.0f
+                             : (t >= 1.0f) ? 0.0f
+                             : (1.0f - 2.0f * (t - 0.5f));
             col[3] = fade;
         }
     }
 
-    // 2. Spawn ~24 droplets / second, capped at 40 live for this owner.
-    //    Burst-shaped initial velocity: downward + radial outward cone.
-    constexpr int32_t kMaxLive    = 40;
-    constexpr float   kSpawnRate  = 24.0f;
-    constexpr float   kLife       = 1.4f;
-    spawn_accum_ += dt * kSpawnRate;
-
-    int32_t live_for_owner = 0;
-    for (int32_t i = 0; i < bucket_->Count(); ++i)
-    {
-        const float* o = bucket_->VarPtr(i, EParticleVar::OwnerId);
-        if (o && *o == owner_particle_id_)
-            ++live_for_owner;
-    }
-
-    const S3DPoint& p = Pos();
-    while (spawn_accum_ >= 1.0f && live_for_owner < kMaxLive)
-    {
-        spawn_accum_ -= 1.0f;
-        const int32_t pi = bucket_->AddParticle(owner_particle_id_, kLife);
-        if (pi < 0)
-            break;
-        ++live_for_owner;
-
-        // Random in a downward-biased cone. rand()/RAND_MAX is good
-        // enough for a visual burst; bucket has no seeded RNG yet.
-        const float u1 = float(std::rand()) / float(RAND_MAX);
-        const float u2 = float(std::rand()) / float(RAND_MAX);
-        const float angle  = u1 * 6.28318530718f;
-        const float radial = 60.0f + 80.0f * u2;    // wu/s
-        const float upward = 140.0f + 80.0f * u2;   // wu/s — initial upward burst
-        const float vx = std::cos(angle) * radial;
-        const float vy = std::sin(angle) * radial;
-        const float vz = upward;
-
-        if (float* dp = bucket_->VarPtr(pi, EParticleVar::DrawPos))
-        {
-            dp[0] = float(p.x);
-            dp[1] = float(p.y);
-            dp[2] = float(p.z) + 30.0f;  // emit a touch above the origin
-        }
-        if (float* vel = bucket_->VarPtr(pi, EParticleVar::EmitVel))
-        {
-            vel[0] = vx; vel[1] = vy; vel[2] = vz;
-        }
-        if (float* ds = bucket_->VarPtr(pi, EParticleVar::DrawScl))
-        {
-            const float s = 24.0f + 16.0f * u1;
-            ds[0] = s; ds[1] = s; ds[2] = 1.0f;
-        }
-        if (float* df = bucket_->VarPtr(pi, EParticleVar::DrawFrame))
-        {
-            // Random cell in the 4×4 atlas. Static — once picked at
-            // spawn, the droplet stays on that frame for its life.
-            *df = float(std::rand() % 16);
-        }
-        if (float* col = bucket_->VarPtr(pi, EParticleVar::DrawColor))
-        {
-            // Bright blood red — the bucket runs LitFlat so the
-            // final RGB is multiplied by (ambient * ambient_color) +
-            // max(0, sun_dir.z) * sun_color, which dims things ~30%
-            // against bright sun lighting. Picking saturated values
-            // (1.0, 0.1, 0.1) so the result still reads against black.
-            // Alpha fades in TickAndSubmitForTest's integrator above.
-            col[0] = 1.00f - 0.20f * u2;
-            col[1] = 0.10f + 0.10f * u1;
-            col[2] = 0.10f + 0.05f * u2;
-            col[3] = 1.0f;
-        }
-    }
-    // Drain leftover fractional spawn budget when we're at the cap so it
-    // doesn't accumulate into a backlog burst when particles expire.
-    if (live_for_owner >= kMaxLive && spawn_accum_ > 1.0f)
-        spawn_accum_ = 1.0f;
-
-    // 3. Reap expired particles (age > life) for this owner. The bucket's
+    // 2. Reap expired particles (age > life) for this owner. The bucket's
     //    AddParticle / KillParticlesByOwner are the only mutators; we
     //    swap-and-pop by owner-stamping dead particles back to a sentinel
     //    then killing that sentinel in one pass.

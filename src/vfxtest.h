@@ -24,22 +24,39 @@
 #include <vector>
 
 #include "renderer.h"
+#include "revtypes.h"     // S3DPoint
 
 class TObjectInstance;
 
 namespace VfxTest {
 
+// Preview style controls how the harness drives the effect over time --
+// real game spawn patterns aren't a single continuous emitter. Combat
+// effects accent strikes at varied screen positions; spell effects play
+// once at the ground plane; ambient effects (torch) persist at a fixed
+// spot. The factory is called each time the harness wants to (re)spawn
+// the effect; the harness passes the world position to use.
+enum class EVfxPreviewStyle : uint8_t
+{
+    Static,        // spawn once at origin, never re-trigger (torch, ambient)
+    Combat,        // re-spawn every ~0.6s at a random spot in the visible area
+                   // (hit flash, blood splat, swing arc) -- mimics combat cadence
+    SpellGround,   // re-spawn every ~3s at the ground plane (cast/teleport burst)
+    Projectile,    // re-spawn every ~1.2s travelling from a source point along a vector
+};
+
 // Per-effect registration record. `factory` is called to (re)spawn the
-// effect; it returns a context pointer the harness passes back into
-// `submit` and `destroy`. `submit` is called once per frame while the
-// effect is selected and the harness is unpaused; it should call into
-// Renderer->SubmitFx* and/or Renderer->AddPointLight as appropriate.
+// effect at a harness-provided origin; it returns a context pointer the
+// harness passes back into `submit` and `destroy`. `submit` is called
+// once per frame while the effect is selected and the harness is
+// unpaused.
 struct SEffect
 {
     std::string id;
     std::string family;
     std::string pipeline;   // "FB" / "PE" / "SR" / "LS" / "MP" / "VO" / "CX"
-    std::function<void*()>                                 factory;
+    EVfxPreviewStyle preview_style = EVfxPreviewStyle::Static;
+    std::function<void*(const S3DPoint&)>                  factory;
     std::function<void(void* ctx, EFxDebugMode dbg)>       submit;
     std::function<void(void* ctx)>                         destroy;
 };
