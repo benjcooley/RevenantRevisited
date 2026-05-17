@@ -142,18 +142,17 @@ The face-off framing IS real (Locke vs current target). It's implemented via a s
 - Sidebar content hidden
 - Only the vertical button strip (§4) visible
 
-### 4. Vertical button strip — sidebar mode switcher
+### 4. Vertical button strip — sidebar visibility controls
 
 **Position:** between the playfield and the right sidebar (so to the LEFT of the sidebar content), running vertically.
 
-**Contents:** column of ~7-8 small circular gold-framed buttons. Each button is an icon for a sidebar mode:
-- Stats / character
-- Inventory
-- Spell book
-- Automap
-- (a few more I can't clearly identify from the resolution)
+**Class identity:** `TSideTabsPane` = `cls_0x5a5750` (Wave-1A). Contains **exactly 6 round mode-switcher buttons.**
 
-**Behavior:** clicking a button switches the right sidebar to that mode. Always visible (even when the sidebar content is hidden — screenshot 4 shows this).
+**Confirmed by user 2026-05-16:** these 6 buttons control what's visible in the sidebar. The sidebar can show **multiple content panes simultaneously** (`sample_screen_1.jpg`: Stats parchment AND Automap circle both visible at once) — so the buttons are not a 1-of-6 mode selector. The exact mapping (per-button independent visibility toggle vs preset combinations) is recovered by extracting TSideTabsPane's click handler (Wave-4 work). The 6 buttons map onto the 5 content classes enumerated in §3 (character paper-doll, stats, spell list, automap, inventory) plus likely one for the book/scroll reader (§3c) which also renders in a sidebar slot.
+
+**Icon-to-content guesses from `sample_screen_1.jpg`** (top to bottom): red heart → character/stats? · blue orb → ? · violet orb → spell list · gold orb → ? · scroll → book/scroll reader · open book → ? Exact bindings confirmed at Wave-4 time from the click handler.
+
+**Behavior:** always visible — including when the sidebar content panes are hidden (`sample_screen_4.jpg`, sidebar collapsed state, shows only this strip).
 
 ### 5. Bottom — quickspell row + potion shelf + game log
 
