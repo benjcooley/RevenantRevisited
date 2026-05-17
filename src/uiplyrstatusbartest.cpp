@@ -88,13 +88,24 @@ constexpr int32_t kBarFillX        = 0x44;                  // 68
 constexpr int32_t kBarRowY[3]      = { 0x0f, 0x1f, 0x2c };  // 15, 31, 44
 constexpr int32_t kTargetBarOff[3] = { 0xc1, 0x91, 0x79 };  // 193, 145, 121
 
-// Portrait Ring + LockeFace positions — currently visual estimates;
-// will be replaced once the recon Init body or helper extractions
-// surface the explicit Ring blit X,Y.
+// Portrait Ring + LockeFace positions.
+//
+// Per recon slot 23 line 190, the portrait AREA is (0x40, 0, 0x40, 0x40)
+// = (64, 0, 64, 64) — drawn into the 128x128 sprite buffer at
+// param_1+100. The pane blits that sprite at some pane-local position
+// (TBD; looking for the sprite blit call). For now the visual reads
+// best with Ring at pane (2, 10) — aligns with the portrait socket
+// visible in the BackPanel chrome.
+//
+// LockeFace (30x30) centered inside Ring (44x44). Real retail portrait
+// lives in `chars\locke.i3d` (per imagery.dat index entry @0x6918a) —
+// reaching it needs an I3D format decoder + sprite extraction
+// subsystem (deferred). portraits.dat LockeFace used here is from an
+// older build (user noted) but the closest stand-in we have.
 constexpr int32_t kRingX        = 2;
-constexpr int32_t kRingY        = 6;
-constexpr int32_t kPortraitX    = 9;
-constexpr int32_t kPortraitY    = 13;
+constexpr int32_t kRingY        = 10;
+constexpr int32_t kPortraitX    = kRingX + (44 - 30) / 2;
+constexpr int32_t kPortraitY    = kRingY + (44 - 30) / 2;
 
 class TPlyrStatusBarRealHud : public THudDrawable
 {
@@ -191,14 +202,17 @@ private:
     {
         if (!icon) return;
         const int32_t paneW = Display.Width();
-        // Icon sits at the bar's INNER end (toward portrait), centered.
-        // LEFT bars: icon at bar's left (icon center = bar X)
-        // RIGHT bars: icon at bar's right (icon center = bar X + bar_width)
+        // Icon sits at the bar's INNER end (toward portrait), aligned so
+        // the icon's INNER edge sits at the bar's start. Per reference,
+        // the icon sits flush against the portrait Ring with only a few
+        // pixels of gap, so position the icon by its inner edge rather
+        // than its center.
         const int32_t barX = isRight
             ? paneW - kTargetBarOff[row]
             : kPanelX + kBarFillX;
-        const int32_t centerX = isRight ? barX + kBarAtlasW : barX;
-        const int32_t ix = centerX - icon->width / 2;
+        const int32_t ix = isRight
+            ? barX + kBarAtlasW - icon->width / 2   // icon's right half at bar's right end
+            : barX - icon->width + icon->width / 3; // icon's right ~2/3 at bar's start
         const int32_t iy = kPanelY + kBarRowY[row]
                            + kBarRowH / 2 - icon->height / 2;
         Renderer->DrawBitmap(icon, ix, iy);
