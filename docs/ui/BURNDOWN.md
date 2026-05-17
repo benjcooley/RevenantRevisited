@@ -87,28 +87,66 @@ The HUD render-path infrastructure was landed in commit `80879c2` ("engine: HUD 
   built on the same wrong layout. Retracted; replaced by a future
   composite that uses the verified retail panel set.
 
-### Phase B — actual (to be built)
+### Phase B — actual (forensic reconstruction)
 
-Source of truth: retail decomp in `recon/classes_converted/` (1428
-classes total). Higher-level mappings in
-[recon/docs/CLASS_MAPPING.md](../../recon/docs/CLASS_MAPPING.md) and
-[recon/docs/GHIDRA_CLASS_IDENTIFICATIONS.md](../../recon/docs/GHIDRA_CLASS_IDENTIFICATIONS.md).
-The retail HUD pane roster needs to be **derived from `TPlayScreen`'s
-decomp** (`cls_0x5b4f30_likely_TPlayScreen.cpp` — 119 KB) by tracing
-which classes it constructs and registers. Pending tasks:
+**Procedure:** follow the established retail-sync method per
+[`../../recon/docs/RETAIL_SYNC_PLAN.md`](../../recon/docs/RETAIL_SYNC_PLAN.md)
+and the 3-stage decomp pipeline per [`../../recon/docs/PIPELINE.md`](../../recon/docs/PIPELINE.md).
+This is the same forensic class of work as gameplay/combat/vfx
+reconstructions in the same recon tree.
 
-- `[ ]` **B.r1 Identify the retail HUD pane classes** — trace
-  `TPlayScreen` init in the decomp; cross-reference any explicit
-  asset-load strings (`*.dat`, `*font`); list each pane's class
-  identity + retail rect + asset references. Output: `docs/ui/RETAIL_HUD.md`.
-- `[ ]` **B.r2 Decide the disposition of `src/statusbar.{h,cpp}`** —
-  re-shape into a value-with-animation model used by the upper-corner
-  character panels, or remove entirely after re-targeting all
-  `HealthBar.ChangeLevel()` callers.
-- `[ ]` **B.r3** Per-pane bring-up of the verified retail panes,
-  same template as the (provisional) B.1 work: data API contract test
-  → HUD-pipeline visualizer → real asset rendering. List populated by
-  B.r1 output.
+**Per-character bars:** the user clarified retail has **three** bars
+per character: **health, stamina, AND mana**. The combined character
+panel (upper-left + upper-right) hosts all three plus character info.
+This corrects the "two bars" framing throughout earlier docs.
+
+**Plan document:** [RETAIL_UI_RECOVERY_PLAN.md](RETAIL_UI_RECOVERY_PLAN.md)
+is the master plan — procedure, per-class roster (Tier 0–8), Ghidra
+CLI fallback path, sub-agent delegation pattern, session-survival
+checklist.
+
+**Inventory artifacts:**
+- [SRC_UI_INVENTORY.md](SRC_UI_INVENTORY.md) — 607-line catalog of
+  every UI-related file in `src/`, classified by retail-correspondence
+  confidence (Very High / High / Medium / Low / port-specific).
+- [RECON_UI_COVERAGE.md](RECON_UI_COVERAGE.md) — 320-line catalog of
+  recon coverage: 15 confirmed UI classes in `classes_readable/`,
+  5 "likely" in `classes_converted/`, YAML mapping cross-refs,
+  string-based discovery results, PlayScreen decomp survey,
+  retail-HUD-element → candidate-recon-class coverage map, gaps.
+
+**Roster status** (per RETAIL_UI_RECOVERY_PLAN.md Tier system):
+
+- `[~]` **B.r1 Forensic inventory + recovery plan** — landed `e8c4f3c`
+  (inventories) + this commit (plan). Tier roster populated; per-class
+  reconstruction now traceable.
+- `[ ]` **B.r2 Tier 1 — Combined character panel (TCharacterPane, real
+  name TBD)** — two instances, each hosts three bars (health, stamina,
+  mana) + character info; identity hunt: investigate
+  `recon/classes_readable/TStatusBar.{h,cpp}` (may be the multi-bar
+  grouping not a single bar), string hunt in `class_index.tsv`,
+  PlayScreen decomp `meth_0x*` callers.
+- `[ ]` **B.r3 Tier 2 — Game-log overlay (TTextBar retail port)** —
+  recon `cls_0x5a4358_likely_TTextBar.cpp` is 4× pre-release size;
+  port the missing scrolling/multi-line/history features.
+- `[ ]` **B.r4 Tier 3 — Right sidebar (TMultiCtrlPane + TEquipPane +
+  TSpellPane + TAutoMap + TStatPane)** — verify each against recon.
+- `[ ]` **B.r5 Tier 4 — Bottom quickspell + shelf (TQuickSpellPane +
+  potion shelf, possibly distinct classes)**.
+- `[ ]` **B.r6 Tier 5 — Conditional overlays (TDialogPane + TBookPane +
+  TScrollPane + TDeathPane + TPopupPane)**.
+- `[ ]` **B.r7 Tier 6 — Button bar (class identity unknown — recon hunt)**.
+- `[ ]` **B.r8 Tier 7 — Cursor + asset infrastructure (font catalog,
+  playscrn.dat / intrface.dat asset enumeration)**.
+- `[ ]` **B.r9 Tier 8 — TPlayScreen retail sync** (drives every pane's
+  AddPane sequence; capstone of Phase B).
+- `[ ]` **B.r10 Statusbar disposition** — `src/statusbar.{h,cpp}` and
+  the `HealthBar`/`StaminaBar` globals: re-shape into a pure
+  value-with-animation model the character panel reads, OR remove
+  entirely after re-targeting every gameplay-side `HealthBar.*` /
+  `StaminaBar.*` call (per `SRC_UI_INVENTORY.md` global usage list).
+  Also: add a third global / channel for mana if not already in
+  TStatusBar pattern.
 - `[x]` **B.3 `TCursorHud`** — landed in `80879c2` as a `THudDrawable` subclass registered at z=0 (below other HUD), with OS-pointer / game-cursor swap on ImGui ownership. See [src/cursor.h:32](../../src/cursor.h#L32). Win32-clipping `#if 0` still pending if/when relevant; deferred (cursor works without it).
 - `[ ]` **B.4 `TQuickSpellPane`** + `--test=ui-quickspells`.
 - `[ ]` **B.5 `TMultiCtrlPane`** — 4-button switcher with 1/2/3/4 keys.
@@ -163,7 +201,8 @@ Per memory `feedback-code-style`, `feedback-modern-cpp`, `feedback-const-correct
 
 ## Notes log (most-recent first)
 
-- **2026-05-16** — **Phase B reset.** User (original Revenant developer) flagged that the `docs/HUD.md` layout + the pre-release `src/` rect defines (`HEALTHBARX` etc) do not match the shipped retail HUD. Standalone health/stamina vertical-tube panes are not in the game. `uihudmockuptest.{h,cpp}` and `uistatusbartest.{h,cpp}` moved to `attic/src/`; corresponding dispatch removed from `testmodes.cpp`. Build clean. `statusbar.{h,cpp}` left in `src/` for now because `HealthBar`/`StaminaBar` globals are load-bearing in gameplay; disposition pending (B.r2). New phase items B.r1/B.r2/B.r3 to reconstruct from `recon/` decomp.
+- **2026-05-16** — **Forensic recovery plan + inventories.** SRC_UI_INVENTORY.md + RECON_UI_COVERAGE.md committed `e8c4f3c`; RETAIL_UI_RECOVERY_PLAN.md drafted this commit. Procedure follows `recon/docs/RETAIL_SYNC_PLAN.md` (same shape as gameplay/combat/vfx reconstructions). Tier 0 (substrate) done; Tier 1–8 enumerated. **Three bars per character (health/stamina/mana)** per user clarification. Next: B.r2 character-panel class identity hunt via recon.
+- **2026-05-16** — **Phase B reset.** User (original Revenant developer) flagged that the `docs/HUD.md` layout + the pre-release `src/` rect defines (`HEALTHBARX` etc) do not match the shipped retail HUD. Standalone health/stamina vertical-tube panes are not in the game. `uihudmockuptest.{h,cpp}` and `uistatusbartest.{h,cpp}` moved to `attic/src/`; corresponding dispatch removed from `testmodes.cpp`. Build clean. `statusbar.{h,cpp}` left in `src/` for now because `HealthBar`/`StaminaBar` globals are load-bearing in gameplay; disposition pending. New phase items B.r1+ to reconstruct from `recon/` decomp.
 - **2026-05-16** — Phase B.13 `--test=ui-hud-mockup` (`43e49fb`): **all 7 visible retail HUD panes rendered at retail rects in the new HUD pipeline.** Animated status bars + color-coded outlines for the rest. Verifies layout topology matches `docs/HUD.md`. No per-pane Initialize required (constructors set rects). **RETRACTED — see Phase B reset note.**
 - **2026-05-16** — Phase B step 2 for B.1 + B.2 (`7873ac1`): first visible panes on the new HUD pipeline. Each test mode registers a `THudDrawable` visualizer that paints `DrawSolidRect` at the pane's retail rect. Status bars animate level via sine cycle. Pattern is the template for remaining pane bring-ups.
 - **2026-05-16** — `TRenderer::DrawSolidRect` (`a8e36f3`): per-color 1x1 texture cache + existing composite pipeline. Unblocks visual fallback for any pane that hasn't ported its retail draw path.
