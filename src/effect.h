@@ -202,6 +202,48 @@ struct SParticleBucketEffectDef
     float chroma_key_rgb[3] = {1.0f, 0.0f, 0.0f};
     std::string frame_expr;
     std::string uv_rect_expr;
+
+    // ---- VM-extension fields (2026-05-17) -----------------------------
+    // Imagery override for buckets that ship a procedural texture or
+    // reach into a non-owner imagery (B01 / M05 ports load a separate
+    // I3D via TObjectImagery::LoadImagery rather than using the owner's
+    // primary imagery). Empty = use the owner-imagery texture_slot path.
+    std::string imagery_path;
+
+    // Blend/light/depth/orientation knobs (canonical strings parsed into
+    // the per-bucket EParticle* enums). When unset, BuildRuntimeBucketDesc
+    // falls back to the legacy `additive` bool + Unlit + TestNoWrite +
+    // ScreenAligned defaults.
+    std::string blend_mode;          // "alpha" | "additive" | "additive_straight" | "premul_alpha"
+    std::string light_mode;          // "unlit" | "lit_flat"
+    std::string depth_mode;          // "test_no_write" | "test_write" | "none"
+    std::string orientation;         // "screen_aligned" | "world_xy"
+
+    // Per-particle dynamics (statement-form expressions). Compiled once
+    // at first-use; cached on the runtime bucket record.
+    std::string spawn_expr;          // ran once at particle add time
+    std::string tick_expr;           // ran each sim tick per live particle
+    std::string kill_expr;           // boolean; true -> respawn (re-run spawn_expr, age=0)
+
+    // Spawn cadence:
+    //   spawn_burst > 0 → emit N particles once at attach (one-shot)
+    //   spawn_count > 0 → maintain a steady-state population of N particles
+    //                     (runtime tops up when count drops below target)
+    // At most one should be non-zero; if both are zero the bucket emits
+    // nothing on its own and is driven by the legacy emitter/output path.
+    int32_t spawn_burst = 0;
+    int32_t spawn_count = 0;
+
+    // Integration cadence:
+    //   tick_hz > 0  → integrate tick_expr at this fixed rate (sim-tick
+    //                  gated, matches retail's 24 Hz authoring cadence)
+    //   tick_hz == 0 → integrate every render frame (no gating)
+    int32_t tick_hz = 0;
+
+    // Default particle life in seconds (set into EParticleVar::Life at
+    // spawn time). <= 0 means "no auto-kill" (drops live until kill_expr
+    // fires).
+    float default_life = -1.0f;
 };
 
 struct SParticleEmitterOutputDef
@@ -231,10 +273,32 @@ class TParticleEffectManager
   public:
     void PulseEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
     void StopEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
+    // Per-frame integration tick. Called from TParticleEffectComponent::
+    // DrawPulse via the render-frame walk so each runtime's bucket
+    // expressions (spawn / tick / kill) advance once per frame using the
+    // shared TTime::DeltaTime.
+    void IntegrateEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner, float dt_seconds);
     void ExpireInactiveEffects();
     void Clear();
 
   private:
+    // Per-bucket compiled-expression cache + sim-tick accumulator.
+    // Created lazily when the runtime first encounters a bucket_def with
+    // a non-empty spawn_expr / tick_expr / kill_expr.
+    struct SBucketRuntime
+    {
+        TParticleBucket* bucket = nullptr;
+        const SParticleBucketEffectDef* bucket_def = nullptr;
+        TParticleExpression spawn_expr;     // statement form
+        TParticleExpression tick_expr;      // statement form
+        TParticleExpression kill_expr;      // single expression (boolean)
+        bool spawn_compiled = false;
+        bool tick_compiled = false;
+        bool kill_compiled = false;
+        double sim_accum_ms = 0.0;
+        int32_t spawned_burst = 0;          // tracks one-shot burst so we don't re-emit
+    };
+
     struct SRuntime
     {
         const SParticleEffectDef* effect_def = nullptr;
@@ -242,11 +306,14 @@ class TParticleEffectManager
         float owner_particle_id = -1.0f;
         uint32_t last_draw_pulse_pass = 0;
         std::vector<TParticleBucket*> buckets;
+        std::vector<SBucketRuntime> bucket_runtimes;
     };
 
     SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_map_index);
     void StartRuntime(SRuntime& runtime, TObjectInstance* owner);
     void StopRuntime(size_t runtime_index);
+    void IntegrateBucket(SBucketRuntime& brt, TObjectInstance* owner, float dt_seconds, float owner_particle_id);
+    void EmitSpawnTopup(SBucketRuntime& brt, TObjectInstance* owner, float owner_particle_id);
 
     std::vector<SRuntime> runtimes;
     uint32_t last_expire_pass = 0;
@@ -273,12 +340,7 @@ class TParticleEffectComponent : public TObjectComponent
         UnregisterUpdate(&TObjectComponent::Update);
     }
 
-    void DrawPulse()
-    {
-        if (!ParticleEffectManager || !effect_def || !Owner())
-            return;
-        ParticleEffectManager->PulseEffect(effect_def, Owner());
-    }
+    void DrawPulse();
 
   protected:
     void OnUpdate() override

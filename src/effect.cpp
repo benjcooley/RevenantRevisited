@@ -189,11 +189,29 @@ SParticleEffectDef ParseParticleEffectDef(const char* wanted)
         bucket.width = float(bucket_node->get_double("width", 1.0));
         bucket.height = float(bucket_node->get_double("height", 1.0));
         bucket.scale = float(bucket_node->get_double("scale", 1.0));
+        // Legacy `blend = "additive"|"alpha"` toggle preserved for the
+        // existing TorchFlame consumer. The richer `blend_mode` slot
+        // (additive_straight, premul_alpha) is read in BuildRuntimeBucketDesc
+        // if present and overrides the legacy bool.
         bucket.additive = bucket_node->get_string("blend", "additive") == "additive";
         bucket.flip_v = bucket_node->get_bool("flip_v", false);
         ParseOptionalColorRgb01(*bucket_node, "chroma_key", bucket.chroma_key, bucket.chroma_key_rgb);
         bucket.frame_expr = bucket_node->get_string("frame_expr");
         bucket.uv_rect_expr = bucket_node->get_string("uv_rect_expr");
+
+        // VM-extension fields (all optional; absence preserves legacy behaviour).
+        bucket.imagery_path  = bucket_node->get_string("imagery_path");
+        bucket.blend_mode    = bucket_node->get_string("blend_mode");
+        bucket.light_mode    = bucket_node->get_string("light_mode");
+        bucket.depth_mode    = bucket_node->get_string("depth_mode");
+        bucket.orientation   = bucket_node->get_string("orientation");
+        bucket.spawn_expr    = bucket_node->get_string("spawn_expr");
+        bucket.tick_expr     = bucket_node->get_string("tick_expr");
+        bucket.kill_expr     = bucket_node->get_string("kill_expr");
+        bucket.spawn_burst   = int32_t(bucket_node->get_int("spawn_burst", 0));
+        bucket.spawn_count   = int32_t(bucket_node->get_int("spawn_count", 0));
+        bucket.tick_hz       = int32_t(bucket_node->get_int("tick_hz", 0));
+        bucket.default_life  = float(bucket_node->get_double("default_life", -1.0));
         def.buckets.push_back(std::move(bucket));
     }
 
@@ -214,8 +232,14 @@ SParticleEffectDef ParseParticleEffectDef(const char* wanted)
 
     if (def.buckets.empty())
         ParticleFatal("[particle] effect " + def.name + " has no buckets");
-    if (def.emitters.empty())
-        ParticleFatal("[particle] effect " + def.name + " has no emitters");
+    // Emitters are now optional -- buckets with spawn_burst/spawn_count
+    // self-emit and don't need an emitter/output block.
+    bool any_self_spawn = false;
+    for (const SParticleBucketEffectDef& bucket : def.buckets)
+        if (bucket.spawn_burst > 0 || bucket.spawn_count > 0)
+            any_self_spawn = true;
+    if (def.emitters.empty() && !any_self_spawn)
+        ParticleFatal("[particle] effect " + def.name + " has no emitters and no self-spawning buckets");
     for (const SParticleBucketEffectDef& bucket : def.buckets)
     {
         if (bucket.name.empty())
@@ -228,10 +252,13 @@ SParticleEffectDef ParseParticleEffectDef(const char* wanted)
             ParticleFatal("[particle] bucket " + bucket.name + " has invalid size");
         if (bucket.scale <= 0.0f)
             ParticleFatal("[particle] bucket " + bucket.name + " has invalid scale");
-        if (bucket.frame_expr.empty())
-            ParticleFatal("[particle] bucket " + bucket.name + " missing frame_expr");
-        if (bucket.uv_rect_expr.empty())
-            ParticleFatal("[particle] bucket " + bucket.name + " missing uv_rect_expr");
+        // frame_expr / uv_rect_expr are now optional. A single-frame sprite
+        // (B01 droplets, M05 wisp) leaves them empty -- the runtime stamps
+        // a default DrawUvRect = full quad at spawn.
+        if (bucket.spawn_burst > 0 && bucket.spawn_count > 0)
+            ParticleFatal("[particle] bucket " + bucket.name + " has both spawn_burst and spawn_count set");
+        if (bucket.tick_hz < 0)
+            ParticleFatal("[particle] bucket " + bucket.name + " has negative tick_hz");
     }
     for (const SParticleEmitterEffectDef& emitter : def.emitters)
     {
@@ -264,9 +291,16 @@ SParticleBufferLayout ParticleEffectBucketLayout()
     SParticleBufferLayout layout = {};
     ParticleLayoutAddVar(layout, EParticleVar::OwnerId);
     ParticleLayoutAddVar(layout, EParticleVar::Life);
+    ParticleLayoutAddVar(layout, EParticleVar::Age);
+    ParticleLayoutAddVar(layout, EParticleVar::Age01);
+    ParticleLayoutAddVar(layout, EParticleVar::Seed);
     ParticleLayoutAddVar(layout, EParticleVar::EmitPos);
+    ParticleLayoutAddVar(layout, EParticleVar::EmitVel);
     ParticleLayoutAddVar(layout, EParticleVar::DrawPos);
     ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawRot);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawFrame);
     ParticleLayoutAddVar(layout, EParticleVar::DrawUvRect);
     return layout;
 }
@@ -280,37 +314,120 @@ const SParticleBucketEffectDef* FindEffectBucketDef(const SParticleEffectDef& ef
     return nullptr;
 }
 
+EParticleBlendMode ResolveBlendMode(const std::string& s, bool legacy_additive)
+{
+    if (s == "alpha")              return EParticleBlendMode::Alpha;
+    if (s == "additive")           return EParticleBlendMode::Additive;
+    if (s == "additive_straight")  return EParticleBlendMode::AdditiveStraight;
+    if (s == "premul_alpha")       return EParticleBlendMode::PremulAlpha;
+    // Empty => fall back to legacy `additive` bool.
+    return legacy_additive ? EParticleBlendMode::Additive : EParticleBlendMode::Alpha;
+}
+
+EParticleLightMode ResolveLightMode(const std::string& s)
+{
+    if (s == "lit_flat") return EParticleLightMode::LitFlat;
+    return EParticleLightMode::Unlit;   // default for back-compat
+}
+
+EParticleDepthMode ResolveDepthMode(const std::string& s)
+{
+    if (s == "test_write") return EParticleDepthMode::TestWrite;
+    if (s == "none")       return EParticleDepthMode::None;
+    return EParticleDepthMode::TestNoWrite;
+}
+
+EParticleOrientation ResolveOrientation(const std::string& s)
+{
+    if (s == "world_xy") return EParticleOrientation::WorldXY;
+    return EParticleOrientation::ScreenAligned;
+}
+
+// Resolve the bucket's texture handle. Honours bucket_def.imagery_path if
+// set (B01/M05 patterns that load a non-owner imagery via TObjectImagery::
+// LoadImagery), otherwise falls back to the owner imagery's texture_slot.
+struct SBucketTextureBinding
+{
+    TTextureHandle handle = kInvalidTexture;
+    int32_t width = 0;
+    int32_t height = 0;
+};
+
+SBucketTextureBinding ResolveBucketTexture(const SParticleBucketEffectDef& bucket_def,
+                                           TObjectInstance* owner)
+{
+    SBucketTextureBinding binding = {};
+    if (!bucket_def.imagery_path.empty())
+    {
+        const int32_t img_id = TObjectImagery::FindImagery(bucket_def.imagery_path.c_str());
+        if (img_id < 0)
+        {
+            char err[256];
+            snprintf(err, sizeof(err),
+                     "[particle] bucket %s: imagery_path='%s' FindImagery failed",
+                     bucket_def.name.c_str(), bucket_def.imagery_path.c_str());
+            FatalError(err);
+        }
+        TObjectImagery* imagery = TObjectImagery::LoadImagery(img_id);
+        T3DImagery* img3d = dynamic_cast<T3DImagery*>(imagery);
+        if (!img3d)
+        {
+            char err[256];
+            snprintf(err, sizeof(err),
+                     "[particle] bucket %s: imagery_path='%s' is not a T3DImagery",
+                     bucket_def.name.c_str(), bucket_def.imagery_path.c_str());
+            FatalError(err);
+        }
+        (void)img3d->NumObjects();  // force lazy mesh init so texture slots populate
+        S3DTex tex = {};
+        img3d->GetTexture(bucket_def.texture_slot, &tex);
+        binding.handle = tex.htexture;
+        binding.width  = int32_t(tex.desc.width);
+        binding.height = int32_t(tex.desc.height);
+        return binding;
+    }
+
+    // Owner-imagery path (TorchFlame): use the owner's imagery, demand it
+    // exists and has the requested slot populated.
+    T3DImagery* img3d = owner ? dynamic_cast<T3DImagery*>(owner->GetImagery()) : nullptr;
+    if (!img3d || img3d->NumTextures() <= 0)
+        FatalError("[particle] effect requires 3D imagery with at least one texture (set imagery_path= for owner-less buckets)");
+    S3DTex tex = {};
+    img3d->GetTexture(bucket_def.texture_slot, &tex);
+    binding.handle = tex.htexture;
+    binding.width  = int32_t(tex.desc.width);
+    binding.height = int32_t(tex.desc.height);
+    return binding;
+}
+
 SParticleBucketDesc BuildRuntimeBucketDesc(const SParticleEffectDef& effect_def,
                                            const SParticleBucketEffectDef& bucket_def,
                                            TObjectInstance* owner)
 {
-    T3DImagery* img3d = owner ? dynamic_cast<T3DImagery*>(owner->GetImagery()) : nullptr;
-    if (!img3d || img3d->NumTextures() <= 0)
-        FatalError("[particle] effect requires 3D imagery with at least one texture");
-
-    S3DTex tex = {};
-    img3d->GetTexture(bucket_def.texture_slot, &tex);
-    if (tex.htexture == kInvalidTexture)
+    const SBucketTextureBinding tex = ResolveBucketTexture(bucket_def, owner);
+    if (tex.handle == kInvalidTexture)
         FatalError("[particle] effect bucket texture handle is invalid");
-
-    const int32_t texture_width = int32_t(tex.desc.width);
-    const int32_t texture_height = int32_t(tex.desc.height);
-    if (texture_width <= 0 || texture_height <= 0)
+    if (tex.width <= 0 || tex.height <= 0)
     {
         char err[256];
         snprintf(err, sizeof(err),
-                 "[particle] effect bucket texture dimensions invalid desc=%ux%u",
-                 tex.desc.width, tex.desc.height);
+                 "[particle] effect bucket texture dimensions invalid (%dx%d)",
+                 tex.width, tex.height);
         FatalError(err);
     }
 
     SParticleBucketDesc desc = {};
     desc.name = bucket_def.name;
-    desc.blend = bucket_def.additive ? EParticleBlendMode::Additive : EParticleBlendMode::Alpha;
+    desc.blend = ResolveBlendMode(bucket_def.blend_mode, bucket_def.additive);
+    desc.light_mode = ResolveLightMode(bucket_def.light_mode);
+    desc.depth_mode = ResolveDepthMode(bucket_def.depth_mode);
+    desc.orientation = ResolveOrientation(bucket_def.orientation);
     desc.sort = EParticleSortMode::None;
-    desc.texture = tex.htexture;
-    desc.texture_width = texture_width;
-    desc.texture_height = texture_height;
+    desc.texture = tex.handle;
+    desc.texture_width = tex.width;
+    desc.texture_height = tex.height;
+    desc.frame_cols = bucket_def.atlas_cols;
+    desc.frame_rows = bucket_def.atlas_rows;
     desc.default_width = bucket_def.width;
     desc.default_height = bucket_def.height;
     desc.debug_solid = effect_def.debug_solid;
@@ -348,13 +465,84 @@ void InitializeRuntimeParticle(TParticleBucket& bucket, int32_t particle_index,
     }
     if (float* uv_rect = bucket.VarPtr(particle_index, EParticleVar::DrawUvRect))
     {
-        TParticleExpression expr;
-        std::string error;
-        if (!expr.Compile(bucket_def.uv_rect_expr.c_str(), &error))
-            ParticleFatal("[particle] bucket " + bucket_def.name + " uv_rect expression compile failed: " + error);
+        if (!bucket_def.uv_rect_expr.empty())
+        {
+            TParticleExpression expr;
+            std::string error;
+            if (!expr.Compile(bucket_def.uv_rect_expr.c_str(), &error))
+                ParticleFatal("[particle] bucket " + bucket_def.name + " uv_rect expression compile failed: " + error);
+            SParticleEvalContext ctx = {};
+            ctx.time_frame = float(TTime::Time());
+            expr.Eval(ctx, uv_rect, 4);
+        }
+        else
+        {
+            // Default: full quad (single-frame sprite, no atlas).
+            uv_rect[0] = 0.0f;
+            uv_rect[1] = 0.0f;
+            uv_rect[2] = 1.0f;
+            uv_rect[3] = 1.0f;
+        }
+    }
+    // Default DrawColor = opaque white (lets spawn_expr override per particle).
+    if (float* color = bucket.VarPtr(particle_index, EParticleVar::DrawColor))
+    {
+        color[0] = 1.0f; color[1] = 1.0f; color[2] = 1.0f; color[3] = 1.0f;
+    }
+}
+
+// Default-init the per-particle slots a self-spawning bucket needs, then
+// run the bucket's compiled spawn_expr to override. Used by EmitSpawnTopup.
+void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index,
+                                 const SParticleBucketEffectDef& bucket_def,
+                                 const TParticleExpression& spawn_expr,
+                                 bool has_spawn_expr,
+                                 TObjectInstance* owner)
+{
+    const S3DPoint& p = owner ? owner->Pos() : S3DPoint{0, 0, 0};
+    const float emit_pos[3] = { float(p.x), float(p.y), float(p.z) };
+    const float emit_vel[3] = { 0.0f, 0.0f, 0.0f };
+
+    // Pre-spawn defaults: pos at owner, white opaque, unit scale, frame 0.
+    if (float* dp = bucket.VarPtr(particle_index, EParticleVar::DrawPos))
+    { dp[0] = emit_pos[0]; dp[1] = emit_pos[1]; dp[2] = emit_pos[2]; }
+    if (float* ep = bucket.VarPtr(particle_index, EParticleVar::EmitPos))
+    { ep[0] = emit_pos[0]; ep[1] = emit_pos[1]; ep[2] = emit_pos[2]; }
+    if (float* ev = bucket.VarPtr(particle_index, EParticleVar::EmitVel))
+    { ev[0] = 0.0f; ev[1] = 0.0f; ev[2] = 0.0f; }
+    if (float* ds = bucket.VarPtr(particle_index, EParticleVar::DrawScl))
+    { ds[0] = bucket_def.width * bucket_def.scale;
+      ds[1] = bucket_def.height * bucket_def.scale;
+      ds[2] = 1.0f; }
+    if (float* dr = bucket.VarPtr(particle_index, EParticleVar::DrawRot))
+        *dr = 0.0f;
+    if (float* dc = bucket.VarPtr(particle_index, EParticleVar::DrawColor))
+    { dc[0] = 1.0f; dc[1] = 1.0f; dc[2] = 1.0f; dc[3] = 1.0f; }
+    if (float* df = bucket.VarPtr(particle_index, EParticleVar::DrawFrame))
+        *df = 0.0f;
+    if (float* uv = bucket.VarPtr(particle_index, EParticleVar::DrawUvRect))
+    { uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f; }
+    if (float* age = bucket.VarPtr(particle_index, EParticleVar::Age))
+        *age = 0.0f;
+    if (float* age01 = bucket.VarPtr(particle_index, EParticleVar::Age01))
+        *age01 = 0.0f;
+    // Seed: deterministic-per-slot mix of particle_index + bucket_def address.
+    if (float* seed = bucket.VarPtr(particle_index, EParticleVar::Seed))
+    {
+        uint32_t s = uint32_t(particle_index) * 2654435761u
+                   + uint32_t(uintptr_t(&bucket_def) & 0xffffffffu) * 16807u;
+        if (s == 0) s = 1;
+        *seed = float(s & 0x7fffffu) / float(0x7fffffu);
+    }
+
+    // Now run the user spawn expression (statement-form). Identifier
+    // aliases pos/vel/color/scale etc. resolve against the bucket slots
+    // we just pre-initialised.
+    if (has_spawn_expr)
+    {
         SParticleEvalContext ctx = {};
         ctx.time_frame = float(TTime::Time());
-        expr.Eval(ctx, uv_rect, 4);
+        spawn_expr.EvalParticle(ctx, bucket, particle_index, emit_pos, emit_vel);
     }
 }
 
@@ -458,19 +646,209 @@ void TParticleEffectManager::Clear()
     last_expire_pass = 0;
 }
 
+// Top up a bucket's particle population. For spawn_burst, called once at
+// StartRuntime; for spawn_count, called each frame from IntegrateEffect
+// to restock after kill_expr fires. The number to emit is the difference
+// between the target count and how many live particles this runtime owns.
+void TParticleEffectManager::EmitSpawnTopup(SBucketRuntime& brt, TObjectInstance* owner, float owner_particle_id)
+{
+    if (!brt.bucket || !brt.bucket_def) return;
+
+    int32_t target = 0;
+    if (brt.bucket_def->spawn_burst > 0 && brt.spawned_burst == 0)
+        target = brt.bucket_def->spawn_burst;
+    else if (brt.bucket_def->spawn_count > 0)
+    {
+        // Count live particles owned by this runtime.
+        int32_t live = 0;
+        for (int32_t i = 0; i < brt.bucket->Count(); ++i)
+        {
+            const float* o = brt.bucket->VarPtr(i, EParticleVar::OwnerId);
+            if (o && *o == owner_particle_id) ++live;
+        }
+        target = brt.bucket_def->spawn_count - live;
+    }
+
+    for (int32_t k = 0; k < target; ++k)
+    {
+        const float life = brt.bucket_def->default_life > 0.0f ? brt.bucket_def->default_life : -1.0f;
+        const int32_t pi = brt.bucket->AddParticle(owner_particle_id, life);
+        if (pi < 0) break;
+        InitializeSelfSpawnParticle(*brt.bucket, pi, *brt.bucket_def,
+                                    brt.spawn_expr, brt.spawn_compiled, owner);
+    }
+}
+
+// Per-bucket integration. dt_seconds is wall-clock for this render frame.
+// If tick_hz > 0 the bucket runs the tick_expr at the fixed cadence
+// (accumulating leftover ms across frames); otherwise the tick_expr runs
+// once per render frame.
+void TParticleEffectManager::IntegrateBucket(SBucketRuntime& brt, TObjectInstance* owner, float dt_seconds, float owner_particle_id)
+{
+    if (!brt.bucket || !brt.bucket_def) return;
+    if (!brt.tick_compiled && !brt.kill_compiled && brt.bucket_def->default_life <= 0.0f
+        && brt.bucket_def->spawn_count == 0)
+    {
+        // Nothing to do -- no per-tick dynamics, no life-based kill,
+        // no spawn-topup restock target. The legacy emitter/output
+        // path (TorchFlame) hits this branch.
+        return;
+    }
+
+    // Compute number of integration ticks this frame.
+    int32_t ticks = 1;
+    float per_tick_seconds = dt_seconds;
+    if (brt.bucket_def->tick_hz > 0)
+    {
+        const double tick_ms = 1000.0 / double(brt.bucket_def->tick_hz);
+        brt.sim_accum_ms += double(dt_seconds) * 1000.0;
+        ticks = 0;
+        while (brt.sim_accum_ms >= tick_ms)
+        {
+            brt.sim_accum_ms -= tick_ms;
+            ++ticks;
+        }
+        per_tick_seconds = float(tick_ms / 1000.0);
+    }
+
+    if (ticks == 0)
+        return;
+
+    const S3DPoint& p = owner ? owner->Pos() : S3DPoint{0, 0, 0};
+    const float emit_pos[3] = { float(p.x), float(p.y), float(p.z) };
+    const float emit_vel[3] = { 0.0f, 0.0f, 0.0f };
+
+    SParticleEvalContext base_ctx = {};
+    base_ctx.time_frame = float(TTime::Time());
+
+    // Per-tick: walk the bucket, integrate live particles owned by this
+    // runtime, run kill_expr, respawn or reap as appropriate.
+    for (int32_t t = 0; t < ticks; ++t)
+    {
+        for (int32_t i = brt.bucket->Count() - 1; i >= 0; --i)
+        {
+            const float* owner_slot = brt.bucket->VarPtr(i, EParticleVar::OwnerId);
+            if (!owner_slot || *owner_slot != owner_particle_id)
+                continue;
+
+            // Advance age.
+            float* age = brt.bucket->VarPtr(i, EParticleVar::Age);
+            float* age01 = brt.bucket->VarPtr(i, EParticleVar::Age01);
+            float* life = brt.bucket->VarPtr(i, EParticleVar::Life);
+            if (age) *age += per_tick_seconds;
+            if (age && life && *life > 0.0f && age01)
+            {
+                const float t = *age / *life;
+                *age01 = t < 1.0f ? t : 1.0f;
+            }
+            else if (age01) *age01 = 0.0f;
+
+            SParticleEvalContext ctx = base_ctx;
+            if (age)   ctx.age   = *age;
+            if (age01) ctx.age01 = *age01;
+            // Pull the current seed into ctx so EvalParticle's rng_state
+            // initialisation reads it.
+            if (const float* seed = brt.bucket->VarPtr(i, EParticleVar::Seed))
+                ctx.seed = *seed;
+
+            // Run the tick body.
+            if (brt.tick_compiled)
+                brt.tick_expr.EvalParticle(ctx, *brt.bucket, i, emit_pos, emit_vel);
+
+            // kill_expr -> respawn (re-run spawn_expr, zero age).
+            bool kill = false;
+            if (brt.kill_compiled)
+                kill = brt.kill_expr.EvalParticlePredicate(ctx, *brt.bucket, i, emit_pos, emit_vel);
+            if (!kill && life && *life > 0.0f && age && *age >= *life)
+                kill = true;
+
+            if (kill)
+            {
+                if (brt.bucket_def->spawn_count > 0)
+                {
+                    // Steady-state: respawn in place by re-running spawn_expr
+                    // and resetting age. The particle stays in the bucket.
+                    if (age)   *age = 0.0f;
+                    if (age01) *age01 = 0.0f;
+                    InitializeSelfSpawnParticle(*brt.bucket, i, *brt.bucket_def,
+                                                brt.spawn_expr, brt.spawn_compiled, owner);
+                }
+                else
+                {
+                    // One-shot burst: tag the particle dead via owner_id
+                    // mutation, then reap below.
+                    if (float* mut_o = brt.bucket->VarPtr(i, EParticleVar::OwnerId))
+                        *mut_o = -7777.0f;
+                }
+            }
+        }
+        brt.bucket->KillParticlesByOwner(-7777.0f);
+    }
+
+    // Steady-state restock (covers the case where a particle was reaped
+    // mid-tick by something other than the respawn path, or the bucket
+    // started under-populated).
+    if (brt.bucket_def->spawn_count > 0)
+        EmitSpawnTopup(brt, owner, owner_particle_id);
+}
+
+void TParticleEffectManager::IntegrateEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner, float dt_seconds)
+{
+    if (!effect_def || !owner) return;
+    SRuntime* runtime = FindRuntime(effect_def, owner->GetMapIndex());
+    if (!runtime) return;
+    for (SBucketRuntime& brt : runtime->bucket_runtimes)
+        IntegrateBucket(brt, owner, dt_seconds, runtime->owner_particle_id);
+}
+
 void TParticleEffectManager::StartRuntime(SRuntime& runtime, TObjectInstance* owner)
 {
     if (!runtime.effect_def || !owner)
         return;
 
     runtime.buckets.clear();
+    runtime.bucket_runtimes.clear();
     const SParticleBufferLayout layout = ParticleEffectBucketLayout();
     for (const SParticleBucketEffectDef& bucket_def : runtime.effect_def->buckets)
     {
         SParticleBucketDesc desc = BuildRuntimeBucketDesc(*runtime.effect_def, bucket_def, owner);
-        runtime.buckets.push_back(ParticleManager().GetOrCreateGlobalBucket(desc, layout));
+        TParticleBucket* bucket = ParticleManager().GetOrCreateGlobalBucket(desc, layout);
+        runtime.buckets.push_back(bucket);
+
+        // Build per-bucket compiled-expression cache. Buckets without
+        // spawn/tick/kill expressions stay all-default (only owns the
+        // bucket ptr for the integration loop's spawn-topup path).
+        SBucketRuntime brt = {};
+        brt.bucket = bucket;
+        brt.bucket_def = &bucket_def;
+        std::string err;
+        if (!bucket_def.spawn_expr.empty())
+        {
+            brt.spawn_compiled = brt.spawn_expr.Compile(
+                bucket_def.spawn_expr.c_str(), &err, EParticleExprMode::Statements);
+            if (!brt.spawn_compiled)
+                ParticleFatal("[particle] bucket " + bucket_def.name + " spawn_expr compile failed: " + err);
+        }
+        if (!bucket_def.tick_expr.empty())
+        {
+            brt.tick_compiled = brt.tick_expr.Compile(
+                bucket_def.tick_expr.c_str(), &err, EParticleExprMode::Statements);
+            if (!brt.tick_compiled)
+                ParticleFatal("[particle] bucket " + bucket_def.name + " tick_expr compile failed: " + err);
+        }
+        if (!bucket_def.kill_expr.empty())
+        {
+            brt.kill_compiled = brt.kill_expr.Compile(
+                bucket_def.kill_expr.c_str(), &err, EParticleExprMode::Expression);
+            if (!brt.kill_compiled)
+                ParticleFatal("[particle] bucket " + bucket_def.name + " kill_expr compile failed: " + err);
+        }
+        runtime.bucket_runtimes.push_back(std::move(brt));
     }
 
+    // Legacy emitter/output path -- still drives TorchFlame. New
+    // self-spawning buckets (spawn_burst / spawn_count) are handled by
+    // IntegrateEffect's spawn-topup.
     for (const SParticleEmitterEffectDef& emitter : runtime.effect_def->emitters)
     {
         for (const SParticleEmitterOutputDef& output : emitter.outputs)
@@ -486,6 +864,18 @@ void TParticleEffectManager::StartRuntime(SRuntime& runtime, TObjectInstance* ow
             const int32_t particle_index = bucket->AddParticle(runtime.owner_particle_id, output.life);
             if (particle_index >= 0)
                 InitializeRuntimeParticle(*bucket, particle_index, *bucket_def, emitter, owner);
+        }
+    }
+
+    // One-shot burst: emit at attach time. Steady-state spawn_count is
+    // handled lazily by IntegrateEffect (so the population restocks
+    // after kill_expr fires).
+    for (SBucketRuntime& brt : runtime.bucket_runtimes)
+    {
+        if (brt.bucket_def && brt.bucket_def->spawn_burst > 0 && brt.spawned_burst == 0)
+        {
+            EmitSpawnTopup(brt, owner, runtime.owner_particle_id);
+            brt.spawned_burst = brt.bucket_def->spawn_burst;
         }
     }
 }
@@ -505,6 +895,20 @@ void TParticleEffectManager::StopRuntime(size_t runtime_index)
 
     runtimes[runtime_index] = std::move(runtimes.back());
     runtimes.pop_back();
+}
+
+void TParticleEffectComponent::DrawPulse()
+{
+    if (!ParticleEffectManager || !effect_def || !Owner())
+        return;
+    ParticleEffectManager->PulseEffect(effect_def, Owner());
+    // Per-frame integration: tick the runtime's bucket expressions
+    // (spawn_expr / tick_expr / kill_expr) against the live owner. dt is
+    // the shared render-frame delta -- buckets with tick_hz > 0 accumulate
+    // and integrate at their fixed cadence; others integrate once per
+    // render frame.
+    const float dt = float(TTime::DeltaTime());
+    ParticleEffectManager->IntegrateEffect(effect_def, Owner(), dt);
 }
 
 TObjectClass EffectClass("EFFECT", OBJCLASS_EFFECT, 0);
