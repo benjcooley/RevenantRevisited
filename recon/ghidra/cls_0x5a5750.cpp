@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a5750
+// Decompiled methods and structure for class: cls_0x5a5750_TSideTabsPane
 
 /*
-/OOAnalyzer/cls_0x5a5750
+/OOAnalyzer/cls_0x5a5750_TSideTabsPane
 pack(disabled)
-Structure cls_0x5a5750 {
-   0   cls_0x5a5750::vftable_5a5750 *   4   vftptr_0x0   "pointer to cls_0x5a5750::vftable_5a5750"
+Structure cls_0x5a5750_TSideTabsPane {
+   0   cls_0x5a5750_TSideTabsPane::vftable_5a5750 *   4   vftptr_0x0   "pointer to cls_0x5a5750_TSideTabsPane::vftable_5a5750"
    4   dword   4   mbr_0x4   "Unsigned Double-Word (ddw, 4-bytes)"
    8   dword   4   mbr_0x8   "Unsigned Double-Word (ddw, 4-bytes)"
    12   dword   4   mbr_0xc   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -39,7 +39,7 @@ Length: 456 Alignment: 1
 
 // Function at 00487c60
 
-cls_0x5a5750 * __thiscall OOAnalyzer::cls_0x5a5750::cls_0x5a5750(cls_0x5a5750 *this)
+cls_0x5a5750_TSideTabsPane * __thiscall OOAnalyzer::cls_0x5a5750_TSideTabsPane::cls_0x5a5750_TSideTabsPane(cls_0x5a5750_TSideTabsPane *this)
 
 {
   this->vftptr_0x0 = (cls_0x5a5750__vftable_5a5750 *)&cls_0x5a4494__vftable_5a4494_005a4494;
@@ -64,15 +64,15 @@ cls_0x5a5750 * __thiscall OOAnalyzer::cls_0x5a5750::cls_0x5a5750(cls_0x5a5750 *t
 
 // Function at 00487cb0
 
-cls_0x5a5750 * __thiscall OOAnalyzer::cls_0x5a5750::virt_meth_0x487cb0(cls_0x5a5750 *this)
+cls_0x5a5750_TSideTabsPane * __thiscall OOAnalyzer::cls_0x5a5750_TSideTabsPane::virt_meth_0x487cb0(cls_0x5a5750_TSideTabsPane *this)
 
 {
   SIZE_T SVar1;
   byte in_stack_00000004;
   
-  ~cls_0x5a5750(this);
+  ~cls_0x5a5750_TSideTabsPane(this);
   if ((in_stack_00000004 & 1) != 0) {
-    if (this != (cls_0x5a5750 *)0x0) {
+    if (this != (cls_0x5a5750_TSideTabsPane *)0x0) {
       SVar1 = FUN_0058cff3(this);
       DAT_0065ba08 = DAT_0065ba08 - SVar1;
     }
@@ -85,12 +85,12 @@ cls_0x5a5750 * __thiscall OOAnalyzer::cls_0x5a5750::virt_meth_0x487cb0(cls_0x5a5
 
 // Function at 00487cf0
 
-cls_0x5a5750 * __thiscall OOAnalyzer::cls_0x5a5750::~cls_0x5a5750(cls_0x5a5750 *this)
+cls_0x5a5750_TSideTabsPane * __thiscall OOAnalyzer::cls_0x5a5750_TSideTabsPane::~cls_0x5a5750_TSideTabsPane(cls_0x5a5750_TSideTabsPane *this)
 
 {
   LPCVOID pvVar1;
   SIZE_T SVar2;
-  cls_0x5a5750 *pcVar3;
+  cls_0x5a5750_TSideTabsPane *pcVar3;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -106,7 +106,7 @@ cls_0x5a5750 * __thiscall OOAnalyzer::cls_0x5a5750::~cls_0x5a5750(cls_0x5a5750 *
     SVar2 = FUN_0058cff3(pvVar1);
     DAT_0065ba08 = DAT_0065ba08 - SVar2;
   }
-  pcVar3 = (cls_0x5a5750 *)FUN_0058cfab(pvVar1);
+  pcVar3 = (cls_0x5a5750_TSideTabsPane *)FUN_0058cfab(pvVar1);
   ExceptionList = local_c;
   return pcVar3;
 }
@@ -115,7 +115,7 @@ cls_0x5a5750 * __thiscall OOAnalyzer::cls_0x5a5750::~cls_0x5a5750(cls_0x5a5750 *
 
 // Function at 0053cc30
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a5750::virt_meth_0x53cc30(cls_0x5a5750 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a5750_TSideTabsPane::virt_meth_0x53cc30_TSideTabsPane_Initialize(cls_0x5a5750_TSideTabsPane *this)
 
 {
   undefined4 uVar1;
@@ -340,7 +340,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5750::virt_meth_0x53cc30(cls_0x5a5750 
 
 // Function at 0053d360
 
-void __thiscall OOAnalyzer::cls_0x5a5750::virt_meth_0x53d360(cls_0x5a5750 *this)
+void __thiscall OOAnalyzer::cls_0x5a5750_TSideTabsPane::virt_meth_0x53d360(cls_0x5a5750_TSideTabsPane *this)
 
 {
   if ((undefined4 *)this->mbr_0x188 != (undefined4 *)0x0) {
@@ -360,7 +360,7 @@ void __thiscall OOAnalyzer::cls_0x5a5750::virt_meth_0x53d360(cls_0x5a5750 *this)
 
 // Function at 0053d400
 
-void __thiscall OOAnalyzer::cls_0x5a5750::virt_meth_0x53d400(cls_0x5a5750 *this)
+void __thiscall OOAnalyzer::cls_0x5a5750_TSideTabsPane::virt_meth_0x53d400(cls_0x5a5750_TSideTabsPane *this)
 
 {
   if (this->mbr_0x50 != 0) {
@@ -375,7 +375,7 @@ void __thiscall OOAnalyzer::cls_0x5a5750::virt_meth_0x53d400(cls_0x5a5750 *this)
 // Function at 0053d6e0
 
 void __thiscall
-OOAnalyzer::cls_0x5a5750::virt_meth_0x53d6e0(cls_0x5a5750 *this,int param_1,int param_2)
+OOAnalyzer::cls_0x5a5750_TSideTabsPane::virt_meth_0x53d6e0(cls_0x5a5750_TSideTabsPane *this,int param_1,int param_2)
 
 {
   int in_stack_0000000c;
@@ -405,7 +405,7 @@ OOAnalyzer::cls_0x5a5750::virt_meth_0x53d6e0(cls_0x5a5750 *this,int param_1,int 
 
 // Function at 0053d8b0
 
-void __thiscall OOAnalyzer::cls_0x5a5750::meth_0x53d8b0(cls_0x5a5750 *this)
+void __thiscall OOAnalyzer::cls_0x5a5750_TSideTabsPane::meth_0x53d8b0(cls_0x5a5750_TSideTabsPane *this)
 
 {
   int *piVar1;

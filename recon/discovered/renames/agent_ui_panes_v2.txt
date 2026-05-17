@@ -1,0 +1,139 @@
+# Agent: UI panes Wave-1A re-launch
+# Date: 2026-05-16
+#
+# Topic: identify the four TPlayScreen child-pane forward-decl-only classes
+#   (TPlyrStatusBar / TSidePane / TSideTabsPane / TBottomPane) listed in
+#   src/revtypes.h:1164..1167 by extracting their Initialize methods + their
+#   vtable addresses from the retail binary.
+#
+# ============================================================================
+# Evidence chain (golden path: retail string + src forward-decl)
+# ============================================================================
+#
+# For each of the four classes, the chain is:
+#
+#  1. Retail string anchor inside TPlayScreen::Initialize @ 0x47a660 logs
+#     "Trouble initializing <NAME> pane" / "Trouble initializing PlyrStatusBar"
+#     on init-failure, immediately after CALL <FN>.
+#  2. Pre-class call sequence sets ECX = <GLOBAL_ADDR>, then CALL <FN>.
+#     `<GLOBAL_ADDR>` is the well-known global instance of the pane.
+#  3. Elsewhere (in a small per-pane ctor stub e.g. 0x48069c), the binary
+#     does `MOV dword ptr [<GLOBAL_ADDR>], <VTABLE_ADDR>` — that wires the
+#     vtable into the global instance. So <VTABLE_ADDR> IS the class's
+#     vtable (cls_0x<VTABLE_ADDR>).
+#  4. DumpVtable on <VTABLE_ADDR> confirms <FN> sits at slot 0 — so <FN>
+#     is the class's `Initialize` virtual (not a wrapper, not a free fn).
+#  5. The four src/revtypes.h forward-decls (`_CLASSDEF(TFooPane)`) at lines
+#     1164..1167 give the pre-release names that match the retail strings
+#     1:1, completing the cross-reference.
+#
+# Per-class breakdown:
+#
+#   TPlyrStatusBar:
+#     - retail string: "Trouble initializing PlyrStatusB" @ 0x5d73e8
+#     - global instance: 0x65a8c0
+#     - vtable wire: 0x48069c "MOV [0x0065a8c0], 0x5a54e4"
+#     - vtable @ 0x5a54e4, slot 0 = 0x549740 (Initialize), slot 1 = 0x549d40
+#     - => cls_0x5a54e4 (31 vtable slots, leaf-TPane shape, not merged)
+#
+#   TSidePane:
+#     - retail string: "Trouble initializing side pane" @ 0x5d7200
+#     - global instance: 0x666140
+#     - vtable wire: 0x480420 "MOV [0x00666140], 0x5a53ec"
+#     - vtable @ 0x5a53ec, slot 0 = 0x53c8c0 (Initialize)
+#     - => cls_0x5a53ec (31 vtable slots, leaf-TPane shape, not merged)
+#
+#   TSideTabsPane:
+#     - retail string: "Trouble initializing SideTabs pa" @ 0x5d7244
+#     - global instance: 0x65be50
+#     - vtable wire: ctor at 0x487c60 sets base vtable 0x5a4494, calls a
+#       base ctor (FUN_0041c7f0), then `MOV [ESI], 0x5a5750` — derived
+#       vtable. ESI is `this`, so 0x5a5750 is the class's final vtable.
+#     - vtable @ 0x5a5750, slot 0 = 0x53cc30 (Initialize)
+#     - => cls_0x5a5750 (32+ vtable slots, leaf with slightly more virtuals
+#       than the others; the body creates 6 buttons "Stats"/"Equip"/"Spell"
+#       + 3 others via TButton ctor — matches the sidebar mode-switcher.)
+#
+#   TBottomPane:
+#     - retail string: "Trouble initializing bottom pane" @ 0x5d7220
+#     - global instance: 0x667c58
+#     - vtable wire: 0x480430 "MOV [0x00667c58], 0x5a5468"
+#     - vtable @ 0x5a5468, slot 0 = 0x52d8a0 (Initialize)
+#     - => cls_0x5a5468 (31 vtable slots, leaf-TPane shape, not merged)
+#
+# ============================================================================
+# Confidence + caveats
+# ============================================================================
+#
+# All four classes meet the 98% bar (3 independent lines of evidence each:
+# retail string + vtable wire + src-side forward-decl). The vtables are also
+# all 31 slots in the same {0x444f**, 0x445***, slot 0/1/2 per-class} shape,
+# which makes Ghidra-merging unlikely.
+#
+# Therefore the following renames are SAFE to apply:
+#   - The four Initialize methods (slot 0 of each vtable)
+#   - The four class identifiers (cls_0x<vtable>)
+#
+# NOT renamed (deferred to subsequent waves):
+#   - The other 30 virtual slots of each class — fingerprint not yet done.
+#     E.g. slot 1 of TPlyrStatusBar (FUN_00549d40) is likely Close, but we
+#     haven't extracted it.
+#   - The constructor stubs (0x48068c-region for PlyrStatusBar, 0x487c60
+#     for SideTabs, etc.). Identifying these as "<Class>::ctor" would be
+#     safe, but is out of scope for this wave.
+#   - The TPane base class (cls_0x5a4494) — confidently the base per the
+#     SideTabsPane constructor, but a separate identification effort.
+#
+# ============================================================================
+# Renames
+# ============================================================================
+
+# ----- TPlyrStatusBar (cls_0x5a54e4) -----
+# Class label (vtable @ 0x5a54e4; global instance @ 0x65a8c0)
+cls_0x5a54e4|cls_0x5a54e4_TPlyrStatusBar
+
+# TPlyrStatusBar::Initialize — vtable slot 0; sets up 5 surface objects
+# (4 mosaic, 1 sprite-sized) for the character status panel; resolution-aware
+# (DAT_006680c8 = NoTex/hires toggle); error string "Couldn't initialize mosaic
+# surface" identifies the surface helpers (FUN_004bb5c0 / FUN_004bcb00).
+virt_meth_0x549740|virt_meth_0x549740_TPlyrStatusBar_Initialize
+meth_0x549740|meth_0x549740_TPlyrStatusBar_Initialize
+FUN_00549740|FUN_00549740_TPlyrStatusBar_Initialize
+
+
+# ----- TSidePane (cls_0x5a53ec) -----
+# Class label (vtable @ 0x5a53ec; global instance @ 0x666140)
+cls_0x5a53ec|cls_0x5a53ec_TSidePane
+
+# TSidePane::Initialize — vtable slot 0; trivial body (calls TPane base init
+# FUN_00491900 then zeros 4 fields). Side pane is a container; the heavy
+# lifting happens in its tab-switcher logic and child panes.
+virt_meth_0x53c8c0|virt_meth_0x53c8c0_TSidePane_Initialize
+meth_0x53c8c0|meth_0x53c8c0_TSidePane_Initialize
+FUN_0053c8c0|FUN_0053c8c0_TSidePane_Initialize
+
+
+# ----- TSideTabsPane (cls_0x5a5750) -----
+# Class label (vtable @ 0x5a5750; global instance @ 0x65be50)
+cls_0x5a5750|cls_0x5a5750_TSideTabsPane
+
+# TSideTabsPane::Initialize — vtable slot 0; creates 6 TButton instances
+# (labels "Stats" / "Equip" / "Spell" + 3 unnamed via &DAT_005e4720) via
+# FUN_0042c600 (TButton ctor). Allocates 3 mosaic surfaces. This pane IS the
+# vertical mode-switcher button strip on the right edge of the sidebar.
+virt_meth_0x53cc30|virt_meth_0x53cc30_TSideTabsPane_Initialize
+meth_0x53cc30|meth_0x53cc30_TSideTabsPane_Initialize
+FUN_0053cc30|FUN_0053cc30_TSideTabsPane_Initialize
+
+
+# ----- TBottomPane (cls_0x5a5468) -----
+# Class label (vtable @ 0x5a5468; global instance @ 0x667c58)
+cls_0x5a5468|cls_0x5a5468_TBottomPane
+
+# TBottomPane::Initialize — vtable slot 0; trivial (just calls base init
+# FUN_00491900, returns 1). The bottom pane is a container; its content
+# (quickspell row, potion shelf, "bottom bar") is initialized by sibling panes
+# (FUN_00544160 quickspell, FUN_0052c970 BarInv, FUN_0052c780 Bottom bar).
+virt_meth_0x52d8a0|virt_meth_0x52d8a0_TBottomPane_Initialize
+meth_0x52d8a0|meth_0x52d8a0_TBottomPane_Initialize
+FUN_0052d8a0|FUN_0052d8a0_TBottomPane_Initialize

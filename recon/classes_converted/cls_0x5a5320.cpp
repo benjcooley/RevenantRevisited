@@ -8572,7 +8572,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x491bd0()
 
 // Function at 0052d8a0
 
-undefined4 cls_0x5a5320_TPlayScreen::virt_meth_0x52d8a0()
+undefined4 cls_0x5a5320_TPlayScreen::virt_meth_0x52d8a0_TBottomPane_Initialize()
 
 {
   this->virt_meth_0x491900();
@@ -8855,7 +8855,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x5368c0()
 
 // Function at 0053c8c0
 
-undefined4 cls_0x5a5320_TPlayScreen::virt_meth_0x53c8c0()
+undefined4 cls_0x5a5320_TPlayScreen::virt_meth_0x53c8c0_TSidePane_Initialize()
 
 {
   this->virt_meth_0x491900();
@@ -9089,7 +9089,7 @@ void cls_0x5a5320_TPlayScreen::meth_0x53cb40()
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-undefined4 cls_0x5a5320_TPlayScreen::virt_meth_0x549740()
+undefined4 cls_0x5a5320_TPlayScreen::virt_meth_0x549740_TPlyrStatusBar_Initialize()
 
 {
   cls_0x5a68d8__vftable_5a68d8 *pcVar1;

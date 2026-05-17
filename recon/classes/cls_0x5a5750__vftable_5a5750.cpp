@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a5750::vftable_5a5750
+// Decompiled methods and structure for class: cls_0x5a5750_TSideTabsPane::vftable_5a5750
 
 /*
-/OOAnalyzer/cls_0x5a5750::vftable_5a5750
+/OOAnalyzer/cls_0x5a5750_TSideTabsPane::vftable_5a5750
 pack(disabled)
-Structure cls_0x5a5750::vftable_5a5750 {
-   0   virt_meth_0x53cc30 *   4   virt_meth_0x53cc30_0   "virtual function table entry."
+Structure cls_0x5a5750_TSideTabsPane::vftable_5a5750 {
+   0   virt_meth_0x53cc30_TSideTabsPane_Initialize *   4   virt_meth_0x53cc30_0   "virtual function table entry."
    4   virt_meth_0x53d360 *   4   virt_meth_0x53d360_4   "virtual function table entry."
    8   virt_meth_0x435010 *   4   virt_meth_0x435010_8   "virtual function table entry."
    12   virt_meth_0x444f40 *   4   virt_meth_0x444f40_12   "virtual function table entry."
