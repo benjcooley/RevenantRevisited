@@ -34,11 +34,17 @@ class TGameModeImpl final : public IRuntimeMode
     void OnEnter() override
     {
         log_info("[runtimemode] enter game mode");
-        // Seed the default game cursor. SetMouseBitmap pushes the
-        // pixels to AppKit's NSCursor on macOS so the OS draws our
-        // cursor everywhere it normally draws the arrow -- including
-        // out-of-window and during window deactivation. No more
-        // sapp_show_mouse toggling; the platform owns visibility.
+        // Seed the default game cursor. In windowed mode SetMouseBitmap
+        // pushes the pixels to AppKit's NSCursor so the OS handles
+        // visibility for us (in/out of window, focus changes, ...).
+        // In fullscreen there's no "outside" for the OS cursor, and
+        // AppKit hides the cursor over fullscreen apps -- so we hide
+        // sokol_app's cursor and let TCursorHud draw the cursor in-game
+        // like the pre-OS-cursor path. SetMouseBitmap itself decides
+        // (Windowed gate) whether to take the OS path; we just suppress
+        // the OS arrow when it won't.
+        if (!Windowed)
+            sapp_show_mouse(false);
         if (GameData)
         {
             if (PTBitmap cursor = GameData->Bitmap("cursor"))
@@ -58,10 +64,14 @@ class TGameModeImpl final : public IRuntimeMode
         log_info("[runtimemode] exit game mode");
         if (Renderer)
             Renderer->RemoveHud(&cursor_hud);
-        // Hand the cursor pixel back to the OS default arrow so the
-        // next mode (editor, menu, ...) doesn't inherit our game
-        // sprite. Editor mode pushes its own bitmap if it wants one.
-        rev_platform::ResetOSCursor();
+        // Hand the cursor back to the system default. In windowed mode
+        // that's the OS arrow via NSCursor; in fullscreen we re-show
+        // sokol_app's cursor (we hid it in OnEnter) so the next mode
+        // isn't left with an invisible pointer.
+        if (Windowed)
+            rev_platform::ResetOSCursor();
+        else
+            sapp_show_mouse(true);
     }
 
   private:

@@ -61,20 +61,29 @@ void SetMouseBitmap(PTBitmap cursor)
     // Hand the new pixels to the OS so AppKit draws our cursor wherever
     // it draws every other app's -- including out-of-window. regx/regy
     // is the registration point Display.Put uses (DM_USEREG), so it's
-    // also the right NSCursor hotspot. macOS-only today; the stub
-    // returns false on other platforms and we fall back to the in-game
-    // draw in TCursorHud::Draw.
-    if (cursor)
+    // also the right NSCursor hotspot.
+    //
+    // Gated on Windowed: in fullscreen there's no "outside the window"
+    // for the OS cursor to live in, and AppKit hides the cursor over
+    // fullscreen apps by default -- which would leave us with no cursor
+    // at all. Fall back to the in-game TCursorHud draw + sapp_show_mouse
+    // (false) in that case. (macOS-only today; the non-macOS stub also
+    // returns false and the same fallback applies.)
+    if (cursor && Windowed)
     {
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(cursor, cursor->regx, cursor->regy);
         if (!g_os_cursor_owns_pixels)
             log_warn("[cursor] SetOSCursor declined; falling back to in-game draw");
     }
+    else
+    {
+        g_os_cursor_owns_pixels = false;
+    }
 }
 
 void RefreshOSCursor()
 {
-    if (MouseCursor)
+    if (MouseCursor && Windowed)
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(
             MouseCursor, MouseCursor->regx, MouseCursor->regy);
 }
