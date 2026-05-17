@@ -8,6 +8,7 @@
 
 #include "3dimage.h"
 #include "animimage.h"
+#include "audio_backend.h"
 #include "bitmapatlas.h"
 #include "bitmapdecode.h"
 #include "decompdata.h"
@@ -25,6 +26,7 @@
 #include "render_metadata.h"
 #include "renderer.h"
 #include "revenant.h"
+#include "sound.h"
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
@@ -42,6 +44,9 @@
 extern TObjectClass TileClass;
 extern TObjectClass CharacterClass;
 extern TObjectClass PlayerClass;
+
+extern char ResourcePath[];
+extern char RunPath[];
 
 namespace {
 
@@ -2196,6 +2201,160 @@ void RenderBlankMode()
     Display.BackBuffer()->EndPass();
 }
 
+// ====================================================== audio test mode
+//
+// `--test=audio` — exercise the miniaudio backend in isolation:
+//   * lists registered SFX (loaded by SoundPlayer.ReadSoundList) with a
+//     Play button per entry
+//   * cycles through TrackNN.ogg files under data/MUSIC/ for music
+//   * exposes master/sfx/music volume sliders
+//
+// Useful pre-game-loop ear-test for the backend before sounds are
+// triggered organically from inside `--test=sector`.
+
+struct AudioTestState {
+    std::vector<std::string> music_tracks;     // absolute paths under data/MUSIC/
+    int                      music_idx = 0;
+    bool                     music_loop = false;
+    float                    master_vol = 1.0f;
+    float                    sfx_vol    = 1.0f;
+    float                    music_vol  = 0.7f;
+    std::string              status;
+};
+static AudioTestState g_audioTest;
+
+bool InitializeAudioMode()
+{
+    g_audioTest = {};
+
+    namespace fs = std::filesystem;
+    fs::path music_dir = fs::path(RunPath) / "MUSIC";
+    std::error_code ec;
+    if (fs::is_directory(music_dir, ec)) {
+        for (auto& ent : fs::directory_iterator(music_dir, ec)) {
+            if (ec) break;
+            if (!ent.is_regular_file()) continue;
+            auto ext = ent.path().extension().string();
+            for (auto& c : ext) c = static_cast<char>(std::tolower(c));
+            if (ext == ".ogg" || ext == ".wav")
+                g_audioTest.music_tracks.push_back(ent.path().string());
+        }
+        std::sort(g_audioTest.music_tracks.begin(), g_audioTest.music_tracks.end());
+    }
+    if (g_audioTest.music_tracks.empty())
+        log_warn("[audio] no .ogg/.wav files found under %s", music_dir.string().c_str());
+
+    audio::SetMasterVolume(g_audioTest.master_vol);
+    audio::SetSfxVolume   (g_audioTest.sfx_vol);
+    audio::SetMusicVolume (g_audioTest.music_vol);
+
+    // Auto-fire the simplest possible playback path: data/open.wav via
+    // ma_engine_play_sound. This isolates the engine + device wiring from
+    // the streaming / vorbis decoder path used by music.
+    {
+        std::string wav = (fs::path(RunPath) / "open.wav").string();
+        if (fs::exists(wav, ec)) {
+            audio::PlayOneShot(wav.c_str());
+            log_info("[audio] auto-fired one-shot %s (master_vol=%.2f)",
+                     wav.c_str(), audio::GetMasterVolume());
+        } else {
+            log_warn("[audio] no test wav at %s", wav.c_str());
+        }
+    }
+
+    // Auto-start the first music track on entry so the user gets an
+    // immediate audible signal without having to click Play.
+    if (!g_audioTest.music_tracks.empty()) {
+        audio::MusicPlayFile(g_audioTest.music_tracks[0].c_str(), /*loop*/ false);
+        log_info("[audio] auto-started music %s", g_audioTest.music_tracks[0].c_str());
+    }
+    return true;
+}
+
+void CloseAudioMode()
+{
+    audio::MusicStop();
+}
+
+void RenderAudioMode()
+{
+    Display.BackBuffer()->StartPass(0.08f, 0.08f, 0.10f, 1.0f);
+
+    ImGui::SetNextWindowSize(ImVec2(620, 500), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Audio Test", nullptr, ImGuiWindowFlags_NoCollapse))
+    {
+        ImGui::Text("Backend: %s", audio::Functioning() ? "miniaudio (functioning)" : "OFFLINE");
+        ImGui::Text("Engine master volume: %.2f", audio::GetMasterVolume());
+        ImGui::Separator();
+
+        // Simplest possible playback test — bypasses Source / group code.
+        if (ImGui::Button("Fire one-shot open.wav")) {
+            std::string wav = (std::filesystem::path(RunPath) / "open.wav").string();
+            audio::PlayOneShot(wav.c_str());
+        }
+        ImGui::Separator();
+
+        // ---- mixer ----
+        if (ImGui::SliderFloat("Master##vol", &g_audioTest.master_vol, 0.0f, 1.0f))
+            audio::SetMasterVolume(g_audioTest.master_vol);
+        if (ImGui::SliderFloat("SFX##vol",    &g_audioTest.sfx_vol,    0.0f, 1.0f))
+            audio::SetSfxVolume(g_audioTest.sfx_vol);
+        if (ImGui::SliderFloat("Music##vol",  &g_audioTest.music_vol,  0.0f, 1.0f))
+            audio::SetMusicVolume(g_audioTest.music_vol);
+
+        // ---- music ----
+        ImGui::Separator();
+        ImGui::Text("Music: %s",
+                    g_audioTest.music_tracks.empty() ? "<no tracks under data/MUSIC>" :
+                    audio::MusicPlaying()             ? g_audioTest.music_tracks[g_audioTest.music_idx].c_str()
+                                                      : "(stopped)");
+        ImGui::Checkbox("Loop", &g_audioTest.music_loop);
+        ImGui::SameLine();
+        if (ImGui::Button("Prev") && !g_audioTest.music_tracks.empty()) {
+            g_audioTest.music_idx = (g_audioTest.music_idx - 1 + int(g_audioTest.music_tracks.size())) %
+                                    int(g_audioTest.music_tracks.size());
+            audio::MusicPlayFile(g_audioTest.music_tracks[g_audioTest.music_idx].c_str(), g_audioTest.music_loop);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Play") && !g_audioTest.music_tracks.empty()) {
+            audio::MusicPlayFile(g_audioTest.music_tracks[g_audioTest.music_idx].c_str(), g_audioTest.music_loop);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Stop")) audio::MusicStop();
+        ImGui::SameLine();
+        if (ImGui::Button("Next") && !g_audioTest.music_tracks.empty()) {
+            g_audioTest.music_idx = (g_audioTest.music_idx + 1) % int(g_audioTest.music_tracks.size());
+            audio::MusicPlayFile(g_audioTest.music_tracks[g_audioTest.music_idx].c_str(), g_audioTest.music_loop);
+        }
+
+        // ---- sfx registry ----
+        ImGui::Separator();
+        ImGui::Text("SFX registry (%d entries)", SoundPlayer.NumItems());
+        if (ImGui::BeginChild("sfxlist", ImVec2(0, 0), true)) {
+            for (int32_t i = 0; i < SoundPlayer.NumItems(); ++i) {
+                PSSoundRef ref = SoundPlayer.GetRef(i);
+                if (!ref || !ref->name) continue;
+                ImGui::PushID(i);
+                if (ImGui::Button("Play")) {
+                    if (SoundPlayer.Mount(i)) {
+                        SoundPlayer.Play(i);
+                        SoundPlayer.Unmount(i);
+                    } else {
+                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name);
+                    }
+                }
+                ImGui::SameLine();
+                ImGui::Text("%s", ref->name);
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndChild();
+    }
+    ImGui::End();
+
+    Display.BackBuffer()->EndPass();
+}
+
 }  // namespace
 
 namespace TestModes {
@@ -2236,6 +2395,8 @@ bool Initialize(const char* mode)
         return InitializeI3DMode();
     if (strcmp(mode, "font") == 0)
         return InitializeFontMode();
+    if (strcmp(mode, "audio") == 0)
+        return InitializeAudioMode();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2253,6 +2414,8 @@ void Close(const char* mode)
         CloseI3DStaticMode();
     if (strcmp(mode, "water3d") == 0)
         CloseI3DStaticMode();
+    if (strcmp(mode, "audio") == 0)
+        CloseAudioMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2279,6 +2442,8 @@ void Render(const char* mode)
         return RenderTTFMode();
     if (strcmp(mode, "text") == 0)
         return RenderTextMode();
+    if (strcmp(mode, "audio") == 0)
+        return RenderAudioMode();
     return RenderBlankMode();
 }
 

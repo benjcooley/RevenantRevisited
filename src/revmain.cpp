@@ -2047,6 +2047,12 @@ bool InitGlobals()
   // any subsystem that observes CurrentMapChanged.
     MapManager.Init();
 
+  // (22) Sound — brings up miniaudio + scans data/sound/effects + the
+  // language voice dir for WAVs. Comes after ResourcePath / Language are
+  // valid and the data manager is up; before any caller can fire SFX.
+    Status("Initializing audio system\n");
+    SoundPlayer.Initialize();   // failure here is non-fatal; game runs silent
+
     if (!_CrtCheckMemory())
     {
 //      _CrtMemDumpAllObjectsSince(&s1);
@@ -2085,6 +2091,11 @@ void ShutdownGlobals()
         ResumeThreads();
 
   // ---- inverse of InitGlobals ----
+
+  // (22) Sound — stop the playback thread + drain music before anything
+  // else unwinds; nothing else depends on audio so this is the safest
+  // first inverse step. Also flushes the cached SFX list.
+    SoundPlayer.Close();
 
   // (21) MapManager - inits last in InitGlobals, so closes first here.
   // Walks each cached TGameMap → Unload → CloseSector while sectors,
@@ -2133,13 +2144,6 @@ void ShutdownGlobals()
   // exit via the dtor.
 
   // (8) ImageryPath — pure setting, nothing to undo.
-
-  // (Sound system is not part of the InitGlobals chain yet — it is
-  // brought up lazily by gameplay code. Tear it down here while audio
-  // hardware references are still alive.)
-    CDStop();
-    CDClose();
-    SoundPlayer.Close();
 
   // (2) FontTable
     if (FontTable) {

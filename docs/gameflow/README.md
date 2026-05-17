@@ -85,9 +85,11 @@ What's still 1998 code, intact, waiting on integration + verification:
 - `src/exit.{h,cpp}` (~840 lines, intact)
 
 What's broken / stubbed:
-- `src/sound.{h,cpp}` — 34 `#if 0` blocks, all marked
-  *"real audio backend — Phase 3"*. DirectSound + MCI cdaudio + winmm
-  WAVE loader paths are all stubbed. **No audio library vendored yet.**
+- ~~`src/sound.{h,cpp}` stubbed.~~ **Landed 2026-05-16** — miniaudio
+  0.11.22 vendored at `thirdparty/miniaudio/`, `src/audio_backend.{h,cpp}`
+  is the facade, `src/sound.cpp` rewritten on top of it. Pre-port file
+  retired to `attic/src/sound_directsound.cpp`. Verified audible via
+  `--test=audio`.
 - No main menu / title screen / credits / game log pane in `src/`.
 
 ## Authority and inter-track etiquette
