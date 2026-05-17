@@ -1,10 +1,12 @@
 # Gameplay / Combat / Controls — Burndown
 
-Live status. Update as work progresses. Goal: bring Demo 1 (Locke wakes up at Misthaven fountain, walks to the forest, fights an Araknid, takes a quicksave, exits to the next sector) to end-to-end playable. Adjacent burndowns: [../ui/BURNDOWN.md](../ui/BURNDOWN.md) for the HUD / OOG screens (parallel UI worktree), VFX burndown lives on the VFX worktree.
+Live status. Update as work progresses. Goal: bring Demo 1 (Locke wakes up at Misthaven fountain, walks to the forest, fights an Araknid, takes a quicksave, exits to the next sector) to end-to-end playable.
 
-**Legend:** `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
+**Track ownership.** Several systems originally listed here are owned by the **gameflow** track ([../gameflow/README.md](../gameflow/README.md) / [../gameflow/BURNDOWN.md](../gameflow/BURNDOWN.md)). Save / load, sector transitions (exits / doors), the script runtime, the main menu, the new-game path, dialogs, death+restart, and the whole audio system live there. This burndown covers what stays in **core gameplay/combat on main**: input dispatch, attacks, AI, equipment, XP/leveling. Adjacent: [../ui/BURNDOWN.md](../ui/BURNDOWN.md) for HUD/OOG screens, the VFX worktree's INVENTORY for spell + impact effects.
 
-Last updated: 2026-05-17 (B.1 landed)
+**Legend:** `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked · `[-]` cancelled / handed off
+
+Last updated: 2026-05-17 (post-gameflow + vfx + ui merge)
 
 ---
 
@@ -21,14 +23,16 @@ Last updated: 2026-05-17 (B.1 landed)
 - `[ ]` **A.7 `GAMECMD_INVOKE1..4`** — spell quick-cast. Calls `Player->Cast(spellname, target)`; spell list comes from the QuickSpellPane state (UI worktree B.4).
 - `[ ]` **A.8 `--test=gameplay-input`** — synthesizes a `Player`, fires each `GAMECOMMAND` once, asserts the right method was called. Cheap regression net once the dispatcher is real.
 
+> Overlaps with UI [../ui/BURNDOWN.md](../ui/BURNDOWN.md) B.11 ("GAMECOMMAND dispatch un-stub"). Core combat dispatch (A.1-A.5) lives here; inventory/spell dispatch (A.6/A.7) is the seam — landing the skeleton + combat first means the UI side can plug into a real dispatcher when its panes are ready.
+
 ## Phase B — Player setup at boot
 
 Without a properly-equipped Player, attacks miss for "no weapon," fatigue is wrong, and damage isn't computed.
 
-- `[x]` **B.1 Auto-equip starter loadout on `SpawnDefaultPlayer`** — done 2026-05-17. Short Sword + Brown Cloth shirt/pants/boots, via the new `EquipStarterLoadout` helper in [playscreen.cpp](../../src/playscreen.cpp). Item names come from the runtime class.def packed in `imagery.rvi` (not the legacy/Class.Def at repo root). Will be superseded when newgame.sav loading lands (Phase E).
-- `[ ]` **B.2 Level from save instead of hardcoded 10** — [player.cpp:189](../../src/player.cpp#L189) placeholder makes skill checks pass that shouldn't. Tie to save/load (Phase E) — until then leave the placeholder but log a warning at boot so it doesn't get forgotten.
-- `[ ]` **B.3 Inventory pre-population** — Demo 1 expects some starter potions / quest item per [../OBJECT_TYPES.md](../OBJECT_TYPES.md). Concrete list TBD; depends on what the demo script triggers reference.
-- `[ ]` **B.4 New-game entry path** — currently boot always goes through `SpawnDefaultPlayer` with hardcoded position ([playscreen.cpp:304](../../src/playscreen.cpp#L304)). Real new-game = create Player + place at the module's start position from `module.def`. The plumbing exists (`TModule.startpos[]` per [[project-module-system]] memory, not yet parsed). *Crosses with main-menu work in UI worktree C.1.*
+- `[x]` **B.1 Auto-equip starter loadout on `SpawnDefaultPlayer`** — done 2026-05-17. Short Sword + Brown Cloth shirt/pants/boots, via the new `EquipStarterLoadout` helper in [playscreen.cpp](../../src/playscreen.cpp). Item names come from the runtime class.def packed in `imagery.rvi` (not the legacy/Class.Def at repo root). Will be superseded when gameflow's newgame.sav loading lands.
+- `[ ]` **B.2 Level from save instead of hardcoded 10** — [player.cpp:189](../../src/player.cpp#L189) placeholder makes skill checks pass that shouldn't. Tied to gameflow's save/load (T5) — until then leave the placeholder but log a warning at boot so it doesn't get forgotten.
+- `[-]` **B.3 Inventory pre-population** — *Handed to gameflow T4 (starting scripts / location). The retail starter inventory is set by the opening script, not by C++; gameflow owns the script runtime.*
+- `[-]` **B.4 New-game entry path** — *Handed to gameflow T3 (New Game) / T4 (starting scripts / location). The hardcoded `SpawnDefaultPlayer` call in [playscreen.cpp:304](../../src/playscreen.cpp#L304) is the stand-in until that lands.*
 
 ## Phase C — Combat smoke
 
@@ -37,46 +41,42 @@ Once A + B land, walk the full attack→hit→damage→death cycle against a rea
 - `[ ]` **C.1 First-blood test** — spawn Locke + one Araknid via `--test=combat`; player swings; verify `[character] hit / damage / impact` log lines. Catches all the gaps that don't fail loudly.
 - `[ ]` **C.2 Hit-reaction + stagger** — [character.cpp:1033-1080](../../src/character.cpp#L1033) plays the impact anim; verify the looptime in [../COMBAT.md](../COMBAT.md) maps correctly to frames and stuns the attacker as intended.
 - `[ ]` **C.3 Death + corpse persistence** — Araknid dies, corpse stays in sector. Verify it doesn't despawn on next sector load (currently `RemoveObject` only fires explicitly, so this should work — confirm with a sector cross).
-- `[ ]` **C.4 Player death** — Locke HP → 0. What happens? Probably nothing right now. Define: respawn at last save, or "you died" overlay → main menu? Depends on main menu (UI C.1).
+- `[ ]` **C.4 Player death** — Locke HP → 0. *Death+restart flow is gameflow T7; this entry tracks only the combat-side death trigger (impact → HP=0 → `IsDead()` flag set → death anim plays).*
 - `[ ]` **C.5 XP on kill** — no caller awards XP ([player.h](../../src/player.h) `Exp()` accessor exists, no writer in combat death path). Add `Player->AddExp(amount)` call in the attacker's death handler. Amount from rules.def per [../COMBAT_RULES.md](../COMBAT_RULES.md).
 - `[ ]` **C.6 Level up** — when `Exp >= NextLevelExp`, bump `Level`, restore HP/MP, log to text bar. Skill / stat advancement model per [../OBJECT_STATS.md](../OBJECT_STATS.md).
 - `[ ]` **C.7 Multi-enemy** — three Araknids in a clearing. Verify AI target acquisition ([character.cpp:2444-2472](../../src/character.cpp#L2444-L2472)) picks them up and combat continues without deadlocks.
+- `[ ]` **C.8 Combat SFX cues fire** — now that gameflow has the SFX registry populated from `resources.rvr` ([../gameflow/BURNDOWN.md](../gameflow/BURNDOWN.md) T0), confirm sword swings / hit impacts / Araknid death actually play their sounds during C.1. The SFX names are bound in `class.def` / `rules.def`; this is just "does the play call reach the audio backend." If broken, file under gameflow.
 
-## Phase D — Sector transitions / System 19
+## Phase D — Sector transitions / System 19 *(handed to gameflow T10)*
 
-`TExit` is largely complete ([exit.cpp:342](../../src/exit.cpp#L342), [exit.cpp:403](../../src/exit.cpp#L403)). Risk areas are paging and state preservation.
+The whole TExit / door auto-activate / "Misthaven return" cycle is gameflow's T10. The combat side cares about two things, tracked here as cross-cuts:
 
-- `[ ]` **D.1 Sector-paging verify after `TExit::Activate`** — `Player.SetPos` jumps Locke to a new sector. Confirm `TMapRenderer` actually loads the new 3x3 sector window and unloads the old (memory `project-mappane-renderer-split` says renderer owns loaded sectors; verify the SetPos hook reaches it).
-- `[ ]` **D.2 NPC AI cleanup on sector unload** — when a sector unloads, do enemy AI ticks halt? Run a smoke where you cross sectors mid-combat; check no AI errors on the old sector. Likely needs an `AI()` early-out for unresident objects.
-- `[ ]` **D.3 Sector-cross state snapshot** — `TExit::Activate` doesn't checkpoint Player state. Should it? Decide whether sector cross is implicitly a quicksave point (matches retail behavior?) or just position teleport. Probably just position; document the decision.
-- `[ ]` **D.4 Door interaction (`TExit::Use`)** — for doors that need a key/lever, `Openable()` ([exit.cpp:372](../../src/exit.cpp#L372)) gates Activate. Verify a locked door + key item works end-to-end on a demo door.
-- `[ ]` **D.5 `TPressPlate` + `TSpikeWall`** ([exit.h:510](../../src/exit.h#L510)) — already implemented, no demo trigger exists. Confirm with `--test=exit-pressplate`.
-- `[ ]` **D.6 `TLever` interaction** — door-opening lever ([exit.h:124](../../src/exit.h#L124)). Same smoke pattern as D.5.
+- `[ ]` **D-cross.1 NPC AI cleanup on sector unload** — when a sector unloads mid-combat, enemy AI ticks need to stop firing on the unresident objects. Likely a one-line early-out in `TCharacter::AI()`; the actual sector-paging plumbing belongs to gameflow.
+- `[ ]` **D-cross.2 Combat-mode preservation across sector cross** — if Locke is in combat when he steps on an exit, does combat mode survive the teleport? Probably should not (no enemy on the other side), but worth a smoke test once gameflow's exit plumbing lands.
 
-## Phase E — Save / load + quicksave
+Original D.1-D.6 items (sector paging, door + lever interaction, press plates) are owned by gameflow.
 
-Save I/O works ([savegame.cpp:27](../../src/savegame.cpp#L27)); needs keybindings and the menu screens. Coordinate with UI worktree C.5/C.6.
+## Phase E — Save / load *(handed to gameflow T5/T6/T7)*
 
-- `[ ]` **E.1 Quicksave / quickload keybindings** — F5/F9 (or whatever you prefer) → `SaveGame(0)` / `LoadGame(0)`. Single line each in the dispatcher.
-- `[ ]` **E.2 Save indicator** — TextBar toast on save success (already prints something? verify).
-- `[ ]` **E.3 NPC / world persistence in saves** — currently only Player is serialized ([savegame.cpp:72](../../src/savegame.cpp#L72)). Decide model: respawn all NPCs from class.def on load (cheap, retail-like) vs. persist dead-flags / inventory states (more authentic, more code). Probably the former for Demo 1.
-- `[ ]` **E.4 Save-file version handling** — `MAP_VERSION` mismatch fails load with no upgrade path ([savegame.cpp:40](../../src/savegame.cpp#L40)). Document the format; add a one-line "incompatible save" error path that returns to main menu instead of crashing.
+Gameflow owns the save-game data model (T5), the load/save UI + slot management (T6), and the death/restart loop (T7). Combat-side cross-cuts:
 
-## Phase F — Script runtime completeness
+- `[ ]` **E-cross.1 Per-character serialization parity** — when gameflow lands NPC/world persistence, verify combat state (current target, current attack, fatigue tick, impact stagger remaining) round-trips. If it doesn't, the combat code may need new save/load hooks. *Track in this file once gameflow's persistence model is decided.*
 
-`TScriptManager` boots and parses; opcode coverage is unverified. Demo scripts (`demo.s`, `forest.s`, etc.) are loaded per-area at [area.cpp:407](../../src/area.cpp#L407) but may silently skip unimplemented opcodes.
+Original E.1-E.4 items (quicksave bindings, save indicator toast, persistence model decision, version compat) are owned by gameflow.
 
-- `[ ]` **F.1 Opcode inventory** — enumerate every opcode the demo scripts actually use (grep the .s files in `data/Modules/Ahkuilon_unzipped/`). Cross-reference with `TScript::Continue` dispatch in [src/script.cpp](../../src/script.cpp). List missing opcodes.
-- `[ ]` **F.2 Port missing opcodes per priority** — port the ones the demo scripts use first; others can wait. Each missing opcode logged with `[script] unhandled opcode <X>` so silent failures don't hide.
-- `[ ]` **F.3 Trigger fire-through** — confirm `TRIGGER_PROXIMITY`, `TRIGGER_ACTIVATE`, `TRIGGER_DIALOG` actually fire for the player's actions. `TExit::Activate` already calls `Trigger(TRIGGER_ACTIVATE)` ([exit.cpp:344](../../src/exit.cpp#L344)) — find one demo-script trigger and verify it fires.
-- `[ ]` **F.4 `Cast` / `Say` / `Wait` opcodes** — the common script vocabulary. Likely partially present; smoke-test by running a known scripted scene from Demo 1.
-- `[ ]` **F.5 GameState variable read/write** — `TGameState` ([script.h:259](../../src/script.h#L259)) holds named flags. Verify scripts read + write them and they persist across save/load (E.3 dependency).
+## Phase F — Script runtime *(handed to gameflow T8)*
+
+Gameflow owns the scripting engine bring-up. Combat-side cross-cuts:
+
+- `[ ]` **F-cross.1 Script-callable combat actions** — `Player->BeginFighting / Cast / Go / Stop / Say` are C++ entry points the script VM dispatches into. Verify the function signatures the gameflow VM needs match what we expose. *Audit only — no work unless gameflow flags a mismatch.*
+
+Original F.1-F.5 items (opcode inventory, missing-opcode port, trigger fire-through, Cast/Say/Wait, GameState read/write) are owned by gameflow.
 
 ## Phase G — Inventory / equipment runtime (input side)
 
 UI side is in [../ui/BURNDOWN.md](../ui/BURNDOWN.md) B.6/B.7. Game-state side lives here.
 
-- `[ ]` **G.1 Pick up item from world** — Locke walks over a dropped item, presses Use. Adds to inventory. Use `TInventory::AddObject` (search needed).
+- `[ ]` **G.1 Pick up item from world** — Locke walks over a dropped item, presses Use. Adds to inventory via `TObjectInstance::AddToInventory`.
 - `[ ]` **G.2 Drop item to world** — `GAMECMD_INVDROP` ([playscreen.cpp:104](../../src/playscreen.cpp#L104)). Spawns the object in the sector at Player's feet, removes from inventory.
 - `[ ]` **G.3 Use consumable** — `GAMECMD_INVUSE` ([playscreen.cpp:102](../../src/playscreen.cpp#L102)). Potion → restore HP, scroll → cast spell, etc. Per-object `Use()` virtual in [src/object.h](../../src/object.h).
 - `[ ]` **G.4 Move equipped item between slots** — `GAMECMD_INVMOVE` ([playscreen.cpp:103](../../src/playscreen.cpp#L103)). Swap-on-conflict semantics from retail.
@@ -96,13 +96,12 @@ Each needs reading the retail behavior out of recon/. Defer until after Demo 1 i
 ## Risks / unknowns
 
 - **Mode-bit lifetime in ControlMap.** The per-mode keys (CTRL_COMBATMODE) only fire when the bit is set; need to verify mode transitions in A.5 don't strand keys mid-press.
-- **Sector paging coupling.** D.1 may turn into a deeper refactor if `Player.SetPos` doesn't already trigger sector load (memory says renderer owns sectors but the trigger path isn't confirmed).
-- **Script opcode coverage.** F.1 might surface a long tail of missing opcodes; if so, prioritize ruthlessly by what Demo 1 actually invokes.
+- **Cross-track seams.** Several phases now have D-cross / E-cross / F-cross items — these are intentional thin slices that activate when gameflow lands the matching feature. Watch the gameflow burndown.
 - **Inventory UI dependency.** A.6 / G.* require something to draw the inventory; until UI worktree B.6 lands, the game-side wiring can only smoke-test via logs.
-- **Save persistence model.** E.3 is a design call with downstream impact on F.5 (GameState persistence).
 
 ## Cross-references
 
 - Design intent: [../COMBAT.md](../COMBAT.md), [../COMBAT_ATTACKS.md](../COMBAT_ATTACKS.md), [../COMBAT_RULES.md](../COMBAT_RULES.md), [../MOVEMENT.md](../MOVEMENT.md), [../SCRIPTING.md](../SCRIPTING.md), [../OBJECT_SYSTEM.md](../OBJECT_SYSTEM.md), [../OBJECT_STATS.md](../OBJECT_STATS.md), [../OBJECT_TYPES.md](../OBJECT_TYPES.md), [../SAVE_GAME.md](../SAVE_GAME.md).
 - Master plan: [../PORT_PLAN.md](../PORT_PLAN.md) Phase 4 (Feature recovery).
-- UI burndown (parallel): [../ui/BURNDOWN.md](../ui/BURNDOWN.md) — especially B.11 (`GAMECOMMAND` dispatch un-stub) which overlaps Phase A here.
+- **Gameflow burndown:** [../gameflow/BURNDOWN.md](../gameflow/BURNDOWN.md) — owns audio, save/load, scripts, exits/doors, menus, new game, death+restart, dialog. Cross-watched from Phases C.4 / C.8 / D / E / F here.
+- **UI burndown:** [../ui/BURNDOWN.md](../ui/BURNDOWN.md) — especially B.11 (`GAMECOMMAND` dispatch un-stub) which overlaps Phase A.6/A.7 here.
