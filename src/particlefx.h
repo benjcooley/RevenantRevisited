@@ -226,7 +226,19 @@ struct SParticleEvalContext
     float age = 0.0f;
     float age01 = 0.0f;
     float seed = 0.0f;
+
+    // Per-particle PRNG state for Rand01/Rand ops. Treated as a 32-bit LCG
+    // state (Park-Miller, multiplier 48271) that the eval loop advances on
+    // each Rand01 call and writes back to the originating slot when the
+    // eval is operating on a real bucket particle (EvalParticle path).
+    // For the stateless Eval (frame_expr / uv_rect_expr) path the rng
+    // state is ephemeral -- each Eval call seeds from `seed` and discards
+    // changes.
+    mutable uint32_t rng_state = 0;
 };
+
+// Forward decl -- the bucket-bound eval reads/writes particle slots.
+class TParticleBucket;
 
 enum class EParticleArgKind : uint8_t
 {
@@ -243,7 +255,9 @@ enum class EParticleOp : uint16_t
     End,
     LoadConst,
     LoadVar,
-    StoreVar,
+    StoreVar,        // Pop value, write into named EParticleVar slot.
+                     // Statement-form (no result lanes). Used by tick/spawn
+                     // expressions to mutate particle state per-tick.
     Add,
     Sub,
     Mul,
@@ -262,6 +276,13 @@ enum class EParticleOp : uint16_t
     Vec2,
     Vec3,
     Vec4,
+    // VM-extension ops (2026-05-17). See docs/vfx/VM_EXTENSION_FORENSICS.md
+    // for the per-effect justification.
+    Rand01,          // () -> U[0,1) per call; advances per-particle LCG seed.
+    Rand,            // (lo, hi) -> lo + (hi-lo) * Rand01.
+    Step,            // (edge, x) -> 0 if x<edge else 1 (per lane).
+    Select,          // (cond, t, f) -> cond!=0 ? t : f (per lane). Branchless
+                     // conditional for piecewise curves; lane count = max(t,f).
 };
 
 struct SParticleOpArgDef
@@ -277,18 +298,51 @@ struct SParticleOpDef
     SParticleOpArgDef args[6] = {};
 };
 
+// Compile mode controls which identifier kinds the parser accepts.
+//   Expression: legacy stateless expression (frame_expr / uv_rect_expr).
+//               Identifiers: time_frame, age, age01, seed.
+//   Statements: statement-form sequence ("var = expr;"). Identifiers
+//               include particle-var aliases (pos, vel, color, scale,
+//               frame, rot) which are read/write, and emit_pos/emit_vel
+//               which are read-only. Used by tick_expr / spawn_expr.
+enum class EParticleExprMode : uint8_t
+{
+    Expression,
+    Statements,
+};
+
 class TParticleExpression
 {
   public:
-    bool Compile(const char* expr, std::string* error = nullptr);
+    bool Compile(const char* expr, std::string* error = nullptr,
+                 EParticleExprMode mode = EParticleExprMode::Expression);
     float Eval(const SParticleEvalContext& ctx) const;
     void Eval(const SParticleEvalContext& ctx, float* out_values, int32_t out_lanes) const;
+    // Bucket-bound eval. Reads particle-var identifiers from
+    // bucket[particle_index] and writes StoreVar results back into the
+    // same slots. Used by tick_expr (per-tick integration) and spawn_expr
+    // (one-shot init). The eval context still supplies time_frame / age /
+    // age01 / seed and the per-particle rng_state.
+    void EvalParticle(const SParticleEvalContext& ctx,
+                      TParticleBucket& bucket,
+                      int32_t particle_index,
+                      const float emit_pos[3] = nullptr,
+                      const float emit_vel[3] = nullptr) const;
+    // Bucket-bound predicate eval -- returns the boolean result of a
+    // single-expression compile (mode=Expression). Treats nonzero scalar
+    // result as true. Used by kill_expr.
+    [[nodiscard]] bool EvalParticlePredicate(const SParticleEvalContext& ctx,
+                                             TParticleBucket& bucket,
+                                             int32_t particle_index,
+                                             const float emit_pos[3] = nullptr,
+                                             const float emit_vel[3] = nullptr) const;
     [[nodiscard]] bool IsValid() const { return valid; }
     [[nodiscard]] uint8_t ResultLanes() const { return result_lanes; }
     [[nodiscard]] const std::string& Source() const { return source; }
     [[nodiscard]] const std::vector<uint16_t>& Code() const { return code; }
     [[nodiscard]] const std::vector<float>& Constants() const { return constants; }
     [[nodiscard]] uint16_t MaxStackDepth() const { return max_stack_depth; }
+    [[nodiscard]] EParticleExprMode Mode() const { return mode; }
 
   private:
     std::string source;
@@ -297,6 +351,7 @@ class TParticleExpression
     uint16_t max_stack_depth = 0;
     uint8_t result_lanes = 1;
     bool valid = false;
+    EParticleExprMode mode = EParticleExprMode::Expression;
 };
 
 const SParticleOpDef* ParticleOpDefs(size_t* count = nullptr);
