@@ -2123,14 +2123,50 @@ _CLASSDEF(TMistEffect)
 class TMistEffect : public TEffect
 {
   private:
-    
+    // --- Phase 2 (M05) PE-pipeline scaffold -----------------------------
+    // Bucket borrowed from the global TParticleManager — same model as
+    // B01 TBloodEffect. The bucket itself outlives this effect; per-
+    // instance drops are disambiguated by `owner_particle_id_` and
+    // killed off in the destructor via TParticleBucket::KillParticlesByOwner.
+    //
+    // Unlike B01 (one-shot 10-droplet burst), Mist is a **continuous
+    // ambient emitter**: the 50 drops are seeded once at SpawnForTest
+    // and then respawn-in-place on death. The bucket sees no churn at
+    // the count level — same 50 particles tick forever, just with
+    // recycled state. See INVENTORY M05 forensics §3 for the cadence.
+    TParticleBucket* bucket_           = nullptr;
+    float            owner_particle_id_ = -1.0f;
+    double           sim_accum_ms_     = 0.0;   // 24 Hz sim-tick gate (forensics §7.4)
+
   public:
     TMistEffect(TObjectImagery* newim) : TEffect(newim) {  }
     TMistEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    virtual ~TMistEffect() {}
+    ~TMistEffect() override;
+
+    void OffScreen() override { KillThisEffect(); }
 
     virtual void Initialize();
-    virtual void Pulse();
+    void Pulse() override;
+
+    // Spawn a standalone TMistEffect for the --test=vfx harness. Loads
+    // `Magic\mist.i3d` (the canonical mist sprite at
+    // legacy/Imagery/Magic/mist.i3d), allocates / reuses a global PE
+    // bucket keyed off the mist texture, seeds 50 drops with retail-
+    // faithful pos + upward velocity envelope, and stamps the instance
+    // with a fresh map index so its particles can be tracked by owner.
+    // Returns nullptr if the imagery can't be loaded. The caller owns
+    // the returned pointer and must `delete` it to release the imagery
+    // refcount and evict its particles.
+    //
+    // PE-pipeline scope: validates the bucket/submit path end-to-end
+    // through the real effect class lineage with a long-lived
+    // continuous-emitter pattern (B01 = burst, M05 = continuous).
+    [[nodiscard]] static TMistEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Drive the owned bucket forward by one sim tick (Euler integrate
+    // + gravity + respawn-in-place on landing), then submit to the FX
+    // queue. Idempotent if the effect has no bucket yet.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
 };
 
 // *******************
