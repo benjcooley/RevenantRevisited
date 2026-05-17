@@ -141,14 +141,25 @@ fragment float4 _main(vs_out in [[stage_in]],
         c = sampled;
     } else {
         sampled = atlas.sample(smp, uv_normal);
-        c = sampled * in.color;
+        // sampled is premultiplied (texture-load pass converts
+        // chroma-key bg to a=0 + rgb=0). in.color is straight-alpha
+        // (tint.rgb modulates color, tint.a fades the whole sprite).
+        // The correct mix into premultiplied output is:
+        //   out.rgb = sampled.rgb * tint.rgb * tint.a
+        //   out.a   = sampled.a * tint.a
+        // Skipping the * tint.a on rgb is what causes the "pink
+        // fade" -- src.rgb stays full intensity while src.a drops,
+        // so PremulAlpha blend produces undersaturated overlay.
+        c.rgb = sampled.rgb * in.color.rgb * in.color.a;
+        c.a   = sampled.a   * in.color.a;
     }
     // Apply per-instance lit factor (computed in VS): Unlit = (1,1,1),
     // LitFlat = ambient + sun_term * sun_color. RGB only -- alpha keeps
     // the texture-driven coverage.
     c.rgb *= in.lit_factor;
-    // Chroma-key fallback disabled (TODO: was over-discarding; need
-    // per-bucket opt-in wired through SParticleBucketDesc.chroma_key).
+    // Chroma-key conversion happens at texture load (3dimage.cpp).
+    // Here we only discard fully-transparent fragments so depth/blend
+    // remain clean at the edges.
     if (c.a < 0.002) discard_fragment();
     return c;
 }

@@ -51,9 +51,60 @@ struct SState
     int64_t      frames_rendered  = 0;
     bool         initialized      = false;
     bool         first_submit_logged = false;
+    // Retrigger pattern state -- driven by the active effect's
+    // EVfxPreviewStyle. Resets on SelectIndex / Restart.
+    float        retrigger_timer  = 0.0f;
 };
 
 SState g_state;
+
+// Per-style retrigger cadence + position policy. Static = never re-fires.
+S3DPoint PickPreviewOrigin(VfxTest::EVfxPreviewStyle style)
+{
+    auto frand = []() { return float(std::rand()) / float(RAND_MAX); };
+    switch (style)
+    {
+        case VfxTest::EVfxPreviewStyle::Static:
+            return S3DPoint{0, 0, 0};
+        case VfxTest::EVfxPreviewStyle::Combat:
+        {
+            // Random spot inside a ~240wu radius square at z=0 (the
+            // visible scene area at the default iso camera). Combat
+            // accents land all over the screen.
+            constexpr float kHalf = 240.0f;
+            return S3DPoint{ int32_t((frand() - 0.5f) * 2.0f * kHalf),
+                             int32_t((frand() - 0.5f) * 2.0f * kHalf),
+                             0 };
+        }
+        case VfxTest::EVfxPreviewStyle::SpellGround:
+        {
+            // Centred at origin, small jitter so successive casts
+            // don't perfectly overlap. Spell casts read as ground-
+            // level events: low Z, narrow XY range.
+            constexpr float kJitter = 40.0f;
+            return S3DPoint{ int32_t((frand() - 0.5f) * 2.0f * kJitter),
+                             int32_t((frand() - 0.5f) * 2.0f * kJitter),
+                             0 };
+        }
+        case VfxTest::EVfxPreviewStyle::Projectile:
+            // TODO Phase 2.x: launch from one side toward the other
+            // along a vector. Placeholder = static for now.
+            return S3DPoint{-200, 0, 80};
+    }
+    return S3DPoint{0, 0, 0};
+}
+
+float RetriggerInterval(VfxTest::EVfxPreviewStyle style)
+{
+    switch (style)
+    {
+        case VfxTest::EVfxPreviewStyle::Static:       return 0.0f; // never
+        case VfxTest::EVfxPreviewStyle::Combat:       return 0.6f;
+        case VfxTest::EVfxPreviewStyle::SpellGround:  return 3.0f;
+        case VfxTest::EVfxPreviewStyle::Projectile:   return 1.2f;
+    }
+    return 0.0f;
+}
 
 void SpawnActive()
 {
@@ -61,11 +112,12 @@ void SpawnActive()
         return;
     const auto& e = g_state.catalogue[g_state.active_idx];
     if (e.factory)
-        g_state.active_ctx = e.factory();
+        g_state.active_ctx = e.factory(PickPreviewOrigin(e.preview_style));
     g_state.first_submit_logged = false;
-    log_info("[vfx] active='%s' family='%s' pipeline='%s' debug=%d",
+    g_state.retrigger_timer = RetriggerInterval(e.preview_style);
+    log_info("[vfx] active='%s' family='%s' pipeline='%s' style=%d debug=%d",
              e.id.c_str(), e.family.c_str(), e.pipeline.c_str(),
-             int(g_state.debug_mode));
+             int(e.preview_style), int(g_state.debug_mode));
 }
 
 void DestroyActive()
@@ -309,10 +361,29 @@ void Render()
     // RunLightingPass.
     const bool should_tick = !g_state.paused || g_state.step_once;
     g_state.step_once = false;
-    if (should_tick && g_state.active_idx >= 0 && g_state.active_ctx)
+    if (should_tick && g_state.active_idx >= 0)
     {
         const auto& e = g_state.catalogue[g_state.active_idx];
-        if (e.submit)
+        // Re-trigger pattern per preview style: non-Static styles
+        // tick down a timer, destroy the previous instance and spawn
+        // a fresh one at a new origin when the timer expires. This
+        // is what makes a combat splat play repeatedly across the
+        // visible area instead of firing once and never again.
+        const float interval = RetriggerInterval(e.preview_style);
+        if (interval > 0.0f)
+        {
+            g_state.retrigger_timer -= float(TTime::DeltaTime());
+            if (g_state.retrigger_timer <= 0.0f)
+            {
+                if (e.destroy && g_state.active_ctx)
+                    e.destroy(g_state.active_ctx);
+                g_state.active_ctx = nullptr;
+                if (e.factory)
+                    g_state.active_ctx = e.factory(PickPreviewOrigin(e.preview_style));
+                g_state.retrigger_timer = interval;
+            }
+        }
+        if (e.submit && g_state.active_ctx)
         {
             e.submit(g_state.active_ctx, g_state.debug_mode);
             if (!g_state.first_submit_logged)
@@ -408,10 +479,10 @@ struct SFlameCtx {
     TFlameEffect* flame = nullptr;
 };
 
-void* FlameSpawn()
+void* FlameSpawn(const S3DPoint& origin)
 {
     auto* c = new SFlameCtx();
-    c->flame = TFlameEffect::SpawnForTest(S3DPoint{0, 0, 0});
+    c->flame = TFlameEffect::SpawnForTest(origin);
     if (!c->flame)
         log_warn("[vfx] TFlameEffect::SpawnForTest returned null; F01 entry will draw nothing");
     return c;
@@ -448,10 +519,10 @@ struct SBloodCtx {
     TBloodEffect* blood = nullptr;
 };
 
-void* BloodSpawn()
+void* BloodSpawn(const S3DPoint& origin)
 {
     auto* c = new SBloodCtx();
-    c->blood = TBloodEffect::SpawnForTest(S3DPoint{0, 0, 0});
+    c->blood = TBloodEffect::SpawnForTest(origin);
     if (!c->blood)
         log_warn("[vfx] TBloodEffect::SpawnForTest returned null; B01 entry will draw nothing");
     return c;
@@ -477,22 +548,25 @@ struct SRibbonCtx {
     std::vector<SStripSegment> segs;
 };
 
-void* RibbonSpawn()
+void* RibbonSpawn(const S3DPoint& origin)
 {
     auto* c = new SRibbonCtx();
     constexpr int32_t N = 16;
     c->segs.reserve(N);
+    const float ox = float(origin.x);
+    const float oy = float(origin.y);
+    const float oz = float(origin.z);
     for (int32_t i = 0; i < N; ++i)
     {
         const float t0 = float(i)     / float(N);
         const float t1 = float(i + 1) / float(N);
         SStripSegment s = {};
-        s.world_a[0] = -150.0f + 300.0f * t0;
-        s.world_a[1] = 0.0f;
-        s.world_a[2] = 60.0f + 30.0f * std::sin(t0 * 6.28f);
-        s.world_b[0] = -150.0f + 300.0f * t1;
-        s.world_b[1] = 0.0f;
-        s.world_b[2] = 60.0f + 30.0f * std::sin(t1 * 6.28f);
+        s.world_a[0] = ox - 150.0f + 300.0f * t0;
+        s.world_a[1] = oy;
+        s.world_a[2] = oz + 60.0f + 30.0f * std::sin(t0 * 6.28f);
+        s.world_b[0] = ox - 150.0f + 300.0f * t1;
+        s.world_b[1] = oy;
+        s.world_b[2] = oz + 60.0f + 30.0f * std::sin(t1 * 6.28f);
         s.width_a_wu = 8.0f + 16.0f * t0;
         s.width_b_wu = 8.0f + 16.0f * t1;
         const float a0 = 1.0f - t0;
@@ -524,9 +598,17 @@ void RibbonSubmit(void* cp, EFxDebugMode dbg)
 }
 
 // --- LS: flare + dynamic point light placeholder -------------------------
-struct SFlareCtx { float age = 0.0f; };
+struct SFlareCtx {
+    float age = 0.0f;
+    S3DPoint origin = {0, 0, 0};
+};
 
-void* FlareSpawn() { return new SFlareCtx(); }
+void* FlareSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFlareCtx();
+    c->origin = origin;
+    return c;
+}
 void  FlareDestroy(void* cp) { delete static_cast<SFlareCtx*>(cp); }
 
 void FlareSubmit(void* cp, EFxDebugMode dbg)
@@ -536,10 +618,13 @@ void FlareSubmit(void* cp, EFxDebugMode dbg)
     const float pulse = 0.7f + 0.3f * std::sin(c->age * 2.0f);
 
     // Submit a small additive billboard for the visible glow.
+    const float wx = float(c->origin.x);
+    const float wy = float(c->origin.y);
+    const float wz = float(c->origin.z) + 80.0f;
     SBillboardDrawItem it = {};
-    it.world_pos[0] = 100.0f;
-    it.world_pos[1] = 0.0f;
-    it.world_pos[2] = 80.0f;
+    it.world_pos[0] = wx;
+    it.world_pos[1] = wy;
+    it.world_pos[2] = wz;
     it.size_wu[0]   = 50.0f * pulse;
     it.size_wu[1]   = 50.0f * pulse;
     it.color_rgba[0] = 1.0f;
@@ -557,7 +642,7 @@ void FlareSubmit(void* cp, EFxDebugMode dbg)
     // And re-add a dynamic point light at the same world position. The
     // LS pipeline coupling is "effects re-add point lights each frame";
     // ClearPointLights ran at the top of VfxTest::Render.
-    Renderer->AddPointLight(100.0f, 0.0f, 80.0f, 320.0f,
+    Renderer->AddPointLight(wx, wy, wz, 320.0f,
                             1.0f, 0.85f, 0.25f,
                             1.2f * pulse);
 }
@@ -571,39 +656,46 @@ namespace {
 struct SVfxTestBootstrap {
     SVfxTestBootstrap() {
         VfxTest::SEffect flame = {};
-        flame.id       = "TFlameEffect";
-        flame.family   = "fire";
-        flame.pipeline = "FB";
-        flame.factory  = []() -> void* { return FlameSpawn(); };
-        flame.submit   = [](void* c, EFxDebugMode d) { FlameSubmit(c, d); };
-        flame.destroy  = [](void* c) { FlameDestroy(c); };
+        flame.id            = "TFlameEffect";
+        flame.family        = "fire";
+        flame.pipeline      = "FB";
+        flame.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        flame.factory       = [](const S3DPoint& o) -> void* { return FlameSpawn(o); };
+        flame.submit        = [](void* c, EFxDebugMode d) { FlameSubmit(c, d); };
+        flame.destroy       = [](void* c) { FlameDestroy(c); };
         VfxTest::DeferredRegister(flame);
 
         VfxTest::SEffect blood = {};
-        blood.id       = "TBloodEffect";
-        blood.family   = "blood";
-        blood.pipeline = "PE";
-        blood.factory  = []() -> void* { return BloodSpawn(); };
-        blood.submit   = [](void* c, EFxDebugMode d) { BloodSubmit(c, d); };
-        blood.destroy  = [](void* c) { BloodDestroy(c); };
+        blood.id            = "TBloodEffect";
+        blood.family        = "blood";
+        blood.pipeline      = "PE";
+        blood.preview_style = VfxTest::EVfxPreviewStyle::Combat;
+        blood.factory       = [](const S3DPoint& o) -> void* { return BloodSpawn(o); };
+        blood.submit        = [](void* c, EFxDebugMode d) { BloodSubmit(c, d); };
+        blood.destroy       = [](void* c) { BloodDestroy(c); };
         VfxTest::DeferredRegister(blood);
 
         VfxTest::SEffect ribbon = {};
-        ribbon.id       = "TStripEffect.placeholder";
-        ribbon.family   = "strip";
-        ribbon.pipeline = "SR";
-        ribbon.factory  = []() -> void* { return RibbonSpawn(); };
-        ribbon.submit   = [](void* c, EFxDebugMode d) { RibbonSubmit(c, d); };
-        ribbon.destroy  = [](void* c) { RibbonDestroy(c); };
+        ribbon.id            = "TStripEffect.placeholder";
+        ribbon.family        = "strip";
+        ribbon.pipeline      = "SR";
+        // Strip / sword-trail is combat-cadence: re-fires across the
+        // screen like a series of swings.
+        ribbon.preview_style = VfxTest::EVfxPreviewStyle::Combat;
+        ribbon.factory       = [](const S3DPoint& o) -> void* { return RibbonSpawn(o); };
+        ribbon.submit        = [](void* c, EFxDebugMode d) { RibbonSubmit(c, d); };
+        ribbon.destroy       = [](void* c) { RibbonDestroy(c); };
         VfxTest::DeferredRegister(ribbon);
 
         VfxTest::SEffect flare = {};
-        flare.id       = "TFlareAnimator.placeholder";
-        flare.family   = "light";
-        flare.pipeline = "LS";
-        flare.factory  = []() -> void* { return FlareSpawn(); };
-        flare.submit   = [](void* c, EFxDebugMode d) { FlareSubmit(c, d); };
-        flare.destroy  = [](void* c) { FlareDestroy(c); };
+        flare.id            = "TFlareAnimator.placeholder";
+        flare.family        = "light";
+        flare.pipeline      = "LS";
+        // Flare = spell-cast burst: ground-level, occasional re-fire.
+        flare.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        flare.factory       = [](const S3DPoint& o) -> void* { return FlareSpawn(o); };
+        flare.submit        = [](void* c, EFxDebugMode d) { FlareSubmit(c, d); };
+        flare.destroy       = [](void* c) { FlareDestroy(c); };
         VfxTest::DeferredRegister(flare);
     }
 };

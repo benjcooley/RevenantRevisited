@@ -123,6 +123,15 @@ class TFlipbookBillboardComponent : public TObjectComponent
   protected:
     void OnUpdate() override
     {
+        // RunUpdateList runs every render frame (60-120 Hz). The
+        // flipbook animation is authored for the legacy 24 Hz sim
+        // rate -- gate increments to actual legacy-frame transitions
+        // so it ticks 24x/sec on any display rate. Without this gate
+        // a 60 Hz display ran the 18-frame cycle 2.5x too fast.
+        const int64_t now = TTime::LegacyFrameCount();
+        if (now == last_legacy_seen_)
+            return;
+        last_legacy_seen_ = now;
         ++legacy_frame;
         if (legacy_frame >= 18)
             legacy_frame = 0;
@@ -164,6 +173,9 @@ class TFlipbookBillboardComponent : public TObjectComponent
     int32_t tex_w = 1, tex_h = 1;
     int32_t cols = 1, rows = 1, frame_count = 1;
     int32_t legacy_frame = 0;
+    // Last legacy frame index we observed in OnUpdate -- gates frame
+    // advancement to 24 Hz regardless of the render frame rate.
+    int64_t last_legacy_seen_ = -1;
     TParticleExpression frame_expr;
     TParticleExpression uv_rect_expr;
     float size_w = 1.0f, size_h = 1.0f;
@@ -2005,7 +2017,6 @@ class TBloodEffect : public TEffect
     // off in the destructor via TParticleBucket::KillParticlesByOwner.
     TParticleBucket* bucket_ = nullptr;
     float owner_particle_id_ = -1.0f;
-    float spawn_accum_ = 0.0f;
     float age_ = 0.0f;
 
   public:
