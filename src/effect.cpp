@@ -1725,3 +1725,281 @@ void TMistEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 
     Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
 }
+
+// *************************************************************************
+// * THaloEffect - FB+LS standalone-spawn for --test=vfx (L02)             *
+// *************************************************************************
+//
+// Scope: Phase 2 L02 row. Ports the triangle-wave radial-glow effect from
+// `THaloAnimator` (src/effect_old.cpp:10564-10680) to the FB pipeline +
+// re-adds a per-frame dynamic point light (LS pipeline coupling — the row
+// tag is "FB+LS"; pre-release source never explicitly adds the light, but
+// the LS coupling falls out of the "halo emits light" semantic — see
+// INVENTORY L02 §4 + gap 7.4). Reuses the H03 / F01 standalone-spawn
+// pattern.
+//
+// What this *does* deliver:
+//   1. A real `THaloEffect` instance that owns its lifecycle.
+//   2. A procedural radial-gradient texture built via
+//      `Renderer->RegisterTextureAsset` (no I3D asset on disk — see
+//      INVENTORY L02 gap 7.2). Texture is a single 128x128 RGBA8 with a
+//      bright ring at outer radius, transparent inner + outer falloff,
+//      matching the H03 ripple atlas pattern but as a single non-atlas
+//      frame (the halo's per-frame variation is scale, not flipbook
+//      cycling).
+//   3. Triangle-wave scale envelope (haloscale +=/-=halostep, peak at
+//      totframes/2, zero at totframes) sim-tick-gated to retail's 24 Hz
+//      cadence (pre-release was ungated; without the gate the pulse runs
+//      ~2.5x too fast at 60 fps).
+//   4. One screen-aligned additive SBillboardDrawItem each frame via
+//      SubmitFxBillboard (FB pipeline) + one per-frame Renderer->
+//      AddPointLight at the halo's world position (LS pipeline).
+//   5. Self-killed when `frameon > totframes`; harness retrigger respawns
+//      at the SpellGround 3.0 sec cadence with small XY jitter.
+//
+// What this does *not* deliver:
+//   - Real `Magic\halo.i3d` mesh (L02b if/when asset is identified).
+//   - Flat-on-ground orientation (pre-release rotates the I3D mesh onto
+//     the ground plane; the harness camera looks straight-on so a
+//     ground-flat ring would project edge-on. Screen-aligned billboard
+//     reads as a glowing disc and works for the harness camera).
+//   - In-game spawn through the OBJCLASS_EFFECT registry ("Halo" builder
+//     dispatch from .rvm-archived scripts isn't wired in the port yet —
+//     same blocker as H03 / M05).
+//
+namespace {
+
+// Per-INVENTORY L02 §1: pre-release `totframes` and `halostep` are
+// controller-supplied (no retail defaults visible). Common-sense range:
+// totframes ~24 ticks (1 sec at 24 Hz) gives a ~0.5 sec grow + 0.5 sec
+// shrink pulse; halostep 0.08 yields peak haloscale ≈ 0.96 (close to
+// 1.0 = mesh-natural-size — see §1's "haloscale=1.0 is mesh's authored
+// size" note).
+constexpr int32_t kHaloDefaultTotFrames = 36;            // ~1.5 sec at 24 Hz
+constexpr float   kHaloDefaultHaloStep  = 0.10f;         // peak haloscale ≈ 1.8
+constexpr int32_t kHaloSimTickMs        = 1000 / 24;     // 24 Hz cadence gate
+
+// Visible diameter at haloscale = 1.0, in world units. Pre-release's
+// `RefreshZBuffer` rect of `haloscale * 20` pixels implies a small
+// accent; that screen-pixel measure doesn't carry over to the harness's
+// iso world-space camera. The harness camera frames roughly ±500 wu
+// across the screen width, so a 300 wu base × peak haloscale 1.8 =
+// 540 wu peak diameter -- about a quarter of the visible scene width,
+// reading cleanly as a spell-cast halo without dominating the frame.
+constexpr float   kHaloBaseDiameterWu   = 300.0f;
+
+// LS coupling: dynamic point light radius scales with haloscale. Peak
+// radius covers ~3-4x the visible glow, so the light spills onto
+// surrounding geometry instead of being clipped to the billboard
+// silhouette. The harness has no ground geometry to illuminate so the
+// light is mostly visible by the scene's ambient-vs-sun differential;
+// in the in-game path (post L02b/L02c wiring) the light would light
+// nearby walls + sectors.
+constexpr float   kHaloLightRadiusWu    = 600.0f;
+
+// Procedural radial-gradient texture. Single 128x128 RGBA8 frame
+// (no atlas) — a bright ring at radius ~0.36, soft falloff inside +
+// outside, fully transparent at the edges. Premultiplied alpha so the
+// AdditiveStraight blend reads cleanly (rgb = alpha = ring intensity).
+// Matches H03 RippleAtlasTexture's premultiplied pattern; one cell
+// instead of 16.
+constexpr int32_t kHaloTexPx = 128;
+
+TTextureHandle HaloRingTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x4658484C4F000000ull;   // "FXHLO\0\0\0"
+
+    static uint8_t pixels[kHaloTexPx * kHaloTexPx * 4];
+
+    constexpr float kRingR     = 0.36f;   // ring radius in tex-uv space (0..0.5 max)
+    constexpr float kRingThick = 0.10f;   // soft falloff on both sides of the ring
+    constexpr float kOuterCut  = 0.48f;   // hard alpha-zero past this radius
+    constexpr float kCoreFill  = 0.15f;   // soft alpha inside the ring (faint disc fill)
+
+    for (int32_t py = 0; py < kHaloTexPx; ++py)
+    {
+        for (int32_t px = 0; px < kHaloTexPx; ++px)
+        {
+            const float u  = (float(px) + 0.5f) / float(kHaloTexPx);
+            const float v  = (float(py) + 0.5f) / float(kHaloTexPx);
+            const float dx = u - 0.5f;
+            const float dy = v - 0.5f;
+            const float r  = std::sqrt(dx * dx + dy * dy);
+
+            // Ring intensity: peaks at r==kRingR, linear falloff over
+            // kRingThick on each side. Cubic shape gives a crisper rim.
+            const float d  = std::fabs(r - kRingR);
+            float ring     = (d < kRingThick) ? (1.0f - d / kRingThick) : 0.0f;
+            ring           = ring * ring * ring;
+
+            // Faint core fill inside the ring — keeps the halo from
+            // looking like a hollow donut and adds a sense of "this
+            // is filled with light", which matches the LS coupling.
+            float core     = (r < kRingR)
+                             ? kCoreFill * (1.0f - r / kRingR)
+                             : 0.0f;
+
+            // Combine + hard-cut outside.
+            float inten    = ring + core;
+            if (r > kOuterCut) inten = 0.0f;
+            if (inten < 0.0f)  inten = 0.0f;
+            if (inten > 1.0f)  inten = 1.0f;
+
+            const uint8_t byte = uint8_t(inten * 255.0f);
+            const int32_t idx  = (py * kHaloTexPx + px) * 4;
+            pixels[idx + 0] = byte;   // premultiplied alpha: rgb == a
+            pixels[idx + 1] = byte;
+            pixels[idx + 2] = byte;
+            pixels[idx + 3] = byte;
+        }
+    }
+
+    return Renderer->RegisterTextureAsset(kKey, pixels, sizeof(pixels),
+                                          kHaloTexPx, kHaloTexPx,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(pixels)));
+}
+
+}   // namespace
+
+void THaloEffect::Initialize()
+{
+    // Pre-release THaloEffect::Initialize is empty (effect_old.cpp:10571).
+    // Per-instance kinematic state (haloscale_, frameon_) lives on this
+    // class now (animator state collapsed onto effect — same as H03 / M05).
+}
+
+void THaloEffect::Pulse()
+{
+    TEffect::Pulse();
+    // Pre-release Pulse just chains to base (effect_old.cpp:10575). The
+    // visible per-frame work runs through TickAndSubmitForTest from the
+    // harness; the in-game caller path is data-script-blocked (no live
+    // "Halo" spawn site exists in the port today — see INVENTORY L02 §5).
+}
+
+THaloEffect* THaloEffect::SpawnForTest(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[halo] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // No imagery — the halo texture is procedural (see L02 gap 7.2).
+    auto* halo = new THaloEffect(static_cast<TObjectImagery*>(nullptr));
+    halo->ForcePos(origin);
+    halo->SetMapIndex(MapPane.MakeIndex());
+    halo->InitParams(kHaloDefaultTotFrames, kHaloDefaultHaloStep);
+    halo->ActivateComponents();
+
+    // Pre-register the texture so the first frame's submit doesn't pay
+    // the bake cost (~64KB; cheap, but log once so we know it landed).
+    const TTextureHandle tex = HaloRingTexture();
+    if (tex == kInvalidTexture)
+    {
+        log_warn("[halo] SpawnForTest: ring texture register failed; L02 will draw nothing");
+    }
+
+    log_info("[halo] SpawnForTest: map_index=%d origin=(%d,%d,%d) "
+             "totframes=%d halostep=%.3f tex=%u",
+             halo->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             halo->GetTotalFrames(), double(halo->GetHaloStep()), tex);
+    return halo;
+}
+
+void THaloEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer)
+        return;
+
+    // 24 Hz sim-tick gate. Pre-release animator was ungated -- at modern
+    // render rates the triangle-wave pulse runs ~2.5x too fast at 60 fps,
+    // so we accumulate DeltaTime and integrate one logical tick per
+    // kHaloSimTickMs (matches H03 / M05 / F01 cadence-gate decision).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kHaloSimTickMs))
+    {
+        sim_accum_ms_ -= double(kHaloSimTickMs);
+
+        // Pre-release THaloAnimator::Animate (effect_old.cpp:10605-10623).
+        // Triangle-wave envelope: grow for totframes/2 ticks then shrink
+        // linearly back to (near) zero by totframes.
+        if (frameon_ < totframes / 2)
+            haloscale_ += halostep;
+        else
+            haloscale_ -= halostep;
+        ++frameon_;
+
+        if (frameon_ > totframes)
+        {
+            alive_ = false;
+            return;
+        }
+    }
+
+    // Pre-release gates render on `haloscale > 0` (effect_old.cpp:10639).
+    // Triangle-wave with the default 24-tick / 0.08-step settings peaks
+    // at ~0.96 and dips to ~0 at the lifetime edge; clamp negative to
+    // avoid a degenerate one-frame mirror.
+    if (haloscale_ <= 0.0f)
+        return;
+
+    const TTextureHandle tex = HaloRingTexture();
+    if (tex == kInvalidTexture)
+        return;
+
+    const S3DPoint& p = Pos();
+
+    // FB pipeline: single additive billboard. Lifted slightly so the
+    // halo doesn't z-fight the ground when scenes have one (the harness
+    // empty tile pass has none; harmless). Color = warm gold to read as
+    // a "magic ring of light" — matches the X17 placeholder flare's
+    // gold tint so LS-pipeline effects share a visual family.
+    SBillboardDrawItem item = {};
+    item.world_pos[0] = float(p.x);
+    item.world_pos[1] = float(p.y);
+    item.world_pos[2] = float(p.z) + 5.0f;   // pre-release's +5 wu lift (§1)
+
+    const float diameter = kHaloBaseDiameterWu * haloscale_;
+    item.size_wu[0]   = diameter;
+    item.size_wu[1]   = diameter;
+    item.color_rgba[0] = 1.0f;     // warm gold (same family as X17 flare)
+    item.color_rgba[1] = 0.85f;
+    item.color_rgba[2] = 0.40f;
+    item.color_rgba[3] = 1.0f;     // per-pixel alpha lives in the texture
+
+    item.uv_rect[0] = 0.0f;
+    item.uv_rect[1] = 0.0f;
+    item.uv_rect[2] = 1.0f;
+    item.uv_rect[3] = 1.0f;
+
+    item.key.texture     = tex;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    // AdditiveStraight pairs with the premultiplied procedural texture
+    // (rgb == a, see HaloRingTexture loop). Pre-release uses
+    // `SetAddBlendState` = D3D ONE/ONE additive (forensics §1); the
+    // matching enum here is AdditiveStraight (same choice as H03 /
+    // S01 / M05).
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    Renderer->SubmitFxBillboard(item);
+
+    // LS pipeline coupling: re-add a dynamic point light each frame
+    // while alive. Pre-release source doesn't do this explicitly; the
+    // LS coupling falls out of the "halo emits light" semantic and the
+    // FB+LS row tag (INVENTORY L02 §4 + gap 7.4). Intensity tracks the
+    // triangle-wave envelope so the light pulses with the visible glow.
+    // ClearPointLights() runs at the top of VfxTest::Render so the
+    // re-add is a per-frame rebuild, matching the LS pipeline contract.
+    const float light_wx  = float(p.x);
+    const float light_wy  = float(p.y);
+    const float light_wz  = float(p.z) + 5.0f;
+    const float radius    = kHaloLightRadiusWu * haloscale_;
+    const float intensity = 1.5f * haloscale_;
+    Renderer->AddPointLight(light_wx, light_wy, light_wz, radius,
+                            1.0f, 0.85f, 0.40f, intensity);
+}

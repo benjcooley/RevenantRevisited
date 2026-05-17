@@ -1776,8 +1776,8 @@ _CLASSDEF(THaloEffect)
 class THaloEffect : public TEffect
 {
   private:
-      float halostep;
-      int32_t totframes;
+      float halostep = 0.0f;
+      int32_t totframes = 0;
   public:
     THaloEffect(TObjectImagery* newim) : TEffect(newim) { }
     THaloEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
@@ -1789,6 +1789,40 @@ class THaloEffect : public TEffect
     virtual void InitParams(int32_t totalframes, float step) { totframes = totalframes; halostep = step; }
     virtual int32_t GetTotalFrames() { return totframes; }
     virtual float GetHaloStep() { return halostep; }
+
+    // Spawn a standalone THaloEffect for the --test=vfx harness. No
+    // imagery lookup — the halo's radial-gradient texture is built
+    // procedurally via `Renderer->RegisterTextureAsset` (no
+    // `Magic\halo.i3d` ships in data/ — see INVENTORY L02 gap 7.2).
+    // Constructs a sector-less instance pinned to world `origin`,
+    // stamps a fresh map index, seeds InitParams(totframes, halostep)
+    // for the triangle-wave envelope. Returns nullptr if the renderer
+    // isn't ready. Caller owns the returned pointer and `delete`s it.
+    [[nodiscard]] static THaloEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness; mirrors F01 / H03 / M05.
+    // Drives the pre-release triangle-wave scale envelope (grow for
+    // totframes/2 ticks then shrink linearly back to zero), submits one
+    // screen-aligned additive billboard via SubmitFxBillboard (FB
+    // pipeline) AND re-adds one dynamic point light via AddPointLight
+    // (LS pipeline coupling — INVENTORY L02 §4). Self-killed when
+    // `frameon > totframes`.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the halo's `frameon > totframes` condition fires
+    // (matching pre-release THaloAnimator::Animate's KillThisEffect
+    // gate). The harness uses this to early-out after death.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Per-instance animator state. Pre-release split this across
+    // THaloEffect (halostep / totframes) + THaloAnimator (haloscale /
+    // frameon). For the standalone test-harness port we collapse the
+    // animator state onto the effect class (matches H03 collapse).
+    float   haloscale_   = 0.0f;     // current scale; triangle-wave envelope
+    int32_t frameon_     = 0;        // monotonic frame counter (sim-tick-gated)
+    bool    alive_       = true;
+    double  sim_accum_ms_ = 0.0;     // sim-tick gate accumulator
 };
 
 // *****************
