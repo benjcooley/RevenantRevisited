@@ -1,12 +1,12 @@
 #include "classes_all.h"
 
-// Decompiled methods and structure for class: cls_0x5a5a30
+// Decompiled methods and structure for class: cls_0x5a5a30_TQuickSpellPane
 
 
 
 // Function at 00488580
 
-cls_0x5a5a30::cls_0x5a5a30()
+cls_0x5a5a30_TQuickSpellPane::cls_0x5a5a30_TQuickSpellPane()
 
 {
   this->mbr_0x8 = 0x1a4;
@@ -31,15 +31,15 @@ cls_0x5a5a30::cls_0x5a5a30()
 
 // Function at 004885e0
 
-cls_0x5a5a30 * cls_0x5a5a30::virt_meth_0x4885e0()
+cls_0x5a5a30_TQuickSpellPane * cls_0x5a5a30_TQuickSpellPane::virt_meth_0x4885e0()
 
 {
   SIZE_T SVar1;
   byte in_stack_00000004;
   
-  ~cls_0x5a5a30(this);
+  ~cls_0x5a5a30_TQuickSpellPane(this);
   if ((in_stack_00000004 & 1) != 0) {
-    if (this != (cls_0x5a5a30 *)0x0) {
+    if (this != (cls_0x5a5a30_TQuickSpellPane *)0x0) {
       SVar1 = FUN_0058cff3(this);
       DAT_0065ba08 = DAT_0065ba08 - SVar1;
     }
@@ -52,10 +52,10 @@ cls_0x5a5a30 * cls_0x5a5a30::virt_meth_0x4885e0()
 
 // Function at 00544000
 
-cls_0x5a5a30 * __thiscall cls_0x5a5a30::~cls_0x5a5a30(cls_0x5a5a30 *this)
+cls_0x5a5a30_TQuickSpellPane * __thiscall cls_0x5a5a30_TQuickSpellPane::~cls_0x5a5a30_TQuickSpellPane(cls_0x5a5a30_TQuickSpellPane *this)
 
 {
-  cls_0x5a5a30 *pcVar1;
+  cls_0x5a5a30_TQuickSpellPane *pcVar1;
   int iVar2;
   dword *pdVar3;
   void *local_c;
@@ -83,7 +83,7 @@ cls_0x5a5a30 * __thiscall cls_0x5a5a30::~cls_0x5a5a30(cls_0x5a5a30 *this)
   local_4 = 2;
   this->virt_meth_0x434f30();
   local_4 = 0xffffffff;
-  pcVar1 = (cls_0x5a5a30 *)FUN_004830f0(*(LPCVOID *)&this->field_0x98);
+  pcVar1 = (cls_0x5a5a30_TQuickSpellPane *)FUN_004830f0(*(LPCVOID *)&this->field_0x98);
   ExceptionList = local_c;
   return pcVar1;
 }
@@ -92,7 +92,7 @@ cls_0x5a5a30 * __thiscall cls_0x5a5a30::~cls_0x5a5a30(cls_0x5a5a30 *this)
 
 // Function at 00544160
 
-undefined4 cls_0x5a5a30::virt_meth_0x544160()
+undefined4 cls_0x5a5a30_TQuickSpellPane::virt_meth_0x544160_TQuickSpellPane_Initialize()
 
 {
   cls_0x46d6b0 *pcVar1;
@@ -184,7 +184,7 @@ undefined4 cls_0x5a5a30::virt_meth_0x544160()
 
 // Function at 005444c0
 
-void cls_0x5a5a30::virt_meth_0x5444c0()
+void cls_0x5a5a30_TQuickSpellPane::virt_meth_0x5444c0()
 
 {
   char cVar1;

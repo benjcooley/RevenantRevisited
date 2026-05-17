@@ -1331,7 +1331,7 @@ void cls_0x5a5658::virt_meth_0x52bf00()
 
 // Function at 0052c970
 
-undefined4 cls_0x5a5658::virt_meth_0x52c970()
+undefined4 cls_0x5a5658::virt_meth_0x52c970_TBarInvPane_Initialize()
 
 {
   cls_0x46d6b0 *this_00;

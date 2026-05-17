@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a5a30
+// Decompiled methods and structure for class: cls_0x5a5a30_TQuickSpellPane
 
 /*
-/OOAnalyzer/cls_0x5a5a30
+/OOAnalyzer/cls_0x5a5a30_TQuickSpellPane
 pack(disabled)
-Structure cls_0x5a5a30 {
-   0   cls_0x5a5a30::vftable_5a5a30 *   4   vftptr_0x0   "pointer to cls_0x5a5a30::vftable_5a5a30"
+Structure cls_0x5a5a30_TQuickSpellPane {
+   0   cls_0x5a5a30_TQuickSpellPane::vftable_5a5a30 *   4   vftptr_0x0   "pointer to cls_0x5a5a30_TQuickSpellPane::vftable_5a5a30"
    4   dword   4   mbr_0x4   "Unsigned Double-Word (ddw, 4-bytes)"
    8   dword   4   mbr_0x8   "Unsigned Double-Word (ddw, 4-bytes)"
    12   dword   4   mbr_0xc   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -26,7 +26,7 @@ Length: 400 Alignment: 1
 
 // Function at 00488580
 
-cls_0x5a5a30 * __thiscall OOAnalyzer::cls_0x5a5a30::cls_0x5a5a30(cls_0x5a5a30 *this)
+cls_0x5a5a30_TQuickSpellPane * __thiscall OOAnalyzer::cls_0x5a5a30_TQuickSpellPane::cls_0x5a5a30_TQuickSpellPane(cls_0x5a5a30_TQuickSpellPane *this)
 
 {
   this->mbr_0x8 = 0x1a4;
@@ -51,15 +51,15 @@ cls_0x5a5a30 * __thiscall OOAnalyzer::cls_0x5a5a30::cls_0x5a5a30(cls_0x5a5a30 *t
 
 // Function at 004885e0
 
-cls_0x5a5a30 * __thiscall OOAnalyzer::cls_0x5a5a30::virt_meth_0x4885e0(cls_0x5a5a30 *this)
+cls_0x5a5a30_TQuickSpellPane * __thiscall OOAnalyzer::cls_0x5a5a30_TQuickSpellPane::virt_meth_0x4885e0(cls_0x5a5a30_TQuickSpellPane *this)
 
 {
   int iVar1;
   byte in_stack_00000004;
   
-  ~cls_0x5a5a30(this);
+  ~cls_0x5a5a30_TQuickSpellPane(this);
   if ((in_stack_00000004 & 1) != 0) {
-    if (this != (cls_0x5a5a30 *)0x0) {
+    if (this != (cls_0x5a5a30_TQuickSpellPane *)0x0) {
       iVar1 = FUN_0058cff3(this);
       DAT_0065ba08 = DAT_0065ba08 - iVar1;
     }
@@ -72,10 +72,10 @@ cls_0x5a5a30 * __thiscall OOAnalyzer::cls_0x5a5a30::virt_meth_0x4885e0(cls_0x5a5
 
 // Function at 00544000
 
-cls_0x5a5a30 * __thiscall OOAnalyzer::cls_0x5a5a30::~cls_0x5a5a30(cls_0x5a5a30 *this)
+cls_0x5a5a30_TQuickSpellPane * __thiscall OOAnalyzer::cls_0x5a5a30_TQuickSpellPane::~cls_0x5a5a30_TQuickSpellPane(cls_0x5a5a30_TQuickSpellPane *this)
 
 {
-  cls_0x5a5a30 *pcVar1;
+  cls_0x5a5a30_TQuickSpellPane *pcVar1;
   int iVar2;
   dword *pdVar3;
   void *local_c;
@@ -103,7 +103,7 @@ cls_0x5a5a30 * __thiscall OOAnalyzer::cls_0x5a5a30::~cls_0x5a5a30(cls_0x5a5a30 *
   local_4 = 2;
   cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
   local_4 = 0xffffffff;
-  pcVar1 = (cls_0x5a5a30 *)FUN_004830f0(*(undefined4 *)&this->field_0x98);
+  pcVar1 = (cls_0x5a5a30_TQuickSpellPane *)FUN_004830f0(*(undefined4 *)&this->field_0x98);
   ExceptionList = local_c;
   return pcVar1;
 }
@@ -112,7 +112,7 @@ cls_0x5a5a30 * __thiscall OOAnalyzer::cls_0x5a5a30::~cls_0x5a5a30(cls_0x5a5a30 *
 
 // Function at 00544160
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a5a30::virt_meth_0x544160(cls_0x5a5a30 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a5a30_TQuickSpellPane::virt_meth_0x544160_TQuickSpellPane_Initialize(cls_0x5a5a30_TQuickSpellPane *this)
 
 {
   cls_0x46d6b0 *pcVar1;
@@ -129,7 +129,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5a30::virt_meth_0x544160(cls_0x5a5a30 
   puStack_8 = &LAB_005a1ef5;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   iVar2 = (**(code **)(*(int *)PTR_DAT_005d79e0 + 0x18))();
   iVar2 = (-(uint)(iVar2 != 0x10) & 0xffff8400) + 0xf81f;
   pcVar3 = (cls_0x5b9bf0 *)FUN_00482fb0(0x150);
@@ -204,7 +204,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5a30::virt_meth_0x544160(cls_0x5a5a30 
 
 // Function at 005444c0
 
-void __thiscall OOAnalyzer::cls_0x5a5a30::virt_meth_0x5444c0(cls_0x5a5a30 *this)
+void __thiscall OOAnalyzer::cls_0x5a5a30_TQuickSpellPane::virt_meth_0x5444c0(cls_0x5a5a30_TQuickSpellPane *this)
 
 {
   char cVar1;

@@ -25,7 +25,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4f28::virt_meth_0x46a510(cls_0x5a4f28 
   cls_0x5a4494__vftable_5a4494 *pcVar2;
   cls_0x46d6b0 *this_00;
   int iVar3;
-  cls_0x5a4494 *this_01;
+  cls_0x5a4494_TPane *this_01;
   void *unaff_EBX;
   cls_0x419dd0 cStack_2c;
   cls_0x419dd0 local_14;
@@ -52,10 +52,10 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4f28::virt_meth_0x46a510(cls_0x5a4f28 
   (**(code **)(dVar1 + 0x30))(8);
   (this->TObjectInstance).mbr_0x40 = (dword)&this->mbr_0x70;
   (this->TObjectInstance).mbr_0x44 = (dword)&this->mbr_0x70;
-  this_01 = (cls_0x5a4494 *)FUN_00482fb0(400);
+  this_01 = (cls_0x5a4494_TPane *)FUN_00482fb0(400);
   local_10 = (cls_0x419dd0 *)0x0;
-  if (this_01 == (cls_0x5a4494 *)0x0) {
-    this_01 = (cls_0x5a4494 *)0x0;
+  if (this_01 == (cls_0x5a4494_TPane *)0x0) {
+    this_01 = (cls_0x5a4494_TPane *)0x0;
   }
   else {
     this_01->mbr_0xc = 0x280;

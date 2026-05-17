@@ -54,7 +54,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a502c::virt_meth_0x46b010(cls_0x5a502c 
   cls_0x46d6b0 *this_00;
   int iVar3;
   
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   iVar3 = DAT_00676828;
   this->mbr_0x1cc = 0;
   if ((iVar3 == 0) || (DAT_00676830 == 0)) {

@@ -43,7 +43,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4738::virt_meth_0x442440(cls_0x5a4738 
   undefined *puVar3;
   dword dVar4;
   
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   cls_0x5b5808::meth_0x444e30
             ((cls_0x5b5808 *)this,&DAT_005cf1e4,this->mbr_0xc - 0x10,0x1c,0x10,0x10,0,&LAB_004420a0,
              0,0,0,0,0,0xffffffff,0,0,0);

@@ -90,7 +90,7 @@ OOAnalyzer::cls_0x5b93c4::virt_meth_0x435150
   dword dVar4;
   int in_stack_0000002c;
   
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   this->mbr_0x60 = param_3;
   if (param_10 == 0) goto LAB_004351de;
   iVar3 = FUN_0059a530_stricmp(param_10,s_widgets_005cd8e8);
@@ -156,7 +156,7 @@ OOAnalyzer::cls_0x5b93c4::virt_meth_0x435230
   dword dVar2;
   dword in_stack_0000002c;
   
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   this->mbr_0x60 = param_3;
   dVar2 = DAT_0066733c;
   dVar1 = DAT_0065bb10;
@@ -1323,7 +1323,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x5339b0(cls_0x5b93c4 
   puStack_8 = &LAB_005a19c1;
   local_c = ExceptionList;
   ExceptionList = &local_c;
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   FUN_00483300_RandomRange(0,4);
   iVar1 = cls_0x41c7d0::meth_0x49c430((cls_0x41c7d0 *)&DAT_00667548);
   if ((-1 < iVar1) &&

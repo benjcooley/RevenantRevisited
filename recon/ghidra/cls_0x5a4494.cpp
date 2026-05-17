@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a4494
+// Decompiled methods and structure for class: cls_0x5a4494_TPane
 
 /*
-/OOAnalyzer/cls_0x5a4494
+/OOAnalyzer/cls_0x5a4494_TPane
 pack(disabled)
-Structure cls_0x5a4494 {
-   0   cls_0x5a4494::vftable_5a4494 *   4   vftptr_0x0   "pointer to cls_0x5a4494::vftable_5a4494"
+Structure cls_0x5a4494_TPane {
+   0   cls_0x5a4494_TPane::vftable_5a4494 *   4   vftptr_0x0   "pointer to cls_0x5a4494_TPane::vftable_5a4494"
    4   dword   4   mbr_0x4   "Unsigned Double-Word (ddw, 4-bytes)"
    8   dword   4   mbr_0x8   "Unsigned Double-Word (ddw, 4-bytes)"
    12   dword   4   mbr_0xc   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -78,7 +78,7 @@ Length: 468 Alignment: 1
 
 // Function at 00434e40
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x434e40(cls_0x5a4494 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a4494_TPane::virt_meth_0x434e40(cls_0x5a4494_TPane *this)
 
 {
   undefined *puVar1;
@@ -137,7 +137,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x434e40(cls_0x5a4494 
 
 // Function at 00445390
 
-cls_0x5a4494 * __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x445390(cls_0x5a4494 *this)
+cls_0x5a4494_TPane * __thiscall OOAnalyzer::cls_0x5a4494_TPane::virt_meth_0x445390(cls_0x5a4494_TPane *this)
 
 {
   byte in_stack_00000004;
@@ -153,7 +153,7 @@ cls_0x5a4494 * __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x445390(cls_0x5a4
 
 // Function at 00488620
 
-cls_0x5a4494 * __thiscall OOAnalyzer::cls_0x5a4494::cls_0x5a4494(cls_0x5a4494 *this)
+cls_0x5a4494_TPane * __thiscall OOAnalyzer::cls_0x5a4494_TPane::cls_0x5a4494_TPane(cls_0x5a4494_TPane *this)
 
 {
   undefined4 *puVar1;
@@ -243,15 +243,15 @@ cls_0x5a4494 * __thiscall OOAnalyzer::cls_0x5a4494::cls_0x5a4494(cls_0x5a4494 *t
 
 // Function at 00488820
 
-cls_0x5a4494 * __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x488820(cls_0x5a4494 *this)
+cls_0x5a4494_TPane * __thiscall OOAnalyzer::cls_0x5a4494_TPane::virt_meth_0x488820(cls_0x5a4494_TPane *this)
 
 {
   SIZE_T SVar1;
   byte in_stack_00000004;
   
-  ~cls_0x5a4494(this);
+  ~cls_0x5a4494_TPane(this);
   if ((in_stack_00000004 & 1) != 0) {
-    if (this != (cls_0x5a4494 *)0x0) {
+    if (this != (cls_0x5a4494_TPane *)0x0) {
       SVar1 = FUN_0058cff3(this);
       DAT_0065ba08 = DAT_0065ba08 - SVar1;
     }
@@ -264,12 +264,12 @@ cls_0x5a4494 * __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x488820(cls_0x5a4
 
 // Function at 00488860
 
-cls_0x5a4494 * __thiscall OOAnalyzer::cls_0x5a4494::~cls_0x5a4494(cls_0x5a4494 *this)
+cls_0x5a4494_TPane * __thiscall OOAnalyzer::cls_0x5a4494_TPane::~cls_0x5a4494_TPane(cls_0x5a4494_TPane *this)
 
 {
   LPCVOID pvVar1;
   SIZE_T SVar2;
-  cls_0x5a4494 *pcVar3;
+  cls_0x5a4494_TPane *pcVar3;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -296,7 +296,7 @@ cls_0x5a4494 * __thiscall OOAnalyzer::cls_0x5a4494::~cls_0x5a4494(cls_0x5a4494 *
     SVar2 = FUN_0058cff3(pvVar1);
     DAT_0065ba08 = DAT_0065ba08 - SVar2;
   }
-  pcVar3 = (cls_0x5a4494 *)FUN_0058cfab(pvVar1);
+  pcVar3 = (cls_0x5a4494_TPane *)FUN_0058cfab(pvVar1);
   ExceptionList = local_c;
   return pcVar3;
 }
@@ -305,7 +305,7 @@ cls_0x5a4494 * __thiscall OOAnalyzer::cls_0x5a4494::~cls_0x5a4494(cls_0x5a4494 *
 
 // Function at 00491900
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x491900(cls_0x5a4494 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a4494_TPane::virt_meth_0x491900(cls_0x5a4494_TPane *this)
 
 {
   if (this->mbr_0x40 == 0) {
@@ -335,7 +335,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x491900(cls_0x5a4494 
 
 // Function at 005449e0
 
-void __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x5449e0(cls_0x5a4494 *this)
+void __thiscall OOAnalyzer::cls_0x5a4494_TPane::virt_meth_0x5449e0(cls_0x5a4494_TPane *this)
 
 {
   cls_0x46d6b0 *pcVar1;
@@ -496,7 +496,7 @@ void __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x5449e0(cls_0x5a4494 *this)
 
 // Function at 00544e40
 
-void __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x544e40(cls_0x5a4494 *this)
+void __thiscall OOAnalyzer::cls_0x5a4494_TPane::virt_meth_0x544e40(cls_0x5a4494_TPane *this)
 
 {
   cls_0x5b98b8::virt_meth_0x434f30((cls_0x5b98b8 *)this);
@@ -523,7 +523,7 @@ void __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x544e40(cls_0x5a4494 *this)
 
 // Function at 00544eb0
 
-void __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x544eb0(cls_0x5a4494 *this)
+void __thiscall OOAnalyzer::cls_0x5a4494_TPane::virt_meth_0x544eb0(cls_0x5a4494_TPane *this)
 
 {
   if (this->mbr_0x50 != 0) {
@@ -539,7 +539,7 @@ void __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x544eb0(cls_0x5a4494 *this)
 // Function at 00546390
 
 void __thiscall
-OOAnalyzer::cls_0x5a4494::virt_meth_0x546390(cls_0x5a4494 *this,int param_1,dword param_2)
+OOAnalyzer::cls_0x5a4494_TPane::virt_meth_0x546390(cls_0x5a4494_TPane *this,int param_1,dword param_2)
 
 {
   char cVar1;
@@ -617,7 +617,7 @@ LAB_0054651e:
 
 // Function at 00546620
 
-void __thiscall OOAnalyzer::cls_0x5a4494::virt_meth_0x546620(cls_0x5a4494 *this)
+void __thiscall OOAnalyzer::cls_0x5a4494_TPane::virt_meth_0x546620(cls_0x5a4494_TPane *this)
 
 {
   int *piVar1;

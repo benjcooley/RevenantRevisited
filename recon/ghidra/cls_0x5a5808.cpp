@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a5808
+// Decompiled methods and structure for class: cls_0x5a5808_TBottomBarPane
 
 /*
-/OOAnalyzer/cls_0x5a5808
+/OOAnalyzer/cls_0x5a5808_TBottomBarPane
 pack(disabled)
-Structure cls_0x5a5808 {
-   0   cls_0x5a5808::vftable_5a5808 *   4   vftptr_0x0   "pointer to cls_0x5a5808::vftable_5a5808"
+Structure cls_0x5a5808_TBottomBarPane {
+   0   cls_0x5a5808_TBottomBarPane::vftable_5a5808 *   4   vftptr_0x0   "pointer to cls_0x5a5808_TBottomBarPane::vftable_5a5808"
    4   dword   4   mbr_0x4   "Unsigned Double-Word (ddw, 4-bytes)"
    8   dword   4   mbr_0x8   "Unsigned Double-Word (ddw, 4-bytes)"
    12   dword   4   mbr_0xc   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -26,7 +26,7 @@ Length: 392 Alignment: 1
 
 // Function at 00487da0
 
-cls_0x5a5808 * __thiscall OOAnalyzer::cls_0x5a5808::cls_0x5a5808(cls_0x5a5808 *this)
+cls_0x5a5808_TBottomBarPane * __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::cls_0x5a5808_TBottomBarPane(cls_0x5a5808_TBottomBarPane *this)
 
 {
   this->mbr_0x8 = 0x1a4;
@@ -51,12 +51,12 @@ cls_0x5a5808 * __thiscall OOAnalyzer::cls_0x5a5808::cls_0x5a5808(cls_0x5a5808 *t
 
 // Function at 00487e00
 
-cls_0x5a5808 * __thiscall OOAnalyzer::cls_0x5a5808::~cls_0x5a5808(cls_0x5a5808 *this)
+cls_0x5a5808_TBottomBarPane * __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::~cls_0x5a5808_TBottomBarPane(cls_0x5a5808_TBottomBarPane *this)
 
 {
   LPCVOID pvVar1;
   SIZE_T SVar2;
-  cls_0x5a5808 *pcVar3;
+  cls_0x5a5808_TBottomBarPane *pcVar3;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -75,7 +75,7 @@ cls_0x5a5808 * __thiscall OOAnalyzer::cls_0x5a5808::~cls_0x5a5808(cls_0x5a5808 *
     SVar2 = FUN_0058cff3(pvVar1);
     DAT_0065ba08 = DAT_0065ba08 - SVar2;
   }
-  pcVar3 = (cls_0x5a5808 *)FUN_0058cfab(pvVar1);
+  pcVar3 = (cls_0x5a5808_TBottomBarPane *)FUN_0058cfab(pvVar1);
   ExceptionList = local_c;
   return pcVar3;
 }
@@ -84,15 +84,15 @@ cls_0x5a5808 * __thiscall OOAnalyzer::cls_0x5a5808::~cls_0x5a5808(cls_0x5a5808 *
 
 // Function at 00487ef0
 
-cls_0x5a5808 * __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x487ef0(cls_0x5a5808 *this)
+cls_0x5a5808_TBottomBarPane * __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::virt_meth_0x487ef0(cls_0x5a5808_TBottomBarPane *this)
 
 {
   SIZE_T SVar1;
   byte in_stack_00000004;
   
-  ~cls_0x5a5808(this);
+  ~cls_0x5a5808_TBottomBarPane(this);
   if ((in_stack_00000004 & 1) != 0) {
-    if (this != (cls_0x5a5808 *)0x0) {
+    if (this != (cls_0x5a5808_TBottomBarPane *)0x0) {
       SVar1 = FUN_0058cff3(this);
       DAT_0065ba08 = DAT_0065ba08 - SVar1;
     }
@@ -105,13 +105,13 @@ cls_0x5a5808 * __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x487ef0(cls_0x5a5
 
 // Function at 0052c780
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c780(cls_0x5a5808 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::virt_meth_0x52c780_TBottomBarPane_Initialize(cls_0x5a5808_TBottomBarPane *this)
 
 {
   cls_0x46d6b0 *this_00;
   dword dVar1;
   
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   dVar1 = cls_0x46d6b0::meth_0x46d710(DAT_0065a570);
   this_00 = DAT_0065a570;
   this->mbr_0x180 = dVar1;
@@ -124,7 +124,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c780(cls_0x5a5808 
 
 // Function at 0052c7c0
 
-void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c7c0(cls_0x5a5808 *this)
+void __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::virt_meth_0x52c7c0(cls_0x5a5808_TBottomBarPane *this)
 
 {
   TCharacter::virt_meth_0x491970((TCharacter *)&DAT_0065b028);
@@ -137,7 +137,7 @@ void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c7c0(cls_0x5a5808 *this)
 
 // Function at 0052c7e0
 
-void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c7e0(cls_0x5a5808 *this)
+void __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::virt_meth_0x52c7e0(cls_0x5a5808_TBottomBarPane *this)
 
 {
   DAT_0065b02c._68_4_ = 1;
@@ -153,14 +153,14 @@ void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c7e0(cls_0x5a5808 *this)
 
 // Function at 0052c800
 
-void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c800(cls_0x5a5808 *this)
+void __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::virt_meth_0x52c800(cls_0x5a5808_TBottomBarPane *this)
 
 {
   if (this->mbr_0x50 != 0) {
     (*this->vftptr_0x0->virt_meth_0x52c880_84)(this);
   }
   cls_0x5a5658::virt_meth_0x52ca70((cls_0x5a5658 *)&DAT_0065b028,PTR_DAT_005d79e0);
-  cls_0x5a5a30::virt_meth_0x5444c0((cls_0x5a5a30 *)&DAT_0065c6f8);
+  cls_0x5a5a30_TQuickSpellPane::virt_meth_0x5444c0((cls_0x5a5a30_TQuickSpellPane *)&DAT_0065c6f8);
   cls_0x5b98b8::virt_meth_0x435de0((cls_0x5b98b8 *)this);
   if (this->mbr_0x50 != 0) {
     FUN_004aacb0(this->mbr_0x4,this->mbr_0x8,this->mbr_0xc,this->mbr_0x10);
@@ -173,7 +173,7 @@ void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c800(cls_0x5a5808 *this)
 
 // Function at 0052c880
 
-void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c880(cls_0x5a5808 *this)
+void __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::virt_meth_0x52c880(cls_0x5a5808_TBottomBarPane *this)
 
 {
   cls_0x5a68d8 *in_stack_00000004;
@@ -184,7 +184,7 @@ void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c880(cls_0x5a5808 *this)
   if (in_stack_00000004 != (cls_0x5a68d8 *)PTR_DAT_005d79e0) {
     cls_0x5b93c4::virt_meth_0x435cb0((cls_0x5b93c4 *)this);
     cls_0x5a5658::virt_meth_0x52ca70((cls_0x5a5658 *)&DAT_0065b028,in_stack_00000004);
-    cls_0x5a5a30::virt_meth_0x5444c0((cls_0x5a5a30 *)&DAT_0065c6f8);
+    cls_0x5a5a30_TQuickSpellPane::virt_meth_0x5444c0((cls_0x5a5a30_TQuickSpellPane *)&DAT_0065c6f8);
   }
   return;
 }
@@ -193,7 +193,7 @@ void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c880(cls_0x5a5808 *this)
 
 // Function at 0052c910
 
-void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c910(cls_0x5a5808 *this)
+void __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::virt_meth_0x52c910(cls_0x5a5808_TBottomBarPane *this)
 
 {
   this->mbr_0x4 = this->mbr_0x14;
@@ -208,7 +208,7 @@ void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c910(cls_0x5a5808 *this)
 
 // Function at 0052c930
 
-void __thiscall OOAnalyzer::cls_0x5a5808::virt_meth_0x52c930(cls_0x5a5808 *this,dword param_1)
+void __thiscall OOAnalyzer::cls_0x5a5808_TBottomBarPane::virt_meth_0x52c930(cls_0x5a5808_TBottomBarPane *this,dword param_1)
 
 {
   dword in_stack_00000008;

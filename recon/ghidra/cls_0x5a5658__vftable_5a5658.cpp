@@ -35,7 +35,7 @@ Structure cls_0x5a5658::vftable_5a5658 {
    112   virt_meth_0x445200 *   4   virt_meth_0x445200_112   "virtual function table entry."
    116   virt_meth_0x4450b0 *   4   virt_meth_0x4450b0_116   "virtual function table entry."
    120   virt_meth_0x4450c0 *   4   virt_meth_0x4450c0_120   "virtual function table entry."
-   124   virt_meth_0x52c970 *   4   virt_meth_0x52c970_124   "virtual function table entry."
+   124   virt_meth_0x52c970_TBarInvPane_Initialize *   4   virt_meth_0x52c970_124   "virtual function table entry."
    128   virt_meth_0x491970 *   4   virt_meth_0x491970_128   "virtual function table entry."
    132   virt_meth_0x491bd0 *   4   virt_meth_0x491bd0_132   "virtual function table entry."
    136   virt_meth_0x444f40 *   4   virt_meth_0x444f40_136   "virtual function table entry."

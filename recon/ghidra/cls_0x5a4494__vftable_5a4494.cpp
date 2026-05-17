@@ -1,9 +1,9 @@
-// Decompiled methods and structure for class: cls_0x5a4494::vftable_5a4494
+// Decompiled methods and structure for class: cls_0x5a4494_TPane::vftable_5a4494
 
 /*
-/OOAnalyzer/cls_0x5a4494::vftable_5a4494
+/OOAnalyzer/cls_0x5a4494_TPane::vftable_5a4494
 pack(disabled)
-Structure cls_0x5a4494::vftable_5a4494 {
+Structure cls_0x5a4494_TPane::vftable_5a4494 {
    0   virt_meth_0x491900 *   4   virt_meth_0x491900_0   "virtual function table entry."
    4   virt_meth_0x491970 *   4   virt_meth_0x491970_4   "virtual function table entry."
    8   virt_meth_0x491bd0 *   4   virt_meth_0x491bd0_8   "virtual function table entry."

@@ -220,7 +220,7 @@ undefined4 __thiscall OOAnalyzer::TCharacter::virt_meth_0x44d5c0(TCharacter *thi
   local_c = ExceptionList;
   ExceptionList = &local_c;
   meth_0x45aec0(this);
-  cls_0x5a4494::virt_meth_0x491900((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x491900((cls_0x5a4494_TPane *)this);
   puVar5 = DAT_00668588;
   DAT_006663d8 = (this->TObjectInstance).cls_0x41c7f0.mbr_0x0;
   DAT_006663d4 = (this->TObjectInstance).cls_0x41c7f0.mbr_0x4;
@@ -8797,7 +8797,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x491bd0(TCharacter *this)
 undefined4 __thiscall OOAnalyzer::TCharacter::virt_meth_0x52d8a0_TBottomPane_Initialize(TCharacter *this)
 
 {
-  cls_0x5a4494::virt_meth_0x491900((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x491900((cls_0x5a4494_TPane *)this);
   return 1;
 }
 
@@ -8927,7 +8927,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x52da00(TCharacter *this)
   (*((this->TObjectInstance).vftptr_0x0)->virt_meth_0x490530_44)(this);
   iVar6 = meth_0x47ed20((TCharacter *)&DAT_0065caf0);
   if (iVar6 == 2) {
-    cls_0x5a5808::virt_meth_0x52c910((cls_0x5a5808 *)&DAT_0065b638);
+    cls_0x5a5808_TBottomBarPane::virt_meth_0x52c910((cls_0x5a5808_TBottomBarPane *)&DAT_0065b638);
     return;
   }
   return;
@@ -8947,7 +8947,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x52da60(TCharacter *this,dwor
   *(undefined4 *)&(this->TObjectInstance).field_0x20 = in_stack_00000008;
   iVar1 = meth_0x47ed20((TCharacter *)&DAT_0065caf0);
   if (iVar1 == 2) {
-    cls_0x5a5808::virt_meth_0x52c930((cls_0x5a5808 *)&DAT_0065b638,param_1);
+    cls_0x5a5808_TBottomBarPane::virt_meth_0x52c930((cls_0x5a5808_TBottomBarPane *)&DAT_0065b638,param_1);
   }
   return;
 }
@@ -8964,7 +8964,7 @@ undefined4 __thiscall OOAnalyzer::TCharacter::virt_meth_0x536360(TCharacter *thi
   dword *pdVar3;
   undefined **ppuVar4;
   
-  cls_0x5a4494::virt_meth_0x491900((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x491900((cls_0x5a4494_TPane *)this);
   dVar2 = cls_0x46d6b0::meth_0x46d710(DAT_0065dde4);
   (this->TObjectInstance).mbr_0x64 = dVar2;
   ppuVar4 = &PTR_DAT_005e3fb8;
@@ -9076,7 +9076,7 @@ void __thiscall OOAnalyzer::TCharacter::virt_meth_0x5368c0(TCharacter *this)
 undefined4 __thiscall OOAnalyzer::TCharacter::virt_meth_0x53c8c0_TSidePane_Initialize(TCharacter *this)
 
 {
-  cls_0x5a4494::virt_meth_0x491900((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x491900((cls_0x5a4494_TPane *)this);
   (this->TObjectInstance).mbr_0x60 = 1;
   *(undefined *)((int)&(this->TObjectInstance).mbr_0x6c + 3) = 0;
   *(undefined *)&(this->TObjectInstance).mbr_0x6c = 0;
@@ -9320,7 +9320,7 @@ undefined4 __thiscall OOAnalyzer::TCharacter::virt_meth_0x549740_TPlyrStatusBar_
   uStack_8 = &LAB_005a2174;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  cls_0x5a4494::virt_meth_0x491900((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x491900((cls_0x5a4494_TPane *)this);
   if (DAT_006680c8 == 0) {
     pcVar7 = (cls_0x5a68d8 *)FUN_00482fb0(0x78);
     local_4 = 0xc;
@@ -9875,7 +9875,7 @@ OOAnalyzer::TCharacter::meth_0x54a5d0
 
 // Function at 0054bf70
 
-undefined4 __thiscall OOAnalyzer::TCharacter::virt_meth_0x54bf70(TCharacter *this)
+undefined4 __thiscall OOAnalyzer::TCharacter::virt_meth_0x54bf70_TTextBar_Initialize(TCharacter *this)
 
 {
   cls_0x5a68d8__vftable_5a68d8 *pcVar1;
@@ -9927,7 +9927,7 @@ undefined4 __thiscall OOAnalyzer::TCharacter::virt_meth_0x54bf70(TCharacter *thi
   (this->TObjectInstance).cls_0x41c7f0.mbr_0x10 = dVar9;
   (this->TObjectInstance).cls_0x41c7f0.mbr_0x14 = (iVar7 - iVar3) + iVar5;
   (this->TObjectInstance).mbr_0x1c = dVar10;
-  iVar5 = cls_0x5a4494::virt_meth_0x491900((cls_0x5a4494 *)this);
+  iVar5 = cls_0x5a4494_TPane::virt_meth_0x491900((cls_0x5a4494_TPane *)this);
   if (iVar5 == 0) {
     ExceptionList = local_c;
     return 0;
@@ -10078,7 +10078,7 @@ LAB_0054c36b:
 
 // Function at 0054c3d0
 
-void __thiscall OOAnalyzer::TCharacter::virt_meth_0x54c3d0(TCharacter *this)
+void __thiscall OOAnalyzer::TCharacter::virt_meth_0x54c3d0_TTextBar_Close(TCharacter *this)
 
 {
   undefined4 *puVar1;

@@ -29,10 +29,24 @@ this+0x94..0xe0 : zero-initialized state (current values, dirty flags, anim stat
 
 Three 0x80x0x40 mosaic surfaces = consistent with three horizontal bars per character (health/stamina/mana).
 
+## Instances
+
+| Instance | Global address | Vtable wire site | Notes |
+|---|---|---|---|
+| Player (left) | `0x65a8c0` | `0x48069c MOV [0x65a8c0], 0x5a54e4` | Wave-1A confirmed |
+| Target (right) | **NONE FOUND** | — | Wave-2B searched the binary exhaustively for additional `0x5a54e4` 4-byte LE patterns; only the player wire exists. See [B.r6](../../../docs/ui/briefs/B_r6_target_charpane_and_base.md#step-1--right-side-target-tplyrstatusbar-instance-hunt-null-result) |
+
+**The "two global instances" hypothesis is FALSIFIED at the global level.** Three alternative architectures remain plausible for the upper-right target panel (B.r6 Step 1):
+
+- **A (most likely)**: single TPlyrStatusBar instance, called twice per frame from TPlayScreen with different stat-source pointers (player vs current target) → would mean the Animate slot takes a character* parameter OR reads a swappable member set before each draw call.
+- **B**: distinct sibling class for the target panel (e.g. `TTargetStatusBar`) with its own vtable + global — no candidate identified yet.
+- **C**: heap-allocated lazily when player acquires a target — no evidence either way.
+
+**Recommended Wave-3 hunt:** extract slot 19 (0x549da0) and slot 20 (0x549e60) — the two TPlyrStatusBar-specific draw-region overrides — to check whether they accept or consult a character source. If they do, Alternative A is confirmed.
+
 ## Open questions
 
-- Where is the TARGET-side instance allocated? (Need to find another global with vtable 0x5a54e4.)
-- Which method binds the panel to a character (player vs current target)? (Look for SetSource / Update slots.)
+- Which method binds the panel to a character (player vs current target)? See "Instances" above — likely a parameter to slot 19/20 rather than a SetSource method.
 - Where does the per-frame Draw/Animate happen?
 
 ## Related

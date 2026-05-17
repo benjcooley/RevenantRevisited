@@ -6,7 +6,7 @@ undefined4 __fastcall FUN_0043da00(int *param_1)
   int iVar1;
   undefined4 *puVar2;
   
-  FUN_00491900();
+  FUN_00491900_TPane_Initialize();
   iVar1 = *(int *)(DAT_0065b020 + DAT_0065bc40 * 4);
   param_1[0x26] = 0x3c;
   param_1[0x21] = 0x3c;

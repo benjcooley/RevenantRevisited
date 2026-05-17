@@ -8718,7 +8718,7 @@ void TCharacter::virt_meth_0x52da00()
   (*((this->TObjectInstance).vftptr_0x0)->virt_meth_0x490530_44)(this);
   iVar6 = meth_0x47ed20((TCharacter *)&DAT_0065caf0);
   if (iVar6 == 2) {
-    cls_0x5a5808::virt_meth_0x52c910((cls_0x5a5808 *)&DAT_0065b638);
+    cls_0x5a5808_TBottomBarPane::virt_meth_0x52c910((cls_0x5a5808_TBottomBarPane *)&DAT_0065b638);
     return;
   }
   return;
@@ -8738,7 +8738,7 @@ void TCharacter::virt_meth_0x52da60(dword param_1)
   *(undefined4 *)&(this->TObjectInstance).field_0x20 = in_stack_00000008;
   iVar1 = meth_0x47ed20((TCharacter *)&DAT_0065caf0);
   if (iVar1 == 2) {
-    cls_0x5a5808::virt_meth_0x52c930((cls_0x5a5808 *)&DAT_0065b638,param_1);
+    cls_0x5a5808_TBottomBarPane::virt_meth_0x52c930((cls_0x5a5808_TBottomBarPane *)&DAT_0065b638,param_1);
   }
   return;
 }
@@ -9662,7 +9662,7 @@ void TCharacter::meth_0x54a5d0(int param_1, uint param_2, undefined4 param_3, un
 
 // Function at 0054bf70
 
-undefined4 TCharacter::virt_meth_0x54bf70()
+undefined4 TCharacter::virt_meth_0x54bf70_TTextBar_Initialize()
 
 {
   cls_0x5a68d8__vftable_5a68d8 *pcVar1;
@@ -9865,7 +9865,7 @@ LAB_0054c36b:
 
 // Function at 0054c3d0
 
-void TCharacter::virt_meth_0x54c3d0()
+void TCharacter::virt_meth_0x54c3d0_TTextBar_Close()
 
 {
   undefined4 *puVar1;

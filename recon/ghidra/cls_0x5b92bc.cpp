@@ -43,7 +43,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b92bc::virt_meth_0x533350(cls_0x5b92bc 
   puStack_8 = &LAB_005a1976;
   local_c = ExceptionList;
   ExceptionList = &local_c;
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   if (DAT_0066f4f8 == (cls_0x46d6b0 *)0x0) {
     DAT_0066f4f8 = (cls_0x46d6b0 *)
                    FUN_0047f670((cls_0x49ead0 *)s_exitsure_dat_005e3e8c,(void *)0xffffffff,0,

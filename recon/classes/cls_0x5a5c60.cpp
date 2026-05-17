@@ -146,7 +146,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5c60::virt_meth_0x534fd0(cls_0x5a5c60 
   if (this->mbr_0x40 != 0) {
     return 1;
   }
-  iVar1 = cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  iVar1 = cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   if (iVar1 == 0) {
     return 0;
   }

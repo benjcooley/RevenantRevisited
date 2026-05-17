@@ -1,0 +1,84 @@
+# Wave-2B renames — TPane base class identification + stat-pane disambiguation
+#
+# Date: 2026-05-16
+# Agent: Wave-2B (forensic-recon for character panel right-side instance + TPane base)
+# Brief: docs/ui/briefs/B_r6_target_charpane_and_base.md
+#
+# Evidence-grade rationale per AGENT_PROTOCOL "Don't promote evidence-level":
+#
+# (1) cls_0x5a4494 -> cls_0x5a4494_TPane
+#     Evidence A: Used as base vtable in 31 distinct sites across the binary (FindBytes
+#                 0x5a4494 -> 31 hits at 0044518b, 0044545e, 00445598, 004699ae, 0046a5ae,
+#                 0046d047, 0046d182, 0046d277, 0046d517, 0046d5f2, 00487c71, 00487dd2,
+#                 00487f88, 00488495, 004885b2, 0048866d, 00488942, 00488d2d, 00488f32,
+#                 004890d7, 00521d92, 00521e82, 00533727, 00533ce7, 00537447, 00539fe2,
+#                 0053a107, 0053a372, 0053bde2, 0053c4e7, 0053c5c7). This is the classic
+#                 2/3-stage MSVC ctor pattern of writing the base vtable first.
+#     Evidence B: All four already-identified Wave-1A leaf pane classes (TPlyrStatusBar
+#                 cls_0x5a54e4, TSidePane cls_0x5a53ec, TSideTabsPane cls_0x5a5750,
+#                 TBottomPane cls_0x5a5468) have vtables whose slots 2-30 are dominated
+#                 by 0x5a4494's slot bodies. E.g. slot 2 = 0x491bd0 (TPane), slots 3..6 =
+#                 0x444f40..0x444f70 (TPane stub defaults), slot 9 = 0x491a80 (TPane),
+#                 slot 16 = 0x491bb0 (TPane), slots 17..30 = mostly TPane base bodies.
+#                 The four leaf classes override slots 0,1,7,19,20,23,27 (overrides vary).
+#                 Textbook single-inheritance vtable layout.
+#     Evidence C: Slot 0 body (FUN_00491900) is the canonical TPane::Initialize idiom:
+#                 reads "is_open" at field [0x10], copies newx/y/w/h -> x/y/w/h from
+#                 fields [5..8] -> [1..4], zeros render state, sets is_open=1, calls
+#                 vtable[3] (= CreateBackgroundBuffers per src/screen.h ordering).
+#                 Slot 1 body (FUN_00491970) is canonical TPane::Close: vtable[4]
+#                 (FreeBackgroundBuffers), clears is_open. Both bodies match src TPane
+#                 semantics exactly.
+#
+#     Evidence quality: 3+ INDEPENDENT lines (multi-site base wire + vtable inheritance
+#     pattern across 4 confirmed leaf panes + slot-0/slot-1 body semantics matching src).
+#     Well above 98% threshold. Safe to apply.
+
+cls_0x5a4494|cls_0x5a4494_TPane
+
+# (2) Init/Close base methods - these are CONFIRMED virtuals of the TPane base by body
+#     analysis. Slot order: slot 0 = Initialize, slot 1 = Close. Two-line evidence each.
+#     Body of Initialize: classic "if (!isopen) { copy new->cur, zero state, call vtab[3], set isopen=1; }"
+#     Body of Close: "vtab[4](); isopen = 0;"
+
+FUN_00491900|FUN_00491900_TPane_Initialize
+FUN_00491970|FUN_00491970_TPane_Close
+
+# NOT INCLUDED (deferred to future waves):
+#
+# - cls_0x5a45c8 (intermediate class shared by stat-pane #1 + stat-pane #2 + TSideTabsPane):
+#   used by FUN_00434e40 init helper (called from FUN_00546b50, FUN_005449e0, etc.).
+#   STRONG candidate for TButtonPane (or similar mid-level pane that owns buttons +
+#   a background graphic). Not renaming yet because:
+#     * Need to confirm the cls_0x5a45c8 -> cls_0x... -> leaf inheritance pattern by
+#       dumping cls_0x5a45c8's vtable (will require its own DumpVtable run)
+#     * Wave-1A already documented TSideTabsPane uses cls_0x5a4494 as base via FUN_0041c7f0
+#       (NOT FUN_00434e40), suggesting cls_0x5a45c8 is a separate inheritance branch
+#       (probably TButtonPane : TPane, not the SideTabsPane base). Needs clarification.
+#
+# - cls_0x5a5ae8 (the 2nd "stat pane" leaf class, ctor at FUN_00488620):
+#   Init function FUN_005449e0 loads ScrlTop/ScrlBottom/ScrollPaper/Scroll/ScrlArwUU..UG/
+#   ScrlArwDU..DG graphics + creates 2 TButton (scroll up/down) buttons. NOT a stat pane.
+#   This is a scrollable parchment/scroll content viewer (likely the books, character
+#   sheet scrolls, or in-game readable papers). The error string "Trouble initializing
+#   stat pane" appears reused for two functions, but the second one is decisively NOT
+#   TStatPane. Naming candidate: TScrollPane or TPaperScrollPane or TBookPane.
+#   Need: (a) cross-reference asset names ScrollPaper/Scroll to find their usage context;
+#   (b) check the ctor at 0x488620 for any string anchor identifying the class;
+#   (c) string-search "book"/"scroll"/"parchment"/"page" near 0x65a9d8 access sites.
+#
+# - cls_unknown for FUN_00546b50 (the 1st "stat pane" - genuine TStatPane):
+#   Wave-1A noted global 0x65b140. The init loads "statpane.def" (DEF widget file) and
+#   "RingT" portrait sprite, sets fields including buffer pointer at [0x68]/[0x69].
+#   Likely TStatPane (sidebar Stats tab content). Not renaming the class yet because:
+#     * The 0x65b140 vtable wire site wasn't found in this run (need a FindImmRefs
+#       targeted at the .data store at 0x65b140 itself looking for a "MOV [0x65b140], <x>"
+#       wire pattern - not done in this wave)
+#     * src/statpane.h already exists; need to verify it matches retail shape before
+#       committing the rename
+#
+# - Target-side TPlyrStatusBar instance:
+#   FindBytes 0x5a54e4 returned ONE hit at 0x4806a2 (= existing Wave-1A wire at 0x48069c
+#   for the player global 0x65a8c0). NO second vtable wire exists in the binary's
+#   .data section or anywhere else. This FALSIFIES the "one class, two global instances"
+#   hypothesis for the upper-right target panel. See brief for analysis of alternatives.

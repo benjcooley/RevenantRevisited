@@ -112,7 +112,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5658::virt_meth_0x529970(cls_0x5a5658 
   puStack_8 = &LAB_005a188a;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  cls_0x5a4494::virt_meth_0x491900((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x491900((cls_0x5a4494_TPane *)this);
   uStack_94 = 0x5299a4;
   DAT_0066f330 = (cls_0x46d6b0 *)FUN_0047f670();
   uStack_94 = 0x74;
@@ -1352,14 +1352,14 @@ void __thiscall OOAnalyzer::cls_0x5a5658::virt_meth_0x52bf00(cls_0x5a5658 *this)
 
 // Function at 0052c970
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a5658::virt_meth_0x52c970(cls_0x5a5658 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a5658::virt_meth_0x52c970_TBarInvPane_Initialize(cls_0x5a5658 *this)
 
 {
   cls_0x46d6b0 *this_00;
   int iVar1;
   dword dVar2;
   
-  cls_0x5a4494::virt_meth_0x491900((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x491900((cls_0x5a4494_TPane *)this);
   this_00 = DAT_0065a570;
   this->mbr_0x68 = 0xffffffff;
   this->mbr_0x64 = 0xffffffff;

@@ -22,17 +22,17 @@ Status values: ✅ vetted · 🟡 partial · 🔴 incomplete · ⚪ out-of-scope
 
 ## Sibling panes (separately constructed, not children of TBottomPane vtable-wise)
 
-These pane-init calls happen alongside TBottomPane in TPlayScreen::Initialize:
-- `FUN_00544160` — "quick spell pane" — the bottom quickspell row
-- `FUN_0052c970` — "BarInv pane" — potion/key shelf (small slots on bottom-right)
-- `FUN_0052c780` — "Bottom bar" — distinct from this TBottomPane (despite the similar string)
+These pane-init calls happen alongside TBottomPane in TPlayScreen::Initialize. **All three resolved by Wave-2A — see [B.r5](../../../docs/ui/briefs/B_r5_bottom_panes.md):**
 
-The relationship between TBottomPane and these (parent/child vs. peer) is not yet established. They may be composited together at draw time without TBottomPane owning them.
+- `FUN_00544160` = **TQuickSpellPane::Initialize** (`cls_0x5a5a30`, TButtonPane subclass) — the 4-slot spell-ring strip with Ring{U,D,G} sprites
+- `FUN_0052c970` = **TBarInvPane::Initialize** (`cls_0x5a56d4`, leaf TPane, NEW retail class) — the potion/key slot row with "BarInvBox" sprite, width-derived slot count
+- `FUN_0052c780` = **TBottomBarPane::Initialize** (`cls_0x5a5808`, TButtonPane subclass, NEW retail class) — utility/action button row with "UtilityBar" + "BarEndCap" sprites; **DISTINCT from this TBottomPane container**
+
+The relationship between TBottomPane and these (parent/child vs. peer) is still not established vtable-wise; they're four distinct globals. They likely composite at draw time without TBottomPane owning them — TBottomPane appears to be a transparent backdrop / region marker.
 
 ## Open questions
 
-- Why is TBottomPane::Initialize so trivial? Likely most logic is in Pulse/Draw or it's just a transparent backdrop.
-- What's the relationship to "Bottom bar" (FUN_0052c780)? Same class or sibling?
+- Why is TBottomPane::Initialize so trivial? Likely most logic is in Pulse/Draw or it's just a transparent backdrop / region marker that the other three panes draw into.
 
 ## Related
 

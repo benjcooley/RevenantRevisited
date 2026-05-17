@@ -183,17 +183,17 @@ undefined4 __fastcall FUN_0047a660_TPlayScreen_Initialize(int param_1)
   if (iVar3 == 0) {
     FUN_00481c10(s_Trouble_initializing_inventory_p_005d728c,0);
   }
-  iVar3 = FUN_00544160();
+  iVar3 = FUN_00544160_TQuickSpellPane_Initialize();
   if (iVar3 == 0) {
     FUN_00481c10(s_Trouble_initializing_quick_spell_005d72b0,0);
   }
   FUN_00448680(5,0);
-  iVar3 = FUN_0052c970();
+  iVar3 = FUN_0052c970_TBarInvPane_Initialize();
   if (iVar3 == 0) {
     FUN_00481c10(s_Trouble_initializing_BarInv_pane_005d72dc,0);
   }
   FUN_00448680(5,0);
-  iVar3 = FUN_0054bf70_TTextBar_init();
+  iVar3 = FUN_0054bf70_TTextBar_Initialize();
   if (iVar3 == 0) {
     FUN_00481c10(s_Trouble_initializing_text_bar_005d7300,0);
   }
@@ -207,7 +207,7 @@ undefined4 __fastcall FUN_0047a660_TPlayScreen_Initialize(int param_1)
     FUN_00481c10(s_Trouble_initializing_dialog_pane_005d7320,0);
   }
   FUN_00448680(5,0);
-  iVar3 = FUN_0052c780();
+  iVar3 = FUN_0052c780_TBottomBarPane_Initialize();
   if (iVar3 == 0) {
     FUN_00481c10(s_Trouble_initializing_Bottom_bar_005d7344,0);
   }

@@ -44,7 +44,7 @@ bool __thiscall OOAnalyzer::cls_0x5a4680::virt_meth_0x441bd0(cls_0x5a4680 *this)
   int local_10;
   int local_c;
   
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   dVar7 = this->mbr_0xc;
   dVar1 = this->mbr_0x10;
   iVar8 = 0;

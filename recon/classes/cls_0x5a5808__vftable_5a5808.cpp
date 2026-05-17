@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a5808::vftable_5a5808
+// Decompiled methods and structure for class: cls_0x5a5808_TBottomBarPane::vftable_5a5808
 
 /*
-/OOAnalyzer/cls_0x5a5808::vftable_5a5808
+/OOAnalyzer/cls_0x5a5808_TBottomBarPane::vftable_5a5808
 pack(disabled)
-Structure cls_0x5a5808::vftable_5a5808 {
-   0   virt_meth_0x52c780 *   4   virt_meth_0x52c780_0   "virtual function table entry."
+Structure cls_0x5a5808_TBottomBarPane::vftable_5a5808 {
+   0   virt_meth_0x52c780_TBottomBarPane_Initialize *   4   virt_meth_0x52c780_0   "virtual function table entry."
    4   virt_meth_0x52c7c0 *   4   virt_meth_0x52c7c0_4   "virtual function table entry."
    8   FUN_00435010 *   4   FUN_00435010_8   "virtual function table entry."
    12   virt_meth_0x444f40 *   4   virt_meth_0x444f40_12   "virtual function table entry."

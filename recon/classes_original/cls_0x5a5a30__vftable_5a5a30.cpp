@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a5a30::vftable_5a5a30
+// Decompiled methods and structure for class: cls_0x5a5a30_TQuickSpellPane::vftable_5a5a30
 
 /*
-/OOAnalyzer/cls_0x5a5a30::vftable_5a5a30
+/OOAnalyzer/cls_0x5a5a30_TQuickSpellPane::vftable_5a5a30
 pack(disabled)
-Structure cls_0x5a5a30::vftable_5a5a30 {
-   0   virt_meth_0x544160 *   4   virt_meth_0x544160_0   "virtual function table entry."
+Structure cls_0x5a5a30_TQuickSpellPane::vftable_5a5a30 {
+   0   virt_meth_0x544160_TQuickSpellPane_Initialize *   4   virt_meth_0x544160_0   "virtual function table entry."
    4   virt_meth_0x434f30 *   4   virt_meth_0x434f30_4   "virtual function table entry."
    8   FUN_00435010 *   4   FUN_00435010_8   "virtual function table entry."
    12   virt_meth_0x444f40 *   4   virt_meth_0x444f40_12   "virtual function table entry."

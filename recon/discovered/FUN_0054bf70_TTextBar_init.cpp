@@ -1,8 +1,8 @@
-// FUN_0054bf70_TTextBar_init @ 0054bf70 size=1110
+// FUN_0054bf70_TTextBar_Initialize @ 0054bf70 size=1110
 
 /* WARNING: Enum "SectionFlags": Some values do not have unique names */
 
-undefined4 __fastcall FUN_0054bf70_TTextBar_init(int param_1)
+undefined4 __fastcall FUN_0054bf70_TTextBar_Initialize(int param_1)
 
 {
   undefined *puVar1;
@@ -55,7 +55,7 @@ undefined4 __fastcall FUN_0054bf70_TTextBar_init(int param_1)
   *(undefined4 *)(param_1 + 0x14) = uVar6;
   *(int *)(param_1 + 0x18) = (iVar4 - iVar3) + iVar5;
   *(undefined4 *)(param_1 + 0x1c) = uVar9;
-  iVar5 = FUN_00491900();
+  iVar5 = FUN_00491900_TPane_Initialize();
   if (iVar5 == 0) {
     ExceptionList = local_c;
     return 0;

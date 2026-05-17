@@ -1,0 +1,219 @@
+# Agent: UI Wave-2A — TTextBar leaf identification + bottom-area pane cluster
+# Date: 2026-05-16
+#
+# See: docs/ui/briefs/B_r4_textbar_assessment.md (appended) +
+#      docs/ui/briefs/B_r5_bottom_panes.md (new) for the full evidence trails.
+#
+# ============================================================================
+# Evidence chain (golden path: retail string + src forward-decl / src impl)
+# ============================================================================
+#
+# Inheriting Wave-1C's TTextBar init-wrapper identification (FUN_0054bf70
+# = "text bar" string anchor in TPlayScreen::Initialize). Wave-2A's job
+# was to find the leaf class for TTextBar + identify the 3 sibling
+# bottom-area panes via the same Wave-1A protocol:
+#
+#  1. Disassemble TPlayScreen::Initialize @ 0x47a660 around each "Trouble
+#     initializing X" string anchor to recover the per-pane
+#     `MOV ECX, <GLOBAL>; CALL <INIT_FN>` sequence.
+#  2. `FindImmRefs.java <GLOBAL>` to find either `MOV [<GLOBAL>], <VTABLE>`
+#     directly (.data static-init pattern) OR a ctor-stub at the WRITE site
+#     that does `MOV ECX, <GLOBAL>; CALL <CTOR>` with the ctor writing the
+#     vtable via `*this = &vtable_XXXXXX`.
+#  3. `DumpVtable.java <VTABLE> 35` to confirm slot 0 = the init fn and
+#     identify the base-class shape (leaf-TPane vs TButtonPane subclass).
+#  4. Sanity-check struct shape (rect dims, field offsets) against src/.
+#
+# Per-class evidence summary:
+#
+#   TTextBar (leaf class):
+#     - String anchor: "Trouble initializing text bar" @ 0x5d7300 (B.r3 / B.r4)
+#     - Global instance: 0x65c5d0  (call site: 0x47abfd MOV ECX,0x65c5d0;
+#         CALL 0x54bf70)
+#     - Vtable wire: FUN_00480725 (global ctor stub, .CRT$ region) does
+#         `DAT_0065c5d0 = &PTR_FUN_005a5560` directly, then field-init for
+#         rect (0x196 x 0xc6 = 406x198 — full-width transparent overlay band)
+#     - Vtable @ 0x5a5560, slot 0 = 0x54bf70 (Initialize), slot 1 = 0x54c3d0
+#         (Close — confirmed below).
+#     - Vtable shape: 31 slots, leaf-TPane fingerprint
+#         (slot 2 = 0x491bd0, slot 9 = 0x491a80, slot 16 = 0x491bb0; same
+#          shape as TBottomPane/TSidePane/TPlyrStatusBar from Wave-1A).
+#         Overrides at slots 7, 13, 19, 20, 23, 28 — all in the
+#         0x54c000..0x54d800 range that B.r4 fingerprinted as the TTextBar
+#         method cluster.
+#     - TTextBar::Close (slot 1, FUN_0054c3d0) — DECISIVE: body frees the
+#         text buffer at this+0x6c PLUS the THREE TMosaicSurfaces at
+#         this+0x84/+0x88/+0x8c, exactly matching the structure that
+#         FUN_0054bf70 (Initialize) sets up. Then calls TPane::Close
+#         (FUN_00491970) at the end. This is the definitive structural
+#         confirmation that vtable 0x5a5560 IS TTextBar.
+#     - => cls_0x5a5560 (NOT merged; clean leaf-TPane shape with TTextBar's
+#         documented multi-surface signature)
+#
+#   TQuickSpellPane (from src/spellpane.h: `class TQuickSpellPane : public TButtonPane`):
+#     - String anchor: "Trouble initializing quick spell pane" @ 0x5d72b0
+#     - Global instance: 0x65c6f8  (call site: 0x47abab MOV ECX,0x65c6f8;
+#         CALL 0x544160)
+#     - Vtable wire: ctor stub at 0x00480ad0 does
+#         `MOV ECX, 0x65c6f8; CALL FUN_00488580` — that ctor (87 bytes) sets
+#         base vtable 0x5a4494 (TPane), inits rect 0x1a4 x 0x3c (420x60),
+#         calls FUN_0041c7f0(0x10,0x10) (TButtonPane base ctor), then writes
+#         derived vtable 0x5a5a30.
+#     - Vtable @ 0x5a5a30, slot 0 = 0x544160 (Initialize)
+#     - Vtable shape: 35+ slots, TButtonPane fingerprint
+#         (slot 1 = 0x434f30, slot 2 = 0x435010 — NOT TPane's 0x491970/0x491bd0;
+#          matches the slot-2 = 0x435010 pattern seen on TSideTabsPane and
+#          other TButtonPane derivatives).
+#     - Init body (FUN_00544160): allocates 4x 0x150-byte (336-byte) entries
+#         with vtable PTR_FUN_005b9c54; loads RingU/RingD/RingG sprites for
+#         each (the up/down/glow spell-ring graphics); registers via
+#         FUN_00436ae0. Strongly consistent with QuickSpellPane = spell-ring
+#         button strip.
+#     - src cross-ref: `src/spellpane.h:class TQuickSpellPane : public TButtonPane`
+#         + `QUICKSPELLX/Y/WIDTH/HEIGHT` rect template — matches retail's
+#         420x60 rect and TButtonPane base.
+#     - => cls_0x5a5a30_TQuickSpellPane (3 lines of evidence: retail string,
+#         vtable wire + TButtonPane shape, RingU/D/G + src forward-decl match)
+#
+#   TBarInvPane (NEW class — pre-release has NO `_CLASSDEF(TBarInvPane)`):
+#     - String anchor: "Trouble initializing BarInv pane" @ 0x5d72dc
+#     - Global instance: 0x65b028  (call site: 0x47abcf MOV ECX,0x65b028;
+#         CALL 0x52c970)
+#     - Vtable wire: DIRECT static-init at 0x480ce8 + 0x480d00:
+#         `MOV dword ptr [0x0065b028], 0x5a56d4` (executed twice — likely
+#         once via global ctor table + once via a re-init path).
+#     - Vtable @ 0x5a56d4, slot 0 = 0x52c970 (Initialize)
+#     - Vtable shape: 31 slots, leaf-TPane fingerprint
+#         (slot 1 = 0x491970, slot 2 = 0x491bd0, slot 9 = 0x491a80,
+#          slot 16 = 0x491bb0 — same as TBottomPane/TSidePane).
+#         Overrides at slots 12, 18, 20, 21, 22, 25, 26 — all in the
+#         0x52c***..0x52d*** range.
+#     - Init body (FUN_0052c970, 129 bytes): calls TPane base init,
+#         loads "BarInvBox" sprite (FUN_0046d710 + s_BarInvBox_005e37b8),
+#         configures slot-grid layout based on DAT_0065b644 ((width-0xdc)/0x2d
+#         => slot count derived from screen width).
+#     - => cls_0x5a56d4_TBarInvPane (NEW class — no pre-release decl).
+#         Evidence: 3 lines (retail string, direct .data vtable wire,
+#         leaf-TPane shape, "BarInvBox" sprite anchor).
+#
+#   TBottomBarPane (likely class identity; distinct from TBottomPane CONTAINER):
+#     - String anchor: "Trouble initializing Bottom bar" @ 0x5d7344
+#     - Global instance: 0x65b638  (call site: 0x47ac72 MOV ECX,0x65b638;
+#         CALL 0x52c780)
+#     - Vtable wire: ctor stub at 0x00480550 does
+#         `MOV ECX, 0x65b638; CALL FUN_00487da0` — that ctor (87 bytes,
+#         BYTE-IDENTICAL to TQuickSpellPane ctor at 0x488580 except for the
+#         final vtable address) sets base vtable 0x5a4494 (TPane), inits
+#         rect 0x1a4 x 0x3c (420x60), calls FUN_0041c7f0(0x10,0x10)
+#         (TButtonPane base ctor), writes derived vtable 0x5a5808.
+#     - Vtable @ 0x5a5808, slot 0 = 0x52c780 (Initialize)
+#     - Vtable shape: TButtonPane fingerprint (slot 2 = 0x435010, same as
+#         TQuickSpellPane + TSideTabsPane). 35+ slots.
+#     - Init body (FUN_0052c780, 59 bytes): loads "UtilityBar" + "BarEndCap"
+#         sprites only (the actual buttons must be wired separately, likely
+#         in a sibling method or via base-class registration in the ctor).
+#     - src cross-ref: NO `_CLASSDEF(TBottomBarPane)` in src/revtypes.h.
+#         "Bottom bar" string is at revtypes.h:1167 for TBottomPane, but
+#         TBottomPane (cls_0x5a5468 from Wave-1A) is the CONTAINER — its
+#         Initialize is trivial. This Bottom-bar pane (cls_0x5a5808) is the
+#         distinct content pane that lives inside / alongside TBottomPane.
+#     - => cls_0x5a5808_TBottomBarPane (NEW class — no pre-release decl).
+#         Evidence: 3 lines (retail string, vtable wire + TButtonPane shape,
+#         "UtilityBar"/"BarEndCap" sprite anchors, BYTE-IDENTICAL ctor stub
+#         pattern to TQuickSpellPane confirms shape match).
+#
+# ============================================================================
+# Confidence + caveats
+# ============================================================================
+#
+# TTextBar (cls_0x5a5560): 98% — 4 lines of evidence
+#   (string + vtable wire + slot 1 Close matches Init's structure + leaf
+#   shape matches Wave-1A pattern). RENAME APPLIED for class + slot 0/1.
+#
+# TQuickSpellPane (cls_0x5a5a30): 98% — 3 lines of evidence
+#   (string + vtable wire via ctor + src forward-decl match + RingU/D/G
+#   sprite anchors). RENAME APPLIED for class + slot 0.
+#
+# TBarInvPane (cls_0x5a56d4): 98% for class identity, ~85% for the NAME
+#   "TBarInvPane" specifically — the string is "BarInv pane" and there's
+#   no src-side decl, so we're inferring the class name from the error
+#   message. Could equally be `TBarInventoryPane` or similar. Going with
+#   "TBarInvPane" as the most direct match to the retail string.
+#   RENAME APPLIED for class + slot 0.
+#
+# TBottomBarPane (cls_0x5a5808): 98% for class identity, ~85% for the
+#   NAME — same caveat as above. Note: TBottomPane (cls_0x5a5468, Wave-1A)
+#   is the container; cls_0x5a5808 is the inner content pane.
+#   RENAME APPLIED for class + slot 0.
+#
+# NOT renamed (deferred):
+#   - The other 30+ virtual slots of each class — per-method fingerprints
+#     not yet done (Wave-2A focused on identification, not full vtable mapping).
+#   - The constructor stubs themselves (FUN_00488580 for QuickSpellPane,
+#     FUN_00487da0 for BottomBar, FUN_00480725 for TTextBar global init) —
+#     they're identified in this brief but renaming `_ctor` adds little
+#     beyond what's documented here.
+#   - The TButtonPane base class (likely vtable address 0x5a4494 acts as
+#     TPane base only; TButtonPane probably has a separate vtable wired by
+#     the `FUN_0041c7f0` call — needs separate identification).
+#
+# ============================================================================
+# Renames
+# ============================================================================
+
+# ----- TTextBar (cls_0x5a5560) — leaf class identification -----
+# Class label (vtable @ 0x5a5560; global instance @ 0x65c5d0)
+cls_0x5a5560|cls_0x5a5560_TTextBar
+
+# TTextBar::Initialize — vtable slot 0
+# Already aliased to FUN_0054bf70_TTextBar_init in Wave-1C; promote to
+# the real method name now that the leaf class is confirmed.
+virt_meth_0x54bf70|virt_meth_0x54bf70_TTextBar_Initialize
+meth_0x54bf70|meth_0x54bf70_TTextBar_Initialize
+FUN_0054bf70_TTextBar_init|FUN_0054bf70_TTextBar_Initialize
+FUN_0054bf70|FUN_0054bf70_TTextBar_Initialize
+
+# TTextBar::Close — vtable slot 1; frees the 3 mosaic surfaces +
+# the 0x6c text buffer, then calls TPane::Close (FUN_00491970).
+virt_meth_0x54c3d0|virt_meth_0x54c3d0_TTextBar_Close
+meth_0x54c3d0|meth_0x54c3d0_TTextBar_Close
+FUN_0054c3d0|FUN_0054c3d0_TTextBar_Close
+
+
+# ----- TQuickSpellPane (cls_0x5a5a30) -----
+# Class label (vtable @ 0x5a5a30; global instance @ 0x65c6f8;
+# inherits TButtonPane per src/spellpane.h)
+cls_0x5a5a30|cls_0x5a5a30_TQuickSpellPane
+
+# TQuickSpellPane::Initialize — vtable slot 0; allocates 4 spell-ring
+# button entries (RingU/RingD/RingG sprites) via FUN_00482fb0(0x150)
+# and registers each via FUN_00436ae0.
+virt_meth_0x544160|virt_meth_0x544160_TQuickSpellPane_Initialize
+meth_0x544160|meth_0x544160_TQuickSpellPane_Initialize
+FUN_00544160|FUN_00544160_TQuickSpellPane_Initialize
+
+
+# ----- TBarInvPane (cls_0x5a56d4) -----
+# Class label (vtable @ 0x5a56d4; global instance @ 0x65b028;
+# NEW retail class — no pre-release forward-decl)
+cls_0x5a56d4|cls_0x5a56d4_TBarInvPane
+
+# TBarInvPane::Initialize — vtable slot 0; loads "BarInvBox" sprite,
+# configures slot-grid layout based on screen width (DAT_0065b644).
+virt_meth_0x52c970|virt_meth_0x52c970_TBarInvPane_Initialize
+meth_0x52c970|meth_0x52c970_TBarInvPane_Initialize
+FUN_0052c970|FUN_0052c970_TBarInvPane_Initialize
+
+
+# ----- TBottomBarPane (cls_0x5a5808) -----
+# Class label (vtable @ 0x5a5808; global instance @ 0x65b638;
+# NEW retail class — no pre-release forward-decl;
+# distinct from TBottomPane (cls_0x5a5468) which is the container.
+# Inherits TButtonPane per ctor's call to FUN_0041c7f0(0x10,0x10).)
+cls_0x5a5808|cls_0x5a5808_TBottomBarPane
+
+# TBottomBarPane::Initialize — vtable slot 0; loads "UtilityBar" +
+# "BarEndCap" sprites.
+virt_meth_0x52c780|virt_meth_0x52c780_TBottomBarPane_Initialize
+meth_0x52c780|meth_0x52c780_TBottomBarPane_Initialize
+FUN_0052c780|FUN_0052c780_TBottomBarPane_Initialize

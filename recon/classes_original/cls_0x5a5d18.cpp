@@ -66,7 +66,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::virt_meth_0x53a2c0_T
   cls_0x5a4494__vftable_5a4494 *pcVar4;
   cls_0x5b98b8 *pcVar5;
   undefined *puVar6;
-  cls_0x5a4494 *this_00;
+  cls_0x5a4494_TPane *this_00;
   cls_0x5a3c68 *pcVar7;
   int iVar8;
   void *unaff_EBX;
@@ -104,11 +104,11 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5d18_TLogoScreen::virt_meth_0x53a2c0_T
   (**(code **)(dVar2 + 0x30))(8);
   (this->cls_0x5a5ed4_TScreen).mbr_0x40 = (dword)&this->mbr_0x70;
   (this->cls_0x5a5ed4_TScreen).mbr_0x44 = (dword)&this->mbr_0x70;
-  this_00 = (cls_0x5a4494 *)FUN_00482fb0(0x17c);
+  this_00 = (cls_0x5a4494_TPane *)FUN_00482fb0(0x17c);
   puVar6 = PTR_DAT_005d79e0;
   local_10 = (cls_0x419dd0 *)0x0;
-  if (this_00 == (cls_0x5a4494 *)0x0) {
-    this_00 = (cls_0x5a4494 *)0x0;
+  if (this_00 == (cls_0x5a4494_TPane *)0x0) {
+    this_00 = (cls_0x5a4494_TPane *)0x0;
   }
   else {
     this_00->vftptr_0x0 = &cls_0x5a4494__vftable_5a4494_005a4494;

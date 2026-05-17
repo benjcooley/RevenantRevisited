@@ -24,7 +24,7 @@ undefined4 __fastcall FUN_00549740_TPlyrStatusBar_Initialize(int param_1)
   puStack_8 = &LAB_005a2174;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  FUN_00491900();
+  FUN_00491900_TPane_Initialize();
   if (DAT_006680c8 == 0) {
     piVar4 = (int *)FUN_00482fb0(0x78);
     local_4 = 0xc;

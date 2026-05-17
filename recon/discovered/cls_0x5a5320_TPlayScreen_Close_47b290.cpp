@@ -18,9 +18,9 @@ void FUN_0047b290_TPlayScreen_Close(void)
   FUN_0044d9c0();
   FUN_00537940();
   FUN_00434f30();
-  FUN_0054c3d0();
+  FUN_0054c3d0_TTextBar_Close();
   FUN_0052a490();
-  FUN_00491970();
+  FUN_00491970_TPane_Close();
   FUN_00434f30();
   FUN_00546d70();
   FUN_00544e40();

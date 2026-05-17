@@ -50,7 +50,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4c68::virt_meth_0x462660(cls_0x5a4c68 
   uint *puVar3;
   
   cls_0x5756d0::meth_0x578210((cls_0x5756d0 *)&DAT_00676738);
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   this->mbr_0x17c = 0;
   cls_0x45f7c0::meth_0x48d260((cls_0x45f7c0 *)&DAT_0065a618);
   puVar3 = (uint *)0x14;

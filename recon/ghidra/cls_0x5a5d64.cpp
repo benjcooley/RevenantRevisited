@@ -161,7 +161,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5d64::virt_meth_0x52f390(cls_0x5a5d64 
   this->mbr_0x188 = 0xffffffff;
   this->mbr_0x18c = 0xffffffff;
   if ((this->mbr_0x1ac != 0) ||
-     (cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this), this->mbr_0x190 != 0)) {
+     (cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this), this->mbr_0x190 != 0)) {
     ExceptionList = local_c;
     return 1;
   }

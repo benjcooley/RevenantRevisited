@@ -49,7 +49,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4c68::virt_meth_0x462660(cls_0x5a4c68 
   cls_0x46d6b0 *this_00;
   
   cls_0x5756d0::meth_0x578210((cls_0x5756d0 *)&DAT_00676738);
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   this->mbr_0x17c = 0;
   cls_0x45f7c0::meth_0x48d260((cls_0x45f7c0 *)&DAT_0065a618);
   dVar2 = FUN_004a1ec0(0x14,0x14,*(uint *)(PTR_DAT_005d79e0 + 0x38) & 0x3001f,0);

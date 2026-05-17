@@ -1,12 +1,12 @@
 #include "classes_all.h"
 
-// Decompiled methods and structure for class: cls_0x5a5808
+// Decompiled methods and structure for class: cls_0x5a5808_TBottomBarPane
 
 
 
 // Function at 00487da0
 
-cls_0x5a5808::cls_0x5a5808()
+cls_0x5a5808_TBottomBarPane::cls_0x5a5808_TBottomBarPane()
 
 {
   this->mbr_0x8 = 0x1a4;
@@ -31,12 +31,12 @@ cls_0x5a5808::cls_0x5a5808()
 
 // Function at 00487e00
 
-cls_0x5a5808 * __thiscall cls_0x5a5808::~cls_0x5a5808(cls_0x5a5808 *this)
+cls_0x5a5808_TBottomBarPane * __thiscall cls_0x5a5808_TBottomBarPane::~cls_0x5a5808_TBottomBarPane(cls_0x5a5808_TBottomBarPane *this)
 
 {
   LPCVOID pvVar1;
   SIZE_T SVar2;
-  cls_0x5a5808 *pcVar3;
+  cls_0x5a5808_TBottomBarPane *pcVar3;
   void *local_c;
   undefined *puStack_8;
   undefined4 local_4;
@@ -55,7 +55,7 @@ cls_0x5a5808 * __thiscall cls_0x5a5808::~cls_0x5a5808(cls_0x5a5808 *this)
     SVar2 = FUN_0058cff3(pvVar1);
     DAT_0065ba08 = DAT_0065ba08 - SVar2;
   }
-  pcVar3 = (cls_0x5a5808 *)FUN_0058cfab(pvVar1);
+  pcVar3 = (cls_0x5a5808_TBottomBarPane *)FUN_0058cfab(pvVar1);
   ExceptionList = local_c;
   return pcVar3;
 }
@@ -64,15 +64,15 @@ cls_0x5a5808 * __thiscall cls_0x5a5808::~cls_0x5a5808(cls_0x5a5808 *this)
 
 // Function at 00487ef0
 
-cls_0x5a5808 * cls_0x5a5808::virt_meth_0x487ef0()
+cls_0x5a5808_TBottomBarPane * cls_0x5a5808_TBottomBarPane::virt_meth_0x487ef0()
 
 {
   SIZE_T SVar1;
   byte in_stack_00000004;
   
-  ~cls_0x5a5808(this);
+  ~cls_0x5a5808_TBottomBarPane(this);
   if ((in_stack_00000004 & 1) != 0) {
-    if (this != (cls_0x5a5808 *)0x0) {
+    if (this != (cls_0x5a5808_TBottomBarPane *)0x0) {
       SVar1 = FUN_0058cff3(this);
       DAT_0065ba08 = DAT_0065ba08 - SVar1;
     }
@@ -85,7 +85,7 @@ cls_0x5a5808 * cls_0x5a5808::virt_meth_0x487ef0()
 
 // Function at 0052c780
 
-undefined4 cls_0x5a5808::virt_meth_0x52c780()
+undefined4 cls_0x5a5808_TBottomBarPane::virt_meth_0x52c780_TBottomBarPane_Initialize()
 
 {
   cls_0x46d6b0 *this_00;
@@ -104,7 +104,7 @@ undefined4 cls_0x5a5808::virt_meth_0x52c780()
 
 // Function at 0052c7c0
 
-void cls_0x5a5808::virt_meth_0x52c7c0()
+void cls_0x5a5808_TBottomBarPane::virt_meth_0x52c7c0()
 
 {
   TCharacter::virt_meth_0x491970((TCharacter *)&DAT_0065b028);
@@ -117,7 +117,7 @@ void cls_0x5a5808::virt_meth_0x52c7c0()
 
 // Function at 0052c7e0
 
-void cls_0x5a5808::virt_meth_0x52c7e0()
+void cls_0x5a5808_TBottomBarPane::virt_meth_0x52c7e0()
 
 {
   DAT_0065b02c._68_4_ = 1;
@@ -133,14 +133,14 @@ void cls_0x5a5808::virt_meth_0x52c7e0()
 
 // Function at 0052c800
 
-void cls_0x5a5808::virt_meth_0x52c800()
+void cls_0x5a5808_TBottomBarPane::virt_meth_0x52c800()
 
 {
   if (this->mbr_0x50 != 0) {
     (*this->vftptr_0x0->virt_meth_0x52c880_84)(this);
   }
   cls_0x5a5658::virt_meth_0x52ca70((cls_0x5a5658 *)&DAT_0065b028,PTR_DAT_005d79e0);
-  cls_0x5a5a30::virt_meth_0x5444c0((cls_0x5a5a30 *)&DAT_0065c6f8);
+  cls_0x5a5a30_TQuickSpellPane::virt_meth_0x5444c0((cls_0x5a5a30_TQuickSpellPane *)&DAT_0065c6f8);
   this->virt_meth_0x435de0();
   if (this->mbr_0x50 != 0) {
     FUN_004aacb0(this->mbr_0x4,this->mbr_0x8,this->mbr_0xc,this->mbr_0x10);
@@ -153,7 +153,7 @@ void cls_0x5a5808::virt_meth_0x52c800()
 
 // Function at 0052c880
 
-void cls_0x5a5808::virt_meth_0x52c880()
+void cls_0x5a5808_TBottomBarPane::virt_meth_0x52c880()
 
 {
   cls_0x5a68d8 *in_stack_00000004;
@@ -164,7 +164,7 @@ void cls_0x5a5808::virt_meth_0x52c880()
   if (in_stack_00000004 != (cls_0x5a68d8 *)PTR_DAT_005d79e0) {
     this->virt_meth_0x435cb0();
     cls_0x5a5658::virt_meth_0x52ca70((cls_0x5a5658 *)&DAT_0065b028,in_stack_00000004);
-    cls_0x5a5a30::virt_meth_0x5444c0((cls_0x5a5a30 *)&DAT_0065c6f8);
+    cls_0x5a5a30_TQuickSpellPane::virt_meth_0x5444c0((cls_0x5a5a30_TQuickSpellPane *)&DAT_0065c6f8);
   }
   return;
 }
@@ -173,7 +173,7 @@ void cls_0x5a5808::virt_meth_0x52c880()
 
 // Function at 0052c910
 
-void cls_0x5a5808::virt_meth_0x52c910()
+void cls_0x5a5808_TBottomBarPane::virt_meth_0x52c910()
 
 {
   this->mbr_0x4 = this->mbr_0x14;
@@ -188,7 +188,7 @@ void cls_0x5a5808::virt_meth_0x52c910()
 
 // Function at 0052c930
 
-void cls_0x5a5808::virt_meth_0x52c930(dword param_1)
+void cls_0x5a5808_TBottomBarPane::virt_meth_0x52c930(dword param_1)
 
 {
   dword in_stack_00000008;

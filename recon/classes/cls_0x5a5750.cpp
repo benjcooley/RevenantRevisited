@@ -136,7 +136,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a5750_TSideTabsPane::virt_meth_0x53cc30
   puStack_8 = &LAB_005a1d44;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  cls_0x5a4494::virt_meth_0x434e40((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x434e40((cls_0x5a4494_TPane *)this);
   cls_0x429950::cls_0x429950(&local_14,0xff,0);
   FUN_004384a0();
   dVar4 = cls_0x46d6b0::meth_0x46d710(DAT_0065c5c8);

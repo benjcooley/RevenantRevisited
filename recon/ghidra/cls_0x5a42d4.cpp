@@ -38,7 +38,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a42d4_TTextPane::virt_meth_0x43da00_TTe
   undefined4 *puVar2;
   int iVar3;
   
-  cls_0x5a4494::virt_meth_0x491900((cls_0x5a4494 *)this);
+  cls_0x5a4494_TPane::virt_meth_0x491900((cls_0x5a4494_TPane *)this);
   iVar3 = *(int *)(DAT_0065b020 + DAT_0065bc40 * 4);
   this->mbr_0x98 = 0x3c;
   this->mbr_0x84 = 0x3c;
