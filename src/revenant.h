@@ -106,6 +106,7 @@ extern bool ShowNormalBuffer;
 extern bool AppActive;          // Flag for if the game is the active application
 extern bool Editor;             // This is true if we are in edit mode
 extern bool StartInEditor;      // Whether to start the program in editor mode
+extern bool RevisitedEnabled;   // --revisited: mount the Revisited overlay (.rvr / dev folder); FATAL if requested but missing
 extern bool NoQuickLoad;        // Prevent the program from attempting to load the IMAGERY.DAT file
 extern char StartupSavePath[];  // --loadmap=<path>; empty if no startup auto-load
 

@@ -44,6 +44,7 @@
 #include "mappane.h"
 #include "maprenderer.h"
 #include "player.h"
+#include "revisited_settings.h"
 #include "runtimemode.h"
 #include "savegame.h"
 #include "sector.h"
@@ -224,6 +225,10 @@ bool TPlayScreen::Initialize()
         // Keep going -- we still want to land on PlayScreen with empty
         // world rather than abort the whole boot.
     }
+    // Push global Revisited point-light multipliers now that MapRenderer
+    // is live. Per-area POINTLIGHTINT / POINTLIGHTRANGE will compose on
+    // top of these each time TArea::Enter fires.
+    ApplyRevisitedSettingsToMapRenderer(mapRenderer.get());
     log_info("[playscreen] map renderer ready");
 
     // Cache common effect imagery for damage/spell overlays. Optional --

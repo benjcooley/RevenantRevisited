@@ -31,7 +31,10 @@
 #include "bitmap.h"
 #include "display.h"
 #include "graphics.h"
+#include "module.h"
 #include "playscreen.h"
+#include "revisited_defaults.h"
+#include "revisited_settings.h"
 #include "testscreen.h"
 #include "testmodes.h"
 #include "testconfig.h"
@@ -225,6 +228,7 @@ bool Ignore3D = false;      // Whether to disallow 3D imagery (to make it run on
 // `Editor` global moved to src/editor.cpp; revmain just references it.
 extern bool Editor;
 bool StartInEditor = false; // Whether to start the program in editor mode
+bool RevisitedEnabled = false; // --revisited: mount Revisited overlay (FATAL if requested but missing)
 bool NoQuickLoad = false;   // true if program should not try to use IMAGERY.DAT file
 bool Force15Bit = false;    // Forces video mode to assume 15 bit
 bool Force16Bit = false;    // Forces video mode to assume 16 bit
@@ -1548,6 +1552,7 @@ void GetParameters(int argc, char **argv)
     if (arg_flag(cmd, "force15bit"))       Force15Bit = true;
     if (arg_flag(cmd, "force16bit"))       Force16Bit = true;
     if (arg_flag(cmd, "editor"))           StartInEditor = true;
+    if (arg_flag(cmd, "revisited"))        RevisitedEnabled = true;
     if (arg_flag(cmd, "windowed"))         Windowed = true;
     if (arg_flag(cmd, "noquickload"))      NoQuickLoad = true;
     if (arg_flag(cmd, "borderless"))       Borderless = true;
@@ -2266,16 +2271,15 @@ static void AppInit()
     if (!MountArchive("imagery.rvi"))
         FatalError("Error in pack file IMAGERY.RVI", nullptr);
 
-    // Mount the main module so per-module files (area.def, master.s, etc.)
-    // resolve. Pre-release lays modules out as unpacked folders under
-    // data/Modules/<Name>/; retail ships them as data/Modules/<Name>.rvm.
-    {
-        char modname[128];
-        INISetSection("Modules");
-        INIGetStr("MainModule", (char *)"Ahkuilon", modname, sizeof(modname));
-        if (!MountModule(modname))
-            FatalError("Unable to mount module %s", modname);
-    }
+    // Enumerate available modules (data/Modules/*) and mount the main one.
+    // ModuleManager.Initialize parses each module.def into a TModule, then
+    // resolves [Modules]/MainModule from the INI; SetCurModule does the
+    // actual VFS mount. Per-module files (area.def, master.s, sector .DATs,
+    // etc.) resolve through that mount thereafter.
+    if (!ModuleManager.Initialize())
+        FatalError("No playable modules found under data/Modules/", nullptr);
+    if (!ModuleManager.SetCurModule(ModuleManager.MainIndex()))
+        FatalError("Unable to mount main module", nullptr);
 
     if (!InitMonitor())
         FatalError("Invalid monitor selected", nullptr);
@@ -2290,6 +2294,19 @@ static void AppInit()
         sapp_request_quit();
         return;
     }
+
+    // Revisited tunables. Layered defaults, lowest priority first:
+    //   1. SRevisitedSettings field initializers (already in place at static init)
+    //   2. revisited_defaults.cpp baked globals (this call)
+    //   3. Revenant.ini [Revisited] overlay     (gated on --revisited)
+    //   4. debug-panel live tweaks              (later in session)
+    // Apply runs unconditionally so even classic-retail boots get the
+    // modernized engine's baseline sun/AO/shadow state pushed to Renderer.
+    // MapRenderer doesn't exist until PlayScreen::Initialize -- that side
+    // of Apply fires from there.
+    GetBakedRevisitedDefaults(RevisitedSettings);
+    LoadRevisitedSettings();
+    ApplyRevisitedSettingsToRenderer(Renderer);
 
     if (StartupTestMode[0])
     {
