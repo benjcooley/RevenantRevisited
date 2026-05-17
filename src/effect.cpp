@@ -851,7 +851,14 @@ TParticleBucket* AcquireBloodBucket(T3DImagery* img3d)
     SParticleBucketDesc desc = {};
     desc.name           = kBloodBucketName;
     desc.scope          = EParticleBucketScope::Global;
+    // Blood is a textured droplet: standard alpha blending lets the
+    // droplet outline read against the scene, scene lighting (LitFlat)
+    // multiplies its dark-red base color by (ambient + sun_term) so it
+    // doesn't render flat-dark like an unlit overlay would. Explicit
+    // TestNoWrite (default) makes the depth-mode choice readable here.
     desc.blend          = EParticleBlendMode::Alpha;
+    desc.light_mode     = EParticleLightMode::LitFlat;
+    desc.depth_mode     = EParticleDepthMode::TestNoWrite;
     desc.sort           = EParticleSortMode::None;
     desc.texture        = tex.htexture;
     desc.texture_width  = int32_t(tex.desc.width  > 0 ? tex.desc.width  : 1);
@@ -1058,8 +1065,14 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         }
         if (float* col = bucket_->VarPtr(pi, EParticleVar::DrawColor))
         {
-            // Deep arterial red with a touch of variation. Alpha fades
-            // in TickAndSubmitForTest's integrator above.
+            // Deep arterial red with a touch of variation. The bucket
+            // now runs LitFlat -- rgb gets multiplied by
+            // (ambient_color * ambient) + max(0, sun_dir.z) * sun_color,
+            // which at the vfxtest scene's defaults (ambient 0.85 *
+            // 0.80 = 0.68; sun term ~ 0.4 * 1.0 = 0.4; sum ~ 1.08) is
+            // close enough to unity that the existing values stay
+            // visibly red. Alpha fades in TickAndSubmitForTest's
+            // integrator above.
             col[0] = 0.55f + 0.25f * u2;
             col[1] = 0.04f + 0.05f * u1;
             col[2] = 0.04f + 0.05f * u2;

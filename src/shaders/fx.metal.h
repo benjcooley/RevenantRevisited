@@ -7,8 +7,8 @@
 // Phase 1 VFX spine. Three pipeline pairs, shared math.
 //
 //   fx_billboard : per-instance world_pos + size_wu + uv_rect + color +
-//                  debug_mode. Static 4-vertex corner VB. Screen-aligned
-//                  quad expansion in the vertex shader.
+//                  debug_mode + light_mode. Static 4-vertex corner VB.
+//                  Screen-aligned quad expansion in the vertex shader.
 //   fx_particle  : fx_billboard + per-instance rotation_rad (rotates the
 //                  corner about the camera-forward axis before expand).
 //   fx_strip     : CPU-expanded per-segment quads. Each segment becomes
@@ -17,13 +17,17 @@
 //
 // All three share the iso-projection from tile.metal.h / mesh.metal.h so
 // fragment depth matches the deferred G-buffer (lit pass blends against
-// the same coordinate system). UBO layout:
+// the same coordinate system). UBO layout (24 floats / 6 vec4s):
 //
 //   vp     .xy = camera pixel origin (padded G-buffer space)
 //          .zw = padded G-buffer dims (fbw, fbh)
 //   camz   .x  = z_near wu, .y = zspan wu, .z = kcam_forward focal,
 //          .w  = perspective enable (0/1)
 //   camw   .xy = camera-center world xy, .z = zoom, .w unused
+//   sun_dir       .xyz = world-space direction surface->sun (matches deferred
+//                        light shader convention). .w unused.
+//   sun_color     .rgb = sun color * intensity. .a unused.
+//   ambient_color .rgb = ambient color * ambient. .a unused.
 //
 // Diagnostic ladder is per-instance (EFxDebugMode):
 //   0 Normal       : sample atlas at uv_rect, multiply by color
@@ -31,30 +35,27 @@
 //   2 FullTexture  : sample at corner.xy + 0.5 (ignore uv_rect)
 //   3 CurrentFrame : sample at uv_rect, force color = white
 //
+// Lighting branch is per-instance (EFxLightMode), computed in the VS as
+// `lit_factor` and forwarded to the FS for a cheap RGB MUL:
+//   0 Unlit   : lit_factor = (1,1,1) -- no-op multiply
+//   1 LitFlat : lit_factor = ambient_color + max(0, sun_dir.z) * sun_color
+//               (treats the particle's normal as world-up)
+//
 // *************************************************************************
 
 #pragma once
 
-// ---- shared iso-projection helper ---------------------------------------
-// Kept in sync with mesh.metal.h. Returns ndc.xyz + scene_z_normalized.
-#define FX_PROJECT_BODY \
-    "    float wx = wp.x - p.camw.x;\n"                                          \
-    "    float wy = wp.y - p.camw.y;\n"                                          \
-    "    float wz = wp.z;\n"                                                     \
-    "    float sum = wx + wy;\n"                                                 \
-    "    float S   = wx - wy;\n"                                                 \
-    "    float T   = 0.5 * sum - wz * 0.867;\n"                                  \
-    "    float scene_z_wu = p.camz.z - 0.867 * sum - 0.5 * wz;\n"                \
-    "    float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);\n"    \
-    "    float zoom = max(p.camw.z, 0.0001);\n"                                  \
-    "    float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;\n" \
-    "    float spx = p.vp.x + S * persp_scale;\n"                                \
-    "    float spy = p.vp.y + T * persp_scale;\n"
-
 inline constexpr const char* kFxBillboardVsMetal = R"MSL(
 #include <metal_stdlib>
 using namespace metal;
-struct fx_params { float4 vp; float4 camz; float4 camw; };
+struct fx_params {
+    float4 vp;
+    float4 camz;
+    float4 camw;
+    float4 sun_dir;
+    float4 sun_color;
+    float4 ambient_color;
+};
 struct vs_in {
     float2 corner       [[attribute(0)]];   // [-0.5,+0.5]^2
     float3 world_pos    [[attribute(1)]];
@@ -62,23 +63,18 @@ struct vs_in {
     float4 uv_rect      [[attribute(3)]];
     float4 color_rgba   [[attribute(4)]];
     float  debug_mode   [[attribute(5)]];
+    float  light_mode   [[attribute(6)]];
 };
 struct vs_out {
     float4 pos      [[position]];
     float2 corner;
     float4 uv_rect;
     float4 color;
+    float3 lit_factor;
     float  debug_mode;
 };
 vertex vs_out _main(vs_in in [[stage_in]],
                     constant fx_params& p [[buffer(0)]]) {
-    // Screen-aligned: in the iso projection used by the rest of the
-    // pipeline, "right" is +x in screen pixels and "up" is +y (we flip y
-    // at NDC). We just need the corner to shift the world anchor by
-    // size_wu * 0.5 along world directions that produce a pixel-aligned
-    // quad. The cheap path: project the anchor, then offset spx/spy by
-    // corner * size_wu * persp_scale. This keeps the size in world units
-    // and the quad screen-aligned for free.
     float3 wp = in.world_pos;
     float wx = wp.x - p.camw.x;
     float wy = wp.y - p.camw.y;
@@ -93,6 +89,12 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float spx = p.vp.x + S * persp_scale + in.corner.x * in.size_wu.x * persp_scale;
     float spy = p.vp.y + T * persp_scale - in.corner.y * in.size_wu.y * persp_scale;
 
+    int lmode = int(in.light_mode + 0.5);
+    float3 lit = float3(1.0, 1.0, 1.0);
+    if (lmode == 1) {
+        lit = p.ambient_color.rgb + max(0.0, p.sun_dir.z) * p.sun_color.rgb;
+    }
+
     vs_out o;
     o.pos.x = 2.0 * spx / max(p.vp.z, 1.0) - 1.0;
     o.pos.y = 1.0 - 2.0 * spy / max(p.vp.w, 1.0);
@@ -101,6 +103,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
     o.corner     = in.corner;
     o.uv_rect    = in.uv_rect;
     o.color      = in.color_rgba;
+    o.lit_factor = lit;
     o.debug_mode = in.debug_mode;
     return o;
 }
@@ -114,6 +117,7 @@ struct vs_out {
     float2 corner;
     float4 uv_rect;
     float4 color;
+    float3 lit_factor;
     float  debug_mode;
 };
 fragment float4 _main(vs_out in [[stage_in]],
@@ -134,17 +138,29 @@ fragment float4 _main(vs_out in [[stage_in]],
     } else {
         c = atlas.sample(smp, uv_normal) * in.color;
     }
+    // Apply per-instance lit factor (computed in VS): Unlit = (1,1,1),
+    // LitFlat = ambient + sun_term * sun_color. RGB only -- alpha keeps
+    // the texture-driven coverage.
+    c.rgb *= in.lit_factor;
     if (c.a < 0.002) discard_fragment();
     return c;
 }
 )MSL";
 
 // Particle shader: identical layout to billboard plus per-instance
-// rotation that turns the corner 2D vector before screen offset.
+// rotation that turns the corner 2D vector before screen offset, plus
+// per-instance light_mode (last attribute).
 inline constexpr const char* kFxParticleVsMetal = R"MSL(
 #include <metal_stdlib>
 using namespace metal;
-struct fx_params { float4 vp; float4 camz; float4 camw; };
+struct fx_params {
+    float4 vp;
+    float4 camz;
+    float4 camw;
+    float4 sun_dir;
+    float4 sun_color;
+    float4 ambient_color;
+};
 struct vs_in {
     float2 corner       [[attribute(0)]];
     float3 world_pos    [[attribute(1)]];
@@ -153,12 +169,14 @@ struct vs_in {
     float4 color_rgba   [[attribute(4)]];
     float  debug_mode   [[attribute(5)]];
     float  rotation_rad [[attribute(6)]];
+    float  light_mode   [[attribute(7)]];
 };
 struct vs_out {
     float4 pos      [[position]];
     float2 corner;
     float4 uv_rect;
     float4 color;
+    float3 lit_factor;
     float  debug_mode;
 };
 vertex vs_out _main(vs_in in [[stage_in]],
@@ -180,6 +198,12 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float spx = p.vp.x + S * persp_scale + rc.x * in.size_wu.x * persp_scale;
     float spy = p.vp.y + T * persp_scale - rc.y * in.size_wu.y * persp_scale;
 
+    int lmode = int(in.light_mode + 0.5);
+    float3 lit = float3(1.0, 1.0, 1.0);
+    if (lmode == 1) {
+        lit = p.ambient_color.rgb + max(0.0, p.sun_dir.z) * p.sun_color.rgb;
+    }
+
     vs_out o;
     o.pos.x = 2.0 * spx / max(p.vp.z, 1.0) - 1.0;
     o.pos.y = 1.0 - 2.0 * spy / max(p.vp.w, 1.0);
@@ -188,6 +212,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
     o.corner     = in.corner;
     o.uv_rect    = in.uv_rect;
     o.color      = in.color_rgba;
+    o.lit_factor = lit;
     o.debug_mode = in.debug_mode;
     return o;
 }
@@ -199,13 +224,21 @@ inline constexpr const char* kFxParticleFsMetal = kFxBillboardFsMetal;
 
 // Strip shader: CPU has already expanded each segment into 4 corners.
 // Per-vertex attributes carry world position, the segment tangent
-// (B - A), signed half-width along the side, uv, and color. The VS
-// computes side = normalize(cross(tangent, view_dir)), offsets by
-// side * half_width, and re-projects through the iso math.
+// (B - A), signed half-width along the side, uv, color, debug_mode,
+// and light_mode. The VS computes side = normalize(cross(tangent,
+// view_dir)), offsets by side * half_width, and re-projects through
+// the iso math.
 inline constexpr const char* kFxStripVsMetal = R"MSL(
 #include <metal_stdlib>
 using namespace metal;
-struct fx_params { float4 vp; float4 camz; float4 camw; };
+struct fx_params {
+    float4 vp;
+    float4 camz;
+    float4 camw;
+    float4 sun_dir;
+    float4 sun_color;
+    float4 ambient_color;
+};
 struct fx_cam    { float4 cam_pos; float4 cam_fwd; };
 struct vs_in {
     float3 world_pos    [[attribute(0)]];
@@ -214,11 +247,13 @@ struct vs_in {
     float2 uv           [[attribute(3)]];
     float4 color        [[attribute(4)]];
     float  debug_mode   [[attribute(5)]];
+    float  light_mode   [[attribute(6)]];
 };
 struct vs_out {
     float4 pos      [[position]];
     float2 uv;
     float4 color;
+    float3 lit_factor;
     float  debug_mode;
 };
 vertex vs_out _main(vs_in in [[stage_in]],
@@ -246,6 +281,12 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float spx = p.vp.x + S * persp_scale;
     float spy = p.vp.y + T * persp_scale;
 
+    int lmode = int(in.light_mode + 0.5);
+    float3 lit = float3(1.0, 1.0, 1.0);
+    if (lmode == 1) {
+        lit = p.ambient_color.rgb + max(0.0, p.sun_dir.z) * p.sun_color.rgb;
+    }
+
     vs_out o;
     o.pos.x = 2.0 * spx / max(p.vp.z, 1.0) - 1.0;
     o.pos.y = 1.0 - 2.0 * spy / max(p.vp.w, 1.0);
@@ -253,6 +294,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
     o.pos.w = 1.0;
     o.uv         = in.uv;
     o.color      = in.color;
+    o.lit_factor = lit;
     o.debug_mode = in.debug_mode;
     return o;
 }
@@ -265,6 +307,7 @@ struct vs_out {
     float4 pos      [[position]];
     float2 uv;
     float4 color;
+    float3 lit_factor;
     float  debug_mode;
 };
 fragment float4 _main(vs_out in [[stage_in]],
@@ -280,6 +323,7 @@ fragment float4 _main(vs_out in [[stage_in]],
     } else {
         c = atlas.sample(smp, in.uv) * in.color;
     }
+    c.rgb *= in.lit_factor;
     if (c.a < 0.002) discard_fragment();
     return c;
 }

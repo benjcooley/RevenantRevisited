@@ -3741,9 +3741,15 @@ void TRenderer::SetPresentNDCRect(float x, float y, float w, float h)
 
 namespace {
 
-constexpr int32_t kFxBillboardInstanceFloats = 16;  // wp(3) + sz(2) + uv(4) + col(4) + dbg(1) + pad(2) -> 16 keeps stride at 64B
-constexpr int32_t kFxParticleInstanceFloats  = 16;  // identical layout, last lane = rotation_rad
-constexpr int32_t kFxStripVertexFloats       = 16;  // wp(3) + wt(3) + hw(1) + uv(2) + col(4) + dbg(1) + pad(2)
+// Instance / vertex strides. Per PHASE1_SPINE.md §6 light_mode shares the
+// debug_mode lane convention (per-instance float, no pipeline variant) --
+// we add it as one more float per instance, growing the stride by 4B.
+//   billboard : wp(3) + sz(2) + uv(4) + col(4) + dbg(1) + light(1) + pad(1) = 16 floats (stays 64B)
+//   particle  : same + rotation_rad = 17 floats; pad to 20 to keep alignment
+//   strip     : wp(3) + wt(3) + hw(1) + uv(2) + col(4) + dbg(1) + light(1) + pad(1) = 16 floats (stays 64B)
+constexpr int32_t kFxBillboardInstanceFloats = 16;
+constexpr int32_t kFxParticleInstanceFloats  = 20;
+constexpr int32_t kFxStripVertexFloats       = 16;
 
 // Static corner quad for billboards / particles. CCW with z=0.
 constexpr float kFxCorners[] = {
@@ -3765,6 +3771,16 @@ void SetupFxBlend(sg_pipeline_desc& pip, EFxBlend blend)
             pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
             pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
             break;
+        case EFxBlend::AdditiveStraight:
+            // Retail TBloodSystem second pass: D3DBLEND_ONE / D3DBLEND_ONE
+            // on both rgb and alpha. Particle color is added at full
+            // weight regardless of alpha -- pairs with LitFlat for the
+            // "self-lit glow over the lit alpha base" effect.
+            pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+            break;
         case EFxBlend::PremulAlpha:
             pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_ONE;
             pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -3781,11 +3797,53 @@ void SetupFxBlend(sg_pipeline_desc& pip, EFxBlend blend)
     }
 }
 
-void FillFxUniforms(float u[12], const TRenderer& /*r*/,
+// Translate EFxDepthMode into sokol pipeline depth state. Depth format
+// is fixed to the G-buffer depth attachment so the fx pass can read
+// scene depth without a separate depth target.
+void SetupFxDepth(sg_pipeline_desc& pip, EFxDepthMode depth_mode)
+{
+    pip.depth.pixel_format = SG_PIXELFORMAT_DEPTH;
+    switch (depth_mode)
+    {
+        case EFxDepthMode::TestWrite:
+            pip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
+            pip.depth.write_enabled = true;
+            break;
+        case EFxDepthMode::None:
+            pip.depth.compare       = SG_COMPAREFUNC_ALWAYS;
+            pip.depth.write_enabled = false;
+            break;
+        case EFxDepthMode::TestNoWrite:
+        default:
+            pip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
+            pip.depth.write_enabled = false;
+            break;
+    }
+}
+
+// Shared FX VS uniform block (vp / camz / camw / sun_dir / sun_color /
+// ambient_color). The first three vec4s match the pre-Phase-1.5 layout
+// so iso projection in the VS is unchanged; the three new vec4s carry
+// lighting state forward to the FS for LitFlat modulation.
+//
+// Layout (24 floats / 6 vec4s):
+//   [ 0.. 3] vp     .xy = camera pixel origin, .zw = padded G-buffer dims
+//   [ 4.. 7] camz   .x  = z_near wu, .y = zspan wu, .z = kcam_forward,
+//                   .w  = perspective enable (0/1)
+//   [ 8..11] camw   .xy = camera-center world xy, .z = zoom, .w unused
+//   [12..15] sun_dir.xyz = world-space direction from surface toward sun
+//                          (same convention as light_dir in the deferred
+//                          light shader: dot(N, sun_dir) > 0 == lit).
+//                   .w = 0 (reserved)
+//   [16..19] sun_col.rgb = sun color (pre-multiplied by intensity), .a = 0
+//   [20..23] amb_col.rgb = ambient color (pre-multiplied by ambient), .a = 0
+void FillFxUniforms(float u[24], const TRenderer& /*r*/,
                     float ox, float oy, float gbw, float gbh,
                     float z_near, float zspan, float kcam_forward,
                     float perspective, float center_wx, float center_wy,
-                    float zoom)
+                    float zoom,
+                    const float sun_dir[3],   const float sun_col[3],
+                    const float amb_col[3])
 {
     u[0]  = ox;
     u[1]  = oy;
@@ -3799,6 +3857,29 @@ void FillFxUniforms(float u[12], const TRenderer& /*r*/,
     u[9]  = center_wy;
     u[10] = zoom;
     u[11] = 0.0f;
+    u[12] = sun_dir[0]; u[13] = sun_dir[1]; u[14] = sun_dir[2]; u[15] = 0.0f;
+    u[16] = sun_col[0]; u[17] = sun_col[1]; u[18] = sun_col[2]; u[19] = 0.0f;
+    u[20] = amb_col[0]; u[21] = amb_col[1]; u[22] = amb_col[2]; u[23] = 0.0f;
+}
+
+}  // namespace
+
+namespace {
+
+// Shared VS uniform block descriptor for fx pipelines. Three vec4s of
+// camera (vp/camz/camw) plus three vec4s of lighting state (sun_dir /
+// sun_color / ambient_color). Lighting fields are forwarded through to
+// the FS via varyings -- the FX shader is small enough that this beats
+// a separate FS UBO.
+void FillFxSharedVsUbo(sg_shader_uniform_block_desc& ub)
+{
+    ub.size = 6 * sizeof(float) * 4;
+    ub.uniforms[0].name = "vp";            ub.uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[1].name = "camz";          ub.uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[2].name = "camw";          ub.uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[3].name = "sun_dir";       ub.uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[4].name = "sun_color";     ub.uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[5].name = "ambient_color"; ub.uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
 }
 
 }  // namespace
@@ -3821,12 +3902,10 @@ void TRenderer::InitFxPipeline()
         sh.attrs[3].name = "uv_rect";     sh.attrs[3].sem_name = "TEXCOORD"; sh.attrs[3].sem_index = 3;
         sh.attrs[4].name = "color_rgba";  sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
         sh.attrs[5].name = "debug_mode";  sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
+        sh.attrs[6].name = "light_mode";  sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
         sh.vs.source = kFxBillboardVs;
         sh.vs.entry  = kShaderVsEntry;
-        sh.vs.uniform_blocks[0].size = 3 * sizeof(float) * 4;
-        sh.vs.uniform_blocks[0].uniforms[0].name = "vp";   sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
-        sh.vs.uniform_blocks[0].uniforms[1].name = "camz"; sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
-        sh.vs.uniform_blocks[0].uniforms[2].name = "camw"; sh.vs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+        FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
         sh.fs.source = kFxBillboardFs;
         sh.fs.entry  = kShaderFsEntry;
         sh.fs.images[0].name = "atlas";
@@ -3847,18 +3926,21 @@ void TRenderer::InitFxPipeline()
         pip.layout.attrs[3].buffer_index = 1; pip.layout.attrs[3].offset = 5  * sizeof(float);         pip.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
         pip.layout.attrs[4].buffer_index = 1; pip.layout.attrs[4].offset = 9  * sizeof(float);         pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
         pip.layout.attrs[5].buffer_index = 1; pip.layout.attrs[5].offset = 13 * sizeof(float);         pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[6].buffer_index = 1; pip.layout.attrs[6].offset = 14 * sizeof(float);         pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
         pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP;
         pip.cull_mode      = SG_CULLMODE_NONE;
-        SetupFxBlend(pip, EFxBlend::Alpha);
-        pip.depth.pixel_format  = SG_PIXELFORMAT_DEPTH;
-        pip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
-        pip.depth.write_enabled = false;
-        pip.label = "renderer.fx.billboard.pip.alpha";
-        fx_billboard_pip_alpha = sg_make_pipeline(&pip);
-
-        SetupFxBlend(pip, EFxBlend::Additive);
-        pip.label = "renderer.fx.billboard.pip.add";
-        fx_billboard_pip_add = sg_make_pipeline(&pip);
+        // Build all (blend, depth_mode) variants. Light mode is
+        // per-instance so it does not multiply the pipeline count.
+        for (int32_t b = 0; b < kFxBlendCount; ++b)
+        {
+            SetupFxBlend(pip, EFxBlend(b));
+            for (int32_t d = 0; d < kFxDepthModeCount; ++d)
+            {
+                SetupFxDepth(pip, EFxDepthMode(d));
+                pip.label = "renderer.fx.billboard.pip";
+                fx_billboard_pip[b][d] = sg_make_pipeline(&pip);
+            }
+        }
     }
 
     // ---- fx_particle shader + pipelines ---------------------------------
@@ -3871,12 +3953,10 @@ void TRenderer::InitFxPipeline()
         sh.attrs[4].name = "color_rgba";   sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
         sh.attrs[5].name = "debug_mode";   sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
         sh.attrs[6].name = "rotation_rad"; sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
+        sh.attrs[7].name = "light_mode";   sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
         sh.vs.source = kFxParticleVs;
         sh.vs.entry  = kShaderVsEntry;
-        sh.vs.uniform_blocks[0].size = 3 * sizeof(float) * 4;
-        sh.vs.uniform_blocks[0].uniforms[0].name = "vp";   sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
-        sh.vs.uniform_blocks[0].uniforms[1].name = "camz"; sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
-        sh.vs.uniform_blocks[0].uniforms[2].name = "camw"; sh.vs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+        FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
         sh.fs.source = kFxParticleFs;
         sh.fs.entry  = kShaderFsEntry;
         sh.fs.images[0].name = "atlas";
@@ -3898,18 +3978,19 @@ void TRenderer::InitFxPipeline()
         pip.layout.attrs[4].buffer_index = 1; pip.layout.attrs[4].offset = 9  * sizeof(float);         pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
         pip.layout.attrs[5].buffer_index = 1; pip.layout.attrs[5].offset = 13 * sizeof(float);         pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
         pip.layout.attrs[6].buffer_index = 1; pip.layout.attrs[6].offset = 14 * sizeof(float);         pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[7].buffer_index = 1; pip.layout.attrs[7].offset = 15 * sizeof(float);         pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT;
         pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP;
         pip.cull_mode      = SG_CULLMODE_NONE;
-        SetupFxBlend(pip, EFxBlend::Alpha);
-        pip.depth.pixel_format  = SG_PIXELFORMAT_DEPTH;
-        pip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
-        pip.depth.write_enabled = false;
-        pip.label = "renderer.fx.particle.pip.alpha";
-        fx_particle_pip_alpha = sg_make_pipeline(&pip);
-
-        SetupFxBlend(pip, EFxBlend::Additive);
-        pip.label = "renderer.fx.particle.pip.add";
-        fx_particle_pip_add = sg_make_pipeline(&pip);
+        for (int32_t b = 0; b < kFxBlendCount; ++b)
+        {
+            SetupFxBlend(pip, EFxBlend(b));
+            for (int32_t d = 0; d < kFxDepthModeCount; ++d)
+            {
+                SetupFxDepth(pip, EFxDepthMode(d));
+                pip.label = "renderer.fx.particle.pip";
+                fx_particle_pip[b][d] = sg_make_pipeline(&pip);
+            }
+        }
     }
 
     // ---- fx_strip shader + pipelines ------------------------------------
@@ -3921,12 +4002,10 @@ void TRenderer::InitFxPipeline()
         sh.attrs[3].name = "uv";          sh.attrs[3].sem_name = "TEXCOORD"; sh.attrs[3].sem_index = 3;
         sh.attrs[4].name = "color";       sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
         sh.attrs[5].name = "debug_mode";  sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
+        sh.attrs[6].name = "light_mode";  sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
         sh.vs.source = kFxStripVs;
         sh.vs.entry  = kShaderVsEntry;
-        sh.vs.uniform_blocks[0].size = 3 * sizeof(float) * 4;
-        sh.vs.uniform_blocks[0].uniforms[0].name = "vp";   sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
-        sh.vs.uniform_blocks[0].uniforms[1].name = "camz"; sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
-        sh.vs.uniform_blocks[0].uniforms[2].name = "camw"; sh.vs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+        FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
         sh.vs.uniform_blocks[1].size = 2 * sizeof(float) * 4;
         sh.vs.uniform_blocks[1].uniforms[0].name = "cam_pos"; sh.vs.uniform_blocks[1].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
         sh.vs.uniform_blocks[1].uniforms[1].name = "cam_fwd"; sh.vs.uniform_blocks[1].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
@@ -3948,18 +4027,19 @@ void TRenderer::InitFxPipeline()
         pip.layout.attrs[3].buffer_index = 0; pip.layout.attrs[3].offset = 7  * sizeof(float); pip.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT2;
         pip.layout.attrs[4].buffer_index = 0; pip.layout.attrs[4].offset = 9  * sizeof(float); pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
         pip.layout.attrs[5].buffer_index = 0; pip.layout.attrs[5].offset = 13 * sizeof(float); pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[6].buffer_index = 0; pip.layout.attrs[6].offset = 14 * sizeof(float); pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
         pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
         pip.cull_mode      = SG_CULLMODE_NONE;
-        SetupFxBlend(pip, EFxBlend::Alpha);
-        pip.depth.pixel_format  = SG_PIXELFORMAT_DEPTH;
-        pip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
-        pip.depth.write_enabled = false;
-        pip.label = "renderer.fx.strip.pip.alpha";
-        fx_strip_pip_alpha = sg_make_pipeline(&pip);
-
-        SetupFxBlend(pip, EFxBlend::Additive);
-        pip.label = "renderer.fx.strip.pip.add";
-        fx_strip_pip_add = sg_make_pipeline(&pip);
+        for (int32_t b = 0; b < kFxBlendCount; ++b)
+        {
+            SetupFxBlend(pip, EFxBlend(b));
+            for (int32_t d = 0; d < kFxDepthModeCount; ++d)
+            {
+                SetupFxDepth(pip, EFxDepthMode(d));
+                pip.label = "renderer.fx.strip.pip";
+                fx_strip_pip[b][d] = sg_make_pipeline(&pip);
+            }
+        }
     }
 
     // ---- dynamic instance / strip VBs -----------------------------------
@@ -3980,18 +4060,25 @@ void TRenderer::InitFxPipeline()
     sb.usage = SG_USAGE_STREAM;
     sb.label = "renderer.fx.strip.vb";
     fx_strip_vb = sg_make_buffer(&sb);
+
+    log_info("[fx-pipeline] init blend=%d depth=%d variants=%d shaders=3",
+             int(kFxBlendCount), int(kFxDepthModeCount),
+             int(kFxBlendCount * kFxDepthModeCount * 3));
 }
 
 void TRenderer::ShutdownFxPipeline()
 {
-    if (fx_billboard_pip_alpha.id) { sg_destroy_pipeline(fx_billboard_pip_alpha); fx_billboard_pip_alpha = {}; }
-    if (fx_billboard_pip_add.id)   { sg_destroy_pipeline(fx_billboard_pip_add);   fx_billboard_pip_add   = {}; }
+    for (int32_t b = 0; b < kFxBlendCount; ++b)
+    {
+        for (int32_t d = 0; d < kFxDepthModeCount; ++d)
+        {
+            if (fx_billboard_pip[b][d].id) { sg_destroy_pipeline(fx_billboard_pip[b][d]); fx_billboard_pip[b][d] = {}; }
+            if (fx_particle_pip[b][d].id)  { sg_destroy_pipeline(fx_particle_pip[b][d]);  fx_particle_pip[b][d]  = {}; }
+            if (fx_strip_pip[b][d].id)     { sg_destroy_pipeline(fx_strip_pip[b][d]);     fx_strip_pip[b][d]     = {}; }
+        }
+    }
     if (fx_billboard_shader.id)    { sg_destroy_shader(fx_billboard_shader);      fx_billboard_shader    = {}; }
-    if (fx_particle_pip_alpha.id)  { sg_destroy_pipeline(fx_particle_pip_alpha);  fx_particle_pip_alpha  = {}; }
-    if (fx_particle_pip_add.id)    { sg_destroy_pipeline(fx_particle_pip_add);    fx_particle_pip_add    = {}; }
     if (fx_particle_shader.id)     { sg_destroy_shader(fx_particle_shader);       fx_particle_shader     = {}; }
-    if (fx_strip_pip_alpha.id)     { sg_destroy_pipeline(fx_strip_pip_alpha);     fx_strip_pip_alpha     = {}; }
-    if (fx_strip_pip_add.id)       { sg_destroy_pipeline(fx_strip_pip_add);       fx_strip_pip_add       = {}; }
     if (fx_strip_shader.id)        { sg_destroy_shader(fx_strip_shader);          fx_strip_shader        = {}; }
     if (fx_corner_vb.id)           { sg_destroy_buffer(fx_corner_vb);             fx_corner_vb           = {}; }
     if (fx_billboard_ivb.id)       { sg_destroy_buffer(fx_billboard_ivb);         fx_billboard_ivb       = {}; }
@@ -4053,8 +4140,26 @@ void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
     SFxBatchKey key = {};
     key.texture     = desc.texture;
     key.pipeline_id = uint16_t(EFxPipeline::Particle);
-    key.blend       = uint8_t(desc.blend == EParticleBlendMode::Additive ? EFxBlend::Additive : EFxBlend::Alpha);
-    key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    // Map per-bucket EParticleBlendMode -> per-pipeline EFxBlend.
+    // EParticleBlendMode enumerators line up 1:1 with EFxBlend (both
+    // declare the same set in the same order); a direct cast is the
+    // documented contract.
+    switch (desc.blend)
+    {
+        case EParticleBlendMode::Alpha:            key.blend = uint8_t(EFxBlend::Alpha);            break;
+        case EParticleBlendMode::Additive:         key.blend = uint8_t(EFxBlend::Additive);         break;
+        case EParticleBlendMode::AdditiveStraight: key.blend = uint8_t(EFxBlend::AdditiveStraight); break;
+        case EParticleBlendMode::PremulAlpha:      key.blend = uint8_t(EFxBlend::PremulAlpha);      break;
+    }
+    switch (desc.depth_mode)
+    {
+        case EParticleDepthMode::TestNoWrite: key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite); break;
+        case EParticleDepthMode::TestWrite:   key.depth_mode = uint8_t(EFxDepthMode::TestWrite);   break;
+        case EParticleDepthMode::None:        key.depth_mode = uint8_t(EFxDepthMode::None);        break;
+    }
+    const EFxLightMode light_mode = (desc.light_mode == EParticleLightMode::LitFlat)
+                                      ? EFxLightMode::LitFlat
+                                      : EFxLightMode::Unlit;
 
     const int32_t count = bucket.Count();
     for (int32_t i = 0; i < count; ++i)
@@ -4103,6 +4208,7 @@ void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
 
         item.key        = key;
         item.debug_mode = debug_mode;
+        item.light_mode = light_mode;
         SubmitFxParticle(item);
     }
 }
@@ -4116,6 +4222,7 @@ void TRenderer::SubmitFxStrip(const SStripDrawItem& item)
         e.key.texture = white_texture;
     e.key.pipeline_id = uint16_t(EFxPipeline::Strip);
     e.debug_mode = item.debug_mode;
+    e.light_mode = item.light_mode;
     e.segments.assign(item.segments, item.segments + item.num_segments);
     if (fx_camera.set && item.num_segments > 0)
     {
@@ -4163,18 +4270,40 @@ void TRenderer::DrainFxQueue()
     pa.stencil.action   = SG_ACTION_DONTCARE;
     sg_begin_pass(fx_pass, &pa);
 
-    // Shared VS uniform block (vp/camz/camw) reuses the lighting
-    // reconstruction state.
-    float u[12] = {};
+    // Shared VS uniform block (vp/camz/camw + sun_dir/sun_color/
+    // ambient_color). The lighting fields drive the LitFlat per-instance
+    // path in the FS; they read directly from the renderer's SLightState
+    // so anything the deferred light shader sees is also visible to FX.
+    //
+    // Convention matches the deferred light shader (light.metal.h): light.dir
+    // is the direction from the surface toward the sun -- dot(N, dir) > 0
+    // is "lit". Particles use world-up (0,0,1) as their implicit normal
+    // (see EFxLightMode::LitFlat) so the FS reduces this to max(0, dir.z).
+    //
+    // sun_color and ambient_color are pre-multiplied by intensity / ambient
+    // here so the FS can stay a single MUL+ADD per fragment.
+    const float sun_dir[3] = { light.dir[0], light.dir[1], light.dir[2] };
+    const float sun_col[3] = {
+        light.color[0] * light.intensity,
+        light.color[1] * light.intensity,
+        light.color[2] * light.intensity,
+    };
+    const float amb_col[3] = {
+        light.ambient_color[0] * light.ambient,
+        light.ambient_color[1] * light.ambient,
+        light.ambient_color[2] * light.ambient,
+    };
+    float u[24] = {};
     FillFxUniforms(u, *this,
                    recon.ox, recon.oy,
                    float(width + 2 * kGBufPad), float(height + 2 * kGBufPad),
                    recon.z_near, recon.zspan, recon.kcam_forward, recon.reserved,
-                   recon.center_wx, recon.center_wy, recon.zoom);
+                   recon.center_wx, recon.center_wy, recon.zoom,
+                   sun_dir, sun_col, amb_col);
     const sg_range u_range = { u, sizeof(u) };
 
     // ---- Billboards: per-bucket sort, then coalesce by key --------------
-    if (!fx_billboard_queue.empty() && fx_billboard_pip_alpha.id)
+    if (!fx_billboard_queue.empty() && fx_billboard_pip[0][0].id)
     {
         // Group adjacent submissions with equal keys; sort within each
         // group back-to-front. (Per-bucket sort granularity per
@@ -4211,8 +4340,8 @@ void TRenderer::DrainFxQueue()
             scratch.push_back(it.color_rgba[2]);
             scratch.push_back(it.color_rgba[3]);
             scratch.push_back(float(uint8_t(it.debug_mode)));
-            scratch.push_back(0.0f);  // pad
-            scratch.push_back(0.0f);  // pad
+            scratch.push_back(float(uint8_t(it.light_mode)));
+            scratch.push_back(0.0f);  // pad to kFxBillboardInstanceFloats (16)
         }
         const sg_range r = { scratch.data(), scratch.size() * sizeof(float) };
         sg_update_buffer(fx_billboard_ivb, &r);
@@ -4226,9 +4355,9 @@ void TRenderer::DrainFxQueue()
                    && fx_billboard_queue[j].item.key.Equals(fx_billboard_queue[i].item.key))
                 ++j;
             const SFxBatchKey& key = fx_billboard_queue[i].item.key;
-            sg_pipeline pip = key.blend == uint8_t(EFxBlend::Additive)
-                                ? fx_billboard_pip_add
-                                : fx_billboard_pip_alpha;
+            const int32_t b = (key.blend < kFxBlendCount) ? key.blend : int32_t(EFxBlend::Alpha);
+            const int32_t d = (key.depth_mode < kFxDepthModeCount) ? key.depth_mode : int32_t(EFxDepthMode::TestNoWrite);
+            sg_pipeline pip = fx_billboard_pip[b][d];
             if (!pip.id) { i = j; continue; }
             sg_apply_pipeline(pip);
             sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
@@ -4246,7 +4375,7 @@ void TRenderer::DrainFxQueue()
     }
 
     // ---- Particles ------------------------------------------------------
-    if (!fx_particle_queue.empty() && fx_particle_pip_alpha.id)
+    if (!fx_particle_queue.empty() && fx_particle_pip[0][0].id)
     {
         std::sort(fx_particle_queue.begin(), fx_particle_queue.end(),
                   [](const SFxParticleQueueEntry& a, const SFxParticleQueueEntry& b) {
@@ -4278,6 +4407,10 @@ void TRenderer::DrainFxQueue()
             scratch.push_back(it.color_rgba[3]);
             scratch.push_back(float(uint8_t(it.debug_mode)));
             scratch.push_back(it.rotation_rad);
+            scratch.push_back(float(uint8_t(it.light_mode)));
+            // pad to kFxParticleInstanceFloats (20)
+            scratch.push_back(0.0f);
+            scratch.push_back(0.0f);
             scratch.push_back(0.0f);
         }
         const sg_range r = { scratch.data(), scratch.size() * sizeof(float) };
@@ -4291,9 +4424,9 @@ void TRenderer::DrainFxQueue()
                    && fx_particle_queue[j].item.key.Equals(fx_particle_queue[i].item.key))
                 ++j;
             const SFxBatchKey& key = fx_particle_queue[i].item.key;
-            sg_pipeline pip = key.blend == uint8_t(EFxBlend::Additive)
-                                ? fx_particle_pip_add
-                                : fx_particle_pip_alpha;
+            const int32_t b = (key.blend < kFxBlendCount) ? key.blend : int32_t(EFxBlend::Alpha);
+            const int32_t d = (key.depth_mode < kFxDepthModeCount) ? key.depth_mode : int32_t(EFxDepthMode::TestNoWrite);
+            sg_pipeline pip = fx_particle_pip[b][d];
             if (!pip.id) { i = j; continue; }
             sg_apply_pipeline(pip);
             sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
@@ -4311,14 +4444,14 @@ void TRenderer::DrainFxQueue()
     }
 
     // ---- Strips ---------------------------------------------------------
-    if (!fx_strip_queue.empty() && fx_strip_pip_alpha.id)
+    if (!fx_strip_queue.empty() && fx_strip_pip[0][0].id)
     {
         // Strips are not auto-batched. Expand each strip's segments into
         // 6 vertices per segment (two triangles per quad) and emit a
         // separate sg_draw call per strip.
         std::vector<float> scratch;
         // Per strip: write vertices, then draw range [base, base+count).
-        struct DrawSpan { int32_t first; int32_t count; SFxBatchKey key; EFxDebugMode dbg; };
+        struct DrawSpan { int32_t first; int32_t count; SFxBatchKey key; EFxDebugMode dbg; EFxLightMode lit; };
         std::vector<DrawSpan> spans;
 
         for (const auto& e : fx_strip_queue)
@@ -4337,6 +4470,7 @@ void TRenderer::DrainFxQueue()
                 // 4 corners per segment: a-left, b-left, a-right, b-right.
                 // Triangle list: (al, bl, ar) (bl, br, ar) -- 6 vertices.
                 const float dbg = float(uint8_t(e.debug_mode));
+                const float lit = float(uint8_t(e.light_mode));
                 auto emit = [&](const float* wp, const float* color,
                                 float half_w, float u, float v) {
                     scratch.push_back(wp[0]); scratch.push_back(wp[1]); scratch.push_back(wp[2]);
@@ -4345,7 +4479,8 @@ void TRenderer::DrainFxQueue()
                     scratch.push_back(u); scratch.push_back(v);
                     scratch.push_back(color[0]); scratch.push_back(color[1]); scratch.push_back(color[2]); scratch.push_back(color[3]);
                     scratch.push_back(dbg);
-                    scratch.push_back(0.0f); scratch.push_back(0.0f);
+                    scratch.push_back(lit);
+                    scratch.push_back(0.0f);  // pad to kFxStripVertexFloats (16)
                 };
                 emit(seg.world_a, seg.color_a, -0.5f * seg.width_a_wu, seg.u_a, 0.0f);   // al
                 emit(seg.world_b, seg.color_b, -0.5f * seg.width_b_wu, seg.u_b, 0.0f);   // bl
@@ -4359,6 +4494,7 @@ void TRenderer::DrainFxQueue()
             ds.count = n * 6;
             ds.key   = e.key;
             ds.dbg   = e.debug_mode;
+            ds.lit   = e.light_mode;
             spans.push_back(ds);
         }
 
@@ -4369,9 +4505,9 @@ void TRenderer::DrainFxQueue()
 
             for (const DrawSpan& sp : spans)
             {
-                sg_pipeline pip = sp.key.blend == uint8_t(EFxBlend::Additive)
-                                    ? fx_strip_pip_add
-                                    : fx_strip_pip_alpha;
+                const int32_t b = (sp.key.blend < kFxBlendCount) ? sp.key.blend : int32_t(EFxBlend::Alpha);
+                const int32_t d = (sp.key.depth_mode < kFxDepthModeCount) ? sp.key.depth_mode : int32_t(EFxDepthMode::TestNoWrite);
+                sg_pipeline pip = fx_strip_pip[b][d];
                 if (!pip.id) continue;
                 sg_apply_pipeline(pip);
                 sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);

@@ -5,15 +5,22 @@
 // *************************************************************************
 //
 // HLSL port of fx.metal.h. Stub-only until a Windows D3D11 build is
-// brought online for VFX validation. See fx.metal.h for documentation.
-// Source kept compilable so the shader umbrella selection works.
+// brought online for VFX validation. See fx.metal.h for documentation,
+// including the LitFlat per-instance lighting branch.
 //
 // *************************************************************************
 
 #pragma once
 
 inline constexpr const char* kFxBillboardVsHlsl = R"HLSL(
-cbuffer fx_params : register(b0) { float4 vp; float4 camz; float4 camw; };
+cbuffer fx_params : register(b0) {
+    float4 vp;
+    float4 camz;
+    float4 camw;
+    float4 sun_dir;
+    float4 sun_color;
+    float4 ambient_color;
+};
 struct vs_in {
     float2 corner       : TEXCOORD0;
     float3 world_pos    : TEXCOORD1;
@@ -21,13 +28,15 @@ struct vs_in {
     float4 uv_rect      : TEXCOORD3;
     float4 color_rgba   : TEXCOORD4;
     float  debug_mode   : TEXCOORD5;
+    float  light_mode   : TEXCOORD6;
 };
 struct vs_out {
     float4 pos      : SV_Position;
     float2 corner   : TEXCOORD0;
     float4 uv_rect  : TEXCOORD1;
     float4 color    : TEXCOORD2;
-    float  debug    : TEXCOORD3;
+    float3 lit      : TEXCOORD3;
+    float  debug    : TEXCOORD4;
 };
 vs_out main_vs(vs_in i) {
     float3 wp = i.world_pos;
@@ -46,9 +55,15 @@ vs_out main_vs(vs_in i) {
     o.pos.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     o.pos.z = scene_z_n;
     o.pos.w = 1.0;
+    int lmode = int(i.light_mode + 0.5);
+    float3 lit = float3(1, 1, 1);
+    if (lmode == 1) {
+        lit = ambient_color.rgb + max(0.0, sun_dir.z) * sun_color.rgb;
+    }
     o.corner  = i.corner;
     o.uv_rect = i.uv_rect;
     o.color   = i.color_rgba;
+    o.lit     = lit;
     o.debug   = i.debug_mode;
     return o;
 }
@@ -62,7 +77,8 @@ struct vs_out {
     float2 corner   : TEXCOORD0;
     float4 uv_rect  : TEXCOORD1;
     float4 color    : TEXCOORD2;
-    float  debug    : TEXCOORD3;
+    float3 lit      : TEXCOORD3;
+    float  debug    : TEXCOORD4;
 };
 float4 main_ps(vs_out i) : SV_Target {
     int mode = int(i.debug + 0.5);
@@ -74,13 +90,21 @@ float4 main_ps(vs_out i) : SV_Target {
     else if (mode == 2) c = atlas.Sample(smp, uv01);
     else if (mode == 3) c = atlas.Sample(smp, uv_n);
     else                c = atlas.Sample(smp, uv_n) * i.color;
+    c.rgb *= i.lit;
     if (c.a < 0.002) discard;
     return c;
 }
 )HLSL";
 
 inline constexpr const char* kFxParticleVsHlsl = R"HLSL(
-cbuffer fx_params : register(b0) { float4 vp; float4 camz; float4 camw; };
+cbuffer fx_params : register(b0) {
+    float4 vp;
+    float4 camz;
+    float4 camw;
+    float4 sun_dir;
+    float4 sun_color;
+    float4 ambient_color;
+};
 struct vs_in {
     float2 corner       : TEXCOORD0;
     float3 world_pos    : TEXCOORD1;
@@ -89,13 +113,15 @@ struct vs_in {
     float4 color_rgba   : TEXCOORD4;
     float  debug_mode   : TEXCOORD5;
     float  rotation_rad : TEXCOORD6;
+    float  light_mode   : TEXCOORD7;
 };
 struct vs_out {
     float4 pos      : SV_Position;
     float2 corner   : TEXCOORD0;
     float4 uv_rect  : TEXCOORD1;
     float4 color    : TEXCOORD2;
-    float  debug    : TEXCOORD3;
+    float3 lit      : TEXCOORD3;
+    float  debug    : TEXCOORD4;
 };
 vs_out main_vs(vs_in i) {
     float ca = cos(i.rotation_rad), sa = sin(i.rotation_rad);
@@ -116,9 +142,15 @@ vs_out main_vs(vs_in i) {
     o.pos.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     o.pos.z = scene_z_n;
     o.pos.w = 1.0;
+    int lmode = int(i.light_mode + 0.5);
+    float3 lit = float3(1, 1, 1);
+    if (lmode == 1) {
+        lit = ambient_color.rgb + max(0.0, sun_dir.z) * sun_color.rgb;
+    }
     o.corner  = i.corner;
     o.uv_rect = i.uv_rect;
     o.color   = i.color_rgba;
+    o.lit     = lit;
     o.debug   = i.debug_mode;
     return o;
 }
@@ -127,7 +159,14 @@ vs_out main_vs(vs_in i) {
 inline constexpr const char* kFxParticleFsHlsl = kFxBillboardFsHlsl;
 
 inline constexpr const char* kFxStripVsHlsl = R"HLSL(
-cbuffer fx_params : register(b0) { float4 vp; float4 camz; float4 camw; };
+cbuffer fx_params : register(b0) {
+    float4 vp;
+    float4 camz;
+    float4 camw;
+    float4 sun_dir;
+    float4 sun_color;
+    float4 ambient_color;
+};
 cbuffer fx_cam    : register(b1) { float4 cam_pos; float4 cam_fwd; };
 struct vs_in {
     float3 world_pos    : TEXCOORD0;
@@ -136,12 +175,14 @@ struct vs_in {
     float2 uv           : TEXCOORD3;
     float4 color        : TEXCOORD4;
     float  debug_mode   : TEXCOORD5;
+    float  light_mode   : TEXCOORD6;
 };
 struct vs_out {
     float4 pos      : SV_Position;
     float2 uv       : TEXCOORD0;
     float4 color    : TEXCOORD1;
-    float  debug    : TEXCOORD2;
+    float3 lit      : TEXCOORD2;
+    float  debug    : TEXCOORD3;
 };
 vs_out main_vs(vs_in i) {
     float3 vd = normalize(i.world_pos - cam_pos.xyz);
@@ -167,8 +208,14 @@ vs_out main_vs(vs_in i) {
     o.pos.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     o.pos.z = scene_z_n;
     o.pos.w = 1.0;
+    int lmode = int(i.light_mode + 0.5);
+    float3 lit = float3(1, 1, 1);
+    if (lmode == 1) {
+        lit = ambient_color.rgb + max(0.0, sun_dir.z) * sun_color.rgb;
+    }
     o.uv    = i.uv;
     o.color = i.color;
+    o.lit   = lit;
     o.debug = i.debug_mode;
     return o;
 }
@@ -181,7 +228,8 @@ struct vs_out {
     float4 pos      : SV_Position;
     float2 uv       : TEXCOORD0;
     float4 color    : TEXCOORD1;
-    float  debug    : TEXCOORD2;
+    float3 lit      : TEXCOORD2;
+    float  debug    : TEXCOORD3;
 };
 float4 main_ps(vs_out i) : SV_Target {
     int mode = int(i.debug + 0.5);
@@ -190,6 +238,7 @@ float4 main_ps(vs_out i) : SV_Target {
     else if (mode == 2) c = atlas.Sample(smp, i.uv);
     else if (mode == 3) { c = atlas.Sample(smp, i.uv); c = float4(1,1,1,c.a); }
     else                c = atlas.Sample(smp, i.uv) * i.color;
+    c.rgb *= i.lit;
     if (c.a < 0.002) discard;
     return c;
 }
