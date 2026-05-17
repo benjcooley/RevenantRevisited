@@ -51,6 +51,37 @@ float Frand()
     return float(std::rand()) / float(RAND_MAX);
 }
 
+// Procedural glow-stripe texture: 1 wide x 64 tall, bright pure-white
+// center fading smoothly to fully transparent at top + bottom edges.
+// Mapped along the strip's V axis (across the bolt's width) so the
+// rendered bolt has a soft glowing core and feathered edges, even
+// without a hand-authored lightning asset. AdditiveStraight blend
+// pairs naturally with this -- bright center adds full white tinted
+// by kStripColor, edges add nothing.
+TTextureHandle LightningGlowTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x46584C49474E5354ull;   // "FXLIGNST"
+    constexpr int32_t  kH   = 64;
+    uint8_t rgba[kH * 4];
+    for (int32_t i = 0; i < kH; ++i)
+    {
+        const float v       = float(i) / float(kH - 1);          // 0..1
+        const float center  = std::abs(v - 0.5f) * 2.0f;         // 0..1, 0 at center
+        const float falloff = (std::max)(0.0f, 1.0f - center);   // smooth ramp
+        const float a       = falloff * falloff * falloff;       // cubic for tighter core
+        const uint8_t byte  = uint8_t(a * 255.0f);
+        rgba[i * 4 + 0] = byte;
+        rgba[i * 4 + 1] = byte;
+        rgba[i * 4 + 2] = byte;
+        rgba[i * 4 + 3] = byte;   // premultiplied (rgb == a since white * a)
+    }
+    return Renderer->RegisterTextureAsset(kKey, rgba, sizeof(rgba),
+                                          1, kH,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(rgba)));
+}
+
 // Per-vertex jitter in (-kStripJitterMag, +kStripJitterMag) world units,
 // applied perpendicular to the bolt direction. Pre-release jitters x+z
 // in the local strip frame; in world space we apply to the two axes
@@ -322,12 +353,15 @@ void TStripEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     SStripDrawItem item = {};
     item.segments     = seg_scratch_.data();
     item.num_segments = int32_t(seg_scratch_.size());
-    item.key.texture     = Renderer->WhiteTextureHandle();
+    item.key.texture     = LightningGlowTexture();
     item.key.pipeline_id = uint16_t(EFxPipeline::Strip);
-    // Additive fits a glowing electric bolt better than alpha-over;
-    // the retail D3D path uses SaveBlendState/SetBlendState which the
-    // pre-release default is additive for the lightning render branch.
-    item.key.blend       = uint8_t(EFxBlend::Additive);
+    // AdditiveStraight (ONE/ONE) -- full-intensity additive, no alpha
+    // weighting on the source. Pairs with the glow-stripe texture
+    // (premultiplied bright-white center, transparent edges) so the
+    // bolt's lit core punches through and the feathered edges fall
+    // off smoothly. Matches retail's D3DBLEND_ONE/ONE convention for
+    // the lightning render branch.
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
     item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode      = debug_mode;
     Renderer->SubmitFxStrip(item);

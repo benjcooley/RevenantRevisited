@@ -4484,19 +4484,68 @@ void TRenderer::DrainFxQueue()
             const int32_t n = int32_t(e.segments.size());
             if (n <= 0) continue;
             const int32_t first_v = int32_t(scratch.size() / kFxStripVertexFloats);
+            const float dbg = float(uint8_t(e.debug_mode));
+            const float lit = float(uint8_t(e.light_mode));
+
+            // Per-vertex tangent miter for continuous strips. At an
+            // interior joint (seg[i].b ~ seg[i+1].a) both segments emit
+            // their shared corner using the AVERAGED tangent of the
+            // adjacent segments. The shader builds side = cross(tan,
+            // view_dir), so identical tangents at the shared vertex
+            // produce identical side offsets => the two segments' edges
+            // line up exactly => no seam. Non-continuous strips (where
+            // consecutive endpoints don't match) fall back to per-
+            // segment tangent automatically.
+            auto seg_tan = [](const SStripSegment& s, float t[3]) {
+                t[0] = s.world_b[0] - s.world_a[0];
+                t[1] = s.world_b[1] - s.world_a[1];
+                t[2] = s.world_b[2] - s.world_a[2];
+            };
+            auto endpoints_match = [](const SStripSegment& a, const SStripSegment& b) {
+                const float ex = a.world_b[0] - b.world_a[0];
+                const float ey = a.world_b[1] - b.world_a[1];
+                const float ez = a.world_b[2] - b.world_a[2];
+                return (ex * ex + ey * ey + ez * ez) < 0.01f;   // ~0.1 wu tolerance
+            };
+
+            // Precompute per-vertex tangents (N+1 tangents for N segments).
+            std::vector<float> tan_at(size_t(n + 1) * 3, 0.0f);
+            for (int32_t s = 0; s < n; ++s)
+            {
+                float t_self[3]; seg_tan(e.segments[s], t_self);
+                // 'a' side of segment s
+                if (s > 0 && endpoints_match(e.segments[s - 1], e.segments[s]))
+                {
+                    // shared with previous segment's 'b' -- average
+                    float t_prev[3]; seg_tan(e.segments[s - 1], t_prev);
+                    tan_at[s * 3 + 0] = 0.5f * (t_prev[0] + t_self[0]);
+                    tan_at[s * 3 + 1] = 0.5f * (t_prev[1] + t_self[1]);
+                    tan_at[s * 3 + 2] = 0.5f * (t_prev[2] + t_self[2]);
+                }
+                else
+                {
+                    tan_at[s * 3 + 0] = t_self[0];
+                    tan_at[s * 3 + 1] = t_self[1];
+                    tan_at[s * 3 + 2] = t_self[2];
+                }
+                // 'b' side of last segment uses its own tangent.
+                if (s == n - 1)
+                {
+                    tan_at[(s + 1) * 3 + 0] = t_self[0];
+                    tan_at[(s + 1) * 3 + 1] = t_self[1];
+                    tan_at[(s + 1) * 3 + 2] = t_self[2];
+                }
+            }
+
             for (int32_t s = 0; s < n; ++s)
             {
                 const SStripSegment& seg = e.segments[s];
-                const float tan[3] = {
-                    seg.world_b[0] - seg.world_a[0],
-                    seg.world_b[1] - seg.world_a[1],
-                    seg.world_b[2] - seg.world_a[2],
-                };
+                const float* tan_a = &tan_at[size_t(s) * 3];
+                const float* tan_b = &tan_at[size_t(s + 1) * 3];
                 // 4 corners per segment: a-left, b-left, a-right, b-right.
                 // Triangle list: (al, bl, ar) (bl, br, ar) -- 6 vertices.
-                const float dbg = float(uint8_t(e.debug_mode));
-                const float lit = float(uint8_t(e.light_mode));
                 auto emit = [&](const float* wp, const float* color,
+                                const float* tan,
                                 float half_w, float u, float v) {
                     scratch.push_back(wp[0]); scratch.push_back(wp[1]); scratch.push_back(wp[2]);
                     scratch.push_back(tan[0]); scratch.push_back(tan[1]); scratch.push_back(tan[2]);
@@ -4507,12 +4556,12 @@ void TRenderer::DrainFxQueue()
                     scratch.push_back(lit);
                     scratch.push_back(0.0f);  // pad to kFxStripVertexFloats (16)
                 };
-                emit(seg.world_a, seg.color_a, -0.5f * seg.width_a_wu, seg.u_a, 0.0f);   // al
-                emit(seg.world_b, seg.color_b, -0.5f * seg.width_b_wu, seg.u_b, 0.0f);   // bl
-                emit(seg.world_a, seg.color_a, +0.5f * seg.width_a_wu, seg.u_a, 1.0f);   // ar
-                emit(seg.world_b, seg.color_b, -0.5f * seg.width_b_wu, seg.u_b, 0.0f);   // bl
-                emit(seg.world_b, seg.color_b, +0.5f * seg.width_b_wu, seg.u_b, 1.0f);   // br
-                emit(seg.world_a, seg.color_a, +0.5f * seg.width_a_wu, seg.u_a, 1.0f);   // ar
+                emit(seg.world_a, seg.color_a, tan_a, -0.5f * seg.width_a_wu, seg.u_a, 0.0f);   // al
+                emit(seg.world_b, seg.color_b, tan_b, -0.5f * seg.width_b_wu, seg.u_b, 0.0f);   // bl
+                emit(seg.world_a, seg.color_a, tan_a, +0.5f * seg.width_a_wu, seg.u_a, 1.0f);   // ar
+                emit(seg.world_b, seg.color_b, tan_b, -0.5f * seg.width_b_wu, seg.u_b, 0.0f);   // bl
+                emit(seg.world_b, seg.color_b, tan_b, +0.5f * seg.width_b_wu, seg.u_b, 1.0f);   // br
+                emit(seg.world_a, seg.color_a, tan_a, +0.5f * seg.width_a_wu, seg.u_a, 1.0f);   // ar
             }
             DrawSpan ds = {};
             ds.first = first_v;
