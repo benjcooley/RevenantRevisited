@@ -274,6 +274,9 @@ def main() -> int:
                     help="ms to wait after launch before first capture")
     ap.add_argument("--out", type=Path,
                     default=Path("/tmp/ui_ab.png"))
+    ap.add_argument("--crop", type=str, default=None,
+                    help="x,y,w,h to crop each mockup frame to (post-window-cap). "
+                         "Use to zero in on a specific UI region for tighter A/B.")
     ap.add_argument("--build-dir", type=Path, default=Path("build"))
     args = ap.parse_args()
 
@@ -286,11 +289,17 @@ def main() -> int:
         args.mode, args.frames, args.interval_ms,
         args.build_dir, args.warmup_ms)
     if used_winid:
-        # screencapture -l already returned the window contents only;
-        # skip the auto-crop heuristic.
         cropped = [f.convert("RGB") for f in raw_frames]
     else:
         cropped = [find_window_crop(f) for f in raw_frames]
+
+    if args.crop:
+        try:
+            cx, cy, cw, ch = [int(v) for v in args.crop.split(",")]
+            cropped = [c.crop((cx, cy, cx + cw, cy + ch)) for c in cropped]
+        except Exception as e:
+            print(f"warning: --crop parse failed ({e}); using full frames",
+                  file=sys.stderr)
 
     # Frame timing labels.
     label_fmt = "t=" + ("{i}*" + str(args.interval_ms/1000.0) + "s")

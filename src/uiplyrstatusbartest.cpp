@@ -61,26 +61,38 @@ namespace {
 // No single "whole panel" backdrop bitmap exists in playscrn.dat — the
 // texthealthbar is THE bar-element bitmap, used 3x stacked.
 constexpr int32_t kBlockMargin    =   4;    // inset from screen edge
-constexpr int32_t kBarRowPitch    =  14;    // Wave-3A row height per bar
-constexpr int32_t kPortraitSize   =  64;    // 0x40 - portrait surface allocation per recon
-constexpr int32_t kPortraitInset  =   4;
+constexpr int32_t kBarRowPitch    =  12;    // tighter than Wave-3A's 14, per reference
+constexpr int32_t kPortraitSize   =  44;    // tighter portrait, ~3-bar stack height
+constexpr int32_t kPortraitInset  =   2;
 
-// Bar-fill rect inside the texthealthbar (200x11) bitmap. The bitmap
-// has a baked frame + icon area; the fill region is the inset slot
-// where the colored bar appears. These offsets are visual estimates
-// until the bitmap is inspected pixel-by-pixel.
-constexpr int32_t kBarFillInsetX  = 36;     // inset from bar bitmap left
-constexpr int32_t kBarFillInsetY  =  2;     // inset from bar bitmap top
-constexpr int32_t kBarFillW       = 160;    // bar bitmap is 200 wide, leave 36+4 margin
-constexpr int32_t kBarFillH       =  7;     // bar bitmap is 11 tall, leave 2+2 margin
+// Bar visuals — tuned against docs/ui/plyr_stats_panel.png.
+constexpr int32_t kBarFillH       =   8;    // thicker bars to match reference presence
+constexpr int32_t kBarFillInsetY  =   2;    // vertical center within row pitch
 
-// Per-bar colors. Health = red, mana = purple, stamina = gold per
-// CLASSIC_HUD_REFERENCE §1.
+// Per-bar length stagger from Wave-3A's slot 23 right-side offsets
+// (0x88=136, 0x91=145, 0x79=121). These are inset-from-right values:
+// HEALTH (0x88) ends 136 from right edge — LONGEST bar.
+// MANA   (0x91) ends 145 from right — slightly shorter.
+// STAMINA(0x79) ends 121 from right — actually longest by this math but
+//                                     reference shows stamina SHORTEST.
+// The retail offsets may include icon-region width; for the mockup the
+// PROPORTIONAL pattern is what matters. Tuned by eye against reference:
+// All bars share the same TRACK width — only the FILL differs. The
+// per-bar visual stagger in the reference is from the per-stat current
+// level (stamina at 191/max looks much shorter than health at 1833/max).
+constexpr int32_t kBarBodyW       = 120;
+
+// Per-bar dark base + bright highlight for the gradient/sheen look.
+// Colors tuned against docs/ui/plyr_stats_panel.png — reference shows:
+// - health: deep crimson body, bright orange-red top highlight
+// - mana:   deep blue-purple body, brighter violet-blue highlight
+// - stamina: deep amber body, bright yellow-orange top highlight
 struct SBarColor { uint8_t r, g, b; };
-constexpr SBarColor kBarColors[3] = {
-    { 0xC8, 0x20, 0x20 },   // health — red
-    { 0x80, 0x40, 0xC0 },   // mana — purple
-    { 0xE0, 0xB0, 0x10 },   // stamina — gold/orange
+struct SBarStyle { SBarColor base; SBarColor highlight; SBarColor outline; };
+constexpr SBarStyle kBarStyles[3] = {
+    { { 0x70, 0x10, 0x10 }, { 0xFF, 0x60, 0x30 }, { 0x30, 0x04, 0x04 } },  // health
+    { { 0x30, 0x18, 0x70 }, { 0x90, 0x70, 0xFF }, { 0x10, 0x04, 0x28 } },  // mana
+    { { 0x80, 0x40, 0x04 }, { 0xFF, 0xD0, 0x20 }, { 0x30, 0x18, 0x02 } },  // stamina
 };
 
 // Cached assets from playscrn.dat.
@@ -112,11 +124,13 @@ public:
         const int32_t blockW = kPortraitSize + 4 + barW;
 
         // === LEFT (player) block — anchored TopLeft ===
+        // Levels approximate sample_screen_1.jpg stats: health ~85%,
+        // mana 100%, stamina LOW ~15%. Slight sine wobble for animation.
         DrawBlock(/*outerX=*/kBlockMargin, blockW, barW, /*isRight=*/false,
                   /*lv=*/{
-                      0.6f + 0.3f * float(std::sin(t * 0.7)),
-                      0.5f + 0.3f * float(std::sin(t * 0.9 + 1.0)),
-                      0.7f + 0.2f * float(std::sin(t * 1.1 + 2.0)),
+                      0.85f + 0.05f * float(std::sin(t * 0.7)),
+                      0.95f + 0.05f * float(std::sin(t * 0.9 + 1.0)),
+                      0.15f + 0.05f * float(std::sin(t * 1.1 + 2.0)),
                   });
 
         // === RIGHT (target) block — anchored TopRight, 3s-on / 3s-off ===
@@ -141,81 +155,166 @@ public:
 private:
     struct SBarLevels { float h, m, s; };
 
+    // Draws an octagonal portrait frame at (x, y, size, size). Faked via
+    // stacked horizontal strips of decreasing width near top/bottom edges
+    // to approximate a chamfered octagon. Gold frame border + dark fill;
+    // the actual portrait sprite would be blitted inside this frame.
+    void DrawOctagonalPortrait(int32_t x, int32_t y, int32_t size, uint8_t a)
+    {
+        const int32_t chamfer = size / 4;  // pixels chamfered at each corner
+        const uint8_t fr = 60, fg = 50, fb = 30;             // fill (dark brown)
+        const uint8_t br = 200, bg = 160, bb = 70;           // border (gold)
+
+        // Body: stacked horizontal strips. For rows in the chamfered
+        // top/bottom region, narrow the strip.
+        for (int32_t row = 0; row < size; ++row)
+        {
+            int32_t inset = 0;
+            if (row < chamfer)              inset = chamfer - row;
+            else if (row >= size - chamfer) inset = chamfer - (size - 1 - row);
+            const int32_t rx = x + inset;
+            const int32_t rw = size - 2 * inset;
+            // Fill row
+            Renderer->DrawSolidRect(rx, y + row, rw, 1, fr, fg, fb, a);
+            // Border pixels: left + right edges (1px)
+            Renderer->DrawSolidRect(rx, y + row, 1, 1, br, bg, bb, a);
+            Renderer->DrawSolidRect(rx + rw - 1, y + row, 1, 1, br, bg, bb, a);
+        }
+        // Top + bottom border strips (1px) — bridge the chamfered edges
+        const int32_t topY = y;
+        const int32_t botY = y + size - 1;
+        const int32_t topW = size - 2 * chamfer;
+        Renderer->DrawSolidRect(x + chamfer, topY, topW, 1, br, bg, bb, a);
+        Renderer->DrawSolidRect(x + chamfer, botY, topW, 1, br, bg, bb, a);
+        // Diagonal chamfer borders (1px steps)
+        for (int32_t s = 0; s < chamfer; ++s)
+        {
+            // top-left → top-center
+            Renderer->DrawSolidRect(x + s, y + chamfer - s, 1, 1, br, bg, bb, a);
+            // top-right
+            Renderer->DrawSolidRect(x + size - 1 - s, y + chamfer - s, 1, 1, br, bg, bb, a);
+            // bottom-left
+            Renderer->DrawSolidRect(x + s, y + size - 1 - (chamfer - s), 1, 1, br, bg, bb, a);
+            // bottom-right
+            Renderer->DrawSolidRect(x + size - 1 - s, y + size - 1 - (chamfer - s), 1, 1, br, bg, bb, a);
+        }
+    }
+
+    // 9x9 blue diamond icon centered on (cx, cy).
+    void DrawDiamondIcon(int32_t cx, int32_t cy,
+                         uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+    {
+        for (int32_t row = -4; row <= 4; ++row)
+        {
+            const int32_t w = 9 - 2 * (row < 0 ? -row : row);
+            Renderer->DrawSolidRect(cx - w / 2, cy + row, w, 1, r, g, b, a);
+        }
+    }
+
+    // 7x7 upward-pointing yellow chevron centered on (cx, cy).
+    void DrawChevronIcon(int32_t cx, int32_t cy,
+                         uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+    {
+        // Filled triangle pointing up: top point at row -3, base at row +3.
+        for (int32_t row = -3; row <= 3; ++row)
+        {
+            const int32_t w = (row + 4);  // 1..7
+            Renderer->DrawSolidRect(cx - w / 2, cy + row, w, 1, r, g, b, a);
+        }
+    }
+
     void DrawBlock(int32_t outerX, int32_t blockW, int32_t barW,
                    bool isRight, SBarLevels lv, float fadeAlpha = 1.0f)
     {
         const uint8_t aFrame = uint8_t(255 * fadeAlpha);
         const int32_t blockY = kBlockMargin;
 
-        // Portrait box at the OUTER corner — placeholder solid rect for
-        // now (real portrait comes from character data, not playscrn.dat).
+        // Portrait at OUTER corner — faked as an octagonal frame to
+        // approximate the retail ornate gem-shaped portrait frame.
+        // (Real portrait sprite comes from character data, not
+        // playscrn.dat; that wiring is deferred to a later iteration.)
         const int32_t portraitX = isRight
             ? outerX + blockW - kPortraitSize
             : outerX;
-        Renderer->DrawSolidRect(portraitX, blockY,
-                                kPortraitSize, kPortraitSize,
-                                60, 50, 30, aFrame);
-        Renderer->DrawSolidRect(portraitX, blockY, kPortraitSize, 1,
-                                180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(portraitX, blockY + kPortraitSize - 1,
-                                kPortraitSize, 1, 180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(portraitX, blockY, 1, kPortraitSize,
-                                180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(portraitX + kPortraitSize - 1, blockY,
-                                1, kPortraitSize, 180, 140, 60, aFrame);
+        DrawOctagonalPortrait(portraitX, blockY, kPortraitSize, aFrame);
 
-        // 3 stacked bars. Bars sit to the INNER side of the portrait.
-        // Each bar = colored gradient fill (placeholder for retail's
-        // per-bar mosaic-surface composition) + icon at outer end.
+        // 3 stacked bars with per-bar length stagger (matches reference).
+        // Each bar = outline + dark base + bright highlight strip
+        // (faked gradient/sheen) + tapered scimitar tip + icon at outer end.
+        // Tight packing: bars start at portrait edge - 4 so icons can
+        // overlap the portrait slightly (matches reference).
         const int32_t barX = isRight
-            ? outerX                              // RIGHT block: bars left of portrait
-            : outerX + kPortraitSize + 4;         // LEFT  block: bars right of portrait
+            ? outerX + 4                          // RIGHT block: bars left of portrait
+            : outerX + kPortraitSize - 4;         // LEFT  block: bars start at portrait edge -4
+
+        (void)g_textHealthBar;  // raw green bitmap doesn't match per-bar colors yet
 
         const float lvls[3] = { lv.h, lv.m, lv.s };
         for (int i = 0; i < 3; ++i)
         {
-            const int32_t rowY = blockY + 2 + i * kBarRowPitch;
-
-            // Skip the green texthealthbar bitmap blit — it doesn't
-            // match the retail per-bar colors and currently dominates
-            // visually. Once the mosaic-surface compositing pipeline
-            // lands, the bitmap's track + icon-slot + value-text-region
-            // will be color-tinted per bar and blitted directly.
-            (void)g_textHealthBar;
-
-            // === Bar fill ===
-            // Approximated scimitar shape: rectangular body with a
-            // tapered triangular tip. Drawn as a stack of decreasing-
-            // height rect slices along the fade region.
-            const float lvl = std::clamp(lvls[i], 0.0f, 1.0f);
-            const int32_t totalW = std::max<int32_t>(kBarFillW, 80);
-            const int32_t bodyW  = int32_t(totalW * 0.7f);     // 70% solid
-            const int32_t tipW   = totalW - bodyW;             // 30% tapered tip
+            const int32_t rowY = blockY + 4 + i * kBarRowPitch;
+            const int32_t totalW = kBarBodyW;
+            const int32_t bodyW  = int32_t(totalW * 0.90f);    // 90% solid (subtle taper)
+            const int32_t tipW   = totalW - bodyW;
             const int32_t fillH  = kBarFillH;
+            const float   lvl    = std::clamp(lvls[i], 0.0f, 1.0f);
             const int32_t filledTotal = int32_t(float(totalW) * lvl);
             const int32_t actualBodyW = (bodyW < filledTotal) ? bodyW : filledTotal;
             const int32_t actualTipW  = (filledTotal > actualBodyW)
                                         ? (filledTotal - actualBodyW) : 0;
 
             const int32_t fillSlotY = rowY + kBarFillInsetY;
-            const auto& c = kBarColors[i];
+            const auto& st = kBarStyles[i];
 
-            // Solid body
+            // 1px darker outline behind the bar (offset by 1 in all dirs).
+            // Drawn first so the fill paints over the inner area.
+            const int32_t outlineX = isRight ? barX - 1 : barX - 1;
+            Renderer->DrawSolidRect(outlineX, fillSlotY - 1,
+                                    totalW + 2, fillH + 2,
+                                    st.outline.r, st.outline.g, st.outline.b,
+                                    aFrame);
+
+            // Solid base body — drawn as gradient slices (brighter near
+            // the icon end, darker toward the tip) for the reference's
+            // metallic-sheen look. Each slice = vertical 1px column.
             if (actualBodyW > 0)
             {
-                const int32_t bx = isRight
-                    ? barX + totalW - actualBodyW
-                    : barX;
-                Renderer->DrawSolidRect(bx, fillSlotY, actualBodyW, fillH,
-                                        c.r, c.g, c.b, aFrame);
+                const int32_t bx = isRight ? barX + totalW - actualBodyW : barX;
+                for (int32_t s = 0; s < actualBodyW; ++s)
+                {
+                    // t01 = 0 at icon end, 1 at tip end.
+                    const float t01 = isRight
+                        ? float(s) / float(actualBodyW)
+                        : float(actualBodyW - 1 - s) / float(actualBodyW);
+                    // 1 - t01 lerp factor toward darkness
+                    const float dark = 0.50f * t01;  // 50% darken at tip end
+                    const uint8_t br = uint8_t(st.base.r * (1.0f - dark));
+                    const uint8_t bgc = uint8_t(st.base.g * (1.0f - dark));
+                    const uint8_t bb = uint8_t(st.base.b * (1.0f - dark));
+                    Renderer->DrawSolidRect(bx + s, fillSlotY, 1, fillH,
+                                            br, bgc, bb, aFrame);
+                }
+                // Bright highlight strip (top 1/3 of bar height) for sheen
+                // — also gradient-darkened from icon end to tip end.
+                const int32_t hiH = fillH / 3 + 1;
+                for (int32_t s = 0; s < actualBodyW; ++s)
+                {
+                    const float t01 = isRight
+                        ? float(s) / float(actualBodyW)
+                        : float(actualBodyW - 1 - s) / float(actualBodyW);
+                    const float dark = 0.40f * t01;
+                    const uint8_t hr = uint8_t(st.highlight.r * (1.0f - dark));
+                    const uint8_t hg = uint8_t(st.highlight.g * (1.0f - dark));
+                    const uint8_t hb = uint8_t(st.highlight.b * (1.0f - dark));
+                    Renderer->DrawSolidRect(bx + s, fillSlotY + 1, 1, hiH,
+                                            hr, hg, hb, aFrame);
+                }
             }
-            // Tapered tip (slices of decreasing height)
+            // Tapered scimitar tip
             if (actualTipW > 0 && tipW > 0)
             {
                 for (int32_t s = 0; s < actualTipW; ++s)
                 {
-                    // Slice height shrinks linearly from fillH at start of tip
-                    // to 1 at end of tip.
                     const float t01 = float(s) / float(tipW);
                     const int32_t sh = std::max<int32_t>(1,
                         int32_t(float(fillH) * (1.0f - t01)));
@@ -223,29 +322,47 @@ private:
                     const int32_t sx = isRight
                         ? barX + tipW - 1 - s
                         : barX + bodyW + s;
+                    // Base color, with highlight on top half if slice tall enough
                     Renderer->DrawSolidRect(sx, sy, 1, sh,
-                                            c.r, c.g, c.b, aFrame);
+                                            st.base.r, st.base.g, st.base.b, aFrame);
+                    if (sh >= 3)
+                        Renderer->DrawSolidRect(sx, sy, 1, 1,
+                                                st.highlight.r, st.highlight.g, st.highlight.b,
+                                                aFrame);
                 }
             }
 
-            // === Icon at outer end of bar ===
-            // Use `life` (heart, 24x21) for the health bar (i=0).
-            // No matching mana/stamina icons in playscrn.dat — leave
-            // those as small colored squares for now.
+            // === Icon at outer end of bar (overlapping the bar start) ===
+            // Per reference: icons sit AT the start of the bar, slightly
+            // overlapping into the portrait region.
+            const int32_t iconCenterX = isRight ? barX + totalW : barX;
+            const int32_t iconCenterY = rowY + kBarRowPitch / 2;
             if (i == 0 && g_lifeIcon)
             {
-                const int32_t ix = isRight
-                    ? barX + totalW + 2
-                    : barX - g_lifeIcon->width - 2;
-                const int32_t iy = rowY + (kBarRowPitch - g_lifeIcon->height) / 2;
+                // Real heart asset for health bar.
+                const int32_t ix = iconCenterX - g_lifeIcon->width / 2;
+                const int32_t iy = iconCenterY - g_lifeIcon->height / 2;
                 Renderer->DrawBitmap(g_lifeIcon, ix, iy);
+            }
+            else if (i == 1)
+            {
+                // Mana: small blue diamond — 4 triangular sides via stacked rects
+                DrawDiamondIcon(iconCenterX, iconCenterY,
+                                st.highlight.r, st.highlight.g, st.highlight.b, aFrame);
+            }
+            else if (i == 2)
+            {
+                // Stamina: small upward yellow chevron
+                DrawChevronIcon(iconCenterX, iconCenterY,
+                                st.highlight.r, st.highlight.g, st.highlight.b, aFrame);
             }
             else
             {
-                // Placeholder icon: 8x8 colored square in the bar color.
-                const int32_t ix = isRight ? barX + totalW + 2 : barX - 10;
-                const int32_t iy = rowY + 2;
-                Renderer->DrawSolidRect(ix, iy, 8, 8, c.r, c.g, c.b, aFrame);
+                // Default tiny square
+                const int32_t ix = iconCenterX - 3;
+                const int32_t iy = iconCenterY - 3;
+                const auto& hi = st.highlight;
+                Renderer->DrawSolidRect(ix, iy, 6, 6, hi.r, hi.g, hi.b, aFrame);
             }
         }
     }
