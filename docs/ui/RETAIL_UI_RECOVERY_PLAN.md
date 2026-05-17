@@ -90,6 +90,10 @@ Derived from `RECON_UI_COVERAGE.md` §6 (retail HUD element → candidate recon 
 
 The TPane/TScreen/TButtonPane/TButton core framework is in `src/` and was confirmed in `SRC_UI_INVENTORY.md` as carrying forward. Phase A.2 extended TPane with retained-mode hierarchy, layout, anchors, 9-slice, style, clip, OnCanvasResize. This is the foundation; no retail-sync needed here.
 
+**Retail base-class identifications:**
+- `TPane` base = `cls_0x5a4494` (Wave-1A; Init `FUN_00491900`, Close `FUN_00491970`).
+- `TButtonPane` intermediate = `cls_0x5a45c8` (Wave-3A, 4 lines: vtable inheritance vs known-derived TQuickSpellPane + slot-0 body matches src::TButtonPane::Initialize + canonical MSVC 3-stage ctor pattern + multiple derived classes use it as base; corroborated independently by Wave-3B). Init `FUN_00434e40`, Close `FUN_00434f30`. `FUN_0041c7f0` is `TPointerArray<TButton>::ctor`, NOT TButtonPane ctor (B.r5 correction).
+
 ### Tier 1 — combined character panel (upper-left + upper-right)
 
 The single biggest gap. Two instances of one pane class, each showing 3 bars (health, stamina, mana) + character info / portrait for the corresponding player. **`HealthBar` / `StaminaBar` globals in `revmain.cpp` are read by `player.cpp` / `food.cpp` / `spell.cpp` / `effect_old.cpp`** — the character panel needs to consume those (or replace them with a richer state model).
@@ -125,6 +129,7 @@ The single biggest gap. Two instances of one pane class, each showing 3 bars (he
 
 - `[ ]` **TDialogPane** — pre-release in `src/dialog.h`. `RECON_UI_COVERAGE.md` confirms this exists in retail.
 - `[ ]` **TScrollPane** / **TBookPane** — pre-release in `src/scroll.h` (where `TScrollPane` is the parchment-text reader, not a viewport scroll; `TBookPane` is the book reader). Retail confirms TBookPane exists.
+  - **Note (Wave-3B 2026-05-16):** `cls_0x5a5ae8` (parchment-styled in-game pane with up/down arrows) is **NOT** TBookPane / TScrollPane / TJournalPane / TSpellPane. It's the **spell-list sidebar pane** that iterates the player's known-spells list (`DAT_00667fcc+0x2ec/+0x2fc`, formatted `"SPELL %s"`); likely a new class added between pre-release src/ and final retail (no src name available). Conservative role descriptor in use: `SpellbookSidebarPane`. See [briefs/B_r9_parchment_viewer.md](briefs/B_r9_parchment_viewer.md). Separate TBookPane / TScrollPane (the parchment-text reader) class vtable not located near cls_0x5a5ae8 — may have been cut from retail OR live in a different .rdata region. Wave-4 work.
 - `[ ]` **TDeathPane** — pre-release in `src/death.h`. Recon string evidence: "Trouble_initializing_Death_pane".
 - `[ ]` **TPopupPane** — popup framework (used by save / load / option confirms). Not yet identified in inventory.
 
@@ -150,10 +155,10 @@ Per user, **settings / multiplayer / save / load / character-create / select-sta
 Don't hunt per-screen classes for these. Hunt the engine.
 
 - `[x]` **B.r11 — Identify the widget engine entry point** — DONE (Wave-2C, commit `42ff390`). Engine entry at `0x4377c0` (load); parse kickoff at `0x437620`; PANEL parser at `0x437000`; control dispatcher at `0x436ec0`; widget vocabulary fully extracted from `.rdata` at `0x005ccfb8-0x005cdc64`. See `docs/ui/briefs/B_r7_def_widget_engine.md`.
-- `[x]` **B.r12 — Identify the widget renderer** — partially done (Wave-2C). Renderer is per-widget via vtable+0xb4 lookup; the widget registry at `DAT_00655510` maps widget type names to widget classes whose vtable carries the draw method. The renderer is distributed (one method per widget subclass) rather than monolithic. Subclass class identities are deferred (Wave-3).
+- `[x]` **B.r12 — Identify the widget renderer** — DONE in two waves. Wave-2C identified the per-widget vtable+0xb4 dispatch shape. Wave-3C clarified the registry: `DAT_00655510` is `DefWidgetClassRecord**` (count `DAT_0065617c = 8`); records carry `{vtable_ptr, name_str}`. All 8 register thunks located. TWidget base vtable at `0x5a3ab8` (24 slots). SCROLLBAR widget ctor pinned (`FUN_0042de00`, vtable `0x5a3cd8`, type-id 5) — confirms the canonical widget-ctor pattern `*this = vtable; FUN_0042a210(this, N, ...)`. See [briefs/B_r10_def_widget_subclasses.md](briefs/B_r10_def_widget_subclasses.md). **Correction to Wave-2C:** the functions Wave-2C labelled "widget ctors" (FUN_0042aaf0 BITMAP, FUN_0042b340 TEXT, FUN_0042bd90 BUTTON, etc.) are actually STYLE-ATTRIBUTE PARSERS, not ctors. True ctors for BITMAP / TEXT / BUTTON / FRAME / LISTBOX / EDIT / DROPLIST are small adjacent functions yet to be individually pinned (Wave-4 work via FindImmRefs on each registered record).
 - `[x]` **B.r13 — Identify the input dispatcher** — DONE (Wave-2C). Input dispatcher at `0x4361f0` (also handles 'R' hot-reload of the .def — dev feature).
 - `[ ]` **B.r14 — Port the engine** so the existing 22 `.def` files render correctly. Test mode: `--test=ui-defwidget-engine` driven against a known-simple `.def` (e.g. `exit.def` — but note: exit.def UI may route through `popup.def`'s "yesno" template, not be a separate activator). Real-target test mode candidate: `popup.def`.
-- `[ ]` **B.r15 — Per-screen verification**. Once the engine renders, each DEF-driven screen should "just work" from the `.def` content. **11 per-screen activators are identified** (connect / connectsimple / savegame / loadgame / options / popup / hostgame / joingame / createchar / ingamemenu / mpingame); selstart + userinfo activators still unbound (Wave-3 to chase). Verify each screen against retail behavior + `--test=ui-options`, `--test=ui-savegame`, etc.
+- `[ ]` **B.r15 — Per-screen verification**. Once the engine renders, each DEF-driven screen should "just work" from the `.def` content. **12 per-screen activators identified** (Wave-2C: connect / connectsimple / savegame / loadgame / options / popup / hostgame / joingame / createchar / ingamemenu / mpingame; Wave-3C: selstart). **userinfo** activation routes through `FUN_00463149_MPLobby_ButtonDispatch` (Wave-3C — multiplayer-lobby button dispatcher branching on 7 button names; userinfo is one of its 7 branches, not a standalone activator). Verify each screen against retail behavior + `--test=ui-options`, `--test=ui-savegame`, etc.
 
 ### Tier 10 — Special-cased non-HUD screens (NEW)
 
