@@ -69,6 +69,7 @@
 #include "dialog.h"
 #include "debugui.h"
 #include "cursor.h"
+#include "platform/cursor.h"
 
 #include <sokol_app.h>
 
@@ -2563,11 +2564,31 @@ static void AppEvent(const sapp_event* ev)
         break;
       }
 
+      case SAPP_EVENTTYPE_MOUSE_ENTER:
+      {
+        // Re-assert the game cursor whenever the mouse re-enters our
+        // window: AppKit auto-pops [NSCursor set] to the system arrow
+        // across window/view crossings, so the initial set in
+        // SetMouseBitmap silently decays. Re-asserting on enter is the
+        // minimal fix that doesn't fight AppKit when the mouse legitimately
+        // belongs to another app (where we don't get this event).
+        if (!imgui_mouse)
+            rev_platform::ReassertOSCursor();
+        break;
+      }
+
       case SAPP_EVENTTYPE_MOUSE_MOVE:
       {
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
+        // Belt-and-suspenders re-assert: some window managers / setups
+        // skip the explicit MOUSE_ENTER but always send MOUSE_MOVE once
+        // the cursor is inside the window. The OS-cursor backend
+        // short-circuits when our cached cursor is already current, so
+        // this is a single pointer compare on the hot path.
+        if (!imgui_mouse)
+            rev_platform::ReassertOSCursor();
         const bool sector_test_drag =
             StartupTestMode[0] &&
             stricmp(StartupTestMode, "sector") == 0 &&
