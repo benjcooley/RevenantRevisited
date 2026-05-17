@@ -216,30 +216,114 @@ class TGameModeImpl final : public IRuntimeMode
 
     bool HandleMouseClick(int32_t button, int32_t x, int32_t y) override
     {
-        // TODO(input): retail MapPane.MouseClick is unsafe under the new
-        // renderer-owned-sectors architecture -- it touches pane state
-        // (posx/posy/scroll), Notify-iterates sectors that MapPane no
-        // longer owns, and synthesizes fake joystick keys. Calling it
-        // directly crashes on right-click.
-        //
-        // Right path: extract the gameplay-only subset (right-down ->
-        // start move, right-up -> stop move, left-down -> attack
-        // request) into a thin GameInput layer that touches Player +
-        // ControlMap without needing pane state. For now just log so
-        // we can confirm events arrive.
-        log_info("[gameinput] click button=%d at (%d,%d) -- not wired", button, x, y);
-        (void)button; (void)x; (void)y;
+        if (!Player) return false;
+        switch (button)
+        {
+          case MB_RIGHTDOWN:
+            // Begin walk-to. ApplyWalkCursor computes the world point
+            // under the cursor, picks an angle, swaps in the matching
+            // wedge bitmap, and asks the Player to walk that way.
+            ApplyWalkCursor(x, y);
+            walking = true;
+            return true;
+
+          case MB_RIGHTUP:
+            // Stop walking + revert to the default arrow cursor.
+            if (walking)
+            {
+                Player->Stop();
+                walking = false;
+                if (GameData)
+                    if (PTBitmap cursor = GameData->Bitmap("cursor"))
+                        SetMouseBitmap(cursor);
+            }
+            return true;
+
+          case MB_LEFTDOWN:
+            // Combat mode: random swing. Other modes (bow, hover-to-
+            // interact, inventory drag) are Phase 2 of mouse-loop work
+            // -- they need object pick via the OBJID buffer and an
+            // inventory pane to drop into. The combat-only path is
+            // enough to verify the dispatch chain end-to-end now.
+            if (Player->IsCombat())
+                Player->ButtonAttack(random(1, 3));
+            return true;
+        }
         return false;
     }
 
     bool HandleMouseMove(int32_t button, int32_t x, int32_t y) override
     {
-        // Same TODO as HandleMouseClick. The wedge-cursor / bow-aim
-        // logic in MapPane.MouseMove depends on uninitialized pane
-        // state; revisit when we have a GameInput layer.
-        (void)button; (void)x; (void)y;
+        // While the right button is held, follow the cursor with a
+        // fresh angle each move. cursorx/cursory are also updated by
+        // the sokol MOUSE_MOVE handler, but the click handler stores
+        // the right-down state here so we know not to chase the cursor
+        // when the player wasn't asking to walk.
+        if (walking && Player)
+            ApplyWalkCursor(x, y);
+        (void)button;
         return false;
     }
+
+  private:
+    // Compute the walk-to angle from the cursor's world projection to
+    // the player, push the matching wedge cursor + ask the player to
+    // start walking that way. Called on right-down and on right-button
+    // drag.
+    void ApplyWalkCursor(int32_t screen_x, int32_t screen_y)
+    {
+        S3DPoint curpos;
+        Player->GetPos(curpos);
+
+        TMapRenderer *mr = PlayScreen.MapRenderer();
+        if (!mr) return;
+
+        // Project the cursor pixel onto the player's z-plane so we get
+        // a world point at walkable height. zoffset=50 matches the
+        // pre-port GetMouseMapPos default.
+        S3DPoint target;
+        mr->ScreenToWorld(screen_x, screen_y, curpos.z + 50, target);
+
+        const S3DPoint dvec = { target.x - curpos.x,
+                                target.y - curpos.y,
+                                0 };
+        // Dead-zone: clicks inside the player's own footprint stop
+        // motion rather than asking the engine to walk zero distance.
+        if (absval(dvec.x) < 16 && absval(dvec.y) < 16)
+        {
+            Player->Stop();
+            if (GameData)
+                if (PTBitmap cursor = GameData->Bitmap("cursor"))
+                    SetMouseBitmap(cursor);
+            return;
+        }
+
+        int32_t angle = ConvertToFacing(curpos, target);
+
+        // 8-way wedge cursor. Snap angle to the nearest 45deg slot
+        // (Revenant's angle space is 0..255; +0x10 rounds before the
+        // mask). Directions[] is { ne, e, se, s, sw, w, nw, n, ne }.
+        static const char *kDirections[] =
+            { "ne", "e", "se", "s", "sw", "w", "nw", "n", "ne" };
+        const int32_t snapped = (angle + 0x10) & 0xe0;
+        const int32_t dir_idx = snapped >> 5;
+
+        if (GameData)
+        {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "wedge-%s", kDirections[dir_idx]);
+            if (PTBitmap wedge = GameData->Bitmap(buf))
+                SetMouseBitmap(wedge);
+
+            std::snprintf(buf, sizeof(buf), "wedge-%sshadow", kDirections[dir_idx]);
+            if (PTBitmap shadow = GameData->Bitmap(buf))
+                SetMouseShadow(shadow, 0, 43);
+        }
+
+        Player->Go(angle);
+    }
+
+    bool walking = false;
 };
 
 class TEditorModeImpl final : public IRuntimeMode
