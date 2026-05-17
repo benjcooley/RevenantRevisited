@@ -1,920 +1,519 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
-// *                    Copyright (C) 1998 Cinematix                       *
+// *                  Revenant Revisited (port) - 2026                     *
 // *                  sound.cpp - Music and sound module                   *
 // *************************************************************************
 //
-// Phase 2 port note: every body here is a stub. The original Win32 / MCI /
-// DirectSound implementation is preserved verbatim inside `#if 0` blocks
-// so it survives as a reference for the Phase 3 audio backend (miniaudio
-// or sokol_audio). When that lands, the `#if 0` content migrates to
-// `attic/src/sound_directsound.cpp` and this file gains real bodies.
+// 1998 TSound / TSoundPlayer rebuilt on the miniaudio facade in
+// audio_backend.h. The DirectSound + MCI + winmm bodies that used to live
+// here are now in attic/src/sound_directsound.cpp as a reference; this
+// file is short on purpose.
 //
-// Keep the public signatures in sound.h unchanged — callers across the
-// codebase (mappane.cpp, revmain.cpp, etc.) must keep compiling.
+// What survives from 1998:
+//   - The TSoundPlayer ref-counted sound list (FindSound / Mount /
+//     Unmount / Play / Stop by id), which is the API every game-side
+//     caller (PLAY, character.cpp, effect_old.cpp, etc.) talks to.
+//   - The CalcPan / CalcDirectionalVol mix law — flat stereo pan +
+//     distance attenuation in DirectSound dB units. Audio backend
+//     converts to linear under the hood.
+//
+// What changed:
+//   - No CDOpen/CDClose/CDPlayTrack shim. Music goes through
+//     audio::MusicPlayFile directly (callers updated, e.g. area.cpp).
+//   - LPDIRECTSOUNDBUFFER replaced by audio::Source* in TSound::source.
+//   - TSoundPlayer needs an explicit Initialize() now (called from
+//     revmain boot) — the 1998 code paired init with the device-open
+//     side effect of the first directsound call.
+//
+// *************************************************************************
 
 #include "sound.h"
 
+#include "audio_backend.h"
 #include "file.h"
+#include "logging.h"
 #include "mainwnd.h"
 #include "object.h"
 #include "parse.h"
 #include "resource.h"
+#include "revutils.h"
 #include "wavedata.h"
 
-#include <math.h>
-#include <stdio.h>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
 
-// *****************************
-// * CD Sound System Functions *
-// *****************************
+// Distance thresholds (world units) for the flat 2D mix law. < MINDIST is
+// full-volume; > MAXDIST is silent; in between we linearly interpolate in
+// the DirectSound dB attenuation range.
+#define MINDIST 256
+#define MAXDIST 1024
 
-#define SOUND_KILLCLICKS    (true)
+// SoundSystemOn — kept as a global gate so callers that pre-date Init can
+// disable audio without crashing. Set by revmain config.
+extern bool SoundSystemOn;
 
-#define DISTFACTOR (1.0f / (float)UNITSPERMETER)
+namespace {
 
-static bool isopen;
-
-#if 0 // TODO(port): real audio backend — Phase 3 (CD audio → ogg from data/Music/)
-static int32_t cdstartticks;
-static int32_t cdtracklen;
-static int32_t cdtrackpos;
-#endif
-
-void CDOpen()
-{
-#if 0 // TODO(port): real audio backend — Phase 3 (MCI cdaudio)
-    char err[120];
-    uint32_t res = mciSendString("open cdaudio shareable", nullptr, 0, 0L);
-    mciGetErrorString(res, err, 120);
-#endif
-
-    isopen = true;
+// Read a little-endian 32-bit value out of a buffer.
+inline uint32_t rd_u32_le(const uint8_t* p) {
+    return static_cast<uint32_t>(p[0])       |
+           static_cast<uint32_t>(p[1]) <<  8 |
+           static_cast<uint32_t>(p[2]) << 16 |
+           static_cast<uint32_t>(p[3]) << 24;
+}
+inline uint16_t rd_u16_le(const uint8_t* p) {
+    return static_cast<uint16_t>(p[0]) |
+           static_cast<uint16_t>(p[1]) << 8;
 }
 
-void CDClose()
+}  // namespace
+
+// LoadWave — small portable PCM RIFF/WAVE reader. Replaces the 1998
+// winmm mmio + ACM-decompress path. Only uncompressed PCM (fmtTag == 1)
+// is accepted; the shipped data set is all PCM.
+//
+// Allocates one TWaveData via operator new[]'d byte buffer (the trailing
+// flex array `uint8_t data[1]` carries the PCM samples). Caller frees
+// with `delete wave`.
+PTWaveData LoadWave(char* filename, int32_t volume, int32_t loopstart, int32_t loopend)
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (MCI cdaudio)
-    char err[120];
-    uint32_t res = mciSendString("close cdaudio", nullptr, 0, 0L);
-    mciGetErrorString(res, err, 120);
-#endif
+    if (!filename) return nullptr;
 
-    isopen = false;
-}
+    // rev_fopen walks SavePath → overlay → RunPath → data root → mounted
+    // archives (keyed by basename). That last step is what lets
+    // "sound/effects/aura.wav" find aura.wav inside the resources.rvr
+    // zip without us mounting an explicit per-subsystem virtual fs.
+    FILE* fp = rev_fopen(filename, "rb");
+    if (!fp) return nullptr;
 
-void CDPlayTrack(int32_t /*track*/)
-{
-#if 0 // TODO(port): real audio backend — Phase 3 (MCI cdaudio)
-    char err[120];
-    if (!SoundSystemOn)
-        return;
+    std::fseek(fp, 0, SEEK_END);
+    const long flen_l = std::ftell(fp);
+    std::fseek(fp, 0, SEEK_SET);
+    if (flen_l < 44 /* RIFF header + minimal fmt/data */) {
+        std::fclose(fp);
+        return nullptr;
+    }
 
-    if (!isopen)
-        CDOpen();
+    const size_t file_bytes = static_cast<size_t>(flen_l);
+    uint8_t* file_buf = new uint8_t[file_bytes];
+    const size_t got = std::fread(file_buf, 1, file_bytes, fp);
+    std::fclose(fp);
+    if (got != file_bytes) {
+        delete[] file_buf;
+        return nullptr;
+    }
 
-    char ret[40];
-    char buf[40];
+    if (std::memcmp(file_buf,     "RIFF", 4) != 0 ||
+        std::memcmp(file_buf + 8, "WAVE", 4) != 0) {
+        log_warn("audio: %s is not a RIFF/WAVE file", filename);
+        delete[] file_buf;
+        return nullptr;
+    }
 
-    uint32_t res = mciSendString("stop cdaudio", nullptr, 0, 0L);
-    mciGetErrorString(res, err, 120);
+    // Walk subchunks until we find both 'fmt ' and 'data'.
+    WAVEFORMATEX fmt{};
+    const uint8_t* pcm_data = nullptr;
+    uint32_t       pcm_len  = 0;
+    bool           have_fmt = false;
 
-    res = mciSendString("set cdaudio time format ms", nullptr, 0, 0L);
-    mciGetErrorString(res, err, 120);
+    size_t cursor = 12;  // skip RIFF/size/WAVE
+    while (cursor + 8 <= file_bytes) {
+        const char* ckid = reinterpret_cast<const char*>(file_buf + cursor);
+        const uint32_t cksz = rd_u32_le(file_buf + cursor + 4);
+        const size_t body = cursor + 8;
+        if (body + cksz > file_bytes) break;
 
-    wsprintf(buf, "status cdaudio position track %d", track);
-    res = mciSendString(buf, ret, 39, 0L);
-    mciGetErrorString(res, err, 120);
-
-    cdtrackpos = atol(ret);
-
-    wsprintf(buf, "status cdaudio length track %d", track);
-    res = mciSendString(buf, ret, 39, 0L);
-    mciGetErrorString(res, err, 120);
-
-    cdtracklen = atol(ret);
-
-    wsprintf(buf, "play cdaudio from %ld to %ld", cdtrackpos, cdtrackpos + cdtracklen - 1);
-
-    cdstartticks = GetTickCount();
-
-    res = mciSendString(buf, nullptr, 0, 0L);
-    mciGetErrorString(res, err, 120);
-#endif
-}
-
-uint32_t CDTrackLength(int32_t /*track*/)
-{
-#if 0 // TODO(port): real audio backend — Phase 3 (MCI cdaudio)
-    if (!SoundSystemOn)
-        return 0;
-
-    if (!isopen)
-        CDOpen();
-
-    char ret[40];
-    char buf[40];
-
-    mciSendString("set cdaudio time format ms", nullptr, 0, 0L);
-
-    wsprintf(buf, "status cdaudio length track %d", track);
-    mciSendString(buf, ret, 39, 0L);
-
-    return atol(ret);
-#endif
-    return 0;
-}
-
-void CDPlayRandomTrack()
-{
-#if 0 // TODO(port): real audio backend — Phase 3 (MCI cdaudio)
-    if (!SoundSystemOn)
-        return;
-
-    if (!isopen)
-        CDOpen();
-
-    char ret[40];
-    int32_t first = 1;
-    int32_t last;
-
-    mciSendString("status cdaudio number of tracks", ret, 39, 0L);
-    last = atoi(ret);
-
-    mciSendString("status cdaudio type track 1", ret, 39, 0L);
-    if (!stricmp(ret, "audio"))
-        first = 1;
-    else
-        first = 2;
-
-  // Check if this is our CD
-/*  char buf[40];
-    mciSendString("set cdaudio time format ms", nullptr, 0, 0L);
-    wsprintf(buf, "status cdaudio length track %d", 2);
-    mciSendString(buf, ret, 39, 0L);
-    int32_t tracklen = atol(ret);
-    if (tracklen > 1000L && tracklen < 1000L)
-        first = 2;
-*/
-
-    static int32_t played[20];
-    int32_t numplayed = min(20, last - first);
-    int32_t play;
-
-    bool wasplayed;
-    do
-    {
-        wasplayed = false;
-        play = random(first, last);
-        for (int32_t c = 0; c < numplayed; c++)
-        {
-            if (play == played[c])
-            {
-                wasplayed = true;
-                break;
-            }
+        if (std::memcmp(ckid, "fmt ", 4) == 0 && cksz >= 16) {
+            fmt.wFormatTag      = rd_u16_le(file_buf + body + 0);
+            fmt.nChannels       = rd_u16_le(file_buf + body + 2);
+            fmt.nSamplesPerSec  = rd_u32_le(file_buf + body + 4);
+            fmt.nAvgBytesPerSec = rd_u32_le(file_buf + body + 8);
+            fmt.nBlockAlign     = rd_u16_le(file_buf + body + 12);
+            fmt.wBitsPerSample  = rd_u16_le(file_buf + body + 14);
+            fmt.cbSize          = 0;
+            have_fmt = true;
+        } else if (std::memcmp(ckid, "data", 4) == 0) {
+            pcm_data = file_buf + body;
+            pcm_len  = cksz;
         }
-    } while (wasplayed);
+        // Chunks are 2-byte aligned per the RIFF spec.
+        cursor = body + cksz + (cksz & 1);
+        if (have_fmt && pcm_data) break;
+    }
 
-    CDPlayTrack(play);
+    if (!have_fmt || !pcm_data || pcm_len == 0) {
+        log_warn("audio: %s missing fmt/data chunk", filename);
+        delete[] file_buf;
+        return nullptr;
+    }
+    if (fmt.wFormatTag != 1 /* WAVE_FORMAT_PCM */) {
+        log_warn("audio: %s is non-PCM (tag=%u) — only PCM is supported",
+                 filename, fmt.wFormatTag);
+        delete[] file_buf;
+        return nullptr;
+    }
 
-    for (int32_t c = 0; c < numplayed - 1; c++)
-        played[c] = played[c + 1];
-    played[numplayed - 1] = play;
-#endif
+    // Allocate a TWaveData big enough for the PCM payload. TWaveData
+    // ends in `uint8_t data[1]` — extend the alloc by (pcm_len - 1).
+    // ::operator new (non-array) so callers can `delete wave;` and have
+    // it match.
+    const size_t alloc_bytes = sizeof(TWaveData) + pcm_len - 1;
+    auto* wave = static_cast<TWaveData*>(::operator new(alloc_bytes));
+    wave->format    = fmt;
+    wave->size      = pcm_len;
+    wave->volume    = volume;
+    wave->loopstart = loopstart;
+    wave->loopend   = loopend;
+    std::memcpy(wave->data, pcm_data, pcm_len);
+
+    delete[] file_buf;
+    return wave;
 }
 
-void CDStop()
-{
-#if 0 // TODO(port): real audio backend — Phase 3 (MCI cdaudio)
-    if (!isopen)
-        CDOpen();
-
-    if (!SoundSystemOn)
-        return;
-
-    mciSendString("stop cdaudio", nullptr, 0, 0L);
-#endif
-}
-
-bool CDPlaying()
-{
-#if 0 // TODO(port): real audio backend — Phase 3 (MCI cdaudio)
-    if (!isopen)
-        CDOpen();
-
-    if (cdtracklen == 0)
-        return false;
-
-    if (GetTickCount() - cdstartticks < (uint32_t)cdtracklen)
-        return true;
-#endif
-
-    return false;
-}
-
-void CDSetVolume(uint16_t /*volume*/)
-{
-#if 0 // TODO(port): real audio backend — Phase 3 (winmm aux device)
-    if (!isopen)
-        CDOpen();
-
-    int32_t devs = auxGetNumDevs();
-
-    AUXCAPS caps;
-
-    for (int32_t c = 0; c < devs; c++)
-    {
-        auxGetDevCaps(c, &caps, sizeof(AUXCAPS));
-        if (caps.wTechnology == AUXCAPS_CDAUDIO)
-        {
-            auxSetVolume(c, MAKELONG(volume,volume));
-            return;
-        }
-    }
-#endif
-}
-
-// *****************
-// * Sound Effects *
-// *****************
-
-// Loads a wave data object and returns a pointer to it.
-// NOTE: sound.h declares a different LoadWave() (returns PTWaveData). The
-// free function below is the 1998 internal helper that was only called
-// from TSound::Load. It uses Win32 mmio / LPBYTE and is kept under `#if 0`
-// in its entirety — no stub body, because it has no external callers.
-#if 0 // TODO(port): real audio backend — Phase 3 (winmm mmio WAVE loader)
-bool LoadWave(char *filename, LPWAVEFORMATEX &format, uint32_t &size, LPBYTE &data)
-{
-    HMMIO hmmio = mmioOpen(filename, nullptr, MMIO_READ | MMIO_ALLOCBUF);
-    if (!hmmio)
-        return false;
-
-    MMCKINFO mmckchunkinfo;
-    mmckchunkinfo.fccType = mmioFOURCC('W', 'A', 'V', 'E');
-    if (mmioDescend(hmmio, (LPMMCKINFO)&mmckchunkinfo, nullptr, MMIO_FINDRIFF))
-    {
-        mmioClose(hmmio, 0);
-        return false;
-    }
-
-    MMCKINFO subchunk;
-    subchunk.ckid = mmioFOURCC('f', 'm', 't', ' ');
-    if (mmioDescend(hmmio, &subchunk, &mmckchunkinfo, MMIO_FINDCHUNK))
-    {
-        mmioClose(hmmio, 0);
-        return false;
-    }
-
-  //read the fmt chunk
-    uint32_t dwfmtsize = subchunk.cksize;
-    format = (LPWAVEFORMATEX)new uint8_t[max(dwfmtsize, sizeof(WAVEFORMATEX))];
-    memset(format, 0, dwfmtsize);
-    if (mmioRead(hmmio, (HPSTR)format, dwfmtsize) != (int32_t)dwfmtsize)
-    {
-        mmioClose(hmmio, 0);
-        return false;
-    }
-
-  // search data chunk
-    subchunk.ckid = mmioFOURCC('d', 'a', 't', 'a');
-    if (mmioDescend(hmmio, &subchunk, &mmckchunkinfo,
-                MMIO_FINDCHUNK))
-    {
-        delete format;
-        mmioClose(hmmio, 0);
-        return false;
-    }
-
-    size = subchunk.cksize;
-    if (size == 0)
-    {
-        delete format;
-        mmioClose(hmmio, 0);
-        return false;
-    }
-
-    data = new uint8_t[size];
-
-    if (mmioRead(hmmio, (char *)data, size) != (int32_t)size)
-    {
-        delete data;
-        delete format;
-        mmioClose(hmmio, 0);
-        return false;
-    }
-
-    mmioClose(hmmio, 0);
-
-    return true;
-}
-#endif
+// *********************
+// * TSound (one voice) *
+// *********************
 
 TSound::TSound()
 {
-    SoundBuffer = nullptr;
+    source = nullptr;
     looping = false;
     next = nullptr;
     sound_volume = 0;
     memset(&listener_pos, 0, sizeof(listener_pos));
-    memset(&sound_pos, 0, sizeof(sound_pos));
-    memset(&format, 0, sizeof(format));
+    memset(&sound_pos,    0, sizeof(sound_pos));
+    memset(&format,       0, sizeof(format));
     size = 0;
 }
 
 TSound::~TSound()
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (DirectSound buffer release)
-    if (SoundBuffer)
-    {
-        SoundBuffer->Release();
-        SoundBuffer = nullptr;
+    if (source) {
+        audio::DestroySource(source);
+        source = nullptr;
     }
-#endif
     if (next)
         delete next;
 }
 
 bool TSound::IsPlaying()
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (DSBSTATUS_PLAYING bit)
-    return (GetStatus() & DSBSTATUS_PLAYING);
-#endif
-    return false;
+    return source && audio::IsPlaying(source);
 }
 
 bool TSound::IsLooping()
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (DSBSTATUS_LOOPING bit)
-    return (GetStatus() & DSBSTATUS_LOOPING);
-#endif
+    if (source) return audio::IsLooping(source);
     return looping;
 }
 
-// Load from wave file
-PTSound TSound::Load(char * /*name*/, int32_t /*dirresid*/)
+// Load from in-memory PCM (the only Load that actually has data to feed
+// the backend; the file/resource Loads below funnel into this one).
+PTSound TSound::Load(WAVEFORMATEX* format_in, uint32_t size_in, uint8_t* data_in, bool looping_in)
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (file-based WAV load)
-    char filename[MAXPATHLEN];
-
-    makepath(ResourcePath, filename, MAXPATHLEN - 1);
-    strcat(filename, "sound\\");
-    if (dirresid == DIRRESID_EFFECTDIR)
-        strcat(filename, "effects");
-    else if (dirresid == DIRRESID_DIALOGDIR)
-        strcat(filename, Language);
-    strcat(filename, "\\");
-    strcat(filename, name);
-    strcat(filename, ".wav");
-
-    LPWAVEFORMATEX format;
-    uint32_t size;
-    LPBYTE data;
-
-    if (!LoadWave(filename, format, size, data))
+    if (!format_in || !data_in || size_in == 0)
         return nullptr;
-
-    PTSound sound = Load(format, size, data, false);
-
-    delete format;
-    delete data;
-
-    return sound;
-#endif
-    return nullptr;
-}
-
-// Load from resource file
-PTSound TSound::Load(int32_t /*resid*/)
-{
-#if 0 // TODO(port): real audio backend — Phase 3 (resource-pack WAV load)
-    char filename[MAXPATHLEN];
-    strcpy(filename, "\\sound\\old\\wave");
-
-    PTWaveData wave = (PTWaveData)LoadResource(filename, resid);
-    if (!wave)
-        return nullptr;
-
-    bool looping = (wave->loopend - wave->loopstart) > 0;
-
-    PTSound sound = Load(&(wave->format), wave->size, wave->data, looping);
-
-    delete wave;
-
-    return sound;
-#endif
-    return nullptr;
-}
-
-// Load from a resource buffer
-PTSound TSound::Load(WAVEFORMATEX * /*format*/, uint32_t /*size*/, uint8_t * /*data*/, bool /*looping*/)
-{
-#if 0 // TODO(port): real audio backend — Phase 3 (DirectSound buffer + ACM decode)
-    MMRESULT mmres;
-    HACMSTREAM acmstream;
-    bool acmdecomp;
-
-    if (!format || !data)
-        return nullptr;
-
     if (!SoundPlayer.Functioning())
         return nullptr;
 
     PTSound sound = new TSound;
 
-  // Copy wave format
-    memcpy(&sound->format, format, sizeof(WAVEFORMATEX));
-    if (sound->format.wFormatTag != WAVE_FORMAT_PCM)
-    {
-        sound->format.wFormatTag = WAVE_FORMAT_PCM;
-//      sound->format.nChannels = 1;
-        sound->format.wBitsPerSample = 16;
-        sound->format.nBlockAlign = sound->format.wBitsPerSample * sound->format.nChannels / 8;
-        sound->format.nAvgBytesPerSec = sound->format.nSamplesPerSec * sound->format.nBlockAlign;
-        sound->format.cbSize = 0;
+    memcpy(&sound->format, format_in, sizeof(WAVEFORMATEX));
+    sound->size    = size_in;
+    sound->looping = looping_in;
 
-        mmres = acmStreamOpen(&acmstream, nullptr, format, &(sound->format),
-            nullptr, nullptr, nullptr, ACM_STREAMOPENF_NONREALTIME);
-        if (mmres != 0)
-        {
-            delete sound;
-            return nullptr;
-        }
-
-        acmStreamSize(acmstream, size, (uint32_t *)&(sound->size), ACM_STREAMSIZEF_SOURCE);
-
-        acmdecomp = true;
-    }
-    else
-    {
-        sound->size = size;
-        acmdecomp = false;
-    }
-
-    DSBUFFERDESC desc;
-    memset(&desc, 0, sizeof(DSBUFFERDESC));
-    desc.dwSize = sizeof(DSBUFFERDESC);
-//  desc.dwFlags = DSBCAPS_CTRL3D | DSBCAPS_CTRLVOLUME | DSBCAPS_STATIC;
-    desc.dwFlags = DSBCAPS_CTRLPAN | DSBCAPS_CTRLVOLUME | DSBCAPS_STATIC;
-    desc.dwBufferBytes = sound->size;
-    desc.lpwfxFormat = &sound->format;
-
-    HRESULT res = SoundPlayer.DirectSound->CreateSoundBuffer(&desc, &(sound->SoundBuffer), nullptr);
-    if (res != DS_OK)
-    {
+    sound->source = audio::CreateSourceFromPCM(format_in, data_in, size_in, looping_in);
+    if (!sound->source) {
         delete sound;
         return nullptr;
     }
-
-  // Get 3D buffer
-//  res = sound->SoundBuffer->QueryInterface(IID_IDirectSound3DBuffer, (LPVOID *)&(sound->SoundBuffer3D));
-//  if (res != DS_OK)
-//  {
-//      delete sound;
-//      return nullptr;
-//  }
-
-    LPVOID buffer;
-    res = sound->SoundBuffer->Lock(0, sound->size, &buffer, &sound->size, nullptr, nullptr, 0);
-    if (res != DS_OK)
-    {
-        sound->SoundBuffer->Release();
-        delete sound;
-        return nullptr;
-    }
-
-    if (acmdecomp)
-    {
-        ACMSTREAMHEADER acmheader;
-
-        memset(&acmheader, 0, sizeof(ACMSTREAMHEADER));
-        acmheader.cbStruct = sizeof(ACMSTREAMHEADER);
-        acmheader.pbSrc = data;
-        acmheader.cbSrcLength = size;
-        acmheader.pbDst = (LPBYTE)buffer;
-        acmheader.cbDstLength = sound->size;
-
-        mmres = acmStreamPrepareHeader(acmstream, &acmheader, 0);
-        if (mmres == 0)
-            mmres = acmStreamConvert(acmstream, &acmheader, ACM_STREAMCONVERTF_BLOCKALIGN);
-
-        if (mmres != 0)
-        {
-            sound->SoundBuffer->Unlock(&buffer, sound->size, nullptr, 0);
-            sound->SoundBuffer->Release();
-            delete sound;
-            return nullptr;
-        }
-
-        acmStreamClose(acmstream, 0);
-    }
-    else
-        memcpy(buffer, data, size);
-
-
-#if SOUND_KILLCLICKS
-
-#define SOUND_RAMPLEVELS    (32)
-    if (!looping)
-    {
-        // Kill clicks 16 bit mono signed
-        if (sound->format.nChannels == 1 &&
-            sound->format.wBitsPerSample == 16 &&
-            sound->size > 64)
-        {
-            short *s = (short *)buffer;
-            short *e = (short *)((uint8_t *)buffer + sound->size - 2);
-            for (int32_t c = 0; c < SOUND_RAMPLEVELS; c++, s++, e--)
-            {
-                *s = (short)(*s * (float)(c / SOUND_RAMPLEVELS));
-                *e = (short)(*e * (float)(c / SOUND_RAMPLEVELS));
-            }
-        }
-
-        // Kill clicks 8 bit mono unsigned
-        if (sound->format.nChannels == 1 &&
-            sound->format.wBitsPerSample == 8 &&
-            sound->size > 32)
-        {
-            uint8_t *s = (uint8_t *)buffer;
-            uint8_t *e = (uint8_t *)((uint8_t *)buffer + sound->size - 1);
-            for (int32_t c = 0; c < SOUND_RAMPLEVELS; c++, s++, e--)
-            {
-                *s = (uint8_t)(*s * (float)(c / SOUND_RAMPLEVELS));
-                *e = (uint8_t)(*e * (float)(c / SOUND_RAMPLEVELS));
-            }
-        }
-    }
-#endif
-
-    sound->SoundBuffer->Unlock(&buffer, sound->size, nullptr, 0);
-
-  // Set 3D info
-//  sound->SoundBuffer3D->SetMode(DS3DMODE_DISABLE, DS3D_IMMEDIATE);
-//  sound->SoundBuffer3D->SetConeAngles(DS3D_MAXCONEANGLE, DS3D_MAXCONEANGLE, DS3D_IMMEDIATE);
-//  sound->SoundBuffer3D->SetConeOrientation(0.0f, 0.0f, 0.0f, DS3D_IMMEDIATE);
-//  sound->SoundBuffer3D->SetConeOutsideVolume(DSBVOLUME_MAX, DS3D_IMMEDIATE);
-//  sound->SoundBuffer3D->SetMinDistance(256.0f, DS3D_IMMEDIATE);
-//  sound->SoundBuffer3D->SetMaxDistance(256.0f + 768.0f, DS3D_IMMEDIATE);
-
-    sound->looping = looping;
-    sound->next = nullptr;
-
     return sound;
-#endif
+}
+
+// Load by name from the active sound directory (effects/<lang>). The
+// file-system path is intentionally Posix-style; the 1998 backslashes are
+// gone with the Win32 build.
+PTSound TSound::Load(char* name, int32_t dirresid)
+{
+    if (!name || !SoundPlayer.Functioning())
+        return nullptr;
+
+    // rev_fopen handles all the path resolution: SavePath → overlay →
+    // RunPath → data root → mounted ZIPs (keyed by basename). The
+    // "sound/<sub>/<name>.wav" prefix matters for the on-disk fallback
+    // chain but is collapsed to just "<name>.wav" when the lookup ends
+    // up in resources.rvr.
+    char filename[MAXPATHLEN];
+    strncpyz(filename, "sound/", MAXPATHLEN);
+    if (dirresid == DIRRESID_EFFECTDIR)
+        strncatz(filename, "effects", MAXPATHLEN);
+    else if (dirresid == DIRRESID_DIALOGDIR)
+        strncatz(filename, Language.CStr(), MAXPATHLEN);
+    strncatz(filename, "/",  MAXPATHLEN);
+    strncatz(filename, name, MAXPATHLEN);
+    strncatz(filename, ".wav", MAXPATHLEN);
+
+    PTWaveData wave = ::LoadWave(filename);
+    if (!wave) {
+        log_warn("audio: wav not found %s", filename);
+        return nullptr;
+    }
+
+    const bool wave_loops = (wave->loopend - wave->loopstart) > 0;
+    PTSound sound = Load(&wave->format, wave->size, wave->data, wave_loops);
+    delete wave;
+    return sound;
+}
+
+// Load from a resource pack (the old WAVE.### resource ID path). We keep
+// the entry point so call sites don't churn, but the resource pack itself
+// is bypassed in the modern port — log a TODO and return nullptr until a
+// caller actually needs it.
+PTSound TSound::Load(int32_t resid)
+{
+    if (!SoundPlayer.Functioning())
+        return nullptr;
+    log_warn("audio: TSound::Load(resid=%d) not yet wired — resource-pack WAV path is unused", resid);
     return nullptr;
 }
 
 PTSound TSound::Duplicate()
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (DirectSound DuplicateSoundBuffer)
-    if (!SoundPlayer.Functioning())
+    if (!source || !SoundPlayer.Functioning())
         return nullptr;
 
     PTSound sound = new TSound;
-
-  // Copy format and size
     memcpy(&sound->format, &format, sizeof(WAVEFORMATEX));
-    sound->size = size;
-
-  // Copy buffer
-    HRESULT res = SoundPlayer.DirectSound->DuplicateSoundBuffer(SoundBuffer, &sound->SoundBuffer);
-    if (res != DS_OK)
-    {
+    sound->size    = size;
+    sound->looping = looping;
+    sound->source  = audio::DuplicateSource(source);
+    if (!sound->source) {
         delete sound;
         return nullptr;
     }
-
-  // Great!
     return sound;
-#endif
-    return nullptr;
 }
 
+// CalcPan / CalcDirectionalVol — the 1998 flat 2D mix law in DirectSound
+// units. Kept verbatim modulo unit literals so the audible behavior of
+// every shipped sound effect stays identical.
 
-#define MINDIST 256
-#define MAXDIST 1024
-
-
-// lpos is the listeners position
-// spos is the sound's position
+// lpos is the listener's position; spos is the sound's position.
 int32_t CalcPan(S3DPoint* lpos, S3DPoint* spos)
 {
     int32_t pan = 0;
-    S3DPoint tmp_pos;
-
-    if (lpos && spos)
-    {
-        int32_t distance = ::Distance(*lpos, *spos);
-
-        if (distance < MAXDIST)
-        {
-            // get the difference in positions...
-            memcpy(&tmp_pos, spos, sizeof(S3DPoint));
-            tmp_pos.x -= lpos->x;
-            tmp_pos.y -= lpos->y;
-            // Get panning based on angle from position
-            double a = atan2(tmp_pos.y, tmp_pos.x);
-            a += (M_PI / 2.0);
-#if 0 // TODO(port): real audio backend — Phase 3 (DSBPAN_RIGHT constant)
-            pan = (int32_t)(cos(a) * (double)DSBPAN_RIGHT / 16);
-#else
-            // DSBPAN_RIGHT was +10000 in DirectSound; keep the math shape so
-            // the Phase 3 backend can swap in its own pan range unit.
-            pan = (int32_t)(cos(a) * 10000.0 / 16.0);
-#endif
+    if (lpos && spos) {
+        const int32_t distance = ::Distance(*lpos, *spos);
+        if (distance < MAXDIST) {
+            // 1998: cos(angle) * DSBPAN_RIGHT(=+10000) / 16. The /16 is
+            // intentional — kept full panning rare so off-screen sounds
+            // still feel anchored to the world rather than the headphones.
+            const double dx = static_cast<double>(spos->x - lpos->x);
+            const double dy = static_cast<double>(spos->y - lpos->y);
+            double a = atan2(dy, dx) + (M_PI / 2.0);
+            pan = static_cast<int32_t>(cos(a) * 10000.0 / 16.0);
         }
     }
-
     return pan;
 }
 
-// lpos is the listeners position
-// spos is the sound's position
 int32_t CalcDirectionalVol(int32_t orig_vol, S3DPoint* lpos, S3DPoint* spos)
 {
     int32_t vol = orig_vol;
-
-    if (lpos && spos)
-    {
-        // Get volume based on distance
-        int32_t distance = ::Distance(*lpos, *spos);
-
+    if (lpos && spos) {
+        const int32_t distance = ::Distance(*lpos, *spos);
         if (distance > MAXDIST)
-            vol = 0;
+            vol = -10000;  // DSBVOLUME_MIN — full attenuation
         else if (distance > MINDIST)
-#if 0 // TODO(port): real audio backend — Phase 3 (DSBVOLUME_MIN constant)
-            vol = ((orig_vol - DSBVOLUME_MIN) * (MAXDIST - distance) / (MAXDIST - MINDIST)) + DSBVOLUME_MIN;
-#else
-            // DSBVOLUME_MIN was -10000 (hundredths of a dB) in DirectSound.
             vol = ((orig_vol - (-10000)) * (MAXDIST - distance) / (MAXDIST - MINDIST)) + (-10000);
-#endif
     }
-
     return vol;
 }
 
-
 void TSound::SetListenerPos(S3DPoint* lpos)
 {
-    if (lpos)
-    {
-        // get the listener's position
-        memcpy(&listener_pos, lpos, sizeof(S3DPoint));
-
-#if 0 // TODO(port): real audio backend — Phase 3 (SoundBuffer SetVolume/SetPan)
-        int32_t volume = CalcDirectionalVol(sound_volume, &listener_pos, &sound_pos);
-        int32_t pan = CalcPan(&listener_pos, &sound_pos);
-
-        SoundBuffer->SetVolume(volume);
-        SoundBuffer->SetPan(pan);
-#endif
+    if (!lpos) return;
+    memcpy(&listener_pos, lpos, sizeof(S3DPoint));
+    if (source) {
+        const int32_t v = CalcDirectionalVol(sound_volume, &listener_pos, &sound_pos);
+        const int32_t p = CalcPan(&listener_pos, &sound_pos);
+        audio::SetSourceVolumePan(source, v, p);
     }
 }
 
 void TSound::SetSoundPos(S3DPoint* spos)
 {
-    if (spos)
-    {
-        // get the sound's position
-        memcpy(&sound_pos, spos, sizeof(S3DPoint));
-
-#if 0 // TODO(port): real audio backend — Phase 3 (SoundBuffer SetVolume/SetPan)
-        int32_t volume = CalcDirectionalVol(sound_volume, &listener_pos, &sound_pos);
-        int32_t pan = 0;
-        if (volume)
-            pan = CalcPan(&listener_pos, &sound_pos);
-
-        SoundBuffer->SetVolume(volume);
-        SoundBuffer->SetPan(pan);
-#endif
+    if (!spos) return;
+    memcpy(&sound_pos, spos, sizeof(S3DPoint));
+    if (source) {
+        const int32_t v = CalcDirectionalVol(sound_volume, &listener_pos, &sound_pos);
+        const int32_t p = v ? CalcPan(&listener_pos, &sound_pos) : 0;
+        audio::SetSourceVolumePan(source, v, p);
     }
 }
 
-// lpos is the listeners position
-// spos is the sound's position
-void TSound::Play(int32_t volume, int32_t /*freq*/, S3DPoint* lpos, S3DPoint* spos)
+// lpos is the listener's position; spos is the sound's position.
+void TSound::Play(int32_t volume, int32_t freq, S3DPoint* lpos, S3DPoint* spos)
 {
-    if (lpos)
-    {
-        // get the listener's position
+    if (lpos) {
         memcpy(&listener_pos, lpos, sizeof(S3DPoint));
-
-        if (spos)   // if we are given a sound position, then use it...
+        if (spos)
             memcpy(&sound_pos, spos, sizeof(S3DPoint));
-        else        // otherwise, center it on the listener's position for right now...
+        else
             memcpy(&sound_pos, lpos, sizeof(S3DPoint));
-
-        // Get volume based on delta point
-        volume = CalcDirectionalVol(volume, lpos, spos);
+        volume = CalcDirectionalVol(volume, lpos, spos ? spos : lpos);
     }
 
     sound_volume = volume;
-        // store this value away for possible use later on
 
-#if 0 // TODO(port): real audio backend — Phase 3 (DirectSound Play/SetVolume/SetFrequency/SetPan)
-    int32_t pan = 0;
-
-    if (!SoundPlayer.Functioning() || SoundBuffer == nullptr)
+    if (!SoundPlayer.Functioning() || source == nullptr)
         return;
 
-    if (lpos)
-    {
-        if (volume)
-            pan = CalcPan(lpos, spos);
-    }
-
-    SoundBuffer->SetVolume(volume);
-    SoundBuffer->SetFrequency(freq);
-    SoundBuffer->SetPan(pan);
-
-//  SoundBuffer->SetCurrentPosition(0);
-    HRESULT error = SoundBuffer->Play(0, 0, looping ? DSBPLAY_LOOPING : 0);
-    if (error != DS_OK)
-    {
-        if (error == DSERR_BUFFERLOST)
-            error = 0;
-        else if (error == DSERR_INVALIDCALL)
-            error = 0;
-        else if (error == DSERR_INVALIDPARAM)
-            error = 0;
-        else if (error == DSERR_PRIOLEVELNEEDED)
-            error = 0;
-    }
-#endif
+    const int32_t pan = (lpos && volume) ? CalcPan(lpos, spos ? spos : lpos) : 0;
+    audio::PlaySource(source, volume, freq, pan);
 }
 
 void TSound::Stop()
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (DirectSound buffer stop)
-    if (!SoundPlayer.Functioning() || SoundBuffer == nullptr)
-        return;
-
-    SoundBuffer->Stop();
-#endif
+    if (!SoundPlayer.Functioning() || source == nullptr) return;
+    audio::StopSource(source);
 }
 
 uint32_t TSound::GetStatus()
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (DirectSound buffer GetStatus)
-    if (!SoundPlayer.Functioning() || SoundBuffer == nullptr)
-        return 0;
-
-    uint32_t status;
-    SoundBuffer->GetStatus(&status);
-
-    return status;
-#endif
+    // 1998 callers only ever asked "is this thing playing?" / "is it
+    // looping?"; the bitfield itself was DirectSound-specific. Expose
+    // just the two booleans via the dedicated IsPlaying/IsLooping methods
+    // instead, and return 0 here.
     return 0;
 }
 
-//void TSound::SetPosition(int32_t x, int32_t y, int32_t z)
-//{
-//  SoundBuffer3D->SetMode(DS3DMODE_HEADRELATIVE, DS3D_IMMEDIATE);
-//  SoundBuffer3D->SetPosition((float)x * DISTFACTOR, (float)y * DISTFACTOR, (float)z * DISTFACTOR, DS3D_IMMEDIATE);
-//}
+// **********************************
+// * TSoundPlayer (registry + mixer) *
+// **********************************
 
-//void TSound::SetVelocity(int32_t x, int32_t y, int32_t z)
-//{
-//  SoundBuffer3D->SetMode(DS3DMODE_HEADRELATIVE, DS3D_IMMEDIATE);
-//  SoundBuffer3D->SetPosition((float)x * DISTFACTOR, (float)y * DISTFACTOR, (float)z * DISTFACTOR, DS3D_IMMEDIATE);
-//}
+bool TSoundPlayer::Initialize()
+{
+    if (initialized) return true;
 
-//void TSound::SetOrientation(float x, float y, float z)
-//{
-//  SoundBuffer3D->SetMode(DS3DMODE_HEADRELATIVE, DS3D_IMMEDIATE);
-//  SoundBuffer3D->SetConeOrientation(x, y, z, DS3D_IMMEDIATE);
-//}
+    if (!SoundSystemOn) {
+        log_info("audio: SoundSystemOn=false — leaving audio offline");
+        return false;
+    }
 
-// ***********************
-// * Sound Effect Player *
-// ***********************
+    if (!audio::Init()) {
+        log_warn("audio: backend init failed — TSoundPlayer offline");
+        return false;
+    }
+
+    // ReadSoundList() walks ClassDefPath/sound.def (if present) plus the
+    // effects/ and language/ folders under ResourcePath. Either path can
+    // legitimately be empty — we still come up.
+    ReadSoundList();
+    initialized = true;
+    log_info("audio: TSoundPlayer ready, %d entries", soundlist.NumItems());
+    return true;
+}
 
 void TSoundPlayer::Close()
 {
     DestroySoundList();
-
-#if 0 // TODO(port): real audio backend — Phase 3 (DirectSound buffer / device release)
-    if (PrimaryBuffer)
-    {
-        PrimaryBuffer->Release();
-        PrimaryBuffer = nullptr;
+    if (initialized) {
+        audio::Shutdown();
+        initialized = false;
     }
+}
 
-    if (DirectSound)
-    {
-        DirectSound->Release();
-        DirectSound = nullptr;
-    }
-#endif
-
-    PrimaryBuffer = nullptr;
-    DirectSound = nullptr;
+bool TSoundPlayer::Functioning() const
+{
+    return initialized && audio::Functioning();
 }
 
 void TSoundPlayer::Pause()
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (PrimaryBuffer->Stop)
-    if (Functioning())
-        PrimaryBuffer->Stop();
-#endif
+    if (Functioning()) audio::PauseAll();
 }
 
 void TSoundPlayer::Unpause()
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (PrimaryBuffer->Play looping)
-    if (Functioning())
-        PrimaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
-#endif
+    if (Functioning()) audio::UnpauseAll();
 }
 
-void TSoundPlayer::SetVolume(int32_t /*volume*/)
+void TSoundPlayer::SetVolume(int32_t volume)
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (PrimaryBuffer->SetVolume)
-    if (Functioning())
-        PrimaryBuffer->SetVolume(volume);
-#endif
+    // 1998 called PrimaryBuffer->SetVolume(hundredths-of-a-dB). Forward
+    // to the audio backend's linear master volume.
+    if (!Functioning()) return;
+    const float linear = (volume <= -10000) ? 0.0f
+                       : (volume >=      0) ? 1.0f
+                       : std::pow(10.0f, static_cast<float>(volume) / 2000.0f);
+    audio::SetMasterVolume(linear);
 }
 
-// The sound system high-level (easy-interface) functions
+// ---- registry lookup ----------------------------------------------------
 
-int32_t TSoundPlayer::FindSound(char *soundname, int32_t nr)
+int32_t TSoundPlayer::FindSound(char* soundname, int32_t nr)
 {
     char buf[80];
-    if (nr >= 0)
-    {
+    if (nr >= 0) {
         sprintf(buf, "%s%d", soundname, nr);
         return FindSound(buf, -1);
     }
-    else
-        strcpy(buf, soundname);
+    strcpy(buf, soundname);
 
-    for (int32_t c = 0; c < soundlist.NumItems(); c++)
-    {
+    for (int32_t c = 0; c < soundlist.NumItems(); c++) {
         PSSoundRef ref = soundlist[c];
-        if (!ref)
-            continue;
-
-        if (!stricmp(ref->name, buf))
+        if (ref && !stricmp(ref->name, buf))
             return c;
     }
-
     return -1;
 }
 
-int32_t TSoundPlayer::NewSound(char *soundname, int32_t nr)
+int32_t TSoundPlayer::NewSound(char* soundname, int32_t nr)
 {
     char buf[80];
-    if (nr >= 0)
-    {
+    if (nr >= 0) {
         sprintf(buf, "%s%d", soundname, nr);
         return FindSound(buf, -1);
     }
-    else
-        strcpy(buf, soundname);
+    strcpy(buf, soundname);
 
     PSSoundRef ref = new SSoundRef;
-    ref->name = strdup(buf);
-    ref->resid = -1;
+    ref->name     = strdup(buf);
+    ref->dir      = nullptr;
+    ref->resid    = -1;
     ref->usecount = 0;
-    ref->sound = nullptr;
+    ref->flags    = 0;
+    ref->sound    = nullptr;
 
     int32_t id = soundlist.Add(ref);
-    if (id < 0)
-    {
+    if (id < 0) {
         free(ref->name);
         delete ref;
         return -1;
     }
-
     return id;
 }
 
+// ---- gc for SOUND_DYING ---------------------------------------------------
+
 void TSoundPlayer::UpdateDying()
 {
-    for (int32_t c = 0; c < soundlist.NumItems(); c++)
-    {
+    for (int32_t c = 0; c < soundlist.NumItems(); c++) {
         PSSoundRef ref = soundlist[c];
-        if (!ref)
-            continue;
+        if (!ref) continue;
 
-      // Clear any duplicated sounds for this ref if they've finished playing
-        if (ref->sound && ref->sound->Next())
-        {
-            PTSound prev, snd, next;
-
-            prev = ref->sound;
-            next = prev->Next();
-
-            while ((snd = next))
-            {
+        // Walk duplicate voices and prune the finished ones.
+        if (ref->sound && ref->sound->Next()) {
+            PTSound prev = ref->sound;
+            PTSound next = prev->Next();
+            for (PTSound snd; (snd = next); ) {
                 next = snd->Next();
-
-                if (snd->IsPlaying())
+                if (snd->IsPlaying()) {
                     prev = snd;
-                else
-                {
+                } else {
                     prev->SetNext(snd->Next());
                     snd->SetNext(nullptr);
                     delete snd;
@@ -922,11 +521,10 @@ void TSoundPlayer::UpdateDying()
             }
         }
 
-      // Clear the main sound if its SOUND_DYING flag is set
-        if (ref->flags & SOUND_DYING)
-        {
-            if (ref->sound && (!ref->sound->IsPlaying() || ref->sound->IsLooping()))
-            {
+        // Retire the main sound if the SOUND_DYING flag is set and it's
+        // done playing.
+        if (ref->flags & SOUND_DYING) {
+            if (ref->sound && (!ref->sound->IsPlaying() || ref->sound->IsLooping())) {
                 delete ref->sound;
                 ref->sound = nullptr;
                 ref->flags &= ~SOUND_DYING;
@@ -935,42 +533,32 @@ void TSoundPlayer::UpdateDying()
     }
 }
 
+// ---- mount / unmount / play / stop --------------------------------------
+
 bool TSoundPlayer::Mount(int32_t id)
 {
-    // Phase 2 stub: no functioning audio device means every Mount is a no-op.
     if (!Functioning() || id < 0 || id >= soundlist.NumItems())
         return false;
 
-#if 0 // TODO(port): real audio backend — Phase 3 (load + refcount mounted sound)
     PSSoundRef ref = soundlist[id];
-    if (!ref)
-        return false;
+    if (!ref) return false;
 
-    if (ref->usecount < 1)
-    {
-        if (ref->flags & SOUND_DYING)
+    if (ref->usecount < 1) {
+        if (ref->flags & SOUND_DYING) {
             ref->flags &= ~SOUND_DYING;
-        else
-        {
+        } else {
             if (ref->resid >= 0)
-                ref->sound = TSound::Load(ref->resid);            // Resid is WAVE.### id num
+                ref->sound = TSound::Load(ref->resid);
             else
-                ref->sound = TSound::Load(ref->name, ref->resid); // Resid is directory id num
+                ref->sound = TSound::Load(ref->name, ref->resid);
         }
-
-        if (ref->sound)
-            ref->usecount = 1;
-        else
-            ref->usecount = 0;
-    }
-    else
+        ref->usecount = ref->sound ? 1 : 0;
+    } else {
         ref->usecount++;
+    }
 
     UpdateDying();
-
-    return true;
-#endif
-    return false;
+    return ref->sound != nullptr;
 }
 
 bool TSoundPlayer::Unmount(int32_t id)
@@ -978,68 +566,48 @@ bool TSoundPlayer::Unmount(int32_t id)
     if (!Functioning() || id < 0 || id >= soundlist.NumItems())
         return false;
 
-#if 0 // TODO(port): real audio backend — Phase 3 (refcount + retire mounted sound)
     PSSoundRef ref = soundlist[id];
-    if (!ref)
-        return false;
+    if (!ref) return false;
 
     ref->usecount--;
-
-    if (ref->usecount < 1)
-    {
-        if (ref->sound)
-        {
-            if (ref->sound->IsPlaying() && !ref->sound->IsLooping())
+    if (ref->usecount < 1) {
+        if (ref->sound) {
+            if (ref->sound->IsPlaying() && !ref->sound->IsLooping()) {
                 ref->flags |= SOUND_DYING;
-            else
-            {
+            } else {
                 delete ref->sound;
                 ref->sound = nullptr;
             }
         }
-
         ref->usecount = 0;
     }
 
     UpdateDying();
-
     return true;
-#endif
-    return false;
 }
 
-bool TSoundPlayer::Play(int32_t id, int32_t /*volume*/, int32_t /*freq*/, S3DPoint* /*spos*/)
+bool TSoundPlayer::Play(int32_t id, int32_t volume, int32_t freq, S3DPoint* spos)
 {
     if (!Functioning() || id < 0 || id >= soundlist.NumItems())
         return false;
 
-#if 0 // TODO(port): real audio backend — Phase 3 (play or duplicate+play a mounted sound)
     PSSoundRef ref = soundlist[id];
-    if (!ref)
-        return false;
+    if (!ref || !ref->sound) return false;
 
-    if (ref && ref->sound)
-    {
-        if (!ref->sound->IsPlaying())
-            ref->sound->Play(volume, freq, &listener_pos, spos);
-        else
-        {
-            // create a duplicate of the buffer to play seperately
-            PTSound newsound = ref->sound->Duplicate();
-            if (!newsound)
-                return false;
-
-            newsound->SetNext(ref->sound->Next());
-            ref->sound->SetNext(newsound);
-            newsound->Play(volume);
-        }
+    if (!ref->sound->IsPlaying()) {
+        ref->sound->Play(volume, freq, &listener_pos, spos);
+    } else {
+        // Overlap an existing playing instance: duplicate the source so
+        // the new voice can run in parallel without re-triggering the old.
+        PTSound newsound = ref->sound->Duplicate();
+        if (!newsound) return false;
+        newsound->SetNext(ref->sound->Next());
+        ref->sound->SetNext(newsound);
+        newsound->Play(volume, freq, &listener_pos, spos);
     }
 
     UpdateDying();
-
     return true;
-#endif
-    return false;
 }
 
 bool TSoundPlayer::Stop(int32_t id)
@@ -1047,108 +615,90 @@ bool TSoundPlayer::Stop(int32_t id)
     if (!Functioning() || id < 0 || id >= soundlist.NumItems())
         return false;
 
-#if 0 // TODO(port): real audio backend — Phase 3 (stop a mounted sound)
     PSSoundRef ref = soundlist[id];
-    if (!ref)
-        return false;
-
-    if (ref && ref->sound)
-        ref->sound->Stop();
-
+    if (!ref) return false;
+    if (ref->sound) ref->sound->Stop();
     return true;
-#endif
-    return false;
 }
 
-// Returns actual sound object for sound (sound must be MOUNTED or this will return nullptr)
 PTSound TSoundPlayer::GetSound(int32_t id)
 {
     if (!Functioning() || id < 0 || id >= soundlist.NumItems())
         return nullptr;
-
     PSSoundRef ref = soundlist[id];
-    if (!ref)
-        return nullptr;
-
-    return ref->sound;
+    return ref ? ref->sound : nullptr;
 }
-
-
-
 
 void TSoundPlayer::SetListenerPos(int32_t x, int32_t y, int32_t z)
 {
-    PSSoundRef ref;
+    listener_pos.x = x;
+    listener_pos.y = y;
+    listener_pos.z = z;
 
-    listener_pos.x = x; listener_pos.y = y; listener_pos.z = z;
-
-    // iterate through all the mounted sounds and set the new listener's position
-    for (int32_t c = 0; c < soundlist.NumItems(); c++)
-    {
-        // get the next sound, but if it's null, then continue on...
-        if (!(ref = soundlist[c]))
-            continue;
-
-        // now set the listener's position for this sound...
-        if (ref->sound)
+    for (int32_t c = 0; c < soundlist.NumItems(); c++) {
+        PSSoundRef ref = soundlist[c];
+        if (ref && ref->sound)
             ref->sound->SetListenerPos(&listener_pos);
     }
 }
 
-//void TSoundPlayer::SetVelocity(int32_t x, int32_t y, int32_t z)
-//{
-//  Listener->SetPosition((float)x * DISTFACTOR, (float)y * DISTFACTOR, (float)z * DISTFACTOR, DS3D_IMMEDIATE);
-//}
+// ---- sound-list population from disk ------------------------------------
 
-//void TSoundPlayer::SetOrientation(float facex, float facey, float facez,
-//  float topx, float topy, float topz)
-//{
-//  Listener->SetOrientation(facex, facey, facez, topx, topy, topz, DS3D_IMMEDIATE);
-//}
-
-//void TSoundPlayer::CommitSettings()
-//{
-//  Listener->CommitDeferredSettings();
-//}
-
-bool TSoundPlayer::SearchSoundDir(char * /*soundpath*/, char * /*subdir*/, int32_t /*dirresid*/)
+bool TSoundPlayer::SearchSoundDir(const char* soundpath, const char* subdir, int32_t dirresid)
 {
-#if 0 // TODO(port): real audio backend — Phase 3 (_findfirst WAV enumeration)
-    char fname[MAXPATHLEN];
+    if (!subdir) return false;
 
-    PSSoundRef ref;
-    char name[128];
-
-  // ****** Search for sounds in current sound directory
-
-    strcpy(fname, soundpath);
-    strcat(fname, subdir);
-    strcat(fname, "\\*.wav");
-
-    struct _finddata_t data;
-
-    int32_t found, handle;
-    found = handle = _findfirst(fname, &data);
-    while (found != -1)
-    {
-        strcpy(name, data.name);
-        char *p = strchr(name, '.');
-        if (p)
-            *p = '\0';
-
-        ref = new SSoundRef;
-        ref->name = strdup(name);
-        ref->resid = dirresid;          // A negative number defined by DIRRESID_xxx macros
+    // First-wins de-dup: a sound that's already in the registry (from a
+    // prior pass or sound.def) doesn't get clobbered by an archive entry
+    // with the same basename.
+    auto add_if_new = [&](const char* basename) {
+        if (FindSound(const_cast<char*>(basename), -1) >= 0) return;
+        auto* ref     = new SSoundRef;
+        ref->name     = strdup(basename);
+        ref->dir      = nullptr;
+        ref->resid    = dirresid;
         ref->usecount = 0;
-        ref->sound = nullptr;
-
+        ref->flags    = 0;
+        ref->sound    = nullptr;
         soundlist.Add(ref);
+    };
 
-        found = _findnext(handle, &data);
+    // 1) Loose WAVs on disk under <RunPath>/sound/<subdir>/*.wav. Modders
+    // or partial extractions will land here; first pass for compatibility.
+    if (soundpath) {
+        std::filesystem::path dir = std::filesystem::path(soundpath) / subdir;
+        std::error_code ec;
+        if (std::filesystem::is_directory(dir, ec)) {
+            for (auto& ent : std::filesystem::directory_iterator(dir, ec)) {
+                if (ec) break;
+                if (!ent.is_regular_file()) continue;
+                auto ext = ent.path().extension().string();
+                for (auto& c : ext) c = static_cast<char>(std::tolower(c));
+                if (ext != ".wav") continue;
+
+                add_if_new(ent.path().stem().string().c_str());
+            }
+        }
     }
 
-    return true;
-#endif
+    // 2) Archive-resident WAVs under "Sound/<subdir>/" inside the mounted
+    // resource ZIPs (resources.rvr ships effects/ this way). Listing
+    // returns lowercased basenames *with* extension; strip ".wav" for
+    // the registry to match the disk path.
+    std::string prefix = std::string("Sound/") + subdir + "/";
+    std::vector<std::string> entries;
+    VFSListByPrefix(prefix.c_str(), entries);
+    for (auto& fname : entries) {
+        // Strip extension. (We already filtered to .wav-shaped names by
+        // path, but be defensive about other extensions slipping in.)
+        std::string base = fname;
+        auto dot = base.rfind('.');
+        std::string ext = (dot == std::string::npos) ? "" : base.substr(dot);
+        for (auto& c : ext) c = static_cast<char>(std::tolower(c));
+        if (ext != ".wav") continue;
+        base.resize(dot);
+        add_if_new(base.c_str());
+    }
     return true;
 }
 
@@ -1156,74 +706,55 @@ bool TSoundPlayer::ReadSoundList()
 {
     soundlist.Clear();
 
-#if 0 // TODO(port): real audio backend — Phase 3 (parse sound.def + enumerate WAVs)
+    // sound.def is optional (it carried the legacy resource-pack ID map);
+    // the directory scan below is what actually populates the registry
+    // for the modern WAV-on-disk path.
+    char defpath[MAXPATHLEN];
+    snprintf(defpath, MAXPATHLEN, "%ssound.def", ClassDefPath);
+    if (FILE* fp = TryOpen(defpath, "rb")) {
+        TFileParseStream s(fp, defpath);
+        TToken t(s);
+        t.Get();
+
+        char name[128];
+        int32_t resid;
+        while (t.Type() != TKN_EOF) {
+            if (t.Type() == TKN_RETURN || t.Type() == TKN_WHITESPACE) {
+                t.LineGet();
+                continue;
+            }
+            if (!Parse(t, "%s %d", name, &resid)) {
+                log_warn("audio: malformed sound.def near token '%s'", name);
+                break;
+            }
+            auto* ref = new SSoundRef;
+            ref->name     = strdup(name);
+            ref->dir      = nullptr;
+            ref->resid    = resid;
+            ref->usecount = 0;
+            ref->flags    = 0;
+            ref->sound    = nullptr;
+            soundlist.Add(ref);
+        }
+        fclose(fp);
+    }
+
     char fname[MAXPATHLEN];
-    sprintf(fname, "%ssound.def", ClassDefPath);
+    strncpyz(fname, RunPath, MAXPATHLEN);
+    strncatz(fname, "sound/", MAXPATHLEN);
 
-    FILE *fp = TryOpen(fname, "rb");
-    if (fp == nullptr)
-        return false;
-
-    TFileParseStream s(fp, fname);
-    TToken t(s);
-
-    t.Get();
-
-    PSSoundRef ref;
-    char name[128];
-    int32_t resid;
-
-    do
-    {
-        if (t.Type() == TKN_RETURN || t.Type() == TKN_WHITESPACE)
-            t.LineGet();
-
-        if (t.Type() == TKN_EOF)
-            break;
-
-        if (!Parse(t, "%s %d", name, &resid))
-            return false;
-
-        ref = new SSoundRef;
-        ref->name = strdup(name);
-        ref->resid = resid;
-        ref->usecount = 0;
-        ref->sound = nullptr;
-
-        soundlist.Add(ref);
-
-    } while (t.Type() != TKN_EOF);
-
-    fclose(fp);
-
-  // ****** Search for sounds in current sound directory
-
-    makepath(ResourcePath, fname, MAXPATHLEN - 1);
-    strcat(fname, "sound\\");
-
-    if (!SearchSoundDir(fname, "effects", DIRRESID_EFFECTDIR))
-        return false;
-
-    if (!SearchSoundDir(fname, Language, DIRRESID_DIALOGDIR))
-        return false;
-#endif
-
+    SearchSoundDir(fname, "effects",        DIRRESID_EFFECTDIR);
+    SearchSoundDir(fname, Language.CStr(),  DIRRESID_DIALOGDIR);
     return true;
 }
 
 void TSoundPlayer::DestroySoundList()
 {
-    for (int32_t c = 0; c < soundlist.NumItems(); c++)
-    {
+    for (int32_t c = 0; c < soundlist.NumItems(); c++) {
         PSSoundRef ref = soundlist[c];
-        if (!ref)
-            continue;
-
-        if (ref->sound)
-            delete ref->sound;
-
+        if (!ref) continue;
+        if (ref->sound) delete ref->sound;
         free(ref->name);
     }
-
     soundlist.DeleteAll();
 }

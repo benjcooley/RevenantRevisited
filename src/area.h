@@ -9,6 +9,7 @@
 #include "revenant.h"
 
 #include "graphics.h"
+#include "object.h"   // MAXNAMELEN, FILENAMELEN — TArea uses both for fixed buffers
 #include "parse.h"
 
 typedef TSizableArray<SRect, 4, 4> TRectArray;
@@ -22,6 +23,7 @@ typedef TSizableArray<SRect, 4, 4> TRectArray;
 #define AREA_LOADSCRIPTS        (1<<4)  // This area should load a script file
 #define AREA_PLAYCDMUSIC        (1<<5)  // This area should play cd music tracks
 #define AREA_PLAYAMBIENT        (1<<6)  // This area should play ambient sound effects
+#define AREA_SETLIGHTING        (1<<7)  // Revisited: per-area lighting overrides (point-light multipliers, etc.)
 
 _CLASSDEF(TArea)
 class TArea
@@ -36,13 +38,28 @@ class TArea
     SColor ambcolor, nightambcolor;     // Ambient color
     int32_t lastdaylight;               // Last daylight value
 
-  // Ambient sound stuff
+    // Revisited per-area lighting (sets AREA_SETLIGHTING when authored).
+    // Identity values leave the renderer state untouched. Caves typically
+    // crank intensity to ~1.5-2.0; open zones drop range to keep crisp.
+    double  point_light_int_mul   = 1.0;    // POINTLIGHTINT
+    double  point_light_range_mul = 1.0;    // POINTLIGHTRANGE
+
+  // Ambient sound (AMBSOUND tag): a single sound, looped at low volume
+  // for the duration of the player's time inside the area. Sourced from
+  // the SoundPlayer registry (effects/ + language/ + sound.def union),
+  // so the name is just the basename without extension — e.g.
+  // AMBSOUND "cave" looks up SoundPlayer.FindSound("cave").
+    char ambsound[MAXNAMELEN];          // empty → no ambient sound
+    int32_t ambsoundid;                 // cached SoundPlayer id while mounted, -1 otherwise
+    int32_t audioenv;                   // EAX environment preset id (AUDIOENV); 0 = generic
+    char bgeffect[MAXNAMELEN];          // visual background effect name (BGEFFECT) — gameflow stores it, VFX track owns rendering
+
     void InitAmbientSounds();
-      // Initializes ambient sounds for area
+      // Mounts + starts the ambient sound looping at low volume.
     void CloseAmbientSounds();
-      // Deinitializes ambient sounds for area
+      // Stops + unmounts the ambient sound.
     void PlayAmbientSounds();
-      // Plays ambient sound effects when music not playing
+      // Per-tick check; keeps the loop running if anything stops it.
 
   // CD audio music playing
     int32_t cdplaynum;                      // Current track to play
@@ -73,9 +90,28 @@ class TArea
 
     int32_t GetFlags() { return flags; }
       // Returns area flags
-        
+
+    const char *GetName() const { return name; }
+      // Returns area name (for "Bake Defaults to Source" + display)
+
     bool In(S3DPoint &pos, int32_t lev);
       // Returns true if player's position is in this area
+
+    // Bake-defaults entry point: overwrite the per-area classic lighting
+    // fields with values supplied from the generated revisited_defaults.cpp
+    // table. Called after area.def parsing (so baked defaults take
+    // precedence over authored values per the layered-defaults model).
+    void SetClassicLighting(int32_t amb, const SColor &amb_c,
+                            int32_t night_amb, const SColor &night_c,
+                            double point_int_mul, double point_range_mul);
+
+    // Snapshot accessors used by the bake button to read current state.
+    int32_t      Amblight()           const { return amblight; }
+    int32_t      Nightamblight()      const { return nightamblight; }
+    const SColor &Ambcolor()          const { return ambcolor; }
+    const SColor &Nightambcolor()     const { return nightambcolor; }
+    double       PointLightIntMul()   const { return point_light_int_mul; }
+    double       PointLightRangeMul() const { return point_light_range_mul; }
 
     void GetCurrentAmbient(int32_t &ambient, SColor &color);
       // Returns the current ambient values based on the time of day
@@ -110,6 +146,10 @@ class TAreaManager
       // Returns the control entry for the given index
     PTArea InArea(S3DPoint &pos, int32_t lev);
       // Returns the area that the point is in, or nullptr if not in any area
+    PTArea CurrentArea();
+      // Returns the area the player is currently in (AREA_PLAYERIN flag),
+      // or nullptr if none. Cheaper than InArea — just scans the player-in
+      // flag rather than re-doing the geometry test.
     bool Load();
       // Loads all areas from the "AREA.DEF" file
     void Pulse();

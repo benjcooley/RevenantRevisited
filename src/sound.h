@@ -1,8 +1,14 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
-// *                    Copyright (C) 1998 Cinematix                       *
+// *                  Revenant Revisited (port) - 2026                     *
 // *                   sound.h - Music and sound module                    *
 // *************************************************************************
+//
+// 1998 TSound / TSoundPlayer public API sitting on top of the modern
+// miniaudio facade (see audio_backend.h). The DirectSound pointer types
+// that used to live in this header are gone; an opaque audio::Source*
+// replaces LPDIRECTSOUNDBUFFER for per-sound voices, and TSoundPlayer
+// now owns its boot state through an explicit Initialize()/Close() pair.
 
 #pragma once
 
@@ -10,30 +16,10 @@
 
 #include "wavedata.h"
 
-// Make it so we don't have to include directsound
-#ifndef __DSOUND_INCLUDED__
-struct IDirectSoundBuffer;
-typedef struct IDirectSoundBuffer *LPDIRECTSOUNDBUFFER;
-struct IDirectSound;
-typedef struct IDirectSound *LPDIRECTSOUND;
-struct IDirectSound3DBuffer;
-typedef struct IDirectSound3DBuffer *LPDIRECTSOUND3DBUFFER;
-struct IDirectSound3DListener;
-typedef struct IDirectSound3DListener *LPDIRECTSOUND3DLISTENER;
-#endif
-
-// CD functions
-void CDOpen();
-void CDClose();
-void CDPlayTrack(int32_t track);
-uint32_t CDTrackLength(int32_t track);
-void CDPlayRandomTrack();
-void CDStop();
-bool CDPlaying();
-void CDSetVolume(uint16_t volume);
+namespace audio { struct Source; }
 
 // Load a wave as a game sound object
-PTWaveData LoadWave(char *filename, 
+PTWaveData LoadWave(char *filename,
     int32_t volume = 0, int32_t loopstart = 0x7FFFFFFF, int32_t loopend = 0x7FFFFFFF);
 
 // Wave data structure
@@ -102,10 +88,9 @@ class TSound
     int32_t sound_volume;
         // save the volume of this sound so that we can get the correct value later on...
     
-    uint32_t size; 
+    uint32_t size;
     WAVEFORMATEX format;
-    LPDIRECTSOUNDBUFFER SoundBuffer;
-//  LPDIRECTSOUND3DBUFFER SoundBuffer3D;
+    audio::Source* source;  // opaque miniaudio voice (was LPDIRECTSOUNDBUFFER in 1998)
     bool looping;
 
     PTSound next;           // next in list
@@ -135,15 +120,16 @@ class TSoundPlayer
   public:
     friend class TSound;
 
-    TSoundPlayer() { DirectSound = nullptr; PrimaryBuffer = nullptr; soundlist.Clear(); }
+    TSoundPlayer() { initialized = false; soundlist.Clear(); }
     // Trivial dtor: explicit Close() runs from ShutdownGlobals before the
     // global destructs. Walking soundlist from a global dtor risks
     // cross-TU teardown ordering bugs.
     ~TSoundPlayer() = default;
 
+    bool Initialize();      // brings up audio backend + scans sound dirs
     void Close();           // idempotent — safe to call twice
 
-    bool Functioning() { return (DirectSound && PrimaryBuffer); }
+    bool Functioning() const;
 
     void Pause();
     void Unpause();
@@ -196,10 +182,14 @@ class TSoundPlayer
   // NOTE: Sound must be MOUNTED or this will return nullptr!
     PTSound GetSound(int32_t id);
 
-    LPDIRECTSOUND DirectSound;
+  // Read-only access to the registry. Used by the --test=audio panel
+  // and any future settings UI that wants to enumerate effects by name.
+    int32_t NumItems() const { return soundlist.NumItems(); }
+    PSSoundRef GetRef(int32_t id) const
+        { return (id >= 0 && id < soundlist.NumItems()) ? soundlist[id] : nullptr; }
 
   private:
-    bool SearchSoundDir(char *soundpath, char *subdir, int32_t dirresid);
+    bool SearchSoundDir(const char* soundpath, const char* subdir, int32_t dirresid);
         // Searches the given sound dir in the given sound path for all WAV files
         // and adds them to the sound list
     bool ReadSoundList();
@@ -209,8 +199,7 @@ class TSoundPlayer
     void UpdateDying();
         // Loop through ref list and kill off any dying sounds
 
-    LPDIRECTSOUNDBUFFER PrimaryBuffer;
-//  LPDIRECTSOUND3DLISTENER Listener;
+    bool initialized;               // audio::Init() succeeded
 
     TSoundArray soundlist;          // Array of active sounds
 

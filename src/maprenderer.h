@@ -84,6 +84,13 @@ class TMapRenderer
     void SetSunShadowEnabled(bool enable);
     [[nodiscard]] bool SunShadowEnabled() const;
 
+    // Per-area point-light multipliers driven by AREA.DEF POINTLIGHTINT and
+    // POINTLIGHTRANGE. Multiplies the per-light intensity / radius coming
+    // out of the sector data before submission. Identity is (1.0, 1.0).
+    // Caves typically want 1.5-2.0 on intensity to read; open forest can
+    // drop range to keep the scene crisper.
+    void SetPointLightMultipliers(float intensity_mul, float range_mul);
+
     // Last-frame draw counts, exposed so the editor status bar can show
     // exactly what's hitting the GPU. All-zero before the first frame.
     struct SDrawCounts {

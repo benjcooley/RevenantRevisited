@@ -8,6 +8,7 @@
 
 #include "revenant.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,6 +20,7 @@
 #include "object.h"
 #include "sound.h"
 #include "spell.h"
+#include "time.h"   // TTime::LegacyFrameCount() for flipbook 24 Hz gate
 
 bool SaveBlendState();
 bool RestoreBlendState();
@@ -34,6 +36,7 @@ _CLASSDEF(TEffect)
 _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
+#include "renderer.h"   // EFxDebugMode, SBillboardDrawItem, TRenderer
 
 // ***********
 // * TEffect *
@@ -67,6 +70,16 @@ class TEffect : public TObjectInstance
 // Runtime visual component for effects rendered as animated billboard
 // flipbooks. It is not serialized; effect builders attach/configure it from
 // existing object/imagery definitions.
+//
+// Submission path: each frame, MapRenderer's per-instance Submit walk
+// calls Submit(*Renderer, *oi). The component fills out an
+// SBillboardDrawItem (world-space, world-unit size, normalized uv_rect)
+// and hands it to Renderer->SubmitFxBillboard; the renderer's fx_pass
+// drains the queue after RunLightingPass (see docs/vfx/PHASE1_SPINE.md).
+//
+// Diagnostic ladder is per-instance EFxDebugMode; the shader branches per
+// PHASE1_SPINE.md §6 so the same pipeline serves Normal / SolidColor /
+// FullTexture / CurrentFrame.
 class TFlipbookBillboardComponent : public TObjectComponent
 {
   public:
@@ -88,7 +101,7 @@ class TFlipbookBillboardComponent : public TObjectComponent
         additive_blend = additive;
         replaces_default_visual = replaces_default;
     }
-    void SetDebugSolid(bool enable) { debug_solid = enable; }
+    void SetDebugMode(EFxDebugMode mode) { debug_mode = mode; }
     bool SetFrameExpression(const char* expr, std::string* error = nullptr)
         { return frame_expr.Compile(expr, error); }
     bool SetUvRectExpression(const char* expr, std::string* error = nullptr)
@@ -99,20 +112,28 @@ class TFlipbookBillboardComponent : public TObjectComponent
 
     [[nodiscard]] bool ReplacesDefaultVisual() const { return replaces_default_visual; }
     [[nodiscard]] TTextureHandle Texture() const { return texture_handle; }
-    [[nodiscard]] int32_t TextureWidth() const { return tex_w; }
-    [[nodiscard]] int32_t TextureHeight() const { return tex_h; }
-    [[nodiscard]] int32_t SourceX() const { float r[4]; UvRect(r); return int32_t(r[0] * float(tex_w)); }
-    [[nodiscard]] int32_t SourceY() const { float r[4]; UvRect(r); return int32_t(r[1] * float(tex_h)); }
-    [[nodiscard]] int32_t SourceWidth() const { float r[4]; UvRect(r); const int32_t w = int32_t(r[2] * float(tex_w)); return w > 0 ? w : 1; }
-    [[nodiscard]] int32_t SourceHeight() const { float r[4]; UvRect(r); const int32_t h = int32_t(r[3] * float(tex_h)); return h > 0 ? h : 1; }
     [[nodiscard]] float Width() const { return size_w; }
     [[nodiscard]] float Height() const { return size_h; }
     [[nodiscard]] bool AdditiveBlend() const { return additive_blend; }
-    [[nodiscard]] bool DebugSolid() const { return debug_solid; }
+    [[nodiscard]] EFxDebugMode DebugMode() const { return debug_mode; }
+
+    // Fill an SBillboardDrawItem from current component state and submit
+    // it to the renderer's FX queue. Called from the per-instance Submit
+    // walk in maprenderer.cpp.
+    void Submit(TRenderer& renderer, const TObjectInstance& inst) const;
 
   protected:
     void OnUpdate() override
     {
+        // RunUpdateList runs every render frame (60-120 Hz). The
+        // flipbook animation is authored for the legacy 24 Hz sim
+        // rate -- gate increments to actual legacy-frame transitions
+        // so it ticks 24x/sec on any display rate. Without this gate
+        // a 60 Hz display ran the 18-frame cycle 2.5x too fast.
+        const int64_t now = TTime::LegacyFrameCount();
+        if (now == last_legacy_seen_)
+            return;
+        last_legacy_seen_ = now;
         ++legacy_frame;
         if (legacy_frame >= 18)
             legacy_frame = 0;
@@ -154,12 +175,15 @@ class TFlipbookBillboardComponent : public TObjectComponent
     int32_t tex_w = 1, tex_h = 1;
     int32_t cols = 1, rows = 1, frame_count = 1;
     int32_t legacy_frame = 0;
+    // Last legacy frame index we observed in OnUpdate -- gates frame
+    // advancement to 24 Hz regardless of the render frame rate.
+    int64_t last_legacy_seen_ = -1;
     TParticleExpression frame_expr;
     TParticleExpression uv_rect_expr;
     float size_w = 1.0f, size_h = 1.0f;
     bool additive_blend = true;
     bool replaces_default_visual = true;
-    bool debug_solid = false;
+    EFxDebugMode debug_mode = EFxDebugMode::Normal;
 };
 
 struct SParticleBucketEffectDef
@@ -178,6 +202,48 @@ struct SParticleBucketEffectDef
     float chroma_key_rgb[3] = {1.0f, 0.0f, 0.0f};
     std::string frame_expr;
     std::string uv_rect_expr;
+
+    // ---- VM-extension fields (2026-05-17) -----------------------------
+    // Imagery override for buckets that ship a procedural texture or
+    // reach into a non-owner imagery (B01 / M05 ports load a separate
+    // I3D via TObjectImagery::LoadImagery rather than using the owner's
+    // primary imagery). Empty = use the owner-imagery texture_slot path.
+    std::string imagery_path;
+
+    // Blend/light/depth/orientation knobs (canonical strings parsed into
+    // the per-bucket EParticle* enums). When unset, BuildRuntimeBucketDesc
+    // falls back to the legacy `additive` bool + Unlit + TestNoWrite +
+    // ScreenAligned defaults.
+    std::string blend_mode;          // "alpha" | "additive" | "additive_straight" | "premul_alpha"
+    std::string light_mode;          // "unlit" | "lit_flat"
+    std::string depth_mode;          // "test_no_write" | "test_write" | "none"
+    std::string orientation;         // "screen_aligned" | "world_xy"
+
+    // Per-particle dynamics (statement-form expressions). Compiled once
+    // at first-use; cached on the runtime bucket record.
+    std::string spawn_expr;          // ran once at particle add time
+    std::string tick_expr;           // ran each sim tick per live particle
+    std::string kill_expr;           // boolean; true -> respawn (re-run spawn_expr, age=0)
+
+    // Spawn cadence:
+    //   spawn_burst > 0 → emit N particles once at attach (one-shot)
+    //   spawn_count > 0 → maintain a steady-state population of N particles
+    //                     (runtime tops up when count drops below target)
+    // At most one should be non-zero; if both are zero the bucket emits
+    // nothing on its own and is driven by the legacy emitter/output path.
+    int32_t spawn_burst = 0;
+    int32_t spawn_count = 0;
+
+    // Integration cadence:
+    //   tick_hz > 0  → integrate tick_expr at this fixed rate (sim-tick
+    //                  gated, matches retail's 24 Hz authoring cadence)
+    //   tick_hz == 0 → integrate every render frame (no gating)
+    int32_t tick_hz = 0;
+
+    // Default particle life in seconds (set into EParticleVar::Life at
+    // spawn time). <= 0 means "no auto-kill" (drops live until kill_expr
+    // fires).
+    float default_life = -1.0f;
 };
 
 struct SParticleEmitterOutputDef
@@ -207,10 +273,32 @@ class TParticleEffectManager
   public:
     void PulseEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
     void StopEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
+    // Per-frame integration tick. Called from TParticleEffectComponent::
+    // DrawPulse via the render-frame walk so each runtime's bucket
+    // expressions (spawn / tick / kill) advance once per frame using the
+    // shared TTime::DeltaTime.
+    void IntegrateEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner, float dt_seconds);
     void ExpireInactiveEffects();
     void Clear();
 
   private:
+    // Per-bucket compiled-expression cache + sim-tick accumulator.
+    // Created lazily when the runtime first encounters a bucket_def with
+    // a non-empty spawn_expr / tick_expr / kill_expr.
+    struct SBucketRuntime
+    {
+        TParticleBucket* bucket = nullptr;
+        const SParticleBucketEffectDef* bucket_def = nullptr;
+        TParticleExpression spawn_expr;     // statement form
+        TParticleExpression tick_expr;      // statement form
+        TParticleExpression kill_expr;      // single expression (boolean)
+        bool spawn_compiled = false;
+        bool tick_compiled = false;
+        bool kill_compiled = false;
+        double sim_accum_ms = 0.0;
+        int32_t spawned_burst = 0;          // tracks one-shot burst so we don't re-emit
+    };
+
     struct SRuntime
     {
         const SParticleEffectDef* effect_def = nullptr;
@@ -218,11 +306,14 @@ class TParticleEffectManager
         float owner_particle_id = -1.0f;
         uint32_t last_draw_pulse_pass = 0;
         std::vector<TParticleBucket*> buckets;
+        std::vector<SBucketRuntime> bucket_runtimes;
     };
 
     SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_map_index);
     void StartRuntime(SRuntime& runtime, TObjectInstance* owner);
     void StopRuntime(size_t runtime_index);
+    void IntegrateBucket(SBucketRuntime& brt, TObjectInstance* owner, float dt_seconds, float owner_particle_id);
+    void EmitSpawnTopup(SBucketRuntime& brt, TObjectInstance* owner, float owner_particle_id);
 
     std::vector<SRuntime> runtimes;
     uint32_t last_expire_pass = 0;
@@ -249,12 +340,7 @@ class TParticleEffectComponent : public TObjectComponent
         UnregisterUpdate(&TObjectComponent::Update);
     }
 
-    void DrawPulse()
-    {
-        if (!ParticleEffectManager || !effect_def || !Owner())
-            return;
-        ParticleEffectManager->PulseEffect(effect_def, Owner());
-    }
+    void DrawPulse();
 
   protected:
     void OnUpdate() override
@@ -273,6 +359,24 @@ class TParticleEffectComponent : public TObjectComponent
 
 _CLASSDEF(TFireEffect)
 
+// Number of scatter quads in the ambient-fire patch. Pre-release matches
+// `NUMFIRES` further down (the legacy TFireAnimator declaration).
+// Forensics §6: legacy TFireAnimator::Animate/Render loops over `c < 10`
+// even though `NUMFIRES == 15` — pre-release WIP quirk. The port keeps
+// the full 15-quad scatter as the modern default; INVENTORY F03 gap 7(a)
+// records the legacy 10-loop quirk for traceability.
+inline constexpr int32_t kFireScatterQuads = 15;
+
+// One scatter quad's transient state. Pre-release stored these as parallel
+// arrays `p[NUMFIRES]` / `f[NUMFIRES]` on TFireAnimator; we collapse onto
+// the effect class (matches the H03 / M05 / L02 animator-state collapse).
+struct SFireScatterQuad
+{
+    float   ox = 0.0f;      // x offset from patch origin, in world units
+    float   oy = 0.0f;      // y offset from patch origin, in world units
+    int32_t frame = 0;      // per-quad atlas frame counter (-22..30 cycle)
+};
+
 class TFireEffect : public TEffect
 {
   public:
@@ -280,6 +384,47 @@ class TFireEffect : public TEffect
     TFireEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
 
     virtual void Pulse();
+
+    // Spawn a standalone TFireEffect for the --test=vfx harness (F03
+    // rig). Per INVENTORY F03 forensics §1: no live retail caller exists
+    // (no spell.def variant invokes the bare "fire" builder, no
+    // ATTACHEFFECT "fire") — this harness path IS the canonical Phase-B
+    // exercise route. No imagery lookup: the scatter quads use a
+    // procedural orange/yellow flame-gradient texture built via
+    // `Renderer->RegisterTextureAsset` (the shipped `Misc\fire.i3d`
+    // atlas-tex isn't wired through the modern imagery path yet, and
+    // for an FB-only rig the procedural texture cleanly validates the
+    // pipeline without the asset-load dependency — same call as the
+    // L02 halo). Caller owns the returned pointer.
+    [[nodiscard]] static TFireEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness; mirrors F01 / H03 / M05 /
+    // L02. Drives per-quad atlas-frame cycling (sim-tick-gated at 24 Hz
+    // to match other Fire-family cadence) and submits
+    // `kFireScatterQuads` additive textured billboards via
+    // SubmitFxBillboard each frame. FB pipeline only — see INVENTORY F03
+    // forensics §6 (pre-release renders quads directly, no particle
+    // bucket).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the harness `delete`s the effect. Pre-release Pulse
+    // self-killed via `spell->GetFire()` damage gate; the standalone rig
+    // is permanently alive (no spell context) so this just mirrors the
+    // alive_ flag for parity with F01 / H03 / M05 / L02. The harness's
+    // SpellGround re-fire cadence rotates fresh instances in.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Pre-release TFireAnimator owned `p[NUMFIRES]` + `f[NUMFIRES]`;
+    // collapsed onto the effect class (same pattern as H03 / M05 / L02).
+    // S3DMat `mat[NUMFIRES]` from pre-release is dropped — material slots
+    // were zeroed on init and never re-touched (legacy effect.cpp:909-925),
+    // which has no analog in the modern FB-billboard pipeline (per-item
+    // additive blend is set via key.blend, not per-material).
+    SFireScatterQuad quads_[kFireScatterQuads] {};
+    bool             alive_ = true;
+    double           sim_accum_ms_ = 0.0;
+    int32_t          rng_seed_ = 0;     // per-instance RNG seed; reseeded each lifetime
 };
 
 class TFlameEffect : public TEffect
@@ -289,6 +434,15 @@ class TFlameEffect : public TEffect
     TFlameEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { InitializeVisualComponent(newim); }
 
     static void AttachVisualComponent(TObjectInstance* inst, TObjectImagery* imagery);
+
+    // Spawn a standalone TFlameEffect for the --test=vfx harness. Loads the
+    // canonical TorchFlame imagery (`Magic\flame.i3d`), constructs a
+    // sector-less instance pinned to world `origin`, and attaches the
+    // flipbook + particle components. Returns nullptr if the imagery can't
+    // be loaded (asset missing / not yet ready). The caller owns the
+    // returned pointer and must `delete` it to release the imagery refcount
+    // and the attached components.
+    [[nodiscard]] static TFlameEffect* SpawnForTest(const S3DPoint& origin);
 
   private:
     void InitializeVisualComponent(TObjectImagery* imagery);
@@ -1744,8 +1898,8 @@ _CLASSDEF(THaloEffect)
 class THaloEffect : public TEffect
 {
   private:
-      float halostep;
-      int32_t totframes;
+      float halostep = 0.0f;
+      int32_t totframes = 0;
   public:
     THaloEffect(TObjectImagery* newim) : TEffect(newim) { }
     THaloEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
@@ -1757,6 +1911,40 @@ class THaloEffect : public TEffect
     virtual void InitParams(int32_t totalframes, float step) { totframes = totalframes; halostep = step; }
     virtual int32_t GetTotalFrames() { return totframes; }
     virtual float GetHaloStep() { return halostep; }
+
+    // Spawn a standalone THaloEffect for the --test=vfx harness. No
+    // imagery lookup — the halo's radial-gradient texture is built
+    // procedurally via `Renderer->RegisterTextureAsset` (no
+    // `Magic\halo.i3d` ships in data/ — see INVENTORY L02 gap 7.2).
+    // Constructs a sector-less instance pinned to world `origin`,
+    // stamps a fresh map index, seeds InitParams(totframes, halostep)
+    // for the triangle-wave envelope. Returns nullptr if the renderer
+    // isn't ready. Caller owns the returned pointer and `delete`s it.
+    [[nodiscard]] static THaloEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness; mirrors F01 / H03 / M05.
+    // Drives the pre-release triangle-wave scale envelope (grow for
+    // totframes/2 ticks then shrink linearly back to zero), submits one
+    // screen-aligned additive billboard via SubmitFxBillboard (FB
+    // pipeline) AND re-adds one dynamic point light via AddPointLight
+    // (LS pipeline coupling — INVENTORY L02 §4). Self-killed when
+    // `frameon > totframes`.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the halo's `frameon > totframes` condition fires
+    // (matching pre-release THaloAnimator::Animate's KillThisEffect
+    // gate). The harness uses this to early-out after death.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Per-instance animator state. Pre-release split this across
+    // THaloEffect (halostep / totframes) + THaloAnimator (haloscale /
+    // frameon). For the standalone test-harness port we collapse the
+    // animator state onto the effect class (matches H03 collapse).
+    float   haloscale_   = 0.0f;     // current scale; triangle-wave envelope
+    int32_t frameon_     = 0;        // monotonic frame counter (sim-tick-gated)
+    bool    alive_       = true;
+    double  sim_accum_ms_ = 0.0;     // sim-tick gate accumulator
 };
 
 // *****************
@@ -1795,7 +1983,7 @@ _CLASSDEF(TRippleEffect)
 class TRippleEffect : public TEffect
 {
   private:
-     int32_t len;
+     int32_t len = 0;
   public:
     TRippleEffect(TObjectImagery* newim) : TEffect(newim) { }
     TRippleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
@@ -1806,6 +1994,40 @@ class TRippleEffect : public TEffect
 
     virtual int32_t GetLength() { return len; }
     virtual void SetLength(int32_t length) { len = length; }
+
+    // Spawn a standalone TRippleEffect for the --test=vfx harness. No
+    // imagery lookup — the ripple's atlas is built procedurally via
+    // `Renderer->RegisterTextureAsset` (see effect.cpp). Constructs a
+    // sector-less instance pinned to world `origin`, stamps a fresh
+    // map index, and seeds the per-instance animator state. Returns
+    // nullptr if the renderer isn't ready. The caller owns the
+    // returned pointer and `delete`s it when done.
+    [[nodiscard]] static TRippleEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness; mirrors B01 / S01. Grows
+    // the ring scale, cycles the 4x4 atlas frame, fades alpha during the
+    // dissipation phase, and submits one screen-aligned billboard via
+    // SubmitFxBillboard. Self-killed when the lifetime elapses (caller
+    // detects via `IsAlive()` and respawns on next retrigger tick).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the ripple's `frameon > length && ripframe == 15`
+    // condition fires (matching pre-release TRippleAnimator::Animate's
+    // OF_KILL gate). The harness uses this to early-out after death.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Per-instance animator state. Pre-release split this across
+    // TRippleEffect (just `len`) + TRippleAnimator (frameon, ripframe,
+    // scale). For the standalone test-harness port we collapse the two
+    // into the effect class; there's no caller-side rig that needs the
+    // animator/effect separation, and the H03 row's pre-release source
+    // bodies live cleanly as one unit.
+    int32_t frameon_  = 0;        // monotonic frame counter (sim-tick-gated)
+    int32_t ripframe_ = 0;        // 0..15 cycle index into rippleframeof[]
+    float   scale_    = 0.5f;     // ring scale; grows by 1/16 per sim tick
+    bool    alive_    = true;
+    double  sim_accum_ms_ = 0.0;  // sim-tick gate accumulator
 };
 
 // *******************
@@ -1861,14 +2083,48 @@ _CLASSDEF(TDripEffect)
 class TDripEffect : public TEffect
 {
   private:
-    int32_t ripplesize, height, period;
+    // Pre-release per-instance params (sector-script-configured via the
+    // `setdrip` command — src/command.cpp:1544). Defaults mirror the
+    // TDripAnimator ctor at effect_old.cpp:11058 (rippelsize=64,
+    // height=128, period=48). Field initializers per project rule.
+    int32_t ripplesize = 64;
+    int32_t height     = 128;
+    int32_t period     = 48;
+
+    // --- Phase 2 (H04) PE-pipeline scaffold -----------------------------
+    // Single-particle bucket borrowed from the global TParticleManager.
+    // Pre-release tracked one in-flight drop per emitter (single pos/vel,
+    // not an array). The PE-bucket equivalent is one particle per drip
+    // instance with respawn-in-place semantics (similar in shape to M05's
+    // continuous emitter but only ever 1 particle alive at a time).
+    //
+    // The bucket itself outlives this effect; per-instance drops are
+    // disambiguated by `owner_particle_id_` and killed off in the
+    // destructor via TParticleBucket::KillParticlesByOwner.
+    TParticleBucket* bucket_            = nullptr;
+    float            owner_particle_id_ = -1.0f;
+    double           sim_accum_ms_      = 0.0;   // 24 Hz sim-tick gate (forensics §7.4)
+
+    // Cyclic emitter state. `dead_` corresponds to pre-release
+    // TDripAnimator::dead; `time_` to its `time` frame counter (used in
+    // the dead-branch respawn gate `time > period && !random(0,
+    // period/2)`). When alive, the bucket particle is visible and
+    // integrates pos/vel; when dead, the particle is parked offscreen
+    // and time_ counts up toward the next respawn coin flip.
+    bool             dead_              = true;
+    int32_t          time_              = 0;
+    // Ripples spawned on landing — the drip→ripple chain (forensics §3).
+    // Owned by this effect, ticked + pruned each frame in
+    // TickAndSubmitForTest. Reuses H03's standalone SpawnForTest.
+    std::vector<std::unique_ptr<TRippleEffect>> spawned_ripples_;
+
   public:
     TDripEffect(TObjectImagery* newim) : TEffect(newim) {  }
     TDripEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    virtual ~TDripEffect() {}
+    ~TDripEffect() override;
 
     virtual void Initialize();
-    virtual void Pulse();
+    void Pulse() override;
 
     virtual void SetParams(int32_t ri, int32_t he, int32_t pe) { ripplesize = ri; height = he; period = pe; };
     virtual void GetParams(int32_t* ri, int32_t* he, int32_t* pe) { *ri = ripplesize; *he = height; *pe = period; };
@@ -1877,6 +2133,31 @@ class TDripEffect : public TEffect
         // Loads object data from the sector
     virtual void Save(RTOutputStream os);
         // Saves object data to the sector
+
+    // Spawn a standalone TDripEffect for the --test=vfx harness. Loads
+    // `Magic\drip.i3d` (the canonical drip sprite at
+    // legacy/Imagery/Magic/drip.i3d), allocates / reuses a global PE
+    // bucket keyed off the drip texture, seeds one particle parked in
+    // the dead state, and stamps the instance with a fresh map index.
+    // Returns nullptr if the imagery can't be loaded. The caller owns
+    // the returned pointer and must `delete` it to release the imagery
+    // refcount, evict its particle, and drop any in-flight spawned
+    // ripples. The harness-rig path also reduces the retail period (48)
+    // to a screencap-friendly default (~24) so the drop is visible
+    // within a 4-sec capture; in-game placement keeps the retail default.
+    //
+    // PE-pipeline scope: validates the single-particle-emitter shape
+    // (B01 = burst, M05 = continuous 50-drop, H04 = single recurring),
+    // and (first time in the harness) the chained "effect spawns
+    // another effect" pattern via TRippleEffect::SpawnForTest on landing.
+    [[nodiscard]] static TDripEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Drive the owned bucket + chained ripples forward by one sim tick
+    // (Euler integrate + gravity + landing → spawn ripple + dead-state
+    // respawn coin flip), then submit the drop bucket + each live
+    // spawned ripple to the FX queue. Idempotent if the effect has no
+    // bucket yet.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
 };
 
 // *******************
@@ -1970,19 +2251,54 @@ _CLASSDEF(TBloodEffect)
 class TBloodEffect : public TEffect
 {
   private:
-    int32_t height, hangle, vangle, hspread, vspread, num;
+    int32_t height = 0;
+    int32_t hangle = 0;
+    int32_t vangle = 0;
+    int32_t hspread = 0;
+    int32_t vspread = 0;
+    int32_t num = 0;
+
+    // --- Phase 2.2 PE-pipeline scaffold ---------------------------------
+    // Bucket borrowed from the global TParticleManager. Created lazily by
+    // SpawnForTest (the in-game spawn path will move to TBloodSystem +
+    // TBloodAnimator once those are ported — tracked as B01a follow-up).
+    // The bucket itself outlives this effect; per-instance particles are
+    // disambiguated by `owner_particle_id_` (= GetMapIndex()) and killed
+    // off in the destructor via TParticleBucket::KillParticlesByOwner.
+    TParticleBucket* bucket_ = nullptr;
+    float owner_particle_id_ = -1.0f;
+    float age_ = 0.0f;
+
   public:
     TBloodEffect(TObjectImagery* newim) : TEffect(newim) {  }
     TBloodEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    virtual ~TBloodEffect() {}
+    ~TBloodEffect() override;
 
-    virtual void OffScreen() { KillThisEffect(); }
+    void OffScreen() override { KillThisEffect(); }
 
     virtual void Initialize();
     virtual void Pulse();
 
     virtual void SetParams(int32_t he, int32_t ha, int32_t va, int32_t hs, int32_t vs, int32_t nu) { height = he; hangle = ha; vangle = va; hspread = hs, vspread = vs; num = nu; }
     virtual void GetParams(int32_t *he, int32_t *ha, int32_t *va, int32_t *hs, int32_t *vs, int32_t *nu) { *he = height; *ha = hangle; *va = vangle; *hs = hspread; *vs = vspread; *nu = num; }
+
+    // Spawn a standalone TBloodEffect for the --test=vfx harness. Loads
+    // `Misc\Blood.I3D` (the canonical bloodimagery — see playscreen.cpp
+    // load), allocates / reuses a global PE bucket keyed off the blood
+    // texture, and stamps the instance with a fresh map index so its
+    // particles can be tracked by owner. Returns nullptr if the imagery
+    // can't be loaded. The caller owns the returned pointer and must
+    // `delete` it to release the imagery refcount and evict its particles.
+    //
+    // PE-pipeline scope: validates the bucket/submit path end-to-end
+    // through the real effect class lineage; faithful retail kinematics
+    // (gravity, splat-sticking, surface decals) follow in Phase 2.2.1.
+    [[nodiscard]] static TBloodEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Drive the owned bucket forward by one frame (spawn + Euler integrate
+    // + fade), then submit it to the FX queue. Idempotent if the effect
+    // has no bucket yet (e.g. SpawnForTest fell through).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
 };
 
 // *******************
@@ -2022,14 +2338,50 @@ _CLASSDEF(TMistEffect)
 class TMistEffect : public TEffect
 {
   private:
-    
+    // --- Phase 2 (M05) PE-pipeline scaffold -----------------------------
+    // Bucket borrowed from the global TParticleManager — same model as
+    // B01 TBloodEffect. The bucket itself outlives this effect; per-
+    // instance drops are disambiguated by `owner_particle_id_` and
+    // killed off in the destructor via TParticleBucket::KillParticlesByOwner.
+    //
+    // Unlike B01 (one-shot 10-droplet burst), Mist is a **continuous
+    // ambient emitter**: the 50 drops are seeded once at SpawnForTest
+    // and then respawn-in-place on death. The bucket sees no churn at
+    // the count level — same 50 particles tick forever, just with
+    // recycled state. See INVENTORY M05 forensics §3 for the cadence.
+    TParticleBucket* bucket_           = nullptr;
+    float            owner_particle_id_ = -1.0f;
+    double           sim_accum_ms_     = 0.0;   // 24 Hz sim-tick gate (forensics §7.4)
+
   public:
     TMistEffect(TObjectImagery* newim) : TEffect(newim) {  }
     TMistEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    virtual ~TMistEffect() {}
+    ~TMistEffect() override;
+
+    void OffScreen() override { KillThisEffect(); }
 
     virtual void Initialize();
-    virtual void Pulse();
+    void Pulse() override;
+
+    // Spawn a standalone TMistEffect for the --test=vfx harness. Loads
+    // `Magic\mist.i3d` (the canonical mist sprite at
+    // legacy/Imagery/Magic/mist.i3d), allocates / reuses a global PE
+    // bucket keyed off the mist texture, seeds 50 drops with retail-
+    // faithful pos + upward velocity envelope, and stamps the instance
+    // with a fresh map index so its particles can be tracked by owner.
+    // Returns nullptr if the imagery can't be loaded. The caller owns
+    // the returned pointer and must `delete` it to release the imagery
+    // refcount and evict its particles.
+    //
+    // PE-pipeline scope: validates the bucket/submit path end-to-end
+    // through the real effect class lineage with a long-lived
+    // continuous-emitter pattern (B01 = burst, M05 = continuous).
+    [[nodiscard]] static TMistEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Drive the owned bucket forward by one sim tick (Euler integrate
+    // + gravity + respawn-in-place on landing), then submit to the FX
+    // queue. Idempotent if the effect has no bucket yet.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
 };
 
 // *******************

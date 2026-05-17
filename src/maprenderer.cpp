@@ -367,93 +367,10 @@ static SSectorCullRange ComputeRenderSectorRange(const TImpl& s,
     return r;
 }
 
-void SubmitParticleBillboards(const SMapRenderContext& ctx, SMapRenderStats& stats)
-{
-    TParticleManager& particles = ParticleManager();
-    for (int32_t bucket_index = 0; bucket_index < particles.GlobalBucketCount(); ++bucket_index)
-    {
-        const TParticleBucket* bucket = particles.GlobalBucket(bucket_index);
-        if (!bucket || !bucket->Active())
-            continue;
-
-        const SParticleBucketDesc& desc = bucket->Desc();
-        const bool debug_solid = desc.debug_solid && ctx.debug_green_texture != kInvalidTexture;
-        const TTextureHandle texture = debug_solid ? ctx.debug_green_texture : desc.texture;
-        if (texture == kInvalidTexture)
-            continue;
-
-        for (int32_t particle_index = 0; particle_index < bucket->Count(); ++particle_index)
-        {
-            const float* draw_pos = bucket->VarPtr(particle_index, EParticleVar::DrawPos);
-            if (!draw_pos)
-                continue;
-
-            const S3DPoint world_pos = {
-                int32_t(std::lround(draw_pos[0])),
-                int32_t(std::lround(draw_pos[1])),
-                int32_t(std::lround(draw_pos[2])),
-            };
-            float sx = 0.0f, sy = 0.0f;
-            float scene_z = 0.0f;
-            ProjectWorldPointToScreen(ctx, world_pos, sx, sy, &scene_z);
-
-            float overlay_scale = (std::max)(ctx.camera_zoom, 0.0001f);
-            if (ctx.perspective_camera)
-            {
-                const float z = (std::max)(scene_z, 1.0f);
-                const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
-                overlay_scale = focal_zoom / z;
-            }
-
-            float width = desc.default_width;
-            float height = desc.default_height;
-            if (const float* draw_scl = bucket->VarPtr(particle_index, EParticleVar::DrawScl))
-            {
-                width = draw_scl[0];
-                height = draw_scl[1];
-            }
-
-            const int32_t w = (std::max)(1, int32_t(std::lround(width * overlay_scale)));
-            const int32_t h = (std::max)(1, int32_t(std::lround(height * overlay_scale)));
-            const int32_t dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
-            const int32_t dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
-            if (dst_x > ctx.vw || dst_y > ctx.vh || dst_x + w < 0 || dst_y + h < 0)
-            {
-                ++stats.draw_offscreen;
-                continue;
-            }
-
-            float uv[4] = {0.0f, 0.0f, 1.0f, 1.0f};
-            if (const float* draw_uv = bucket->VarPtr(particle_index, EParticleVar::DrawUvRect))
-            {
-                uv[0] = draw_uv[0];
-                uv[1] = draw_uv[1];
-                uv[2] = draw_uv[2];
-                uv[3] = draw_uv[3];
-            }
-
-            SOverlaySubmit sub = {};
-            sub.texture = texture;
-            sub.dst_x = dst_x;
-            sub.dst_y = dst_y;
-            sub.dst_w = w;
-            sub.dst_h = h;
-            sub.src_x = debug_solid ? 0 : int32_t(uv[0] * float(desc.texture_width));
-            sub.src_y = debug_solid ? 0 : int32_t((uv[1] + (desc.flip_v ? uv[3] : 0.0f)) * float(desc.texture_height));
-            sub.src_w = debug_solid ? 1 : (std::max)(1, int32_t(uv[2] * float(desc.texture_width)));
-            sub.src_h = debug_solid ? 1 : (desc.flip_v ? -1 : 1) * (std::max)(1, int32_t(uv[3] * float(desc.texture_height)));
-            sub.src_tex_w = debug_solid ? 1 : desc.texture_width;
-            sub.src_tex_h = debug_solid ? 1 : desc.texture_height;
-            sub.additive_blend = !debug_solid && desc.blend == EParticleBlendMode::Additive;
-            sub.chroma_key = !debug_solid && desc.chroma_key;
-            sub.chroma_key_rgb[0] = desc.chroma_key_rgb[0];
-            sub.chroma_key_rgb[1] = desc.chroma_key_rgb[1];
-            sub.chroma_key_rgb[2] = desc.chroma_key_rgb[2];
-            Renderer->SubmitOverlay(sub);
-            ++stats.draw_submitted;
-        }
-    }
-}
+// SubmitParticleBillboards: deleted in the Phase 1 VFX spine rewrite.
+// Bucket submission now goes through Renderer->SubmitFxParticleBucket,
+// which is drained inside the dedicated fx_pass after RunLightingPass
+// (see docs/vfx/PHASE1_SPINE.md §5).
 
 inline FVec3 MakeFVec3(float x, float y, float z) { return { x, y, z }; }
 inline FVec3 Add(const FVec3& a, const FVec3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
@@ -1132,48 +1049,20 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             return;
 
         auto* flipbook = oi->GetComponent<TFlipbookBillboardComponent>();
-        if (!flipbook && ctx.debug_green_texture == kInvalidTexture) return;
-        const bool debug_solid = flipbook && flipbook->DebugSolid() && ctx.debug_green_texture != kInvalidTexture;
-        const TTextureHandle texture = debug_solid ? ctx.debug_green_texture : flipbook->Texture();
-        if (texture == kInvalidTexture) return;
+        if (!flipbook || !Renderer)
+            return;
+        if (flipbook->Texture() == kInvalidTexture)
+            return;
+
         static bool logged_billboard_submit = false;
         if (!logged_billboard_submit)
         {
             logged_billboard_submit = true;
-            log_info("[component-render] submit billboard inst=%p class='%s' type='%s' debug=%d texture=%u green=%u",
+            log_info("[component-render] submit billboard via fx inst=%p class='%s' type='%s' debug=%d texture=%u",
                      (void*)oi, oi->GetClassName(), oi->GetTypeName(),
-                     debug_solid ? 1 : 0, texture, ctx.debug_green_texture);
+                     int(flipbook->DebugMode()), flipbook->Texture());
         }
-        const S3DPoint billboard_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-        const S3DPoint billboard_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-        const S3DPoint rel = billboard_world - billboard_camera;
-        float sx = 0.0f, sy = 0.0f;
-        ProjectCameraRelToScreen(ctx, rel, sx, sy);
-        float overlay_scale = (std::max)(ctx.camera_zoom, 0.0001f);
-        if (ctx.perspective_camera)
-        {
-            const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
-            const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
-            overlay_scale = focal_zoom / z;
-        }
-        const float billboard_width = flipbook ? flipbook->Width() : 25.0f;
-        const float billboard_height = flipbook ? flipbook->Height() : 62.5f;
-        const int32_t w = (std::max)(1, int32_t(std::lround(billboard_width * overlay_scale)));
-        const int32_t h = (std::max)(1, int32_t(std::lround(billboard_height * overlay_scale)));
-        SOverlaySubmit sub = {};
-        sub.texture = texture;
-        sub.dst_x = int32_t(std::lround(sx)) + ctx.cam_ox - w / 2;
-        sub.dst_y = int32_t(std::lround(sy)) + ctx.cam_oy - h / 2;
-        sub.dst_w = w;
-        sub.dst_h = h;
-        sub.src_x = debug_solid ? 0 : flipbook->SourceX();
-        sub.src_y = debug_solid ? 0 : flipbook->SourceY();
-        sub.src_w = debug_solid ? 1 : flipbook->SourceWidth();
-        sub.src_h = debug_solid ? 1 : flipbook->SourceHeight();
-        sub.src_tex_w = debug_solid ? 1 : flipbook->TextureWidth();
-        sub.src_tex_h = debug_solid ? 1 : flipbook->TextureHeight();
-        sub.additive_blend = debug_solid ? false : flipbook->AdditiveBlend();
-        Renderer->SubmitOverlay(sub);
+        flipbook->Submit(*Renderer, *oi);
         ++stats.draw_submitted;
         return;
     }
@@ -1465,6 +1354,13 @@ void TMapRenderer::SetCameraWorld(int32_t level, int32_t world_x, int32_t world_
 
 void TMapRenderer::SetSunShadowEnabled(bool enable) { if (impl) impl->sun_shadow = enable; }
 bool TMapRenderer::SunShadowEnabled() const         { return impl ? impl->sun_shadow : false; }
+
+void TMapRenderer::SetPointLightMultipliers(float intensity_mul, float range_mul)
+{
+    if (!impl) return;
+    impl->intensity_mul = intensity_mul;
+    impl->radius_mul    = range_mul;
+}
 
 TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
 {
@@ -2037,13 +1933,11 @@ void TMapRenderer::RebuildForCurrentMap()
                 if (!logged_billboard_build)
                 {
                     logged_billboard_build = true;
-                    log_info("[component-render] build billboard inst=%p class='%s' type='%s' debug=%d texture=%u src=(%d,%d %dx%d) tex=%dx%d",
+                    log_info("[component-render] build billboard inst=%p class='%s' type='%s' debug=%d texture=%u size=%.1fx%.1f",
                              (void*)oi, oi->GetClassName(), oi->GetTypeName(),
-                             flipbook->DebugSolid() ? 1 : 0,
+                             int(flipbook->DebugMode()),
                              flipbook->Texture(),
-                             flipbook->SourceX(), flipbook->SourceY(),
-                             flipbook->SourceWidth(), flipbook->SourceHeight(),
-                             flipbook->TextureWidth(), flipbook->TextureHeight());
+                             flipbook->Width(), flipbook->Height());
                 }
                 SSectorDrawableInst billboard = {};
                 billboard.kind = ESectorDrawableKind::Billboard;
@@ -3010,7 +2904,20 @@ void TMapRenderer::RenderFrame()
                 particle_effect->DrawPulse();
         s.sectorDrawInst[idx].Submit(drawctx, stats, obj_id);
     }
-    SubmitParticleBillboards(drawctx, stats);
+    // Effect-component buckets are drained through the FX submission API
+    // (see docs/vfx/PHASE1_SPINE.md). The renderer's DrainFxQueue runs
+    // inside fx_pass, immediately after RunLightingPass below.
+    {
+        TParticleManager& particles = ParticleManager();
+        for (int32_t bi = 0; bi < particles.GlobalBucketCount(); ++bi)
+        {
+            const TParticleBucket* bucket = particles.GlobalBucket(bi);
+            if (!bucket || !bucket->Active())
+                continue;
+            Renderer->SubmitFxParticleBucket(*bucket);
+            ++stats.draw_submitted;
+        }
+    }
     mark_phase(timings.submit_ms);
     // Mirror this frame's counts into the impl so the editor status bar
     // can read them without re-running the render.
