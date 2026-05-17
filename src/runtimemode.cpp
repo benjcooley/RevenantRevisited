@@ -8,6 +8,7 @@
 
 #include "ctrlmap.h"
 #include "cursor.h"
+#include "cursor_os.h"
 #include "imgui.h"
 #include "logging.h"
 #include "mappane.h"
@@ -33,14 +34,11 @@ class TGameModeImpl final : public IRuntimeMode
     void OnEnter() override
     {
         log_info("[runtimemode] enter game mode");
-        // Hide the OS pointer -- the game draws its own cursor via
-        // TCursorHud, and the platform arrow on top would be visual
-        // double-vision. Editor mode reverses this in its OnEnter.
-        sapp_show_mouse(false);
-
-        // Seed the default game cursor once. MapPane.MouseMove /
-        // MouseClick swap it (wedge / hand / sword) as the mouse moves
-        // over targets and as right-drag movement starts/ends.
+        // Seed the default game cursor. SetMouseBitmap pushes the
+        // pixels to AppKit's NSCursor on macOS so the OS draws our
+        // cursor everywhere it normally draws the arrow -- including
+        // out-of-window and during window deactivation. No more
+        // sapp_show_mouse toggling; the platform owns visibility.
         if (GameData)
         {
             if (PTBitmap cursor = GameData->Bitmap("cursor"))
@@ -49,11 +47,9 @@ class TGameModeImpl final : public IRuntimeMode
                 log_warn("[runtimemode] GameData->Bitmap(\"cursor\") returned null");
         }
 
-        // Register the cursor as a HUD drawable at the lowest z.
-        // Cursor draws after the map (Scene3D pass already done) but
-        // BEFORE any HUD panels -- panels are opaque widgets and
-        // should paint over the cursor where they overlap, so the
-        // cursor "lives" in the playfield layer of the HUD stack.
+        // Register the cursor HUD drawable. It no longer renders the
+        // main cursor pixel (OS owns that); it still composites the
+        // drag bitmap + corner-bitmap overlay on top.
         if (Renderer)
             Renderer->AddHud(&cursor_hud, /*z=*/0.0f);
     }
@@ -62,26 +58,32 @@ class TGameModeImpl final : public IRuntimeMode
         log_info("[runtimemode] exit game mode");
         if (Renderer)
             Renderer->RemoveHud(&cursor_hud);
-        // Restore OS pointer for the next mode (editor, menu, etc.).
-        sapp_show_mouse(true);
+        // Hand the cursor pixel back to the OS default arrow so the
+        // next mode (editor, menu, ...) doesn't inherit our game
+        // sprite. Editor mode pushes its own bitmap if it wants one.
+        rev_platform::ResetOSCursor();
     }
 
   private:
     TCursorHud cursor_hud;
-    bool       os_cursor_visible = false;  // last-set OS cursor state
+    bool       imgui_had_mouse_last_tick = false;  // edge-trigger for OS cursor swap
 
     void Tick() override
     {
-        // Hand the cursor back to the OS while ImGui wants the mouse
-        // (debug panels, menus, modal popups) and reclaim it while
-        // the mouse is over the playfield. TCursorHud::Draw mirrors
-        // the same predicate and suppresses the game cursor in that
-        // case so we never show both.
+        // While ImGui wants the mouse (debug panels, menus, modal
+        // popups) reset the OS cursor to the platform arrow so panel
+        // hovers / resizes feel native. When focus returns to the
+        // playfield, re-push the current game cursor. TCursorHud::Draw
+        // mirrors the same predicate to suppress drag/corner overlays
+        // during ImGui ownership.
         const bool imgui_owns_mouse = ImGui::GetIO().WantCaptureMouse;
-        if (imgui_owns_mouse != os_cursor_visible)
+        if (imgui_owns_mouse != imgui_had_mouse_last_tick)
         {
-            sapp_show_mouse(imgui_owns_mouse);
-            os_cursor_visible = imgui_owns_mouse;
+            if (imgui_owns_mouse)
+                rev_platform::ResetOSCursor();
+            else
+                RefreshOSCursor();
+            imgui_had_mouse_last_tick = imgui_owns_mouse;
         }
 
         // Drive player movement from the latest command-flag state.
@@ -230,11 +232,11 @@ class TEditorModeImpl final : public IRuntimeMode
     void OnEnter() override
     {
         log_info("[runtimemode] enter editor mode");
-        // Editor uses the OS pointer (with the editor's own tool
-        // cursors swapped in via SetMouseBitmap when a specific tool
-        // wants it). Show the OS cursor explicitly so it's correct
-        // regardless of what the previous mode left it as.
-        sapp_show_mouse(true);
+        // Editor uses the platform arrow (with editor tool cursors
+        // swapped in via SetMouseBitmap when a specific tool wants
+        // one). Reset to the default arrow explicitly so the editor's
+        // entry state is independent of whatever game mode left.
+        rev_platform::ResetOSCursor();
 
         // Restore the editor's own camera. Otherwise we'd inherit
         // whatever camera position game mode last set (= Locke's last
