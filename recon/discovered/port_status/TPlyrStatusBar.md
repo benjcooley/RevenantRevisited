@@ -6,14 +6,57 @@ The character status panel (upper-corner per-character HUD with health/stamina/m
 
 Status values: ✅ vetted · 🟡 partial · 🔴 incomplete · ⚪ out-of-scope · ⚫ not-started. See [README.md](README.md).
 
-## Vtable (31 slots, all addresses identified — methods not yet ported)
+## Vtable (31 slots, all overrides extracted as of Wave-3A 2026-05-16)
 
 | Slot | Method | Retail addr | Our source | Status | Notes |
 |---|---|---|---|---|---|
-| 0 | `Initialize` | 0x549740 | — | ⚫ not-started | Allocates 5 surfaces (1 sprite 0x80x0x80 at +0x64, 1 0x28x0x28 at +0x60, 3 mosaic 0x80x0x40 at +0x6c/+0x70/+0x74) plus a portrait sprite (FUN_0046d710 of DAT_005e5724 = portrait name). Resolution-aware via DAT_006680c8 (NoTex/hires toggle). Body in `cls_0x5a54e4_TPlyrStatusBar_Initialize_549740.cpp`. |
-| 1 | (likely Close/Dtor) | 0x549d40 | — | ⚫ not-started | Not yet extracted. |
-| 2 | (TPane shared, likely Pulse) | 0x491bd0 | — | ⚫ not-started | Shared with TSidePane / TBottomPane / TSideTabsPane — likely TPane base. |
-| 3..30 | (mix of base defaults + per-class overrides) | various | — | ⚫ not-started | Not yet extracted/labeled. |
+| 0 | `Initialize` | 0x549740 | — | 🟡 partial | Allocates 5 surfaces (1 sprite 0x80x0x80 at +0x64, 1 0x28x0x28 at +0x60, 3 mosaic 0x80x0x40 at +0x6c/+0x70/+0x74) plus a portrait sprite (FUN_0046d710 of DAT_005e5724 = portrait name). Resolution-aware via DAT_006680c8 (NoTex/hires toggle). Body in `cls_0x5a54e4_TPlyrStatusBar_Initialize_549740.cpp`. |
+| 1 | `Close` | 0x549d40 | — | 🟡 partial | Frees the 5 surfaces allocated by Initialize via destructor-with-delete calls, then calls FUN_00491970_TPane_Close. Body in `cls_0x5a54e4_TPlyrStatusBar_Close_549d40.cpp`. Renamed Wave-3A. |
+| 2 | (TPane base — likely `PaneResized`/`SetClipRect`) | 0x491bd0 | — | ⚫ not-started | Inherited from TPane base. |
+| 3..6 | TPane base stubs | 0x444f40..0x70 | — | ⚫ not-started | Inherited. |
+| 7 | (override — likely `Update`) | 0x54ab80 | — | ⚫ not-started | 645-byte partial two-pass bar redraw (LEFT=DAT_00667fcc, RIGHT=DAT_00667fcc->target). Body in `cls_0x5a54e4_TPlyrStatusBar_slot7_partialdraw_54ab80.cpp`. TButtonPane also overrides slot 7 (0x436010) — slot is likely `Update` per src::TButtonPane override list. |
+| 8 | TPane base stub | 0x444f90 | — | ⚫ not-started | Inherited. |
+| 9 | TPane base shared | 0x491a80 | — | ⚫ not-started | Inherited from TPane. |
+| 10..15 | TPane base stubs | 0x444fb0..0x445000 | — | ⚫ not-started | Inherited. |
+| 16 | TPane base shared | 0x491bb0 | — | ⚫ not-started | Inherited. |
+| 17, 18 | TPane base stubs | 0x445020, 0x445030 | — | ⚫ not-started | Inherited. |
+| 19 | (override — likely `DrawBackground`/`Pulse`) | 0x549da0 | — | ⚫ not-started | 178-byte state-counter update (animates +0xd4 / +0xdc / +0xd8 / +0xe0 toward 6 based on player/target presence). NO drawing in this body. Body in `cls_0x5a54e4_TPlyrStatusBar_slot19_state_549da0.cpp`. |
+| 20 | (override — likely `Animate(bool draw)`) | 0x549e60 | — | ⚫ not-started | 571-byte. Manages portrait surface (recreates on player/target swap via DAT_00667fcc rebind check), calls FUN_0054a0a0 + FUN_0054a310 helpers (likely "paint player side" / "paint target side"). Body in `cls_0x5a54e4_TPlyrStatusBar_slot20_Animate_549e60.cpp`. |
+| 21, 22 | TPane base stubs | 0x4451e0, 0x445060 | — | ⚫ not-started | Inherited. |
+| 23 | (override — OPEN; body is THE big two-pass paint) | 0x54af20 | — | ⚫ not-started | **3909 bytes — the smoking-gun two-pass-draw body.** Renders text values (health/mana/stamina) for player at fixed x=0 + portrait at (0x40, 0x00), then for target at mirrored x + portrait at (0x40, 0x40), then triple bar fill on both sides via FUN_0054a5d0. Body in `cls_0x5a54e4_TPlyrStatusBar_slot23_TwoPassDraw_54af20.cpp`. Slot-23 → src-name mapping is OPEN (see B.r8 §6). |
+| 24..30 | TPane base stubs | 0x445080..0x4450c0 | — | ⚫ not-started | Inherited. |
+
+## Architecture: single-instance two-pass-draw — **CONFIRMED 2026-05-16 by Wave-3A**
+
+The B.r6 Alternative A hypothesis is decisively confirmed (see [B.r8](../../../docs/ui/briefs/B_r8_charpane_draw_buttonpane.md) for full evidence):
+
+- **Single instance @ 0x65a8c0** (no second global, no heap-allocated sibling)
+- **No `SetSource()` API on the class.** Character binding is *implicit through the global pointer `DAT_00667fcc`*, NOT explicit
+- **Slot 23 body draws BOTH sides in one method**:
+  - LEFT pass: reads from `DAT_00667fcc` (player), paints at fixed x-coords (0, 0x40, 0x44)
+  - RIGHT pass: reads from `DAT_00667fcc[0x38][0x11]` (target derived via player→target→character chain), paints at MIRRORED x-coords (pane_width - 0x80, -0x88, -0x91, -0x79)
+- **Slot 7 has the same two-pass pattern** as a partial-redraw variant
+- **Slot 19 + slot 20** each early-return if `DAT_00667fcc == 0` (gates entire draw on player presence); slot 23 right-side block early-returns if target is null AND fallback lookup fails (gates target panel on target presence — per spec)
+- **Fade-in/out timing.** Slot 19 ramps animation counters (`+0xd4` left, `+0xdc` right) toward 6 each tick — slot 23 multiplies these counters by 0xff/6 for the bar fill alpha. This is the smooth-transition mechanism per CLASSIC_HUD_REFERENCE.md §2 ("smooth target swap matters").
+
+## Surface layout (from Initialize)
+
+```
+this+0x60  : small 0x28x0x28 sprite     (portrait corner?)
+this+0x64  : 0x80x0x80 sprite (large)   (portrait?)
+this+0x68  : portrait-sized sprite (loaded from DAT_005e5724 name string)
+this+0x6c  : 0x80x0x40 mosaic surface   (bar?)
+this+0x70  : 0x80x0x40 mosaic surface   (bar?)
+this+0x74  : 0x80x0x40 mosaic surface   (bar?)
+this+0x94..0xa4 : cached LEFT (player) stat values
+this+0xa8..0xb8 : cached RIGHT (target) stat values
+this+0xbc..0xd0 : cached extra-stats + name/level hashes
+this+0xd4..0xe0 : per-side animation counters (left+right fade)
+```
+
+Three 0x80x0x40 mosaic surfaces = consistent with three horizontal bars per character (health/stamina/mana).
+
+## Instances
 
 ## Surface layout (from Initialize)
 

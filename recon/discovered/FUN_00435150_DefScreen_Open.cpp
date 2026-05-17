@@ -10,7 +10,7 @@ FUN_00435150_DefScreen_Open(int param_1,undefined4 param_2,undefined4 param_3,ui
   int iVar2;
   int iVar3;
   
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   *(uint *)(param_1 + 0x60) = param_4;
   if (param_11 == 0) goto LAB_004351de;
   iVar2 = FUN_0059a530_stricmp(param_11,s_widgets_005cd8e8);

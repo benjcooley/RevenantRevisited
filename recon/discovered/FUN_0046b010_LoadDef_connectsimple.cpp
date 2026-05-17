@@ -8,7 +8,7 @@ undefined4 __fastcall FUN_0046b010_LoadDef_connectsimple(int param_1)
   int iVar1;
   undefined4 uVar2;
   
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   iVar1 = DAT_00676828;
   *(undefined4 *)(param_1 + 0x1cc) = 0;
   if ((iVar1 == 0) || (DAT_00676830 == 0)) {

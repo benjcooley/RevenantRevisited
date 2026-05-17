@@ -5,7 +5,7 @@
 pack(disabled)
 Structure cls_0x5a5978::vftable_5a5978 {
    0   virt_meth_0x5432a0 *   4   virt_meth_0x5432a0_0   "virtual function table entry."
-   4   FUN_00434f30 *   4   FUN_00434f30_4   "virtual function table entry."
+   4   FUN_00434f30_TButtonPane_Close *   4   FUN_00434f30_4   "virtual function table entry."
    8   FUN_00435010 *   4   FUN_00435010_8   "virtual function table entry."
    12   virt_meth_0x444f40 *   4   virt_meth_0x444f40_12   "virtual function table entry."
    16   virt_meth_0x444f50 *   4   virt_meth_0x444f50_16   "virtual function table entry."

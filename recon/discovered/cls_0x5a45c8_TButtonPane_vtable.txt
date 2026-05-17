@@ -1,0 +1,51 @@
+INFO  DumpVtable.java> vtable @ 005a45c8 (cls_0x5a45c8 = TButtonPane base) (GhidraScript)
+INFO  DumpVtable.java>   [ 0] @ 005a45c8  -> 00434e40  FUN_00434e40 (TButtonPane::Initialize -- calls TPane::Initialize + zeros button-array state)
+INFO  DumpVtable.java>   [ 1] @ 005a45cc  -> 00434f30  FUN_00434f30 (TButtonPane::Close candidate)
+INFO  DumpVtable.java>   [ 2] @ 005a45d0  -> 00435010  FUN_00435010 (override of TPane 0x491bd0)
+INFO  DumpVtable.java>   [ 3] @ 005a45d4  -> 00444f40  <no fn>  (inherited from TPane base)
+INFO  DumpVtable.java>   [ 4] @ 005a45d8  -> 00444f50  <no fn>  (inherited)
+INFO  DumpVtable.java>   [ 5] @ 005a45dc  -> 00444f60  <no fn>  (inherited)
+INFO  DumpVtable.java>   [ 6] @ 005a45e0  -> 00444f70  <no fn>  (inherited)
+INFO  DumpVtable.java>   [ 7] @ 005a45e4  -> 00436010  FUN_00436010 (override of TPane 0x444f80 -- TButtonPane Update candidate)
+INFO  DumpVtable.java>   [ 8] @ 005a45e8  -> 00444f90  <no fn>  (inherited)
+INFO  DumpVtable.java>   [ 9] @ 005a45ec  -> 00491a80  FUN_00491a80@00491a80 (inherited from TPane)
+INFO  DumpVtable.java>   [10] @ 005a45f0  -> 00445210  <no fn>  (override of TPane 0x444fb0)
+INFO  DumpVtable.java>   [11] @ 005a45f4  -> 00444fc0  <no fn>  (inherited)
+INFO  DumpVtable.java>   [12] @ 005a45f8  -> 00444fd0  <no fn>  (inherited)
+INFO  DumpVtable.java>   [13] @ 005a45fc  -> 00444fe0  <no fn>  (inherited)
+INFO  DumpVtable.java>   [14] @ 005a4600  -> 00444ff0  <no fn>  (inherited)
+INFO  DumpVtable.java>   [15] @ 005a4604  -> 00445000  <no fn>  (inherited)
+INFO  DumpVtable.java>   [16] @ 005a4608  -> 00491bb0  FUN_00491bb0 (inherited from TPane)
+INFO  DumpVtable.java>   [17] @ 005a460c  -> 00445020  <no fn>  (inherited)
+INFO  DumpVtable.java>   [18] @ 005a4610  -> 00445030  <no fn>  (inherited)
+INFO  DumpVtable.java>   [19] @ 005a4614  -> 00435d70  FUN_00435d70 (TButtonPane::DrawBackground per src override list)
+INFO  DumpVtable.java>   [20] @ 005a4618  -> 00435de0  FUN_00435de0 (TButtonPane::Animate(bool draw) per src override list)
+INFO  DumpVtable.java>   [21] @ 005a461c  -> 004451e0  <no fn>  (inherited; Overlay default)
+INFO  DumpVtable.java>   [22] @ 005a4620  -> 00435f90  <no fn>  (TButtonPane MouseClick candidate)
+INFO  DumpVtable.java>   [23] @ 005a4624  -> 00436090  FUN_00436090 (TButtonPane MouseMove candidate)
+INFO  DumpVtable.java>   [24] @ 005a4628  -> 00445080  <no fn>  (inherited)
+INFO  DumpVtable.java>   [25] @ 005a462c  -> 00436530  FUN_00436530 (TButtonPane KeyPress candidate)
+INFO  DumpVtable.java>   [26] @ 005a4630  -> 00436660  FUN_00436660 (TButtonPane CharPress candidate)
+INFO  DumpVtable.java>   [27] @ 005a4634  -> 004361f0  FUN_004361f0 (override; bottom-area)
+INFO  DumpVtable.java>   [28] @ 005a4638  -> 00436460  FUN_00436460
+INFO  DumpVtable.java>   [29] @ 005a463c  -> 00436340  FUN_00436340
+INFO  DumpVtable.java>   [30] @ 005a4640  -> 004450c0  <no fn>  (inherited)
+INFO  DumpVtable.java>   [31] @ 005a4644  -> 00445390  FUN_00445390  (off-by-one / scalar dtor)
+
+EVIDENCE THAT cls_0x5a45c8 == TButtonPane:
+  1. cls_0x5a5a30 (TQuickSpellPane, confirmed Wave-2A from "quick spell pane" string anchor + src TQuickSpellPane forward decl) shares
+     8+ vtable slot identities with cls_0x5a45c8: slots 1, 2, 7, 9, 16, 19, 20, 23, 27, 28, 29 are byte-identical addresses.
+     This is decisive base-class vtable inheritance.
+  2. Slot 0 body FUN_00434e40 (saved at cls_0x5a45c8_intermediate_init_434e40.cpp) calls TPane::Initialize() first,
+     then zeros a 0x100-byte buffer at field [0x26] (Buttons array storage in TPointerArray<TButton,MAXBUTTONS>),
+     then zeros all other instance state. Matches src/button.h::TButtonPane::Initialize semantics exactly.
+  3. Used as intermediate vtable in MSVC 3-stage ctor pattern (cls_0x5a5ae8_ctor_488620.cpp line 34: writes 0x5a4494 -> 0x5a45c8 -> 0x5a5ae8 leaf).
+  4. cls_0x5a5ae8 (the second "stat pane" / scroll-pane class) inherits via cls_0x5a45c8 too -- multiple derived classes use it as base = base class.
+
+THE FUN_0041c7f0(0x10, 0x10) call in TQuickSpellPane / TBottomBarPane ctors is NOT the TButtonPane base ctor. It's
+the TPointerArray<TButton, MAXBUTTONS>::TPointerArray() constructor -- allocates `param_2 << 2` bytes (= MAXBUTTONS=16
+pointers = 64 bytes -> argument 0x10=16, count of TButton* slots) and zeros them. The TButtonPane base ctor in
+TQuickSpellPane is omitted because the compiler optimized away the intermediate vtable write -- TButtonPane's only
+non-virtual data members (Buttons array + `clicked` int) are initialized separately, and the vtable transition is
+collapsed to a single final write (base TPane vtable -> leaf vtable) since the intermediate TButtonPane vtable would
+immediately be overwritten anyway.

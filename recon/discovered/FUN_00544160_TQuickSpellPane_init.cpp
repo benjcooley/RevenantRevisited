@@ -16,7 +16,7 @@ undefined4 FUN_00544160_TQuickSpellPane_Initialize(void)
   puStack_8 = &LAB_005a1ef5;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   iVar1 = (**(code **)(*(int *)PTR_DAT_005d79e0 + 0x18))();
   iVar1 = (-(uint)(iVar1 != 0x10) & 0xffff8400) + 0xf81f;
   puVar2 = (undefined4 *)FUN_00482fb0(0x150);

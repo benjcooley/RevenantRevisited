@@ -9,7 +9,7 @@ undefined4 __fastcall FUN_00462660_LoadDef_connect(int param_1)
   undefined4 uVar2;
   
   FUN_00578210();
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   *(undefined4 *)(param_1 + 0x17c) = 0;
   FUN_0048d260(1);
   iVar1 = FUN_004a1ec0(0x14,0x14,*(uint *)(PTR_DAT_005d79e0 + 0x38) & 0x3001f,0);

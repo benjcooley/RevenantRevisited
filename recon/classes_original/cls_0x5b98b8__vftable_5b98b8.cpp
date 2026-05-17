@@ -4,7 +4,7 @@
 /OOAnalyzer/cls_0x5b98b8::vftable_5b98b8
 pack(disabled)
 Structure cls_0x5b98b8::vftable_5b98b8 {
-   0   FUN_00434e40 *   4   FUN_00434e40_0   "virtual function table entry."
+   0   FUN_00434e40_TButtonPane_Initialize *   4   FUN_00434e40_0   "virtual function table entry."
    4   pointer   4   4   "virtual function table entry."
    8   FUN_00435010 *   4   FUN_00435010_8   "virtual function table entry."
    12   virt_meth_0x444f40 *   4   virt_meth_0x444f40_12   "virtual function table entry."

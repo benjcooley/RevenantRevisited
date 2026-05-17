@@ -1,6 +1,6 @@
-// FUN_00434e40 @ 00434e40 size=233
+// FUN_00434e40_TButtonPane_Initialize @ 00434e40 size=233
 
-undefined4 __fastcall FUN_00434e40(int *param_1)
+undefined4 __fastcall FUN_00434e40_TButtonPane_Initialize(int *param_1)
 
 {
   undefined *puVar1;

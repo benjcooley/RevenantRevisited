@@ -227,7 +227,7 @@ undefined4 __fastcall FUN_0047a660_TPlayScreen_Initialize(int param_1)
     FUN_00481c10(s_Trouble_initializing_stat_pane_005d73a8,0);
   }
   FUN_00448680(5,0);
-  iVar3 = FUN_005449e0();
+  iVar3 = FUN_005449e0_SpellbookSidebarPane_Initialize();
   if (iVar3 == 0) {
     FUN_00481c10(s_Trouble_initializing_stat_pane_005d73c8,0);
   }
@@ -396,7 +396,7 @@ LAB_0047b060:
      ((iVar3 = (**(code **)(*DAT_00667fcc + 0x1c0))(), iVar3 < 1 ||
       ((DAT_00667fcc[0xdb] & 0x100000U) != 0)))) {
     FUN_0047c580(0);
-    FUN_00469370();
+    FUN_00469370_LoadDef_selstart();
     FUN_0048ed90(&DAT_006597c0,0xffffffff);
     uVar4 = 7;
     uVar2 = FUN_0048ed60(&DAT_006597c0);

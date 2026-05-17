@@ -1,6 +1,6 @@
-// FUN_00488620 @ 00488620 size=487
+// FUN_00488620_SpellbookSidebarPane_ctor @ 00488620 size=487
 
-undefined4 * __fastcall FUN_00488620(undefined4 *param_1)
+undefined4 * __fastcall FUN_00488620_SpellbookSidebarPane_ctor(undefined4 *param_1)
 
 {
   undefined4 *puVar1;

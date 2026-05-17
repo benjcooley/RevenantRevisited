@@ -1,0 +1,183 @@
+# Agent: Wave-3C — DEF widget subclasses + remaining selstart/userinfo activators
+# Date: 2026-05-16
+#
+# Mission (from coordinator):
+#   1. Walk TWidget base vtable @ PTR_FUN_005a3ab8 + the widget registry at
+#      DAT_00655510 to identify widget subclass vtables for BUTTON / TEXT /
+#      BITMAP / SCROLLBAR / LISTBOX / DROPLIST / FRAME / EDIT.
+#   2. Find the selstart + userinfo per-screen activators left unbound by
+#      Wave-2C.
+#
+# ============================================================================
+# Architecture discovery (refines Wave-2C's brief)
+# ============================================================================
+# Wave-2C labelled FUN_0042aaf0 / FUN_0042b340 / FUN_0042bd90 / FUN_0042d730 /
+# FUN_0042f9f0 / FUN_00431750 / FUN_00433170 as "widget ctors." Closer
+# inspection shows that pattern is wrong — those signatures take 3-4 params
+# and don't set a `this->vtable` pointer. They are STYLE-ATTRIBUTE PARSER
+# helpers (called via the widget's vtable+0x04 parse-body slot to consume
+# tokens for that widget's BGBITMAP/FRAME/DRAWMODE/UPLABELRECT/etc. attrs).
+#
+# The TRUE widget ctors are smaller adjacent functions in the same TU that
+# (a) set *this = &PTR_FUN_005a3xxx (the subclass vtable), (b) call
+# FUN_0042a210 (a base-init helper) with a small widget-type-id integer
+# (1..8), and (c) initialize subclass-specific fields. The SCROLLBAR ctor
+# at 0x0042de00 is the exemplar — confirmed because (i) it sits adjacent
+# to the SCROLLBAR registration thunk at ~0x42ddcc–0x42dddd, (ii) its body
+# sets *this = &PTR_FUN_005a3cd8 (the SCROLLBAR widget vtable) and calls
+# FUN_0042a210(this, 5, ...) with type-id 5.
+#
+# The "ctor" labels Wave-2C inferred map more accurately to "attribute
+# parsers" — useful but not the class identity. The actual widget ctors
+# for BITMAP / TEXT / BUTTON / FRAME / LISTBOX / EDIT / DROPLIST have not
+# yet been individually pinned; they live in the gaps between the "attr
+# parser" functions. SCROLLBAR is the one this wave anchors.
+#
+# ============================================================================
+# Widget registry layout (DAT_00655510)
+# ============================================================================
+# DAT_00655510 : void**          ; array of pointers to registration records
+# DAT_0065617c : int             ; count of registered widget classes (= 8)
+#
+# Each registration record (32-bit fields) :
+#   +0x00 : vtable_ptr           ; widget class vtable in .rdata (0x5a3xxx)
+#   +0x04 : name_ptr             ; ASCII keyword (BITMAP / SCROLLBAR / ...)
+#
+# Registration thunks are small static-init functions Ghidra missed. Each
+# does:
+#     DAT_00655510[DAT_0065617c++] = &recordN;
+#     *((void**)&recordN) = vtable_ptr;
+#     *((const char**)((char*)&recordN + 4)) = "WIDGET_NAME";
+#
+# Eight thunks were enumerated via FindImmRefs.java on 0x00655510:
+#
+#   thunk MOV @  | record addr | widget class (by adjacent ctor / name string)
+#   0042aabc     | 0x655dc8    | BITMAP    (vtable target = 0x5a3b18 via
+#                |             |            MOV at 0x42aad7)
+#   0042ae9c     | 0x655508    | (BGBITMAP / FRAME attribute helper variant —
+#                |             |  NOT renamed; see "weak evidence" section)
+#   0042b2fc     | 0x656218    | TEXT      (registered alongside FUN_0042b340)
+#   0042bb4c     | 0x6562d0    | BUTTON    (registered alongside FUN_0042bd90;
+#                |             |            "BUTTON" string ref at 0x42bb5d)
+#   0042ddcc     | 0x656388    | SCROLLBAR (registered alongside FUN_0042de00;
+#                |             |            "SCROLLBAR" string ref at 0x42dddd)
+#   0042fe1c     | 0x655f48    | LISTBOX   (registered alongside FUN_0042f9f0)
+#   00431c4c     | 0x656210    | EDIT      (registered alongside FUN_00431750)
+#   004335ec     | 0x655dc0    | DROPLIST  (registered alongside FUN_00433170)
+#
+# Eight widget classes = exactly the eight tokens in the widgets.def
+# vocabulary that have STYLE entries (BUTTON / TEXT / BITMAP / SCROLLBAR /
+# LISTBOX / DROPLIST / FRAME / EDIT). The vocabulary's other top-level
+# tokens (PANEL / STYLE / BEGIN / END / BGBITMAP / DROPBUTTON / UPLABELRECT
+# / DOWNLABELRECT / FIELD / LISTHEIGHT / DRAWMODE / ITEMRECT / SPIN /
+# FRAME) are not widget classes — they're either structural keywords or
+# per-widget attribute keywords parsed inside the corresponding subclass'
+# attr-parser.
+#
+# ============================================================================
+# TWidget base vtable @ 0x005a3ab8 (dumped 60 slots)
+# ============================================================================
+# Slot 0  @ 005a3ab8  -> 00437dc0   (likely dtor / "delete-self"; dispatcher
+#                                    invokes via *(void**)record[0] but with
+#                                    arg 1 = "delete this" on parse-failure)
+# Slot 1  @ 005a3abc  -> 0042a790   (TWidget::ParseAttrs entry point — base
+#                                    impl of vtable+0x04 ParseBody, invoked
+#                                    by dispatcher after construct)
+# Slots 2..6   @ 005a3ac0..005a3acc -> 00438720..38770  (default base methods)
+# Slot 7  @ 005a3ad4  -> 0042a770
+# Slots 8..16 @ 005a3ad8..005a3af8 -> 00438820..388c0
+# Slot 17 @ 005a3afc  -> 0042a940
+# Slots 18..20 @ 005a3b00..005a3b08 -> 004388d0..388f0
+# Slot 21 @ 005a3b0c  -> 0042a7a0
+# Slot 22 @ 005a3b10  -> 0042a7f0
+# Slot 23 @ 005a3b14  -> 00438900
+# (TWidget base vtable ends here — 24 slots total)
+#
+# A second vtable begins at 0x005a3b18 — that's the BITMAP widget vtable
+# (confirmed via "MOV [0x655dc8], 0x5a3b18" at 0x42aad7). Slot 0 of that
+# vtable is FUN_00437e00 (likely TBitmapWidget's dtor or self-allocator).
+# By symmetry there are 6 more widget vtables packed adjacent in .rdata
+# (TEXT / BUTTON / SCROLLBAR / FRAME / LISTBOX / EDIT / DROPLIST), one of
+# which is at 0x5a3cd8 (SCROLLBAR, confirmed via FUN_0042de00 body).
+# Exact per-class vtable addresses for BITMAP / TEXT / BUTTON / FRAME /
+# LISTBOX / EDIT / DROPLIST need a FindImmRefs.java pass on each candidate
+# 0x5a3xxx address to confirm; deferred to Wave-4 per Rule 1.
+#
+# ============================================================================
+# Conservative rename rules applied here
+# ============================================================================
+# SAFE :
+#   * SCROLLBAR ctor (FUN_0042de00) — two lines of evidence:
+#       (a) Adjacent register thunk at 0x42dddd refers to "SCROLLBAR" string
+#           (FindStringRefs.java "SCROLLBAR" hit at 0x42dddd; only widget
+#            type for which we have an unambiguous string ref in the
+#            register-thunk region).
+#       (b) Function body sets *this = &PTR_FUN_005a3cd8 (subclass vtable)
+#           and calls FUN_0042a210(this, 5, ...) with widget type-id 5 —
+#           the canonical widget-ctor pattern matched here for the first
+#           time.
+#   * selstart per-screen activator (FUN_00469370) — two lines of evidence:
+#       (a) Direct ref to "selstart" string (0x005d3bc4) at 0x00469371.
+#       (b) Body is a 90-byte single call to
+#           FUN_00435150("selstart", &DAT_00659cb8, 0x11, 0x7e, ...,
+#                        "widgets", "selstart")
+#           — identical shape to the other 11 confirmed per-screen
+#           activators (savegame/loadgame/options/popup/hostgame/...).
+#
+# NOT SAFE (documented in brief, not renamed) :
+#   * Per-widget-class vtable addresses (0x5a3b18 BITMAP / 0x5a3cd8 SCROLLBAR
+#     confirmed, others extrapolated). Need a FindImmRefs on each ctor body
+#     to nail the address before naming cls_0x?? entries.
+#   * Wave-2C's "widget ctor" labels on FUN_0042aaf0 / 0042b340 / 0042bd90 /
+#     0042d730 / 0042f9f0 / 00431750 / 00433170 — these are STYLE-ATTRIBUTE
+#     PARSERS, not class ctors. NOT contradicting the prior rename here per
+#     Rule "don't contradict prior renames without coordination" — the
+#     prior names give those fns a useful suffix even if the role is
+#     attr-parsing rather than constructing. Brief flags for cleanup.
+#   * BITMAP / TEXT / BUTTON / FRAME / LISTBOX / EDIT / DROPLIST true ctor
+#     functions — must be in the cluster but not yet uniquely identified.
+#     Likely candidates: FUN_0042aa60, FUN_0042b090, FUN_0042bbb0,
+#     FUN_0042d6c0, FUN_0042f570, FUN_00431410, FUN_00432d90, FUN_00433640
+#     — each adjacent to its register thunk and a "0042a210(this, N, ...)"
+#     call. Deferred to Wave-4 with concrete next steps in the brief.
+#   * userinfo per-screen activator — FUN_00463149 is the multiplayer-lobby
+#     button dispatcher (forced extraction via DecompileAddr at unbound
+#     0x463149) that branches on 7 button names including "userinfo",
+#     "hostgame", "joingame", "deathmatch", "newchar", "editchar",
+#     "delchar". userinfo IS opened from there via FUN_00435150
+#     ("userinfo", "default", 0x11, 0x7e, ..., "widgets") — but the
+#     function's *identity* is "MP lobby button dispatch," not "userinfo
+#     activator." A per-button activator decomposition would split this fn
+#     into seven handlers; that's a larger restructure than fits this
+#     wave. Renamed conservatively as MPLobby_ButtonDispatch.
+#
+# ============================================================================
+# Renames
+# ============================================================================
+#
+# SCROLLBAR widget constructor — sets *this = 0x5a3cd8 (SCROLLBAR vtable),
+# calls FUN_0042a210(this, 5, ...) for widget-type-id 5, initializes
+# scrollbar-specific fields (param_1[0x24..0x28] = position/range/step
+# defaults: 0, 0, 0, 1000, 100). Adjacent to SCROLLBAR registration thunk.
+# Confidence: HIGH (2+ lines: string anchor + ctor-pattern match).
+FUN_0042de00|FUN_0042de00_DefWidget_TDefScrollbar_ctor
+meth_0x42de00|meth_0x42de00_DefWidget_TDefScrollbar_ctor
+#
+# selstart per-screen activator — opens selstart.def modally via DefScreen_Open
+# with the screen name "selstart" and panel "default". Body shape matches
+# every other per-screen activator. Confidence: HIGH (2+ lines: string +
+# call-chain).
+FUN_00469370|FUN_00469370_LoadDef_selstart
+meth_0x469370|meth_0x469370_LoadDef_selstart
+#
+# Multiplayer-lobby button dispatcher (was unbound at 0x463149; force-
+# created via DecompileAddr.java; size 1850 bytes). Branches on a button
+# name string (FUN_0059a530 = stricmp) and invokes the corresponding
+# screen-open or screen-action. Recognized buttons in order: userinfo,
+# hostgame, joingame, "?", deathmatch, newchar, editchar, delchar.
+# userinfo activation route confirmed here (FUN_00435150 called with
+# "userinfo"). Confidence: HIGH on role (multi-branch button dispatcher
+# with 7 string anchors); MEDIUM on the "MPLobby" prefix — the parent
+# panel that owns these buttons is the multiplayer lobby (since the
+# button vocabulary matches selstart/connect/hostgame/joingame/etc.).
+FUN_00463149|FUN_00463149_MPLobby_ButtonDispatch

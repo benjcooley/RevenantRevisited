@@ -1,0 +1,96 @@
+openjdk version "21.0.10" 2026-01-20
+OpenJDK Runtime Environment Homebrew (build 21.0.10)
+OpenJDK 64-Bit Server VM Homebrew (build 21.0.10, mixed mode)
+INFO  Using log config file: jar:file:/opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /Users/benjamincooley/Library/ghidra/ghidra_12.0.4_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /Users/benjamincooley/Library/ghidra/ghidra_12.0.4_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (794 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (1443 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 58 extension points (18 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/Base/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/FileFormats/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/BSim/ghidra_scripts
+    /Users/benjamincooley/projects/RevenantRevisited/worktrees/ui/recon/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Processors/8051/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/BytePatterns/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Processors/Atmel/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/Jython/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Processors/DATA/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/FunctionID/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/PyGhidra/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/PDB/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Processors/JVM/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Processors/PIC/ghidra_scripts
+    /opt/homebrew/Cellar/ghidra/12.0.4/libexec/Ghidra/Debug/Debugger/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /Users/benjamincooley/projects/RevenantRevisited/RevenantRevisited/data/RevenantDev (HeadlessAnalyzer)  
+INFO  Opening project: /Users/benjamincooley/projects/RevenantRevisited/RevenantRevisited/data/RevenantDev (HeadlessProject)  
+INFO  REPORT: Processing read-only project file: /Revenant.exe (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: DumpVtable.java '0x5a5ae8' '50'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /Users/benjamincooley/projects/RevenantRevisited/worktrees/ui/recon/ghidra_scripts/DumpVtable.java (HeadlessAnalyzer)  
+INFO  DumpVtable.java> vtable @ 005a5ae8 (GhidraScript)  
+INFO  DumpVtable.java>   [ 0] @ 005a5ae8  -> 005449e0  FUN_005449e0@005449e0 (GhidraScript)  
+INFO  DumpVtable.java>   [ 1] @ 005a5aec  -> 00544e40  FUN_00544e40@00544e40 (GhidraScript)  
+INFO  DumpVtable.java>   [ 2] @ 005a5af0  -> 00435010  FUN_00435010@00435010 (GhidraScript)  
+INFO  DumpVtable.java>   [ 3] @ 005a5af4  -> 00444f40  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [ 4] @ 005a5af8  -> 00444f50  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [ 5] @ 005a5afc  -> 00444f60  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [ 6] @ 005a5b00  -> 00444f70  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [ 7] @ 005a5b04  -> 00436010  FUN_00436010@00436010 (GhidraScript)  
+INFO  DumpVtable.java>   [ 8] @ 005a5b08  -> 00444f90  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [ 9] @ 005a5b0c  -> 00491a80  FUN_00491a80@00491a80 (GhidraScript)  
+INFO  DumpVtable.java>   [10] @ 005a5b10  -> 00445210  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [11] @ 005a5b14  -> 00488810  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [12] @ 005a5b18  -> 00444fd0  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [13] @ 005a5b1c  -> 00444fe0  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [14] @ 005a5b20  -> 00444ff0  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [15] @ 005a5b24  -> 00445000  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [16] @ 005a5b28  -> 00491bb0  FUN_00491bb0@00491bb0 (GhidraScript)  
+INFO  DumpVtable.java>   [17] @ 005a5b2c  -> 00445020  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [18] @ 005a5b30  -> 00445030  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [19] @ 005a5b34  -> 00546620  FUN_00546620@00546620 (GhidraScript)  
+INFO  DumpVtable.java>   [20] @ 005a5b38  -> 00544eb0  FUN_00544eb0@00544eb0 (GhidraScript)  
+INFO  DumpVtable.java>   [21] @ 005a5b3c  -> 005452d0  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [22] @ 005a5b40  -> 00435f90  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [23] @ 005a5b44  -> 00436090  FUN_00436090@00436090 (GhidraScript)  
+INFO  DumpVtable.java>   [24] @ 005a5b48  -> 00445080  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [25] @ 005a5b4c  -> 00545f10  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [26] @ 005a5b50  -> 00546390  FUN_00546390@00546390 (GhidraScript)  
+INFO  DumpVtable.java>   [27] @ 005a5b54  -> 004361f0  FUN_004361f0@004361f0 (GhidraScript)  
+INFO  DumpVtable.java>   [28] @ 005a5b58  -> 00436460  FUN_00436460@00436460 (GhidraScript)  
+INFO  DumpVtable.java>   [29] @ 005a5b5c  -> 00436340  FUN_00436340@00436340 (GhidraScript)  
+INFO  DumpVtable.java>   [30] @ 005a5b60  -> 004450c0  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [31] @ 005a5b64  -> 00488820  FUN_00488820@00488820 (GhidraScript)  
+INFO  DumpVtable.java>   [32] @ 005a5b68  -> 00435230  FUN_00435230@00435230 (GhidraScript)  
+INFO  DumpVtable.java>   [33] @ 005a5b6c  -> 00435150  FUN_00435150@00435150 (GhidraScript)  
+INFO  DumpVtable.java>   [34] @ 005a5b70  -> 004364d0  FUN_004364d0@004364d0 (GhidraScript)  
+INFO  DumpVtable.java>   [35] @ 005a5b74  -> 00435cb0  FUN_00435cb0@00435cb0 (GhidraScript)  
+INFO  DumpVtable.java>   [36] @ 005a5b78  -> 004361b0  FUN_004361b0@004361b0 (GhidraScript)  
+INFO  DumpVtable.java>   [37] @ 005a5b7c  -> 00437a80  FUN_00437a80@00437a80 (GhidraScript)  
+INFO  DumpVtable.java>   [38] @ 005a5b80  -> 00436b20  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [39] @ 005a5b84  -> 00436d30  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [40] @ 005a5b88  -> 00436de0  FUN_00436de0@00436de0 (GhidraScript)  
+INFO  DumpVtable.java>   [41] @ 005a5b8c  -> 00436ea0  FUN_00436ea0@00436ea0 (GhidraScript)  
+INFO  DumpVtable.java>   [42] @ 005a5b90  -> 00436eb0  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [43] @ 005a5b94  -> 00436ec0  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [44] @ 005a5b98  -> 00437000  FUN_00437000@00437000 (GhidraScript)  
+INFO  DumpVtable.java>   [45] @ 005a5b9c  -> 00437080  <no fn> (GhidraScript)  
+INFO  DumpVtable.java>   [46] @ 005a5ba0  -> 00546b50  FUN_00546b50@00546b50 (GhidraScript)  
+INFO  DumpVtable.java>   [47] @ 005a5ba4  -> 00546d70  FUN_00546d70@00546d70 (GhidraScript)  
+INFO  DumpVtable.java>   [48] @ 005a5ba8  -> 00435010  FUN_00435010@00435010 (GhidraScript)  
+INFO  DumpVtable.java>   [49] @ 005a5bac  -> 00444f40  <no fn> (GhidraScript)  

@@ -5,7 +5,7 @@ undefined4 __fastcall FUN_0052c780_TBottomBarPane_Initialize(int param_1)
 {
   undefined4 uVar1;
   
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   uVar1 = FUN_0046d710(s_UtilityBar_005e37a0);
   *(undefined4 *)(param_1 + 0x180) = uVar1;
   uVar1 = FUN_0046d710(s_BarEndCap_005e37ac);

@@ -1,0 +1,44 @@
+INFO  DumpVtable.java> vtable @ 005a54e4 (GhidraScript)
+INFO  DumpVtable.java>   [ 0] @ 005a54e4  -> 00549740  FUN_00549740@00549740
+INFO  DumpVtable.java>   [ 1] @ 005a54e8  -> 00549d40  FUN_00549d40@00549d40
+INFO  DumpVtable.java>   [ 2] @ 005a54ec  -> 00491bd0  FUN_00491bd0@00491bd0
+INFO  DumpVtable.java>   [ 3] @ 005a54f0  -> 00444f40  <no fn>
+INFO  DumpVtable.java>   [ 4] @ 005a54f4  -> 00444f50  <no fn>
+INFO  DumpVtable.java>   [ 5] @ 005a54f8  -> 00444f60  <no fn>
+INFO  DumpVtable.java>   [ 6] @ 005a54fc  -> 00444f70  <no fn>
+INFO  DumpVtable.java>   [ 7] @ 005a5500  -> 0054ab80  <no fn>      <-- OVERRIDE (TPane base = 0x444f80)
+INFO  DumpVtable.java>   [ 8] @ 005a5504  -> 00444f90  <no fn>
+INFO  DumpVtable.java>   [ 9] @ 005a5508  -> 00491a80  FUN_00491a80@00491a80
+INFO  DumpVtable.java>   [10] @ 005a550c  -> 00444fb0  <no fn>
+INFO  DumpVtable.java>   [11] @ 005a5510  -> 00444fc0  <no fn>
+INFO  DumpVtable.java>   [12] @ 005a5514  -> 00444fd0  <no fn>
+INFO  DumpVtable.java>   [13] @ 005a5518  -> 00444fe0  <no fn>
+INFO  DumpVtable.java>   [14] @ 005a551c  -> 00444ff0  <no fn>
+INFO  DumpVtable.java>   [15] @ 005a5520  -> 00445000  <no fn>
+INFO  DumpVtable.java>   [16] @ 005a5524  -> 00491bb0  FUN_00491bb0@00491bb0
+INFO  DumpVtable.java>   [17] @ 005a5528  -> 00445020  <no fn>
+INFO  DumpVtable.java>   [18] @ 005a552c  -> 00445030  <no fn>
+INFO  DumpVtable.java>   [19] @ 005a5530  -> 00549da0  <no fn>      <-- OVERRIDE (TPane base = 0x445050)
+INFO  DumpVtable.java>   [20] @ 005a5534  -> 00549e60  <no fn>      <-- OVERRIDE (TPane base = 0x4451d0)
+INFO  DumpVtable.java>   [21] @ 005a5538  -> 004451e0  <no fn>
+INFO  DumpVtable.java>   [22] @ 005a553c  -> 00445060  <no fn>
+INFO  DumpVtable.java>   [23] @ 005a5540  -> 0054af20  <no fn>      <-- OVERRIDE (TPane base = 0x445070)
+INFO  DumpVtable.java>   [24] @ 005a5544  -> 00445080  <no fn>
+INFO  DumpVtable.java>   [25] @ 005a5548  -> 00445090  <no fn>
+INFO  DumpVtable.java>   [26] @ 005a554c  -> 004450a0  <no fn>
+INFO  DumpVtable.java>   [27] @ 005a5550  -> 004451f0  <no fn>
+INFO  DumpVtable.java>   [28] @ 005a5554  -> 00445200  <no fn>
+INFO  DumpVtable.java>   [29] @ 005a5558  -> 004450b0  <no fn>
+INFO  DumpVtable.java>   [30] @ 005a555c  -> 004450c0  <no fn>
+INFO  DumpVtable.java>   [31] @ 005a5560  -> 0054bf70  FUN_0054bf70@0054bf70   <-- OFF-BY-ONE (= next class TTextBar init, adjacent in .data)
+
+Overrides vs TPane base (cls_0x5a4494):
+  slot  0 Initialize        -> 0x549740 (TPlyrStatusBar)
+  slot  1 Close             -> 0x549d40 (TPlyrStatusBar)
+  slot  7 (likely Update)   -> 0x54ab80 (TPlyrStatusBar)  -- partial two-pass bar draw
+  slot 19 (likely DrawBg)   -> 0x549da0 (TPlyrStatusBar)  -- counter-state update from DAT_00667fcc / target
+  slot 20 (likely Animate)  -> 0x549e60 (TPlyrStatusBar)  -- portrait surface mgmt + helper calls FUN_0054a0a0 / FUN_0054a310
+  slot 23 (open; not MouseMove despite slot-position match -- body takes no x/y args)
+                            -> 0x54af20 (TPlyrStatusBar)  -- FULL two-pass paint (left=DAT_00667fcc/player, right=target-derived, mirrored x)
+
+Inherited from TPane base (cls_0x5a4494) -- slots 2..6, 8..18, 21, 22, 24..30 -- all match base addresses.

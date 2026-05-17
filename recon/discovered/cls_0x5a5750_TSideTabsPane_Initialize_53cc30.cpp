@@ -18,7 +18,7 @@ undefined4 __fastcall FUN_0053cc30_TSideTabsPane_Initialize(int *param_1)
   puStack_8 = &LAB_005a1d44;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   FUN_00429950(0xff,0);
   FUN_004384a0();
   iVar3 = FUN_0046d710();

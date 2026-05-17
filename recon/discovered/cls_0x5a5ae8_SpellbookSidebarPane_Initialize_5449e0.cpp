@@ -1,6 +1,6 @@
-// FUN_005449e0 @ 005449e0 size=1120
+// FUN_005449e0_SpellbookSidebarPane_Initialize @ 005449e0 size=1120
 
-void __fastcall FUN_005449e0(int param_1)
+void __fastcall FUN_005449e0_SpellbookSidebarPane_Initialize(int param_1)
 
 {
   undefined4 *puVar1;
@@ -18,7 +18,7 @@ void __fastcall FUN_005449e0(int param_1)
   puStack_8 = &LAB_005a1f74;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   puVar1 = (undefined4 *)FUN_00482fb0(0x78);
   iVar6 = 0;
   local_4 = 0;

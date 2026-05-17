@@ -50,12 +50,36 @@ This is engine-identification, NOT a class. Per AGENT_PROTOCOL Rule 2-sibling: m
 | createchar | `FUN_00465a50` | ⚫ not-started | Via DefScreen_Open + variant DefScreen_Open2 (FUN_00435230). |
 | ingamemenu | `FUN_00537110` | ⚫ not-started | Handles SP + MP variant ("mpingamemenu" + "ingamemenu" base names). |
 | mpingame | `FUN_00463e00` | ⚫ not-started | Multiplayer in-game pane. |
-| selstart | (unbound) | 🔴 incomplete | Force-CreateFunction at unbound string refs to identify. |
-| userinfo | (unbound) | 🔴 incomplete | Same — needs CreateFunction at unbound refs. |
+| selstart | `FUN_00469370` | ⚫ not-started | Identified by Wave-3C 2026-05-16. 90-byte DefScreen_Open wrapper. |
+| userinfo | (in `FUN_00463149` MPLobby_ButtonDispatch) | 🟡 partial | Wave-3C 2026-05-16: userinfo activation is the first branch of a 1850-byte 7-button MP-lobby dispatcher (force-extracted at unbound 0x463149). No standalone activator fn. |
 
 ## Renderer
 
 Not yet pinned. Action: `DumpVtable.java 0x5a3ab8` → identify widget draw slot → CallersOf to find pane driver. Likely lives in the same 0x436xxx-0x437xxx translation unit.
+
+## Widget subclasses (Wave-3C 2026-05-16)
+
+See `docs/ui/briefs/B_r10_def_widget_subclasses.md` for full evidence.
+
+**Architecture refinement.** The "widget ctor" functions Wave-2C labelled in §22-36 of this file (FUN_0042aaf0 BITMAP, FUN_0042b340 TEXT, FUN_0042bd90 BUTTON, FUN_0042d730 FRAME, FUN_0042f9f0 LISTBOX, FUN_00431750 EDIT, FUN_00433170 DROPLIST) are STYLE-ATTRIBUTE PARSERS, not true class constructors. They take 3-4 params and don't set a `this->vtable` pointer. The TRUE widget ctors are smaller adjacent functions that:
+
+1. Set `*this = &PTR_FUN_005a3xxx` (the per-class widget vtable).
+2. Call `FUN_0042a210(this, N, ...)` (the shared TDefWidget base-init helper) with a small widget-type-id `N`.
+3. Initialize subclass-specific fields.
+
+**Registry layout.** `DAT_00655510` is `DefWidgetClassRecord**` (count `DAT_0065617c = 8`). Each record:
+- `+0x00`: vtable pointer (0x5a3xxx in .rdata)
+- `+0x04`: name C-string (e.g. "SCROLLBAR")
+
+Eight register thunks (each a small static-init Ghidra missed) populate the table at program start.
+
+**One widget confirmed this wave:**
+
+| Addr | Class | Vtable | Status | Notes |
+|---|---|---|---|---|
+| `0x0042de00` | `TDefScrollbar` ctor | `0x5a3cd8` | ✅ confirmed | Type-id 5; range/step defaults 1000/100. Renamed. |
+
+**Remaining 7 widget classes have vtable addresses pending Wave-4.** Per-record FindImmRefs will give them in one pass each. See B.r10 §6 for the full pending-work checklist.
 
 ## Outstanding work to land a working engine
 

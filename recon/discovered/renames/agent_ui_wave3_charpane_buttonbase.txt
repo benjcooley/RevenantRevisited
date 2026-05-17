@@ -1,0 +1,150 @@
+# Wave-3A renames -- TButtonPane base class identification + TPlyrStatusBar Close
+#
+# Date: 2026-05-16
+# Agent: Wave-3A (forensic-recon for character panel two-pass-draw + TButtonPane base)
+# Brief: docs/ui/briefs/B_r8_charpane_draw_buttonpane.md
+#
+# Evidence-grade rationale per AGENT_PROTOCOL "Don't promote evidence-level":
+#
+# ============================================================================
+# (1) cls_0x5a45c8 -> cls_0x5a45c8_TButtonPane
+# ============================================================================
+# Evidence A: VTABLE INHERITANCE -- cls_0x5a5a30 (TQuickSpellPane, confirmed
+#             Wave-2A via "quick spell pane" string anchor + the src/spellpane.h
+#             `_CLASSDEF(TQuickSpellPane)` forward decl with `class TQuickSpellPane :
+#             public TButtonPane` declaration) shares 8+ vtable slot identities
+#             with cls_0x5a45c8 byte-for-byte:
+#               slot  1 = 0x00434f30  (both)
+#               slot  2 = 0x00435010  (both)
+#               slot  7 = 0x00436010  (both)
+#               slot  9 = 0x00491a80  (both -- inherited from TPane)
+#               slot 10 = 0x00445210  (both -- TButtonPane override of TPane stub)
+#               slot 16 = 0x00491bb0  (both -- inherited from TPane)
+#               slot 19 = 0x00435d70  (both -- TButtonPane DrawBackground override)
+#               slot 22 = 0x00435f90  (both)
+#               slot 23 = 0x00436090  (both)
+#               slot 27 = 0x004361f0  (both)
+#               slot 28 = 0x00436460  (both)
+#               slot 29 = 0x00436340  (both)
+#             This is decisive single-inheritance vtable layout: TQuickSpellPane
+#             inherits cls_0x5a45c8's virtuals verbatim, overriding only its own
+#             leaf-class methods (slots 0, 20, 21, 25, 26, 31+).
+#
+# Evidence B: SLOT-0 BODY SEMANTICS -- FUN_00434e40 (slot 0 of cls_0x5a45c8) calls
+#             FUN_00491900_TPane_Initialize() first, then zeros the 0x100-byte buffer
+#             at field [0x26] (which is the TPointerArray<TButton, MAXBUTTONS>::data
+#             storage per src/button.h:124), then zeros the other instance state
+#             fields. This matches `src/button.h::TButtonPane::Initialize` semantics
+#             exactly: chain to base, prepare the Buttons array, then per-class state.
+#             Body saved at recon/discovered/cls_0x5a45c8_intermediate_init_434e40.cpp
+#             (Wave-2B) and now annotated.
+#
+# Evidence C: MSVC 3-STAGE CTOR PATTERN -- cls_0x5a5ae8_ctor_488620.cpp shows the
+#             canonical chained-ctor write pattern:
+#                *param_1 = &PTR_FUN_005a4494;   // TPane base vtable
+#                FUN_0041c7f0(0x10, 0x10);       // TPointerArray<TButton> ctor
+#                *param_1 = &PTR_FUN_005a45c8;   // intermediate (THIS IS TButtonPane)
+#                ... per-leaf field setup ...
+#                *param_1 = &PTR_FUN_005a5ae8;   // leaf vtable
+#             Three distinct vtables = three levels of inheritance. The middle one
+#             (cls_0x5a45c8) is the TButtonPane base, sandwiched between TPane and
+#             leaf.
+#
+# Evidence D: MULTIPLE DERIVED CLASSES -- cls_0x5a45c8 is shared as intermediate by
+#             at least 3 confirmed-distinct leaf classes (TQuickSpellPane cls_0x5a5a30,
+#             TBottomBarPane cls_0x5a5808 -- both via byte-identical ctor patterns
+#             writing the TPane base then leaf, and cls_0x5a5ae8 ScrollPane via the
+#             3-stage write). Multi-derivative use = base class pattern.
+#
+# Evidence quality: 4 INDEPENDENT lines (vtable slot-by-slot inheritance match across
+# a known-derived class + slot-0 body matching src::TButtonPane::Initialize semantics +
+# canonical MSVC 3-stage ctor write pattern + multiple derived classes). Well above
+# 98% threshold. Safe to apply.
+
+cls_0x5a45c8|cls_0x5a45c8_TButtonPane
+
+# ============================================================================
+# (2) FUN_00434e40 -> FUN_00434e40_TButtonPane_Initialize
+# ============================================================================
+# Evidence A: Slot 0 of cls_0x5a45c8 (= TButtonPane per identification #1 above).
+# Evidence B: Body calls TPane::Initialize first, then zeros button-array storage at
+#             field [0x26] -- semantics match src/button.h::TButtonPane::Initialize.
+# Two independent lines (vtable position + body semantics matching src). Safe.
+
+FUN_00434e40|FUN_00434e40_TButtonPane_Initialize
+
+# ============================================================================
+# (3) FUN_00434f30 -> FUN_00434f30_TButtonPane_Close
+# ============================================================================
+# Evidence A: Slot 1 of cls_0x5a45c8 (= TButtonPane). Paired position with Initialize
+#             at slot 0 -- src/screen.h establishes (TPane base) and src/button.h
+#             confirms (TButtonPane derived) that Initialize / Close are slots 0 / 1
+#             in declaration order.
+# Evidence B: Body NOT yet decompiled, so this rename is based on slot-position
+#             only PLUS the cross-class vtable identity (cls_0x5a5a30 TQuickSpellPane
+#             also has 0x434f30 at slot 1 -- so this is the SHARED base-class Close).
+#
+# NOTE: this rename relies on the slot-position pairing convention. It would be
+# stronger with a body extraction. Reviewers: if you have any doubt, downgrade this
+# to a "candidate" note in the brief and remove the rename pair.
+
+FUN_00434f30|FUN_00434f30_TButtonPane_Close
+
+# ============================================================================
+# (4) FUN_00549d40 -> FUN_00549d40_TPlyrStatusBar_Close
+# ============================================================================
+# Evidence A: Slot 1 of cls_0x5a54e4 (= TPlyrStatusBar, confirmed Wave-1A via
+#             "PlyrStatusB(ar)" string anchor + src/revtypes.h:1166 forward decl).
+#             Paired position with Initialize at slot 0 (= FUN_00549740, already
+#             renamed by Wave-1A to FUN_00549740_TPlyrStatusBar_Initialize).
+# Evidence B: BODY SYMMETRY WITH INITIALIZE -- FUN_00549d40 body (extracted this
+#             wave to /tmp/recon_ui_wave3/slot1_549d40.cpp) frees the EXACT 5
+#             surfaces that Initialize at FUN_00549740 allocates:
+#               +0x64 sprite, +0x60 sprite, +0x6c/0x70/0x74 mosaic surfaces, +0x68 portrait
+#             Each surface is destroyed by `(**(vtable))(1)` (TSurface::~TSurface or
+#             similar destructor call with the "delete=1" arg). Then calls
+#             FUN_00491970_TPane_Close (the inherited base Close). This is the
+#             canonical Initialize/Close symmetric-pair pattern: every surface
+#             allocated in Initialize is freed here.
+#
+# Two independent lines (vtable slot 1 + body semantics inverting Initialize). Safe.
+
+FUN_00549d40|FUN_00549d40_TPlyrStatusBar_Close
+
+# ============================================================================
+# NOT INCLUDED (deferred / open):
+# ============================================================================
+#
+# - TPlyrStatusBar overridden slots 7 / 19 / 20 / 23 (the draw / state methods):
+#   ALL four extracted bodies decisively touch the player+target stat-source path
+#   (DAT_00667fcc + DAT_00667fcc->target), but the exact src-name mapping per slot
+#   is NOT yet pinned down. Per Wave-2B's port_status/TPane.md slot table, the
+#   strong candidates are:
+#     slot  7 -> Update (TButtonPane also overrides this -- body suggests partial bar redraw)
+#     slot 19 -> DrawBackground (small counter-state update body; pre-paint hook)
+#     slot 20 -> Animate (per-frame portrait surface mgmt + per-character helper calls)
+#     slot 23 -> open (body is the LARGE two-pass paint, but src vtable position 23 = MouseMove
+#                      per pre-Revisited declaration order, which contradicts the body shape;
+#                      either the retail vtable order differs from current src/screen.h
+#                      declaration order, OR slot 23 is the actual draw with the per-class
+#                      Animate at slot 20 being a wrapper/dispatcher)
+#   Rather than promote ambiguous evidence, all four are documented in the brief +
+#   port_status updates instead of being renamed. The two-pass-draw HYPOTHESIS itself
+#   is fully confirmed (see brief Step 3) -- it's only the per-slot src-name mapping
+#   that needs another extraction pass to lock down.
+#
+# - The per-character helper functions FUN_0054a0a0, FUN_0054a310, FUN_0054ae10,
+#   FUN_0054a5d0, FUN_00452690, and the portrait-load helper FUN_0046d710 are all
+#   called from the draw bodies but not yet extracted as discrete units. Wave-4
+#   should extract these to confirm:
+#     - which is "draw player side" vs "draw target side"
+#     - which handles portrait composition
+#     - what FUN_00452690 does as the fallback target lookup (likely a registry
+#       lookup by mapindex, given the +0xb8 field saved earlier in the draw)
+#
+# - DAT_00667fcc itself -- the global "current player character pointer" -- has not
+#   been formally renamed. Wave-2B port_status/TPlyrStatusBar.md identifies it as
+#   the player binding. Cross-reference with TCharacter / TPlayer field shape +
+#   field [0x38] / [0x11] would confirm; offset 0x38*4 = 0xe0 corresponds to
+#   TCharacter's known target / lookat field per recon/discovered/cls_0x5a7b98_*.
+#   Defer to a focused TPlayer / TCharacter binding pass.

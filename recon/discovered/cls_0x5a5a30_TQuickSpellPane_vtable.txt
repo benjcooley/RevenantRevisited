@@ -1,0 +1,43 @@
+INFO  DumpVtable.java> vtable @ 005a5a30 (cls_0x5a5a30 = TQuickSpellPane, leaf of TButtonPane)
+INFO  DumpVtable.java>   [ 0] @ 005a5a30  -> 00544160  FUN_00544160 (TQuickSpellPane::Initialize)
+INFO  DumpVtable.java>   [ 1] @ 005a5a34  -> 00434f30  FUN_00434f30  (inherited from cls_0x5a45c8 = TButtonPane::Close)
+INFO  DumpVtable.java>   [ 2] @ 005a5a38  -> 00435010  FUN_00435010  (inherited from TButtonPane)
+INFO  DumpVtable.java>   [ 3] @ 005a5a3c  -> 00444f40  <no fn>       (inherited from TPane base)
+INFO  DumpVtable.java>   [ 4] @ 005a5a40  -> 00444f50  <no fn>       (inherited from TPane base)
+INFO  DumpVtable.java>   [ 5] @ 005a5a44  -> 00444f60  <no fn>       (inherited)
+INFO  DumpVtable.java>   [ 6] @ 005a5a48  -> 00444f70  <no fn>       (inherited)
+INFO  DumpVtable.java>   [ 7] @ 005a5a4c  -> 00436010  FUN_00436010  (inherited from TButtonPane)
+INFO  DumpVtable.java>   [ 8] @ 005a5a50  -> 00444f90  <no fn>       (inherited)
+INFO  DumpVtable.java>   [ 9] @ 005a5a54  -> 00491a80  FUN_00491a80  (inherited from TPane)
+INFO  DumpVtable.java>   [10] @ 005a5a58  -> 00445210  <no fn>       (inherited from TButtonPane)
+INFO  DumpVtable.java>   [11] @ 005a5a5c  -> 00444fc0  <no fn>       (inherited)
+INFO  DumpVtable.java>   [12] @ 005a5a60  -> 00444fd0  <no fn>       (inherited)
+INFO  DumpVtable.java>   [13] @ 005a5a64  -> 00444fe0  <no fn>       (inherited)
+INFO  DumpVtable.java>   [14] @ 005a5a68  -> 00444ff0  <no fn>       (inherited)
+INFO  DumpVtable.java>   [15] @ 005a5a6c  -> 00445000  <no fn>       (inherited)
+INFO  DumpVtable.java>   [16] @ 005a5a70  -> 00491bb0  FUN_00491bb0  (inherited from TPane)
+INFO  DumpVtable.java>   [17] @ 005a5a74  -> 00445020  <no fn>       (inherited)
+INFO  DumpVtable.java>   [18] @ 005a5a78  -> 00445030  <no fn>       (inherited)
+INFO  DumpVtable.java>   [19] @ 005a5a7c  -> 00435d70  FUN_00435d70  (inherited from TButtonPane = DrawBackground)
+INFO  DumpVtable.java>   [20] @ 005a5a80  -> 005444a0  <no fn>       <-- OVERRIDE (TQuickSpellPane::Animate candidate)
+INFO  DumpVtable.java>   [21] @ 005a5a84  -> 005444c0  FUN_005444c0  <-- OVERRIDE (Overlay candidate)
+INFO  DumpVtable.java>   [22] @ 005a5a88  -> 00435f90  <no fn>       (inherited from TButtonPane)
+INFO  DumpVtable.java>   [23] @ 005a5a8c  -> 00436090  FUN_00436090  (inherited from TButtonPane)
+INFO  DumpVtable.java>   [24] @ 005a5a90  -> 00445080  <no fn>       (inherited)
+INFO  DumpVtable.java>   [25] @ 005a5a94  -> 00544890  <no fn>       <-- OVERRIDE
+INFO  DumpVtable.java>   [26] @ 005a5a98  -> 005449a0  <no fn>       <-- OVERRIDE
+INFO  DumpVtable.java>   [27] @ 005a5a9c  -> 004361f0  FUN_004361f0  (inherited from TButtonPane)
+INFO  DumpVtable.java>   [28] @ 005a5aa0  -> 00436460  FUN_00436460  (inherited from TButtonPane)
+INFO  DumpVtable.java>   [29] @ 005a5aa4  -> 00436340  FUN_00436340  (inherited from TButtonPane)
+INFO  DumpVtable.java>   [30] @ 005a5aa8  -> 004450c0  <no fn>       (inherited)
+INFO  DumpVtable.java>   [31] @ 005a5aac  -> 004885e0  FUN_004885e0  <-- per-class trailing dtor / cleanup
+INFO  DumpVtable.java>   [32] @ 005a5ab0  -> 00435230  FUN_00435230
+INFO  DumpVtable.java>   [33] @ 005a5ab4  -> 00435150  FUN_00435150
+INFO  DumpVtable.java>   [34] @ 005a5ab8  -> 004364d0  FUN_004364d0
+INFO  DumpVtable.java>   [35] @ 005a5abc  -> 00435cb0  FUN_00435cb0
+
+NOTE: this vtable extends past 31 slots (= base TPane size) because TButtonPane defines additional virtuals beyond TPane,
+and TQuickSpellPane may add a few more. Slots 32..35 are TButtonPane-or-deeper virtuals (per src/button.h: NewButton,
+ClearGroup, CheckGroup are non-virtual today, but in retail these may have been virtual to allow per-derived button setup).
+
+INHERITANCE EVIDENCE: slots 1, 2, 7, 19, 22, 23, 27, 28, 29 are byte-identical to cls_0x5a45c8 (TButtonPane base) -- decisive.

@@ -54,14 +54,30 @@ this+0x5c : ???                              <- param_1[0x17]
 
 (These offsets are consistent across all leaf panes' field accesses observed so far.)
 
+## Confirmed virtuals from Wave-3A (2026-05-16)
+
+Cross-referencing TButtonPane (cls_0x5a45c8) overrides + src::button.h known override list, the following TPane vtable slot → src-name mappings gain support (still ⚫ at the per-method body level, but slot-purpose is firming up):
+
+- **Slot 0 = `Initialize`** ✅ (already locked)
+- **Slot 1 = `Close`** ✅ (already locked)
+- **Slot 7** is overridden by both TButtonPane (= `Update` per src::button.h:106 `Update() { TPane::Update(); RedrawButtons(); }`) AND TPlyrStatusBar (= partial bar redraw). Strong evidence slot 7 = **`Update`** (TPane src:225 `virtual void Update() { SetDirty(true); }`).
+- **Slot 19** is overridden by TButtonPane — per src::button.h:101 TButtonPane overrides `DrawBackground`. Slot 19 = **`DrawBackground`** is the strong candidate. TPlyrStatusBar's slot 19 override is a state-counter update (no draw calls) consistent with "pre-paint state setup" semantics.
+- **Slot 20** is overridden by TButtonPane — per src::button.h:102 TButtonPane overrides `Animate(bool draw)`. Slot 20 = **`Animate`** is the strong candidate. TPlyrStatusBar's slot 20 override manages portrait surface + calls per-side helpers.
+- **Slot 21** (TPane stub 0x4451e0) is NOT overridden by TButtonPane — consistent with TButtonPane not overriding Overlay. Slot 21 = **`Overlay`** likely.
+- **Slots 22, 23, 25** are overridden by TButtonPane — per src::button.h:98-100 TButtonPane overrides `KeyPress`, `MouseClick`, `MouseMove`. Slot order (22, 23, 25) likely maps to (MouseClick, MouseMove, KeyPress) — needs body extraction to confirm, BUT this is a weaker pairing than slots 19/20 because:
+  - 13 slots are overridden in TButtonPane but only 7 src virtuals are listed — either src is incomplete or some slots map to virtuals NOT in src
+  - Slot 24 is NOT overridden (between MouseMove-candidate and KeyPress-candidate); could be a non-src virtual
+
+**Resolution path:** extracting TButtonPane slot bodies (0x435d70, 0x435de0, 0x435f90, 0x436090, 0x436010, 0x436530, 0x436660, 0x436090, 0x4361f0, 0x436460, 0x436340) and matching each to a src::button.h or src::screen.h virtual by shape would lock the mapping fully.
+
 ## Open questions
 
-- Slots 2, 7, 9, 16, 19, 20 need body extraction to confirm src-name mapping.
-- The cls_0x5a45c8 intermediate (used by stat-pane class family) is NOT a TPane subclass directly via vtable wiring patterns — its relationship needs disentangling. May be a `TButtonPane : TPane` mid-level, or a non-pane base shared by some buttons-and-bgr UI elements.
-- Vtable slot 31 = 0x00434e40 — this is the base-init helper called from FUN_00546b50, FUN_00549740, etc. as a NON-virtual call. Its presence at slot 31 of the cls_0x5a4494 vtable is suspicious — could be a DumpVtable.java off-by-one (the script dumps `slots` slots, not `slots-1`). Recheck by reading raw memory at 0x5a4510..0x5a4514 to verify it's actually a vtable slot vs adjacent data.
+- Slots 2, 9, 16 (non-trivial bodies shared across multiple panes) still need body extraction to confirm src-name mapping. They're likely structural virtuals (PaneResized / SetClipRect / something internal).
+- Vtable slot 31 = 0x00434e40 — **CONFIRMED off-by-one in DumpVtable**: 0x00434e40 is actually TButtonPane's Initialize (slot 0 of cls_0x5a45c8, which sits in .data immediately after cls_0x5a4494's 31-slot vtable). The TPane vtable is exactly 31 slots wide. Per Wave-3A.
 
 ## Related
 
 - Leaf panes confirmed to derive from this base: TPlyrStatusBar (cls_0x5a54e4), TSidePane (cls_0x5a53ec), TSideTabsPane (cls_0x5a5750), TBottomPane (cls_0x5a5468).
+- Intermediate-derived class: **TButtonPane** = `cls_0x5a45c8` (Wave-3A) — see [port_status/TButtonPane.md](TButtonPane.md). TButtonPane is THE common base for button-bearing panes (TQuickSpellPane, TBottomBarPane, TSideTabsPane, TStatPane, scroll-pane class).
 - src/screen.h class TPane line 83.
-- Brief: [B.r6](../../../docs/ui/briefs/B_r6_target_charpane_and_base.md).
+- Briefs: [B.r6](../../../docs/ui/briefs/B_r6_target_charpane_and_base.md), [B.r8](../../../docs/ui/briefs/B_r8_charpane_draw_buttonpane.md).

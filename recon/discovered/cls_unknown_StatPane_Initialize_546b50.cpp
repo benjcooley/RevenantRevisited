@@ -19,7 +19,7 @@ undefined4 __fastcall FUN_00546b50(int *param_1)
   puStack_8 = &LAB_005a1fb2;
   pvStack_c = ExceptionList;
   ExceptionList = &pvStack_c;
-  FUN_00434e40();
+  FUN_00434e40_TButtonPane_Initialize();
   piVar1 = (int *)FUN_00482fb0(0x78);
   local_4 = 0;
   local_118 = piVar1;

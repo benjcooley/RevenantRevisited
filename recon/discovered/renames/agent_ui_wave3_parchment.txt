@@ -1,0 +1,97 @@
+# Wave-3B renames - cls_0x5a5ae8 (parchment-styled spell-list sidebar pane)
+#
+# Date: 2026-05-16
+# Agent: Wave-3B (parchment-viewer class identification)
+# Brief: docs/ui/briefs/B_r9_parchment_viewer.md
+#
+# Summary verdict: cls_0x5a5ae8 is the IN-GAME SPELL-LIST SIDEBAR PANE
+# ("Spell" tab of TSideTabsPane; CLASSIC_HUD_REFERENCE.md sec 3d). It iterates
+# the player character's known-spells list (DAT_00667fcc + 0x2ec / + 0x2fc) and
+# renders each entry as "SPELL %s" inside a scrollable parchment-styled column.
+#
+# Importantly it is NOT a 1:1 match for ANY of: src/scroll.h::TScrollPane,
+# src/scroll.h::TBookPane, src/spellpane.h::TSpellPane, or a hypothetical
+# TJournalPane. See brief for the side-by-side comparison. Renaming the class
+# to one of those names would mislabel.
+#
+# What we CAN apply with 2+ evidence lines:
+#
+# (1) FUN_005449e0 is cls_0x5a5ae8's Initialize virtual (vtable slot 0 of
+#     0x5a5ae8 = 0x005449e0). Already understood as "the init function of the
+#     2nd stat-pane global @ 0x65a9d8" by Wave-2B; vtable confirms it as the
+#     class's actual virtual method, not just a wrapper.
+#
+#     Evidence line 1: vtable[0] of 0x5a5ae8 -> 0x005449e0 (DumpVtable.java
+#                      output saved at cls_0x5a5ae8_vtable.txt).
+#     Evidence line 2: TPlayScreen::Initialize calls it on the global instance
+#                      @ 0x65a9d8 (already documented by Wave-2B, B.r6 brief).
+#                      Same call-site pattern as the other 5 TPlayScreen panes
+#                      whose vtable[0] = Initialize is confirmed.
+#
+# (2) FUN_00488620 is cls_0x5a5ae8's constructor (3-stage MSVC pattern writing
+#     base TPane vtable -> intermediate 0x5a45c8 -> final 0x5a5ae8). Already
+#     extracted by Wave-2B. Callers analysis: ONE call site at 0x00480c65,
+#     immediately after `MOV ECX, 0x0065a9d8`. This is the static-init wire
+#     for the global instance, exactly mirroring the Wave-1A pattern for the
+#     other HUD pane globals.
+#
+#     Evidence line 1: writes &PTR_FUN_005a5ae8 to *this (the cls's final
+#                      vtable wire pattern at 0x488810).
+#     Evidence line 2: only call site at 0x00480c65 sets ECX = 0x65a9d8
+#                      (the documented global instance address).
+#
+# Per the AGENT_PROTOCOL "don't promote evidence-level" rule, we describe the
+# functions by ROLE relative to the still-unidentified class - rather than
+# pretending a TSpellPane / TBookPane / TScrollPane identification we don't
+# have. The cls_0x5a5ae8 token itself is NOT renamed (no src name matches).
+#
+# Naming convention used: SpellbookSidebarPane is a description of the role
+# (parchment-styled sidebar tab showing the player's known-spells list), NOT
+# a claimed retail class name. Using a description rather than a guessed
+# class name prevents the next agent from inheriting an unjustified name.
+
+FUN_005449e0|FUN_005449e0_SpellbookSidebarPane_Initialize
+FUN_00488620|FUN_00488620_SpellbookSidebarPane_ctor
+
+# NOT INCLUDED (deferred):
+#
+# - cls_0x5a5ae8 itself. Candidates considered:
+#     * TScrollPane (src/scroll.h: parchment text reader for found-item scrolls)
+#       REJECTED: content is the player's spell list, not free text from a
+#       TScroll object. Sprite naming "Scroll*" matches the visual STYLE not
+#       the class.
+#     * TBookPane (src/scroll.h: final TScrollPane subclass for book reading)
+#       REJECTED: same reason. Also: TBookPane is `final` in src, but the
+#       retail class is referenced by 36 callers and is a single instance,
+#       which doesn't add evidence either way.
+#     * TJournalPane (hypothesised quest journal): no anchor at all.
+#     * TSpellPane (src/spellpane.h: TALISMAN ASSEMBLY pane in pre-release):
+#       REJECTED: pre-release TSpellPane loads sprite "spell" not "ScrollPaper",
+#       buttons named "spell"/"book"/"add"/"back"/"down"/"up"/"min" not
+#       "ScrlArwUU/DU" etc, iterates TalismanClass.NumTypes() not the player's
+#       spell list. The pre-release TSpellPane is the TALISMAN COMPOSER, a
+#       fundamentally different UI mode than the retail "list of known spells".
+#     * A retail-era new class for which we have no src name. MOST LIKELY but
+#       cannot name. The Spell tab in TSideTabsPane (4th tab at y=0x71) is the
+#       activator slot; whatever the class is called in the lost retail source,
+#       its instance is wired @ 0x65a9d8 and ctor'd at 0x00480c65.
+#
+# - cls_0x5a5ae8 method-level renames (slots 1, 19, 20, 26 in particular):
+#   FUN_00544e40 (Close), FUN_00546620 (scroll handler - works with scroll
+#   state fields), FUN_00544eb0 (slot 20), FUN_00546390 (click/select on
+#   spell-list entry - reads selection index mbr_0x1c8 + looks up spell name
+#   in player's spell list). All have circumstantial evidence but no string
+#   anchors of their own; defer until either the class is named OR each method
+#   gets its own anchor.
+#
+# - cls_0x5a45c8 (the intermediate parent class shared with TBottomBarPane,
+#   TStatPane(prob), TSideTabsPane(prob), and others). This is clearly the
+#   TButtonPane-with-DEF-widget-engine intermediate base. Worth a dedicated
+#   identification pass: its vtable adds ~14 slots over TPane base (32 -> 46),
+#   the new slots are populated with the 0x436xxx-0x437xxx button + DEF
+#   parser methods documented in B.r7. Likely src name is TButtonPane (per
+#   the inheritance shape of TBottomBarPane / TQuickSpellPane / TSpellPane /
+#   TStatPane in src/), but the existing src TButtonPane is much simpler than
+#   what the retail intermediate carries. The retail intermediate may be a
+#   "TButtonPane evolved to incorporate the DEF widget engine + scroll buttons
+#   pattern" - i.e. a structural evolution worth its own dedicated wave.
