@@ -30,6 +30,7 @@
 
 #include "3dimage.h"
 #include "area.h"
+#include "automap.h"
 #include "cursor.h"
 #include "display.h"
 #include "multi.h"
@@ -257,6 +258,16 @@ bool TPlayScreen::Initialize()
     // area.def via rev_fopen + VFS.
     if (!AreaManager.Initialize())
         log_warn("[playscreen] AreaManager.Initialize failed; ambient will fall back to MapPane defaults");
+
+    // AutoMap loads automap.dat from resources.rvr and allocates the
+    // MapList / ActiveBuf state every other AutoMap method (and the
+    // save-game writer/reader) treats as required-non-null. Without
+    // this, TSaveGame::WriteGame/ReadGame would nullptr-deref the
+    // first time the player triggers a save. Has to run after
+    // resources.rvr is mounted (InitGlobals step pre-condition) and
+    // before any save path can fire.
+    if (!AutoMap.Initialize())
+        log_warn("[playscreen] AutoMap.Initialize failed; save-game will skip automap state");
 
     // Runtime mode owns mode-specific UI state (cursor, overlay
     // visibility, etc.). At static init g_currentMode defaults to game
@@ -523,6 +534,7 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
 
 void TPlayScreen::Close()
 {
+    AutoMap.Close();
     AreaManager.Close();
     if (mapRenderer)
     {

@@ -1773,6 +1773,11 @@ void TObjectInstance::InitScript(PTScript newscr)
     {
         flags |= OF_PULSE;          // Pulse me so script will run
         SetNotify(N_SCRIPTDELETED); // Tell us if script gets hacked
+        TScriptProto* p = script->GetScriptProto();
+        log_info("[script] attached '%s' -> obj %s (class=%d)",
+                 (p && p->name) ? p->name : "?",
+                 GetName() ? GetName() : "<unnamed>",
+                 objclass);
     }
 
     ResetScript();

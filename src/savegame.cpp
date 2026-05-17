@@ -6,9 +6,12 @@
 
 #include "savegame.h"
 
+#include <cerrno>
+
 #include "automap.h"
 #include "dls.h"
 #include "inventory.h"
+#include "logging.h"
 #include "mappane.h"
 #include "multictrl.h"
 #include "player.h"
@@ -29,8 +32,10 @@ bool TSaveGame::WriteGame(char *name)
     if (!name)
         name = "game01.sav";
 
-    if (!Player)
+    if (!Player) {
+        log_warn("[savegame] WriteGame('%s'): no Player to save", name);
         return false;
+    }
 
     if (saved != Player)
         saved = Player;
@@ -41,10 +46,15 @@ bool TSaveGame::WriteGame(char *name)
 
     TOutputStream os(32768, 16384);
 
-    FILE *fp;
-    fp = fopen(name, "wb");
-    if (!fp)
+    // Use rev_fopen so the write lands in SavePath (the per-user
+    // writable dir) rather than cwd. The matching ReadGame path
+    // already uses rev_fopen and would fail to find a cwd-written
+    // file on a typical install.
+    FILE *fp = rev_fopen(name, "wb");
+    if (!fp) {
+        log_error("[savegame] WriteGame('%s'): rev_fopen failed (errno=%d)", name, errno);
         return false;
+    }
 
     bool retval = true;
 
@@ -77,6 +87,8 @@ bool TSaveGame::WriteGame(char *name)
 
     fclose(fp);
 
+    log_info("[savegame] WriteGame('%s'): %s (gametime=%d, version=%d)",
+             name, retval ? "ok" : "FAIL", gametime, version);
     return retval;
 }
 
@@ -114,6 +126,7 @@ bool TSaveGame::ReadGame(char *name)
     FILE *fp = rev_fopen(name, "rb");
     if (fp == nullptr)
     {
+        log_warn("[savegame] ReadGame('%s'): file not found", name);
         loading = false;
         return false;
     }
@@ -198,6 +211,8 @@ bool TSaveGame::ReadGame(char *name)
     PlayScreen.Redraw();
 
     loading = false;
+    log_info("[savegame] ReadGame('%s'): %s (gametime=%d, version=%d)",
+             name, retval ? "ok" : "FAIL", gametime, version);
     return retval;
 }
 
