@@ -2071,6 +2071,18 @@ bool InitGlobals()
     Status("Initializing audio system\n");
     SoundPlayer.Initialize();   // failure here is non-fatal; game runs silent
 
+  // (23) ScriptManager — parses master.s into the proto registry and
+  // loads gamestate names from state.def. Both files live inside the
+  // mounted module archive (master.s is in resources.rvr; state.def is
+  // in both base and module), resolved via rev_fopen's basename-keyed
+  // VFS. Has to run after MountArchive/MountModule and before any
+  // sector spawn (TObjectInstance::InitScript calls back into the
+  // proto registry when an instance comes to life). Fatal if the
+  // master script can't be parsed — the world has no AI without it.
+    Status("Loading scripts\n");
+    if (!ScriptManager.Initialize())
+        FatalError("Unable to load master script (master.s)");
+
     if (!_CrtCheckMemory())
     {
 //      _CrtMemDumpAllObjectsSince(&s1);
@@ -2109,6 +2121,11 @@ void ShutdownGlobals()
         ResumeThreads();
 
   // ---- inverse of InitGlobals ----
+
+  // (23) ScriptManager — flushes the proto registry + gamestate names.
+  // Editor builds write any dirty scripts back to master.s before the
+  // memory is dropped. No live dependents so this can lead the inverse.
+    ScriptManager.Close();
 
   // (22) Sound — stop the playback thread + drain music before anything
   // else unwinds; nothing else depends on audio so this is the safest
