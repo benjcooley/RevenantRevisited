@@ -3598,6 +3598,47 @@ void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
                        0, 0, sw, sh, sw, sh);
 }
 
+sg_image TRenderer::GetOrCreateSolidColorImage(uint32_t rgba)
+{
+    auto it = solid_color_cache.find(rgba);
+    if (it != solid_color_cache.end())
+        return it->second;
+
+    // RGBA layout: caller passes (r << 24) | (g << 16) | (b << 8) | a.
+    // SG_PIXELFORMAT_RGBA8 expects bytes R, G, B, A in that order.
+    const uint8_t bytes[4] = {
+        uint8_t((rgba >> 24) & 0xff),
+        uint8_t((rgba >> 16) & 0xff),
+        uint8_t((rgba >>  8) & 0xff),
+        uint8_t( rgba        & 0xff),
+    };
+
+    sg_image_desc desc{};
+    desc.width  = 1;
+    desc.height = 1;
+    desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    desc.data.subimage[0][0].ptr  = bytes;
+    desc.data.subimage[0][0].size = sizeof(bytes);
+
+    const sg_image img = sg_make_image(&desc);
+    solid_color_cache[rgba] = img;
+    return img;
+}
+
+void TRenderer::DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
+                              uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    if (w <= 0 || h <= 0) return;
+    const uint32_t key = (uint32_t(r) << 24) | (uint32_t(g) << 16) |
+                         (uint32_t(b) <<  8) |  uint32_t(a);
+    const sg_image img = GetOrCreateSolidColorImage(key);
+    if (!img.id) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    CompositeSwapchain(img, x, y, w, h, target_w, target_h,
+                       0, 0, 1, 1, 1, 1);
+}
+
 void TRenderer::DrawNineSlice(PTBitmap bm,
                               int32_t l, int32_t t, int32_t r, int32_t b,
                               int32_t dx, int32_t dy, int32_t dw, int32_t dh)

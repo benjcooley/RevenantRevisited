@@ -542,6 +542,15 @@ public:
     // and refresh outside the draw path.
     void DrawSurface(TSurface* surf, int32_t x, int32_t y);
 
+    // Solid-color filled rect (B-phase visual). Backed by a per-color 1x1
+    // texture cache so the existing composite pipeline handles the blit
+    // (no shader-side tint needed). Useful as a debug visualization for
+    // panes that haven't ported their full DrawBackground yet, and as a
+    // primitive any pane can use directly for flat-colored backgrounds /
+    // separators / debug overlays.
+    void DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
+                       uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+
     // 9-slice blit (A.2d). Treats `bm` as a stretchable panel: the four
     // corner pieces render verbatim at their source size; the four edges
     // stretch along their long axis; the center fills. `l/t/r/b` are inset
@@ -610,6 +619,12 @@ private:
         float         z        = 0.0f;
     };
     std::vector<SHudRegistration> hud_drawables;
+
+    // Solid-color rect cache: one 1x1 sg_image per unique RGBA tuple.
+    // Created on demand by DrawSolidRect, never freed until renderer
+    // shutdown -- the per-color cost is 4 bytes of texture memory.
+    std::unordered_map<uint32_t, sg_image> solid_color_cache;
+    sg_image GetOrCreateSolidColorImage(uint32_t rgba);
 
     [[nodiscard]] sg_image TextureImage(TTextureHandle handle) const;
     [[nodiscard]] sg_image ImagePairColor(RendererImagePairHandle handle) const;
