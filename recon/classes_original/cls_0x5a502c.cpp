@@ -82,8 +82,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a502c::virt_meth_0x46b010(cls_0x5a502c 
     this->mbr_0x1b8 = 1;
   }
   this->mbr_0x1ac = 0;
-  cls_0x5b98b8::meth_0x4377c0((cls_0x5b98b8 *)this);
-  cls_0x5b98b8::meth_0x437620((cls_0x5b98b8 *)this);
+  cls_0x5b98b8::meth_0x4377c0_DefWidget_LoadFile((cls_0x5b98b8 *)this);
+  cls_0x5b98b8::meth_0x437620_DefWidget_ParseBuffer((cls_0x5b98b8 *)this);
   return 1;
 }
 

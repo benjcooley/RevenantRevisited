@@ -37,7 +37,7 @@ Structure cls_0x5b5750::vftable_5b5750 {
    120   virt_meth_0x4450c0 *   4   virt_meth_0x4450c0_120   "virtual function table entry."
    124   virt_meth_0x521dd0 *   4   virt_meth_0x521dd0_124   "virtual function table entry."
    128   FUN_00435230 *   4   FUN_00435230_128   "virtual function table entry."
-   132   FUN_00435150 *   4   FUN_00435150_132   "virtual function table entry."
+   132   FUN_00435150_DefScreen_Open *   4   FUN_00435150_132   "virtual function table entry."
    136   FUN_004364d0 *   4   FUN_004364d0_136   "virtual function table entry."
    140   FUN_00435cb0 *   4   FUN_00435cb0_140   "virtual function table entry."
    144   FUN_004361b0 *   4   FUN_004361b0_144   "virtual function table entry."
@@ -48,7 +48,7 @@ Structure cls_0x5b5750::vftable_5b5750 {
    164   FUN_00436ea0 *   4   FUN_00436ea0_164   "virtual function table entry."
    168   virt_meth_0x436eb0 *   4   virt_meth_0x436eb0_168   "virtual function table entry."
    172   virt_meth_0x436ec0 *   4   virt_meth_0x436ec0_172   "virtual function table entry."
-   176   FUN_00437000 *   4   FUN_00437000_176   "virtual function table entry."
+   176   FUN_00437000_DefWidget_ParsePanel *   4   FUN_00437000_176   "virtual function table entry."
    180   virt_meth_0x437080 *   4   virt_meth_0x437080_180   "virtual function table entry."
 }
 Length: 184 Alignment: 1

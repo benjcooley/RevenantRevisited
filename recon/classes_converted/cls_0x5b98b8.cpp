@@ -61,7 +61,7 @@ void cls_0x5b98b8::virt_meth_0x434f30()
 
 // Function at 00435040
 
-undefined4 cls_0x5b98b8::meth_0x435040(undefined param_1, undefined param_2, undefined4 param_3, dword param_4, dword param_5, uint param_6, undefined4 param_7, dword param_8)
+undefined4 cls_0x5b98b8::meth_0x435040_DefScreen_LoadAndShow(undefined param_1, undefined param_2, undefined4 param_3, dword param_4, dword param_5, uint param_6, undefined4 param_7, dword param_8)
 
 {
   char *_Dest;
@@ -112,7 +112,7 @@ undefined4 cls_0x5b98b8::meth_0x435040(undefined param_1, undefined param_2, und
     _Dest = (char *)((int)&uStack_64 + ~uVar4 + 3);
     _strncpy(_Dest,&DAT_005cd8e0,iVar3 + 0x4f);
     _Dest[iVar3 + 0x4f] = '\0';
-    iVar3 = meth_0x4377c0(this);
+    iVar3 = meth_0x4377c0_DefWidget_LoadFile(this);
     if (iVar3 == 0) {
       return 0;
     }
@@ -725,7 +725,7 @@ void cls_0x5b98b8::virt_meth_0x435de0()
     *(undefined4 *)&this->field_0x8c = 0;
     (*this->vftptr_0x0->virt_meth_0x444fc0_44)(this);
     if (this->mbr_0xc8 != 0) {
-      meth_0x437620(this);
+      meth_0x437620_DefWidget_ParseBuffer(this);
     }
   }
   if (((cls_0x438ea0 *)this->mbr_0x84 == (cls_0x438ea0 *)0x0) || (this->mbr_0x7c != 0)) {
@@ -983,7 +983,7 @@ bool cls_0x5b98b8::meth_0x436ae0()
 
 // Function at 00437620
 
-int cls_0x5b98b8::meth_0x437620()
+int cls_0x5b98b8::meth_0x437620_DefWidget_ParseBuffer()
 
 {
   undefined uVar1;
@@ -1071,7 +1071,7 @@ int cls_0x5b98b8::meth_0x437620()
 
 // Function at 004377c0
 
-undefined4 cls_0x5b98b8::meth_0x4377c0()
+undefined4 cls_0x5b98b8::meth_0x4377c0_DefWidget_LoadFile()
 
 {
   dword dVar1;

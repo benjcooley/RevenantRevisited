@@ -67,8 +67,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4c68::virt_meth_0x462660(cls_0x5a4c68 
   cls_0x46d6b0::meth_0x46d710(this_00);
   cls_0x5b98b8::meth_0x435660((cls_0x5b98b8 *)this);
   cls_0x5b98b8::meth_0x435ad0((cls_0x5b98b8 *)this,DAT_0065bb10);
-  cls_0x5b98b8::meth_0x4377c0((cls_0x5b98b8 *)this);
-  cls_0x5b98b8::meth_0x437620((cls_0x5b98b8 *)this);
+  cls_0x5b98b8::meth_0x4377c0_DefWidget_LoadFile((cls_0x5b98b8 *)this);
+  cls_0x5b98b8::meth_0x437620_DefWidget_ParseBuffer((cls_0x5b98b8 *)this);
   return 1;
 }
 

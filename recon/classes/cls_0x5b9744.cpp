@@ -114,7 +114,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5b9744::virt_meth_0x53a8b0(cls_0x5b9744 
       local_54 = local_54 + 1;
     } while (local_54 < DAT_005d697c);
   }
-  cls_0x5b98b8::meth_0x437620((cls_0x5b98b8 *)this);
+  cls_0x5b98b8::meth_0x437620_DefWidget_ParseBuffer((cls_0x5b98b8 *)this);
   return 1;
 }
 

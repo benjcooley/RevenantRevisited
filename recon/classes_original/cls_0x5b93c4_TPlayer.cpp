@@ -135,7 +135,7 @@ LAB_004351de:
   if (in_stack_0000002c != 0) {
     cls_0x5b98b8::meth_0x435b20((cls_0x5b98b8 *)this);
   }
-  cls_0x5b98b8::meth_0x435040
+  cls_0x5b98b8::meth_0x435040_DefScreen_LoadAndShow
             ((cls_0x5b98b8 *)this,(undefined)param_1,(undefined)param_2,param_3,param_4,param_5,
              param_6,param_7,param_8);
   return;
@@ -210,7 +210,7 @@ LAB_004352c6:
     }
     this->mbr_0x70 = 0;
   }
-  cls_0x5b98b8::meth_0x435040
+  cls_0x5b98b8::meth_0x435040_DefScreen_LoadAndShow
             ((cls_0x5b98b8 *)this,(undefined)param_1,(undefined)param_2,param_3,param_4,param_5,
              param_6,param_7,param_8);
   return;
@@ -395,7 +395,7 @@ void __thiscall OOAnalyzer::cls_0x5b93c4::virt_meth_0x4361f0(cls_0x5b93c4 *this,
   
   if ((((DAT_0065c9e0 != 0) && (in_stack_00000008 != 0)) && (param_1 == 0x52)) &&
      (*(char *)&this->mbr_0xd0 != '\0')) {
-    cls_0x5b98b8::meth_0x4377c0((cls_0x5b98b8 *)this);
+    cls_0x5b98b8::meth_0x4377c0_DefWidget_LoadFile((cls_0x5b98b8 *)this);
   }
   if ((int *)this->mbr_0xa0 != (int *)0x0) {
     (**(code **)(*(int *)this->mbr_0xa0 + 0x30))(param_1);

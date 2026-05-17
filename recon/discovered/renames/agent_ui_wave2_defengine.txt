@@ -1,0 +1,310 @@
+# Agent: Wave-2C — DEF widget engine entry-point identification
+# Date: 2026-05-16
+#
+# Mission: Identify the text-based DEF widget engine (parser + renderer +
+# input dispatcher) that powers options/popup/savegame/loadgame/joingame/
+# hostgame/ingamemenu/mpingame/selstart/createchar/userinfo/connect/
+# connectsimple secondary screens, as described in
+# CLASSIC_HUD_REFERENCE.md §8 and RETAIL_UI_RECOVERY_PLAN.md Tier 9.
+#
+# ============================================================================
+# Methodology
+# ============================================================================
+# Step 1: Read widgets.def + per-screen .def samples (options, popup) to
+#         extract distinctive vocabulary (PANEL, STYLE, BEGIN, END, BUTTON,
+#         TEXT, BITMAP, SCROLLBAR, LISTBOX, DROPLIST, FRAME, EDIT, FIELD,
+#         BGBITMAP, DROPBUTTON, UPLABELRECT, DOWNLABELRECT, LISTHEIGHT,
+#         DRAWMODE, ITEMRECT, SPIN, FONT, FLAGS, POS, RECT, COLOR, ...).
+# Step 2: FindStringRefs.java for each distinctive token across the retail
+#         binary. Results in /tmp/recon_ui/refs_*.txt.
+# Step 3: Cluster analysis — all distinctive widget tokens reference
+#         functions in the 0x42a000-0x437xxx range, with their string
+#         literals packed in the 0x005ccfb8-0x005cdc64 .rdata region. Same
+#         translation unit. Decisive.
+# Step 4: Decompile the cluster + the per-screen activators that load each
+#         .def file. Cross-reference call chains. Verify with golden-path
+#         error strings.
+#
+# ============================================================================
+# Evidence summary (all string anchors live in 0x005ccfb8-0x005cdc70)
+# ============================================================================
+# Distinctive token       Address       Owner function
+# ---------------------   -----------   --------------
+# "PANEL"                 0x005cdb64    FUN_00437000 (panel-body parser)
+# "BEGIN" (panel-local)   0x005cda78    FUN_00437000
+# "END" (panel-local)     0x005cda9c    FUN_00437000
+# "Panel layout BEGIN expected"  0x005cda80  FUN_00437000  ← golden-path error
+# "STYLE"                 0x005cd9f8    FUN_00436ec0 (control dispatcher)
+# "Control STYLE definitions not allowed in panel layout"  0x005cda00
+# "Unrecognized layout command %s"  0x005cda58  FUN_00436ec0
+# "Unrecognized tag in %s control"  0x005cda38  FUN_00436ec0
+# "widgets.def"           0x005cdbcc    FUN_004377c0 (file loader)
+# "Unable to load widgets.def"  0x005cdbe4    FUN_004377c0  ← golden-path error
+# "Unable to load %s"     0x005cdc0c    FUN_004377c0
+# "POS"/"%i,%i"/"NAME"/"FIELD"/"INDEX"/"TEXT"/"STRINGREF"/"FLAGS"/"GROUP"/"HOTKEY"
+#                         0x005ccfb8.. 0x005cd09c    FUN_0042a350 (TWidget base ctor)
+# "BITMAP"/"DRAWMODE"     0x005cd0f0+   FUN_0042aaf0 (BITMAP widget ctor)
+# "BGBITMAP"/"FRAME"/"FONT"  0x005cd158+  FUN_0042b340 (TEXT widget ctor)
+# "UPLABELRECT"/"DOWNLABELRECT"  0x005cd264/0x005cd288  FUN_0042bd90 (BUTTON ctor)
+# "BGBITMAP"/"FRAME"      0x005cd2f8+   FUN_0042d730 (FRAME widget ctor)
+# "BGBITMAP"/"RECT"/"FONT"  0x005cd470+ FUN_0042f9f0 (LISTBOX ctor)
+# "FIELD"/"END"           0x005cd470/0x005cd428  FUN_0042f700 (LISTBOX format-block)
+# "BGBITMAP"/"SPIN"       0x005cd65c/0x005cd710  FUN_00431750 (EDIT widget ctor)
+# "DROPBUTTON"/"ITEMRECT"/"LISTHEIGHT"  0x005cd814+  FUN_00433170 (DROPLIST ctor)
+#
+# All widget-type and attribute strings live in one contiguous .rdata window
+# referenced by one contiguous .text window — clear evidence of one TU.
+#
+# ============================================================================
+# Architecture (inferred)
+# ============================================================================
+#
+#  ┌───────────────────────────── PER-SCREEN ACTIVATOR ──────────────────────┐
+#  │  FUN_005399f0  (savegame), FUN_00465a50 (createchar), etc.              │
+#  │  builds geometry + sprite names, calls:                                  │
+#  └────────────────────────────┬────────────────────────────────────────────┘
+#                               │
+#  ┌────────────────────────────▼────────────────────────────────────────────┐
+#  │  FUN_00435150  DefScreen_Open(name, panel, flags, x,y,w,h, ..., bg)     │
+#  │  high-level "open this DEF screen" entry (modal centred)                 │
+#  └────────────────────────────┬────────────────────────────────────────────┘
+#                               │
+#  ┌────────────────────────────▼────────────────────────────────────────────┐
+#  │  FUN_00435040  DefScreen_LoadAndShow                                     │
+#  │  generic init: strips ".def", appends ".def", calls LoadFile, then      │
+#  │  activates via vtable+0x2c                                               │
+#  └────────────────────────────┬────────────────────────────────────────────┘
+#                               │
+#  ┌────────────────────────────▼────────────────────────────────────────────┐
+#  │  FUN_004377c0  DefWidget_LoadFile(this, "name.def")                     │
+#  │  ENGINE ENTRY: loads widgets.def + per-screen.def, concatenates into    │
+#  │  this->buf at +0xc8 (size at +0xcc), strncpy(this->name, name, 0x7f).   │
+#  │  String anchor: "widgets.def", "Unable to load widgets.def",            │
+#  │  "Unable to load %s". DECISIVE.                                          │
+#  └────────────────────────────┬────────────────────────────────────────────┘
+#                               │
+#                  (later, often same activator:)
+#                               │
+#  ┌────────────────────────────▼────────────────────────────────────────────┐
+#  │  FUN_00437620  DefWidget_ParseBuffer(this)                              │
+#  │  PARSER ENTRY: opens a TString tokenizer over this->buf, dispatches     │
+#  │  to vtable+0xb4 (the screen's parse hook), then activates via +0x94.    │
+#  │  Reads buffer pointer/size from this+0xc8/+0xcc set by LoadFile.        │
+#  └────────────────────────────┬────────────────────────────────────────────┘
+#                               │
+#                  vtable+0xb4 → (panel/style discriminator)
+#                               │
+#  ┌─────────────┬──────────────┴──────────────┐
+#  │             │                              │
+#  ▼             ▼                              ▼
+# FUN_00437000  FUN_00436ec0          [STYLE section parser]
+# PANEL parser  CONTROL DISPATCHER     (registers named styles into
+# expects BEGIN  reads identifier      DAT_00655510 table; STYLE-ref
+# loops calling  token, looks up in    consumer is FUN_00436ec0 itself)
+# +0xac per      DAT_00655510 widget-
+# control until  class table by name
+# END            (count DAT_0065617c),
+#                calls registered
+#                constructor func ptr
+#                via vtable[0] on
+#                the class entry.
+#
+#  ┌─────────────────────────────────────────────────────────────────────────┐
+#  │  WIDGET-SUBCLASS CONSTRUCTORS (one each, registered into global table)  │
+#  │  FUN_0042a350 — TWidget base attrs (POS/SIZE/NAME/FIELD/TEXT/FLAGS/…)   │
+#  │  FUN_0042aaf0 — BITMAP                                                  │
+#  │  FUN_0042aed0 — (FRAME-bitmap variant)                                  │
+#  │  FUN_0042b340 — TEXT                                                    │
+#  │  FUN_0042bd90 — BUTTON                                                  │
+#  │  FUN_0042d730 — FRAME                                                   │
+#  │  FUN_0042f700 — LISTBOX FIELD/END inner format-block                    │
+#  │  FUN_0042f9f0 — LISTBOX                                                 │
+#  │  FUN_00431750 — EDIT (with SPIN sub-mode)                               │
+#  │  FUN_00433170 — DROPLIST                                                │
+#  └─────────────────────────────────────────────────────────────────────────┘
+#
+#  ┌─────────────────────────────────────────────────────────────────────────┐
+#  │  INPUT DISPATCH                                                         │
+#  │  FUN_004361f0  DefWidget_DispatchInput(this, vkey, isKeyDown)           │
+#  │  Walks this->children[] (count +0x88, array +0x98). On 'R' (0x52)       │
+#  │  hot-reloads via FUN_004377c0(this->name) — DEV FEATURE; on arrow       │
+#  │  keys (0x25..0x28) navigates focus; on Enter (0xd) calls focused's      │
+#  │  vtable+0x2c (activate). For unhandled, iterates children calling each  │
+#  │  one's vtable+0x58 (KeyDown handler).                                   │
+#  └─────────────────────────────────────────────────────────────────────────┘
+#
+# ============================================================================
+# Conservative rename rules applied here
+# ============================================================================
+# - Engine entry points (LoadFile, ParseBuffer, ParsePanel, DispatchControl,
+#   DispatchInput, TWidget base ctor) have 2+ independent evidence lines each
+#   (string anchor + call-chain match + cross-reference).
+# - Per-screen activators are renamed ONLY for those screens whose .def file
+#   appears as a string literal in the binary AND whose call chain hits
+#   FUN_004377c0 (connect, connectsimple) — these are DOUBLE-confirmed.
+# - For screens whose .def filename is built at runtime (savegame, loadgame,
+#   options, popup, hostgame, joingame, mpingame, selstart, createchar,
+#   userinfo, ingamemenu, exit — all routed through FUN_00435150 with a
+#   "savegame"/"options"/etc. base-name parameter), the activator is renamed
+#   because the bare base name appears as a string literal AND it is passed
+#   into FUN_00435150 (which routes to FUN_004377c0).
+# - Widget-subclass constructors get a "_ParseAttrs" suffix — they don't get
+#   class names yet, because each one would need vtable confirmation and
+#   that's a separate hunt. The base-class TWidget identification stays
+#   in the brief as "primary candidate, needs vtable+ctor signature
+#   confirmation against any pre-release src class definition."
+# - The big "DEF top-level dispatch" function in the 0x437080-0x437620 gap
+#   (where the STYLE-section parser body lives) is NOT renamed — it's a
+#   single bare region Ghidra didn't bind to a function entry; needs a
+#   force-CreateFunction first. Documented in the brief.
+#
+# ============================================================================
+# ENGINE CORE — entry points (TPane/TDefScreen method-on-this)
+# ============================================================================
+
+# DefWidget_LoadFile — concatenates widgets.def + <name>.def into this->buf.
+# String anchors: "widgets.def" (0x005cdbcc) + "Unable to load widgets.def"
+# (0x005cdbe4) + "Unable to load %s" (0x005cdc0c). All inside this function.
+# Call chain: per-screen activators → FUN_00435150 → FUN_00435040 → here.
+# Confidence: HIGH (2+ string anchors, golden-path call chain).
+FUN_004377c0|FUN_004377c0_DefWidget_LoadFile
+meth_0x4377c0|meth_0x4377c0_DefWidget_LoadFile
+
+# DefWidget_ParseBuffer — tokenizes this->buf via TString helper, calls
+# vtable+0xb4 to dispatch to the screen's top-level parser hook, then
+# activates the screen via vtable+0x94 on success.
+# Anchors: reads buffer at +0xc8/+0xcc that LoadFile wrote; "String" type
+# tag at 0x005cdbc4; called immediately after LoadFile from FUN_00462660
+# (connect) and FUN_0046b010 (connectsimple).
+# Confidence: HIGH (data-flow chain to LoadFile + 2 explicit caller pairs).
+FUN_00437620|FUN_00437620_DefWidget_ParseBuffer
+meth_0x437620|meth_0x437620_DefWidget_ParseBuffer
+
+# DefWidget_ParsePanel — body of the PANEL "name" BEGIN ... END block.
+# String anchors: "PANEL" (0x005cdb64), "BEGIN" (0x005cda78), "END"
+# (0x005cda9c), "Panel layout BEGIN expected" (0x005cda80). Calls
+# vtable+0xac per child token until END is seen. Per-child slot+0xac is
+# the control-creation hook; its base impl is FUN_00436ec0.
+# Confidence: HIGH (4 string anchors, error-message golden path).
+FUN_00437000|FUN_00437000_DefWidget_ParsePanel
+meth_0x437000|meth_0x437000_DefWidget_ParsePanel
+
+# DefWidget_DispatchControl — given an identifier token, looks up the
+# matching widget class in the global table at DAT_00655510 (count
+# DAT_0065617c, entry name at +4, ctor fnptr at +0), instantiates it,
+# attaches it to the pane (FUN_0041c840 = add child), sets dirty bit.
+# String anchors: "Unrecognized layout command %s" (0x005cda58),
+# "Control STYLE definitions not allowed in panel layout" (0x005cda00),
+# "Unrecognized tag in %s control" (0x005cda38), "STYLE" (0x005cd9f8).
+# Confidence: HIGH (4 string anchors in one function body).
+FUN_00436ec0|FUN_00436ec0_DefWidget_DispatchControl
+meth_0x436ec0|meth_0x436ec0_DefWidget_DispatchControl
+
+# DefWidget_DispatchInput — input router for a DEF-driven screen.
+# Behavior: 'R' (0x52) reloads .def via FUN_004377c0(this->name+0xd0) —
+# explicit dev hot-reload. Arrow keys (0x25..0x28) navigate child focus.
+# Enter (0xd) activates focused child via vtable+0x2c. Falls through to
+# child KeyDown handlers via vtable+0x58.
+# Confidence: HIGH (hot-reload code-path uses LoadFile entry with the
+# filename field LoadFile populated at +0xd0 — exact data-flow match).
+FUN_004361f0|FUN_004361f0_DefWidget_DispatchInput
+meth_0x4361f0|meth_0x4361f0_DefWidget_DispatchInput
+
+# DefScreen_LoadAndShow — generic activator: strips ".def" extension if
+# present (FUN_0058ade0 = strchr '.'), appends ".def" again, calls
+# DefWidget_LoadFile, then activates via vtable+0x2c.
+# Confidence: HIGH (only caller path into LoadFile other than direct
+# screen activators; symmetric load+show pattern with FUN_00435150).
+FUN_00435040|FUN_00435040_DefScreen_LoadAndShow
+meth_0x435040|meth_0x435040_DefScreen_LoadAndShow
+
+# DefScreen_Open — high-level "open named DEF screen" with geometry.
+# Signature: (this, panel_name, screen_name, flags, x,y, w,h, bg_w,bg_h,
+# bg_sprite_name, outer_name). Dispatches to FUN_00435040.
+# Confidence: HIGH (every "*.def" activator we extracted routes through
+# this — savegame, loadgame, ingamemenu, createchar, options, popup, …).
+FUN_00435150|FUN_00435150_DefScreen_Open
+meth_0x435150|meth_0x435150_DefScreen_Open
+
+# ============================================================================
+# WIDGET BASE CTOR — common attribute parser
+# ============================================================================
+
+# DefWidget_TWidgetBase_ParseAttrs — sets the base widget vtable
+# (PTR_FUN_005a3ab8) and parses common attributes: POS x y, SIZE w h, NAME,
+# FIELD, INDEX, TEXT, STRINGREF, FLAGS, GROUP, HOTKEY.
+# String anchors: "%i,%i" pos/size patterns, "Unable to parse control pos"
+# (0x005ccfc4), "Text expected" (0x005cd028), "Unable to parse control
+# flags" (0x005cd048), "Unable to parse control group", "Unable to parse
+# control hotkey". All in one function body.
+# Confidence: HIGH on identification as the widget base; MEDIUM on which
+# src class it maps to (would need a pre-release TWidget definition with
+# matching field offsets — primary candidate but not pinned).
+FUN_0042a350|FUN_0042a350_DefWidget_TWidgetBase_ParseAttrs
+meth_0x42a350|meth_0x42a350_DefWidget_TWidgetBase_ParseAttrs
+
+# ============================================================================
+# PER-SCREEN ACTIVATORS — confirmed via .def or bare-name string + chain
+# ============================================================================
+
+# Connect (multiplayer "connect to host" screen).
+# .def filename literal at 0x005d2b7c referenced from inside this fn,
+# direct FUN_004377c0 call. Confidence: HIGH.
+FUN_00462660|FUN_00462660_LoadDef_connect
+meth_0x462660|meth_0x462660_LoadDef_connect
+
+# ConnectSimple (multiplayer "simple connect" variant).
+# .def filename literal at 0x005d40b4 referenced from inside this fn,
+# direct FUN_004377c0 call. Confidence: HIGH.
+FUN_0046b010|FUN_0046b010_LoadDef_connectsimple
+meth_0x46b010|meth_0x46b010_LoadDef_connectsimple
+
+# Savegame screen — bare name "savegame" at 0x005e4314 + 0x005e4330,
+# passed to FUN_00435150 (DefScreen_Open) which routes to LoadFile.
+# Confidence: HIGH (golden-path through DefScreen_Open).
+FUN_005399f0|FUN_005399f0_LoadDef_savegame
+meth_0x5399f0|meth_0x5399f0_LoadDef_savegame
+
+# Loadgame screen — bare name "loadgame" at 0x005e4244 + 0x005e4260,
+# passed to FUN_00435150. Confidence: HIGH.
+FUN_00539380|FUN_00539380_LoadDef_loadgame
+meth_0x539380|meth_0x539380_LoadDef_loadgame
+
+# Createchar screen — bare name "createchar" at 0x005d3300 (and friends),
+# passed to FUN_00435150/FUN_00435230 (variant). Confidence: HIGH.
+FUN_00465a50|FUN_00465a50_LoadDef_createchar
+meth_0x465a50|meth_0x465a50_LoadDef_createchar
+
+# Ingamemenu screen (in-game pause menu) — bare name "ingamemenu" at
+# multiple addresses referenced from this fn; routes to FUN_00435150.
+# Confidence: HIGH.
+FUN_00537110|FUN_00537110_LoadDef_ingamemenu
+meth_0x537110|meth_0x537110_LoadDef_ingamemenu
+
+# Mpingame (multiplayer in-game pane) — bare name "mpingame" at 0x005d2ebc.
+# Confidence: HIGH.
+FUN_00463e00|FUN_00463e00_LoadDef_mpingame
+meth_0x463e00|meth_0x463e00_LoadDef_mpingame
+
+# Hostgame screen — bare name "hostgame" referenced from this fn,
+# part of the multiplayer flow. Confidence: HIGH.
+FUN_00469a60|FUN_00469a60_LoadDef_hostgame
+meth_0x469a60|meth_0x469a60_LoadDef_hostgame
+
+# Joingame screen — bare name "joingame" referenced from this fn.
+# Confidence: HIGH.
+FUN_0046a660|FUN_0046a660_LoadDef_joingame
+meth_0x46a660|meth_0x46a660_LoadDef_joingame
+
+# Options screen — bare name "options" referenced from FUN_0053a8b0.
+# Confidence: HIGH (only fn-bound ref site; matches DefScreen_Open chain).
+FUN_0053a8b0|FUN_0053a8b0_LoadDef_options
+meth_0x53a8b0|meth_0x53a8b0_LoadDef_options
+
+# Popup screen (yesno / okcancel / ok / progress modal). Two activators:
+# FUN_0053bf00 and FUN_0053c1d0 each ref the "popup" string. Confidence:
+# HIGH; both belong to this brief.
+FUN_0053bf00|FUN_0053bf00_LoadDef_popup
+meth_0x53bf00|meth_0x53bf00_LoadDef_popup
+FUN_0053c1d0|FUN_0053c1d0_LoadDef_popup_variant
+meth_0x53c1d0|meth_0x53c1d0_LoadDef_popup_variant
