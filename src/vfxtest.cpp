@@ -22,6 +22,7 @@
 
 #include "display.h"
 #include "effect.h"
+#include "imgui.h"
 #include "logging.h"
 #include "object.h"
 #include "particlefx.h"
@@ -32,6 +33,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -102,6 +104,96 @@ void CycleDebug()
     if (v > int(EFxDebugMode::CurrentFrame)) v = 0;
     g_state.debug_mode = EFxDebugMode(v);
     log_info("[vfx] debug_mode -> %d", v);
+}
+
+const char* DebugModeName(EFxDebugMode m)
+{
+    switch (m)
+    {
+        case EFxDebugMode::Normal:       return "Normal";
+        case EFxDebugMode::SolidColor:   return "Solid";
+        case EFxDebugMode::FullTexture:  return "FullTex";
+        case EFxDebugMode::CurrentFrame: return "CurrFrame";
+    }
+    return "?";
+}
+
+void DrawBrowserPanel()
+{
+    ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowBgAlpha(0.86f);
+    constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_AlwaysAutoResize |
+                                        ImGuiWindowFlags_NoSavedSettings |
+                                        ImGuiWindowFlags_NoFocusOnAppearing;
+    if (!ImGui::Begin("VFX Browser", nullptr, kFlags))
+    {
+        ImGui::End();
+        return;
+    }
+
+    const int32_t n = int32_t(g_state.catalogue.size());
+
+    if (n == 0)
+    {
+        ImGui::TextDisabled("(no effects registered)");
+    }
+    else
+    {
+        const int32_t cur = (g_state.active_idx < 0 || g_state.active_idx >= n)
+            ? 0 : g_state.active_idx;
+        const VfxTest::SEffect& sel = g_state.catalogue[cur];
+
+        ImGui::Text("Effect %d / %d", cur + 1, n);
+        ImGui::SetNextItemWidth(360.0f);
+        if (ImGui::BeginCombo("##effect", sel.id.c_str()))
+        {
+            for (int32_t i = 0; i < n; ++i)
+            {
+                const bool selected = (i == cur);
+                if (ImGui::Selectable(g_state.catalogue[i].id.c_str(), selected))
+                    SelectIndex(i);
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::ArrowButton("##prev", ImGuiDir_Left))  SelectIndex(cur - 1);
+        ImGui::SameLine();
+        if (ImGui::ArrowButton("##next", ImGuiDir_Right)) SelectIndex(cur + 1);
+
+        ImGui::Separator();
+        ImGui::Text("Family:   %s", sel.family.empty()   ? "-" : sel.family.c_str());
+        ImGui::Text("Pipeline: %s", sel.pipeline.empty() ? "-" : sel.pipeline.c_str());
+    }
+
+    ImGui::Separator();
+    int32_t mode = int32_t(g_state.debug_mode);
+    ImGui::TextUnformatted("Debug:");
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Normal",    &mode, 0)) g_state.debug_mode = EFxDebugMode::Normal;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Solid",     &mode, 1)) g_state.debug_mode = EFxDebugMode::SolidColor;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("FullTex",   &mode, 2)) g_state.debug_mode = EFxDebugMode::FullTexture;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("CurrFrame", &mode, 3)) g_state.debug_mode = EFxDebugMode::CurrentFrame;
+
+    ImGui::Checkbox("Pause", &g_state.paused);
+    ImGui::SameLine();
+    if (ImGui::Button("Step"))    { if (g_state.paused) g_state.step_once = true; }
+    ImGui::SameLine();
+    if (ImGui::Button("Restart")) Restart();
+
+    ImGui::Separator();
+    ImGui::TextDisabled("frame=%lld  debug=%s%s",
+                        static_cast<long long>(g_state.frames_rendered),
+                        DebugModeName(g_state.debug_mode),
+                        g_state.paused ? "  [paused]" : "");
+    ImGui::TextDisabled("Keys: \xe2\x86\x90/\xe2\x86\x92  cycle   D  debug   "
+                        "Space  pause   .  step   R  restart   Esc  quit");
+
+    ImGui::End();
 }
 
 }  // namespace
@@ -233,11 +325,13 @@ void Render()
     }
 
     // Step 2: empty tile pass (clear-only) + lighting. RunLightingPass
-    // drains the FX queue at the tail. Mid-gray clear so coloured
-    // effects (red blood, yellow flame, white flare) all read clearly.
-    Renderer->BeginTilePass(0.45f, 0.46f, 0.50f, 1.0f);
+    // drains the FX queue at the tail. Black clear keeps the focus on
+    // the effect itself (and matches the typical "effect viewer" backdrop).
+    Renderer->BeginTilePass(0.0f, 0.0f, 0.0f, 1.0f);
     Renderer->EndTilePass();
     Renderer->RunLightingPass();
+
+    DrawBrowserPanel();
 }
 
 void HandleKeyPress(int32_t key, bool down)

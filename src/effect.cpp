@@ -863,12 +863,15 @@ TParticleBucket* AcquireBloodBucket(T3DImagery* img3d)
     desc.texture        = tex.htexture;
     desc.texture_width  = int32_t(tex.desc.width  > 0 ? tex.desc.width  : 1);
     desc.texture_height = int32_t(tex.desc.height > 0 ? tex.desc.height : 1);
-    // Blood imagery has multiple sprite frames; for the Phase 2.2 stage
-    // gate we just blit the whole sheet — a Phase 2.2.1 follow-up will
-    // wire the proper frame UV picker once TBloodSystem.SBloodParticle's
-    // size/stage fields are mapped from retail.
-    desc.default_width  = 16.0f;
-    desc.default_height = 16.0f;
+    // Blood.I3D is a 4×4 sprite atlas (guess — verify visually). Per-
+    // particle DrawFrame picks one cell so each droplet is one sprite
+    // instead of the whole sheet. If the grid turns out to be different
+    // (8×8 of 16-px droplets, 2×2 of large splats, etc.), only this and
+    // the spawn-side DrawFrame randomization need tuning.
+    desc.frame_cols     = 4;
+    desc.frame_rows     = 4;
+    desc.default_width  = 32.0f;
+    desc.default_height = 32.0f;
 
     SParticleBufferLayout layout = {};
     ParticleLayoutAddVar(layout, EParticleVar::OwnerId);
@@ -877,6 +880,7 @@ TParticleBucket* AcquireBloodBucket(T3DImagery* img3d)
     ParticleLayoutAddVar(layout, EParticleVar::DrawPos);
     ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
     ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawFrame);
     // EmitVel stores per-particle velocity (world-units / sec) so the
     // tick step can integrate without re-randomizing every frame.
     ParticleLayoutAddVar(layout, EParticleVar::EmitVel);
@@ -1060,8 +1064,14 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         }
         if (float* ds = bucket_->VarPtr(pi, EParticleVar::DrawScl))
         {
-            const float s = 8.0f + 6.0f * u1;
+            const float s = 24.0f + 16.0f * u1;
             ds[0] = s; ds[1] = s; ds[2] = 1.0f;
+        }
+        if (float* df = bucket_->VarPtr(pi, EParticleVar::DrawFrame))
+        {
+            // Random cell in the 4×4 atlas. Static — once picked at
+            // spawn, the droplet stays on that frame for its life.
+            *df = float(std::rand() % 16);
         }
         if (float* col = bucket_->VarPtr(pi, EParticleVar::DrawColor))
         {

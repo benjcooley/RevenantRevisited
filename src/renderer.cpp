@@ -4191,6 +4191,8 @@ void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
             item.color_rgba[3] = dc[3];
         }
 
+        // UV priority: explicit DrawUvRect (per-particle override) >
+        // sprite-grid pick from DrawFrame > whole texture.
         item.uv_rect[0] = 0.0f;
         item.uv_rect[1] = 0.0f;
         item.uv_rect[2] = 1.0f;
@@ -4201,6 +4203,24 @@ void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
             item.uv_rect[1] = du[1];
             item.uv_rect[2] = du[2];
             item.uv_rect[3] = du[3];
+        }
+        else if (desc.frame_cols > 1 || desc.frame_rows > 1)
+        {
+            const int32_t cols   = desc.frame_cols > 0 ? desc.frame_cols : 1;
+            const int32_t rows   = desc.frame_rows > 0 ? desc.frame_rows : 1;
+            const int32_t cells  = cols * rows;
+            int32_t frame = 0;
+            if (const float* df = bucket.VarPtr(i, EParticleVar::DrawFrame))
+                frame = int32_t(*df);
+            frame = ((frame % cells) + cells) % cells;
+            const int32_t fx = frame % cols;
+            const int32_t fy = frame / cols;
+            const float cw = 1.0f / float(cols);
+            const float ch = 1.0f / float(rows);
+            item.uv_rect[0] = float(fx) * cw;
+            item.uv_rect[1] = float(fy) * ch;
+            item.uv_rect[2] = cw;
+            item.uv_rect[3] = ch;
         }
 
         if (const float* dr = bucket.VarPtr(i, EParticleVar::DrawRot))

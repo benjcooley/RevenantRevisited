@@ -123,6 +123,12 @@ struct SParticleBucketDesc
     TTextureHandle texture = kInvalidTexture;
     int32_t texture_width = 1;
     int32_t texture_height = 1;
+    // Sprite atlas grid. When frame_cols * frame_rows > 1, the renderer
+    // computes per-particle uv_rect from the particle's DrawFrame value
+    // (frame_index mod (cols*rows)). 1×1 = use whole texture (or explicit
+    // DrawUvRect override if the bucket layout includes it).
+    int32_t frame_cols = 1;
+    int32_t frame_rows = 1;
     float default_width = 1.0f;
     float default_height = 1.0f;
     bool debug_solid = false;
