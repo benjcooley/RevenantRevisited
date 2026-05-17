@@ -191,19 +191,17 @@ public:
     }
 
 private:
-    // Per FUN_0054a5d0: bar is a 4-section composite over kBarMaxW=119
-    // pixels: left cap + filled (from BRIGHT row) + empty (from DIM row
-    // 48 below bright) + right cap. cap_w=6 each end.
-    //
-    // For now, simplify to 2 sections (filled + empty) drawn full height
-    // — caps are part of those sections rather than separate sub-rect
-    // blits. Once visual confirms, can split into proper 4-section.
+    // Per FUN_0054a5d0: bar = filled (BRIGHT row) + empty (DIM row)
+    // composed at the bar position. A dropshadow is drawn FIRST at
+    // (+kBarShadowOffX, +kBarShadowOffY) — recon slot 23 calls
+    // FUN_00438d80(buf, 4, 4) immediately before each bar block to set
+    // up the shadow blit. The shadow uses the same bar geometry in a
+    // dark/alpha-tinted color. For now we approximate the shadow as a
+    // semi-transparent black rect at the bar's geometry +4,+4.
     void DrawBar(bool isRight, int32_t atlasY, int32_t row, float level)
     {
         if (!g_bars) return;
         const int32_t paneW = Display.Width();
-        // Subtract shadow offset for target side too (recon line 657: bar_x =
-        // pane_width - 0xc1 is the SHADOW X; actual bar X = shadow_x - 4).
         const int32_t dstX = isRight
             ? paneW - kTargetBarOff[row] - kBarShadowOffX
             : kPanelX + kBarFillX;
@@ -213,9 +211,15 @@ private:
         const int32_t emptyW = kBarMaxW - fillW;
         const int32_t dimAtlasY = atlasY + kBarDimYOffset;
 
+        // === Dropshadow pass ===
+        // Semi-transparent black rect at (bar_x + 4, bar_y + 4), same
+        // geometry as the bar. Approximates the retail shadow blit.
+        Renderer->DrawSolidRect(dstX + kBarShadowOffX, dstY + kBarShadowOffY,
+                                kBarMaxW, kBarRowH, 0, 0, 0, 160);
+
+        // === Bar pass ===
         if (isRight)
         {
-            // Target: filled at the OUTER (right) end, empty at INNER (left).
             if (emptyW > 0)
                 Renderer->DrawBitmapSubrect(g_bars, dstX, dstY,
                                             0, dimAtlasY, emptyW, kBarRowH);
@@ -225,7 +229,6 @@ private:
         }
         else
         {
-            // Player: filled at INNER (left, next to icon), empty at OUTER (right).
             if (fillW > 0)
                 Renderer->DrawBitmapSubrect(g_bars, dstX, dstY,
                                             0, atlasY, fillW, kBarRowH);
