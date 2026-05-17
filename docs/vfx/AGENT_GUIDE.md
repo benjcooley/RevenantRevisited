@@ -156,6 +156,56 @@ If your effect genuinely needs a new pipeline capability (e.g. a soft-particle
 depth blend mode), that is a Phase-1 expansion. Stop, file it as a separate
 row, and either do it or claim it explicitly.
 
+#### 3.2.1 Engine-vs-bespoke decision (mandatory before Phase B)
+
+Not every effect should be a data-driven engine definition. **Use the engine
+for the common shapes; keep bespoke when behavior is genuinely unique.**
+
+**Use the engine** (declare in `data/Resources/effects.def`, drive via
+`TParticleEffectComponent` + expression VM, minimal C++ shim) when the
+effect is one of these shapes:
+
+- **Standard spray** — burst or continuous emitter, particles with
+  initial velocity + spread cone + gravity + lifetime + alpha/scale/color
+  curves. (Blood, mist, sparks, smoke, fountains, swirls.)
+- **Standard pulse** — single billboard or N-particle burst with
+  scale/alpha envelope over a fixed life. (Halo pulses, hit flashes,
+  spell-cast rings, ripple expansions.)
+- **Standard flipbook billboard** — atlas-cell animation cycling at a
+  fixed rate. (Torch flame, fire patches, sprite-based ambient
+  visuals.)
+- **Standard ray / missile particle trail** — projectile leaves a
+  particle trail behind it as it flies. (Fireball ember tails, ice
+  bolt frost trails.)
+- **Screen-space or world-space quads with standard blend/lit modes**.
+  (Most overlay effects, glow halos, hit decals.)
+
+**Stay bespoke** (write a focused C++ class with its own state machine
+and `SubmitFx*` calls) when the effect needs:
+
+- **Per-vertex custom geometry** beyond standard quads (sword swipe
+  with weapon-extents-driven width, lightning bolt with
+  spline-smoothed per-segment jitter + miter joins).
+- **Effect-specific gameplay state machines** (multi-phase spells with
+  LAUNCH→FLY→EXPLODE stages, hit-resolution callbacks, owner-state
+  coupling).
+- **Character-attached behavior** that scans the owner's mesh / bones
+  / equipped items per frame.
+- **Unique kinematics** that aren't well-served by standard spray /
+  pulse vocabulary (composite multi-emitter effects with cross-emitter
+  coordination, complex collision response).
+
+**Decision criteria during Phase A forensics:** when you write the
+forensic body, name the shape category. If it matches a standard one,
+the Phase B port goes through the engine. If it doesn't, the Phase B
+port is bespoke C++. If you write bespoke when the shape was standard,
+that's drift — call it out and refactor.
+
+**Don't rabbit-hole on conversions.** If the engine VM is missing one
+op a standard-shape effect needs (e.g. gravity, alpha curve), add the
+op generically and migrate. If the engine needs three new ops *just*
+for one effect's quirks, that effect is probably bespoke.
+
 ### 3.3 Diagnostic ladder (mandatory)
 
 Per PARTICLE_EFFECTS §3.2, every effect goes through these visible stages
