@@ -117,8 +117,9 @@ endif()
 # default *.cpp glob so add it explicitly. Skipped on non-Apple builds
 # where there's no Cocoa to call into.
 if(APPLE)
-  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/osx/editorplatform.mm")
-  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/osx/renderer_readback.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/editorplatform.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/renderer_readback.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/cursor.mm")
 endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
