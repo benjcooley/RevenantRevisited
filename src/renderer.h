@@ -159,8 +159,18 @@ struct SOverlaySubmit
 //
 // *************************************************************************
 
-enum class EFxBlend     : uint8_t { Alpha = 0, Additive = 1, PremulAlpha = 2 };
-enum class EFxDepthMode : uint8_t { TestNoWrite = 0, None = 1 };
+// Canonical per-bucket FX blend modes. Mirror of EParticleBlendMode in
+// particlefx.h -- producers fill in EParticleBlendMode, the renderer maps
+// it to EFxBlend at submission time. AdditiveStraight (ONE/ONE) is the
+// retail "self-lit overlay" mode that TBloodSystem::Render uses for its
+// second pass; Additive (SRC_ALPHA/ONE) is the alpha-weighted additive
+// the existing smoke/spark buckets use.
+enum class EFxBlend     : uint8_t { Alpha = 0, Additive = 1, AdditiveStraight = 2, PremulAlpha = 3 };
+// Depth-buffer interaction. TestWrite is for alpha-tested / mostly-opaque
+// particles (decal impostors) that should occlude later transparent fx;
+// TestNoWrite is the standard transparent path; None is for always-on-top.
+enum class EFxDepthMode : uint8_t { TestNoWrite = 0, None = 1, TestWrite = 2 };
+enum class EFxLightMode : uint8_t { Unlit = 0, LitFlat = 1 };
 enum class EFxDebugMode : uint8_t { Normal = 0, SolidColor = 1, FullTexture = 2, CurrentFrame = 3 };
 
 // Identifies which fx pipeline owns a submission. The renderer keeps one
@@ -195,6 +205,10 @@ struct SBillboardDrawItem
     float        uv_rect[4]     = {0.0f, 0.0f, 1.0f, 1.0f};   // x,y,w,h normalized
     SFxBatchKey  key            = {};
     EFxDebugMode debug_mode     = EFxDebugMode::Normal;
+    // Per-instance per PHASE1_SPINE.md §6: lighting is a runtime
+    // multiplier in the FS, not a pipeline variant -- avoids fanning
+    // the pipeline count out by 2x.
+    EFxLightMode light_mode     = EFxLightMode::Unlit;
 };
 
 // Same fields as SBillboardDrawItem plus per-instance rotation. Bulk
@@ -209,6 +223,7 @@ struct SParticleDrawItem
     float        rotation_rad   = 0.0f;
     SFxBatchKey  key            = {};
     EFxDebugMode debug_mode     = EFxDebugMode::Normal;
+    EFxLightMode light_mode     = EFxLightMode::Unlit;
 };
 
 // A single screen-aligned ribbon segment (world A -> world B). Strips
@@ -231,6 +246,7 @@ struct SStripDrawItem
     int32_t              num_segments = 0;
     SFxBatchKey          key          = {};
     EFxDebugMode         debug_mode   = EFxDebugMode::Normal;
+    EFxLightMode         light_mode   = EFxLightMode::Unlit;
 };
 
 class TParticleBucket;   // forward, see particlefx.h
@@ -958,6 +974,7 @@ private:
     struct SFxStripQueueEntry {
         SFxBatchKey                key;
         EFxDebugMode               debug_mode = EFxDebugMode::Normal;
+        EFxLightMode               light_mode = EFxLightMode::Unlit;
         std::vector<SStripSegment> segments;
         float                      sort_z = 0.0f;
     };
@@ -967,15 +984,18 @@ private:
     std::vector<SFxStripQueueEntry>     fx_strip_queue;
 
     sg_pass     fx_pass         = {};   // color = lit_target, depth = scene_z_target (read)
-    sg_shader   fx_billboard_shader   = {};
-    sg_pipeline fx_billboard_pip_alpha = {};
-    sg_pipeline fx_billboard_pip_add   = {};
-    sg_shader   fx_particle_shader    = {};
-    sg_pipeline fx_particle_pip_alpha = {};
-    sg_pipeline fx_particle_pip_add   = {};
-    sg_shader   fx_strip_shader   = {};
-    sg_pipeline fx_strip_pip_alpha = {};
-    sg_pipeline fx_strip_pip_add   = {};
+    // Pipeline cross-product: [blend][depth_mode]. Light mode is
+    // per-instance (uniform/attribute), not a pipeline variant -- keeps
+    // the variant count manageable (4 blends * 3 depth modes = 12 per
+    // shader, 36 total across billboard/particle/strip).
+    static constexpr int32_t kFxBlendCount     = 4;   // matches EFxBlend
+    static constexpr int32_t kFxDepthModeCount = 3;   // matches EFxDepthMode
+    sg_shader   fx_billboard_shader = {};
+    sg_pipeline fx_billboard_pip[kFxBlendCount][kFxDepthModeCount] = {};
+    sg_shader   fx_particle_shader  = {};
+    sg_pipeline fx_particle_pip[kFxBlendCount][kFxDepthModeCount] = {};
+    sg_shader   fx_strip_shader     = {};
+    sg_pipeline fx_strip_pip[kFxBlendCount][kFxDepthModeCount] = {};
     sg_buffer   fx_corner_vb     = {};   // static 4-vert quad corners
     sg_buffer   fx_billboard_ivb = {};   // dynamic per-frame, instance data
     sg_buffer   fx_particle_ivb  = {};

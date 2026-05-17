@@ -5,9 +5,10 @@
 // *************************************************************************
 //
 // GL port of fx.metal.h. See that header for documentation of the FX
-// submission API and pipeline layout. Phase 1 is Mac-first; this port
-// has not been visually validated yet -- shader source is included so
-// the shader umbrella compiles on Linux/Win builds.
+// submission API, pipeline layout, and the LitFlat lighting branch.
+// Phase 1 is Mac-first; this port has not been visually validated yet --
+// shader source is included so the shader umbrella compiles on
+// Linux/Win builds.
 //
 // *************************************************************************
 
@@ -21,10 +22,19 @@ layout(location = 2) in vec2 size_wu;
 layout(location = 3) in vec4 uv_rect;
 layout(location = 4) in vec4 color_rgba;
 layout(location = 5) in float debug_mode;
-layout(std140) uniform fx_params { vec4 vp; vec4 camz; vec4 camw; };
+layout(location = 6) in float light_mode;
+layout(std140) uniform fx_params {
+    vec4 vp;
+    vec4 camz;
+    vec4 camw;
+    vec4 sun_dir;
+    vec4 sun_color;
+    vec4 ambient_color;
+};
 out vec2  v_corner;
 out vec4  v_uv_rect;
 out vec4  v_color;
+out vec3  v_lit;
 out float v_debug;
 void main() {
     vec3 wp = world_pos;
@@ -44,9 +54,15 @@ void main() {
     gl_Position.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     gl_Position.z = scene_z_n;
     gl_Position.w = 1.0;
+    int lmode = int(light_mode + 0.5);
+    vec3 lit = vec3(1.0);
+    if (lmode == 1) {
+        lit = ambient_color.rgb + max(0.0, sun_dir.z) * sun_color.rgb;
+    }
     v_corner  = corner;
     v_uv_rect = uv_rect;
     v_color   = color_rgba;
+    v_lit     = lit;
     v_debug   = debug_mode;
 }
 )GLSL";
@@ -56,6 +72,7 @@ inline constexpr const char* kFxBillboardFsGlsl = R"GLSL(
 in vec2  v_corner;
 in vec4  v_uv_rect;
 in vec4  v_color;
+in vec3  v_lit;
 in float v_debug;
 uniform sampler2D atlas;
 out vec4 o_color;
@@ -69,6 +86,7 @@ void main() {
     else if (mode == 2) c = texture(atlas, uv01);
     else if (mode == 3) c = texture(atlas, uv_n);
     else                c = texture(atlas, uv_n) * v_color;
+    c.rgb *= v_lit;
     if (c.a < 0.002) discard;
     o_color = c;
 }
@@ -83,10 +101,19 @@ layout(location = 3) in vec4 uv_rect;
 layout(location = 4) in vec4 color_rgba;
 layout(location = 5) in float debug_mode;
 layout(location = 6) in float rotation_rad;
-layout(std140) uniform fx_params { vec4 vp; vec4 camz; vec4 camw; };
+layout(location = 7) in float light_mode;
+layout(std140) uniform fx_params {
+    vec4 vp;
+    vec4 camz;
+    vec4 camw;
+    vec4 sun_dir;
+    vec4 sun_color;
+    vec4 ambient_color;
+};
 out vec2  v_corner;
 out vec4  v_uv_rect;
 out vec4  v_color;
+out vec3  v_lit;
 out float v_debug;
 void main() {
     float ca = cos(rotation_rad), sa = sin(rotation_rad);
@@ -108,9 +135,15 @@ void main() {
     gl_Position.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     gl_Position.z = scene_z_n;
     gl_Position.w = 1.0;
+    int lmode = int(light_mode + 0.5);
+    vec3 lit = vec3(1.0);
+    if (lmode == 1) {
+        lit = ambient_color.rgb + max(0.0, sun_dir.z) * sun_color.rgb;
+    }
     v_corner  = corner;
     v_uv_rect = uv_rect;
     v_color   = color_rgba;
+    v_lit     = lit;
     v_debug   = debug_mode;
 }
 )GLSL";
@@ -125,10 +158,19 @@ layout(location = 2) in float half_width;
 layout(location = 3) in vec2 uv;
 layout(location = 4) in vec4 color;
 layout(location = 5) in float debug_mode;
-layout(std140) uniform fx_params { vec4 vp; vec4 camz; vec4 camw; };
+layout(location = 6) in float light_mode;
+layout(std140) uniform fx_params {
+    vec4 vp;
+    vec4 camz;
+    vec4 camw;
+    vec4 sun_dir;
+    vec4 sun_color;
+    vec4 ambient_color;
+};
 layout(std140) uniform fx_cam    { vec4 cam_pos; vec4 cam_fwd; };
 out vec2  v_uv;
 out vec4  v_color;
+out vec3  v_lit;
 out float v_debug;
 void main() {
     vec3 vd = normalize(world_pos - cam_pos.xyz);
@@ -155,8 +197,14 @@ void main() {
     gl_Position.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     gl_Position.z = scene_z_n;
     gl_Position.w = 1.0;
+    int lmode = int(light_mode + 0.5);
+    vec3 lit = vec3(1.0);
+    if (lmode == 1) {
+        lit = ambient_color.rgb + max(0.0, sun_dir.z) * sun_color.rgb;
+    }
     v_uv    = uv;
     v_color = color;
+    v_lit   = lit;
     v_debug = debug_mode;
 }
 )GLSL";
@@ -165,6 +213,7 @@ inline constexpr const char* kFxStripFsGlsl = R"GLSL(
 #version 330
 in vec2  v_uv;
 in vec4  v_color;
+in vec3  v_lit;
 in float v_debug;
 uniform sampler2D atlas;
 out vec4 o_color;
@@ -175,6 +224,7 @@ void main() {
     else if (mode == 2) c = texture(atlas, v_uv);
     else if (mode == 3) { c = texture(atlas, v_uv); c = vec4(1.0, 1.0, 1.0, c.a); }
     else                c = texture(atlas, v_uv) * v_color;
+    c.rgb *= v_lit;
     if (c.a < 0.002) discard;
     o_color = c;
 }

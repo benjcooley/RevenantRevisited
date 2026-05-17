@@ -61,10 +61,43 @@ enum class EParticleBucketScope : uint8_t
     Local,
 };
 
+// Canonical per-bucket blend mode -- mirrored to renderer's EFxBlend at
+// submission time. AdditiveStraight is the D3DBLEND_ONE/ONE "self-lit
+// overlay" mode used by retail TBloodSystem; Additive (the legacy default)
+// is the SRC_ALPHA / ONE alpha-weighted additive used by smoke / spark
+// trails; PremulAlpha is the standard one/one_minus_src_alpha premultiplied
+// path for assets already authored with baked-in coverage.
 enum class EParticleBlendMode : uint8_t
 {
-    Alpha,
-    Additive,
+    Alpha,            // SRC_ALPHA / ONE_MINUS_SRC_ALPHA  (default for textured droplets)
+    Additive,         // SRC_ALPHA / ONE                  (alpha-weighted additive)
+    AdditiveStraight, // ONE / ONE                        (retail-style "self-lit" additive)
+    PremulAlpha,      // ONE / ONE_MINUS_SRC_ALPHA        (premultiplied alpha)
+};
+
+// Whether the engine should multiply particle color by scene lighting.
+// Per the original author's note ("some particles are lit by the scene
+// lighting, others are glowing or self lit"): blood, debris, lit smoke
+// should be LitFlat; explosions, sparks, glows stay Unlit. Per-particle
+// normal-mapped lighting is a future expansion -- LitFlat treats the
+// particle's normal as world-up (matches the way pre-release dls
+// reconstructed lighting for round splats).
+enum class EParticleLightMode : uint8_t
+{
+    Unlit = 0,   // particle color is literal (current behavior; default for back-compat)
+    LitFlat,     // multiply rgb by (ambient + max(0, Ldir.z) * sun_color)
+    // Future: LitNormalMapped (per-particle normal), LitHemisphere, ...
+};
+
+// Standard transparency-vs-depth knobs. TestNoWrite is what every
+// transparent particle wants; TestWrite lets alpha-tested / mostly-solid
+// particles (decals, sliced impostors) interleave with the world depth.
+// None is for always-on-top overlays (HUD-attached fx, locators).
+enum class EParticleDepthMode : uint8_t
+{
+    TestNoWrite = 0, // depth-test enabled, no depth write (default)
+    TestWrite,       // depth-test + depth write
+    None,            // no depth test, no depth write
 };
 
 enum class EParticleSortMode : uint8_t
@@ -81,6 +114,10 @@ struct SParticleBucketDesc
     std::string name;
     EParticleBucketScope scope = EParticleBucketScope::Global;
     EParticleBlendMode blend = EParticleBlendMode::Additive;
+    // Defaults preserve existing behavior so untouched bucket descs
+    // render identically after this change (Unlit + TestNoWrite).
+    EParticleLightMode light_mode = EParticleLightMode::Unlit;
+    EParticleDepthMode depth_mode = EParticleDepthMode::TestNoWrite;
     EParticleSortMode sort = EParticleSortMode::None;
     int32_t sort_order = 0;
     TTextureHandle texture = kInvalidTexture;
