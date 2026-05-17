@@ -25,16 +25,43 @@ Each step is painful and time-multiplied across however many agents have already
 
 ### 98% confidence threshold (from `recon/docs/REFACTORING_APPROACH.md`)
 
-A rename gets applied only when you can justify it with **two or more independent lines of evidence**:
+A rename gets applied only when you can justify it with **two or more independent lines of evidence**.
 
-- A unique string anchor (e.g. a method body contains `"Initializing TPlayer"` — definitive)
+### THE GOLDEN PATH — string anchor in retail decomp + same string emitted by a known src/ function
+
+The single strongest identification chain is:
+
+1. **Find a string literal in the retail decomp** (`FindStringRefs.java <ascii>`)
+2. **Grep `src/` for the same string** (`grep -rln "needle" src/`)
+3. **Read the src/ function that emits it** to identify which class + method
+4. **The retail function emitting the same string IS the same class + method**
+
+Strings survive from pre-release to retail because both eras use them as `Status()` / log facade / error messages. When a Wave-1A-style error string like `"Trouble initializing PlyrStatusBar pane"` exists in the retail binary AND the pre-release `src/` references `PlyrStatusBar`, the cross-reference is decisive: the retail function emitting that string belongs to `TPlyrStatusBar` (or its construction wrapper).
+
+This counts as TWO independent lines of evidence in one move:
+- Line 1: the retail-side string (anchor in the decomp)
+- Line 2: the src-side string + class context (anchor in our existing code)
+
+Sub-rule (per Rule 2 below — Ghidra class merging): the string identifies the **purpose** of the function. The function may be the class's actual `Initialize` virtual, a free-function init wrapper, or a setup wrapper for a global instance. ALL of those give you a strong identification target, but the right rename depends on what kind of function it is. Safe scope of renames:
+
+| Evidence | What you can rename |
+|---|---|
+| String anchor + src class forward-decl exists (e.g. `_CLASSDEF(TFooPane)`) | The init/wrapper function: `FUN_00XXXXXX` → `FUN_00XXXXXX_TFooPane_init` (or similar — describes role without overcommitting to method-vs-free-function) |
+| Above + you've extracted the function body AND it contains `new cls_0xCCCC(...)` | The constructed class: `cls_0xCCCC` → `cls_0xCCCC_TFooPane` (if the structure also fingerprints as TFooPane) |
+| Above + you've dumped the cls_0xCCCC vtable AND its method addresses match the src TFooPane hierarchy | Class + individual virtuals: `meth_0xMMMMMM` → `meth_0xMMMMMM_TFooPane_Initialize` (etc.) |
+| Method-level string anchors inside individual methods | Each method individually |
+
+**Don't promote evidence-level. Don't rename a class based on the init-wrapper's identification; verify the class itself.**
+
+### Other evidence types (need one of these as the SECOND line, paired with a string anchor)
+
 - A call into an already-confirmed method (e.g. this function passes its `this` to `TCharacter::Damage`, which we already identified — strong)
 - A vtable slot match against the base class (e.g. slot 5 of TScreen's vtable is `Initialize`; finding it at this address confirms the class hierarchy)
 - A struct-shape fingerprint (size + field count + offset pattern matches the src class within ±2 bytes)
 - A numeric-literal density signature (e.g. matrix code has many `0x3f800000` constants)
 - An asset filename loaded — strong if the filename is unique to one subsystem
 
-**One line of evidence is not enough.** A string like `"stat pane"` in an error message tells you the PURPOSE of a function (initializing some "stat pane"), not its CLASS IDENTITY (could be a free function, a wrapper, the actual `TStatPane::Initialize`, or an init function for a global instance of a different class).
+**One line of evidence is not enough.** A string like `"stat pane"` in an error message tells you the PURPOSE of a function (initializing some "stat pane"), not its CLASS IDENTITY (could be a free function, a wrapper, the actual `TStatPane::Initialize`, or an init function for a global instance of a different class). Use the golden-path src-side cross-reference to disambiguate.
 
 ### When in doubt, write to the brief, not the rename file
 
