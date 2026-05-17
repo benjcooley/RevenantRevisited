@@ -3741,11 +3741,15 @@ void TRenderer::SetPresentNDCRect(float x, float y, float w, float h)
 
 namespace {
 
-// Instance / vertex strides. Per PHASE1_SPINE.md §6 light_mode shares the
-// debug_mode lane convention (per-instance float, no pipeline variant) --
-// we add it as one more float per instance, growing the stride by 4B.
-//   billboard : wp(3) + sz(2) + uv(4) + col(4) + dbg(1) + light(1) + pad(1) = 16 floats (stays 64B)
-//   particle  : same + rotation_rad = 17 floats; pad to 20 to keep alignment
+// Instance / vertex strides. Per PHASE1_SPINE.md §6 light_mode and
+// orientation share the debug_mode lane convention (per-instance float,
+// no pipeline variant) -- we add them as more floats per instance.
+//   billboard : wp(3) + sz(2) + uv(4) + col(4) + dbg(1) + light(1) +
+//               orient(1) = 16 floats (the original pad lane absorbs
+//               orientation; stays 64B)
+//   particle  : same + rotation_rad + orientation = 18 floats; pad to
+//               20 to keep alignment (and to retain headroom for the
+//               next per-instance lane).
 //   strip     : wp(3) + wt(3) + hw(1) + uv(2) + col(4) + dbg(1) + light(1) + pad(1) = 16 floats (stays 64B)
 constexpr int32_t kFxBillboardInstanceFloats = 16;
 constexpr int32_t kFxParticleInstanceFloats  = 20;
@@ -3903,6 +3907,7 @@ void TRenderer::InitFxPipeline()
         sh.attrs[4].name = "color_rgba";  sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
         sh.attrs[5].name = "debug_mode";  sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
         sh.attrs[6].name = "light_mode";  sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
+        sh.attrs[7].name = "orientation"; sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
         sh.vs.source = kFxBillboardVs;
         sh.vs.entry  = kShaderVsEntry;
         FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
@@ -3927,10 +3932,12 @@ void TRenderer::InitFxPipeline()
         pip.layout.attrs[4].buffer_index = 1; pip.layout.attrs[4].offset = 9  * sizeof(float);         pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
         pip.layout.attrs[5].buffer_index = 1; pip.layout.attrs[5].offset = 13 * sizeof(float);         pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
         pip.layout.attrs[6].buffer_index = 1; pip.layout.attrs[6].offset = 14 * sizeof(float);         pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[7].buffer_index = 1; pip.layout.attrs[7].offset = 15 * sizeof(float);         pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT;
         pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP;
         pip.cull_mode      = SG_CULLMODE_NONE;
-        // Build all (blend, depth_mode) variants. Light mode is
-        // per-instance so it does not multiply the pipeline count.
+        // Build all (blend, depth_mode) variants. Light mode and
+        // orientation are per-instance so they don't multiply the
+        // pipeline count.
         for (int32_t b = 0; b < kFxBlendCount; ++b)
         {
             SetupFxBlend(pip, EFxBlend(b));
@@ -3954,6 +3961,7 @@ void TRenderer::InitFxPipeline()
         sh.attrs[5].name = "debug_mode";   sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
         sh.attrs[6].name = "rotation_rad"; sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
         sh.attrs[7].name = "light_mode";   sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
+        sh.attrs[8].name = "orientation";  sh.attrs[8].sem_name = "TEXCOORD"; sh.attrs[8].sem_index = 8;
         sh.vs.source = kFxParticleVs;
         sh.vs.entry  = kShaderVsEntry;
         FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
@@ -3979,6 +3987,7 @@ void TRenderer::InitFxPipeline()
         pip.layout.attrs[5].buffer_index = 1; pip.layout.attrs[5].offset = 13 * sizeof(float);         pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
         pip.layout.attrs[6].buffer_index = 1; pip.layout.attrs[6].offset = 14 * sizeof(float);         pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
         pip.layout.attrs[7].buffer_index = 1; pip.layout.attrs[7].offset = 15 * sizeof(float);         pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[8].buffer_index = 1; pip.layout.attrs[8].offset = 16 * sizeof(float);         pip.layout.attrs[8].format = SG_VERTEXFORMAT_FLOAT;
         pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP;
         pip.cull_mode      = SG_CULLMODE_NONE;
         for (int32_t b = 0; b < kFxBlendCount; ++b)
@@ -4160,6 +4169,9 @@ void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
     const EFxLightMode light_mode = (desc.light_mode == EParticleLightMode::LitFlat)
                                       ? EFxLightMode::LitFlat
                                       : EFxLightMode::Unlit;
+    const EFxBillboardOrientation orientation = (desc.orientation == EParticleOrientation::WorldXY)
+                                                  ? EFxBillboardOrientation::WorldXY
+                                                  : EFxBillboardOrientation::ScreenAligned;
 
     const int32_t count = bucket.Count();
     for (int32_t i = 0; i < count; ++i)
@@ -4226,9 +4238,10 @@ void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
         if (const float* dr = bucket.VarPtr(i, EParticleVar::DrawRot))
             item.rotation_rad = dr[0];
 
-        item.key        = key;
-        item.debug_mode = debug_mode;
-        item.light_mode = light_mode;
+        item.key         = key;
+        item.debug_mode  = debug_mode;
+        item.light_mode  = light_mode;
+        item.orientation = orientation;
         SubmitFxParticle(item);
     }
 }
@@ -4361,7 +4374,11 @@ void TRenderer::DrainFxQueue()
             scratch.push_back(it.color_rgba[3]);
             scratch.push_back(float(uint8_t(it.debug_mode)));
             scratch.push_back(float(uint8_t(it.light_mode)));
-            scratch.push_back(0.0f);  // pad to kFxBillboardInstanceFloats (16)
+            scratch.push_back(float(uint8_t(it.orientation)));
+            // kFxBillboardInstanceFloats (16) is now fully packed --
+            // no trailing pad lane. If you add another per-instance
+            // attribute, bump the constant + the pipeline attr table
+            // + the shader's vs_in to match.
         }
         const sg_range r = { scratch.data(), scratch.size() * sizeof(float) };
         sg_update_buffer(fx_billboard_ivb, &r);
@@ -4428,12 +4445,12 @@ void TRenderer::DrainFxQueue()
             scratch.push_back(float(uint8_t(it.debug_mode)));
             scratch.push_back(it.rotation_rad);
             scratch.push_back(float(uint8_t(it.light_mode)));
+            scratch.push_back(float(uint8_t(it.orientation)));
             // pad to kFxParticleInstanceFloats (20). Off-by-one here
             // would shift every subsequent instance's read by 4 bytes
             // (stride mismatch), corrupting world_pos / size_wu /
             // rotation_rad across instances and producing trapezoidal
             // quad distortions. Keep count synced with the constant.
-            scratch.push_back(0.0f);
             scratch.push_back(0.0f);
             scratch.push_back(0.0f);
             scratch.push_back(0.0f);

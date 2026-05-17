@@ -1352,6 +1352,13 @@ void TRippleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     item.world_pos[1] = float(p.y);
     // Lift z slightly so the ring doesn't z-fight the ground in scenes
     // that have one. (vfxtest's empty tile pass has no ground; harmless.)
+    // Retail anchor convention (effect_old.cpp:10726-10746 TRipple-
+    // Animator::AddNewRipple via TDripAnimator): caller passes the
+    // drop's landing xy + the parent inst's pos.z, i.e. the water
+    // surface position. In the test harness PickPreviewOrigin already
+    // supplies z=0 -- the orientation knob does the rest (the quad
+    // lies flat on z=p.z+1 in the WorldXY path). If a future caller
+    // ports a real `WaterSurfaceZAt(x,y)` query, snap p.z to that.
     item.world_pos[2] = float(p.z) + 1.0f;
 
     const float diameter = kRippleBaseSizeWu * scale_;
@@ -1376,6 +1383,12 @@ void TRippleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
     item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode      = debug_mode;
+    // Ripples are flat on the water surface. WorldXY expands the quad
+    // along world +X / +Y so the ring foreshortens correctly under the
+    // iso camera (reads as a horizontally-stretched ellipse). Without
+    // this it would render as a camera-facing disc, visually wrong
+    // for a "ripple on the water" effect.
+    item.orientation     = EFxBillboardOrientation::WorldXY;
     Renderer->SubmitFxBillboard(item);
 }
 
@@ -2391,6 +2404,16 @@ void THaloEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     // empty tile pass has none; harmless). Color = warm gold to read as
     // a "magic ring of light" — matches the X17 placeholder flare's
     // gold tint so LS-pipeline effects share a visual family.
+    //
+    // Retail anchor convention (effect_old.cpp:10632-10666
+    // THaloAnimator::Render): the matrix path applies
+    // `RotateX(-π/2)` to the originally-vertical sprite plane, tipping
+    // it onto z=0 -- confirming the halo lies flat on the GROUND plane
+    // at the effect's `inst pos`. Caller (spell / script) is responsible
+    // for setting pos to ground center of the caster; if a future
+    // caller has the caster's chest position it must snap pos.z to
+    // `GroundZAt(x,y)` first. In the harness PickPreviewOrigin already
+    // supplies z=0.
     SBillboardDrawItem item = {};
     item.world_pos[0] = float(p.x);
     item.world_pos[1] = float(p.y);
@@ -2419,6 +2442,11 @@ void THaloEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
     item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode      = debug_mode;
+    // Halo lies flat on the ground. WorldXY makes the quad foreshorten
+    // as a ground-projected ellipse under iso/perspective, matching the
+    // retail `RotateX(-π/2)` semantics (§1 forensics). Without this
+    // the gold ring would render as a camera-facing disc.
+    item.orientation     = EFxBillboardOrientation::WorldXY;
     Renderer->SubmitFxBillboard(item);
 
     // LS pipeline coupling: re-add a dynamic point light each frame
