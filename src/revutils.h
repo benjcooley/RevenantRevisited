@@ -52,12 +52,15 @@ void END_CRITICAL();
 void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen);
 
 // Locate the Revenant Revisited overlay (our enhancement layer — strictly
-// opt-in: empty/missing means vanilla retail). Resolution order:
+// opt-in: gated on the --revisited CLI flag. Without the flag this returns
+// "" unconditionally and the engine runs vanilla. With the flag, resolution
+// order is:
 //   1. $REVENANT_REVISITED_PATH (explicit override)
 //   2. <exe-dir>/RevenantRevisited.rvr   (production: shipped pack)
 //   3. <RunPath>/RevenantRevisited.rvr   (production: in user's install)
 //   4. <repo-root>/revisited/resources/  (dev: loose folder beside src/)
-// Returns "" if no overlay found (engine then runs vanilla).
+// If --revisited is set but no overlay is reachable, this FatalErrors —
+// silently dropping back to vanilla would mask the misconfiguration.
 // See revisited/README.md for the convention.
 const char *rev_resolve_revisited_overlay();
 
