@@ -1326,6 +1326,17 @@ void Render()
     // the bg (vs black where dim particles disappear).
     Renderer->BeginTilePass(0.45f, 0.46f, 0.50f, 1.0f);
     RenderCharacterRigBackground();
+    // Per M09_FORENSICS.md §M09b: effects that submit through the
+    // transparent_world_queue (SubmitHelperMesh) MUST do so after
+    // BeginTilePass — that call clears the queue. So we give effects
+    // a submit_world hook here.
+    if (g_state.active_idx >= 0 &&
+        g_state.active_idx < int32_t(g_state.catalogue.size()))
+    {
+        const auto& e = g_state.catalogue[g_state.active_idx];
+        if (e.submit_world && g_state.active_ctx)
+            e.submit_world(g_state.active_ctx, g_state.debug_mode);
+    }
     Renderer->EndTilePass();
     Renderer->RunLightingPass();
 
@@ -1746,12 +1757,18 @@ void TeleDestroy(void* cp)
     delete c;
 }
 
-void TeleSubmit(void* cp, EFxDebugMode dbg)
+void TeleTick(void* cp, EFxDebugMode /*dbg*/)
 {
     auto* c = static_cast<STeleCtx*>(cp);
-    if (!c->tele)
-        return;
-    c->tele->TickAndSubmitForTest(dbg);
+    if (!c->tele) return;
+    c->tele->TickForTest();
+}
+
+void TeleSubmitWorld(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<STeleCtx*>(cp);
+    if (!c->tele) return;
+    c->tele->SubmitWorldForTest(dbg);
 }
 
 // --- LS: flare + dynamic point light placeholder -------------------------
@@ -2058,12 +2075,17 @@ struct SVfxTestBootstrap {
             // reads Pos() to position each of its 5 glow flares, so
             // pinning Pos() to the live CharacterRoot makes the column
             // track the caster as the rig animator moves him (cast
-            // anim has minor root motion).
+            // anim has minor root motion). The actual mesh draw happens
+            // in submit_world below (must run after BeginTilePass clears
+            // the transparent_world_queue; see M09_FORENSICS.md §M09b).
             if (at.resolved)
                 ctx->tele->ForcePos(S3DPoint{ int32_t(at.world_pos[0]),
                                               int32_t(at.world_pos[1]),
                                               int32_t(at.world_pos[2]) });
-            ctx->tele->TickAndSubmitForTest(d);
+            TeleTick(c, d);
+        };
+        tele.submit_world = [](void* c, EFxDebugMode d) {
+            TeleSubmitWorld(c, d);
         };
         tele.destroy = [](void* c) { TeleDestroy(c); };
         VfxTest::DeferredRegister(tele);

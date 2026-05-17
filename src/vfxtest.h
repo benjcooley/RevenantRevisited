@@ -125,6 +125,16 @@ struct SEffect
     std::function<void(void* ctx, EFxDebugMode dbg)>       submit;
     std::function<void(void* ctx, EFxDebugMode dbg,
                        const SVfxAttachment& attach)>      submit_attached;
+    // Called between BeginTilePass + EndTilePass so the effect can
+    // submit mesh draws (SubmitMesh / SubmitHelperMesh) that need to
+    // ride the tile/lighting/transparent-world pipeline. The harness
+    // calls submit/submit_attached FIRST (for fx-queue billboards +
+    // ticking), then BeginTilePass, then submit_world, then EndTilePass.
+    // Effects that don't draw meshes leave this null. Per
+    // M09_FORENSICS.md §M09b: required for I3D-mesh effects, since
+    // BeginTilePass clears the transparent_world_queue which holds
+    // pending SubmitHelperMesh entries.
+    std::function<void(void* ctx, EFxDebugMode dbg)>       submit_world;
     std::function<void(void* ctx)>                         destroy;
 };
 
