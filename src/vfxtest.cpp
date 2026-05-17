@@ -1457,6 +1457,57 @@ void FireSubmit(void* cp, EFxDebugMode dbg)
     c->fire->TickAndSubmitForTest(dbg);
 }
 
+// --- FB: real TTeleporterEffect (procedural cool-blue glow, M09) --------
+// Spawns a sector-less TTeleporterEffect at the harness-provided origin
+// (which the CharacterRig resolves to the caster's CharacterRoot anchor
+// each frame — see drip_hand for the canonical pattern). Drives the
+// pre-release 4-phase state machine (Init→Out→Move→In) + 5-flare
+// triangle-wave envelope via TickAndSubmitForTest each frame.
+//
+// CharacterCast preview style — the Teleporter is the Misthaven recall
+// spell (spell.def line 1471 `VortexM`) plus 15 other spell variants
+// (Teleport / Priest Teleport / 12 monster summons; M09_FORENSICS.md §5).
+// The rig spawns Locke with a cast* / invoke* anim looping; the effect
+// engulfs his feet in a rotating glow column (~4.17 s lifetime).
+//
+// Anchor: SVfxAnchor::CharacterRoot — caster's feet. NO hand bone (M09
+// forensics §6, §7.8). The visual is the entire vertical column
+// centred on the caster's body, not a hand flourish.
+//
+// Per M09_FORENSICS.md §6 the natural lifetime (~4.17 s) is longer than
+// the default SpellGround retrigger (3.0 s); a mid-flight restart reads
+// as "another teleport fires" rather than a glitch and is acceptable
+// for the visual primitive. Gameflow's in-game wiring will fire the
+// effect at single-cast intervals (no auto-retrigger).
+struct STeleCtx {
+    TTeleporterEffect* tele = nullptr;
+};
+
+void* TeleSpawn(const S3DPoint& origin)
+{
+    auto* c = new STeleCtx();
+    c->tele = TTeleporterEffect::SpawnForTest(origin);
+    if (!c->tele)
+        log_warn("[vfx] TTeleporterEffect::SpawnForTest returned null; "
+                 "M09 entry will draw nothing");
+    return c;
+}
+
+void TeleDestroy(void* cp)
+{
+    auto* c = static_cast<STeleCtx*>(cp);
+    delete c->tele;
+    delete c;
+}
+
+void TeleSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<STeleCtx*>(cp);
+    if (!c->tele)
+        return;
+    c->tele->TickAndSubmitForTest(dbg);
+}
+
 // --- LS: flare + dynamic point light placeholder -------------------------
 struct SFlareCtx {
     float age = 0.0f;
@@ -1659,6 +1710,41 @@ struct SVfxTestBootstrap {
         };
         drip_hand.destroy = [](void* c) { DripDestroy(c); };
         VfxTest::DeferredRegister(drip_hand);
+
+        // --- M09 TTeleporterEffect — Misthaven recall on a CharacterCast rig
+        // The user-flagged headline VFX. Anchored on the caster's
+        // CharacterRoot (feet); the effect's pre-release state machine
+        // grows a rotating glow column over ~2 s, "teleports" (single
+        // payload tick that gameflow hooks), shrinks back over ~2 s.
+        // Total visible lifetime ~4.17 s. The harness's CharacterCast
+        // rig picks a `cast*` / `invoke*` / `magic*` animation
+        // automatically — for Locke this matches `invoke4` (the
+        // animation spell.def Teleport line 807 specifies). See
+        // docs/vfx/M09_FORENSICS.md.
+        VfxTest::SEffect tele = {};
+        tele.id            = "TTeleporterEffect";
+        tele.family        = "spell";
+        tele.pipeline      = "FB";
+        tele.preview_style = VfxTest::EVfxPreviewStyle::CharacterCast;
+        tele.anchor.kind   = VfxTest::SVfxAnchor::EKind::CharacterRoot;
+        tele.factory       = [](const S3DPoint& o) -> void* { return TeleSpawn(o); };
+        tele.submit_attached = [](void* c, EFxDebugMode d,
+                                  const VfxTest::SVfxAttachment& at) {
+            auto* ctx = static_cast<STeleCtx*>(c);
+            if (!ctx->tele) return;
+            // Re-anchor each frame: the teleport's per-frame submit
+            // reads Pos() to position each of its 5 glow flares, so
+            // pinning Pos() to the live CharacterRoot makes the column
+            // track the caster as the rig animator moves him (cast
+            // anim has minor root motion).
+            if (at.resolved)
+                ctx->tele->ForcePos(S3DPoint{ int32_t(at.world_pos[0]),
+                                              int32_t(at.world_pos[1]),
+                                              int32_t(at.world_pos[2]) });
+            ctx->tele->TickAndSubmitForTest(d);
+        };
+        tele.destroy = [](void* c) { TeleDestroy(c); };
+        VfxTest::DeferredRegister(tele);
 
         VfxTest::SEffect flare = {};
         flare.id            = "TFlareAnimator.placeholder";

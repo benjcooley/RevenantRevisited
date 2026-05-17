@@ -3309,3 +3309,414 @@ void TFireEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         Renderer->SubmitFxBillboard(item);
     }
 }
+
+// *************************************************************************
+// * TTeleporterEffect — FB-pipeline rotating glow column (M09 Misthaven)  *
+// *************************************************************************
+//
+// Per-INVENTORY M09 + docs/vfx/M09_FORENSICS.md (pre-release authoritative
+// — recon not yet extracted, flagged as M09a follow-up; the pre-release
+// body lives at src/effect_old.cpp:5444-5880 intact).
+//
+// What this delivers (Phase B):
+//   1. A real `TTeleporterEffect` instance owning its lifecycle.
+//   2. Pre-release 4-phase state machine (Init→Out→Move→In) running on the
+//      24 Hz sim tick (~4.17 s total).
+//   3. Visual: 5 stacked screen-aligned glow billboards driven by the
+//      pre-release per-flare triangle-wave envelope (see M09_FORENSICS.md
+//      §1, §2). Procedural cool-blue-violet glow texture (matches the
+//      spell.def "LIGHT COLOR 50, 50, 255" Teleport tint).
+//   4. Payload-coupling hook: GetPhase() returns the live ETeleporterPhase
+//      so gameflow can fire its caster->SetPos(destination) on the
+//      Out→Move transition (M09_FORENSICS.md §7.6 option (a)).
+//
+// What this does NOT deliver (deferred — see forensics):
+//   - Real I3D mesh draw of `Magic\teleportation.I3D` / `gvortex.I3D`
+//     (M09b — comes with the wider mesh-load infra alongside M07/M06/X09).
+//   - Per-spell-variant texture / tint (v1 ships one cool-blue-violet
+//     texture that reads correctly for both player Teleport and
+//     Misthaven recall; the user's headline ask).
+//   - Caster fade timing (M09c — gameflow concern; the harness rig
+//     doesn't route SetFade through its background render path).
+//   - In-game spawn through the spell.def `"Teleporter"` registration
+//     (gameflow / spell-dispatch wiring; out of scope for VFX track).
+namespace {
+
+// --- Pre-release effect-side constants (effect_old.cpp:5448-5451, 5538) -
+constexpr int32_t kTeleOutDurationTicks   = 50;   // OUT phase length (effect_old.cpp:5538)
+constexpr int32_t kTeleAnimSelfKillLife   = 100;  // animator KillThisEffect gate (effect_old.cpp:5818)
+
+// --- Pre-release animator-side constants (effect_old.cpp:5770-5785) -----
+constexpr int32_t kTeleFlares             = 5;
+constexpr int32_t kTeleIterationsCap      = 50;   // OUT-phase morph counter (effect_old.cpp:5804)
+constexpr int32_t kTeleMidWideningAt      = 25;   // when iter >= 25, p[1]/p[2] expand horizontally
+constexpr float   kTeleMidWideningStep    = 0.5f; // p[1].x +=, p[2].x -= per sim tick
+constexpr float   kTeleVerticalSqueezeStep = 1.0f;// p[3].z -=, p[4].z += per sim tick
+constexpr float   kTeleRotationStep       = 0.1f; // rotation += per sim tick (~95°/s)
+
+// --- Render envelope (effect_old.cpp:5838-5860) -------------------------
+// Triangle-wave clock: ticks_in_phase < 50 → growing, else mirror-shrink.
+// Per-flare radius = (0.5*z + 2.5 * (effective_t / 30)), per-flare
+// height_z = (10 - 5*(effective_t/30) - z), spin = rotation + z*0.5.
+// `% 100` defensive wrap from pre-release (M09_FORENSICS.md §7.3).
+constexpr int32_t kTelePhaseClockPeriod   = 100;  // ticks_in_phase = ticks % 100
+constexpr int32_t kTelePhaseHalf          = 50;   // grow vs shrink split point
+constexpr float   kTelePhaseNormalizer    = 30.0f;// (effective_t / 30) in pre-release math
+
+// --- Port-specific scale factors ----------------------------------------
+// Pre-release per-flare scl.xy / scl.z are multipliers on the bound I3D
+// mesh's baseline geometry (cylinder body ~20-40 wu diameter judging
+// from teleportation.I3D's 105KB asset size). For our procedural-
+// billboard stand-in we have no underlying mesh, so the scl values are
+// *world-unit* sizes directly. We multiply by a baseline that reads
+// as "engulfs the caster". CharacterRig calibration: Locke's bbox
+// half-height ≈ 40 wu mesh-space × 3.5 display scale = 140 wu visible
+// half-height (full ~280 wu), bbox width ≈ 80 wu visible. So:
+//   - peak radius (pre-release 2.5 units) → ~150 wu wide column
+//     (= 60 wu/unit × 2.5 units) to engulf bbox width with margin.
+//   - peak height (pre-release 5 units for innermost flare) →
+//     ~280 wu tall (= 56 wu/unit × 5 units) to engulf body height.
+// The CharacterRoot anchor returns inst->Pos() which is the bbox-
+// CENTER (not feet) per the rig's recentre logic at
+// src/vfxtest.cpp:561-563. So our local Z offsets are measured from
+// body center, not from ground.
+constexpr float   kTeleBillboardWuPerUnit = 60.0f; // multiplies pre-release scl.xy
+constexpr float   kTeleHeightWuPerUnit    = 56.0f; // multiplies pre-release scl.z
+constexpr float   kTeleHeightLiftWu       = 0.0f;  // (anchor is bbox center, not floor)
+// Pre-release `p[i].z = 25..65` (±20 envelope around 45) maps to our
+// world wu centered on the caster's body center (z=0 at the
+// CharacterRoot anchor). The full span ±20 pre-release units becomes
+// ±80 wu in our scale (mid-thigh to upper-shoulders on a 280-wu
+// character). Base height 0 = body center (mid-torso).
+constexpr float   kTeleFlareBaseHeightWu   = 0.0f;
+constexpr float   kTeleFlareHeightSpreadWu = 80.0f;
+
+constexpr int32_t kTeleSimTickMs          = 1000 / 24; // 24 Hz cadence (family-consistent)
+
+// --- Procedural cool-blue-violet cylinder-glow texture ------------------
+// 64x64 RGBA8, premultiplied alpha. Soft-rim "vertical glow strip"
+// gradient: bright at center, fades to transparent at edges. Same
+// shape family as L02 HaloRingTexture / F03 FireScatterTexture
+// (procedural sprite, premul alpha, AdditiveStraight blend pair).
+//
+// Tint chosen to match spell.def's "Teleport" LIGHT COLOR (50,50,255)
+// — a deep cool blue. Slight violet shift toward the rim reads as
+// "arcane magic". Cyan-white core gives the glow a hot center.
+constexpr int32_t kTeleTexPx = 64;
+
+TTextureHandle TeleporterGlowTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x4658544c50000000ull;   // "FXTLP\0\0\0"
+
+    static uint8_t pixels[kTeleTexPx * kTeleTexPx * 4];
+
+    // Endpoints: hot cyan-white core fades to violet-blue rim. Premul
+    // alpha — rgb scales with intensity so AdditiveStraight reads the
+    // tinted contribution cleanly.
+    constexpr float kCoreR = 0.85f, kCoreG = 0.95f, kCoreB = 1.00f;   // cyan-white
+    constexpr float kRimR  = 0.30f, kRimG  = 0.30f, kRimB  = 1.00f;   // deep blue-violet
+
+    for (int32_t py = 0; py < kTeleTexPx; ++py)
+    {
+        for (int32_t px = 0; px < kTeleTexPx; ++px)
+        {
+            const float u  = (float(px) + 0.5f) / float(kTeleTexPx);
+            const float v  = (float(py) + 0.5f) / float(kTeleTexPx);
+            const float dx = u - 0.5f;
+            const float dy = v - 0.5f;
+            const float r  = std::sqrt(dx * dx + dy * dy) * 2.0f;
+
+            // Soft radial falloff: bright core for r<0.25, smooth fade
+            // to alpha=0 by r==0.95, hard cut beyond. Cubic shape on
+            // the inner falloff gives a defined hot center; linear on
+            // the outer keeps the rim soft.
+            float inten;
+            if (r >= 0.95f)
+                inten = 0.0f;
+            else if (r < 0.25f)
+            {
+                const float t = r / 0.25f;
+                inten = 1.0f - 0.20f * (t * t);
+            }
+            else
+                inten = 0.80f * (1.0f - (r - 0.25f) / 0.70f);
+
+            if (inten < 0.0f) inten = 0.0f;
+            if (inten > 1.0f) inten = 1.0f;
+
+            const float tr = r > 1.0f ? 1.0f : r;
+            const float rr = kCoreR + (kRimR - kCoreR) * tr;
+            const float gg = kCoreG + (kRimG - kCoreG) * tr;
+            const float bb = kCoreB + (kRimB - kCoreB) * tr;
+
+            const int32_t idx = (py * kTeleTexPx + px) * 4;
+            pixels[idx + 0] = uint8_t(rr * inten * 255.0f);
+            pixels[idx + 1] = uint8_t(gg * inten * 255.0f);
+            pixels[idx + 2] = uint8_t(bb * inten * 255.0f);
+            pixels[idx + 3] = uint8_t(inten * 255.0f);
+        }
+    }
+
+    return Renderer->RegisterTextureAsset(kKey, pixels, sizeof(pixels),
+                                          kTeleTexPx, kTeleTexPx,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(pixels)));
+}
+
+}   // namespace
+
+void TTeleporterEffect::Initialize()
+{
+    // Pre-release effect_old.cpp:5503-5506: sets my_state = TELE_STATE_INIT.
+    // Our default member initializer already sets phase_=Init, so this
+    // is effectively a no-op. Kept as a vtable hook for in-game spawn
+    // (TEffect ctor chain calls Initialize via the SObjectDef path).
+    phase_ = ETeleporterPhase::Init;
+    life_ = 0;
+}
+
+void TTeleporterEffect::Pulse()
+{
+    // Pre-release Pulse body (effect_old.cpp:5508-5754) is the 4-phase
+    // state machine. We port the *visual* state transitions and the
+    // animator's life counter; the payload work (resolve destination via
+    // map walk, fire caster->SetPos, fire SetFade) is the in-game spawn
+    // path that gameflow wires when it dispatches the spell. See
+    // M09_FORENSICS.md §3, §7.5, §7.6.
+    TEffect::Pulse();
+
+    if (!alive_) return;
+
+    ++life_;
+
+    switch (phase_)
+    {
+        case ETeleporterPhase::Init:
+            // Pre-release line 5513: 1 tick to resolve variant.
+            // spell_level_ is set by the in-game spawn path (or by
+            // SpawnForTest default) — here we just transition.
+            phase_ = ETeleporterPhase::Out;
+            life_ = 0;
+            break;
+
+        case ETeleporterPhase::Out:
+            // Pre-release line 5538: transition to MOVE at life == 50.
+            if (life_ >= kTeleOutDurationTicks)
+                phase_ = ETeleporterPhase::Move;
+            break;
+
+        case ETeleporterPhase::Move:
+            // Pre-release line 5541-5736: single-tick payload. In-game
+            // this is where caster->SetPos(destination) fires and the
+            // effect itself re-anchors to the destination. The harness
+            // port keeps the effect in place (no payload destination
+            // resolved). Gameflow integrators poll GetPhase() and fire
+            // their payload here. Always transition straight to IN.
+            phase_ = ETeleporterPhase::In;
+            break;
+
+        case ETeleporterPhase::In:
+            // Pre-release line 5737-5752: shrink phase, runs until the
+            // animator's life >= 100 self-kill (effect_old.cpp:5818).
+            // The animator-life counter lives on this class (collapsed
+            // — M09_FORENSICS.md §1) via life_; the IN-phase tick budget
+            // is whatever's left out of the 100-tick total minus the 51
+            // ticks already spent (INIT + OUT + MOVE).
+            if (life_ >= (kTeleAnimSelfKillLife - kTeleOutDurationTicks - 2))
+            {
+                alive_ = false;
+                KillThisEffect();
+            }
+            break;
+    }
+}
+
+TTeleporterEffect* TTeleporterEffect::SpawnForTest(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[teleporter] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // No imagery — the cylinder-glow texture is procedural (M09_FORENSICS
+    // §7.2). Same pattern as L02 halo / F03 fire / X17 flare.
+    auto* tele = new TTeleporterEffect(static_cast<TObjectImagery*>(nullptr));
+    tele->ForcePos(origin);
+    tele->SetMapIndex(MapPane.MakeIndex());
+    tele->ActivateComponents();
+
+    // Seed per-flare position table from pre-release Initialize
+    // (effect_old.cpp:5770-5779). Y is unused in our 2D-on-XZ envelope
+    // (we only consume p_x_ and p_z_); kept off the struct.
+    for (int32_t i = 0; i < kTeleFlares; ++i)
+        tele->flare_p_z_[i] = 45.0f;   // base height in pre-release units
+    tele->flare_p_x_[0] = 0.0f;
+    tele->flare_p_x_[1] = -5.0f;
+    tele->flare_p_x_[2] = +5.0f;
+    tele->flare_p_x_[3] = 0.0f;
+    tele->flare_p_z_[3] = 45.0f + 20.0f;   // top flare
+    tele->flare_p_x_[4] = 0.0f;
+    tele->flare_p_z_[4] = 45.0f - 20.0f;   // bottom flare
+
+    tele->iterations_ = 0;
+    tele->ticks_ = 0;
+    tele->rotation_rad_ = 0.0f;
+
+    // Pre-register the texture so the first frame's submit doesn't pay
+    // the bake cost (~16KB).
+    const TTextureHandle tex = TeleporterGlowTexture();
+    if (tex == kInvalidTexture)
+    {
+        log_warn("[teleporter] SpawnForTest: glow texture register failed; "
+                 "M09 will draw nothing");
+    }
+
+    log_info("[teleporter] SpawnForTest: map_index=%d origin=(%d,%d,%d) "
+             "flares=%d tex=%u",
+             tele->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             kTeleFlares, tex);
+    return tele;
+}
+
+void TTeleporterEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer)
+        return;
+
+    // 24 Hz sim-tick gate. Pre-release Animate (effect_old.cpp:5787-5820)
+    // was ungated. Per M09_FORENSICS.md §3 we gate to 24 Hz so the
+    // envelope runs at retail speed regardless of render rate. Same
+    // pattern as F01 / H03 / M05 / L02 / F03.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kTeleSimTickMs))
+    {
+        sim_accum_ms_ -= double(kTeleSimTickMs);
+
+        // Pre-release Animate (effect_old.cpp:5787-5820) — the per-tick
+        // morph of the 5 flare positions + rotation increment + tick
+        // counter advance.
+        rotation_rad_ += kTeleRotationStep;
+
+        if (iterations_ < kTeleIterationsCap)
+        {
+            // Pre-release line 5806-5810: after the midpoint, p[1]/p[2]
+            // expand horizontally (the column thickens in its middle).
+            if (iterations_ >= kTeleMidWideningAt)
+            {
+                flare_p_x_[1] += kTeleMidWideningStep;
+                flare_p_x_[2] -= kTeleMidWideningStep;
+            }
+            // Pre-release line 5811-5812: vertical squeeze (top/bottom
+            // converge toward mid).
+            flare_p_z_[3] -= kTeleVerticalSqueezeStep;
+            flare_p_z_[4] += kTeleVerticalSqueezeStep;
+
+            ++iterations_;
+        }
+        ++ticks_;
+
+        // Pre-release effect-side Pulse runs at the engine sim cadence
+        // already; for the harness we drive it ourselves on the same
+        // tick so the phase state machine advances in lockstep with the
+        // animator. (In-game path: TEffect::Pulse is called by the
+        // engine's pulse loop; the animator's Animate runs at render
+        // rate gated to sim-rate by the engine's own gates.)
+        Pulse();
+    }
+
+    if (!alive_)
+        return;
+
+    const TTextureHandle tex = TeleporterGlowTexture();
+    if (tex == kInvalidTexture)
+        return;
+
+    const S3DPoint& p = Pos();
+
+    // Build the per-frame billboard template once; per-flare fields
+    // are overwritten in the loop below.
+    SBillboardDrawItem item = {};
+    item.color_rgba[0] = 1.0f;     // tint lives in the texture (premultiplied)
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = 0.0f;
+    item.uv_rect[1] = 0.0f;
+    item.uv_rect[2] = 1.0f;
+    item.uv_rect[3] = 1.0f;
+    item.key.texture     = tex;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    // M09_FORENSICS.md §4: AdditiveStraight against the procedural
+    // premul-alpha glow texture. Pre-release used D3D Alpha blend; the
+    // divergence is justified there (matches L02 halo / F03 fire).
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;   // glow is its own light source
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+
+    // Pre-release render envelope (effect_old.cpp:5838-5860). The
+    // triangle-wave clock + per-flare radius/height/spin formulas.
+    const int32_t curticks = ticks_ % kTelePhaseClockPeriod;
+    const int32_t effective_t = (curticks < kTelePhaseHalf)
+                                ? curticks
+                                : (kTelePhaseHalf - (curticks - kTelePhaseHalf));
+    const float   t_norm = float(effective_t) / kTelePhaseNormalizer;
+
+    // Render 5 stacked screen-aligned glow billboards. The pre-release
+    // rotation around Z is INVISIBLE to a screen-aligned billboard
+    // (the cylinder's silhouette doesn't change when it spins about its
+    // Z axis from a fixed camera angle), so we don't bake it into the
+    // billboard. The visible shimmer in pre-release came from the
+    // *texture* moving on the cylinder walls as the cylinder rotated;
+    // we approximate that by per-flare phase offset on the radius
+    // formula via the `0.5 * z_index` baked-in scale, which still
+    // produces visible per-flare size variation that reads as
+    // "shimmering layers" against the static glow texture.
+    for (int32_t z = 0; z < kTeleFlares; ++z)
+    {
+        const float zf = float(z);
+
+        // Pre-release line 5844: per-cyl height (z-axis scale of cyl
+        // mesh in retail; vertical billboard size here).
+        const float scl_z_units = 10.0f - 5.0f * t_norm - zf;
+        if (scl_z_units <= 0.01f)
+            continue;   // pre-release cull (effect_old.cpp:5846)
+
+        // Pre-release line 5845: per-cyl radius (x/y scale of cyl
+        // mesh in retail; horizontal billboard size here).
+        const float scl_xy_units = (0.5f * zf) + 2.5f * t_norm;
+
+        const float w_wu = scl_xy_units * kTeleBillboardWuPerUnit;
+        const float h_wu = scl_z_units  * kTeleHeightWuPerUnit;
+
+        // Place each flare at its per-flare position offset (pre-release
+        // p[i]). p_z_[i] is in pre-release units; map to world wu via
+        // the same proportions as the height scale.
+        const float local_height_pre = flare_p_z_[z] - 45.0f;     // ±20 envelope
+        const float local_height_wu  = (local_height_pre / 20.0f) * kTeleFlareHeightSpreadWu
+                                       + kTeleFlareBaseHeightWu;
+        // p_x_[z] expands ±5 units during the OUT phase (per the
+        // mid-widening morph at iteration>=25). Map ±5 units → ±60 wu
+        // in our scale so the column visibly thickens at peak.
+        const float local_x_wu       = flare_p_x_[z] * (kTeleBillboardWuPerUnit / 5.0f);
+
+        item.world_pos[0] = float(p.x) + local_x_wu;
+        item.world_pos[1] = float(p.y);
+        item.world_pos[2] = float(p.z) + local_height_wu + kTeleHeightLiftWu;
+        item.size_wu[0]   = w_wu;
+        item.size_wu[1]   = h_wu;
+
+        // Per-flare alpha tint: slightly dimmer flares at the edges of
+        // the stack add depth without losing the bright core. Also
+        // keeps the AdditiveStraight blend from saturating into a flat
+        // white at peak.
+        const float alpha_mult = 1.0f - 0.10f * zf;
+        item.color_rgba[3] = alpha_mult;
+
+        Renderer->SubmitFxBillboard(item);
+    }
+}
