@@ -1,9 +1,19 @@
 # Classic Revenant HUD — Visual Reference
 
 **Status:** authoritative reference. Drives all per-class reconstruction.
-**Reference screenshots:** [`../../ui_examples/`](../../ui_examples/) (the user is placing the originals here; this doc transcribes what I read from them).
 
-This is the SOURCE OF TRUTH for what Classic Revenant looks like and how each HUD element behaves on screen. Cross-check anything you build against this; if your reconstruction doesn't match, the reconstruction is wrong.
+**Reference screenshots** (in this same `docs/ui/` directory):
+
+| File | Scene | Shows |
+|---|---|---|
+| [sample_screen_1.jpg](sample_screen_1.jpg) | Dungeon with snake boss, Locke Lvl 26 | Full HUD: character panel UL, Stats/Skills + Automap sidebar, quickspell row + potion shelf + game log |
+| [sample_screen_2.jpg](sample_screen_2.jpg) | Forest with chest, Locke Lvl 8 | Inventory sidebar mode (paper doll + item grid + currency) |
+| [sample_screen_3.jpg](sample_screen_3.jpg) | Low-res dungeon combat | **TWO character panels** (upper-left + upper-right), both with portraits + bars — confirms the two-panel layout |
+| [sample_screen_4.jpg](sample_screen_4.jpg) | Keep entrance, Locke Lvl 1 | Sidebar collapsed (only the vertical button strip visible). Extra slot below character panel shows a sword icon (active weapon?). "HINSTEN" overlay top-right is a **fansite watermark, NOT game UI** |
+| [spell_list_ui.jpg](spell_list_ui.jpg) | Spell cast scene, scroll reader open | Sidebar showing scroll text ("Tut Hailey") + spell-book-style column of small spells below the scroll |
+| [main_menu_ui.jpg](main_menu_ui.jpg) | OOG main menu | Title + character art + vertical menu (New Game / Load Game / Multiplayer / Options / Exit) + Cinematix branding |
+
+This document is the SOURCE OF TRUTH for what Classic Revenant looks like and how each HUD element behaves. Cross-check anything you build against the screenshots; if reconstruction doesn't match, reconstruction is wrong.
 
 If you spot a misread in this doc — fix it. The screenshots are authoritative; this transcription is not.
 
@@ -27,19 +37,15 @@ If you spot a misread in this doc — fix it. The screenshots are authoritative;
 
 **Behavior:** always visible during gameplay. Not collapsible. Updates live as player stats change.
 
-**Open question:** the user's earlier "two character panels upper-left + upper-right" description suggests there IS an upper-right one too in some mode (coop multiplayer?). All six screenshots are single-player and only show the upper-left panel. The upper-right area in screenshots is either empty, or contains a different element (see §2).
+**Two-panel layout confirmed by `sample_screen_3.jpg`** — that screenshot shows panels in BOTH upper corners with portraits + bars. The right-side portrait looks distinct from Locke's (possibly companion / pet / coop second player). My earlier "single-player only has one" guess based on sample_screen_1/2 was wrong; the upper-right just isn't always populated.
 
-### 2. Upper-right — active-weapon / quick indicator (provisional reading)
+### 2. Upper-right character panel (when shown)
 
-**Position:** upper-right corner, mirrored against the character panel's upper-left position.
+Mirror of §1 (right-aligned). Visible in `sample_screen_3`. Shows another character's portrait + bars in the same shape. Whether this is a coop partner, a pet/companion, or a targeted-NPC info popup is uncertain — needs user confirmation.
 
-**Contents** (only visible in screenshot 4 — "Keep entrance"):
-- A small circular gold-framed slot showing a sword icon (active weapon?).
-- Possibly more slots stacked below; hard to tell at the resolution.
-
-**Behavior:** appears in screenshot 4; absent or hidden in screenshots 1, 2, 6. This may be a **toggleable HUD element**, OR conditional on the game state (e.g. only shown right after a weapon equip / map enter), OR it's the multiplayer second-character panel and screenshot 4 is from coop.
-
-**Uncertain.** Needs user clarification or recon-side confirmation.
+**Not to be confused with**:
+- The **"HINSTEN" overlay** in `sample_screen_4` upper-right — that's a fansite-watermark on the screenshot, not in-game UI.
+- The **sword-icon circle** below the character panel in `sample_screen_4` — that's an extra slot below the LEFT character panel, looks like an active-weapon / quick-equip display. Whether this is part of the character panel itself or a separate small pane is uncertain.
 
 ### 3. Right sidebar — multifunction panel ("right tab area")
 
@@ -187,12 +193,13 @@ This visual reference forces revisions to [RETAIL_UI_RECOVERY_PLAN.md](RETAIL_UI
 
 ## Open questions for the user
 
-1. **Upper-right element** — what is it actually? Active weapon? Companion / pet info? Coop second player? Quick-equip menu?
-2. **Single-player only** — confirm that the second character panel only appears in coop multiplayer.
-3. **Sidebar modes count** — how many distinct modes does the vertical button strip cycle through? I count ~7-8 buttons in the strip; I can identify 5 modes confidently (stats, skills/talents?, inventory, spell book, automap). What are the others?
-4. **Potion shelf size** — exactly how many potion slots? Are the slots fixed (always 6-7) or variable?
-5. **Key / extra-slot on far right of potion shelf** — what goes there (keys, quest items, runes)?
-6. **Bars** — are health/mana/stamina the canonical order, or does the user character have a different ordering (e.g. health first then stamina then mana)?
-7. **Tab buttons on Stats panel** ("Stats" / "Skills" in screenshot 1) — is "Skills" a sub-tab inside the Stats sidebar mode, or a top-level sidebar mode in its own right? (Affects whether it's a sub-state or a sidebar mode count.)
+1. **Right character panel role** — confirmed in `sample_screen_3` (two panels upper-left + upper-right). Who's the second panel? Coop partner? Pet / companion? Targeted NPC info popup?
+2. **Sword-icon circle below character panel** (`sample_screen_4`, below upper-left panel) — is that part of the character panel structure, OR a separate "active weapon / quick equip" pane? If part of the character panel: does it always show (just hidden if no weapon equipped)?
+3. **Sidebar modes count** — I count ~7-8 buttons in the vertical mode-switcher strip. I can identify 5 modes confidently (stats, skills?, inventory, spell book, automap). What are the others?
+4. **Stats vs Skills tab** — in `sample_screen_1` the stats panel has "Stats | Skills" tab buttons. Are those sub-tabs inside one sidebar mode, or two distinct sidebar modes?
+5. **Potion shelf** — fixed slot count (~6-7) or variable? Is the key/extra slot on the far right always there?
+6. **Far-right slot** — what goes there (keys, quest items, runes)?
+7. **Bar ordering** — health → mana → stamina, or health → stamina → mana? `sample_screen_1` shows the order from screenshots: heart (red), then purple, then yellow — what are the middle and bottom values labeled in retail terms?
+8. **Game log scrollback** — can the player scroll up to see older messages, or is it write-only? How many lines visible at once?
 
 Filling these in dramatically narrows the recon hunt and prevents another off-spec build.
