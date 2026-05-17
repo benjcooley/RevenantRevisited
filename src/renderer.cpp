@@ -3421,10 +3421,11 @@ void TRenderer::Composite(TSurface* src)
     bind.fs_images[0]      = img;
     sg_apply_bindings(&bind);
 
-    const float uniforms[12] = {
+    const float uniforms[16] = {
         -1.0f, -1.0f, 2.0f, 2.0f,
          0.0f,  0.0f, 1.0f, 1.0f,
-         0.0f,  0.0f, 0.0f, 0.0f,
+         0.0f,  0.0f, 0.0f, 0.0f,    // chroma_key disabled
+         1.0f,  1.0f, 1.0f, 1.0f,    // color_tint = white (no-op)
     };
     const sg_range u_range = { uniforms, sizeof(uniforms) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
@@ -3550,7 +3551,12 @@ void TRenderer::Composite(sg_image img,
     const float uw = float(src_w) / float(src_tex_w);
     const float vh = float(src_h) / float(src_tex_h);
 
-    float uniforms[12] = { nx, ny, nw, nh,  u0, v0, uw, vh, 0.0f, 0.0f, 0.0f, 0.0f };
+    float uniforms[16] = {
+        nx, ny, nw, nh,
+        u0, v0, uw, vh,
+        0.0f, 0.0f, 0.0f, 0.0f,    // chroma_key
+        1.0f, 1.0f, 1.0f, 1.0f,    // color_tint (white = no-op)
+    };
     if (chroma_key && chroma_key_rgb)
     {
         uniforms[8] = 1.0f;
