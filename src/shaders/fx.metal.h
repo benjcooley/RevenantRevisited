@@ -128,20 +128,27 @@ fragment float4 _main(vs_out in [[stage_in]],
     float2 uv01 = in.corner + float2(0.5, 0.5);
     float2 uv_normal = float2(in.uv_rect.x + uv01.x * in.uv_rect.z,
                               in.uv_rect.y + uv01.y * in.uv_rect.w);
+    float4 sampled;
     float4 c;
     if (mode == 1) {
+        sampled = float4(1.0, 1.0, 1.0, 1.0);
         c = in.color;
     } else if (mode == 2) {
-        c = atlas.sample(smp, uv01);
+        sampled = atlas.sample(smp, uv01);
+        c = sampled;
     } else if (mode == 3) {
-        c = atlas.sample(smp, uv_normal);
+        sampled = atlas.sample(smp, uv_normal);
+        c = sampled;
     } else {
-        c = atlas.sample(smp, uv_normal) * in.color;
+        sampled = atlas.sample(smp, uv_normal);
+        c = sampled * in.color;
     }
     // Apply per-instance lit factor (computed in VS): Unlit = (1,1,1),
     // LitFlat = ambient + sun_term * sun_color. RGB only -- alpha keeps
     // the texture-driven coverage.
     c.rgb *= in.lit_factor;
+    // Chroma-key fallback disabled (TODO: was over-discarding; need
+    // per-bucket opt-in wired through SParticleBucketDesc.chroma_key).
     if (c.a < 0.002) discard_fragment();
     return c;
 }
