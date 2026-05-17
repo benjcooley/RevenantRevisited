@@ -72,6 +72,7 @@ set(MINIZ_DIR "${THIRDPARTY_DIR}/miniz")
 set(LOG_DIR "${THIRDPARTY_DIR}/log")
 set(ARGH_DIR "${THIRDPARTY_DIR}/argh")
 set(STB_DIR "${THIRDPARTY_DIR}/stb")
+set(MINIAUDIO_DIR "${THIRDPARTY_DIR}/miniaudio")
 set(IMGUI_DIR    "${THIRDPARTY_DIR}/imgui")
 set(IMGUIZMO_DIR "${THIRDPARTY_DIR}/imguizmo")
 set(IMPLOT_DIR   "${THIRDPARTY_DIR}/implot")
@@ -141,6 +142,7 @@ target_include_directories(Revenant PRIVATE
   ${LOG_DIR}
   ${ARGH_DIR}
   ${STB_DIR}
+  ${MINIAUDIO_DIR}
   ${IMGUI_DIR}
 )
 

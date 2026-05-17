@@ -5,6 +5,7 @@
 // ************************************************************************* 
 
 #include "revenant.h"
+#include "audio_backend.h"
 #include "logging.h"
 #include "parse.h"
 #include "sound.h"
@@ -15,6 +16,8 @@
 #include "playscreen.h"
 #include "textbar.h"
 #include "area.h"
+
+#include <cstdio>
 
 // *****************************
 // * TArea - Basic area object *
@@ -241,55 +244,76 @@ void TArea::PlayAmbientSounds()
     // Play ambient sound effects here
 }
 
-// Initializes data needed to play CD tracks
+// Resolve a 1998-era CD track number (the AREA.DEF CDPLAYLIST values) to
+// a vorbis path under <install>/MUSIC/. Tracks are 1-based in the source
+// data and the ripped GOG file names follow `TrackNN.ogg`. We anchor on
+// RunPath (the install dir, read-only assets) rather than ResourcePath —
+// makepath() rewrites a leading "." in ResourcePath to SavePath, which
+// is the writable per-user dir and doesn't host the music tree.
+static bool BuildMusicTrackPath(int32_t track, char* out, size_t out_len)
+{
+    return std::snprintf(out, out_len, "%sMUSIC/Track%02d.ogg",
+                         RunPath, track) > 0;
+}
+
+// Initializes data needed to play this area's music playlist.
 void TArea::InitCDMusic()
 {
-  // Initialize CD play params
-    if (CDPlaying())
-        CDStop();   
+    audio::MusicStop();
 
-  // Initialize play params
-    cdplaynum = -1;
-    cdplaystart = tickcount();
-    cdplaywait = 0;
+    cdplaynum    = -1;
+    cdplaystart  = 0;
+    cdplaywait   = 0;
     cdplaylength = 0;
 }
 
-// Deinitializes CD play system
+// Deinitializes the playlist (current track keeps playing — areas hand
+// the music torch to one another).
 void TArea::CloseCDMusic()
 {
-    // Do nothing (allow music to continue playing)
 }
 
-// Plays CD music tracks
+// Advances the playlist. Called from the area's per-tick update. The
+// caller-visible behavior matches 1998: pick the next track when the
+// previous one finishes, with `cdplaypause` seconds of silence between.
 void TArea::PlayCDMusic()
 {
-    if ((int32_t)tickcount() - cdplaystart >= cdplaywait)
-    {
-        if (cdplayisrandom)
-        {
-            int32_t newplaynum;
-            do {
-                newplaynum = random(0, cdplaylistsize - 1);
-            } while (newplaynum == cdplaynum && cdplaylistsize > 1);
-            cdplaynum = newplaynum;
-        }
-        else
-        {
-            cdplaynum++;
-            if (cdplaynum >= cdplaylistsize)
-                cdplaynum = 0;
-        }
+    if (cdplaylistsize <= 0) return;
+    if (audio::MusicPlaying()) return;
 
-        cdplaylength = CDTrackLength(cdplaylist[cdplaynum]);
-        cdplaywait = cdplaylength + cdplaypause * 1000;
-        if (cdplaywait <= 1000)
-            cdplaywait = 3 * 60 * 1000; // Wait 3 minutes if no track found
-        CDPlayTrack(cdplaylist[cdplaynum]);
-        cdplaystart = tickcount();
-    }
-    else if ((int32_t)tickcount() - cdplaystart >= cdplaylength)
+    const int32_t now = static_cast<int32_t>(tickcount());
+
+    // Hold the silence gap after a track ends.
+    if (cdplaystart != 0 && (now - cdplaystart) < cdplaywait) {
         PlayAmbientSounds();
+        return;
+    }
+
+    if (cdplayisrandom) {
+        int32_t pick;
+        do {
+            pick = random(0, cdplaylistsize - 1);
+        } while (pick == cdplaynum && cdplaylistsize > 1);
+        cdplaynum = pick;
+    } else {
+        cdplaynum = (cdplaynum + 1) % cdplaylistsize;
+    }
+
+    char path[MAXPATHLEN];
+    if (!BuildMusicTrackPath(cdplaylist[cdplaynum], path, sizeof(path)) ||
+        !audio::MusicPlayFile(path, /*looping*/ false)) {
+        // Failed to start — back off so we don't hammer disk on missing files.
+        cdplaystart  = now;
+        cdplaywait   = 60 * 1000;
+        return;
+    }
+
+    cdplaystart  = now;
+    // Without per-track length info, defer the "between tracks" delay to
+    // *after* the track finishes (MusicPlaying() goes false), at which
+    // point we still want to honour cdplaypause seconds of silence.
+    cdplaywait   = cdplaypause * 1000;
+    cdplaylength = 0;
 }
 
 // Gets the current ambient colors based on the time of day

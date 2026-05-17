@@ -17,20 +17,25 @@ a status changes.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | Vendor `miniaudio.h` into `thirdparty/miniaudio/` + CMake target | — |
-| [ ] | Verify `stb_vorbis` available (vendor if not) | — |
-| [ ] | `src/audio_backend.{h,cpp}` — owns `ma_engine`, master volume, worker plumbing | — |
-| [ ] | Re-light `sound.cpp` `#if 0` blocks: load/play/stop core | — |
-| [ ] | Re-light wave loader (file path + resource-pack path) | — |
-| [ ] | Re-light volume / pan / frequency setters | — |
-| [ ] | Re-light primary buffer / 3D listener path | — |
-| [ ] | CD-audio MCI shim → `data/Music/*.ogg` mapping | — |
-| [ ] | 3D voices — spatial source per `TSound::Play3D`, listener follows player | — |
-| [ ] | Settings `[Audio]` section: master / sfx / music / spatial | — |
-| [ ] | `--test=audio` mode (one SFX + one music track) | — |
-| [ ] | Smoke-test inside `--test=sector`: footsteps, ambient, sword swings | — |
+| [x] | Vendor `miniaudio.h` v0.11.22 into `thirdparty/miniaudio/` + CMake include | 2026-05-16 |
+| [x] | Vendor `stb_vorbis.c` v1.22 into `thirdparty/stb/` | 2026-05-16 |
+| [x] | `src/audio_backend.{h,cpp}` — owns `ma_engine`, sfx/music sound groups, master/sfx/music volume, listener pos, ref-counted shared PCM, one-shot helper | 2026-05-16 |
+| [x] | Re-light `sound.cpp` load/play/stop core (TSound::Load/Play/Stop/IsPlaying/IsLooping/Duplicate via backend) | 2026-05-16 |
+| [x] | Re-light wave loader (in-tree PCM RIFF/WAVE reader; ACM-decode path retired) | 2026-05-16 |
+| [x] | Re-light volume / pan / frequency setters (DirectSound dB + pan units preserved; backend converts to linear) | 2026-05-16 |
+| [x] | Re-light TSoundPlayer Mount/Unmount/Play/Stop + Pause/Unpause/SetVolume + dir scan + Init/Close | 2026-05-16 |
+| [x] | Drop CD* C-function shim; rewrite `TArea::Init/Close/PlayCDMusic` directly on `audio::MusicPlayFile`; resolves to `<install>/MUSIC/TrackNN.ogg` | 2026-05-16 |
+| [x] | Wire `SoundPlayer.Initialize()` as step 22 of `InitGlobals`; `SoundPlayer.Close()` as first step of `ShutdownGlobals` inverse | 2026-05-16 |
+| [x] | `--test=audio` mode (auto-fires `open.wav` one-shot + auto-starts music; ImGui panel for SFX/music/volumes) | 2026-05-16 |
+| [x] | Smoke-test on macOS — miniaudio comes up on `MacBook Air Speakers`, .ogg playback confirmed audible | 2026-05-16 |
+| [x] | Retire pre-port `sound.cpp` to `attic/src/sound_directsound.cpp` | 2026-05-16 |
+| [ ] | 3D voices — spatial source per `TSound::Play3D`, listener follows player (currently flat-pan classic mix; spatializer disabled by design) | — |
+| [ ] | Settings `[Audio]` section: master / sfx / music / spatial (G3.2 work; backend volume hooks already in place) | — |
+| [ ] | Inside-game smoke test — `--test=sector` footsteps / ambient / sword swings (gated on `data/sound/effects/*.wav` extraction from the GOG install; only `data/open.wav` ships loose) | — |
 
 **Exit:** SFX play in `--test=sector`; music can be started/stopped; spatial voices position correctly.
+
+**Notes:** SFX registry comes up with 0 entries on the GOG install because effects live inside the resource pack rather than as loose WAVs under `data/sound/effects/`. The audio backend is ready; surfacing those effects is a separate task (RVI resource-pack reader). Music plays from loose `.ogg` files under `data/MUSIC/` (also where the GOG install puts them).
 
 ---
 
@@ -236,6 +241,13 @@ These items aren't part of any single track but block others:
 
 ## Completed
 
-(Nothing yet beyond plan docs. Each commit to `feature/gameflow` that
-lands a checklist item should move that item here with the date and
-short link to the commit short-hash.)
+- **2026-05-16 — T0 Audio backend stood up.** miniaudio 0.11.22 +
+  stb_vorbis v1.22 vendored; new `audio::` facade owns the engine,
+  sfx/music groups, and a ref-counted shared-PCM Source type;
+  `sound.cpp` rewired end-to-end (TSound + TSoundPlayer); CD* shim
+  replaced by direct `audio::MusicPlayFile` calls from `area.cpp`;
+  SoundPlayer joined the InitGlobals/ShutdownGlobals chain at step
+  22 / first-inverse; `--test=audio` mode added; smoke-tested on
+  macOS (CoreAudio → MacBook Air Speakers, .ogg vorbis path
+  confirmed audible). Pre-port `sound.cpp` retired to
+  `attic/src/sound_directsound.cpp`.
