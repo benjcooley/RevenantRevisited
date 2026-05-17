@@ -1,7 +1,7 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
-// *      cursor_macos.mm - NSCursor backing for the game pointer          *
+// *      cursor.mm - NSCursor backing for the game pointer (macOS)        *
 // *************************************************************************
 //
 // We hand our cursor pixels to AppKit's NSCursor so macOS handles every
@@ -11,7 +11,7 @@
 // reset to the arrow and the OS draws it. No more sapp_show_mouse
 // dance, no more "stuck game cursor" bugs.
 
-#include "../../cursor_os.h"
+#include "../cursor.h"
 
 #include "../../bitmap.h"
 #include "../../bitmapdecode.h"
@@ -21,6 +21,12 @@
 
 namespace rev_platform
 {
+
+// Cached "current game cursor" so ReassertOSCursor can re-set it every
+// tick without rebuilding the NSImage/NSCursor. Strong-retained via
+// ARC's __strong default (ObjC++ TU). Cleared by ResetOSCursor so the
+// arrow stays clean while ImGui captures.
+static NSCursor *g_currentCursor = nil;
 
 bool SetOSCursor(const TBitmap *bm, int32_t hot_x, int32_t hot_y)
 {
@@ -80,6 +86,7 @@ bool SetOSCursor(const TBitmap *bm, int32_t hot_x, int32_t hot_y)
             (CGFloat)std::clamp((int32_t)hot_y, (int32_t)0, h - 1));
 
         NSCursor *cursor = [[NSCursor alloc] initWithImage:img hotSpot:hot];
+        g_currentCursor = cursor;   // cache for per-tick re-assert
         [cursor set];
     }
     return true;
@@ -88,8 +95,18 @@ bool SetOSCursor(const TBitmap *bm, int32_t hot_x, int32_t hot_y)
 void ResetOSCursor()
 {
     @autoreleasepool {
+        g_currentCursor = nil;      // stop re-asserting until next SetOSCursor
         [[NSCursor arrowCursor] set];
     }
+}
+
+void ReassertOSCursor()
+{
+    if (!g_currentCursor) return;
+    // [set] is cheap when called on the already-current cursor; AppKit
+    // tracks the current cursor pointer and short-circuits. The cost
+    // is only paid on the frames after AppKit has auto-reverted.
+    [g_currentCursor set];
 }
 
 } // namespace rev_platform
