@@ -1,11 +1,11 @@
 // REVSYNC: disputed=TTextBar reason="class contains 'Could not create character event' / 'Could not create kill event for c...' strings and CreateEventA calls — character-event/lifecycle concerns, not UI text rendering as TTextBar name implies" rejected=MEDIUM date=2026-04-17 note="likely TCharacter-related (event/kill signals) but not confirmed; prior TTextBar suffix stripped."
-// Decompiled methods and structure for class: cls_0x5a4358
+// Decompiled methods and structure for class: cls_0x5a4358_TConsolePane
 
 /*
-/OOAnalyzer/cls_0x5a4358
+/OOAnalyzer/cls_0x5a4358_TConsolePane
 pack(disabled)
-Structure cls_0x5a4358 {
-   0   cls_0x5a4358::vftable_5a4358 *   4   vftptr_0x0   "pointer to cls_0x5a4358::vftable_5a4358"
+Structure cls_0x5a4358_TConsolePane {
+   0   cls_0x5a4358_TConsolePane::vftable_5a4358 *   4   vftptr_0x0   "pointer to cls_0x5a4358_TConsolePane::vftable_5a4358"
    4   dword   4   mbr_0x4   "Unsigned Double-Word (ddw, 4-bytes)"
    8   dword   4   mbr_0x8   "Unsigned Double-Word (ddw, 4-bytes)"
    12   dword   4   mbr_0xc   "Unsigned Double-Word (ddw, 4-bytes)"
@@ -49,7 +49,7 @@ Length: 204 Alignment: 1
 
 // Function at 0043dbc0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a4358::meth_0x43dbc0(cls_0x5a4358 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a4358_TConsolePane::meth_0x43dbc0(cls_0x5a4358_TConsolePane *this)
 
 {
   char cVar1;
@@ -116,7 +116,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4358::meth_0x43dbc0(cls_0x5a4358 *this
 
 // Function at 0043dca0
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a4358::meth_0x43dca0(cls_0x5a4358 *this,int param_1)
+undefined4 __thiscall OOAnalyzer::cls_0x5a4358_TConsolePane::meth_0x43dca0(cls_0x5a4358_TConsolePane *this,int param_1)
 
 {
   char cVar1;
@@ -164,7 +164,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4358::meth_0x43dca0(cls_0x5a4358 *this
 
 // Function at 0043dda0
 
-void __thiscall OOAnalyzer::cls_0x5a4358::meth_0x43dda0(cls_0x5a4358 *this)
+void __thiscall OOAnalyzer::cls_0x5a4358_TConsolePane::meth_0x43dda0(cls_0x5a4358_TConsolePane *this)
 
 {
   char *pcVar1;
@@ -226,7 +226,7 @@ void __thiscall OOAnalyzer::cls_0x5a4358::meth_0x43dda0(cls_0x5a4358 *this)
 // Function at 0043de60
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5a4358::meth_0x43de60(cls_0x5a4358 *this,dword param_1,dword param_2)
+OOAnalyzer::cls_0x5a4358_TConsolePane::meth_0x43de60(cls_0x5a4358_TConsolePane *this,dword param_1,dword param_2)
 
 {
   char cVar1;
@@ -324,17 +324,17 @@ LAB_0043df42:
 
 // Function at 0043e370
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a4358::virt_meth_0x43e370(cls_0x5a4358 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a4358_TConsolePane::virt_meth_0x43e370_TConsolePane_Initialize(cls_0x5a4358_TConsolePane *this)
 
 {
   char cVar1;
   HANDLE hThread;
   uint uVar2;
   char *pcVar3;
-  cls_0x5a4358 *pcStack_4;
+  cls_0x5a4358_TConsolePane *pcStack_4;
   
   pcStack_4 = this;
-  cls_0x5a42d4::virt_meth_0x43da00((cls_0x5a42d4 *)this);
+  cls_0x5a42d4_TTextPane::virt_meth_0x43da00_TTextPane_Initialize((cls_0x5a42d4_TTextPane *)this);
   uVar2 = 0xffffffff;
   pcVar3 = &DAT_005ceef8;
   do {
@@ -370,8 +370,8 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4358::virt_meth_0x43e370(cls_0x5a4358 
 // Function at 0043e510
 
 void __thiscall
-OOAnalyzer::cls_0x5a4358::meth_0x43e510
-          (cls_0x5a4358 *this,undefined4 param_1,int param_2,int param_3,undefined4 param_4,
+OOAnalyzer::cls_0x5a4358_TConsolePane::meth_0x43e510
+          (cls_0x5a4358_TConsolePane *this,undefined4 param_1,int param_2,int param_3,undefined4 param_4,
           int param_5,int param_6)
 
 {
@@ -444,7 +444,7 @@ LAB_0043e61f:
 
 // Function at 0043f350
 
-undefined4 __thiscall OOAnalyzer::cls_0x5a4358::virt_meth_0x43f350(cls_0x5a4358 *this)
+undefined4 __thiscall OOAnalyzer::cls_0x5a4358_TConsolePane::virt_meth_0x43f350(cls_0x5a4358_TConsolePane *this)
 
 {
   char *pcVar1;
@@ -509,7 +509,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a4358::virt_meth_0x43f350(cls_0x5a4358 
 
 // Function at 0043f490
 
-void __thiscall OOAnalyzer::cls_0x5a4358::virt_meth_0x43f490(cls_0x5a4358 *this)
+void __thiscall OOAnalyzer::cls_0x5a4358_TConsolePane::virt_meth_0x43f490(cls_0x5a4358_TConsolePane *this)
 
 {
   int iVar1;
@@ -526,7 +526,7 @@ void __thiscall OOAnalyzer::cls_0x5a4358::virt_meth_0x43f490(cls_0x5a4358 *this)
 
 // Function at 00445100
 
-cls_0x5a4358 * __thiscall OOAnalyzer::cls_0x5a4358::cls_0x5a4358(cls_0x5a4358 *this)
+cls_0x5a4358_TConsolePane * __thiscall OOAnalyzer::cls_0x5a4358_TConsolePane::cls_0x5a4358_TConsolePane(cls_0x5a4358_TConsolePane *this)
 
 {
   this->mbr_0x8 = 0x164;

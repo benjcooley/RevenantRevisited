@@ -1074,7 +1074,7 @@ int __thiscall OOAnalyzer::cls_0x5b93c4::meth_0x4430f0(cls_0x5b93c4 *this)
         iVar4 = FUN_0058ade0(iVar4 + 1,10)) {
       DAT_00656d68 = DAT_00656d68 + 1;
     }
-    cls_0x5a4358::meth_0x43dbc0((cls_0x5a4358 *)&DAT_00656ce8);
+    cls_0x5a4358_TConsolePane::meth_0x43dbc0((cls_0x5a4358_TConsolePane *)&DAT_00656ce8);
     DAT_00656db4 = DAT_00656d48 + DAT_00656d58;
     return -1;
   }

@@ -1,0 +1,68 @@
+# Agent: Wave-1C — TTextBar assessment
+# Date: 2026-05-16
+#
+# See: docs/ui/briefs/B_r4_textbar_assessment.md for the full evidence trail.
+#
+# Headline finding: the inherited "_likely_TTextBar" suffix on cls_0x5a4358 is
+# WRONG. cls_0x5a4358 is actually TConsolePane (the editor command console),
+# inheriting from TTextPane (cls_0x5a42d4). The real retail TTextBar lives in
+# the 0x54c000..0x54d800 method range and its leaf vtable address has NOT been
+# determined yet.
+#
+# This file applies only the renames I have 2+ lines of evidence for:
+#
+#   1. cls_0x5a4358 -> cls_0x5a4358_TConsolePane
+#      Evidence A: TWO unique error-message strings in virt_meth_0x43e370
+#        ("Could not create kill event for command processor!"
+#         "Could not create character event for command processor!")
+#        match attic/src/editor.cpp:546,550 — both emitted ONLY by
+#        TConsolePane::Initialize, nowhere else in pre-release src.
+#      Evidence B: Same function spins up a Win32 thread with the
+#        kill-event + character-event pair — structurally unique to
+#        TConsolePane in pre-release.
+#      Evidence C: Field layout (mbr_0x60 = text*, mbr_0xc8 = thread handle)
+#        + struct size (~204 bytes) matches pre-release TConsolePane.
+#
+#   2. cls_0x5a42d4 -> cls_0x5a42d4_TTextPane
+#      Evidence A: Implements virt_meth_0x43da00 BYTE-IDENTICAL to the
+#        base-class call made from cls_0x5a4358_TConsolePane's Initialize.
+#        Confirms cls_0x5a42d4 OWNS the implementation of 0x43da00, and that
+#        0x43da00 is TTextPane::Initialize (allocates two 10000-byte text
+#        buffers initialized to '{' + null — the color-escape sentinel that
+#        every text-manipulation method then treats specially).
+#      Evidence B: Struct size 160 bytes matches pre-release TTextPane
+#        (TPane base + 15 TTextPane-specific 4-byte fields).
+#
+#   3. meth_0x43da00 -> meth_0x43da00_TTextPane_Initialize
+#      Direct consequence of (2). The function at 0x43da00 IS
+#      TTextPane::Initialize.
+#
+#   4. meth_0x43e370 / virt_meth_0x43e370 -> ..._TConsolePane_Initialize
+#      Direct consequence of (1). The function at 0x43e370 IS
+#      TConsolePane::Initialize (the one with the kill/character event
+#      strings + thread spinup).
+#
+# Deliberately NOT renaming (per Rule 1 — conservative):
+#
+#   - The real TTextBar class — vtable address unknown.
+#   - FUN_0054bf70 — extracted and string-anchored to "text bar", but until
+#     the leaf class is identified, the safe rename is just *_TTextBar_init.
+#     Adding it below since the string anchor + caller-site evidence (called
+#     from TPlayScreen::Initialize at 0x47abfd, in the documented pane-init
+#     sequence from B.r3) is the same two-line-evidence bar that other
+#     Wave-1A renames met.
+#   - FUN_0054cb00 — strong (155/176/16/186 constants + only xref to
+#     "texthealthbar" string), but it's currently appearing inside
+#     cls_0x5a5320 (TCharacter) decomp as a Ghidra mis-attribution. Renaming
+#     it inside that file would suggest it's a TCharacter method, which is
+#     misleading. Documenting in B.r4 instead.
+#
+# Renames:
+
+cls_0x5a4358|cls_0x5a4358_TConsolePane
+cls_0x5a42d4|cls_0x5a42d4_TTextPane
+meth_0x43da00|meth_0x43da00_TTextPane_Initialize
+virt_meth_0x43da00|virt_meth_0x43da00_TTextPane_Initialize
+meth_0x43e370|meth_0x43e370_TConsolePane_Initialize
+virt_meth_0x43e370|virt_meth_0x43e370_TConsolePane_Initialize
+FUN_0054bf70|FUN_0054bf70_TTextBar_init

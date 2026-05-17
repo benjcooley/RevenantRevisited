@@ -9,7 +9,7 @@
 undefined4 cls_0x5a4250::virt_meth_0x43f890()
 
 {
-  this->virt_meth_0x43da00();
+  this->virt_meth_0x43da00_TTextPane_Initialize();
   this->mbr_0xa0 = 0;
   return 1;
 }

@@ -982,7 +982,7 @@ void cls_0x5a5320_TPlayScreen::virt_meth_0x44f140(int param_1, int param_2)
         if (iVar4 != 0) {
           cls_0x4405d0::meth_0x4405d0((cls_0x4405d0 *)&DAT_00656e78,*(undefined4 *)(iVar4 + 0x40));
         }
-        cls_0x5a4358::virt_meth_0x43f350((cls_0x5a4358 *)&DAT_00656ce8);
+        cls_0x5a4358_TConsolePane::virt_meth_0x43f350((cls_0x5a4358_TConsolePane *)&DAT_00656ce8);
         return;
       }
       if (param_1 != 4) {

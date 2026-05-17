@@ -1,12 +1,12 @@
 #include "classes_all.h"
 
-// Decompiled methods and structure for class: cls_0x5a4358
+// Decompiled methods and structure for class: cls_0x5a4358_TConsolePane
 
 
 
 // Function at 0043dbc0
 
-undefined4 cls_0x5a4358::meth_0x43dbc0()
+undefined4 cls_0x5a4358_TConsolePane::meth_0x43dbc0()
 
 {
   char cVar1;
@@ -73,7 +73,7 @@ undefined4 cls_0x5a4358::meth_0x43dbc0()
 
 // Function at 0043dca0
 
-undefined4 cls_0x5a4358::meth_0x43dca0(int param_1)
+undefined4 cls_0x5a4358_TConsolePane::meth_0x43dca0(int param_1)
 
 {
   char cVar1;
@@ -121,7 +121,7 @@ undefined4 cls_0x5a4358::meth_0x43dca0(int param_1)
 
 // Function at 0043dda0
 
-void cls_0x5a4358::meth_0x43dda0()
+void cls_0x5a4358_TConsolePane::meth_0x43dda0()
 
 {
   char *pcVar1;
@@ -182,7 +182,7 @@ void cls_0x5a4358::meth_0x43dda0()
 
 // Function at 0043de60
 
-undefined4 cls_0x5a4358::meth_0x43de60(dword param_1, dword param_2)
+undefined4 cls_0x5a4358_TConsolePane::meth_0x43de60(dword param_1, dword param_2)
 
 {
   char cVar1;
@@ -280,17 +280,17 @@ LAB_0043df42:
 
 // Function at 0043e370
 
-undefined4 cls_0x5a4358::virt_meth_0x43e370()
+undefined4 cls_0x5a4358_TConsolePane::virt_meth_0x43e370_TConsolePane_Initialize()
 
 {
   char cVar1;
   HANDLE hThread;
   uint uVar2;
   char *pcVar3;
-  cls_0x5a4358 *pcStack_4;
+  cls_0x5a4358_TConsolePane *pcStack_4;
   
   pcStack_4 = this;
-  this->virt_meth_0x43da00();
+  this->virt_meth_0x43da00_TTextPane_Initialize();
   uVar2 = 0xffffffff;
   pcVar3 = &DAT_005ceef8;
   do {
@@ -325,7 +325,7 @@ undefined4 cls_0x5a4358::virt_meth_0x43e370()
 
 // Function at 0043e510
 
-void cls_0x5a4358::meth_0x43e510(undefined4 param_1, int param_2, int param_3, undefined4 param_4, int param_5, int param_6)
+void cls_0x5a4358_TConsolePane::meth_0x43e510(undefined4 param_1, int param_2, int param_3, undefined4 param_4, int param_5, int param_6)
 
 {
   dword dVar1;
@@ -397,7 +397,7 @@ LAB_0043e61f:
 
 // Function at 0043f350
 
-undefined4 cls_0x5a4358::virt_meth_0x43f350()
+undefined4 cls_0x5a4358_TConsolePane::virt_meth_0x43f350()
 
 {
   char *pcVar1;
@@ -462,7 +462,7 @@ undefined4 cls_0x5a4358::virt_meth_0x43f350()
 
 // Function at 0043f490
 
-void cls_0x5a4358::virt_meth_0x43f490()
+void cls_0x5a4358_TConsolePane::virt_meth_0x43f490()
 
 {
   int iVar1;
@@ -479,7 +479,7 @@ void cls_0x5a4358::virt_meth_0x43f490()
 
 // Function at 00445100
 
-cls_0x5a4358::cls_0x5a4358()
+cls_0x5a4358_TConsolePane::cls_0x5a4358_TConsolePane()
 
 {
   this->mbr_0x8 = 0x164;

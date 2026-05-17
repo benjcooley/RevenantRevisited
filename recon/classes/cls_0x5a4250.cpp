@@ -29,7 +29,7 @@ Length: 164 Alignment: 1
 undefined4 __thiscall OOAnalyzer::cls_0x5a4250::virt_meth_0x43f890(cls_0x5a4250 *this)
 
 {
-  cls_0x5a42d4::virt_meth_0x43da00((cls_0x5a42d4 *)this);
+  cls_0x5a42d4_TTextPane::virt_meth_0x43da00_TTextPane_Initialize((cls_0x5a42d4_TTextPane *)this);
   this->mbr_0xa0 = 0;
   return 1;
 }

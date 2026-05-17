@@ -34,7 +34,7 @@ Ghidra's structural naming prefix:
 | File | Address | "Likely" Name | Size | Notes |
 |------|---------|---------------|------|-------|
 | `cls_0x5a50e8_likely_TScreen.cpp` | 0x5a50e8 | TScreen | ~18 KB | Base screen; appears in readable as confirmed |
-| `cls_0x5a4358_likely_TTextBar.cpp` | 0x5a4358 | TTextBar | ~16 KB | Text bar UI (confirmed in mapping) |
+| `cls_0x5a4358_TConsolePane.cpp` | 0x5a4358 | **TConsolePane** (NOT TTextBar — pre-existing CLASS_MAPPING.md size-heuristic was wrong; caught by Wave-1C 2026-05-16) | ~16 KB | Editor command console (Win32 thread + kill/character events). Real retail TTextBar at FUN_0054bf70 (init wrapper); leaf class TBD. See `docs/ui/briefs/B_r4_textbar_assessment.md`. |
 | `cls_0x5a7b98_likely_TPlayScreen.cpp` | 0x5a7b98 | TPlayScreen (pre-retail) | ~75 KB | Earlier TPlayScreen version (superseded by 0x5b4f30) |
 | `cls_0x5b4f30_likely_TPlayScreen.cpp` | 0x5b4f30 | TPlayScreen (retail) | **119 KB** | **RETAIL HUD CONSTRUCTOR** — authoritative PlayScreen decomp |
 | `cls_0x5b9fac_likely_ScreenManager.cpp` | 0x5b9fac | ScreenManager | ~32 KB | Screen lifecycle/transition manager (possible overlay coordinator) |

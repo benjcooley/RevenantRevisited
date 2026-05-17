@@ -193,7 +193,7 @@ undefined4 __fastcall FUN_0047a660_TPlayScreen_Initialize(int param_1)
     FUN_00481c10(s_Trouble_initializing_BarInv_pane_005d72dc,0);
   }
   FUN_00448680(5,0);
-  iVar3 = FUN_0054bf70();
+  iVar3 = FUN_0054bf70_TTextBar_init();
   if (iVar3 == 0) {
     FUN_00481c10(s_Trouble_initializing_text_bar_005d7300,0);
   }

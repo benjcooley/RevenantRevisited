@@ -1022,7 +1022,7 @@ int cls_0x5b93c4::meth_0x4430f0()
         puVar4 != (uint *)0x0; puVar4 = FUN_0058ade0((uint *)((int)puVar4 + 1),'\n')) {
       DAT_00656d68 = DAT_00656d68 + 1;
     }
-    cls_0x5a4358::meth_0x43dbc0((cls_0x5a4358 *)&DAT_00656ce8);
+    cls_0x5a4358_TConsolePane::meth_0x43dbc0((cls_0x5a4358_TConsolePane *)&DAT_00656ce8);
     DAT_00656db4 = DAT_00656d48 + DAT_00656d58;
     return -1;
   }

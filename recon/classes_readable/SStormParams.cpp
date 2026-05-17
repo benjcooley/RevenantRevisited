@@ -6,7 +6,7 @@
 
 // Function at 0043da00
 
-undefined4 SStormParams::virt_meth_0x43da00()
+undefined4 SStormParams::virt_meth_0x43da00_TTextPane_Initialize()
 
 {
   dword dVar1;
@@ -119,20 +119,20 @@ void SStormParams::virt_meth_0x43dfa0(undefined4 param_1)
   switch(param_1) {
   case 8:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43dca0((cls_0x5a4358 *)this,1);
+    cls_0x5a4358_TConsolePane::meth_0x43dca0((cls_0x5a4358_TConsolePane *)this,1);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   default:
     return;
   case 0x21:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->impact_v,this->impact_begin - this->particle_frame_inc)
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->impact_v,this->impact_begin - this->particle_frame_inc)
     ;
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x22:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->impact_v,this->particle_frame_inc + this->impact_begin)
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->impact_v,this->particle_frame_inc + this->impact_begin)
     ;
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
@@ -149,12 +149,12 @@ void SStormParams::virt_meth_0x43dfa0(undefined4 param_1)
       cVar2 = *pcVar1;
     }
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->impact_v + iVar6,this->impact_begin);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->impact_v + iVar6,this->impact_begin);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x24:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,0,this->impact_begin);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,0,this->impact_begin);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x25:
@@ -167,7 +167,7 @@ void SStormParams::virt_meth_0x43dfa0(undefined4 param_1)
     break;
   case 0x26:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->impact_v,this->impact_begin - 1);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->impact_v,this->impact_begin - 1);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x27:
@@ -180,16 +180,16 @@ void SStormParams::virt_meth_0x43dfa0(undefined4 param_1)
     break;
   case 0x28:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->impact_v,this->impact_begin + 1);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->impact_v,this->impact_begin + 1);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x2e:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43dca0((cls_0x5a4358 *)this,1);
+    cls_0x5a4358_TConsolePane::meth_0x43dca0((cls_0x5a4358_TConsolePane *)this,1);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x72:
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,0,this->impact_begin);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,0,this->impact_begin);
     pcVar5 = (char *)(this->impact_u + this->particle_u);
     iVar6 = 0;
     cVar2 = *pcVar5;
@@ -201,8 +201,8 @@ void SStormParams::virt_meth_0x43dfa0(undefined4 param_1)
       pcVar5 = pcVar5 + 1;
       cVar2 = *pcVar1;
     }
-    cls_0x5a4358::meth_0x43dca0((cls_0x5a4358 *)this,iVar6 + 1);
-    cls_0x5a4358::meth_0x43dbc0((cls_0x5a4358 *)this);
+    cls_0x5a4358_TConsolePane::meth_0x43dca0((cls_0x5a4358_TConsolePane *)this,iVar6 + 1);
+    cls_0x5a4358_TConsolePane::meth_0x43dbc0((cls_0x5a4358_TConsolePane *)this);
     (*this->vftptr_0x0->virt_meth_0x444fc0_44)(this);
   case 0x59:
   case 0x79:
@@ -210,7 +210,7 @@ void SStormParams::virt_meth_0x43dfa0(undefined4 param_1)
       return;
     }
     dVar4 = this->impact_v;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,0,this->impact_begin);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,0,this->impact_begin);
     pcVar5 = (char *)(this->impact_u + this->particle_u);
     iVar6 = 0;
     cVar2 = *pcVar5;
@@ -222,13 +222,13 @@ void SStormParams::virt_meth_0x43dfa0(undefined4 param_1)
       pcVar5 = pcVar5 + 1;
       cVar2 = *pcVar1;
     }
-    cls_0x5a4358::meth_0x43dca0((cls_0x5a4358 *)this,iVar6 + 1);
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,dVar4,this->impact_begin);
+    cls_0x5a4358_TConsolePane::meth_0x43dca0((cls_0x5a4358_TConsolePane *)this,iVar6 + 1);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,dVar4,this->impact_begin);
     (*this->vftptr_0x0->virt_meth_0x444fc0_44)(this);
     return;
   }
   pcVar3 = this->vftptr_0x0;
-  cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,iVar6,this->impact_begin);
+  cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,iVar6,this->impact_begin);
   (*pcVar3->virt_meth_0x444fc0_44)(this);
   return;
 }

@@ -1,10 +1,10 @@
-// Decompiled methods and structure for class: cls_0x5a4358::vftable_5a4358
+// Decompiled methods and structure for class: cls_0x5a4358_TConsolePane::vftable_5a4358
 
 /*
-/OOAnalyzer/cls_0x5a4358::vftable_5a4358
+/OOAnalyzer/cls_0x5a4358_TConsolePane::vftable_5a4358
 pack(disabled)
-Structure cls_0x5a4358::vftable_5a4358 {
-   0   virt_meth_0x43e370 *   4   virt_meth_0x43e370_0   "virtual function table entry."
+Structure cls_0x5a4358_TConsolePane::vftable_5a4358 {
+   0   virt_meth_0x43e370_TConsolePane_Initialize *   4   virt_meth_0x43e370_0   "virtual function table entry."
    4   virt_meth_0x43e440 *   4   virt_meth_0x43e440_4   "virtual function table entry."
    8   virt_meth_0x491bd0 *   4   virt_meth_0x491bd0_8   "virtual function table entry."
    12   virt_meth_0x444f40 *   4   virt_meth_0x444f40_12   "virtual function table entry."

@@ -1,12 +1,12 @@
 #include "classes_all.h"
 
-// Decompiled methods and structure for class: cls_0x5a42d4
+// Decompiled methods and structure for class: cls_0x5a42d4_TTextPane
 
 
 
 // Function at 0043da00
 
-undefined4 cls_0x5a42d4::virt_meth_0x43da00()
+undefined4 cls_0x5a42d4_TTextPane::virt_meth_0x43da00_TTextPane_Initialize()
 
 {
   dword dVar1;
@@ -58,7 +58,7 @@ undefined4 cls_0x5a42d4::virt_meth_0x43da00()
 
 // Function at 0043dad0
 
-void cls_0x5a42d4::virt_meth_0x43dad0()
+void cls_0x5a42d4_TTextPane::virt_meth_0x43dad0()
 
 {
   FUN_004830f0((LPCVOID)this->mbr_0x60);
@@ -73,7 +73,7 @@ void cls_0x5a42d4::virt_meth_0x43dad0()
 
 // Function at 0043db00
 
-void cls_0x5a42d4::virt_meth_0x43db00()
+void cls_0x5a42d4_TTextPane::virt_meth_0x43db00()
 
 {
   if (this->mbr_0x50 != 0) {
@@ -87,7 +87,7 @@ void cls_0x5a42d4::virt_meth_0x43db00()
 
 // Function at 0043db30
 
-void cls_0x5a42d4::virt_meth_0x43db30(cls_0x5a68d8 *param_1)
+void cls_0x5a42d4_TTextPane::virt_meth_0x43db30(cls_0x5a68d8 *param_1)
 
 {
   (*param_1->vftptr_0x0->virt_meth_0x4bde60_100)
@@ -102,7 +102,7 @@ void cls_0x5a42d4::virt_meth_0x43db30(cls_0x5a68d8 *param_1)
 
 // Function at 0043dfa0
 
-void cls_0x5a42d4::virt_meth_0x43dfa0(undefined4 param_1)
+void cls_0x5a42d4_TTextPane::virt_meth_0x43dfa0(undefined4 param_1)
 
 {
   char *pcVar1;
@@ -119,20 +119,20 @@ void cls_0x5a42d4::virt_meth_0x43dfa0(undefined4 param_1)
   switch(param_1) {
   case 8:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43dca0((cls_0x5a4358 *)this,1);
+    cls_0x5a4358_TConsolePane::meth_0x43dca0((cls_0x5a4358_TConsolePane *)this,1);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   default:
     return;
   case 0x21:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->mbr_0x74,this->mbr_0x78 - this->mbr_0x94)
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->mbr_0x74,this->mbr_0x78 - this->mbr_0x94)
     ;
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x22:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->mbr_0x74,this->mbr_0x94 + this->mbr_0x78)
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->mbr_0x74,this->mbr_0x94 + this->mbr_0x78)
     ;
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
@@ -149,12 +149,12 @@ void cls_0x5a42d4::virt_meth_0x43dfa0(undefined4 param_1)
       cVar2 = *pcVar1;
     }
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->mbr_0x74 + iVar6,this->mbr_0x78);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->mbr_0x74 + iVar6,this->mbr_0x78);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x24:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,0,this->mbr_0x78);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,0,this->mbr_0x78);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x25:
@@ -167,7 +167,7 @@ void cls_0x5a42d4::virt_meth_0x43dfa0(undefined4 param_1)
     break;
   case 0x26:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->mbr_0x74,this->mbr_0x78 - 1);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->mbr_0x74,this->mbr_0x78 - 1);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x27:
@@ -180,16 +180,16 @@ void cls_0x5a42d4::virt_meth_0x43dfa0(undefined4 param_1)
     break;
   case 0x28:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,this->mbr_0x74,this->mbr_0x78 + 1);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,this->mbr_0x74,this->mbr_0x78 + 1);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x2e:
     pcVar3 = this->vftptr_0x0;
-    cls_0x5a4358::meth_0x43dca0((cls_0x5a4358 *)this,1);
+    cls_0x5a4358_TConsolePane::meth_0x43dca0((cls_0x5a4358_TConsolePane *)this,1);
     (*pcVar3->virt_meth_0x444fc0_44)(this);
     return;
   case 0x72:
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,0,this->mbr_0x78);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,0,this->mbr_0x78);
     pcVar5 = (char *)(this->mbr_0x70 + this->mbr_0x60);
     iVar6 = 0;
     cVar2 = *pcVar5;
@@ -201,8 +201,8 @@ void cls_0x5a42d4::virt_meth_0x43dfa0(undefined4 param_1)
       pcVar5 = pcVar5 + 1;
       cVar2 = *pcVar1;
     }
-    cls_0x5a4358::meth_0x43dca0((cls_0x5a4358 *)this,iVar6 + 1);
-    cls_0x5a4358::meth_0x43dbc0((cls_0x5a4358 *)this);
+    cls_0x5a4358_TConsolePane::meth_0x43dca0((cls_0x5a4358_TConsolePane *)this,iVar6 + 1);
+    cls_0x5a4358_TConsolePane::meth_0x43dbc0((cls_0x5a4358_TConsolePane *)this);
     (*this->vftptr_0x0->virt_meth_0x444fc0_44)(this);
   case 0x59:
   case 0x79:
@@ -210,7 +210,7 @@ void cls_0x5a42d4::virt_meth_0x43dfa0(undefined4 param_1)
       return;
     }
     dVar4 = this->mbr_0x74;
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,0,this->mbr_0x78);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,0,this->mbr_0x78);
     pcVar5 = (char *)(this->mbr_0x70 + this->mbr_0x60);
     iVar6 = 0;
     cVar2 = *pcVar5;
@@ -222,13 +222,13 @@ void cls_0x5a42d4::virt_meth_0x43dfa0(undefined4 param_1)
       pcVar5 = pcVar5 + 1;
       cVar2 = *pcVar1;
     }
-    cls_0x5a4358::meth_0x43dca0((cls_0x5a4358 *)this,iVar6 + 1);
-    cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,dVar4,this->mbr_0x78);
+    cls_0x5a4358_TConsolePane::meth_0x43dca0((cls_0x5a4358_TConsolePane *)this,iVar6 + 1);
+    cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,dVar4,this->mbr_0x78);
     (*this->vftptr_0x0->virt_meth_0x444fc0_44)(this);
     return;
   }
   pcVar3 = this->vftptr_0x0;
-  cls_0x5a4358::meth_0x43de60((cls_0x5a4358 *)this,iVar6,this->mbr_0x78);
+  cls_0x5a4358_TConsolePane::meth_0x43de60((cls_0x5a4358_TConsolePane *)this,iVar6,this->mbr_0x78);
   (*pcVar3->virt_meth_0x444fc0_44)(this);
   return;
 }
@@ -237,7 +237,7 @@ void cls_0x5a42d4::virt_meth_0x43dfa0(undefined4 param_1)
 
 // Function at 0043e2b0
 
-void cls_0x5a42d4::virt_meth_0x43e2b0(int param_1)
+void cls_0x5a42d4_TTextPane::virt_meth_0x43e2b0(int param_1)
 
 {
   undefined *puVar1;

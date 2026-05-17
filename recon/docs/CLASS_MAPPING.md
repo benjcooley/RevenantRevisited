@@ -91,8 +91,8 @@ This document maps the decompiled classes in the `Classes/` folder to their corr
 ## Small Classes (Utility/Helper Classes)
 
 ### Text Bar
-- **Classes/cls_0x5a4358_TTextBar.cpp** (15,615 bytes) → **src/textbar.cpp** (2,996 bytes)
-  - Text bar UI component
+- ~~**Classes/cls_0x5a4358_TTextBar.cpp** (15,615 bytes) → **src/textbar.cpp** (2,996 bytes)~~
+- **RETRACTED 2026-05-16** — this size-heuristic mapping was WRONG. cls_0x5a4358 is actually **TConsolePane** (editor command console, inherits from TTextPane at cls_0x5a42d4). Golden-path identification by Wave-1C: two unique error strings ("Could not create kill event for command processor!" / "Could not create character event for command processor!") match TConsolePane::Initialize in `attic/src/editor.cpp:546,550` + Win32 thread+event pattern + struct field layout. Real retail TTextBar lives at FUN_0054bf70 (init wrapper) with three TMosaicSurface buffers; leaf class vtable still TBD. See `docs/ui/briefs/B_r4_textbar_assessment.md` for full evidence.
 
 ### Command System
 - **Classes/cls_0x5a7e98.cpp** (19,678 bytes) → **src/command.cpp** (102,817 bytes)

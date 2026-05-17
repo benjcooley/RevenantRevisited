@@ -101,7 +101,10 @@ The single biggest gap. Two instances of one pane class, each showing 3 bars (he
 
 ### Tier 2 — game-log overlay (transparent bottom area)
 
-- `[ ]` **TTextBar (retail)** — pre-release src/textbar.cpp = 3 KB, retail decomp `cls_0x5a4358_likely_TTextBar.cpp` = 13 KB (4× larger). The 4× delta suggests scrolling / multi-line / history features beyond the pre-release `Print()` + `SetHealthDisplay()` API. Per user the retail TextBar is the **transparent game-log panel** that overlays the bottom area. Pre-release test mode at `src/uitextbartest.cpp` validated the pre-release data API; the **retail port replaces** that.
+- `[ ]` **TTextBar (retail)** — **mislabel retracted**: `cls_0x5a4358` is NOT TTextBar; it's `TConsolePane` (editor console — pre-existing CLASS_MAPPING.md size-heuristic error, caught by Wave-1C 2026-05-16 per `docs/ui/briefs/B_r4_textbar_assessment.md`).
+  - **Real retail TTextBar init wrapper:** `FUN_0054bf70` (golden-path confirmed via "text bar" string anchor + cross-ref to pre-release `src/textbar.cpp` features). Body allocates a ~0x450-byte instance with **three `TMosaicSurface` children** — the multi-buffer transparent overlay infrastructure that explains the user's "transparent multi-line overlay" description.
+  - **TTextBar leaf class vtable address: still TBD** (Wave-2 to extract the `new <size>` allocation pattern inside FUN_0054bf70 + find the vtable wire site).
+  - `SetHealthDisplay` (pre-release opponent name+health overlay path) IS retained in retail bit-for-bit (FUN_0054cb00 — same 155/176/16/186/4-increment constants as pre-release).
   - Read recon decomp; diff vs pre-release; document the missing features.
   - Recon string evidence (RECON_UI_COVERAGE.md §4): "Trouble_initializing_Death_pane" — confirms a TDeathPane exists; similar diagnostic strings around TextBar may exist.
 
