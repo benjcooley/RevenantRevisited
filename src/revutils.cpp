@@ -1385,6 +1385,31 @@ FILE *rev_vfs_open(const char *name, const char *flags)
 
 } // anonymous namespace
 
+size_t VFSListByPrefix(const char *prefix, std::vector<std::string> &out)
+{
+    if (!prefix) return 0;
+    const std::string pfx = vfs_lower(prefix);
+    const size_t before = out.size();
+
+    auto walk = [&](VFSArchive *arc) {
+        if (!arc) return;
+        const mz_uint n = mz_zip_reader_get_num_files(&arc->zip);
+        for (mz_uint i = 0; i < n; ++i)
+        {
+            mz_zip_archive_file_stat st;
+            if (!mz_zip_reader_file_stat(&arc->zip, i, &st)) continue;
+            if (st.m_is_directory) continue;
+            const std::string lo = vfs_lower(st.m_filename);
+            if (lo.compare(0, pfx.size(), pfx) != 0) continue;
+            out.push_back(vfs_basename_lower(st.m_filename));
+        }
+    };
+
+    for (auto &up : g_base_archives) walk(up.get());
+    walk(g_module_archive.get());
+    return out.size() - before;
+}
+
 bool MountArchive(const char *name)
 {
     namespace fs = std::filesystem;
