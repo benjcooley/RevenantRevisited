@@ -719,6 +719,46 @@ void HaloSubmit(void* cp, EFxDebugMode dbg)
     c->halo->TickAndSubmitForTest(dbg);
 }
 
+// --- FB: real TFireEffect (procedural orange/yellow scatter, F03) --------
+// Spawns a sector-less TFireEffect at the harness-provided origin via
+// SpawnForTest and ticks its 15-quad scatter scatter through
+// TickAndSubmitForTest each frame. FB pipeline only (no particle bucket,
+// no point light); per INVENTORY F03 forensics §6 the pre-release effect
+// renders additive textured quads directly.
+//
+// SpellGround preview style — F03 has no live retail caller (forensics
+// §4) so the cadence choice is a presentational decision; SpellGround
+// 3 sec re-fire reads as "another patch of ambient fire pops up nearby",
+// which matches the scatter-patch ambient-fire semantic and the
+// spell-killed lifetime in pre-release Pulse.
+struct SFireCtx {
+    TFireEffect* fire = nullptr;
+};
+
+void* FireSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFireCtx();
+    c->fire = TFireEffect::SpawnForTest(origin);
+    if (!c->fire)
+        log_warn("[vfx] TFireEffect::SpawnForTest returned null; F03 entry will draw nothing");
+    return c;
+}
+
+void FireDestroy(void* cp)
+{
+    auto* c = static_cast<SFireCtx*>(cp);
+    delete c->fire;
+    delete c;
+}
+
+void FireSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFireCtx*>(cp);
+    if (!c->fire)
+        return;
+    c->fire->TickAndSubmitForTest(dbg);
+}
+
 // --- LS: flare + dynamic point light placeholder -------------------------
 struct SFlareCtx {
     float age = 0.0f;
@@ -849,6 +889,20 @@ struct SVfxTestBootstrap {
         halo.submit        = [](void* c, EFxDebugMode d) { HaloSubmit(c, d); };
         halo.destroy       = [](void* c) { HaloDestroy(c); };
         VfxTest::DeferredRegister(halo);
+
+        VfxTest::SEffect fire = {};
+        fire.id            = "TFireEffect";
+        fire.family        = "fire";
+        fire.pipeline      = "FB";
+        // F03 = ambient scatter-patch fire (per INVENTORY F03 §6).
+        // SpellGround re-fire cadence reads as "occasional patch flares
+        // up nearby" — matches the spell-killed pre-release lifetime
+        // (forensics §4) and the scatter-patch ambient semantic.
+        fire.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        fire.factory       = [](const S3DPoint& o) -> void* { return FireSpawn(o); };
+        fire.submit        = [](void* c, EFxDebugMode d) { FireSubmit(c, d); };
+        fire.destroy       = [](void* c) { FireDestroy(c); };
+        VfxTest::DeferredRegister(fire);
 
         VfxTest::SEffect flare = {};
         flare.id            = "TFlareAnimator.placeholder";
