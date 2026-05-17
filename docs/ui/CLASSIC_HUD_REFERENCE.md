@@ -74,9 +74,14 @@ This retrofits the pre-release `TTextBar::SetHealthDisplay(name, level)` API in 
 
 **Targeting is player-controlled** — the player explicitly steers toward / away from enemies to cycle the target. The right panel observes the target pointer dynamically: when the player switches targets, the panel updates to display the new opponent (presumably with a smooth transition, not a hard cut, but verify against retail). Two-opponents-facing-off framing reinforced — the target is the opponent the player is currently engaging.
 
-**Implementation implication for recon:** one character-panel class, two instances. The bound stat source determines what's shown:
-- Left instance binds to `Player` (always present once a game starts).
-- Right instance binds to whatever the "current target" pointer is (could be `Player->Target`, `CurrentTarget` global, or similar — recon will identify). The instance must **react to target changes**, not snapshot-once-on-show; the player retargets frequently mid-combat by steering.
+**Implementation: single instance, two-pass draw with stat-source swap (CORRECTED 2026-05-16 by Wave-2B).** The original framing assumed "one class, two instances (left=player, right=target)" but `FindBytes` on TPlyrStatusBar's vtable address (0x5a54e4) returned exactly ONE wire site in the binary — the player instance. There is no second global instance.
+
+The likely real architecture (to be verified in Wave-3 by extracting TPlyrStatusBar's draw methods):
+- **Single TPlyrStatusBar instance**
+- Draw method called **twice per frame**, once with the player as stat source and once with the current target — same widget, two paint operations, two source-stat pointers
+- OR: one paint operation that internally walks both stat sources
+
+The face-off framing IS real (the user's "two opponents facing off" description holds — Locke vs current target). It's just implemented via re-draw, not re-instance. **Don't model the port as two-instance** — verify against the actual draw method then mirror retail.
 
 **Not to be confused with**:
 - The **"HINSTEN" overlay** in `sample_screen_4` upper-right — that's a fansite-watermark on the screenshot, not in-game UI.

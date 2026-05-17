@@ -149,11 +149,11 @@ Per user, **settings / multiplayer / save / load / character-create / select-sta
 
 Don't hunt per-screen classes for these. Hunt the engine.
 
-- `[ ]` **B.r11 — Identify the widget engine entry point**. The parser reads `widgets.def` for primitive widget definitions and per-screen files for layout + behavior. Search the retail decomp for unique strings from `widgets.def` (widget type names like `BUTTON`, `LABEL`, `LIST`, `CHECKBOX`, etc.; common attribute names like `POS`, `SIZE`, `TEXT`, `STYLE`). The function emitting / parsing those strings is the engine's parse/build entry. Trace inward.
-- `[ ]` **B.r12 — Identify the widget renderer**. Once a widget tree is built, something walks it and renders each widget. Look for the draw-walk function — likely takes a widget-list pointer + a draw context. Cross-reference against `Display.Box` / `Display.WriteText` calls (the legacy CPU-surface primitives used by HUD code; the widget engine probably uses the same primitives).
-- `[ ]` **B.r13 — Identify the input dispatcher**. Walks the widget tree for hit-testing + routes input to the active widget. Probably entry point on each key/mouse event from the active screen.
-- `[ ]` **B.r14 — Port the engine** so the existing 22 `.def` files render correctly. Test mode: `--test=ui-defwidget-engine` driven against a known-simple `.def` (e.g. `exit.def` — just an OK/Cancel popup).
-- `[ ]` **B.r15 — Per-screen verification**. Once the engine renders, each DEF-driven screen should "just work" from the `.def` content; verify each screen against retail screenshots (`--test=ui-options`, `--test=ui-savegame`, etc.).
+- `[x]` **B.r11 — Identify the widget engine entry point** — DONE (Wave-2C, commit `42ff390`). Engine entry at `0x4377c0` (load); parse kickoff at `0x437620`; PANEL parser at `0x437000`; control dispatcher at `0x436ec0`; widget vocabulary fully extracted from `.rdata` at `0x005ccfb8-0x005cdc64`. See `docs/ui/briefs/B_r7_def_widget_engine.md`.
+- `[x]` **B.r12 — Identify the widget renderer** — partially done (Wave-2C). Renderer is per-widget via vtable+0xb4 lookup; the widget registry at `DAT_00655510` maps widget type names to widget classes whose vtable carries the draw method. The renderer is distributed (one method per widget subclass) rather than monolithic. Subclass class identities are deferred (Wave-3).
+- `[x]` **B.r13 — Identify the input dispatcher** — DONE (Wave-2C). Input dispatcher at `0x4361f0` (also handles 'R' hot-reload of the .def — dev feature).
+- `[ ]` **B.r14 — Port the engine** so the existing 22 `.def` files render correctly. Test mode: `--test=ui-defwidget-engine` driven against a known-simple `.def` (e.g. `exit.def` — but note: exit.def UI may route through `popup.def`'s "yesno" template, not be a separate activator). Real-target test mode candidate: `popup.def`.
+- `[ ]` **B.r15 — Per-screen verification**. Once the engine renders, each DEF-driven screen should "just work" from the `.def` content. **11 per-screen activators are identified** (connect / connectsimple / savegame / loadgame / options / popup / hostgame / joingame / createchar / ingamemenu / mpingame); selstart + userinfo activators still unbound (Wave-3 to chase). Verify each screen against retail behavior + `--test=ui-options`, `--test=ui-savegame`, etc.
 
 ### Tier 10 — Special-cased non-HUD screens (NEW)
 

@@ -112,7 +112,18 @@ The opposite of merging: Ghidra's class-tracing **misses** static methods and ba
    - If it's a bare function with identified role: `util_RoleName_XXXXXX.cpp` or `cls_misc_RoleName_XXXXXX.cpp` (see existing `cls_misc_*` and `util_*` files for the pattern)
    - If purpose unknown yet: `FUN_00XXXXXX.cpp` is acceptable as a placeholder until you can name it
 
-Function types that are commonly missing this way:
+### Coordination note — Ghidra project is single-writer
+
+Discovered by Wave-2B (2026-05-16): the Ghidra project at `data/RevenantDev` uses a single-writer lock. Multiple agents running `analyzeHeadless` concurrently against the SAME project will block / retry on contention.
+
+Mitigations:
+- **Serialize Ghidra-CLI access** when dispatching parallel agents — only one agent runs Ghidra-CLI at a time. (Other agents can still read recon decomps, write briefs, work with pre-extracted bodies.)
+- **OR use snapshot copies** of `RevenantDev.{gpr,rep}` into per-agent working dirs (`-import` flag wouldn't help since you'd need analysis; just `cp` the directory pair).
+- Agents should retry on lock failure rather than treating it as a hard error.
+
+`apply_renames.sh` is safe to run anytime — it only modifies `.cpp` files under `recon/`, no Ghidra interaction.
+
+### Function types that are commonly missing this way:
 - Pane / screen init wrappers (Wave-1A's pane init functions like FUN_00549740 are likely in this category)
 - C-style free functions in source files (helpers / utilities / format routines)
 - Static methods on classes (C++ static — no `this`, looks like a free function in the binary)
