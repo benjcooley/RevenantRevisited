@@ -74,7 +74,20 @@ if it grows beyond one paragraph):
 2. **Spawn / emit shape** — how many particles per trigger, what
    trigger semantics (one-shot? duration? continuous? loop?),
    initial direction (radial cone? caller-supplied vector?
-   character-attached vector?), spread distribution.
+   character-attached vector?), spread distribution, **and the
+   emit anchor convention**:
+   - Where in the trigger world does the effect ORIGINATE? At the
+     spawn-call's exact (x, y, z), OR at the ground projection
+     (z snapped to surface), OR at the character's feet, OR at
+     the weapon tip, OR at a sub-object hand bone?
+   - Many pulse effects (ground halo, heal aura, footstep ripple,
+     teleport circle) emit from the **ground center of the target
+     emitter point** — NOT from the spawn call's exact Z. Check
+     the retail code for the snap-to-ground (or snap-to-water-
+     surface, or snap-to-character-feet) convention.
+   - Document the convention explicitly. A pulse that should emit
+     at the player's feet but emits at the player's hand reads
+     totally wrong even if the effect itself is otherwise correct.
 3. **Per-frame integration** — gravity/drag/wind, alpha curve,
    scale curve, frame-cell curve, death condition (life-elapsed,
    ground-impact, owner-state).
