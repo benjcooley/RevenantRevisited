@@ -325,9 +325,9 @@ void Render()
     }
 
     // Step 2: empty tile pass (clear-only) + lighting. RunLightingPass
-    // drains the FX queue at the tail. Mid-gray clear (debug -- the
-    // grey background helps the original author see particle quad
-    // shapes against the bg to diagnose orientation issues).
+    // drains the FX queue at the tail. Mid-gray clear -- per author's
+    // diagnostic preference, the gray bg helps see particle quad shapes
+    // against the bg (vs black where dim particles disappear).
     Renderer->BeginTilePass(0.45f, 0.46f, 0.50f, 1.0f);
     Renderer->EndTilePass();
     Renderer->RunLightingPass();
