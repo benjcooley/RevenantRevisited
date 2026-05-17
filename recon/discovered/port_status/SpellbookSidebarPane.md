@@ -2,9 +2,17 @@
 
 Retail vtable: **`cls_0x5a5ae8`** (46 slots). **Class identity unresolved** -
 see [B.r9 brief](../../../docs/ui/briefs/B_r9_parchment_viewer.md). The class
-is the **in-game "Spell" sidebar tab content pane** (CLASSIC_HUD_REFERENCE.md
-section 3d), displaying the player's known-spells list as a scrollable
-parchment-styled column with up/down arrow buttons.
+is the **in-game "Book" sidebar tab content pane** (the player's SPELL BOOK,
+displaying the known-spells list as a scrollable parchment-styled column with
+up/down arrow buttons).
+
+**Sidebar position clarified by Wave-4A** ([B.r11 brief](../../../docs/ui/briefs/B_r11_sidebar_tab_cascade.md)):
+the UI label on the button strip is "**Book**" (upper-region position 1, mode value 2 in
+`DAT_0065d1b8`). The "Book" sidebar tab presents the player's **spell book**
+contents (= list of known spells) — the role descriptor `SpellbookSidebarPane`
+remains accurate but the UI label is "Book", NOT "Spell". The "Spell" labelled
+button is at the LOWER-region position 3 and binds to a DIFFERENT class
+(`cls_0x5a5978 = QuickSpellSidebarPane`, see `QuickSpellSidebarPane.md`).
 
 **This file is named `SpellbookSidebarPane.md` to describe its ROLE, not to
 claim a retail class name.** The src/ candidates (`TBookPane`, `TScrollPane`,

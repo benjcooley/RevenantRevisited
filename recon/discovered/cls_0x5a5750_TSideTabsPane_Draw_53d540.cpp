@@ -1,6 +1,6 @@
-// FUN_0053d540 @ 0053d540 size=409
+// FUN_0053d540_TSideTabsPane_Draw @ 0053d540 size=409
 
-void __fastcall FUN_0053d540(int param_1)
+void __fastcall FUN_0053d540_TSideTabsPane_Draw(int param_1)
 
 {
   int iVar1;

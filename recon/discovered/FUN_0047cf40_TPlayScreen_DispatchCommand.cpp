@@ -1,8 +1,8 @@
-// FUN_0047cf40 @ 0047cf40 size=3588
+// FUN_0047cf40_TPlayScreen_DispatchCommand @ 0047cf40 size=3588
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall FUN_0047cf40(int param_1,int param_2)
+void __thiscall FUN_0047cf40_TPlayScreen_DispatchCommand(int param_1,int param_2)
 
 {
   int *piVar1;
@@ -63,11 +63,11 @@ void __thiscall FUN_0047cf40(int param_1,int param_2)
         if (DAT_0066829c == 0) {
           FUN_0054d390();
         }
-        FUN_004d3b90(0,3);
+        FUN_004d3b90_BeginFighting(0,3);
         *(undefined4 *)(DAT_00667fcc + 0xe8) = 1;
       }
       else {
-        FUN_004d3fd0();
+        FUN_004d3fd0_EndFighting();
         *(undefined4 *)(DAT_00667fcc + 0xe8) = 0;
       }
     }
@@ -78,10 +78,10 @@ void __thiscall FUN_0047cf40(int param_1,int param_2)
         if (DAT_0066829c == 0) {
           FUN_0054d390();
         }
-        FUN_004d3b90(0,0x19);
+        FUN_004d3b90_BeginFighting(0,0x19);
       }
       else {
-        FUN_004d3fd0();
+        FUN_004d3fd0_EndFighting();
       }
     }
     break;
@@ -90,8 +90,8 @@ void __thiscall FUN_0047cf40(int param_1,int param_2)
       ExceptionList = pvStack_c;
       return;
     }
-    if ((*(int *)(uVar6 + 0xe0) == 0) || (iVar3 = FUN_004dab80(s_sneak_005c618c), iVar3 == 0)) {
-      FUN_004cf2e0();
+    if ((*(int *)(uVar6 + 0xe0) == 0) || (iVar3 = FUN_004dab80_TActionBlock_Is(s_sneak_005c618c), iVar3 == 0)) {
+      FUN_004cf2e0_TCharacter_StartSneak();
       ExceptionList = pvStack_c;
       return;
     }
@@ -335,17 +335,17 @@ LAB_0047d807:
     break;
   case 0x21:
     if (uVar6 != 0) {
-      FUN_004d2480(1);
+      FUN_004d2480_ButtonAttack(1);
     }
     break;
   case 0x22:
     if (uVar6 != 0) {
-      FUN_004d2480(2);
+      FUN_004d2480_ButtonAttack(2);
     }
     break;
   case 0x23:
     if (uVar6 != 0) {
-      FUN_004d2480(3);
+      FUN_004d2480_ButtonAttack(3);
     }
     break;
   case 0x24:
@@ -361,7 +361,7 @@ LAB_0047d807:
   case 0x2e:
   case 0x2f:
     if (uVar6 != 0) {
-      FUN_004d2480(param_2 + -0x20);
+      FUN_004d2480_ButtonAttack(param_2 + -0x20);
     }
     break;
   case 0x30:
@@ -420,7 +420,7 @@ LAB_0047d807:
   case 0x41:
   case 0x42:
     if (uVar6 != 0) {
-      FUN_004d2480(param_2 + -0x3f);
+      FUN_004d2480_ButtonAttack(param_2 + -0x3f);
     }
     break;
   case 0x43:
@@ -437,21 +437,21 @@ LAB_0047d807:
       return;
     }
     if ((uVar2 & 0x100) != 0) {
-      FUN_004cf490();
+      FUN_004cf490_SetRunMode();
       ExceptionList = pvStack_c;
       return;
     }
 LAB_0047d176:
-    FUN_004cf000();
+    FUN_004cf000_SetWalkMode();
     break;
   case 0x50:
     if ((DAT_0066829c != 0) && (DAT_0065db48 == 0)) {
       FUN_0047c580(0);
       if (DAT_00667fcc != 0) {
         FUN_0044f140(5,0,0);
-        FUN_004cee70(0);
+        FUN_004cee70_Stop(0);
       }
-      FUN_00463e00();
+      FUN_00463e00_LoadDef_mpingame();
       FUN_0048ed90(&DAT_0065db08,0xffffffff);
       uVar7 = 7;
       uVar4 = FUN_0048ed60(&DAT_0065db08);
@@ -465,14 +465,14 @@ LAB_0047d176:
     break;
   case 0x52:
     _DAT_0066fe3c = 1;
-    FUN_0053a8b0();
+    FUN_0053a8b0_LoadDef_options();
     FUN_0048f040(&DAT_0066fcc0,(-(uint)(DAT_0066829c != 0) & 0xfffffff8) + 8 | 7);
     FUN_0053aa60();
     _DAT_0065cb40 = 1;
     break;
   case 0x53:
     _DAT_0066fa68 = 1;
-    FUN_00539380();
+    FUN_00539380_LoadDef_loadgame();
     FUN_0048f040(&DAT_0066f8d0,(-(uint)(DAT_0066829c != 0) & 0xfffffff8) + 8 | 7);
     FUN_00539440();
     _DAT_0065cb40 = 1;
@@ -500,7 +500,7 @@ LAB_0047d176:
       (**(code **)*puVar5)(1);
     }
     FUN_004830f0(uVar4);
-    FUN_005399f0();
+    FUN_005399f0_LoadDef_savegame();
     FUN_0048f040(&DAT_0066fb08,(-(uint)(DAT_0066829c != 0) & 0xfffffff8) + 8 | 7);
     FUN_00539ab0();
     _DAT_0065cb40 = 1;

@@ -1,6 +1,6 @@
-// FUN_00487f50 @ 00487f50 size=100
+// FUN_00487f50_InventorySidebarPane_ctor @ 00487f50 size=100
 
-undefined4 * __fastcall FUN_00487f50(undefined4 *param_1)
+undefined4 * __fastcall FUN_00487f50_InventorySidebarPane_ctor(undefined4 *param_1)
 
 {
   param_1[1] = 0x1c4;

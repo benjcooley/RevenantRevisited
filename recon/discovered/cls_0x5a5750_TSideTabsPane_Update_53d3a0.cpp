@@ -1,6 +1,6 @@
-// FUN_0053d3a0 @ 0053d3a0 size=90
+// FUN_0053d3a0_TSideTabsPane_Update @ 0053d3a0 size=90
 
-void __fastcall FUN_0053d3a0(int param_1)
+void __fastcall FUN_0053d3a0_TSideTabsPane_Update(int param_1)
 
 {
   int iVar1;

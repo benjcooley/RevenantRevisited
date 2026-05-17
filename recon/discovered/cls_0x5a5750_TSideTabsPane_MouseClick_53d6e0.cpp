@@ -1,8 +1,8 @@
-// FUN_0053d6e0 @ 0053d6e0 size=171
+// FUN_0053d6e0_TSideTabsPane_MouseClick @ 0053d6e0 size=171
 
 /* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
 
-void __thiscall FUN_0053d6e0(int param_1,int param_2,int param_3,int param_4)
+void __thiscall FUN_0053d6e0_TSideTabsPane_MouseClick(int param_1,int param_2,int param_3,int param_4)
 
 {
   if (((((param_2 == 5) || (param_2 == 4)) && (-1 < param_3)) &&

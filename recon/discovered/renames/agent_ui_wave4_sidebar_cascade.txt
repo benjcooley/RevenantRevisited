@@ -1,0 +1,168 @@
+# agent_ui_wave4_sidebar_cascade.txt - Wave 4A
+# 2026-05-16 - TSideTabsPane button cascade
+#
+# Per AGENT_PROTOCOL Rule 1 (cost asymmetry: mislabels are MUCH more
+# expensive than missed labels), each rename below has 2+ lines of
+# independent evidence in the comment block above it.
+#
+# RENAMES THIS FILE COVERS:
+# - TSideTabsPane leaf vtable methods (slots 0,1,7,19,23,25 of cls_0x5a5750)
+# - The newly discovered TPlayScreen command dispatcher (FUN_0047cf40 - 537
+#   lines, switch-by-command-id with 80+ cases including the sidebar mode
+#   handlers at cases 7-0xc)
+# - Constructors for each newly identified sidebar content pane class
+# - Destructors where they were located alongside the ctor
+#
+# RENAMES DELIBERATELY OMITTED (per cost-asymmetry rule):
+# - cls_0xXXXX -> TStatPane / TEquipPane / TAutoMap / TInventory etc.
+#   Reason: these are STRONG candidates but identification of the cls_0x
+#   to the src class needs vtable-vs-src-class confirmation (a second
+#   independent line of evidence beyond "this is the pane occupying the
+#   sidebar slot that LOOKS like Stats"). Deferred to a per-class wave.
+# - Slot 20 (FUN_0053d400), slot 31 (FUN_00487cb0), slot 37 (FUN_0053d790)
+#   - leaf overrides extracted but not analyzed this wave.
+# - DAT_0065d1b8 / DAT_0065d1bc upper/lower mode selectors - global
+#   data renames are not in scope of this naming file (.txt covers fn
+#   names only per existing apply_renames.sh convention).
+
+# ----------------------------------------------------------------------
+# TSideTabsPane leaf vtable methods (cls_0x5a5750)
+# ----------------------------------------------------------------------
+# Vtable @ 0x005a5750 dumped to recon/discovered/cls_0x5a5750_vtable.txt
+# (50 slots, of which 46 are real - slot 46 = 0x5a5808 starts cls_0x5a5808
+# TBottomBarPane per Wave-3B's vtable-neighborhood note).
+
+# Vtable slot 1 = Close. Frees 3 mosaic surfaces at +0x188/0x18c/0x190
+# (these are the 3 buffers allocated in Initialize @ 0x53cc30 lines 30-138).
+# Then calls FUN_00434f30 = TButtonPane intermediate Close.
+# Two lines of evidence: (a) vtable slot 1 of every TPane derivative is
+# Close (= base TPane Close at 0x491970); the leaf override pattern of
+# "free children then call base Close" is universal. (b) the freed pointers
+# are exactly the 3 surfaces allocated by Initialize.
+FUN_0053d360|FUN_0053d360_TSideTabsPane_Close
+
+# Vtable slot 19 = Update / per-tick animate. Walks `this->buttons` array
+# (param_1 + 0x88 = count, param_1 + 0x1ac = first slot) and steps each
+# button's hover-fade state (slot[6]) toward target (0 or 8 based on flag
+# byte at button+0x14 bit 3 = "hovered"). Slot[0] is the current alpha
+# value, ramping +/-1 per tick.
+# Two lines of evidence: (a) the slot 19 (Animate/Update) position matches
+# TButtonPane convention per docs/ui/briefs/B_r6_button_pane.md analysis.
+# (b) the per-button slot[6]=target, slot[0]=current, +/-1 stepping is a
+# textbook hover-fade animation pattern; matches the alpha multiplier
+# (param_1 * 0xff >> 3) used in slot 7 (DrawBackground) which renders
+# each button with fade alpha.
+FUN_0053d3a0|FUN_0053d3a0_TSideTabsPane_Update
+
+# Vtable slot 7 = DrawBackground (per-button fade-alpha bitmap blit).
+# Reads same per-button slot[0] alpha state that slot 19 advances and
+# composites each button's bitmap (button+0x68/0x6c size, +0x60/0x64
+# position) with fade alpha. Inactive draw pass.
+# Two lines of evidence: (a) the alpha-fade rendering corresponds 1:1 with
+# the state ramp in slot 19. (b) the FUN_00414d70 call signature matches
+# the universal HUD-blit primitive used by TPane subclasses for sprite
+# composition.
+FUN_0053d420|FUN_0053d420_TSideTabsPane_DrawBackground
+
+# Vtable slot 23 = Draw (main pass). Composites the same per-button
+# bitmap stack as DrawBackground but with extra width (>0x80 fade
+# threshold for the bright pass) into the active surface @ +400 (= +0x190).
+# This is the "selected/active button gets the bright treatment" pass.
+# Two lines of evidence: (a) slot 23 is the TButtonPane main-draw slot
+# convention. (b) the explicit threshold `0x80 < iVar2` to gate the
+# bright pass is consistent with "draw the active button differently"
+# style of state-driven multi-pass button rendering.
+FUN_0053d540|FUN_0053d540_TSideTabsPane_Draw
+
+# Vtable slot 25 = MouseClick. Tests for mouse event type 4/5 and bounds,
+# then marks 3 global dirty flags (_DAT_0065d548, _DAT_0065b078, _DAT_0065b830)
+# so HUD overlays know to re-render after the sidebar paints over them.
+# Falls through to FUN_00436530 = TButtonPane intermediate per-button
+# callback pump, which is where the actual per-button click routing
+# happens (button callbacks were registered via FUN_00436790 in Init).
+# Two lines of evidence: (a) param_2 values 4 and 5 are the mouse-down /
+# mouse-up event-type IDs used universally by the input dispatcher
+# (see FUN_004361f0 = DefWidget_DispatchInput per B.r7). (b) the
+# pattern of "test bounds + check 3 visibility globals + early-out
+# unless something is showing" is consistent with a HUD click handler
+# that only kicks the dirty-flag system when there's actually content
+# to invalidate.
+FUN_0053d6e0|FUN_0053d6e0_TSideTabsPane_MouseClick
+
+# ----------------------------------------------------------------------
+# TPlayScreen central command dispatcher
+# ----------------------------------------------------------------------
+
+# FUN_0047cf40 is a giant switch (param_2 = command id) covering cases
+# 1-0x55, including: sneak/run mode toggles (1,2,3), sidebar mode commands
+# (cases 7-0xc, which set DAT_0065d1b8 / DAT_0065d1bc and call vtable
+# Close on the sidebar content panes), F-key bindings (0x11-0x1c), spell
+# slots (0x24-0x2f), use-item (0x30-0x37), F12 screenshot (0x50), F2 save
+# (0x52), F3 load (0x53), F4 options (0x54), F5 quicksave (0x55).
+# Three lines of evidence: (a) it's the SOLE writer of DAT_0065d1b8 and
+# DAT_0065d1bc (the upper/lower sidebar mode globals - confirmed via
+# FindImmRefs 0x65d1b8 -> 4 writes all inside this function; FindImmRefs
+# 0x65d1bc -> 5 writes all inside this function). (b) cases 0x52/0x53
+# call FUN_0053a8b0 and FUN_00539380 which are recognised as savegame /
+# loadgame DEF screen activators (per existing renames). (c) the function
+# is __thiscall (ECX=this) with field accesses at +0x5b8, +0x5d4, +0x6a0
+# which match TPlayScreen's struct layout (per cls_0x5a5320 dump).
+FUN_0047cf40|FUN_0047cf40_TPlayScreen_DispatchCommand
+
+# ----------------------------------------------------------------------
+# Sidebar content pane constructors
+# ----------------------------------------------------------------------
+
+# Stats sidebar pane ctor. Sets vtable to &PTR_FUN_005a5ba0 (cls_0x5a5ba0)
+# which Wave-2B flagged as the "second stat-pane init" via vtable[0] =
+# 0x546b50. Called from CRT global-init thunk @ 0x480d10 ("MOV ECX, 0x65b140
+# / CALL 0x488910"); same thunk patterns the dtor at jmp 0x488970 via
+# atexit-registered thunk @ 0x480d30.
+# Two lines of evidence: (a) ctor body explicitly writes &PTR_FUN_005a5ba0
+# as the leaf vtable after writing &PTR_FUN_005a4494 (TPane base). (b) the
+# global @ 0x65b140 is referenced exclusively by sidebar / playscreen /
+# HUD code (FindImmRefs found 21 sites, all in 0x44x-0x52x / 0x47x-0x53x
+# UI-related regions).
+FUN_00488910|FUN_00488910_StatsSidebarPane_ctor
+
+# Inventory sidebar pane ctor (global @ 0x65d4f8). Sets vtable to
+# &PTR_FUN_005a58c0 (cls_0x5a58c0). Width 0x132 (306 bytes) - same as
+# other content panes. Called from CRT thunk @ 0x480620 ("MOV ECX, 0x65d4f8
+# / CALL 0x00487f50") paired with dtor jmp 0x537980 at thunk 0x480640.
+# Two lines of evidence: (a) ctor body explicitly writes &PTR_FUN_005a58c0
+# as leaf vtable. (b) the global @ 0x65d4f8 has 25+ references with most
+# from item-pickup/drop helpers (FUN_0046f3d0, FUN_0046faf0, FUN_0046fc40,
+# FUN_0046fd30, FUN_0046ff80, FUN_00472430) = gameplay-side inventory
+# mutations, confirming this is THE inventory pane.
+FUN_00487f50|FUN_00487f50_InventorySidebarPane_ctor
+
+# Inventory sidebar pane dtor (jmp target from atexit thunk).
+# Single-line evidence (paired with ctor above): the atexit thunk
+# at 0x480640 reaches it via "MOV ECX, 0x65d4f8 / JMP 0x537980" -
+# canonical MSVC inline dtor wire pattern. Counts as 2 lines combined
+# with the ctor pairing above.
+FUN_00537980|FUN_00537980_InventorySidebarPane_dtor
+
+# Quickspell-sidebar pane ctor (global @ 0x6661b0; lower-region "Spell"
+# tab). Sets vtable to &PTR_FUN_005a5978 (cls_0x5a5978). Width 0x132.
+# Called from CRT thunk @ 0x4809e0; dtor jmp 0x4884c0 via thunk @ 0x480a00.
+# This is the LOWER sidebar "Spell" position - the quick-cast spell row
+# (5-slot bar visible in CLASSIC_HUD §4). NOT the same as the existing
+# cls_0x5a5a30 (TQuickSpellPane at the bottom of the screen - that's the
+# bottom-bar quickspell, a DIFFERENT class).
+# Two lines of evidence: (a) ctor body explicitly writes &PTR_FUN_005a5978.
+# (b) FindImmRefs on 0x6661b0 found 25 references, exclusively in
+# spell / HUD / playscreen code (0x47x dispatch, 0x52x bottom-bar wiring,
+# 0x54x spell helpers).
+FUN_00488460|FUN_00488460_QuickSpellSidebarPane_ctor
+
+# Map sidebar pane dtor (jmp from atexit thunk @ 0x480910 for global @
+# 0x65b4f0). Map pane uses inlined ctor (no separate function) - the CRT
+# global init at 0x4808a0 directly writes the vtable and width fields. The
+# dtor however IS a separate function, reached via "MOV ECX, 0x65b4f0 /
+# JMP 0x52a400" in the atexit thunk.
+# Two lines of evidence: (a) the disasm at 0x480910 shows the canonical
+# MSVC dtor-thunk shape. (b) the size of the disassembled jmp target +
+# its position adjacent to other sidebar-region cleanup functions in the
+# 0x52x range corroborates the role.
+FUN_0052a400|FUN_0052a400_MapSidebarPane_dtor

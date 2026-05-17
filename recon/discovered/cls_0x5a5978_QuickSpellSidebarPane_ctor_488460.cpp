@@ -1,6 +1,6 @@
-// FUN_00488460 @ 00488460 size=92
+// FUN_00488460_QuickSpellSidebarPane_ctor @ 00488460 size=92
 
-undefined4 * __fastcall FUN_00488460(undefined4 *param_1)
+undefined4 * __fastcall FUN_00488460_QuickSpellSidebarPane_ctor(undefined4 *param_1)
 
 {
   param_1[1] = 0x1c4;

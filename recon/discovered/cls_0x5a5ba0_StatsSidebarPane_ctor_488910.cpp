@@ -1,6 +1,6 @@
-// FUN_00488910 @ 00488910 size=87
+// FUN_00488910_StatsSidebarPane_ctor @ 00488910 size=87
 
-undefined4 * __fastcall FUN_00488910(undefined4 *param_1)
+undefined4 * __fastcall FUN_00488910_StatsSidebarPane_ctor(undefined4 *param_1)
 
 {
   param_1[3] = 0xbc;

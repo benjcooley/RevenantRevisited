@@ -14,7 +14,7 @@ void FUN_0047b290_TPlayScreen_Close(void)
   FUN_0051eda0_TPlayerManager_Clear();
   thunk_FUN_00491970();
   thunk_FUN_00491970();
-  FUN_0053d360();
+  FUN_0053d360_TSideTabsPane_Close();
   FUN_0044d9c0();
   FUN_00537940();
   FUN_00434f30_TButtonPane_Close();
