@@ -115,7 +115,11 @@ checklist.
   string-based discovery results, PlayScreen decomp survey,
   retail-HUD-element → candidate-recon-class coverage map, gaps.
 
-**Roster status** (per RETAIL_UI_RECOVERY_PLAN.md Tier system):
+**Roster status** (per RETAIL_UI_RECOVERY_PLAN.md Tier system — the plan doc has the full per-class enumeration; BURNDOWN tracks status only):
+
+Tier 0 substrate done. Tier 1–8 panes mostly identified at the container layer; content classes per tab in flight. Tier 9 DEF engine identified, port pending (B.r14). Tier 10 OOG: TLogoScreen partial; TDeathPane / TBookPane / TScrollPane / credits / main-menu placeholders open (B.r16–B.r20). Tier 11 sidebar tab content classes (B.r21–B.r25) — spell list done; character / stats / automap / inventory placeholders open.
+
+Highlights (full status in [RETAIL_UI_RECOVERY_PLAN.md](RETAIL_UI_RECOVERY_PLAN.md)):
 
 - `[~]` **B.r1 Forensic inventory + recovery plan** — landed `e8c4f3c`
   (inventories) + this commit (plan). Tier roster populated; per-class

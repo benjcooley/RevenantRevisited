@@ -114,11 +114,18 @@ The single biggest gap. Two instances of one pane class, each showing 3 bars (he
 
 ### Tier 3 — right sidebar (multifunction panel)
 
-- `[ ]` **TMultiCtrlPane** — pre-release present in `src/multictrl.h`. Confidence: medium. The pre-release **uses a global `MultiPanes[]` array** that the multifunction button strip switches between; that pattern likely holds in retail. Verify against recon: is the sidebar a single big pane or is each tab a separate pane? What's the tab-switching mechanism?
-- `[ ]` **TEquipPane** — pre-release present in `src/equip.h`. Verify retail.
-- `[ ]` **TSpellPane** — pre-release in `src/spellpane.h` (note: not `TQuickSpellPane`).
-- `[ ]` **TAutoMap** — pre-release in `src/automap.h`. `RECON_UI_COVERAGE.md` notes PERFECT yaml mapping for retail.
-- `[ ]` **TStatPane** — pre-release in `src/statpane.h`. Likely the "character/skills" tab content.
+The sidebar is a single container (`TSidePane` = `cls_0x5a53ec`, Wave-1A) whose top region holds a vertical mode-switcher strip (`TSideTabsPane` = `cls_0x5a5750`, Wave-1A, 6 mode-switcher buttons) and whose remaining area shows the **content pane** for the current mode. Per `CLASSIC_HUD_REFERENCE.md` §3 and user's explicit grouping:
+
+**Upper sidebar region (three content modes):**
+- `[ ]` **Character content pane (paper-doll + equipment slots; CLASSIC_HUD §3b)** — pre-release `src/equip.h` `TEquipPane` (paper-doll + equipment around character body) + `src/inventory.h` `TInventory` (item grid below). Retail vtable not yet pinned. Container relationship unknown — could be one pane that owns both halves, or two stacked panes in this mode slot.
+- `[ ]` **Stats content pane (CLASSIC_HUD §3a)** — pre-release `src/statpane.h` `TStatPane`. Retail vtable not yet pinned; this is a strong candidate for `cls_0x5a5ba0` (vtable[0] = `0x546b50`, the "second stat-pane init" per Wave-2B — adjacent to `cls_0x5a5ae8` in .rdata).
+- `[x]` **Spell list content pane (CLASSIC_HUD §3d)** — identified as `cls_0x5a5ae8` by Wave-3B (role descriptor `SpellbookSidebarPane`; iterates player's known-spells list at `DAT_00667fcc+0x2ec/+0x2fc`, formatted `"SPELL %s"`). **NOT** the pre-release `src/spellpane.h` `TSpellPane` (which is the talisman composer). Likely a new retail class with no src name.
+
+**Lower sidebar region (two combined content modes, per user):**
+- `[ ]` **Automap content pane (CLASSIC_HUD §3e)** — pre-release `src/automap.h` `TAutoMap`. `RECON_UI_COVERAGE.md` notes PERFECT yaml mapping for retail.
+- `[ ]` **Inventory content pane (lower sidebar — combined with automap per user grouping)** — `src/inventory.h` `TInventory`. Container relationship with the upper-region "character" mode TBD: is this the same `TInventory` class instantiated twice, or are paper-doll-grid and lower-sidebar inventory distinct content panes?
+
+**Sidebar-content-host pattern note:** the pre-release shell `TMultiCtrlPane` (`src/multictrl.h`) used a global `MultiPanes[]` array that the button strip switched between. Retail evolved this into `TSideTabsPane` (cls_0x5a5750) — verify whether the switching pattern (one pane visible at a time vs simultaneous upper+lower) survives or got rebuilt.
 
 ### Tier 4 — bottom quickspell + shelf
 
@@ -165,10 +172,25 @@ Don't hunt per-screen classes for these. Hunt the engine.
 These are neither pure-HUD panes nor DEF-driven; they have their own special-case classes:
 
 - `[ ]` **B.r16 — TLogoScreen** (`cls_0x5a5d18`) — main menu / splash. Partly identified in `recon/discovered/cls_0x5a5d18_TLogoScreen_{Animate,Initialize}.cpp`. May actually BE the main menu (screenshot 5 / `main_menu_ui.jpg`) or be the pre-menu splash with the menu as a separate screen.
-- `[ ]` **B.r17 — TDeathPane** (`src/death.h`) — death screen. Has src/ impl; cross-check retail.
-- `[ ]` **B.r18 — TBookPane / TScrollPane** (`src/scroll.h`) — book / scroll reader. Renders IN the right sidebar per `CLASSIC_HUD_REFERENCE.md §3c`. Has src/ impl; cross-check retail.
-- `[ ]` **B.r19 — Credits screen** — TBD whether DEF-driven or special-cased.
+- `[ ]` **B.r17 — TDeathPane** (`src/death.h`) — death screen. Has src/ impl (31+85 lines, very thin); cross-check retail. Recon string evidence: `"Trouble_initializing_Death_pane"` confirms retail class exists. Likely heavily evolved from src/ stub.
+- `[ ]` **B.r18 — TBookPane / TScrollPane** (`src/scroll.h`) — book / scroll reader. Renders IN the right sidebar per `CLASSIC_HUD_REFERENCE.md §3c`. Has src/ impl (87+331 lines); cross-check retail. **Note (Wave-3B):** `cls_0x5a5ae8` is NOT TBookPane/TScrollPane (Wave-3B explicitly rejected those candidates — that class is the spell-list sidebar pane). The real retail TBookPane/TScrollPane vtable is in a different .rdata region — separate forensic hunt required.
+- `[ ]` **B.r19 — Credits screen** — TBD whether DEF-driven or special-cased. No identification yet. Hunt: check for a `credits.def` activator + look for a "TCredits" / scrolling-text class in recon.
 - `[ ]` **B.r20 — Main menu identification** — confirm whether `main_menu_ui.jpg` is TLogoScreen, a separate TMainMenuScreen, or a DEF-driven screen wrapped in special chrome.
+
+### Tier 11 — sidebar tab content classes (NEW — per user 2026-05-16 grouping)
+
+The 6-tab sidebar (per `TSideTabsPane` Wave-1A finding) splits visually into two content regions:
+
+**Upper sidebar (3 tabs):**
+- `[ ]` **B.r21 — Character sidebar tab (upper)** — paper-doll + equipment slots, per CLASSIC_HUD §3b. Roster items: `TEquipPane` (src/equip.h) + possibly `TInventory` (src/inventory.h) for the item grid below. Container relationship TBD.
+- `[ ]` **B.r22 — Stats sidebar tab (upper)** — `TStatPane` (src/statpane.h). Strong retail candidate: `cls_0x5a5ba0` (vtable[0] = `0x546b50` — the "second stat-pane init" Wave-2B; sibling vtable to `cls_0x5a5ae8` in .rdata). Confirm via dedicated extraction.
+- `[x]` **B.r23 — Spell list sidebar tab (upper)** — DONE per Wave-3B (`cls_0x5a5ae8` = `SpellbookSidebarPane` role descriptor; real class identity remains unnamed). See `briefs/B_r9_parchment_viewer.md`.
+
+**Lower sidebar (combined automap + inventory):**
+- `[ ]` **B.r24 — Automap sidebar tab (lower)** — `TAutoMap` (src/automap.h). PERFECT yaml mapping per `RECON_UI_COVERAGE.md`; identify retail vtable + verify.
+- `[ ]` **B.r25 — Inventory sidebar tab (lower)** — `TInventory` (src/inventory.h). Per user: this is the lower-sidebar inventory, separate from / combined with the upper Character tab's paper-doll grid. Container relationship needs verification: same class twice? distinct retail classes? part of the Character tab spilling into the lower region?
+
+**Open structural question (B.r21 through B.r25):** the visual organization shows simultaneous upper+lower content in some modes (`sample_screen_1.jpg`: Stats on top, Automap on bottom). That implies the sidebar can show TWO content panes at once, not just one — meaning `TSideTabsPane`'s 6 buttons may not be a flat 1-of-6 mode toggle, but rather a row of independent visibility toggles for the various content tabs. Verify via TSideTabsPane's input/click handler.
 
 ## Progress tracking (BURNDOWN integration)
 
