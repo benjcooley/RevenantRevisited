@@ -10,6 +10,7 @@
 
 #include "revenant.h"
 #include "script.h"
+#include "logging.h"
 #include "parse.h"
 #include "object.h"
 #include "command.h"
@@ -844,15 +845,14 @@ bool TScriptManager::Initialize()
 {
     scripts.Clear();
 
-#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
-    if (!_CrtCheckMemory())
-    {
-        _CrtMemDumpAllObjectsSince(nullptr);
-        _RPT0(_CRT_ERROR, "Memory Error");
-    }
-#endif
-
-    return (Load("master.s") && gamestate.Load("state.def"));
+    const bool master_ok = Load("master.s");
+    const bool state_ok  = gamestate.Load("state.def");
+    log_info("[script] Initialize: master.s=%s state.def=%s, %d proto(s), %d gamestate(s)",
+             master_ok ? "ok" : "FAIL",
+             state_ok  ? "ok" : "FAIL",
+             scripts.NumItems(),
+             gamestate.NumStates());
+    return master_ok && state_ok;
 }
 
 void TScriptManager::Close()
@@ -869,16 +869,9 @@ void TScriptManager::Close()
 bool TScriptManager::Load(char *filename, void *owner)
 {
     char fname[MAXPATHLEN];
-
-#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
-    if (!_CrtCheckMemory())
-    {
-        _CrtMemDumpAllObjectsSince(nullptr);
-        _RPT0(_CRT_ERROR, "Memory Error");
-    }
-#endif
-
     sprintf(fname, "%s%s", ClassDefPath, filename);
+
+    const int before = scripts.NumItems();
 
     FILE *fp = TryOpen(fname, "rb");
     if (fp == nullptr)
@@ -906,14 +899,8 @@ bool TScriptManager::Load(char *filename, void *owner)
 
     scriptsdirty = false;
 
-#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
-    if (!_CrtCheckMemory())
-    {
-        _CrtMemDumpAllObjectsSince(nullptr);
-        _RPT0(_CRT_ERROR, "Memory Error");
-    }
-#endif
-
+    log_info("[script] Load('%s'): +%d proto(s) (total %d)", filename,
+             scripts.NumItems() - before, scripts.NumItems());
     return retval;
 }
 
