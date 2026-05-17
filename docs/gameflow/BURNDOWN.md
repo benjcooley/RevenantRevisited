@@ -31,11 +31,10 @@ a status changes.
 | [x] | Retire pre-port `sound.cpp` to `attic/src/sound_directsound.cpp` | 2026-05-16 |
 | [ ] | 3D voices — spatial source per `TSound::Play3D`, listener follows player (currently flat-pan classic mix; spatializer disabled by design) | — |
 | [ ] | Settings `[Audio]` section: master / sfx / music / spatial (G3.2 work; backend volume hooks already in place) | — |
-| [ ] | Inside-game smoke test — `--test=sector` footsteps / ambient / sword swings (gated on `data/sound/effects/*.wav` extraction from the GOG install; only `data/open.wav` ships loose) | — |
+| [x] | Surface SFX from `resources.rvr` via new `VFSListByPrefix` + route `LoadWave` through `rev_fopen` — 1057 SFX in registry on GOG install | 2026-05-16 |
+| [ ] | Inside-game smoke test — `--test=sector` footsteps / ambient / sword swings (now unblocked; SFX registry populated) | — |
 
 **Exit:** SFX play in `--test=sector`; music can be started/stopped; spatial voices position correctly.
-
-**Notes:** SFX registry comes up with 0 entries on the GOG install because effects live inside the resource pack rather than as loose WAVs under `data/sound/effects/`. The audio backend is ready; surfacing those effects is a separate task (RVI resource-pack reader). Music plays from loose `.ogg` files under `data/MUSIC/` (also where the GOG install puts them).
 
 ---
 
