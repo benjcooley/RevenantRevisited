@@ -65,17 +65,23 @@ constexpr int32_t kBarHealthAtlasY = 0;
 constexpr int32_t kBarManaAtlasY   = 16;
 constexpr int32_t kBarStaminaAtlasY = 32;
 
-// Per-bar destination Y inside the BackPanel.
-constexpr int32_t kBarRowPitch  = 14;
-constexpr int32_t kBarSlotY0    = 6;    // first bar row Y inside panel
+// Retail bar coordinates extracted from
+// recon/discovered/cls_0x5a54e4_TPlyrStatusBar_slot23_TwoPassDraw_54af20.cpp
+// lines 484, 499, 511 (LEFT side bar draws in hi-res branch):
+//   Health  : x=0x44 (68), y=0x0f (15)
+//   Mana    : x=0x44 (68), y=0x1f (31)
+//   Stamina : x=0x44 (68), y=0x2c (44)
+// Row pitch is non-uniform (16 then 13). These are pane-relative.
+constexpr int32_t kBarFillX     = 0x44;  // 68 — LEFT side bar X (retail slot 23)
+constexpr int32_t kBarRowY[3]   = { 0x0f, 0x1f, 0x2c };  // 15, 31, 44
 
-// Portrait Ring (44x44) sits on the left side of the panel. Bars start
-// after the Ring with a small gap; icons overlap the bars' left edge.
-constexpr int32_t kRingX        = 2;     // Ring offset within panel
-constexpr int32_t kRingY        = 10;
-constexpr int32_t kPortraitX    = 9;     // LockeFace inside Ring
-constexpr int32_t kPortraitY    = 17;
-constexpr int32_t kBarFillX     = 50;    // bars right of Ring
+// Portrait Ring + LockeFace positions — currently visual estimates;
+// will be replaced once the recon Init body or helper extractions
+// surface the explicit Ring blit X,Y.
+constexpr int32_t kRingX        = 2;
+constexpr int32_t kRingY        = 6;
+constexpr int32_t kPortraitX    = 9;
+constexpr int32_t kPortraitY    = 13;
 
 class TPlyrStatusBarRealHud : public THudDrawable
 {
@@ -119,10 +125,7 @@ private:
     {
         if (!g_bars) return;
         const int32_t dstX = kPanelX + kBarFillX;
-        const int32_t dstY = kPanelY + kBarSlotY0 + row * kBarRowPitch;
-        // Subrect blit: take the atlas row at (0, atlasY, atlasW, rowH)
-        // and clip horizontally to (level * bar width). Retail compositor
-        // does the equivalent via TMosaicSurface; we go direct.
+        const int32_t dstY = kPanelY + kBarRowY[row];
         const float clamped = level < 0.0f ? 0.0f : (level > 1.0f ? 1.0f : level);
         const int32_t filled = int32_t(float(kBarAtlasW) * clamped);
         if (filled > 0)
@@ -133,9 +136,9 @@ private:
     void DrawIcon(PTBitmap icon, int32_t row)
     {
         if (!icon) return;
-        // Icon centered at the start of the bar row.
+        // Icon centered on the start of the bar row.
         const int32_t ix = kPanelX + kBarFillX - icon->width / 2;
-        const int32_t iy = kPanelY + kBarSlotY0 + row * kBarRowPitch
+        const int32_t iy = kPanelY + kBarRowY[row]
                            + kBarRowH / 2 - icon->height / 2;
         Renderer->DrawBitmap(icon, ix, iy);
     }
