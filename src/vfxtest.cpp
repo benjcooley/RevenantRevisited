@@ -597,6 +597,46 @@ void StripSubmit(void* cp, EFxDebugMode dbg)
     c->strip->TickAndSubmitForTest(dbg);
 }
 
+// --- FB: real TRippleEffect (procedural ring atlas, H03) ----------------
+// Spawns a sector-less TRippleEffect at the harness-provided origin via
+// SpawnForTest and drives its ring expansion through TickAndSubmitForTest
+// each frame. The ripple uses no I3D asset (no `Magic\Ripple.I3D` or
+// equivalent exists in the data tree — see INVENTORY H03 gap 7.2); the
+// 4x4 atlas is built procedurally in src/effect.cpp::RippleAtlasTexture.
+// The harness lambda is a thin shim — all spawn / animator / submit
+// logic lives on the real TRippleEffect class. Mirrors F01 / B01 / S01.
+//
+// SpellGround preview style — water ripple is a ground-anchored event
+// (drip from above lands; the ring expands at the impact point), so
+// the cadence reads as "drip every few seconds, small XY jitter".
+struct SRippleCtx {
+    TRippleEffect* ripple = nullptr;
+};
+
+void* RippleSpawn(const S3DPoint& origin)
+{
+    auto* c = new SRippleCtx();
+    c->ripple = TRippleEffect::SpawnForTest(origin);
+    if (!c->ripple)
+        log_warn("[vfx] TRippleEffect::SpawnForTest returned null; H03 entry will draw nothing");
+    return c;
+}
+
+void RippleDestroy(void* cp)
+{
+    auto* c = static_cast<SRippleCtx*>(cp);
+    delete c->ripple;
+    delete c;
+}
+
+void RippleSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SRippleCtx*>(cp);
+    if (!c->ripple)
+        return;
+    c->ripple->TickAndSubmitForTest(dbg);
+}
+
 // --- LS: flare + dynamic point light placeholder -------------------------
 struct SFlareCtx {
     float age = 0.0f;
@@ -689,6 +729,18 @@ struct SVfxTestBootstrap {
         strip.submit        = [](void* c, EFxDebugMode d) { StripSubmit(c, d); };
         strip.destroy       = [](void* c) { StripDestroy(c); };
         VfxTest::DeferredRegister(strip);
+
+        VfxTest::SEffect ripple = {};
+        ripple.id            = "TRippleEffect";
+        ripple.family        = "water";
+        ripple.pipeline      = "FB";
+        // Ripple = drip-into-water event: ground-level, occasional
+        // re-fire at small XY jitter. Matches SpellGround cadence.
+        ripple.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        ripple.factory       = [](const S3DPoint& o) -> void* { return RippleSpawn(o); };
+        ripple.submit        = [](void* c, EFxDebugMode d) { RippleSubmit(c, d); };
+        ripple.destroy       = [](void* c) { RippleDestroy(c); };
+        VfxTest::DeferredRegister(ripple);
 
         VfxTest::SEffect flare = {};
         flare.id            = "TFlareAnimator.placeholder";
