@@ -35,6 +35,7 @@
 #include "renderer.h"
 #include "revenant.h"     // VK_LEFT, VK_RIGHT, VK_SPACE
 #include "stripeffect.h"  // TStripEffect (S01 SR-pipeline port)
+#include "weaponswipe.h"  // TWeaponSwipe (S09 SR-pipeline port)
 #include "surface.h"
 #include "testconfig.h"  // StartupVfxId, StartupVfxHideUi
 #include "time.h"
@@ -180,16 +181,51 @@ int32_t PickInitialState(TObjectInstance* inst, VfxTest::EVfxPreviewStyle style)
         }
     };
     const int32_t n = inst->NumStates();
+
+    // Two-pass scan for CharacterAttack so windup-only poses
+    // (`backswing`) don't out-prioritize the actual in-motion swing
+    // states that come after them in the state table. Pass 1 = names
+    // that exhibit live weapon arc motion; pass 2 = wider net
+    // including windup / pose-only `attack*` shorthands.
+    if (style == VfxTest::EVfxPreviewStyle::CharacterAttack)
+    {
+        // Pass 1 — in-motion swings.
+        for (int32_t i = 0; i < n; ++i)
+        {
+            auto* s = img->GetState(i);
+            if (!s || !s->animname[0]) continue;
+            const char* nm = s->animname;
+            // Exclude `backswing` explicitly from this pass — it
+            // starts with "swing"-adjacent chars but lacks blade
+            // motion.
+            if (starts_with_ci(nm, "backswing")) continue;
+            if (starts_with_ci(nm, "swing")     ||
+                starts_with_ci(nm, "upslash")   ||
+                starts_with_ci(nm, "spinswing") ||
+                starts_with_ci(nm, "turnswing"))
+                return i;
+        }
+        // Pass 2 — any attack-flavoured name. Catches both `attack*`
+        // (monster naming) and `backswing` (Locke fallback) when no
+        // in-motion swing exists on the character.
+        for (int32_t i = 0; i < n; ++i)
+        {
+            auto* s = img->GetState(i);
+            if (!s || !s->animname[0]) continue;
+            const char* nm = s->animname;
+            if (starts_with_ci(nm, "attack")    ||
+                starts_with_ci(nm, "backswing"))
+                return i;
+        }
+        return -1;
+    }
+
     for (int32_t i = 0; i < n; ++i)
     {
         auto* s = img->GetState(i);
         if (!s || !s->animname[0]) continue;
         const char* name = s->animname;
-        if (style == VfxTest::EVfxPreviewStyle::CharacterAttack)
-        {
-            if (starts_with_ci(name, "attack")) return i;
-        }
-        else if (style == VfxTest::EVfxPreviewStyle::CharacterCast)
+        if (style == VfxTest::EVfxPreviewStyle::CharacterCast)
         {
             if (starts_with_ci(name, "cast")   ||
                 starts_with_ci(name, "magic")  ||
@@ -516,6 +552,192 @@ bool ResolveAnchor(const VfxTest::SVfxAnchor& a, VfxTest::SVfxAttachment& out)
     return false;
 }
 
+// -------------------------------------------------------------------------
+// Weapon-sub-object helpers (S09 TWeaponSwipe Phase B)
+//
+// The retail TWeaponSwipe pulled the weapon hilt + tip from the
+// character's `weapon` / `sword` / `ogrokaxe` named sub-object
+// (priority order matches src/weapontrail.cpp:609-615 fallback chain).
+// For the harness we need the same lookup plus the cached local-space
+// max-Z extent of the weapon mesh (so a long sword draws a wide arc
+// and a dagger draws a narrow one — same `GetWeaponExtents()` shape
+// per S09 forensics §1).
+// -------------------------------------------------------------------------
+
+// Find the weapon sub-object's bone index on the currently loaded rig
+// character, trying the three retail-canonical names in order.
+// Returns -1 if none are present.
+int32_t FindWeaponObjNum()
+{
+    SCharacterRig& rig = g_state.rig;
+    if (!rig.img) return -1;
+    static constexpr const char* kNames[] = { "weapon", "sword", "ogrokaxe" };
+    for (const char* nm : kNames)
+    {
+        const int32_t n = rig.img->GetObjectNum(const_cast<char*>(nm));
+        if (n >= 0) return n;
+    }
+    return -1;
+}
+
+const char* FindWeaponBoneName()
+{
+    SCharacterRig& rig = g_state.rig;
+    if (!rig.img) return nullptr;
+    static constexpr const char* kNames[] = { "weapon", "sword", "ogrokaxe" };
+    for (const char* nm : kNames)
+    {
+        if (rig.img->GetObjectNum(const_cast<char*>(nm)) >= 0) return nm;
+    }
+    return nullptr;
+}
+
+// Scan the weapon sub-object's vertices for the maximum local-Z value;
+// that's the weapon-tip local coordinate that retail's
+// `GetWeaponExtents()` cached. Result is cached for the current rig
+// character on the rig itself so we only pay the extract cost once.
+struct SWeaponCache
+{
+    const T3DImagery* for_img    = nullptr;  // invalidated on character swap
+    int32_t  objnum              = -1;
+    float    tip_local_z         = 0.0f;
+    bool     valid               = false;
+};
+SWeaponCache g_weapon_cache;
+
+const SWeaponCache* GetWeaponCache()
+{
+    SCharacterRig& rig = g_state.rig;
+    if (!rig.img)
+    {
+        g_weapon_cache = {};
+        return nullptr;
+    }
+    if (g_weapon_cache.valid && g_weapon_cache.for_img == rig.img)
+        return &g_weapon_cache;
+
+    g_weapon_cache = {};
+    g_weapon_cache.for_img = rig.img;
+    g_weapon_cache.objnum  = FindWeaponObjNum();
+    if (g_weapon_cache.objnum < 0)
+        return &g_weapon_cache;
+
+    // Pull the weapon mesh vertices and walk Z for the max extent.
+    // Same shape as retail GetWeaponExtents in src/weapontrail.cpp:504:
+    // start the hilt at local (0,0,0) (retail does ivweapbeg but then
+    // clears it to zero; the rotation hub is the bone pivot) and let
+    // the tip's Z drive the strip width.
+    std::vector<SMeshVertex> verts;
+    std::vector<uint16_t>    indices;
+    if (!ExtractSubMesh(rig.img, g_weapon_cache.objnum, verts, indices))
+    {
+        log_warn("[vfx.swipe] weapon sub-object %d extract failed; "
+                 "tipZ unavailable",
+                 g_weapon_cache.objnum);
+        return &g_weapon_cache;
+    }
+    float max_z = -1e9f;
+    for (const auto& v : verts)
+        if (v.pos[2] > max_z) max_z = v.pos[2];
+    if (max_z <= 0.0f)
+    {
+        // Pre-release `GetWeaponExtents` starts `end = -100000` and
+        // would carry a degenerate end if all verts had Z<=0. Skip.
+        log_warn("[vfx.swipe] weapon mesh has no positive-Z extent; "
+                 "tip degenerate, swipe disabled");
+        return &g_weapon_cache;
+    }
+    g_weapon_cache.tip_local_z = max_z;
+    g_weapon_cache.valid       = true;
+    {
+        const int32_t st = rig.inst ? rig.inst->GetState() : -1;
+        auto* sd = (st >= 0 && rig.img) ? rig.img->GetState(st) : nullptr;
+        log_info("[vfx.swipe] weapon='%s' objnum=%d tipZ=%.1f verts=%zu "
+                 "rig_state=%d ('%s')",
+                 FindWeaponBoneName(), g_weapon_cache.objnum,
+                 double(max_z), verts.size(),
+                 st, (sd && sd->animname[0]) ? sd->animname : "?");
+    }
+    return &g_weapon_cache;
+}
+
+// Is the rig character currently playing an "attack*" state? Used by
+// the swipe to gate visible Submit. Mirrors retail's IsAttack()
+// (charanimator.cpp:55 Render check) — for the harness we look at the
+// state name rather than the IsDoing(ACTION_*) action mask, since the
+// rig drives state changes directly via SetState rather than through
+// the action system.
+bool RigIsInAttackState()
+{
+    SCharacterRig& rig = g_state.rig;
+    if (!rig.inst || !rig.img) return false;
+    const int32_t st = rig.inst->GetState();
+    auto* s = rig.img->GetState(st);
+    if (!s) return false;
+    const char* name = s->animname;
+    if (!name || !name[0]) return false;
+    // Case-insensitive "attack" prefix match.
+    auto starts_with_ci = [](const char* str, const char* prefix) {
+        for (size_t i = 0;; ++i) {
+            const char p = prefix[i];
+            if (!p) return true;
+            const char c = str[i];
+            const char pl = (p >= 'A' && p <= 'Z') ? char(p - 'A' + 'a') : p;
+            const char cl = (c >= 'A' && c <= 'Z') ? char(c - 'A' + 'a') : c;
+            if (cl != pl) return false;
+        }
+    };
+    // Match the same keyword set PickInitialState uses for
+    // CharacterAttack — see note there about per-character naming
+    // (Locke uses `swing` family; some monsters use `attack*`).
+    return starts_with_ci(name, "attack")     ||
+           starts_with_ci(name, "swing")      ||
+           starts_with_ci(name, "backswing")  ||
+           starts_with_ci(name, "upslash")    ||
+           starts_with_ci(name, "spinswing")  ||
+           starts_with_ci(name, "turnswing");
+}
+
+// Resolve the (hilt, tip) world-space anchor pair for the current
+// rig's weapon. Returns false if the weapon sub-object isn't present
+// or the rig isn't loaded; the swipe should skip Submit in that case.
+bool ResolveWeaponAnchors(VfxTest::SVfxAttachment& out_hilt,
+                          VfxTest::SVfxAttachment& out_tip)
+{
+    out_hilt = {};
+    out_tip  = {};
+    SCharacterRig& rig = g_state.rig;
+    if (!rig.inst || !rig.img) return false;
+
+    const SWeaponCache* wc = GetWeaponCache();
+    if (!wc || !wc->valid) return false;
+
+    const char* bone = FindWeaponBoneName();
+    if (!bone) return false;
+
+    // Hilt = weapon bone pivot (local origin transformed to world).
+    VfxTest::SVfxAnchor hilt_anchor = {};
+    hilt_anchor.kind = VfxTest::SVfxAnchor::EKind::Bone;
+    std::strncpy(hilt_anchor.bone_name, bone,
+                 sizeof(hilt_anchor.bone_name) - 1);
+    if (!ResolveAnchor(hilt_anchor, out_hilt) || !out_hilt.resolved)
+        return false;
+
+    // Tip = local (0, 0, tipZ_local) through the weapon bone matrix.
+    // The rig's BoneLocalPoint resolver already handles the scale +
+    // bbox recentre composition.
+    VfxTest::SVfxAnchor tip_anchor = {};
+    tip_anchor.kind = VfxTest::SVfxAnchor::EKind::BoneLocalPoint;
+    std::strncpy(tip_anchor.bone_name, bone,
+                 sizeof(tip_anchor.bone_name) - 1);
+    tip_anchor.local_offset[0] = 0.0f;
+    tip_anchor.local_offset[1] = 0.0f;
+    tip_anchor.local_offset[2] = wc->tip_local_z;
+    if (!ResolveAnchor(tip_anchor, out_tip) || !out_tip.resolved)
+        return false;
+    return true;
+}
+
 void TickCharacterRig()
 {
     SCharacterRig& rig = g_state.rig;
@@ -528,6 +750,30 @@ void TickCharacterRig()
     if (rig.inst->NeedsAnimator() && !rig.inst->HasAnimator())
         rig.inst->OnScreen();
     rig.inst->Animate(false);
+
+    // Auto-loop the active state. Retail anim cycles for `swing` /
+    // `cast` are non-AF_LOOPING (per imagery.h:427 + object.cpp:1633):
+    // when the frame reaches statesize-1, TObjectInstance::NextFrame
+    // PINS frame at the end pose and sets the animator's `complete`
+    // flag. For the harness we want the animation to keep cycling so
+    // the swipe trail has live blade motion to trace — re-trigger via
+    // ResetState() once we've held the end pose for a tick.
+    //
+    // Only kicks in for character-attached preview styles where the
+    // user picked a specific animation (attack / cast). Idle states
+    // are typically already AF_LOOPING (`combat` / `walk`) so this
+    // path is a no-op for them.
+    if (rig.img)
+    {
+        const int32_t st = rig.inst->GetState();
+        const int32_t len = rig.img->GetAniLength(st);
+        const int32_t flg = rig.img->GetAniFlags(st);
+        const int32_t fr  = rig.inst->GetFrame();
+        if (len > 1 && fr >= len - 1 && (flg & AF_LOOPING) == 0)
+        {
+            rig.inst->ResetState();
+        }
+    }
 }
 
 void RenderCharacterRigBackground()
@@ -1558,6 +1804,82 @@ void FlareSubmit(void* cp, EFxDebugMode dbg)
                             1.2f * pulse);
 }
 
+// --- SR: TWeaponSwipe (S09 sword slash trail) ---------------------------
+// Character-attached strip effect. Owned per-character in retail; here
+// we instantiate one TWeaponSwipe inside the harness ctx and feed it
+// the live (hilt, tip) anchor pair every frame from the rig. The
+// strip ring + Catmull-Rom spline + per-vertex colour curve all live
+// inside TWeaponSwipe (src/weaponswipe.cpp); this glue just resolves
+// the two anchors and drives the visibility gate.
+//
+// **CharacterAttack** preview style — `PickInitialState` cycles to the
+// first `attack*` animation on the loaded character (any character
+// with one will work; Locke has multiple). The retrigger cadence
+// (1.5 s) re-seeds the ring buffer between swings so the trail starts
+// clean on each new attack.
+//
+// SCharData::swipecolor wiring — retail pulls the colour from
+// chardata->swipecolor (RGB 0..255). The harness can't reach the
+// chardata table without spinning up the gameplay rules path, so we
+// use a tasteful default (warm gold) that reads against any
+// character's skin tones and gracefully clamps via NormalizeColors.
+// Per-character colour binding lands when the gameplay path
+// (TCharAnimator::SetupWeaponSwipe re-enabled) consumes this class.
+struct SSwipeCtx {
+    TWeaponSwipe* swipe = nullptr;
+};
+
+void* SwipeSpawn(const S3DPoint& /*origin*/)
+{
+    auto* c = new SSwipeCtx();
+    c->swipe = new TWeaponSwipe();
+    // Phase A §1: NormalizeColors will rescale this so the brightest
+    // channel maxes at 1.0; gold (1, 0.85, 0.55) keeps the warmth of a
+    // metallic slash without saturating to pure white.
+    c->swipe->SetColour(1.0f, 0.85f, 0.55f);
+    c->swipe->ResetForNewWeapon();
+    return c;
+}
+
+void SwipeDestroy(void* cp)
+{
+    auto* c = static_cast<SSwipeCtx*>(cp);
+    delete c->swipe;
+    delete c;
+}
+
+void SwipeSubmitAttached(void* cp, EFxDebugMode dbg,
+                         const VfxTest::SVfxAttachment& /*hilt_attach*/)
+{
+    auto* c = static_cast<SSwipeCtx*>(cp);
+    if (!c->swipe) return;
+
+    // Resolve the (hilt, tip) anchor pair against the live weapon
+    // matrix. The `hilt_attach` passed in by the dispatcher is the
+    // hilt; we discard it and re-resolve both at once so a single
+    // call site reads the rig state consistently (and so the tip
+    // local-Z cache lives next to the lookup it gates).
+    VfxTest::SVfxAttachment hilt, tip;
+    const bool ok = ResolveWeaponAnchors(hilt, tip);
+    if (!ok)
+    {
+        // Rig isn't loaded, or character has no recognised weapon
+        // sub-object. Keep ring at zero — the strip never draws and
+        // the next valid character/frame picks up cleanly.
+        return;
+    }
+
+    // Visibility gate matches retail TCharAnimator::Render:
+    //   IsAttack() && initialized && (player ? primehand != null : true)
+    // The harness has no equip slots so the primehand check is a
+    // no-op (the bone presence check above already covers "weapon
+    // exists"). IsAttack() maps to RigIsInAttackState() above.
+    const bool attack_visible = RigIsInAttackState();
+
+    c->swipe->TickAndSubmit(hilt.world_pos, tip.world_pos,
+                            attack_visible, dbg);
+}
+
 }  // namespace
 
 // Defer registration until VfxTest::Initialize runs (renderer must
@@ -1745,6 +2067,35 @@ struct SVfxTestBootstrap {
         };
         tele.destroy = [](void* c) { TeleDestroy(c); };
         VfxTest::DeferredRegister(tele);
+
+        // --- SR: TWeaponSwipe — S09 sword slash trail -----------------
+        // Strip ribbon traced from the live weapon hilt + tip on a
+        // character playing an attack* animation. Bespoke per
+        // AGENT_GUIDE §3.2.1 (per-vertex custom geometry,
+        // weapon-extents-driven width, character-attached behaviour).
+        // The hilt anchor is registered explicitly so the dispatcher
+        // resolves SOMETHING (gives the UI panel a readable
+        // "Anchor: weapon @ (...)" line); the submit lambda re-
+        // resolves both hilt + tip together via ResolveWeaponAnchors.
+        VfxTest::SEffect swipe = {};
+        swipe.id            = "TWeaponSwipe";
+        swipe.family        = "strip";
+        swipe.pipeline      = "SR";
+        swipe.preview_style = VfxTest::EVfxPreviewStyle::CharacterAttack;
+        swipe.anchor.kind   = VfxTest::SVfxAnchor::EKind::Bone;
+        // "weapon" is the primary retail name (charanimator.cpp:264);
+        // FindWeaponBoneName() inside the submit lambda walks the full
+        // fallback chain (weapon -> sword -> ogrokaxe). The anchor name
+        // here is purely for the UI readout.
+        std::strncpy(swipe.anchor.bone_name, "weapon",
+                     sizeof(swipe.anchor.bone_name) - 1);
+        swipe.factory         = [](const S3DPoint& o) -> void* { return SwipeSpawn(o); };
+        swipe.submit_attached = [](void* c, EFxDebugMode d,
+                                   const VfxTest::SVfxAttachment& at) {
+            SwipeSubmitAttached(c, d, at);
+        };
+        swipe.destroy         = [](void* c) { SwipeDestroy(c); };
+        VfxTest::DeferredRegister(swipe);
 
         VfxTest::SEffect flare = {};
         flare.id            = "TFlareAnimator.placeholder";
