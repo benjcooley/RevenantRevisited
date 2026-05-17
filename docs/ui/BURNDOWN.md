@@ -50,7 +50,7 @@ The HUD render-path infrastructure was landed in commit `80879c2` ("engine: HUD 
 - `[ ]` **B.10 `TDialogPane`** + `--test=ui-dialog` — hooks into existing script/dialog system; consumes `TDialogList`.
 - `[ ]` **B.11 `GAMECOMMAND` dispatch un-stub** — un-stub `TODO(port)` markers in [src/playscreen.cpp](../../src/playscreen.cpp). Combat / inventory / spells / dialogs. *Tightly coupled to game state; no test mode.*
 - `[ ]` **B.12 Panel visibility toggles** — B / V / Space keys per [../HUD.md](../HUD.md).
-- `[ ]` **B.13 `--test=ui-hud-mockup`** — full HUD composition test, synthesized data, both resolutions. *Composite mockup.*
+- `[x]` **B.13 `--test=ui-hud-mockup`** — landed in `43e49fb`. Composite wireframe at retail 640×480: TextBar, HealthBar, StaminaBar, Inventory, QuickSpells, MultiCtrl, StatPane (representative multipane) all constructed at retail rects from revdefs.h and rendered via a single visualizer registered with `Renderer->AddHud`. Status bars animate (sine-cycle SetLevel). No `Initialize()` called -- mockup verifies layout topology, not per-pane content. Per-pane content rendering is the follow-up per-pane work.
 
 ## Phase C — OOG bring-up
 
@@ -94,6 +94,7 @@ Per memory `feedback-code-style`, `feedback-modern-cpp`, `feedback-const-correct
 
 ## Notes log (most-recent first)
 
+- **2026-05-16** — Phase B.13 `--test=ui-hud-mockup` (`43e49fb`): **all 7 visible retail HUD panes rendered at retail rects in the new HUD pipeline.** Animated status bars + color-coded outlines for the rest. Verifies layout topology matches `docs/HUD.md`. No per-pane Initialize required (constructors set rects).
 - **2026-05-16** — Phase B step 2 for B.1 + B.2 (`7873ac1`): first visible panes on the new HUD pipeline. Each test mode registers a `THudDrawable` visualizer that paints `DrawSolidRect` at the pane's retail rect. Status bars animate level via sine cycle. Pattern is the template for remaining pane bring-ups.
 - **2026-05-16** — `TRenderer::DrawSolidRect` (`a8e36f3`): per-color 1x1 texture cache + existing composite pipeline. Unblocks visual fallback for any pane that hasn't ported its retail draw path.
 - **2026-05-16** — Phase B started. B.1 step 1 (`4df1bcf`, TTextBar data-API contract) and B.2 step 1 (`495a28c`, TStatusBar/THealthBar/TStaminaBar data-API + retail-asset load verification).
