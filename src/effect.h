@@ -8,6 +8,7 @@
 
 #include "revenant.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -2020,14 +2021,48 @@ _CLASSDEF(TDripEffect)
 class TDripEffect : public TEffect
 {
   private:
-    int32_t ripplesize, height, period;
+    // Pre-release per-instance params (sector-script-configured via the
+    // `setdrip` command — src/command.cpp:1544). Defaults mirror the
+    // TDripAnimator ctor at effect_old.cpp:11058 (rippelsize=64,
+    // height=128, period=48). Field initializers per project rule.
+    int32_t ripplesize = 64;
+    int32_t height     = 128;
+    int32_t period     = 48;
+
+    // --- Phase 2 (H04) PE-pipeline scaffold -----------------------------
+    // Single-particle bucket borrowed from the global TParticleManager.
+    // Pre-release tracked one in-flight drop per emitter (single pos/vel,
+    // not an array). The PE-bucket equivalent is one particle per drip
+    // instance with respawn-in-place semantics (similar in shape to M05's
+    // continuous emitter but only ever 1 particle alive at a time).
+    //
+    // The bucket itself outlives this effect; per-instance drops are
+    // disambiguated by `owner_particle_id_` and killed off in the
+    // destructor via TParticleBucket::KillParticlesByOwner.
+    TParticleBucket* bucket_            = nullptr;
+    float            owner_particle_id_ = -1.0f;
+    double           sim_accum_ms_      = 0.0;   // 24 Hz sim-tick gate (forensics §7.4)
+
+    // Cyclic emitter state. `dead_` corresponds to pre-release
+    // TDripAnimator::dead; `time_` to its `time` frame counter (used in
+    // the dead-branch respawn gate `time > period && !random(0,
+    // period/2)`). When alive, the bucket particle is visible and
+    // integrates pos/vel; when dead, the particle is parked offscreen
+    // and time_ counts up toward the next respawn coin flip.
+    bool             dead_              = true;
+    int32_t          time_              = 0;
+    // Ripples spawned on landing — the drip→ripple chain (forensics §3).
+    // Owned by this effect, ticked + pruned each frame in
+    // TickAndSubmitForTest. Reuses H03's standalone SpawnForTest.
+    std::vector<std::unique_ptr<TRippleEffect>> spawned_ripples_;
+
   public:
     TDripEffect(TObjectImagery* newim) : TEffect(newim) {  }
     TDripEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    virtual ~TDripEffect() {}
+    ~TDripEffect() override;
 
     virtual void Initialize();
-    virtual void Pulse();
+    void Pulse() override;
 
     virtual void SetParams(int32_t ri, int32_t he, int32_t pe) { ripplesize = ri; height = he; period = pe; };
     virtual void GetParams(int32_t* ri, int32_t* he, int32_t* pe) { *ri = ripplesize; *he = height; *pe = period; };
@@ -2036,6 +2071,31 @@ class TDripEffect : public TEffect
         // Loads object data from the sector
     virtual void Save(RTOutputStream os);
         // Saves object data to the sector
+
+    // Spawn a standalone TDripEffect for the --test=vfx harness. Loads
+    // `Magic\drip.i3d` (the canonical drip sprite at
+    // legacy/Imagery/Magic/drip.i3d), allocates / reuses a global PE
+    // bucket keyed off the drip texture, seeds one particle parked in
+    // the dead state, and stamps the instance with a fresh map index.
+    // Returns nullptr if the imagery can't be loaded. The caller owns
+    // the returned pointer and must `delete` it to release the imagery
+    // refcount, evict its particle, and drop any in-flight spawned
+    // ripples. The harness-rig path also reduces the retail period (48)
+    // to a screencap-friendly default (~24) so the drop is visible
+    // within a 4-sec capture; in-game placement keeps the retail default.
+    //
+    // PE-pipeline scope: validates the single-particle-emitter shape
+    // (B01 = burst, M05 = continuous 50-drop, H04 = single recurring),
+    // and (first time in the harness) the chained "effect spawns
+    // another effect" pattern via TRippleEffect::SpawnForTest on landing.
+    [[nodiscard]] static TDripEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Drive the owned bucket + chained ripples forward by one sim tick
+    // (Euler integrate + gravity + landing → spawn ripple + dead-state
+    // respawn coin flip), then submit the drop bucket + each live
+    // spawned ripple to the FX queue. Idempotent if the effect has no
+    // bucket yet.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
 };
 
 // *******************

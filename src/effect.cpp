@@ -66,9 +66,11 @@
 #include "logging.h"
 #include "time.h"
 
+#include <algorithm>
 #include <cstring>
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <utility>
 
 namespace {
@@ -1724,6 +1726,437 @@ void TMistEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     }
 
     Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+}
+
+// *************************************************************************
+// * TDripEffect - PE-pipeline single-drop ceiling emitter for --test=vfx  *
+// * (H04) + drip→ripple chain via TRippleEffect::SpawnForTest             *
+// *************************************************************************
+//
+// Scope: Phase 2 H04 row. Ports the cyclic single-drop ceiling emitter
+// from `TDripAnimator` (src/effect_old.cpp:10987-11108) to the PE
+// pipeline, and demonstrates the harness's first "effect that spawns
+// another effect" pattern — when the drop lands, it spawns a real
+// TRippleEffect (H03) at the impact point via the same standalone
+// SpawnForTest path the harness uses directly.
+//
+// What this *does* deliver:
+//   1. A real `TDripEffect` instance that owns its lifecycle.
+//   2. A `TParticleBucket` allocated from `ParticleManager()` and
+//      submitted every frame via `Renderer->SubmitFxParticleBucket()`.
+//      Single particle per drip-emitter (pre-release tracked one
+//      in-flight drop, not an array — INVENTORY H04 §2).
+//   3. Real `Magic\drip.i3d` imagery (8916 bytes at
+//      legacy/Imagery/Magic/drip.i3d). Texture sourced via the F01 / B01
+//      / M05 lazy-mesh-init poke pattern.
+//   4. Retail-faithful pos/vel envelope (height=128, gravity=0.37
+//      wu/tick², vz0=-1.85 — see INVENTORY H04 §1). 24 Hz sim-tick gate
+//      preserves the retail time-of-flight ≈ 21 ticks ≈ 0.875 sec
+//      (pre-release was ungated; without the gate the drop would fall
+//      ~2.5× too fast at 60 fps render rate).
+//   5. Cyclic respawn matching pre-release `dead → wait period →
+//      coin-flip respawn → fall → land → spawn ripple → dead` loop.
+//      Harness-path period reduced (48 → 24) for screencap-friendly
+//      visible drop rate; in-game spawn path keeps retail default.
+//   6. **Drip→ripple chain.** On landing, calls
+//      `TRippleEffect::SpawnForTest(landing_pos)` and owns the
+//      resulting effect via `std::unique_ptr` in `spawned_ripples_`.
+//      The harness ticks each spawned ripple via its own
+//      `TickAndSubmitForTest`, prunes dead ones via `IsAlive()`. Bypass-
+//      es the retail `MapPane.NewObject(SObjectDef{...,
+//      FindObjType("ripple"), ...})` registry path because the .rvm
+//      effect-registry isn't loaded in the harness (INVENTORY H04 §7.5).
+//
+// What this does *not* deliver:
+//   - `PLAY("drip")` landing SFX (audio routing is out of VFX Phase 2
+//     scope — see INVENTORY H04 §7.6).
+//   - In-game spawn through area-effect-registry dispatch (no live
+//     registry caller in the port today; harness-only — same status as
+//     H03 / M05 / L02 / F03).
+//   - Bone-mesh / I3D-anim composition (drip.i3d is a single-frame
+//     billboard sprite — `GetObject(0)` in pre-release Render).
+//
+namespace {
+
+constexpr const char* kDripImageryPath = "Magic\\drip.i3d";
+constexpr const char* kDripBucketName  = "vfx.drip.drops";
+
+// Pre-release constants (effect_old.cpp:10987-11065), preserved for
+// reviewability. All values authored at retail's 24 Hz sim tick.
+constexpr int32_t kDripDefaultRippleSize = 64;     // ripple lifetime on landing (TRippleEffect::SetLength)
+constexpr int32_t kDripDefaultHeight     = 128;    // initial pos.z above origin (wu)
+constexpr int32_t kDripDefaultPeriod     = 48;     // dead-state wait before respawn coin flip (frames)
+constexpr float   kDripGravity           = 0.37f;  // RIPPLE_GRAVITY shared constant, wu/tick²
+constexpr float   kDripInitialVz         = -kDripGravity * 5.0f;  // pre-release respawn: -1.85 wu/tick
+constexpr int32_t kDripSimTickMs         = 1000 / 24;  // 24 Hz integration gate
+
+// Harness-path period override. Retail period=48 / 24 Hz = ~26 sec mean
+// inter-drop interval (script-driven sector ambient — long, sparse).
+// For a 4-sec screencap that's invisible — set the harness-side period
+// to ~24 / 24 Hz = ~10 sec mean, enough to see one or two drops per
+// capture cycle. In-game placement keeps the retail default via Load().
+constexpr int32_t kDripHarnessPeriod     = 24;
+
+// Park-position offset for dead drops. Bucket particles stay alive
+// even when the drip is in the dead-state; parking them well below the
+// camera floor keeps them invisible without paying the per-frame
+// allocate/destroy cost. The harness camera frames roughly z ∈ [0..400];
+// -1000 is safely out-of-view.
+constexpr float   kDripDeadParkZ         = -1000.0f;
+
+// Visible droplet world-unit size. Pre-release scaled the drip.i3d
+// sprite by 0.3 against the I3D's mesh-space quad. For modern
+// camera-aligned billboards we choose a fixed wu size that reads at
+// the harness camera distance. The drop is small — too big and it
+// looks like a fireball; too small and it disappears in a screencap.
+// 48 wu reads as a small bright droplet at the harness's iso camera.
+constexpr float   kDripDropletSizeWu     = 48.0f;
+
+float NextDripOwnerId()
+{
+    static float next = 6000.0f;
+    const float v = next;
+    next += 1.0f;
+    return v;
+}
+
+// Lazily allocate the shared drip bucket against the drip imagery's
+// texture slot 0. Returns nullptr if the texture handle isn't ready.
+// Mirrors AcquireMistBucket (M05) one-to-one — same blend/depth/light
+// choices because the underlying I3D pixel data has the same
+// chroma-key-friendly bright-on-near-black profile.
+TParticleBucket* AcquireDripBucket(T3DImagery* img3d)
+{
+    if (TParticleBucket* existing = ParticleManager().FindGlobalBucket(kDripBucketName))
+        return existing;
+
+    // Same lazy-mesh-init poke as F01/B01/M05.
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[drip] AcquireDripBucket: imagery has 0 textures after "
+                  "lazy-init poke (objects=%d)", img3d->NumObjects());
+        return nullptr;
+    }
+
+    S3DTex tex = {};
+    img3d->GetTexture(0, &tex);
+    if (tex.htexture == kInvalidTexture)
+    {
+        log_error("[drip] AcquireDripBucket: texture slot 0 handle invalid");
+        return nullptr;
+    }
+
+    SParticleBucketDesc desc = {};
+    desc.name           = kDripBucketName;
+    desc.scope          = EParticleBucketScope::Global;
+    // Drip is unlit additive (forensics §4 — inferred from the
+    // SaveBlendState/SetBlendState wrapper around the Render path,
+    // matching the same idiom in adjacent M05 mist code at
+    // effect_old.cpp:10823). PremulAlpha pairs with chroma-key-
+    // converted texture for clean edges.
+    desc.light_mode     = EParticleLightMode::Unlit;
+    desc.depth_mode     = EParticleDepthMode::TestNoWrite;
+    desc.blend          = EParticleBlendMode::AdditiveStraight;
+    desc.sort           = EParticleSortMode::None;
+    desc.texture        = tex.htexture;
+    desc.texture_width  = int32_t(tex.desc.width  > 0 ? tex.desc.width  : 1);
+    desc.texture_height = int32_t(tex.desc.height > 0 ? tex.desc.height : 1);
+    // drip.i3d is a single-frame sprite (no atlas — pre-release renders
+    // GetObject(0) which is a single billboard per drop).
+    desc.frame_cols     = 1;
+    desc.frame_rows     = 1;
+    desc.default_width  = kDripDropletSizeWu;
+    desc.default_height = kDripDropletSizeWu;
+
+    SParticleBufferLayout layout = {};
+    ParticleLayoutAddVar(layout, EParticleVar::OwnerId);
+    ParticleLayoutAddVar(layout, EParticleVar::Life);
+    ParticleLayoutAddVar(layout, EParticleVar::Age);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawPos);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawFrame);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawRot);
+    // EmitVel stores per-particle velocity (wu/sim-tick to keep math in
+    // retail units; scaled by tick count per frame in
+    // TickAndSubmitForTest).
+    ParticleLayoutAddVar(layout, EParticleVar::EmitVel);
+
+    TParticleBucket* bucket = ParticleManager().GetOrCreateGlobalBucket(desc, layout);
+    log_info("[drip] AcquireDripBucket: bucket='%s' tex=%dx%d handle=%u",
+             kDripBucketName, desc.texture_width, desc.texture_height,
+             tex.htexture);
+    return bucket;
+}
+
+}   // namespace
+
+TDripEffect::~TDripEffect()
+{
+    if (bucket_ && owner_particle_id_ >= 0.0f)
+        bucket_->KillParticlesByOwner(owner_particle_id_);
+    // spawned_ripples_ unique_ptrs destruct here, releasing chained
+    // TRippleEffects (which delete their map indices + procedural-atlas
+    // refcounts cleanly via their own ~TRippleEffect).
+}
+
+// Pre-release TDripEffect::Initialize / Pulse are empty stubs
+// (effect_old.cpp:10954-10961) — all the per-frame work lives in
+// TDripAnimator. Phase 2 collapses both into TDripEffect.
+void TDripEffect::Initialize() {}
+void TDripEffect::Pulse()      { TEffect::Pulse(); }
+
+void TDripEffect::Load(RTInputStream is, int32_t version, int32_t objversion)
+{
+    TObjectInstance::Load(is, version, objversion);
+    is >> ripplesize >> height >> period;
+}
+
+void TDripEffect::Save(RTOutputStream os)
+{
+    TObjectInstance::Save(os);
+    os << ripplesize << height << period;
+}
+
+TDripEffect* TDripEffect::SpawnForTest(const S3DPoint& origin)
+{
+    const int32_t img_id = TObjectImagery::FindImagery(kDripImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[drip] SpawnForTest: FindImagery('%s') failed", kDripImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[drip] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kDripImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[drip] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kDripImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* drip = new TDripEffect(base);
+    drip->ForcePos(origin);
+    drip->SetMapIndex(MapPane.MakeIndex());
+    drip->ActivateComponents();
+
+    // Harness cadence override (forensics §6 — see kDripHarnessPeriod).
+    drip->SetParams(kDripDefaultRippleSize, kDripDefaultHeight, kDripHarnessPeriod);
+
+    drip->bucket_ = AcquireDripBucket(img3d);
+    if (!drip->bucket_)
+    {
+        log_warn("[drip] SpawnForTest: bucket unavailable — H04 will draw nothing");
+        return drip;
+    }
+    drip->owner_particle_id_ = NextDripOwnerId();
+
+    // Seed exactly one particle, parked offscreen in the dead state.
+    // The Tick path moves it into the visible region on the respawn
+    // coin flip + integrates downward until landing.
+    TParticleBucket& bucket = *drip->bucket_;
+    const int32_t pi = bucket.AddParticle(drip->owner_particle_id_, /*life*/0.0f);
+    if (pi < 0)
+    {
+        log_warn("[drip] SpawnForTest: bucket AddParticle returned -1");
+        return drip;
+    }
+
+    if (float* pos = bucket.VarPtr(pi, EParticleVar::DrawPos))
+    {
+        pos[0] = float(origin.x);
+        pos[1] = float(origin.y);
+        pos[2] = kDripDeadParkZ;
+    }
+    if (float* vel = bucket.VarPtr(pi, EParticleVar::EmitVel))
+    {
+        vel[0] = 0.0f;
+        vel[1] = 0.0f;
+        vel[2] = 0.0f;
+    }
+    if (float* ds = bucket.VarPtr(pi, EParticleVar::DrawScl))
+    {
+        ds[0] = kDripDropletSizeWu;
+        ds[1] = kDripDropletSizeWu;
+        ds[2] = 1.0f;
+    }
+    if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
+        *df = 0.0f;
+    if (float* dr = bucket.VarPtr(pi, EParticleVar::DrawRot))
+        *dr = 0.0f;
+    // Cool-water-blue tint with additive blend. Brighter than M05 mist's
+    // 0.18 per-particle intensity since only ONE drop is ever alive at
+    // a time (no overlap saturation concern) and the streak needs to
+    // read as bright against the dark harness background. Slight blue
+    // tilt distinguishes water-drip from a generic spark.
+    if (float* col = bucket.VarPtr(pi, EParticleVar::DrawColor))
+    {
+        col[0] = 0.55f;
+        col[1] = 0.75f;
+        col[2] = 1.0f;
+        col[3] = 1.0f;
+    }
+    // Life is unused in the integration loop (drips manage their own
+    // lifecycle via the dead_/time_ FSM) but set to a non-zero value so
+    // the bucket's reaper doesn't tag the particle as a zombie.
+    if (float* life = bucket.VarPtr(pi, EParticleVar::Life))
+        *life = 1e9f;
+
+    log_info("[drip] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "owner_id=%.0f height=%d period=%d ripplesize=%d",
+             kDripImageryPath, drip->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             drip->owner_particle_id_,
+             kDripDefaultHeight, kDripHarnessPeriod, kDripDefaultRippleSize);
+    return drip;
+}
+
+void TDripEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24 Hz sim-tick gate (forensics §7.4) — accumulate render-rate
+    // deltas, integrate per retail-tick. Without this the drop would
+    // fall 2.5× too fast and the respawn coin flip would fire 2.5×
+    // more often at 60 fps.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    int32_t ticks = 0;
+    while (sim_accum_ms_ >= double(kDripSimTickMs))
+    {
+        sim_accum_ms_ -= double(kDripSimTickMs);
+        ++ticks;
+    }
+
+    const S3DPoint& origin = Pos();
+
+    // ----- Drop integration (per-tick FSM) ----------------------------
+    if (bucket_ && owner_particle_id_ >= 0.0f && ticks > 0)
+    {
+        // Find our single particle (could iterate by owner like M05,
+        // but we know it's one slot; the linear scan is cheap).
+        const int32_t count = bucket_->Count();
+        int32_t pi = -1;
+        for (int32_t i = 0; i < count; ++i)
+        {
+            const float* owner = bucket_->VarPtr(i, EParticleVar::OwnerId);
+            if (owner && *owner == owner_particle_id_)
+            {
+                pi = i;
+                break;
+            }
+        }
+
+        if (pi >= 0)
+        {
+            float* pos = bucket_->VarPtr(pi, EParticleVar::DrawPos);
+            float* vel = bucket_->VarPtr(pi, EParticleVar::EmitVel);
+            if (pos && vel)
+            {
+                for (int32_t t = 0; t < ticks; ++t)
+                {
+                    if (dead_)
+                    {
+                        ++time_;
+                        // Pre-release: respawn gate is
+                        //   `time > period && !random(0, period/2)`.
+                        // `random(0, N)` returns 0..N inclusive (N+1
+                        // outcomes), so `!random(0, N)` is a
+                        // 1/(N+1) Bernoulli per frame. We model the
+                        // same with std::rand().
+                        const int32_t period_half = (period > 1) ? (period / 2) : 1;
+                        if (time_ > period && (std::rand() % (period_half + 1)) == 0)
+                        {
+                            time_  = 0;
+                            dead_  = false;
+                            pos[0] = float(origin.x);
+                            pos[1] = float(origin.y);
+                            pos[2] = float(origin.z) + float(height);
+                            vel[0] = 0.0f;
+                            vel[1] = 0.0f;
+                            vel[2] = kDripInitialVz;
+                        }
+                    }
+                    else
+                    {
+                        // Euler integrate; gravity in wu/tick².
+                        pos[0] += vel[0];
+                        pos[1] += vel[1];
+                        pos[2] += vel[2];
+                        vel[2] -= kDripGravity;
+                        if (pos[2] <= float(origin.z))
+                        {
+                            // ----- Landing: chain into H03 ripple --
+                            const S3DPoint landing = {
+                                int32_t(pos[0]),
+                                int32_t(pos[1]),
+                                int32_t(origin.z),
+                            };
+                            TRippleEffect* ripple = TRippleEffect::SpawnForTest(landing);
+                            if (ripple)
+                            {
+                                ripple->SetLength(ripplesize);
+                                spawned_ripples_.emplace_back(ripple);
+                                log_info("[drip] landing at (%d,%d,%d) → "
+                                         "spawned ripple (len=%d, owned_count=%zu)",
+                                         landing.x, landing.y, landing.z,
+                                         ripplesize, spawned_ripples_.size());
+                            }
+                            else
+                            {
+                                log_warn("[drip] landing at (%d,%d,%d) — "
+                                         "ripple SpawnForTest returned null",
+                                         landing.x, landing.y, landing.z);
+                            }
+                            // Park the bucket particle offscreen until
+                            // the next respawn coin flip.
+                            pos[2] = kDripDeadParkZ;
+                            vel[0] = 0.0f;
+                            vel[1] = 0.0f;
+                            vel[2] = 0.0f;
+                            dead_  = true;
+                            time_  = 0;
+                            // PLAY("drip") SFX is muted in the harness
+                            // (forensics §7.6).
+                            break;   // don't integrate fresh-parked particle this same frame
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ----- Submit drop bucket ----------------------------------------
+    if (bucket_)
+        Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+
+    // ----- Tick + submit + prune chained ripples ---------------------
+    // First tick each ripple forward (their own TickAndSubmitForTest
+    // submits via SubmitFxBillboard, independent of our bucket).
+    for (auto& r : spawned_ripples_)
+    {
+        if (r)
+            r->TickAndSubmitForTest(debug_mode);
+    }
+    // Then prune dead ones. erase-remove keeps memory contiguous; the
+    // landing site typically holds 1-3 ripples concurrently (a fresh
+    // ripple takes ~96 ticks ≈ 4 sec at 24 Hz to dissipate fully via
+    // H03's frameon > len gate, and our 10-sec mean inter-drop period
+    // means landings are sparser than the ripple lifetime).
+    spawned_ripples_.erase(
+        std::remove_if(spawned_ripples_.begin(), spawned_ripples_.end(),
+                       [](const std::unique_ptr<TRippleEffect>& r) {
+                           return !r || !r->IsAlive();
+                       }),
+        spawned_ripples_.end());
 }
 
 // *************************************************************************

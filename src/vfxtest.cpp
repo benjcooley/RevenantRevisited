@@ -678,6 +678,47 @@ void MistSubmit(void* cp, EFxDebugMode dbg)
     c->mist->TickAndSubmitForTest(dbg);
 }
 
+// --- PE: real TDripEffect (Magic/drip.i3d, H04) + drip→ripple chain -----
+// Spawns a sector-less TDripEffect at the harness-provided origin via
+// SpawnForTest and drives its single-drop ceiling-emitter through
+// TickAndSubmitForTest each frame. H04 is the natural retail caller of
+// H03 TRippleEffect — on each landing the drip spawns a real
+// TRippleEffect owned via std::unique_ptr inside the drip. This makes
+// H04 the harness's **first "effect that spawns another effect"**
+// demonstration (see INVENTORY H04 §6).
+//
+// Static preview style — drip is ambient environmental: the cyclic
+// respawn happens internally within TickAndSubmitForTest, the harness
+// never re-fires the drip itself. Cycle out and back in with Left/Right
+// to reset the emitter state.
+struct SDripCtx {
+    TDripEffect* drip = nullptr;
+};
+
+void* DripSpawn(const S3DPoint& origin)
+{
+    auto* c = new SDripCtx();
+    c->drip = TDripEffect::SpawnForTest(origin);
+    if (!c->drip)
+        log_warn("[vfx] TDripEffect::SpawnForTest returned null; H04 entry will draw nothing");
+    return c;
+}
+
+void DripDestroy(void* cp)
+{
+    auto* c = static_cast<SDripCtx*>(cp);
+    delete c->drip;
+    delete c;
+}
+
+void DripSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SDripCtx*>(cp);
+    if (!c->drip)
+        return;
+    c->drip->TickAndSubmitForTest(dbg);
+}
+
 // --- FB+LS: real THaloEffect (procedural radial-gradient texture, L02) --
 // Spawns a sector-less THaloEffect at the harness-provided origin via
 // SpawnForTest and drives its triangle-wave scale envelope through
@@ -875,6 +916,20 @@ struct SVfxTestBootstrap {
         mist.submit        = [](void* c, EFxDebugMode d) { MistSubmit(c, d); };
         mist.destroy       = [](void* c) { MistDestroy(c); };
         VfxTest::DeferredRegister(mist);
+
+        VfxTest::SEffect drip = {};
+        drip.id            = "TDripEffect";
+        drip.family        = "water";
+        drip.pipeline      = "PE";
+        // Drip is ambient environmental — the cyclic respawn happens
+        // inside TickAndSubmitForTest (one drop per ~10 sec at the
+        // harness's reduced period). Static cadence; cycle in/out to
+        // reset. See INVENTORY H04 §6.
+        drip.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        drip.factory       = [](const S3DPoint& o) -> void* { return DripSpawn(o); };
+        drip.submit        = [](void* c, EFxDebugMode d) { DripSubmit(c, d); };
+        drip.destroy       = [](void* c) { DripDestroy(c); };
+        VfxTest::DeferredRegister(drip);
 
         VfxTest::SEffect halo = {};
         halo.id            = "THaloEffect";
