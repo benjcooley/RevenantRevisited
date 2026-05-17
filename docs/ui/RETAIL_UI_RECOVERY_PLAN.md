@@ -190,7 +190,7 @@ The 6-tab sidebar (per `TSideTabsPane` Wave-1A finding) splits visually into two
 - `[ ]` **B.r24 — Automap sidebar tab (lower)** — `TAutoMap` (src/automap.h). PERFECT yaml mapping per `RECON_UI_COVERAGE.md`; identify retail vtable + verify.
 - `[ ]` **B.r25 — Inventory sidebar tab (lower)** — `TInventory` (src/inventory.h). Per user: this is the lower-sidebar inventory, separate from / combined with the upper Character tab's paper-doll grid. Container relationship needs verification: same class twice? distinct retail classes? part of the Character tab spilling into the lower region?
 
-**Open structural question (B.r21 through B.r25):** the visual organization shows simultaneous upper+lower content in some modes (`sample_screen_1.jpg`: Stats on top, Automap on bottom). That implies the sidebar can show TWO content panes at once, not just one — meaning `TSideTabsPane`'s 6 buttons may not be a flat 1-of-6 mode toggle, but rather a row of independent visibility toggles for the various content tabs. Verify via TSideTabsPane's input/click handler.
+**Sidebar visibility model (confirmed by user 2026-05-16):** `TSideTabsPane`'s 6 round buttons control sidebar content visibility (confirmed: `sample_screen_1.jpg` shows Stats parchment + Automap circle visible simultaneously, so the buttons are not a flat 1-of-6 mode selector). The exact wire-up — independent per-button toggles vs preset combinations — is recovered by extracting TSideTabsPane's input/click handler; whatever the mapping, the 6 buttons map onto the 5-6 content classes enumerated above plus possibly one for book/scroll display in the sidebar slot (CLASSIC_HUD §3c).
 
 ## Progress tracking (BURNDOWN integration)
 
