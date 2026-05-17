@@ -678,6 +678,47 @@ void MistSubmit(void* cp, EFxDebugMode dbg)
     c->mist->TickAndSubmitForTest(dbg);
 }
 
+// --- FB+LS: real THaloEffect (procedural radial-gradient texture, L02) --
+// Spawns a sector-less THaloEffect at the harness-provided origin via
+// SpawnForTest and drives its triangle-wave scale envelope through
+// TickAndSubmitForTest each frame. Halo submits one additive billboard
+// (FB pipeline) AND re-adds one dynamic point light (LS pipeline) each
+// frame — the row's "FB+LS" pipeline-tag in INVENTORY. Mirrors the
+// F01/H03/M05 lambda-shim pattern; all spawn/animator/submit logic
+// lives on THaloEffect.
+//
+// SpellGround preview style — the halo's triangle-wave + brief lifetime
+// reads as a spell-cast ground halo (per INVENTORY L02 §5 inference):
+// ground-anchored event, occasional re-fire at small XY jitter, 3.0 sec
+// retrigger cadence (same as H03 ripple).
+struct SHaloCtx {
+    THaloEffect* halo = nullptr;
+};
+
+void* HaloSpawn(const S3DPoint& origin)
+{
+    auto* c = new SHaloCtx();
+    c->halo = THaloEffect::SpawnForTest(origin);
+    if (!c->halo)
+        log_warn("[vfx] THaloEffect::SpawnForTest returned null; L02 entry will draw nothing");
+    return c;
+}
+
+void HaloDestroy(void* cp)
+{
+    auto* c = static_cast<SHaloCtx*>(cp);
+    delete c->halo;
+    delete c;
+}
+
+void HaloSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SHaloCtx*>(cp);
+    if (!c->halo)
+        return;
+    c->halo->TickAndSubmitForTest(dbg);
+}
+
 // --- LS: flare + dynamic point light placeholder -------------------------
 struct SFlareCtx {
     float age = 0.0f;
@@ -794,6 +835,20 @@ struct SVfxTestBootstrap {
         mist.submit        = [](void* c, EFxDebugMode d) { MistSubmit(c, d); };
         mist.destroy       = [](void* c) { MistDestroy(c); };
         VfxTest::DeferredRegister(mist);
+
+        VfxTest::SEffect halo = {};
+        halo.id            = "THaloEffect";
+        halo.family        = "light";
+        halo.pipeline      = "FB+LS";
+        // Halo = spell-cast ground halo (per INVENTORY L02 §5): brief
+        // triangle-wave pulse, ground-anchored, ~1 sec lifetime.
+        // SpellGround cadence (3 sec retrigger, small XY jitter) reads
+        // as repeated spell casts at the player's feet.
+        halo.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        halo.factory       = [](const S3DPoint& o) -> void* { return HaloSpawn(o); };
+        halo.submit        = [](void* c, EFxDebugMode d) { HaloSubmit(c, d); };
+        halo.destroy       = [](void* c) { HaloDestroy(c); };
+        VfxTest::DeferredRegister(halo);
 
         VfxTest::SEffect flare = {};
         flare.id            = "TFlareAnimator.placeholder";
