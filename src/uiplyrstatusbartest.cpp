@@ -83,11 +83,9 @@ constexpr SBarColor kBarColors[3] = {
     { 0xE0, 0xB0, 0x10 },   // stamina — gold/orange
 };
 
-// Cached single-bar backdrop bitmap (200x11) from playscrn.dat. The retail
-// asset is `texthealthbar` (asset #98) — ONE bar's track+text composite.
-// The full TPlyrStatusBar panel stacks 3 of these vertically (one each
-// for health / mana / stamina).
-PTBitmap g_textHealthBar = nullptr;
+// Cached assets from playscrn.dat.
+PTBitmap g_textHealthBar = nullptr;   // 200x11 single-bar backdrop
+PTBitmap g_lifeIcon      = nullptr;   // 24x21 heart icon for health bar
 
 // Mockup pane visualizer. The panel for each side is:
 //   - 3 stacked `texthealthbar` blits (200x11 each, 14px row pitch)
@@ -166,8 +164,9 @@ private:
         Renderer->DrawSolidRect(portraitX + kPortraitSize - 1, blockY,
                                 1, kPortraitSize, 180, 140, 60, aFrame);
 
-        // 3 stacked `texthealthbar` blits, one per bar.
-        // Bars sit to the INNER side of the portrait.
+        // 3 stacked bars. Bars sit to the INNER side of the portrait.
+        // Each bar = colored gradient fill (placeholder for retail's
+        // per-bar mosaic-surface composition) + icon at outer end.
         const int32_t barX = isRight
             ? outerX                              // RIGHT block: bars left of portrait
             : outerX + kPortraitSize + 4;         // LEFT  block: bars right of portrait
@@ -177,32 +176,76 @@ private:
         {
             const int32_t rowY = blockY + 2 + i * kBarRowPitch;
 
-            // Backdrop bitmap (the bar's track + icon + text frame).
-            if (g_textHealthBar)
-            {
-                Renderer->DrawBitmap(g_textHealthBar, barX, rowY);
-            }
+            // Skip the green texthealthbar bitmap blit — it doesn't
+            // match the retail per-bar colors and currently dominates
+            // visually. Once the mosaic-surface compositing pipeline
+            // lands, the bitmap's track + icon-slot + value-text-region
+            // will be color-tinted per bar and blitted directly.
+            (void)g_textHealthBar;
 
-            // Bar fill — colored rect overlaid on the bar bitmap to
-            // indicate current level. The retail mechanism is different:
-            // it pre-composites each bar into a TMosaicSurface in the
-            // intended color and blits the surface (cached, regenerated
-            // only when level changes). Wiring that requires the
-            // surface-to-HUD pipeline and per-bar color compositing,
-            // both pending. For now the colored fill rect lives on top
-            // of the bar bitmap as a level indicator.
+            // === Bar fill ===
+            // Approximated scimitar shape: rectangular body with a
+            // tapered triangular tip. Drawn as a stack of decreasing-
+            // height rect slices along the fade region.
             const float lvl = std::clamp(lvls[i], 0.0f, 1.0f);
-            const int32_t fw = int32_t(float(kBarFillW) * lvl);
-            const int32_t fillSlotX = barX + kBarFillInsetX;
+            const int32_t totalW = std::max<int32_t>(kBarFillW, 80);
+            const int32_t bodyW  = int32_t(totalW * 0.7f);     // 70% solid
+            const int32_t tipW   = totalW - bodyW;             // 30% tapered tip
+            const int32_t fillH  = kBarFillH;
+            const int32_t filledTotal = int32_t(float(totalW) * lvl);
+            const int32_t actualBodyW = (bodyW < filledTotal) ? bodyW : filledTotal;
+            const int32_t actualTipW  = (filledTotal > actualBodyW)
+                                        ? (filledTotal - actualBodyW) : 0;
+
             const int32_t fillSlotY = rowY + kBarFillInsetY;
             const auto& c = kBarColors[i];
-            if (fw > 0)
+
+            // Solid body
+            if (actualBodyW > 0)
             {
-                const int32_t fillX = isRight
-                    ? fillSlotX + (kBarFillW - fw)
-                    : fillSlotX;
-                Renderer->DrawSolidRect(fillX, fillSlotY, fw, kBarFillH,
+                const int32_t bx = isRight
+                    ? barX + totalW - actualBodyW
+                    : barX;
+                Renderer->DrawSolidRect(bx, fillSlotY, actualBodyW, fillH,
                                         c.r, c.g, c.b, aFrame);
+            }
+            // Tapered tip (slices of decreasing height)
+            if (actualTipW > 0 && tipW > 0)
+            {
+                for (int32_t s = 0; s < actualTipW; ++s)
+                {
+                    // Slice height shrinks linearly from fillH at start of tip
+                    // to 1 at end of tip.
+                    const float t01 = float(s) / float(tipW);
+                    const int32_t sh = std::max<int32_t>(1,
+                        int32_t(float(fillH) * (1.0f - t01)));
+                    const int32_t sy = fillSlotY + (fillH - sh) / 2;
+                    const int32_t sx = isRight
+                        ? barX + tipW - 1 - s
+                        : barX + bodyW + s;
+                    Renderer->DrawSolidRect(sx, sy, 1, sh,
+                                            c.r, c.g, c.b, aFrame);
+                }
+            }
+
+            // === Icon at outer end of bar ===
+            // Use `life` (heart, 24x21) for the health bar (i=0).
+            // No matching mana/stamina icons in playscrn.dat — leave
+            // those as small colored squares for now.
+            if (i == 0 && g_lifeIcon)
+            {
+                const int32_t ix = isRight
+                    ? barX + totalW + 2
+                    : barX - g_lifeIcon->width - 2;
+                const int32_t iy = rowY + (kBarRowPitch - g_lifeIcon->height) / 2;
+                Renderer->DrawBitmap(g_lifeIcon, ix, iy);
+            }
+            else
+            {
+                // Placeholder icon: 8x8 colored square in the bar color.
+                const int32_t ix = isRight ? barX + totalW + 2 : barX - 10;
+                const int32_t iy = rowY + 2;
+                Renderer->DrawSolidRect(ix, iy, 8, 8, c.r, c.g, c.b, aFrame);
             }
         }
     }
@@ -231,17 +274,20 @@ bool InitializeUIPlyrStatusBarMode()
     }
 
     // Look up real assets used by retail TPlyrStatusBar.
-    // Asset name discovered by dumping playscrn.dat's name table — the
-    // panel backdrop bitmap is `texthealthbar` (asset #98 in the .dat).
+    // texthealthbar (#98): one bar's track+text bitmap (plain green
+    //   rectangle 200x11 — per-bar color comes from mosaic-surface
+    //   compositing in retail; not yet wired here).
+    // life (#54): 24x21 heart icon for the health bar's left-end icon
     if (GameData)
     {
         g_textHealthBar = GameData->Bitmap((char*)"texthealthbar");
+        g_lifeIcon      = GameData->Bitmap((char*)"life");
         if (g_textHealthBar)
-            log_info("[ui-plyrstatusbar] texthealthbar bitmap loaded (%dx%d)",
+            log_info("[ui-plyrstatusbar] texthealthbar loaded (%dx%d)",
                      g_textHealthBar->width, g_textHealthBar->height);
-        else
-            log_warn("[ui-plyrstatusbar] texthealthbar not found in GameData "
-                     "-- falling back to solid-rect placeholder");
+        if (g_lifeIcon)
+            log_info("[ui-plyrstatusbar] life (heart icon) loaded (%dx%d)",
+                     g_lifeIcon->width, g_lifeIcon->height);
     }
 
     Renderer->AddHud(&g_hud, 0.0f);
