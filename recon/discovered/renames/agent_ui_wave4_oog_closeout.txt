@@ -1,0 +1,279 @@
+# Wave-4B renames - Tier 10 OOG closeout: TDeathPane, TScrollPane, TBookPane,
+# TDeathScreen, and main-menu disambiguation (TLogoScreen).
+#
+# Date:  2026-05-16
+# Agent: Wave-4B (Tier 10 OOG closeout)
+# Brief: docs/ui/briefs/B_r12_oog_closeout.md
+#
+# All renames in this file have 2+ independent lines of evidence via the
+# GOLDEN PATH (string anchor in retail decomp + same string emitted from
+# matching src/ method). Per AGENT_PROTOCOL.md, asset-name + vtable-shape
+# evidence is used as the second line only when paired with a class-purpose
+# string anchor in the same method body.
+#
+# IMPORTANT - merging hazard warning. The file
+# `recon/classes_original/cls_0x5b93c4_TPlayer.cpp` carries a misleading
+# `_TPlayer` filename suffix from an earlier OOAnalyzer auto-label pass.
+# It is NOT TPlayer. TPlayer is confirmed elsewhere as cls_0x5b4f30 (see
+# `recon/discovered/port_status/TPlayer.md` and the 22 cls_0x5b4f30_TPlayer_*
+# decomp files in recon/discovered/). cls_0x5b93c4 is TDeathPane (see
+# brief B.r17 for the evidence chain). The 33 methods OOAnalyzer attached to
+# cls_0x5b93c4 are a flatten-mixed bag of: (a) the TButtonPane intermediate
+# (cls_0x5a45c8) inherited slots in the 0x435xxx-0x437xxx range, (b)
+# TDeathPane-specific slots at 0x5339b0..0x533da0, (c) a few intrusions
+# (0x52ff40, 0x538e40, 0x5391a0) that may belong to the intermediate or
+# sibling classes. Do NOT rename `cls_0x5b93c4` -> `cls_0x5b93c4_TDeathPane`
+# at the bare-class level yet without coordinator review, because doing so
+# would invalidate any of the 0x435xxx/0x436xxx/0x437xxx methods in that
+# same file that actually belong to the intermediate base. Method-level
+# renames for confirmed TDeathPane methods are applied below.
+#
+# B.r19 - Credits screen: no class to rename. Credits ship as a Smacker
+# video at `data/Disk2/MIX_CREDITS.SMK` (no in-engine credits UI class).
+# See brief.
+#
+# B.r20 - Main menu: cls_0x5a5d18_TLogoScreen is the main menu screen
+# (already labeled by Wave-1 in agent_screens.txt). This wave only adds a
+# clarifying comment to that prior identification - no new renames needed.
+
+# ============================================================================
+# B.r17 - TDeathPane (cls_0x5b93c4) method-level renames
+# ============================================================================
+
+# FUN_005339b0 -> TDeathPane::Initialize (vtable slot 0 of cls_0x5b93c4).
+#
+# Evidence line 1: cls_0x5b93c4_TDeathPane_Initialize_5339b0.cpp body
+#   calls FUN_00481c10(s_Trouble_initializing_Death_pane_005e3ec8, 0) when
+#   DAT_0066f6f4 (which the wrapper screen at 0x5338a0 loads via
+#   FUN_0047f670("death.dat",...)) is zero. The string
+#   "Trouble initializing Death pane" exists in the binary at 0x5e3ec8.
+# Evidence line 2: src/death.cpp::TDeathPane::Initialize loads "death.dat"
+#   via TMulti::LoadMulti and creates 3 NewButton() calls for restart/load/exit
+#   with VK_TAB / VK_RETURN / VK_ESCAPE. The retail body creates 3 button
+#   widgets (cls_0x5a3c68 ctor at 0x148-byte alloc) with the exact same
+#   pattern: button labels "Restart" (0x5e3f18), DAT_005e3f20, DAT_005e3f28
+#   (= "Load", "Exit" - alignment-padded strings in the .rdata block).
+FUN_005339b0|FUN_005339b0_TDeathPane_Initialize
+virt_meth_0x5339b0|virt_meth_0x5339b0_TDeathPane_Initialize
+meth_0x5339b0|meth_0x5339b0_TDeathPane_Initialize
+
+# FUN_00533c00 -> TDeathPane::Close (vtable slot 184 of cls_0x5b93c4).
+#
+# Evidence line 1: slot 184 (last leaf slot above the 47-slot base) of
+#   cls_0x5b93c4's vtable points to 0x533c00. Body is a thin wrapper that
+#   calls cls_0x5b98b8::virt_meth_0x434f30 (TButtonPane intermediate's
+#   Close). Position in vtable matches the Close-slot pattern observed for
+#   TScrollPane / TBookPane / TStatPane.
+# Evidence line 2: src/death.cpp::TDeathPane::Close calls TButtonPane::Close()
+#   first then cleans up. Retail body matches in shape.
+FUN_00533c00|FUN_00533c00_TDeathPane_Close
+virt_meth_0x533c00|virt_meth_0x533c00_TDeathPane_Close
+meth_0x533c00|meth_0x533c00_TDeathPane_Close
+
+# FUN_00533c10 -> TDeathPane::DrawBackground (vtable slot 80 of cls_0x5b93c4).
+#
+# Evidence line 1: slot 80 = the standard DrawBackground slot for the
+#   TButtonPane-with-DEF intermediate (verified across TScrollPane slot80
+#   = 0x521360 and TBookPane slot80 = 0x521a20, both DrawBackground per
+#   src/scroll.cpp). The body at 0x533c10 reads this->mbr_0x50 (the IsDirty
+#   flag for the pane) and on dirty calls cls_0x46d6b0::meth_0x46d710(
+#   DAT_0066f6f4) - that's Bitmap("background") on the loaded death.dat
+#   multi. Pattern: get the bitmap, Put it at (0,0) via cls_0x5a68d8's
+#   meth_0x4bd680.
+# Evidence line 2: src/death.cpp::TDeathPane::DrawBackground does
+#   IsDirty() guard then Display.Put(0, 0, deathdata->Bitmap("background"),
+#   DM_BACKGROUND) - exact structural match.
+FUN_00533c10|FUN_00533c10_TDeathPane_DrawBackground
+virt_meth_0x533c10|virt_meth_0x533c10_TDeathPane_DrawBackground
+meth_0x533c10|meth_0x533c10_TDeathPane_DrawBackground
+
+# FUN_00533cc0 -> TDeathPane::TDeathPane (ctor of cls_0x5b93c4).
+#
+# Evidence line 1: ctor body sets mbr_0xc/0x1c=0x280, mbr_0x10/0x20=0x1e0
+#   (= 640x480 full-screen). Matches FRAMEMAPPANEX/Y/WIDTH/HEIGHT used by
+#   src/death.h::TDeathPane(FRAMEMAPPANEX, FRAMEMAPPANEY, FRAMEMAPPANEWIDTH,
+#   FRAMEMAPPANEHEIGHT). Sets vftptr to &cls_0x5b93c4__vftable_5b93c4 after
+#   first initializing it to &cls_0x5a4494__vftable (TPane base) - classic
+#   ctor-chain pattern.
+# Evidence line 2: only called from inside cls_0x5b9374's Initialize chain
+#   (the TDeathScreen wrapper); reachable only from death-screen activation.
+FUN_00533cc0|FUN_00533cc0_TDeathPane_Ctor
+meth_0x533cc0|meth_0x533cc0_TDeathPane_Ctor
+
+# ============================================================================
+# B.r17 - TDeathScreen (cls_0x5b9374) method-level renames
+# ============================================================================
+#
+# cls_0x5b9374 is a TScreen subclass (inherits cls_0x5a5ed4_TScreen as its
+# only member at offset 0, length 112). Its purpose is to wrap TDeathPane and
+# provide the screen-level Initialize/Close lifecycle that the screen manager
+# expects. NOT present in pre-release src/ - in src/, TDeathPane was directly
+# AddPane'd onto PlayScreen without an intervening TScreen subclass.
+
+# FUN_005338a0 -> TDeathScreen::Initialize (slot 0 of cls_0x5b9374's vtable).
+#
+# Evidence line 1: body of FUN_005338a0 (extracted) loads death.dat via
+#   FUN_0047f670(s_death_dat_005e3ebc, ...) into DAT_0066f6f4, then calls
+#   cls_0x5b93c4::virt_meth_0x5339b0(&DAT_0066f500) - i.e. invokes
+#   TDeathPane::Initialize on the global TDeathPane instance at 0x66f500.
+#   If TDeathPane::Initialize returns 0 it emits FUN_00481c10(
+#   s_Trouble_initializing_Death_pane_005e3ec8, 0).
+# Evidence line 2: the wrapper-loads-asset-then-inits-pane shape matches
+#   the established PlayScreen pattern for other panes (TPlyrStatusBar,
+#   TStatPane, TQuickSpellPane); TDeathScreen is the same pattern lifted
+#   into its own TScreen subclass.
+FUN_005338a0|FUN_005338a0_TDeathScreen_Initialize
+
+# ============================================================================
+# B.r18 - TScrollPane (cls_0x5b5750) method-level renames
+# ============================================================================
+
+# FUN_00521080 -> TScrollPane::Initialize (vtable slot 0 of cls_0x5b5750).
+#
+# Evidence line 1: body loads "scroll.dat" via FUN_0047f670(s_scroll_dat_
+#   005e2c6c, ...) and stores in mbr_0x180. Then calls FUN_0046d710(
+#   s_scroll_005e2c78) to fetch the "scroll" bitmap, computes centred (x,y),
+#   then 3x FUN_00444e30 calls (= NewButton equivalent) with the asset
+#   names "down" (s_downup/s_downdown), "up" (s_updown/DAT_5e2c9c), "exit"
+#   (s_exitup/s_exitdown), wired to LAB_00521030/LAB_00520ff0/LAB_00521070
+#   (button handlers) and keys 0x22(VK_NEXT)/0x21(VK_PRIOR)/0x1b(VK_ESCAPE).
+# Evidence line 2: src/scroll.cpp::TScrollPane::Initialize at lines 117-130
+#   does PRECISELY the same sequence with identical asset names and identical
+#   VK_NEXT/VK_PRIOR/VK_ESCAPE keycodes:
+#     scrolldata = TMulti::LoadMulti("scroll.dat");
+#     bitmap = scrolldata->Bitmap("scroll");  // for centring
+#     NewButton("down", x+452, y+330, 28, 31, VK_NEXT, ScrollBtnScrollDown,
+#               scrolldata->Bitmap("downdown"), scrolldata->Bitmap("downup"));
+#     NewButton("up", ..., VK_PRIOR, ScrollBtnScrollUp, ...);
+#     NewButton("exit", ..., VK_ESCAPE, ScrollBtnExit, ...);
+#   This is an exact, decisive golden-path match.
+FUN_00521080|FUN_00521080_TScrollPane_Initialize
+virt_meth_0x521080|virt_meth_0x521080_TScrollPane_Initialize
+meth_0x521080|meth_0x521080_TScrollPane_Initialize
+
+# FUN_005212c0 -> TScrollPane::Close (vtable slot 4 of cls_0x5b5750, also
+# inherited by TBookPane at the same vtable offset).
+#
+# Evidence line 1: body calls cls_0x5b98b8::virt_meth_0x434f30 (TButtonPane
+#   intermediate Close), frees this->mbr_0x180 (the scrolldata multi),
+#   then calls 3 methods on the global PlayScreen instance at DAT_0065caf0:
+#   meth_0x48ed60 / meth_0x48ef30 / meth_0x48ee10 (matching PlayScreen's
+#   ReleaseExclusivePane / RemovePane / Redraw pattern). Sets mbr_0x17c
+#   (scroll object pointer) to 0.
+# Evidence line 2: src/scroll.cpp::TScrollPane::Close (lines 137-146) does:
+#   TButtonPane::Close(); delete scrolldata; PlayScreen.ReleaseExclusivePane;
+#   PlayScreen.RemovePane; PlayScreen.Redraw; PlayScreen.SetFullScreen(...).
+#   The retail body matches order + cleanup exactly.
+FUN_005212c0|FUN_005212c0_TScrollPane_Close
+virt_meth_0x5212c0|virt_meth_0x5212c0_TScrollPane_Close
+meth_0x5212c0|meth_0x5212c0_TScrollPane_Close
+
+# FUN_00521360 -> TScrollPane::DrawBackground (vtable slot 80 of cls_0x5b5750).
+#
+# Evidence line 1: body reads mbr_0x50 (IsDirty), then on dirty fetches the
+#   "scroll" bitmap (Bitmap("scroll") at line 0x521377 = s_scroll_005e2ccc),
+#   centres it on the 640x480 screen, and emits text from mbr_0x17c+0xd8
+#   (= scroll->text in src layout). Uses cls_0x419dd0 (font + colour) for
+#   text rendering.
+# Evidence line 2: src/scroll.cpp::TScrollPane::DrawBackground (lines 154+)
+#   gets scrolldata->Bitmap("scroll"), centres, then iterates lines of text
+#   from the bound TScroll object using scrollfont.
+FUN_00521360|FUN_00521360_TScrollPane_DrawBackground
+virt_meth_0x521360|virt_meth_0x521360_TScrollPane_DrawBackground
+meth_0x521360|meth_0x521360_TScrollPane_DrawBackground
+
+# cls_0x5b5750 -> cls_0x5b5750_TScrollPane (class itself).
+#
+# Promotion to class-level rename justified because:
+# - vtable[0] (Initialize) emits unique class-purpose strings matching src
+# - vtable[4] (Close) interacts with PlayScreen in src-matching pattern
+# - vtable[80] (DrawBackground) renders the scroll bitmap + text
+# - ctor sets pane geometry to full-screen (0,0,640,480) matching src
+#   TScrollPane(0, 0, WIDTH, HEIGHT)
+# - struct layout (408 bytes, fields at 0x17c=scroll, 0x180=scrolldata,
+#   0x188=line, 0x18c=numlines, 0x190/0x194=font fields) matches src layout
+#   for TScrollPane : public TButtonPane.
+cls_0x5b5750|cls_0x5b5750_TScrollPane
+
+# ============================================================================
+# B.r18 - TBookPane (cls_0x5b5808) method-level renames
+# ============================================================================
+
+# FUN_005217e0 -> TBookPane::Initialize (vtable slot 0 of cls_0x5b5808).
+#
+# Evidence line 1: body loads "book.dat" via FUN_0047f670(s_book_dat_
+#   005e2cd4, ...) and stores in mbr_0x180; references "book" bitmap at
+#   DAT_005e2ce0; creates "down"/"up"/"exit" buttons identically to
+#   TScrollPane::Initialize (with VK_NEXT/VK_PRIOR/VK_ESCAPE). The "book.dat"
+#   string anchor uniquely belongs to the book-reader UI subsystem.
+# Evidence line 2: src/scroll.cpp::TBookPane::Initialize at lines 265-280
+#   does EXACTLY the same thing with identical asset names:
+#     scrolldata = TMulti::LoadMulti("book.dat");
+#     scrollfont = FontTable->Bitmap("Book");
+#     bitmap = scrolldata->Bitmap("book");
+#     NewButton("down", ..., VK_NEXT, BookBtnScrollDown, ...);
+#     NewButton("up", ..., VK_PRIOR, BookBtnScrollUp, ...);
+#     NewButton("exit", ..., VK_ESCAPE, BookBtnExit, ...);
+FUN_005217e0|FUN_005217e0_TBookPane_Initialize
+virt_meth_0x5217e0|virt_meth_0x5217e0_TBookPane_Initialize
+meth_0x5217e0|meth_0x5217e0_TBookPane_Initialize
+
+# FUN_00521a20 -> TBookPane::DrawBackground (vtable slot 80 of cls_0x5b5808,
+# which OVERRIDES TScrollPane's slot 80 = 0x521360).
+#
+# Evidence line 1: vtable slot 80 differs between cls_0x5b5750 (0x521360)
+#   and cls_0x5b5808 (0x521a20); all other shared slots are identical
+#   between the two vtables. Slot 80 is consistently DrawBackground across
+#   the TButtonPane-with-DEF family.
+# Evidence line 2: src/scroll.h declares TBookPane final : public TScrollPane
+#   with only two virtual overrides: Initialize and DrawBackground. The
+#   vtable diff matches: slot 0 (Initialize) and slot 80 (DrawBackground)
+#   are the only TScrollPane slots TBookPane overrides.
+FUN_00521a20|FUN_00521a20_TBookPane_DrawBackground
+virt_meth_0x521a20|virt_meth_0x521a20_TBookPane_DrawBackground
+meth_0x521a20|meth_0x521a20_TBookPane_DrawBackground
+
+# cls_0x5b5808 -> cls_0x5b5808_TBookPane (class itself).
+#
+# Promotion to class-level rename justified because:
+# - vtable shape is exactly TScrollPane's 46-slot vtable + 1 new slot (47
+#   total). The 2 overridden slots (Initialize, DrawBackground) match
+#   src/scroll.h's TBookPane interface 1:1.
+# - Initialize emits "book.dat" / "book" / button-name strings exclusive to
+#   the book-reader subsystem; no other class emits these.
+# - ctor sets identical geometry + field layout to TScrollPane (subclass
+#   shares all base fields, only behaviour differs).
+cls_0x5b5808|cls_0x5b5808_TBookPane
+
+# ============================================================================
+# Footer
+# ============================================================================
+#
+# NOT renamed in this wave (deferred):
+#
+# - cls_0x5b93c4 (the bare class). Despite strong evidence that its
+#   "Initialize / Close / DrawBackground / ctor" leaf methods belong to
+#   TDeathPane, the OOAnalyzer-attached intermediate-class methods in the
+#   same file make a bare-class rename risky (would mislabel slot-shared
+#   intermediate methods as TDeathPane methods). Method-level renames above
+#   are safe; class-level rename should wait until Wave-3A/4A finishes
+#   identifying the cls_0x5a45c8 intermediate.
+#
+# - cls_0x5b9374 (the TDeathScreen container). Single Initialize identified;
+#   need vtable dump + 1 more method body before promoting to class-level.
+#
+# - TScrollPane vtable slots 108 (FUN_00521530, key handler) and 184
+#   (FUN_00521fb0, factory/proxy). 108 corresponds to src
+#   TScrollPane::KeyPress (handles VK_NEXT/VK_PRIOR scrolling) - see the
+#   switch statement in cls_0x5b5808::virt_meth_0x521530 that handles cases
+#   0x23/0x24/0x26/0x28 (VK_END/VK_HOME/VK_LEFT/VK_RIGHT? - need verify
+#   against pre-release src). Defer until we extract the body cleanly.
+#
+# - TBookPane's slot 184 (FUN_00521fb0) - looks like a factory/page-flip
+#   method but no string anchor. Defer.
+#
+# - cls_0x5a5d18 (TLogoScreen/main menu). Already renamed by Wave-1 in
+#   agent_screens.txt. Wave-4B confirms it IS the main menu (loads
+#   menus.dat, creates 5 menu buttons: NewGame/LoadGame/Multi/Options/Exit,
+#   draws "MainMenu" bitmap + "Revenant v%d.%02d" version string in
+#   Animate). No new renames needed.

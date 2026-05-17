@@ -165,6 +165,12 @@ Highlights (full status in [RETAIL_UI_RECOVERY_PLAN.md](RETAIL_UI_RECOVERY_PLAN.
 
 ## Phase C — OOG bring-up
 
+- `[ ]` **C.0 Smacker (.SMK) video playback support** — required by C.1 main menu intro + credits roll + inter-mission FMVs. Pre-release `src/` has NO Smacker decoder or movie player (no SMK references found). Assets shipped with retail: `data/Disk2/MIX_CREDITS.SMK`, `data/Disk2/MIX_FMV1.SMK`, `data/Disk2/MIX_FMV2.SMK`, `data/Disk2/Mix_fmv3english.smk` (4 total). Scope:
+  - **Decoder:** vendor `libsmacker` (small BSD-licensed C decoder, the standard open-source Smacker codec) into `thirdparty/libsmacker/`. ffmpeg is too heavy a dep for one codec.
+  - **Playback pipeline:** YV12 (or RGB-converted) frame upload into a `sokol_gfx` texture per frame; audio decoded to PCM and pushed through `sokol_audio`. Cinematics are usually skippable (Esc / click) — wire a generic input dismissal.
+  - **Screen wrapper:** `TCinematicScreen` (new) — `TScreen` subclass that owns a libsmacker stream + per-frame Update() that advances/uploads/draws. Composes underneath the existing OOG screen stack so a menu can transition into it.
+  - **Test mode:** `--test=ui-cinematic <path>` — load one SMK and play it through the new pipeline to verify decode + audio sync before wiring it to game flow.
+  - **Used by:** C.1 (intro on first New Game), C.? (inter-mission), C.? (credits trigger from main menu).
 - `[ ]` **C.1 `TMainMenuScreen`** + `--test=ui-mainmenu`.
 - `[ ]` **C.2 Popup mechanism** — `TPopupScreen` or modal helper; reused by everything downstream.
 - `[ ]` **C.3 `TExitConfirmScreen`** — trivial pattern shakedown.
