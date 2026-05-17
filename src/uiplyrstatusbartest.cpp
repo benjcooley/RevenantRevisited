@@ -42,24 +42,40 @@
 
 namespace {
 
-// Retail-derived layout constants (from Wave-3A extraction).
-constexpr int32_t kPanelHeight     = 64;
-constexpr int32_t kBarRowH         = 14;     // 0x0e
-constexpr int32_t kValueTextW      = 50;     // 0x32 — numeric value text width
-constexpr int32_t kBarFillH        = 10;     // visible bar fill height (< row height)
-constexpr int32_t kBarFillW        = 80;     // approximation — bar fill width
-constexpr int32_t kLeftBarX        = 0x44;   // 68 — bar fill x (LEFT block)
-constexpr int32_t kPortraitSize    = 56;
-constexpr int32_t kPortraitLeftX   = 0x40;   // 64 — portrait region (LEFT)
-constexpr int32_t kPortraitLeftY   = 4;
+// Retail-derived layout constants (from Wave-3A extraction + sample_screen_1
+// proportions). The retail panel is small: ~140px wide, ~52px tall. Portrait
+// in the corner (top-left for player, top-right for target), 3 bars stacked
+// to its inner side, name+level above the bars.
+//
+// Wave-3A coords from FUN_0054af20 slot 23 body:
+//   - 3 value-text rects at (0, 0/14/28, 50, 14) — these are number labels
+//     beside each bar (one per bar, 14px row height)
+//   - bar fills at x=0x44=68 (LEFT) — i.e. bars start 68px in from left edge
+//   - bar fills at x=pane_width - {0x88=136, 0x91=145, 0x79=121} (RIGHT)
+//   - portrait at (0x40=64, 0)
+//
+// The retail pane stretches across the full screen width so the mirror
+// math lands the right block at the right edge. For our mockup we use
+// TWO separate small blocks anchored to the corners — same visual result,
+// cleaner architecture.
+constexpr int32_t kBlockW         = 200;    // panel block width (per side)
+constexpr int32_t kBlockH         =  56;    // panel block height
+constexpr int32_t kBlockMargin    =   4;    // inset from screen edge
 
-// RIGHT (target) block — mirrored bar fill offsets from pane right edge.
-// Wave-3A: x = pane_width - {0x88, 0x91, 0x79}. Three different offsets
-// for the three bars (presumably for visual stagger / icon placement).
-constexpr int32_t kRightBarOff[3]  = { 0x88, 0x91, 0x79 };  // 136, 145, 121
+constexpr int32_t kBarRowH        =  14;    // 0x0e
+constexpr int32_t kValueTextW     =  32;    // numeric value text width
+constexpr int32_t kBarFillH       =  10;
+constexpr int32_t kBarFillW       =  88;    // bar fill width (tuned for kBlockW)
+constexpr int32_t kPortraitSize   =  44;
+constexpr int32_t kPortraitInset  =   4;    // portrait offset from outer corner
 
-// Per-bar colors. Health = red heart, mana = purple gem, stamina = yellow/orange
-// per CLASSIC_HUD_REFERENCE §1.
+// Per-bar Wave-3A stagger: each bar's x offset relative to its track origin
+// differs by a few px (0x88-0x79=15 across the 3). Skip the stagger in the
+// mockup — it's only visible when bars have icons, not yet wired.
+
+// Per-bar colors. Health = red, mana = purple, stamina = gold per
+// CLASSIC_HUD_REFERENCE §1 (matches red-heart / blue-mana orb / yellow
+// in the actual game per sample_screen_1.jpg).
 struct SBarColor { uint8_t r, g, b; };
 constexpr SBarColor kBarColors[3] = {
     { 0xC8, 0x20, 0x20 },   // health — red
@@ -67,125 +83,136 @@ constexpr SBarColor kBarColors[3] = {
     { 0xE0, 0xB0, 0x10 },   // stamina — gold/orange
 };
 
-// Mockup pane visualizer. Paints the entire char-panel layout in solid
-// rects at the retail-derived coords. Synthetic stats (sine-cycled) so
-// the bars animate. Target block toggles on/off on a 3-second cycle to
-// verify the two-pass-draw architecture renders correctly.
+// Mockup pane visualizer. Paints the char-panel layout as TWO separate
+// corner-anchored blocks: LEFT block at TopLeft (always visible), RIGHT
+// block at TopRight (gated on synthetic "have target" cycle). Each block
+// has the same internal structure: portrait at outer corner + 3 bars
+// stacked vertically on the inner side + numeric value rects + name area.
+//
+// The retail pane is one full-screen-width pane with both blocks painted
+// from a single draw method (Wave-3A's slot 23 body). Architecturally
+// equivalent — the corner-anchored split is cleaner for the modern
+// retained-mode TPane layout and produces the same visual.
 class TPlyrStatusBarMockHud : public THudDrawable
 {
 public:
     void Draw() override
     {
-        const int32_t panel_w = Display.Width();
-        const int32_t panel_h = kPanelHeight;
-        const int32_t panel_x = 0;
-        const int32_t panel_y = 0;
-
+        const int32_t screen_w = Display.Width();
         const double t = TTime::Time();
 
-        // Background frame (semi-transparent gold border, dark interior).
-        // Placeholder for the retail mosaic-surface backdrop.
-        Renderer->DrawSolidRect(panel_x, panel_y, panel_w, panel_h,
-                                20, 16, 8, 200);
-        // 1px top/bottom border to make the panel rect visible
-        Renderer->DrawSolidRect(panel_x, panel_y + panel_h - 1,
-                                panel_w, 1, 180, 140, 60, 255);
+        // === LEFT (player) block — anchored TopLeft ===
+        DrawBlock(/*outerX=*/kBlockMargin, /*isRight=*/false,
+                  /*lv=*/{
+                      0.6f + 0.3f * float(std::sin(t * 0.7)),
+                      0.5f + 0.3f * float(std::sin(t * 0.9 + 1.0)),
+                      0.7f + 0.2f * float(std::sin(t * 1.1 + 2.0)),
+                  });
 
-        // === LEFT (player) block ===
-        DrawSide(/*originX=*/0, /*rightEdgeX=*/0, /*isRight=*/false,
-                 /*levels=*/{
-                     0.6f + 0.3f * float(std::sin(t * 0.7)),       // health
-                     0.5f + 0.3f * float(std::sin(t * 0.9 + 1.0)), // mana
-                     0.7f + 0.2f * float(std::sin(t * 1.1 + 2.0)), // stamina
-                 });
-
-        // === RIGHT (target) block — gated on the synthetic "have target"
-        // cycle. 3-second period, target visible for first half.
+        // === RIGHT (target) block — anchored TopRight, gated on
+        // synthetic 3s-on / 3s-off cycle with 0.5s fade at boundaries.
         const double tgt_phase = std::fmod(t, 6.0);
         const bool have_target = tgt_phase < 3.0;
         if (have_target)
         {
-            // Optional fade for the smooth-swap counter (Wave-3A: animation
-            // counters at +0xd4/+0xdc ramp toward 6, suggesting fade alpha).
             float fade = 1.0f;
             if (tgt_phase < 0.5)       fade = float(tgt_phase / 0.5);
             else if (tgt_phase > 2.5)  fade = float((3.0 - tgt_phase) / 0.5);
 
-            DrawSide(/*originX=*/panel_w, /*rightEdgeX=*/panel_w, /*isRight=*/true,
-                     /*levels=*/{
-                         0.4f + 0.3f * float(std::sin(t * 1.3 + 0.5)),
-                         0.3f + 0.3f * float(std::sin(t * 1.5 + 1.5)),
-                         0.5f + 0.2f * float(std::sin(t * 1.7 + 2.5)),
-                     }, fade);
+            const int32_t outerX = screen_w - kBlockMargin - kBlockW;
+            DrawBlock(outerX, /*isRight=*/true,
+                      /*lv=*/{
+                          0.4f + 0.3f * float(std::sin(t * 1.3 + 0.5)),
+                          0.3f + 0.3f * float(std::sin(t * 1.5 + 1.5)),
+                          0.5f + 0.2f * float(std::sin(t * 1.7 + 2.5)),
+                      }, fade);
         }
     }
 
 private:
     struct SBarLevels { float h, m, s; };
 
-    void DrawSide(int32_t originX, int32_t rightEdgeX, bool isRight,
-                  SBarLevels lv, float fadeAlpha = 1.0f)
+    // outerX = block's left edge (in screen coords)
+    // isRight = whether this is the target block (mirror portrait + bar
+    //           layout so portrait sits at the outer corner)
+    void DrawBlock(int32_t outerX, bool isRight,
+                   SBarLevels lv, float fadeAlpha = 1.0f)
     {
         const uint8_t aFrame = uint8_t(255 * fadeAlpha);
+        const int32_t blockY = kBlockMargin;
 
-        // Portrait box.
+        // Block background (dark interior + thin gold border placeholder
+        // for the retail mosaic-surface backdrop frame).
+        Renderer->DrawSolidRect(outerX, blockY, kBlockW, kBlockH,
+                                20, 16, 8, uint8_t(220 * fadeAlpha));
+        Renderer->DrawSolidRect(outerX, blockY, kBlockW, 1,
+                                180, 140, 60, aFrame);
+        Renderer->DrawSolidRect(outerX, blockY + kBlockH - 1, kBlockW, 1,
+                                180, 140, 60, aFrame);
+        Renderer->DrawSolidRect(outerX, blockY, 1, kBlockH,
+                                180, 140, 60, aFrame);
+        Renderer->DrawSolidRect(outerX + kBlockW - 1, blockY, 1, kBlockH,
+                                180, 140, 60, aFrame);
+
+        // Portrait box at the OUTER corner of the block.
         const int32_t px = isRight
-            ? rightEdgeX - kPortraitLeftX - kPortraitSize
-            : originX + kPortraitLeftX;
-        Renderer->DrawSolidRect(px, kPortraitLeftY,
-                                kPortraitSize, kPortraitSize,
+            ? outerX + kBlockW - kPortraitInset - kPortraitSize
+            : outerX + kPortraitInset;
+        const int32_t py = blockY + kPortraitInset;
+        Renderer->DrawSolidRect(px, py, kPortraitSize, kPortraitSize,
                                 90, 70, 30, aFrame);
-        // 1px portrait border
-        Renderer->DrawSolidRect(px, kPortraitLeftY,
+        // Portrait border
+        Renderer->DrawSolidRect(px, py, kPortraitSize, 1, 180, 140, 60, aFrame);
+        Renderer->DrawSolidRect(px, py + kPortraitSize - 1,
                                 kPortraitSize, 1, 180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(px, kPortraitLeftY + kPortraitSize - 1,
-                                kPortraitSize, 1, 180, 140, 60, aFrame);
+        Renderer->DrawSolidRect(px, py, 1, kPortraitSize, 180, 140, 60, aFrame);
+        Renderer->DrawSolidRect(px + kPortraitSize - 1, py,
+                                1, kPortraitSize, 180, 140, 60, aFrame);
 
-        // Three bars (health, mana, stamina) — track + fill.
+        // Bars + values fill the inner half of the block (opposite the portrait).
+        const int32_t innerX = isRight
+            ? outerX + kPortraitInset
+            : outerX + kPortraitInset + kPortraitSize + 4;
+        const int32_t innerW = kBlockW - kPortraitSize - kPortraitInset * 2 - 4;
+
         const float lvls[3] = { lv.h, lv.m, lv.s };
         for (int i = 0; i < 3; ++i)
         {
-            const int32_t y = i * kBarRowH + 2;
+            const int32_t rowY = blockY + 4 + i * kBarRowH;
 
-            // Bar X depends on side.
-            int32_t bx;
-            if (isRight)
-            {
-                // Wave-3A: each bar has its own offset from right edge
-                bx = rightEdgeX - kRightBarOff[i];
-            }
-            else
-            {
-                bx = originX + kLeftBarX;
-            }
+            // value box + bar: value on the OUTER side of the row, bar on
+            // the inner side (so bar+value pair reads consistently across
+            // sides — values closer to the screen edge, bars closer to center).
+            const int32_t valueX = isRight
+                ? innerX + innerW - kValueTextW
+                : innerX;
+            const int32_t barXrow = isRight
+                ? innerX
+                : innerX + kValueTextW + 2;
+            const int32_t fillWidth = innerW - kValueTextW - 2;
 
-            // Track (dark)
-            Renderer->DrawSolidRect(bx, y, kBarFillW, kBarFillH,
+            // Value text placeholder
+            Renderer->DrawSolidRect(valueX, rowY, kValueTextW, kBarFillH,
+                                    10, 10, 18, aFrame);
+
+            // Bar track
+            Renderer->DrawSolidRect(barXrow, rowY, fillWidth, kBarFillH,
                                     30, 24, 16, aFrame);
-            // Fill (per-bar color, scaled by level)
-            const int32_t fw = int32_t(float(kBarFillW) * std::clamp(lvls[i], 0.0f, 1.0f));
+            // Bar fill
+            const int32_t fw = int32_t(float(fillWidth) * std::clamp(lvls[i], 0.0f, 1.0f));
             const auto& c = kBarColors[i];
             if (fw > 0)
-                Renderer->DrawSolidRect(bx, y, fw, kBarFillH,
+            {
+                // Fill side mirrors: LEFT side fills LTR, RIGHT side fills RTL.
+                const int32_t fillX = isRight ? barXrow + fillWidth - fw : barXrow;
+                Renderer->DrawSolidRect(fillX, rowY, fw, kBarFillH,
                                         c.r, c.g, c.b, aFrame);
-            // 1px top/bottom border on track
-            Renderer->DrawSolidRect(bx, y, kBarFillW, 1, 120, 100, 50, aFrame);
-            Renderer->DrawSolidRect(bx, y + kBarFillH - 1,
-                                    kBarFillW, 1, 120, 100, 50, aFrame);
-
-            // Numeric value text placeholder — small rect next to the bar
-            // on the inside (away from the portrait).
-            const int32_t vx = isRight ? bx - kValueTextW - 2 : bx + kBarFillW + 2;
-            Renderer->DrawSolidRect(vx, y, kValueTextW, kBarFillH,
-                                    10, 10, 18, aFrame);
+            }
+            // Track 1px borders
+            Renderer->DrawSolidRect(barXrow, rowY, fillWidth, 1, 120, 100, 50, aFrame);
+            Renderer->DrawSolidRect(barXrow, rowY + kBarFillH - 1,
+                                    fillWidth, 1, 120, 100, 50, aFrame);
         }
-
-        // Player/target name area placeholder — slim rect above bars.
-        const int32_t nameX = isRight
-            ? rightEdgeX - kPortraitLeftX - kPortraitSize - kValueTextW - 4
-            : originX + kPortraitLeftX + kPortraitSize + 4;
-        Renderer->DrawSolidRect(nameX, 0, kValueTextW + 60, kBarRowH,
-                                40, 40, 80, aFrame);
     }
 };
 
