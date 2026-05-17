@@ -30,6 +30,7 @@
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
+#include "vfxtest.h"
 
 #include <cmath>
 #include <cctype>
@@ -2397,6 +2398,8 @@ bool Initialize(const char* mode)
         return InitializeFontMode();
     if (strcmp(mode, "audio") == 0)
         return InitializeAudioMode();
+    if (strcmp(mode, "vfx") == 0)
+        return VfxTest::Initialize();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2416,6 +2419,8 @@ void Close(const char* mode)
         CloseI3DStaticMode();
     if (strcmp(mode, "audio") == 0)
         CloseAudioMode();
+    if (strcmp(mode, "vfx") == 0)
+        VfxTest::Close();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2444,6 +2449,8 @@ void Render(const char* mode)
         return RenderTextMode();
     if (strcmp(mode, "audio") == 0)
         return RenderAudioMode();
+    if (strcmp(mode, "vfx") == 0)
+        return VfxTest::Render();
     return RenderBlankMode();
 }
 
@@ -2510,6 +2517,11 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleKeyPress(const char* mode, int32_t key, bool down)
 {
+    if (strcmp(mode, "vfx") == 0)
+    {
+        VfxTest::HandleKeyPress(key, down);
+        return;
+    }
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleKeyPress(key, down);
 }
