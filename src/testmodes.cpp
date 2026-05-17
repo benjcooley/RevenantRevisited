@@ -30,12 +30,14 @@
 #include "tile.h"
 #include "uianchortest.h"
 #include "uicliptest.h"
-#include "uihudmockuptest.h"
 #include "uilayouttest.h"
 #include "uinineslicetest.h"
-#include "uistatusbartest.h"
 #include "uistyletest.h"
 #include "uitextbartest.h"
+// uihudmockuptest + uistatusbartest moved to attic/: the rects/labels they
+// encoded were derived from the pre-release src/ defines (HEALTHBARX etc)
+// and the AI-generated docs/HUD.md, neither of which match the shipped
+// retail HUD layout. See docs/ui/BURNDOWN.md "Phase B retraction" note.
 
 #include <cmath>
 #include <cctype>
@@ -2256,10 +2258,6 @@ bool Initialize(const char* mode)
         return InitializeUIClipMode();
     if (strcmp(mode, "ui-textbar") == 0)
         return InitializeUITextBarMode();
-    if (strcmp(mode, "ui-statusbars") == 0)
-        return InitializeUIStatusBarMode();
-    if (strcmp(mode, "ui-hud-mockup") == 0)
-        return InitializeUIHudMockupMode();
 
     log_error("[test] unknown mode '%s' — falling back to blank", mode);
     return true;
@@ -2289,10 +2287,6 @@ void Close(const char* mode)
         CloseUIClipMode();
     if (strcmp(mode, "ui-textbar") == 0)
         CloseUITextBarMode();
-    if (strcmp(mode, "ui-statusbars") == 0)
-        CloseUIStatusBarMode();
-    if (strcmp(mode, "ui-hud-mockup") == 0)
-        CloseUIHudMockupMode();
     DestroyBitmapAtlas(&g_uiAtlas);
 }
 
@@ -2331,10 +2325,6 @@ void Render(const char* mode)
         return RenderUIClipMode();
     if (strcmp(mode, "ui-textbar") == 0)
         return RenderUITextBarMode();
-    if (strcmp(mode, "ui-statusbars") == 0)
-        return RenderUIStatusBarMode();
-    if (strcmp(mode, "ui-hud-mockup") == 0)
-        return RenderUIHudMockupMode();
     return RenderBlankMode();
 }
 
