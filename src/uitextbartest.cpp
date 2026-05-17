@@ -11,6 +11,7 @@
 
 #include "display.h"
 #include "logging.h"
+#include "renderer.h"
 #include "textbar.h"
 #include "time.h"
 
@@ -21,6 +22,31 @@
 namespace {
 
 std::unique_ptr<TTextBar> g_textbar;
+
+// Visualizer: paints a debug-colored rect at the text bar's retail rect
+// so the pane is visible in the new HUD pipeline. The real Display.Box +
+// Display.WriteText port lands when the bitmap-font / text-rendering path
+// is wired into Renderer-> primitives.
+class TTextBarHud : public THudDrawable
+{
+public:
+    void Draw() override
+    {
+        if (!g_textbar) return;
+        const int32_t x = g_textbar->GetPosX();
+        const int32_t y = g_textbar->GetPosY();
+        const int32_t w = g_textbar->GetWidth();
+        const int32_t h = g_textbar->GetHeight();
+
+        // Filled rect with a 1px outline -- looks like a status strip.
+        Renderer->DrawSolidRect(x,         y,         w, h, 30, 30, 50, 220);
+        Renderer->DrawSolidRect(x,         y,         w, 1, 180, 180, 200, 255);
+        Renderer->DrawSolidRect(x,         y + h - 1, w, 1, 180, 180, 200, 255);
+        Renderer->DrawSolidRect(x,         y,         1, h, 180, 180, 200, 255);
+        Renderer->DrawSolidRect(x + w - 1, y,         1, h, 180, 180, 200, 255);
+    }
+};
+TTextBarHud g_viz;
 
 // Reach in via a friend-free shim: the protected members of TTextBar are
 // not exposed publicly. For verification we infer state from the public
@@ -92,6 +118,12 @@ bool InitializeUITextBarMode()
     log_info("[ui-textbar] (DrawBackground / visual render is a follow-up "
              "commit -- needs GameData->Bitmap(\"texthealthbar\") + Font(\"silverfont\"))");
 
+    // Wire visualizer into the HUD pipeline so the text bar is visible
+    // at its retail rect. Debug-colored rect for now; text + healthbar
+    // rendering lands when the font + bitmap paths are wired.
+    Renderer->AddHud(&g_viz, 0.0f);
+    log_info("[ui-textbar] visualizer registered with renderer HUD pipeline");
+
     return true;
 }
 
@@ -107,6 +139,7 @@ void RenderUITextBarMode()
 
 void CloseUITextBarMode()
 {
+    Renderer->RemoveHud(&g_viz);
     if (g_textbar)
         g_textbar->Close();
     g_textbar.reset();
