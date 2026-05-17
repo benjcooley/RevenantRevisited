@@ -143,6 +143,150 @@ struct SOverlaySubmit
     float    chroma_key_rgb[3] = {1.0f, 0.0f, 0.0f};
 };
 
+// *************************************************************************
+// * FX submission API  (Phase 1 VFX spine, see docs/vfx/PHASE1_SPINE.md)  *
+// *************************************************************************
+//
+// World-space billboards, particles, and strips/ribbons all flow through
+// these three submit calls plus the bucket batcher on TRenderer. The
+// caller authors world-unit sizes; perspective / camera basis is built in
+// the renderer's fx_billboard / fx_particle / fx_strip vertex shaders.
+// Game-side effect code (TFlipbookBillboardComponent, TParticleEffect-
+// Component, future strip components) calls SubmitFx* from inside the
+// existing per-instance Submit walk in maprenderer.cpp -- no new walk.
+// DrainFxQueue runs after RunLightingPass in a dedicated fx_pass that
+// reads scene depth and writes the lit color target.
+//
+// *************************************************************************
+
+// Canonical per-bucket FX blend modes. Mirror of EParticleBlendMode in
+// particlefx.h -- producers fill in EParticleBlendMode, the renderer maps
+// it to EFxBlend at submission time. AdditiveStraight (ONE/ONE) is the
+// retail "self-lit overlay" mode that TBloodSystem::Render uses for its
+// second pass; Additive (SRC_ALPHA/ONE) is the alpha-weighted additive
+// the existing smoke/spark buckets use.
+enum class EFxBlend     : uint8_t { Alpha = 0, Additive = 1, AdditiveStraight = 2, PremulAlpha = 3 };
+// Depth-buffer interaction. TestWrite is for alpha-tested / mostly-opaque
+// particles (decal impostors) that should occlude later transparent fx;
+// TestNoWrite is the standard transparent path; None is for always-on-top.
+enum class EFxDepthMode : uint8_t { TestNoWrite = 0, None = 1, TestWrite = 2 };
+enum class EFxLightMode : uint8_t { Unlit = 0, LitFlat = 1 };
+enum class EFxDebugMode : uint8_t { Normal = 0, SolidColor = 1, FullTexture = 2, CurrentFrame = 3 };
+
+// Per-billboard / per-particle quad orientation. Standard particle-engine
+// knob (cf. Unity Billboard / Stretched / Horizontal / Vertical / Mesh
+// and Unreal "Camera Position" / "Custom" alignment). The default
+// (ScreenAligned) matches the original Phase 1 behaviour: the 4 corners
+// expand along the camera right/up basis after iso projection, so the
+// quad always faces the viewer.
+//
+// WorldXY expands the 4 corners along world +X / +Y at the billboard's
+// world position BEFORE iso projection -- the resulting quad lies flat
+// on the world XY plane and foreshortens correctly under the iso /
+// perspective camera, which is what ground-projected effects (ripples
+// on water, halos on the ground, AoE rings, decal-style overlays) want.
+//
+// Default ScreenAligned preserves existing behaviour for every effect
+// that does not opt in (F01 flame, F03 fire, X17 flare, etc.) -- no
+// migration required for screen-aligned glow/spark sprites.
+enum class EFxBillboardOrientation : uint8_t {
+    ScreenAligned = 0,   // 4 corners expand along camera basis (default)
+    WorldXY       = 1,   // 4 corners expand along world +X / +Y (flat on
+                         // XY plane; correct foreshortening under iso/persp)
+    // Future:
+    //   WorldUpAligned        -- Z-axis-aligned, flame-style
+    //   StretchedAlongVelocity -- motion-streak particles
+};
+
+// Identifies which fx pipeline owns a submission. The renderer keeps one
+// dynamic vertex buffer per pipeline; equality of (texture, pipeline_id,
+// blend, depth_mode) lets adjacent draws coalesce into a single instanced
+// draw call.
+enum class EFxPipeline  : uint16_t { Billboard = 1, Particle = 2, Strip = 3 };
+
+struct SFxBatchKey
+{
+    TTextureHandle texture     = kInvalidTexture;
+    uint16_t       pipeline_id = uint16_t(EFxPipeline::Billboard);
+    uint8_t        blend       = uint8_t(EFxBlend::Alpha);
+    uint8_t        depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+
+    [[nodiscard]] bool Equals(const SFxBatchKey& rhs) const
+    {
+        return texture == rhs.texture
+            && pipeline_id == rhs.pipeline_id
+            && blend == rhs.blend
+            && depth_mode == rhs.depth_mode;
+    }
+};
+
+// One persistent screen-aligned world-space billboard. Sizes are in world
+// units (NOT pixels) -- the renderer projects per-vertex.
+struct SBillboardDrawItem
+{
+    float        world_pos[3]   = {0.0f, 0.0f, 0.0f};
+    float        size_wu[2]     = {1.0f, 1.0f};
+    float        color_rgba[4]  = {1.0f, 1.0f, 1.0f, 1.0f};
+    float        uv_rect[4]     = {0.0f, 0.0f, 1.0f, 1.0f};   // x,y,w,h normalized
+    SFxBatchKey  key            = {};
+    EFxDebugMode debug_mode     = EFxDebugMode::Normal;
+    // Per-instance per PHASE1_SPINE.md §6: lighting is a runtime
+    // multiplier in the FS, not a pipeline variant -- avoids fanning
+    // the pipeline count out by 2x.
+    EFxLightMode light_mode     = EFxLightMode::Unlit;
+    // Per-instance quad orientation. Default ScreenAligned keeps the
+    // existing screen-aligned billboard expansion (no migration needed
+    // for any pre-orientation-knob effect). Ground/water-projected
+    // effects (H03 ripple, L02 halo, future AoE rings, decal overlays)
+    // opt in to WorldXY.
+    EFxBillboardOrientation orientation = EFxBillboardOrientation::ScreenAligned;
+};
+
+// Same fields as SBillboardDrawItem plus per-instance rotation. Bulk
+// submission is by bucket pointer (see SubmitFxParticleBucket); this
+// struct exists for one-off submission and as a logical wire shape.
+struct SParticleDrawItem
+{
+    float        world_pos[3]   = {0.0f, 0.0f, 0.0f};
+    float        size_wu[2]     = {1.0f, 1.0f};
+    float        color_rgba[4]  = {1.0f, 1.0f, 1.0f, 1.0f};
+    float        uv_rect[4]     = {0.0f, 0.0f, 1.0f, 1.0f};
+    float        rotation_rad   = 0.0f;
+    SFxBatchKey  key            = {};
+    EFxDebugMode debug_mode     = EFxDebugMode::Normal;
+    EFxLightMode light_mode     = EFxLightMode::Unlit;
+    // Per-instance quad orientation. Same shape as SBillboardDrawItem
+    // -- lets PE effects opt into WorldXY for ground-projected particle
+    // swarms (e.g. a ring of glow puffs on the floor). Default
+    // ScreenAligned keeps every existing PE bucket untouched.
+    EFxBillboardOrientation orientation = EFxBillboardOrientation::ScreenAligned;
+};
+
+// A single screen-aligned ribbon segment (world A -> world B). Strips
+// expand to a camera-aligned quad in the fx_strip vertex shader.
+struct SStripSegment
+{
+    float world_a[3]   = {0.0f, 0.0f, 0.0f};
+    float world_b[3]   = {0.0f, 0.0f, 0.0f};
+    float width_a_wu   = 1.0f;
+    float width_b_wu   = 1.0f;
+    float color_a[4]   = {1.0f, 1.0f, 1.0f, 1.0f};
+    float color_b[4]   = {1.0f, 1.0f, 1.0f, 1.0f};
+    float u_a          = 0.0f;
+    float u_b          = 1.0f;
+};
+
+struct SStripDrawItem
+{
+    const SStripSegment* segments     = nullptr;
+    int32_t              num_segments = 0;
+    SFxBatchKey          key          = {};
+    EFxDebugMode         debug_mode   = EFxDebugMode::Normal;
+    EFxLightMode         light_mode   = EFxLightMode::Unlit;
+};
+
+class TParticleBucket;   // forward, see particlefx.h
+
 // Renderer-owned paired images, currently used by world sprites that need both
 // color and depth textures. The renderer owns the sg_image lifetimes and ref
 // counts; game systems keep only RendererImagePairHandle values.
@@ -492,6 +636,29 @@ public:
     // Run the deferred lighting pass over the current G-buffer. Writes
     // lit_target (passes [2] + [3]).
     void RunLightingPass();
+
+    // ---- FX submission (Phase 1 VFX spine) ------------------------------
+    // The fx pipelines need a camera basis (right/up) to expand
+    // screen-aligned quads from world-space anchor points. Producers fill
+    // SetFxCamera once per frame before submitting any fx item; the
+    // shared fx_camera UBO is uploaded at DrainFxQueue time.
+    //   right_wu / up_wu : world-space camera basis (unit length)
+    //   forward_wu       : world-space camera forward (unit length)
+    //   pos_wu           : world-space camera origin
+    //   view_proj[16]    : row-major MVP that turns world xyz into NDC.
+    //                      Phase 1 leaves this empty and uses the same
+    //                      iso projection as the tile pipeline.
+    void SetFxCamera(const float right_wu[3], const float up_wu[3],
+                     const float forward_wu[3], const float pos_wu[3]);
+    void SubmitFxBillboard(const SBillboardDrawItem& item);
+    void SubmitFxParticle(const SParticleDrawItem& item);
+    // Bulk submit every live particle in a TParticleBucket into one fx
+    // bucket. The renderer reads draw_pos / draw_scl / draw_color /
+    // draw_uv_rect off the bucket's SoA columns; bucket lifetime stays
+    // with the caller. blend / texture come from the bucket desc.
+    void SubmitFxParticleBucket(const TParticleBucket& bucket,
+                                EFxDebugMode debug_mode = EFxDebugMode::Normal);
+    void SubmitFxStrip(const SStripDrawItem& item);
 
     // ---- Composite (UI blit + swapchain present) ------------------------
     // Fullscreen blit of a TSurface into the current render pass (used by
@@ -849,6 +1016,69 @@ private:
     void EmitTransparentTile(const STileSubmit& t);
     void EmitTransparentHelper(const SHelperMeshSubmit& s);
     void DrainTransparentWorldQueue();
+
+    // ---- FX (billboards / particles / strips) ---------------------------
+    void InitFxPipeline();
+    void ShutdownFxPipeline();
+    void DrainFxQueue();   // runs inside fx_pass after RunLightingPass
+
+    // Per-pipeline scratch instance data, SoA, materialized at drain time.
+    struct SFxBucketScratch {
+        SFxBatchKey         key = {};
+        std::vector<float>  pos_xyz;       // 3 floats/instance
+        std::vector<float>  size_wh;       // 2
+        std::vector<float>  uv_xywh;       // 4
+        std::vector<float>  color_rgba;    // 4
+        std::vector<float>  rotation;      // particle only (1)
+        std::vector<float>  debug_mode;    // 1 (float so we share the instance VB)
+        int32_t             count = 0;
+    };
+
+    // Submission queue. Each variant entry is converted into a per-bucket
+    // SFxBucketScratch in DrainFxQueue; the scratch then drives one
+    // sg_draw per bucket against the shared instance vbuf for that
+    // pipeline.
+    struct SFxBillboardQueueEntry { SBillboardDrawItem item; float sort_z = 0.0f; };
+    struct SFxParticleQueueEntry  { SParticleDrawItem  item; float sort_z = 0.0f; };
+    struct SFxStripQueueEntry {
+        SFxBatchKey                key;
+        EFxDebugMode               debug_mode = EFxDebugMode::Normal;
+        EFxLightMode               light_mode = EFxLightMode::Unlit;
+        std::vector<SStripSegment> segments;
+        float                      sort_z = 0.0f;
+    };
+
+    std::vector<SFxBillboardQueueEntry> fx_billboard_queue;
+    std::vector<SFxParticleQueueEntry>  fx_particle_queue;
+    std::vector<SFxStripQueueEntry>     fx_strip_queue;
+
+    sg_pass     fx_pass         = {};   // color = lit_target, depth = scene_z_target (read)
+    // Pipeline cross-product: [blend][depth_mode]. Light mode is
+    // per-instance (uniform/attribute), not a pipeline variant -- keeps
+    // the variant count manageable (4 blends * 3 depth modes = 12 per
+    // shader, 36 total across billboard/particle/strip).
+    static constexpr int32_t kFxBlendCount     = 4;   // matches EFxBlend
+    static constexpr int32_t kFxDepthModeCount = 3;   // matches EFxDepthMode
+    sg_shader   fx_billboard_shader = {};
+    sg_pipeline fx_billboard_pip[kFxBlendCount][kFxDepthModeCount] = {};
+    sg_shader   fx_particle_shader  = {};
+    sg_pipeline fx_particle_pip[kFxBlendCount][kFxDepthModeCount] = {};
+    sg_shader   fx_strip_shader     = {};
+    sg_pipeline fx_strip_pip[kFxBlendCount][kFxDepthModeCount] = {};
+    sg_buffer   fx_corner_vb     = {};   // static 4-vert quad corners
+    sg_buffer   fx_billboard_ivb = {};   // dynamic per-frame, instance data
+    sg_buffer   fx_particle_ivb  = {};
+    sg_buffer   fx_strip_vb      = {};   // dynamic per-frame, expanded strip corners
+    static constexpr int32_t kMaxFxInstances = 16384;
+    static constexpr int32_t kMaxFxStripVerts = 8192;
+
+    struct SFxCameraState {
+        float right[3]   = {1.0f, 0.0f, 0.0f};
+        float up[3]      = {0.0f, 1.0f, 0.0f};
+        float forward[3] = {0.0f, 0.0f, 1.0f};
+        float pos[3]     = {0.0f, 0.0f, 0.0f};
+        bool  set        = false;
+    } fx_camera;
 };
 
 // Global renderer instance -- created by TDisplay::Init, destroyed by

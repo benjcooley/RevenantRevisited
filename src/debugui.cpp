@@ -11,7 +11,10 @@
 #include "display.h"
 #include "editor.h"
 #include "imgui.h"
+#include "area.h"
 #include "playscreen.h"
+#include "revisited_defaults.h"
+#include "revisited_settings.h"
 #include "runtimemode.h"
 #include "time.h"
 
@@ -332,6 +335,113 @@ void TMapRenderer::DrawDebugTab()
         // Everything tone/brightness/ambient + point-light controls.
         // Shadow / AO / normal-reconstruction params live on Effects.
         if (ImGui::BeginTabItem("Lighting")) {
+            // ---- Revisited global save -----------------------------------
+            // Snapshots the debug-panel knobs that map to [Revisited]
+            // settings keys and writes them to the overlay Revenant.ini.
+            // Requires --revisited; logs a failure toast otherwise.
+            // Per-area tweaks (AMBLIGHT/AMBCOLOR/POINTLIGHTINT/...) belong
+            // in area.def, not here -- those get a separate "Save Area"
+            // button (TODO).
+            static char s_save_msg[260] = {0};
+            static double s_save_msg_until = 0.0;
+            if (ImGui::Button("Save Revisited Settings")) {
+                SRevisitedSettings &rs = RevisitedSettings;
+                rs.lighting_mode        = s.lighting_mode;
+                rs.sun_dir_x            = s.light_dir[0];
+                rs.sun_dir_y            = s.light_dir[1];
+                rs.sun_dir_z            = s.light_dir[2];
+                rs.sun_color_r          = (uint8_t)std::clamp(int(s.color[0] * 255.0f + 0.5f), 0, 255);
+                rs.sun_color_g          = (uint8_t)std::clamp(int(s.color[1] * 255.0f + 0.5f), 0, 255);
+                rs.sun_color_b          = (uint8_t)std::clamp(int(s.color[2] * 255.0f + 0.5f), 0, 255);
+                rs.sun_intensity        = s.intensity;
+                rs.light_ceiling        = s.light_ceiling;
+                rs.sun_shadow_enable    = s.sun_shadow;
+                rs.sun_shadow_step_wu   = s.sun_shadow_step;
+                rs.sun_shadow_soft_px   = s.sun_shadow_soft;
+                rs.sun_shadow_max_steps = s.sun_shadow_max;
+                rs.sun_shadow_bias_wu   = s.sun_shadow_bias;
+                rs.sun_shadow_depth_cut = s.sun_shadow_depth_cutoff;
+                rs.ao_enable            = s.ao_enable;
+                rs.ao_radius_px         = s.ao_radius_px;
+                rs.ao_strength          = s.ao_strength;
+                rs.ao_bias              = s.ao_bias;
+                rs.ao_max_dist_wu       = s.ao_max_dist;
+                rs.parallax_enable      = s.sectorPerspectiveCamera;
+                rs.parallax_fov_deg     = s.sectorPerspectiveFovDeg;
+                rs.parallax_proxy_scale = s.sectorPerspectiveProxyRasterScale;
+                rs.normal_radius        = s.normal_radius;
+                rs.normal_hardness      = s.normal_hardness;
+                rs.edge_threshold       = s.edge_thr;
+                rs.depth_mul            = s.depth_mul;
+                rs.camera_zoom          = s.sectorCameraZoom;
+                rs.point_light_int_mul  = s.intensity_mul;
+                rs.point_light_range_mul= s.radius_mul;
+
+                char path[256] = {0};
+                const bool ok = SaveRevisitedSettings(path, sizeof(path));
+                if (ok)
+                    std::snprintf(s_save_msg, sizeof(s_save_msg), "Saved: %s", path);
+                else
+                    std::snprintf(s_save_msg, sizeof(s_save_msg),
+                                  "Save failed (need --revisited + writable overlay)");
+                s_save_msg_until = ImGui::GetTime() + 4.0;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Bake Defaults to Source")) {
+                // Snapshot the same debug-panel state into RevisitedSettings
+                // first (same fields as Save above) so the bake captures
+                // exactly what the user sees on screen.
+                SRevisitedSettings &rs = RevisitedSettings;
+                rs.lighting_mode        = s.lighting_mode;
+                rs.sun_dir_x            = s.light_dir[0];
+                rs.sun_dir_y            = s.light_dir[1];
+                rs.sun_dir_z            = s.light_dir[2];
+                rs.sun_color_r          = (uint8_t)std::clamp(int(s.color[0] * 255.0f + 0.5f), 0, 255);
+                rs.sun_color_g          = (uint8_t)std::clamp(int(s.color[1] * 255.0f + 0.5f), 0, 255);
+                rs.sun_color_b          = (uint8_t)std::clamp(int(s.color[2] * 255.0f + 0.5f), 0, 255);
+                rs.sun_intensity        = s.intensity;
+                rs.light_ceiling        = s.light_ceiling;
+                rs.sun_shadow_enable    = s.sun_shadow;
+                rs.sun_shadow_step_wu   = s.sun_shadow_step;
+                rs.sun_shadow_soft_px   = s.sun_shadow_soft;
+                rs.sun_shadow_max_steps = s.sun_shadow_max;
+                rs.sun_shadow_bias_wu   = s.sun_shadow_bias;
+                rs.sun_shadow_depth_cut = s.sun_shadow_depth_cutoff;
+                rs.ao_enable            = s.ao_enable;
+                rs.ao_radius_px         = s.ao_radius_px;
+                rs.ao_strength          = s.ao_strength;
+                rs.ao_bias              = s.ao_bias;
+                rs.ao_max_dist_wu       = s.ao_max_dist;
+                rs.parallax_enable      = s.sectorPerspectiveCamera;
+                rs.parallax_fov_deg     = s.sectorPerspectiveFovDeg;
+                rs.parallax_proxy_scale = s.sectorPerspectiveProxyRasterScale;
+                rs.normal_radius        = s.normal_radius;
+                rs.normal_hardness      = s.normal_hardness;
+                rs.edge_threshold       = s.edge_thr;
+                rs.depth_mul            = s.depth_mul;
+                rs.camera_zoom          = s.sectorCameraZoom;
+                rs.point_light_int_mul  = s.intensity_mul;
+                rs.point_light_range_mul= s.radius_mul;
+
+                // Per-area: bake whichever area the player is currently in.
+                // null current_area is fine -- BakeRevisited just updates
+                // globals and leaves the area table untouched.
+                TArea *cur = AreaManager.CurrentArea();
+                char path[512] = {0};
+                const bool ok = BakeRevisitedDefaultsToSource(cur, path, sizeof(path));
+                if (ok)
+                    std::snprintf(s_save_msg, sizeof(s_save_msg),
+                                  "Baked: %s (recompile to apply)", path);
+                else
+                    std::snprintf(s_save_msg, sizeof(s_save_msg),
+                                  "Bake failed (need dev checkout w/ src/)");
+                s_save_msg_until = ImGui::GetTime() + 4.0;
+            }
+            if (ImGui::GetTime() < s_save_msg_until) {
+                ImGui::TextUnformatted(s_save_msg);
+            }
+            ImGui::Separator();
+
             // ---- Sun orbit ----------------------------------------------
             // Sun rotates AROUND `rotation axis` on the plane perpendicular
             // to it. Noon = world up projected onto that plane; midnight =

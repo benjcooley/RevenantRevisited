@@ -1,0 +1,25 @@
+# TArrowEffect - MEDIUM CONFIDENCE CANDIDATE
+# Not in current INVENTORY — new effect class discovered via XREF scan.
+source_class: "TArrowEffect"
+ghidra_class: "cls_0x5b0cfc"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "ArrowEffect" string at .rdata 005e15ac at 0x4838d0/0x4a30 — one XREF
+#     in cls_0x5b0cfc (00504830 +0x1190 in fn 0x503740), second XREF lands
+#     in cls_0x5b8e94 (TObjectInstance) which is a registrar callout.
+#   - "QueenArrow" at 005e15b8 (0x504ce0/4fc0) — both XREFs in cls_0x5b8e94
+#     methods; these are likely TObjectInstance::PostEvent("QueenArrow", ...)
+#     calls from this class.
+#   - "rhand" at 005e14e4 (0x503802) at delta +0xc2 in cls_0x5b0cfc's fn 0x503740
+#     — confirms 0x503740 fn is the ArrowEffect registrar/init.
+#   - cls_0x5b0cfc size 288 bytes, 5 methods, self-allocated 0x104 bytes.
+#   - Inherits from TEffect chain (cls_0x5b0074::~cls_0x5b0074).
+#
+# Probably the arrow-impact effect (sparks/dust on arrow hit). Add INVENTORY
+# row if confirmed.
+
+fields:
+methods:
+  # 0x503740 - registrar + init
+  # 0x509620, 0x509650, 0x5096f0, 0x509710 - vtbl ops

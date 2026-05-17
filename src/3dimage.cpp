@@ -1681,6 +1681,46 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
         if (!DecodeTextureFrameRGBA(srcsd, frame_pixels, palette, rgba))
             continue;
 
+        // Chroma-key + premultiply pass for I3D-era sprite atlases
+        // whose transparent background is pure black (no alpha
+        // channel in the source). Without this, bilinear sampling at
+        // the splat-to-bg boundary produces dark-red transition
+        // pixels (visible fringe).
+        //
+        // Heuristic: if >20% of the texture is pure black, treat it
+        // as chroma-keyed. Set those pixels to fully transparent
+        // (a=0, rgb=0 = premultiplied form) and leave opaque pixels
+        // alone (a=255, rgb unchanged = already premultiplied since
+        // a=1.0). Bucket consumers should pair this with the
+        // PremulAlpha blend mode for correct edge blending.
+        //
+        // TODO: drive this from an explicit per-asset flag once the
+        // tile-set loader gets one, instead of the heuristic. For
+        // Phase 2 it covers Blood/Mist/Smoke/spell-disc style
+        // atlases which all use the chroma-key convention.
+        if (!rgba.empty())
+        {
+            const size_t px_count = rgba.size() / 4;
+            size_t black_count = 0;
+            for (size_t i = 0; i < px_count; ++i)
+            {
+                const uint8_t r = rgba[i * 4 + 0];
+                const uint8_t g = rgba[i * 4 + 1];
+                const uint8_t b = rgba[i * 4 + 2];
+                if (r == 0 && g == 0 && b == 0)
+                    ++black_count;
+            }
+            if (px_count > 0 && black_count * 5 > px_count) // >20%
+            {
+                for (size_t i = 0; i < px_count; ++i)
+                {
+                    uint8_t* px = &rgba[i * 4];
+                    if (px[0] == 0 && px[1] == 0 && px[2] == 0)
+                        px[3] = 0;   // fully transparent (rgb already 0 = premul'd)
+                }
+            }
+        }
+
         TTextureHandle htexture = kInvalidTexture;
         if (Renderer)
         {

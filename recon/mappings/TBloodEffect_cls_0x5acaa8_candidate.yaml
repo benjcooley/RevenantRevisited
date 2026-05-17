@@ -1,0 +1,33 @@
+# TBloodEffect (+ TMistEffect / TMistFogEffect / TWaterFallEffect composite)
+# MEDIUM CONFIDENCE CANDIDATE - Ghidra-merged multi-class file
+source_class: "TBloodEffect"
+ghidra_class: "cls_0x5acaa8"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - Four effect-name strings all XREF into cls_0x5acaa8:
+#       "Blood"     005e11e8 -> 0x4f1870 (+0x280), 0x4f18b0 (+0x2c0)
+#       "Mist"      005e11f0 -> 0x4f2200 (+0xc10), 0x4f2240 (+0xc50)
+#       "MistFog"   005e11f8 -> 0x4f2820 (+0x1230)
+#       "WaterFall" 005e1200 -> 0x4f2c50 (+0x1660), 0x4f2c90 (+0x16a0)
+#     Plus "ripple" 005e1044 -> 0x4f238e (+0xd9e in cls_0x5acaa8's fn 0x4f15f0).
+#   - cls_0x5acaa8 size 1032 bytes, 14 methods.
+#   - **Contains TWO distinct classes** (confirmed via two allocators):
+#       - Primary: alloc 0x110 (272 bytes) with vftable_5acaa8 — leaf TEffect
+#         (probably TBloodEffect itself).
+#       - Secondary: alloc 0x19c (412 bytes) with vtable
+#         PTR_virt_meth_0x4f9520_005acb0c — a separate composite
+#         (likely TMistEffect or TWaterFallEffect).
+#   - The TStormAnimator-style "many names share one class" pattern
+#     doesn't fully apply here — Mist + WaterFall + Blood are unlikely to
+#     be one class. More likely Ghidra has clustered three adjacent leaf
+#     classes whose vtables landed in adjacent .rdata regions.
+#
+# Open: needs Ghidra rerun with stricter class scoping. For now:
+#   - TBloodEffect    -> primary 272-byte class in this file
+#   - TMistEffect     -> ???   (412-byte class? or in cls_0x* sibling)
+#   - TMistFogEffect  -> probably the 412-byte secondary
+#   - TWaterFallEffect -> a third class merged in by Ghidra
+
+fields:
+methods:

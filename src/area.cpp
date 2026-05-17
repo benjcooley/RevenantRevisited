@@ -5,6 +5,7 @@
 // ************************************************************************* 
 
 #include "revenant.h"
+#include "audio_backend.h"
 #include "logging.h"
 #include "parse.h"
 #include "sound.h"
@@ -12,9 +13,14 @@
 #include "textbar.h"
 #include "script.h"
 #include "player.h"
+#include "maprenderer.h"
 #include "playscreen.h"
+#include "revisited_defaults.h"
+#include "revisited_settings.h"
 #include "textbar.h"
 #include "area.h"
+
+#include <cstdio>
 
 // *****************************
 // * TArea - Basic area object *
@@ -39,11 +45,17 @@ TArea::TArea()
     level = -1; // All levels
     rects.Clear();
 
-  // CD audio music playing
+  // Music playlist
     cdplaynum = 0;
     cdplaylistsize = 0;
     cdplayisrandom = false;
     cdplaypause = 0;
+
+  // Ambient sound + audio environment + background effect
+    ambsound[0] = '\0';
+    ambsoundid  = -1;
+    audioenv    = 0;
+    bgeffect[0] = '\0';
 }
 
 // Gets rid of area
@@ -180,11 +192,48 @@ bool TArea::Load(char *aname, TToken &t)
 
             flags |= AREA_PLAYCDMUSIC;
         }
+        else if (t.Is("AMBSOUND"))
+        {
+            // AMBSOUND "<name>" — looping background SFX. Name resolves
+            // through SoundPlayer.FindSound, so it can come from disk OR
+            // resources.rvr.
+            if (!Parse(t, "AMBSOUND %s\n", ambsound))
+                t.Error("'AMBSOUND \"name\"' expected");
+            flags |= AREA_PLAYAMBIENT;
+        }
+        else if (t.Is("AUDIOENV"))
+        {
+            // AUDIOENV <preset-id> — EAX environment (reverb) preset. We
+            // parse + store it; routing to a miniaudio reverb effect is a
+            // follow-up. 0 (GENERIC) is the no-op default.
+            if (!Parse(t, "AUDIOENV %i\n", &audioenv))
+                t.Error("'AUDIOENV <preset-id>' expected");
+        }
+        else if (t.Is("BGEFFECT"))
+        {
+            // BGEFFECT "<name>" — area-scoped background visual effect
+            // (e.g. lab plasma haze). Owned by the VFX track; gameflow
+            // just records the name so the VFX system can pick it up
+            // when an area becomes active.
+            if (!Parse(t, "BGEFFECT %s\n", bgeffect))
+                t.Error("'BGEFFECT \"name\"' expected");
+        }
+        else if (t.Is("POINTLIGHTINT"))
+        {
+            if (!Parse(t, "POINTLIGHTINT %f\n", &point_light_int_mul))
+                t.Error("'POINTLIGHTINT value' expected");
+            flags |= AREA_SETLIGHTING;
+        }
+        else if (t.Is("POINTLIGHTRANGE"))
+        {
+            if (!Parse(t, "POINTLIGHTRANGE %f\n", &point_light_range_mul))
+                t.Error("'POINTLIGHTRANGE value' expected");
+            flags |= AREA_SETLIGHTING;
+        }
         else
         {
-            // Retail added area tags (AUDIOENV, ...) not in the pre-release
-            // source. Skip to the next line rather than aborting.
-            log_warn("[area] skipping unknown tag '%s'", t.Text());
+            // Truly unknown tag — log once per area and skip the line.
+            log_warn("[area] '%s': skipping unknown tag '%s'", name, t.Text());
             while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
                 t.Get();
             t.LineGet();
@@ -205,7 +254,27 @@ bool TArea::Load(char *aname, TToken &t)
         rects.Add(r);
     }
 
+    // Layered defaults: after area.def parsing, give the auto-generated
+    // baked table (revisited_defaults.cpp) a chance to overwrite per-area
+    // lighting fields with values captured from the debug-panel "Bake
+    // Defaults to Source" button. Lookup by area name; no-op when the
+    // area is missing from the baked table. See [[project-revisited-defaults]].
+    ApplyBakedAreaDefaults(name, this);
+
     return true;
+}
+
+void TArea::SetClassicLighting(int32_t amb, const SColor &amb_c,
+                               int32_t night_amb, const SColor &night_c,
+                               double point_int_mul, double point_range_mul)
+{
+    amblight              = amb;
+    ambcolor              = amb_c;
+    nightamblight         = night_amb;
+    nightambcolor         = night_c;
+    point_light_int_mul   = point_int_mul;
+    point_light_range_mul = point_range_mul;
+    flags |= AREA_SETAMBIENT;
 }
 
 bool TArea::In(S3DPoint &pos, int32_t lev)
@@ -226,70 +295,125 @@ bool TArea::In(S3DPoint &pos, int32_t lev)
     return false;
 }
 
-// Initializes ambient sounds for area
+// Ambient SFX (AMBSOUND "<name>") — mount the named sound, mark it
+// looping, and start it at a low background level. Volume is in
+// DirectSound hundredths-of-a-dB attenuation (0 = full, -10000 = mute);
+// -2000 ≈ -10dB keeps the loop comfortably behind in-world SFX + music.
+static constexpr int32_t kAmbientVolume = -2000;
+
 void TArea::InitAmbientSounds()
 {
+    if (!ambsound[0]) return;
+
+    ambsoundid = SoundPlayer.FindSound(ambsound);
+    if (ambsoundid < 0) {
+        log_warn("[area] '%s': AMBSOUND '%s' not found in sound registry", name, ambsound);
+        return;
+    }
+    if (!SoundPlayer.Mount(ambsoundid)) {
+        log_warn("[area] '%s': AMBSOUND '%s' failed to mount", name, ambsound);
+        ambsoundid = -1;
+        return;
+    }
+
+    if (PTSound s = SoundPlayer.GetSound(ambsoundid))
+        s->SetLooping(true);
+
+    SoundPlayer.Play(ambsoundid, kAmbientVolume, /*freq*/ 0, /*spos*/ nullptr);
+    log_info("[area] '%s': ambient '%s' looping", name, ambsound);
 }
 
-// Deinitializes ambient sounds for area
 void TArea::CloseAmbientSounds()
 {
+    if (ambsoundid < 0) return;
+    SoundPlayer.Stop(ambsoundid);
+    SoundPlayer.Unmount(ambsoundid);
+    ambsoundid = -1;
 }
 
 void TArea::PlayAmbientSounds()
 {
-    // Play ambient sound effects here
+    // Loop is supposed to run continuously while we're in the area; this
+    // is a defensive restart in case anything stops it (engine pause that
+    // didn't resume cleanly, UpdateDying flagging a duplicate as dying,
+    // etc.). No-op when already playing.
+    if (ambsoundid < 0) return;
+    if (PTSound s = SoundPlayer.GetSound(ambsoundid)) {
+        if (!s->IsPlaying())
+            SoundPlayer.Play(ambsoundid, kAmbientVolume, /*freq*/ 0, /*spos*/ nullptr);
+    }
 }
 
-// Initializes data needed to play CD tracks
+// Resolve a 1998-era CD track number (the AREA.DEF CDPLAYLIST values) to
+// a vorbis path under <install>/MUSIC/. Tracks are 1-based in the source
+// data and the ripped GOG file names follow `TrackNN.ogg`. We anchor on
+// RunPath (the install dir, read-only assets) rather than ResourcePath —
+// makepath() rewrites a leading "." in ResourcePath to SavePath, which
+// is the writable per-user dir and doesn't host the music tree.
+static bool BuildMusicTrackPath(int32_t track, char* out, size_t out_len)
+{
+    return std::snprintf(out, out_len, "%sMUSIC/Track%02d.ogg",
+                         RunPath, track) > 0;
+}
+
+// Initializes data needed to play this area's music playlist.
 void TArea::InitCDMusic()
 {
-  // Initialize CD play params
-    if (CDPlaying())
-        CDStop();   
+    audio::MusicStop();
 
-  // Initialize play params
-    cdplaynum = -1;
-    cdplaystart = tickcount();
-    cdplaywait = 0;
+    cdplaynum    = -1;
+    cdplaystart  = 0;
+    cdplaywait   = 0;
     cdplaylength = 0;
 }
 
-// Deinitializes CD play system
+// Deinitializes the playlist (current track keeps playing — areas hand
+// the music torch to one another).
 void TArea::CloseCDMusic()
 {
-    // Do nothing (allow music to continue playing)
 }
 
-// Plays CD music tracks
+// Advances the playlist. Called from the area's per-tick update. The
+// caller-visible behavior matches 1998: pick the next track when the
+// previous one finishes, with `cdplaypause` seconds of silence between.
 void TArea::PlayCDMusic()
 {
-    if ((int32_t)tickcount() - cdplaystart >= cdplaywait)
-    {
-        if (cdplayisrandom)
-        {
-            int32_t newplaynum;
-            do {
-                newplaynum = random(0, cdplaylistsize - 1);
-            } while (newplaynum == cdplaynum && cdplaylistsize > 1);
-            cdplaynum = newplaynum;
-        }
-        else
-        {
-            cdplaynum++;
-            if (cdplaynum >= cdplaylistsize)
-                cdplaynum = 0;
-        }
+    if (cdplaylistsize <= 0) return;
+    if (audio::MusicPlaying()) return;
 
-        cdplaylength = CDTrackLength(cdplaylist[cdplaynum]);
-        cdplaywait = cdplaylength + cdplaypause * 1000;
-        if (cdplaywait <= 1000)
-            cdplaywait = 3 * 60 * 1000; // Wait 3 minutes if no track found
-        CDPlayTrack(cdplaylist[cdplaynum]);
-        cdplaystart = tickcount();
-    }
-    else if ((int32_t)tickcount() - cdplaystart >= cdplaylength)
+    const int32_t now = static_cast<int32_t>(tickcount());
+
+    // Hold the silence gap after a track ends.
+    if (cdplaystart != 0 && (now - cdplaystart) < cdplaywait) {
         PlayAmbientSounds();
+        return;
+    }
+
+    if (cdplayisrandom) {
+        int32_t pick;
+        do {
+            pick = random(0, cdplaylistsize - 1);
+        } while (pick == cdplaynum && cdplaylistsize > 1);
+        cdplaynum = pick;
+    } else {
+        cdplaynum = (cdplaynum + 1) % cdplaylistsize;
+    }
+
+    char path[MAXPATHLEN];
+    if (!BuildMusicTrackPath(cdplaylist[cdplaynum], path, sizeof(path)) ||
+        !audio::MusicPlayFile(path, /*looping*/ false)) {
+        // Failed to start — back off so we don't hammer disk on missing files.
+        cdplaystart  = now;
+        cdplaywait   = 60 * 1000;
+        return;
+    }
+
+    cdplaystart  = now;
+    // Without per-track length info, defer the "between tracks" delay to
+    // *after* the track finishes (MusicPlaying() goes false), at which
+    // point we still want to honour cdplaypause seconds of silence.
+    cdplaywait   = cdplaypause * 1000;
+    cdplaylength = 0;
 }
 
 // Gets the current ambient colors based on the time of day
@@ -402,6 +526,19 @@ void TArea::Enter()
             MapPane.FadeAmbient(ambient, color, FRAMERATE * 3, 10);
     }
 
+  // Revisited per-area lighting overrides. Per-area POINTLIGHTINT /
+  // POINTLIGHTRANGE *compose* with the global RevisitedSettings defaults
+  // (multiply), so transitioning between areas always pushes a coherent
+  // value: areas without overrides have a default of 1.0 and effectively
+  // push just the global. The composition holds even without --revisited
+  // because RevisitedSettings still has its baked-in defaults.
+    if (TMapRenderer *mr = PlayScreen.MapRenderer())
+    {
+        const float int_mul   = float(RevisitedSettings.point_light_int_mul   * point_light_int_mul);
+        const float range_mul = float(RevisitedSettings.point_light_range_mul * point_light_range_mul);
+        mr->SetPointLightMultipliers(int_mul, range_mul);
+    }
+
   // Load local scripts
     if (flags & AREA_LOADSCRIPTS)
         ScriptManager.Load(scriptfile, this);
@@ -409,6 +546,11 @@ void TArea::Enter()
   // Put "Entered" line in the status line
     if (Player)
         TextBar.Print("%s entered %s", Player->GetName(), name);
+
+    log_info("[area] entered '%s' (level=%d, audioenv=%d%s%s%s)", name, this->level,
+             audioenv,
+             ambsound[0] ? ", ambsound=" : "", ambsound[0] ? ambsound : "",
+             bgeffect[0] ? ", bgeffect set" : "");
 }
 
 // Called when the player exits the area
@@ -554,6 +696,14 @@ void TAreaManager::Pulse()
   // can decide between snap and FadeAmbient.
     lastpos = pos;
     lastlevel = level;
+}
+
+PTArea TAreaManager::CurrentArea()
+{
+    for (int32_t c = 0; c < areas.NumItems(); c++)
+        if (areas[c]->GetFlags() & AREA_PLAYERIN)
+            return areas[c];
+    return nullptr;
 }
 
 // Called by the game screen Animate() function to update area stuff

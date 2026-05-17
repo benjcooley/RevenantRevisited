@@ -1,0 +1,18 @@
+# THaloEffect - MEDIUM CONFIDENCE CANDIDATE
+source_class: "THaloEffect"
+ghidra_class: "cls_0x5ac0cc"
+confidence: "MEDIUM"
+
+# Evidence (XREF-driven, see EXTRACTION_PASS_2026-05-16.md methodology):
+#   - "Halo" string at .rdata 005e11c4 has 2 XREFs:
+#       004f03b0 (delta +0x250 in fn 0x4f0160, owner cls_0x5ac0cc)
+#       004f03f0 (delta +0x290 in fn 0x4f0160, owner cls_0x5ac0cc)
+#     Both XREFs land cleanly inside cls_0x5ac0cc — same registration fn.
+#   - cls_0x5ac0cc size 268 bytes, 7 methods, self-allocated 0x10c bytes.
+#   - Inherits from TEffect chain (cls_0x5b0074::~cls_0x5b0074 in dtor).
+#   - Size and field layout match the TEffect-base "256+small-delta" sibling
+#     pattern shared by all confirmed effect leaves (cls_0x5aaf28, 5abbb0,
+#     5abe4c, 5ac340, 5ac83c, 5acf9c, 5ad4e4, 5aacac).
+
+fields:
+methods:

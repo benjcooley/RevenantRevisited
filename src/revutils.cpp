@@ -905,6 +905,13 @@ const char *rev_resolve_revisited_overlay()
     if (s_done) return s_resolved.c_str();
     s_done = true;
 
+    // Strict opt-in: the Revisited overlay only applies when the user
+    // launches with --revisited. Without the flag, return empty even if
+    // a revisited/ folder or RevenantRevisited.rvr sits next to the exe,
+    // so the game runs pure vanilla retail by default.
+    if (!RevisitedEnabled)
+        return "";
+
     auto looks_like_overlay = [](const fs::path &p) -> bool {
         // For now: anything that exists. The overlay can be empty (no
         // patches yet) and that's fine — we just won't find any files
@@ -979,7 +986,16 @@ const char *rev_resolve_revisited_overlay()
         }
     }
 
-    log_info("[overlay] no revisited overlay found — running vanilla retail");
+    // --revisited was requested but no overlay is reachable. Hard fail —
+    // the user explicitly asked for Revisited features and silently
+    // dropping back to vanilla would mask the misconfiguration. Log the
+    // full search path first since FatalError's display buffer is short.
+    log_error("[overlay] --revisited overlay not found. Searched (in order):");
+    log_error("  1) $REVENANT_REVISITED_PATH");
+    log_error("  2) <exe-dir>/RevenantRevisited.rvr");
+    log_error("  3) <RunPath>/RevenantRevisited.rvr");
+    log_error("  4) <repo-root>/revisited/resources/ (dev layout)");
+    FatalError("--revisited specified but no overlay found (see log for search paths)", nullptr);
     return "";
 }
 
@@ -1384,6 +1400,31 @@ FILE *rev_vfs_open(const char *name, const char *flags)
 }
 
 } // anonymous namespace
+
+size_t VFSListByPrefix(const char *prefix, std::vector<std::string> &out)
+{
+    if (!prefix) return 0;
+    const std::string pfx = vfs_lower(prefix);
+    const size_t before = out.size();
+
+    auto walk = [&](VFSArchive *arc) {
+        if (!arc) return;
+        const mz_uint n = mz_zip_reader_get_num_files(&arc->zip);
+        for (mz_uint i = 0; i < n; ++i)
+        {
+            mz_zip_archive_file_stat st;
+            if (!mz_zip_reader_file_stat(&arc->zip, i, &st)) continue;
+            if (st.m_is_directory) continue;
+            const std::string lo = vfs_lower(st.m_filename);
+            if (lo.compare(0, pfx.size(), pfx) != 0) continue;
+            out.push_back(vfs_basename_lower(st.m_filename));
+        }
+    };
+
+    for (auto &up : g_base_archives) walk(up.get());
+    walk(g_module_archive.get());
+    return out.size() - before;
+}
 
 bool MountArchive(const char *name)
 {

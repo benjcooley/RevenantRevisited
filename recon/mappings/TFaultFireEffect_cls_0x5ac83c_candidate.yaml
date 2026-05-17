@@ -1,0 +1,14 @@
+# TFaultFireEffect (or TFaultFireAnimator) - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TFaultFireEffect"
+ghidra_class: "cls_0x5ac83c"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "FaultFire" string at .rdata 005e11dc has 2 XREFs:
+#       004f1530 (delta +0x170 in fn 0x4f13c0, owner cls_0x5ac83c)
+#       004f1570 (delta +0x1b0 in fn 0x4f13c0, owner cls_0x5ac83c)
+#   - cls_0x5ac83c size 400 bytes, 6 methods, vtable 104 bytes (26 vmethods).
+#   - Inherits from cls_0x5b0074 (TEffect candidate).
+
+fields:
+methods:

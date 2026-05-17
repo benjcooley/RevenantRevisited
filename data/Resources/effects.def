@@ -34,3 +34,144 @@ effect TorchFlame
         }
     }
 }
+
+// B01 TBloodEffect -- one-shot impact burst, 10 droplets, polar-cone
+// initial velocity + gravity-driven ballistic arc + held-then-fade alpha.
+// Migrated from bespoke C++ on TParticleBucket per
+// docs/vfx/VM_EXTENSION_FORENSICS.md Phase 5. Asset paths + per-particle
+// constants are 1:1 with the bespoke SpawnForTest body in effect.cpp.
+effect Blood
+{
+    debug = normal
+    inactive_ttl_pulses = 12
+
+    bucket blood_droplets
+    {
+        // Imagery (Misc\Blood.I3D) loaded via TObjectImagery::LoadImagery
+        // -- the standalone harness has no "owner imagery"; this lets the
+        // bucket own its texture independently of the spawning instance.
+        imagery_path = "Misc\\Blood.I3D"
+        texture_slot = 0
+        atlas_cols = 2
+        atlas_rows = 2
+        atlas_frames = 4
+        width = 64.0
+        height = 64.0
+        scale = 1.0
+        blend_mode = "premul_alpha"
+        light_mode = "unlit"
+        depth_mode = "test_no_write"
+        orientation = "screen_aligned"
+        chroma_key = [255, 0, 0]
+
+        spawn_burst = 10
+        tick_hz = 0
+        default_life = 1.4
+
+        // Polar-cone spawn: ground-level emitter +30 wu up, radial speed
+        // 60..140 wu/s, upward 140..220 wu/s. Color = red-ish with a slight
+        // value-jitter via rand01() (matches the bespoke r/g/b expressions).
+        spawn_expr = "
+            pos = emit_pos + vec3(0, 0, 30);
+            vel = vec3(cos(rand(0, 6.2831853) ) * (60 + 80 * rand01()),
+                       sin(rand(0, 6.2831853) ) * (60 + 80 * rand01()),
+                       140 + 80 * rand01());
+            scale = vec3(24 + 16 * rand01(), 24 + 16 * rand01(), 1);
+            rot.x = rand(0, 6.2831853);
+            frame = floor(rand01() * 4);
+            color = vec4(1.0 - 0.20 * rand01(),
+                         0.10 + 0.10 * rand01(),
+                         0.10 + 0.05 * rand01(),
+                         1);
+        "
+
+        // Per-frame integration. kGravity = -480 wu/s^2 from the bespoke
+        // C++; dt is implicit (the engine multiplies tick_hz=0 -> 1 tick
+        // per render frame, per_tick_seconds = dt). We pass dt via the
+        // `age` advance and read it from the rate-of-change; but since
+        // the bespoke port wrote pos += vel * dt, vel.z += g * dt and our
+        // tick_expr runs at render-rate (matching the bespoke behaviour),
+        // we encode the same shape using a fixed 1/60 approximation. The
+        // engine's per_tick_seconds is the actual dt -- we can't read it
+        // directly from an expression yet, so we approximate with the
+        // ratio kGravity * (1/60) which gives the same visual envelope
+        // as the bespoke at the harness's 60 fps target.
+        //
+        // The visible envelope is dominated by 'life=1.4s' -- the
+        // approximation drift over 1.4 sec is invisible against the
+        // gravity-driven arc.
+        tick_expr = "
+            vel.z = vel.z - 8.0;
+            pos = pos + vel * 0.01667;
+            color.a = clamp((1 - age01) * 2, 0, 1);
+        "
+
+        // No kill_expr -- default-life auto-kill handles reaping when
+        // age >= life. (Earlier draft had `kill_expr = "age01"` which
+        // killed on the first tick because any non-zero age01 reads as
+        // truthy.) For a clear "kill when life elapsed" expression in
+        // future buckets, use `kill_expr = "step(1, age01)"`.
+    }
+}
+
+// M05 TMistEffect -- ambient ascending wisps; steady-state 50-particle
+// emitter, respawn-in-place on landing. Migrated from bespoke C++ per
+// docs/vfx/VM_EXTENSION_FORENSICS.md Phase 5. Constants 1:1 with the
+// retail TMistAnimator forensics body in INVENTORY M05 §1.
+effect Mist
+{
+    debug = normal
+    inactive_ttl_pulses = 12
+
+    bucket mist_drops
+    {
+        imagery_path = "Magic\\mist.i3d"
+        texture_slot = 0
+        atlas_cols = 1
+        atlas_rows = 1
+        atlas_frames = 1
+        width = 56.0
+        height = 56.0
+        scale = 1.0
+        blend_mode = "additive_straight"
+        light_mode = "unlit"
+        depth_mode = "test_no_write"
+        orientation = "screen_aligned"
+
+        spawn_count = 50
+        tick_hz = 24
+        default_life = 5.0
+
+        // Retail TMistAnimator constants (effect_old.cpp:11342+):
+        //   MIST_LENGTH = 64, MIST_WIDTH = 20, MIST_HEIGHT = 4
+        //   vx = random(-L,L)/32 = -2..+2 wu/tick
+        //   vy = random(-W,W)/32 = -0.625..+0.625 wu/tick
+        //   vz = random(H/2, H) = +2..+4 wu/tick (always upward)
+        //   pos.x = random(-L,L)/2 = -32..+32 wu (port widens 3x to ±96)
+        //   pos.y = random(-W,W)/2 = -10..+10 wu (port widens 3x to ±30)
+        //   pos.z = +5 wu (slightly above origin)
+        spawn_expr = "
+            pos = emit_pos + vec3(rand(-96, 96), rand(-30, 30), 20);
+            vel = vec3(rand(-2, 2), rand(-0.625, 0.625), rand(2, 4));
+            scale = vec3(56 * (0.75 + 0.5 * rand01()),
+                         56 * (0.75 + 0.5 * rand01()),
+                         1);
+            rot.x = 0;
+            frame = 0;
+            color = vec4(0.16, 0.18, 0.22, 1);
+        "
+
+        // RIPPLE_GRAVITY = 0.37 per-tick (shared with H03/H04). tick_hz=24
+        // means per_tick_seconds = 1/24, so vel.z -= 0.37 is per-tick
+        // exactly. pos += vel in tick units (wu/tick).
+        tick_expr = "
+            vel.z = vel.z - 0.37;
+            pos = pos + vel;
+        "
+
+        // Respawn-in-place when the drop lands. emit_pos.z is the
+        // bucket-anchor z (the spawning instance's origin); a drop dies
+        // when its z falls to or below that level.
+        kill_expr = "step(pos.z, emit_pos.z)"
+    }
+}

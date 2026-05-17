@@ -1,0 +1,32 @@
+# TDragonFireEffect ("DragonFire" registry name) - MEDIUM CONFIDENCE CANDIDATE
+# (2026-05-16 pass-2: renamed from TPhotonEffect_cls_0x5aacac_candidate.yaml.
+# The actual TPhotonEffect class lives in the MissileEffect.cpp family at
+# cls_0x5b401c -- see TPhotonEffect_cls_0x5b401c_candidate.yaml.)
+source_class: "TDragonFireEffect"
+ghidra_class: "cls_0x5aacac"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "DragonFire" string at .rdata 005e1170 has 2 XREFs:
+#       004eabb0 (delta +0xd0 in fn 0x4eaae0, owner cls_0x5aacac)
+#       004eac10 (delta +0x130 in fn 0x4eaae0, owner cls_0x5aacac)
+#     Both XREFs land in one registration fn inside cls_0x5aacac.
+#   - cls_0x5aacac size 376 bytes, 3 methods, vtable 96 bytes (24 vmethods).
+#   - Inherits from TEffect chain (cls_0x5b0074::~cls_0x5b0074 in dtor).
+#
+# Source notes: pre-release tree has no `TDragonFireEffect` class declared.
+# "DragonFire" is likely a Dragon-NPC special attack -- implemented as a
+# generic TEffect/TParticleSystem variant registered by name with the
+# dragon imagery loaded. Could also be a renamed/dev-internal variant of
+# TFireSwarmEffect or TFireBallEffect parameterized for dragon attacks.
+#
+# Confidence is MEDIUM (not HIGH) because:
+#   - The class itself definitely registers "DragonFire" (both XREFs land here).
+#   - But the source-side class name is unknown -- TDragonFireEffect is a
+#     plausible C++ identifier, not a verified one.
+#
+# Consider treating this as a discovery row in INVENTORY: "DragonFire effect
+# - retail registers it as a separate type, source class name unknown".
+
+fields:
+methods:

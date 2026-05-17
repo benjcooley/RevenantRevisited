@@ -1,0 +1,19 @@
+# TWaterEffect - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TWaterEffect"
+ghidra_class: "cls_0x5ad26c"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "Water" string at .rdata 005e120c has 2 XREFs:
+#       004f3260 (delta +0x360 in fn 0x4f2f00, owner cls_0x5ad26c)
+#       004f32a0 (delta +0x3a0 in fn 0x4f2f00, owner cls_0x5ad26c)
+#     Both XREFs in one registration fn inside cls_0x5ad26c.
+#   - cls_0x5ad26c size 272 bytes, 6 methods, self-allocated 0x110 bytes.
+#   - Inherits from TEffect chain (cls_0x5b0074::~cls_0x5b0074 in dtor).
+#   - Matches TEffect-base sibling layout pattern.
+#   - Open question: pre-release source declares both TWaterEffect (splash PE)
+#     and TWaterFallEffect (CX). Confirm by inspecting the function at 0x4f2f00
+#     for waterfall-specific behaviour (multi-emitter spawn, mist particles).
+
+fields:
+methods:

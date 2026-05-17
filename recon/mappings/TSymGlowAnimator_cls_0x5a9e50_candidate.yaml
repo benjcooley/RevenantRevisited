@@ -1,0 +1,16 @@
+# TSymGlowAnimator - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TSymGlowAnimator"
+ghidra_class: "cls_0x5a9e50"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "SymGlow" string at .rdata 005e10fc has 1 XREF: 004e5110 in cls_0x5a9e50
+#     (delta +0x220 in fn 0x4e4ef0).
+#   - "sparks" string at .rdata 005e1104 also XREFs into cls_0x5a9e50 at
+#     004e53a0 (+0x140 in fn 0x4e5260) — suggests this class also spawns
+#     sparks particles, consistent with a glowing symbol effect.
+#   - cls_0x5a9e50 size 268 bytes, 7 methods, self-allocated 0x10c bytes.
+#   - Inherits from TEffect chain.
+
+fields:
+methods:

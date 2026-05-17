@@ -1,0 +1,32 @@
+# TStormAnimator (Tornado/Sandswirl/Quicksand composite) - MEDIUM CONFIDENCE
+source_class: "TStormAnimator"
+ghidra_class: "cls_0x5ab460"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - Three distinct effect-name registry strings all XREF into cls_0x5ab460:
+#       "Tornado"   005e11a4 -> 0x4ee430 (+0x1a60), 0x4ee580 (+0x1bb0)
+#       "Sandswirl" 005e1198 -> 0x4edd50 (+0x1380), 0x4edd90 (+0x13c0)
+#       "Quicksand" 005e118c -> 0x4ed390 (+0x9c0),  0x4edb00 (+0x1130)
+#     All six XREFs land inside cls_0x5ab460 — strong evidence this is a
+#     templated/parameterized storm class registered under three names.
+#   - Additional supporting XREFs in this class:
+#       "sand" 005e1004, "Quicksand" 005e100c (loader keywords)
+#       "icestorm" 005e1018 (loader keyword)
+#       "Iced" 005e1184 second XREF
+#   - cls_0x5ab460 size 2064 bytes, 7 methods.
+#   - **Likely contains TWO distinct classes**: Ghidra has merged them.
+#     - Primary class: allocates 0x884 (2180 bytes) with vftable_5ab460 —
+#       the big TStormAnimator itself.
+#     - Secondary class: allocates 0x234 (564 bytes) with separate vtable
+#       at PTR_virt_meth_0x4f8080_005ab4c4 — probably SStormInstance or
+#       a per-storm-particle helper / TQuicksandEffect leaf.
+#   - The 2180-byte size matches pre-release src/effectcomp.h:TStormAnimator
+#     (which holds an SStormParams + N SStormInstance bookkeeping).
+#
+# Open: untangle the two embedded classes. The secondary
+# PTR_virt_meth_0x4f8080_005ab4c4 should get its own cls_0x* id in a
+# Ghidra rerun.
+
+fields:
+methods:
