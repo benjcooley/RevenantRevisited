@@ -119,6 +119,7 @@ endif()
 if(APPLE)
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/osx/editorplatform.mm")
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/osx/renderer_readback.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/osx/cursor_macos.mm")
 endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
