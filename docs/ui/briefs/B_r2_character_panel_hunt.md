@@ -25,13 +25,28 @@ The retail class that builds the upper-left + upper-right character panels per [
 
 **Class index summary for cls_0x579bb0:** `4 fields, 1 method, 52 lines`.
 
-## Pane architecture evidence in TPlayScreen
+## CRITICAL CORRECTION
 
-From `recon/classes_converted/cls_0x5b4f30_likely_TPlayScreen.cpp` (119 KB):
-- TPlayScreen holds pane pointers at offsets `0x2a0, 0x2a8, 0x2ac, 0x2b0, 0x2b4, 0x2b8, 0x2bc, 0x2c4, 0x2c8`.
-- Method `meth_0x519850` (lines 2619-2658 of the decomp) iterates these slots querying pane state at VFT+0x1f0.
-- Architecture supports two character-panel instances (slots accommodate them) but **slot-to-class mapping is not yet confirmed**.
-- Classes `cls_0x5756d0` and `cls_0x51f6b0` are referenced from TPlayScreen pane-update dispatch — possibly the character-state→pane binding layer, not yet identified.
+**The first-pass hunt looked at the wrong class for TPlayScreen.**
+
+Per `recon/discovered/README.md` "High-confidence anchors":
+- **TPlayer = `cls_0x5b4f30`** (vtable inherits TCharacter's virtuals; recon yaml mismapped as TPlayScreen)
+- **TPlayScreen = `cls_0x5a5320`** (per existing `recon/discovered/cls_0x5a5320_TPlayScreen_*.cpp` decomps: Animate at 0x47b4a0, Pulse at 0x47b4d0, Close at 0x47b290).
+
+So the pane-slot offsets noted above (`0x2a0..0x2c8`) belong to **TPlayer**, not TPlayScreen — those are the player's data, not the screen's pane registry.
+
+The real **TPlayScreen pane-construction trace** lives in `cls_0x5a5320`'s Initialize (address TBD; needs Ghidra extraction).
+
+The first-pass hunt's findings about cls_0x579bb0 (TStatusBar candidate, structurally inadequate / likely incomplete decomp) stand — that part wasn't dependent on the TPlayScreen confusion.
+
+## ~~Pane architecture evidence in TPlayScreen~~ (retracted)
+
+The slot offsets `0x2a0..0x2c8` I described above are inside **TPlayer**, not TPlayScreen. Disregard for character-panel identification purposes.
+
+The correct hunt path is:
+1. Decompile `cls_0x5a5320`'s Initialize via Ghidra CLI (`DecompileAddr.java`). Address unknown; cross-reference against TPlayScreen's vtable + the existing Animate/Pulse/Close offsets.
+2. Trace `new cls_0x*` calls inside Initialize to enumerate which pane classes get constructed.
+3. Identify the character-panel class from that enumeration (one or two instances of the same class).
 
 ## Asset / string evidence
 
