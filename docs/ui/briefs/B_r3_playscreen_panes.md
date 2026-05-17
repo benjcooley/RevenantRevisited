@@ -172,4 +172,122 @@ For panes with src-side implementations (TMapPane / TStatPane / etc.) — the re
 ## Hunt log
 
 - **2026-05-16, Wave-1A run 1 (interrupted):** identified TPlayScreen::Initialize at 0x47a660; extracted asset .dat list (13 files) + 16 pane-init function candidates with string anchors. Agent was stopped before applying any renames (good — protocol corrected mid-run with new rules about mislabel cost asymmetry + Ghidra class merging). Findings preserved here as seed material.
-- **Next:** re-launched wave with updated AGENT_PROTOCOL.md guidance.
+- **2026-05-16, Wave-1A re-launch (this section):** completed the 4 forward-decl-only class identifications. See section below.
+
+---
+
+## Wave-1A re-launch (2026-05-16) — Four pane-class identifications COMPLETE
+
+### What was done
+
+For each of the four forward-decl-only classes in `src/revtypes.h:1164..1167` (TPlyrStatusBar / TSidePane / TSideTabsPane / TBottomPane), the chain was:
+
+1. **Extract the Initialize function** via `DecompileAddr.java` (already in `/recon/discovered/`).
+2. **Disassemble the call sites in TPlayScreen::Initialize** to find the `MOV ECX, <GLOBAL>` immediately preceding each `CALL <FN>` — that gives the global instance address.
+3. **`FindImmRefs.java <GLOBAL>`** to find the `MOV [<GLOBAL>], <VTABLE>` instruction — that gives the class's vtable address.
+4. **`DumpVtable.java <VTABLE> 31`** to confirm slot 0 = the init function, and to sanity-check the class shape (31 slots, leaf-TPane fingerprint).
+5. The retail string anchor inside `TPlayScreen::Initialize` (e.g. `"Trouble initializing PlyrStatusB"`) + the `_CLASSDEF` forward-decl in src constitute the golden-path src cross-reference.
+
+### Results (all four)
+
+| src class | vtable (cls_0x…) | global instance | Initialize fn | Body file |
+|---|---|---|---|---|
+| `TPlyrStatusBar` | `cls_0x5a54e4` | `0x65a8c0` | `0x549740` | `recon/discovered/cls_0x5a54e4_TPlyrStatusBar_Initialize_549740.cpp` |
+| `TSidePane` | `cls_0x5a53ec` | `0x666140` | `0x53c8c0` | `recon/discovered/cls_0x5a53ec_TSidePane_Initialize_53c8c0.cpp` |
+| `TSideTabsPane` | `cls_0x5a5750` | `0x65be50` | `0x53cc30` | `recon/discovered/cls_0x5a5750_TSideTabsPane_Initialize_53cc30.cpp` |
+| `TBottomPane` | `cls_0x5a5468` | `0x667c58` | `0x52d8a0` | `recon/discovered/cls_0x5a5468_TBottomPane_Initialize_52d8a0.cpp` |
+
+### Per-class evidence summary
+
+**TPlyrStatusBar (cls_0x5a54e4):**
+- Init function ~1500 bytes; allocates 5 surfaces (4 mosaic + 1 sprite) at offsets +0x60..+0x74. Three 0x80×0x40 mosaic surfaces matches "three horizontal bars" (health / stamina / mana).
+- Vtable wire: `0x48069c MOV [0x0065a8c0], 0x5a54e4`.
+- Vtable slot 0 = 0x549740 = Initialize. 31 slots total (consistent leaf-TPane shape).
+- src forward-decl: `src/revtypes.h:1166`.
+- **Both rename levels applied** (the class `cls_0x5a54e4_TPlyrStatusBar` + the Initialize method).
+
+**TSidePane (cls_0x5a53ec):**
+- Init function trivial (33 bytes): TPane base init + zeros 4 fields. Suggests TSidePane is a thin container — children initialized separately, composited at draw.
+- Vtable wire: `0x480420 MOV [0x00666140], 0x5a53ec`.
+- Vtable slot 0 = 0x53c8c0. 31 slots. Same leaf shape.
+- src forward-decl: `src/revtypes.h:1164`.
+- **Both rename levels applied.**
+
+**TSideTabsPane (cls_0x5a5750):**
+- Init function ~1800 bytes; loads 3 graphics, 3 mosaic surfaces, **creates 6 TButton instances** with labels "Stats", "Equip", "Spell" + 3 unnamed (icon-only?). DEFINITIVELY the sidebar mode-switcher button strip.
+- Vtable wire is split: the ctor at 0x487c60 sets base vtable 0x5a4494, then calls FUN_0041c7f0 (base ctor), then writes 0x5a5750. Classic single-inheritance ctor pattern → 0x5a5750 is the derived vtable.
+- Vtable slot 0 = 0x53cc30. 32+ slots (slightly more than the others; matches a class with button-strip-specific virtuals).
+- src forward-decl: `src/revtypes.h:1165`.
+- **Both rename levels applied.**
+
+**TBottomPane (cls_0x5a5468):**
+- Init function trivial (11 bytes): only `FUN_00491900(); return 1;`. The "Bottom" content (quickspell, BarInv, Bottom bar) initializes via sibling pane inits, not via this class.
+- Vtable wire: `0x480430 MOV [0x00667c58], 0x5a5468`.
+- Vtable slot 0 = 0x52d8a0. 31 slots. Same leaf shape.
+- src forward-decl: `src/revtypes.h:1167`.
+- **Both rename levels applied.**
+
+### Renames applied (file: `recon/discovered/renames/agent_ui_panes_v2.txt`)
+
+Two levels per class:
+
+```
+# Class label
+cls_0x5a54e4 → cls_0x5a54e4_TPlyrStatusBar
+cls_0x5a53ec → cls_0x5a53ec_TSidePane
+cls_0x5a5750 → cls_0x5a5750_TSideTabsPane
+cls_0x5a5468 → cls_0x5a5468_TBottomPane
+
+# Initialize method (slot 0 of each vtable)
+FUN_00549740 → FUN_00549740_TPlyrStatusBar_Initialize  (+ meth_/virt_meth_ variants)
+FUN_0053c8c0 → FUN_0053c8c0_TSidePane_Initialize       (+ ...)
+FUN_0053cc30 → FUN_0053cc30_TSideTabsPane_Initialize   (+ ...)
+FUN_0052d8a0 → FUN_0052d8a0_TBottomPane_Initialize     (+ ...)
+```
+
+These go beyond the brief's original `..._init` suggestion: per AGENT_PROTOCOL's "What you can rename" table, the chain
+**`retail string + extracted body containing the function at vtable slot 0 + vtable dump matching the src hierarchy`** authorizes the `_Initialize` method-level name. The init function IS the class's Initialize virtual — not a wrapper. The string anchor + the vtable slot-0 identity are two fully-independent lines of evidence.
+
+### Merging suspicions
+
+**None of the four vtables show merging signs.** Each is exactly 31 slots (TSideTabsPane 32+), all with the same shape:
+- Slot 0 = class's Initialize
+- Slot 1 = thunk or near-empty (likely Close)
+- Slot 2 = a shared base method (3 of 4 share `0x491bd0`; TSideTabsPane uses its own `0x435010`)
+- Slots 9, 16 are shared base methods across all four (`0x491a80`, `0x491bb0`)
+- Most other slots are base defaults in the `0x444f**` / `0x445***` range, with sparse per-class overrides
+
+This is **textbook leaf-TPane-derivative layout**. No method-count explosion, no mixed-purpose methods. Class identifications are clean.
+
+### New pane-init candidates that emerged (still to investigate)
+
+Nothing new beyond the original 16 — but this wave nailed down WHICH globals correspond to which inits, which simplifies the next round. Adjacent globals worth checking:
+
+- `0x65b7e0` → FUN_00536360 (equipment pane init) — likely another sidebar content pane
+- `0x6661b0` → FUN_005432a0 (spell pane init) — sidebar Spell tab content
+- `0x65b140` → FUN_00546b50 (stat pane init #1) — sidebar Stats tab content
+- `0x65a9d8` → FUN_005449e0 (stat pane init #2) — **second stat-pane: separate global, separate init function → likely a DIFFERENT class. Investigate before assuming "two instances of TStatPane".**
+- `0x666140` (TSidePane) and adjacent globals — check if `0x666144`/`0x666160` etc. hold child-pane pointers
+- **Target-side TPlyrStatusBar instance** — find another global with vtable 0x5a54e4 (would confirm the user's "one class, two instances" framing for the character panels)
+
+### What's left for Wave-2
+
+1. **Find the target-side TPlyrStatusBar instance.** Run `FindBytes.java 0xe4545a00` (LE encoding of 0x5a54e4) to find every `.data` slot that holds this vtable pointer — one is 0x65a8c0 (player), look for a second.
+2. **Confirm two "stat pane" inits are really two classes** (not two instances). They're at different globals (0x65b140 vs 0x65a9d8) and different init fns (0x546b50 vs 0x5449e0) — already strong evidence for two classes, but the vtables-at-globals check will be definitive.
+3. **Extract slot 1 (Close) of all four classes** for symmetry — that's the second-easiest virtual to identify and lets us start matching to src class shape.
+4. **Identify the TPane base class** (likely `cls_0x5a4494` from the SideTabsPane ctor). Once labeled, the "shared base methods" across all four vtables become identifiable.
+5. **Find draw / animate slots** to confirm where each pane renders to the framebuffer (these will be the ports' biggest implementation surface).
+6. **Reconstruct each class's `.h`/`.cpp`** in `src/` once the full virtual surface + draw paths are mapped. Per the [evolve-don't-replace feedback](../../../../recon/discovered/AGENT_PROTOCOL.md), these are NEW files (since src has only forward-decls).
+
+### Port-status files created
+
+- `recon/discovered/port_status/TPlyrStatusBar.md`
+- `recon/discovered/port_status/TSidePane.md`
+- `recon/discovered/port_status/TSideTabsPane.md`
+- `recon/discovered/port_status/TBottomPane.md`
+
+Each marks all known methods as `⚫ not-started`, with documented vtable slots, surface layout, and open questions.
+
+### Coordinator's call: apply the renames
+
+`recon/discovered/renames/agent_ui_panes_v2.txt` is ready. Apply via `bash recon/scripts/apply_renames.sh` (per the README workflow).
