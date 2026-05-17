@@ -53,7 +53,7 @@ The HUD render-path infrastructure was landed in commit `80879c2` ("engine: HUD 
 >    (not a 7×2 inventory grid).
 > 4. **Game log panel** — transparent overlay on the bottom area
 >    (TTextBar is likely this; its retail decomp at
->    `recon/classes_converted/cls_0x5a4358_likely_TTextBar.cpp` is ~13 KB,
+>    ~~`recon/classes_converted/cls_0x5a4358_likely_TTextBar.cpp`~~ (mislabel — that's `TConsolePane`; real TTextBar at FUN_0054bf70 per Wave-1C) is ~13 KB,
 >    4× the pre-release size, suggesting significant scrolling/multi-line
 >    features beyond the pre-release Print() API).
 > 5. **Dialog overlays** — conditional top-area + bottom-area overlays.
@@ -127,7 +127,7 @@ checklist.
   grouping not a single bar), string hunt in `class_index.tsv`,
   PlayScreen decomp `meth_0x*` callers.
 - `[ ]` **B.r3 Tier 2 — Game-log overlay (TTextBar retail port)** —
-  recon `cls_0x5a4358_likely_TTextBar.cpp` is 4× pre-release size;
+  ~~recon `cls_0x5a4358_likely_TTextBar.cpp` is 4× pre-release size;~~ **MISLABEL RETRACTED 2026-05-16** — cls_0x5a4358 is actually TConsolePane (Wave-1C golden-path identification). Real retail TTextBar is at FUN_0054bf70 (init wrapper) with three TMosaicSurface buffers; leaf class vtable still TBD;
   port the missing scrolling/multi-line/history features.
 - `[ ]` **B.r4 Tier 3 — Right sidebar (TMultiCtrlPane + TEquipPane +
   TSpellPane + TAutoMap + TStatPane)** — verify each against recon.
