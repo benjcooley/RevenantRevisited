@@ -165,6 +165,7 @@ other rows.
 | S06 | `TStripAnimator`       | SR       | effectcomp.cpp  | not-extracted | src/effectcomp.h        | not-started   | -     | generic strip animator; needs Ghidra extraction |
 | S07 | `TStreamerEffect`      | SR       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | banner / streamer trail; needs Ghidra extraction |
 | S08 | `TMissileEffect`       | IM       | MissileEffect.cpp | recon/classes/cls_0x5b3c18.cpp | src/missileeffect.h     | not-started   | -     | **2026-05-16 pass-2:** MEDIUM candidate cls_0x5b3c18 -- shared base for the MissileEffect family (Photon + FireBall + lightning sound-key all XREF here). Inherits cls_0x5a50e8 (root animation class). See recon/mappings/TMissileEffect_cls_0x5b3c18_candidate.yaml. |
+| S09 | `TWeaponSwipe`         | SR       | weapontrail.cpp | not-extracted | src/weapontrail.cpp     | not-started   | -     | **The actual sword slash trail.** Distinct from S01 TStripEffect (Lightning bolt) — both use the strip primitive but TWeaponSwipe is owned by TCharAnimator per-character (`weaponswipe` member, GetWeaponSwipe() accessor) and triggered by attack-frame events. Pre-release source already has Init / GenerateStrip / Animate at src/weapontrail.cpp:353+ — read for retail forensics. User flagged "sword slashes" as essential VFX in the original brief; this is the row to port for that. Phase 2 candidate after S01. |
 
 ### Misc / other
 
