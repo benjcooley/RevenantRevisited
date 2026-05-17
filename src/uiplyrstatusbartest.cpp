@@ -65,15 +65,28 @@ constexpr int32_t kBarHealthAtlasY = 0;
 constexpr int32_t kBarManaAtlasY   = 16;
 constexpr int32_t kBarStaminaAtlasY = 32;
 
-// Retail bar coordinates extracted from
-// recon/discovered/cls_0x5a54e4_TPlyrStatusBar_slot23_TwoPassDraw_54af20.cpp
-// lines 484, 499, 511 (LEFT side bar draws in hi-res branch):
-//   Health  : x=0x44 (68), y=0x0f (15)
-//   Mana    : x=0x44 (68), y=0x1f (31)
-//   Stamina : x=0x44 (68), y=0x2c (44)
-// Row pitch is non-uniform (16 then 13). These are pane-relative.
-constexpr int32_t kBarFillX     = 0x44;  // 68 — LEFT side bar X (retail slot 23)
-constexpr int32_t kBarRowY[3]   = { 0x0f, 0x1f, 0x2c };  // 15, 31, 44
+// Retail bar coordinates from
+// recon/discovered/cls_0x5a54e4_TPlyrStatusBar_slot23_TwoPassDraw_54af20.cpp.
+//
+// LEFT (player) bars — slot 23 lines 484/499/511, hi-res branch:
+//   Health  : (x=0x44=68, y=0x0f=15)
+//   Mana    : (x=0x44=68, y=0x1f=31)
+//   Stamina : (x=0x44=68, y=0x2c=44)
+//
+// RIGHT (target) bars — slot 23 lines 657/672/686, hi-res branch:
+//   x is computed as `*(int *)(param_1 + 0xc) - <offset>` where +0xc
+//   is the pane width. Per-bar offsets:
+//     Health  : pane_width - 0xc1 = pane_width - 193
+//     Mana    : pane_width - 0x91 = pane_width - 145
+//     Stamina : pane_width - 0x79 = pane_width - 121
+//   Y values are the same as LEFT (15/31/44).
+//
+// Row pitch is non-uniform (16 then 13). Coords are PANE-relative
+// (the pane spans the full screen width in retail; here the test mode
+// uses screen width for pane width).
+constexpr int32_t kBarFillX        = 0x44;                  // 68
+constexpr int32_t kBarRowY[3]      = { 0x0f, 0x1f, 0x2c };  // 15, 31, 44
+constexpr int32_t kTargetBarOff[3] = { 0xc1, 0x91, 0x79 };  // 193, 145, 121
 
 // Portrait Ring + LockeFace positions — currently visual estimates;
 // will be replaced once the recon Init body or helper extractions
@@ -90,54 +103,102 @@ public:
     {
         if (!g_backPanel) return;
         const double t = TTime::Time();
+        const int32_t paneW = Display.Width();
 
-        // Synthetic levels matching reference: health ~85%, mana ~95%,
-        // stamina ~15%. Slight sine wobble for animation life.
-        const float healthLvl  = 0.85f + 0.05f * float(std::sin(t * 0.7));
-        const float manaLvl    = 0.95f + 0.05f * float(std::sin(t * 0.9 + 1.0));
-        const float staminaLvl = 0.15f + 0.05f * float(std::sin(t * 1.1 + 2.0));
+        // Synthetic levels matching reference.
+        const float playerH = 0.85f + 0.05f * float(std::sin(t * 0.7));
+        const float playerM = 0.95f + 0.05f * float(std::sin(t * 0.9 + 1.0));
+        const float playerS = 0.15f + 0.05f * float(std::sin(t * 1.1 + 2.0));
+        const float targetH = 0.40f + 0.05f * float(std::sin(t * 1.3 + 0.5));
+        const float targetM = 0.60f + 0.05f * float(std::sin(t * 1.5 + 1.5));
+        const float targetS = 0.30f + 0.05f * float(std::sin(t * 1.7 + 2.5));
 
-        // Backdrop
+        // === LEFT (player) ===
+        // BackPanel chrome at panel origin (0,0 in pane coords).
         Renderer->DrawBitmap(g_backPanel, kPanelX, kPanelY);
-
-        // Bars: per-row blit from the Bars atlas, clipped horizontally
-        // to (level * bar_width). The retail panel composes bars from
-        // this atlas; we do the same via subrect blit.
-        DrawBar(kBarHealthAtlasY, 0, healthLvl);
-        DrawBar(kBarManaAtlasY,   1, manaLvl);
-        DrawBar(kBarStaminaAtlasY, 2, staminaLvl);
-
-        // Bar icons (overlap the panel's icon slot at the bar's start)
-        DrawIcon(g_healthIcon,  0);
-        DrawIcon(g_manaIcon,    1);
-        DrawIcon(g_fatigueIcon, 2);
-
-        // Portrait: Ring frame then LockeFace inside it
+        DrawBar(false, kBarHealthAtlasY,  0, playerH);
+        DrawBar(false, kBarManaAtlasY,    1, playerM);
+        DrawBar(false, kBarStaminaAtlasY, 2, playerS);
+        DrawIcon(false, g_healthIcon,  0);
+        DrawIcon(false, g_manaIcon,    1);
+        DrawIcon(false, g_fatigueIcon, 2);
         if (g_ring)
             Renderer->DrawBitmap(g_ring, kPanelX + kRingX, kPanelY + kRingY);
         if (g_lockeFace)
             Renderer->DrawBitmap(g_lockeFace, kPanelX + kPortraitX,
                                  kPanelY + kPortraitY);
+
+        // === RIGHT (target) ===
+        // Synthetic 3s on / 3s off target visibility cycle.
+        const double tgt_phase = std::fmod(t, 6.0);
+        if (tgt_phase < 3.0)
+        {
+            // Right-edge X for the backdrop chrome: mirror the LEFT pane
+            // position. The retail BackPanel is the same bitmap drawn at
+            // (pane_width - panel_w) for the right side.
+            const int32_t rightPanelX = paneW - kPanelX - g_backPanel->width;
+            Renderer->DrawBitmap(g_backPanel, rightPanelX, kPanelY);
+            DrawBar(true, kBarHealthAtlasY,  0, targetH);
+            DrawBar(true, kBarManaAtlasY,    1, targetM);
+            DrawBar(true, kBarStaminaAtlasY, 2, targetS);
+            DrawIcon(true, g_healthIcon,  0);
+            DrawIcon(true, g_manaIcon,    1);
+            DrawIcon(true, g_fatigueIcon, 2);
+            if (g_ring)
+                Renderer->DrawBitmap(g_ring,
+                    rightPanelX + (g_backPanel->width - g_ring->width - kRingX),
+                    kPanelY + kRingY);
+            if (g_lockeFace)
+                Renderer->DrawBitmap(g_lockeFace,
+                    rightPanelX + (g_backPanel->width - g_lockeFace->width - kPortraitX),
+                    kPanelY + kPortraitY);
+        }
     }
 
 private:
-    void DrawBar(int32_t atlasY, int32_t row, float level)
+    void DrawBar(bool isRight, int32_t atlasY, int32_t row, float level)
     {
         if (!g_bars) return;
-        const int32_t dstX = kPanelX + kBarFillX;
+        const int32_t paneW = Display.Width();
+        // LEFT: bar X = kBarFillX (68). RIGHT: bar X = paneW - kTargetBarOff[row].
+        const int32_t dstX = isRight
+            ? paneW - kTargetBarOff[row]
+            : kPanelX + kBarFillX;
         const int32_t dstY = kPanelY + kBarRowY[row];
         const float clamped = level < 0.0f ? 0.0f : (level > 1.0f ? 1.0f : level);
         const int32_t filled = int32_t(float(kBarAtlasW) * clamped);
         if (filled > 0)
-            Renderer->DrawBitmapSubrect(g_bars, dstX, dstY,
-                                        0, atlasY, filled, kBarRowH);
+        {
+            if (isRight)
+            {
+                // Mirror fill: target bars deplete TOWARD the screen
+                // edge (right). Blit from the right side of the atlas
+                // row so the visible portion ends at the bar's right
+                // edge, not the left.
+                Renderer->DrawBitmapSubrect(g_bars,
+                    dstX + (kBarAtlasW - filled), dstY,
+                    kBarAtlasW - filled, atlasY, filled, kBarRowH);
+            }
+            else
+            {
+                Renderer->DrawBitmapSubrect(g_bars, dstX, dstY,
+                                            0, atlasY, filled, kBarRowH);
+            }
+        }
     }
 
-    void DrawIcon(PTBitmap icon, int32_t row)
+    void DrawIcon(bool isRight, PTBitmap icon, int32_t row)
     {
         if (!icon) return;
-        // Icon centered on the start of the bar row.
-        const int32_t ix = kPanelX + kBarFillX - icon->width / 2;
+        const int32_t paneW = Display.Width();
+        // Icon sits at the bar's INNER end (toward portrait), centered.
+        // LEFT bars: icon at bar's left (icon center = bar X)
+        // RIGHT bars: icon at bar's right (icon center = bar X + bar_width)
+        const int32_t barX = isRight
+            ? paneW - kTargetBarOff[row]
+            : kPanelX + kBarFillX;
+        const int32_t centerX = isRight ? barX + kBarAtlasW : barX;
+        const int32_t ix = centerX - icon->width / 2;
         const int32_t iy = kPanelY + kBarRowY[row]
                            + kBarRowH / 2 - icon->height / 2;
         Renderer->DrawBitmap(icon, ix, iy);
