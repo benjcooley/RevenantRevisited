@@ -8,6 +8,9 @@
 
 #include "revenant.h"
 
+#include <string>
+#include <vector>
+
 // Simple Support Functions
 inline char *strncpyz(char* dst, const char* src, int32_t n)
   { strncpy(dst, src, n-1); dst[n-1] = 0; return dst; }
@@ -79,6 +82,14 @@ bool MountArchive(const char *name);    // name looked up under data root, e.g. 
 bool MountModule(const char *name);     // mounts data/Modules/<name>.rvm (unmounts any prior)
 void UnmountModule();
 void UnmountAll();
+
+// Enumerate file entries across all mounted archives whose in-archive
+// path starts with `prefix` (case-insensitive). Returns lowercase
+// basenames (with extension); appended to `out`. Used by subsystems
+// that need to discover assets without per-file probing, e.g. the
+// sound registry walking Sound/effects/*.wav out of resources.rvr.
+// Returns the number of new entries appended.
+size_t VFSListByPrefix(const char *prefix, std::vector<std::string> &out);
 
 // Random number generation
 int32_t random(int32_t min, int32_t max);

@@ -81,7 +81,11 @@ PTWaveData LoadWave(char* filename, int32_t volume, int32_t loopstart, int32_t l
 {
     if (!filename) return nullptr;
 
-    FILE* fp = std::fopen(filename, "rb");
+    // rev_fopen walks SavePath → overlay → RunPath → data root → mounted
+    // archives (keyed by basename). That last step is what lets
+    // "sound/effects/aura.wav" find aura.wav inside the resources.rvr
+    // zip without us mounting an explicit per-subsystem virtual fs.
+    FILE* fp = rev_fopen(filename, "rb");
     if (!fp) return nullptr;
 
     std::fseek(fp, 0, SEEK_END);
@@ -236,12 +240,13 @@ PTSound TSound::Load(char* name, int32_t dirresid)
     if (!name || !SoundPlayer.Functioning())
         return nullptr;
 
-    // Anchor on RunPath (install dir). makepath(ResourcePath, ...) would
-    // route through SavePath instead, which is the writable per-user dir
-    // and doesn't host the sound tree.
+    // rev_fopen handles all the path resolution: SavePath → overlay →
+    // RunPath → data root → mounted ZIPs (keyed by basename). The
+    // "sound/<sub>/<name>.wav" prefix matters for the on-disk fallback
+    // chain but is collapsed to just "<name>.wav" when the lookup ends
+    // up in resources.rvr.
     char filename[MAXPATHLEN];
-    strncpyz(filename, RunPath, MAXPATHLEN);
-    strncatz(filename, "sound/", MAXPATHLEN);
+    strncpyz(filename, "sound/", MAXPATHLEN);
     if (dirresid == DIRRESID_EFFECTDIR)
         strncatz(filename, "effects", MAXPATHLEN);
     else if (dirresid == DIRRESID_DIALOGDIR)
@@ -641,33 +646,58 @@ void TSoundPlayer::SetListenerPos(int32_t x, int32_t y, int32_t z)
 
 bool TSoundPlayer::SearchSoundDir(const char* soundpath, const char* subdir, int32_t dirresid)
 {
-    if (!soundpath || !subdir) return false;
+    if (!subdir) return false;
 
-    std::filesystem::path dir = std::filesystem::path(soundpath) / subdir;
-    std::error_code ec;
-    if (!std::filesystem::is_directory(dir, ec)) {
-        // Missing language/effects dir is fine — game data may simply not
-        // have any. Don't FatalError.
-        return true;
-    }
-
-    for (auto& ent : std::filesystem::directory_iterator(dir, ec)) {
-        if (ec) break;
-        if (!ent.is_regular_file()) continue;
-        auto ext = ent.path().extension().string();
-        // Normalize to lowercase for the .wav check (some asset packs
-        // ship .WAV uppercase on case-sensitive filesystems).
-        for (auto& c : ext) c = static_cast<char>(std::tolower(c));
-        if (ext != ".wav") continue;
-
-        auto* ref = new SSoundRef;
-        ref->name     = strdup(ent.path().stem().string().c_str());
+    // First-wins de-dup: a sound that's already in the registry (from a
+    // prior pass or sound.def) doesn't get clobbered by an archive entry
+    // with the same basename.
+    auto add_if_new = [&](const char* basename) {
+        if (FindSound(const_cast<char*>(basename), -1) >= 0) return;
+        auto* ref     = new SSoundRef;
+        ref->name     = strdup(basename);
         ref->dir      = nullptr;
         ref->resid    = dirresid;
         ref->usecount = 0;
         ref->flags    = 0;
         ref->sound    = nullptr;
         soundlist.Add(ref);
+    };
+
+    // 1) Loose WAVs on disk under <RunPath>/sound/<subdir>/*.wav. Modders
+    // or partial extractions will land here; first pass for compatibility.
+    if (soundpath) {
+        std::filesystem::path dir = std::filesystem::path(soundpath) / subdir;
+        std::error_code ec;
+        if (std::filesystem::is_directory(dir, ec)) {
+            for (auto& ent : std::filesystem::directory_iterator(dir, ec)) {
+                if (ec) break;
+                if (!ent.is_regular_file()) continue;
+                auto ext = ent.path().extension().string();
+                for (auto& c : ext) c = static_cast<char>(std::tolower(c));
+                if (ext != ".wav") continue;
+
+                add_if_new(ent.path().stem().string().c_str());
+            }
+        }
+    }
+
+    // 2) Archive-resident WAVs under "Sound/<subdir>/" inside the mounted
+    // resource ZIPs (resources.rvr ships effects/ this way). Listing
+    // returns lowercased basenames *with* extension; strip ".wav" for
+    // the registry to match the disk path.
+    std::string prefix = std::string("Sound/") + subdir + "/";
+    std::vector<std::string> entries;
+    VFSListByPrefix(prefix.c_str(), entries);
+    for (auto& fname : entries) {
+        // Strip extension. (We already filtered to .wav-shaped names by
+        // path, but be defensive about other extensions slipping in.)
+        std::string base = fname;
+        auto dot = base.rfind('.');
+        std::string ext = (dot == std::string::npos) ? "" : base.substr(dot);
+        for (auto& c : ext) c = static_cast<char>(std::tolower(c));
+        if (ext != ".wav") continue;
+        base.resize(dot);
+        add_if_new(base.c_str());
     }
     return true;
 }
