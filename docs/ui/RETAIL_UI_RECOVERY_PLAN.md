@@ -137,7 +137,30 @@ The single biggest gap. Two instances of one pane class, each showing 3 bars (he
 
 ### Tier 8 — TPlayScreen pane construction
 
-- `[ ]` **TPlayScreen retail sync** — 119 KB retail decomp vs 35 KB pre-release. The decomp is where every HUD pane gets constructed and `AddPane`'d. Most of the work above feeds back into this: once we know each pane class, port `TPlayScreen::Initialize` to construct them all with the retail addresses + AddPane sequence.
+- `[ ]` **TPlayScreen retail sync** — the decomp is where every HUD pane gets constructed and `AddPane`'d. Most of the work above feeds back into this: once we know each pane class, port `TPlayScreen::Initialize` to construct them all with the retail addresses + AddPane sequence. The full Initialize body is already extracted at `recon/discovered/cls_0x5a5320_TPlayScreen_Initialize_47a660.cpp` (per Wave-1A).
+  - Note: the recon mapping originally tagged `cls_0x5b4f30` as TPlayScreen but per `recon/discovered/README.md` that's TPlayer; TPlayScreen is `cls_0x5a5320`.
+
+### Tier 9 — DEF-driven widget engine (NEW)
+
+Per user, **settings / multiplayer / save / load / character-create / select-start / in-game menu / exit-confirm / popups / user-info** are NOT hard-coded TScreen subclasses. They're rendered by a **widget engine** that walks per-screen `.def` files. The engine + the existing `.def` files in `data/resources_unzipped/` (22 files) = the whole secondary-screen layer.
+
+Don't hunt per-screen classes for these. Hunt the engine.
+
+- `[ ]` **B.r11 — Identify the widget engine entry point**. The parser reads `widgets.def` for primitive widget definitions and per-screen files for layout + behavior. Search the retail decomp for unique strings from `widgets.def` (widget type names like `BUTTON`, `LABEL`, `LIST`, `CHECKBOX`, etc.; common attribute names like `POS`, `SIZE`, `TEXT`, `STYLE`). The function emitting / parsing those strings is the engine's parse/build entry. Trace inward.
+- `[ ]` **B.r12 — Identify the widget renderer**. Once a widget tree is built, something walks it and renders each widget. Look for the draw-walk function — likely takes a widget-list pointer + a draw context. Cross-reference against `Display.Box` / `Display.WriteText` calls (the legacy CPU-surface primitives used by HUD code; the widget engine probably uses the same primitives).
+- `[ ]` **B.r13 — Identify the input dispatcher**. Walks the widget tree for hit-testing + routes input to the active widget. Probably entry point on each key/mouse event from the active screen.
+- `[ ]` **B.r14 — Port the engine** so the existing 22 `.def` files render correctly. Test mode: `--test=ui-defwidget-engine` driven against a known-simple `.def` (e.g. `exit.def` — just an OK/Cancel popup).
+- `[ ]` **B.r15 — Per-screen verification**. Once the engine renders, each DEF-driven screen should "just work" from the `.def` content; verify each screen against retail screenshots (`--test=ui-options`, `--test=ui-savegame`, etc.).
+
+### Tier 10 — Special-cased non-HUD screens (NEW)
+
+These are neither pure-HUD panes nor DEF-driven; they have their own special-case classes:
+
+- `[ ]` **B.r16 — TLogoScreen** (`cls_0x5a5d18`) — main menu / splash. Partly identified in `recon/discovered/cls_0x5a5d18_TLogoScreen_{Animate,Initialize}.cpp`. May actually BE the main menu (screenshot 5 / `main_menu_ui.jpg`) or be the pre-menu splash with the menu as a separate screen.
+- `[ ]` **B.r17 — TDeathPane** (`src/death.h`) — death screen. Has src/ impl; cross-check retail.
+- `[ ]` **B.r18 — TBookPane / TScrollPane** (`src/scroll.h`) — book / scroll reader. Renders IN the right sidebar per `CLASSIC_HUD_REFERENCE.md §3c`. Has src/ impl; cross-check retail.
+- `[ ]` **B.r19 — Credits screen** — TBD whether DEF-driven or special-cased.
+- `[ ]` **B.r20 — Main menu identification** — confirm whether `main_menu_ui.jpg` is TLogoScreen, a separate TMainMenuScreen, or a DEF-driven screen wrapped in special chrome.
 
 ## Progress tracking (BURNDOWN integration)
 

@@ -193,13 +193,47 @@ This retrofits the pre-release `TTextBar::SetHealthDisplay(name, level)` API in 
 
 ### 7. Out-of-Game (OOG) — main menu
 
-(screenshot 5)
+(screenshot 5 = `main_menu_ui.jpg`)
 - Full-screen menu, not a HUD overlay
 - Background: large character art of Locke on the left
 - Centered title "REVENANT" in stylized gold lettering at top
 - Vertical menu (right side): New Game / Load Game / Multiplayer / Options / Exit
 - Bottom-right corner: "CINEMATIX" branding
 - Bottom-left corner: version label ("Revenant v1.22")
+
+### 8. DEF-driven secondary screens
+
+**Per the user: "The game had its own text-based layout system/UI for the settings, multiplayer, save/load we used."**
+
+A whole category of screens are rendered by a **widget engine** that walks per-screen `.def` files — not by hand-written `TScreen` subclasses. The 22 `.def` files in `data/resources_unzipped/` are this system's content. The engine reads `widgets.def` for the primitive widget definitions and per-screen files (`options.def`, `loadgame.def`, etc.) for the layout + behavior.
+
+Screens in this category:
+- **Settings / options** (`options.def`)
+- **Multiplayer start** (`joingame.def`, `hostgame.def`, `connect.def`, `connectsimple.def`, `mpingamemenu.def`)
+- **Save game** (`savegame.def`)
+- **Load game** (`loadgame.def`)
+- **Character creation** (`createchar.def`)
+- **Character select / start** (`selstart.def`)
+- **In-game pause menu** (`ingamemenu.def`)
+- **Exit confirmation** (`exit.def`)
+- **Popups / modals** (`popup.def`)
+- **User info entry** (`userinfo.def`)
+- **(possibly) credits** — TBD whether DEF-driven or special-cased
+
+Implication for reconstruction: we **don't hunt per-screen classes** for these. We hunt the **DEF widget engine** (parser + renderer + input dispatcher). That + the existing `.def` files = the whole secondary-screen layer for free.
+
+The engine is roughly: parse `.def` → instantiate widget tree → render via the same primitives the HUD uses → route input to the active widget. Find the parser entry point in the retail decomp by searching for unique strings from `widgets.def` (e.g. widget type names, common attribute names), then trace inward.
+
+This is a Tier of its own in the recovery plan — separate from the hard-coded HUD pane work (Wave-1A territory).
+
+### 9. Special-cased non-HUD screens
+
+A few screens are NOT in either category — they're special-cased TScreen subclasses with their own draw / input:
+
+- **Logo / splash** — `TLogoScreen` (`cls_0x5a5d18`, already partially identified in `recon/discovered/`).
+- **Death screen** — `TDeathPane` (`src/death.h`, implementation present). May be a pane on top of the play screen rather than a full screen replacement.
+- **Books / scrolls** — `TBookPane` / `TScrollPane` (`src/scroll.h`, implementations present). Per CLASSIC_HUD §3c earlier, the scroll/book reader content renders **in the right sidebar area**, not as a main-area overlay. Whether that's the actual TBookPane/TScrollPane rendered into the sidebar slot, or a different code path that pulls scroll text from a `TScroll` game object, is open.
+- **Main menu** (screenshot 5) — unclear if hard-coded or DEF-driven. Has fancy character-art background + version label which suggests at least the chrome is special-cased.
 
 ---
 
@@ -226,6 +260,14 @@ This visual reference forces revisions to [RETAIL_UI_RECOVERY_PLAN.md](RETAIL_UI
 - **NEW Tier — Game log** — separate pane (was lumped under TTextBar). Multi-line, multi-color, transparent, scrollback. Retail TTextBar decomp at 4× pre-release size makes sense now.
 - **NEW Tier — OOG main menu** — already in scope (Phase C in the original plan); this is the visual reference.
 
+## Categorization summary
+
+| Category | Examples | Recovery approach |
+|---|---|---|
+| Hard-coded HUD panes | TPlyrStatusBar, TSidePane, TSideTabsPane, TBottomPane, TTextBar, TQuickSpellPane, TInventory, TAutoMap, TStatPane, TEquipPane, TSpellPane, TMapPane, TDialogPane | Per-class forensic identification in retail decomp; port via existing src/ impl where available. **Wave-1A territory.** |
+| DEF-driven secondary screens | settings, save/load, multiplayer, character create, select start, in-game menu, exit confirm, popups, user info | Identify the widget engine (parser + renderer + dispatcher) in retail decomp. Existing `.def` files in `data/resources_unzipped/` are the content. **New tier.** |
+| Special-cased non-HUD screens | TLogoScreen, TDeathPane, TBookPane, TScrollPane, main menu | Per-class identification. Some src impl exists. Cross-check retail layout. |
+
 ## Open questions for the user
 
 1. ~~Right character panel role~~ — **ANSWERED:** current targeted enemy (like a fighting game). Same class, two instances; right one shown conditionally on target presence.
@@ -236,5 +278,7 @@ This visual reference forces revisions to [RETAIL_UI_RECOVERY_PLAN.md](RETAIL_UI
 6. **Far-right slot** — what goes there (keys, quest items, runes)?
 7. **Bar ordering** — health → mana → stamina, or health → stamina → mana? `sample_screen_1` shows the order from screenshots: heart (red), then purple, then yellow — what are the middle and bottom values labeled in retail terms?
 8. **Game log scrollback** — can the player scroll up to see older messages, or is it write-only? How many lines visible at once?
+9. **Credits screen** — DEF-driven (in the widget engine) or special-cased (scrolling text screen of its own)?
+10. **Main menu** (screenshot 5 / `main_menu_ui.jpg`) — DEF-driven or hard-coded? The character-art background and version label feel hand-authored, but the menu items themselves could be widget-engine.
 
 Filling these in dramatically narrows the recon hunt and prevents another off-spec build.
