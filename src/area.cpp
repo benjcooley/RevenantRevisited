@@ -13,7 +13,10 @@
 #include "textbar.h"
 #include "script.h"
 #include "player.h"
+#include "maprenderer.h"
 #include "playscreen.h"
+#include "revisited_defaults.h"
+#include "revisited_settings.h"
 #include "textbar.h"
 #include "area.h"
 
@@ -215,6 +218,18 @@ bool TArea::Load(char *aname, TToken &t)
             if (!Parse(t, "BGEFFECT %s\n", bgeffect))
                 t.Error("'BGEFFECT \"name\"' expected");
         }
+        else if (t.Is("POINTLIGHTINT"))
+        {
+            if (!Parse(t, "POINTLIGHTINT %f\n", &point_light_int_mul))
+                t.Error("'POINTLIGHTINT value' expected");
+            flags |= AREA_SETLIGHTING;
+        }
+        else if (t.Is("POINTLIGHTRANGE"))
+        {
+            if (!Parse(t, "POINTLIGHTRANGE %f\n", &point_light_range_mul))
+                t.Error("'POINTLIGHTRANGE value' expected");
+            flags |= AREA_SETLIGHTING;
+        }
         else
         {
             // Truly unknown tag — log once per area and skip the line.
@@ -239,7 +254,27 @@ bool TArea::Load(char *aname, TToken &t)
         rects.Add(r);
     }
 
+    // Layered defaults: after area.def parsing, give the auto-generated
+    // baked table (revisited_defaults.cpp) a chance to overwrite per-area
+    // lighting fields with values captured from the debug-panel "Bake
+    // Defaults to Source" button. Lookup by area name; no-op when the
+    // area is missing from the baked table. See [[project-revisited-defaults]].
+    ApplyBakedAreaDefaults(name, this);
+
     return true;
+}
+
+void TArea::SetClassicLighting(int32_t amb, const SColor &amb_c,
+                               int32_t night_amb, const SColor &night_c,
+                               double point_int_mul, double point_range_mul)
+{
+    amblight              = amb;
+    ambcolor              = amb_c;
+    nightamblight         = night_amb;
+    nightambcolor         = night_c;
+    point_light_int_mul   = point_int_mul;
+    point_light_range_mul = point_range_mul;
+    flags |= AREA_SETAMBIENT;
 }
 
 bool TArea::In(S3DPoint &pos, int32_t lev)
@@ -491,6 +526,19 @@ void TArea::Enter()
             MapPane.FadeAmbient(ambient, color, FRAMERATE * 3, 10);
     }
 
+  // Revisited per-area lighting overrides. Per-area POINTLIGHTINT /
+  // POINTLIGHTRANGE *compose* with the global RevisitedSettings defaults
+  // (multiply), so transitioning between areas always pushes a coherent
+  // value: areas without overrides have a default of 1.0 and effectively
+  // push just the global. The composition holds even without --revisited
+  // because RevisitedSettings still has its baked-in defaults.
+    if (TMapRenderer *mr = PlayScreen.MapRenderer())
+    {
+        const float int_mul   = float(RevisitedSettings.point_light_int_mul   * point_light_int_mul);
+        const float range_mul = float(RevisitedSettings.point_light_range_mul * point_light_range_mul);
+        mr->SetPointLightMultipliers(int_mul, range_mul);
+    }
+
   // Load local scripts
     if (flags & AREA_LOADSCRIPTS)
         ScriptManager.Load(scriptfile, this);
@@ -648,6 +696,14 @@ void TAreaManager::Pulse()
   // can decide between snap and FadeAmbient.
     lastpos = pos;
     lastlevel = level;
+}
+
+PTArea TAreaManager::CurrentArea()
+{
+    for (int32_t c = 0; c < areas.NumItems(); c++)
+        if (areas[c]->GetFlags() & AREA_PLAYERIN)
+            return areas[c];
+    return nullptr;
 }
 
 // Called by the game screen Animate() function to update area stuff

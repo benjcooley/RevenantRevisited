@@ -1466,6 +1466,13 @@ void TMapRenderer::SetCameraWorld(int32_t level, int32_t world_x, int32_t world_
 void TMapRenderer::SetSunShadowEnabled(bool enable) { if (impl) impl->sun_shadow = enable; }
 bool TMapRenderer::SunShadowEnabled() const         { return impl ? impl->sun_shadow : false; }
 
+void TMapRenderer::SetPointLightMultipliers(float intensity_mul, float range_mul)
+{
+    if (!impl) return;
+    impl->intensity_mul = intensity_mul;
+    impl->radius_mul    = range_mul;
+}
+
 TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
 {
     SDrawCounts out;
