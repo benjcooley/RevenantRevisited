@@ -95,7 +95,13 @@ bool SetOSCursor(const TBitmap *bm, int32_t hot_x, int32_t hot_y)
 void ResetOSCursor()
 {
     @autoreleasepool {
-        g_currentCursor = nil;      // stop re-asserting until next SetOSCursor
+        // Show the system arrow but keep the cached game cursor alive
+        // so a subsequent ReassertOSCursor (e.g. mouse re-entered the
+        // window) brings it back without the caller having to re-push
+        // the bitmap. Mode-exit callers don't care about the cache:
+        // the next mode's OnEnter will replace it via SetOSCursor or
+        // leave it pointing at the previous mode's cursor (harmless,
+        // never read until SetOSCursor refreshes it).
         [[NSCursor arrowCursor] set];
     }
 }
@@ -105,7 +111,8 @@ void ReassertOSCursor()
     if (!g_currentCursor) return;
     // [set] is cheap when called on the already-current cursor; AppKit
     // tracks the current cursor pointer and short-circuits. The cost
-    // is only paid on the frames after AppKit has auto-reverted.
+    // is only paid on the frames after AppKit has auto-reverted (or
+    // after our MOUSE_LEAVE handler pushed the arrow).
     [g_currentCursor set];
 }
 
