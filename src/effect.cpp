@@ -857,7 +857,10 @@ TParticleBucket* AcquireBloodBucket(T3DImagery* img3d)
     // doesn't render flat-dark like an unlit overlay would. Explicit
     // TestNoWrite (default) makes the depth-mode choice readable here.
     desc.blend          = EParticleBlendMode::Alpha;
-    desc.light_mode     = EParticleLightMode::LitFlat;
+    // TODO debug 2026-05-16: temporarily Unlit to isolate whether the
+    // LitFlat path was zero-ing blood out. Switch back once light.ambient
+    // wiring in vfxtest is confirmed nonzero.
+    desc.light_mode     = EParticleLightMode::Unlit;
     desc.depth_mode     = EParticleDepthMode::TestNoWrite;
     desc.sort           = EParticleSortMode::None;
     desc.texture        = tex.htexture;
@@ -981,10 +984,48 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     const float dt = float(TTime::DeltaTime());
     age_ += dt;
 
+    // DEBUG 2026-05-16: while diagnosing shader quad shape, spawn ONE
+    // static particle at origin once, never move it, never spawn more.
+    // Force SolidColor mode so we see the raw quad geometry as a
+    // single bright square with no texture sampling involved.
+    {
+        bool already_spawned = false;
+        for (int32_t i = 0; i < bucket_->Count(); ++i)
+        {
+            const float* o = bucket_->VarPtr(i, EParticleVar::OwnerId);
+            if (o && *o == owner_particle_id_) { already_spawned = true; break; }
+        }
+        if (!already_spawned)
+        {
+            const int32_t pi = bucket_->AddParticle(owner_particle_id_, 1.0e9f);
+            if (pi >= 0)
+            {
+                if (float* dp = bucket_->VarPtr(pi, EParticleVar::DrawPos))
+                {
+                    dp[0] = float(Pos().x);
+                    dp[1] = float(Pos().y);
+                    dp[2] = float(Pos().z);
+                }
+                if (float* ds = bucket_->VarPtr(pi, EParticleVar::DrawScl))
+                {
+                    ds[0] = 200.0f; ds[1] = 200.0f; ds[2] = 1.0f;
+                }
+                if (float* col = bucket_->VarPtr(pi, EParticleVar::DrawColor))
+                {
+                    col[0] = 1.0f; col[1] = 0.2f; col[2] = 0.2f; col[3] = 1.0f;
+                }
+                log_info("[blood-debug] spawned 1 static particle, size=200, solid red");
+            }
+        }
+        // Force SolidColor so we see the raw quad shape (no texture).
+        Renderer->SubmitFxParticleBucket(*bucket_, EFxDebugMode::SolidColor);
+        return;
+    }
+
     // 1. Integrate existing particles owned by this instance.
     //    Simple Euler with constant downward acceleration ("gravity").
     //    Faithful retail kinematics + splat-stick deferred to 2.2.1.
-    constexpr float kGravity = -480.0f;   // wu / s^2 (rough, looks right at default scale)
+    constexpr float kGravity = -40.0f;   // wu / s^2 (debug: slowed down so particles linger in view)
     for (int32_t i = 0; i < bucket_->Count(); ++i)
     {
         const float* owner = bucket_->VarPtr(i, EParticleVar::OwnerId);
@@ -1046,8 +1087,8 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         const float u1 = float(std::rand()) / float(RAND_MAX);
         const float u2 = float(std::rand()) / float(RAND_MAX);
         const float angle  = u1 * 6.28318530718f;
-        const float radial = 60.0f + 80.0f * u2;   // wu/s
-        const float upward = 140.0f + 80.0f * u2;  // wu/s — initial upward burst
+        const float radial = 10.0f + 20.0f * u2;   // wu/s (debug: narrow cone)
+        const float upward = 20.0f + 20.0f * u2;   // wu/s (debug: small initial burst)
         const float vx = std::cos(angle) * radial;
         const float vy = std::sin(angle) * radial;
         const float vz = upward;
@@ -1064,7 +1105,7 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         }
         if (float* ds = bucket_->VarPtr(pi, EParticleVar::DrawScl))
         {
-            const float s = 24.0f + 16.0f * u1;
+            const float s = 80.0f + 40.0f * u1;   // debug: BIG particles to inspect shape
             ds[0] = s; ds[1] = s; ds[2] = 1.0f;
         }
         if (float* df = bucket_->VarPtr(pi, EParticleVar::DrawFrame))
@@ -1075,17 +1116,15 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         }
         if (float* col = bucket_->VarPtr(pi, EParticleVar::DrawColor))
         {
-            // Deep arterial red with a touch of variation. The bucket
-            // now runs LitFlat -- rgb gets multiplied by
-            // (ambient_color * ambient) + max(0, sun_dir.z) * sun_color,
-            // which at the vfxtest scene's defaults (ambient 0.85 *
-            // 0.80 = 0.68; sun term ~ 0.4 * 1.0 = 0.4; sum ~ 1.08) is
-            // close enough to unity that the existing values stay
-            // visibly red. Alpha fades in TickAndSubmitForTest's
-            // integrator above.
-            col[0] = 0.55f + 0.25f * u2;
-            col[1] = 0.04f + 0.05f * u1;
-            col[2] = 0.04f + 0.05f * u2;
+            // Bright blood red — the bucket runs LitFlat so the
+            // final RGB is multiplied by (ambient * ambient_color) +
+            // max(0, sun_dir.z) * sun_color, which dims things ~30%
+            // against bright sun lighting. Picking saturated values
+            // (1.0, 0.1, 0.1) so the result still reads against black.
+            // Alpha fades in TickAndSubmitForTest's integrator above.
+            col[0] = 1.00f - 0.20f * u2;
+            col[1] = 0.10f + 0.10f * u1;
+            col[2] = 0.10f + 0.05f * u2;
             col[3] = 1.0f;
         }
     }

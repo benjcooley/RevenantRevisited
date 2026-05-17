@@ -325,9 +325,10 @@ void Render()
     }
 
     // Step 2: empty tile pass (clear-only) + lighting. RunLightingPass
-    // drains the FX queue at the tail. Black clear keeps the focus on
-    // the effect itself (and matches the typical "effect viewer" backdrop).
-    Renderer->BeginTilePass(0.0f, 0.0f, 0.0f, 1.0f);
+    // drains the FX queue at the tail. Mid-gray clear (debug -- the
+    // grey background helps the original author see particle quad
+    // shapes against the bg to diagnose orientation issues).
+    Renderer->BeginTilePass(0.45f, 0.46f, 0.50f, 1.0f);
     Renderer->EndTilePass();
     Renderer->RunLightingPass();
 
