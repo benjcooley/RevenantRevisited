@@ -32,50 +32,50 @@
 
 #include "uiplyrstatusbartest.h"
 
+#include "bitmap.h"
 #include "display.h"
 #include "logging.h"
+#include "multi.h"
 #include "renderer.h"
+#include "revenant.h"
 #include "time.h"
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 namespace {
 
-// Retail-derived layout constants (from Wave-3A extraction + sample_screen_1
-// proportions). The retail panel is small: ~140px wide, ~52px tall. Portrait
-// in the corner (top-left for player, top-right for target), 3 bars stacked
-// to its inner side, name+level above the bars.
+// Retail layout — verified by inspecting actual `texthealthbar` bitmap
+// dimensions at runtime (200x11). The retail panel composes:
+//   - 3 stacked `texthealthbar` blits, one per bar (health/mana/stamina)
+//   - portrait bitmap (sourced from character data, not playscrn.dat)
+//   - name + level text overlay
 //
-// Wave-3A coords from FUN_0054af20 slot 23 body:
-//   - 3 value-text rects at (0, 0/14/28, 50, 14) — these are number labels
-//     beside each bar (one per bar, 14px row height)
-//   - bar fills at x=0x44=68 (LEFT) — i.e. bars start 68px in from left edge
-//   - bar fills at x=pane_width - {0x88=136, 0x91=145, 0x79=121} (RIGHT)
-//   - portrait at (0x40=64, 0)
+// Wave-3A slot 23 body extraction:
+//   - 3 value-text rects at (0, 0/14/28, 50, 14) — value text PER bar
+//   - bars stacked vertically at 14px row pitch (0x0e)
+//   - bar fills at x=0x44=68 from pane origin (LEFT block)
+//   - portrait at (0x40=64, 0) from pane origin
 //
-// The retail pane stretches across the full screen width so the mirror
-// math lands the right block at the right edge. For our mockup we use
-// TWO separate small blocks anchored to the corners — same visual result,
-// cleaner architecture.
-constexpr int32_t kBlockW         = 200;    // panel block width (per side)
-constexpr int32_t kBlockH         =  56;    // panel block height
+// No single "whole panel" backdrop bitmap exists in playscrn.dat — the
+// texthealthbar is THE bar-element bitmap, used 3x stacked.
 constexpr int32_t kBlockMargin    =   4;    // inset from screen edge
+constexpr int32_t kBarRowPitch    =  14;    // Wave-3A row height per bar
+constexpr int32_t kPortraitSize   =  64;    // 0x40 - portrait surface allocation per recon
+constexpr int32_t kPortraitInset  =   4;
 
-constexpr int32_t kBarRowH        =  14;    // 0x0e
-constexpr int32_t kValueTextW     =  32;    // numeric value text width
-constexpr int32_t kBarFillH       =  10;
-constexpr int32_t kBarFillW       =  88;    // bar fill width (tuned for kBlockW)
-constexpr int32_t kPortraitSize   =  44;
-constexpr int32_t kPortraitInset  =   4;    // portrait offset from outer corner
-
-// Per-bar Wave-3A stagger: each bar's x offset relative to its track origin
-// differs by a few px (0x88-0x79=15 across the 3). Skip the stagger in the
-// mockup — it's only visible when bars have icons, not yet wired.
+// Bar-fill rect inside the texthealthbar (200x11) bitmap. The bitmap
+// has a baked frame + icon area; the fill region is the inset slot
+// where the colored bar appears. These offsets are visual estimates
+// until the bitmap is inspected pixel-by-pixel.
+constexpr int32_t kBarFillInsetX  = 36;     // inset from bar bitmap left
+constexpr int32_t kBarFillInsetY  =  2;     // inset from bar bitmap top
+constexpr int32_t kBarFillW       = 160;    // bar bitmap is 200 wide, leave 36+4 margin
+constexpr int32_t kBarFillH       =  7;     // bar bitmap is 11 tall, leave 2+2 margin
 
 // Per-bar colors. Health = red, mana = purple, stamina = gold per
-// CLASSIC_HUD_REFERENCE §1 (matches red-heart / blue-mana orb / yellow
-// in the actual game per sample_screen_1.jpg).
+// CLASSIC_HUD_REFERENCE §1.
 struct SBarColor { uint8_t r, g, b; };
 constexpr SBarColor kBarColors[3] = {
     { 0xC8, 0x20, 0x20 },   // health — red
@@ -83,16 +83,24 @@ constexpr SBarColor kBarColors[3] = {
     { 0xE0, 0xB0, 0x10 },   // stamina — gold/orange
 };
 
-// Mockup pane visualizer. Paints the char-panel layout as TWO separate
-// corner-anchored blocks: LEFT block at TopLeft (always visible), RIGHT
-// block at TopRight (gated on synthetic "have target" cycle). Each block
-// has the same internal structure: portrait at outer corner + 3 bars
-// stacked vertically on the inner side + numeric value rects + name area.
+// Cached single-bar backdrop bitmap (200x11) from playscrn.dat. The retail
+// asset is `texthealthbar` (asset #98) — ONE bar's track+text composite.
+// The full TPlyrStatusBar panel stacks 3 of these vertically (one each
+// for health / mana / stamina).
+PTBitmap g_textHealthBar = nullptr;
+
+// Mockup pane visualizer. The panel for each side is:
+//   - 3 stacked `texthealthbar` blits (200x11 each, 14px row pitch)
+//   - portrait box at the outer corner (64x64 placeholder for now —
+//     real portrait sourced from character data, not playscrn.dat)
+//   - colored bar fill overlaid in the bar fill slot of each texthealthbar
 //
-// The retail pane is one full-screen-width pane with both blocks painted
-// from a single draw method (Wave-3A's slot 23 body). Architecturally
-// equivalent — the corner-anchored split is cleaner for the modern
-// retained-mode TPane layout and produces the same visual.
+// Mirror handling: the texthealthbar bitmap is authored for the LEFT
+// (player) side. For the RIGHT (target) side we draw it at the mirrored
+// X coordinate; the visual asymmetry (icon on left edge of bitmap) will
+// show as "icons closer to inside of right panel" — that's exactly how
+// retail does it per Wave-3A's slot 23 body (no flipped variant in the
+// asset list; mirror is purely coordinate math).
 class TPlyrStatusBarMockHud : public THudDrawable
 {
 public:
@@ -101,16 +109,19 @@ public:
         const int32_t screen_w = Display.Width();
         const double t = TTime::Time();
 
+        // Block width = bar bitmap + portrait + small gap.
+        const int32_t barW = g_textHealthBar ? g_textHealthBar->width : 200;
+        const int32_t blockW = kPortraitSize + 4 + barW;
+
         // === LEFT (player) block — anchored TopLeft ===
-        DrawBlock(/*outerX=*/kBlockMargin, /*isRight=*/false,
+        DrawBlock(/*outerX=*/kBlockMargin, blockW, barW, /*isRight=*/false,
                   /*lv=*/{
                       0.6f + 0.3f * float(std::sin(t * 0.7)),
                       0.5f + 0.3f * float(std::sin(t * 0.9 + 1.0)),
                       0.7f + 0.2f * float(std::sin(t * 1.1 + 2.0)),
                   });
 
-        // === RIGHT (target) block — anchored TopRight, gated on
-        // synthetic 3s-on / 3s-off cycle with 0.5s fade at boundaries.
+        // === RIGHT (target) block — anchored TopRight, 3s-on / 3s-off ===
         const double tgt_phase = std::fmod(t, 6.0);
         const bool have_target = tgt_phase < 3.0;
         if (have_target)
@@ -119,8 +130,8 @@ public:
             if (tgt_phase < 0.5)       fade = float(tgt_phase / 0.5);
             else if (tgt_phase > 2.5)  fade = float((3.0 - tgt_phase) / 0.5);
 
-            const int32_t outerX = screen_w - kBlockMargin - kBlockW;
-            DrawBlock(outerX, /*isRight=*/true,
+            const int32_t outerX = screen_w - kBlockMargin - blockW;
+            DrawBlock(outerX, blockW, barW, /*isRight=*/true,
                       /*lv=*/{
                           0.4f + 0.3f * float(std::sin(t * 1.3 + 0.5)),
                           0.3f + 0.3f * float(std::sin(t * 1.5 + 1.5)),
@@ -132,86 +143,67 @@ public:
 private:
     struct SBarLevels { float h, m, s; };
 
-    // outerX = block's left edge (in screen coords)
-    // isRight = whether this is the target block (mirror portrait + bar
-    //           layout so portrait sits at the outer corner)
-    void DrawBlock(int32_t outerX, bool isRight,
-                   SBarLevels lv, float fadeAlpha = 1.0f)
+    void DrawBlock(int32_t outerX, int32_t blockW, int32_t barW,
+                   bool isRight, SBarLevels lv, float fadeAlpha = 1.0f)
     {
         const uint8_t aFrame = uint8_t(255 * fadeAlpha);
         const int32_t blockY = kBlockMargin;
 
-        // Block background (dark interior + thin gold border placeholder
-        // for the retail mosaic-surface backdrop frame).
-        Renderer->DrawSolidRect(outerX, blockY, kBlockW, kBlockH,
-                                20, 16, 8, uint8_t(220 * fadeAlpha));
-        Renderer->DrawSolidRect(outerX, blockY, kBlockW, 1,
+        // Portrait box at the OUTER corner — placeholder solid rect for
+        // now (real portrait comes from character data, not playscrn.dat).
+        const int32_t portraitX = isRight
+            ? outerX + blockW - kPortraitSize
+            : outerX;
+        Renderer->DrawSolidRect(portraitX, blockY,
+                                kPortraitSize, kPortraitSize,
+                                60, 50, 30, aFrame);
+        Renderer->DrawSolidRect(portraitX, blockY, kPortraitSize, 1,
                                 180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(outerX, blockY + kBlockH - 1, kBlockW, 1,
-                                180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(outerX, blockY, 1, kBlockH,
-                                180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(outerX + kBlockW - 1, blockY, 1, kBlockH,
-                                180, 140, 60, aFrame);
-
-        // Portrait box at the OUTER corner of the block.
-        const int32_t px = isRight
-            ? outerX + kBlockW - kPortraitInset - kPortraitSize
-            : outerX + kPortraitInset;
-        const int32_t py = blockY + kPortraitInset;
-        Renderer->DrawSolidRect(px, py, kPortraitSize, kPortraitSize,
-                                90, 70, 30, aFrame);
-        // Portrait border
-        Renderer->DrawSolidRect(px, py, kPortraitSize, 1, 180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(px, py + kPortraitSize - 1,
+        Renderer->DrawSolidRect(portraitX, blockY + kPortraitSize - 1,
                                 kPortraitSize, 1, 180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(px, py, 1, kPortraitSize, 180, 140, 60, aFrame);
-        Renderer->DrawSolidRect(px + kPortraitSize - 1, py,
+        Renderer->DrawSolidRect(portraitX, blockY, 1, kPortraitSize,
+                                180, 140, 60, aFrame);
+        Renderer->DrawSolidRect(portraitX + kPortraitSize - 1, blockY,
                                 1, kPortraitSize, 180, 140, 60, aFrame);
 
-        // Bars + values fill the inner half of the block (opposite the portrait).
-        const int32_t innerX = isRight
-            ? outerX + kPortraitInset
-            : outerX + kPortraitInset + kPortraitSize + 4;
-        const int32_t innerW = kBlockW - kPortraitSize - kPortraitInset * 2 - 4;
+        // 3 stacked `texthealthbar` blits, one per bar.
+        // Bars sit to the INNER side of the portrait.
+        const int32_t barX = isRight
+            ? outerX                              // RIGHT block: bars left of portrait
+            : outerX + kPortraitSize + 4;         // LEFT  block: bars right of portrait
 
         const float lvls[3] = { lv.h, lv.m, lv.s };
         for (int i = 0; i < 3; ++i)
         {
-            const int32_t rowY = blockY + 4 + i * kBarRowH;
+            const int32_t rowY = blockY + 2 + i * kBarRowPitch;
 
-            // value box + bar: value on the OUTER side of the row, bar on
-            // the inner side (so bar+value pair reads consistently across
-            // sides — values closer to the screen edge, bars closer to center).
-            const int32_t valueX = isRight
-                ? innerX + innerW - kValueTextW
-                : innerX;
-            const int32_t barXrow = isRight
-                ? innerX
-                : innerX + kValueTextW + 2;
-            const int32_t fillWidth = innerW - kValueTextW - 2;
+            // Backdrop bitmap (the bar's track + icon + text frame).
+            if (g_textHealthBar)
+            {
+                Renderer->DrawBitmap(g_textHealthBar, barX, rowY);
+            }
 
-            // Value text placeholder
-            Renderer->DrawSolidRect(valueX, rowY, kValueTextW, kBarFillH,
-                                    10, 10, 18, aFrame);
-
-            // Bar track
-            Renderer->DrawSolidRect(barXrow, rowY, fillWidth, kBarFillH,
-                                    30, 24, 16, aFrame);
-            // Bar fill
-            const int32_t fw = int32_t(float(fillWidth) * std::clamp(lvls[i], 0.0f, 1.0f));
+            // Bar fill — colored rect overlaid on the bar bitmap to
+            // indicate current level. The retail mechanism is different:
+            // it pre-composites each bar into a TMosaicSurface in the
+            // intended color and blits the surface (cached, regenerated
+            // only when level changes). Wiring that requires the
+            // surface-to-HUD pipeline and per-bar color compositing,
+            // both pending. For now the colored fill rect lives on top
+            // of the bar bitmap as a level indicator.
+            const float lvl = std::clamp(lvls[i], 0.0f, 1.0f);
+            const int32_t fw = int32_t(float(kBarFillW) * lvl);
+            const int32_t fillSlotX = barX + kBarFillInsetX;
+            const int32_t fillSlotY = rowY + kBarFillInsetY;
             const auto& c = kBarColors[i];
             if (fw > 0)
             {
-                // Fill side mirrors: LEFT side fills LTR, RIGHT side fills RTL.
-                const int32_t fillX = isRight ? barXrow + fillWidth - fw : barXrow;
-                Renderer->DrawSolidRect(fillX, rowY, fw, kBarFillH,
+                const int32_t fillX = isRight
+                    ? fillSlotX + (kBarFillW - fw)
+                    : fillSlotX;
+                Renderer->DrawSolidRect(fillX, fillSlotY, fw, kBarFillH,
                                         c.r, c.g, c.b, aFrame);
             }
-            // Track 1px borders
-            Renderer->DrawSolidRect(barXrow, rowY, fillWidth, 1, 120, 100, 50, aFrame);
-            Renderer->DrawSolidRect(barXrow, rowY + kBarFillH - 1,
-                                    fillWidth, 1, 120, 100, 50, aFrame);
         }
     }
 };
@@ -223,14 +215,34 @@ TPlyrStatusBarMockHud g_hud;
 bool InitializeUIPlyrStatusBarMode()
 {
     log_info("[ui-plyrstatusbar] === TPlyrStatusBar layout mockup ===");
-    log_info("[ui-plyrstatusbar] Pane spans full screen width, anchored top.");
-    log_info("[ui-plyrstatusbar] LEFT block (player) painted unconditionally;");
-    log_info("[ui-plyrstatusbar] RIGHT block (target) toggles 3s on / 3s off");
-    log_info("[ui-plyrstatusbar]   with 0.5s fade in/out at the boundaries");
-    log_info("[ui-plyrstatusbar]   (placeholder for the +0xd4/+0xdc animation");
-    log_info("[ui-plyrstatusbar]   counters in retail per Wave-3A).");
-    log_info("[ui-plyrstatusbar] Layout coords sourced from FUN_0054af20");
-    log_info("[ui-plyrstatusbar]   (slot 23 two-pass paint, per B_r8 brief).");
+
+    // Load playscrn.dat into GameData if not already done. Mirrors
+    // playscreen.cpp:205+ — same global, same path.
+    if (!GameData)
+    {
+        log_info("[ui-plyrstatusbar] loading playscrn.dat...");
+        GameData = TMulti::LoadMulti((char*)"playscrn.dat");
+        if (!GameData)
+            log_warn("[ui-plyrstatusbar] failed to load playscrn.dat -- "
+                     "no assets available, bars will paint as solid rects");
+        else
+            log_info("[ui-plyrstatusbar] playscrn.dat loaded (%d assets)",
+                     GameData->numoffsets);
+    }
+
+    // Look up real assets used by retail TPlyrStatusBar.
+    // Asset name discovered by dumping playscrn.dat's name table — the
+    // panel backdrop bitmap is `texthealthbar` (asset #98 in the .dat).
+    if (GameData)
+    {
+        g_textHealthBar = GameData->Bitmap((char*)"texthealthbar");
+        if (g_textHealthBar)
+            log_info("[ui-plyrstatusbar] texthealthbar bitmap loaded (%dx%d)",
+                     g_textHealthBar->width, g_textHealthBar->height);
+        else
+            log_warn("[ui-plyrstatusbar] texthealthbar not found in GameData "
+                     "-- falling back to solid-rect placeholder");
+    }
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
