@@ -704,6 +704,14 @@ public:
     // caches by bitmap identity so repeat calls cost an unordered_map
     // lookup. Caller never sees TTextureHandle for HUD purposes.
     void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y);
+    // Subrect variant — blits the (src_x, src_y, src_w, src_h) region of
+    // bm to (dst_x, dst_y). Used for sprite-atlas panels (e.g. the
+    // TPlyrStatusBar `Bars` 128x128 atlas that holds 3 bar colours
+    // stacked vertically).
+    void DrawBitmapSubrect(PTBitmap bm,
+                           int32_t dst_x, int32_t dst_y,
+                           int32_t src_x, int32_t src_y,
+                           int32_t src_w, int32_t src_h);
     // TSurface -> quad blit, sized to the surface. Used for cached HUD
     // panels (char stats, game log, ...) that own their own surface
     // and refresh outside the draw path.

@@ -57,6 +57,13 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
     if (bm->flags & (BM_15BIT | BM_16BIT))
     {
         const uint16_t key = (uint16_t)bm->keycolor;
+        // Magenta (R=31,G=0,B=31 in 555 = 0x7c1f) is the implicit
+        // transparency key in many Revenant retail sprites — the
+        // bitmap's keycolor field is often 0 even when magenta is the
+        // intended transparent background. The runtime engine appears
+        // to handle this via DM_TRANSPARENT drawmode + per-blit setup
+        // we don't have here. Treat magenta as transparent globally.
+        constexpr uint16_t MAGENTA_KEY = 0x7c1f;
         const uint16_t* src = bm->data16;
         for (int32_t y = 0; y < h; y++)
         {
@@ -64,8 +71,14 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
             for (int32_t x = 0; x < w; x++)
             {
                 const uint16_t px = src[y * w + x];
-                if (px == key) { row[0]=row[1]=row[2]=row[3]=0; }
-                else                           { Decode555(px, row); }
+                if (px == key || px == MAGENTA_KEY)
+                {
+                    row[0]=row[1]=row[2]=row[3]=0;
+                }
+                else
+                {
+                    Decode555(px, row);
+                }
                 row += 4;
             }
         }

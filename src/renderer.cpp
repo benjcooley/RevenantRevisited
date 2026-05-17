@@ -3598,6 +3598,23 @@ void TRenderer::DrawBitmap(PTBitmap bm, int32_t x, int32_t y)
                        bm->width, bm->height);
 }
 
+void TRenderer::DrawBitmapSubrect(PTBitmap bm,
+                                  int32_t dst_x, int32_t dst_y,
+                                  int32_t src_x, int32_t src_y,
+                                  int32_t src_w, int32_t src_h)
+{
+    if (!bm || src_w <= 0 || src_h <= 0) return;
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    const sg_image img = TextureImage(tex);
+    if (!img.id) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    CompositeSwapchain(img, dst_x, dst_y, src_w, src_h, target_w, target_h,
+                       src_x, src_y, src_w, src_h,
+                       bm->width, bm->height);
+}
+
 void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
 {
     if (!surf) return;
