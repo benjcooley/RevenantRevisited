@@ -8,7 +8,7 @@
 
 #include "bitmap.h"
 #include "bmsurface.h"
-#include "cursor_os.h"
+#include "platform/cursor.h"
 #include "display.h"
 #include "imgui.h"
 #include "logging.h"

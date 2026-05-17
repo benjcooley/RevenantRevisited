@@ -8,7 +8,7 @@
 
 #include "ctrlmap.h"
 #include "cursor.h"
-#include "cursor_os.h"
+#include "platform/cursor.h"
 #include "imgui.h"
 #include "logging.h"
 #include "mappane.h"
@@ -85,6 +85,14 @@ class TGameModeImpl final : public IRuntimeMode
                 RefreshOSCursor();
             imgui_had_mouse_last_tick = imgui_owns_mouse;
         }
+        // Re-assertion to defeat AppKit's auto-revert across tracking-
+        // area / view / title-bar crossings is driven from the
+        // SAPP_EVENTTYPE_MOUSE_MOVE / MOUSE_ENTER handlers in revmain
+        // -- those only fire while the cursor is INSIDE our window, so
+        // we don't fight AppKit when the mouse legitimately belongs to
+        // another app. Don't re-assert from the tick path -- that
+        // forces our cursor on top of the system arrow over the
+        // desktop / other apps.
 
         // Drive player movement from the latest command-flag state.
         // Mouse-click walk-to is the primary input path; keyboard
