@@ -1974,6 +1974,126 @@ class THaloAnimator : public T3DAnimator
     virtual void RefreshZBuffer();
 };
 
+// ***********************
+// * TTeleporterEffect *
+// ***********************
+//
+// M09 — Misthaven recall + Player Teleport + 12+ monster-summoning
+// variants (16 callers in spell.def). Pre-release source lives at
+// src/effect_old.cpp:5444-5880 (TTeleporterEffect + TTeleporterAnimator,
+// both intact). Recon: not extracted (only Teleporter string XREFs at
+// 0x004e6a20 / 0x004e6a40 are visible). Forensics: docs/vfx/M09_FORENSICS.md.
+//
+// Port shape: bespoke FB pipeline + procedural cool-blue-violet glow
+// texture + 5 stacked screen-aligned billboards with the pre-release
+// triangle-wave per-flare envelope. Visual primitive; gameflow wires
+// the actual character SetPos payload separately via GetState() polling
+// of the OUT→MOVE transition. See M09_FORENSICS.md §3, §7.6.
+//
+// Lifecycle: INIT (1 tick) → OUT (50) → MOVE (1, payload) → IN (≤49)
+// at 24 Hz; total ~4.17 s.
+
+_CLASSDEF(TTeleporterEffect)
+
+// Pre-release state-machine phase identifiers (effect_old.cpp:5448-5451).
+// kept as an enum class so call sites read cleanly; the int32_t values
+// are stable across versions in case any serialization path lands.
+enum class ETeleporterPhase : int32_t
+{
+    Init = 1,    // resolve spell variant (1 tick)
+    Out  = 2,    // grow rotating column over 50 sim ticks (caster fade-out)
+    Move = 3,    // single-tick payload (the actual SetPos happens here in-game)
+    In   = 4,    // shrink rotating column over ≤49 sim ticks at destination
+};
+
+class TTeleporterEffect : public TEffect
+{
+  public:
+    TTeleporterEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TTeleporterEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    ~TTeleporterEffect() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    virtual void Initialize();
+    virtual void Pulse();
+
+    // Spawn a standalone TTeleporterEffect for the --test=vfx harness.
+    // No imagery lookup — the cylinder-glow texture is built
+    // procedurally (the I3D mesh path is M09b; see M09_FORENSICS.md
+    // §7.2). Constructs a sector-less instance pinned to world
+    // `origin`, stamps a fresh map index, seeds the per-flare position
+    // table from the pre-release Initialize body. Returns nullptr if
+    // the renderer isn't ready. Caller owns the returned pointer and
+    // `delete`s it.
+    [[nodiscard]] static TTeleporterEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness; mirrors L02 / F03.
+    // Sim-tick-gated (24 Hz) advance of the OUT→IN envelope, then one
+    // screen-aligned additive billboard per visible flare. Self-killed
+    // when animator life >= 100 ticks (pre-release effect_old.cpp:5818).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // Phase enum for gameflow's payload coupling. Gameflow polls this
+    // and fires its caster->SetPos(destination) on the OUT→MOVE
+    // transition (single tick), then SetFade(0,-10) on the caster as
+    // we enter IN. See M09_FORENSICS.md §7.6.
+    [[nodiscard]] ETeleporterPhase GetPhase() const { return phase_; }
+
+    // True until life >= 100 sim ticks (pre-release animator self-kill
+    // gate at effect_old.cpp:5818). The harness checks this for early-out.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // --- Pre-release effect-side state (effect_old.cpp:5459-5463) ---
+    ETeleporterPhase phase_       = ETeleporterPhase::Init;
+    int32_t          life_        = 0;
+    int32_t          spell_level_ = 1;       // 0=VortexM/Misthaven recall, 1=Teleport, 2=Teleport2
+    bool             alive_       = true;
+
+    // --- Pre-release animator-side state (effect_old.cpp:5478-5482) -
+    // Collapsed onto the effect class for the harness port (matches
+    // the H03 / L02 / F03 collapse). The 5 per-flare positions p[i]
+    // morph over the OUT phase per Animate's iteration logic; we
+    // store them as the live values (initialized in SpawnForTest).
+    float   flare_p_x_[5]    = {0,0,0,0,0};
+    float   flare_p_z_[5]    = {0,0,0,0,0};
+    int32_t iterations_      = 0;    // OUT-phase morph counter (caps at 50)
+    int32_t ticks_           = 0;    // render-envelope clock (`% 100` per pre-release)
+    float   rotation_rad_    = 0.0f; // continuous spin, +0.1 / sim tick
+
+    // sim-tick gate accumulator (same pattern as F01 / H03 / M05 / L02 / F03).
+    double  sim_accum_ms_    = 0.0;
+};
+
+// *********************
+// * Teleporter Animator *
+// *********************
+//
+// Legacy declaration kept to satisfy the existing in-game animator-
+// registry comments (`REGISTER_3DANIMATOR("Teleporter", TTeleporterAnimator)`
+// at effect.cpp:29). The pre-release body lives at
+// src/effect_old.cpp:5474-5880 and is the source-of-truth for behaviour;
+// in the modern port the animator state is collapsed onto
+// TTeleporterEffect (M09 forensics §1, §7.4). This stub exists so the
+// vtable links if any caller still references the class name; calling
+// Animate / Render on it is a no-op until the real I3D mesh port (M09b)
+// lands. Per-instance ports should drive the effect via
+// TTeleporterEffect::TickAndSubmitForTest, not this stub.
+
+_CLASSDEF(TTeleporterAnimator)
+
+class TTeleporterAnimator : public T3DAnimator
+{
+  public:
+    TTeleporterAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
+    ~TTeleporterAnimator() override { Close(); }
+
+    void Initialize() override {}                  // M09b: port pre-release body
+    void Animate(bool /*draw*/) override {}        // M09b: port pre-release body
+    bool Render() override { return true; }        // M09b: port pre-release body
+};
+
 // *****************
 // * TRippleEffect *
 // *****************
