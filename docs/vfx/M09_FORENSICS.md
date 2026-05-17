@@ -588,3 +588,266 @@ that makes the Teleporter visually distinct from a generic spell halo.
   and fires `SetPos(destination)` then.
 - Carve-outs: M09a (post-Ghidra cross-check), M09b (real I3D mesh
   port), M09c (caster SetFade timing in gameflow).
+
+---
+
+## M09b — I3D Mesh Draw (real rotating cylinders)
+
+Written 2026-05-17 after the first M09 ship (procedural billboard stand-
+in) was reviewed and rejected. The procedural column was visually
+unacceptable because the **rotation is the defining visual** — a tall
+stack of *spinning textured cylinders* with cross-cyl phase offsets is
+the shimmer pattern that reads as "teleport vortex". Screen-aligned
+billboards spinning about world-Z look identical to themselves at every
+frame (the silhouette is rotation-invariant) and that is exactly what
+the rejected ship looked like: a flat blue glow with no motion. The fix
+is to load the real I3D mesh and draw it; rotation now produces visible
+shimmer because each textured cyl wall crosses through the camera frame.
+
+### 1. Pre-release source: I3D mesh load + draw
+
+The mesh load happens implicitly in the **builder**: pre-release
+`DEFINE_BUILDER("Teleporter", TTeleporterEffect)` (`effect_old.cpp:5471`)
+wires the effect class into the engine's `TObjectClass` registry, and
+the *caller* (spell-dispatch path) loads the appropriate
+`TObjectImagery` per spell variant and passes it to the effect ctor
+(`TTeleporterEffect(TObjectImagery* newim)` at `effect_old.cpp:5464`).
+Per `data/Resources/spell.def` the variants resolve to:
+
+- `EFFECT_NAME "Magic\teleportation.I3D"` for Teleport / Teleport2
+- `EFFECT_NAME "Magic\gvortex.I3D"` for VortexM (Misthaven recall)
+- `EFFECT_NAME "Magic\jtele.I3D"` for Priest Teleport (MAC talisman)
+
+The mesh draw lives entirely in `TTeleporterAnimator::Render()`:
+
+```cpp
+// effect_old.cpp:5822-5867
+bool TTeleporterAnimator::Render()
+{
+    SaveBlendState();
+    SetBlendState();                          // standard D3D Alpha blend
+
+    PS3DAnimObj obj;
+    obj = GetObject(1);                       // sub-object 1 = the cyl mesh
+    Get3DImagery()->ResetExtents();
+    obj->flags = OBJ3D_ROT1 | OBJ3D_SCL2;     // per-instance Z-rot + XY/Z scale
+    obj->rot.x = obj->rot.y = 0.0f;
+
+    int32_t curticks = ticks % 100;
+    if (curticks < 50) {
+        for (int32_t z = 0; z < 5; z++) {
+            obj->rot.z = rotation + z * 0.5f;
+            obj->scl.z = 10 - 5.0f * (curticks / 30.0f) - z;
+            obj->scl.x = obj->scl.y = 0.5f * z + 2.5f * (curticks / 30.0f);
+            if (obj->scl.z > .01)
+                RenderObject(obj);            // draws the I3D sub-object
+        }
+    } else {
+        // mirror branch — tempticks = 50 - (curticks - 50)
+        ...
+    }
+    UpdateExtents();
+    RestoreBlendState();
+    return true;
+}
+```
+
+Key facts:
+
+- **One I3D sub-object is reused 5×** with different per-iteration
+  rot.z + scl. The loop calls `RenderObject(obj)` against the same
+  `S3DAnimObj` 5 times per frame, mutating fields between calls.
+- `obj = GetObject(1)` — sub-object **index 1** (not 0). The
+  teleportation.I3D / gvortex.I3D layout has the cylinder geometry
+  in sub-object 1; sub-object 0 is likely a root / pivot node.
+  (Verified for our port by inspecting `NumObjects()` at load.)
+- `Get3DImagery()->ResetExtents()` + `UpdateExtents()` are screen-bbox
+  bookkeeping for the engine's RestoreZ rect (effect_old.cpp:5869-5880,
+  D3D-era depth-restore hack — not needed in our deferred path,
+  M09_FORENSICS.md §7.9).
+
+### 2. Which I3D meshes + role
+
+The animator draws a **single I3D sub-object** five times. There is no
+"inner vs outer cyl" or "sparks" sub-mesh:
+
+| Asset | Used by | Role |
+|-------|---------|------|
+| `Magic\teleportation.I3D` (105357 B) | `"Teleport"`, `"Teleport2"` | The cylinder geometry — one textured-cyl sub-object stamped 5× with different scale/rot per stamp. |
+| `Magic\gvortex.I3D` (110394 B) | `"VortexM"` (Misthaven recall) | Same animator, different cylinder asset. Larger asset suggests a more-detailed wall texture or extra geometry; structurally identical role. |
+| `Magic\jtele.I3D` (28523 B) | `"Priest Teleport"` (MAC talisman) | Same animator, smaller asset (simpler cyl / smaller texture). |
+
+So there are **no auxiliary "sparks" or "base ring" sub-meshes** to
+worry about. The visual is 5 instances of one cyl, period. The shimmer
+that reads as multiple layers comes from the 5 cylinders being at
+different scales + Z-rotations + slight XY offsets, drawn alpha-blended
+front-to-back so their textured walls overlap and beat against each
+other as they spin.
+
+### 3. Rotation rate(s) + axis per mesh
+
+Per `effect_old.cpp:5802` and `effect_old.cpp:5843, 5855`:
+
+- **Common rotation accumulator:** `rotation += 0.1f` per `Animate()`
+  call (one frame in pre-release; 24 Hz sim-tick in our port per the
+  established sim-rate gate). `rotation` is in **radians**. Net rate:
+  `0.1 rad/tick × 24 ticks/s ≈ 2.4 rad/s ≈ 137°/s` — a slow continuous
+  spin (~2.6 s per revolution).
+- **Per-flare phase offset:** `obj->rot.z = rotation + z * 0.5f` where
+  `z ∈ {0..4}`. So each cylinder is offset by **0.5 rad ≈ 29°** from
+  the previous one. Across the 5-cyl stack the total spread is ~115°.
+  This is the source of the visible "shimmer-stripe" pattern: cylinder
+  texture walls cross each other as they rotate at the same rate but
+  phase-shifted, beating against each other.
+- **Axis:** world Z (the cylinder's vertical / central axis).
+  `obj->rot.x = obj->rot.y = 0.0f` is explicit (line 5836); only Z
+  rotates. The pre-release call site sets `obj->flags = OBJ3D_ROT1`
+  which signals "use rot.z" to T3DImagery's CalcObjectMatrix.
+
+### 4. Lifecycle binding
+
+Pre-release `TTeleporterAnimator::Animate()` (line 5787) and `Render()`
+(line 5822) run **every frame** while the effect is alive. There is no
+per-phase visibility gate inside the animator — the visual draws across
+**all of OUT, MOVE, IN**, and the per-phase appearance differences come
+from:
+
+- **OUT (life 0..49):** `iterations` ramps from 0..50, driving the
+  p[1]/p[2] mid-widening (lines 5806-5810, starts at iter≥25) and the
+  p[3]/p[4] vertical squeeze (lines 5811-5812). Render's
+  `ticks % 100` clock is *also* in 0..49 here, so `effective_t = ticks`
+  and the column **grows radially while squeezing vertically** (the
+  classic "anchor flowering" shape).
+- **MOVE (life 50, 1 tick):** `ticks` is at ~50, right at the apex of
+  the triangle wave. The render formula starts mirroring; `iterations`
+  is capped at 50 so the morph stops advancing.
+- **IN (life 51..99):** `ticks` continues past 50 so
+  `tempticks = 50 - (curticks - 50)` runs back down 49..1, **shrinking
+  the column symmetrically** as it lives at the destination. The
+  `iterations` morph never reverses — the p[1..4] positions stay at
+  their OUT-end values; only the render-side scale envelope mirrors.
+- **Self-kill:** at life ≥ 100 the animator calls
+  `((PTTeleporterEffect)inst)->KillThisEffect()` (line 5818).
+
+The 5-cyl stamp count, per-flare rot offset, and pre-tick rotation
+increment are **all constant across all phases**. No fade. No
+opacity envelope on the mesh itself — opacity is entirely a function
+of the scl.z cull (`if (obj->scl.z > .01)` line 5846), which drops
+flares one-at-a-time as their height collapses past zero past the
+peak, producing a graceful per-flare fade-out.
+
+### 5. Phase shift / sync between meshes
+
+All 5 cyls **spin at the same rate** (`rotation` is the shared
+accumulator). They differ only in:
+
+- **Z-rotation phase offset:** `rot.z = rotation + z * 0.5f` — each
+  cyl starts +29° rotated from the previous one. This is the **only
+  inter-cyl phase term**. There is no opposite-direction spin (not
+  inner-vs-outer counter-rotating).
+- **Per-flare radius bias:** `scl.xy = 0.5*z + 2.5*(t/30)` — each
+  outer cyl is 0.5 wider than the inner, giving a nested-cones shape
+  (innermost = tightest, outermost = widest at any given t).
+- **Per-flare height bias:** `scl.z = 10 - 5*(t/30) - z` — each
+  outer cyl is shorter than the inner by 1 unit, so they fade out
+  from outside-in as the column shrinks past the peak.
+- **Per-flare XY offset:** at iter≥25, `p[1].x -= 0.5` and
+  `p[2].x += 0.5` per tick, so cyls 1 and 2 walk apart horizontally
+  over the second half of OUT. p[3] is lifted (z+20) and p[4] is
+  dropped (z-20) at Initialize, then converge back to z=45 by the
+  end of OUT via the squeeze step. These are *base-position* offsets
+  applied to each cyl's instance origin before the world matrix
+  composition.
+
+### 6. Current engine API for I3D mesh load + draw
+
+**Yes, the API exists.** Pattern is well-established by both the
+character rig and prior test modes:
+
+| Step | API | File:line | Notes |
+|------|-----|-----------|-------|
+| 1. Resolve imagery name → ID | `TObjectImagery::FindImagery(const char* path)` | `src/imagery.cpp:431` | Returns int32 id or -1 on miss. Path uses backslashes (e.g. `"Magic\\gvortex.I3D"`). |
+| 2. Load imagery → instance | `TObjectImagery::LoadImagery(int32_t imgid)` | `src/imagery.cpp:447` | Returns `TObjectImagery*`; cache and reuse. |
+| 3. Cast to T3DImagery | `dynamic_cast<T3DImagery*>(imagery)` | many sites | I3D-format imageries return a T3DImagery; mesh APIs live on this subclass. |
+| 4. Extract sub-mesh geometry | `ExtractSubMesh(img, objnum, verts, indices)` | `src/meshextract.h:35` + `meshextract.cpp:41` | Pulls per-sub-object verts/faces. Use sub-object **1** for the cyl (per pre-release `GetObject(1)`). |
+| 5. Pick the texture | `img->GetTexture(0, &S3DTex)` → `S3DTex.htexture` | per vfxtest rig load `vfxtest.cpp:343` | Slot 0 = primary texture. Fall back to renderer white if -1. |
+| 6. Register the GPU mesh | `Renderer->RegisterMesh(verts, nv, indices, ni, albedo)` | `src/renderer.h:481`-ish | Returns `MeshHandle`; cache per imagery+sub-object. |
+| 7. Build world matrix | row-major 4×4 (12 affine + 4 last row) | math3d helpers + manual compose | For our case we compose explicitly: translate(world_pos) ∘ rotateZ(rotation_rad) ∘ scale(scl) ∘ translate(per-flare offset). The pre-release `BuildAnimPoseObjectMatrix` is overkill — we don't need the imagery's anim hierarchy, the cylinder is a single-sub-object lookup with per-instance transform. |
+| 8. Submit | `Renderer->SubmitHelperMesh(SHelperMeshSubmit)` with `additive_blend=true`, emissive=color, diffuse=0 | `src/renderer.h:482`, `src/renderer.cpp:2166` | Goes through the transparent-helper pass with the additive pipeline (`helper_mesh_add_*_pipeline`, true GL_ONE + GL_ONE blend). Sort-depth based. |
+
+**Key choice: `SubmitHelperMesh` (with `additive_blend=true`) vs
+`SubmitMesh`.** The plain `SubmitMesh` writes into the G-buffer and
+participates in deferred lighting — wrong for a self-emissive glow
+mesh that needs to additively composite over the scene with no
+depth-write. `SubmitHelperMesh` is the existing additive-pass
+helper-mesh path (used by debug visualization meshes and now this
+effect); it has both front-cull-then-back-cull (double-sided draw —
+exactly what a glass-cylinder shell needs to show both walls), no
+depth write, additive blend when `additive_blend=true`, and an
+emissive uniform that we can drive with our cool-blue-violet tint.
+
+**Comparison vs how the existing char rig does it:** the rig calls
+`SubmitMesh` (lit, opaque) per sub-object because it's a normal
+character draw. We deliberately *don't* use that path for the cyl
+glow because the cyl is transparent + emissive + double-sided. The
+rig's `ExtractSubMeshTextureSlot` + `BuildAnimPoseObjectMatrix`
+helpers are reusable but we use `ExtractSubMesh` (single sub-object)
++ our own compose-on-the-fly matrix to keep the per-flare math
+explicit.
+
+### 7. Open per-asset unknowns (verify at first load)
+
+- The **baseline cyl size** (untransformed mesh extent in local
+  coords) is unknown without parsing the asset. The pre-release
+  scl multipliers (0.5*z+2.5 for radius, 10-5*t/30-z for height)
+  are multipliers on whatever the imagery's local geometry is —
+  so the final world-space size depends on the asset's intrinsic
+  scale. We probe `NumObjects()` and the sub-object 1 vertex
+  extents at first load and log them; if they're far from "engulfs
+  a character" we apply a global multiplier (matched by visual
+  iteration in `--test=vfx`). Pre-release was designed for the
+  asset as authored; we honour the asset's intrinsic scale.
+- The **texture's premultiplication state** is unknown. Retail
+  I3D textures vary. We trust the asset's texture as-is and use
+  the standard helper-mesh path; if it reads wrong (e.g. dark rim
+  ghosting from non-premul black-bg pixels in the texture's
+  un-emissive regions) the fix is at the asset-import layer, not
+  per-effect.
+- The **sub-object index** (pre-release `GetObject(1)`) is treated
+  as authoritative for teleportation.I3D / gvortex.I3D. If any
+  variant ships an asset where the cyl lives at a different sub-
+  object index, we fall back to **the largest sub-object by face
+  count** (deterministic alternative). Logged on load.
+
+### Blockers
+
+**None.** The full API surface (`FindImagery` / `LoadImagery` /
+`dynamic_cast<T3DImagery*>` / `ExtractSubMesh` /
+`Renderer->RegisterMesh` / `Renderer->SubmitHelperMesh` with
+`additive_blend=true`) exists and is used in production code paths
+today (vfxtest character rig, testmodes char3d). M09b is **not** a
+gated-on-engine carve-out; the prior agent's §7.2 reasoning ("the
+mesh-load infrastructure is ready alongside M07/M06/X09") was based
+on an under-survey of the renderer API. M09b can ship today.
+
+### Implementation notes for Phase 2
+
+- Lazy-load the cyl mesh once per imagery path on first call to
+  `TickAndSubmitForTest`; cache the `MeshHandle` + texture handle
+  on a process-static (same family as `TeleporterGlowTexture`'s
+  static buffer). Multiple TTeleporterEffect instances share the
+  same handle.
+- Build the per-flare world matrix as
+  `T(world_pos + (local_x_wu, 0, local_z_wu)) ∘ Rz(rot_rad) ∘ S(sx, sy, sz)`
+  in row-major form (renderer expects translation in
+  `world[3]/world[7]/world[11]`).
+- Initial `inst->Face(-32)` is the pre-release "give the column a
+  fixed starting orientation" — in our port we drop it (no instance
+  to call Face on; rotation_rad_ starts at 0 and accumulates). If
+  this turns out to matter (very rare for a continuously-spinning
+  cylinder) we add `rotation_rad_ = -32.0f / 256.0f * 2π` at init.
+- Keep the procedural billboard texture / billboard submit code
+  deleted (not `#if 0`-wrapped): the I3D mesh path replaces it
+  outright. The pre-release procedural-billboard rationale (§7.2)
+  no longer applies; preserving the dead procedural path would be
+  drift.
