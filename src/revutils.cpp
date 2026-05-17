@@ -905,6 +905,13 @@ const char *rev_resolve_revisited_overlay()
     if (s_done) return s_resolved.c_str();
     s_done = true;
 
+    // Strict opt-in: the Revisited overlay only applies when the user
+    // launches with --revisited. Without the flag, return empty even if
+    // a revisited/ folder or RevenantRevisited.rvr sits next to the exe,
+    // so the game runs pure vanilla retail by default.
+    if (!RevisitedEnabled)
+        return "";
+
     auto looks_like_overlay = [](const fs::path &p) -> bool {
         // For now: anything that exists. The overlay can be empty (no
         // patches yet) and that's fine — we just won't find any files
@@ -979,7 +986,16 @@ const char *rev_resolve_revisited_overlay()
         }
     }
 
-    log_info("[overlay] no revisited overlay found — running vanilla retail");
+    // --revisited was requested but no overlay is reachable. Hard fail —
+    // the user explicitly asked for Revisited features and silently
+    // dropping back to vanilla would mask the misconfiguration. Log the
+    // full search path first since FatalError's display buffer is short.
+    log_error("[overlay] --revisited overlay not found. Searched (in order):");
+    log_error("  1) $REVENANT_REVISITED_PATH");
+    log_error("  2) <exe-dir>/RevenantRevisited.rvr");
+    log_error("  3) <RunPath>/RevenantRevisited.rvr");
+    log_error("  4) <repo-root>/revisited/resources/ (dev layout)");
+    FatalError("--revisited specified but no overlay found (see log for search paths)", nullptr);
     return "";
 }
 

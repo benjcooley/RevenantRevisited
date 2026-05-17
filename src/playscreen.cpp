@@ -44,6 +44,7 @@
 #include "mappane.h"
 #include "maprenderer.h"
 #include "player.h"
+#include "revisited_settings.h"
 #include "runtimemode.h"
 #include "savegame.h"
 #include "sector.h"
@@ -224,6 +225,10 @@ bool TPlayScreen::Initialize()
         // Keep going -- we still want to land on PlayScreen with empty
         // world rather than abort the whole boot.
     }
+    // Push global Revisited point-light multipliers now that MapRenderer
+    // is live. Per-area POINTLIGHTINT / POINTLIGHTRANGE will compose on
+    // top of these each time TArea::Enter fires.
+    ApplyRevisitedSettingsToMapRenderer(mapRenderer.get());
     log_info("[playscreen] map renderer ready");
 
     // Cache common effect imagery for damage/spell overlays. Optional --
@@ -264,6 +269,73 @@ bool TPlayScreen::Initialize()
 
     log_info("[playscreen] initialize done");
     return true;
+}
+
+// Hand-rolled starter loadout for Demo 1. Stand-in until newgame.sav
+// loading (see [docs/gameplay/BURNDOWN.md](../docs/gameplay/BURNDOWN.md)
+// phase E) supersedes this. Each entry: (item name as known to
+// class.def, target equipment slot). Name lookup scans every
+// TObjectClass so we don't have to hand-pick OBJCLASS_WEAPON vs
+// OBJCLASS_ARMOR per row. Order matters: PRIMEHAND first so the
+// combat-root re-resolution in TPlayer::Equip has its target before
+// the body armor decoration lands on top.
+// Item names per the runtime class.def packed in imagery.rvi (not the
+// older legacy/Class.Def at repo root, which uses different identifiers).
+// Brown Cloth set is the unarmored peasant look Locke wakes up in.
+struct SStarterItem { const char *name; int32_t slot; };
+static const SStarterItem kStarterLoadout[] = {
+    { "Short Sword",         EQ_PRIMEHAND },
+    { "Brown Cloth Shirt",   EQ_BODY      },
+    { "Brown Cloth Pants",   EQ_LEGS      },
+    { "Brown Cloth Boots",   EQ_FEET      },
+};
+
+static void EquipStarterLoadout(TPlayer *p)
+{
+    if (!p) return;
+    for (const SStarterItem &row : kStarterLoadout)
+    {
+        TObjectClass *cl = nullptr;
+        int32_t ot = -1;
+        for (int32_t i = 0; i < MAXOBJECTCLASSES && !cl; ++i)
+        {
+            TObjectClass *c = TObjectClass::GetClass(i);
+            if (!c) continue;
+            const int32_t t = c->FindObjType(row.name);
+            if (t >= 0) { cl = c; ot = t; }
+        }
+        if (!cl)
+        {
+            log_warn("[player] starter: no class.def type named '%s'", row.name);
+            continue;
+        }
+
+        SObjectDef def;
+        memset(&def, 0, sizeof(def));
+        def.objclass = cl->ClassId();
+        def.objtype  = ot;
+        p->GetPos(def.pos);    // placeholder; AddToInventory reparents
+
+        TObjectInstance *inst = cl->NewObject(&def);
+        if (!inst)
+        {
+            log_warn("[player] starter: NewObject('%s') failed", row.name);
+            continue;
+        }
+        if (!p->AddToInventory(inst))
+        {
+            log_warn("[player] starter: AddToInventory('%s') failed", row.name);
+            continue;
+        }
+        if (!p->Equip(inst, row.slot))
+        {
+            log_warn("[player] starter: Equip('%s', slot=%d) refused "
+                     "(EqSlot mismatch or missing combat ani)",
+                     row.name, row.slot);
+            continue;
+        }
+        log_info("[player] starter: equipped '%s' in slot %d", row.name, row.slot);
+    }
 }
 
 // Drop a "Locke" TPlayer into the loaded sector at (level, sx, sy) and
@@ -400,6 +472,7 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
     CurrentScreen = nullptr;
     PlayerManager.AddPlayer((TPlayer*)oi);
     PlayerManager.SetMainPlayer((TPlayer*)oi);
+    EquipStarterLoadout((TPlayer*)oi);
     CurrentScreen = saved_screen;
 
     log_info("[player] spawned Locke in sector %d_%d_%d at world (%d,%d,%d)",
