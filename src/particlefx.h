@@ -100,6 +100,23 @@ enum class EParticleDepthMode : uint8_t
     None,            // no depth test, no depth write
 };
 
+// Coordinate space the bucket's per-particle DrawPos is interpreted in.
+// World (default): DrawPos is absolute world coordinates. Particles do not
+// follow their owner after spawn -- "spawn-and-forget" semantics that match
+// blood splats, debris, smoke trails that drift on their own.
+// Local: DrawPos is relative to the bucket's `anchor` (set by the owning
+// effect each frame via TParticleBucket::SetAnchor). The renderer adds
+// anchor + DrawPos when materializing instances. Local lets particles
+// move with their owner (torch wisps follow the torch's instance, an
+// aura ring follows the character). Only meaningful for single-owner
+// buckets; shared global buckets must stay World since they hold
+// particles from multiple owners with different positions.
+enum class EParticleBucketSpace : uint8_t
+{
+    World = 0,
+    Local,
+};
+
 enum class EParticleSortMode : uint8_t
 {
     None,
@@ -120,6 +137,9 @@ struct SParticleBucketDesc
     EParticleDepthMode depth_mode = EParticleDepthMode::TestNoWrite;
     EParticleSortMode sort = EParticleSortMode::None;
     int32_t sort_order = 0;
+    // World/Local space for DrawPos. See EParticleBucketSpace comment.
+    // Defaults to World so existing buckets keep current semantics.
+    EParticleBucketSpace space = EParticleBucketSpace::World;
     TTextureHandle texture = kInvalidTexture;
     int32_t texture_width = 1;
     int32_t texture_height = 1;
