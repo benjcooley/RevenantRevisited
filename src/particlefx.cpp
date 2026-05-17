@@ -180,7 +180,7 @@ constexpr SParticleOpDef kParticleOpDefs[] = {
     {"End",      0, {}},
     {"LoadConst",1, { { "constant", EParticleArgKind::ConstIndex } }},
     {"LoadVar",  1, { { "var", EParticleArgKind::VarId } }},
-    {"StoreVar", 2, { { "var", EParticleArgKind::VarId }, { "src", EParticleArgKind::FloatOffset } }},
+    {"StoreVar", 3, { { "var", EParticleArgKind::VarId }, { "lane", EParticleArgKind::ImmediateU16 }, { "src", EParticleArgKind::FloatOffset } }},
     {"Add",      2, { { "a", EParticleArgKind::FloatOffset }, { "b", EParticleArgKind::FloatOffset } }},
     {"Sub",      2, { { "a", EParticleArgKind::FloatOffset }, { "b", EParticleArgKind::FloatOffset } }},
     {"Mul",      2, { { "a", EParticleArgKind::FloatOffset }, { "b", EParticleArgKind::FloatOffset } }},
@@ -199,6 +199,10 @@ constexpr SParticleOpDef kParticleOpDefs[] = {
     {"Vec2",     2, { { "x", EParticleArgKind::FloatOffset }, { "y", EParticleArgKind::FloatOffset } }},
     {"Vec3",     3, { { "x", EParticleArgKind::FloatOffset }, { "y", EParticleArgKind::FloatOffset }, { "z", EParticleArgKind::FloatOffset } }},
     {"Vec4",     4, { { "x", EParticleArgKind::FloatOffset }, { "y", EParticleArgKind::FloatOffset }, { "z", EParticleArgKind::FloatOffset }, { "w", EParticleArgKind::FloatOffset } }},
+    {"Rand01",   0, {}},
+    {"Rand",     2, { { "lo", EParticleArgKind::FloatOffset }, { "hi", EParticleArgKind::FloatOffset } }},
+    {"Step",     2, { { "edge", EParticleArgKind::FloatOffset }, { "x", EParticleArgKind::FloatOffset } }},
+    {"Select",   3, { { "cond", EParticleArgKind::FloatOffset }, { "t", EParticleArgKind::FloatOffset }, { "f", EParticleArgKind::FloatOffset } }},
 };
 
 constexpr uint16_t kPfxArgStack = 0x8000;
@@ -221,6 +225,54 @@ bool PfxIsLocalArg(uint16_t arg) { return (arg & kPfxArgConst) == kPfxArgLocal; 
 bool PfxIsConstArg(uint16_t arg) { return (arg & kPfxArgConst) == kPfxArgConst; }
 uint16_t PfxArgIndex(uint16_t arg) { return uint16_t(arg & kPfxArgMask); }
 
+// Identifier → EParticleVar mapping for tick/spawn expressions.
+// Returns false if the identifier is not a known particle-var alias.
+// is_writable is true for slots the parser will accept as LHS of assignment;
+// emit_pos/emit_vel are read-only (caller-bound bucket-anchor values).
+bool PfxResolveParticleVarIdent(const char* ident, EParticleVar* out_var, bool* out_writable)
+{
+    struct SAlias
+    {
+        const char* name;
+        EParticleVar var;
+        bool writable;
+    };
+    static constexpr SAlias kAliases[] = {
+        {"pos",       EParticleVar::DrawPos,    true},
+        {"vel",       EParticleVar::EmitVel,    true},
+        {"color",     EParticleVar::DrawColor,  true},
+        {"scale",     EParticleVar::DrawScl,    true},
+        {"frame",     EParticleVar::DrawFrame,  true},
+        {"rot",       EParticleVar::DrawRot,    true},
+        {"life",      EParticleVar::Life,       true},
+        {"emit_pos",  EParticleVar::EmitPos,    false},
+        {"emit_vel",  EParticleVar::EmitVel,    false},  // read-only alias for the bucket-anchor velocity
+    };
+    for (const SAlias& a : kAliases)
+    {
+        if (std::strcmp(ident, a.name) == 0)
+        {
+            if (out_var)      *out_var = a.var;
+            if (out_writable) *out_writable = a.writable;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Swizzle char → lane index. 'x'/'r'=0, 'y'/'g'=1, 'z'/'b'=2, 'w'/'a'=3.
+int PfxSwizzleLane(char c)
+{
+    switch (c)
+    {
+        case 'x': case 'r': return 0;
+        case 'y': case 'g': return 1;
+        case 'z': case 'b': return 2;
+        case 'w': case 'a': return 3;
+        default: return -1;
+    }
+}
+
 class TParticleExpressionParser
 {
   public:
@@ -228,13 +280,15 @@ class TParticleExpressionParser
                               std::vector<float>& out_constants,
                               uint16_t& out_max_stack_depth,
                               uint8_t& out_result_lanes,
-                              std::string* err)
+                              std::string* err,
+                              EParticleExprMode mode)
         : src(text ? text : ""),
           code(out_code),
           constants(out_constants),
           max_stack_depth(out_max_stack_depth),
           result_lanes(out_result_lanes),
-          error(err) {}
+          error(err),
+          mode(mode) {}
 
     bool Parse()
     {
@@ -243,6 +297,26 @@ class TParticleExpressionParser
         max_stack_depth = 0;
         result_lanes = 1;
         stack_top = 0;
+
+        if (mode == EParticleExprMode::Statements)
+        {
+            // Statement form: zero or more `var [.swizzle] = expr ;` then EOF.
+            // No final result lanes; tick/spawn expressions don't return a value.
+            while (true)
+            {
+                SkipWs();
+                if (*src == 0)
+                    break;
+                if (!ParseStatement())
+                    return false;
+                // Each statement resets the stack frame -- intermediates are
+                // gone after StoreVar, no inter-statement temporaries.
+                stack_top = 0;
+            }
+            result_lanes = 0;
+            return true;
+        }
+
         SPfxValueRef result;
         if (!ParseExpr(&result))
             return false;
@@ -261,6 +335,7 @@ class TParticleExpressionParser
     uint8_t& result_lanes;
     std::string* error = nullptr;
     uint16_t stack_top = 0;
+    EParticleExprMode mode = EParticleExprMode::Expression;
 
     SPfxValueRef NewStackResult(uint8_t lanes)
     {
@@ -312,7 +387,122 @@ class TParticleExpressionParser
     }
 
     SPfxValueRef EmitConst(float v) { return { PfxConstArg(AddConst(v)), 1 }; }
-    SPfxValueRef EmitVar(EParticleVar v) { return { PfxVarArg(v), 1 }; }
+
+    // Emit a LoadVar for `v` and push it onto the stack with the var's
+    // natural lane count (vec3 for pos/vel/scale/rot, vec4 for color, scalar
+    // otherwise). Returns the stack ref. Lane==-1 means "all lanes"; a
+    // non-negative lane reads a specific lane and pushes a scalar.
+    SPfxValueRef EmitLoadVar(EParticleVar var, int lane = -1)
+    {
+        const int32_t natural = ParticleDefaultLanes(var);
+        const uint8_t total_lanes = uint8_t(natural > 0 ? natural : 1);
+        EmitOp(EParticleOp::LoadVar);
+        EmitArg(uint16_t(var));
+        if (lane >= 0)
+        {
+            // Read full var to stack, then pick a single lane via a
+            // post-load swizzle. We model this by emitting LoadVar with
+            // the full natural lane count and then using a "lane pick" --
+            // implemented as a 1-lane stack push from the loaded slot.
+            // Easiest: emit a scalar Op that reads the chosen lane.
+            // The eval treats LoadVar as a multi-lane push automatically.
+            // We then push a single-lane "Lerp(self, self, 0)" or a
+            // simpler shape -- but the cleanest is to use a dedicated
+            // lane-pick op. To avoid yet-another op, materialize the
+            // single lane with a `Add(self_lane, 0_const)` pattern --
+            // since read_arg handles lane-broadcast on scalar consts, we
+            // can pop the full-lane stack entry and re-push only lane N
+            // by emitting nothing here and tagging the SPfxValueRef
+            // lanes=1 with the slot already wide enough. The evaluator's
+            // read_arg(stack, lane) walks into stack[idx+lane] -- so for
+            // a single-lane pick we just create a stack ref pointing at
+            // the chosen sub-lane of the loaded slot.
+            //
+            // Implementation: bump the stack pointer past the loaded var
+            // (which occupies natural lanes), then return a ref whose
+            // arg points at stack[loaded_slot + lane] with lanes=1. We
+            // rely on the fact that loaded var lanes are contiguous in
+            // the eval stack[] array.
+            const uint16_t base_slot = stack_top;
+            stack_top = uint16_t(stack_top + total_lanes);
+            if (stack_top > max_stack_depth) max_stack_depth = stack_top;
+            return { PfxStackArg(uint16_t(base_slot + uint16_t(lane))), 1 };
+        }
+        return NewStackResult(total_lanes);
+    }
+
+    SPfxValueRef EmitVar(EParticleVar v) { return EmitLoadVar(v, -1); }
+
+    // Parse one statement: `ident [.swizzle] = expr ;`
+    // Statements compile to a StoreVar that writes the expression result
+    // into the named particle var. For full-var assignment the result
+    // expression's lane count must match the var's natural lane count.
+    // For swizzle assignment (e.g. `pos.z = ...`) the RHS must be scalar.
+    bool ParseStatement()
+    {
+        SkipWs();
+        const char* ident_start = src;
+        if (!(std::isalpha((unsigned char)*src) || *src == '_'))
+            return Fail("expected identifier at start of statement");
+        while (std::isalnum((unsigned char)*src) || *src == '_') ++src;
+        const std::string ident(ident_start, src);
+
+        EParticleVar var = EParticleVar::TimeFrame;
+        bool writable = false;
+        if (!PfxResolveParticleVarIdent(ident.c_str(), &var, &writable))
+            return Fail("unknown statement LHS identifier");
+        if (!writable)
+            return Fail("LHS identifier is read-only");
+
+        int lane = -1;
+        if (Match('.'))
+        {
+            SkipWs();
+            if (!*src) return Fail("expected swizzle after '.'");
+            lane = PfxSwizzleLane(*src);
+            ++src;
+            if (lane < 0) return Fail("invalid swizzle");
+        }
+
+        if (!Match('=')) return Fail("expected '=' in statement");
+
+        SPfxValueRef rhs;
+        if (!ParseExpr(&rhs)) return false;
+        if (!Match(';')) return Fail("expected ';' at end of statement");
+
+        // Validate lane shape.
+        const int32_t natural = ParticleDefaultLanes(var);
+        if (lane < 0)
+        {
+            // Whole-var assignment.
+            if (rhs.lanes != uint8_t(natural))
+            {
+                // Permit scalar→vec broadcast: if rhs is scalar and var
+                // is multi-lane, emit Vec ops to fan out. Simplest: just
+                // disallow and ask the author to write vec3(s,s,s).
+                if (natural > 1 && rhs.lanes == 1)
+                    return Fail("scalar->vec assignment requires explicit constructor (e.g. vec3(s,s,s))");
+                if (rhs.lanes < uint8_t(natural))
+                    return Fail("RHS lane count smaller than target var");
+                // rhs has more lanes than var -- truncate by taking the first N.
+                rhs.lanes = uint8_t(natural);
+            }
+        }
+        else
+        {
+            if (rhs.lanes != 1)
+                return Fail("swizzle assignment requires scalar RHS");
+        }
+
+        // Emit StoreVar(var, lane, src). For full-var the eval writes N
+        // lanes from rhs starting at lane 0. For swizzle the eval writes
+        // a single lane.
+        EmitOp(EParticleOp::StoreVar);
+        EmitArg(uint16_t(var));
+        EmitArg(uint16_t(lane < 0 ? 0xFFFF : uint16_t(lane)));
+        EmitArg(rhs.arg);
+        return true;
+    }
 
     bool Match(char ch)
     {
@@ -382,6 +572,41 @@ class TParticleExpressionParser
     bool ParseCall(const char* name, SPfxValueRef* out)
     {
         if (!Match('(')) return Fail("expected '(' after function name");
+        if (!std::strcmp(name, "rand01"))
+        {
+            if (!Match(')')) return Fail("expected ')' after rand01()");
+            EmitOp(EParticleOp::Rand01);
+            if (out) *out = NewStackResult(1);
+            return true;
+        }
+        if (!std::strcmp(name, "rand"))
+        {
+            SPfxValueRef lo, hi;
+            if (!ParseExpr(&lo)) return false;
+            if (!ParseCommaExpr(hi, "expected ',' after rand lo")) return false;
+            if (!Match(')')) return Fail("expected ')' after rand arguments");
+            if (out) *out = EmitValueOp(EParticleOp::Rand, { lo, hi });
+            return true;
+        }
+        if (!std::strcmp(name, "step"))
+        {
+            SPfxValueRef edge, x;
+            if (!ParseExpr(&edge)) return false;
+            if (!ParseCommaExpr(x, "expected ',' after step edge")) return false;
+            if (!Match(')')) return Fail("expected ')' after step arguments");
+            if (out) *out = EmitValueOp(EParticleOp::Step, { edge, x });
+            return true;
+        }
+        if (!std::strcmp(name, "select"))
+        {
+            SPfxValueRef cond, t, f;
+            if (!ParseExpr(&cond)) return false;
+            if (!ParseCommaExpr(t, "expected ',' after select cond")) return false;
+            if (!ParseCommaExpr(f, "expected ',' after select t")) return false;
+            if (!Match(')')) return Fail("expected ')' after select arguments");
+            if (out) *out = EmitValueOp(EParticleOp::Select, { cond, t, f });
+            return true;
+        }
         if (!std::strcmp(name, "floor") || !std::strcmp(name, "sin") || !std::strcmp(name, "cos"))
         {
             SPfxValueRef a;
@@ -467,10 +692,54 @@ class TParticleExpressionParser
             std::string ident(ident_start, src);
             SkipWs();
             if (*src == '(') return ParseCall(ident.c_str(), out);
-            if (ident == "time_frame") { if (out) *out = EmitVar(EParticleVar::TimeFrame); return true; }
-            if (ident == "age01") { if (out) *out = EmitVar(EParticleVar::Age01); return true; }
-            if (ident == "age") { if (out) *out = EmitVar(EParticleVar::Age); return true; }
-            if (ident == "seed") { if (out) *out = EmitVar(EParticleVar::Seed); return true; }
+
+            // Optional swizzle (single lane: .x/.y/.z/.w/.r/.g/.b/.a).
+            int lane = -1;
+            if (*src == '.')
+            {
+                const char* dot_src = src;
+                ++src;
+                if (*src && (std::isalpha((unsigned char)*src)))
+                {
+                    lane = PfxSwizzleLane(*src);
+                    if (lane < 0) return Fail("invalid swizzle");
+                    ++src;
+                }
+                else
+                {
+                    // Not a swizzle, roll back.
+                    src = dot_src;
+                }
+            }
+
+            // Built-in eval-context scalars (always available).
+            EParticleVar ctx_var = EParticleVar::TimeFrame;
+            bool ctx_match = true;
+            if      (ident == "time_frame") ctx_var = EParticleVar::TimeFrame;
+            else if (ident == "age01")      ctx_var = EParticleVar::Age01;
+            else if (ident == "age")        ctx_var = EParticleVar::Age;
+            else if (ident == "seed")       ctx_var = EParticleVar::Seed;
+            else ctx_match = false;
+            if (ctx_match)
+            {
+                if (lane > 0) return Fail("swizzle on scalar identifier");
+                if (out) *out = EmitVar(ctx_var);
+                return true;
+            }
+
+            // Particle-var aliases (pos, vel, color, scale, frame, rot,
+            // emit_pos, emit_vel, life). Resolved in both Expression and
+            // Statements mode -- the stateless Eval path returns 0 for
+            // particle vars (no bucket bound), the EvalParticle path
+            // reads them from the bucket's slot.
+            EParticleVar pv = EParticleVar::TimeFrame;
+            bool writable = false;
+            if (PfxResolveParticleVarIdent(ident.c_str(), &pv, &writable))
+            {
+                if (out) *out = EmitLoadVar(pv, lane);
+                return true;
+            }
+
             return Fail("unknown identifier");
         }
 
@@ -488,21 +757,53 @@ class TParticleExpressionParser
 
 } // namespace
 
-bool TParticleExpression::Compile(const char* expr, std::string* error)
+bool TParticleExpression::Compile(const char* expr, std::string* error, EParticleExprMode mode)
 {
     source = expr ? expr : "";
-    TParticleExpressionParser parser(source.c_str(), code, constants, max_stack_depth, result_lanes, error);
+    this->mode = mode;
+    TParticleExpressionParser parser(source.c_str(), code, constants, max_stack_depth, result_lanes, error, mode);
     valid = parser.Parse();
     if (valid)
         code.push_back(uint16_t(EParticleOp::End));
     return valid;
 }
 
-void TParticleExpression::Eval(const SParticleEvalContext& ctx, float* out_values, int32_t out_lanes) const
-{
-    if (!out_values || out_lanes <= 0)
-        return;
+namespace {
 
+// Park-Miller 32-bit LCG. Used by Rand01 to advance the per-particle
+// rng_state on each call. Returns U[0,1).
+float PfxRandAdvance(uint32_t& state)
+{
+    // Avoid the zero-trap that locks the generator: re-seed from a
+    // golden-ratio constant if state==0.
+    if (state == 0)
+        state = 0x9e3779b9u;
+    // multiplier 48271, modulus 2^31-1.
+    constexpr uint64_t kMul = 48271ull;
+    constexpr uint64_t kMod = 0x7fffffffull;
+    state = uint32_t((uint64_t(state) * kMul) % kMod);
+    return float(state) / float(kMod);
+}
+
+}   // namespace
+
+namespace {
+
+// Shared evaluator. bucket==nullptr → stateless ctx-only eval (matches
+// the legacy Eval semantics: particle-var loads return 0 unless they're
+// one of the four ctx-scalars). bucket != nullptr → tick/spawn eval:
+// LoadVar reads from bucket[particle_index], StoreVar writes back.
+void PfxEvalImpl(const std::vector<uint16_t>& code,
+                 const std::vector<float>& constants,
+                 const SParticleEvalContext& ctx,
+                 float* out_values, int32_t out_lanes,
+                 TParticleBucket* bucket,
+                 int32_t particle_index,
+                 const float* emit_pos,
+                 const float* emit_vel,
+                 uint16_t* out_last_arg,
+                 uint8_t* out_last_lanes)
+{
     float stack[256] = {};
     uint8_t stack_lanes[256] = {};
     uint16_t sp = 0;
@@ -513,6 +814,43 @@ void TParticleExpression::Eval(const SParticleEvalContext& ctx, float* out_value
         if (PfxIsStackArg(arg))
             return stack_lanes[PfxArgIndex(arg)] > 0 ? stack_lanes[PfxArgIndex(arg)] : 1;
         return 1;
+    };
+
+    auto read_ctx_var = [&](EParticleVar var, uint8_t lane) -> float {
+        switch (var)
+        {
+            case EParticleVar::TimeFrame: return ctx.time_frame;
+            case EParticleVar::Age:       return ctx.age;
+            case EParticleVar::Age01:     return ctx.age01;
+            case EParticleVar::Seed:      return ctx.seed;
+            case EParticleVar::EmitPos:
+                return emit_pos ? emit_pos[lane < 3 ? lane : 2] : 0.0f;
+            case EParticleVar::EmitVel:
+                if (bucket && particle_index >= 0)
+                {
+                    // EmitVel is per-particle-writable when bucket-bound;
+                    // we still allow caller-supplied emit_vel override
+                    // (read-only alias). Prefer the bucket-stored value
+                    // if bucket is bound.
+                    if (const float* slot = bucket->VarPtr(particle_index, EParticleVar::EmitVel))
+                        return lane < 3 ? slot[lane] : slot[2];
+                }
+                return emit_vel ? emit_vel[lane < 3 ? lane : 2] : 0.0f;
+            default:
+                // Other particle-vars: only resolvable via bucket.
+                if (bucket && particle_index >= 0)
+                {
+                    if (const float* slot = bucket->VarPtr(particle_index, var))
+                    {
+                        const int32_t lanes_for_var = ParticleDefaultLanes(var);
+                        const uint8_t safe_lane = lane < uint8_t(lanes_for_var)
+                                                   ? lane
+                                                   : uint8_t(lanes_for_var > 0 ? lanes_for_var - 1 : 0);
+                        return slot[safe_lane];
+                    }
+                }
+                return 0.0f;
+        }
     };
 
     auto read_arg = [&](uint16_t arg, uint8_t lane = 0) -> float {
@@ -527,14 +865,7 @@ void TParticleExpression::Eval(const SParticleEvalContext& ctx, float* out_value
             return stack[PfxArgIndex(arg) + lane];
         if (PfxIsConstArg(arg))
             return PfxArgIndex(arg) < constants.size() ? constants[PfxArgIndex(arg)] : 0.0f;
-        switch (EParticleVar(arg))
-        {
-            case EParticleVar::TimeFrame: return ctx.time_frame;
-            case EParticleVar::Age: return ctx.age;
-            case EParticleVar::Age01: return ctx.age01;
-            case EParticleVar::Seed: return ctx.seed;
-            default: return 0.0f;
-        }
+        return read_ctx_var(EParticleVar(arg), lane);
     };
 
     auto push_values = [&](const float* values, uint8_t lanes) -> uint16_t {
@@ -561,18 +892,57 @@ void TParticleExpression::Eval(const SParticleEvalContext& ctx, float* out_value
         switch (op)
         {
             case EParticleOp::End:
-                for (int32_t lane = 0; lane < out_lanes; ++lane)
-                    out_values[lane] = read_arg(last, uint8_t(lane));
+                if (out_values)
+                    for (int32_t lane = 0; lane < out_lanes; ++lane)
+                        out_values[lane] = read_arg(last, uint8_t(lane));
+                if (out_last_arg)   *out_last_arg = last;
+                if (out_last_lanes) *out_last_lanes = last_lanes;
                 return;
             case EParticleOp::LoadConst:
                 push_scalar(read_arg(PfxConstArg(code[pc++])));
                 break;
             case EParticleOp::LoadVar:
-                push_scalar(read_arg(PfxVarArg(EParticleVar(code[pc++]))));
+            {
+                // Push the var's natural lane count onto the stack. This
+                // is what lets `pos` evaluate to a vec3 in expressions.
+                const EParticleVar var = EParticleVar(code[pc++]);
+                const int32_t natural = ParticleDefaultLanes(var);
+                const uint8_t lanes = uint8_t(natural > 0 ? natural : 1);
+                float values[4] = {};
+                for (uint8_t lane = 0; lane < lanes && lane < 4; ++lane)
+                    values[lane] = read_ctx_var(var, lane);
+                push_values(values, lanes);
                 break;
+            }
             case EParticleOp::StoreVar:
-                pc += 2;
+            {
+                // StoreVar(var_id, lane_or_0xFFFF, src_arg). Writes the
+                // src expression's value back into the bucket particle's
+                // slot. No-op if bucket isn't bound (e.g. stateless eval
+                // of a statement-mode expression -- which the parser
+                // doesn't currently emit, but be defensive).
+                const EParticleVar var = EParticleVar(code[pc++]);
+                const uint16_t lane_arg = code[pc++];
+                const uint16_t src_arg  = code[pc++];
+                if (bucket && particle_index >= 0)
+                {
+                    if (float* slot = bucket->VarPtr(particle_index, var))
+                    {
+                        const int32_t natural = ParticleDefaultLanes(var);
+                        if (lane_arg == 0xFFFF)
+                        {
+                            // Whole-var write: copy `natural` lanes from src.
+                            for (int32_t lane = 0; lane < natural && lane < 4; ++lane)
+                                slot[lane] = read_arg(src_arg, uint8_t(lane));
+                        }
+                        else if (int32_t(lane_arg) < natural)
+                        {
+                            slot[lane_arg] = read_arg(src_arg, 0);
+                        }
+                    }
+                }
                 break;
+            }
             case EParticleOp::Add:
             case EParticleOp::Sub:
             case EParticleOp::Mul:
@@ -703,11 +1073,91 @@ void TParticleExpression::Eval(const SParticleEvalContext& ctx, float* out_value
                 push_values(values, lanes);
                 break;
             }
+            case EParticleOp::Rand01:
+            {
+                push_scalar(PfxRandAdvance(ctx.rng_state));
+                break;
+            }
+            case EParticleOp::Rand:
+            {
+                const uint16_t lo_arg = code[pc++];
+                const uint16_t hi_arg = code[pc++];
+                const uint8_t lo_lanes = arg_lanes(lo_arg);
+                const uint8_t hi_lanes = arg_lanes(hi_arg);
+                const uint8_t lanes = lo_lanes > hi_lanes ? lo_lanes : hi_lanes;
+                float values[4] = {};
+                for (uint8_t lane = 0; lane < lanes && lane < 4; ++lane)
+                {
+                    const float lo = read_arg(lo_arg, lane);
+                    const float hi = read_arg(hi_arg, lane);
+                    const float u  = PfxRandAdvance(ctx.rng_state);
+                    values[lane] = lo + (hi - lo) * u;
+                }
+                push_values(values, lanes);
+                break;
+            }
+            case EParticleOp::Step:
+            {
+                const uint16_t edge_arg = code[pc++];
+                const uint16_t x_arg    = code[pc++];
+                const uint8_t e_lanes = arg_lanes(edge_arg);
+                const uint8_t x_lanes = arg_lanes(x_arg);
+                const uint8_t lanes = e_lanes > x_lanes ? e_lanes : x_lanes;
+                float values[4] = {};
+                for (uint8_t lane = 0; lane < lanes && lane < 4; ++lane)
+                {
+                    const float e = read_arg(edge_arg, lane);
+                    const float x = read_arg(x_arg, lane);
+                    values[lane] = x < e ? 0.0f : 1.0f;
+                }
+                push_values(values, lanes);
+                break;
+            }
+            case EParticleOp::Select:
+            {
+                const uint16_t cond_arg = code[pc++];
+                const uint16_t t_arg    = code[pc++];
+                const uint16_t f_arg    = code[pc++];
+                const uint8_t t_lanes = arg_lanes(t_arg);
+                const uint8_t f_lanes = arg_lanes(f_arg);
+                const uint8_t lanes = t_lanes > f_lanes ? t_lanes : f_lanes;
+                float values[4] = {};
+                for (uint8_t lane = 0; lane < lanes && lane < 4; ++lane)
+                {
+                    const float c = read_arg(cond_arg, lane);
+                    const float t = read_arg(t_arg, lane);
+                    const float f = read_arg(f_arg, lane);
+                    values[lane] = c != 0.0f ? t : f;
+                }
+                push_values(values, lanes);
+                break;
+            }
         }
     }
 
-    for (int32_t lane = 0; lane < out_lanes; ++lane)
-        out_values[lane] = read_arg(last, uint8_t(lane));
+    if (out_values)
+        for (int32_t lane = 0; lane < out_lanes; ++lane)
+            out_values[lane] = read_arg(last, uint8_t(lane));
+    if (out_last_arg)   *out_last_arg = last;
+    if (out_last_lanes) *out_last_lanes = last_lanes;
+}
+
+}   // namespace
+
+void TParticleExpression::Eval(const SParticleEvalContext& ctx, float* out_values, int32_t out_lanes) const
+{
+    if (!out_values || out_lanes <= 0)
+        return;
+    SParticleEvalContext local_ctx = ctx;
+    // Stateless eval: per-particle PRNG seeds from `seed`, advanced per
+    // Rand01 call but not persisted (the caller's ctx is copied first).
+    if (local_ctx.rng_state == 0)
+        local_ctx.rng_state = uint32_t(local_ctx.seed * 1.0f) ^ 0x9e3779b9u;
+    PfxEvalImpl(code, constants, local_ctx,
+                out_values, out_lanes,
+                /*bucket*/ nullptr, /*particle_index*/ -1,
+                /*emit_pos*/ nullptr, /*emit_vel*/ nullptr,
+                /*out_last_arg*/ nullptr, /*out_last_lanes*/ nullptr);
 }
 
 float TParticleExpression::Eval(const SParticleEvalContext& ctx) const
@@ -715,5 +1165,59 @@ float TParticleExpression::Eval(const SParticleEvalContext& ctx) const
     float value = 0.0f;
     Eval(ctx, &value, 1);
     return value;
+}
+
+void TParticleExpression::EvalParticle(const SParticleEvalContext& ctx,
+                                       TParticleBucket& bucket,
+                                       int32_t particle_index,
+                                       const float emit_pos[3],
+                                       const float emit_vel[3]) const
+{
+    if (!valid || particle_index < 0)
+        return;
+    SParticleEvalContext local_ctx = ctx;
+    if (local_ctx.rng_state == 0)
+    {
+        // Seed per-particle PRNG from the particle's own seed slot if it
+        // has one, otherwise fall back to the supplied ctx.seed.
+        if (const float* seed_slot = bucket.VarPtr(particle_index, EParticleVar::Seed))
+            local_ctx.rng_state = uint32_t(*seed_slot * 16807.0f) ^ 0xdeadbeefu;
+        else
+            local_ctx.rng_state = uint32_t(local_ctx.seed * 16807.0f) ^ 0xdeadbeefu;
+    }
+    // No out_values -- statement expressions don't materialise a result.
+    // Tick/spawn expressions only mutate via StoreVar.
+    PfxEvalImpl(code, constants, local_ctx,
+                /*out_values*/ nullptr, /*out_lanes*/ 0,
+                &bucket, particle_index, emit_pos, emit_vel,
+                /*out_last_arg*/ nullptr, /*out_last_lanes*/ nullptr);
+    // Persist the advanced rng state back into the particle's seed slot
+    // so successive ticks see distinct random values.
+    if (float* seed_slot = bucket.VarPtr(particle_index, EParticleVar::Seed))
+        *seed_slot = float(local_ctx.rng_state & 0x7fffffu) / float(0x7fffffu);
+}
+
+bool TParticleExpression::EvalParticlePredicate(const SParticleEvalContext& ctx,
+                                                TParticleBucket& bucket,
+                                                int32_t particle_index,
+                                                const float emit_pos[3],
+                                                const float emit_vel[3]) const
+{
+    if (!valid || particle_index < 0)
+        return false;
+    SParticleEvalContext local_ctx = ctx;
+    if (local_ctx.rng_state == 0)
+    {
+        if (const float* seed_slot = bucket.VarPtr(particle_index, EParticleVar::Seed))
+            local_ctx.rng_state = uint32_t(*seed_slot * 16807.0f) ^ 0xfeedfaceu;
+        else
+            local_ctx.rng_state = uint32_t(local_ctx.seed * 16807.0f) ^ 0xfeedfaceu;
+    }
+    float result = 0.0f;
+    PfxEvalImpl(code, constants, local_ctx,
+                &result, 1,
+                &bucket, particle_index, emit_pos, emit_vel,
+                nullptr, nullptr);
+    return result != 0.0f;
 }
 
