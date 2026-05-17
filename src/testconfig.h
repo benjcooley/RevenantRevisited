@@ -19,3 +19,10 @@ extern char StartupAssetPath[128];
 extern float StartupAssetScale;
 // --dumptiles=<path> — export tile albedo PNGs into the given folder, then exit.
 extern char StartupDumpTilesPath[MAXPATHLEN];
+// --vfx=<id> — pre-select an effect by id in --test=vfx (e.g.
+// --vfx=TStripEffect). Empty = first alphabetically-sorted entry.
+// Useful for clean screencaps + scripted iteration.
+extern char StartupVfxId[64];
+// --vfx-no-ui — suppress the ImGui VFX Browser panel so screencaps
+// show only the effect render.
+extern bool StartupVfxHideUi;

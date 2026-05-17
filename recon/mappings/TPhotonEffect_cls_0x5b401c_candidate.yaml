@@ -1,0 +1,28 @@
+# TPhotonEffect - MEDIUM CONFIDENCE CANDIDATE
+# (Supersedes the prior cls_0x5aacac->TPhotonEffect mapping — that one
+# was the "DragonFire" registry entry, NOT photon. The correct Photon
+# class lives in the MissileEffect.cpp family.)
+source_class: "TPhotonEffect"
+ghidra_class: "cls_0x5b401c"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "Photon" string at .rdata 005e1b20 has 2 XREFs:
+#       005103e0 (delta +0x1c0 in fn 0x510220, owner cls_0x5b401c)
+#       005104a0 (delta +0x50  in fn 0x510450, owner cls_0x5b3c18)
+#     The first XREF is in this class; the second XREF is in cls_0x5b3c18
+#     which appears to be a shared MissileEffect-family helper / base.
+#   - cls_0x5b401c size 1288 bytes, 6 methods, self-allocated 0x508 bytes.
+#   - Inherits from cls_0x5a50e8 base (NOT cls_0x5a47f0 = TEffect).
+#     MissileEffect classes derive from a different base — likely
+#     TObjectInstance or T3DImage-family. Consistent with source's
+#     TMissileEffect being a separate hierarchy from TEffect.
+#
+# Open: the prior 2026-05-16 pass mapped cls_0x5aacac -> TPhotonEffect on
+# weak "DragonFire" evidence. With the correct Photon class identified
+# here, the cls_0x5aacac mapping should be re-labeled to its actual
+# registry name "DragonFire" (which may itself be a dragon-specific
+# attack class, possibly TDragonFireEffect added during development).
+
+fields:
+methods:

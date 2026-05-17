@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "logging.h"
+#include "particlefx.h"
 #include "revenant.h"
 #include "renderer_readback.h"
 #include "shaders/shaders.h"
@@ -1219,6 +1220,14 @@ bool TRenderer::Initialize(int32_t dwidth, int32_t dheight)
     helper_desc.depth_stencil_attachment.image = depth_target;
     helper_pass = sg_make_pass(&helper_desc);
 
+    // Pass [5] -- transparent FX (billboards, particles, ribbons). Reads
+    // scene depth (no write), blends over the lit color. See
+    // docs/vfx/PHASE1_SPINE.md §5.
+    sg_pass_desc fx_desc = {};
+    fx_desc.color_attachments[0].image = lit_target;
+    fx_desc.depth_stencil_attachment.image = depth_target;
+    fx_pass = sg_make_pass(&fx_desc);
+
     // Pass [2] -- screen-space AO.
     sg_pass_desc ao_desc = {};
     ao_desc.color_attachments[0].image = ao_target;
@@ -1241,12 +1250,14 @@ bool TRenderer::Initialize(int32_t dwidth, int32_t dheight)
     InitAOPipeline();
     InitShadowPipeline();
     InitLightPipeline();
+    InitFxPipeline();
 
     return true;
 }
 
 void TRenderer::Shutdown()
 {
+    ShutdownFxPipeline();
     ShutdownLightPipeline();
     ShutdownShadowPipeline();
     ShutdownAOPipeline();
@@ -1271,6 +1282,7 @@ void TRenderer::Shutdown()
     if (default_pass.id) { sg_destroy_pass(default_pass); default_pass = {}; }
     if (lit_pass.id)     { sg_destroy_pass(lit_pass);     lit_pass     = {}; }
     if (helper_pass.id)  { sg_destroy_pass(helper_pass);  helper_pass  = {}; }
+    if (fx_pass.id)      { sg_destroy_pass(fx_pass);      fx_pass      = {}; }
     if (ao_pass.id)      { sg_destroy_pass(ao_pass);      ao_pass      = {}; }
     if (shadow_pass.id)  { sg_destroy_pass(shadow_pass);  shadow_pass  = {}; }
     if (shadow_blur_pass.id) { sg_destroy_pass(shadow_blur_pass); shadow_blur_pass = {}; }
@@ -2917,6 +2929,7 @@ void TRenderer::RunLightingPass()
     sg_end_pass();
 
     DrainTransparentWorldQueue();
+    DrainFxQueue();
     DrainOverlayQueue();
     lit_target_dirty = true;
 }
@@ -3702,4 +3715,915 @@ void TRenderer::SetPresentNDCRect(float x, float y, float w, float h)
     present_ndc[1] = y;
     present_ndc[2] = w;
     present_ndc[3] = h;
+}
+
+// *************************************************************************
+// * FX pipelines (Phase 1 VFX spine)                                       *
+// *************************************************************************
+//
+// Three sokol pipelines + one fx_pass. All three share the same iso
+// projection as the tile / mesh pipelines (uniform block layout vp/camz/
+// camw); we resolve recon state at drain time so producers don't have to
+// know about it.
+//
+//   fx_billboard : per-instance attributes (location 0 = corner unit
+//                  quad, 1 = world_pos, 2 = size_wu, 3 = uv_rect, 4 =
+//                  color, 5 = debug_mode).
+//   fx_particle  : same plus per-instance rotation_rad (location 6).
+//   fx_strip     : CPU expands segments into 4-vertex quads; per-vertex
+//                  world_pos, world_tan, half_width, uv, color,
+//                  debug_mode.
+//
+// One shared dynamic instance VB per pipeline, rebuilt per frame. Per-
+// bucket sort is back-to-front in camera-forward space.
+//
+// *************************************************************************
+
+namespace {
+
+// Instance / vertex strides. Per PHASE1_SPINE.md §6 light_mode and
+// orientation share the debug_mode lane convention (per-instance float,
+// no pipeline variant) -- we add them as more floats per instance.
+//   billboard : wp(3) + sz(2) + uv(4) + col(4) + dbg(1) + light(1) +
+//               orient(1) = 16 floats (the original pad lane absorbs
+//               orientation; stays 64B)
+//   particle  : same + rotation_rad + orientation = 18 floats; pad to
+//               20 to keep alignment (and to retain headroom for the
+//               next per-instance lane).
+//   strip     : wp(3) + wt(3) + hw(1) + uv(2) + col(4) + dbg(1) + light(1) + pad(1) = 16 floats (stays 64B)
+constexpr int32_t kFxBillboardInstanceFloats = 16;
+constexpr int32_t kFxParticleInstanceFloats  = 20;
+constexpr int32_t kFxStripVertexFloats       = 16;
+
+// Static corner quad for billboards / particles. CCW with z=0.
+constexpr float kFxCorners[] = {
+    -0.5f, -0.5f,
+     0.5f, -0.5f,
+    -0.5f,  0.5f,
+     0.5f,  0.5f,
+};
+
+void SetupFxBlend(sg_pipeline_desc& pip, EFxBlend blend)
+{
+    pip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    pip.colors[0].blend.enabled = true;
+    switch (blend)
+    {
+        case EFxBlend::Additive:
+            pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+            pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
+            pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+            break;
+        case EFxBlend::AdditiveStraight:
+            // Retail TBloodSystem second pass: D3DBLEND_ONE / D3DBLEND_ONE
+            // on both rgb and alpha. Particle color is added at full
+            // weight regardless of alpha -- pairs with LitFlat for the
+            // "self-lit glow over the lit alpha base" effect.
+            pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+            break;
+        case EFxBlend::PremulAlpha:
+            pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            break;
+        case EFxBlend::Alpha:
+        default:
+            pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+            pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+            pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            break;
+    }
+}
+
+// Translate EFxDepthMode into sokol pipeline depth state. Depth format
+// is fixed to the G-buffer depth attachment so the fx pass can read
+// scene depth without a separate depth target.
+void SetupFxDepth(sg_pipeline_desc& pip, EFxDepthMode depth_mode)
+{
+    pip.depth.pixel_format = SG_PIXELFORMAT_DEPTH;
+    switch (depth_mode)
+    {
+        case EFxDepthMode::TestWrite:
+            pip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
+            pip.depth.write_enabled = true;
+            break;
+        case EFxDepthMode::None:
+            pip.depth.compare       = SG_COMPAREFUNC_ALWAYS;
+            pip.depth.write_enabled = false;
+            break;
+        case EFxDepthMode::TestNoWrite:
+        default:
+            pip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
+            pip.depth.write_enabled = false;
+            break;
+    }
+}
+
+// Shared FX VS uniform block (vp / camz / camw / sun_dir / sun_color /
+// ambient_color). The first three vec4s match the pre-Phase-1.5 layout
+// so iso projection in the VS is unchanged; the three new vec4s carry
+// lighting state forward to the FS for LitFlat modulation.
+//
+// Layout (24 floats / 6 vec4s):
+//   [ 0.. 3] vp     .xy = camera pixel origin, .zw = padded G-buffer dims
+//   [ 4.. 7] camz   .x  = z_near wu, .y = zspan wu, .z = kcam_forward,
+//                   .w  = perspective enable (0/1)
+//   [ 8..11] camw   .xy = camera-center world xy, .z = zoom, .w unused
+//   [12..15] sun_dir.xyz = world-space direction from surface toward sun
+//                          (same convention as light_dir in the deferred
+//                          light shader: dot(N, sun_dir) > 0 == lit).
+//                   .w = 0 (reserved)
+//   [16..19] sun_col.rgb = sun color (pre-multiplied by intensity), .a = 0
+//   [20..23] amb_col.rgb = ambient color (pre-multiplied by ambient), .a = 0
+void FillFxUniforms(float u[24], const TRenderer& /*r*/,
+                    float ox, float oy, float gbw, float gbh,
+                    float z_near, float zspan, float kcam_forward,
+                    float perspective, float center_wx, float center_wy,
+                    float zoom,
+                    const float sun_dir[3],   const float sun_col[3],
+                    const float amb_col[3])
+{
+    u[0]  = ox;
+    u[1]  = oy;
+    u[2]  = gbw;
+    u[3]  = gbh;
+    u[4]  = z_near;
+    u[5]  = zspan;
+    u[6]  = kcam_forward;
+    u[7]  = perspective;
+    u[8]  = center_wx;
+    u[9]  = center_wy;
+    u[10] = zoom;
+    u[11] = 0.0f;
+    u[12] = sun_dir[0]; u[13] = sun_dir[1]; u[14] = sun_dir[2]; u[15] = 0.0f;
+    u[16] = sun_col[0]; u[17] = sun_col[1]; u[18] = sun_col[2]; u[19] = 0.0f;
+    u[20] = amb_col[0]; u[21] = amb_col[1]; u[22] = amb_col[2]; u[23] = 0.0f;
+}
+
+}  // namespace
+
+namespace {
+
+// Shared VS uniform block descriptor for fx pipelines. Three vec4s of
+// camera (vp/camz/camw) plus three vec4s of lighting state (sun_dir /
+// sun_color / ambient_color). Lighting fields are forwarded through to
+// the FS via varyings -- the FX shader is small enough that this beats
+// a separate FS UBO.
+void FillFxSharedVsUbo(sg_shader_uniform_block_desc& ub)
+{
+    ub.size = 6 * sizeof(float) * 4;
+    ub.uniforms[0].name = "vp";            ub.uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[1].name = "camz";          ub.uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[2].name = "camw";          ub.uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[3].name = "sun_dir";       ub.uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[4].name = "sun_color";     ub.uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
+    ub.uniforms[5].name = "ambient_color"; ub.uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
+}
+
+}  // namespace
+
+void TRenderer::InitFxPipeline()
+{
+    // ---- Shared corner VB (4 vertices, position-only) -------------------
+    sg_buffer_desc cb = {};
+    cb.size  = int(sizeof(kFxCorners));
+    cb.data  = SG_RANGE(kFxCorners);
+    cb.label = "renderer.fx.corner_vb";
+    fx_corner_vb = sg_make_buffer(&cb);
+
+    // ---- fx_billboard shader + pipelines --------------------------------
+    {
+        sg_shader_desc sh = {};
+        sh.attrs[0].name = "corner";      sh.attrs[0].sem_name = "TEXCOORD"; sh.attrs[0].sem_index = 0;
+        sh.attrs[1].name = "world_pos";   sh.attrs[1].sem_name = "TEXCOORD"; sh.attrs[1].sem_index = 1;
+        sh.attrs[2].name = "size_wu";     sh.attrs[2].sem_name = "TEXCOORD"; sh.attrs[2].sem_index = 2;
+        sh.attrs[3].name = "uv_rect";     sh.attrs[3].sem_name = "TEXCOORD"; sh.attrs[3].sem_index = 3;
+        sh.attrs[4].name = "color_rgba";  sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
+        sh.attrs[5].name = "debug_mode";  sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
+        sh.attrs[6].name = "light_mode";  sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
+        sh.attrs[7].name = "orientation"; sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
+        sh.vs.source = kFxBillboardVs;
+        sh.vs.entry  = kShaderVsEntry;
+        FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
+        sh.fs.source = kFxBillboardFs;
+        sh.fs.entry  = kShaderFsEntry;
+        sh.fs.images[0].name = "atlas";
+        sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
+        sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
+        sh.label = "renderer.fx.billboard.shader";
+        fx_billboard_shader = sg_make_shader(&sh);
+
+        sg_pipeline_desc pip = {};
+        pip.shader = fx_billboard_shader;
+        pip.layout.buffers[0].stride    = 2 * sizeof(float);
+        pip.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+        pip.layout.buffers[1].stride    = kFxBillboardInstanceFloats * sizeof(float);
+        pip.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
+        pip.layout.attrs[0].buffer_index = 0; pip.layout.attrs[0].offset = 0;                          pip.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+        pip.layout.attrs[1].buffer_index = 1; pip.layout.attrs[1].offset = 0;                          pip.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+        pip.layout.attrs[2].buffer_index = 1; pip.layout.attrs[2].offset = 3  * sizeof(float);         pip.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+        pip.layout.attrs[3].buffer_index = 1; pip.layout.attrs[3].offset = 5  * sizeof(float);         pip.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+        pip.layout.attrs[4].buffer_index = 1; pip.layout.attrs[4].offset = 9  * sizeof(float);         pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+        pip.layout.attrs[5].buffer_index = 1; pip.layout.attrs[5].offset = 13 * sizeof(float);         pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[6].buffer_index = 1; pip.layout.attrs[6].offset = 14 * sizeof(float);         pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[7].buffer_index = 1; pip.layout.attrs[7].offset = 15 * sizeof(float);         pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT;
+        pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP;
+        pip.cull_mode      = SG_CULLMODE_NONE;
+        // Build all (blend, depth_mode) variants. Light mode and
+        // orientation are per-instance so they don't multiply the
+        // pipeline count.
+        for (int32_t b = 0; b < kFxBlendCount; ++b)
+        {
+            SetupFxBlend(pip, EFxBlend(b));
+            for (int32_t d = 0; d < kFxDepthModeCount; ++d)
+            {
+                SetupFxDepth(pip, EFxDepthMode(d));
+                pip.label = "renderer.fx.billboard.pip";
+                fx_billboard_pip[b][d] = sg_make_pipeline(&pip);
+            }
+        }
+    }
+
+    // ---- fx_particle shader + pipelines ---------------------------------
+    {
+        sg_shader_desc sh = {};
+        sh.attrs[0].name = "corner";       sh.attrs[0].sem_name = "TEXCOORD"; sh.attrs[0].sem_index = 0;
+        sh.attrs[1].name = "world_pos";    sh.attrs[1].sem_name = "TEXCOORD"; sh.attrs[1].sem_index = 1;
+        sh.attrs[2].name = "size_wu";      sh.attrs[2].sem_name = "TEXCOORD"; sh.attrs[2].sem_index = 2;
+        sh.attrs[3].name = "uv_rect";      sh.attrs[3].sem_name = "TEXCOORD"; sh.attrs[3].sem_index = 3;
+        sh.attrs[4].name = "color_rgba";   sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
+        sh.attrs[5].name = "debug_mode";   sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
+        sh.attrs[6].name = "rotation_rad"; sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
+        sh.attrs[7].name = "light_mode";   sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
+        sh.attrs[8].name = "orientation";  sh.attrs[8].sem_name = "TEXCOORD"; sh.attrs[8].sem_index = 8;
+        sh.vs.source = kFxParticleVs;
+        sh.vs.entry  = kShaderVsEntry;
+        FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
+        sh.fs.source = kFxParticleFs;
+        sh.fs.entry  = kShaderFsEntry;
+        sh.fs.images[0].name = "atlas";
+        sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
+        sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
+        sh.label = "renderer.fx.particle.shader";
+        fx_particle_shader = sg_make_shader(&sh);
+
+        sg_pipeline_desc pip = {};
+        pip.shader = fx_particle_shader;
+        pip.layout.buffers[0].stride    = 2 * sizeof(float);
+        pip.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+        pip.layout.buffers[1].stride    = kFxParticleInstanceFloats * sizeof(float);
+        pip.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
+        pip.layout.attrs[0].buffer_index = 0; pip.layout.attrs[0].offset = 0;                          pip.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+        pip.layout.attrs[1].buffer_index = 1; pip.layout.attrs[1].offset = 0;                          pip.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+        pip.layout.attrs[2].buffer_index = 1; pip.layout.attrs[2].offset = 3  * sizeof(float);         pip.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+        pip.layout.attrs[3].buffer_index = 1; pip.layout.attrs[3].offset = 5  * sizeof(float);         pip.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT4;
+        pip.layout.attrs[4].buffer_index = 1; pip.layout.attrs[4].offset = 9  * sizeof(float);         pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+        pip.layout.attrs[5].buffer_index = 1; pip.layout.attrs[5].offset = 13 * sizeof(float);         pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[6].buffer_index = 1; pip.layout.attrs[6].offset = 14 * sizeof(float);         pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[7].buffer_index = 1; pip.layout.attrs[7].offset = 15 * sizeof(float);         pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[8].buffer_index = 1; pip.layout.attrs[8].offset = 16 * sizeof(float);         pip.layout.attrs[8].format = SG_VERTEXFORMAT_FLOAT;
+        pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP;
+        pip.cull_mode      = SG_CULLMODE_NONE;
+        for (int32_t b = 0; b < kFxBlendCount; ++b)
+        {
+            SetupFxBlend(pip, EFxBlend(b));
+            for (int32_t d = 0; d < kFxDepthModeCount; ++d)
+            {
+                SetupFxDepth(pip, EFxDepthMode(d));
+                pip.label = "renderer.fx.particle.pip";
+                fx_particle_pip[b][d] = sg_make_pipeline(&pip);
+            }
+        }
+    }
+
+    // ---- fx_strip shader + pipelines ------------------------------------
+    {
+        sg_shader_desc sh = {};
+        sh.attrs[0].name = "world_pos";   sh.attrs[0].sem_name = "TEXCOORD"; sh.attrs[0].sem_index = 0;
+        sh.attrs[1].name = "world_tan";   sh.attrs[1].sem_name = "TEXCOORD"; sh.attrs[1].sem_index = 1;
+        sh.attrs[2].name = "half_width";  sh.attrs[2].sem_name = "TEXCOORD"; sh.attrs[2].sem_index = 2;
+        sh.attrs[3].name = "uv";          sh.attrs[3].sem_name = "TEXCOORD"; sh.attrs[3].sem_index = 3;
+        sh.attrs[4].name = "color";       sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
+        sh.attrs[5].name = "debug_mode";  sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
+        sh.attrs[6].name = "light_mode";  sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
+        sh.vs.source = kFxStripVs;
+        sh.vs.entry  = kShaderVsEntry;
+        FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
+        sh.vs.uniform_blocks[1].size = 2 * sizeof(float) * 4;
+        sh.vs.uniform_blocks[1].uniforms[0].name = "cam_pos"; sh.vs.uniform_blocks[1].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+        sh.vs.uniform_blocks[1].uniforms[1].name = "cam_fwd"; sh.vs.uniform_blocks[1].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
+        sh.fs.source = kFxStripFs;
+        sh.fs.entry  = kShaderFsEntry;
+        sh.fs.images[0].name = "atlas";
+        sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
+        sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
+        sh.label = "renderer.fx.strip.shader";
+        fx_strip_shader = sg_make_shader(&sh);
+
+        sg_pipeline_desc pip = {};
+        pip.shader = fx_strip_shader;
+        pip.layout.buffers[0].stride    = kFxStripVertexFloats * sizeof(float);
+        pip.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+        pip.layout.attrs[0].buffer_index = 0; pip.layout.attrs[0].offset = 0;                  pip.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
+        pip.layout.attrs[1].buffer_index = 0; pip.layout.attrs[1].offset = 3  * sizeof(float); pip.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
+        pip.layout.attrs[2].buffer_index = 0; pip.layout.attrs[2].offset = 6  * sizeof(float); pip.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[3].buffer_index = 0; pip.layout.attrs[3].offset = 7  * sizeof(float); pip.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT2;
+        pip.layout.attrs[4].buffer_index = 0; pip.layout.attrs[4].offset = 9  * sizeof(float); pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
+        pip.layout.attrs[5].buffer_index = 0; pip.layout.attrs[5].offset = 13 * sizeof(float); pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[6].buffer_index = 0; pip.layout.attrs[6].offset = 14 * sizeof(float); pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
+        pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+        pip.cull_mode      = SG_CULLMODE_NONE;
+        for (int32_t b = 0; b < kFxBlendCount; ++b)
+        {
+            SetupFxBlend(pip, EFxBlend(b));
+            for (int32_t d = 0; d < kFxDepthModeCount; ++d)
+            {
+                SetupFxDepth(pip, EFxDepthMode(d));
+                pip.label = "renderer.fx.strip.pip";
+                fx_strip_pip[b][d] = sg_make_pipeline(&pip);
+            }
+        }
+    }
+
+    // ---- dynamic instance / strip VBs -----------------------------------
+    sg_buffer_desc ib = {};
+    ib.size  = kMaxFxInstances * kFxBillboardInstanceFloats * int(sizeof(float));
+    ib.usage = SG_USAGE_STREAM;
+    ib.label = "renderer.fx.billboard.ivb";
+    fx_billboard_ivb = sg_make_buffer(&ib);
+
+    sg_buffer_desc pb = {};
+    pb.size  = kMaxFxInstances * kFxParticleInstanceFloats * int(sizeof(float));
+    pb.usage = SG_USAGE_STREAM;
+    pb.label = "renderer.fx.particle.ivb";
+    fx_particle_ivb = sg_make_buffer(&pb);
+
+    sg_buffer_desc sb = {};
+    sb.size  = kMaxFxStripVerts * kFxStripVertexFloats * int(sizeof(float));
+    sb.usage = SG_USAGE_STREAM;
+    sb.label = "renderer.fx.strip.vb";
+    fx_strip_vb = sg_make_buffer(&sb);
+
+    log_info("[fx-pipeline] init blend=%d depth=%d variants=%d shaders=3",
+             int(kFxBlendCount), int(kFxDepthModeCount),
+             int(kFxBlendCount * kFxDepthModeCount * 3));
+}
+
+void TRenderer::ShutdownFxPipeline()
+{
+    for (int32_t b = 0; b < kFxBlendCount; ++b)
+    {
+        for (int32_t d = 0; d < kFxDepthModeCount; ++d)
+        {
+            if (fx_billboard_pip[b][d].id) { sg_destroy_pipeline(fx_billboard_pip[b][d]); fx_billboard_pip[b][d] = {}; }
+            if (fx_particle_pip[b][d].id)  { sg_destroy_pipeline(fx_particle_pip[b][d]);  fx_particle_pip[b][d]  = {}; }
+            if (fx_strip_pip[b][d].id)     { sg_destroy_pipeline(fx_strip_pip[b][d]);     fx_strip_pip[b][d]     = {}; }
+        }
+    }
+    if (fx_billboard_shader.id)    { sg_destroy_shader(fx_billboard_shader);      fx_billboard_shader    = {}; }
+    if (fx_particle_shader.id)     { sg_destroy_shader(fx_particle_shader);       fx_particle_shader     = {}; }
+    if (fx_strip_shader.id)        { sg_destroy_shader(fx_strip_shader);          fx_strip_shader        = {}; }
+    if (fx_corner_vb.id)           { sg_destroy_buffer(fx_corner_vb);             fx_corner_vb           = {}; }
+    if (fx_billboard_ivb.id)       { sg_destroy_buffer(fx_billboard_ivb);         fx_billboard_ivb       = {}; }
+    if (fx_particle_ivb.id)        { sg_destroy_buffer(fx_particle_ivb);          fx_particle_ivb        = {}; }
+    if (fx_strip_vb.id)            { sg_destroy_buffer(fx_strip_vb);              fx_strip_vb            = {}; }
+}
+
+void TRenderer::SetFxCamera(const float right_wu[3], const float up_wu[3],
+                            const float forward_wu[3], const float pos_wu[3])
+{
+    if (right_wu)   { fx_camera.right[0] = right_wu[0]; fx_camera.right[1] = right_wu[1]; fx_camera.right[2] = right_wu[2]; }
+    if (up_wu)      { fx_camera.up[0]    = up_wu[0];    fx_camera.up[1]    = up_wu[1];    fx_camera.up[2]    = up_wu[2]; }
+    if (forward_wu) { fx_camera.forward[0] = forward_wu[0]; fx_camera.forward[1] = forward_wu[1]; fx_camera.forward[2] = forward_wu[2]; }
+    if (pos_wu)     { fx_camera.pos[0] = pos_wu[0]; fx_camera.pos[1] = pos_wu[1]; fx_camera.pos[2] = pos_wu[2]; }
+    fx_camera.set = true;
+}
+
+void TRenderer::SubmitFxBillboard(const SBillboardDrawItem& item)
+{
+    if (int32_t(fx_billboard_queue.size()) >= kMaxFxInstances) return;
+    SFxBillboardQueueEntry e{};
+    e.item = item;
+    if (e.item.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
+        e.item.key.texture = white_texture;
+    // Sort along camera forward: greater distance = further away = draw first.
+    if (fx_camera.set)
+    {
+        const float dx = item.world_pos[0] - fx_camera.pos[0];
+        const float dy = item.world_pos[1] - fx_camera.pos[1];
+        const float dz = item.world_pos[2] - fx_camera.pos[2];
+        e.sort_z = dx * fx_camera.forward[0] + dy * fx_camera.forward[1] + dz * fx_camera.forward[2];
+    }
+    fx_billboard_queue.push_back(e);
+}
+
+void TRenderer::SubmitFxParticle(const SParticleDrawItem& item)
+{
+    if (int32_t(fx_particle_queue.size()) >= kMaxFxInstances) return;
+    SFxParticleQueueEntry e{};
+    e.item = item;
+    if (e.item.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
+        e.item.key.texture = white_texture;
+    if (fx_camera.set)
+    {
+        const float dx = item.world_pos[0] - fx_camera.pos[0];
+        const float dy = item.world_pos[1] - fx_camera.pos[1];
+        const float dz = item.world_pos[2] - fx_camera.pos[2];
+        e.sort_z = dx * fx_camera.forward[0] + dy * fx_camera.forward[1] + dz * fx_camera.forward[2];
+    }
+    fx_particle_queue.push_back(e);
+}
+
+void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
+                                       EFxDebugMode debug_mode)
+{
+    const SParticleBucketDesc& desc = bucket.Desc();
+    if (!bucket.Active() || desc.texture == kInvalidTexture)
+        return;
+    SFxBatchKey key = {};
+    key.texture     = desc.texture;
+    key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    // Map per-bucket EParticleBlendMode -> per-pipeline EFxBlend.
+    // EParticleBlendMode enumerators line up 1:1 with EFxBlend (both
+    // declare the same set in the same order); a direct cast is the
+    // documented contract.
+    switch (desc.blend)
+    {
+        case EParticleBlendMode::Alpha:            key.blend = uint8_t(EFxBlend::Alpha);            break;
+        case EParticleBlendMode::Additive:         key.blend = uint8_t(EFxBlend::Additive);         break;
+        case EParticleBlendMode::AdditiveStraight: key.blend = uint8_t(EFxBlend::AdditiveStraight); break;
+        case EParticleBlendMode::PremulAlpha:      key.blend = uint8_t(EFxBlend::PremulAlpha);      break;
+    }
+    switch (desc.depth_mode)
+    {
+        case EParticleDepthMode::TestNoWrite: key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite); break;
+        case EParticleDepthMode::TestWrite:   key.depth_mode = uint8_t(EFxDepthMode::TestWrite);   break;
+        case EParticleDepthMode::None:        key.depth_mode = uint8_t(EFxDepthMode::None);        break;
+    }
+    const EFxLightMode light_mode = (desc.light_mode == EParticleLightMode::LitFlat)
+                                      ? EFxLightMode::LitFlat
+                                      : EFxLightMode::Unlit;
+    const EFxBillboardOrientation orientation = (desc.orientation == EParticleOrientation::WorldXY)
+                                                  ? EFxBillboardOrientation::WorldXY
+                                                  : EFxBillboardOrientation::ScreenAligned;
+
+    const int32_t count = bucket.Count();
+    for (int32_t i = 0; i < count; ++i)
+    {
+        const float* dp = bucket.VarPtr(i, EParticleVar::DrawPos);
+        if (!dp) continue;
+        SParticleDrawItem item = {};
+        item.world_pos[0] = dp[0];
+        item.world_pos[1] = dp[1];
+        item.world_pos[2] = dp[2];
+
+        item.size_wu[0] = desc.default_width;
+        item.size_wu[1] = desc.default_height;
+        if (const float* ds = bucket.VarPtr(i, EParticleVar::DrawScl))
+        {
+            item.size_wu[0] = ds[0];
+            item.size_wu[1] = ds[1];
+        }
+
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        if (const float* dc = bucket.VarPtr(i, EParticleVar::DrawColor))
+        {
+            item.color_rgba[0] = dc[0];
+            item.color_rgba[1] = dc[1];
+            item.color_rgba[2] = dc[2];
+            item.color_rgba[3] = dc[3];
+        }
+
+        // UV priority: explicit DrawUvRect (per-particle override) >
+        // sprite-grid pick from DrawFrame > whole texture.
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        if (const float* du = bucket.VarPtr(i, EParticleVar::DrawUvRect))
+        {
+            item.uv_rect[0] = du[0];
+            item.uv_rect[1] = du[1];
+            item.uv_rect[2] = du[2];
+            item.uv_rect[3] = du[3];
+        }
+        else if (desc.frame_cols > 1 || desc.frame_rows > 1)
+        {
+            const int32_t cols   = desc.frame_cols > 0 ? desc.frame_cols : 1;
+            const int32_t rows   = desc.frame_rows > 0 ? desc.frame_rows : 1;
+            const int32_t cells  = cols * rows;
+            int32_t frame = 0;
+            if (const float* df = bucket.VarPtr(i, EParticleVar::DrawFrame))
+                frame = int32_t(*df);
+            frame = ((frame % cells) + cells) % cells;
+            const int32_t fx = frame % cols;
+            const int32_t fy = frame / cols;
+            const float cw = 1.0f / float(cols);
+            const float ch = 1.0f / float(rows);
+            item.uv_rect[0] = float(fx) * cw;
+            item.uv_rect[1] = float(fy) * ch;
+            item.uv_rect[2] = cw;
+            item.uv_rect[3] = ch;
+        }
+
+        if (const float* dr = bucket.VarPtr(i, EParticleVar::DrawRot))
+            item.rotation_rad = dr[0];
+
+        item.key         = key;
+        item.debug_mode  = debug_mode;
+        item.light_mode  = light_mode;
+        item.orientation = orientation;
+        SubmitFxParticle(item);
+    }
+}
+
+void TRenderer::SubmitFxStrip(const SStripDrawItem& item)
+{
+    if (item.num_segments <= 0 || !item.segments) return;
+    SFxStripQueueEntry e{};
+    e.key        = item.key;
+    if (e.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
+        e.key.texture = white_texture;
+    e.key.pipeline_id = uint16_t(EFxPipeline::Strip);
+    e.debug_mode = item.debug_mode;
+    e.light_mode = item.light_mode;
+    e.segments.assign(item.segments, item.segments + item.num_segments);
+    if (fx_camera.set && item.num_segments > 0)
+    {
+        const SStripSegment& s = item.segments[0];
+        const float mx = 0.5f * (s.world_a[0] + s.world_b[0]) - fx_camera.pos[0];
+        const float my = 0.5f * (s.world_a[1] + s.world_b[1]) - fx_camera.pos[1];
+        const float mz = 0.5f * (s.world_a[2] + s.world_b[2]) - fx_camera.pos[2];
+        e.sort_z = mx * fx_camera.forward[0] + my * fx_camera.forward[1] + mz * fx_camera.forward[2];
+    }
+    fx_strip_queue.push_back(std::move(e));
+}
+
+void TRenderer::DrainFxQueue()
+{
+    const bool empty = fx_billboard_queue.empty()
+                    && fx_particle_queue.empty()
+                    && fx_strip_queue.empty();
+    if (empty || !fx_pass.id) return;
+
+    // If no consumer set the FX camera basis this frame, derive one from
+    // the deferred reconstruction state. The iso camera looks "down" the
+    // sum-of-xy axis with a kcam_forward offset; this is enough for the
+    // strip pipeline's side = cross(tangent, view_dir) and the back-to-
+    // front sort in our submit helpers. Producers may override with
+    // SetFxCamera.
+    if (!fx_camera.set)
+    {
+        constexpr float kIsoCos30 = 0.867f;
+        const float fwd[3]   = { -kIsoCos30, -kIsoCos30, -0.5f };
+        const float up[3]    = {  0.0f,        0.0f,      1.0f };
+        const float right[3] = {  0.707f,    -0.707f,     0.0f };
+        const float pos[3]   = {
+            recon.center_wx + kIsoCos30 * recon.kcam_forward,
+            recon.center_wy + kIsoCos30 * recon.kcam_forward,
+            0.5f * recon.kcam_forward,
+        };
+        SetFxCamera(right, up, fwd, pos);
+    }
+
+    // Begin the fx pass: load lit color so we blend over it, load depth
+    // for read-only test.
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_LOAD;
+    pa.depth.action     = SG_ACTION_LOAD;
+    pa.stencil.action   = SG_ACTION_DONTCARE;
+    sg_begin_pass(fx_pass, &pa);
+
+    // Shared VS uniform block (vp/camz/camw + sun_dir/sun_color/
+    // ambient_color). The lighting fields drive the LitFlat per-instance
+    // path in the FS; they read directly from the renderer's SLightState
+    // so anything the deferred light shader sees is also visible to FX.
+    //
+    // Convention matches the deferred light shader (light.metal.h): light.dir
+    // is the direction from the surface toward the sun -- dot(N, dir) > 0
+    // is "lit". Particles use world-up (0,0,1) as their implicit normal
+    // (see EFxLightMode::LitFlat) so the FS reduces this to max(0, dir.z).
+    //
+    // sun_color and ambient_color are pre-multiplied by intensity / ambient
+    // here so the FS can stay a single MUL+ADD per fragment.
+    const float sun_dir[3] = { light.dir[0], light.dir[1], light.dir[2] };
+    const float sun_col[3] = {
+        light.color[0] * light.intensity,
+        light.color[1] * light.intensity,
+        light.color[2] * light.intensity,
+    };
+    const float amb_col[3] = {
+        light.ambient_color[0] * light.ambient,
+        light.ambient_color[1] * light.ambient,
+        light.ambient_color[2] * light.ambient,
+    };
+    float u[24] = {};
+    FillFxUniforms(u, *this,
+                   recon.ox, recon.oy,
+                   float(width + 2 * kGBufPad), float(height + 2 * kGBufPad),
+                   recon.z_near, recon.zspan, recon.kcam_forward, recon.reserved,
+                   recon.center_wx, recon.center_wy, recon.zoom,
+                   sun_dir, sun_col, amb_col);
+    const sg_range u_range = { u, sizeof(u) };
+
+    // ---- Billboards: per-bucket sort, then coalesce by key --------------
+    if (!fx_billboard_queue.empty() && fx_billboard_pip[0][0].id)
+    {
+        // Group adjacent submissions with equal keys; sort within each
+        // group back-to-front. (Per-bucket sort granularity per
+        // PHASE1_SPINE.md §9.)
+        std::sort(fx_billboard_queue.begin(), fx_billboard_queue.end(),
+                  [](const SFxBillboardQueueEntry& a, const SFxBillboardQueueEntry& b) {
+                      const SFxBatchKey& ka = a.item.key;
+                      const SFxBatchKey& kb = b.item.key;
+                      if (ka.texture != kb.texture) return ka.texture < kb.texture;
+                      if (ka.blend   != kb.blend)   return ka.blend   < kb.blend;
+                      if (ka.depth_mode != kb.depth_mode) return ka.depth_mode < kb.depth_mode;
+                      // Greater sort_z = further from camera = draw first.
+                      return a.sort_z > b.sort_z;
+                  });
+
+        // Materialize the entire queue into one shared instance buffer
+        // (count <= kMaxFxInstances).
+        std::vector<float> scratch;
+        scratch.reserve(fx_billboard_queue.size() * kFxBillboardInstanceFloats);
+        for (const auto& e : fx_billboard_queue)
+        {
+            const auto& it = e.item;
+            scratch.push_back(it.world_pos[0]);
+            scratch.push_back(it.world_pos[1]);
+            scratch.push_back(it.world_pos[2]);
+            scratch.push_back(it.size_wu[0]);
+            scratch.push_back(it.size_wu[1]);
+            scratch.push_back(it.uv_rect[0]);
+            scratch.push_back(it.uv_rect[1]);
+            scratch.push_back(it.uv_rect[2]);
+            scratch.push_back(it.uv_rect[3]);
+            scratch.push_back(it.color_rgba[0]);
+            scratch.push_back(it.color_rgba[1]);
+            scratch.push_back(it.color_rgba[2]);
+            scratch.push_back(it.color_rgba[3]);
+            scratch.push_back(float(uint8_t(it.debug_mode)));
+            scratch.push_back(float(uint8_t(it.light_mode)));
+            scratch.push_back(float(uint8_t(it.orientation)));
+            // kFxBillboardInstanceFloats (16) is now fully packed --
+            // no trailing pad lane. If you add another per-instance
+            // attribute, bump the constant + the pipeline attr table
+            // + the shader's vs_in to match.
+        }
+        const sg_range r = { scratch.data(), scratch.size() * sizeof(float) };
+        sg_update_buffer(fx_billboard_ivb, &r);
+
+        // Emit one sg_draw per equal-key run.
+        size_t i = 0;
+        while (i < fx_billboard_queue.size())
+        {
+            size_t j = i + 1;
+            while (j < fx_billboard_queue.size()
+                   && fx_billboard_queue[j].item.key.Equals(fx_billboard_queue[i].item.key))
+                ++j;
+            const SFxBatchKey& key = fx_billboard_queue[i].item.key;
+            const int32_t b = (key.blend < kFxBlendCount) ? key.blend : int32_t(EFxBlend::Alpha);
+            const int32_t d = (key.depth_mode < kFxDepthModeCount) ? key.depth_mode : int32_t(EFxDepthMode::TestNoWrite);
+            sg_pipeline pip = fx_billboard_pip[b][d];
+            if (!pip.id) { i = j; continue; }
+            sg_apply_pipeline(pip);
+            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+
+            sg_bindings bind = {};
+            bind.vertex_buffers[0]        = fx_corner_vb;
+            bind.vertex_buffers[1]        = fx_billboard_ivb;
+            bind.vertex_buffer_offsets[1] = int(i) * kFxBillboardInstanceFloats * int(sizeof(float));
+            bind.fs_images[0]             = TextureImage(key.texture);
+            if (!bind.fs_images[0].id) { i = j; continue; }
+            sg_apply_bindings(&bind);
+            sg_draw(0, 4, int(j - i));
+            i = j;
+        }
+    }
+
+    // ---- Particles ------------------------------------------------------
+    if (!fx_particle_queue.empty() && fx_particle_pip[0][0].id)
+    {
+        std::sort(fx_particle_queue.begin(), fx_particle_queue.end(),
+                  [](const SFxParticleQueueEntry& a, const SFxParticleQueueEntry& b) {
+                      const SFxBatchKey& ka = a.item.key;
+                      const SFxBatchKey& kb = b.item.key;
+                      if (ka.texture != kb.texture) return ka.texture < kb.texture;
+                      if (ka.blend   != kb.blend)   return ka.blend   < kb.blend;
+                      if (ka.depth_mode != kb.depth_mode) return ka.depth_mode < kb.depth_mode;
+                      return a.sort_z > b.sort_z;
+                  });
+
+        std::vector<float> scratch;
+        scratch.reserve(fx_particle_queue.size() * kFxParticleInstanceFloats);
+        for (const auto& e : fx_particle_queue)
+        {
+            const auto& it = e.item;
+            scratch.push_back(it.world_pos[0]);
+            scratch.push_back(it.world_pos[1]);
+            scratch.push_back(it.world_pos[2]);
+            scratch.push_back(it.size_wu[0]);
+            scratch.push_back(it.size_wu[1]);
+            scratch.push_back(it.uv_rect[0]);
+            scratch.push_back(it.uv_rect[1]);
+            scratch.push_back(it.uv_rect[2]);
+            scratch.push_back(it.uv_rect[3]);
+            scratch.push_back(it.color_rgba[0]);
+            scratch.push_back(it.color_rgba[1]);
+            scratch.push_back(it.color_rgba[2]);
+            scratch.push_back(it.color_rgba[3]);
+            scratch.push_back(float(uint8_t(it.debug_mode)));
+            scratch.push_back(it.rotation_rad);
+            scratch.push_back(float(uint8_t(it.light_mode)));
+            scratch.push_back(float(uint8_t(it.orientation)));
+            // pad to kFxParticleInstanceFloats (20). Off-by-one here
+            // would shift every subsequent instance's read by 4 bytes
+            // (stride mismatch), corrupting world_pos / size_wu /
+            // rotation_rad across instances and producing trapezoidal
+            // quad distortions. Keep count synced with the constant.
+            scratch.push_back(0.0f);
+            scratch.push_back(0.0f);
+            scratch.push_back(0.0f);
+        }
+        const sg_range r = { scratch.data(), scratch.size() * sizeof(float) };
+        sg_update_buffer(fx_particle_ivb, &r);
+
+        size_t i = 0;
+        while (i < fx_particle_queue.size())
+        {
+            size_t j = i + 1;
+            while (j < fx_particle_queue.size()
+                   && fx_particle_queue[j].item.key.Equals(fx_particle_queue[i].item.key))
+                ++j;
+            const SFxBatchKey& key = fx_particle_queue[i].item.key;
+            const int32_t b = (key.blend < kFxBlendCount) ? key.blend : int32_t(EFxBlend::Alpha);
+            const int32_t d = (key.depth_mode < kFxDepthModeCount) ? key.depth_mode : int32_t(EFxDepthMode::TestNoWrite);
+            sg_pipeline pip = fx_particle_pip[b][d];
+            if (!pip.id) { i = j; continue; }
+            sg_apply_pipeline(pip);
+            sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+
+            sg_bindings bind = {};
+            bind.vertex_buffers[0]        = fx_corner_vb;
+            bind.vertex_buffers[1]        = fx_particle_ivb;
+            bind.vertex_buffer_offsets[1] = int(i) * kFxParticleInstanceFloats * int(sizeof(float));
+            bind.fs_images[0]             = TextureImage(key.texture);
+            if (!bind.fs_images[0].id) { i = j; continue; }
+            sg_apply_bindings(&bind);
+            sg_draw(0, 4, int(j - i));
+            i = j;
+        }
+    }
+
+    // ---- Strips ---------------------------------------------------------
+    if (!fx_strip_queue.empty() && fx_strip_pip[0][0].id)
+    {
+        // Strips are not auto-batched. Expand each strip's segments into
+        // 6 vertices per segment (two triangles per quad) and emit a
+        // separate sg_draw call per strip.
+        std::vector<float> scratch;
+        // Per strip: write vertices, then draw range [base, base+count).
+        struct DrawSpan { int32_t first; int32_t count; SFxBatchKey key; EFxDebugMode dbg; EFxLightMode lit; };
+        std::vector<DrawSpan> spans;
+
+        for (const auto& e : fx_strip_queue)
+        {
+            const int32_t n = int32_t(e.segments.size());
+            if (n <= 0) continue;
+            const int32_t first_v = int32_t(scratch.size() / kFxStripVertexFloats);
+            const float dbg = float(uint8_t(e.debug_mode));
+            const float lit = float(uint8_t(e.light_mode));
+
+            // Per-vertex tangent miter for continuous strips. At an
+            // interior joint (seg[i].b ~ seg[i+1].a) both segments emit
+            // their shared corner using the AVERAGED tangent of the
+            // adjacent segments. The shader builds side = cross(tan,
+            // view_dir), so identical tangents at the shared vertex
+            // produce identical side offsets => the two segments' edges
+            // line up exactly => no seam. Non-continuous strips (where
+            // consecutive endpoints don't match) fall back to per-
+            // segment tangent automatically.
+            auto seg_tan = [](const SStripSegment& s, float t[3]) {
+                t[0] = s.world_b[0] - s.world_a[0];
+                t[1] = s.world_b[1] - s.world_a[1];
+                t[2] = s.world_b[2] - s.world_a[2];
+            };
+            auto endpoints_match = [](const SStripSegment& a, const SStripSegment& b) {
+                const float ex = a.world_b[0] - b.world_a[0];
+                const float ey = a.world_b[1] - b.world_a[1];
+                const float ez = a.world_b[2] - b.world_a[2];
+                return (ex * ex + ey * ey + ez * ez) < 0.01f;   // ~0.1 wu tolerance
+            };
+
+            // Precompute per-vertex tangents (N+1 tangents for N segments).
+            std::vector<float> tan_at(size_t(n + 1) * 3, 0.0f);
+            for (int32_t s = 0; s < n; ++s)
+            {
+                float t_self[3]; seg_tan(e.segments[s], t_self);
+                // 'a' side of segment s
+                if (s > 0 && endpoints_match(e.segments[s - 1], e.segments[s]))
+                {
+                    // shared with previous segment's 'b' -- average
+                    float t_prev[3]; seg_tan(e.segments[s - 1], t_prev);
+                    tan_at[s * 3 + 0] = 0.5f * (t_prev[0] + t_self[0]);
+                    tan_at[s * 3 + 1] = 0.5f * (t_prev[1] + t_self[1]);
+                    tan_at[s * 3 + 2] = 0.5f * (t_prev[2] + t_self[2]);
+                }
+                else
+                {
+                    tan_at[s * 3 + 0] = t_self[0];
+                    tan_at[s * 3 + 1] = t_self[1];
+                    tan_at[s * 3 + 2] = t_self[2];
+                }
+                // 'b' side of last segment uses its own tangent.
+                if (s == n - 1)
+                {
+                    tan_at[(s + 1) * 3 + 0] = t_self[0];
+                    tan_at[(s + 1) * 3 + 1] = t_self[1];
+                    tan_at[(s + 1) * 3 + 2] = t_self[2];
+                }
+            }
+
+            for (int32_t s = 0; s < n; ++s)
+            {
+                const SStripSegment& seg = e.segments[s];
+                const float* tan_a = &tan_at[size_t(s) * 3];
+                const float* tan_b = &tan_at[size_t(s + 1) * 3];
+                // 4 corners per segment: a-left, b-left, a-right, b-right.
+                // Triangle list: (al, bl, ar) (bl, br, ar) -- 6 vertices.
+                auto emit = [&](const float* wp, const float* color,
+                                const float* tan,
+                                float half_w, float u, float v) {
+                    scratch.push_back(wp[0]); scratch.push_back(wp[1]); scratch.push_back(wp[2]);
+                    scratch.push_back(tan[0]); scratch.push_back(tan[1]); scratch.push_back(tan[2]);
+                    scratch.push_back(half_w);
+                    scratch.push_back(u); scratch.push_back(v);
+                    scratch.push_back(color[0]); scratch.push_back(color[1]); scratch.push_back(color[2]); scratch.push_back(color[3]);
+                    scratch.push_back(dbg);
+                    scratch.push_back(lit);
+                    scratch.push_back(0.0f);  // pad to kFxStripVertexFloats (16)
+                };
+                emit(seg.world_a, seg.color_a, tan_a, -0.5f * seg.width_a_wu, seg.u_a, 0.0f);   // al
+                emit(seg.world_b, seg.color_b, tan_b, -0.5f * seg.width_b_wu, seg.u_b, 0.0f);   // bl
+                emit(seg.world_a, seg.color_a, tan_a, +0.5f * seg.width_a_wu, seg.u_a, 1.0f);   // ar
+                emit(seg.world_b, seg.color_b, tan_b, -0.5f * seg.width_b_wu, seg.u_b, 0.0f);   // bl
+                emit(seg.world_b, seg.color_b, tan_b, +0.5f * seg.width_b_wu, seg.u_b, 1.0f);   // br
+                emit(seg.world_a, seg.color_a, tan_a, +0.5f * seg.width_a_wu, seg.u_a, 1.0f);   // ar
+            }
+            DrawSpan ds = {};
+            ds.first = first_v;
+            ds.count = n * 6;
+            ds.key   = e.key;
+            ds.dbg   = e.debug_mode;
+            ds.lit   = e.light_mode;
+            spans.push_back(ds);
+        }
+
+        if (!scratch.empty() && int32_t(scratch.size() / kFxStripVertexFloats) <= kMaxFxStripVerts)
+        {
+            const sg_range r = { scratch.data(), scratch.size() * sizeof(float) };
+            sg_update_buffer(fx_strip_vb, &r);
+
+            for (const DrawSpan& sp : spans)
+            {
+                const int32_t b = (sp.key.blend < kFxBlendCount) ? sp.key.blend : int32_t(EFxBlend::Alpha);
+                const int32_t d = (sp.key.depth_mode < kFxDepthModeCount) ? sp.key.depth_mode : int32_t(EFxDepthMode::TestNoWrite);
+                sg_pipeline pip = fx_strip_pip[b][d];
+                if (!pip.id) continue;
+                sg_apply_pipeline(pip);
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+                float cam[8] = {
+                    fx_camera.pos[0], fx_camera.pos[1], fx_camera.pos[2], 0.0f,
+                    fx_camera.forward[0], fx_camera.forward[1], fx_camera.forward[2], 0.0f,
+                };
+                const sg_range cam_r = { cam, sizeof(cam) };
+                sg_apply_uniforms(SG_SHADERSTAGE_VS, 1, &cam_r);
+                sg_bindings bind = {};
+                bind.vertex_buffers[0]        = fx_strip_vb;
+                bind.vertex_buffer_offsets[0] = sp.first * kFxStripVertexFloats * int(sizeof(float));
+                bind.fs_images[0]             = TextureImage(sp.key.texture);
+                if (!bind.fs_images[0].id) continue;
+                sg_apply_bindings(&bind);
+                sg_draw(0, sp.count, 1);
+            }
+        }
+    }
+
+    sg_end_pass();
+
+    fx_billboard_queue.clear();
+    fx_particle_queue.clear();
+    fx_strip_queue.clear();
+    fx_camera.set = false;
+    lit_target_dirty = true;
 }

@@ -1,0 +1,26 @@
+# TFlameAnimator - MEDIUM CONFIDENCE CANDIDATE
+# (Loader keyword "FLAME" — likely TFlameAnimator, the bridge that wraps
+# TFlameEffect for imagery-defined flames.)
+source_class: "TFlameAnimator"
+ghidra_class: "cls_0x5a9d88"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "FLAME" string at .rdata 005e10f4 (uppercase — loader keyword form,
+#     consistent with TFlameAnimator's imagery-loader entry rather than
+#     RegisterObjectClass type tag) has 1 XREF: 004e4ea0 in cls_0x5a9d88
+#     (delta +0x110 in fn 0x4e4d90).
+#   - cls_0x5a9d88 size 264 bytes, 5 methods, self-allocated 0x100 bytes.
+#   - Inherits from TEffect chain (cls_0x5b0074::~cls_0x5b0074 in dtor).
+#   - Note the sibling uppercase loader keywords clustered nearby:
+#       SHIELD (005e10ec), FLAME (005e10f4), RIBBON (005e10e4)
+#     all live in cls_0x4e4400 (a loader/registrar free fn region), NOT in
+#     a per-effect class. So FLAME here is the *consumer* in cls_0x5a9d88's
+#     init, matching the TFlameAnimator role.
+#
+# Lower confidence than DragonFire/IceBolt etc because only 1 XREF lands
+# in this class — but the size + inheritance + loader-keyword pairing
+# matches expectations for TFlameAnimator.
+
+fields:
+methods:

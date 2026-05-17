@@ -1,0 +1,27 @@
+# TYFireBallEffect (Yhagoro's fireball variant) - MEDIUM CONFIDENCE CANDIDATE
+# Not in current INVENTORY — Yhagoro-NPC-specific projectile.
+source_class: "TYFireBallEffect"
+ghidra_class: "cls_0x5b4814"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "YFireBall" string at .rdata 005e1b58 has 2 XREFs:
+#       005130e0 (delta +0x110 in fn 0x512fd0, owner cls_0x5b4814)
+#       00513210 (delta +0x110 — actually the same fn region)
+#   - "yhagoro" name string at .rdata 005e1b10 XREF at 0x0051336e (+0x26e
+#     in cls_0x5b4814) — confirms class is Yhagoro-NPC-coupled.
+#   - "FIRESHOOT" 2nd XREF at 0x0051323d (+0x13d) and "FIREHIT" 2nd XREF
+#     at 0x0051373e (+0x63e) — both in this class, mirroring FireBall's
+#     launch+hit event names but Y-prefixed.
+#   - cls_0x5b4814 size 732 bytes, 7 methods, self-allocated 0x4cc bytes
+#     (same as cls_0x5b4290 = TFireBallEffect — suggests YFireBall is
+#     literally a TFireBallEffect subclass with no extra fields, just
+#     overridden behaviour).
+#   - Inherits from cls_0x5a50e8 (MissileEffect hierarchy).
+#
+# Open: TYFireBallEffect doesn't appear by name in the INVENTORY but
+# would add a new row. Probably scripted as a TFireBallEffect variant
+# in the binary — confirm against pre-release source effect class list.
+
+fields:
+methods:

@@ -1,0 +1,28 @@
+# TMissileEffect (base) - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TMissileEffect"
+ghidra_class: "cls_0x5b3c18"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "Photon" second XREF at 0x005104a0 lands +0x50 in fn 0x510450 of
+#     cls_0x5b3c18.
+#   - "FireBall" first XREF at 0x00510bb0 lands +0x760 in cls_0x5b3c18.
+#   - "lightning" XREFs first two (0x0051040a, 0x00510476) AND last
+#     (0x00515355) all land in cls_0x5b3c18 — a shared sound-key for the
+#     entire missile family.
+#   - cls_0x5b3c18 size 404 bytes, 6 methods.
+#   - Dtor calls cls_0x5a50e8::~cls_0x5a50e8 — so cls_0x5b3c18 inherits
+#     from cls_0x5a50e8 (the MissileEffect-family root).
+#   - Multiple distinct registrations (Photon + FireBall + sound key) all
+#     landing in one class strongly suggests this IS the shared base
+#     (TMissileEffect) where common registrar/loader code lives, rather
+#     than a specific subclass.
+#
+# Note: cls_0x5a50e8 itself is 276 bytes with 107 functions — almost
+# certainly a misattributed multi-class blob (Ghidra concatenated
+# unrelated free functions). The "TMissileEffect = cls_0x5b3c18"
+# hypothesis is consistent only with the registered-base interpretation;
+# the deeper "what is cls_0x5a50e8" question is OPEN.
+
+fields:
+methods:

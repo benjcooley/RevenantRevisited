@@ -1637,6 +1637,19 @@ void GetParameters(int argc, char **argv)
             strncpyz(StartupTestMode, p.c_str(), sizeof(StartupTestMode));
     }
 
+  // VFX=<effect_id> — pre-select an effect in --test=vfx (e.g.
+  // --vfx=TStripEffect). Empty = default (first alphabetically).
+    {
+        std::string p;
+        if (arg_param(cmd, "vfx", p))
+            strncpyz(StartupVfxId, p.c_str(), sizeof(StartupVfxId));
+    }
+
+  // VFX-NO-UI — suppress the ImGui VFX Browser panel (for clean
+  // effect-only screencaps). Flag-style: --vfx-no-ui (no value).
+    if (arg_flag(cmd, "vfx-no-ui"))
+        StartupVfxHideUi = true;
+
   // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.
   // Empty = the default hard-coded pick (0_2_25, Misthaven).
     {

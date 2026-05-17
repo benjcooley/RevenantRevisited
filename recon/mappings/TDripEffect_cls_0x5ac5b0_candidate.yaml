@@ -1,0 +1,21 @@
+# TDripEffect - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TDripEffect"
+ghidra_class: "cls_0x5ac5b0"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "Drip" string at .rdata 005e11d4 has 2 XREFs:
+#       004f0f70 (delta +0x7f0 in fn 0x4f0780, owner cls_0x5ac5b0)
+#       004f10a0 (delta +0x920 in fn 0x4f0780, owner cls_0x5ac5b0)
+#     Both XREFs in one registration fn inside cls_0x5ac5b0.
+#   - cls_0x5ac5b0 size 392 bytes, 5 methods, self-allocated 0x118 bytes.
+#   - Inherits from TEffect chain (cls_0x5b0074::~cls_0x5b0074 in dtor).
+#   - The same class also handles "ripple" XREFs at 0x4f0813 and 0x4f116e
+#     (which fall inside its fns 0x4f0780/0x4f1140) — so this class might
+#     actually be a RIPPLE-related effect (TRippleEffect base or TDripEffect
+#     which generates ripples on impact). The XREF chain ripple→Drip suggests
+#     drip drops produce ripples — natural pairing.
+#   - The dedicated TRippleEffect candidate is cls_0x5ac340 (different class).
+
+fields:
+methods:

@@ -1,0 +1,22 @@
+# TRippleEffect (or TRippleAnimator) - MEDIUM CONFIDENCE CANDIDATE
+source_class: "TRippleEffect"
+ghidra_class: "cls_0x5ac340"
+confidence: "MEDIUM"
+
+# Evidence:
+#   - "Ripple" string at .rdata 005e11cc has 2 XREFs:
+#       004f0720 (delta +0x310 in fn 0x4f0410, owner cls_0x5ac340)
+#       004f0760 (delta +0x350 in fn 0x4f0410, owner cls_0x5ac340)
+#   - cls_0x5ac340 size 396 bytes, 6 methods, vtable 100 bytes (25 vmethods).
+#   - Inherits from cls_0x5b0074 (TEffect candidate).
+#   - Note: also has lowercase "ripple" strings at 005e102c/1034/1044 that hit
+#     OTHER classes (cls_0x5ac5b0, cls_0x5ac83c, cls_0x5acf9c) — those classes
+#     consume the runtime "ripple" event name, suggesting cls_0x5ac5b0/cls_0x5acf9c
+#     might be TRippleAnimator / TDripEffect / TDripAnimator etc.
+#
+# Open questions: which of the four ripple-touching classes is the Effect,
+# Animator, drip-Effect, and drip-Animator. Need vtable-shape matching against
+# source headers.
+
+fields:
+methods:
