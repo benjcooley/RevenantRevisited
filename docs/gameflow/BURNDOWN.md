@@ -150,7 +150,7 @@ a status changes.
 | [x] | Confirmed runtime: master.s parses 24 protos + state.def 82 vars; forest.s adds 19 on area enter | 2026-05-17 |
 | [x] | Pump driver verified — `TGameModeImpl::Tick` → `MapPane.PulseObjects` → `inst->Pulse` → `ContinueScript` → `script->Continue(this)` already wired (no new code needed) | 2026-05-17 |
 | [x] | Retire/refactor the 3 `#if 0` MSVC-debug-heap blocks in script.cpp | 2026-05-17 (b2bd02a) |
-| [~] | **T8.1 RETAIL-SYNC** — retail-sync `src/script.{cpp,h}` against `recon/discovered/cls_TScript*` (~1700 lines decomp). Pre-release implementation has drifted (retail TScriptManager class is 32KB+ with three inline arrays; pre-release uses separate gamestate member). Owned by a dedicated sync subagent on a sub-branch off feature/gameflow | 2026-05-17 |
+| [x] | **T8.1 RETAIL-SYNC** — `src/script.{cpp,h}` synced against `recon/discovered/cls_TScript*` (~1700 lines decomp). New: TScriptManager.instances + fileowners registries, ObjectScript class-name second-pass match (now actually attaches DOOR1 etc. at boot), TGameState::STATE_INVALID = 0xfeced300, AddScript port, USE-trigger fallback to proto-self name. Continue/Triggered/End keep pre-release C++ because retail bodies hook subsystems not yet ported (dialog FSM, player combat FSM, multi-context vftable slots) — flagged `TODO(revsync)` in-source. Per-method `// REVSYNC: @ <addr>` provenance markers | 2026-05-17 (52904fe) |
 | [ ] | TRIGGER_ALWAYS verified live (after sync) | — |
 | [ ] | TRIGGER_DIALOG — click-on-character handler (depends on T9) | — |
 | [ ] | TRIGGER_PROXIMITY — per-frame distance check | — |
