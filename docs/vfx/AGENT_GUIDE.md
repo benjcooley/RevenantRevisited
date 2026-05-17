@@ -206,6 +206,22 @@ op a standard-shape effect needs (e.g. gravity, alpha curve), add the
 op generically and migrate. If the engine needs three new ops *just*
 for one effect's quirks, that effect is probably bespoke.
 
+**Bespoke effects often combine bespoke + engine.** A "fireball" effect
+class is fundamentally bespoke (multi-phase state machine, I3D mesh
+advance along a flight path, hit-resolution callback), but the
+particle sub-pieces it spawns — ember trail behind the missile,
+explosion-burst at impact, smoke puffs at death — should go through
+the engine via `TParticleEffectComponent` / declared bucket-emitter
+defs. Same for a lightning bolt with spline-jittered geometry that
+also emits spark particles, or a sword swipe whose strip is bespoke
+but whose hit-spark accent is engine. **Bespoke owns the unique;
+engine owns the particles inside it.**
+
+The decision is per-subsystem, not per-effect: a bespoke effect can
+declare an `effects.def` block for its particle sub-emitters and
+construct a `TParticleEffectComponent` from C++ rather than from a
+top-level builder registration. The engine doesn't care who calls it.
+
 ### 3.3 Diagnostic ladder (mandatory)
 
 Per PARTICLE_EFFECTS §3.2, every effect goes through these visible stages
