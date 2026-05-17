@@ -145,19 +145,24 @@ a status changes.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | Confirm `TScriptManager` compiles + links in current build | — |
-| [ ] | Pump `ContinueAllScripts()` from `TPlayScreen::Update` | — |
-| [ ] | TRIGGER_ALWAYS verified live | — |
+| [x] | Confirm `TScriptManager` compiles + links in current build | 2026-05-17 |
+| [x] | Wire `ScriptManager.Initialize()` into InitGlobals (step 23) + `Close()` into inverse | 2026-05-17 (b2bd02a) |
+| [x] | Confirmed runtime: master.s parses 24 protos + state.def 82 vars; forest.s adds 19 on area enter | 2026-05-17 |
+| [x] | Pump driver verified — `TGameModeImpl::Tick` → `MapPane.PulseObjects` → `inst->Pulse` → `ContinueScript` → `script->Continue(this)` already wired (no new code needed) | 2026-05-17 |
+| [x] | Retire/refactor the 3 `#if 0` MSVC-debug-heap blocks in script.cpp | 2026-05-17 (b2bd02a) |
+| [~] | **T8.1 RETAIL-SYNC** — retail-sync `src/script.{cpp,h}` against `recon/discovered/cls_TScript*` (~1700 lines decomp). Pre-release implementation has drifted (retail TScriptManager class is 32KB+ with three inline arrays; pre-release uses separate gamestate member). Owned by a dedicated sync subagent on a sub-branch off feature/gameflow | 2026-05-17 |
+| [ ] | TRIGGER_ALWAYS verified live (after sync) | — |
 | [ ] | TRIGGER_DIALOG — click-on-character handler (depends on T9) | — |
 | [ ] | TRIGGER_PROXIMITY — per-frame distance check | — |
 | [ ] | TRIGGER_CUBE — entry detection | — |
 | [ ] | TRIGGER_ACTIVATE / USE / GIVE / GET — coord with ui inventory | — |
 | [ ] | TRIGGER_COMBAT / DEAD — coord with core combat | — |
 | [ ] | Mainline ImGui console panel (replaces threaded TConsolePane) | — |
-| [ ] | Retire/refactor the 3 `#if 0` MSVC-debug-heap blocks in script.cpp | — |
 | [ ] | `--test=script` patrol-and-say NPC sample | — |
 
 **Exit:** Scripts pump every frame; triggered scripts fire from in-game; console executes commands.
+
+**Notes:** Per-object script execution is already plumbed in the engine — every `TObjectInstance::InitScript(ScriptManager.ObjectScript(this))` site attaches a script, every `Pulse()` advances it. What was missing was `ScriptManager.Initialize()` itself (zero callers in the modern boot path); that's fixed. Trigger-firing verification + per-trigger-type live tests are gated on the T8.1 retail sync — pre-release `TScript::Triggered` is 199 retail lines vs. our shorter pre-release impl, and triggers gate every observable script behavior.
 
 ---
 
