@@ -196,8 +196,70 @@ The editor `TConsolePane` body sitting in `cls_0x5a4358_likely_TTextBar.cpp` is 
 
 **Pending for next wave:**
 
-- Extract TTextBar leaf vtable address (constructor called from `FUN_0054bf70`)
-- Per-method extract + golden-path match for Print / Clear / SetHealthDisplay / SetLevels / ClearHealthDisplay / DrawBackground / Pulse / Animate
+- Extract TTextBar leaf vtable address (constructor called from `FUN_0054bf70`) — **DONE by Wave-2A, see section below**
+- Per-method extract + golden-path match for Print / Clear / SetHealthDisplay / SetLevels / ClearHealthDisplay / DrawBackground / Pulse / Animate — partial (Close done by Wave-2A; rest pending)
 - Rename `cls_0x5a4358_likely_TTextBar.{cpp,h}` files (this is a file-rename, not text-rename — needs coordinator)
 - Update `docs/ui/RECON_UI_COVERAGE.md` and `recon/docs/CLASS_MAPPING.md` to retract the cls_0x5a4358 ↔ TTextBar mapping
 - Update `RETAIL_UI_RECOVERY_PLAN.md` line 104 to point at `0x54bf70` instead
+
+---
+
+## Wave-2A leaf-class identification (2026-05-16) — `cls_0x5a5560 = TTextBar` CONFIRMED
+
+### What was done
+
+Followed the Wave-1A protocol from B.r3 to find the actual leaf class:
+
+1. **Located the call site** in `TPlayScreen::Initialize @ 0x47a660` for the text-bar init: disassembled around the `"Trouble initializing text bar"` string anchor (`0x5d7300`) and found `0x0047abf8: MOV ECX, 0x65c5d0; CALL 0x54bf70`. So the global instance is **`0x65c5d0`**.
+2. **Searched for the vtable wire** via `RefsTo.java 0x65c5d0` — exactly **one** WRITE-mode reference: `00480725 (WRITE) in <none>`. That's a global-ctor stub address (Wave-1A's per-pane ctor pattern).
+3. **Decompiled** `FUN_00480725` (force-created via `DecompileAddr.java`). Body:
+   ```cpp
+   DAT_0065c5d0 = &PTR_FUN_005a5560;     // <- vtable address
+   _DAT_0065c5d8 = 0x196;                // rect width = 406
+   _DAT_0065c5e8 = 0x196;
+   _DAT_0065c5dc = 0xc6;                 // rect height = 198
+   _DAT_0065c5ec = 0xc6;
+   _DAT_0065c5e0 = 0xe;                  // padding/border = 14
+   _DAT_0065c5f0 = 0xe;
+   ```
+   406×198 — consistent with a wide transparent overlay band, **not** the pre-release single-line 80-char strip.
+4. **Dumped vtable @ 0x5a5560** (35 slots) — exactly **31 used slots, leaf-TPane fingerprint** (slot 2 = `0x491bd0`, slot 9 = `0x491a80`, slot 16 = `0x491bb0`; matches TBottomPane/TSidePane/TPlyrStatusBar from Wave-1A). Overrides cluster in the documented `0x54c000..0x54d800` range (slots 7=0x54c600, 13=0x54c9c0, 19=0x54c460, 20=0x54c440, 23=0x54c780, 28=0x54d4a0). No method-count explosion, no mixed-purpose virtuals — **not Ghidra-merged**.
+5. **Extracted slot 1** (`FUN_0054c3d0`) — recon/discovered/cls_0x5a5560_TTextBar_Close_54c3d0.cpp. Body:
+   ```cpp
+   FUN_004830f0(this+0x6c);              // free() text buffer
+   if (this+0x84) (**(*this+0x84))(1);  // destroy mosaic surface 1
+   if (this+0x88) (**(*this+0x88))(1);  // destroy mosaic surface 2
+   if (this+0x8c) (**(*this+0x8c))(1);  // destroy mosaic surface 3
+   FUN_00491970();                       // TPane::Close (base)
+   ```
+   This is **TTextBar::Close** — it tears down exactly the structure that `FUN_0054bf70` (Initialize) builds up (text buffer at +0x6c, three mosaic surfaces at +0x84/+0x88/+0x8c). The structural symmetry is the decisive confirmation.
+
+### Results
+
+| Symbol | Address | Role |
+|---|---|---|
+| `cls_0x5a5560` | `0x5a5560` (vtable) | **TTextBar** (the real retail leaf class) |
+| `0x65c5d0` | (data, global) | TTextBar global instance (singleton) |
+| `0x00480725` | (code, global ctor stub) | wires `[0x65c5d0] = 0x5a5560` and inits rect |
+| `0x54bf70` | (vtable slot 0) | `TTextBar::Initialize` |
+| `0x54c3d0` | (vtable slot 1) | `TTextBar::Close` |
+
+### Evidence summary (4 lines, well over 98%)
+
+1. Retail string `"Trouble initializing text bar"` at the call site — `[B.r3 anchor + B.r4 inheritance]`.
+2. Vtable wire via the unique WRITE-mode reference to the global at `0x00480725` (.CRT$ region pattern).
+3. Vtable @ `0x5a5560` has 31 slots with the leaf-TPane fingerprint shared with the four Wave-1A panes — not merged.
+4. Slot-1 body at `0x54c3d0` (Close) frees exactly the 3 mosaic surfaces + text buffer that Initialize allocates — structural reciprocity is a structural fingerprint, not a coincidence.
+
+### Renames added in `agent_ui_wave2_textbar_bottom.txt`
+
+- Class label: `cls_0x5a5560 → cls_0x5a5560_TTextBar`
+- Slot 0 (Initialize): `FUN_0054bf70` → `FUN_0054bf70_TTextBar_Initialize` (replaces Wave-1C's `_init` placeholder)
+- Slot 1 (Close): `FUN_0054c3d0` → `FUN_0054c3d0_TTextBar_Close`
+- Plus the `meth_`/`virt_meth_` variants of both.
+
+### What's left for the next wave
+
+- Identify slots 7/13/19/20/23/28 by extracting their bodies and matching against pre-release `Print` / `Clear` / `Pulse` / `Animate` / `DrawBackground` / `SetHealthDisplay` / `SetLevels` / `ClearHealthDisplay` — they should all sit in this set since B.r4 already confirmed `FUN_0054cb00` (DrawHealth inner block, exact constant match) and `FUN_0054cd40` (large, likely DrawBackground outer) are TTextBar methods. Most of the work is now identification by signature.
+- Update the recon-classes file rename (`cls_0x5a4358_likely_TTextBar.{cpp,h}` → `cls_0x5a4358_TConsolePane.{cpp,h}`) — still coordinator's job.
+
