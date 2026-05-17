@@ -29,6 +29,21 @@ Per the user (original developer): "Revenant is very much that kind of a fightin
 
 Treat this as the **lens** for every UI reconstruction call: optimize for **fast combat readability + at-a-glance state + bottom-of-screen action shortcuts**, not menu-driven RPG comfort.
 
+### Target-lock orbit combat (key mechanic that drives the HUD)
+
+When the player acquires a target, the game's movement model **shifts into a circular orbit around the target**. Attacks become **linear player→target** — no 2D aiming. The user (original developer) notes Revenant may have been one of the first games to do this (mid/late 90s).
+
+Implications for the HUD that fall out of this:
+
+- **The target panel really IS the opponent in a ring with you** — both characters constantly face each other across the screen, matching the upper-left + upper-right placement (Street Fighter / MK framing).
+- **Target is high-commitment** — the player is orbiting one opponent until they explicitly cycle off. The right panel is not a peripheral "current hover info"; it's the opponent the player is engaged with. Its prominence matches that weight.
+- **No aim cursor needed in the HUD** — attacks are linear from player to target by virtue of the orbit lock. The HUD doesn't need to surface aim direction / cone-of-attack — the lock itself does that.
+- **Smooth target swap matters** — when the player steers to switch targets, the right panel must update without a hard cut so the combat flow isn't broken. Animate the transition.
+
+### Heritage
+
+The user (Revenant's original developer) was clear that creating Revenant was hard and there were "no games to crib from" — most of the design was original. The two explicit references they did borrow from are **Street Fighter and Mortal Kombat** (face-off framing + fast-action input). Expect non-conventional design choices throughout — when something in the UI doesn't match a familiar genre convention, the right call is usually to honor what's in retail rather than "fix" it to match contemporary patterns.
+
 ---
 
 ## Element catalog (per visual evidence)
