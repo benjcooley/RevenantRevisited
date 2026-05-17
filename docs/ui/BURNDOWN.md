@@ -38,8 +38,8 @@ The HUD render-path infrastructure was landed in commit `80879c2` ("engine: HUD 
 
 ## Phase B — HUD bring-up
 
-- `[~]` **B.1 `TTextBar`** — step 1 done in `4df1bcf` (`--test=ui-textbar` verifies Print/Clear/SetHealthDisplay/ClearHealthDisplay data API contract). Step 2 pending: visual `DrawBackground` port (Display.Box/WriteText → Renderer-> primitives; needs widget-atlas bitmap source + font integration).
-- `[~]` **B.2 `THealthBar`, `TStaminaBar`** — step 1 done in `495a28c` (`--test=ui-statusbars` verifies SetLevel/ChangeLevel/clamp/GetHue formulas; **health.dat / stamina.dat both load via rev_fopen on GOG install**). Step 2 pending: visual port (Display.Box/PutHue → tinted Renderer-> composite).
+- `[~]` **B.1 `TTextBar`** — step 1: `4df1bcf` (data API contract). Step 2: `7873ac1` (visualizer on HUD pipeline at retail rect 122×336 198×14). Step 3 pending: real text rendering (Display.WriteText → Renderer font primitive) + healthbar bitmap.
+- `[~]` **B.2 `THealthBar`, `TStaminaBar`** — step 1: `495a28c` (data API + retail asset load). Step 2: `7873ac1` (visualizer on HUD pipeline; animated bottom-filling colored gauges at left/right edges; SetLevel sine-cycle). Step 3 pending: tube bitmap rendering via tubedata + tinted composite.
 - `[x]` **B.3 `TCursorHud`** — landed in `80879c2` as a `THudDrawable` subclass registered at z=0 (below other HUD), with OS-pointer / game-cursor swap on ImGui ownership. See [src/cursor.h:32](../../src/cursor.h#L32). Win32-clipping `#if 0` still pending if/when relevant; deferred (cursor works without it).
 - `[ ]` **B.4 `TQuickSpellPane`** + `--test=ui-quickspells`.
 - `[ ]` **B.5 `TMultiCtrlPane`** — 4-button switcher with 1/2/3/4 keys.
@@ -94,7 +94,9 @@ Per memory `feedback-code-style`, `feedback-modern-cpp`, `feedback-const-correct
 
 ## Notes log (most-recent first)
 
-- **2026-05-16** — Phase B started. B.1 step 1 (`4df1bcf`, TTextBar data-API contract) and B.2 step 1 (`495a28c`, TStatusBar/THealthBar/TStaminaBar data-API + retail-asset load verification) shipped. Visual-render step blocked on porting Display.Box/PutHue/WriteText to new renderer primitives (likely needs a `DrawSolidRect` or tinted-composite addition).
+- **2026-05-16** — Phase B step 2 for B.1 + B.2 (`7873ac1`): first visible panes on the new HUD pipeline. Each test mode registers a `THudDrawable` visualizer that paints `DrawSolidRect` at the pane's retail rect. Status bars animate level via sine cycle. Pattern is the template for remaining pane bring-ups.
+- **2026-05-16** — `TRenderer::DrawSolidRect` (`a8e36f3`): per-color 1x1 texture cache + existing composite pipeline. Unblocks visual fallback for any pane that hasn't ported its retail draw path.
+- **2026-05-16** — Phase B started. B.1 step 1 (`4df1bcf`, TTextBar data-API contract) and B.2 step 1 (`495a28c`, TStatusBar/THealthBar/TStaminaBar data-API + retail-asset load verification).
 - **2026-05-16** — A.2h `OnCanvasResize` hook landed in `5ddce9c`. Phase A.2 complete except for A.2f.ii (renderer scissor) and A.2f.iii (ScrollView), both deferred to first B-phase consumer.
 - **2026-05-16** — A.2g alpha (soft-edge) clip API landed in `c9e60da`. Renderer fade shader TODO.
 - **2026-05-16** — A.2f scope split: A.2f.i TPane clip-rect API landed in `69446de` (`--test=ui-clip` verified). A.2f.ii renderer-side scissor deferred to first B-phase consumer. A.2f.iii general ScrollView carved out as separate item (TScrollPane is parchment-text, not a viewport container).
