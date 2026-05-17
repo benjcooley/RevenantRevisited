@@ -165,18 +165,31 @@ Highlights (full status in [RETAIL_UI_RECOVERY_PLAN.md](RETAIL_UI_RECOVERY_PLAN.
 
 ## Phase C — OOG bring-up
 
-- `[ ]` **C.0 Smacker (.SMK) video playback support** — required by C.1 main menu intro + credits roll + inter-mission FMVs. Pre-release `src/` has NO Smacker decoder or movie player (no SMK references found). Assets shipped with retail: `data/Disk2/MIX_CREDITS.SMK`, `data/Disk2/MIX_FMV1.SMK`, `data/Disk2/MIX_FMV2.SMK`, `data/Disk2/Mix_fmv3english.smk` (4 total). Scope:
-  - **Decoder selection — GATED ON LICENSE AUDIT (TODO).** RAD Game Tools' official Smacker SDK is proprietary (no go). Known open-source decoders all need license verification before vendoring:
-    - `libsmacker` (Greg Kennedy) — believed LGPL-2.1+; if so, requires either dynamic linking OR providing object files / replaceable lib so users can relink. Doable for our binary-into-GOG-install model but adds packaging burden.
-    - FFmpeg's Smacker decoder — LGPL/GPL depending on build config; same dynamic-link/replace constraints, much heavier dep than we want for one codec.
-    - ScummVM's Smacker decoder — GPL-2+; viral, almost certainly off-spec for our distribution.
-    - Clean-room implementation from public format documentation (MultimediaWiki) — most permissive but largest implementation cost; would need a careful "no GPL source read" workflow.
-  - **Action:** before any port work, pick the decoder + confirm license fit with the distribution model. Vendor location: `thirdparty/<chosen>/` (e.g. `thirdparty/libsmacker/`) once cleared.
-  - **Video frame upload pipeline (UI worktree scope):** decoded YV12 (or RGB-converted) frame uploaded into a `sokol_gfx` texture per frame; cinematic skippable on Esc / click (generic input dismissal).
-  - **Audio decode + playback: COORDINATE WITH AUDIO SUBSYSTEM (sibling worktree).** Not in this worktree's scope. The decoder will yield PCM; whoever owns the audio subsystem provides the playback channel.
-  - **Screen wrapper:** `TCinematicScreen` (new) — `TScreen` subclass that owns the decoder stream + per-frame `Update()` that advances/uploads/draws. Composes underneath the existing OOG screen stack so a menu can transition into it.
-  - **Test mode:** `--test=ui-cinematic <path>` — load one SMK and play it through the new pipeline to verify decode + frame upload before wiring to game flow. Audio verification depends on the sibling-worktree audio subsystem.
-  - **Used by:** C.1 (intro on first New Game), C.? (inter-mission), C.? (credits trigger from main menu).
+- `[ ]` **C.0 Smacker (.SMK) video playback support** — required by C.1 main menu intro + credits roll + inter-mission FMVs. Pre-release `src/` has NO Smacker decoder or movie player. Retail assets (must play as-is, no re-encoding per distribution model): `data/Disk2/MIX_CREDITS.SMK`, `data/Disk2/MIX_FMV1.SMK`, `data/Disk2/MIX_FMV2.SMK`, `data/Disk2/Mix_fmv3english.smk`.
+
+  **Hard constraints:**
+  - MUST decode the original `.SMK` bitstream at runtime (assets are read-only stock GOG install — no re-encode to MP4/MPEG-1/etc allowed).
+  - NO dynamic libraries (so LGPL/GPL decoders can't be vendored even with dynamic-link workaround).
+  - Statically linked into the single binary that drops into the GOG install.
+
+  **Decoder choice:**
+  - `libsmacker` (Greg Kennedy) — confirmed LGPL-2.1 (license file checked 2026-05-17). Rules out per "no dynamic libs".
+  - FFmpeg / ScummVM Smacker — LGPL or GPL respectively. Rules out same reason.
+  - RAD Game Tools Smacker SDK — proprietary, paid, unknown current availability via Telegamez/Epic. Probably wrong fit for a fan project.
+  - **Selected path: clean-room implementation in `thirdparty/revsmk/`** (MIT or zlib licensed, ours). Bitstream format is publicly documented (MultimediaWiki + format reverse-engineering articles). Realistic scope ~1500-2500 lines of C++: header + frame index + Huffman trees (MMAP/MCLR/FULL/TYPE) for video, DPCM+Huffman for audio. Implementation requires a careful "no GPL/LGPL Smacker source read" workflow to keep the codebase clean-room.
+
+  **Alternative if clean-room timeline doesn't fit V1:**
+  - **C.0a fallback — skip cinematics.** Ship V1 with a "Press Esc to continue" placeholder where intro/credits/FMVs would play. Decoder lands in a follow-up release. Doesn't compromise Classic-mode gameplay faithfulness (the game proper still runs precisely faithful to retail); only the cinematic interstitials are absent.
+
+  **Video frame upload pipeline (UI worktree scope):** decoded RGB/YUV frame uploaded into a `sokol_gfx` texture per frame; cinematic skippable on Esc / click.
+
+  **Audio decode + playback: COORDINATE WITH AUDIO SUBSYSTEM (sibling worktree).** Decoder yields PCM (DPCM-decoded); sibling worktree owns the playback channel.
+
+  **Screen wrapper:** `TCinematicScreen` (new) — `TScreen` subclass that owns the decoder stream + per-frame `Update()` that advances/uploads/draws.
+
+  **Test mode:** `--test=ui-cinematic <path>` — feed one .SMK through the decoder + frame upload pipeline to verify visuals before wiring to game flow.
+
+  **Used by:** C.1 (intro on first New Game), C.? (inter-mission), C.? (credits trigger from main menu).
 - `[ ]` **C.1 `TMainMenuScreen`** + `--test=ui-mainmenu`.
 - `[ ]` **C.2 Popup mechanism** — `TPopupScreen` or modal helper; reused by everything downstream.
 - `[ ]` **C.3 `TExitConfirmScreen`** — trivial pattern shakedown.
