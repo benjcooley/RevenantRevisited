@@ -74,14 +74,17 @@ This retrofits the pre-release `TTextBar::SetHealthDisplay(name, level)` API in 
 
 **Targeting is player-controlled** — the player explicitly steers toward / away from enemies to cycle the target. The right panel observes the target pointer dynamically: when the player switches targets, the panel updates to display the new opponent (presumably with a smooth transition, not a hard cut, but verify against retail). Two-opponents-facing-off framing reinforced — the target is the opponent the player is currently engaging.
 
-**Implementation: single instance, two-pass draw with stat-source swap (CORRECTED 2026-05-16 by Wave-2B).** The original framing assumed "one class, two instances (left=player, right=target)" but `FindBytes` on TPlyrStatusBar's vtable address (0x5a54e4) returned exactly ONE wire site in the binary — the player instance. There is no second global instance.
+**Implementation: single instance, two-pass draw with stat-source swap (CORRECTED 2026-05-16 by Wave-2B; CONFIRMED from extracted draw body 2026-05-16 by Wave-3A).** The original framing assumed "one class, two instances (left=player, right=target)" but `FindBytes` on TPlyrStatusBar's vtable address (0x5a54e4) returned exactly ONE wire site in the binary — the player instance. There is no second global instance.
 
-The likely real architecture (to be verified in Wave-3 by extracting TPlyrStatusBar's draw methods):
-- **Single TPlyrStatusBar instance**
-- Draw method called **twice per frame**, once with the player as stat source and once with the current target — same widget, two paint operations, two source-stat pointers
-- OR: one paint operation that internally walks both stat sources
+**Actual architecture (per the extracted body — `FUN_0054af20`, vtable slot 23, 3909 bytes):**
+- **One paint method that knows about both sides.** Single function, two distinct draw blocks separated by a target-null check.
+- **Left pass** reads `DAT_00667fcc` (global current-player pointer) and paints at fixed x-coords (0x44).
+- **Right pass** reads `DAT_00667fcc[0x38][0x11]` (player → target object → character chain) and paints at MIRRORED x-coords (`pane_width - 0x88/-0x91/-0x79`). Pane is wide enough to span both anchored content regions.
+- **No `SetSource()` / `SetTarget()` API on the class** — character binding is implicit through the global pointer. The right block early-returns if no target.
+- **Smooth target swap** via animation counters at instance fields +0xd4 (left) / +0xdc (right) that ramp toward 6 (state-managed in slot 19; portrait surface rebuild in slot 20).
+- Slot 7 (`FUN_0054ab80`, 645 bytes) has the same two-pass shape as a partial-redraw variant gated on the per-side animation counters.
 
-The face-off framing IS real (the user's "two opponents facing off" description holds — Locke vs current target). It's just implemented via re-draw, not re-instance. **Don't model the port as two-instance** — verify against the actual draw method then mirror retail.
+The face-off framing IS real (Locke vs current target). It's implemented via a single composite draw, not via two instances or two separate Draw() calls. **For the port:** the modernized C++ could either mirror retail's composite shape OR refactor into two parametric `DrawSide(source, originX)` passes — the user's "evolve don't replace" guidance and the existing pre-release `SetHealthDisplay` parametric API suggest the parametric refactor is the right modern shape. See [briefs/B_r8_charpane_draw_buttonpane.md](briefs/B_r8_charpane_draw_buttonpane.md) for full evidence.
 
 **Not to be confused with**:
 - The **"HINSTEN" overlay** in `sample_screen_4` upper-right — that's a fansite-watermark on the screenshot, not in-game UI.
