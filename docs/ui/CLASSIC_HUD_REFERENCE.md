@@ -37,11 +37,17 @@ If you spot a misread in this doc — fix it. The screenshots are authoritative;
 
 **Behavior:** always visible during gameplay. Not collapsible. Updates live as player stats change.
 
-**Two-panel layout confirmed by `sample_screen_3.jpg`** — that screenshot shows panels in BOTH upper corners with portraits + bars. The right-side portrait looks distinct from Locke's (possibly companion / pet / coop second player). My earlier "single-player only has one" guess based on sample_screen_1/2 was wrong; the upper-right just isn't always populated.
+**Two-panel layout** (`sample_screen_3.jpg`): panels in BOTH upper corners with portraits + bars. The **right panel = current targeted enemy** (per user). Like a fighting game — two opponents' stats facing off. Same panel class as §1, just bound to a different stat source.
 
-### 2. Upper-right character panel (when shown)
+### 2. Upper-right character panel = current target (when targeting)
 
-Mirror of §1 (right-aligned). Visible in `sample_screen_3`. Shows another character's portrait + bars in the same shape. Whether this is a coop partner, a pet/companion, or a targeted-NPC info popup is uncertain — needs user confirmation.
+Same class / same visual shape as §1 (mirrored right-aligned). Shown **conditionally — only when the player has a current target**. Displays the targeted enemy's portrait + name + level + three bars (health / mana / stamina, with the same icon set).
+
+This retrofits the pre-release `TTextBar::SetHealthDisplay(name, level)` API in [src/textbar.cpp](../../src/textbar.h) — that "show opponent name + health line in the textbar" path was the **primitive predecessor** of what became the dedicated right-side target panel by retail.
+
+**Implementation implication for recon:** one character-panel class, two instances. The bound stat source determines what's shown:
+- Left instance binds to `Player` (always present once a game starts).
+- Right instance binds to whatever the "current target" pointer is (could be `Player->Target`, `CurrentTarget` global, or similar — recon will identify).
 
 **Not to be confused with**:
 - The **"HINSTEN" overlay** in `sample_screen_4` upper-right — that's a fansite-watermark on the screenshot, not in-game UI.
@@ -193,7 +199,7 @@ This visual reference forces revisions to [RETAIL_UI_RECOVERY_PLAN.md](RETAIL_UI
 
 ## Open questions for the user
 
-1. **Right character panel role** — confirmed in `sample_screen_3` (two panels upper-left + upper-right). Who's the second panel? Coop partner? Pet / companion? Targeted NPC info popup?
+1. ~~Right character panel role~~ — **ANSWERED:** current targeted enemy (like a fighting game). Same class, two instances; right one shown conditionally on target presence.
 2. **Sword-icon circle below character panel** (`sample_screen_4`, below upper-left panel) — is that part of the character panel structure, OR a separate "active weapon / quick equip" pane? If part of the character panel: does it always show (just hidden if no weapon equipped)?
 3. **Sidebar modes count** — I count ~7-8 buttons in the vertical mode-switcher strip. I can identify 5 modes confidently (stats, skills?, inventory, spell book, automap). What are the others?
 4. **Stats vs Skills tab** — in `sample_screen_1` the stats panel has "Stats | Skills" tab buttons. Are those sub-tabs inside one sidebar mode, or two distinct sidebar modes?
