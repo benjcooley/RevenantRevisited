@@ -57,9 +57,11 @@ Same class / same visual shape as §1 (mirrored right-aligned). Shown **conditio
 
 This retrofits the pre-release `TTextBar::SetHealthDisplay(name, level)` API in [src/textbar.cpp](../../src/textbar.h) — that "show opponent name + health line in the textbar" path was the **primitive predecessor** of what became the dedicated right-side target panel by retail.
 
+**Targeting is player-controlled** — the player explicitly steers toward / away from enemies to cycle the target. The right panel observes the target pointer dynamically: when the player switches targets, the panel updates to display the new opponent (presumably with a smooth transition, not a hard cut, but verify against retail). Two-opponents-facing-off framing reinforced — the target is the opponent the player is currently engaging.
+
 **Implementation implication for recon:** one character-panel class, two instances. The bound stat source determines what's shown:
 - Left instance binds to `Player` (always present once a game starts).
-- Right instance binds to whatever the "current target" pointer is (could be `Player->Target`, `CurrentTarget` global, or similar — recon will identify).
+- Right instance binds to whatever the "current target" pointer is (could be `Player->Target`, `CurrentTarget` global, or similar — recon will identify). The instance must **react to target changes**, not snapshot-once-on-show; the player retargets frequently mid-combat by steering.
 
 **Not to be confused with**:
 - The **"HINSTEN" overlay** in `sample_screen_4` upper-right — that's a fansite-watermark on the screenshot, not in-game UI.
