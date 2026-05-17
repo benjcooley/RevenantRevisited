@@ -148,9 +148,22 @@ The face-off framing IS real (Locke vs current target). It's implemented via a s
 
 **Class identity:** `TSideTabsPane` = `cls_0x5a5750` (Wave-1A). Contains **exactly 6 round mode-switcher buttons.**
 
-**Confirmed by user 2026-05-16:** these 6 buttons control what's visible in the sidebar. The sidebar can show **multiple content panes simultaneously** (`sample_screen_1.jpg`: Stats parchment AND Automap circle both visible at once) — so the buttons are not a 1-of-6 mode selector. The exact mapping (per-button independent visibility toggle vs preset combinations) is recovered by extracting TSideTabsPane's click handler (Wave-4 work). The 6 buttons map onto the 5 content classes enumerated in §3 (character paper-doll, stats, spell list, automap, inventory) plus likely one for the book/scroll reader (§3c) which also renders in a sidebar slot.
+**Visibility model — CONFIRMED (Wave-4A, see [briefs/B_r11_sidebar_tab_cascade.md](briefs/B_r11_sidebar_tab_cascade.md)):** the 6 buttons are **TWO INDEPENDENT 3-WAY REGION SELECTORS**, not a flat 1-of-6 picker and not independent toggles:
 
-**Icon-to-content guesses from `sample_screen_1.jpg`** (top to bottom): red heart → character/stats? · blue orb → ? · violet orb → spell list · gold orb → ? · scroll → book/scroll reader · open book → ? Exact bindings confirmed at Wave-4 time from the click handler.
+- **Upper region** (modal state `DAT_0065d1b8`, values 0/1/2):
+  - 0 = **Equip** — `cls_0x5a55dc` (`EquipSidebarPane`, likely `TEquipPane`)
+  - 1 = **Stats** — `cls_0x5a5ba0` (`StatsSidebarPane`, likely `TStatPane`)
+  - 2 = **Book** — `cls_0x5a5ae8` (`SpellbookSidebarPane` per Wave-3B — the player's spell book; iterates known spells)
+- **Lower region** (modal state `DAT_0065d1bc`, values 0/1/2):
+  - 0 = **Inv** — `cls_0x5a58c0` (`InventorySidebarPane`, likely `TInventory`)
+  - 1 = **Map** — `cls_0x5a5658` (`MapSidebarPane`, likely `TAutoMap`)
+  - 2 = **Spell** — `cls_0x5a5978` (`QuickSpellSidebarPane`, src match unclear)
+
+The sidebar shows **one upper-region pane AND one lower-region pane simultaneously** — matching `sample_screen_1.jpg` (Stats upper + Map lower).
+
+**Dispatch path:** routed through `TPlayScreen`'s central command dispatcher `FUN_0047cf40` (a switch over 80+ command IDs, cases 0x7–0xc handle the 6 sidebar mode commands), NOT through `TSideTabsPane`'s click handler. Each case sets the region modal-state global and either closes the active content global or marks the sidebar dirty.
+
+**Structural split (per Wave-4A):** Book and Stats use the heavier TButtonPane-w-DEF intermediate (`cls_0x5a45c8` = TButtonPane per Wave-3A), giving them DEF-widget scrollable-content machinery. Equip / Inv / Map / lower-Spell are leaner plain `TPane` subclasses with no intermediate — they render fixed-position grids/images, no scrolling needed.
 
 **Behavior:** always visible — including when the sidebar content panes are hidden (`sample_screen_4.jpg`, sidebar collapsed state, shows only this strip).
 
