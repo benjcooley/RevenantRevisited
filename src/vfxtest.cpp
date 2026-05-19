@@ -40,11 +40,17 @@
 #include "testconfig.h"  // StartupVfxId, StartupVfxHideUi
 #include "time.h"
 
+#include "stb_image.h"   // diagnostic-backdrop PNG load (forest/dungeon)
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <vector>
+
+#ifndef REV_VFX_TEST_BG_DIR
+#  define REV_VFX_TEST_BG_DIR "tools/vfx/test_backgrounds"
+#endif
 
 extern TObjectClass CharacterClass;
 // PlayerClass already extern'd in revenant.h.
@@ -140,6 +146,15 @@ struct SState
     // the rig also ForcePos()es the effect's owner instance to the same
     // value (see TickCharacterRig).
     VfxTest::SVfxAttachment current_attach;
+
+    // Diagnostic backdrop the user cycles via `B` / the rig sub-panel.
+    // Forest / Dungeon textures are loaded once at Initialize from
+    // tools/vfx/test_backgrounds/ and released in Close. kInvalidTexture
+    // simply means "the PNG didn't load" -- the harness falls back to a
+    // solid backdrop in that case.
+    VfxTest::EVfxBackground background       = VfxTest::EVfxBackground::LtGray;
+    TTextureHandle          forest_texture   = kInvalidTexture;
+    TTextureHandle          dungeon_texture  = kInvalidTexture;
 };
 
 SState g_state;
@@ -969,6 +984,118 @@ const char* DebugModeName(EFxDebugMode m)
     return "?";
 }
 
+// =========================================================================
+//   Diagnostic backdrops (Black / LtGray / Forest / Dungeon)
+// =========================================================================
+
+constexpr float kBackdropLtGrayRgba[4] = { 0.45f, 0.46f, 0.50f, 1.0f };
+constexpr float kBackdropBlackRgba [4] = { 0.0f,  0.0f,  0.0f,  1.0f };
+
+const char* BackgroundName(VfxTest::EVfxBackground b)
+{
+    switch (b)
+    {
+        case VfxTest::EVfxBackground::Black:   return "Black";
+        case VfxTest::EVfxBackground::LtGray:  return "LtGray";
+        case VfxTest::EVfxBackground::Forest:  return "Forest";
+        case VfxTest::EVfxBackground::Dungeon: return "Dungeon";
+    }
+    return "?";
+}
+
+[[nodiscard]] TTextureHandle LoadBackgroundPNG(const char* relpath)
+{
+    if (!Renderer) return kInvalidTexture;
+    char path[1024];
+    std::snprintf(path, sizeof(path), "%s/%s", REV_VFX_TEST_BG_DIR, relpath);
+
+    int w = 0, h = 0, n = 0;
+    stbi_uc* px = stbi_load(path, &w, &h, &n, 4);
+    if (!px) {
+        log_warn("[vfx] failed to load backdrop '%s' (%s); BG entry disabled",
+                 path, stbi_failure_reason());
+        return kInvalidTexture;
+    }
+
+    const size_t bytes = size_t(w) * size_t(h) * 4u;
+    const TTextureHandle texture = Renderer->RegisterTextureAsset(
+        0,
+        px,
+        bytes,
+        w,
+        h,
+        ERendererTextureFormat::RGBA8,
+        bytes,
+        ERendererTextureFilter::Linear);
+    if (texture != kInvalidTexture)
+        Renderer->AddTextureAssetRef(texture);
+    stbi_image_free(px);
+
+    if (texture == kInvalidTexture)
+        log_warn("[vfx] backdrop texture upload failed for '%s'", path);
+    else
+        log_info("[vfx] loaded backdrop '%s' (%dx%d)", path, w, h);
+    return texture;
+}
+
+void LoadBackgroundTextures()
+{
+    g_state.forest_texture  = LoadBackgroundPNG("forest.png");
+    g_state.dungeon_texture = LoadBackgroundPNG("dungeon.png");
+}
+
+void ReleaseBackgroundTextures()
+{
+    if (Renderer) {
+        if (g_state.forest_texture != kInvalidTexture)
+            Renderer->ReleaseTextureAssetRef(g_state.forest_texture);
+        if (g_state.dungeon_texture != kInvalidTexture)
+            Renderer->ReleaseTextureAssetRef(g_state.dungeon_texture);
+    }
+    g_state.forest_texture  = kInvalidTexture;
+    g_state.dungeon_texture = kInvalidTexture;
+}
+
+// Dispatch g_state.background to a renderer call. Black / LtGray pass a
+// solid clear; Forest / Dungeon composite their image into the visible
+// rect with LtGray letterbox bars (so partial-aspect coverage doesn't
+// read as a jarring black band against the rig's mid-tone scene).
+void ApplyBackdrop()
+{
+    if (!Renderer) return;
+    switch (g_state.background)
+    {
+        case VfxTest::EVfxBackground::Black:
+            Renderer->DrawBackdrop(kInvalidTexture,
+                                   kBackdropBlackRgba[0], kBackdropBlackRgba[1],
+                                   kBackdropBlackRgba[2], kBackdropBlackRgba[3]);
+            break;
+        case VfxTest::EVfxBackground::LtGray:
+            Renderer->DrawBackdrop(kInvalidTexture,
+                                   kBackdropLtGrayRgba[0], kBackdropLtGrayRgba[1],
+                                   kBackdropLtGrayRgba[2], kBackdropLtGrayRgba[3]);
+            break;
+        case VfxTest::EVfxBackground::Forest:
+            Renderer->DrawBackdrop(g_state.forest_texture,
+                                   kBackdropLtGrayRgba[0], kBackdropLtGrayRgba[1],
+                                   kBackdropLtGrayRgba[2], kBackdropLtGrayRgba[3]);
+            break;
+        case VfxTest::EVfxBackground::Dungeon:
+            Renderer->DrawBackdrop(g_state.dungeon_texture,
+                                   kBackdropLtGrayRgba[0], kBackdropLtGrayRgba[1],
+                                   kBackdropLtGrayRgba[2], kBackdropLtGrayRgba[3]);
+            break;
+    }
+}
+
+void CycleBackground()
+{
+    int v = int(g_state.background) + 1;
+    if (v > int(VfxTest::EVfxBackground::Dungeon)) v = 0;
+    g_state.background = VfxTest::EVfxBackground(v);
+    log_info("[vfx] background -> %s", BackgroundName(g_state.background));
+}
+
 void DrawBrowserPanel()
 {
     ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
@@ -1070,6 +1197,37 @@ void DrawBrowserPanel()
         }
     }
 
+    // Diagnostic backdrop -- dev cycles Black/LtGray/Forest/Dungeon to vet
+    // effects against different scene contexts (additive bloom, alpha
+    // see-through, real outdoor + interior screenshots). Unconditionally
+    // visible so it works for both rig-attached and free-effect previews.
+    ImGui::Separator();
+    {
+        int32_t bg = int32_t(g_state.background);
+        ImGui::TextUnformatted("Backdrop:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(160.0f);
+        const char* items[] = { "Black", "LtGray", "Forest", "Dungeon" };
+        if (ImGui::Combo("##backdrop", &bg, items, IM_ARRAYSIZE(items)))
+        {
+            g_state.background = VfxTest::EVfxBackground(bg);
+            log_info("[vfx] background -> %s (UI)",
+                     BackgroundName(g_state.background));
+        }
+        if (g_state.background == VfxTest::EVfxBackground::Forest &&
+            g_state.forest_texture == kInvalidTexture)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(missing)");
+        }
+        if (g_state.background == VfxTest::EVfxBackground::Dungeon &&
+            g_state.dungeon_texture == kInvalidTexture)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(missing)");
+        }
+    }
+
     ImGui::Separator();
     int32_t mode = int32_t(g_state.debug_mode);
     ImGui::TextUnformatted("Debug:");
@@ -1094,7 +1252,7 @@ void DrawBrowserPanel()
                         DebugModeName(g_state.debug_mode),
                         g_state.paused ? "  [paused]" : "");
     ImGui::TextDisabled("Keys: \xe2\x86\x90/\xe2\x86\x92  cycle   D  debug   "
-                        "Space  pause   .  step   R  restart   Esc  quit");
+                        "B  backdrop   Space  pause   .  step   R  restart   Esc  quit");
 
     ImGui::End();
 }
@@ -1136,6 +1294,32 @@ bool Initialize()
     g_state.step_once = false;
     g_state.debug_mode = EFxDebugMode::Normal;
     g_state.first_submit_logged = false;
+    g_state.background = EVfxBackground::LtGray;
+
+    LoadBackgroundTextures();
+
+    // --vfx-bg=<...> startup override (lower-case, leading hyphens
+    // already stripped by argh). Useful for scripted multi-BG captures.
+    if (StartupVfxBackground[0])
+    {
+        auto eq_ci = [](const char* a, const char* b) {
+            while (*a && *b) {
+                const char ca = (*a >= 'A' && *a <= 'Z') ? char(*a - 'A' + 'a') : *a;
+                const char cb = (*b >= 'A' && *b <= 'Z') ? char(*b - 'A' + 'a') : *b;
+                if (ca != cb) return false;
+                ++a; ++b;
+            }
+            return *a == 0 && *b == 0;
+        };
+        if      (eq_ci(StartupVfxBackground, "black"))   g_state.background = EVfxBackground::Black;
+        else if (eq_ci(StartupVfxBackground, "ltgray"))  g_state.background = EVfxBackground::LtGray;
+        else if (eq_ci(StartupVfxBackground, "forest"))  g_state.background = EVfxBackground::Forest;
+        else if (eq_ci(StartupVfxBackground, "dungeon")) g_state.background = EVfxBackground::Dungeon;
+        else log_warn("[vfx] --vfx-bg='%s' unknown; staying on default LtGray",
+                      StartupVfxBackground);
+        log_info("[vfx] startup background = %s",
+                 BackgroundName(g_state.background));
+    }
 
     for (const auto& e : g_state.deferred)
         Register(e);
@@ -1188,6 +1372,7 @@ void Close()
 {
     DestroyActive();
     TeardownRig();
+    ReleaseBackgroundTextures();
     g_state.catalogue.clear();
     g_state.active_idx = -1;
     g_state.initialized = false;
@@ -1321,10 +1506,13 @@ void Render()
 
     // Step 3: tile pass. Empty unless the rig is active, in which case
     // we submit the character meshes here so they get lit alongside the
-    // normal scene path. Mid-gray clear -- per author's diagnostic
-    // preference, the gray bg helps see particle quad shapes against
-    // the bg (vs black where dim particles disappear).
-    Renderer->BeginTilePass(0.45f, 0.46f, 0.50f, 1.0f);
+    // normal scene path. The G-buffer is always cleared transparent
+    // (alpha=0) so the light shader's `alb.a < 0.01` discard reveals
+    // whatever the backdrop step (below) wrote into lit_target -- this
+    // way Black / LtGray / Forest / Dungeon all read identically for the
+    // scene-empty pixels.
+    Renderer->BeginTilePass(kBackdropLtGrayRgba[0], kBackdropLtGrayRgba[1],
+                            kBackdropLtGrayRgba[2], kBackdropLtGrayRgba[3]);
     RenderCharacterRigBackground();
     // Per M09_FORENSICS.md §M09b: effects that submit through the
     // transparent_world_queue (SubmitHelperMesh) MUST do so after
@@ -1338,6 +1526,12 @@ void Render()
             e.submit_world(g_state.active_ctx, g_state.debug_mode);
     }
     Renderer->EndTilePass();
+    // Diagnostic backdrop: write lit_target with the selected BG before
+    // the deferred light shader runs. Light shader keeps these pixels
+    // wherever the scene has no contribution (discard on alb.a<0.01);
+    // post-light fx_pass then blends against the backdrop just like it
+    // would against any lit scene content. See vfxtest.h EVfxBackground.
+    ApplyBackdrop();
     Renderer->RunLightingPass();
 
     if (!StartupVfxHideUi)
@@ -1356,6 +1550,7 @@ void HandleKeyPress(int32_t key, bool down)
                          log_info("[vfx] paused=%d", g_state.paused ? 1 : 0); break;
         case '.':        if (g_state.paused) g_state.step_once = true; break;
         case 'D':        CycleDebug(); break;
+        case 'B':        CycleBackground(); break;
         case '1':        g_state.debug_mode = EFxDebugMode::Normal;       log_info("[vfx] debug_mode -> 0"); break;
         case '2':        g_state.debug_mode = EFxDebugMode::SolidColor;   log_info("[vfx] debug_mode -> 1"); break;
         case '3':        g_state.debug_mode = EFxDebugMode::FullTexture;  log_info("[vfx] debug_mode -> 2"); break;
