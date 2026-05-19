@@ -152,6 +152,18 @@ void TCursorHud::Draw()
     if (ImGui::GetIO().WantCaptureMouse)
         return;
 
+    // Ground shadow under wedge cursors (and the regular cursor's
+    // own drop-shadow). Drawn FIRST so the cursor / drag bitmap /
+    // corner overlay all paint on top of it -- the shadow lives "in"
+    // the world layer conceptually (it's the destination marker on
+    // the ground plane during right-click walk-to). shadowoffsetx/y
+    // come from SetMouseShadow; the wedge bitmaps use (0, 43) so the
+    // shadow lands directly below the wedge tip.
+    if (MouseShadow)
+        Renderer->DrawBitmap(MouseShadow,
+                             cursorx + shadowoffsetx,
+                             cursory + shadowoffsety);
+
     // Drag bitmap (e.g. inventory item being dragged) goes first so
     // the cursor sits above it. Still drawn here even when the OS owns
     // the cursor pixel -- the drag bitmap is a separate visual asset
