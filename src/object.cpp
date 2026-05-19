@@ -2291,6 +2291,22 @@ void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, bool 
     os.SetPos(end);
 }
 
+// REVSYNC: TObjectInstance::LoadInventory — vtable slot 0x168 (offset 360)
+// of cls_0x5a50e8 (= FUN_00472310). Called by FUN_00471ce0_CreateObjectFromStream
+// when v14+ invblocksize >= 1 (or unconditionally pre-v14).
+//
+// Retail places each item at the slot recorded in its body
+// (TObjectInstance::Load reads `invindex` from the stream), so that the
+// child's stale invindex field always matches its true position in the
+// parent's inventory array. Our previous port used `inventory.Add(inst)`
+// which packs items into the front of the array — if the saved layout
+// had gaps (slot 0 used, slot 1 null, slot 2 used), the loaded item with
+// invindex=2 ended up at array slot 1, leaving the dtor's
+// RemoveFromInventory() walk pointing `Remove(2)` at the wrong (or
+// out-of-bounds) slot. That's the exit-crash candidate documented in
+// docs/gameflow/T5_FORENSIC.md §5 (C2). `Set(slot)` places the item at
+// its saved slot, restoring the retail-faithful invariant and incidentally
+// repairing the dtor walk's slot-skip behaviour.
 void TObjectInstance::LoadInventory(RTInputStream is, int32_t version)
 {
     if (version < 3)
@@ -2308,15 +2324,27 @@ void TObjectInstance::LoadInventory(RTInputStream is, int32_t version)
     for (int32_t i = 0; i < num; i++)
     {
         TObjectInstance* inst = LoadObject(is, version);
-        if (inst)
-        {
-            inventory.Add(inst);
-            inst->SetOwner(this);
-        }
-        else
+        if (!inst)
         {
             fprintf(stderr, "Invalid inventory object for obj %s", this->GetName());
+            continue;
         }
+
+        // TObjectInstance::Load read `invindex` out of the stream into
+        // inst->invindex. Place the item at exactly that slot. Fall back
+        // to Add for malformed bodies that left invindex < 0 (shouldn't
+        // happen for v>=3 but be defensive).
+        const int32_t slot = inst->invindex;
+        int32_t placed;
+        if (slot >= 0 && slot < MAXINVITEMS)
+            placed = inventory.Set(inst, slot);
+        else
+            placed = inventory.Add(inst);
+
+        // Keep the in-memory field consistent with where the item
+        // actually landed, in case Set/Add clamped.
+        inst->invindex = placed;
+        inst->SetOwner(this);
     }
 }
 
