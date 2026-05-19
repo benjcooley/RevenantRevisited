@@ -256,6 +256,7 @@ char DXDriverMatchStr[FILENAMELEN]; // Will use first DX driver who's descriptio
 // When non-empty, AppInit hands it to PlayScreen.LoadGameFile() so the engine
 // restores a live session on first Pulse().
 char StartupSavePath[MAXPATHLEN] = "";
+bool StartupSaveCycle = false;
 
 // Window/backbuffer size selected before sokol creates the native window.
 // WIDTH/HEIGHT stay as the classic 640x480 layout baseline; the renderer and
@@ -1628,6 +1629,14 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "loadmap", p))
             strncpyz(StartupSavePath, p.c_str(), MAXPATHLEN);
     }
+
+  // SAVECYCLE-TEST — once the PlayScreen reaches its first frame, run
+  // WriteGame("savecycle.sav") → ReadGame("savecycle.sav") back-to-back
+  // and dump a side-by-side comparison of the player's key retail-faithful
+  // fields. Lets a non-interactive smoke test verify the round-trip
+  // landed correctly. See docs/gameflow/T5_FORENSIC.md.
+    if (arg_flag(cmd, "savecycle-test"))
+        StartupSaveCycle = true;
 
   // TEST=<mode> — route to TTestScreen instead of LogoScreen/PlayScreen.
   // See recon/docs/RETAIL_SYNC_PLAN.md.
