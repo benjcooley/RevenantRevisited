@@ -12,6 +12,7 @@
 #include "dls.h"
 #include "inventory.h"
 #include "logging.h"
+#include "mapmanager.h"
 #include "mappane.h"
 #include "multictrl.h"
 #include "player.h"
@@ -87,8 +88,17 @@ bool TSaveGame::WriteGame(char *name)
 
     fclose(fp);
 
-    log_info("[savegame] WriteGame('%s'): %s (gametime=%d, version=%d)",
-             name, retval ? "ok" : "FAIL", gametime, version);
+    // Pre-save snapshot of the player's key retail-faithful state. Pairs
+    // with the matching log in ReadGame so we can spot any field that
+    // doesn't round-trip through TObjectInstance::Save/LoadObject.
+    {
+        S3DPoint p; saved->GetPos(p);
+        log_info("[savegame] WriteGame('%s'): %s gametime=%d ver=%d "
+                 "player level=%d pos=(%d,%d,%d) flags=0x%x mapindex=%d",
+                 name, retval ? "ok" : "FAIL", gametime, version,
+                 saved->GetLevel(), p.x, p.y, p.z, saved->Flags(),
+                 saved->GetMapIndex());
+    }
     return retval;
 }
 
@@ -111,8 +121,22 @@ bool TSaveGame::ReadGame(char *name)
     if (!name)
         name = "game01.sav";
 
-  // Kill the currently loaded map (return to original map)
-    MapPane.ClearCurMap();
+  // Modern map reset: drop the entire TGameMap cache (which TMapPane
+  // shares sector pointers with — calling the legacy
+  // MapPane.ClearCurMap directly causes a use-after-free in
+  // TGameMap::FindSector). MapManager.Shutdown walks each loaded map
+  // through TGameMap::Unload → TSector::CloseSector exactly once and
+  // fires Unloaded so the renderer drops its currentMap pointer too.
+  // We re-Init and SetCurrentLevel after the player loads so the
+  // engine has a live map again.
+  //
+  // The retail engine's MapPane.ClearCurMap-then-LoadCurMap pair is
+  // a different shape from ours (per-slot CurMap copy; tracked
+  // elsewhere as a follow-up). What's retail-faithful here is the
+  // player object's serialization, not the map orchestration around
+  // it — see [feedback-retail-first] in /memory.
+    MapManager.Shutdown();
+    MapManager.Init();
 
   // Reload initial game states
     ScriptManager.ReloadStates();
@@ -204,6 +228,12 @@ bool TSaveGame::ReadGame(char *name)
   // Tell system this is our main player
     PlayerManager.SetMainPlayer((TPlayer*)saved);
 
+  // Re-anchor the modern map registry to the player's level so
+  // UpdateActiveWindow / FindSector have a live TGameMap. The renderer
+  // rebind happens at the caller layer (TPlayScreen::Update after
+  // ReadGame returns) since the renderer is a PlayScreen owned member.
+    MapManager.SetCurrentLevel(saved->GetLevel());
+
   // Restore game time
     PlayScreen.SetGameTime(gametime);
 
@@ -211,8 +241,16 @@ bool TSaveGame::ReadGame(char *name)
     PlayScreen.Redraw();
 
     loading = false;
-    log_info("[savegame] ReadGame('%s'): %s (gametime=%d, version=%d)",
-             name, retval ? "ok" : "FAIL", gametime, version);
+    // Post-load snapshot — pair with the pre-save log in WriteGame to
+    // diagnose any drift in retail-faithful player serialization.
+    {
+        S3DPoint p; saved->GetPos(p);
+        log_info("[savegame] ReadGame('%s'): %s gametime=%d ver=%d "
+                 "player level=%d pos=(%d,%d,%d) flags=0x%x mapindex=%d",
+                 name, retval ? "ok" : "FAIL", gametime, version,
+                 saved->GetLevel(), p.x, p.y, p.z, saved->Flags(),
+                 saved->GetMapIndex());
+    }
     return retval;
 }
 

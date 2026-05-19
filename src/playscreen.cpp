@@ -571,6 +571,14 @@ void TPlayScreen::Update()
         {
             ::SaveGame.ReadGame(gamenum);
         }
+        // Re-bind the renderer to the newly-loaded TGameMap. ReadGame
+        // tore down the old map cache (firing Unloaded → renderer cleared
+        // its currentMap pointer) then SetCurrentLevel'd to the player's
+        // level; nothing else re-binds the renderer. Without this the
+        // frame loop after a load produces a black screen.
+        if (mapRenderer)
+            if (TGameMap* gm = MapManager.CurrentMap())
+                mapRenderer->SetMap(gm, /*use_level_origin=*/true);
     }
     if (savegame)
     {
