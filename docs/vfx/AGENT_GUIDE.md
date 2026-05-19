@@ -415,6 +415,77 @@ Caught failures so far: M09 TTeleporterEffect first port shipped a procedural
 glow column instead of `Magic\gvortex.I3D` (re-dispatched as M09b). F03
 TFireEffect under audit for same pattern. Reference: [[feedback-no-standins]].
 
+### 4.2.1.5 Color is a health signal
+
+Revenant effects have rich saturated color by design. Fire-family = warm
+orange/red; ice/cyclone = blue / ice-blue; sandstorm = brown; magic spells
+= blue or violet; sword swipes pull from `chardata->swipecolor` (often
+saturated). **If your port renders pale, muted, gray, or off-saturation,
+suspect the port path is broken before declaring done.**
+
+Likely culprits in order of frequency observed this project:
+
+1. **Stand-in for a real asset** — procedural gradient/billboard texture
+   replacing a real `.I3D` / imagery atlas; the asset's authored palette
+   is gone. See §4.2.1 + [[feedback-no-standins]].
+2. **Default color path** — harness or port supplying a fallback colour
+   (gold, white, gray) because the real data source (`chardata->swipecolor`,
+   `spell->color`, per-cast tint) wasn't traced. See the S09c failure where
+   harness defaulted to gold instead of reading Locke's `SWIPECOLOR 0,0,10`.
+3. **Wrong blend mode** — AdditiveStraight where Alpha-Decal was needed
+   (or vice versa) washes out per-vertex colours. F03 fix changed this.
+4. **Lighting mode mismatch** — `LitFlat` against dark sun direction
+   crushes saturated colours; `Unlit` is the convention for self-lit FX.
+5. **Chroma-key miss** — auto-chroma in `3dimage.cpp` converts black-bordered
+   textures to premultiplied alpha; bypass that and dark borders eat colour.
+
+Cross-check against sister-family effects: fire-family is all warm; magic-
+family is all cool; combat-family pulls from per-character data. Out-of-
+family colour = broken port. Reference: [[feedback-vfx-color-health-signal]].
+
+### 4.2.1.6 Quad orientation expectation
+
+Revenant's billboards are almost always one of two things, never an
+arbitrary world rotation:
+
+- **Screen-aligned billboard** (default) — fire sparks, flame, projectile
+  trails, glow halos that should always face the camera.
+- **Ground-oriented** (WorldXY) — ring halos, ripples, ground decals,
+  ground-scatter fire patches, AoE markers. Pre-release source's
+  `rot.x = -π/2` is the canonical tell that the quad tips onto the floor
+  plane.
+
+If your forensics produces a per-quad rotation that's neither (e.g. a
+loose 30° world-Y rotation), re-read the pre-release transform — almost
+certainly it's one of the two canonical orientations and you've mis-
+interpreted the matrix. F03 forensics initially shipped ScreenAligned;
+helper-trace caught the `rot.x = -π/2` → it's WorldXY.
+
+### 4.2.1.7 Background selection during capture
+
+When using the `--test=vfx` rig (the dev-cycled `B` key + ImGui dropdown
+toggles Black / LtGray / Forest / Dungeon backdrops), pick the BG that
+exposes the most diagnostic information for the effect you're vetting:
+
+- **Dungeon** — best for fire-family effects (the warm glow contrasts
+  against cool stone walls) and for floor-parallel effects (the dungeon
+  ground is flat, so ground-orientation foreshortening reads cleanly).
+  Use as default for any cast / spell / projectile vetting.
+- **Forest** — best for brighter effects (sword sparks read against the
+  saturated green/brown forest floor), outdoor ambient effects, and
+  anything that should "blend into" daylit scenes.
+- **Black** — diagnostic check for additive blend modes. The effect's
+  contribution shows literally; if it disappears against black, your
+  additive isn't firing.
+- **LtGray** — diagnostic check for alpha / see-through. If the effect
+  looks "solid" against light gray, your alpha path is broken; if you
+  can see the gray through it cleanly, alpha is firing.
+
+Many effects warrant capturing on BOTH a diagnostic BG (Black or LtGray)
+AND a game-view BG (Forest or Dungeon) — the diagnostic confirms the
+pipeline, the game-view confirms it reads in real context. Report
+both captures when the effect's correctness depends on either.
+
 ### 4.2.2 Capture practice (snap_grid framing)
 
 Your own captures via `tools/vfx/snap_grid.py` must let a reviewer see the
