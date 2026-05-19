@@ -90,14 +90,22 @@ bool TSaveGame::WriteGame(char *name)
 
     // Pre-save snapshot of the player's key retail-faithful state. Pairs
     // with the matching log in ReadGame so we can spot any field that
-    // doesn't round-trip through TObjectInstance::Save/LoadObject.
+    // doesn't round-trip through TObjectInstance::Save/LoadObject. Logs
+    // Pos() (which reads through transform_), plus sector liveness and
+    // inventory item count so post-load mismatches (dangling inventory
+    // slot, post-load sector-attach missing) jump out of revenant.log
+    // without an interactive repro. (The legacy `pos` mirror is private
+    // — Pos() is the canonical read.)
     {
-        S3DPoint p; saved->GetPos(p);
+        const S3DPoint p = saved->Pos();
         log_info("[savegame] WriteGame('%s'): %s gametime=%d ver=%d "
-                 "player level=%d pos=(%d,%d,%d) flags=0x%x mapindex=%d",
+                 "player level=%d pos=(%d,%d,%d) flags=0x%x mapindex=%d "
+                 "sector=%s inv=%d",
                  name, retval ? "ok" : "FAIL", gametime, version,
-                 saved->GetLevel(), p.x, p.y, p.z, saved->Flags(),
-                 saved->GetMapIndex());
+                 saved->GetLevel(), p.x, p.y, p.z,
+                 saved->Flags(), saved->GetMapIndex(),
+                 saved->GetSector() ? "live" : "null",
+                 saved->RealNumInventoryItems());
     }
     return retval;
 }
@@ -243,13 +251,18 @@ bool TSaveGame::ReadGame(char *name)
     loading = false;
     // Post-load snapshot — pair with the pre-save log in WriteGame to
     // diagnose any drift in retail-faithful player serialization.
+    // `sector=null` post-load = the sector attach step didn't run
+    // (Locke-in-ground symptom, see docs/gameflow/T5_FORENSIC.md).
     {
-        S3DPoint p; saved->GetPos(p);
+        const S3DPoint p = saved->Pos();
         log_info("[savegame] ReadGame('%s'): %s gametime=%d ver=%d "
-                 "player level=%d pos=(%d,%d,%d) flags=0x%x mapindex=%d",
+                 "player level=%d pos=(%d,%d,%d) flags=0x%x mapindex=%d "
+                 "sector=%s inv=%d",
                  name, retval ? "ok" : "FAIL", gametime, version,
-                 saved->GetLevel(), p.x, p.y, p.z, saved->Flags(),
-                 saved->GetMapIndex());
+                 saved->GetLevel(), p.x, p.y, p.z,
+                 saved->Flags(), saved->GetMapIndex(),
+                 saved->GetSector() ? "live" : "null",
+                 saved->RealNumInventoryItems());
     }
     return retval;
 }
