@@ -52,6 +52,20 @@ namespace VfxTest {
 // called once at boot with the initial anchor — the moving anchor is
 // re-applied on the owning instance every frame, so any effect whose
 // emit logic reads inst->Pos() tracks the bone automatically.
+// Diagnostic backdrop modes for --test=vfx. The harness cycles between
+// these (UI dropdown + `B` key) so effects can be visually vetted against
+// different contexts -- a black backdrop probes additive bloom; LtGray
+// probes alpha / see-through; the two real screenshots probe the in-game
+// outdoor + interior look. Default is LtGray (matches the original harness
+// clear color so existing captures still read the same).
+enum class EVfxBackground : uint8_t
+{
+    Black,
+    LtGray,
+    Forest,
+    Dungeon,
+};
+
 enum class EVfxPreviewStyle : uint8_t
 {
     Static,            // spawn once at origin, never re-trigger (torch, ambient)
