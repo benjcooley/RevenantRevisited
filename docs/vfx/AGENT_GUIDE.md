@@ -158,6 +158,16 @@ if it grows beyond one paragraph):
    same category reuses it.
 7. **Gaps / unknowns** — anything still ambiguous. Mark explicitly
    what's documented vs guessed.
+8. **Trace every helper call.** When the retail draw / tick / pulse
+   body calls into a helper (texture lookup, mesh-load, particle-spawn,
+   color/scale envelope), the forensics must follow the helper, not
+   stop at the call site. Visual constants — colors, sizes, scales,
+   atlas frame counts, blend factors, rotation rates — frequently
+   live one or two helper-levels down from the lifecycle code that
+   first attracts the agent's eye. A port that nails the state
+   machine but reads scale/color/texture from "looked about right"
+   is the failure mode we keep hitting. If you find yourself making
+   up a number that retail computes, you have not finished forensics.
 
 Only after the row's notes carry these facts do you start the port.
 Reason: a port grounded in evidence is reviewable against the
@@ -380,6 +390,61 @@ When possible, capture a short video / screenshot of the original Revenant
 - The retail `Revenant.exe` in `data/` runs under Wine/dosbox for spot checks.
 
 Note any deliberate divergence (e.g. "blood is a touch brighter — better on modern displays") in the row's `Notes`.
+
+### 4.2.1 No procedural stand-ins for asset-driven effects (HARD RULE)
+
+If the retail code loads a `.I3D` mesh, `.RVI` imagery, or any named asset and
+draws it, **the port must load and draw the same asset**. Writing procedural
+geometry / billboards / gradients as a "stand-in" for an asset draw is a bodge
+even if the harness output looks superficially similar.
+
+Self-check during forensics (§3.0): does the retail source call
+`FindImagery` / `RegisterImagery` / `LoadImagery` / `Load3DAsset` / any
+imagery-lookup helper that resolves a named asset? If yes, the port path
+must reach the equivalent engine API. If that engine API does not yet
+exist, **stop and escalate as a blocker** — do NOT silently fall back to
+procedural geometry.
+
+Test for this in your own work: read your `SpawnForTest` and `Tick*` paths
+back-to-back with retail. Every named-asset call in retail must have a
+named-asset call in your port. Procedural code (`MakeTexture(...)`,
+`GenerateGradient`, billboard-from-scratch) appearing where retail loaded
+an asset means you have a stand-in and the port is not done.
+
+Caught failures so far: M09 TTeleporterEffect first port shipped a procedural
+glow column instead of `Magic\gvortex.I3D` (re-dispatched as M09b). F03
+TFireEffect under audit for same pattern. Reference: [[feedback-no-standins]].
+
+### 4.2.2 Capture practice (snap_grid framing)
+
+Your own captures via `tools/vfx/snap_grid.py` must let a reviewer see the
+whole effect without having to ask follow-up questions. That means:
+
+- **Frame to the full visual extent** — when the effect has multiple phases
+  (Init / peak / fade) with different bounding boxes, frame for the LARGEST.
+  A cylinder that grows to engulf the caster must not get cropped at peak.
+- **Capture the diagnostic moments**, not arbitrary intervals:
+  1. Pre-trigger (state machine in starting state — proves baseline)
+  2. First frame of visual (proves it spawns correctly)
+  3. Visual peak (proves shape / scale / texture / color at apex)
+  4. Mid-decay or motion mid-point (proves any rotation / drift / fade)
+  5. Last frame before kill (proves clean death)
+- **Animated effects need a sequence, not a grid.** For rotation, traveling
+  projectiles, sword arcs, or anything where motion IS the effect, capture
+  a per-frame sequence at the cadence the user can replay. A 4×4 stills grid
+  fails to show whether rotation is happening or just translation.
+- **Label the frames.** Annotate the moment each frame shows
+  (e.g. "OUT peak — engulf", "MOVE start — rotation 90°"), or include a
+  small timestamp burn-in. A 16-frame grid with no context shifts the
+  parsing burden to the reviewer.
+- **Include scene context.** Locke or a known-scale anchor in frame, so
+  the reviewer can judge whether the effect is the correct size relative
+  to a character / weapon / area.
+
+Before declaring done, look at your own capture and ask: "if I had only
+this image and the retail reference, could a stranger tell whether they
+match?" If not, the capture is failing its job and the port is not
+verifiable yet. Re-shoot before reporting.
 
 ### 4.3 Build-clean check
 
