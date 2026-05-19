@@ -1836,25 +1836,23 @@ void FlareSubmit(void* cp, EFxDebugMode dbg)
 // clean on each new attack.
 //
 // SCharData::swipecolor wiring — retail pulls the colour from
-// chardata->swipecolor (RGB 0..255). The harness can't reach the
-// chardata table without spinning up the gameplay rules path, so we
-// use a tasteful default (warm gold) that reads against any
-// character's skin tones and gracefully clamps via NormalizeColors.
-// Per-character colour binding lands when the gameplay path
-// (TCharAnimator::SetupWeaponSwipe re-enabled) consumes this class.
+// chardata->swipecolor (RGB 0..255), set per-character in RULES.DEF
+// (e.g. Locke = `SWIPECOLOR 0, 0, 10` → normalizes to vivid blue with
+// the +0.4 hilt boost reading purplish-pink over warm backdrops).
+// We read it from the rig's loaded character every submit so cycling
+// characters in the harness picks up the right tint automatically.
 struct SSwipeCtx {
     TWeaponSwipe* swipe = nullptr;
+    int32_t       last_roster_idx = -1;  // re-read chardata only on character change
 };
 
 void* SwipeSpawn(const S3DPoint& /*origin*/)
 {
     auto* c = new SSwipeCtx();
     c->swipe = new TWeaponSwipe();
-    // Phase A §1: NormalizeColors will rescale this so the brightest
-    // channel maxes at 1.0; gold (1, 0.85, 0.55) keeps the warmth of a
-    // metallic slash without saturating to pure white.
-    c->swipe->SetColour(1.0f, 0.85f, 0.55f);
     c->swipe->ResetForNewWeapon();
+    // Colour deferred to first submit — chardata is only available once
+    // the rig has loaded its character.
     return c;
 }
 
@@ -1870,6 +1868,27 @@ void SwipeSubmitAttached(void* cp, EFxDebugMode dbg,
 {
     auto* c = static_cast<SSwipeCtx*>(cp);
     if (!c->swipe) return;
+
+    // Pull the per-character swipecolor from chardata when the rig's
+    // loaded character changes. Retail's TCharAnimator::SetupWeaponSwipe
+    // does this on attach; we mirror it on roster-cycle. Zero colour
+    // short-circuits the trail entirely (matches retail behaviour for
+    // characters without a SWIPECOLOR entry in RULES.DEF).
+    SCharacterRig& rig = g_state.rig;
+    if (c->last_roster_idx != rig.roster_idx)
+    {
+        c->last_roster_idx = rig.roster_idx;
+        c->swipe->ResetForNewWeapon();
+        if (auto* chr = dynamic_cast<TCharacter*>(rig.inst))
+        {
+            if (SCharData* cd = chr->GetCharData())
+            {
+                c->swipe->SetColour(float(cd->swipecolor.red)   / 255.0f,
+                                    float(cd->swipecolor.green) / 255.0f,
+                                    float(cd->swipecolor.blue)  / 255.0f);
+            }
+        }
+    }
 
     // Resolve the (hilt, tip) anchor pair against the live weapon
     // matrix. The `hilt_attach` passed in by the dispatcher is the
