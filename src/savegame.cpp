@@ -10,6 +10,7 @@
 
 #include "automap.h"
 #include "dls.h"
+#include "gamemap.h"
 #include "inventory.h"
 #include "logging.h"
 #include "mapmanager.h"
@@ -17,6 +18,7 @@
 #include "multictrl.h"
 #include "player.h"
 #include "playscreen.h"
+#include "revdefs.h"
 #include "revutils.h"
 #include "script.h"
 #include "sector.h"
@@ -241,6 +243,52 @@ bool TSaveGame::ReadGame(char *name)
   // rebind happens at the caller layer (TPlayScreen::Update after
   // ReadGame returns) since the renderer is a PlayScreen owned member.
     MapManager.SetCurrentLevel(saved->GetLevel());
+
+  // Post-load sector attach. The loaded player object carries its world
+  // pos.x / pos.y / level faithfully (TObjectInstance::Load round-trips
+  // them), but TObjectInstance::Load does NOT attach the object to a
+  // sector — it never has, because in retail sector membership was
+  // re-established by the surrounding LoadGame orchestration (which
+  // recreated curmap from the slot, then re-loaded sectors). Our modern
+  // map system reloads sectors on SetCurrentLevel, but doesn't know to
+  // wire the freshly-loaded OF_NONMAP player into the sector that owns
+  // its world pos. Without this attach, oi->GetSector() stays nullptr,
+  // and code paths that go through sector → walkmap → floor-Z (and the
+  // dispatch chain that uses GetSector() for OF_NONMAP follow-the-player
+  // logic) fall back to defaults — Locke renders below the walkmap
+  // surface. Documented in docs/gameflow/T5_FORENSIC.md §4 (H3).
+  //
+  // Per the user's architectural rule, this is map-side orchestration
+  // but uses our modern engine API (TGameMap::FindSector + the existing
+  // TSector::AddObject), not the retail FUN_00460d60 chain. The player
+  // object's serialization itself stayed retail-faithful — what we're
+  // wiring up is the modern-engine response to a retail-faithful loaded
+  // player.
+    {
+        const S3DPoint p = saved->Pos();
+        const int32_t sx = p.x >> SECTORWSHIFT;
+        const int32_t sy = p.y >> SECTORHSHIFT;
+        TGameMap* gm = MapManager.CurrentMap();
+        TSector* sec = gm ? gm->FindSector(sx, sy) : nullptr;
+        if (sec)
+        {
+            // Player is OF_NONMAP — TSector::~TSector skips delete on
+            // OF_NONMAP objects, so the player's lifetime stays owned by
+            // PlayerManager. Safe to AddObject. AddObject also calls
+            // oi->ForceSector(this) so GetSector() goes live.
+            sec->AddObject(saved);
+            log_info("[savegame] ReadGame: attached player to sector "
+                     "%d_%d_%d at world (%d,%d,%d)",
+                     saved->GetLevel(), sx, sy, p.x, p.y, p.z);
+        }
+        else
+        {
+            log_warn("[savegame] ReadGame: no sector found for player "
+                     "at level=%d sector=(%d,%d) world=(%d,%d,%d); "
+                     "Locke will likely render below the floor",
+                     saved->GetLevel(), sx, sy, p.x, p.y, p.z);
+        }
+    }
 
   // Restore game time
     PlayScreen.SetGameTime(gametime);
