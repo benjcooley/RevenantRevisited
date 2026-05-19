@@ -109,6 +109,7 @@ extern bool StartInEditor;      // Whether to start the program in editor mode
 extern bool RevisitedEnabled;   // --revisited: mount the Revisited overlay (.rvr / dev folder); FATAL if requested but missing
 extern bool NoQuickLoad;        // Prevent the program from attempting to load the IMAGERY.DAT file
 extern char StartupSavePath[];  // --loadmap=<path>; empty if no startup auto-load
+extern bool StartupSaveCycle;   // --savecycle-test: WriteGame/ReadGame round-trip + diff log on first PlayScreen pulse
 
 // Startup-selected render size. WIDTH/HEIGHT remain the classic fallback
 // constants for legacy layout code; new render targets and window creation

@@ -548,6 +548,56 @@ void TPlayScreen::Close()
 // * Per-frame                                                             *
 // *************************************************************************
 
+// Headless save-cycle smoke test. Runs ONCE on the first PlayScreen
+// Update() after enough frames have elapsed for the spawn sequence to
+// settle (player exists + sector attached). Writes the live player to
+// "savecycle.sav" then immediately reads it back; logs a side-by-side
+// diff of the canonical fields so the parent agent (and user) can
+// verify the round-trip without an interactive F5/F9 repro.
+//
+// Gated by --savecycle-test command-line flag so it never fires in
+// normal play. The harness only consumes the existing TSaveGame
+// WriteGame/ReadGame entry points — no special test path.
+static void RunSaveCycleTest()
+{
+    if (!Player)
+    {
+        log_warn("[savecycle] no live Player — cannot run cycle");
+        return;
+    }
+
+    auto snapshot = [](const char* tag) {
+        const S3DPoint p = Player->Pos();
+        log_info("[savecycle] %s: pos=(%d,%d,%d) level=%d flags=0x%x "
+                 "mapindex=%d sector=%s inv=%d",
+                 tag, p.x, p.y, p.z, Player->GetLevel(),
+                 Player->Flags(), Player->GetMapIndex(),
+                 Player->GetSector() ? "live" : "null",
+                 Player->RealNumInventoryItems());
+    };
+
+    snapshot("pre-write ");
+    if (!::SaveGame.WriteGame((char *)"savecycle.sav"))
+    {
+        log_error("[savecycle] WriteGame failed; aborting cycle");
+        return;
+    }
+
+    // The ReadGame chain re-runs MapManager.Shutdown / Init /
+    // ScriptManager.ReloadStates / PlayerManager.Clear, so any state
+    // sitting on the live player gets torn down — exactly what F9
+    // would do mid-session.
+    if (!::SaveGame.ReadGame((char *)"savecycle.sav"))
+    {
+        log_error("[savecycle] ReadGame failed");
+        return;
+    }
+    snapshot("post-read ");
+
+    log_info("[savecycle] cycle complete — compare 'pre-write' and "
+             "'post-read' lines above. Identical = round-trip OK.");
+}
+
 void TPlayScreen::Update()
 {
     // Apply any deferred pane add scheduled by SetNextPane().
@@ -555,6 +605,21 @@ void TPlayScreen::Update()
     {
         AddPane(nextpane);
         nextpane = nullptr;
+    }
+
+    // --savecycle-test: once the spawn has settled (a handful of frames
+    // so MapPane window / sector loads complete), run the headless
+    // save-cycle smoke harness once.
+    if (StartupSaveCycle)
+    {
+        static int32_t s_savecycle_delay = 60;  // ~1 second at 60 Hz
+        if (s_savecycle_delay > 0)
+            --s_savecycle_delay;
+        else if (Player)
+        {
+            StartupSaveCycle = false;
+            RunSaveCycleTest();
+        }
     }
 
     // Honor save / load requests staged from the input layer or scripts.
