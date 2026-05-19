@@ -101,14 +101,25 @@ a status changes.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | Audit `TSaveGame::WriteGame/ReadGame` against current `TObjectInstance::Save/Load` | — |
-| [ ] | Confirm version IDs match `docs/SAVE_GAME.md` | — |
-| [ ] | Confirm `LoadCurMap/SaveCurMap` work with modern TModuleManager + Revisited overlay | — |
-| [ ] | Confirm `TScript::ip` saves as offset, not raw pointer | — |
-| [ ] | Round-trip test: spawn → walk → save → restart → load → verify | — |
-| [ ] | `--test=savecycle` headless round-trip | — |
+| [x] | Audit `TSaveGame::WriteGame/ReadGame` against current `TObjectInstance::Save/Load` | 2026-05-19 (T5_FORENSIC.md) |
+| [x] | Confirm version IDs match `docs/SAVE_GAME.md` (= MAP_VERSION 15; envelope + per-class version gates symmetric) | 2026-05-19 |
+| [-] | Confirm `LoadCurMap/SaveCurMap` work with modern TModuleManager + Revisited overlay — out of scope per architectural rule (map orchestration uses modern engine; see T5_FORENSIC §1.3) | 2026-05-19 |
+| [!] | Confirm `TScript::ip` saves as offset, not raw pointer — TScript per-instance state is NOT in the WriteGame envelope (REVSYNC-QUESTION in T5_FORENSIC §8); needs user guidance | 2026-05-19 |
+| [~] | Round-trip test: spawn → walk → save → restart → load → verify (gated on interactive F5/F9; `--savecycle-test` is the non-interactive proxy) | 2026-05-19 |
+| [x] | `--savecycle-test` headless round-trip harness | 2026-05-19 |
+| [x] | Fix LoadInventory to place items at saved slot (retail-faithful; closes exit-crash candidate C2) | 2026-05-19 |
+| [x] | Post-load sector attach for loaded player (closes Locke-in-ground candidate H3) | 2026-05-19 |
+| [x] | REVSYNC headers on SaveObject / LoadObject / Load / Save / LoadInventory / SaveInventory | 2026-05-19 |
+| [x] | Harden WriteGame/ReadGame diagnostic log (Pos() canonical; sector liveness; inv count) | 2026-05-19 |
 
 **Exit:** Save/load round-trips player + script state cleanly.
+
+**Notes:** Player-object serialization is now retail-faithful and round-trips
+cleanly per-field. Two known wrapper-format gaps remain (TGameState binary
+stream, retail's automap 0x80 header + 0x200 walkmap) — both out of scope
+for T5 (script.cpp just retail-synced; automap retail-sync is a separate
+track). See `docs/gameflow/T5_FORENSIC.md` for the full audit and the
+REVSYNC-QUESTIONs surfaced for the user.
 
 ---
 
