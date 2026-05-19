@@ -3099,80 +3099,14 @@ constexpr int32_t kFireSimTickMs          = 1000 / 24;// 24 Hz cadence gate (fam
 constexpr float   kFireQuadLiftWu         = 4.0f;     // small z lift so quads don't z-fight
                                                       // the ground plane in harness scene
 
-// Procedural orange/yellow flame-gradient texture. 64x64 RGBA8, single
-// frame (no atlas). Pre-release Misc\Fire.I3D ships an atlas-style
-// flipbook texture, but wiring T3DImagery -> RGBA upload through the
-// modern imagery path for an FB-only rig is overkill at this point
-// (INVENTORY F03 forensics §6); a procedural radial gradient cleanly
-// validates the FB pipeline end-to-end and matches the visual intent
-// ("small additive orange-yellow flame puff"). Same procedural-texture
-// pattern as L02 HaloRingTexture / X17 GoldFlareTexture.
-//
-// Shape: hot bright-yellow core, orange ring, falls off to fully
-// transparent. Premultiplied alpha so the AdditiveStraight blend
-// reads cleanly (rgb tracks the underlying inten * tint product).
-constexpr int32_t kFireTexPx = 64;
-
-TTextureHandle FireScatterTexture()
-{
-    if (!Renderer) return kInvalidTexture;
-    constexpr uint64_t kKey = 0x4658464952455f30ull;   // "FXFIRE_0"
-
-    static uint8_t pixels[kFireTexPx * kFireTexPx * 4];
-
-    // Tint endpoints — interpolate from yellow-white at the core to
-    // orange-red at the rim. Pre-release legacy material slots were all
-    // zeroed (forensics §6) leaving raw texture-color as the visible
-    // output, so the texture itself carries the entire color identity.
-    constexpr float kCoreR = 1.00f, kCoreG = 0.95f, kCoreB = 0.55f;   // bright yellow
-    constexpr float kRimR  = 1.00f, kRimG  = 0.35f, kRimB  = 0.05f;   // deep orange
-
-    for (int32_t py = 0; py < kFireTexPx; ++py)
-    {
-        for (int32_t px = 0; px < kFireTexPx; ++px)
-        {
-            const float u  = (float(px) + 0.5f) / float(kFireTexPx);
-            const float v  = (float(py) + 0.5f) / float(kFireTexPx);
-            const float dx = u - 0.5f;
-            const float dy = v - 0.5f;
-            // 0 at center, ~0.707 at corners. Normalize so r=1.0 at the
-            // tex edge — past that we cut to fully transparent.
-            const float r  = std::sqrt(dx * dx + dy * dy) * 2.0f;
-
-            // Soft radial falloff: bright core for r < 0.3, smooth fade
-            // to alpha=0 by r==0.95, hard cut beyond.
-            float inten;
-            if (r >= 0.95f)
-                inten = 0.0f;
-            else if (r < 0.3f)
-                inten = 1.0f - 0.25f * (r / 0.3f);     // 1.0 -> 0.75 over the core
-            else
-                inten = 0.75f * (1.0f - (r - 0.3f) / 0.65f);    // 0.75 -> 0 over the rim
-
-            if (inten < 0.0f) inten = 0.0f;
-            if (inten > 1.0f) inten = 1.0f;
-
-            // Interpolate tint core->rim by `r` (clamped to [0,1] in
-            // the visible region).
-            const float tr = r > 1.0f ? 1.0f : r;
-            const float rr = kCoreR + (kRimR - kCoreR) * tr;
-            const float gg = kCoreG + (kRimG - kCoreG) * tr;
-            const float bb = kCoreB + (kRimB - kCoreB) * tr;
-
-            // Premultiplied alpha: rgb == inten * tint, a == inten.
-            const int32_t idx = (py * kFireTexPx + px) * 4;
-            pixels[idx + 0] = uint8_t(rr * inten * 255.0f);
-            pixels[idx + 1] = uint8_t(gg * inten * 255.0f);
-            pixels[idx + 2] = uint8_t(bb * inten * 255.0f);
-            pixels[idx + 3] = uint8_t(inten * 255.0f);
-        }
-    }
-
-    return Renderer->RegisterTextureAsset(kKey, pixels, sizeof(pixels),
-                                          kFireTexPx, kFireTexPx,
-                                          ERendererTextureFormat::RGBA8,
-                                          uint64_t(sizeof(pixels)));
-}
+// Real-asset path: pre-release Class.Def:2015 registers
+// "Fire" -> "Misc\Fire.I3D" (forensics §5). The I3D ships a single
+// material/texture slot with ~30 animated frames in `framehtexs[]` —
+// the per-quad `obj->textureframe[0] = f[c]` write in
+// `TFireAnimator::Render` picks one frame per quad each submit
+// (legacy/walkcode/effect.cpp:980-981; resolver lives in
+// src/3dimage.cpp:1478-1482 / SetTextureFrame in 3dimage.cpp:1814-1836).
+constexpr const char* kFireImageryPath = "Misc\\Fire.I3D";
 
 // Re-roll one scatter quad's XY offset + startup frame. Pre-release
 // legacy/walkcode/effect.cpp:897-903 (Initialize) and
@@ -3207,7 +3141,79 @@ TFireEffect* TFireEffect::SpawnForTest(const S3DPoint& origin)
         return nullptr;
     }
 
-    auto* fire = new TFireEffect(static_cast<TObjectImagery*>(nullptr));
+    // Real-asset load. Misc\Fire.I3D isn't pre-registered by any
+    // TObjectClass::AddType in the modern data path (per F03 forensics §4
+    // — vestigial pre-release class), so do the standard
+    // FindImagery -> RegisterImagery fallback (same as M09b TTeleporterEffect).
+    int32_t img_id = TObjectImagery::FindImagery(kFireImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFireImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[fire] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kFireImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[fire] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFireImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fire] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kFireImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Lazy-mesh-init poke (same idiom as F01/B01/M05/H04): forces the
+    // texture-array to populate before we query frame handles.
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[fire] SpawnForTest: imagery '%s' has 0 textures after lazy-init poke",
+                  kFireImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Pull the texture-slot-0 record. Fire.I3D has one material slot;
+    // the frame array lives in textures[0].framehtexs[0..numframes).
+    S3DTex tex0 = {};
+    img3d->GetTexture(0, &tex0);
+    const int32_t numframes = tex0.numframes > 0 ? tex0.numframes : 1;
+    if (tex0.htexture == kInvalidTexture && numframes == 1)
+    {
+        log_error("[fire] SpawnForTest: texture slot 0 handle invalid and numframes=1");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Snapshot the per-frame texture handles. SetTextureFrame swaps
+    // `textures[t].htexture` to `framehtexs[f]` (3dimage.cpp:1827); for
+    // an FB-pipeline submit we want each billboard to reference its own
+    // frame texture directly, not mutate shared imagery state per
+    // submit. So we cache the full frame array here and index it from
+    // the submit hot path.
+    auto* fire = new TFireEffect(base);
+    fire->imagery_ = base;
+    fire->frame_textures_.resize(numframes);
+    for (int32_t f = 0; f < numframes; ++f)
+    {
+        // copyframes==false (Fire.I3D is the standard pre-baked path):
+        // each frame has its own pre-uploaded texture handle. With
+        // copyframes==true (legacy paged-pixel path) framehtexs is
+        // nullptr and only htexture is valid — fall back to that.
+        if (tex0.framehtexs && tex0.copyframes == false)
+            fire->frame_textures_[f] = tex0.framehtexs[f];
+        else
+            fire->frame_textures_[f] = tex0.htexture;
+    }
+
     fire->ForcePos(origin);
     fire->SetMapIndex(MapPane.MakeIndex());
 
@@ -3223,24 +3229,19 @@ TFireEffect* TFireEffect::SpawnForTest(const S3DPoint& origin)
 
     fire->ActivateComponents();
 
-    // Pre-register the texture so the first frame's submit doesn't pay
-    // the bake cost (~16KB; cheap).
-    const TTextureHandle tex = FireScatterTexture();
-    if (tex == kInvalidTexture)
-        log_warn("[fire] SpawnForTest: scatter texture register failed; F03 will draw nothing");
-
-    log_info("[fire] SpawnForTest: map_index=%d origin=(%d,%d,%d) "
-             "quads=%d patch=%dx%d wu tex=%u",
-             fire->GetMapIndex(),
+    log_info("[fire] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "quads=%d patch=%dx%d wu tex0_handle=%u numframes=%d w=%u h=%u",
+             kFireImageryPath, fire->GetMapIndex(),
              origin.x, origin.y, origin.z,
              kFireScatterQuads,
-             2 * kFirePatchHalfWu, 2 * kFirePatchHalfWu, tex);
+             2 * kFirePatchHalfWu, 2 * kFirePatchHalfWu,
+             tex0.htexture, numframes, tex0.desc.width, tex0.desc.height);
     return fire;
 }
 
 void TFireEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 {
-    if (!alive_ || !Renderer)
+    if (!alive_ || !Renderer || frame_textures_.empty())
         return;
 
     // 24 Hz sim-tick gate. Pre-release Animate / Render were ungated;
@@ -3271,21 +3272,25 @@ void TFireEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         }
     }
 
-    const TTextureHandle tex = FireScatterTexture();
-    if (tex == kInvalidTexture)
-        return;
-
     const S3DPoint& p = Pos();
+    const int32_t   numframes = int32_t(frame_textures_.size());
 
-    // FB pipeline: one additive billboard per visible quad. Pre-release
+    // FB pipeline: one alpha-keyed billboard per visible quad. Pre-release
     // `if (f[c] < 0) continue` (legacy effect.cpp:971-972) — the
     // startup-delay window keeps a randomly-staggered subset of quads
     // invisible each frame, which produces the "occasional flickering
     // flame puff" cadence of an ambient fire. Preserved here.
+    //
+    // F03b helper-trace correction (vs. 2026-05-16 procedural port):
+    //   - blend = Alpha (pre-release `SetBlendState()` is DECAL, NOT
+    //     `SetAddBlendState()` — see F03b inventory §2)
+    //   - orientation = WorldXY (pre-release rot.x=-π/2 tips the quad
+    //     onto the ground plane — F03b §3)
+    //   - texture = per-quad framehtexs[f[c]] (real I3D atlas — F03b §1)
     SBillboardDrawItem item = {};
     item.size_wu[0]   = kFireQuadSizeWu;
     item.size_wu[1]   = kFireQuadSizeWu;
-    item.color_rgba[0] = 1.0f;     // tint lives in the texture (premultiplied)
+    item.color_rgba[0] = 1.0f;
     item.color_rgba[1] = 1.0f;
     item.color_rgba[2] = 1.0f;
     item.color_rgba[3] = 1.0f;
@@ -3293,20 +3298,31 @@ void TFireEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     item.uv_rect[1] = 0.0f;
     item.uv_rect[2] = 1.0f;
     item.uv_rect[3] = 1.0f;
-    item.key.texture     = tex;
     item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    // Pre-release SetBlendState in TFireAnimator::Render is
-    // D3DBLEND_ONE / D3DBLEND_ONE additive — AdditiveStraight here
-    // (same choice as L02 halo / H03 ripple / M05 mist).
-    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::WorldXY;
 
     for (int32_t i = 0; i < kFireScatterQuads; ++i)
     {
         if (quads_[i].frame < 0)
             continue;   // startup-delay window — quad not yet visible
 
+        // Pre-release: `obj->textureframe[0] = f[c]` -> 3dimage.cpp
+        // resolves via `framehtexs[texframe % numframes]` (SetTextureFrame
+        // wraps via `framenum % numframes`, 3dimage.cpp:1820-1821).
+        // Mirror that wrap defensively in case the I3D ships fewer than
+        // 30 frames (forensics doesn't pin the exact frame count).
+        int32_t f = quads_[i].frame;
+        if (f >= numframes)
+            f = f % numframes;
+        const TTextureHandle ftex = frame_textures_[f];
+        if (ftex == kInvalidTexture)
+            continue;
+
+        item.key.texture  = ftex;
         item.world_pos[0] = float(p.x) + quads_[i].ox;
         item.world_pos[1] = float(p.y) + quads_[i].oy;
         item.world_pos[2] = float(p.z) + kFireQuadLiftWu;

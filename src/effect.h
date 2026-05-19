@@ -389,22 +389,20 @@ class TFireEffect : public TEffect
     // rig). Per INVENTORY F03 forensics §1: no live retail caller exists
     // (no spell.def variant invokes the bare "fire" builder, no
     // ATTACHEFFECT "fire") — this harness path IS the canonical Phase-B
-    // exercise route. No imagery lookup: the scatter quads use a
-    // procedural orange/yellow flame-gradient texture built via
-    // `Renderer->RegisterTextureAsset` (the shipped `Misc\fire.i3d`
-    // atlas-tex isn't wired through the modern imagery path yet, and
-    // for an FB-only rig the procedural texture cleanly validates the
-    // pipeline without the asset-load dependency — same call as the
-    // L02 halo). Caller owns the returned pointer.
+    // exercise route. Loads the real `Misc\Fire.I3D` asset (F03b — the
+    // 2026-05-16 procedural-gradient stand-in was replaced per
+    // AGENT_GUIDE §4.2.1; helper trace lives in the F03b inventory
+    // sub-section). Caller owns the returned pointer.
     [[nodiscard]] static TFireEffect* SpawnForTest(const S3DPoint& origin);
 
     // Per-frame tick + submit for the harness; mirrors F01 / H03 / M05 /
     // L02. Drives per-quad atlas-frame cycling (sim-tick-gated at 24 Hz
     // to match other Fire-family cadence) and submits
-    // `kFireScatterQuads` additive textured billboards via
-    // SubmitFxBillboard each frame. FB pipeline only — see INVENTORY F03
-    // forensics §6 (pre-release renders quads directly, no particle
-    // bucket).
+    // `kFireScatterQuads` ground-projected (WorldXY) textured billboards
+    // via SubmitFxBillboard each frame, picking the per-quad texture
+    // frame from the real I3D's `framehtexs[]` table. FB pipeline only
+    // — pre-release renders quads directly, no particle bucket
+    // (forensics §6 / F03b §1).
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
 
     // True until the harness `delete`s the effect. Pre-release Pulse
@@ -425,6 +423,14 @@ class TFireEffect : public TEffect
     bool             alive_ = true;
     double           sim_accum_ms_ = 0.0;
     int32_t          rng_seed_ = 0;     // per-instance RNG seed; reseeded each lifetime
+    // Real-asset state (F03b): the Misc\Fire.I3D imagery and the resolved
+    // texture-slot-0 frame array. The imagery is owned by the effect
+    // (FreeImagery in dtor) — same lifecycle pattern as F01 / H04. The
+    // frame texture handle array is a cached snapshot of `framehtexs[0..N)`
+    // captured at SpawnForTest to avoid a virtual GetTexture per quad per
+    // frame in the submit hot path.
+    TObjectImagery*           imagery_ = nullptr;
+    std::vector<TTextureHandle> frame_textures_ {};
 };
 
 class TFlameEffect : public TEffect
