@@ -2027,6 +2027,13 @@ int32_t g_loadObjNullCorruptDrop = 0;
 int32_t g_loadObjNullNonMapDrop  = 0;
 int32_t g_loadObjOk              = 0;
 
+// REVSYNC: TObjectInstance::LoadObject (universal stream decoder) @ 0x471ce0
+//   = FUN_00471ce0_CreateObjectFromStream
+//   Source-path fingerprint: d:\revenant\object.cpp (1998 source).
+//   Header layout, version gates, MovePos resync semantics, and the
+//   "force-simple" recovery path (mismatched objclass found via id scan,
+//   dispatch via TObjectInstance::Load instead of the virtual) all match
+//   retail. v14+ adds the separate invblocksize tail.
 TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, bool ismap)
 {
     uint32_t uniqueid;
@@ -2235,12 +2242,21 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     return inst;
 }
 
-// Mirrors retail FUN_00472110 (v14+). Layout written to disk:
+// REVSYNC: TObjectInstance::SaveObject (universal stream encoder) @ 0x472110
+//   = FUN_00472110 (called from cls_0x45f7c0.cpp:2153 in SaveGame,
+//     and from cls_TSector_FUN_00499e90.cpp:47 / cls_TSector_FUN_00498c90.cpp:36
+//     in sector serialization). Source-path fingerprint: d:\revenant\object.cpp.
+//
+// Layout written to disk:
 //   [objversion:int16][objclass:int16][uniqueid:uint32]
 //   [blocksize:int16][invblocksize:int16]     (invblocksize only when v14+)
 //   [body bytes: blocksize - invblocksize]
 //   [inventory bytes: invblocksize]           (present only when invblocksize>0)
 // An empty slot is encoded as just a single int16 = -1.
+//
+// The retail `ismap` corresponds to (DAT_0065a254 & 1); when saving a map
+// file, OF_NONMAP objects (players, script-generated effects, etc.) emit
+// the empty-slot placeholder so they don't leak into sector .DAT files.
 void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, bool ismap)
 {
     os.MakeFreeSpace(1024);
@@ -2348,6 +2364,12 @@ void TObjectInstance::LoadInventory(RTInputStream is, int32_t version)
     }
 }
 
+// REVSYNC: TObjectInstance::SaveInventory — vtable slot 0x16c (offset 364)
+// of cls_0x5a50e8 (= FUN_00472380). Mirror of LoadInventory at slot 0x168.
+//   [int32 count] [count × SaveObject(...) recursively]
+// `count` is the live item count (RealNumInventoryItems), not the max
+// slot — gaps in the parent's inventory array are NOT encoded; LoadInventory
+// rebuilds the slot placement from each child's invindex body field.
 void TObjectInstance::SaveInventory(RTOutputStream os)
 {
     int32_t num = RealNumInventoryItems();
@@ -2365,6 +2387,24 @@ void TObjectInstance::SaveInventory(RTOutputStream os)
 
 }
 
+// REVSYNC: TObjectInstance::Load — vtable slot 0x160 (offset 352) of
+// cls_0x5a50e8 (= FUN_00472430). Body field order matches retail v15:
+//   uint8 namelen; namelen × char name
+//   uint32 flags; int32 pos.x, pos.y, pos.z
+//   if !(flags & OF_IMMOBILE): int32 vel.x, vel.y, vel.z
+//   uint16 state                              (uint8 pre-v9)
+//   if (flags & OF_NONMAP): uint16 level      (gated v>=6; uint8 pre-v9)
+//   int32 inventnum, invindex, shadow
+//   uint8 rotatex, rotatey, rotatez (or facing pre-v3)
+//   int32 mapindex
+//   if (flags & OF_ANIMATE): int32 frame, framerate   (gated v>=6)
+//   int32 group
+//   uint8 numstats; numstats × { int32 stat; uint32 uniqueid }
+//   if (flags & OF_LIGHT): light block (flags, pos.xyz, color.rgb,
+//                                       intensity, multiplier)
+// pos is routed through WriteTransformPos so transform_ and the legacy
+// pos mirror stay in lockstep — the canonical world position is read
+// back via Pos().
 void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
     uint8_t len;
@@ -2537,6 +2577,10 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
         Inventory.Update();
 }
 
+// REVSYNC: TObjectInstance::Save — vtable slot 0x164 (offset 356) of
+// cls_0x5a50e8 (= FUN_00472980). Byte-symmetric counterpart of Load
+// above; field order, version gates, and OF_IMMOBILE / OF_NONMAP /
+// OF_ANIMATE / OF_LIGHT predicates match retail v15.
 void TObjectInstance::Save(RTOutputStream os)
 {
     if (flags & OF_LIGHT)
