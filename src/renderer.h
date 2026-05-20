@@ -720,6 +720,45 @@ public:
     // caches by bitmap identity so repeat calls cost an unordered_map
     // lookup. Caller never sees TTextureHandle for HUD purposes.
     void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y);
+    // Subrect variant — blits the (src_x, src_y, src_w, src_h) region of
+    // bm to (dst_x, dst_y). Used for sprite-atlas panels (e.g. the
+    // TPlyrStatusBar `Bars` 128x128 atlas that holds 3 bar colours
+    // stacked vertically).
+    void DrawBitmapSubrect(PTBitmap bm,
+                           int32_t dst_x, int32_t dst_y,
+                           int32_t src_x, int32_t src_y,
+                           int32_t src_w, int32_t src_h);
+
+    // Color-tinted blit — multiplies texture sample by (tr, tg, tb, ta).
+    // Used for dropshadow / glow / silhouette effects where a bitmap is
+    // rendered in a uniform color while preserving its alpha/key shape.
+    //   tint (0, 0, 0, 1)   = pure black silhouette (dropshadow)
+    //   tint (0, 0, 0, 0.6) = semi-transparent shadow
+    //   tint (1, 1, 1, 1)   = no change (use DrawBitmap instead)
+    void DrawBitmapTinted(PTBitmap bm, int32_t x, int32_t y,
+                          float tr, float tg, float tb, float ta);
+    void DrawBitmapSubrectTinted(PTBitmap bm,
+                                 int32_t dst_x, int32_t dst_y,
+                                 int32_t src_x, int32_t src_y,
+                                 int32_t src_w, int32_t src_h,
+                                 float tr, float tg, float tb, float ta);
+
+    // Dropshadow convenience — draws a darkened silhouette of `bm` at
+    // (x + off_x, y + off_y), then the normal bitmap on top. The shadow
+    // alpha is `shadow_a` (default 0.6); shadow color defaults to black.
+    // This is the modern equivalent of retail's blit-effect-pipeline
+    // shadow pass (FUN_004aa280_BlitWithEffects + FUN_00438d80_Setup).
+    // See memory project-retail-blit-effect-pipeline for the recon
+    // analysis that informed this API.
+    void DrawBitmapShadowed(PTBitmap bm, int32_t x, int32_t y,
+                            int32_t off_x = 4, int32_t off_y = 4,
+                            float shadow_a = 0.6f);
+    void DrawBitmapSubrectShadowed(PTBitmap bm,
+                                   int32_t dst_x, int32_t dst_y,
+                                   int32_t src_x, int32_t src_y,
+                                   int32_t src_w, int32_t src_h,
+                                   int32_t off_x = 4, int32_t off_y = 4,
+                                   float shadow_a = 0.6f);
     // TSurface -> quad blit, sized to the surface. Used for cached HUD
     // panels (char stats, game log, ...) that own their own surface
     // and refresh outside the draw path.
@@ -833,6 +872,14 @@ private:
                             int32_t target_w, int32_t target_h,
                             int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
                             int32_t src_tex_w, int32_t src_tex_h);
+    // Tinted variant — multiplies texture sample by (tr, tg, tb, ta)
+    // before output. Backs DrawBitmapTinted + the shadow draw helpers.
+    void CompositeSwapchainTinted(sg_image img,
+                                  int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                  int32_t target_w, int32_t target_h,
+                                  int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                  int32_t src_tex_w, int32_t src_tex_h,
+                                  float tr, float tg, float tb, float ta);
 
     int32_t width  = 0;
     int32_t height = 0;
