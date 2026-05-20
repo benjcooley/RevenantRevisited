@@ -1047,6 +1047,25 @@ void TPlayScreen::UpdateMove()
     uint32_t state, changed;
     ControlMap.GetCommandFlags(state, changed);
 
+    // Run / sneak mode toggles. The 'R' and 'S' (in sneak-mode binding)
+    // keys carry a CMDFLAG_RUN / CMDFLAG_SNEAK bit alongside their
+    // GAMECMD_MOVEDOWN dispatch -- ControlMap maintains the bit while
+    // held, and `changed` flags the bits that flipped this poll. Press
+    // edge -> swap the player's root animation to run/sneak; release
+    // edge -> swap back to walk. Both keyboard direction keys AND the
+    // mouse walk-to path then naturally pick up the new root, so
+    // hold-R + right-click runs toward the cursor, etc.
+    if (changed & CMDFLAG_RUN)
+    {
+        if (state & CMDFLAG_RUN) Player->SetRunMode();
+        else                     Player->SetWalkMode();
+    }
+    if (changed & CMDFLAG_SNEAK)
+    {
+        if (state & CMDFLAG_SNEAK) Player->SetSneakMode();
+        else                       Player->SetWalkMode();
+    }
+
     // Synthesize diagonal flags from adjacent cardinals so keyboards
     // without a Home / PgUp / End / PgDn cluster can still walk
     // diagonally with two arrow keys. The retail bit-scan picks the

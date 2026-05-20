@@ -8,6 +8,7 @@
 
 #include "bitmap.h"
 #include "bmsurface.h"
+#include "platform/cursor.h"
 #include "display.h"
 #include "imgui.h"
 #include "logging.h"
@@ -23,6 +24,13 @@ PTBitmap MouseShadow = nullptr;
 int32_t shadowoffsetx = 0, shadowoffsety = 0;
 PTBitmap MouseCursorAdd = nullptr;     // Little picture that goes in the corner
 bool priority;                      // Priority of mouse image
+
+// True once the OS has accepted our cursor pixels via rev_platform::
+// SetOSCursor (macOS path). TCursorHud::Draw consults this to suppress
+// the in-game main cursor render so we don't double-draw on top of the
+// OS pointer. On platforms without the OS handoff it stays false and
+// the original in-game draw runs.
+static bool g_os_cursor_owns_pixels = false;
 
 PTBitmap DragBitmap = nullptr;
 int32_t grabx, graby;
@@ -49,6 +57,35 @@ void SetMouseBitmap(PTBitmap cursor)
         MouseCursorAdd = nullptr;      // no corner bitmaps if not in regular cursor
         priority = true;
     }
+
+    // Hand the new pixels to the OS so AppKit draws our cursor wherever
+    // it draws every other app's -- including out-of-window. regx/regy
+    // is the registration point Display.Put uses (DM_USEREG), so it's
+    // also the right NSCursor hotspot.
+    //
+    // Gated on Windowed: in fullscreen there's no "outside the window"
+    // for the OS cursor to live in, and AppKit hides the cursor over
+    // fullscreen apps by default -- which would leave us with no cursor
+    // at all. Fall back to the in-game TCursorHud draw + sapp_show_mouse
+    // (false) in that case. (macOS-only today; the non-macOS stub also
+    // returns false and the same fallback applies.)
+    if (cursor && Windowed)
+    {
+        g_os_cursor_owns_pixels = rev_platform::SetOSCursor(cursor, cursor->regx, cursor->regy);
+        if (!g_os_cursor_owns_pixels)
+            log_warn("[cursor] SetOSCursor declined; falling back to in-game draw");
+    }
+    else
+    {
+        g_os_cursor_owns_pixels = false;
+    }
+}
+
+void RefreshOSCursor()
+{
+    if (MouseCursor && Windowed)
+        g_os_cursor_owns_pixels = rev_platform::SetOSCursor(
+            MouseCursor, MouseCursor->regx, MouseCursor->regy);
 }
 
 void SetMouseShadow(PTBitmap shadow, int32_t offsetx, int32_t offsety)
@@ -108,23 +145,44 @@ void TCursorHud::Draw()
     // active pass -- can issue Renderer->DrawBitmap calls directly.
     if (!Renderer) return;
 
-    // Suppress the game cursor while ImGui owns the mouse (the OS
-    // pointer is visible in that case -- see TGameModeImpl::Tick which
-    // toggles sapp_show_mouse on the same predicate). Showing both
-    // would be visual double-vision.
+    // Suppress the game-side overlay while ImGui owns the mouse. The
+    // OS cursor still draws the pointer pixel (we reset it to the
+    // arrow from runtimemode while ImGui captures); we just don't add
+    // drag bitmaps or corner overlays on top.
     if (ImGui::GetIO().WantCaptureMouse)
         return;
 
-
+    // Ground shadow under wedge cursors (and the regular cursor's
+    // own drop-shadow). Drawn FIRST so the cursor / drag bitmap /
+    // corner overlay all paint on top of it -- the shadow lives "in"
+    // the world layer conceptually (it's the destination marker on
+    // the ground plane during right-click walk-to). shadowoffsetx/y
+    // come from SetMouseShadow; the wedge bitmaps use (0, 43) so the
+    // shadow lands directly below the wedge tip.
+    if (MouseShadow)
+        Renderer->DrawBitmap(MouseShadow,
+                             cursorx + shadowoffsetx,
+                             cursory + shadowoffsety);
 
     // Drag bitmap (e.g. inventory item being dragged) goes first so
-    // the cursor sits above it.
+    // the cursor sits above it. Still drawn here even when the OS owns
+    // the cursor pixel -- the drag bitmap is a separate visual asset
+    // (the item being moved), not part of the cursor sprite.
     if (DragBitmap)
         Renderer->DrawBitmap(DragBitmap, cursorx - grabx, cursory - graby);
 
-    if (MouseCursor && !MouseCursorAdd)
+    // Main cursor pixel: only draw it ourselves if the OS didn't take
+    // it. On macOS SetMouseBitmap routes through rev_platform::SetOSCursor
+    // and g_os_cursor_owns_pixels = true; on other platforms (and the
+    // brief window before the first SetMouseBitmap call) we fall back
+    // to the in-game draw.
+    if (MouseCursor && !MouseCursorAdd && !g_os_cursor_owns_pixels)
         Renderer->DrawBitmap(MouseCursor, cursorx, cursory);
 
+    // Corner-bitmap overlay (the little add-on icon: hand, eye, sword,
+    // etc.) is always our render, even when OS owns the main cursor --
+    // it's a per-target hint laid over the cursor pixel that the OS
+    // pointer has no awareness of.
     if (MouseCursorAdd)
         Renderer->DrawBitmap(MouseCursorAdd, cursorx, cursory);
 

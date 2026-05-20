@@ -396,13 +396,13 @@ void cls_0x5a5750_TSideTabsPane::meth_0x53d8b0()
   
   cls_0x5a68d8::meth_0x4bd680((cls_0x5a68d8 *)this->mbr_0x188,0,0,this->mbr_0x184,0x80000000);
   piVar1 = (int *)this->mbr_0x190;
-  FUN_00438d80(&local_54,0,0,0,0,*(undefined4 *)(this->mbr_0x188 + 4),
+  FUN_00438d80_BlitEffect_StructInit(&local_54,0,0,0,0,*(undefined4 *)(this->mbr_0x188 + 4),
                *(undefined4 *)(this->mbr_0x188 + 8),0x80000000);
   (**(code **)(*piVar1 + 0x5c))(&local_54);
   cls_0x5a68d8::meth_0x4bd680((cls_0x5a68d8 *)this->mbr_0x188,0,0,this->mbr_0x17c,0x80000000);
   dVar2 = this->mbr_0x188;
   piVar1 = (int *)this->mbr_0x18c;
-  FUN_00438d80((undefined4 *)&stack0xffffff9c,0,0,0,0,*(undefined4 *)(dVar2 + 4),
+  FUN_00438d80_BlitEffect_StructInit((undefined4 *)&stack0xffffff9c,0,0,0,0,*(undefined4 *)(dVar2 + 4),
                *(undefined4 *)(dVar2 + 8),0x80000000);
   (**(code **)(*piVar1 + 0x5c))(&stack0xffffff9c,dVar2,0,0);
   cls_0x5a68d8::meth_0x4bd680((cls_0x5a68d8 *)this->mbr_0x188,0,0,this->mbr_0x180,0x80000000);

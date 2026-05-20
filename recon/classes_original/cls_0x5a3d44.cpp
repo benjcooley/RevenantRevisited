@@ -715,7 +715,7 @@ OOAnalyzer::cls_0x5a3d44::meth_0x430db0(cls_0x5a3d44 *this,cls_0x5a68d8 *param_1
                 (&(this->cls_0x5a3ab8).mbr_0x38,auStack_84);
       if (*(char *)&(this->cls_0x5a3ab8).mbr_0x38 != '\0') {
         cls_0x419dd0::cls_0x419dd0((cls_0x419dd0 *)&stack0xffffff54);
-        cls_0x5a68d8::meth_0x4be2b0
+        cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
                   (unaff_retaddr,(char)iVar7,uVar8,(char)dVar6,unaff_EBX,(char)auStack_84,0);
       }
     }

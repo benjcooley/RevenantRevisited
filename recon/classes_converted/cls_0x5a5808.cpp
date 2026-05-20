@@ -143,7 +143,7 @@ void cls_0x5a5808_TBottomBarPane::virt_meth_0x52c800()
   cls_0x5a5a30_TQuickSpellPane::virt_meth_0x5444c0((cls_0x5a5a30_TQuickSpellPane *)&DAT_0065c6f8);
   this->virt_meth_0x435de0();
   if (this->mbr_0x50 != 0) {
-    FUN_004aacb0(this->mbr_0x4,this->mbr_0x8,this->mbr_0xc,this->mbr_0x10);
+    FUN_004aacb0_BlitEffect_Iterate(this->mbr_0x4,this->mbr_0x8,this->mbr_0xc,this->mbr_0x10);
   }
   (*this->vftptr_0x0->virt_meth_0x444fc0_44)(this);
   return;

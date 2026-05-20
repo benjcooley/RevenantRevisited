@@ -14,10 +14,19 @@
 
 #pragma once
 
+// Uniform layout (must match TRenderer::CompositeSwapchain's 16-float array):
+//   rect       (x, y, w, h) — clip-space rect of the dest quad
+//   uv_rect    (u, v, w, h) — source UV rect
+//   chroma_key (enable, _, _, _) — non-zero discards red pixels (legacy)
+//   color_tint (r, g, b, a) — multiplied with texture sample. Default
+//                              (1, 1, 1, 1) = no change. Used for
+//                              dropshadow rendering (e.g. (0,0,0,a) to
+//                              draw a bitmap as a darkened silhouette
+//                              while preserving its alpha shape).
 inline constexpr const char* kCompositeVsMetal = R"MSL(
 #include <metal_stdlib>
 using namespace metal;
-struct params { float4 rect; float4 uv_rect; float4 chroma_key; };
+struct params { float4 rect; float4 uv_rect; float4 chroma_key; float4 color_tint; };
 struct vs_in  { float2 pos [[attribute(0)]]; float2 uv [[attribute(1)]]; };
 struct vs_out { float4 pos [[position]];      float2 uv; };
 vertex vs_out _main(vs_in in [[stage_in]], constant params& p [[buffer(0)]]) {
@@ -31,7 +40,7 @@ vertex vs_out _main(vs_in in [[stage_in]], constant params& p [[buffer(0)]]) {
 inline constexpr const char* kCompositeFsMetal = R"MSL(
 #include <metal_stdlib>
 using namespace metal;
-struct params { float4 rect; float4 uv_rect; float4 chroma_key; };
+struct params { float4 rect; float4 uv_rect; float4 chroma_key; float4 color_tint; };
 struct vs_out { float4 pos [[position]]; float2 uv; };
 fragment float4 _main(vs_out in [[stage_in]],
                       constant params& p [[buffer(0)]],
@@ -40,6 +49,9 @@ fragment float4 _main(vs_out in [[stage_in]],
     float4 c = tex.sample(smp, in.uv);
     if (p.chroma_key.x > 0.5 && c.r > 0.55 && c.g < 0.30 && c.b < 0.30)
         discard_fragment();
-    return c;
+    // Color tint: multiply texture sample by tint. tint=(1,1,1,1) is
+    // a no-op. (0,0,0,a) preserves alpha shape but blackens to draw
+    // a darkened shadow/silhouette of the bitmap.
+    return c * p.color_tint;
 }
 )MSL";

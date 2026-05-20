@@ -414,7 +414,7 @@ void __thiscall OOAnalyzer::cls_0x5a3e1c::meth_0x4341a0(cls_0x5a3e1c *this,cls_0
         (**(code **)(*(int *)(this->cls_0x5a3ab8).mbr_0x8 + 0xa4))
                   (&(this->cls_0x5a3ab8).mbr_0x38,auStack_84);
         cls_0x419dd0::cls_0x419dd0((cls_0x419dd0 *)&stack0xffffff4c);
-        cls_0x5a68d8::meth_0x4be2b0(param_1,uVar9,uVar10,uVar11,dVar2,(char)auStack_84,0);
+        cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer(param_1,uVar9,uVar10,uVar11,dVar2,(char)auStack_84,0);
       }
     }
     else {

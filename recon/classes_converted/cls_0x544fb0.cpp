@@ -50,7 +50,7 @@ void cls_0x544fb0::meth_0x544fb0()
          (iVar7 = cls_0x45f7c0::meth_0x49d780((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310), iVar7 != 0
          )) {
         cls_0x419dd0::cls_0x419dd0((cls_0x419dd0 *)&stack0xffffff88);
-        iVar2 = cls_0x5a68d8::meth_0x4be2b0
+        iVar2 = cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
                           ((cls_0x5a68d8 *)this->mbr_0x180,0,0,0x84,1,(char)iVar7,0);
         iVar7 = DAT_0065a9d8;
         iVar3 = iVar2 * *(int *)(iVar3 + 0x50) + 0x5b;
@@ -236,7 +236,7 @@ void cls_0x544fb0::meth_0x546830()
           cls_0x419dd0::cls_0x419dd0((cls_0x419dd0 *)&stack0xffffff78);
           uVar14 = 0;
           uVar3 = cls_0x45f7c0::meth_0x49d800((cls_0x45f7c0 *)&UNK_0065d1c0.field_0x310);
-          iVar6 = cls_0x5a68d8::meth_0x4be2b0
+          iVar6 = cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
                             ((cls_0x5a68d8 *)this->mbr_0x180,0,0,0x84,1,uVar3,uVar14);
           iVar6 = iVar6 * *(int *)(local_64 + 0x50) + 0x5b;
           if ((short)this->mbr_0x1a6 <= (short)this->mbr_0x1a4) {

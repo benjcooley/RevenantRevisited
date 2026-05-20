@@ -925,7 +925,7 @@ undefined4 __thiscall OOAnalyzer::cls_0x5a393c::virt_meth_0x419590(cls_0x5a393c 
                 ((cls_0x411eb0 *)((int)&DAT_0065a578 + 4),(char)local_38 - cVar3,
                  (char)local_34 - (char)iStack_1c,local_30 - iStack_18,iVar4,0);
     }
-    FUN_004aacb0(local_38 - iVar6,local_34 - iStack_1c,*(int *)(iVar4 + 4) + 1,
+    FUN_004aacb0_BlitEffect_Iterate(local_38 - iVar6,local_34 - iStack_1c,*(int *)(iVar4 + 4) + 1,
                  *(int *)(iVar4 + 8) + 1);
   }
   return 1;

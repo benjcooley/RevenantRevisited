@@ -90,7 +90,7 @@ void __fastcall FUN_0054cd40(int param_1)
         }
         uVar9 = 0x80000000;
         uVar8 = 0x400;
-        FUN_00419dd0(&uStack_14c);
+        FUN_00419dd0_BlitEffect_SetField(&uStack_14c);
         FUN_00438ed0(4,9,iStack_148 + 0xc + *(int *)(param_1 + 0x6c),DAT_0065abc4,uVar4,uVar8,uVar9)
         ;
         if (DAT_006680c8 == 0) {
@@ -99,7 +99,7 @@ void __fastcall FUN_0054cd40(int param_1)
                      ,0x7f7f,0x80000000);
           iVar7 = *(int *)(param_1 + 0x84);
           piStack_144 = *(int **)(param_1 + 0x88);
-          FUN_00438d80(auStack_94,0,iVar6,0,0,*(undefined4 *)(iVar7 + 4),*(undefined4 *)(iVar7 + 8),
+          FUN_00438d80_BlitEffect_StructInit(auStack_94,0,iVar6,0,0,*(undefined4 *)(iVar7 + 4),*(undefined4 *)(iVar7 + 8),
                        0x100);
           puVar3 = auStack_94;
           iVar5 = *piStack_144;
@@ -107,7 +107,7 @@ void __fastcall FUN_0054cd40(int param_1)
         else {
           iVar7 = *(int *)(param_1 + 0x84);
           piStack_144 = *(int **)(param_1 + 0x88);
-          FUN_00438d80(auStack_e8,0,iVar6,0,0,*(undefined4 *)(iVar7 + 4),*(undefined4 *)(iVar7 + 8),
+          FUN_00438d80_BlitEffect_StructInit(auStack_e8,0,iVar6,0,0,*(undefined4 *)(iVar7 + 4),*(undefined4 *)(iVar7 + 8),
                        0x80000000);
           puVar3 = auStack_e8;
           iVar5 = *piStack_144;

@@ -69,6 +69,7 @@
 #include "dialog.h"
 #include "debugui.h"
 #include "cursor.h"
+#include "platform/cursor.h"
 
 #include <sokol_app.h>
 
@@ -2571,6 +2572,15 @@ static void AppEvent(const sapp_event* ev)
             CurrentScreen->CharPress((int32_t)ev->char_code, true);
         break;
       }
+
+      // No MOUSE_ENTER / MOUSE_LEAVE handlers for cursor swapping. The
+      // platform layer (src/platform/macosx/cursor.mm) installs its own
+      // NSTrackingArea with NSTrackingActiveAlways + NSTrackingCursorUpdate
+      // on the sokol contentView, so AppKit drives cursor swaps via
+      // cursorUpdate: directly. That fires reliably across key-window
+      // transitions, which sokol's MOUSE_LEAVE does not -- sokol's own
+      // tracking area is NSTrackingActiveInKeyWindow and goes silent the
+      // moment another window becomes key.
 
       case SAPP_EVENTTYPE_MOUSE_MOVE:
       {

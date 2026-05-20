@@ -17,6 +17,7 @@ cbuffer params : register(b0) {
     float4 rect;
     float4 uv_rect;
     float4 chroma_key;
+    float4 color_tint;
 };
 struct vs_in  { float2 pos : POSITION; float2 uv : TEXCOORD0; };
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
@@ -29,6 +30,12 @@ vs_out main_vs(vs_in i) {
 )HLSL";
 
 inline constexpr const char* kCompositeFsHlsl = R"HLSL(
+cbuffer params : register(b0) {
+    float4 rect;
+    float4 uv_rect;
+    float4 chroma_key;
+    float4 color_tint;
+};
 Texture2D    tex : register(t0);
 SamplerState smp : register(s0);
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
@@ -36,6 +43,6 @@ float4 main_ps(vs_out i) : SV_Target0 {
     float4 c = tex.Sample(smp, i.uv);
     if (chroma_key.x > 0.5 && c.r > 0.55 && c.g < 0.30 && c.b < 0.30)
         discard;
-    return c;
+    return c * color_tint;
 }
 )HLSL";
