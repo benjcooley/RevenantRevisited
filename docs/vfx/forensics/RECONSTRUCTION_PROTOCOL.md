@@ -81,8 +81,12 @@ closest already-ported effect as a template (e.g. asset load: H04 TDripEffect's
 2. Read [../AGENT_GUIDE.md](../AGENT_GUIDE.md) §3.2.1 (engine-vs-bespoke),
    §4.2.* (verification rules), and the cited retail code for any detail you want
    to confirm.
-3. Decide the engine approach (pipeline, bespoke-vs-engine) and build, pulling
-   constants/assets/behavior/render/color from the doc's §3–§10.
+3. Work the doc's §14 reconstruction burndown as your task list — it's the flat
+   checklist of every discrete element to recreate, each back-referencing the
+   detail section. Decide the engine approach (pipeline, bespoke-vs-engine) and
+   build, pulling constants/assets/behavior/render/color from §3–§10 as each
+   burndown item directs. Check items off as you go; the burndown is your
+   definition of done.
 4. Wire the `--test=vfx` harness entry (SpawnForTest + TickAndSubmitForTest);
    choose the preview_style + rig category yourself from the effect's nature.
 5. Build clean (`cmake --build build`, no new warnings).
