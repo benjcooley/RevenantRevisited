@@ -21,22 +21,24 @@ inline void Decode555(uint16_t px, uint8_t* rgba_out)
 }  // namespace
 
 bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
-                        int32_t ox, int32_t oy)
+                        int32_t ox, int32_t oy, bool prefer_alias)
 {
     if (!bm || bm->width <= 0 || bm->height <= 0) return false;
     if (bm->flags & BM_COMPRESSED) return false;  // TODO decompressor
     const int32_t w = bm->width, h = bm->height;
 
-    // BM_ALIAS bitmaps (anti-aliased sprites: cursor/wedge shadows, soft
-    // UI text shadows, glows) store their real pixels as an RLE coverage
-    // stream in the alias buffer, NOT in the data8/data16 array. Per
-    // scanline: alternating (skip-count, run-count, [color16, alpha5]*)
-    // groups; AL_EOL ends a line, AL_EOD ends the stream. alpha5 is 0..31
-    // coverage (31 = opaque). Legacy blitted this via MMX asm
-    // (graphics.cpp PutAlias*, now #if 0); this is the C port of that
-    // format. Without it these bitmaps decode from an empty/garbage data
-    // array -> invisible (the cursor-shadow bug).
-    if ((bm->flags & BM_ALIAS) && bm->alias.ptr())
+    // Alias path: only when the caller explicitly asked for it (a shadow /
+    // glow draw). BM_ALIAS alone is NOT sufficient -- the cursor sprite
+    // carries both a real data array AND an alias buffer, and must decode
+    // from the data array. Retail keyed this off the DM_ALIAS draw mode,
+    // not the BM_ALIAS bitmap flag; prefer_alias is our equivalent.
+    //
+    // The alias buffer stores anti-aliased pixels as an RLE coverage
+    // stream: per scanline, alternating (skip-count, run-count,
+    // [color16, alpha5]*) groups; AL_EOL ends a line, AL_EOD ends the
+    // stream; alpha5 is 0..31 coverage (31 = opaque). C port of the
+    // legacy MMX PutAlias* blit (graphics.cpp, now #if 0).
+    if (prefer_alias && (bm->flags & BM_ALIAS) && bm->alias.ptr())
     {
         const uint8_t* a   = (const uint8_t*)bm->alias.ptr();
         const uint8_t* aend = a + bm->aliassize;
