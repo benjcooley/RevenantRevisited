@@ -5,7 +5,8 @@
 | **Effect ID** | (none yet — needs an INVENTORY row; suggest **X22**, see §1) |
 | **Class(es)** | `TParticle3DAnimator` (the actual animator). `TSparkAnimator` is **not a class** — it is only the *builder symbol name* the registration macro mints (see §2, §7). Registered name = `"sparks"`. No paired `TEffect` subclass; the spawned object is a generic `TEffect`. |
 | **Status** | forensics-complete (see §13 for the few genuine unknowns) |
-| **Author / Date** | vfx-forensics-agent / 2026-05-19 |
+| **Retail fidelity** | **retail-confirmed (with 3 divergences)** — retail `TCharacter::EffectBurst` decompiles cleanly and corroborates the asset, registration, structure, and most constants; but **gravity, trails, and bounce were re-tuned for ship** (snapshot 0.2/1/false → retail 0.25/2/true). Use the RETAIL values. See §2.1. |
+| **Author / Date** | vfx-forensics-agent / 2026-05-19 (retail reconciliation: vfx-forensics-agent / 2026-05-20) |
 | **Family** | blood/combat (combat-feedback; mechanically a generic spark burst) |
 | **Draws** | particle emitter — N screen-aligned billboards, each one sub-object of `Misc\Sparks.I3D` placed at a particle position |
 | **Archetype(s)** | (E) particle emitter — **simple emitter with gravity** (spawn, ballistic arc, fixed lifetime, die). No texture animation, no associated light, no state machine. The single-trigger **burst** sub-flavor. |
@@ -88,6 +89,96 @@ with `TSparkAnimator`. The generic spark burst is `TParticle3DAnimator`
 (`:4688`, `:4694-5002`) and applies **downward** gravity (`v.z -= gravity`,
 `:4850`), not upward acceleration. Do not conflate them.
 
+### 2.1 Retail-vs-snapshot reconciliation
+
+`src/character.cpp` / `src/effect_old.cpp` are a **pre-release development
+snapshot**, not the shipped game. Because the spark constants live in the
+**caller** (`TCharacter::EffectBurst`, not the generic animator), the
+reconciliation is primarily against the **retail `EffectBurst` decomp** — which,
+unlike the animator, **does** decompile cleanly. (The §2 statement "Retail decomp:
+NONE" was correct for the *animator* `TParticle3DAnimator`; it is **wrong for the
+caller** — see below.) Verdict: **retail-confirmed, with three documented
+divergences.** Use the retail values for those three.
+
+**Retail source:** `TCharacter::EffectBurst` = `meth_0x4c85d0` @ `0x4c85d0`
+(800 bytes). Full decompiled body: `recon/classes/cls_0x5a7b98.cpp:4535-4665`; the
+`"sparks"` branch is `:4614-4660`, where the `SParticleParams` is built on the
+stack at `&uStack_b0` and passed to the animator via `(**(code**)(*piVar5 +
+0x60))(&uStack_b0)` (`:4659`) — vtable slot `+0x60` = `InitParticles`. The struct
+field→stack-offset mapping is unambiguous (`SParticleParams` layout from
+`effect.h:982-1002`; struct base `&uStack_b0`, fields 4-byte contiguous).
+
+**(1) Constant grep — caller immediates, retail vs snapshot.** Every immediate in
+the retail "sparks" branch was decoded and mapped to its `SParticleParams` field:
+
+| field | snapshot (`character.cpp`) | retail immediate (`cls_0x5a7b98.cpp`) | match |
+|-------|----------------------------|---------------------------------------|-------|
+| particles | `random(15,25)` (:2290) | `RandomRange(0xf,0x19)` (:4635) | ✅ same |
+| pos.z bias | `+45` (:2288) | `iStack_100 + 0x2d` = +45 (:4634) | ✅ same |
+| facing jitter | `random(-80,80)` (:2274) | `RandomRange(0xffffffb0,0x50)` = (-80,80) (:4624) | ✅ same |
+| pspread x/y/z | `3.0` (:2294-96) | `0x40400000` = 3.0 ×3 (:4637-40) | ✅ same |
+| dir scale | `/100` (:2297-99) | `* _DAT_005a350c` = ×0.01 (:4652-55) | ✅ same |
+| spread x/y/z | `0.5` (:2300-02) | `0x3f000000` = 0.5 ×3 (:4641-44) | ✅ same |
+| **gravity** | **`0.2`** (:2303) | **`0x3e800000` = 0.25** (:4645, struct+0x34) | ❌ **DIVERGE** |
+| **trails** | **`1`** (:2304) | **`2`** (:4646, struct+0x38) | ❌ **DIVERGE** |
+| minstart / maxstart | `0` / `8` (:2305-06) | `0` / `8` (:4647-48) | ✅ same |
+| minlife / maxlife | `20` / `40` (:2307-08) | `0x14` / `0x28` = 20/40 (:4649-50) | ✅ same |
+| **bounce** | **`false`** (:2309) | **`1` = true** (:4651, struct+0x4c) | ❌ **DIVERGE** |
+| killobj | `true` (:2310) | `1` (:4653, struct+0x50) | ✅ same |
+| objflags | `1 << (ObjId()&3)` (:2311) | `1 << (… & 3)` (:4658, struct+0x54) | ✅ same |
+| numtargets | `0` (:2313) | `0` (:4657, struct+0x60) | ✅ same |
+
+So **11 of 14 spark params are byte-identical** between snapshot and retail;
+**three were re-tuned before ship**: `gravity 0.2 → 0.25`, `trails 1 → 2`,
+`bounce false → true`. These are exactly the kind of late tuning the protocol
+warns about. (`_DAT_005a350c` = bytes `0a d7 23 3c` = `0x3c23d70a` = 0.01 =
+`1/100`, `recon/classes/_data.txt:3898-3901` — the retail `×0.01` is the
+snapshot's `/100`.)
+
+**Effect of the divergences:** sparks fall slightly faster (gravity +25%); each
+particle draws as a short **2-step motion streak** rather than a single billboard
+(`trails=2` → the Render inner loop runs twice, stepping a ghost copy forward
+along velocity, §7); and sparks **bounce** off geometry instead of passing
+through (`bounce=true` enables the bounce block at `effect_old.cpp:4852-4858`,
+which §6/§13.3 documents as "skipped for sparks" *per the snapshot* — in retail it
+runs). The reconstruction must use the retail values.
+
+**(2) Asset identity — IDENTICAL.** The shipped `Imagery/Misc/sparks.i3d` member
+of `data/imagery.rvi` (a PK/ZIP archive) is **byte-for-byte identical** to the
+snapshot `legacy/Imagery/Misc/Sparks.i3d`: both 16,300 B, both md5
+`f285e02bb803bc53c45dbe9ce70d1956` (`cmp` reports identical). The 4-photon-sprite
+visual identity (§4, §10) is unchanged between snapshot and retail — the asset side
+of the effect did not move.
+
+**(3) Structure / registration table — corroborated.** The retail binary holds a
+contiguous animator-builder function-pointer table (`recon/classes/_data.txt`
+around `005c5300+`, entries `addr LAB_004e____`); the entry at `005c5350 →
+004e53a0` is the builder whose function references the `"sparks"` string at
+`005e1104` (`_data.txt:107439-107440`). This confirms the retail
+`REGISTER_MULTI_3DANIMATOR_("sparks", …)` registration mechanism is present and
+slots into the same factory table. (The auto-fingerprinter heuristically maps
+`SParticleParams ↔ cls_0x5a393c` `recon/analysis/full_output.txt:1240`, but that
+cls also matches `TLightningAnimator` and carries "Armor" strings — treat the
+struct-layout match as **unconfirmed**, not corroborating.)
+
+**(4) Registration + naming + trigger — corroborated.** The `"sparks"` string is
+XREF'd from three retail sites (`recon/classes/_data.txt:104150,104238,107439`):
+the `EffectBurst` dispatch (`meth_0x4c85d0:0x4c86ce`), the attack-result handler
+(`TPlayer virt_meth_0x4c6dd0:0x4c71aa` — the block-resolution caller that passes
+`"sparks"` to `EffectBurst`, matching the snapshot's `character.cpp:1805-1810`
+blocked-miss path), and the animator builder (`0x4e53a0`). The retail dispatch
+also keeps the burning early-out (`if (mbr_0x1b8 && stricmp(type,"blood")==0)
+return;`, `cls_0x5a7b98.cpp:4586`) matching the snapshot `EffectBurst` head. The
+`CA_SPARKS`-gated, `ACTION_BLOCK`-conditioned trigger is therefore confirmed in
+retail (the flag-test itself lives in the block-resolution caller, consistent with
+the snapshot).
+
+**Bottom line:** the effect is **retail-confirmed** — asset identical,
+registration + trigger wiring identical, 11/14 caller constants identical — but the
+snapshot is **not** authoritative for `gravity`, `trails`, and `bounce`, which the
+retail decomp shows were changed for ship. The §3 table and §13 are updated
+accordingly.
+
 ---
 
 ## 3. Constants
@@ -100,23 +191,23 @@ constants in the animator.
 
 | name | value | units | source | confirmed? |
 |------|-------|-------|--------|------------|
-| particle count | `random(15, 25)` (inclusive) | count | character.cpp:2290 | yes |
-| spawn origin (pos) | `vect0` = vector(caster→target, dist/2) with `z += 45` | wu, caster-local | character.cpp:2283-2293 | yes |
-| pspread (position jitter) | `(3, 3, 3)` × `random(-100,100)/100` ⇒ ±3 wu each axis | wu | character.cpp:2294-2296 | yes |
-| dir (mean velocity) | `vect/100` where `vect = vector(face±random(-80,80), 100)` ⇒ unit-ish XY toward a randomized facing, z≈0 | wu/tick | character.cpp:2274-2277, 2297-2299 | yes |
-| spread (velocity jitter) | `(0.5, 0.5, 0.5)` × `random(-100,100)/100` ⇒ ±0.5 wu/tick each axis | wu/tick | character.cpp:2300-2302 | yes |
-| gravity | `0.2` | wu/tick² (added to `v.z` each tick) | character.cpp:2303 | yes |
-| trails | `1` | count (render-only sub-steps per particle, §7) | character.cpp:2304 | yes |
-| minstart / maxstart | `0` / `8` | tick start-delay range, `random()` per particle | character.cpp:2305-2306 | yes |
-| minlife / maxlife | `20` / `40` | tick lifetime range, `random()` per particle | character.cpp:2307-2308 | yes |
-| bounce | `false` | bool | character.cpp:2309 | yes |
-| killobj | `true` | bool — object self-destructs when all particles done | character.cpp:2310 | yes |
-| objflags | `1 << (ObjId() & 0x3)` | bitmask — selects exactly ONE of the 4 sub-objects (§4) | character.cpp:2311 | yes |
-| seektargets / numtargets | `false` / `0` | no homing | character.cpp:2312-2313 | yes |
-| EffectBurst `height` arg | `50` (default, unused for "sparks") | wu | character.h:311 | yes (unused — see §5) |
-| spawn-facing jitter | `random(-80, 80)` byte-angle | added to caster face | character.cpp:2274 | yes |
-| **sample-default count** | `10` | count — fallback only if `params.particles==0` (§6.1) | effect_old.cpp:4797 | yes (dev fallback, not the live path) |
-| RefreshZBuffer patch | `size_x=75, size_y=50`, offset `+25 / −50` px | screen px | effect_old.cpp:4996-5000 | yes |
+| particle count | `random(15, 25)` (inclusive) | count | character.cpp:2290 | **yes (retail)** — `RandomRange(0xf,0x19)` cls_0x5a7b98.cpp:4635 |
+| spawn origin (pos) | `vect0` = vector(caster→target, dist/2) with `z += 45` | wu, caster-local | character.cpp:2283-2293 | **yes (retail)** — `+0x2d`/dist÷2 cls_0x5a7b98.cpp:4633-34 |
+| pspread (position jitter) | `(3, 3, 3)` × `random(-100,100)/100` ⇒ ±3 wu each axis | wu | character.cpp:2294-2296 | **yes (retail)** — `0x40400000`=3.0 cls_0x5a7b98.cpp:4637-40 |
+| dir (mean velocity) | `vect/100` where `vect = vector(face±random(-80,80), 100)` ⇒ unit-ish XY toward a randomized facing, z≈0 | wu/tick | character.cpp:2274-2277, 2297-2299 | **yes (retail)** — `×0.01` (_DAT_005a350c) cls_0x5a7b98.cpp:4652-55 |
+| spread (velocity jitter) | `(0.5, 0.5, 0.5)` × `random(-100,100)/100` ⇒ ±0.5 wu/tick each axis | wu/tick | character.cpp:2300-2302 | **yes (retail)** — `0x3f000000`=0.5 cls_0x5a7b98.cpp:4641-44 |
+| gravity ⚠️ | snapshot `0.2` → **retail `0.25`** | wu/tick² (added to `v.z` each tick) | character.cpp:2303 / cls_0x5a7b98.cpp:4645 | **DIVERGES — use 0.25 (retail)** `0x3e800000` |
+| trails ⚠️ | snapshot `1` → **retail `2`** | count (render-only sub-steps per particle, §7) | character.cpp:2304 / cls_0x5a7b98.cpp:4646 | **DIVERGES — use 2 (retail)** (motion-streak, §7) |
+| minstart / maxstart | `0` / `8` | tick start-delay range, `random()` per particle | character.cpp:2305-2306 | **yes (retail)** — `0`/`8` cls_0x5a7b98.cpp:4647-48 |
+| minlife / maxlife | `20` / `40` | tick lifetime range, `random()` per particle | character.cpp:2307-2308 | **yes (retail)** — `0x14`/`0x28` cls_0x5a7b98.cpp:4649-50 |
+| bounce ⚠️ | snapshot `false` → **retail `true`** | bool | character.cpp:2309 / cls_0x5a7b98.cpp:4651 | **DIVERGES — use true (retail)** `1` (enables §6.2 bounce block) |
+| killobj | `true` | bool — object self-destructs when all particles done | character.cpp:2310 | **yes (retail)** — `1` cls_0x5a7b98.cpp:4653 |
+| objflags | `1 << (ObjId() & 0x3)` | bitmask — selects exactly ONE of the 4 sub-objects (§4) | character.cpp:2311 | **yes (retail)** — `1 << (… & 3)` cls_0x5a7b98.cpp:4658 |
+| seektargets / numtargets | `false` / `0` | no homing | character.cpp:2312-2313 | **yes (retail)** — `0`/`0` cls_0x5a7b98.cpp:4656-57 |
+| EffectBurst `height` arg | `50` (default, unused for "sparks") | wu | character.h:311 | yes (unused — see §5; retail "sparks" branch likewise ignores the height arg) |
+| spawn-facing jitter | `random(-80, 80)` byte-angle | added to caster face | character.cpp:2274 | **yes (retail)** — `RandomRange(0xffffffb0,0x50)` cls_0x5a7b98.cpp:4624 |
+| **sample-default count** | `10` | count — fallback only if `params.particles==0` (§6.1) | effect_old.cpp:4797 | snapshot-only (dev fallback in the animator; not exercised — caller always sets count) |
+| RefreshZBuffer patch | `size_x=75, size_y=50`, offset `+25 / −50` px | screen px | effect_old.cpp:4996-5000 | snapshot-only (animator-internal; no retail `TParticle3DAnimator` body to corroborate, §13.1) |
 
 `random(min,max)` is **inclusive** on both ends (`rand() % (max-min+1) + min`,
 `src/revutils.cpp:1609-1610`).
@@ -437,13 +528,32 @@ effect.
 
 ## 13. Gaps & uncertainties
 
-- **13.1 No retail decomp.** There is no `recon/classes/` body or
-  `recon/mappings/` entry for `TParticle3DAnimator` / `TSparkAnimator` / `"sparks"`
-  (verified by grep). Behavior here is **pre-release-authoritative**; the
-  pre-release source is complete (full bodies present), so this is low risk — but
-  flag it: there is no retail cross-check. The only `"sparks"` string XREF in
-  recon lands in the *unrelated* `TSymGlowAnimator` candidate
-  (`recon/mappings/TSymGlowAnimator_cls_0x5a9e50_candidate.yaml:9-11`).
+- **13.0 RETAIL DIVERGENCE — snapshot is wrong for 3 spark params (§2.1).** The
+  retail `TCharacter::EffectBurst` decompiles cleanly and shows the shipped spark
+  params changed `gravity 0.2 → 0.25`, `trails 1 → 2`, `bounce false → true`
+  (`recon/classes/cls_0x5a7b98.cpp:4645-46,4651`). **Use the retail values.** The
+  most visible consequence is `trails=2` (each spark draws as a 2-step motion
+  streak, not a single billboard, §7) and `bounce=true` (sparks bounce off
+  geometry — the §6.2/§13.3 "bounce block skipped" note holds only for the
+  *snapshot*; in retail the bounce path at `effect_old.cpp:4852-4858` runs). The
+  remaining 11 caller constants + the asset + registration are byte-/value-identical
+  in retail, so the rest of this doc is retail-confirmed.
+- **13.1 No retail decomp for the *animator* (caller IS decompiled).** There is no
+  `recon/classes/` body for the generic `TParticle3DAnimator` itself
+  (Animate/Render/InitParticles) — that translation unit wasn't extracted — so the
+  animator-internal numbers (the §6.2 update math, the §7 render/blend, the
+  `RefreshZBuffer` 75×50 patch, the §6.1 dev sample-default) are **snapshot-only**,
+  unverified against shipped retail. Their behavioral risk is low (the snapshot
+  bodies are complete and the asset/registration/caller all confirm), but a
+  reconstruction should still **visually match against an in-game block capture
+  (§12)** to confirm blend, billboard size, and the streak look. By contrast the
+  **caller** `TCharacter::EffectBurst` *is* fully decompiled
+  (`cls_0x5a7b98.cpp:4535-4665`) and is the authority for §3's spark constants
+  (see §2.1). (The only `"sparks"` string XREF that lands in an *unrelated* place
+  is the `TSymGlowAnimator` candidate
+  `recon/mappings/TSymGlowAnimator_cls_0x5a9e50_candidate.yaml:9-11`; the three
+  *relevant* `"sparks"` XREFs are in EffectBurst, the attack-result handler, and
+  the animator builder, §2.1(4).)
 - **13.2 Ribbon-spark code is a different class** — resolved (see §2
   disambiguation): `effect_old.cpp:4117-4260` is `TRibbonAnimator`, not this
   effect. The "accelerate upward" comment at `:4225` is ribbon behavior; sparks
