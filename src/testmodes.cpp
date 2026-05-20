@@ -35,6 +35,7 @@
 #include "uilayouttest.h"
 #include "uinineslicetest.h"
 #include "uiplyrstatusbartest.h"
+#include "uisidetabstest.h"
 #include "uistyletest.h"
 #include "uitextbartest.h"
 #include "vfxtest.h"
@@ -2421,6 +2422,8 @@ bool Initialize(const char* mode)
         return InitializeUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return InitializeUIPlyrStatusBarMode();
+    if (strcmp(mode, "ui-sidetabs") == 0)
+        return InitializeUISideTabsMode();
     if (strcmp(mode, "audio") == 0)
         return InitializeAudioMode();
     if (strcmp(mode, "vfx") == 0)
@@ -2456,6 +2459,8 @@ void Close(const char* mode)
         CloseUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         CloseUIPlyrStatusBarMode();
+    if (strcmp(mode, "ui-sidetabs") == 0)
+        CloseUISideTabsMode();
     if (strcmp(mode, "audio") == 0)
         CloseAudioMode();
     if (strcmp(mode, "vfx") == 0)
@@ -2500,6 +2505,8 @@ void Render(const char* mode)
         return RenderUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return RenderUIPlyrStatusBarMode();
+    if (strcmp(mode, "ui-sidetabs") == 0)
+        return RenderUISideTabsMode();
     if (strcmp(mode, "audio") == 0)
         return RenderAudioMode();
     if (strcmp(mode, "vfx") == 0)
