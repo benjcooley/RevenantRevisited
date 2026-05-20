@@ -100,7 +100,7 @@ other rows.
 |-----|---------------------|----------|-----------------|------------|-------------------------|---------------|-------|-------|
 | I20 | `TIceEffect`        | PE       | effect.cpp      | not-extracted | src/effect.h            | not-started   | -     | ice shard burst; needs Ghidra extraction |
 | I21 | `TIceBoltEffect`    | IM+PE(CX) | effect_old.cpp:7984 | sparse (cls_0x5aaf28) | src/effect.h:1464 | forensics-complete | - | **Forensics doc: docs/vfx/forensics/I21_TIceBoltEffect.md (2026-05-19).** Stationary caster→target freeze BEAM (NOT a flying missile): base is `TEffect` not `TMissileEffect` (confirmed pre-release effect.h:1464 + retail cls_0x5aaf28→cls_0x5b0074). Composite of 7 `Magic\icebolt.I3D` sub-objects (4 core cylinders stretched scl.z=length/64, counter-rotating spirals, sliding rings, 2 end glow spheres, 50 frost + 50 snow box01 billboards). Alpha blend, Unlit (asset color, no material zero), TestNoWrite. Damages (DAMAGE_ICE) @beat10 and posts the **Iced status (I22)** @beat20. Color = icebolt.I3D textures (ice-blue); spell.def LIGHT(100,100,255) is retail-only/discarded by pre-release parser. Candidate match: cls_0x5aaf28 (recon/mappings/TIceBoltEffect_cls_0x5aaf28_candidate.yaml). |
-| I22 | `TIcedEffect`       | VO       | effect.cpp      | (no class) | src/effect.h            | not-started   | -     | **2026-05-16 pass-2:** "Iced" XREFs split across cls_0x5aaf28 (TIceBoltEffect) and cls_0x5ab460 (TStormAnimator) -- it's a status tag posted by other effects, NOT a standalone TEffect class. Likely script-side / character imagery overlay only. See recon/mappings/TIcedEffect_cls_0x5aaf28_note.yaml. |
+| I22 | `TIcedEffect`+`TIcedAnimator` | IM(CX) | effect_old.cpp:8723 | retail-merged (cls_0x5aaf28 + cls_0x5ab460) | src/effect.h:1555 | forensics-complete | - | **Forensics doc: docs/vfx/forensics/I22_TIcedEffect.md (2026-05-19).** Frozen-status OVERLAY posted on a victim by Ice Bolt (I21) (and, retail-only, TStormAnimator). **Correction to the 2026-05-16 "(no class)" note:** retail folds "Iced" into the two posters, but the **pre-release DOES define a real `TIcedEffect`/`TIcedAnimator`** (`DEFINE_BUILDER("Iced", TIcedEffect)` effect_old.cpp:8723) — that pre-release class is the authoritative spec. 3-phase state machine: (1) crystal HOLD ~10s (ICED_DURATION=240) over a paralysed victim, revealing `iced.I3D` facets (`face01..43`+`icicle01..06`) 4/frame; (2) SHATTER-init spawns MAX_ICED_CHUNKS=30 `cube`-mesh chunks in 4 quadrants / 5 rows; (3) TUMBLE under ICED_CHUNK_GRAVITY=0.25, bounce at z<=16 (v.z*=-0.5, spin×2) for life=random(2,3) bounces, then KillThisEffect. Alpha blend, Unlit (asset color, no material zero), TestNoWrite, no light/audio/texture-anim. Posting handshake effect_old.cpp:8431-8448; un-freeze on timeout/cure/death. See recon/mappings/TIcedEffect_cls_0x5aaf28_note.yaml. |
 
 ### Blood / gore
 
@@ -305,9 +305,13 @@ Continues the methodology from `recon/mappings/EXTRACTION_PASS_2026-05-16.md`
   - S04 `TLightningAnimator`'s pass-1 hint that `cls_0x5b0a28` is the
     better candidate than the demoted `cls_0x5a47f0` is CONFIRMED.
 
-- **I22 re-evaluated: 1.** `TIcedEffect` has no dedicated class — "Iced"
+- **I22 re-evaluated: 1.** ~~`TIcedEffect` has no dedicated class — "Iced"
   is a status tag posted by TIceBoltEffect + TStormAnimator. Recon-file
-  set to "(no class)".
+  set to "(no class)".~~ **SUPERSEDED 2026-05-19 by forensics
+  (docs/vfx/forensics/I22_TIcedEffect.md §13.1):** the "no class" finding is
+  RETAIL-only (retail folds Iced into the two posters). The **pre-release DOES
+  define a real `TIcedEffect`/`TIcedAnimator`** (effect_old.cpp:8723), which is
+  the authoritative spec. INVENTORY row updated to forensics-complete.
 
 - **D07 (Effect3.cpp contents) RESOLVED.** It's TLightningAnimator's
   source file. 1400-byte class suggests Effect3.cpp may contain only
