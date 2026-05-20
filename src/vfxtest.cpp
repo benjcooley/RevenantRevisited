@@ -37,6 +37,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <strings.h>   // strcasecmp
 #include <vector>
 
 namespace {
@@ -419,10 +420,22 @@ void Render()
     }
 
     // Step 2: empty tile pass (clear-only) + lighting. RunLightingPass
-    // drains the FX queue at the tail. Mid-gray clear -- per author's
-    // diagnostic preference, the gray bg helps see particle quad shapes
-    // against the bg (vs black where dim particles disappear).
-    Renderer->BeginTilePass(0.45f, 0.46f, 0.50f, 1.0f);
+    // drains the FX queue at the tail. Default mid-gray clear -- per
+    // author's diagnostic preference, the gray bg helps see particle quad
+    // shapes against the bg (vs black where dim particles disappear).
+    // --vfx-bg=<name> overrides for the diagnostic background the verifier
+    // wants (black = additive-glint check, ltgray = alpha-edge check) per
+    // docs/vfx/AGENT_GUIDE.md §4.2.1.7.
+    float bg_r = 0.45f, bg_g = 0.46f, bg_b = 0.50f;
+    if (StartupVfxBg[0])
+    {
+        if      (!strcasecmp(StartupVfxBg, "black"))   { bg_r = bg_g = bg_b = 0.0f; }
+        else if (!strcasecmp(StartupVfxBg, "gray"))    { bg_r = 0.45f; bg_g = 0.46f; bg_b = 0.50f; }
+        else if (!strcasecmp(StartupVfxBg, "ltgray"))  { bg_r = bg_g = bg_b = 0.78f; }
+        else if (!strcasecmp(StartupVfxBg, "dungeon")) { bg_r = 0.08f; bg_g = 0.07f; bg_b = 0.06f; }
+        else log_warn("[vfx] --vfx-bg='%s' unknown; using default gray", StartupVfxBg);
+    }
+    Renderer->BeginTilePass(bg_r, bg_g, bg_b, 1.0f);
     Renderer->EndTilePass();
     Renderer->RunLightingPass();
 
@@ -800,6 +813,68 @@ void FireSubmit(void* cp, EFxDebugMode dbg)
     c->fire->TickAndSubmitForTest(dbg);
 }
 
+// --- FB: real TSparkEffect (X22, Misc/Sparks.I3D) -----------------------
+// Spawns a sector-less single-burst TSparkEffect at the harness origin via
+// SpawnForTest and drives the ported TParticle3DAnimator loop through
+// TickAndSubmitForTest each frame. Faithful direct port (not a
+// TParticleBucket re-derivation) — see src/effect.cpp X22 block.
+//
+// Single non-overlapping burst (per the verification requirement): the
+// harness lets a burst fully play out (IsAlive() goes false when the last
+// spark expires), waits a clear gap, then re-fires ONE fresh burst. No
+// overlapping/grouped bursts — exactly one clean instance is visible at a
+// time so a stranger can verify the single-color additive glint look.
+// Static preview style (the internal cadence is owned here, not by the
+// harness's destroy/respawn timer).
+struct SSparkCtx {
+    TSparkEffect* spark   = nullptr;
+    S3DPoint      origin  = {0, 0, 0};
+    float         gap     = 0.0f;     // post-death cooldown before re-fire
+};
+
+constexpr float kSparkRetriggerGap = 0.8f;   // clear gap between bursts (s)
+
+void* SparkSpawn(const S3DPoint& origin)
+{
+    auto* c = new SSparkCtx();
+    c->origin = origin;
+    c->spark = TSparkEffect::SpawnForTest(origin);
+    if (!c->spark)
+        log_warn("[vfx] TSparkEffect::SpawnForTest returned null; X22 entry will draw nothing");
+    return c;
+}
+
+void SparkDestroy(void* cp)
+{
+    auto* c = static_cast<SSparkCtx*>(cp);
+    delete c->spark;
+    delete c;
+}
+
+void SparkSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SSparkCtx*>(cp);
+    if (!c)
+        return;
+
+    // Burst has fully played out -> wait a clear gap, then re-fire ONE
+    // fresh burst. This keeps exactly one clean, non-overlapping instance
+    // visible for verification.
+    if (!c->spark || !c->spark->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->spark;
+            c->spark = TSparkEffect::SpawnForTest(c->origin);
+            c->gap   = kSparkRetriggerGap;
+        }
+    }
+
+    if (c->spark)
+        c->spark->TickAndSubmitForTest(dbg);
+}
+
 // --- LS: flare + dynamic point light placeholder -------------------------
 struct SFlareCtx {
     float age = 0.0f;
@@ -958,6 +1033,20 @@ struct SVfxTestBootstrap {
         fire.submit        = [](void* c, EFxDebugMode d) { FireSubmit(c, d); };
         fire.destroy       = [](void* c) { FireDestroy(c); };
         VfxTest::DeferredRegister(fire);
+
+        VfxTest::SEffect spark = {};
+        spark.id            = "TSparkEffect";
+        spark.family        = "blood";   // combat-feedback family (forensics §0)
+        spark.pipeline      = "FB";
+        // X22 = one-shot combat block-spark burst. Static cadence: the
+        // single-burst non-overlapping re-fire is owned inside SparkSubmit
+        // (let one burst die, wait a clear gap, fire one fresh burst) so a
+        // clean single instance is always visible for verification.
+        spark.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        spark.factory       = [](const S3DPoint& o) -> void* { return SparkSpawn(o); };
+        spark.submit        = [](void* c, EFxDebugMode d) { SparkSubmit(c, d); };
+        spark.destroy       = [](void* c) { SparkDestroy(c); };
+        VfxTest::DeferredRegister(spark);
 
         VfxTest::SEffect flare = {};
         flare.id            = "TFlareAnimator.placeholder";

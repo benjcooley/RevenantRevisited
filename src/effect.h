@@ -427,6 +427,110 @@ class TFireEffect : public TEffect
     int32_t          rng_seed_ = 0;     // per-instance RNG seed; reseeded each lifetime
 };
 
+// ****************
+// * TSparkEffect *
+// ****************
+//
+// X22 generic spark burst ("sparks" / TSparkAnimator). Faithful direct
+// port of the pre-release particle loop, NOT a re-derivation through the
+// TParticleBucket / effects.def abstraction (which is how a prior attempt
+// drifted into mixed colors / wrong blend). The original is the simplest
+// effect in the game:
+//
+//   spawn  = TCharacter::EffectBurst "sparks" branch (character.cpp:2262-2317)
+//            builds an SParticleParams and calls anim->InitParticles(&pr).
+//   update = TParticle3DAnimator::Animate  (effect_old.cpp:4790-4942).
+//   render = TParticle3DAnimator::Render   (effect_old.cpp:4944-4986).
+//
+// The animator was a fully generic particle system parameterized entirely
+// by SParticleParams; for the spark use only the non-seeking ballistic
+// path runs (seektargets=false). The per-particle arrays
+// (pos/vel/life/start/obj) from TParticle3DAnimator are collapsed onto
+// this effect class (same animator-state-collapse convention as F03 fire
+// / H03 ripple / M05 mist). One-shot burst: random(15,25) particles seeded
+// at once, the object self-destructs (killobj) once all particles expire.
+//
+// Single color per burst: objflags = 1 << (ObjId() & 3) selects exactly
+// ONE of the 4 photon sub-objects (photon / photon01 / photon02 / photon03)
+// of Misc\Sparks.I3D for the WHOLE burst — every particle draws that one
+// sprite. The 4 are NOT mixed.
+//
+// Retail-confirmed param divergences from the snapshot (verified IEEE bit
+// patterns at recon/classes/cls_0x5a7b98.cpp:4640-4664): gravity 0.25
+// (snapshot 0.2), trails 2 (snapshot 1 — each spark draws as a 2-step
+// motion streak), bounce true (snapshot false — sparks bounce off the
+// floor). See forensics SPARKS_TSparkAnimator.md §2.1.
+//
+// Blend = Alpha per the snapshot Render body (SetBlendState = MODULATE +
+// SRC_ALPHA/INV_SRC_ALPHA). The retail Render TU was not decompiled so the
+// blend is snapshot-only; if it reads dull rather than glinting, additive
+// is the visual-vet fallback hypothesis. Unlit, TestNoWrite, ScreenAligned.
+
+// Max particles a single burst can hold (caller seeds random(15,25)). The
+// pre-release allocated `new[params.particles]`; the modern port uses a
+// fixed-cap inline array (no heap churn per burst).
+inline constexpr int32_t kSparkMaxParticles = 32;
+
+// One spark particle's transient state. Pre-release stored these as the
+// parallel arrays p[]/v[]/l[]/s[]/o[] on TParticle3DAnimator; collapsed
+// here onto a per-particle struct (life/start are integer ticks in the
+// original — kept as float real-tick counters for framerate-independent
+// integration, see TickAndSubmitForTest).
+struct SSparkParticle
+{
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};   // object-local position (wu)
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};   // velocity (wu / sim-tick)
+    float    life  = 0.0f;                 // remaining lifetime, in sim-ticks
+    float    start = 0.0f;                 // start delay, in sim-ticks
+};
+
+class TSparkEffect : public TEffect
+{
+  public:
+    TSparkEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TSparkEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+
+    // Spawn a standalone single-burst TSparkEffect for the --test=vfx
+    // harness. Loads the real Misc\Sparks.I3D imagery (NO procedural
+    // stand-in — the authored photon sprite IS the visual identity),
+    // picks one photon variant for the whole burst, and seeds
+    // random(15,25) particles via the ported InitParticles loop. Returns
+    // nullptr if the imagery can't be loaded. Caller owns the pointer.
+    [[nodiscard]] static TSparkEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness. Ports
+    // TParticle3DAnimator::Animate (ballistic integrate + gravity +
+    // bounce + death) and ::Render (one billboard per live particle, plus
+    // trails-1 ghost copies stepped along velocity) directly, converted to
+    // framerate-independent integration (per-tick rates -> per-second via a
+    // 24 Hz sim-tick accumulator). FB pipeline (one additive/alpha textured
+    // billboard per draw via SubmitFxBillboard).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the last particle expires (mirrors the original's
+    // killobj=true self-destruct). The harness uses this to know when a
+    // burst has fully played out before re-triggering.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SSparkParticle particles_[kSparkMaxParticles] {};
+    int32_t        num_particles_ = 0;
+    float          gravity_       = 0.25f;  // wu / sim-tick^2 (retail)
+    int32_t        trails_        = 2;      // render sub-steps per particle (retail)
+    bool           bounce_        = true;   // retail
+    TTextureHandle texture_       = kInvalidTexture; // chosen photon variant
+    // UV sub-rect (x,y,w,h normalized) of the shared Sparks.I3D texture
+    // for the chosen photon variant. The 4 sub-objects (photon/01/02/03)
+    // partition ONE atlas texture into 4 differently-tinted photon cells;
+    // drawing the full [0,0,1,1] rect would show all 4 colors at once
+    // (the mixed-color bug). Computed at spawn from the variant's authored
+    // vertex UVs so every particle in the burst draws its single cell.
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          quad_size_wu_  = 24.0f;  // billboard size (from sprite cell)
+    bool           alive_         = true;
+    double         sim_accum_ms_  = 0.0;
+};
+
 class TFlameEffect : public TEffect
 {
   public:

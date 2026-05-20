@@ -26,3 +26,8 @@ extern char StartupVfxId[64];
 // --vfx-no-ui — suppress the ImGui VFX Browser panel so screencaps
 // show only the effect render.
 extern bool StartupVfxHideUi;
+// --vfx-bg=<name> — background clear for --test=vfx. "black" / "gray"
+// (default) / "ltgray" / "dungeon". Lets a verifier pick the diagnostic
+// background per docs/vfx/AGENT_GUIDE.md §4.2.1.7 (black for additive
+// glints, ltgray for alpha edges). Empty = the default mid-gray.
+extern char StartupVfxBg[16];
