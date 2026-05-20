@@ -209,34 +209,30 @@ private:
         const int32_t emptyW = kBarMaxW - fillW;
         const int32_t dimAtlasY = atlasY + kBarDimYOffset;
 
-        // === Bar (filled+empty composite) with dropshadow ===
-        // Each section uses DrawBitmapSubrectShadowed which renders the
-        // bitmap as a darkened silhouette at (+kBarShadowOffX, +kBarShadowOffY)
-        // first, then the bar atlas on top. The shadow preserves bar
-        // geometry (tapered caps, etc.) from the atlas alpha. This is
-        // the modern equivalent of retail's blit-effect-pipeline shadow
-        // pass per memory project-retail-blit-effect-pipeline.
+        // === Dropshadow pass ===
+        // Semi-transparent black rect at (bar_x + 4, bar_y + 4), same
+        // geometry as the bar. Approximates the retail shadow blit.
+        Renderer->DrawSolidRect(dstX + kBarShadowOffX, dstY + kBarShadowOffY,
+                                kBarMaxW, kBarRowH, 0, 0, 0, 160);
+
+        // === Bar pass ===
         if (isRight)
         {
             if (emptyW > 0)
-                Renderer->DrawBitmapSubrectShadowed(g_bars, dstX, dstY,
-                                                    0, dimAtlasY, emptyW, kBarRowH,
-                                                    kBarShadowOffX, kBarShadowOffY);
+                Renderer->DrawBitmapSubrect(g_bars, dstX, dstY,
+                                            0, dimAtlasY, emptyW, kBarRowH);
             if (fillW > 0)
-                Renderer->DrawBitmapSubrectShadowed(g_bars, dstX + emptyW, dstY,
-                                                    emptyW, atlasY, fillW, kBarRowH,
-                                                    kBarShadowOffX, kBarShadowOffY);
+                Renderer->DrawBitmapSubrect(g_bars, dstX + emptyW, dstY,
+                                            emptyW, atlasY, fillW, kBarRowH);
         }
         else
         {
             if (fillW > 0)
-                Renderer->DrawBitmapSubrectShadowed(g_bars, dstX, dstY,
-                                                    0, atlasY, fillW, kBarRowH,
-                                                    kBarShadowOffX, kBarShadowOffY);
+                Renderer->DrawBitmapSubrect(g_bars, dstX, dstY,
+                                            0, atlasY, fillW, kBarRowH);
             if (emptyW > 0)
-                Renderer->DrawBitmapSubrectShadowed(g_bars, dstX + fillW, dstY,
-                                                    fillW, dimAtlasY, emptyW, kBarRowH,
-                                                    kBarShadowOffX, kBarShadowOffY);
+                Renderer->DrawBitmapSubrect(g_bars, dstX + fillW, dstY,
+                                            fillW, dimAtlasY, emptyW, kBarRowH);
         }
     }
 
