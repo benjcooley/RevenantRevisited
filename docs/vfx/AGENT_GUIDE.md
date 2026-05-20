@@ -14,6 +14,16 @@ Read, in order:
 2. [TEST_MODE.md](TEST_MODE.md) — what "done" looks like for any effect.
 3. [../PARTICLE_EFFECTS.md](../PARTICLE_EFFECTS.md) — the engine architecture you are extending. **Do not invent a parallel architecture.**
 4. [INVENTORY.md](INVENTORY.md) — pick an unclaimed row.
+5. [forensics/NOMENCLATURE.md](forensics/NOMENCLATURE.md) — canonical vocabulary for orientation / space / blend / lighting / depth / animation / pipelines / rigs. Use these terms; don't invent synonyms.
+
+### Two-phase workflow (forensics → reconstruction)
+
+Effect restoration splits into two roles, each with its own protocol:
+
+- **Forensics** — [forensics/FORENSICS_PROTOCOL.md](forensics/FORENSICS_PROTOCOL.md). Produce a complete reconstruction document (constants, assets, spawn shape + diagrams, pseudocode, render spec, color source, callers, rig+BG, roadmap). No engine code.
+- **Reconstruction** — [forensics/RECONSTRUCTION_PROTOCOL.md](forensics/RECONSTRUCTION_PROTOCOL.md). Rebuild from the forensics doc; verify visually on the recommended backgrounds; report doc gaps.
+
+See [forensics/README.md](forensics/README.md) for why the split exists. The §3.0–§4.2.* rules below apply to both phases.
 
 Spot-check the project-wide rules these touch:
 
