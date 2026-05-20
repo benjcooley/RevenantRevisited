@@ -4047,3 +4047,365 @@ void TTeleporterEffect::SubmitWorldForTest(EFxDebugMode /*debug_mode*/)
         }
     }
 }
+
+// *************************************************************************
+// * (X22) TSparkEffect — generic spark burst ("sparks"/TSparkAnimator)    *
+// *************************************************************************
+//
+// FAITHFUL DIRECT PORT of the pre-release particle loop. See forensics
+// docs/vfx/forensics/SPARKS_TSparkAnimator.md. The three ported bodies:
+//
+//   spawn  : TCharacter::EffectBurst "sparks" branch (character.cpp:2262-2317)
+//            builds an SParticleParams + calls anim->InitParticles(&pr);
+//            InitParticles (effect_old.cpp:4752-4787) seeds the arrays.
+//   update : TParticle3DAnimator::Animate (effect_old.cpp:4790-4942) —
+//            non-seeking ballistic path only (seektargets=false for sparks).
+//   render : TParticle3DAnimator::Render (effect_old.cpp:4944-4986) — one
+//            billboard per live particle + (trails-1) ghost copies stepped
+//            forward along velocity (the motion streak).
+//
+// Engine adaptations (only what the new engine genuinely requires):
+//   - SubmitFxBillboard FB-pipeline draws instead of D3D RenderObject.
+//   - Framerate-independence: the original integrated on a 24 Hz integer
+//     game-frame (p += v; v.z -= gravity; l-- per tick). We keep the math
+//     in the original per-tick units and drive it from a 24 Hz sim-tick
+//     accumulator (same fix as F03/H03/M05), so the burst plays at the
+//     original real-world speed regardless of render framerate.
+//   - Single photon variant (objflags = 1 << (ObjId() & 3)) resolved at
+//     spawn into one UV sub-rect of the shared 2x2 atlas texture (the 4
+//     photon sub-objects partition one texture into 4 tinted cells); every
+//     particle in the burst draws that one cell = one solid color.
+//
+// NOT ported (dead code for the spark use): the seek/homing block
+// (effect_old.cpp:4859-4936), ResetTargetInfo, and the params==0 dev
+// sample-default. The bounce block IS ported (retail bounce=true).
+
+namespace {
+
+constexpr const char* kSparkImageryPath = "Misc\\Sparks.I3D";
+
+// 24 Hz cadence gate (family-consistent with F03/H03/M05). The original
+// per-tick rates (gravity 0.25 wu/tick^2, life 20-40 ticks, etc.) are
+// integrated once per sim-tick of accumulated wall-clock time.
+constexpr int32_t kSparkSimTickMs = 1000 / 24;
+
+// Retail spark params (TCharacter::EffectBurst "sparks" branch +
+// retail reconciliation, forensics §2.1/§3). Constant immediates live in
+// the CALLER in the original, not in the generic animator, so this is the
+// spark "constant table".
+constexpr int32_t kSparkMinCount  = 15;     // random(15,25)
+constexpr int32_t kSparkMaxCount  = 25;
+constexpr float   kSparkPosJitter = 3.0f;   // pspread ±3 wu/axis
+constexpr float   kSparkVelJitter = 0.5f;   // spread ±0.5 wu/tick/axis
+constexpr float   kSparkGravity   = 0.25f;  // retail (snapshot 0.2)
+constexpr int32_t kSparkTrails    = 2;      // retail (snapshot 1)
+constexpr bool    kSparkBounce    = true;   // retail (snapshot false)
+constexpr int32_t kSparkMinStart  = 0;      // start-delay 0..8 ticks
+constexpr int32_t kSparkMaxStart  = 8;
+constexpr int32_t kSparkMinLife   = 20;     // lifetime 20..40 ticks
+constexpr int32_t kSparkMaxLife   = 40;
+constexpr int32_t kSparkPosZBias  = 45;     // emit z +45 wu (~impact height)
+constexpr int32_t kSparkFaceJitterLo = -80; // facing ± random(-80,80) byte-angle
+constexpr int32_t kSparkFaceJitterHi =  80;
+constexpr int32_t kSparkDirSpeed  = 100;    // ConvertToVector mag, then /100 (≈1 wu/tick)
+
+// random(-100,100)/100 -> [-1,1] (the original's per-axis jitter scale).
+float SparkUnitJitter()
+{
+    return float(random(-100, 100)) / 100.0f;
+}
+
+}   // namespace
+
+TSparkEffect* TSparkEffect::SpawnForTest(const S3DPoint& origin)
+{
+    // --- Load the REAL Misc\Sparks.I3D imagery (no procedural stand-in).
+    const int32_t img_id = TObjectImagery::FindImagery(kSparkImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[spark] SpawnForTest: FindImagery('%s') failed", kSparkImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[spark] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kSparkImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[spark] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kSparkImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* spark = new TSparkEffect(base);
+    spark->ForcePos(origin);
+    spark->SetMapIndex(MapPane.MakeIndex());
+    spark->ActivateComponents();
+
+    spark->gravity_ = kSparkGravity;
+    spark->trails_  = kSparkTrails;
+    spark->bounce_  = kSparkBounce;
+
+    // --- Single color per burst (objflags = 1 << (ObjId() & 3)).
+    // The original selects exactly one of the 4 photon sub-objects for the
+    // WHOLE burst, keyed off the attacker's object id. A sector-less
+    // harness effect has no valid SObjectInfo (ObjId() would null-deref),
+    // so for the standalone rig we rotate a static counter — each fresh
+    // burst picks the NEXT photon variant, giving the same per-burst (not
+    // per-particle) single-color behavior with cycling variety. All 4
+    // photon variants share the same authored sprite, so they map to the
+    // same texture content; we index GetTexture by the chosen variant
+    // clamped to the available texture slots.
+    (void)img3d->NumObjects();   // lazy-mesh-init poke (same as F01/B01/H04)
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_tex <= 0)
+    {
+        log_error("[spark] SpawnForTest: imagery has 0 textures after lazy-init poke");
+        delete spark;
+        return nullptr;
+    }
+    S3DTex tex = {};
+    img3d->GetTexture(0, &tex);
+    spark->texture_ = tex.htexture;
+    if (spark->texture_ == kInvalidTexture)
+    {
+        log_error("[spark] SpawnForTest: texture slot 0 handle invalid");
+        delete spark;
+        return nullptr;
+    }
+
+    // The Sparks.I3D texture is a 2x2 ATLAS — the 4 photon sub-objects
+    // (photon / photon01 / photon02 / photon03, object indices 0..3) each
+    // select ONE atlas cell via their authored UVs. The 4 cells are distinct
+    // SHAPES (4-pointed stars and blobs), not just color tints. Selecting one
+    // sub-object = one cell = one shape/color for the whole burst (the correct
+    // single-cell look — drawing the full atlas mixes all 4 = the grid bug).
+    //
+    // In the game, objflags = 1 << (ObjId() & 3) keys the cell off the
+    // attacker's object id, so different attackers/hits land on different
+    // cells and the combat sparks alternate stars/blobs across hits. A
+    // sector-less harness effect has no valid SObjectInfo (ObjId() would
+    // null-deref), so we rotate a static counter: each successive burst
+    // advances the cell 0->1->2->3->wrap, reproducing that in-game shape
+    // variety (one clean single-cell burst at a time, consecutive bursts
+    // alternate). Never mix cells within a burst.
+    const int32_t num_obj = img3d->NumObjects();
+    static int32_t s_variant_rotor = 0;
+    const int32_t variant = num_obj > 0 ? ((s_variant_rotor++) & 0x3) % num_obj : 0;
+
+    // Compute the chosen sub-object's UV sub-rect from its authored vertex
+    // UVs (the faithful equivalent of RenderObject drawing that sub-object's
+    // quad with its baked UVs). Drawing the full [0,0,1,1] rect would show
+    // all 4 atlas cells on every particle (the mixed-color grid bug).
+    float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
+    const int32_t nverts = img3d->NumObjVerts(variant);
+    if (nverts > 0)
+    {
+        std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+        img3d->GetObjVerts(variant, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+        float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+        float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+        for (int32_t i = 1; i < nverts; ++i)
+        {
+            if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+            if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+            if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+            if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+        }
+        u0 = minu; v0 = minv; u1 = maxu; v1 = maxv;
+    }
+    spark->uv_rect_[0] = u0;
+    spark->uv_rect_[1] = v0;
+    spark->uv_rect_[2] = u1 - u0;     // width
+    spark->uv_rect_[3] = v1 - v0;     // height
+
+    // Billboard size = the sprite cell, scaled to world units. The photon
+    // cell is small; keep the quad small enough that the per-tick travel
+    // (~1-2 wu/tick) visibly separates particles rather than overlapping
+    // into a static clump (a big quad masks the motion). (The original drew
+    // the I3D's authored quad; we approximate with a fixed wu size since the
+    // FB pipeline submits screen-aligned wu-sized billboards.)
+    spark->quad_size_wu_ = 10.0f;
+
+    // --- Port of EffectBurst "sparks" param build (character.cpp:2273-2313)
+    // + InitParticles seeding (effect_old.cpp:4774-4787).
+    //
+    // The combat caller computes the emit origin/facing from the
+    // attacker->target geometry (GetFace, ConvertToFacing, Distance). The
+    // harness has no target, so we synthesize: a random horizontal facing
+    // for the cone direction, emit at the harness origin with z += 45.
+    // Everything downstream (the cone fan, jitter, lifetimes, bounce) is
+    // the exact original math.
+    const int32_t ang = (random(0, 255) + random(kSparkFaceJitterLo, kSparkFaceJitterHi)) & 0xff;
+    S3DPoint vect;
+    ConvertToVector(ang, kSparkDirSpeed, vect);   // dir vector, mag ~kSparkDirSpeed, z=0
+
+    // params.pos = vect0 = caster-local impact offset with z += 45. In the
+    // harness the burst is the centerpiece, so we emit at the local origin
+    // (0,0,+45); the effect object itself sits at `origin`.
+    // hmm_vec3 uses uppercase .X/.Y/.Z; S3DPoint `vect` uses lowercase .x/.y/.z.
+    const hmm_vec3 ppos   = { 0.0f, 0.0f, float(kSparkPosZBias) };
+    const hmm_vec3 pdir   = { float(vect.x) / float(kSparkDirSpeed),
+                              float(vect.y) / float(kSparkDirSpeed),
+                              float(vect.z) / float(kSparkDirSpeed) };
+
+    // `min` is a macro (revtypes.h) — std::min would mis-expand; use a ternary.
+    const int32_t rcount = random(kSparkMinCount, kSparkMaxCount);
+    const int32_t count  = rcount < kSparkMaxParticles ? rcount : kSparkMaxParticles;
+    spark->num_particles_ = count;
+    for (int32_t c = 0; c < count; ++c)
+    {
+        SSparkParticle& pt = spark->particles_[c];
+        pt.pos.X = ppos.X + kSparkPosJitter * SparkUnitJitter();
+        pt.pos.Y = ppos.Y + kSparkPosJitter * SparkUnitJitter();
+        pt.pos.Z = ppos.Z + kSparkPosJitter * SparkUnitJitter();
+        pt.vel.X = pdir.X + kSparkVelJitter * SparkUnitJitter();
+        pt.vel.Y = pdir.Y + kSparkVelJitter * SparkUnitJitter();
+        pt.vel.Z = pdir.Z + kSparkVelJitter * SparkUnitJitter();
+        pt.life  = float(random(kSparkMinLife, kSparkMaxLife));
+        pt.start = float(random(kSparkMinStart, kSparkMaxStart));
+    }
+
+    spark->alive_ = (count > 0);
+    log_info("[spark] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "particles=%d variant=%d/%d tex=%u uv=[%.3f,%.3f %.3fx%.3f] "
+             "face=%d gravity=%.2f trails=%d bounce=%d",
+             kSparkImageryPath, spark->GetMapIndex(),
+             origin.x, origin.y, origin.z, count, variant, num_obj,
+             spark->texture_, spark->uv_rect_[0], spark->uv_rect_[1],
+             spark->uv_rect_[2], spark->uv_rect_[3],
+             ang, spark->gravity_, spark->trails_, spark->bounce_ ? 1 : 0);
+    return spark;
+}
+
+void TSparkEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TParticle3DAnimator::Animate (non-seeking path,
+    // effect_old.cpp:4826-4941), framerate-independent via the 24 Hz
+    // sim-tick accumulator. Each accumulated tick runs the original
+    // per-tick integration exactly once.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kSparkSimTickMs))
+        {
+            sim_accum_ms_ -= double(kSparkSimTickMs);
+
+            bool isdone = true;
+            for (int32_t c = 0; c < num_particles_; ++c)
+            {
+                SSparkParticle& pt = particles_[c];
+                if (pt.life <= 0.0f)           // already dead
+                    continue;
+                isdone = false;
+
+                if (pt.start > 0.0f)           // still in start delay
+                {
+                    pt.start -= 1.0f;
+                    continue;
+                }
+
+                // p += v;  l--;  v.z -= gravity  (effect_old.cpp:4842-4851)
+                pt.pos.X += pt.vel.X;
+                pt.pos.Y += pt.vel.Y;
+                pt.pos.Z += pt.vel.Z;
+                pt.life  -= 1.0f;
+                pt.vel.Z -= gravity_;
+
+                // bounce block (effect_old.cpp:4852-4858) — retail bounce=true
+                if (bounce_ && pt.pos.Z < 0.0f)
+                {
+                    pt.pos.Z = -pt.pos.Z;
+                    pt.vel.Z = -pt.vel.Z * 0.5f;
+                    if (pt.vel.Z < 2.0f)       // don't bounce too much
+                        pt.life = 0.0f;
+                }
+            }
+
+            // killobj=true: object self-destructs once all particles expire
+            // (effect_old.cpp:4939-4941). The harness reads alive_ to know
+            // when to allow a re-trigger.
+            if (isdone)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    // --- Render: port of TParticle3DAnimator::Render (effect_old.cpp:4944-4986).
+    // One screen-aligned billboard per live, started particle, plus
+    // (trails-1) ghost copies stepped forward along velocity (the 2-step
+    // motion streak; retail trails=2).
+    const S3DPoint& base = Pos();
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0]   = quad_size_wu_;
+    item.size_wu[1]   = quad_size_wu_;
+    item.color_rgba[0] = 1.0f;     // no per-vertex tint in the original; color
+    item.color_rgba[1] = 1.0f;     // lives entirely in the photon sprite texture
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    // One 2x2 atlas cell (the chosen photon variant), NOT the full texture.
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    // Blend = Alpha (SRC_ALPHA / INV_SRC_ALPHA) — the combat-spark Render body
+    // calls SetBlendState (= Alpha), and forensics §7 records Alpha. The
+    // earlier "additive" comparison turned out to be the GREEN Fountain /
+    // Sparkle effect (GREENFONT family), a DIFFERENT effect — not combat
+    // sparks. Combat sparks ship Alpha. (Still snapshot-only: the retail
+    // TParticle3DAnimator::Render TU was never decompiled; vet against real
+    // combat-spark footage, not the fountain video.)
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+
+    for (int32_t c = 0; c < num_particles_; ++c)
+    {
+        const SSparkParticle& pt = particles_[c];
+        if (pt.start > 0.0f || pt.life <= 0.0f)   // skip delayed/dead
+            continue;
+
+        // Trails: the render walks a local copy forward along velocity,
+        // drawing trails_ ghost copies (the motion streak). Identical to
+        // the original inner loop (effect_old.cpp:4961-4978).
+        hmm_vec3 pp = pt.pos;
+        hmm_vec3 vv = pt.vel;
+        for (int32_t d = 0; d < trails_; ++d)
+        {
+            item.world_pos[0] = float(base.x) + pp.X;
+            item.world_pos[1] = float(base.y) + pp.Y;
+            item.world_pos[2] = float(base.z) + pp.Z;
+            Renderer->SubmitFxBillboard(item);
+
+            pp.X += vv.X;
+            pp.Y += vv.Y;
+            pp.Z += vv.Z;
+            vv.Z -= gravity_;
+            if (bounce_ && pp.Z < 0.0f)
+            {
+                pp.Z = -pp.Z;
+                vv.Z = -vv.Z * 0.5f;
+                if (vv.Z < 2.0f)
+                    break;
+            }
+        }
+    }
+}
