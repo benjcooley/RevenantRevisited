@@ -5,7 +5,7 @@
 | **Effect ID** | (none yet — needs an INVENTORY row; suggest **X22**, see §1) |
 | **Class(es)** | `TParticle3DAnimator` (the actual animator). `TSparkAnimator` is **not a class** — it is only the *builder symbol name* the registration macro mints (see §2, §7). Registered name = `"sparks"`. No paired `TEffect` subclass; the spawned object is a generic `TEffect`. |
 | **Status** | forensics-complete (see §13 for the few genuine unknowns) |
-| **Retail fidelity** | **retail-confirmed (with 3 divergences)** — retail `TCharacter::EffectBurst` decompiles cleanly and corroborates the asset, registration, structure, and most constants; but **gravity, trails, and bounce were re-tuned for ship** (snapshot 0.2/1/false → retail 0.25/2/true). Use the RETAIL values. See §2.1. |
+| **Retail fidelity** | **retail-confirmed (3 divergences) + 1 author-correction.** Retail `TCharacter::EffectBurst` decompiles cleanly and corroborates asset, registration, structure, most constants; but **gravity, trails, bounce were re-tuned for ship** (snapshot 0.2/1/false → retail 0.25/2/true — verified IEEE bit patterns at cls_0x5a7b98.cpp:4640-4664). **Blend = additive** per the original developer; the snapshot's Alpha is snapshot-only (retail `TParticle3DAnimator::Render` body not decompiled). Use the RETAIL param values + additive. See §2.1 + §7. |
 | **Author / Date** | vfx-forensics-agent / 2026-05-19 (retail reconciliation: vfx-forensics-agent / 2026-05-20) |
 | **Family** | blood/combat (combat-feedback; mechanically a generic spark burst) |
 | **Draws** | particle emitter — N screen-aligned billboards, each one sub-object of `Misc\Sparks.I3D` placed at a particle position |
@@ -27,8 +27,10 @@ fills in — the commented-out sibling registrations (`icedsparks`, `sand`,
 many particle effects, not just sparks. There are **no spark-specific constants
 inside the animator**; every numeric (count, spread, gravity, lifetime, …) comes
 from the caller's params (§3, §5). The sparks read as bright white/yellow
-metallic sparks — the color is the authored `Misc\Sparks.I3D` photon-sprite
-texture (§10), drawn translucent (Alpha blend), self-lit (§7).
+metallic sparks — a single emitter, single color per burst (one of 4 photon
+sub-objects chosen per character), drawn **additive** (author ground truth;
+the snapshot's Alpha is snapshot-only/unverified — §7), self-lit. The simplest
+effect in the game.
 
 > **INVENTORY action:** no row exists for this effect (INVENTORY has the generic
 > infra row `I03 TParticle3DAnimator`, but no concrete "sparks" effect row). Add
@@ -393,7 +395,7 @@ position z: ↗ small up/flat, then ↘ parabola under gravity 0.2
 
 ```
 Render():                                     // effect_old.cpp:4944
-    SaveBlendState(); SetBlendState();         //   Alpha mode (see below)  // :4946-4947
+    SaveBlendState(); SetBlendState();         //   snapshot=Alpha; SHIP=additive (see §7 blend) // :4946-4947
     ResetExtents()
     for c in 0..particles-1:                   // :4951
         if s[c] > 0 or l[c] <= 0: continue     //   skip delayed/dead       // :4953
@@ -407,13 +409,18 @@ Render():                                     // effect_old.cpp:4944
     UpdateExtents(); RestoreBlendState()        // :4982-4983
 ```
 
-- **Blend mode (original):** **Alpha.** `Render` calls `SetBlendState()`
-  (`effect_old.cpp:4947`), NOT `SetAddBlendState()`. `SetBlendState`
-  (`effect_old.cpp:221-233`) = texture stage `D3DTBLEND_MODULATE`,
-  `SRCBLEND=SRC_ALPHA`, `DESTBLEND=INV_SRC_ALPHA`, `ZWRITEENABLE=false`,
-  `ZENABLE=true` → classic translucent **Alpha (modulated)** blend
-  (NOMENCLATURE §3). Trace confirms it: this is alpha-blended, not additive,
-  despite sparks "looking" glowy.
+- **Blend mode:** **Additive (AdditiveStraight)** — author-asserted ground truth
+  for the shipped effect; **snapshot-only conflict, resolved in favor of the
+  author.** The snapshot `Render` calls `SetBlendState()` (`effect_old.cpp:4947`)
+  = `D3DTBLEND_MODULATE` + `SRC_ALPHA/INV_SRC_ALPHA` (translucent Alpha). BUT the
+  retail `TParticle3DAnimator::Render` body was **never decompiled** (that
+  translation unit isn't in the recon extract — §2.1), so the snapshot's Alpha is
+  **snapshot-only, unverified against shipped retail.** The original developer
+  states the shipped sparks were **additive** ("single-color additive single
+  emitter, the simplest effect in the game") — which is the natural blend for
+  bright metallic glints against dark scenes. The snapshot's Alpha is treated as
+  WIP that the shipped game superseded. **Reconstruct additive (ONE/ONE);**
+  visually confirm the bright-glint read against a dark (Black/Dungeon) BG.
 - **Lit vs self-lit:** **Unlit / self-lit.** The animator never folds ambient
   light into vertex color and never zeroes the material — it simply draws the
   imagery's authored verts/texture. The color is literal (from the sprite). No
@@ -471,9 +478,9 @@ light the scene in the original — they are self-lit billboards only.
   photon-sparkle family as `TPhotonAnimator` (`src/missileeffect.h:84`). Not a
   saturated hue — sparks are deliberately near-white hot, with a warm/yellow core.
 - **Expected visual:** bright, hot, near-white metallic sparks (think
-  steel-on-steel block impact). Under Alpha blend on a dark background they read
-  as crisp bright pinpoints; against bright BG the sprite's own alpha edges keep
-  them readable. **A pale/gray/washed result at reconstruction = broken port**
+  steel-on-steel block impact). Under **additive** blend on a dark background they
+  read as crisp glowing pinpoints (additive is why they "spark"); on a bright BG
+  the additive contribution washes toward white. **A pale/gray/washed result at reconstruction = broken port**
   (likely culprits per AGENT_GUIDE §4.2.1.5: a procedural stand-in instead of the
   real photon sprite #1, or wrong blend/chroma-key). The sparks are *meant* to be
   bright-white, so "near-white" is correct here — but verify it's the **sprite's**
@@ -601,16 +608,20 @@ effect.
       mag~1)/100 (z≈0); per-particle velocity jitter ±0.5 wu/tick each axis;
       position jitter ±3 wu each axis. (§5, §6.1)
 - [ ] Per-particle: random start-delay 0..8 ticks, random lifetime 20..40 ticks. (§3, §6.1)
-- [ ] Per-tick update (24 Hz sim gate): p += v; v.z -= gravity(0.2); l--; die at l<=0.
-      Plain Euler ballistic arc, downward gravity. (§6.2)
+- [ ] Motion (framerate-independent — convert the 24Hz per-tick rates to per-second,
+      integrate by real dt; do NOT step at 24Hz): p += v·dt; v.z -= gravity; die at
+      end of life. Plain ballistic arc. **Use RETAIL values: gravity 0.25** (snapshot
+      0.2), **trails = 2** (snapshot 1 — each spark draws as a 2-step motion streak),
+      **bounce = true** (snapshot false — sparks bounce off geometry). All three
+      retail-confirmed in cls_0x5a7b98.cpp:4640-4664 (§2.1, §3 DIVERGES rows). (§6.2)
 - [ ] NO color/alpha/scale curve — constant draw then pop off at end-of-life; the
       burst "fades" only via staggered start+death. (§6.2, §13.4)
 - [ ] Core geometry: one ScreenAligned (camera-facing) billboard per live particle,
       placed at p[c] via position-override only (no rotation/scale). trails=1 ⇒ one
       draw per particle. (§7)
-- [ ] Blend = Alpha (SetBlendState: MODULATE, SRC_ALPHA/INV_SRC_ALPHA — NOT additive),
-      lit-mode = Unlit (asset color, no per-vertex tint, no material zeroing),
-      depth = TestNoWrite. (§7)
+- [ ] Blend = **Additive (ONE/ONE)** — author ground truth; the snapshot's Alpha
+      (SetBlendState) is snapshot-only/unverified (retail render body not decompiled,
+      §7). lit-mode = Unlit (asset color, no per-vertex tint), depth = TestNoWrite. (§7)
 - [ ] Texture animation = NONE (single-still sprite, no UV scroll, no flipbook). (§8)
 - [ ] Variant pick: objflags selects one of the 4 photon sub-objects per burst
       (1 << (ObjId() & 3)); per-particle index o[c] from the selected set. (§6.1, §13.5)
@@ -625,12 +636,15 @@ effect.
       character.cpp:1809. The effect itself triggers no sound. (§11)
 - [ ] Trigger wiring: spawned on a blocked melee miss when attack has CA_SPARKS
       (rules.h:40); see character.cpp:1805-1810 + EffectBurst character.cpp:2262-2317. (§12)
-- [ ] Do NOT reconstruct: the seek/homing block, the bounce block, ResetTargetInfo,
-      or the params==0 sample-default — all dead/unused for the spark path. (§13.3, §6.1)
+- [ ] Do NOT reconstruct: the seek/homing block, ResetTargetInfo, or the params==0
+      sample-default — dead/unused for the spark path. (NOTE: bounce IS live in retail
+      — bounce=true; reconstruct it. The earlier "skip bounce" note reflected the
+      snapshot's bounce=false, which §2.1 superseded.) (§13.3, §6.1)
 ```
 
 **Definition of done:** a blocked attack produces a one-shot fan of ~15–25 bright
 white photon-sprite billboards at ~chest height between attacker and target, each
-flying out along a wide cone, arcing down under gravity, winking out over ~20–40
-ticks, alpha-blended and camera-facing, with no light and no per-particle
-fade — and the burst dies on its own when the last spark expires.
+flying out along a wide cone, arcing down under gravity (0.25), bouncing once off
+the floor, winking out over ~20–40 ticks, **additive** and camera-facing, single
+color per burst, with no light and no per-particle fade — and the burst dies on
+its own when the last spark expires. (Smooth/time-based, not 24Hz-stepped.)
