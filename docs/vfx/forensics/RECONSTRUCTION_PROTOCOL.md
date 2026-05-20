@@ -51,6 +51,24 @@ closest already-ported effect as a template (e.g. asset load: H04 TDripEffect's
 
 ## Hard rules (project-wide + VFX-specific)
 
+- **Framerate-independent, smooth animation (do NOT replicate the 24Hz integer
+  frame).** The original simulated/animated on a 24Hz integer game-frame counter
+  (`frameon++`, per-tick constants). Our engine runs at 60fps+ (and variable). Do
+  NOT drive animation off an integer game-frame or gate it to 24Hz — that steps
+  the motion at 24fps and looks choppy. **Convert to time-based animation:**
+  - Per-tick constants become per-second rates (a `0.37 wu/tick` gravity at 24Hz
+    is `0.37 × 24 ≈ 8.88 wu/s²`); integrate continuous quantities (position,
+    velocity, scale, rotation, color/alpha curves) by real delta-time each frame,
+    so the motion is smooth and runs at the same real-world *speed* the original
+    did, regardless of framerate.
+  - Discrete steps that are genuinely frame-quantized (flipbook/atlas frame
+    advance, state-machine phase transitions) are timed by **accumulated real
+    time** (advance every `1/24 s` of wall-clock), not by counting render frames.
+    Their discreteness is inherent; their *timing* is real-time-based. Where a
+    stepped quantity reads choppy (a scale "pop"), prefer interpolating it.
+  - The forensics doc records the original's per-tick values + 24Hz cadence
+    faithfully — that's the original's truth. YOUR job is the conversion. This
+    supersedes the older "gate to 24Hz sim tick" pattern some early ports used.
 - **No stand-ins.** The doc's §4 assets are mandatory. If the engine lacks an API
   to load an asset the doc requires, STOP and escalate as a blocker — do not fall
   back to procedural. ([../AGENT_GUIDE.md](../AGENT_GUIDE.md) §4.2.1)

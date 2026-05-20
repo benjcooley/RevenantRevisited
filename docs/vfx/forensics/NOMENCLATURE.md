@@ -95,7 +95,7 @@ in a comment over the actual factors.
 
 | term | meaning |
 |------|---------|
-| **sim tick / 24Hz gate** | Retail simulation runs at 24Hz. Animators advance per sim tick, not per render frame. Pre-release math is often ungated (runs at render rate) — the port MUST gate to 24Hz (`kSimTickMs = 1000/24`) or speeds/cadence scale with framerate. |
+| **sim tick / 24Hz** | The original simulated/animated at 24Hz on an integer game-frame counter (`frameon++`); its constants are per-tick. **Forensics** records this faithfully (per-tick values + the 24Hz base). **Reconstruction** does NOT replicate the integer-frame stepping — it converts per-tick → per-second and integrates by real delta-time for smooth, framerate-independent motion (see RECONSTRUCTION_PROTOCOL "Framerate-independent, smooth animation"). Don't gate the new engine's animation to 24Hz; that steps motion at 24fps and looks choppy. |
 | **age** | Ticks (or seconds) since a particle/effect spawned. |
 | **age01** | Normalized age, `age / lifetime`, in `[0,1]`. Drives curves. |
 | **lifetime** | Total ticks/seconds a particle/effect lives before it's killed. |
