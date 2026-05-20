@@ -389,6 +389,16 @@ The harness is the gate. Per [TEST_MODE.md](TEST_MODE.md):
 4. Watch a few seconds of the loop. Effects with finite lifetime should restart
    on a timer or via the `R` key.
 
+**ONE effect instance on screen at a time** (hard rule). Show a single instance;
+let a finite effect fully play out and die before any re-trigger (re-trigger on a
+clear gap or the `R` key, never overlapping). Do NOT spawn a grid of instances,
+do NOT overlap/group copies, and do NOT reuse a fixed random seed across spawns
+(seed per spawn so re-triggers vary). You cannot verify an effect against retail
+when many overlapping or identical copies are on screen — a grid of same-seed
+copies hides whether the effect or the rig is wrong. (The `snap_grid.py` temporal
+montage — one effect's frames over time — is fine; this rule is about live
+on-screen instances.) See [[feedback-vfx-one-effect-onscreen]].
+
 ### 4.2 Retail reference
 
 When possible, capture a short video / screenshot of the original Revenant
