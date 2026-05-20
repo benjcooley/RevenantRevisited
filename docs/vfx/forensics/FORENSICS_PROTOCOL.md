@@ -120,14 +120,15 @@ For any given effect (from [../AGENT_GUIDE.md](../AGENT_GUIDE.md) §3.1):
 3. **Sister-family effects** — when an effect's own source is sparse, a sibling
    in the same family (fire-family, magic-family, combat-family) usually shares
    the render/blend/color pattern. Cite the sibling.
-4. **Author testimony** — the original developer is on this project. For a value
-   the retail decomp is silent on (a snapshot-only value), the author's direct
-   statement about what shipped is the highest authority and OVERRIDES the
-   snapshot. (Example: the snapshot draws sparks Alpha-blended, but the retail
-   `TParticle3DAnimator::Render` body wasn't decompiled, so that's snapshot-only;
-   the author states the shipped sparks were additive → additive wins.) Record it
-   as author-asserted in the doc, and flag it for visual confirmation. Author
-   testimony does NOT override a value the retail binary positively shows.
+
+Document what the **code** says. The original developer is on this project and
+their observations are valuable signals — but they can be wrong, and their memory
+does NOT override the source. When the developer flags a reconstruction as wrong,
+the default assumption is a **reconstruction bug** (the port didn't faithfully
+translate the code), not a forensics misinterpretation — debug the port against
+the code first. A developer hypothesis about a snapshot-only value is something to
+**visually confirm against retail**, recorded as a hypothesis, not enshrined as
+ground truth.
 
 (Note: the current in-progress port under `src/effect.{h,cpp}` is **not** a
 source — per hard-rule 8 you work clean-slate from the original, not against the
