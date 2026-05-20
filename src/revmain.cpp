@@ -1651,6 +1651,15 @@ void GetParameters(int argc, char **argv)
     if (arg_flag(cmd, "vfx-no-ui"))
         StartupVfxHideUi = true;
 
+  // VFX-BG=<name> — background clear for --test=vfx (black / gray /
+  // ltgray / dungeon). Lets a verifier pick the diagnostic background
+  // (black = additive-glint check). Empty = default mid-gray.
+    {
+        std::string p;
+        if (arg_param(cmd, "vfx-bg", p))
+            strncpyz(StartupVfxBg, p.c_str(), sizeof(StartupVfxBg));
+    }
+
   // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.
   // Empty = the default hard-coded pick (0_2_25, Misthaven).
     {
