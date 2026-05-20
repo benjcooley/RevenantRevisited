@@ -120,6 +120,14 @@ For any given effect (from [../AGENT_GUIDE.md](../AGENT_GUIDE.md) §3.1):
 3. **Sister-family effects** — when an effect's own source is sparse, a sibling
    in the same family (fire-family, magic-family, combat-family) usually shares
    the render/blend/color pattern. Cite the sibling.
+4. **Author testimony** — the original developer is on this project. For a value
+   the retail decomp is silent on (a snapshot-only value), the author's direct
+   statement about what shipped is the highest authority and OVERRIDES the
+   snapshot. (Example: the snapshot draws sparks Alpha-blended, but the retail
+   `TParticle3DAnimator::Render` body wasn't decompiled, so that's snapshot-only;
+   the author states the shipped sparks were additive → additive wins.) Record it
+   as author-asserted in the doc, and flag it for visual confirmation. Author
+   testimony does NOT override a value the retail binary positively shows.
 
 (Note: the current in-progress port under `src/effect.{h,cpp}` is **not** a
 source — per hard-rule 8 you work clean-slate from the original, not against the
