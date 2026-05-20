@@ -27,9 +27,9 @@ fills in — the commented-out sibling registrations (`icedsparks`, `sand`,
 many particle effects, not just sparks. There are **no spark-specific constants
 inside the animator**; every numeric (count, spread, gravity, lifetime, …) comes
 from the caller's params (§3, §5). The sparks read as bright white/yellow
-metallic sparks — a single emitter, single color per burst (one of 4 photon
-sub-objects chosen per character), drawn Alpha-blended per the code (snapshot-
-only/unverified — visually vet, §7), self-lit. The simplest effect in the game.
+metallic sparks — a single emitter, single color per burst (one 2×2-atlas cell,
+chosen per character), drawn **Additive** (video-confirmed; the code's Alpha was
+snapshot-only WIP — §7), self-lit. The simplest effect in the game.
 
 > **INVENTORY action:** no row exists for this effect (INVENTORY has the generic
 > infra row `I03 TParticle3DAnimator`, but no concrete "sparks" effect row). Add
@@ -407,7 +407,7 @@ position z: ↗ small up/flat, then ↘ parabola under gravity 0.2
 
 ```
 Render():                                     // effect_old.cpp:4944
-    SaveBlendState(); SetBlendState();         //   Alpha (snapshot-only; visually vet — §7) // :4946-4947
+    SaveBlendState(); SetBlendState();         //   snapshot=Alpha; SHIP=Additive (video-confirmed — §7) // :4946-4947
     ResetExtents()
     for c in 0..particles-1:                   // :4951
         if s[c] > 0 or l[c] <= 0: continue     //   skip delayed/dead       // :4953
@@ -421,15 +421,17 @@ Render():                                     // effect_old.cpp:4944
     UpdateExtents(); RestoreBlendState()        // :4982-4983
 ```
 
-- **Blend mode:** **Alpha** (what the code does). Snapshot `Render` calls
-  `SetBlendState()` (`effect_old.cpp:4947`) = `D3DTBLEND_MODULATE` +
-  `SRC_ALPHA/INV_SRC_ALPHA` (translucent Alpha, NOMENCLATURE §3), NOT
-  `SetAddBlendState`. **Snapshot-only / unverified:** the retail
-  `TParticle3DAnimator::Render` body was never decompiled (that translation unit
-  isn't in the recon extract — §2.1), so this isn't corroborated against shipped
-  retail. Reconstruct Alpha per the code, and **visually vet against retail** — if
-  the bright-glint read is wrong, additive is the likely shipped value (a
-  hypothesis to confirm, §13), but don't assume it ahead of the visual check.
+- **Blend mode:** **Additive (ONE/ONE)** — **video-confirmed** against retail
+  (developer, 2026-05-20). The snapshot `Render` calls `SetBlendState()`
+  (`effect_old.cpp:4947`) = `D3DTBLEND_MODULATE` + `SRC_ALPHA/INV_SRC_ALPHA`
+  (translucent Alpha), BUT the retail `TParticle3DAnimator::Render` body was never
+  decompiled (snapshot-only — §2.1), so the snapshot's Alpha was always
+  unverified. Visual comparison to the retail video resolved it: the sparks are
+  additive (they glow against the dark scene). The snapshot's Alpha is WIP that
+  the shipped game superseded. **Reconstruct Additive (ONE/ONE).** This is a
+  resolved snapshot→shipped divergence on the render blend, settled by visual vet
+  (the methodology working as intended — the value was flagged snapshot-only, not
+  asserted, and the video settled it).
 - **Lit vs self-lit:** **Unlit / self-lit.** The animator never folds ambient
   light into vertex color and never zeroes the material — it simply draws the
   imagery's authored verts/texture. The color is literal (from the sprite). No
@@ -487,9 +489,9 @@ light the scene in the original — they are self-lit billboards only.
   photon-sparkle family as `TPhotonAnimator` (`src/missileeffect.h:84`). Not a
   saturated hue — sparks are deliberately near-white hot, with a warm/yellow core.
 - **Expected visual:** bright, hot, near-white metallic sparks (think
-  steel-on-steel block impact). Under the code's Alpha blend on a dark background
-  they read as crisp bright pinpoints. (If they read dull rather than glinting,
-  the blend may need to be additive — visually vet, §7/§13.) **A pale/gray/washed result at reconstruction = broken port**
+  steel-on-steel block impact). **Additive** (video-confirmed, §7) → they GLOW
+  against the dark scene, bright cores blowing toward white. A flat/translucent
+  (alpha) look is wrong. **A pale/gray/washed result at reconstruction = broken port**
   (likely culprits per AGENT_GUIDE §4.2.1.5: a procedural stand-in instead of the
   real photon sprite #1, or wrong blend/chroma-key). The sparks are *meant* to be
   bright-white, so "near-white" is correct here — but verify it's the **sprite's**

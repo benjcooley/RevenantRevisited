@@ -315,10 +315,26 @@ multi-component effect into one description.
   volumetric / composite
 - **Blend mode (original):** identify which helper the effect calls —
   `SetBlendState()` (texture MODULATE + SRC_ALPHA/INV_SRC_ALPHA = Alpha) vs
-  `SetAddBlendState()` (ONE/ONE = AdditiveStraight); see
+  `SetAddBlendState()` (DECALALPHA + ONE/ONE = AdditiveStraight); see
   [NOMENCLATURE.md](NOMENCLATURE.md) §3. Cite the call site + the real factors.
-  (F03 was wrongly guessed additive — it was straight Alpha. Trace the helper,
-  don't guess from how it looks or from a D3D-constant name in a comment.)
+  - **BLEND SANITY-CHECK (mandatory).** After tracing the call, cross-check it
+    against the sprite design + sister effects, and FLAG any conflict:
+    - A **bright sprite on a black/chroma-keyed background** is the textbook
+      ADDITIVE sprite (black = transparent under additive). If such a sprite is
+      drawn with `SetBlendState` (Alpha) in the snapshot, that is **suspect** —
+      likely shipped additive. Flag it: "code=Alpha but bright-on-black sprite ⇒
+      suspect Additive; visually vet."
+    - Cross-check **sister-family** blends (e.g. fire spells FireFlash/FireWind/
+      FireCone/DragonFire use `SetAddBlendState`). If a sibling glow is additive
+      but this one traces alpha, flag the inconsistency.
+    - **The render blend is a top snapshot-drift risk:** retail `*::Render`
+      bodies are frequently NOT decompiled, so the blend is usually snapshot-only
+      and unverified. CONFIRMED case: the particle animator (sparks) is `SetBlendState`
+      (Alpha) in the snapshot but shipped **Additive** (video-confirmed). Treat a
+      snapshot-Alpha glow as a hypothesis to visually vet, not a fact.
+  (Also: F03 was wrongly *guessed* additive — it was straight Alpha. Trace the
+  helper; then sanity-check it. Don't guess, but don't blindly trust a
+  snapshot-Alpha on an obvious glow either.)
 - **Lit vs self-lit:** scene-lit or self-lit/glowing? — cite
 - **Depth / Z:** ZWRITEENABLE / ZENABLE in the Render body; what RefreshZBuffer
   does — cite
