@@ -14,11 +14,30 @@ document was insufficient.
 3. The existing engine + harness: `src/effect.{h,cpp}`, `src/vfxtest.{h,cpp}`,
    `src/renderer.{h,cpp}`, the FX submission API.
 
+## Faithful port first — translate the original code, don't reinterpret it
+
+When the original code is complete and present in the snapshot (most effects'
+full bodies are in `src/effect_old.cpp` / `effectcomp.cpp`), **port that code
+directly** — translate the actual `Animate`/`Render`/spawn loop line-by-line,
+adapting only what the new engine genuinely requires: the rendering API (submit
+calls instead of D3D `RenderObject`), framerate-independence (per-tick → per-
+second + dt, see below), and any author/§2.1 corrections the doc flags. Read the
+cited source and follow ITS structure.
+
+Do NOT re-derive the effect through our engine's higher abstractions
+(`TParticleBucket` / `effects.def` / the expression VM) when a direct
+translation of the original loop is simpler and the code is right there. Routing
+a dead-simple original through a fancier abstraction is how reconstructions
+drift (wrong blend, mixed colors, lost details). Use the engine abstraction only
+when it maps cleanly AND doesn't lose fidelity. The original code is the most
+reliable guide to exactly how the effect behaves; the doc tells you WHAT it is
+and flags the corrections, the code tells you precisely HOW.
+
 ## Work from the document first
 
-The forensics doc is your spec. It describes the ORIGINAL effect; **you** make
-all the engine decisions (which pipeline, the test rig + background, the build
-order). Build from the doc's sections:
+The forensics doc is your spec (with the source it cites). It describes the
+ORIGINAL effect; **you** make the engine decisions (rendering path, test rig +
+background, build order). Build from the doc's sections:
 - §3 Constants → your literals (exact values + units).
 - §4 Assets → load the named assets via the original-load API the doc cites,
   mapped to our engine's loader. **NEVER substitute a procedural stand-in for a
