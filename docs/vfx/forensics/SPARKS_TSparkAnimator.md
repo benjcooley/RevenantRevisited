@@ -28,9 +28,8 @@ many particle effects, not just sparks. There are **no spark-specific constants
 inside the animator**; every numeric (count, spread, gravity, lifetime, …) comes
 from the caller's params (§3, §5). The sparks read as bright white/yellow
 metallic sparks — a single emitter, single color per burst (one of 4 photon
-sub-objects chosen per character), drawn **additive** (author ground truth;
-the snapshot's Alpha is snapshot-only/unverified — §7), self-lit. The simplest
-effect in the game.
+sub-objects chosen per character), drawn Alpha-blended per the code (snapshot-
+only/unverified — visually vet, §7), self-lit. The simplest effect in the game.
 
 > **INVENTORY action:** no row exists for this effect (INVENTORY has the generic
 > infra row `I03 TParticle3DAnimator`, but no concrete "sparks" effect row). Add
@@ -395,7 +394,7 @@ position z: ↗ small up/flat, then ↘ parabola under gravity 0.2
 
 ```
 Render():                                     // effect_old.cpp:4944
-    SaveBlendState(); SetBlendState();         //   snapshot=Alpha; SHIP=additive (see §7 blend) // :4946-4947
+    SaveBlendState(); SetBlendState();         //   Alpha (snapshot-only; visually vet — §7) // :4946-4947
     ResetExtents()
     for c in 0..particles-1:                   // :4951
         if s[c] > 0 or l[c] <= 0: continue     //   skip delayed/dead       // :4953
@@ -409,18 +408,15 @@ Render():                                     // effect_old.cpp:4944
     UpdateExtents(); RestoreBlendState()        // :4982-4983
 ```
 
-- **Blend mode:** **Additive (AdditiveStraight)** — author-asserted ground truth
-  for the shipped effect; **snapshot-only conflict, resolved in favor of the
-  author.** The snapshot `Render` calls `SetBlendState()` (`effect_old.cpp:4947`)
-  = `D3DTBLEND_MODULATE` + `SRC_ALPHA/INV_SRC_ALPHA` (translucent Alpha). BUT the
-  retail `TParticle3DAnimator::Render` body was **never decompiled** (that
-  translation unit isn't in the recon extract — §2.1), so the snapshot's Alpha is
-  **snapshot-only, unverified against shipped retail.** The original developer
-  states the shipped sparks were **additive** ("single-color additive single
-  emitter, the simplest effect in the game") — which is the natural blend for
-  bright metallic glints against dark scenes. The snapshot's Alpha is treated as
-  WIP that the shipped game superseded. **Reconstruct additive (ONE/ONE);**
-  visually confirm the bright-glint read against a dark (Black/Dungeon) BG.
+- **Blend mode:** **Alpha** (what the code does). Snapshot `Render` calls
+  `SetBlendState()` (`effect_old.cpp:4947`) = `D3DTBLEND_MODULATE` +
+  `SRC_ALPHA/INV_SRC_ALPHA` (translucent Alpha, NOMENCLATURE §3), NOT
+  `SetAddBlendState`. **Snapshot-only / unverified:** the retail
+  `TParticle3DAnimator::Render` body was never decompiled (that translation unit
+  isn't in the recon extract — §2.1), so this isn't corroborated against shipped
+  retail. Reconstruct Alpha per the code, and **visually vet against retail** — if
+  the bright-glint read is wrong, additive is the likely shipped value (a
+  hypothesis to confirm, §13), but don't assume it ahead of the visual check.
 - **Lit vs self-lit:** **Unlit / self-lit.** The animator never folds ambient
   light into vertex color and never zeroes the material — it simply draws the
   imagery's authored verts/texture. The color is literal (from the sprite). No
@@ -478,9 +474,9 @@ light the scene in the original — they are self-lit billboards only.
   photon-sparkle family as `TPhotonAnimator` (`src/missileeffect.h:84`). Not a
   saturated hue — sparks are deliberately near-white hot, with a warm/yellow core.
 - **Expected visual:** bright, hot, near-white metallic sparks (think
-  steel-on-steel block impact). Under **additive** blend on a dark background they
-  read as crisp glowing pinpoints (additive is why they "spark"); on a bright BG
-  the additive contribution washes toward white. **A pale/gray/washed result at reconstruction = broken port**
+  steel-on-steel block impact). Under the code's Alpha blend on a dark background
+  they read as crisp bright pinpoints. (If they read dull rather than glinting,
+  the blend may need to be additive — visually vet, §7/§13.) **A pale/gray/washed result at reconstruction = broken port**
   (likely culprits per AGENT_GUIDE §4.2.1.5: a procedural stand-in instead of the
   real photon sprite #1, or wrong blend/chroma-key). The sparks are *meant* to be
   bright-white, so "near-white" is correct here — but verify it's the **sprite's**
@@ -619,9 +615,9 @@ effect.
 - [ ] Core geometry: one ScreenAligned (camera-facing) billboard per live particle,
       placed at p[c] via position-override only (no rotation/scale). trails=1 ⇒ one
       draw per particle. (§7)
-- [ ] Blend = **Additive (ONE/ONE)** — author ground truth; the snapshot's Alpha
-      (SetBlendState) is snapshot-only/unverified (retail render body not decompiled,
-      §7). lit-mode = Unlit (asset color, no per-vertex tint), depth = TestNoWrite. (§7)
+- [ ] Blend = **Alpha** (SetBlendState: MODULATE, SRC_ALPHA/INV_SRC_ALPHA) — what
+      the code does; snapshot-only/unverified (retail render body not decompiled, §7),
+      so visually vet (if dull, try additive). lit-mode = Unlit, depth = TestNoWrite. (§7)
 - [ ] Texture animation = NONE (single-still sprite, no UV scroll, no flipbook). (§8)
 - [ ] Variant pick: objflags selects one of the 4 photon sub-objects per burst
       (1 << (ObjId() & 3)); per-particle index o[c] from the selected set. (§6.1, §13.5)
@@ -645,6 +641,7 @@ effect.
 **Definition of done:** a blocked attack produces a one-shot fan of ~15–25 bright
 white photon-sprite billboards at ~chest height between attacker and target, each
 flying out along a wide cone, arcing down under gravity (0.25), bouncing once off
-the floor, winking out over ~20–40 ticks, **additive** and camera-facing, single
-color per burst, with no light and no per-particle fade — and the burst dies on
-its own when the last spark expires. (Smooth/time-based, not 24Hz-stepped.)
+the floor, winking out over ~20–40 ticks, Alpha-blended (snapshot-only — visually
+vet) and camera-facing, single color per burst, with no light and no per-particle
+fade — and the burst dies on its own when the last spark expires. (Smooth/time-
+based, not 24Hz-stepped. Draw ONE burst at a time when verifying — don't overlap.)
