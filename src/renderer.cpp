@@ -3636,12 +3636,16 @@ void TRenderer::Composite(sg_image img,
 // * and docs/FRAME_PIPELINE.md.                                            *
 // *************************************************************************
 
-TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm)
+TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, bool prefer_alias)
 {
     if (!bm || bm->width <= 0 || bm->height <= 0)
         return kInvalidTexture;
 
-    const uintptr_t key = uintptr_t(bm);
+    // Cache key folds in prefer_alias: the same bitmap decoded data-mode
+    // vs alias-mode is two distinct textures (cursor sprite vs its alias
+    // shadow). In practice a given bitmap is only ever drawn one way, but
+    // keying correctly keeps the two from colliding.
+    const uintptr_t key = uintptr_t(bm) | (prefer_alias ? 1u : 0u);
     if (auto it = bitmap_texture_cache.find(key); it != bitmap_texture_cache.end())
         return it->second;
 
@@ -3649,7 +3653,7 @@ TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm)
     const int32_t h = bm->height;
     const int32_t pitch = w * 4;
     std::vector<uint8_t> rgba(size_t(pitch) * size_t(h), 0);
-    if (!DecodeBitmapToRGBA(bm, rgba.data(), pitch, 0, 0))
+    if (!DecodeBitmapToRGBA(bm, rgba.data(), pitch, 0, 0, prefer_alias))
     {
         log_warn("[renderer] DrawBitmap: DecodeBitmapToRGBA failed for bitmap %p (%dx%d, flags=0x%x)",
                  (void*)bm, w, h, bm->flags);
@@ -3666,10 +3670,10 @@ TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm)
     return tex;
 }
 
-void TRenderer::DrawBitmap(PTBitmap bm, int32_t x, int32_t y)
+void TRenderer::DrawBitmap(PTBitmap bm, int32_t x, int32_t y, bool prefer_alias)
 {
     if (!bm) return;
-    const TTextureHandle tex = BitmapAsTexture(bm);
+    const TTextureHandle tex = BitmapAsTexture(bm, prefer_alias);
     if (tex == kInvalidTexture) return;
     const sg_image img = TextureImage(tex);
     if (!img.id) return;

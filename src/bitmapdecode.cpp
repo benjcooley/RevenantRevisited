@@ -21,11 +21,67 @@ inline void Decode555(uint16_t px, uint8_t* rgba_out)
 }  // namespace
 
 bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
-                        int32_t ox, int32_t oy)
+                        int32_t ox, int32_t oy, bool prefer_alias)
 {
     if (!bm || bm->width <= 0 || bm->height <= 0) return false;
     if (bm->flags & BM_COMPRESSED) return false;  // TODO decompressor
     const int32_t w = bm->width, h = bm->height;
+
+    // Alias path: only when the caller explicitly asked for it (a shadow /
+    // glow draw). BM_ALIAS alone is NOT sufficient -- the cursor sprite
+    // carries both a real data array AND an alias buffer, and must decode
+    // from the data array. Retail keyed this off the DM_ALIAS draw mode,
+    // not the BM_ALIAS bitmap flag; prefer_alias is our equivalent.
+    //
+    // The alias buffer stores anti-aliased pixels as an RLE coverage
+    // stream: per scanline, alternating (skip-count, run-count,
+    // [color16, alpha5]*) groups; AL_EOL ends a line, AL_EOD ends the
+    // stream; alpha5 is 0..31 coverage (31 = opaque). C port of the
+    // legacy MMX PutAlias* blit (graphics.cpp, now #if 0).
+    if (prefer_alias && (bm->flags & BM_ALIAS) && bm->alias.ptr())
+    {
+        const uint8_t* a   = (const uint8_t*)bm->alias.ptr();
+        const uint8_t* aend = a + bm->aliassize;
+
+        // Skipped pixels stay transparent; zero the target region first
+        // so the function is self-contained regardless of caller state.
+        for (int32_t y = 0; y < h; y++)
+            memset(dst + (oy + y) * dst_pitch + ox * 4, 0, (size_t)w * 4);
+
+        int32_t y = 0;
+        while (y < h && a < aend)
+        {
+            uint8_t code = *a++;                 // first code of the line
+            if (code == AL_EOD) break;
+            if (code == AL_EOL) { y++; continue; } // blank line
+
+            int32_t x = 0;
+            for (;;)
+            {
+                x += code;                       // `code` is a skip count
+                if (a >= aend) break;
+                const uint8_t run = *a++;
+                for (uint8_t i = 0; i < run && a + 3 <= aend; i++)
+                {
+                    const uint16_t px  = (uint16_t)(a[0] | (a[1] << 8));
+                    const uint8_t  cov = a[2];   // 0..31 coverage
+                    a += 3;
+                    if (x >= 0 && x < w)
+                    {
+                        uint8_t* row = dst + (oy + y) * dst_pitch + (ox + x) * 4;
+                        Decode555(px, row);                       // RGB (sets A=255)
+                        row[3] = (uint8_t)((cov * 255) / 31);     // override A = coverage
+                    }
+                    x++;
+                }
+                if (a >= aend) break;
+                code = *a++;                      // next skip count OR AL_EOL
+                if (code == AL_EOL) break;
+            }
+            y++;
+        }
+        return true;
+    }
 
     if (bm->flags & BM_8BIT)
     {

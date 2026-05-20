@@ -162,7 +162,8 @@ void TCursorHud::Draw()
     if (MouseShadow)
         Renderer->DrawBitmap(MouseShadow,
                              cursorx + shadowoffsetx,
-                             cursory + shadowoffsety);
+                             cursory + shadowoffsety,
+                             /*prefer_alias=*/true);   // soft shadow lives in the alias RLE buffer
 
     // Drag bitmap (e.g. inventory item being dragged) goes first so
     // the cursor sits above it. Still drawn here even when the OS owns

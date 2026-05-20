@@ -165,13 +165,19 @@ add a row — over-list and reconcile.
 Live gaps surfaced during play-testing, each needs the §3 write-up
 before/with its port:
 
-- **Animation-event system (footsteps).** I3D `play` tags load
-  ([3dimage.cpp:636](../../src/3dimage.cpp#L636)) but nothing consumes
-  them during playback. No code fires footstep sounds. Forensic Q: how
-  did retail's animator walk the `tags` array per frame and dispatch
-  `play` → `SoundPlayer.Play`, `beg`/`end` → state hooks? This is a
-  whole subsystem, not a one-liner — port the tag-event dispatch, then
-  footsteps + weapon-swipe-spawn + impact-frame hits all light up.
+- **Animation-event system (footsteps).** FORENSICS DONE —
+  [forensics/animation-events.md](forensics/animation-events.md).
+  Correction to the original framing: the tag-dispatch chain is
+  **already ported** verbatim from 1999 (`TCharacter::Pulse` →
+  `T3DAnimator::Pulse` ([3dimage.cpp:2243](../../src/3dimage.cpp#L2243))
+  → `T3DImagery::PlaySound` → `FindTag("play")` → `PlayWave` →
+  `SoundPlayer.Play`). `beg`/`end` are state-continuation labels (not
+  callbacks); controller tags were deliberately removed; **swipe is
+  combat-state-driven and impact hits key off `attack->impacttime`,
+  neither is tag-driven.** So footsteps is the ONLY tag-dependent gap,
+  and it's narrow: confirm the walk states actually carry `play` tags
+  and that `PlayWave` resolves the sound. Probe live in
+  `T3DImagery::PlaySound` (`[footprobe]`).
 - **Run / sneak mode.** `SetRunMode` / `SetSneakMode` exist
   ([character.cpp:3312](../../src/character.cpp#L3312)) and the `run`
   animation exists (state 233). Wired the `R`/`S` CMDFLAG edge →
