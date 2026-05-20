@@ -285,6 +285,36 @@ scope, but record it so nothing's lost.
   guess + rationale — never a silent fabrication.
 - Anywhere the original source is ambiguous and the reconstruction agent will
   need to visually match against ground-truth reference to resolve.
+
+## 14. Reconstruction burndown
+A flat checklist of every discrete element the reconstruction agent must recreate
+to reproduce this effect faithfully. This is the distillation of §1–§13 into
+actionable items + the definition of done. List **what** must be recreated (the
+original's components/behaviors), not **how** to build it in our engine — the
+reconstruction agent owns the how. Each item back-references the section that
+specs it, so the builder can jump to the detail. Order roughly by build
+dependency (assets first, then geometry, then behavior, then polish).
+
+```
+- [ ] <load asset(s) — name them> (§4)
+- [ ] <emit/spawn: count, shape, anchor, space> (§5)
+- [ ] <core geometry: billboard / mesh / strip / particles> (§7)
+- [ ] <blend + lit + depth + orientation> (§7)
+- [ ] <texture animation: UV-scroll or framehtexs flipbook, rate> (§8)
+- [ ] <transform animation: rotation/scale/translation curves> (§6)
+- [ ] <particle motion: velocity field + gravity + curves> (§6)
+- [ ] <custom/procedural logic: e.g. random placement, vertex animation> (§6)
+- [ ] <state machine / phases, if any> (§6)
+- [ ] <associated dynamic light: color/range/intensity/animation, or "none"> (§9)
+- [ ] <color wired from the right source> (§10)
+- [ ] <sub-effects spawned, if any> (§6)
+- [ ] <audio hooks recorded for the audio phase, or "none"> (§11)
+```
+
+Keep it concrete and complete: a reconstruction agent should be able to work
+top-to-bottom, check each box, and end with a faithful recreation. Items the
+effect doesn't have (no light, no audio, no sub-effects) are stated as "none" so
+the builder knows they were considered, not forgotten.
 ````
 
 ## Process
@@ -298,7 +328,9 @@ scope, but record it so nothing's lost.
 3. Locate all sources (§0). Rank them.
 4. Fill the template top to bottom, tracing every helper, citing every fact,
    capturing ALL custom logic (not just particles), the associated light, and
-   any audio.
+   any audio. Finish with the §14 burndown — distill everything above into a flat
+   checklist of discrete things to recreate; if you can't write a clean burndown
+   item for some behavior, you haven't documented it clearly enough above.
 5. Self-test: "Working from my doc plus the retail code it cites, could the
    reconstruction agent reproduce this 100% — without having to discover anything
    I didn't point them at?" If not, keep going.
