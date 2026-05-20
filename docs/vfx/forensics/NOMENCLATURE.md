@@ -51,14 +51,24 @@ per-instance knob for WorldXY in-plane rotation (carve-out F03c).
 
 | term | engine enum | factors | use |
 |------|-------------|---------|-----|
-| **Alpha** | `EFxBlend::Alpha` | SRC_ALPHA / ONE_MINUS_SRC_ALPHA | textured droplets, decal-style strips (sword swipe), default translucency |
+| **Alpha** | `EFxBlend::Alpha` | SRC_ALPHA / ONE_MINUS_SRC_ALPHA (= INV_SRC_ALPHA) | textured droplets, fire/flame/flare quads, strips (sword swipe), default translucency |
 | **Additive** | `EFxBlend::Additive` | SRC_ALPHA / ONE | alpha-weighted additive — smoke, spark trails |
 | **AdditiveStraight** | `EFxBlend::AdditiveStraight` | ONE / ONE | retail "self-lit overlay" — glows, explosions, the TBloodSystem additive path |
 | **PremulAlpha** | `EFxBlend::PremulAlpha` | ONE / ONE_MINUS_SRC_ALPHA | assets authored with baked-in coverage |
-| **Decal** | maps to `Alpha` | D3DTBLEND_DECAL = SRC_ALPHA / INV_SRC_ALPHA | the pre-release `SetBlendState()` default for textured fire/flame/flare quads |
 
-**Trace the actual `SetBlendState`/`SaveBlendState` helper** to classify — don't
-guess from how the effect "looks." F03 was wrongly assumed additive; it was Decal.
+**The two original blend helpers** (`src/effect_old.cpp:221-244`, confirmed by
+both knowledge agents):
+- `SetBlendState()` → texture stage `D3DTBLEND_MODULATE` + frame blend
+  `SRC_ALPHA / INV_SRC_ALPHA` = our **Alpha**. This is the default for textured
+  fire/flame/flare quads. (NOT D3DTBLEND_DECAL — earlier drafts of this doc and
+  the F03 forensics mislabeled it; the *blend factors* were right, the D3D
+  constant name was wrong. F03 correctly shipped `EFxBlend::Alpha`.)
+- `SetAddBlendState()` → `ONE / ONE` = our **AdditiveStraight**. Glows, sparks,
+  explosions, blood-system overlay.
+
+**Trace the actual helper** (`SetBlendState` vs `SetAddBlendState`) to classify —
+don't guess from how the effect "looks," and don't trust the D3D-constant name
+in a comment over the actual factors.
 
 ---
 

@@ -442,7 +442,7 @@ Likely culprits in order of frequency observed this project:
    (gold, white, gray) because the real data source (`chardata->swipecolor`,
    `spell->color`, per-cast tint) wasn't traced. See the S09c failure where
    harness defaulted to gold instead of reading Locke's `SWIPECOLOR 0,0,10`.
-3. **Wrong blend mode** — AdditiveStraight where Alpha-Decal was needed
+3. **Wrong blend mode** — AdditiveStraight where Alpha was needed
    (or vice versa) washes out per-vertex colours. F03 fix changed this.
 4. **Lighting mode mismatch** — `LitFlat` against dark sun direction
    crushes saturated colours; `Unlit` is the convention for self-lit FX.
