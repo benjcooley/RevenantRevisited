@@ -1324,22 +1324,20 @@ void TRenderer::InitCompositePipeline()
     sh.attrs[1].sem_index   = 0;
     sh.vs.source                 = kCompositeVs;
     sh.vs.entry                  = kShaderVsEntry;
-    sh.vs.uniform_blocks[0].size = sizeof(float) * 16;
+    sh.vs.uniform_blocks[0].size = sizeof(float) * 12;
     sh.vs.uniform_blocks[0].uniforms[0].name = "rect";
     sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     sh.vs.uniform_blocks[0].uniforms[1].name = "uv_rect";
     sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.source                 = kCompositeFs;
     sh.fs.entry                  = kShaderFsEntry;
-    sh.fs.uniform_blocks[0].size = sizeof(float) * 16;
+    sh.fs.uniform_blocks[0].size = sizeof(float) * 12;
     sh.fs.uniform_blocks[0].uniforms[0].name = "rect";
     sh.fs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[1].name = "uv_rect";
     sh.fs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[2].name = "chroma_key";
     sh.fs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[3].name = "color_tint";
-    sh.fs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.images[0].name         = "tex";
     sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -3503,11 +3501,10 @@ void TRenderer::Composite(TSurface* src)
     bind.fs_images[0]      = img;
     sg_apply_bindings(&bind);
 
-    const float uniforms[16] = {
+    const float uniforms[12] = {
         -1.0f, -1.0f, 2.0f, 2.0f,
          0.0f,  0.0f, 1.0f, 1.0f,
-         0.0f,  0.0f, 0.0f, 0.0f,    // chroma_key disabled
-         1.0f,  1.0f, 1.0f, 1.0f,    // color_tint = white (no-op)
+         0.0f,  0.0f, 0.0f, 0.0f,
     };
     const sg_range u_range = { uniforms, sizeof(uniforms) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
@@ -3556,20 +3553,8 @@ void TRenderer::CompositeSwapchain(sg_image img,
                                    int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
                                    int32_t src_tex_w, int32_t src_tex_h)
 {
-    // No tint (preserves all existing callers). For tinted blits use
-    // CompositeSwapchainTinted below.
-    CompositeSwapchainTinted(img, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
-                             src_x, src_y, src_w, src_h, src_tex_w, src_tex_h,
-                             1.0f, 1.0f, 1.0f, 1.0f);
-}
-
-void TRenderer::CompositeSwapchainTinted(sg_image img,
-                                         int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
-                                         int32_t target_w, int32_t target_h,
-                                         int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
-                                         int32_t src_tex_w, int32_t src_tex_h,
-                                         float tr, float tg, float tb, float ta)
-{
+    // Same blit math as the RT variant below, but uses the swapchain-
+    // format pipeline so it can be called inside sg_begin_default_pass.
     if (!img.id || !composite_pip_swap.id) return;
     if (target_w <= 0 || target_h <= 0) return;
     if (src_tex_w <= 0 || src_tex_h <= 0) return;
@@ -3590,13 +3575,7 @@ void TRenderer::CompositeSwapchainTinted(sg_image img,
     const float uw = float(src_w) / float(src_tex_w);
     const float vh = float(src_h) / float(src_tex_h);
 
-    // 16 floats: rect(4) + uv_rect(4) + chroma_key(4) + color_tint(4).
-    const float uniforms[16] = {
-        nx, ny, nw, nh,
-        u0, v0, uw, vh,
-        0.0f, 0.0f, 0.0f, 0.0f,    // chroma_key disabled
-        tr, tg, tb, ta,            // color_tint (multiplied with sample)
-    };
+    const float uniforms[12] = { nx, ny, nw, nh,  u0, v0, uw, vh,  0.0f, 0.0f, 0.0f, 0.0f };
     const sg_range u_range = { uniforms, sizeof(uniforms) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
@@ -3633,12 +3612,7 @@ void TRenderer::Composite(sg_image img,
     const float uw = float(src_w) / float(src_tex_w);
     const float vh = float(src_h) / float(src_tex_h);
 
-    float uniforms[16] = {
-        nx, ny, nw, nh,
-        u0, v0, uw, vh,
-        0.0f, 0.0f, 0.0f, 0.0f,    // chroma_key
-        1.0f, 1.0f, 1.0f, 1.0f,    // color_tint (white = no-op)
-    };
+    float uniforms[12] = { nx, ny, nw, nh,  u0, v0, uw, vh, 0.0f, 0.0f, 0.0f, 0.0f };
     if (chroma_key && chroma_key_rgb)
     {
         uniforms[8] = 1.0f;
@@ -3721,66 +3695,6 @@ void TRenderer::DrawBitmapSubrect(PTBitmap bm,
     CompositeSwapchain(img, dst_x, dst_y, src_w, src_h, target_w, target_h,
                        src_x, src_y, src_w, src_h,
                        bm->width, bm->height);
-}
-
-void TRenderer::DrawBitmapTinted(PTBitmap bm, int32_t x, int32_t y,
-                                 float tr, float tg, float tb, float ta)
-{
-    if (!bm) return;
-    const TTextureHandle tex = BitmapAsTexture(bm);
-    if (tex == kInvalidTexture) return;
-    const sg_image img = TextureImage(tex);
-    if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
-    CompositeSwapchainTinted(img, x, y, bm->width, bm->height, target_w, target_h,
-                             0, 0, bm->width, bm->height,
-                             bm->width, bm->height,
-                             tr, tg, tb, ta);
-}
-
-void TRenderer::DrawBitmapSubrectTinted(PTBitmap bm,
-                                        int32_t dst_x, int32_t dst_y,
-                                        int32_t src_x, int32_t src_y,
-                                        int32_t src_w, int32_t src_h,
-                                        float tr, float tg, float tb, float ta)
-{
-    if (!bm || src_w <= 0 || src_h <= 0) return;
-    const TTextureHandle tex = BitmapAsTexture(bm);
-    if (tex == kInvalidTexture) return;
-    const sg_image img = TextureImage(tex);
-    if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
-    CompositeSwapchainTinted(img, dst_x, dst_y, src_w, src_h, target_w, target_h,
-                             src_x, src_y, src_w, src_h,
-                             bm->width, bm->height,
-                             tr, tg, tb, ta);
-}
-
-void TRenderer::DrawBitmapShadowed(PTBitmap bm, int32_t x, int32_t y,
-                                   int32_t off_x, int32_t off_y,
-                                   float shadow_a)
-{
-    if (!bm) return;
-    // Shadow pass: bitmap as a darkened silhouette at offset
-    DrawBitmapTinted(bm, x + off_x, y + off_y, 0.0f, 0.0f, 0.0f, shadow_a);
-    // Bar pass: normal bitmap on top
-    DrawBitmap(bm, x, y);
-}
-
-void TRenderer::DrawBitmapSubrectShadowed(PTBitmap bm,
-                                          int32_t dst_x, int32_t dst_y,
-                                          int32_t src_x, int32_t src_y,
-                                          int32_t src_w, int32_t src_h,
-                                          int32_t off_x, int32_t off_y,
-                                          float shadow_a)
-{
-    if (!bm || src_w <= 0 || src_h <= 0) return;
-    DrawBitmapSubrectTinted(bm, dst_x + off_x, dst_y + off_y,
-                            src_x, src_y, src_w, src_h,
-                            0.0f, 0.0f, 0.0f, shadow_a);
-    DrawBitmapSubrect(bm, dst_x, dst_y, src_x, src_y, src_w, src_h);
 }
 
 void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
