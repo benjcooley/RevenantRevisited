@@ -5,7 +5,8 @@
 | **Effect ID** | I21 |
 | **Class(es)** | `TIceBoltEffect` (object) + `TIceBoltAnimator` (visual). Couples to `TIcedEffect`/`TIcedAnimator` (sub-effect, I22). |
 | **Status** | forensics-complete (see §13 for the few genuine unknowns) |
-| **Author / Date** | vfx-forensics-agent / 2026-05-19 |
+| **Retail fidelity** | **retail-partial** — asset byte-identical + registration/naming + `TEffect` base + `subspell=3` force all retail-confirmed; the animate/render **kinematic constants are snapshot-only** (no readable retail body) and the **particle count shows a 50→300 divergence signal**. See §2.1. |
+| **Author / Date** | vfx-forensics-agent / 2026-05-19 (retail-recon pass: vfx-forensics-agent / 2026-05-20) |
 | **Family** | ice |
 | **Draws** | I3D mesh — multiple sub-objects of `Magic\icebolt.I3D` (stretched cylinders + spirals + rings + glow spheres + frost/snow billboard-meshes). Composite. |
 | **Archetype(s)** | (B) I3D-geometry-with-transforms, (D) beam (two-endpoint mesh stretch), (E) particle emitters (frost + snow), (F) custom procedural logic + state machine, (F-composite). Posts the **(I22) Iced sub-effect**. NO associated dynamic light in the pre-release source (§9). |
@@ -71,6 +72,96 @@ Its color identity (ice-blue/white) comes from the **authored textures of
   pre-release source also shows — no behavior divergence found, only the
   catalog/INVENTORY mislabel (TMissileEffect → actually TEffect; see §13).
 
+### 2.1 Retail-vs-snapshot reconciliation (verdict: retail-partial)
+
+`src/effect_old.cpp` is a **pre-release development snapshot**, not the shipped
+game. Four cross-checks against the retail Ghidra decomp (`recon/`):
+
+**1. Asset identity — IDENTICAL (strong corroboration).** Both meshes the effect
+consumes are **byte-for-byte identical** between snapshot and ship:
+- `icebolt.i3d` — snapshot `legacy/Imagery/Magic/icebolt.i3d` (204 428 B) vs the
+  shipped member `Imagery/Magic/icebolt.i3d` (204 428 B) packed in
+  `data/imagery.rvi`: MD5 `72c35ab169970e59c25fe663702bdebe` for **both** (`cmp`
+  reports identical).
+- `iced.i3d` (I22 overlay) — snapshot 94 888 B vs shipped 94 888 B: MD5
+  `10e7e15b3cd6b491e47ab1743b5cdf8e` for **both** (identical).
+
+  (`data/imagery.rvi` is a *stored* — uncompressed — ZIP; members listed via
+  `unzip -l`, extracted via `unzip`.) The geometry the effect transforms (the 7
+  sub-objects of §4: 4 core cylinders + box01 particle quad + ring + spiral) and
+  their embedded ice-blue textures are unchanged. Whatever code drives them is
+  very likely unchanged in *what it draws* — the asset did not get re-authored.
+
+**2. Registration + naming — CONFIRMED.** The retail binary registers the same
+`"IceBolt"` builder/animator name and wires the same spell:
+- `"IceBolt"` string at retail `.rdata 005e117c` (`recon/ghidra/_data.txt:107499-
+  107500`), sitting in the effect-name table beside `Teleporter`/`Smoke`/`Blood`/
+  `Ripple`. Its **2 XREFs land at `004eb1f0` and `004eb550`** — both inside the
+  registration/dispatch fn `0x4eb130`, owned by `cls_0x5aaf28` (the IceBolt
+  candidate). The dispatch jump-table entries are at `005c5398`/`005c539c`
+  (`recon/ghidra/_data.txt:55994-55996`). This matches the snapshot's
+  `DEFINE_BUILDER("IceBolt", …)` (effect_old.cpp:7984) +
+  `REGISTER_3DANIMATOR("IceBolt", TIceBoltAnimator)` (`:8004`).
+- spell.def `"icebolt"` builder wiring is present in shipped data:
+  `data/Resources/spell.def:1228` (`VARIANT "Ice Bolt", … "icebolt", …`) and
+  `:1230` (`VARIANT "Priest Ice Bolt", … "icebolt", …`).
+- The `"Iced"` status string at `005e1184` XREFs from `cls_0x5aaf28` (IceBolt
+  posts the freeze) and `cls_0x5ab460` (TStormAnimator) — confirming the
+  sub-effect coupling of §6.7 is retail behavior, not a snapshot-only experiment.
+
+**3. Structure / vftable — base class CONFIRMED; particle storage REORGANIZED.**
+- Retail `cls_0x5aaf28` is **340 bytes, 6 split-out methods, vtable 100 bytes =
+  25 vmethods**, and **inherits `cls_0x5b0074` (the TEffect candidate)**
+  (`recon/classes/cls_0x5aaf28.cpp:6-20`; `..._candidate.yaml:10-11`; dtor calls
+  `cls_0x5b0074::~cls_0x5b0074` at `cls_0x5aaf28.cpp:196`). This corroborates the
+  snapshot's `TIceBoltEffect : public TEffect` (effect.h:1464) — **NOT**
+  `TMissileEffect` (resolves the catalog/INVENTORY mislabel, §13.1).
+- A 340-byte effect shell is far too small to hold the snapshot animator's inline
+  particle arrays (the snapshot's `MAX_FROST/SNOW=50` arrays alone are ~2 600 B,
+  effect.h:1521-1526). In retail the particle storage is **heap-allocated in a
+  separate object**: the IceBolt method `virt_meth_0x4f6fd0`
+  (`cls_0x5aaf28.cpp:41-95`) constructs a `cls_0x5a47f0` and allocates **two**
+  `0x6720` = 26 400-byte buffers, each zeroing **300 entries of 88 bytes (22
+  dwords)** and storing count **300** (`:67-88`). That is a **count divergence
+  signal: 300 in retail vs 50 (`MAX_FROST_PARTICLES`/`MAX_SNOW_PARTICLES`) in the
+  snapshot.** ⚠ Caveat (recon-conservatism): the constructed class is a generic
+  particle-system object (`cls_0x5a47f0` + `cls_0x5a96d8` container), so it is not
+  *proven* that these two 300-buffers are specifically IceBolt's frost+snow arrays
+  vs. a shared pool — but two 300-buffers built by an IceBolt method strongly
+  suggest the retail frost/snow caps are higher than the snapshot's 50.
+
+**4. Constant grep — animate/render constants NOT corroborated (snapshot-only).**
+The IceBolt **Animate/Render bodies were not recovered** in readable form: the
+decompiled `cls_0x5aaf28.cpp` contains only the registration stub, the two
+particle/animator constructors (`0x4f6fd0`/`0x4f7200`), and the dtors — not the
+per-frame logic where the §3 immediates live. Searching `recon/` for the float
+bit-patterns of the snapshot's magic numbers (`0.1`=0x3dcccccd, `0.03`=0x3cf5c28f,
+`20.0`=0x41a00000, `64.0`=0x42800000, `0.5`=0x3f000000) returns **no hits inside
+any IceBolt function**; the decimal/float hits that exist land in unrelated
+classes (T3DScene, the TEffect base, combat) and never co-occur with an IceBolt
+render fingerprint (`GetObject`/`RenderObject`/`RestoreZ` are decompiled in no
+IceBolt body). So `GROW_DURATION=10`, the `length/64` divisor, `RING_SPEED=20`,
+`SPIRAL_STEP=1.0`, `FROST_STEP=0.03`, the `*12` lifetime, etc. are **best-evidence
+from the snapshot, unverified against shipped**.
+- **Two structural corroborations exist:** (a) `virt_meth_0x4f7200`
+  (`cls_0x5aaf28.cpp:131`) stores the immediate **`3`** into `field_0xdc` at
+  construction — consistent with the snapshot's `SetSubSpell(3)` force
+  (effect_old.cpp:8049), i.e. retail also pins a fixed value 3 at init; and (b)
+  the `DAMAGE_ICE` posting via the `"Iced"` XREF (§2.1.2) matches the snapshot's
+  hardcoded `DAMAGE_ICE` damage beat.
+
+**Verdict — retail-partial.** *What it is / what it draws / how it's triggered* is
+retail-confirmed: byte-identical `icebolt.i3d`+`iced.i3d`, same `"IceBolt"`
+registration + `"icebolt"` spell wiring, `TEffect` base, `"Iced"`-status coupling,
+and a fixed `3` (subspell) pinned at init. *The exact animate/render kinematics*
+(durations, scales, speeds, the `length/64` beam-stretch, the particle caps) are
+**snapshot-only** — and the 50→300 buffer-count signal means at least the particle
+density may differ from shipped. Reconstruction must treat the §3 kinematic
+constants as a fidelity risk and **visually match against in-game ground-truth**
+(§12), watching particle density especially. Given the byte-identical asset and
+the matching registration/base/subspell, the geometry envelope is *likely*
+faithful, but the numeric tuning is an inference, not a confirmation.
+
 ---
 
 ## 3. Constants
@@ -79,43 +170,50 @@ All from the gated pre-release body unless noted. "wu" = world units; the
 animator is ungated in the original (runs at render rate) — per NOMENCLATURE §6
 the port must gate to 24 Hz so timing/cadence don't scale with framerate.
 
+Per §2.1, the IceBolt animate/render body was **not recovered** in the retail
+decomp, so the kinematic immediates below are **snapshot-only** unless a structural
+corroboration exists (subspell `3`, `DAMAGE_ICE` posting, particle storage). The
+"yes" markings of the original draft are corrected accordingly: a "yes" here means
+the value is correctly *read from the snapshot*, not that it was confirmed against
+shipped retail.
+
 | name | value | units | source | confirmed? |
 |------|-------|-------|--------|------------|
-| `GROW_DURATION` | 10 | frames (timeline beat) | effect_old.cpp:7972 | yes — the master clock; every phase boundary is a multiple of it |
-| `SPHERE_STEP` | 0.5 | scale/frame | effect_old.cpp:7973 | yes |
-| `RING_SPEED` | 20 | wu/frame | effect_old.cpp:7974 | yes |
-| `SPIRAL_STEP` | 1.0 | rad/frame (spiral spin) | effect_old.cpp:7975 | yes |
-| `SPIRAL_SCALE_STEP` | 0.1 | scale/frame | effect_old.cpp:7976 | yes |
-| `FROST_INIT_SIZE` | 0.5 | scale | effect_old.cpp:7977 | yes |
-| `FROST_STEP` | 0.03 | scale/frame (shrink) | effect_old.cpp:7978 | yes |
-| `FROST_DAMAGE_MIN` | 10 | hp | effect_old.cpp:7979 | yes — defined but **unused** (damage comes from spell variant, see §6) |
-| `FROST_DAMAGE_MAX` | 25 | hp | effect_old.cpp:7980 | yes — defined but **unused** |
-| `SW_ROTSPEED` | 0.5 | rad/frame | effect_old.cpp:7981 | yes — only used in commented-out shockwave code (§13) |
-| `SW_SCALESPEED` | 0.2 | scale/frame | effect_old.cpp:7982 | yes — commented-out only |
-| `FROST_HEIGHT` | 70 | wu | effect_old.cpp:153 | yes — z-drop used in the strike-test sample point |
-| `MAX_FROST_PARTICLES` | 50 | count | effect.h:1513 | yes |
-| `MAX_SNOW_PARTICLES` | 50 | count | effect.h:1514 | yes |
-| `MAX_MAXPOINTS` | 100 | count (max march steps) | legacy/StripEffect.H:87 | yes — **not** defined in `src/`; resolves via the legacy header. Caps `length` at 100 steps. |
-| length step | 10 | wu/step | effect_old.cpp:8170-8171,8232 | yes — `point += (dx,dy)` of magnitude `r=10`; `length = ticks*10` so `length ≤ 1000 wu` |
-| march radius `r` | 10 | wu | effect_old.cpp:8154 | yes — per-step march distance along facing |
-| strike hit radius | 10 | wu | effect_old.cpp:8209 | yes — character within 10 wu of sample stops the march |
-| Initialize z-lift | +50 | wu | effect_old.cpp:8023 | yes — bolt origin raised 50 wu above caster pos at spawn |
-| `SetSubSpell(3)` | 3 | — | effect_old.cpp:8049 | yes — **animator force-sets subspell=3** (max tier) at Initialize, overriding whatever the cast set; gates which visuals/timings run (see §6) |
-| frost init pos jitter | ±10 | wu | effect_old.cpp:8037-8039 | yes |
-| frost init vel jitter | ±3 | wu/frame | effect_old.cpp:8040-8042 | yes |
-| frost init delay `t[i]` | random(0, FROST_INIT_SIZE*2/FROST_STEP)=random(0,33) | frames | effect_old.cpp:8044 | yes — staggers spawn |
-| frost respawn delay | random(0, FROST_INIT_SIZE/FROST_STEP)=random(0,16) | frames | effect_old.cpp:8351 | yes (becomes hard 100 after `GROW_DURATION*3`, `:8352-8353`) |
-| snow `h[i]` (z) | random(-50,50) | wu | effect_old.cpp:8123 | yes |
-| snow `th[i]` (angle) | random(0,359)·TORADIAN | rad | effect_old.cpp:8124 | yes |
-| snow `rs[i]` (ang vel) | random(5,15)/100 = 0.05..0.15 | rad/frame | effect_old.cpp:8125 | yes; accelerates `+0.01`/frame (`:8243`), `+0.05`/frame after beat 5 (`:8270`) |
-| snow `sz[i]` (scale) | random(FROST_STEP·100, FROST_STEP·GROW_DURATION·100)/100 = random(3,30)/100 = 0.03..0.30 | scale | effect_old.cpp:8126 | yes |
-| snow `r[i]` (radius) | random(25,50) | wu | effect_old.cpp:8127 | yes; shrinks `-1`/frame after beat 5 (`:8267`), floored at 1 |
-| snow rise after beat 5 | `h[i] += 5` | wu/frame | effect_old.cpp:8266 | yes |
-| `TORADIAN` | π/180 | rad/deg | revdefs.h:25 | yes |
-| damage range radius | 200 | wu | effect_old.cpp:8400,8425 | yes — `DamageCharactersInRange`/`FindObjectsInRange` |
-| damage type | `DAMAGE_ICE` (13) | enum | effect_old.cpp:8400; object.h:663 | yes — **hardcoded** in animator, overriding `spell->SpellData()->damagetype` (`:8399` commented out). Note spell.def says `DT_FREEZE`(8); the live call forces `DAMAGE_ICE`(13). See §13. |
-| damage min/max | `spell->VariantData()->mindamage/maxdamage` | hp | effect_old.cpp:8400 | yes — from spell.def VARIANT (e.g. 350/392 for Ice Bolt, 120/142 for Priest variant; spell.def:1228,1230) |
-| lifetime / kill | `GROW_DURATION*12` = 120 frames | frames | effect_old.cpp:8451-8454 | yes — at 24 Hz ≈ **5.0 s** |
+| `GROW_DURATION` | 10 | frames (timeline beat) | effect_old.cpp:7972 | snapshot-only — master clock; no retail body recovered (§2.1.4) |
+| `SPHERE_STEP` | 0.5 | scale/frame | effect_old.cpp:7973 | snapshot-only |
+| `RING_SPEED` | 20 | wu/frame | effect_old.cpp:7974 | snapshot-only (`0x41a00000` not found in any IceBolt fn) |
+| `SPIRAL_STEP` | 1.0 | rad/frame (spiral spin) | effect_old.cpp:7975 | snapshot-only |
+| `SPIRAL_SCALE_STEP` | 0.1 | scale/frame | effect_old.cpp:7976 | snapshot-only (`0x3dcccccd` not found in any IceBolt fn) |
+| `FROST_INIT_SIZE` | 0.5 | scale | effect_old.cpp:7977 | snapshot-only |
+| `FROST_STEP` | 0.03 | scale/frame (shrink) | effect_old.cpp:7978 | snapshot-only (`0x3cf5c28f` not found in any IceBolt fn) |
+| `FROST_DAMAGE_MIN` | 10 | hp | effect_old.cpp:7979 | snapshot-only — defined but **unused** (damage comes from spell variant, see §6) |
+| `FROST_DAMAGE_MAX` | 25 | hp | effect_old.cpp:7980 | snapshot-only — defined but **unused** |
+| `SW_ROTSPEED` | 0.5 | rad/frame | effect_old.cpp:7981 | snapshot-only — only used in commented-out shockwave code (§13) |
+| `SW_SCALESPEED` | 0.2 | scale/frame | effect_old.cpp:7982 | snapshot-only — commented-out only |
+| `FROST_HEIGHT` | 70 | wu | effect_old.cpp:153 | snapshot-only — z-drop used in the strike-test sample point |
+| `MAX_FROST_PARTICLES` | 50 | count | effect.h:1513 | **snapshot-only — DIVERGENCE SIGNAL**: retail IceBolt ctor `0x4f6fd0` allocates a 300-entry buffer (`cls_0x5aaf28.cpp:67-76`); see §2.1.3 |
+| `MAX_SNOW_PARTICLES` | 50 | count | effect.h:1514 | **snapshot-only — DIVERGENCE SIGNAL**: retail allocates a *second* 300-entry buffer (`cls_0x5aaf28.cpp:79-88`); see §2.1.3 |
+| `MAX_MAXPOINTS` | 100 | count (max march steps) | legacy/StripEffect.H:87 | snapshot-only — **not** defined in `src/`; resolves via the legacy header. Caps `length` at 100 steps. |
+| length step | 10 | wu/step | effect_old.cpp:8170-8171,8232 | snapshot-only — `point += (dx,dy)` of magnitude `r=10`; `length = ticks*10` so `length ≤ 1000 wu` |
+| march radius `r` | 10 | wu | effect_old.cpp:8154 | snapshot-only — per-step march distance along facing |
+| strike hit radius | 10 | wu | effect_old.cpp:8209 | snapshot-only — character within 10 wu of sample stops the march |
+| Initialize z-lift | +50 | wu | effect_old.cpp:8023 | snapshot-only — bolt origin raised 50 wu above caster pos at spawn |
+| `SetSubSpell(3)` | 3 | — | effect_old.cpp:8049 | **yes (retail)** — retail ctor `0x4f7200` stores immediate `3` into `field_0xdc` at init (`cls_0x5aaf28.cpp:131`), matching the snapshot's force-subspell=3 (§2.1.4) |
+| frost init pos jitter | ±10 | wu | effect_old.cpp:8037-8039 | snapshot-only |
+| frost init vel jitter | ±3 | wu/frame | effect_old.cpp:8040-8042 | snapshot-only |
+| frost init delay `t[i]` | random(0, FROST_INIT_SIZE*2/FROST_STEP)=random(0,33) | frames | effect_old.cpp:8044 | snapshot-only — staggers spawn |
+| frost respawn delay | random(0, FROST_INIT_SIZE/FROST_STEP)=random(0,16) | frames | effect_old.cpp:8351 | snapshot-only (becomes hard 100 after `GROW_DURATION*3`, `:8352-8353`) |
+| snow `h[i]` (z) | random(-50,50) | wu | effect_old.cpp:8123 | snapshot-only |
+| snow `th[i]` (angle) | random(0,359)·TORADIAN | rad | effect_old.cpp:8124 | snapshot-only |
+| snow `rs[i]` (ang vel) | random(5,15)/100 = 0.05..0.15 | rad/frame | effect_old.cpp:8125 | snapshot-only; accelerates `+0.01`/frame (`:8243`), `+0.05`/frame after beat 5 (`:8270`) |
+| snow `sz[i]` (scale) | random(FROST_STEP·100, FROST_STEP·GROW_DURATION·100)/100 = random(3,30)/100 = 0.03..0.30 | scale | effect_old.cpp:8126 | snapshot-only |
+| snow `r[i]` (radius) | random(25,50) | wu | effect_old.cpp:8127 | snapshot-only; shrinks `-1`/frame after beat 5 (`:8267`), floored at 1 |
+| snow rise after beat 5 | `h[i] += 5` | wu/frame | effect_old.cpp:8266 | snapshot-only |
+| `TORADIAN` | π/180 | rad/deg | revdefs.h:25 | yes (retail) — engine-wide constant, not effect-specific |
+| damage range radius | 200 | wu | effect_old.cpp:8400,8425 | snapshot-only — `DamageCharactersInRange`/`FindObjectsInRange` |
+| damage type | `DAMAGE_ICE` (13) | enum | effect_old.cpp:8400; object.h:663 | **partial (retail)** — the `"Iced"`-status posting is retail-confirmed (string XREF from `cls_0x5aaf28`, §2.1.2); the exact `DAMAGE_ICE`(13) immediate is snapshot-only. **Hardcoded** in animator, overriding `spell->SpellData()->damagetype` (`:8399` commented out). spell.def says `DT_FREEZE`(8); the live call forces `DAMAGE_ICE`(13). See §13. |
+| damage min/max | `spell->VariantData()->mindamage/maxdamage` | hp | effect_old.cpp:8400 | yes (retail) — read from spell.def VARIANT, which ships unchanged: 350/392 Ice Bolt, 120/142 Priest variant (`data/Resources/spell.def:1228,1230`) |
+| lifetime / kill | `GROW_DURATION*12` = 120 frames | frames | effect_old.cpp:8451-8454 | snapshot-only — at 24 Hz ≈ **5.0 s** (the `*12` multiplier not corroborated; §2.1.4) |
 
 ### Iced sub-effect (I22) constants — for the coupling note (§6)
 
@@ -576,6 +674,32 @@ scale
    plays them (it transforms sub-objects manually). Whether retail used the I3D's
    own state animation instead is **undetermined**; the pre-release imperative
    transform is the documented path.
+
+8. **Snapshot-vs-retail fidelity risk (Retail fidelity = retail-partial, §2.1).**
+   The retail decomp recovered IceBolt's *registration, base class, subspell-3
+   force, and Iced-status coupling*, plus byte-identical `icebolt.i3d`/`iced.i3d`
+   assets — but **NOT** the animate/render body, so the §3 kinematic constants are
+   **snapshot-only, unverified against shipped**. The reconstruction must visually
+   match these against in-game ground-truth (§12) and treat them as the primary
+   fidelity risk:
+   - **Particle counts — known divergence signal.** Snapshot
+     `MAX_FROST_PARTICLES=MAX_SNOW_PARTICLES=50`; retail's IceBolt ctor allocates
+     **two 300-entry** particle buffers (`cls_0x5aaf28.cpp:67-88`, §2.1.3). The
+     shipped frost/snow density may be **up to 6× denser** than the snapshot's 50.
+     If the rebuilt beam's frost cloud looks sparse vs. ground-truth, raise the
+     caps toward 300. (Caveat: not *proven* those buffers are the frost/snow
+     arrays vs a shared pool — verify visually.)
+   - **Timing/scale constants unverified:** `GROW_DURATION=10`, the `*12` lifetime
+     (≈5 s), `RING_SPEED=20`, `SPIRAL_STEP=1.0`, `SPIRAL_SCALE_STEP=0.1`,
+     `FROST_STEP=0.03`, the `length/64` beam-stretch divisor, `SPHERE_STEP=0.5`,
+     and the snow envelope (orbit accel, beat-5 blow-up) are all snapshot-only.
+     None were found as immediates in any IceBolt retail function. Use the snapshot
+     values as the starting point, then tune against ground-truth — pace, beam
+     thickness/length, ring/spiral speed, and effect duration are the things to
+     watch.
+   - **`DAMAGE_ICE`(13) immediate** is snapshot-only (the *posting* of "Iced" is
+     retail-confirmed, but the damage-type value is not) — gameplay-relevant, not
+     visual.
 
 ---
 
