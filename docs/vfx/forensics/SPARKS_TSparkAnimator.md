@@ -5,7 +5,7 @@
 | **Effect ID** | (none yet — needs an INVENTORY row; suggest **X22**, see §1) |
 | **Class(es)** | `TParticle3DAnimator` (the actual animator). `TSparkAnimator` is **not a class** — it is only the *builder symbol name* the registration macro mints (see §2, §7). Registered name = `"sparks"`. No paired `TEffect` subclass; the spawned object is a generic `TEffect`. |
 | **Status** | forensics-complete (see §13 for the few genuine unknowns) |
-| **Retail fidelity** | **retail-confirmed (3 divergences) + 1 author-correction.** Retail `TCharacter::EffectBurst` decompiles cleanly and corroborates asset, registration, structure, most constants; but **gravity, trails, bounce were re-tuned for ship** (snapshot 0.2/1/false → retail 0.25/2/true — verified IEEE bit patterns at cls_0x5a7b98.cpp:4640-4664). **Blend = additive** per the original developer; the snapshot's Alpha is snapshot-only (retail `TParticle3DAnimator::Render` body not decompiled). Use the RETAIL param values + additive. See §2.1 + §7. |
+| **Retail fidelity** | **retail-confirmed (3 divergences).** Retail `TCharacter::EffectBurst` decompiles cleanly and corroborates asset, registration, structure, most constants; **gravity, trails, bounce were re-tuned for ship** (snapshot 0.2/1/false → retail 0.25/2/true — verified IEEE bit patterns at cls_0x5a7b98.cpp:4640-4664). **Blend = Alpha** (per code; developer-confirmed the forensics is correct). Render blend is snapshot-only (retail render body not decompiled) → vet vs combat footage. Texture = 2×2 atlas of distinct shapes (stars + blobs), one cell per burst (§4). Use RETAIL params + Alpha. See §2.1 + §7. |
 | **Author / Date** | vfx-forensics-agent / 2026-05-19 (retail reconciliation: vfx-forensics-agent / 2026-05-20) |
 | **Family** | blood/combat (combat-feedback; mechanically a generic spark burst) |
 | **Draws** | particle emitter — N screen-aligned billboards, each one sub-object of `Misc\Sparks.I3D` placed at a particle position |
@@ -27,9 +27,11 @@ fills in — the commented-out sibling registrations (`icedsparks`, `sand`,
 many particle effects, not just sparks. There are **no spark-specific constants
 inside the animator**; every numeric (count, spread, gravity, lifetime, …) comes
 from the caller's params (§3, §5). The sparks read as bright white/yellow
-metallic sparks — a single emitter, single color per burst (one 2×2-atlas cell,
-chosen per character), drawn **Additive** (video-confirmed; the code's Alpha was
-snapshot-only WIP — §7), self-lit. The simplest effect in the game.
+metallic sparks — a single emitter, one 2×2-atlas cell per burst (the cells are
+distinct SHAPES: 4-pointed stars + blobs; `objflags = 1<<(ObjId()&3)` picks one
+per attacker, so hits alternate stars/blobs), drawn Alpha-blended per the code
+(snapshot-only — vet vs combat footage, §7), self-lit. The simplest effect in the
+game. NOTE: not the green Fountain sparkles — that's a separate effect.
 
 > **INVENTORY action:** no row exists for this effect (INVENTORY has the generic
 > infra row `I03 TParticle3DAnimator`, but no concrete "sparks" effect row). Add
@@ -407,7 +409,7 @@ position z: ↗ small up/flat, then ↘ parabola under gravity 0.2
 
 ```
 Render():                                     // effect_old.cpp:4944
-    SaveBlendState(); SetBlendState();         //   snapshot=Alpha; SHIP=Additive (video-confirmed — §7) // :4946-4947
+    SaveBlendState(); SetBlendState();         //   Alpha (snapshot-only; vet vs combat footage — §7) // :4946-4947
     ResetExtents()
     for c in 0..particles-1:                   // :4951
         if s[c] > 0 or l[c] <= 0: continue     //   skip delayed/dead       // :4953
@@ -421,17 +423,18 @@ Render():                                     // effect_old.cpp:4944
     UpdateExtents(); RestoreBlendState()        // :4982-4983
 ```
 
-- **Blend mode:** **Additive (ONE/ONE)** — **video-confirmed** against retail
-  (developer, 2026-05-20). The snapshot `Render` calls `SetBlendState()`
+- **Blend mode:** **Alpha** (what the code does). `Render` calls `SetBlendState()`
   (`effect_old.cpp:4947`) = `D3DTBLEND_MODULATE` + `SRC_ALPHA/INV_SRC_ALPHA`
-  (translucent Alpha), BUT the retail `TParticle3DAnimator::Render` body was never
-  decompiled (snapshot-only — §2.1), so the snapshot's Alpha was always
-  unverified. Visual comparison to the retail video resolved it: the sparks are
-  additive (they glow against the dark scene). The snapshot's Alpha is WIP that
-  the shipped game superseded. **Reconstruct Additive (ONE/ONE).** This is a
-  resolved snapshot→shipped divergence on the render blend, settled by visual vet
-  (the methodology working as intended — the value was flagged snapshot-only, not
-  asserted, and the video settled it).
+  (translucent Alpha, NOMENCLATURE §3). The developer confirms the combat-spark
+  forensics is correct, including the blend. **Reconstruct Alpha.**
+  - *Snapshot-only / to-vet:* the retail `TParticle3DAnimator::Render` body wasn't
+    decompiled (§2.1), so Alpha is unverified-vs-shipped. Vet against ACTUAL
+    combat-spark footage (a blocked melee).
+  - *History note:* a green-sparkle clip briefly led to an "additive" call, but
+    that footage is a **different effect** — the Fountain/Sparkle family
+    (`GREENFONT` / `TGreenFountainAnimator`, `Misc\Sparkle.I3D`), an ambient
+    rising-sparkle effect, NOT combat sparks. The additive read applies to that
+    effect (if/when reconstructed), not here. Combat sparks = Alpha.
 - **Lit vs self-lit:** **Unlit / self-lit.** The animator never folds ambient
   light into vertex color and never zeroes the material — it simply draws the
   imagery's authored verts/texture. The color is literal (from the sprite). No
@@ -489,9 +492,9 @@ light the scene in the original — they are self-lit billboards only.
   photon-sparkle family as `TPhotonAnimator` (`src/missileeffect.h:84`). Not a
   saturated hue — sparks are deliberately near-white hot, with a warm/yellow core.
 - **Expected visual:** bright, hot, near-white metallic sparks (think
-  steel-on-steel block impact). **Additive** (video-confirmed, §7) → they GLOW
-  against the dark scene, bright cores blowing toward white. A flat/translucent
-  (alpha) look is wrong. **A pale/gray/washed result at reconstruction = broken port**
+  steel-on-steel block impact). Alpha-blended per the code (§7); the cells are
+  distinct shapes (4-pointed stars + blobs). Vet brightness/glint against actual
+  combat-spark footage. (Not the green Fountain sparkles — separate effect.) **A pale/gray/washed result at reconstruction = broken port**
   (likely culprits per AGENT_GUIDE §4.2.1.5: a procedural stand-in instead of the
   real photon sprite #1, or wrong blend/chroma-key). The sparks are *meant* to be
   bright-white, so "near-white" is correct here — but verify it's the **sprite's**
