@@ -97,6 +97,16 @@ pointed at the wrong place."
    an ASCII diagram per the conventions in [NOMENCLATURE.md](NOMENCLATURE.md)
    §9. A diagram orients the reconstruction agent fast; it supplements (never
    replaces) the constants table + pseudocode.
+8. **Clean slate — no prior-port knowledge.** Document the original purely from
+   its own source. You are NOT told what any previous porting attempt did, you do
+   not go looking for the current `src/effect.{h,cpp}` port to compare against,
+   and you do not frame any finding against a prior implementation ("the old port
+   got this wrong", "unlike the current version"). Forensics is objective
+   archaeology of the original — describe what IS, with citations. State
+   non-obvious behaviors plainly as facts (e.g. "spray is biased along the hit
+   normal, not radial"); their value stands on its own without reference to any
+   mistake. (Prior-port knowledge belongs to the reconstruction phase, where the
+   reconstruction agent may be told what to fix.)
 
 ## Source-of-truth order
 
@@ -107,10 +117,14 @@ For any given effect (from [../AGENT_GUIDE.md](../AGENT_GUIDE.md) §3.1):
    only), note it and fall back to pre-release.
 2. **Pre-release source** under `src/effect_old.cpp` / `src/effectcomp.cpp` —
    authoritative for *intent*. Most effects' full bodies live here.
-3. **Existing port shell** in `src/effect.{h,cpp}` — note what's already there.
-4. **Sister-family effects** — when an effect's own source is sparse, a sibling
+3. **Sister-family effects** — when an effect's own source is sparse, a sibling
    in the same family (fire-family, magic-family, combat-family) usually shares
    the render/blend/color pattern. Cite the sibling.
+
+(Note: the current in-progress port under `src/effect.{h,cpp}` is **not** a
+source — per hard-rule 8 you work clean-slate from the original, not against the
+port. The class *declarations* there are fine to confirm a name/signature, but do
+not study or describe what the port's bodies do.)
 
 If retail and pre-release disagree, **retail wins for behavior**, but record the
 divergence — it is information.
