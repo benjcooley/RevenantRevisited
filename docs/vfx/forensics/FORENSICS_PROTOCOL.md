@@ -231,10 +231,12 @@ multi-component effect into one description.
 ## 7. Rendering (original render state + geometry)
 - **What it draws:** billboard(s) / I3D mesh / strip / particles / light /
   volumetric / composite
-- **Blend mode (original):** trace `SetBlendState`/`SaveBlendState` for the real
-  D3D src/dst factors; name them (D3DTBLEND_DECAL, ONE/ONE,
-  SRC_ALPHA/INV_SRC_ALPHA…) + the NOMENCLATURE label. Cite. (F03 was wrongly
-  guessed additive when it was Decal — trace, don't guess.)
+- **Blend mode (original):** identify which helper the effect calls —
+  `SetBlendState()` (texture MODULATE + SRC_ALPHA/INV_SRC_ALPHA = Alpha) vs
+  `SetAddBlendState()` (ONE/ONE = AdditiveStraight); see
+  [NOMENCLATURE.md](NOMENCLATURE.md) §3. Cite the call site + the real factors.
+  (F03 was wrongly guessed additive — it was straight Alpha. Trace the helper,
+  don't guess from how it looks or from a D3D-constant name in a comment.)
 - **Lit vs self-lit:** scene-lit or self-lit/glowing? — cite
 - **Depth / Z:** ZWRITEENABLE / ZENABLE in the Render body; what RefreshZBuffer
   does — cite
