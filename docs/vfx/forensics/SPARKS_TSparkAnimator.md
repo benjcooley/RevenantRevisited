@@ -235,15 +235,28 @@ constants in the animator.
 | 2 | `photon02` | spark billboard quad (variant 2) |
 | 3 | `photon03` | spark billboard quad (variant 3) |
 
-All four are billboard quads sharing the same authored photon-sparkle sprite
-(the imagery is the same family as `TPhotonAnimator`, `src/missileeffect.h:84`).
-The four named variants exist so each particle can pick one at random
-(`objflags` / `o[c]`, §6) for subtle variety. Imagery header (file offset `0x14`
-onward): type tag `STILL` (`0x1C`), texture cell **64 × 80** px
-(`0x44`: `40 00` = 64 wide, `50 00` = 80 high), 16-bit (RGB565) pixel data — the
-sprite is a small bright spark/sparkle, **white/yellow-white** (texture region
-`0x174`–`0x3FAC`). No multi-frame `framehtexs` array (single still per object →
-no flipbook, §8).
+All four are billboard quads over **one texture that is a 2×2 atlas** — four
+spark-sprite cells in a single image, NOT four separate sprites and NOT one
+sprite shared. Each photon sub-object is **UV-mapped to a different cell** of the
+2×2 grid (read the sub-object UVs off the I3D geometry — they are sub-rects, not
+0..1). So selecting one sub-object (via `objflags`, §6) selects one cell = one
+spark variant. **A reconstruction that maps the whole texture (0..1 UV) onto each
+quad draws all four cells per particle — the "2×2 multicolor grid" failure.
+Render the chosen sub-object's actual UV sub-rect (one cell).**
+
+Imagery header (file offset `0x14` onward): type tag `STILL` (`0x1C`), texture
+**64 × 80** px (`0x44`: `40 00` = 64 wide, `50 00` = 80 high) holding the 2×2
+atlas, 16-bit (RGB565) — the cells are small bright spark/sparkles,
+**white/yellow-white** (texture region `0x174`–`0x3FAC`). No multi-frame
+`framehtexs` array and no UV-scroll — the only "atlas" is the static 2×2 cell
+selection via per-sub-object UVs (§8). (Same photon-sprite family as
+`TPhotonAnimator`, `src/missileeffect.h:84`.)
+
+> **NOTE (forensics correction, 2026-05-20):** an earlier draft said the four
+> sub-objects "share the same sprite." That missed that the texture is a 2×2
+> atlas with each sub-object UV-mapped to its own cell — the detail that decides
+> single-cell vs whole-grid rendering. Exact per-cell UV rects to be confirmed
+> from the I3D geometry during reconstruction; the 2×2 layout is confirmed.
 
 **The effect loads a real asset — do NOT substitute a procedural spark sprite.**
 The authored 4-variant photon sprite is the visual identity (§10).
