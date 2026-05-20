@@ -5,7 +5,8 @@
 | **Effect ID** | I22 |
 | **Class(es)** | `TIcedEffect` (object, shell) + `TIcedAnimator` (visual + state machine). Posted as a sub-effect by `TIceBoltAnimator` (I21) and — in retail only — `TStormAnimator`. |
 | **Status** | forensics-complete (see §13 for the genuine unknowns) |
-| **Author / Date** | vfx-forensics-agent / 2026-05-19 |
+| **Retail fidelity** | **retail-partial** — the lifecycle/state-machine core IS in retail (`cls_0x5ab460::virt_meth_0x4ec890` corroborates `ICED_DURATION=240`, the `frameon++`/`Stop()`-each-frame loop, the `OF_ICED` early-exit + `OF_PARALIZE`/`OF_ICED` clear-at-shatter), the `iced.I3D` asset is byte-identical, and the "Iced" posting/naming matches; but the shatter-physics tuning (gravity, chunk count, bounce, scatter, scale/life RNG) was **not recovered** in the retail decomp → snapshot-only. See §2.1. |
+| **Author / Date** | vfx-forensics-agent / 2026-05-19 (retail recon §2.1 added 2026-05-20) |
 | **Family** | ice |
 | **Draws** | I3D mesh — sub-objects of `Magic\iced.I3D`. **Crystal phase:** progressively-revealed facet meshes (`face01..face43` + `icicle01..06`) forming a crystal shell over the victim. **Shatter phase:** up to `MAX_ICED_CHUNKS=30` instances of the single `cube` sub-mesh tumbling/bouncing under gravity. Composite + custom-logic. |
 | **Archetype(s)** | (B) I3D-geometry-with-transforms, (F2) custom procedural logic + a 3-phase state machine, (E-ish) chunk "particles" that are full mesh instances with gravity/bounce. Character-attached status overlay. NO associated dynamic light (§9). NO texture animation (§8). NO audio (§11). |
@@ -72,6 +73,86 @@ audio, no texture animation in the pre-release source.
   reconciliation is "retail folds Iced into the posters; pre-release has a real
   class" (§13.1).
 
+### 2.1 Retail-vs-snapshot reconciliation
+
+`src/effect_old.cpp` is a **pre-release development snapshot**, not the shipped
+game. This subsection records the active cross-check of the snapshot against the
+retail Ghidra decomp. **Headline correction to §2's "retail has no recovered
+TIcedEffect body":** Ghidra DID recover the Iced **state-machine body** — it is
+`cls_0x5ab460::virt_meth_0x4ec890` (the function the recon note's "Iced second
+XREF 005e1184" points into). Ghidra merged it under the TStormAnimator id
+`cls_0x5ab460` (the recon note's documented "two embedded classes" caveat), but
+the body itself is unmistakably the Iced animator's `Animate`. So this effect is
+**retail-partial**, not pure snapshot-only.
+
+**1. Constant grep — what retail corroborates.** `cls_0x5ab460::virt_meth_0x4ec890`
+(`recon/classes/cls_0x5ab460.cpp:37-62`) is a near-line-for-line match of the
+snapshot's `Animate` hold/shatter logic (§6.1):
+- `this->mbr_0x188 = this->mbr_0x188 + 1` → `frameon++` (snapshot `:8783`).
+- `meth_0x4cee70_Stop((TCharacter*)this->mbr_0x184)` → `icedchar->Stop()` every
+  frame (snapshot `:8786`); `mbr_0x184` = `icedchar`, `mbr_0x188` = `frameon`.
+- `if ((int)dVar1 < 0xf0)` → **`frameon < 240` confirms `ICED_DURATION = 0xf0 = 240`**
+  (snapshot `ICED_DURATION = 24 * ICED_LENGTH` `:8720`). **yes (retail).**
+- `if (((flags[2] & 0x2000000U) == 0) || (IsDead() < 1)) this->mbr_0x188 = 0xf0;`
+  → the **early-exit**: `0x2000000 = 1<<25 = OF_ICED` (`src/object.h:550`); snaps
+  `frameon = 240` when `!IsIced()` OR victim dead (snapshot `:8790-8797`). The
+  `OF_ICED` flag bit and both early-exit conditions are **confirmed in retail.**
+- `if (dVar1 == 0xf0) { SetFlag(flags & 0xff7fffff); SetFlag(flags & 0xfdffffff); }`
+  → at `frameon == 240` (shatter), clear `0xff7fffff = ~(1<<23) = OF_PARALIZE`
+  (`src/object.h:548`) then `0xfdffffff = ~(1<<25) = OF_ICED`. This corroborates
+  the snapshot's `SetParalize(false)` un-freeze at shatter (`:8800`). **yes
+  (retail)** for the un-freeze + flag semantics.
+
+  **What retail did NOT recover:** the Phase-3 chunk-tumble math. `cls_0x5ab460`
+  has only 7 recovered methods and none contains the shatter-spawn or
+  tumble/bounce body — so `ICED_CHUNK_GRAVITY=0.25`, `MAX_ICED_CHUNKS=30`, the
+  `p.z<=16`/`p.z=20`/`v.z*=-0.5` bounce, the `(i/6)*25` row spread, the 4/frame
+  reveal cap 49, and every chunk velocity/scale/life RNG range are **present only
+  in the snapshot.** A grep of both Iced-related class bodies for `0.25 / 16 / 20
+  / 25 / 30 / 49 / 50` and the hex equivalents returns only `0xf0` (=240, above).
+  These are **snapshot-only.**
+
+**2. Asset identity — confirmed unchanged.** The shipped `Imagery/Magic/iced.i3d`
+inside `data/imagery.rvi` (a PK/ZIP archive) is **byte-for-byte identical** to the
+snapshot `legacy/Imagery/Magic/iced.I3D`:
+- both **94888 B**; shipped member dated 06-30-1998.
+- **MD5 `10e7e15b3cd6b491e47ab1743b5cdf8e`** for both (extracted member vs.
+  snapshot, `cmp` reports identical).
+So the crystal/chunk geometry (the `cube` + `face01..43` + `icicle01..06`
+sub-objects) and the embedded ice-blue textures — i.e. everything in §4, §7's
+draw paths, and §10's color — are **retail-confirmed unchanged.**
+
+**3. Struct / vftable.** The snapshot `TIcedAnimator` (`src/effect.h:1574-1601`)
+carries the 30-chunk working set: `frameon`+`angle`+`donebouncing` + five
+`hmm_vec3[30]` arrays (`p,v,t,w,s` = 5·30·12 = 1800 B) + `l[30]` (120 B) +
+`icedchar` (4 B) ≈ **~1940 B of animator data** atop the `T3DAnimator` base.
+That magnitude matches the **2064-byte `cls_0x5ab460`** (the merged class that
+owns `virt_meth_0x4ec890` and uses `mbr_0x184`/`mbr_0x188` as `icedchar`/`frameon`)
+and is far too large for the 456-byte leaf `cls_0x5ab6c8` (the secondary embedded
+class at vtable `005ab4c4`). So the layout is **consistent with retail** (a
+re-tune of the chunk RNG would not change this footprint). The retail TEffect
+shell vftable has 25 vmethods (per `TIceBoltEffect_cls_0x5aaf28_candidate.yaml`);
+the snapshot `TIcedEffect` overrides only `Initialize`/`Pulse` over `TEffect`,
+consistent.
+
+**4. Registration / naming — confirmed.** The `"Iced"` effect-name string lives at
+`.rdata 005e1184` ("Iced", `recon/classes/_data.txt:107503-107507`) with **exactly
+two XREFs** — `004ec860` (into `cls_0x5aaf28`, the IceBolt poster) and `004eca40`
+(into `cls_0x5ab460`, the TStormAnimator/Iced merge). There is **no standalone
+`DEFINE_BUILDER("Iced", …)` site of its own in retail**: "Iced" is a status tag
+posted by those two effects, matching the recon note and the snapshot's coupling
+(§12). The snapshot's `DEFINE_BUILDER("Iced", TIcedEffect)` (`effect_old.cpp:8723`)
+is the pre-release form of the same registration; retail evidently folded the
+class identity into the posters (or the leaf survived as `cls_0x5ab6c8` but its
+body wasn't recovered) — see §13.1.
+
+**Verdict: retail-partial.** Lifecycle/state-machine core (`ICED_DURATION=240`,
+the per-frame `Stop()` hold, the `OF_ICED`/`OF_PARALIZE` early-exit + clear-at-
+shatter), the `iced.I3D` asset, the struct footprint, and the posting/naming are
+all **retail-confirmed**. The **shatter-physics tuning constants are snapshot-only
+and a fidelity risk** (§13.8) — the reconstruction must verify them by visually
+matching against in-game retail capture (§12).
+
 ---
 
 ## 3. Constants
@@ -86,33 +167,35 @@ i.e. 24 frames/second is the intended tick rate.
 
 | name | value | units | source | confirmed? |
 |------|-------|-------|--------|------------|
-| `ICED_LENGTH` | 10 | seconds (hold) | effect_old.cpp:8719 | yes |
-| `ICED_DURATION` | `24 * ICED_LENGTH` = **240** | frames (≈10 s @ 24 Hz) | effect_old.cpp:8720 | yes — the master clock; phase boundary |
-| `ICED_CHUNK_GRAVITY` | 0.25 | wu/frame² (z accel) | effect_old.cpp:8721 | yes |
-| `MAX_ICED_CHUNKS` | 30 | count | effect.h:1573 | yes |
-| crystal reveal cap | `min(frameon*4, 50)` | sub-object index | effect_old.cpp:8909 | yes — # of crystal sub-objects drawn grows 4/frame, capped at 49 (`i < 50`) |
-| crystal spin `angle` | `random(0,359) * TORADIAN` | rad | effect_old.cpp:8753 | yes — fixed at Initialize, one static Z-spin for the whole crystal |
-| `TORADIAN` | π/180 | rad/deg | revdefs.h:25 | yes |
-| `M_2PI` | 2π | rad | revdefs.h:24 | yes — angular wrap for chunk spin |
-| **chunk velocity x** | `c*random(5,10)/10 + random(-5,5)/10` = `c*[0.5..1.0] + [-0.5..0.5]` | wu/frame | effect_old.cpp:8813 | yes (`c`=±1 quadrant sign, §6.2) |
-| **chunk velocity y** | `d*random(5,10)/10 + random(-5,5)/10` = `d*[0.5..1.0] + [-0.5..0.5]` | wu/frame | effect_old.cpp:8814 | yes (`d`=±1 quadrant sign) |
-| **chunk velocity z** | `random(0,10)/10` = `[0.0..1.0]` | wu/frame (upward) | effect_old.cpp:8815 | yes |
-| **chunk position x** | `c*random(20,40) + random(-20,20)` = `c*[20..40] + [-20..20]` | wu | effect_old.cpp:8817 | yes |
-| **chunk position y** | `d*random(20,40) + random(-20,20)` = `d*[20..40] + [-20..20]` | wu | effect_old.cpp:8818 | yes |
-| **chunk position z** | `(i/6)*25` (integer div) | wu | effect_old.cpp:8819 | yes — rows of 6, each row +25 wu (see §6.2; comment says "rows of 4" but math = 6) |
-| **chunk ang. vel x,y** (`w[i].x=w[i].y`) | `random(0,25)/100` = `[0.0..0.25]` | rad/frame | effect_old.cpp:8821 | yes |
-| chunk ang. vel z (`w[i].z`) | **commented out** `random(-25,25)/100` | rad/frame | effect_old.cpp:8822 | yes — DEAD: `w[i].z` left uninitialised → see §13.3 |
-| chunk ang. pos x,y (`t[i].x/y`) | **commented out** `random(0,6)` | rad | effect_old.cpp:8824-8825 | yes — DEAD: `t[i].x/y` start at 0 (default-init) |
-| chunk ang. pos z (`t[i].z`) | `atan2(v[i].y, v[i].x)` | rad | effect_old.cpp:8826 | yes — initial spin oriented to travel direction |
-| **chunk scale** (50% of chunks) | `random(25,75)/100` per axis = `[0.25..0.75]` | scale | effect_old.cpp:8828-8833 | yes — `if(random(0,1))` branch (large chunks) |
-| **chunk scale** (other 50%) | `random(10,15)/100` per axis = `[0.10..0.15]` | scale | effect_old.cpp:8834-8839 | yes — else branch (small chunks/shards) |
-| **chunk life** (`l[i]`) | `random(2,3)` | bounces remaining | effect_old.cpp:8841 | yes — chunk dies after 2 or 3 floor bounces |
-| **bounce floor threshold** | `p[i].z <= 16` | wu | effect_old.cpp:8876 | yes (comment "fix this") |
-| bounce reset height | `p[i].z = 20` | wu | effect_old.cpp:8878 | yes — snap above floor on bounce |
-| **bounce z reflection** | `v[i].z *= -0.5` | factor | effect_old.cpp:8879 | yes — damped bounce (loses half speed) |
-| **bounce spin boost** | `w[i].{x,y,z} *= 2.0` | factor | effect_old.cpp:8880-8882 | yes — spin doubles each bounce |
-| RefreshZBuffer crystal patch | 150 × 200 px (offset −50 in y) | px | effect_old.cpp:8962-8964 | yes |
-| RefreshZBuffer chunk patch | 70 × 70 px (offset −10 in y) | px | effect_old.cpp:8968-8982 | yes |
+| `ICED_LENGTH` | 10 | seconds (hold) | effect_old.cpp:8719 | yes (retail) — implied by `ICED_DURATION=0xf0=240=24·10` corroborated at `cls_0x5ab460.cpp:48` |
+| `ICED_DURATION` | `24 * ICED_LENGTH` = **240** | frames (≈10 s @ 24 Hz) | effect_old.cpp:8720 | **yes (retail)** — `cls_0x5ab460::virt_meth_0x4ec890` tests `frameon < 0xf0` (=240) and snaps to `0xf0` (`cls_0x5ab460.cpp:48,51,55`); master clock / phase boundary |
+| `ICED_CHUNK_GRAVITY` | 0.25 | wu/frame² (z accel) | effect_old.cpp:8721 | **snapshot-only** — Phase-3 tumble body not recovered in retail decomp |
+| `MAX_ICED_CHUNKS` | 30 | count | effect.h:1573 | **snapshot-only** — chunk-spawn body not recovered (footprint consistent w/ 2064 B `cls_0x5ab460`, §2.1.3, but the literal 30 isn't a retrievable immediate) |
+| crystal reveal cap | `min(frameon*4, 50)` | sub-object index | effect_old.cpp:8909 | **snapshot-only** — Render body not recovered in retail decomp |
+| crystal spin `angle` | `random(0,359) * TORADIAN` | rad | effect_old.cpp:8753 | **snapshot-only** — Initialize body not recovered; fixed at Initialize, one static Z-spin |
+| `TORADIAN` | π/180 | rad/deg | revdefs.h:25 | yes — engine-wide constant |
+| `M_2PI` | 2π | rad | revdefs.h:24 | yes — engine-wide constant (angular wrap for chunk spin) |
+| **chunk velocity x** | `c*random(5,10)/10 + random(-5,5)/10` = `c*[0.5..1.0] + [-0.5..0.5]` | wu/frame | effect_old.cpp:8813 | **snapshot-only** — shatter-spawn body not recovered (`c`=±1 quadrant sign, §6.2) |
+| **chunk velocity y** | `d*random(5,10)/10 + random(-5,5)/10` = `d*[0.5..1.0] + [-0.5..0.5]` | wu/frame | effect_old.cpp:8814 | **snapshot-only** (`d`=±1 quadrant sign) |
+| **chunk velocity z** | `random(0,10)/10` = `[0.0..1.0]` | wu/frame (upward) | effect_old.cpp:8815 | **snapshot-only** |
+| **chunk position x** | `c*random(20,40) + random(-20,20)` = `c*[20..40] + [-20..20]` | wu | effect_old.cpp:8817 | **snapshot-only** |
+| **chunk position y** | `d*random(20,40) + random(-20,20)` = `d*[20..40] + [-20..20]` | wu | effect_old.cpp:8818 | **snapshot-only** |
+| **chunk position z** | `(i/6)*25` (integer div) | wu | effect_old.cpp:8819 | **snapshot-only** — rows of 6, each row +25 wu (see §6.2; comment says "rows of 4" but math = 6) |
+| **chunk ang. vel x,y** (`w[i].x=w[i].y`) | `random(0,25)/100` = `[0.0..0.25]` | rad/frame | effect_old.cpp:8821 | **snapshot-only** |
+| chunk ang. vel z (`w[i].z`) | **commented out** `random(-25,25)/100` | rad/frame | effect_old.cpp:8822 | **snapshot-only** — DEAD: `w[i].z` left uninitialised → see §13.3 |
+| chunk ang. pos x,y (`t[i].x/y`) | **commented out** `random(0,6)` | rad | effect_old.cpp:8824-8825 | **snapshot-only** — DEAD: `t[i].x/y` start at 0 (default-init) |
+| chunk ang. pos z (`t[i].z`) | `atan2(v[i].y, v[i].x)` | rad | effect_old.cpp:8826 | **snapshot-only** — initial spin oriented to travel direction |
+| **chunk scale** (50% of chunks) | `random(25,75)/100` per axis = `[0.25..0.75]` | scale | effect_old.cpp:8828-8833 | **snapshot-only** — `if(random(0,1))` branch (large chunks) |
+| **chunk scale** (other 50%) | `random(10,15)/100` per axis = `[0.10..0.15]` | scale | effect_old.cpp:8834-8839 | **snapshot-only** — else branch (small chunks/shards) |
+| **chunk life** (`l[i]`) | `random(2,3)` | bounces remaining | effect_old.cpp:8841 | **snapshot-only** — chunk dies after 2 or 3 floor bounces |
+| **bounce floor threshold** | `p[i].z <= 16` | wu | effect_old.cpp:8876 | **snapshot-only** — bounce body not recovered (comment "fix this") |
+| bounce reset height | `p[i].z = 20` | wu | effect_old.cpp:8878 | **snapshot-only** — snap above floor on bounce |
+| **bounce z reflection** | `v[i].z *= -0.5` | factor | effect_old.cpp:8879 | **snapshot-only** — damped bounce (loses half speed) |
+| **bounce spin boost** | `w[i].{x,y,z} *= 2.0` | factor | effect_old.cpp:8880-8882 | **snapshot-only** — spin doubles each bounce |
+| RefreshZBuffer crystal patch | 150 × 200 px (offset −50 in y) | px | effect_old.cpp:8962-8964 | **snapshot-only** — RefreshZBuffer body not recovered |
+| RefreshZBuffer chunk patch | 70 × 70 px (offset −10 in y) | px | effect_old.cpp:8968-8982 | **snapshot-only** — RefreshZBuffer body not recovered |
+| `OF_ICED` mask | `1<<25` = `0x2000000` | flag bit | object.h:550 | **yes (retail)** — `cls_0x5ab460.cpp:49` tests `& 0x2000000`, clears with `& 0xfdffffff` (`:57`) |
+| `OF_PARALIZE` mask | `1<<23` | flag bit | object.h:548 | **yes (retail)** — cleared at shatter via `& 0xff7fffff` (`cls_0x5ab460.cpp:56`) |
 
 ---
 
@@ -599,6 +682,24 @@ Full body `Render()` `:8900-8953`. Brackets the whole draw with
    pre-release's imperative transforms is **undetermined**. The pre-release
    imperative path (reveal facets, transform chunks) is the documented, complete
    spec.
+8. **Shatter-physics tuning is snapshot-only — the fidelity risk for
+   reconstruction.** Per the §2.1 reconciliation, retail corroborates the
+   *lifecycle skeleton* (`ICED_DURATION=240`, the per-frame `Stop()` hold, the
+   `OF_ICED` early-exit, the `OF_PARALIZE`/`OF_ICED` clear at shatter — all in
+   `cls_0x5ab460::virt_meth_0x4ec890`) and the **byte-identical `iced.I3D` asset**,
+   but the **Phase-2 shatter-spawn and Phase-3 tumble/bounce bodies were not
+   recovered** in the retail decomp. Therefore every chunk-physics constant in §3
+   is **snapshot-only** and *may have been re-tuned for the shipped game*:
+   `ICED_CHUNK_GRAVITY=0.25`, `MAX_ICED_CHUNKS=30`, the bounce
+   (`p.z<=16`→`p.z=20`, `v.z*=-0.5`, `w*=2.0`, `l=random(2,3)`), the 4-quadrant
+   scatter (`c·[20..40]±20`), the `(i/6)*25` row spread, the crystal reveal rate
+   (`min(frameon*4,50)`), and all chunk velocity/scale RNG ranges. Build the
+   reconstruction from these snapshot values (best available evidence), then
+   **verify the shatter visually against an in-game retail capture** (§12 capture
+   rig) — count the chunks, the bounce decay, the chunk size mix, and the burst
+   spread — and adjust if the shipped behaviour diverges. The crystal-hold phase,
+   the asset, and the freeze/un-freeze lifecycle do **not** carry this risk
+   (retail-confirmed).
 
 ---
 
