@@ -148,6 +148,7 @@ forensics agent checked and there's nothing," not "the forensics agent forgot").
 | **Effect ID** | <e.g. M09> |
 | **Class(es)** | <TXxxEffect + TXxxAnimator> |
 | **Status** | forensics-complete \| forensics-partial (see §13) |
+| **Retail fidelity** | retail-confirmed \| retail-partial \| snapshot-only (unverified) — see §2.1 |
 | **Author / Date** | <agent-id> / <YYYY-MM-DD> |
 | **Family** | fire \| ice \| magic \| lightning \| projectile \| blood/combat \| water/environment \| other |
 | **Draws** | billboard(s) \| I3D mesh \| strip/ribbon \| particle emitter \| dynamic light \| volumetric \| composite |
@@ -160,20 +161,61 @@ before diving into the detail sections.
 
 ## 2. Sources & evidence
 - **Retail decomp:** `recon/classes/<file>` — COMPLETE \| SPARSE \| NONE
-- **Pre-release:** `src/effect_old.cpp:<start>-<end>` (`<ClassName>` + `<AnimatorName>`)
-- **Existing port shell:** `src/effect.{h,cpp}:<lines>` or "none"
+- **Pre-release (snapshot):** `src/effect_old.cpp:<start>-<end>` (`<ClassName>` + `<AnimatorName>`)
 - **Sister effects consulted:** `<ClassName>` (`effect_old.cpp:<lines>`) — <what for>
-- **Source-of-truth ranking:** which source is authoritative for this effect + why;
-  note any retail-vs-pre-release divergence (retail wins for behavior).
+- **Source-of-truth ranking:** which source is authoritative for this effect + why.
+
+### 2.1 Retail-vs-snapshot reconciliation (REQUIRED — answer it, don't assume)
+`src/effect_old.cpp` is a **pre-release development snapshot**, not the shipped
+game. The retail build came later; effects are exactly the kind of thing that got
+re-tuned or rewritten late. **You must actively determine whether the snapshot
+matches what shipped** and rate the **Retail fidelity** field accordingly. Do not
+default to "the snapshot is the truth."
+
+Cross-check the snapshot against the retail Ghidra decomp — and don't stop at
+"recon has no clean bodies." Actively try:
+
+1. **Constant grep.** Take the snapshot's magic numbers (gravity, counts,
+   durations, scales, angle offsets, RNG bounds) and search the retail decomp
+   (`recon/classes/`, `recon/discovered/`, the wider Ghidra output) for those
+   immediates in the effect's functions. Matching immediates = strong corroboration
+   even without readable bodies; missing/different ones = a divergence signal.
+2. **Asset identity.** Compare the snapshot asset (`legacy/Imagery/...`) to the
+   shipped asset in the retail data (main checkout `data/...` / the `.rvi`). Same
+   file (size/bytes) ⇒ the effect that consumes it is very likely unchanged;
+   a different/renamed/missing asset ⇒ investigate.
+3. **Structure/layout.** Compare class size, field count/offsets, and vftable
+   method count between the snapshot class and the retail `cls_*` mapping. A
+   matching layout corroborates; a different one means the effect was reworked.
+4. **Registration + naming.** Confirm the retail binary registers the same
+   builder/animator name (string XREF) and that the spell/caller wiring matches.
+
+State the verdict explicitly with the evidence:
+- **retail-confirmed** — retail decomp corroborates the snapshot's key constants +
+  structure (cite the corroborating immediates/offsets/strings).
+- **retail-partial** — some corroboration (e.g. asset identical + name matches) but
+  key constants unverifiable; list what's confirmed vs. assumed-from-snapshot.
+- **snapshot-only (unverified)** — retail decomp too sparse to corroborate anything
+  beyond existence. The snapshot is the best available evidence but **may differ
+  from shipped**; this is a fidelity risk the reconstruction must resolve by
+  visually matching against retail ground-truth (the in-game capture in §12).
+
+Per-constant, the §3 "confirmed?" column should reflect this: a value the retail
+decomp corroborates is "yes (retail)"; a value seen only in the snapshot is
+"snapshot-only" — not "yes." Don't launder snapshot-only values as confirmed.
 
 ## 3. Constants
 Every numeric the effect uses, with citation. Mark confirmed vs guessed.
 
 | name | value | units | source | confirmed? |
 |------|-------|-------|--------|------------|
-| NUMFIRES | 15 | count | effect_old.cpp:889 | yes |
-| gravity | 0.37 | wu/tick² | effect_old.cpp:10947 | yes |
+| NUMFIRES | 15 | count | effect_old.cpp:889 | yes (retail: immediate at cls_0x…) |
+| gravity | 0.37 | wu/tick² | effect_old.cpp:10947 | snapshot-only (no retail corroboration) |
 | … | … | … | … | guessed: <rationale> |
+
+`confirmed?` values: **yes (retail)** = corroborated in the retail decomp (cite how);
+**snapshot-only** = present only in the pre-release source, unverified against
+retail; **guessed** = inferred, with rationale. Don't mark snapshot-only as "yes."
 
 Include: counts, lifetimes/durations, speeds, gravities, drag, sizes, scales,
 rotation rates, spawn rates/cadence, burst counts, blend factors, atlas dims,
@@ -297,6 +339,10 @@ scope, but record it so nothing's lost.
 ## 13. Gaps & uncertainties
 - What you couldn't determine from source, what you tried, the most reasonable
   guess + rationale — never a silent fabrication.
+- **Snapshot-vs-retail risk:** if Retail fidelity (§2.1) is snapshot-only or
+  retail-partial, call out the specific values/behaviors that are unverified
+  against shipped retail, so the reconstruction agent knows exactly what to
+  scrutinize when visually matching against ground-truth reference.
 - Anywhere the original source is ambiguous and the reconstruction agent will
   need to visually match against ground-truth reference to resolve.
 
@@ -339,12 +385,16 @@ the builder knows they were considered, not forgotten.
    §4.2.1.5 (color = health signal), §4.2.1.6 (orientation tells).
 2. Read the INVENTORY row for your effect — it may already have partial
    forensics. Build on it, don't redo.
-3. Locate all sources (§0). Rank them.
+3. Locate all sources (§2). Rank them. **Do the §2.1 retail-vs-snapshot
+   reconciliation** — actively cross-check the snapshot against the retail decomp
+   (constant grep, asset identity, structure/vftable, registration) and set the
+   Retail fidelity rating with evidence. Don't assume the snapshot is retail.
 4. Fill the template top to bottom, tracing every helper, citing every fact,
    capturing ALL custom logic (not just particles), the associated light, and
-   any audio. Finish with the §14 burndown — distill everything above into a flat
-   checklist of discrete things to recreate; if you can't write a clean burndown
-   item for some behavior, you haven't documented it clearly enough above.
+   any audio. Mark each §3 constant as retail-confirmed vs snapshot-only. Finish
+   with the §14 burndown — distill everything above into a flat checklist of
+   discrete things to recreate; if you can't write a clean burndown item for some
+   behavior, you haven't documented it clearly enough above.
 5. Self-test: "Working from my doc plus the retail code it cites, could the
    reconstruction agent reproduce this 100% — without having to discover anything
    I didn't point them at?" If not, keep going.
