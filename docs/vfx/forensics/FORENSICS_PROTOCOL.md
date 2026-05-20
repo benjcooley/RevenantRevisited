@@ -240,10 +240,27 @@ here becomes a procedural stand-in at reconstruction.
 | … | … | … | … | … |
 
 For mesh assets, enumerate the **sub-objects** and what each renders (pivot,
-cylinder, flare, blast…). For textures, record frame count + cell dims + whether
-animation is **UV-scroll** or **framehtexs flipbook** (see §8). If the effect
-loads NO asset (pure procedural in the original), say so explicitly with the
-citation proving it.
+cylinder, flare, blast…). If the effect loads NO asset (pure procedural in the
+original), say so explicitly with the citation proving it.
+
+**Decode the texture layout — don't summarize it.** For every texture, report:
+- **Dimensions** (WxH) and format.
+- **Single image vs ATLAS.** Many sprites are a grid of cells (e.g. a **2×2**
+  atlas of 4 spark variants). Decode it: how many cells, the grid layout, and
+  what each cell holds. "4 sub-objects share the same sprite" is NOT acceptable
+  when the truth is "one 2×2-atlas texture, each sub-object UV-mapped to a
+  different cell" — that distinction decides whether reconstruction draws one
+  cell or the whole grid (a real failure we hit).
+- **The UV mapping.** READ the actual UV coordinates off each sub-object /
+  frame / particle in the I3D geometry — do NOT assume 0..1 (whole texture).
+  State which sub-object / frame / index maps to which cell or sub-rect. If the
+  effect picks a cell at runtime (e.g. `objflags`, `textureframe`, a frame
+  counter), document the selection rule and which UVs it lands on.
+- **Animation mechanism** (if any): UV-scroll vs `framehtexs` flipbook vs static
+  cell-selection (see §8).
+
+The forensics agent owns this decode — the reconstruction must not have to
+discover the atlas/UV layout itself.
 
 ## 5. Spawn & emit
 - **Trigger semantics:** one-shot \| fixed-duration \| continuous \| looping
