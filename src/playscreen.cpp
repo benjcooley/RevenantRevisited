@@ -516,6 +516,22 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
                  kd ? kd->statreqs[0] : -1, kd ? kd->statreqs[1] : -1,
                  kd ? kd->statreqs[2] : -1, kd ? kd->statreqs[3] : -1,
                  kd ? kd->statreqs[4] : -1, kd ? kd->statreqs[5] : -1);
+
+        // One-shot dump of Locke's animation state names + their play-tag
+        // counts. Answers two open questions: does a "run" state exist
+        // (run-mode toggle), and which states carry "play" sound tags
+        // (footsteps). Remove once both are wired.
+        if (TObjectImagery *img = p->GetImagery())
+        {
+            const int32_t n = img->NumStates();
+            log_info("[anim-dump] Locke has %d animation states:", n);
+            for (int32_t i = 0; i < n; i++)
+            {
+                SImageryHeader *hdr = img->GetHeader();
+                const char *nm = (hdr && i < hdr->numstates) ? hdr->states[i].animname : "?";
+                log_info("[anim-dump]   [%d] '%s'", i, nm ? nm : "?");
+            }
+        }
     }
 
     return true;
