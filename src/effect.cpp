@@ -3444,11 +3444,19 @@ TSparkEffect* TSparkEffect::SpawnForTest(const S3DPoint& origin)
 
     // The Sparks.I3D texture is a 2x2 ATLAS — the 4 photon sub-objects
     // (photon / photon01 / photon02 / photon03, object indices 0..3) each
-    // select ONE differently-tinted cell via their authored UVs. Selecting
-    // one sub-object = one cell = one solid color for the whole burst (the
-    // correct single-color look). A sector-less harness effect has no valid
-    // SObjectInfo (the original keyed objflags off the attacker's ObjId),
-    // so we rotate a static counter to vary the variant per burst.
+    // select ONE atlas cell via their authored UVs. The 4 cells are distinct
+    // SHAPES (4-pointed stars and blobs), not just color tints. Selecting one
+    // sub-object = one cell = one shape/color for the whole burst (the correct
+    // single-cell look — drawing the full atlas mixes all 4 = the grid bug).
+    //
+    // In the game, objflags = 1 << (ObjId() & 3) keys the cell off the
+    // attacker's object id, so different attackers/hits land on different
+    // cells and the combat sparks alternate stars/blobs across hits. A
+    // sector-less harness effect has no valid SObjectInfo (ObjId() would
+    // null-deref), so we rotate a static counter: each successive burst
+    // advances the cell 0->1->2->3->wrap, reproducing that in-game shape
+    // variety (one clean single-cell burst at a time, consecutive bursts
+    // alternate). Never mix cells within a burst.
     const int32_t num_obj = img3d->NumObjects();
     static int32_t s_variant_rotor = 0;
     const int32_t variant = num_obj > 0 ? ((s_variant_rotor++) & 0x3) % num_obj : 0;
@@ -3619,12 +3627,14 @@ void TSparkEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
     item.uv_rect[3] = uv_rect_[3];
     item.key.texture     = texture_;
     item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    // Blend = Additive (ONE/ONE). Video-confirmed against the retail capture
-    // (bright glints). The snapshot Render body called SetBlendState (= Alpha,
-    // MODULATE + SRC_ALPHA/INV_SRC_ALPHA), but that was a WIP value — the
-    // retail TParticle3DAnimator::Render TU was never decompiled, and the
-    // shipped sparks are additive. (See forensics §7 blend note.)
-    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    // Blend = Alpha (SRC_ALPHA / INV_SRC_ALPHA) — the combat-spark Render body
+    // calls SetBlendState (= Alpha), and forensics §7 records Alpha. The
+    // earlier "additive" comparison turned out to be the GREEN Fountain /
+    // Sparkle effect (GREENFONT family), a DIFFERENT effect — not combat
+    // sparks. Combat sparks ship Alpha. (Still snapshot-only: the retail
+    // TParticle3DAnimator::Render TU was never decompiled; vet against real
+    // combat-spark footage, not the fountain video.)
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
     item.light_mode      = EFxLightMode::Unlit;
     item.orientation     = EFxBillboardOrientation::ScreenAligned;
