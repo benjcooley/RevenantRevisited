@@ -14,6 +14,16 @@ Read, in order:
 2. [TEST_MODE.md](TEST_MODE.md) — what "done" looks like for any effect.
 3. [../PARTICLE_EFFECTS.md](../PARTICLE_EFFECTS.md) — the engine architecture you are extending. **Do not invent a parallel architecture.**
 4. [INVENTORY.md](INVENTORY.md) — pick an unclaimed row.
+5. [forensics/NOMENCLATURE.md](forensics/NOMENCLATURE.md) — canonical vocabulary for orientation / space / blend / lighting / depth / animation / pipelines / rigs. Use these terms; don't invent synonyms.
+
+### Two-phase workflow (forensics → reconstruction)
+
+Effect restoration splits into two roles, each with its own protocol:
+
+- **Forensics** — [forensics/FORENSICS_PROTOCOL.md](forensics/FORENSICS_PROTOCOL.md). Produce a complete reconstruction document (constants, assets, spawn shape + diagrams, pseudocode, render spec, color source, callers, rig+BG, roadmap). No engine code.
+- **Reconstruction** — [forensics/RECONSTRUCTION_PROTOCOL.md](forensics/RECONSTRUCTION_PROTOCOL.md). Rebuild from the forensics doc; verify visually on the recommended backgrounds; report doc gaps.
+
+See [forensics/README.md](forensics/README.md) for why the split exists. The §3.0–§4.2.* rules below apply to both phases.
 
 Spot-check the project-wide rules these touch:
 
@@ -102,21 +112,48 @@ if it grows beyond one paragraph):
    is standalone-spawnable like a torch flame. Categories so far:
    - **Standalone** — `SpawnForTest(origin)` is enough (F01 flame,
      B01 blood, S01 lightning). No external state needed.
+     Use `EVfxPreviewStyle::Static` / `Combat` / `SpellGround` /
+     `Projectile` depending on the in-game cadence.
    - **Character-attached** — needs a character imagery loaded +
      TCharAnimator running so the effect's owner exists. Status
      overlays (TBurnEffect / TAuraEffect / TIcedEffect), aura
-     glows, healing visuals.
+     glows, healing visuals. **Rig available** as of 2026-05-17:
+     register with `EVfxPreviewStyle::CharacterIdle` and set
+     `SEffect.anchor` to one of CharacterRoot / BoundsCenter /
+     Bone("rhand"|"lhand"|"head"|"chest") / BoneLocalPoint. Use
+     `submit_attached(ctx, dbg, attachment)` instead of `submit`;
+     the rig resolves the anchor every frame and the effect just
+     calls `effect->ForcePos(...)` from the world point. See
+     `TDripEffect.OnHand` in src/vfxtest.cpp for the canonical
+     1-line example. Design + forensics:
+     [CHARACTER_RIG_FORENSICS.md](CHARACTER_RIG_FORENSICS.md).
    - **Character + weapon + attack-anim** — needs a character
      with a weapon equipped and a swing animation cycling so the
      effect's per-tick logic has live weapon-extents to scan.
-     TWeaponSwipe.
+     TWeaponSwipe. **Rig available**: register with
+     `EVfxPreviewStyle::CharacterAttack` and anchor on
+     Bone("weapon") for hilt, BoneLocalPoint("weapon",
+     (0,0,+tipZ)) for tip. The rig picks an `attack*` anim state
+     automatically; cycle to a specific one via the "Next state"
+     button in the rig ImGui panel. Most character meshes name
+     their weapon sub-object `"weapon"` or `"sword"`; per-
+     character fallback list lives in
+     `CHARACTER_RIG_FORENSICS.md §2`.
    - **Projectile (source→target)** — needs a launch point, a
      target point, and a way to advance the projectile along a
      vector each tick. TMissileEffect / TFireBallEffect /
-     TIceBoltEffect / TPhotonEffect.
+     TIceBoltEffect / TPhotonEffect. **Rig pending**.
    - **Spell-cast (caster→ground)** — needs a caster character
      plus a ground-impact point. Spell visuals that originate at
-     a hand and play out at a target location.
+     a hand and play out at a target location. **Rig available**:
+     register with `EVfxPreviewStyle::CharacterCast` and anchor
+     on Bone("rhand") for the cast-from-hand convention (matches
+     `src/spell.cpp:399`'s in-game lookup). The rig picks a
+     `cast*`/`magic*`/`invoke*`/`spell*` anim state automatically.
+     **M09 TTeleporterAnimator (Misthaven recall) is the headline
+     downstream consumer** — its port author should pick this
+     category, anchor on CharacterRoot for the ground burst plus
+     a Bone("rhand") sub-effect for the flourish.
    - **Environment-context** — needs a sector / ground plane /
      water surface to anchor against. TWaterFallEffect, ambient
      drips, ripples on water.
@@ -126,11 +163,21 @@ if it grows beyond one paragraph):
    the rig is reusable from an existing harness primitive or
    needs to be built. The library of rig primitives grows
    incrementally — when a new category appears, add the primitive
-   to vfxtest.{h,cpp} as `Rig*` helpers (e.g. `CharacterRig`,
-   `CharacterWithWeaponRig`, `ProjectileRig`) so the next effect
-   in the same category reuses it.
+   to vfxtest.{h,cpp} as `Rig*` helpers (e.g. `CharacterRig`
+   [done], `ProjectileRig` [pending]) so the next effect in the
+   same category reuses it.
 7. **Gaps / unknowns** — anything still ambiguous. Mark explicitly
    what's documented vs guessed.
+8. **Trace every helper call.** When the retail draw / tick / pulse
+   body calls into a helper (texture lookup, mesh-load, particle-spawn,
+   color/scale envelope), the forensics must follow the helper, not
+   stop at the call site. Visual constants — colors, sizes, scales,
+   atlas frame counts, blend factors, rotation rates — frequently
+   live one or two helper-levels down from the lifecycle code that
+   first attracts the agent's eye. A port that nails the state
+   machine but reads scale/color/texture from "looked about right"
+   is the failure mode we keep hitting. If you find yourself making
+   up a number that retail computes, you have not finished forensics.
 
 Only after the row's notes carry these facts do you start the port.
 Reason: a port grounded in evidence is reviewable against the
@@ -353,6 +400,132 @@ When possible, capture a short video / screenshot of the original Revenant
 - The retail `Revenant.exe` in `data/` runs under Wine/dosbox for spot checks.
 
 Note any deliberate divergence (e.g. "blood is a touch brighter — better on modern displays") in the row's `Notes`.
+
+### 4.2.1 No procedural stand-ins for asset-driven effects (HARD RULE)
+
+If the retail code loads a `.I3D` mesh, `.RVI` imagery, or any named asset and
+draws it, **the port must load and draw the same asset**. Writing procedural
+geometry / billboards / gradients as a "stand-in" for an asset draw is a bodge
+even if the harness output looks superficially similar.
+
+Self-check during forensics (§3.0): does the retail source call
+`FindImagery` / `RegisterImagery` / `LoadImagery` / `Load3DAsset` / any
+imagery-lookup helper that resolves a named asset? If yes, the port path
+must reach the equivalent engine API. If that engine API does not yet
+exist, **stop and escalate as a blocker** — do NOT silently fall back to
+procedural geometry.
+
+Test for this in your own work: read your `SpawnForTest` and `Tick*` paths
+back-to-back with retail. Every named-asset call in retail must have a
+named-asset call in your port. Procedural code (`MakeTexture(...)`,
+`GenerateGradient`, billboard-from-scratch) appearing where retail loaded
+an asset means you have a stand-in and the port is not done.
+
+Caught failures so far: M09 TTeleporterEffect first port shipped a procedural
+glow column instead of `Magic\gvortex.I3D` (re-dispatched as M09b). F03
+TFireEffect under audit for same pattern. Reference: [[feedback-no-standins]].
+
+### 4.2.1.5 Color is a health signal
+
+Revenant effects have rich saturated color by design. Fire-family = warm
+orange/red; ice/cyclone = blue / ice-blue; sandstorm = brown; magic spells
+= blue or violet; sword swipes pull from `chardata->swipecolor` (often
+saturated). **If your port renders pale, muted, gray, or off-saturation,
+suspect the port path is broken before declaring done.**
+
+Likely culprits in order of frequency observed this project:
+
+1. **Stand-in for a real asset** — procedural gradient/billboard texture
+   replacing a real `.I3D` / imagery atlas; the asset's authored palette
+   is gone. See §4.2.1 + [[feedback-no-standins]].
+2. **Default color path** — harness or port supplying a fallback colour
+   (gold, white, gray) because the real data source (`chardata->swipecolor`,
+   `spell->color`, per-cast tint) wasn't traced. See the S09c failure where
+   harness defaulted to gold instead of reading Locke's `SWIPECOLOR 0,0,10`.
+3. **Wrong blend mode** — AdditiveStraight where Alpha was needed
+   (or vice versa) washes out per-vertex colours. F03 fix changed this.
+4. **Lighting mode mismatch** — `LitFlat` against dark sun direction
+   crushes saturated colours; `Unlit` is the convention for self-lit FX.
+5. **Chroma-key miss** — auto-chroma in `3dimage.cpp` converts black-bordered
+   textures to premultiplied alpha; bypass that and dark borders eat colour.
+
+Cross-check against sister-family effects: fire-family is all warm; magic-
+family is all cool; combat-family pulls from per-character data. Out-of-
+family colour = broken port. Reference: [[feedback-vfx-color-health-signal]].
+
+### 4.2.1.6 Quad orientation expectation
+
+Revenant's billboards are almost always one of two things, never an
+arbitrary world rotation:
+
+- **Screen-aligned billboard** (default) — fire sparks, flame, projectile
+  trails, glow halos that should always face the camera.
+- **Ground-oriented** (WorldXY) — ring halos, ripples, ground decals,
+  ground-scatter fire patches, AoE markers. Pre-release source's
+  `rot.x = -π/2` is the canonical tell that the quad tips onto the floor
+  plane.
+
+If your forensics produces a per-quad rotation that's neither (e.g. a
+loose 30° world-Y rotation), re-read the pre-release transform — almost
+certainly it's one of the two canonical orientations and you've mis-
+interpreted the matrix. F03 forensics initially shipped ScreenAligned;
+helper-trace caught the `rot.x = -π/2` → it's WorldXY.
+
+### 4.2.1.7 Background selection during capture
+
+When using the `--test=vfx` rig (the dev-cycled `B` key + ImGui dropdown
+toggles Black / LtGray / Forest / Dungeon backdrops), pick the BG that
+exposes the most diagnostic information for the effect you're vetting:
+
+- **Dungeon** — best for fire-family effects (the warm glow contrasts
+  against cool stone walls) and for floor-parallel effects (the dungeon
+  ground is flat, so ground-orientation foreshortening reads cleanly).
+  Use as default for any cast / spell / projectile vetting.
+- **Forest** — best for brighter effects (sword sparks read against the
+  saturated green/brown forest floor), outdoor ambient effects, and
+  anything that should "blend into" daylit scenes.
+- **Black** — diagnostic check for additive blend modes. The effect's
+  contribution shows literally; if it disappears against black, your
+  additive isn't firing.
+- **LtGray** — diagnostic check for alpha / see-through. If the effect
+  looks "solid" against light gray, your alpha path is broken; if you
+  can see the gray through it cleanly, alpha is firing.
+
+Many effects warrant capturing on BOTH a diagnostic BG (Black or LtGray)
+AND a game-view BG (Forest or Dungeon) — the diagnostic confirms the
+pipeline, the game-view confirms it reads in real context. Report
+both captures when the effect's correctness depends on either.
+
+### 4.2.2 Capture practice (snap_grid framing)
+
+Your own captures via `tools/vfx/snap_grid.py` must let a reviewer see the
+whole effect without having to ask follow-up questions. That means:
+
+- **Frame to the full visual extent** — when the effect has multiple phases
+  (Init / peak / fade) with different bounding boxes, frame for the LARGEST.
+  A cylinder that grows to engulf the caster must not get cropped at peak.
+- **Capture the diagnostic moments**, not arbitrary intervals:
+  1. Pre-trigger (state machine in starting state — proves baseline)
+  2. First frame of visual (proves it spawns correctly)
+  3. Visual peak (proves shape / scale / texture / color at apex)
+  4. Mid-decay or motion mid-point (proves any rotation / drift / fade)
+  5. Last frame before kill (proves clean death)
+- **Animated effects need a sequence, not a grid.** For rotation, traveling
+  projectiles, sword arcs, or anything where motion IS the effect, capture
+  a per-frame sequence at the cadence the user can replay. A 4×4 stills grid
+  fails to show whether rotation is happening or just translation.
+- **Label the frames.** Annotate the moment each frame shows
+  (e.g. "OUT peak — engulf", "MOVE start — rotation 90°"), or include a
+  small timestamp burn-in. A 16-frame grid with no context shifts the
+  parsing burden to the reviewer.
+- **Include scene context.** Locke or a known-scale anchor in frame, so
+  the reviewer can judge whether the effect is the correct size relative
+  to a character / weapon / area.
+
+Before declaring done, look at your own capture and ask: "if I had only
+this image and the retail reference, could a stranger tell whether they
+match?" If not, the capture is failing its job and the port is not
+verifiable yet. Re-shoot before reporting.
 
 ### 4.3 Build-clean check
 
