@@ -461,10 +461,12 @@ class TFireEffect : public TEffect
 // motion streak), bounce true (snapshot false — sparks bounce off the
 // floor). See forensics SPARKS_TSparkAnimator.md §2.1.
 //
-// Blend = Alpha per the snapshot Render body (SetBlendState = MODULATE +
-// SRC_ALPHA/INV_SRC_ALPHA). The retail Render TU was not decompiled so the
-// blend is snapshot-only; if it reads dull rather than glinting, additive
-// is the visual-vet fallback hypothesis. Unlit, TestNoWrite, ScreenAligned.
+// Blend = Alpha (SRC_ALPHA / INV_SRC_ALPHA) per the combat-spark Render body
+// (SetBlendState) and forensics §7. (An "additive" hypothesis came from
+// comparing against the GREEN Fountain/Sparkle effect — a different effect;
+// combat sparks are Alpha.) Snapshot-only since the retail
+// TParticle3DAnimator::Render TU was not decompiled; vet against real
+// combat-spark footage. Unlit, TestNoWrite, ScreenAligned.
 
 // Max particles a single burst can hold (caller seeds random(15,25)). The
 // pre-release allocated `new[params.particles]`; the modern port uses a
