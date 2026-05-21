@@ -12,6 +12,7 @@
 #include "mainwnd.h"
 #include "mappane.h"
 #include "parse.h"
+#include "platform/platform_file.h"
 #include "timer.h"
 
 #include <chrono>
@@ -1330,47 +1331,6 @@ void vfs_index_archive(VFSArchive *arc, std::unordered_map<std::string, VFSEntry
     }
 }
 
-struct VFSHandle
-{
-    std::vector<uint8_t> buf;
-    size_t pos;
-};
-
-int vfs_read(void *c, char *p, int n)
-{
-    auto *h = static_cast<VFSHandle *>(c);
-    const size_t avail = h->buf.size() - h->pos;
-    size_t copy = n < 0 ? 0 : (size_t)n;
-    if (copy > avail)
-        copy = avail;
-    memcpy(p, h->buf.data() + h->pos, copy);
-    h->pos += copy;
-    return (int)copy;
-}
-
-fpos_t vfs_seek(void *c, fpos_t off, int whence)
-{
-    auto *h = static_cast<VFSHandle *>(c);
-    fpos_t newpos = 0;
-    switch (whence)
-    {
-    case SEEK_SET: newpos = off; break;
-    case SEEK_CUR: newpos = (fpos_t)h->pos + off; break;
-    case SEEK_END: newpos = (fpos_t)h->buf.size() + off; break;
-    default: return -1;
-    }
-    if (newpos < 0 || (size_t)newpos > (fpos_t)h->buf.size())
-        return -1;
-    h->pos = (size_t)newpos;
-    return newpos;
-}
-
-int vfs_close(void *c)
-{
-    delete static_cast<VFSHandle *>(c);
-    return 0;
-}
-
 FILE *rev_vfs_open(const char *name, const char *flags)
 {
     if (!flags || flags[0] != 'r' || strchr(flags, '+'))
@@ -1386,17 +1346,14 @@ FILE *rev_vfs_open(const char *name, const char *flags)
     if (!entry)
         return nullptr;
 
-    auto h = std::make_unique<VFSHandle>();
-    h->buf.resize(entry->size);
-    h->pos = 0;
+    // Decompress the entry, then hand the bytes to the platform layer, which
+    // serves them as a FILE* (funopen on BSD/macOS, a temp file elsewhere).
+    std::vector<uint8_t> buf(entry->size);
     if (!mz_zip_reader_extract_to_mem(&entry->arch->zip, entry->file_index,
-                                      h->buf.data(), h->buf.size(), 0))
+                                      buf.data(), buf.size(), 0))
         return nullptr;
 
-    FILE *fp = funopen(h.get(), vfs_read, nullptr, vfs_seek, vfs_close);
-    if (fp)
-        h.release();
-    return fp;
+    return rev_platform::OpenBytesAsReadStream(std::move(buf));
 }
 
 } // anonymous namespace
@@ -1581,7 +1538,7 @@ FILE *rev_fopen(const char *name, const char *flags)
         if (!root.empty())
         {
             const char *rel = name;
-            if (strncasecmp(rel, "data/", 5) == 0 || strncasecmp(rel, "data\\", 5) == 0)
+            if (strnicmp(rel, "data/", 5) == 0 || strnicmp(rel, "data\\", 5) == 0)
                 rel += 5;
             std::filesystem::path dpath = root / rel;
             fp = fopen(dpath.string().c_str(), flags);

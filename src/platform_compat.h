@@ -23,7 +23,27 @@ using HANDLE = void*;
 // each subsystem rewrite the signature converts to `bool` or the value is
 // dropped entirely. Retained as a shim only while legacy DirectX call
 // sites still exist.
+//
+// On macOS/Linux there's no Windows SDK, so we define HRESULT ourselves. On
+// Windows it must agree with <winnt.h>, which declares `typedef long HRESULT;`
+// behind the `_HRESULT_DEFINED` guard. A handful of TUs (sokol_imgui /
+// sokol_impl) end up seeing both this header and <winnt.h>, so we reuse that
+// guard and match its `long` type: whichever header is parsed first wins and
+// the other skips. (int32_t is `int`, which MSVC rejects as a conflicting
+// redefinition vs. `long`.) This keeps windows.h out of the general TUs --
+// it stays confined to where sokol does its thing.
 // TODO(port): remove when Subsystems 2a and 3 land.
+#ifndef _HRESULT_DEFINED
+#define _HRESULT_DEFINED
+#if defined(_WIN32)
+using HRESULT = long;      // matches <winnt.h>
+#else
 using HRESULT = int32_t;
+#endif
+#endif
+#ifndef SUCCEEDED
 #define SUCCEEDED(hr) ((HRESULT)(hr) >= 0)
+#endif
+#ifndef FAILED
 #define FAILED(hr)    ((HRESULT)(hr) < 0)
+#endif

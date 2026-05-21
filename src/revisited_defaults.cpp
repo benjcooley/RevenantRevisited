@@ -37,7 +37,8 @@ struct SBakedAreaRow {
 };
 
 // BEGIN BAKED AREAS
-static const SBakedAreaRow kBakedAreas[] = {};
+static const SBakedAreaRow *const kBakedAreas = nullptr;
+static const size_t kBakedAreasCount = 0;
 // END BAKED AREAS
 
 constexpr const char *kBeginGlobals = "// BEGIN BAKED GLOBALS";
@@ -90,8 +91,9 @@ void GetBakedRevisitedDefaults(SRevisitedSettings &out)
 bool ApplyBakedAreaDefaults(const char *area_name, TArea *area)
 {
     if (!area_name || !*area_name || !area) return false;
-    for (const SBakedAreaRow &row : kBakedAreas)
+    for (size_t i = 0; i < kBakedAreasCount; ++i)
     {
+        const SBakedAreaRow &row = kBakedAreas[i];
         if (std::strcmp(row.name, area_name) == 0)
         {
             area->SetClassicLighting(row.amblight, row.ambcolor,
@@ -212,8 +214,17 @@ std::string format_areas_block(const std::vector<ParsedRow> &rows)
     std::ostringstream o;
     o.setf(std::ios::fixed);
     o.precision(4);
-    o << kBeginAreas << "\n"
-      << "static const SBakedAreaRow kBakedAreas[] = {\n";
+    o << kBeginAreas << "\n";
+    if (rows.empty())
+    {
+        // MSVC rejects zero-size C arrays (`T[] = {}`), so the empty case is a
+        // null pointer + zero count rather than an empty array literal.
+        o << "static const SBakedAreaRow *const kBakedAreas = nullptr;\n"
+          << "static const size_t kBakedAreasCount = 0;\n"
+          << kEndAreas;
+        return o.str();
+    }
+    o << "static const SBakedAreaRow kBakedAreasStorage[] = {\n";
     for (const ParsedRow &r : rows)
     {
         o << "    { \"" << r.name << "\""
@@ -226,6 +237,9 @@ std::string format_areas_block(const std::vector<ParsedRow> &rows)
           << " },\n";
     }
     o << "};\n"
+      << "static const SBakedAreaRow *const kBakedAreas = kBakedAreasStorage;\n"
+      << "static const size_t kBakedAreasCount =\n"
+      << "    sizeof(kBakedAreasStorage) / sizeof(kBakedAreasStorage[0]);\n"
       << kEndAreas;
     return o.str();
 }
