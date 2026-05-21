@@ -15,7 +15,10 @@
 #include <string.h>
 #include <ctype.h>
 
-static inline void strupr(char *s)
+// Local upper-caser. Named to avoid the CRT's deprecated `strupr`, which MSVC
+// declares as a dllimport in <string.h> -- defining our own under that name is
+// a hard error there (and the CRT signature differs anyway: char* vs void).
+static inline void str_to_upper(char *s)
 {
     for (; *s; ++s) *s = (char)toupper((unsigned char)*s);
 }
@@ -65,7 +68,7 @@ void *LoadResource(const char *name, int32_t id, uint32_t *ressize)
             strcat(filename, ".DAT");
     }
 
-    strupr(filename);
+    str_to_upper(filename);
 
     FILE *fl = rev_fopen(filename, "rb");
 
@@ -172,7 +175,7 @@ void *LoadResourceHeader(const char *name, int32_t id, uint32_t *ressize)
             strcat(filename, ".DAT");
     }
 
-    strupr(filename);
+    str_to_upper(filename);
 
     FILE *fl = rev_fopen(filename, "rb");
 
@@ -318,7 +321,7 @@ bool SaveResourceHeader(const char *name, void *header, int32_t hdrsize, int32_t
             strcat(filename, ".DAT");
     }
 
-    strupr(filename);
+    str_to_upper(filename);
 
     FILE *fl = rev_fopen(filename, "rb+");
 

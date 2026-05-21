@@ -26,8 +26,11 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "CMAKE_BUILD_TYPE not set; defaulting to RelWithDebInfo")
 endif()
 
-# C++ standard
-set(CMAKE_CXX_STANDARD 17)
+# C++ standard. C++20 (was 17) so designated initializers -- used pervasively
+# for sokol descriptors and engine structs -- compile under MSVC, which (unlike
+# clang/gcc) does not accept them as a C++17 extension. clang/gcc build C++20
+# fine, so this stays cross-platform.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -113,6 +116,14 @@ add_library(imgui STATIC
 target_include_directories(imgui PUBLIC
   ${IMGUI_DIR} ${IMGUIZMO_DIR} ${IMPLOT_DIR} ${IMGUIFD_DIR} ${IMGUITGL_DIR} ${FONTS_DIR})
 
+# ImGuiFileDialog ships a POSIX dirent backend and bundles a dirent/dirent.h
+# shim for MSVC -- but that shim isn't vendored here. On Windows, switch it to
+# the std::filesystem backend instead (we already require C++17). Mac/Linux
+# keep using their system <dirent.h>, so leave them untouched.
+if(WIN32)
+  target_compile_definitions(imgui PRIVATE USE_STD_FILESYSTEM)
+endif()
+
 # Gather C++ sources. Sokol TU is added explicitly per-backend below so
 # the GLOB doesn't pick up the wrong one on a given platform.
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
@@ -137,6 +148,16 @@ endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
 target_link_libraries(Revenant PRIVATE imgui)
+
+# The 1998-era engine relies on relaxed rules clang/gcc still accept by default
+# -- most notably the implicit string-literal -> char* conversion used pervasively
+# for char* string params. On MSVC, /std:c++20 implies /permissive-, which turns
+# those into hard errors (C2440), so opt the engine target back into permissive
+# mode. Designated initializers (the reason for C++20) remain available -- they're
+# a language feature, not gated on conformance mode. clang/gcc are unaffected.
+if(MSVC)
+  target_compile_options(Revenant PRIVATE /permissive)
+endif()
 
 # Propagate the SOKOL_<BACKEND> macro to every TU that pulls in
 # <sokol_gfx.h> / <sokol_app.h> / sokol_imgui.h.

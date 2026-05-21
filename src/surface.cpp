@@ -472,10 +472,12 @@ bool TSurface::BlitHandler(PSDrawParam dp, TSurface* srcsurface, int32_t flags)
     };
 
     // Create vertex buffer
+    // Designators in sg_buffer_desc declaration order (size, usage, data) --
+    // C++20/MSVC requires it; clang/gcc allow out-of-order as an extension.
     sg_buffer_desc vbuf_desc = {
         .size = sizeof(vertices),
-        .data = SG_RANGE(vertices),
-        .usage = SG_USAGE_IMMUTABLE
+        .usage = SG_USAGE_IMMUTABLE,
+        .data = SG_RANGE(vertices)
     };
     sg_buffer vbuf = sg_make_buffer(&vbuf_desc);
 

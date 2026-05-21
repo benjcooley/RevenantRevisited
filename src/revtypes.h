@@ -20,10 +20,12 @@
 #define max(a,b)    (((a) > (b)) ? (a) : (b))
 #define min(a,b)    (((a) < (b)) ? (a) : (b))
 
-#ifndef _SIZE_T
-#define _SIZE_T
-typedef unsigned size_t;
-#endif
+// NOTE: size_t comes from <cstddef> (included above). The original 1998 code
+// hand-rolled `typedef unsigned size_t;` behind a `_SIZE_T` guard -- harmless
+// on glibc/libc++ (their guard suppressed it) but on MSVC the guard macro
+// differs, so it fired and redefined size_t as 32-bit, clashing with the
+// 64-bit toolchain size_t. Dropped entirely; the standard header is correct
+// on every platform.
 
 /*
  * Virtual Keys, Standard Set
