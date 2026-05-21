@@ -29,6 +29,17 @@ vs_out main_vs(vs_in i) {
 )HLSL";
 
 inline constexpr const char* kCompositeFsHlsl = R"HLSL(
+// Each HLSL stage compiles independently, so the pixel shader needs its own
+// copy of the params cbuffer (matching the VS layout / b0) -- it reads
+// chroma_key. renderer.cpp binds fs.uniform_blocks[0] = {rect, uv_rect,
+// chroma_key}, so the full 12-float layout must be declared here for the
+// offsets to line up. (Was missing -> X3004 'undeclared identifier chroma_key'
+// -> all 3 composite pipelines invalid -> blank swapchain on D3D11.)
+cbuffer params : register(b0) {
+    float4 rect;
+    float4 uv_rect;
+    float4 chroma_key;
+};
 Texture2D    tex : register(t0);
 SamplerState smp : register(s0);
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };

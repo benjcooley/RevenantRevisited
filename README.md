@@ -143,21 +143,95 @@ against the user's existing data.
 
 ## Building
 
-The project currently builds with CMake.
+The project builds with **CMake (≥ 3.15)** and a **C++20** compiler. The
+quick form (macOS / Linux):
 
 ```bash
 cmake -S . -B build
 cmake --build build
 ```
 
-On macOS, the project links Metal/Cocoa/AppKit frameworks through `CMakeLists.txt`.
+This produces the `Revenant` executable in `build/`. The renderer backend is
+chosen automatically by `CMakeLists.txt`: **Metal** on macOS (links
+Metal/Cocoa/AppKit), **Direct3D 11** on Windows, **OpenGL 3.3** on Linux.
+Default build type is `RelWithDebInfo` (override with
+`-DCMAKE_BUILD_TYPE=Debug` / `Release`).
+
+You also need your own copy of the Revenant game data under `data/` (see
+[Repository Layout](#repository-layout)); the engine reads retail assets from
+there at runtime.
+
+### Windows
+
+**Prerequisites**
+
+- Windows 10 or 11 (x64).
+- **Visual Studio 2022** (the free *Community* edition is fine) **or** the
+  standalone **Build Tools for Visual Studio 2022**. In the Visual Studio
+  Installer, select these two components:
+  - **Desktop development with C++** — the MSVC v143 toolset + Windows 10/11 SDK.
+  - **C++ CMake tools for Windows** — bundles `cmake.exe` *and* `ninja.exe`.
+
+  With those installed you do **not** need a separate CMake/Ninja download —
+  they ship inside Visual Studio under
+  `…\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\` and
+  `…\CMake\Ninja\`. (If you prefer, install CMake ≥ 3.15 and Ninja yourself and
+  put them on `PATH`.)
+- Network access for the first configure (CMake `FetchContent` downloads
+  GoogleTest).
+
+**Build with Ninja (recommended — single-config, exe lands in `build/` like
+macOS/Linux)**
+
+MSVC needs its environment initialized. The simplest way is to use the
+**“x64 Native Tools Command Prompt for VS 2022”** (Start menu) — it puts `cl`,
+`cmake`, and `ninja` on `PATH` and sets the compiler env. From the repo root:
+
+```bat
+cmake -S . -B build -G Ninja
+cmake --build build
+```
+
+Output: `build\Revenant.exe`.
+
+From a plain PowerShell/`cmd` instead, initialize the toolchain first by running
+the matching `vcvars64.bat` (use your edition’s path):
+
+```bat
+"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+:: or, for the IDE edition:
+:: "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+```
+
+**Build with the Visual Studio generator (no env setup, but multi-config layout)**
+
+```bat
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config RelWithDebInfo
+```
+
+This self-locates the toolset (no `vcvars64.bat` needed), but the executable
+lands in `build\RelWithDebInfo\Revenant.exe`. The Ninja form above is preferred
+so the output layout matches the other platforms.
+
+**Notes**
+
+- C++20 is required — under MSVC, `/std:c++20` is enabled (with `/permissive`)
+  by `CMakeLists.txt`.
+- The Windows audio path uses WASAPI; D3D11 is the only supported backend here.
 
 ## Running
 
 Run the executable from the repository root so the game can find `data/` and the runtime INI/log paths land where expected:
 
 ```bash
-./build/Revenant
+./build/Revenant            # macOS / Linux
+```
+
+On Windows (Ninja build):
+
+```bat
+.\build\Revenant.exe
 ```
 
 You can also start directly into a save:

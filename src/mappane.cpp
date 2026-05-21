@@ -2293,8 +2293,13 @@ void TMapPane::DrawDLight()
     S3DPoint spos;
     WorldToScreen(dlight.pos, spos);
 
+//  Software dynamic-light draw is retired: the modern renderer lights this
+//  via Scene3D.AddLight() above, and the marker bitmap below shows the light
+//  position. DrawLightNoNormals/DrawLight are unimplemented (their bodies were
+//  the now-#if'd MMX/asm in dls.cpp), so referencing them is an unresolved
+//  symbol on a clean link — only dead-strip hid it. Leave them out.
 //  if (NoNormals)
-        DrawLightNoNormals(spos, dlight.color, dlight.intensity, &Display);
+//      DrawLightNoNormals(spos, dlight.color, dlight.intensity, &Display);
 //  else
 //      DrawLight(spos, dlight.color, dlight.intensity, &Display);
 
