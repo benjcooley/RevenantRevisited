@@ -221,6 +221,22 @@ target_include_directories(test_parse PRIVATE
 target_compile_definitions(test_parse PRIVATE SOKOL_${SOKOL_BACKEND})
 
 # ----------------------------------------------------------------------------
+# revsmk — clean-room Smacker (SMK2) decoder. Self-contained (C++ stdlib only),
+# so it's a standalone static lib the engine and the smkdump tool both link.
+# ----------------------------------------------------------------------------
+set(REVSMK_DIR "${THIRDPARTY_DIR}/revsmk")
+add_library(revsmk STATIC
+  ${REVSMK_DIR}/revsmk.cpp
+  ${REVSMK_DIR}/huffman.cpp)
+target_include_directories(revsmk PUBLIC ${REVSMK_DIR})
+
+# smkdump — decode a .SMK to PNG frames + WAV audio for verification. Uses miniz
+# for PNG output only (not part of the decoder).
+add_executable(smkdump tools/smkdump.cpp ${MINIZ_DIR}/miniz.c)
+target_include_directories(smkdump PRIVATE ${MINIZ_DIR})
+target_link_libraries(smkdump PRIVATE revsmk)
+
+# ----------------------------------------------------------------------------
 # Platform libs / frameworks.
 # ----------------------------------------------------------------------------
 if(APPLE)
