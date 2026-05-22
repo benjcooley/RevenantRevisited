@@ -522,6 +522,16 @@ public:
     void ReleaseTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
     void ResetAssetRefCounts();
 
+    // Dynamic (streamable) RGBA8 texture for per-frame-updated content such as
+    // video playback. Create once at a fixed size; call UpdateDynamicTexture
+    // once per frame (outside any render pass) with a full width*height*4 RGBA
+    // buffer, then present it with DrawTextureFit. DestroyDynamicTexture frees
+    // the GPU image. Not key-cached or ref-counted -- the caller owns the
+    // lifetime.
+    TTextureHandle CreateDynamicTexture(int32_t width, int32_t height);
+    void UpdateDynamicTexture(TTextureHandle handle, const void* rgba, size_t bytes);
+    void DestroyDynamicTexture(TTextureHandle handle);
+
     // Register a rigid mesh. TRenderer owns the resulting GPU buffers and
     // resolves albedo_texture internally. Returns 0 on failure.
     MeshHandle RegisterMeshAsset(uint64_t key,
@@ -729,6 +739,12 @@ public:
     // separators / debug overlays.
     void DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
                        uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+
+    // Letterboxed fullscreen blit of a renderer texture onto the swapchain,
+    // preserving the texture's aspect ratio (black bars fill the remainder).
+    // Call from a THudDrawable::Draw() (inside the swapchain pass). Used by the
+    // cinematic player to present a decoded video frame scaled to the window.
+    void DrawTextureFit(TTextureHandle texture);
 
     // 9-slice blit (A.2d). Treats `bm` as a stretchable panel: the four
     // corner pieces render verbatim at their source size; the four edges

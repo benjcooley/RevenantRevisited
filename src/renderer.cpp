@@ -1919,6 +1919,56 @@ const SRendererTextureInfo* TRenderer::TextureInfo(TTextureHandle handle) const
     return &texture_assets[handle - 1];
 }
 
+TTextureHandle TRenderer::CreateDynamicTexture(int32_t width, int32_t height)
+{
+    if (width <= 0 || height <= 0)
+        return kInvalidTexture;
+
+    sg_image_desc desc = {};
+    desc.width = width;
+    desc.height = height;
+    desc.usage = SG_USAGE_STREAM;
+    desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    desc.min_filter = SG_FILTER_LINEAR;
+    desc.mag_filter = SG_FILTER_LINEAR;
+    desc.wrap_u = desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    desc.label = "renderer.dynamic_texture";
+
+    SRendererTextureEntry asset = {};
+    asset.image = sg_make_image(&desc);
+    asset.width = width;
+    asset.height = height;
+    asset.gpu_bytes = uint64_t(width) * uint64_t(height) * 4;
+    if (sg_query_image_state(asset.image) != SG_RESOURCESTATE_VALID)
+    {
+        if (asset.image.id) sg_destroy_image(asset.image);
+        return kInvalidTexture;
+    }
+
+    texture_assets.push_back(asset);
+    return TTextureHandle(texture_assets.size());
+}
+
+void TRenderer::UpdateDynamicTexture(TTextureHandle handle, const void* rgba, size_t bytes)
+{
+    if (handle == 0 || handle > texture_assets.size() || !rgba)
+        return;
+    SRendererTextureEntry& e = texture_assets[handle - 1];
+    if (bytes != size_t(e.width) * size_t(e.height) * 4)
+        return; // STREAM images require a full-surface update
+    sg_image_data data = {};
+    data.subimage[0][0] = { rgba, bytes };
+    sg_update_image(e.image, &data);
+}
+
+void TRenderer::DestroyDynamicTexture(TTextureHandle handle)
+{
+    if (handle == 0 || handle > texture_assets.size())
+        return;
+    SRendererTextureEntry& e = texture_assets[handle - 1];
+    if (e.image.id) { sg_destroy_image(e.image); e.image = {}; }
+}
+
 sg_image TRenderer::TextureImage(TTextureHandle handle) const
 {
     const SRendererTextureInfo* info = TextureInfo(handle);
@@ -3670,6 +3720,30 @@ void TRenderer::DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
     const int32_t target_w = sapp_width();
     const int32_t target_h = sapp_height();
     CompositeSwapchain(img, x, y, w, h, target_w, target_h,
+                       0, 0, 1, 1, 1, 1);
+}
+
+void TRenderer::DrawTextureFit(TTextureHandle texture)
+{
+    const SRendererTextureInfo* info = TextureInfo(texture);
+    if (!info || info->width <= 0 || info->height <= 0) return;
+    const sg_image img = TextureImage(texture);
+    if (!img.id) return;
+
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    if (target_w <= 0 || target_h <= 0) return;
+
+    // Aspect-preserving "contain" fit, centered; remainder stays whatever the
+    // caller cleared the background to (black for the cinematic player).
+    const double s = (std::min)(double(target_w) / info->width,
+                                double(target_h) / info->height);
+    const int32_t dw = int32_t(info->width * s + 0.5);
+    const int32_t dh = int32_t(info->height * s + 0.5);
+    const int32_t dx = (target_w - dw) / 2;
+    const int32_t dy = (target_h - dh) / 2;
+
+    CompositeSwapchain(img, dx, dy, dw, dh, target_w, target_h,
                        0, 0, 1, 1, 1, 1);
 }
 

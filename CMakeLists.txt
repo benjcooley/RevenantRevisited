@@ -136,7 +136,7 @@ if(APPLE)
 endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
-target_link_libraries(Revenant PRIVATE imgui)
+target_link_libraries(Revenant PRIVATE imgui revsmk)
 
 # Propagate the SOKOL_<BACKEND> macro to every TU that pulls in
 # <sokol_gfx.h> / <sokol_app.h> / sokol_imgui.h.

@@ -36,6 +36,7 @@
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
 #include "testscreen.h"
+#include "cinematicscreen.h"
 #include "testmodes.h"
 #include "testconfig.h"
 #include "time.h"
@@ -1537,6 +1538,7 @@ void GetParameters(int argc, char **argv)
         "gamespeed", "monitor", "violencelevel", "preloadsize",
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
+        "cinematic",
     });
     cmd.parse(argc, argv);
 
@@ -1644,6 +1646,13 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "vfx", p))
             strncpyz(StartupVfxId, p.c_str(), sizeof(StartupVfxId));
+    }
+
+  // CINEMATIC=<path> — .SMK file for --test=ui-cinematic. Empty = intro FMV.
+    {
+        std::string p;
+        if (arg_param(cmd, "cinematic", p))
+            strncpyz(StartupCinematicPath, p.c_str(), sizeof(StartupCinematicPath));
     }
 
   // VFX-NO-UI — suppress the ImGui VFX Browser panel (for clean
@@ -2328,8 +2337,16 @@ static void AppInit()
 
     if (StartupTestMode[0])
     {
-        log_info("[boot] routing to TestScreen, mode='%s'", StartupTestMode);
-        BootScreen = &TestScreen;
+        if (strcmp(StartupTestMode, "ui-cinematic") == 0)
+        {
+            log_info("[boot] routing to CinematicScreen");
+            BootScreen = &CinematicScreen;
+        }
+        else
+        {
+            log_info("[boot] routing to TestScreen, mode='%s'", StartupTestMode);
+            BootScreen = &TestScreen;
+        }
     }
     else
     {
