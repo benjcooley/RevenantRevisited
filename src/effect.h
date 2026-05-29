@@ -2823,7 +2823,254 @@ class TFizzleEffect : public TEffect
     int32_t frame_count_    = 0;
     // 24Hz sim-tick accumulator (ms) — same as sparks/blood.
     double  sim_accum_ms_   = 0.0;
-    bool    alive_          = true;
+    bool    alive_          = true;};
+
+// ********************
+// * TFireBallEffect *
+// ********************
+//
+// F07 fireball — TMissileEffect : TEffect base + TFireBallEffect leaf.
+// FAITHFUL DIRECT PORT of the pre-release `TMissileEffect::Pulse`
+// (src/missileeffect.cpp:52-135) + `TFireBallAnimator::Animate` /
+// `::Render` body (src/missileeffect.cpp:549-1085). Doc:
+// docs/vfx/forensics/F07_TFireBallEffect.md.
+//
+// Visual shape: 3-state machine LAUNCH→FLY→EXPLODE.
+//   LAUNCH (~25 ticks): ball grows above caster, animator hands off
+//                       to TMissileEffect::Pulse with SetStatus(true).
+//   FLY:                ball travels along aim, grows to MAX_SIZE,
+//                       sheds a 10-slot mesh-trail ring buffer + 30
+//                       photon-spark particles per tick.
+//   EXPLODE:            single-tick blast (`firsttime`) spawns 10
+//                       burst quads + 4-ring shockwave + 40-spark
+//                       burst; subsequent ticks shrink the burst and
+//                       fade the ring; effect self-destructs when all
+//                       sub-systems are quiet.
+//
+// Asset: real `Magic\NewFireBall.I3D` (forensics §4). 3 sub-objects:
+//   box01      (idx 0) — fire-ball quad, reused for ball/glow/trail/burst
+//                        via 4×4 atlas UV cell selection (`SetAnimFrame`).
+//   box02      (idx 1) — spark quad handed to the spark trail.
+//   cylinder01 (idx 2) — shockwave ring geometry, drawn as helper-mesh.
+//
+// Pipeline split (forensics §7):
+//   - box01 (ball/glow/trail/burst) + box02 (sparks) → FB-pipeline
+//     billboards (`SubmitFxBillboard`) with per-instance UV sub-rect for
+//     atlas cell selection. Engine-native ScreenAligned approximates the
+//     original's −30°/+60°-tilt+facing-spin orientation (§13.6).
+//   - cylinder01 (ring) → helper-mesh (`SubmitHelperMesh`, additive),
+//     same primitive M09b TTeleporterEffect uses.
+//
+// Per-instance per-frame state (animator class collapse, same convention
+// as SParkS/Blood/Teleporter): the `FireBallData` head + 10-slot trail +
+// 10-slot burst + spark-trail array all live on this class.
+
+// 24 Hz sim cadence — the per-tick rates (FIREBALL_GROW_RATE 0.05/tick,
+// trail shrink 0.85/slot/tick, ring scale 1.085/tick, burst shrink 0.90/
+// tick, spark gravity 0.37/tick²) are integrated once per accumulated
+// sim tick (family-consistent with F03/H03/M05/X22/B01).
+inline constexpr int32_t kFireBallSimTickMs = 1000 / 24;
+
+// Forensics §3 constants — kept side-by-side with the doc's spelling.
+inline constexpr float   kFireBallSpeed         = 8.0f;            // pos-units/tick (pre-ROLLOVER), §3 FIREBALL_SPEED
+inline constexpr float   kFireBallSpawnLiftZ    = 50.0f;           // ball spawned +50 wu above caster
+inline constexpr float   kFireBallGrowRate      = 0.05f;           // FLY/EXPLODE scale step / tick
+inline constexpr float   kFireBallMaxSize       = 0.60f;           // scale cap
+inline constexpr float   kFireBallTrailScale    = 0.85f;           // per-slot trail shrink
+inline constexpr int32_t kFireBallTrailSize     = 10;              // ring-buffer length
+inline constexpr int32_t kFireBallMaxFrame      = 16;              // 4x4 atlas frame count
+inline constexpr int32_t kFireBallGlowFrame     = 3;               // reserved glow cell
+inline constexpr int32_t kFireBallMaxSpark      = 40;              // spark trail cap
+inline constexpr int32_t kFireBallNormSpark     = 30;              // FLY spark target
+inline constexpr int32_t kFireBallMaxBurst      = 10;              // impact burst quad count
+inline constexpr float   kFireBallSparkScale    = 0.15f;           // initial spark scale
+inline constexpr float   kFireBallSparkScaleDec = 0.90f;           // spark scale decay / tick
+inline constexpr float   kFireBallSparkGravity  = 0.37f;           // wu / tick²
+inline constexpr int32_t kFireBallSparkMinLife  = 15;              // spark life range (ticks)
+inline constexpr int32_t kFireBallSparkMaxLife  = 20;
+inline constexpr float   kFireBallSparkFlicker  = 1.75f;           // flicker scale boost
+inline constexpr int32_t kFireBallBlastRadius   = 150;             // wu (BlastCharactersInRange)
+inline constexpr float   kFireBallRingScale     = 25.0f;           // ring init scale (all axes)
+inline constexpr float   kFireBallRingFactor    = 1.085f;          // ring grow factor / tick
+inline constexpr float   kFireBallRingMaxSize   = 120.0f;          // ring scale cap
+inline constexpr int32_t kFireBallRingRings     = 4;               // shockwave ring count
+inline constexpr int32_t kFireBallRingVerts     = 24;              // ring vertex count
+inline constexpr int32_t kFireBallFlyRangeTicks = 60;              // (240*MISSILE_RANGE)/FIREBALL_SPEED
+                                                                    // = (240*2)/8 = 60 ticks of flight
+// Harness adaptation only: the original animator transitions LAUNCH→FLY
+// on the very first tick after SetStatus(true) (~1-tick LAUNCH phase),
+// so the visible "grow above caster" moment is just one frame and the
+// state-machine semantics aren't observable in --test=vfx. We extend
+// LAUNCH to ~16 ticks (~0.67 s) so the user can see the LAUNCH→FLY edge.
+// This does NOT change the in-game cadence — gameflow's caller skips
+// the harness gate and uses the original 1-tick transition. The
+// kFireBallSpeedScale below halves the FLY velocity for the harness so
+// the ball stays in the camera view envelope (~240 wu radius) instead
+// of zipping off-screen in ~1.2 s.
+inline constexpr int32_t kFireBallHarnessLaunchHoldTicks = 16;
+inline constexpr float   kFireBallHarnessSpeedScale      = 0.4f;
+// Per-burst billboard size baseline. The original's `obj->scl` multiplies
+// the box01 quad's authored geometry; in the FB-pipeline world-space the
+// `size_wu` field is the on-screen ratio. 192 wu × 0.6 max scale = 115 wu
+// at peak, which reads as a "moderate-size fireball" against the dungeon's
+// ~64 wu wall sprites — tunable per §3 snapshot-only.
+inline constexpr float   kFireBallBaseQuadWu    = 192.0f;
+// Spark quad world-unit size — small enough that the 30-40 sparks
+// visibly separate against the moving ball, large enough to read as a
+// flicker. The original draws box02 at the I3D's authored scale; this is
+// the engine equivalent.
+inline constexpr float   kFireBallSparkQuadWu   = 6.0f;
+// Spell-carried point-light parameters (forensics §9, spell.def LIGHT
+// directive). Color (255,130,0) is RETAIL-CONFIRMED; intensity / radius
+// are tuned to match the warm flicker on the scene without saturating.
+inline constexpr float   kFireBallLightR        = 1.0f;       // 255/255
+inline constexpr float   kFireBallLightG        = 0.51f;      // 130/255
+inline constexpr float   kFireBallLightB        = 0.0f;
+inline constexpr float   kFireBallLightRadiusWu = 320.0f;     // MULT 20 family default
+inline constexpr float   kFireBallLightInt      = 1.5f;       // baseline; multiplied by glow flicker
+
+// One slot in the head trail / burst ring buffer. Mirrors `FireBallData`
+// (missileeffect.h:179-187). `rotation` is the per-instance in-plane
+// spin (degrees) the snapshot accumulates on the ball head (+2/tick) and
+// PROPAGATES into trail copies + burst quads via `trail[0] = fireball`
+// / `burst[i].rotation = 0`. The per-trail-slot stale-snapshot of
+// rotation is what gives the trail its tumbling/streak look — every
+// card freezes at whatever rotation the ball had when that slot got
+// recorded. Drawn through the FB-particle pipeline (SubmitFxParticle)
+// with WorldXY orientation + per-instance rotation_rad so the same
+// world-space matrix tilt the original used (rotZ(spin) * rotX(-30°) *
+// rotY(+60°) * rotZ(facing)) lands as a ground-tipped tumble trail,
+// not a camera-facing swirl.
+struct SFireBallData
+{
+    hmm_vec3 pos      = {0.0f, 0.0f, 0.0f};   // world-space (trail) or local (head)
+    float    scale    = 0.0f;                  // draw scale
+    float    glow     = 1.0f;                  // flicker multiplier (×1.0..1.75)
+    float    frame    = 0.0f;                  // atlas cell index
+    float    rotation = 0.0f;                  // in-plane spin (degrees, +2/tick on head)
+    bool     used     = false;                 // burst slot active?
+};
+
+// One spark in the photon-spark trail (collapses TSubParticleAnimator's
+// per-particle arrays onto the effect class — same convention as
+// SSparkParticle / SBloodParticleEx).
+struct SFireBallSpark
+{
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};   // world-space
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};   // wu / tick
+    float    scale = 0.0f;                  // current scale (×0.90/tick decay)
+    int32_t  life  = 0;                     // remaining ticks
+    bool     used  = false;
+};
+
+_CLASSDEF(TFireBallEffect)
+
+// Asset binding state captured at SpawnForTest. Held as a private member
+// rather than a side-table because the F07 port is single-file (no
+// imagery-API leakage in the header is preserved by keeping the type
+// internal; the file that defines TFireBallEffect::SpawnForTest owns
+// the binding semantics).
+struct SFireBallAssetBind
+{
+    TTextureHandle box01_tex     = 0;     // ball / glow / trail / burst sprite atlas
+    TTextureHandle box02_tex     = 0;     // spark quad sprite
+    // The cylinder01 ring is drawn via SubmitHelperMesh — its MeshHandle
+    // is kept here so the effect doesn't need to re-extract per draw.
+    MeshHandle     ring_mesh     = 0;
+    float          ring_mat[16]  = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    // Authoring scale of the box01 quad (atlas-cell size in normalized
+    // texture coords). The original uses a 4×4 grid (0.25 × 0.25).
+    float          atlas_cell_w  = 0.25f;
+    float          atlas_cell_h  = 0.25f;
+};
+
+class TFireBallEffect : public TEffect
+{
+  public:
+    TFireBallEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TFireBallEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireBallEffect() override = default;
+
+    void OffScreen() override { /* MissileEffect-family stays simulating until EXPLODE done */ }
+
+    // No `override` — TEffect doesn't declare Initialize() as virtual
+    // (the family pattern is to define Initialize() on each leaf as a
+    // plain virtual). Pulse IS virtual on TEffect, so override there.
+    virtual void Initialize();
+    void Pulse() override;
+
+    // Spawn a standalone TFireBallEffect for the --test=vfx harness.
+    // Loads `Magic\NewFireBall.I3D`, resolves the 3 sub-object textures +
+    // the cylinder01 ring mesh, picks a random horizontal aim direction
+    // (the harness has no caster/target geometry — gameflow's in-game
+    // caller will supply the actual aim via TSpell::Timer).
+    // Returns nullptr if the imagery can't be loaded.
+    [[nodiscard]] static TFireBallEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports the 3-state Pulse + the animator's
+    // Animate/Render bodies directly to the FB pipeline (box01/box02
+    // billboards) + helper-mesh additive pass (cylinder01 ring). Drives
+    // the spell light via Renderer->AddPointLight each tick while alive.
+    //
+    // The mesh draws (cylinder01 ring) must be submitted AFTER the
+    // tile-pass opens (same convention as TTeleporterEffect::
+    // SubmitWorldForTest). The harness wires `submit` for the
+    // billboard+tick path and `submit_world` for the ring.
+    void TickAndSubmit(EFxDebugMode debug_mode);
+    void SubmitWorldRing(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // --- TMissileEffect base-class state (forensics §6.1) -----------
+    // The original carries these on TMissileEffect; we fold them onto the
+    // leaf for the single-file port. The semantics are unchanged: 3-state
+    // machine, byte-angle aim, integer-tick range countdown.
+    int32_t state_      = 0;            // MISSILE_LAUNCH=0 / FLY=1 / EXPLODE=2
+    int32_t range_      = 32768;        // ticks left until self-explode
+    bool    status_     = false;        // animator → base "launch now" handshake
+    int32_t aim_angle_  = 0;            // 0..255 byte-angle (horizontal facing)
+    // Harness-only LAUNCH-hold counter (see kFireBallHarnessLaunchHoldTicks).
+    // In-game callers leave this at 0 — gameflow's port will set
+    // launch_hold_=0 so the transition matches retail's 1-tick LAUNCH.
+    int32_t launch_hold_ticks_remaining_ = kFireBallHarnessLaunchHoldTicks;
+
+    // Per-tick velocity in world wu/tick (set on LAUNCH→FLY transition).
+    hmm_vec3 vel_       = {0.0f, 0.0f, 0.0f};
+
+    // --- TFireBallAnimator state (forensics §6.2) -------------------
+    SFireBallData  fireball_;                                     // ball head
+    SFireBallData  trail_[kFireBallTrailSize];                    // 10-slot mesh-trail ring buffer
+    SFireBallData  burst_[kFireBallMaxBurst];                     // 10-slot impact burst
+    SFireBallSpark sparks_[kFireBallMaxSpark];                    // 40-slot photon-spark trail
+    int32_t        frame_count_  = kFireBallMaxFrame;             // atlas total frames
+    int32_t        glow_frame_   = kFireBallGlowFrame;            // reserved glow cell
+    int32_t        old_state_    = 0;                              // state-edge tracker
+    int32_t        firsttime_    = 0;                              // edge for explode-once
+    int32_t        explode_      = 0;                              // 0 pre / 1 first-tick / -1 after
+
+    // --- Ring kinematics (forensics §6.3) ---------------------------
+    bool           ring_active_  = false;
+    float          ring_scale_   = kFireBallRingScale;
+    bool           ring_done_    = true;
+    hmm_vec3       ring_pos_     = {0.0f, 0.0f, 0.0f};
+
+    // --- Asset binding (resolved at SpawnForTest) --------------------
+    SFireBallAssetBind asset_;
+
+    // --- Lifecycle -----------------------------------------------------
+    bool           alive_        = true;
+    double         sim_accum_ms_ = 0.0;
+
+    // Internal helpers (translate the body line-by-line; private so they
+    // can mutate state without polluting the public API).
+    void StepMissilePulse();      // TMissileEffect::Pulse (forensics §6.1)
+    void StepAnimate();           // TFireBallAnimator::Animate (forensics §6.2)
+    void SubmitBillboards(EFxDebugMode debug_mode) const;
+    [[nodiscard]] bool IsTrailDraining() const;
+    [[nodiscard]] bool AnyBurstAlive() const;
+    [[nodiscard]] int32_t LiveSparkCount() const;
+    void FillAtlasUv(int32_t frame_idx, float out_uv[4]) const;
 };
 
 // *****************
