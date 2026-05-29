@@ -218,6 +218,13 @@ row, and either do it or claim it explicitly.
 
 #### 3.2.1 Engine-vs-bespoke decision (mandatory before Phase B)
 
+**STRONG DEFAULT: prefer the existing particle / effect engine over hand-rolled
+C++ particle pools.** If the engine is missing a feature the effect needs
+(respawn timer, gravity term, per-particle rotation accumulator, atlas-cell
+flipbook), **add the feature to the engine generically and use it** — don't
+build a one-off particle pool in the effect class. Engine extension is
+in-scope; parallel reinvention is not. See [[feedback-evolve-dont-replace]].
+
 Not every effect should be a data-driven engine definition. **Use the engine
 for the common shapes; keep bespoke when behavior is genuinely unique.**
 
@@ -308,6 +315,38 @@ submission in the Phase B port):
       know whether to snap pos.z to `GroundZAt(x,y)` / `WaterSurfaceZAt(x,y)`
       before spawning, or whether the harness's z=0 (PickPreviewOrigin)
       is enough.
+
+#### 3.2.2 Blend-mode sanity check — don't trust the snapshot's writes verbatim
+
+A pre-release snapshot can write `SetBlendState()` / `SetAddBlendState()` /
+inline `SRCBLEND` / `DESTBLEND` factors that look authoritative but are
+actually **dormant**. Direct3D 6/7 ignores `SRCBLEND`/`DESTBLEND` unless
+`D3DRENDERSTATE_ALPHABLENDENABLE` is `TRUE`, and the default is `FALSE`.
+**Before declaring a blend mode "Alpha" or "Additive" from snapshot reads,
+audit who enables `ALPHABLENDENABLE` in the effect's call chain.** If
+nothing does, the factor writes are dead and the effect almost certainly
+ships as **chroma-keyed opaque + alpha-test**, consuming the 1-bit alpha
+that `legacy/3dimage.cpp:2079` bakes into textures with black keycolor.
+
+Audit recipe:
+
+```
+grep -rn "ALPHABLENDENABLE" src/ legacy/
+grep -rn "ALPHATESTENABLE\|ALPHAREF\|ALPHAFUNC" src/ legacy/
+```
+
+If neither is touched in the effect's path AND the texture is loaded via
+the chroma-key-to-1-bit-alpha imagery loader, the shipped behavior is:
+**alpha-test cut (no blend), TestNoWrite depth, opaque modulated texture**.
+Mistaking that for `EFxBlend::Alpha` produces washed-out / semi-transparent
+droplets — exactly the failure mode the B01 blood port hit. Reference:
+`docs/vfx/forensics/B01_TBloodEffect_RENDER_RESETTLED.md` §2.6 / §6.
+
+When the snapshot hand-rolls inline blend factors WITHOUT a `Set*BlendState()`
+helper (e.g. raw `SRC=ONE, DEST=ONE` writes mid-Render with no surrounding
+helper), suspect WIP dead-code. **Every additive effect in `effect_old.cpp`
+except blood-k=1 calls `SetAddBlendState()` consistently — outliers smell
+like experimental WIP that didn't ship.**
 
 ### 3.3 Diagnostic ladder (mandatory)
 
