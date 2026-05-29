@@ -203,18 +203,63 @@ divergence in the row's `Notes`.
 
 ### 3.2 What you're producing
 
-Per [../PARTICLE_EFFECTS.md §15](../PARTICLE_EFFECTS.md) — do *not* port D3D
-animators one-by-one as bespoke C++ renderers. Instead:
+Reconstruction now ships in **two sequenced ports**, not one:
 
-1. Identify the animator registration (`REGISTER_3DANIMATOR("X", TXAnimator)`).
-2. Attach an effect component from the animator builder.
-3. Express the behavior as an effect definition (expression-based, see PARTICLE_EFFECTS §6–§7).
-4. Add only the **missing** generic engine capability to support it. Generalize, don't special-case.
-5. Leave the old D3D body in `effect_old.cpp` / `#if 0` blocks — do not delete.
+  - **Phase B1 — Bespoke baseline**: faithful direct C++ translation of the
+    snapshot's animator body. Line-by-line from `effect_old.cpp` /
+    `effectcomp.cpp`. This is the *visual reference* — when it boots and
+    looks like the game, the forensics doc + constants are validated.
+  - **Phase B2 — Engine migration**: rewrite the bespoke into the engine
+    particle / effect system (`TParticleBucket` + `effects.def`). A/B against
+    B1 at every visual checkpoint. Engine port is "done" when its capture
+    matches the bespoke's capture frame-by-frame.
 
-If your effect genuinely needs a new pipeline capability (e.g. a soft-particle
-depth blend mode), that is a Phase-1 expansion. Stop, file it as a separate
-row, and either do it or claim it explicitly.
+Why two ports instead of going engine-first: the engine port has to
+re-derive the animator's behavior through bucket descriptors + expression
+VM + chain mechanics, which is a wider semantic gap than the source-to-source
+bespoke port. Bugs in that gap (wrong scale, wrong velocity unit, missing
+grow phase, dormant blend, UV priority overrides) are invisible without
+a reference to compare to. **The B1 baseline is what makes B2 verifiable.**
+B01 TBloodEffect is the canonical lesson: the engine port shipped, looked
+plausible, but was missing the SPLAT grow phase that the bespoke had —
+caught only because the user remembered the game's visual. With a bespoke
+baseline in hand we would have spotted it in the first A/B capture.
+
+After B2 lands and the A/B is clean, **B1 is preserved under `#if 0`** in
+the same file (per [[feedback-preserve-old-code]]), and the bespoke
+SpawnForTest/TickAndSubmit lambdas stay in `vfxtest.cpp` behind a
+`--vfx-bespoke` toggle for future regression checks. Don't delete it.
+
+#### 3.2.0 Bespoke baseline first (mandatory before engine port)
+
+  1. Identify the animator registration (`REGISTER_3DANIMATOR("X", TXAnimator)`).
+  2. Write `TXEffect::SpawnForTest_BESPOKE` + `TickAndSubmit_BESPOKE` —
+     a direct port of the snapshot's `Initialize` / `Animate` / `Render`,
+     line by line. Forensics doc §3 (constants) and §6 (pseudocode) are
+     the spec. No engine integration yet — just a per-frame `SubmitFx*`
+     call sequence that mirrors the original's draw order.
+  3. Wire it as the harness entry (`vfxtest.cpp`). Boot with
+     `--test=vfx --vfx=TXEffect` and capture via `snap_grid.py` (see §4.2.2).
+  4. The bespoke must visually match the game (or retail reference, or
+     sister-family pattern). If it doesn't, the forensics doc is wrong —
+     stop the port and fix the doc. **Do not move to B2 with a broken B1.**
+  5. Save the bespoke capture as `docs/vfx/captures/<ID>_bespoke.png` —
+     this is the A/B baseline for B2.
+
+Phase B2 then takes the validated bespoke and re-expresses it as an
+`effects.def` block, adding only the engine extensions strictly required
+(respawn / chain / reflection / random_start_frame / etc.). After every
+substantive B2 change, capture and diff against the saved bespoke. The
+B2 row is `validated` when the engine A/B captures are indistinguishable.
+
+#### 3.2.0 — when to skip the bespoke baseline
+
+Engine-only is acceptable when the effect is already trivially decomposable
+into existing engine bucket primitives with **zero new extensions needed**
+(simple flipbook billboard, single-shot ScreenAligned spray with standard
+gravity + alpha). For everything else — multi-stage effects, missiles with
+state machines, reflection-plane behavior, novel emit shapes — do the
+bespoke baseline first.
 
 #### 3.2.1 Engine-vs-bespoke decision (mandatory before Phase B)
 
@@ -249,6 +294,15 @@ list will grow — add to it when you ship an extension):
   expression runs and which sub-texture / orientation applies. Blood's
   FLY / SPLAT / SHRINK is the archetype (different visual + kinematic
   per stage, single bucket).
+- **Random start frame from atlas grid** *(shipped — `random_start_frame = true` bucket flag)*:
+  when true and `atlas_frames > 1`, the engine auto-picks `DrawFrame` from
+  `[0, atlas_frames)` on spawn using the per-particle seed and materializes
+  the correct cell UV rect into `DrawUvRect`. Use for "N droplet variants" /
+  "N spark variants" cases (blood's 4-cell 2x2 atlas of `Misc\Blood.I3D` is
+  the archetype). Saves `frame = floor(rand01() * N)` boilerplate. The
+  paired UV materialization is required because the renderer's UV priority
+  is `DrawUvRect > atlas-grid-from-DrawFrame` — leaving DrawUvRect at the
+  default `(0,0,1,1)` overrides the atlas pick.
 
 Effects that should be **engine particle effects, not bespoke C++**:
 
