@@ -2063,6 +2063,80 @@ void TeleSubmitWorld(void* cp, EFxDebugMode dbg)
     c->tele->SubmitWorldForTest(dbg);
 }
 
+// --- FB+LS: real TFireBallEffect (F07, Magic/NewFireBall.I3D) -----------
+// Spawns a sector-less single-cast TFireBallEffect at the harness origin
+// via SpawnForTest and drives the ported TMissileEffect Pulse +
+// TFireBallAnimator Animate/Render bodies through TickAndSubmit each
+// frame. Faithful direct port — see src/effect.cpp F07 block.
+//
+// Two-hook wiring (mirrors TTeleporterEffect M09b): `submit` drives the
+// FB-pipeline billboards (ball/glow/trail/burst/sparks) + tick + spell
+// point-light; `submit_world` drives the cylinder01 shockwave ring via
+// SubmitHelperMesh AFTER BeginTilePass opens. Required because helper-
+// meshes land in the transparent_world_queue which BeginTilePass clears.
+//
+// Single non-overlapping cast (per RECONSTRUCTION_PROTOCOL + the §4.1
+// "one effect on screen at a time" rule): the harness lets a full cycle
+// play out (IsAlive() goes false when LAUNCH→FLY→EXPLODE finishes and
+// all sub-systems are quiet), waits a clear ~1.5 s gap (a fireball's
+// total visible lifetime), then re-fires ONE fresh cast. Combat preview
+// style — the cadence reads as repeated casts at the same spot.
+struct SFireBallCtx {
+    TFireBallEffect* fireball = nullptr;
+    S3DPoint         origin   = {0, 0, 0};
+    float            gap      = 0.0f;
+};
+
+constexpr float kFireBallRetriggerGap = 1.5f;  // clear gap between casts (s)
+
+void* FireBallSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFireBallCtx();
+    c->origin = origin;
+    c->fireball = TFireBallEffect::SpawnForTest(origin);
+    if (!c->fireball)
+        log_warn("[vfx] TFireBallEffect::SpawnForTest returned null; F07 entry will draw nothing");
+    return c;
+}
+
+void FireBallDestroy(void* cp)
+{
+    auto* c = static_cast<SFireBallCtx*>(cp);
+    delete c->fireball;
+    delete c;
+}
+
+void FireBallSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFireBallCtx*>(cp);
+    if (!c)
+        return;
+
+    // Single non-overlapping cast — let the LAUNCH→FLY→EXPLODE cycle
+    // fully play out, wait a clear gap, then re-fire ONE fresh cast.
+    if (!c->fireball || !c->fireball->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->fireball;
+            c->fireball = TFireBallEffect::SpawnForTest(c->origin);
+            c->gap = kFireBallRetriggerGap;
+        }
+    }
+
+    if (c->fireball)
+        c->fireball->TickAndSubmit(dbg);
+}
+
+void FireBallSubmitWorld(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFireBallCtx*>(cp);
+    if (!c || !c->fireball)
+        return;
+    c->fireball->SubmitWorldRing(dbg);
+}
+
 // --- FB: real TSparkEffect (X22, Misc/Sparks.I3D) -----------------------
 // Spawns a sector-less single-burst TSparkEffect at the harness origin via
 // SpawnForTest and drives the ported TParticle3DAnimator loop through
@@ -2495,6 +2569,28 @@ struct SVfxTestBootstrap {
         };
         swipe.destroy         = [](void* c) { SwipeDestroy(c); };
         VfxTest::DeferredRegister(swipe);
+
+        // --- F07 TFireBallEffect — flagship offensive spell (Magic\NewFireBall.I3D)
+        // Composite effect: 3-state LAUNCH→FLY→EXPLODE machine, 10-slot
+        // mesh trail + 30-40 photon-spark particle trail, impact burst
+        // (10 quads) + shockwave ring (cylinder01) + warm point light.
+        // The ring uses SubmitHelperMesh (same as M09b teleporter) and
+        // therefore MUST be submitted from submit_world (after the
+        // tile pass clears transparent_world_queue). See
+        // docs/vfx/forensics/F07_TFireBallEffect.md.
+        VfxTest::SEffect fireball = {};
+        fireball.id            = "TFireBallEffect";
+        fireball.family        = "fire";
+        fireball.pipeline      = "FB+LS";   // billboards + carried point light + helper-mesh ring
+        // Static cadence: the single-cast non-overlapping re-fire is
+        // owned inside FireBallSubmit so a clean single instance is
+        // always visible for the LAUNCH→FLY→EXPLODE verification.
+        fireball.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fireball.factory       = [](const S3DPoint& o) -> void* { return FireBallSpawn(o); };
+        fireball.submit        = [](void* c, EFxDebugMode d) { FireBallSubmit(c, d); };
+        fireball.submit_world  = [](void* c, EFxDebugMode d) { FireBallSubmitWorld(c, d); };
+        fireball.destroy       = [](void* c) { FireBallDestroy(c); };
+        VfxTest::DeferredRegister(fireball);
 
         VfxTest::SEffect spark = {};
         spark.id            = "TSparkEffect";

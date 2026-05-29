@@ -5231,3 +5231,923 @@ void TSparkEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         }
     }
 }
+
+// *************************************************************************
+// * (F07) TFireBallEffect — TMissileEffect : TEffect leaf, faithful port  *
+// *************************************************************************
+//
+// FAITHFUL DIRECT PORT of the pre-release `TMissileEffect::Pulse`
+// (src/missileeffect.cpp:52-135) + `TFireBallAnimator::Animate/::Render`
+// (src/missileeffect.cpp:549-1085). See forensics
+// docs/vfx/forensics/F07_TFireBallEffect.md.
+//
+// Engine adaptations (only what the new engine genuinely requires):
+//   - SubmitFxBillboard for box01 (ball/glow/trail/burst) and box02
+//     (spark) with per-instance UV sub-rect for atlas-cell selection.
+//     The original used D3D matrix-rotated quads (rotX-30°, rotY+60°,
+//     rotZ=spin+facing); ScreenAligned billboards are the FB-pipeline
+//     engine-native approximation. Forensics §13.6 flags this as the
+//     uncertain orientation choice.
+//   - SubmitHelperMesh for cylinder01 (the shockwave ring) — same
+//     primitive M09b TTeleporterEffect uses, additive-blend pass.
+//   - Framerate-independent 24 Hz sim-tick accumulator (per-tick rates
+//     integrated once per accumulated wall-clock tick of 1/24 s),
+//     family-consistent with B01/X22/F03/H03/M05.
+//   - Per-frame Renderer->AddPointLight at the ball position with the
+//     retail spell-LIGHT colour (255,130,0) for the warm scene glow.
+
+namespace {
+
+constexpr const char* kFireBallImageryPath = "Magic\\NewFireBall.I3D";
+
+// Sub-object indices inside NewFireBall.I3D (forensics §4).
+constexpr int32_t kFireBallObjBox01      = 0;   // ball / glow / trail / burst
+constexpr int32_t kFireBallObjBox02      = 1;   // spark quad
+constexpr int32_t kFireBallObjCylinder01 = 2;   // shockwave ring
+
+// Pre-release `ROLLOVER = 1 << 16` (revdefs.h:447) — sub-unit precision
+// used by TMissileEffect's `speed = newspeed * ROLLOVER` integer math.
+// We carry the same constant so the port's Pulse arithmetic matches the
+// snapshot literal-for-literal (forensics §3).
+constexpr int32_t kFireBallRollover = 1 << 16;
+
+// Resolve which texture slot a sub-object draws from by walking its
+// texfaces[] table. Duplicates the blood-side helper (effect.cpp B01
+// block) — left local to keep the file's section boundaries clean
+// rather than pulling the blood namespace open here.
+int32_t FireBallSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+}   // namespace
+
+void TFireBallEffect::Initialize()
+{
+    // Port of TMissileEffect::Initialize (missileeffect.cpp:31-40) +
+    // TFireBallEffect::Initialize (:482-487) + TFireBallAnimator::
+    // Initialize (:501-546). The animator-side init is folded onto the
+    // class since the per-frame state lives here.
+    state_      = 0;   // MISSILE_LAUNCH
+    aim_angle_  = 0;
+    range_      = 32768;
+    status_     = false;
+    vel_        = {0.0f, 0.0f, 0.0f};
+    old_state_  = 0;
+    firsttime_  = 0;
+    explode_    = 0;
+
+    // FireBallAnimator init (missileeffect.cpp:516-545):
+    fireball_.pos    = {0.0f, 0.0f, 0.0f};
+    fireball_.scale  = kFireBallMaxSize / 2.0f;   // 0.30
+    fireball_.frame  = 0.0f;
+    fireball_.glow   = 1.5f;
+    fireball_.used   = true;
+    frame_count_     = kFireBallMaxFrame;
+    glow_frame_      = kFireBallGlowFrame;
+    for (auto& t : trail_)   t = SFireBallData{};
+    for (auto& b : burst_)   b = SFireBallData{};
+    for (auto& s : sparks_)  s = SFireBallSpark{};
+    ring_active_    = false;
+    ring_done_      = true;
+    ring_scale_     = kFireBallRingScale;
+    alive_          = true;
+    sim_accum_ms_   = 0.0;
+}
+
+void TFireBallEffect::Pulse()
+{
+    // Pre-release TFireBallEffect::Pulse (missileeffect.cpp:489-492) is a
+    // pure pass-through to TMissileEffect::Pulse. The base body lives in
+    // StepMissilePulse (a private helper so the port can drive sim-tick
+    // gated cadence from TickAndSubmit without a virtual-call detour).
+    TEffect::Pulse();
+}
+
+void TFireBallEffect::FillAtlasUv(int32_t frame_idx, float out_uv[4]) const
+{
+    // Port of TFireBallAnimator::SetAnimFrame (missileeffect.cpp:761-779):
+    // 4×4 grid, cell size 0.25 × 0.25, u=(f%4)*.25, v=(f/4)*.25.
+    const int32_t f = ((frame_idx % frame_count_) + frame_count_) % frame_count_;
+    out_uv[0] = float(f % 4) * asset_.atlas_cell_w;
+    out_uv[1] = float(f / 4) * asset_.atlas_cell_h;
+    out_uv[2] = asset_.atlas_cell_w;
+    out_uv[3] = asset_.atlas_cell_h;
+}
+
+bool TFireBallEffect::IsTrailDraining() const
+{
+    // Port of TFireBallAnimator::IsTrail (missileeffect.cpp:781-791):
+    // true while the trail head ≠ tail position (the ball still moved
+    // recently). Used as the "trail still draining" gate for death.
+    const SFireBallData& head = trail_[0];
+    const SFireBallData& tail = trail_[kFireBallTrailSize - 1];
+    return head.pos.X != tail.pos.X
+        || head.pos.Y != tail.pos.Y
+        || head.pos.Z != tail.pos.Z;
+}
+
+bool TFireBallEffect::AnyBurstAlive() const
+{
+    for (const auto& b : burst_)
+        if (b.used) return true;
+    return false;
+}
+
+int32_t TFireBallEffect::LiveSparkCount() const
+{
+    int32_t c = 0;
+    for (const auto& s : sparks_)
+        if (s.used) ++c;
+    return c;
+}
+
+void TFireBallEffect::StepMissilePulse()
+{
+    // Port of TMissileEffect::Pulse (missileeffect.cpp:52-135), translated
+    // line-by-line. The original's `Move()` integration becomes an
+    // explicit pos += vel here (we drive the effect's TObjectInstance::Pos
+    // via ForcePos, since the engine's mover isn't wired for the harness
+    // path). The MOVE_BLOCKED branch reduces to a range floor in the
+    // harness (no character / tile collision in --test=vfx).
+
+    // Integrate velocity into the effect's world position (the
+    // pre-release engine's `Move()` does this). Vel is in per-tick units
+    // (set in the LAUNCH→FLY transition below).
+    if (state_ == 1 /*MISSILE_FLY*/)
+    {
+        S3DPoint p = Pos();
+        p.x += int32_t(vel_.X);
+        p.y += int32_t(vel_.Y);
+        p.z += int32_t(vel_.Z);
+        ForcePos(p);
+    }
+
+    switch (state_)
+    {
+        case 0: /* MISSILE_LAUNCH */
+            // missileeffect.cpp:58-72.
+            if (status_)
+            {
+                // Harness-only: hold LAUNCH for ~16 ticks so the
+                // "grow above caster" moment is visibly observable
+                // before the ball launches. In-game launch_hold_=0.
+                if (launch_hold_ticks_remaining_ > 0)
+                {
+                    --launch_hold_ticks_remaining_;
+                    break;
+                }
+                // Aim → velocity (ConvertToVector emits an integer
+                // S3DPoint scaled by `speed`; we divide by ROLLOVER to
+                // get the per-tick wu velocity the harness integrates).
+                S3DPoint v_int = {0, 0, 0};
+                const float harness_speed = kFireBallSpeed * kFireBallHarnessSpeedScale;
+                ConvertToVector(aim_angle_, int32_t(harness_speed * float(kFireBallRollover)), v_int);
+                vel_.X = float(v_int.x) / float(kFireBallRollover);
+                vel_.Y = float(v_int.y) / float(kFireBallRollover);
+                // missileeffect.cpp:66 — vel.z = speed / -16 (slight
+                // downward arc).
+                vel_.Z = harness_speed / -16.0f;
+                // missileeffect.cpp:68 — range = (240 * MISSILE_RANGE) /
+                // (speed / ROLLOVER) = (240*2)/8 = 60 ticks of flight
+                // (scaled to keep the visible flight ≈2.5 s regardless
+                // of harness speed scale).
+                range_ = kFireBallFlyRangeTicks;
+                state_ = 1;   // MISSILE_FLY
+            }
+            break;
+
+        case 1: /* MISSILE_FLY */
+        {
+            // missileeffect.cpp:79-114.
+            bool explode = false;
+            range_--;
+            if (range_ <= 0)
+                explode = true;
+            // MOVE_BLOCKED / character-hit branches: in the harness there
+            // is no map collision and no live characters to query
+            // (TMapIterator would walk empty sets / fault), so we fall
+            // through. In-game the dispatcher fires these checks per
+            // forensics §6.1. Translated body is preserved at the
+            // bottom of the file under `#if 0` for the in-game port.
+            if (explode)
+                state_ = 2;   // MISSILE_EXPLODE
+            break;
+        }
+
+        case 2: /* MISSILE_EXPLODE */
+            // missileeffect.cpp:127-130. The animator drives the visual
+            // termination; HasAnimator() goes false once all sub-systems
+            // are quiet. In this port the death gate lives in
+            // StepAnimate (alive_ = false when IsTrailDraining + sparks +
+            // burst + ring are all quiet — forensics §6.2).
+            break;
+    }
+}
+
+void TFireBallEffect::StepAnimate()
+{
+    // Port of TFireBallAnimator::Animate (missileeffect.cpp:549-759),
+    // translated line-by-line. SetCommandDone / SetStatus(false) handshakes
+    // collapse to direct boolean assignments on the leaf since there is
+    // no separate animator object.
+
+    status_ = false;
+    firsttime_ = (old_state_ != state_) ? 1 : 0;
+
+    // explode-edge tracker (:564-567).
+    if (explode_ == 1)
+        explode_ = -1;
+    else if (explode_ == 0 && state_ == 2 /*MISSILE_EXPLODE*/)
+        explode_ = 1;
+
+    const S3DPoint effect_pos = Pos();
+
+    // --- spark trail params (:573-621) ---
+    int32_t spark_target = 0;
+    if (explode_ == -1)
+        spark_target = 0;
+    else if (explode_ == 1)
+        spark_target = kFireBallMaxSpark;
+    else
+        spark_target = kFireBallNormSpark;
+
+    int32_t spark_chance = 0;
+    if (state_ == 0 /*LAUNCH*/)
+        spark_chance = 25;
+    else if (state_ == 1 /*FLY*/)
+        spark_chance = 30;
+    else
+        spark_chance = 100;
+
+    // velocity spread per state (:604-610).
+    const float spread_xy = (state_ == 0) ? 3.0f : 1.0f;
+    const float spread_z  = 1.0f;
+
+    // Spawn-to-fill sparks (mirrors TSubParticleAnimator::Animate spawn
+    // path at effectcomp.cpp:455-524): each empty slot, until we hit the
+    // target count, has a `chance%` probability to spawn this tick.
+    int32_t live = LiveSparkCount();
+    for (int32_t i = 0; i < kFireBallMaxSpark && live < spark_target; ++i)
+    {
+        SFireBallSpark& sp = sparks_[i];
+        if (sp.used) continue;
+        if (random(1, 100) > spark_chance) continue;
+        sp.used = true;
+        sp.pos.X = float(effect_pos.x);
+        sp.pos.Y = float(effect_pos.y);
+        sp.pos.Z = float(effect_pos.z);
+        sp.vel.X = float(random(-100, 100)) / 100.0f * spread_xy;
+        sp.vel.Y = float(random(-100, 100)) / 100.0f * spread_xy;
+        sp.vel.Z = float(random(-100, 100)) / 100.0f * spread_z;
+        sp.scale = kFireBallSparkScale;
+        sp.life  = random(kFireBallSparkMinLife, kFireBallSparkMaxLife);
+        ++live;
+    }
+
+    // Integrate sparks (TSubParticleAnimator update body — effectcomp.cpp:
+    // 1372-1413-ish flavor; the doc cites it via §6.3): pos += vel;
+    // vel.z -= gravity; scale *= scale_dec; life--; cull if life<0.
+    for (auto& sp : sparks_)
+    {
+        if (!sp.used) continue;
+        sp.pos.X += sp.vel.X;
+        sp.pos.Y += sp.vel.Y;
+        sp.pos.Z += sp.vel.Z;
+        sp.vel.Z -= kFireBallSparkGravity;
+        sp.scale *= kFireBallSparkScaleDec;
+        sp.life  -= 1;
+        if (sp.life <= 0 || sp.scale <= 0.01f)
+            sp.used = false;
+    }
+
+    // --- mesh-trail ring buffer (:627-636) ---
+    for (int32_t i = kFireBallTrailSize - 1; i > 0; --i)
+    {
+        trail_[i] = trail_[i - 1];
+        trail_[i].scale *= kFireBallTrailScale;
+    }
+    trail_[0] = fireball_;
+    trail_[0].scale *= kFireBallTrailScale;
+    // Pre-release records the trail head in WORLD coords (:634-636 adds
+    // effect_pos to the local 0,0,0 head); we follow suit.
+    trail_[0].pos.X = fireball_.pos.X + float(effect_pos.x);
+    trail_[0].pos.Y = fireball_.pos.Y + float(effect_pos.y);
+    trail_[0].pos.Z = fireball_.pos.Z + float(effect_pos.z);
+
+    // --- ball self-animation (:638-655) ---
+    fireball_.glow = 1.0f + 0.05f * float(random(0, 15));
+    fireball_.frame += 1.0f;
+    if (fireball_.frame > float(frame_count_))
+        fireball_.frame = 0.0f;
+    if (int32_t(fireball_.frame) == glow_frame_)
+    {
+        fireball_.frame += 1.0f;
+        if (fireball_.frame > float(frame_count_))
+            fireball_.frame = 0.0f;
+    }
+    // In-plane spin accumulator (missileeffect.cpp:651-655). The active
+    // snapshot branch is `+2/tick` (FIREBALL_WHITE_FADE is commented out
+    // at missileeffect.h:163, so the `#ifndef` branch wins). This value
+    // propagates into trail copies via `trail[0] = fireball` below, so
+    // each trail slot freezes at the rotation the head had when the
+    // copy was recorded — the snapshot's stale-spin tumble.
+    fireball_.rotation = std::fmod(fireball_.rotation + 2.0f, 360.0f);
+
+    // --- state-specific actions (:657-757) ---
+    int32_t live_burst_count = 0;
+    switch (state_)
+    {
+        case 0: /* MISSILE_LAUNCH */
+            status_ = true;   // tell base Pulse to launch (handshake)
+            break;
+
+        case 1: /* MISSILE_FLY */
+            if (fireball_.scale < kFireBallMaxSize)
+                fireball_.scale += kFireBallGrowRate;
+            break;
+
+        case 2: /* MISSILE_EXPLODE */
+            if (fireball_.scale < kFireBallMaxSize)
+                fireball_.scale += kFireBallGrowRate;
+
+            if (firsttime_)
+            {
+                // Impact world position = fireball.pos + effect_pos
+                // (:676-679). In our port fireball_.pos.X/Y/Z are 0 (the
+                // ball head sits at the effect origin), so the impact
+                // simplifies to effect_pos.
+                S3DPoint impact_pos = effect_pos;
+                impact_pos.x += int32_t(fireball_.pos.X);
+                impact_pos.y += int32_t(fireball_.pos.Y);
+                impact_pos.z += int32_t(fireball_.pos.Z);
+
+                // Blast damage (:681-684). The retail call:
+                //   BlastCharactersInRange(spell->GetInvoker(), impact_pos,
+                //                          150, vd->mindamage, vd->maxdamage,
+                //                          spell->SpellData()->damagetype);
+                // is gated by HasSpell() — and BlastCharactersInRange itself
+                // currently lives under `#if 0` in effect_old.cpp:278 (the
+                // body comes back online in the combat-port phase). The
+                // gameflow caller wires this; harness has no live spell.
+                // See §13.8 (damage source = spell variant data, not the
+                // dead FIREBALL_DAMAGE_MIN/MAX macro).
+                (void)impact_pos;
+
+                // Burst quads (:687-699). Pre-release sets
+                // `burst[i].rotation = 0` (missileeffect.cpp:694); the
+                // draw at :846 then applies `-burst[i].rotation *
+                // TORADIANf` = 0, so all burst cards share the no-spin
+                // orientation. Seed the same so the WorldXY matrix tilt
+                // + facing-rotation composes consistently across slots.
+                for (int32_t i = 0; i < kFireBallMaxBurst; ++i)
+                {
+                    SFireBallData& bq = burst_[i];
+                    bq.used    = true;
+                    bq.pos.X   = fireball_.pos.X + float(random(-15, 20));
+                    bq.pos.Y   = fireball_.pos.Y + float(random(-15, 20));
+                    bq.pos.Z   = fireball_.pos.Z + float(random(-15, 20));
+                    bq.scale   = 0.75f + float(random(0, 5)) * 0.15f;
+                    bq.glow    = 1.0f + 0.05f * float(random(0, 15));
+                    bq.frame   = float(random(0, frame_count_ - 1));
+                    bq.rotation = 0.0f;   // snapshot :694
+                    if (int32_t(bq.frame) == glow_frame_)
+                        bq.frame += 1.0f;
+                    ++live_burst_count;
+                }
+
+                // Shockwave ring init (:701-731). Color stops are stored
+                // implicitly — the ring helper-mesh draws use the
+                // texture-modulated cylinder geometry, and the four
+                // RGBA color stops fade together via per-frame alpha.
+                ring_active_ = true;
+                ring_done_   = false;
+                ring_scale_  = kFireBallRingScale;
+                ring_pos_.X  = fireball_.pos.X + float(effect_pos.x);
+                ring_pos_.Y  = fireball_.pos.Y + float(effect_pos.y);
+                ring_pos_.Z  = fireball_.pos.Z + float(effect_pos.z);
+            }
+            else
+            {
+                // Continuing EXPLODE ticks (:734-749). Ring grows
+                // 1.085 / tick until > 120 → done. Burst quads shrink
+                // 0.90 / tick, culled at < 0.50.
+                if (ring_active_ && !ring_done_)
+                {
+                    ring_scale_ *= kFireBallRingFactor;
+                    if (ring_scale_ > kFireBallRingMaxSize)
+                    {
+                        ring_scale_ = kFireBallRingMaxSize;
+                        ring_done_  = true;
+                    }
+                }
+                for (auto& bq : burst_)
+                {
+                    if (!bq.used) continue;
+                    ++live_burst_count;
+                    bq.scale *= 0.90f;
+                    if (bq.scale < 0.50f)
+                    {
+                        bq.used = false;
+                        continue;
+                    }
+                    bq.glow = 1.0f + 0.05f * float(random(0, 15));
+                    bq.frame += 1.0f;
+                    if (int32_t(bq.frame) == glow_frame_)
+                        bq.frame += 1.0f;
+                    bq.frame = float(int32_t(bq.frame) % frame_count_);
+                }
+            }
+
+            // Death gate (:752-755). The original checks IsTrail() &&
+            // spark.GetCount() == 0 && no burst alive && ring.IsDone().
+            // All four must be true simultaneously.
+            if (!IsTrailDraining()
+                && LiveSparkCount() == 0
+                && live_burst_count == 0
+                && (ring_done_ || !ring_active_))
+            {
+                alive_ = false;
+            }
+            break;
+    }
+
+    old_state_ = state_;
+}
+
+TFireBallEffect* TFireBallEffect::SpawnForTest(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[fireball] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // FindImagery → RegisterImagery fallback (NewFireBall.I3D is not
+    // pre-registered by any AddType in the modern data path; the only
+    // registration was the disabled `DEFINE_BUILDER("FireBall", ...)` in
+    // missileeffect.cpp).
+    int32_t img_id = TObjectImagery::FindImagery(kFireBallImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFireBallImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[fireball] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kFireBallImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[fireball] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFireBallImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fireball] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kFireBallImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Lazy-mesh-init poke (same idiom F01/B01/H04/X22 use).
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < 3 || num_tex <= 0)
+    {
+        log_error("[fireball] SpawnForTest: imagery '%s' underspec'd "
+                  "(objects=%d, textures=%d) — expected ≥3 sub-objects "
+                  "(box01/box02/cylinder01)",
+                  kFireBallImageryPath, num_obj, num_tex);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* fb = new TFireBallEffect(base);
+    fb->ForcePos(origin);
+    fb->SetMapIndex(MapPane.MakeIndex());
+    fb->ActivateComponents();
+
+    // Resolve box01 (idx 0) and box02 (idx 1) textures via their texfaces
+    // table. NewFireBall.I3D's texture[0] is the warm-orange 4×4 atlas;
+    // texture[1] (if present) is the spark sprite. Pre-release picks
+    // these via GetObject(0)/GetObject(1) at register time.
+    auto resolve_subobj_tex = [&](int32_t obj_idx, const char* tag) -> TTextureHandle {
+        const int32_t slot = FireBallSubObjTextureSlot(img3d, obj_idx);
+        const int32_t actual = (slot >= 0 && slot < num_tex) ? slot : 0;
+        S3DTex tex = {};
+        img3d->GetTexture(actual, &tex);
+        log_info("[fireball]   %s sub-obj=%d -> texture slot=%d handle=%u "
+                 "w=%u h=%u frames=%d",
+                 tag, obj_idx, actual, tex.htexture,
+                 tex.desc.width, tex.desc.height, tex.numframes);
+        return tex.htexture;
+    };
+    fb->asset_.box01_tex = resolve_subobj_tex(kFireBallObjBox01, "box01(ball/atlas)");
+    fb->asset_.box02_tex = resolve_subobj_tex(kFireBallObjBox02, "box02(spark)");
+
+    if (fb->asset_.box01_tex == kInvalidTexture)
+    {
+        log_error("[fireball] SpawnForTest: box01 texture unresolved — port broken");
+        delete fb;
+        return nullptr;
+    }
+    if (fb->asset_.box02_tex == kInvalidTexture)
+        fb->asset_.box02_tex = fb->asset_.box01_tex;   // safe fallback (atlas has warm cells)
+
+    // Register the cylinder01 sub-mesh for additive-blend helper-mesh
+    // submission (the shockwave ring). Same path TTeleporterEffect uses
+    // for its glow column. We pull texslot 0 if there's no resolvable
+    // material binding; the ring's geometry doesn't carry the warm
+    // gradient (that comes from our per-frame vertex tint).
+    {
+        const int32_t cyl = kFireBallObjCylinder01;
+        const int32_t texslots = num_tex + 1;
+        for (int32_t texslot = 0; texslot < texslots; ++texslot)
+        {
+            std::vector<SMeshVertex> verts;
+            std::vector<uint16_t>    indices;
+            if (!ExtractSubMeshTextureSlot(img3d, cyl, texslot, verts, indices))
+                continue;
+            if (verts.empty() || indices.empty()) continue;
+            TTextureHandle albedo = Renderer->WhiteTextureHandle();
+            if (texslot > 0 && texslot - 1 < num_tex)
+            {
+                S3DTex t = {};
+                img3d->GetTexture(texslot - 1, &t);
+                if (t.htexture != kInvalidTexture) albedo = t.htexture;
+            }
+            const MeshHandle h = Renderer->RegisterMesh(
+                verts.data(), int32_t(verts.size()),
+                indices.data(), int32_t(indices.size()),
+                albedo);
+            if (h)
+            {
+                fb->asset_.ring_mesh = h;
+                BuildStaticObjectMatrix(img3d, cyl, 0, 0, fb->asset_.ring_mat);
+                log_info("[fireball]   cylinder01 sub-obj=%d texslot=%d "
+                         "verts=%zu indices=%zu mesh_handle=%u",
+                         cyl, texslot, verts.size(), indices.size(), h);
+                break;
+            }
+        }
+        if (fb->asset_.ring_mesh == 0)
+        {
+            log_warn("[fireball] SpawnForTest: cylinder01 mesh extract failed — "
+                     "ring won't draw (impact will still produce burst+sparks)");
+        }
+    }
+
+    // Harness aim: random horizontal byte-angle (in-game caller would
+    // supply via TSpell::Timer + GetAngle()).
+    fb->aim_angle_ = random(0, 255);
+
+    // Mirror TFireBallAnimator::Initialize z-lift (:511-514): nudge the
+    // effect +50 wu on z so the ball grows above the caster.
+    S3DPoint p = fb->Pos();
+    p.z += int32_t(kFireBallSpawnLiftZ);
+    fb->ForcePos(p);
+
+    log_info("[fireball] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "aim=%d box01_tex=%u box02_tex=%u ring_mesh=%u "
+             "fly_range_ticks=%d",
+             kFireBallImageryPath, fb->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             fb->aim_angle_,
+             fb->asset_.box01_tex, fb->asset_.box02_tex, fb->asset_.ring_mesh,
+             kFireBallFlyRangeTicks);
+    return fb;
+}
+
+void TFireBallEffect::TickAndSubmit(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24 Hz sim-tick accumulator (family pattern). Each drained tick
+    // runs the full state machine + animator + spark integration once.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kFireBallSimTickMs))
+        {
+            sim_accum_ms_ -= double(kFireBallSimTickMs);
+            StepMissilePulse();
+            StepAnimate();
+            if (!alive_)
+                break;
+        }
+    }
+
+    // Submit billboards every render frame (the sim cadence is the
+    // simulation; rendering reads the latest tick state). The box01
+    // ball/glow/trail/burst + box02 spark quads all go through the
+    // FB pipeline.
+    SubmitBillboards(debug_mode);
+
+    // Spell-carried point light (forensics §9). Re-added each frame
+    // while alive (LS-pipeline contract: ClearPointLights() at the top
+    // of VfxTest::Render, effects rebuild per frame).
+    if (alive_)
+    {
+        const S3DPoint p = Pos();
+        const float wx = float(p.x) + fireball_.pos.X;
+        const float wy = float(p.y) + fireball_.pos.Y;
+        const float wz = float(p.z) + fireball_.pos.Z;
+        // Intensity tracks the ball's glow flicker (×1.0..1.75 jitter
+        // re-rolled each tick) so the warm scene light visibly pulses
+        // with the ball's flame flicker.
+        const float intensity = kFireBallLightInt * fireball_.glow;
+        Renderer->AddPointLight(wx, wy, wz,
+                                kFireBallLightRadiusWu,
+                                kFireBallLightR, kFireBallLightG, kFireBallLightB,
+                                intensity);
+    }
+}
+
+void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || asset_.box01_tex == kInvalidTexture)
+        return;
+
+    const S3DPoint base = Pos();
+
+    // Per-instance facing rotation. Snapshot draw matrices apply
+    // `RotateZ(-(GetFace(...)/256) * TORADIAN)` as the last spin
+    // (missileeffect.cpp:846/906/953/1002/1041), composed under the
+    // fixed -30°/+60° XY tilt + per-slot rotation. We collapse those
+    // into one in-plane rotation per WorldXY-tipped quad:
+    //   rotation_rad = -slot.rotation * (π/180)  +  facing_rad
+    // facing comes from aim_angle_ (the byte-angle 0..255 we stored at
+    // launch) — same source the snapshot used via GetFace.
+    const float facing_rad = -(float(aim_angle_) / 256.0f) * 2.0f * float(M_PI);
+
+    // Render-order port of TFireBallAnimator::Render (missileeffect.cpp:
+    // 1060-1085): spark first; then per state — LAUNCH/FLY: glow, trail,
+    // ball; EXPLODE: trail, burst, ring (ring drawn in SubmitWorldRing).
+    //
+    // Pipeline = FB particle (SubmitFxParticle / SParticleDrawItem) —
+    // billboards don't plumb per-instance rotation_rad, but particles do
+    // (renderer.h:248-263). Sister effects (Fizzle, B01 FLY droplets)
+    // use the particle pipeline for the same reason: keep the snapshot's
+    // matrix-tilt + per-instance spin without re-implementing matrices.
+    // Orientation = WorldXY so each quad lies in the world plane the
+    // snapshot's RotateX(-30°)/RotateY(+60°) defined; the per-instance
+    // rotation_rad then spins it in that plane.
+    SParticleDrawItem ball_item = {};
+    ball_item.key.texture     = asset_.box01_tex;
+    ball_item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    // Blend = Alpha — pre-release calls SetBlendState() = MODULATE/
+    // SRCALPHA/INVSRCALPHA (missileeffect.cpp:1062-1063 + forensics §7).
+    // The black-keyed atlas supplies transparency; the modulate stage
+    // lets the warm-orange texel tint dominate.
+    ball_item.key.blend       = uint8_t(EFxBlend::Alpha);
+    ball_item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    ball_item.light_mode      = EFxLightMode::Unlit;
+    ball_item.orientation     = EFxBillboardOrientation::WorldXY;
+    ball_item.debug_mode      = debug_mode;
+    // White tint — color lives in the warm-orange atlas texels per §10.
+    ball_item.color_rgba[0] = 1.0f;
+    ball_item.color_rgba[1] = 1.0f;
+    ball_item.color_rgba[2] = 1.0f;
+    ball_item.color_rgba[3] = 1.0f;
+
+    // --- Spark trail (TSubParticleAnimator::Render — effectcomp.cpp:
+    // 526-570 in spirit). Drawn first so the ball + glow layer on top.
+    // Sparks have no per-instance rotation in the snapshot (the original
+    // `TSubParticleAnimator::Render` uses a fixed rotZ-60°/rotX-45° face
+    // rotation, not a per-particle accumulator), so rotation_rad stays
+    // 0 — but they still ride the WorldXY tip so they read as embers in
+    // the world plane, not camera-pasted dots.
+    SParticleDrawItem spark_item = ball_item;
+    spark_item.key.texture = asset_.box02_tex;
+    spark_item.key.blend   = uint8_t(EFxBlend::Alpha);
+    spark_item.uv_rect[0] = 0.0f; spark_item.uv_rect[1] = 0.0f;
+    spark_item.uv_rect[2] = 1.0f; spark_item.uv_rect[3] = 1.0f;
+    spark_item.rotation_rad = 0.0f;
+    for (const auto& sp : sparks_)
+    {
+        if (!sp.used) continue;
+        const float flicker = ((sp.life & 1) == 0) ? kFireBallSparkFlicker : 1.0f;
+        spark_item.world_pos[0] = sp.pos.X;
+        spark_item.world_pos[1] = sp.pos.Y;
+        spark_item.world_pos[2] = sp.pos.Z;
+        spark_item.size_wu[0] = kFireBallSparkQuadWu * sp.scale * flicker * 6.0f;
+        spark_item.size_wu[1] = kFireBallSparkQuadWu * sp.scale * flicker * 6.0f;
+        Renderer->SubmitFxParticle(spark_item);
+    }
+
+    constexpr float kDegToRad = float(M_PI) / 180.0f;
+
+    if (state_ == 0 /*LAUNCH*/ || state_ == 1 /*FLY*/)
+    {
+        // --- Glow (RenderFireBallGlow — missileeffect.cpp:1022-1057).
+        // box01 quad with atlas cell = glow_frame, scale = scale * glow.
+        // The original glow has NO per-instance spin (only the static
+        // -30°/+60° tilt + facing — :1039-1041), so we leave its
+        // rotation_rad at facing_rad with no rotation term.
+        SParticleDrawItem glow = ball_item;
+        FillAtlasUv(glow_frame_, glow.uv_rect);
+        const float gsize = kFireBallBaseQuadWu * fireball_.scale * fireball_.glow;
+        glow.size_wu[0] = gsize;
+        glow.size_wu[1] = gsize;
+        glow.world_pos[0] = float(base.x) + fireball_.pos.X;
+        glow.world_pos[1] = float(base.y) + fireball_.pos.Y;
+        glow.world_pos[2] = float(base.z) + fireball_.pos.Z;
+        glow.rotation_rad = facing_rad;
+        Renderer->SubmitFxParticle(glow);
+
+        // --- Mesh trail (RenderFireBallTrail — :871-973). The original
+        // applies `RotateZ(-trail[i].rotation * TORADIAN)` PER SLOT
+        // (:948), where trail[i].rotation is the stale snapshot of the
+        // ball's rotation at the moment that slot was recorded (via
+        // `trail[0] = fireball` at :632). That stale-spin propagation is
+        // what gives the trail its tumbling streak look — each card sits
+        // at a frozen angle in the WorldXY plane, NOT camera-facing.
+        SParticleDrawItem trail_item = ball_item;
+        // Walk back-to-front so older slots draw first.
+        for (int32_t i = kFireBallTrailSize - 1; i >= 0; --i)
+        {
+            const SFireBallData& tr = trail_[i];
+            if (tr.scale <= 0.0001f) continue;
+            FillAtlasUv(int32_t(tr.frame), trail_item.uv_rect);
+            const float tsize = kFireBallBaseQuadWu * tr.scale;
+            trail_item.size_wu[0] = tsize;
+            trail_item.size_wu[1] = tsize;
+            trail_item.world_pos[0] = tr.pos.X;
+            trail_item.world_pos[1] = tr.pos.Y;
+            trail_item.world_pos[2] = tr.pos.Z;
+            trail_item.rotation_rad = -tr.rotation * kDegToRad + facing_rad;
+            Renderer->SubmitFxParticle(trail_item);
+        }
+
+        // --- Ball (RenderFireBall — :975-1020). Per-instance spin from
+        // the ball-head accumulator (`fireball_.rotation`, +2°/tick).
+        SParticleDrawItem ball = ball_item;
+        FillAtlasUv(int32_t(fireball_.frame), ball.uv_rect);
+        const float bsize = kFireBallBaseQuadWu * fireball_.scale;
+        ball.size_wu[0] = bsize;
+        ball.size_wu[1] = bsize;
+        ball.world_pos[0] = float(base.x) + fireball_.pos.X;
+        ball.world_pos[1] = float(base.y) + fireball_.pos.Y;
+        ball.world_pos[2] = float(base.z) + fireball_.pos.Z;
+        ball.rotation_rad = -fireball_.rotation * kDegToRad + facing_rad;
+        Renderer->SubmitFxParticle(ball);
+    }
+    else /* state_ == MISSILE_EXPLODE */
+    {
+        // EXPLODE branch (:1075-1079): trail, burst, ring. The trail
+        // keeps draining at the frozen stale-spin angles; ring is drawn
+        // via SubmitHelperMesh.
+        SParticleDrawItem trail_item = ball_item;
+        for (int32_t i = kFireBallTrailSize - 1; i >= 0; --i)
+        {
+            const SFireBallData& tr = trail_[i];
+            if (tr.scale <= 0.0001f) continue;
+            FillAtlasUv(int32_t(tr.frame), trail_item.uv_rect);
+            const float tsize = kFireBallBaseQuadWu * tr.scale;
+            trail_item.size_wu[0] = tsize;
+            trail_item.size_wu[1] = tsize;
+            trail_item.world_pos[0] = tr.pos.X;
+            trail_item.world_pos[1] = tr.pos.Y;
+            trail_item.world_pos[2] = tr.pos.Z;
+            trail_item.rotation_rad = -tr.rotation * kDegToRad + facing_rad;
+            Renderer->SubmitFxParticle(trail_item);
+        }
+
+        // Burst quads (RenderFireBallBurst — :793-869). Snapshot seeds
+        // `burst[i].rotation = 0` (:694), so the per-slot rotation_rad
+        // collapses to just the facing_rad term — the matrix tilt at
+        // :846-851 reduces to the WorldXY plane + facing rotation.
+        SParticleDrawItem burst = ball_item;
+        for (const auto& bq : burst_)
+        {
+            if (!bq.used) continue;
+            FillAtlasUv(int32_t(bq.frame), burst.uv_rect);
+            const float bsize = kFireBallBaseQuadWu * bq.scale * bq.glow;
+            burst.size_wu[0] = bsize;
+            burst.size_wu[1] = bsize;
+            burst.world_pos[0] = float(base.x) + bq.pos.X;
+            burst.world_pos[1] = float(base.y) + bq.pos.Y;
+            burst.world_pos[2] = float(base.z) + bq.pos.Z;
+            burst.rotation_rad = -bq.rotation * kDegToRad + facing_rad;
+            Renderer->SubmitFxParticle(burst);
+        }
+    }
+}
+
+void TFireBallEffect::SubmitWorldRing(EFxDebugMode /*debug_mode*/)
+{
+    // Shockwave ring (cylinder01 via SubmitHelperMesh, additive blend).
+    // Same primitive M09b TTeleporterEffect uses (forensics §7).
+    if (!Renderer || asset_.ring_mesh == 0 || !ring_active_)
+        return;
+
+    // Compose the world matrix: T(ring_pos) * S(ring_scale,*,*) applied
+    // to the cylinder's authored parent matrix. The ring grows isotropic
+    // (all 3 axes scale together), matching ring.scale_factor = 1.085 on
+    // x/y/z (missileeffect.cpp:715-717).
+    float t[16] = {
+        ring_scale_, 0.0f,        0.0f,        ring_pos_.X,
+        0.0f,        ring_scale_, 0.0f,        ring_pos_.Y,
+        0.0f,        0.0f,        ring_scale_, ring_pos_.Z,
+        0.0f,        0.0f,        0.0f,        1.0f
+    };
+    float world[16];
+    // world = t * parent_matrix (row-major). Reuse the renderer-side
+    // helper structure of TTeleporterEffect — but the helper is local
+    // there. Compose inline.
+    for (int32_t r = 0; r < 4; ++r)
+        for (int32_t c = 0; c < 4; ++c)
+        {
+            float s = 0.0f;
+            for (int32_t k = 0; k < 4; ++k)
+                s += t[r * 4 + k] * asset_.ring_mat[k * 4 + c];
+            world[r * 4 + c] = s;
+        }
+
+    // Alpha-fade per SHOCKWAVE_FLAG_FADE (effectcomp.cpp:732-748):
+    // alpha = (max_size - scale) / (max_size - init_scale).
+    const float fade_num = kFireBallRingMaxSize - ring_scale_;
+    const float fade_den = kFireBallRingMaxSize - kFireBallRingScale;
+    const float fade     = fade_den > 0.0f
+                               ? std::fmax(0.0f, std::fmin(1.0f, fade_num / fade_den))
+                               : 1.0f;
+
+    SHelperMeshSubmit m = {};
+    m.mesh           = asset_.ring_mesh;
+    m.additive_blend = true;
+    m.shadow_plane   = false;
+    std::memcpy(m.world, world, sizeof(world));
+
+    // Warm-orange ring tint — the 4 ring color stops (forensics §10):
+    // mid stop = (0.78,0.24,0.06) red-orange / (0.97,0.61,0.06) orange.
+    // Helper-mesh shader emissive carries the color directly (additive
+    // pass = self-luminant), modulated by `fade` so the ring fades out
+    // as it grows past max_size.
+    m.diffuse[0]  = 1.0f; m.diffuse[1]  = 1.0f; m.diffuse[2]  = 1.0f; m.diffuse[3]  = 1.0f;
+    m.ambient[0]  = 0.0f; m.ambient[1]  = 0.0f; m.ambient[2]  = 0.0f; m.ambient[3]  = 1.0f;
+    m.specular[0] = 0.0f; m.specular[1] = 0.0f; m.specular[2] = 0.0f; m.specular[3] = 0.0f;
+    m.emissive[0] = 0.97f * fade;   // bright orange
+    m.emissive[1] = 0.45f * fade;
+    m.emissive[2] = 0.06f * fade;
+    m.emissive[3] = 1.0f;
+    m.power       = 1.0f;
+    m.sort_depth  = float(Pos().z);
+
+    Renderer->SubmitHelperMesh(m);
+}
+
+#if 0
+// REFERENCE — in-game `TMissileEffect::Pulse` impact-detection block.
+// The harness path in StepMissilePulse omits the MOVE_BLOCKED / character
+// hit branches because --test=vfx has no map collision or live character
+// iteration. When the in-game caller wires the fireball into TSpell::
+// Timer, this is the body that fires. Preserved verbatim from
+// missileeffect.cpp:75-114 so the gameflow porter has a one-stop
+// reference. Re-enable by reading the engine's Move() flags + TMapIterator
+// when those hooks are wired into the modern path.
+case 1 /* MISSILE_FLY */:
+{
+    bool explode = false;
+    range_--;
+    if (range_ <= 0)
+        explode = true;
+    if (bits & MOVE_BLOCKED)
+        explode = true;
+    else
+    {
+        PTCharacter invoker = spell ? (PTCharacter)spell->GetInvoker() : nullptr;
+        for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
+        {
+            PTCharacter chr = (PTCharacter)i.Item();
+            if (chr == invoker)            continue;
+            if (chr->IsDead())             continue;
+            if (this->Distance(chr) > 32)  continue;
+            if (invoker && !invoker->IsEnemy(chr)) continue;
+            explode = true;
+            break;
+        }
+    }
+    if (explode)
+    {
+        flags = (flags & ~OF_MOVING & ~OF_WEIGHTLESS) | OF_IMMOBILE;
+        state_ = 2 /*MISSILE_EXPLODE*/;
+    }
+    break;
+}
+#endif
