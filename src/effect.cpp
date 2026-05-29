@@ -5070,11 +5070,13 @@ void TFireBallEffect::StepAnimate()
         if (fireball_.frame > float(frame_count_))
             fireball_.frame = 0.0f;
     }
-    // Pre-release rotation step is dead in the ScreenAligned port (no
-    // in-plane spin on screen-aligned billboards). The original's
-    // `fireball.rotation = (rotation + 2) % 360` would only be visible
-    // under the matrix-rotated quad path; with billboards it's a no-op.
-    // Captured here for documentation; not stored.
+    // In-plane spin accumulator (missileeffect.cpp:651-655). The active
+    // snapshot branch is `+2/tick` (FIREBALL_WHITE_FADE is commented out
+    // at missileeffect.h:163, so the `#ifndef` branch wins). This value
+    // propagates into trail copies via `trail[0] = fireball` below, so
+    // each trail slot freezes at the rotation the head had when the
+    // copy was recorded — the snapshot's stale-spin tumble.
+    fireball_.rotation = std::fmod(fireball_.rotation + 2.0f, 360.0f);
 
     // --- state-specific actions (:657-757) ---
     int32_t live_burst_count = 0;
@@ -5116,7 +5118,12 @@ void TFireBallEffect::StepAnimate()
                 // dead FIREBALL_DAMAGE_MIN/MAX macro).
                 (void)impact_pos;
 
-                // Burst quads (:687-699).
+                // Burst quads (:687-699). Pre-release sets
+                // `burst[i].rotation = 0` (missileeffect.cpp:694); the
+                // draw at :846 then applies `-burst[i].rotation *
+                // TORADIANf` = 0, so all burst cards share the no-spin
+                // orientation. Seed the same so the WorldXY matrix tilt
+                // + facing-rotation composes consistently across slots.
                 for (int32_t i = 0; i < kFireBallMaxBurst; ++i)
                 {
                     SFireBallData& bq = burst_[i];
@@ -5127,6 +5134,7 @@ void TFireBallEffect::StepAnimate()
                     bq.scale   = 0.75f + float(random(0, 5)) * 0.15f;
                     bq.glow    = 1.0f + 0.05f * float(random(0, 15));
                     bq.frame   = float(random(0, frame_count_ - 1));
+                    bq.rotation = 0.0f;   // snapshot :694
                     if (int32_t(bq.frame) == glow_frame_)
                         bq.frame += 1.0f;
                     ++live_burst_count;
@@ -5390,14 +5398,31 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
 
     const S3DPoint base = Pos();
 
+    // Per-instance facing rotation. Snapshot draw matrices apply
+    // `RotateZ(-(GetFace(...)/256) * TORADIAN)` as the last spin
+    // (missileeffect.cpp:846/906/953/1002/1041), composed under the
+    // fixed -30°/+60° XY tilt + per-slot rotation. We collapse those
+    // into one in-plane rotation per WorldXY-tipped quad:
+    //   rotation_rad = -slot.rotation * (π/180)  +  facing_rad
+    // facing comes from aim_angle_ (the byte-angle 0..255 we stored at
+    // launch) — same source the snapshot used via GetFace.
+    const float facing_rad = -(float(aim_angle_) / 256.0f) * 2.0f * float(M_PI);
+
     // Render-order port of TFireBallAnimator::Render (missileeffect.cpp:
     // 1060-1085): spark first; then per state — LAUNCH/FLY: glow, trail,
     // ball; EXPLODE: trail, burst, ring (ring drawn in SubmitWorldRing).
     //
-    // Template for box01 draws (atlas-cell UV picked per-instance).
-    SBillboardDrawItem ball_item = {};
+    // Pipeline = FB particle (SubmitFxParticle / SParticleDrawItem) —
+    // billboards don't plumb per-instance rotation_rad, but particles do
+    // (renderer.h:248-263). Sister effects (Fizzle, B01 FLY droplets)
+    // use the particle pipeline for the same reason: keep the snapshot's
+    // matrix-tilt + per-instance spin without re-implementing matrices.
+    // Orientation = WorldXY so each quad lies in the world plane the
+    // snapshot's RotateX(-30°)/RotateY(+60°) defined; the per-instance
+    // rotation_rad then spins it in that plane.
+    SParticleDrawItem ball_item = {};
     ball_item.key.texture     = asset_.box01_tex;
-    ball_item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    ball_item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
     // Blend = Alpha — pre-release calls SetBlendState() = MODULATE/
     // SRCALPHA/INVSRCALPHA (missileeffect.cpp:1062-1063 + forensics §7).
     // The black-keyed atlas supplies transparency; the modulate stage
@@ -5405,7 +5430,7 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
     ball_item.key.blend       = uint8_t(EFxBlend::Alpha);
     ball_item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
     ball_item.light_mode      = EFxLightMode::Unlit;
-    ball_item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    ball_item.orientation     = EFxBillboardOrientation::WorldXY;
     ball_item.debug_mode      = debug_mode;
     // White tint — color lives in the warm-orange atlas texels per §10.
     ball_item.color_rgba[0] = 1.0f;
@@ -5415,13 +5440,17 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
 
     // --- Spark trail (TSubParticleAnimator::Render — effectcomp.cpp:
     // 526-570 in spirit). Drawn first so the ball + glow layer on top.
-    SBillboardDrawItem spark_item = ball_item;
+    // Sparks have no per-instance rotation in the snapshot (the original
+    // `TSubParticleAnimator::Render` uses a fixed rotZ-60°/rotX-45° face
+    // rotation, not a per-particle accumulator), so rotation_rad stays
+    // 0 — but they still ride the WorldXY tip so they read as embers in
+    // the world plane, not camera-pasted dots.
+    SParticleDrawItem spark_item = ball_item;
     spark_item.key.texture = asset_.box02_tex;
-    // The original draws sparks with the same SetBlendState() (Alpha
-    // modulate); §7 confirms.
     spark_item.key.blend   = uint8_t(EFxBlend::Alpha);
     spark_item.uv_rect[0] = 0.0f; spark_item.uv_rect[1] = 0.0f;
     spark_item.uv_rect[2] = 1.0f; spark_item.uv_rect[3] = 1.0f;
+    spark_item.rotation_rad = 0.0f;
     for (const auto& sp : sparks_)
     {
         if (!sp.used) continue;
@@ -5431,14 +5460,19 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
         spark_item.world_pos[2] = sp.pos.Z;
         spark_item.size_wu[0] = kFireBallSparkQuadWu * sp.scale * flicker * 6.0f;
         spark_item.size_wu[1] = kFireBallSparkQuadWu * sp.scale * flicker * 6.0f;
-        Renderer->SubmitFxBillboard(spark_item);
+        Renderer->SubmitFxParticle(spark_item);
     }
+
+    constexpr float kDegToRad = float(M_PI) / 180.0f;
 
     if (state_ == 0 /*LAUNCH*/ || state_ == 1 /*FLY*/)
     {
         // --- Glow (RenderFireBallGlow — missileeffect.cpp:1022-1057).
         // box01 quad with atlas cell = glow_frame, scale = scale * glow.
-        SBillboardDrawItem glow = ball_item;
+        // The original glow has NO per-instance spin (only the static
+        // -30°/+60° tilt + facing — :1039-1041), so we leave its
+        // rotation_rad at facing_rad with no rotation term.
+        SParticleDrawItem glow = ball_item;
         FillAtlasUv(glow_frame_, glow.uv_rect);
         const float gsize = kFireBallBaseQuadWu * fireball_.scale * fireball_.glow;
         glow.size_wu[0] = gsize;
@@ -5446,17 +5480,18 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
         glow.world_pos[0] = float(base.x) + fireball_.pos.X;
         glow.world_pos[1] = float(base.y) + fireball_.pos.Y;
         glow.world_pos[2] = float(base.z) + fireball_.pos.Z;
-        Renderer->SubmitFxBillboard(glow);
+        glow.rotation_rad = facing_rad;
+        Renderer->SubmitFxParticle(glow);
 
-        // --- Mesh trail (RenderFireBallTrail — :871-973). Two-pass in
-        // the original (glow-frame pass + then per-slot atlas frame).
-        // We collapse to a single per-slot draw using the per-slot stored
-        // atlas frame (trail entries inherit `fireball.frame` at copy
-        // time, so they walk back through stale frames — the streaking
-        // look). Each entry's pos is in WORLD coords (see StepAnimate).
-        SBillboardDrawItem trail_item = ball_item;
-        // Start from the back of the ring buffer so older slots draw
-        // first (matches the original :882-887 walk-from-tail).
+        // --- Mesh trail (RenderFireBallTrail — :871-973). The original
+        // applies `RotateZ(-trail[i].rotation * TORADIAN)` PER SLOT
+        // (:948), where trail[i].rotation is the stale snapshot of the
+        // ball's rotation at the moment that slot was recorded (via
+        // `trail[0] = fireball` at :632). That stale-spin propagation is
+        // what gives the trail its tumbling streak look — each card sits
+        // at a frozen angle in the WorldXY plane, NOT camera-facing.
+        SParticleDrawItem trail_item = ball_item;
+        // Walk back-to-front so older slots draw first.
         for (int32_t i = kFireBallTrailSize - 1; i >= 0; --i)
         {
             const SFireBallData& tr = trail_[i];
@@ -5468,13 +5503,13 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
             trail_item.world_pos[0] = tr.pos.X;
             trail_item.world_pos[1] = tr.pos.Y;
             trail_item.world_pos[2] = tr.pos.Z;
-            Renderer->SubmitFxBillboard(trail_item);
+            trail_item.rotation_rad = -tr.rotation * kDegToRad + facing_rad;
+            Renderer->SubmitFxParticle(trail_item);
         }
 
-        // --- Ball (RenderFireBall — :975-1020). Drawn last so it sits
-        // on top of glow + trail. Uses the current atlas frame (which
-        // skips glow_frame in StepAnimate).
-        SBillboardDrawItem ball = ball_item;
+        // --- Ball (RenderFireBall — :975-1020). Per-instance spin from
+        // the ball-head accumulator (`fireball_.rotation`, +2°/tick).
+        SParticleDrawItem ball = ball_item;
         FillAtlasUv(int32_t(fireball_.frame), ball.uv_rect);
         const float bsize = kFireBallBaseQuadWu * fireball_.scale;
         ball.size_wu[0] = bsize;
@@ -5482,13 +5517,15 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
         ball.world_pos[0] = float(base.x) + fireball_.pos.X;
         ball.world_pos[1] = float(base.y) + fireball_.pos.Y;
         ball.world_pos[2] = float(base.z) + fireball_.pos.Z;
-        Renderer->SubmitFxBillboard(ball);
+        ball.rotation_rad = -fireball_.rotation * kDegToRad + facing_rad;
+        Renderer->SubmitFxParticle(ball);
     }
     else /* state_ == MISSILE_EXPLODE */
     {
         // EXPLODE branch (:1075-1079): trail, burst, ring. The trail
-        // keeps draining; ring is drawn via SubmitHelperMesh.
-        SBillboardDrawItem trail_item = ball_item;
+        // keeps draining at the frozen stale-spin angles; ring is drawn
+        // via SubmitHelperMesh.
+        SParticleDrawItem trail_item = ball_item;
         for (int32_t i = kFireBallTrailSize - 1; i >= 0; --i)
         {
             const SFireBallData& tr = trail_[i];
@@ -5500,19 +5537,18 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
             trail_item.world_pos[0] = tr.pos.X;
             trail_item.world_pos[1] = tr.pos.Y;
             trail_item.world_pos[2] = tr.pos.Z;
-            Renderer->SubmitFxBillboard(trail_item);
+            trail_item.rotation_rad = -tr.rotation * kDegToRad + facing_rad;
+            Renderer->SubmitFxParticle(trail_item);
         }
 
-        // Burst quads (RenderFireBallBurst — :793-869). Each burst slot
-        // is a box01 quad at the impact-jittered position, atlas frame +
-        // glow flicker per slot.
-        SBillboardDrawItem burst = ball_item;
+        // Burst quads (RenderFireBallBurst — :793-869). Snapshot seeds
+        // `burst[i].rotation = 0` (:694), so the per-slot rotation_rad
+        // collapses to just the facing_rad term — the matrix tilt at
+        // :846-851 reduces to the WorldXY plane + facing rotation.
+        SParticleDrawItem burst = ball_item;
         for (const auto& bq : burst_)
         {
             if (!bq.used) continue;
-            // Per-slot glow draw (the original draws glow + ball per
-            // burst slot — :804-829). Single draw with bq.scale * bq.glow
-            // for engine-side equivalence.
             FillAtlasUv(int32_t(bq.frame), burst.uv_rect);
             const float bsize = kFireBallBaseQuadWu * bq.scale * bq.glow;
             burst.size_wu[0] = bsize;
@@ -5520,7 +5556,8 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
             burst.world_pos[0] = float(base.x) + bq.pos.X;
             burst.world_pos[1] = float(base.y) + bq.pos.Y;
             burst.world_pos[2] = float(base.z) + bq.pos.Z;
-            Renderer->SubmitFxBillboard(burst);
+            burst.rotation_rad = -bq.rotation * kDegToRad + facing_rad;
+            Renderer->SubmitFxParticle(burst);
         }
     }
 }
