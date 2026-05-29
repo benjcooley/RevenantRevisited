@@ -230,6 +230,61 @@ the same file (per [[feedback-preserve-old-code]]), and the bespoke
 SpawnForTest/TickAndSubmit lambdas stay in `vfxtest.cpp` behind a
 `--vfx-bespoke` toggle for future regression checks. Don't delete it.
 
+#### Phase A.5 — capture reference footage (before B1)
+
+Forensics (Phase A) tells you what the code says the effect should do.
+Reference footage tells you what the **shipped game actually shows on
+screen** at runtime — which is the ground truth the bespoke must match
+in §3.2.0 step 4 and the engine port must match in §3.2.0 step B2.
+**Capture this footage before you write the bespoke port**, not after,
+otherwise you'll spend B1 debugging against your mental model of the
+effect instead of the game's pixels.
+
+  1. Launch the original game (GOG install, native macOS via the
+     supported wrapper, or VM) and reach a moment that triggers the
+     effect cleanly — pause/quicksave just before so you can re-do the
+     capture if needed.
+  2. Screen-record with QuickTime (region-select tight around the game
+     window's client area; do **not** include the macOS title bar);
+     native res, H.264 MP4, 60 fps preferred, 5–30 s per clip covering
+     **one** visual moment.
+  3. Import the clip into the reference-footage catalog:
+
+     ```
+     tools/refcap/import_clip vfx <TEffectId> /path/to/clip.mp4 \
+         --label "<short visual description>" \
+         --src  "<module + in-game timer or savefile name>"
+     ```
+
+     This sha256s the file, probes it (codec/fps/duration), copies it
+     to `$REVENANT_REFS_DIR/vfx/<id>/clips/`, and stubs a clip entry
+     in `manifest.yaml`. The clip **bytes** stay out of the repo; only
+     the inventory pointer `references/index.yaml` is committed (refresh
+     with `tools/refcap/sync_index`).
+  4. Scrub the clip, jot the `t_ms` of key moments (impact, peak,
+     settle, dissipate), and hand-add a `markers:` block to
+     `manifest.yaml`. Markers drive snap_ab's per-tile captions.
+  5. Extract the frame sets you'll A/B against:
+
+     ```
+     tools/refcap/extract_frames vfx <TEffectId> <clip_id> \
+         --set-id peak_window --at 1040,1080,1120,1160,1200,1240
+     # or:
+     tools/refcap/extract_frames vfx <TEffectId> <clip_id> \
+         --set-id full_8col --every-ms 80 --start-ms 900 --end-ms 1540
+     ```
+
+Once the catalog has a clip + extracted frame set for the effect, every
+later A/B grid in §3.2.0 should pass `--ref <TEffectId>` to
+`tools/vfx/snap_ab.py` so the reference row appears at the top of the
+output PNG alongside bespoke + engine. snap_ab degrades gracefully when
+the catalog is empty (it prints a friendly warning and falls back to
+the 2-row mode), so feature-flagging is unnecessary.
+
+See [`references/REFS_README.md`](../../references/REFS_README.md) for
+the full catalog protocol, manifest schema, and complete `refcat` CLI
+reference.
+
 #### 3.2.0 Bespoke baseline first (mandatory before engine port)
 
   1. Identify the animator registration (`REGISTER_3DANIMATOR("X", TXAnimator)`).
@@ -241,8 +296,16 @@ SpawnForTest/TickAndSubmit lambdas stay in `vfxtest.cpp` behind a
   3. Wire it as the harness entry (`vfxtest.cpp`). Boot with
      `--test=vfx --vfx=TXEffect` and capture via `snap_grid.py` (see §4.2.2).
   4. The bespoke must visually match the game (or retail reference, or
-     sister-family pattern). If it doesn't, the forensics doc is wrong —
-     stop the port and fix the doc. **Do not move to B2 with a broken B1.**
+     sister-family pattern). If Phase A.5 reference footage exists for
+     this effect, A/B against it explicitly:
+
+     ```
+     tools/vfx/snap_ab.py TXEffect_BESPOKE TXEffect \
+         --ref TXEffect --cols 8 --interval-ms 80
+     ```
+
+     If it doesn't match, the forensics doc is wrong — stop the port
+     and fix the doc. **Do not move to B2 with a broken B1.**
   5. Save the bespoke capture as `docs/vfx/captures/<ID>_bespoke.png` —
      this is the A/B baseline for B2.
 
