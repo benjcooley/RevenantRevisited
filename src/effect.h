@@ -389,22 +389,20 @@ class TFireEffect : public TEffect
     // rig). Per INVENTORY F03 forensics §1: no live retail caller exists
     // (no spell.def variant invokes the bare "fire" builder, no
     // ATTACHEFFECT "fire") — this harness path IS the canonical Phase-B
-    // exercise route. No imagery lookup: the scatter quads use a
-    // procedural orange/yellow flame-gradient texture built via
-    // `Renderer->RegisterTextureAsset` (the shipped `Misc\fire.i3d`
-    // atlas-tex isn't wired through the modern imagery path yet, and
-    // for an FB-only rig the procedural texture cleanly validates the
-    // pipeline without the asset-load dependency — same call as the
-    // L02 halo). Caller owns the returned pointer.
+    // exercise route. Loads the real `Misc\Fire.I3D` asset (F03b — the
+    // 2026-05-16 procedural-gradient stand-in was replaced per
+    // AGENT_GUIDE §4.2.1; helper trace lives in the F03b inventory
+    // sub-section). Caller owns the returned pointer.
     [[nodiscard]] static TFireEffect* SpawnForTest(const S3DPoint& origin);
 
     // Per-frame tick + submit for the harness; mirrors F01 / H03 / M05 /
     // L02. Drives per-quad atlas-frame cycling (sim-tick-gated at 24 Hz
     // to match other Fire-family cadence) and submits
-    // `kFireScatterQuads` additive textured billboards via
-    // SubmitFxBillboard each frame. FB pipeline only — see INVENTORY F03
-    // forensics §6 (pre-release renders quads directly, no particle
-    // bucket).
+    // `kFireScatterQuads` ground-projected (WorldXY) textured billboards
+    // via SubmitFxBillboard each frame, picking the per-quad texture
+    // frame from the real I3D's `framehtexs[]` table. FB pipeline only
+    // — pre-release renders quads directly, no particle bucket
+    // (forensics §6 / F03b §1).
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
 
     // True until the harness `delete`s the effect. Pre-release Pulse
@@ -425,6 +423,120 @@ class TFireEffect : public TEffect
     bool             alive_ = true;
     double           sim_accum_ms_ = 0.0;
     int32_t          rng_seed_ = 0;     // per-instance RNG seed; reseeded each lifetime
+    // Real-asset state (F03b): the Misc\Fire.I3D imagery and the resolved
+    // texture-slot-0 frame array. The imagery is owned by the effect
+    // (FreeImagery in dtor) — same lifecycle pattern as F01 / H04. The
+    // frame texture handle array is a cached snapshot of `framehtexs[0..N)`
+    // captured at SpawnForTest to avoid a virtual GetTexture per quad per
+    // frame in the submit hot path.
+    TObjectImagery*           imagery_ = nullptr;
+    std::vector<TTextureHandle> frame_textures_ {};
+};
+
+// ****************
+// * TSparkEffect *
+// ****************
+//
+// X22 generic spark burst ("sparks" / TSparkAnimator). Faithful direct
+// port of the pre-release particle loop, NOT a re-derivation through the
+// TParticleBucket / effects.def abstraction (which is how a prior attempt
+// drifted into mixed colors / wrong blend). The original is the simplest
+// effect in the game:
+//
+//   spawn  = TCharacter::EffectBurst "sparks" branch (character.cpp:2262-2317)
+//            builds an SParticleParams and calls anim->InitParticles(&pr).
+//   update = TParticle3DAnimator::Animate  (effect_old.cpp:4790-4942).
+//   render = TParticle3DAnimator::Render   (effect_old.cpp:4944-4986).
+//
+// The animator was a fully generic particle system parameterized entirely
+// by SParticleParams; for the spark use only the non-seeking ballistic
+// path runs (seektargets=false). The per-particle arrays
+// (pos/vel/life/start/obj) from TParticle3DAnimator are collapsed onto
+// this effect class (same animator-state-collapse convention as F03 fire
+// / H03 ripple / M05 mist). One-shot burst: random(15,25) particles seeded
+// at once, the object self-destructs (killobj) once all particles expire.
+//
+// Single color per burst: objflags = 1 << (ObjId() & 3) selects exactly
+// ONE of the 4 photon sub-objects (photon / photon01 / photon02 / photon03)
+// of Misc\Sparks.I3D for the WHOLE burst — every particle draws that one
+// sprite. The 4 are NOT mixed.
+//
+// Retail-confirmed param divergences from the snapshot (verified IEEE bit
+// patterns at recon/classes/cls_0x5a7b98.cpp:4640-4664): gravity 0.25
+// (snapshot 0.2), trails 2 (snapshot 1 — each spark draws as a 2-step
+// motion streak), bounce true (snapshot false — sparks bounce off the
+// floor). See forensics SPARKS_TSparkAnimator.md §2.1.
+//
+// Blend = Alpha (SRC_ALPHA / INV_SRC_ALPHA) per the combat-spark Render body
+// (SetBlendState) and forensics §7. (An "additive" hypothesis came from
+// comparing against the GREEN Fountain/Sparkle effect — a different effect;
+// combat sparks are Alpha.) Snapshot-only since the retail
+// TParticle3DAnimator::Render TU was not decompiled; vet against real
+// combat-spark footage. Unlit, TestNoWrite, ScreenAligned.
+
+// Max particles a single burst can hold (caller seeds random(15,25)). The
+// pre-release allocated `new[params.particles]`; the modern port uses a
+// fixed-cap inline array (no heap churn per burst).
+inline constexpr int32_t kSparkMaxParticles = 32;
+
+// One spark particle's transient state. Pre-release stored these as the
+// parallel arrays p[]/v[]/l[]/s[]/o[] on TParticle3DAnimator; collapsed
+// here onto a per-particle struct (life/start are integer ticks in the
+// original — kept as float real-tick counters for framerate-independent
+// integration, see TickAndSubmitForTest).
+struct SSparkParticle
+{
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};   // object-local position (wu)
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};   // velocity (wu / sim-tick)
+    float    life  = 0.0f;                 // remaining lifetime, in sim-ticks
+    float    start = 0.0f;                 // start delay, in sim-ticks
+};
+
+class TSparkEffect : public TEffect
+{
+  public:
+    TSparkEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TSparkEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+
+    // Spawn a standalone single-burst TSparkEffect for the --test=vfx
+    // harness. Loads the real Misc\Sparks.I3D imagery (NO procedural
+    // stand-in — the authored photon sprite IS the visual identity),
+    // picks one photon variant for the whole burst, and seeds
+    // random(15,25) particles via the ported InitParticles loop. Returns
+    // nullptr if the imagery can't be loaded. Caller owns the pointer.
+    [[nodiscard]] static TSparkEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness. Ports
+    // TParticle3DAnimator::Animate (ballistic integrate + gravity +
+    // bounce + death) and ::Render (one billboard per live particle, plus
+    // trails-1 ghost copies stepped along velocity) directly, converted to
+    // framerate-independent integration (per-tick rates -> per-second via a
+    // 24 Hz sim-tick accumulator). FB pipeline (one additive/alpha textured
+    // billboard per draw via SubmitFxBillboard).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the last particle expires (mirrors the original's
+    // killobj=true self-destruct). The harness uses this to know when a
+    // burst has fully played out before re-triggering.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SSparkParticle particles_[kSparkMaxParticles] {};
+    int32_t        num_particles_ = 0;
+    float          gravity_       = 0.25f;  // wu / sim-tick^2 (retail)
+    int32_t        trails_        = 2;      // render sub-steps per particle (retail)
+    bool           bounce_        = true;   // retail
+    TTextureHandle texture_       = kInvalidTexture; // chosen photon variant
+    // UV sub-rect (x,y,w,h normalized) of the shared Sparks.I3D texture
+    // for the chosen photon variant. The 4 sub-objects (photon/01/02/03)
+    // partition ONE atlas texture into 4 differently-tinted photon cells;
+    // drawing the full [0,0,1,1] rect would show all 4 colors at once
+    // (the mixed-color bug). Computed at spawn from the variant's authored
+    // vertex UVs so every particle in the burst draws its single cell.
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          quad_size_wu_  = 24.0f;  // billboard size (from sprite cell)
+    bool           alive_         = true;
+    double         sim_accum_ms_  = 0.0;
 };
 
 class TFlameEffect : public TEffect
@@ -1974,6 +2086,156 @@ class THaloAnimator : public T3DAnimator
     virtual void RefreshZBuffer();
 };
 
+// ***********************
+// * TTeleporterEffect *
+// ***********************
+//
+// M09 — Misthaven recall + Player Teleport + 12+ monster-summoning
+// variants (16 callers in spell.def). Pre-release source lives at
+// src/effect_old.cpp:5444-5880 (TTeleporterEffect + TTeleporterAnimator,
+// both intact). Recon: not extracted (only Teleporter string XREFs at
+// 0x004e6a20 / 0x004e6a40 are visible). Forensics: docs/vfx/M09_FORENSICS.md.
+//
+// Port shape (M09b, real mesh draw): loads the variant's I3D imagery
+// (Magic\teleportation.I3D or Magic\gvortex.I3D), pulls sub-object 1
+// (the cylinder geometry) via ExtractSubMesh, registers it as a single
+// MeshHandle, then stamps it 5x per frame via SubmitHelperMesh in the
+// additive-blended helper pass — pre-release's
+// `for (z=0..4) RenderObject(obj)` loop with rot.z = rotation + z*0.5
+// (radians) and per-flare scale envelope. Visual primitive; gameflow
+// wires the actual character SetPos payload separately via GetPhase()
+// polling of the OUT→MOVE transition. See M09_FORENSICS.md §3, §7.6,
+// and the M09b section for the I3D draw path.
+//
+// Lifecycle: INIT (1 tick) → OUT (50) → MOVE (1, payload) → IN (≤49)
+// at 24 Hz; total ~4.17 s.
+
+_CLASSDEF(TTeleporterEffect)
+
+// Pre-release state-machine phase identifiers (effect_old.cpp:5448-5451).
+// kept as an enum class so call sites read cleanly; the int32_t values
+// are stable across versions in case any serialization path lands.
+enum class ETeleporterPhase : int32_t
+{
+    Init = 1,    // resolve spell variant (1 tick)
+    Out  = 2,    // grow rotating column over 50 sim ticks (caster fade-out)
+    Move = 3,    // single-tick payload (the actual SetPos happens here in-game)
+    In   = 4,    // shrink rotating column over ≤49 sim ticks at destination
+};
+
+class TTeleporterEffect : public TEffect
+{
+  public:
+    TTeleporterEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TTeleporterEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    // M09b: destructor releases the per-instance entry in the mesh-
+    // binding side table (defined in effect.cpp). Not =default so the
+    // header doesn't drag in the imagery API.
+    ~TTeleporterEffect() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    virtual void Initialize();
+    virtual void Pulse();
+
+    // Spawn a standalone TTeleporterEffect for the --test=vfx harness.
+    // Loads `imagery_path` (default: gvortex.I3D, the Misthaven recall
+    // asset — the user's headline ask) and pulls the cylinder mesh out
+    // for later per-frame stamping. Constructs a sector-less instance
+    // pinned to world `origin`, stamps a fresh map index, seeds the
+    // per-flare position table from the pre-release Initialize body.
+    // Returns nullptr if the renderer isn't ready or the imagery can't
+    // be loaded. Caller owns the returned pointer and `delete`s it.
+    [[nodiscard]] static TTeleporterEffect* SpawnForTest(
+        const S3DPoint& origin,
+        const char* imagery_path = "Magic\\gvortex.I3D");
+
+    // Per-frame sim-tick advance: drains the 24 Hz sim accumulator into
+    // pre-release Animate kinematics (rotation, iteration morph, p[i]
+    // squeeze) and ticks Pulse() for the phase state machine. Called
+    // first each frame by the harness, before the tile pass opens.
+    void TickForTest();
+
+    // Per-frame mesh submission. Stamps the loaded I3D cylinder asset
+    // 5x with per-flare rot.z + scale (the pre-release
+    // `for(z=0..4) RenderObject(obj)` loop), each through
+    // SubmitHelperMesh (additive, double-sided). MUST be called after
+    // Renderer->BeginTilePass — that call clears the
+    // transparent_world_queue which holds pending SubmitHelperMesh
+    // entries. The vfxtest harness routes this through SEffect::
+    // submit_world; see vfxtest.cpp Render() Step 3.
+    void SubmitWorldForTest(EFxDebugMode debug_mode);
+
+    // Convenience wrapper: TickForTest + SubmitWorldForTest in sequence.
+    // Useful for callers that don't care about the tile-pass split (e.g.
+    // headless harness probes). NOT used by the vfxtest browser path
+    // because the tile-pass timing matters there.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode)
+    {
+        TickForTest();
+        SubmitWorldForTest(debug_mode);
+    }
+
+    // Phase enum for gameflow's payload coupling. Gameflow polls this
+    // and fires its caster->SetPos(destination) on the OUT→MOVE
+    // transition (single tick), then SetFade(0,-10) on the caster as
+    // we enter IN. See M09_FORENSICS.md §7.6.
+    [[nodiscard]] ETeleporterPhase GetPhase() const { return phase_; }
+
+    // True until life >= 100 sim ticks (pre-release animator self-kill
+    // gate at effect_old.cpp:5818). The harness checks this for early-out.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // --- Pre-release effect-side state (effect_old.cpp:5459-5463) ---
+    ETeleporterPhase phase_       = ETeleporterPhase::Init;
+    int32_t          life_        = 0;
+    int32_t          spell_level_ = 1;       // 0=VortexM/Misthaven recall, 1=Teleport, 2=Teleport2
+    bool             alive_       = true;
+
+    // --- Pre-release animator-side state (effect_old.cpp:5478-5482) -
+    // Collapsed onto the effect class for the harness port (matches
+    // the H03 / L02 / F03 collapse). The 5 per-flare positions p[i]
+    // morph over the OUT phase per Animate's iteration logic; we
+    // store them as the live values (initialized in SpawnForTest).
+    float   flare_p_x_[5]    = {0,0,0,0,0};
+    float   flare_p_z_[5]    = {0,0,0,0,0};
+    int32_t iterations_      = 0;    // OUT-phase morph counter (caps at 50)
+    int32_t ticks_           = 0;    // render-envelope clock (`% 100` per pre-release)
+    float   rotation_rad_    = 0.0f; // continuous spin, +0.1 rad / sim tick
+
+    // sim-tick gate accumulator (same pattern as F01 / H03 / M05 / L02 / F03).
+    double  sim_accum_ms_    = 0.0;
+};
+
+// *********************
+// * Teleporter Animator *
+// *********************
+//
+// Legacy declaration kept to satisfy the existing in-game animator-
+// registry comments (`REGISTER_3DANIMATOR("Teleporter", TTeleporterAnimator)`
+// at effect.cpp:29). The pre-release body lives at
+// src/effect_old.cpp:5474-5880 and is the source-of-truth for behaviour;
+// in the modern port the animator state is collapsed onto
+// TTeleporterEffect (M09 forensics §1, §7.4). This stub exists so the
+// vtable links if any caller still references the class name; calling
+// Animate / Render on it is a no-op until the real I3D mesh port (M09b)
+// lands. Per-instance ports should drive the effect via
+// TTeleporterEffect::TickAndSubmitForTest, not this stub.
+
+_CLASSDEF(TTeleporterAnimator)
+
+class TTeleporterAnimator : public T3DAnimator
+{
+  public:
+    TTeleporterAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
+    ~TTeleporterAnimator() override { Close(); }
+
+    void Initialize() override {}                  // M09b: port pre-release body
+    void Animate(bool /*draw*/) override {}        // M09b: port pre-release body
+    bool Render() override { return true; }        // M09b: port pre-release body
+};
+
 // *****************
 // * TRippleEffect *
 // *****************
@@ -2245,12 +2507,84 @@ class TFaultFireAnimator : public T3DAnimator
 // *****************
 // * TBloodEffect *
 // *****************
+//
+// B01 generic blood spray ("Blood" / TBloodAnimator / TBloodSystem).
+// FAITHFUL DIRECT PORT of the pre-release particle loop — same model the
+// SPARKS port follows. The original is a 30-particle directional-spray
+// ballistic system embedded inside TBloodAnimator, and its three bodies:
+//
+//   spawn  = TCharacter::EffectBurst "blood" branch (character.cpp:2225-2261)
+//            + TCharacter::ResolveAttack decap squirts (character.cpp:231-256);
+//            Init is TBloodSystem::Init (effectcomp.cpp:1182-1307).
+//   update = TBloodSystem::Animate (effectcomp.cpp:1309-1370) — 3-stage
+//            FLY → SPLAT → SHRINK state machine, 24 Hz sim-tick cadence.
+//   render = TBloodSystem::Render (effectcomp.cpp:1415-1530) — each used
+//            droplet drawn TWICE (Alpha base pass + ONE/ONE additive overlay
+//            pass) with one of the 8 box sub-objects of Misc\Blood.I3D
+//            per pass-set.
+//
+// The per-particle arrays from TBloodSystem are collapsed onto this effect
+// class (same animator-state-collapse convention as F03 / H03 / M05 / X22).
+// One-shot burst: Init seeds num + trail-fill droplets at once; the object
+// self-destructs when every droplet expires.
+//
+// Retail-confirmed param divergences from the snapshot (forensics §2.1):
+// for attack/impale path use hspread=32 / vspread=5 (NOT snapshot's 80/20);
+// the retail ResolveAttack immediates for the live impale squirt are
+// (height=40, hangle=face-128, vangle=32, hspread=32, vspread=5, num=1) per
+// recon/discovered/cls_0x5a7b98_TCharacter_ResolveAttack_4c1bb0.cpp:190.
+//
+// Blend = TWO passes per droplet:
+//   pass 0 = Alpha       (SetBlendState: SRC_ALPHA / INV_SRC_ALPHA) — the
+//            solid dark-red droplet body, sub-objects {box05..box08}.
+//   pass 1 = AdditiveStraight (ONE/ONE) with MODULATE texture stage — the
+//            self-luminous wet sheen, sub-objects {box01..box04}.
+// Scene-LIT (LitFlat) so blood darkens in shadow per forensics §7 / §10.
+// TestNoWrite depth. FLY droplets are tipped ground-flat (WorldXY-ish)
+// + 45° in-plane spin; SPLAT/SHRINK keep authored facing. Forensics §7.
+
+// MAX_BLOODS particles per burst — matches retail TBloodSystem (effectcomp.cpp:374).
+inline constexpr int32_t kBloodMaxParticles = 30;
+
+// Per-droplet transient state. Pre-release stored these as SBloodParticle in
+// the TBloodSystem-owned heap array; we collapse onto a per-particle struct
+// on the effect class. Lifetime counters stay in their authored per-tick
+// units — TickAndSubmitForTest integrates via a 24 Hz sim-tick accumulator
+// so the motion plays at the original wall-clock speed on any framerate.
+struct SBloodParticleEx
+{
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};   // object-local position (wu)
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};   // velocity (wu / sim-tick)
+    float    scl   = 1.0f;                 // draw scale (FLY 1.0+grow → SPLAT 1.8 → SHRINK 0)
+    int32_t  size  = 0;                    // 0=small, 1=med, 2=big (big draws as small per §13.3)
+    int32_t  stage = 0;                    // BLOOD_FLY=0, BLOOD_SPLAT=1, BLOOD_SHRINK=2
+    int32_t  count = 0;                    // ticks held in current stage (SPLAT timer)
+    int32_t  delay = 0;                    // ticks of start-delay (trail-fill droplets)
+    bool     used  = false;                // active slot?
+};
+
+// One sub-object's resolved draw data — captured at SpawnForTest from the
+// authored UVs of the box's verts and the htextures[] slot the box uses.
+// The 8 boxes feed two pass-sets per forensics §4: pass 0 (Alpha) uses
+// box05..box08 (indices 4..7), pass 1 (AdditiveStraight) uses box01..box04
+// (indices 0..3); within each set [0]=small, [1]=med, [2]=big, [3]=splat.
+// Big & splat draws are commented out in the original Render — we keep the
+// table populated but only the small + med slots are ever read (forensics §7).
+struct SBloodSubObject
+{
+    TTextureHandle texture = kInvalidTexture;
+    float          uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};   // x,y,w,h normalized
+    float          size_wu    = 32.0f;                       // billboard size in world units
+};
 
 _CLASSDEF(TBloodEffect)
 
 class TBloodEffect : public TEffect
 {
   private:
+    // Retail SetParams payload (spray descriptor) — kept for the eventual
+    // in-game caller, not consumed by the harness path (SpawnForTest fills
+    // the equivalent values directly per forensics §5).
     int32_t height = 0;
     int32_t hangle = 0;
     int32_t vangle = 0;
@@ -2258,21 +2592,30 @@ class TBloodEffect : public TEffect
     int32_t vspread = 0;
     int32_t num = 0;
 
-    // --- Phase 2.2 PE-pipeline scaffold ---------------------------------
-    // Bucket borrowed from the global TParticleManager. Created lazily by
-    // SpawnForTest (the in-game spawn path will move to TBloodSystem +
-    // TBloodAnimator once those are ported — tracked as B01a follow-up).
-    // The bucket itself outlives this effect; per-instance particles are
-    // disambiguated by `owner_particle_id_` (= GetMapIndex()) and killed
-    // off in the destructor via TParticleBucket::KillParticlesByOwner.
-    TParticleBucket* bucket_ = nullptr;
-    float owner_particle_id_ = -1.0f;
-    float age_ = 0.0f;
+    // Per-droplet state (faithful collapse of TBloodSystem's SBloodParticle
+    // array onto the class — same pattern as SSparkParticle in TSparkEffect).
+    SBloodParticleEx particles_[kBloodMaxParticles] {};
+    // Resolved sub-object textures + UV sub-rects. Indexed
+    // 0..3 = pass 1 (AdditiveStraight overlay, box01..box04),
+    // 4..7 = pass 0 (Alpha base,           box05..box08).
+    SBloodSubObject subobjs_[8] {};
+    // Authoring units: the original integrated `pos += vel; vel.z -= 0.37;
+    // vel.xy *= 0.95; scl += 0.01` once per 24 Hz sim tick. We keep the
+    // math in those units and gate it on a sim-tick accumulator so the
+    // burst plays at the original wall-clock speed (per
+    // RECONSTRUCTION_PROTOCOL framerate-independence rule).
+    double  sim_accum_ms_ = 0.0;
+    // Spawn-height of the droplets in object-local space (also subtracted
+    // from pos.z at render time so the world z lands at object_origin +
+    // integrated delta — forensics §5 / §7 "the −height cancels the local
+    // start height").
+    float   height_local_ = 0.0f;
+    bool    alive_        = true;
 
   public:
     TBloodEffect(TObjectImagery* newim) : TEffect(newim) {  }
     TBloodEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    ~TBloodEffect() override;
+    ~TBloodEffect() override = default;
 
     void OffScreen() override { KillThisEffect(); }
 
@@ -2282,23 +2625,32 @@ class TBloodEffect : public TEffect
     virtual void SetParams(int32_t he, int32_t ha, int32_t va, int32_t hs, int32_t vs, int32_t nu) { height = he; hangle = ha; vangle = va; hspread = hs, vspread = vs; num = nu; }
     virtual void GetParams(int32_t *he, int32_t *ha, int32_t *va, int32_t *hs, int32_t *vs, int32_t *nu) { *he = height; *ha = hangle; *va = vangle; *hs = hspread; *vs = vspread; *nu = num; }
 
-    // Spawn a standalone TBloodEffect for the --test=vfx harness. Loads
-    // `Misc\Blood.I3D` (the canonical bloodimagery — see playscreen.cpp
-    // load), allocates / reuses a global PE bucket keyed off the blood
-    // texture, and stamps the instance with a fresh map index so its
-    // particles can be tracked by owner. Returns nullptr if the imagery
-    // can't be loaded. The caller owns the returned pointer and must
-    // `delete` it to release the imagery refcount and evict its particles.
-    //
-    // PE-pipeline scope: validates the bucket/submit path end-to-end
-    // through the real effect class lineage; faithful retail kinematics
-    // (gravity, splat-sticking, surface decals) follow in Phase 2.2.1.
+    // Spawn a standalone single-burst TBloodEffect for the --test=vfx
+    // harness. Loads the real `Misc\Blood.I3D` imagery (the canonical
+    // bloodimagery — see playscreen.cpp:241 preload; NO procedural
+    // stand-in — the dark-red box sprites ARE the visual identity per
+    // §10), reads each of the 8 box sub-objects' authored UV sub-rects
+    // + texture handles, and seeds num + trail-fill droplets via the
+    // ported TBloodSystem::Init loop with the **retail** spray params
+    // (hspread=32, vspread=5; not the snapshot's 80/20 per forensics §2.1).
+    // Returns nullptr if the imagery can't be loaded. Caller owns the
+    // pointer.
     [[nodiscard]] static TBloodEffect* SpawnForTest(const S3DPoint& origin);
 
-    // Drive the owned bucket forward by one frame (spawn + Euler integrate
-    // + fade), then submit it to the FX queue. Idempotent if the effect
-    // has no bucket yet (e.g. SpawnForTest fell through).
+    // Per-frame tick + submit for the harness. Ports TBloodSystem::Animate
+    // (3-stage FLY → SPLAT → SHRINK state machine with horizontal air-drag
+    // + gravity) and TBloodSystem::Render (two billboards per droplet:
+    // Alpha base + AdditiveStraight overlay) directly, converted to
+    // framerate-independent integration via a 24 Hz sim-tick accumulator.
+    // FB pipeline (SubmitFxBillboard); per-droplet sub-object UV sub-rect
+    // selects the authored sprite cell within the shared Blood.I3D atlas.
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the last droplet expires (mirrors the original's
+    // `OF_KILL` self-destruct when TBloodSystem::GetDone() goes true).
+    // The harness uses this to know when a burst has fully played out
+    // before re-triggering for clean single-instance verification.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
 };
 
 // *******************

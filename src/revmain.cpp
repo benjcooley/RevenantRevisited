@@ -1537,6 +1537,7 @@ void GetParameters(int argc, char **argv)
         "gamespeed", "monitor", "violencelevel", "preloadsize",
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
+        "vfx-bg",
     });
     cmd.parse(argc, argv);
 
@@ -1650,6 +1651,14 @@ void GetParameters(int argc, char **argv)
   // effect-only screencaps). Flag-style: --vfx-no-ui (no value).
     if (arg_flag(cmd, "vfx-no-ui"))
         StartupVfxHideUi = true;
+
+  // VFX-BG=<black|ltgray|forest|dungeon> — pre-select the diagnostic
+  // backdrop for --test=vfx (for scripted multi-BG captures).
+    {
+        std::string p;
+        if (arg_param(cmd, "vfx-bg", p))
+            strncpyz(StartupVfxBackground, p.c_str(), sizeof(StartupVfxBackground));
+    }
 
   // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.
   // Empty = the default hard-coded pick (0_2_25, Misthaven).
