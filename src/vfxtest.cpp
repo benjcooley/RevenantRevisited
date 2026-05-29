@@ -1636,21 +1636,33 @@ void FlameSubmit(void* cp, EFxDebugMode dbg)
     flipbook->Submit(*Renderer, *c->flame);
 }
 
-// --- PE: real TBloodEffect (bloodimagery, Misc/Blood.I3D) ---------------
-// Spawns a sector-less TBloodEffect at world origin via SpawnForTest and
-// drives its owned TParticleBucket through SubmitFxParticleBucket() each
-// frame. Mirrors the F01 / TFlameEffect pattern: the harness lambda is a
-// thin shim; all the spawn / kinematic / draw logic lives on the real
-// effect class. See effect.cpp's TBloodEffect block for the scope
-// boundary (Phase 2.2 = PE pipeline gate; Phase 2.2.1 = faithful retail
-// kinematics).
+// --- FB: real TBloodEffect (B01, Misc/Blood.I3D) ------------------------
+// Spawns a sector-less single-burst TBloodEffect at the harness origin via
+// SpawnForTest and drives the ported TBloodSystem loop through
+// TickAndSubmitForTest each frame. Faithful direct port (not a
+// TParticleBucket / effects.def re-derivation) — see src/effect.cpp B01
+// block.
+//
+// Single non-overlapping burst (per RECONSTRUCTION_PROTOCOL + the §4.1
+// "one effect on screen at a time" rule): the harness lets a burst fully
+// play out (IsAlive() goes false when the last droplet expires), waits a
+// clear gap, then re-fires ONE fresh burst. Blood bounces and splats so
+// the gap is slightly longer than for sparks (~1.0s) — enough to clearly
+// separate one burst from the next so the directional spray + splat-stick
+// + shrink can be verified per-burst. Static preview style (internal
+// cadence is owned here, not by the harness destroy/respawn timer).
 struct SBloodCtx {
-    TBloodEffect* blood = nullptr;
+    TBloodEffect* blood   = nullptr;
+    S3DPoint      origin  = {0, 0, 0};
+    float         gap     = 0.0f;     // post-death cooldown before re-fire
 };
+
+constexpr float kBloodRetriggerGap = 1.0f;   // clear gap between bursts (s)
 
 void* BloodSpawn(const S3DPoint& origin)
 {
     auto* c = new SBloodCtx();
+    c->origin = origin;
     c->blood = TBloodEffect::SpawnForTest(origin);
     if (!c->blood)
         log_warn("[vfx] TBloodEffect::SpawnForTest returned null; B01 entry will draw nothing");
@@ -1667,9 +1679,25 @@ void BloodDestroy(void* cp)
 void BloodSubmit(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SBloodCtx*>(cp);
-    if (!c->blood)
+    if (!c)
         return;
-    c->blood->TickAndSubmitForTest(dbg);
+
+    // Burst has fully played out -> wait a clear gap, then re-fire ONE
+    // fresh burst. Keeps exactly one clean, non-overlapping instance
+    // visible for verification (no overlapping/grouped bursts).
+    if (!c->blood || !c->blood->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->blood;
+            c->blood = TBloodEffect::SpawnForTest(c->origin);
+            c->gap   = kBloodRetriggerGap;
+        }
+    }
+
+    if (c->blood)
+        c->blood->TickAndSubmitForTest(dbg);
 }
 
 // --- SR: real TStripEffect (S01 lightning bolt) --------------------------
@@ -2195,8 +2223,12 @@ struct SVfxTestBootstrap {
         VfxTest::SEffect blood = {};
         blood.id            = "TBloodEffect";
         blood.family        = "blood";
-        blood.pipeline      = "PE";
-        blood.preview_style = VfxTest::EVfxPreviewStyle::Combat;
+        blood.pipeline      = "FB";
+        // B01 = one-shot combat directional spray. Static cadence: the
+        // single-burst non-overlapping re-fire is owned inside BloodSubmit
+        // (let one burst die, wait a clear gap, fire one fresh burst) so a
+        // clean single instance is always visible for verification.
+        blood.preview_style = VfxTest::EVfxPreviewStyle::Static;
         blood.factory       = [](const S3DPoint& o) -> void* { return BloodSpawn(o); };
         blood.submit        = [](void* c, EFxDebugMode d) { BloodSubmit(c, d); };
         blood.destroy       = [](void* c) { BloodDestroy(c); };
