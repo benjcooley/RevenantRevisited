@@ -190,6 +190,7 @@ SParticleEffectDef ParseParticleEffectDef(const char* wanted)
         bucket.atlas_cols = int32_t(bucket_node->get_int("atlas_cols", 1));
         bucket.atlas_rows = int32_t(bucket_node->get_int("atlas_rows", 1));
         bucket.atlas_frames = int32_t(bucket_node->get_int("atlas_frames", 1));
+        bucket.random_start_frame = bucket_node->get_bool("random_start_frame", false);
         bucket.width = float(bucket_node->get_double("width", 1.0));
         bucket.height = float(bucket_node->get_double("height", 1.0));
         bucket.scale = float(bucket_node->get_double("scale", 1.0));
@@ -528,8 +529,6 @@ void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index
         *dr = 0.0f;
     if (float* dc = bucket.VarPtr(particle_index, EParticleVar::DrawColor))
     { dc[0] = 1.0f; dc[1] = 1.0f; dc[2] = 1.0f; dc[3] = 1.0f; }
-    if (float* df = bucket.VarPtr(particle_index, EParticleVar::DrawFrame))
-        *df = 0.0f;
     if (float* uv = bucket.VarPtr(particle_index, EParticleVar::DrawUvRect))
     { uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f; }
     if (float* age = bucket.VarPtr(particle_index, EParticleVar::Age))
@@ -537,17 +536,29 @@ void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index
     if (float* age01 = bucket.VarPtr(particle_index, EParticleVar::Age01))
         *age01 = 0.0f;
     // Seed: deterministic-per-slot mix of particle_index + bucket_def address.
+    // Computed BEFORE DrawFrame so random_start_frame can use it.
+    float seed_val = 0.0f;
     if (float* seed = bucket.VarPtr(particle_index, EParticleVar::Seed))
     {
         uint32_t s = uint32_t(particle_index) * 2654435761u
                    + uint32_t(uintptr_t(&bucket_def) & 0xffffffffu) * 16807u;
         if (s == 0) s = 1;
         *seed = float(s & 0x7fffffu) / float(0x7fffffu);
+        seed_val = *seed;
+    }
+    // DrawFrame: random pick from atlas grid if requested, else 0.
+    if (float* df = bucket.VarPtr(particle_index, EParticleVar::DrawFrame))
+    {
+        if (bucket_def.random_start_frame && bucket_def.atlas_frames > 1)
+            *df = std::floor(seed_val * float(bucket_def.atlas_frames));
+        else
+            *df = 0.0f;
     }
 
     // Now run the user spawn expression (statement-form). Identifier
     // aliases pos/vel/color/scale etc. resolve against the bucket slots
-    // we just pre-initialised.
+    // we just pre-initialised — spawn_expr can override random_start_frame
+    // by writing to `frame` explicitly.
     if (has_spawn_expr)
     {
         SParticleEvalContext ctx = {};
@@ -744,14 +755,13 @@ int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
         *dr = 0.0f;
     if (float* dc = bucket.VarPtr(pi, EParticleVar::DrawColor))
     { dc[0] = 1.0f; dc[1] = 1.0f; dc[2] = 1.0f; dc[3] = 1.0f; }
-    if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
-        *df = 0.0f;
     if (float* uv = bucket.VarPtr(pi, EParticleVar::DrawUvRect))
     { uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f; }
     if (float* age = bucket.VarPtr(pi, EParticleVar::Age))
         *age = 0.0f;
     if (float* age01 = bucket.VarPtr(pi, EParticleVar::Age01))
         *age01 = 0.0f;
+    float chain_seed_val = 0.0f;
     if (float* seed = bucket.VarPtr(pi, EParticleVar::Seed))
     {
         // Seed off the chain particle's index + the dying particle's
@@ -760,6 +770,15 @@ int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
                    + uint32_t(int32_t(dying_pos[0])) * 16807u;
         if (s == 0) s = 1;
         *seed = float(s & 0x7fffffu) / float(0x7fffffu);
+        chain_seed_val = *seed;
+    }
+    // DrawFrame: same random_start_frame honoring as self-spawn.
+    if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
+    {
+        if (bd.random_start_frame && bd.atlas_frames > 1)
+            *df = std::floor(chain_seed_val * float(bd.atlas_frames));
+        else
+            *df = 0.0f;
     }
 
     if (chain_brt.spawn_compiled)

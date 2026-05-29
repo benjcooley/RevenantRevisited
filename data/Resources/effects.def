@@ -71,9 +71,16 @@ effect Blood
     {
         imagery_path = "Misc\\Blood.I3D"
         texture_slot = 0
+        // 2x2 atlas = 4 droplet variants (the .I3D's box01..box04 cells,
+        // sampled at spawn via frame = floor(rand01()*4)). Each particle
+        // picks one variant randomly so the burst reads as a mix of shapes
+        // instead of 10 clones of the same droplet.
         atlas_cols = 2
         atlas_rows = 2
         atlas_frames = 4
+        // Engine picks one of the 4 atlas cells per particle on spawn — no
+        // boilerplate `frame = floor(rand01()*4)` needed in spawn_expr.
+        random_start_frame = true
         width = 32.0
         height = 32.0
         scale = 1.0
@@ -121,7 +128,6 @@ effect Blood
                        2 + 4 * rand01());
             scale = vec3(20, 20, 1);
             rot.z = -0.7853982;
-            frame = floor(rand01() * 4);
             color = vec4(0.8, 0.1, 0.1, 1);
         "
 
@@ -148,9 +154,14 @@ effect Blood
     {
         imagery_path = "Misc\\Blood.I3D"
         texture_slot = 0
+        // Same 2x2 atlas / 4 droplet variants as blood_fly (no separate
+        // SPLAT cell-set; the visual difference between FLY and SPLAT
+        // comes from orientation + scale, not from picking different
+        // texture cells — see resettled doc §3.3 footnote).
         atlas_cols = 2
         atlas_rows = 2
         atlas_frames = 4
+        random_start_frame = true
         width = 32.0
         height = 32.0
         scale = 1.0
@@ -182,7 +193,6 @@ effect Blood
             vel = vec3(0, 0, 0);
             scale = vec3(35, 35, 1);
             rot.z = rand(0, 6.2831853);
-            frame = 4 + floor(rand01() * 4);
             color = vec4(0.6, 0.08, 0.08, 1);
         "
 
