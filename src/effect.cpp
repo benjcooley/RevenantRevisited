@@ -1976,11 +1976,20 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
     }
 
     // --- Render: port of TBloodSystem::Render (effectcomp.cpp:1415-1483).
-    // Each used droplet draws TWICE: pass 0 (k=0) = Alpha base using
-    // {box05..box08} (indices 4..7), pass 1 (k=1) = AdditiveStraight overlay
-    // using {box01..box04} (indices 0..3). Size 2 (big) and the splat
-    // sub-objects are commented out in the original — a size-2 droplet
-    // renders with the small sprite (forensics §7 / §13.3).
+    // Resettled forensics (B01_TBloodEffect_RENDER_RESETTLED.md §6): the
+    // snapshot SetBlendState writes SRC_ALPHA/INV_SRC_ALPHA factors but
+    // D3DRENDERSTATE_ALPHABLENDENABLE is NEVER turned on along the blood
+    // path, so on shipped DX6/7 the blend is DORMANT. The texture loader
+    // (legacy/3dimage.cpp:2079) bakes the keycolor as 1-bit alpha and the
+    // shipped read is CHROMA-KEYED OPAQUE, single-pass. The old k=1
+    // AdditiveStraight overlay pass has been DROPPED per §6.4 — it was
+    // a re-derivation of the wrong (dormant-blend) snapshot read and
+    // produced washed-out pink droplets in the harness. Single Alpha
+    // pass below uses the box05..box08 cells (indices 4..7) and lets the
+    // FB shader's chroma-key discard cut out the black background.
+    // Size 2 (big) and the splat sub-objects are commented out in the
+    // original — a size-2 droplet renders with the small sprite
+    // (forensics §7 / §13.3).
     const S3DPoint& base = Pos();
     for (int32_t i = 0; i < kBloodMaxParticles; ++i)
     {
@@ -2012,13 +2021,13 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         item.color_rgba[3] = 1.0f;
         item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
         item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        // Scene-LIT: retail samples 3 closest world lights + ambient×4 and
-        // multiplies the dark-red texture per vertex (DoLighting at
-        // effectcomp.cpp:1372-1413). The FB pipeline's LitFlat is the
-        // engine-side scene-light multiplier — flagged as engine adaptation
-        // in §7. With LitFlat the blood reads brighter in lit rooms and
-        // darker in shadow, matching the §10 expectation.
-        item.light_mode  = EFxLightMode::LitFlat;
+        // Light mode: matches the engine-driven blood_fly bucket
+        // (data/Resources/effects.def `light_mode = "unlit"`) which is
+        // currently set Unlit as a harness diagnostic until the test scene
+        // lights TBloodEffect properly (resettled doc §6.6). Keeping the
+        // bespoke aligned with the engine path means the A/B capture
+        // isolates BLEND differences only, not lighting.
+        item.light_mode = EFxLightMode::Unlit;
         // FLY droplets are tipped ground-flat (RotateX(-90°)+RotateZ(-45°),
         // i.e. WorldXY ground-oriented with a 45° in-plane spin per §7);
         // SPLAT/SHRINK keep authored facing. WorldXY is the engine analog
@@ -2031,37 +2040,26 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         item.world_pos[1] = wy;
         item.world_pos[2] = wz;
 
-        // Pass 0 — Alpha base, sub-objects box05..box08 (indices 4..7).
+        // Single Alpha pass — sub-objects box05..box08 (indices 4..7). The
+        // texture's keycolor was baked to 1-bit alpha by the .I3D loader
+        // (legacy/3dimage.cpp:2079) so the FB shader's chroma-key discard
+        // cuts out the black background and the dark-red droplet reads
+        // as a chroma-keyed OPAQUE sprite — same as shipped DX6/7.
+        // The pre-resettled k=1 AdditiveStraight overlay pass on
+        // box01..box04 was DROPPED per resettled doc §6.4: it was a
+        // re-derivation of the dormant-blend snapshot read and produced
+        // light-pink washed-out droplets via additive accumulation on top
+        // of the dark-red base.
+        const SBloodSubObject& so = subobjs_[4 + cell];
+        if (so.texture != kInvalidTexture)
         {
-            const SBloodSubObject& so = subobjs_[4 + cell];
-            if (so.texture != kInvalidTexture)
-            {
-                item.key.texture = so.texture;
-                item.key.blend   = uint8_t(EFxBlend::Alpha);
-                item.uv_rect[0] = so.uv_rect[0];
-                item.uv_rect[1] = so.uv_rect[1];
-                item.uv_rect[2] = so.uv_rect[2];
-                item.uv_rect[3] = so.uv_rect[3];
-                Renderer->SubmitFxBillboard(item);
-            }
-        }
-        // Pass 1 — AdditiveStraight (ONE/ONE) overlay sheen, sub-objects
-        // box01..box04 (indices 0..3). MODULATE texture stage in the
-        // original means the vertex tint still attenuates this pass; the
-        // FB pipeline's AdditiveStraight + same per-item color_rgba is the
-        // engine-side analog (§7).
-        {
-            const SBloodSubObject& so = subobjs_[cell];
-            if (so.texture != kInvalidTexture)
-            {
-                item.key.texture = so.texture;
-                item.key.blend   = uint8_t(EFxBlend::AdditiveStraight);
-                item.uv_rect[0] = so.uv_rect[0];
-                item.uv_rect[1] = so.uv_rect[1];
-                item.uv_rect[2] = so.uv_rect[2];
-                item.uv_rect[3] = so.uv_rect[3];
-                Renderer->SubmitFxBillboard(item);
-            }
+            item.key.texture = so.texture;
+            item.key.blend   = uint8_t(EFxBlend::Alpha);
+            item.uv_rect[0] = so.uv_rect[0];
+            item.uv_rect[1] = so.uv_rect[1];
+            item.uv_rect[2] = so.uv_rect[2];
+            item.uv_rect[3] = so.uv_rect[3];
+            Renderer->SubmitFxBillboard(item);
         }
     }
 }
