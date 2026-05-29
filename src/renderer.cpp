@@ -2864,9 +2864,20 @@ void TRenderer::RunLightingPass()
     RunShadowPass();
 
     sg_pass_action pa = {};
-    pa.colors[0].action = SG_ACTION_CLEAR;
-    pa.colors[0].value  = { tile_clear_rgba[0], tile_clear_rgba[1],
-                            tile_clear_rgba[2], tile_clear_rgba[3] };
+    if (backdrop_filled)
+    {
+        // DrawBackdrop ran this frame; keep its contents so the light
+        // shader's `discard` on empty pixels reveals the backdrop instead
+        // of solid tile_clear_rgba.
+        pa.colors[0].action = SG_ACTION_LOAD;
+        backdrop_filled = false;
+    }
+    else
+    {
+        pa.colors[0].action = SG_ACTION_CLEAR;
+        pa.colors[0].value  = { tile_clear_rgba[0], tile_clear_rgba[1],
+                                tile_clear_rgba[2], tile_clear_rgba[3] };
+    }
     sg_begin_pass(lit_pass, &pa);
 
     sg_apply_pipeline(light_pipeline);
@@ -3291,6 +3302,77 @@ void TRenderer::EndTilePass()
     mesh_queue.clear();
     sg_end_pass();
     last_tile_pass_stats = current_tile_pass_stats;
+}
+
+// -------------------------------------------------------------------------
+// Backdrop pre-fill -- writes lit_target before RunLightingPass so the
+// deferred light shader's `discard` on empty pixels keeps the backdrop
+// visible behind the lit scene, and post-light fx (fx_pass) composites
+// against it. Caller picks a clear color (used directly when backdrop is
+// invalid; used for letterbox bars when a backdrop image is supplied).
+// Backdrops fit to the visible (display) sub-rect of lit_target preserving
+// the source aspect ratio.
+// -------------------------------------------------------------------------
+void TRenderer::DrawBackdrop(TTextureHandle backdrop,
+                             float r, float g, float b, float a)
+{
+    if (!lit_pass.id) return;
+
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_CLEAR;
+    pa.colors[0].value  = { r, g, b, a };
+    pa.depth.action     = SG_ACTION_DONTCARE;
+    pa.stencil.action   = SG_ACTION_DONTCARE;
+    sg_begin_pass(lit_pass, &pa);
+
+    const sg_image img = (backdrop != kInvalidTexture)
+        ? TextureImage(backdrop)
+        : sg_image{0};
+
+    if (img.id && width > 0 && height > 0)
+    {
+        const SRendererTextureInfo* info = TextureInfo(backdrop);
+        const int32_t src_w = info ? info->width  : 0;
+        const int32_t src_h = info ? info->height : 0;
+        if (src_w > 0 && src_h > 0)
+        {
+            // Letterbox-fit: scale the image so it fills the visible
+            // display rect while preserving source aspect; pad with the
+            // letterbox color (the pa clear) along the wide axis.
+            const float disp_aspect = float(width) / float(height);
+            const float src_aspect  = float(src_w) / float(src_h);
+            int32_t dst_w = width;
+            int32_t dst_h = height;
+            int32_t dst_x = kGBufPad;
+            int32_t dst_y = kGBufPad;
+            if (src_aspect >= disp_aspect)
+            {
+                // Source is wider: fit by width, pillar bars top+bottom.
+                dst_h = int32_t(std::round(float(width) / src_aspect));
+                dst_y = kGBufPad + (height - dst_h) / 2;
+            }
+            else
+            {
+                // Source is taller: fit by height, bars left+right.
+                dst_w = int32_t(std::round(float(height) * src_aspect));
+                dst_x = kGBufPad + (width - dst_w) / 2;
+            }
+            const int32_t gbw = width  + 2 * kGBufPad;
+            const int32_t gbh = height + 2 * kGBufPad;
+            Composite(img,
+                      dst_x, dst_y, dst_w, dst_h,
+                      gbw, gbh,
+                      0, 0, src_w, src_h,
+                      src_w, src_h,
+                      /*additive_blend=*/false,
+                      /*chroma_key=*/false,
+                      nullptr);
+        }
+    }
+
+    sg_end_pass();
+    backdrop_filled = true;
+    lit_target_dirty = true;
 }
 
 // *************************************************************************
