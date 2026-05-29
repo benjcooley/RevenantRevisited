@@ -835,9 +835,33 @@ int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
 }
 
 // Per-bucket integration. dt_seconds is wall-clock for this render frame.
-// If tick_hz > 0 the bucket runs the tick_expr at the fixed cadence
-// (accumulating leftover ms across frames); otherwise the tick_expr runs
-// once per render frame.
+//
+// UNIT MODEL: explicit-tick-multiplier.
+//
+//   The engine's contract with bucket authors is:
+//
+//   * tick_hz > 0 (the normal case): tick_expr is invoked exactly tick_hz
+//     times per simulated second, regardless of render FPS. Leftover ms
+//     accumulate in sim_accum_ms across render frames and produce additional
+//     integer ticks on subsequent frames. tick_expr is NOT given dt and is
+//     NOT scaled per call -- authors write velocity / acceleration literals
+//     in PER-TICK units (wu/tick, wu/tick^2). One tick_expr call == one
+//     tick's worth of motion.
+//
+//   * tick_hz == 0: tick_expr runs once per render frame. Motion authored
+//     under tick_hz==0 is frame-rate-dependent; prefer tick_hz>0 for any
+//     bucket whose dynamics need to be wall-clock-consistent.
+//
+//   * Age / Life / Age01 are always in SECONDS. Age is advanced by
+//     per_tick_seconds (= 1/tick_hz when tick_hz>0) per tick, and Life is
+//     stored as the bucket's default_life value in seconds. Age01 = Age/Life.
+//     The auto-kill at the bottom of this loop fires when Age >= Life in
+//     seconds.
+//
+//   In short: tick_expr literals are PER-TICK; default_life / Age / Age01
+//   are SECONDS. Authors converting between the two convert by hand using
+//   tick_hz (e.g. blood_splat's SHRINK comment shows 0.4*1.6s*24Hz = 15.4
+//   ticks).
 void TParticleEffectManager::IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt,
                                              TObjectInstance* owner, float dt_seconds,
                                              float owner_particle_id)
