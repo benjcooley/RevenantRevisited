@@ -529,8 +529,6 @@ void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index
         *dr = 0.0f;
     if (float* dc = bucket.VarPtr(particle_index, EParticleVar::DrawColor))
     { dc[0] = 1.0f; dc[1] = 1.0f; dc[2] = 1.0f; dc[3] = 1.0f; }
-    if (float* uv = bucket.VarPtr(particle_index, EParticleVar::DrawUvRect))
-    { uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f; }
     if (float* age = bucket.VarPtr(particle_index, EParticleVar::Age))
         *age = 0.0f;
     if (float* age01 = bucket.VarPtr(particle_index, EParticleVar::Age01))
@@ -546,13 +544,36 @@ void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index
         *seed = float(s & 0x7fffffu) / float(0x7fffffu);
         seed_val = *seed;
     }
-    // DrawFrame: random pick from atlas grid if requested, else 0.
+    // DrawFrame + DrawUvRect: pick atlas cell now and write the explicit
+    // UV rect (the renderer's UV priority is DrawUvRect > atlas-from-frame,
+    // so we must materialize the cell UV here — leaving DrawUvRect at the
+    // default (0,0,1,1) would override the atlas pick and render the whole
+    // sheet). When the bucket has no atlas grid (cells == 1), DrawUvRect
+    // stays at full-quad.
+    const int32_t atlas_cells = bucket_def.atlas_cols * bucket_def.atlas_rows;
+    int32_t spawn_frame = 0;
+    if (bucket_def.random_start_frame && bucket_def.atlas_frames > 1)
+        spawn_frame = int32_t(std::floor(seed_val * float(bucket_def.atlas_frames)));
     if (float* df = bucket.VarPtr(particle_index, EParticleVar::DrawFrame))
+        *df = float(spawn_frame);
+    if (float* uv = bucket.VarPtr(particle_index, EParticleVar::DrawUvRect))
     {
-        if (bucket_def.random_start_frame && bucket_def.atlas_frames > 1)
-            *df = std::floor(seed_val * float(bucket_def.atlas_frames));
+        if (atlas_cells > 1)
+        {
+            const int32_t cell  = ((spawn_frame % atlas_cells) + atlas_cells) % atlas_cells;
+            const int32_t fx    = cell % bucket_def.atlas_cols;
+            const int32_t fy    = cell / bucket_def.atlas_cols;
+            const float cw      = 1.0f / float(bucket_def.atlas_cols);
+            const float ch      = 1.0f / float(bucket_def.atlas_rows);
+            uv[0] = float(fx) * cw;
+            uv[1] = float(fy) * ch;
+            uv[2] = cw;
+            uv[3] = ch;
+        }
         else
-            *df = 0.0f;
+        {
+            uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f;
+        }
     }
 
     // Now run the user spawn expression (statement-form). Identifier
@@ -755,8 +776,6 @@ int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
         *dr = 0.0f;
     if (float* dc = bucket.VarPtr(pi, EParticleVar::DrawColor))
     { dc[0] = 1.0f; dc[1] = 1.0f; dc[2] = 1.0f; dc[3] = 1.0f; }
-    if (float* uv = bucket.VarPtr(pi, EParticleVar::DrawUvRect))
-    { uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f; }
     if (float* age = bucket.VarPtr(pi, EParticleVar::Age))
         *age = 0.0f;
     if (float* age01 = bucket.VarPtr(pi, EParticleVar::Age01))
@@ -772,13 +791,33 @@ int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
         *seed = float(s & 0x7fffffu) / float(0x7fffffu);
         chain_seed_val = *seed;
     }
-    // DrawFrame: same random_start_frame honoring as self-spawn.
+    // DrawFrame + DrawUvRect: same atlas-cell materialization as self-spawn
+    // (the renderer's UV priority is DrawUvRect > atlas-from-frame, so we
+    // must write the cell UV explicitly here).
+    const int32_t chain_atlas_cells = bd.atlas_cols * bd.atlas_rows;
+    int32_t chain_spawn_frame = 0;
+    if (bd.random_start_frame && bd.atlas_frames > 1)
+        chain_spawn_frame = int32_t(std::floor(chain_seed_val * float(bd.atlas_frames)));
     if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
+        *df = float(chain_spawn_frame);
+    if (float* uv = bucket.VarPtr(pi, EParticleVar::DrawUvRect))
     {
-        if (bd.random_start_frame && bd.atlas_frames > 1)
-            *df = std::floor(chain_seed_val * float(bd.atlas_frames));
+        if (chain_atlas_cells > 1)
+        {
+            const int32_t cell  = ((chain_spawn_frame % chain_atlas_cells) + chain_atlas_cells) % chain_atlas_cells;
+            const int32_t fx    = cell % bd.atlas_cols;
+            const int32_t fy    = cell / bd.atlas_cols;
+            const float cw      = 1.0f / float(bd.atlas_cols);
+            const float ch      = 1.0f / float(bd.atlas_rows);
+            uv[0] = float(fx) * cw;
+            uv[1] = float(fy) * ch;
+            uv[2] = cw;
+            uv[3] = ch;
+        }
         else
-            *df = 0.0f;
+        {
+            uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f;
+        }
     }
 
     if (chain_brt.spawn_compiled)
