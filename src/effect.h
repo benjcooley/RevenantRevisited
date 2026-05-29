@@ -2786,15 +2786,24 @@ inline constexpr float   kFireBallLightRadiusWu = 320.0f;     // MULT 20 family 
 inline constexpr float   kFireBallLightInt      = 1.5f;       // baseline; multiplied by glow flicker
 
 // One slot in the head trail / burst ring buffer. Mirrors `FireBallData`
-// (missileeffect.h:179-187) but only the fields the modern port consumes
-// (the `rotation` field is omitted because ScreenAligned billboards have
-// no in-plane spin — the original spin was for the matrix-rotated quad).
+// (missileeffect.h:179-187). `rotation` is the per-instance in-plane
+// spin (degrees) the snapshot accumulates on the ball head (+2/tick) and
+// PROPAGATES into trail copies + burst quads via `trail[0] = fireball`
+// / `burst[i].rotation = 0`. The per-trail-slot stale-snapshot of
+// rotation is what gives the trail its tumbling/streak look — every
+// card freezes at whatever rotation the ball had when that slot got
+// recorded. Drawn through the FB-particle pipeline (SubmitFxParticle)
+// with WorldXY orientation + per-instance rotation_rad so the same
+// world-space matrix tilt the original used (rotZ(spin) * rotX(-30°) *
+// rotY(+60°) * rotZ(facing)) lands as a ground-tipped tumble trail,
+// not a camera-facing swirl.
 struct SFireBallData
 {
     hmm_vec3 pos      = {0.0f, 0.0f, 0.0f};   // world-space (trail) or local (head)
     float    scale    = 0.0f;                  // draw scale
     float    glow     = 1.0f;                  // flicker multiplier (×1.0..1.75)
     float    frame    = 0.0f;                  // atlas cell index
+    float    rotation = 0.0f;                  // in-plane spin (degrees, +2/tick on head)
     bool     used     = false;                 // burst slot active?
 };
 
