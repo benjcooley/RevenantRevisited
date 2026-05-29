@@ -78,7 +78,10 @@ effect Blood
         height = 32.0
         scale = 1.0
         blend_mode = "alpha"
-        light_mode = "lit_flat"
+        // DIAGNOSTIC: forced Unlit to confirm geometry/texture/chroma path is
+        // working in the unlit harness scene. Revert to lit_flat once the
+        // harness lights TBloodEffect properly per the resettled doc §6.6.
+        light_mode = "unlit"
         depth_mode = "test_no_write"
         // ScreenAligned matches the snapshot's vertical-tipped quad for
         // FLY (RotateX(-90)·RotateZ(-45)). WorldXY would lay it flat on
@@ -107,13 +110,17 @@ effect Blood
         // pick at spawn selects one of the box01..box04 droplet variants.
         // rot.x = -pi/4 carries the snapshot's RotateZ(-45°) in-plane
         // spin.
+        // Snapshot effectcomp.cpp:1229-1232 (BLOOD_VEL=2.0, BLOOD_FLYSCALE=1.0):
+        //   vel.{x,y} = BLOOD_VEL * cos/sin(ha) * random(100,300)/100  -> ~[-6,6]
+        //   vel.z     = BLOOD_VEL * sin(va) * random(100,300)/100      -> ~[1,6] upward
+        //   scl       = 1.0
         spawn_expr = "
             pos = emit_pos + vec3(0, 0, 40);
-            vel = vec3(cos(rand(0, 6.2831853)) * (60 + 120 * rand01()),
-                       sin(rand(0, 6.2831853)) * (60 + 120 * rand01()),
-                       60 + 80 * rand01());
-            scale = vec3(16 + 8 * rand01(), 16 + 8 * rand01(), 1);
-            rot.x = -0.7853982;
+            vel = vec3(cos(rand(0, 6.2831853)) * (2 + 4 * rand01()),
+                       sin(rand(0, 6.2831853)) * (2 + 4 * rand01()),
+                       2 + 4 * rand01());
+            scale = vec3(8, 8, 1);
+            rot.z = -0.7853982;
             frame = floor(rand01() * 4);
             color = vec4(0.8, 0.1, 0.1, 1);
         "
@@ -148,7 +155,8 @@ effect Blood
         height = 32.0
         scale = 1.0
         blend_mode = "alpha"
-        light_mode = "lit_flat"
+        // DIAGNOSTIC: Unlit (see blood_fly note above).
+        light_mode = "unlit"
         depth_mode = "test_no_write"
         // WorldXY = flat on world XY plane, normal +Z (ground decal).
         // Per forensics §7 / A3: SPLAT/SHRINK keep authored facing,
@@ -167,28 +175,27 @@ effect Blood
         // so the decal doesn't z-fight with the floor), peak scale 28.8
         // = ~1.8x the FLY droplet's 16 base (forensics §3
         // kBloodSplatSize=1.8). frame 4..7 picks the splat cells.
+        // Snapshot BLOOD_SPLATSIZE=1.8 (peak splat scale, effectcomp.cpp:1169).
+        // SPLAT decal sits at impact + small +z lift to avoid floor z-fight.
         spawn_expr = "
             pos = vec3(emit_pos.x, emit_pos.y, emit_pos.z + 2);
             vel = vec3(0, 0, 0);
-            scale = vec3(28.8, 28.8, 1);
-            rot.x = rand(0, 6.2831853);
+            scale = vec3(14, 14, 1);
+            rot.z = rand(0, 6.2831853);
             frame = 4 + floor(rand01() * 4);
             color = vec4(0.6, 0.08, 0.08, 1);
         "
 
-        // 24 Hz tick: hold peak scale for the first ~60% of life (~1s)
-        // via step(0.6, age01), then shrink linearly to zero at
-        // ~0.4 wu/tick * 0.4s = ~9.6 wu over the second 40% of life.
-        // step(edge, x) returns 0 when x<edge else 1 — i.e. zero shrink
-        // during the hold, then full shrink during the SHRINK phase.
+        // Hold peak 1.8 for ~60% of life, then linearly shrink to 0 over
+        // the last 40%. Shrink rate sized so scale reaches ~0 at age01=1:
+        //   shrink_total = 1.8 over (0.4 * default_life * tick_hz) = 0.4*1.6*24 = 15.4 ticks
+        //   rate ~= 1.8/15.4 ~= 0.12 wu/tick during SHRINK phase.
         tick_expr = "
-            scale.x = scale.x - 0.4 * step(0.6, age01);
-            scale.y = scale.y - 0.4 * step(0.6, age01);
+            scale.x = scale.x - 0.9 * step(0.6, age01);
+            scale.y = scale.y - 0.9 * step(0.6, age01);
         "
 
-        // Reap when the splat has shrunk to ~zero (snapshot kBloodSplatScale
-        // ramps down to <= 0 by which point used=false; we threshold at
-        // 0.5 wu since shrink is per-tick discrete).
+        // Reap when the splat has shrunk to ~zero.
         kill_expr = "step(scale.x, 0.5)"
     }
 }
