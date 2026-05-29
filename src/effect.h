@@ -2645,6 +2645,87 @@ class TBloodEffect : public TEffect
     [[nodiscard]] bool IsAlive() const;
 };
 
+// *************************************************************************
+// * TBloodEffect_Bespoke — A/B reference (faithful direct C++ port)        *
+// *************************************************************************
+//
+// Pre-engine-rework reference implementation of B01 blood: the 1998
+// TBloodSystem-style 30-particle per-class state machine, three-stage
+// FLY -> SPLAT -> SHRINK lifecycle, two-pass per-droplet draw (Alpha base
+// + AdditiveStraight overlay) using the 8 box sub-objects of
+// Misc\Blood.I3D. Lives alongside the engine port as a side-by-side A/B
+// verification baseline driven by --test=vfx --vfx=TBloodEffect_BESPOKE
+// (see tools/vfx/snap_ab.py for the filmstrip capture). The math /
+// constants / sub-object resolution are the snapshot port preserved per
+// project preserve-old-code rule.
+
+// One blood droplet's transient state. Pre-release stored these as
+// SBloodParticle (effectcomp.h:357) inside TBloodSystem; we collapse
+// onto a per-particle struct on the bespoke effect class. stage is one
+// of kBloodStageFly / kBloodStageSplat / kBloodStageShrink.
+struct SBloodParticleEx
+{
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};   // object-local position (wu)
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};   // velocity (wu / sim-tick)
+    float    scl   = 0.0f;                 // current scale multiplier
+    int32_t  size  = 0;                    // 0=small, 1=med, 2=big (collapses to small)
+    int32_t  stage = 0;                    // kBloodStageFly / Splat / Shrink
+    int32_t  delay = 0;                    // ticks until this particle starts integrating
+    int32_t  count = 0;                    // sub-stage tick counter (SPLAT hold etc.)
+    bool     used  = false;                // active slot?
+};
+
+// One sub-object's resolved draw data — captured at SpawnForTest from the
+// authored UVs and htextures[] slot for that sub-object. The 8 boxes map:
+//   index 0..3 = box01..box04 = pass 1 (AdditiveStraight overlay)
+//   index 4..7 = box05..box08 = pass 0 (Alpha base)
+// Within each set: [0]=small, [1]=med, [2]=big, [3]=splat (DEAD).
+struct SBloodSubObject
+{
+    TTextureHandle texture    = kInvalidTexture;
+    float          uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};   // x,y,w,h normalized
+    float          size_wu    = 16.0f;                       // billboard size in wu
+};
+
+_CLASSDEF(TBloodEffect_Bespoke)
+
+class TBloodEffect_Bespoke : public TEffect
+{
+  public:
+    TBloodEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TBloodEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBloodEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // Spawn a standalone single-burst bespoke blood reference for the
+    // --test=vfx harness. Loads Misc\Blood.I3D, resolves the 8 box
+    // sub-objects, then runs TBloodSystem::Init (effectcomp.cpp:1182-1307)
+    // verbatim against an internal 30-particle array. Returns nullptr if
+    // the imagery can't be loaded. Caller owns the returned pointer.
+    [[nodiscard]] static TBloodEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports TBloodSystem::Animate
+    // (effectcomp.cpp:1309-1370) + ::Render (effectcomp.cpp:1415-1483)
+    // directly, integrated via a 24 Hz sim-tick accumulator for
+    // framerate-independent motion. Two billboard draws per live droplet
+    // (Alpha base box05..box08 then AdditiveStraight overlay box01..box04).
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    // True until the last droplet finishes its FLY → SPLAT → SHRINK
+    // lifecycle. The harness uses this to know when a burst has fully
+    // played out before re-triggering for clean single-instance
+    // verification.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SBloodParticleEx particles_[kBloodMaxParticles] {};
+    SBloodSubObject  subobjs_[8] {};
+    float            height_local_  = 0.0f;     // emit height (wu, from height param)
+    bool             alive_         = true;
+    double           sim_accum_ms_  = 0.0;      // 24 Hz sim-tick gate
+};
+
 // *******************
 // * Blood Animator *
 // *******************

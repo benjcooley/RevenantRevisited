@@ -1674,37 +1674,20 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         Renderer->SubmitFxParticleBucket(*splat_bucket_, debug_mode);
 }
 
-#if 0
-// --- Bespoke faithful port (preserved per project preserve-old-code rule).
+// --- Bespoke faithful port (A/B reference, lives alongside engine port).
 //
 // The 1998 TBloodSystem-style implementation: 30-particle array on the
 // effect class, 3-stage FLY → SPLAT → SHRINK state machine integrated at
 // 24 Hz via a sim-tick accumulator, two-pass billboard draw per droplet
 // (Alpha base + AdditiveStraight overlay) using 8 box sub-objects of
-// Misc\Blood.I3D. Replaced by the engine-particle rework above per the
-// resettled forensics (chroma-keyed Alpha, single pass, two engine
-// buckets wired by reflection-plane chain).
+// Misc\Blood.I3D. Lives alongside the engine-particle rework above as
+// the A/B baseline for snap_ab.py side-by-side filmstrip verification
+// (see TBloodEffect_Bespoke in effect.h + tools/vfx/snap_ab.py).
 //
-// Kept under `#if 0` so the math/constants/sub-object resolution remain
-// referenceable when wiring the in-game B01a path or if the engine rework
-// needs to be cross-checked against the per-tick units.
+// The math/constants/sub-object resolution are the snapshot port,
+// preserved per project preserve-old-code rule.
 
-void TBloodEffect::Initialize_BESPOKE()
-{
-    // Empty (intentional). The pre-release TBloodEffect::Initialize body
-    // is empty (effect_old.cpp:11246-11253); the per-burst state lives
-    // entirely in SBloodSystemParams + TBloodSystem.
-}
-
-void TBloodEffect::Pulse_BESPOKE()
-{
-    TEffect::Pulse();
-    // No per-pulse work — the in-game path drives Animate through
-    // TBloodAnimator (effect_old.cpp:11306-11317). Harness uses
-    // TickAndSubmitForTest, which integrates directly.
-}
-
-TBloodEffect* TBloodEffect::SpawnForTest_FaithfulPort(const S3DPoint& origin)
+TBloodEffect_Bespoke* TBloodEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
     // --- Load the REAL Misc\Blood.I3D imagery (no procedural stand-in).
     // The dark-red box sprites ARE the visual identity (forensics §10).
@@ -1730,7 +1713,7 @@ TBloodEffect* TBloodEffect::SpawnForTest_FaithfulPort(const S3DPoint& origin)
         return nullptr;
     }
 
-    auto* blood = new TBloodEffect(base);
+    auto* blood = new TBloodEffect_Bespoke(base);
     blood->ForcePos(origin);
     blood->SetMapIndex(MapPane.MakeIndex());
     blood->ActivateComponents();
@@ -1906,7 +1889,7 @@ TBloodEffect* TBloodEffect::SpawnForTest_FaithfulPort(const S3DPoint& origin)
     return blood;
 }
 
-void TBloodEffect::TickAndSubmitForTest_FaithfulPort(EFxDebugMode debug_mode)
+void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     if (!Renderer)
         return;
@@ -2082,14 +2065,16 @@ void TBloodEffect::TickAndSubmitForTest_FaithfulPort(EFxDebugMode debug_mode)
         }
     }
 }
-#endif  // bespoke faithful port (TBloodSystem-style state machine)
+// --- end bespoke faithful port (A/B reference)
 
 #if 0
 // REVISITED (earlier WIP): pre-faithful-port body, re-derived blood
 // through a TParticleBucket directly (no effects.def, no chain). Kept
 // here as historical context only; the resettled engine-driven rework
-// at the top of this section is the live path.
-TBloodEffect* TBloodEffect::SpawnForTest_BESPOKE(const S3DPoint& origin)
+// at the top of this section is the live path. Renamed to
+// SpawnForTest_BESPOKE_WIP to disambiguate from the live bespoke
+// faithful-port class above.
+TBloodEffect* TBloodEffect::SpawnForTest_BESPOKE_WIP(const S3DPoint& origin)
 {
     const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
     if (img_id < 0)
@@ -2185,7 +2170,7 @@ TBloodEffect* TBloodEffect::SpawnForTest_BESPOKE(const S3DPoint& origin)
     return blood;
 }
 
-void TBloodEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+void TBloodEffect::TickAndSubmitForTest_BESPOKE_WIP(EFxDebugMode debug_mode)
 {
     if (!bucket_ || !Renderer)
         return;
