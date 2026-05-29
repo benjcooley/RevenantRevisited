@@ -26,3 +26,6 @@ extern char StartupVfxId[64];
 // --vfx-no-ui — suppress the ImGui VFX Browser panel so screencaps
 // show only the effect render.
 extern bool StartupVfxHideUi;
+// --vfx-bg=<black|ltgray|forest|dungeon> — pre-select the diagnostic
+// backdrop for --test=vfx (default ltgray). Empty / unknown = default.
+extern char StartupVfxBackground[16];
