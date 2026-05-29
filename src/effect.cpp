@@ -1943,6 +1943,494 @@ void TBloodEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 #endif // bespoke TBloodEffect spawn/tick preserved-old-code
 
 // *************************************************************************
+// * TFizzleEffect - FAITHFUL DIRECT PORT for --test=vfx (X21)             *
+// *************************************************************************
+//
+// Reconstruction of TFizzleAnimator (effect_old.cpp:12347-12516) +
+// TParticleSystem::Animate/Render (effectcomp.cpp:1041-1109). Same model
+// as TSparkEffect / TBloodEffect: collapse the per-system particle arrays
+// onto the effect class, integrate at the original 24 Hz cadence via a
+// real-time accumulator (RECONSTRUCTION_PROTOCOL framerate-independence
+// rule), drive everything off the snapshot constants in forensics §3.
+//
+// The original organizes particles into 3 TParticleSystem instances
+// (blue/red/purple), each bound to one sub-object of Magic\Fizzle.I3D.
+// Render walks each system in turn; the matrix it builds per particle is:
+//
+//    M = RotateX(rot.x) * RotateY(rot.y) * RotateZ(rot.z)        // (rot.x/y=0)
+//      * RotateX(-pi/2)                                          // ground tip
+//      * RotateZ(-pi/4)                                          // static spin
+//      * RotateZ(facing)                                         // facing=0
+//      * Scale(scl * [1.5 if flicker])
+//      * Translate(pos)
+//
+// Mapped to the FB-particle pipeline:
+//   - WorldXY orientation handles the RotateX(-pi/2) ground tip — the
+//     quad's 4 corners are placed on the world XY plane at the particle
+//     anchor before iso projection.
+//   - rotation_rad (per-instance) handles the in-plane spin: rot.z (live
+//     animator value) + (-pi/4) (static) folded into one angle. Facing is
+//     zero for Fizzle (forensics §13.5), so the third RotateZ is a no-op.
+//   - The flicker ×1.5 scale multiplier (forensics §6.2 / §7) is applied
+//     by widening size_wu in the render submit.
+//
+// We use SubmitFxParticle rather than SubmitFxBillboard because billboards
+// don't carry a per-instance rotation_rad — and the per-particle spin IS
+// the visible identity of the puff.
+
+namespace {
+
+constexpr const char* kFizzleImageryPath = "Magic\\Fizzle.I3D";
+
+// 24Hz cadence gate (family-consistent with F03/H03/M05/X22/B01). The
+// original per-tick rates (DUST_SCL_INC=0.05/tick grow, DUST_SCL_DEC=0.02/
+// tick shrink, DUST_ADD=1.5/tick emission, DUST_ROT=15deg/tick max spin,
+// DUST_FRAME=15 tick emission window) integrate once per sim-tick of
+// accumulated wall-clock time. See forensics §3 + §6.2.
+constexpr int32_t kFizzleSimTickMs = 1000 / 24;
+
+// Constants — straight from effect_old.cpp:12293-12303 (forensics §3).
+// Snapshot-only (the retail animator body is not extracted); rate of
+// these is "best-evidence, visually match in-game" per §2.1(1) / §13.0.
+constexpr int32_t kFizzleDustCount     = kFizzleParticlesPerSystem; // 30
+constexpr int32_t kFizzleDustFrame     = 15;       // emission window (ticks)
+constexpr int32_t kFizzleDustSpread    = 15;       // ± xy jitter at spawn (wu)
+constexpr int32_t kFizzleDustMinZ      = 5;        // ×0.1 -> 0.5 wu/tick min fall
+constexpr int32_t kFizzleDustMaxZ      = 45;       // ×0.1 -> 4.5 wu/tick max fall
+constexpr int32_t kFizzleDustRot       = 15;       // ± deg/tick spin rate
+constexpr int32_t kFizzleDustMinScl    = 5;        // ×0.01 -> 0.05 min max-scale
+constexpr int32_t kFizzleDustMaxScl    = 25;       // ×0.01 -> 0.25 max max-scale
+constexpr float   kFizzleDustSclInc    = 0.05f;    // scale/tick GROW
+constexpr float   kFizzleDustSclDec    = 0.02f;    // scale/tick SHRINK
+constexpr float   kFizzleDustAdd       = 1.5f;     // emission acc /tick
+constexpr int32_t kFizzleSpawnZMin     = 70;       // wu above origin
+constexpr int32_t kFizzleSpawnZMax     = 130;      // wu above origin
+
+// Phase tags (forensics §6.2 / §13.3 — life_span is OVERLOADED as a phase
+// tag, not a tick countdown).
+constexpr int32_t kFizzlePhaseGrow     = 100;
+constexpr int32_t kFizzlePhaseShrink   = 200;
+constexpr int32_t kFizzlePhaseDead     = 0;
+
+// Static in-plane Z-axis rotation from TParticleSystem::Render
+// (effectcomp.cpp:1089) — folded into rotation_rad alongside the live
+// per-particle rot.z so we don't have to chain transforms per draw.
+constexpr float   kFizzleStaticRotRad  = -float(M_PI) / 4.0f;
+
+// Flicker scale boost (effectcomp.cpp:1095-1097).
+constexpr float   kFizzleFlickerScale  = 1.5f;
+
+// Base quad world-unit size. The original drew the I3D's authored quad
+// (each box01/02/03 is a textured 2-triangle quad sized by its verts);
+// the FB-particle pipeline submits a wu-sized billboard, so we pick a
+// base size and the per-particle `scl` curve (0..max_scl in [0.05..0.25])
+// multiplies it. The 32×32 sprite at peak scale 0.25 reads as a small
+// ~8 wu puff at typical camera distances; pick a base that gives the
+// peak a visible-but-modest footprint without dominating the burst.
+constexpr float   kFizzleBaseSizeWu    = 96.0f;
+
+// Resolve which texture slot a sub-object draws from by walking its
+// texfaces[] table. Each S3DObj records one nonzero entry in
+// numtexfaces[1..MAXTEXTURES] for the single texture that actually
+// renders its quad (index 0 is no-texture). Returns -1 if none found.
+// Duplicated locally rather than #include'd because the helper in the
+// blood section above is `static` to that anonymous namespace; keep this
+// file's structure preserve-and-add (no cross-section coupling).
+int32_t FizzleSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+// Read a sub-object's authored UV sub-rect from its vertex list (same
+// shape as ResolveSubObjUv above for blood / the spark UV-cell extraction).
+void FizzleResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Find an unused slot for spawn. Mirrors TParticleSystem::Add's free-slot
+// search (effectcomp.cpp:1133-1158). Returns -1 if the cap is hit.
+// Collapsed-array variant: only consider slots tagged with the requested
+// system (the original kept 3 separate arrays, so a slot was implicitly
+// system-typed — here we search by system field).
+int32_t FizzleFindFreeSlot(SFizzleParticle particles[], int32_t system_idx)
+{
+    // Each system gets its own contiguous range of slots so we preserve
+    // the original's per-system DUST_COUNT cap (effect_old.cpp:12316,
+    // ::Add at effectcomp.cpp:1133-1158 walks the system's own array
+    // until it finds `!used`). System 0 owns slots [0..30), system 1
+    // owns [30..60), system 2 owns [60..90).
+    const int32_t base = system_idx * kFizzleParticlesPerSystem;
+    const int32_t end  = base + kFizzleParticlesPerSystem;
+    for (int32_t i = base; i < end; ++i)
+        if (!particles[i].used)
+            return i;
+    return -1;
+}
+
+}   // namespace
+
+TFizzleEffect* TFizzleEffect::SpawnForTest(const S3DPoint& origin)
+{
+    // --- Load the REAL Magic\Fizzle.I3D imagery (no procedural stand-in).
+    // The 3 dust-puff sprites (blue/purple/magenta) ARE the visual
+    // identity per forensics §10 — substituting procedural dust is
+    // explicitly called out as a bug in §10 / no-standins feedback.
+    const int32_t img_id = TObjectImagery::FindImagery(kFizzleImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[fizzle] SpawnForTest: FindImagery('%s') failed", kFizzleImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[fizzle] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFizzleImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fizzle] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kFizzleImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* fizzle = new TFizzleEffect(base);
+    fizzle->ForcePos(origin);
+    fizzle->SetMapIndex(MapPane.MakeIndex());
+    fizzle->ActivateComponents();
+
+    // Lazy-mesh-init poke (mirror F01 / H04 / X22 / B01). NumObjects
+    // triggers the actual mesh load; NumTextures alone doesn't.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < kFizzleNumSystems || num_tex <= 0)
+    {
+        log_error("[fizzle] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d) — expected 3 box sub-objects",
+                  num_obj, num_tex);
+        delete fizzle;
+        return nullptr;
+    }
+
+    // --- Sub-object resolution. The original (effect_old.cpp:12354-12356)
+    // binds:
+    //     blue.Init(this, GetObject(0), ...);
+    //     red.Init(this, GetObject(2), ...);          // NOTE: index 2!
+    //     purple.Init(this, GetObject(1), ...);       // NOTE: index 1!
+    // So system 0 (blue)  -> sub-object 0 (box01, blue sprite)
+    //    system 1 (red)   -> sub-object 2 (box03, magenta sprite)
+    //    system 2 (purple)-> sub-object 1 (box02, violet/purple sprite)
+    // This is the documented index↔label crossing from forensics §4. We
+    // preserve it so the per-system random(1,3) distribution lines up
+    // with what the original drew.
+    const int32_t kSubObjForSystem[kFizzleNumSystems] = { 0, 2, 1 };
+    const char*   kSystemLabel[kFizzleNumSystems]    = { "blue", "red", "purple" };
+    for (int32_t s = 0; s < kFizzleNumSystems; ++s)
+    {
+        const int32_t obj = kSubObjForSystem[s];
+        const int32_t tex_slot = FizzleSubObjTextureSlot(img3d, obj);
+        const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : obj;
+        S3DTex tex = {};
+        img3d->GetTexture(slot, &tex);
+        fizzle->subobjs_[s].texture = tex.htexture;
+        FizzleResolveSubObjUv(img3d, obj, fizzle->subobjs_[s].uv_rect);
+        fizzle->subobjs_[s].size_wu = kFizzleBaseSizeWu;
+        if (fizzle->subobjs_[s].texture == kInvalidTexture)
+        {
+            log_error("[fizzle] SpawnForTest: '%s' sub-object %d texture unresolved",
+                      kSystemLabel[s], obj);
+            delete fizzle;
+            return nullptr;
+        }
+    }
+
+    // Particles are seeded by the per-tick emission loop in
+    // TickAndSubmitForTest (the original spawns over the first DUST_FRAME=15
+    // ticks, NOT all at once at Initialize). Just zero the cadence state.
+    fizzle->emit_add_    = 0.0f;
+    fizzle->frame_count_ = 0;
+    fizzle->sim_accum_ms_ = 0.0;
+    fizzle->alive_       = true;
+
+    log_info("[fizzle] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "subobjs={blue=box%d(tex=%u), red=box%d(tex=%u), purple=box%d(tex=%u)} "
+             "uvs={blue=[%.3f,%.3f %.3fx%.3f], red=[%.3f,%.3f %.3fx%.3f], "
+             "purple=[%.3f,%.3f %.3fx%.3f]}",
+             kFizzleImageryPath, fizzle->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             kSubObjForSystem[0] + 1, fizzle->subobjs_[0].texture,
+             kSubObjForSystem[1] + 1, fizzle->subobjs_[1].texture,
+             kSubObjForSystem[2] + 1, fizzle->subobjs_[2].texture,
+             fizzle->subobjs_[0].uv_rect[0], fizzle->subobjs_[0].uv_rect[1],
+             fizzle->subobjs_[0].uv_rect[2], fizzle->subobjs_[0].uv_rect[3],
+             fizzle->subobjs_[1].uv_rect[0], fizzle->subobjs_[1].uv_rect[1],
+             fizzle->subobjs_[1].uv_rect[2], fizzle->subobjs_[1].uv_rect[3],
+             fizzle->subobjs_[2].uv_rect[0], fizzle->subobjs_[2].uv_rect[1],
+             fizzle->subobjs_[2].uv_rect[2], fizzle->subobjs_[2].uv_rect[3]);
+    return fizzle;
+}
+
+void TFizzleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TFizzleAnimator::Animate (effect_old.cpp:12361-12487)
+    // + TParticleSystem::Animate (effectcomp.cpp:1041-1068). Framerate-
+    // independent via the 24Hz sim-tick accumulator (same shape as
+    // sparks/blood). Each accumulated tick runs the original per-tick
+    // integration exactly once.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kFizzleSimTickMs))
+        {
+            sim_accum_ms_ -= double(kFizzleSimTickMs);
+
+            // Emission cadence: add += DUST_ADD; ++frame_count
+            // (effect_old.cpp:12367, :12371).
+            emit_add_ += kFizzleDustAdd;
+            ++frame_count_;
+
+            // TParticleSystem::Animate (effectcomp.cpp:1045-1067) — per
+            // used particle: integrate pos += vel, multiply vel *= acc
+            // (acc=1.0 -> constant velocity, no gravity/drag for Fizzle).
+            // The original's life/life_span lifecycle is COMPLETELY
+            // bypassed in practice because the animator's scale machine
+            // sets life_span=0 (kill) before any time-based death
+            // condition triggers (forensics §6.1 note / §13.3 — life_span
+            // is overloaded as a phase tag, NOT a tick-countdown). So
+            // we only run the position integration here; the kill
+            // condition lives in the scale state machine below.
+            for (int32_t i = 0; i < kFizzleMaxParticles; ++i)
+            {
+                SFizzleParticle& p = particles_[i];
+                if (!p.used)
+                    continue;
+                // pos += vel (acc=1.0, so vel never changes)
+                p.pos.X += p.vel.X;
+                p.pos.Y += p.vel.Y;
+                p.pos.Z += p.vel.Z;
+            }
+
+            // --- Emission loop (effect_old.cpp:12378-12423).
+            // Spawn ~1.5/tick for the first 15 ticks, distributed
+            // randomly across the 3 systems. Each new particle has
+            // scl=(0,0,0) (will GROW), random max-scale temp.z, random
+            // spin rate temp.y, and phase=100 (GROW).
+            while (emit_add_ > 1.0f && frame_count_ < kFizzleDustFrame)
+            {
+                emit_add_ -= 1.0f;
+
+                // Match the original's r in {1,2,3} → system {blue, red,
+                // purple}. Mapped to system_idx 0/1/2.
+                const int32_t r = random(1, 3);
+                const int32_t system_idx = r - 1;
+                const int32_t slot = FizzleFindFreeSlot(particles_, system_idx);
+                if (slot < 0)
+                    continue;   // system full this tick — original behaviour:
+                                // TParticleSystem::Add silently drops if no slot
+
+                SFizzleParticle& p = particles_[slot];
+                p.used = true;
+                p.system = system_idx;
+                // pos: (±DUST_SPREAD, ±DUST_SPREAD, random(70,130)) wu
+                p.pos.X = float(random(-kFizzleDustSpread, kFizzleDustSpread));
+                p.pos.Y = float(random(-kFizzleDustSpread, kFizzleDustSpread));
+                p.pos.Z = float(random(kFizzleSpawnZMin, kFizzleSpawnZMax));
+                // vel: (0, 0, -random(5,45)*0.1) — straight down only
+                p.vel.X = 0.0f;
+                p.vel.Y = 0.0f;
+                p.vel.Z = -float(random(kFizzleDustMinZ, kFizzleDustMaxZ)) * 0.1f;
+                // scl starts at 0 (invisible); will grow via the
+                // state machine.
+                p.scl.X = p.scl.Y = p.scl.Z = 0.0f;
+                // rot.z starts at 0 — the original assigns a random
+                // rot.z = random(0,359) then immediately overwrites all
+                // rot to 0 on the next line (effect_old.cpp:12401-12402),
+                // so the initial random spin NEVER takes effect
+                // (forensics §13.2 — "do NOT reconstruct the dead line").
+                p.rot_z_deg = 0.0f;
+                // phase tag (life_span in the original; 100 = GROW)
+                p.phase = kFizzlePhaseGrow;
+                // flicker re-rolled each tick during the per-particle
+                // pass; seed it now too (mirrors the spawn assignment).
+                p.flicker = (random(0, 1) != 0);
+                // spin rate temp.y = ±DUST_ROT deg/tick
+                p.spin_rate = float(random(-kFizzleDustRot, kFizzleDustRot));
+                // max-scale temp.z = random(DUST_MIN_SCL, DUST_MAX_SCL) * 0.01
+                p.max_scl = float(random(kFizzleDustMinScl, kFizzleDustMaxScl)) * 0.01f;
+            }
+
+            // --- Per-particle scale state machine + spin + flicker
+            // (effect_old.cpp:12426-12478). `done` tracks whether any
+            // particle is still alive — if not (and emission is over),
+            // the effect self-destructs.
+            bool done = true;
+            for (int32_t i = 0; i < kFizzleMaxParticles; ++i)
+            {
+                SFizzleParticle& p = particles_[i];
+                if (!p.used)
+                    continue;
+
+                if (p.phase == kFizzlePhaseGrow)
+                {
+                    // scl += DUST_SCL_INC (per axis) — uniform grow
+                    p.scl.X += kFizzleDustSclInc;
+                    p.scl.Y += kFizzleDustSclInc;
+                    p.scl.Z += kFizzleDustSclInc;
+                    if (p.scl.X > p.max_scl)
+                        p.phase = kFizzlePhaseShrink;
+                }
+                else if (p.phase == kFizzlePhaseShrink)
+                {
+                    // scl -= DUST_SCL_DEC (per axis) — uniform shrink
+                    p.scl.X -= kFizzleDustSclDec;
+                    p.scl.Y -= kFizzleDustSclDec;
+                    p.scl.Z -= kFizzleDustSclDec;
+                    if (p.scl.X <= 0.0f)
+                    {
+                        p.scl.X = p.scl.Y = p.scl.Z = 0.0f;
+                        p.phase = kFizzlePhaseDead;
+                        p.used  = false;     // free slot (mirror "life_span=0"
+                                             // semantic: next ::Animate would
+                                             // free in the original; we do it
+                                             // here to keep the array clean)
+                        continue;            // don't spin/flicker a dead particle
+                    }
+                }
+
+                // Spin: rot.z += temp.y (deg), wrap [0,360).
+                // (effect_old.cpp:12467-12472).
+                p.rot_z_deg += p.spin_rate;
+                while (p.rot_z_deg <    0.0f) p.rot_z_deg += 360.0f;
+                while (p.rot_z_deg >= 360.0f) p.rot_z_deg -= 360.0f;
+
+                // Re-roll flicker (effect_old.cpp:12475).
+                p.flicker = (random(0, 1) != 0);
+
+                done = false;
+            }
+
+            // --- Self-destruct (effect_old.cpp:12482-12485).
+            if (frame_count_ >= kFizzleDustFrame && done)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    // --- Render: port of TFizzleAnimator::Render (effect_old.cpp:12489-12502)
+    // + TParticleSystem::Render (effectcomp.cpp:1070-1109). For each used
+    // particle: build the rotation/scale/translate transform and submit
+    // one billboard. Mapped to the FB-particle pipeline:
+    //   - WorldXY orientation = the RotateX(-pi/2) ground tip.
+    //   - rotation_rad        = rot.z (radians) + the static -pi/4 spin.
+    //   - size_wu * scale     = the per-axis Scale call (×1.5 if flicker).
+    //   - color_rgba          = (1,1,1,1) — no per-vertex tint in the
+    //                           original; color is entirely in the sprite
+    //                           texture (forensics §7 "Per-vertex color
+    //                           packing: NONE written by the effect").
+    //   - blend = Alpha       — TFizzleAnimator::Render calls
+    //                           SetBlendState (= SRC_ALPHA / INV_SRC_ALPHA),
+    //                           NOT SetAddBlendState (forensics §7).
+    //   - light = Unlit       — animator never folds ambient into vertex
+    //                           color; materials are neutral white
+    //                           (forensics §7).
+    //   - depth = TestNoWrite — SetBlendState sets ZWRITE=false.
+
+    const S3DPoint& base = Pos();
+
+    SParticleDrawItem item = {};
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 1.0f;
+    item.color_rgba[2]   = 1.0f;
+    item.color_rgba[3]   = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::WorldXY;
+    item.debug_mode      = debug_mode;
+
+    for (int32_t i = 0; i < kFizzleMaxParticles; ++i)
+    {
+        const SFizzleParticle& p = particles_[i];
+        if (!p.used || p.scl.X <= 0.0f)
+            continue;
+
+        const SFizzleSubObject& so = subobjs_[p.system];
+        if (so.texture == kInvalidTexture)
+            continue;
+
+        // World position = effect origin + object-local particle pos.
+        // The original calls FIX_Z_VALUE on pos.z, which corrects from
+        // local to world depth via the iso-projection conventions; we
+        // submit world coordinates directly so the renderer applies its
+        // own (sokol) projection and we don't double-apply the fix.
+        item.world_pos[0] = float(base.x) + p.pos.X;
+        item.world_pos[1] = float(base.y) + p.pos.Y;
+        item.world_pos[2] = float(base.z) + p.pos.Z;
+
+        // Scale: size_wu × current scl × (1.5 if flicker). The original
+        // applies the boost to all three axes uniformly, so it's a
+        // uniform size multiplier on the rendered quad.
+        const float flicker_mult = p.flicker ? kFizzleFlickerScale : 1.0f;
+        item.size_wu[0] = so.size_wu * p.scl.X * flicker_mult;
+        item.size_wu[1] = so.size_wu * p.scl.Y * flicker_mult;
+
+        // Spin: live per-particle rot.z (degrees -> radians) +
+        // the static -pi/4 ground-plane spin (effectcomp.cpp:1089).
+        // Facing is 0 for Fizzle (forensics §13.5), so no third term.
+        const float rot_z_rad = p.rot_z_deg * float(M_PI) / 180.0f;
+        item.rotation_rad = rot_z_rad + kFizzleStaticRotRad;
+
+        item.uv_rect[0] = so.uv_rect[0];
+        item.uv_rect[1] = so.uv_rect[1];
+        item.uv_rect[2] = so.uv_rect[2];
+        item.uv_rect[3] = so.uv_rect[3];
+        item.key.texture = so.texture;
+
+        Renderer->SubmitFxParticle(item);
+    }
+}
+
+// *************************************************************************
 // * TRippleEffect - FB-pipeline standalone-spawn for --test=vfx (H03)     *
 // *************************************************************************
 //
