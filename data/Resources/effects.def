@@ -97,9 +97,18 @@ effect Blood
 
         // One-shot 10-droplet burst at attach.
         spawn_burst = 10
-        // 24 Hz sim cadence matches the snapshot's authoring rate
-        // (effectcomp.cpp:1326-1334 integrates pos += vel; vel.z -= 0.37
-        // per tick; we run that math here in per-tick units).
+        // ---------------------------------------------------------------
+        // UNIT CONVENTION (explicit-tick-multiplier; see effect.cpp
+        // IntegrateBucket header):
+        //   * tick_expr runs once per tick at tick_hz=24, i.e. exactly 24
+        //     times per simulated second regardless of render FPS.
+        //   * All velocity / gravity / pos-delta literals in tick_expr are
+        //     PER-TICK units (wu/tick for velocity, wu/tick^2 for gravity).
+        //     One tick_expr call == one tick's worth of motion; the engine
+        //     does NOT multiply by dt.
+        //   * default_life / Age / Age01 are SECONDS. Convert by hand using
+        //     tick_hz when mixing the two systems in one expression.
+        // ---------------------------------------------------------------
         tick_hz = 24
         // No auto-kill -- the reflection-plane kill_expr handles the
         // FLY -> SPLAT transition. (default_life=0 keeps drops alive
@@ -131,8 +140,13 @@ effect Blood
             color = vec4(0.8, 0.1, 0.1, 1);
         "
 
-        // 24 Hz tick: pos += vel; vel.xy *= 0.95; vel.z -= 0.37
-        // (effectcomp.cpp:1326-1334 verbatim, in per-tick units).
+        // Per-tick body (effectcomp.cpp:1326-1334 verbatim):
+        //   pos += vel               -- vel is wu/tick, so this advances
+        //                               one tick's worth of position
+        //   vel.xy *= 0.95           -- per-tick air drag
+        //   vel.z -= 0.37            -- per-tick gravity (wu/tick^2)
+        // Numerically correct under the explicit-tick-multiplier model
+        // because the engine invokes this body exactly tick_hz=24 times/sec.
         tick_expr = "
             pos = pos + vel;
             vel.x = vel.x * 0.95;
@@ -176,9 +190,18 @@ effect Blood
 
         // Driven entirely by the chain from blood_fly -- no self-spawn.
         spawn_burst = 0
+        // ---------------------------------------------------------------
+        // UNIT CONVENTION (explicit-tick-multiplier; see effect.cpp
+        // IntegrateBucket header):
+        //   * tick_expr runs once per tick at tick_hz=24 (24 invocations
+        //     per simulated second, frame-rate independent).
+        //   * tick_expr literals (the SHRINK rate below) are PER-TICK.
+        //   * default_life is SECONDS; Age01 = Age_seconds / default_life.
+        // ---------------------------------------------------------------
         tick_hz = 24
-        // SPLAT (1s hold) + SHRINK (~0.4s) ~= 1.4s. The kill_expr handles
-        // fine-grained reaping; default_life is the upper bound.
+        // 1.6s = 38.4 ticks @ tick_hz=24. SHRINK begins at age01=0.6
+        // (~23 ticks in) and runs for the last 40% of life (~15 ticks)
+        // -- see SHRINK math comment below tick_expr.
         default_life = 1.6
 
         // Chain spawn -- emit_pos / emit_vel are the dying FLY droplet's
@@ -196,16 +219,23 @@ effect Blood
             color = vec4(0.6, 0.08, 0.08, 1);
         "
 
-        // Hold peak 1.8 for ~60% of life, then linearly shrink to 0 over
-        // the last 40%. Shrink rate sized so scale reaches ~0 at age01=1:
-        //   shrink_total = 1.8 over (0.4 * default_life * tick_hz) = 0.4*1.6*24 = 15.4 ticks
-        //   rate ~= 1.8/15.4 ~= 0.12 wu/tick during SHRINK phase.
+        // Hold peak scale for ~60% of life (age01 < 0.6 -> step() = 0),
+        // then linearly shrink over the last 40%. Per-tick shrink rate is
+        // sized so authored scale (35 wu) reaches ~0 at age01=1:
+        //   SHRINK window = 0.4 * default_life * tick_hz
+        //                 = 0.4 * 1.6s * 24Hz
+        //                 = 15.4 ticks
+        //   per-tick rate = 35 wu / 15.4 ticks ~= 2.3 wu/tick
+        // (rate literal is per-tick; age01 is unitless 0..1 from seconds).
         tick_expr = "
             scale.x = scale.x - 2.3 * step(0.6, age01);
             scale.y = scale.y - 2.3 * step(0.6, age01);
         "
 
-        // Reap when the splat has shrunk to ~zero.
+        // Reap when scale has shrunk past ~1 wu (scale-units predicate, NOT
+        // a time predicate). The default_life=1.6s auto-kill is the
+        // backstop; this kill_expr typically fires a tick or two earlier
+        // when SHRINK has run scale down to 0.
         kill_expr = "step(scale.x, 1.0)"
     }
 }
@@ -235,6 +265,17 @@ effect Mist
         orientation = "screen_aligned"
 
         spawn_count = 50
+        // ---------------------------------------------------------------
+        // UNIT CONVENTION (explicit-tick-multiplier; see effect.cpp
+        // IntegrateBucket header):
+        //   * tick_expr runs once per tick at tick_hz=24 (frame-rate
+        //     independent: exactly 24 invocations per simulated second).
+        //   * Velocity / gravity literals in tick_expr are PER-TICK
+        //     (wu/tick and wu/tick^2). The retail TMistAnimator constants
+        //     (effect_old.cpp:11342+) were authored at this exact cadence.
+        //   * default_life is SECONDS (5.0s = 120 ticks @ 24Hz upper bound;
+        //     drops typically die earlier via the kill_expr below).
+        // ---------------------------------------------------------------
         tick_hz = 24
         default_life = 5.0
 
@@ -257,9 +298,12 @@ effect Mist
             color = vec4(0.16, 0.18, 0.22, 1);
         "
 
-        // RIPPLE_GRAVITY = 0.37 per-tick (shared with H03/H04). tick_hz=24
-        // means per_tick_seconds = 1/24, so vel.z -= 0.37 is per-tick
-        // exactly. pos += vel in tick units (wu/tick).
+        // Per-tick body. RIPPLE_GRAVITY = 0.37 wu/tick^2 (shared retail
+        // constant with H03/H04). Under the explicit-tick-multiplier
+        // model, the engine invokes this body exactly tick_hz=24 times/sec,
+        // so per-tick literals produce the retail-authored motion verbatim:
+        //   vel.z -= 0.37     -- per-tick gravity
+        //   pos  += vel       -- one tick's position advance (vel is wu/tick)
         tick_expr = "
             vel.z = vel.z - 0.37;
             pos = pos + vel;
