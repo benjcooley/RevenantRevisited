@@ -2665,7 +2665,7 @@ class TBloodAnimator : public T3DAnimator
     TBloodSystem bloods;
 
   protected:
-    
+
   public:
     TBloodAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
       // Constructor (initialization handled by Initialize)
@@ -2679,6 +2679,151 @@ class TBloodAnimator : public T3DAnimator
     virtual bool Render();
       // Called to render a frame
     virtual void RefreshZBuffer();
+};
+
+// ******************
+// * TFizzleEffect *
+// ******************
+//
+// X21 spell-failure puff ("Fizzle" / TFizzleAnimator / TParticleSystem).
+// FAITHFUL DIRECT PORT of the pre-release per-tick particle loop — same
+// model SPARKS / BLOOD follow. The original is three small `TParticleSystem`
+// instances (blue/red/purple) owned by `TFizzleAnimator`, each binding one
+// of the 3 sub-objects (box01/02/03) of `Magic\Fizzle.I3D` (a 32x32
+// ARGB4444 dust sprite); each tick the animator spawns ~1.5 particles for
+// the first 15 ticks, runs a grow→shrink scale state machine + in-plane
+// spin, and self-destructs when emission is done AND every particle's
+// scale cycle has finished. See forensics docs/vfx/forensics/X21_TFizzleEffect.md.
+//
+// Three bodies (snapshot, retail animator body not extracted — §2.1):
+//
+//   spawn  = TPlayer::InvokeQuickSpell -> CastByName("Fizzle")
+//            (player.cpp:547-574; spell.def:253-263)
+//   update = TFizzleAnimator::Animate (effect_old.cpp:12361-12487) — owns
+//            the cadence, scale state machine (life_span = 100 -> 200 -> 0
+//            phase tag), spin, flicker re-roll, self-kill.
+//   render = TFizzleAnimator::Render (effect_old.cpp:12489-12502) +
+//            TParticleSystem::Render (effectcomp.cpp:1070-1109) — Alpha
+//            blend, ground-tipped WorldXY, per-particle Z-axis spin,
+//            +1.5x flicker scale boost.
+//
+// The per-particle arrays from the 3 TParticleSystems are collapsed onto
+// this effect class (same convention as SSparkParticle / SBloodParticleEx).
+// One-shot fixed-duration burst, emission window = 15 sim-ticks.
+//
+// Retail fidelity: registration + trigger + asset visual payload are
+// retail-confirmed (forensics §2.1(2)(3)(4)); the per-tick DUST_* constants
+// and the animator body are snapshot-only (§2.1(1)). The shipped fizzle.i3d
+// has identical decoded texture pixels and identical 3-subobj geometry.
+//
+// Caveats (forensics §13.2 / §13.3):
+//   - life_span is OVERLOADED as a phase tag (100=GROW, 200=SHRINK, 0=DEAD),
+//     NOT a tick-countdown — the real lifetime is the grow+shrink scale
+//     cycle ((temp.z/0.05) + (temp.z/0.02) ticks per particle).
+//   - The original spawn has a dead `rot.z = random(0,359)` immediately
+//     overwritten to 0; do NOT port the dead line.
+//
+// Blend = Alpha (SRC_ALPHA / INV_SRC_ALPHA), Unlit, TestNoWrite,
+// orientation = WorldXY (lies flat on ground, RotateX(-pi/2) tip).
+
+// Per-system cap = DUST_COUNT (effect_old.cpp:12293). Emission caps at
+// ~1.5/tick × 15 ticks ≈ 22-23 total split across the 3 systems, so DUST_COUNT
+// is never reached in practice — but the pre-release allocated this many
+// slots per system, so we hold the same capacity per system for fidelity.
+inline constexpr int32_t kFizzleParticlesPerSystem = 30;
+
+// Three systems (blue/red/purple) × DUST_COUNT each. Particles join a
+// random system at spawn (random(1,3)). We collapse onto a single
+// fixed-cap inline array — no heap churn per burst.
+inline constexpr int32_t kFizzleNumSystems     = 3;
+inline constexpr int32_t kFizzleMaxParticles   =
+    kFizzleParticlesPerSystem * kFizzleNumSystems;
+
+// One fizzle particle's transient state. Pre-release stored these as
+// SParticleSystemInfo (effectcomp.h:308-325) inside the per-system arrays;
+// we collapse onto a per-particle struct on the effect class. system_idx
+// records which of the 3 systems (= which sub-object texture) it draws from.
+// The 24Hz cadence (DUST_*) integrates via the same sim-tick accumulator
+// the sparks/blood ports use — converted to per-second wall-clock via
+// TickAndSubmitForTest's accumulator, so motion stays framerate-independent.
+struct SFizzleParticle
+{
+    hmm_vec3 pos       = {0.0f, 0.0f, 0.0f};   // object-local position (wu)
+    hmm_vec3 vel       = {0.0f, 0.0f, 0.0f};   // velocity (wu / sim-tick)
+    hmm_vec3 scl       = {0.0f, 0.0f, 0.0f};   // current scale (grow/shrink)
+    float    rot_z_deg = 0.0f;                 // in-plane spin angle (degrees)
+    float    spin_rate = 0.0f;                 // deg / sim-tick (temp.y)
+    float    max_scl   = 0.0f;                 // peak scale 0.05..0.25 (temp.z)
+    int32_t  phase     = 0;                    // 100 GROW, 200 SHRINK, 0 DEAD
+    int32_t  system    = 0;                    // 0=blue, 1=red, 2=purple
+    bool     used      = false;                // active slot?
+    bool     flicker   = false;                // re-rolled each tick (×1.5 scale)
+};
+
+// One sub-object's resolved draw data — captured at SpawnForTest from the
+// authored UVs of the box's verts and the htextures[] slot the box uses.
+// The 3 systems map to box01/box02/box03 (forensics §4). Mirrors the
+// SBloodSubObject pattern (effect.h:2573-2578).
+struct SFizzleSubObject
+{
+    TTextureHandle texture    = kInvalidTexture;
+    float          uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};  // x,y,w,h normalized
+    float          size_wu    = 16.0f;                      // billboard size in wu
+};
+
+_CLASSDEF(TFizzleEffect)
+
+class TFizzleEffect : public TEffect
+{
+  public:
+    TFizzleEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TFizzleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFizzleEffect() override = default;
+
+    // Spawn a standalone single-burst TFizzleEffect for the --test=vfx
+    // harness. Loads the real Magic\Fizzle.I3D imagery (NO procedural
+    // stand-in — the 3 colored dust sprites ARE the visual identity per
+    // forensics §10), resolves each of the 3 box sub-objects (box01/blue,
+    // box02/purple, box03/red — note the index↔label crossing from
+    // effect_old.cpp:12354-12356) to (texture, UV sub-rect, size). Resets
+    // the per-burst counters; particles are seeded by the per-tick
+    // emission loop inside TickAndSubmitForTest (not at spawn — the
+    // original emits over the first 15 ticks, not all at once). Returns
+    // nullptr if the imagery can't be loaded. Caller owns the pointer.
+    [[nodiscard]] static TFizzleEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness. Ports
+    // TFizzleAnimator::Animate (effect_old.cpp:12361-12487) +
+    // TParticleSystem::Animate/Render (effectcomp.cpp:1041-1109) directly,
+    // converted to framerate-independent integration via the 24 Hz sim-tick
+    // accumulator (same pattern as sparks/blood). FB pipeline — but uses
+    // SubmitFxParticle (not SubmitFxBillboard) so each particle's
+    // in-plane spin (rot.z) is honored by the per-particle rotation_rad
+    // attribute on the WorldXY-oriented quad.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the last particle's scale cycle has finished (mirrors
+    // TFizzleAnimator self-destruct via KillThisEffect when frame_count
+    // >= 15 AND every used particle is done — effect_old.cpp:12482-12485).
+    // The harness uses this to gate non-overlapping re-fires.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Per-particle state (faithful collapse of the 3 TParticleSystem
+    // arrays onto the class — same pattern as SSparkParticle in sparks,
+    // SBloodParticleEx in blood).
+    SFizzleParticle particles_[kFizzleMaxParticles] {};
+    // Resolved sub-object textures + UV sub-rects. Indexed by particle's
+    // `system` field (0=blue/box01, 1=red/box03, 2=purple/box02).
+    SFizzleSubObject subobjs_[kFizzleNumSystems] {};
+
+    // Emission cadence — directly mirrors `add`/`frame_count` in
+    // TFizzleAnimator (effect_old.cpp:12313-12314).
+    float   emit_add_       = 0.0f;
+    int32_t frame_count_    = 0;
+    // 24Hz sim-tick accumulator (ms) — same as sparks/blood.
+    double  sim_accum_ms_   = 0.0;
+    bool    alive_          = true;
 };
 
 // *****************

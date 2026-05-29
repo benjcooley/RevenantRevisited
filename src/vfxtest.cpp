@@ -1700,6 +1700,74 @@ void BloodSubmit(void* cp, EFxDebugMode dbg)
         c->blood->TickAndSubmitForTest(dbg);
 }
 
+// --- FB: real TFizzleEffect (X21, Magic/Fizzle.I3D) ----------------------
+// Spawns a sector-less single-burst TFizzleEffect at the harness origin
+// via SpawnForTest and drives the ported TFizzleAnimator loop through
+// TickAndSubmitForTest each frame. Faithful direct port (not a
+// TParticleBucket / effects.def re-derivation) — see src/effect.cpp X21
+// block. Three colored dust sprites (blue/purple/magenta) tipped flat on
+// the world XY plane, growing then shrinking with an in-plane spin.
+//
+// Single non-overlapping burst (per RECONSTRUCTION_PROTOCOL + the §4.1
+// "one effect on screen at a time" rule + the X21 spec's "single burst on
+// screen" requirement): the harness lets a burst fully play out (IsAlive()
+// goes false when the last particle's scale cycle ends), waits a clear
+// gap, then re-fires ONE fresh burst. The gap (~1.0s) is long enough that
+// the previous puff has cleared before the next one pops in — so a viewer
+// sees one isolated grow→shrink cycle at a time, not overlapping clouds.
+// Static preview style (internal cadence is owned here, not by the
+// harness destroy/respawn timer).
+struct SFizzleCtx {
+    TFizzleEffect* fizzle = nullptr;
+    S3DPoint       origin = {0, 0, 0};
+    float          gap    = 0.0f;     // post-death cooldown before re-fire
+};
+
+constexpr float kFizzleRetriggerGap = 1.0f;   // clear gap between bursts (s)
+
+void* FizzleSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFizzleCtx();
+    c->origin = origin;
+    c->fizzle = TFizzleEffect::SpawnForTest(origin);
+    if (!c->fizzle)
+        log_warn("[vfx] TFizzleEffect::SpawnForTest returned null; X21 entry will draw nothing");
+    return c;
+}
+
+void FizzleDestroy(void* cp)
+{
+    auto* c = static_cast<SFizzleCtx*>(cp);
+    delete c->fizzle;
+    delete c;
+}
+
+void FizzleSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFizzleCtx*>(cp);
+    if (!c)
+        return;
+
+    // Burst played out -> wait a clear gap, then re-fire ONE fresh burst.
+    // Keeps exactly one clean, non-overlapping puff visible — the
+    // §4.1 "one effect on screen at a time" rule, also called out
+    // explicitly in the X21 reconstruction prompt ("single burst on
+    // screen, re-fire after a clear gap").
+    if (!c->fizzle || !c->fizzle->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->fizzle;
+            c->fizzle = TFizzleEffect::SpawnForTest(c->origin);
+            c->gap    = kFizzleRetriggerGap;
+        }
+    }
+
+    if (c->fizzle)
+        c->fizzle->TickAndSubmitForTest(dbg);
+}
+
 // --- SR: real TStripEffect (S01 lightning bolt) --------------------------
 // Spawns a sector-less TStripEffect at the harness-provided origin via
 // SpawnForTest and drives its segment ring through TickAndSubmitForTest
@@ -2441,6 +2509,21 @@ struct SVfxTestBootstrap {
         spark.submit        = [](void* c, EFxDebugMode d) { SparkSubmit(c, d); };
         spark.destroy       = [](void* c) { SparkDestroy(c); };
         VfxTest::DeferredRegister(spark);
+
+        VfxTest::SEffect fizzle = {};
+        fizzle.id            = "TFizzleEffect";
+        fizzle.family        = "magic";   // spell-failure family (forensics §0)
+        fizzle.pipeline      = "FB";
+        // X21 = spell-fail dust puff: brief one-shot fixed-duration burst
+        // (~30 sim-ticks of emission + play-out). Static cadence; the
+        // single-burst non-overlapping re-fire is owned inside FizzleSubmit
+        // (let one puff die, wait a clear gap, fire one fresh puff) so a
+        // clean single instance is always visible for verification.
+        fizzle.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fizzle.factory       = [](const S3DPoint& o) -> void* { return FizzleSpawn(o); };
+        fizzle.submit        = [](void* c, EFxDebugMode d) { FizzleSubmit(c, d); };
+        fizzle.destroy       = [](void* c) { FizzleDestroy(c); };
+        VfxTest::DeferredRegister(fizzle);
 
         VfxTest::SEffect flare = {};
         flare.id            = "TFlareAnimator.placeholder";
