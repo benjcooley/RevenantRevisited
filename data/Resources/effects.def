@@ -119,7 +119,7 @@ effect Blood
             vel = vec3(cos(rand(0, 6.2831853)) * (2 + 4 * rand01()),
                        sin(rand(0, 6.2831853)) * (2 + 4 * rand01()),
                        2 + 4 * rand01());
-            scale = vec3(8, 8, 1);
+            scale = vec3(20, 20, 1);
             rot.z = -0.7853982;
             frame = floor(rand01() * 4);
             color = vec4(0.8, 0.1, 0.1, 1);
@@ -180,7 +180,7 @@ effect Blood
         spawn_expr = "
             pos = vec3(emit_pos.x, emit_pos.y, emit_pos.z + 2);
             vel = vec3(0, 0, 0);
-            scale = vec3(14, 14, 1);
+            scale = vec3(35, 35, 1);
             rot.z = rand(0, 6.2831853);
             frame = 4 + floor(rand01() * 4);
             color = vec4(0.6, 0.08, 0.08, 1);
@@ -191,12 +191,12 @@ effect Blood
         //   shrink_total = 1.8 over (0.4 * default_life * tick_hz) = 0.4*1.6*24 = 15.4 ticks
         //   rate ~= 1.8/15.4 ~= 0.12 wu/tick during SHRINK phase.
         tick_expr = "
-            scale.x = scale.x - 0.9 * step(0.6, age01);
-            scale.y = scale.y - 0.9 * step(0.6, age01);
+            scale.x = scale.x - 2.3 * step(0.6, age01);
+            scale.y = scale.y - 2.3 * step(0.6, age01);
         "
 
         // Reap when the splat has shrunk to ~zero.
-        kill_expr = "step(scale.x, 0.5)"
+        kill_expr = "step(scale.x, 1.0)"
     }
 }
 
