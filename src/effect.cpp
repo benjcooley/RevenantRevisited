@@ -1189,180 +1189,200 @@ TFlameEffect* TFlameEffect::SpawnForTest(const S3DPoint& origin)
 }
 
 // *************************************************************************
-// * TBloodEffect - PE-pipeline minimum-viable spawn for --test=vfx        *
+// * (B01) TBloodEffect — generic blood spray ("Blood" / TBloodAnimator)   *
 // *************************************************************************
 //
-// Scope: Phase 2.2 pipeline validator. This is *not* a faithful port of
-// retail TBloodSystem kinematics (gravity, splat-sticking, surface-decal
-// blood splats). Those land in Phase 2.2.1 once TBloodSystem +
-// TBloodAnimator are mapped against the retail Ghidra output
-// (recon/classes/cls_0x5acaa8.cpp — the merged Blood+Mist+WaterFall file
-// flagged in INVENTORY for split-before-port).
+// FAITHFUL DIRECT PORT of the pre-release particle loop. See forensics
+// docs/vfx/forensics/B01_TBloodEffect.md. The three ported bodies:
 //
-// What this *does* deliver:
-//   1. A real `TBloodEffect` instance that owns its lifecycle.
-//   2. A `TParticleBucket` allocated from `ParticleManager()` and submitted
-//      every frame via `Renderer->SubmitFxParticleBucket()` — exercising
-//      the PE pipeline end-to-end through the real effect class lineage.
-//   3. The bucket's texture is sourced from the canonical bloodimagery
-//      (`Misc\Blood.I3D`, the same asset playscreen.cpp:236 loads), so
-//      this validates 3D-imagery → particle-texture wiring too.
-//   4. Spawns red, downward + outward droplets with brief lifetime — the
-//      "vaguely like a blood spray" bar the scope sets explicitly.
+//   spawn  : TBloodSystem::Init (effectcomp.cpp:1182-1307) — 30-particle
+//            directional spray seeded at once, optional trail-fill of small
+//            droplets riding behind the main ones, ViolenceLevel-gated.
+//   update : TBloodSystem::Animate (effectcomp.cpp:1309-1370) — 3-stage
+//            FLY → SPLAT → SHRINK state machine. FLY integrates `pos += vel;
+//            vel.xy *= 0.95; vel.z -= 0.37; scl += 0.01` once per 24 Hz tick,
+//            transitions to SPLAT when pos.z <= 20 (snap to 1.8 scale, hold
+//            25 ticks), then SHRINK ramps scl down by 0.1/tick to 0 = dead.
+//   render : TBloodSystem::Render (effectcomp.cpp:1415-1530) — each used
+//            droplet drawn TWICE: pass 0 = Alpha base, pass 1 = ONE/ONE
+//            additive overlay. Sub-objects {box05..box08} feed pass 0,
+//            {box01..box04} feed pass 1 (forensics §4 / §7).
 //
-// What this does *not* deliver:
-//   - Faithful retail TBloodSystem droplet/splat state machine.
-//   - Surface intersection for decals.
-//   - The TBloodAnimator <-> TParticleSystem dispatch glue.
+// Engine adaptations (only what the new engine genuinely requires):
+//   - SubmitFxBillboard FB-pipeline draws instead of D3D RenderObject.
+//     Each droplet emits TWO billboard items (one per pass-set) so the
+//     alpha base + additive sheen composite faithfully.
+//   - Framerate-independence: the original integrated on a 24 Hz integer
+//     game-frame. We keep the math in the original per-tick units and
+//     drive it from a 24 Hz sim-tick accumulator (same fix as F03/H03/
+//     M05/X22), so the burst plays at the original wall-clock speed
+//     regardless of render framerate.
+//   - DoLighting: retail samples 3 closest world lights + ambient×4,
+//     clamps/normalizes to grayscale, multiplies the texture. The FB
+//     pipeline's EFxLightMode::LitFlat provides a comparable "scene-lit"
+//     multiplier; that's the engine-side analog flagged in forensics §7 +
+//     §10. (Once a direct Scene3D::GetClosestLights port is wired into
+//     the FB submit path, the per-droplet vertex grayscale will land
+//     verbatim — a follow-up tracked as B01a.)
+//   - Per-sub-object UV sub-rect resolved from authored vertex UVs (the
+//     faithful equivalent of RenderObject drawing that sub-object's quad
+//     with its baked UVs). Each box references one texture slot via its
+//     S3DObj texfaces[]; we resolve the slot → htextures[] mapping at
+//     spawn so every droplet draws the correct sprite cell.
 //
-// Per the time-box rule, all of the above are deferred to Phase 2.2.1
-// rather than blocking this row on TBloodSystem reverse-engineering.
+// Retail-vs-snapshot reconciliation (forensics §2.1, retail-partial):
+//   - Asset Misc\Blood.I3D is byte-identical to ship (MD5 confirmed).
+//   - Caller wiring + SetParams handshake are retail-confirmed; the live
+//     impale call (recon/discovered/cls_0x5a7b98_ResolveAttack_4c1bb0.cpp:190)
+//     uses hspread=0x20=32, vspread=5 — NOT the snapshot's 80/20. We
+//     adopt the retail values here for the harness spawn (tighter spray);
+//     the snapshot's 80/20 is a known dev tuning divergence (§13.2).
+//   - TBloodSystem kinematics (gravity 0.37, drag 0.95, splat 1.8, etc.)
+//     are snapshot-only (Ghidra didn't isolate the animator class). We
+//     ship the snapshot numbers as best-evidence (forensics §13.1); the
+//     spray distance/arc must be vetted vs in-game footage in §12.
+//
+// NOT ported (dead/dev-disabled per forensics §13):
+//   - the bif impact-splash block (effectcomp.cpp:1485-1529 commented).
+//   - the big/med trail loops (effectcomp.cpp:1242-1283 commented) —
+//     ONLY the smalls-trail-smalls loop (:1287-1306) is live.
+//   - big (size=2) sprite draws (commented in Render — a size-2 droplet
+//     falls through to the small sprite).
+//   - TBloodParticle3DAnimator alternate + REGISTER_MULTI_3DANIMATOR_.
 namespace {
 
-constexpr const char* kBloodImageryPath  = "Misc\\Blood.I3D";
-constexpr const char* kBloodBucketName   = "vfx.blood.droplets";
+constexpr const char* kBloodImageryPath = "Misc\\Blood.I3D";
 
-// Monotonic counter for per-instance owner_particle_id so multiple
-// concurrent spawns don't share particles in the global bucket. The
-// usual ownership stamp is GetMapIndex(), but particles allocated via
-// SpawnForTest live in the *global* TParticleManager bucket where map
-// indices aren't unique across the whole engine — a dedicated 1000+
-// range avoids stomping any real map-index-derived ids.
-float NextBloodOwnerId()
+// 24 Hz cadence gate (family-consistent with F03/H03/M05/X22). The original
+// per-tick rates (gravity 0.37 wu/tick^2, drag 0.95/tick, scale step 0.01/tick,
+// SPLAT duration 25 ticks, SHRINK step 0.1/tick) are integrated once per
+// sim-tick of accumulated wall-clock time. See forensics §3 + §6.2.
+constexpr int32_t kBloodSimTickMs = 1000 / 24;
+
+// Constants — straight from src/effectcomp.cpp:1164-1180 (forensics §3).
+// Names mirror the BLOOD_* defines so the port reads side-by-side with
+// the original (the doc cites these by their BLOOD_* spelling).
+constexpr float   kBloodAirresist     = 0.95f;
+constexpr float   kBloodGravity       = 0.37f;
+constexpr int32_t kBloodStageFly      = 0;
+constexpr int32_t kBloodStageSplat    = 1;
+constexpr int32_t kBloodStageShrink   = 2;
+constexpr float   kBloodSplatSize     = 1.8f;
+constexpr int32_t kBloodSplatDuration = 25;
+constexpr float   kBloodSplatScale    = 0.1f;
+constexpr int32_t kBloodZOffset       = 20;
+constexpr float   kBloodVel           = 2.0f;
+constexpr int32_t kBloodSquirtDelay   = 3;
+constexpr float   kBloodFlyScaleStep  = 0.01f;
+constexpr float   kBloodFlyScale      = 1.0f;
+constexpr int32_t kBloodBloodsPerSquirt = 4;
+constexpr int32_t kBloodMostBloods    = 10;
+
+// Retail spray params (TCharacter::ResolveAttack impale immediates per
+// recon/discovered/cls_0x5a7b98_..._4c1bb0.cpp:190 — forensics §2.1 / §3).
+// These are the live-ship values for the attack-hit path. The snapshot's
+// commented `SetParams(40, (face+128)&255, 0, 80, 20, random(1,5))` at
+// character.cpp:2260 differs only in spread tuning (snapshot 80/20 vs
+// retail 32/5; flagged §13.2) — retail wins for the impale path.
+constexpr int32_t kBloodHeightAttack = 40;
+constexpr int32_t kBloodVangleAttack = 32;     // retail 0x20 (vangle, not vspread)
+constexpr int32_t kBloodHspreadAttack = 32;    // RETAIL 0x20 (snapshot 80)
+constexpr int32_t kBloodVspreadAttack = 5;     // RETAIL 5     (snapshot 20)
+constexpr int32_t kBloodNumMin = 1;            // random(1,5) count
+constexpr int32_t kBloodNumMax = 5;
+constexpr int32_t kBloodSizeIdxMax = 2;        // size = random(0, min(maxsize, 2))
+
+// Quad world-unit size when the I3D sub-object has no resolvable size hint.
+// The Blood.I3D box billboards are authored at sprite-cell pixel sizes; the
+// FB pipeline draws size_wu world-units, so we pick a small base that
+// reads as a droplet at typical camera distances. The per-droplet scl
+// curve multiplies this (FLY ~1.0 → SPLAT 1.8 → SHRINK → 0).
+constexpr float kBloodBaseSizeWu = 16.0f;
+
+// Resolve which texture slot a sub-object draws from by walking its
+// texfaces[] table. Each S3DObj records one nonzero entry in
+// numtexfaces[1..MAXTEXTURES] for the single texture that actually
+// renders its quad (index 0 is no-texture). Returns -1 if none found.
+int32_t SubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
 {
-    static float next = 1000.0f;
-    const float v = next;
-    next += 1.0f;
-    return v;
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    // GetObjFaces fills numtexfaces[0..MAXTEXTURES]. Index 0 is the
+    // "no texture" bin; the active texture slot is the first nonzero
+    // index in [1..MAXTEXTURES]. Return slot-1 (zero-based texture index
+    // for GetTexture).
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
 }
 
-// Lazily allocate the shared droplet bucket against the blood imagery's
-// texture slot 0. Returns nullptr if the texture handle isn't available
-// yet (caller logs + bails).
-TParticleBucket* AcquireBloodBucket(T3DImagery* img3d)
+// Read a sub-object's authored UV sub-rect from its vertex list. Matches
+// the spark UV-cell extraction (see TSparkEffect::SpawnForTest).
+void ResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
 {
-    if (TParticleBucket* existing = ParticleManager().FindGlobalBucket(kBloodBucketName))
-        return existing;
-
-    // Mirror TFlameEffect::AttachVisualComponent's lazy-mesh-init poke:
-    // NumTextures() doesn't trigger init by itself, NumObjects() does.
-    (void)img3d->NumObjects();
-    if (img3d->NumTextures() <= 0)
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
     {
-        log_error("[blood] AcquireBloodBucket: imagery has 0 textures after "
-                  "lazy-init poke (objects=%d)", img3d->NumObjects());
-        return nullptr;
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
     }
-
-    S3DTex tex = {};
-    img3d->GetTexture(0, &tex);
-    if (tex.htexture == kInvalidTexture)
-    {
-        log_error("[blood] AcquireBloodBucket: texture slot 0 handle invalid");
-        return nullptr;
-    }
-
-    SParticleBucketDesc desc = {};
-    desc.name           = kBloodBucketName;
-    desc.scope          = EParticleBucketScope::Global;
-    // Blood is a textured droplet: standard alpha blending lets the
-    // droplet outline read against the scene, scene lighting (LitFlat)
-    // multiplies its dark-red base color by (ambient + sun_term) so it
-    // doesn't render flat-dark like an unlit overlay would. Explicit
-    // TestNoWrite (default) makes the depth-mode choice readable here.
-    desc.light_mode     = EParticleLightMode::Unlit;
-    desc.depth_mode     = EParticleDepthMode::TestNoWrite;
-    // PremulAlpha works correctly with the chroma-key-converted
-    // Blood.I3D texture (alpha=0 in the black bg, rgb already
-    // premultiplied since opaque pixels have alpha=1). This removes
-    // the dark-red fringe that straight-alpha bilinear interpolation
-    // produced at the splat edges.
-    desc.blend          = EParticleBlendMode::PremulAlpha;
-    desc.sort           = EParticleSortMode::None;
-    desc.texture        = tex.htexture;
-    desc.texture_width  = int32_t(tex.desc.width  > 0 ? tex.desc.width  : 1);
-    desc.texture_height = int32_t(tex.desc.height > 0 ? tex.desc.height : 1);
-    // Blood.I3D verified by direct atlas dump: 2×2 grid of 64×64
-    // splat variants (cluster / X / oval / dot) on a pure-black bg.
-    // The second texture in the I3D is a stencil mask, not yet used.
-    desc.frame_cols     = 2;
-    desc.frame_rows     = 2;
-    desc.default_width  = 32.0f;
-    desc.default_height = 32.0f;
-
-    SParticleBufferLayout layout = {};
-    ParticleLayoutAddVar(layout, EParticleVar::OwnerId);
-    ParticleLayoutAddVar(layout, EParticleVar::Life);
-    ParticleLayoutAddVar(layout, EParticleVar::Age);
-    ParticleLayoutAddVar(layout, EParticleVar::DrawPos);
-    ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
-    ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
-    ParticleLayoutAddVar(layout, EParticleVar::DrawFrame);
-    // Per-particle rotation (radians). Retail blood used a random
-    // birth orientation so successive splats didn't all face the
-    // same way -- we mirror that.
-    ParticleLayoutAddVar(layout, EParticleVar::DrawRot);
-    // EmitVel stores per-particle velocity (world-units / sec) so the
-    // tick step can integrate without re-randomizing every frame.
-    ParticleLayoutAddVar(layout, EParticleVar::EmitVel);
-
-    TParticleBucket* bucket = ParticleManager().GetOrCreateGlobalBucket(desc, layout);
-    log_info("[blood] AcquireBloodBucket: bucket='%s' tex=%dx%d handle=%u",
-             kBloodBucketName, desc.texture_width, desc.texture_height,
-             tex.htexture);
-    return bucket;
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
 }
 
-} // namespace
-
-TBloodEffect::~TBloodEffect()
+// Byte-angle → world XY components (matches the original
+// `((angle & 255) * 360 / 256) * TORADIAN` math at effectcomp.cpp:1222-1223).
+float ByteAngleToRad(int32_t byteangle)
 {
-    // Evict our particles from the shared bucket. Bucket itself stays
-    // alive on the manager — it's reused across spawn cycles in the
-    // --test=vfx harness (Left/Right cycling destroys + respawns).
-    if (bucket_ && owner_particle_id_ >= 0.0f)
-        bucket_->KillParticlesByOwner(owner_particle_id_);
+    return float((byteangle & 255)) * (float(M_PI) * 2.0f / 256.0f);
 }
+
+}   // namespace
 
 // Retail TBloodEffect::Initialize / Pulse are the in-game spawn-path
 // hooks (decompiled body lives in recon/classes/cls_0x5acaa8.cpp, merged
-// with Mist + WaterFall — see INVENTORY B01 notes). For Phase 2.2
-// (PE-pipeline validator) we provide empty bodies so the vtable links;
-// the `--test=vfx` path drives spawn + tick through SpawnForTest +
-// TickAndSubmitForTest instead. Faithful retail kinematics + the
-// SObjectDef-driven Pulse cycle land in Phase 2.2.1.
+// with Mist + WaterFall — see forensics §2). The `--test=vfx` path drives
+// spawn + tick through SpawnForTest + TickAndSubmitForTest; the in-game
+// path will route through TBloodAnimator::Animate / ::Render once the
+// retail caller is wired (B01a follow-up).
 void TBloodEffect::Initialize()
 {
-    // Phase 2.2.1: port body from recon/classes/cls_0x5acaa8.cpp once the
-    // Ghidra merge is split into TBloodEffect / TMistEffect / TWaterFallEffect.
+    // Empty (intentional). The pre-release TBloodEffect::Initialize body
+    // is empty (effect_old.cpp:11246-11253); the per-burst state lives
+    // entirely in SBloodSystemParams + TBloodSystem.
 }
 
 void TBloodEffect::Pulse()
 {
     TEffect::Pulse();
-    // Phase 2.2.1: port body from recon. The PE-pipeline harness uses
-    // TickAndSubmitForTest, which doesn't depend on Pulse() — but the
-    // in-game spawn path will once Phase 2.2.1 lands.
+    // No per-pulse work — the in-game path drives Animate through
+    // TBloodAnimator (effect_old.cpp:11306-11317). Harness uses
+    // TickAndSubmitForTest, which integrates directly.
 }
 
-// Cached parsed effect def (lazy on first use). Mirrors TorchFlameDef().
-const SParticleEffectDef& BloodEffectDef()
-{
-    static const SParticleEffectDef def = ParseParticleEffectDef("Blood");
-    return def;
-}
-
-// Engine-driven SpawnForTest. Loads Misc\Blood.I3D (still needed -- the
-// effect instance refcount must own an imagery for the engine's component
-// lifecycle to be valid), constructs the TBloodEffect, attaches a
-// TParticleEffectComponent configured with the Blood def, and pulses it
-// once so the engine StartRuntime path runs the spawn_burst.
-//
-// Per-particle dynamics (cone spawn, gravity arc, alpha fade) live in
-// the effects.def `Blood` block; this method is now ~30 lines of
-// component wiring instead of ~95 lines of bespoke spawn-init.
 TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
 {
+    // --- Load the REAL Misc\Blood.I3D imagery (no procedural stand-in).
+    // The dark-red box sprites ARE the visual identity (forensics §10).
     const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
     if (img_id < 0)
     {
@@ -1376,63 +1396,377 @@ TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
                   img_id, kBloodImageryPath);
         return nullptr;
     }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[blood] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kBloodImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
 
     auto* blood = new TBloodEffect(base);
     blood->ForcePos(origin);
     blood->SetMapIndex(MapPane.MakeIndex());
     blood->ActivateComponents();
 
-    // Attach the engine-driven particle component. spawn_burst = 10
-    // in effects.def -> StartRuntime fires the cone burst at this point.
-    auto particle_effect = std::make_unique<TParticleEffectComponent>();
-    particle_effect->Configure(&BloodEffectDef());
-    blood->AddComponent(std::move(particle_effect));
+    // Lazy-mesh-init poke (mirror F01 / H04 / X22). NumObjects triggers
+    // the actual mesh load; NumTextures alone doesn't.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < 8 || num_tex <= 0)
+    {
+        log_error("[blood] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d) — expected 8 box sub-objects",
+                  num_obj, num_tex);
+        delete blood;
+        return nullptr;
+    }
 
-    // Drive one DrawPulse so StartRuntime + EmitSpawnTopup fire now (the
-    // harness's first TickAndSubmitForTest happens later in the frame and
-    // would otherwise miss this frame's submit -- we want the burst alive
-    // immediately on Spawn).
-    if (auto* pe = blood->GetComponent<TParticleEffectComponent>())
-        pe->DrawPulse();
+    // Resolve each of the 8 box sub-objects to (texture, UV sub-rect).
+    // Forensics §4 maps:
+    //   index 0..3 = box01..box04 = pass 1 (AdditiveStraight overlay)
+    //   index 4..7 = box05..box08 = pass 0 (Alpha base)
+    // Within each set: [0]=small, [1]=med, [2]=big, [3]=splat.
+    // GetObject(0..7) maps directly to T3DImagery sub-object indices 0..7;
+    // box01 is sub-object 0, box02 is 1, ..., box08 is 7.
+    int32_t resolved_textures[8] = {0,0,0,0,0,0,0,0};
+    for (int32_t i = 0; i < 8; ++i)
+    {
+        if (i >= num_obj)
+            break;
+        const int32_t tex_slot = SubObjTextureSlot(img3d, i);
+        const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+        resolved_textures[i] = slot;
+        S3DTex tex = {};
+        img3d->GetTexture(slot, &tex);
+        blood->subobjs_[i].texture = tex.htexture;
+        ResolveSubObjUv(img3d, i, blood->subobjs_[i].uv_rect);
+        blood->subobjs_[i].size_wu = kBloodBaseSizeWu;
+    }
+    if (blood->subobjs_[0].texture == kInvalidTexture
+        || blood->subobjs_[4].texture == kInvalidTexture)
+    {
+        log_error("[blood] SpawnForTest: sub-object textures unresolved "
+                  "(pass1[0]=%u, pass0[4]=%u)",
+                  blood->subobjs_[0].texture, blood->subobjs_[4].texture);
+        delete blood;
+        return nullptr;
+    }
 
-    // Cache the bucket pointer for direct submission in TickAndSubmit.
-    blood->bucket_ = ParticleManager().FindGlobalBucket("blood_droplets");
-    blood->owner_particle_id_ = float(blood->GetMapIndex());
+    // --- Port of TBloodSystem::Init (effectcomp.cpp:1182-1307).
+    // Retail spray params (forensics §2.1 / §3): impale-path immediates.
+    // hangle randomized for the harness (no attacker→victim vector); in-game
+    // it's `(victim_face + 128) & 255` (180° from victim front).
+    int32_t height_param  = kBloodHeightAttack;            // 40 wu above object pos
+    int32_t hangle_param  = random(0, 255);                // harness: random horizontal mean
+    int32_t vangle_param  = kBloodVangleAttack;            // retail 32
+    int32_t hspread_param = kBloodHspreadAttack;           // RETAIL 32 (not snapshot 80)
+    int32_t vspread_param = kBloodVspreadAttack;           // RETAIL 5  (not snapshot 20)
+    int32_t num_param     = random(kBloodNumMin, kBloodNumMax);  // random(1,5)
+    // maxsize from TBloodAnimator::Initialize (effect_old.cpp:11292).
+    int32_t maxsize_param = 2;
 
-    log_info("[blood] SpawnForTest (engine-driven): map_index=%d origin=(%d,%d,%d) "
-             "bucket=%p def=Blood",
-             blood->GetMapIndex(),
+    // ViolenceLevel clamps (effectcomp.cpp:1214-1217).
+    int32_t num     = num_param;
+    int32_t maxsize = maxsize_param;
+    if (num > ViolenceLevel * 2)
+        num = ViolenceLevel * 2;
+    if (maxsize > ViolenceLevel)
+        maxsize = ViolenceLevel;
+
+    // Trail-fill budget (effectcomp.cpp:1211).
+    const int32_t init_left_base =
+        kBloodMaxParticles - ((kBloodMostBloods - num) * kBloodBloodsPerSquirt);
+    int32_t left = init_left_base > kBloodBloodsPerSquirt
+                       ? init_left_base
+                       : kBloodBloodsPerSquirt;
+
+    blood->height_local_ = float(height_param);
+
+    // Main droplets (effectcomp.cpp:1220-1236).
+    int32_t cur_num = 0;
+    const int32_t main_count = num < kBloodMaxParticles ? num : kBloodMaxParticles;
+    for (int32_t i = 0; i < main_count; ++i)
+    {
+        // Byte-angle ± spread → radians, faithful to original
+        // `(((mean + random(-spread, spread)) & 255) * 360 / 256) * TORADIAN`.
+        const float ha = ByteAngleToRad(
+            hangle_param + random(-hspread_param, hspread_param));
+        const float va = ByteAngleToRad(
+            vangle_param + random(-vspread_param, vspread_param));
+        SBloodParticleEx& p = blood->particles_[i];
+        p.used = true;
+        const int32_t sz_cap = maxsize < kBloodSizeIdxMax ? maxsize : kBloodSizeIdxMax;
+        p.size = random(0, sz_cap);
+        p.pos.X = 0.0f;
+        p.pos.Y = 0.0f;
+        p.pos.Z = float(height_param);
+        const float vs_x = float(random(100, 300)) / 100.0f;   // 1.0 .. 3.0
+        const float vs_y = float(random(100, 300)) / 100.0f;
+        const float vs_z = float(random(100, 300)) / 100.0f;
+        p.vel.X = kBloodVel * std::cos(ha) * vs_x;
+        p.vel.Y = kBloodVel * std::sin(ha) * vs_y;
+        p.vel.Z = kBloodVel * std::sin(va) * vs_z;
+        p.scl   = kBloodFlyScale;
+        p.stage = kBloodStageFly;
+        p.delay = 0;
+        p.count = 0;
+        --left;
+        ++cur_num;
+    }
+
+    // Trail-fill gate (effectcomp.cpp:1238-1239).
+    if (ViolenceLevel < 4)
+        left = 0;
+
+    // Smalls-trail-smalls loop (effectcomp.cpp:1285-1306).
+    // Only the live loop — the big/med trail loops above (:1242-1283) are
+    // dead per forensics §13.5. Walk i forward through the source droplets,
+    // adding small droplets riding each one at vel * random(60,75)/80.
+    for (int32_t i = 0; left > 0 && cur_num < kBloodMaxParticles; ++i)
+    {
+        // Original loop has no upper bound on i — it walks until either
+        // `left` runs out or `me.num >= MAX_BLOODS` (cur_num == cap), with
+        // the source droplet index wrapping by always pulling from the
+        // most recent slot (i increments while cur_num grows). Cap i to
+        // the live count to avoid an unbounded walk if the seeded droplets
+        // ran out (an edge case the original tolerated implicitly via the
+        // MAX_BLOODS ceiling).
+        if (i >= cur_num)
+            break;
+        if (!blood->particles_[i].used)
+            continue;
+        SBloodParticleEx& parent = blood->particles_[i];
+        SBloodParticleEx& q = blood->particles_[cur_num];
+        q.used = true;
+        q.size = random(0, 1);
+        q.pos.X = 0.0f;
+        q.pos.Y = 0.0f;
+        q.pos.Z = float(height_param);
+        const float scale_x = float(random(60, 75)) / 80.0f;   // 0.75..0.9375
+        const float scale_y = float(random(60, 75)) / 80.0f;
+        const float scale_z = float(random(60, 75)) / 80.0f;
+        q.vel.X = parent.vel.X * scale_x;
+        q.vel.Y = parent.vel.Y * scale_y;
+        q.vel.Z = parent.vel.Z * scale_z;
+        q.delay = parent.delay + kBloodSquirtDelay + random(-1, 1);
+        if (q.delay < 0) q.delay = 0;
+        q.stage = kBloodStageFly;
+        q.scl   = kBloodFlyScale;
+        q.count = 0;
+        ++cur_num;
+        --left;
+    }
+
+    blood->alive_ = (cur_num > 0);
+    log_info("[blood] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "particles=%d (main=%d trail=%d) height=%d hangle=%d "
+             "hspread=%d vspread=%d ViolenceLevel=%d "
+             "subobj_tex={pass1=%u/%u/%u/%u, pass0=%u/%u/%u/%u} "
+             "tex_slots={%d,%d,%d,%d,%d,%d,%d,%d}",
+             kBloodImageryPath, blood->GetMapIndex(),
              origin.x, origin.y, origin.z,
-             (void*)blood->bucket_);
+             cur_num, main_count, cur_num - main_count,
+             height_param, hangle_param, hspread_param, vspread_param,
+             ViolenceLevel,
+             blood->subobjs_[0].texture, blood->subobjs_[1].texture,
+             blood->subobjs_[2].texture, blood->subobjs_[3].texture,
+             blood->subobjs_[4].texture, blood->subobjs_[5].texture,
+             blood->subobjs_[6].texture, blood->subobjs_[7].texture,
+             resolved_textures[0], resolved_textures[1],
+             resolved_textures[2], resolved_textures[3],
+             resolved_textures[4], resolved_textures[5],
+             resolved_textures[6], resolved_textures[7]);
     return blood;
 }
 
 void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 {
-    if (!Renderer) return;
+    if (!Renderer)
+        return;
 
-    // Drive the engine's per-frame integration (tick_expr + kill_expr +
-    // age update + reap). DrawPulse is the standard per-frame entry on
-    // TParticleEffectComponent -- the harness reuses it here instead of
-    // re-implementing the integration loop.
-    if (auto* pe = GetComponent<TParticleEffectComponent>())
-        pe->DrawPulse();
+    // --- Update: port of TBloodSystem::Animate (effectcomp.cpp:1309-1370),
+    // framerate-independent via the 24 Hz sim-tick accumulator. Each tick
+    // runs the original per-tick integration exactly once.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBloodSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBloodSimTickMs);
 
-    // Submit the global bucket to the FX queue. The bucket holds particles
-    // from every TBloodEffect instance currently live; the renderer doesn't
-    // care which instance owns which particle for rendering -- only the
-    // owner_id matters for kill/respawn bookkeeping (handled in the engine).
-    if (bucket_)
-        Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+            bool done = true;
+            for (int32_t i = 0; i < kBloodMaxParticles; ++i)
+            {
+                SBloodParticleEx& p = particles_[i];
+                if (!p.used)
+                    continue;
+                if (p.delay > 0)
+                {
+                    p.delay--;
+                    continue;
+                }
+                done = false;
+
+                if (p.stage == kBloodStageFly)
+                {
+                    // effectcomp.cpp:1326-1334: pos += vel; vel.xy *= 0.95;
+                    // vel.z -= 0.37; scl += 0.01.
+                    p.pos.X += p.vel.X;
+                    p.pos.Y += p.vel.Y;
+                    p.pos.Z += p.vel.Z;
+                    p.vel.X *= kBloodAirresist;
+                    p.vel.Y *= kBloodAirresist;
+                    p.vel.Z -= kBloodGravity;
+                    p.scl   += kBloodFlyScaleStep;
+
+                    // effectcomp.cpp:1336-1345: ground hit → SPLAT, with
+                    // early-kills at ViolenceLevel<3 OR size==0.
+                    if (p.pos.Z <= float(kBloodZOffset))
+                    {
+                        p.pos.Z = float(kBloodZOffset);
+                        p.stage = kBloodStageSplat;
+                        p.count = 0;
+                        if (ViolenceLevel < 3)
+                            p.used = false;
+                        if (p.size == 0)
+                            p.used = false;
+                    }
+                }
+                else if (p.stage == kBloodStageSplat)
+                {
+                    // effectcomp.cpp:1347-1355.
+                    p.scl = kBloodSplatSize;
+                    p.count++;
+                    if (p.count > kBloodSplatDuration)
+                    {
+                        p.stage = kBloodStageShrink;
+                        p.count = 0;
+                    }
+                }
+                else if (p.stage == kBloodStageShrink)
+                {
+                    // effectcomp.cpp:1357-1365.
+                    p.scl -= kBloodSplatScale;
+                    if (p.scl <= 0.0f)
+                    {
+                        p.scl = 0.0f;
+                        p.used = false;
+                    }
+                }
+            }
+            // TBloodAnimator self-destruct: OF_KILL when GetDone() goes
+            // true (effect_old.cpp:11313-11316). Harness reads alive_ to
+            // know when to re-trigger.
+            if (done)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    // --- Render: port of TBloodSystem::Render (effectcomp.cpp:1415-1483).
+    // Each used droplet draws TWICE: pass 0 (k=0) = Alpha base using
+    // {box05..box08} (indices 4..7), pass 1 (k=1) = AdditiveStraight overlay
+    // using {box01..box04} (indices 0..3). Size 2 (big) and the splat
+    // sub-objects are commented out in the original — a size-2 droplet
+    // renders with the small sprite (forensics §7 / §13.3).
+    const S3DPoint& base = Pos();
+    for (int32_t i = 0; i < kBloodMaxParticles; ++i)
+    {
+        const SBloodParticleEx& p = particles_[i];
+        if (!p.used || p.delay > 0)
+            continue;
+        // Per-droplet world position. The render places each box at
+        // (pos.x, pos.y, pos.z - height) so the world z is
+        // (object_origin.z + pos.z - height) — forensics §7 "the −height
+        // cancels the local start height". For the harness, base is the
+        // object origin in world coords.
+        const float wx = float(base.x) + p.pos.X;
+        const float wy = float(base.y) + p.pos.Y;
+        const float wz = float(base.z) + (p.pos.Z - height_local_);
+
+        // Size index → sub-object within each pass-set: [0]=small, [1]=med,
+        // [2]=big (DEAD, falls through to small per §13.3), [3]=splat
+        // (DEAD, only used by the bif splash per §13.4). Render small + med
+        // only. Big size collapses to small.
+        const int32_t cell = p.size == 1 ? 1 : 0;
+
+        // Common item template (per-pass blend + sub-object override below).
+        SBillboardDrawItem item = {};
+        item.size_wu[0] = item.size_wu[1] =
+            subobjs_[4 + cell].size_wu * p.scl;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        // Scene-LIT: retail samples 3 closest world lights + ambient×4 and
+        // multiplies the dark-red texture per vertex (DoLighting at
+        // effectcomp.cpp:1372-1413). The FB pipeline's LitFlat is the
+        // engine-side scene-light multiplier — flagged as engine adaptation
+        // in §7. With LitFlat the blood reads brighter in lit rooms and
+        // darker in shadow, matching the §10 expectation.
+        item.light_mode  = EFxLightMode::LitFlat;
+        // FLY droplets are tipped ground-flat (RotateX(-90°)+RotateZ(-45°),
+        // i.e. WorldXY ground-oriented with a 45° in-plane spin per §7);
+        // SPLAT/SHRINK keep authored facing. WorldXY is the engine analog
+        // for the canonical ground-flat tip.
+        item.orientation = p.stage == kBloodStageFly
+                               ? EFxBillboardOrientation::WorldXY
+                               : EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode  = debug_mode;
+        item.world_pos[0] = wx;
+        item.world_pos[1] = wy;
+        item.world_pos[2] = wz;
+
+        // Pass 0 — Alpha base, sub-objects box05..box08 (indices 4..7).
+        {
+            const SBloodSubObject& so = subobjs_[4 + cell];
+            if (so.texture != kInvalidTexture)
+            {
+                item.key.texture = so.texture;
+                item.key.blend   = uint8_t(EFxBlend::Alpha);
+                item.uv_rect[0] = so.uv_rect[0];
+                item.uv_rect[1] = so.uv_rect[1];
+                item.uv_rect[2] = so.uv_rect[2];
+                item.uv_rect[3] = so.uv_rect[3];
+                Renderer->SubmitFxBillboard(item);
+            }
+        }
+        // Pass 1 — AdditiveStraight (ONE/ONE) overlay sheen, sub-objects
+        // box01..box04 (indices 0..3). MODULATE texture stage in the
+        // original means the vertex tint still attenuates this pass; the
+        // FB pipeline's AdditiveStraight + same per-item color_rgba is the
+        // engine-side analog (§7).
+        {
+            const SBloodSubObject& so = subobjs_[cell];
+            if (so.texture != kInvalidTexture)
+            {
+                item.key.texture = so.texture;
+                item.key.blend   = uint8_t(EFxBlend::AdditiveStraight);
+                item.uv_rect[0] = so.uv_rect[0];
+                item.uv_rect[1] = so.uv_rect[1];
+                item.uv_rect[2] = so.uv_rect[2];
+                item.uv_rect[3] = so.uv_rect[3];
+                Renderer->SubmitFxBillboard(item);
+            }
+        }
+    }
 }
 
 #if 0
-// REVISITED: replaced by effects.def Blood declaration, kept for reference
-// until migration of all 5 bespoke effects (B01/M05/F03/H03/H04) lands.
-// The original bespoke spawn/tick body integrated 10 droplets with polar
-// cone init, kGravity = -480 wu/s^2 Euler, held-then-linear-fade alpha
-// curve, age-based reap. All of that is now expressed in the effects.def
-// Blood block's spawn_expr / tick_expr / kill_expr.
+// REVISITED: replaced by the FAITHFUL PORT above (TBloodSystem::Init/
+// Animate/Render ported line-by-line). The pre-faithful-port body
+// re-derived blood through the TParticleBucket / effects.def "Blood"
+// declaration, which is the kind of engine-abstraction drift the
+// RECONSTRUCTION_PROTOCOL warns against (cf. SPARKS Alpha/additive
+// confusion). Preserved here under #if 0 as a record of the engine-
+// abstraction path in case the def-driven route is wanted later for a
+// non-faithful variant.
 TBloodEffect* TBloodEffect::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
     const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
