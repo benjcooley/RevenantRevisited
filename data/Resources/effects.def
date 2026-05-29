@@ -35,82 +35,161 @@ effect TorchFlame
     }
 }
 
-// B01 TBloodEffect -- one-shot impact burst, 10 droplets, polar-cone
-// initial velocity + gravity-driven ballistic arc + held-then-fade alpha.
-// Migrated from bespoke C++ on TParticleBucket per
-// docs/vfx/VM_EXTENSION_FORENSICS.md Phase 5. Asset paths + per-particle
-// constants are 1:1 with the bespoke SpawnForTest body in effect.cpp.
+// B01 TBloodEffect -- engine-particle rework per the resettled forensics
+// (B01_TBloodEffect_RENDER_RESETTLED.md). Blood is a particle system with:
+//   1) RESPAWN / loop emission   -- one-shot 10-droplet burst (spawn_burst).
+//   2) REFLECTION PLANE          -- FLY droplet hits ground (kill_expr fires
+//                                   on pos.z <= emit_pos.z) and chains one
+//                                   SPLAT particle at the impact point via
+//                                   `chain_bucket = "blood_splat"`.
+//   3) PER-PARTICLE STAGES       -- modelled as two buckets (FLY + SPLAT)
+//                                   per the brief's Option B: no VM
+//                                   stage-machine; the chain mechanism
+//                                   handles FLY -> SPLAT.
+//
+// Render-state per the resettled doc:
+//   blend_mode = "alpha"          -- the texture loader pre-encodes the
+//                                    black keycolor as a 1-bit alpha
+//                                    channel (3dimage.cpp ~line 1690).
+//                                    Combined with EParticleBlendMode::Alpha
+//                                    (SRC_ALPHA / INV_SRC_ALPHA) and the
+//                                    FX shader's `discard if (c.a<0.002)`
+//                                    edge cleanup, the survivors render
+//                                    chroma-keyed opaque dark red.
+//   light_mode = "lit_flat"       -- scene-lit grayscale modulation
+//                                    (DoLighting analog).
+//   depth_mode = "test_no_write"  -- droplets occlude correctly but don't
+//                                    break later effects' depth reads.
 effect Blood
 {
     debug = normal
     inactive_ttl_pulses = 12
 
-    bucket blood_droplets
+    // FLY droplet -- airborne ballistic dark-red sprite. Uses the box01..
+    // box04 cells of Misc\Blood.I3D (top half of the 2x2 atlas).
+    bucket blood_fly
     {
-        // Imagery (Misc\Blood.I3D) loaded via TObjectImagery::LoadImagery
-        // -- the standalone harness has no "owner imagery"; this lets the
-        // bucket own its texture independently of the spawning instance.
         imagery_path = "Misc\\Blood.I3D"
         texture_slot = 0
         atlas_cols = 2
         atlas_rows = 2
         atlas_frames = 4
-        width = 64.0
-        height = 64.0
+        width = 32.0
+        height = 32.0
         scale = 1.0
-        blend_mode = "premul_alpha"
-        light_mode = "unlit"
+        blend_mode = "alpha"
+        light_mode = "lit_flat"
         depth_mode = "test_no_write"
+        // ScreenAligned matches the snapshot's vertical-tipped quad for
+        // FLY (RotateX(-90)·RotateZ(-45)). WorldXY would lay it flat on
+        // the ground which is wrong for the airborne stage.
         orientation = "screen_aligned"
-        chroma_key = [255, 0, 0]
 
+        // One-shot 10-droplet burst at attach.
         spawn_burst = 10
-        tick_hz = 0
-        default_life = 1.4
+        // 24 Hz sim cadence matches the snapshot's authoring rate
+        // (effectcomp.cpp:1326-1334 integrates pos += vel; vel.z -= 0.37
+        // per tick; we run that math here in per-tick units).
+        tick_hz = 24
+        // No auto-kill -- the reflection-plane kill_expr handles the
+        // FLY -> SPLAT transition. (default_life=0 keeps drops alive
+        // until they hit ground.)
+        default_life = 0.0
 
-        // Polar-cone spawn: ground-level emitter +30 wu up, radial speed
-        // 60..140 wu/s, upward 140..220 wu/s. Color = red-ish with a slight
-        // value-jitter via rand01() (matches the bespoke r/g/b expressions).
+        // Reflection-plane chain: on kill_expr fire, spawn one particle
+        // in blood_splat using THIS particle's pos + vel as the chain
+        // spawn's emit_pos / emit_vel.
+        chain_bucket = "blood_splat"
+
+        // Polar-cone spawn at +40 wu above origin (forensics §3
+        // kBloodHeightAttack). Horizontal velocity is a random radial
+        // cone, upward component gives a ballistic arc. 4-cell atlas
+        // pick at spawn selects one of the box01..box04 droplet variants.
+        // rot.x = -pi/4 carries the snapshot's RotateZ(-45°) in-plane
+        // spin.
         spawn_expr = "
-            pos = emit_pos + vec3(0, 0, 30);
-            vel = vec3(cos(rand(0, 6.2831853) ) * (60 + 80 * rand01()),
-                       sin(rand(0, 6.2831853) ) * (60 + 80 * rand01()),
-                       140 + 80 * rand01());
-            scale = vec3(24 + 16 * rand01(), 24 + 16 * rand01(), 1);
-            rot.x = rand(0, 6.2831853);
+            pos = emit_pos + vec3(0, 0, 40);
+            vel = vec3(cos(rand(0, 6.2831853)) * (60 + 120 * rand01()),
+                       sin(rand(0, 6.2831853)) * (60 + 120 * rand01()),
+                       60 + 80 * rand01());
+            scale = vec3(16 + 8 * rand01(), 16 + 8 * rand01(), 1);
+            rot.x = -0.7853982;
             frame = floor(rand01() * 4);
-            color = vec4(1.0 - 0.20 * rand01(),
-                         0.10 + 0.10 * rand01(),
-                         0.10 + 0.05 * rand01(),
-                         1);
+            color = vec4(0.8, 0.1, 0.1, 1);
         "
 
-        // Per-frame integration. kGravity = -480 wu/s^2 from the bespoke
-        // C++; dt is implicit (the engine multiplies tick_hz=0 -> 1 tick
-        // per render frame, per_tick_seconds = dt). We pass dt via the
-        // `age` advance and read it from the rate-of-change; but since
-        // the bespoke port wrote pos += vel * dt, vel.z += g * dt and our
-        // tick_expr runs at render-rate (matching the bespoke behaviour),
-        // we encode the same shape using a fixed 1/60 approximation. The
-        // engine's per_tick_seconds is the actual dt -- we can't read it
-        // directly from an expression yet, so we approximate with the
-        // ratio kGravity * (1/60) which gives the same visual envelope
-        // as the bespoke at the harness's 60 fps target.
-        //
-        // The visible envelope is dominated by 'life=1.4s' -- the
-        // approximation drift over 1.4 sec is invisible against the
-        // gravity-driven arc.
+        // 24 Hz tick: pos += vel; vel.xy *= 0.95; vel.z -= 0.37
+        // (effectcomp.cpp:1326-1334 verbatim, in per-tick units).
         tick_expr = "
-            vel.z = vel.z - 8.0;
-            pos = pos + vel * 0.01667;
-            color.a = clamp((1 - age01) * 2, 0, 1);
+            pos = pos + vel;
+            vel.x = vel.x * 0.95;
+            vel.y = vel.y * 0.95;
+            vel.z = vel.z - 0.37;
         "
 
-        // No kill_expr -- default-life auto-kill handles reaping when
-        // age >= life. (Earlier draft had `kill_expr = "age01"` which
-        // killed on the first tick because any non-zero age01 reads as
-        // truthy.) For a clear "kill when life elapsed" expression in
-        // future buckets, use `kill_expr = "step(1, age01)"`.
+        // Reflection plane: droplet hits ground (pos.z falls to or below
+        // the spawn-anchor's z = the origin world-z). The chain_bucket
+        // mechanism then materializes ONE blood_splat at this impact
+        // site. step() returns 1 (kill) when pos.z <= emit_pos.z.
+        kill_expr = "step(pos.z, emit_pos.z)"
+    }
+
+    // SPLAT decal -- ground-flat dark-red blob, holds peak scale ~1 sec
+    // then shrinks. Uses the box05..box08 cells (bottom half of atlas,
+    // frame indices 4..7 via `4 + floor(rand01()*4)`).
+    bucket blood_splat
+    {
+        imagery_path = "Misc\\Blood.I3D"
+        texture_slot = 0
+        atlas_cols = 2
+        atlas_rows = 2
+        atlas_frames = 4
+        width = 32.0
+        height = 32.0
+        scale = 1.0
+        blend_mode = "alpha"
+        light_mode = "lit_flat"
+        depth_mode = "test_no_write"
+        // WorldXY = flat on world XY plane, normal +Z (ground decal).
+        // Per forensics §7 / A3: SPLAT/SHRINK keep authored facing,
+        // which lays flat after the world transform.
+        orientation = "world_xy"
+
+        // Driven entirely by the chain from blood_fly -- no self-spawn.
+        spawn_burst = 0
+        tick_hz = 24
+        // SPLAT (1s hold) + SHRINK (~0.4s) ~= 1.4s. The kill_expr handles
+        // fine-grained reaping; default_life is the upper bound.
+        default_life = 1.6
+
+        // Chain spawn -- emit_pos / emit_vel are the dying FLY droplet's
+        // pos / vel. Stamp the splat at impact (snap z to anchor + 2 wu
+        // so the decal doesn't z-fight with the floor), peak scale 28.8
+        // = ~1.8x the FLY droplet's 16 base (forensics §3
+        // kBloodSplatSize=1.8). frame 4..7 picks the splat cells.
+        spawn_expr = "
+            pos = vec3(emit_pos.x, emit_pos.y, emit_pos.z + 2);
+            vel = vec3(0, 0, 0);
+            scale = vec3(28.8, 28.8, 1);
+            rot.x = rand(0, 6.2831853);
+            frame = 4 + floor(rand01() * 4);
+            color = vec4(0.6, 0.08, 0.08, 1);
+        "
+
+        // 24 Hz tick: hold peak scale for the first ~60% of life (~1s)
+        // via step(0.6, age01), then shrink linearly to zero at
+        // ~0.4 wu/tick * 0.4s = ~9.6 wu over the second 40% of life.
+        // step(edge, x) returns 0 when x<edge else 1 — i.e. zero shrink
+        // during the hold, then full shrink during the SHRINK phase.
+        tick_expr = "
+            scale.x = scale.x - 0.4 * step(0.6, age01);
+            scale.y = scale.y - 0.4 * step(0.6, age01);
+        "
+
+        // Reap when the splat has shrunk to ~zero (snapshot kBloodSplatScale
+        // ramps down to <= 0 by which point used=false; we threshold at
+        // 0.5 wu since shrink is per-tick discrete).
+        kill_expr = "step(scale.x, 0.5)"
     }
 }
 
