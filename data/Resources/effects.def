@@ -206,30 +206,52 @@ effect Blood
 
         // Chain spawn -- emit_pos / emit_vel are the dying FLY droplet's
         // pos / vel. Stamp the splat at impact (snap z to anchor + 2 wu
-        // so the decal doesn't z-fight with the floor), peak scale 28.8
-        // = ~1.8x the FLY droplet's 16 base (forensics §3
-        // kBloodSplatSize=1.8). frame 4..7 picks the splat cells.
-        // Snapshot BLOOD_SPLATSIZE=1.8 (peak splat scale, effectcomp.cpp:1169).
-        // SPLAT decal sits at impact + small +z lift to avoid floor z-fight.
+        // so the decal doesn't z-fight with the floor). Spawn at a SMALL
+        // starting scale (7 wu, ~0.35x peak) so the splat reads as a
+        // tiny dot at impact and visibly grows into the peak puddle --
+        // the bespoke port's three-phase GROW/HOLD/SHRINK envelope.
+        // Peak scale 35 wu = ~1.8x the FLY droplet's ~20 visibility-scaled
+        // base (snapshot BLOOD_SPLATSIZE=1.8, effectcomp.cpp:1169).
+        // frame 4..7 picks the splat cells via random_start_frame above.
         spawn_expr = "
             pos = vec3(emit_pos.x, emit_pos.y, emit_pos.z + 2);
             vel = vec3(0, 0, 0);
-            scale = vec3(35, 35, 1);
+            scale = vec3(7, 7, 1);
             rot.z = rand(0, 6.2831853);
             color = vec4(0.6, 0.08, 0.08, 1);
         "
 
-        // Hold peak scale for ~60% of life (age01 < 0.6 -> step() = 0),
-        // then linearly shrink over the last 40%. Per-tick shrink rate is
-        // sized so authored scale (35 wu) reaches ~0 at age01=1:
-        //   SHRINK window = 0.4 * default_life * tick_hz
-        //                 = 0.4 * 1.6s * 24Hz
-        //                 = 15.4 ticks
-        //   per-tick rate = 35 wu / 15.4 ticks ~= 2.3 wu/tick
-        // (rate literal is per-tick; age01 is unitless 0..1 from seconds).
+        // Three-phase scale envelope -- GROW / HOLD / SHRINK, gated by
+        // step() on age01:
+        //
+        //   age01 in [0.00, 0.10): GROW   scale += 7.4 wu/tick
+        //   age01 in [0.10, 0.60): HOLD   no change (both gates 0)
+        //   age01 in [0.60, 1.00]: SHRINK scale -= 2.3 wu/tick
+        //
+        // grow_phase   = (1 - step(0.10, age01))   -- 1 while growing, else 0
+        // shrink_phase = step(0.60, age01)         -- 1 while shrinking, else 0
+        //
+        // Rate sizing (per-tick literals; tick_hz=24, default_life=1.6s
+        // -> 38.4 ticks per life):
+        //   GROW window   = 0.10 * 1.6s * 24Hz = 3.84 ticks
+        //   GROW rate     = (35 - 7) / 3.84   ~= 7.3 wu/tick  -> 7.4
+        //   HOLD window   = 0.50 * 1.6s * 24Hz = 19.2 ticks (~0.8s)
+        //                   (snapshot BLOOD_SPLATDURATION = 25 ticks ~ 1.04s)
+        //   SHRINK window = 0.40 * 1.6s * 24Hz = 15.36 ticks
+        //   SHRINK rate   = 35 / 15.36         ~= 2.28 wu/tick -> 2.3
+        //
+        // Snapshot anchors:
+        //   GROW ~ BLOOD_FLYSCALESTEP=0.01/tick * 20 visibility ~= 7-8/tick (effectcomp.cpp:1177)
+        //   HOLD ~ BLOOD_SPLATDURATION=25 ticks (effectcomp.cpp:1170)
+        //   SHRINK ~ BLOOD_SPLATSCALE=0.1/tick  * 20 visibility ~= 2 wu/tick (effectcomp.cpp:1171)
+        // Retail's TBloodSystem::Animate (effectcomp.cpp:1347-1366) lacks
+        // an explicit GROW phase (it snaps scl=BLOOD_SPLATSIZE on impact);
+        // the bespoke port's GROW phase reads as the splat growing into
+        // a pool, which the retail snap-to-peak does not visually convey
+        // at our 20x visibility scale.
         tick_expr = "
-            scale.x = scale.x - 2.3 * step(0.6, age01);
-            scale.y = scale.y - 2.3 * step(0.6, age01);
+            scale.x = scale.x + 7.4 * (1 - step(0.10, age01)) - 2.3 * step(0.60, age01);
+            scale.y = scale.y + 7.4 * (1 - step(0.10, age01)) - 2.3 * step(0.60, age01);
         "
 
         // Reap when scale has shrunk past ~1 wu (scale-units predicate, NOT
