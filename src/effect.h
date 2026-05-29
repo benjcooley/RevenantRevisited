@@ -193,6 +193,13 @@ struct SParticleBucketEffectDef
     int32_t atlas_cols = 1;
     int32_t atlas_rows = 1;
     int32_t atlas_frames = 1;
+    // Random start frame from the atlas grid on spawn (and on chain-spawn).
+    // When true and atlas_frames > 1, DrawFrame is auto-set to a uniform
+    // [0, atlas_frames) integer per particle, using the per-particle seed
+    // for determinism. Saves `frame = floor(rand01() * N)` boilerplate in
+    // spawn_expr for "N drop variants" / "N spark variants" cases.
+    // spawn_expr (if any) can still override.
+    bool random_start_frame = false;
     float width = 1.0f;
     float height = 1.0f;
     float scale = 1.0f;
