@@ -5,10 +5,27 @@ Canonical Phase B2 A/B verification capture per docs/vfx/AGENT_GUIDE.md
 §3.2 / §3.2.0 (bespoke baseline before engine port methodology). Boots
 the Revenant harness once per effect id (the harness doesn't multi-
 instance cleanly), captures N frames of each at a fixed interval, then
-stitches the two filmstrips into ONE PNG: the bespoke row on top, the
-engine row directly below, with frame-N of bespoke vertically aligned
-with frame-N of engine. A reviewer can scan left-to-right and immediately
-spot where the two diverge.
+stitches the two captures into ONE PNG with the bespoke panel above
+the engine panel, sharing a left-gutter rotated label per side.
+
+Layouts:
+    grid   (default)  Each side composed as a rows×cols grid (default
+                      4 cols × ceil(cols/4) rows); bespoke grid stacked
+                      above engine grid. Larger per-tile resolution
+                      makes individual droplet/glyph/silhouette shape
+                      legible, which is what the canonical "is the port
+                      visually equivalent?" review actually needs an
+                      LLM-vision agent (or human) to resolve.
+    strip             2 rows of N frames in strict left-to-right time
+                      order, with frame-N of bespoke vertically aligned
+                      to frame-N of engine. Use this when the question
+                      is specifically about temporal progression / when
+                      the divergence to spot is "wrong timing", not
+                      "wrong droplet shape".
+
+Default output path:
+    grid   → /tmp/<bespoke_id>_vs_<engine_id>.png         (canonical)
+    strip  → /tmp/<bespoke_id>_vs_<engine_id>_strip.png
 
 Usage:
     tools/vfx/snap_ab.py <bespoke_id> <engine_id> [--cols N]
@@ -17,22 +34,14 @@ Usage:
                          [--label-engine STR] [--layout strip|grid]
                          [--grid-cols N]
 
-Layouts:
-    strip  (default)  2 rows of N frames, left-to-right time order.
-    grid              Each side composed as a rows×cols grid; bespoke
-                      grid stacked above engine grid with the same
-                      left-gutter rotated label. Bigger per-tile
-                      resolution for LLM-vision review at the cost of
-                      strict horizontal time order.
-
 Example (the B01 blood A/B):
     tools/vfx/snap_ab.py TBloodEffect_BESPOKE TBloodEffect \\
-        --cols 8 --interval-ms 80 --warmup-ms 1500 \\
-        --out /tmp/blood_ab.png
+        --cols 8 --interval-ms 80 --warmup-ms 1500
+    # → /tmp/TBloodEffect_BESPOKE_vs_TBloodEffect.png  (grid)
 
     tools/vfx/snap_ab.py TBloodEffect_BESPOKE TBloodEffect \\
-        --cols 8 --interval-ms 80 --warmup-ms 1500 \\
-        --layout grid --out /tmp/blood_ab_grid.png
+        --cols 8 --interval-ms 80 --warmup-ms 1500 --layout strip
+    # → /tmp/TBloodEffect_BESPOKE_vs_TBloodEffect_strip.png
 
 Requires Pillow (`pip install Pillow`) and macOS screencapture +
 osascript. Runs from the worktree root (the build/ dir must already
@@ -297,11 +306,13 @@ def main() -> int:
                     help="left-gutter label for the top row")
     ap.add_argument("--label-engine", default="engine",
                     help="left-gutter label for the bottom row")
-    ap.add_argument("--layout", choices=("strip", "grid"), default="strip",
-                    help="strip = 2 rows of N frames (default); "
-                         "grid = each side as rows×cols grid stacked, "
-                         "for bigger per-tile detail at the cost of "
-                         "strict left-to-right time order")
+    ap.add_argument("--layout", choices=("strip", "grid"), default="grid",
+                    help="grid = each side as rows×cols grid stacked "
+                         "(default; bigger per-tile detail, canonical "
+                         "for visual-equivalence review); "
+                         "strip = 2 rows of N frames with frame-N "
+                         "bespoke vertically aligned to frame-N engine "
+                         "(use for temporal-progression review)")
     ap.add_argument("--grid-cols", type=int, default=None,
                     help="grid layout: columns per side (default 4); "
                          "rows = ceil(--cols / --grid-cols)")
@@ -309,9 +320,15 @@ def main() -> int:
 
     out = args.out
     if out is None:
-        suffix = "grid" if args.layout == "grid" else "strip"
-        out = Path(
-            f"/tmp/{args.bespoke_id}_vs_{args.engine_id}_{suffix}.png")
+        # Canonical capture (grid, the default) gets the bare name; strip
+        # layout is the special-case workflow and tags its filename so
+        # both can coexist in /tmp without clobbering each other.
+        if args.layout == "grid":
+            out = Path(
+                f"/tmp/{args.bespoke_id}_vs_{args.engine_id}.png")
+        else:
+            out = Path(
+                f"/tmp/{args.bespoke_id}_vs_{args.engine_id}_strip.png")
 
     return run_capture_ab(args.bespoke_id, args.engine_id, args.cols,
                           args.interval_ms, args.warmup_ms, out,
