@@ -219,11 +219,64 @@ row, and either do it or claim it explicitly.
 #### 3.2.1 Engine-vs-bespoke decision (mandatory before Phase B)
 
 **STRONG DEFAULT: prefer the existing particle / effect engine over hand-rolled
-C++ particle pools.** If the engine is missing a feature the effect needs
-(respawn timer, gravity term, per-particle rotation accumulator, atlas-cell
-flipbook), **add the feature to the engine generically and use it** — don't
-build a one-off particle pool in the effect class. Engine extension is
-in-scope; parallel reinvention is not. See [[feedback-evolve-dont-replace]].
+C++ particle pools.** If the engine is missing a feature the effect needs,
+**add the feature to the engine generically and use it** — don't build a
+one-off particle pool in the effect class. Engine extension is in-scope;
+parallel reinvention is not. See [[feedback-evolve-dont-replace]].
+
+**Canonical engine extensions worth adding when an effect needs them** (this
+list will grow — add to it when you ship an extension):
+
+- **Respawn (loop emission)** — bucket auto-recycles slots when particles
+  die so a constant alive count is maintained without an emitter pulse.
+  Blood is the archetype (30 droplets that re-fly on death until the
+  effect ends).
+- **Reflection planes** — particles bounce / transition on hitting a
+  configured plane (typically ground Z). Lets blood transition FLY →
+  SPLAT cleanly as a per-bucket behavior rather than a per-effect state
+  machine. Fireball's spark trail collides with ground via the same path.
+- **Velocity-aligned trails** — head particle position drives a trail
+  bucket that spawns one (or N) particle per tick along the head's recent
+  path. Fireball is the archetype (10-slot mesh-trail ring buffer in the
+  retail source is exactly this).
+- **Per-particle in-plane rotation** — `DrawRot` already exists in the
+  VM; bucket needs to expose it as a renderable per-instance attribute
+  on ScreenAligned / WorldXY billboards. Fizzle uses it.
+- **Per-particle flicker / atlas-cell jitter** — already partially there
+  via `DrawFrame` + `Rand01`; if an effect needs a specific cell-select
+  policy (alternate cells on flicker), extend the bucket desc.
+- **Stage transitions** — per-particle "stage" enum that gates which
+  expression runs and which sub-texture / orientation applies. Blood's
+  FLY / SPLAT / SHRINK is the archetype (different visual + kinematic
+  per stage, single bucket).
+
+Effects that should be **engine particle effects, not bespoke C++**:
+
+- **Blood** — 30-droplet pool with respawn + reflection plane (FLY → SPLAT)
+  + per-stage orientation switch (ScreenAligned during FLY, WorldXY decal
+  on SPLAT/SHRINK). Already-merged port is structurally bespoke and will
+  be redone via engine.
+- **Fizzle** — 3 sub-system buckets (blue / red / purple) with
+  per-particle WorldXY + DrawRot. Already on the right shape.
+- **Fireball spark trail + spark burst** — Particle buckets spawned along
+  the missile's flight + at the impact. The fireball *head* + state
+  machine stay bespoke (multi-phase missile-with-collision), but every
+  sub-piece (head glow flicker doesn't count — the trail and explosion
+  particles do) goes through the engine.
+
+Effects that legitimately stay **bespoke C++** (combination of unique
+geometry + state machines + gameplay coupling):
+
+- Sword swipes (weapon-extents-driven strip geometry, hit callbacks).
+- Lightning bolts (spline-jittered per-segment ribbons).
+- Missile head + state machine (LAUNCH/FLY/EXPLODE) — but the trail
+  particles inside come from engine buckets.
+- Character-attached aura overlays that read owner bones / equip slots
+  every frame.
+
+When you discover a needed extension and it would take serious effort,
+**stop and propose it** in `docs/vfx/ENGINE_EXTENSIONS.md` (create the
+file if it doesn't exist) before sinking days into a bespoke workaround.
 
 Not every effect should be a data-driven engine definition. **Use the engine
 for the common shapes; keep bespoke when behavior is genuinely unique.**
