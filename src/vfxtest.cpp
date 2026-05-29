@@ -1700,6 +1700,61 @@ void BloodSubmit(void* cp, EFxDebugMode dbg)
         c->blood->TickAndSubmitForTest(dbg);
 }
 
+// --- FB: real TBloodEffect_Bespoke (B01 A/B baseline) -------------------
+// Drives the bespoke 1998 TBloodSystem-style port (faithful direct C++
+// state machine: 30-particle array, FLY → SPLAT → SHRINK, two-pass
+// alpha+additive billboard draws using 8 Misc/Blood.I3D box sub-objects).
+// Lives alongside the engine TBloodEffect entry above as the canonical
+// A/B reference — tools/vfx/snap_ab.py stacks the two as a side-by-side
+// filmstrip so visual divergence between the bespoke baseline and the
+// engine port is obvious frame-for-frame.
+struct SBloodBespokeCtx {
+    TBloodEffect_Bespoke* blood   = nullptr;
+    S3DPoint              origin  = {0, 0, 0};
+    float                 gap     = 0.0f;
+};
+
+constexpr float kBloodBespokeRetriggerGap = 1.0f;
+
+void* BloodBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SBloodBespokeCtx();
+    c->origin = origin;
+    c->blood = TBloodEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->blood)
+        log_warn("[vfx] TBloodEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " B01 bespoke entry will draw nothing");
+    return c;
+}
+
+void BloodBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SBloodBespokeCtx*>(cp);
+    delete c->blood;
+    delete c;
+}
+
+void BloodBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SBloodBespokeCtx*>(cp);
+    if (!c)
+        return;
+
+    if (!c->blood || !c->blood->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->blood;
+            c->blood = TBloodEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap   = kBloodBespokeRetriggerGap;
+        }
+    }
+
+    if (c->blood)
+        c->blood->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 // --- FB: real TFizzleEffect (X21, Magic/Fizzle.I3D) ----------------------
 // Spawns a sector-less single-burst TFizzleEffect at the harness origin
 // via SpawnForTest and drives the ported TFizzleAnimator loop through
@@ -2375,6 +2430,20 @@ struct SVfxTestBootstrap {
         blood.submit        = [](void* c, EFxDebugMode d) { BloodSubmit(c, d); };
         blood.destroy       = [](void* c) { BloodDestroy(c); };
         VfxTest::DeferredRegister(blood);
+
+        // A/B baseline: bespoke 1998 TBloodSystem-style port. Same
+        // preview_style/family/pipeline as the engine port above so the
+        // harness drives them identically; tools/vfx/snap_ab.py captures
+        // both and stitches them into a side-by-side filmstrip.
+        VfxTest::SEffect blood_bespoke = {};
+        blood_bespoke.id            = "TBloodEffect_BESPOKE";
+        blood_bespoke.family        = "blood";
+        blood_bespoke.pipeline      = "FB";
+        blood_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        blood_bespoke.factory       = [](const S3DPoint& o) -> void* { return BloodBespokeSpawn(o); };
+        blood_bespoke.submit        = [](void* c, EFxDebugMode d) { BloodBespokeSubmit(c, d); };
+        blood_bespoke.destroy       = [](void* c) { BloodBespokeDestroy(c); };
+        VfxTest::DeferredRegister(blood_bespoke);
 
         VfxTest::SEffect strip = {};
         strip.id            = "TStripEffect";
