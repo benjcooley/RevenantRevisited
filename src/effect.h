@@ -244,6 +244,20 @@ struct SParticleBucketEffectDef
     // spawn time). <= 0 means "no auto-kill" (drops live until kill_expr
     // fires).
     float default_life = -1.0f;
+
+    // ---- Chain emission (reflection-plane / state-transition mechanism) ----
+    // When a particle in this bucket dies (kill_expr fires, or life
+    // expires, or default_life is 0 with no kill_expr running), spawn one
+    // particle into `chain_bucket` instead of (or in addition to) reaping
+    // the source. The chain spawn runs the target bucket's spawn_expr
+    // with `emit_pos` and `emit_vel` set to the dying particle's pos /
+    // vel — so the chain particle inherits the impact site naturally.
+    //
+    // Generic mechanism — blood uses it for FLY droplet -> SPLAT decal
+    // transition; future "bullet impact -> spark burst", "spell missile ->
+    // explosion smoke", etc. wire through the same field. Empty = no
+    // chain emission (default).
+    std::string chain_bucket;
 };
 
 struct SParticleEmitterOutputDef
@@ -312,8 +326,19 @@ class TParticleEffectManager
     SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_map_index);
     void StartRuntime(SRuntime& runtime, TObjectInstance* owner);
     void StopRuntime(size_t runtime_index);
-    void IntegrateBucket(SBucketRuntime& brt, TObjectInstance* owner, float dt_seconds, float owner_particle_id);
+    void IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt, TObjectInstance* owner,
+                         float dt_seconds, float owner_particle_id);
     void EmitSpawnTopup(SBucketRuntime& brt, TObjectInstance* owner, float owner_particle_id);
+    // Emit one chain particle into `chain_brt` using `(pos, vel)` as the
+    // chain spawn's emit_pos / emit_vel. Returns the new particle index
+    // (-1 if the chain bucket is full or the chain runtime is missing).
+    int32_t EmitChainParticle(SBucketRuntime& chain_brt, TObjectInstance* owner,
+                              float owner_particle_id,
+                              const float dying_pos[3],
+                              const float dying_vel[3]);
+    // Find the sibling bucket runtime within `runtime` by bucket name
+    // (matches SParticleBucketEffectDef::chain_bucket).
+    SBucketRuntime* FindBucketRuntime(SRuntime& runtime, const std::string& bucket_name);
 
     std::vector<SRuntime> runtimes;
     uint32_t last_expire_pass = 0;
@@ -2544,47 +2569,26 @@ class TFaultFireAnimator : public T3DAnimator
 // + 45° in-plane spin; SPLAT/SHRINK keep authored facing. Forensics §7.
 
 // MAX_BLOODS particles per burst — matches retail TBloodSystem (effectcomp.cpp:374).
+// Kept as a reference constant for the legacy bespoke loop preserved under
+// `#if 0` in effect.cpp; the engine-particle rework uses the bucket
+// `spawn_burst` value declared in effects.def instead.
 inline constexpr int32_t kBloodMaxParticles = 30;
-
-// Per-droplet transient state. Pre-release stored these as SBloodParticle in
-// the TBloodSystem-owned heap array; we collapse onto a per-particle struct
-// on the effect class. Lifetime counters stay in their authored per-tick
-// units — TickAndSubmitForTest integrates via a 24 Hz sim-tick accumulator
-// so the motion plays at the original wall-clock speed on any framerate.
-struct SBloodParticleEx
-{
-    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};   // object-local position (wu)
-    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};   // velocity (wu / sim-tick)
-    float    scl   = 1.0f;                 // draw scale (FLY 1.0+grow → SPLAT 1.8 → SHRINK 0)
-    int32_t  size  = 0;                    // 0=small, 1=med, 2=big (big draws as small per §13.3)
-    int32_t  stage = 0;                    // BLOOD_FLY=0, BLOOD_SPLAT=1, BLOOD_SHRINK=2
-    int32_t  count = 0;                    // ticks held in current stage (SPLAT timer)
-    int32_t  delay = 0;                    // ticks of start-delay (trail-fill droplets)
-    bool     used  = false;                // active slot?
-};
-
-// One sub-object's resolved draw data — captured at SpawnForTest from the
-// authored UVs of the box's verts and the htextures[] slot the box uses.
-// The 8 boxes feed two pass-sets per forensics §4: pass 0 (Alpha) uses
-// box05..box08 (indices 4..7), pass 1 (AdditiveStraight) uses box01..box04
-// (indices 0..3); within each set [0]=small, [1]=med, [2]=big, [3]=splat.
-// Big & splat draws are commented out in the original Render — we keep the
-// table populated but only the small + med slots are ever read (forensics §7).
-struct SBloodSubObject
-{
-    TTextureHandle texture = kInvalidTexture;
-    float          uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};   // x,y,w,h normalized
-    float          size_wu    = 32.0f;                       // billboard size in world units
-};
 
 _CLASSDEF(TBloodEffect)
 
+// B01 TBloodEffect — engine-particle rework per the resettled forensics.
+// The 1998 TBloodSystem-style per-particle array + 3-stage state machine
+// (FLY -> SPLAT -> SHRINK) is now modelled in effects.def as two engine
+// particle buckets (`blood_fly` + `blood_splat`) with a reflection-plane
+// chain wiring FLY -> SPLAT on ground impact. The bespoke C++ port is
+// preserved under `#if 0` in effect.cpp for reference.
 class TBloodEffect : public TEffect
 {
   private:
     // Retail SetParams payload (spray descriptor) — kept for the eventual
-    // in-game caller, not consumed by the harness path (SpawnForTest fills
-    // the equivalent values directly per forensics §5).
+    // in-game caller. The harness path (SpawnForTest + effects.def) reads
+    // its spray params from the bucket's spawn_expr; in-game wiring will
+    // need to forward these via a per-effect override pass (B01a).
     int32_t height = 0;
     int32_t hangle = 0;
     int32_t vangle = 0;
@@ -2592,30 +2596,18 @@ class TBloodEffect : public TEffect
     int32_t vspread = 0;
     int32_t num = 0;
 
-    // Per-droplet state (faithful collapse of TBloodSystem's SBloodParticle
-    // array onto the class — same pattern as SSparkParticle in TSparkEffect).
-    SBloodParticleEx particles_[kBloodMaxParticles] {};
-    // Resolved sub-object textures + UV sub-rects. Indexed
-    // 0..3 = pass 1 (AdditiveStraight overlay, box01..box04),
-    // 4..7 = pass 0 (Alpha base,           box05..box08).
-    SBloodSubObject subobjs_[8] {};
-    // Authoring units: the original integrated `pos += vel; vel.z -= 0.37;
-    // vel.xy *= 0.95; scl += 0.01` once per 24 Hz sim tick. We keep the
-    // math in those units and gate it on a sim-tick accumulator so the
-    // burst plays at the original wall-clock speed (per
-    // RECONSTRUCTION_PROTOCOL framerate-independence rule).
-    double  sim_accum_ms_ = 0.0;
-    // Spawn-height of the droplets in object-local space (also subtracted
-    // from pos.z at render time so the world z lands at object_origin +
-    // integrated delta — forensics §5 / §7 "the −height cancels the local
-    // start height").
-    float   height_local_ = 0.0f;
-    bool    alive_        = true;
+    // Bucket cursors -- populated at SpawnForTest. Both reference engine-
+    // owned global buckets that outlive this effect (the engine manages
+    // particle storage; we just hold the owner_id used to scope reaping
+    // when the effect is destroyed).
+    TParticleBucket* fly_bucket_     = nullptr;
+    TParticleBucket* splat_bucket_   = nullptr;
+    float            owner_particle_id_ = -1.0f;
 
   public:
     TBloodEffect(TObjectImagery* newim) : TEffect(newim) {  }
     TBloodEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    ~TBloodEffect() override = default;
+    ~TBloodEffect() override;
 
     void OffScreen() override { KillThisEffect(); }
 
@@ -2626,31 +2618,24 @@ class TBloodEffect : public TEffect
     virtual void GetParams(int32_t *he, int32_t *ha, int32_t *va, int32_t *hs, int32_t *vs, int32_t *nu) { *he = height; *ha = hangle; *va = vangle; *hs = hspread; *vs = vspread; *nu = num; }
 
     // Spawn a standalone single-burst TBloodEffect for the --test=vfx
-    // harness. Loads the real `Misc\Blood.I3D` imagery (the canonical
-    // bloodimagery — see playscreen.cpp:241 preload; NO procedural
-    // stand-in — the dark-red box sprites ARE the visual identity per
-    // §10), reads each of the 8 box sub-objects' authored UV sub-rects
-    // + texture handles, and seeds num + trail-fill droplets via the
-    // ported TBloodSystem::Init loop with the **retail** spray params
-    // (hspread=32, vspread=5; not the snapshot's 80/20 per forensics §2.1).
-    // Returns nullptr if the imagery can't be loaded. Caller owns the
-    // pointer.
+    // harness. Loads the real Misc\Blood.I3D imagery and attaches a
+    // TParticleEffectComponent configured with the "Blood" effects.def
+    // entry, then pulses it once so the engine seeds the 10-droplet FLY
+    // burst. Returns nullptr if the imagery can't be loaded. Caller owns
+    // the returned pointer.
     [[nodiscard]] static TBloodEffect* SpawnForTest(const S3DPoint& origin);
 
-    // Per-frame tick + submit for the harness. Ports TBloodSystem::Animate
-    // (3-stage FLY → SPLAT → SHRINK state machine with horizontal air-drag
-    // + gravity) and TBloodSystem::Render (two billboards per droplet:
-    // Alpha base + AdditiveStraight overlay) directly, converted to
-    // framerate-independent integration via a 24 Hz sim-tick accumulator.
-    // FB pipeline (SubmitFxBillboard); per-droplet sub-object UV sub-rect
-    // selects the authored sprite cell within the shared Blood.I3D atlas.
+    // Per-frame tick + submit for the harness. Drives the engine's
+    // per-frame integration via TParticleEffectComponent::DrawPulse,
+    // then submits both buckets (FLY droplets + SPLAT decals) to the
+    // FX queue.
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
 
-    // True until the last droplet expires (mirrors the original's
-    // `OF_KILL` self-destruct when TBloodSystem::GetDone() goes true).
-    // The harness uses this to know when a burst has fully played out
-    // before re-triggering for clean single-instance verification.
-    [[nodiscard]] bool IsAlive() const { return alive_; }
+    // True until both FLY and SPLAT buckets have drained of this effect's
+    // particles. The harness uses this to know when a burst has fully
+    // played out before re-triggering for clean single-instance
+    // verification.
+    [[nodiscard]] bool IsAlive() const;
 };
 
 // *******************

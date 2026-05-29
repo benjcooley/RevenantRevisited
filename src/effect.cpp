@@ -216,6 +216,7 @@ SParticleEffectDef ParseParticleEffectDef(const char* wanted)
         bucket.spawn_count   = int32_t(bucket_node->get_int("spawn_count", 0));
         bucket.tick_hz       = int32_t(bucket_node->get_int("tick_hz", 0));
         bucket.default_life  = float(bucket_node->get_double("default_life", -1.0));
+        bucket.chain_bucket  = bucket_node->get_string("chain_bucket");
         def.buckets.push_back(std::move(bucket));
     }
 
@@ -263,6 +264,11 @@ SParticleEffectDef ParseParticleEffectDef(const char* wanted)
             ParticleFatal("[particle] bucket " + bucket.name + " has both spawn_burst and spawn_count set");
         if (bucket.tick_hz < 0)
             ParticleFatal("[particle] bucket " + bucket.name + " has negative tick_hz");
+        if (!bucket.chain_bucket.empty()
+            && !FindNamedBlock(*effect, "bucket", bucket.chain_bucket))
+            ParticleFatal("[particle] bucket " + bucket.name +
+                          " chain_bucket='" + bucket.chain_bucket +
+                          "' targets unknown bucket");
     }
     for (const SParticleEmitterEffectDef& emitter : def.emitters)
     {
@@ -683,19 +689,109 @@ void TParticleEffectManager::EmitSpawnTopup(SBucketRuntime& brt, TObjectInstance
     }
 }
 
+TParticleEffectManager::SBucketRuntime* TParticleEffectManager::FindBucketRuntime(
+    SRuntime& runtime, const std::string& bucket_name)
+{
+    for (SBucketRuntime& brt : runtime.bucket_runtimes)
+        if (brt.bucket_def && brt.bucket_def->name == bucket_name)
+            return &brt;
+    return nullptr;
+}
+
+// Spawn one particle in the chain bucket using the dying particle's pos /
+// vel as the chain spawn's emit_pos / emit_vel. The chain bucket's
+// spawn_expr runs against the chain particle's own slots, with the
+// supplied dying-pos/vel exposed as the read-only emit_pos / emit_vel
+// identifiers (this is exactly how the legacy emitter/output path
+// supplies emit_pos / emit_vel to spawn_expr).
+//
+// Reflection-plane / chain-bucket mechanism: blood's FLY droplet hits
+// ground (kill_expr fires on pos.z <= emit_pos.z), the engine reaps the
+// flier AND spawns one SPLAT into the chain bucket at the impact site.
+// Generic — any "die into X" effect uses the same wire.
+int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
+                                                  TObjectInstance* owner,
+                                                  float owner_particle_id,
+                                                  const float dying_pos[3],
+                                                  const float dying_vel[3])
+{
+    if (!chain_brt.bucket || !chain_brt.bucket_def)
+        return -1;
+
+    const float life = chain_brt.bucket_def->default_life > 0.0f
+                           ? chain_brt.bucket_def->default_life : -1.0f;
+    const int32_t pi = chain_brt.bucket->AddParticle(owner_particle_id, life);
+    if (pi < 0)
+        return -1;
+
+    // Pre-init the chain particle's slots to sensible defaults (matches
+    // InitializeSelfSpawnParticle's defaults). Then run the chain
+    // bucket's spawn_expr — but with the dying particle's pos / vel
+    // shadowed into emit_pos / emit_vel so the chain spawn can place
+    // itself at the impact site naturally.
+    TParticleBucket& bucket = *chain_brt.bucket;
+    const SParticleBucketEffectDef& bd = *chain_brt.bucket_def;
+
+    if (float* dp = bucket.VarPtr(pi, EParticleVar::DrawPos))
+    { dp[0] = dying_pos[0]; dp[1] = dying_pos[1]; dp[2] = dying_pos[2]; }
+    if (float* ep = bucket.VarPtr(pi, EParticleVar::EmitPos))
+    { ep[0] = dying_pos[0]; ep[1] = dying_pos[1]; ep[2] = dying_pos[2]; }
+    if (float* ev = bucket.VarPtr(pi, EParticleVar::EmitVel))
+    { ev[0] = dying_vel[0]; ev[1] = dying_vel[1]; ev[2] = dying_vel[2]; }
+    if (float* ds = bucket.VarPtr(pi, EParticleVar::DrawScl))
+    { ds[0] = bd.width * bd.scale; ds[1] = bd.height * bd.scale; ds[2] = 1.0f; }
+    if (float* dr = bucket.VarPtr(pi, EParticleVar::DrawRot))
+        *dr = 0.0f;
+    if (float* dc = bucket.VarPtr(pi, EParticleVar::DrawColor))
+    { dc[0] = 1.0f; dc[1] = 1.0f; dc[2] = 1.0f; dc[3] = 1.0f; }
+    if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
+        *df = 0.0f;
+    if (float* uv = bucket.VarPtr(pi, EParticleVar::DrawUvRect))
+    { uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f; }
+    if (float* age = bucket.VarPtr(pi, EParticleVar::Age))
+        *age = 0.0f;
+    if (float* age01 = bucket.VarPtr(pi, EParticleVar::Age01))
+        *age01 = 0.0f;
+    if (float* seed = bucket.VarPtr(pi, EParticleVar::Seed))
+    {
+        // Seed off the chain particle's index + the dying particle's
+        // pos.x so successive chain spawns don't collide.
+        uint32_t s = uint32_t(pi) * 2654435761u
+                   + uint32_t(int32_t(dying_pos[0])) * 16807u;
+        if (s == 0) s = 1;
+        *seed = float(s & 0x7fffffu) / float(0x7fffffu);
+    }
+
+    if (chain_brt.spawn_compiled)
+    {
+        SParticleEvalContext ctx = {};
+        ctx.time_frame = float(TTime::Time());
+        // dying_pos / dying_vel become the emit_pos / emit_vel identifiers
+        // for this chain spawn — the chain bucket's spawn_expr can read
+        // emit_pos / emit_vel to inherit the impact site.
+        chain_brt.spawn_expr.EvalParticle(ctx, bucket, pi, dying_pos, dying_vel);
+    }
+
+    (void)owner;
+    return pi;
+}
+
 // Per-bucket integration. dt_seconds is wall-clock for this render frame.
 // If tick_hz > 0 the bucket runs the tick_expr at the fixed cadence
 // (accumulating leftover ms across frames); otherwise the tick_expr runs
 // once per render frame.
-void TParticleEffectManager::IntegrateBucket(SBucketRuntime& brt, TObjectInstance* owner, float dt_seconds, float owner_particle_id)
+void TParticleEffectManager::IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt,
+                                             TObjectInstance* owner, float dt_seconds,
+                                             float owner_particle_id)
 {
     if (!brt.bucket || !brt.bucket_def) return;
     if (!brt.tick_compiled && !brt.kill_compiled && brt.bucket_def->default_life <= 0.0f
-        && brt.bucket_def->spawn_count == 0)
+        && brt.bucket_def->spawn_count == 0
+        && brt.bucket_def->chain_bucket.empty())
     {
         // Nothing to do -- no per-tick dynamics, no life-based kill,
-        // no spawn-topup restock target. The legacy emitter/output
-        // path (TorchFlame) hits this branch.
+        // no spawn-topup restock target, no chain emission. The legacy
+        // emitter/output path (TorchFlame) hits this branch.
         return;
     }
 
@@ -768,6 +864,29 @@ void TParticleEffectManager::IntegrateBucket(SBucketRuntime& brt, TObjectInstanc
 
             if (kill)
             {
+                // Chain emission: if the bucket defines a chain_bucket,
+                // spawn one particle in the target bucket using this
+                // particle's pos / vel as the chain spawn's emit_pos /
+                // emit_vel. This is the reflection-plane / state-
+                // transition mechanism — blood uses it for FLY droplet
+                // -> SPLAT decal. Generic.
+                if (!brt.bucket_def->chain_bucket.empty())
+                {
+                    SBucketRuntime* chain_brt =
+                        FindBucketRuntime(runtime, brt.bucket_def->chain_bucket);
+                    if (chain_brt)
+                    {
+                        float dying_pos[3] = {0, 0, 0};
+                        float dying_vel[3] = {0, 0, 0};
+                        if (const float* dp = brt.bucket->VarPtr(i, EParticleVar::DrawPos))
+                        { dying_pos[0] = dp[0]; dying_pos[1] = dp[1]; dying_pos[2] = dp[2]; }
+                        if (const float* dv = brt.bucket->VarPtr(i, EParticleVar::EmitVel))
+                        { dying_vel[0] = dv[0]; dying_vel[1] = dv[1]; dying_vel[2] = dv[2]; }
+                        EmitChainParticle(*chain_brt, owner, owner_particle_id,
+                                          dying_pos, dying_vel);
+                    }
+                }
+
                 if (brt.bucket_def->spawn_count > 0)
                 {
                     // Steady-state: respawn in place by re-running spawn_expr
@@ -779,8 +898,8 @@ void TParticleEffectManager::IntegrateBucket(SBucketRuntime& brt, TObjectInstanc
                 }
                 else
                 {
-                    // One-shot burst: tag the particle dead via owner_id
-                    // mutation, then reap below.
+                    // One-shot burst (or chain-source bucket): tag the
+                    // particle dead via owner_id mutation, then reap below.
                     if (float* mut_o = brt.bucket->VarPtr(i, EParticleVar::OwnerId))
                         *mut_o = -7777.0f;
                 }
@@ -802,7 +921,7 @@ void TParticleEffectManager::IntegrateEffect(const SParticleEffectDef* effect_de
     SRuntime* runtime = FindRuntime(effect_def, owner->GetMapIndex());
     if (!runtime) return;
     for (SBucketRuntime& brt : runtime->bucket_runtimes)
-        IntegrateBucket(brt, owner, dt_seconds, runtime->owner_particle_id);
+        IntegrateBucket(*runtime, brt, owner, dt_seconds, runtime->owner_particle_id);
 }
 
 void TParticleEffectManager::StartRuntime(SRuntime& runtime, TObjectInstance* owner)
@@ -1189,69 +1308,46 @@ TFlameEffect* TFlameEffect::SpawnForTest(const S3DPoint& origin)
 }
 
 // *************************************************************************
-// * (B01) TBloodEffect — generic blood spray ("Blood" / TBloodAnimator)   *
+// * (B01) TBloodEffect — engine-particle rework                            *
 // *************************************************************************
 //
-// FAITHFUL DIRECT PORT of the pre-release particle loop. See forensics
-// docs/vfx/forensics/B01_TBloodEffect.md. The three ported bodies:
+// See docs/vfx/forensics/B01_TBloodEffect_RENDER_RESETTLED.md for the
+// authoritative spec, docs/vfx/PLAN_B01_engine_rework.md for the rework
+// plan. Blood is rebuilt as two engine particle buckets declared in
+// data/Resources/effects.def:
 //
-//   spawn  : TBloodSystem::Init (effectcomp.cpp:1182-1307) — 30-particle
-//            directional spray seeded at once, optional trail-fill of small
-//            droplets riding behind the main ones, ViolenceLevel-gated.
-//   update : TBloodSystem::Animate (effectcomp.cpp:1309-1370) — 3-stage
-//            FLY → SPLAT → SHRINK state machine. FLY integrates `pos += vel;
-//            vel.xy *= 0.95; vel.z -= 0.37; scl += 0.01` once per 24 Hz tick,
-//            transitions to SPLAT when pos.z <= 20 (snap to 1.8 scale, hold
-//            25 ticks), then SHRINK ramps scl down by 0.1/tick to 0 = dead.
-//   render : TBloodSystem::Render (effectcomp.cpp:1415-1530) — each used
-//            droplet drawn TWICE: pass 0 = Alpha base, pass 1 = ONE/ONE
-//            additive overlay. Sub-objects {box05..box08} feed pass 0,
-//            {box01..box04} feed pass 1 (forensics §4 / §7).
+//   blood_fly    — one-shot 10-droplet burst (spawn_burst=10), 24 Hz
+//                  integration, gravity+drag tick_expr, reflection-plane
+//                  kill_expr on pos.z <= emit_pos.z. chain_bucket=
+//                  "blood_splat" spawns one SPLAT decal at the impact
+//                  site when a droplet kills.
+//   blood_splat  — chain-driven, ground-flat decal (orientation=world_xy),
+//                  holds peak scale for ~60% of life then shrinks to zero.
 //
-// Engine adaptations (only what the new engine genuinely requires):
-//   - SubmitFxBillboard FB-pipeline draws instead of D3D RenderObject.
-//     Each droplet emits TWO billboard items (one per pass-set) so the
-//     alpha base + additive sheen composite faithfully.
-//   - Framerate-independence: the original integrated on a 24 Hz integer
-//     game-frame. We keep the math in the original per-tick units and
-//     drive it from a 24 Hz sim-tick accumulator (same fix as F03/H03/
-//     M05/X22), so the burst plays at the original wall-clock speed
-//     regardless of render framerate.
-//   - DoLighting: retail samples 3 closest world lights + ambient×4,
-//     clamps/normalizes to grayscale, multiplies the texture. The FB
-//     pipeline's EFxLightMode::LitFlat provides a comparable "scene-lit"
-//     multiplier; that's the engine-side analog flagged in forensics §7 +
-//     §10. (Once a direct Scene3D::GetClosestLights port is wired into
-//     the FB submit path, the per-droplet vertex grayscale will land
-//     verbatim — a follow-up tracked as B01a.)
-//   - Per-sub-object UV sub-rect resolved from authored vertex UVs (the
-//     faithful equivalent of RenderObject drawing that sub-object's quad
-//     with its baked UVs). Each box references one texture slot via its
-//     S3DObj texfaces[]; we resolve the slot → htextures[] mapping at
-//     spawn so every droplet draws the correct sprite cell.
+// Render-state per the resettled doc §6:
+//   - blend = Alpha (with the texture loader's 1-bit chroma-key alpha
+//     baked in by 3dimage.cpp ~line 1690, the result is chroma-keyed
+//     opaque -- not semi-transparent, not additive).
+//   - light_mode = LitFlat (scene-lit grayscale modulation, retail
+//     DoLighting analog).
+//   - depth_mode = TestNoWrite.
+//   - orientation = ScreenAligned (FLY) / WorldXY (SPLAT).
 //
-// Retail-vs-snapshot reconciliation (forensics §2.1, retail-partial):
-//   - Asset Misc\Blood.I3D is byte-identical to ship (MD5 confirmed).
-//   - Caller wiring + SetParams handshake are retail-confirmed; the live
-//     impale call (recon/discovered/cls_0x5a7b98_ResolveAttack_4c1bb0.cpp:190)
-//     uses hspread=0x20=32, vspread=5 — NOT the snapshot's 80/20. We
-//     adopt the retail values here for the harness spawn (tighter spray);
-//     the snapshot's 80/20 is a known dev tuning divergence (§13.2).
-//   - TBloodSystem kinematics (gravity 0.37, drag 0.95, splat 1.8, etc.)
-//     are snapshot-only (Ghidra didn't isolate the animator class). We
-//     ship the snapshot numbers as best-evidence (forensics §13.1); the
-//     spray distance/arc must be vetted vs in-game footage in §12.
-//
-// NOT ported (dead/dev-disabled per forensics §13):
-//   - the bif impact-splash block (effectcomp.cpp:1485-1529 commented).
-//   - the big/med trail loops (effectcomp.cpp:1242-1283 commented) —
-//     ONLY the smalls-trail-smalls loop (:1287-1306) is live.
-//   - big (size=2) sprite draws (commented in Render — a size-2 droplet
-//     falls through to the small sprite).
-//   - TBloodParticle3DAnimator alternate + REGISTER_MULTI_3DANIMATOR_.
+// The bespoke C++ port (1998 TBloodSystem-style per-particle state
+// machine on the effect class, two-pass alpha+additive billboard draws)
+// is preserved under `#if 0` below for reference, per project
+// preserve-old-code rule.
 namespace {
 
 constexpr const char* kBloodImageryPath = "Misc\\Blood.I3D";
+
+// Cached parsed effects.def "Blood" block. Lazy on first use; same
+// pattern as TorchFlameDef / MistEffectDef above.
+const SParticleEffectDef& BloodEffectDef()
+{
+    static const SParticleEffectDef def = ParseParticleEffectDef("Blood");
+    return def;
+}
 
 // 24 Hz cadence gate (family-consistent with F03/H03/M05/X22). The original
 // per-tick rates (gravity 0.37 wu/tick^2, drag 0.95/tick, scale step 0.01/tick,
@@ -1358,20 +1454,167 @@ float ByteAngleToRad(int32_t byteangle)
 
 }   // namespace
 
-// Retail TBloodEffect::Initialize / Pulse are the in-game spawn-path
-// hooks (decompiled body lives in recon/classes/cls_0x5acaa8.cpp, merged
-// with Mist + WaterFall — see forensics §2). The `--test=vfx` path drives
-// spawn + tick through SpawnForTest + TickAndSubmitForTest; the in-game
-// path will route through TBloodAnimator::Animate / ::Render once the
-// retail caller is wired (B01a follow-up).
+// --- Engine-driven implementation (resettled-forensics rework) -----------
+//
+// Retail TBloodEffect::Initialize / Pulse are the in-game spawn-path hooks
+// (decompiled body lives in recon/classes/cls_0x5acaa8.cpp, merged with
+// Mist + WaterFall — see forensics §2). The `--test=vfx` path drives
+// spawn + tick via SpawnForTest + TickAndSubmitForTest, which wire a
+// TParticleEffectComponent configured with the "Blood" effects.def block
+// (FLY + SPLAT buckets + chain). The in-game path will be wired in B01a.
+
+TBloodEffect::~TBloodEffect()
+{
+    // Drop any live particles owned by this effect. Both buckets are
+    // engine-owned globals; reaping by owner_id only kills this effect's
+    // contribution, leaving other in-flight bursts (if any) intact.
+    if (owner_particle_id_ >= 0.0f)
+    {
+        if (fly_bucket_)   fly_bucket_->KillParticlesByOwner(owner_particle_id_);
+        if (splat_bucket_) splat_bucket_->KillParticlesByOwner(owner_particle_id_);
+    }
+}
+
 void TBloodEffect::Initialize()
+{
+    // Empty (intentional). The pre-release TBloodEffect::Initialize body
+    // is empty (effect_old.cpp:11246-11253); per-burst state now lives
+    // in the engine particle buckets keyed by owner_particle_id_.
+}
+
+void TBloodEffect::Pulse()
+{
+    TEffect::Pulse();
+    // No per-pulse work — the engine ticks particles via the attached
+    // TParticleEffectComponent's DrawPulse path each render frame.
+}
+
+bool TBloodEffect::IsAlive() const
+{
+    // Alive while either bucket still holds particles owned by us. The
+    // harness uses this to gate the re-trigger gap (see vfxtest.cpp
+    // BloodSubmit). Walking the bucket per-frame is fine — both buckets
+    // hold at most a few dozen particles total at the SPLAT/FLY peaks.
+    auto any_owned = [this](const TParticleBucket* b) {
+        if (!b) return false;
+        for (int32_t i = 0; i < b->Count(); ++i)
+        {
+            const float* o = b->VarPtr(i, EParticleVar::OwnerId);
+            if (o && *o == owner_particle_id_)
+                return true;
+        }
+        return false;
+    };
+    return any_owned(fly_bucket_) || any_owned(splat_bucket_);
+}
+
+TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
+{
+    // Load Misc\Blood.I3D so its textures get registered with the renderer
+    // (the bucket descs reference these via `imagery_path` and the engine
+    // resolves the htexture handle at StartRuntime; the texture loader's
+    // 1-bit chroma-key alpha conversion happens during this load, per
+    // 3dimage.cpp ~line 1690). No procedural stand-in -- the dark-red box
+    // sprites ARE the visual identity per forensics §10.
+    const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[blood] SpawnForTest: FindImagery('%s') failed", kBloodImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[blood] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kBloodImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[blood] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kBloodImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    // Force lazy mesh init so the bucket-desc resolver finds populated
+    // texture slots (NumTextures alone doesn't trigger init).
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[blood] SpawnForTest: imagery has no textures after init");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* blood = new TBloodEffect(base);
+    blood->ForcePos(origin);
+    blood->SetMapIndex(MapPane.MakeIndex());
+    blood->ActivateComponents();
+
+    // Attach the engine-driven particle component. The "Blood" effects.def
+    // entry declares two buckets (blood_fly + blood_splat) wired by
+    // chain_bucket="blood_splat" on FLY's kill_expr.
+    auto particle_effect = std::make_unique<TParticleEffectComponent>();
+    particle_effect->Configure(&BloodEffectDef());
+    blood->AddComponent(std::move(particle_effect));
+
+    // Drive one DrawPulse so StartRuntime fires NOW and the FLY bucket's
+    // spawn_burst=10 emits immediately (visible from frame 1, matching
+    // the harness Static preview style).
+    if (auto* pe = blood->GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    blood->fly_bucket_       = ParticleManager().FindGlobalBucket("blood_fly");
+    blood->splat_bucket_     = ParticleManager().FindGlobalBucket("blood_splat");
+    blood->owner_particle_id_ = float(blood->GetMapIndex());
+
+    log_info("[blood] SpawnForTest (engine-driven): '%s' map_index=%d "
+             "origin=(%d,%d,%d) fly_bucket=%p splat_bucket=%p def=Blood",
+             kBloodImageryPath, blood->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             (void*)blood->fly_bucket_, (void*)blood->splat_bucket_);
+    return blood;
+}
+
+void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+
+    // Drive the engine's per-frame integration. Pulse first so the
+    // FLY tick_expr advances + kill_expr/chain fire before submit.
+    if (auto* pe = GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    if (fly_bucket_)
+        Renderer->SubmitFxParticleBucket(*fly_bucket_, debug_mode);
+    if (splat_bucket_)
+        Renderer->SubmitFxParticleBucket(*splat_bucket_, debug_mode);
+}
+
+#if 0
+// --- Bespoke faithful port (preserved per project preserve-old-code rule).
+//
+// The 1998 TBloodSystem-style implementation: 30-particle array on the
+// effect class, 3-stage FLY → SPLAT → SHRINK state machine integrated at
+// 24 Hz via a sim-tick accumulator, two-pass billboard draw per droplet
+// (Alpha base + AdditiveStraight overlay) using 8 box sub-objects of
+// Misc\Blood.I3D. Replaced by the engine-particle rework above per the
+// resettled forensics (chroma-keyed Alpha, single pass, two engine
+// buckets wired by reflection-plane chain).
+//
+// Kept under `#if 0` so the math/constants/sub-object resolution remain
+// referenceable when wiring the in-game B01a path or if the engine rework
+// needs to be cross-checked against the per-tick units.
+
+void TBloodEffect::Initialize_BESPOKE()
 {
     // Empty (intentional). The pre-release TBloodEffect::Initialize body
     // is empty (effect_old.cpp:11246-11253); the per-burst state lives
     // entirely in SBloodSystemParams + TBloodSystem.
 }
 
-void TBloodEffect::Pulse()
+void TBloodEffect::Pulse_BESPOKE()
 {
     TEffect::Pulse();
     // No per-pulse work — the in-game path drives Animate through
@@ -1379,7 +1622,7 @@ void TBloodEffect::Pulse()
     // TickAndSubmitForTest, which integrates directly.
 }
 
-TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
+TBloodEffect* TBloodEffect::SpawnForTest_FaithfulPort(const S3DPoint& origin)
 {
     // --- Load the REAL Misc\Blood.I3D imagery (no procedural stand-in).
     // The dark-red box sprites ARE the visual identity (forensics §10).
@@ -1581,7 +1824,7 @@ TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
     return blood;
 }
 
-void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+void TBloodEffect::TickAndSubmitForTest_FaithfulPort(EFxDebugMode debug_mode)
 {
     if (!Renderer)
         return;
@@ -1757,16 +2000,13 @@ void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         }
     }
 }
+#endif  // bespoke faithful port (TBloodSystem-style state machine)
 
 #if 0
-// REVISITED: replaced by the FAITHFUL PORT above (TBloodSystem::Init/
-// Animate/Render ported line-by-line). The pre-faithful-port body
-// re-derived blood through the TParticleBucket / effects.def "Blood"
-// declaration, which is the kind of engine-abstraction drift the
-// RECONSTRUCTION_PROTOCOL warns against (cf. SPARKS Alpha/additive
-// confusion). Preserved here under #if 0 as a record of the engine-
-// abstraction path in case the def-driven route is wanted later for a
-// non-faithful variant.
+// REVISITED (earlier WIP): pre-faithful-port body, re-derived blood
+// through a TParticleBucket directly (no effects.def, no chain). Kept
+// here as historical context only; the resettled engine-driven rework
+// at the top of this section is the live path.
 TBloodEffect* TBloodEffect::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
     const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
