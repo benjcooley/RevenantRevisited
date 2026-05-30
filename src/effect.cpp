@@ -7327,3 +7327,877 @@ case 1 /* MISSILE_FLY */:
     break;
 }
 #endif
+
+// *************************************************************************
+// * Ice family bespoke ports — wave-bespoke-03-ice                         *
+// *************************************************************************
+//
+// Three sister effects: I20 (TIceEffect stub — no body), I21
+// (TIceBoltEffect — composite freeze beam), I22 (TIcedEffect — frozen
+// overlay + shatter). Faithful direct ports of the snapshot animator
+// bodies at src/effect_old.cpp:8015-8688 (I21) and :8749-8953 (I22).
+// Only render API calls change (Renderer->SubmitFxBillboard); per-tick
+// math, variable names, constants, and pass order preserved.
+//
+// Forensics: docs/vfx/forensics/I21_TIceBoltEffect.md,
+//            docs/vfx/forensics/I22_TIcedEffect.md.
+
+// --- I20 TIceEffect stub ------------------------------------------------
+// Brief: "needs forensics doc first — DO NOT port code blind". Snapshot
+// has only class declarations (effect.h:607-615), no Animate/Render
+// body anywhere in src/effect_old.cpp or src/effectcomp.cpp. SpawnForTest
+// returns nullptr + log_warn; harness draws nothing. Re-enable once a
+// forensics doc exists. Status: BLOCKED.
+TIceEffect_Bespoke* TIceEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& /*origin*/)
+{
+    log_warn("[ice/I20] SpawnForTest: BLOCKED — no snapshot body and no "
+             "forensics doc; harness draws nothing for this id. "
+             "See wave-bespoke-03-ice brief: 'needs forensics doc first — "
+             "DO NOT port code blind'.");
+    return nullptr;
+}
+
+void TIceEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    // No-op (paired with the nullptr SpawnForTest above).
+}
+
+// --- I21 TIceBoltEffect bespoke -----------------------------------------
+//
+// FAITHFUL DIRECT PORT of TIceBoltAnimator (snapshot effect_old.cpp:
+// 8015-8688). Stationary freeze beam from caster outward — NOT a flying
+// missile (TIceBoltEffect base is TEffect; the TMissileEffect calls in
+// the snapshot Initialize/Pulse are commented out, retail-confirmed via
+// cls_0x5aaf28 inheritance, forensics §6.0).
+//
+// Engine adaptations:
+//   - Render path swaps RenderObject(obj) for SubmitFxBillboard. The
+//     7 sub-objects of icebolt.I3D collapse to billboard quads in the
+//     bespoke first-pass — the cylinder stretch / spiral twist / ring
+//     slide become spatial billboard placement, faithful in count and
+//     position but not in mesh geometry. This is the "compiles + boots
+//     + renders something" first pass per the brief; a future pass can
+//     swap the cylinders to SubmitHelperMesh (cf. F07 ring) for proper
+//     mesh draws once the cylinder UVs are extracted.
+//   - 24 Hz sim-tick gate (family pattern blood/spark/fireball/iced)
+//     replaces the snapshot's per-render-frame integration. Per-tick
+//     math (FROST_STEP=0.03, SPIRAL_STEP=1.0, etc.) runs once per
+//     accumulated 1/24 s of wall-clock time.
+//   - Length march (snapshot :8152-8233) is replaced with a fixed
+//     harness `length_` since --test=vfx has no caster/targets/MapPane.
+//   - Gameplay beats (DamageCharactersInRange @beat10,
+//     "Iced"-posting @beat20) are GUARDED OUT for the standalone
+//     harness (no spell/invoker/MapPane). They're preserved as comments
+//     citing the snapshot lines so the in-game wire-up is one paste away.
+//   - SetSubSpell(3) forced (snapshot :8049), all visual tiers active.
+
+namespace {
+
+constexpr const char* kIceBoltImageryPath = "Magic\\icebolt.I3D";
+
+// Snapshot constants (forensics §3). Same names + values as
+// effect_old.cpp:7972-7982 — line-for-line preserved.
+constexpr int32_t kIceBoltGrowDuration     = 10;        // GROW_DURATION
+constexpr float   kIceBoltSphereStep       = 0.5f;      // SPHERE_STEP
+constexpr float   kIceBoltRingSpeed        = 20.0f;     // RING_SPEED
+constexpr float   kIceBoltSpiralStep       = 1.0f;      // SPIRAL_STEP
+constexpr float   kIceBoltSpiralScaleStep  = 0.1f;      // SPIRAL_SCALE_STEP
+constexpr float   kIceBoltFrostInitSize    = 0.5f;      // FROST_INIT_SIZE
+constexpr float   kIceBoltFrostStep        = 0.03f;     // FROST_STEP
+
+// Harness: --test=vfx has no caster facing / no target march. Beam runs
+// along local −y for a fixed length (snapshot length = ticks*10, ≤1000).
+// 500 wu sits between snapshot's plausible 300-800 sample range.
+constexpr float   kIceBoltHarnessLength    = 500.0f;
+constexpr int32_t kIceBoltHarnessAngle     = 0;         // byte facing (0..255); +Y
+
+// 7 sub-objects of icebolt.I3D (forensics §4). Names match the .I3D
+// file order; the snapshot animator addresses them via GetObject(idx).
+constexpr int32_t kIceBoltSubObjCount      = 7;
+constexpr int32_t kIceBoltCylBase          = 0;   // cylinder04 (and 01/02/03 at 1..3)
+constexpr int32_t kIceBoltBox01            = 4;   // glow sphere / frost / snow billboard
+constexpr int32_t kIceBoltCylRing          = 5;   // cylinder05 — rings
+constexpr int32_t kIceBoltCylSpiral        = 6;   // cylinder06 — spirals
+
+// In-plane billboard size (snapshot scales sub-object meshes; here we
+// approximate as a billboard quad). Tuned against the asset's bbox.
+constexpr float   kIceBoltCylSizeWu        = 24.0f;     // core beam quad
+constexpr float   kIceBoltGlowSizeWu       = 48.0f;     // end glow sphere
+constexpr float   kIceBoltFrostSizeWu      = 12.0f;     // frost particle
+constexpr float   kIceBoltSnowSizeWu       = 12.0f;     // snow particle
+constexpr float   kIceBoltRingSizeWu       = 32.0f;     // ring quad
+constexpr float   kIceBoltSpiralSizeWu     = 18.0f;     // spiral quad
+
+}   // namespace
+
+TIceBoltEffect_Bespoke* TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // --- Load Magic\icebolt.I3D (forensics §4 — byte-identical between
+    // snapshot and shipped retail, MD5 confirmed).
+    const int32_t img_id = TObjectImagery::FindImagery(kIceBoltImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[icebolt] SpawnForTest: FindImagery('%s') failed",
+                  kIceBoltImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[icebolt] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kIceBoltImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[icebolt] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kIceBoltImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* bolt = new TIceBoltEffect_Bespoke(base);
+    // Mirror TIceBoltAnimator::Initialize :8022-8026 — z-lift +50 wu
+    // (caster pos → hand height for the beam origin).
+    S3DPoint anchored = origin;
+    anchored.z += 50;
+    bolt->ForcePos(anchored);
+    bolt->SetMapIndex(MapPane.MakeIndex());
+    bolt->ActivateComponents();
+
+    // Lazy-mesh-init poke (B01 / F07 / X22 pattern). NumObjects triggers
+    // the mesh load that fills in textures.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < kIceBoltSubObjCount || num_tex <= 0)
+    {
+        log_error("[icebolt] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d) — expected >=%d sub-objects",
+                  num_obj, num_tex, kIceBoltSubObjCount);
+        delete bolt;
+        return nullptr;
+    }
+
+    // Resolve each of the 7 sub-objects to (texture, UV sub-rect).
+    // Forensics §4: all 7 share the .I3D's inline texture pool. Index 4
+    // (box01) carries the glow sphere / frost / snow billboard; it's the
+    // critical one — if it fails to resolve the entire particle cloud
+    // draws nothing.
+    for (int32_t i = 0; i < kIceBoltSubObjCount; ++i)
+    {
+        const int32_t tex_slot = SubObjTextureSlot(img3d, i);
+        const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+        S3DTex tex = {};
+        img3d->GetTexture(slot, &tex);
+        bolt->subobj_tex_[i] = tex.htexture;
+        ResolveSubObjUv(img3d, i, bolt->subobj_uv_[i]);
+    }
+    if (bolt->subobj_tex_[kIceBoltBox01] == kInvalidTexture)
+    {
+        log_error("[icebolt] SpawnForTest: box01 (sub-obj 4) texture "
+                  "unresolved — glow sphere / frost / snow particles "
+                  "will draw nothing");
+    }
+
+    // Port of TIceBoltAnimator::Initialize (effect_old.cpp:8015-8135).
+    // Same variable names, same per-line assignment, same constants.
+    bolt->frameon_       = 0;
+    bolt->spherescale_[0] = kIceBoltSphereStep;          // :8029
+    bolt->spherescale_[1] = 1.0f;                         // :8030
+    bolt->cylscale_      = kIceBoltSphereStep;            // :8031
+    bolt->ringout_       = 0.0f;                          // :8032
+    bolt->spiralang_     = 0.0f;                          // :8033
+    bolt->spiralscale_   = kIceBoltSpiralScaleStep;       // :8034
+    bolt->cy_            = 0.0f;                          // :8129
+    bolt->angle_         = kIceBoltHarnessAngle;          // :8047 GetAngle — harness fixed
+    bolt->subspell_      = 3;                              // :8049 SetSubSpell(3) force
+    bolt->length_        = kIceBoltHarnessLength;         // length march replaced
+
+    // Frost particle seed (snapshot :8035-8045). Per-particle p[i],v[i]
+    // jitter ±10 / ±3 wu, s[i]=FROST_INIT_SIZE, staggered delay
+    // t[i] = random(0, FROST_INIT_SIZE*2/FROST_STEP) = random(0,33).
+    for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
+    {
+        SIceBoltFrostParticle& f = bolt->frost_[i];
+        f.pos.X = float(random(-10, 10));    // :8037
+        f.pos.Y = float(random(-10, 10));    // :8038
+        f.pos.Z = float(random(-10, 10));    // :8039
+        f.vel.X = float(random(-3, 3));      // :8040
+        f.vel.Y = float(random(-3, 3));      // :8041
+        f.vel.Z = float(random(-3, 3));      // :8042
+        f.s     = kIceBoltFrostInitSize;     // :8043
+        f.t     = float(random(0,
+            int32_t(kIceBoltFrostInitSize * 2.0f / kIceBoltFrostStep))); // :8044
+    }
+
+    // Snow particle seed (snapshot :8119-8133, subspell>2 branch — always
+    // true here since subspell forced to 3 at :8049).
+    for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
+    {
+        SIceBoltSnowParticle& sn = bolt->snow_[i];
+        sn.h  = float(random(-50, 50));                                       // :8123
+        sn.th = float(random(0, 359)) * float(TORADIAN);                      // :8124
+        sn.rs = float(random(5, 15)) / 100.0f;                                // :8125
+        sn.sz = float(random(int32_t(kIceBoltFrostStep * 100.0f),
+                            int32_t(kIceBoltFrostStep
+                                    * float(kIceBoltGrowDuration) * 100.0f))) / 100.0f; // :8126
+        sn.r  = float(random(25, 50));                                        // :8127
+    }
+
+    log_info("[icebolt] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "length=%.0f angle=%d subspell=%d subobj_tex={%u,%u,%u,%u,%u,%u,%u}",
+             kIceBoltImageryPath, bolt->GetMapIndex(),
+             anchored.x, anchored.y, anchored.z,
+             bolt->length_, bolt->angle_, bolt->subspell_,
+             bolt->subobj_tex_[0], bolt->subobj_tex_[1], bolt->subobj_tex_[2],
+             bolt->subobj_tex_[3], bolt->subobj_tex_[4], bolt->subobj_tex_[5],
+             bolt->subobj_tex_[6]);
+    return bolt;
+}
+
+void TIceBoltEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TIceBoltAnimator::Animate (effect_old.cpp:
+    // 8144-8455), framerate-independent via the 24 Hz sim-tick
+    // accumulator. Each accumulated tick runs the original per-tick
+    // integration exactly once.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kIceBoltSimTickMs))
+        {
+            sim_accum_ms_ -= double(kIceBoltSimTickMs);
+
+            // Snapshot :8152-8232 — length march. Harness skips
+            // (no caster/targets/MapPane); length_ pinned at spawn.
+
+            frameon_++;  // :8234
+
+            // Snow tick (snapshot :8236-8273). subspell>2 branch always
+            // true (force-3 at :8049).
+            if (subspell_ > 2)
+            {
+                for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)   // :8238
+                {
+                    SIceBoltSnowParticle& sn = snow_[i];
+                    sn.th += sn.rs;                              // :8240
+                    if (sn.th > float(M_2PI))
+                        sn.th -= float(M_2PI);                   // :8242
+                    sn.rs += 0.01f;                              // :8243
+                }
+                if (frameon_ > kIceBoltGrowDuration * 2)         // :8245
+                {
+                    cy_ += length_ / float(kIceBoltGrowDuration * 2);  // :8247
+                    if (cy_ >= length_)
+                        cy_ = length_;                           // :8249
+                }
+                if (frameon_ > kIceBoltGrowDuration * 5)         // :8251
+                {
+                    for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
+                    {
+                        SIceBoltSnowParticle& sn = snow_[i];
+                        sn.h += 5.0f;                            // :8266
+                        sn.r -= 1.0f;                            // :8267
+                        if (sn.r < 1.0f)
+                            sn.r = 1.0f;                         // :8269
+                        sn.rs += 0.05f;                          // :8270
+                    }
+                }
+            }
+
+            // Frost tick (snapshot :8331-8355).
+            for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
+            {
+                SIceBoltFrostParticle& f = frost_[i];
+                f.t -= 1.0f;                                     // :8333
+                if (f.t > 0)
+                    continue;                                    // :8334
+                f.t = 0;                                          // :8337
+                f.pos.X += f.vel.X;                              // :8338
+                f.pos.Y += f.vel.Y;                              // :8339
+                f.pos.Z += f.vel.Z;                              // :8340
+                f.s -= kIceBoltFrostStep;                        // :8341
+                if (f.s < 0)                                      // :8342
+                {
+                    // Respawn (:8344-8353).
+                    f.pos.X = float(random(-10, 10));
+                    f.pos.Y = float(random(-10, 10));
+                    f.pos.Z = float(random(-10, 10));
+                    f.vel.X = float(random(-3, 3));
+                    f.vel.Y = float(random(-3, 3));
+                    f.vel.Z = float(random(-3, 3));
+                    f.s     = kIceBoltFrostInitSize;
+                    f.t     = float(random(0,
+                        int32_t(kIceBoltFrostInitSize / kIceBoltFrostStep)));
+                    if (frameon_ > kIceBoltGrowDuration * 3)
+                        f.t = 100.0f;                            // :8353
+                }
+            }
+
+            // Beam-body transform envelope (snapshot :8356-8392).
+            if (frameon_ < kIceBoltGrowDuration)                 // :8356
+            {
+                spherescale_[0] += kIceBoltSphereStep;
+                spherescale_[1] += kIceBoltSphereStep * 2.0f;
+                cylscale_       += kIceBoltSphereStep;
+                spiralscale_    += kIceBoltSpiralScaleStep;
+                spiralang_      += kIceBoltSpiralStep;
+                if (spiralang_ > float(M_2PI))
+                    spiralang_ -= float(M_2PI);
+            }
+            if (frameon_ >= kIceBoltGrowDuration
+                && frameon_ < kIceBoltGrowDuration * 2)          // :8366
+            {
+                cylscale_       -= kIceBoltSphereStep * 0.5f;
+                spherescale_[0] += kIceBoltSphereStep;
+                spherescale_[1] += kIceBoltSphereStep;
+                spiralang_      += kIceBoltSpiralStep;
+                if (spiralang_ > float(M_2PI))
+                    spiralang_ -= float(M_2PI);
+            }
+            if (frameon_ >= kIceBoltGrowDuration * 2
+                && frameon_ < kIceBoltGrowDuration * 3)          // :8375
+            {
+                cylscale_       -= kIceBoltSphereStep * 0.5f;
+                spherescale_[0] -= kIceBoltSphereStep;
+                spherescale_[1] -= kIceBoltSphereStep;
+                spiralang_      += kIceBoltSpiralStep;
+                if (spiralang_ > float(M_2PI))
+                    spiralang_ -= float(M_2PI);
+            }
+            if (frameon_ >= kIceBoltGrowDuration * 3
+                && frameon_ < kIceBoltGrowDuration * 4)          // :8384
+            {
+                spherescale_[0] -= kIceBoltSphereStep;
+                spherescale_[1] -= kIceBoltSphereStep * 2.0f;
+                spiralscale_    -= kIceBoltSpiralScaleStep;
+            }
+            ringout_ += kIceBoltRingSpeed;                       // :8390
+            if (ringout_ > length_)
+                ringout_ -= length_;                             // :8392
+
+            // Gameplay beats — guarded out in harness (no spell/invoker/
+            // MapPane). Snapshot :8393-8454 references for the gameflow
+            // wire-up:
+            //   frameon == GD       → DamageCharactersInRange(... DAMAGE_ICE)
+            //   frameon == 2*GD     → spawn "Iced" (I22) on each enemy
+            //   frameon == 12*GD    → KillThisEffect()
+            if (frameon_ >= kIceBoltGrowDuration * 12)           // :8451
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render: port of TIceBoltAnimator::Render (effect_old.cpp:
+    // 8464-8688). The snapshot uses RenderObject(obj) on per-frame
+    // matrix-transformed I3D sub-objects; the first-pass bespoke
+    // collapses each draw to a SubmitFxBillboard quad in the same world
+    // position, scale, and pass order. Cylinder stretch / spiral twist
+    // are approximated as billboard placement (a future pass can swap to
+    // SubmitHelperMesh for proper mesh draws, cf. F07 ring).
+    //
+    // Blend = Alpha (snapshot SetBlendState :8467, MODULATE,
+    // SRC_ALPHA/INV_SRC_ALPHA — NOT additive — forensics §7).
+    // Lit-mode = Unlit (asset color carries blue, no material zeroing).
+    // Depth = TestNoWrite. Orientation = ScreenAligned (the snapshot
+    // billboards use ScreenAligned-ish rotation, forensics §7).
+
+    const S3DPoint& base_pos = Pos();
+    // Beam direction in local frame: −y (forensics §5/§7). For the
+    // first-pass bespoke we use byte-angle 0 (+Y) as the harness facing,
+    // so the beam stretches along world +Y from origin.
+    const float face_rad =
+        float(angle_) * (2.0f * float(M_PI)) / 256.0f;
+    const float dx = std::sin(face_rad);    // beam +X step direction
+    const float dy = -std::cos(face_rad);   // beam −Y step direction (snapshot :8156)
+
+    // Common billboard template.
+    SBillboardDrawItem item = {};
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+
+    // --- Core beam cylinders (snapshot :8472-8505).
+    // 4 nested cylinders (cyl04/01/02/03 at sub-obj 0..3). The snapshot
+    // stretches them to scl.z = length/64 along the beam axis; here we
+    // stamp 8 billboard quads along the beam axis instead (count tuned
+    // to give continuous beam read at length=500). Pass = first in
+    // render order (depth-test on, alpha) — snapshot :8475 subspell>1.
+    if (subspell_ > 1)
+    {
+        const int32_t beam_quads = 8;
+        for (int32_t k = 0; k < beam_quads; ++k)
+        {
+            const float t = float(k) / float(beam_quads - 1);   // 0..1
+            const float along = -t * length_;                    // 0..−length
+            for (int32_t cyl = 0; cyl < 4; ++cyl)
+            {
+                const int32_t obj_idx = cyl;
+                if (subobj_tex_[obj_idx] == kInvalidTexture)
+                    continue;
+                item.world_pos[0] = float(base_pos.x) + dx * (-along);
+                item.world_pos[1] = float(base_pos.y) + dy * (-along);
+                item.world_pos[2] = float(base_pos.z);
+                item.size_wu[0] = item.size_wu[1] =
+                    kIceBoltCylSizeWu * cylscale_;
+                item.key.texture = subobj_tex_[obj_idx];
+                std::memcpy(item.uv_rect, subobj_uv_[obj_idx],
+                            sizeof(item.uv_rect));
+                Renderer->SubmitFxBillboard(item);
+            }
+        }
+    }
+
+    // --- Spirals + rings (snapshot :8507-8571). subspell>0 +
+    // frameon < GD*3 (snapshot :8507).
+    if (frameon_ < kIceBoltGrowDuration * 3)
+    {
+        // Spirals (cyl06 = sub-obj 6, snapshot :8510-8545). numrevs =
+        // length/100 segments, two mirrored helices per segment.
+        if (subspell_ > 0
+            && subobj_tex_[kIceBoltCylSpiral] != kInvalidTexture)
+        {
+            // `max` is a macro from revtypes.h:20, so std::max won't parse
+            // here; expand inline.
+            const int32_t numrevs_raw = int32_t(length_) / 100;
+            const int32_t numrevs = numrevs_raw > 1 ? numrevs_raw : 1;
+            const float zscale = length_ / float(numrevs);
+            for (int32_t j = 0; j < numrevs; ++j)
+            {
+                const float ypos = -float(j) * zscale;
+                for (int32_t i = 0; i < 2; ++i)
+                {
+                    const float ang = (i ? float(M_PI) - spiralang_
+                                          : spiralang_);
+                    // Helix offset perpendicular to beam axis.
+                    const float ox = std::cos(ang) * kIceBoltSpiralSizeWu;
+                    const float oz = std::sin(ang) * kIceBoltSpiralSizeWu;
+                    item.world_pos[0] =
+                        float(base_pos.x) + dx * (-ypos) + ox;
+                    item.world_pos[1] =
+                        float(base_pos.y) + dy * (-ypos);
+                    item.world_pos[2] = float(base_pos.z) + oz;
+                    item.size_wu[0] = item.size_wu[1] =
+                        kIceBoltSpiralSizeWu * spiralscale_;
+                    item.key.texture = subobj_tex_[kIceBoltCylSpiral];
+                    std::memcpy(item.uv_rect, subobj_uv_[kIceBoltCylSpiral],
+                                sizeof(item.uv_rect));
+                    Renderer->SubmitFxBillboard(item);
+                }
+            }
+        }
+        // Rings (cyl05 = sub-obj 5, snapshot :8547-8570). length/100
+        // instances, slide along beam at RING_SPEED, wrap by length.
+        if (subobj_tex_[kIceBoltCylRing] != kInvalidTexture)
+        {
+            // `max`/`min` are macros from revtypes.h:20-21, so std::max won't
+            // parse here; expand inline.
+            const int32_t num_rings_raw = int32_t(length_) / 100;
+            const int32_t num_rings = num_rings_raw > 1 ? num_rings_raw : 1;
+            for (int32_t i = 0; i < num_rings; ++i)
+            {
+                // Snapshot :8563: y = -((ringout + 100*i) % length).
+                const int32_t length_raw = int32_t(length_);
+                const int32_t lengthi = length_raw > 1 ? length_raw : 1;
+                const int32_t y_int =
+                    -((int32_t(ringout_) + 100 * i) % lengthi);
+                const float ypos = float(y_int);
+                item.world_pos[0] = float(base_pos.x) + dx * (-ypos);
+                item.world_pos[1] = float(base_pos.y) + dy * (-ypos);
+                item.world_pos[2] = float(base_pos.z);
+                item.size_wu[0] = item.size_wu[1] =
+                    kIceBoltRingSizeWu * cylscale_;
+                item.key.texture = subobj_tex_[kIceBoltCylRing];
+                std::memcpy(item.uv_rect, subobj_uv_[kIceBoltCylRing],
+                            sizeof(item.uv_rect));
+                Renderer->SubmitFxBillboard(item);
+            }
+        }
+    }
+
+    // --- End glow spheres (snapshot :8573-8600). 2x box01, one at
+    // y=0 (caster end), one at y=−length (target end). subspell>0.
+    if (subspell_ > 0
+        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
+    {
+        for (int32_t i = 0; i < 2; ++i)
+        {
+            const float ypos = -length_ * float(i);   // :8595
+            item.world_pos[0] = float(base_pos.x) + dx * (-ypos);
+            item.world_pos[1] = float(base_pos.y) + dy * (-ypos);
+            item.world_pos[2] = float(base_pos.z);
+            item.size_wu[0] = item.size_wu[1] =
+                kIceBoltGlowSizeWu * (spherescale_[i] * 0.5f);
+            item.key.texture = subobj_tex_[kIceBoltBox01];
+            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
+                        sizeof(item.uv_rect));
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+
+    // --- Frost particles (snapshot :8602-8628). 50 box01 quads at
+    // p[i] offset −length in y (clustered at target end).
+    if (subobj_tex_[kIceBoltBox01] != kInvalidTexture)
+    {
+        for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
+        {
+            const SIceBoltFrostParticle& f = frost_[i];
+            if (f.t > 0)
+                continue;                                        // :8605
+            // Snapshot :8622-8624: pos = (p.x, p.y − length, p.z).
+            const float lx = f.pos.X;
+            const float ly = f.pos.Y - length_;
+            const float lz = f.pos.Z;
+            // Rotate local (lx,ly) into world by beam facing (dx,dy).
+            item.world_pos[0] =
+                float(base_pos.x) + dx * (-ly) + lx;
+            item.world_pos[1] =
+                float(base_pos.y) + dy * (-ly);
+            item.world_pos[2] = float(base_pos.z) + lz;
+            item.size_wu[0] = item.size_wu[1] =
+                kIceBoltFrostSizeWu * f.s;
+            item.key.texture = subobj_tex_[kIceBoltBox01];
+            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
+                        sizeof(item.uv_rect));
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+
+    // --- Snow flurry (snapshot :8630-8657). subspell>2; orbits the
+    // beam axis, sweeps along beam after beat 2*GD, blows up after 5*GD.
+    if (subspell_ > 2
+        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
+    {
+        for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
+        {
+            const SIceBoltSnowParticle& sn = snow_[i];
+            // Snapshot :8649-8653: pos = (r·cos th, r·sin th − cy?, h).
+            const float lx = sn.r * std::cos(sn.th);
+            float       ly = sn.r * std::sin(sn.th);
+            if (frameon_ > kIceBoltGrowDuration * 2)
+                ly -= cy_;                                       // :8652
+            const float lz = sn.h;
+            item.world_pos[0] =
+                float(base_pos.x) + dx * (-ly) + lx;
+            item.world_pos[1] =
+                float(base_pos.y) + dy * (-ly);
+            item.world_pos[2] = float(base_pos.z) + lz;
+            item.size_wu[0] = item.size_wu[1] =
+                kIceBoltSnowSizeWu * sn.sz;
+            item.key.texture = subobj_tex_[kIceBoltBox01];
+            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
+                        sizeof(item.uv_rect));
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+}
+
+// --- I22 TIcedEffect bespoke -------------------------------------------
+//
+// FAITHFUL DIRECT PORT of TIcedAnimator (snapshot effect_old.cpp:
+// 8749-8953). 3-phase state machine: HOLD (240 ticks reveal facets) →
+// SHATTER (seed 30 chunks) → TUMBLE/BOUNCE (gravity + bounce death).
+// Posted by I21 (and retail-only TStormAnimator); harness runs it
+// standalone — no victim coupling (icedchar = nullptr; SetParalize,
+// IsIced, IsDead, Stop branches are guarded out for sector-less preview;
+// lifecycle ticks purely on frameon).
+//
+// Engine adaptations:
+//   - Render path swaps RenderObject(obj) for SubmitFxBillboard. Phase A
+//     (HOLD): draws min(frameon*4, 50) face billboards stacked at the
+//     origin (snapshot transforms cycle facets via D3DMATRIXRotateZ).
+//     Phase B+C (SHATTER+TUMBLE): one billboard per live chunk at p[i]
+//     world position.
+//   - 24 Hz sim-tick gate (family pattern). Per-tick math (gravity,
+//     bounce, rotation) runs once per accumulated 1/24 s.
+//   - icedchar lifecycle paths (SetParalize/Stop/IsDead) guarded out;
+//     lifecycle is "elapsed frameon" only.
+
+namespace {
+
+constexpr const char* kIcedImageryPath = "Magic\\iced.I3D";
+
+// Snapshot constants. Variable names follow effect_old.cpp:8715-8721.
+constexpr float kIcedBouncePlane    = 16.0f;   // p.z <= 16 (snapshot :8876)
+constexpr float kIcedBounceLift     = 20.0f;   // p.z = 20 (:8878)
+constexpr float kIcedBounceVelMul   = -0.5f;   // v.z *= -0.5 (:8879)
+constexpr float kIcedBounceSpinMul  = 2.0f;    // w *= 2 (:8880-8882)
+constexpr int32_t kIcedRowsPerSide  = 5;       // chunk z-row spread (:8819: i/6 implies ~5 rows)
+constexpr float kIcedRowSpacingZ    = 25.0f;   // :8819 row spacing 25 wu
+constexpr float kIcedFacetSizeWu    = 24.0f;   // single-facet billboard size
+
+}   // namespace
+
+TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // --- Load Magic\iced.I3D (forensics §4 — byte-identical asset
+    // confirmed MD5 10e7e15b3cd6b491e47ab1743b5cdf8e snapshot vs ship).
+    const int32_t img_id = TObjectImagery::FindImagery(kIcedImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[iced] SpawnForTest: FindImagery('%s') failed",
+                  kIcedImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[iced] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kIcedImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[iced] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kIcedImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* iced = new TIcedEffect_Bespoke(base);
+    iced->ForcePos(origin);
+    iced->SetMapIndex(MapPane.MakeIndex());
+    iced->ActivateComponents();
+
+    // Lazy-mesh-init poke.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj <= 0 || num_tex <= 0)
+    {
+        log_error("[iced] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete iced;
+        return nullptr;
+    }
+
+    // Resolve sub-object 0 (the cube chunk mesh) texture for billboards.
+    // Forensics §4: iced.I3D has face01..43 reveal facets + icicle01..06
+    // + a cube chunk mesh at sub-obj 0 used for the shatter phase.
+    const int32_t tex_slot = SubObjTextureSlot(img3d, 0);
+    const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    img3d->GetTexture(slot, &tex);
+    iced->facet_tex_ = tex.htexture;
+    ResolveSubObjUv(img3d, 0, iced->facet_uv_);
+    iced->facet_size_wu_ = kIcedFacetSizeWu;
+
+    if (iced->facet_tex_ == kInvalidTexture)
+    {
+        log_error("[iced] SpawnForTest: sub-obj 0 texture unresolved — "
+                  "facet/chunk billboards will draw nothing");
+    }
+
+    // Port of TIcedAnimator::Initialize (snapshot :8749-8756).
+    iced->frameon_      = 0;                                    // :8752
+    iced->angle_        = float(random(0, 359))
+                            * float(TORADIAN);                  // :8753
+    // icedchar_ stays nullptr (harness has no victim) — :8754
+    iced->donebouncing_ = 0;                                    // :8755
+
+    log_info("[iced] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "angle=%.3f facet_tex=%u num_obj=%d",
+             kIcedImageryPath, iced->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             iced->angle_, iced->facet_tex_, num_obj);
+    return iced;
+}
+
+void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TIcedAnimator::Animate (effect_old.cpp:
+    // 8777-8891), framerate-independent via 24 Hz sim-tick gate.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kIcedSimTickMs))
+        {
+            sim_accum_ms_ -= double(kIcedSimTickMs);
+
+            frameon_++;   // :8783
+
+            // Victim-coupling lifecycle (:8785-8797): all branches are
+            // guarded out for the harness — no icedchar, no Stop(), no
+            // IsIced/IsDead. Lifecycle is "elapsed frameon" only.
+
+            // Phase B: SHATTER seed (snapshot :8798-8847, frameon==DURATION).
+            if (frameon_ == kIcedDuration)
+            {
+                // icedchar SetParalize(false) (:8800-8804) guarded out.
+                // Snapshot :8807-8846 — seed MAX_ICED_CHUNKS in 4
+                // quadrants × 5 rows pattern. Same RNG sequence.
+                int32_t a = 0, b = 0;
+                for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
+                {
+                    const int32_t c = (a ? 1 : -1);              // :8810
+                    const int32_t d = (b ? 1 : -1);              // :8811
+                    SIcedChunk& ch = chunks_[i];
+
+                    // velocity (:8813-8815)
+                    ch.vel.X = float(c * random(5, 10) / 10.0
+                                     + random(-5, 5) / 10.0);
+                    ch.vel.Y = float(d * random(5, 10) / 10.0
+                                     + random(-5, 5) / 10.0);
+                    ch.vel.Z = float(random(0, 10) / 10.0);
+                    // position (:8817-8819)
+                    ch.pos.X = float(c * random(20, 40) + random(-20, 20));
+                    ch.pos.Y = float(d * random(20, 40) + random(-20, 20));
+                    ch.pos.Z = float(int32_t(i / 6) * 25);
+                    // angular velocity (:8821)
+                    ch.ang.X = ch.ang.Y = float(random(0, 25) / 100.0);
+                    // angular position (:8826: t.z = atan2(v.y, v.x))
+                    ch.rot.Z = std::atan2(ch.vel.Y, ch.vel.X);
+                    // scale (:8828-8839)
+                    if (random(0, 1))
+                    {
+                        ch.scl.X = float(random(25, 75) / 100.0);
+                        ch.scl.Y = float(random(25, 75) / 100.0);
+                        ch.scl.Z = float(random(25, 75) / 100.0);
+                    }
+                    else
+                    {
+                        ch.scl.X = float(random(10, 15) / 100.0);
+                        ch.scl.Y = float(random(10, 15) / 100.0);
+                        ch.scl.Z = float(random(10, 15) / 100.0);
+                    }
+                    // life (bounces left, :8841)
+                    ch.life = random(2, 3);
+                    // separator (:8843-8845)
+                    a = 1 - a;
+                    if (a)
+                        b = 1 - b;
+                }
+            }
+
+            // Phase C: TUMBLE+BOUNCE (snapshot :8848-8886, frameon>DURATION).
+            if (frameon_ > kIcedDuration)
+            {
+                donebouncing_ = 1;
+                for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
+                {
+                    SIcedChunk& ch = chunks_[i];
+                    if (ch.life == 0)
+                        continue;
+                    donebouncing_ = 0;
+                    ch.pos.X += ch.vel.X;                        // :8856
+                    ch.pos.Y += ch.vel.Y;                        // :8857
+                    ch.pos.Z += ch.vel.Z;                        // :8858
+                    ch.vel.Z -= kIcedChunkGravity;               // :8859
+                    ch.rot.X += ch.ang.X;                        // :8860
+                    ch.rot.Y += ch.ang.Y;                        // :8861
+                    ch.rot.Z += ch.ang.Z;                        // :8862
+                    // wrap angles 0..2π (:8863-8874)
+                    auto wrap = [](float& r) {
+                        if (r > float(M_2PI)) r -= float(M_2PI);
+                        if (r < 0.0f)         r += float(M_2PI);
+                    };
+                    wrap(ch.rot.X);
+                    wrap(ch.rot.Y);
+                    wrap(ch.rot.Z);
+                    // bounce (:8876-8884)
+                    if (ch.pos.Z <= kIcedBouncePlane)
+                    {
+                        ch.pos.Z = kIcedBounceLift;
+                        ch.vel.Z *= kIcedBounceVelMul;
+                        ch.ang.X *= kIcedBounceSpinMul;
+                        ch.ang.Y *= kIcedBounceSpinMul;
+                        ch.ang.Z *= kIcedBounceSpinMul;
+                        ch.life--;
+                    }
+                }
+            }
+
+            // Self-destruct (snapshot :8887-8890).
+            if (donebouncing_)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render: port of TIcedAnimator::Render (effect_old.cpp:
+    // 8900-8953). Blend = Alpha, Lit-mode = Unlit, Depth = TestNoWrite.
+    // Phase A (HOLD): min(frameon*4, 50) facet billboards at origin.
+    // Phase B+C: one billboard per live chunk at world pos.
+    if (facet_tex_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base_pos = Pos();
+
+    SBillboardDrawItem item = {};
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.key.texture     = facet_tex_;
+    std::memcpy(item.uv_rect, facet_uv_, sizeof(item.uv_rect));
+
+    if (frameon_ < kIcedDuration)
+    {
+        // Phase A: HOLD. Snapshot :8907-8920 — for i in 1..min(frameon*4, 50)
+        // RenderObject(GetObject(i)) with RotateZ(angle). All facets share
+        // origin transform; with billboard quads, they all stack visually.
+        // `min`/`max` are macros from revtypes.h:20-21; expand inline so
+        // std::min parses.
+        const int32_t reveal_raw = frameon_ * 4;
+        const int32_t reveal_count =
+            reveal_raw < kIcedRevealCap ? reveal_raw : kIcedRevealCap;
+        const float ring_scale = 1.0f;
+        for (int32_t i = 1; i < reveal_count; ++i)
+        {
+            item.world_pos[0] = float(base_pos.x);
+            item.world_pos[1] = float(base_pos.y);
+            item.world_pos[2] = float(base_pos.z);
+            item.size_wu[0] = item.size_wu[1] =
+                facet_size_wu_ * ring_scale;
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+    else
+    {
+        // Phase B+C: SHATTER chunks. Snapshot :8923-8948 — one
+        // RenderObject(GetObject(0)) per live chunk at p[i] world pos.
+        for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
+        {
+            const SIcedChunk& ch = chunks_[i];
+            if (ch.life == 0)
+                continue;
+            item.world_pos[0] = float(base_pos.x) + ch.pos.X;
+            item.world_pos[1] = float(base_pos.y) + ch.pos.Y;
+            item.world_pos[2] = float(base_pos.z) + ch.pos.Z;
+            item.size_wu[0] = item.size_wu[1] =
+                facet_size_wu_ * (ch.scl.X + ch.scl.Y) * 0.5f;
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+}
+// --- end ice bespoke first-pass
