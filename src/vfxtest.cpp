@@ -3480,6 +3480,39 @@ void PulpBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->pulp->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
+// W2E X04/X05/X06/X07/X08 TFountainAnimator_Bespoke — one bespoke class with
+// per-spawn colorobj parameter (0=Cyan / 1=Red / 2=Green / 3=Blue) covers
+// the 4 color leaves over the shared Misc\Sparkle.I3D asset.
+struct SFountainBespokeCtx {
+    TFountainAnimator_Bespoke* fount = nullptr;
+};
+
+template <int32_t kColorObj>
+void* FountainBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFountainBespokeCtx();
+    c->fount = TFountainAnimator_Bespoke::SpawnForTest_BESPOKE(origin, kColorObj);
+    if (!c->fount)
+        log_warn("[vfx] TFountainAnimator_Bespoke::SpawnForTest_BESPOKE(colorobj=%d)"
+                 " returned null; X04/05/06/07/08 bespoke entry will draw nothing",
+                 kColorObj);
+    return c;
+}
+
+void FountainBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFountainBespokeCtx*>(cp);
+    delete c->fount;
+    delete c;
+}
+
+void FountainBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFountainBespokeCtx*>(cp);
+    if (c && c->fount)
+        c->fount->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 }  // namespace
 
 // Defer registration until VfxTest::Initialize runs (renderer must
@@ -4278,6 +4311,62 @@ struct SVfxTestBootstrap {
         pulp_bespoke.submit        = [](void* c, EFxDebugMode d) { PulpBespokeSubmit(c, d); };
         pulp_bespoke.destroy       = [](void* c) { PulpBespokeDestroy(c); };
         VfxTest::DeferredRegister(pulp_bespoke);
+
+        // W2E X04/X05/X06/X07/X08 TFountainAnimator — magical sparkle column,
+        // 10 rising photon billboards from Misc\Sparkle.I3D. Single bespoke
+        // class with 4 color variants (colorobj 0..3 -> Cyan/Red/Green/Blue).
+        // Couples soft per-variant tinted point light scaled by active bubble
+        // count. ID "TFountainAnimator_BESPOKE" defaults to Cyan (colorobj=0,
+        // the abstract X04 base); the 4 leaves get their own IDs.
+        VfxTest::SEffect fountain_bespoke = {};
+        fountain_bespoke.id            = "TFountainAnimator_BESPOKE";
+        fountain_bespoke.family        = "magic";
+        fountain_bespoke.pipeline      = "FB+LS";
+        fountain_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fountain_bespoke.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeSpawn<0>(o); };
+        fountain_bespoke.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+        fountain_bespoke.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+        VfxTest::DeferredRegister(fountain_bespoke);
+
+        VfxTest::SEffect cyan_fountain_bespoke = {};
+        cyan_fountain_bespoke.id            = "TCyanFountainAnimator_BESPOKE";
+        cyan_fountain_bespoke.family        = "magic";
+        cyan_fountain_bespoke.pipeline      = "FB+LS";
+        cyan_fountain_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        cyan_fountain_bespoke.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeSpawn<0>(o); };
+        cyan_fountain_bespoke.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+        cyan_fountain_bespoke.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+        VfxTest::DeferredRegister(cyan_fountain_bespoke);
+
+        VfxTest::SEffect red_fountain_bespoke = {};
+        red_fountain_bespoke.id            = "TRedFountainAnimator_BESPOKE";
+        red_fountain_bespoke.family        = "magic";
+        red_fountain_bespoke.pipeline      = "FB+LS";
+        red_fountain_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        red_fountain_bespoke.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeSpawn<1>(o); };
+        red_fountain_bespoke.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+        red_fountain_bespoke.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+        VfxTest::DeferredRegister(red_fountain_bespoke);
+
+        VfxTest::SEffect green_fountain_bespoke = {};
+        green_fountain_bespoke.id            = "TGreenFountainAnimator_BESPOKE";
+        green_fountain_bespoke.family        = "magic";
+        green_fountain_bespoke.pipeline      = "FB+LS";
+        green_fountain_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        green_fountain_bespoke.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeSpawn<2>(o); };
+        green_fountain_bespoke.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+        green_fountain_bespoke.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+        VfxTest::DeferredRegister(green_fountain_bespoke);
+
+        VfxTest::SEffect blue_fountain_bespoke = {};
+        blue_fountain_bespoke.id            = "TBlueFountainAnimator_BESPOKE";
+        blue_fountain_bespoke.family        = "magic";
+        blue_fountain_bespoke.pipeline      = "FB+LS";
+        blue_fountain_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        blue_fountain_bespoke.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeSpawn<3>(o); };
+        blue_fountain_bespoke.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+        blue_fountain_bespoke.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+        VfxTest::DeferredRegister(blue_fountain_bespoke);
     }
 };
 SVfxTestBootstrap g_vfx_test_bootstrap;
