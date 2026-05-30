@@ -5516,6 +5516,152 @@ class TQuicksandEffect_Bespoke : public TEffect
 };
 
 // =========================================================================
+// * Wave-3 W3-H — Boss-specific + LabyrinthEffect (deep-recon batch)       *
+// *                                                                       *
+// * Five retail-only effects whose snapshot source body is absent. Each   *
+// * is shipped as a minimal placeholder: SpawnForTest loads the .I3D and *
+// * resolves sub-object 0, TickAndSubmit draws ONE ScreenAligned Alpha    *
+// * billboard at the effect origin with a sensible default lifetime.     *
+// * This gives the harness a row to A/B against game video; concrete    *
+// * animator behaviour (boss tie-ins, spawn waypoints, teleport-pair    *
+// * sequencing, multi-flare layout) is deferred to a follow-up once the  *
+// * caller side (TJhaga / Nakrnoth / Misorial labyrinth) is in scope.    *
+// *                                                                     *
+// * Pattern mirrors TBloodEffect_Bespoke at src/effect.cpp:1690-2065;   *
+// * placeholder kinematics mirror TFlareEffect_Bespoke (single sub-obj  *
+// * Alpha billboard, no spark loop).                                    *
+// =========================================================================
+
+// --- LabyrinthEffect (asset: misc\Starfield.I3D) -------------------------
+// Late-game endgame visual (Misorial labyrinth). Starfield.I3D = animated
+// starfield bg. Spell-handler at 0x5052e0/0x505300 registers it as a
+// dedicated entry in the spell table (s_LabyrinthEffect_005e15c4 has 2
+// XREFs in the same function — dedicated registrar). Feasibility: medium.
+// Owning class body not yet found by direct decomp — XREFs land in
+// dispatcher prologue/epilogue. Placeholder until class is identified.
+_CLASSDEF(TLabyrinthEffect_Bespoke)
+class TLabyrinthEffect_Bespoke : public TEffect
+{
+  public:
+    TLabyrinthEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TLabyrinthEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TLabyrinthEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TLabyrinthEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Placeholder constants — endgame bg starfield: large, persistent.
+    static constexpr float   kLabyrinthBaseSizeWu = 256.0f;
+    static constexpr double  kLabyrinthLifetimeMs = 8000.0;
+
+    bool           alive_       = true;
+    double         elapsed_ms_  = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// --- JhagaAttack (asset: magic\Jattack.i3d) ------------------------------
+// Jhaga (boss) attack effect. Boss-specific. No XREF on s_JhagaAttack_ at
+// 0x505800 lands in a class body — dispatcher entry only. Feasibility: low.
+// Placeholder until Jhaga boss fight is in scope; once behaviour known,
+// likely reuses TFireSwarmEffect / TFireBallEffect variant scaffold.
+_CLASSDEF(TJhagaAttackEffect_Bespoke)
+class TJhagaAttackEffect_Bespoke : public TEffect
+{
+  public:
+    TJhagaAttackEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TJhagaAttackEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TJhagaAttackEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TJhagaAttackEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float  kJhagaAttackBaseSizeWu = 96.0f;
+    static constexpr double kJhagaAttackLifetimeMs = 1500.0;
+
+    bool           alive_      = true;
+    double         elapsed_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// --- jtele (asset: magic\jtele.i3d) --------------------------------------
+// Jhaga teleport-source effect. Paired with `jteled` (teleport-dest).
+// XREF lands at TCharacter PostEvent in cls_0x5a7b98_TCharacter_AI_PerMonster
+// (4cce1a) — Jhaga AI spawns a `jtele` map-object at her current position
+// via TMapPane::NewObject(name="jtele"), then 6 ticks later spawns
+// `jteled` at the warp-target waypoint. Feasibility: medium — clear
+// pair semantics, but the actual visual is asset-only (animator class
+// not yet identified). Placeholder: short-lived bright flare-style
+// burst at spawn position.
+_CLASSDEF(TJTeleEffect_Bespoke)
+class TJTeleEffect_Bespoke : public TEffect
+{
+  public:
+    TJTeleEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TJTeleEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TJTeleEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TJTeleEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float  kJTeleBaseSizeWu = 64.0f;
+    static constexpr double kJTeleLifetimeMs = 800.0;
+
+    bool           alive_      = true;
+    double         elapsed_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// --- Nakrnoth: class definition supplied by W3-E above ---
+
+// --- ceyes (asset: magic\Ceyes.i3d) --------------------------------------
+// Boss "creature eyes" glowing-eye sprite pair. No XREF — asset-only.
+// Feasibility: low. Likely two-flare setup once mapped. Placeholder
+// renders the first sub-object as a single billboard; the second flare
+// (left/right eye pair) is deferred until we know the offset.
+_CLASSDEF(TCEyesEffect_Bespoke)
+class TCEyesEffect_Bespoke : public TEffect
+{
+  public:
+    TCEyesEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TCEyesEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TCEyesEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TCEyesEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float  kCEyesBaseSizeWu = 32.0f;
+    static constexpr double kCEyesLifetimeMs = 4000.0;
+
+    bool           alive_      = true;
+    double         elapsed_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// =========================================================================
 // * Wave-3 batch W3-G — Decorative ambient / late-polish (5 retail-only)   *
 // *                                                                       *
 // * Fairy (misc\Fairy.I3D), Globe (misc\Globe.I3D),                       *
