@@ -13552,6 +13552,466 @@ void TQuicksandEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
     // class-doc comment on TQuicksandEffect_Bespoke for follow-up.
 }
 
+// *************************************************************************
+// * Wave-3 batch W3-G — Decorative ambient / late-polish (5 effects)       *
+// *                                                                       *
+// * Retail-only effects with NO snapshot source body AND NO Ghidra        *
+// * decomp XREF visible (s_<Name>_ strings absent from recon/). Per       *
+// * W3-G brief: ship minimal placeholders that load the I3D asset and    *
+// * draw the first sub-object as a ScreenAligned (or WorldXY where      *
+// * relevant) Alpha billboard with sensible default lifetime. Each        *
+// * effect ships as a harness row so the user can A/B against game video *
+// * and iterate when forensics arrive. Status: stubbed.                  *
+// *                                                                       *
+// * Asset paths preserved verbatim from /tmp/retail_effect_inventory.tsv *
+// * (mixed-case 'misc\\' prefix matches retail string table).            *
+// *                                                                       *
+// * Localized-at-end for clean merge with adjacent wave-3 batches.       *
+// *************************************************************************
+
+namespace {
+
+constexpr const char* kFairyImageryPath        = "misc\\Fairy.I3D";
+constexpr const char* kGlobeImageryPath        = "misc\\Globe.I3D";
+constexpr const char* kPunchAndJudyImageryPath = "misc\\PunchAndJudy.i3d";
+constexpr const char* kGoldImageryPath         = "misc\\Goldp.i3d";
+constexpr const char* kDustImageryPath         = "misc\\Dustcloud.i3d";
+
+constexpr int32_t kW3GSimTickMs = 1000 / 24;
+
+// Minimal local helper — resolves first sub-object texture + UV rect from
+// an I3D path. Returns true on success. Mirrors the SparkleLoadImagery +
+// SparkleSubObjTextureSlot + SparkleResolveSubObjUv triplet, condensed
+// for the W3-G placeholders. Owns no imagery (caller manages lifetime
+// via the TEffect's base imagery if needed; we pass nullptr base to keep
+// the stub self-contained).
+bool W3GResolveFirstSubObject(const char* path, const char* tag,
+                              TTextureHandle& out_tex, float out_uv[4])
+{
+    out_tex = kInvalidTexture;
+    out_uv[0] = 0.0f; out_uv[1] = 0.0f; out_uv[2] = 1.0f; out_uv[3] = 1.0f;
+    const int32_t img_id = TObjectImagery::FindImagery(path);
+    if (img_id < 0)
+    {
+        log_warn("[%s] FindImagery('%s') failed; placeholder will draw nothing",
+                 tag, path);
+        return false;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_warn("[%s] LoadImagery(id=%d '%s') failed", tag, img_id, path);
+        return false;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_warn("[%s] imagery for '%s' is not a T3DImagery", tag, path);
+        TObjectImagery::FreeImagery(base);
+        return false;
+    }
+    // Lazy-mesh-init poke — NumObjects() triggers texture slot population.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj <= 0 || num_tex <= 0)
+    {
+        log_warn("[%s] '%s' underspec'd (objects=%d, textures=%d)",
+                 tag, path, num_obj, num_tex);
+        TObjectImagery::FreeImagery(base);
+        return false;
+    }
+
+    // Pick the first sub-object's texture slot via face-table scan
+    // (same algorithm as SparkleSubObjTextureSlot, inlined to keep W3-G
+    // self-contained).
+    int32_t slot = 0;
+    {
+        const int32_t nfaces = img3d->NumObjFaces(0);
+        if (nfaces > 0)
+        {
+            std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+            int32_t texfaces[8 + 1] = {};
+            int32_t numtexfaces[8 + 1] = {};
+            img3d->GetObjFaces(0, face_buf.data(), texfaces, numtexfaces);
+            for (int32_t s = 1; s <= 8; ++s)
+                if (numtexfaces[s] > 0) { slot = s - 1; break; }
+        }
+    }
+    if (slot >= num_tex) slot = 0;
+
+    S3DTex tex = {};
+    img3d->GetTexture(slot, &tex);
+    if (tex.htexture == kInvalidTexture)
+    {
+        log_warn("[%s] '%s' sub-object 0 texture slot=%d unresolved",
+                 tag, path, slot);
+        TObjectImagery::FreeImagery(base);
+        return false;
+    }
+
+    // UV envelope of sub-object 0.
+    const int32_t nverts = img3d->NumObjVerts(0);
+    if (nverts > 0)
+    {
+        std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+        img3d->GetObjVerts(0, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+        float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+        float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+        for (int32_t i = 1; i < nverts; ++i)
+        {
+            if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+            if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+            if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+            if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+        }
+        out_uv[0] = minu;
+        out_uv[1] = minv;
+        out_uv[2] = maxu - minu;
+        out_uv[3] = maxv - minv;
+    }
+
+    out_tex = tex.htexture;
+    log_info("[%s] resolved imagery='%s' tex=%u uv=(%.3f,%.3f,%.3f,%.3f)",
+             tag, path, out_tex, out_uv[0], out_uv[1], out_uv[2], out_uv[3]);
+    // Note: imagery is leaked here — placeholder convention; once the real
+    // animator is ported it should own the imagery via TEffect's ctor like
+    // TFlyEffect_Bespoke does (see effect.cpp:12126).
+    return true;
+}
+
+}   // namespace
+
+// ----- W3-G #1: TFairyEffect_Bespoke (stubbed) ---------------------------
+
+TFairyEffect_Bespoke* TFairyEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TFairyEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    W3GResolveFirstSubObject(kFairyImageryPath, "fairy",
+                             eff->texture_, eff->uv_rect_);
+    eff->phase_        = 0.0f;
+    eff->sim_accum_ms_ = 0.0;
+    log_info("[fairy] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u "
+             "(stubbed placeholder — no Ghidra evidence, awaiting forensics)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TFairyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[fairy] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // Small vertical bob — sensible default for an ambient fairy sprite
+    // until forensics confirm the actual motion (likely a parametric loop
+    // path; TPixieEffect's spawn-pattern is the leading guess).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kW3GSimTickMs))
+    {
+        sim_accum_ms_ -= double(kW3GSimTickMs);
+        phase_ += 0.12f;   // ~2.9 rad/s at 24Hz — gentle hover
+    }
+    const float bob_z = 6.0f * std::sin(phase_);
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = size_wu_;
+    item.size_wu[1]      = size_wu_;
+    // Warm gold-tinted fairy glow — sensible placeholder until palette
+    // confirmed against game video.
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 0.95f;
+    item.color_rgba[2]   = 0.7f;
+    item.color_rgba[3]   = 1.0f;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z) + bob_z;
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-G #2: TGlobeEffect_Bespoke (stubbed) ---------------------------
+
+TGlobeEffect_Bespoke* TGlobeEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TGlobeEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    W3GResolveFirstSubObject(kGlobeImageryPath, "globe",
+                             eff->texture_, eff->uv_rect_);
+    eff->phase_        = 0.0f;
+    eff->sim_accum_ms_ = 0.0;
+    log_info("[globe] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u "
+             "(stubbed placeholder — no Ghidra evidence, awaiting forensics)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TGlobeEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[globe] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // Slow pulse — orb visual cue until forensics confirm rotation pattern.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kW3GSimTickMs))
+    {
+        sim_accum_ms_ -= double(kW3GSimTickMs);
+        phase_ += 0.05f;   // ~1.2 rad/s slow pulse
+    }
+    const float pulse = 0.5f + 0.5f * std::sin(phase_);   // 0..1
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = size_wu_;
+    item.size_wu[1]      = size_wu_;
+    // Cool blue crystal-ball glow.
+    item.color_rgba[0]   = 0.6f + 0.3f * pulse;
+    item.color_rgba[1]   = 0.7f + 0.2f * pulse;
+    item.color_rgba[2]   = 1.0f;
+    item.color_rgba[3]   = 1.0f;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-G #3: TPunchAndJudyEffect_Bespoke (stubbed) --------------------
+
+TPunchAndJudyEffect_Bespoke*
+TPunchAndJudyEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TPunchAndJudyEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    W3GResolveFirstSubObject(kPunchAndJudyImageryPath, "punchandjudy",
+                             eff->texture_, eff->uv_rect_);
+    eff->sim_accum_ms_ = 0.0;
+    log_info("[punchandjudy] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u "
+             "(stubbed placeholder — no Ghidra evidence, awaiting forensics)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TPunchAndJudyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[punchandjudy] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // Static — pure scripted playback effect. No per-tick math until
+    // forensics expose the animation loop. The 24Hz gate is preserved for
+    // when the loop arrives.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kW3GSimTickMs))
+        sim_accum_ms_ -= double(kW3GSimTickMs);
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = size_wu_;
+    item.size_wu[1]      = size_wu_;
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 1.0f;
+    item.color_rgba[2]   = 1.0f;
+    item.color_rgba[3]   = 1.0f;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    // Puppet-show stage reads as ground-anchored; WorldXY billboard until
+    // we can play the I3D animation tracks.
+    item.orientation     = EFxBillboardOrientation::WorldXY;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-G #4: TGoldEffect_Bespoke (stubbed) ----------------------------
+
+TGoldEffect_Bespoke* TGoldEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TGoldEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    W3GResolveFirstSubObject(kGoldImageryPath, "gold",
+                             eff->texture_, eff->uv_rect_);
+    eff->age_ms_       = 0.0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+    log_info("[gold] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u "
+             "(stubbed placeholder — likely TFlareAnimator variant, awaiting forensics)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TGoldEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[gold] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // Short pulse-fade — pickup sparkle semantics.
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kGoldLifetimeMs))
+    {
+        alive_ = false;
+        return;
+    }
+    const float t = float(age_ms_ / double(kGoldLifetimeMs));   // 0..1
+    // Pulse: rise to 1.0 by t=0.2, then linear fade to 0.
+    const float pulse = (t < 0.2f) ? (t / 0.2f) : (1.0f - (t - 0.2f) / 0.8f);
+    const float size  = size_wu_ * (0.6f + 0.6f * pulse);
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = size;
+    item.size_wu[1]      = size;
+    // Bright gold tint.
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 0.85f;
+    item.color_rgba[2]   = 0.3f;
+    item.color_rgba[3]   = pulse;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    // Pickup sparkles read as additive (flare-family behavior).
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-G #5: TDustEffect_Bespoke (stubbed) ----------------------------
+
+TDustEffect_Bespoke* TDustEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TDustEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    W3GResolveFirstSubObject(kDustImageryPath, "dust",
+                             eff->texture_, eff->uv_rect_);
+    eff->age_ms_       = 0.0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+    log_info("[dust] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u "
+             "(stubbed placeholder — likely TFog/TMistEffect variant, awaiting forensics)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TDustEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[dust] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // Quick expand+fade — footfall puff semantics.
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kDustLifetimeMs))
+    {
+        alive_ = false;
+        return;
+    }
+    const float t     = float(age_ms_ / double(kDustLifetimeMs));   // 0..1
+    const float size  = kDustStartSizeWu + (kDustEndSizeWu - kDustStartSizeWu) * t;
+    const float alpha = 1.0f - t;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = size;
+    item.size_wu[1]      = size;
+    // Warm dusty brown.
+    item.color_rgba[0]   = 0.75f;
+    item.color_rgba[1]   = 0.65f;
+    item.color_rgba[2]   = 0.5f;
+    item.color_rgba[3]   = alpha;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    // Ground-anchored puff.
+    item.orientation     = EFxBillboardOrientation::WorldXY;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
 // =========================================================================
 // Wave-3 W3-F: Buff overlays (character-attached state effects)
 // =========================================================================
