@@ -3232,6 +3232,97 @@ void PixieBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->pixie->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
+// --- wave-bespoke-W2A: weather A — ground/atmospheric scatter family ----
+// (W06 fog, W04 sandswirl, W05 quicksand). Same shape as wave-05 wrappers
+// above: ctx-owned instance + Spawn/Destroy/Submit forwarder.
+
+// W06 TFogEffect_Bespoke
+struct SFogBespokeCtx {
+    TFogEffect_Bespoke* fog = nullptr;
+};
+
+void* FogBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFogBespokeCtx();
+    c->fog = TFogEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->fog)
+        log_warn("[vfx] TFogEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " W06 bespoke entry will draw nothing");
+    return c;
+}
+
+void FogBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFogBespokeCtx*>(cp);
+    delete c->fog;
+    delete c;
+}
+
+void FogBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFogBespokeCtx*>(cp);
+    if (c && c->fog)
+        c->fog->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// W04 TSandswirlEffect_Bespoke
+struct SSandswirlBespokeCtx {
+    TSandswirlEffect_Bespoke* sw = nullptr;
+};
+
+void* SandswirlBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SSandswirlBespokeCtx();
+    c->sw = TSandswirlEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->sw)
+        log_warn("[vfx] TSandswirlEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " W04 bespoke entry will draw nothing");
+    return c;
+}
+
+void SandswirlBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SSandswirlBespokeCtx*>(cp);
+    delete c->sw;
+    delete c;
+}
+
+void SandswirlBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SSandswirlBespokeCtx*>(cp);
+    if (c && c->sw)
+        c->sw->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// W05 TQuicksandEffect_Bespoke
+struct SQuicksandBespokeCtx {
+    TQuicksandEffect_Bespoke* qs = nullptr;
+};
+
+void* QuicksandBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SQuicksandBespokeCtx();
+    c->qs = TQuicksandEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->qs)
+        log_warn("[vfx] TQuicksandEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " W05 bespoke entry will draw nothing");
+    return c;
+}
+
+void QuicksandBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SQuicksandBespokeCtx*>(cp);
+    delete c->qs;
+    delete c;
+}
+
+void QuicksandBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SQuicksandBespokeCtx*>(cp);
+    if (c && c->qs)
+        c->qs->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 }  // namespace
 
 // Defer registration until VfxTest::Initialize runs (renderer must
@@ -3823,6 +3914,47 @@ struct SVfxTestBootstrap {
         pixie_bespoke.submit        = [](void* c, EFxDebugMode d) { PixieBespokeSubmit(c, d); };
         pixie_bespoke.destroy       = [](void* c) { PixieBespokeDestroy(c); };
         VfxTest::DeferredRegister(pixie_bespoke);
+
+        // --- wave-bespoke-W2A weather A: ground & atmospheric scatter ----
+
+        // W06 TFogAnimator — ambient ground fog overlay, Magic/fog.i3d.
+        // 36-vertex random-walk brightness/alpha grid; first-pass bespoke
+        // collapses to one ground-aligned Alpha billboard at mean color.
+        VfxTest::SEffect fog_bespoke = {};
+        fog_bespoke.id            = "TFogEffect_BESPOKE";
+        fog_bespoke.family        = "weather";
+        fog_bespoke.pipeline      = "VO";
+        fog_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fog_bespoke.factory       = [](const S3DPoint& o) -> void* { return FogBespokeSpawn(o); };
+        fog_bespoke.submit        = [](void* c, EFxDebugMode d) { FogBespokeSubmit(c, d); };
+        fog_bespoke.destroy       = [](void* c) { FogBespokeDestroy(c); };
+        VfxTest::DeferredRegister(fog_bespoke);
+
+        // W04 TSandswirlAnimator — sandswirl spell-cast burst, Magic/sandswirl.i3d.
+        // Own particle pool (50-100 sand motes) seeking (0,0,100); ramping
+        // seekspeed = 5 + frameon/10 over 75 ticks; self-kill at frame 300.
+        VfxTest::SEffect sandswirl_bespoke = {};
+        sandswirl_bespoke.id            = "TSandswirlEffect_BESPOKE";
+        sandswirl_bespoke.family        = "weather";
+        sandswirl_bespoke.pipeline      = "PE";
+        sandswirl_bespoke.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        sandswirl_bespoke.factory       = [](const S3DPoint& o) -> void* { return SandswirlBespokeSpawn(o); };
+        sandswirl_bespoke.submit        = [](void* c, EFxDebugMode d) { SandswirlBespokeSubmit(c, d); };
+        sandswirl_bespoke.destroy       = [](void* c) { SandswirlBespokeDestroy(c); };
+        VfxTest::DeferredRegister(sandswirl_bespoke);
+
+        // W05 TQuicksandEffect — quicksand ground trap, Magic/quicksand.i3d.
+        // Spinning sand decal billboard whose scale follows scalesize curve
+        // (stage/count machine preserved). Cylinder + dust passes deferred.
+        VfxTest::SEffect quicksand_bespoke = {};
+        quicksand_bespoke.id            = "TQuicksandEffect_BESPOKE";
+        quicksand_bespoke.family        = "weather";
+        quicksand_bespoke.pipeline      = "FB";
+        quicksand_bespoke.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        quicksand_bespoke.factory       = [](const S3DPoint& o) -> void* { return QuicksandBespokeSpawn(o); };
+        quicksand_bespoke.submit        = [](void* c, EFxDebugMode d) { QuicksandBespokeSubmit(c, d); };
+        quicksand_bespoke.destroy       = [](void* c) { QuicksandBespokeDestroy(c); };
+        VfxTest::DeferredRegister(quicksand_bespoke);
     }
 };
 SVfxTestBootstrap g_vfx_test_bootstrap;
