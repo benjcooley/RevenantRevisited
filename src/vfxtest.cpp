@@ -2399,6 +2399,130 @@ void SwipeSubmitAttached(void* cp, EFxDebugMode dbg,
                             attack_visible, dbg);
 }
 
+// --- wave-bespoke-05: sparkle/glow family bespoke harness wrappers -------
+// Faithful direct ports of the snapshot animator bodies (X03 flare, X10
+// sym-glow, M07 photon, M08 pixie). Each ctx owns the bespoke effect
+// instance and forwards TickAndSubmitForTest_BESPOKE each frame. Static
+// preview-style by default — the effects are ambient/cyclic, so a single
+// long-lived instance is what reads correctly. See effect.h class doc-
+// comments for per-effect details.
+
+// X03 TFlareEffect_Bespoke
+struct SFlareBespokeCtx {
+    TFlareEffect_Bespoke* flare = nullptr;
+};
+
+void* FlareBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFlareBespokeCtx();
+    c->flare = TFlareEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->flare)
+        log_warn("[vfx] TFlareEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " X03 bespoke entry will draw nothing");
+    return c;
+}
+
+void FlareBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFlareBespokeCtx*>(cp);
+    delete c->flare;
+    delete c;
+}
+
+void FlareBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFlareBespokeCtx*>(cp);
+    if (c && c->flare)
+        c->flare->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// X10 TSymGlowEffect_Bespoke
+struct SSymGlowBespokeCtx {
+    TSymGlowEffect_Bespoke* sym = nullptr;
+};
+
+void* SymGlowBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SSymGlowBespokeCtx();
+    c->sym = TSymGlowEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->sym)
+        log_warn("[vfx] TSymGlowEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " X10 bespoke entry will draw nothing");
+    return c;
+}
+
+void SymGlowBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SSymGlowBespokeCtx*>(cp);
+    delete c->sym;
+    delete c;
+}
+
+void SymGlowBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SSymGlowBespokeCtx*>(cp);
+    if (c && c->sym)
+        c->sym->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// M07 TPhotonEffect_Bespoke
+struct SPhotonBespokeCtx {
+    TPhotonEffect_Bespoke* photon = nullptr;
+};
+
+void* PhotonBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SPhotonBespokeCtx();
+    c->photon = TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->photon)
+        log_warn("[vfx] TPhotonEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " M07 bespoke entry will draw nothing");
+    return c;
+}
+
+void PhotonBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SPhotonBespokeCtx*>(cp);
+    delete c->photon;
+    delete c;
+}
+
+void PhotonBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SPhotonBespokeCtx*>(cp);
+    if (c && c->photon)
+        c->photon->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// M08 TPixieEffect_Bespoke
+struct SPixieBespokeCtx {
+    TPixieEffect_Bespoke* pixie = nullptr;
+};
+
+void* PixieBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SPixieBespokeCtx();
+    c->pixie = TPixieEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->pixie)
+        log_warn("[vfx] TPixieEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " M08 bespoke entry will draw nothing");
+    return c;
+}
+
+void PixieBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SPixieBespokeCtx*>(cp);
+    delete c->pixie;
+    delete c;
+}
+
+void PixieBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SPixieBespokeCtx*>(cp);
+    if (c && c->pixie)
+        c->pixie->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 }  // namespace
 
 // Defer registration until VfxTest::Initialize runs (renderer must
@@ -2700,6 +2824,64 @@ struct SVfxTestBootstrap {
         flare.submit        = [](void* c, EFxDebugMode d) { FlareSubmit(c, d); };
         flare.destroy       = [](void* c) { FlareDestroy(c); };
         VfxTest::DeferredRegister(flare);
+
+        // --- wave-bespoke-05 sparkle/glow family bespoke entries ---------
+        // Faithful direct ports of the snapshot animator bodies. Each
+        // entry registers as "T<Class>_BESPOKE" so the harness CLI can
+        // select them with --vfx=T<Class>_BESPOKE. Static cadence — these
+        // are ambient/cyclic effects driven by their own internal state
+        // machines; the harness keeps a single long-lived instance.
+
+        // X03 TFlareAnimator — 10 bouncing-spark ground flare, Misc/IrisFlare.I3D.
+        // Couples one warm-yellow point light at the effect origin per frame.
+        VfxTest::SEffect flare_bespoke = {};
+        flare_bespoke.id            = "TFlareAnimator_BESPOKE";
+        flare_bespoke.family        = "light";
+        flare_bespoke.pipeline      = "FB+LS";
+        flare_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        flare_bespoke.factory       = [](const S3DPoint& o) -> void* { return FlareBespokeSpawn(o); };
+        flare_bespoke.submit        = [](void* c, EFxDebugMode d) { FlareBespokeSubmit(c, d); };
+        flare_bespoke.destroy       = [](void* c) { FlareBespokeDestroy(c); };
+        VfxTest::DeferredRegister(flare_bespoke);
+
+        // X10 TSymGlowAnimator — single glowing-symbol billboard, Misc/SymGlow.I3D.
+        // UV V-scroll + breathing zscale + warm point light coupling.
+        VfxTest::SEffect symglow_bespoke = {};
+        symglow_bespoke.id            = "TSymGlowAnimator_BESPOKE";
+        symglow_bespoke.family        = "magic";
+        symglow_bespoke.pipeline      = "FB+LS";
+        symglow_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        symglow_bespoke.factory       = [](const S3DPoint& o) -> void* { return SymGlowBespokeSpawn(o); };
+        symglow_bespoke.submit        = [](void* c, EFxDebugMode d) { SymGlowBespokeSubmit(c, d); };
+        symglow_bespoke.destroy       = [](void* c) { SymGlowBespokeDestroy(c); };
+        VfxTest::DeferredRegister(symglow_bespoke);
+
+        // M07 TPhotonAnimator — 32-spark energy-bolt missile, Magic/Photon.I3D.
+        // Three-state LAUNCH/FLY/EXPLODE cycle on a fixed harness cadence
+        // (no live TMissileEffect machinery). Couples bright blue-white
+        // point light per frame.
+        VfxTest::SEffect photon_bespoke = {};
+        photon_bespoke.id            = "TPhotonEffect_BESPOKE";
+        photon_bespoke.family        = "magic";
+        photon_bespoke.pipeline      = "IM+LS";
+        photon_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        photon_bespoke.factory       = [](const S3DPoint& o) -> void* { return PhotonBespokeSpawn(o); };
+        photon_bespoke.submit        = [](void* c, EFxDebugMode d) { PhotonBespokeSubmit(c, d); };
+        photon_bespoke.destroy       = [](void* c) { PhotonBespokeDestroy(c); };
+        VfxTest::DeferredRegister(photon_bespoke);
+
+        // M08 TPixieAnimator — 25-particle ambient fairy swarm, Misc/Pixies.I3D.
+        // Per-particle centring forces + scale jitter + time-flip. Couples
+        // soft blue-green point light scaled by mean particle scale.
+        VfxTest::SEffect pixie_bespoke = {};
+        pixie_bespoke.id            = "TPixieEffect_BESPOKE";
+        pixie_bespoke.family        = "ambient";
+        pixie_bespoke.pipeline      = "PE+LS";
+        pixie_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        pixie_bespoke.factory       = [](const S3DPoint& o) -> void* { return PixieBespokeSpawn(o); };
+        pixie_bespoke.submit        = [](void* c, EFxDebugMode d) { PixieBespokeSubmit(c, d); };
+        pixie_bespoke.destroy       = [](void* c) { PixieBespokeDestroy(c); };
+        VfxTest::DeferredRegister(pixie_bespoke);
     }
 };
 SVfxTestBootstrap g_vfx_test_bootstrap;
