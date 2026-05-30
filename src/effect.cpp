@@ -13553,6 +13553,450 @@ void TQuicksandEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 }
 
 // =========================================================================
+// Wave-3 W3-F: Buff overlays (character-attached state effects)
+// =========================================================================
+//
+// Five retail-only effects, each shipped as a MINIMAL PLACEHOLDER
+// (status=stubbed). All five share the same structural body — load the
+// verbatim asset path, draw ONE ScreenAligned Alpha billboard at the
+// effect origin with a per-effect color tint, self-terminate after a
+// short lifetime so the harness can re-trigger via the SpellGround
+// preview cadence.
+//
+// No snapshot source body exists for any of these and no per-effect
+// Ghidra class identification was possible (see class-doc banner in
+// effect.h for the s_*_ string XREF tally). They are very likely
+// variants of a single TBuffEffect or TAuraEffect animator driven by
+// asset/color overrides — once the shared base is identified in Ghidra
+// the bodies below should collapse into thin adapters.
+//
+// Per-effect color tints come from the buff's visual family / spell
+// description text and are placeholders — when the user has video
+// footage they can iterate per-effect from here without touching shared
+// infra.
+
+namespace {
+
+constexpr int32_t kBuffSimTickMs       = 1000 / 24;   // 24 Hz cadence gate
+constexpr double  kBuffLifetimeMs      = 6000.0;      // ~6s placeholder lifetime
+constexpr float   kBuffBaseSizeWu      = 96.0f;       // billboard footprint
+
+// Shared spawn helper — load the asset via TryLoadMagicTexture, plant the
+// effect into the map, log first-spawn. Returns false on hard failure so
+// the per-effect SpawnForTest can clean up.
+struct SBuffBespokeInit
+{
+    TTextureHandle texture     = kInvalidTexture;
+    float          uv_rect[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+SBuffBespokeInit BuffBespokeResolveAsset(const char* asset_path, const char* tag)
+{
+    SBuffBespokeInit out = {};
+    const char* candidates[1] = { asset_path };
+    out.texture = TryLoadMagicTexture(candidates, 1, out.uv_rect, tag);
+    return out;
+}
+
+}  // namespace
+
+// -------------------------------------------------------------------------
+// W3-F.1  Might  (magic\might.i3d)
+// -------------------------------------------------------------------------
+// Strength buff aura overlay. Color: warm gold (matches the "might =
+// physical-strength" archetype shared with Warriorborn / Ogrestrength).
+
+TBuffEffect_Bespoke__Might* TBuffEffect_Bespoke__Might::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TBuffEffect_Bespoke__Might(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("magic\\might.i3d", "buff-might");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-might] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TBuffEffect_Bespoke__Might::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-might] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Warm gold tint — placeholder for the Might buff visual family.
+    item.color_rgba[0] = 1.00f;
+    item.color_rgba[1] = 0.80f;
+    item.color_rgba[2] = 0.25f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// -------------------------------------------------------------------------
+// W3-F.2  Stoneskin  (magic\Stone.i3d)
+// -------------------------------------------------------------------------
+// Skin-hardening buff. Likely a texture overlay on the character mesh
+// (separate visual style from buff auras) — may eventually need a
+// TSkinOverlayEffect class. Placeholder: cool grey billboard.
+
+TBuffEffect_Bespoke__Stoneskin* TBuffEffect_Bespoke__Stoneskin::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TBuffEffect_Bespoke__Stoneskin(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("magic\\Stone.i3d", "buff-stoneskin");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-stoneskin] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TBuffEffect_Bespoke__Stoneskin::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-stoneskin] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Cool grey tint — placeholder for the Stoneskin buff visual family.
+    item.color_rgba[0] = 0.65f;
+    item.color_rgba[1] = 0.68f;
+    item.color_rgba[2] = 0.72f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// -------------------------------------------------------------------------
+// W3-F.3  Invisible  (Magic\Invisible.I3D)
+// -------------------------------------------------------------------------
+// Shimmer/transparency overlay. The s_invisible_ string has 11 XREFs but
+// most are AI/combat invis-check call sites — the visual effect spawn is
+// distinct from the OF_INVISIBLE flag.  Placeholder: low-alpha cyan
+// shimmer billboard (the "phasing out" archetype).
+
+TInvisibleEffect_Bespoke* TInvisibleEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TInvisibleEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("Magic\\Invisible.I3D", "buff-invisible");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-invisible] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TInvisibleEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-invisible] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Low-alpha cyan shimmer tint — placeholder for the Invisible
+    // phasing-out visual.
+    item.color_rgba[0] = 0.55f;
+    item.color_rgba[1] = 0.90f;
+    item.color_rgba[2] = 1.00f;
+    item.color_rgba[3] = 0.50f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// -------------------------------------------------------------------------
+// W3-F.4  charm  (magic\Charm.i3d)
+// -------------------------------------------------------------------------
+// Mental-control buff visual (hearts/sparkles per gameplay convention).
+// Pink/red aura archetype shared with the wider "mind-magic" family.
+
+TBuffEffect_Bespoke__charm* TBuffEffect_Bespoke__charm::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TBuffEffect_Bespoke__charm(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("magic\\Charm.i3d", "buff-charm");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-charm] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TBuffEffect_Bespoke__charm::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-charm] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Pink/red tint — placeholder for the charm buff visual family.
+    item.color_rgba[0] = 1.00f;
+    item.color_rgba[1] = 0.45f;
+    item.color_rgba[2] = 0.65f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// -------------------------------------------------------------------------
+// W3-F.5  speed  (magic\Speed.i3d)
+// -------------------------------------------------------------------------
+// Speed buff — likely a motion-trail effect (trails follow movement, not
+// a static aura). May eventually need a TMotionTrailEffect class. Group
+// with Quick (Magic\Quick.i3d) which uses the same archetype.
+// Placeholder: blue-streak billboard.
+
+TBuffEffect_Bespoke__speed* TBuffEffect_Bespoke__speed::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TBuffEffect_Bespoke__speed(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("magic\\Speed.i3d", "buff-speed");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-speed] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TBuffEffect_Bespoke__speed::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-speed] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Blue streak tint — placeholder for the speed buff visual family.
+    item.color_rgba[0] = 0.35f;
+    item.color_rgba[1] = 0.65f;
+    item.color_rgba[2] = 1.00f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// =========================================================================
 // * wave-3 W3-E batch: spell-only effects (asset-only, no dedicated class). *
 // *                                                                       *
 // * Five retail-shipped spell visuals whose Class.Def registrations point *

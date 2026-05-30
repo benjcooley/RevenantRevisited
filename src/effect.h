@@ -5516,6 +5516,166 @@ class TQuicksandEffect_Bespoke : public TEffect
 };
 
 // =========================================================================
+// Wave-3 W3-F: Buff overlays (character-attached state effects)
+// -------------------------------------------------------------------------
+// Five retail-only effects with NO snapshot source body and effectively no
+// per-effect Ghidra class identification:
+//
+//   - Might         magic\might.i3d        s_Might_*    : 1 ambiguous XREF
+//   - Stoneskin     magic\Stone.i3d        s_Stone_*    : 2 ambiguous XREFs
+//                                                         (could be terrain)
+//   - Invisible     Magic\Invisible.I3D    s_invisible_*: 11 XREFs but
+//                                                         spread across
+//                                                         combat/AI invis
+//                                                         flag plus the
+//                                                         effect
+//   - charm         magic\Charm.i3d        none in _data.txt — asset only
+//   - speed         magic\Speed.i3d        no clear XREF — asset only
+//
+// The original Revenant buff family likely shared ONE TBuffEffect or
+// TAuraEffect animator with color/asset overrides per buff (the asset-only
+// registrations support a data-driven dispatch). The closest base in the
+// snapshot is TAuraAnimator (Magic\aura.i3d, AURA_COUNT=100 particles); see
+// TAuraEffect_Bespoke at src/effect.cpp:8572 for the faithful port.
+//
+// Without per-effect Ghidra evidence and without snapshot bodies, each of
+// the 5 effects below ships as a MINIMAL PLACEHOLDER (status=stubbed):
+//
+//   - SpawnForTest loads the verbatim asset path via TryLoadMagicTexture.
+//   - TickAndSubmit draws ONE ScreenAligned Alpha billboard at the effect
+//     origin with a per-effect color tint sampled from the buff's visual
+//     family (gold for Might, grey for Stoneskin, cyan-shimmer for
+//     Invisible, pink for charm, blue-streak for speed).
+//   - A simple `lifetime_ms_` timer self-terminates after ~6s so the
+//     harness can re-trigger via the SpellGround cadence.
+//
+// Each effect gets a distinct C++ type so the bespoke dispatch / future
+// per-effect tuning has a hook; collapsing them into a single
+// TBuffEffect_Bespoke type would lose the harness A/B identity. When the
+// user has video footage, per-effect tuning can land here without touching
+// the shared infra.
+//
+// Once the shared TBuffEffect / TAuraEffect base is identified in Ghidra
+// (and a real animator is ported), these classes should become thin
+// adapters around it. For now: bespoke placeholders so each row has a
+// boot-able harness entry.
+
+_CLASSDEF(TBuffEffect_Bespoke__Might)
+
+class TBuffEffect_Bespoke__Might : public TEffect
+{
+  public:
+    TBuffEffect_Bespoke__Might(TObjectImagery* newim) : TEffect(newim) {}
+    TBuffEffect_Bespoke__Might(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBuffEffect_Bespoke__Might() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBuffEffect_Bespoke__Might* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TBuffEffect_Bespoke__Stoneskin)
+
+class TBuffEffect_Bespoke__Stoneskin : public TEffect
+{
+  public:
+    TBuffEffect_Bespoke__Stoneskin(TObjectImagery* newim) : TEffect(newim) {}
+    TBuffEffect_Bespoke__Stoneskin(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBuffEffect_Bespoke__Stoneskin() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBuffEffect_Bespoke__Stoneskin* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TInvisibleEffect_Bespoke)
+
+class TInvisibleEffect_Bespoke : public TEffect
+{
+  public:
+    TInvisibleEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TInvisibleEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TInvisibleEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TInvisibleEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TBuffEffect_Bespoke__charm)
+
+class TBuffEffect_Bespoke__charm : public TEffect
+{
+  public:
+    TBuffEffect_Bespoke__charm(TObjectImagery* newim) : TEffect(newim) {}
+    TBuffEffect_Bespoke__charm(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBuffEffect_Bespoke__charm() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBuffEffect_Bespoke__charm* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TBuffEffect_Bespoke__speed)
+
+class TBuffEffect_Bespoke__speed : public TEffect
+{
+  public:
+    TBuffEffect_Bespoke__speed(TObjectImagery* newim) : TEffect(newim) {}
+    TBuffEffect_Bespoke__speed(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBuffEffect_Bespoke__speed() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBuffEffect_Bespoke__speed* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// =========================================================================
 // * wave-3 W3-E: Spell-only effects (asset-only, no dedicated class).      *
 // *                                                                       *
 // * Five retail-shipped spell visuals (cataclysm, funnel, maelstrom,      *
