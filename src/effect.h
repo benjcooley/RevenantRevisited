@@ -2726,6 +2726,95 @@ class TBloodEffect_Bespoke : public TEffect
     double           sim_accum_ms_  = 0.0;      // 24 Hz sim-tick gate
 };
 
+// *************************************************************************
+// * TFlameEffect_Bespoke — F01 A/B reference (faithful direct C++ port)    *
+// *************************************************************************
+//
+// Line-by-line port of TFlameAnimator::Initialize / Animate / Render
+// (src/effect_old.cpp:4486-4565). Single ScreenAligned billboard quad of
+// `Magic\flame.i3d`'s sole `box01` sub-object; per-frame UV cell pick out
+// of a 4-col x 2-row atlas using `n = frame*11/24; col = n%4; row = n/4`.
+// `frame` cycles 0..17. Blend = Alpha (DECAL) per snapshot SetBlendState
+// — F01 forensics §7 BLEND SANITY-CHECK flags this as "snapshot-only,
+// retail-unconfirmed"; we preserve the snapshot literally per
+// translation rule 3.
+//
+// Lives alongside the existing TFlameEffect (which uses the
+// TFlipbookBillboardComponent engine path) as an A/B reference for the
+// --test=vfx --vfx=TFlameEffect_BESPOKE harness entry.
+
+_CLASSDEF(TFlameEffect_Bespoke)
+
+class TFlameEffect_Bespoke : public TEffect
+{
+  public:
+    TFlameEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFlameEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFlameEffect_Bespoke() override = default;
+
+    // Spawn a standalone single-quad bespoke flame for --test=vfx. Loads
+    // Magic\flame.i3d, resolves the single texture handle, snapshots the
+    // canonical 128x160 surface size, and seeds `frame = 0`. Caller owns
+    // the returned pointer.
+    [[nodiscard]] static TFlameEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports TFlameAnimator::Animate (snapshot
+    // ungated, framerate-dependent) via a 24Hz sim-tick accumulator for
+    // framerate-independent cadence per project memory feedback. Submits
+    // ONE SubmitFxBillboard with the per-frame 0.25x0.5 UV sub-rect.
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    // Always alive (snapshot has no kill condition) — present for parity
+    // with the bespoke family signature.
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    int32_t        frame_         = 0;        // snapshot's int32_t frame
+    TTextureHandle texture_       = kInvalidTexture;
+    float          quad_size_wu_  = 32.0f;    // matches sister flame port (kFireQuadSizeWu)
+    double         sim_accum_ms_  = 0.0;      // 24 Hz cadence gate
+};
+
+// *************************************************************************
+// * TFireEffect_Bespoke — F03 A/B reference (faithful direct C++ port)     *
+// *************************************************************************
+//
+// Line-by-line port of the snapshot TFireAnimator (legacy
+// walkcode/effect.cpp:886-991): NUMFIRES=15 scatter quads, per-quad random
+// XY offset in +/-50 wu patch, per-quad startup frame in (-22..-2), each
+// tick `f[c]++` and respawn at `f[c] >= 30`; per quad selects
+// `framehtexs[f]` from Misc\Fire.I3D's frame array. Blend = Alpha (DECAL
+// default; snapshot SetBlendState). Orientation = WorldXY per
+// rot.x=-π/2; preserving the snapshot's per-quad rot.z=-π/4 (45° in-plane
+// spin) via SParticleDrawItem's rotation_rad — the F03c gap noted in the
+// batch brief.
+//
+// Lives alongside the existing TFireEffect as an A/B reference for the
+// --test=vfx --vfx=TFireEffect_BESPOKE harness entry.
+
+_CLASSDEF(TFireEffect_Bespoke)
+
+class TFireEffect_Bespoke : public TEffect
+{
+  public:
+    TFireEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFireEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireEffect_Bespoke() override = default;
+
+    [[nodiscard]] static TFireEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SFireScatterQuad            quads_[kFireScatterQuads] {};
+    bool                        alive_         = true;
+    double                      sim_accum_ms_  = 0.0;
+    TObjectImagery*             imagery_       = nullptr;
+    std::vector<TTextureHandle> frame_textures_ {};
+};
+
 // *******************
 // * Blood Animator *
 // *******************

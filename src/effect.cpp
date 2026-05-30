@@ -2065,6 +2065,164 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 }
 // --- end bespoke faithful port (A/B reference)
 
+// *************************************************************************
+// * TFlameEffect_Bespoke — F01 A/B reference (faithful direct C++ port)    *
+// *************************************************************************
+//
+// Line-by-line port of TFlameAnimator::Initialize / Animate / Render
+// (src/effect_old.cpp:4486-4565). Single ScreenAligned billboard quad of
+// Magic\flame.i3d's sole `box01` sub-object; per-frame UV cell pick out
+// of a 4-col x 2-row atlas using `n = frame*11/24; col = n%4; row = n/4`.
+// `frame` cycles 0..17 (snapshot frame_wrap=18). Blend = Alpha (DECAL) per
+// snapshot SetBlendState — F01 forensics §7 BLEND SANITY-CHECK flags this
+// as snapshot-only-but-suspect; preserved literally per translation rule 3.
+// The snapshot's matrix (RotX(45°)·RotY(30°)·RotZ(160°)·Scale(0.5)) was
+// the D3D6/7 way to orient a non-billboarding mesh quad to roughly face
+// the iso camera; in the modern FB pipeline ScreenAligned is the
+// equivalent (the quad auto-faces the camera, see renderer.h:193) so the
+// explicit Euler rotation collapses to "ScreenAligned" — drift-adaptation
+// noted in the return.
+
+namespace {
+
+constexpr const char* kFlameBespokeImageryPath = "Magic\\flame.i3d";
+constexpr int32_t     kFlameBespokeFrameWrap   = 18;          // snapshot effect_old.cpp:4508
+constexpr int32_t     kFlameBespokeSimTickMs   = 1000 / 24;   // 24 Hz cadence gate
+
+}  // namespace
+
+TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // --- Load Magic\flame.i3d (asset path from snapshot Class.Def:2030)
+    int32_t img_id = TObjectImagery::FindImagery(kFlameBespokeImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFlameBespokeImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[flame-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kFlameBespokeImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[flame-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFlameBespokeImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[flame-bespoke] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kFlameBespokeImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    (void)img3d->NumObjects();   // lazy-mesh-init poke (sister idiom F01/B01/M05/H04)
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[flame-bespoke] SpawnForTest: imagery '%s' has 0 textures after lazy-init",
+                  kFlameBespokeImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Resolve texture slot 0 (single material slot per F01 forensics §4).
+    S3DTex tex0 = {};
+    img3d->GetTexture(0, &tex0);
+    if (tex0.htexture == kInvalidTexture)
+    {
+        log_error("[flame-bespoke] SpawnForTest: texture slot 0 handle invalid");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* flame = new TFlameEffect_Bespoke(base);
+    flame->ForcePos(origin);
+    flame->SetMapIndex(MapPane.MakeIndex());
+    flame->ActivateComponents();
+    flame->texture_ = tex0.htexture;
+    flame->frame_   = 0;                 // snapshot Initialize :4493
+
+    log_info("[flame-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "tex0=%u w=%u h=%u",
+             kFlameBespokeImageryPath, flame->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             tex0.htexture, tex0.desc.width, tex0.desc.height);
+    return flame;
+}
+
+void TFlameEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture_ == kInvalidTexture)
+        return;
+
+    // --- Animate: port of TFlameAnimator::Animate (effect_old.cpp:4503-4510).
+    // Snapshot advances `frame` once per render-frame ungated. Drift-
+    // adaptation: framerate-independent via 24 Hz sim-tick accumulator (per
+    // feedback-framerate-independent-anim memory). One increment per tick.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFlameBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFlameBespokeSimTickMs);
+        ++frame_;                                  // :4507
+        if (frame_ >= kFlameBespokeFrameWrap)      // :4508
+            frame_ = 0;                            // :4509
+    }
+
+    // --- Render: port of TFlameAnimator::Render (effect_old.cpp:4519-4565).
+    // SetBlendState (snapshot :4521-4522) = Alpha (DECAL) — preserved
+    // literally per translation rule 3 / forensics §7 BLEND SANITY-CHECK.
+    //
+    // Per-frame UV cell pick (snapshot :4543-4544):
+    //   n    = (int32_t)(frame * 11 / 24)
+    //   xpos = (n % 4) * 0.25
+    //   ypos = (n / 4) * 0.5
+    // The 4 lvert UVs sample the 0.25 x 0.5 sub-rect at (xpos, ypos)
+    // (snapshot :4546-4556).
+    const int32_t n    = (frame_ * 11) / 24;
+    const float   xpos = float(n % 4) * 0.25f;
+    const float   ypos = float(n / 4) * 0.5f;
+
+    const S3DPoint& p = Pos();
+
+    SBillboardDrawItem item = {};
+    item.world_pos[0] = float(p.x);
+    item.world_pos[1] = float(p.y);
+    item.world_pos[2] = float(p.z);
+    // Snapshot scale = 0.5 uniform (snapshot :4535-4538). Authored quad
+    // base size: per F01 forensics §4 the cell is 32x80 px in source, with
+    // the snapshot Render path drawing via the imagery's authored verts
+    // through scale 0.5. The modern FB pipeline takes a literal world-unit
+    // size_wu; pick a size_wu that approximates the on-screen footprint
+    // (the F01 RefreshZBuffer patch was 25x62 px, matches a ~32 wu quad
+    // tall under the harness camera; same value the engine-port F03 uses).
+    item.size_wu[0]   = quad_size_wu_;
+    item.size_wu[1]   = quad_size_wu_ * (80.0f / 32.0f);  // preserve cell aspect 32:80
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0]   = xpos;
+    item.uv_rect[1]   = ypos;
+    item.uv_rect[2]   = 0.25f;
+    item.uv_rect[3]   = 0.5f;
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);          // SetBlendState :4522
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;               // flame is self-lit (§7)
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;  // collapses snapshot Euler tilt
+    Renderer->SubmitFxBillboard(item);
+}
+// --- end TFlameEffect_Bespoke faithful port
+
+// (TFireEffect_Bespoke impl deferred to after the F03 engine port; see
+//  the matching block after TFireEffect::TickAndSubmitForTest — that's
+//  where the `kFirePatchHalfWu` / `RerollFireQuad` anon-namespace helpers
+//  live and are reused verbatim.)
+
 #if 0
 // REVISITED (earlier WIP): pre-faithful-port body, re-derived blood
 // through a TParticleBucket directly (no effects.def, no chain). Kept
@@ -4456,6 +4614,199 @@ void TFireEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         Renderer->SubmitFxBillboard(item);
     }
 }
+
+// *************************************************************************
+// * TFireEffect_Bespoke — F03 A/B reference (faithful direct C++ port)     *
+// *************************************************************************
+//
+// Line-by-line port of the snapshot TFireAnimator
+// (legacy/walkcode/effect.cpp:886-991): NUMFIRES=15 scatter quads, each
+// with random XY offset in +/- 50 wu patch and a per-quad startup-frame
+// counter `f[c]` in (-22..-2) (so they fade in staggered), advance each
+// tick and respawn-in-place when `f[c] >= 30`. Per quad picks
+// `framehtexs[f[c] mod numframes]` from Misc\Fire.I3D's frame array.
+// Blend = Alpha (DECAL default; snapshot SetBlendState). Orientation =
+// WorldXY (snapshot rot.x=-π/2 tips the quad onto the ground plane).
+//
+// F03c gap fix: preserve the snapshot's per-quad rot.z=-π/4 (45° in-plane
+// spin) — the SBillboardDrawItem WorldXY path has no per-instance
+// rotation lane, so submit via SubmitFxParticle (SParticleDrawItem has
+// `rotation_rad`) with the same WorldXY orientation so each quad is
+// ground-flat AND in-plane spun.
+//
+// Reuses the F03-engine-port anon-namespace helpers (kFirePatchHalfWu,
+// kFireFrameRespawnAt, RerollFireQuad) defined immediately above. This
+// file-position is intentional — keeping the bespoke after the engine
+// port lets us share the seed/respawn formula verbatim.
+
+namespace {
+
+constexpr float       kFireBespokeQuadSpinRad = -0.7853981633974483f;  // -π/4 (45° CW)
+
+}  // namespace
+
+TFireEffect_Bespoke* TFireEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[fire-bespoke] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    int32_t img_id = TObjectImagery::FindImagery(kFireImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFireImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[fire-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kFireImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[fire-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFireImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fire-bespoke] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kFireImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[fire-bespoke] SpawnForTest: imagery '%s' has 0 textures after lazy-init",
+                  kFireImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    S3DTex tex0 = {};
+    img3d->GetTexture(0, &tex0);
+    const int32_t numframes = tex0.numframes > 0 ? tex0.numframes : 1;
+    if (tex0.htexture == kInvalidTexture && numframes == 1)
+    {
+        log_error("[fire-bespoke] SpawnForTest: texture slot 0 handle invalid and numframes=1");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* fire = new TFireEffect_Bespoke(base);
+    fire->imagery_ = base;
+    fire->frame_textures_.resize(numframes);
+    for (int32_t f = 0; f < numframes; ++f)
+    {
+        if (tex0.framehtexs && tex0.copyframes == false)
+            fire->frame_textures_[f] = tex0.framehtexs[f];
+        else
+            fire->frame_textures_[f] = tex0.htexture;
+    }
+
+    fire->ForcePos(origin);
+    fire->SetMapIndex(MapPane.MakeIndex());
+
+    // Seed NUMFIRES=15 scatter quads (snapshot Initialize :892-903).
+    // Quad 0 special-cased to (0,0,0) / f=0 — center quad always visible
+    // and anchors the patch.
+    fire->quads_[0].ox    = 0.0f;
+    fire->quads_[0].oy    = 0.0f;
+    fire->quads_[0].frame = 0;
+    for (int32_t i = 1; i < kFireScatterQuads; ++i)
+        RerollFireQuad(fire->quads_[i]);
+
+    fire->ActivateComponents();
+
+    log_info("[fire-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "quads=%d patch=%dx%d wu tex0=%u numframes=%d w=%u h=%u",
+             kFireImageryPath, fire->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             kFireScatterQuads,
+             2 * kFirePatchHalfWu, 2 * kFirePatchHalfWu,
+             tex0.htexture, numframes, tex0.desc.width, tex0.desc.height);
+    return fire;
+}
+
+void TFireEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || frame_textures_.empty())
+        return;
+
+    // --- Animate: port of TFireAnimator::Animate (snapshot
+    // legacy/walkcode/effect.cpp:937-947). Per-tick `f[c]++`; on
+    // `f[c] >= 30` respawn-in-place (XY + new f start in (-22..-2)).
+    // 24 Hz sim-tick gate for framerate-independence (matches F03
+    // engine-port cadence — same kFireSimTickMs).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFireSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFireSimTickMs);
+        for (int32_t i = 0; i < kFireScatterQuads; ++i)
+        {
+            if (quads_[i].frame >= kFireFrameRespawnAt)
+                RerollFireQuad(quads_[i]);
+            else
+                ++quads_[i].frame;
+        }
+    }
+
+    // --- Render: port of TFireAnimator::Render (snapshot
+    // legacy/walkcode/effect.cpp:950-991). Per quad:
+    //   if (f[c] < 0) continue;           // startup-delay window
+    //   p[c].z = 0 (ground); rot.x = -π/2 (ground-flat); rot.z = -π/4 (45° spin)
+    //   textureframe[0] = f[c]            // pick frame from framehtexs[]
+    //   blend = Alpha (DECAL, SetBlendState — preserved per rule 3)
+    //
+    // F03c gap fix: SBillboardDrawItem WorldXY has no per-instance rotation
+    // lane; submit via SubmitFxParticle (SParticleDrawItem has rotation_rad)
+    // with the same WorldXY orientation. Each quad is ground-flat AND
+    // 45° in-plane spun.
+    const S3DPoint& p         = Pos();
+    const int32_t   numframes = int32_t(frame_textures_.size());
+
+    SParticleDrawItem item = {};
+    item.size_wu[0]    = kFireQuadSizeWu;
+    item.size_wu[1]    = kFireQuadSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0]    = 0.0f;
+    item.uv_rect[1]    = 0.0f;
+    item.uv_rect[2]    = 1.0f;
+    item.uv_rect[3]    = 1.0f;
+    item.rotation_rad    = kFireBespokeQuadSpinRad;             // snapshot rot.z = -π/4
+    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);            // SetBlendState (snapshot)
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::WorldXY;    // rot.x = -π/2
+
+    for (int32_t i = 0; i < kFireScatterQuads; ++i)
+    {
+        if (quads_[i].frame < 0)
+            continue;   // startup-delay window — quad not yet visible
+
+        int32_t f = quads_[i].frame;
+        if (f >= numframes)
+            f = f % numframes;
+        const TTextureHandle ftex = frame_textures_[f];
+        if (ftex == kInvalidTexture)
+            continue;
+
+        item.key.texture  = ftex;
+        item.world_pos[0] = float(p.x) + quads_[i].ox;
+        item.world_pos[1] = float(p.y) + quads_[i].oy;
+        item.world_pos[2] = float(p.z) + kFireQuadLiftWu;
+        Renderer->SubmitFxParticle(item);
+    }
+}
+// --- end TFireEffect_Bespoke faithful port
 
 // *************************************************************************
 // * TTeleporterEffect — I3D cylinder rotating glow column (M09 Misthaven) *
