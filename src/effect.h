@@ -2726,6 +2726,160 @@ class TBloodEffect_Bespoke : public TEffect
     double           sim_accum_ms_  = 0.0;      // 24 Hz sim-tick gate
 };
 
+// *************************************************************************
+// * TFireSwarmEffect_Bespoke — F05 A/B reference (faithful direct port)    *
+// *************************************************************************
+//
+// Line-by-line port of the snapshot TFireSwarmAnimator
+// (src/effect_old.cpp:10483-10549). Forensics doc:
+// docs/vfx/forensics/F05_TFireSwarmEffect.md — a spinning, expanding,
+// flattening single I3D cylinder mesh `tube01` (sub-object index 1) of
+// `Magic\FireSwarm.i3d`. Per-tick state machine (3 floats + 1 int):
+//   cylth   += 0.5  rad/tick (yaw about world Z, wrapped at 2π)
+//   cylhscl += 0.4  (XY radius scale)
+//   cylvscl -= 0.4  (Z height scale, from init 30.0)
+// Kill when frameon > 75. Blend = Alpha (snapshot SetBlendState — F05
+// forensics §7 BLEND SANITY-CHECK flags as suspect, but ARGB4444 alpha
+// channel implies the snapshot literal is intentional; preserved
+// verbatim per translation rule 3).
+//
+// First-pass NOTE: The original draws a 64-vertex I3D cylinder with a
+// per-frame Scale·RotZ matrix. The Sokol FB pipeline does not yet have a
+// per-effect mesh-submission path with arbitrary blend overrides, so this
+// first-pass renders the cylinder as a single WorldUpAligned-equivalent
+// ScreenAligned billboard using the `tube01` sub-object's authored
+// texture (the 64×128 ARGB4444 flame skin). The billboard's size_wu
+// tracks cylhscl × cylvscl so the visual still expands radially and
+// flattens vertically as the original mesh would. Drift documented in
+// the return — full mesh path is a follow-up.
+
+_CLASSDEF(TFireSwarmEffect_Bespoke)
+
+class TFireSwarmEffect_Bespoke : public TEffect
+{
+  public:
+    TFireSwarmEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFireSwarmEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireSwarmEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // Spawn a single FireSwarm burst at `origin` for the --test=vfx
+    // harness. Loads Magic\FireSwarm.i3d, resolves the tube01 sub-object's
+    // texture slot, seeds the 3-float state from the snapshot Initialize
+    // body (effect_old.cpp:10483-10490). Returns nullptr on asset failure.
+    [[nodiscard]] static TFireSwarmEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports TFireSwarmAnimator::Animate
+    // (effect_old.cpp:10499-10515) verbatim through a 24 Hz sim-tick
+    // accumulator (framerate-independent per project memory), then submits
+    // one Alpha billboard scaled by (cylhscl, cylvscl) per
+    // TFireSwarmAnimator::Render (effect_old.cpp:10524-10549).
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot animator fields (effect.h:1996-2034 + effect_old.cpp Initialize).
+    int32_t        frameon_       = 0;
+    float          cylhscl_       = 0.4f;       // FIRESWARM_CYLHSCLSTEP
+    float          cylvscl_      = 30.0f;       // FIRESWARM_CYLVSCLINIT
+    float          cylth_         = 0.0f;       // rad
+    // Resolved asset state.
+    TTextureHandle texture_       = kInvalidTexture;
+    float          base_size_wu_  = 16.0f;      // per-axis world-unit base
+    bool           alive_         = true;
+    double         sim_accum_ms_  = 0.0;
+};
+
+// *************************************************************************
+// * TBurnEffect_Bespoke — M04 A/B reference (faithful direct port)         *
+// *************************************************************************
+//
+// Line-by-line port of the snapshot TBurnAnimator
+// (src/effect_old.cpp:3292-3473). Forensics doc:
+// docs/vfx/forensics/M04_TBurnEffect.md — composite particle status
+// overlay attached to a burning character. Two TParticleSystem instances
+// (fire + smoke), each capacity BURN_COUNT=70, both seeded from
+// Magic\burnbabyburn.I3D's two sub-objects (smoke01 / smoke). Per tick:
+//   1. Promote any fire particle with life == life_span -> smoke
+//      (life_span = (old*2)/3, scl *= 1.25).
+//   2. Animate each system (integrate pos += vel, vel *= acc).
+//   3. Spawn `to_add` new fire particles at random character bones
+//      with random scale [0.15,0.4], pure-upward vel [3.0,7.5], life
+//      [5,15], rot=(-90,0,-45).
+//   4. Decay each live particle scl *= BURN_DEC (=0.97).
+// `to_add` ramps 0->8 over ticks 0-50, then 8->0 over ticks 50-58.
+// Kill when frame>=BURN_FRAME (=50) and to_add==0 and all particles done.
+// Blend = AdditiveStraight (snapshot SetAddBlendState, fire-family).
+//
+// First-pass NOTE: the harness has no live TCharacter rig wired for the
+// random-bone emit, so the bone-emit path is simplified to spawn from
+// the effect's origin + ±BURN_SPREAD jitter on each axis. The per-tick
+// physics (velocity, life, decay, fire→smoke promotion) is preserved
+// verbatim. CharacterRig integration is a follow-up — for now the
+// harness entry uses preview_style=Static so the effect spawns at a
+// fixed origin and runs its full ramp-up / ramp-down / drain cycle.
+
+constexpr int32_t kBurnBespokeCount = 70;     // BURN_COUNT (effect.h:1526)
+
+// One particle slot — collapsed from SParticleSystemInfo
+// (src/effectcomp.h:357-372) into a compact bespoke record. `system`
+// disambiguates fire vs smoke (the snapshot stores them in separate
+// TParticleSystem arrays; we use a single flat array tagged with the
+// owning system so the fire→smoke promotion is just a tag flip).
+struct SBurnBespokeParticle
+{
+    hmm_vec3 pos        = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 vel        = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 scl        = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 acc        = {1.0f, 1.0f, 1.0f};
+    int32_t  life       = 0;
+    int32_t  life_span  = 0;
+    int32_t  system     = 0;       // 0 = fire (smoke01), 1 = smoke (smoke)
+    bool     used       = false;
+};
+
+_CLASSDEF(TBurnEffect_Bespoke)
+
+class TBurnEffect_Bespoke : public TEffect
+{
+  public:
+    TBurnEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TBurnEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBurnEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // Spawn a single BURN overlay at `origin` for the --test=vfx
+    // harness. Loads Magic\burnbabyburn.I3D, resolves the texture slots
+    // for the two sub-objects (smoke01 -> fire system, smoke -> smoke
+    // system per forensics §4), seeds the empty particle array and
+    // ramp envelope from the snapshot Initialize body (effect_old.cpp
+    // :3292-3313). Returns nullptr on asset failure.
+    [[nodiscard]] static TBurnEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports TBurnAnimator::Animate verbatim
+    // through a 24 Hz sim-tick accumulator, then submits one
+    // AdditiveStraight billboard per live particle (texture switches by
+    // particle.system) per the SetAddBlendState bracket
+    // (effect_old.cpp:3449-3460).
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SBurnBespokeParticle particles_[kBurnBespokeCount * 2] {};   // fire + smoke arenas (flat)
+    int32_t              frame_         = 0;     // snapshot's animator-side frame counter
+    int32_t              to_add_        = 0;     // per-tick spawn cap (ramps 0..8..0)
+    int32_t              size_          = 1;     // ca->NumObjects() — 1 for harness (no rig)
+    TTextureHandle       tex_fire_      = kInvalidTexture;       // smoke01 sub-object
+    TTextureHandle       tex_smoke_     = kInvalidTexture;       // smoke sub-object
+    float                base_size_wu_  = 48.0f;
+    bool                 alive_         = true;
+    double               sim_accum_ms_  = 0.0;
+};
+
 // *******************
 // * Blood Animator *
 // *******************
