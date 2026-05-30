@@ -2065,6 +2065,258 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 }
 // --- end bespoke faithful port (A/B reference)
 
+// *************************************************************************
+// * TMissileEffect_Bespoke — S08 base infrastructure (faithful direct port)
+// *************************************************************************
+//
+// Faithful translation of TMissileEffect::Initialize / SetSpeed / Pulse /
+// OffScreen from src/missileeffect.cpp:31-141 (whole file under #if 0).
+// Line-by-line port — same variable names, same constants, same per-tick
+// math. The only adaptations are:
+//   1. `Move()` collapses to an inline `pos += vel` per tick (the engine's
+//      collision-integrating mover is not wired for the --test=vfx path).
+//   2. The MOVE_BLOCKED / TMapIterator(character)-hit branches in FLY are
+//      no-ops here (no map collision, no live characters in the harness);
+//      the range countdown still drives the EXPLODE transition.
+//   3. The harness draws a single state-colored marker billboard at the
+//      missile world-pos using the renderer's white texture — TMissileEffect
+//      has no visual of its own in retail (each leaf supplies its own
+//      animator), so the marker exists only to prove state transitions.
+
+void TMissileEffect_Bespoke::Initialize()
+{
+    // Port of TMissileEffect::Initialize (missileeffect.cpp:31-40).
+    state_ = kMissileLaunch;
+    angle  = 0;            // TEffect::angle (snapshot `angle = 0;`)
+    range_ = 32768;
+
+    SetSpeed(kMissileSpeedDefault);   // SetSpeed(16) -> speed = 16 * ROLLOVER
+
+    status_ = false;
+
+    // Harness-only members (not in snapshot Initialize).
+    aim_angle_ = 0;
+    vel_ = {0.0f, 0.0f, 0.0f};
+    launch_hold_ticks_remaining_ = kMissileHarnessLaunchHoldTicks;
+    explode_ticks_remaining_ = 24;
+    alive_ = true;
+    sim_accum_ms_ = 0.0;
+}
+
+void TMissileEffect_Bespoke::Pulse()
+{
+    // Port of TMissileEffect::Pulse (missileeffect.cpp:52-135), translated
+    // line-by-line. The snapshot's `Move()` becomes an inline `pos += vel`
+    // here so the marker moves without engine collision involvement.
+
+    // Snapshot: `uint32_t bits = Move();` — Move() integrates vel and
+    // returns flags. We integrate inline in FLY state.
+    uint32_t bits = 0;   // MOVE_BLOCKED never set in harness (no collision)
+    if (state_ == kMissileFly)
+    {
+        S3DPoint p = Pos();
+        p.x += int32_t(vel_.X);
+        p.y += int32_t(vel_.Y);
+        p.z += int32_t(vel_.Z);
+        ForcePos(p);
+    }
+
+    switch (state_)
+    {
+        case kMissileLaunch:
+        {
+            // missileeffect.cpp:58-72.
+            if (status_)
+            {
+                // Harness-only: hold LAUNCH for ~12 ticks so the
+                // LAUNCH -> FLY edge is observable in --test=vfx. The
+                // in-game caller leaves launch_hold_=0 so this collapses
+                // to the original 1-tick transition.
+                if (launch_hold_ticks_remaining_ > 0)
+                {
+                    --launch_hold_ticks_remaining_;
+                    break;
+                }
+
+                if (speed_)
+                {
+                    // ConvertToVector(GetAngle(), speed, vel) — emits an
+                    // integer S3DPoint scaled by speed. Use aim_angle_
+                    // (the byte-angle stored at spawn) since the harness
+                    // overrides TEffect::angle.
+                    const int32_t harness_speed =
+                        int32_t(float(speed_) * kMissileHarnessSpeedScale);
+                    S3DPoint v_int = {0, 0, 0};
+                    ConvertToVector(aim_angle_, harness_speed, v_int);
+                    vel_.X = float(v_int.x) / float(ROLLOVER);
+                    vel_.Y = float(v_int.y) / float(ROLLOVER);
+
+                    // snapshot sets flags = (flags & ~OF_IMMOBILE)
+                    //                       | OF_MOVING | OF_WEIGHTLESS
+                    // — replicated for any engine-side code path that
+                    // reads them. In-harness collision is bypassed.
+                    flags = (flags & ~OF_IMMOBILE) | OF_MOVING | OF_WEIGHTLESS;
+
+                    // missileeffect.cpp:66 — vel.z = (speed / -16)
+                    // (slight downward arc). `speed / -16` here uses the
+                    // SCALED harness speed so the arc matches the
+                    // harness flight envelope.
+                    vel_.Z = float(harness_speed) / -16.0f / float(ROLLOVER);
+
+                    // missileeffect.cpp:68 — range = (240*MISSILE_RANGE) /
+                    //                                (speed/ROLLOVER)
+                    // = (240*2)/(16) = 30 ticks of flight at default speed.
+                    const int32_t speed_per_tick = speed_ / ROLLOVER;
+                    if (speed_per_tick > 0)
+                        range_ = (240 * kMissileRangeDefault) / speed_per_tick;
+                }
+                state_ = kMissileFly;
+            }
+            break;
+        }
+
+        case kMissileFly:
+        {
+            // missileeffect.cpp:75-124.
+            bool explode = false;
+
+            range_--;
+            if (range_ <= 0)
+                explode = true;
+
+            // missileeffect.cpp:83-84 — MOVE_BLOCKED branch. bits is 0 in
+            // the harness so this never fires; preserved for the eventual
+            // in-game wiring.
+            if (bits & MOVE_BLOCKED)
+                explode = true;
+            else
+            {
+                // missileeffect.cpp:87-113 — character-hit branch
+                // (TMapIterator over OBJSET_CHARACTER). Skipped in the
+                // harness (no live characters); preserved verbatim under
+                // `#if 0` below in this same file as the in-game port
+                // reference. For the bespoke base path we trust the
+                // range countdown to drive EXPLODE.
+            }
+
+            if (explode)
+            {
+                // missileeffect.cpp:119-120 — stop the missile dead.
+                flags = (flags & ~OF_MOVING & ~OF_WEIGHTLESS) | OF_IMMOBILE;
+                state_ = kMissileExplode;
+            }
+            break;
+        }
+
+        case kMissileExplode:
+        {
+            // missileeffect.cpp:127-130 — `if (!HasAnimator()) KillThisEffect();`
+            // The bespoke base has no animator, so we use an explicit
+            // post-explode tick counter to keep the marker visible long
+            // enough that the EXPLODE state is observable in --test=vfx.
+            if (explode_ticks_remaining_ > 0)
+            {
+                --explode_ticks_remaining_;
+            }
+            else
+            {
+                alive_ = false;
+            }
+            break;
+        }
+    }
+
+    // missileeffect.cpp:134 — TEffect::Pulse() chain.
+    TEffect::Pulse();
+}
+
+TMissileEffect_Bespoke* TMissileEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[missile] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // Pure infra base — no I3D imagery required. Construct with null
+    // imagery (same pattern as TStripEffect::SpawnForTest at
+    // src/stripeffect.cpp:150). The marker billboard uses the renderer's
+    // white texture.
+    auto* m = new TMissileEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    m->ForcePos(origin);
+    m->SetMapIndex(MapPane.MakeIndex());
+    m->ActivateComponents();
+
+    // Harness aim: random horizontal byte-angle (in-game caller would
+    // supply this via SetAngle()).
+    m->aim_angle_ = random(0, 255);
+    // missileeffect.cpp:39 — status starts false; the animator drives it
+    // true on its first tick. In the harness we set it true immediately
+    // so the state machine proceeds (no animator to wait on).
+    m->status_ = true;
+
+    log_info("[missile] SpawnForTest: map_index=%d origin=(%d,%d,%d) aim=%d "
+             "speed=%d (per-tick=%d) range=%d",
+             m->GetMapIndex(), origin.x, origin.y, origin.z,
+             m->aim_angle_, m->speed_, m->GetSpeed(), m->range_);
+    return m;
+}
+
+void TMissileEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: drive Pulse() via the 24 Hz sim-tick accumulator (same
+    // gate B01/F07/B-family use) so motion is framerate-independent.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kMissileSimTickMs))
+        {
+            sim_accum_ms_ -= double(kMissileSimTickMs);
+            Pulse();
+            if (!alive_)
+                break;
+        }
+    }
+
+    // --- Render: ONE marker billboard at the missile world-pos, colored
+    // by state. TMissileEffect has no visual in retail (each leaf supplies
+    // its own animator); the marker exists only to prove the state-machine
+    // ticks LAUNCH -> FLY -> EXPLODE in --test=vfx.
+    const S3DPoint& p = Pos();
+
+    float r = 1.0f, g = 1.0f, b = 1.0f;
+    switch (state_)
+    {
+        case kMissileLaunch:  r = 1.0f; g = 1.0f; b = 0.2f; break;   // yellow
+        case kMissileFly:     r = 1.0f; g = 0.55f; b = 0.0f; break;  // orange
+        case kMissileExplode: r = 1.0f; g = 0.15f; b = 0.10f; break; // red
+        default: break;
+    }
+
+    SBillboardDrawItem item = {};
+    item.world_pos[0]  = float(p.x);
+    item.world_pos[1]  = float(p.y);
+    item.world_pos[2]  = float(p.z);
+    item.size_wu[0]    = kMissileMarkerSizeWu;
+    item.size_wu[1]    = kMissileMarkerSizeWu;
+    item.color_rgba[0] = r;
+    item.color_rgba[1] = g;
+    item.color_rgba[2] = b;
+    item.color_rgba[3] = 1.0f;
+    item.key.texture     = Renderer->WhiteTextureHandle();
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    Renderer->SubmitFxBillboard(item);
+}
+// --- end S08 TMissileEffect_Bespoke port
+
 #if 0
 // REVISITED (earlier WIP): pre-faithful-port body, re-derived blood
 // through a TParticleBucket directly (no effects.def, no chain). Kept
