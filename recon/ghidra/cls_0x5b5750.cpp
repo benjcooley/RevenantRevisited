@@ -64,7 +64,7 @@ void __thiscall OOAnalyzer::cls_0x5b5750_TScrollPane::virt_meth_0x521360_TScroll
     }
     if ((this->mbr_0x17c != 0) && (pcVar4 != (char *)0x0)) {
       cls_0x419dd0::cls_0x419dd0((cls_0x419dd0 *)&stack0xffffffe4);
-      cls_0x5a68d8::meth_0x4be2b0
+      cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
                 ((cls_0x5a68d8 *)PTR_DAT_005d79e0,(char)iVar6 + 'A',(char)iVar7 + 'D',
                  (char)this->mbr_0x190,this->mbr_0x194,(char)pcVar4,this->mbr_0x188);
     }

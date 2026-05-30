@@ -4,9 +4,11 @@ Live status. Update as work progresses. Goal: bring Demo 1 (Locke wakes up at Mi
 
 **Track ownership.** Several systems originally listed here are owned by the **gameflow** track ([../gameflow/README.md](../gameflow/README.md) / [../gameflow/BURNDOWN.md](../gameflow/BURNDOWN.md)). Save / load, sector transitions (exits / doors), the script runtime, the main menu, the new-game path, dialogs, death+restart, and the whole audio system live there. This burndown covers what stays in **core gameplay/combat on main**: input dispatch, attacks, AI, equipment, XP/leveling. Adjacent: [../ui/BURNDOWN.md](../ui/BURNDOWN.md) for HUD/OOG screens, the VFX worktree's INVENTORY for spell + impact effects.
 
+**Forensics first.** Before porting any combat / movement / AI / animation behavior, follow [AGENT_GUIDE.md](AGENT_GUIDE.md) — the forensics-first protocol (constants, state-machine shape, animation events, trigger sites, data deps) + the shared Ghidra recon rigor. Same discipline the VFX + UI tracks use.
+
 **Legend:** `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked · `[-]` cancelled / handed off
 
-Last updated: 2026-05-17 (post-gameflow + vfx + ui merge)
+Last updated: 2026-05-19 (added AGENT_GUIDE forensics protocol)
 
 ---
 

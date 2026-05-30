@@ -66,7 +66,7 @@ undefined4 * __thiscall FUN_00433640_DefWidget_TDefDroplist_ctor(undefined4 *par
         local_4 = (uint)local_4._1_3_ << 8;
         param_1[0x27] = iVar8;
         param_1[0x28] = 1;
-        FUN_00419dd0(param_1 + 0x66);
+        FUN_00419dd0_BlitEffect_SetField(param_1 + 0x66);
         iVar8 = FUN_0042f700(param_1[0x27],param_2,param_3,param_1[100]);
         if (iVar8 == 0) {
           ExceptionList = local_c;

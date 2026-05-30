@@ -41,8 +41,11 @@ __pycache__/
 /imgui.ini
 /Revenant.ini
 # Sector saves the running game writes with a literal-backslash
-# "curmap\name.DAT" filename (path-separator bug).
+# "curmap\name.DAT" filename (path-separator bug). Show up at repo
+# root when running ./Revenant from source, and under data/curmap\\
+# when running ./build/Revenant.
 /curmap\\*.DAT
+/data/curmap\\*.DAT
 
 # Runtime-modified game state — not original game assets. These mutate
 # during gameplay/testing. Originals come from the stock GOG install at

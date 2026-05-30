@@ -20,6 +20,7 @@
 
 #include "editorfonts.h"
 #include "editoricons.h"
+#include "framesnap.h"
 #include "multisurface.h"
 #include "renderer.h"
 #include "revenant.h"
@@ -243,6 +244,87 @@ bool TDisplay::FlipPage(bool /*Wait*/)
 
     sg_end_pass();
     sg_commit();
+
+    // ---- Snap-mode mirror pass -------------------------------------------
+    // Re-run the composite into an offscreen RT we own so framesnap can
+    // read it back via Metal blit. Adds one extra composite per frame but
+    // only when --snap / --filmstrip is active. The RT, depth, and pass
+    // are lazily allocated and re-created on display-size changes.
+    //
+    // Both color + depth must match the SWAPCHAIN formats, because the
+    // renderer's pipelines were created against them — sokol-gfx will
+    // assert if pipeline.color_format != pass.color_format (or depth).
+    if (FrameSnap::Active())
+    {
+        const int32_t w = sapp_width();
+        const int32_t h = sapp_height();
+        const sg_pixel_format scColor = (sg_pixel_format) sapp_color_format();
+        const sg_pixel_format scDepth = (sg_pixel_format) sapp_depth_format();
+
+        if (snap_capture_color.id == SG_INVALID_ID
+            || snap_capture_w != w
+            || snap_capture_h != h)
+        {
+            if (snap_capture_color.id != SG_INVALID_ID)
+                sg_destroy_image(snap_capture_color);
+
+            sg_image_desc cd = {};
+            cd.render_target = true;
+            cd.width  = w;
+            cd.height = h;
+            cd.pixel_format = scColor;
+            cd.min_filter = SG_FILTER_NEAREST;
+            cd.mag_filter = SG_FILTER_NEAREST;
+            cd.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+            cd.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+            cd.label = "snap-capture-color";
+            snap_capture_color = sg_make_image(&cd);
+
+            snap_capture_w = w;
+            snap_capture_h = h;
+        }
+
+        // Build a transient depth attachment + pass each frame. Cheap
+        // relative to the composite work itself; keeps display.cpp from
+        // owning more long-lived sokol resources.
+        sg_image_desc dd = {};
+        dd.render_target = true;
+        dd.width  = w;
+        dd.height = h;
+        dd.pixel_format = scDepth;
+        dd.min_filter = SG_FILTER_NEAREST;
+        dd.mag_filter = SG_FILTER_NEAREST;
+        dd.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+        dd.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+        dd.label = "snap-capture-depth";
+        sg_image snapDepth = sg_make_image(&dd);
+
+        sg_pass_desc pd = {};
+        pd.color_attachments[0].image = snap_capture_color;
+        pd.depth_stencil_attachment.image = snapDepth;
+        sg_pass capturePass = sg_make_pass(&pd);
+
+        sg_pass_action snapPa = {};
+        snapPa.colors[0].action = SG_ACTION_CLEAR;
+        snapPa.colors[0].value  = { 0.0f, 0.0f, 0.0f, 1.0f };
+        snapPa.depth.action     = SG_ACTION_CLEAR;
+        snapPa.depth.value      = 1.0f;
+        snapPa.stencil.action   = SG_ACTION_DONTCARE;
+
+        sg_begin_pass(capturePass, &snapPa);
+        if (Renderer) {
+            Renderer->PresentToSwapchain();
+            Renderer->Composite(backbuffer);
+            Renderer->DrawHud();
+        }
+        // simgui_render() omitted from snap path — ImGui in a non-default
+        // pass needs careful pipeline setup; HUD-test modes don't use it.
+        sg_end_pass();
+        sg_commit();
+
+        sg_destroy_pass(capturePass);
+        sg_destroy_image(snapDepth);
+    }
 
     return true;
 }

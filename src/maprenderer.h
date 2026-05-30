@@ -168,6 +168,15 @@ class TMapRenderer
     // sector window.
     [[nodiscard]] S3DPoint CameraWorld() const;
 
+    // Project a screen pixel onto a world plane at z = z_floor. Inverse
+    // of the camera's world->pixel transform (camera offset + viewport
+    // scale + iso projection), so game-side input code can compute "what
+    // world point is the cursor over?" without hand-rolling the camera
+    // math. Common z_floor is Player->Pos().z (snap to walkable height
+    // beneath the player).
+    void ScreenToWorld(int32_t screen_x, int32_t screen_y,
+                       int32_t z_floor, S3DPoint &out) const;
+
     // Find the loaded TSector covering (level, sector_x, sector_y).
     // Editor commands that create/remove instances need this because
     // MapPane's standard add/remove path scans MapPane.sectors[][]

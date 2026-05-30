@@ -187,7 +187,7 @@ OOAnalyzer::cls_0x5a68d8::meth_0x438ed0
   cStack_10.mbr_0x0 = param_6 | 0x80;
   uStack_c = cStack_10.mbr_0x0;
   cls_0x419dd0::cls_0x419dd0(&cStack_10);
-  meth_0x4be2b0(this,(undefined)param_1,(undefined)param_2,0x10,10000,(undefined)param_3,0);
+  meth_0x4be2b0_CompositeBuffer(this,(undefined)param_1,(undefined)param_2,0x10,10000,(undefined)param_3,0);
   return;
 }
 
@@ -1690,7 +1690,7 @@ OOAnalyzer::cls_0x5a68d8::meth_0x4be110
     *(undefined4 *)(iVar5 + 0x54) = in_stack_00000030;
     cStack_20.mbr_0x0 = param_10;
     cls_0x419dd0::cls_0x419dd0(&cStack_20);
-    uVar4 = meth_0x4be2b0(this,(char)param_2,(undefined)param_3,(char)param_8,
+    uVar4 = meth_0x4be2b0_CompositeBuffer(this,(char)param_2,(undefined)param_3,(char)param_8,
                           (iVar1 + iVar2) * param_4,(char)param_1,param_9);
     *(undefined4 *)(iVar5 + 0x54) = uVar3;
     return uVar4;
@@ -1705,7 +1705,7 @@ OOAnalyzer::cls_0x5a68d8::meth_0x4be110
 /* WARNING: Type propagation algorithm not settling */
 
 undefined4 __thiscall
-OOAnalyzer::cls_0x5a68d8::meth_0x4be2b0
+OOAnalyzer::cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
           (cls_0x5a68d8 *this,undefined param_1,undefined param_2,undefined param_3,
           virt_meth_0x419e80 *param_4,undefined param_5,cls_0x5a68d8__vftable_5a68d8 *param_6)
 

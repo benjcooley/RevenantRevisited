@@ -25,6 +25,8 @@
 
 #include "revenant.h"
 #include "assetcache.h"
+#include "framesnap.h"
+#include "headless_window.h"
 #include "logging.h"
 #include "fonttable.h"
 #include "3dscene.h"
@@ -69,6 +71,7 @@
 #include "dialog.h"
 #include "debugui.h"
 #include "cursor.h"
+#include "platform/cursor.h"
 
 #include <sokol_app.h>
 
@@ -1659,6 +1662,10 @@ void GetParameters(int argc, char **argv)
     if (arg_flag(cmd, "vfx-no-ui"))
         StartupVfxHideUi = true;
 
+  // --input-script / --mouse-script live on feature branches that carry
+  // testmodes.cpp's InputSim parser. Not yet wired into main; stub-skipped
+  // here so this revmain.cpp stays single-source across worktrees.
+
   // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.
   // Empty = the default hard-coded pick (0_2_25, Misthaven).
     {
@@ -2265,6 +2272,20 @@ sapp_desc sokol_main(int argc, char* argv[])
     IsMMX = false;
     ApplyCommandLineResolution(argc, argv);
 
+    // --headless: skip sokol_app's makeKeyAndOrderFront so no NSWindow
+    // appears on the desktop. Parsed here (before sokol_app shows the
+    // window) AND again later in AppInit (which sets the post-init hide
+    // flag in case desc.hidden wasn't honored by a build that doesn't
+    // include our sokol_app patch). Scan argv directly — argh hasn't run.
+    bool cli_headless = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        const char* a = argv[i];
+        if (!a) continue;
+        while (*a == '-' || *a == '/') ++a;
+        if (std::strcmp(a, "headless") == 0) { cli_headless = true; break; }
+    }
+
     sapp_desc desc = {};
     desc.init_cb = AppInit;
     desc.frame_cb = AppFrame;
@@ -2282,6 +2303,15 @@ sapp_desc sokol_main(int argc, char* argv[])
     // serialized object blocks can run large.
     desc.enable_clipboard = true;
     desc.clipboard_size   = 1 << 20;     // 1 MB
+    if (cli_headless)
+    {
+        // Our sokol_app patch: skip makeKeyAndOrderFront so the NSWindow
+        // never appears on the desktop, and use the accessory activation
+        // policy so the app has no Dock icon. The Metal context + frame
+        // timer still run normally; framesnap reads the offscreen RT.
+        desc.hidden = true;
+        desc.no_dock_icon = true;
+    }
     // Windowed by default; Borderless/FullScreen come from INI/args and
     // take effect before the window opens only if set via argv. Anything
     // else stays at sokol defaults.
@@ -2306,6 +2336,28 @@ static void AppInit()
     GetINISettings();
 
     GetParameters(g_argc, g_argv);
+
+    // Headless snap / filmstrip flags. Parsed once after GetParameters so
+    // the args[] argh consumed are still around (we read argv ourselves).
+    {
+        FrameSnap::SConfig snapCfg;
+        if (FrameSnap::ParseArgs(g_argc, g_argv, snapCfg))
+        {
+            FrameSnap::SetConfig(snapCfg);
+            log_info("[framesnap] active: %s frames=%d interval=%.3fs prefix='%s' out='%s'",
+                     snapCfg.is_filmstrip ? "filmstrip" : "single-snap",
+                     snapCfg.frames, snapCfg.interval_sec,
+                     snapCfg.prefix.c_str(), snapCfg.out_path.c_str());
+        }
+        if (HeadlessWindow::ParseArgs(g_argc, g_argv))
+        {
+            log_info("[headless] --headless active; window will be hidden");
+            // Hide ASAP — sokol_app has already shown the NSWindow by the
+            // time init_cb (this AppInit) fires, so a few frames may still
+            // flash visible before the per-frame HideAllWindows kicks in.
+            HeadlessWindow::HideAllWindows();
+        }
+    }
 
     // Base resource archives — retail WinMain opened these explicitly before
     // anything that calls rev_fopen (FontTable->Initialize, LoadClasses...).
@@ -2455,6 +2507,16 @@ static void AppFrame()
     if (Display.IsActive())
         Display.FlipPage();
 
+    // --headless: hide the OS window so snap runs don't pop up on screen
+    // and steal focus. Called every frame (cheap; idempotent).
+    if (HeadlessWindow::IsActive())
+        HeadlessWindow::HideAllWindows();
+
+    // Headless snap / filmstrip tick — reads the backbuffer (GPU readback),
+    // accumulates frames, and on the Nth capture writes PNG(s) + quits.
+    if (FrameSnap::Active())
+        FrameSnap::TickAfterRender();
+
     if (CurrentScreen->IsDone() || Closing)
     {
         TScreen *next = CurrentScreen->GetNextScreen();
@@ -2589,8 +2651,20 @@ static void AppEvent(const sapp_event* ev)
         break;
       }
 
+      // No MOUSE_ENTER / MOUSE_LEAVE handlers for cursor swapping. The
+      // platform layer (src/platform/macosx/cursor.mm) installs its own
+      // NSTrackingArea with NSTrackingActiveAlways + NSTrackingCursorUpdate
+      // on the sokol contentView, so AppKit drives cursor swaps via
+      // cursorUpdate: directly. That fires reliably across key-window
+      // transitions, which sokol's MOUSE_LEAVE does not -- sokol's own
+      // tracking area is NSTrackingActiveInKeyWindow and goes silent the
+      // moment another window becomes key.
+
       case SAPP_EVENTTYPE_MOUSE_MOVE:
       {
+        // While an --input-script owns the cursor, ignore hardware moves so the
+        // script has exclusive control of cursorx/cursory + hover dispatch.
+        // (TestModes::InputScriptActive guard skipped — feature/ui only)
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
@@ -2611,6 +2685,7 @@ static void AppEvent(const sapp_event* ev)
 
       case SAPP_EVENTTYPE_MOUSE_DOWN:
       {
+        // (TestModes::InputScriptActive guard skipped — feature/ui only)   // script owns the mouse
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
@@ -2630,6 +2705,7 @@ static void AppEvent(const sapp_event* ev)
 
       case SAPP_EVENTTYPE_MOUSE_UP:
       {
+        // (TestModes::InputScriptActive guard skipped — feature/ui only)   // script owns the mouse
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;

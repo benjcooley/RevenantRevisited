@@ -34,6 +34,7 @@
 #include "uicliptest.h"
 #include "uilayouttest.h"
 #include "uinineslicetest.h"
+#include "uiplyrstatusbartest.h"
 #include "uistyletest.h"
 #include "uitextbartest.h"
 #include "vfxtest.h"
@@ -2418,6 +2419,8 @@ bool Initialize(const char* mode)
         return InitializeUIClipMode();
     if (strcmp(mode, "ui-textbar") == 0)
         return InitializeUITextBarMode();
+    if (strcmp(mode, "ui-plyrstatusbar") == 0)
+        return InitializeUIPlyrStatusBarMode();
     if (strcmp(mode, "audio") == 0)
         return InitializeAudioMode();
     if (strcmp(mode, "vfx") == 0)
@@ -2451,6 +2454,8 @@ void Close(const char* mode)
         CloseUIClipMode();
     if (strcmp(mode, "ui-textbar") == 0)
         CloseUITextBarMode();
+    if (strcmp(mode, "ui-plyrstatusbar") == 0)
+        CloseUIPlyrStatusBarMode();
     if (strcmp(mode, "audio") == 0)
         CloseAudioMode();
     if (strcmp(mode, "vfx") == 0)
@@ -2493,6 +2498,8 @@ void Render(const char* mode)
         return RenderUIClipMode();
     if (strcmp(mode, "ui-textbar") == 0)
         return RenderUITextBarMode();
+    if (strcmp(mode, "ui-plyrstatusbar") == 0)
+        return RenderUIPlyrStatusBarMode();
     if (strcmp(mode, "audio") == 0)
         return RenderAudioMode();
     if (strcmp(mode, "vfx") == 0)

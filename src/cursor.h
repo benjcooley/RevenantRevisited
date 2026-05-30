@@ -14,6 +14,10 @@ extern int32_t cursory;
 extern int32_t mousebutton;
 
 void SetMouseBitmap(PTBitmap cursor);
+void RefreshOSCursor();
+  // Re-push the current MouseCursor to the OS pointer. Used after
+  // resetting to the OS arrow (e.g. while ImGui captures the mouse)
+  // to restore the game cursor when focus returns to the playfield.
 void SetMouseShadow(PTBitmap shadow, int32_t offsetx = 1, int32_t offsety = 3);
 void SetMouseCornerBitmap(PTBitmap corner, bool toppriority = false);
 void SetMouseCornerBitmap(int32_t type, bool toppriority = false);

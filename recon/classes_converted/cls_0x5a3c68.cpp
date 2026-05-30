@@ -504,7 +504,7 @@ void cls_0x5a3c68::virt_meth_0x42cc30()
       cVar5 = cVar4 * '\x02';
       cls_0x429950::cls_0x429950(&local_58,0,0x8c);
       cls_0x419dd0::cls_0x419dd0((cls_0x419dd0 *)&stack0xffffff6c);
-      cls_0x5a68d8::meth_0x4be2b0
+      cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
                 (in_stack_00000004,(char)(this->cls_0x5a3ab8).mbr_0x60 + cVar5,
                  cVar5 + (char)(this->cls_0x5a3ab8).mbr_0x64,
                  (char)(this->cls_0x5a3ab8).mbr_0x68 + cVar4 * -2,
@@ -607,7 +607,7 @@ void cls_0x5a3c68::virt_meth_0x42cc30()
         }
         local_58 = (cls_0x429950)(this->cls_0x5a3ab8).mbr_0x5c;
         cls_0x419dd0::cls_0x419dd0((cls_0x419dd0 *)&stack0xffffff6c);
-        cls_0x5a68d8::meth_0x4be2b0
+        cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
                   (in_stack_00000004,cVar4,(char)local_6c,cVar5,iVar3,local_58.mbr_0x0,0);
       }
       (*in_stack_00000004->vftptr_0x0->virt_meth_0x4bcc60_32)(in_stack_00000004);

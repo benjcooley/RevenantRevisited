@@ -88,7 +88,7 @@ void __thiscall OOAnalyzer::cls_0x534d40::meth_0x534d40(cls_0x534d40 *this)
         (**(code **)(*(int *)PTR_DAT_005d79e0 + 0x5c))(&local_54,this->mbr_0x48,0,0);
         puVar3 = PTR_DAT_005d79e0;
         dVar1 = this->mbr_0x48;
-        FUN_00438d80((undefined4 *)&stack0xffffff9c,this->mbr_0x18 + 0x32 + this->mbr_0x20,
+        FUN_00438d80_BlitEffect_StructInit((undefined4 *)&stack0xffffff9c,this->mbr_0x18 + 0x32 + this->mbr_0x20,
                      this->mbr_0x24 + this->mbr_0x1c,0x32,0,this->mbr_0x28 - 0x32,this->mbr_0x2c,
                      0x100);
         (**(code **)(*(int *)puVar3 + 0x5c))(&stack0xffffff9c,dVar1,0,0);
@@ -131,7 +131,7 @@ void __thiscall OOAnalyzer::cls_0x534d40::meth_0x534d40(cls_0x534d40 *this)
         }
       }
       if (DAT_005d7a18 == 0) {
-        FUN_004aacb0(this->mbr_0x18 + this->mbr_0x20,this->mbr_0x24 + this->mbr_0x1c,this->mbr_0x28,
+        FUN_004aacb0_BlitEffect_Iterate(this->mbr_0x18 + this->mbr_0x20,this->mbr_0x24 + this->mbr_0x1c,this->mbr_0x28,
                      this->mbr_0x2c);
       }
     }

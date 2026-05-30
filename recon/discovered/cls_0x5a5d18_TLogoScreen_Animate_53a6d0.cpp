@@ -31,8 +31,8 @@ void __fastcall FUN_0053a6d0_TLogoScreen_Animate(int param_1)
     uVar4 = 0x10;
     uVar3 = 0x41;
     uVar2 = extraout_ECX;
-    FUN_00419dd0(&uStack_104);
-    FUN_004be2b0(0xf,0x1c2,0x96,0x28,auStack_100,0,DAT_00667cc0,uVar2,uVar3,uVar4);
+    FUN_00419dd0_BlitEffect_SetField(&uStack_104);
+    FUN_004be2b0_CompositeBuffer(0xf,0x1c2,0x96,0x28,auStack_100,0,DAT_00667cc0,uVar2,uVar3,uVar4);
   }
   *(undefined4 *)(param_1 + 0x50) = 0;
   return;

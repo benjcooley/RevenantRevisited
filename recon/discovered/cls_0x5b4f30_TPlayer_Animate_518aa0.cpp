@@ -129,7 +129,7 @@ LAB_00518bcc:
     uVar7 = (**(code **)(*(int *)param_1[0xae] + 0x1f0))();
     FUN_004714e0(uVar7);
     FUN_004715e0(uVar10);
-    puVar8 = (undefined4 *)FUN_00429950(uVar4,uVar5,uVar6);
+    puVar8 = (undefined4 *)FUN_00429950_BlitEffect_PackRGB(uVar4,uVar5,uVar6);
     FUN_00471820(*puVar8);
     FUN_004716c0(&iStack_50);
   }

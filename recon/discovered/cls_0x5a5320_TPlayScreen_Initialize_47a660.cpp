@@ -376,7 +376,7 @@ LAB_0047b060:
     uVar10 = 0;
     uVar4 = FUN_00444e20(0);
     uVar2 = extraout_ECX;
-    FUN_00419dd0(uVar4);
+    FUN_00419dd0_BlitEffect_SetField(uVar4);
     (**(code **)(iVar3 + 0x30))(8,uVar2,uVar10);
     *(int *)(param_1 + 0x40) = param_1 + 0x5bc;
     *(int *)(param_1 + 0x44) = param_1 + 0x5bc;

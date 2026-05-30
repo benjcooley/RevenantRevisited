@@ -27,7 +27,7 @@ undefined4 __fastcall FUN_0053a2c0_TLogoScreen_Initialize(int param_1)
   FUN_0043a020();
   iVar7 = *(int *)(param_1 + 0x70);
   uVar5 = FUN_00444e20();
-  FUN_00419dd0(uVar5);
+  FUN_00419dd0_BlitEffect_SetField(uVar5);
   (**(code **)(iVar7 + 0x30))(8);
   *(int *)(param_1 + 0x40) = param_1 + 0x70;
   *(int *)(param_1 + 0x44) = param_1 + 0x70;

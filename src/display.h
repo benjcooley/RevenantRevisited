@@ -88,6 +88,15 @@ class TDisplay : public TSurface
     // swapchain in that order. ImGui is always rendered last.
     bool FlipPage(bool Wait = true);
 
+    // Headless-capture target: when FrameSnap is active, FlipPage mirrors
+    // the swapchain composite into this offscreen sg_image RGBA8 RT so
+    // framesnap.cpp can read it via Metal blit (renderer_readback). Lazily
+    // allocated on the first FlipPage in snap mode; returns invalid id
+    // outside snap mode. Display.IsActive() is the lifetime guard.
+    [[nodiscard]] sg_image SnapCaptureImage() const { return snap_capture_color; }
+    [[nodiscard]] int32_t  SnapCaptureWidth()  const { return snap_capture_w; }
+    [[nodiscard]] int32_t  SnapCaptureHeight() const { return snap_capture_h; }
+
   private:
     int32_t currentpage = 0;
     bool    updateenabled = true;
@@ -97,4 +106,7 @@ class TDisplay : public TSurface
     TSurface* savezbuffer = nullptr;
     bool      imgui_initialized = false;
     bool      overlay_pass_open = false;
+    sg_image  snap_capture_color { SG_INVALID_ID };
+    int32_t   snap_capture_w = 0;
+    int32_t   snap_capture_h = 0;
 };

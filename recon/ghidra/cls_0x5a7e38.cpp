@@ -1677,7 +1677,7 @@ void __thiscall OOAnalyzer::cls_0x5a7e38::meth_0x4d9ea0(cls_0x5a7e38 *this)
     cls_0x419dd0::cls_0x419dd0((cls_0x419dd0 *)&stack0xffffff70);
     uVar13 = 0;
     uVar3 = cls_0x4da8f0::meth_0x4da8f0(*(cls_0x4da8f0 **)(unaff_EBP + 4));
-    cls_0x5a68d8::meth_0x4be2b0
+    cls_0x5a68d8::meth_0x4be2b0_CompositeBuffer
               (pcVar4,0,0,0x40,(-(uint)(DAT_00669324 != 0) & 0x20) + 0x20,uVar3,uVar13);
     this_00 = (cls_0x5a68d8 *)FUN_00482fb0(0x78);
     local_c = (void *)0x4;
@@ -1693,7 +1693,7 @@ void __thiscall OOAnalyzer::cls_0x5a7e38::meth_0x4d9ea0(cls_0x5a7e38 *this)
       this_01 = this_00;
     }
     local_c = (void *)0xffffffff;
-    FUN_00438d80(local_68,0,0,0,0,pcVar4->mbr_0x4,pcVar4->mbr_0x8,0x100);
+    FUN_00438d80_BlitEffect_StructInit(local_68,0,0,0,0,pcVar4->mbr_0x4,pcVar4->mbr_0x8,0x100);
     cVar14.mbr_0x0 = (dword)pcVar4;
     (*this_01->vftptr_0x0->virt_meth_0x4bd490_92)(this_01,local_68);
     uVar3 = (*this_01->vftptr_0x0->virt_meth_0x438cf0_16)(this_01);

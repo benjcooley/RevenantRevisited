@@ -27,7 +27,7 @@ Structure cls_0x5a3980::vftable_5a3980 {
    80   virt_meth_0x4a6300 *   4   virt_meth_0x4a6300_80   "virtual function table entry."
    84   virt_meth_0x419eb0 *   4   virt_meth_0x419eb0_84   "virtual function table entry."
    88   FUN_004bcef0 *   4   FUN_004bcef0_88   "virtual function table entry."
-   92   FUN_004bd490 *   4   FUN_004bd490_92   "virtual function table entry."
+   92   FUN_004bd490_Blit *   4   FUN_004bd490_92   "virtual function table entry."
    96   FUN_004bd5c0 *   4   FUN_004bd5c0_96   "virtual function table entry."
    100   virt_meth_0x4a6930 *   4   virt_meth_0x4a6930_100   "virtual function table entry."
    104   virt_meth_0x4a60c0 *   4   virt_meth_0x4a60c0_104   "virtual function table entry."

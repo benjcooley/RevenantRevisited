@@ -345,13 +345,13 @@ static SSectorCullRange ComputeRenderSectorRange(const TImpl& s,
     auto unzoomScreen = [cull_scale](int32_t v) -> int32_t {
         return int32_t(std::floor(float(v) * cull_scale));
     };
-    ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
+    ::ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
                   unzoomScreen(-cam_oy - TRenderer::kGBufPad), c0, 0);
-    ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
+    ::ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
                   unzoomScreen(-cam_oy - TRenderer::kGBufPad), c1, 0);
-    ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
+    ::ScreenToWorld(unzoomScreen(-cam_ox - TRenderer::kGBufPad),
                   unzoomScreen(vh - cam_oy + TRenderer::kGBufPad), c2, 0);
-    ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
+    ::ScreenToWorld(unzoomScreen(vw - cam_ox + TRenderer::kGBufPad),
                   unzoomScreen(vh - cam_oy + TRenderer::kGBufPad), c3, 0);
 
     const int32_t min_wx = (std::min)((std::min)(c0.x, c1.x), (std::min)(c2.x, c3.x)) + s.sectorCameraWorld.x - SECTORWIDTH;
@@ -1266,6 +1266,40 @@ int32_t TMapRenderer::CameraLevel() const
 S3DPoint TMapRenderer::CameraWorld() const
 {
     return impl ? impl->sectorCameraWorld : S3DPoint{0, 0, 0};
+}
+
+void TMapRenderer::ScreenToWorld(int32_t screen_x, int32_t screen_y,
+                                 int32_t z_floor, S3DPoint &out) const
+{
+    out = { 0, 0, z_floor };
+    if (!impl || !Display.IsActive()) return;
+
+    const Impl& s = *impl;
+    const int32_t vw = Display.Width();
+    const int32_t vh = Display.Height();
+    const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
+    const float effective_camera_zoom =
+        (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
+
+    int32_t cam_ox_logical = 0, cam_oy_logical = 0;
+    s.sectorCameraOriginScreen(cam_ox_logical, cam_oy_logical);
+    const int32_t cam_ox = int32_t(std::lround(
+        camera_view.offset_x + float(cam_ox_logical) * camera_view.scale));
+    const int32_t cam_oy = int32_t(std::lround(
+        camera_view.offset_y + float(cam_oy_logical) * camera_view.scale));
+
+    // Same projection unwrap the editor's light-drag uses:
+    //   1) subtract the camera origin -> camera-local screen pixels
+    //   2) divide by zoom -> camera-local logical pixels
+    //   3) ScreenToWorld with the target z_floor -> world *relative to camera*
+    //   4) add the camera's world position -> absolute world.
+    S3DPoint wp_rel;
+    ::ScreenToWorld(int32_t(std::lround(float(screen_x - cam_ox) / effective_camera_zoom)),
+                    int32_t(std::lround(float(screen_y - cam_oy) / effective_camera_zoom)),
+                    wp_rel, z_floor);
+    out.x = wp_rel.x + s.sectorCameraWorld.x;
+    out.y = wp_rel.y + s.sectorCameraWorld.y;
+    out.z = z_floor;
 }
 
 void TMapRenderer::GetWorldToPixel(int32_t dst_x, int32_t dst_y,
@@ -2782,7 +2816,7 @@ void TMapRenderer::RenderFrame()
     if (s.lights_on)
     {
         S3DPoint vc_rel;
-        ScreenToWorld(int32_t(std::lround(float(vw / 2 - cam_ox) / (std::max)(effective_camera_zoom, 0.0001f))),
+        ::ScreenToWorld(int32_t(std::lround(float(vw / 2 - cam_ox) / (std::max)(effective_camera_zoom, 0.0001f))),
                       int32_t(std::lround(float(vh / 2 - cam_oy) / (std::max)(effective_camera_zoom, 0.0001f))),
                       vc_rel, 0);
         const S3DPoint vc_w = vc_rel + s.sectorCameraWorld;
@@ -3077,7 +3111,7 @@ void TMapRenderer::HandleMouseMove(int32_t button, int32_t x, int32_t y)
             const int32_t cam_ox = int32_t(std::lround(camera_view.offset_x + float(cam_ox_logical) * camera_view.scale));
             const int32_t cam_oy = int32_t(std::lround(camera_view.offset_y + float(cam_oy_logical) * camera_view.scale));
             S3DPoint wp_rel;
-            ScreenToWorld(int32_t(std::lround(float(x - cam_ox) / effective_camera_zoom)),
+            ::ScreenToWorld(int32_t(std::lround(float(x - cam_ox) / effective_camera_zoom)),
                           int32_t(std::lround(float(y - cam_oy) / effective_camera_zoom)),
                           wp_rel,
                           int32_t(s.lightDragStartOiPos.z));
@@ -3098,7 +3132,7 @@ void TMapRenderer::HandleMouseMove(int32_t button, int32_t x, int32_t y)
     const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
     const float effective_camera_zoom = (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
     S3DPoint drag_delta_w = {0,0,0};
-    ScreenToWorld(int32_t(std::lround(float(x - s.dragStartX) / effective_camera_zoom)),
+    ::ScreenToWorld(int32_t(std::lround(float(x - s.dragStartX) / effective_camera_zoom)),
                   int32_t(std::lround(float(y - s.dragStartY) / effective_camera_zoom)),
                   drag_delta_w,
                   0);
