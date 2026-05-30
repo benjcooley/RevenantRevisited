@@ -1498,6 +1498,8 @@ typedef struct sapp_desc {
     bool high_dpi;                      // whether the rendering canvas is full-resolution on HighDPI displays
     bool fullscreen;                    // whether the window should be created in fullscreen mode
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
+    bool hidden;                        // [RevenantRevisited] if true, skip makeKeyAndOrderFront so the NSWindow never appears on screen (macOS only); paired with our --headless CLI flag for snap-only test runs
+    bool no_dock_icon;                  // [RevenantRevisited] if true, set NSApplicationActivationPolicyAccessory so the app gets no Dock icon (paired with hidden=true)
     const char* window_title;           // the window title as UTF-8 encoded string
     bool enable_clipboard;              // enable clipboard access, default is false
     int clipboard_size;                 // max size of clipboard content in bytes
@@ -3728,9 +3730,28 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         /* ^^^ on GL, this already toggles a rendered frame, so set the valid flag before */
         [_sapp.macos.window toggleFullScreen:self];
     }
-    NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
-    [NSApp activateIgnoringOtherApps:YES];
-    [_sapp.macos.window makeKeyAndOrderFront:nil];
+    /* [RevenantRevisited] hidden / no_dock_icon: honor headless desc. We
+       still need the NSWindow + CAMetalLayer (otherwise sokol_gfx has no
+       device + frame timer), but we DON'T show the window and we DON'T
+       grab activation. The Metal swapchain is happy to render without
+       ever being presented to a visible NSScreen. */
+    if (_sapp.desc.no_dock_icon) {
+        NSApp.activationPolicy = NSApplicationActivationPolicyAccessory;
+    } else {
+        NSApp.activationPolicy = NSApplicationActivationPolicyRegular;
+    }
+    if (!_sapp.desc.hidden) {
+        [NSApp activateIgnoringOtherApps:YES];
+        [_sapp.macos.window makeKeyAndOrderFront:nil];
+    } else {
+        /* Move the window off-screen as belt-and-suspenders; even though
+           we never order it front, some macOS code paths may still
+           composite an NSWindow whose contentView is layer-backed. */
+        const NSRect cur = [_sapp.macos.window frame];
+        [_sapp.macos.window setFrameOrigin:NSMakePoint(-(cur.size.width + 32.0),
+                                                       -(cur.size.height + 32.0))];
+        [_sapp.macos.window setIgnoresMouseEvents:YES];
+    }
     _sapp_macos_update_dimensions();
     [NSEvent setMouseCoalescingEnabled:NO];
 }
