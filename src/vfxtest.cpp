@@ -3323,6 +3323,102 @@ void QuicksandBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->qs->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
+// =========================================================================
+// * Wave-2B Weather B (W01/W02/W03) — BLOCKED entries                      *
+// *                                                                       *
+// * SpawnForTest returns nullptr by design (see effect.h banner). The     *
+// * harness still registers them so the cycle/IDs are present; they just *
+// * render nothing until the upstream blockers (TStormAnimator + multi-  *
+// * sub-object I3D mesh draws) are brought online.                       *
+// =========================================================================
+
+// W01 TMeteorStormEffect_Bespoke
+struct SMeteorStormBespokeCtx {
+    TMeteorStormEffect_Bespoke* eff = nullptr;
+};
+
+void* MeteorStormBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SMeteorStormBespokeCtx();
+    c->eff = TMeteorStormEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TMeteorStormEffect_Bespoke::SpawnForTest_BESPOKE returned"
+                 " null; W01 bespoke entry will draw nothing (BLOCKED)");
+    return c;
+}
+
+void MeteorStormBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SMeteorStormBespokeCtx*>(cp);
+    delete c->eff;
+    delete c;
+}
+
+void MeteorStormBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SMeteorStormBespokeCtx*>(cp);
+    if (c && c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// W02 TTornadoEffect_Bespoke
+struct STornadoBespokeCtx {
+    TTornadoEffect_Bespoke* eff = nullptr;
+};
+
+void* TornadoBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new STornadoBespokeCtx();
+    c->eff = TTornadoEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TTornadoEffect_Bespoke::SpawnForTest_BESPOKE returned"
+                 " null; W02 bespoke entry will draw nothing (BLOCKED)");
+    return c;
+}
+
+void TornadoBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<STornadoBespokeCtx*>(cp);
+    delete c->eff;
+    delete c;
+}
+
+void TornadoBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<STornadoBespokeCtx*>(cp);
+    if (c && c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// W03 TVortexEffect_Bespoke
+struct SVortexBespokeCtx {
+    TVortexEffect_Bespoke* eff = nullptr;
+};
+
+void* VortexBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SVortexBespokeCtx();
+    c->eff = TVortexEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TVortexEffect_Bespoke::SpawnForTest_BESPOKE returned"
+                 " null; W03 bespoke entry will draw nothing (BLOCKED)");
+    return c;
+}
+
+void VortexBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SVortexBespokeCtx*>(cp);
+    delete c->eff;
+    delete c;
+}
+
+void VortexBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SVortexBespokeCtx*>(cp);
+    if (c && c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 }  // namespace
 
 // Defer registration until VfxTest::Initialize runs (renderer must
@@ -3955,6 +4051,47 @@ struct SVfxTestBootstrap {
         quicksand_bespoke.submit        = [](void* c, EFxDebugMode d) { QuicksandBespokeSubmit(c, d); };
         quicksand_bespoke.destroy       = [](void* c) { QuicksandBespokeDestroy(c); };
         VfxTest::DeferredRegister(quicksand_bespoke);
+
+        // Wave-2B Weather B — large composite spawners (BLOCKED).
+        // W01 TMeteorStormAnimator: composite IM+PE+LS+SR; delegates to
+        // TStormAnimator (effectcomp.cpp) which is currently `#if 0`'d.
+        // Stub registered so cycle/IDs are present; renders nothing.
+        VfxTest::SEffect meteorstorm_bespoke = {};
+        meteorstorm_bespoke.id            = "TMeteorStormEffect_BESPOKE";
+        meteorstorm_bespoke.family        = "weather";
+        meteorstorm_bespoke.pipeline      = "IM+PE+LS+SR";
+        meteorstorm_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        meteorstorm_bespoke.factory       = [](const S3DPoint& o) -> void* { return MeteorStormBespokeSpawn(o); };
+        meteorstorm_bespoke.submit        = [](void* c, EFxDebugMode d) { MeteorStormBespokeSubmit(c, d); };
+        meteorstorm_bespoke.destroy       = [](void* c) { MeteorStormBespokeDestroy(c); };
+        VfxTest::DeferredRegister(meteorstorm_bespoke);
+
+        // W02 TTornadoAnimator: composite PE+SR. Three particle families
+        // (tornado helix / ice chunks+splashes / flame trail) using T3D
+        // animator GetObject(N)+RenderObject() multi-mesh path not yet
+        // available in the bespoke pipeline.
+        VfxTest::SEffect tornado_bespoke = {};
+        tornado_bespoke.id            = "TTornadoEffect_BESPOKE";
+        tornado_bespoke.family        = "weather";
+        tornado_bespoke.pipeline      = "PE+SR";
+        tornado_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        tornado_bespoke.factory       = [](const S3DPoint& o) -> void* { return TornadoBespokeSpawn(o); };
+        tornado_bespoke.submit        = [](void* c, EFxDebugMode d) { TornadoBespokeSubmit(c, d); };
+        tornado_bespoke.destroy       = [](void* c) { TornadoBespokeDestroy(c); };
+        VfxTest::DeferredRegister(tornado_bespoke);
+
+        // W03 TVortexAnimator: PE+SR sucking spiral. Multi-sub-object I3D
+        // mesh draws plus per-vertex alpha writeback into LVERTEX.color —
+        // bespoke pipeline lacks both.
+        VfxTest::SEffect vortex_bespoke = {};
+        vortex_bespoke.id            = "TVortexEffect_BESPOKE";
+        vortex_bespoke.family        = "weather";
+        vortex_bespoke.pipeline      = "PE+SR";
+        vortex_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        vortex_bespoke.factory       = [](const S3DPoint& o) -> void* { return VortexBespokeSpawn(o); };
+        vortex_bespoke.submit        = [](void* c, EFxDebugMode d) { VortexBespokeSubmit(c, d); };
+        vortex_bespoke.destroy       = [](void* c) { VortexBespokeDestroy(c); };
+        VfxTest::DeferredRegister(vortex_bespoke);
     }
 };
 SVfxTestBootstrap g_vfx_test_bootstrap;

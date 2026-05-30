@@ -4844,6 +4844,84 @@ class TPixieEffect_Bespoke : public TEffect
     double         sim_accum_ms_ = 0.0;
 };
 
+// =========================================================================
+// * Wave-2B Weather B — large composite spawners (W01/W02/W03)             *
+// *                                                                       *
+// * These three effects (Meteor Storm / Tornado / Vortex) are large       *
+// * composite animators that lean on infrastructure not yet available     *
+// * in the bespoke port pipeline:                                         *
+// *                                                                      *
+// *   - W01 TMeteorStormAnimator delegates to TStormAnimator              *
+// *     (effectcomp.{h,cpp}) for spawn/animate/render. The whole          *
+// *     TStormAnimator body in effectcomp.cpp is gated `#if 0` (Phase-3   *
+// *     sokol pipeline TODO). Without that subsystem ported there is     *
+// *     no faithful path here.                                           *
+// *                                                                      *
+// *   - W02 TTornadoAnimator renders three multi-sub-object I3D mesh     *
+// *     families (flames / tornado particles / ice chunks+splashes) via  *
+// *     T3DAnimator::GetObject(N)+RenderObject(), with full per-instance *
+// *     D3DMATRIX matrix stacks. The bespoke pipeline today only         *
+// *     submits billboards/strips/lights — no mesh-RenderObject path.    *
+// *                                                                      *
+// *   - W03 TVortexAnimator does the same multi-sub-object mesh dance    *
+// *     (sub-objects 0/1/2 + 36-vert glow + particle system) plus heavy  *
+// *     per-vertex alpha writeback into LVERTEX.color (D3DRGBA). Same    *
+// *     blocker.                                                         *
+// *                                                                      *
+// * Per batch protocol: stub SpawnForTest to return nullptr + log_warn,  *
+// * mark blocked. The classes exist so the harness has something to      *
+// * register against and a future port can flesh out the bodies         *
+// * without touching the registration side.                              *
+// =========================================================================
+
+_CLASSDEF(TMeteorStormEffect_Bespoke)
+
+class TMeteorStormEffect_Bespoke : public TEffect
+{
+  public:
+    TMeteorStormEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TMeteorStormEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMeteorStormEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TMeteorStormEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+};
+
+_CLASSDEF(TTornadoEffect_Bespoke)
+
+class TTornadoEffect_Bespoke : public TEffect
+{
+  public:
+    TTornadoEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TTornadoEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TTornadoEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TTornadoEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+};
+
+_CLASSDEF(TVortexEffect_Bespoke)
+
+class TVortexEffect_Bespoke : public TEffect
+{
+  public:
+    TVortexEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TVortexEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TVortexEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TVortexEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+};
+
 // *************************************************************************
 // * wave-bespoke-W2A: weather / ground-scatter family — fog / sandswirl /  *
 // * quicksand. Faithful direct ports of the snapshot animator bodies for   *

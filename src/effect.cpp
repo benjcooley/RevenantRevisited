@@ -12049,6 +12049,84 @@ void TSandswirlEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 }
 
 // =========================================================================
+// * Wave-2B Weather B stubs (W01/W02/W03) — see effect.h banner.           *
+// *                                                                       *
+// * These three classes are placeholders. The snapshot animator bodies   *
+// * (src/effect_old.cpp:6367-6503 / :9769-10218 / :12860-13605) depend   *
+// * on infrastructure not yet available in the bespoke pipeline:         *
+// *                                                                      *
+// *   - TStormAnimator (effectcomp.cpp) — entire body is `#if 0` Phase-3 *
+// *     sokol-pipeline TODO. W01 cannot be faithfully ported until that  *
+// *     subsystem is brought back online.                                *
+// *   - T3DAnimator::GetObject(N) + RenderObject() multi-sub-object I3D  *
+// *     mesh draws with full per-instance D3DMATRIX stacks. The bespoke  *
+// *     pipeline only submits billboards/strips/lights today. W02 and   *
+// *     W03 each render 3-4 distinct mesh sub-objects per frame, plus    *
+// *     per-vertex alpha writeback into LVERTEX.color for W03.           *
+// *                                                                      *
+// * Per batch protocol, SpawnForTest returns nullptr + log_warn so the   *
+// * harness entries register cleanly and the cycle skips past these,    *
+// * status = blocked.                                                    *
+// =========================================================================
+
+// ----- W01 TMeteorStormEffect_Bespoke (BLOCKED) ---------------------------
+
+TMeteorStormEffect_Bespoke*
+TMeteorStormEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    (void)origin;
+    log_warn("[meteorstorm] SpawnForTest_BESPOKE: BLOCKED — TStormAnimator "
+             "subsystem (effectcomp.cpp) is gated `#if 0` Phase-3 sokol "
+             "pipeline TODO; W01 will draw nothing");
+    return nullptr;
+}
+
+void TMeteorStormEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    (void)debug_mode;
+    // Stub: no submission. Spawn already returned nullptr.
+}
+
+// ----- W02 TTornadoEffect_Bespoke (BLOCKED) -------------------------------
+
+TTornadoEffect_Bespoke*
+TTornadoEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    (void)origin;
+    log_warn("[tornado] SpawnForTest_BESPOKE: BLOCKED — snapshot Render "
+             "(effect_old.cpp:9769-10218) uses T3DAnimator multi-sub-object "
+             "I3D mesh RenderObject() path not available in the bespoke "
+             "pipeline; W02 will draw nothing");
+    return nullptr;
+}
+
+void TTornadoEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    (void)debug_mode;
+    // Stub: no submission. Spawn already returned nullptr.
+}
+
+// ----- W03 TVortexEffect_Bespoke (BLOCKED) --------------------------------
+
+TVortexEffect_Bespoke*
+TVortexEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    (void)origin;
+    log_warn("[vortex] SpawnForTest_BESPOKE: BLOCKED — snapshot Render "
+             "(effect_old.cpp:12860-13605) uses T3DAnimator multi-sub-object "
+             "I3D mesh RenderObject() + per-vertex LVERTEX.color alpha "
+             "writeback not available in the bespoke pipeline; W03 will "
+             "draw nothing");
+    return nullptr;
+}
+
+void TVortexEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    (void)debug_mode;
+    // Stub: no submission. Spawn already returned nullptr.
+}
+
+// =========================================================================
 // W05 — TQuicksandEffect_Bespoke
 // =========================================================================
 //
