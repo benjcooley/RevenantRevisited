@@ -1799,6 +1799,75 @@ void FireSwarmBespokeSubmit(void* cp, EFxDebugMode dbg)
         return;
 
     if (!c->swarm || !c->swarm->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->swarm;
+            c->swarm = TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap   = kFireSwarmBespokeRetriggerGap;
+        }
+    }
+
+    if (c->swarm)
+        c->swarm->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- FB: real TBurnEffect_Bespoke (M04 first-pass) -----------------------
+// Faithful direct port of the snapshot TBurnAnimator. Two-system
+// (fire + smoke) particle field with fire→smoke promotion, AdditiveStraight
+// blend. First-pass drift: spawn at effect origin rather than random
+// character bones (no CharAnimator wired in the harness) — see effect.cpp.
+//
+// Static preview cadence: the effect's own ramp/drain envelope plays out
+// over ~4 s and then self-kills; re-fires after a clear gap.
+struct SBurnBespokeCtx {
+    TBurnEffect_Bespoke* burn   = nullptr;
+    S3DPoint             origin = {0, 0, 0};
+    float                gap    = 0.0f;
+};
+
+constexpr float kBurnBespokeRetriggerGap = 1.0f;
+
+void* BurnBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SBurnBespokeCtx();
+    c->origin = origin;
+    c->burn   = TBurnEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->burn)
+        log_warn("[vfx] TBurnEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " M04 bespoke entry will draw nothing");
+    return c;
+}
+
+void BurnBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SBurnBespokeCtx*>(cp);
+    delete c->burn;
+    delete c;
+}
+
+void BurnBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SBurnBespokeCtx*>(cp);
+    if (!c)
+        return;
+
+    if (!c->burn || !c->burn->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->burn;
+            c->burn = TBurnEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap  = kBurnBespokeRetriggerGap;
+        }
+    }
+
+    if (c->burn)
+        c->burn->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 // --- Ice family bespoke harness wiring (wave-bespoke-03-ice) -------------
 // Three sister effects: I20 (TIceEffect_Bespoke — STUB, blocked on
 // forensics), I21 (TIceBoltEffect_Bespoke — composite freeze beam, ~5 s
@@ -1878,6 +1947,65 @@ void IceBoltBespokeSubmit(void* cp, EFxDebugMode dbg)
     if (!c)
         return;
     if (!c->bolt || !c->bolt->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->bolt;
+            c->bolt = TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap  = kIceBoltBespokeRetriggerGap;
+        }
+    }
+    if (c->bolt)
+        c->bolt->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- I22 TIcedEffect bespoke wiring.
+struct SIcedBespokeCtx {
+    TIcedEffect_Bespoke* iced   = nullptr;
+    S3DPoint             origin = {0, 0, 0};
+    float                gap    = 0.0f;
+};
+
+constexpr float kIcedBespokeRetriggerGap = 1.5f;
+
+void* IcedBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SIcedBespokeCtx();
+    c->origin = origin;
+    c->iced   = TIcedEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->iced)
+        log_warn("[vfx] TIcedEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " I22 bespoke entry will draw nothing");
+    return c;
+}
+
+void IcedBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SIcedBespokeCtx*>(cp);
+    delete c->iced;
+    delete c;
+}
+
+void IcedBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SIcedBespokeCtx*>(cp);
+    if (!c)
+        return;
+    if (!c->iced || !c->iced->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->iced;
+            c->iced = TIcedEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap  = kIcedBespokeRetriggerGap;
+        }
+    }
+    if (c->iced)
+        c->iced->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 // --- wave-bespoke-04 Magic family (M01/M03/M05/X09) ----------------------
 // First-pass faithful direct ports of TAura/THeal/TMist/TShield animator
 // bodies as T<Name>Effect_Bespoke classes. Each effect: factory wraps
@@ -1938,95 +2066,49 @@ void HealBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
         {
-            delete c->swarm;
-            c->swarm = TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
-            c->gap   = kFireSwarmBespokeRetriggerGap;
+            delete c->heal;
+            c->heal = THealEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap  = kHealBespokeRetriggerGap;
         }
     }
-
-    if (c->swarm)
-        c->swarm->TickAndSubmitForTest_BESPOKE(dbg);
+    if (c->heal)
+        c->heal->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
-// --- FB: real TBurnEffect_Bespoke (M04 first-pass) -----------------------
-// Faithful direct port of the snapshot TBurnAnimator. Two-system
-// (fire + smoke) particle field with fire→smoke promotion, AdditiveStraight
-// blend. First-pass drift: spawn at effect origin rather than random
-// character bones (no CharAnimator wired in the harness) — see effect.cpp.
-//
-// Static preview cadence: the effect's own ramp/drain envelope plays out
-// over ~4 s and then self-kills; re-fires after a clear gap.
-struct SBurnBespokeCtx {
-    TBurnEffect_Bespoke* burn   = nullptr;
-            delete c->bolt;
-            c->bolt = TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
-            c->gap  = kIceBoltBespokeRetriggerGap;
-        }
-    }
-    if (c->bolt)
-        c->bolt->TickAndSubmitForTest_BESPOKE(dbg);
-}
-
-// --- I22 TIcedEffect bespoke wiring.
-struct SIcedBespokeCtx {
-    TIcedEffect_Bespoke* iced   = nullptr;
-    S3DPoint             origin = {0, 0, 0};
-    float                gap    = 0.0f;
-};
-
-constexpr float kBurnBespokeRetriggerGap = 1.0f;
-
-void* BurnBespokeSpawn(const S3DPoint& origin)
+struct SMistBespokeCtx { TMistEffect_Bespoke* mist = nullptr; };
+void* MistBespokeSpawn(const S3DPoint& origin)
 {
-    auto* c = new SBurnBespokeCtx();
-    c->origin = origin;
-    c->burn   = TBurnEffect_Bespoke::SpawnForTest_BESPOKE(origin);
-    if (!c->burn)
-        log_warn("[vfx] TBurnEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
-                 " M04 bespoke entry will draw nothing");
+    auto* c = new SMistBespokeCtx();
+    c->mist = TMistEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->mist)
+        log_warn("[vfx] TMistEffect_Bespoke::SpawnForTest_BESPOKE returned null; M05 BESPOKE entry will draw nothing");
     return c;
 }
-
-void BurnBespokeDestroy(void* cp)
+void MistBespokeDestroy(void* cp) { auto* c = static_cast<SMistBespokeCtx*>(cp); delete c->mist; delete c; }
+void MistBespokeSubmit(void* cp, EFxDebugMode dbg)
 {
-    auto* c = static_cast<SBurnBespokeCtx*>(cp);
-    delete c->burn;
-    delete c;
+    auto* c = static_cast<SMistBespokeCtx*>(cp);
+    if (c && c->mist)
+        c->mist->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
-void BurnBespokeSubmit(void* cp, EFxDebugMode dbg)
+struct SShieldBespokeCtx { TShieldEffect_Bespoke* shield = nullptr; };
+void* ShieldBespokeSpawn(const S3DPoint& origin)
 {
-    auto* c = static_cast<SBurnBespokeCtx*>(cp);
-    if (!c)
-        return;
-
-    if (!c->burn || !c->burn->IsAlive())
-constexpr float kIcedBespokeRetriggerGap = 1.5f;
-
-void* IcedBespokeSpawn(const S3DPoint& origin)
-{
-    auto* c = new SIcedBespokeCtx();
-    c->origin = origin;
-    c->iced   = TIcedEffect_Bespoke::SpawnForTest_BESPOKE(origin);
-    if (!c->iced)
-        log_warn("[vfx] TIcedEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
-                 " I22 bespoke entry will draw nothing");
+    auto* c = new SShieldBespokeCtx();
+    c->shield = TShieldEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->shield)
+        log_warn("[vfx] TShieldEffect_Bespoke::SpawnForTest_BESPOKE returned null; X09 entry will draw nothing");
     return c;
 }
-
-void IcedBespokeDestroy(void* cp)
+void ShieldBespokeDestroy(void* cp) { auto* c = static_cast<SShieldBespokeCtx*>(cp); delete c->shield; delete c; }
+void ShieldBespokeSubmit(void* cp, EFxDebugMode dbg)
 {
-    auto* c = static_cast<SIcedBespokeCtx*>(cp);
-    delete c->iced;
-    delete c;
+    auto* c = static_cast<SShieldBespokeCtx*>(cp);
+    if (c && c->shield)
+        c->shield->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
-void IcedBespokeSubmit(void* cp, EFxDebugMode dbg)
-{
-    auto* c = static_cast<SIcedBespokeCtx*>(cp);
-    if (!c)
-        return;
-    if (!c->iced || !c->iced->IsAlive())
 // --- FB: real TMissileEffect_Bespoke (S08 base infrastructure) ----------
 // Drives the bespoke TMissileEffect base 3-state LAUNCH -> FLY -> EXPLODE
 // machine. This is the shared infra base for F07 fireball / M07 photon /
@@ -2072,62 +2154,6 @@ void MissileBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
         {
-            delete c->burn;
-            c->burn = TBurnEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
-            c->gap  = kBurnBespokeRetriggerGap;
-        }
-    }
-
-    if (c->burn)
-        c->burn->TickAndSubmitForTest_BESPOKE(dbg);
-            delete c->iced;
-            c->iced = TIcedEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
-            c->gap  = kIcedBespokeRetriggerGap;
-        }
-    }
-    if (c->iced)
-        c->iced->TickAndSubmitForTest_BESPOKE(dbg);
-            delete c->heal;
-            c->heal = THealEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
-            c->gap  = kHealBespokeRetriggerGap;
-        }
-    }
-    if (c->heal)
-        c->heal->TickAndSubmitForTest_BESPOKE(dbg);
-}
-
-struct SMistBespokeCtx { TMistEffect_Bespoke* mist = nullptr; };
-void* MistBespokeSpawn(const S3DPoint& origin)
-{
-    auto* c = new SMistBespokeCtx();
-    c->mist = TMistEffect_Bespoke::SpawnForTest_BESPOKE(origin);
-    if (!c->mist)
-        log_warn("[vfx] TMistEffect_Bespoke::SpawnForTest_BESPOKE returned null; M05 BESPOKE entry will draw nothing");
-    return c;
-}
-void MistBespokeDestroy(void* cp) { auto* c = static_cast<SMistBespokeCtx*>(cp); delete c->mist; delete c; }
-void MistBespokeSubmit(void* cp, EFxDebugMode dbg)
-{
-    auto* c = static_cast<SMistBespokeCtx*>(cp);
-    if (c && c->mist)
-        c->mist->TickAndSubmitForTest_BESPOKE(dbg);
-}
-
-struct SShieldBespokeCtx { TShieldEffect_Bespoke* shield = nullptr; };
-void* ShieldBespokeSpawn(const S3DPoint& origin)
-{
-    auto* c = new SShieldBespokeCtx();
-    c->shield = TShieldEffect_Bespoke::SpawnForTest_BESPOKE(origin);
-    if (!c->shield)
-        log_warn("[vfx] TShieldEffect_Bespoke::SpawnForTest_BESPOKE returned null; X09 entry will draw nothing");
-    return c;
-}
-void ShieldBespokeDestroy(void* cp) { auto* c = static_cast<SShieldBespokeCtx*>(cp); delete c->shield; delete c; }
-void ShieldBespokeSubmit(void* cp, EFxDebugMode dbg)
-{
-    auto* c = static_cast<SShieldBespokeCtx*>(cp);
-    if (c && c->shield)
-        c->shield->TickAndSubmitForTest_BESPOKE(dbg);
             delete c->missile;
             c->missile = TMissileEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
             c->gap = kMissileBespokeRetriggerGap;
@@ -3282,6 +3308,7 @@ struct SVfxTestBootstrap {
         burn_bespoke.submit        = [](void* c, EFxDebugMode d) { BurnBespokeSubmit(c, d); };
         burn_bespoke.destroy       = [](void* c) { BurnBespokeDestroy(c); };
         VfxTest::DeferredRegister(burn_bespoke);
+
         // --- Ice family bespoke first-pass ports (wave-bespoke-03-ice).
         // Three sister effects in the frost-spell chain. I20 is STUB
         // (blocked on forensics doc); I21+I22 are faithful direct ports
@@ -3315,6 +3342,7 @@ struct SVfxTestBootstrap {
         iced_bespoke.submit        = [](void* c, EFxDebugMode d) { IcedBespokeSubmit(c, d); };
         iced_bespoke.destroy       = [](void* c) { IcedBespokeDestroy(c); };
         VfxTest::DeferredRegister(iced_bespoke);
+
         // --- wave-bespoke-04 Magic family entries -----------------------
         // First-pass faithful direct ports of TAura/THeal/TMist/TShield
         // animator bodies. M01/M03 are character-attached buff visuals
@@ -3361,6 +3389,7 @@ struct SVfxTestBootstrap {
         shield_bespoke.submit        = [](void* c, EFxDebugMode d) { ShieldBespokeSubmit(c, d); };
         shield_bespoke.destroy       = [](void* c) { ShieldBespokeDestroy(c); };
         VfxTest::DeferredRegister(shield_bespoke);
+
         // S08: TMissileEffect base infrastructure. Pure state-machine
         // (LAUNCH -> FLY -> EXPLODE) that F07/M07/X19 derive from. No
         // visual of its own — harness shows a single state-colored
