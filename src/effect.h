@@ -4074,4 +4074,297 @@ class TShieldEffect_Bespoke : public TEffect
     bool           alive_         = true;
     TTextureHandle texture_       = kInvalidTexture;
     float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+// * wave-bespoke-05: sparkle/glow family — flare / sym-glow / photon /     *
+// * pixie. Faithful direct ports of the snapshot animator bodies for the   *
+// * --test=vfx harness, mirroring the TBloodEffect_Bespoke pattern at      *
+// * effect.cpp:1690-2065. Each class loads its real .I3D imagery (no       *
+// * procedural stand-in per feedback_no_standins) and runs the snapshot's  *
+// * per-tick state machine LINE BY LINE against an internal state array.  *
+// * Pipeline + blend preserved verbatim — SetBlendState in the snapshot    *
+// * means Alpha here; SetAddBlendState means AdditiveStraight; no          *
+// * reinterpretation. Each effect couples a point light (LS) where the     *
+// * family cross-check says it should. Framerate-independent via a 24Hz    *
+// * sim-tick accumulator (per feedback_framerate_independent_anim).        *
+// *************************************************************************
+
+// ----- X03 TFlareAnimator -------------------------------------------------
+//
+// "Flare" — 10 small ground-flat textured quads bouncing on the floor.
+// REGISTER_3DANIMATOR("Flare", TFlareAnimator) (effect_old.cpp:515).
+// Animate (effect_old.cpp:557-582): each of 10 sparks integrates straight
+// gravity-only physics; when a spark hits z=0 it bounces (vel.z *= -0.5)
+// and once damped (|vel.z|<0.4) respawns with a fresh launch velocity.
+// Render (effect_old.cpp:584-611): sub-object 0 drawn 10 times, each at
+// rot=(-pi/2, 0, -pi/4) (ground-flat) and scl=4. SetBlendState (= Alpha,
+// not additive — per feedback_retail_first + family cross-check with the
+// existing FlareSpawn placeholder at vfxtest.cpp:2257 which DOES use
+// Additive, but the SNAPSHOT writes SetBlendState which translates to
+// Alpha; we preserve the snapshot verbatim per the no-reinterpretation
+// rule).
+//
+// LS coupling: family note + "Sparkle/glow family" + L01 lightsource
+// note in roadmap. The snapshot animator doesn't call any light API
+// directly (that lives on the parent TEffect via spell.def coupling),
+// so we re-add one point light per frame in TickAndSubmitForTest at the
+// effect origin, warm-yellow, modest radius. Verified by L02 / X17
+// pattern.
+//
+// Asset: Misc\IrisFlare.I3D (the only "Flare-like" imagery registered in
+// Class.Def with a TFlareAnimator-class animator — also used by
+// "Teleporter" / "IrisFlare").
+
+inline constexpr int32_t kFlareBespokeNumSparks = 10;   // hard-coded loop limit (effect_old.cpp:562)
+inline constexpr int32_t kFlareBespokeSimTickMs = 1000 / 24;
+inline constexpr float   kFlareBespokeScale     = 4.0f;
+inline constexpr float   kFlareBespokeBaseSizeWu = 12.0f;
+inline constexpr float   kFlareBespokeLightRadiusWu  = 240.0f;
+inline constexpr float   kFlareBespokeLightIntensity = 1.0f;
+
+struct SFlareBespokeSpark
+{
+    hmm_vec3 p = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 v = {0.0f, 0.0f, 0.0f};
+};
+
+_CLASSDEF(TFlareEffect_Bespoke)
+
+class TFlareEffect_Bespoke : public TEffect
+{
+  public:
+    TFlareEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFlareEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFlareEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // Standalone spawn for the --test=vfx harness. Loads Misc\IrisFlare.I3D,
+    // resolves sub-object 0 (the single flare quad), seeds the 10-spark
+    // array. Returns nullptr if the imagery can't be loaded.
+    [[nodiscard]] static TFlareEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports TFlareAnimator::Animate +
+    // TFlareAnimator::Render directly. 10 alpha-blended billboards drawn
+    // per frame + 1 point light re-added at effect origin.
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    // Always alive for the harness — TFlareAnimator self-respawns each
+    // spark on bounce-decay, so the effect never naturally ends.
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    SFlareBespokeSpark sparks_[kFlareBespokeNumSparks] {};
+    TTextureHandle     texture_      = kInvalidTexture;
+    float              uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float              size_wu_      = kFlareBespokeBaseSizeWu;
+    double             sim_accum_ms_ = 0.0;
+};
+
+// ----- X10 TSymGlowAnimator -----------------------------------------------
+//
+// "SymGlow" — single glowing-symbol billboard whose texture pulses (V
+// scroll), the Z-scale of the quad breathes between 2.0 and 5.0, and the
+// authored uv.tv is creeping up slowly. REGISTER_3DANIMATOR("SymGlow",
+// TSymGlowAnimator) (effect_old.cpp:4584). Animator-only (no Effect
+// class); attached to whatever object is named "SymGlow" in a sector
+// (likely magical altars / runes).
+//
+// SetupObjects (effect_old.cpp:4588-4606): walk sub-objects, copy verts,
+// shift authored uv.tv by -0.01 across all verts. Animate
+// (effect_old.cpp:4615-4633): 40-tick toggle on dz sign; integrate zscale
+// in [2,5]; u (the per-tick tv scroll step) re-randomized to (2..8)/100.
+// Render (effect_old.cpp:4642-4665): SetBlendState (Alpha), draw the one
+// sub-object with scl=(1.4, 1.4, zscale) and obj->verts[*].tu += u per
+// vertex per draw. The scl.z 2..5 stretch on a 2D billboard is the
+// "breathing" effect; vertex.tu accumulation drives the V scroll.
+//
+// LS coupling: roadmap says "Likely couples a soft point light" — we
+// re-add a warm point light per frame for the LS-pipeline coupling
+// invariant, sized to ~symbol radius.
+//
+// Asset: Misc\SymGlow.I3D (Class.Def-registered).
+
+inline constexpr int32_t kSymGlowBespokeSimTickMs    = 1000 / 24;
+inline constexpr float   kSymGlowBespokeScaleXY      = 1.4f;
+inline constexpr float   kSymGlowBespokeZMin         = 2.0f;
+inline constexpr float   kSymGlowBespokeZMax         = 5.0f;
+inline constexpr float   kSymGlowBespokeDzInit       = 0.1f;
+inline constexpr int32_t kSymGlowBespokeFlipTicks    = 40;
+inline constexpr int32_t kSymGlowBespokeUScrollMin   = 2;       // /100
+inline constexpr int32_t kSymGlowBespokeUScrollMax   = 8;       // /100
+inline constexpr float   kSymGlowBespokeBaseSizeWu   = 32.0f;
+inline constexpr float   kSymGlowBespokeLightRadiusWu  = 200.0f;
+inline constexpr float   kSymGlowBespokeLightIntensity = 0.8f;
+
+_CLASSDEF(TSymGlowEffect_Bespoke)
+
+class TSymGlowEffect_Bespoke : public TEffect
+{
+  public:
+    TSymGlowEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TSymGlowEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TSymGlowEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TSymGlowEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          size_wu_      = kSymGlowBespokeBaseSizeWu;
+    float          u_offset_     = 0.0f;       // accumulated V scroll (we shift along V like the
+                                               // snapshot's obj->verts[].tu += u — but in src this
+                                               // is named "u" though it advances the V axis through
+                                               // the per-vertex tu field — see §gotcha below).
+    float          zscale_       = 2.0f;
+    float          dz_           = kSymGlowBespokeDzInit;
+    int32_t        timer_        = 0;
+    double         sim_accum_ms_ = 0.0;
+};
+
+// ----- M07 TPhotonEffect (Bespoke) -----------------------------------------
+//
+// "Photon" — 32-slot energy-bolt missile (forensics docs/vfx/forensics/
+// M07_TPhotonEffect.md). REGISTER_3DANIMATOR("Photon", TPhotonAnimator)
+// (missileeffect.cpp:176). Three-state LAUNCH / FLY / EXPLODE machine; the
+// in-game TMissileEffect base drives transit + state transitions, but the
+// harness drives the visual choreography only (no live char/collision).
+//
+// We collapse the choreography onto a freestanding TEffect subclass and
+// cycle LAUNCH -> FLY -> EXPLODE on a fixed visual cadence so the harness
+// can replay every state without the missile-base machinery. The
+// per-state per-spark kinematics are line-for-line from
+// missileeffect.cpp:187-399 (Initialize/Animate); the render is from
+// :408-441.
+//
+// SetBlendState in the snapshot's Render is Alpha. We submit one alpha
+// billboard per spark per frame and re-add one point light at the
+// effect origin per frame (LS coupling — bright blue-white glow during
+// the bolt, brightest at EXPLODE).
+//
+// Asset: Magic\Photon.I3D (Class.Def-registered + byte-identical in
+// data/imagery.rvi per forensics §2.1(1)).
+
+inline constexpr int32_t kPhotonBespokeNumSparks       = 16;     // NUM_PHOTON_SPARKS
+inline constexpr int32_t kPhotonBespokeSlots           = 32;     // NUM_PHOTON_SPARKS * 2
+inline constexpr int32_t kPhotonBespokeLaunchRadius    = 20;     // PHOTON_LAUNCH_RADIUS
+inline constexpr int32_t kPhotonBespokeLaunchDuration  = 25;     // PHOTON_LAUNCH_DURATION
+inline constexpr float   kPhotonBespokeScaleStep       = 0.25f;  // PHOTON_LAUNCH_SCALE_STEP
+inline constexpr int32_t kPhotonBespokeSimTickMs       = 1000 / 24;
+inline constexpr float   kPhotonBespokeBaseSizeWu      = 16.0f;
+inline constexpr float   kPhotonBespokeLightRadiusWu   = 280.0f;
+inline constexpr float   kPhotonBespokeLightIntensity  = 1.4f;
+// Harness-only state-cycle cadence (tick durations for LAUNCH/FLY/EXPLODE).
+// In-game these are driven by TMissileEffect range/Pulse; the harness
+// cycles them on a fixed timer so all three visuals replay.
+inline constexpr int32_t kPhotonBespokeFlyTicks        = 40;
+inline constexpr int32_t kPhotonBespokeExplodeTicks    = 30;
+inline constexpr int32_t kPhotonBespokeIdleTicks       = 12;     // gap between EXPLODE and next LAUNCH
+
+_CLASSDEF(TPhotonEffect_Bespoke)
+
+class TPhotonEffect_Bespoke : public TEffect
+{
+  public:
+    TPhotonEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TPhotonEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TPhotonEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TPhotonEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }   // cycles forever in the harness
+
+  private:
+    void ResetLaunch_();
+    void EnterFly_();
+    void EnterExplode_();
+
+    hmm_vec3       p_[kPhotonBespokeSlots] {};
+    hmm_vec3       v_[kPhotonBespokeSlots] {};
+    float          scale_[kPhotonBespokeSlots] {};
+    int32_t        framenum_[kPhotonBespokeSlots] {};
+    int32_t        activesparks_ = 0;
+    int32_t        numtexframes_ = 1;
+    int32_t        state_        = 0;     // 0=LAUNCH 1=FLY 2=EXPLODE 3=IDLE (harness gap)
+    int32_t        oldstate_     = -1;    // force first-time block on entry
+    int32_t        state_ticks_  = 0;
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          size_wu_      = kPhotonBespokeBaseSizeWu;
+    double         sim_accum_ms_ = 0.0;
+};
+
+// ----- M08 TPixieEffect (Bespoke) ------------------------------------------
+//
+// "Pixie" — small swarm of 25 twinkling particles (fairy dust) attached to
+// the effect origin. DEFINE_BUILDER("Pixie", TPixieEffect) (effect_old.cpp:
+// 12082), REGISTER_3DANIMATOR("Pixie", TPixieAnimator) (:12099). The
+// animator (effect_old.cpp:12109-12277) seeds 25 per-particle slots with
+// random pos in [-32, 32]^3 and random vel/25; each tick the particles
+// drift, the velocity gets a centring restorative force (PIX_ACC=0.4),
+// scale jitters in [0.06, 0.08], time flips on a 1/49 chance, and the
+// pixies flee from any nearby character. SetBlendState (Alpha) renders
+// the sub-object selected by `pix[i].time` (0 or 1 — two variants of the
+// glow). Per-particle: scale uniform, rotZ = -face_byteangle * TORADIAN
+// (in-game), translate to (pos.x*charnear/100, pos.y*charnear/100,
+// PIX_HEIGHT + pos.z).
+//
+// Harness simplification: we strip the character-flee logic (FindObjects
+// InRange is a live-map query) and use the static origin as the rest
+// point. The character-near scale (`charnear`) stays at 100 (= 1.0x).
+// The face byte-angle defaults to 0.
+//
+// LS coupling: roadmap calls for a "soft point light coupling"; we
+// re-add a small green-blue point light per frame, modulated by the
+// swarm's collective scale, to drive the LS pipeline.
+//
+// Asset: Misc\Pixies.I3D (Class.Def-registered).
+
+inline constexpr int32_t kPixieBespokeNumParts        = 25;     // PIX_NUMPARTS
+inline constexpr float   kPixieBespokeAcc             = 0.4f;   // PIX_ACC
+inline constexpr int32_t kPixieBespokeHeight          = 32;     // PIX_HEIGHT
+inline constexpr float   kPixieBespokeMinScale        = 0.06f;  // PIX_MINSCALE
+inline constexpr float   kPixieBespokeMaxScale        = 0.08f;  // PIX_MAXSCALE
+inline constexpr int32_t kPixieBespokeSimTickMs       = 1000 / 24;
+inline constexpr float   kPixieBespokeBaseSizeWu      = 256.0f; // sub-object scaled by ~0.07 -> 18 wu visible
+inline constexpr float   kPixieBespokeLightRadiusWu   = 220.0f;
+inline constexpr float   kPixieBespokeLightIntensity  = 0.7f;
+
+// One pixie particle's transient state. Pre-release stored these as
+// SWaterParticle (effectcomp.h) inside the animator's heap array; we
+// inline a per-particle struct to match the SBloodParticleEx pattern.
+struct SPixieParticle
+{
+    hmm_vec3 scale = {kPixieBespokeMinScale, kPixieBespokeMinScale, kPixieBespokeMinScale};
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};
+    int32_t  time  = 0;     // 0 or 1 — selects sub-object texture (two glow variants)
+};
+
+_CLASSDEF(TPixieEffect_Bespoke)
+
+class TPixieEffect_Bespoke : public TEffect
+{
+  public:
+    TPixieEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TPixieEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TPixieEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TPixieEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient swarm — never dies
+
+  private:
+    SPixieParticle pix_[kPixieBespokeNumParts] {};
+    int32_t        charnear_     = 100;          // 100 = 1.0x scale (no nearby char)
+    TTextureHandle textures_[2]  = {kInvalidTexture, kInvalidTexture};
+    float          uv_rect_[2][4] = {{0,0,1,1}, {0,0,1,1}};
+    float          size_wu_      = kPixieBespokeBaseSizeWu;
+    double         sim_accum_ms_ = 0.0;
 };
