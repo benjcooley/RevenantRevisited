@@ -3345,6 +3345,98 @@ class TWaterAnimator : public T3DAnimator
     virtual void DoLighting(float x, float y, float z, PS3DAnimObj object);
 };
 
+// *************************************************************************
+// * TWaterFallEffect_Bespoke — H02 first-pass faithful port (snapshot)     *
+// *************************************************************************
+//
+// Direct C++ port of TWaterFallAnimator::Initialize / UpdateStuff /
+// Render (src/effect_old.cpp:11701-11860). Same constants, same per-tick
+// math, same render-pass order. Only render API call changed: instead of
+// RenderObject(D3D MATRIX) we submit one screen-aligned billboard per
+// drop via TRenderer::SubmitFxBillboard. The snapshot Render() writes
+// SRCBLEND/DESTBLEND=ONE/ONE (additive) with the SetAddBlendState comment
+// preserved — we emit AdditiveStraight verbatim.
+//
+// First-pass bespoke (compiles + boots + renders something) per
+// wave-bespoke-07-water orchestrator brief. No video A/B validation yet.
+
+_CLASSDEF(TWaterFallEffect_Bespoke)
+
+class TWaterFallEffect_Bespoke : public TEffect
+{
+  public:
+    TWaterFallEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TWaterFallEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TWaterFallEffect_Bespoke() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // Spawn a standalone TWaterFallEffect_Bespoke for the --test=vfx
+    // harness. Loads Misc\Water.I3D, resolves a billboard texture, seeds
+    // WATERFALL_MAXDROPS drops and warms the simulator the same way
+    // TWaterFallAnimator::Initialize does. Returns nullptr if the
+    // imagery can't be loaded; caller owns the returned pointer.
+    [[nodiscard]] static TWaterFallEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports UpdateStuff() (per sim-tick) and
+    // Render() (per frame) verbatim. Animator was framerate-locked in
+    // the snapshot — gated here via a 24 Hz sim-tick accumulator for
+    // framerate-independent motion. Emits one AdditiveStraight billboard
+    // per live drop.
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return true; }   // persistent
+
+  private:
+    void InitParticle(int32_t i);
+    void UpdateStuff();
+
+    SWaterParticle* drops_     = nullptr;
+    int32_t         numdrops_  = 0;
+    TTextureHandle  texture_   = kInvalidTexture;
+    float           uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    float           size_wu_   = 16.0f;
+    double          sim_accum_ms_ = 0.0;
+};
+
+// *************************************************************************
+// * TWaterEffect_Bespoke — H01 first-pass faithful port (snapshot)         *
+// *************************************************************************
+//
+// Direct C++ port of TWaterAnimator::Initialize / UpdateStuff / Render
+// (src/effect_old.cpp:11911-12062). Ambient horizontal-stream water spray.
+// Particles travel along +X at WATER_SPEED * ((i%2)+1) until they cross
+// WATER_LENGTH/2 then respawn. Same constants, same per-tick math, same
+// render order. Snapshot Render() writes SRCBLEND/DESTBLEND=ONE/ONE
+// (additive) — emit AdditiveStraight verbatim.
+
+_CLASSDEF(TWaterEffect_Bespoke)
+
+class TWaterEffect_Bespoke : public TEffect
+{
+  public:
+    TWaterEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TWaterEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TWaterEffect_Bespoke() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TWaterEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }   // persistent
+
+  private:
+    void InitParticle(int32_t i);
+    void UpdateStuff();
+
+    SWaterParticle* drops_     = nullptr;
+    int32_t         numdrops_  = 0;
+    TTextureHandle  texture_   = kInvalidTexture;
+    float           uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    float           size_wu_   = 16.0f;
+    double          sim_accum_ms_ = 0.0;
+};
+
 // *****************
 // * TPixieEffect *
 // *****************
