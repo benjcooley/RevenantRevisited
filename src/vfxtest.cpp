@@ -2061,6 +2061,78 @@ void FireSubmit(void* cp, EFxDebugMode dbg)
     c->fire->TickAndSubmitForTest(dbg);
 }
 
+// --- FB: real TFlameEffect_Bespoke (F01 A/B baseline) -------------------
+// Faithful line-by-line port of the snapshot TFlameAnimator
+// (effect_old.cpp:4486-4565). Single ScreenAligned billboard quad of
+// Magic\flame.i3d's box01 sub-object, per-frame 0.25x0.5 UV-cell pick
+// from the 4x2 atlas, Alpha blend (DECAL — snapshot SetBlendState
+// preserved literally per translation rule 3). Lives alongside the
+// engine-flipbook TFlameEffect entry as a side-by-side A/B reference
+// (tools/vfx/snap_ab.py).
+struct SFlameBespokeCtx {
+    TFlameEffect_Bespoke* flame = nullptr;
+};
+
+void* FlameBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFlameBespokeCtx();
+    c->flame = TFlameEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->flame)
+        log_warn("[vfx] TFlameEffect_Bespoke::SpawnForTest_BESPOKE returned null; "
+                 "F01 bespoke entry will draw nothing");
+    return c;
+}
+
+void FlameBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFlameBespokeCtx*>(cp);
+    delete c->flame;
+    delete c;
+}
+
+void FlameBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFlameBespokeCtx*>(cp);
+    if (!c || !c->flame)
+        return;
+    c->flame->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- FB: real TFireEffect_Bespoke (F03 A/B baseline) --------------------
+// Faithful line-by-line port of the snapshot TFireAnimator (NUMFIRES=15,
+// 24Hz frame cadence, +/-50 wu XY scatter, Alpha blend with WorldXY
+// orientation and per-quad -π/4 in-plane spin via SParticleDrawItem's
+// rotation_rad lane). Lives alongside the engine TFireEffect entry as a
+// side-by-side A/B reference.
+struct SFireBespokeCtx {
+    TFireEffect_Bespoke* fire = nullptr;
+};
+
+void* FireBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFireBespokeCtx();
+    c->fire = TFireEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->fire)
+        log_warn("[vfx] TFireEffect_Bespoke::SpawnForTest_BESPOKE returned null; "
+                 "F03 bespoke entry will draw nothing");
+    return c;
+}
+
+void FireBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFireBespokeCtx*>(cp);
+    delete c->fire;
+    delete c;
+}
+
+void FireBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFireBespokeCtx*>(cp);
+    if (!c || !c->fire)
+        return;
+    c->fire->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 // --- FB: real TTeleporterEffect (procedural cool-blue glow, M09) --------
 // Spawns a sector-less TTeleporterEffect at the harness-provided origin
 // (which the CharacterRig resolves to the caster's CharacterRoot anchor
@@ -2525,6 +2597,32 @@ struct SVfxTestBootstrap {
         fire.submit        = [](void* c, EFxDebugMode d) { FireSubmit(c, d); };
         fire.destroy       = [](void* c) { FireDestroy(c); };
         VfxTest::DeferredRegister(fire);
+
+        // A/B baseline: bespoke faithful direct port of snapshot
+        // TFlameAnimator. Same preview_style/family/pipeline as the engine
+        // entry above so the harness drives them identically;
+        // tools/vfx/snap_ab.py can stitch them into a side-by-side filmstrip.
+        VfxTest::SEffect flame_bespoke = {};
+        flame_bespoke.id            = "TFlameEffect_BESPOKE";
+        flame_bespoke.family        = "fire";
+        flame_bespoke.pipeline      = "FB";
+        flame_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        flame_bespoke.factory       = [](const S3DPoint& o) -> void* { return FlameBespokeSpawn(o); };
+        flame_bespoke.submit        = [](void* c, EFxDebugMode d) { FlameBespokeSubmit(c, d); };
+        flame_bespoke.destroy       = [](void* c) { FlameBespokeDestroy(c); };
+        VfxTest::DeferredRegister(flame_bespoke);
+
+        // A/B baseline: bespoke faithful direct port of snapshot
+        // TFireAnimator (NUMFIRES=15 scatter, per-quad rot.z=-π/4 spin).
+        VfxTest::SEffect fire_bespoke = {};
+        fire_bespoke.id            = "TFireEffect_BESPOKE";
+        fire_bespoke.family        = "fire";
+        fire_bespoke.pipeline      = "FB";
+        fire_bespoke.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        fire_bespoke.factory       = [](const S3DPoint& o) -> void* { return FireBespokeSpawn(o); };
+        fire_bespoke.submit        = [](void* c, EFxDebugMode d) { FireBespokeSubmit(c, d); };
+        fire_bespoke.destroy       = [](void* c) { FireBespokeDestroy(c); };
+        VfxTest::DeferredRegister(fire_bespoke);
 
         // --- Character-attached proof: TDripEffect tracked to "rhand" ---
         // Validates the CharacterRig primitive end-to-end. The drip
