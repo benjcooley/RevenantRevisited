@@ -2959,6 +2959,241 @@ class TBurnEffect_Bespoke : public TEffect
     float                base_size_wu_  = 48.0f;
     bool                 alive_         = true;
     double               sim_accum_ms_  = 0.0;
+// * Strip/Ribbon family bespoke first-pass A/B references                 *
+// *                                                                       *
+// * Four faithful direct ports of the pre-release snapshot animator       *
+// * bodies for Wave 2 batch wave-bespoke-06-strip-ribbon:                 *
+// *                                                                       *
+// *   S04 TLightningAnimator_Bespoke  — composite lightning bolt (strip   *
+// *                                     of jittered anchors).             *
+// *   S05 TShockAnimator_Bespoke      — expanding shockwave ring          *
+// *                                     (animator-only, EMBEDDED in I21   *
+// *                                     in retail; here a self-contained  *
+// *                                     test effect).                     *
+// *   S07 TStreamerEffect_Bespoke     — trailing streamer/ribbon (the     *
+// *                                     hemispherical 4-stream spiral).   *
+// *   X11 TRibbonAnimator_Bespoke     — slow-grow ribbon disc + sparks    *
+// *                                     (revive halo).                    *
+// *                                                                       *
+// * Each lives alongside any future engine port as an A/B baseline. The   *
+// * math / constants / per-tick step are translated line-for-line from    *
+// * the snapshot bodies (effect_old.cpp / effectcomp.cpp); only the       *
+// * render API is adapted (RenderObject -> SubmitFxBillboard /            *
+// * SubmitFxStrip). Pipelines: S04 = SR strip + FB glow; S05/S07/X11 =    *
+// * FB billboard composites (no I3D asset bound yet — first-pass uses    *
+// * a procedural white glow texture). See src/effect.cpp.                *
+// *************************************************************************
+
+// --- S04 TLightningAnimator_Bespoke ---------------------------------------
+// Faithful port of the pre-release TLightningAnimator strip body (the
+// jittered bolt; snapshot in src/stripeffect.cpp `#if 0` :822-915 +
+// :534-662). Drives a TStripAnimator-shaped anchor ring expanding along
+// the caster facing direction, with per-tick smoothing-jitter on every
+// SMOOTH_SIZE-th anchor + cubic-shaped interpolation in between,
+// SetAddBlendState (-> AdditiveStraight) for the strip render, plus a
+// procedural-glow halo placeholder (no Lightning Spark.I3D asset bound
+// here yet — would land alongside a real imagery load in a follow-up).
+//
+// One-shot lifecycle: LAUNCH(1 tick) -> FLY(STRIP_FLY_DURATION ticks of
+// grow-and-fly) -> EXPLODE(STRIP_EXPLODE_TICKS ticks of tail-shrink) ->
+// dead. Harness Combat cadence re-fires.
+_CLASSDEF(TLightningAnimator_Bespoke)
+class TLightningAnimator_Bespoke : public TEffect
+{
+  public:
+    TLightningAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TLightningAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TLightningAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TLightningAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Lifecycle phases (mirror retail STRIP_LAUNCH / STRIP_FLY / STRIP_EXPLODE).
+    enum { kLaunch = 0, kFly = 1, kExplode = 2 };
+
+    // One strip anchor along the bolt — world-space position + per-tick
+    // jitter offset (px, pz in retail's local frame; here applied perp to
+    // the bolt's XY forward axis).
+    struct SBoltAnchor
+    {
+        float pos[3]    = {0.0f, 0.0f, 0.0f};
+        float jitter[2] = {0.0f, 0.0f};
+    };
+
+    SBoltAnchor anchors_[100] {};    // STRIP_MAX_POINTS = 100 in retail
+    int32_t     numpoints_      = 0;
+    int32_t     maxpoints_      = 0;
+    int32_t     state_          = kLaunch;
+    int32_t     duration_       = 20;       // STRIP_FLY_DURATION
+    float       forward_dir_[3] = {1.0f, 0.0f, 0.0f};
+    float       glow_scale_     = 3.4f;     // retail initial
+    float       rotdegree_      = 0.0f;     // glow rot accumulator (degrees, mod 360)
+    float       morrotdegree_   = 0.0f;     // counter-rot accumulator
+    float       u_scroll_       = 0.0f;     // ScrollTexture(-0.1)/tick accumulator
+    bool        alive_          = true;
+    double      sim_accum_ms_   = 0.0;      // 24 Hz sim-tick gate
+};
+
+// --- S05 TShockAnimator_Bespoke -------------------------------------------
+// Faithful port of TShockAnimator (effectcomp.cpp:609-770) — the expanding
+// shockwave ring used as an embedded member by I21 TIceBoltAnimator. The
+// retail member animates a TStripAnimator-style ring object; here we
+// stand it up as a self-contained test effect spawning a "ring" of
+// billboards procedurally arrayed in a circle, with the same scale
+// state machine (grow → optional shrink-via-flag → done), same alpha
+// fade ramp (when SHOCKWAVE_FLAG_FADE), and same per-ring colour
+// (ARGB packed in the snapshot; here flattened to one ring of N
+// vertices). Default flags = SHRINK | FADE (the I21 ring usage).
+//
+// Blend = Alpha (snapshot SetBlendState = SRC_ALPHA / INV_SRC_ALPHA).
+_CLASSDEF(TShockAnimator_Bespoke)
+class TShockAnimator_Bespoke : public TEffect
+{
+  public:
+    TShockAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TShockAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TShockAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TShockAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return !done_; }
+
+  private:
+    enum { kGrow = 0, kShrink = 1 };
+    enum {
+        kFlagShrink      = 1 << 0,   // SHOCKWAVE_FLAG_SHRINK
+        kFlagFade        = 1 << 1,   // SHOCKWAVE_FLAG_FADE
+        kFlagStartShrink = 1 << 2,   // SHOCKWAVE_FLAG_START_SHRINK
+    };
+
+    // SShockParam mirror, retail names preserved (effectcomp.h:206-216).
+    int32_t   flags_         = kFlagShrink | kFlagFade;
+    hmm_vec3  pos_           = {0.0f, 0.0f, 0.0f};
+    hmm_vec3  rot_           = {0.0f, 0.0f, 0.0f};
+    hmm_vec3  scale_         = {0.05f, 0.05f, 0.05f};
+    hmm_vec3  scale_factor_  = {1.10f, 1.10f, 1.10f};
+    hmm_vec3  shrink_factor_ = {0.92f, 0.92f, 0.92f};
+    hmm_vec3  max_size_      = {2.0f, 2.0f, 2.0f};
+    hmm_vec3  min_size_      = {0.05f, 0.05f, 0.05f};
+    hmm_vec3  init_scale_    = {0.05f, 0.05f, 0.05f};
+
+    // Single ring of N vertices for the SR-equivalent. The retail
+    // SetRingColor packs ARGB8 per ring; we store one ring (RGBA float).
+    static constexpr int32_t kRingVertices = 24;
+    float     ring_color_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    bool      done_          = false;
+    int32_t   grow_          = kGrow;       // SHOCKWAVE_GROW (== 0)
+    double    sim_accum_ms_  = 0.0;
+};
+
+// --- S07 TStreamerEffect_Bespoke ------------------------------------------
+// Faithful port of TStreamerAnimator (effect_old.cpp:10258-10434) — the
+// hemispherical 4-stream spiral. Each tick spawns ~STREAMER_SKIP*(4-j)
+// new particles per stream (4 streams total); the angles th/h advance by
+// dth/dh, and a sphere-mapped parametric position is plotted along a
+// scaled radius. Particle scale ramps down via dscl. Lifetime is gated
+// by STREAMER_DURATION = 100 ticks (per-stream h going past PI also
+// short-circuits via frameon=DURATION+1).
+//
+// Blend = AdditiveStraight (snapshot SetAddBlendState in Render).
+_CLASSDEF(TStreamerEffect_Bespoke)
+class TStreamerEffect_Bespoke : public TEffect
+{
+  public:
+    TStreamerEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TStreamerEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TStreamerEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TStreamerEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Retail constants (preserved names; values from effect_old.cpp:10252-10256).
+    static constexpr int32_t kStreamerMaxParticles = 50;   // STREAMER_MAXPARTICLES
+    static constexpr int32_t kStreamerMaxStreams   = 4;    // STREAMER_MAXSTREAMS (from effect.h:1960)
+    static constexpr int32_t kStreamerDuration     = 100;  // STREAMER_DURATION
+    static constexpr int32_t kStreamerModifier     = 40;   // STREAMER_MODIFIER
+    static constexpr int32_t kStreamerModifierV    = 50;   // STREAMER_MODIFIERV
+    static constexpr int32_t kStreamerSkip         = 1;    // STREAMER_SKIP
+
+    // SStreamerParticle mirror (effect.h:1953-1958).
+    struct SStreamerParticleEx
+    {
+        hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};
+        float    scl   = 0.0f;
+        int32_t  count = 0;
+    };
+
+    SStreamerParticleEx stream_[kStreamerMaxStreams][kStreamerMaxParticles] {};
+    float    dscl_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    scl_init_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    th_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    dth_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    h_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    dh_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    int32_t  frameon_   = 0;
+    bool     alive_     = true;
+    double   sim_accum_ms_ = 0.0;
+
+    // Helper: pre-tick "InitStreamer(x)" snapshot — adds one particle to
+    // stream x at the next parametric (th, h) point, scaled by modif and
+    // stream index.
+    void InitStreamerSnap(int32_t x);
+    void AddStreamerSnap(int32_t num, const hmm_vec3& pos, float scl);
+};
+
+// --- X11 TRibbonAnimator_Bespoke ------------------------------------------
+// Faithful port of TRibbonAnimator (effect_old.cpp:4069-4321) — the
+// revive-spell ground halo: a slow-growing central spark (scaled by
+// ribscale) + NUM_RIBBONS=3 outer ribbons rotating around it, plus
+// NUM_RIBBON_SPARKS=30 small sparks orbiting + lifting upward. Pre-
+// release used REVIVE_STARTTICKS for the grow window; we use a literal
+// here (no TReviveEffect available in harness — pass through the GROW
+// branch with ribscale incrementing every tick).
+//
+// Blend = Alpha (snapshot SetBlendState in Render).
+_CLASSDEF(TRibbonAnimator_Bespoke)
+class TRibbonAnimator_Bespoke : public TEffect
+{
+  public:
+    TRibbonAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TRibbonAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TRibbonAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TRibbonAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants (effect.h:1001-1006). NUM_RIBBONS=3, NUM_RIBBON_SPARKS=30
+    // are macros — we re-use them where in scope.
+    static constexpr int32_t kRibbonGrowFrames = 24;  // REVIVE_STARTTICKS placeholder
+    static constexpr int32_t kRibbonLifeTicks  = 80;  // harness one-shot duration
+
+    hmm_vec3 p_[NUM_RIBBON_SPARKS] {};
+    hmm_vec3 v_[NUM_RIBBON_SPARKS] {};
+    float    scale_spark_[NUM_RIBBON_SPARKS] = {0.0f};
+    int32_t  framenum_[NUM_RIBBON_SPARKS] = {0};
+    hmm_vec3 ribpos_     = {0.0f, 0.0f, 0.0f};
+    float    rotation_[NUM_RIBBONS] = {0.0f, 2.0f, 4.0f};
+    int32_t  ribbontimer_ = 0;
+    float    ribscale_    = 0.05f;   // RIBBON_MINSCALE
+    float    centertilt_     = 0.0f;
+    float    centertilt_dx_  = 0.001f;
+    bool     alive_       = true;
+    double   sim_accum_ms_ = 0.0;
 };
 
 // *******************

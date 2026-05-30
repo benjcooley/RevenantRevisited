@@ -65,6 +65,7 @@
 #include "meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
 #include "revutils.h"
 #include "logging.h"
+#include "stripeffect.h"   // S04: STRIP_* constants for TLightningAnimator_Bespoke
 #include "time.h"
 
 #include <algorithm>
@@ -8205,6 +8206,452 @@ TSymGlowEffect_Bespoke* TSymGlowEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPo
 }
 
 void TSymGlowEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+// * Wave 2 batch wave-bespoke-06-strip-ribbon: faithful direct ports of   *
+// * pre-release snapshot animator bodies for Strip / ribbon family.       *
+// * Translation rules: identical math, identical variable names where     *
+// * legal in C++, identical per-tick step and render-pass order. Only the *
+// * render API changes (RenderObject -> SubmitFxBillboard / SubmitFxStrip).
+// *************************************************************************
+
+namespace {
+
+// Shared procedural-glow texture for the strip/ribbon family — used as a
+// first-pass stand-in for the real Magic\Lightning Spark.I3D /
+// Magic\NewLightStrip.I3D / Magic\ribbon.I3D assets which aren't bound
+// yet. White cubic-falloff core, transparent edges, pairs with
+// AdditiveStraight (premultiplied). 1 x 64 RGBA8 strip.
+TTextureHandle StripFamilyGlowTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x46584C4753545246ull;   // "FXLGSTRF"
+    constexpr int32_t  kH   = 64;
+    uint8_t rgba[kH * 4];
+    for (int32_t i = 0; i < kH; ++i)
+    {
+        const float v       = float(i) / float(kH - 1);
+        const float center  = std::abs(v - 0.5f) * 2.0f;
+        const float falloff = (std::max)(0.0f, 1.0f - center);
+        const float a       = falloff * falloff * falloff;
+        const uint8_t byte  = uint8_t(a * 255.0f);
+        rgba[i * 4 + 0] = byte;
+        rgba[i * 4 + 1] = byte;
+        rgba[i * 4 + 2] = byte;
+        rgba[i * 4 + 3] = byte;
+    }
+    return Renderer->RegisterTextureAsset(kKey, rgba, sizeof(rgba),
+                                          1, kH,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(rgba)));
+}
+
+// Round soft-edge billboard texture for the spark/streamer/ribbon-spark
+// placeholders (no Magic\<x>.I3D bound yet). 32x32 white disc with
+// quadratic-falloff alpha.
+TTextureHandle StripFamilySparkTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x46584C475350524Bull;   // "FXLGSPRK"
+    constexpr int32_t  kS   = 32;
+    uint8_t rgba[kS * kS * 4];
+    for (int32_t y = 0; y < kS; ++y)
+    {
+        for (int32_t x = 0; x < kS; ++x)
+        {
+            const float dx = (float(x) + 0.5f) / float(kS) * 2.0f - 1.0f;
+            const float dy = (float(y) + 0.5f) / float(kS) * 2.0f - 1.0f;
+            const float r  = std::sqrt(dx * dx + dy * dy);
+            const float a  = (std::max)(0.0f, 1.0f - r);
+            const float aa = a * a;
+            const uint8_t b = uint8_t(aa * 255.0f);
+            const int32_t off = (y * kS + x) * 4;
+            rgba[off + 0] = b;
+            rgba[off + 1] = b;
+            rgba[off + 2] = b;
+            rgba[off + 3] = b;
+        }
+    }
+    return Renderer->RegisterTextureAsset(kKey, rgba, sizeof(rgba),
+                                          kS, kS,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(rgba)));
+}
+
+// 24 Hz sim tick (~41.7 ms) — matches the snapshot's tick rate.
+constexpr int32_t kStripFamilySimTickMs = 1000 / 24;
+
+}  // namespace
+
+// =========================================================================
+// S04 TLightningAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/stripeffect.cpp `#if 0` Initialize/SetupObjects/
+// Animate/Render (:472-915) + TStripEffect Pulse (:406-457). Constants
+// from src/stripeffect.h (STRIP_*, LIGHTNING_SCALE_*, ADD_FACTOR=2,
+// SMOOTH_SIZE=4). The retail animator owns three sub-objects:
+//   obj 0 = the LightStrip strip geometry (TStripAnimator)
+//   obj 1 = the glow halo
+//   obj 2 = the spark sub-emitter image
+// First-pass port covers the strip + a tiny glow stand-in; sparks are
+// stubbed (the SPARKS_TSparkAnimator forensics doc owns that sub-emitter,
+// porting it lives in a follow-up slice).
+
+TLightningAnimator_Bespoke* TLightningAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // No imagery bound — first-pass uses the procedural strip glow
+    // texture (no Magic\NewLightStrip.I3D loader yet). Same approach as
+    // the existing TStripEffect::SpawnForTest path.
+    auto* eff = new TLightningAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // Caster facing — randomized yaw so successive Combat-cadence re-fires
+    // point in different directions (same intuition as TStripEffect).
+    const float yaw =
+        (float(std::rand()) / float(RAND_MAX)) * 6.28318530718f;
+    eff->forward_dir_[0] = std::cos(yaw);
+    eff->forward_dir_[1] = std::sin(yaw);
+    eff->forward_dir_[2] = 0.0f;
+
+    // Retail SetupObjects walks a raycast up to MAX_MAXPOINTS=100 to find
+    // the target range; in the harness we pick a plausible random length
+    // in segments (10..40), matching ~100..400 wu (STRIP_SEG_LEN=10).
+    eff->maxpoints_ = random(10, 40) * STRIP_SMOOTH_SIZE;
+    if (eff->maxpoints_ > 100) eff->maxpoints_ = 100;
+
+    // Snapshot SetupObjects seeds the strip with `numpoints = 2` initial
+    // anchors at the local origin offset down-Y (the strip is authored in
+    // a local frame with p.y = -10 * i).
+    eff->numpoints_ = 2;
+    for (int32_t i = 0; i < 2; ++i)
+    {
+        SBoltAnchor& a = eff->anchors_[i];
+        a.pos[0] = float(origin.x) + eff->forward_dir_[0] * float(i * STRIP_SEG_LEN);
+        a.pos[1] = float(origin.y) + eff->forward_dir_[1] * float(i * STRIP_SEG_LEN);
+        a.pos[2] = float(origin.z) + 50.0f;   // matches Initialize() z+=50
+    }
+
+    eff->state_     = kLaunch;
+    eff->duration_  = STRIP_FLY_DURATION;
+    eff->glow_scale_ = 3.4f;       // retail initial
+    eff->alive_     = true;
+
+    log_info("[S04 lightning_bespoke] SpawnForTest: origin=(%d,%d,%d) "
+             "maxpoints=%d yaw=%.2frad",
+             origin.x, origin.y, origin.z,
+             eff->maxpoints_, double(yaw));
+    return eff;
+}
+
+void TLightningAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || !alive_)
+        return;
+
+    // --- Sim-tick gate: original animator runs at 24 Hz.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
+    {
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+
+        // --- Pulse() state machine (stripeffect.cpp :406-457):
+        switch (state_)
+        {
+            case kLaunch:
+                state_ = kFly;
+                break;
+            case kFly:
+                --duration_;
+                if (duration_ <= 0)
+                {
+                    state_ = kExplode;
+                    duration_ = STRIP_EXPLODE_TICKS;
+                }
+                break;
+            case kExplode:
+                if (duration_ > 0) --duration_;
+                break;
+        }
+
+        // --- Animate() body (stripeffect.cpp :664-820):
+        // EXPLODE: shrink the tail at ADD_FACTOR=2 / tick, glow *= 0.8.
+        if (state_ == kExplode)
+        {
+            for (int32_t i = 0; i < 2 && numpoints_ > 0; ++i)
+                --numpoints_;
+            glow_scale_ *= 0.8f;
+        }
+        // FLY: grow at ADD_FACTOR=2 anchors / tick until numpoints == maxpoints.
+        else if (numpoints_ < maxpoints_)
+        {
+            for (int32_t i = 0; i < 2 && numpoints_ < maxpoints_; ++i)
+            {
+                // Snapshot stores p in local frame with p.y = -10 * numpoints,
+                // p.x = p.z = 0; we project that to world space along
+                // forward_dir_, anchored at the spawn origin.
+                SBoltAnchor& a = anchors_[numpoints_];
+                a.pos[0] = float(Pos().x) +
+                           forward_dir_[0] * float(numpoints_ * STRIP_SEG_LEN);
+                a.pos[1] = float(Pos().y) +
+                           forward_dir_[1] * float(numpoints_ * STRIP_SEG_LEN);
+                a.pos[2] = float(Pos().z) + 50.0f;
+                ++numpoints_;
+            }
+        }
+
+        // Smoothing calculations (stripeffect.cpp :741-792).
+        // Allocate the px/pz arrays of size numpoints+SMOOTH_SIZE; fill
+        // every SMOOTH_SIZE-th index with random(-13, 13); interpolate
+        // intermediate indices with the snapshot's 0.5/2.0/3.5 weights.
+        const int32_t n = numpoints_;
+        if (n >= 2)
+        {
+            float px[100 + STRIP_SMOOTH_SIZE] = {0};
+            float pz[100 + STRIP_SMOOTH_SIZE] = {0};
+            for (int32_t i = 1; i < n; ++i)
+            {
+                if (!(i % STRIP_SMOOTH_SIZE))
+                {
+                    px[i] = float(random(-STRIP_JITTER_MAG, STRIP_JITTER_MAG));
+                    pz[i] = float(random(-STRIP_JITTER_MAG, STRIP_JITTER_MAG));
+                }
+            }
+            int32_t last_point = 0;
+            int32_t next_point = STRIP_SMOOTH_SIZE;
+            for (int32_t i = 1; i < n; ++i)
+            {
+                if (i == next_point)
+                {
+                    last_point = next_point;
+                    next_point += STRIP_SMOOTH_SIZE;
+                }
+                const int32_t mod = i % STRIP_SMOOTH_SIZE;
+                if (mod)
+                {
+                    if (mod == 1)
+                    {
+                        px[i] = ((px[next_point] - px[last_point]) * 0.5f) /
+                                float(STRIP_SMOOTH_SIZE);
+                        pz[i] = ((pz[next_point] - pz[last_point]) * 0.5f) /
+                                float(STRIP_SMOOTH_SIZE);
+                    }
+                    else if (mod == 2)
+                    {
+                        px[i] = ((px[next_point] - px[last_point]) * 2.0f) /
+                                float(STRIP_SMOOTH_SIZE);
+                        pz[i] = ((pz[next_point] - pz[last_point]) * 2.0f) /
+                                float(STRIP_SMOOTH_SIZE);
+                    }
+                    else if (mod == 3)
+                    {
+                        px[i] = ((px[next_point] - px[last_point]) * 3.5f) /
+                                float(STRIP_SMOOTH_SIZE);
+                        pz[i] = ((pz[next_point] - pz[last_point]) * 3.5f) /
+                                float(STRIP_SMOOTH_SIZE);
+                    }
+                    px[i] += px[last_point];
+                    pz[i] += pz[last_point];
+                }
+            }
+            // Apply jitter to every anchor's xy + z, anchor 0 stays clean.
+            // Snapshot also has a "down ? p->z = -(i-1)*20/(maxpoints-1)" droop
+            // which we omit for first-pass (looks subtle and adds nothing for
+            // the boot-render smoke test); keep px/pz only.
+            for (int32_t i = 1; i < n; ++i)
+            {
+                anchors_[i].jitter[0] = px[i];
+                anchors_[i].jitter[1] = pz[i];
+            }
+        }
+
+        // ScrollTexture(-0.1) (stripeffect.cpp :817).
+        u_scroll_ += -0.1f;
+        if (u_scroll_ < -1.0f) u_scroll_ += 1.0f;
+        if (u_scroll_ >  1.0f) u_scroll_ -= 1.0f;
+
+        // Rotating glow degrees (stripeffect.cpp :814-815).
+        rotdegree_    = std::fmod(rotdegree_ + 12.0f, 360.0f);
+        morrotdegree_ = std::fmod(morrotdegree_ + 16.0f, 360.0f);
+
+        // Self-destruct when EXPLODE drains all points + the glow is dim
+        // (snapshot equivalent: `if (my_state == EXPLODE && !spark.GetCount()
+        // && !impact_spark.GetCount()) KillThisEffect()`). We approximate
+        // by waiting until numpoints == 0 AND glow_scale_ < 0.05.
+        if (state_ == kExplode && numpoints_ <= 1 && glow_scale_ < 0.05f)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (numpoints_ < 2)
+        return;
+
+    // --- Render() — port of stripeffect.cpp :822-915. Strip half is the
+    // SR pipeline submission (AdditiveStraight per snapshot SetAddBlendState
+    // -- ALPHABLENDENABLE is on in the snapshot's Render :701 enable). The
+    // glow uses two AdditiveStraight billboards as a stand-in for the
+    // RenderObject(obj 1) RotateZ()+RotateZ() pair.
+
+    // Perpendicular axes for applying jitter in world XY (matches
+    // src/stripeffect.cpp's perp_x/perp_y).
+    const float perp_x = -forward_dir_[1];
+    const float perp_y =  forward_dir_[0];
+
+    // Build SStripSegment[] for the strip body.
+    static thread_local std::vector<SStripSegment> seg_scratch;
+    seg_scratch.clear();
+    const int32_t n_seg = numpoints_ - 1;
+    seg_scratch.reserve(size_t(n_seg));
+    for (int32_t i = 0; i < n_seg; ++i)
+    {
+        const SBoltAnchor& a = anchors_[i];
+        const SBoltAnchor& b = anchors_[i + 1];
+        const float ta = float(i)     / float(n_seg);
+        const float tb = float(i + 1) / float(n_seg);
+        SStripSegment seg = {};
+        seg.world_a[0] = a.pos[0] + perp_x * a.jitter[0];
+        seg.world_a[1] = a.pos[1] + perp_y * a.jitter[0];
+        seg.world_a[2] = a.pos[2] + a.jitter[1];
+        seg.world_b[0] = b.pos[0] + perp_x * b.jitter[0];
+        seg.world_b[1] = b.pos[1] + perp_y * b.jitter[0];
+        seg.world_b[2] = b.pos[2] + b.jitter[1];
+        // Width hilt -> tip, LIGHTNING_SCALE constants -> STRIP_WIDTH_*.
+        seg.width_a_wu = STRIP_WIDTH_HILT * (1.0f - ta) + STRIP_WIDTH_TIP * ta;
+        seg.width_b_wu = STRIP_WIDTH_HILT * (1.0f - tb) + STRIP_WIDTH_TIP * tb;
+        // Snapshot sets every vertex color to D3DRGBA(1,1,1,1) (line :848),
+        // so all four corners are full white.
+        for (int32_t k = 0; k < 4; ++k)
+        {
+            seg.color_a[k] = 1.0f;
+            seg.color_b[k] = 1.0f;
+        }
+        seg.u_a = ta + u_scroll_;
+        seg.u_b = tb + u_scroll_;
+        seg_scratch.push_back(seg);
+    }
+
+    SStripDrawItem strip_item = {};
+    strip_item.segments     = seg_scratch.data();
+    strip_item.num_segments = int32_t(seg_scratch.size());
+    strip_item.key.texture     = StripFamilyGlowTexture();
+    strip_item.key.pipeline_id = uint16_t(EFxPipeline::Strip);
+    // Snapshot: SetBlendState() enables ALPHABLENDENABLE with default
+    // SRC_ALPHA/INV_SRC_ALPHA — but Render() in the snapshot is one
+    // monolithic block with no SetAddBlendState mid-way for the strip
+    // itself. Stripeffect.cpp's live port already migrated this to
+    // AdditiveStraight (see kStripColor + EFxBlend::AdditiveStraight
+    // comment). Preserve that here so the procedural-glow texture
+    // (premultiplied) reads correctly.
+    strip_item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    strip_item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    strip_item.debug_mode      = debug_mode;
+    Renderer->SubmitFxStrip(strip_item);
+
+    // Glow halo (snapshot stripeffect.cpp :861-902) — TWO billboard draws
+    // counter-rotating at the caster hand. We stand them in with two
+    // AdditiveStraight billboards offset slightly so a "rotating glow disc"
+    // reads through the strip start.
+    if (glow_scale_ > 0.005f)
+    {
+        const TTextureHandle spark_tex = StripFamilySparkTexture();
+        if (spark_tex != kInvalidTexture)
+        {
+            // Snapshot: scale = glow_scale + random(0, 4f/10.0) (i.e. 0..0.4
+            // jitter); we re-roll once per render. Placement is the bolt's
+            // origin anchor.
+            const float scl = glow_scale_ +
+                              (float(random(0, 4)) / 10.0f);
+            const float wx = anchors_[0].pos[0];
+            const float wy = anchors_[0].pos[1];
+            const float wz = anchors_[0].pos[2];
+            for (int32_t pass = 0; pass < 2; ++pass)
+            {
+                SBillboardDrawItem item = {};
+                item.world_pos[0] = wx;
+                item.world_pos[1] = wy;
+                item.world_pos[2] = wz;
+                // Snapshot scales the i3d object by `scl` (uniform on x/y/z);
+                // we pick a wu size that reads as a glow disc.
+                const float size_wu = 24.0f * scl;
+                item.size_wu[0] = size_wu;
+                item.size_wu[1] = size_wu;
+                item.color_rgba[0] = 1.0f;
+                item.color_rgba[1] = 1.0f;
+                item.color_rgba[2] = 1.0f;
+                item.color_rgba[3] = 1.0f;
+                item.uv_rect[0] = 0.0f;
+                item.uv_rect[1] = 0.0f;
+                item.uv_rect[2] = 1.0f;
+                item.uv_rect[3] = 1.0f;
+                item.key.texture     = spark_tex;
+                item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+                item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+                item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+                item.light_mode      = EFxLightMode::Unlit;
+                item.orientation     = EFxBillboardOrientation::ScreenAligned;
+                item.debug_mode      = debug_mode;
+                Renderer->SubmitFxBillboard(item);
+            }
+        }
+    }
+
+    // NOTE: spark + impact_spark sub-emitter passes are NOT ported
+    // (forensics SPARKS_TSparkAnimator.md owns that piece). First-pass
+    // sticks to the strip + glow.
+}
+
+// =========================================================================
+// S05 TShockAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/effectcomp.cpp :609-770. The retail TShockAnimator
+// is embedded in I21 TIceBoltAnimator at the target/caster end. Animator
+// owns one ring TStripAnimator-shaped object with N vertices; per-tick
+// scale_factor *= component-wise; when any axis crosses max_size, either
+// flip to SHRINK or set done. Per-frame Render: rotate/scale/translate
+// the object's matrix, optionally fade alpha by
+// (max - scale)/(max - init), submit. We approximate the ring with N
+// billboards arrayed in a circle on the world XY plane.
+
+TShockAnimator_Bespoke* TShockAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TShockAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // Snapshot Set() copies the incoming SShockParam and sets init_scale.
+    // For the harness we use defaults consistent with the I21 ring usage:
+    // start small, grow to ~50 wu over ~30 ticks (scale_factor 1.10/tick),
+    // then shrink back via shrink_factor 0.92/tick. Pos lives at origin.
+    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
+    eff->pos_.X = float(origin.x);
+    eff->pos_.Y = float(origin.y);
+    eff->pos_.Z = float(origin.z) + 4.0f;
+    eff->rot_   = {0.0f, 0.0f, 0.0f};
+    eff->scale_         = {2.0f, 2.0f, 2.0f};         // start radius ~2 wu
+    eff->scale_factor_  = {1.10f, 1.10f, 1.10f};
+    eff->shrink_factor_ = {0.92f, 0.92f, 0.92f};
+    eff->max_size_      = {50.0f, 50.0f, 50.0f};
+    eff->min_size_      = {0.5f, 0.5f, 0.5f};
+    eff->init_scale_    = eff->scale_;
+    eff->flags_         = kFlagShrink | kFlagFade;
+    eff->ring_color_[0] = 0.5f;
+    eff->ring_color_[1] = 0.7f;
+    eff->ring_color_[2] = 1.0f;
+    eff->ring_color_[3] = 1.0f;
+    eff->done_  = false;
+    eff->grow_  = kGrow;
+
+    log_info("[S05 shock_bespoke] SpawnForTest: origin=(%d,%d,%d) flags=%d "
+             "init_scale=(%.2f,%.2f,%.2f) max=(%.2f,%.2f,%.2f)",
+             origin.x, origin.y, origin.z, eff->flags_,
+             double(eff->init_scale_.X), double(eff->init_scale_.Y), double(eff->init_scale_.Z),
+             double(eff->max_size_.X), double(eff->max_size_.Y), double(eff->max_size_.Z));
+    return eff;
+}
+
+void TShockAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     if (!Renderer)
         return;
@@ -8596,6 +9043,103 @@ void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         item.world_pos[0] = float(base.x) + p.pos.X;
         item.world_pos[1] = float(base.y) + p.pos.Y;
         item.world_pos[2] = float(base.z) + p.pos.Z;
+    // --- Animate() (effectcomp.cpp :636-663):
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
+    {
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+        if (done_)
+            break;
+
+        // scaling
+        scale_.X *= scale_factor_.X;
+        scale_.Y *= scale_factor_.Y;
+        scale_.Z *= scale_factor_.Z;
+
+        // check growth, and shrinking
+        if ((scale_.X > max_size_.X || scale_.Y > max_size_.Y || scale_.Z > max_size_.Z)
+            && grow_ == kGrow)
+        {
+            if (flags_ & kFlagShrink)
+            {
+                grow_ = kShrink;
+                scale_factor_.X = shrink_factor_.X;
+                scale_factor_.Y = shrink_factor_.Y;
+                scale_factor_.Z = shrink_factor_.Z;
+            }
+            else
+            {
+                done_ = true;
+            }
+        }
+        else if ((scale_.X < min_size_.X || scale_.Y < min_size_.Y || scale_.Z < min_size_.Z)
+                 && grow_ == kShrink)
+        {
+            done_ = true;
+        }
+    }
+
+    if (done_)
+        return;
+
+    // --- Render() (effectcomp.cpp :689-770):
+    // Snapshot computes alpha_blend_factor = (max - scale) / (max - init) when
+    // SHOCKWAVE_FLAG_FADE set, and multiplies the alpha by it. (RGB
+    // commented out in snapshot.) We do the same.
+    float alpha_blend_factor = 1.0f;
+    if (flags_ & kFlagFade)
+    {
+        alpha_blend_factor = (max_size_.X - scale_.X) /
+                             (max_size_.X - init_scale_.X);
+        if (alpha_blend_factor < 0.0f) alpha_blend_factor = 0.0f;
+        if (alpha_blend_factor > 1.0f) alpha_blend_factor = 1.0f;
+    }
+
+    // Snapshot draws ONE object with `ring_count * vertex_count` lverts.
+    // We collapse to one ring of kRingVertices billboards on the world XY
+    // plane, radius = scale.x * 10wu (the snapshot mesh shape isn't
+    // directly accessible — first-pass approximation).
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    const float r = scale_.X * 10.0f;
+    const float a = ring_color_[3] * alpha_blend_factor;
+    for (int32_t j = 0; j < kRingVertices; ++j)
+    {
+        const float th = float(j) / float(kRingVertices) * 6.28318530718f;
+        const float wx = pos_.X + std::cos(th) * r;
+        const float wy = pos_.Y + std::sin(th) * r;
+        const float wz = pos_.Z;
+
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = wx;
+        item.world_pos[1] = wy;
+        item.world_pos[2] = wz;
+        // Per-vertex size = a bit of the radius so consecutive billboards
+        // overlap into a continuous ring.
+        const float ring_segment_wu = r * 0.35f + 4.0f;
+        item.size_wu[0] = ring_segment_wu;
+        item.size_wu[1] = ring_segment_wu;
+        item.color_rgba[0] = ring_color_[0];
+        item.color_rgba[1] = ring_color_[1];
+        item.color_rgba[2] = ring_color_[2];
+        item.color_rgba[3] = a;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        // Snapshot Render() :756-758 sets SRCBLEND=SRC_ALPHA /
+        // DESTBLEND=INV_SRC_ALPHA -> EFxBlend::Alpha. (Preserved verbatim;
+        // do not reinterpret as Additive.)
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        // Ground-plane ring -> WorldXY so it foreshortens correctly.
+        item.orientation     = EFxBillboardOrientation::WorldXY;
+        item.debug_mode      = debug_mode;
         Renderer->SubmitFxBillboard(item);
     }
 }
@@ -8849,6 +9393,97 @@ TPhotonEffect_Bespoke* TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoin
 }
 
 void TPhotonEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+// S07 TStreamerEffect_Bespoke
+// =========================================================================
+// Snapshot source: src/effect_old.cpp :10248-10434 (TStreamerAnimator).
+// 4 streams (j=0..3), each per tick spawns STREAMER_SKIP*(4-j) new
+// particles via InitStreamer(j); particle pos is sphere-mapped from
+// (th, h) into (cos*r, sin*r, vertical), with modif = 0.5*(1+cos(2h+PI))
+// for a smooth ring growth. Lifetime gated by frameon > STREAMER_DURATION.
+// Render uses SetAddBlendState (AdditiveStraight).
+
+TStreamerEffect_Bespoke* TStreamerEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TStreamerEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // Snapshot Initialize() (effect_old.cpp :10297-10322):
+    eff->frameon_ = 0;
+    for (int32_t j = 0; j < kStreamerMaxStreams; ++j)
+    {
+        eff->scl_init_[j] = 0.15f * float(j + 1);
+        eff->dscl_[j]     = eff->scl_init_[j] / float(kStreamerMaxParticles);
+        eff->h_[j]        = 0.0f;
+        eff->dh_[j]       = 0.02f / float(4 - j);
+        eff->th_[j]       = 0.0f;
+        eff->dth_[j]      = 0.15f;
+        for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
+            eff->stream_[j][i].count = 0;
+    }
+    eff->alive_ = true;
+
+    log_info("[S07 streamer_bespoke] SpawnForTest: origin=(%d,%d,%d)",
+             origin.x, origin.y, origin.z);
+    return eff;
+}
+
+// Snapshot InitStreamer (effect_old.cpp :10276-10295) — adds one particle
+// to stream x at the current (th, h) parametric point, advances angles,
+// short-circuits frameon if h crosses PI.
+void TStreamerEffect_Bespoke::InitStreamerSnap(int32_t x)
+{
+    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};
+    const float modif = float(0.5 * (1.0 + std::cos(2.0 * double(h_[x]) + M_PI)));
+    pos.X = float(kStreamerModifier) * std::cos(th_[x]) * modif *
+            float(x + 1) / float(kStreamerMaxStreams);
+    pos.Y = float(kStreamerModifier) * std::sin(th_[x]) * modif *
+            float(x + 1) / float(kStreamerMaxStreams);
+    pos.Z = float(kStreamerModifierV) * (std::cos(h_[x]) + 1.0f);
+    h_[x] += dh_[x];
+    if (h_[x] > float(M_PI))
+    {
+        // h_[x] -= M_PI;  (commented out in snapshot)
+        frameon_ = kStreamerDuration + 1;
+    }
+    if (h_[x] > float(2.0 * M_PI))
+        h_[x] -= float(2.0 * M_PI);
+    th_[x] += dth_[x];
+    if (th_[x] > float(2.0 * M_PI))
+        th_[x] -= float(2.0 * M_PI);
+    AddStreamerSnap(x, pos, scl_init_[x] * modif);
+}
+
+// Snapshot AddStreamer (effect_old.cpp :10324-10347) — finds the LAST
+// dead slot (snapshot does `if (count <= 0) p = i` in a forward sweep,
+// so p ends as the last free index), populates it, then decrements all
+// counts and scales for the whole stream.
+void TStreamerEffect_Bespoke::AddStreamerSnap(int32_t num, const hmm_vec3& pos, float scl)
+{
+    int32_t p = -1;
+    for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
+    {
+        if (stream_[num][i].count <= 0)
+            p = i;
+    }
+    if (p > -1)
+    {
+        stream_[num][p].pos.X = pos.X;
+        stream_[num][p].pos.Y = pos.Y;
+        stream_[num][p].pos.Z = pos.Z;
+        stream_[num][p].scl = scl;
+        stream_[num][p].count = kStreamerMaxParticles;
+    }
+    for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
+    {
+        stream_[num][i].count--;
+        stream_[num][i].scl -= dscl_[num];
+    }
+}
+
+void TStreamerEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     if (!Renderer)
         return;
@@ -9045,6 +9680,125 @@ TMistEffect_Bespoke* TMistEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& o
 }
 
 void TMistEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+    // --- Animate() (effect_old.cpp :10356-10381):
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
+    {
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+        if (!alive_)
+            break;
+        frameon_++;
+        for (int32_t j = 0; j < kStreamerMaxStreams; ++j)
+        {
+            for (int32_t i = 0; i < kStreamerSkip * (4 - j); ++i)
+                InitStreamerSnap(j);
+        }
+        if (frameon_ > kStreamerDuration)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render() (effect_old.cpp :10390-10434):
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    const float ox = float(Pos().x);
+    const float oy = float(Pos().y);
+    const float oz = float(Pos().z);
+    for (int32_t j = 0; j < kStreamerMaxStreams; ++j)
+    {
+        for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
+        {
+            const SStreamerParticleEx& sp = stream_[j][i];
+            if (sp.count <= 0 || sp.scl <= 0.0f)
+                continue;
+            // Snapshot Render: ScaleMatrix(scl), RotateX(-PI/2)+RotateX(-PI/6)+
+            // RotateZ(-PI/4)+RotateZ(-face*TORADIAN). The orientation rotations
+            // are baked into "face the camera flat", which billboards already
+            // do; we use ScreenAligned + the snapshot's pos.
+            SBillboardDrawItem item = {};
+            item.world_pos[0] = ox + sp.pos.X;
+            item.world_pos[1] = oy + sp.pos.Y;
+            item.world_pos[2] = oz + sp.pos.Z;
+            const float size_wu = sp.scl * 12.0f;   // imagery scale -> wu
+            item.size_wu[0] = size_wu;
+            item.size_wu[1] = size_wu;
+            item.color_rgba[0] = 1.0f;
+            item.color_rgba[1] = 1.0f;
+            item.color_rgba[2] = 1.0f;
+            item.color_rgba[3] = 1.0f;
+            item.uv_rect[0] = 0.0f;
+            item.uv_rect[1] = 0.0f;
+            item.uv_rect[2] = 1.0f;
+            item.uv_rect[3] = 1.0f;
+            item.key.texture     = spark_tex;
+            item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+            // Snapshot Render() :10395-10396 SetAddBlendState -> AdditiveStraight.
+            item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+            item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+            item.light_mode      = EFxLightMode::Unlit;
+            item.orientation     = EFxBillboardOrientation::ScreenAligned;
+            item.debug_mode      = debug_mode;
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+}
+
+// =========================================================================
+// X11 TRibbonAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/effect_old.cpp :4069-4321. The revive halo's
+// composite: NUM_RIBBON_SPARKS=30 small sparks orbiting in a column above
+// the ribbon position, plus a slow-growing center spark at the floor,
+// plus NUM_RIBBONS=3 rotating ribbons. Pre-release reads
+// (PTReviveEffect)inst->stage / ->target — neither exists in the harness,
+// so we land in the "no spell" branch (effect_old.cpp :4180-4186, grow
+// ribscale to RIBBON_MAXSCALE then hold).
+
+TRibbonAnimator_Bespoke* TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TRibbonAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // Snapshot Initialize() (effect_old.cpp :4084-4134):
+    // numtexframes from imagery (NOT bound; default 1).
+    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
+    eff->ribbontimer_ = 0;
+    eff->ribpos_.X = float(origin.x);
+    eff->ribpos_.Y = float(origin.y);
+    eff->ribpos_.Z = float(origin.z);
+    eff->ribscale_ = 0.05f;   // RIBBON_MINSCALE
+    for (int32_t n = 0; n < NUM_RIBBONS; ++n)
+        eff->rotation_[n] = float(n) * 2.0f;
+    for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
+    {
+        eff->p_[n].X = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+        eff->p_[n].Y = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+        eff->p_[n].Z = float(random(0, RIBBON_RADIUS / 2));
+        eff->v_[n].X = -eff->p_[n].X / float(RIBBON_SPARK_DURATION) / 2.0f;
+        eff->v_[n].Y = -eff->p_[n].Y / float(RIBBON_SPARK_DURATION) / 2.0f;
+        eff->v_[n].Z = 0.5f;
+        eff->scale_spark_[n] = 0.0f;
+        eff->framenum_[n] = random(-NUM_RIBBON_SPARKS, 0);
+    }
+    eff->centertilt_     = 0.0f;
+    eff->centertilt_dx_  = 0.001f;
+    eff->alive_          = true;
+
+    log_info("[X11 ribbon_bespoke] SpawnForTest: origin=(%d,%d,%d)",
+             origin.x, origin.y, origin.z);
+    return eff;
+}
+
+void TRibbonAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     if (!Renderer)
         return;
@@ -9818,4 +10572,170 @@ void TPixieEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
                             kPixieBespokeLightRadiusWu,
                             0.55f, 0.95f, 0.85f,
                             intensity);
+    // --- Animate() (effect_old.cpp :4143-4235):
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
+    {
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+        if (!alive_)
+            break;
+        ribbontimer_++;
+        // Rotate ribbons (snapshot :4157).
+        for (int32_t n = 0; n < NUM_RIBBONS; ++n)
+            rotation_[n] += 0.2f;
+        // No PTReviveEffect in harness — take the else-branch (snapshot
+        // :4180-4186): grow ribscale to RIBBON_MAXSCALE.
+        const float RIBBON_MAXSCALE = 4.5f;
+        const float RIBBON_MINSCALE = 0.05f;
+        const float RIBBON_SCALEINC =
+            (RIBBON_MAXSCALE - RIBBON_MINSCALE) / float(kRibbonGrowFrames);
+        if (ribscale_ <= RIBBON_MAXSCALE)
+            ribscale_ += RIBBON_SCALEINC;
+
+        // Update all ribbon sparks (snapshot :4191-4228).
+        for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
+        {
+            framenum_[n]++;
+            if (framenum_[n] > 0)
+            {
+                if (framenum_[n] >= RIBBON_SPARK_DURATION)
+                {
+                    p_[n].X = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+                    p_[n].Y = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+                    p_[n].Z = float(random(0, RIBBON_RADIUS / 2));
+                    v_[n].X = -p_[n].X / float(RIBBON_SPARK_DURATION) / 2.0f;
+                    v_[n].Y = -p_[n].Y / float(RIBBON_SPARK_DURATION) / 2.0f;
+                    v_[n].Z = 0.5f;
+                    framenum_[n] = 0;
+                    scale_spark_[n] = 0.0f;
+                }
+                else if (framenum_[n] > RIBBON_SPARK_DURATION / 2)
+                    scale_spark_[n] -= float(RIBBON_SPARK_SCALE_STEP);
+                else
+                    scale_spark_[n] += float(RIBBON_SPARK_SCALE_STEP);
+                p_[n].X += v_[n].X;
+                p_[n].Y += v_[n].Y;
+                p_[n].Z += v_[n].Z;
+                v_[n].Z += 0.5f;
+            }
+        }
+        centertilt_ += centertilt_dx_;
+        if (centertilt_ > 0.25f || centertilt_ < -0.25f)
+            centertilt_dx_ = -centertilt_dx_;
+
+        // Harness self-kill — snapshot relies on PTReviveEffect to KillThisEffect;
+        // we use a fixed one-shot duration so the Combat-cadence harness can
+        // re-trigger cleanly.
+        if (ribbontimer_ >= kRibbonLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render() (effect_old.cpp :4244-4321):
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    const float ox = ribpos_.X;
+    const float oy = ribpos_.Y;
+    const float oz = ribpos_.Z;
+
+    // 1) Ribbon sparks (snapshot :4257-4277). For each spark with framenum>0
+    // and scale>0, draw the obj at p_[n] with scale_spark_[n].
+    for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
+    {
+        if (framenum_[n] > 0 && scale_spark_[n] > 0.0f)
+        {
+            SBillboardDrawItem item = {};
+            item.world_pos[0] = ox + p_[n].X;
+            item.world_pos[1] = oy + p_[n].Y;
+            item.world_pos[2] = oz + p_[n].Z;
+            const float size_wu = scale_spark_[n] * 16.0f;
+            item.size_wu[0] = size_wu;
+            item.size_wu[1] = size_wu;
+            item.color_rgba[0] = 1.0f;
+            item.color_rgba[1] = 1.0f;
+            item.color_rgba[2] = 1.0f;
+            item.color_rgba[3] = 1.0f;
+            item.uv_rect[0] = 0.0f;
+            item.uv_rect[1] = 0.0f;
+            item.uv_rect[2] = 1.0f;
+            item.uv_rect[3] = 1.0f;
+            item.key.texture     = spark_tex;
+            item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+            // Snapshot Render() :4248-4249 SetBlendState -> Alpha.
+            item.key.blend       = uint8_t(EFxBlend::Alpha);
+            item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+            item.light_mode      = EFxLightMode::Unlit;
+            item.orientation     = EFxBillboardOrientation::ScreenAligned;
+            item.debug_mode      = debug_mode;
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+
+    // 2) Center floor spark (snapshot :4283-4294).
+    {
+        const float scl = ribscale_ * 2.5f + (float(random(0, 10)) / 20.0f);
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = ox;
+        item.world_pos[1] = oy;
+        item.world_pos[2] = oz;
+        const float size_wu = scl * 12.0f;
+        item.size_wu[0] = size_wu;
+        item.size_wu[1] = size_wu;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::WorldXY;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+
+    // 3) Ribbons (snapshot :4301-4316). Three rotating ribbons sitting at
+    // ribpos. Each ribbon's z is scaled 2x x/y (snapshot :4308-4309); we
+    // stand them in as three world-XY-tipped billboards offset upward,
+    // rotating around ribpos via rotation_[n].
+    for (int32_t n = 0; n < NUM_RIBBONS; ++n)
+    {
+        const float ang = rotation_[n];
+        const float offs = ribscale_ * 8.0f;
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = ox + std::cos(ang) * offs;
+        item.world_pos[1] = oy + std::sin(ang) * offs;
+        item.world_pos[2] = oz + ribscale_ * 10.0f;
+        const float ribbon_size_wu = ribscale_ * 16.0f;
+        item.size_wu[0] = ribbon_size_wu;
+        item.size_wu[1] = ribbon_size_wu * 2.0f;       // snapshot scl.z = 2x scl.x/y
+        item.color_rgba[0] = 0.9f;
+        item.color_rgba[1] = 0.85f;
+        item.color_rgba[2] = 0.55f;                    // pale gold
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
 }
