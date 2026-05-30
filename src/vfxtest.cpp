@@ -2192,6 +2192,168 @@ void StripSubmit(void* cp, EFxDebugMode dbg)
     c->strip->TickAndSubmitForTest(dbg);
 }
 
+// --- Wave 2 batch wave-bespoke-06-strip-ribbon: first-pass bespoke ports.
+// All four shims follow the TBloodEffect_Bespoke pattern: spawn -> tick
+// -> when IsAlive() goes false, wait kRetriggerGap seconds then respawn.
+
+constexpr float kStripFamilyRetriggerGap = 1.0f;
+
+// S04 TLightningAnimator_Bespoke ------------------------------------------
+struct SLightningBespokeCtx {
+    TLightningAnimator_Bespoke* eff    = nullptr;
+    S3DPoint                    origin = {0, 0, 0};
+    float                       gap    = 0.0f;
+};
+void* LightningBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SLightningBespokeCtx();
+    c->origin = origin;
+    c->eff    = TLightningAnimator_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TLightningAnimator_Bespoke::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+void LightningBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SLightningBespokeCtx*>(cp);
+    delete c->eff;
+    delete c;
+}
+void LightningBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SLightningBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TLightningAnimator_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kStripFamilyRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// S05 TShockAnimator_Bespoke ----------------------------------------------
+struct SShockBespokeCtx {
+    TShockAnimator_Bespoke* eff    = nullptr;
+    S3DPoint                origin = {0, 0, 0};
+    float                   gap    = 0.0f;
+};
+void* ShockBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SShockBespokeCtx();
+    c->origin = origin;
+    c->eff    = TShockAnimator_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TShockAnimator_Bespoke::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+void ShockBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SShockBespokeCtx*>(cp);
+    delete c->eff;
+    delete c;
+}
+void ShockBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SShockBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TShockAnimator_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kStripFamilyRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// S07 TStreamerEffect_Bespoke ---------------------------------------------
+struct SStreamerBespokeCtx {
+    TStreamerEffect_Bespoke* eff    = nullptr;
+    S3DPoint                 origin = {0, 0, 0};
+    float                    gap    = 0.0f;
+};
+void* StreamerBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SStreamerBespokeCtx();
+    c->origin = origin;
+    c->eff    = TStreamerEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TStreamerEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+void StreamerBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SStreamerBespokeCtx*>(cp);
+    delete c->eff;
+    delete c;
+}
+void StreamerBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SStreamerBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TStreamerEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kStripFamilyRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// X11 TRibbonAnimator_Bespoke ---------------------------------------------
+struct SRibbonBespokeCtx {
+    TRibbonAnimator_Bespoke* eff    = nullptr;
+    S3DPoint                 origin = {0, 0, 0};
+    float                    gap    = 0.0f;
+};
+void* RibbonBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SRibbonBespokeCtx();
+    c->origin = origin;
+    c->eff    = TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+void RibbonBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SRibbonBespokeCtx*>(cp);
+    delete c->eff;
+    delete c;
+}
+void RibbonBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SRibbonBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kStripFamilyRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 // --- FB: real TRippleEffect (procedural ring atlas, H03) ----------------
 // Spawns a sector-less TRippleEffect at the harness-provided origin via
 // SpawnForTest and drives its ring expansion through TickAndSubmitForTest
@@ -3099,6 +3261,55 @@ struct SVfxTestBootstrap {
         strip.submit        = [](void* c, EFxDebugMode d) { StripSubmit(c, d); };
         strip.destroy       = [](void* c) { StripDestroy(c); };
         VfxTest::DeferredRegister(strip);
+
+        // Wave 2 batch wave-bespoke-06-strip-ribbon: first-pass bespoke ports.
+        // Each entry uses the same Combat / Static-respawning cadence as the
+        // engine port siblings (TBloodEffect_BESPOKE convention).
+        VfxTest::SEffect lightning_bespoke = {};
+        lightning_bespoke.id            = "TLightningAnimator_BESPOKE";
+        lightning_bespoke.family        = "strip";
+        lightning_bespoke.pipeline      = "SR+FB";
+        lightning_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Combat;
+        lightning_bespoke.factory       = [](const S3DPoint& o) -> void* { return LightningBespokeSpawn(o); };
+        lightning_bespoke.submit        = [](void* c, EFxDebugMode d) { LightningBespokeSubmit(c, d); };
+        lightning_bespoke.destroy       = [](void* c) { LightningBespokeDestroy(c); };
+        VfxTest::DeferredRegister(lightning_bespoke);
+
+        VfxTest::SEffect shock_bespoke = {};
+        shock_bespoke.id            = "TShockAnimator_BESPOKE";
+        shock_bespoke.family        = "shock";
+        shock_bespoke.pipeline      = "FB";
+        // Shock ring: SpellGround cadence (one-shot ground-anchored expanding
+        // ring, re-fires periodically).
+        shock_bespoke.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        shock_bespoke.factory       = [](const S3DPoint& o) -> void* { return ShockBespokeSpawn(o); };
+        shock_bespoke.submit        = [](void* c, EFxDebugMode d) { ShockBespokeSubmit(c, d); };
+        shock_bespoke.destroy       = [](void* c) { ShockBespokeDestroy(c); };
+        VfxTest::DeferredRegister(shock_bespoke);
+
+        VfxTest::SEffect streamer_bespoke = {};
+        streamer_bespoke.id            = "TStreamerEffect_BESPOKE";
+        streamer_bespoke.family        = "streamer";
+        streamer_bespoke.pipeline      = "FB";
+        // Streamer: spell-cast hemispherical spiral — Static cadence (one
+        // burst per ~kStreamerDuration ticks, internal cycle).
+        streamer_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        streamer_bespoke.factory       = [](const S3DPoint& o) -> void* { return StreamerBespokeSpawn(o); };
+        streamer_bespoke.submit        = [](void* c, EFxDebugMode d) { StreamerBespokeSubmit(c, d); };
+        streamer_bespoke.destroy       = [](void* c) { StreamerBespokeDestroy(c); };
+        VfxTest::DeferredRegister(streamer_bespoke);
+
+        VfxTest::SEffect ribbon_bespoke = {};
+        ribbon_bespoke.id            = "TRibbonAnimator_BESPOKE";
+        ribbon_bespoke.family        = "ribbon";
+        ribbon_bespoke.pipeline      = "FB";
+        // Ribbon: revive halo — SpellGround cadence (one halo, ground-
+        // anchored, lifts then fades; harness recycles every ~kRibbonLifeTicks).
+        ribbon_bespoke.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        ribbon_bespoke.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeSpawn(o); };
+        ribbon_bespoke.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
+        ribbon_bespoke.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+        VfxTest::DeferredRegister(ribbon_bespoke);
 
         VfxTest::SEffect ripple = {};
         ripple.id            = "TRippleEffect";
