@@ -6456,3 +6456,679 @@ case 1 /* MISSILE_FLY */:
     break;
 }
 #endif
+
+// *************************************************************************
+// * Magic family bespoke first-pass ports (wave-bespoke-04-aura-magic)     *
+// *************************************************************************
+//
+// Faithful direct ports of the snapshot animator bodies for M01/M03/M05/X09.
+// Translation rules (per task brief): per-tick math/variable names/constants
+// preserved from the snapshot; blend mode preserved AS WRITTEN
+// (SetAddBlendState -> AdditiveStraight; SetBlendState -> Alpha); 24Hz
+// sim-tick gate for framerate-independent motion (same pattern as B01).
+// First-pass renders mesh-based draws as billboards positioned at the
+// original sub-object pos/scl — verifies compile + boot + something draws.
+
+namespace {
+
+// ---- M01 / M03 / X09 share the lazy-load helper pattern ---------------------
+// Tries a list of candidate imagery paths in order (the snapshot animator
+// classes don't specify a canonical I3D — `Magic\\aura.i3d`, `Magic\\heal*.i3d`,
+// `Magic\\shield.i3d` are guesses pending forensics). Falls through to a
+// kInvalidTexture handle if nothing loads; the harness will still draw
+// nothing visibly but the effect compiles + boots.
+TTextureHandle TryLoadMagicTexture(const char* const* candidate_paths,
+                                   int32_t num_candidates,
+                                   float out_uv_rect[4],
+                                   const char* tag)
+{
+    for (int32_t i = 0; i < num_candidates; ++i)
+    {
+        const int32_t img_id = TObjectImagery::FindImagery(candidate_paths[i]);
+        if (img_id < 0)
+            continue;
+        TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+        if (!base)
+            continue;
+        T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+        if (!img3d)
+        {
+            TObjectImagery::FreeImagery(base);
+            continue;
+        }
+        // Lazy-mesh-init poke (mirror F01/B01/H04/X22): NumObjects() triggers
+        // the actual texture-slot population; NumTextures() alone doesn't.
+        (void)img3d->NumObjects();
+        const int32_t num_tex = img3d->NumTextures();
+        if (num_tex <= 0)
+            continue;
+        S3DTex tex = {};
+        img3d->GetTexture(0, &tex);
+        if (tex.htexture == kInvalidTexture)
+            continue;
+        out_uv_rect[0] = 0.0f;
+        out_uv_rect[1] = 0.0f;
+        out_uv_rect[2] = 1.0f;
+        out_uv_rect[3] = 1.0f;
+        log_info("[%s] resolved imagery='%s' tex=%u", tag,
+                 candidate_paths[i], tex.htexture);
+        return tex.htexture;
+    }
+    log_warn("[%s] no candidate imagery resolved (tried %d paths); will draw "
+             "untextured/invisible billboards (first-pass blocker note)",
+             tag, num_candidates);
+    return kInvalidTexture;
+}
+
+}   // namespace
+
+// =========================================================================
+// M01 — TAuraEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TAuraAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:3535-3667). The snapshot uses a TParticleSystem
+// emitting AURA_COUNT=100 particles randomly distributed across the
+// character's animator sub-objects. The harness has no live character,
+// so we collapse the per-frame emission onto a single emit-radius around
+// the effect's pos (preserving the random spread + Z-range + life span).
+// Per-tick scale decay (scl *= AURA_DEC=0.97) is preserved verbatim.
+// Render: AdditiveStraight (was SetAddBlendState).
+
+TAuraEffect_Bespoke* TAuraEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Imagery guess list (no forensics doc yet — aura* candidates).
+    static const char* kAuraCandidates[] = {
+        "Magic\\aura.i3d",
+        "Magic\\Aura.I3D",
+        "Magic\\flare.i3d",      // TFlareAnimator uses a similar emit pattern
+    };
+
+    // Spawn with no imagery (we resolve textures separately via TryLoad).
+    auto* aura = new TAuraEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    aura->ForcePos(origin);
+    aura->SetMapIndex(MapPane.MakeIndex());
+    aura->ActivateComponents();
+
+    aura->texture_ = TryLoadMagicTexture(kAuraCandidates,
+                                         int32_t(sizeof(kAuraCandidates) / sizeof(*kAuraCandidates)),
+                                         aura->uv_rect_, "aura");
+
+    aura->frame_  = 0;
+    aura->to_add_ = 0;
+    aura->alive_  = true;
+
+    log_info("[aura] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             aura->GetMapIndex(), origin.x, origin.y, origin.z, aura->texture_);
+    return aura;
+}
+
+void TAuraEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick gate for framerate-independent integration.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kAuraSimTickMs))
+        {
+            sim_accum_ms_ -= double(kAuraSimTickMs);
+
+            // Snapshot effect_old.cpp:3571-3575 — `to_add` ramps up/down
+            // bracketing the AURA_FRAME window.
+            ++frame_;
+            if (frame_ < kAuraFrameCap && to_add_ < kAuraAdd)
+                ++to_add_;
+            else if (frame_ >= kAuraFrameCap && to_add_ > 0)
+                --to_add_;
+
+            // Snapshot effect_old.cpp:3587-3636 — emit `to_add` new
+            // particles per tick. Without a character animator we emit
+            // around the effect's local origin (the snapshot picks a
+            // random sub-object and offsets by ±AURA_SPREAD).
+            for (int32_t i = 0; i < to_add_; ++i)
+            {
+                // Find a free slot
+                int32_t slot = -1;
+                for (int32_t k = 0; k < kAuraCount; ++k)
+                {
+                    if (!particles_[k].used)
+                    {
+                        slot = k;
+                        break;
+                    }
+                }
+                if (slot < 0)
+                    break;
+
+                SAuraParticle& p = particles_[slot];
+                p.used = true;
+                p.pos.X = float(random(-kAuraSpread, kAuraSpread));
+                p.pos.Y = float(random(-kAuraSpread, kAuraSpread));
+                p.pos.Z = float(random(-kAuraSpread, kAuraSpread));
+
+                const float scale = float(random(kAuraMinScl, kAuraMaxScl)) * 0.01f;
+                p.scl.X = p.scl.Y = p.scl.Z = scale;
+
+                // snapshot acc is unused for these single-tick particles;
+                // velocity is only the Z component (ascending aura motes).
+                p.vel.X = 0.0f;
+                p.vel.Y = 0.0f;
+                p.vel.Z = float(random(kAuraMinZ, kAuraMaxZ)) * 0.1f;
+
+                p.life_span = random(kAuraMinLife, kAuraMaxLife);
+            }
+
+            // Snapshot effect_old.cpp:3641-3651 — per-particle scale decay
+            // each tick. Combined with the inline integration TParticleSystem
+            // does (pos += vel; life_span--; kill when life_span <= 0).
+            bool done = true;
+            for (int32_t i = 0; i < kAuraCount; ++i)
+            {
+                SAuraParticle& p = particles_[i];
+                if (!p.used)
+                    continue;
+                done = false;
+                p.pos.X += p.vel.X;
+                p.pos.Y += p.vel.Y;
+                p.pos.Z += p.vel.Z;
+                p.scl.X *= kAuraDec;
+                p.scl.Y *= kAuraDec;
+                p.scl.Z *= kAuraDec;
+                --p.life_span;
+                if (p.life_span <= 0)
+                    p.used = false;
+            }
+
+            // Snapshot effect_old.cpp:3653-3654 — self-destruct when emit
+            // window closes and all particles have died.
+            if (frame_ >= kAuraFrameCap && to_add_ == 0 && done)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    // --- Render (port of TAuraAnimator::Render, effect_old.cpp:3657-3667).
+    // SetAddBlendState -> AdditiveStraight, preserved AS WRITTEN.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = Pos();
+    for (int32_t i = 0; i < kAuraCount; ++i)
+    {
+        const SAuraParticle& p = particles_[i];
+        if (!p.used)
+            continue;
+
+        SBillboardDrawItem item = {};
+        // size_wu scaled by per-particle scl (snapshot ranges 0.25..0.6).
+        const float size = 32.0f * p.scl.X;
+        item.size_wu[0] = size;
+        item.size_wu[1] = size;
+        // Aura tint — warm gold (placeholder until forensics confirms).
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 0.85f;
+        item.color_rgba[2] = 0.40f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0] = float(base.x) + p.pos.X;
+        item.world_pos[1] = float(base.y) + p.pos.Y;
+        item.world_pos[2] = float(base.z) + p.pos.Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// M03 — THealEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of THealAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:628-833). NUM_HEAL_BUBBLES=60 bubbles + a
+// cylindrical glow at the feet. HEAL_DURATION=40 ticks total: glow
+// grows for HEAL_DURATION/2, then shrinks once activebubbles==0.
+// Per-bubble: random pos in ±HEALING_RADIUS=20, rises with `rise` at
+// random(3,6)*4/3 wu/tick, scale shrinks by HEAL_SCALE_STEP=0.15
+// until invisible; respawns until framenum[0] > HEAL_DURATION.
+// SetBlendState -> Alpha (preserved AS WRITTEN).
+
+THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kHealCandidates[] = {
+        "Magic\\heal.i3d",
+        "Magic\\Heal.I3D",
+        "Magic\\heal1.i3d",
+    };
+
+    auto* heal = new THealEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    heal->ForcePos(origin);
+    heal->SetMapIndex(MapPane.MakeIndex());
+    heal->ActivateComponents();
+
+    heal->bubble_tex_ = TryLoadMagicTexture(kHealCandidates,
+                                            int32_t(sizeof(kHealCandidates) / sizeof(*kHealCandidates)),
+                                            heal->bubble_uv_, "heal-bubble");
+    heal->glow_tex_   = heal->bubble_tex_;
+    heal->glow_uv_[0] = heal->bubble_uv_[0];
+    heal->glow_uv_[1] = heal->bubble_uv_[1];
+    heal->glow_uv_[2] = heal->bubble_uv_[2];
+    heal->glow_uv_[3] = heal->bubble_uv_[3];
+
+    // Snapshot effect_old.cpp:628-685 — Initialize. heal_num/glow_num
+    // depend on spell level; default branch is heal_num=0, glow_num=1.
+    heal->heal_num_ = 0;
+    heal->glow_num_ = 1;
+
+    // Glow at the player's feet (index 0).
+    heal->p_[0]        = {0.0f, 0.0f, 0.0f};
+    heal->scale_[0]    = 2.0f;
+    heal->framenum_[0] = 0;
+    heal->rotation_    = 0.0f;
+
+    for (int32_t n = 1; n < kHealBubbles; ++n)
+    {
+        heal->p_[n].X = float(random(-kHealingRadius, kHealingRadius));
+        heal->p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
+        heal->p_[n].Z = 2.0f;
+        heal->rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
+        // snapshot assigns scale[n] = 0 then immediately scale[n] = 4.5 —
+        // preserve the second assignment (the live value); the leading 0
+        // assignment is dead per snapshot effect_old.cpp:682-683.
+        heal->scale_[n] = 4.5f;
+        heal->framenum_[n] = random(-kHealBubbles / 2, -1);
+    }
+    heal->activebubbles_ = 0;
+    heal->alive_ = true;
+
+    log_info("[heal] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "bubble_tex=%u glow_tex=%u",
+             heal->GetMapIndex(), origin.x, origin.y, origin.z,
+             heal->bubble_tex_, heal->glow_tex_);
+    return heal;
+}
+
+void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate port (effect_old.cpp:695-760), 24Hz sim-tick gated.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kHealSimTickMs))
+        {
+            sim_accum_ms_ -= double(kHealSimTickMs);
+
+            // Snapshot :701-719 — glow framenum/scale lifecycle.
+            ++framenum_[0];
+            if (framenum_[0] < kHealDuration / 2)
+            {
+                if (scale_[0] < 7.0f)
+                    scale_[0] += 1.0f;
+            }
+            else if (framenum_[0] > kHealDuration && activebubbles_ == 0)
+            {
+                if (scale_[0] > 0.0f)
+                    scale_[0] -= 1.0f;
+                else
+                {
+                    alive_ = false;
+                    break;
+                }
+            }
+
+            // Snapshot :722 — rotation += 0.1f.
+            rotation_ += 0.1f;
+
+            // Snapshot :725-759 — per-bubble integration.
+            for (int32_t n = 1; n < kHealBubbles; ++n)
+            {
+                ++framenum_[n];
+                if (framenum_[n] == 0)
+                    ++activebubbles_;
+
+                if (framenum_[n] > 0)
+                {
+                    p_[n].Z += rise_[n];
+
+                    if (scale_[n] > 0.0f)
+                    {
+                        scale_[n] -= kHealScaleStep;
+                        if (scale_[n] <= 0.0f)
+                        {
+                            --activebubbles_;
+
+                            if (framenum_[0] < kHealDuration)
+                            {
+                                // Snapshot :749-755 — respawn bubble.
+                                p_[n].X = float(random(-kHealingRadius, kHealingRadius));
+                                p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
+                                p_[n].Z = 2.0f;
+                                rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
+                                scale_[n] = 4.5f;
+                                framenum_[n] = -1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Render port (effect_old.cpp:770-832). SetBlendState -> Alpha.
+    if (bubble_tex_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = Pos();
+
+    // Snapshot :777-811 — per-visible-bubble billboard draws.
+    for (int32_t n = 1; n < kHealBubbles; ++n)
+    {
+        if (framenum_[n] <= 0 || scale_[n] <= 0.0f)
+            continue;
+
+        // Bubble billboard.
+        SBillboardDrawItem item = {};
+        const float size = 8.0f * scale_[n];
+        item.size_wu[0] = size;
+        item.size_wu[1] = size;
+        // Soft green-blue heal tint (placeholder until forensics).
+        item.color_rgba[0] = 0.5f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 0.7f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = bubble_uv_[0];
+        item.uv_rect[1] = bubble_uv_[1];
+        item.uv_rect[2] = bubble_uv_[2];
+        item.uv_rect[3] = bubble_uv_[3];
+        item.key.texture     = bubble_tex_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0] = float(base.x) + p_[n].X;
+        item.world_pos[1] = float(base.y) + p_[n].Y;
+        item.world_pos[2] = float(base.z) + p_[n].Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+
+    // Snapshot :813-826 — cylindrical glow at the player's feet, drawn
+    // TWICE (forward + reverse rotation), preserving the two-pass shape.
+    if (glow_tex_ != kInvalidTexture && scale_[0] > 0.0f)
+    {
+        SBillboardDrawItem glow = {};
+        const float size = 24.0f * scale_[0] * 0.75f;   // snapshot scl * 3/4
+        glow.size_wu[0] = size;
+        glow.size_wu[1] = size;
+        glow.color_rgba[0] = 0.6f;
+        glow.color_rgba[1] = 1.0f;
+        glow.color_rgba[2] = 0.7f;
+        glow.color_rgba[3] = 1.0f;
+        glow.uv_rect[0] = glow_uv_[0];
+        glow.uv_rect[1] = glow_uv_[1];
+        glow.uv_rect[2] = glow_uv_[2];
+        glow.uv_rect[3] = glow_uv_[3];
+        glow.key.texture     = glow_tex_;
+        glow.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        glow.key.blend       = uint8_t(EFxBlend::Alpha);
+        glow.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        glow.light_mode      = EFxLightMode::Unlit;
+        glow.orientation     = EFxBillboardOrientation::WorldXY;   // ground-plane cylinder
+        glow.debug_mode      = debug_mode;
+        glow.world_pos[0] = float(base.x) + p_[0].X;
+        glow.world_pos[1] = float(base.y) + p_[0].Y;
+        glow.world_pos[2] = float(base.z) + p_[0].Z;
+        // Pass 1: forward rotation (snapshot obj->rot.z = rotation).
+        Renderer->SubmitFxBillboard(glow);
+        // Pass 2: reverse rotation (snapshot obj->rot.z = -rotation +
+        // RenderObject(obj) again). Preserves the two-pass shape; in our
+        // billboard path this duplicates the draw so the overlapping
+        // additive contributions stack as in the snapshot.
+        Renderer->SubmitFxBillboard(glow);
+    }
+}
+
+// =========================================================================
+// M05 — TMistEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TMistAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:11376-11502). The engine TMistEffect path lives at
+// src/effect.cpp:3241 (engine-driven via TParticleEffectComponent +
+// effects.def); this bespoke class is the BESPOKE canonical per the
+// wave-04 pivot. Both coexist; the harness picks one via the test ID.
+//
+// 50 drops with retail pos/vel envelope (MIST_LENGTH=64 etc.); ascends,
+// falls under gravity (RIPPLE_GRAVITY=0.37 wu/tick²), respawns-in-place
+// on landing (pos.z <= 0). SetAddBlendState -> AdditiveStraight.
+// One sub-object (snapshot GetObject(0)) renders all 50 billboards.
+
+TMistEffect_Bespoke* TMistEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kMistCandidates[] = {
+        "Magic\\mist.i3d",
+        "Misc\\mist.i3d",        // byte-identical duplicate per M05 forensics §4
+    };
+
+    auto* mist = new TMistEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    mist->ForcePos(origin);
+    mist->SetMapIndex(MapPane.MakeIndex());
+    mist->ActivateComponents();
+
+    mist->texture_ = TryLoadMagicTexture(kMistCandidates,
+                                         int32_t(sizeof(kMistCandidates) / sizeof(*kMistCandidates)),
+                                         mist->uv_rect_, "mist");
+
+    // Snapshot effect_old.cpp:11383-11392 — seed all 50 drops up-front.
+    for (int32_t i = 0; i < kMistMaxDrops; ++i)
+    {
+        SMistDrop& d = mist->drops_[i];
+        d.vel.X = float(random(-kMistLength, kMistLength) / 32.0f);
+        d.vel.Y = float(random(-kMistWidth,  kMistWidth)  / 32.0f);
+        d.vel.Z = float(random(kMistHeight / 2, kMistHeight));
+        d.pos.X = float(random(-kMistLength, kMistLength) / 2.0f);
+        d.pos.Y = float(random(-kMistWidth,  kMistWidth)  / 2.0f);
+        d.pos.Z = kMistSpawnZ;
+        d.dead = false;
+    }
+    mist->alive_ = true;
+
+    log_info("[mist-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u drops=%d",
+             mist->GetMapIndex(), origin.x, origin.y, origin.z,
+             mist->texture_, kMistMaxDrops);
+    return mist;
+}
+
+void TMistEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick gate (snapshot was ungated; at modern 60fps drops fly
+    // 2.5x too fast — same gate fix as B01/H03/M05-engine/H04/L02).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kMistSimTickMs))
+    {
+        sim_accum_ms_ -= double(kMistSimTickMs);
+
+        // Snapshot effect_old.cpp:11432-11453 — per-drop Animate. dead
+        // drops re-roll pos+vel; live drops integrate Euler with gravity;
+        // pos.z <= 0 -> dead.
+        for (int32_t i = 0; i < kMistMaxDrops; ++i)
+        {
+            SMistDrop& d = drops_[i];
+            if (d.dead)
+            {
+                d.vel.X = float(random(-kMistLength, kMistLength) / 32.0f);
+                d.vel.Y = float(random(-kMistWidth,  kMistWidth)  / 32.0f);
+                d.vel.Z = float(random(kMistHeight / 2, kMistHeight));
+                d.pos.X = float(random(-kMistLength, kMistLength) / 2.0f);
+                d.pos.Y = float(random(-kMistWidth,  kMistWidth)  / 2.0f);
+                d.pos.Z = kMistSpawnZ;
+                d.dead = false;
+            }
+            d.pos.X += d.vel.X;
+            d.pos.Y += d.vel.Y;
+            d.pos.Z += d.vel.Z;
+            d.vel.Z -= kMistGravity;
+            if (d.pos.Z <= 0.0f)
+            {
+                d.dead = true;
+                // Snapshot AddNewRipple call is commented-out per M05 §7.6.
+            }
+        }
+    }
+
+    // --- Render port (effect_old.cpp:11463-11502). SetAddBlendState ->
+    // AdditiveStraight. Single sub-object drives all 50 drops.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kMistBaseSizeWu * kMistScale;   // snapshot scl = 0.7
+    item.size_wu[1] = kMistBaseSizeWu * kMistScale;
+    // Cool-white wisp tint (matches engine TMistEffect's color choice for
+    // visual continuity between bespoke + engine paths).
+    item.color_rgba[0] = 0.16f;
+    item.color_rgba[1] = 0.18f;
+    item.color_rgba[2] = 0.22f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+
+    for (int32_t i = 0; i < kMistMaxDrops; ++i)
+    {
+        const SMistDrop& d = drops_[i];
+        if (d.dead)
+            continue;
+        item.world_pos[0] = float(base.x) + d.pos.X;
+        item.world_pos[1] = float(base.y) + d.pos.Y;
+        item.world_pos[2] = float(base.z) + d.pos.Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// X09 — TShieldEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TShieldAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:4336-4392). Animator-only in pre-release; bridges
+// via an existing TEffect on the caster object. Animator is the simplest
+// in this batch: Animate is a no-op; Render draws ONE mesh sub-object at
+// pos.z=40 with SHIELD_SCALE=2.0 and a fixed -π/3 X-rotation + -π/4
+// Z-rotation. SetBlendState -> Alpha (preserved AS WRITTEN).
+//
+// First-pass: single Alpha billboard at the shield position; real mesh
+// (sphere/ellipsoid enveloping the victim) is a follow-up upgrade.
+
+TShieldEffect_Bespoke* TShieldEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kShieldCandidates[] = {
+        "Magic\\shield.i3d",
+        "Magic\\Shield.I3D",
+        "Magic\\shield1.i3d",
+    };
+
+    auto* shield = new TShieldEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    shield->ForcePos(origin);
+    shield->SetMapIndex(MapPane.MakeIndex());
+    shield->ActivateComponents();
+
+    shield->texture_ = TryLoadMagicTexture(kShieldCandidates,
+                                           int32_t(sizeof(kShieldCandidates) / sizeof(*kShieldCandidates)),
+                                           shield->uv_rect_, "shield");
+
+    // Snapshot effect_old.cpp:4336-4342 — Initialize sets pos = (0,0,40).
+    shield->pos_.X = 0.0f;
+    shield->pos_.Y = 0.0f;
+    shield->pos_.Z = kShieldLiftZ;
+    shield->framenum_ = 0;
+    shield->alive_ = true;
+
+    log_info("[shield] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             shield->GetMapIndex(), origin.x, origin.y, origin.z, shield->texture_);
+    return shield;
+}
+
+void TShieldEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate port (effect_old.cpp:4351-4355): empty (base call only,
+    // a no-op). 24Hz sim-tick gate runs an empty body — kept here for
+    // symmetry with the other bespoke effects.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kShieldSimTickMs))
+        {
+            sim_accum_ms_ -= double(kShieldSimTickMs);
+            ++framenum_;
+            // Snapshot Animate is empty — no state change.
+        }
+    }
+
+    // --- Render port (effect_old.cpp:4364-4391). SetBlendState -> Alpha.
+    // Snapshot binds GetObject(0) and applies:
+    //   scl = SHIELD_SCALE=2.0
+    //   pos = (0,0,40)
+    //   RotateX(-π/3), RotateZ(-π/4)
+    // Then RenderObject(obj). One mesh draw per frame.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kShieldSizeWu * kShieldScale;
+    item.size_wu[1] = kShieldSizeWu * kShieldScale;
+    // Pale blue shield tint.
+    item.color_rgba[0] = 0.6f;
+    item.color_rgba[1] = 0.85f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 0.8f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    const S3DPoint& base = Pos();
+    item.world_pos[0] = float(base.x) + pos_.X;
+    item.world_pos[1] = float(base.y) + pos_.Y;
+    item.world_pos[2] = float(base.z) + pos_.Z;
+    Renderer->SubmitFxBillboard(item);
+}
