@@ -1755,6 +1755,109 @@ void BloodBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->blood->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
+// --- wave-bespoke-04 Magic family (M01/M03/M05/X09) ----------------------
+// First-pass faithful direct ports of TAura/THeal/TMist/TShield animator
+// bodies as T<Name>Effect_Bespoke classes. Each effect: factory wraps
+// SpawnForTest_BESPOKE; submit calls TickAndSubmitForTest_BESPOKE. M01/M03
+// CharacterIdle preview style (character-attached buff visuals); M05/X09
+// stationary. Cycle out/in with Left/Right to restart.
+
+struct SAuraBespokeCtx { TAuraEffect_Bespoke* aura = nullptr; S3DPoint origin{0,0,0}; float gap = 0.0f; };
+constexpr float kAuraBespokeRetriggerGap = 1.5f;
+
+void* AuraBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SAuraBespokeCtx();
+    c->origin = origin;
+    c->aura   = TAuraEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->aura)
+        log_warn("[vfx] TAuraEffect_Bespoke::SpawnForTest_BESPOKE returned null; M01 entry will draw nothing");
+    return c;
+}
+void AuraBespokeDestroy(void* cp) { auto* c = static_cast<SAuraBespokeCtx*>(cp); delete c->aura; delete c; }
+void AuraBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SAuraBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->aura || !c->aura->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->aura;
+            c->aura = TAuraEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap  = kAuraBespokeRetriggerGap;
+        }
+    }
+    if (c->aura)
+        c->aura->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SHealBespokeCtx { THealEffect_Bespoke* heal = nullptr; S3DPoint origin{0,0,0}; float gap = 0.0f; };
+constexpr float kHealBespokeRetriggerGap = 1.5f;
+
+void* HealBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SHealBespokeCtx();
+    c->origin = origin;
+    c->heal   = THealEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->heal)
+        log_warn("[vfx] THealEffect_Bespoke::SpawnForTest_BESPOKE returned null; M03 entry will draw nothing");
+    return c;
+}
+void HealBespokeDestroy(void* cp) { auto* c = static_cast<SHealBespokeCtx*>(cp); delete c->heal; delete c; }
+void HealBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SHealBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->heal || !c->heal->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->heal;
+            c->heal = THealEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap  = kHealBespokeRetriggerGap;
+        }
+    }
+    if (c->heal)
+        c->heal->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SMistBespokeCtx { TMistEffect_Bespoke* mist = nullptr; };
+void* MistBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SMistBespokeCtx();
+    c->mist = TMistEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->mist)
+        log_warn("[vfx] TMistEffect_Bespoke::SpawnForTest_BESPOKE returned null; M05 BESPOKE entry will draw nothing");
+    return c;
+}
+void MistBespokeDestroy(void* cp) { auto* c = static_cast<SMistBespokeCtx*>(cp); delete c->mist; delete c; }
+void MistBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SMistBespokeCtx*>(cp);
+    if (c && c->mist)
+        c->mist->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SShieldBespokeCtx { TShieldEffect_Bespoke* shield = nullptr; };
+void* ShieldBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SShieldBespokeCtx();
+    c->shield = TShieldEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->shield)
+        log_warn("[vfx] TShieldEffect_Bespoke::SpawnForTest_BESPOKE returned null; X09 entry will draw nothing");
+    return c;
+}
+void ShieldBespokeDestroy(void* cp) { auto* c = static_cast<SShieldBespokeCtx*>(cp); delete c->shield; delete c; }
+void ShieldBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SShieldBespokeCtx*>(cp);
+    if (c && c->shield)
+        c->shield->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 // --- FB: real TFizzleEffect (X21, Magic/Fizzle.I3D) ----------------------
 // Spawns a sector-less single-burst TFizzleEffect at the harness origin
 // via SpawnForTest and drives the ported TFizzleAnimator loop through
@@ -2444,6 +2547,53 @@ struct SVfxTestBootstrap {
         blood_bespoke.submit        = [](void* c, EFxDebugMode d) { BloodBespokeSubmit(c, d); };
         blood_bespoke.destroy       = [](void* c) { BloodBespokeDestroy(c); };
         VfxTest::DeferredRegister(blood_bespoke);
+
+        // --- wave-bespoke-04 Magic family entries -----------------------
+        // First-pass faithful direct ports of TAura/THeal/TMist/TShield
+        // animator bodies. M01/M03 are character-attached buff visuals
+        // (CharacterIdle); M05/X09 are stationary.
+
+        VfxTest::SEffect aura_bespoke = {};
+        aura_bespoke.id            = "TAuraEffect_BESPOKE";
+        aura_bespoke.family        = "magic";
+        aura_bespoke.pipeline      = "FB";
+        aura_bespoke.preview_style = VfxTest::EVfxPreviewStyle::CharacterIdle;
+        aura_bespoke.anchor.kind   = VfxTest::SVfxAnchor::EKind::CharacterRoot;
+        aura_bespoke.factory       = [](const S3DPoint& o) -> void* { return AuraBespokeSpawn(o); };
+        aura_bespoke.submit        = [](void* c, EFxDebugMode d) { AuraBespokeSubmit(c, d); };
+        aura_bespoke.destroy       = [](void* c) { AuraBespokeDestroy(c); };
+        VfxTest::DeferredRegister(aura_bespoke);
+
+        VfxTest::SEffect heal_bespoke = {};
+        heal_bespoke.id            = "THealEffect_BESPOKE";
+        heal_bespoke.family        = "magic";
+        heal_bespoke.pipeline      = "FB";
+        heal_bespoke.preview_style = VfxTest::EVfxPreviewStyle::CharacterIdle;
+        heal_bespoke.anchor.kind   = VfxTest::SVfxAnchor::EKind::CharacterRoot;
+        heal_bespoke.factory       = [](const S3DPoint& o) -> void* { return HealBespokeSpawn(o); };
+        heal_bespoke.submit        = [](void* c, EFxDebugMode d) { HealBespokeSubmit(c, d); };
+        heal_bespoke.destroy       = [](void* c) { HealBespokeDestroy(c); };
+        VfxTest::DeferredRegister(heal_bespoke);
+
+        VfxTest::SEffect mist_bespoke = {};
+        mist_bespoke.id            = "TMistEffect_BESPOKE";
+        mist_bespoke.family        = "ambient";
+        mist_bespoke.pipeline      = "FB";    // first-pass via billboards (PE in spec)
+        mist_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        mist_bespoke.factory       = [](const S3DPoint& o) -> void* { return MistBespokeSpawn(o); };
+        mist_bespoke.submit        = [](void* c, EFxDebugMode d) { MistBespokeSubmit(c, d); };
+        mist_bespoke.destroy       = [](void* c) { MistBespokeDestroy(c); };
+        VfxTest::DeferredRegister(mist_bespoke);
+
+        VfxTest::SEffect shield_bespoke = {};
+        shield_bespoke.id            = "TShieldEffect_BESPOKE";
+        shield_bespoke.family        = "magic";
+        shield_bespoke.pipeline      = "FB";   // first-pass via billboard (mesh in spec)
+        shield_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        shield_bespoke.factory       = [](const S3DPoint& o) -> void* { return ShieldBespokeSpawn(o); };
+        shield_bespoke.submit        = [](void* c, EFxDebugMode d) { ShieldBespokeSubmit(c, d); };
+        shield_bespoke.destroy       = [](void* c) { ShieldBespokeDestroy(c); };
+        VfxTest::DeferredRegister(shield_bespoke);
 
         VfxTest::SEffect strip = {};
         strip.id            = "TStripEffect";
