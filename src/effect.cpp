@@ -2101,6 +2101,56 @@ TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint&
     {
         log_error("[flame-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
                   kFlameBespokeImageryPath);
+// * TFireSwarmEffect_Bespoke — F05 A/B reference (faithful direct port)    *
+// *************************************************************************
+//
+// Line-by-line port of TFireSwarmAnimator::Initialize / Animate / Render
+// (src/effect_old.cpp:10483-10549). Forensics doc:
+// docs/vfx/forensics/F05_TFireSwarmEffect.md. The snapshot draws the
+// `tube01` sub-object (index 1) of `Magic\FireSwarm.i3d` as a
+// transform-animated I3D cylinder mesh: per-frame matrix
+// Scale(cylhscl, cylhscl, cylvscl) · RotZ(cylth) with no translate, blend
+// = Alpha (SetBlendState, snapshot literal preserved per translation
+// rule 3). The mesh has 64 vertices wrapped with a 64×128 ARGB4444 flame
+// skin (red core, yellow tongues).
+//
+// First-pass drift: the Sokol FB pipeline doesn't currently expose an
+// arbitrary-mesh + per-effect blend submission API for one-off effects,
+// so we approximate the cylinder by a single ScreenAligned billboard
+// using the tube01 texture; the billboard width tracks `cylhscl` and the
+// height tracks `cylvscl` so the visual still "expands outward and
+// flattens vertically" over the 75-tick life. Full mesh path is a
+// follow-up — Renderer->SubmitMesh requires a MeshHandle authored
+// through TMeshExtractor, which is out of scope for this first-pass.
+
+namespace {
+
+constexpr const char* kFireSwarmBespokeImageryPath = "Magic\\FireSwarm.i3d";
+constexpr int32_t     kFireSwarmBespokeDuration    = 75;        // FIRESWARM_DURATION
+constexpr float       kFireSwarmBespokeHsclStep    = 0.4f;      // FIRESWARM_CYLHSCLSTEP
+constexpr float       kFireSwarmBespokeThStep      = 0.5f;      // FIRESWARM_CYLTHSTEP
+constexpr float       kFireSwarmBespokeVsclInit    = 30.0f;     // FIRESWARM_CYLVSCLINIT
+constexpr float       kFireSwarmBespokeVsclStep    = 0.4f;      // FIRESWARM_CYLVSCLSTEP
+constexpr float       kFireSwarmBespoke2Pi         = 6.2831853071795864f;
+constexpr int32_t     kFireSwarmBespokeSimTickMs   = 1000 / 24;
+// World-unit size multiplier applied to (cylhscl, cylvscl) — the
+// snapshot mesh's authored radius is ~1.0 wu, so the billboard `size_wu`
+// = scl * 1.0. The original cylinder was drawn through the engine's
+// parent-transform concatenation; in the harness we use a literal world
+// size that reads at the test camera. Adjust if the visual scale is off.
+constexpr float       kFireSwarmBespokeUnitWu      = 1.0f;
+
+}  // namespace
+
+TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    int32_t img_id = TObjectImagery::FindImagery(kFireSwarmBespokeImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFireSwarmBespokeImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[fireswarm-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kFireSwarmBespokeImageryPath);
         return nullptr;
     }
     TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
@@ -2108,6 +2158,8 @@ TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint&
     {
         log_error("[flame-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
                   img_id, kFlameBespokeImageryPath);
+        log_error("[fireswarm-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFireSwarmBespokeImageryPath);
         return nullptr;
     }
     T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
@@ -2123,6 +2175,20 @@ TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint&
     {
         log_error("[flame-bespoke] SpawnForTest: imagery '%s' has 0 textures after lazy-init",
                   kFlameBespokeImageryPath);
+        log_error("[fireswarm-bespoke] SpawnForTest: imagery '%s' is not a T3DImagery",
+                  kFireSwarmBespokeImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    // Lazy-mesh-init poke (same idiom as F01/B01/M05/H04) — NumObjects
+    // triggers the actual mesh load; NumTextures alone doesn't.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < 2 || num_tex <= 0)
+    {
+        log_error("[fireswarm-bespoke] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d) — expected 2 sub-objects",
+                  num_obj, num_tex);
         TObjectImagery::FreeImagery(base);
         return nullptr;
     }
@@ -2199,6 +2265,88 @@ void TFlameEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
     // tall under the harness camera; same value the engine-port F03 uses).
     item.size_wu[0]   = quad_size_wu_;
     item.size_wu[1]   = quad_size_wu_ * (80.0f / 32.0f);  // preserve cell aspect 32:80
+    // Forensics §4 says tube01 (sub-object index 1) is the cylinder
+    // drawn by the animator; box01 (index 0) is unused. The single
+    // ARGB4444 64×128 texture is at slot 0.
+    S3DTex tex0 = {};
+    img3d->GetTexture(0, &tex0);
+
+    auto* swarm = new TFireSwarmEffect_Bespoke(base);
+    swarm->ForcePos(origin);
+    swarm->SetMapIndex(MapPane.MakeIndex());
+    swarm->ActivateComponents();
+    swarm->texture_ = tex0.htexture;
+
+    // Snapshot Initialize body (effect_old.cpp:10483-10490) — verbatim.
+    swarm->frameon_ = 0;
+    swarm->cylth_   = 0.0f;
+    swarm->cylhscl_ = kFireSwarmBespokeHsclStep;     // 0.4 (matches one tick's increment)
+    swarm->cylvscl_ = kFireSwarmBespokeVsclInit;     // 30.0
+    swarm->alive_   = true;
+    swarm->base_size_wu_ = kFireSwarmBespokeUnitWu;
+
+    log_info("[fireswarm-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "tex0=%u w=%u h=%u numobj=%d numtex=%d",
+             kFireSwarmBespokeImageryPath, swarm->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             tex0.htexture, tex0.desc.width, tex0.desc.height, num_obj, num_tex);
+    return swarm;
+}
+
+void TFireSwarmEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
+        return;
+
+    // --- Animate: port of TFireSwarmAnimator::Animate
+    // (src/effect_old.cpp:10499-10515). Snapshot runs ungated every
+    // Animate; drift to 24 Hz sim-tick gate per
+    // feedback-framerate-independent-anim memory.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFireSwarmBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFireSwarmBespokeSimTickMs);
+
+        ++frameon_;                                       // :10504
+
+        cylth_   += kFireSwarmBespokeThStep;              // :10506 (0.5 rad/tick)
+        if (cylth_ > kFireSwarmBespoke2Pi)                // :10507
+            cylth_ -= kFireSwarmBespoke2Pi;               // :10508 (single subtract wrap)
+        cylhscl_ += kFireSwarmBespokeHsclStep;            // :10509 (XY radius grows)
+        cylvscl_ -= kFireSwarmBespokeVsclStep;            // :10510 (Z height shrinks)
+
+        if (frameon_ > kFireSwarmBespokeDuration)         // :10511
+        {
+            alive_ = false;                               // KillThisEffect() :10513
+            break;
+        }
+    }
+    if (!alive_)
+        return;
+
+    // --- Render: port of TFireSwarmAnimator::Render
+    // (src/effect_old.cpp:10524-10549). Snapshot:
+    //   SaveBlendState() / SetBlendState() (= Alpha)
+    //   obj = GetObject(1)          (tube01)
+    //   obj->flags = OBJ3D_MATRIX
+    //   D3DMATRIXClear / Scale(cylhscl, cylhscl, cylvscl) / RotZ(cylth)
+    //   RenderObject(obj)
+    //   RestoreBlendState()
+    //
+    // First-pass: single ScreenAligned billboard at effect.Pos() with
+    // width = cylhscl * base_size_wu and height = cylvscl * base_size_wu,
+    // Alpha blend per the snapshot SetBlendState. cylth (yaw) is not
+    // applied — ScreenAligned billboards have no in-plane rotation lane
+    // in SBillboardDrawItem (would need SParticleDrawItem's rotation_rad
+    // or a true mesh submission). Drift documented in batch return.
+    const S3DPoint& p = Pos();
+
+    SBillboardDrawItem item = {};
+    item.world_pos[0]  = float(p.x);
+    item.world_pos[1]  = float(p.y);
+    item.world_pos[2]  = float(p.z);
+    item.size_wu[0]    = cylhscl_ * base_size_wu_;        // XY radius scale
+    item.size_wu[1]    = cylvscl_ * base_size_wu_;        // Z height scale
     item.color_rgba[0] = 1.0f;
     item.color_rgba[1] = 1.0f;
     item.color_rgba[2] = 1.0f;
@@ -2222,6 +2370,378 @@ void TFlameEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 //  the matching block after TFireEffect::TickAndSubmitForTest — that's
 //  where the `kFirePatchHalfWu` / `RerollFireQuad` anon-namespace helpers
 //  live and are reused verbatim.)
+    item.uv_rect[0]    = 0.0f;
+    item.uv_rect[1]    = 0.0f;
+    item.uv_rect[2]    = 1.0f;
+    item.uv_rect[3]    = 1.0f;
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);      // SetBlendState (:10527)
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;           // flame self-lit (forensics §7)
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    Renderer->SubmitFxBillboard(item);
+}
+// --- end TFireSwarmEffect_Bespoke faithful port
+
+// *************************************************************************
+// * TBurnEffect_Bespoke — M04 A/B reference (faithful direct port)         *
+// *************************************************************************
+//
+// Line-by-line port of the snapshot TBurnAnimator::Initialize / Animate /
+// Render (src/effect_old.cpp:3292-3460). Forensics doc:
+// docs/vfx/forensics/M04_TBurnEffect.md. Two TParticleSystem instances
+// (fire + smoke) with BURN_COUNT=70 capacity each, fire→smoke promotion
+// on life==life_span (×1.25 scl, ×2/3 life_span). Blend =
+// AdditiveStraight (snapshot SetAddBlendState — fire-family consistent
+// per forensics §7).
+//
+// First-pass drift: the harness has no live TCharacter rig, so the
+// per-particle "spawn at a random bone's world position" path is
+// simplified to spawn at the effect's own world position + ±BURN_SPREAD
+// jitter on each axis (size_ defaults to 1 — "one virtual bone" = the
+// effect origin). Particle physics (velocity, life, decay, fire→smoke
+// promotion, ramp envelope, kill condition) are preserved verbatim.
+// Full character-rig attachment is a follow-up.
+
+namespace {
+
+constexpr const char* kBurnBespokeImageryPath = "Magic\\burnbabyburn.I3D";
+constexpr int32_t     kBurnBespokeSimTickMs   = 1000 / 24;
+constexpr int32_t     kBurnBespokePartMin     = 50;   // BURN_PART_MIN (DEAD per forensics §13.1 — preserve)
+constexpr int32_t     kBurnBespokePartMax     = 50;   // BURN_PART_MAX (DEAD)
+constexpr int32_t     kBurnBespokeAdd         = 8;    // BURN_ADD
+constexpr int32_t     kBurnBespokeSpread      = 2;    // BURN_SPREAD (wu, ± per axis)
+constexpr int32_t     kBurnBespokeMinScl      = 15;   // BURN_MIN_SCL (×0.01)
+constexpr int32_t     kBurnBespokeMaxScl      = 40;   // BURN_MAX_SCL (×0.01)
+constexpr int32_t     kBurnBespokeMinZ        = 30;   // BURN_MIN_Z (×0.1)
+constexpr int32_t     kBurnBespokeMaxZ        = 75;   // BURN_MAX_Z (×0.1)
+constexpr int32_t     kBurnBespokeMinLife     = 5;    // BURN_MIN_LIFE
+constexpr int32_t     kBurnBespokeMaxLife     = 15;   // BURN_MAX_LIFE
+constexpr float       kBurnBespokeDec         = 0.97f;// BURN_DEC
+constexpr int32_t     kBurnBespokeFrame       = 50;   // BURN_FRAME
+
+// Sub-object enumeration (forensics §4):
+//   GetObject(0) = "smoke"    -> smoke system  -> tex slot for smoke
+//   GetObject(1) = "smoke01"  -> fire  system  -> tex slot for fire
+// Following the SubObjTextureSlot helper above (TBloodEffect_Bespoke).
+int32_t BurnSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+}  // namespace
+
+TBurnEffect_Bespoke* TBurnEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    int32_t img_id = TObjectImagery::FindImagery(kBurnBespokeImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kBurnBespokeImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[burn-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kBurnBespokeImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[burn-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kBurnBespokeImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[burn-bespoke] SpawnForTest: imagery '%s' is not a T3DImagery",
+                  kBurnBespokeImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < 2 || num_tex <= 0)
+    {
+        log_error("[burn-bespoke] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d) — expected 2 sub-objects",
+                  num_obj, num_tex);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Resolve fire / smoke textures per forensics §4.
+    auto resolve_subobj_tex = [&](int32_t objnum) -> TTextureHandle {
+        const int32_t slot = BurnSubObjTextureSlot(img3d, objnum);
+        const int32_t safe_slot = (slot >= 0 && slot < num_tex) ? slot : 0;
+        S3DTex tex = {};
+        img3d->GetTexture(safe_slot, &tex);
+        return tex.htexture;
+    };
+    const TTextureHandle tex_smoke = resolve_subobj_tex(0);  // smoke sub-object
+    const TTextureHandle tex_fire  = resolve_subobj_tex(1);  // smoke01 sub-object (fire)
+    if (tex_fire == kInvalidTexture && tex_smoke == kInvalidTexture)
+    {
+        log_error("[burn-bespoke] SpawnForTest: both sub-object textures invalid");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* burn = new TBurnEffect_Bespoke(base);
+    burn->ForcePos(origin);
+    burn->SetMapIndex(MapPane.MakeIndex());
+    burn->ActivateComponents();
+    burn->tex_fire_  = tex_fire;
+    burn->tex_smoke_ = tex_smoke;
+
+    // Snapshot TBurnAnimator::Initialize (effect_old.cpp:3292-3313):
+    //   T3DAnimator::Initialize()
+    //   size = ca->NumObjects()          <-- harness drift: no rig, default 1
+    //   fire.Init(...) / smoke.Init(...) <-- our particle arena is pre-zeroed
+    //   frame = 0; to_add = 0;
+    burn->frame_         = 0;
+    burn->to_add_        = 0;
+    burn->size_          = 1;     // harness has no CharAnimator
+    burn->alive_         = true;
+    burn->sim_accum_ms_  = 0.0;
+    for (auto& part : burn->particles_)
+        part.used = false;
+
+    log_info("[burn-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "tex_fire=%u tex_smoke=%u numobj=%d numtex=%d",
+             kBurnBespokeImageryPath, burn->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             tex_fire, tex_smoke, num_obj, num_tex);
+    return burn;
+}
+
+void TBurnEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate: port of TBurnAnimator::Animate
+    // (src/effect_old.cpp:3315-3447). Snapshot ungated; drift to 24 Hz
+    // sim-tick gate per feedback-framerate-independent-anim.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBurnBespokeSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBurnBespokeSimTickMs);
+
+            ++frame_;                                                // :3328
+            if (frame_ < kBurnBespokeFrame && to_add_ < kBurnBespokeAdd)
+                ++to_add_;                                           // :3329-3330 ramp up
+            else if (frame_ >= kBurnBespokeFrame && to_add_ > 0)
+                --to_add_;                                           // :3331-3332 ramp down
+
+            // 1. fire→smoke promotion (:3339-3357).
+            //    Iterate fire half [0..kBurnBespokeCount); on life ==
+            //    life_span, copy into smoke half [count..count*2) with
+            //    ×1.25 scl and ×2/3 life_span.
+            for (int32_t i = 0; i < kBurnBespokeCount; ++i)
+            {
+                SBurnBespokeParticle& particle = particles_[i];
+                if (!particle.used || particle.system != 0)
+                    continue;
+
+                if (particle.life == particle.life_span)
+                {
+                    particle.used = false;                           // :3347 free fire slot
+
+                    // Compute promoted values from the dying particle.
+                    SBurnBespokeParticle promoted = particle;
+                    promoted.life_span = (particle.life_span * 2) / 3;   // :3349
+                    promoted.scl.X *= 1.25f;                          // :3351
+                    promoted.scl.Y *= 1.25f;                          // :3352
+                    promoted.scl.Z *= 1.25f;                          // :3353
+                    promoted.life   = 0;
+                    promoted.system = 1;                              // smoke
+                    promoted.used   = true;
+
+                    // smoke.Add(particle) — find first unused slot in
+                    // the smoke half [kBurnBespokeCount, 2*kBurnBespokeCount).
+                    for (int32_t k = kBurnBespokeCount; k < kBurnBespokeCount * 2; ++k)
+                    {
+                        if (!particles_[k].used)
+                        {
+                            particles_[k] = promoted;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 2. fire.Animate() + smoke.Animate()  (:3359-3360)
+            //    TParticleSystem::Animate (effectcomp.cpp:1041-1068):
+            //      if (life >= life_span) used = false; continue;
+            //      ++life; pos += vel; vel *= acc;
+            for (auto& particle : particles_)
+            {
+                if (!particle.used)
+                    continue;
+                if (particle.life >= particle.life_span)
+                {
+                    particle.used = false;
+                    continue;
+                }
+                ++particle.life;
+                particle.pos.X += particle.vel.X;
+                particle.pos.Y += particle.vel.Y;
+                particle.pos.Z += particle.vel.Z;
+                particle.vel.X *= particle.acc.X;
+                particle.vel.Y *= particle.acc.Y;
+                particle.vel.Z *= particle.acc.Z;
+            }
+
+            // 3. Spawn `to_add_` new fire particles at random bones.
+            //    Drift: no CharAnimator, so spawn at effect origin (0,0,0
+            //    local) with ±BURN_SPREAD jitter per axis (forensics §5
+            //    bone-emit path simplified). The MakeMatrix /
+            //    GetObjectMatrix / D3DMATRIXTransform chain collapses to
+            //    "world origin offset 0 + jitter". Per-particle physics
+            //    is preserved verbatim per :3362-3413.
+            const S3DPoint& origin = Pos();
+            for (int32_t i = 0; i < to_add_; ++i)
+            {
+                // Find a free fire slot.
+                int32_t free_idx = -1;
+                for (int32_t k = 0; k < kBurnBespokeCount; ++k)
+                {
+                    if (!particles_[k].used)
+                    {
+                        free_idx = k;
+                        break;
+                    }
+                }
+                if (free_idx < 0)
+                    break;       // fire arena full
+
+                SBurnBespokeParticle& p = particles_[free_idx];
+
+                // Drift: world-space emit position. snapshot picks a
+                // random bone j via ca->GetObject + ca->GetObjectMatrix;
+                // we have no rig so size_ = 1 and the bone matrix
+                // collapses to identity. Random(0, size-1) = 0 always.
+                const int32_t j = (size_ > 1) ? random(0, size_ - 1) : 0;
+                (void)j;
+                p.pos.X = float(origin.x);
+                p.pos.Y = float(origin.y);
+                p.pos.Z = float(origin.z);
+
+                p.pos.X += float(random(-kBurnBespokeSpread, kBurnBespokeSpread));   // :3387
+                p.pos.Y += float(random(-kBurnBespokeSpread, kBurnBespokeSpread));   // :3388
+                p.pos.Z += float(random(-kBurnBespokeSpread, kBurnBespokeSpread));   // :3389
+
+                const float scale = float(random(kBurnBespokeMinScl, kBurnBespokeMaxScl)) * 0.01f;
+                p.scl.X = scale;                                                     // :3393
+                p.scl.Y = scale;                                                     // :3394
+                p.scl.Z = scale;                                                     // :3395
+
+                // p.rot.x = -90; p.rot.z = -45; p.rot.y = 0  (:3398-3400)
+                // No rotation lane on SBillboardDrawItem — preserved as
+                // dead semantic state (the snapshot bakes these into the
+                // matrix at Render in TParticleSystem::Render
+                // effectcomp.cpp:1086-1090).
+
+                p.acc.X = 1.0f;                                                      // :3403
+                p.acc.Y = 1.0f;
+                p.acc.Z = 1.0f;
+
+                p.vel.X = 0.0f;                                                      // :3406
+                p.vel.Y = 0.0f;                                                      // :3407
+                p.vel.Z = float(random(kBurnBespokeMinZ, kBurnBespokeMaxZ)) * 0.1f;  // :3408
+
+                p.life_span = random(kBurnBespokeMinLife, kBurnBespokeMaxLife);      // :3410
+                p.life      = 0;
+                p.system    = 0;        // fire system
+                p.used      = true;                                                  // fire.Add :3412
+            }
+
+            // 4. Per-tick scl decay (:3415-3440) and `done` check.
+            bool done = true;
+            for (auto& particle : particles_)
+            {
+                if (!particle.used)
+                    continue;
+                done = false;
+                particle.scl.X *= kBurnBespokeDec;
+                particle.scl.Y *= kBurnBespokeDec;
+                particle.scl.Z *= kBurnBespokeDec;
+            }
+
+            if (frame_ >= kBurnBespokeFrame && to_add_ == 0 && done)
+            {
+                alive_ = false;                                       // KillThisEffect :3444
+                break;
+            }
+        }
+    }
+
+    // --- Render: port of TBurnAnimator::Render
+    // (src/effect_old.cpp:3449-3460). SetAddBlendState() = AdditiveStraight
+    // (DECALALPHA + ONE/ONE). One particle = one billboard with the
+    // particle's per-axis scale applied uniformly (snapshot
+    // TParticleSystem::Render bakes Scale·Rot·Translate into the I3D
+    // sub-object's per-instance matrix; in the FB pipeline we use the
+    // billboard's size_wu lane for the scale and let the particle's
+    // world pos drive translate. Per-quad rot.x=-π/2 + rot.z=-π/4 from
+    // effectcomp.cpp:1086-1090 is preserved as dead semantic state per
+    // the drift note above — billboards have no rotation lane in
+    // SBillboardDrawItem; if visual reads wrong, switch to
+    // SParticleDrawItem and route rotation_rad).
+    SBillboardDrawItem item = {};
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 1.0f;
+    item.color_rgba[2]   = 1.0f;
+    item.color_rgba[3]   = 1.0f;
+    item.uv_rect[0]      = 0.0f;
+    item.uv_rect[1]      = 0.0f;
+    item.uv_rect[2]      = 1.0f;
+    item.uv_rect[3]      = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);   // SetAddBlendState :3452
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;                   // fire-family unlit (§7)
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+
+    for (const auto& particle : particles_)
+    {
+        if (!particle.used)
+            continue;
+
+        const TTextureHandle tex = (particle.system == 0) ? tex_fire_ : tex_smoke_;
+        if (tex == kInvalidTexture)
+            continue;
+
+        item.key.texture  = tex;
+        item.world_pos[0] = particle.pos.X;
+        item.world_pos[1] = particle.pos.Y;
+        item.world_pos[2] = particle.pos.Z;
+        // Particle scale is uniform per axis at spawn; pick X as the
+        // scalar (Y/Z identical). Multiply by base_size_wu_ to convert
+        // the [0.15, 0.40]-ish range into a readable on-screen quad.
+        const float quad = particle.scl.X * base_size_wu_;
+        item.size_wu[0]   = quad;
+        item.size_wu[1]   = quad;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+// --- end TBurnEffect_Bespoke faithful port
 
 #if 0
 // REVISITED (earlier WIP): pre-faithful-port body, re-derived blood
