@@ -5574,6 +5574,191 @@ struct SVfxTestBootstrap {
             };
             VfxTest::DeferredRegister(e);
         }
+
+        // --- W3-C: Cave / environment ambient bespoke entries -----------
+        // Localized-at-end pattern: structs + factory adapters + registration
+        // all live in this block for clean diff-stack append.
+
+        // W3-C sgeyser TGeyserEffect_Bespoke — steam variant. Periodic
+        // upward spurt of 100 ballistic particles. Static preview style
+        // (ambient cave fixture, no re-trigger).
+        struct SGeyserBespokeCtx_W3C {
+            TGeyserEffect_Bespoke* eff = nullptr;
+        };
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TGeyserEffect_Bespoke__sgeyser_BESPOKE";
+            e.family        = "weather";
+            e.pipeline      = "PE";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SGeyserBespokeCtx_W3C();
+                c->eff = TGeyserEffect_Bespoke::SpawnForTest_BESPOKE(
+                    o, TGeyserEffect_Bespoke::EVariant::Steam);
+                if (!c->eff)
+                    log_warn("[vfx] TGeyserEffect_Bespoke[steam] SpawnForTest"
+                             " returned null; sgeyser entry will draw nothing");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SGeyserBespokeCtx_W3C*>(cp);
+                if (c && c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SGeyserBespokeCtx_W3C*>(cp);
+                if (!c) return;
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // W3-C fgeyser TGeyserEffect_Bespoke — fire variant. Same class
+        // as sgeyser with the Fire variant flag (warm color ramp).
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TGeyserEffect_Bespoke__fgeyser_BESPOKE";
+            e.family        = "weather";
+            e.pipeline      = "PE";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SGeyserBespokeCtx_W3C();
+                c->eff = TGeyserEffect_Bespoke::SpawnForTest_BESPOKE(
+                    o, TGeyserEffect_Bespoke::EVariant::Fire);
+                if (!c->eff)
+                    log_warn("[vfx] TGeyserEffect_Bespoke[fire] SpawnForTest"
+                             " returned null; fgeyser entry will draw nothing");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SGeyserBespokeCtx_W3C*>(cp);
+                if (c && c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SGeyserBespokeCtx_W3C*>(cp);
+                if (!c) return;
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // W3-C cfire TFlameAnimator_Bespoke__cfire — STUBBED. SpawnForTest
+        // returns nullptr; harness row keeps the id present.
+        struct SCfireBespokeCtx_W3C {
+            TFlameAnimator_Bespoke__cfire* eff = nullptr;
+        };
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFlameAnimator_Bespoke__cfire_BESPOKE";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SCfireBespokeCtx_W3C();
+                c->eff = TFlameAnimator_Bespoke__cfire::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TFlameAnimator_Bespoke__cfire SpawnForTest"
+                             " returned null (STUB)");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SCfireBespokeCtx_W3C*>(cp);
+                if (c && c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SCfireBespokeCtx_W3C*>(cp);
+                if (!c) return;
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // W3-C MistFog TFogEffect_Bespoke__MistFog — 25-puff gravity smoke
+        // field. Direct port of TMistFogAnimator (legacy/effect.cpp:11311).
+        struct SMistFogBespokeCtx_W3C {
+            TFogEffect_Bespoke__MistFog* eff = nullptr;
+        };
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFogEffect_Bespoke__MistFog_BESPOKE";
+            e.family        = "weather";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SMistFogBespokeCtx_W3C();
+                c->eff = TFogEffect_Bespoke__MistFog::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TFogEffect_Bespoke__MistFog SpawnForTest"
+                             " returned null; MistFog entry will draw nothing");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SMistFogBespokeCtx_W3C*>(cp);
+                if (c && c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SMistFogBespokeCtx_W3C*>(cp);
+                if (!c) return;
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // W3-C RockStorm TRockStormEffect_Bespoke — 4-7 rocks orbiting a
+        // target descend, contract, damage, then bounce out. Direct port
+        // of TRockStormAnimator (legacy/effect3.cpp:96). SpellGround
+        // preview restarts the storm cyclically.
+        struct SRockStormBespokeCtx_W3C {
+            TRockStormEffect_Bespoke* eff    = nullptr;
+            S3DPoint                  origin = {0, 0, 0};
+            float                     gap    = 0.0f;
+        };
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TRockStormEffect_Bespoke_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SRockStormBespokeCtx_W3C();
+                c->origin = o;
+                c->eff    = TRockStormEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TRockStormEffect_Bespoke SpawnForTest"
+                             " returned null; RockStorm entry will draw nothing");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SRockStormBespokeCtx_W3C*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TRockStormEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        c->gap = 1.5f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SRockStormBespokeCtx_W3C*>(cp);
+                if (!c) return;
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
     }
 };
 SVfxTestBootstrap g_vfx_test_bootstrap;

@@ -5835,3 +5835,306 @@ class TStrikeEffect_Bespoke : public TEffect
     bool    alive_        = true;
     double  sim_accum_ms_ = 0.0;
 };
+
+// *************************************************************************
+// * Wave 3 batch W3-C: Cave / environment ambient                         *
+// *                                                                       *
+// *   sgeyser/fgeyser TGeyserEffect_Bespoke — Steam / Fire periodic geyser*
+// *                                           spout. Retail Ghidra evid:  *
+// *                                           cls_0x5b79ac (348-byte      *
+// *                                           class) is a TParticle3D-    *
+// *                                           Animator subclass; the      *
+// *                                           registrar at FUN_00526780   *
+// *                                           differentiates 'CavFGeyser' *
+// *                                           (fire) and 'CavSGeyser'     *
+// *                                           (steam) by name and selects *
+// *                                           'fgeyser'/'sgeyser' sound   *
+// *                                           cue (Sound/effects/         *
+// *                                           {f,s}geyser.wav are on      *
+// *                                           disk). The 100-iter loop on *
+// *                                           meth_0x526040 (a TEffect    *
+// *                                           sub-object spawn) implies   *
+// *                                           ~100 particles per emission *
+// *                                           burst. Snapshot has no body *
+// *                                           — synthesis: periodic       *
+// *                                           upward spurt (gravity-      *
+// *                                           ballistic particles)        *
+// *                                           tinted by variant.          *
+// *                                                                       *
+// *   cfire TFlameAnimator_Bespoke__cfire — campfire ambient flame. No   *
+// *                                          Ghidra match, no asset on    *
+// *                                          disk in legacy/data. Likely  *
+// *                                          a TFlameAnimator variant     *
+// *                                          with a different I3D, but    *
+// *                                          asset absent. STUB: spawn    *
+// *                                          returns nullptr with         *
+// *                                          diagnostic; harness row      *
+// *                                          present for A/B with future  *
+// *                                          captured video.              *
+// *                                                                       *
+// *   MistFog TFogEffect_Bespoke__MistFog — ambient mist (gravity smoke   *
+// *                                         puffs). Faithful direct port  *
+// *                                         of TMistFogAnimator           *
+// *                                         (legacy/effect.cpp:11311-     *
+// *                                         11456): NUMMISTFOG=25 smoke   *
+// *                                         puffs, gravity, lifetime 200, *
+// *                                         scale grows then shrinks,     *
+// *                                         resets when scale dies.       *
+// *                                         SetAddBlendState ->            *
+// *                                         AdditiveStraight (preserved   *
+// *                                         literally). Per task spec we  *
+// *                                         add a dedicated class rather  *
+// *                                         than re-using TFogEffect      *
+// *                                         since the snapshot bodies     *
+// *                                         differ materially.            *
+// *                                                                       *
+// *   RockStorm TRockStormEffect_Bespoke — falling/orbiting rocks spell.  *
+// *                                        Faithful direct port of        *
+// *                                        TRockStormAnimator             *
+// *                                        (legacy/effect3.cpp:96-413).   *
+// *                                        4-7 rocks orbit caster at      *
+// *                                        radius, descending to land     *
+// *                                        height, contract to             *
+// *                                        min_radius, damage stage,      *
+// *                                        then bounce out. Snapshot     *
+// *                                        SetBlendState (rock = Alpha,  *
+// *                                        glow = AdditiveStraight)       *
+// *                                        preserved. First-pass collapses*
+// *                                        per-rock rendering to a single *
+// *                                        composite point: each rock is  *
+// *                                        a screen-aligned billboard at  *
+// *                                        the computed orbital pos with  *
+// *                                        scl_fac scale.                 *
+// * ************************************************************************
+
+_CLASSDEF(TGeyserEffect_Bespoke)
+
+// W3-C sgeyser/fgeyser. Retail-only effect (no snapshot body).
+// Synthesized from Ghidra cls_0x5b79ac forensics:
+//   - 348-byte class, derived from TEffect (cls_0x5a47f0 base via
+//     cls_0x5a7e38 dispatcher path; vtable shows TScreen sub-objects).
+//   - meth_0x526040 looped 100x in virt_meth_0x526860 (registrar) →
+//     ~100 particle sub-objects per burst.
+//   - Registrar branches on the registered name "CavFGeyser" vs default
+//     ("CavSGeyser") → picks fgeyser/sgeyser sound cue (sound assets are
+//     on disk under Sound/effects/). Visual variant: fire (warm) vs steam
+//     (cool) tint over the same particle behavior.
+//
+// Synthesis: a periodic eruption every kGeyserPeriodTicks. During an
+// eruption (kGeyserEruptionTicks) we hold up to kGeyserParticles ballistic
+// particles spawned with upward velocity + lateral spread. Gravity pulls
+// them back down; particles fade by alpha over their life. Variant
+// (fire/steam) sets the color ramp. No I3D asset on disk → renders as
+// procedural billboards keyed off a generic smoke/flame fallback texture.
+//
+// This is a first-pass synthesis; constants tuned to "looks like a
+// geyser." Awaiting reference video for A/B kinematic tuning.
+class TGeyserEffect_Bespoke : public TEffect
+{
+  public:
+    enum class EVariant : uint8_t
+    {
+        Steam = 0,   // sgeyser (cool: white/blue)
+        Fire  = 1,   // fgeyser (warm: orange/red)
+    };
+
+    TGeyserEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TGeyserEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TGeyserEffect_Bespoke() override = default;
+
+    void OffScreen() override { /* ambient — do not kill */ }
+
+    [[nodiscard]] static TGeyserEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                    EVariant variant);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient
+
+  private:
+    // Synthesis constants. Particle count taken from Ghidra (100 iter).
+    static constexpr int32_t kGeyserParticles      = 100;
+    static constexpr int32_t kGeyserSimTickMs      = 1000 / 24;
+    static constexpr int32_t kGeyserPeriodTicks    = 24 * 5;   // 5s period
+    static constexpr int32_t kGeyserEruptionTicks  = 24 * 2;   // 2s eruption
+    static constexpr float   kGeyserParticleLife   = 60.0f;    // ticks
+    static constexpr float   kGeyserGravity        = -0.30f;   // wu/tick^2
+    static constexpr float   kGeyserUpVel          = 4.5f;     // wu/tick
+    static constexpr float   kGeyserSideSpread     = 0.4f;     // wu/tick
+    static constexpr float   kGeyserBaseSizeWu     = 28.0f;
+    static constexpr float   kGeyserSpawnSpreadXY  = 6.0f;     // base radius
+
+    struct SGeyserParticle
+    {
+        bool     used = false;
+        hmm_vec3 pos  = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 vel  = {0.0f, 0.0f, 0.0f};
+        float    life = 0.0f;
+        float    maxlife = 0.0f;
+        float    scl  = 1.0f;
+    };
+
+    SGeyserParticle particles_[kGeyserParticles] {};
+    EVariant       variant_       = EVariant::Steam;
+    int32_t        cycle_tick_    = 0;    // 0..kGeyserPeriodTicks
+    int32_t        spawn_cursor_  = 0;
+    double         sim_accum_ms_  = 0.0;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TFlameAnimator_Bespoke__cfire)
+
+// W3-C cfire. STUB. No Ghidra body, no snapshot body, no asset on
+// disk (Class.Def does not register "cfire"; ATTACHEFFECT lines in
+// char.def are commented out). SpawnForTest returns nullptr with a
+// diagnostic; harness row present so the id appears in --vfx-list for
+// future A/B once real video / asset surface.
+class TFlameAnimator_Bespoke__cfire : public TEffect
+{
+  public:
+    TFlameAnimator_Bespoke__cfire(TObjectImagery* newim) : TEffect(newim) {}
+    TFlameAnimator_Bespoke__cfire(SObjectDef* def, TObjectImagery* newim)
+        : TEffect(def, newim) {}
+    ~TFlameAnimator_Bespoke__cfire() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFlameAnimator_Bespoke__cfire* SpawnForTest_BESPOKE(
+        const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return false; }   // stub never alive
+};
+
+_CLASSDEF(TFogEffect_Bespoke__MistFog)
+
+// W3-C MistFog. Faithful direct port of TMistFogAnimator
+// (legacy/effect.cpp:11311-11456). 25-puff gravity-falling smoke field
+// using SSmoke per-puff state (x,y,z,rot,vx,vy,vz,life,size). Animate
+// integrates ballistic motion, grows size linearly, after life>200 starts
+// shrinking and ResetBall when size<=0.01.
+//
+// Render: SetAddBlendState -> AdditiveStraight (preserved literally). The
+// snapshot uses GetObject(0) of mistfog.i3d and re-positions/re-scales it
+// per puff. First-pass collapses each puff to a ScreenAligned additive
+// billboard at the puff pos with size = puff.size. The .i3d asset exists
+// at Misc/mistfog.I3D and Magic/mistfog.I3D, we pull texture slot 0.
+class TFogEffect_Bespoke__MistFog : public TEffect
+{
+  public:
+    TFogEffect_Bespoke__MistFog(TObjectImagery* newim) : TEffect(newim) {}
+    TFogEffect_Bespoke__MistFog(SObjectDef* def, TObjectImagery* newim)
+        : TEffect(def, newim) {}
+    ~TFogEffect_Bespoke__MistFog() override = default;
+
+    void OffScreen() override { /* ambient — do not kill */ }
+
+    [[nodiscard]] static TFogEffect_Bespoke__MistFog* SpawnForTest_BESPOKE(
+        const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    static constexpr int32_t kMistFogNumPuffs   = 25;   // NUMMISTFOG
+    static constexpr int32_t kMistFogSimTickMs  = 1000 / 24;
+    static constexpr float   kMistFogSmokeGrav  = -0.012f;  // SMOKE_GRAV reasonable default
+    static constexpr float   kMistFogBaseSizeWu = 28.0f;
+
+    struct SMistPuff
+    {
+        float    x = 0.0f, y = 0.0f, z = 0.0f;
+        float    rot = 0.0f;
+        float    vx = 0.0f, vy = 0.0f, vz = 0.0f;
+        int32_t  life = 0;
+        float    size = 0.0f;
+    };
+
+    SMistPuff      smoke_[kMistFogNumPuffs] {};
+    float          centerx_       = 0.0f;
+    float          centery_       = 0.0f;
+    int32_t        ticks_         = 0;
+    double         sim_accum_ms_  = 0.0;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+
+    void ResetBall_(int32_t b);
+};
+
+_CLASSDEF(TRockStormEffect_Bespoke)
+
+// W3-C RockStorm. Faithful direct port of TRockStormAnimator
+// (legacy/effect3.cpp:96-413). The animator runs a 5-stage state machine:
+//   START   → level-2 only: ramp scl_fac[max] in
+//   STAGE1  → level 1: rocks orbit, descending, then contract radius
+//             level 2: big rock descends
+//   DAMAGE  → flip lin_vel to 4.0 (bounce out)
+//   STAGE2  → rocks rise, expanding radius, fading
+//   DONE    → kill effect
+//
+// First-pass bespoke targets level 1 only (no spell-target lookup
+// available in harness; level 2 needs a real target). Renders each rock
+// as a screen-aligned billboard with scl_fac scale, plus an additive
+// "glow" billboard during STAGE1.
+//
+// Blend per snapshot Render: rock = SetBlendState (Alpha),
+// glow = SetAddBlendState (AdditiveStraight). Preserved literally.
+//
+// Asset Magic\Rocks.I3D is referenced in Class.Def but not present on
+// disk in legacy/Imagery/Magic. Bespoke tries to RegisterImagery/Load
+// and falls back to a procedural untextured render if missing.
+class TRockStormEffect_Bespoke : public TEffect
+{
+  public:
+    TRockStormEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TRockStormEffect_Bespoke(SObjectDef* def, TObjectImagery* newim)
+        : TEffect(def, newim) {}
+    ~TRockStormEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TRockStormEffect_Bespoke* SpawnForTest_BESPOKE(
+        const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants (legacy/effect3.cpp:37-45).
+    static constexpr int32_t kRockStormMinRocks   = 4;   // ROCKSTORM_MINROCKS
+    static constexpr int32_t kRockStormVarRocks   = 3;   // ROCKSTORM_VARROCKS
+    static constexpr int32_t kRockStormMaxRocks   = 7;   // ROCKSTORM_MAXROCKS
+    static constexpr int32_t kRockStormSimTickMs  = 1000 / 24;
+    static constexpr float   kRockStormBaseSizeWu = 22.0f;
+    static constexpr float   kRockStormGlowSizeWu = 36.0f;
+
+    enum EStage
+    {
+        kStageStart   = 0,
+        kStageStage1  = 1,
+        kStageDamage  = 2,
+        kStageStage2  = 3,
+        kStageDone    = 4,
+    };
+
+    // Mirror TRockStormAnimator privates (legacy/effect3.cpp:99-112).
+    int32_t  level_       = 1;
+    int32_t  stage_       = kStageStart;
+    int32_t  num_rocks_   = 0;
+    S3DPoint target_pos_  = {0, 0, 0};
+    float    min_radius_  = 8.0f;
+    float    radius_[kRockStormMaxRocks] {};
+    float    ang_vel_[kRockStormMaxRocks] {};
+    float    ang_[kRockStormMaxRocks] {};
+    float    dest_height_[kRockStormMaxRocks + 1] {};
+    float    lin_vel_[kRockStormMaxRocks + 1] {};
+    float    height_[kRockStormMaxRocks + 1] {};
+    float    scl_fac_[kRockStormMaxRocks + 1] {};
+    int32_t  frameon_    = 0;
+    bool     alive_      = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle rock_tex_  = kInvalidTexture;
+    TTextureHandle glow_tex_  = kInvalidTexture;
+    float          rock_uv_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          glow_uv_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
