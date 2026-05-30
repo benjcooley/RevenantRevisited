@@ -5514,3 +5514,177 @@ class TQuicksandEffect_Bespoke : public TEffect
     TTextureHandle texture_    = kInvalidTexture;
     float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
 };
+
+// *************************************************************************
+// * Wave-3 W3-A Dragon/Fire bespokes (Blast, FireFlash, FireWind,         *
+// * FireCone, Faultfire) — retail-only effects.                            *
+// *                                                                       *
+// * Status summary (see effect.cpp bodies for per-class detail):           *
+// *   TBlastEffect_Bespoke      — STUBBED (no animator, no Ghidra body)    *
+// *   TFireFlashEffect_Bespoke  — STUBBED (snapshot animator depends on    *
+// *                                PTSpell/PTCharacter rig not in test     *
+// *                                harness; Ghidra cls_0x5a9194 is a       *
+// *                                merged composite, untrustworthy)        *
+// *   TFireWindEffect_Bespoke   — STUBBED (same dependency profile;        *
+// *                                supports YFireWind variant via asset    *
+// *                                override)                               *
+// *   TFireConeEffect_Bespoke   — STUBBED (TParticleSystem fire+smoke+     *
+// *                                burst tri-system; not yet harness-      *
+// *                                ready; supports dragonfire variant)     *
+// *   TFaultFireEffect_Bespoke  — PORTED (small self-contained UV-scroll   *
+// *                                + scale-cosine pulse animator; faithful *
+// *                                first-pass billboard approximation)     *
+// *                                                                       *
+// * All five register a SpawnForTest_BESPOKE that loads the cited .I3D     *
+// * asset, and a TickAndSubmitForTest_BESPOKE that draws ONE Alpha         *
+// * ScreenAligned (FaultFire: WorldXY) billboard using the asset's first   *
+// * mapped texture. Awaiting user video A/B for kinematic tuning.          *
+// *************************************************************************
+
+_CLASSDEF(TBlastEffect_Bespoke)
+
+class TBlastEffect_Bespoke : public TEffect
+{
+  public:
+    TBlastEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TBlastEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBlastEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBlastEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void                                       TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kBlastBaseSizeWu = 48.0f;
+    static constexpr int32_t kBlastLifetimeMs = 1500;
+
+    TTextureHandle texture_      = kInvalidTexture;
+    float          age_ms_       = 0.0f;
+    bool           alive_        = true;
+};
+
+_CLASSDEF(TFireFlashEffect_Bespoke)
+
+class TFireFlashEffect_Bespoke : public TEffect
+{
+  public:
+    TFireFlashEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFireFlashEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireFlashEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFireFlashEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void                                           TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kFireFlashBaseSizeWu = 32.0f;
+    static constexpr int32_t kFireFlashLifetimeMs = 1600;
+
+    TTextureHandle texture_      = kInvalidTexture;
+    float          age_ms_       = 0.0f;
+    bool           alive_        = true;
+};
+
+_CLASSDEF(TFireWindEffect_Bespoke)
+
+class TFireWindEffect_Bespoke : public TEffect
+{
+  public:
+    TFireWindEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFireWindEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireWindEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // asset_override supports the YFireWind sibling variant (Magic\YFirewind.I3D)
+    // — Y-prefix in the snapshot is the "yellow" tint variant; same animator.
+    [[nodiscard]] static TFireWindEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                       const char*     asset_override = nullptr);
+    void                                          TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kFireWindBaseSizeWu = 40.0f;
+    static constexpr int32_t kFireWindLifetimeMs = 2000;
+
+    TTextureHandle texture_      = kInvalidTexture;
+    float          age_ms_       = 0.0f;
+    bool           alive_        = true;
+};
+
+_CLASSDEF(TFireConeEffect_Bespoke)
+
+class TFireConeEffect_Bespoke : public TEffect
+{
+  public:
+    TFireConeEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFireConeEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireConeEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // asset_override supports dragonfire (same FireCone.I3D under a different
+    // spell name) and any future cone-shape sibling.
+    [[nodiscard]] static TFireConeEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                       const char*     asset_override = nullptr);
+    void                                          TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kFireConeBaseSizeWu = 56.0f;
+    static constexpr int32_t kFireConeLifetimeMs = 1800;
+
+    TTextureHandle texture_      = kInvalidTexture;
+    float          age_ms_       = 0.0f;
+    bool           alive_        = true;
+};
+
+_CLASSDEF(TFaultFireEffect_Bespoke)
+
+// Faithful first-pass port of TFaultFireAnimator
+// (src/effect_old.cpp:11145-11225). Self-contained: no PTSpell/PTCharacter
+// dependency, no particle-system manager. Animator state is:
+//   th   += FF_STEP (=0.1)  every tick, wrapped at 2π
+//   per-tick: du = random(2..8) / 100, accumulate tu on every vertex
+//   render: 2 passes, each with scale = 0.125 * (cos(th + i*π/2) + 7)
+//           (range ≈ 0.75..1.0); apply tv = base_tv * scale per vert.
+//
+// First-pass drift: full mesh vertex submission (UV scroll, per-vert
+// tv-scale, two-pass overdraw) requires a per-effect mesh path we don't
+// yet expose. We collapse to ONE WorldXY billboard whose size pulses on the
+// same cos(th)+7 envelope, with a continuous UV-X scroll on the harness's
+// uv_rect.x to approximate the per-tick tu accumulation. Faithful version
+// pending mesh-submission support.
+class TFaultFireEffect_Bespoke : public TEffect
+{
+  public:
+    TFaultFireEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFaultFireEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFaultFireEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFaultFireEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void                                           TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants (effect_old.cpp:11143 + body).
+    static constexpr float   kFFStep         = 0.1f;       // FF_STEP
+    static constexpr int32_t kFFSimTickMs    = 1000 / 24;  // 24Hz sim-tick gate
+    static constexpr float   kFFBaseSizeWu   = 48.0f;      // billboard footprint
+    static constexpr int32_t kFFLifetimeMs   = 4000;       // harness display window
+                                                            // (snapshot is persistent;
+                                                            // we self-kill so it cycles)
+
+    float          th_           = 0.0f;     // animator's th
+    float          tu_scroll_    = 0.0f;     // accumulated tu (mod 1)
+    float          age_ms_       = 0.0f;
+    double         sim_accum_ms_ = 0.0;
+    TTextureHandle texture_      = kInvalidTexture;
+    bool           alive_        = true;
+};

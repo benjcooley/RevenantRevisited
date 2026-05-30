@@ -13551,3 +13551,434 @@ void TQuicksandEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
     // GetObject(1) cylinders and GetObject(2) dust mesh deferred -- see
     // class-doc comment on TQuicksandEffect_Bespoke for follow-up.
 }
+
+// =========================================================================
+// * Wave-3 W3-A Dragon/Fire bespokes                                      *
+// *                                                                       *
+// * Five retail-only effects. Strategy by feasibility (see batch brief):  *
+// *   STUBBED placeholders: Blast, FireFlash, FireWind, FireCone          *
+// *   PORTED first-pass:    Faultfire                                     *
+// *                                                                       *
+// * The stubbed entries all share the same minimal pattern:               *
+// *   1. SpawnForTest: Find/Register/Load the I3D, dynamic_cast to        *
+// *      T3DImagery, GetTexture(0) for the first texture slot.            *
+// *   2. Tick: age in ms via TTime::DeltaTime, kill at kXxxLifetimeMs.    *
+// *   3. Submit: ONE Alpha ScreenAligned billboard at effect Pos() with   *
+// *      a sensible kXxxBaseSizeWu footprint.                             *
+// *                                                                       *
+// * Faulfire ports the real animator's th/scale-cosine pulse + UV scroll  *
+// * (collapsed to a single billboard rather than the snapshot's 2-pass    *
+// * mesh draw — see header class-doc).                                    *
+// =========================================================================
+
+namespace {
+
+// Asset paths preserved verbatim from /tmp/retail_effect_inventory.tsv.
+constexpr const char* kBlastBespokeImageryPath     = "Magic\\Blast.I3D";
+constexpr const char* kFireFlashBespokeImageryPath = "Magic\\Fireflash.I3D";
+constexpr const char* kFireWindBespokeImageryPath  = "Magic\\Firewind.I3D";
+constexpr const char* kFireConeBespokeImageryPath  = "Magic\\FireCone.I3D";
+constexpr const char* kFaultFireBespokeImageryPath = "Magic\\Faultfire.i3d";
+
+// Shared helper: load an I3D effect imagery and return its first mapped
+// texture handle (slot 0). Returns kInvalidTexture and logs on failure;
+// also returns the base TObjectImagery* via out-param so callers can
+// attach it to their effect instance.
+TTextureHandle Wave3a_LoadFirstTexture(const char*      asset_path,
+                                       const char*      log_tag,
+                                       TObjectImagery*& out_imagery)
+{
+    out_imagery = nullptr;
+    int32_t img_id = TObjectImagery::FindImagery(asset_path);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
+    if (img_id < 0)
+    {
+        log_error("[%s] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  log_tag, asset_path);
+        return kInvalidTexture;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[%s] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  log_tag, img_id, asset_path);
+        return kInvalidTexture;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[%s] SpawnForTest: imagery '%s' is not a T3DImagery",
+                  log_tag, asset_path);
+        TObjectImagery::FreeImagery(base);
+        return kInvalidTexture;
+    }
+    // Poke NumObjects to trigger lazy mesh load.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj <= 0 || num_tex <= 0)
+    {
+        log_error("[%s] SpawnForTest: imagery '%s' empty (objects=%d, textures=%d)",
+                  log_tag, asset_path, num_obj, num_tex);
+        TObjectImagery::FreeImagery(base);
+        return kInvalidTexture;
+    }
+    S3DTex tex0 = {};
+    img3d->GetTexture(0, &tex0);
+    out_imagery = base;
+    log_info("[%s] SpawnForTest: '%s' tex0=%u w=%u h=%u numobj=%d numtex=%d",
+             log_tag, asset_path, tex0.htexture,
+             tex0.desc.width, tex0.desc.height, num_obj, num_tex);
+    return tex0.htexture;
+}
+
+// Shared helper: submit a single Alpha ScreenAligned billboard with the
+// given texture, size, and tint. Used by all four STUBBED entries.
+void Wave3a_SubmitBillboard(const S3DPoint& pos,
+                            TTextureHandle  texture,
+                            float           size_wu,
+                            EFxBillboardOrientation orient,
+                            EFxDebugMode    debug_mode,
+                            float           tint_r = 1.0f,
+                            float           tint_g = 1.0f,
+                            float           tint_b = 1.0f,
+                            float           tint_a = 1.0f,
+                            float           uv_x   = 0.0f,
+                            float           uv_y   = 0.0f,
+                            float           uv_w   = 1.0f,
+                            float           uv_h   = 1.0f)
+{
+    SBillboardDrawItem item = {};
+    item.world_pos[0]  = float(pos.x);
+    item.world_pos[1]  = float(pos.y);
+    item.world_pos[2]  = float(pos.z);
+    item.size_wu[0]    = size_wu;
+    item.size_wu[1]    = size_wu;
+    item.color_rgba[0] = tint_r;
+    item.color_rgba[1] = tint_g;
+    item.color_rgba[2] = tint_b;
+    item.color_rgba[3] = tint_a;
+    item.uv_rect[0]    = uv_x;
+    item.uv_rect[1]    = uv_y;
+    item.uv_rect[2]    = uv_w;
+    item.uv_rect[3]    = uv_h;
+    item.key.texture     = texture;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = orient;
+    item.debug_mode      = debug_mode;
+    Renderer->SubmitFxBillboard(item);
+}
+
+}  // namespace
+
+// -------------------------------------------------------------------------
+// TBlastEffect_Bespoke — STUBBED placeholder
+// -------------------------------------------------------------------------
+TBlastEffect_Bespoke* TBlastEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    TObjectImagery* base = nullptr;
+    TTextureHandle  tex  = Wave3a_LoadFirstTexture(kBlastBespokeImageryPath, "blast-bespoke", base);
+    if (!base)
+        return nullptr;
+
+    auto* eff = new TBlastEffect_Bespoke(base);
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    eff->texture_ = tex;
+    eff->age_ms_  = 0.0f;
+    eff->alive_   = true;
+    log_info("[blast-bespoke] STUBBED placeholder spawned at map_index=%d origin=(%d,%d,%d)"
+             " — awaiting Ghidra body or user video A/B",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z);
+    return eff;
+}
+
+void TBlastEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
+        return;
+
+    age_ms_ += float(TTime::DeltaTime() * 1000.0);
+    if (age_ms_ >= float(kBlastLifetimeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    static const bool s_blast_first = []{
+        log_info("[blast-bespoke] first submit (placeholder draw)");
+        return true;
+    }();
+    (void)s_blast_first;
+
+    // Expand-then-fade over lifetime — gives the harness something visible
+    // to A/B against game video.
+    const float t      = age_ms_ / float(kBlastLifetimeMs);
+    const float scl    = 0.4f + 1.6f * t;                   // 0.4x → 2.0x
+    const float alpha  = 1.0f - t;                          // 1 → 0
+    Wave3a_SubmitBillboard(Pos(), texture_, kBlastBaseSizeWu * scl,
+                           EFxBillboardOrientation::ScreenAligned, debug_mode,
+                           1.0f, 1.0f, 1.0f, alpha);
+}
+
+// -------------------------------------------------------------------------
+// TFireFlashEffect_Bespoke — STUBBED placeholder
+// -------------------------------------------------------------------------
+TFireFlashEffect_Bespoke* TFireFlashEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    TObjectImagery* base = nullptr;
+    TTextureHandle  tex  = Wave3a_LoadFirstTexture(kFireFlashBespokeImageryPath,
+                                                    "fireflash-bespoke", base);
+    if (!base)
+        return nullptr;
+
+    auto* eff = new TFireFlashEffect_Bespoke(base);
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    eff->texture_ = tex;
+    eff->age_ms_  = 0.0f;
+    eff->alive_   = true;
+    log_info("[fireflash-bespoke] STUBBED placeholder spawned at map_index=%d origin=(%d,%d,%d)"
+             " — snapshot TFireFlashAnimator depends on PTSpell/PTCharacter; "
+             "Ghidra cls_0x5a9194 is merged composite",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z);
+    return eff;
+}
+
+void TFireFlashEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
+        return;
+
+    age_ms_ += float(TTime::DeltaTime() * 1000.0);
+    if (age_ms_ >= float(kFireFlashLifetimeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    static const bool s_fireflash_first = []{
+        log_info("[fireflash-bespoke] first submit (placeholder draw)");
+        return true;
+    }();
+    (void)s_fireflash_first;
+
+    // Snapshot's "FFLASH_GS_ON → FFLASH_EXPLOSION" arc — grow then flash.
+    // Two visual phases: 0..60% = grow (FFLASH_GS_SIZEVEL1 ramp),
+    // 60..100% = flash burst (rapid expand + fade).
+    const float t   = age_ms_ / float(kFireFlashLifetimeMs);
+    float scl, alpha;
+    if (t < 0.6f)
+    {
+        scl   = 0.5f + 1.0f * (t / 0.6f);                   // 0.5x → 1.5x
+        alpha = 1.0f;
+    }
+    else
+    {
+        const float u = (t - 0.6f) / 0.4f;
+        scl   = 1.5f + 2.5f * u;                            // 1.5x → 4.0x
+        alpha = 1.0f - u;                                   // 1 → 0
+    }
+    // Warm yellow-orange tint per fire family.
+    Wave3a_SubmitBillboard(Pos(), texture_, kFireFlashBaseSizeWu * scl,
+                           EFxBillboardOrientation::ScreenAligned, debug_mode,
+                           1.0f, 0.85f, 0.55f, alpha);
+}
+
+// -------------------------------------------------------------------------
+// TFireWindEffect_Bespoke — STUBBED placeholder
+// -------------------------------------------------------------------------
+TFireWindEffect_Bespoke* TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                       const char* asset_override)
+{
+    const char* asset_path = asset_override ? asset_override : kFireWindBespokeImageryPath;
+    TObjectImagery* base = nullptr;
+    TTextureHandle  tex  = Wave3a_LoadFirstTexture(asset_path, "firewind-bespoke", base);
+    if (!base)
+        return nullptr;
+
+    auto* eff = new TFireWindEffect_Bespoke(base);
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    eff->texture_ = tex;
+    eff->age_ms_  = 0.0f;
+    eff->alive_   = true;
+    log_info("[firewind-bespoke] STUBBED placeholder spawned at map_index=%d origin=(%d,%d,%d)"
+             " asset='%s' — snapshot TFireWindAnimator depends on PTSpell/PTCharacter rig",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, asset_path);
+    return eff;
+}
+
+void TFireWindEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
+        return;
+
+    age_ms_ += float(TTime::DeltaTime() * 1000.0);
+    if (age_ms_ >= float(kFireWindLifetimeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    static const bool s_firewind_first = []{
+        log_info("[firewind-bespoke] first submit (placeholder draw)");
+        return true;
+    }();
+    (void)s_firewind_first;
+
+    // Wind-like elongating tongue — stretch along the asset's natural
+    // aspect, hold mid-life, fade out tail. Single-billboard collapse.
+    const float t   = age_ms_ / float(kFireWindLifetimeMs);
+    const float scl = 0.6f + 1.4f * std::sin(float(M_PI) * t);   // 0.6 → 2.0 → 0.6
+    const float alpha = (t < 0.8f) ? 1.0f : (1.0f - (t - 0.8f) / 0.2f);
+    Wave3a_SubmitBillboard(Pos(), texture_, kFireWindBaseSizeWu * scl,
+                           EFxBillboardOrientation::ScreenAligned, debug_mode,
+                           1.0f, 0.9f, 0.6f, alpha);
+}
+
+// -------------------------------------------------------------------------
+// TFireConeEffect_Bespoke — STUBBED placeholder
+// -------------------------------------------------------------------------
+TFireConeEffect_Bespoke* TFireConeEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                       const char* asset_override)
+{
+    const char* asset_path = asset_override ? asset_override : kFireConeBespokeImageryPath;
+    TObjectImagery* base = nullptr;
+    TTextureHandle  tex  = Wave3a_LoadFirstTexture(asset_path, "firecone-bespoke", base);
+    if (!base)
+        return nullptr;
+
+    auto* eff = new TFireConeEffect_Bespoke(base);
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    eff->texture_ = tex;
+    eff->age_ms_  = 0.0f;
+    eff->alive_   = true;
+    log_info("[firecone-bespoke] STUBBED placeholder spawned at map_index=%d origin=(%d,%d,%d)"
+             " asset='%s' — snapshot TFireConeAnimator owns 3 TParticleSystems "
+             "(fire+smoke+burst) not yet harness-ready",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, asset_path);
+    return eff;
+}
+
+void TFireConeEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
+        return;
+
+    age_ms_ += float(TTime::DeltaTime() * 1000.0);
+    if (age_ms_ >= float(kFireConeLifetimeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    static const bool s_firecone_first = []{
+        log_info("[firecone-bespoke] first submit (placeholder draw)");
+        return true;
+    }();
+    (void)s_firecone_first;
+
+    // Cone-breath expanding outward and tapering — single billboard
+    // proxy for the three-system flame field.
+    const float t     = age_ms_ / float(kFireConeLifetimeMs);
+    const float scl   = 0.5f + 2.5f * t;                       // 0.5x → 3.0x
+    const float alpha = (t < 0.5f) ? 1.0f : (1.0f - (t - 0.5f) / 0.5f);
+    // Dragon-breath orange-red.
+    Wave3a_SubmitBillboard(Pos(), texture_, kFireConeBaseSizeWu * scl,
+                           EFxBillboardOrientation::ScreenAligned, debug_mode,
+                           1.0f, 0.7f, 0.35f, alpha);
+}
+
+// -------------------------------------------------------------------------
+// TFaultFireEffect_Bespoke — PORTED (snapshot effect_old.cpp:11145-11225)
+// -------------------------------------------------------------------------
+TFaultFireEffect_Bespoke* TFaultFireEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    TObjectImagery* base = nullptr;
+    TTextureHandle  tex  = Wave3a_LoadFirstTexture(kFaultFireBespokeImageryPath,
+                                                    "faultfire-bespoke", base);
+    if (!base)
+        return nullptr;
+
+    auto* eff = new TFaultFireEffect_Bespoke(base);
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    eff->texture_ = tex;
+    // Snapshot Initialize: th = 0.0f.
+    eff->th_           = 0.0f;
+    eff->tu_scroll_    = 0.0f;
+    eff->age_ms_       = 0.0f;
+    eff->sim_accum_ms_ = 0.0;
+    eff->alive_        = true;
+    log_info("[faultfire-bespoke] SpawnForTest: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, tex);
+    return eff;
+}
+
+void TFaultFireEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
+        return;
+
+    // 24Hz sim-tick gate for the per-tick th += FF_STEP and du accumulation.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFFSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFFSimTickMs);
+        // Snapshot Animate (effect_old.cpp:11165-11181) — verbatim.
+        th_ += kFFStep;
+        if (th_ > float(M_PI * 2.0))
+            th_ -= float(M_PI * 2.0);
+        const float du = float(random(2, 8)) / 100.0f;
+        tu_scroll_ += du;
+        if (tu_scroll_ > 1.0f)
+            tu_scroll_ -= 1.0f;
+    }
+
+    age_ms_ += float(TTime::DeltaTime() * 1000.0);
+    if (age_ms_ >= float(kFFLifetimeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    static const bool s_faultfire_first = []{
+        log_info("[faultfire-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_faultfire_first;
+
+    // Snapshot Render (effect_old.cpp:11182-11221): 2 mesh passes, each
+    // with scale = 0.125 * (cos(th + i*π/2) + 7). The two passes are π/2
+    // out of phase — overall envelope range ≈ 0.875..1.0 with high cross-
+    // over. First-pass billboard: take MAX of the two scales as a single
+    // proxy footprint.
+    const float scl0 = 0.125f * (std::cos(th_)                         + 7.0f);
+    const float scl1 = 0.125f * (std::cos(th_ + float(M_PI / 2.0))     + 7.0f);
+    // NOTE: `max` is a macro from revtypes.h:20 — std::max won't parse;
+    // use a ternary.
+    const float scl  = (scl0 > scl1) ? scl0 : scl1;
+
+    // Tail-fade in the last 20% of life so re-trigger has a clean gap.
+    const float t     = age_ms_ / float(kFFLifetimeMs);
+    const float alpha = (t < 0.8f) ? 1.0f : (1.0f - (t - 0.8f) / 0.2f);
+
+    // UV-X scroll: snapshot accumulates tu on every vertex; we wrap it
+    // into uv_rect[0] for the billboard so the texture appears to flow.
+    Wave3a_SubmitBillboard(Pos(), texture_, kFFBaseSizeWu * scl,
+                           EFxBillboardOrientation::WorldXY, debug_mode,
+                           1.0f, 0.55f, 0.25f, alpha,
+                           tu_scroll_, 0.0f, 1.0f, 1.0f);
+}
+// --- end Wave-3 W3-A Dragon/Fire bespokes
+
