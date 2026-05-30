@@ -4844,6 +4844,90 @@ class TPixieEffect_Bespoke : public TEffect
     double         sim_accum_ms_ = 0.0;
 };
 
+// =========================================================================
+// W2D batch — Misc A — character/ambient particle emitters (X01, B04)
+// =========================================================================
+// Localized-at-end additions for clean wave-3 merge. Faithful direct ports
+// of the snapshot animator bodies in src/effect_old.cpp.
+
+// ----- X01 TFlyEffect (Bespoke) ------------------------------------------
+// FAITHFUL DIRECT PORT of TFlyAnimator (snapshot src/effect_old.cpp:
+// 6514-6603). Ambient corpse-decay fly swarm. Per-particle random wander
+// inside a fixed cube (FLY_RANGE_X/Y/Z = 30 wu), one fly is "switched on"
+// per tick at random until all 20 are active. Velocity is per-tick
+// random(-2,2) integer steps in each axis; if a fly oversteps the cube
+// edge it's pushed back by 2*vel (a hard reflect-bounce). Render is
+// SetBlendState() (Alpha) with cull=NONE — billboards already no-cull.
+// Asset: Misc\Flies.I3D — small dark-grey/black pixel-sprite quads.
+
+inline constexpr int32_t kFlyBespokeCount        = FLY_COUNT;     // 20
+inline constexpr int32_t kFlyBespokeRangeX       = FLY_RANGE_X;   // 30
+inline constexpr int32_t kFlyBespokeRangeY       = FLY_RANGE_Y;   // 30
+inline constexpr int32_t kFlyBespokeRangeZ       = FLY_RANGE_Z;   // 30
+inline constexpr float   kFlyBespokeScale        = 0.3f;          // Init: scl.xyz = .3
+inline constexpr int32_t kFlyBespokeSimTickMs    = 1000 / 24;
+inline constexpr float   kFlyBespokeBaseSizeWu   = 10.0f;         // size.x = size.y = 10
+
+struct SFlyParticleBespoke
+{
+    hmm_vec3 pos  = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 scl  = {kFlyBespokeScale, kFlyBespokeScale, kFlyBespokeScale};
+    hmm_vec3 rot  = {0.0f, 0.0f, 0.0f};
+    bool     used = false;   // staged activation (1 per tick chance)
+};
+
+_CLASSDEF(TFlyEffect_Bespoke)
+
+class TFlyEffect_Bespoke : public TEffect
+{
+  public:
+    TFlyEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFlyEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFlyEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFlyEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient swarm — never dies
+
+  private:
+    SFlyParticleBespoke flies_[kFlyBespokeCount] {};
+    TTextureHandle      texture_      = kInvalidTexture;
+    float               uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float               size_wu_      = kFlyBespokeBaseSizeWu;
+    double              sim_accum_ms_ = 0.0;
+};
+
+// ----- B04 TPulpEffect (Bespoke) — STUBBED -------------------------------
+// FAITHFUL DIRECT PORT BLOCKED. TPulpEffect::Set(vel, ch, ...) requires a
+// live PTCharacter whose TCharAnimator yields per-bone sub-object meshes
+// (head/limb chunks) ejected as falling rigid bodies + blood spray. The
+// harness rig path exists but there is no SubmitFx* API for animated
+// character sub-object meshes (only billboards/particles); a faithful
+// port would need either the IM body-part submission path or coupling
+// against the live rig from inside the bespoke effect — both out of
+// W2D scope. STUB per brief: SpawnForTest returns nullptr + log_warn.
+// Re-enable once either (a) char-mesh submission lands or (b) we accept
+// the blood-only subset and reuse the B01 path (brief notes: "May share
+// particles with B01 — keep B01 path canonical"). Status: BLOCKED.
+
+_CLASSDEF(TPulpEffect_Bespoke)
+
+class TPulpEffect_Bespoke : public TEffect
+{
+  public:
+    TPulpEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TPulpEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TPulpEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TPulpEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+};
+
 // *************************************************************************
 // * Wave 3 batch W2C: Weather C — character-cast storm + wind strip.       *
 // *                                                                       *

@@ -3419,6 +3419,67 @@ void VortexBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->eff->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
+// --- W2D batch (X01, B04) bespoke harness wrappers ----------------------
+// Localized-at-end for clean wave-3 merge.
+
+// X01 TFlyEffect_Bespoke — ambient corpse-decay fly swarm.
+struct SFlyBespokeCtx {
+    TFlyEffect_Bespoke* fly = nullptr;
+};
+
+void* FlyBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFlyBespokeCtx();
+    c->fly = TFlyEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->fly)
+        log_warn("[vfx] TFlyEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " X01 bespoke entry will draw nothing");
+    return c;
+}
+
+void FlyBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFlyBespokeCtx*>(cp);
+    delete c->fly;
+    delete c;
+}
+
+void FlyBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFlyBespokeCtx*>(cp);
+    if (c && c->fly)
+        c->fly->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// B04 TPulpEffect_Bespoke — STUBBED (see effect.cpp note).
+struct SPulpBespokeCtx {
+    TPulpEffect_Bespoke* pulp = nullptr;
+};
+
+void* PulpBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SPulpBespokeCtx();
+    c->pulp = TPulpEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->pulp)
+        log_warn("[vfx] TPulpEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " B04 bespoke entry will draw nothing (BLOCKED)");
+    return c;
+}
+
+void PulpBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SPulpBespokeCtx*>(cp);
+    delete c->pulp;
+    delete c;
+}
+
+void PulpBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SPulpBespokeCtx*>(cp);
+    if (c && c->pulp)
+        c->pulp->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 }  // namespace
 
 // Defer registration until VfxTest::Initialize runs (renderer must
@@ -4186,6 +4247,37 @@ struct SVfxTestBootstrap {
             delete c;
         };
         VfxTest::DeferredRegister(windstrip_bespoke);
+
+        // --- W2D batch (X01, B04) — character/ambient particle emitters ---
+        // Localized-at-end for clean wave-3 merge.
+
+        // X01 TFlyAnimator — 20-particle ambient fly swarm, Misc/Flies.I3D.
+        // Per-tick staged activation + random per-axis wander inside a
+        // 30 wu cube with hard reflect-back bounce. Alpha-keyed dark
+        // pixel-sprite quads.
+        VfxTest::SEffect fly_bespoke = {};
+        fly_bespoke.id            = "TFlyEffect_BESPOKE";
+        fly_bespoke.family        = "ambient";
+        fly_bespoke.pipeline      = "PE";
+        fly_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fly_bespoke.factory       = [](const S3DPoint& o) -> void* { return FlyBespokeSpawn(o); };
+        fly_bespoke.submit        = [](void* c, EFxDebugMode d) { FlyBespokeSubmit(c, d); };
+        fly_bespoke.destroy       = [](void* c) { FlyBespokeDestroy(c); };
+        VfxTest::DeferredRegister(fly_bespoke);
+
+        // B04 TPulpAnimator — STUBBED. Body-part-mesh-eject + blood spray
+        // gore burst. Requires a live PTCharacter + TCharAnimator and
+        // animated sub-object mesh submission path (neither in W2D scope).
+        // SpawnForTest returns nullptr + log_warn; harness draws nothing.
+        VfxTest::SEffect pulp_bespoke = {};
+        pulp_bespoke.id            = "TPulpEffect_BESPOKE";
+        pulp_bespoke.family        = "blood";
+        pulp_bespoke.pipeline      = "PE+IM";
+        pulp_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        pulp_bespoke.factory       = [](const S3DPoint& o) -> void* { return PulpBespokeSpawn(o); };
+        pulp_bespoke.submit        = [](void* c, EFxDebugMode d) { PulpBespokeSubmit(c, d); };
+        pulp_bespoke.destroy       = [](void* c) { PulpBespokeDestroy(c); };
+        VfxTest::DeferredRegister(pulp_bespoke);
     }
 };
 SVfxTestBootstrap g_vfx_test_bootstrap;
