@@ -3439,3 +3439,197 @@ class TAmbSoundAnimator : public T3DAnimator
     bool Render();
     void RefreshZBuffer();
 };
+
+// *************************************************************************
+// * Ice family bespoke ports (wave-bespoke-03-ice)                         *
+// *************************************************************************
+//
+// Three sister effects in the player's frost-spell chain:
+//   I20 TIceEffect      — shard-burst impact effect (NO ported body —
+//                         needs forensics doc first; STUB returns nullptr)
+//   I21 TIceBoltEffect  — stationary caster->target freeze beam, ~5 s
+//                         lifetime, composite Magic\icebolt.I3D draw +
+//                         50 frost + 50 snow billboards. Posts I22.
+//   I22 TIcedEffect     — 10 s frozen-victim overlay, then 30-chunk
+//                         shatter. Posted by I21.
+//
+// All three follow the TBloodEffect_Bespoke template: T<Class>_Bespoke
+// subclass of TEffect, SpawnForTest_BESPOKE static factory, and
+// TickAndSubmitForTest_BESPOKE per-frame driver. Forensics:
+//   docs/vfx/forensics/I21_TIceBoltEffect.md
+//   docs/vfx/forensics/I22_TIcedEffect.md
+// Snapshot bodies: src/effect_old.cpp:8015-8688 (I21), :8749-8953 (I22).
+
+// --- I20 TIceEffect bespoke stub --------------------------------------
+// I20 has only header declarations (effect.h:607-615). No Animate/Render
+// body exists in src/effect_old.cpp or src/effectcomp.cpp — the snapshot
+// shipped just TIceEffect / TIceAnimator decls + a constructor-only
+// `flags |= OF_MOVING; pos += ICEDIST` ctor (no Pulse body, no animator
+// body). The brief flags this as "needs forensics doc first — DO NOT
+// port code blind". SpawnForTest returns nullptr + log_warn; harness
+// renders nothing for this id. Re-enable once a forensics doc exists.
+_CLASSDEF(TIceEffect_Bespoke)
+
+class TIceEffect_Bespoke : public TEffect
+{
+  public:
+    TIceEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TIceEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TIceEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // BLOCKED: returns nullptr — no snapshot body and no forensics doc.
+    [[nodiscard]] static TIceEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return false; }
+};
+
+// --- I21 TIceBoltEffect bespoke ---------------------------------------
+// FAITHFUL DIRECT PORT of TIceBoltAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:8015-8688). Per forensics §3 constants and §6
+// state machine. Stationary freeze beam (NOT a missile — base is
+// TEffect; the TMissileEffect::Initialize/Pulse calls in the snapshot
+// are commented out). Composite draw: 4 nested core cylinders
+// (cyl04/01/02/03), counter-rotating spirals (cyl06), sliding rings
+// (cyl05), 2 end glow spheres (box01), 50 frost particles (box01), 50
+// snow particles (box01). Blend = Alpha, Lit-mode = Unlit (asset color
+// carries blue), Depth = TestNoWrite. spell.def LIGHT(100,100,255) is
+// retail-only — pre-release parser discards it; no light added here.
+inline constexpr int32_t kIceBoltMaxFrost = 50;   // MAX_FROST_PARTICLES (effect.h:1651)
+inline constexpr int32_t kIceBoltMaxSnow  = 50;   // MAX_SNOW_PARTICLES  (effect.h:1652)
+
+// 24 Hz sim-tick gate (family pattern: blood/spark/fireball/iced).
+inline constexpr int32_t kIceBoltSimTickMs = 1000 / 24;
+
+// One frost particle (snapshot: p[],v[],s[],t[] member arrays in the
+// animator). Re-flattened onto a per-particle struct on the effect class
+// — mirrors SBloodParticleEx convention.
+struct SIceBoltFrostParticle
+{
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};   // p[i] (wu, object-local)
+    hmm_vec3 vel = {0.0f, 0.0f, 0.0f};   // v[i] (wu/tick)
+    float    s   = 0.0f;                  // size (FROST_INIT_SIZE → 0)
+    float    t   = 0.0f;                  // spawn delay (ticks)
+};
+
+// One snow particle (snapshot: h[],th[],r[],rs[],sz[] member arrays).
+struct SIceBoltSnowParticle
+{
+    float h  = 0.0f;   // height (z, ±50 wu)
+    float th = 0.0f;   // orbit angle (rad)
+    float r  = 0.0f;   // orbit radius (wu)
+    float rs = 0.0f;   // angular velocity (rad/tick)
+    float sz = 0.0f;   // particle scale
+};
+
+_CLASSDEF(TIceBoltEffect_Bespoke)
+
+class TIceBoltEffect_Bespoke : public TEffect
+{
+  public:
+    TIceBoltEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TIceBoltEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TIceBoltEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TIceBoltEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Per-particle arrays (50+50 = 100 quads max), forensics §3.
+    SIceBoltFrostParticle frost_[kIceBoltMaxFrost] {};
+    SIceBoltSnowParticle  snow_[kIceBoltMaxSnow] {};
+
+    // Beam-body transform animation envelopes (snapshot member fields:
+    // length, spherescale[2], cylscale, ringout, spiralang, spiralscale, cy).
+    // Same names as snapshot for line-by-line fidelity.
+    float length_       = 0.0f;          // beam length (wu); harness-fixed
+    float spherescale_[2] = {0.0f, 0.0f};// glow-sphere scales (snapshot spherescale[0/1])
+    float cylscale_     = 0.0f;          // core-cylinder x/y scale (snapshot cylscale)
+    float ringout_      = 0.0f;          // ring slide offset (snapshot ringout)
+    float spiralang_    = 0.0f;          // spiral rotation angle (rad)
+    float spiralscale_  = 0.0f;          // spiral xy scale
+    float cy_           = 0.0f;          // snow cluster axial sweep
+    int32_t angle_      = 0;             // byte facing (0..255) toward target
+    int32_t frameon_    = 0;             // simulation tick counter
+    int32_t subspell_   = 3;             // ::SetSubSpell(3) force (snapshot :8049)
+
+    // Resolved texture handles for the 7 sub-objects of icebolt.I3D.
+    // §4 mapping: [0..3] = cylinder04/01/02/03 (core beam),
+    //             [4]    = box01 (glow sphere / frost / snow billboard),
+    //             [5]    = cylinder05 (rings),
+    //             [6]    = cylinder06 (spirals).
+    TTextureHandle subobj_tex_[7] {kInvalidTexture, kInvalidTexture, kInvalidTexture,
+                                   kInvalidTexture, kInvalidTexture, kInvalidTexture,
+                                   kInvalidTexture};
+    float          subobj_uv_[7][4] {};
+
+    bool   alive_         = true;
+    double sim_accum_ms_  = 0.0;
+};
+
+// --- I22 TIcedEffect bespoke -------------------------------------------
+// FAITHFUL DIRECT PORT of TIcedAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:8749-8953). 3-phase state machine:
+//   Phase A — HOLD: frameon < ICED_DURATION (240 ticks ≈ 10s @ 24Hz).
+//     Reveal face01..face43 sub-objects 4/frame over paralyzed victim.
+//   Phase B — SHATTER: frameon == ICED_DURATION. Seed MAX_ICED_CHUNKS=30
+//     cube chunks in 4 quadrants × 5 rows.
+//   Phase C — TUMBLE: integrate p+=v, v.z-=ICED_CHUNK_GRAVITY(0.25),
+//     spin t+=w, bounce at p.z<=16 (v.z*=-0.5, spin x2), die after
+//     random(2,3) bounces. KillThisEffect when all chunks dead.
+//
+// Blend = Alpha, Lit-mode = Unlit (asset color), Depth = TestNoWrite.
+// Posted by I21 (and retail-only TStormAnimator) — harness drives this
+// effect standalone (no victim coupling: `icedchar` stays nullptr,
+// SetParalize/IsIced/IsDead branches are guarded out for sector-less
+// preview, lifecycle runs purely on frameon).
+inline constexpr int32_t kIcedSimTickMs = 1000 / 24;
+inline constexpr int32_t kIcedDuration  = 24 * 10;   // ICED_DURATION (effect_old.cpp:8720)
+inline constexpr float   kIcedChunkGravity = 0.25f;  // ICED_CHUNK_GRAVITY (effect_old.cpp:8721)
+inline constexpr int32_t kIcedRevealCap = 50;        // min(frameon*4, 50) (effect_old.cpp:8909)
+
+// One shatter chunk (snapshot: p[], v[], t[], w[], s[], l[] member
+// arrays of size MAX_ICED_CHUNKS). Re-flattened per family convention.
+struct SIcedChunk
+{
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};   // p[i]
+    hmm_vec3 vel = {0.0f, 0.0f, 0.0f};   // v[i]
+    hmm_vec3 rot = {0.0f, 0.0f, 0.0f};   // t[i] (angular position)
+    hmm_vec3 ang = {0.0f, 0.0f, 0.0f};   // w[i] (angular velocity)
+    hmm_vec3 scl = {0.0f, 0.0f, 0.0f};   // s[i]
+    int32_t  life = 0;                    // l[i] (bounces left)
+};
+
+_CLASSDEF(TIcedEffect_Bespoke)
+
+class TIcedEffect_Bespoke : public TEffect
+{
+  public:
+    TIcedEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TIcedEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TIcedEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TIcedEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SIcedChunk chunks_[MAX_ICED_CHUNKS] {};
+    float   angle_         = 0.0f;       // random(0,359)*TORADIAN, Z-axis spin for reveal facets
+    int32_t frameon_       = 0;
+    int32_t donebouncing_  = 0;
+
+    // box01 (chunk mesh) texture handle + UVs.
+    TTextureHandle facet_tex_ = kInvalidTexture;
+    float          facet_uv_[4] {0.0f, 0.0f, 1.0f, 1.0f};
+    float          facet_size_wu_ = 24.0f;
+
+    bool   alive_        = true;
+    double sim_accum_ms_ = 0.0;
+};
