@@ -5515,6 +5515,186 @@ class TQuicksandEffect_Bespoke : public TEffect
     float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
 };
 
+// =========================================================================
+// * Wave-3 W3-D Y-prefix boss-variant bespoke stubs                        *
+// *                                                                       *
+// * Five retail-only Y-prefix effects (Yhagoro / boss-variant assets).    *
+// * No snapshot source body. Ghidra evidence is THIN for four of the      *
+// * five — only TYFireBallEffect has a dedicated cls_0x5b4814 candidate   *
+// * (with the same vtable shape as cls_0x5b4290 = base FireBall, i.e.     *
+// * "same code, different asset"). The other four (YFireWind, YCataclysm,*
+// * YManadrain, ymaelstrom) only show string XREFs in spell-handler       *
+// * routines — no dedicated class layout to port.                         *
+// *                                                                       *
+// * Per the batch protocol, each ships as a MINIMAL placeholder: load     *
+// * the I3D asset (path verbatim from /tmp/retail_effect_inventory.tsv),  *
+// * draw the first sub-object as a ScreenAligned Alpha billboard, with a *
+// * default lifetime. Status = stubbed. Bodies are intentionally tiny —   *
+// * forensics-without-decomp is fabrication; the placeholders give the    *
+// * harness a row to A/B against game video once the user captures one.   *
+// *                                                                       *
+// * Each class follows the lightweight stub pattern: nullptr-imagery      *
+// * ctor + TryLoadMagicTexture-style asset load, single-billboard tick.   *
+// *************************************************************************
+
+// W3-D YFireBall — Yhagoro fireball variant.
+// Ghidra: cls_0x5b4814, MEDIUM confidence (recon/mappings/
+// TYFireBallEffect_cls_0x5b4814_candidate.yaml). Same vtable shape and
+// self-allocated size (0x4cc bytes) as cls_0x5b4290 (base FireBall) — Y
+// variant is functionally identical with overridden asset. Asset
+// Magic\YFireBall.I3D (yellow/large fireball).
+//
+// Stub renders a single ScreenAligned Alpha billboard sized like a small
+// fireball. Behavioral parity with the base TFireBallEffect (which is
+// already fully ported at effect.cpp:6694+) is left for a follow-up that
+// either subclasses TFireBallEffect or accepts an asset_override on its
+// SpawnForTest — that wiring is non-trivial because TFireBallEffect's
+// Init bakes Magic\NewFireBall.I3D into its sub-object resolution.
+_CLASSDEF(TFireBallEffect_Bespoke__YFireBall)
+class TFireBallEffect_Bespoke__YFireBall : public TEffect
+{
+  public:
+    TFireBallEffect_Bespoke__YFireBall(TObjectImagery* newim) : TEffect(newim) {}
+    TFireBallEffect_Bespoke__YFireBall(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireBallEffect_Bespoke__YFireBall() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFireBallEffect_Bespoke__YFireBall* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kStubLifetimeMs   = 2500;
+    static constexpr float   kStubBaseSizeWu   = 24.0f;
+    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
+
+    int32_t  age_ms_       = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// W3-D YFireWind — boss-variant firewind. No dedicated class candidate; only
+// string XREFs in spell-handler area. Asset Magic\YFirewind.I3D.
+// Minimal placeholder — single ScreenAligned Alpha billboard.
+_CLASSDEF(TFireWindEffect_Bespoke__YFireWind)
+class TFireWindEffect_Bespoke__YFireWind : public TEffect
+{
+  public:
+    TFireWindEffect_Bespoke__YFireWind(TObjectImagery* newim) : TEffect(newim) {}
+    TFireWindEffect_Bespoke__YFireWind(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireWindEffect_Bespoke__YFireWind() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFireWindEffect_Bespoke__YFireWind* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kStubLifetimeMs   = 3000;
+    static constexpr float   kStubBaseSizeWu   = 32.0f;
+    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
+
+    int32_t  age_ms_       = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// W3-D YCataclysm — boss-variant cataclysm. Ghidra XREF for s_YCataclysm_
+// at 0x005e1520 lives in virt_meth_0x507530 (spell handler), no dedicated
+// class. Base Cataclysm is similarly spell-only (no class). Asset
+// Magic\YCataclysm.I3D. Minimal placeholder.
+_CLASSDEF(TCataclysmEffect_Bespoke__YCataclysm)
+class TCataclysmEffect_Bespoke__YCataclysm : public TEffect
+{
+  public:
+    TCataclysmEffect_Bespoke__YCataclysm(TObjectImagery* newim) : TEffect(newim) {}
+    TCataclysmEffect_Bespoke__YCataclysm(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TCataclysmEffect_Bespoke__YCataclysm() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TCataclysmEffect_Bespoke__YCataclysm* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kStubLifetimeMs   = 4000;
+    static constexpr float   kStubBaseSizeWu   = 64.0f;
+    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
+
+    int32_t  age_ms_       = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// W3-D YManadrain — boss-variant mana-drain tether/beam. Ghidra XREF for
+// s_YManaDrain_005e1550 lives in virt_meth_0x5082c0 (spell handler); base
+// ManaDrain has XREFs in cls handler 0x4fbf50 but no clean class body
+// candidate identified. Asset Magic\YManadrain.I3D. Minimal placeholder.
+_CLASSDEF(TManadrainEffect_Bespoke__YManadrain)
+class TManadrainEffect_Bespoke__YManadrain : public TEffect
+{
+  public:
+    TManadrainEffect_Bespoke__YManadrain(TObjectImagery* newim) : TEffect(newim) {}
+    TManadrainEffect_Bespoke__YManadrain(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TManadrainEffect_Bespoke__YManadrain() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TManadrainEffect_Bespoke__YManadrain* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kStubLifetimeMs   = 3000;
+    static constexpr float   kStubBaseSizeWu   = 20.0f;
+    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
+
+    int32_t  age_ms_       = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// W3-D ymaelstrom — boss-variant maelstrom vortex. Pure asset-only (no
+// s_maelstrom_/s_ymaelstrom_ XREF in _data.txt — registered via class.def).
+// Asset magic\ymaelstrom.i3d (lowercase, preserved verbatim from
+// /tmp/retail_effect_inventory.tsv). Minimal placeholder.
+_CLASSDEF(TMaelstromEffect_Bespoke__ymaelstrom)
+class TMaelstromEffect_Bespoke__ymaelstrom : public TEffect
+{
+  public:
+    TMaelstromEffect_Bespoke__ymaelstrom(TObjectImagery* newim) : TEffect(newim) {}
+    TMaelstromEffect_Bespoke__ymaelstrom(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMaelstromEffect_Bespoke__ymaelstrom() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TMaelstromEffect_Bespoke__ymaelstrom* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kStubLifetimeMs   = 5000;
+    static constexpr float   kStubBaseSizeWu   = 96.0f;
+    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
+
+    int32_t  age_ms_       = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
 // *************************************************************************
 // * Wave-3 W3-A Dragon/Fire bespokes (Blast, FireFlash, FireWind,         *
 // * FireCone, Faultfire) — retail-only effects.                            *

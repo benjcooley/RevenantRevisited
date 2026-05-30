@@ -13553,6 +13553,357 @@ void TQuicksandEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 }
 
 // =========================================================================
+// Wave-3 W3-D Y-prefix boss-variant bespoke stubs
+// =========================================================================
+//
+// Five retail-only Y-prefix effects (Yhagoro / boss-variant assets).
+// Status = stubbed — no snapshot body, thin Ghidra evidence. Each loads
+// its I3D asset (path verbatim from /tmp/retail_effect_inventory.tsv) via
+// TryLoadMagicTexture and ticks down a default lifetime while drawing a
+// single ScreenAligned Alpha billboard. Body shape is the same minimal
+// scaffold across the five — kept verbose for individual tuning later
+// (user video A/B will drive kinematics).
+//
+// SHARED SCAFFOLD — duplicated per class so a future per-effect upgrade
+// can specialize one without untangling a template. Macro-free per
+// project style (feedback_code_style).
+
+namespace {
+
+// Submit one ScreenAligned Alpha billboard at world-pos for the W3-D
+// stubs. `alpha_fade01` is 0..1 (fades out toward end of lifetime).
+void W3DStubSubmitBillboard(const S3DPoint& base,
+                            TTextureHandle texture,
+                            const float uv_rect[4],
+                            float size_wu,
+                            float alpha_fade01,
+                            EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture == kInvalidTexture)
+        return;
+    SBillboardDrawItem item   = {};
+    item.size_wu[0]           = size_wu;
+    item.size_wu[1]           = size_wu;
+    item.color_rgba[0]        = 1.0f;
+    item.color_rgba[1]        = 1.0f;
+    item.color_rgba[2]        = 1.0f;
+    item.color_rgba[3]        = alpha_fade01;
+    item.uv_rect[0]           = uv_rect[0];
+    item.uv_rect[1]           = uv_rect[1];
+    item.uv_rect[2]           = uv_rect[2];
+    item.uv_rect[3]           = uv_rect[3];
+    item.key.texture          = texture;
+    item.key.pipeline_id      = uint16_t(EFxPipeline::Billboard);
+    item.key.blend            = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode       = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode           = EFxLightMode::Unlit;
+    item.orientation          = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode           = debug_mode;
+    item.world_pos[0]         = float(base.x);
+    item.world_pos[1]         = float(base.y);
+    item.world_pos[2]         = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+}   // namespace
+
+// ----- YFireBall ----------------------------------------------------------
+
+TFireBallEffect_Bespoke__YFireBall*
+TFireBallEffect_Bespoke__YFireBall::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from /tmp/retail_effect_inventory.tsv.
+    static const char* kYFireBallCandidates[] = {
+        "Magic\\YFireBall.I3D",
+        "Magic\\yfireball.i3d",
+    };
+
+    auto* eff = new TFireBallEffect_Bespoke__YFireBall(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = TryLoadMagicTexture(
+        kYFireBallCandidates,
+        int32_t(sizeof(kYFireBallCandidates) / sizeof(*kYFireBallCandidates)),
+        eff->uv_rect_, "yfireball");
+
+    eff->age_ms_       = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[yfireball-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u (cls_0x5b4814 candidate, stubbed)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TFireBallEffect_Bespoke__YFireBall::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStubSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStubSimTickMs);
+        age_ms_ += kStubSimTickMs;
+        if (age_ms_ >= kStubLifetimeMs)
+            alive_ = false;
+    }
+    if (!alive_)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[yfireball-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    const float fade01 =
+        1.0f - float(age_ms_) / float(kStubLifetimeMs);
+    W3DStubSubmitBillboard(Pos(), texture_, uv_rect_,
+                           kStubBaseSizeWu, fade01, debug_mode);
+}
+
+// ----- YFireWind ----------------------------------------------------------
+
+TFireWindEffect_Bespoke__YFireWind*
+TFireWindEffect_Bespoke__YFireWind::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kYFireWindCandidates[] = {
+        "Magic\\YFirewind.I3D",
+        "Magic\\yfirewind.i3d",
+    };
+
+    auto* eff = new TFireWindEffect_Bespoke__YFireWind(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = TryLoadMagicTexture(
+        kYFireWindCandidates,
+        int32_t(sizeof(kYFireWindCandidates) / sizeof(*kYFireWindCandidates)),
+        eff->uv_rect_, "yfirewind");
+
+    eff->age_ms_       = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[yfirewind-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u (no class candidate, stubbed)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TFireWindEffect_Bespoke__YFireWind::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStubSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStubSimTickMs);
+        age_ms_ += kStubSimTickMs;
+        if (age_ms_ >= kStubLifetimeMs)
+            alive_ = false;
+    }
+    if (!alive_)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[yfirewind-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    const float fade01 =
+        1.0f - float(age_ms_) / float(kStubLifetimeMs);
+    W3DStubSubmitBillboard(Pos(), texture_, uv_rect_,
+                           kStubBaseSizeWu, fade01, debug_mode);
+}
+
+// ----- YCataclysm ---------------------------------------------------------
+
+TCataclysmEffect_Bespoke__YCataclysm*
+TCataclysmEffect_Bespoke__YCataclysm::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kYCataclysmCandidates[] = {
+        "Magic\\YCataclysm.I3D",
+        "Magic\\ycataclysm.i3d",
+    };
+
+    auto* eff = new TCataclysmEffect_Bespoke__YCataclysm(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = TryLoadMagicTexture(
+        kYCataclysmCandidates,
+        int32_t(sizeof(kYCataclysmCandidates) / sizeof(*kYCataclysmCandidates)),
+        eff->uv_rect_, "ycataclysm");
+
+    eff->age_ms_       = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[ycataclysm-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u (spell-handler XREF only, stubbed)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TCataclysmEffect_Bespoke__YCataclysm::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStubSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStubSimTickMs);
+        age_ms_ += kStubSimTickMs;
+        if (age_ms_ >= kStubLifetimeMs)
+            alive_ = false;
+    }
+    if (!alive_)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[ycataclysm-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    const float fade01 =
+        1.0f - float(age_ms_) / float(kStubLifetimeMs);
+    W3DStubSubmitBillboard(Pos(), texture_, uv_rect_,
+                           kStubBaseSizeWu, fade01, debug_mode);
+}
+
+// ----- YManadrain ---------------------------------------------------------
+
+TManadrainEffect_Bespoke__YManadrain*
+TManadrainEffect_Bespoke__YManadrain::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kYManadrainCandidates[] = {
+        "Magic\\YManadrain.I3D",
+        "Magic\\ymanadrain.i3d",
+    };
+
+    auto* eff = new TManadrainEffect_Bespoke__YManadrain(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = TryLoadMagicTexture(
+        kYManadrainCandidates,
+        int32_t(sizeof(kYManadrainCandidates) / sizeof(*kYManadrainCandidates)),
+        eff->uv_rect_, "ymanadrain");
+
+    eff->age_ms_       = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[ymanadrain-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u (spell-handler XREF only, stubbed)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TManadrainEffect_Bespoke__YManadrain::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStubSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStubSimTickMs);
+        age_ms_ += kStubSimTickMs;
+        if (age_ms_ >= kStubLifetimeMs)
+            alive_ = false;
+    }
+    if (!alive_)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[ymanadrain-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    const float fade01 =
+        1.0f - float(age_ms_) / float(kStubLifetimeMs);
+    W3DStubSubmitBillboard(Pos(), texture_, uv_rect_,
+                           kStubBaseSizeWu, fade01, debug_mode);
+}
+
+// ----- ymaelstrom ---------------------------------------------------------
+
+TMaelstromEffect_Bespoke__ymaelstrom*
+TMaelstromEffect_Bespoke__ymaelstrom::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from /tmp/retail_effect_inventory.tsv (lowercase
+    // 'magic\\' AND lowercase 'ymaelstrom.i3d' — preserved). Try a few
+    // case variants since the loader's path resolution is case-sensitive
+    // on macOS targets.
+    static const char* kYMaelstromCandidates[] = {
+        "magic\\ymaelstrom.i3d",
+        "Magic\\ymaelstrom.I3D",
+        "Magic\\Ymaelstrom.I3D",
+    };
+
+    auto* eff = new TMaelstromEffect_Bespoke__ymaelstrom(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = TryLoadMagicTexture(
+        kYMaelstromCandidates,
+        int32_t(sizeof(kYMaelstromCandidates) / sizeof(*kYMaelstromCandidates)),
+        eff->uv_rect_, "ymaelstrom");
+
+    eff->age_ms_       = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[ymaelstrom-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u (asset-only registration, stubbed)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TMaelstromEffect_Bespoke__ymaelstrom::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStubSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStubSimTickMs);
+        age_ms_ += kStubSimTickMs;
+        if (age_ms_ >= kStubLifetimeMs)
+            alive_ = false;
+    }
+    if (!alive_)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[ymaelstrom-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    const float fade01 =
+        1.0f - float(age_ms_) / float(kStubLifetimeMs);
+    W3DStubSubmitBillboard(Pos(), texture_, uv_rect_,
+                           kStubBaseSizeWu, fade01, debug_mode);
+}
+
+// =========================================================================
 // * Wave-3 W3-A Dragon/Fire bespokes                                      *
 // *                                                                       *
 // * Five retail-only effects. Strategy by feasibility (see batch brief):  *

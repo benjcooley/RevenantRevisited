@@ -3723,6 +3723,110 @@ void FireSwarmBespokeVariantSubmit(void* cp, EFxDebugMode dbg)
 }
 
 // =========================================================================
+// * Wave-3 W3-D Y-prefix boss-variant harness helpers                      *
+// *                                                                       *
+// * Each effect ships as a stubbed _Bespoke class (see effect.h W3-D       *
+// * banner). The harness wiring follows the same SCtx + Spawn/Destroy/    *
+// * Submit triplet as the other bespoke entries. SpawnForTest may return  *
+// * nullptr if the I3D asset isn't resolvable — handled with a warn log.  *
+// =========================================================================
+
+struct SW3DYFireBallCtx { TFireBallEffect_Bespoke__YFireBall* eff = nullptr; };
+void* W3DYFireBallSpawn(const S3DPoint& origin) {
+    auto* c = new SW3DYFireBallCtx();
+    c->eff  = TFireBallEffect_Bespoke__YFireBall::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TFireBallEffect_Bespoke__YFireBall::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+void W3DYFireBallDestroy(void* cp) {
+    auto* c = static_cast<SW3DYFireBallCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+void W3DYFireBallSubmit(void* cp, EFxDebugMode dbg) {
+    auto* c = static_cast<SW3DYFireBallCtx*>(cp);
+    if (c && c->eff) c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SW3DYFireWindCtx { TFireWindEffect_Bespoke__YFireWind* eff = nullptr; };
+void* W3DYFireWindSpawn(const S3DPoint& origin) {
+    auto* c = new SW3DYFireWindCtx();
+    c->eff  = TFireWindEffect_Bespoke__YFireWind::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TFireWindEffect_Bespoke__YFireWind::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+void W3DYFireWindDestroy(void* cp) {
+    auto* c = static_cast<SW3DYFireWindCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+void W3DYFireWindSubmit(void* cp, EFxDebugMode dbg) {
+    auto* c = static_cast<SW3DYFireWindCtx*>(cp);
+    if (c && c->eff) c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SW3DYCataclysmCtx { TCataclysmEffect_Bespoke__YCataclysm* eff = nullptr; };
+void* W3DYCataclysmSpawn(const S3DPoint& origin) {
+    auto* c = new SW3DYCataclysmCtx();
+    c->eff  = TCataclysmEffect_Bespoke__YCataclysm::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TCataclysmEffect_Bespoke__YCataclysm::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+void W3DYCataclysmDestroy(void* cp) {
+    auto* c = static_cast<SW3DYCataclysmCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+void W3DYCataclysmSubmit(void* cp, EFxDebugMode dbg) {
+    auto* c = static_cast<SW3DYCataclysmCtx*>(cp);
+    if (c && c->eff) c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SW3DYManadrainCtx { TManadrainEffect_Bespoke__YManadrain* eff = nullptr; };
+void* W3DYManadrainSpawn(const S3DPoint& origin) {
+    auto* c = new SW3DYManadrainCtx();
+    c->eff  = TManadrainEffect_Bespoke__YManadrain::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TManadrainEffect_Bespoke__YManadrain::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+void W3DYManadrainDestroy(void* cp) {
+    auto* c = static_cast<SW3DYManadrainCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+void W3DYManadrainSubmit(void* cp, EFxDebugMode dbg) {
+    auto* c = static_cast<SW3DYManadrainCtx*>(cp);
+    if (c && c->eff) c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SW3DYMaelstromCtx { TMaelstromEffect_Bespoke__ymaelstrom* eff = nullptr; };
+void* W3DYMaelstromSpawn(const S3DPoint& origin) {
+    auto* c = new SW3DYMaelstromCtx();
+    c->eff  = TMaelstromEffect_Bespoke__ymaelstrom::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TMaelstromEffect_Bespoke__ymaelstrom::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+void W3DYMaelstromDestroy(void* cp) {
+    auto* c = static_cast<SW3DYMaelstromCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+void W3DYMaelstromSubmit(void* cp, EFxDebugMode dbg) {
+    auto* c = static_cast<SW3DYMaelstromCtx*>(cp);
+    if (c && c->eff) c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// =========================================================================
 // * Wave-3 W3-A Dragon/Fire bespoke harness wiring                        *
 // *                                                                       *
 // * 4 STUBBED entries (Blast, FireFlash, FireWind, FireCone) + 1 PORTED   *
@@ -5235,6 +5339,67 @@ struct SVfxTestBootstrap {
             e.factory       = [](const S3DPoint& o) -> void* { return FireSwarmBespokeVariantSpawn<kVariantHfire_I3D>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { FireSwarmBespokeVariantSubmit(c, d); };
             e.destroy       = [](void* c) { FireSwarmBespokeVariantDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // =====================================================================
+        // * Wave-3 W3-D Y-prefix boss-variant entries (5 retail-only effects)  *
+        // *   All ship as stubbed minimal placeholders pending user A/B video. *
+        // *   See effect.h W3-D banner for per-effect Ghidra evidence notes.   *
+        // =====================================================================
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireBallEffect_Bespoke__YFireBall_BESPOKE";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return W3DYFireBallSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { W3DYFireBallSubmit(c, d); };
+            e.destroy       = [](void* c) { W3DYFireBallDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireWindEffect_Bespoke__YFireWind_BESPOKE";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return W3DYFireWindSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { W3DYFireWindSubmit(c, d); };
+            e.destroy       = [](void* c) { W3DYFireWindDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TCataclysmEffect_Bespoke__YCataclysm_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return W3DYCataclysmSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { W3DYCataclysmSubmit(c, d); };
+            e.destroy       = [](void* c) { W3DYCataclysmDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TManadrainEffect_Bespoke__YManadrain_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return W3DYManadrainSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { W3DYManadrainSubmit(c, d); };
+            e.destroy       = [](void* c) { W3DYManadrainDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return W3DYMaelstromSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { W3DYMaelstromSubmit(c, d); };
+            e.destroy       = [](void* c) { W3DYMaelstromDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
         {
