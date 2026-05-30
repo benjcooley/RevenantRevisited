@@ -13,19 +13,6 @@ if(APPLE)
   enable_language(OBJC)
 endif()
 
-# Default to an optimized-with-symbols build. Without this, a plain
-# `cmake -S . -B build` leaves CMAKE_BUILD_TYPE empty -> no -O flags at
-# all -> the engine runs unoptimized and boot/sector-stream times balloon
-# (~2x). RelWithDebInfo (-O2 -g) keeps stack traces useful for the active
-# gameplay debugging while staying fast. Override explicitly with
-# -DCMAKE_BUILD_TYPE=Release / Debug when you want something else.
-# (Single-config generators only; multi-config like Xcode ignore this.)
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
-      "Build type (Debug/Release/RelWithDebInfo/MinSizeRel)" FORCE)
-  message(STATUS "CMAKE_BUILD_TYPE not set; defaulting to RelWithDebInfo")
-endif()
-
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -133,6 +120,7 @@ if(APPLE)
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/editorplatform.mm")
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/renderer_readback.mm")
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/cursor.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/headless_window.mm")
 endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
