@@ -4092,6 +4092,100 @@ struct SVfxTestBootstrap {
         vortex_bespoke.submit        = [](void* c, EFxDebugMode d) { VortexBespokeSubmit(c, d); };
         vortex_bespoke.destroy       = [](void* c) { VortexBespokeDestroy(c); };
         VfxTest::DeferredRegister(vortex_bespoke);
+
+        // --- wave3 W2C weather-C family bespoke entries ------------------
+        // Faithful direct ports of the snapshot animator bodies.
+        // Localized-at-end pattern: structs + factory adapters + registration
+        // all live in one block right before the closing brace so merge with
+        // adjacent W2A/W2B/W2D batches is a clean diff-stack append.
+
+        // W07 TStormAnimator — 20-instance falling-particle storm (the inner
+        // helper from effectcomp.cpp; outer wrapper is TMeteorStormAnimator).
+        // SpellGround preview style: ground-level burst, occasional re-fire.
+        struct SStormBespokeCtx_W2C {
+            TStormAnimator_Bespoke* eff    = nullptr;
+            S3DPoint                origin = {0, 0, 0};
+            float                   gap    = 0.0f;
+        };
+        VfxTest::SEffect storm_bespoke = {};
+        storm_bespoke.id            = "TStormAnimator_BESPOKE";
+        storm_bespoke.family        = "weather";
+        storm_bespoke.pipeline      = "PE";
+        storm_bespoke.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        storm_bespoke.factory = [](const S3DPoint& o) -> void* {
+            auto* c = new SStormBespokeCtx_W2C();
+            c->origin = o;
+            c->eff    = TStormAnimator_Bespoke::SpawnForTest_BESPOKE(o);
+            if (!c->eff)
+                log_warn("[vfx] TStormAnimator_Bespoke::SpawnForTest_BESPOKE returned null");
+            return c;
+        };
+        storm_bespoke.submit = [](void* cp, EFxDebugMode dbg) {
+            auto* c = static_cast<SStormBespokeCtx_W2C*>(cp);
+            if (!c) return;
+            if (!c->eff || !c->eff->IsAlive())
+            {
+                c->gap -= float(TTime::DeltaTime());
+                if (c->gap <= 0.0f)
+                {
+                    delete c->eff;
+                    c->eff = TStormAnimator_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                    c->gap = 1.0f;
+                }
+            }
+            if (c->eff)
+                c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+        };
+        storm_bespoke.destroy = [](void* cp) {
+            auto* c = static_cast<SStormBespokeCtx_W2C*>(cp);
+            delete c->eff;
+            delete c;
+        };
+        VfxTest::DeferredRegister(storm_bespoke);
+
+        // S02 TWindStripAnimator — 3-strip wind-blown ambient streak with
+        // gravity-fall drop sparks and a fade-in/out halo. SpellGround
+        // preview style: spawn at the casting ground point.
+        struct SWindStripBespokeCtx_W2C {
+            TWindStripAnimator_Bespoke* eff    = nullptr;
+            S3DPoint                    origin = {0, 0, 0};
+            float                       gap    = 0.0f;
+        };
+        VfxTest::SEffect windstrip_bespoke = {};
+        windstrip_bespoke.id            = "TWindStripAnimator_BESPOKE";
+        windstrip_bespoke.family        = "weather";
+        windstrip_bespoke.pipeline      = "SR+FB";
+        windstrip_bespoke.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        windstrip_bespoke.factory = [](const S3DPoint& o) -> void* {
+            auto* c = new SWindStripBespokeCtx_W2C();
+            c->origin = o;
+            c->eff    = TWindStripAnimator_Bespoke::SpawnForTest_BESPOKE(o);
+            if (!c->eff)
+                log_warn("[vfx] TWindStripAnimator_Bespoke::SpawnForTest_BESPOKE returned null");
+            return c;
+        };
+        windstrip_bespoke.submit = [](void* cp, EFxDebugMode dbg) {
+            auto* c = static_cast<SWindStripBespokeCtx_W2C*>(cp);
+            if (!c) return;
+            if (!c->eff || !c->eff->IsAlive())
+            {
+                c->gap -= float(TTime::DeltaTime());
+                if (c->gap <= 0.0f)
+                {
+                    delete c->eff;
+                    c->eff = TWindStripAnimator_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                    c->gap = 1.0f;
+                }
+            }
+            if (c->eff)
+                c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+        };
+        windstrip_bespoke.destroy = [](void* cp) {
+            auto* c = static_cast<SWindStripBespokeCtx_W2C*>(cp);
+            delete c->eff;
+            delete c;
+        };
+        VfxTest::DeferredRegister(windstrip_bespoke);
     }
 };
 SVfxTestBootstrap g_vfx_test_bootstrap;
