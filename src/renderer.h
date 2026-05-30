@@ -703,7 +703,19 @@ public:
     // PTBitmap -> cached GPU texture, then quad blit. The renderer
     // caches by bitmap identity so repeat calls cost an unordered_map
     // lookup. Caller never sees TTextureHandle for HUD purposes.
-    void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y);
+    // prefer_alias: decode from the bitmap's BM_ALIAS RLE coverage buffer
+    // (anti-aliased shadow / glow sprite) instead of its data array. Only
+    // shadow/glow draws want this; the default false decodes the normal
+    // pixels. See DecodeBitmapToRGBA.
+    void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y, bool prefer_alias = false);
+    // Subrect variant — blits the (src_x, src_y, src_w, src_h) region of
+    // bm to (dst_x, dst_y). Used for sprite-atlas panels (e.g. the
+    // TPlyrStatusBar `Bars` 128x128 atlas that holds 3 bar colours
+    // stacked vertically).
+    void DrawBitmapSubrect(PTBitmap bm,
+                           int32_t dst_x, int32_t dst_y,
+                           int32_t src_x, int32_t src_y,
+                           int32_t src_w, int32_t src_h);
     // TSurface -> quad blit, sized to the surface. Used for cached HUD
     // panels (char stats, game log, ...) that own their own surface
     // and refresh outside the draw path.
@@ -774,7 +786,7 @@ private:
     // calls for the same bitmap are O(1).
     std::unordered_map<uintptr_t, TTextureHandle> bitmap_texture_cache;
     // Get-or-create a TTextureHandle for the given bitmap.
-    TTextureHandle BitmapAsTexture(PTBitmap bm);
+    TTextureHandle BitmapAsTexture(PTBitmap bm, bool prefer_alias = false);
 
     // Registered HUD drawables + their z-order. Renderer owns this
     // metadata; the drawable itself doesn't carry z. Sorted on demand
