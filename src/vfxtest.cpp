@@ -3723,6 +3723,139 @@ void FireSwarmBespokeVariantSubmit(void* cp, EFxDebugMode dbg)
 }
 
 // =========================================================================
+// * Wave-3 batch W3-G — Decorative ambient / late-polish (5 stubbed)       *
+// *                                                                       *
+// * Fairy / Globe / PunchAndJudy / goldeffect / Dust harness wrappers.    *
+// * Each spawn returns a context wrapping the stubbed _Bespoke effect.    *
+// * Static preview cadence for the ambient/static effects; Combat-style   *
+// * (auto-respawn) for the short-lifetime burst effects (Gold, Dust).    *
+// =========================================================================
+
+struct SFairyBespokeCtx { TFairyEffect_Bespoke* eff = nullptr; };
+void* FairyBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFairyBespokeCtx();
+    c->eff = TFairyEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TFairyEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " W3-G Fairy bespoke entry will draw nothing (stubbed)");
+    return c;
+}
+void FairyBespokeDestroy(void* cp) { auto* c = static_cast<SFairyBespokeCtx*>(cp); delete c->eff; delete c; }
+void FairyBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFairyBespokeCtx*>(cp);
+    if (c && c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SGlobeBespokeCtx { TGlobeEffect_Bespoke* eff = nullptr; };
+void* GlobeBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SGlobeBespokeCtx();
+    c->eff = TGlobeEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TGlobeEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " W3-G Globe bespoke entry will draw nothing (stubbed)");
+    return c;
+}
+void GlobeBespokeDestroy(void* cp) { auto* c = static_cast<SGlobeBespokeCtx*>(cp); delete c->eff; delete c; }
+void GlobeBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SGlobeBespokeCtx*>(cp);
+    if (c && c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SPunchAndJudyBespokeCtx { TPunchAndJudyEffect_Bespoke* eff = nullptr; };
+void* PunchAndJudyBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SPunchAndJudyBespokeCtx();
+    c->eff = TPunchAndJudyEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TPunchAndJudyEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " W3-G PunchAndJudy bespoke entry will draw nothing (stubbed)");
+    return c;
+}
+void PunchAndJudyBespokeDestroy(void* cp) { auto* c = static_cast<SPunchAndJudyBespokeCtx*>(cp); delete c->eff; delete c; }
+void PunchAndJudyBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SPunchAndJudyBespokeCtx*>(cp);
+    if (c && c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+constexpr float kGoldBespokeRetriggerGap = 0.8f;
+struct SGoldBespokeCtx {
+    TGoldEffect_Bespoke* eff    = nullptr;
+    S3DPoint             origin = {0, 0, 0};
+    float                gap    = 0.0f;
+};
+void* GoldBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SGoldBespokeCtx();
+    c->origin = origin;
+    c->eff    = TGoldEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TGoldEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " W3-G goldeffect bespoke entry will draw nothing (stubbed)");
+    return c;
+}
+void GoldBespokeDestroy(void* cp) { auto* c = static_cast<SGoldBespokeCtx*>(cp); delete c->eff; delete c; }
+void GoldBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SGoldBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TGoldEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kGoldBespokeRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+constexpr float kDustBespokeRetriggerGap = 0.8f;
+struct SDustBespokeCtx {
+    TDustEffect_Bespoke* eff    = nullptr;
+    S3DPoint             origin = {0, 0, 0};
+    float                gap    = 0.0f;
+};
+void* DustBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SDustBespokeCtx();
+    c->origin = origin;
+    c->eff    = TDustEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TDustEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " W3-G Dust bespoke entry will draw nothing (stubbed)");
+    return c;
+}
+void DustBespokeDestroy(void* cp) { auto* c = static_cast<SDustBespokeCtx*>(cp); delete c->eff; delete c; }
+void DustBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SDustBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TDustEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kDustBespokeRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// =========================================================================
 // * Wave-3 W3-D Y-prefix boss-variant harness helpers                      *
 // *                                                                       *
 // * Each effect ships as a stubbed _Bespoke class (see effect.h W3-D       *
@@ -5339,6 +5472,70 @@ struct SVfxTestBootstrap {
             e.factory       = [](const S3DPoint& o) -> void* { return FireSwarmBespokeVariantSpawn<kVariantHfire_I3D>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { FireSwarmBespokeVariantSubmit(c, d); };
             e.destroy       = [](void* c) { FireSwarmBespokeVariantDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // =====================================================================
+        // * Wave-3 batch W3-G — Decorative ambient / late-polish (5 stubbed)   *
+        // *   All retail-only effects with no Ghidra evidence; placeholders    *
+        // *   load the I3D asset and draw sub-object 0 as a billboard.         *
+        // *   Awaiting user video A/B for forensics + kinematic tuning.        *
+        // =====================================================================
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFairyEffect_BESPOKE";
+            e.family        = "ambient";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FairyBespokeSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FairyBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FairyBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TGlobeEffect_BESPOKE";
+            e.family        = "ambient";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return GlobeBespokeSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { GlobeBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { GlobeBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TPunchAndJudyEffect_BESPOKE";
+            e.family        = "ambient";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return PunchAndJudyBespokeSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { PunchAndJudyBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { PunchAndJudyBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TGoldEffect_BESPOKE";
+            e.family        = "pickup";
+            e.pipeline      = "FB";
+            // Short-lifetime burst — auto-respawn for steady visual cadence.
+            e.preview_style = VfxTest::EVfxPreviewStyle::Combat;
+            e.factory       = [](const S3DPoint& o) -> void* { return GoldBespokeSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { GoldBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { GoldBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TDustEffect_BESPOKE";
+            e.family        = "impact";
+            e.pipeline      = "FB";
+            // Short-lifetime puff — auto-respawn for steady visual cadence.
+            e.preview_style = VfxTest::EVfxPreviewStyle::Combat;
+            e.factory       = [](const S3DPoint& o) -> void* { return DustBespokeSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { DustBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { DustBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
 

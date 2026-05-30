@@ -5516,6 +5516,167 @@ class TQuicksandEffect_Bespoke : public TEffect
 };
 
 // =========================================================================
+// * Wave-3 batch W3-G — Decorative ambient / late-polish (5 retail-only)   *
+// *                                                                       *
+// * Fairy (misc\Fairy.I3D), Globe (misc\Globe.I3D),                       *
+// * PunchAndJudy (misc\PunchAndJudy.i3d), goldeffect (misc\Goldp.i3d),    *
+// * Dust (misc\Dustcloud.i3d).                                            *
+// *                                                                       *
+// * Ghidra evidence: thin to nonexistent. No s_<Name>_ XREF visible in    *
+// * recon/, asset-only. Per W3-G brief: ship minimal placeholders that    *
+// * load the I3D asset and draw the first sub-object as a ScreenAligned   *
+// * Alpha billboard. Lifetime / motion are sensible defaults. Each effect *
+// * exists as a harness row so the user can A/B against game video and    *
+// * iterate when forensics arrive. Status: stubbed.                      *
+// *                                                                       *
+// * Localized-at-end for clean merge with adjacent wave-3 batches.        *
+// =========================================================================
+
+_CLASSDEF(TFairyEffect_Bespoke)
+
+// Floating fairy sprite ambient. Per brief: likely a TPixieEffect variant
+// (already covered) — both are small flying sprites with trails. A Fairy2
+// variant also exists in inventory. Placeholder: load misc\Fairy.I3D and
+// draw sub-object 0 as a hovering ScreenAligned Alpha billboard with a
+// small vertical bob; 24Hz sim-tick gate for framerate-independent motion.
+class TFairyEffect_Bespoke : public TEffect
+{
+  public:
+    TFairyEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFairyEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFairyEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFairyEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient — never dies
+
+  private:
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          size_wu_      = 18.0f;
+    float          phase_        = 0.0f;   // bob phase (radians)
+    double         sim_accum_ms_ = 0.0;
+};
+
+_CLASSDEF(TGlobeEffect_Bespoke)
+
+// Decorative orb (crystal-ball style). Static rotating sphere. Per brief:
+// possibly just an animated I3D body with no custom logic. Placeholder
+// draws sub-object 0 as a ScreenAligned Alpha billboard at the origin with
+// a slow pulsing alpha — stand-in until forensics confirm whether it's a
+// rotating mesh or a baked-rotation flipbook.
+class TGlobeEffect_Bespoke : public TEffect
+{
+  public:
+    TGlobeEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TGlobeEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TGlobeEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TGlobeEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          size_wu_      = 32.0f;
+    float          phase_        = 0.0f;
+    double         sim_accum_ms_ = 0.0;
+};
+
+_CLASSDEF(TPunchAndJudyEffect_Bespoke)
+
+// Puppet-show decorative effect (entertainer NPC). Per brief: pure scripted
+// animation — probably no per-tick custom logic, just plays an I3D animation
+// loop. Low priority (one-off scene asset). Placeholder draws sub-object 0
+// as a WorldXY (ground-locked) Alpha billboard so the puppet-show stage
+// reads correctly even before mesh-anim playback lands.
+class TPunchAndJudyEffect_Bespoke : public TEffect
+{
+  public:
+    TPunchAndJudyEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TPunchAndJudyEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TPunchAndJudyEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TPunchAndJudyEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          size_wu_      = 48.0f;
+    double         sim_accum_ms_ = 0.0;
+};
+
+_CLASSDEF(TGoldEffect_Bespoke)
+
+// Pickup sparkle for gold piles. Per brief: likely a TFlareAnimator variant.
+// High-frequency effect (every gold pickup), so cheap path matters.
+// Placeholder draws sub-object 0 as an additive ScreenAligned billboard
+// with a short ~1.2s pulse-fade lifetime — the burst-pulse semantics of a
+// pickup sparkle. Self-kills when lifetime expires.
+class TGoldEffect_Bespoke : public TEffect
+{
+  public:
+    TGoldEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TGoldEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TGoldEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TGoldEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float kGoldLifetimeMs = 1200.0f;
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          size_wu_      = 22.0f;
+    double         age_ms_       = 0.0;
+    bool           alive_        = true;
+    double         sim_accum_ms_ = 0.0;
+};
+
+_CLASSDEF(TDustEffect_Bespoke)
+
+// Footfall/impact dust cloud. Per brief: try TFogEffect or TMistEffect
+// parameterization (already covered). Particle-puff with quick fade. Very
+// common effect. Placeholder draws sub-object 0 as a WorldXY ground-puff
+// Alpha billboard with quick expand+fade — the visual signature of an
+// impact puff. ~0.6s lifetime.
+class TDustEffect_Bespoke : public TEffect
+{
+  public:
+    TDustEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TDustEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TDustEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TDustEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float kDustLifetimeMs = 600.0f;
+    static constexpr float kDustStartSizeWu = 18.0f;
+    static constexpr float kDustEndSizeWu   = 42.0f;
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    double         age_ms_       = 0.0;
+    bool           alive_        = true;
+    double         sim_accum_ms_ = 0.0;
+};
+
+// =========================================================================
 // Wave-3 W3-F: Buff overlays (character-attached state effects)
 // -------------------------------------------------------------------------
 // Five retail-only effects with NO snapshot source body and effectively no
