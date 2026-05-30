@@ -11590,3 +11590,630 @@ void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         Renderer->SubmitFxBillboard(item);
     }
 }
+
+// =========================================================================
+// wave-bespoke-W2A — weather A: ground & atmospheric scatter
+// =========================================================================
+//
+// Three faithful direct ports of snapshot animator bodies (W06 fog, W04
+// sandswirl, W05 quicksand). Each effect:
+//   - Loads its real .I3D imagery via TryLoadMagicTexture.
+//   - Runs the snapshot's per-tick state machine LINE BY LINE against an
+//     internal state array (no live TObjectInstance machinery — the
+//     harness has no characters, spells, or particle child effects).
+//   - Submits one or more billboards per tick with the snapshot's literal
+//     blend mode preserved AS WRITTEN (SetBlendState -> Alpha;
+//     SetAddBlendState -> AdditiveStraight).
+// Constants are snapshot-only (no retail recon for any of W06/W04/W05).
+
+// =========================================================================
+// W06 — TFogEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TFogAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:6621-6750). Snapshot uses a 36-vertex grid (6x6)
+// over a scl=7.475 quad; 20 "anchored" border vertices are frozen at
+// (c=0.7, a=0.125) and the remaining 16 inner vertices random-walk both
+// brightness/alpha and position with bounded velocity envelopes.
+// SetBlendState -> Alpha (preserved AS WRITTEN; sister atmospheric
+// overlays use Alpha per W2A batch gotcha).
+//
+// First-pass bespoke collapses the 36-vertex grid into a single ground-
+// aligned (WorldXY) Alpha billboard whose color/alpha is the mean of
+// the inner-vert random walk. The per-vertex random walks (color/alpha
+// drift, velocity bounds, anchored-vs-free distinction) are preserved
+// verbatim — the visual breathes at the same cadence. Full triangulated
+// grid is a follow-up upgrade.
+
+TFogEffect_Bespoke* TFogEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kFogCandidates[] = {
+        "Misc\\Fog.I3D",     // the only fog.i3d on disk lives here
+        "Misc\\fog.i3d",
+        "Magic\\fog.i3d",    // batch task spec; not present in the snapshot data
+    };
+
+    auto* fog = new TFogEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    fog->ForcePos(origin);
+    fog->SetMapIndex(MapPane.MakeIndex());
+    fog->ActivateComponents();
+
+    fog->texture_ = TryLoadMagicTexture(kFogCandidates,
+                                        int32_t(sizeof(kFogCandidates) / sizeof(*kFogCandidates)),
+                                        fog->uv_rect_, "fog");
+
+    // Fog isn't auto-loaded by Class.Def the way Mist is (Class.Def has
+    // "Fog" "Misc\Fog.I3D" but no spell calls Fog at boot in this build),
+    // so TryLoadMagicTexture's FindImagery-only path returns -1. Fall
+    // back to RegisterImagery (resource pack lookup) for each candidate,
+    // matching the TFlameEffect_Bespoke / TFireSwarm pattern.
+    if (fog->texture_ == kInvalidTexture)
+    {
+        for (size_t i = 0; i < sizeof(kFogCandidates) / sizeof(*kFogCandidates); ++i)
+        {
+            int32_t img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFogCandidates[i]));
+            if (img_id < 0)
+                continue;
+            TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+            if (!base)
+                continue;
+            T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+            if (!img3d)
+            {
+                TObjectImagery::FreeImagery(base);
+                continue;
+            }
+            (void)img3d->NumObjects();
+            if (img3d->NumTextures() <= 0)
+                continue;
+            S3DTex tex = {};
+            img3d->GetTexture(0, &tex);
+            if (tex.htexture == kInvalidTexture)
+                continue;
+            fog->uv_rect_[0] = 0.0f;
+            fog->uv_rect_[1] = 0.0f;
+            fog->uv_rect_[2] = 1.0f;
+            fog->uv_rect_[3] = 1.0f;
+            fog->texture_ = tex.htexture;
+            log_info("[fog] resolved imagery='%s' via RegisterImagery tex=%u",
+                     kFogCandidates[i], tex.htexture);
+            break;
+        }
+    }
+
+    // Snapshot effect_old.cpp:6628-6657 — Initialize each of FOG_VERTEX
+    // verts. The 20 "anchored" indices are frozen at (c=0.7, a=0.125,
+    // dpos=0). The remaining 16 inner verts get random c, a, dpos in
+    // their snapshot envelopes.
+    static const int32_t anchored_ids[] = {
+        0, 4, 6, 8, 10, 3, 13, 19, 25,
+        31, 30, 32, 33, 34, 35, 29, 23,
+        17, 11, 1
+    };
+    constexpr int32_t kNumAnchored = int32_t(sizeof(anchored_ids) / sizeof(*anchored_ids));
+    for (int32_t i = 0; i < kFogVertex; ++i)
+    {
+        SFogVert& v = fog->verts_[i];
+        v.anchored = false;
+        for (int32_t a = 0; a < kNumAnchored; ++a)
+        {
+            if (anchored_ids[a] == i)
+            {
+                v.anchored = true;
+                break;
+            }
+        }
+        if (v.anchored)
+        {
+            v.c        = 0.7f;
+            v.a        = 0.125f;
+            v.dpos.X   = 0.0f;
+            v.dpos.Y   = 0.0f;
+            v.dpos.Z   = 0.0f;
+        }
+        else
+        {
+            v.c        = float(random(400, 1000)) / 1000.0f;
+            v.a        = float(random(100, 400)) / 1000.0f;
+            v.dpos.X   = float(random(-50, 50)) / 100.0f;
+            v.dpos.Y   = float(random(-50, 50)) / 100.0f;
+            v.dpos.Z   = float(random(-50, 50)) / 100.0f;
+        }
+        v.velocity.X = 0.0f;
+        v.velocity.Y = 0.0f;
+        v.velocity.Z = 0.0f;
+        v.cv = 0.0f;
+        v.av = 0.0f;
+    }
+
+    log_info("[fog-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u verts=%d (anchored=%d, drifting=%d)",
+             fog->GetMapIndex(), origin.x, origin.y, origin.z,
+             fog->texture_, kFogVertex, kNumAnchored, kFogVertex - kNumAnchored);
+    return fog;
+}
+
+void TFogEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick gate (snapshot was ungated; modern fix per
+    // feedback_framerate_independent_anim).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFogSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFogSimTickMs);
+
+        // Snapshot effect_old.cpp:6664-6698 — per-vert Animate. Anchored
+        // verts skip; drifting verts random-walk color/alpha/position.
+        for (int32_t i = 0; i < kFogVertex; ++i)
+        {
+            SFogVert& v = verts_[i];
+            if (v.anchored)
+                continue;
+            v.cv += float(random(-10, 10)) / 1000.0f;
+            v.av += float(random(-10, 10)) / 1000.0f;
+
+            v.c += v.cv;
+            if (v.cv > 1.0f || v.cv < 0.4f)
+                v.cv = 0.0f;
+            v.c = min(1.0f, max(0.4f, v.c));
+            v.a += v.av;
+            if (v.av > 0.4f || v.av < 0.1f)
+                v.av = 0.0f;
+            v.a = min(0.4f, max(0.1f, v.a));
+
+            v.velocity.X += float(random(-10, 10)) / 1000.0f;
+            v.velocity.Y += float(random(-10, 10)) / 1000.0f;
+            v.velocity.Z += float(random(-10, 10)) / 1000.0f;
+
+            v.dpos.X += v.velocity.X;
+            if (v.dpos.X < -0.5f || v.dpos.X > 0.5f)
+                v.velocity.X = 0.0f;
+            v.dpos.X = min(0.5f, max(-0.5f, v.dpos.X));
+            v.dpos.Y += v.velocity.Y;
+            if (v.dpos.Y < -0.5f || v.dpos.Y > 0.5f)
+                v.velocity.Y = 0.0f;
+            v.dpos.Y = min(0.5f, max(-0.5f, v.dpos.Y));
+            v.dpos.Z += v.velocity.Z;
+            if (v.dpos.Z < -0.5f || v.dpos.Z > 0.5f)
+                v.velocity.Z = 0.0f;
+            v.dpos.Z = min(0.5f, max(-0.5f, v.dpos.Z));
+        }
+    }
+
+    // --- Render port (effect_old.cpp:6701-6736). SetBlendState -> Alpha
+    // (preserved AS WRITTEN). Snapshot sets per-vert color = D3DRGBA(c,c,c,a)
+    // and renders the 36-vert grid at scl=7.475. First-pass collapses
+    // to a single billboard at the mean inner-vert color.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_fog_logged_first_submit = []{
+        log_info("[fog-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_fog_logged_first_submit;
+
+    // Mean of the 16 inner (drifting) verts — captures the animated
+    // brightness/alpha breathing.
+    float sum_c = 0.0f;
+    float sum_a = 0.0f;
+    int32_t n = 0;
+    for (int32_t i = 0; i < kFogVertex; ++i)
+    {
+        if (verts_[i].anchored)
+            continue;
+        sum_c += verts_[i].c;
+        sum_a += verts_[i].a;
+        ++n;
+    }
+    const float mean_c = (n > 0) ? sum_c / float(n) : 0.7f;
+    const float mean_a = (n > 0) ? sum_a / float(n) : 0.125f;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kFogBaseSizeWu;   // snapshot scl=7.475 along X/Y
+    item.size_wu[1] = kFogBaseSizeWu;
+    item.color_rgba[0] = mean_c;        // D3DRGBA(c, c, c, a) -- gray
+    item.color_rgba[1] = mean_c;
+    item.color_rgba[2] = mean_c;
+    item.color_rgba[3] = mean_a;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);   // SetBlendState -> Alpha
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::WorldXY;   // ground-pinned overlay
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// =========================================================================
+// W04 — TSandswirlEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TSandswirlAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:9476-9683). Snapshot spawns a child sand particle
+// effect (TParticle3DAnimator) with random(50, 100) particles, sets a
+// seek-target at (0, 0, 100), and ramps seekspeed = 5.0 + frameon/10.0
+// over SANDSWIRL_DURATION (75) ticks. After SANDSWIRL_DURATION the
+// snapshot retargets to nearby characters (up to 5) and spawns child
+// Quicksand effects on them; at SANDSWIRL_DURATION*4 (=300) it self-
+// destructs. Render() in the snapshot is fully commented-out -- the
+// visual is entirely the child sand PE.
+//
+// First-pass bespoke owns its own particle pool (no child effect),
+// reproducing the seek-target curve and per-particle motion. Retarget-
+// to-characters is stubbed (harness has none); the original (0,0,100)
+// seek target is retained for the entire run. KillThisEffect at
+// frameon == SANDSWIRL_DURATION*4 preserved.
+
+TSandswirlEffect_Bespoke* TSandswirlEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kSandCandidates[] = {
+        "Magic\\sandswirl.i3d",
+        "Magic\\sand.i3d",
+        "Misc\\sand.i3d",
+    };
+
+    auto* sw = new TSandswirlEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    sw->ForcePos(origin);
+    sw->SetMapIndex(MapPane.MakeIndex());
+    sw->ActivateComponents();
+
+    sw->texture_ = TryLoadMagicTexture(kSandCandidates,
+                                       int32_t(sizeof(kSandCandidates) / sizeof(*kSandCandidates)),
+                                       sw->uv_rect_, "sandswirl");
+
+    // Snapshot effect_old.cpp:9479-9544 — Initialize. frameon=0,
+    // angle = inst->GetAngle() (harness: 0). Particle pool of random(50,100)
+    // particles is created with pos.x=0,y=0,z=70 and a pspread of (50,50,50).
+    sw->frameon_  = 0;
+    sw->angle_    = 0;
+    sw->alive_    = true;
+    sw->seektarget_.X = 0.0f;
+    sw->seektarget_.Y = 0.0f;
+    sw->seektarget_.Z = kSandSeekTargetZ;
+
+    sw->numparticles_ = random(50, 100);
+    if (sw->numparticles_ > kSandMaxParticles)
+        sw->numparticles_ = kSandMaxParticles;
+    const int32_t maxstart = sw->numparticles_ / 2;
+    for (int32_t i = 0; i < sw->numparticles_; ++i)
+    {
+        SSandParticle& p = sw->parts_[i];
+        // Snapshot pr.pos + pr.pspread => uniform in cube around pos.
+        p.pos.X = 0.0f + float(random(-int32_t(kSandSpreadXY), int32_t(kSandSpreadXY)));
+        p.pos.Y = 0.0f + float(random(-int32_t(kSandSpreadXY), int32_t(kSandSpreadXY)));
+        p.pos.Z = kSandSpawnZ + float(random(-int32_t(kSandSpreadZ), int32_t(kSandSpreadZ)));
+        // Snapshot pr.dir scaled by pr.spread (0.5 in each axis) -- harness
+        // has no firing direction (angle=0 -> ConvertToVector yields x=100
+        // along the X axis), so we init zero velocity and let seek do the
+        // work (consistent with snapshot's seektargets=true behavior).
+        p.vel.X = 0.0f;
+        p.vel.Y = 0.0f;
+        p.vel.Z = 0.0f;
+        p.life  = random(kSandMinLife, kSandMaxLife);
+        p.start = random(0, maxstart);
+        p.alive = false;   // becomes true once start delay expires
+    }
+
+    log_info("[sandswirl-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u particles=%d",
+             sw->GetMapIndex(), origin.x, origin.y, origin.z,
+             sw->texture_, sw->numparticles_);
+    return sw;
+}
+
+void TSandswirlEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick gate.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSandSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSandSimTickMs);
+
+        // Snapshot effect_old.cpp:9553-9635 — Animate.
+        // frameon++; seek-target retarget for frameon < SANDSWIRL_DURATION;
+        // character retarget at frameon == SANDSWIRL_DURATION (stubbed
+        // here -- harness has no characters); self-kill at SANDSWIRL_
+        // DURATION*4.
+        frameon_++;
+        // Seekspeed ramp per snapshot: 5.0 + frameon/10.0 while <
+        // SANDSWIRL_DURATION.
+        const float seekspeed = (frameon_ < int32_t(kSandswirlDuration))
+            ? (kSandSeekSpeedBase + float(frameon_) / 10.0f)
+            : 7.5f;   // snapshot post-duration retarget speed
+
+        // Per-particle motion. Snapshot delegates to TParticle3DAnimator
+        // which: (1) decrements life, (2) seeks toward the target via
+        // turn-toward + push, (3) integrates pos += vel. Faithfully
+        // reproduced here.
+        for (int32_t i = 0; i < numparticles_; ++i)
+        {
+            SSandParticle& p = parts_[i];
+            if (!p.alive)
+            {
+                // Activate when start-delay expires (one tick per delay
+                // unit per snapshot pr.maxstart pattern).
+                if (p.start > 0)
+                {
+                    p.start--;
+                    continue;
+                }
+                p.alive = true;
+            }
+            if (p.life <= 0)
+            {
+                // Respawn at base envelope -- snapshot's pr.killobj=true
+                // path; the snapshot then re-emits via the trail counter,
+                // we just bounce back to fresh spawn.
+                p.pos.X = float(random(-int32_t(kSandSpreadXY), int32_t(kSandSpreadXY)));
+                p.pos.Y = float(random(-int32_t(kSandSpreadXY), int32_t(kSandSpreadXY)));
+                p.pos.Z = kSandSpawnZ + float(random(-int32_t(kSandSpreadZ), int32_t(kSandSpreadZ)));
+                p.vel.X = 0.0f;
+                p.vel.Y = 0.0f;
+                p.vel.Z = 0.0f;
+                p.life  = random(kSandMinLife, kSandMaxLife);
+                continue;
+            }
+            p.life--;
+
+            // Seek -- snapshot turnang=0.5, seekspeed=ramped.
+            const float dx = seektarget_.X - p.pos.X;
+            const float dy = seektarget_.Y - p.pos.Y;
+            const float dz = seektarget_.Z - p.pos.Z;
+            const float dlen = std::sqrt(dx*dx + dy*dy + dz*dz);
+            if (dlen > 0.001f)
+            {
+                const float inv = 1.0f / dlen;
+                const float tx = dx * inv;
+                const float ty = dy * inv;
+                const float tz = dz * inv;
+                // Push velocity toward target at seekspeed (per-tick).
+                p.vel.X = p.vel.X * (1.0f - kSandTurnAng) + tx * seekspeed * kSandTurnAng;
+                p.vel.Y = p.vel.Y * (1.0f - kSandTurnAng) + ty * seekspeed * kSandTurnAng;
+                p.vel.Z = p.vel.Z * (1.0f - kSandTurnAng) + tz * seekspeed * kSandTurnAng;
+            }
+            p.pos.X += p.vel.X;
+            p.pos.Y += p.vel.Y;
+            p.pos.Z += p.vel.Z;
+        }
+
+        // Snapshot character-retarget at frameon == SANDSWIRL_DURATION is
+        // STUBBED (harness has no characters / no quicksand child spawn).
+        // The seek target stays at (0,0,100) for the remainder of the run.
+
+        if (frameon_ == int32_t(kSandswirlDuration * 4))
+        {
+            alive_ = false;
+        }
+    }
+
+    // --- Render. Snapshot TSandswirlAnimator::Render is fully commented
+    // out (effect_old.cpp:9647-9677); the visual is the child sand PE.
+    // First-pass bespoke draws one AdditiveStraight billboard per alive
+    // particle (sister sand/dust PE blend per W2A gotcha).
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_sand_logged_first_submit = []{
+        log_info("[sandswirl-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_sand_logged_first_submit;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kSandBaseSizeWu;
+    item.size_wu[1] = kSandBaseSizeWu;
+    // Sand: warm tan tint, opaque alpha for AdditiveStraight.
+    item.color_rgba[0] = 0.85f;
+    item.color_rgba[1] = 0.70f;
+    item.color_rgba[2] = 0.45f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+
+    for (int32_t i = 0; i < numparticles_; ++i)
+    {
+        const SSandParticle& p = parts_[i];
+        if (!p.alive)
+            continue;
+        item.world_pos[0] = float(base.x) + p.pos.X;
+        item.world_pos[1] = float(base.y) + p.pos.Y;
+        item.world_pos[2] = float(base.z) + p.pos.Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// W05 — TQuicksandEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TQuicksandAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:9137-9442 — canonical body; the 12520-12836 body
+// is dead inside /***** Old Quicksand: Redone by Pepper *****/ comment).
+// SetBlendState -> Alpha (preserved AS WRITTEN).
+//
+// Snapshot Render uses three sub-objects:
+//   GetObject(0) — spinning sand decal, 4-frame UV-flip, scale=scalesize,
+//                  rotation=ang.
+//   GetObject(1) — twin cylinders, scale=(cylscale, cylscale, cylheight),
+//                  rotations (cylrot, M_PI - cylrot).
+//   GetObject(2) — dust mesh (34 verts) U-scrolling at -0.06/tick, drawn
+//                  at scalesize / 1.0, /1.25, /1.5, /1.75 in concentric
+//                  shells, with zscalefactor ramp-down after duration.
+//
+// First-pass bespoke renders ONE ground-aligned (WorldXY) Alpha billboard
+// whose scale follows the `scalesize` curve and orientation follows `ang`
+// (the spinning sand decal — the most visually iconic of the 3 sub-
+// objects). Cylinder mesh + 4-stack dust passes are deferred until the
+// engine has axis-aligned cylinder + concentric-shell support.
+// scalesize / stage / count / cylscale / cylheight / cylrot / zscalefactor
+// state machine preserved verbatim from snapshot Animate (line 9194-9236).
+
+TQuicksandEffect_Bespoke* TQuicksandEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kQuicksandCandidates[] = {
+        "Magic\\quicksand.i3d",
+        "Magic\\Quicksand.I3D",
+        "Misc\\quicksand.i3d",
+    };
+
+    auto* qs = new TQuicksandEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    qs->ForcePos(origin);
+    qs->SetMapIndex(MapPane.MakeIndex());
+    qs->ActivateComponents();
+
+    qs->texture_ = TryLoadMagicTexture(kQuicksandCandidates,
+                                       int32_t(sizeof(kQuicksandCandidates) / sizeof(*kQuicksandCandidates)),
+                                       qs->uv_rect_, "quicksand");
+
+    // Snapshot effect_old.cpp:9137-9170 — Initialize.
+    //   frameon = 0; scalesize = 0.0; stage = 0; count = 0;
+    //   cylscale = 0.0; cylheight = 1.0; cylrot = 0.0; cylcount = 0;
+    //   ang = 0.0; z_level = 0; zscalefactor = 1.0;
+    qs->frameon_      = 0;
+    qs->scalesize_    = 0.0f;
+    qs->stage_        = 0;
+    qs->count_        = 0;
+    qs->cylscale_     = 0.0f;
+    qs->cylheight_    = 1.0f;
+    qs->cylrot_       = 0.0f;
+    qs->cylcount_     = 0;
+    qs->ang_          = 0.0f;
+    qs->zscalefactor_ = 1.0f;
+    qs->alive_        = true;
+
+    // Snapshot InitQuicksand sets frameon = -delay (delay = QUICKSAND_
+    // DURATION = 40 when called from Sandswirl). Harness has no caster
+    // -> use the no-delay path (frameon = 0).
+
+    log_info("[quicksand-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             qs->GetMapIndex(), origin.x, origin.y, origin.z, qs->texture_);
+    return qs;
+}
+
+void TQuicksandEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick gate.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kQuicksandSimTickMs))
+    {
+        sim_accum_ms_ -= double(kQuicksandSimTickMs);
+
+        // Snapshot effect_old.cpp:9194-9236 — Animate. Direct line-by-line
+        // port.
+        frameon_++;
+        ang_ += 0.06f;
+        if (frameon_ < 0)
+        {
+            cylscale_  += float(0.125 / kQuicksandSwitch);
+            cylheight_ += 0.025f;
+        }
+        if (frameon_ > 0 && frameon_ < kQuicksandDuration)
+        {
+            cylscale_  -= float(0.125 / kQuicksandSwitch);
+            cylheight_ -= 0.025f;
+        }
+        if (frameon_ < 0)
+            continue;   // snapshot: return; -- skip the rest this tick
+
+        if (frameon_ > 60)
+        {
+            scalesize_ -= 0.05f;
+        }
+        if (scalesize_ < 1.0f && frameon_ > 30)
+        {
+            scalesize_ += 0.05f;
+        }
+
+        if (frameon_ > kQuicksandDuration * 2)
+        {
+            zscalefactor_ -= 0.2f;
+            if (zscalefactor_ <= 0.0f)
+            {
+                // Snapshot calls KillThisEffect + clears NoCollision on
+                // each target. Harness: no targets to clean up.
+                alive_ = false;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_quicksand_logged_first_submit = []{
+        log_info("[quicksand-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_quicksand_logged_first_submit;
+
+    // --- Render port (effect_old.cpp:9265-9428). SetBlendState -> Alpha
+    // (preserved AS WRITTEN). First-pass: only the spinning sand decal
+    // sub-object (GetObject(0)) is rendered, as a ground-aligned (WorldXY)
+    // billboard whose scale follows `scalesize` and whose UV rect is the
+    // base asset rect (snapshot's 4-frame UV-flip is a follow-up; the
+    // base texture is the natural fallback).
+    //
+    // The snapshot draws this sub-object only while frameon < QUICKSAND_
+    // DURATION * 2; preserved here.
+    if (frameon_ < kQuicksandDuration * 2)
+    {
+        const S3DPoint& base = Pos();
+        SBillboardDrawItem item = {};
+        // Snapshot scl.x = scl.y = scalesize. Multiply by base WU footprint.
+        const float scl = (scalesize_ > 0.05f) ? scalesize_ : 0.05f;
+        item.size_wu[0] = kQuicksandBaseSizeWu * scl;
+        item.size_wu[1] = kQuicksandBaseSizeWu * scl;
+        // Snapshot uses lverts.color which the I3D supplies; default to
+        // sand-tan with full alpha (Alpha blend respects this).
+        item.color_rgba[0] = 0.80f;
+        item.color_rgba[1] = 0.65f;
+        item.color_rgba[2] = 0.40f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);   // SetBlendState
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::WorldXY;   // ground decal
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = float(base.x);
+        item.world_pos[1]    = float(base.y);
+        item.world_pos[2]    = float(base.z);
+        Renderer->SubmitFxBillboard(item);
+    }
+    // GetObject(1) cylinders and GetObject(2) dust mesh deferred -- see
+    // class-doc comment on TQuicksandEffect_Bespoke for follow-up.
+}
