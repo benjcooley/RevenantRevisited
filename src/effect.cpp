@@ -6456,3 +6456,509 @@ case 1 /* MISSILE_FLY */:
     break;
 }
 #endif
+
+// *************************************************************************
+// * TWaterFallEffect_Bespoke (H02) + TWaterEffect_Bespoke (H01)            *
+// *   first-pass faithful direct ports of the snapshot TWaterFallAnimator  *
+// *   and TWaterAnimator render/integration bodies.                        *
+// *                                                                        *
+// * Source of truth:                                                       *
+// *   - TWaterFallAnimator: src/effect_old.cpp:11685-11873                 *
+// *   - TWaterAnimator:     src/effect_old.cpp:11895-12073                 *
+// *                                                                        *
+// * Render path note: the snapshot Render() bodies for BOTH effects        *
+// * write D3DRENDERSTATE_SRCBLEND=ONE / DESTBLEND=ONE (additive accumulate)*
+// * with the SetAddBlendState() call commented out. We honour the WRITTEN  *
+// * factor pair verbatim — EFxBlend::AdditiveStraight (ONE/ONE). Per       *
+// * orchestrator brief: "PRESERVE the snapshot's blend mode AS WRITTEN.    *
+// * Don't reinterpret."                                                    *
+// *                                                                        *
+// * Asset: both classes share `misc\Water.i3d` (imagery.rvi confirms;      *
+// * H01 entry maps "Water" -> misc\Water.i3d, H02 entry "Waterfall" ->     *
+// * misc\Water.i3d). Single sub-object, single texture — billboard the    *
+// * drop sprite per particle. Snapshot rendered with full D3D matrices    *
+// * (RotateZ -π/4 + per-instance face rotation); we collapse to a         *
+// * screen-aligned billboard for first-pass since the rotation knob isn't *
+// * on SBillboardDrawItem.                                                 *
+// *************************************************************************
+
+namespace {
+
+constexpr const char* kWaterImageryPath = "misc\\Water.i3d";   // shared H01/H02
+
+// Snapshot constants — direct from effect_old.cpp:11693-11699.
+constexpr int32_t kWaterFallMaxDrops  = 100;
+constexpr int32_t kWaterFallLength    = 64;
+constexpr int32_t kWaterFallHeight    = 64;
+constexpr float   kWaterFallScale     = 0.1f;
+constexpr float   kWaterFallGravity   = 0.25f;
+constexpr float   kWaterFallTallScale = 2.0f;
+
+// Snapshot constants — direct from effect_old.cpp:11903-11909.
+constexpr int32_t kWaterMaxDrops      = 25;
+constexpr int32_t kWaterLength        = 64;
+constexpr int32_t kWaterWidth         = 64;
+constexpr float   kWaterScale         = 0.2f;
+constexpr float   kWaterTallScale     = 0.1f;
+constexpr float   kWaterSpeed         = 2.0f;
+
+// 24 Hz sim-tick gate — every animator on the project ports to this.
+constexpr int32_t kWaterSimTickMs     = 1000 / 24;
+
+// First-pass billboard size in world units (drop billboard, ~16 wu base
+// scaled per-particle by drops[i].scale.x for visual variance). The
+// snapshot drove this through D3DMATRIXScale + Render with vertices in
+// a unit box mesh; we collapse to a single billboard scaled by an
+// average of (scale.x, scale.y) so the per-drop fall-time stretch is
+// approximated rather than dropped.
+constexpr float   kWaterBaseSizeWu    = 16.0f;
+
+// Resolve the .I3D's first nonzero texture slot via the shared helper.
+// (SubObjTextureSlot / ResolveSubObjUv are file-static in the blood
+// namespace above; re-declared as forward-only refs here.)
+//
+// Forward refs into the blood namespace above. Re-implement small
+// wrappers in this anonymous namespace to keep coupling explicit and
+// avoid yanking the blood namespace open here.
+int32_t WaterSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0) return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+void WaterResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Load Misc\Water.i3d, resolve sub-object 0's texture/UV. Shared by
+// both effects (imagery.rvi entries "Water" and "Waterfall" both point
+// at misc\Water.i3d).
+bool LoadWaterImagery(TObjectImagery*& out_base,
+                      T3DImagery*&    out_img3d,
+                      TTextureHandle& out_texture,
+                      float           out_uv_rect[4])
+{
+    out_base = nullptr;
+    out_img3d = nullptr;
+    out_texture = kInvalidTexture;
+    out_uv_rect[0] = 0.0f; out_uv_rect[1] = 0.0f;
+    out_uv_rect[2] = 1.0f; out_uv_rect[3] = 1.0f;
+
+    const int32_t img_id = TObjectImagery::FindImagery(kWaterImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[water] LoadWaterImagery: FindImagery('%s') failed",
+                  kWaterImageryPath);
+        return false;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[water] LoadWaterImagery: LoadImagery(id=%d '%s') failed",
+                  img_id, kWaterImageryPath);
+        return false;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[water] LoadWaterImagery: imagery '%s' is not T3DImagery",
+                  kWaterImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return false;
+    }
+    // Lazy mesh-load poke pattern (B01/F01/H04/X22).
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj <= 0 || num_tex <= 0)
+    {
+        log_error("[water] LoadWaterImagery: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        return false;
+    }
+    const int32_t tex_slot = WaterSubObjTextureSlot(img3d, 0);
+    const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    img3d->GetTexture(slot, &tex);
+    out_base = base;
+    out_img3d = img3d;
+    out_texture = tex.htexture;
+    WaterResolveSubObjUv(img3d, 0, out_uv_rect);
+    return true;
+}
+
+}   // namespace
+
+// =========================================================================
+// * H02 — TWaterFallEffect_Bespoke                                         *
+// =========================================================================
+
+TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()
+{
+    delete[] drops_;
+    drops_ = nullptr;
+}
+
+void TWaterFallEffect_Bespoke::InitParticle(int32_t i)
+{
+    // VERBATIM port of TWaterFallAnimator::InitParticle
+    // (src/effect_old.cpp:11701-11715).
+    float grav = (float)(kWaterFallGravity * ((i % 2) + 1));
+    drops_[i].pos.X = (float)(random(-kWaterFallLength, kWaterFallLength) / 2.0);
+    drops_[i].pos.Y = (float)0.0f;
+    drops_[i].pos.Z = (float)kWaterFallHeight;
+    drops_[i].vel.X = (float)0.0f;
+    drops_[i].vel.Y = (float)0.0f;
+    drops_[i].vel.Z = (float)0.0f;
+    drops_[i].scale.X = (float)(random(2, 4) * kWaterFallScale);
+    drops_[i].scale.Y = (float)(kWaterFallTallScale * grav
+        * std::sqrt(2 * (kWaterFallHeight - drops_[i].pos.Z) / grav));
+    drops_[i].scale.Z = (float)1.0f;
+    drops_[i].time = i;
+}
+
+void TWaterFallEffect_Bespoke::UpdateStuff()
+{
+    // VERBATIM port of TWaterFallAnimator::UpdateStuff
+    // (src/effect_old.cpp:11717-11745).
+    int32_t i;
+    for (i = 0; i < numdrops_; i++)
+    {
+        if (drops_[i].time > 0)
+        {
+            drops_[i].time--;
+            continue;
+        }
+        if (drops_[i].time == -1)
+        {
+            InitParticle(i);
+            drops_[i].pos.Z = (float)kWaterFallHeight;
+            drops_[i].vel.Z = 0.0f;
+            drops_[i].time = 0;
+        }
+        drops_[i].pos.X += drops_[i].vel.X;
+        drops_[i].pos.Y += drops_[i].vel.Y;
+        drops_[i].pos.Z += drops_[i].vel.Z;
+        float grav = (float)(kWaterFallGravity * ((i % 2) + 1));
+        drops_[i].vel.Z -= grav;
+        drops_[i].scale.Y = (float)(kWaterFallTallScale * grav
+            * std::sqrt(2 * (kWaterFallHeight - drops_[i].pos.Z) / grav));
+        if (drops_[i].pos.Z <= 0)
+        {
+            drops_[i].time = -1;
+        }
+    }
+}
+
+TWaterFallEffect_Bespoke*
+TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    TObjectImagery* base = nullptr;
+    T3DImagery*     img3d = nullptr;
+    TTextureHandle  texture = kInvalidTexture;
+    float           uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    if (!LoadWaterImagery(base, img3d, texture, uv_rect))
+        return nullptr;
+
+    auto* wf = new TWaterFallEffect_Bespoke(base);
+    wf->ForcePos(origin);
+    wf->SetMapIndex(MapPane.MakeIndex());
+    wf->ActivateComponents();
+
+    wf->texture_ = texture;
+    wf->uv_rect_[0] = uv_rect[0];
+    wf->uv_rect_[1] = uv_rect[1];
+    wf->uv_rect_[2] = uv_rect[2];
+    wf->uv_rect_[3] = uv_rect[3];
+    wf->size_wu_ = kWaterBaseSizeWu;
+
+    // VERBATIM port of TWaterFallAnimator::Initialize
+    // (src/effect_old.cpp:11747-11767).
+    //   inst->GetPos(eff) -> the effect base position; here Pos() suffices.
+    //   numdrops = WATERFALL_MAXDROPS;
+    //   drops = new SWaterParticle[numdrops];
+    //   for (i = 0..numdrops) InitParticle(i);
+    //   for (k = 0..numdrops) UpdateStuff();        // warmup pass
+    wf->numdrops_ = kWaterFallMaxDrops;
+    wf->drops_ = new SWaterParticle[wf->numdrops_]();
+    for (int32_t i = 0; i < wf->numdrops_; i++)
+        wf->InitParticle(i);
+    // Warm-up: snapshot runs UpdateStuff `numdrops` times to seed a
+    // staggered fall pattern (the per-particle `time` index dictates
+    // when each drop "starts" falling). Preserve verbatim.
+    for (int32_t k = 0; k < wf->numdrops_; k++)
+        wf->UpdateStuff();
+
+    log_info("[waterfall] SpawnForTest_BESPOKE: '%s' map_index=%d "
+             "origin=(%d,%d,%d) drops=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
+             kWaterImageryPath, wf->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             wf->numdrops_, wf->texture_,
+             wf->uv_rect_[0], wf->uv_rect_[1],
+             wf->uv_rect_[2], wf->uv_rect_[3]);
+    return wf;
+}
+
+void TWaterFallEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || !drops_)
+        return;
+
+    // 24 Hz sim-tick gate — snapshot UpdateStuff was once per Animate
+    // (framerate-locked); we run the per-tick integration once per sim
+    // tick of accumulated wall-clock time so motion is framerate-indep.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kWaterSimTickMs))
+    {
+        sim_accum_ms_ -= double(kWaterSimTickMs);
+        UpdateStuff();
+    }
+
+    // VERBATIM port of TWaterFallAnimator::Render
+    // (src/effect_old.cpp:11813-11860). Snapshot sets:
+    //   D3DRENDERSTATE_SRCBLEND  = D3DBLEND_ONE
+    //   D3DRENDERSTATE_DESTBLEND = D3DBLEND_ONE
+    // -> AdditiveStraight (ONE/ONE) verbatim. ZWRITE=false ZENABLE=true
+    // -> EFxDepthMode::TestNoWrite.
+    static const bool s_logged_first_submit = []{
+        log_info("[waterfall] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = Pos();
+    for (int32_t i = 0; i < numdrops_; i++)
+    {
+        if (drops_[i].time != 0)
+            continue;
+        // Snapshot composes the matrix as:
+        //   Scale(scale.x, scale.y, scale.z)
+        //   RotateZ(-π/4)
+        //   RotateZ(-(inst.face * 360 / 256) * TORADIAN)
+        //   Translate(pos)
+        // For first-pass we collapse to a screen-aligned billboard.
+        // Per-drop size = base_size_wu * average(scale.x, scale.y) so
+        // the per-particle tall-y stretch is approximated. The −π/4
+        // and inst-face rotations are not on SBillboardDrawItem yet —
+        // tracked under "drift adaptation" (no rotation knob in API).
+        const float wx = float(base.x) + drops_[i].pos.X;
+        const float wy = float(base.y) + drops_[i].pos.Y;
+        const float wz = float(base.z) + drops_[i].pos.Z;
+
+        SBillboardDrawItem item = {};
+        // Stretch the billboard along Y (vertical) by scale.y, X by scale.x.
+        item.size_wu[0] = size_wu_ * drops_[i].scale.X;
+        item.size_wu[1] = size_wu_ * drops_[i].scale.Y;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        // Snapshot SRCBLEND/DESTBLEND = ONE/ONE — AdditiveStraight verbatim.
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::LitFlat;  // snapshot DoLighting
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = wx;
+        item.world_pos[1]    = wy;
+        item.world_pos[2]    = wz;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// * H01 — TWaterEffect_Bespoke                                             *
+// =========================================================================
+
+TWaterEffect_Bespoke::~TWaterEffect_Bespoke()
+{
+    delete[] drops_;
+    drops_ = nullptr;
+}
+
+void TWaterEffect_Bespoke::InitParticle(int32_t i)
+{
+    // VERBATIM port of TWaterAnimator::InitParticle
+    // (src/effect_old.cpp:11911-11923).
+    drops_[i].pos.X = (float)(-kWaterLength / 2);
+    drops_[i].pos.Y = (float)(random(-kWaterWidth, kWaterWidth) / 2.0);
+    drops_[i].pos.Z = (float)0.0f;
+    drops_[i].vel.X = (float)(kWaterSpeed * ((i % 2) + 1));
+    drops_[i].vel.Y = (float)0.0f;
+    drops_[i].vel.Z = (float)0.0f;
+    drops_[i].scale.X = (float)(random(17, 30) * kWaterTallScale);
+    drops_[i].scale.Y = (float)(random(2, 4) * kWaterScale);
+    drops_[i].scale.Z = (float)1.0f;
+    drops_[i].time = i;
+}
+
+void TWaterEffect_Bespoke::UpdateStuff()
+{
+    // VERBATIM port of TWaterAnimator::UpdateStuff
+    // (src/effect_old.cpp:11925-11948).
+    int32_t i;
+    for (i = 0; i < numdrops_; i++)
+    {
+        if (drops_[i].time > 0)
+        {
+            drops_[i].time--;
+            continue;
+        }
+        if (drops_[i].time == -1)
+        {
+            InitParticle(i);
+            drops_[i].time = 0;
+        }
+        drops_[i].pos.X += drops_[i].vel.X;
+        drops_[i].pos.Y += drops_[i].vel.Y;
+        drops_[i].pos.Z += drops_[i].vel.Z;
+        if (drops_[i].pos.X >= kWaterLength / 2)
+        {
+            drops_[i].time = -1;
+        }
+    }
+}
+
+TWaterEffect_Bespoke*
+TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    TObjectImagery* base = nullptr;
+    T3DImagery*     img3d = nullptr;
+    TTextureHandle  texture = kInvalidTexture;
+    float           uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    if (!LoadWaterImagery(base, img3d, texture, uv_rect))
+        return nullptr;
+
+    auto* w = new TWaterEffect_Bespoke(base);
+    w->ForcePos(origin);
+    w->SetMapIndex(MapPane.MakeIndex());
+    w->ActivateComponents();
+
+    w->texture_ = texture;
+    w->uv_rect_[0] = uv_rect[0];
+    w->uv_rect_[1] = uv_rect[1];
+    w->uv_rect_[2] = uv_rect[2];
+    w->uv_rect_[3] = uv_rect[3];
+    w->size_wu_ = kWaterBaseSizeWu;
+
+    // VERBATIM port of TWaterAnimator::Initialize
+    // (src/effect_old.cpp:11950-11970). Same warmup pattern as H02.
+    w->numdrops_ = kWaterMaxDrops;
+    w->drops_ = new SWaterParticle[w->numdrops_]();
+    for (int32_t i = 0; i < w->numdrops_; i++)
+        w->InitParticle(i);
+    for (int32_t k = 0; k < w->numdrops_; k++)
+        w->UpdateStuff();
+
+    log_info("[water] SpawnForTest_BESPOKE: '%s' map_index=%d "
+             "origin=(%d,%d,%d) drops=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
+             kWaterImageryPath, w->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             w->numdrops_, w->texture_,
+             w->uv_rect_[0], w->uv_rect_[1],
+             w->uv_rect_[2], w->uv_rect_[3]);
+    return w;
+}
+
+void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || !drops_)
+        return;
+
+    // 24 Hz sim-tick gate — same family pattern as H02 / B01 / M05.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kWaterSimTickMs))
+    {
+        sim_accum_ms_ -= double(kWaterSimTickMs);
+        UpdateStuff();
+    }
+
+    // VERBATIM port of TWaterAnimator::Render
+    // (src/effect_old.cpp:12016-12062). Snapshot sets:
+    //   D3DRENDERSTATE_SRCBLEND  = D3DBLEND_ONE
+    //   D3DRENDERSTATE_DESTBLEND = D3DBLEND_ONE
+    // -> AdditiveStraight (ONE/ONE) verbatim. ZWRITE=false ZENABLE=true
+    // -> EFxDepthMode::TestNoWrite. The Render() body for TWaterAnimator
+    // commented out ALL three rotation lines (RotateX, RotateZ -π/4,
+    // RotateZ inst-face) — so the snapshot already collapses to axis-
+    // aligned which maps directly to ScreenAligned billboard.
+    static const bool s_logged_first_submit = []{
+        log_info("[water] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = Pos();
+    for (int32_t i = 0; i < numdrops_; i++)
+    {
+        if (drops_[i].time != 0)
+            continue;
+        const float wx = float(base.x) + drops_[i].pos.X;
+        const float wy = float(base.y) + drops_[i].pos.Y;
+        const float wz = float(base.z) + drops_[i].pos.Z;
+
+        SBillboardDrawItem item = {};
+        // Snapshot: scale.x tall (long stream), scale.y narrow (thin spray).
+        item.size_wu[0] = size_wu_ * drops_[i].scale.X;
+        item.size_wu[1] = size_wu_ * drops_[i].scale.Y;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::LitFlat;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = wx;
+        item.world_pos[1]    = wy;
+        item.world_pos[2]    = wz;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
