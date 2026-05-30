@@ -5516,6 +5516,195 @@ class TQuicksandEffect_Bespoke : public TEffect
 };
 
 // =========================================================================
+// * wave-3 W3-E: Spell-only effects (asset-only, no dedicated class).      *
+// *                                                                       *
+// * Five retail-shipped spell visuals (cataclysm, funnel, maelstrom,      *
+// * magicshield, Nakrnoth) whose Class.Def registrations point at named   *
+// * I3D assets in the retail data tree (Magic\Cataclysm.I3D, etc.) but   *
+// * whose game-side classes are SPELL-INIT STUBS — the Ghidra decomp for *
+// * each is a single-statement ctor that flips one default member        *
+// * (cls_0x4fe9e0 / cls_0x4fd890 / cls_0x502420 etc.). All of the actual *
+// * animator logic lives in a shared TStormAnimator / TMeteorStormAnimator *
+// * / TShieldEffect parent, which is either already covered (TShieldEffect, *
+// * X09 + W3-D wave) or BLOCKED on a sokol-pipeline TODO (W01            *
+// * TMeteorStormEffect_Bespoke is `#if 0`'d).                            *
+// *                                                                       *
+// * The I3D assets themselves are not present in the local                *
+// * RevenantRepo/Imagery/Magic tree — they ship only with the retail     *
+// * data drop. The five bespoke classes therefore ship as MINIMAL        *
+// * PLACEHOLDERS per batch protocol: SpawnForTest_BESPOKE attempts to    *
+// * load the named .I3D candidate set, and TickAndSubmit draws a single  *
+// * ScreenAligned Alpha billboard with the asset's first sub-object      *
+// * texture if it resolved (otherwise no submission, log_warn). Status   *
+// * is `stubbed` — the harness has a row to A/B against retail game      *
+// * video; the body can be fleshed out once the user provides reference  *
+// * video + I3D assets show up in the local data tree.                   *
+// *                                                                       *
+// * Per batch brief / feedback_no_standins: we do NOT draw procedural    *
+// * stand-ins for these named real effects. If the asset doesn't         *
+// * resolve, we draw nothing and log_warn.                                *
+// =========================================================================
+
+_CLASSDEF(TCataclysmEffect_Bespoke)
+
+// W3-E #1: "cataclysm" — spell registered via Class.Def to Magic\Cataclysm.I3D.
+// Ghidra evidence: s_Cataclysm_005e13a0 XREFs at 004fe7c0 / 004fe7e0 are
+// inside cls_0x4fe9e0 (spell-init region) whose ctor body just clears a
+// single member (mbr_0x190 = 1) — no animator logic. Parent of W3-D's
+// YCataclysm. Likely a meteor-storm variant whose visual lives in the
+// shared TMeteorStormAnimator (W01, BLOCKED on TStormAnimator #if 0).
+class TCataclysmEffect_Bespoke : public TEffect
+{
+  public:
+    TCataclysmEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TCataclysmEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TCataclysmEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TCataclysmEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kCataclysmBaseSizeWu = 96.0f;   // ground burst footprint
+    static constexpr int32_t kCataclysmLifeMs     = 4000;    // 4s default lifetime
+
+    bool           alive_       = true;
+    double         age_ms_      = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TFunnelEffect_Bespoke)
+
+// W3-E #2: "funnel" — Magic\Funnel.I3D. Ghidra evidence at 004fd3b0 /
+// 004fd3d0 is the spell-init region; no dedicated animator class. Likely
+// a tornado-funnel variant whose visual lives in TTornadoEffect (W02,
+// BLOCKED on multi-sub-object I3D mesh path). Asset-only placeholder.
+class TFunnelEffect_Bespoke : public TEffect
+{
+  public:
+    TFunnelEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFunnelEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFunnelEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFunnelEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kFunnelBaseSizeWu = 128.0f;   // funnel column footprint
+    static constexpr int32_t kFunnelLifeMs     = 5000;     // 5s default lifetime
+
+    bool           alive_       = true;
+    double         age_ms_      = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TMaelstromEffect_Bespoke)
+
+// W3-E #3: "maelstrom" — magic\maelstrom.i3d. NO XREF found in
+// recon/ghidra/_data.txt — pure Class.Def registration with no game-side
+// class body. Parent of W3-D's ymaelstrom. Likely a swirling water/energy
+// vortex whose visual lives in TVortexEffect (W03, BLOCKED).
+class TMaelstromEffect_Bespoke : public TEffect
+{
+  public:
+    TMaelstromEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TMaelstromEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMaelstromEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TMaelstromEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kMaelstromBaseSizeWu = 144.0f;   // swirl footprint
+    static constexpr int32_t kMaelstromLifeMs     = 5000;     // 5s default lifetime
+
+    bool           alive_       = true;
+    double         age_ms_      = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TMagicShieldEffect_Bespoke)
+
+// W3-E #4: "magicshield" — Magic\Mshield.I3D. Ghidra has 4 string XREFs
+// from cls_0x502420 (spell-init region) for "MagicShield" / "MagicShield2" /
+// "MagicShield3" — 3-tier variant set, all sharing the same init class. The
+// init ctor (meth_0x502420) sets mbr_0x184 = 0 / mbr_0x188 = 0xf and
+// calls a base init via vtable[0x158] — no animator body. The actual visual
+// is TShieldAnimator (already ported as TShieldEffect_Bespoke, X09) with a
+// different I3D asset. First-pass: try Mshield.I3D, fall through to ALPHA
+// billboard with a pale-blue tint like TShieldEffect, but ScreenAligned.
+class TMagicShieldEffect_Bespoke : public TEffect
+{
+  public:
+    TMagicShieldEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TMagicShieldEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMagicShieldEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TMagicShieldEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return true; }   // shield = persistent buff
+
+  private:
+    // Mirror TShieldEffect_Bespoke constants/layout — magicshield is the
+    // same animator with a different I3D.
+    static constexpr float   kMagicShieldBaseSizeWu = 64.0f;
+    static constexpr float   kMagicShieldScale      = 2.0f;   // SHIELD_SCALE
+    static constexpr float   kMagicShieldLiftZ      = 40.0f;  // pos.z=40
+
+    int32_t        framenum_   = 0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TNakrnothEffect_Bespoke)
+
+// W3-E #5: "Nakrnoth" — magic\Nakrnoth.I3D. NO XREF in
+// recon/ghidra/_data.txt — boss-specific (Nakrnoth = dragon boss) asset-
+// only registration. Probably a one-off scripted spell visual whose
+// owning class hasn't been found yet. First-pass placeholder: try to
+// load the I3D and draw the first sub-object as an Alpha billboard.
+class TNakrnothEffect_Bespoke : public TEffect
+{
+  public:
+    TNakrnothEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TNakrnothEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TNakrnothEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TNakrnothEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kNakrnothBaseSizeWu = 96.0f;    // boss-spell footprint
+    static constexpr int32_t kNakrnothLifeMs     = 4000;     // 4s default lifetime
+
+    bool           alive_       = true;
+    double         age_ms_      = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// =========================================================================
 // * Wave-3 W3-D Y-prefix boss-variant bespoke stubs                        *
 // *                                                                       *
 // * Five retail-only Y-prefix effects (Yhagoro / boss-variant assets).    *

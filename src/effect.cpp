@@ -13553,6 +13553,499 @@ void TQuicksandEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 }
 
 // =========================================================================
+// * wave-3 W3-E batch: spell-only effects (asset-only, no dedicated class). *
+// *                                                                       *
+// * Five retail-shipped spell visuals whose Class.Def registrations point *
+// * at named I3D assets but whose Ghidra-decompiled "classes" are spell- *
+// * init stubs (single-statement ctors). The actual animator logic lives *
+// * in shared parents (TStormAnimator / TShieldAnimator / TVortexAnimator)*
+// * that are EITHER already covered as separate bespoke entries OR       *
+// * blocked on upstream pipeline TODOs.                                   *
+// *                                                                       *
+// * Per batch protocol + feedback_no_standins: when the I3D candidate    *
+// * fails to resolve (the assets are retail-only and not in the local    *
+// * RevenantRepo data tree), we draw nothing and log_warn. No procedural *
+// * substitute for a real named effect.                                   *
+// *                                                                       *
+// * Each effect ships as a minimal placeholder: SpawnForTest tries to    *
+// * load the named .I3D via TryLoadMagicTexture (with RegisterImagery   *
+// * fallback for assets not auto-loaded by spell-init code), and        *
+// * TickAndSubmit draws a single ScreenAligned Alpha billboard for the  *
+// * configured lifetime. Sensible default footprints (96-144 wu) and a  *
+// * 4-5s lifetime give a row in the harness for A/B against retail      *
+// * game video, without fabricating motion the snapshot doesn't have.   *
+// * Status across all five = `stubbed`.                                  *
+// =========================================================================
+
+namespace {
+
+// W3-E shared helper: tries TryLoadMagicTexture first (Class.Def-registered
+// path) and falls back to RegisterImagery (resource-pack lookup) for assets
+// the spell-init code doesn't auto-load. Mirrors the TFogEffect_Bespoke
+// pattern at effect.cpp:11694-11725.
+TTextureHandle TryLoadSpellAssetW3E(const char* const* candidates,
+                                    int32_t num_candidates,
+                                    float out_uv_rect[4],
+                                    const char* tag)
+{
+    TTextureHandle tex = TryLoadMagicTexture(candidates, num_candidates,
+                                             out_uv_rect, tag);
+    if (tex != kInvalidTexture)
+        return tex;
+
+    // Fallback: RegisterImagery → LoadImagery for assets not in the spell-
+    // init code's auto-load set. This is the TFogEffect_Bespoke fallback.
+    for (int32_t i = 0; i < num_candidates; ++i)
+    {
+        int32_t img_id = TObjectImagery::RegisterImagery(const_cast<char*>(candidates[i]));
+        if (img_id < 0)
+            continue;
+        TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+        if (!base)
+            continue;
+        T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+        if (!img3d)
+        {
+            TObjectImagery::FreeImagery(base);
+            continue;
+        }
+        (void)img3d->NumObjects();   // lazy-mesh-init poke
+        if (img3d->NumTextures() <= 0)
+            continue;
+        S3DTex t = {};
+        img3d->GetTexture(0, &t);
+        if (t.htexture == kInvalidTexture)
+            continue;
+        out_uv_rect[0] = 0.0f;
+        out_uv_rect[1] = 0.0f;
+        out_uv_rect[2] = 1.0f;
+        out_uv_rect[3] = 1.0f;
+        log_info("[%s] resolved imagery='%s' via RegisterImagery tex=%u",
+                 tag, candidates[i], t.htexture);
+        return t.htexture;
+    }
+    return kInvalidTexture;
+}
+
+}   // namespace
+
+// ----- W3-E #1: TCataclysmEffect_Bespoke ---------------------------------
+
+TCataclysmEffect_Bespoke*
+TCataclysmEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from /tmp/retail_effect_inventory.tsv. Preserve
+    // both casings — the I3D loader is case-sensitive on POSIX overlay reads.
+    static const char* kCataclysmCandidates[] = {
+        "Magic\\Cataclysm.I3D",
+        "Magic\\cataclysm.i3d",
+        "magic\\Cataclysm.I3D",
+        "magic\\cataclysm.i3d",
+    };
+
+    auto* cat = new TCataclysmEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    cat->ForcePos(origin);
+    cat->SetMapIndex(MapPane.MakeIndex());
+    cat->ActivateComponents();
+
+    cat->texture_ = TryLoadSpellAssetW3E(
+        kCataclysmCandidates,
+        int32_t(sizeof(kCataclysmCandidates) / sizeof(*kCataclysmCandidates)),
+        cat->uv_rect_, "cataclysm");
+
+    if (cat->texture_ == kInvalidTexture)
+        log_warn("[cataclysm] SpawnForTest_BESPOKE: Magic\\Cataclysm.I3D not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only, no local copy)");
+
+    log_info("[cataclysm] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             cat->GetMapIndex(), origin.x, origin.y, origin.z, cat->texture_);
+    return cat;
+}
+
+void TCataclysmEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    if (!alive_)
+        return;
+
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kCataclysmLifeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_cataclysm_logged_first_submit = []{
+        log_info("[cataclysm] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_cataclysm_logged_first_submit;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kCataclysmBaseSizeWu;
+    item.size_wu[1] = kCataclysmBaseSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-E #2: TFunnelEffect_Bespoke -----------------------------------
+
+TFunnelEffect_Bespoke*
+TFunnelEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Inventory: "Funnel" "Magic\Funnel.I3D"
+    static const char* kFunnelCandidates[] = {
+        "Magic\\Funnel.I3D",
+        "Magic\\funnel.i3d",
+        "magic\\Funnel.I3D",
+        "magic\\funnel.i3d",
+    };
+
+    auto* fn = new TFunnelEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    fn->ForcePos(origin);
+    fn->SetMapIndex(MapPane.MakeIndex());
+    fn->ActivateComponents();
+
+    fn->texture_ = TryLoadSpellAssetW3E(
+        kFunnelCandidates,
+        int32_t(sizeof(kFunnelCandidates) / sizeof(*kFunnelCandidates)),
+        fn->uv_rect_, "funnel");
+
+    if (fn->texture_ == kInvalidTexture)
+        log_warn("[funnel] SpawnForTest_BESPOKE: Magic\\Funnel.I3D not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only, no local copy)");
+
+    log_info("[funnel] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             fn->GetMapIndex(), origin.x, origin.y, origin.z, fn->texture_);
+    return fn;
+}
+
+void TFunnelEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    if (!alive_)
+        return;
+
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kFunnelLifeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_funnel_logged_first_submit = []{
+        log_info("[funnel] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_funnel_logged_first_submit;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kFunnelBaseSizeWu;
+    item.size_wu[1] = kFunnelBaseSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-E #3: TMaelstromEffect_Bespoke --------------------------------
+
+TMaelstromEffect_Bespoke*
+TMaelstromEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Inventory: "maelstrom" "magic\maelstrom.i3d" (lowercase .i3d).
+    static const char* kMaelstromCandidates[] = {
+        "magic\\maelstrom.i3d",
+        "Magic\\maelstrom.i3d",
+        "Magic\\Maelstrom.I3D",
+        "magic\\Maelstrom.I3D",
+    };
+
+    auto* ms = new TMaelstromEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    ms->ForcePos(origin);
+    ms->SetMapIndex(MapPane.MakeIndex());
+    ms->ActivateComponents();
+
+    ms->texture_ = TryLoadSpellAssetW3E(
+        kMaelstromCandidates,
+        int32_t(sizeof(kMaelstromCandidates) / sizeof(*kMaelstromCandidates)),
+        ms->uv_rect_, "maelstrom");
+
+    if (ms->texture_ == kInvalidTexture)
+        log_warn("[maelstrom] SpawnForTest_BESPOKE: magic\\maelstrom.i3d not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only, no local copy)");
+
+    log_info("[maelstrom] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             ms->GetMapIndex(), origin.x, origin.y, origin.z, ms->texture_);
+    return ms;
+}
+
+void TMaelstromEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    if (!alive_)
+        return;
+
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kMaelstromLifeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_maelstrom_logged_first_submit = []{
+        log_info("[maelstrom] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_maelstrom_logged_first_submit;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kMaelstromBaseSizeWu;
+    item.size_wu[1] = kMaelstromBaseSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::WorldXY;   // ground-flat swirl
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-E #4: TMagicShieldEffect_Bespoke ------------------------------
+//
+// Variant of TShieldEffect_Bespoke (X09) — the spell-init class
+// cls_0x502420 sets up three named registrations (MagicShield / MagicShield2
+// / MagicShield3) and bridges through to TShieldAnimator with the
+// Mshield.I3D asset instead of the X09 Shield.I3D. First-pass: same Alpha
+// billboard, ScreenAligned with the snapshot's pos.z=40 lift and
+// SHIELD_SCALE=2.0 scaling. The 3-tier variant differentiation
+// (MagicShield/MagicShield2/MagicShield3) is deferred — a single ground-
+// truth row is enough to A/B against retail.
+
+TMagicShieldEffect_Bespoke*
+TMagicShieldEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Inventory: "magicshield" "Magic\Mshield.I3D".
+    static const char* kMagicShieldCandidates[] = {
+        "Magic\\Mshield.I3D",
+        "Magic\\mshield.i3d",
+        "magic\\Mshield.I3D",
+        "magic\\mshield.i3d",
+    };
+
+    auto* ms = new TMagicShieldEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    ms->ForcePos(origin);
+    ms->SetMapIndex(MapPane.MakeIndex());
+    ms->ActivateComponents();
+
+    ms->texture_ = TryLoadSpellAssetW3E(
+        kMagicShieldCandidates,
+        int32_t(sizeof(kMagicShieldCandidates) / sizeof(*kMagicShieldCandidates)),
+        ms->uv_rect_, "magicshield");
+
+    if (ms->texture_ == kInvalidTexture)
+        log_warn("[magicshield] SpawnForTest_BESPOKE: Magic\\Mshield.I3D not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only, no local copy)");
+
+    log_info("[magicshield] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             ms->GetMapIndex(), origin.x, origin.y, origin.z, ms->texture_);
+    return ms;
+}
+
+void TMagicShieldEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    ++framenum_;
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_magicshield_logged_first_submit = []{
+        log_info("[magicshield] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_magicshield_logged_first_submit;
+
+    // Mirror TShieldEffect_Bespoke's Render port: single Alpha billboard at
+    // (0, 0, kMagicShieldLiftZ) above the effect's origin, scaled by
+    // SHIELD_SCALE=2.0, with a pale-blue magical tint.
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kMagicShieldBaseSizeWu * kMagicShieldScale;
+    item.size_wu[1] = kMagicShieldBaseSizeWu * kMagicShieldScale;
+    item.color_rgba[0] = 0.6f;
+    item.color_rgba[1] = 0.85f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 0.8f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z) + kMagicShieldLiftZ;
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-E #5: TNakrnothEffect_Bespoke ---------------------------------
+
+TNakrnothEffect_Bespoke*
+TNakrnothEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Inventory: "Nakrnoth" "magic\Nakrnoth.I3D".
+    static const char* kNakrnothCandidates[] = {
+        "magic\\Nakrnoth.I3D",
+        "Magic\\Nakrnoth.I3D",
+        "magic\\nakrnoth.i3d",
+        "Magic\\nakrnoth.i3d",
+    };
+
+    auto* nk = new TNakrnothEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    nk->ForcePos(origin);
+    nk->SetMapIndex(MapPane.MakeIndex());
+    nk->ActivateComponents();
+
+    nk->texture_ = TryLoadSpellAssetW3E(
+        kNakrnothCandidates,
+        int32_t(sizeof(kNakrnothCandidates) / sizeof(*kNakrnothCandidates)),
+        nk->uv_rect_, "nakrnoth");
+
+    if (nk->texture_ == kInvalidTexture)
+        log_warn("[nakrnoth] SpawnForTest_BESPOKE: magic\\Nakrnoth.I3D not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only + boss-specific, no local copy)");
+
+    log_info("[nakrnoth] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             nk->GetMapIndex(), origin.x, origin.y, origin.z, nk->texture_);
+    return nk;
+}
+
+void TNakrnothEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    if (!alive_)
+        return;
+
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kNakrnothLifeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_nakrnoth_logged_first_submit = []{
+        log_info("[nakrnoth] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_nakrnoth_logged_first_submit;
+
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kNakrnothBaseSizeWu;
+    item.size_wu[1] = kNakrnothBaseSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+
+// =========================================================================
 // Wave-3 W3-D Y-prefix boss-variant bespoke stubs
 // =========================================================================
 //
