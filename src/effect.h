@@ -2803,6 +2803,19 @@ class TFireEffect_Bespoke : public TEffect
 
     [[nodiscard]] static TFireEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
 
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SFireScatterQuad            quads_[kFireScatterQuads] {};
+    bool                        alive_         = true;
+    double                      sim_accum_ms_  = 0.0;
+    TObjectImagery*             imagery_       = nullptr;
+    std::vector<TTextureHandle> frame_textures_ {};
+};
+
+// *************************************************************************
 // * TFireSwarmEffect_Bespoke — F05 A/B reference (faithful direct port)    *
 // *************************************************************************
 //
@@ -2945,11 +2958,6 @@ class TBurnEffect_Bespoke : public TEffect
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
   private:
-    SFireScatterQuad            quads_[kFireScatterQuads] {};
-    bool                        alive_         = true;
-    double                      sim_accum_ms_  = 0.0;
-    TObjectImagery*             imagery_       = nullptr;
-    std::vector<TTextureHandle> frame_textures_ {};
     SBurnBespokeParticle particles_[kBurnBespokeCount * 2] {};   // fire + smoke arenas (flat)
     int32_t              frame_         = 0;     // snapshot's animator-side frame counter
     int32_t              to_add_        = 0;     // per-tick spawn cap (ramps 0..8..0)
@@ -2959,6 +2967,9 @@ class TBurnEffect_Bespoke : public TEffect
     float                base_size_wu_  = 48.0f;
     bool                 alive_         = true;
     double               sim_accum_ms_  = 0.0;
+};
+
+// *************************************************************************
 // * Strip/Ribbon family bespoke first-pass A/B references                 *
 // *                                                                       *
 // * Four faithful direct ports of the pre-release snapshot animator       *
@@ -3194,6 +3205,9 @@ class TRibbonAnimator_Bespoke : public TEffect
     float    centertilt_dx_  = 0.001f;
     bool     alive_       = true;
     double   sim_accum_ms_ = 0.0;
+};
+
+// *************************************************************************
 // * TMissileEffect_Bespoke — S08 base infrastructure (faithful direct port)*
 // *************************************************************************
 //
@@ -4322,6 +4336,9 @@ class TIcedEffect_Bespoke : public TEffect
 
     bool   alive_        = true;
     double sim_accum_ms_ = 0.0;
+};
+
+// *************************************************************************
 // * Magic family — wave-bespoke-04 first-pass bespoke ports                *
 // * (M01 TAuraEffect, M03 THealEffect, M05 TMistEffect, X09 TShieldEffect) *
 // *************************************************************************
@@ -4529,6 +4546,9 @@ class TShieldEffect_Bespoke : public TEffect
     bool           alive_         = true;
     TTextureHandle texture_       = kInvalidTexture;
     float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// *************************************************************************
 // * wave-bespoke-05: sparkle/glow family — flare / sym-glow / photon /     *
 // * pixie. Faithful direct ports of the snapshot animator bodies for the   *
 // * --test=vfx harness, mirroring the TBloodEffect_Bespoke pattern at      *

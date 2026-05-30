@@ -2102,56 +2102,6 @@ TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint&
     {
         log_error("[flame-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
                   kFlameBespokeImageryPath);
-// * TFireSwarmEffect_Bespoke — F05 A/B reference (faithful direct port)    *
-// *************************************************************************
-//
-// Line-by-line port of TFireSwarmAnimator::Initialize / Animate / Render
-// (src/effect_old.cpp:10483-10549). Forensics doc:
-// docs/vfx/forensics/F05_TFireSwarmEffect.md. The snapshot draws the
-// `tube01` sub-object (index 1) of `Magic\FireSwarm.i3d` as a
-// transform-animated I3D cylinder mesh: per-frame matrix
-// Scale(cylhscl, cylhscl, cylvscl) · RotZ(cylth) with no translate, blend
-// = Alpha (SetBlendState, snapshot literal preserved per translation
-// rule 3). The mesh has 64 vertices wrapped with a 64×128 ARGB4444 flame
-// skin (red core, yellow tongues).
-//
-// First-pass drift: the Sokol FB pipeline doesn't currently expose an
-// arbitrary-mesh + per-effect blend submission API for one-off effects,
-// so we approximate the cylinder by a single ScreenAligned billboard
-// using the tube01 texture; the billboard width tracks `cylhscl` and the
-// height tracks `cylvscl` so the visual still "expands outward and
-// flattens vertically" over the 75-tick life. Full mesh path is a
-// follow-up — Renderer->SubmitMesh requires a MeshHandle authored
-// through TMeshExtractor, which is out of scope for this first-pass.
-
-namespace {
-
-constexpr const char* kFireSwarmBespokeImageryPath = "Magic\\FireSwarm.i3d";
-constexpr int32_t     kFireSwarmBespokeDuration    = 75;        // FIRESWARM_DURATION
-constexpr float       kFireSwarmBespokeHsclStep    = 0.4f;      // FIRESWARM_CYLHSCLSTEP
-constexpr float       kFireSwarmBespokeThStep      = 0.5f;      // FIRESWARM_CYLTHSTEP
-constexpr float       kFireSwarmBespokeVsclInit    = 30.0f;     // FIRESWARM_CYLVSCLINIT
-constexpr float       kFireSwarmBespokeVsclStep    = 0.4f;      // FIRESWARM_CYLVSCLSTEP
-constexpr float       kFireSwarmBespoke2Pi         = 6.2831853071795864f;
-constexpr int32_t     kFireSwarmBespokeSimTickMs   = 1000 / 24;
-// World-unit size multiplier applied to (cylhscl, cylvscl) — the
-// snapshot mesh's authored radius is ~1.0 wu, so the billboard `size_wu`
-// = scl * 1.0. The original cylinder was drawn through the engine's
-// parent-transform concatenation; in the harness we use a literal world
-// size that reads at the test camera. Adjust if the visual scale is off.
-constexpr float       kFireSwarmBespokeUnitWu      = 1.0f;
-
-}  // namespace
-
-TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    int32_t img_id = TObjectImagery::FindImagery(kFireSwarmBespokeImageryPath);
-    if (img_id < 0)
-        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFireSwarmBespokeImageryPath));
-    if (img_id < 0)
-    {
-        log_error("[fireswarm-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
-                  kFireSwarmBespokeImageryPath);
         return nullptr;
     }
     TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
@@ -2159,8 +2109,6 @@ TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(const S
     {
         log_error("[flame-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
                   img_id, kFlameBespokeImageryPath);
-        log_error("[fireswarm-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  img_id, kFireSwarmBespokeImageryPath);
         return nullptr;
     }
     T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
@@ -2176,20 +2124,6 @@ TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(const S
     {
         log_error("[flame-bespoke] SpawnForTest: imagery '%s' has 0 textures after lazy-init",
                   kFlameBespokeImageryPath);
-        log_error("[fireswarm-bespoke] SpawnForTest: imagery '%s' is not a T3DImagery",
-                  kFireSwarmBespokeImageryPath);
-        TObjectImagery::FreeImagery(base);
-        return nullptr;
-    }
-    // Lazy-mesh-init poke (same idiom as F01/B01/M05/H04) — NumObjects
-    // triggers the actual mesh load; NumTextures alone doesn't.
-    const int32_t num_obj = img3d->NumObjects();
-    const int32_t num_tex = img3d->NumTextures();
-    if (num_obj < 2 || num_tex <= 0)
-    {
-        log_error("[fireswarm-bespoke] SpawnForTest: imagery underspec'd "
-                  "(objects=%d, textures=%d) — expected 2 sub-objects",
-                  num_obj, num_tex);
         TObjectImagery::FreeImagery(base);
         return nullptr;
     }
@@ -2266,6 +2200,111 @@ void TFlameEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
     // tall under the harness camera; same value the engine-port F03 uses).
     item.size_wu[0]   = quad_size_wu_;
     item.size_wu[1]   = quad_size_wu_ * (80.0f / 32.0f);  // preserve cell aspect 32:80
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0]   = xpos;
+    item.uv_rect[1]   = ypos;
+    item.uv_rect[2]   = 0.25f;
+    item.uv_rect[3]   = 0.5f;
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);          // SetBlendState :4522
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;               // flame is self-lit (§7)
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;  // collapses snapshot Euler tilt
+    Renderer->SubmitFxBillboard(item);
+}
+// --- end TFlameEffect_Bespoke faithful port
+
+// (TFireEffect_Bespoke impl deferred to after the F03 engine port; see
+//  the matching block after TFireEffect::TickAndSubmitForTest — that's
+//  where the `kFirePatchHalfWu` / `RerollFireQuad` anon-namespace helpers
+//  live and are reused verbatim.)
+
+// *************************************************************************
+// * TFireSwarmEffect_Bespoke — F05 A/B reference (faithful direct port)    *
+// *************************************************************************
+//
+// Line-by-line port of TFireSwarmAnimator::Initialize / Animate / Render
+// (src/effect_old.cpp:10483-10549). Forensics doc:
+// docs/vfx/forensics/F05_TFireSwarmEffect.md. The snapshot draws the
+// `tube01` sub-object (index 1) of `Magic\FireSwarm.i3d` as a
+// transform-animated I3D cylinder mesh: per-frame matrix
+// Scale(cylhscl, cylhscl, cylvscl) · RotZ(cylth) with no translate, blend
+// = Alpha (SetBlendState, snapshot literal preserved per translation
+// rule 3). The mesh has 64 vertices wrapped with a 64×128 ARGB4444 flame
+// skin (red core, yellow tongues).
+//
+// First-pass drift: the Sokol FB pipeline doesn't currently expose an
+// arbitrary-mesh + per-effect blend submission API for one-off effects,
+// so we approximate the cylinder by a single ScreenAligned billboard
+// using the tube01 texture; the billboard width tracks `cylhscl` and the
+// height tracks `cylvscl` so the visual still "expands outward and
+// flattens vertically" over the 75-tick life. Full mesh path is a
+// follow-up — Renderer->SubmitMesh requires a MeshHandle authored
+// through TMeshExtractor, which is out of scope for this first-pass.
+
+namespace {
+
+constexpr const char* kFireSwarmBespokeImageryPath = "Magic\\FireSwarm.i3d";
+constexpr int32_t     kFireSwarmBespokeDuration    = 75;        // FIRESWARM_DURATION
+constexpr float       kFireSwarmBespokeHsclStep    = 0.4f;      // FIRESWARM_CYLHSCLSTEP
+constexpr float       kFireSwarmBespokeThStep      = 0.5f;      // FIRESWARM_CYLTHSTEP
+constexpr float       kFireSwarmBespokeVsclInit    = 30.0f;     // FIRESWARM_CYLVSCLINIT
+constexpr float       kFireSwarmBespokeVsclStep    = 0.4f;      // FIRESWARM_CYLVSCLSTEP
+constexpr float       kFireSwarmBespoke2Pi         = 6.2831853071795864f;
+constexpr int32_t     kFireSwarmBespokeSimTickMs   = 1000 / 24;
+// World-unit size multiplier applied to (cylhscl, cylvscl) — the
+// snapshot mesh's authored radius is ~1.0 wu, so the billboard `size_wu`
+// = scl * 1.0. The original cylinder was drawn through the engine's
+// parent-transform concatenation; in the harness we use a literal world
+// size that reads at the test camera. Adjust if the visual scale is off.
+constexpr float       kFireSwarmBespokeUnitWu      = 1.0f;
+
+}  // namespace
+
+TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    int32_t img_id = TObjectImagery::FindImagery(kFireSwarmBespokeImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFireSwarmBespokeImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[fireswarm-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kFireSwarmBespokeImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[fireswarm-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFireSwarmBespokeImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fireswarm-bespoke] SpawnForTest: imagery '%s' is not a T3DImagery",
+                  kFireSwarmBespokeImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    // Lazy-mesh-init poke (same idiom as F01/B01/M05/H04) — NumObjects
+    // triggers the actual mesh load; NumTextures alone doesn't.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < 2 || num_tex <= 0)
+    {
+        log_error("[fireswarm-bespoke] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d) — expected 2 sub-objects",
+                  num_obj, num_tex);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
     // Forensics §4 says tube01 (sub-object index 1) is the cylinder
     // drawn by the animator; box01 (index 0) is unused. The single
     // ARGB4444 64×128 texture is at slot 0.
@@ -2352,25 +2391,6 @@ void TFireSwarmEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
     item.color_rgba[1] = 1.0f;
     item.color_rgba[2] = 1.0f;
     item.color_rgba[3] = 1.0f;
-    item.uv_rect[0]   = xpos;
-    item.uv_rect[1]   = ypos;
-    item.uv_rect[2]   = 0.25f;
-    item.uv_rect[3]   = 0.5f;
-    item.key.texture     = texture_;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);          // SetBlendState :4522
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.debug_mode      = debug_mode;
-    item.light_mode      = EFxLightMode::Unlit;               // flame is self-lit (§7)
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;  // collapses snapshot Euler tilt
-    Renderer->SubmitFxBillboard(item);
-}
-// --- end TFlameEffect_Bespoke faithful port
-
-// (TFireEffect_Bespoke impl deferred to after the F03 engine port; see
-//  the matching block after TFireEffect::TickAndSubmitForTest — that's
-//  where the `kFirePatchHalfWu` / `RerollFireQuad` anon-namespace helpers
-//  live and are reused verbatim.)
     item.uv_rect[0]    = 0.0f;
     item.uv_rect[1]    = 0.0f;
     item.uv_rect[2]    = 1.0f;
@@ -2529,203 +2549,6 @@ TBurnEffect_Bespoke* TBurnEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& o
 }
 
 void TBurnEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-// * TMissileEffect_Bespoke — S08 base infrastructure (faithful direct port)
-// *************************************************************************
-//
-// Faithful translation of TMissileEffect::Initialize / SetSpeed / Pulse /
-// OffScreen from src/missileeffect.cpp:31-141 (whole file under #if 0).
-// Line-by-line port — same variable names, same constants, same per-tick
-// math. The only adaptations are:
-//   1. `Move()` collapses to an inline `pos += vel` per tick (the engine's
-//      collision-integrating mover is not wired for the --test=vfx path).
-//   2. The MOVE_BLOCKED / TMapIterator(character)-hit branches in FLY are
-//      no-ops here (no map collision, no live characters in the harness);
-//      the range countdown still drives the EXPLODE transition.
-//   3. The harness draws a single state-colored marker billboard at the
-//      missile world-pos using the renderer's white texture — TMissileEffect
-//      has no visual of its own in retail (each leaf supplies its own
-//      animator), so the marker exists only to prove state transitions.
-
-void TMissileEffect_Bespoke::Initialize()
-{
-    // Port of TMissileEffect::Initialize (missileeffect.cpp:31-40).
-    state_ = kMissileLaunch;
-    angle  = 0;            // TEffect::angle (snapshot `angle = 0;`)
-    range_ = 32768;
-
-    SetSpeed(kMissileSpeedDefault);   // SetSpeed(16) -> speed = 16 * ROLLOVER
-
-    status_ = false;
-
-    // Harness-only members (not in snapshot Initialize).
-    aim_angle_ = 0;
-    vel_ = {0.0f, 0.0f, 0.0f};
-    launch_hold_ticks_remaining_ = kMissileHarnessLaunchHoldTicks;
-    explode_ticks_remaining_ = 24;
-    alive_ = true;
-    sim_accum_ms_ = 0.0;
-}
-
-void TMissileEffect_Bespoke::Pulse()
-{
-    // Port of TMissileEffect::Pulse (missileeffect.cpp:52-135), translated
-    // line-by-line. The snapshot's `Move()` becomes an inline `pos += vel`
-    // here so the marker moves without engine collision involvement.
-
-    // Snapshot: `uint32_t bits = Move();` — Move() integrates vel and
-    // returns flags. We integrate inline in FLY state.
-    uint32_t bits = 0;   // MOVE_BLOCKED never set in harness (no collision)
-    if (state_ == kMissileFly)
-    {
-        S3DPoint p = Pos();
-        p.x += int32_t(vel_.X);
-        p.y += int32_t(vel_.Y);
-        p.z += int32_t(vel_.Z);
-        ForcePos(p);
-    }
-
-    switch (state_)
-    {
-        case kMissileLaunch:
-        {
-            // missileeffect.cpp:58-72.
-            if (status_)
-            {
-                // Harness-only: hold LAUNCH for ~12 ticks so the
-                // LAUNCH -> FLY edge is observable in --test=vfx. The
-                // in-game caller leaves launch_hold_=0 so this collapses
-                // to the original 1-tick transition.
-                if (launch_hold_ticks_remaining_ > 0)
-                {
-                    --launch_hold_ticks_remaining_;
-                    break;
-                }
-
-                if (speed_)
-                {
-                    // ConvertToVector(GetAngle(), speed, vel) — emits an
-                    // integer S3DPoint scaled by speed. Use aim_angle_
-                    // (the byte-angle stored at spawn) since the harness
-                    // overrides TEffect::angle.
-                    const int32_t harness_speed =
-                        int32_t(float(speed_) * kMissileHarnessSpeedScale);
-                    S3DPoint v_int = {0, 0, 0};
-                    ConvertToVector(aim_angle_, harness_speed, v_int);
-                    vel_.X = float(v_int.x) / float(ROLLOVER);
-                    vel_.Y = float(v_int.y) / float(ROLLOVER);
-
-                    // snapshot sets flags = (flags & ~OF_IMMOBILE)
-                    //                       | OF_MOVING | OF_WEIGHTLESS
-                    // — replicated for any engine-side code path that
-                    // reads them. In-harness collision is bypassed.
-                    flags = (flags & ~OF_IMMOBILE) | OF_MOVING | OF_WEIGHTLESS;
-
-                    // missileeffect.cpp:66 — vel.z = (speed / -16)
-                    // (slight downward arc). `speed / -16` here uses the
-                    // SCALED harness speed so the arc matches the
-                    // harness flight envelope.
-                    vel_.Z = float(harness_speed) / -16.0f / float(ROLLOVER);
-
-                    // missileeffect.cpp:68 — range = (240*MISSILE_RANGE) /
-                    //                                (speed/ROLLOVER)
-                    // = (240*2)/(16) = 30 ticks of flight at default speed.
-                    const int32_t speed_per_tick = speed_ / ROLLOVER;
-                    if (speed_per_tick > 0)
-                        range_ = (240 * kMissileRangeDefault) / speed_per_tick;
-                }
-                state_ = kMissileFly;
-            }
-            break;
-        }
-
-        case kMissileFly:
-        {
-            // missileeffect.cpp:75-124.
-            bool explode = false;
-
-            range_--;
-            if (range_ <= 0)
-                explode = true;
-
-            // missileeffect.cpp:83-84 — MOVE_BLOCKED branch. bits is 0 in
-            // the harness so this never fires; preserved for the eventual
-            // in-game wiring.
-            if (bits & MOVE_BLOCKED)
-                explode = true;
-            else
-            {
-                // missileeffect.cpp:87-113 — character-hit branch
-                // (TMapIterator over OBJSET_CHARACTER). Skipped in the
-                // harness (no live characters); preserved verbatim under
-                // `#if 0` below in this same file as the in-game port
-                // reference. For the bespoke base path we trust the
-                // range countdown to drive EXPLODE.
-            }
-
-            if (explode)
-            {
-                // missileeffect.cpp:119-120 — stop the missile dead.
-                flags = (flags & ~OF_MOVING & ~OF_WEIGHTLESS) | OF_IMMOBILE;
-                state_ = kMissileExplode;
-            }
-            break;
-        }
-
-        case kMissileExplode:
-        {
-            // missileeffect.cpp:127-130 — `if (!HasAnimator()) KillThisEffect();`
-            // The bespoke base has no animator, so we use an explicit
-            // post-explode tick counter to keep the marker visible long
-            // enough that the EXPLODE state is observable in --test=vfx.
-            if (explode_ticks_remaining_ > 0)
-            {
-                --explode_ticks_remaining_;
-            }
-            else
-            {
-                alive_ = false;
-            }
-            break;
-        }
-    }
-
-    // missileeffect.cpp:134 — TEffect::Pulse() chain.
-    TEffect::Pulse();
-}
-
-TMissileEffect_Bespoke* TMissileEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    if (!Renderer)
-    {
-        log_error("[missile] SpawnForTest: renderer not initialized");
-        return nullptr;
-    }
-
-    // Pure infra base — no I3D imagery required. Construct with null
-    // imagery (same pattern as TStripEffect::SpawnForTest at
-    // src/stripeffect.cpp:150). The marker billboard uses the renderer's
-    // white texture.
-    auto* m = new TMissileEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    m->ForcePos(origin);
-    m->SetMapIndex(MapPane.MakeIndex());
-    m->ActivateComponents();
-
-    // Harness aim: random horizontal byte-angle (in-game caller would
-    // supply this via SetAngle()).
-    m->aim_angle_ = random(0, 255);
-    // missileeffect.cpp:39 — status starts false; the animator drives it
-    // true on its first tick. In the harness we set it true immediately
-    // so the state machine proceeds (no animator to wait on).
-    m->status_ = true;
-
-    log_info("[missile] SpawnForTest: map_index=%d origin=(%d,%d,%d) aim=%d "
-             "speed=%d (per-tick=%d) range=%d",
-             m->GetMapIndex(), origin.x, origin.y, origin.z,
-             m->aim_angle_, m->speed_, m->GetSpeed(), m->range_);
-    return m;
-}
-
-void TMissileEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     if (!Renderer)
         return;
@@ -2940,6 +2763,209 @@ void TMissileEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mod
     }
 }
 // --- end TBurnEffect_Bespoke faithful port
+
+// *************************************************************************
+// * TMissileEffect_Bespoke — S08 base infrastructure (faithful direct port)
+// *************************************************************************
+//
+// Faithful translation of TMissileEffect::Initialize / SetSpeed / Pulse /
+// OffScreen from src/missileeffect.cpp:31-141 (whole file under #if 0).
+// Line-by-line port — same variable names, same constants, same per-tick
+// math. The only adaptations are:
+//   1. `Move()` collapses to an inline `pos += vel` per tick (the engine's
+//      collision-integrating mover is not wired for the --test=vfx path).
+//   2. The MOVE_BLOCKED / TMapIterator(character)-hit branches in FLY are
+//      no-ops here (no map collision, no live characters in the harness);
+//      the range countdown still drives the EXPLODE transition.
+//   3. The harness draws a single state-colored marker billboard at the
+//      missile world-pos using the renderer's white texture — TMissileEffect
+//      has no visual of its own in retail (each leaf supplies its own
+//      animator), so the marker exists only to prove state transitions.
+
+void TMissileEffect_Bespoke::Initialize()
+{
+    // Port of TMissileEffect::Initialize (missileeffect.cpp:31-40).
+    state_ = kMissileLaunch;
+    angle  = 0;            // TEffect::angle (snapshot `angle = 0;`)
+    range_ = 32768;
+
+    SetSpeed(kMissileSpeedDefault);   // SetSpeed(16) -> speed = 16 * ROLLOVER
+
+    status_ = false;
+
+    // Harness-only members (not in snapshot Initialize).
+    aim_angle_ = 0;
+    vel_ = {0.0f, 0.0f, 0.0f};
+    launch_hold_ticks_remaining_ = kMissileHarnessLaunchHoldTicks;
+    explode_ticks_remaining_ = 24;
+    alive_ = true;
+    sim_accum_ms_ = 0.0;
+}
+
+void TMissileEffect_Bespoke::Pulse()
+{
+    // Port of TMissileEffect::Pulse (missileeffect.cpp:52-135), translated
+    // line-by-line. The snapshot's `Move()` becomes an inline `pos += vel`
+    // here so the marker moves without engine collision involvement.
+
+    // Snapshot: `uint32_t bits = Move();` — Move() integrates vel and
+    // returns flags. We integrate inline in FLY state.
+    uint32_t bits = 0;   // MOVE_BLOCKED never set in harness (no collision)
+    if (state_ == kMissileFly)
+    {
+        S3DPoint p = Pos();
+        p.x += int32_t(vel_.X);
+        p.y += int32_t(vel_.Y);
+        p.z += int32_t(vel_.Z);
+        ForcePos(p);
+    }
+
+    switch (state_)
+    {
+        case kMissileLaunch:
+        {
+            // missileeffect.cpp:58-72.
+            if (status_)
+            {
+                // Harness-only: hold LAUNCH for ~12 ticks so the
+                // LAUNCH -> FLY edge is observable in --test=vfx. The
+                // in-game caller leaves launch_hold_=0 so this collapses
+                // to the original 1-tick transition.
+                if (launch_hold_ticks_remaining_ > 0)
+                {
+                    --launch_hold_ticks_remaining_;
+                    break;
+                }
+
+                if (speed_)
+                {
+                    // ConvertToVector(GetAngle(), speed, vel) — emits an
+                    // integer S3DPoint scaled by speed. Use aim_angle_
+                    // (the byte-angle stored at spawn) since the harness
+                    // overrides TEffect::angle.
+                    const int32_t harness_speed =
+                        int32_t(float(speed_) * kMissileHarnessSpeedScale);
+                    S3DPoint v_int = {0, 0, 0};
+                    ConvertToVector(aim_angle_, harness_speed, v_int);
+                    vel_.X = float(v_int.x) / float(ROLLOVER);
+                    vel_.Y = float(v_int.y) / float(ROLLOVER);
+
+                    // snapshot sets flags = (flags & ~OF_IMMOBILE)
+                    //                       | OF_MOVING | OF_WEIGHTLESS
+                    // — replicated for any engine-side code path that
+                    // reads them. In-harness collision is bypassed.
+                    flags = (flags & ~OF_IMMOBILE) | OF_MOVING | OF_WEIGHTLESS;
+
+                    // missileeffect.cpp:66 — vel.z = (speed / -16)
+                    // (slight downward arc). `speed / -16` here uses the
+                    // SCALED harness speed so the arc matches the
+                    // harness flight envelope.
+                    vel_.Z = float(harness_speed) / -16.0f / float(ROLLOVER);
+
+                    // missileeffect.cpp:68 — range = (240*MISSILE_RANGE) /
+                    //                                (speed/ROLLOVER)
+                    // = (240*2)/(16) = 30 ticks of flight at default speed.
+                    const int32_t speed_per_tick = speed_ / ROLLOVER;
+                    if (speed_per_tick > 0)
+                        range_ = (240 * kMissileRangeDefault) / speed_per_tick;
+                }
+                state_ = kMissileFly;
+            }
+            break;
+        }
+
+        case kMissileFly:
+        {
+            // missileeffect.cpp:75-124.
+            bool explode = false;
+
+            range_--;
+            if (range_ <= 0)
+                explode = true;
+
+            // missileeffect.cpp:83-84 — MOVE_BLOCKED branch. bits is 0 in
+            // the harness so this never fires; preserved for the eventual
+            // in-game wiring.
+            if (bits & MOVE_BLOCKED)
+                explode = true;
+            else
+            {
+                // missileeffect.cpp:87-113 — character-hit branch
+                // (TMapIterator over OBJSET_CHARACTER). Skipped in the
+                // harness (no live characters); preserved verbatim under
+                // `#if 0` below in this same file as the in-game port
+                // reference. For the bespoke base path we trust the
+                // range countdown to drive EXPLODE.
+            }
+
+            if (explode)
+            {
+                // missileeffect.cpp:119-120 — stop the missile dead.
+                flags = (flags & ~OF_MOVING & ~OF_WEIGHTLESS) | OF_IMMOBILE;
+                state_ = kMissileExplode;
+            }
+            break;
+        }
+
+        case kMissileExplode:
+        {
+            // missileeffect.cpp:127-130 — `if (!HasAnimator()) KillThisEffect();`
+            // The bespoke base has no animator, so we use an explicit
+            // post-explode tick counter to keep the marker visible long
+            // enough that the EXPLODE state is observable in --test=vfx.
+            if (explode_ticks_remaining_ > 0)
+            {
+                --explode_ticks_remaining_;
+            }
+            else
+            {
+                alive_ = false;
+            }
+            break;
+        }
+    }
+
+    // missileeffect.cpp:134 — TEffect::Pulse() chain.
+    TEffect::Pulse();
+}
+
+TMissileEffect_Bespoke* TMissileEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[missile] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // Pure infra base — no I3D imagery required. Construct with null
+    // imagery (same pattern as TStripEffect::SpawnForTest at
+    // src/stripeffect.cpp:150). The marker billboard uses the renderer's
+    // white texture.
+    auto* m = new TMissileEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    m->ForcePos(origin);
+    m->SetMapIndex(MapPane.MakeIndex());
+    m->ActivateComponents();
+
+    // Harness aim: random horizontal byte-angle (in-game caller would
+    // supply this via SetAngle()).
+    m->aim_angle_ = random(0, 255);
+    // missileeffect.cpp:39 — status starts false; the animator drives it
+    // true on its first tick. In the harness we set it true immediately
+    // so the state machine proceeds (no animator to wait on).
+    m->status_ = true;
+
+    log_info("[missile] SpawnForTest: map_index=%d origin=(%d,%d,%d) aim=%d "
+             "speed=%d (per-tick=%d) range=%d",
+             m->GetMapIndex(), origin.x, origin.y, origin.z,
+             m->aim_angle_, m->speed_, m->GetSpeed(), m->range_);
+    return m;
+}
+
+void TMissileEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
     // --- Update: drive Pulse() via the 24 Hz sim-tick accumulator (same
     // gate B01/F07/B-family use) so motion is framerate-independent.
     if (alive_)
@@ -7687,171 +7713,6 @@ TIceBoltEffect_Bespoke* TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPo
         log_error("[icebolt] SpawnForTest: FindImagery('%s') failed",
                   kIceBoltImageryPath);
         return nullptr;
-// * wave-bespoke-05: sparkle/glow family bespoke ports                     *
-// *************************************************************************
-//
-// X03 TFlareEffect_Bespoke / X10 TSymGlowEffect_Bespoke / M07
-// TPhotonEffect_Bespoke / M08 TPixieEffect_Bespoke — faithful direct
-// ports of the snapshot animators (effect_old.cpp + missileeffect.cpp)
-// driving the --test=vfx harness for the FB+LS / PE+LS / IM+LS
-// pipelines. See class doc-comments in effect.h for per-effect notes.
-
-namespace {
-
-// Asset paths from Class.Def (registered names → I3D paths). The harness
-// loads via TObjectImagery::FindImagery + LoadImagery so paths are
-// matched against the canonical registry name.
-constexpr const char* kFlareBespokeImageryPath   = "Misc\\IrisFlare.I3D";
-constexpr const char* kSymGlowBespokeImageryPath = "Misc\\SymGlow.I3D";
-constexpr const char* kPhotonBespokeImageryPath  = "Magic\\Photon.I3D";
-constexpr const char* kPixieBespokeImageryPath   = "misc\\Pixies.i3d";
-
-// Local helpers — mirrors SubObjTextureSlot / ResolveSubObjUv at
-// effect.cpp:1484 / :1507 (anonymous-namespace scoped there so we
-// re-declare here for the sparkle/glow batch).
-int32_t SparkleSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
-// * TWaterFallEffect_Bespoke (H02) + TWaterEffect_Bespoke (H01)            *
-// *   first-pass faithful direct ports of the snapshot TWaterFallAnimator  *
-// *   and TWaterAnimator render/integration bodies.                        *
-// *                                                                        *
-// * Source of truth:                                                       *
-// *   - TWaterFallAnimator: src/effect_old.cpp:11685-11873                 *
-// *   - TWaterAnimator:     src/effect_old.cpp:11895-12073                 *
-// *                                                                        *
-// * Render path note: the snapshot Render() bodies for BOTH effects        *
-// * write D3DRENDERSTATE_SRCBLEND=ONE / DESTBLEND=ONE (additive accumulate)*
-// * with the SetAddBlendState() call commented out. We honour the WRITTEN  *
-// * factor pair verbatim — EFxBlend::AdditiveStraight (ONE/ONE). Per       *
-// * orchestrator brief: "PRESERVE the snapshot's blend mode AS WRITTEN.    *
-// * Don't reinterpret."                                                    *
-// *                                                                        *
-// * Asset: both classes share `misc\Water.i3d` (imagery.rvi confirms;      *
-// * H01 entry maps "Water" -> misc\Water.i3d, H02 entry "Waterfall" ->     *
-// * misc\Water.i3d). Single sub-object, single texture — billboard the    *
-// * drop sprite per particle. Snapshot rendered with full D3D matrices    *
-// * (RotateZ -π/4 + per-instance face rotation); we collapse to a         *
-// * screen-aligned billboard for first-pass since the rotation knob isn't *
-// * on SBillboardDrawItem.                                                 *
-// *************************************************************************
-
-namespace {
-
-constexpr const char* kWaterImageryPath = "misc\\Water.i3d";   // shared H01/H02
-
-// Snapshot constants — direct from effect_old.cpp:11693-11699.
-constexpr int32_t kWaterFallMaxDrops  = 100;
-constexpr int32_t kWaterFallLength    = 64;
-constexpr int32_t kWaterFallHeight    = 64;
-constexpr float   kWaterFallScale     = 0.1f;
-constexpr float   kWaterFallGravity   = 0.25f;
-constexpr float   kWaterFallTallScale = 2.0f;
-
-// Snapshot constants — direct from effect_old.cpp:11903-11909.
-constexpr int32_t kWaterMaxDrops      = 25;
-constexpr int32_t kWaterLength        = 64;
-constexpr int32_t kWaterWidth         = 64;
-constexpr float   kWaterScale         = 0.2f;
-constexpr float   kWaterTallScale     = 0.1f;
-constexpr float   kWaterSpeed         = 2.0f;
-
-// 24 Hz sim-tick gate — every animator on the project ports to this.
-constexpr int32_t kWaterSimTickMs     = 1000 / 24;
-
-// First-pass billboard size in world units (drop billboard, ~16 wu base
-// scaled per-particle by drops[i].scale.x for visual variance). The
-// snapshot drove this through D3DMATRIXScale + Render with vertices in
-// a unit box mesh; we collapse to a single billboard scaled by an
-// average of (scale.x, scale.y) so the per-drop fall-time stretch is
-// approximated rather than dropped.
-constexpr float   kWaterBaseSizeWu    = 16.0f;
-
-// Resolve the .I3D's first nonzero texture slot via the shared helper.
-// (SubObjTextureSlot / ResolveSubObjUv are file-static in the blood
-// namespace above; re-declared as forward-only refs here.)
-//
-// Forward refs into the blood namespace above. Re-implement small
-// wrappers in this anonymous namespace to keep coupling explicit and
-// avoid yanking the blood namespace open here.
-int32_t WaterSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
-{
-    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
-        return -1;
-    const int32_t nfaces = img3d->NumObjFaces(objnum);
-    if (nfaces <= 0)
-        return -1;
-    if (nfaces <= 0) return -1;
-    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
-    int32_t texfaces[8 + 1] = {};
-    int32_t numtexfaces[8 + 1] = {};
-    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
-    for (int32_t s = 1; s <= 8; ++s)
-        if (numtexfaces[s] > 0)
-            return s - 1;
-    return -1;
-}
-
-void SparkleResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
-void WaterResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
-{
-    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
-    if (!img3d) return;
-    const int32_t nverts = img3d->NumObjVerts(objnum);
-    if (nverts <= 0) return;
-    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
-    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
-    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
-    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
-    for (int32_t i = 1; i < nverts; ++i)
-    {
-        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
-        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
-        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
-        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
-    }
-    out[0] = minu;
-    out[1] = minv;
-    out[2] = maxu - minu;
-    out[3] = maxv - minv;
-}
-
-// Load + sanity-check an imagery path. Returns a (TObjectImagery*,
-// T3DImagery*) pair or {nullptr, nullptr} on failure. Caller owns the
-// returned imagery (delete via TObjectImagery::FreeImagery only if not
-// passed into a TEffect — once the TEffect takes it the effect owns it).
-struct SLoadedImagery
-{
-    TObjectImagery* base  = nullptr;
-    T3DImagery*     img3d = nullptr;
-};
-
-SLoadedImagery SparkleLoadImagery(const char* path, const char* tag)
-{
-    SLoadedImagery out;
-    const int32_t img_id = TObjectImagery::FindImagery(path);
-    if (img_id < 0)
-    {
-        log_error("[%s] SpawnForTest: FindImagery('%s') failed", tag, path);
-        return out;
-// Load Misc\Water.i3d, resolve sub-object 0's texture/UV. Shared by
-// both effects (imagery.rvi entries "Water" and "Waterfall" both point
-// at misc\Water.i3d).
-bool LoadWaterImagery(TObjectImagery*& out_base,
-                      T3DImagery*&    out_img3d,
-                      TTextureHandle& out_texture,
-                      float           out_uv_rect[4])
-{
-    out_base = nullptr;
-    out_img3d = nullptr;
-    out_texture = kInvalidTexture;
-    out_uv_rect[0] = 0.0f; out_uv_rect[1] = 0.0f;
-    out_uv_rect[2] = 1.0f; out_uv_rect[3] = 1.0f;
-
-    const int32_t img_id = TObjectImagery::FindImagery(kWaterImageryPath);
-    if (img_id < 0)
-    {
-        log_error("[water] LoadWaterImagery: FindImagery('%s') failed",
-                  kWaterImageryPath);
-        return false;
     }
     TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
     if (!base)
@@ -7859,12 +7720,6 @@ bool LoadWaterImagery(TObjectImagery*& out_base,
         log_error("[icebolt] SpawnForTest: LoadImagery(id=%d '%s') failed",
                   img_id, kIceBoltImageryPath);
         return nullptr;
-        log_error("[%s] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  tag, img_id, path);
-        return out;
-        log_error("[water] LoadWaterImagery: LoadImagery(id=%d '%s') failed",
-                  img_id, kWaterImageryPath);
-        return false;
     }
     T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
     if (!img3d)
@@ -7975,208 +7830,6 @@ bool LoadWaterImagery(TObjectImagery*& out_base,
 }
 
 void TIceBoltEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-// * Magic family bespoke first-pass ports (wave-bespoke-04-aura-magic)     *
-// *************************************************************************
-//
-// Faithful direct ports of the snapshot animator bodies for M01/M03/M05/X09.
-// Translation rules (per task brief): per-tick math/variable names/constants
-// preserved from the snapshot; blend mode preserved AS WRITTEN
-// (SetAddBlendState -> AdditiveStraight; SetBlendState -> Alpha); 24Hz
-// sim-tick gate for framerate-independent motion (same pattern as B01).
-// First-pass renders mesh-based draws as billboards positioned at the
-// original sub-object pos/scl — verifies compile + boot + something draws.
-
-namespace {
-
-// ---- M01 / M03 / X09 share the lazy-load helper pattern ---------------------
-// Tries a list of candidate imagery paths in order (the snapshot animator
-// classes don't specify a canonical I3D — `Magic\\aura.i3d`, `Magic\\heal*.i3d`,
-// `Magic\\shield.i3d` are guesses pending forensics). Falls through to a
-// kInvalidTexture handle if nothing loads; the harness will still draw
-// nothing visibly but the effect compiles + boots.
-TTextureHandle TryLoadMagicTexture(const char* const* candidate_paths,
-                                   int32_t num_candidates,
-                                   float out_uv_rect[4],
-                                   const char* tag)
-{
-    for (int32_t i = 0; i < num_candidates; ++i)
-    {
-        const int32_t img_id = TObjectImagery::FindImagery(candidate_paths[i]);
-        if (img_id < 0)
-            continue;
-        TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
-        if (!base)
-            continue;
-        T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
-        if (!img3d)
-        {
-            TObjectImagery::FreeImagery(base);
-            continue;
-        }
-        // Lazy-mesh-init poke (mirror F01/B01/H04/X22): NumObjects() triggers
-        // the actual texture-slot population; NumTextures() alone doesn't.
-        (void)img3d->NumObjects();
-        const int32_t num_tex = img3d->NumTextures();
-        if (num_tex <= 0)
-            continue;
-        S3DTex tex = {};
-        img3d->GetTexture(0, &tex);
-        if (tex.htexture == kInvalidTexture)
-            continue;
-        out_uv_rect[0] = 0.0f;
-        out_uv_rect[1] = 0.0f;
-        out_uv_rect[2] = 1.0f;
-        out_uv_rect[3] = 1.0f;
-        log_info("[%s] resolved imagery='%s' tex=%u", tag,
-                 candidate_paths[i], tex.htexture);
-        return tex.htexture;
-    }
-    log_warn("[%s] no candidate imagery resolved (tried %d paths); will draw "
-             "untextured/invisible billboards (first-pass blocker note)",
-             tag, num_candidates);
-    return kInvalidTexture;
-        log_error("[water] LoadWaterImagery: imagery '%s' is not T3DImagery",
-                  kWaterImageryPath);
-        TObjectImagery::FreeImagery(base);
-        return false;
-    }
-    // Lazy mesh-load poke pattern (B01/F01/H04/X22).
-    const int32_t num_obj = img3d->NumObjects();
-    const int32_t num_tex = img3d->NumTextures();
-    if (num_obj <= 0 || num_tex <= 0)
-    {
-        log_error("[water] LoadWaterImagery: imagery underspec'd "
-                  "(objects=%d, textures=%d)", num_obj, num_tex);
-        return false;
-    }
-    const int32_t tex_slot = WaterSubObjTextureSlot(img3d, 0);
-    const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    S3DTex tex = {};
-    img3d->GetTexture(slot, &tex);
-    out_base = base;
-    out_img3d = img3d;
-    out_texture = tex.htexture;
-    WaterResolveSubObjUv(img3d, 0, out_uv_rect);
-    return true;
-}
-
-}   // namespace
-
-// =========================================================================
-// M01 — TAuraEffect_Bespoke
-// =========================================================================
-//
-// Faithful direct port of TAuraAnimator::Initialize/Animate/Render
-// (src/effect_old.cpp:3535-3667). The snapshot uses a TParticleSystem
-// emitting AURA_COUNT=100 particles randomly distributed across the
-// character's animator sub-objects. The harness has no live character,
-// so we collapse the per-frame emission onto a single emit-radius around
-// the effect's pos (preserving the random spread + Z-range + life span).
-// Per-tick scale decay (scl *= AURA_DEC=0.97) is preserved verbatim.
-// Render: AdditiveStraight (was SetAddBlendState).
-
-TAuraEffect_Bespoke* TAuraEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    // Imagery guess list (no forensics doc yet — aura* candidates).
-    static const char* kAuraCandidates[] = {
-        "Magic\\aura.i3d",
-        "Magic\\Aura.I3D",
-        "Magic\\flare.i3d",      // TFlareAnimator uses a similar emit pattern
-    };
-
-    // Spawn with no imagery (we resolve textures separately via TryLoad).
-    auto* aura = new TAuraEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    aura->ForcePos(origin);
-    aura->SetMapIndex(MapPane.MakeIndex());
-    aura->ActivateComponents();
-
-    aura->texture_ = TryLoadMagicTexture(kAuraCandidates,
-                                         int32_t(sizeof(kAuraCandidates) / sizeof(*kAuraCandidates)),
-                                         aura->uv_rect_, "aura");
-
-    aura->frame_  = 0;
-    aura->to_add_ = 0;
-    aura->alive_  = true;
-
-    log_info("[aura] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
-             aura->GetMapIndex(), origin.x, origin.y, origin.z, aura->texture_);
-    return aura;
-}
-
-void TAuraEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-        log_error("[%s] SpawnForTest: imagery for '%s' is not a T3DImagery",
-                  tag, path);
-        TObjectImagery::FreeImagery(base);
-        return out;
-    }
-    out.base  = base;
-    out.img3d = img3d;
-    return out;
-}
-
-}   // namespace
-
-// ----- X03 TFlareEffect_Bespoke -------------------------------------------
-
-TFlareEffect_Bespoke* TFlareEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    SLoadedImagery loaded = SparkleLoadImagery(kFlareBespokeImageryPath, "flare");
-    if (!loaded.img3d)
-        return nullptr;
-
-    auto* flare = new TFlareEffect_Bespoke(loaded.base);
-    flare->ForcePos(origin);
-    flare->SetMapIndex(MapPane.MakeIndex());
-    flare->ActivateComponents();
-
-    // Lazy-mesh-init poke (NumObjects triggers actual mesh load).
-    const int32_t num_obj = loaded.img3d->NumObjects();
-    const int32_t num_tex = loaded.img3d->NumTextures();
-    if (num_obj < 1 || num_tex <= 0)
-    {
-        log_error("[flare] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
-                  num_obj, num_tex);
-        delete flare;
-        return nullptr;
-    }
-
-    // Resolve sub-object 0's texture + UV. TFlareAnimator only uses
-    // GetObject(0) (effect_old.cpp:586).
-    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
-    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    S3DTex tex = {};
-    loaded.img3d->GetTexture(slot, &tex);
-    flare->texture_ = tex.htexture;
-    SparkleResolveSubObjUv(loaded.img3d, 0, flare->uv_rect_);
-    flare->size_wu_ = kFlareBespokeBaseSizeWu;
-    if (flare->texture_ == kInvalidTexture)
-    {
-        log_error("[flare] SpawnForTest: sub-object 0 texture unresolved");
-        delete flare;
-        return nullptr;
-    }
-
-    // --- Port of TFlareAnimator::Initialize (effect_old.cpp:517-550).
-    // Zero out per-spark position/velocity; the material zeroing in the
-    // original is a D3D-specific tint setup we don't need (the renderer
-    // applies its own per-instance color modulation).
-    for (int32_t c = 0; c < kFlareBespokeNumSparks; ++c)
-    {
-        flare->sparks_[c].p = hmm_vec3{0.0f, 0.0f, 0.0f};
-        flare->sparks_[c].v = hmm_vec3{0.0f, 0.0f, 0.0f};
-    }
-
-    log_info("[flare] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "texture=%u uv=[%.3f,%.3f %.3fx%.3f]",
-             kFlareBespokeImageryPath, flare->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             flare->texture_,
-             flare->uv_rect_[0], flare->uv_rect_[1],
-             flare->uv_rect_[2], flare->uv_rect_[3]);
-    return flare;
-}
-
-void TFlareEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     if (!Renderer)
         return;
@@ -8307,6 +7960,632 @@ void TFlareEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
             //   frameon == 2*GD     → spawn "Iced" (I22) on each enemy
             //   frameon == 12*GD    → KillThisEffect()
             if (frameon_ >= kIceBoltGrowDuration * 12)           // :8451
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render: port of TIceBoltAnimator::Render (effect_old.cpp:
+    // 8464-8688). The snapshot uses RenderObject(obj) on per-frame
+    // matrix-transformed I3D sub-objects; the first-pass bespoke
+    // collapses each draw to a SubmitFxBillboard quad in the same world
+    // position, scale, and pass order. Cylinder stretch / spiral twist
+    // are approximated as billboard placement (a future pass can swap to
+    // SubmitHelperMesh for proper mesh draws, cf. F07 ring).
+    //
+    // Blend = Alpha (snapshot SetBlendState :8467, MODULATE,
+    // SRC_ALPHA/INV_SRC_ALPHA — NOT additive — forensics §7).
+    // Lit-mode = Unlit (asset color carries blue, no material zeroing).
+    // Depth = TestNoWrite. Orientation = ScreenAligned (the snapshot
+    // billboards use ScreenAligned-ish rotation, forensics §7).
+
+    const S3DPoint& base_pos = Pos();
+    // Beam direction in local frame: −y (forensics §5/§7). For the
+    // first-pass bespoke we use byte-angle 0 (+Y) as the harness facing,
+    // so the beam stretches along world +Y from origin.
+    const float face_rad =
+        float(angle_) * (2.0f * float(M_PI)) / 256.0f;
+    const float dx = std::sin(face_rad);    // beam +X step direction
+    const float dy = -std::cos(face_rad);   // beam −Y step direction (snapshot :8156)
+
+    // Common billboard template.
+    SBillboardDrawItem item = {};
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+
+    // --- Core beam cylinders (snapshot :8472-8505).
+    // 4 nested cylinders (cyl04/01/02/03 at sub-obj 0..3). The snapshot
+    // stretches them to scl.z = length/64 along the beam axis; here we
+    // stamp 8 billboard quads along the beam axis instead (count tuned
+    // to give continuous beam read at length=500). Pass = first in
+    // render order (depth-test on, alpha) — snapshot :8475 subspell>1.
+    if (subspell_ > 1)
+    {
+        const int32_t beam_quads = 8;
+        for (int32_t k = 0; k < beam_quads; ++k)
+        {
+            const float t = float(k) / float(beam_quads - 1);   // 0..1
+            const float along = -t * length_;                    // 0..−length
+            for (int32_t cyl = 0; cyl < 4; ++cyl)
+            {
+                const int32_t obj_idx = cyl;
+                if (subobj_tex_[obj_idx] == kInvalidTexture)
+                    continue;
+                item.world_pos[0] = float(base_pos.x) + dx * (-along);
+                item.world_pos[1] = float(base_pos.y) + dy * (-along);
+                item.world_pos[2] = float(base_pos.z);
+                item.size_wu[0] = item.size_wu[1] =
+                    kIceBoltCylSizeWu * cylscale_;
+                item.key.texture = subobj_tex_[obj_idx];
+                std::memcpy(item.uv_rect, subobj_uv_[obj_idx],
+                            sizeof(item.uv_rect));
+                Renderer->SubmitFxBillboard(item);
+            }
+        }
+    }
+
+    // --- Spirals + rings (snapshot :8507-8571). subspell>0 +
+    // frameon < GD*3 (snapshot :8507).
+    if (frameon_ < kIceBoltGrowDuration * 3)
+    {
+        // Spirals (cyl06 = sub-obj 6, snapshot :8510-8545). numrevs =
+        // length/100 segments, two mirrored helices per segment.
+        if (subspell_ > 0
+            && subobj_tex_[kIceBoltCylSpiral] != kInvalidTexture)
+        {
+            // `max` is a macro from revtypes.h:20, so std::max won't parse
+            // here; expand inline.
+            const int32_t numrevs_raw = int32_t(length_) / 100;
+            const int32_t numrevs = numrevs_raw > 1 ? numrevs_raw : 1;
+            const float zscale = length_ / float(numrevs);
+            for (int32_t j = 0; j < numrevs; ++j)
+            {
+                const float ypos = -float(j) * zscale;
+                for (int32_t i = 0; i < 2; ++i)
+                {
+                    const float ang = (i ? float(M_PI) - spiralang_
+                                          : spiralang_);
+                    // Helix offset perpendicular to beam axis.
+                    const float ox = std::cos(ang) * kIceBoltSpiralSizeWu;
+                    const float oz = std::sin(ang) * kIceBoltSpiralSizeWu;
+                    item.world_pos[0] =
+                        float(base_pos.x) + dx * (-ypos) + ox;
+                    item.world_pos[1] =
+                        float(base_pos.y) + dy * (-ypos);
+                    item.world_pos[2] = float(base_pos.z) + oz;
+                    item.size_wu[0] = item.size_wu[1] =
+                        kIceBoltSpiralSizeWu * spiralscale_;
+                    item.key.texture = subobj_tex_[kIceBoltCylSpiral];
+                    std::memcpy(item.uv_rect, subobj_uv_[kIceBoltCylSpiral],
+                                sizeof(item.uv_rect));
+                    Renderer->SubmitFxBillboard(item);
+                }
+            }
+        }
+        // Rings (cyl05 = sub-obj 5, snapshot :8547-8570). length/100
+        // instances, slide along beam at RING_SPEED, wrap by length.
+        if (subobj_tex_[kIceBoltCylRing] != kInvalidTexture)
+        {
+            // `max`/`min` are macros from revtypes.h:20-21, so std::max won't
+            // parse here; expand inline.
+            const int32_t num_rings_raw = int32_t(length_) / 100;
+            const int32_t num_rings = num_rings_raw > 1 ? num_rings_raw : 1;
+            for (int32_t i = 0; i < num_rings; ++i)
+            {
+                // Snapshot :8563: y = -((ringout + 100*i) % length).
+                const int32_t length_raw = int32_t(length_);
+                const int32_t lengthi = length_raw > 1 ? length_raw : 1;
+                const int32_t y_int =
+                    -((int32_t(ringout_) + 100 * i) % lengthi);
+                const float ypos = float(y_int);
+                item.world_pos[0] = float(base_pos.x) + dx * (-ypos);
+                item.world_pos[1] = float(base_pos.y) + dy * (-ypos);
+                item.world_pos[2] = float(base_pos.z);
+                item.size_wu[0] = item.size_wu[1] =
+                    kIceBoltRingSizeWu * cylscale_;
+                item.key.texture = subobj_tex_[kIceBoltCylRing];
+                std::memcpy(item.uv_rect, subobj_uv_[kIceBoltCylRing],
+                            sizeof(item.uv_rect));
+                Renderer->SubmitFxBillboard(item);
+            }
+        }
+    }
+
+    // --- End glow spheres (snapshot :8573-8600). 2x box01, one at
+    // y=0 (caster end), one at y=−length (target end). subspell>0.
+    if (subspell_ > 0
+        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
+    {
+        for (int32_t i = 0; i < 2; ++i)
+        {
+            const float ypos = -length_ * float(i);   // :8595
+            item.world_pos[0] = float(base_pos.x) + dx * (-ypos);
+            item.world_pos[1] = float(base_pos.y) + dy * (-ypos);
+            item.world_pos[2] = float(base_pos.z);
+            item.size_wu[0] = item.size_wu[1] =
+                kIceBoltGlowSizeWu * (spherescale_[i] * 0.5f);
+            item.key.texture = subobj_tex_[kIceBoltBox01];
+            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
+                        sizeof(item.uv_rect));
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+
+    // --- Frost particles (snapshot :8602-8628). 50 box01 quads at
+    // p[i] offset −length in y (clustered at target end).
+    if (subobj_tex_[kIceBoltBox01] != kInvalidTexture)
+    {
+        for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
+        {
+            const SIceBoltFrostParticle& f = frost_[i];
+            if (f.t > 0)
+                continue;                                        // :8605
+            // Snapshot :8622-8624: pos = (p.x, p.y − length, p.z).
+            const float lx = f.pos.X;
+            const float ly = f.pos.Y - length_;
+            const float lz = f.pos.Z;
+            // Rotate local (lx,ly) into world by beam facing (dx,dy).
+            item.world_pos[0] =
+                float(base_pos.x) + dx * (-ly) + lx;
+            item.world_pos[1] =
+                float(base_pos.y) + dy * (-ly);
+            item.world_pos[2] = float(base_pos.z) + lz;
+            item.size_wu[0] = item.size_wu[1] =
+                kIceBoltFrostSizeWu * f.s;
+            item.key.texture = subobj_tex_[kIceBoltBox01];
+            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
+                        sizeof(item.uv_rect));
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+
+    // --- Snow flurry (snapshot :8630-8657). subspell>2; orbits the
+    // beam axis, sweeps along beam after beat 2*GD, blows up after 5*GD.
+    if (subspell_ > 2
+        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
+    {
+        for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
+        {
+            const SIceBoltSnowParticle& sn = snow_[i];
+            // Snapshot :8649-8653: pos = (r·cos th, r·sin th − cy?, h).
+            const float lx = sn.r * std::cos(sn.th);
+            float       ly = sn.r * std::sin(sn.th);
+            if (frameon_ > kIceBoltGrowDuration * 2)
+                ly -= cy_;                                       // :8652
+            const float lz = sn.h;
+            item.world_pos[0] =
+                float(base_pos.x) + dx * (-ly) + lx;
+            item.world_pos[1] =
+                float(base_pos.y) + dy * (-ly);
+            item.world_pos[2] = float(base_pos.z) + lz;
+            item.size_wu[0] = item.size_wu[1] =
+                kIceBoltSnowSizeWu * sn.sz;
+            item.key.texture = subobj_tex_[kIceBoltBox01];
+            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
+                        sizeof(item.uv_rect));
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+}
+
+// --- I22 TIcedEffect bespoke -------------------------------------------
+//
+// FAITHFUL DIRECT PORT of TIcedAnimator (snapshot effect_old.cpp:
+// 8749-8953). 3-phase state machine: HOLD (240 ticks reveal facets) →
+// SHATTER (seed 30 chunks) → TUMBLE/BOUNCE (gravity + bounce death).
+// Posted by I21 (and retail-only TStormAnimator); harness runs it
+// standalone — no victim coupling (icedchar = nullptr; SetParalize,
+// IsIced, IsDead, Stop branches are guarded out for sector-less preview;
+// lifecycle ticks purely on frameon).
+//
+// Engine adaptations:
+//   - Render path swaps RenderObject(obj) for SubmitFxBillboard. Phase A
+//     (HOLD): draws min(frameon*4, 50) face billboards stacked at the
+//     origin (snapshot transforms cycle facets via D3DMATRIXRotateZ).
+//     Phase B+C (SHATTER+TUMBLE): one billboard per live chunk at p[i]
+//     world position.
+//   - 24 Hz sim-tick gate (family pattern). Per-tick math (gravity,
+//     bounce, rotation) runs once per accumulated 1/24 s.
+//   - icedchar lifecycle paths (SetParalize/Stop/IsDead) guarded out;
+//     lifecycle is "elapsed frameon" only.
+
+namespace {
+
+constexpr const char* kIcedImageryPath = "Magic\\iced.I3D";
+
+// Snapshot constants. Variable names follow effect_old.cpp:8715-8721.
+constexpr float kIcedBouncePlane    = 16.0f;   // p.z <= 16 (snapshot :8876)
+constexpr float kIcedBounceLift     = 20.0f;   // p.z = 20 (:8878)
+constexpr float kIcedBounceVelMul   = -0.5f;   // v.z *= -0.5 (:8879)
+constexpr float kIcedBounceSpinMul  = 2.0f;    // w *= 2 (:8880-8882)
+constexpr int32_t kIcedRowsPerSide  = 5;       // chunk z-row spread (:8819: i/6 implies ~5 rows)
+constexpr float kIcedRowSpacingZ    = 25.0f;   // :8819 row spacing 25 wu
+constexpr float kIcedFacetSizeWu    = 24.0f;   // single-facet billboard size
+
+}   // namespace
+
+TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // --- Load Magic\iced.I3D (forensics §4 — byte-identical asset
+    // confirmed MD5 10e7e15b3cd6b491e47ab1743b5cdf8e snapshot vs ship).
+    const int32_t img_id = TObjectImagery::FindImagery(kIcedImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[iced] SpawnForTest: FindImagery('%s') failed",
+                  kIcedImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[iced] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kIcedImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[iced] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kIcedImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* iced = new TIcedEffect_Bespoke(base);
+    iced->ForcePos(origin);
+    iced->SetMapIndex(MapPane.MakeIndex());
+    iced->ActivateComponents();
+
+    // Lazy-mesh-init poke.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj <= 0 || num_tex <= 0)
+    {
+        log_error("[iced] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete iced;
+        return nullptr;
+    }
+
+    // Resolve sub-object 0 (the cube chunk mesh) texture for billboards.
+    // Forensics §4: iced.I3D has face01..43 reveal facets + icicle01..06
+    // + a cube chunk mesh at sub-obj 0 used for the shatter phase.
+    const int32_t tex_slot = SubObjTextureSlot(img3d, 0);
+    const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    img3d->GetTexture(slot, &tex);
+    iced->facet_tex_ = tex.htexture;
+    ResolveSubObjUv(img3d, 0, iced->facet_uv_);
+    iced->facet_size_wu_ = kIcedFacetSizeWu;
+
+    if (iced->facet_tex_ == kInvalidTexture)
+    {
+        log_error("[iced] SpawnForTest: sub-obj 0 texture unresolved — "
+                  "facet/chunk billboards will draw nothing");
+    }
+
+    // Port of TIcedAnimator::Initialize (snapshot :8749-8756).
+    iced->frameon_      = 0;                                    // :8752
+    iced->angle_        = float(random(0, 359))
+                            * float(TORADIAN);                  // :8753
+    // icedchar_ stays nullptr (harness has no victim) — :8754
+    iced->donebouncing_ = 0;                                    // :8755
+
+    log_info("[iced] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "angle=%.3f facet_tex=%u num_obj=%d",
+             kIcedImageryPath, iced->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             iced->angle_, iced->facet_tex_, num_obj);
+    return iced;
+}
+
+void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TIcedAnimator::Animate (effect_old.cpp:
+    // 8777-8891), framerate-independent via 24 Hz sim-tick gate.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kIcedSimTickMs))
+        {
+            sim_accum_ms_ -= double(kIcedSimTickMs);
+
+            frameon_++;   // :8783
+
+            // Victim-coupling lifecycle (:8785-8797): all branches are
+            // guarded out for the harness — no icedchar, no Stop(), no
+            // IsIced/IsDead. Lifecycle is "elapsed frameon" only.
+
+            // Phase B: SHATTER seed (snapshot :8798-8847, frameon==DURATION).
+            if (frameon_ == kIcedDuration)
+            {
+                // icedchar SetParalize(false) (:8800-8804) guarded out.
+                // Snapshot :8807-8846 — seed MAX_ICED_CHUNKS in 4
+                // quadrants × 5 rows pattern. Same RNG sequence.
+                int32_t a = 0, b = 0;
+                for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
+                {
+                    const int32_t c = (a ? 1 : -1);              // :8810
+                    const int32_t d = (b ? 1 : -1);              // :8811
+                    SIcedChunk& ch = chunks_[i];
+
+                    // velocity (:8813-8815)
+                    ch.vel.X = float(c * random(5, 10) / 10.0
+                                     + random(-5, 5) / 10.0);
+                    ch.vel.Y = float(d * random(5, 10) / 10.0
+                                     + random(-5, 5) / 10.0);
+                    ch.vel.Z = float(random(0, 10) / 10.0);
+                    // position (:8817-8819)
+                    ch.pos.X = float(c * random(20, 40) + random(-20, 20));
+                    ch.pos.Y = float(d * random(20, 40) + random(-20, 20));
+                    ch.pos.Z = float(int32_t(i / 6) * 25);
+                    // angular velocity (:8821)
+                    ch.ang.X = ch.ang.Y = float(random(0, 25) / 100.0);
+                    // angular position (:8826: t.z = atan2(v.y, v.x))
+                    ch.rot.Z = std::atan2(ch.vel.Y, ch.vel.X);
+                    // scale (:8828-8839)
+                    if (random(0, 1))
+                    {
+                        ch.scl.X = float(random(25, 75) / 100.0);
+                        ch.scl.Y = float(random(25, 75) / 100.0);
+                        ch.scl.Z = float(random(25, 75) / 100.0);
+                    }
+                    else
+                    {
+                        ch.scl.X = float(random(10, 15) / 100.0);
+                        ch.scl.Y = float(random(10, 15) / 100.0);
+                        ch.scl.Z = float(random(10, 15) / 100.0);
+                    }
+                    // life (bounces left, :8841)
+                    ch.life = random(2, 3);
+                    // separator (:8843-8845)
+                    a = 1 - a;
+                    if (a)
+                        b = 1 - b;
+                }
+            }
+
+            // Phase C: TUMBLE+BOUNCE (snapshot :8848-8886, frameon>DURATION).
+            if (frameon_ > kIcedDuration)
+            {
+                donebouncing_ = 1;
+                for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
+                {
+                    SIcedChunk& ch = chunks_[i];
+                    if (ch.life == 0)
+                        continue;
+                    donebouncing_ = 0;
+                    ch.pos.X += ch.vel.X;                        // :8856
+                    ch.pos.Y += ch.vel.Y;                        // :8857
+                    ch.pos.Z += ch.vel.Z;                        // :8858
+                    ch.vel.Z -= kIcedChunkGravity;               // :8859
+                    ch.rot.X += ch.ang.X;                        // :8860
+                    ch.rot.Y += ch.ang.Y;                        // :8861
+                    ch.rot.Z += ch.ang.Z;                        // :8862
+                    // wrap angles 0..2π (:8863-8874)
+                    auto wrap = [](float& r) {
+                        if (r > float(M_2PI)) r -= float(M_2PI);
+                        if (r < 0.0f)         r += float(M_2PI);
+                    };
+                    wrap(ch.rot.X);
+                    wrap(ch.rot.Y);
+                    wrap(ch.rot.Z);
+                    // bounce (:8876-8884)
+                    if (ch.pos.Z <= kIcedBouncePlane)
+                    {
+                        ch.pos.Z = kIcedBounceLift;
+                        ch.vel.Z *= kIcedBounceVelMul;
+                        ch.ang.X *= kIcedBounceSpinMul;
+                        ch.ang.Y *= kIcedBounceSpinMul;
+                        ch.ang.Z *= kIcedBounceSpinMul;
+                        ch.life--;
+                    }
+                }
+            }
+
+            // Self-destruct (snapshot :8887-8890).
+            if (donebouncing_)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render: port of TIcedAnimator::Render (effect_old.cpp:
+    // 8900-8953). Blend = Alpha, Lit-mode = Unlit, Depth = TestNoWrite.
+    // Phase A (HOLD): min(frameon*4, 50) facet billboards at origin.
+    // Phase B+C: one billboard per live chunk at world pos.
+    if (facet_tex_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base_pos = Pos();
+
+    SBillboardDrawItem item = {};
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.key.texture     = facet_tex_;
+    std::memcpy(item.uv_rect, facet_uv_, sizeof(item.uv_rect));
+
+    if (frameon_ < kIcedDuration)
+    {
+        // Phase A: HOLD. Snapshot :8907-8920 — for i in 1..min(frameon*4, 50)
+        // RenderObject(GetObject(i)) with RotateZ(angle). All facets share
+        // origin transform; with billboard quads, they all stack visually.
+        // `min`/`max` are macros from revtypes.h:20-21; expand inline so
+        // std::min parses.
+        const int32_t reveal_raw = frameon_ * 4;
+        const int32_t reveal_count =
+            reveal_raw < kIcedRevealCap ? reveal_raw : kIcedRevealCap;
+        const float ring_scale = 1.0f;
+        for (int32_t i = 1; i < reveal_count; ++i)
+        {
+            item.world_pos[0] = float(base_pos.x);
+            item.world_pos[1] = float(base_pos.y);
+            item.world_pos[2] = float(base_pos.z);
+            item.size_wu[0] = item.size_wu[1] =
+                facet_size_wu_ * ring_scale;
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+    else
+    {
+        // Phase B+C: SHATTER chunks. Snapshot :8923-8948 — one
+        // RenderObject(GetObject(0)) per live chunk at p[i] world pos.
+        for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
+        {
+            const SIcedChunk& ch = chunks_[i];
+            if (ch.life == 0)
+                continue;
+            item.world_pos[0] = float(base_pos.x) + ch.pos.X;
+            item.world_pos[1] = float(base_pos.y) + ch.pos.Y;
+            item.world_pos[2] = float(base_pos.z) + ch.pos.Z;
+            item.size_wu[0] = item.size_wu[1] =
+                facet_size_wu_ * (ch.scl.X + ch.scl.Y) * 0.5f;
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+}
+// --- end ice bespoke first-pass
+
+// *************************************************************************
+// * Magic family bespoke first-pass ports (wave-bespoke-04-aura-magic)     *
+// *************************************************************************
+//
+// Faithful direct ports of the snapshot animator bodies for M01/M03/M05/X09.
+// Translation rules (per task brief): per-tick math/variable names/constants
+// preserved from the snapshot; blend mode preserved AS WRITTEN
+// (SetAddBlendState -> AdditiveStraight; SetBlendState -> Alpha); 24Hz
+// sim-tick gate for framerate-independent motion (same pattern as B01).
+// First-pass renders mesh-based draws as billboards positioned at the
+// original sub-object pos/scl — verifies compile + boot + something draws.
+
+namespace {
+
+// ---- M01 / M03 / X09 share the lazy-load helper pattern ---------------------
+// Tries a list of candidate imagery paths in order (the snapshot animator
+// classes don't specify a canonical I3D — `Magic\\aura.i3d`, `Magic\\heal*.i3d`,
+// `Magic\\shield.i3d` are guesses pending forensics). Falls through to a
+// kInvalidTexture handle if nothing loads; the harness will still draw
+// nothing visibly but the effect compiles + boots.
+TTextureHandle TryLoadMagicTexture(const char* const* candidate_paths,
+                                   int32_t num_candidates,
+                                   float out_uv_rect[4],
+                                   const char* tag)
+{
+    for (int32_t i = 0; i < num_candidates; ++i)
+    {
+        const int32_t img_id = TObjectImagery::FindImagery(candidate_paths[i]);
+        if (img_id < 0)
+            continue;
+        TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+        if (!base)
+            continue;
+        T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+        if (!img3d)
+        {
+            TObjectImagery::FreeImagery(base);
+            continue;
+        }
+        // Lazy-mesh-init poke (mirror F01/B01/H04/X22): NumObjects() triggers
+        // the actual texture-slot population; NumTextures() alone doesn't.
+        (void)img3d->NumObjects();
+        const int32_t num_tex = img3d->NumTextures();
+        if (num_tex <= 0)
+            continue;
+        S3DTex tex = {};
+        img3d->GetTexture(0, &tex);
+        if (tex.htexture == kInvalidTexture)
+            continue;
+        out_uv_rect[0] = 0.0f;
+        out_uv_rect[1] = 0.0f;
+        out_uv_rect[2] = 1.0f;
+        out_uv_rect[3] = 1.0f;
+        log_info("[%s] resolved imagery='%s' tex=%u", tag,
+                 candidate_paths[i], tex.htexture);
+        return tex.htexture;
+    }
+    log_warn("[%s] no candidate imagery resolved (tried %d paths); will draw "
+             "untextured/invisible billboards (first-pass blocker note)",
+             tag, num_candidates);
+    return kInvalidTexture;
+}
+
+}   // namespace
+
+// =========================================================================
+// M01 — TAuraEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TAuraAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:3535-3667). The snapshot uses a TParticleSystem
+// emitting AURA_COUNT=100 particles randomly distributed across the
+// character's animator sub-objects. The harness has no live character,
+// so we collapse the per-frame emission onto a single emit-radius around
+// the effect's pos (preserving the random spread + Z-range + life span).
+// Per-tick scale decay (scl *= AURA_DEC=0.97) is preserved verbatim.
+// Render: AdditiveStraight (was SetAddBlendState).
+
+TAuraEffect_Bespoke* TAuraEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Imagery guess list (no forensics doc yet — aura* candidates).
+    static const char* kAuraCandidates[] = {
+        "Magic\\aura.i3d",
+        "Magic\\Aura.I3D",
+        "Magic\\flare.i3d",      // TFlareAnimator uses a similar emit pattern
+    };
+
+    // Spawn with no imagery (we resolve textures separately via TryLoad).
+    auto* aura = new TAuraEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    aura->ForcePos(origin);
+    aura->SetMapIndex(MapPane.MakeIndex());
+    aura->ActivateComponents();
+
+    aura->texture_ = TryLoadMagicTexture(kAuraCandidates,
+                                         int32_t(sizeof(kAuraCandidates) / sizeof(*kAuraCandidates)),
+                                         aura->uv_rect_, "aura");
+
+    aura->frame_  = 0;
+    aura->to_add_ = 0;
+    aura->alive_  = true;
+
+    log_info("[aura] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             aura->GetMapIndex(), origin.x, origin.y, origin.z, aura->texture_);
+    return aura;
+}
+
+void TAuraEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
     // 24Hz sim-tick gate for framerate-independent integration.
     if (alive_)
     {
@@ -8391,34 +8670,656 @@ void TFlareEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         }
     }
 
-    if (!alive_)
+    // --- Render (port of TAuraAnimator::Render, effect_old.cpp:3657-3667).
+    // SetAddBlendState -> AdditiveStraight, preserved AS WRITTEN.
+    if (texture_ == kInvalidTexture)
         return;
 
-    // --- Render: port of TIceBoltAnimator::Render (effect_old.cpp:
-    // 8464-8688). The snapshot uses RenderObject(obj) on per-frame
-    // matrix-transformed I3D sub-objects; the first-pass bespoke
-    // collapses each draw to a SubmitFxBillboard quad in the same world
-    // position, scale, and pass order. Cylinder stretch / spiral twist
-    // are approximated as billboard placement (a future pass can swap to
-    // SubmitHelperMesh for proper mesh draws, cf. F07 ring).
-    //
-    // Blend = Alpha (snapshot SetBlendState :8467, MODULATE,
-    // SRC_ALPHA/INV_SRC_ALPHA — NOT additive — forensics §7).
-    // Lit-mode = Unlit (asset color carries blue, no material zeroing).
-    // Depth = TestNoWrite. Orientation = ScreenAligned (the snapshot
-    // billboards use ScreenAligned-ish rotation, forensics §7).
+    const S3DPoint& base = Pos();
+    for (int32_t i = 0; i < kAuraCount; ++i)
+    {
+        const SAuraParticle& p = particles_[i];
+        if (!p.used)
+            continue;
 
-    const S3DPoint& base_pos = Pos();
-    // Beam direction in local frame: −y (forensics §5/§7). For the
-    // first-pass bespoke we use byte-angle 0 (+Y) as the harness facing,
-    // so the beam stretches along world +Y from origin.
-    const float face_rad =
-        float(angle_) * (2.0f * float(M_PI)) / 256.0f;
-    const float dx = std::sin(face_rad);    // beam +X step direction
-    const float dy = -std::cos(face_rad);   // beam −Y step direction (snapshot :8156)
+        SBillboardDrawItem item = {};
+        // size_wu scaled by per-particle scl (snapshot ranges 0.25..0.6).
+        const float size = 32.0f * p.scl.X;
+        item.size_wu[0] = size;
+        item.size_wu[1] = size;
+        // Aura tint — warm gold (placeholder until forensics confirms).
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 0.85f;
+        item.color_rgba[2] = 0.40f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0] = float(base.x) + p.pos.X;
+        item.world_pos[1] = float(base.y) + p.pos.Y;
+        item.world_pos[2] = float(base.z) + p.pos.Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
 
-    // Common billboard template.
+// =========================================================================
+// M03 — THealEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of THealAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:628-833). NUM_HEAL_BUBBLES=60 bubbles + a
+// cylindrical glow at the feet. HEAL_DURATION=40 ticks total: glow
+// grows for HEAL_DURATION/2, then shrinks once activebubbles==0.
+// Per-bubble: random pos in ±HEALING_RADIUS=20, rises with `rise` at
+// random(3,6)*4/3 wu/tick, scale shrinks by HEAL_SCALE_STEP=0.15
+// until invisible; respawns until framenum[0] > HEAL_DURATION.
+// SetBlendState -> Alpha (preserved AS WRITTEN).
+
+THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kHealCandidates[] = {
+        "Magic\\heal.i3d",
+        "Magic\\Heal.I3D",
+        "Magic\\heal1.i3d",
+    };
+
+    auto* heal = new THealEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    heal->ForcePos(origin);
+    heal->SetMapIndex(MapPane.MakeIndex());
+    heal->ActivateComponents();
+
+    heal->bubble_tex_ = TryLoadMagicTexture(kHealCandidates,
+                                            int32_t(sizeof(kHealCandidates) / sizeof(*kHealCandidates)),
+                                            heal->bubble_uv_, "heal-bubble");
+    heal->glow_tex_   = heal->bubble_tex_;
+    heal->glow_uv_[0] = heal->bubble_uv_[0];
+    heal->glow_uv_[1] = heal->bubble_uv_[1];
+    heal->glow_uv_[2] = heal->bubble_uv_[2];
+    heal->glow_uv_[3] = heal->bubble_uv_[3];
+
+    // Snapshot effect_old.cpp:628-685 — Initialize. heal_num/glow_num
+    // depend on spell level; default branch is heal_num=0, glow_num=1.
+    heal->heal_num_ = 0;
+    heal->glow_num_ = 1;
+
+    // Glow at the player's feet (index 0).
+    heal->p_[0]        = {0.0f, 0.0f, 0.0f};
+    heal->scale_[0]    = 2.0f;
+    heal->framenum_[0] = 0;
+    heal->rotation_    = 0.0f;
+
+    for (int32_t n = 1; n < kHealBubbles; ++n)
+    {
+        heal->p_[n].X = float(random(-kHealingRadius, kHealingRadius));
+        heal->p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
+        heal->p_[n].Z = 2.0f;
+        heal->rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
+        // snapshot assigns scale[n] = 0 then immediately scale[n] = 4.5 —
+        // preserve the second assignment (the live value); the leading 0
+        // assignment is dead per snapshot effect_old.cpp:682-683.
+        heal->scale_[n] = 4.5f;
+        heal->framenum_[n] = random(-kHealBubbles / 2, -1);
+    }
+    heal->activebubbles_ = 0;
+    heal->alive_ = true;
+
+    log_info("[heal] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "bubble_tex=%u glow_tex=%u",
+             heal->GetMapIndex(), origin.x, origin.y, origin.z,
+             heal->bubble_tex_, heal->glow_tex_);
+    return heal;
+}
+
+void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate port (effect_old.cpp:695-760), 24Hz sim-tick gated.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kHealSimTickMs))
+        {
+            sim_accum_ms_ -= double(kHealSimTickMs);
+
+            // Snapshot :701-719 — glow framenum/scale lifecycle.
+            ++framenum_[0];
+            if (framenum_[0] < kHealDuration / 2)
+            {
+                if (scale_[0] < 7.0f)
+                    scale_[0] += 1.0f;
+            }
+            else if (framenum_[0] > kHealDuration && activebubbles_ == 0)
+            {
+                if (scale_[0] > 0.0f)
+                    scale_[0] -= 1.0f;
+                else
+                {
+                    alive_ = false;
+                    break;
+                }
+            }
+
+            // Snapshot :722 — rotation += 0.1f.
+            rotation_ += 0.1f;
+
+            // Snapshot :725-759 — per-bubble integration.
+            for (int32_t n = 1; n < kHealBubbles; ++n)
+            {
+                ++framenum_[n];
+                if (framenum_[n] == 0)
+                    ++activebubbles_;
+
+                if (framenum_[n] > 0)
+                {
+                    p_[n].Z += rise_[n];
+
+                    if (scale_[n] > 0.0f)
+                    {
+                        scale_[n] -= kHealScaleStep;
+                        if (scale_[n] <= 0.0f)
+                        {
+                            --activebubbles_;
+
+                            if (framenum_[0] < kHealDuration)
+                            {
+                                // Snapshot :749-755 — respawn bubble.
+                                p_[n].X = float(random(-kHealingRadius, kHealingRadius));
+                                p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
+                                p_[n].Z = 2.0f;
+                                rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
+                                scale_[n] = 4.5f;
+                                framenum_[n] = -1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Render port (effect_old.cpp:770-832). SetBlendState -> Alpha.
+    if (bubble_tex_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = Pos();
+
+    // Snapshot :777-811 — per-visible-bubble billboard draws.
+    for (int32_t n = 1; n < kHealBubbles; ++n)
+    {
+        if (framenum_[n] <= 0 || scale_[n] <= 0.0f)
+            continue;
+
+        // Bubble billboard.
+        SBillboardDrawItem item = {};
+        const float size = 8.0f * scale_[n];
+        item.size_wu[0] = size;
+        item.size_wu[1] = size;
+        // Soft green-blue heal tint (placeholder until forensics).
+        item.color_rgba[0] = 0.5f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 0.7f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = bubble_uv_[0];
+        item.uv_rect[1] = bubble_uv_[1];
+        item.uv_rect[2] = bubble_uv_[2];
+        item.uv_rect[3] = bubble_uv_[3];
+        item.key.texture     = bubble_tex_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0] = float(base.x) + p_[n].X;
+        item.world_pos[1] = float(base.y) + p_[n].Y;
+        item.world_pos[2] = float(base.z) + p_[n].Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+
+    // Snapshot :813-826 — cylindrical glow at the player's feet, drawn
+    // TWICE (forward + reverse rotation), preserving the two-pass shape.
+    if (glow_tex_ != kInvalidTexture && scale_[0] > 0.0f)
+    {
+        SBillboardDrawItem glow = {};
+        const float size = 24.0f * scale_[0] * 0.75f;   // snapshot scl * 3/4
+        glow.size_wu[0] = size;
+        glow.size_wu[1] = size;
+        glow.color_rgba[0] = 0.6f;
+        glow.color_rgba[1] = 1.0f;
+        glow.color_rgba[2] = 0.7f;
+        glow.color_rgba[3] = 1.0f;
+        glow.uv_rect[0] = glow_uv_[0];
+        glow.uv_rect[1] = glow_uv_[1];
+        glow.uv_rect[2] = glow_uv_[2];
+        glow.uv_rect[3] = glow_uv_[3];
+        glow.key.texture     = glow_tex_;
+        glow.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        glow.key.blend       = uint8_t(EFxBlend::Alpha);
+        glow.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        glow.light_mode      = EFxLightMode::Unlit;
+        glow.orientation     = EFxBillboardOrientation::WorldXY;   // ground-plane cylinder
+        glow.debug_mode      = debug_mode;
+        glow.world_pos[0] = float(base.x) + p_[0].X;
+        glow.world_pos[1] = float(base.y) + p_[0].Y;
+        glow.world_pos[2] = float(base.z) + p_[0].Z;
+        // Pass 1: forward rotation (snapshot obj->rot.z = rotation).
+        Renderer->SubmitFxBillboard(glow);
+        // Pass 2: reverse rotation (snapshot obj->rot.z = -rotation +
+        // RenderObject(obj) again). Preserves the two-pass shape; in our
+        // billboard path this duplicates the draw so the overlapping
+        // additive contributions stack as in the snapshot.
+        Renderer->SubmitFxBillboard(glow);
+    }
+}
+
+// =========================================================================
+// M05 — TMistEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TMistAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:11376-11502). The engine TMistEffect path lives at
+// src/effect.cpp:3241 (engine-driven via TParticleEffectComponent +
+// effects.def); this bespoke class is the BESPOKE canonical per the
+// wave-04 pivot. Both coexist; the harness picks one via the test ID.
+//
+// 50 drops with retail pos/vel envelope (MIST_LENGTH=64 etc.); ascends,
+// falls under gravity (RIPPLE_GRAVITY=0.37 wu/tick²), respawns-in-place
+// on landing (pos.z <= 0). SetAddBlendState -> AdditiveStraight.
+// One sub-object (snapshot GetObject(0)) renders all 50 billboards.
+
+TMistEffect_Bespoke* TMistEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kMistCandidates[] = {
+        "Magic\\mist.i3d",
+        "Misc\\mist.i3d",        // byte-identical duplicate per M05 forensics §4
+    };
+
+    auto* mist = new TMistEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    mist->ForcePos(origin);
+    mist->SetMapIndex(MapPane.MakeIndex());
+    mist->ActivateComponents();
+
+    mist->texture_ = TryLoadMagicTexture(kMistCandidates,
+                                         int32_t(sizeof(kMistCandidates) / sizeof(*kMistCandidates)),
+                                         mist->uv_rect_, "mist");
+
+    // Snapshot effect_old.cpp:11383-11392 — seed all 50 drops up-front.
+    for (int32_t i = 0; i < kMistMaxDrops; ++i)
+    {
+        SMistDrop& d = mist->drops_[i];
+        d.vel.X = float(random(-kMistLength, kMistLength) / 32.0f);
+        d.vel.Y = float(random(-kMistWidth,  kMistWidth)  / 32.0f);
+        d.vel.Z = float(random(kMistHeight / 2, kMistHeight));
+        d.pos.X = float(random(-kMistLength, kMistLength) / 2.0f);
+        d.pos.Y = float(random(-kMistWidth,  kMistWidth)  / 2.0f);
+        d.pos.Z = kMistSpawnZ;
+        d.dead = false;
+    }
+    mist->alive_ = true;
+
+    log_info("[mist-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u drops=%d",
+             mist->GetMapIndex(), origin.x, origin.y, origin.z,
+             mist->texture_, kMistMaxDrops);
+    return mist;
+}
+
+void TMistEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick gate (snapshot was ungated; at modern 60fps drops fly
+    // 2.5x too fast — same gate fix as B01/H03/M05-engine/H04/L02).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kMistSimTickMs))
+    {
+        sim_accum_ms_ -= double(kMistSimTickMs);
+
+        // Snapshot effect_old.cpp:11432-11453 — per-drop Animate. dead
+        // drops re-roll pos+vel; live drops integrate Euler with gravity;
+        // pos.z <= 0 -> dead.
+        for (int32_t i = 0; i < kMistMaxDrops; ++i)
+        {
+            SMistDrop& d = drops_[i];
+            if (d.dead)
+            {
+                d.vel.X = float(random(-kMistLength, kMistLength) / 32.0f);
+                d.vel.Y = float(random(-kMistWidth,  kMistWidth)  / 32.0f);
+                d.vel.Z = float(random(kMistHeight / 2, kMistHeight));
+                d.pos.X = float(random(-kMistLength, kMistLength) / 2.0f);
+                d.pos.Y = float(random(-kMistWidth,  kMistWidth)  / 2.0f);
+                d.pos.Z = kMistSpawnZ;
+                d.dead = false;
+            }
+            d.pos.X += d.vel.X;
+            d.pos.Y += d.vel.Y;
+            d.pos.Z += d.vel.Z;
+            d.vel.Z -= kMistGravity;
+            if (d.pos.Z <= 0.0f)
+            {
+                d.dead = true;
+                // Snapshot AddNewRipple call is commented-out per M05 §7.6.
+            }
+        }
+    }
+
+    // --- Render port (effect_old.cpp:11463-11502). SetAddBlendState ->
+    // AdditiveStraight. Single sub-object drives all 50 drops.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = Pos();
     SBillboardDrawItem item = {};
+    item.size_wu[0] = kMistBaseSizeWu * kMistScale;   // snapshot scl = 0.7
+    item.size_wu[1] = kMistBaseSizeWu * kMistScale;
+    // Cool-white wisp tint (matches engine TMistEffect's color choice for
+    // visual continuity between bespoke + engine paths).
+    item.color_rgba[0] = 0.16f;
+    item.color_rgba[1] = 0.18f;
+    item.color_rgba[2] = 0.22f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+
+    for (int32_t i = 0; i < kMistMaxDrops; ++i)
+    {
+        const SMistDrop& d = drops_[i];
+        if (d.dead)
+            continue;
+        item.world_pos[0] = float(base.x) + d.pos.X;
+        item.world_pos[1] = float(base.y) + d.pos.Y;
+        item.world_pos[2] = float(base.z) + d.pos.Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// X09 — TShieldEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TShieldAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:4336-4392). Animator-only in pre-release; bridges
+// via an existing TEffect on the caster object. Animator is the simplest
+// in this batch: Animate is a no-op; Render draws ONE mesh sub-object at
+// pos.z=40 with SHIELD_SCALE=2.0 and a fixed -π/3 X-rotation + -π/4
+// Z-rotation. SetBlendState -> Alpha (preserved AS WRITTEN).
+//
+// First-pass: single Alpha billboard at the shield position; real mesh
+// (sphere/ellipsoid enveloping the victim) is a follow-up upgrade.
+
+TShieldEffect_Bespoke* TShieldEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kShieldCandidates[] = {
+        "Magic\\shield.i3d",
+        "Magic\\Shield.I3D",
+        "Magic\\shield1.i3d",
+    };
+
+    auto* shield = new TShieldEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    shield->ForcePos(origin);
+    shield->SetMapIndex(MapPane.MakeIndex());
+    shield->ActivateComponents();
+
+    shield->texture_ = TryLoadMagicTexture(kShieldCandidates,
+                                           int32_t(sizeof(kShieldCandidates) / sizeof(*kShieldCandidates)),
+                                           shield->uv_rect_, "shield");
+
+    // Snapshot effect_old.cpp:4336-4342 — Initialize sets pos = (0,0,40).
+    shield->pos_.X = 0.0f;
+    shield->pos_.Y = 0.0f;
+    shield->pos_.Z = kShieldLiftZ;
+    shield->framenum_ = 0;
+    shield->alive_ = true;
+
+    log_info("[shield] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             shield->GetMapIndex(), origin.x, origin.y, origin.z, shield->texture_);
+    return shield;
+}
+
+void TShieldEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate port (effect_old.cpp:4351-4355): empty (base call only,
+    // a no-op). 24Hz sim-tick gate runs an empty body — kept here for
+    // symmetry with the other bespoke effects.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kShieldSimTickMs))
+        {
+            sim_accum_ms_ -= double(kShieldSimTickMs);
+            ++framenum_;
+            // Snapshot Animate is empty — no state change.
+        }
+    }
+
+    // --- Render port (effect_old.cpp:4364-4391). SetBlendState -> Alpha.
+    // Snapshot binds GetObject(0) and applies:
+    //   scl = SHIELD_SCALE=2.0
+    //   pos = (0,0,40)
+    //   RotateX(-π/3), RotateZ(-π/4)
+    // Then RenderObject(obj). One mesh draw per frame.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kShieldSizeWu * kShieldScale;
+    item.size_wu[1] = kShieldSizeWu * kShieldScale;
+    // Pale blue shield tint.
+    item.color_rgba[0] = 0.6f;
+    item.color_rgba[1] = 0.85f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 0.8f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    const S3DPoint& base = Pos();
+    item.world_pos[0] = float(base.x) + pos_.X;
+    item.world_pos[1] = float(base.y) + pos_.Y;
+    item.world_pos[2] = float(base.z) + pos_.Z;
+    Renderer->SubmitFxBillboard(item);
+}
+
+// *************************************************************************
+// * wave-bespoke-05: sparkle/glow family bespoke ports                     *
+// *************************************************************************
+//
+// X03 TFlareEffect_Bespoke / X10 TSymGlowEffect_Bespoke / M07
+// TPhotonEffect_Bespoke / M08 TPixieEffect_Bespoke — faithful direct
+// ports of the snapshot animators (effect_old.cpp + missileeffect.cpp)
+// driving the --test=vfx harness for the FB+LS / PE+LS / IM+LS
+// pipelines. See class doc-comments in effect.h for per-effect notes.
+
+namespace {
+
+// Asset paths from Class.Def (registered names → I3D paths). The harness
+// loads via TObjectImagery::FindImagery + LoadImagery so paths are
+// matched against the canonical registry name.
+constexpr const char* kFlareBespokeImageryPath   = "Misc\\IrisFlare.I3D";
+constexpr const char* kSymGlowBespokeImageryPath = "Misc\\SymGlow.I3D";
+constexpr const char* kPhotonBespokeImageryPath  = "Magic\\Photon.I3D";
+constexpr const char* kPixieBespokeImageryPath   = "misc\\Pixies.i3d";
+
+// Local helpers — mirrors SubObjTextureSlot / ResolveSubObjUv at
+// effect.cpp:1484 / :1507 (anonymous-namespace scoped there so we
+// re-declare here for the sparkle/glow batch).
+int32_t SparkleSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+void SparkleResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Load + sanity-check an imagery path. Returns a (TObjectImagery*,
+// T3DImagery*) pair or {nullptr, nullptr} on failure. Caller owns the
+// returned imagery (delete via TObjectImagery::FreeImagery only if not
+// passed into a TEffect — once the TEffect takes it the effect owns it).
+struct SLoadedImagery
+{
+    TObjectImagery* base  = nullptr;
+    T3DImagery*     img3d = nullptr;
+};
+
+SLoadedImagery SparkleLoadImagery(const char* path, const char* tag)
+{
+    SLoadedImagery out;
+    const int32_t img_id = TObjectImagery::FindImagery(path);
+    if (img_id < 0)
+    {
+        log_error("[%s] SpawnForTest: FindImagery('%s') failed", tag, path);
+        return out;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[%s] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  tag, img_id, path);
+        return out;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[%s] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  tag, path);
+        TObjectImagery::FreeImagery(base);
+        return out;
+    }
+    out.base  = base;
+    out.img3d = img3d;
+    return out;
+}
+
+}   // namespace
+
+// ----- X03 TFlareEffect_Bespoke -------------------------------------------
+
+TFlareEffect_Bespoke* TFlareEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SLoadedImagery loaded = SparkleLoadImagery(kFlareBespokeImageryPath, "flare");
+    if (!loaded.img3d)
+        return nullptr;
+
+    auto* flare = new TFlareEffect_Bespoke(loaded.base);
+    flare->ForcePos(origin);
+    flare->SetMapIndex(MapPane.MakeIndex());
+    flare->ActivateComponents();
+
+    // Lazy-mesh-init poke (NumObjects triggers actual mesh load).
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[flare] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
+                  num_obj, num_tex);
+        delete flare;
+        return nullptr;
+    }
+
+    // Resolve sub-object 0's texture + UV. TFlareAnimator only uses
+    // GetObject(0) (effect_old.cpp:586).
+    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    flare->texture_ = tex.htexture;
+    SparkleResolveSubObjUv(loaded.img3d, 0, flare->uv_rect_);
+    flare->size_wu_ = kFlareBespokeBaseSizeWu;
+    if (flare->texture_ == kInvalidTexture)
+    {
+        log_error("[flare] SpawnForTest: sub-object 0 texture unresolved");
+        delete flare;
+        return nullptr;
+    }
+
+    // --- Port of TFlareAnimator::Initialize (effect_old.cpp:517-550).
+    // Zero out per-spark position/velocity; the material zeroing in the
+    // original is a D3D-specific tint setup we don't need (the renderer
+    // applies its own per-instance color modulation).
+    for (int32_t c = 0; c < kFlareBespokeNumSparks; ++c)
+    {
+        flare->sparks_[c].p = hmm_vec3{0.0f, 0.0f, 0.0f};
+        flare->sparks_[c].v = hmm_vec3{0.0f, 0.0f, 0.0f};
+    }
+
+    log_info("[flare] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u uv=[%.3f,%.3f %.3fx%.3f]",
+             kFlareBespokeImageryPath, flare->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             flare->texture_,
+             flare->uv_rect_[0], flare->uv_rect_[1],
+             flare->uv_rect_[2], flare->uv_rect_[3]);
+    return flare;
+}
+
+void TFlareEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
     // --- Update: port of TFlareAnimator::Animate (effect_old.cpp:557-582).
     // Framerate-independent via the 24Hz sim-tick accumulator. Each tick
     // runs the original per-tick integration exactly once.
@@ -8563,6 +9464,689 @@ TSymGlowEffect_Bespoke* TSymGlowEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPo
 }
 
 void TSymGlowEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TSymGlowAnimator::Animate (effect_old.cpp:4615-4633).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSymGlowBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSymGlowBespokeSimTickMs);
+
+        // effect_old.cpp:4619: timer++.
+        timer_++;
+
+        // effect_old.cpp:4621-4622: every 40 ticks flip dz sign.
+        if (!(timer_ % kSymGlowBespokeFlipTicks))
+            dz_ *= -1.0f;
+
+        // effect_old.cpp:4624: zscale += dz.
+        zscale_ += dz_;
+
+        // effect_old.cpp:4626-4630: clamp zscale to [2, 5].
+        if (zscale_ < kSymGlowBespokeZMin)
+            zscale_ = kSymGlowBespokeZMin;
+        else if (zscale_ > kSymGlowBespokeZMax)
+            zscale_ = kSymGlowBespokeZMax;
+
+        // effect_old.cpp:4632: u = random(2,8)/100. The original advances
+        // the per-vertex tu accumulator by `u` each Render. We accumulate
+        // it here per sim-tick (the Render and Animate run once each per
+        // sim-tick in the original) so the scroll cadence matches.
+        const float u_step = float(random(kSymGlowBespokeUScrollMin,
+                                          kSymGlowBespokeUScrollMax)) / 100.0f;
+        u_offset_ += u_step;
+        if (u_offset_ > 4096.0f)
+            u_offset_ -= 4096.0f;     // keep bounded over long sessions
+    }
+
+    // --- Render: port of TSymGlowAnimator::Render (effect_old.cpp:4642-4665).
+    // SetBlendState = Alpha. Single sub-object drawn once with:
+    //   scl = (1.4, 1.4, zscale)  — zscale 2..5 stretches the quad
+    //                                vertically (a 2D billboard, so this
+    //                                reads as an aspect-stretched glow)
+    //   per-vert tu += u           — V-scroll (the field is named tu but
+    //                                in effect.cpp:4602 the SetupObjects
+    //                                shifts tv; the Animate scrolls tu).
+    const S3DPoint& base = Pos();
+    SBillboardDrawItem item = {};
+    item.world_pos[0] = float(base.x);
+    item.world_pos[1] = float(base.y);
+    item.world_pos[2] = float(base.z);
+    // scl: (1.4, 1.4, zscale). On a screen-aligned 2D billboard, the
+    // X = horizontal scale, Y = vertical scale — Z is unused in our
+    // submission shape, so we fold the zscale onto the vertical size
+    // (the snapshot's scl.z effectively stretches the quad's height
+    // because the SymGlow imagery is a vertical sigil).
+    item.size_wu[0] = size_wu_ * kSymGlowBespokeScaleXY;
+    item.size_wu[1] = size_wu_ * zscale_;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    // UV-scroll: shift the U origin by the accumulated u_offset (the
+    // snapshot's per-vertex tu += u). The renderer wraps tex coords so
+    // accumulated offsets are fine.
+    item.uv_rect[0] = uv_rect_[0] + u_offset_;
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    Renderer->SubmitFxBillboard(item);
+
+    // --- LS coupling: soft warm point light at the symbol origin, gently
+    // modulated by zscale so the light pulses with the breathing scale.
+    const float t = (zscale_ - kSymGlowBespokeZMin)
+                  / (kSymGlowBespokeZMax - kSymGlowBespokeZMin);
+    const float intensity = kSymGlowBespokeLightIntensity * (0.6f + 0.4f * t);
+    Renderer->AddPointLight(float(base.x), float(base.y), float(base.z) + 32.0f,
+                            kSymGlowBespokeLightRadiusWu,
+                            1.0f, 0.78f, 0.32f,
+                            intensity);
+}
+
+// ----- M07 TPhotonEffect_Bespoke ------------------------------------------
+
+void TPhotonEffect_Bespoke::ResetLaunch_()
+{
+    // --- Port of TPhotonAnimator::Initialize (missileeffect.cpp:187-234).
+    // Initialize central flare (slot 0).
+    p_[0].X = p_[0].Y = p_[0].Z = 0.0f;
+    v_[0].X = v_[0].Y = v_[0].Z = 0.0f;
+    scale_[0]    = 1.0f;
+    framenum_[0] = 0;
+
+    // Initialize the starting position of each spark, its scale and a
+    // delay before it starts (a neg. framenum). NUM_PHOTON_SPARKS=16.
+    for (int32_t n = 1; n < kPhotonBespokeNumSparks; n++)
+    {
+        p_[n].X = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
+        p_[n].Y = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
+        p_[n].Z = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
+
+        // Set a vector for most of the sparks to move them to the center
+        // of the effect (missileeffect.cpp:213-219).
+        if (n > kPhotonBespokeNumSparks / 3)
+        {
+            v_[n].X = -p_[n].X / float(kPhotonBespokeLaunchDuration * 3 / 4);
+            v_[n].Y = -p_[n].Y / float(kPhotonBespokeLaunchDuration * 3 / 4);
+            v_[n].Z = -p_[n].Z / float(kPhotonBespokeLaunchDuration * 3 / 4);
+        }
+        else
+        {
+            v_[n].X = v_[n].Y = v_[n].Z = 0.0f;
+        }
+
+        scale_[n] = 0.0f;
+
+        framenum_[n] = random(-kPhotonBespokeLaunchDuration / 2, 0);
+    }
+
+    // Initialize the framenums for the trailing photon sparks
+    // (missileeffect.cpp:229-230).
+    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++)
+        framenum_[n] = -1;
+
+    // Set how many photon sparks are active at the beginning
+    // (missileeffect.cpp:233).
+    activesparks_ = kPhotonBespokeNumSparks - 1;
+}
+
+void TPhotonEffect_Bespoke::EnterFly_()
+{
+    // --- Port of TPhotonAnimator::Animate FLY first-time block
+    // (missileeffect.cpp:302-322). Harness has no live velocity so we
+    // use a fixed back-projection direction (Y- = "behind" in iso).
+    // dir.x / dir.y / dir.z are in ROLLOVER units (1 wu = 65536); the
+    // snapshot scales each trailing photon by `t / ROLLOVER` along
+    // -dir, so we use a tiny fake vel that produces visible spacing.
+    constexpr float kFakeVelMag = 8.0f;   // per-step wu (matches MISSILE_SPEED feel)
+    const float dirx = 0.0f;
+    const float diry = kFakeVelMag;       // sim "moving south"
+    const float dirz = 0.0f;
+
+    // Initialize the variables for the leading photon (missileeffect.cpp:308-310).
+    p_[0].X = p_[0].Y = p_[0].Z = 0.0f;
+    scale_[0]    = 3.5f;
+    framenum_[0] = 0;
+
+    // Initialize the variables for the trailing photons
+    // (missileeffect.cpp:312-321).
+    int32_t t = 1;
+    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++, t++)
+    {
+        framenum_[n] = -t;
+        framenum_[t] = -1;
+        // Back-projection: -dir * t (skipping the ROLLOVER division —
+        // dir is already in our local wu/step scale).
+        p_[n].X = -dirx * float(t);
+        p_[n].Y = -diry * float(t);
+        p_[n].Z = -dirz * float(t);
+        scale_[n] = 3.5f - float(t) * kPhotonBespokeScaleStep;
+    }
+}
+
+void TPhotonEffect_Bespoke::EnterExplode_()
+{
+    // --- Port of TPhotonAnimator::Animate EXPLODE first-time block
+    // (missileeffect.cpp:335-353).
+    for (int32_t n = 0; n < kPhotonBespokeNumSparks; n++)
+    {
+        p_[n].X = p_[n].Y = p_[n].Z = 0.0f;
+        scale_[n] = 3.0f;
+
+        v_[n].X = float(random(-3, 3)) * 3.0f / 2.0f;
+        v_[n].Y = float(random(-3, 3)) * 3.0f / 2.0f;
+        v_[n].Z = float(random(-3, 3)) * 3.0f / 2.0f;
+
+        framenum_[n] = 0;
+    }
+    activesparks_ = kPhotonBespokeNumSparks;
+}
+
+TPhotonEffect_Bespoke* TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SLoadedImagery loaded = SparkleLoadImagery(kPhotonBespokeImageryPath, "photon");
+    if (!loaded.img3d)
+        return nullptr;
+
+    auto* photon = new TPhotonEffect_Bespoke(loaded.base);
+    photon->ForcePos(origin);
+    photon->SetMapIndex(MapPane.MakeIndex());
+    photon->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[photon] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
+                  num_obj, num_tex);
+        delete photon;
+        return nullptr;
+    }
+
+    // Get how many frames are in the texture (missileeffect.cpp:194-195).
+    S3DTex tex = {};
+    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    loaded.img3d->GetTexture(slot, &tex);
+    photon->texture_      = tex.htexture;
+    photon->numtexframes_ = tex.numframes > 0 ? tex.numframes : 1;
+    SparkleResolveSubObjUv(loaded.img3d, 0, photon->uv_rect_);
+    photon->size_wu_ = kPhotonBespokeBaseSizeWu;
+    if (photon->texture_ == kInvalidTexture)
+    {
+        log_error("[photon] SpawnForTest: sub-object 0 texture unresolved");
+        delete photon;
+        return nullptr;
+    }
+
+    // Set the beginning state of the effect (missileeffect.cpp:198).
+    photon->state_       = 0;     // MISSILE_LAUNCH
+    photon->oldstate_    = -1;    // force first-time on entry
+    photon->state_ticks_ = 0;
+    photon->ResetLaunch_();
+
+    log_info("[photon] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u numtexframes=%d uv=[%.3f,%.3f %.3fx%.3f]",
+             kPhotonBespokeImageryPath, photon->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             photon->texture_, photon->numtexframes_,
+             photon->uv_rect_[0], photon->uv_rect_[1],
+             photon->uv_rect_[2], photon->uv_rect_[3]);
+    return photon;
+}
+
+void TPhotonEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TPhotonAnimator::Animate (missileeffect.cpp:243-399).
+    // Framerate-independent via the 24Hz sim-tick accumulator.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kPhotonBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kPhotonBespokeSimTickMs);
+        state_ticks_++;
+
+        // Harness state machine: cycle LAUNCH (until activesparks<NUM/3)
+        // -> FLY (kPhotonBespokeFlyTicks) -> EXPLODE (until activesparks==0)
+        // -> IDLE (gap) -> LAUNCH again. In-game this would be driven by
+        // TMissileEffect::Pulse range/hit transitions, but the harness has
+        // no live missile machinery so we drive the cycle on a fixed cadence.
+
+        switch (state_)
+        {
+            case 0:     // MISSILE_LAUNCH
+            {
+                // missileeffect.cpp:256-259: adjust central flare.
+                framenum_[0]++;
+                if ((framenum_[0] > kPhotonBespokeLaunchDuration / 2)
+                    && (scale_[0] < 5.5f))
+                {
+                    scale_[0] += kPhotonBespokeScaleStep;
+                }
+
+                // missileeffect.cpp:262-295: adjust the other sparks.
+                for (int32_t n = 1; n < kPhotonBespokeNumSparks; n++)
+                {
+                    framenum_[n]++;
+
+                    if (framenum_[n] >= 0)
+                    {
+                        // Move the sparks (missileeffect.cpp:269-271).
+                        p_[n].X += v_[n].X;
+                        p_[n].Y += v_[n].Y;
+                        p_[n].Z += v_[n].Z;
+
+                        if (framenum_[n] > kPhotonBespokeLaunchDuration / 2)
+                        {
+                            // missileeffect.cpp:275-290: scale-down + retire.
+                            if (scale_[n] != 0.0f)
+                            {
+                                scale_[n] -= kPhotonBespokeScaleStep;
+                                if (scale_[n] <= 0.0f)
+                                {
+                                    activesparks_--;
+                                    // missileeffect.cpp:284-286: when 2/3 of
+                                    // sparks are gone, set missile status
+                                    // (= "ready to fly"). Harness analog:
+                                    // transition to FLY when the snapshot
+                                    // would set status.
+                                    scale_[n] = 0.0f;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // missileeffect.cpp:292-293: scale-up.
+                            scale_[n] += kPhotonBespokeScaleStep;
+                        }
+                    }
+                }
+
+                // State transition: in-game this happens when TMissileEffect
+                // sees the status flag (missileeffect.cpp:286). Harness
+                // mirrors: when activesparks_ < NUM/3.
+                if (activesparks_ < kPhotonBespokeNumSparks / 3)
+                {
+                    state_       = 1;     // MISSILE_FLY
+                    state_ticks_ = 0;
+                }
+                break;
+            }
+
+            case 1:     // MISSILE_FLY
+            {
+                if (state_ != oldstate_)
+                {
+                    EnterFly_();
+                }
+                else
+                {
+                    // missileeffect.cpp:325-327: just update the frame counter
+                    // for the trailing photons.
+                    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++)
+                        framenum_[n]++;
+                }
+
+                if (state_ticks_ >= kPhotonBespokeFlyTicks)
+                {
+                    state_       = 2;     // MISSILE_EXPLODE
+                    state_ticks_ = 0;
+                }
+                break;
+            }
+
+            case 2:     // MISSILE_EXPLODE
+            {
+                if (state_ != oldstate_)
+                {
+                    EnterExplode_();
+                }
+                else
+                {
+                    // missileeffect.cpp:357-393: per-spark integration +
+                    // scale fall + trailing-photon drain.
+                    for (int32_t n = 0; n < kPhotonBespokeNumSparks; n++)
+                    {
+                        const int32_t t = n + kPhotonBespokeNumSparks;
+                        framenum_[n]++;
+
+                        // Move the sparks (missileeffect.cpp:363-365).
+                        p_[n].X += v_[n].X;
+                        p_[n].Y += v_[n].Y;
+                        p_[n].Z += v_[n].Z;
+
+                        if (scale_[n] > 0.0f)
+                        {
+                            scale_[n] -= kPhotonBespokeScaleStep / 2.0f;
+                            if (scale_[n] <= 0.0f)
+                            {
+                                scale_[n] = 0.0f;
+                                activesparks_--;
+                            }
+                        }
+
+                        // Trailing photon drain (missileeffect.cpp:383-389).
+                        if (scale_[t] != 0.0f)
+                        {
+                            framenum_[t]++;
+                            scale_[t] -= kPhotonBespokeScaleStep / 2.0f;
+                            if (scale_[t] <= 0.0f)
+                                scale_[t] = 0.0f;
+                        }
+                    }
+                }
+
+                if (activesparks_ <= 0 || state_ticks_ >= kPhotonBespokeExplodeTicks)
+                {
+                    state_       = 3;     // IDLE (harness gap)
+                    state_ticks_ = 0;
+                }
+                break;
+            }
+
+            default:    // 3 = IDLE (harness-only gap before next LAUNCH)
+            {
+                if (state_ticks_ >= kPhotonBespokeIdleTicks)
+                {
+                    state_       = 0;     // back to LAUNCH
+                    state_ticks_ = 0;
+                    ResetLaunch_();
+                }
+                break;
+            }
+        }
+
+        // Keep track of the state we're in (missileeffect.cpp:398).
+        oldstate_ = state_;
+    }
+
+    // --- Render: port of TPhotonAnimator::Render (missileeffect.cpp:408-441).
+    // SetBlendState = Alpha. Single sub-object drawn up to 32 times with
+    // per-spark scale and position.
+    const S3DPoint& base = Pos();
+    SParticleDrawItem item = {};
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.key.texture     = texture_;
+    item.rotation_rad    = 0.0f;
+    // UV: snapshot picks per-spark frame = framenum % numtexframes
+    // (missileeffect.cpp:429). The decoded photon.i3d texture's frames
+    // are laid out along U (each frame occupies 1/numtexframes_ of the
+    // U range). We compute the per-frame UV sub-rect at submission time.
+
+    for (int32_t n = 0; n < kPhotonBespokeSlots; n++)
+    {
+        // missileeffect.cpp:418: only render the spark if framenum is positive.
+        if (framenum_[n] < 0)
+            continue;
+        if (scale_[n] <= 0.0f)
+            continue;
+
+        // missileeffect.cpp:424-426: scale + position.
+        const float scl = scale_[n];
+        item.size_wu[0] = size_wu_ * scl;
+        item.size_wu[1] = size_wu_ * scl;
+        item.world_pos[0] = float(base.x) + p_[n].X;
+        item.world_pos[1] = float(base.y) + p_[n].Y;
+        item.world_pos[2] = float(base.z) + p_[n].Z;
+
+        // Per-spark frame UV. The snapshot's `frame = framenum % numtexframes`
+        // (missileeffect.cpp:429) cycles the bound texture frame; we slice
+        // the authored U range into numtexframes_ cells and pick the
+        // (framenum % numtexframes_)-th.
+        const int32_t fnum = framenum_[n] % numtexframes_;
+        if (numtexframes_ > 1)
+        {
+            const float cell_w = uv_rect_[2] / float(numtexframes_);
+            item.uv_rect[0] = uv_rect_[0] + cell_w * float(fnum);
+            item.uv_rect[1] = uv_rect_[1];
+            item.uv_rect[2] = cell_w;
+            item.uv_rect[3] = uv_rect_[3];
+        }
+        else
+        {
+            item.uv_rect[0] = uv_rect_[0];
+            item.uv_rect[1] = uv_rect_[1];
+            item.uv_rect[2] = uv_rect_[2];
+            item.uv_rect[3] = uv_rect_[3];
+        }
+
+        Renderer->SubmitFxParticle(item);
+    }
+
+    // --- LS coupling: re-add one bright blue-white point light at the
+    // effect origin per frame. Brightest at EXPLODE (per the bolt
+    // discharge); fades with the leading-spark scale during LAUNCH/FLY.
+    float light_t = 0.5f;
+    if (state_ == 2)    // EXPLODE — brightest
+        light_t = 1.0f;
+    else if (scale_[0] > 0.0f)
+        light_t = std::fmin(1.0f, scale_[0] / 5.5f);
+    Renderer->AddPointLight(float(base.x), float(base.y), float(base.z) + 24.0f,
+                            kPhotonBespokeLightRadiusWu,
+                            0.7f, 0.85f, 1.0f,
+                            kPhotonBespokeLightIntensity * light_t);
+}
+
+// ----- M08 TPixieEffect_Bespoke -------------------------------------------
+
+TPixieEffect_Bespoke* TPixieEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SLoadedImagery loaded = SparkleLoadImagery(kPixieBespokeImageryPath, "pixie");
+    if (!loaded.img3d)
+        return nullptr;
+
+    auto* pixie = new TPixieEffect_Bespoke(loaded.base);
+    pixie->ForcePos(origin);
+    pixie->SetMapIndex(MapPane.MakeIndex());
+    pixie->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[pixie] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
+                  num_obj, num_tex);
+        delete pixie;
+        return nullptr;
+    }
+
+    // Resolve the 2 sub-objects (pix[i].time = 0 or 1 selects between
+    // them; effect_old.cpp:12237 GetObject(pix[i].time)). Fall back to
+    // sub-object 0 if only one exists.
+    for (int32_t i = 0; i < 2; ++i)
+    {
+        const int32_t obj = (num_obj > i) ? i : 0;
+        const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, obj);
+        const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+        S3DTex tex = {};
+        loaded.img3d->GetTexture(slot, &tex);
+        pixie->textures_[i] = tex.htexture;
+        SparkleResolveSubObjUv(loaded.img3d, obj, pixie->uv_rect_[i]);
+    }
+    pixie->size_wu_ = kPixieBespokeBaseSizeWu;
+    if (pixie->textures_[0] == kInvalidTexture)
+    {
+        log_error("[pixie] SpawnForTest: sub-object 0 texture unresolved");
+        delete pixie;
+        return nullptr;
+    }
+    if (pixie->textures_[1] == kInvalidTexture)
+        pixie->textures_[1] = pixie->textures_[0];     // fall back to first
+
+    // --- Port of TPixieAnimator::Initialize (effect_old.cpp:12109-12127).
+    for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
+    {
+        // scale.x/y/z = random(MINSCALE*1000, MAXSCALE*1000) / 1000.
+        const float s = float(random(int32_t(kPixieBespokeMinScale * 1000.0f),
+                                     int32_t(kPixieBespokeMaxScale * 1000.0f))) / 1000.0f;
+        pixie->pix_[i].scale.X = pixie->pix_[i].scale.Y = pixie->pix_[i].scale.Z = s;
+        pixie->pix_[i].pos.X = float(random(-32, 32));
+        pixie->pix_[i].pos.Y = float(random(-32, 32));
+        pixie->pix_[i].pos.Z = float(random(-32, 32));
+        pixie->pix_[i].vel.X = float(random(-32, 32)) / 25.0f;
+        pixie->pix_[i].vel.Y = float(random(-32, 32)) / 25.0f;
+        pixie->pix_[i].vel.Z = float(random(-32, 32)) / 25.0f;
+        pixie->pix_[i].time  = random(0, 1);
+    }
+    pixie->charnear_     = 100;
+    pixie->sim_accum_ms_ = 0.0;
+
+    log_info("[pixie] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "textures={%u,%u} num_obj=%d",
+             kPixieBespokeImageryPath, pixie->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             pixie->textures_[0], pixie->textures_[1], num_obj);
+    return pixie;
+}
+
+void TPixieEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TPixieAnimator::Animate (effect_old.cpp:12129-12227).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kPixieBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kPixieBespokeSimTickMs);
+
+        // Per-particle integration (effect_old.cpp:12134-12163).
+        for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
+        {
+            // scale.x += random(-35, 35) / 1000.
+            pix_[i].scale.X += float(random(-35, 35)) / 1000.0f;
+            // The snapshot has scale.y = scale.z = scale.x commented out
+            // (effect_old.cpp:12137 — "//pix[i].scale.y = pix[i].scale.z =
+            // pix[i].scale.x;"). We DO NOT re-instate it (preserve dead-
+            // code form as written). Only scale.x is mutated.
+            if (pix_[i].scale.X > 0.07f)
+                pix_[i].scale.X = 0.07f;
+
+            // pos += vel.
+            pix_[i].pos.X += pix_[i].vel.X;
+            pix_[i].pos.Y += pix_[i].vel.Y;
+            pix_[i].pos.Z += pix_[i].vel.Z;
+
+            // Centring restorative force (effect_old.cpp:12143-12154).
+            if (pix_[i].pos.X > 0.0f)
+                pix_[i].vel.X -= kPixieBespokeAcc;
+            if (pix_[i].pos.X < 0.0f)
+                pix_[i].vel.X += kPixieBespokeAcc;
+            if (pix_[i].pos.Y > 0.0f)
+                pix_[i].vel.Y -= kPixieBespokeAcc;
+            if (pix_[i].pos.Y < 0.0f)
+                pix_[i].vel.Y += kPixieBespokeAcc;
+            if (pix_[i].pos.Z > 0.0f)
+                pix_[i].vel.Z -= kPixieBespokeAcc;
+            if (pix_[i].pos.Z < 0.0f)
+                pix_[i].vel.Z += kPixieBespokeAcc;
+
+            // Time-flip on a 1/49 chance (effect_old.cpp:12155-12156).
+            if (random(0, 48) == 17)
+                pix_[i].time = 1 - pix_[i].time;
+
+            // Floor clamp (effect_old.cpp:12157-12158).
+            if (pix_[i].pos.Z < -float(kPixieBespokeHeight))
+                pix_[i].pos.Z = -float(kPixieBespokeHeight);
+
+            // Scale clamp (effect_old.cpp:12159-12162).
+            if (pix_[i].scale.X < kPixieBespokeMinScale)
+                pix_[i].scale.X = kPixieBespokeMinScale;
+            if (pix_[i].scale.X > kPixieBespokeMaxScale)
+                pix_[i].scale.X = kPixieBespokeMaxScale;
+        }
+
+        // effect_old.cpp:12164-12226: FindObjectsInRange character-flee
+        // logic. Harness has no live character iteration in --test=vfx,
+        // so we skip this block entirely. charnear_ stays at 100 (= 1.0x
+        // scale on per-particle pos in Render). The "resume to origpos"
+        // branch is also a no-op because the harness pins the effect at
+        // a fixed origin via ForcePos.
+    }
+
+    // --- Render: port of TPixieAnimator::Render (effect_old.cpp:12229-12264).
+    // SetBlendState = Alpha. Per-particle: pick sub-object (pix[i].time),
+    // scale uniform by scale.x/(1+time*2), rotate Z by -face*TORADIAN
+    // (face is 0 for a sector-less harness effect — so rotation is 0),
+    // translate to (pos.x*charnear/100, pos.y*charnear/100, PIX_HEIGHT+pos.z).
+    const S3DPoint& base = Pos();
+    SParticleDrawItem item = {};
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.rotation_rad    = 0.0f;     // face = 0 in harness (no in-game facing)
+
+    for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
+    {
+        // Pick sub-object (effect_old.cpp:12237: obj = GetObject(pix[i].time)).
+        const int32_t time_idx = pix_[i].time != 0 ? 1 : 0;
+        item.key.texture = textures_[time_idx];
+        item.uv_rect[0] = uv_rect_[time_idx][0];
+        item.uv_rect[1] = uv_rect_[time_idx][1];
+        item.uv_rect[2] = uv_rect_[time_idx][2];
+        item.uv_rect[3] = uv_rect_[time_idx][3];
+
+        // Per-particle scale (effect_old.cpp:12243).
+        // obj->scl = scale.x / (1 + (time * 2.0f)).
+        const float scl = pix_[i].scale.X / (1.0f + float(pix_[i].time) * 2.0f);
+        item.size_wu[0] = size_wu_ * scl;
+        item.size_wu[1] = size_wu_ * scl;
+
+        // Position (effect_old.cpp:12252-12254).
+        const float wx = float(base.x) + (pix_[i].pos.X * float(charnear_)) / 100.0f;
+        const float wy = float(base.y) + (pix_[i].pos.Y * float(charnear_)) / 100.0f;
+        const float wz = float(base.z) + float(kPixieBespokeHeight) + pix_[i].pos.Z;
+        item.world_pos[0] = wx;
+        item.world_pos[1] = wy;
+        item.world_pos[2] = wz;
+
+        Renderer->SubmitFxParticle(item);
+    }
+
+    // --- LS coupling: soft blue-green point light at the swarm centre.
+    // Modulated by the mean scale of the swarm so the light gently pulses.
+    float mean_scale = 0.0f;
+    for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
+        mean_scale += pix_[i].scale.X;
+    mean_scale /= float(kPixieBespokeNumParts);
+    const float t = (mean_scale - kPixieBespokeMinScale)
+                  / (kPixieBespokeMaxScale - kPixieBespokeMinScale);
+    const float intensity = kPixieBespokeLightIntensity * (0.6f + 0.4f * std::fmax(0.0f, std::fmin(1.0f, t)));
+    Renderer->AddPointLight(float(base.x), float(base.y),
+                            float(base.z) + float(kPixieBespokeHeight),
+                            kPixieBespokeLightRadiusWu,
+                            0.55f, 0.95f, 0.85f,
+                            intensity);
+}
+
+// *************************************************************************
 // * Wave 2 batch wave-bespoke-06-strip-ribbon: faithful direct ports of   *
 // * pre-release snapshot animator bodies for Strip / ribbon family.       *
 // * Translation rules: identical math, identical variable names where     *
@@ -9013,378 +10597,655 @@ void TShockAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mod
     if (!Renderer)
         return;
 
-    // --- Update: port of TSymGlowAnimator::Animate (effect_old.cpp:4615-4633).
+    // --- Animate() (effectcomp.cpp :636-663):
     sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kSymGlowBespokeSimTickMs))
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
     {
-        sim_accum_ms_ -= double(kSymGlowBespokeSimTickMs);
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+        if (done_)
+            break;
 
-        // effect_old.cpp:4619: timer++.
-        timer_++;
+        // scaling
+        scale_.X *= scale_factor_.X;
+        scale_.Y *= scale_factor_.Y;
+        scale_.Z *= scale_factor_.Z;
 
-        // effect_old.cpp:4621-4622: every 40 ticks flip dz sign.
-        if (!(timer_ % kSymGlowBespokeFlipTicks))
-            dz_ *= -1.0f;
-
-        // effect_old.cpp:4624: zscale += dz.
-        zscale_ += dz_;
-
-        // effect_old.cpp:4626-4630: clamp zscale to [2, 5].
-        if (zscale_ < kSymGlowBespokeZMin)
-            zscale_ = kSymGlowBespokeZMin;
-        else if (zscale_ > kSymGlowBespokeZMax)
-            zscale_ = kSymGlowBespokeZMax;
-
-        // effect_old.cpp:4632: u = random(2,8)/100. The original advances
-        // the per-vertex tu accumulator by `u` each Render. We accumulate
-        // it here per sim-tick (the Render and Animate run once each per
-        // sim-tick in the original) so the scroll cadence matches.
-        const float u_step = float(random(kSymGlowBespokeUScrollMin,
-                                          kSymGlowBespokeUScrollMax)) / 100.0f;
-        u_offset_ += u_step;
-        if (u_offset_ > 4096.0f)
-            u_offset_ -= 4096.0f;     // keep bounded over long sessions
-    }
-
-    // --- Render: port of TSymGlowAnimator::Render (effect_old.cpp:4642-4665).
-    // SetBlendState = Alpha. Single sub-object drawn once with:
-    //   scl = (1.4, 1.4, zscale)  — zscale 2..5 stretches the quad
-    //                                vertically (a 2D billboard, so this
-    //                                reads as an aspect-stretched glow)
-    //   per-vert tu += u           — V-scroll (the field is named tu but
-    //                                in effect.cpp:4602 the SetupObjects
-    //                                shifts tv; the Animate scrolls tu).
-    const S3DPoint& base = Pos();
-    SBillboardDrawItem item = {};
-    item.world_pos[0] = float(base.x);
-    item.world_pos[1] = float(base.y);
-    item.world_pos[2] = float(base.z);
-    // scl: (1.4, 1.4, zscale). On a screen-aligned 2D billboard, the
-    // X = horizontal scale, Y = vertical scale — Z is unused in our
-    // submission shape, so we fold the zscale onto the vertical size
-    // (the snapshot's scl.z effectively stretches the quad's height
-    // because the SymGlow imagery is a vertical sigil).
-    item.size_wu[0] = size_wu_ * kSymGlowBespokeScaleXY;
-    item.size_wu[1] = size_wu_ * zscale_;
-    item.color_rgba[0] = 1.0f;
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-
-    // --- Core beam cylinders (snapshot :8472-8505).
-    // 4 nested cylinders (cyl04/01/02/03 at sub-obj 0..3). The snapshot
-    // stretches them to scl.z = length/64 along the beam axis; here we
-    // stamp 8 billboard quads along the beam axis instead (count tuned
-    // to give continuous beam read at length=500). Pass = first in
-    // render order (depth-test on, alpha) — snapshot :8475 subspell>1.
-    if (subspell_ > 1)
-    {
-        const int32_t beam_quads = 8;
-        for (int32_t k = 0; k < beam_quads; ++k)
+        // check growth, and shrinking
+        if ((scale_.X > max_size_.X || scale_.Y > max_size_.Y || scale_.Z > max_size_.Z)
+            && grow_ == kGrow)
         {
-            const float t = float(k) / float(beam_quads - 1);   // 0..1
-            const float along = -t * length_;                    // 0..−length
-            for (int32_t cyl = 0; cyl < 4; ++cyl)
+            if (flags_ & kFlagShrink)
             {
-                const int32_t obj_idx = cyl;
-                if (subobj_tex_[obj_idx] == kInvalidTexture)
-                    continue;
-                item.world_pos[0] = float(base_pos.x) + dx * (-along);
-                item.world_pos[1] = float(base_pos.y) + dy * (-along);
-                item.world_pos[2] = float(base_pos.z);
-                item.size_wu[0] = item.size_wu[1] =
-                    kIceBoltCylSizeWu * cylscale_;
-                item.key.texture = subobj_tex_[obj_idx];
-                std::memcpy(item.uv_rect, subobj_uv_[obj_idx],
-                            sizeof(item.uv_rect));
-                Renderer->SubmitFxBillboard(item);
+                grow_ = kShrink;
+                scale_factor_.X = shrink_factor_.X;
+                scale_factor_.Y = shrink_factor_.Y;
+                scale_factor_.Z = shrink_factor_.Z;
+            }
+            else
+            {
+                done_ = true;
             }
         }
-    }
-
-    // --- Spirals + rings (snapshot :8507-8571). subspell>0 +
-    // frameon < GD*3 (snapshot :8507).
-    if (frameon_ < kIceBoltGrowDuration * 3)
-    {
-        // Spirals (cyl06 = sub-obj 6, snapshot :8510-8545). numrevs =
-        // length/100 segments, two mirrored helices per segment.
-        if (subspell_ > 0
-            && subobj_tex_[kIceBoltCylSpiral] != kInvalidTexture)
+        else if ((scale_.X < min_size_.X || scale_.Y < min_size_.Y || scale_.Z < min_size_.Z)
+                 && grow_ == kShrink)
         {
-            // `max` is a macro from revtypes.h:20, so std::max won't parse
-            // here; expand inline.
-            const int32_t numrevs_raw = int32_t(length_) / 100;
-            const int32_t numrevs = numrevs_raw > 1 ? numrevs_raw : 1;
-            const float zscale = length_ / float(numrevs);
-            for (int32_t j = 0; j < numrevs; ++j)
-            {
-                const float ypos = -float(j) * zscale;
-                for (int32_t i = 0; i < 2; ++i)
-                {
-                    const float ang = (i ? float(M_PI) - spiralang_
-                                          : spiralang_);
-                    // Helix offset perpendicular to beam axis.
-                    const float ox = std::cos(ang) * kIceBoltSpiralSizeWu;
-                    const float oz = std::sin(ang) * kIceBoltSpiralSizeWu;
-                    item.world_pos[0] =
-                        float(base_pos.x) + dx * (-ypos) + ox;
-                    item.world_pos[1] =
-                        float(base_pos.y) + dy * (-ypos);
-                    item.world_pos[2] = float(base_pos.z) + oz;
-                    item.size_wu[0] = item.size_wu[1] =
-                        kIceBoltSpiralSizeWu * spiralscale_;
-                    item.key.texture = subobj_tex_[kIceBoltCylSpiral];
-                    std::memcpy(item.uv_rect, subobj_uv_[kIceBoltCylSpiral],
-                                sizeof(item.uv_rect));
-                    Renderer->SubmitFxBillboard(item);
-                }
-            }
-        }
-        // Rings (cyl05 = sub-obj 5, snapshot :8547-8570). length/100
-        // instances, slide along beam at RING_SPEED, wrap by length.
-        if (subobj_tex_[kIceBoltCylRing] != kInvalidTexture)
-        {
-            // `max`/`min` are macros from revtypes.h:20-21, so std::max won't
-            // parse here; expand inline.
-            const int32_t num_rings_raw = int32_t(length_) / 100;
-            const int32_t num_rings = num_rings_raw > 1 ? num_rings_raw : 1;
-            for (int32_t i = 0; i < num_rings; ++i)
-            {
-                // Snapshot :8563: y = -((ringout + 100*i) % length).
-                const int32_t length_raw = int32_t(length_);
-                const int32_t lengthi = length_raw > 1 ? length_raw : 1;
-                const int32_t y_int =
-                    -((int32_t(ringout_) + 100 * i) % lengthi);
-                const float ypos = float(y_int);
-                item.world_pos[0] = float(base_pos.x) + dx * (-ypos);
-                item.world_pos[1] = float(base_pos.y) + dy * (-ypos);
-                item.world_pos[2] = float(base_pos.z);
-                item.size_wu[0] = item.size_wu[1] =
-                    kIceBoltRingSizeWu * cylscale_;
-                item.key.texture = subobj_tex_[kIceBoltCylRing];
-                std::memcpy(item.uv_rect, subobj_uv_[kIceBoltCylRing],
-                            sizeof(item.uv_rect));
-                Renderer->SubmitFxBillboard(item);
-            }
+            done_ = true;
         }
     }
 
-    // --- End glow spheres (snapshot :8573-8600). 2x box01, one at
-    // y=0 (caster end), one at y=−length (target end). subspell>0.
-    if (subspell_ > 0
-        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
+    if (done_)
+        return;
+
+    // --- Render() (effectcomp.cpp :689-770):
+    // Snapshot computes alpha_blend_factor = (max - scale) / (max - init) when
+    // SHOCKWAVE_FLAG_FADE set, and multiplies the alpha by it. (RGB
+    // commented out in snapshot.) We do the same.
+    float alpha_blend_factor = 1.0f;
+    if (flags_ & kFlagFade)
     {
-        for (int32_t i = 0; i < 2; ++i)
+        alpha_blend_factor = (max_size_.X - scale_.X) /
+                             (max_size_.X - init_scale_.X);
+        if (alpha_blend_factor < 0.0f) alpha_blend_factor = 0.0f;
+        if (alpha_blend_factor > 1.0f) alpha_blend_factor = 1.0f;
+    }
+
+    // Snapshot draws ONE object with `ring_count * vertex_count` lverts.
+    // We collapse to one ring of kRingVertices billboards on the world XY
+    // plane, radius = scale.x * 10wu (the snapshot mesh shape isn't
+    // directly accessible — first-pass approximation).
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    const float r = scale_.X * 10.0f;
+    const float a = ring_color_[3] * alpha_blend_factor;
+    for (int32_t j = 0; j < kRingVertices; ++j)
+    {
+        const float th = float(j) / float(kRingVertices) * 6.28318530718f;
+        const float wx = pos_.X + std::cos(th) * r;
+        const float wy = pos_.Y + std::sin(th) * r;
+        const float wz = pos_.Z;
+
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = wx;
+        item.world_pos[1] = wy;
+        item.world_pos[2] = wz;
+        // Per-vertex size = a bit of the radius so consecutive billboards
+        // overlap into a continuous ring.
+        const float ring_segment_wu = r * 0.35f + 4.0f;
+        item.size_wu[0] = ring_segment_wu;
+        item.size_wu[1] = ring_segment_wu;
+        item.color_rgba[0] = ring_color_[0];
+        item.color_rgba[1] = ring_color_[1];
+        item.color_rgba[2] = ring_color_[2];
+        item.color_rgba[3] = a;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        // Snapshot Render() :756-758 sets SRCBLEND=SRC_ALPHA /
+        // DESTBLEND=INV_SRC_ALPHA -> EFxBlend::Alpha. (Preserved verbatim;
+        // do not reinterpret as Additive.)
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        // Ground-plane ring -> WorldXY so it foreshortens correctly.
+        item.orientation     = EFxBillboardOrientation::WorldXY;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// S07 TStreamerEffect_Bespoke
+// =========================================================================
+// Snapshot source: src/effect_old.cpp :10248-10434 (TStreamerAnimator).
+// 4 streams (j=0..3), each per tick spawns STREAMER_SKIP*(4-j) new
+// particles via InitStreamer(j); particle pos is sphere-mapped from
+// (th, h) into (cos*r, sin*r, vertical), with modif = 0.5*(1+cos(2h+PI))
+// for a smooth ring growth. Lifetime gated by frameon > STREAMER_DURATION.
+// Render uses SetAddBlendState (AdditiveStraight).
+
+TStreamerEffect_Bespoke* TStreamerEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TStreamerEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // Snapshot Initialize() (effect_old.cpp :10297-10322):
+    eff->frameon_ = 0;
+    for (int32_t j = 0; j < kStreamerMaxStreams; ++j)
+    {
+        eff->scl_init_[j] = 0.15f * float(j + 1);
+        eff->dscl_[j]     = eff->scl_init_[j] / float(kStreamerMaxParticles);
+        eff->h_[j]        = 0.0f;
+        eff->dh_[j]       = 0.02f / float(4 - j);
+        eff->th_[j]       = 0.0f;
+        eff->dth_[j]      = 0.15f;
+        for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
+            eff->stream_[j][i].count = 0;
+    }
+    eff->alive_ = true;
+
+    log_info("[S07 streamer_bespoke] SpawnForTest: origin=(%d,%d,%d)",
+             origin.x, origin.y, origin.z);
+    return eff;
+}
+
+// Snapshot InitStreamer (effect_old.cpp :10276-10295) — adds one particle
+// to stream x at the current (th, h) parametric point, advances angles,
+// short-circuits frameon if h crosses PI.
+void TStreamerEffect_Bespoke::InitStreamerSnap(int32_t x)
+{
+    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};
+    const float modif = float(0.5 * (1.0 + std::cos(2.0 * double(h_[x]) + M_PI)));
+    pos.X = float(kStreamerModifier) * std::cos(th_[x]) * modif *
+            float(x + 1) / float(kStreamerMaxStreams);
+    pos.Y = float(kStreamerModifier) * std::sin(th_[x]) * modif *
+            float(x + 1) / float(kStreamerMaxStreams);
+    pos.Z = float(kStreamerModifierV) * (std::cos(h_[x]) + 1.0f);
+    h_[x] += dh_[x];
+    if (h_[x] > float(M_PI))
+    {
+        // h_[x] -= M_PI;  (commented out in snapshot)
+        frameon_ = kStreamerDuration + 1;
+    }
+    if (h_[x] > float(2.0 * M_PI))
+        h_[x] -= float(2.0 * M_PI);
+    th_[x] += dth_[x];
+    if (th_[x] > float(2.0 * M_PI))
+        th_[x] -= float(2.0 * M_PI);
+    AddStreamerSnap(x, pos, scl_init_[x] * modif);
+}
+
+// Snapshot AddStreamer (effect_old.cpp :10324-10347) — finds the LAST
+// dead slot (snapshot does `if (count <= 0) p = i` in a forward sweep,
+// so p ends as the last free index), populates it, then decrements all
+// counts and scales for the whole stream.
+void TStreamerEffect_Bespoke::AddStreamerSnap(int32_t num, const hmm_vec3& pos, float scl)
+{
+    int32_t p = -1;
+    for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
+    {
+        if (stream_[num][i].count <= 0)
+            p = i;
+    }
+    if (p > -1)
+    {
+        stream_[num][p].pos.X = pos.X;
+        stream_[num][p].pos.Y = pos.Y;
+        stream_[num][p].pos.Z = pos.Z;
+        stream_[num][p].scl = scl;
+        stream_[num][p].count = kStreamerMaxParticles;
+    }
+    for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
+    {
+        stream_[num][i].count--;
+        stream_[num][i].scl -= dscl_[num];
+    }
+}
+
+void TStreamerEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate() (effect_old.cpp :10356-10381):
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
+    {
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+        if (!alive_)
+            break;
+        frameon_++;
+        for (int32_t j = 0; j < kStreamerMaxStreams; ++j)
         {
-            const float ypos = -length_ * float(i);   // :8595
-            item.world_pos[0] = float(base_pos.x) + dx * (-ypos);
-            item.world_pos[1] = float(base_pos.y) + dy * (-ypos);
-            item.world_pos[2] = float(base_pos.z);
-            item.size_wu[0] = item.size_wu[1] =
-                kIceBoltGlowSizeWu * (spherescale_[i] * 0.5f);
-            item.key.texture = subobj_tex_[kIceBoltBox01];
-            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
-                        sizeof(item.uv_rect));
-            Renderer->SubmitFxBillboard(item);
+            for (int32_t i = 0; i < kStreamerSkip * (4 - j); ++i)
+                InitStreamerSnap(j);
+        }
+        if (frameon_ > kStreamerDuration)
+        {
+            alive_ = false;
+            break;
         }
     }
 
-    // --- Frost particles (snapshot :8602-8628). 50 box01 quads at
-    // p[i] offset −length in y (clustered at target end).
-    if (subobj_tex_[kIceBoltBox01] != kInvalidTexture)
-    {
-        for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
-        {
-            const SIceBoltFrostParticle& f = frost_[i];
-            if (f.t > 0)
-                continue;                                        // :8605
-            // Snapshot :8622-8624: pos = (p.x, p.y − length, p.z).
-            const float lx = f.pos.X;
-            const float ly = f.pos.Y - length_;
-            const float lz = f.pos.Z;
-            // Rotate local (lx,ly) into world by beam facing (dx,dy).
-            item.world_pos[0] =
-                float(base_pos.x) + dx * (-ly) + lx;
-            item.world_pos[1] =
-                float(base_pos.y) + dy * (-ly);
-            item.world_pos[2] = float(base_pos.z) + lz;
-            item.size_wu[0] = item.size_wu[1] =
-                kIceBoltFrostSizeWu * f.s;
-            item.key.texture = subobj_tex_[kIceBoltBox01];
-            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
-                        sizeof(item.uv_rect));
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
+    if (!alive_)
+        return;
 
-    // --- Snow flurry (snapshot :8630-8657). subspell>2; orbits the
-    // beam axis, sweeps along beam after beat 2*GD, blows up after 5*GD.
-    if (subspell_ > 2
-        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
+    // --- Render() (effect_old.cpp :10390-10434):
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    const float ox = float(Pos().x);
+    const float oy = float(Pos().y);
+    const float oz = float(Pos().z);
+    for (int32_t j = 0; j < kStreamerMaxStreams; ++j)
     {
-        for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
+        for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
         {
-            const SIceBoltSnowParticle& sn = snow_[i];
-            // Snapshot :8649-8653: pos = (r·cos th, r·sin th − cy?, h).
-            const float lx = sn.r * std::cos(sn.th);
-            float       ly = sn.r * std::sin(sn.th);
-            if (frameon_ > kIceBoltGrowDuration * 2)
-                ly -= cy_;                                       // :8652
-            const float lz = sn.h;
-            item.world_pos[0] =
-                float(base_pos.x) + dx * (-ly) + lx;
-            item.world_pos[1] =
-                float(base_pos.y) + dy * (-ly);
-            item.world_pos[2] = float(base_pos.z) + lz;
-            item.size_wu[0] = item.size_wu[1] =
-                kIceBoltSnowSizeWu * sn.sz;
-            item.key.texture = subobj_tex_[kIceBoltBox01];
-            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
-                        sizeof(item.uv_rect));
+            const SStreamerParticleEx& sp = stream_[j][i];
+            if (sp.count <= 0 || sp.scl <= 0.0f)
+                continue;
+            // Snapshot Render: ScaleMatrix(scl), RotateX(-PI/2)+RotateX(-PI/6)+
+            // RotateZ(-PI/4)+RotateZ(-face*TORADIAN). The orientation rotations
+            // are baked into "face the camera flat", which billboards already
+            // do; we use ScreenAligned + the snapshot's pos.
+            SBillboardDrawItem item = {};
+            item.world_pos[0] = ox + sp.pos.X;
+            item.world_pos[1] = oy + sp.pos.Y;
+            item.world_pos[2] = oz + sp.pos.Z;
+            const float size_wu = sp.scl * 12.0f;   // imagery scale -> wu
+            item.size_wu[0] = size_wu;
+            item.size_wu[1] = size_wu;
+            item.color_rgba[0] = 1.0f;
+            item.color_rgba[1] = 1.0f;
+            item.color_rgba[2] = 1.0f;
+            item.color_rgba[3] = 1.0f;
+            item.uv_rect[0] = 0.0f;
+            item.uv_rect[1] = 0.0f;
+            item.uv_rect[2] = 1.0f;
+            item.uv_rect[3] = 1.0f;
+            item.key.texture     = spark_tex;
+            item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+            // Snapshot Render() :10395-10396 SetAddBlendState -> AdditiveStraight.
+            item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+            item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+            item.light_mode      = EFxLightMode::Unlit;
+            item.orientation     = EFxBillboardOrientation::ScreenAligned;
+            item.debug_mode      = debug_mode;
             Renderer->SubmitFxBillboard(item);
         }
     }
 }
 
-// --- I22 TIcedEffect bespoke -------------------------------------------
-//
-// FAITHFUL DIRECT PORT of TIcedAnimator (snapshot effect_old.cpp:
-// 8749-8953). 3-phase state machine: HOLD (240 ticks reveal facets) →
-// SHATTER (seed 30 chunks) → TUMBLE/BOUNCE (gravity + bounce death).
-// Posted by I21 (and retail-only TStormAnimator); harness runs it
-// standalone — no victim coupling (icedchar = nullptr; SetParalize,
-// IsIced, IsDead, Stop branches are guarded out for sector-less preview;
-// lifecycle ticks purely on frameon).
-//
-// Engine adaptations:
-//   - Render path swaps RenderObject(obj) for SubmitFxBillboard. Phase A
-//     (HOLD): draws min(frameon*4, 50) face billboards stacked at the
-//     origin (snapshot transforms cycle facets via D3DMATRIXRotateZ).
-//     Phase B+C (SHATTER+TUMBLE): one billboard per live chunk at p[i]
-//     world position.
-//   - 24 Hz sim-tick gate (family pattern). Per-tick math (gravity,
-//     bounce, rotation) runs once per accumulated 1/24 s.
-//   - icedchar lifecycle paths (SetParalize/Stop/IsDead) guarded out;
-//     lifecycle is "elapsed frameon" only.
+// =========================================================================
+// X11 TRibbonAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/effect_old.cpp :4069-4321. The revive halo's
+// composite: NUM_RIBBON_SPARKS=30 small sparks orbiting in a column above
+// the ribbon position, plus a slow-growing center spark at the floor,
+// plus NUM_RIBBONS=3 rotating ribbons. Pre-release reads
+// (PTReviveEffect)inst->stage / ->target — neither exists in the harness,
+// so we land in the "no spell" branch (effect_old.cpp :4180-4186, grow
+// ribscale to RIBBON_MAXSCALE then hold).
+
+TRibbonAnimator_Bespoke* TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TRibbonAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // Snapshot Initialize() (effect_old.cpp :4084-4134):
+    // numtexframes from imagery (NOT bound; default 1).
+    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
+    eff->ribbontimer_ = 0;
+    eff->ribpos_.X = float(origin.x);
+    eff->ribpos_.Y = float(origin.y);
+    eff->ribpos_.Z = float(origin.z);
+    eff->ribscale_ = 0.05f;   // RIBBON_MINSCALE
+    for (int32_t n = 0; n < NUM_RIBBONS; ++n)
+        eff->rotation_[n] = float(n) * 2.0f;
+    for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
+    {
+        eff->p_[n].X = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+        eff->p_[n].Y = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+        eff->p_[n].Z = float(random(0, RIBBON_RADIUS / 2));
+        eff->v_[n].X = -eff->p_[n].X / float(RIBBON_SPARK_DURATION) / 2.0f;
+        eff->v_[n].Y = -eff->p_[n].Y / float(RIBBON_SPARK_DURATION) / 2.0f;
+        eff->v_[n].Z = 0.5f;
+        eff->scale_spark_[n] = 0.0f;
+        eff->framenum_[n] = random(-NUM_RIBBON_SPARKS, 0);
+    }
+    eff->centertilt_     = 0.0f;
+    eff->centertilt_dx_  = 0.001f;
+    eff->alive_          = true;
+
+    log_info("[X11 ribbon_bespoke] SpawnForTest: origin=(%d,%d,%d)",
+             origin.x, origin.y, origin.z);
+    return eff;
+}
+
+void TRibbonAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate() (effect_old.cpp :4143-4235):
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
+    {
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+        if (!alive_)
+            break;
+        ribbontimer_++;
+        // Rotate ribbons (snapshot :4157).
+        for (int32_t n = 0; n < NUM_RIBBONS; ++n)
+            rotation_[n] += 0.2f;
+        // No PTReviveEffect in harness — take the else-branch (snapshot
+        // :4180-4186): grow ribscale to RIBBON_MAXSCALE.
+        const float RIBBON_MAXSCALE = 4.5f;
+        const float RIBBON_MINSCALE = 0.05f;
+        const float RIBBON_SCALEINC =
+            (RIBBON_MAXSCALE - RIBBON_MINSCALE) / float(kRibbonGrowFrames);
+        if (ribscale_ <= RIBBON_MAXSCALE)
+            ribscale_ += RIBBON_SCALEINC;
+
+        // Update all ribbon sparks (snapshot :4191-4228).
+        for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
+        {
+            framenum_[n]++;
+            if (framenum_[n] > 0)
+            {
+                if (framenum_[n] >= RIBBON_SPARK_DURATION)
+                {
+                    p_[n].X = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+                    p_[n].Y = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+                    p_[n].Z = float(random(0, RIBBON_RADIUS / 2));
+                    v_[n].X = -p_[n].X / float(RIBBON_SPARK_DURATION) / 2.0f;
+                    v_[n].Y = -p_[n].Y / float(RIBBON_SPARK_DURATION) / 2.0f;
+                    v_[n].Z = 0.5f;
+                    framenum_[n] = 0;
+                    scale_spark_[n] = 0.0f;
+                }
+                else if (framenum_[n] > RIBBON_SPARK_DURATION / 2)
+                    scale_spark_[n] -= float(RIBBON_SPARK_SCALE_STEP);
+                else
+                    scale_spark_[n] += float(RIBBON_SPARK_SCALE_STEP);
+                p_[n].X += v_[n].X;
+                p_[n].Y += v_[n].Y;
+                p_[n].Z += v_[n].Z;
+                v_[n].Z += 0.5f;
+            }
+        }
+        centertilt_ += centertilt_dx_;
+        if (centertilt_ > 0.25f || centertilt_ < -0.25f)
+            centertilt_dx_ = -centertilt_dx_;
+
+        // Harness self-kill — snapshot relies on PTReviveEffect to KillThisEffect;
+        // we use a fixed one-shot duration so the Combat-cadence harness can
+        // re-trigger cleanly.
+        if (ribbontimer_ >= kRibbonLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render() (effect_old.cpp :4244-4321):
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    const float ox = ribpos_.X;
+    const float oy = ribpos_.Y;
+    const float oz = ribpos_.Z;
+
+    // 1) Ribbon sparks (snapshot :4257-4277). For each spark with framenum>0
+    // and scale>0, draw the obj at p_[n] with scale_spark_[n].
+    for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
+    {
+        if (framenum_[n] > 0 && scale_spark_[n] > 0.0f)
+        {
+            SBillboardDrawItem item = {};
+            item.world_pos[0] = ox + p_[n].X;
+            item.world_pos[1] = oy + p_[n].Y;
+            item.world_pos[2] = oz + p_[n].Z;
+            const float size_wu = scale_spark_[n] * 16.0f;
+            item.size_wu[0] = size_wu;
+            item.size_wu[1] = size_wu;
+            item.color_rgba[0] = 1.0f;
+            item.color_rgba[1] = 1.0f;
+            item.color_rgba[2] = 1.0f;
+            item.color_rgba[3] = 1.0f;
+            item.uv_rect[0] = 0.0f;
+            item.uv_rect[1] = 0.0f;
+            item.uv_rect[2] = 1.0f;
+            item.uv_rect[3] = 1.0f;
+            item.key.texture     = spark_tex;
+            item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+            // Snapshot Render() :4248-4249 SetBlendState -> Alpha.
+            item.key.blend       = uint8_t(EFxBlend::Alpha);
+            item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+            item.light_mode      = EFxLightMode::Unlit;
+            item.orientation     = EFxBillboardOrientation::ScreenAligned;
+            item.debug_mode      = debug_mode;
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+
+    // 2) Center floor spark (snapshot :4283-4294).
+    {
+        const float scl = ribscale_ * 2.5f + (float(random(0, 10)) / 20.0f);
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = ox;
+        item.world_pos[1] = oy;
+        item.world_pos[2] = oz;
+        const float size_wu = scl * 12.0f;
+        item.size_wu[0] = size_wu;
+        item.size_wu[1] = size_wu;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::WorldXY;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+
+    // 3) Ribbons (snapshot :4301-4316). Three rotating ribbons sitting at
+    // ribpos. Each ribbon's z is scaled 2x x/y (snapshot :4308-4309); we
+    // stand them in as three world-XY-tipped billboards offset upward,
+    // rotating around ribpos via rotation_[n].
+    for (int32_t n = 0; n < NUM_RIBBONS; ++n)
+    {
+        const float ang = rotation_[n];
+        const float offs = ribscale_ * 8.0f;
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = ox + std::cos(ang) * offs;
+        item.world_pos[1] = oy + std::sin(ang) * offs;
+        item.world_pos[2] = oz + ribscale_ * 10.0f;
+        const float ribbon_size_wu = ribscale_ * 16.0f;
+        item.size_wu[0] = ribbon_size_wu;
+        item.size_wu[1] = ribbon_size_wu * 2.0f;       // snapshot scl.z = 2x scl.x/y
+        item.color_rgba[0] = 0.9f;
+        item.color_rgba[1] = 0.85f;
+        item.color_rgba[2] = 0.55f;                    // pale gold
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// *************************************************************************
+// * TWaterFallEffect_Bespoke (H02) + TWaterEffect_Bespoke (H01)            *
+// *   first-pass faithful direct ports of the snapshot TWaterFallAnimator  *
+// *   and TWaterAnimator render/integration bodies.                        *
+// *                                                                        *
+// * Source of truth:                                                       *
+// *   - TWaterFallAnimator: src/effect_old.cpp:11685-11873                 *
+// *   - TWaterAnimator:     src/effect_old.cpp:11895-12073                 *
+// *                                                                        *
+// * Render path note: the snapshot Render() bodies for BOTH effects        *
+// * write D3DRENDERSTATE_SRCBLEND=ONE / DESTBLEND=ONE (additive accumulate)*
+// * with the SetAddBlendState() call commented out. We honour the WRITTEN  *
+// * factor pair verbatim — EFxBlend::AdditiveStraight (ONE/ONE). Per       *
+// * orchestrator brief: "PRESERVE the snapshot's blend mode AS WRITTEN.    *
+// * Don't reinterpret."                                                    *
+// *                                                                        *
+// * Asset: both classes share `misc\Water.i3d` (imagery.rvi confirms;      *
+// * H01 entry maps "Water" -> misc\Water.i3d, H02 entry "Waterfall" ->     *
+// * misc\Water.i3d). Single sub-object, single texture — billboard the    *
+// * drop sprite per particle. Snapshot rendered with full D3D matrices    *
+// * (RotateZ -π/4 + per-instance face rotation); we collapse to a         *
+// * screen-aligned billboard for first-pass since the rotation knob isn't *
+// * on SBillboardDrawItem.                                                 *
+// *************************************************************************
 
 namespace {
 
-constexpr const char* kIcedImageryPath = "Magic\\iced.I3D";
+constexpr const char* kWaterImageryPath = "misc\\Water.i3d";   // shared H01/H02
 
-// Snapshot constants. Variable names follow effect_old.cpp:8715-8721.
-constexpr float kIcedBouncePlane    = 16.0f;   // p.z <= 16 (snapshot :8876)
-constexpr float kIcedBounceLift     = 20.0f;   // p.z = 20 (:8878)
-constexpr float kIcedBounceVelMul   = -0.5f;   // v.z *= -0.5 (:8879)
-constexpr float kIcedBounceSpinMul  = 2.0f;    // w *= 2 (:8880-8882)
-constexpr int32_t kIcedRowsPerSide  = 5;       // chunk z-row spread (:8819: i/6 implies ~5 rows)
-constexpr float kIcedRowSpacingZ    = 25.0f;   // :8819 row spacing 25 wu
-constexpr float kIcedFacetSizeWu    = 24.0f;   // single-facet billboard size
+// Snapshot constants — direct from effect_old.cpp:11693-11699.
+constexpr int32_t kWaterFallMaxDrops  = 100;
+constexpr int32_t kWaterFallLength    = 64;
+constexpr int32_t kWaterFallHeight    = 64;
+constexpr float   kWaterFallScale     = 0.1f;
+constexpr float   kWaterFallGravity   = 0.25f;
+constexpr float   kWaterFallTallScale = 2.0f;
 
-}   // namespace
+// Snapshot constants — direct from effect_old.cpp:11903-11909.
+constexpr int32_t kWaterMaxDrops      = 25;
+constexpr int32_t kWaterLength        = 64;
+constexpr int32_t kWaterWidth         = 64;
+constexpr float   kWaterScale         = 0.2f;
+constexpr float   kWaterTallScale     = 0.1f;
+constexpr float   kWaterSpeed         = 2.0f;
 
-TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+// 24 Hz sim-tick gate — every animator on the project ports to this.
+constexpr int32_t kWaterSimTickMs     = 1000 / 24;
+
+// First-pass billboard size in world units (drop billboard, ~16 wu base
+// scaled per-particle by drops[i].scale.x for visual variance). The
+// snapshot drove this through D3DMATRIXScale + Render with vertices in
+// a unit box mesh; we collapse to a single billboard scaled by an
+// average of (scale.x, scale.y) so the per-drop fall-time stretch is
+// approximated rather than dropped.
+constexpr float   kWaterBaseSizeWu    = 16.0f;
+
+// Resolve the .I3D's first nonzero texture slot via the shared helper.
+// (SubObjTextureSlot / ResolveSubObjUv are file-static in the blood
+// namespace above; re-declared as forward-only refs here.)
+//
+// Forward refs into the blood namespace above. Re-implement small
+// wrappers in this anonymous namespace to keep coupling explicit and
+// avoid yanking the blood namespace open here.
+int32_t WaterSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
 {
-    // --- Load Magic\iced.I3D (forensics §4 — byte-identical asset
-    // confirmed MD5 10e7e15b3cd6b491e47ab1743b5cdf8e snapshot vs ship).
-    const int32_t img_id = TObjectImagery::FindImagery(kIcedImageryPath);
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0) return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+void WaterResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Load Misc\Water.i3d, resolve sub-object 0's texture/UV. Shared by
+// both effects (imagery.rvi entries "Water" and "Waterfall" both point
+// at misc\Water.i3d).
+bool LoadWaterImagery(TObjectImagery*& out_base,
+                      T3DImagery*&    out_img3d,
+                      TTextureHandle& out_texture,
+                      float           out_uv_rect[4])
+{
+    out_base = nullptr;
+    out_img3d = nullptr;
+    out_texture = kInvalidTexture;
+    out_uv_rect[0] = 0.0f; out_uv_rect[1] = 0.0f;
+    out_uv_rect[2] = 1.0f; out_uv_rect[3] = 1.0f;
+
+    const int32_t img_id = TObjectImagery::FindImagery(kWaterImageryPath);
     if (img_id < 0)
     {
-        log_error("[iced] SpawnForTest: FindImagery('%s') failed",
-                  kIcedImageryPath);
-        return nullptr;
+        log_error("[water] LoadWaterImagery: FindImagery('%s') failed",
+                  kWaterImageryPath);
+        return false;
     }
     TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
     if (!base)
     {
-        log_error("[iced] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  img_id, kIcedImageryPath);
-        return nullptr;
+        log_error("[water] LoadWaterImagery: LoadImagery(id=%d '%s') failed",
+                  img_id, kWaterImageryPath);
+        return false;
     }
     T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
     if (!img3d)
     {
-        log_error("[iced] SpawnForTest: imagery for '%s' is not a T3DImagery",
-                  kIcedImageryPath);
+        log_error("[water] LoadWaterImagery: imagery '%s' is not T3DImagery",
+                  kWaterImageryPath);
         TObjectImagery::FreeImagery(base);
-        return nullptr;
+        return false;
     }
-
-    auto* iced = new TIcedEffect_Bespoke(base);
-    iced->ForcePos(origin);
-    iced->SetMapIndex(MapPane.MakeIndex());
-    iced->ActivateComponents();
-
-    // Lazy-mesh-init poke.
+    // Lazy mesh-load poke pattern (B01/F01/H04/X22).
     const int32_t num_obj = img3d->NumObjects();
     const int32_t num_tex = img3d->NumTextures();
     if (num_obj <= 0 || num_tex <= 0)
     {
-        log_error("[iced] SpawnForTest: imagery underspec'd "
+        log_error("[water] LoadWaterImagery: imagery underspec'd "
                   "(objects=%d, textures=%d)", num_obj, num_tex);
-        delete iced;
-        return nullptr;
+        return false;
     }
-
-    // Resolve sub-object 0 (the cube chunk mesh) texture for billboards.
-    // Forensics §4: iced.I3D has face01..43 reveal facets + icicle01..06
-    // + a cube chunk mesh at sub-obj 0 used for the shatter phase.
-    const int32_t tex_slot = SubObjTextureSlot(img3d, 0);
+    const int32_t tex_slot = WaterSubObjTextureSlot(img3d, 0);
     const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
     S3DTex tex = {};
     img3d->GetTexture(slot, &tex);
-    iced->facet_tex_ = tex.htexture;
-    ResolveSubObjUv(img3d, 0, iced->facet_uv_);
-    iced->facet_size_wu_ = kIcedFacetSizeWu;
-
-    if (iced->facet_tex_ == kInvalidTexture)
-    {
-        log_error("[iced] SpawnForTest: sub-obj 0 texture unresolved — "
-                  "facet/chunk billboards will draw nothing");
-    }
-
-    // Port of TIcedAnimator::Initialize (snapshot :8749-8756).
-    iced->frameon_      = 0;                                    // :8752
-    iced->angle_        = float(random(0, 359))
-                            * float(TORADIAN);                  // :8753
-    // icedchar_ stays nullptr (harness has no victim) — :8754
-    iced->donebouncing_ = 0;                                    // :8755
-
-    log_info("[iced] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "angle=%.3f facet_tex=%u num_obj=%d",
-             kIcedImageryPath, iced->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             iced->angle_, iced->facet_tex_, num_obj);
-    return iced;
+    out_base = base;
+    out_img3d = img3d;
+    out_texture = tex.htexture;
+    WaterResolveSubObjUv(img3d, 0, out_uv_rect);
+    return true;
 }
 
-void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-    // --- Render (port of TAuraAnimator::Render, effect_old.cpp:3657-3667).
-    // SetAddBlendState -> AdditiveStraight, preserved AS WRITTEN.
-    if (texture_ == kInvalidTexture)
-        return;
+}   // namespace
 
-    const S3DPoint& base = Pos();
-    for (int32_t i = 0; i < kAuraCount; ++i)
-    {
-        const SAuraParticle& p = particles_[i];
-        if (!p.used)
-            continue;
-
-        SBillboardDrawItem item = {};
-        // size_wu scaled by per-particle scl (snapshot ranges 0.25..0.6).
-        const float size = 32.0f * p.scl.X;
-        item.size_wu[0] = size;
-        item.size_wu[1] = size;
-        // Aura tint — warm gold (placeholder until forensics confirms).
-        item.color_rgba[0] = 1.0f;
-        item.color_rgba[1] = 0.85f;
-        item.color_rgba[2] = 0.40f;
+// =========================================================================
 // * H02 — TWaterFallEffect_Bespoke                                         *
 // =========================================================================
 
@@ -9720,1705 +11581,6 @@ void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
         item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
         item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        item.orientation     = EFxBillboardOrientation::ScreenAligned;
-        item.debug_mode      = debug_mode;
-        item.world_pos[0] = float(base.x) + p.pos.X;
-        item.world_pos[1] = float(base.y) + p.pos.Y;
-        item.world_pos[2] = float(base.z) + p.pos.Z;
-    // --- Animate() (effectcomp.cpp :636-663):
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
-    {
-        sim_accum_ms_ -= double(kStripFamilySimTickMs);
-        if (done_)
-            break;
-
-        // scaling
-        scale_.X *= scale_factor_.X;
-        scale_.Y *= scale_factor_.Y;
-        scale_.Z *= scale_factor_.Z;
-
-        // check growth, and shrinking
-        if ((scale_.X > max_size_.X || scale_.Y > max_size_.Y || scale_.Z > max_size_.Z)
-            && grow_ == kGrow)
-        {
-            if (flags_ & kFlagShrink)
-            {
-                grow_ = kShrink;
-                scale_factor_.X = shrink_factor_.X;
-                scale_factor_.Y = shrink_factor_.Y;
-                scale_factor_.Z = shrink_factor_.Z;
-            }
-            else
-            {
-                done_ = true;
-            }
-        }
-        else if ((scale_.X < min_size_.X || scale_.Y < min_size_.Y || scale_.Z < min_size_.Z)
-                 && grow_ == kShrink)
-        {
-            done_ = true;
-        }
-    }
-
-    if (done_)
-        return;
-
-    // --- Render() (effectcomp.cpp :689-770):
-    // Snapshot computes alpha_blend_factor = (max - scale) / (max - init) when
-    // SHOCKWAVE_FLAG_FADE set, and multiplies the alpha by it. (RGB
-    // commented out in snapshot.) We do the same.
-    float alpha_blend_factor = 1.0f;
-    if (flags_ & kFlagFade)
-    {
-        alpha_blend_factor = (max_size_.X - scale_.X) /
-                             (max_size_.X - init_scale_.X);
-        if (alpha_blend_factor < 0.0f) alpha_blend_factor = 0.0f;
-        if (alpha_blend_factor > 1.0f) alpha_blend_factor = 1.0f;
-    }
-
-    // Snapshot draws ONE object with `ring_count * vertex_count` lverts.
-    // We collapse to one ring of kRingVertices billboards on the world XY
-    // plane, radius = scale.x * 10wu (the snapshot mesh shape isn't
-    // directly accessible — first-pass approximation).
-    const TTextureHandle spark_tex = StripFamilySparkTexture();
-    if (spark_tex == kInvalidTexture)
-        return;
-
-    const float r = scale_.X * 10.0f;
-    const float a = ring_color_[3] * alpha_blend_factor;
-    for (int32_t j = 0; j < kRingVertices; ++j)
-    {
-        const float th = float(j) / float(kRingVertices) * 6.28318530718f;
-        const float wx = pos_.X + std::cos(th) * r;
-        const float wy = pos_.Y + std::sin(th) * r;
-        const float wz = pos_.Z;
-
-        SBillboardDrawItem item = {};
-        item.world_pos[0] = wx;
-        item.world_pos[1] = wy;
-        item.world_pos[2] = wz;
-        // Per-vertex size = a bit of the radius so consecutive billboards
-        // overlap into a continuous ring.
-        const float ring_segment_wu = r * 0.35f + 4.0f;
-        item.size_wu[0] = ring_segment_wu;
-        item.size_wu[1] = ring_segment_wu;
-        item.color_rgba[0] = ring_color_[0];
-        item.color_rgba[1] = ring_color_[1];
-        item.color_rgba[2] = ring_color_[2];
-        item.color_rgba[3] = a;
-        item.uv_rect[0] = 0.0f;
-        item.uv_rect[1] = 0.0f;
-        item.uv_rect[2] = 1.0f;
-        item.uv_rect[3] = 1.0f;
-        item.key.texture     = spark_tex;
-        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        // Snapshot Render() :756-758 sets SRCBLEND=SRC_ALPHA /
-        // DESTBLEND=INV_SRC_ALPHA -> EFxBlend::Alpha. (Preserved verbatim;
-        // do not reinterpret as Additive.)
-        item.key.blend       = uint8_t(EFxBlend::Alpha);
-        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        // Ground-plane ring -> WorldXY so it foreshortens correctly.
-        item.orientation     = EFxBillboardOrientation::WorldXY;
-        item.debug_mode      = debug_mode;
-        Renderer->SubmitFxBillboard(item);
-    }
-}
-
-// =========================================================================
-// M03 — THealEffect_Bespoke
-// =========================================================================
-//
-// Faithful direct port of THealAnimator::Initialize/Animate/Render
-// (src/effect_old.cpp:628-833). NUM_HEAL_BUBBLES=60 bubbles + a
-// cylindrical glow at the feet. HEAL_DURATION=40 ticks total: glow
-// grows for HEAL_DURATION/2, then shrinks once activebubbles==0.
-// Per-bubble: random pos in ±HEALING_RADIUS=20, rises with `rise` at
-// random(3,6)*4/3 wu/tick, scale shrinks by HEAL_SCALE_STEP=0.15
-// until invisible; respawns until framenum[0] > HEAL_DURATION.
-// SetBlendState -> Alpha (preserved AS WRITTEN).
-
-THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    static const char* kHealCandidates[] = {
-        "Magic\\heal.i3d",
-        "Magic\\Heal.I3D",
-        "Magic\\heal1.i3d",
-    };
-
-    auto* heal = new THealEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    heal->ForcePos(origin);
-    heal->SetMapIndex(MapPane.MakeIndex());
-    heal->ActivateComponents();
-
-    heal->bubble_tex_ = TryLoadMagicTexture(kHealCandidates,
-                                            int32_t(sizeof(kHealCandidates) / sizeof(*kHealCandidates)),
-                                            heal->bubble_uv_, "heal-bubble");
-    heal->glow_tex_   = heal->bubble_tex_;
-    heal->glow_uv_[0] = heal->bubble_uv_[0];
-    heal->glow_uv_[1] = heal->bubble_uv_[1];
-    heal->glow_uv_[2] = heal->bubble_uv_[2];
-    heal->glow_uv_[3] = heal->bubble_uv_[3];
-
-    // Snapshot effect_old.cpp:628-685 — Initialize. heal_num/glow_num
-    // depend on spell level; default branch is heal_num=0, glow_num=1.
-    heal->heal_num_ = 0;
-    heal->glow_num_ = 1;
-
-    // Glow at the player's feet (index 0).
-    heal->p_[0]        = {0.0f, 0.0f, 0.0f};
-    heal->scale_[0]    = 2.0f;
-    heal->framenum_[0] = 0;
-    heal->rotation_    = 0.0f;
-
-    for (int32_t n = 1; n < kHealBubbles; ++n)
-    {
-        heal->p_[n].X = float(random(-kHealingRadius, kHealingRadius));
-        heal->p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
-        heal->p_[n].Z = 2.0f;
-        heal->rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
-        // snapshot assigns scale[n] = 0 then immediately scale[n] = 4.5 —
-        // preserve the second assignment (the live value); the leading 0
-        // assignment is dead per snapshot effect_old.cpp:682-683.
-        heal->scale_[n] = 4.5f;
-        heal->framenum_[n] = random(-kHealBubbles / 2, -1);
-    }
-    heal->activebubbles_ = 0;
-    heal->alive_ = true;
-
-    log_info("[heal] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
-             "bubble_tex=%u glow_tex=%u",
-             heal->GetMapIndex(), origin.x, origin.y, origin.z,
-             heal->bubble_tex_, heal->glow_tex_);
-    return heal;
-}
-
-void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-    // UV-scroll: shift the U origin by the accumulated u_offset (the
-    // snapshot's per-vertex tu += u). The renderer wraps tex coords so
-    // accumulated offsets are fine.
-    item.uv_rect[0] = uv_rect_[0] + u_offset_;
-    item.uv_rect[1] = uv_rect_[1];
-    item.uv_rect[2] = uv_rect_[2];
-    item.uv_rect[3] = uv_rect_[3];
-    item.key.texture     = texture_;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.debug_mode      = debug_mode;
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    Renderer->SubmitFxBillboard(item);
-
-    // --- LS coupling: soft warm point light at the symbol origin, gently
-    // modulated by zscale so the light pulses with the breathing scale.
-    const float t = (zscale_ - kSymGlowBespokeZMin)
-                  / (kSymGlowBespokeZMax - kSymGlowBespokeZMin);
-    const float intensity = kSymGlowBespokeLightIntensity * (0.6f + 0.4f * t);
-    Renderer->AddPointLight(float(base.x), float(base.y), float(base.z) + 32.0f,
-                            kSymGlowBespokeLightRadiusWu,
-                            1.0f, 0.78f, 0.32f,
-                            intensity);
-}
-
-// ----- M07 TPhotonEffect_Bespoke ------------------------------------------
-
-void TPhotonEffect_Bespoke::ResetLaunch_()
-{
-    // --- Port of TPhotonAnimator::Initialize (missileeffect.cpp:187-234).
-    // Initialize central flare (slot 0).
-    p_[0].X = p_[0].Y = p_[0].Z = 0.0f;
-    v_[0].X = v_[0].Y = v_[0].Z = 0.0f;
-    scale_[0]    = 1.0f;
-    framenum_[0] = 0;
-
-    // Initialize the starting position of each spark, its scale and a
-    // delay before it starts (a neg. framenum). NUM_PHOTON_SPARKS=16.
-    for (int32_t n = 1; n < kPhotonBespokeNumSparks; n++)
-    {
-        p_[n].X = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
-        p_[n].Y = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
-        p_[n].Z = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
-
-        // Set a vector for most of the sparks to move them to the center
-        // of the effect (missileeffect.cpp:213-219).
-        if (n > kPhotonBespokeNumSparks / 3)
-        {
-            v_[n].X = -p_[n].X / float(kPhotonBespokeLaunchDuration * 3 / 4);
-            v_[n].Y = -p_[n].Y / float(kPhotonBespokeLaunchDuration * 3 / 4);
-            v_[n].Z = -p_[n].Z / float(kPhotonBespokeLaunchDuration * 3 / 4);
-        }
-        else
-        {
-            v_[n].X = v_[n].Y = v_[n].Z = 0.0f;
-        }
-
-        scale_[n] = 0.0f;
-
-        framenum_[n] = random(-kPhotonBespokeLaunchDuration / 2, 0);
-    }
-
-    // Initialize the framenums for the trailing photon sparks
-    // (missileeffect.cpp:229-230).
-    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++)
-        framenum_[n] = -1;
-
-    // Set how many photon sparks are active at the beginning
-    // (missileeffect.cpp:233).
-    activesparks_ = kPhotonBespokeNumSparks - 1;
-}
-
-void TPhotonEffect_Bespoke::EnterFly_()
-{
-    // --- Port of TPhotonAnimator::Animate FLY first-time block
-    // (missileeffect.cpp:302-322). Harness has no live velocity so we
-    // use a fixed back-projection direction (Y- = "behind" in iso).
-    // dir.x / dir.y / dir.z are in ROLLOVER units (1 wu = 65536); the
-    // snapshot scales each trailing photon by `t / ROLLOVER` along
-    // -dir, so we use a tiny fake vel that produces visible spacing.
-    constexpr float kFakeVelMag = 8.0f;   // per-step wu (matches MISSILE_SPEED feel)
-    const float dirx = 0.0f;
-    const float diry = kFakeVelMag;       // sim "moving south"
-    const float dirz = 0.0f;
-
-    // Initialize the variables for the leading photon (missileeffect.cpp:308-310).
-    p_[0].X = p_[0].Y = p_[0].Z = 0.0f;
-    scale_[0]    = 3.5f;
-    framenum_[0] = 0;
-
-    // Initialize the variables for the trailing photons
-    // (missileeffect.cpp:312-321).
-    int32_t t = 1;
-    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++, t++)
-    {
-        framenum_[n] = -t;
-        framenum_[t] = -1;
-        // Back-projection: -dir * t (skipping the ROLLOVER division —
-        // dir is already in our local wu/step scale).
-        p_[n].X = -dirx * float(t);
-        p_[n].Y = -diry * float(t);
-        p_[n].Z = -dirz * float(t);
-        scale_[n] = 3.5f - float(t) * kPhotonBespokeScaleStep;
-    }
-}
-
-void TPhotonEffect_Bespoke::EnterExplode_()
-{
-    // --- Port of TPhotonAnimator::Animate EXPLODE first-time block
-    // (missileeffect.cpp:335-353).
-    for (int32_t n = 0; n < kPhotonBespokeNumSparks; n++)
-    {
-        p_[n].X = p_[n].Y = p_[n].Z = 0.0f;
-        scale_[n] = 3.0f;
-
-        v_[n].X = float(random(-3, 3)) * 3.0f / 2.0f;
-        v_[n].Y = float(random(-3, 3)) * 3.0f / 2.0f;
-        v_[n].Z = float(random(-3, 3)) * 3.0f / 2.0f;
-
-        framenum_[n] = 0;
-    }
-    activesparks_ = kPhotonBespokeNumSparks;
-}
-
-TPhotonEffect_Bespoke* TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    SLoadedImagery loaded = SparkleLoadImagery(kPhotonBespokeImageryPath, "photon");
-    if (!loaded.img3d)
-        return nullptr;
-
-    auto* photon = new TPhotonEffect_Bespoke(loaded.base);
-    photon->ForcePos(origin);
-    photon->SetMapIndex(MapPane.MakeIndex());
-    photon->ActivateComponents();
-
-    const int32_t num_obj = loaded.img3d->NumObjects();
-    const int32_t num_tex = loaded.img3d->NumTextures();
-    if (num_obj < 1 || num_tex <= 0)
-    {
-        log_error("[photon] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
-                  num_obj, num_tex);
-        delete photon;
-        return nullptr;
-    }
-
-    // Get how many frames are in the texture (missileeffect.cpp:194-195).
-    S3DTex tex = {};
-    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
-    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    loaded.img3d->GetTexture(slot, &tex);
-    photon->texture_      = tex.htexture;
-    photon->numtexframes_ = tex.numframes > 0 ? tex.numframes : 1;
-    SparkleResolveSubObjUv(loaded.img3d, 0, photon->uv_rect_);
-    photon->size_wu_ = kPhotonBespokeBaseSizeWu;
-    if (photon->texture_ == kInvalidTexture)
-    {
-        log_error("[photon] SpawnForTest: sub-object 0 texture unresolved");
-        delete photon;
-        return nullptr;
-    }
-
-    // Set the beginning state of the effect (missileeffect.cpp:198).
-    photon->state_       = 0;     // MISSILE_LAUNCH
-    photon->oldstate_    = -1;    // force first-time on entry
-    photon->state_ticks_ = 0;
-    photon->ResetLaunch_();
-
-    log_info("[photon] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "texture=%u numtexframes=%d uv=[%.3f,%.3f %.3fx%.3f]",
-             kPhotonBespokeImageryPath, photon->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             photon->texture_, photon->numtexframes_,
-             photon->uv_rect_[0], photon->uv_rect_[1],
-             photon->uv_rect_[2], photon->uv_rect_[3]);
-    return photon;
-}
-
-void TPhotonEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-// S07 TStreamerEffect_Bespoke
-// =========================================================================
-// Snapshot source: src/effect_old.cpp :10248-10434 (TStreamerAnimator).
-// 4 streams (j=0..3), each per tick spawns STREAMER_SKIP*(4-j) new
-// particles via InitStreamer(j); particle pos is sphere-mapped from
-// (th, h) into (cos*r, sin*r, vertical), with modif = 0.5*(1+cos(2h+PI))
-// for a smooth ring growth. Lifetime gated by frameon > STREAMER_DURATION.
-// Render uses SetAddBlendState (AdditiveStraight).
-
-TStreamerEffect_Bespoke* TStreamerEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    auto* eff = new TStreamerEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    eff->ForcePos(origin);
-    eff->SetMapIndex(MapPane.MakeIndex());
-    eff->ActivateComponents();
-
-    // Snapshot Initialize() (effect_old.cpp :10297-10322):
-    eff->frameon_ = 0;
-    for (int32_t j = 0; j < kStreamerMaxStreams; ++j)
-    {
-        eff->scl_init_[j] = 0.15f * float(j + 1);
-        eff->dscl_[j]     = eff->scl_init_[j] / float(kStreamerMaxParticles);
-        eff->h_[j]        = 0.0f;
-        eff->dh_[j]       = 0.02f / float(4 - j);
-        eff->th_[j]       = 0.0f;
-        eff->dth_[j]      = 0.15f;
-        for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
-            eff->stream_[j][i].count = 0;
-    }
-    eff->alive_ = true;
-
-    log_info("[S07 streamer_bespoke] SpawnForTest: origin=(%d,%d,%d)",
-             origin.x, origin.y, origin.z);
-    return eff;
-}
-
-// Snapshot InitStreamer (effect_old.cpp :10276-10295) — adds one particle
-// to stream x at the current (th, h) parametric point, advances angles,
-// short-circuits frameon if h crosses PI.
-void TStreamerEffect_Bespoke::InitStreamerSnap(int32_t x)
-{
-    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
-    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};
-    const float modif = float(0.5 * (1.0 + std::cos(2.0 * double(h_[x]) + M_PI)));
-    pos.X = float(kStreamerModifier) * std::cos(th_[x]) * modif *
-            float(x + 1) / float(kStreamerMaxStreams);
-    pos.Y = float(kStreamerModifier) * std::sin(th_[x]) * modif *
-            float(x + 1) / float(kStreamerMaxStreams);
-    pos.Z = float(kStreamerModifierV) * (std::cos(h_[x]) + 1.0f);
-    h_[x] += dh_[x];
-    if (h_[x] > float(M_PI))
-    {
-        // h_[x] -= M_PI;  (commented out in snapshot)
-        frameon_ = kStreamerDuration + 1;
-    }
-    if (h_[x] > float(2.0 * M_PI))
-        h_[x] -= float(2.0 * M_PI);
-    th_[x] += dth_[x];
-    if (th_[x] > float(2.0 * M_PI))
-        th_[x] -= float(2.0 * M_PI);
-    AddStreamerSnap(x, pos, scl_init_[x] * modif);
-}
-
-// Snapshot AddStreamer (effect_old.cpp :10324-10347) — finds the LAST
-// dead slot (snapshot does `if (count <= 0) p = i` in a forward sweep,
-// so p ends as the last free index), populates it, then decrements all
-// counts and scales for the whole stream.
-void TStreamerEffect_Bespoke::AddStreamerSnap(int32_t num, const hmm_vec3& pos, float scl)
-{
-    int32_t p = -1;
-    for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
-    {
-        if (stream_[num][i].count <= 0)
-            p = i;
-    }
-    if (p > -1)
-    {
-        stream_[num][p].pos.X = pos.X;
-        stream_[num][p].pos.Y = pos.Y;
-        stream_[num][p].pos.Z = pos.Z;
-        stream_[num][p].scl = scl;
-        stream_[num][p].count = kStreamerMaxParticles;
-    }
-    for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
-    {
-        stream_[num][i].count--;
-        stream_[num][i].scl -= dscl_[num];
-    }
-}
-
-void TStreamerEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-{
-    if (!Renderer)
-        return;
-
-    // --- Animate port (effect_old.cpp:695-760), 24Hz sim-tick gated.
-    if (alive_)
-    {
-        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-        while (sim_accum_ms_ >= double(kHealSimTickMs))
-        {
-            sim_accum_ms_ -= double(kHealSimTickMs);
-
-            // Snapshot :701-719 — glow framenum/scale lifecycle.
-            ++framenum_[0];
-            if (framenum_[0] < kHealDuration / 2)
-            {
-                if (scale_[0] < 7.0f)
-                    scale_[0] += 1.0f;
-            }
-            else if (framenum_[0] > kHealDuration && activebubbles_ == 0)
-            {
-                if (scale_[0] > 0.0f)
-                    scale_[0] -= 1.0f;
-                else
-                {
-                    alive_ = false;
-                    break;
-                }
-            }
-
-            // Snapshot :722 — rotation += 0.1f.
-            rotation_ += 0.1f;
-
-            // Snapshot :725-759 — per-bubble integration.
-            for (int32_t n = 1; n < kHealBubbles; ++n)
-            {
-                ++framenum_[n];
-                if (framenum_[n] == 0)
-                    ++activebubbles_;
-
-                if (framenum_[n] > 0)
-                {
-                    p_[n].Z += rise_[n];
-
-                    if (scale_[n] > 0.0f)
-                    {
-                        scale_[n] -= kHealScaleStep;
-                        if (scale_[n] <= 0.0f)
-                        {
-                            --activebubbles_;
-
-                            if (framenum_[0] < kHealDuration)
-                            {
-                                // Snapshot :749-755 — respawn bubble.
-                                p_[n].X = float(random(-kHealingRadius, kHealingRadius));
-                                p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
-                                p_[n].Z = 2.0f;
-                                rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
-                                scale_[n] = 4.5f;
-                                framenum_[n] = -1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // --- Render port (effect_old.cpp:770-832). SetBlendState -> Alpha.
-    if (bubble_tex_ == kInvalidTexture)
-        return;
-
-    const S3DPoint& base = Pos();
-
-    // Snapshot :777-811 — per-visible-bubble billboard draws.
-    for (int32_t n = 1; n < kHealBubbles; ++n)
-    {
-        if (framenum_[n] <= 0 || scale_[n] <= 0.0f)
-            continue;
-
-        // Bubble billboard.
-        SBillboardDrawItem item = {};
-        const float size = 8.0f * scale_[n];
-        item.size_wu[0] = size;
-        item.size_wu[1] = size;
-        // Soft green-blue heal tint (placeholder until forensics).
-        item.color_rgba[0] = 0.5f;
-        item.color_rgba[1] = 1.0f;
-        item.color_rgba[2] = 0.7f;
-        item.color_rgba[3] = 1.0f;
-        item.uv_rect[0] = bubble_uv_[0];
-        item.uv_rect[1] = bubble_uv_[1];
-        item.uv_rect[2] = bubble_uv_[2];
-        item.uv_rect[3] = bubble_uv_[3];
-        item.key.texture     = bubble_tex_;
-        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        item.key.blend       = uint8_t(EFxBlend::Alpha);
-        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        item.orientation     = EFxBillboardOrientation::ScreenAligned;
-        item.debug_mode      = debug_mode;
-        item.world_pos[0] = float(base.x) + p_[n].X;
-        item.world_pos[1] = float(base.y) + p_[n].Y;
-        item.world_pos[2] = float(base.z) + p_[n].Z;
-        Renderer->SubmitFxBillboard(item);
-    }
-
-    // Snapshot :813-826 — cylindrical glow at the player's feet, drawn
-    // TWICE (forward + reverse rotation), preserving the two-pass shape.
-    if (glow_tex_ != kInvalidTexture && scale_[0] > 0.0f)
-    {
-        SBillboardDrawItem glow = {};
-        const float size = 24.0f * scale_[0] * 0.75f;   // snapshot scl * 3/4
-        glow.size_wu[0] = size;
-        glow.size_wu[1] = size;
-        glow.color_rgba[0] = 0.6f;
-        glow.color_rgba[1] = 1.0f;
-        glow.color_rgba[2] = 0.7f;
-        glow.color_rgba[3] = 1.0f;
-        glow.uv_rect[0] = glow_uv_[0];
-        glow.uv_rect[1] = glow_uv_[1];
-        glow.uv_rect[2] = glow_uv_[2];
-        glow.uv_rect[3] = glow_uv_[3];
-        glow.key.texture     = glow_tex_;
-        glow.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        glow.key.blend       = uint8_t(EFxBlend::Alpha);
-        glow.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        glow.light_mode      = EFxLightMode::Unlit;
-        glow.orientation     = EFxBillboardOrientation::WorldXY;   // ground-plane cylinder
-        glow.debug_mode      = debug_mode;
-        glow.world_pos[0] = float(base.x) + p_[0].X;
-        glow.world_pos[1] = float(base.y) + p_[0].Y;
-        glow.world_pos[2] = float(base.z) + p_[0].Z;
-        // Pass 1: forward rotation (snapshot obj->rot.z = rotation).
-        Renderer->SubmitFxBillboard(glow);
-        // Pass 2: reverse rotation (snapshot obj->rot.z = -rotation +
-        // RenderObject(obj) again). Preserves the two-pass shape; in our
-        // billboard path this duplicates the draw so the overlapping
-        // additive contributions stack as in the snapshot.
-        Renderer->SubmitFxBillboard(glow);
-    }
-}
-
-// =========================================================================
-// M05 — TMistEffect_Bespoke
-// =========================================================================
-//
-// Faithful direct port of TMistAnimator::Initialize/Animate/Render
-// (src/effect_old.cpp:11376-11502). The engine TMistEffect path lives at
-// src/effect.cpp:3241 (engine-driven via TParticleEffectComponent +
-// effects.def); this bespoke class is the BESPOKE canonical per the
-// wave-04 pivot. Both coexist; the harness picks one via the test ID.
-//
-// 50 drops with retail pos/vel envelope (MIST_LENGTH=64 etc.); ascends,
-// falls under gravity (RIPPLE_GRAVITY=0.37 wu/tick²), respawns-in-place
-// on landing (pos.z <= 0). SetAddBlendState -> AdditiveStraight.
-// One sub-object (snapshot GetObject(0)) renders all 50 billboards.
-
-TMistEffect_Bespoke* TMistEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    static const char* kMistCandidates[] = {
-        "Magic\\mist.i3d",
-        "Misc\\mist.i3d",        // byte-identical duplicate per M05 forensics §4
-    };
-
-    auto* mist = new TMistEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    mist->ForcePos(origin);
-    mist->SetMapIndex(MapPane.MakeIndex());
-    mist->ActivateComponents();
-
-    mist->texture_ = TryLoadMagicTexture(kMistCandidates,
-                                         int32_t(sizeof(kMistCandidates) / sizeof(*kMistCandidates)),
-                                         mist->uv_rect_, "mist");
-
-    // Snapshot effect_old.cpp:11383-11392 — seed all 50 drops up-front.
-    for (int32_t i = 0; i < kMistMaxDrops; ++i)
-    {
-        SMistDrop& d = mist->drops_[i];
-        d.vel.X = float(random(-kMistLength, kMistLength) / 32.0f);
-        d.vel.Y = float(random(-kMistWidth,  kMistWidth)  / 32.0f);
-        d.vel.Z = float(random(kMistHeight / 2, kMistHeight));
-        d.pos.X = float(random(-kMistLength, kMistLength) / 2.0f);
-        d.pos.Y = float(random(-kMistWidth,  kMistWidth)  / 2.0f);
-        d.pos.Z = kMistSpawnZ;
-        d.dead = false;
-    }
-    mist->alive_ = true;
-
-    log_info("[mist-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
-             "tex=%u drops=%d",
-             mist->GetMapIndex(), origin.x, origin.y, origin.z,
-             mist->texture_, kMistMaxDrops);
-    return mist;
-}
-
-void TMistEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-    // --- Animate() (effect_old.cpp :10356-10381):
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
-    {
-        sim_accum_ms_ -= double(kStripFamilySimTickMs);
-        if (!alive_)
-            break;
-        frameon_++;
-        for (int32_t j = 0; j < kStreamerMaxStreams; ++j)
-        {
-            for (int32_t i = 0; i < kStreamerSkip * (4 - j); ++i)
-                InitStreamerSnap(j);
-        }
-        if (frameon_ > kStreamerDuration)
-        {
-            alive_ = false;
-            break;
-        }
-    }
-
-    if (!alive_)
-        return;
-
-    // --- Render() (effect_old.cpp :10390-10434):
-    const TTextureHandle spark_tex = StripFamilySparkTexture();
-    if (spark_tex == kInvalidTexture)
-        return;
-
-    const float ox = float(Pos().x);
-    const float oy = float(Pos().y);
-    const float oz = float(Pos().z);
-    for (int32_t j = 0; j < kStreamerMaxStreams; ++j)
-    {
-        for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
-        {
-            const SStreamerParticleEx& sp = stream_[j][i];
-            if (sp.count <= 0 || sp.scl <= 0.0f)
-                continue;
-            // Snapshot Render: ScaleMatrix(scl), RotateX(-PI/2)+RotateX(-PI/6)+
-            // RotateZ(-PI/4)+RotateZ(-face*TORADIAN). The orientation rotations
-            // are baked into "face the camera flat", which billboards already
-            // do; we use ScreenAligned + the snapshot's pos.
-            SBillboardDrawItem item = {};
-            item.world_pos[0] = ox + sp.pos.X;
-            item.world_pos[1] = oy + sp.pos.Y;
-            item.world_pos[2] = oz + sp.pos.Z;
-            const float size_wu = sp.scl * 12.0f;   // imagery scale -> wu
-            item.size_wu[0] = size_wu;
-            item.size_wu[1] = size_wu;
-            item.color_rgba[0] = 1.0f;
-            item.color_rgba[1] = 1.0f;
-            item.color_rgba[2] = 1.0f;
-            item.color_rgba[3] = 1.0f;
-            item.uv_rect[0] = 0.0f;
-            item.uv_rect[1] = 0.0f;
-            item.uv_rect[2] = 1.0f;
-            item.uv_rect[3] = 1.0f;
-            item.key.texture     = spark_tex;
-            item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-            // Snapshot Render() :10395-10396 SetAddBlendState -> AdditiveStraight.
-            item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
-            item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-            item.light_mode      = EFxLightMode::Unlit;
-            item.orientation     = EFxBillboardOrientation::ScreenAligned;
-            item.debug_mode      = debug_mode;
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
-}
-
-// =========================================================================
-// X11 TRibbonAnimator_Bespoke
-// =========================================================================
-// Snapshot source: src/effect_old.cpp :4069-4321. The revive halo's
-// composite: NUM_RIBBON_SPARKS=30 small sparks orbiting in a column above
-// the ribbon position, plus a slow-growing center spark at the floor,
-// plus NUM_RIBBONS=3 rotating ribbons. Pre-release reads
-// (PTReviveEffect)inst->stage / ->target — neither exists in the harness,
-// so we land in the "no spell" branch (effect_old.cpp :4180-4186, grow
-// ribscale to RIBBON_MAXSCALE then hold).
-
-TRibbonAnimator_Bespoke* TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    auto* eff = new TRibbonAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    eff->ForcePos(origin);
-    eff->SetMapIndex(MapPane.MakeIndex());
-    eff->ActivateComponents();
-
-    // Snapshot Initialize() (effect_old.cpp :4084-4134):
-    // numtexframes from imagery (NOT bound; default 1).
-    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
-    eff->ribbontimer_ = 0;
-    eff->ribpos_.X = float(origin.x);
-    eff->ribpos_.Y = float(origin.y);
-    eff->ribpos_.Z = float(origin.z);
-    eff->ribscale_ = 0.05f;   // RIBBON_MINSCALE
-    for (int32_t n = 0; n < NUM_RIBBONS; ++n)
-        eff->rotation_[n] = float(n) * 2.0f;
-    for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
-    {
-        eff->p_[n].X = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
-        eff->p_[n].Y = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
-        eff->p_[n].Z = float(random(0, RIBBON_RADIUS / 2));
-        eff->v_[n].X = -eff->p_[n].X / float(RIBBON_SPARK_DURATION) / 2.0f;
-        eff->v_[n].Y = -eff->p_[n].Y / float(RIBBON_SPARK_DURATION) / 2.0f;
-        eff->v_[n].Z = 0.5f;
-        eff->scale_spark_[n] = 0.0f;
-        eff->framenum_[n] = random(-NUM_RIBBON_SPARKS, 0);
-    }
-    eff->centertilt_     = 0.0f;
-    eff->centertilt_dx_  = 0.001f;
-    eff->alive_          = true;
-
-    log_info("[X11 ribbon_bespoke] SpawnForTest: origin=(%d,%d,%d)",
-             origin.x, origin.y, origin.z);
-    return eff;
-}
-
-void TRibbonAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-{
-    if (!Renderer)
-        return;
-
-    // --- Update: port of TIcedAnimator::Animate (effect_old.cpp:
-    // 8777-8891), framerate-independent via 24 Hz sim-tick gate.
-    if (alive_)
-    {
-        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-        while (sim_accum_ms_ >= double(kIcedSimTickMs))
-        {
-            sim_accum_ms_ -= double(kIcedSimTickMs);
-
-            frameon_++;   // :8783
-
-            // Victim-coupling lifecycle (:8785-8797): all branches are
-            // guarded out for the harness — no icedchar, no Stop(), no
-            // IsIced/IsDead. Lifecycle is "elapsed frameon" only.
-
-            // Phase B: SHATTER seed (snapshot :8798-8847, frameon==DURATION).
-            if (frameon_ == kIcedDuration)
-            {
-                // icedchar SetParalize(false) (:8800-8804) guarded out.
-                // Snapshot :8807-8846 — seed MAX_ICED_CHUNKS in 4
-                // quadrants × 5 rows pattern. Same RNG sequence.
-                int32_t a = 0, b = 0;
-                for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
-                {
-                    const int32_t c = (a ? 1 : -1);              // :8810
-                    const int32_t d = (b ? 1 : -1);              // :8811
-                    SIcedChunk& ch = chunks_[i];
-
-                    // velocity (:8813-8815)
-                    ch.vel.X = float(c * random(5, 10) / 10.0
-                                     + random(-5, 5) / 10.0);
-                    ch.vel.Y = float(d * random(5, 10) / 10.0
-                                     + random(-5, 5) / 10.0);
-                    ch.vel.Z = float(random(0, 10) / 10.0);
-                    // position (:8817-8819)
-                    ch.pos.X = float(c * random(20, 40) + random(-20, 20));
-                    ch.pos.Y = float(d * random(20, 40) + random(-20, 20));
-                    ch.pos.Z = float(int32_t(i / 6) * 25);
-                    // angular velocity (:8821)
-                    ch.ang.X = ch.ang.Y = float(random(0, 25) / 100.0);
-                    // angular position (:8826: t.z = atan2(v.y, v.x))
-                    ch.rot.Z = std::atan2(ch.vel.Y, ch.vel.X);
-                    // scale (:8828-8839)
-                    if (random(0, 1))
-                    {
-                        ch.scl.X = float(random(25, 75) / 100.0);
-                        ch.scl.Y = float(random(25, 75) / 100.0);
-                        ch.scl.Z = float(random(25, 75) / 100.0);
-                    }
-                    else
-                    {
-                        ch.scl.X = float(random(10, 15) / 100.0);
-                        ch.scl.Y = float(random(10, 15) / 100.0);
-                        ch.scl.Z = float(random(10, 15) / 100.0);
-                    }
-                    // life (bounces left, :8841)
-                    ch.life = random(2, 3);
-                    // separator (:8843-8845)
-                    a = 1 - a;
-                    if (a)
-                        b = 1 - b;
-                }
-            }
-
-            // Phase C: TUMBLE+BOUNCE (snapshot :8848-8886, frameon>DURATION).
-            if (frameon_ > kIcedDuration)
-            {
-                donebouncing_ = 1;
-                for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
-                {
-                    SIcedChunk& ch = chunks_[i];
-                    if (ch.life == 0)
-                        continue;
-                    donebouncing_ = 0;
-                    ch.pos.X += ch.vel.X;                        // :8856
-                    ch.pos.Y += ch.vel.Y;                        // :8857
-                    ch.pos.Z += ch.vel.Z;                        // :8858
-                    ch.vel.Z -= kIcedChunkGravity;               // :8859
-                    ch.rot.X += ch.ang.X;                        // :8860
-                    ch.rot.Y += ch.ang.Y;                        // :8861
-                    ch.rot.Z += ch.ang.Z;                        // :8862
-                    // wrap angles 0..2π (:8863-8874)
-                    auto wrap = [](float& r) {
-                        if (r > float(M_2PI)) r -= float(M_2PI);
-                        if (r < 0.0f)         r += float(M_2PI);
-                    };
-                    wrap(ch.rot.X);
-                    wrap(ch.rot.Y);
-                    wrap(ch.rot.Z);
-                    // bounce (:8876-8884)
-                    if (ch.pos.Z <= kIcedBouncePlane)
-                    {
-                        ch.pos.Z = kIcedBounceLift;
-                        ch.vel.Z *= kIcedBounceVelMul;
-                        ch.ang.X *= kIcedBounceSpinMul;
-                        ch.ang.Y *= kIcedBounceSpinMul;
-                        ch.ang.Z *= kIcedBounceSpinMul;
-                        ch.life--;
-                    }
-                }
-            }
-
-            // Self-destruct (snapshot :8887-8890).
-            if (donebouncing_)
-            {
-                alive_ = false;
-                break;
-            }
-        }
-    }
-
-    if (!alive_)
-        return;
-
-    // --- Render: port of TIcedAnimator::Render (effect_old.cpp:
-    // 8900-8953). Blend = Alpha, Lit-mode = Unlit, Depth = TestNoWrite.
-    // Phase A (HOLD): min(frameon*4, 50) facet billboards at origin.
-    // Phase B+C: one billboard per live chunk at world pos.
-    if (facet_tex_ == kInvalidTexture)
-        return;
-
-    const S3DPoint& base_pos = Pos();
-
-    SBillboardDrawItem item = {};
-    // --- Update: port of TPhotonAnimator::Animate (missileeffect.cpp:243-399).
-    // Framerate-independent via the 24Hz sim-tick accumulator.
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kPhotonBespokeSimTickMs))
-    {
-        sim_accum_ms_ -= double(kPhotonBespokeSimTickMs);
-        state_ticks_++;
-
-        // Harness state machine: cycle LAUNCH (until activesparks<NUM/3)
-        // -> FLY (kPhotonBespokeFlyTicks) -> EXPLODE (until activesparks==0)
-        // -> IDLE (gap) -> LAUNCH again. In-game this would be driven by
-        // TMissileEffect::Pulse range/hit transitions, but the harness has
-        // no live missile machinery so we drive the cycle on a fixed cadence.
-
-        switch (state_)
-        {
-            case 0:     // MISSILE_LAUNCH
-            {
-                // missileeffect.cpp:256-259: adjust central flare.
-                framenum_[0]++;
-                if ((framenum_[0] > kPhotonBespokeLaunchDuration / 2)
-                    && (scale_[0] < 5.5f))
-                {
-                    scale_[0] += kPhotonBespokeScaleStep;
-                }
-
-                // missileeffect.cpp:262-295: adjust the other sparks.
-                for (int32_t n = 1; n < kPhotonBespokeNumSparks; n++)
-                {
-                    framenum_[n]++;
-
-                    if (framenum_[n] >= 0)
-                    {
-                        // Move the sparks (missileeffect.cpp:269-271).
-                        p_[n].X += v_[n].X;
-                        p_[n].Y += v_[n].Y;
-                        p_[n].Z += v_[n].Z;
-
-                        if (framenum_[n] > kPhotonBespokeLaunchDuration / 2)
-                        {
-                            // missileeffect.cpp:275-290: scale-down + retire.
-                            if (scale_[n] != 0.0f)
-                            {
-                                scale_[n] -= kPhotonBespokeScaleStep;
-                                if (scale_[n] <= 0.0f)
-                                {
-                                    activesparks_--;
-                                    // missileeffect.cpp:284-286: when 2/3 of
-                                    // sparks are gone, set missile status
-                                    // (= "ready to fly"). Harness analog:
-                                    // transition to FLY when the snapshot
-                                    // would set status.
-                                    scale_[n] = 0.0f;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // missileeffect.cpp:292-293: scale-up.
-                            scale_[n] += kPhotonBespokeScaleStep;
-                        }
-                    }
-                }
-
-                // State transition: in-game this happens when TMissileEffect
-                // sees the status flag (missileeffect.cpp:286). Harness
-                // mirrors: when activesparks_ < NUM/3.
-                if (activesparks_ < kPhotonBespokeNumSparks / 3)
-                {
-                    state_       = 1;     // MISSILE_FLY
-                    state_ticks_ = 0;
-                }
-                break;
-            }
-
-            case 1:     // MISSILE_FLY
-            {
-                if (state_ != oldstate_)
-                {
-                    EnterFly_();
-                }
-                else
-                {
-                    // missileeffect.cpp:325-327: just update the frame counter
-                    // for the trailing photons.
-                    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++)
-                        framenum_[n]++;
-                }
-
-                if (state_ticks_ >= kPhotonBespokeFlyTicks)
-                {
-                    state_       = 2;     // MISSILE_EXPLODE
-                    state_ticks_ = 0;
-                }
-                break;
-            }
-
-            case 2:     // MISSILE_EXPLODE
-            {
-                if (state_ != oldstate_)
-                {
-                    EnterExplode_();
-                }
-                else
-                {
-                    // missileeffect.cpp:357-393: per-spark integration +
-                    // scale fall + trailing-photon drain.
-                    for (int32_t n = 0; n < kPhotonBespokeNumSparks; n++)
-                    {
-                        const int32_t t = n + kPhotonBespokeNumSparks;
-                        framenum_[n]++;
-
-                        // Move the sparks (missileeffect.cpp:363-365).
-                        p_[n].X += v_[n].X;
-                        p_[n].Y += v_[n].Y;
-                        p_[n].Z += v_[n].Z;
-
-                        if (scale_[n] > 0.0f)
-                        {
-                            scale_[n] -= kPhotonBespokeScaleStep / 2.0f;
-                            if (scale_[n] <= 0.0f)
-                            {
-                                scale_[n] = 0.0f;
-                                activesparks_--;
-                            }
-                        }
-
-                        // Trailing photon drain (missileeffect.cpp:383-389).
-                        if (scale_[t] != 0.0f)
-                        {
-                            framenum_[t]++;
-                            scale_[t] -= kPhotonBespokeScaleStep / 2.0f;
-                            if (scale_[t] <= 0.0f)
-                                scale_[t] = 0.0f;
-                        }
-                    }
-                }
-
-                if (activesparks_ <= 0 || state_ticks_ >= kPhotonBespokeExplodeTicks)
-                {
-                    state_       = 3;     // IDLE (harness gap)
-                    state_ticks_ = 0;
-                }
-                break;
-            }
-
-            default:    // 3 = IDLE (harness-only gap before next LAUNCH)
-            {
-                if (state_ticks_ >= kPhotonBespokeIdleTicks)
-                {
-                    state_       = 0;     // back to LAUNCH
-                    state_ticks_ = 0;
-                    ResetLaunch_();
-                }
-                break;
-            }
-        }
-
-        // Keep track of the state we're in (missileeffect.cpp:398).
-        oldstate_ = state_;
-    }
-
-    // --- Render: port of TPhotonAnimator::Render (missileeffect.cpp:408-441).
-    // SetBlendState = Alpha. Single sub-object drawn up to 32 times with
-    // per-spark scale and position.
-    const S3DPoint& base = Pos();
-    SParticleDrawItem item = {};
-    item.color_rgba[0] = 1.0f;
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-    item.key.texture     = facet_tex_;
-    std::memcpy(item.uv_rect, facet_uv_, sizeof(item.uv_rect));
-
-    if (frameon_ < kIcedDuration)
-    {
-        // Phase A: HOLD. Snapshot :8907-8920 — for i in 1..min(frameon*4, 50)
-        // RenderObject(GetObject(i)) with RotateZ(angle). All facets share
-        // origin transform; with billboard quads, they all stack visually.
-        // `min`/`max` are macros from revtypes.h:20-21; expand inline so
-        // std::min parses.
-        const int32_t reveal_raw = frameon_ * 4;
-        const int32_t reveal_count =
-            reveal_raw < kIcedRevealCap ? reveal_raw : kIcedRevealCap;
-        const float ring_scale = 1.0f;
-        for (int32_t i = 1; i < reveal_count; ++i)
-        {
-            item.world_pos[0] = float(base_pos.x);
-            item.world_pos[1] = float(base_pos.y);
-            item.world_pos[2] = float(base_pos.z);
-            item.size_wu[0] = item.size_wu[1] =
-                facet_size_wu_ * ring_scale;
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
-    else
-    {
-        // Phase B+C: SHATTER chunks. Snapshot :8923-8948 — one
-        // RenderObject(GetObject(0)) per live chunk at p[i] world pos.
-        for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
-        {
-            const SIcedChunk& ch = chunks_[i];
-            if (ch.life == 0)
-                continue;
-            item.world_pos[0] = float(base_pos.x) + ch.pos.X;
-            item.world_pos[1] = float(base_pos.y) + ch.pos.Y;
-            item.world_pos[2] = float(base_pos.z) + ch.pos.Z;
-            item.size_wu[0] = item.size_wu[1] =
-                facet_size_wu_ * (ch.scl.X + ch.scl.Y) * 0.5f;
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
-}
-// --- end ice bespoke first-pass
-    // 24Hz sim-tick gate (snapshot was ungated; at modern 60fps drops fly
-    // 2.5x too fast — same gate fix as B01/H03/M05-engine/H04/L02).
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kMistSimTickMs))
-    {
-        sim_accum_ms_ -= double(kMistSimTickMs);
-
-        // Snapshot effect_old.cpp:11432-11453 — per-drop Animate. dead
-        // drops re-roll pos+vel; live drops integrate Euler with gravity;
-        // pos.z <= 0 -> dead.
-        for (int32_t i = 0; i < kMistMaxDrops; ++i)
-        {
-            SMistDrop& d = drops_[i];
-            if (d.dead)
-            {
-                d.vel.X = float(random(-kMistLength, kMistLength) / 32.0f);
-                d.vel.Y = float(random(-kMistWidth,  kMistWidth)  / 32.0f);
-                d.vel.Z = float(random(kMistHeight / 2, kMistHeight));
-                d.pos.X = float(random(-kMistLength, kMistLength) / 2.0f);
-                d.pos.Y = float(random(-kMistWidth,  kMistWidth)  / 2.0f);
-                d.pos.Z = kMistSpawnZ;
-                d.dead = false;
-            }
-            d.pos.X += d.vel.X;
-            d.pos.Y += d.vel.Y;
-            d.pos.Z += d.vel.Z;
-            d.vel.Z -= kMistGravity;
-            if (d.pos.Z <= 0.0f)
-            {
-                d.dead = true;
-                // Snapshot AddNewRipple call is commented-out per M05 §7.6.
-            }
-        }
-    }
-
-    // --- Render port (effect_old.cpp:11463-11502). SetAddBlendState ->
-    // AdditiveStraight. Single sub-object drives all 50 drops.
-    if (texture_ == kInvalidTexture)
-        return;
-
-    const S3DPoint& base = Pos();
-    SBillboardDrawItem item = {};
-    item.size_wu[0] = kMistBaseSizeWu * kMistScale;   // snapshot scl = 0.7
-    item.size_wu[1] = kMistBaseSizeWu * kMistScale;
-    // Cool-white wisp tint (matches engine TMistEffect's color choice for
-    // visual continuity between bespoke + engine paths).
-    item.color_rgba[0] = 0.16f;
-    item.color_rgba[1] = 0.18f;
-    item.color_rgba[2] = 0.22f;
-    item.color_rgba[3] = 1.0f;
-    item.uv_rect[0] = uv_rect_[0];
-    item.uv_rect[1] = uv_rect_[1];
-    item.uv_rect[2] = uv_rect_[2];
-    item.uv_rect[3] = uv_rect_[3];
-    item.key.texture     = texture_;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-
-    for (int32_t i = 0; i < kMistMaxDrops; ++i)
-    {
-        const SMistDrop& d = drops_[i];
-        if (d.dead)
-            continue;
-        item.world_pos[0] = float(base.x) + d.pos.X;
-        item.world_pos[1] = float(base.y) + d.pos.Y;
-        item.world_pos[2] = float(base.z) + d.pos.Z;
-        Renderer->SubmitFxBillboard(item);
-    }
-}
-
-// =========================================================================
-// X09 — TShieldEffect_Bespoke
-// =========================================================================
-//
-// Faithful direct port of TShieldAnimator::Initialize/Animate/Render
-// (src/effect_old.cpp:4336-4392). Animator-only in pre-release; bridges
-// via an existing TEffect on the caster object. Animator is the simplest
-// in this batch: Animate is a no-op; Render draws ONE mesh sub-object at
-// pos.z=40 with SHIELD_SCALE=2.0 and a fixed -π/3 X-rotation + -π/4
-// Z-rotation. SetBlendState -> Alpha (preserved AS WRITTEN).
-//
-// First-pass: single Alpha billboard at the shield position; real mesh
-// (sphere/ellipsoid enveloping the victim) is a follow-up upgrade.
-
-TShieldEffect_Bespoke* TShieldEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    static const char* kShieldCandidates[] = {
-        "Magic\\shield.i3d",
-        "Magic\\Shield.I3D",
-        "Magic\\shield1.i3d",
-    };
-
-    auto* shield = new TShieldEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    shield->ForcePos(origin);
-    shield->SetMapIndex(MapPane.MakeIndex());
-    shield->ActivateComponents();
-
-    shield->texture_ = TryLoadMagicTexture(kShieldCandidates,
-                                           int32_t(sizeof(kShieldCandidates) / sizeof(*kShieldCandidates)),
-                                           shield->uv_rect_, "shield");
-
-    // Snapshot effect_old.cpp:4336-4342 — Initialize sets pos = (0,0,40).
-    shield->pos_.X = 0.0f;
-    shield->pos_.Y = 0.0f;
-    shield->pos_.Z = kShieldLiftZ;
-    shield->framenum_ = 0;
-    shield->alive_ = true;
-
-    log_info("[shield] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
-             "tex=%u",
-             shield->GetMapIndex(), origin.x, origin.y, origin.z, shield->texture_);
-    return shield;
-}
-
-void TShieldEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-    item.key.texture     = texture_;
-    item.rotation_rad    = 0.0f;
-    // UV: snapshot picks per-spark frame = framenum % numtexframes
-    // (missileeffect.cpp:429). The decoded photon.i3d texture's frames
-    // are laid out along U (each frame occupies 1/numtexframes_ of the
-    // U range). We compute the per-frame UV sub-rect at submission time.
-
-    for (int32_t n = 0; n < kPhotonBespokeSlots; n++)
-    {
-        // missileeffect.cpp:418: only render the spark if framenum is positive.
-        if (framenum_[n] < 0)
-            continue;
-        if (scale_[n] <= 0.0f)
-            continue;
-
-        // missileeffect.cpp:424-426: scale + position.
-        const float scl = scale_[n];
-        item.size_wu[0] = size_wu_ * scl;
-        item.size_wu[1] = size_wu_ * scl;
-        item.world_pos[0] = float(base.x) + p_[n].X;
-        item.world_pos[1] = float(base.y) + p_[n].Y;
-        item.world_pos[2] = float(base.z) + p_[n].Z;
-
-        // Per-spark frame UV. The snapshot's `frame = framenum % numtexframes`
-        // (missileeffect.cpp:429) cycles the bound texture frame; we slice
-        // the authored U range into numtexframes_ cells and pick the
-        // (framenum % numtexframes_)-th.
-        const int32_t fnum = framenum_[n] % numtexframes_;
-        if (numtexframes_ > 1)
-        {
-            const float cell_w = uv_rect_[2] / float(numtexframes_);
-            item.uv_rect[0] = uv_rect_[0] + cell_w * float(fnum);
-            item.uv_rect[1] = uv_rect_[1];
-            item.uv_rect[2] = cell_w;
-            item.uv_rect[3] = uv_rect_[3];
-        }
-        else
-        {
-            item.uv_rect[0] = uv_rect_[0];
-            item.uv_rect[1] = uv_rect_[1];
-            item.uv_rect[2] = uv_rect_[2];
-            item.uv_rect[3] = uv_rect_[3];
-        }
-
-        Renderer->SubmitFxParticle(item);
-    }
-
-    // --- LS coupling: re-add one bright blue-white point light at the
-    // effect origin per frame. Brightest at EXPLODE (per the bolt
-    // discharge); fades with the leading-spark scale during LAUNCH/FLY.
-    float light_t = 0.5f;
-    if (state_ == 2)    // EXPLODE — brightest
-        light_t = 1.0f;
-    else if (scale_[0] > 0.0f)
-        light_t = std::fmin(1.0f, scale_[0] / 5.5f);
-    Renderer->AddPointLight(float(base.x), float(base.y), float(base.z) + 24.0f,
-                            kPhotonBespokeLightRadiusWu,
-                            0.7f, 0.85f, 1.0f,
-                            kPhotonBespokeLightIntensity * light_t);
-}
-
-// ----- M08 TPixieEffect_Bespoke -------------------------------------------
-
-TPixieEffect_Bespoke* TPixieEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
-{
-    SLoadedImagery loaded = SparkleLoadImagery(kPixieBespokeImageryPath, "pixie");
-    if (!loaded.img3d)
-        return nullptr;
-
-    auto* pixie = new TPixieEffect_Bespoke(loaded.base);
-    pixie->ForcePos(origin);
-    pixie->SetMapIndex(MapPane.MakeIndex());
-    pixie->ActivateComponents();
-
-    const int32_t num_obj = loaded.img3d->NumObjects();
-    const int32_t num_tex = loaded.img3d->NumTextures();
-    if (num_obj < 1 || num_tex <= 0)
-    {
-        log_error("[pixie] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
-                  num_obj, num_tex);
-        delete pixie;
-        return nullptr;
-    }
-
-    // Resolve the 2 sub-objects (pix[i].time = 0 or 1 selects between
-    // them; effect_old.cpp:12237 GetObject(pix[i].time)). Fall back to
-    // sub-object 0 if only one exists.
-    for (int32_t i = 0; i < 2; ++i)
-    {
-        const int32_t obj = (num_obj > i) ? i : 0;
-        const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, obj);
-        const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-        S3DTex tex = {};
-        loaded.img3d->GetTexture(slot, &tex);
-        pixie->textures_[i] = tex.htexture;
-        SparkleResolveSubObjUv(loaded.img3d, obj, pixie->uv_rect_[i]);
-    }
-    pixie->size_wu_ = kPixieBespokeBaseSizeWu;
-    if (pixie->textures_[0] == kInvalidTexture)
-    {
-        log_error("[pixie] SpawnForTest: sub-object 0 texture unresolved");
-        delete pixie;
-        return nullptr;
-    }
-    if (pixie->textures_[1] == kInvalidTexture)
-        pixie->textures_[1] = pixie->textures_[0];     // fall back to first
-
-    // --- Port of TPixieAnimator::Initialize (effect_old.cpp:12109-12127).
-    for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
-    {
-        // scale.x/y/z = random(MINSCALE*1000, MAXSCALE*1000) / 1000.
-        const float s = float(random(int32_t(kPixieBespokeMinScale * 1000.0f),
-                                     int32_t(kPixieBespokeMaxScale * 1000.0f))) / 1000.0f;
-        pixie->pix_[i].scale.X = pixie->pix_[i].scale.Y = pixie->pix_[i].scale.Z = s;
-        pixie->pix_[i].pos.X = float(random(-32, 32));
-        pixie->pix_[i].pos.Y = float(random(-32, 32));
-        pixie->pix_[i].pos.Z = float(random(-32, 32));
-        pixie->pix_[i].vel.X = float(random(-32, 32)) / 25.0f;
-        pixie->pix_[i].vel.Y = float(random(-32, 32)) / 25.0f;
-        pixie->pix_[i].vel.Z = float(random(-32, 32)) / 25.0f;
-        pixie->pix_[i].time  = random(0, 1);
-    }
-    pixie->charnear_     = 100;
-    pixie->sim_accum_ms_ = 0.0;
-
-    log_info("[pixie] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "textures={%u,%u} num_obj=%d",
-             kPixieBespokeImageryPath, pixie->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             pixie->textures_[0], pixie->textures_[1], num_obj);
-    return pixie;
-}
-
-void TPixieEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-{
-    if (!Renderer)
-        return;
-
-    // --- Animate port (effect_old.cpp:4351-4355): empty (base call only,
-    // a no-op). 24Hz sim-tick gate runs an empty body — kept here for
-    // symmetry with the other bespoke effects.
-    if (alive_)
-    {
-        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-        while (sim_accum_ms_ >= double(kShieldSimTickMs))
-        {
-            sim_accum_ms_ -= double(kShieldSimTickMs);
-            ++framenum_;
-            // Snapshot Animate is empty — no state change.
-        }
-    }
-
-    // --- Render port (effect_old.cpp:4364-4391). SetBlendState -> Alpha.
-    // Snapshot binds GetObject(0) and applies:
-    //   scl = SHIELD_SCALE=2.0
-    //   pos = (0,0,40)
-    //   RotateX(-π/3), RotateZ(-π/4)
-    // Then RenderObject(obj). One mesh draw per frame.
-    if (texture_ == kInvalidTexture)
-        return;
-
-    SBillboardDrawItem item = {};
-    item.size_wu[0] = kShieldSizeWu * kShieldScale;
-    item.size_wu[1] = kShieldSizeWu * kShieldScale;
-    // Pale blue shield tint.
-    item.color_rgba[0] = 0.6f;
-    item.color_rgba[1] = 0.85f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 0.8f;
-    item.uv_rect[0] = uv_rect_[0];
-    item.uv_rect[1] = uv_rect_[1];
-    item.uv_rect[2] = uv_rect_[2];
-    item.uv_rect[3] = uv_rect_[3];
-    item.key.texture     = texture_;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    // --- Update: port of TPixieAnimator::Animate (effect_old.cpp:12129-12227).
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kPixieBespokeSimTickMs))
-    {
-        sim_accum_ms_ -= double(kPixieBespokeSimTickMs);
-
-        // Per-particle integration (effect_old.cpp:12134-12163).
-        for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
-        {
-            // scale.x += random(-35, 35) / 1000.
-            pix_[i].scale.X += float(random(-35, 35)) / 1000.0f;
-            // The snapshot has scale.y = scale.z = scale.x commented out
-            // (effect_old.cpp:12137 — "//pix[i].scale.y = pix[i].scale.z =
-            // pix[i].scale.x;"). We DO NOT re-instate it (preserve dead-
-            // code form as written). Only scale.x is mutated.
-            if (pix_[i].scale.X > 0.07f)
-                pix_[i].scale.X = 0.07f;
-
-            // pos += vel.
-            pix_[i].pos.X += pix_[i].vel.X;
-            pix_[i].pos.Y += pix_[i].vel.Y;
-            pix_[i].pos.Z += pix_[i].vel.Z;
-
-            // Centring restorative force (effect_old.cpp:12143-12154).
-            if (pix_[i].pos.X > 0.0f)
-                pix_[i].vel.X -= kPixieBespokeAcc;
-            if (pix_[i].pos.X < 0.0f)
-                pix_[i].vel.X += kPixieBespokeAcc;
-            if (pix_[i].pos.Y > 0.0f)
-                pix_[i].vel.Y -= kPixieBespokeAcc;
-            if (pix_[i].pos.Y < 0.0f)
-                pix_[i].vel.Y += kPixieBespokeAcc;
-            if (pix_[i].pos.Z > 0.0f)
-                pix_[i].vel.Z -= kPixieBespokeAcc;
-            if (pix_[i].pos.Z < 0.0f)
-                pix_[i].vel.Z += kPixieBespokeAcc;
-
-            // Time-flip on a 1/49 chance (effect_old.cpp:12155-12156).
-            if (random(0, 48) == 17)
-                pix_[i].time = 1 - pix_[i].time;
-
-            // Floor clamp (effect_old.cpp:12157-12158).
-            if (pix_[i].pos.Z < -float(kPixieBespokeHeight))
-                pix_[i].pos.Z = -float(kPixieBespokeHeight);
-
-            // Scale clamp (effect_old.cpp:12159-12162).
-            if (pix_[i].scale.X < kPixieBespokeMinScale)
-                pix_[i].scale.X = kPixieBespokeMinScale;
-            if (pix_[i].scale.X > kPixieBespokeMaxScale)
-                pix_[i].scale.X = kPixieBespokeMaxScale;
-        }
-
-        // effect_old.cpp:12164-12226: FindObjectsInRange character-flee
-        // logic. Harness has no live character iteration in --test=vfx,
-        // so we skip this block entirely. charnear_ stays at 100 (= 1.0x
-        // scale on per-particle pos in Render). The "resume to origpos"
-        // branch is also a no-op because the harness pins the effect at
-        // a fixed origin via ForcePos.
-    }
-
-    // --- Render: port of TPixieAnimator::Render (effect_old.cpp:12229-12264).
-    // SetBlendState = Alpha. Per-particle: pick sub-object (pix[i].time),
-    // scale uniform by scale.x/(1+time*2), rotate Z by -face*TORADIAN
-    // (face is 0 for a sector-less harness effect — so rotation is 0),
-    // translate to (pos.x*charnear/100, pos.y*charnear/100, PIX_HEIGHT+pos.z).
-    const S3DPoint& base = Pos();
-    SParticleDrawItem item = {};
-    item.color_rgba[0] = 1.0f;
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-    const S3DPoint& base = Pos();
-    item.world_pos[0] = float(base.x) + pos_.X;
-    item.world_pos[1] = float(base.y) + pos_.Y;
-    item.world_pos[2] = float(base.z) + pos_.Z;
-    Renderer->SubmitFxBillboard(item);
-    item.rotation_rad    = 0.0f;     // face = 0 in harness (no in-game facing)
-
-    for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
-    {
-        // Pick sub-object (effect_old.cpp:12237: obj = GetObject(pix[i].time)).
-        const int32_t time_idx = pix_[i].time != 0 ? 1 : 0;
-        item.key.texture = textures_[time_idx];
-        item.uv_rect[0] = uv_rect_[time_idx][0];
-        item.uv_rect[1] = uv_rect_[time_idx][1];
-        item.uv_rect[2] = uv_rect_[time_idx][2];
-        item.uv_rect[3] = uv_rect_[time_idx][3];
-
-        // Per-particle scale (effect_old.cpp:12243).
-        // obj->scl = scale.x / (1 + (time * 2.0f)).
-        const float scl = pix_[i].scale.X / (1.0f + float(pix_[i].time) * 2.0f);
-        item.size_wu[0] = size_wu_ * scl;
-        item.size_wu[1] = size_wu_ * scl;
-
-        // Position (effect_old.cpp:12252-12254).
-        const float wx = float(base.x) + (pix_[i].pos.X * float(charnear_)) / 100.0f;
-        const float wy = float(base.y) + (pix_[i].pos.Y * float(charnear_)) / 100.0f;
-        const float wz = float(base.z) + float(kPixieBespokeHeight) + pix_[i].pos.Z;
-        item.world_pos[0] = wx;
-        item.world_pos[1] = wy;
-        item.world_pos[2] = wz;
-
-        Renderer->SubmitFxParticle(item);
-    }
-
-    // --- LS coupling: soft blue-green point light at the swarm centre.
-    // Modulated by the mean scale of the swarm so the light gently pulses.
-    float mean_scale = 0.0f;
-    for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
-        mean_scale += pix_[i].scale.X;
-    mean_scale /= float(kPixieBespokeNumParts);
-    const float t = (mean_scale - kPixieBespokeMinScale)
-                  / (kPixieBespokeMaxScale - kPixieBespokeMinScale);
-    const float intensity = kPixieBespokeLightIntensity * (0.6f + 0.4f * std::fmax(0.0f, std::fmin(1.0f, t)));
-    Renderer->AddPointLight(float(base.x), float(base.y),
-                            float(base.z) + float(kPixieBespokeHeight),
-                            kPixieBespokeLightRadiusWu,
-                            0.55f, 0.95f, 0.85f,
-                            intensity);
-    // --- Animate() (effect_old.cpp :4143-4235):
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
-    {
-        sim_accum_ms_ -= double(kStripFamilySimTickMs);
-        if (!alive_)
-            break;
-        ribbontimer_++;
-        // Rotate ribbons (snapshot :4157).
-        for (int32_t n = 0; n < NUM_RIBBONS; ++n)
-            rotation_[n] += 0.2f;
-        // No PTReviveEffect in harness — take the else-branch (snapshot
-        // :4180-4186): grow ribscale to RIBBON_MAXSCALE.
-        const float RIBBON_MAXSCALE = 4.5f;
-        const float RIBBON_MINSCALE = 0.05f;
-        const float RIBBON_SCALEINC =
-            (RIBBON_MAXSCALE - RIBBON_MINSCALE) / float(kRibbonGrowFrames);
-        if (ribscale_ <= RIBBON_MAXSCALE)
-            ribscale_ += RIBBON_SCALEINC;
-
-        // Update all ribbon sparks (snapshot :4191-4228).
-        for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
-        {
-            framenum_[n]++;
-            if (framenum_[n] > 0)
-            {
-                if (framenum_[n] >= RIBBON_SPARK_DURATION)
-                {
-                    p_[n].X = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
-                    p_[n].Y = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
-                    p_[n].Z = float(random(0, RIBBON_RADIUS / 2));
-                    v_[n].X = -p_[n].X / float(RIBBON_SPARK_DURATION) / 2.0f;
-                    v_[n].Y = -p_[n].Y / float(RIBBON_SPARK_DURATION) / 2.0f;
-                    v_[n].Z = 0.5f;
-                    framenum_[n] = 0;
-                    scale_spark_[n] = 0.0f;
-                }
-                else if (framenum_[n] > RIBBON_SPARK_DURATION / 2)
-                    scale_spark_[n] -= float(RIBBON_SPARK_SCALE_STEP);
-                else
-                    scale_spark_[n] += float(RIBBON_SPARK_SCALE_STEP);
-                p_[n].X += v_[n].X;
-                p_[n].Y += v_[n].Y;
-                p_[n].Z += v_[n].Z;
-                v_[n].Z += 0.5f;
-            }
-        }
-        centertilt_ += centertilt_dx_;
-        if (centertilt_ > 0.25f || centertilt_ < -0.25f)
-            centertilt_dx_ = -centertilt_dx_;
-
-        // Harness self-kill — snapshot relies on PTReviveEffect to KillThisEffect;
-        // we use a fixed one-shot duration so the Combat-cadence harness can
-        // re-trigger cleanly.
-        if (ribbontimer_ >= kRibbonLifeTicks)
-        {
-            alive_ = false;
-            break;
-        }
-    }
-
-    if (!alive_)
-        return;
-
-    // --- Render() (effect_old.cpp :4244-4321):
-    const TTextureHandle spark_tex = StripFamilySparkTexture();
-    if (spark_tex == kInvalidTexture)
-        return;
-
-    const float ox = ribpos_.X;
-    const float oy = ribpos_.Y;
-    const float oz = ribpos_.Z;
-
-    // 1) Ribbon sparks (snapshot :4257-4277). For each spark with framenum>0
-    // and scale>0, draw the obj at p_[n] with scale_spark_[n].
-    for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
-    {
-        if (framenum_[n] > 0 && scale_spark_[n] > 0.0f)
-        {
-            SBillboardDrawItem item = {};
-            item.world_pos[0] = ox + p_[n].X;
-            item.world_pos[1] = oy + p_[n].Y;
-            item.world_pos[2] = oz + p_[n].Z;
-            const float size_wu = scale_spark_[n] * 16.0f;
-            item.size_wu[0] = size_wu;
-            item.size_wu[1] = size_wu;
-            item.color_rgba[0] = 1.0f;
-            item.color_rgba[1] = 1.0f;
-            item.color_rgba[2] = 1.0f;
-            item.color_rgba[3] = 1.0f;
-            item.uv_rect[0] = 0.0f;
-            item.uv_rect[1] = 0.0f;
-            item.uv_rect[2] = 1.0f;
-            item.uv_rect[3] = 1.0f;
-            item.key.texture     = spark_tex;
-            item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-            // Snapshot Render() :4248-4249 SetBlendState -> Alpha.
-            item.key.blend       = uint8_t(EFxBlend::Alpha);
-            item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-            item.light_mode      = EFxLightMode::Unlit;
-            item.orientation     = EFxBillboardOrientation::ScreenAligned;
-            item.debug_mode      = debug_mode;
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
-
-    // 2) Center floor spark (snapshot :4283-4294).
-    {
-        const float scl = ribscale_ * 2.5f + (float(random(0, 10)) / 20.0f);
-        SBillboardDrawItem item = {};
-        item.world_pos[0] = ox;
-        item.world_pos[1] = oy;
-        item.world_pos[2] = oz;
-        const float size_wu = scl * 12.0f;
-        item.size_wu[0] = size_wu;
-        item.size_wu[1] = size_wu;
-        item.color_rgba[0] = 1.0f;
-        item.color_rgba[1] = 1.0f;
-        item.color_rgba[2] = 1.0f;
-        item.color_rgba[3] = 1.0f;
-        item.uv_rect[0] = 0.0f;
-        item.uv_rect[1] = 0.0f;
-        item.uv_rect[2] = 1.0f;
-        item.uv_rect[3] = 1.0f;
-        item.key.texture     = spark_tex;
-        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        item.key.blend       = uint8_t(EFxBlend::Alpha);
-        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        item.orientation     = EFxBillboardOrientation::WorldXY;
-        item.debug_mode      = debug_mode;
-        Renderer->SubmitFxBillboard(item);
-    }
-
-    // 3) Ribbons (snapshot :4301-4316). Three rotating ribbons sitting at
-    // ribpos. Each ribbon's z is scaled 2x x/y (snapshot :4308-4309); we
-    // stand them in as three world-XY-tipped billboards offset upward,
-    // rotating around ribpos via rotation_[n].
-    for (int32_t n = 0; n < NUM_RIBBONS; ++n)
-    {
-        const float ang = rotation_[n];
-        const float offs = ribscale_ * 8.0f;
-        SBillboardDrawItem item = {};
-        item.world_pos[0] = ox + std::cos(ang) * offs;
-        item.world_pos[1] = oy + std::sin(ang) * offs;
-        item.world_pos[2] = oz + ribscale_ * 10.0f;
-        const float ribbon_size_wu = ribscale_ * 16.0f;
-        item.size_wu[0] = ribbon_size_wu;
-        item.size_wu[1] = ribbon_size_wu * 2.0f;       // snapshot scl.z = 2x scl.x/y
-        item.color_rgba[0] = 0.9f;
-        item.color_rgba[1] = 0.85f;
-        item.color_rgba[2] = 0.55f;                    // pale gold
-        item.color_rgba[3] = 1.0f;
-        item.uv_rect[0] = 0.0f;
-        item.uv_rect[1] = 0.0f;
-        item.uv_rect[2] = 1.0f;
-        item.uv_rect[3] = 1.0f;
-        item.key.texture     = spark_tex;
-        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        item.key.blend       = uint8_t(EFxBlend::Alpha);
-        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        item.orientation     = EFxBillboardOrientation::ScreenAligned;
-        item.debug_mode      = debug_mode;
         item.light_mode      = EFxLightMode::LitFlat;
         item.orientation     = EFxBillboardOrientation::ScreenAligned;
         item.debug_mode      = debug_mode;
