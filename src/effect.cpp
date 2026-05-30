@@ -12048,6 +12048,221 @@ void TSandswirlEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
     }
 }
 
+// =========================================================================
+// * W2D batch — Misc A — character/ambient particle emitters (X01, B04)    *
+// =========================================================================
+// Localized-at-end additions for clean wave-3 merge. Faithful direct ports
+// of the snapshot animator bodies in src/effect_old.cpp.
+
+namespace {
+constexpr const char* kFlyBespokeImageryPath = "Misc\\Flies.I3D";
+}  // namespace
+
+// ----- X01 TFlyEffect_Bespoke --------------------------------------------
+// FAITHFUL DIRECT PORT of TFlyAnimator (snapshot src/effect_old.cpp:
+// 6514-6603 — Initialize/Animate/Render).
+//
+// Spawn ports TFlyAnimator::Initialize: 20 flies, each pre-seeded at a
+// random position inside a (FLY_RANGE_X,FLY_RANGE_Y,FLY_RANGE_Z) = 30 wu
+// cube (per-axis range [-30, 30]), all marked used=false (staged
+// activation). Scale = .3 uniformly, rotation zero.
+//
+// TickAndSubmit ports TFlyAnimator::Animate: each 24 Hz sim tick rolls one
+// (chance = random(0,1)) per-tick activation of a single dormant fly, then
+// per-fly velocity = random(-2,2) in each axis, pos += velocity, and a
+// hard-bounce-back (pos -= velocity*2) when over the cube edge. Render is
+// SetBlendState() (Alpha) with cull=NONE — billboards already no-cull.
+
+TFlyEffect_Bespoke* TFlyEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SLoadedImagery loaded = SparkleLoadImagery(kFlyBespokeImageryPath, "fly");
+    if (!loaded.img3d)
+        return nullptr;
+
+    auto* fly = new TFlyEffect_Bespoke(loaded.base);
+    fly->ForcePos(origin);
+    fly->SetMapIndex(MapPane.MakeIndex());
+    fly->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[fly] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
+                  num_obj, num_tex);
+        delete fly;
+        return nullptr;
+    }
+
+    // Snapshot TParticleSystem uses GetObject(0) (the single fly sprite).
+    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    fly->texture_ = tex.htexture;
+    SparkleResolveSubObjUv(loaded.img3d, 0, fly->uv_rect_);
+    fly->size_wu_ = kFlyBespokeBaseSizeWu;
+    if (fly->texture_ == kInvalidTexture)
+    {
+        log_error("[fly] SpawnForTest: sub-object 0 texture unresolved");
+        delete fly;
+        return nullptr;
+    }
+
+    // --- Port of TFlyAnimator::Initialize (effect_old.cpp:6525-6550).
+    // size.x = size.y = 10 (fly->size_wu_ above). Then per-fly:
+    //   pos = random(-RANGE,RANGE) per axis, used=false, scl=.3, rot=0.
+    for (int32_t i = 0; i < kFlyBespokeCount; ++i)
+    {
+        fly->flies_[i].pos.X = float(random(-kFlyBespokeRangeX, kFlyBespokeRangeX));
+        fly->flies_[i].pos.Y = float(random(-kFlyBespokeRangeY, kFlyBespokeRangeY));
+        fly->flies_[i].pos.Z = float(random(-kFlyBespokeRangeZ, kFlyBespokeRangeZ));
+        fly->flies_[i].used  = false;
+        fly->flies_[i].scl.X = kFlyBespokeScale;
+        fly->flies_[i].scl.Y = kFlyBespokeScale;
+        fly->flies_[i].scl.Z = kFlyBespokeScale;
+        fly->flies_[i].rot.X = 0.0f;
+        fly->flies_[i].rot.Y = 0.0f;
+        fly->flies_[i].rot.Z = 0.0f;
+    }
+    fly->sim_accum_ms_ = 0.0;
+
+    log_info("[fly] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
+             "count=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
+             kFlyBespokeImageryPath, fly->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             kFlyBespokeCount, fly->texture_,
+             fly->uv_rect_[0], fly->uv_rect_[1],
+             fly->uv_rect_[2], fly->uv_rect_[3]);
+    return fly;
+}
+
+void TFlyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[fly] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // --- Port of TFlyAnimator::Animate (effect_old.cpp:6552-6585).
+    // 24 Hz sim tick — same family pattern as M08/H02/B01.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFlyBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFlyBespokeSimTickMs);
+
+        // Stage one new fly per tick on a coin-flip (effect_old.cpp:6557).
+        // The original walks the array and consumes the 'chance' on the
+        // first dormant fly it finds — exactly one stage-on per tick.
+        int32_t chance = random(0, 1);
+
+        for (int32_t i = 0; i < kFlyBespokeCount; ++i)
+        {
+            SFlyParticleBespoke& f = flies_[i];
+
+            if (f.used == false && chance)
+            {
+                f.used  = true;
+                chance  = 0;
+            }
+
+            hmm_vec3 velocity;
+            velocity.X = float(random(-2, 2));
+            velocity.Y = float(random(-2, 2));
+            velocity.Z = float(random(-2, 2));
+
+            f.pos.X += velocity.X;
+            f.pos.Y += velocity.Y;
+            f.pos.Z += velocity.Z;
+
+            // Hard reflect-back: if out of cube, undo 2x velocity (so the
+            // net step on this tick is -velocity, pushing back into the
+            // box). Snapshot: `pos -= velocity + velocity`.
+            if (f.pos.X > float(kFlyBespokeRangeX) || f.pos.X < float(-kFlyBespokeRangeX))
+                f.pos.X -= velocity.X + velocity.X;
+            if (f.pos.Y > float(kFlyBespokeRangeY) || f.pos.Y < float(-kFlyBespokeRangeY))
+                f.pos.Y -= velocity.Y + velocity.Y;
+            if (f.pos.Z > float(kFlyBespokeRangeZ) || f.pos.Z < float(-kFlyBespokeRangeZ))
+                f.pos.Z -= velocity.Z + velocity.Z;
+        }
+    }
+
+    // --- Port of TFlyAnimator::Render (effect_old.cpp:6587-6603).
+    // SetBlendState() (no args) = Alpha (the alpha-keyed dark fly sprite,
+    // chroma-keyed black quad). Cull=NONE in snapshot — billboards are
+    // already two-sided so no extra state needed.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = Pos();
+    for (int32_t i = 0; i < kFlyBespokeCount; ++i)
+    {
+        if (!flies_[i].used)
+            continue;   // staged-off; faithful to snapshot — TParticleSystem skips !used
+
+        const float wx = float(base.x) + flies_[i].pos.X;
+        const float wy = float(base.y) + flies_[i].pos.Y;
+        const float wz = float(base.z) + flies_[i].pos.Z;
+
+        SBillboardDrawItem item = {};
+        // size.x = size.y = 10 (FLY_SIZE), scaled per-particle by .3.
+        item.size_wu[0]      = size_wu_ * flies_[i].scl.X;
+        item.size_wu[1]      = size_wu_ * flies_[i].scl.Y;
+        item.color_rgba[0]   = 1.0f;
+        item.color_rgba[1]   = 1.0f;
+        item.color_rgba[2]   = 1.0f;
+        item.color_rgba[3]   = 1.0f;
+        item.uv_rect[0]      = uv_rect_[0];
+        item.uv_rect[1]      = uv_rect_[1];
+        item.uv_rect[2]      = uv_rect_[2];
+        item.uv_rect[3]      = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = wx;
+        item.world_pos[1]    = wy;
+        item.world_pos[2]    = wz;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+// --- end TFlyEffect_Bespoke faithful port
+
+// ----- B04 TPulpEffect_Bespoke — STUBBED ---------------------------------
+// BLOCKED. TPulpEffect::Set requires a live PTCharacter + TCharAnimator
+// to source per-bone body-part sub-object meshes (head/limb chunks)
+// ejected as falling rigid bodies. The harness has no SubmitFx* path
+// for animated character sub-object meshes (only billboards/particles);
+// and the bespoke effect would need to couple against the rig from
+// inside its Tick path — both out of W2D scope. STUB per brief.
+// Re-enable when (a) char-mesh submission lands or (b) we accept the
+// blood-only subset (which would just re-use the canonical B01
+// TBloodEffect_Bespoke path per brief: "keep B01 path canonical").
+
+TPulpEffect_Bespoke* TPulpEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& /*origin*/)
+{
+    log_warn("[pulp/B04] SpawnForTest: BLOCKED — TPulpEffect::Set requires a "
+             "live PTCharacter + TCharAnimator for body-part sub-object meshes, "
+             "and there is no SubmitFx* path for animated character sub-object "
+             "meshes from a bespoke effect in the --test=vfx harness. "
+             "Harness draws nothing for this id. Per brief: 'May share particles "
+             "with B01 — keep B01 path canonical' for the blood subset.");
+    return nullptr;
+}
+
+void TPulpEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    // No-op (paired with the nullptr SpawnForTest above).
+}
+// --- end TPulpEffect_Bespoke STUB
+
 // *************************************************************************
 // * Wave 3 batch W2C: Weather C — character-cast storm + wind strip       *
 // *                                                                       *
