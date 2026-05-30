@@ -3513,6 +3513,215 @@ void FountainBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->fount->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
+// =========================================================================
+// * Wave-4 retail-variant harness helpers                                  *
+// *   Each variant entry reuses an existing _Bespoke animator with a       *
+// *   different I3D asset path (passed through the new asset_override      *
+// *   parameter on SpawnForTest_BESPOKE). One context struct per base,     *
+// *   parameterized by a static-storage path string via non-type template  *
+// *   <const char*> arg (C++17). No animator behavior is altered.          *
+// =========================================================================
+
+// --- Variant asset paths (external linkage for non-type template args) ---
+inline constexpr char kVariantFlameB_I3D[]      = "Magic\\FlameB.I3D";
+inline constexpr char kVariantFlameG_I3D[]      = "Magic\\FlameG.I3D";
+
+inline constexpr char kVariantRibbonB_I3D[]     = "Magic\\RibbonB.I3D";
+inline constexpr char kVariantRibbonG_I3D[]     = "Magic\\RibbonG.I3D";
+inline constexpr char kVariantRibbonO_I3D[]     = "Magic\\RibbonO.I3D";
+inline constexpr char kVariantRibbonP_I3D[]     = "Magic\\RibbonP.I3D";
+inline constexpr char kVariantRibbonR_I3D[]     = "Magic\\RibbonR.I3D";
+inline constexpr char kVariantRibbonW_I3D[]     = "Magic\\RibbonW.I3D";
+inline constexpr char kVariantRibbonY_I3D[]     = "Magic\\RibbonY.I3D";
+
+inline constexpr char kVariantIced_I3D[]        = "Magic\\Iced.i3d";
+
+inline constexpr char kVariantIrisFlare_I3D[]   = "Misc\\IrisFlare.I3D";
+
+inline constexpr char kVariantWater_I3D[]       = "misc\\Water.i3d";
+inline constexpr char kVariantStillWater_I3D[]  = "Misc\\StillWater.I3D";
+inline constexpr char kVariantFlowWater_I3D[]   = "Misc\\FlowWater.I3D";
+inline constexpr char kVariantSewerW_I3D[]      = "Misc\\SewerW.I3D";
+
+inline constexpr char kVariantWFall_I3D[]       = "misc\\WFall.i3d";
+inline constexpr char kVariantWFall2_I3D[]      = "misc\\WFall2.i3d";
+inline constexpr char kVariantWCap_I3D[]        = "misc\\WCap.i3d";
+inline constexpr char kVariantWCap2_I3D[]       = "misc\\Wcap2.i3d";
+inline constexpr char kVariantRiverfall_I3D[]   = "misc\\Riverfall.i3d";
+
+inline constexpr char kVariantOlihoot_I3D[]     = "Misc\\Olihoot.I3D";
+inline constexpr char kVariantOgroks_I3D[]      = "Misc\\Ogroks.I3D";
+inline constexpr char kVariantCamp_I3D[]        = "Misc\\Camp.I3D";
+inline constexpr char kVariantTower_I3D[]       = "Misc\\Tower.I3D";
+inline constexpr char kVariantDruhg_I3D[]       = "Misc\\Druhg.I3D";
+inline constexpr char kVariantRuins_I3D[]       = "Misc\\Ruins.I3D";
+inline constexpr char kVariantBone_I3D[]        = "Misc\\Bone.I3D";
+inline constexpr char kVariantYard_I3D[]        = "Misc\\Yard.I3D";
+inline constexpr char kVariantAncient_I3D[]     = "Misc\\Ancient.I3D";
+inline constexpr char kVariantVillage_I3D[]     = "Misc\\Village.I3D";
+inline constexpr char kVariantMistSign_I3D[]    = "Misc\\Mist.I3D";
+inline constexpr char kVariantHaven_I3D[]       = "Misc\\Haven.I3D";
+
+inline constexpr char kVariantFireCone_I3D[]    = "Magic\\FireCone.I3D";
+inline constexpr char kVariantHfire_I3D[]       = "magic\\Hfire.i3d";
+
+// --- Variant spawn/destroy/submit templates per base class ---------------
+
+template <const char* kPath>
+void* FlameBespokeVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFlameBespokeCtx();
+    c->flame = TFlameEffect_Bespoke::SpawnForTest_BESPOKE(origin, kPath);
+    if (!c->flame)
+        log_warn("[vfx] TFlameEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 kPath);
+    return c;
+}
+
+template <const char* kPath>
+void* RibbonBespokeVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SRibbonBespokeCtx();
+    c->origin = origin;
+    c->eff    = TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE(origin, kPath);
+    if (!c->eff)
+        log_warn("[vfx] TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 kPath);
+    return c;
+}
+
+struct SIcedBespokeVariantCtx {
+    TIcedEffect_Bespoke* iced   = nullptr;
+    S3DPoint             origin = {0, 0, 0};
+    float                gap    = 0.0f;
+    const char*          path   = nullptr;
+};
+
+template <const char* kPath>
+void* IcedBespokeVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SIcedBespokeVariantCtx();
+    c->origin = origin;
+    c->path   = kPath;
+    c->iced   = TIcedEffect_Bespoke::SpawnForTest_BESPOKE(origin, kPath);
+    if (!c->iced)
+        log_warn("[vfx] TIcedEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 kPath);
+    return c;
+}
+
+void IcedBespokeVariantDestroy(void* cp)
+{
+    auto* c = static_cast<SIcedBespokeVariantCtx*>(cp);
+    if (!c) return;
+    delete c->iced;
+    delete c;
+}
+
+void IcedBespokeVariantSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SIcedBespokeVariantCtx*>(cp);
+    if (!c) return;
+    if (c->iced)
+        c->iced->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SFlareBespokeVariantCtx {
+    TFlareEffect_Bespoke* flare = nullptr;
+};
+
+template <const char* kPath>
+void* FlareBespokeVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFlareBespokeVariantCtx();
+    c->flare = TFlareEffect_Bespoke::SpawnForTest_BESPOKE(origin, kPath);
+    if (!c->flare)
+        log_warn("[vfx] TFlareEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 kPath);
+    return c;
+}
+
+void FlareBespokeVariantDestroy(void* cp)
+{
+    auto* c = static_cast<SFlareBespokeVariantCtx*>(cp);
+    if (!c) return;
+    delete c->flare;
+    delete c;
+}
+
+void FlareBespokeVariantSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFlareBespokeVariantCtx*>(cp);
+    if (c && c->flare)
+        c->flare->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+template <const char* kPath>
+void* WaterFallBespokeVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SWaterFallBespokeCtx();
+    c->wf = TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE(origin, kPath);
+    if (!c->wf)
+        log_warn("[vfx] TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 kPath);
+    return c;
+}
+
+template <const char* kPath>
+void* WaterBespokeVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SWaterBespokeCtx();
+    c->w = TWaterEffect_Bespoke::SpawnForTest_BESPOKE(origin, kPath);
+    if (!c->w)
+        log_warn("[vfx] TWaterEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 kPath);
+    return c;
+}
+
+template <const char* kPath>
+void* FountainBespokeVariantSpawn(const S3DPoint& origin)
+{
+    // Sign markers use the fountain animator with colorobj=0 (Cyan slot) —
+    // the per-variant asset overrides the sub-objects, color is irrelevant
+    // for marker meshes whose own materials drive the look.
+    auto* c = new SFountainBespokeCtx();
+    c->fount = TFountainAnimator_Bespoke::SpawnForTest_BESPOKE(origin, 0, kPath);
+    if (!c->fount)
+        log_warn("[vfx] TFountainAnimator_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 kPath);
+    return c;
+}
+
+struct SFireSwarmBespokeVariantCtx {
+    TFireSwarmEffect_Bespoke* swarm = nullptr;
+};
+
+template <const char* kPath>
+void* FireSwarmBespokeVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFireSwarmBespokeVariantCtx();
+    c->swarm = TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(origin, kPath);
+    if (!c->swarm)
+        log_warn("[vfx] TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 kPath);
+    return c;
+}
+
+void FireSwarmBespokeVariantDestroy(void* cp)
+{
+    auto* c = static_cast<SFireSwarmBespokeVariantCtx*>(cp);
+    if (!c) return;
+    delete c->swarm;
+    delete c;
+}
+
+void FireSwarmBespokeVariantSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFireSwarmBespokeVariantCtx*>(cp);
+    if (c && c->swarm)
+        c->swarm->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 }  // namespace
 
 // Defer registration until VfxTest::Initialize runs (renderer must
@@ -4367,6 +4576,427 @@ struct SVfxTestBootstrap {
         blue_fountain_bespoke.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
         blue_fountain_bespoke.destroy       = [](void* c) { FountainBespokeDestroy(c); };
         VfxTest::DeferredRegister(blue_fountain_bespoke);
+
+        // =====================================================================
+        // * Wave-4: 36 retail-variant harness entries                          *
+        // *   Each entry reuses an existing _Bespoke animator with the         *
+        // *   variant's I3D asset path. Animator behavior unchanged; only the  *
+        // *   asset path differs. See effect.cpp SpawnForTest_BESPOKE bodies.  *
+        // =====================================================================
+
+        // --- TFlameEffect_Bespoke variants (FlameB/FlameG) -------------------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFlameEffect_BESPOKE__FlameB";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FlameBespokeVariantSpawn<kVariantFlameB_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FlameBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FlameBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFlameEffect_BESPOKE__FlameG";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FlameBespokeVariantSpawn<kVariantFlameG_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FlameBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FlameBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- TRibbonAnimator_Bespoke variants (RibbonB/G/O/P/R/W/Y) ----------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TRibbonAnimator_BESPOKE__RibbonB";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeVariantSpawn<kVariantRibbonB_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TRibbonAnimator_BESPOKE__RibbonG";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeVariantSpawn<kVariantRibbonG_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TRibbonAnimator_BESPOKE__RibbonO";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeVariantSpawn<kVariantRibbonO_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TRibbonAnimator_BESPOKE__RibbonP";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeVariantSpawn<kVariantRibbonP_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TRibbonAnimator_BESPOKE__RibbonR";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeVariantSpawn<kVariantRibbonR_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TRibbonAnimator_BESPOKE__RibbonW";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeVariantSpawn<kVariantRibbonW_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TRibbonAnimator_BESPOKE__RibbonY";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeVariantSpawn<kVariantRibbonY_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- TIcedEffect_Bespoke variants (Icedsparks/Snow) ------------------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TIcedEffect_BESPOKE__Icedsparks";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return IcedBespokeVariantSpawn<kVariantIced_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { IcedBespokeVariantSubmit(c, d); };
+            e.destroy       = [](void* c) { IcedBespokeVariantDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TIcedEffect_BESPOKE__Snow";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return IcedBespokeVariantSpawn<kVariantIced_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { IcedBespokeVariantSubmit(c, d); };
+            e.destroy       = [](void* c) { IcedBespokeVariantDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- TFlareEffect_Bespoke variant (Teleporter) -----------------------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFlareAnimator_BESPOKE__Teleporter";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FlareBespokeVariantSpawn<kVariantIrisFlare_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FlareBespokeVariantSubmit(c, d); };
+            e.destroy       = [](void* c) { FlareBespokeVariantDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- TWaterFallEffect_Bespoke variants (Waterfall+5) -----------------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TWaterFallEffect_BESPOKE__Waterfall";
+            e.family        = "water";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWater_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TWaterFallEffect_BESPOKE__WaterFlft";
+            e.family        = "water";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWFall_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TWaterFallEffect_BESPOKE__WaterFrt";
+            e.family        = "water";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWFall2_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TWaterFallEffect_BESPOKE__WaterClft";
+            e.family        = "water";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWCap_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TWaterFallEffect_BESPOKE__WaterCrt";
+            e.family        = "water";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWCap2_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TWaterFallEffect_BESPOKE__RiverFall";
+            e.family        = "water";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantRiverfall_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- TWaterEffect_Bespoke variants (StillWater/FlowWater/SewerWater) -
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TWaterEffect_BESPOKE__StillWater";
+            e.family        = "water";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return WaterBespokeVariantSpawn<kVariantStillWater_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { WaterBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { WaterBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TWaterEffect_BESPOKE__FlowWater";
+            e.family        = "water";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return WaterBespokeVariantSpawn<kVariantFlowWater_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { WaterBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { WaterBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TWaterEffect_BESPOKE__SewerWater";
+            e.family        = "water";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return WaterBespokeVariantSpawn<kVariantSewerW_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { WaterBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { WaterBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- TFountainAnimator_Bespoke sign variants (11 markers) -----------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__OlihootSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantOlihoot_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__OgrokSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantOgroks_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__CampSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantCamp_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__TowerSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantTower_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__DruhgSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantDruhg_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__RuinsSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantRuins_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__BoneSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantBone_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__YardSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantYard_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__AncientSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantAncient_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__VillageSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantVillage_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__MistSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantMistSign_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFountainAnimator_BESPOKE__HavenSign";
+            e.family        = "magic";
+            e.pipeline      = "FB+LS";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FountainBespokeVariantSpawn<kVariantHaven_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FountainBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- TFireSwarmEffect_Bespoke variants (dragonfire / headfireball /
+        // dragonattack) — tentative reuse; FireCone/FireBall NOVEL animators
+        // may supersede when ported. -----------------------------------------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireSwarmEffect_BESPOKE__dragonfire";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FireSwarmBespokeVariantSpawn<kVariantFireCone_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FireSwarmBespokeVariantSubmit(c, d); };
+            e.destroy       = [](void* c) { FireSwarmBespokeVariantDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireSwarmEffect_BESPOKE__headfireball";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FireSwarmBespokeVariantSpawn<kVariantHfire_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FireSwarmBespokeVariantSubmit(c, d); };
+            e.destroy       = [](void* c) { FireSwarmBespokeVariantDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireSwarmEffect_BESPOKE__dragonattack";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FireSwarmBespokeVariantSpawn<kVariantHfire_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FireSwarmBespokeVariantSubmit(c, d); };
+            e.destroy       = [](void* c) { FireSwarmBespokeVariantDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
     }
 };
 SVfxTestBootstrap g_vfx_test_bootstrap;

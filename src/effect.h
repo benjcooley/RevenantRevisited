@@ -2756,7 +2756,8 @@ class TFlameEffect_Bespoke : public TEffect
     // Magic\flame.i3d, resolves the single texture handle, snapshots the
     // canonical 128x160 surface size, and seeds `frame = 0`. Caller owns
     // the returned pointer.
-    [[nodiscard]] static TFlameEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    [[nodiscard]] static TFlameEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                    const char* asset_override = nullptr);
 
     // Per-frame tick + submit. Ports TFlameAnimator::Animate (snapshot
     // ungated, framerate-dependent) via a 24Hz sim-tick accumulator for
@@ -2857,7 +2858,8 @@ class TFireSwarmEffect_Bespoke : public TEffect
     // harness. Loads Magic\FireSwarm.i3d, resolves the tube01 sub-object's
     // texture slot, seeds the 3-float state from the snapshot Initialize
     // body (effect_old.cpp:10483-10490). Returns nullptr on asset failure.
-    [[nodiscard]] static TFireSwarmEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    [[nodiscard]] static TFireSwarmEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                        const char* asset_override = nullptr);
 
     // Per-frame tick + submit. Ports TFireSwarmAnimator::Animate
     // (effect_old.cpp:10499-10515) verbatim through a 24 Hz sim-tick
@@ -3183,7 +3185,8 @@ class TRibbonAnimator_Bespoke : public TEffect
 
     void OffScreen() override { KillThisEffect(); }
 
-    [[nodiscard]] static TRibbonAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    [[nodiscard]] static TRibbonAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                      const char* asset_override = nullptr);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
@@ -3988,7 +3991,8 @@ class TWaterFallEffect_Bespoke : public TEffect
     // WATERFALL_MAXDROPS drops and warms the simulator the same way
     // TWaterFallAnimator::Initialize does. Returns nullptr if the
     // imagery can't be loaded; caller owns the returned pointer.
-    [[nodiscard]] static TWaterFallEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    [[nodiscard]] static TWaterFallEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                        const char* asset_override = nullptr);
 
     // Per-frame tick + submit. Ports UpdateStuff() (per sim-tick) and
     // Render() (per frame) verbatim. Animator was framerate-locked in
@@ -4033,7 +4037,8 @@ class TWaterEffect_Bespoke : public TEffect
 
     void OffScreen() override { KillThisEffect(); }
 
-    [[nodiscard]] static TWaterEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    [[nodiscard]] static TWaterEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                    const char* asset_override = nullptr);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }   // persistent
 
@@ -4319,7 +4324,8 @@ class TIcedEffect_Bespoke : public TEffect
 
     void OffScreen() override { KillThisEffect(); }
 
-    [[nodiscard]] static TIcedEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    [[nodiscard]] static TIcedEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                  const char* asset_override = nullptr);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
@@ -4615,7 +4621,8 @@ class TFlareEffect_Bespoke : public TEffect
     // Standalone spawn for the --test=vfx harness. Loads Misc\IrisFlare.I3D,
     // resolves sub-object 0 (the single flare quad), seeds the 10-spark
     // array. Returns nullptr if the imagery can't be loaded.
-    [[nodiscard]] static TFlareEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    [[nodiscard]] static TFlareEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                    const char* asset_override = nullptr);
 
     // Per-frame tick + submit. Ports TFlareAnimator::Animate +
     // TFlareAnimator::Render directly. 10 alpha-blended billboards drawn
@@ -4899,7 +4906,9 @@ class TFountainAnimator_Bespoke : public TEffect
 
     // colorobj selects the photon sub-object (0=Cyan / 1=Red / 2=Green / 3=Blue)
     // and the matching tinted point light color.
-    [[nodiscard]] static TFountainAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin, int32_t colorobj);
+    [[nodiscard]] static TFountainAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                         int32_t colorobj,
+                                                                         const char* asset_override = nullptr);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }   // ambient loop — never dies
 
