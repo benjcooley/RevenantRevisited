@@ -13553,6 +13553,400 @@ void TQuicksandEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 }
 
 // *************************************************************************
+// * Wave-3 W3-H — Boss-specific + LabyrinthEffect (deep-recon batch)      *
+// *                                                                       *
+// * Five retail-only effects with no snapshot source body. The XREF       *
+// * trail dead-ends at dispatcher prologues (LabyrinthEffect, JhagaAttack *
+// * at the spell handler table 005c54e0..005c5500) or has no XREF at all *
+// * (Nakrnoth, ceyes — registered via class.def only). `jtele` has a     *
+// * direct caller in TCharacter AI (cls_0x5a7b98 4cce1a) but the body of *
+// * the consuming animator is asset-only.                                *
+// *                                                                       *
+// * Each is shipped as a minimal placeholder per the W3-H brief: load    *
+// * the .I3D, resolve sub-object 0's texture+UV, and draw ONE Alpha     *
+// * billboard at the effect origin for a sensible default lifetime.      *
+// * Marked status=stubbed in the dispatch table; gives the --test=vfx   *
+// * harness a real row to A/B against game video so the user can drive  *
+// * kinematic tuning once footage is captured.                           *
+// *************************************************************************
+
+namespace {
+
+// Local copies of the SparkleLoadImagery / SparkleSubObjTextureSlot /
+// SparkleResolveSubObjUv helpers used by F03/X10/X11/X12/X01 etc. The
+// originals live in the anonymous namespace at src/effect.cpp:9210-9269
+// and aren't visible here. Same body — keep merge-clean per
+// localize-at-end W3-H rule.
+struct SW3HLoadedImagery
+{
+    TObjectImagery* base  = nullptr;
+    T3DImagery*     img3d = nullptr;
+};
+
+SW3HLoadedImagery W3HLoadImagery(const char* path, const char* tag)
+{
+    SW3HLoadedImagery out;
+    const int32_t img_id = TObjectImagery::FindImagery(path);
+    if (img_id < 0)
+    {
+        log_error("[%s] SpawnForTest: FindImagery('%s') failed", tag, path);
+        return out;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[%s] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  tag, img_id, path);
+        return out;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[%s] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  tag, path);
+        TObjectImagery::FreeImagery(base);
+        return out;
+    }
+    out.base  = base;
+    out.img3d = img3d;
+    return out;
+}
+
+int32_t W3HSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d) return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0) return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+void W3HResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Common placeholder draw — single Alpha billboard at the effect origin,
+// ScreenAligned, full white, full alpha. Each W3-H stub calls this from
+// its TickAndSubmit body after running the lifetime accumulator.
+void W3HSubmitPlaceholderBillboard(TRenderer* renderer,
+                                   const S3DPoint& base,
+                                   TTextureHandle texture,
+                                   const float uv_rect[4],
+                                   float size_wu,
+                                   EFxDebugMode debug_mode)
+{
+    if (!renderer || texture == kInvalidTexture) return;
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = size_wu;
+    item.size_wu[1] = size_wu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect[0];
+    item.uv_rect[1] = uv_rect[1];
+    item.uv_rect[2] = uv_rect[2];
+    item.uv_rect[3] = uv_rect[3];
+    item.key.texture     = texture;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    renderer->SubmitFxBillboard(item);
+}
+
+constexpr const char* kLabyrinthBespokeImageryPath   = "misc\\Starfield.I3D";
+constexpr const char* kJhagaAttackBespokeImageryPath = "magic\\Jattack.i3d";
+constexpr const char* kJTeleBespokeImageryPath       = "magic\\jtele.i3d";
+constexpr const char* kNakrnothBespokeImageryPath    = "magic\\Nakrnoth.I3D";
+constexpr const char* kCEyesBespokeImageryPath       = "magic\\Ceyes.i3d";
+
+}  // namespace
+
+// ----- W3-H/01 TLabyrinthEffect_Bespoke (STUB) ----------------------------
+// SpawnForTest body shape is identical across the five W3-H entries: load
+// the .I3D, resolve sub-object 0's texture+UV, park on the effect's
+// `texture_` / `uv_rect_` members. Kept as five small inlined bodies (vs
+// one templated factory) because each binds to a per-class private
+// member and the per-effect log tag improves harness diagnostics.
+
+TLabyrinthEffect_Bespoke* TLabyrinthEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SW3HLoadedImagery loaded = W3HLoadImagery(kLabyrinthBespokeImageryPath, "labyrinth");
+    if (!loaded.img3d) return nullptr;
+
+    auto* eff = new TLabyrinthEffect_Bespoke(loaded.base);
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[labyrinth] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete eff;
+        return nullptr;
+    }
+
+    const int32_t tex_slot = W3HSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    eff->texture_ = tex.htexture;
+    W3HResolveSubObjUv(loaded.img3d, 0, eff->uv_rect_);
+    if (eff->texture_ == kInvalidTexture)
+    {
+        log_error("[labyrinth] SpawnForTest: sub-object 0 texture unresolved");
+        delete eff;
+        return nullptr;
+    }
+
+    log_info("[labyrinth] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u uv=[%.3f,%.3f %.3fx%.3f] (PLACEHOLDER — endgame starfield bg)",
+             kLabyrinthBespokeImageryPath, eff->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             eff->texture_,
+             eff->uv_rect_[0], eff->uv_rect_[1],
+             eff->uv_rect_[2], eff->uv_rect_[3]);
+    return eff;
+}
+
+void TLabyrinthEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+    static const bool s_logged_first_submit = []{
+        log_info("[labyrinth-bespoke] first submit (TickAndSubmit running) — placeholder");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    elapsed_ms_ += TTime::DeltaTime() * 1000.0;
+    if (elapsed_ms_ >= kLabyrinthLifetimeMs)
+    {
+        alive_ = false;
+        return;
+    }
+    W3HSubmitPlaceholderBillboard(Renderer, Pos(), texture_, uv_rect_,
+                                   kLabyrinthBaseSizeWu, debug_mode);
+}
+
+// ----- W3-H/02 TJhagaAttackEffect_Bespoke (STUB) --------------------------
+TJhagaAttackEffect_Bespoke* TJhagaAttackEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SW3HLoadedImagery loaded = W3HLoadImagery(kJhagaAttackBespokeImageryPath, "jhagaattack");
+    if (!loaded.img3d) return nullptr;
+
+    auto* eff = new TJhagaAttackEffect_Bespoke(loaded.base);
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[jhagaattack] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete eff;
+        return nullptr;
+    }
+
+    const int32_t tex_slot = W3HSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    eff->texture_ = tex.htexture;
+    W3HResolveSubObjUv(loaded.img3d, 0, eff->uv_rect_);
+    if (eff->texture_ == kInvalidTexture)
+    {
+        log_error("[jhagaattack] SpawnForTest: sub-object 0 texture unresolved");
+        delete eff;
+        return nullptr;
+    }
+
+    log_info("[jhagaattack] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u (PLACEHOLDER — Jhaga boss attack)",
+             kJhagaAttackBespokeImageryPath, eff->GetMapIndex(),
+             origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TJhagaAttackEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+    static const bool s_logged_first_submit = []{
+        log_info("[jhagaattack-bespoke] first submit (TickAndSubmit running) — placeholder");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    elapsed_ms_ += TTime::DeltaTime() * 1000.0;
+    if (elapsed_ms_ >= kJhagaAttackLifetimeMs)
+    {
+        alive_ = false;
+        return;
+    }
+    W3HSubmitPlaceholderBillboard(Renderer, Pos(), texture_, uv_rect_,
+                                   kJhagaAttackBaseSizeWu, debug_mode);
+}
+
+// ----- W3-H/03 TJTeleEffect_Bespoke (STUB) --------------------------------
+TJTeleEffect_Bespoke* TJTeleEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SW3HLoadedImagery loaded = W3HLoadImagery(kJTeleBespokeImageryPath, "jtele");
+    if (!loaded.img3d) return nullptr;
+
+    auto* eff = new TJTeleEffect_Bespoke(loaded.base);
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[jtele] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete eff;
+        return nullptr;
+    }
+
+    const int32_t tex_slot = W3HSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    eff->texture_ = tex.htexture;
+    W3HResolveSubObjUv(loaded.img3d, 0, eff->uv_rect_);
+    if (eff->texture_ == kInvalidTexture)
+    {
+        log_error("[jtele] SpawnForTest: sub-object 0 texture unresolved");
+        delete eff;
+        return nullptr;
+    }
+
+    log_info("[jtele] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u (PLACEHOLDER — Jhaga teleport-source; pairs with `jteled`)",
+             kJTeleBespokeImageryPath, eff->GetMapIndex(),
+             origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TJTeleEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+    static const bool s_logged_first_submit = []{
+        log_info("[jtele-bespoke] first submit (TickAndSubmit running) — placeholder");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    elapsed_ms_ += TTime::DeltaTime() * 1000.0;
+    if (elapsed_ms_ >= kJTeleLifetimeMs)
+    {
+        alive_ = false;
+        return;
+    }
+    W3HSubmitPlaceholderBillboard(Renderer, Pos(), texture_, uv_rect_,
+                                   kJTeleBaseSizeWu, debug_mode);
+}
+
+// ----- W3-H/04 TNakrnothEffect_Bespoke: impl supplied by W3-E above -----
+
+// ----- W3-H/05 TCEyesEffect_Bespoke (STUB) --------------------------------
+TCEyesEffect_Bespoke* TCEyesEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SW3HLoadedImagery loaded = W3HLoadImagery(kCEyesBespokeImageryPath, "ceyes");
+    if (!loaded.img3d) return nullptr;
+
+    auto* eff = new TCEyesEffect_Bespoke(loaded.base);
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[ceyes] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete eff;
+        return nullptr;
+    }
+
+    const int32_t tex_slot = W3HSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    eff->texture_ = tex.htexture;
+    W3HResolveSubObjUv(loaded.img3d, 0, eff->uv_rect_);
+    if (eff->texture_ == kInvalidTexture)
+    {
+        log_error("[ceyes] SpawnForTest: sub-object 0 texture unresolved");
+        delete eff;
+        return nullptr;
+    }
+
+    log_info("[ceyes] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u (PLACEHOLDER — boss creature-eyes; 2nd eye flare deferred)",
+             kCEyesBespokeImageryPath, eff->GetMapIndex(),
+             origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TCEyesEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+    static const bool s_logged_first_submit = []{
+        log_info("[ceyes-bespoke] first submit (TickAndSubmit running) — placeholder");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    elapsed_ms_ += TTime::DeltaTime() * 1000.0;
+    if (elapsed_ms_ >= kCEyesLifetimeMs)
+    {
+        alive_ = false;
+        return;
+    }
+    W3HSubmitPlaceholderBillboard(Renderer, Pos(), texture_, uv_rect_,
+                                   kCEyesBaseSizeWu, debug_mode);
+}
+// --- end W3-H batch (LabyrinthEffect / JhagaAttack / jtele / Nakrnoth / ceyes)
+
+
+// *************************************************************************
 // * Wave-3 batch W3-G — Decorative ambient / late-polish (5 effects)       *
 // *                                                                       *
 // * Retail-only effects with NO snapshot source body AND NO Ghidra        *

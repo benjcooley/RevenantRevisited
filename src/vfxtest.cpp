@@ -5475,6 +5475,117 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
 
+        // ----- Wave-3 W3-H: Boss-specific + LabyrinthEffect placeholders ---
+        // Each entry loads its .I3D and draws ONE Alpha billboard at the
+        // effect origin for a sensible default lifetime. STUBBED — bodies
+        // synthesized from asset metadata + XREF table evidence; behaviour
+        // tuning waits on game video A/B from the user.
+        {
+            struct SLabyrinthBespokeCtx { TLabyrinthEffect_Bespoke* eff = nullptr; };
+            VfxTest::SEffect e = {};
+            e.id            = "TLabyrinthEffect_BESPOKE";
+            e.family        = "endgame";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SLabyrinthBespokeCtx();
+                c->eff = TLabyrinthEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TLabyrinthEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode d) {
+                auto* c = static_cast<SLabyrinthBespokeCtx*>(cp);
+                if (c && c->eff) c->eff->TickAndSubmitForTest_BESPOKE(d);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SLabyrinthBespokeCtx*>(cp);
+                if (!c) return;
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            struct SJhagaAttackBespokeCtx { TJhagaAttackEffect_Bespoke* eff = nullptr; };
+            VfxTest::SEffect e = {};
+            e.id            = "TJhagaAttackEffect_BESPOKE";
+            e.family        = "boss";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Projectile;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SJhagaAttackBespokeCtx();
+                c->eff = TJhagaAttackEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TJhagaAttackEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode d) {
+                auto* c = static_cast<SJhagaAttackBespokeCtx*>(cp);
+                if (c && c->eff) c->eff->TickAndSubmitForTest_BESPOKE(d);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SJhagaAttackBespokeCtx*>(cp);
+                if (!c) return;
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            struct SJTeleBespokeCtx { TJTeleEffect_Bespoke* eff = nullptr; };
+            VfxTest::SEffect e = {};
+            e.id            = "TJTeleEffect_BESPOKE";
+            e.family        = "boss";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SJTeleBespokeCtx();
+                c->eff = TJTeleEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TJTeleEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode d) {
+                auto* c = static_cast<SJTeleBespokeCtx*>(cp);
+                if (c && c->eff) c->eff->TickAndSubmitForTest_BESPOKE(d);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SJTeleBespokeCtx*>(cp);
+                if (!c) return;
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+        // W3-H Nakrnoth registration omitted — superseded by W3-E entry.
+        {
+            struct SCEyesBespokeCtx { TCEyesEffect_Bespoke* eff = nullptr; };
+            VfxTest::SEffect e = {};
+            e.id            = "TCEyesEffect_BESPOKE";
+            e.family        = "boss";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SCEyesBespokeCtx();
+                c->eff = TCEyesEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TCEyesEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode d) {
+                auto* c = static_cast<SCEyesBespokeCtx*>(cp);
+                if (c && c->eff) c->eff->TickAndSubmitForTest_BESPOKE(d);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SCEyesBespokeCtx*>(cp);
+                if (!c) return;
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
         // =====================================================================
         // * Wave-3 batch W3-G — Decorative ambient / late-polish (5 stubbed)   *
         // *   All retail-only effects with no Ghidra evidence; placeholders    *
