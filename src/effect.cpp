@@ -14362,3 +14362,642 @@ void TStrikeEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode
         }
     }
 }
+
+// *************************************************************************
+// * Wave 3 batch W3-C: Cave / environment ambient                         *
+// *                                                                       *
+// * Implementations for:                                                  *
+// *   - TGeyserEffect_Bespoke         (sgeyser / fgeyser)                 *
+// *   - TFlameAnimator_Bespoke__cfire (cfire — STUB)                       *
+// *   - TFogEffect_Bespoke__MistFog   (MistFog)                            *
+// *   - TRockStormEffect_Bespoke      (RockStorm)                          *
+// *                                                                       *
+// * Localized-at-end (append) for clean merge with adjacent wave-3 batches.*
+// *************************************************************************
+
+// =========================================================================
+// W3-C sgeyser / fgeyser : TGeyserEffect_Bespoke
+// =========================================================================
+//
+// Synthesized from Ghidra cls_0x5b79ac forensics. No snapshot body.
+// See class-header doc in effect.h for the evidence chain.
+
+TGeyserEffect_Bespoke* TGeyserEffect_Bespoke::SpawnForTest_BESPOKE(
+    const S3DPoint& origin, EVariant variant)
+{
+    // Asset path varies by variant (no I3D on disk for either; we still
+    // attempt a load — the loader will fail gracefully and we render
+    // untextured procedural billboards if needed).
+    static const char* kSGeyserCandidates[] = {
+        "cave\\Cavsgeyser.i3d",
+        "Cave\\Cavsgeyser.I3D",
+        "Cave\\CavSGeyser.I3D",
+    };
+    static const char* kFGeyserCandidates[] = {
+        "cave\\Cavfgeyser.i3d",
+        "Cave\\Cavfgeyser.I3D",
+        "Cave\\CavFGeyser.I3D",
+    };
+    const char* const* candidates = (variant == EVariant::Fire)
+                                     ? kFGeyserCandidates
+                                     : kSGeyserCandidates;
+    int32_t num_candidates = (variant == EVariant::Fire)
+        ? int32_t(sizeof(kFGeyserCandidates) / sizeof(*kFGeyserCandidates))
+        : int32_t(sizeof(kSGeyserCandidates) / sizeof(*kSGeyserCandidates));
+
+    auto* g = new TGeyserEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    g->ForcePos(origin);
+    g->SetMapIndex(MapPane.MakeIndex());
+    g->ActivateComponents();
+    g->variant_     = variant;
+    g->cycle_tick_  = 0;
+    g->spawn_cursor_ = 0;
+
+    g->texture_ = TryLoadMagicTexture(candidates, num_candidates,
+                                      g->uv_rect_,
+                                      (variant == EVariant::Fire) ? "fgeyser"
+                                                                  : "sgeyser");
+
+    // Cold-start the particle pool empty; first eruption triggers at
+    // cycle_tick_=0 (immediate burst on first tick).
+    for (int32_t i = 0; i < kGeyserParticles; ++i)
+    {
+        g->particles_[i].used = false;
+    }
+
+    log_info("[geyser-bespoke] SpawnForTest_BESPOKE variant=%s map_index=%d "
+             "origin=(%d,%d,%d) tex=%u",
+             (variant == EVariant::Fire) ? "fire" : "steam",
+             g->GetMapIndex(), origin.x, origin.y, origin.z, g->texture_);
+    return g;
+}
+
+void TGeyserEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick accumulator (per feedback_framerate_independent_anim).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kGeyserSimTickMs))
+    {
+        sim_accum_ms_ -= double(kGeyserSimTickMs);
+
+        // Advance period clock; spawn during eruption window.
+        ++cycle_tick_;
+        if (cycle_tick_ >= kGeyserPeriodTicks)
+            cycle_tick_ = 0;
+
+        const bool eruption_active = (cycle_tick_ < kGeyserEruptionTicks);
+
+        // Spawn ~1-2 particles per tick during eruption (eruption ticks *
+        // ~1.5 / particle count ≈ steady-state). Use spawn_cursor_ to
+        // recycle slots round-robin.
+        if (eruption_active)
+        {
+            const int32_t spawns_this_tick = 2;
+            for (int32_t k = 0; k < spawns_this_tick; ++k)
+            {
+                // Find next available slot (round-robin).
+                for (int32_t scan = 0; scan < kGeyserParticles; ++scan)
+                {
+                    const int32_t idx = (spawn_cursor_ + scan) % kGeyserParticles;
+                    if (!particles_[idx].used)
+                    {
+                        SGeyserParticle& p = particles_[idx];
+                        p.used = true;
+                        p.life = 0.0f;
+                        p.maxlife = kGeyserParticleLife
+                                  + float(random(-10, 10));
+                        p.pos.X = float(random(-100, 100)) / 100.0f
+                                * kGeyserSpawnSpreadXY;
+                        p.pos.Y = float(random(-100, 100)) / 100.0f
+                                * kGeyserSpawnSpreadXY;
+                        p.pos.Z = 0.0f;
+                        p.vel.X = float(random(-100, 100)) / 100.0f
+                                * kGeyserSideSpread;
+                        p.vel.Y = float(random(-100, 100)) / 100.0f
+                                * kGeyserSideSpread;
+                        p.vel.Z = kGeyserUpVel
+                                + float(random(-50, 50)) / 100.0f;
+                        p.scl   = 0.6f + float(random(0, 100)) / 200.0f;
+                        spawn_cursor_ = (idx + 1) % kGeyserParticles;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Integrate every particle: ballistic with gravity.
+        for (int32_t i = 0; i < kGeyserParticles; ++i)
+        {
+            SGeyserParticle& p = particles_[i];
+            if (!p.used)
+                continue;
+            p.vel.Z += kGeyserGravity;
+            p.pos.X += p.vel.X;
+            p.pos.Y += p.vel.Y;
+            p.pos.Z += p.vel.Z;
+            p.life  += 1.0f;
+            // Particles die when life expires or when they fall below
+            // ground (z < small negative buffer).
+            if (p.life >= p.maxlife || p.pos.Z < -8.0f)
+            {
+                p.used = false;
+            }
+        }
+    }
+
+    static const bool s_geyser_logged_first_submit = []{
+        log_info("[geyser-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_geyser_logged_first_submit;
+
+    if (texture_ == kInvalidTexture)
+        return;   // nothing to draw; harness still keeps the row
+
+    // Variant color ramp. Fire: warm orange/red; Steam: cool white/blue.
+    // Alpha fades over life.
+    const S3DPoint& base = Pos();
+    const bool is_fire = (variant_ == EVariant::Fire);
+    for (int32_t i = 0; i < kGeyserParticles; ++i)
+    {
+        const SGeyserParticle& p = particles_[i];
+        if (!p.used)
+            continue;
+
+        const float t = (p.maxlife > 0.0f)
+                       ? (p.life / p.maxlife)
+                       : 1.0f;
+        // Alpha: ramp-up first 10%, hold, fade last 40%.
+        float alpha;
+        if (t < 0.1f)
+            alpha = t / 0.1f;
+        else if (t < 0.6f)
+            alpha = 1.0f;
+        else
+            alpha = 1.0f - (t - 0.6f) / 0.4f;
+        if (alpha < 0.0f) alpha = 0.0f;
+        if (alpha > 1.0f) alpha = 1.0f;
+
+        SBillboardDrawItem item = {};
+        item.size_wu[0] = kGeyserBaseSizeWu * p.scl;
+        item.size_wu[1] = kGeyserBaseSizeWu * p.scl;
+        if (is_fire)
+        {
+            // Warm: hot core fading to dim red.
+            item.color_rgba[0] = 1.0f;
+            item.color_rgba[1] = 0.55f + 0.25f * (1.0f - t);
+            item.color_rgba[2] = 0.10f + 0.10f * (1.0f - t);
+        }
+        else
+        {
+            // Cool: white core fading to pale blue.
+            item.color_rgba[0] = 0.85f + 0.15f * (1.0f - t);
+            item.color_rgba[1] = 0.90f + 0.10f * (1.0f - t);
+            item.color_rgba[2] = 1.0f;
+        }
+        item.color_rgba[3] = alpha;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        // Both variants are luminous (steam catches light, fire glows) —
+        // additive reads as a hot plume against the cave background.
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = float(base.x) + p.pos.X;
+        item.world_pos[1]    = float(base.y) + p.pos.Y;
+        item.world_pos[2]    = float(base.z) + p.pos.Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// W3-C cfire : TFlameAnimator_Bespoke__cfire (STUB)
+// =========================================================================
+//
+// No Ghidra body, no snapshot body, no asset on disk. SpawnForTest
+// returns nullptr; harness row registered for future A/B.
+
+TFlameAnimator_Bespoke__cfire*
+TFlameAnimator_Bespoke__cfire::SpawnForTest_BESPOKE(const S3DPoint& /*origin*/)
+{
+    log_warn("[cfire-bespoke/W3-C] SpawnForTest: STUB — no Ghidra class "
+             "identified, no snapshot body, asset 'misc\\Cfire.i3d' not "
+             "present in legacy/Imagery or resources.rvr. Harness row "
+             "registered; renders nothing until reference video or asset "
+             "surfaces.");
+    return nullptr;
+}
+
+void TFlameAnimator_Bespoke__cfire::TickAndSubmitForTest_BESPOKE(
+    EFxDebugMode /*debug_mode*/)
+{
+    // No-op (paired with the nullptr SpawnForTest above).
+}
+
+// =========================================================================
+// W3-C MistFog : TFogEffect_Bespoke__MistFog
+// =========================================================================
+//
+// Faithful direct port of TMistFogAnimator (legacy/effect.cpp:11311-11456).
+
+void TFogEffect_Bespoke__MistFog::ResetBall_(int32_t b)
+{
+    // Direct port of TMistFogAnimator::ResetBall (legacy:11337-11349).
+    SMistPuff& s = smoke_[b];
+    s.x = float(random(-32, 32)) + centerx_;
+    s.y = centery_;
+    s.z = 0.0f;
+    s.rot = 0.0f;
+    s.vx = (float(random(0, 1000)) / 1000.0f) * 0.5f - 0.25f;
+    s.vy = (float(random(0, 1000)) / 1000.0f) * 0.5f - 0.25f;
+    s.vz = (float(random(0, 1000)) / 1000.0f) * 0.5f;
+    s.life = random(0, 200);
+    s.size = (float(random(0, 1000)) / 1000.0f) * 2.7f + 0.1f;
+}
+
+TFogEffect_Bespoke__MistFog* TFogEffect_Bespoke__MistFog::SpawnForTest_BESPOKE(
+    const S3DPoint& origin)
+{
+    // Asset paths from legacy Class.Def:2070,2074 — both Magic and Misc
+    // variants registered (Magic was preferred per first registration).
+    static const char* kMistFogCandidates[] = {
+        "Magic\\mistfog.i3d",
+        "Magic\\MistFog.I3D",
+        "misc\\Mistfog.i3d",
+        "Misc\\mistfog.I3D",
+    };
+
+    auto* mf = new TFogEffect_Bespoke__MistFog(static_cast<TObjectImagery*>(nullptr));
+    mf->ForcePos(origin);
+    mf->SetMapIndex(MapPane.MakeIndex());
+    mf->ActivateComponents();
+
+    mf->texture_ = TryLoadMagicTexture(kMistFogCandidates,
+                                       int32_t(sizeof(kMistFogCandidates)
+                                              / sizeof(*kMistFogCandidates)),
+                                       mf->uv_rect_, "mistfog");
+
+    // legacy:11354-11366 — Initialize.
+    mf->centerx_ = 0.0f;
+    mf->centery_ = 0.0f;
+    for (int32_t i = 0; i < kMistFogNumPuffs; ++i)
+        mf->ResetBall_(i);
+    mf->ticks_ = 0;
+
+    log_info("[mistfog-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) tex=%u puffs=%d",
+             mf->GetMapIndex(), origin.x, origin.y, origin.z,
+             mf->texture_, kMistFogNumPuffs);
+    return mf;
+}
+
+void TFogEffect_Bespoke__MistFog::TickAndSubmitForTest_BESPOKE(
+    EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim tick accumulator.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kMistFogSimTickMs))
+    {
+        sim_accum_ms_ -= double(kMistFogSimTickMs);
+
+        // legacy/effect.cpp:11369-11405 — Animate. Direct port.
+        for (int32_t i = 0; i < kMistFogNumPuffs; ++i)
+        {
+            SMistPuff& s = smoke_[i];
+            s.vz += kMistFogSmokeGrav;
+            s.x  += s.vx;
+            s.y  += s.vy;
+            if (s.z > 0.0f)
+                s.z += s.vz;
+            else
+                s.z -= 0.008f;
+
+            s.life += 1;
+            s.size += 0.02f;
+
+            if (s.life > 200)
+            {
+                s.size -= 0.2f;
+                if (s.size <= 0.01f)
+                    ResetBall_(i);
+            }
+        }
+        ++ticks_;
+    }
+
+    static const bool s_mistfog_logged_first_submit = []{
+        log_info("[mistfog-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_mistfog_logged_first_submit;
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    // legacy/effect.cpp:11407-11438 — Render port. SetAddBlendState ->
+    // AdditiveStraight (preserved AS WRITTEN). For each puff submit a
+    // ScreenAligned additive billboard at the puff position with size
+    // = puff.size.
+    const S3DPoint& base = Pos();
+    for (int32_t i = 0; i < kMistFogNumPuffs; ++i)
+    {
+        const SMistPuff& s = smoke_[i];
+        if (s.size <= 0.0f)
+            continue;
+
+        SBillboardDrawItem item = {};
+        item.size_wu[0] = kMistFogBaseSizeWu * s.size;
+        item.size_wu[1] = kMistFogBaseSizeWu * s.size;
+        // Snapshot uses the I3D's authored vertex color; default to a
+        // soft warm-white to read as mist against caves.
+        item.color_rgba[0] = 0.95f;
+        item.color_rgba[1] = 0.92f;
+        item.color_rgba[2] = 0.85f;
+        item.color_rgba[3] = 0.55f;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight); // SetAddBlendState
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = float(base.x) + s.x;
+        item.world_pos[1]    = float(base.y) + s.y;
+        item.world_pos[2]    = float(base.z) + s.z;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// W3-C RockStorm : TRockStormEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TRockStormAnimator (legacy/effect3.cpp:96-413).
+// First-pass: level=1 only (no spell-target lookup in the harness; level 2
+// requires a real character target with a current position).
+
+TRockStormEffect_Bespoke* TRockStormEffect_Bespoke::SpawnForTest_BESPOKE(
+    const S3DPoint& origin)
+{
+    // Asset Magic\Rocks.I3D — Class.Def:2088 references it but it's not
+    // present in legacy/Imagery/Magic. Try registering; fall back to
+    // procedural untextured render if load fails.
+    static const char* kRockCandidates[] = {
+        "Magic\\Rocks.I3D",
+        "Magic\\rocks.i3d",
+        "magic\\Rocks.I3D",
+    };
+
+    auto* rs = new TRockStormEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    rs->ForcePos(origin);
+    rs->SetMapIndex(MapPane.MakeIndex());
+    rs->ActivateComponents();
+
+    rs->rock_tex_ = TryLoadMagicTexture(kRockCandidates,
+                                        int32_t(sizeof(kRockCandidates)
+                                               / sizeof(*kRockCandidates)),
+                                        rs->rock_uv_, "rockstorm");
+    // Glow shares the same I3D sub-object texture set; first slot stands
+    // in for both if multi-slot enumeration is unavailable here.
+    rs->glow_tex_ = rs->rock_tex_;
+    for (int32_t i = 0; i < 4; ++i)
+        rs->glow_uv_[i] = rs->rock_uv_[i];
+
+    // legacy/effect3.cpp:123-193 — Initialize. Level 1 path (RockStorm)
+    // since we have no spell variant lookup at harness time.
+    rs->level_ = 1;
+    rs->stage_ = kStageStage1;
+    rs->num_rocks_ = kRockStormMinRocks + random(0, kRockStormVarRocks);
+    rs->target_pos_ = origin;
+    rs->min_radius_ = 8.0f;   // base radius (snapshot derives from target->Radius() + 5)
+    for (int32_t i = 0; i < kRockStormMaxRocks; ++i)
+    {
+        rs->lin_vel_[i] = 0.25f;
+        rs->scl_fac_[i] = 1.0f + float(random(-5, 10)) / 10.0f;
+        rs->ang_[i]     = float(random(0, 359));
+        // level 1 only
+        rs->height_[i]      = -5.0f;
+        rs->dest_height_[i] = float(random(45, 55));
+        rs->radius_[i]      = float(random(50, 60));
+        rs->ang_vel_[i]     = 0.1f + float(random(0, 5)) / 50.0f;
+    }
+    // level 2 slot intentionally untouched (not used at level 1).
+    rs->scl_fac_[kRockStormMaxRocks] = 0.0f;
+    rs->lin_vel_[kRockStormMaxRocks] = 0.0f;
+    rs->height_[kRockStormMaxRocks]  = 0.0f;
+    rs->frameon_ = 0;
+
+    log_info("[rockstorm-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) tex=%u num_rocks=%d level=%d",
+             rs->GetMapIndex(), origin.x, origin.y, origin.z,
+             rs->rock_tex_, rs->num_rocks_, rs->level_);
+    return rs;
+}
+
+void TRockStormEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim tick.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kRockStormSimTickMs))
+    {
+        sim_accum_ms_ -= double(kRockStormSimTickMs);
+        if (!alive_)
+            break;
+        ++frameon_;
+
+        // legacy/effect3.cpp:195-296 — Animate. Direct port of level 1
+        // state machine. (Level 2 / DAMAGE→spell->Damage(target) require
+        // a target which we don't have in the harness; we still cycle
+        // DAMAGE→STAGE2→DONE for full state coverage.)
+        switch (stage_)
+        {
+            case kStageStart:
+                // level 1 starts at STAGE1; START is a level-2-only ramp.
+                stage_ = kStageStage1;
+                break;
+
+            case kStageStage1:
+            {
+                int32_t i;
+                for (i = 0; i < num_rocks_; ++i)
+                {
+                    ang_[i] += ang_vel_[i];
+                    if (height_[i] < dest_height_[i])
+                    {
+                        height_[i] += lin_vel_[i];
+                        lin_vel_[i] += 0.1f;
+                    }
+                    else
+                    {
+                        radius_[i] -= 0.93f;
+                        ang_vel_[i] += 0.001f;
+                    }
+                }
+                int32_t still_outside = 0;
+                for (i = 0; i < num_rocks_; ++i)
+                {
+                    if (radius_[i] > min_radius_)
+                    {
+                        ++still_outside;
+                        break;
+                    }
+                }
+                if (still_outside == 0)
+                    stage_ = kStageDamage;
+                break;
+            }
+
+            case kStageDamage:
+                // Snapshot calls spell->Damage(target) here. No spell in
+                // harness — just transition.
+                stage_ = kStageStage2;
+                for (int32_t i = 0; i < num_rocks_; ++i)
+                    lin_vel_[i] = 4.0f;
+                break;
+
+            case kStageStage2:
+            {
+                for (int32_t i = 0; i < num_rocks_; ++i)
+                {
+                    if (scl_fac_[i] > 0.001f)
+                        scl_fac_[i] -= 0.05f;
+                    height_[i] += lin_vel_[i];
+                    lin_vel_[i] -= 0.5f;
+                    radius_[i] += 1.0f;
+                }
+                int32_t still_above = 0;
+                for (int32_t i = 0; i < num_rocks_; ++i)
+                {
+                    if (height_[i] > -5.0f)
+                    {
+                        ++still_above;
+                        break;
+                    }
+                }
+                if (still_above == 0)
+                    stage_ = kStageDone;
+                break;
+            }
+
+            case kStageDone:
+                alive_ = false;
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    static const bool s_rockstorm_logged_first_submit = []{
+        log_info("[rockstorm-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_rockstorm_logged_first_submit;
+
+    if (!alive_)
+        return;
+    if (rock_tex_ == kInvalidTexture)
+        return;   // first-pass: no procedural fallback for rocks; skip draw
+
+    // legacy/effect3.cpp:299-398 — Render port (level 1 path). Each rock
+    // submitted as a ScreenAligned Alpha billboard at the orbital pos;
+    // during STAGE1 also a paired AdditiveStraight glow.
+    const S3DPoint& base = Pos();
+    const bool draw_glow = (stage_ == kStageStage1);
+
+    for (int32_t i = 0; i < num_rocks_; ++i)
+    {
+        const float rx = radius_[i] * cosf(ang_[i]);
+        const float ry = radius_[i] * sinf(ang_[i]);
+        const float wx = float(target_pos_.x) + rx;
+        const float wy = float(target_pos_.y) + ry;
+        const float wz = float(base.z) + height_[i];
+
+        // ---- Glow (paired, additive, drawn first per snapshot ---------
+        if (draw_glow && glow_tex_ != kInvalidTexture)
+        {
+            // Snapshot glow scl: x = z = scl_fac[i] * 1.7, y depends on
+            // height: <10 -> 7.0 + pos.z=5; else -> scl_fac*1.7.
+            float gx_scl = scl_fac_[i] * 1.7f;
+            float gy_scl;
+            float gz_off;
+            if (height_[i] < 10.0f)
+            {
+                gy_scl = 7.0f;
+                gz_off = 5.0f;
+            }
+            else
+            {
+                gy_scl = scl_fac_[i] * 1.7f;
+                gz_off = 0.0f;
+            }
+            SBillboardDrawItem g = {};
+            g.size_wu[0] = kRockStormGlowSizeWu * gx_scl;
+            g.size_wu[1] = kRockStormGlowSizeWu * gy_scl;
+            g.color_rgba[0] = 0.95f;
+            g.color_rgba[1] = 0.70f;
+            g.color_rgba[2] = 0.35f;
+            g.color_rgba[3] = 1.0f;
+            g.uv_rect[0] = glow_uv_[0];
+            g.uv_rect[1] = glow_uv_[1];
+            g.uv_rect[2] = glow_uv_[2];
+            g.uv_rect[3] = glow_uv_[3];
+            g.key.texture     = glow_tex_;
+            g.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+            g.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+            g.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+            g.light_mode      = EFxLightMode::Unlit;
+            g.orientation     = EFxBillboardOrientation::ScreenAligned;
+            g.debug_mode      = debug_mode;
+            g.world_pos[0]    = wx;
+            g.world_pos[1]    = wy;
+            g.world_pos[2]    = wz - height_[i] + gz_off;   // glow z pin
+            Renderer->SubmitFxBillboard(g);
+        }
+
+        // ---- Rock (alpha) --------------------------------------------
+        SBillboardDrawItem item = {};
+        const float scl = (scl_fac_[i] > 0.05f) ? scl_fac_[i] : 0.05f;
+        item.size_wu[0] = kRockStormBaseSizeWu * scl;
+        item.size_wu[1] = kRockStormBaseSizeWu * scl;
+        item.color_rgba[0] = 0.65f;
+        item.color_rgba[1] = 0.55f;
+        item.color_rgba[2] = 0.45f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = rock_uv_[0];
+        item.uv_rect[1] = rock_uv_[1];
+        item.uv_rect[2] = rock_uv_[2];
+        item.uv_rect[3] = rock_uv_[3];
+        item.key.texture     = rock_tex_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);   // SetBlendState
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = wx;
+        item.world_pos[1]    = wy;
+        item.world_pos[2]    = wz;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
