@@ -5688,3 +5688,150 @@ class TFaultFireEffect_Bespoke : public TEffect
     TTextureHandle texture_      = kInvalidTexture;
     bool           alive_        = true;
 };
+
+// =========================================================================
+// * Wave-3 W3-B — Arrow/projectile family (5 retail-only effects)        *
+// *   Forensics: thin Ghidra evidence (cls_0x5b0cfc has decompiled       *
+// *   ctor/dtor/vtbl helpers but no Animate/Render body; the other 4    *
+// *   effects have no dedicated class decomp). Each effect ships as a   *
+// *   minimal SpawnForTest + Tick body that loads its named I3D and     *
+// *   draws sub-object 0 as a ScreenAligned Alpha billboard with a      *
+// *   sensible default lifetime. Awaiting user video A/B for kinematic  *
+// *   tuning. Pattern mirrors TBloodEffect_Bespoke template.            *
+// =========================================================================
+
+_CLASSDEF(TArrowEffect_Bespoke)
+// W3-B-1 — arroweffect / queenarrow. Both retail strings resolve to the
+// same Ghidra class cls_0x5b0cfc (288 bytes, 5 vtbl methods, registrar
+// fn 0x503740 attaches to caster's 'rhand' bone). Asset is
+// misc\Arroweffects.I3D — shared between the two variants. The
+// queenarrow variant (TArrowEffect_Bespoke__queenarrow) is the boss-fight
+// (Queen Mahara) arrow, same asset with a red tint. Constructor at
+// 0x503740 sets mbr_0x114 = 100.0f (likely initial speed/range) and zeros
+// mbr_0x118/0x11c.
+class TArrowEffect_Bespoke : public TEffect
+{
+  public:
+    TArrowEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TArrowEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TArrowEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TArrowEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+    // Variant tint (queenarrow override sets this red).
+    float tint_rgba_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+  private:
+    // Default 24Hz sim cadence + ~1.0s lifetime placeholder. Real lifetime
+    // (snapshot Pulse-driven) unknown without a richer decomp.
+    static constexpr int32_t kSimTickMs       = 1000 / 24;
+    static constexpr int32_t kLifeTicks       = 24;     // ~1.0s placeholder
+    static constexpr float   kBaseSizeWu      = 48.0f;  // billboard footprint
+
+    int32_t  ticks_        = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TSparksEffect_Bespoke)
+// W3-B-3 — Sparks. Generic impact-spark effect (asset Misc\Sparks.I3D).
+// Six string XREFs in the global string table; spawned from TCharacter
+// PostEvent at combat-hit frame. No dedicated class decomp — treated as
+// a brief ground-spark burst. Could collapse onto TStreamerEffect_Bespoke
+// in a future pass; first cut keeps it as its own _Bespoke for separable
+// harness rows.
+class TSparksEffect_Bespoke : public TEffect
+{
+  public:
+    TSparksEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TSparksEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TSparksEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TSparksEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kSimTickMs  = 1000 / 24;
+    static constexpr int32_t kLifeTicks  = 16;     // ~0.66s sparks burst
+    static constexpr float   kBaseSizeWu = 32.0f;
+
+    int32_t  ticks_        = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TCombatFlashEffect_Bespoke)
+// W3-B-4 — combatflash. Triggered from TCharacter combat code at hit-
+// frame (cls_0x5a7b98 method 0x4c8500 builds a NewObjectByName request
+// with type=0x19 at character pos + (+0x1e, +0x50, +0x1e)). Asset is
+// misc\Impact.i3d — shared hit-flash imagery. Brief bright additive
+// flash; lifetime <0.5s.
+class TCombatFlashEffect_Bespoke : public TEffect
+{
+  public:
+    TCombatFlashEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TCombatFlashEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TCombatFlashEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TCombatFlashEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kSimTickMs  = 1000 / 24;
+    static constexpr int32_t kLifeTicks  = 10;     // ~0.42s flash
+    static constexpr float   kBaseSizeWu = 56.0f;
+
+    int32_t  ticks_        = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TStrikeEffect_Bespoke)
+// W3-B-5 — StrikeEffect. Asset is Misc\Dummy.i3d (placeholder/no-imagery
+// marker). Likely audio-only or script-trigger effect with no visible
+// body. Stubbed: SpawnForTest still allocates the effect (so it shows
+// up in the harness cycle) but Tick draws nothing.
+class TStrikeEffect_Bespoke : public TEffect
+{
+  public:
+    TStrikeEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TStrikeEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TStrikeEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TStrikeEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kSimTickMs = 1000 / 24;
+    static constexpr int32_t kLifeTicks = 12;     // ~0.5s marker lifetime
+
+    int32_t ticks_        = 0;
+    bool    alive_        = true;
+    double  sim_accum_ms_ = 0.0;
+};
