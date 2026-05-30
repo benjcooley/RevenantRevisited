@@ -4844,6 +4844,83 @@ class TPixieEffect_Bespoke : public TEffect
     double         sim_accum_ms_ = 0.0;
 };
 
+// ----- X04/X05/X06/X07/X08 TFountainAnimator (Bespoke) --------------------
+//
+// "Fountain" sparkle column — 10 colored sparkle billboards rising from a
+// 40x40 wu ground disc, shrinking linearly to nothing, then respawning at
+// the floor on death. Continuous loop with no kill-on-done; scripted
+// `.delete` terminates in-game. Despite the class name "Fountain", the
+// live in-game usage is the Sabu witch vanish/appear puff (REDFONT) and
+// the chest-unlock sparkle (CYANFONT) in the Ahkuilon module — see the
+// FOUNTAIN_TFountainAnimator forensics doc.
+//
+// One bespoke port covers the abstract base + all 4 color leaves
+// (TCyanFountainAnimator / TRedFountainAnimator / TGreenFountainAnimator /
+// TBlueFountainAnimator). The only per-variant code in the snapshot is
+// `SetColorObject() { colorobj = 0|1|2|3; }` (effect.h:949,964,979,994);
+// we expose colorobj_ as a SpawnForTest_BESPOKE parameter and resolve
+// the sub-object 0..3 at spawn.
+//
+// Asset: Misc\Sparkle.I3D (4 sub-objects 'photon'/'photon01'/'02'/'03',
+// each with its own baked vertex DIFFUSE tint giving cyan/red/green/blue).
+// Class.Def-registered 4 times as CyanFont/RedFont/GreenFont/BlueFont
+// (legacy/Class.Def:2023-2026).
+//
+// Blend: snapshot uses SetBlendState (= Alpha; MODULATE + SRC_ALPHA /
+// INV_SRC_ALPHA). Forensics flags this as SUSPECT (bright-on-dark
+// sprite, the textbook "code says Alpha but reads as glow" case) but
+// the rule is to preserve blend AS WRITTEN — Alpha it is.
+//
+// LS coupling: none in the snapshot (no AddPointLight call); we add a
+// faint per-variant tinted point light to drive the LS pipeline path
+// the same way Pixie does — soft, low intensity, scaled with active
+// bubble count.
+
+inline constexpr int32_t kFountainBespokeNumBubbles  = 10;     // NUM_FOUNTAIN_BUBBLES
+inline constexpr float   kFountainBespokeScaleStep   = 0.15f;  // FOUNTAIN_SCALE_STEP
+inline constexpr int32_t kFountainBespokeRadius      = 20;     // FOUNTAIN_RADIUS
+inline constexpr float   kFountainBespokeInitScale   = 2.0f;   // scale[n] at spawn
+inline constexpr int32_t kFountainBespokeSimTickMs   = 1000 / 24;
+inline constexpr float   kFountainBespokeBaseSizeWu  = 64.0f;  // photon sub-object ~unit-scaled at 2.0
+inline constexpr float   kFountainBespokeLightRadiusWu  = 180.0f;
+inline constexpr float   kFountainBespokeLightIntensity = 0.5f;
+inline constexpr int32_t kFountainBespokeNumSubObjs  = 4;      // photon/photon01/02/03
+
+_CLASSDEF(TFountainAnimator_Bespoke)
+
+class TFountainAnimator_Bespoke : public TEffect
+{
+  public:
+    TFountainAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFountainAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFountainAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // colorobj selects the photon sub-object (0=Cyan / 1=Red / 2=Green / 3=Blue)
+    // and the matching tinted point light color.
+    [[nodiscard]] static TFountainAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin, int32_t colorobj);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient loop — never dies
+
+  private:
+    // Per-bubble state. Mirrors TFountainAnimator's p/scale/rise/framenum
+    // arrays (effect.h:911-914).
+    hmm_vec3 p_[kFountainBespokeNumBubbles] {};
+    float    scale_[kFountainBespokeNumBubbles] {};
+    float    rise_[kFountainBespokeNumBubbles]  {};
+    int32_t  framenum_[kFountainBespokeNumBubbles] {};
+    int32_t  colorobj_ = 0;     // 0..3 -> photon/photon01/photon02/photon03
+
+    // Per-sub-object texture + uv (resolved at spawn). We pre-resolve
+    // all 4 even though only colorobj_ is drawn — keeps the SpawnForTest
+    // path uniform and lets a future use case re-tint without reload.
+    TTextureHandle textures_[kFountainBespokeNumSubObjs]  = {kInvalidTexture, kInvalidTexture, kInvalidTexture, kInvalidTexture};
+    float          uv_rects_[kFountainBespokeNumSubObjs][4] = {{0,0,1,1},{0,0,1,1},{0,0,1,1},{0,0,1,1}};
+    float          size_wu_      = kFountainBespokeBaseSizeWu;
+    double         sim_accum_ms_ = 0.0;
+};
+
 // =========================================================================
 // W2D batch — Misc A — character/ambient particle emitters (X01, B04)
 // =========================================================================

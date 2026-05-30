@@ -12233,6 +12233,215 @@ void TFlyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         Renderer->SubmitFxBillboard(item);
     }
 }
+
+// *************************************************************************
+// * Wave 3 batch W2E (Misc B): faithful direct port of TFountainAnimator. *
+// * One bespoke class covers X04 base + X05/X06/X07/X08 color subclasses  *
+// * via a `colorobj` parameter selecting one of 4 sub-objects in the      *
+// * shared Misc\Sparkle.I3D asset. Identical per-tick math, identical    *
+// * render-pass order to effect_old.cpp:3786-3903. Only the render API   *
+// * adapted to Sokol/SParticleDrawItem.                                  *
+// *************************************************************************
+
+namespace {
+constexpr const char* kFountainBespokeImageryPath = "Misc\\Sparkle.I3D";
+
+// Per-variant tint colors for the LS-coupling point light. Hue mirrors
+// the photon sub-object's authored DIFFUSE: cyan / red / green / blue.
+// The bubble billboards themselves are drawn with white modulation
+// (color identity comes from the asset's baked vertex DIFFUSE — see
+// forensics doc §10), but the LS point light needs an RGB tuple.
+constexpr float kFountainBespokeLightRGB[4][3] = {
+    {0.4f, 0.95f, 1.0f},   // 0 Cyan
+    {1.0f, 0.25f, 0.25f},  // 1 Red
+    {0.25f, 1.0f, 0.4f},   // 2 Green
+    {0.35f, 0.5f, 1.0f},   // 3 Blue
+};
+}   // namespace
+
+// ----- X04 TFountainAnimator_Bespoke --------------------------------------
+
+TFountainAnimator_Bespoke* TFountainAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin, int32_t colorobj)
+{
+    if (colorobj < 0 || colorobj >= kFountainBespokeNumSubObjs)
+    {
+        log_warn("[fountain] SpawnForTest: colorobj=%d out of [0,%d); clamping to 0",
+                 colorobj, kFountainBespokeNumSubObjs);
+        colorobj = 0;
+    }
+
+    SLoadedImagery loaded = SparkleLoadImagery(kFountainBespokeImageryPath, "fountain");
+    if (!loaded.img3d)
+        return nullptr;
+
+    auto* fount = new TFountainAnimator_Bespoke(loaded.base);
+    fount->ForcePos(origin);
+    fount->SetMapIndex(MapPane.MakeIndex());
+    fount->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[fountain] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
+                  num_obj, num_tex);
+        delete fount;
+        return nullptr;
+    }
+
+    // Resolve all 4 sub-objects (photon/photon01/02/03). If the asset has
+    // fewer sub-objects, fall back to sub-object 0 for the missing slots
+    // (matches the Pixie pattern at effect.cpp:9976-9985).
+    for (int32_t i = 0; i < kFountainBespokeNumSubObjs; ++i)
+    {
+        const int32_t obj = (num_obj > i) ? i : 0;
+        const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, obj);
+        const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+        S3DTex tex = {};
+        loaded.img3d->GetTexture(slot, &tex);
+        fount->textures_[i] = tex.htexture;
+        SparkleResolveSubObjUv(loaded.img3d, obj, fount->uv_rects_[i]);
+    }
+    fount->size_wu_  = kFountainBespokeBaseSizeWu;
+    fount->colorobj_ = colorobj;
+    if (fount->textures_[colorobj] == kInvalidTexture)
+    {
+        log_error("[fountain] SpawnForTest: sub-object %d texture unresolved", colorobj);
+        delete fount;
+        return nullptr;
+    }
+
+    // --- Port of TFountainAnimator::Initialize (effect_old.cpp:3797-3813).
+    // Seed all 10 bubbles simultaneously, each with an independent rise
+    // speed (3 quantized values) and an independent negative start delay.
+    for (int32_t n = 0; n < kFountainBespokeNumBubbles; n++)
+    {
+        // p[n].x/y = random(-FOUNTAIN_RADIUS, FOUNTAIN_RADIUS); p[n].z = 0.
+        fount->p_[n].X = float(random(-kFountainBespokeRadius, kFountainBespokeRadius));
+        fount->p_[n].Y = float(random(-kFountainBespokeRadius, kFountainBespokeRadius));
+        fount->p_[n].Z = 0.0f;
+        // rise[n] = random(1,3) / 2.0 -> {0.5, 1.0, 1.5} wu/tick.
+        fount->rise_[n]  = float(random(1, 3)) / 2.0f;
+        fount->scale_[n] = kFountainBespokeInitScale;     // 2.0
+        // framenum[n] = random(-NUM_FOUNTAIN_BUBBLES/2, 0) = random(-5,0).
+        fount->framenum_[n] = random(-kFountainBespokeNumBubbles / 2, 0);
+    }
+    // SetColorObject() is the per-leaf virtual; we set colorobj_ above.
+
+    log_info("[fountain] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "colorobj=%d texture=%u num_obj=%d",
+             kFountainBespokeImageryPath, fount->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             colorobj, fount->textures_[colorobj], num_obj);
+    return fount;
+}
+
+void TFountainAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[fountain] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // --- Update: port of TFountainAnimator::Animate (effect_old.cpp:3822-3852).
+    // Framerate-independent via the 24Hz sim-tick accumulator. Each tick
+    // runs the original per-tick integration exactly once.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFountainBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFountainBespokeSimTickMs);
+
+        for (int32_t n = 0; n < kFountainBespokeNumBubbles; n++)
+        {
+            // framenum++ always — even waiting bubbles advance (effect_old.cpp:3830).
+            framenum_[n]++;
+
+            if (framenum_[n] > 0)
+            {
+                // Float the bubbles up (effect_old.cpp:3835).
+                p_[n].Z += rise_[n];
+
+                // Scale the bubbles down (effect_old.cpp:3838).
+                scale_[n] -= kFountainBespokeScaleStep;
+
+                // See if bubble shrunk out of sight, respawn at floor
+                // (effect_old.cpp:3841-3849).
+                if (scale_[n] <= 0.0f)
+                {
+                    p_[n].X = float(random(-kFountainBespokeRadius, kFountainBespokeRadius));
+                    p_[n].Y = float(random(-kFountainBespokeRadius, kFountainBespokeRadius));
+                    p_[n].Z = 0.0f;
+                    rise_[n]  = float(random(1, 3)) / 2.0f;
+                    scale_[n] = kFountainBespokeInitScale;
+                    framenum_[n] = random(-kFountainBespokeNumBubbles / 2, 0);
+                }
+            }
+        }
+    }
+
+    // --- Render: port of TFountainAnimator::Render (effect_old.cpp:3861-3887).
+    // SaveBlendState / SetBlendState (= Alpha — MODULATE + SRC_ALPHA /
+    // INV_SRC_ALPHA). Forensics §7 flags this as SUSPECT but the rule
+    // is preserve-as-written; we pick EFxBlend::Alpha verbatim.
+    // GetObject(colorobj) once -- only that sub-object renders.
+    const S3DPoint& base = Pos();
+    SParticleDrawItem item = {};
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;             // self-lit photon sprite
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.rotation_rad    = 0.0f;     // no per-quad rotation (snapshot only sets scl + pos)
+    item.key.texture     = textures_[colorobj_];
+    item.uv_rect[0]      = uv_rects_[colorobj_][0];
+    item.uv_rect[1]      = uv_rects_[colorobj_][1];
+    item.uv_rect[2]      = uv_rects_[colorobj_][2];
+    item.uv_rect[3]      = uv_rects_[colorobj_][3];
+
+    int32_t alive = 0;
+    for (int32_t n = 0; n < kFountainBespokeNumBubbles; n++)
+    {
+        if (framenum_[n] > 0)
+        {
+            // obj->flags = OBJ3D_SCL1 | OBJ3D_POS2 -> Scale(scale[n]) then
+            // Translate(p[n]). On a ScreenAligned billboard, scale maps
+            // directly to size_wu and pos folds onto world position.
+            // obj->scl.x = obj->scl.y = obj->scl.z = scale[n].
+            item.size_wu[0] = size_wu_ * scale_[n];
+            item.size_wu[1] = size_wu_ * scale_[n];
+            // obj->pos = p[n].
+            item.world_pos[0] = float(base.x) + p_[n].X;
+            item.world_pos[1] = float(base.y) + p_[n].Y;
+            item.world_pos[2] = float(base.z) + p_[n].Z;
+            Renderer->SubmitFxParticle(item);
+            alive++;
+        }
+    }
+
+    // --- LS coupling (DEVIATION from snapshot): the original Render
+    // makes no AddPointLight call. We add a faint per-variant tinted
+    // point light at the column base to drive the LS pipeline the same
+    // way Pixie does. Intensity scales with the active bubble fraction
+    // so the light gently breathes with the twinkle cadence. Color tuple
+    // mirrors the sub-object's authored DIFFUSE tint.
+    const float t = float(alive) / float(kFountainBespokeNumBubbles);
+    const float intensity = kFountainBespokeLightIntensity * (0.5f + 0.5f * t);
+    Renderer->AddPointLight(float(base.x), float(base.y), float(base.z) + 8.0f,
+                            kFountainBespokeLightRadiusWu,
+                            kFountainBespokeLightRGB[colorobj_][0],
+                            kFountainBespokeLightRGB[colorobj_][1],
+                            kFountainBespokeLightRGB[colorobj_][2],
+                            intensity);
+}
 // --- end TFlyEffect_Bespoke faithful port
 
 // ----- B04 TPulpEffect_Bespoke — STUBBED ---------------------------------
