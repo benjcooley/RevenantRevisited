@@ -13982,3 +13982,383 @@ void TFaultFireEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 }
 // --- end Wave-3 W3-A Dragon/Fire bespokes
 
+
+// =========================================================================
+// * Wave-3 W3-B — Arrow/projectile family bespoke ports                  *
+// *                                                                      *
+// * Five retail-only effects with NO snapshot source body. Ghidra        *
+// * evidence is THIN:                                                    *
+// *   - arroweffect / queenarrow share cls_0x5b0cfc (decompiled          *
+// *     ctor/dtor/vtbl thunks only — no Animate/Render body); class      *
+// *     attaches to 'rhand' bone of caster (string XREF inside fn        *
+// *     0x503740 at +0xc2 delta); ctor sets mbr_0x114 = 100.0f.          *
+// *   - Sparks has 6 string XREFs but no dedicated class decomp.         *
+// *   - combatflash is spawned via NewObjectByName(type=0x19) from       *
+// *     TCharacter cls_0x5a7b98 method 0x4c8500 at a hit-frame offset    *
+// *     above the character (+0x1e, +0x50, +0x1e). No animator class.   *
+// *   - StrikeEffect uses Misc\Dummy.i3d (placeholder asset) → marker/   *
+// *     audio-only effect, no visible body.                              *
+// *                                                                      *
+// * Each effect ships as a MINIMAL placeholder per protocol:             *
+// *   SpawnForTest loads the named I3D and resolves sub-object 0's       *
+// *   first texture; Tick draws one ScreenAligned Alpha billboard for    *
+// *   the placeholder lifetime, then KillThisEffect. queenarrow reuses   *
+// *   the TArrowEffect_Bespoke class with a red tint variant param.      *
+// *                                                                      *
+// * Status:                                                              *
+// *   arroweffect             stubbed  — Ghidra ctor+asset+bone hint     *
+// *   queenarrow              stubbed  — alias of arroweffect, red tint  *
+// *   Sparks                  stubbed  — asset only, no decomp body      *
+// *   combatflash             stubbed  — asset + spawn-site hint         *
+// *   StrikeEffect            stubbed  — Dummy.i3d marker; draws nothing *
+// =========================================================================
+
+namespace {
+
+// Lightweight shared loader for the W3-B placeholders: tries each candidate
+// path, returns the first texture handle that resolves. Mirrors
+// TryLoadMagicTexture (line 8514) but kept here next to its sole callers so
+// future refactors can collapse / specialize without disturbing M01/M02
+// magic loaders.
+TTextureHandle W3BTryLoadAssetTexture(const char* const* candidate_paths,
+                                      int32_t num_candidates,
+                                      float out_uv_rect[4],
+                                      const char* tag)
+{
+    for (int32_t i = 0; i < num_candidates; ++i)
+    {
+        const int32_t img_id = TObjectImagery::FindImagery(candidate_paths[i]);
+        if (img_id < 0)
+            continue;
+        TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+        if (!base)
+            continue;
+        T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+        if (!img3d)
+        {
+            TObjectImagery::FreeImagery(base);
+            continue;
+        }
+        // Lazy-init poke: NumObjects() triggers texture-slot population.
+        (void)img3d->NumObjects();
+        const int32_t num_tex = img3d->NumTextures();
+        if (num_tex <= 0)
+            continue;
+        S3DTex tex = {};
+        img3d->GetTexture(0, &tex);
+        if (tex.htexture == kInvalidTexture)
+            continue;
+        out_uv_rect[0] = 0.0f;
+        out_uv_rect[1] = 0.0f;
+        out_uv_rect[2] = 1.0f;
+        out_uv_rect[3] = 1.0f;
+        log_info("[%s] resolved imagery='%s' tex=%u", tag,
+                 candidate_paths[i], tex.htexture);
+        return tex.htexture;
+    }
+    log_warn("[%s] no candidate imagery resolved (tried %d paths); will draw "
+             "nothing (W3-B placeholder)",
+             tag, num_candidates);
+    return kInvalidTexture;
+}
+
+}   // namespace
+
+// ----- W3-B-1 TArrowEffect_Bespoke (arroweffect + queenarrow share) ----
+
+TArrowEffect_Bespoke* TArrowEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from retail effect inventory (note lowercase 'misc').
+    static const char* kArrowCandidates[] = {
+        "misc\\Arroweffects.I3D",
+        "Misc\\Arroweffects.I3D",
+        "Misc\\arroweffects.i3d",
+    };
+
+    auto* eff = new TArrowEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = W3BTryLoadAssetTexture(
+        kArrowCandidates,
+        int32_t(sizeof(kArrowCandidates) / sizeof(*kArrowCandidates)),
+        eff->uv_rect_, "arroweffect");
+    eff->ticks_        = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[arroweffect-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) tex=%u (Ghidra cls_0x5b0cfc: ctor sets "
+             "mbr_0x114=100.0; 'rhand' bone attach — harness has no caster)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TArrowEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSimTickMs);
+        ticks_++;
+        if (ticks_ >= kLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_arrow_logged_first_submit = []{
+        log_info("[arroweffect-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_arrow_logged_first_submit;
+
+    // Placeholder: single ScreenAligned Alpha billboard. Real effect is the
+    // arrow trail/impact spark — needs missile-Pulse-driven motion which
+    // isn't available without a richer cls_0x5b0cfc decomp.
+    const S3DPoint& base = Pos();
+    const float t = float(ticks_) / float(kLifeTicks);
+    const float fade = 1.0f - t;   // simple linear fade-out
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = kBaseSizeWu;
+    item.size_wu[1]      = kBaseSizeWu;
+    item.color_rgba[0]   = tint_rgba_[0];
+    item.color_rgba[1]   = tint_rgba_[1];
+    item.color_rgba[2]   = tint_rgba_[2];
+    item.color_rgba[3]   = tint_rgba_[3] * fade;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-B-3 TSparksEffect_Bespoke ---------------------------------------
+
+TSparksEffect_Bespoke* TSparksEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from retail inventory: "Misc\Sparks.I3D".
+    static const char* kSparksCandidates[] = {
+        "Misc\\Sparks.I3D",
+        "misc\\Sparks.I3D",
+        "Misc\\sparks.i3d",
+    };
+
+    auto* eff = new TSparksEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = W3BTryLoadAssetTexture(
+        kSparksCandidates,
+        int32_t(sizeof(kSparksCandidates) / sizeof(*kSparksCandidates)),
+        eff->uv_rect_, "Sparks");
+    eff->ticks_        = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[sparks-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) tex=%u (no dedicated cls decomp; placeholder "
+             "single-billboard burst, awaits TStreamerEffect parameterization)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TSparksEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSimTickMs);
+        ticks_++;
+        if (ticks_ >= kLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_sparks_logged_first_submit = []{
+        log_info("[sparks-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_sparks_logged_first_submit;
+
+    const S3DPoint& base = Pos();
+    const float t    = float(ticks_) / float(kLifeTicks);
+    const float fade = 1.0f - t;
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = kBaseSizeWu * (0.6f + 0.4f * t);  // grow over life
+    item.size_wu[1]      = kBaseSizeWu * (0.6f + 0.4f * t);
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 0.85f;   // warm metallic spark tint
+    item.color_rgba[2]   = 0.45f;
+    item.color_rgba[3]   = fade;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-B-4 TCombatFlashEffect_Bespoke ----------------------------------
+
+TCombatFlashEffect_Bespoke* TCombatFlashEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from retail inventory: "misc\Impact.i3d".
+    static const char* kCombatFlashCandidates[] = {
+        "misc\\Impact.i3d",
+        "Misc\\Impact.i3d",
+        "Misc\\impact.i3d",
+    };
+
+    auto* eff = new TCombatFlashEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = W3BTryLoadAssetTexture(
+        kCombatFlashCandidates,
+        int32_t(sizeof(kCombatFlashCandidates) / sizeof(*kCombatFlashCandidates)),
+        eff->uv_rect_, "combatflash");
+    eff->ticks_        = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[combatflash-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) tex=%u (spawned via TCharacter NewObjectByName "
+             "type=0x19 at pos +(0x1e,0x50,0x1e); placeholder additive flash)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TCombatFlashEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSimTickMs);
+        ticks_++;
+        if (ticks_ >= kLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_combatflash_logged_first_submit = []{
+        log_info("[combatflash-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_combatflash_logged_first_submit;
+
+    // Quick bright flash that fades fast; brightest at t=0, gone by kLifeTicks.
+    const S3DPoint& base = Pos();
+    const float t    = float(ticks_) / float(kLifeTicks);
+    const float fade = (1.0f - t) * (1.0f - t);   // ease-out quadratic
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = kBaseSizeWu * (1.0f + 0.5f * t);  // mild expansion
+    item.size_wu[1]      = kBaseSizeWu * (1.0f + 0.5f * t);
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 1.0f;
+    item.color_rgba[2]   = 0.85f;   // slight warm bias on hit-flash
+    item.color_rgba[3]   = fade;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-B-5 TStrikeEffect_Bespoke (Dummy.i3d marker) --------------------
+
+TStrikeEffect_Bespoke* TStrikeEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset is Misc\Dummy.i3d — placeholder. We DON'T try to load it;
+    // there's no visible body and the harness should just register a
+    // life-counted no-draw effect so the cycle/IDs are present.
+    auto* eff = new TStrikeEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    eff->ticks_        = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[strikeeffect-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) (Misc\\Dummy.i3d = no-imagery marker — draws "
+             "nothing; awaits audio/script binding)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z);
+    return eff;
+}
+
+void TStrikeEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    (void)debug_mode;
+    // Marker/audio-only — no draw. Just count down lifetime so the harness
+    // recycles the slot.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSimTickMs);
+        ticks_++;
+        if (ticks_ >= kLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+}

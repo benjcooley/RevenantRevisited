@@ -5329,6 +5329,251 @@ struct SVfxTestBootstrap {
             e.destroy       = [](void* c) { FaultFireBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
+
+        // =====================================================================
+        // * Wave-3 W3-B — Arrow/projectile family (5 retail-only effects)     *
+        // *   Single dedicated TArrowEffect_Bespoke class shared by the       *
+        // *   arroweffect + queenarrow entries (matching Ghidra cls_0x5b0cfc *
+        // *   sharing). queenarrow gets a red tint variant. Sparks /          *
+        // *   combatflash / StrikeEffect each get their own _Bespoke class.   *
+        // *   All five are stubbed placeholders (Ghidra evidence thin) and    *
+        // *   await user video A/B for kinematic tuning.                      *
+        // =====================================================================
+
+        // W3-B context wrapper with auto-recycle (same pattern as W2C storm).
+        struct SArrowBespokeCtx_W3B {
+            TArrowEffect_Bespoke* eff    = nullptr;
+            S3DPoint              origin = {0, 0, 0};
+            float                 gap    = 0.0f;
+            float                 tint[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        };
+        struct SSparksBespokeCtx_W3B {
+            TSparksEffect_Bespoke* eff    = nullptr;
+            S3DPoint               origin = {0, 0, 0};
+            float                  gap    = 0.0f;
+        };
+        struct SCombatFlashBespokeCtx_W3B {
+            TCombatFlashEffect_Bespoke* eff    = nullptr;
+            S3DPoint                    origin = {0, 0, 0};
+            float                       gap    = 0.0f;
+        };
+        struct SStrikeBespokeCtx_W3B {
+            TStrikeEffect_Bespoke* eff    = nullptr;
+            S3DPoint               origin = {0, 0, 0};
+            float                  gap    = 0.0f;
+        };
+
+        // --- W3-B arroweffect (white tint, base variant) ---------------------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TArrowEffect_BESPOKE";
+            e.family        = "projectile";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SArrowBespokeCtx_W3B();
+                c->origin = o;
+                c->eff    = TArrowEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TArrowEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SArrowBespokeCtx_W3B*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TArrowEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        c->gap = 1.0f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SArrowBespokeCtx_W3B*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- W3-B queenarrow (same class, red tint variant) ------------------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TArrowEffect_BESPOKE__queenarrow";
+            e.family        = "projectile";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SArrowBespokeCtx_W3B();
+                c->origin = o;
+                c->eff    = TArrowEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (c->eff)
+                {
+                    // Queen Mahara's arrow — red tint, slightly larger.
+                    c->eff->tint_rgba_[0] = 1.0f;
+                    c->eff->tint_rgba_[1] = 0.25f;
+                    c->eff->tint_rgba_[2] = 0.20f;
+                    c->eff->tint_rgba_[3] = 1.0f;
+                }
+                else
+                {
+                    log_warn("[vfx] TArrowEffect_Bespoke::SpawnForTest_BESPOKE returned null (queenarrow)");
+                }
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SArrowBespokeCtx_W3B*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TArrowEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        if (c->eff)
+                        {
+                            c->eff->tint_rgba_[0] = 1.0f;
+                            c->eff->tint_rgba_[1] = 0.25f;
+                            c->eff->tint_rgba_[2] = 0.20f;
+                            c->eff->tint_rgba_[3] = 1.0f;
+                        }
+                        c->gap = 1.0f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SArrowBespokeCtx_W3B*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- W3-B Sparks -----------------------------------------------------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TSparksEffect_BESPOKE";
+            e.family        = "impact";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SSparksBespokeCtx_W3B();
+                c->origin = o;
+                c->eff    = TSparksEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TSparksEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SSparksBespokeCtx_W3B*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TSparksEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        c->gap = 1.0f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SSparksBespokeCtx_W3B*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- W3-B combatflash ------------------------------------------------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TCombatFlashEffect_BESPOKE";
+            e.family        = "impact";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SCombatFlashBespokeCtx_W3B();
+                c->origin = o;
+                c->eff    = TCombatFlashEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TCombatFlashEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SCombatFlashBespokeCtx_W3B*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TCombatFlashEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        c->gap = 1.0f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SCombatFlashBespokeCtx_W3B*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- W3-B StrikeEffect (Misc\Dummy.i3d marker — draws nothing) ------
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TStrikeEffect_BESPOKE";
+            e.family        = "marker";
+            e.pipeline      = "(none)";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SStrikeBespokeCtx_W3B();
+                c->origin = o;
+                c->eff    = TStrikeEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TStrikeEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SStrikeBespokeCtx_W3B*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TStrikeEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        c->gap = 1.0f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SStrikeBespokeCtx_W3B*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
     }
 };
 SVfxTestBootstrap g_vfx_test_bootstrap;
