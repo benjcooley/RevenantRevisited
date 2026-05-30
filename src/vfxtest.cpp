@@ -2476,6 +2476,72 @@ void DripSubmit(void* cp, EFxDebugMode dbg)
     c->drip->TickAndSubmitForTest(dbg);
 }
 
+// --- FB: TWaterFallEffect_Bespoke (H02 first-pass faithful port) --------
+// Persistent vertical waterfall — direct port of the snapshot
+// TWaterFallAnimator (effect_old.cpp:11685-11873). Static preview style:
+// 100-drop persistent emitter, no harness re-fire (drops respawn
+// internally on landing via the snapshot's time=-1 sentinel).
+struct SWaterFallBespokeCtx {
+    TWaterFallEffect_Bespoke* wf = nullptr;
+};
+
+void* WaterFallBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SWaterFallBespokeCtx();
+    c->wf = TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->wf)
+        log_warn("[vfx] TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE returned"
+                 " null; H02 entry will draw nothing");
+    return c;
+}
+
+void WaterFallBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SWaterFallBespokeCtx*>(cp);
+    delete c->wf;
+    delete c;
+}
+
+void WaterFallBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SWaterFallBespokeCtx*>(cp);
+    if (!c || !c->wf) return;
+    c->wf->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- FB: TWaterEffect_Bespoke (H01 first-pass faithful port) ------------
+// Ambient horizontal water spray — direct port of the snapshot
+// TWaterAnimator (effect_old.cpp:11895-12073). 25 drops travelling along
+// +X at speed (i%2+1)*2.0 wu/tick until they cross +LENGTH/2 then
+// respawn. Persistent emitter (Static preview, no harness re-fire).
+struct SWaterBespokeCtx {
+    TWaterEffect_Bespoke* w = nullptr;
+};
+
+void* WaterBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SWaterBespokeCtx();
+    c->w = TWaterEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->w)
+        log_warn("[vfx] TWaterEffect_Bespoke::SpawnForTest_BESPOKE returned"
+                 " null; H01 entry will draw nothing");
+    return c;
+}
+
+void WaterBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SWaterBespokeCtx*>(cp);
+    delete c->w;
+    delete c;
+}
+
+void WaterBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SWaterBespokeCtx*>(cp);
+    if (!c || !c->w) return;
+    c->w->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 // --- FB+LS: real THaloEffect (procedural radial-gradient texture, L02) --
 // Spawns a sector-less THaloEffect at the harness-provided origin via
 // SpawnForTest and drives its triangle-wave scale envelope through
@@ -3348,6 +3414,36 @@ struct SVfxTestBootstrap {
         drip.submit        = [](void* c, EFxDebugMode d) { DripSubmit(c, d); };
         drip.destroy       = [](void* c) { DripDestroy(c); };
         VfxTest::DeferredRegister(drip);
+
+        // --- H02 bespoke first-pass faithful port ---
+        // Persistent vertical waterfall — 100 drops, snapshot-faithful
+        // gravity + tall-scale envelope. Pipeline=FB (single billboard
+        // per drop). Static cadence; the snapshot Animator was a
+        // persistent fixture (river edge / fountain), drops respawn
+        // internally on landing.
+        VfxTest::SEffect waterfall_bespoke = {};
+        waterfall_bespoke.id            = "TWaterFallEffect_BESPOKE";
+        waterfall_bespoke.family        = "water";
+        waterfall_bespoke.pipeline      = "FB";
+        waterfall_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        waterfall_bespoke.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeSpawn(o); };
+        waterfall_bespoke.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+        waterfall_bespoke.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
+        VfxTest::DeferredRegister(waterfall_bespoke);
+
+        // --- H01 bespoke first-pass faithful port ---
+        // Ambient horizontal water spray — 25 drops, snapshot-faithful
+        // +X stream-respawn loop. Pipeline=FB. Static cadence; emitter
+        // is persistent like H02.
+        VfxTest::SEffect water_bespoke = {};
+        water_bespoke.id            = "TWaterEffect_BESPOKE";
+        water_bespoke.family        = "water";
+        water_bespoke.pipeline      = "FB";
+        water_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        water_bespoke.factory       = [](const S3DPoint& o) -> void* { return WaterBespokeSpawn(o); };
+        water_bespoke.submit        = [](void* c, EFxDebugMode d) { WaterBespokeSubmit(c, d); };
+        water_bespoke.destroy       = [](void* c) { WaterBespokeDestroy(c); };
+        VfxTest::DeferredRegister(water_bespoke);
 
         VfxTest::SEffect halo = {};
         halo.id            = "THaloEffect";
