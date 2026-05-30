@@ -2092,30 +2092,34 @@ constexpr int32_t     kFlameBespokeSimTickMs   = 1000 / 24;   // 24 Hz cadence g
 
 }  // namespace
 
-TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                 const char* asset_override)
 {
     // --- Load Magic\flame.i3d (asset path from snapshot Class.Def:2030)
-    int32_t img_id = TObjectImagery::FindImagery(kFlameBespokeImageryPath);
+    // Variant entries (FlameB/FlameG) pass an override path; same animator.
+    const char* asset_path = asset_override ? asset_override : kFlameBespokeImageryPath;
+    int32_t img_id = TObjectImagery::FindImagery(asset_path);
     if (img_id < 0)
-        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFlameBespokeImageryPath));
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
     if (img_id < 0)
     {
-        log_error("[flame-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
-                  kFlameBespokeImageryPath);
+        log_error("[flame-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed"
+                  " — asset missing",
+                  asset_path);
         return nullptr;
     }
     TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
     if (!base)
     {
         log_error("[flame-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  img_id, kFlameBespokeImageryPath);
+                  img_id, asset_path);
         return nullptr;
     }
     T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
     if (!img3d)
     {
         log_error("[flame-bespoke] SpawnForTest: imagery for '%s' is not a T3DImagery",
-                  kFlameBespokeImageryPath);
+                  asset_path);
         TObjectImagery::FreeImagery(base);
         return nullptr;
     }
@@ -2123,7 +2127,7 @@ TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint&
     if (img3d->NumTextures() <= 0)
     {
         log_error("[flame-bespoke] SpawnForTest: imagery '%s' has 0 textures after lazy-init",
-                  kFlameBespokeImageryPath);
+                  asset_path);
         TObjectImagery::FreeImagery(base);
         return nullptr;
     }
@@ -2147,7 +2151,7 @@ TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint&
 
     log_info("[flame-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
              "tex0=%u w=%u h=%u",
-             kFlameBespokeImageryPath, flame->GetMapIndex(),
+             asset_path, flame->GetMapIndex(),
              origin.x, origin.y, origin.z,
              tex0.htexture, tex0.desc.width, tex0.desc.height);
     return flame;
@@ -2266,29 +2270,34 @@ constexpr float       kFireSwarmBespokeUnitWu      = 1.0f;
 
 }  // namespace
 
-TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                        const char* asset_override)
 {
-    int32_t img_id = TObjectImagery::FindImagery(kFireSwarmBespokeImageryPath);
+    // Wave-4 variant entries (dragonfire FireCone.I3D, headfireball Hfire.i3d,
+    // dragonattack Hfire.i3d) pass an override path; same animator behavior.
+    const char* asset_path = asset_override ? asset_override : kFireSwarmBespokeImageryPath;
+    int32_t img_id = TObjectImagery::FindImagery(asset_path);
     if (img_id < 0)
-        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFireSwarmBespokeImageryPath));
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
     if (img_id < 0)
     {
-        log_error("[fireswarm-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
-                  kFireSwarmBespokeImageryPath);
+        log_error("[fireswarm-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed"
+                  " — asset missing",
+                  asset_path);
         return nullptr;
     }
     TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
     if (!base)
     {
         log_error("[fireswarm-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  img_id, kFireSwarmBespokeImageryPath);
+                  img_id, asset_path);
         return nullptr;
     }
     T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
     if (!img3d)
     {
         log_error("[fireswarm-bespoke] SpawnForTest: imagery '%s' is not a T3DImagery",
-                  kFireSwarmBespokeImageryPath);
+                  asset_path);
         TObjectImagery::FreeImagery(base);
         return nullptr;
     }
@@ -2327,7 +2336,7 @@ TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(const S
 
     log_info("[fireswarm-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
              "tex0=%u w=%u h=%u numobj=%d numtex=%d",
-             kFireSwarmBespokeImageryPath, swarm->GetMapIndex(),
+             asset_path, swarm->GetMapIndex(),
              origin.x, origin.y, origin.z,
              tex0.htexture, tex0.desc.width, tex0.desc.height, num_obj, num_tex);
     return swarm;
@@ -8217,29 +8226,36 @@ constexpr float kIcedFacetSizeWu    = 24.0f;   // single-facet billboard size
 
 }   // namespace
 
-TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                              const char* asset_override)
 {
     // --- Load Magic\iced.I3D (forensics §4 — byte-identical asset
     // confirmed MD5 10e7e15b3cd6b491e47ab1743b5cdf8e snapshot vs ship).
-    const int32_t img_id = TObjectImagery::FindImagery(kIcedImageryPath);
+    // Wave-4 variants (Icedsparks, Snow) reuse the same Iced.i3d asset path;
+    // accept an override for future variants that may swap the asset.
+    const char* asset_path = asset_override ? asset_override : kIcedImageryPath;
+    int32_t img_id = TObjectImagery::FindImagery(asset_path);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
     if (img_id < 0)
     {
-        log_error("[iced] SpawnForTest: FindImagery('%s') failed",
-                  kIcedImageryPath);
+        log_error("[iced] SpawnForTest: FindImagery/RegisterImagery('%s') failed"
+                  " — asset missing",
+                  asset_path);
         return nullptr;
     }
     TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
     if (!base)
     {
         log_error("[iced] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  img_id, kIcedImageryPath);
+                  img_id, asset_path);
         return nullptr;
     }
     T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
     if (!img3d)
     {
         log_error("[iced] SpawnForTest: imagery for '%s' is not a T3DImagery",
-                  kIcedImageryPath);
+                  asset_path);
         TObjectImagery::FreeImagery(base);
         return nullptr;
     }
@@ -8286,7 +8302,7 @@ TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& o
 
     log_info("[iced] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
              "angle=%.3f facet_tex=%u num_obj=%d",
-             kIcedImageryPath, iced->GetMapIndex(),
+             asset_path, iced->GetMapIndex(),
              origin.x, origin.y, origin.z,
              iced->angle_, iced->facet_tex_, num_obj);
     return iced;
@@ -9257,11 +9273,19 @@ SLoadedImagery SparkleLoadImagery(const char* path, const char* tag)
 
 // ----- X03 TFlareEffect_Bespoke -------------------------------------------
 
-TFlareEffect_Bespoke* TFlareEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+TFlareEffect_Bespoke* TFlareEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                const char* asset_override)
 {
-    SLoadedImagery loaded = SparkleLoadImagery(kFlareBespokeImageryPath, "flare");
+    // Wave-4 variant entries (Teleporter) reuse this animator. Default path
+    // is the IrisFlare asset; override is honored if present.
+    const char* asset_path = asset_override ? asset_override : kFlareBespokeImageryPath;
+    SLoadedImagery loaded = SparkleLoadImagery(asset_path, "flare");
     if (!loaded.img3d)
+    {
+        log_error("[flare] SpawnForTest: SparkleLoadImagery('%s') failed — asset missing",
+                  asset_path);
         return nullptr;
+    }
 
     auto* flare = new TFlareEffect_Bespoke(loaded.base);
     flare->ForcePos(origin);
@@ -9307,7 +9331,7 @@ TFlareEffect_Bespoke* TFlareEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint&
 
     log_info("[flare] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
              "texture=%u uv=[%.3f,%.3f %.3fx%.3f]",
-             kFlareBespokeImageryPath, flare->GetMapIndex(),
+             asset_path, flare->GetMapIndex(),
              origin.x, origin.y, origin.z,
              flare->texture_,
              flare->uv_rect_[0], flare->uv_rect_[1],
@@ -10875,8 +10899,18 @@ void TStreamerEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mo
 // so we land in the "no spell" branch (effect_old.cpp :4180-4186, grow
 // ribscale to RIBBON_MAXSCALE then hold).
 
-TRibbonAnimator_Bespoke* TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+TRibbonAnimator_Bespoke* TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                      const char* asset_override)
 {
+    // Wave-4 variant entries (RibbonB/G/O/P/R/W/Y) supply per-variant I3D
+    // paths (Magic\RibbonB.I3D etc.). The current X11 port draws sparks via
+    // StripFamilySparkTexture() (shared family texture) — no per-variant
+    // imagery is loaded yet; record the requested override so future
+    // per-variant texture binding can pick it up.
+    if (asset_override)
+        log_info("[X11 ribbon_bespoke] SpawnForTest: variant asset override='%s' "
+                 "(animator still uses shared spark texture)",
+                 asset_override);
     auto* eff = new TRibbonAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
     eff->ForcePos(origin);
     eff->SetMapIndex(MapPane.MakeIndex());
@@ -11189,11 +11223,13 @@ void WaterResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
 
 // Load Misc\Water.i3d, resolve sub-object 0's texture/UV. Shared by
 // both effects (imagery.rvi entries "Water" and "Waterfall" both point
-// at misc\Water.i3d).
+// at misc\Water.i3d). Wave-4 waterfall variants pass alternate paths
+// (WFall.i3d, WCap.i3d, Riverfall.i3d, etc.).
 bool LoadWaterImagery(TObjectImagery*& out_base,
                       T3DImagery*&    out_img3d,
                       TTextureHandle& out_texture,
-                      float           out_uv_rect[4])
+                      float           out_uv_rect[4],
+                      const char*     path = nullptr)
 {
     out_base = nullptr;
     out_img3d = nullptr;
@@ -11201,25 +11237,29 @@ bool LoadWaterImagery(TObjectImagery*& out_base,
     out_uv_rect[0] = 0.0f; out_uv_rect[1] = 0.0f;
     out_uv_rect[2] = 1.0f; out_uv_rect[3] = 1.0f;
 
-    const int32_t img_id = TObjectImagery::FindImagery(kWaterImageryPath);
+    const char* asset_path = path ? path : kWaterImageryPath;
+    int32_t img_id = TObjectImagery::FindImagery(asset_path);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
     if (img_id < 0)
     {
-        log_error("[water] LoadWaterImagery: FindImagery('%s') failed",
-                  kWaterImageryPath);
+        log_error("[water] LoadWaterImagery: FindImagery/RegisterImagery('%s') failed"
+                  " — asset missing",
+                  asset_path);
         return false;
     }
     TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
     if (!base)
     {
         log_error("[water] LoadWaterImagery: LoadImagery(id=%d '%s') failed",
-                  img_id, kWaterImageryPath);
+                  img_id, asset_path);
         return false;
     }
     T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
     if (!img3d)
     {
         log_error("[water] LoadWaterImagery: imagery '%s' is not T3DImagery",
-                  kWaterImageryPath);
+                  asset_path);
         TObjectImagery::FreeImagery(base);
         return false;
     }
@@ -11307,14 +11347,16 @@ void TWaterFallEffect_Bespoke::UpdateStuff()
 }
 
 TWaterFallEffect_Bespoke*
-TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                              const char* asset_override)
 {
     TObjectImagery* base = nullptr;
     T3DImagery*     img3d = nullptr;
     TTextureHandle  texture = kInvalidTexture;
     float           uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
-    if (!LoadWaterImagery(base, img3d, texture, uv_rect))
+    if (!LoadWaterImagery(base, img3d, texture, uv_rect, asset_override))
         return nullptr;
+    const char* asset_path = asset_override ? asset_override : kWaterImageryPath;
 
     auto* wf = new TWaterFallEffect_Bespoke(base);
     wf->ForcePos(origin);
@@ -11347,7 +11389,7 @@ TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 
     log_info("[waterfall] SpawnForTest_BESPOKE: '%s' map_index=%d "
              "origin=(%d,%d,%d) drops=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
-             kWaterImageryPath, wf->GetMapIndex(),
+             asset_path, wf->GetMapIndex(),
              origin.x, origin.y, origin.z,
              wf->numdrops_, wf->texture_,
              wf->uv_rect_[0], wf->uv_rect_[1],
@@ -11485,14 +11527,16 @@ void TWaterEffect_Bespoke::UpdateStuff()
 }
 
 TWaterEffect_Bespoke*
-TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                          const char* asset_override)
 {
     TObjectImagery* base = nullptr;
     T3DImagery*     img3d = nullptr;
     TTextureHandle  texture = kInvalidTexture;
     float           uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
-    if (!LoadWaterImagery(base, img3d, texture, uv_rect))
+    if (!LoadWaterImagery(base, img3d, texture, uv_rect, asset_override))
         return nullptr;
+    const char* asset_path = asset_override ? asset_override : kWaterImageryPath;
 
     auto* w = new TWaterEffect_Bespoke(base);
     w->ForcePos(origin);
@@ -11517,7 +11561,7 @@ TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 
     log_info("[water] SpawnForTest_BESPOKE: '%s' map_index=%d "
              "origin=(%d,%d,%d) drops=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
-             kWaterImageryPath, w->GetMapIndex(),
+             asset_path, w->GetMapIndex(),
              origin.x, origin.y, origin.z,
              w->numdrops_, w->texture_,
              w->uv_rect_[0], w->uv_rect_[1],
@@ -12261,7 +12305,9 @@ constexpr float kFountainBespokeLightRGB[4][3] = {
 
 // ----- X04 TFountainAnimator_Bespoke --------------------------------------
 
-TFountainAnimator_Bespoke* TFountainAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin, int32_t colorobj)
+TFountainAnimator_Bespoke* TFountainAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                          int32_t colorobj,
+                                                                          const char* asset_override)
 {
     if (colorobj < 0 || colorobj >= kFountainBespokeNumSubObjs)
     {
@@ -12270,9 +12316,16 @@ TFountainAnimator_Bespoke* TFountainAnimator_Bespoke::SpawnForTest_BESPOKE(const
         colorobj = 0;
     }
 
-    SLoadedImagery loaded = SparkleLoadImagery(kFountainBespokeImageryPath, "fountain");
+    // Wave-4 sign variants (OlihootSign, OgrokSign, ...) reuse the fountain
+    // animator with marker-specific I3D assets (Misc\Olihoot.I3D etc.).
+    const char* asset_path = asset_override ? asset_override : kFountainBespokeImageryPath;
+    SLoadedImagery loaded = SparkleLoadImagery(asset_path, "fountain");
     if (!loaded.img3d)
+    {
+        log_error("[fountain] SpawnForTest: SparkleLoadImagery('%s') failed — asset missing",
+                  asset_path);
         return nullptr;
+    }
 
     auto* fount = new TFountainAnimator_Bespoke(loaded.base);
     fount->ForcePos(origin);
@@ -12330,7 +12383,7 @@ TFountainAnimator_Bespoke* TFountainAnimator_Bespoke::SpawnForTest_BESPOKE(const
 
     log_info("[fountain] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
              "colorobj=%d texture=%u num_obj=%d",
-             kFountainBespokeImageryPath, fount->GetMapIndex(),
+             asset_path, fount->GetMapIndex(),
              origin.x, origin.y, origin.z,
              colorobj, fount->textures_[colorobj], num_obj);
     return fount;
