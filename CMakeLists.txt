@@ -120,6 +120,7 @@ if(APPLE)
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/editorplatform.mm")
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/renderer_readback.mm")
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/cursor.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/headless_window.mm")
 endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
