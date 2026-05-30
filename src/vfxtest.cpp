@@ -5342,6 +5342,221 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
 
+        // --- wave3 W3-E batch: spell-only effects (asset-only, no class) ---
+        // Five retail-shipped spell visuals whose Class.Def registrations
+        // point at named I3D assets but whose game-side "classes" are
+        // spell-init stubs in Ghidra. The assets themselves are retail-only
+        // and not in the local RevenantRepo data tree, so each spawn will
+        // log_warn + render nothing until the user supplies a data drop.
+        // Status = stubbed; localized-at-end for clean merge.
+
+        // W3-E #1 TCataclysmEffect_Bespoke — Magic\Cataclysm.I3D
+        {
+            struct SCataclysmCtx {
+                TCataclysmEffect_Bespoke* eff    = nullptr;
+                S3DPoint                  origin = {0, 0, 0};
+                float                     gap    = 0.0f;
+            };
+            VfxTest::SEffect e = {};
+            e.id            = "TCataclysmEffect_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SCataclysmCtx();
+                c->origin = o;
+                c->eff    = TCataclysmEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TCataclysmEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SCataclysmCtx*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TCataclysmEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        c->gap = 1.0f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SCataclysmCtx*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // W3-E #2 TFunnelEffect_Bespoke — Magic\Funnel.I3D
+        {
+            struct SFunnelCtx {
+                TFunnelEffect_Bespoke* eff    = nullptr;
+                S3DPoint               origin = {0, 0, 0};
+                float                  gap    = 0.0f;
+            };
+            VfxTest::SEffect e = {};
+            e.id            = "TFunnelEffect_BESPOKE";
+            e.family        = "weather";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SFunnelCtx();
+                c->origin = o;
+                c->eff    = TFunnelEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TFunnelEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SFunnelCtx*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TFunnelEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        c->gap = 1.0f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SFunnelCtx*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // W3-E #3 TMaelstromEffect_Bespoke — magic\maelstrom.i3d
+        {
+            struct SMaelstromCtx {
+                TMaelstromEffect_Bespoke* eff    = nullptr;
+                S3DPoint                  origin = {0, 0, 0};
+                float                     gap    = 0.0f;
+            };
+            VfxTest::SEffect e = {};
+            e.id            = "TMaelstromEffect_BESPOKE";
+            e.family        = "weather";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SMaelstromCtx();
+                c->origin = o;
+                c->eff    = TMaelstromEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TMaelstromEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SMaelstromCtx*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TMaelstromEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        c->gap = 1.0f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SMaelstromCtx*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // W3-E #4 TMagicShieldEffect_Bespoke — Magic\Mshield.I3D (variant of
+        // TShieldEffect_Bespoke / X09 with a different I3D asset).
+        {
+            struct SMagicShieldCtx {
+                TMagicShieldEffect_Bespoke* eff = nullptr;
+            };
+            VfxTest::SEffect e = {};
+            e.id            = "TMagicShieldEffect_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SMagicShieldCtx();
+                c->eff = TMagicShieldEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TMagicShieldEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SMagicShieldCtx*>(cp);
+                if (c && c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SMagicShieldCtx*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // W3-E #5 TNakrnothEffect_Bespoke — magic\Nakrnoth.I3D (boss-specific)
+        {
+            struct SNakrnothCtx {
+                TNakrnothEffect_Bespoke* eff    = nullptr;
+                S3DPoint                 origin = {0, 0, 0};
+                float                    gap    = 0.0f;
+            };
+            VfxTest::SEffect e = {};
+            e.id            = "TNakrnothEffect_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory = [](const S3DPoint& o) -> void* {
+                auto* c = new SNakrnothCtx();
+                c->origin = o;
+                c->eff    = TNakrnothEffect_Bespoke::SpawnForTest_BESPOKE(o);
+                if (!c->eff)
+                    log_warn("[vfx] TNakrnothEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+                return c;
+            };
+            e.submit = [](void* cp, EFxDebugMode dbg) {
+                auto* c = static_cast<SNakrnothCtx*>(cp);
+                if (!c) return;
+                if (!c->eff || !c->eff->IsAlive())
+                {
+                    c->gap -= float(TTime::DeltaTime());
+                    if (c->gap <= 0.0f)
+                    {
+                        delete c->eff;
+                        c->eff = TNakrnothEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+                        c->gap = 1.0f;
+                    }
+                }
+                if (c->eff)
+                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+            };
+            e.destroy = [](void* cp) {
+                auto* c = static_cast<SNakrnothCtx*>(cp);
+                delete c->eff;
+                delete c;
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
         // =====================================================================
         // * Wave-3 W3-D Y-prefix boss-variant entries (5 retail-only effects)  *
         // *   All ship as stubbed minimal placeholders pending user A/B video. *
