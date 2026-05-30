@@ -5342,6 +5342,113 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
 
+        // =====================================================================
+        // Wave-3 W3-F: Buff overlays (character-attached state effects)
+        // ---------------------------------------------------------------------
+        // Five retail-only effects with no snapshot source body and only
+        // ambiguous Ghidra string XREFs — see effect.h class-doc banner.
+        // Each ships as a MINIMAL PLACEHOLDER (status=stubbed): loads the
+        // verbatim asset path, draws ONE ScreenAligned Alpha billboard at
+        // the effect origin with a per-effect color tint, self-terminates
+        // after ~6s so the SpellGround harness cadence re-triggers cleanly.
+        //
+        // preview_style = SpellGround (not CharacterIdle): buff visual
+        // attachment to a character rig is deferred until the shared
+        // TBuffEffect / TAuraEffect base is identified in Ghidra. Until
+        // then, ground-anchored re-triggering gives the harness a stable
+        // A/B baseline.
+        // =====================================================================
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TBuffEffect_Bespoke__Might_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory       = [](const S3DPoint& o) -> void* {
+                return TBuffEffect_Bespoke__Might::SpawnForTest_BESPOKE(o);
+            };
+            e.submit        = [](void* c, EFxDebugMode d) {
+                auto* eff = static_cast<TBuffEffect_Bespoke__Might*>(c);
+                if (eff) eff->TickAndSubmitForTest_BESPOKE(d);
+            };
+            e.destroy       = [](void* c) {
+                delete static_cast<TBuffEffect_Bespoke__Might*>(c);
+            };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TBuffEffect_Bespoke__Stoneskin_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory       = [](const S3DPoint& o) -> void* {
+                return TBuffEffect_Bespoke__Stoneskin::SpawnForTest_BESPOKE(o);
+            };
+            e.submit        = [](void* c, EFxDebugMode d) {
+                auto* eff = static_cast<TBuffEffect_Bespoke__Stoneskin*>(c);
+                if (eff) eff->TickAndSubmitForTest_BESPOKE(d);
+            };
+            e.destroy       = [](void* c) {
+                delete static_cast<TBuffEffect_Bespoke__Stoneskin*>(c);
+            };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TInvisibleEffect_Bespoke_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory       = [](const S3DPoint& o) -> void* {
+                return TInvisibleEffect_Bespoke::SpawnForTest_BESPOKE(o);
+            };
+            e.submit        = [](void* c, EFxDebugMode d) {
+                auto* eff = static_cast<TInvisibleEffect_Bespoke*>(c);
+                if (eff) eff->TickAndSubmitForTest_BESPOKE(d);
+            };
+            e.destroy       = [](void* c) {
+                delete static_cast<TInvisibleEffect_Bespoke*>(c);
+            };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TBuffEffect_Bespoke__charm_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory       = [](const S3DPoint& o) -> void* {
+                return TBuffEffect_Bespoke__charm::SpawnForTest_BESPOKE(o);
+            };
+            e.submit        = [](void* c, EFxDebugMode d) {
+                auto* eff = static_cast<TBuffEffect_Bespoke__charm*>(c);
+                if (eff) eff->TickAndSubmitForTest_BESPOKE(d);
+            };
+            e.destroy       = [](void* c) {
+                delete static_cast<TBuffEffect_Bespoke__charm*>(c);
+            };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TBuffEffect_Bespoke__speed_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory       = [](const S3DPoint& o) -> void* {
+                return TBuffEffect_Bespoke__speed::SpawnForTest_BESPOKE(o);
+            };
+            e.submit        = [](void* c, EFxDebugMode d) {
+                auto* eff = static_cast<TBuffEffect_Bespoke__speed*>(c);
+                if (eff) eff->TickAndSubmitForTest_BESPOKE(d);
+            };
+            e.destroy       = [](void* c) {
+                delete static_cast<TBuffEffect_Bespoke__speed*>(c);
+            };
+            VfxTest::DeferredRegister(e);
+        }
+
         // --- wave3 W3-E batch: spell-only effects (asset-only, no class) ---
         // Five retail-shipped spell visuals whose Class.Def registrations
         // point at named I3D assets but whose game-side "classes" are
