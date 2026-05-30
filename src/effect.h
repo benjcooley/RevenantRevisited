@@ -3194,6 +3194,134 @@ class TRibbonAnimator_Bespoke : public TEffect
     float    centertilt_dx_  = 0.001f;
     bool     alive_       = true;
     double   sim_accum_ms_ = 0.0;
+// * TMissileEffect_Bespoke — S08 base infrastructure (faithful direct port)*
+// *************************************************************************
+//
+// The TMissileEffect base class is a pure 3-state LAUNCH -> FLY -> EXPLODE
+// state machine: no rendering of its own (each leaf supplies its own
+// animator). The same machine is shared by:
+//   F07  TFireBallEffect   (Magic\NewFireBall.I3D)
+//   M07  TPhotonEffect      (Magic\Photon.I3D)
+//   X19  TYFireBallEffect   (Magic\YellowFireBall.I3D)
+//   F09  TFireColumnEffect  (vestigial)
+//   F11  TFlameDiscEffect   (vestigial)
+//
+// Snapshot source of truth: src/missileeffect.cpp:31-141 (the entire
+// `#if 0` body), TMissileEffect::Initialize / SetSpeed / Pulse / OffScreen.
+// Retail recon: cls_0x5a50e8 (base) — referenced by cls_0x5b4290 (FireBall)
+// which inherits from it. See F07 forensics doc §6.1 for the per-tick
+// LAUNCH/FLY/EXPLODE pseudocode.
+//
+// This bespoke base is the foundation that M07 (batch 5) and X19 (later
+// wave) inherit from. F07 is already shipped with the state machine
+// folded onto its leaf (TFireBallEffect in src/effect.h:3060+); leaving
+// F07 alone per the skip list.
+//
+// Harness rendering: TMissileEffect has no visual on its own. To prove
+// the state-machine ticks LAUNCH -> FLY -> EXPLODE, the bespoke port
+// submits ONE marker billboard at the missile world-pos each frame,
+// colored by state (LAUNCH=yellow, FLY=orange, EXPLODE=red). The marker
+// uses the renderer's white texture so no I3D imagery is required.
+
+// MISSILE_LAUNCH / FLY / EXPLODE — verbatim mirror of missileeffect.h:20-24.
+inline constexpr int32_t kMissileLaunch  = 0;
+inline constexpr int32_t kMissileFly     = 1;
+inline constexpr int32_t kMissileExplode = 2;
+
+// missileeffect.h:26-27 — snapshot defaults shared by every missile leaf.
+inline constexpr int32_t kMissileSpeedDefault = 16;
+inline constexpr int32_t kMissileRangeDefault = 2;
+
+// 24 Hz sim cadence (family-consistent with B01/F07): the per-tick
+// integration runs once per accumulated sim tick so motion is
+// framerate-independent.
+inline constexpr int32_t kMissileSimTickMs = 1000 / 24;
+
+// Harness-only LAUNCH-hold so the visible transition is observable in
+// --test=vfx (the in-game caller leaves this at 0). The animator drives
+// SetStatus(true) on the very first tick in retail, so without this hold
+// the LAUNCH frame is invisible. Same trick TFireBallEffect uses.
+inline constexpr int32_t kMissileHarnessLaunchHoldTicks = 12;
+inline constexpr float   kMissileHarnessSpeedScale      = 0.4f;
+
+// Marker billboard size in world units (harness visualization only).
+// Picked to read clearly against the test scene (~64 wu wall sprites).
+inline constexpr float   kMissileMarkerSizeWu          = 24.0f;
+
+_CLASSDEF(TMissileEffect_Bespoke)
+
+class TMissileEffect_Bespoke : public TEffect
+{
+  public:
+    TMissileEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TMissileEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    ~TMissileEffect_Bespoke() override = default;
+
+    // missileeffect.cpp:137-141 — MissileEffects stay on-screen until the
+    // effect is finished (only OffScreen when EXPLODE done AND status).
+    // For the harness we keep it simple: pure base path lets the engine
+    // do its thing.
+    void OffScreen() override
+    {
+        if ((state_ == kMissileExplode) && status_)
+            TObjectInstance::OffScreen();
+    }
+
+    // Faithful port of missileeffect.cpp:31-40.
+    virtual void Initialize();
+
+    // Faithful port of missileeffect.cpp:52-135. Drives the 3-state
+    // LAUNCH -> FLY -> EXPLODE machine. Called from TickAndSubmitForTest's
+    // sim-tick gate (and in-game directly from the engine's Pulse walk).
+    void Pulse() override;
+
+    // missileeffect.cpp:42-50.
+    int32_t GetSpeed() const { return speed_ / ROLLOVER; }
+    void    SetSpeed(int32_t newspeed) { speed_ = newspeed * ROLLOVER; }
+    int32_t GetMissileSpeed() const { return speed_; }
+    void    SetStatus(bool newstatus) { status_ = newstatus; }
+    int32_t GetMissileState() const { return state_; }
+
+    // Spawn a standalone TMissileEffect_Bespoke for the --test=vfx
+    // harness. No imagery required (the marker billboard uses the
+    // renderer's white texture). Returns nullptr if the renderer isn't
+    // initialized.
+    [[nodiscard]] static TMissileEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports TMissileEffect::Pulse via a 24 Hz
+    // sim-tick accumulator, then submits ONE marker billboard at the
+    // missile world-pos colored by state.
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    // True until the EXPLODE phase ages out (~24 ticks after EXPLODE
+    // entry). Harness uses this to know when to re-fire.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  protected:
+    // --- TMissileEffect base-class state (missileeffect.h:33-37) -------
+    int32_t state_    = kMissileLaunch;  // MISSILE_LAUNCH / FLY / EXPLODE
+    int32_t range_    = 32768;           // ticks left until self-explode
+    int32_t speed_    = 0;               // wu/tick * ROLLOVER
+    bool    status_   = false;           // animator -> base "launch now" handshake
+    int32_t aim_angle_ = 0;              // 0..255 byte-angle (snapshot `angle`)
+
+    // Per-tick velocity in world wu/tick (set on LAUNCH->FLY transition).
+    // The snapshot uses S3DPoint vel on TObjectInstance and integrates it
+    // via Move(); for the harness we integrate here so the marker moves
+    // without engine collision involvement.
+    hmm_vec3 vel_     = {0.0f, 0.0f, 0.0f};
+
+    // Harness-only LAUNCH-hold counter (see
+    // kMissileHarnessLaunchHoldTicks). In-game this stays at 0.
+    int32_t launch_hold_ticks_remaining_ = kMissileHarnessLaunchHoldTicks;
+
+    // Post-explode lifetime so the harness shows the EXPLODE frame
+    // before re-firing.
+    int32_t explode_ticks_remaining_ = 24;
+
+    // Lifecycle
+    bool   alive_         = true;
+    double sim_accum_ms_  = 0.0;   // 24 Hz sim-tick gate
 };
 
 // *******************

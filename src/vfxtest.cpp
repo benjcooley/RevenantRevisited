@@ -2027,6 +2027,47 @@ void IcedBespokeSubmit(void* cp, EFxDebugMode dbg)
     if (!c)
         return;
     if (!c->iced || !c->iced->IsAlive())
+// --- FB: real TMissileEffect_Bespoke (S08 base infrastructure) ----------
+// Drives the bespoke TMissileEffect base 3-state LAUNCH -> FLY -> EXPLODE
+// machine. This is the shared infra base for F07 fireball / M07 photon /
+// X19 yfireball — no visual of its own in retail, so the harness shows
+// a single state-colored marker billboard at the missile world-pos
+// (yellow=LAUNCH, orange=FLY, red=EXPLODE). The marker exists only to
+// prove the state machine ticks; M07 / X19 / etc. will inherit from this
+// class and supply their own animator visuals on top.
+struct SMissileBespokeCtx {
+    TMissileEffect_Bespoke* missile = nullptr;
+    S3DPoint                origin  = {0, 0, 0};
+    float                   gap     = 0.0f;
+};
+
+constexpr float kMissileBespokeRetriggerGap = 0.8f;
+
+void* MissileBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SMissileBespokeCtx();
+    c->origin = origin;
+    c->missile = TMissileEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->missile)
+        log_warn("[vfx] TMissileEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " S08 base infra entry will draw nothing");
+    return c;
+}
+
+void MissileBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SMissileBespokeCtx*>(cp);
+    delete c->missile;
+    delete c;
+}
+
+void MissileBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SMissileBespokeCtx*>(cp);
+    if (!c)
+        return;
+
+    if (!c->missile || !c->missile->IsAlive())
     {
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
@@ -2087,6 +2128,14 @@ void ShieldBespokeSubmit(void* cp, EFxDebugMode dbg)
     auto* c = static_cast<SShieldBespokeCtx*>(cp);
     if (c && c->shield)
         c->shield->TickAndSubmitForTest_BESPOKE(dbg);
+            delete c->missile;
+            c->missile = TMissileEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kMissileBespokeRetriggerGap;
+        }
+    }
+
+    if (c->missile)
+        c->missile->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
 // --- FB: real TFizzleEffect (X21, Magic/Fizzle.I3D) ----------------------
@@ -3312,6 +3361,20 @@ struct SVfxTestBootstrap {
         shield_bespoke.submit        = [](void* c, EFxDebugMode d) { ShieldBespokeSubmit(c, d); };
         shield_bespoke.destroy       = [](void* c) { ShieldBespokeDestroy(c); };
         VfxTest::DeferredRegister(shield_bespoke);
+        // S08: TMissileEffect base infrastructure. Pure state-machine
+        // (LAUNCH -> FLY -> EXPLODE) that F07/M07/X19 derive from. No
+        // visual of its own — harness shows a single state-colored
+        // marker billboard at the missile world-pos. Combat preview
+        // cadence (missiles re-fire across the screen).
+        VfxTest::SEffect missile_bespoke = {};
+        missile_bespoke.id            = "TMissileEffect_BESPOKE";
+        missile_bespoke.family        = "missile";
+        missile_bespoke.pipeline      = "FB";
+        missile_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Combat;
+        missile_bespoke.factory       = [](const S3DPoint& o) -> void* { return MissileBespokeSpawn(o); };
+        missile_bespoke.submit        = [](void* c, EFxDebugMode d) { MissileBespokeSubmit(c, d); };
+        missile_bespoke.destroy       = [](void* c) { MissileBespokeDestroy(c); };
+        VfxTest::DeferredRegister(missile_bespoke);
 
         VfxTest::SEffect strip = {};
         strip.id            = "TStripEffect";
