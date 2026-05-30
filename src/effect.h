@@ -3867,4 +3867,211 @@ class TIcedEffect_Bespoke : public TEffect
 
     bool   alive_        = true;
     double sim_accum_ms_ = 0.0;
+// * Magic family — wave-bespoke-04 first-pass bespoke ports                *
+// * (M01 TAuraEffect, M03 THealEffect, M05 TMistEffect, X09 TShieldEffect) *
+// *************************************************************************
+//
+// Faithful direct ports of the snapshot animator bodies for the magic
+// family. Each effect ships as T<Name>Effect_Bespoke + SpawnForTest_BESPOKE
+// + TickAndSubmitForTest_BESPOKE + a harness entry "T<Name>_BESPOKE".
+// Pattern mirrors TBloodEffect_Bespoke at src/effect.cpp:1690-2065.
+//
+// Snapshot sources (per-batch translation rules):
+//   M01: TAuraEffect/TAuraAnimator   src/effect_old.cpp:3482-3688
+//   M03: THealEffect/THealAnimator   src/effect_old.cpp:464-849
+//   M05: TMistEffect/TMistAnimator   src/effect_old.cpp:11342-11515
+//   X09: TShieldAnimator             src/effect_old.cpp:4336-4392
+//
+// Translation rules applied (per task brief):
+//   1. Per-tick math + variable names + constants from the snapshot.
+//   2. Blend mode preserved AS WRITTEN: `SetAddBlendState` -> AdditiveStraight,
+//      `SetBlendState` -> Alpha.
+//   3. Two-pass shape preserved if present (no dead-code drop).
+//   4. Animation uses the 24Hz sim-tick accumulator pattern (B01/H03/M05).
+//   5. Render-path API adapted to Sokol (SubmitFxBillboard); mesh-based
+//      RenderObject calls in the snapshot draw as billboards positioned at
+//      the original sub-object pos/rot/scl — first-pass visual.
+
+_CLASSDEF(TAuraEffect_Bespoke)
+
+// M01: character aura particle system. Snapshot:
+// src/effect_old.cpp:3535-3667 (TAuraAnimator). Emits particles uniformly
+// distributed across the character's animator sub-objects with random
+// upward velocity; particles shrink (scl *= 0.97) until the AURA_FRAME
+// window closes. SetAddBlendState -> AdditiveStraight.
+class TAuraEffect_Bespoke : public TEffect
+{
+  public:
+    TAuraEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TAuraEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TAuraEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TAuraEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants — AURA_COUNT=100; AURA_PART_MIN/MAX=50;
+    // AURA_ADD=2; AURA_SPREAD=2; AURA_MIN_SCL=25, AURA_MAX_SCL=60;
+    // AURA_MIN_Z=5, AURA_MAX_Z=30; AURA_MIN_LIFE=15, AURA_MAX_LIFE=30;
+    // AURA_DEC=0.97; AURA_SEC=30; AURA_FRAME=AURA_SEC*24=720.
+    static constexpr int32_t kAuraCount    = 100;
+    static constexpr int32_t kAuraAdd      = 2;
+    static constexpr int32_t kAuraSpread   = 2;
+    static constexpr int32_t kAuraMinScl   = 25;
+    static constexpr int32_t kAuraMaxScl   = 60;
+    static constexpr int32_t kAuraMinZ     = 5;
+    static constexpr int32_t kAuraMaxZ     = 30;
+    static constexpr int32_t kAuraMinLife  = 15;
+    static constexpr int32_t kAuraMaxLife  = 30;
+    static constexpr float   kAuraDec      = 0.97f;
+    static constexpr int32_t kAuraFrameCap = 30 * 24;   // AURA_SEC * 24Hz
+    static constexpr int32_t kAuraSimTickMs = 1000 / 24;
+
+    struct SAuraParticle
+    {
+        bool     used = false;
+        hmm_vec3 pos  = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 vel  = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 scl  = {0.0f, 0.0f, 0.0f};
+        int32_t  life_span = 0;
+    };
+
+    SAuraParticle  particles_[kAuraCount] {};
+    int32_t        frame_         = 0;
+    int32_t        to_add_        = 0;
+    double         sim_accum_ms_  = 0.0;
+    bool           alive_         = true;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(THealEffect_Bespoke)
+
+// M03: healing spell visual. Snapshot:
+// src/effect_old.cpp:628-833 (THealAnimator). 60 bubbles rising from
+// player's feet over HEAL_DURATION=40 ticks + a cylindrical glow at the
+// feet that grows then shrinks. SetBlendState -> Alpha.
+class THealEffect_Bespoke : public TEffect
+{
+  public:
+    THealEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    THealEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~THealEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static THealEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kHealBubbles    = 60;
+    static constexpr float   kHealScaleStep  = 0.15f;
+    static constexpr int32_t kHealingRadius  = 20;
+    static constexpr int32_t kHealDuration   = 40;
+    static constexpr int32_t kHealSimTickMs  = 1000 / 24;
+
+    hmm_vec3 p_[kHealBubbles]        {};
+    float    scale_[kHealBubbles]    {};
+    float    rise_[kHealBubbles]     {};
+    int32_t  framenum_[kHealBubbles] {};
+    int32_t  activebubbles_ = 0;
+    float    rotation_     = 0.0f;
+    int32_t  heal_num_     = 0;     // bubble sub-object index (0/2/4/6)
+    int32_t  glow_num_     = 1;     // glow sub-object index (1/3/5/7)
+    double   sim_accum_ms_ = 0.0;
+    bool     alive_        = true;
+    TTextureHandle bubble_tex_  = kInvalidTexture;
+    TTextureHandle glow_tex_    = kInvalidTexture;
+    float          bubble_uv_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          glow_uv_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TMistEffect_Bespoke)
+
+// M05: continuous ambient mist emitter. Snapshot:
+// src/effect_old.cpp:11376-11502 (TMistAnimator). 50 drops with retail
+// pos/vel envelope; ascends, falls under gravity, respawns-in-place on
+// landing (steady-state flux). SetAddBlendState -> AdditiveStraight.
+// BESPOKE pivot per BESPOKE_WAVE_ROADMAP (engine TMistEffect is the legacy
+// path; this bespoke class is canonical for first-pass).
+class TMistEffect_Bespoke : public TEffect
+{
+  public:
+    TMistEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TMistEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMistEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TMistEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kMistMaxDrops    = 50;
+    static constexpr int32_t kMistLength      = 64;
+    static constexpr int32_t kMistWidth       = 20;
+    static constexpr int32_t kMistHeight      = 4;
+    static constexpr float   kMistScale       = 0.7f;
+    static constexpr float   kMistGravity     = 0.37f;     // RIPPLE_GRAVITY
+    static constexpr float   kMistSpawnZ      = 5.0f;      // snapshot literal
+    static constexpr int32_t kMistSimTickMs   = 1000 / 24;
+    static constexpr float   kMistBaseSizeWu  = 96.0f;     // billboard size, snapshot rendered scale 0.7 against unknown quad
+
+    struct SMistDrop
+    {
+        hmm_vec3 pos  = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 vel  = {0.0f, 0.0f, 0.0f};
+        bool     dead = false;
+    };
+
+    SMistDrop      drops_[kMistMaxDrops] {};
+    double         sim_accum_ms_  = 0.0;
+    bool           alive_         = true;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TShieldEffect_Bespoke)
+
+// X09: shield bubble. Snapshot:
+// src/effect_old.cpp:4336-4392 (TShieldAnimator). Animator-only in
+// pre-release (bridges via TEffect on caster object). Renders a single
+// I3D sphere mesh at pos.z=40 above the character with SHIELD_SCALE=2.0
+// and a fixed -π/3 X-rotation + -π/4 Z-rotation. SetBlendState -> Alpha.
+// First-pass: a single Alpha billboard at the same pos/scale; mesh
+// rendering is a future upgrade.
+class TShieldEffect_Bespoke : public TEffect
+{
+  public:
+    TShieldEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TShieldEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TShieldEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TShieldEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kShieldScale     = 2.0f;     // SHIELD_SCALE
+    static constexpr float   kShieldLiftZ     = 40.0f;    // snapshot pos.z = 40
+    static constexpr float   kShieldSizeWu    = 96.0f;
+    static constexpr int32_t kShieldSimTickMs = 1000 / 24;
+
+    hmm_vec3       pos_           = {0.0f, 0.0f, 40.0f};   // snapshot init
+    int32_t        framenum_      = 0;
+    double         sim_accum_ms_  = 0.0;
+    bool           alive_         = true;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
 };
