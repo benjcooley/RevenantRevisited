@@ -1755,6 +1755,119 @@ void BloodBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->blood->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
+// --- FB: real TFireSwarmEffect_Bespoke (F05 first-pass) ------------------
+// Faithful direct port of the snapshot TFireSwarmAnimator (single I3D
+// cylinder transform-animated for 75 ticks, expanding outward + flattening
+// vertically). The bespoke approximates the cylinder mesh with a single
+// Alpha billboard whose size_wu tracks (cylhscl, cylvscl) — first-pass
+// drift, the true mesh path is a follow-up (see effect.cpp comment).
+//
+// Single non-overlapping burst (one effect on screen at a time per
+// feedback-vfx-one-effect-onscreen): the harness lets the cylinder play
+// out its full ~3.1 s lifetime, waits a clear gap, then re-fires ONE
+// fresh burst.
+struct SFireSwarmBespokeCtx {
+    TFireSwarmEffect_Bespoke* swarm  = nullptr;
+    S3DPoint                  origin = {0, 0, 0};
+    float                     gap    = 0.0f;
+};
+
+constexpr float kFireSwarmBespokeRetriggerGap = 1.0f;
+
+void* FireSwarmBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFireSwarmBespokeCtx();
+    c->origin = origin;
+    c->swarm  = TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->swarm)
+        log_warn("[vfx] TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " F05 bespoke entry will draw nothing");
+    return c;
+}
+
+void FireSwarmBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFireSwarmBespokeCtx*>(cp);
+    delete c->swarm;
+    delete c;
+}
+
+void FireSwarmBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFireSwarmBespokeCtx*>(cp);
+    if (!c)
+        return;
+
+    if (!c->swarm || !c->swarm->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->swarm;
+            c->swarm = TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap   = kFireSwarmBespokeRetriggerGap;
+        }
+    }
+
+    if (c->swarm)
+        c->swarm->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- FB: real TBurnEffect_Bespoke (M04 first-pass) -----------------------
+// Faithful direct port of the snapshot TBurnAnimator. Two-system
+// (fire + smoke) particle field with fire→smoke promotion, AdditiveStraight
+// blend. First-pass drift: spawn at effect origin rather than random
+// character bones (no CharAnimator wired in the harness) — see effect.cpp.
+//
+// Static preview cadence: the effect's own ramp/drain envelope plays out
+// over ~4 s and then self-kills; re-fires after a clear gap.
+struct SBurnBespokeCtx {
+    TBurnEffect_Bespoke* burn   = nullptr;
+    S3DPoint             origin = {0, 0, 0};
+    float                gap    = 0.0f;
+};
+
+constexpr float kBurnBespokeRetriggerGap = 1.0f;
+
+void* BurnBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SBurnBespokeCtx();
+    c->origin = origin;
+    c->burn   = TBurnEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->burn)
+        log_warn("[vfx] TBurnEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " M04 bespoke entry will draw nothing");
+    return c;
+}
+
+void BurnBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SBurnBespokeCtx*>(cp);
+    delete c->burn;
+    delete c;
+}
+
+void BurnBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SBurnBespokeCtx*>(cp);
+    if (!c)
+        return;
+
+    if (!c->burn || !c->burn->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->burn;
+            c->burn = TBurnEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap  = kBurnBespokeRetriggerGap;
+        }
+    }
+
+    if (c->burn)
+        c->burn->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 // --- FB: real TFizzleEffect (X21, Magic/Fizzle.I3D) ----------------------
 // Spawns a sector-less single-burst TFizzleEffect at the harness origin
 // via SpawnForTest and drives the ported TFizzleAnimator loop through
@@ -2444,6 +2557,37 @@ struct SVfxTestBootstrap {
         blood_bespoke.submit        = [](void* c, EFxDebugMode d) { BloodBespokeSubmit(c, d); };
         blood_bespoke.destroy       = [](void* c) { BloodBespokeDestroy(c); };
         VfxTest::DeferredRegister(blood_bespoke);
+
+        // F05 bespoke: faithful direct port of snapshot TFireSwarmAnimator
+        // (spinning cylinder mesh expand+flatten, Alpha blend). First-pass
+        // approximates the 64-vert tube01 mesh with a single billboard
+        // whose size tracks (cylhscl, cylvscl). Static preview style —
+        // single non-overlapping ~3.1 s burst with clear gap re-fire owned
+        // inside FireSwarmBespokeSubmit.
+        VfxTest::SEffect fireswarm_bespoke = {};
+        fireswarm_bespoke.id            = "TFireSwarmEffect_BESPOKE";
+        fireswarm_bespoke.family        = "fire";
+        fireswarm_bespoke.pipeline      = "FB";
+        fireswarm_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fireswarm_bespoke.factory       = [](const S3DPoint& o) -> void* { return FireSwarmBespokeSpawn(o); };
+        fireswarm_bespoke.submit        = [](void* c, EFxDebugMode d) { FireSwarmBespokeSubmit(c, d); };
+        fireswarm_bespoke.destroy       = [](void* c) { FireSwarmBespokeDestroy(c); };
+        VfxTest::DeferredRegister(fireswarm_bespoke);
+
+        // M04 bespoke: faithful direct port of snapshot TBurnAnimator
+        // (two-system fire + smoke particles, fire→smoke promotion,
+        // AdditiveStraight blend). First-pass drift: spawns at effect
+        // origin (no CharAnimator wired in the harness). Static preview —
+        // single ~4 s ramp+drain cycle with clear-gap re-fire.
+        VfxTest::SEffect burn_bespoke = {};
+        burn_bespoke.id            = "TBurnEffect_BESPOKE";
+        burn_bespoke.family        = "fire";
+        burn_bespoke.pipeline      = "FB";
+        burn_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        burn_bespoke.factory       = [](const S3DPoint& o) -> void* { return BurnBespokeSpawn(o); };
+        burn_bespoke.submit        = [](void* c, EFxDebugMode d) { BurnBespokeSubmit(c, d); };
+        burn_bespoke.destroy       = [](void* c) { BurnBespokeDestroy(c); };
+        VfxTest::DeferredRegister(burn_bespoke);
 
         VfxTest::SEffect strip = {};
         strip.id            = "TStripEffect";
