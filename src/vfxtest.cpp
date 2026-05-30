@@ -3722,6 +3722,257 @@ void FireSwarmBespokeVariantSubmit(void* cp, EFxDebugMode dbg)
         c->swarm->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
+// =========================================================================
+// * Wave-3 W3-A Dragon/Fire bespoke harness wiring                        *
+// *                                                                       *
+// * 4 STUBBED entries (Blast, FireFlash, FireWind, FireCone) + 1 PORTED   *
+// * (Faultfire) + 2 variants (YFireWind same animator as FireWind,        *
+// * dragonfire same as FireCone). All cycle with self-killing lifetimes   *
+// * and re-spawn on a 1 s retrigger gap.                                  *
+// =========================================================================
+
+constexpr float kW3aRetriggerGap = 1.0f;
+
+// --- Blast ---
+struct SBlastBespokeCtx {
+    TBlastEffect_Bespoke* eff    = nullptr;
+    S3DPoint              origin = {0, 0, 0};
+    float                 gap    = 0.0f;
+};
+
+void* BlastBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SBlastBespokeCtx();
+    c->origin = origin;
+    c->eff    = TBlastEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TBlastEffect_Bespoke::SpawnForTest_BESPOKE returned null"
+                 " — entry will draw nothing");
+    return c;
+}
+
+void BlastBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SBlastBespokeCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+
+void BlastBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SBlastBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TBlastEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kW3aRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- FireFlash ---
+struct SFireFlashBespokeCtx {
+    TFireFlashEffect_Bespoke* eff    = nullptr;
+    S3DPoint                  origin = {0, 0, 0};
+    float                     gap    = 0.0f;
+};
+
+void* FireFlashBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFireFlashBespokeCtx();
+    c->origin = origin;
+    c->eff    = TFireFlashEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TFireFlashEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+
+void FireFlashBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFireFlashBespokeCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+
+void FireFlashBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFireFlashBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TFireFlashEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kW3aRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- FireWind (templated for base + YFireWind variant) ---
+enum class EFireWindVariant { Base, YFireWind };
+
+constexpr const char* FireWindVariantPath(EFireWindVariant v)
+{
+    return (v == EFireWindVariant::YFireWind) ? "Magic\\YFirewind.I3D" : nullptr;
+}
+
+struct SFireWindBespokeCtx {
+    TFireWindEffect_Bespoke* eff    = nullptr;
+    S3DPoint                 origin = {0, 0, 0};
+    const char*              path   = nullptr;  // nullptr = base
+    float                    gap    = 0.0f;
+};
+
+template <EFireWindVariant V>
+void* FireWindBespokeVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFireWindBespokeCtx();
+    c->origin = origin;
+    c->path   = FireWindVariantPath(V);
+    c->eff    = TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(origin, c->path);
+    if (!c->eff)
+        log_warn("[vfx] TFireWindEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 c->path ? c->path : "<base>");
+    return c;
+}
+
+void FireWindBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFireWindBespokeCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+
+void FireWindBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFireWindBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(c->origin, c->path);
+            c->gap = kW3aRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- FireCone (templated for base + dragonfire variant) ---
+enum class EFireConeVariant { Base, DragonFire };
+
+constexpr const char* FireConeVariantPath(EFireConeVariant v)
+{
+    // dragonfire shares Magic\FireCone.I3D per /tmp/retail_effect_inventory.tsv
+    // — same asset, different spell-table entry. Pass nullptr to use default.
+    return (v == EFireConeVariant::DragonFire) ? "Magic\\FireCone.I3D" : nullptr;
+}
+
+struct SFireConeBespokeCtx {
+    TFireConeEffect_Bespoke* eff    = nullptr;
+    S3DPoint                 origin = {0, 0, 0};
+    const char*              path   = nullptr;
+    float                    gap    = 0.0f;
+};
+
+template <EFireConeVariant V>
+void* FireConeBespokeVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFireConeBespokeCtx();
+    c->origin = origin;
+    c->path   = FireConeVariantPath(V);
+    c->eff    = TFireConeEffect_Bespoke::SpawnForTest_BESPOKE(origin, c->path);
+    if (!c->eff)
+        log_warn("[vfx] TFireConeEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
+                 c->path ? c->path : "<base>");
+    return c;
+}
+
+void FireConeBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFireConeBespokeCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+
+void FireConeBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFireConeBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TFireConeEffect_Bespoke::SpawnForTest_BESPOKE(c->origin, c->path);
+            c->gap = kW3aRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- Faultfire ---
+struct SFaultFireBespokeCtx {
+    TFaultFireEffect_Bespoke* eff    = nullptr;
+    S3DPoint                  origin = {0, 0, 0};
+    float                     gap    = 0.0f;
+};
+
+void* FaultFireBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFaultFireBespokeCtx();
+    c->origin = origin;
+    c->eff    = TFaultFireEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->eff)
+        log_warn("[vfx] TFaultFireEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+    return c;
+}
+
+void FaultFireBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SFaultFireBespokeCtx*>(cp);
+    if (!c) return;
+    delete c->eff;
+    delete c;
+}
+
+void FaultFireBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SFaultFireBespokeCtx*>(cp);
+    if (!c) return;
+    if (!c->eff || !c->eff->IsAlive())
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            delete c->eff;
+            c->eff = TFaultFireEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap = kW3aRetriggerGap;
+        }
+    }
+    if (c->eff)
+        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
 }  // namespace
 
 // Defer registration until VfxTest::Initialize runs (renderer must
@@ -4995,6 +5246,87 @@ struct SVfxTestBootstrap {
             e.factory       = [](const S3DPoint& o) -> void* { return FireSwarmBespokeVariantSpawn<kVariantHfire_I3D>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { FireSwarmBespokeVariantSubmit(c, d); };
             e.destroy       = [](void* c) { FireSwarmBespokeVariantDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+
+        // --- Wave-3 W3-A Dragon/Fire bespokes
+        // (Blast, FireFlash, FireWind, FireCone, Faultfire). 4 STUBBED +
+        // 1 PORTED; see effect.h class banner for status detail.
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TBlastEffect_BESPOKE";
+            e.family        = "magic";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return BlastBespokeSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { BlastBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { BlastBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireFlashEffect_BESPOKE";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FireFlashBespokeSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FireFlashBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FireFlashBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireWindEffect_BESPOKE";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FireWindBespokeVariantSpawn<EFireWindVariant::Base>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FireWindBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FireWindBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireWindEffect_BESPOKE__YFireWind";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FireWindBespokeVariantSpawn<EFireWindVariant::YFireWind>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FireWindBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FireWindBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireConeEffect_BESPOKE";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FireConeBespokeVariantSpawn<EFireConeVariant::Base>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FireConeBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FireConeBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFireConeEffect_BESPOKE__dragonfire";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return FireConeBespokeVariantSpawn<EFireConeVariant::DragonFire>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FireConeBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FireConeBespokeDestroy(c); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFaultFireEffect_BESPOKE";
+            e.family        = "fire";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+            e.factory       = [](const S3DPoint& o) -> void* { return FaultFireBespokeSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { FaultFireBespokeSubmit(c, d); };
+            e.destroy       = [](void* c) { FaultFireBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
     }
