@@ -12048,6 +12048,785 @@ void TSandswirlEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
     }
 }
 
+// *************************************************************************
+// * Wave 3 batch W2C: Weather C — character-cast storm + wind strip       *
+// *                                                                       *
+// * Faithful direct ports of:                                              *
+// *   W07 TStormAnimator (effectcomp.cpp:38-380)                          *
+// *   S02 TWindStripAnimator (stripeffect.cpp:1063-1417)                  *
+// *                                                                       *
+// * Translation rules: identical math, identical per-tick constants,      *
+// * identical render-pass order. Only the render API adapts: D3D          *
+// * matrix/RenderObject -> SubmitFxBillboard / SubmitFxStrip; we reuse    *
+// * StripFamilySparkTexture (procedural disc) and StripFamilyGlowTexture  *
+// * (vertical falloff strip) already proven by S04 lightning bespoke.     *
+// *                                                                       *
+// * Localized-at-end of file for clean merge with adjacent W2A/W2B/W2D    *
+// * batches.                                                              *
+// *************************************************************************
+
+// Forward decls for the StripFamily procedural textures defined in the
+// anonymous namespace at effect.cpp:10164/10191 (TU-internal linkage but
+// still resolvable below the namespace's closing brace since they share
+// the same translation unit).
+namespace { TTextureHandle StripFamilyGlowTexture(); TTextureHandle StripFamilySparkTexture(); }
+
+// =========================================================================
+// W07 TStormAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/effectcomp.cpp:38-380 (TStormAnimator::Init,
+// GetCount, Set, Get, Create, Animate, Render). The retail outer wrapper
+// is TMeteorStormAnimator (effect_old.cpp:6365-6503) which populates an
+// SStormParams struct then ramps the particle count up over ticks (size 8
+// in METEOR_STORM_SIZE). We mirror that ramp here so the single bespoke
+// effect plays as a self-contained storm burst.
+//
+// Per-instance per-tick:
+//   particle phase: pos += vel; if pos.z <= walkheight -> switch to
+//   impact; else vel.z -= gravity, frame += particle_frame_inc, wrap.
+//   impact phase:   frame += impact_frame_inc; when frame >= impact_end
+//                   -> used = false.
+//
+// Render per instance:
+//   matrix = (rotZ ±-45, rotY -90 for particle; rotX 90 for impact) *
+//            scale (part or expl) * translate (pos for particle, pos +
+//            (25,35,...) for impact).
+//   uv: u_size = 1/u, u = u_size*(frame % u); v fixed at 0 for particle,
+//       v = v_size*(frame/v) for impact.
+//   blend: snapshot TMeteorStormAnimator::Render (effect_old.cpp:6488)
+//   wraps with SetBlendState -> Alpha. Preserved AS WRITTEN.
+//
+// Harness simplification: walk-height is unavailable in --test=vfx
+// (mappane sector is empty), so we use a fixed "ground" plane at
+// origin.z and let the particle hit that to flip to impact. The damage /
+// spell-invoker / sound branches in Render are guarded out (no spell).
+
+TStormAnimator_Bespoke* TStormAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TStormAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // --- Port of TMeteorStormAnimator::Initialize (effect_old.cpp:6367-6445).
+    // The wrapper effect copies effect_pos, then sets SStormParams. We
+    // mirror the same numbers — these are the meteor-storm defaults; a
+    // future stormbolt.i3d binding could pick blue-tint constants.
+    for (int32_t i = 0; i < kStormBespokeMaxInstance; ++i)
+        eff->storm_instance_[i].used = false;
+    memset(&eff->params_, 0, sizeof(eff->params_));
+
+    eff->ticks_   = 0;
+    eff->tracker_ = 0;
+
+    SStormBespokeParams& params = eff->params_;
+
+    // how many meteors
+    params.particles = 0;
+    // their texture size
+    params.tex_u = params.tex_v = 64;
+    // what is the meteor grid
+    params.particle_u = 8;
+    params.particle_v = 2;
+    // where do the frames begin and end
+    params.particle_begin = 0;
+    params.particle_end = 7;
+    // what is the impact grid
+    params.impact_u = 4;
+    params.impact_v = 4;
+    // where do the frames begin and end
+    params.impact_begin = 8;
+    params.impact_end = 15;
+    // gravity, duh...take physics
+    params.gravity = .37f;
+    // velocity, see above suggestion
+    params.velocity.Y = 0.0f;
+    params.velocity.X = -10.0f;
+    params.velocity.Z = -15.0f;
+    // base position value
+    params.pos.X = (float)origin.x + 120.0f;
+    params.pos.Y = (float)origin.y - 20.0f;
+    params.pos.Z = (float)origin.z + 300.0f;
+    // the spread
+    params.pos_spread.X = 100.0f;
+    params.pos_spread.Y = 100.0f;
+    params.pos_spread.Z = 0.0f;
+    // frame incrementors
+    params.impact_frame_inc = 0.7f;
+    params.particle_frame_inc = 0.5f;
+    float ratio = (float)random(5, 20) / 10.0f;
+    // scaling
+    params.impact_scale.X = 1.0f * ratio;
+    params.impact_scale.Y = 1.0f * ratio;
+    params.impact_scale.Z = 1.0f * ratio;
+    // scaling
+    params.particle_scale.X = 0.5f * ratio;
+    params.particle_scale.Y = 1.5f * ratio;
+    params.particle_scale.Z = 1.0f * ratio;
+
+    params.rot.X = 0.0f;
+    params.rot.Y = 0.0f;
+    params.rot.Z = 0.0f;
+
+    eff->alive_         = true;
+    eff->sim_accum_ms_  = 0.0;
+
+    log_info("[W07 storm_bespoke] SpawnForTest: origin=(%d,%d,%d) "
+             "particles_cap=%d duration_ticks=%d",
+             origin.x, origin.y, origin.z,
+             kStormBespokeMaxInstance, kStormBespokeDurationTicks);
+    return eff;
+}
+
+int32_t TStormAnimator_Bespoke::GetCount_() const
+{
+    // VERBATIM port of TStormAnimator::GetCount (effectcomp.cpp:53-62).
+    int32_t count = 0;
+    for (int32_t i = 0; i < kStormBespokeMaxInstance; ++i)
+    {
+        if (storm_instance_[i].used)
+            ++count;
+    }
+    return count;
+}
+
+void TStormAnimator_Bespoke::Create_()
+{
+    // VERBATIM port of TStormAnimator::Create (effectcomp.cpp:80-114).
+    int32_t i = 0;
+    // create all necessary particles
+    while (GetCount_() < params_.particles)
+    {
+        if (storm_instance_[i].used)
+        {
+            i++;
+            continue;
+        }
+        // found a instance to be created
+        storm_instance_[i].used = true;
+        storm_instance_[i].pos.X = params_.pos.X + random(-(int32_t)params_.pos_spread.X, (int32_t)params_.pos_spread.X);
+        storm_instance_[i].pos.Y = params_.pos.Y + random(-(int32_t)params_.pos_spread.Y, (int32_t)params_.pos_spread.Y);
+        storm_instance_[i].pos.Z = params_.pos.Z + random(-(int32_t)params_.pos_spread.Z, (int32_t)params_.pos_spread.Z);
+        storm_instance_[i].is_particle = true;
+        storm_instance_[i].velocity.X = params_.velocity.X;
+        storm_instance_[i].velocity.Y = params_.velocity.Y;
+        storm_instance_[i].velocity.Z = params_.velocity.Z * ((float)random(100, 150) / 100.0f);
+        storm_instance_[i].gravity = params_.gravity;
+        storm_instance_[i].frame = (float)params_.particle_begin;
+        storm_instance_[i].particle_frame_inc = params_.particle_frame_inc;
+        storm_instance_[i].impact_frame_inc = params_.impact_frame_inc;
+        storm_instance_[i].part_scl.X = params_.particle_scale.X * ((float)random(50, 150) / 100.0f);
+        storm_instance_[i].part_scl.Y = params_.particle_scale.Y;
+        storm_instance_[i].part_scl.Z = params_.particle_scale.Z;
+        storm_instance_[i].expl_scl.X = params_.impact_scale.X * ((float)random(50, 150) / 100.0f);
+        storm_instance_[i].expl_scl.Y = params_.impact_scale.Y;
+        storm_instance_[i].expl_scl.Z = params_.impact_scale.Z;
+        storm_instance_[i].explosion_sounded = false;
+        //PLAY("meteor fall");
+        i++;
+    }
+}
+
+void TStormAnimator_Bespoke::Animate_()
+{
+    // VERBATIM port of TStormAnimator::Animate (effectcomp.cpp:116-164).
+    hmm_vec3 new_pos;
+
+    // Harness simplification: no live MapPane sector. Approximate the
+    // walk-height as the spawn origin's z (the "ground" the particles
+    // crash into). The snapshot calls MapPane.GetWalkHeight(point); we
+    // substitute a fixed plane at base.z. (Drift adaptation.)
+    const float ground_z = (float)Pos().z;
+
+    // run through existing particles
+    for (int32_t i = 0; i < kStormBespokeMaxInstance; ++i)
+    {
+        if (!storm_instance_[i].used)
+            continue;
+
+        if (storm_instance_[i].is_particle)
+        {
+            new_pos.X = storm_instance_[i].pos.X + storm_instance_[i].velocity.X;
+            new_pos.Y = storm_instance_[i].pos.Y + storm_instance_[i].velocity.Y;
+            new_pos.Z = storm_instance_[i].pos.Z + storm_instance_[i].velocity.Z;
+
+            const float height = ground_z;
+
+            if (height >= new_pos.Z)
+            {
+                storm_instance_[i].frame = (float)params_.impact_begin;
+                storm_instance_[i].is_particle = false;
+            }
+            else
+            {
+                storm_instance_[i].pos.X = new_pos.X;
+                storm_instance_[i].pos.Y = new_pos.Y;
+                storm_instance_[i].pos.Z = new_pos.Z;
+                storm_instance_[i].velocity.Z -= storm_instance_[i].gravity;
+                storm_instance_[i].frame += storm_instance_[i].particle_frame_inc;
+                if (storm_instance_[i].frame >= params_.particle_end)
+                    storm_instance_[i].frame -= (params_.particle_end - params_.particle_begin);
+            }
+        }
+        else
+        {
+            if ((int32_t)storm_instance_[i].frame >= params_.impact_end)
+                storm_instance_[i].used = false;
+            else
+                storm_instance_[i].frame += storm_instance_[i].impact_frame_inc;
+        }
+    }
+    // create new particles
+    Create_();
+}
+
+void TStormAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || !alive_)
+        return;
+
+    // 24 Hz sim tick — same family pattern as S04 lightning.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStormBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStormBespokeSimTickMs);
+
+        // --- Port of TMeteorStormAnimator::Animate (effect_old.cpp:6447-6483).
+        // Ramp the particle count up/down over METEOR_STORM_TICKS.
+        if (!(ticks_ % 10))
+        {
+            if (tracker_ < kStormBespokeRampSize && ticks_ <= kStormBespokeDurationTicks)
+                tracker_++;
+            if (ticks_ > kStormBespokeDurationTicks && tracker_ != 0)
+                tracker_--;
+            // params_.particles = tracker (snapshot Get/Set inlined here)
+            params_.particles = tracker_;
+            if (params_.particles > kStormBespokeMaxInstance)
+                params_.particles = kStormBespokeMaxInstance;
+        }
+
+        // animate the storm!
+        Animate_();
+
+        // check to see if finished
+        const bool storm_done = (GetCount_() == 0);
+        if (storm_done && ticks_ >= kStormBespokeDurationTicks)
+        {
+            alive_ = false;
+            break;
+        }
+
+        ++ticks_;
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render() — port of TStormAnimator::Render (effectcomp.cpp:166-293).
+    // Snapshot: SetBlendState() (Alpha) at outer wrapper (effect_old.cpp:
+    // 6488), then per-instance RenderObject. Preserve Alpha AS WRITTEN.
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    for (int32_t i = 0; i < kStormBespokeMaxInstance; ++i)
+    {
+        if (!storm_instance_[i].used)
+            continue;
+
+        // Build the world position (snapshot's pos / pos+offset for
+        // impact). The matrix rotations (RotZ -45/RotY -90 for particle,
+        // RotX 90 for impact) shape the I3D mesh — without a real asset
+        // we use screen-aligned billboards; the per-phase rotation maps
+        // to a per-phase rotation_rad on the particle item.
+        float wx, wy, wz;
+        if (storm_instance_[i].is_particle)
+        {
+            wx = storm_instance_[i].pos.X;
+            wy = storm_instance_[i].pos.Y;
+            wz = storm_instance_[i].pos.Z;   // FIX_Z_VALUE in snapshot
+        }
+        else
+        {
+            wx = storm_instance_[i].pos.X + 25.0f;
+            wy = storm_instance_[i].pos.Y + 35.0f;
+            wz = storm_instance_[i].pos.Z;
+        }
+
+        // Spell-explode-sound block (snapshot effectcomp.cpp:227-238) is
+        // guarded out — harness has no spell. Mark the slot as "sounded"
+        // so it won't keep entering this block.
+        if (!storm_instance_[i].is_particle && !storm_instance_[i].explosion_sounded)
+            storm_instance_[i].explosion_sounded = true;
+
+        // --- UV (snapshot effectcomp.cpp:241-275): pick a tile out of the
+        // particle/impact frame grid. Real asset would map to actual tiles
+        // in stormbolt.i3d; with the procedural disc spark_tex, we keep
+        // the full UV [0..1] but compute the snapshot's u/v values so a
+        // future asset hookup is trivial.
+        int32_t frame = (int32_t)storm_instance_[i].frame;
+        float u, u_size, v, v_size;
+        if (storm_instance_[i].is_particle)
+        {
+            u_size = (1.0f / (float)params_.particle_u);
+            u = u_size * (float)(frame % params_.particle_u);
+            v_size = (1.0f / (float)params_.particle_v);
+            v = 0.0f;
+        }
+        else
+        {
+            u_size = (1.0f / (float)params_.impact_u);
+            u = u_size * (float)(frame % params_.impact_u);
+            v_size = (1.0f / (float)params_.impact_v);
+            v = v_size * (float)(frame / params_.impact_v);
+        }
+
+        // Per-phase size: snapshot scales by part_scl (particle) or
+        // expl_scl (impact). We bake the X axis * a base size_wu.
+        const float base_size_wu = 24.0f;
+        const float scl = storm_instance_[i].is_particle
+                             ? storm_instance_[i].part_scl.X
+                             : storm_instance_[i].expl_scl.X;
+        const float size_wu = base_size_wu * scl;
+
+        // Per-phase tint: stormbolt = blue particles + white impact.
+        // (Procedural stand-in; real asset would carry the tint.)
+        const float r_ = storm_instance_[i].is_particle ? 0.55f : 1.0f;
+        const float g_ = storm_instance_[i].is_particle ? 0.75f : 1.0f;
+        const float b_ = storm_instance_[i].is_particle ? 1.0f  : 1.0f;
+
+        SParticleDrawItem item = {};
+        item.world_pos[0] = wx;
+        item.world_pos[1] = wy;
+        item.world_pos[2] = wz;
+        item.size_wu[0]   = size_wu;
+        item.size_wu[1]   = size_wu;
+        item.color_rgba[0] = r_;
+        item.color_rgba[1] = g_;
+        item.color_rgba[2] = b_;
+        item.color_rgba[3] = 1.0f;
+        // For now use full uv (procedural disc); preserve computed u/v as
+        // the rect for the asset path.
+        (void)u; (void)v; (void)u_size; (void)v_size;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.rotation_rad = storm_instance_[i].is_particle ? -0.7854f : 0.0f; // RotZ(-45deg)
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxParticle(item);
+    }
+
+    // Static log on first submit for harness verification.
+    static const bool s_logged_first_submit = []{
+        log_info("[W07 storm_bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+}
+
+// =========================================================================
+// S02 TWindStripAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/stripeffect.cpp:1063-1417 (TWindStripAnimator::
+// Initialize / SetupObjects / Animate / Render / RefreshZBuffer +
+// InitDrops + AddDrop). Three parallel strips walk Lissajous paths around
+// `center`; each tick the head moves a notch and the oldest point is
+// dropped, with sparks spawning at the displaced head. A central halo
+// pulses (grow then shrink) over the fadeout window.
+//
+// Per-tick (snapshot Animate :1132-1242):
+//   - first frame: seed all 10 (POINTS/2) head points.
+//   - subsequent frames: DelStartPoint + AddPoint (FIFO head-prepend);
+//     also AddDrop(p + center).
+//   - update accumulators r/th/h/ac/dac (Lissajous speeds).
+//   - haloscale grows by HALOSTEP per tick during first half of FADEOUT,
+//     shrinks past 1.5*FADEOUT.
+//   - drops integrate p += v, v.z -= SPARKGRAV, scl -= SPARKDSCALE; die
+//     when scl <= 0 OR pos.z < 20.
+//   - centerang random-walks (snapshot uses byte-angle).
+//   - if frameon > WINDSTRIP_DURATION -> kill effect.
+//
+// Render (snapshot :1244-1369):
+//   - Alpha blend (SetBlendState): strip body + drop sparks.
+//   - AdditiveStraight (SetAddBlendState): halo billboard.
+//   - Cull mode forced to NONE (preserved by submission orientation +
+//     strip pipeline handling both sides).
+
+TWindStripAnimator_Bespoke* TWindStripAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TWindStripAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    eff->ForcePos(origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // --- Port of TWindStripAnimator::Initialize (stripeffect.cpp:1063-1101).
+    eff->center_.X = 0.0f;
+    eff->center_.Y = 0.0f;
+    eff->center_.Z = 0.0f;
+
+    eff->realpos_.X = 0.0f;
+    eff->realpos_.Y = 0.0f;
+    eff->realpos_.Z = 0.0f;
+
+    eff->centerang_ = 0;
+    eff->haloscale_ = 0.0f;
+    eff->frameon_   = 0;
+
+    for (int32_t i = 0; i < kWindStripBespokeMaxStrips; i++)
+    {
+        eff->r_[i]   = (float)random(0, 6);
+        eff->th_[i]  = (float)random(0, 6);
+        eff->h_[i]   = (float)random(0, 6);
+        eff->dr_[i]  = (float)(random(1, 20) / 100.0);
+        eff->dth_[i] = (float)(random(15, 20) / 100.0);
+        eff->dh_[i]  = (float)(random(1, 20) / 100.0);
+        eff->ac_[i]  = 0.0f;
+        eff->dac_[i] = (float)(random(5, 10) / 100.0);
+
+        // Snapshot stripeffect.cpp:1096-1098 — these lines exist as
+        // commented-out in Initialize and are restored in SetupObjects
+        // (lines 1123-1125). The TStripAnimator equivalent maps to our
+        // strip_points_ ring buffer which is implicit (no separate
+        // TStripAnimator instance needed).
+        eff->strip_count_[i] = 0;
+    }
+    eff->InitDrops_();
+
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[S02 windstrip_bespoke] SpawnForTest: origin=(%d,%d,%d) "
+             "strips=%d points/strip=%d sparks=%d",
+             origin.x, origin.y, origin.z,
+             kWindStripBespokeMaxStrips, kWindStripBespokePoints,
+             kWindStripBespokeNumSparks);
+    return eff;
+}
+
+void TWindStripAnimator_Bespoke::InitDrops_()
+{
+    // Port of stripeffect.cpp:1389-1396.
+    for (int32_t i = 0; i < kWindStripBespokeNumSparks; i++)
+        drops_[i].used = false;
+}
+
+void TWindStripAnimator_Bespoke::AddDrop_(const hmm_vec3& pos)
+{
+    // VERBATIM port of TWindStripAnimator::AddDrop (stripeffect.cpp:
+    // 1398-1418). Snapshot bug preserved (`p = i` overwrites every
+    // un-used slot's index, so AddDrop ends up writing into the LAST
+    // un-used slot — that's how it was shipped).
+    int32_t p = -1, i;
+    for (i = 0; i < kWindStripBespokeNumSparks; i++)
+    {
+        if (drops_[i].used)
+            continue;
+        p = i;
+    }
+    if (p > -1)
+    {
+        drops_[p].pos.X = pos.X;
+        drops_[p].pos.Y = pos.Y;
+        drops_[p].pos.Z = pos.Z;
+        drops_[p].vel.X = 0.0f;
+        drops_[p].vel.Y = 0.0f;
+        drops_[p].vel.Z = -kWindStripBespokeSparkFall;
+        drops_[p].scl   = kWindStripBespokeSparkScale;
+        drops_[p].used  = true;
+    }
+}
+
+void TWindStripAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || !alive_)
+        return;
+
+    // 24 Hz sim tick — matches snapshot's per-frame cadence.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kWindStripBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kWindStripBespokeSimTickMs);
+
+        // --- Port of TWindStripAnimator::Animate (stripeffect.cpp:1132-1242).
+        hmm_vec3 p;
+        for (int32_t j = 0; j < kWindStripBespokeMaxStrips; j++)
+        {
+            if (frameon_ == 0)
+            {
+                // First frame: seed the strip with POINTS/2 head points.
+                for (int32_t i = 0; i < kWindStripBespokePoints / 2; i++)
+                {
+                    p.X = (float)((std::cos(r_[j]) + 2) * std::cos(th_[j]) * kWindStripBespokeModifier * ac_[j] * (std::sin(h_[j]) + 1));
+                    p.Y = (float)((std::cos(r_[j]) + 2) * std::sin(th_[j]) * kWindStripBespokeModifier * ac_[j] * (std::sin(h_[j]) + 1));
+                    p.Z = (float)(std::sin(h_[j]) * kWindStripBespokeModifierV * ac_[j]);
+
+                    // strip head-prepend (mystrip[j]->AddPoint(&p)).
+                    if (strip_count_[j] < kWindStripBespokePoints)
+                    {
+                        // shift up (head at [0])
+                        for (int32_t k = strip_count_[j]; k > 0; --k)
+                            strip_points_[j][k] = strip_points_[j][k - 1];
+                        strip_points_[j][0].pos = p;
+                        strip_points_[j][0].used = true;
+                        ++strip_count_[j];
+                    }
+
+                    th_[j] += (float)dth_[j];
+                    r_[j]  += (float)dr_[j];
+                    h_[j]  += (float)dh_[j];
+                    ac_[j] += (float)dac_[j];
+                    if (ac_[j] > 5.0f)
+                        ac_[j] = 5.0f;
+                }
+            }
+            else
+            {
+                // DelStartPoint: drop the oldest point (snapshot pops from
+                // the tail of the ring-shifted buffer).
+                if (strip_count_[j] > 0)
+                {
+                    // shift down (drop tail)
+                    for (int32_t k = 0; k < strip_count_[j] - 1; ++k)
+                        strip_points_[j][k] = strip_points_[j][k + 1];
+                    strip_points_[j][strip_count_[j] - 1].used = false;
+                    --strip_count_[j];
+                }
+
+                p.X = (float)((std::cos(r_[j]) + 2) * std::cos(th_[j]) * kWindStripBespokeModifier * ac_[j] * (std::sin(h_[j]) + 1));
+                p.Y = (float)((std::cos(r_[j]) + 2) * std::sin(th_[j]) * kWindStripBespokeModifier * ac_[j] * (std::sin(h_[j]) + 1));
+                p.Z = (float)(std::sin(h_[j]) * kWindStripBespokeModifierV * ac_[j]);
+
+                // AddPoint (head-prepend).
+                if (strip_count_[j] < kWindStripBespokePoints)
+                {
+                    for (int32_t k = strip_count_[j]; k > 0; --k)
+                        strip_points_[j][k] = strip_points_[j][k - 1];
+                    strip_points_[j][0].pos = p;
+                    strip_points_[j][0].used = true;
+                    ++strip_count_[j];
+                }
+                else
+                {
+                    // ring is full -- still rotate head down then prepend.
+                    for (int32_t k = kWindStripBespokePoints - 1; k > 0; --k)
+                        strip_points_[j][k] = strip_points_[j][k - 1];
+                    strip_points_[j][0].pos = p;
+                    strip_points_[j][0].used = true;
+                }
+
+                th_[j] += (float)dth_[j];
+                r_[j]  += (float)dr_[j];
+                h_[j]  += (float)dh_[j];
+                p.X += center_.X;
+                p.Y += center_.Y;
+                p.Z += center_.Z;
+                AddDrop_(p);
+
+                if (frameon_ < kWindStripBespokeFadeout)
+                {
+                    ac_[j] += (float)dac_[j];
+                    if (ac_[j] > 5.0f)
+                        ac_[j] = 5.0f;
+                }
+                else
+                {
+                    ac_[j] -= (float)dac_[j];
+                    if (ac_[j] < 0.0f)
+                        ac_[j] = 0.0f;
+                }
+                if (frameon_ < kWindStripBespokeFadeout / 2)
+                    haloscale_ += kWindStripBespokeHaloStep;
+                if (frameon_ > (kWindStripBespokeFadeout * 3) / 2)
+                    haloscale_ -= kWindStripBespokeHaloStep;
+            }
+        }
+
+        // Drop integration (stripeffect.cpp:1199-1210).
+        for (int32_t i = 0; i < kWindStripBespokeNumSparks; i++)
+        {
+            if (!drops_[i].used)
+                continue;
+            drops_[i].pos.X += drops_[i].vel.X;
+            drops_[i].pos.Y += drops_[i].vel.Y;
+            drops_[i].pos.Z += drops_[i].vel.Z;
+            drops_[i].vel.Z -= kWindStripBespokeSparkGrav;
+            drops_[i].scl   -= kWindStripBespokeSparkDScale;
+            if (drops_[i].scl <= 0 || drops_[i].pos.Z < 20)
+                drops_[i].used = false;
+        }
+
+        // Lifetime check (stripeffect.cpp:1211-1216). The STRIP_EXPLODE
+        // branch is harness-irrelevant (no my_state); rely solely on
+        // frameon overrun.
+        if (frameon_ > kWindStripBespokeDuration)
+        {
+            alive_ = false;
+            break;
+        }
+
+        ++frameon_;
+
+        // Center wobble (stripeffect.cpp:1218-1240). Snapshot uses
+        // ConvertToVector(centerang, RADIUS, vel) which is byte-angle
+        // -> x/y. We replicate with sin/cos.
+        const float angle_rad = float(centerang_ & 255) * (6.28318530718f / 256.0f);
+        const float vx = std::cos(angle_rad) * float(kWindStripBespokeRadius);
+        const float vy = std::sin(angle_rad) * float(kWindStripBespokeRadius);
+        center_.X  += vx;
+        center_.Y  += vy;
+        // Spell-invoker branch (snapshot :1225-1227) is harness-skipped
+        // — no invoker, so realpos stays at 0 (or grows under our own
+        // angle without the face-offset).
+        realpos_.X += vx;
+        realpos_.Y += vy;
+        centerang_ = (centerang_ + random(-2, 2)) & 255;
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render() — port of TWindStripAnimator::Render (stripeffect.cpp:
+    // 1244-1369). Snapshot: SetBlendState (Alpha) for strips + drops,
+    // SetAddBlendState (AdditiveStraight) for the halo. Cull mode forced
+    // NONE; strip pipeline draws both sides natively.
+
+    const TTextureHandle glow_tex  = StripFamilyGlowTexture();
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (glow_tex == kInvalidTexture || spark_tex == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = Pos();
+    const float ox = float(base.x) + center_.X;
+    const float oy = float(base.y) + center_.Y;
+    const float oz = float(base.z) + center_.Z;
+
+    // 1) Strips — port of stripeffect.cpp:1276-1302 (GenerateStrip +
+    // RenderObject). Each strip is rendered as N-1 SStripSegments
+    // between adjacent points; width pinned at WINDSTRIP_WIDTH / WIDTH2.
+    static thread_local std::vector<SStripSegment> seg_scratch;
+    for (int32_t j = 0; j < kWindStripBespokeMaxStrips; j++)
+    {
+        if (strip_count_[j] < 2)
+            continue;
+        seg_scratch.clear();
+        const int32_t n = strip_count_[j];
+        seg_scratch.reserve(size_t(n - 1));
+        for (int32_t k = 0; k < n - 1; k++)
+        {
+            const SWindStripBespokePoint& a = strip_points_[j][k];
+            const SWindStripBespokePoint& b = strip_points_[j][k + 1];
+            const float ta = float(k)     / float(n - 1);
+            const float tb = float(k + 1) / float(n - 1);
+            SStripSegment seg = {};
+            seg.world_a[0] = ox + a.pos.X;
+            seg.world_a[1] = oy + a.pos.Y;
+            seg.world_a[2] = oz + a.pos.Z;
+            seg.world_b[0] = ox + b.pos.X;
+            seg.world_b[1] = oy + b.pos.Y;
+            seg.world_b[2] = oz + b.pos.Z;
+            seg.width_a_wu = float(kWindStripBespokeWidth);
+            seg.width_b_wu = float(kWindStripBespokeWidth2);
+            // Snapshot has D3DRGBA(0,0,1,(numverts-i-1)/numverts) as the
+            // commented-out vertex color (stripeffect.cpp:1296-1297); the
+            // active code path leaves vertex colors at the obj defaults
+            // (white). Preserve as written: full white.
+            for (int32_t c = 0; c < 4; ++c)
+            {
+                seg.color_a[c] = 1.0f;
+                seg.color_b[c] = 1.0f;
+            }
+            // Snapshot SetTextureRange(-1, 1); we map ta/tb to [-1..1].
+            seg.u_a = -1.0f + 2.0f * ta;
+            seg.u_b = -1.0f + 2.0f * tb;
+            seg_scratch.push_back(seg);
+        }
+        SStripDrawItem strip_item = {};
+        strip_item.segments     = seg_scratch.data();
+        strip_item.num_segments = int32_t(seg_scratch.size());
+        strip_item.key.texture     = glow_tex;
+        strip_item.key.pipeline_id = uint16_t(EFxPipeline::Strip);
+        strip_item.key.blend       = uint8_t(EFxBlend::Alpha);
+        strip_item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        strip_item.debug_mode      = debug_mode;
+        Renderer->SubmitFxStrip(strip_item);
+    }
+
+    // 2) Drop sparks — port of stripeffect.cpp:1304-1331. Snapshot only
+    // renders a drop if `!random(0,1)` (i.e. ~50% per frame); preserved.
+    for (int32_t i = 0; i < kWindStripBespokeNumSparks; i++)
+    {
+        if (!drops_[i].used || random(0, 1))
+            continue;
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = drops_[i].pos.X;
+        item.world_pos[1] = drops_[i].pos.Y;
+        item.world_pos[2] = drops_[i].pos.Z;
+        const float drop_size_wu = drops_[i].scl * 24.0f;
+        item.size_wu[0] = drop_size_wu;
+        item.size_wu[1] = drop_size_wu;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+
+    // 3) Halo — port of stripeffect.cpp:1333-1356. SetAddBlendState ->
+    // AdditiveStraight. Position at center.x/y/z+haloscale (z-offset by
+    // haloscale per snapshot :1352).
+    if (haloscale_ > 0.0f)
+    {
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = ox;
+        item.world_pos[1] = oy;
+        item.world_pos[2] = oz + haloscale_;
+        const float halo_size_wu = haloscale_ * 32.0f;
+        item.size_wu[0] = halo_size_wu;
+        item.size_wu[1] = halo_size_wu;
+        item.color_rgba[0] = 0.55f;
+        item.color_rgba[1] = 0.75f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+
+    // Static log on first submit for harness verification.
+    static const bool s_logged_first_submit = []{
+        log_info("[S02 windstrip_bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+}
+
 // =========================================================================
 // * Wave-2B Weather B stubs (W01/W02/W03) — see effect.h banner.           *
 // *                                                                       *

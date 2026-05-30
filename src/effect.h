@@ -4844,6 +4844,225 @@ class TPixieEffect_Bespoke : public TEffect
     double         sim_accum_ms_ = 0.0;
 };
 
+// *************************************************************************
+// * Wave 3 batch W2C: Weather C — character-cast storm + wind strip.       *
+// *                                                                       *
+// *   W07 TStormAnimator_Bespoke  — particle storm (rain-of-bolts) driven *
+// *                                 by SStormParams (effectcomp.cpp:38).  *
+// *                                 First-pass mirrors the TStormAnimator *
+// *                                 inner helper as a standalone effect — *
+// *                                 the M09-style "wrapper" (e.g.         *
+// *                                 TMeteorStormAnimator) becomes a fixed *
+// *                                 params struct chosen at spawn time.   *
+// *                                                                       *
+// *   S02 TWindStripAnimator_Bespoke — 3-strip wind-blown ambient streak  *
+// *                                    (stripeffect.cpp:1063-1417). Each  *
+// *                                    strip walks a Lissajous-like curve *
+// *                                    around the caster, spawning drop    *
+// *                                    sparks behind it + a fade-in/out   *
+// *                                    halo. Snapshot SetBlendState =     *
+// *                                    Alpha for strips, AddBlendState    *
+// *                                    for halo.                          *
+// *                                                                       *
+// * Translation rules: identical math, identical per-tick constants,      *
+// * identical render-pass order. Only the render API adapts. Both port    *
+// * reuses the StripFamilyGlowTexture / StripFamilySparkTexture procedural*
+// * stand-ins already proven by S04 TLightningAnimator_Bespoke.           *
+// *************************************************************************
+
+// --- W07 TStormAnimator_Bespoke -------------------------------------------
+// Faithful direct port of the inner TStormAnimator helper (effectcomp.cpp:
+// 38-380). The helper is a particle bucket of falling animated billboards;
+// each instance is born above the caster, falls under gravity, switches to
+// an "impact" animation when it hits the walk-height, then dies after the
+// impact frames play out. Snapshot Render blend = SetAddBlendState ->
+// AdditiveStraight (cf. TMeteorStormAnimator::Render, effect_old.cpp:6485).
+//
+// For the harness we instantiate with ice-bolt-style params (a smaller,
+// blue-tinted storm — the "stormbolt.i3d" intent). The MeteorStormAnimator
+// wrapper in effect_old.cpp:6367-6445 is our reference for how outer
+// animators populate SStormParams.
+//
+// Asset binding is deferred (no stormbolt.i3d loader yet); first-pass uses
+// the StripFamilySparkTexture procedural stand-in tinted blue for the
+// "particle" phase and white for the "impact" phase.
+inline constexpr int32_t kStormBespokeMaxInstance = 20;   // STORM_DEFAULT_MAX_INSTANCE
+inline constexpr int32_t kStormBespokeSimTickMs   = 1000 / 24;
+inline constexpr int32_t kStormBespokeDurationTicks = 24 * 5;  // ~5 s of spawning
+inline constexpr int32_t kStormBespokeRampSize     = 8;   // pulse_count target
+
+// One storm particle (snapshot SStormInstance — effectcomp.h:56).
+struct SStormBespokeInstance
+{
+    bool     used               = false;
+    hmm_vec3 pos                = {0.0f, 0.0f, 0.0f};
+    bool     is_particle        = true;
+    bool     explosion_sounded  = false;
+    hmm_vec3 velocity           = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 part_scl           = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 expl_scl           = {0.0f, 0.0f, 0.0f};
+    float    gravity            = 0.0f;
+    float    frame              = 0.0f;
+    float    impact_frame_inc   = 0.0f;
+    float    particle_frame_inc = 0.0f;
+};
+
+// The bespoke holds its own SStormParams (snapshot effectcomp.h:21). All
+// fields copied verbatim — kept here as a local struct so the bespoke is
+// self-contained without dragging in effectcomp.h.
+struct SStormBespokeParams
+{
+    int32_t  particles          = 0;
+    int32_t  tex_u              = 64;
+    int32_t  tex_v              = 64;
+    int32_t  particle_u         = 8;
+    int32_t  particle_v         = 2;
+    int32_t  particle_begin     = 0;
+    int32_t  particle_end       = 7;
+    int32_t  impact_u           = 4;
+    int32_t  impact_v           = 4;
+    int32_t  impact_begin       = 8;
+    int32_t  impact_end         = 15;
+    float    gravity            = 0.37f;
+    hmm_vec3 velocity           = {-10.0f, 0.0f, -15.0f};
+    hmm_vec3 pos                = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 pos_spread         = {100.0f, 100.0f, 0.0f};
+    float    impact_frame_inc   = 0.7f;
+    float    particle_frame_inc = 0.5f;
+    hmm_vec3 particle_scale     = {0.5f, 1.5f, 1.0f};
+    hmm_vec3 impact_scale       = {1.0f, 1.0f, 1.0f};
+    hmm_vec3 rot                = {0.0f, 0.0f, 0.0f};
+};
+
+_CLASSDEF(TStormAnimator_Bespoke)
+class TStormAnimator_Bespoke : public TEffect
+{
+  public:
+    TStormAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TStormAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TStormAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TStormAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot animator helpers (effectcomp.cpp:53/80/116).
+    int32_t GetCount_() const;
+    void    Create_();
+    void    Animate_();
+
+    SStormBespokeParams   params_ {};
+    SStormBespokeInstance storm_instance_[kStormBespokeMaxInstance] {};
+
+    // Outer-animator state (mirrors TMeteorStormAnimator: ticks/tracker
+    // drive the particle-count ramp).
+    int32_t ticks_   = 0;
+    int32_t tracker_ = 0;
+    bool    alive_   = true;
+    double  sim_accum_ms_ = 0.0;
+};
+
+// --- S02 TWindStripAnimator_Bespoke ---------------------------------------
+// Faithful direct port of TWindStripAnimator::Initialize / SetupObjects /
+// Animate / Render (src/stripeffect.cpp:1063-1417). Three parallel strip
+// curves walk Lissajous-like paths around the caster; behind each strip
+// point we spawn a "drop spark" with gravity. A central halo grows during
+// the first half of the fadeout window and shrinks after. Snapshot has the
+// caster following the spell-invoker's facing — for the harness we hold
+// the center at the spawn origin and let centerang wobble.
+//
+// Blend: SetBlendState (Alpha) for strips + drops, SetAddBlendState
+// (AdditiveStraight) for the halo (preserved as written in :1333).
+//
+// Asset: Magic\windstrip.i3d (no loader yet); first-pass uses the
+// StripFamilyGlowTexture for the strips and the StripFamilySparkTexture
+// for drops + halo.
+
+inline constexpr int32_t kWindStripBespokeMaxStrips      = 3;
+inline constexpr int32_t kWindStripBespokePoints         = 20;   // WINDSTRIP_POINTS
+inline constexpr int32_t kWindStripBespokeWidth          = 15;   // WINDSTRIP_WIDTH
+inline constexpr int32_t kWindStripBespokeWidth2         = 15;   // WINDSTRIP_WIDTH2
+inline constexpr int32_t kWindStripBespokeDuration       = 250;  // WINDSTRIP_DURATION
+inline constexpr int32_t kWindStripBespokeFadeout        = 100;  // WINDSTRIP_FADEOUT
+inline constexpr int32_t kWindStripBespokeModifier       = 5;    // WINDSTRIP_MODIFIER
+inline constexpr int32_t kWindStripBespokeModifierV      = 15;   // WINDSTRIP_MODIFIERV
+inline constexpr int32_t kWindStripBespokeRadius         = 2;    // WINDSTRIP_RADIUS
+inline constexpr int32_t kWindStripBespokeNumSparks      = 20 * 20;
+inline constexpr float   kWindStripBespokeSparkScale     = 0.4f;
+inline constexpr float   kWindStripBespokeSparkDScale    = 0.005f;
+inline constexpr float   kWindStripBespokeSparkGrav      = 0.2f;
+inline constexpr float   kWindStripBespokeSparkFall      = 0.5f;
+inline constexpr float   kWindStripBespokeHaloStep       = 0.04f;
+inline constexpr int32_t kWindStripBespokeSimTickMs      = 1000 / 24;
+
+// One Lissajous point along a strip (head-prepended ring buffer).
+struct SWindStripBespokePoint
+{
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};
+    bool     used = false;
+};
+
+// One drop spark.
+struct SWindStripBespokeDrop
+{
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 vel = {0.0f, 0.0f, 0.0f};
+    float    scl = 0.0f;
+    bool     used = false;
+};
+
+_CLASSDEF(TWindStripAnimator_Bespoke)
+class TWindStripAnimator_Bespoke : public TEffect
+{
+  public:
+    TWindStripAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TWindStripAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TWindStripAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TWindStripAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    void InitDrops_();
+    void AddDrop_(const hmm_vec3& pos);
+
+    // Per-strip Lissajous parameters (member arrays in the snapshot —
+    // mystrip[j], r[j], th[j], h[j], dr[j], dth[j], dh[j], ac[j], dac[j]).
+    float r_[kWindStripBespokeMaxStrips]   {};
+    float th_[kWindStripBespokeMaxStrips]  {};
+    float h_[kWindStripBespokeMaxStrips]   {};
+    float dr_[kWindStripBespokeMaxStrips]  {};
+    float dth_[kWindStripBespokeMaxStrips] {};
+    float dh_[kWindStripBespokeMaxStrips]  {};
+    float ac_[kWindStripBespokeMaxStrips]  {};
+    float dac_[kWindStripBespokeMaxStrips] {};
+
+    // Per-strip point ring buffer (head = newest). Snapshot uses
+    // TStripAnimator's AddPoint / DelStartPoint; we replicate the FIFO.
+    SWindStripBespokePoint strip_points_[kWindStripBespokeMaxStrips]
+                                        [kWindStripBespokePoints] {};
+    int32_t strip_count_[kWindStripBespokeMaxStrips] = {0, 0, 0};
+
+    // Center pos + offset accumulators (snapshot center, realpos).
+    hmm_vec3 center_   = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 realpos_  = {0.0f, 0.0f, 0.0f};
+    int32_t  centerang_ = 0;
+    float    haloscale_ = 0.0f;
+    int32_t  frameon_   = 0;
+
+    // Spark bucket — fixed-size heap array in the snapshot.
+    SWindStripBespokeDrop drops_[kWindStripBespokeNumSparks] {};
+
+    bool   alive_        = true;
+    double sim_accum_ms_ = 0.0;
+};
+
 // =========================================================================
 // * Wave-2B Weather B — large composite spawners (W01/W02/W03)             *
 // *                                                                       *
