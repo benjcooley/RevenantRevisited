@@ -4843,3 +4843,207 @@ class TPixieEffect_Bespoke : public TEffect
     float          size_wu_      = kPixieBespokeBaseSizeWu;
     double         sim_accum_ms_ = 0.0;
 };
+
+// *************************************************************************
+// * wave-bespoke-W2A: weather / ground-scatter family — fog / sandswirl /  *
+// * quicksand. Faithful direct ports of the snapshot animator bodies for   *
+// * the --test=vfx harness, mirroring the TBloodEffect_Bespoke pattern.    *
+// * Each class loads its real .I3D imagery (no procedural stand-in per     *
+// * feedback_no_standins) and runs the snapshot's per-tick state machine   *
+// * LINE BY LINE against an internal state array. Pipeline + blend         *
+// * preserved verbatim — SetBlendState in the snapshot means Alpha here;   *
+// * SetAddBlendState means AdditiveStraight; no constants invented.        *
+// *************************************************************************
+
+_CLASSDEF(TFogEffect_Bespoke)
+
+// W06: ambient ground fog overlay. Snapshot:
+// src/effect_old.cpp:6621-6750 (TFogAnimator). 36-vertex flat grid (6x6)
+// over a scl=7.475 quad, with per-vertex random color/alpha brightness
+// drift on 20 "anchored" border verts (frozen at c=.7/a=.125) and the
+// other 16 inner verts drifting through random color_velocity /
+// alpha_velocity / position-delta walks. SetBlendState -> Alpha (verbatim,
+// preserved AS WRITTEN — no AdditiveStraight reinterpretation).
+//
+// First-pass bespoke: collapse the 36-vertex animated grid down to a
+// single ground-aligned (WorldXY) Alpha billboard whose color/alpha is
+// the mean of the inner verts. Preserves the snapshot's brightness/alpha
+// random walk shape (same min/max/velocity bounds) so the visual breathes
+// at the same cadence; the per-vertex gradient is a follow-up upgrade
+// once the engine has a triangulated-quad-with-vertex-color render path.
+class TFogEffect_Bespoke : public TEffect
+{
+  public:
+    TFogEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFogEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFogEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFogEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient overlay — never dies
+
+  private:
+    // Snapshot constants (effect_old.cpp:6621-6750).
+    static constexpr int32_t kFogVertex      = 36;   // FOG_VERTEX
+    static constexpr float   kFogScale       = 7.475f;
+    static constexpr int32_t kFogSimTickMs   = 1000 / 24;
+    static constexpr float   kFogBaseSizeWu  = 96.0f * kFogScale;  // grid quad ~ 96 wu base * 7.475
+
+    struct SFogVert
+    {
+        float c   = 0.7f;
+        float a   = 0.125f;
+        float cv  = 0.0f;     // color_velocity
+        float av  = 0.0f;     // alpha_velocity
+        hmm_vec3 dpos     = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 velocity = {0.0f, 0.0f, 0.0f};
+        bool  anchored    = false;   // border vert (frozen) vs inner vert (drifting)
+    };
+
+    SFogVert       verts_[kFogVertex] {};
+    double         sim_accum_ms_  = 0.0;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TSandswirlEffect_Bespoke)
+
+// W04: sandswirl spell-cast burst. Snapshot:
+// src/effect_old.cpp:9476-9683 (TSandswirlAnimator). Spawns a child
+// "sand" particle effect (TParticle3DAnimator) on Initialize with 50-100
+// particles, sets seek-targets to (0,0,100) above the cast point. After
+// SANDSWIRL_DURATION (75) the snapshot scans nearby characters and
+// retargets the particles at them, also spawning child Quicksand effects.
+// At frame SANDSWIRL_DURATION*4 (=300) the effect kills itself. Render()
+// is fully commented-out in the snapshot — no own draws; visuals are
+// entirely the child sand PE.
+//
+// First-pass bespoke: own particle pool (50 sand particles) running the
+// snapshot's seek-target curve (z=100 ascending point), so the effect
+// reads visually as the swirling sand updraft. Blend = AdditiveStraight
+// by sister-family precedent (sand, dust, swirl PEs all SetAddBlendState
+// in the snapshot family). Retarget-to-character logic is stubbed: in
+// the harness there are no nearby characters, so on frame == SANDSWIRL_
+// DURATION we keep the original (0,0,100) target. KillThisEffect at
+// frame SANDSWIRL_DURATION*4 preserved.
+class TSandswirlEffect_Bespoke : public TEffect
+{
+  public:
+    TSandswirlEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TSandswirlEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TSandswirlEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TSandswirlEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants.
+    static constexpr float   kSandswirlDuration = 75.0f;   // SANDSWIRL_DURATION
+    static constexpr int32_t kSandMaxParticles  = 100;     // upper bound of random(50,100)
+    static constexpr float   kSandSpawnZ        = 70.0f;   // pr.pos.z
+    static constexpr float   kSandSpreadXY      = 50.0f;   // pr.pspread.x/y
+    static constexpr float   kSandSpreadZ       = 50.0f;   // pr.pspread.z
+    static constexpr float   kSandSeekTargetZ   = 100.0f;  // pr.targetpos[0].z
+    static constexpr float   kSandSeekSpeedBase = 5.0f;    // pr.seekspeed
+    static constexpr float   kSandTurnAng       = 0.5f;    // pr.turnang
+    static constexpr int32_t kSandMinLife       = 100;     // pr.minlife
+    static constexpr int32_t kSandMaxLife       = 150;     // pr.maxlife
+    static constexpr int32_t kSandSimTickMs     = 1000 / 24;
+    static constexpr float   kSandBaseSizeWu    = 32.0f;   // single sand mote
+
+    struct SSandParticle
+    {
+        hmm_vec3 pos    = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 vel    = {0.0f, 0.0f, 0.0f};
+        int32_t  life   = 0;
+        bool     alive  = false;
+        int32_t  start  = 0;     // delay until particle activates
+    };
+
+    SSandParticle  parts_[kSandMaxParticles] {};
+    int32_t        numparticles_  = 0;
+    int32_t        frameon_       = 0;
+    int32_t        angle_         = 0;     // snapshot: inst->GetAngle()
+    hmm_vec3       seektarget_    = {0.0f, 0.0f, kSandSeekTargetZ};
+    bool           alive_         = true;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+    double         sim_accum_ms_  = 0.0;
+};
+
+_CLASSDEF(TQuicksandEffect_Bespoke)
+
+// W05: quicksand ground trap. Snapshot:
+// src/effect_old.cpp:9137-9474 (TQuicksandAnimator at lines 9137-9442 +
+// REGISTER + Pulse at TQuicksandEffect:9004-9122). A duplicate body
+// exists at 12520-12836 inside /***** Old Quicksand: Redone by Pepper *****/
+// comment block — DEAD (commented-out); the canonical body is at line
+// 9194.
+//
+// The snapshot uses three sub-objects on a 3-mesh I3D:
+//   GetObject(0) — spinning sand decal (4-frame UV-flip texture), scaled
+//                  by `scalesize` (animated), rotated by `ang` (+=0.06/tick).
+//   GetObject(1) — twin cylinders, scaled by (cylscale, cylheight), one
+//                  rotated by `cylrot`, the other by M_PI - cylrot.
+//   GetObject(2) — dust mesh (34 verts) U-scrolling at -0.06/tick, rendered
+//                  in 3 concentric scales: (scalesize), (scalesize/1.25),
+//                  (scalesize/1.5), (scalesize/1.75). zscalefactor ramps
+//                  down after QUICKSAND_DURATION*2.
+//
+// SetBlendState -> Alpha (verbatim, preserved AS WRITTEN). Render does
+// SetBlendState a second time mid-body which is a no-op (alpha->alpha).
+//
+// First-pass bespoke: ONE ground-aligned (WorldXY) Alpha billboard whose
+// scale follows the animated `scalesize` curve and orientation follows
+// `ang`. Cylinder mesh + 4-stack dust passes are deferred to a follow-up
+// (engine doesn't have axis-aligned-cylinder rendering today; future
+// upgrade once mesh submission path exposes scale-with-rotation).
+// scalesize / stage / count animation curve preserved verbatim from
+// snapshot Animate (line 9194-9236).
+class TQuicksandEffect_Bespoke : public TEffect
+{
+  public:
+    TQuicksandEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TQuicksandEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TQuicksandEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TQuicksandEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants (effect_old.cpp:8993-8997 — canonical body).
+    static constexpr int32_t kQuicksandDuration  = 40;     // QUICKSAND_DURATION
+    static constexpr float   kQuicksandSwitch    = 10.0f;  // QUICKSAND_SWITCH
+    static constexpr float   kQuicksandCylRot    = 0.5f;   // QUICKSAND_CYLROT
+    static constexpr float   kQuicksandSpinStart = 10.0f;  // QUICKSAND_SPIN_START
+    static constexpr int32_t kQuicksandSimTickMs = 1000 / 24;
+    static constexpr float   kQuicksandBaseSizeWu = 128.0f;  // ground decal footprint
+
+    // Internal state — direct mapping of TQuicksandAnimator privates.
+    float    scalesize_    = 0.0f;
+    float    cylscale_     = 0.0f;
+    float    cylheight_    = 1.0f;
+    float    cylrot_       = 0.0f;
+    int32_t  cylcount_     = 0;
+    int32_t  stage_        = 0;
+    int32_t  count_        = 0;
+    float    ang_          = 0.0f;
+    float    zscalefactor_ = 1.0f;
+    int32_t  frameon_      = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
