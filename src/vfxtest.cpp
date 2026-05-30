@@ -1799,6 +1799,85 @@ void FireSwarmBespokeSubmit(void* cp, EFxDebugMode dbg)
         return;
 
     if (!c->swarm || !c->swarm->IsAlive())
+// --- Ice family bespoke harness wiring (wave-bespoke-03-ice) -------------
+// Three sister effects: I20 (TIceEffect_Bespoke — STUB, blocked on
+// forensics), I21 (TIceBoltEffect_Bespoke — composite freeze beam, ~5 s
+// lifetime), I22 (TIcedEffect_Bespoke — frozen-overlay + shatter,
+// ~12 s lifetime).
+//
+// Same Static-cadence single-burst pattern as the existing
+// TBloodEffect_BESPOKE harness above: let the effect play out, wait a
+// clear gap, then re-fire one fresh instance. Pass nullptr from
+// SpawnForTest_BESPOKE flows through as "draw nothing" (I20 stub case).
+
+// --- I20 stub: SpawnForTest returns nullptr; submit is a no-op.
+// Kept for parity with the other ice family entries so the harness
+// browser shows the id (with a log_warn explaining the blockage) rather
+// than silently dropping I20.
+struct SIceBespokeCtx {
+    TIceEffect_Bespoke* ice    = nullptr;
+    S3DPoint            origin = {0, 0, 0};
+};
+
+void* IceBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SIceBespokeCtx();
+    c->origin = origin;
+    c->ice    = TIceEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->ice)
+        log_warn("[vfx] TIceEffect_Bespoke::SpawnForTest_BESPOKE returned null"
+                 " (BLOCKED — no forensics doc); I20 entry draws nothing");
+    return c;
+}
+
+void IceBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SIceBespokeCtx*>(cp);
+    delete c->ice;
+    delete c;
+}
+
+void IceBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SIceBespokeCtx*>(cp);
+    if (!c || !c->ice)
+        return;
+    c->ice->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- I21 TIceBoltEffect bespoke wiring.
+struct SIceBoltBespokeCtx {
+    TIceBoltEffect_Bespoke* bolt   = nullptr;
+    S3DPoint                origin = {0, 0, 0};
+    float                   gap    = 0.0f;
+};
+
+constexpr float kIceBoltBespokeRetriggerGap = 1.5f;
+
+void* IceBoltBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SIceBoltBespokeCtx();
+    c->origin = origin;
+    c->bolt   = TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->bolt)
+        log_warn("[vfx] TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " I21 bespoke entry will draw nothing");
+    return c;
+}
+
+void IceBoltBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SIceBoltBespokeCtx*>(cp);
+    delete c->bolt;
+    delete c;
+}
+
+void IceBoltBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SIceBoltBespokeCtx*>(cp);
+    if (!c)
+        return;
+    if (!c->bolt || !c->bolt->IsAlive())
     {
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
@@ -1823,6 +1902,18 @@ void FireSwarmBespokeSubmit(void* cp, EFxDebugMode dbg)
 // over ~4 s and then self-kills; re-fires after a clear gap.
 struct SBurnBespokeCtx {
     TBurnEffect_Bespoke* burn   = nullptr;
+            delete c->bolt;
+            c->bolt = TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap  = kIceBoltBespokeRetriggerGap;
+        }
+    }
+    if (c->bolt)
+        c->bolt->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// --- I22 TIcedEffect bespoke wiring.
+struct SIcedBespokeCtx {
+    TIcedEffect_Bespoke* iced   = nullptr;
     S3DPoint             origin = {0, 0, 0};
     float                gap    = 0.0f;
 };
@@ -1854,6 +1945,32 @@ void BurnBespokeSubmit(void* cp, EFxDebugMode dbg)
         return;
 
     if (!c->burn || !c->burn->IsAlive())
+constexpr float kIcedBespokeRetriggerGap = 1.5f;
+
+void* IcedBespokeSpawn(const S3DPoint& origin)
+{
+    auto* c = new SIcedBespokeCtx();
+    c->origin = origin;
+    c->iced   = TIcedEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (!c->iced)
+        log_warn("[vfx] TIcedEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
+                 " I22 bespoke entry will draw nothing");
+    return c;
+}
+
+void IcedBespokeDestroy(void* cp)
+{
+    auto* c = static_cast<SIcedBespokeCtx*>(cp);
+    delete c->iced;
+    delete c;
+}
+
+void IcedBespokeSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SIcedBespokeCtx*>(cp);
+    if (!c)
+        return;
+    if (!c->iced || !c->iced->IsAlive())
     {
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
@@ -1866,6 +1983,13 @@ void BurnBespokeSubmit(void* cp, EFxDebugMode dbg)
 
     if (c->burn)
         c->burn->TickAndSubmitForTest_BESPOKE(dbg);
+            delete c->iced;
+            c->iced = TIcedEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            c->gap  = kIcedBespokeRetriggerGap;
+        }
+    }
+    if (c->iced)
+        c->iced->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
 // --- FB: real TFizzleEffect (X21, Magic/Fizzle.I3D) ----------------------
@@ -2660,6 +2784,39 @@ struct SVfxTestBootstrap {
         burn_bespoke.submit        = [](void* c, EFxDebugMode d) { BurnBespokeSubmit(c, d); };
         burn_bespoke.destroy       = [](void* c) { BurnBespokeDestroy(c); };
         VfxTest::DeferredRegister(burn_bespoke);
+        // --- Ice family bespoke first-pass ports (wave-bespoke-03-ice).
+        // Three sister effects in the frost-spell chain. I20 is STUB
+        // (blocked on forensics doc); I21+I22 are faithful direct ports
+        // of effect_old.cpp:8015-8688 / :8749-8953.
+        VfxTest::SEffect ice_bespoke = {};
+        ice_bespoke.id            = "TIceEffect_BESPOKE";
+        ice_bespoke.family        = "ice";
+        ice_bespoke.pipeline      = "PE";   // forensics says shard burst → particle pipeline
+        ice_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        ice_bespoke.factory       = [](const S3DPoint& o) -> void* { return IceBespokeSpawn(o); };
+        ice_bespoke.submit        = [](void* c, EFxDebugMode d) { IceBespokeSubmit(c, d); };
+        ice_bespoke.destroy       = [](void* c) { IceBespokeDestroy(c); };
+        VfxTest::DeferredRegister(ice_bespoke);
+
+        VfxTest::SEffect icebolt_bespoke = {};
+        icebolt_bespoke.id            = "TIceBoltEffect_BESPOKE";
+        icebolt_bespoke.family        = "ice";
+        icebolt_bespoke.pipeline      = "FB";   // composite I3D billboard draws
+        icebolt_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        icebolt_bespoke.factory       = [](const S3DPoint& o) -> void* { return IceBoltBespokeSpawn(o); };
+        icebolt_bespoke.submit        = [](void* c, EFxDebugMode d) { IceBoltBespokeSubmit(c, d); };
+        icebolt_bespoke.destroy       = [](void* c) { IceBoltBespokeDestroy(c); };
+        VfxTest::DeferredRegister(icebolt_bespoke);
+
+        VfxTest::SEffect iced_bespoke = {};
+        iced_bespoke.id            = "TIcedEffect_BESPOKE";
+        iced_bespoke.family        = "ice";
+        iced_bespoke.pipeline      = "FB";   // facet billboards + chunk billboards
+        iced_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        iced_bespoke.factory       = [](const S3DPoint& o) -> void* { return IcedBespokeSpawn(o); };
+        iced_bespoke.submit        = [](void* c, EFxDebugMode d) { IcedBespokeSubmit(c, d); };
+        iced_bespoke.destroy       = [](void* c) { IcedBespokeDestroy(c); };
+        VfxTest::DeferredRegister(iced_bespoke);
 
         VfxTest::SEffect strip = {};
         strip.id            = "TStripEffect";
