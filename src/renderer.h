@@ -678,6 +678,40 @@ public:
                    bool additive_blend = false,
                    bool chroma_key = false,
                    const float* chroma_key_rgb = nullptr);
+    // Tinted render-target variant. Use while a TSurface::StartPass render
+    // target is active; HUD swapchain drawing should use CompositeSwapchain*
+    // or Draw* helpers below.
+    void CompositeTinted(TTextureHandle texture,
+                         int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                         int32_t target_w, int32_t target_h,
+                         int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                         int32_t src_tex_w, int32_t src_tex_h,
+                         float tr, float tg, float tb, float ta);
+
+    // Swapchain-pass variant of the atlas sub-rect composite. Use this
+    // from HUD Draw() callbacks (where the active pass is the swapchain,
+    // not an offscreen render target) to blit glyphs from a font atlas
+    // (SFontAtlas::texture) or any other TTextureHandle on top of the
+    // 3D scene + backbuffer. The non-swap Composite() above targets the
+    // render-target pipeline and trips sg_apply_pipeline validation when
+    // called from a swapchain pass.
+    void CompositeSwapchain(TTextureHandle texture,
+                            int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                            int32_t target_w, int32_t target_h,
+                            int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                            int32_t src_tex_w, int32_t src_tex_h);
+    // Tinted swapchain-pass variant. Multiplies the texture sample by
+    // (tr, tg, tb, ta) before output — lets HUD code colour or black-out
+    // a TTF coverage atlas (white RGB, coverage in alpha), or apply a uniform tint
+    // to a pre-coloured texture. Used by the bar-value / name-label text
+    // path to render the retail white text plus its 3-pass black drop shadow
+    // (FUN_004be2b0 lines 389-407).
+    void CompositeSwapchainTinted(TTextureHandle texture,
+                                  int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                  int32_t target_w, int32_t target_h,
+                                  int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                  int32_t src_tex_w, int32_t src_tex_h,
+                                  float tr, float tg, float tb, float ta);
 
     // Called from TDisplay::FlipPage inside sg_begin_default_pass. Picks
     // the best final image (lit_target > color_target > nothing) and
@@ -726,6 +760,58 @@ public:
                                  int32_t src_x, int32_t src_y,
                                  int32_t src_w, int32_t src_h,
                                  float tr, float tg, float tb, float ta);
+    // Render-target variants for cached HUD surfaces. These use the same
+    // bitmap cache as the swapchain DrawBitmap helpers, but emit through the
+    // RGBA8 render-target composite pipeline into the currently active
+    // TSurface pass.
+    void DrawBitmapToTarget(PTBitmap bm, int32_t x, int32_t y,
+                            int32_t target_w, int32_t target_h);
+    void DrawBitmapSubrectToTarget(PTBitmap bm,
+                                   int32_t dst_x, int32_t dst_y,
+                                   int32_t src_x, int32_t src_y,
+                                   int32_t src_w, int32_t src_h,
+                                   int32_t target_w, int32_t target_h);
+    // Subrect → arbitrary dest-size variant — the bitmap's (sx,sy,sw,sh) region
+    // is stretched to fill (dst_w,dst_h) at (dst_x,dst_y) in the target. This
+    // is the to-target twin of the legacy retail `meth_0x4bd5e0` (the 7-arg
+    // subrect→stretch surface blit, UI_METHOD_MAP §14 method-map gap). Used
+    // for X-stretched chrome plates whose source bitmap width != target width
+    // (e.g. TBottomBarPane UtilityBar 640px source stretched to display width).
+    void DrawBitmapSubrectStretchedToTarget(PTBitmap bm,
+                                            int32_t dst_x, int32_t dst_y,
+                                            int32_t dst_w, int32_t dst_h,
+                                            int32_t src_x, int32_t src_y,
+                                            int32_t src_w, int32_t src_h,
+                                            int32_t target_w, int32_t target_h);
+    void DrawBitmapTintedToTarget(PTBitmap bm, int32_t x, int32_t y,
+                                  int32_t target_w, int32_t target_h,
+                                  float tr, float tg, float tb, float ta);
+    void DrawBitmapSubrectTintedToTarget(PTBitmap bm,
+                                         int32_t dst_x, int32_t dst_y,
+                                         int32_t src_x, int32_t src_y,
+                                         int32_t src_w, int32_t src_h,
+                                         int32_t target_w, int32_t target_h,
+                                         float tr, float tg, float tb, float ta);
+    // Render-target dropshadow — the to-target twin of DrawBitmap{,Subrect}-
+    // Shadowed below. Draws the darkened silhouette at (dst + off) then the
+    // bitmap on top, into the active TSurface render-target pass. This is the
+    // canonical "image with shadow" for the compose-to-target contract — UI
+    // panels MUST use it rather than hand-rolling a tinted-black pass + a
+    // bitmap pass. Per-side shadow direction (player +dx, target -dx) is the
+    // caller's choice via off_x sign (NOMENCLATURE §4, project-retail-shadow-
+    // semantics: the retail recon coord is where the SHADOW lands, so pass the
+    // bitmap dst and let this offset the shadow).
+    void DrawBitmapShadowedToTarget(PTBitmap bm, int32_t x, int32_t y,
+                                    int32_t target_w, int32_t target_h,
+                                    int32_t off_x = 4, int32_t off_y = 4,
+                                    float shadow_a = 0.6f);
+    void DrawBitmapSubrectShadowedToTarget(PTBitmap bm,
+                                           int32_t dst_x, int32_t dst_y,
+                                           int32_t src_x, int32_t src_y,
+                                           int32_t src_w, int32_t src_h,
+                                           int32_t target_w, int32_t target_h,
+                                           int32_t off_x = 4, int32_t off_y = 4,
+                                           float shadow_a = 0.6f);
 
     // Dropshadow convenience — draws a darkened silhouette of `bm` at
     // (x + off_x, y + off_y), then the normal bitmap on top. The shadow
@@ -747,6 +833,8 @@ public:
     // panels (char stats, game log, ...) that own their own surface
     // and refresh outside the draw path.
     void DrawSurface(TSurface* surf, int32_t x, int32_t y);
+    void DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
+                           float tr, float tg, float tb, float ta);
 
     // Solid-color filled rect (B-phase visual). Backed by a per-color 1x1
     // texture cache so the existing composite pipeline handles the blit
@@ -756,6 +844,13 @@ public:
     // separators / debug overlays.
     void DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
                        uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+
+    // Compose-to-target variant of DrawSolidRect (emits into the active TSurface
+    // render-target pass). `target_w/target_h` are the RT dims. Used by the DEF
+    // widget engine for listbox selection fills.
+    void DrawSolidRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
+                               int32_t target_w, int32_t target_h,
+                               uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 
     // 9-slice blit (A.2d). Treats `bm` as a stretchable panel: the four
     // corner pieces render verbatim at their source size; the four edges
@@ -774,6 +869,17 @@ public:
     void DrawNineSlice(PTBitmap bm,
                        int32_t l, int32_t t, int32_t r, int32_t b,
                        int32_t dx, int32_t dy, int32_t dw, int32_t dh);
+
+    // Compose-to-target variant of DrawNineSlice: same 9-piece decomposition,
+    // but emitted through the to-target Composite path into the active TSurface
+    // render-target pass (the compose-to-target panel contract, NOMENCLATURE
+    // §3) rather than straight to the swapchain. `target_w/target_h` are the RT
+    // dimensions. Used by the DEF widget engine to stretch button / frame /
+    // listbox chrome into a panel RT.
+    void DrawNineSliceToTarget(PTBitmap bm,
+                               int32_t l, int32_t t, int32_t r, int32_t b,
+                               int32_t dx, int32_t dy, int32_t dw, int32_t dh,
+                               int32_t target_w, int32_t target_h);
 
     void AddHud   (class THudDrawable* d, float z = 0.0f);
     void RemoveHud(class THudDrawable* d);
@@ -847,6 +953,12 @@ private:
                    bool additive_blend = false,
                    bool chroma_key = false,
                    const float* chroma_key_rgb = nullptr);
+    void CompositeTinted(sg_image img,
+                         int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                         int32_t target_w, int32_t target_h,
+                         int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                         int32_t src_tex_w, int32_t src_tex_h,
+                         float tr, float tg, float tb, float ta);
     // Swapchain-target variant of the sub-rect composite. Same math
     // as the RT variant but uses composite_pip_swap so the pipeline's
     // color attachment pixel format matches the default pass. Used by
