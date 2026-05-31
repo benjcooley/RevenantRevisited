@@ -13,7 +13,7 @@ Within each folder, frames are 01.png .. NN.png in capture-time order.
 | 03 | `03_rotating_vortex_spell` | 3 | 📝 descriptive |
 | 04 | `04_magicshield` | 3 | ✅ retail |
 | 05 | `05_LightStrip` | 5 | ✅ retail |
-| 06 | `06_FireFlash` | 12 | ✅ retail |
+| 06 | `06_yellow_ground_ring_priest_cast` | 12 | 📝 descriptive |
 | 07 | `07_wierd_multicolor_swirling_effect_that_seems_to_come_froom_this_magical_device_in` | 9 | 📝 descriptive |
 | 09 | `09_Iced` | 11 | ✅ retail |
 | 10 | `10_Teleporter` | 5 | ✅ retail |
@@ -24,7 +24,7 @@ Within each folder, frames are 01.png .. NN.png in capture-time order.
 | 15 | `15_FireFlash` | 6 | ✅ retail |
 | 16 | `16_TeleportDoorInside` | 3 | ✅ retail |
 | 17 | `17_SymGlow` | 8 | ✅ retail |
-| 18 | `18_Faultfire` | 9 | ✅ retail |
+| 18 | `18_red_ground_ring_rising_sparks` | 9 | 📝 descriptive |
 | 19 | `19_Sparks` | 8 | ✅ retail |
 | 20 | `20_teleportation` | 3 | ✅ retail |
 | 21 | `21_invisible` | 10 | ✅ retail |
