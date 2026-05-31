@@ -4155,10 +4155,18 @@ bool TRenderer::PresentToSwapchain()
     const float   v0  = float(pad)   / gbh;
     const float   uw  = float(width) / gbw;
     const float   vh  = float(height) / gbh;
-    const float u[12] = {
+    // 16-float composite-pipeline uniform layout — MUST match
+    // composite.{metal,glsl,hlsl}.h's `params` struct (rect + uv_rect +
+    // chroma_key + color_tint). Sending only 12 here was the
+    // uniformly-undefined color_tint that caused the black/yellow
+    // flashing on Misthaven (commit f8d826d "Revert renderer color_tint
+    // UI primitives"). PresentToSwapchain fires every frame — passing
+    // the no-tint default (1,1,1,1) so the scene composites unmodified.
+    const float u[16] = {
         present_ndc[0], present_ndc[1], present_ndc[2], present_ndc[3],
         u0, v0, uw, vh,
-        0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f,           // chroma_key disabled
+        1.0f, 1.0f, 1.0f, 1.0f,           // color_tint = identity (no tint)
     };
     const sg_range ur = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ur);
