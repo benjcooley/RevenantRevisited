@@ -1,166 +1,128 @@
 # VFX Reference Screenshot Manifest
 
 Captured 2026-05-30. 143 in-game effect screenshots classified against
-the retail effect inventory by parallel vision agents, then organized
-into per-effect subfolders for `snap_ab --ref` consumption.
+the 174-entry retail effect inventory by parallel vision agents, then
+organized into per-effect subfolders for `snap_ab --ref` consumption.
 
-## Teleporter/
+- Total screenshots: 143
+- Classified into per-effect folders: 86
+- Borderline (low-confidence + no-effect) parked in `_unclassified/`
+  with `maybe_<guess>__` prefix: 57
 
+## Per-effect folders
+
+### Burn/
+- Frame count: 8
+- Confidence: medium x8
+- Files: Burn__01.png ... Burn__08.png (orig shot_112 ... shot_119)
+
+### Faultfire/
+- Frame count: 7
+- Confidence: medium x7
+- Files: Faultfire__01.png ... Faultfire__07.png (orig shot_077 ... shot_083)
+
+### FireBall/
+- Frame count: 4
+- Confidence: medium x4
+- Files: FireBall__01.png ... FireBall__04.png (orig shot_086 ... shot_089)
+
+### Flame/
+- Frame count: 3
+- Confidence: medium x3
+- Files: Flame__01.png ... Flame__03.png (orig shot_090 ... shot_092)
+
+### Halo/
+- Frame count: 4
+- Confidence: medium x4
+- Files: Halo__01.png ... Halo__04.png (orig shot_027 ... shot_030)
+
+### IceBolt/
+- Frame count: 5
+- Confidence: medium x5
+- Files: IceBolt__01.png ... IceBolt__05.png (orig shot_121 ... shot_125)
+
+### Iced/
+- Frame count: 6
+- Confidence: high x6
+- Files: Iced__01.png ... Iced__06.png (orig shot_045 ... shot_050)
+
+### Icedsparks/
+- Frame count: 8
+- Confidence: medium x8
+- Files: Icedsparks__01.png ... Icedsparks__08.png (orig shot_051-055, shot_126-128)
+
+### Photon/
+- Frame count: 13
+- Confidence: medium x13
+- Files: Photon__01.png ... Photon__13.png (orig shot_036-042, shot_066-071)
+
+### Storm/
+- Frame count: 5
+- Confidence: medium x5
+- Files: Storm__01.png ... Storm__05.png (orig shot_018 ... shot_022)
+
+### TeleportDoorInsideB/
+- Frame count: 4
+- Confidence: high x2, medium x2
+- Files: TeleportDoorInsideB__01.png ... TeleportDoorInsideB__04.png
+  (orig shot_129, shot_130, shot_131, shot_142)
+
+### Teleporter/
+- Frame count: 8
+- Confidence: high x4, medium x4
+- Files: Teleporter__01.png ... Teleporter__08.png
+  (orig shot_000, shot_001, shot_005, shot_056-060)
+
+### cataclysm/
+- Frame count: 4
+- Confidence: medium x4
+- Files: cataclysm__01.png ... cataclysm__04.png (orig shot_095 ... shot_098)
+
+### combatflash/
 - Frame count: 1
-- Confidence distribution: high x1
-- Notes: Single standalone frame. Tall vertical cylindrical column of bright blue
-  glowing energy in forest/cave scene. Classic teleporter pad shape - soft
-  vertical light column with blue chroma, ground-anchored.
-- Files:
-  - Teleporter__solo_01.png (orig: Screenshot 2026-05-30 at 9.07.11 PM.png)
+- Confidence: medium x1
+- Files: combatflash__01.png (orig shot_064)
+
+### fgeyser/
+- Frame count: 6
+- Confidence: medium x6
+- Files: fgeyser__01.png ... fgeyser__06.png (orig shot_006 ... shot_011)
 
 ## _unclassified/
 
-- Frame count: 142
-- Reason: Only 1 of 143 images received a vision-agent classification in this
-  organization run. The remaining 142 images were not classified and per the
-  organizer rules ("Don't invent new effect names") have been parked here
-  with original filenames preserved, awaiting a follow-up classification pass.
-- Files:
-  - Screenshot 2026-05-30 at 9.07.46 PM.png
-  - Screenshot 2026-05-30 at 9.07.56 PM.png
-  - Screenshot 2026-05-30 at 9.08.05 PM.png
-  - Screenshot 2026-05-30 at 9.08.13 PM.png
-  - Screenshot 2026-05-30 at 9.08.22 PM.png
-  - Screenshot 2026-05-30 at 9.08.32 PM.png
-  - Screenshot 2026-05-30 at 9.13.30 PM.png
-  - Screenshot 2026-05-30 at 9.13.40 PM.png
-  - Screenshot 2026-05-30 at 9.13.49 PM.png
-  - Screenshot 2026-05-30 at 9.13.57 PM.png
-  - Screenshot 2026-05-30 at 9.14.06 PM.png
-  - Screenshot 2026-05-30 at 9.14.13 PM.png
-  - Screenshot 2026-05-30 at 9.18.55 PM.png
-  - Screenshot 2026-05-30 at 9.19.02 PM.png
-  - Screenshot 2026-05-30 at 9.19.08 PM.png
-  - Screenshot 2026-05-30 at 9.19.52 PM.png
-  - Screenshot 2026-05-30 at 9.20.01 PM.png
-  - Screenshot 2026-05-30 at 9.20.08 PM.png
-  - Screenshot 2026-05-30 at 9.20.54 PM.png
-  - Screenshot 2026-05-30 at 9.21.03 PM.png
-  - Screenshot 2026-05-30 at 9.21.10 PM.png
-  - Screenshot 2026-05-30 at 9.21.16 PM.png
-  - Screenshot 2026-05-30 at 9.21.25 PM.png
-  - Screenshot 2026-05-30 at 9.22.49 PM.png
-  - Screenshot 2026-05-30 at 9.22.56 PM.png
-  - Screenshot 2026-05-30 at 9.23.04 PM.png
-  - Screenshot 2026-05-30 at 9.23.10 PM.png
-  - Screenshot 2026-05-30 at 9.23.16 PM.png
-  - Screenshot 2026-05-30 at 9.23.23 PM.png
-  - Screenshot 2026-05-30 at 9.23.30 PM.png
-  - Screenshot 2026-05-30 at 9.23.38 PM.png
-  - Screenshot 2026-05-30 at 9.23.46 PM.png
-  - Screenshot 2026-05-30 at 9.23.52 PM.png
-  - Screenshot 2026-05-30 at 9.24.00 PM.png
-  - Screenshot 2026-05-30 at 9.24.10 PM.png
-  - Screenshot 2026-05-30 at 9.25.01 PM.png
-  - Screenshot 2026-05-30 at 9.25.12 PM.png
-  - Screenshot 2026-05-30 at 9.25.24 PM.png
-  - Screenshot 2026-05-30 at 9.25.30 PM.png
-  - Screenshot 2026-05-30 at 9.25.37 PM.png
-  - Screenshot 2026-05-30 at 9.25.43 PM.png
-  - Screenshot 2026-05-30 at 9.25.52 PM.png
-  - Screenshot 2026-05-30 at 9.25.59 PM.png
-  - Screenshot 2026-05-30 at 9.26.11 PM.png
-  - Screenshot 2026-05-30 at 9.27.10 PM.png
-  - Screenshot 2026-05-30 at 9.29.51 PM.png
-  - Screenshot 2026-05-30 at 9.29.59 PM.png
-  - Screenshot 2026-05-30 at 9.30.06 PM.png
-  - Screenshot 2026-05-30 at 9.30.12 PM.png
-  - Screenshot 2026-05-30 at 9.30.19 PM.png
-  - Screenshot 2026-05-30 at 9.30.33 PM.png
-  - Screenshot 2026-05-30 at 9.30.38 PM.png
-  - Screenshot 2026-05-30 at 9.30.45 PM.png
-  - Screenshot 2026-05-30 at 9.30.52 PM.png
-  - Screenshot 2026-05-30 at 9.30.59 PM.png
-  - Screenshot 2026-05-30 at 9.31.10 PM.png
-  - Screenshot 2026-05-30 at 9.31.52 PM.png
-  - Screenshot 2026-05-30 at 9.31.59 PM.png
-  - Screenshot 2026-05-30 at 9.32.06 PM.png
-  - Screenshot 2026-05-30 at 9.32.11 PM.png
-  - Screenshot 2026-05-30 at 9.32.18 PM.png
-  - Screenshot 2026-05-30 at 9.32.56 PM.png
-  - Screenshot 2026-05-30 at 9.33.02 PM.png
-  - Screenshot 2026-05-30 at 9.33.12 PM.png
-  - Screenshot 2026-05-30 at 9.34.20 PM.png
-  - Screenshot 2026-05-30 at 9.34.26 PM.png
-  - Screenshot 2026-05-30 at 9.34.32 PM.png
-  - Screenshot 2026-05-30 at 9.34.37 PM.png
-  - Screenshot 2026-05-30 at 9.34.43 PM.png
-  - Screenshot 2026-05-30 at 9.34.51 PM.png
-  - Screenshot 2026-05-30 at 9.34.55 PM.png
-  - Screenshot 2026-05-30 at 9.34.59 PM.png
-  - Screenshot 2026-05-30 at 9.35.04 PM.png
-  - Screenshot 2026-05-30 at 9.35.09 PM.png
-  - Screenshot 2026-05-30 at 9.35.15 PM.png
-  - Screenshot 2026-05-30 at 9.36.03 PM.png
-  - Screenshot 2026-05-30 at 9.36.09 PM.png
-  - Screenshot 2026-05-30 at 9.36.14 PM.png
-  - Screenshot 2026-05-30 at 9.36.19 PM.png
-  - Screenshot 2026-05-30 at 9.36.25 PM.png
-  - Screenshot 2026-05-30 at 9.36.30 PM.png
-  - Screenshot 2026-05-30 at 9.36.35 PM.png
-  - Screenshot 2026-05-30 at 9.36.42 PM.png
-  - Screenshot 2026-05-30 at 9.36.49 PM.png
-  - Screenshot 2026-05-30 at 9.38.04 PM.png
-  - Screenshot 2026-05-30 at 9.38.09 PM.png
-  - Screenshot 2026-05-30 at 9.38.12 PM.png
-  - Screenshot 2026-05-30 at 9.38.20 PM.png
-  - Screenshot 2026-05-30 at 9.38.26 PM.png
-  - Screenshot 2026-05-30 at 9.38.34 PM.png
-  - Screenshot 2026-05-30 at 9.38.40 PM.png
-  - Screenshot 2026-05-30 at 9.38.46 PM.png
-  - Screenshot 2026-05-30 at 9.38.53 PM.png
-  - Screenshot 2026-05-30 at 9.39.06 PM.png
-  - Screenshot 2026-05-30 at 9.39.12 PM.png
-  - Screenshot 2026-05-30 at 9.39.17 PM.png
-  - Screenshot 2026-05-30 at 9.39.23 PM.png
-  - Screenshot 2026-05-30 at 9.39.29 PM.png
-  - Screenshot 2026-05-30 at 9.39.34 PM.png
-  - Screenshot 2026-05-30 at 9.39.39 PM.png
-  - Screenshot 2026-05-30 at 9.39.46 PM.png
-  - Screenshot 2026-05-30 at 9.40.51 PM.png
-  - Screenshot 2026-05-30 at 9.40.56 PM.png
-  - Screenshot 2026-05-30 at 9.41.02 PM.png
-  - Screenshot 2026-05-30 at 9.42.05 PM.png
-  - Screenshot 2026-05-30 at 9.42.11 PM.png
-  - Screenshot 2026-05-30 at 9.42.17 PM.png
-  - Screenshot 2026-05-30 at 9.42.23 PM.png
-  - Screenshot 2026-05-30 at 9.42.33 PM.png
-  - Screenshot 2026-05-30 at 9.42.38 PM.png
-  - Screenshot 2026-05-30 at 9.42.44 PM.png
-  - Screenshot 2026-05-30 at 9.42.50 PM.png
-  - Screenshot 2026-05-30 at 9.43.25 PM.png
-  - Screenshot 2026-05-30 at 9.43.30 PM.png
-  - Screenshot 2026-05-30 at 9.43.36 PM.png
-  - Screenshot 2026-05-30 at 9.43.42 PM.png
-  - Screenshot 2026-05-30 at 9.43.51 PM.png
-  - Screenshot 2026-05-30 at 9.43.57 PM.png
-  - Screenshot 2026-05-30 at 9.44.03 PM.png
-  - Screenshot 2026-05-30 at 9.44.09 PM.png
-  - Screenshot 2026-05-30 at 9.44.20 PM.png
-  - Screenshot 2026-05-30 at 9.45.04 PM.png
-  - Screenshot 2026-05-30 at 9.45.08 PM.png
-  - Screenshot 2026-05-30 at 9.45.12 PM.png
-  - Screenshot 2026-05-30 at 9.45.16 PM.png
-  - Screenshot 2026-05-30 at 9.45.21 PM.png
-  - Screenshot 2026-05-30 at 9.45.25 PM.png
-  - Screenshot 2026-05-30 at 9.45.29 PM.png
-  - Screenshot 2026-05-30 at 9.45.34 PM.png
-  - Screenshot 2026-05-30 at 9.46.40 PM.png
-  - Screenshot 2026-05-30 at 9.46.47 PM.png
-  - Screenshot 2026-05-30 at 9.46.52 PM.png
-  - Screenshot 2026-05-30 at 9.47.35 PM.png
-  - Screenshot 2026-05-30 at 9.47.42 PM.png
-  - Screenshot 2026-05-30 at 9.48.05 PM.png
-  - Screenshot 2026-05-30 at 9.48.10 PM.png
-  - Screenshot 2026-05-30 at 9.48.16 PM.png
-  - Screenshot 2026-05-30 at 9.48.21 PM.png
-  - Screenshot 2026-05-30 at 9.48.26 PM.png
-  - Screenshot 2026-05-30 at 9.48.30 PM.png
-  - Screenshot 2026-05-30 at 9.48.35 PM.png
-  - Screenshot 2026-05-30 at 9.48.40 PM.png
+57 borderline frames (all low-confidence guesses, or "no-effect")
+prefixed with `maybe_<guess>__` so a human reviewer can scan the agent's
+best guess without it being trusted as ground truth.
+
+First 10 filenames:
+- maybe_Blast__shot_025.png
+- maybe_Blast__shot_094.png
+- maybe_Burn__shot_120.png
+- maybe_CampSign__shot_015.png
+- maybe_CampSign__shot_016.png
+- maybe_CampSign__shot_017.png
+- maybe_CampSign__shot_104.png
+- maybe_CampSign__shot_105.png
+- maybe_CampSign__shot_106.png
+- maybe_CampSign__shot_107.png
+
+Distribution of `maybe_` guesses:
+- maybe_Blast: 2
+- maybe_Burn: 1
+- maybe_CampSign: 7 (shot_015-017, shot_104-107)
+- maybe_Fairy: 1
+- maybe_Faultfire: 9 (shot_031-034, shot_075-076, shot_101-103)
+- maybe_FireBall: 3
+- maybe_FireFlash: 1
+- maybe_Lightning: 1
+- maybe_Photon: 1
+- maybe_Pixie: 3 (shot_072-074)
+- maybe_StillWater: 3 (shot_061-063)
+- maybe_Teleporter: 4 (shot_108-111)
+- maybe_Warriorborn: 1
+- maybe_cataclysm: 4 (shot_002-004, shot_099)
+- maybe_funnel: 3 (shot_012-014)
+- maybe_magicshield: 10 (shot_132-141)
+- maybe_no-effect: 3 (shot_044, shot_084, shot_100)
+
+Total: 57
