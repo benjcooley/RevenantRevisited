@@ -4179,6 +4179,7 @@ bool TRenderer::PresentToSwapchain()
 
     color_target_dirty = false;
     lit_target_dirty   = false;
+    any_target_ever_written = true;     // PresentForSnap may re-emit
     return true;
 }
 
@@ -4194,6 +4195,12 @@ bool TRenderer::PresentToSwapchain()
 bool TRenderer::PresentForSnap()
 {
     if (suppress_present) return false;
+
+    // HUD-only test modes never write to lit_target / color_target — the
+    // textures sit uninitialized in GPU memory. Reading those would emit
+    // garbage / magenta into the snap RT. Bail unless PresentToSwapchain
+    // has flagged at least one frame of real Scene3D content.
+    if (!any_target_ever_written) return false;
 
     // We always have one of the two targets initialized after Initialize();
     // pick lit_target by default (final composited image), fall back to
