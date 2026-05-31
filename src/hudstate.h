@@ -69,9 +69,13 @@ struct SHudState
     // the inventory replaces the pack icon with a miniature image of the
     // bag, and the inventory shows the contents of the bag."
     int32_t inventoryContainer = 0;
+    // Spellbook scroll offset in pixels — driven by the up/down arrows
+    // at pane-local (169, 150) and (169, 174). Per SpellbookPane_SPEC:
+    // ±40 per tick (one spell row = ~91px; 40 is a half-row scroll).
+    int32_t spellbookScroll = 0;
 
     static constexpr uint32_t kMagic   = 0x52485644;  // 'RHVD'
-    static constexpr uint32_t kVersion = 3;
+    static constexpr uint32_t kVersion = 4;
 };
 
 bool SaveHudState(const SHudState& s, const char* path);
