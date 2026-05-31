@@ -135,11 +135,19 @@ void *LoadResource(const char *name, int32_t id, uint32_t *ressize)
             if ((uint32_t)bm->width > (uint32_t)8192 || (uint32_t)bm->height > (uint32_t)8192)
                 FatalError("Corrupted bitmap list in resource %s", name);
 
-            if (bm->flags & BM_15BIT)
-                Convert15to16(bm);
-
-            if (bm->flags & BM_8BIT)
-                ConvertPal15to16(bm);
+            // Legacy 555 -> Revenant-565 conversion (Convert15to16 / ConvertPal15to16)
+            // is intentionally disabled in this port. The retail engine blitted
+            // into a 565 backbuffer so it had to convert at load time; our
+            // renderer decodes 555 directly to RGBA8 (see bitmapdecode.cpp).
+            // Convert15to16's output isn't standard 565 either — it packs as
+            // R<<11 | G<<6 | B (5-bit green with a gap at bit 5, see
+            // graphics.cpp:9237-9240) which would corrupt every TMulti bitmap
+            // (chrome, icons, etc.) when our decoder sees it. We already
+            // disabled the same call on baked .i3d icons in 3dimage.cpp for
+            // the same reason. Leaving the calls out keeps all loaded bitmaps
+            // in their on-disk format (BM_15BIT 555 / BM_16BIT true-565 / 8-bit
+            // palette), and the renderer's per-flag branch handles each.
+            (void)bm;
         }
         free(bitmaptable);
     }

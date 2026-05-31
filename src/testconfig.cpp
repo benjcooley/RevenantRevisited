@@ -15,3 +15,4 @@ char  StartupDumpTilesPath[MAXPATHLEN] = "";
 char  StartupVfxId[64]        = "";
 bool  StartupVfxHideUi        = false;
 char  StartupCinematicPath[MAXPATHLEN] = "";
+char  StartupInputScript[1024] = "";

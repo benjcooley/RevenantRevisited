@@ -124,6 +124,19 @@ const SFontAtlas* BuildFontAtlas(TFont* font)
         r.w = (uint16_t)gw;
         r.h = (uint16_t)gh;
 
+        // Carry the bitmap font's per-glyph metrics in the same stb-style
+        // fields the TTF path uses, so one glyph walk serves both atlas kinds.
+        // DrawLeft/DrawRight are horizontal bearings (advance = right-left);
+        // StartHeight is the glyph top's rise above the line baseline that the
+        // pen y references. Bitmap glyphs are 1:1 (no oversample) so the dst
+        // extent (xoff2-xoff, yoff2-yoff) equals the source pixel extent.
+        const unsigned char ch = (unsigned char)(first + i);
+        r.xoff     = -(float)font->DrawLeft(ch);
+        r.yoff     = -(float)font->StartHeight(ch);
+        r.xoff2    = r.xoff + (float)gw;
+        r.yoff2    = r.yoff + (float)gh;
+        r.xadvance = (float)(font->DrawRight(ch) - font->DrawLeft(ch));
+
         cursor_x += gw + kGlyphPadding;
         if (gh > shelf_h) shelf_h = gh;
     }
@@ -316,4 +329,159 @@ int32_t TFont::FindNumLinesInText(char *text, int32_t wrapwidth, int32_t justify
 
     TextDraw(&db, &dp);
     return tp.length;
+}
+
+// *************************************************************************
+// * Canonical UI text drawing (see font.h)                               *
+// *************************************************************************
+
+float TextWidth(const SFontAtlas* atlas, const char* text)
+{
+    if (!atlas || !text) return 0.0f;
+    float w = 0.0f;
+    for (const char* p = text; *p; ++p)
+        w += atlas->Rect((unsigned char)*p).xadvance;
+    return w;
+}
+
+float TextAscent(const SFontAtlas* atlas)
+{
+    if (!atlas) return 0.0f;
+    // Ascent = how far the tallest glyph rises above the baseline. stb's
+    // yoff is the (negative) top offset from the pen baseline, so the
+    // ascent is max(-yoff) over the renderable glyphs.
+    float ascent = 0.0f;
+    for (int i = 0; i < atlas->numchars; ++i)
+    {
+        const SFontAtlasRect& r = atlas->rects[i];
+        if (r.w > 0 && r.h > 0 && -r.yoff > ascent)
+            ascent = -r.yoff;
+    }
+    return ascent;
+}
+
+float TextLineHeight(const SFontAtlas* atlas)
+{
+    if (!atlas) return 0.0f;
+    // Line height = ascent + descent. stb's yoff2 is the (positive) bottom
+    // offset from the baseline, so descent = max(yoff2) over the glyphs.
+    float descent = 0.0f;
+    for (int i = 0; i < atlas->numchars; ++i)
+    {
+        const SFontAtlasRect& r = atlas->rects[i];
+        if (r.w > 0 && r.h > 0 && r.yoff2 > descent)
+            descent = r.yoff2;
+    }
+    return TextAscent(atlas) + descent;
+}
+
+namespace {
+
+// Shared glyph walk: blit each glyph of `text` into the active render-target
+// pass at the given pen baseline, tinted (r,g,b,1). The destination extent is
+// the glyph's LOGICAL size (xoff2-xoff, yoff2-yoff); the source extent is the
+// packed atlas rect (rc.w, rc.h), which is 2x larger because the TTF atlas is
+// 2x2 oversampled (ttfatlas.cpp). The GPU sampler downsamples src->dst, giving
+// crisp antialiased glyphs at the intended size. (Drawing dst == rc.w/rc.h
+// instead renders every glyph 2x too big and overlapping.) Glyphs sit at their
+// true metric position so caps/ascenders keep their height above the baseline;
+// there is no per-glyph cell scissor (that truncated cap tops and made
+// lowercase look top-justified). This matches the vetted RenderTTFMode walk in
+// testmodes.cpp. Used by both the plain and shadowed public helpers.
+void DrawGlyphRun(const SFontAtlas* atlas, const char* text,
+                  float penX, float baselineY,
+                  float r, float g, float b,
+                  int32_t target_w, int32_t target_h)
+{
+    if (!Renderer) return;
+    for (const char* p = text; *p; ++p)
+    {
+        const SFontAtlasRect& rc = atlas->Rect((unsigned char)*p);
+        if (rc.w > 0 && rc.h > 0)
+        {
+            const int32_t gx = (int32_t)(penX + rc.xoff + 0.5f);
+            const int32_t gy = (int32_t)(baselineY + rc.yoff + 0.5f);
+            const int32_t gw = (int32_t)(rc.xoff2 - rc.xoff + 0.5f);
+            const int32_t gh = (int32_t)(rc.yoff2 - rc.yoff + 0.5f);
+            if (gw > 0 && gh > 0)
+                Renderer->CompositeTinted(atlas->texture,
+                                          gx, gy, gw, gh,           // dst = logical glyph size
+                                          target_w, target_h,
+                                          rc.x, rc.y, rc.w, rc.h,   // src = 2x oversampled
+                                          atlas->width, atlas->height,
+                                          r, g, b, 1.0f);
+        }
+        penX += rc.xadvance;
+    }
+}
+
+// Pen-x for the given alignment of `text` within [cellX, cellX+cellW).
+float AlignedPenX(const SFontAtlas* atlas, const char* text,
+                  int32_t cellX, int32_t cellW, ETextAlign align)
+{
+    if (align == ETextAlign::Left) return (float)cellX;
+    const float tw = TextWidth(atlas, text);
+    if (align == ETextAlign::Center) return cellX + (cellW - tw) * 0.5f;
+    return cellX + (cellW - tw);   // Right
+}
+
+} // namespace
+
+void DrawTextAtBaseline(const SFontAtlas* atlas, const char* text,
+                        float penX, float baselineY,
+                        float r, float g, float b,
+                        int32_t target_w, int32_t target_h)
+{
+    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
+    DrawGlyphRun(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
+}
+
+// Retail drew UI text with GDI DrawTextA (DT_TOP). GDI's DT_TOP hangs glyphs
+// from the cell top using the font's internal-leading, which sits the visible
+// strokes ~2px higher than a naive `cellTop + ascent` baseline. This is a GDI
+// rendering artifact the recon/spec can't see — we reproduce it once here so
+// every panel's text matches retail without each spec carrying a font metric.
+// (See NOMENCLATURE §2 "baseline".)
+constexpr float kGdiTopLeading = 2.0f;
+
+// The retail font drew each colored glyph twice at the same position to lift the
+// thin antialiased coverage of small glyphs up to a solid read (two alpha-over
+// passes: 0.5 coverage -> 0.75). We keep that double pass in the canonical
+// helpers so every panel's text matches retail's weight.
+static void DrawGlyphRunDoubled(const SFontAtlas* atlas, const char* text,
+                                float penX, float baselineY,
+                                float r, float g, float b,
+                                int32_t target_w, int32_t target_h)
+{
+    DrawGlyphRun(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
+    DrawGlyphRun(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
+}
+
+void DrawTextToTarget(const SFontAtlas* atlas, const char* text,
+                      int32_t cellX, int32_t cellY, int32_t cellW, int32_t cellH,
+                      ETextAlign align, float r, float g, float b,
+                      int32_t target_w, int32_t target_h)
+{
+    (void)cellH;
+    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
+    const float penX = AlignedPenX(atlas, text, cellX, cellW, align);
+    const float baselineY = cellY + TextAscent(atlas) - kGdiTopLeading;
+    DrawGlyphRunDoubled(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
+}
+
+void DrawTextShadowedToTarget(const SFontAtlas* atlas, const char* text,
+                              int32_t cellX, int32_t cellY, int32_t cellW, int32_t cellH,
+                              ETextAlign align, float r, float g, float b,
+                              int32_t target_w, int32_t target_h)
+{
+    (void)cellH;
+    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
+    const float penX = AlignedPenX(atlas, text, cellX, cellW, align);
+    const float baselineY = cellY + TextAscent(atlas) - kGdiTopLeading;
+    // Retail FUN_004be2b0 font-flag-0x400: 3 black passes (base, +1x, +1y) then
+    // the colored (doubled) pass at base. 1px shadow on the right + bottom.
+    DrawGlyphRun(atlas, text, penX,        baselineY,        0, 0, 0, target_w, target_h);
+    DrawGlyphRun(atlas, text, penX + 1.0f, baselineY,        0, 0, 0, target_w, target_h);
+    DrawGlyphRun(atlas, text, penX,        baselineY + 1.0f, 0, 0, 0, target_w, target_h);
+    DrawGlyphRunDoubled(atlas, text, penX,  baselineY,        r, g, b, target_w, target_h);
 }
