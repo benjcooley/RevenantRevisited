@@ -457,17 +457,50 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
         if (g_buttons[i].region == 0)
         {
             s.topSlot = mode;
-            s.sidebarState = HUD_SIDEBAR_OPEN;
             region = "top";
         }
         else
         {
             s.bottomSlot = mode;
-            s.sidebarState = HUD_SIDEBAR_OPEN;
             region = "bottom";
         }
-        log_info("[ui-sidebar] click btn %d (%s/mode %d) -> top=%d bottom=%d",
-                 i, region, mode, s.topSlot, s.bottomSlot);
+        s.sidebarState = HUD_SIDEBAR_OPEN;
+
+        // Auto-pairing (per FUN_0047cf40_TPlayScreen_DispatchCommand cases 7/9):
+        //   case 7  ("Spell view"): upper=2 Book + lower=2 Spell  — paired
+        //   case 9  ("Equip view"): upper=0 Equip + lower=0 Inv   — paired
+        //   case 8  (Stats only):   upper=1 Stats, lower untouched
+        //   case 11 (Inv only):     lower=0, upper untouched
+        //   case 12 (Map only):     lower=1, upper untouched
+        // So Stats / Map clicks are "solo"; Book / Equip / Spell / Inv pair.
+        // User confirmed 2026-05-30: "spell list and spell construction
+        // panels are tied together".
+        bool paired = false;
+        if (s.topSlot == HUD_TOP_BOOK && g_buttons[i].region == 0)
+        {
+            s.bottomSlot = HUD_BOT_SPELL;
+            paired = true;
+        }
+        else if (s.topSlot == HUD_TOP_EQUIP && g_buttons[i].region == 0)
+        {
+            s.bottomSlot = HUD_BOT_INV;
+            paired = true;
+        }
+        else if (s.bottomSlot == HUD_BOT_SPELL && g_buttons[i].region == 1)
+        {
+            s.topSlot = HUD_TOP_BOOK;
+            paired = true;
+        }
+        else if (s.bottomSlot == HUD_BOT_INV && g_buttons[i].region == 1)
+        {
+            s.topSlot = HUD_TOP_EQUIP;
+            paired = true;
+        }
+
+        log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
+                 i, region, mode,
+                 paired ? " [paired]" : "",
+                 s.topSlot, s.bottomSlot);
         return;
     }
 }
