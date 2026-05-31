@@ -80,26 +80,34 @@ by parallel vision agents, then organized into per-effect subfolders for
 - Confidence: medium x5
 - Files: Storm__01.png ... Storm__05.png (orig shot_018 ... shot_022)
 
-### TeleportDoorInsideB/
-- Frame count: 4
-- Confidence: high x2, medium x2
-- Files: TeleportDoorInsideB__01.png ... TeleportDoorInsideB__04.png
-  (orig shot_129, shot_130, shot_131, shot_142)
+### TeleportDoorInsideB/  *(portal door — Magic\WarpB.I3D, blue variant)*
+- Frame count: 11
+- Confidence: high x2, medium x9
+- Files: TeleportDoorInsideB__01.png ... TeleportDoorInsideB__11.png
+  - __01 ... __04: batch 1 (orig shot_129, shot_130, shot_131, shot_142) —
+    standalone tall blue lattice pillar.
+  - __05 ... __11: batch 2 (orig batch2_090 ... batch2_096, formerly
+    Teleporter__09 ... __15) — crystalline diamond-lattice pillar at a
+    fixed pavement location with NPC inside; on __10 a second NPC walks
+    into the pillar from outside (multi-actor portal interaction).
+- Notes: Resplit from Teleporter/ on 2026-05-30 after recognizing the two
+  retail pad-class effects: pulsing iris ring (Teleporter / Misc\IrisFlare.I3D)
+  vs rotating crystalline-lattice rings (TeleportDoorInsideX /
+  Magic\Warp{B|G|O|P|R|W|Y}.I3D). Blue is the default / most-common variant.
 
-### Teleporter/  *(pad — Misc\IrisFlare.I3D)*
-- Frame count: 15
-- Confidence: high x4, medium x11
-- Files: Teleporter__01.png ... Teleporter__15.png
+### Teleporter/  *(pad — Misc\IrisFlare.I3D, town return / Misthaven recall)*
+- Frame count: 8
+- Confidence: high x4, medium x4
+- Files: Teleporter__01.png ... Teleporter__08.png
   - __01 ... __08: batch 1 (orig shot_000, shot_001, shot_005, shot_056-060) —
-    ground-anchored ring-base pillar at Misthaven recall pad, no character
-    inside; classic IrisFlare PAD signature.
-  - __09 ... __15: batch 2 (orig batch2_090, batch2_091 ... batch2_096) —
-    crystalline diamond-lattice pillar at a fixed pavement location; second
-    NPC walks into the pillar from outside on __14 (decisive multi-actor
-    pad-interaction tell vs caster-centric spell).
-- Notes: Split out from the original 40-frame Teleporter capture. Frames that
-  showed a caster-centric blue cylinder / rings-around-character / vertical
-  beam transport moved to `teleportation/` (the SPELL).
+    ground-anchored smooth blue/white iris-ring pillar at Misthaven recall
+    pad on stone/tree environment; no character inside; classic IrisFlare
+    pulsing PAD signature.
+- Notes: Resplit on 2026-05-30 — frames showing stacked rotating crystalline
+  lattice rings with NPC walkthrough moved to `TeleportDoorInsideB/` (the
+  portal-door pad). Earlier resplit (commit 0ed4151) moved caster-centric
+  rings-around-character / vertical-beam transport visuals to `teleportation/`
+  (the SPELL).
 
 ### teleportation/  *(spell — magic\Teleportation.i3d)*
 - Frame count: 25
