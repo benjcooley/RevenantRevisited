@@ -313,7 +313,12 @@ bool TDisplay::FlipPage(bool /*Wait*/)
 
         sg_begin_pass(capturePass, &snapPa);
         if (Renderer) {
-            Renderer->PresentToSwapchain();
+            // Mirror pass: use PresentForSnap (dirty-flag-free variant)
+            // because PresentToSwapchain already cleared the flags this
+            // frame. Without this the snap RT misses Scene3D entirely
+            // and the filmstrip captures only the HUD over black —
+            // which broke vfx test snaps (the effects ARE the scene).
+            Renderer->PresentForSnap();
             Renderer->Composite(backbuffer);
             Renderer->DrawHud();
         }
