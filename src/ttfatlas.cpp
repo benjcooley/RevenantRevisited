@@ -17,6 +17,7 @@
 #define STBTT_STATIC
 #include "stb_truetype.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -116,17 +117,18 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     }
     stbtt_PackEnd(&spc);
 
-    // Promote the single-channel coverage atlas to RGBA8 (R=G=B=A=cov) so
-    // straight-alpha composite works against any tint. Linear sampling smooths
-    // the 2x oversampled coverage.
+    // Promote the single-channel coverage atlas to straight-alpha RGBA8.
+    // RGB stays white; alpha carries coverage. The composite pipeline uses
+    // SRC_ALPHA blending, so putting coverage in RGB as well would square the
+    // coverage and make tinted text too dim.
     const size_t rgba_bytes = size_t(atlas_w) * atlas_h * 4;
     std::unique_ptr<uint8_t[]> rgba(new uint8_t[rgba_bytes]);
     for (size_t i = 0; i < size_t(atlas_w) * atlas_h; i++)
     {
         const uint8_t a = coverage[i];
-        rgba[i * 4 + 0] = a;
-        rgba[i * 4 + 1] = a;
-        rgba[i * 4 + 2] = a;
+        rgba[i * 4 + 0] = 255;
+        rgba[i * 4 + 1] = 255;
+        rgba[i * 4 + 2] = 255;
         rgba[i * 4 + 3] = a;
     }
 
@@ -142,6 +144,15 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     // reach back into stb_truetype. xoff/yoff are the offsets from pen
     // (yoff is negative for ascenders — pen_y is the baseline), xadvance
     // is the pen advance after the glyph.
+    //
+    // Round every metric to the integer pixel grid. stb's metrics are
+    // fractional, so snapping each glyph to whole pixels at draw time from a
+    // fractional running pen makes inter-glyph gaps drift ±1px (uneven spacing)
+    // and rounds glyph tops/bottoms onto different rows (lowercase bobbing off
+    // the baseline). Quantizing the metrics here makes this small UI font
+    // behave like the original bitmap fonts — even spacing, one flat baseline —
+    // which is what the pixel-faithful UI needs. (The atlas bitmap stays 2x
+    // oversampled for crisp downsampled coverage; only placement is gridded.)
     for (int i = 0; i < kCount; i++)
     {
         const stbtt_packedchar& pc = chardata[i];
@@ -150,11 +161,11 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
         r.y = (uint16_t)pc.y0;
         r.w = (uint16_t)(pc.x1 - pc.x0);
         r.h = (uint16_t)(pc.y1 - pc.y0);
-        r.xoff     = pc.xoff;
-        r.yoff     = pc.yoff;
-        r.xoff2    = pc.xoff2;
-        r.yoff2    = pc.yoff2;
-        r.xadvance = pc.xadvance;
+        r.xoff     = roundf(pc.xoff);
+        r.yoff     = roundf(pc.yoff);
+        r.xoff2    = roundf(pc.xoff2);
+        r.yoff2    = roundf(pc.yoff2);
+        r.xadvance = roundf(pc.xadvance);
     }
 
     if (Renderer)

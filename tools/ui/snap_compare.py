@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Capture frames of a UI test mode + compose A/B against a reference image.
+"""Capture UI test-mode frames and compose a pixel-scale A/B board.
 
 Based on tools/vfx/snap_grid.py. Boots ./build/Revenant --test=<mode>,
 captures N frames at a configurable interval (to see any animation
-cycle), auto-crops each to the Revenant window region, then composites
-the frame strip alongside a reference image into one PNG for visual
-A/B comparison.
+cycle), crops to the Revenant window content, then places the retail
+reference and current build side by side at matching integer zoom.
+
+This is a regression/transcription viewer. For retail UI reconstruction,
+derive coordinates from /recon and disassembly first, then use this image
+to catch obvious capture or porting mistakes.
 
 Usage:
     tools/ui/snap_compare.py <mode> <reference.png>
@@ -14,7 +17,7 @@ Usage:
 
 Example:
     tools/ui/snap_compare.py ui-plyrstatusbar docs/ui/plyr_stats_panel.png \\
-                             --frames 4 --interval-ms 1500 \\
+                             --frames 1 --crop 0,0,640,120 \\
                              --out /tmp/plyr_ab.png
 
 Requires Pillow + numpy.
@@ -48,14 +51,17 @@ except ImportError:
     HAVE_QUARTZ = False
 
 
-def find_revenant_window_id() -> int | None:
-    """Return the CGWindowID of the Revenant window, or None."""
+def find_revenant_window_info(owner_pid: int | None = None) -> tuple[int, dict] | None:
+    """Return the CGWindowID and Quartz info for the launched Revenant window."""
     if not HAVE_QUARTZ:
         return None
     infos = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID)
     for info in infos:
-        if info.get("kCGWindowOwnerName", "") == "Revenant":
-            return info["kCGWindowNumber"]
+        if owner_pid is not None:
+            if info.get("kCGWindowOwnerPID") == owner_pid:
+                return info["kCGWindowNumber"], info
+        elif info.get("kCGWindowOwnerName", "") == "Revenant":
+            return info["kCGWindowNumber"], info
     return None
 
 
@@ -142,7 +148,7 @@ def find_window_crop(img: Image.Image) -> Image.Image:
 
 
 def capture_frames(mode: str, n: int, interval_ms: int,
-                   build_dir: Path, warmup_ms: int) -> list[Image.Image]:
+                   build_dir: Path, warmup_ms: int) -> tuple[list[Image.Image], bool, float]:
     revenant = build_dir / "Revenant"
     if not revenant.exists():
         raise FileNotFoundError(f"{revenant} not found. cmake --build first.")
@@ -160,12 +166,18 @@ def capture_frames(mode: str, n: int, interval_ms: int,
             # permission needed, just Screen Recording which screencapture
             # already has). Fall back to full-screen + auto-crop if Quartz
             # isn't available.
-            win_id = find_revenant_window_id()
-            if win_id is None:
-                print("warning: Quartz unavailable or window not found; "
+            win_info = find_revenant_window_info(proc.pid)
+            if win_info is None:
+                win_id = None
+                capture_scale = 1.0
+                print("warning: Quartz unavailable or launched window not found; "
                       "falling back to full-screen capture",
                       file=sys.stderr)
             else:
+                win_id, info = win_info
+                bounds = info.get("kCGWindowBounds", {})
+                bounds_w = float(bounds.get("Width", 0.0) or 0.0)
+                capture_scale = 1.0
                 print(f"[snap] Revenant window id = {win_id}")
             frames = []
             for i in range(n):
@@ -182,6 +194,8 @@ def capture_frames(mode: str, n: int, interval_ms: int,
                         ["screencapture", "-x", "-t", "png", str(shot)],
                         check=True)
                 frames.append(Image.open(shot).copy())
+                if win_id is not None and bounds_w > 0:
+                    capture_scale = max(1.0, frames[-1].width / bounds_w)
                 if i + 1 < n:
                     time.sleep(interval_ms / 1000.0)
         finally:
@@ -190,47 +204,91 @@ def capture_frames(mode: str, n: int, interval_ms: int,
                 proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 proc.kill()
-        return frames, (win_id is not None)
+        return frames, (win_id is not None), capture_scale
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def compose_ab(ref: Image.Image, mockup_frames: list[Image.Image],
-               out_path: Path, frame_label_fmt: str = "t={i}") -> None:
-    """Compose the reference image above a row of mockup frames.
+def crop_rect(img: Image.Image, spec: str | None) -> Image.Image:
+    if not spec:
+        return img
+    x, y, w, h = [int(v) for v in spec.split(",")]
+    return img.crop((x, y, x + w, y + h))
 
-    Layout:
-        +-----------------------------------+
-        | REFERENCE (retail)                |
-        | [ ref image, scaled to row H ]    |
-        +-----------------------------------+
-        | MOCKUP (current build) — animation|
-        | [frame 0] [frame 1] [frame 2] ... |
-        +-----------------------------------+
+
+def detect_content_top(img: Image.Image) -> int | None:
+    """Find the first game-content row in a captured app window.
+
+    macOS `screencapture -l` includes the titlebar. The Revenant test window
+    begins with large runs of near-black backbuffer pixels, while the titlebar
+    is dark gray chrome with very few true-black pixels. Scan the top of the
+    capture and choose the first stable run of rows that looks like content.
     """
-    LABEL_H = 24
-    GAP = 8
+    rgb = img.convert("RGB")
+    a = np.array(rgb)
+    max_scan = min(160, max(1, img.height // 3))
+    for y in range(max_scan):
+        band = a[y:min(y + 4, img.height), :, :]
+        black = (
+            (band[:, :, 0] < 8)
+            & (band[:, :, 1] < 8)
+            & (band[:, :, 2] < 8)
+        )
+        if float(black.mean()) > 0.20:
+            return y
+    return None
+
+
+def crop_window_content(img: Image.Image, chrome_top: int | None) -> Image.Image:
+    """Drop macOS window chrome from screencapture -l output."""
+    if chrome_top is None:
+        chrome_top = detect_content_top(img)
+        if chrome_top is None:
+            chrome_top = 0
+            print("warning: could not auto-detect content top; keeping "
+                  "full window capture", file=sys.stderr)
+        else:
+            print(f"[snap] content top = {chrome_top}px")
+    if chrome_top <= 0 or img.height <= chrome_top:
+        return img
+    return img.crop((0, chrome_top, img.width, img.height))
+
+
+def normalize_window_scale(img: Image.Image, scale: float) -> Image.Image:
+    """Convert a Retina/window capture from physical pixels to game pixels."""
+    if scale <= 1.01:
+        return img
+    w = max(1, int(round(img.width / scale)))
+    h = max(1, int(round(img.height / scale)))
+    return img.resize((w, h), Image.Resampling.BOX)
+
+
+def zoom_image(img: Image.Image, zoom: int) -> Image.Image:
+    img = img.convert("RGB")
+    if zoom <= 1:
+        return img
+    return img.resize((img.width * zoom, img.height * zoom),
+                      Image.Resampling.NEAREST)
+
+
+def compose_ab(ref: Image.Image, mockup_frames: list[Image.Image],
+               out_path: Path, frame_label_fmt: str = "t={i}",
+               zoom: int = 2, layout: str = "side-by-side",
+               ref_zoom: int | None = None,
+               current_zoom: int | None = None) -> None:
+    """Compose reference/current images without aspect-changing resizes."""
+    LABEL_H = 22
+    GAP = 10
     BG = (28, 28, 32)
 
-    # Pick a row height: 2x reference height for retina legibility,
-    # min 220, max 600.
-    row_h = max(220, min(600, ref.height * 2))
+    if ref_zoom is None:
+        ref_zoom = zoom
+    if current_zoom is None:
+        current_zoom = zoom
 
-    def resize_h(img: Image.Image, h: int) -> Image.Image:
-        if img.height == h:
-            return img.convert("RGB")
-        w = max(1, int(img.width * (h / img.height)))
-        return img.convert("RGB").resize((w, h), Image.LANCZOS)
+    ref_z = zoom_image(ref, ref_zoom)
+    mocks_z = [zoom_image(f, current_zoom) for f in mockup_frames]
 
-    ref_r = resize_h(ref, row_h)
-    mocks_r = [resize_h(f, row_h) for f in mockup_frames]
-    mocks_row_w = sum(m.width for m in mocks_r) + GAP * max(0, len(mocks_r) - 1)
-    total_w = max(ref_r.width, mocks_row_w) + GAP * 2
-
-    total_h = LABEL_H + ref_r.height + LABEL_H + row_h + GAP
-    out = Image.new("RGB", (total_w, total_h), BG)
-
-    draw = ImageDraw.Draw(out)
     try:
         font = ImageFont.truetype(
             "/System/Library/Fonts/Supplemental/Arial.ttf", 14)
@@ -239,23 +297,44 @@ def compose_ab(ref: Image.Image, mockup_frames: list[Image.Image],
     except Exception:
         font = font_small = ImageFont.load_default()
 
-    # Reference row
-    y = 4
-    draw.text((GAP, y), "REFERENCE (retail)", (220, 220, 220), font=font)
-    out.paste(ref_r, (GAP, LABEL_H))
+    if layout == "stack":
+        mocks_row_w = sum(m.width for m in mocks_z) + GAP * max(0, len(mocks_z) - 1)
+        total_w = max(ref_z.width, mocks_row_w) + GAP * 2
+        total_h = LABEL_H + ref_z.height + LABEL_H + max(m.height for m in mocks_z) + GAP
+        out = Image.new("RGB", (total_w, total_h), BG)
+        draw = ImageDraw.Draw(out)
+        draw.text((GAP, 3), f"REFERENCE (retail)  zoom={ref_zoom}x",
+                  (220, 220, 220), font=font)
+        out.paste(ref_z, (GAP, LABEL_H))
+        y = LABEL_H + ref_z.height + 3
+        draw.text((GAP, y), f"CURRENT BUILD — {len(mocks_z)} frame(s)",
+                  (220, 220, 220), font=font)
+        x = GAP
+        yy = LABEL_H + ref_z.height + LABEL_H
+        for i, img in enumerate(mocks_z):
+            out.paste(img, (x, yy))
+            x += img.width + GAP
+    else:
+        current_w = sum(m.width for m in mocks_z) + GAP * max(0, len(mocks_z) - 1)
+        current_h = max(m.height for m in mocks_z)
+        total_w = ref_z.width + GAP + current_w + GAP * 2
+        total_h = LABEL_H + max(ref_z.height, current_h) + GAP
+        out = Image.new("RGB", (total_w, total_h), BG)
+        draw = ImageDraw.Draw(out)
 
-    # Mockup row
-    y = LABEL_H + ref_r.height + 4
-    draw.text((GAP, y),
-              f"MOCKUP (current build) — {len(mocks_r)} frames",
-              (220, 220, 220), font=font)
-    x = GAP
-    yy = LABEL_H + ref_r.height + LABEL_H
-    for i, img in enumerate(mocks_r):
-        out.paste(img, (x, yy))
-        draw.text((x + 2, yy + 2), frame_label_fmt.format(i=i),
-                  (180, 220, 255), font=font_small)
-        x += img.width + GAP
+        left_x = GAP
+        right_x = GAP + ref_z.width + GAP
+        draw.text((left_x, 3), f"REFERENCE (retail)  zoom={ref_zoom}x",
+                  (220, 220, 220), font=font)
+        draw.text((right_x, 3), f"CURRENT BUILD — {len(mocks_z)} frame(s)",
+                  (220, 220, 220), font=font)
+
+        y = LABEL_H
+        out.paste(ref_z, (left_x, y))
+        x = right_x
+        for i, img in enumerate(mocks_z):
+            out.paste(img, (x, y))
+            x += img.width + GAP
 
     out.save(out_path)
     print(f"wrote {out_path} ({out.size[0]}x{out.size[1]})")
@@ -274,9 +353,28 @@ def main() -> int:
                     help="ms to wait after launch before first capture")
     ap.add_argument("--out", type=Path,
                     default=Path("/tmp/ui_ab.png"))
+    ap.add_argument("--layout", choices=("side-by-side", "stack"),
+                    default="side-by-side",
+                    help="comparison layout (default side-by-side)")
+    ap.add_argument("--zoom", type=int, default=2,
+                    help="integer nearest-neighbor zoom for both sides (default 2)")
+    ap.add_argument("--ref-zoom", type=int, default=0,
+                    help="integer zoom for the reference side. Default 0 uses --zoom.")
+    ap.add_argument("--current-zoom", type=int, default=0,
+                    help="integer zoom for captured frames. Default 0 uses --zoom.")
+    ap.add_argument("--chrome-top", type=int, default=-1,
+                    help="pixels of macOS titlebar to remove from window captures "
+                         "before --crop. Default -1 auto-detects the game "
+                         "content top; use 0 to keep chrome.")
+    ap.add_argument("--window-scale", type=float, default=0.0,
+                    help="physical-to-logical scale for window captures. "
+                         "Default 0 auto-detects from Quartz bounds; use 1 "
+                         "to disable Retina normalization.")
     ap.add_argument("--crop", type=str, default=None,
-                    help="x,y,w,h to crop each mockup frame to (post-window-cap). "
-                         "Use to zero in on a specific UI region for tighter A/B.")
+                    help="x,y,w,h crop for current build, after titlebar removal. "
+                         "Use to zero in on a UI region for tight A/B.")
+    ap.add_argument("--ref-crop", type=str, default=None,
+                    help="x,y,w,h crop for the reference image")
     ap.add_argument("--build-dir", type=Path, default=Path("build"))
     args = ap.parse_args()
 
@@ -284,27 +382,37 @@ def main() -> int:
         print(f"error: reference {args.reference} not found", file=sys.stderr)
         return 2
 
-    ref = Image.open(args.reference).convert("RGB")
-    raw_frames, used_winid = capture_frames(
+    ref = crop_rect(Image.open(args.reference).convert("RGB"), args.ref_crop)
+    raw_frames, used_winid, capture_scale = capture_frames(
         args.mode, args.frames, args.interval_ms,
         args.build_dir, args.warmup_ms)
+    if args.window_scale > 0.0:
+        capture_scale = args.window_scale
     if used_winid:
-        cropped = [f.convert("RGB") for f in raw_frames]
+        chrome_top = None if args.chrome_top < 0 else args.chrome_top
+        cropped = [
+            normalize_window_scale(
+                crop_window_content(f.convert("RGB"), chrome_top),
+                capture_scale)
+            for f in raw_frames
+        ]
     else:
         cropped = [find_window_crop(f) for f in raw_frames]
 
     if args.crop:
         try:
-            cx, cy, cw, ch = [int(v) for v in args.crop.split(",")]
-            cropped = [c.crop((cx, cy, cx + cw, cy + ch)) for c in cropped]
+            cropped = [crop_rect(c, args.crop) for c in cropped]
         except Exception as e:
             print(f"warning: --crop parse failed ({e}); using full frames",
                   file=sys.stderr)
 
     # Frame timing labels.
-    label_fmt = "t=" + ("{i}*" + str(args.interval_ms/1000.0) + "s")
     compose_ab(ref, cropped, args.out,
-               frame_label_fmt="t={i}*" + f"{args.interval_ms/1000.0}s")
+               frame_label_fmt="frame {i}",
+               zoom=max(1, args.zoom),
+               layout=args.layout,
+               ref_zoom=max(1, args.ref_zoom) if args.ref_zoom > 0 else None,
+               current_zoom=max(1, args.current_zoom) if args.current_zoom > 0 else None)
     return 0
 
 

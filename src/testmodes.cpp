@@ -15,14 +15,17 @@
 #include "display.h"
 #include "font.h"
 #include "fonttable.h"
+#include "framesnap.h"
 #include "imagery.h"
 #include "imageres.h"
 #include "imgui.h"
 #include "chunkcache.h"
 #include "character.h"
+#include "cursor.h"
 #include "logging.h"
 #include "maprenderer.h"
 #include "meshextract.h"
+#include "multi.h"
 #include "render_metadata.h"
 #include "renderer.h"
 #include "revenant.h"
@@ -31,10 +34,26 @@
 #include "time.h"
 #include "tile.h"
 #include "uianchortest.h"
+#include "uibarinvtest.h"
+#include "uibottombartest.h"
 #include "uicliptest.h"
+#include "uideathtest.h"
+#include "uiequiptest.h"
+#include "uihudtest.h"
+#include "uidefscreentest.h"
+#include "uiinventorytest.h"
 #include "uilayouttest.h"
+#include "uiloadscreentest.h"
+#include "uimainmenutest.h"
+#include "uimaptest.h"
 #include "uinineslicetest.h"
 #include "uiplyrstatusbartest.h"
+#include "uiquickspelltest.h"
+#include "uisidebartest.h"
+#include "uisidetabstest.h"
+#include "uispellbooktest.h"
+#include "uispellcreatetest.h"
+#include "uistatstest.h"
 #include "uistyletest.h"
 #include "uitextbartest.h"
 #include "vfxtest.h"
@@ -47,6 +66,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -2112,31 +2132,10 @@ void RenderTTFMode()
         const SFontAtlas* atlas = BuildTTFAtlas(L.path, L.size);
         if (!atlas || atlas->texture == kInvalidTexture) continue;
 
-        float line_w = 0.0f;
-        for (const char* p = msg; *p; ++p)
-            line_w += atlas->Rect((unsigned char)*p).xadvance;
-
-        float pen_x = (float)(tw - (int32_t)line_w) * 0.5f;
-        const float pen_y = (float)baseline;
-
-        for (const char* p = msg; *p; ++p)
-        {
-            const auto& r = atlas->Rect((unsigned char)*p);
-            if (r.w > 0 && r.h > 0)
-            {
-                const int32_t gx = (int32_t)(pen_x + r.xoff + 0.5f);
-                const int32_t gy = (int32_t)(pen_y + r.yoff + 0.5f);
-                const int32_t gw = (int32_t)(r.xoff2 - r.xoff + 0.5f);
-                const int32_t gh = (int32_t)(r.yoff2 - r.yoff + 0.5f);
-                Renderer->Composite(
-                    atlas->texture,
-                    gx, gy, gw, gh,
-                    tw, th,
-                    r.x, r.y, r.w, r.h,
-                    atlas->width, atlas->height);
-            }
-            pen_x += r.xadvance;
-        }
+        // One shared glyph walk (font.cpp); this mode just centers the line.
+        const float pen_x = (tw - TextWidth(atlas, msg)) * 0.5f;
+        DrawTextAtBaseline(atlas, msg, pen_x, (float)baseline,
+                           1.0f, 1.0f, 1.0f, tw, th);
         baseline += L.size + 16;
     }
 
@@ -2169,33 +2168,14 @@ void RenderTextMode()
     {
         if (!L.font || !L.atlas || L.atlas->texture == kInvalidTexture) continue;
 
+        // Bitmap atlases now carry the same metrics as TTF (font.cpp), so this
+        // mode funnels through the one shared glyph walk too. pen_y is the line
+        // baseline the bitmap StartHeight metric references (line top + height).
         const int32_t line_h = (int32_t)((TFontData*)L.font)->height;
-        int32_t line_w = 0;
-        for (const char* p = msg; *p; ++p)
-        {
-            const unsigned char ch = (unsigned char)*p;
-            line_w += (int32_t)L.font->DrawRight(ch) - (int32_t)L.font->DrawLeft(ch);
-        }
-
-        int32_t pen_x = (tw - line_w) / 2;
-        const int32_t pen_y = line_top + line_h;
-        for (const char* p = msg; *p; ++p)
-        {
-            const unsigned char ch = (unsigned char)*p;
-            const auto& r = L.atlas->Rect(ch);
-            if (r.w > 0 && r.h > 0)
-            {
-                const int32_t gx = pen_x - (int32_t)L.font->DrawLeft(ch);
-                const int32_t gy = pen_y - (int32_t)L.font->StartHeight(ch);
-                Renderer->Composite(
-                    L.atlas->texture,
-                    gx, gy, r.w, r.h,
-                    tw, th,
-                    r.x, r.y, r.w, r.h,
-                    L.atlas->width, L.atlas->height);
-            }
-            pen_x += (int32_t)L.font->DrawRight(ch) - (int32_t)L.font->DrawLeft(ch);
-        }
+        const int32_t pen_x  = (tw - (int32_t)TextWidth(L.atlas, msg)) / 2;
+        const int32_t pen_y  = line_top + line_h;
+        DrawTextAtBaseline(L.atlas, msg, (float)pen_x, (float)pen_y,
+                           1.0f, 1.0f, 1.0f, tw, th);
 
         line_top += line_h + 4;
     }
@@ -2367,9 +2347,313 @@ void RenderAudioMode()
     Display.BackBuffer()->EndPass();
 }
 
+// =====================================================================
+// Scripted input simulator (--input-script="...", alias --mouse-script).
+//
+// Replays a synthetic sequence of mouse + keyboard events into the active test
+// mode's input dispatch, so UI behavior can be driven and verified headlessly
+// (no real input). The script is a timeline: `pause` advances a running clock;
+// `moveto`/`left_down`/`key_down`/etc. emit an event at the current clock +
+// cursor position. Each frame, InputSimTick() fires every event whose timestamp
+// has elapsed (measured against TTime), calling the same HandleMouseMove /
+// HandleMouseClick / HandleKeyPress path real input uses. Coordinates are in
+// Classic 640x480 content pixels (the UI test modes letterbox internally).
+// =====================================================================
+enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_LOG, MS_SNAP };
+
+struct SInputEvent
+{
+    double      at_ms = 0.0;   // fire time, ms from script start
+    int32_t     kind  = MS_MOVE;
+    int32_t     button = 0;    // MB_* for MS_CLICK; VK code for MS_KEY
+    int32_t     x = 0, y = 0;  // for MS_KEY: x = 1 (down) / 0 (up)
+    std::string text;          // for MS_LOG
+};
+
+// Map an input-script key token to a legacy VK_* code (the space the engine's
+// KeyPress dispatch uses — see SappKeyToVK in revmain). Accepts a single char
+// (letters/digits = uppercase ASCII = VK), a named special key, or a numeric
+// VK code. Returns 0 (unknown) on miss.
+int32_t InputSimKeyCode(const std::string& tokIn)
+{
+    if (tokIn.empty()) return 0;
+    std::string t = tokIn;
+    for (char& c : t) c = (char)std::tolower((unsigned char)c);
+
+    if (t.size() == 1)
+    {
+        const char c = t[0];
+        if (c >= 'a' && c <= 'z') return (int32_t)(c - 'a' + 'A');   // VK letter
+        if (c >= '0' && c <= '9') return (int32_t)c;                 // VK digit
+    }
+    if (t == "esc" || t == "escape")        return VK_ESCAPE;
+    if (t == "enter" || t == "return")      return VK_RETURN;
+    if (t == "tab")                         return VK_TAB;
+    if (t == "space")                       return VK_SPACE;
+    if (t == "up")                          return VK_UP;
+    if (t == "down")                        return VK_DOWN;
+    if (t == "left")                        return VK_LEFT;
+    if (t == "right")                       return VK_RIGHT;
+    if (t == "backspace" || t == "back")    return VK_BACK;
+    if (t == "del" || t == "delete")        return VK_DELETE;
+    if (t == "home")                        return VK_HOME;
+    if (t == "end")                         return VK_END;
+    if (t == "pgup" || t == "pageup")       return VK_PRIOR;
+    if (t == "pgdn" || t == "pagedown")     return VK_NEXT;
+    if (t.size() >= 2 && t[0] == 'f' && std::isdigit((unsigned char)t[1]))
+    {
+        const int32_t n = (int32_t)std::strtol(t.c_str() + 1, nullptr, 10);
+        if (n >= 1 && n <= 12) return VK_F1 + (n - 1);
+    }
+    // Numeric VK code fallback.
+    char* endp = nullptr;
+    const long v = std::strtol(t.c_str(), &endp, 0);
+    if (endp && *endp == '\0' && v > 0) return (int32_t)v;
+    return 0;
+}
+
+std::vector<SInputEvent> g_inputSimEvents;
+size_t  g_inputSimNext   = 0;
+double  g_inputSimStartMs = 0.0;   // 0 until the first tick stamps it
+bool    g_inputSimActive = false;
+bool    g_inputSimLoop   = false;
+
+// Split a string on a delimiter into trimmed, non-empty tokens.
+std::vector<std::string> SplitTokens(const std::string& s, char delim)
+{
+    std::vector<std::string> out;
+    size_t i = 0;
+    while (i <= s.size())
+    {
+        size_t j = s.find(delim, i);
+        if (j == std::string::npos) j = s.size();
+        size_t a = i, b = j;
+        while (a < b && std::isspace((unsigned char)s[a])) ++a;
+        while (b > a && std::isspace((unsigned char)s[b - 1])) --b;
+        if (b > a) out.emplace_back(s.substr(a, b - a));
+        i = j + 1;
+    }
+    return out;
+}
+
+void InputSimStart(const char* script)
+{
+    g_inputSimEvents.clear();
+    g_inputSimNext    = 0;
+    g_inputSimStartMs = 0.0;
+    g_inputSimActive  = false;
+    g_inputSimLoop    = false;
+    mousebutton       = 0;   // start with no buttons held (drag-state baseline)
+    if (!script || !script[0]) return;
+
+    // Default glide duration for `moveto` — the cursor animates from its
+    // current spot to the target over this many ms (so the move is visible and
+    // passes hover over intervening widgets), unless an explicit duration arg
+    // (incl. 0 for an instant jump) is given.
+    constexpr int32_t kDefaultMoveMs = 500;
+
+    // Default hold for the convenience press commands (mouse_click / key_press):
+    // down, hold this long, then up. Overridable with a trailing ms arg.
+    constexpr int32_t kDefaultPressMs = 200;
+
+    double  t_ms = 0.0;            // running timeline cursor
+    int32_t cx = WIDTH / 2;        // running synthetic cursor position
+    int32_t cy = HEIGHT / 2;       // (seeded to screen center, like the modes)
+
+    for (const std::string& cmd : SplitTokens(script, ';'))
+    {
+        std::vector<std::string> tok = SplitTokens(cmd, ' ');
+        if (tok.empty()) continue;
+        std::string op = tok[0];
+        for (char& c : op) c = (char)std::tolower((unsigned char)c);
+
+        auto argi = [&](size_t idx) -> int32_t
+        { return idx < tok.size() ? (int32_t)std::strtol(tok[idx].c_str(), nullptr, 10) : 0; };
+
+        if (op == "moveto" || op == "move")
+        {
+            const int32_t tx = argi(1), ty = argi(2);
+            const int32_t dur = (tok.size() > 3) ? argi(3) : kDefaultMoveMs;
+            if (dur <= 0)
+            {
+                // Instant jump.
+                g_inputSimEvents.push_back({ t_ms, MS_MOVE, 0, tx, ty, "" });
+            }
+            else
+            {
+                // Glide: ~60 Hz intermediate samples, interpolated start->target.
+                int32_t steps = dur / 16;
+                if (steps < 1)   steps = 1;
+                if (steps > 240) steps = 240;
+                for (int32_t s = 1; s <= steps; ++s)
+                {
+                    const int32_t ix = cx + (tx - cx) * s / steps;
+                    const int32_t iy = cy + (ty - cy) * s / steps;
+                    const double  at = t_ms + (double)dur * s / steps;
+                    g_inputSimEvents.push_back({ at, MS_MOVE, 0, ix, iy, "" });
+                }
+                t_ms += dur;   // the glide consumes timeline; later cmds follow it
+            }
+            cx = tx; cy = ty;
+        }
+        else if (op == "pause" || op == "wait" || op == "delay")
+        {
+            t_ms += (double)argi(1);
+        }
+        // Discrete button down/up only (NO combined "click") so a press can be
+        // held across intervening moves — i.e. drags: left_down; moveto …; left_up.
+        else if (op == "left_down" || op == "leftdown" || op == "ldown" || op == "down")
+            g_inputSimEvents.push_back({ t_ms, MS_CLICK, MB_LEFTDOWN, cx, cy, "" });
+        else if (op == "left_up" || op == "leftup" || op == "lup" || op == "up")
+            g_inputSimEvents.push_back({ t_ms, MS_CLICK, MB_LEFTUP, cx, cy, "" });
+        else if (op == "right_down" || op == "rightdown")
+            g_inputSimEvents.push_back({ t_ms, MS_CLICK, MB_RIGHTDOWN, cx, cy, "" });
+        else if (op == "right_up" || op == "rightup")
+            g_inputSimEvents.push_back({ t_ms, MS_CLICK, MB_RIGHTUP, cx, cy, "" });
+        else if (op == "middle_down" || op == "middledown")
+            g_inputSimEvents.push_back({ t_ms, MS_CLICK, MB_MIDDLEDOWN, cx, cy, "" });
+        else if (op == "middle_up" || op == "middleup")
+            g_inputSimEvents.push_back({ t_ms, MS_CLICK, MB_MIDDLEUP, cx, cy, "" });
+        else if (op == "mouse_click" || op == "click" || op == "left_click")
+        {
+            // Convenience left click: down, hold (default 200ms or arg), up.
+            const int32_t hold = (tok.size() > 1) ? argi(1) : kDefaultPressMs;
+            g_inputSimEvents.push_back({ t_ms, MS_CLICK, MB_LEFTDOWN, cx, cy, "" });
+            t_ms += hold;
+            g_inputSimEvents.push_back({ t_ms, MS_CLICK, MB_LEFTUP, cx, cy, "" });
+        }
+        else if (op == "key_down" || op == "keydown" || op == "key_up" || op == "keyup")
+        {
+            const int32_t vk = (tok.size() > 1) ? InputSimKeyCode(tok[1]) : 0;
+            const int32_t down = (op == "key_down" || op == "keydown") ? 1 : 0;
+            if (vk != 0)
+                g_inputSimEvents.push_back({ t_ms, MS_KEY, vk, down, 0, "" });
+            else
+                log_warn("[input-sim] %s: unknown key '%s'", op.c_str(),
+                         tok.size() > 1 ? tok[1].c_str() : "");
+        }
+        else if (op == "key_press" || op == "keypress" || op == "key_click")
+        {
+            // Convenience key press: key_down, hold (default 200ms or arg), key_up.
+            const int32_t vk = (tok.size() > 1) ? InputSimKeyCode(tok[1]) : 0;
+            const int32_t hold = (tok.size() > 2) ? argi(2) : kDefaultPressMs;
+            if (vk != 0)
+            {
+                g_inputSimEvents.push_back({ t_ms, MS_KEY, vk, 1, 0, "" });
+                t_ms += hold;
+                g_inputSimEvents.push_back({ t_ms, MS_KEY, vk, 0, 0, "" });
+            }
+            else
+                log_warn("[input-sim] key_press: unknown key '%s'",
+                         tok.size() > 1 ? tok[1].c_str() : "");
+        }
+        else if (op == "loop")
+            g_inputSimLoop = true;
+        else if (op == "take_snapshot" || op == "snapshot" || op == "snap")
+        {
+            // Optional label after the command name:
+            //   take_snapshot                     (no label)
+            //   take_snapshot click upper book    (free-form label, joined)
+            size_t sp = cmd.find(' ');
+            std::string label = (sp == std::string::npos) ? "" : cmd.substr(sp + 1);
+            g_inputSimEvents.push_back({ t_ms, MS_SNAP, 0, 0, 0, label });
+        }
+        else if (op == "log")
+        {
+            size_t sp = cmd.find(' ');
+            std::string msg = (sp == std::string::npos) ? "" : cmd.substr(sp + 1);
+            g_inputSimEvents.push_back({ t_ms, MS_LOG, 0, 0, 0, msg });
+        }
+        else
+            log_warn("[input-sim] unknown command '%s'", cmd.c_str());
+    }
+
+    g_inputSimActive = !g_inputSimEvents.empty();
+    if (g_inputSimActive)
+        log_info("[input-sim] %zu events parsed (loop=%d)",
+                 g_inputSimEvents.size(), g_inputSimLoop ? 1 : 0);
+}
+
 }  // namespace
 
 namespace TestModes {
+
+// Defined here (in the TestModes namespace) so it can call the dispatch
+// functions directly. Fires all synthetic input events whose timestamp has
+// elapsed since the script started.
+static void InputSimTick(const char* mode)
+{
+    if (!g_inputSimActive) return;
+    const double now_ms = TTime::Time() * 1000.0;
+    if (g_inputSimStartMs == 0.0) g_inputSimStartMs = now_ms;
+    const double elapsed = now_ms - g_inputSimStartMs;
+
+    while (g_inputSimNext < g_inputSimEvents.size() &&
+           g_inputSimEvents[g_inputSimNext].at_ms <= elapsed)
+    {
+        const SInputEvent& e = g_inputSimEvents[g_inputSimNext++];
+        switch (e.kind)
+        {
+        case MS_MOVE:
+            // Drive the shared cursor position so the in-frame game cursor
+            // (TCursorHud, when a mode disables the hardware cursor) follows
+            // the script. Same globals the real mouse handler writes. Pass the
+            // held-button mask so moves between down/up read as a drag.
+            cursorx = e.x; cursory = e.y;
+            HandleMouseMove(mode, mousebutton, e.x, e.y);
+            break;
+        case MS_CLICK:
+            cursorx = e.x; cursory = e.y;
+            // Mirror the real handler's mousebutton bookkeeping so a held
+            // press persists across subsequent moves (drag support).
+            switch (e.button)
+            {
+            case MB_LEFTDOWN:   mousebutton |= MB_LEFTDOWN;    break;
+            case MB_LEFTUP:     mousebutton &= ~MB_LEFTDOWN;   break;
+            case MB_RIGHTDOWN:  mousebutton |= MB_RIGHTDOWN;   break;
+            case MB_RIGHTUP:    mousebutton &= ~MB_RIGHTDOWN;  break;
+            case MB_MIDDLEDOWN: mousebutton |= MB_MIDDLEDOWN;  break;
+            case MB_MIDDLEUP:   mousebutton &= ~MB_MIDDLEDOWN; break;
+            default: break;
+            }
+            HandleMouseClick(mode, e.button, e.x, e.y);
+            break;
+        case MS_KEY:
+            // e.button = VK code, e.x = 1 (down) / 0 (up). Same path real keys
+            // take; real keyboard is NOT gated, so synthetic + real coexist.
+            HandleKeyPress(mode, e.button, e.x != 0);
+            break;
+        case MS_SNAP:
+            // Manual filmstrip capture (--filmstrip=N,0). Captures the LAST
+            // fully-rendered frame, so put a short `pause` before take_snapshot
+            // to let the just-driven state reach the backbuffer. No-op unless a
+            // manual-mode filmstrip is active. Optional label (e.text) is
+            // baked into the per-frame PNG filename + drawn on the cell.
+            if (FrameSnap::TriggerSnapshot(e.text.empty() ? nullptr : e.text.c_str()))
+                log_info("[input-sim] take_snapshot%s%s",
+                         e.text.empty() ? "" : " label=",
+                         e.text.c_str());
+            break;
+        case MS_LOG:
+            log_info("[input-sim] %s", e.text.c_str());
+            break;
+        }
+    }
+
+    if (g_inputSimNext >= g_inputSimEvents.size() && g_inputSimLoop)
+    {
+        g_inputSimNext    = 0;
+        g_inputSimStartMs = now_ms;
+    }
+}
+
+bool InputScriptActive()
+{
+    // Own the mouse only while the script still has work to do: events pending,
+    // or looping forever. Once a one-shot script drains, hand control back.
+    return g_inputSimActive &&
+           (g_inputSimLoop || g_inputSimNext < g_inputSimEvents.size());
+}
 
 bool DumpTilesToFolder(const char* path)
 {
@@ -2378,6 +2662,9 @@ bool DumpTilesToFolder(const char* path)
 
 bool Initialize(const char* mode)
 {
+    // Arm the scripted input simulator (no-op if --input-script was not given).
+    InputSimStart(StartupInputScript);
+
     if (strcmp(mode, "blank") == 0 || strcmp(mode, "ticker") == 0)
         return true;
     if (strcmp(mode, "sector") == 0)
@@ -2421,6 +2708,38 @@ bool Initialize(const char* mode)
         return InitializeUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return InitializeUIPlyrStatusBarMode();
+    if (strcmp(mode, "ui-sidetabs") == 0)
+        return InitializeUISideTabsMode();
+    if (strcmp(mode, "ui-sidebar") == 0)
+        return InitializeUISidebarMode();
+    if (strcmp(mode, "ui-quickspell") == 0)
+        return InitializeUIQuickSpellMode();
+    if (strcmp(mode, "ui-bottombar") == 0)
+        return InitializeUIBottomBarMode();
+    if (strcmp(mode, "ui-barinv") == 0)
+        return InitializeUIBarInvMode();
+    if (strcmp(mode, "ui-map") == 0)
+        return InitializeUIMapMode();
+    if (strcmp(mode, "ui-spellbook") == 0)
+        return InitializeUISpellbookMode();
+    if (strcmp(mode, "ui-spellcreate") == 0)
+        return InitializeUISpellCreateMode();
+    if (strcmp(mode, "ui-stats") == 0)
+        return InitializeUIStatsMode();
+    if (strcmp(mode, "ui-equip") == 0)
+        return InitializeUIEquipMode();
+    if (strcmp(mode, "ui-inventory") == 0)
+        return InitializeUIInventoryMode();
+    if (strcmp(mode, "ui-hud") == 0)
+        return InitializeUIHudMode();
+    if (strcmp(mode, "ui-loadscreen") == 0)
+        return InitializeUILoadScreenMode();
+    if (strcmp(mode, "ui-mainmenu") == 0)
+        return InitializeUIMainMenuMode();
+    if (strcmp(mode, "ui-death") == 0)
+        return InitializeUIDeathMode();
+    if (IsUIDefScreenMode(mode))
+        return InitializeUIDefScreenMode(mode);
     if (strcmp(mode, "audio") == 0)
         return InitializeAudioMode();
     if (strcmp(mode, "vfx") == 0)
@@ -2456,6 +2775,38 @@ void Close(const char* mode)
         CloseUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         CloseUIPlyrStatusBarMode();
+    if (strcmp(mode, "ui-sidetabs") == 0)
+        CloseUISideTabsMode();
+    if (strcmp(mode, "ui-sidebar") == 0)
+        CloseUISidebarMode();
+    if (strcmp(mode, "ui-quickspell") == 0)
+        CloseUIQuickSpellMode();
+    if (strcmp(mode, "ui-bottombar") == 0)
+        CloseUIBottomBarMode();
+    if (strcmp(mode, "ui-barinv") == 0)
+        CloseUIBarInvMode();
+    if (strcmp(mode, "ui-map") == 0)
+        CloseUIMapMode();
+    if (strcmp(mode, "ui-spellbook") == 0)
+        CloseUISpellbookMode();
+    if (strcmp(mode, "ui-spellcreate") == 0)
+        CloseUISpellCreateMode();
+    if (strcmp(mode, "ui-stats") == 0)
+        CloseUIStatsMode();
+    if (strcmp(mode, "ui-equip") == 0)
+        CloseUIEquipMode();
+    if (strcmp(mode, "ui-inventory") == 0)
+        CloseUIInventoryMode();
+    if (strcmp(mode, "ui-hud") == 0)
+        CloseUIHudMode();
+    if (strcmp(mode, "ui-loadscreen") == 0)
+        CloseUILoadScreenMode();
+    if (strcmp(mode, "ui-mainmenu") == 0)
+        CloseUIMainMenuMode();
+    if (strcmp(mode, "ui-death") == 0)
+        CloseUIDeathMode();
+    if (IsUIDefScreenMode(mode))
+        CloseUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
         CloseAudioMode();
     if (strcmp(mode, "vfx") == 0)
@@ -2467,6 +2818,10 @@ void Render(const char* mode)
 {
     if (!Display.IsActive() || !Display.BackBuffer())
         return;
+
+    // Advance the scripted input simulator before painting so any hover/down
+    // state change is reflected in this frame (no-op without --input-script).
+    InputSimTick(mode);
 
     if (strcmp(mode, "sector") == 0)
         return g_mapRenderer.RenderFrame();
@@ -2500,6 +2855,38 @@ void Render(const char* mode)
         return RenderUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return RenderUIPlyrStatusBarMode();
+    if (strcmp(mode, "ui-sidetabs") == 0)
+        return RenderUISideTabsMode();
+    if (strcmp(mode, "ui-sidebar") == 0)
+        return RenderUISidebarMode();
+    if (strcmp(mode, "ui-quickspell") == 0)
+        return RenderUIQuickSpellMode();
+    if (strcmp(mode, "ui-bottombar") == 0)
+        return RenderUIBottomBarMode();
+    if (strcmp(mode, "ui-barinv") == 0)
+        return RenderUIBarInvMode();
+    if (strcmp(mode, "ui-map") == 0)
+        return RenderUIMapMode();
+    if (strcmp(mode, "ui-spellbook") == 0)
+        return RenderUISpellbookMode();
+    if (strcmp(mode, "ui-spellcreate") == 0)
+        return RenderUISpellCreateMode();
+    if (strcmp(mode, "ui-stats") == 0)
+        return RenderUIStatsMode();
+    if (strcmp(mode, "ui-equip") == 0)
+        return RenderUIEquipMode();
+    if (strcmp(mode, "ui-inventory") == 0)
+        return RenderUIInventoryMode();
+    if (strcmp(mode, "ui-hud") == 0)
+        return RenderUIHudMode();
+    if (strcmp(mode, "ui-loadscreen") == 0)
+        return RenderUILoadScreenMode();
+    if (strcmp(mode, "ui-mainmenu") == 0)
+        return RenderUIMainMenuMode();
+    if (strcmp(mode, "ui-death") == 0)
+        return RenderUIDeathMode();
+    if (IsUIDefScreenMode(mode))
+        return RenderUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
         return RenderAudioMode();
     if (strcmp(mode, "vfx") == 0)
@@ -2509,6 +2896,14 @@ void Render(const char* mode)
 
 void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 {
+    if (strcmp(mode, "ui-mainmenu") == 0)
+        return HandleMouseClickUIMainMenuMode(button, x, y);
+    if (strcmp(mode, "ui-death") == 0)
+        return HandleMouseClickUIDeathMode(button, x, y);
+    if (IsUIDefScreenMode(mode))
+        return HandleMouseClickUIDefScreenMode(button, x, y);
+    if (strcmp(mode, "ui-sidebar") == 0 || strcmp(mode, "ui-hud") == 0)
+        return HandleMouseClickUISidebarMode(button, x, y);
     (void)x; (void)y;
     if (strcmp(mode, "char3d") == 0)
     {
@@ -2564,6 +2959,12 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 {
+    if (strcmp(mode, "ui-mainmenu") == 0)
+        return HandleMouseMoveUIMainMenuMode(x, y);
+    if (strcmp(mode, "ui-death") == 0)
+        return HandleMouseMoveUIDeathMode(x, y);
+    if (IsUIDefScreenMode(mode))
+        return HandleMouseMoveUIDefScreenMode(button, x, y);
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleMouseMove(button, x, y);
 }

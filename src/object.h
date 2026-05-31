@@ -1063,10 +1063,14 @@ class TObjectInstance : protected SObjectDef
   // Imagery pass through functions
     virtual PTBitmap GetStillImage(int32_t ostate = -1) { return imagery ? imagery->GetStillImage(ostate < 0 ? GetState() : ostate) : nullptr; }
         // Get still bitmap, if any
-    virtual PTBitmap InventoryImage() { return imagery ? imagery->GetInvImage(GetState()) : nullptr; }
-        // Returns bitmap for the inventory image
-    virtual bool IsInventoryItem() { return (imagery != nullptr && imagery->GetInvImage(GetState()) != nullptr); }
-        // Returns whether or not this item can go into an inventory
+    virtual PTBitmap InventoryImage();
+        // Returns bitmap for the inventory image. Retail FUN_0046f190: prefers the static
+        // `invitem` (GetInvImage); when null, falls back to frame 0 of the inventory
+        // animation (GetInvAnimation). Items shipped with only `invanim` (potions etc.)
+        // were invisible in the port until this fallback landed.
+    virtual bool IsInventoryItem();
+        // Inventory-eligible iff InventoryImage() would return non-null (matches retail's
+        // semantics: a baked invitem OR an invanim with at least one frame).
     virtual int32_t FindState(const char *name) const { return imagery ? imagery->FindState(name) : -1; }
         // Find a state in the object's imagery
     virtual int32_t FindTransitionState(const char *from, const char *to) const { return imagery ? imagery->FindTransitionState(from, to) : -1; }

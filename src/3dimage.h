@@ -297,8 +297,8 @@ class T3DImagery : public TObjectImagery
 
     virtual bool GetZ(TObjectInstance* oi, TSurface* surface) { return true; }
     virtual bool AlwaysOnTop(TObjectInstance* oi) { return true; }
-    virtual TBitmap* GetInvImage(int32_t state, int32_t num = 0);
-    virtual TAnimation* GetInvAnimation(int32_t state);
+    TBitmap* GetInvImage(int32_t state, int32_t num = 0) override;
+    TAnimation* GetInvAnimation(int32_t state) override;
 
     void AttachAnimatorComponents(TObjectInstance* oi);
     virtual TObjectAnimator* NewObjectAnimator(TObjectInstance* oi);

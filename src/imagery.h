@@ -373,15 +373,21 @@ class TObjectImagery : public TAsset
           entry->header->states[state].wregz = regz;
           entry->headerdirty = true; } }
       // Sets the world registration in world space
-    virtual PTBitmap GetStillImage(int32_t state, int32_t num = 0) const { return nullptr; }
+    // NOTE: these image getters are NON-const because the concrete overrides
+    // (T3DImagery, TAnimImagery) lazily InitializeMesh()/decode on first call.
+    // They were previously declared `const` here while the overrides were
+    // non-const — a silent signature mismatch, so the overrides did NOT override
+    // and every call through a TObjectImagery* hit these null stubs (no item
+    // icons, no portraits anywhere). Keep base and overrides non-const + marked.
+    virtual PTBitmap GetStillImage(int32_t state, int32_t num = 0) { return nullptr; }
         // Get still bitmap, if any
-    virtual PTAnimation GetAnimation(int32_t state) const { return nullptr; }
+    virtual PTAnimation GetAnimation(int32_t state) { return nullptr; }
         // Get animation for state
-    virtual PTBitmap GetInvImage(int32_t state, int32_t num = 0) const { return nullptr; }
+    virtual PTBitmap GetInvImage(int32_t state, int32_t num = 0) { return nullptr; }
         // Returns the inventory image for the item
-    virtual PTAnimation GetInvAnimation(int32_t state) const { return nullptr; }
+    virtual PTAnimation GetInvAnimation(int32_t state) { return nullptr; }
         // Get inventory animation for state
-    virtual uint32_t GetImageFlags(int32_t state) const { return 0; }
+    virtual uint32_t GetImageFlags(int32_t state) { return 0; }   // non-const: see image-getter note above
         // Gets imagery flags for state
     virtual const char *GetObjName(int32_t obj) const { return nullptr; }
         // Get the name of an object within the 3d mesh
