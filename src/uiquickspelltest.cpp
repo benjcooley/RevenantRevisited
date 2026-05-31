@@ -85,8 +85,15 @@ constexpr int32_t kPaneH = 0x3c;   // 60 — pane height (spec §3, retail bar p
 // have room to render. The bar-plate portion stays the bottom 60 px;
 // the labels live in the extra top margin and DrawSurface bottom-anchors
 // the whole RT to display_h - kStripH.
-constexpr int32_t kLabelMargin = 32;            // extra height above bar for 2-line label
-constexpr int32_t kStripH      = kPaneH + kLabelMargin;  // 92 — total RT height
+// Two-line label layout: per user 2026-05-30 ("spell names split by word,
+// first word above ring, second word below"), the strip RT extends both
+// ABOVE the bar plate (for line 1) and BELOW the ring (for line 2). Line 2
+// sits at the bottom of the bar plate / partially below it on the playfield.
+constexpr int32_t kLabelMarginAbove = 22;   // RT room above bar for line 1
+constexpr int32_t kLabelMarginBelow = 18;   // RT room below ring for line 2
+constexpr int32_t kStripH      = kPaneH + kLabelMarginAbove;
+// kStripH used for RT allocation; the below-bar label overlap is handled
+// via overdraw onto the bar's bottom edge / playfield (no extra RT pixels).
 
 // The 4 rings only occupy pane-x [10, 208]; the rest of pane width is
 // owned by the host bar's BarInv slots (spec §3 spacing arithmetic).
@@ -104,7 +111,7 @@ constexpr int32_t kStripW = 212;
 constexpr int32_t kBtnCount = 4;
 constexpr int32_t kBtnX[kBtnCount] = { 0x0a, 0x3c, 0x6e, 0xa0 };  // 10, 60, 110, 160
 constexpr int32_t kBtnYInBar       = 0x0a;                         // 10 in bar-local
-constexpr int32_t kBtnY            = kBtnYInBar + kLabelMargin;    // RT-local y
+constexpr int32_t kBtnY            = kBtnYInBar + kLabelMarginAbove; // RT-local y
 
 // --- ring sprite + click rect (spec §3 hit-rect-vs-sprite note) ------
 // Ring sprites are 48x48 stamped at (mbr_0x60, mbr_0x64); the inner
@@ -307,23 +314,20 @@ public:
                 }
             }
 
-            // (c) Two-line spell name label ABOVE the ring (UNCONFIRMED-D
-            //     per reference image — labels float over the playfield
-            //     above the bar plate, NOT on it). Cream color, centered,
-            //     3-pass black shadow (font flag 0x400 — same
-            //     SpellbookPane convention, spec §7/§8). Stack line 2
-            //     directly above the ring; line 1 above line 2.
+            // (c) Two-line spell name label SPLIT across the ring (per
+            //     user 2026-05-30: "spell names split by word, first
+            //     word above the ring, second word below"). Cream color,
+            //     centered, 3-pass black shadow (font flag 0x400 — same
+            //     SpellbookPane convention, spec §7/§8). Single-word
+            //     spells (e.g. "IronSkin") render line 1 only, placed
+            //     directly above the ring.
             if (g_font)
             {
                 const int32_t lineH  = (int32_t)(TextLineHeight(g_font) + 0.5f);
                 const bool hasLine2  = g_slots[i].labelLine2 && g_slots[i].labelLine2[0];
                 const int32_t cellX  = rx + kLabelDX;
-                // Line 2 sits directly above the ring (just above kBtnY).
-                const int32_t line2Y = kBtnY - lineH - 1;
-                // Line 1 sits one line above that. For single-line labels,
-                // skip the line-2 slot entirely so the name reads at line 2's
-                // position closest to the ring.
-                const int32_t line1Y = hasLine2 ? (line2Y - lineH) : line2Y;
+                const int32_t line1Y = kBtnY - lineH - 1;          // above ring
+                const int32_t line2Y = kBtnY + kRingH + 1;         // below ring
 
                 if (g_slots[i].labelLine1 && g_slots[i].labelLine1[0])
                     DrawTextShadowedToTarget(
