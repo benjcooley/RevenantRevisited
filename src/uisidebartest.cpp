@@ -40,6 +40,7 @@
 #include "surface.h"
 #include "testmodes.h"
 #include "time.h"
+#include "uidragstate.h"
 
 #include <cstdint>
 #include <cstring>
@@ -430,9 +431,84 @@ void CloseUISidebarMode()
     g_lastTickMs = 0.0;
 }
 
+// Hit-test the inventory 4x3 grid. Returns column-major slot index
+// 0..11 (col*3 + row + page*12) when (x,y) is inside a cell, -1 otherwise.
+// Per InventoryPane_SPEC: origin pane-local (8, 42), pitch 45x44,
+// interior 40x40, column-major.
+static int32_t HitInvSlot(int32_t x, int32_t y, int32_t page)
+{
+    const int32_t dw     = Display.Width();
+    const int32_t inv_x  = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    const int32_t inv_y  = kTopH;
+    constexpr int32_t kOriginX  = 8;
+    constexpr int32_t kOriginY  = 42;
+    constexpr int32_t kPitchX   = 45;
+    constexpr int32_t kPitchY   = 44;
+    constexpr int32_t kCellSize = 40;
+    constexpr int32_t kCols     = 4;
+    constexpr int32_t kRows     = 3;
+    const int32_t local_x = x - inv_x - kOriginX;
+    const int32_t local_y = y - inv_y - kOriginY;
+    if (local_x < 0 || local_y < 0) return -1;
+    const int32_t col = local_x / kPitchX;
+    const int32_t row = local_y / kPitchY;
+    if (col >= kCols || row >= kRows) return -1;
+    // Reject the inter-cell gap (cell content is 40px inside the 45/44 pitch).
+    const int32_t cell_lx = local_x - col * kPitchX;
+    const int32_t cell_ly = local_y - row * kPitchY;
+    if (cell_lx >= kCellSize || cell_ly >= kCellSize) return -1;
+    return page * (kCols * kRows) + col * kRows + row;
+}
+
 void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
 {
+    SHudState& s = GetHudState();
+
+    // ---- MouseUp: commit / cancel an in-flight drag -------------------
+    if (button == MB_LEFTUP)
+    {
+        if (!UIDragState::IsActive()) return;
+        // Find the drop target. For this test mode we only support Inv
+        // grid as a drop target; future passes wire BarInv + Equip too.
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+        {
+            const int32_t dest_slot = HitInvSlot(x, y, s.inventoryPage);
+            if (dest_slot >= 0)
+            {
+                // Always accept in this test (allowed_type == 0). Real
+                // Equip slots would gate on CanEquip here.
+                UIDragState::CompleteDrag(EDragSource::Inventory, dest_slot, true);
+                return;
+            }
+        }
+        // Released somewhere uninteresting → cancel.
+        UIDragState::Cancel();
+        return;
+    }
+
     if (button != MB_LEFTDOWN) return;
+
+    // ---- Inventory grid: click-down on a cell starts a drag ----------
+    // Click-on-bag would open the bag (per user: "Clicking on a bag in
+    // the inventory replaces the pack icon with a miniature image of the
+    // bag, and the inventory shows the contents of the bag."). The bag
+    // detection requires real item refs which the test harness doesn't
+    // have yet — for now any cell click starts a drag from that slot.
+    if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+    {
+        const int32_t slot = HitInvSlot(x, y, s.inventoryPage);
+        if (slot >= 0)
+        {
+            // Test harness has no real items — use the slot index as a
+            // synthetic "item id" stand-in (cast to nullptr-equivalent
+            // pointer with a non-null offset so logs distinguish slots).
+            TObjectInstance* fake_item =
+                reinterpret_cast<TObjectInstance*>(uintptr_t(slot + 1));
+            UIDragState::BeginDrag(EDragSource::Inventory, slot,
+                                   fake_item, x, y);
+            return;
+        }
+    }
 
     // --- Inventory page arrows (only when bottom slot = Inv) ---------
     // Per docs/ui/forensics/InventoryPane_SPEC.md:392/393:
