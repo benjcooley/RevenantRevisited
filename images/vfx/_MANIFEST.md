@@ -86,18 +86,33 @@ by parallel vision agents, then organized into per-effect subfolders for
 - Files: TeleportDoorInsideB__01.png ... TeleportDoorInsideB__04.png
   (orig shot_129, shot_130, shot_131, shot_142)
 
-### Teleporter/
-- Frame count: 40  *(+32 in batch 2)*
-- Confidence: high x4, medium x36
-- Files: Teleporter__01.png ... Teleporter__40.png
-  - __01 ... __08: batch 1 (orig shot_000, shot_001, shot_005, shot_056-060)
-  - __09 ... __26: batch 2 burst (orig batch2_001 ... batch2_018, blue cylinder
-    around character with stacked rings)
-  - __27 ... __33: batch 2 burst (orig batch2_029 ... batch2_035, ringed-pillar
-    teleport between figures)
-  - __34 ... __39: batch 2 burst (orig batch2_091 ... batch2_096, crystalline
-    diamond-lattice pillar around player)
-  - __40: batch 2 (orig batch2_090, initiating frame of the 091-096 burst)
+### Teleporter/  *(pad — Misc\IrisFlare.I3D)*
+- Frame count: 15
+- Confidence: high x4, medium x11
+- Files: Teleporter__01.png ... Teleporter__15.png
+  - __01 ... __08: batch 1 (orig shot_000, shot_001, shot_005, shot_056-060) —
+    ground-anchored ring-base pillar at Misthaven recall pad, no character
+    inside; classic IrisFlare PAD signature.
+  - __09 ... __15: batch 2 (orig batch2_090, batch2_091 ... batch2_096) —
+    crystalline diamond-lattice pillar at a fixed pavement location; second
+    NPC walks into the pillar from outside on __14 (decisive multi-actor
+    pad-interaction tell vs caster-centric spell).
+- Notes: Split out from the original 40-frame Teleporter capture. Frames that
+  showed a caster-centric blue cylinder / rings-around-character / vertical
+  beam transport moved to `teleportation/` (the SPELL).
+
+### teleportation/  *(spell — magic\Teleportation.i3d)*
+- Frame count: 25
+- Confidence: medium x25
+- Files: teleportation__01.png ... teleportation__25.png
+  - __01 ... __18: batch 2 burst (orig batch2_001 ... batch2_018, formerly
+    Teleporter__09 ... __26) — blue cylinder forming AROUND the dark-armored
+    caster with stacked rings rising up the body; brief duration.
+  - __19 ... __25: batch 2 burst (orig batch2_029 ... batch2_035, formerly
+    Teleporter__27 ... __33) — ringed-pillar / beam shaft phase, caster still
+    rooted at the base; spell transport visual.
+- Notes: Resplit from Teleporter on 2026-05-30 after recognizing the two
+  retail effects (stationary pad vs cast spell) share the visual family.
 
 ### YAbsorb/  *(new in batch 2)*
 - Frame count: 9
