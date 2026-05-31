@@ -1653,9 +1653,15 @@ void GetParameters(int argc, char **argv)
     if (arg_flag(cmd, "vfx-no-ui"))
         StartupVfxHideUi = true;
 
-  // --input-script / --mouse-script live on feature branches that carry
-  // testmodes.cpp's InputSim parser. Not yet wired into main; stub-skipped
-  // here so this revmain.cpp stays single-source across worktrees.
+  // INPUT-SCRIPT="..." (alias --mouse-script) — replay a scripted synthetic
+  // input sequence (mouse + keyboard) into the active --test mode (drive/verify
+  // UI without real input). Quote the value so the spaces/semicolons reach argv
+  // as one token. See StartupInputScript in testconfig.h for the vocabulary.
+    {
+        std::string p;
+        if (arg_param(cmd, "input-script", p) || arg_param(cmd, "mouse-script", p))
+            strncpyz(StartupInputScript, p.c_str(), sizeof(StartupInputScript));
+    }
 
   // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.
   // Empty = the default hard-coded pick (0_2_25, Misthaven).
@@ -2638,7 +2644,7 @@ static void AppEvent(const sapp_event* ev)
       {
         // While an --input-script owns the cursor, ignore hardware moves so the
         // script has exclusive control of cursorx/cursory + hover dispatch.
-        // (TestModes::InputScriptActive guard skipped — feature/ui only)
+        if (TestModes::InputScriptActive()) break;
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
@@ -2659,7 +2665,7 @@ static void AppEvent(const sapp_event* ev)
 
       case SAPP_EVENTTYPE_MOUSE_DOWN:
       {
-        // (TestModes::InputScriptActive guard skipped — feature/ui only)   // script owns the mouse
+        if (TestModes::InputScriptActive()) break;   // script owns the mouse
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
@@ -2679,7 +2685,7 @@ static void AppEvent(const sapp_event* ev)
 
       case SAPP_EVENTTYPE_MOUSE_UP:
       {
-        // (TestModes::InputScriptActive guard skipped — feature/ui only)   // script owns the mouse
+        if (TestModes::InputScriptActive()) break;   // script owns the mouse
         cursorx = (int32_t)ev->mouse_x;
         cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;

@@ -7,6 +7,7 @@
 #include "object.h"
 
 #include "3dscene.h"
+#include "animation.h"
 #include "command.h"
 #include "display.h"
 #include "dls.h"
@@ -1679,6 +1680,33 @@ void TObjectInstance::OffScreen()
         FreeLightIndex(lightdef.lightid);
         lightdef.lightid = -1;
     }
+}
+
+// Retail-faithful inventory-image lookup.
+//
+// Mirrors FUN_0046f190 (recon/classes_original/cls_0x5b8e94_TObjectInstance_Final.cpp
+// :283): try the static inventory bitmap first; if that's null, fall back to
+// the first frame of the inventory animation. Items shipped with only `invanim`
+// (potions are the prime example; see 3dimagebody.h's invanim slot) were
+// invisible in the port until this fallback landed because the previous
+// pass-through only consulted GetInvImage.
+PTBitmap TObjectInstance::InventoryImage()
+{
+    if (!imagery)
+        return nullptr;
+    const int32_t st = GetState();
+    if (PTBitmap bm = imagery->GetInvImage(st))
+        return bm;
+    if (PTAnimation anim = imagery->GetInvAnimation(st))
+        return anim->GetFrame(0);
+    return nullptr;
+}
+
+bool TObjectInstance::IsInventoryItem()
+{
+    // Cheap: reuse InventoryImage()'s eligibility (matches retail's "has a
+    // baked invitem OR an invanim" semantics).
+    return InventoryImage() != nullptr;
 }
 
 void TObjectInstance::GetFacingBoundBox(int32_t &nx, int32_t &ny, int32_t &nsx, int32_t &nsy)
