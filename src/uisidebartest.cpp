@@ -580,6 +580,94 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
 
     if (button != MB_LEFTDOWN) return;
 
+    // ---- Sidebar tab strip (TAKES PRECEDENCE over chrome-pane slots) -
+    // The tab strip is visually on top of the chrome panes' right edge
+    // (sokol composite z-order), so its hit-tests must run before the
+    // Equip / BarInv / Inv slot drag-sources — otherwise an Equip slot
+    // anchor that happens to overlap a tab button (e.g. EQ_AMMO @ (576,11)
+    // vs upper-Book tab @ (583,26)) swallows the click.
+    {
+        const int32_t dw      = Display.Width();
+        const int32_t strip_x = (dw > 0 ? dw : kStripW + kTabsRightInset) - kStripW - kTabsRightInset;
+        const int32_t strip_y = kTabsTopInset;
+        for (int32_t i = 0; i < kBtnCount; ++i)
+        {
+            const int32_t bx = strip_x + kBtnX;
+            const int32_t by = strip_y + kBtnY[i];
+            if (x < bx || x >= bx + kBtnW) continue;
+            if (y < by || y >= by + kBtnH) continue;
+
+            const int32_t mode = g_buttons[i].mode;
+            const char*   region;
+            if (g_buttons[i].region == 0) { s.topSlot    = mode; region = "top"; }
+            else                          { s.bottomSlot = mode; region = "bottom"; }
+            s.sidebarState = HUD_SIDEBAR_OPEN;
+
+            // Auto-pairing (DispatchCommand cases 7/9): Book↔Spell, Equip↔Inv.
+            bool paired = false;
+            if (s.topSlot == HUD_TOP_BOOK && g_buttons[i].region == 0)
+            { s.bottomSlot = HUD_BOT_SPELL; paired = true; }
+            else if (s.topSlot == HUD_TOP_EQUIP && g_buttons[i].region == 0)
+            { s.bottomSlot = HUD_BOT_INV;   paired = true; }
+            else if (s.bottomSlot == HUD_BOT_SPELL && g_buttons[i].region == 1)
+            { s.topSlot    = HUD_TOP_BOOK;  paired = true; }
+            else if (s.bottomSlot == HUD_BOT_INV && g_buttons[i].region == 1)
+            { s.topSlot    = HUD_TOP_EQUIP; paired = true; }
+
+            log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
+                     i, region, mode, paired ? " [paired]" : "",
+                     s.topSlot, s.bottomSlot);
+            return;
+        }
+    }
+
+    // ---- Spellbook scroll arrows (only when top slot = Book) ---------
+    // Per SpellbookPane_SPEC: up arrow at pane-local (169, 150),
+    // down arrow at (169, 174), each 20x26. Scroll ±40 per click.
+    if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+    {
+        const int32_t dw       = Display.Width();
+        const int32_t book_x   = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+        const int32_t book_y   = 0;
+        constexpr int32_t kArrLocalX = 169;
+        constexpr int32_t kUpY    = 150;
+        constexpr int32_t kDnY    = 174;
+        constexpr int32_t kArrW   = 20;
+        constexpr int32_t kArrH   = 26;
+        constexpr int32_t kStep   = 40;
+        const int32_t arrX = book_x + kArrLocalX;
+        if (x >= arrX && x < arrX + kArrW)
+        {
+            const int32_t upY = book_y + kUpY;
+            const int32_t dnY = book_y + kDnY;
+            if (y >= upY && y < upY + kArrH)
+            {
+                if (s.spellbookScroll > 0)
+                {
+                    s.spellbookScroll -= kStep;
+                    if (s.spellbookScroll < 0) s.spellbookScroll = 0;
+                    log_info("[ui-sidebar] spellbook up-arrow -> scroll=%d",
+                             s.spellbookScroll);
+                }
+                else
+                {
+                    log_info("[ui-sidebar] spellbook up-arrow (at top, no-op)");
+                }
+                return;
+            }
+            if (y >= dnY && y < dnY + kArrH)
+            {
+                // No upper limit gated here — retail would clamp to the
+                // last spell row; the test harness doesn't have real
+                // content so we just let it grow.
+                s.spellbookScroll += kStep;
+                log_info("[ui-sidebar] spellbook dn-arrow -> scroll=%d",
+                         s.spellbookScroll);
+                return;
+            }
+        }
+    }
+
     // ---- Inventory grid: click-down on a cell starts a drag ----------
     if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
     {
@@ -671,73 +759,7 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
         }
     }
 
-    // Mirror the same right-anchored placement used in DrawTabStrip.
-    const int32_t dw     = Display.Width();
-    const int32_t strip_x = (dw > 0 ? dw : kStripW + kTabsRightInset) - kStripW - kTabsRightInset;
-    const int32_t strip_y = kTabsTopInset;
-
-    // Hit-test the 6 buttons. Each is at (kBtnX, kBtnY[i]) within the strip,
-    // size kBtnW x kBtnH. Convert to screen coords and check (x, y).
-    for (int32_t i = 0; i < kBtnCount; ++i)
-    {
-        const int32_t bx = strip_x + kBtnX;
-        const int32_t by = strip_y + kBtnY[i];
-        if (x < bx || x >= bx + kBtnW) continue;
-        if (y < by || y >= by + kBtnH) continue;
-
-        SHudState& s = GetHudState();
-        // Per spec §10 modal mapping (matches g_buttons add-order):
-        //   Upper buttons (region 0): i=0 Book(mode 2), i=1 Stats(mode 1), i=2 Equip(mode 0)
-        //   Lower buttons (region 1): i=3 Spell(mode 2), i=4 Inv(mode 0),  i=5 Map(mode 1)
-        const int32_t mode = g_buttons[i].mode;
-        const char*   region;
-        if (g_buttons[i].region == 0)
-        {
-            s.topSlot = mode;
-            region = "top";
-        }
-        else
-        {
-            s.bottomSlot = mode;
-            region = "bottom";
-        }
-        s.sidebarState = HUD_SIDEBAR_OPEN;
-
-        // Auto-pairing (per FUN_0047cf40_TPlayScreen_DispatchCommand cases 7/9):
-        //   case 7  ("Spell view"): upper=2 Book + lower=2 Spell  — paired
-        //   case 9  ("Equip view"): upper=0 Equip + lower=0 Inv   — paired
-        //   case 8  (Stats only):   upper=1 Stats, lower untouched
-        //   case 11 (Inv only):     lower=0, upper untouched
-        //   case 12 (Map only):     lower=1, upper untouched
-        // So Stats / Map clicks are "solo"; Book / Equip / Spell / Inv pair.
-        // User confirmed 2026-05-30: "spell list and spell construction
-        // panels are tied together".
-        bool paired = false;
-        if (s.topSlot == HUD_TOP_BOOK && g_buttons[i].region == 0)
-        {
-            s.bottomSlot = HUD_BOT_SPELL;
-            paired = true;
-        }
-        else if (s.topSlot == HUD_TOP_EQUIP && g_buttons[i].region == 0)
-        {
-            s.bottomSlot = HUD_BOT_INV;
-            paired = true;
-        }
-        else if (s.bottomSlot == HUD_BOT_SPELL && g_buttons[i].region == 1)
-        {
-            s.topSlot = HUD_TOP_BOOK;
-            paired = true;
-        }
-        else if (s.bottomSlot == HUD_BOT_INV && g_buttons[i].region == 1)
-        {
-            s.topSlot = HUD_TOP_EQUIP;
-            paired = true;
-        }
-
-        log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
-                 i, region, mode,
-                 paired ? " [paired]" : "",
-                 s.topSlot, s.bottomSlot);
-        return;
-    }
+    // (Tab strip already handled at the top of the LEFTDOWN section,
+    // before chrome-pane slot hit-tests, so it takes precedence on
+    // overlapping coords.)
 }

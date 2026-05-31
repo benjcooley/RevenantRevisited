@@ -1,0 +1,38 @@
+# Spellbook scroll-arrow click test.
+# Pair with: --test=ui-hud --headless --filmstrip=6,0
+#   --snapprefix=sidebar/spellbook-
+#   --input-script="$(cat tools/uitests/spellbook_scroll.script)"
+#
+# Pre-conditions: top slot must be Book. Default ui-hud init has
+# topSlot=Equip so we click upper-Book first to switch.
+#
+# Arrow screen coords (Classic 640x480, Book pane at 452,0):
+#   up   arrow: pane-local (169, 150) 20x26 → screen (621, 150)..(641, 176) center (631, 163)
+#   down arrow: pane-local (169, 174) 20x26 → screen (621, 174)..(641, 200) center (631, 187)
+# (Inside tab-strip footprint per retail layout; clicks still reach.)
+#
+# 6 captures: switch to Book → 3 down clicks (0 → 40 → 80 → 120) → 1 up (80) → 1 up (40)
+
+log switch_to_book;
+moveto 601 43 200; pause 100; left_down; pause 80; left_up; pause 200;
+take_snapshot Book view scroll=0;
+
+log scroll_down_1;
+moveto 631 187 200; pause 100; left_down; pause 80; left_up; pause 200;
+take_snapshot scroll down 1 = 40;
+
+log scroll_down_2;
+moveto 631 187 100; pause 100; left_down; pause 80; left_up; pause 200;
+take_snapshot scroll down 2 = 80;
+
+log scroll_down_3;
+moveto 631 187 100; pause 100; left_down; pause 80; left_up; pause 200;
+take_snapshot scroll down 3 = 120;
+
+log scroll_up_1;
+moveto 631 163 200; pause 100; left_down; pause 80; left_up; pause 200;
+take_snapshot scroll up 1 = 80;
+
+log scroll_up_2;
+moveto 631 163 100; pause 100; left_down; pause 80; left_up; pause 200;
+take_snapshot scroll up 2 = 40
