@@ -48,18 +48,18 @@ class TAnimImagery : public TObjectImagery
         // Causes image to draw selection (hilighting) around itself
     virtual bool AlwaysOnTop(TObjectInstance* oi);
         // Lit imagery is always on top because it has no zbuffer
-    virtual PTBitmap GetStillImage(int32_t state, int32_t num = 0)
+    PTBitmap GetStillImage(int32_t state, int32_t num = 0) override
       { return (PTBitmap)GetAnimState(state)->still.ptr(); }
       // Returns the still image for the item
-    virtual PTBitmap GetInvImage(int32_t state, int32_t num = 0)
+    PTBitmap GetInvImage(int32_t state, int32_t num = 0) override
       { return (PTBitmap)GetAnimState(state)->invitem.ptr(); }
       // Returns the inventory image for the item
-    virtual PTAnimation GetInvAnimation(int32_t state)
+    PTAnimation GetInvAnimation(int32_t state) override
       { return (PTAnimation)GetAnimState(state)->invanim.ptr(); }
         // Get inventory animation for state
-    virtual PTAnimation GetAnimation(int32_t state) { return (PTAnimation)GetAnimState(state)->anim.ptr(); }
+    PTAnimation GetAnimation(int32_t state) override { return (PTAnimation)GetAnimState(state)->anim.ptr(); }
         // Get animation for state
-    virtual uint32_t GetImageFlags(int32_t state) { return GetAnimState(state)->flags; }
+    uint32_t GetImageFlags(int32_t state) override { return GetAnimState(state)->flags; }
         // Gets imagery flags for state
     virtual int32_t GetAniLength(int32_t state)
       { if (GetAnimation(state)) return GetAnimation(state)->NumFrames(); return 0; }

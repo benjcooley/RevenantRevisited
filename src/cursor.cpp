@@ -18,6 +18,8 @@
 #include "playscreen.h"
 #include "renderer.h"
 
+#include <sokol_app.h>
+
 // Globals for storing current mouse imagery
 PTBitmap MouseCursor = nullptr;
 PTBitmap MouseShadow = nullptr;
@@ -31,6 +33,11 @@ bool priority;                      // Priority of mouse image
 // OS pointer. On platforms without the OS handoff it stays false and
 // the original in-game draw runs.
 static bool g_os_cursor_owns_pixels = false;
+
+// When false, the OS/hardware pointer is suppressed and TCursorHud draws the
+// game cursor bitmap in-frame at (cursorx, cursory). Toggled via
+// SetHardwareCursorEnabled (see cursor.h). Default: hardware cursor enabled.
+static bool g_hw_cursor_enabled = true;
 
 PTBitmap DragBitmap = nullptr;
 int32_t grabx, graby;
@@ -69,7 +76,7 @@ void SetMouseBitmap(PTBitmap cursor)
     // at all. Fall back to the in-game TCursorHud draw + sapp_show_mouse
     // (false) in that case. (macOS-only today; the non-macOS stub also
     // returns false and the same fallback applies.)
-    if (cursor && Windowed)
+    if (cursor && Windowed && g_hw_cursor_enabled)
     {
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(cursor, cursor->regx, cursor->regy);
         if (!g_os_cursor_owns_pixels)
@@ -81,9 +88,34 @@ void SetMouseBitmap(PTBitmap cursor)
     }
 }
 
+void SetHardwareCursorEnabled(bool enabled)
+{
+    g_hw_cursor_enabled = enabled;
+    if (enabled)
+    {
+        // Re-show the OS pointer and re-push the current cursor pixels so the
+        // OS owns the pointer again; TCursorHud then suppresses its in-frame
+        // draw (RefreshOSCursor sets g_os_cursor_owns_pixels on success).
+        sapp_show_mouse(true);
+        RefreshOSCursor();
+    }
+    else
+    {
+        // Hide the OS pointer and force the in-frame TCursorHud draw to run.
+        rev_platform::ResetOSCursor();
+        sapp_show_mouse(false);
+        g_os_cursor_owns_pixels = false;
+    }
+}
+
+bool HardwareCursorEnabled()
+{
+    return g_hw_cursor_enabled;
+}
+
 void RefreshOSCursor()
 {
-    if (MouseCursor && Windowed)
+    if (MouseCursor && Windowed && g_hw_cursor_enabled)
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(
             MouseCursor, MouseCursor->regx, MouseCursor->regy);
 }
