@@ -2904,15 +2904,22 @@ class TFireSwarmEffect_Bespoke : public TEffect
 // Kill when frame>=BURN_FRAME (=50) and to_add==0 and all particles done.
 // Blend = AdditiveStraight (snapshot SetAddBlendState, fire-family).
 //
-// First-pass NOTE: the harness has no live TCharacter rig wired for the
-// random-bone emit, so the bone-emit path is simplified to spawn from
-// the effect's origin + ±BURN_SPREAD jitter on each axis. The per-tick
-// physics (velocity, life, decay, fire→smoke promotion) is preserved
-// verbatim. CharacterRig integration is a follow-up — for now the
-// harness entry uses preview_style=Static so the effect spawns at a
-// fixed origin and runs its full ramp-up / ramp-down / drain cycle.
+// Iter1 NOTE: the harness has no live TCharacter rig wired for the
+// random-bone emit, so the snapshot's `ca->GetObjectMatrix(j) * MakeMatrix`
+// chain is approximated by synthesising a vertical array of "bone"
+// positions (12 anchors spaced along Z=[0..96]) that stand in for a
+// humanoid actor's mesh sub-objects. Each spawn picks a random index j
+// in [0, size_-1] and uses bones_[j] as the bone world position, then
+// applies ±BURN_SPREAD jitter on each axis (snapshot :3387-3389). The
+// per-tick physics (velocity, life, decay, fire→smoke promotion) is
+// preserved verbatim. Full CharacterRig integration replaces the
+// synthetic bones once preview_style=CharacterIdle is wired through.
 
 constexpr int32_t kBurnBespokeCount = 70;     // BURN_COUNT (effect.h:1526)
+
+// Number of synthetic "bones" used to scatter spawns vertically in the
+// harness when no live CharAnimator is available (Iter1 fix #2).
+constexpr int32_t kBurnBespokeSyntheticBones = 12;
 
 // One particle slot — collapsed from SParticleSystemInfo
 // (src/effectcomp.h:357-372) into a compact bespoke record. `system`
@@ -2961,12 +2968,20 @@ class TBurnEffect_Bespoke : public TEffect
 
   private:
     SBurnBespokeParticle particles_[kBurnBespokeCount * 2] {};   // fire + smoke arenas (flat)
+    // Synthetic bone positions (world-space deltas off the effect's own
+    // origin) — populated in SpawnForTest_BESPOKE to stand in for
+    // `ca->GetObjectMatrix(j)`. See class comment above. (Iter1 fix #2.)
+    hmm_vec3             bones_[kBurnBespokeSyntheticBones] {};
     int32_t              frame_         = 0;     // snapshot's animator-side frame counter
     int32_t              to_add_        = 0;     // per-tick spawn cap (ramps 0..8..0)
-    int32_t              size_          = 1;     // ca->NumObjects() — 1 for harness (no rig)
+    int32_t              size_          = kBurnBespokeSyntheticBones;  // ca->NumObjects() — synthetic in harness
     TTextureHandle       tex_fire_      = kInvalidTexture;       // smoke01 sub-object
     TTextureHandle       tex_smoke_     = kInvalidTexture;       // smoke sub-object
-    float                base_size_wu_  = 48.0f;
+    // Authored I3D quad size in world units — burnbabyburn.I3D's quads
+    // are approximately character-height (~80wu) per forensics §4. The
+    // snapshot's per-particle scl ∈ [0.15, 0.40] then yields per-quad
+    // 12–32 wu, which matches the reference column width (Iter1).
+    float                base_size_wu_  = 80.0f;
     bool                 alive_         = true;
     double               sim_accum_ms_  = 0.0;
 };
