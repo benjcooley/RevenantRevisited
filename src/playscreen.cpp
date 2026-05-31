@@ -516,6 +516,22 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
                  kd ? kd->statreqs[0] : -1, kd ? kd->statreqs[1] : -1,
                  kd ? kd->statreqs[2] : -1, kd ? kd->statreqs[3] : -1,
                  kd ? kd->statreqs[4] : -1, kd ? kd->statreqs[5] : -1);
+
+        // One-shot dump of Locke's animation state names + their play-tag
+        // counts. Answers two open questions: does a "run" state exist
+        // (run-mode toggle), and which states carry "play" sound tags
+        // (footsteps). Remove once both are wired.
+        if (TObjectImagery *img = p->GetImagery())
+        {
+            const int32_t n = img->NumStates();
+            log_info("[anim-dump] Locke has %d animation states:", n);
+            for (int32_t i = 0; i < n; i++)
+            {
+                SImageryHeader *hdr = img->GetHeader();
+                const char *nm = (hdr && i < hdr->numstates) ? hdr->states[i].animname : "?";
+                log_info("[anim-dump]   [%d] '%s'", i, nm ? nm : "?");
+            }
+        }
     }
 
     return true;
@@ -1046,6 +1062,25 @@ void TPlayScreen::UpdateMove()
 
     uint32_t state, changed;
     ControlMap.GetCommandFlags(state, changed);
+
+    // Run / sneak mode toggles. The 'R' and 'S' (in sneak-mode binding)
+    // keys carry a CMDFLAG_RUN / CMDFLAG_SNEAK bit alongside their
+    // GAMECMD_MOVEDOWN dispatch -- ControlMap maintains the bit while
+    // held, and `changed` flags the bits that flipped this poll. Press
+    // edge -> swap the player's root animation to run/sneak; release
+    // edge -> swap back to walk. Both keyboard direction keys AND the
+    // mouse walk-to path then naturally pick up the new root, so
+    // hold-R + right-click runs toward the cursor, etc.
+    if (changed & CMDFLAG_RUN)
+    {
+        if (state & CMDFLAG_RUN) Player->SetRunMode();
+        else                     Player->SetWalkMode();
+    }
+    if (changed & CMDFLAG_SNEAK)
+    {
+        if (state & CMDFLAG_SNEAK) Player->SetSneakMode();
+        else                       Player->SetWalkMode();
+    }
 
     // Synthesize diagonal flags from adjacent cardinals so keyboards
     // without a Home / PgUp / End / PgDn cluster can still walk

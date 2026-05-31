@@ -136,21 +136,7 @@ class TGameModeImpl final : public IRuntimeMode
       // combat mode. ControlMap.GetCommand returns the *first* binding
       // whose mode mask intersects modemask, so we have to pass exactly
       // the active mode — ALLMODES would always pick the earlier entry.
-      // CTRL_* constants mirror those in playscreen.cpp's keybind table.
-        constexpr uint32_t CTRL_NORMALMODE    = 1;
-        constexpr uint32_t CTRL_COMBATMODE    = 2;
-        constexpr uint32_t CTRL_BOWMODE       = 4;
-        constexpr uint32_t CTRL_SNEAKMODE     = 8;
-        constexpr uint32_t CTRL_INVENTORYMODE = 16;
-        uint32_t modemask = CTRL_NORMALMODE;
-        if (Player)
-        {
-            if (Player->IsCombat())        modemask = CTRL_COMBATMODE;
-            else if (Player->IsBowMode())  modemask = CTRL_BOWMODE;
-            else if (Player->IsSneakMode())modemask = CTRL_SNEAKMODE;
-            // Inventory-mode is UI-driven (not a TCharacter mode); leave it
-            // unset for now — combat demos don't open the inventory pane.
-        }
+        const uint32_t modemask = CurrentModeMask();
         int32_t cmd = ControlMap.GetCommand(key, down, modemask);
 
         if (Player && PlayScreen.IsControlOn() && !PlayScreen.IsDemoMode() &&
@@ -228,10 +214,12 @@ class TGameModeImpl final : public IRuntimeMode
             return true;
 
           case MB_RIGHTUP:
-            // Stop walking + revert to the default arrow cursor.
+            // Stop walking: release the synthesized joystick direction so
+            // UpdateMove sees no direction next tick and stops the player.
+            // Revert to the default cursor.
             if (walking)
             {
-                Player->Stop();
+                ReleaseMouseWalkKey();
                 walking = false;
                 if (GameData)
                     if (PTBitmap cursor = GameData->Bitmap("cursor"))
@@ -266,10 +254,42 @@ class TGameModeImpl final : public IRuntimeMode
     }
 
   private:
-    // Compute the walk-to angle from the cursor's world projection to
-    // the player, push the matching wedge cursor + ask the player to
-    // start walking that way. Called on right-down and on right-button
-    // drag.
+    // Control-mode mask for ControlMap lookups (mirrors the keybind
+    // table's CTRL_* in playscreen.cpp). Same value HandleKey and the
+    // mouse-walk joystick synthesis both need.
+    static uint32_t CurrentModeMask()
+    {
+        constexpr uint32_t CTRL_NORMALMODE = 1, CTRL_COMBATMODE = 2,
+                           CTRL_BOWMODE = 4, CTRL_SNEAKMODE = 8;
+        uint32_t m = CTRL_NORMALMODE;
+        if (Player)
+        {
+            if (Player->IsCombat())         m = CTRL_COMBATMODE;
+            else if (Player->IsBowMode())   m = CTRL_BOWMODE;
+            else if (Player->IsSneakMode()) m = CTRL_SNEAKMODE;
+        }
+        return m;
+    }
+
+    // Release the currently-synthesized mouse-walk joystick direction (if
+    // any) through ControlMap, clearing its CMDFLAG so UpdateMove stops
+    // driving that direction.
+    void ReleaseMouseWalkKey()
+    {
+        if (mouse_walk_key >= 0)
+        {
+            ControlMap.GetCommand(mouse_walk_key, false, CurrentModeMask());
+            mouse_walk_key = -1;
+        }
+    }
+
+    // Drive walk-to by synthesizing the matching joystick direction key,
+    // exactly as retail's TMapPane::UpdateMouseMovement did. This feeds
+    // the SAME ControlMap → cmdflag → UpdateMove path the keyboard uses,
+    // so run (R / CMDFLAG_RUN), sneak, block, etc. compose for free and
+    // there's a single movement driver. (The previous direct Player->Go
+    // bypassed UpdateMove, so R-while-mouse-walking didn't run and the
+    // two drivers fought.) Called on right-down and right-button drag.
     void ApplyWalkCursor(int32_t screen_x, int32_t screen_y)
     {
         S3DPoint curpos;
@@ -284,29 +304,29 @@ class TGameModeImpl final : public IRuntimeMode
         S3DPoint target;
         mr->ScreenToWorld(screen_x, screen_y, curpos.z + 50, target);
 
-        const S3DPoint dvec = { target.x - curpos.x,
-                                target.y - curpos.y,
-                                0 };
-        // Dead-zone: clicks inside the player's own footprint stop
-        // motion rather than asking the engine to walk zero distance.
-        if (absval(dvec.x) < 16 && absval(dvec.y) < 16)
+        // Dead-zone: cursor inside the player's own footprint releases the
+        // walk key (stop) and shows the normal cursor.
+        if (absval(target.x - curpos.x) < 16 && absval(target.y - curpos.y) < 16)
         {
-            Player->Stop();
+            ReleaseMouseWalkKey();
             if (GameData)
                 if (PTBitmap cursor = GameData->Bitmap("cursor"))
                     SetMouseBitmap(cursor);
             return;
         }
 
-        int32_t angle = ConvertToFacing(curpos, target);
+        const int32_t angle = ConvertToFacing(curpos, target);
 
-        // 8-way wedge cursor. Snap angle to the nearest 45deg slot
-        // (Revenant's angle space is 0..255; +0x10 rounds before the
-        // mask). Directions[] is { ne, e, se, s, sw, w, nw, n, ne }.
+        // Snap to the nearest 45deg slot (Revenant angle space is 0..255;
+        // +0x10 rounds before the mask). dir_idx maps to both the wedge
+        // bitmap suffix and the joystick key. Index order matches the
+        // legacy Directions[] = { ne, e, se, s, sw, w, nw, n }.
         static const char *kDirections[] =
-            { "ne", "e", "se", "s", "sw", "w", "nw", "n", "ne" };
-        const int32_t snapped = (angle + 0x10) & 0xe0;
-        const int32_t dir_idx = snapped >> 5;
+            { "ne", "e", "se", "s", "sw", "w", "nw", "n" };
+        static const int32_t kJoyKeys[] =
+            { VK_JOYUPRIGHT, VK_JOYRIGHT, VK_JOYDOWNRIGHT, VK_JOYDOWN,
+              VK_JOYDOWNLEFT, VK_JOYLEFT, VK_JOYUPLEFT, VK_JOYUP };
+        const int32_t dir_idx = ((angle + 0x10) & 0xe0) >> 5;
 
         if (GameData)
         {
@@ -320,10 +340,22 @@ class TGameModeImpl final : public IRuntimeMode
                 SetMouseShadow(shadow, 0, 43);
         }
 
-        Player->Go(angle);
+        // Swap the synthesized joystick direction if it changed. UpdateMove
+        // reads the resulting CMDFLAG every tick and issues Player->Go with
+        // whatever mode (walk/run/sneak) is active.
+        const int32_t joykey = kJoyKeys[dir_idx];
+        if (joykey != mouse_walk_key)
+        {
+            const uint32_t mode = CurrentModeMask();
+            if (mouse_walk_key >= 0)
+                ControlMap.GetCommand(mouse_walk_key, false, mode);
+            ControlMap.GetCommand(joykey, true, mode);
+            mouse_walk_key = joykey;
+        }
     }
 
-    bool walking = false;
+    bool    walking = false;
+    int32_t mouse_walk_key = -1;   // synthesized joystick dir key, -1 = none
 };
 
 class TEditorModeImpl final : public IRuntimeMode

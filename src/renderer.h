@@ -719,6 +719,15 @@ public:
     // sub-rect of the padded G-buffer. Returns true if it drew anything.
     bool PresentToSwapchain();
 
+    // Same composite as PresentToSwapchain, but ignores the dirty flags so
+    // the framesnap mirror pass can re-emit the last frame's final image
+    // into its own offscreen RT *after* PresentToSwapchain already cleared
+    // the dirty state for the real swapchain pass. The lit_target /
+    // color_target textures still hold valid pixels at that point; the
+    // dirty flags only signal "we've already presented this frame". No-op
+    // if neither target has ever been written.
+    bool PresentForSnap();
+
     // -------- HUD layer ----------------------------------------------------
     // HUD layer composites on top of the 3D scene during the swapchain
     // pass. Each HUD widget subclasses THudDrawable and implements
@@ -737,7 +746,7 @@ public:
     // PTBitmap -> cached GPU texture, then quad blit. The renderer
     // caches by bitmap identity so repeat calls cost an unordered_map
     // lookup. Caller never sees TTextureHandle for HUD purposes.
-    void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y);
+    void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y, bool prefer_alias = false);
     // Subrect variant — blits the (src_x, src_y, src_w, src_h) region of
     // bm to (dst_x, dst_y). Used for sprite-atlas panels (e.g. the
     // TPlyrStatusBar `Bars` 128x128 atlas that holds 3 bar colours
@@ -919,7 +928,7 @@ private:
     // calls for the same bitmap are O(1).
     std::unordered_map<uintptr_t, TTextureHandle> bitmap_texture_cache;
     // Get-or-create a TTextureHandle for the given bitmap.
-    TTextureHandle BitmapAsTexture(PTBitmap bm);
+    TTextureHandle BitmapAsTexture(PTBitmap bm, bool prefer_alias = false);
 
     // Registered HUD drawables + their z-order. Renderer owns this
     // metadata; the drawable itself doesn't carry z. Sorted on demand
