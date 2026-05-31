@@ -1,13 +1,14 @@
 # VFX Reference Screenshot Manifest
 
-Captured 2026-05-30. 143 in-game effect screenshots classified against
-the 174-entry retail effect inventory by parallel vision agents, then
-organized into per-effect subfolders for `snap_ab --ref` consumption.
+Captured in two batches (2026-05-30 and 2026-05-30 batch 2). 275 in-game
+effect screenshots classified against the 174-entry retail effect inventory
+by parallel vision agents, then organized into per-effect subfolders for
+`snap_ab --ref` consumption.
 
-- Total screenshots: 143
-- Classified into per-effect folders: 86
+- Total screenshots: 275 (batch 1: 143, batch 2: 132)
+- Classified into per-effect folders: 164 (batch 1: 86, batch 2: 78)
 - Borderline (low-confidence + no-effect) parked in `_unclassified/`
-  with `maybe_<guess>__` prefix: 57
+  with `maybe_<guess>__` prefix: 111 (batch 1: 57, batch 2: 54)
 
 ## Per-effect folders
 
@@ -51,10 +52,28 @@ organized into per-effect subfolders for `snap_ab --ref` consumption.
 - Confidence: medium x8
 - Files: Icedsparks__01.png ... Icedsparks__08.png (orig shot_051-055, shot_126-128)
 
+### Lightning/  *(new in batch 2)*
+- Frame count: 2
+- Confidence: medium x2
+- Files: Lightning__01.png ... Lightning__02.png (orig batch2_088, batch2_089)
+
 ### Photon/
 - Frame count: 13
 - Confidence: medium x13
 - Files: Photon__01.png ... Photon__13.png (orig shot_036-042, shot_066-071)
+
+### Restorelife/  *(new in batch 2)*
+- Frame count: 5
+- Confidence: medium x3, high x2
+- Files: Restorelife__01.png ... Restorelife__05.png (orig batch2_126 ... batch2_130)
+- Notes: Item-consumption rejuvenation buff; subtitle "The item was consumed.
+  You feel rejuvenated" confirms identity on frame 04.
+
+### RockStorm/  *(new in batch 2)*
+- Frame count: 6
+- Confidence: medium x1, high x5
+- Files: RockStorm__01.png ... RockStorm__06.png (orig batch2_078 ... batch2_083)
+- Notes: Falling boulder sequence — likely Magic\Rocks.I3D.
 
 ### Storm/
 - Frame count: 5
@@ -68,61 +87,131 @@ organized into per-effect subfolders for `snap_ab --ref` consumption.
   (orig shot_129, shot_130, shot_131, shot_142)
 
 ### Teleporter/
-- Frame count: 8
-- Confidence: high x4, medium x4
-- Files: Teleporter__01.png ... Teleporter__08.png
-  (orig shot_000, shot_001, shot_005, shot_056-060)
+- Frame count: 40  *(+32 in batch 2)*
+- Confidence: high x4, medium x36
+- Files: Teleporter__01.png ... Teleporter__40.png
+  - __01 ... __08: batch 1 (orig shot_000, shot_001, shot_005, shot_056-060)
+  - __09 ... __26: batch 2 burst (orig batch2_001 ... batch2_018, blue cylinder
+    around character with stacked rings)
+  - __27 ... __33: batch 2 burst (orig batch2_029 ... batch2_035, ringed-pillar
+    teleport between figures)
+  - __34 ... __39: batch 2 burst (orig batch2_091 ... batch2_096, crystalline
+    diamond-lattice pillar around player)
+  - __40: batch 2 (orig batch2_090, initiating frame of the 091-096 burst)
+
+### YAbsorb/  *(new in batch 2)*
+- Frame count: 9
+- Confidence: medium x3, high x6
+- Files: YAbsorb__01.png ... YAbsorb__09.png
+  (orig batch2_062, batch2_064, batch2_065, batch2_066 ... batch2_071)
+- Notes: Boss-tier purple-energy dome absorbing/charging effect around
+  kneeling figure. Y-prefix late-game variant.
+
+### Ymanadrain/  *(new in batch 2)*
+- Frame count: 3
+- Confidence: medium x3
+- Files: Ymanadrain__01.png ... Ymanadrain__03.png
+  (orig batch2_025, batch2_026, batch2_027)
+- Notes: Dramatic purple/violet swirling cloud around character — late-game
+  boss magic (Y-prefix variant).
 
 ### cataclysm/
-- Frame count: 4
-- Confidence: medium x4
-- Files: cataclysm__01.png ... cataclysm__04.png (orig shot_095 ... shot_098)
+- Frame count: 8  *(+4 in batch 2)*
+- Confidence: medium x8
+- Files: cataclysm__01.png ... cataclysm__08.png
+  - __01 ... __04: batch 1 (orig shot_095 ... shot_098)
+  - __05 ... __08: batch 2 (orig batch2_084 ... batch2_087, rocks on floor +
+    cyan bursts + red ribbon-trail perimeter sweep)
+
+### cfire/  *(new in batch 2)*
+- Frame count: 3
+- Confidence: medium x3
+- Files: cfire__01.png ... cfire__03.png
+  (orig batch2_108 ... batch2_110)
+- Notes: Stationary brazier flame — cave/environment ambient fire.
 
 ### combatflash/
-- Frame count: 1
-- Confidence: medium x1
-- Files: combatflash__01.png (orig shot_064)
+- Frame count: 2  *(+1 in batch 2)*
+- Confidence: medium x2
+- Files: combatflash__01.png ... combatflash__02.png
+  - __01: batch 1 (orig shot_064)
+  - __02: batch 2 (orig batch2_053, large bright white-yellow burst on
+    sword-strike impact)
 
 ### fgeyser/
 - Frame count: 6
 - Confidence: medium x6
 - Files: fgeyser__01.png ... fgeyser__06.png (orig shot_006 ... shot_011)
 
+### magicshield/  *(new in batch 2)*
+- Frame count: 5
+- Confidence: medium x5
+- Files: magicshield__01.png ... magicshield__05.png
+  (orig batch2_072 ... batch2_076)
+- Notes: Purple/violet energy bubble around character with crackling sparks.
+  Could alternatively be a YAbsorb variant — verify against retail asset.
+
+### ymaelstrom/  *(new in batch 2)*
+- Frame count: 8
+- Confidence: medium x8
+- Files: ymaelstrom__01.png ... ymaelstrom__08.png
+  (orig batch2_036 ... batch2_043)
+- Notes: Vertical column of stacked blue glowing rings/orbs forming a
+  twisting vortex column. Late-game boss-tier blue spell.
+
+## Batch 2 additions (2026-05-30)
+
+Newly created folders:
+- `Lightning/` (2)
+- `Restorelife/` (5)
+- `RockStorm/` (6)
+- `YAbsorb/` (9)
+- `Ymanadrain/` (3)
+- `cfire/` (3)
+- `magicshield/` (5)
+- `ymaelstrom/` (8)
+
+Existing folders that received batch-2 frames:
+- `Teleporter/` (+32 → 40)
+- `cataclysm/` (+4 → 8)
+- `combatflash/` (+1 → 2)
+
+Batch-2 frames sent to `_unclassified/` (low confidence): 54
+- Halo: 1 (batch2_019)
+- Antimagic: 5 (batch2_020-024)
+- Teleporter: 1 (batch2_028, start of medium burst — kept separate per
+  low-confidence rule)
+- ymaelstrom: 2 (batch2_044-045, aftermath sparkles)
+- YAbsorb: 10 (batch2_046-048 crystal/gem; batch2_056-061, 063 purple-orb
+  warm-up)
+- YEnergy: 5 (batch2_049-051, batch2_124-125)
+- StrikeEffect: 1 (batch2_052)
+- combatflash: 2 (batch2_054-055, blue-white sparkle variant)
+- no-effect / unknown: 2 (batch2_077 thin red sliver, batch2_132 unlabelled)
+- Teleporter: 7 (batch2_097-103, tail of teleport-pillar burst)
+- LabyrinthEffect: 4 (batch2_104-107, dark labyrinth interior, very low
+  intensity)
+- Ycataclysm: 13 (batch2_111-123, full purple-sparkle cast sequence by
+  tentacled caster — long burst kept together)
+- Sparks: 1 (batch2_131)
+
 ## _unclassified/
 
-57 borderline frames (all low-confidence guesses, or "no-effect")
-prefixed with `maybe_<guess>__` so a human reviewer can scan the agent's
-best guess without it being trusted as ground truth.
+111 borderline frames total (batch 1: 57, batch 2: 54). All are
+low-confidence guesses or "no-effect" frames, prefixed with
+`maybe_<guess>__` so a human reviewer can scan the agent's best guess
+without it being trusted as ground truth.
 
-First 10 filenames:
-- maybe_Blast__shot_025.png
-- maybe_Blast__shot_094.png
-- maybe_Burn__shot_120.png
-- maybe_CampSign__shot_015.png
-- maybe_CampSign__shot_016.png
-- maybe_CampSign__shot_017.png
-- maybe_CampSign__shot_104.png
-- maybe_CampSign__shot_105.png
-- maybe_CampSign__shot_106.png
-- maybe_CampSign__shot_107.png
-
-Distribution of `maybe_` guesses:
-- maybe_Blast: 2
-- maybe_Burn: 1
-- maybe_CampSign: 7 (shot_015-017, shot_104-107)
-- maybe_Fairy: 1
-- maybe_Faultfire: 9 (shot_031-034, shot_075-076, shot_101-103)
-- maybe_FireBall: 3
-- maybe_FireFlash: 1
-- maybe_Lightning: 1
-- maybe_Photon: 1
-- maybe_Pixie: 3 (shot_072-074)
-- maybe_StillWater: 3 (shot_061-063)
-- maybe_Teleporter: 4 (shot_108-111)
-- maybe_Warriorborn: 1
-- maybe_cataclysm: 4 (shot_002-004, shot_099)
-- maybe_funnel: 3 (shot_012-014)
-- maybe_magicshield: 10 (shot_132-141)
-- maybe_no-effect: 3 (shot_044, shot_084, shot_100)
-
-Total: 57
+Batch-2 maybe_ distribution (54 frames):
+- maybe_Antimagic: 5 (batch2_020-024)
+- maybe_Halo: 1 (batch2_019)
+- maybe_LabyrinthEffect: 4 (batch2_104-107)
+- maybe_Sparks: 1 (batch2_131)
+- maybe_StrikeEffect: 1 (batch2_052)
+- maybe_Teleporter: 8 (batch2_028, batch2_097-103)
+- maybe_YAbsorb: 10 (batch2_046-048, batch2_056-061, batch2_063)
+- maybe_YEnergy: 5 (batch2_049-051, batch2_124-125)
+- maybe_Ycataclysm: 13 (batch2_111-123)
+- maybe_combatflash: 2 (batch2_054-055)
+- maybe_no-effect: 2 (batch2_077, batch2_132)
+- maybe_ymaelstrom: 2 (batch2_044-045)
