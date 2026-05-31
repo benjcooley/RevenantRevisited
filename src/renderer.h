@@ -1097,6 +1097,10 @@ private:
     // Dirty flags -- read by PresentToSwapchain.
     bool color_target_dirty = false;
     bool lit_target_dirty   = false;
+    // Sticky flag: set true once any Scene3D pass has written to a target
+    // in any frame, so PresentForSnap won't re-emit uninitialized GPU
+    // memory in HUD-only test modes (was tinting snap output magenta).
+    bool any_target_ever_written = false;
 
     // Set by DrawBackdrop; consumed (and reset) by RunLightingPass to flip
     // its lit_target clear action from CLEAR -> LOAD so the backdrop pixels
