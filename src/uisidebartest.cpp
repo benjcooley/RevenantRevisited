@@ -434,6 +434,55 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
 {
     if (button != MB_LEFTDOWN) return;
 
+    // --- Inventory page arrows (only when bottom slot = Inv) ---------
+    // Per docs/ui/forensics/InventoryPane_SPEC.md:392/393:
+    //   scrollleft  button at pane-local (140, 11) 24x24
+    //   scrollright button at pane-local (161, 12) 24x24
+    // Pane is bottom-right at (display_w - 188, kTopH=306) → screen coords.
+    {
+        SHudState& s = GetHudState();
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+        {
+            const int32_t dw       = Display.Width();
+            const int32_t inv_x    = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+            const int32_t inv_y    = kTopH;
+            const int32_t leftBx   = inv_x + 140;
+            const int32_t leftBy   = inv_y + 11;
+            const int32_t rightBx  = inv_x + 161;
+            const int32_t rightBy  = inv_y + 12;
+            constexpr int32_t kArrW = 24;
+            constexpr int32_t kArrH = 24;
+            if (x >= leftBx && x < leftBx + kArrW && y >= leftBy && y < leftBy + kArrH)
+            {
+                if (s.inventoryPage > 0)
+                {
+                    s.inventoryPage--;
+                    log_info("[ui-sidebar] inv L-arrow click -> page=%d", s.inventoryPage);
+                }
+                else
+                {
+                    log_info("[ui-sidebar] inv L-arrow click (at page 0, no-op)");
+                }
+                return;
+            }
+            if (x >= rightBx && x < rightBx + kArrW && y >= rightBy && y < rightBy + kArrH)
+            {
+                // Retail's hard upper bound is 0xf3 per spec UNCONFIRMED-D;
+                // clamp here so the test harness can't run away.
+                if (s.inventoryPage < 0xf3)
+                {
+                    s.inventoryPage++;
+                    log_info("[ui-sidebar] inv R-arrow click -> page=%d", s.inventoryPage);
+                }
+                else
+                {
+                    log_info("[ui-sidebar] inv R-arrow click (at max page, no-op)");
+                }
+                return;
+            }
+        }
+    }
+
     // Mirror the same right-anchored placement used in DrawTabStrip.
     const int32_t dw     = Display.Width();
     const int32_t strip_x = (dw > 0 ? dw : kStripW + kTabsRightInset) - kStripW - kTabsRightInset;
