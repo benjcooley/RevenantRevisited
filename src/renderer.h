@@ -734,6 +734,15 @@ public:
     // sub-rect of the padded G-buffer. Returns true if it drew anything.
     bool PresentToSwapchain();
 
+    // Same composite as PresentToSwapchain, but ignores the dirty flags so
+    // the framesnap mirror pass can re-emit the last frame's final image
+    // into its own offscreen RT *after* PresentToSwapchain already cleared
+    // the dirty state for the real swapchain pass. The lit_target /
+    // color_target textures still hold valid pixels at that point; the
+    // dirty flags only signal "we've already presented this frame". No-op
+    // if neither target has ever been written.
+    bool PresentForSnap();
+
     // -------- HUD layer ----------------------------------------------------
     // HUD layer composites on top of the 3D scene during the swapchain
     // pass. Each HUD widget subclasses THudDrawable and implements
