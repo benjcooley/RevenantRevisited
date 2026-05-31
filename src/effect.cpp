@@ -2538,16 +2538,45 @@ TBurnEffect_Bespoke* TBurnEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& o
 
     // Snapshot TBurnAnimator::Initialize (effect_old.cpp:3292-3313):
     //   T3DAnimator::Initialize()
-    //   size = ca->NumObjects()          <-- harness drift: no rig, default 1
+    //   size = ca->NumObjects()          <-- harness drift: no rig, simulate
+    //                                       a humanoid mesh (~12 sub-objects)
     //   fire.Init(...) / smoke.Init(...) <-- our particle arena is pre-zeroed
     //   frame = 0; to_add = 0;
     burn->frame_         = 0;
     burn->to_add_        = 0;
-    burn->size_          = 1;     // harness has no CharAnimator
+    burn->size_          = kBurnBespokeSyntheticBones;
     burn->alive_         = true;
     burn->sim_accum_ms_  = 0.0;
     for (auto& part : burn->particles_)
         part.used = false;
+
+    // Iter1 fix #2 — synthesise a vertical "bone" column standing in for
+    // the snapshot's `ca->GetObjectMatrix(j) * MakeMatrix(&mtx)` chain.
+    // A humanoid mesh has ~12 sub-objects (head/torso/upper-arms/lower-
+    // arms/hands/upper-legs/lower-legs/feet) — distribute the synthetic
+    // anchors evenly along Z=[0..96], with a small (±6) lateral spread
+    // around the body centre line. The snapshot then transforms (0,0,0)
+    // through the bone matrix (effect_old.cpp:3375-3381) — i.e. the
+    // origin in bone-local frame ends up at the bone's world position.
+    // With these bones in place the per-spawn picks any humanoid limb
+    // uniformly, exactly like the snapshot's `random(0, size-1)`.
+    {
+        const float zmin = 0.0f;
+        const float zmax = 96.0f;   // ~character height in wu
+        for (int32_t i = 0; i < kBurnBespokeSyntheticBones; ++i)
+        {
+            const float t = float(i) / float(kBurnBespokeSyntheticBones - 1);
+            // Light XY zig-zag so adjacent bones don't perfectly stack
+            // (mirrors the typical humanoid layout where limbs aren't on
+            // the central spine line). Magnitudes are << bone Z spacing
+            // so the column reads as one connected emitter.
+            const float xoff = ((i & 1) ? 1.0f : -1.0f) * 4.0f;
+            const float yoff = ((i & 2) ? 1.0f : -1.0f) * 3.0f;
+            burn->bones_[i].X = xoff;
+            burn->bones_[i].Y = yoff;
+            burn->bones_[i].Z = zmin + t * (zmax - zmin);
+        }
+    }
 
     log_info("[burn-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
              "tex_fire=%u tex_smoke=%u numobj=%d numtex=%d",
@@ -2638,12 +2667,18 @@ void TBurnEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
             }
 
             // 3. Spawn `to_add_` new fire particles at random bones.
-            //    Drift: no CharAnimator, so spawn at effect origin (0,0,0
-            //    local) with ±BURN_SPREAD jitter per axis (forensics §5
-            //    bone-emit path simplified). The MakeMatrix /
-            //    GetObjectMatrix / D3DMATRIXTransform chain collapses to
-            //    "world origin offset 0 + jitter". Per-particle physics
-            //    is preserved verbatim per :3362-3413.
+            //    Snapshot path (effect_old.cpp:3365-3413):
+            //      int j = random(0, size - 1);
+            //      obj = ca->GetObject(j); ca->GetObjectMatrix(j, &obj->matrix);
+            //      vp = (0,0,0); dest = obj->matrix * MakeMatrix();
+            //      D3DMATRIXTransform(&dest, &vp, &p.pos);
+            //      p.pos += random(-SPREAD, SPREAD) per axis;
+            //      // … scale / rotation / vel / life …
+            //    Iter1 fix #2: with no CharAnimator we approximate
+            //    `obj->matrix * MakeMatrix()` by treating bones_[j] as the
+            //    transformed origin (the bone's world position relative
+            //    to the effect's own world position). Per-particle physics
+            //    is preserved verbatim per :3387-3413.
             const S3DPoint& origin = Pos();
             for (int32_t i = 0; i < to_add_; ++i)
             {
@@ -2662,15 +2697,11 @@ void TBurnEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 
                 SBurnBespokeParticle& p = particles_[free_idx];
 
-                // Drift: world-space emit position. snapshot picks a
-                // random bone j via ca->GetObject + ca->GetObjectMatrix;
-                // we have no rig so size_ = 1 and the bone matrix
-                // collapses to identity. Random(0, size-1) = 0 always.
-                const int32_t j = (size_ > 1) ? random(0, size_ - 1) : 0;
-                (void)j;
-                p.pos.X = float(origin.x);
-                p.pos.Y = float(origin.y);
-                p.pos.Z = float(origin.z);
+                const int32_t j = (size_ > 1) ? random(0, size_ - 1) : 0;     // :3367
+                const hmm_vec3 bone = bones_[j];                              // :3371-3381 collapsed
+                p.pos.X = float(origin.x) + bone.X;
+                p.pos.Y = float(origin.y) + bone.Y;
+                p.pos.Z = float(origin.z) + bone.Z;
 
                 p.pos.X += float(random(-kBurnBespokeSpread, kBurnBespokeSpread));   // :3387
                 p.pos.Y += float(random(-kBurnBespokeSpread, kBurnBespokeSpread));   // :3388
