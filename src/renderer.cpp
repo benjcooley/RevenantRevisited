@@ -4261,6 +4261,61 @@ bool TRenderer::PresentToSwapchain()
 
     color_target_dirty = false;
     lit_target_dirty   = false;
+    any_target_ever_written = true;     // PresentForSnap may re-emit
+    return true;
+}
+
+// PresentForSnap — same composite as PresentToSwapchain but for the
+// framesnap mirror pass. Differences:
+//   1) Does NOT gate on dirty flags. PresentToSwapchain has already run
+//      this frame and cleared them; the lit_target / color_target images
+//      still hold valid pixels (sokol_gfx doesn't auto-zero RTs). We
+//      re-emit those pixels into the offscreen snap target.
+//   2) Does NOT clear the dirty flags itself — they're already false.
+// Returns true if any target had ever been written (i.e. there's content
+// to re-emit; false on the very first frame before any scene draw).
+bool TRenderer::PresentForSnap()
+{
+    if (suppress_present) return false;
+
+    // HUD-only test modes never write to lit_target / color_target — the
+    // textures sit uninitialized in GPU memory. Reading those would emit
+    // garbage / magenta into the snap RT. Bail unless PresentToSwapchain
+    // has flagged at least one frame of real Scene3D content.
+    if (!any_target_ever_written) return false;
+
+    // We always have one of the two targets initialized after Initialize();
+    // pick lit_target by default (final composited image), fall back to
+    // color_target if lighting hasn't been run yet.
+    sg_image src = lit_target;
+    if (sg_query_image_state(src) != SG_RESOURCESTATE_VALID)
+        src = color_target;
+    if (sg_query_image_state(src) != SG_RESOURCESTATE_VALID)
+        return false;
+
+    sg_apply_pipeline(composite_pip_swap);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = composite_vbuf;
+    bind.fs_images[0]      = src;
+    sg_apply_bindings(&bind);
+
+    const int32_t pad = kGBufPad;
+    const float   gbw = float(width  + 2 * pad);
+    const float   gbh = float(height + 2 * pad);
+    const float   u0  = float(pad)   / gbw;
+    const float   v0  = float(pad)   / gbh;
+    const float   uw  = float(width) / gbw;
+    const float   vh  = float(height) / gbh;
+    const float u[16] = {
+        present_ndc[0], present_ndc[1], present_ndc[2], present_ndc[3],
+        u0, v0, uw, vh,
+        0.0f, 0.0f, 0.0f, 0.0f,           // chroma_key disabled
+        1.0f, 1.0f, 1.0f, 1.0f,           // color_tint = identity
+    };
+    const sg_range ur = { u, sizeof(u) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ur);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &ur);
+    sg_draw(0, 6, 1);
     return true;
 }
 
