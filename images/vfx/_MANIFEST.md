@@ -15,7 +15,6 @@ Within each folder, frames are 01.png .. NN.png in capture-time order.
 | 05 | `05_LightStrip` | 5 | ✅ retail |
 | 06 | `06_FireFlash` | 12 | ✅ retail |
 | 07 | `07_wierd_multicolor_swirling_effect_that_seems_to_come_froom_this_magical_device_in` | 9 | 📝 descriptive |
-| 08 | `08_NOT_AN_EFFECT_scroll` | 1 | ⛔ excluded |
 | 09 | `09_Iced` | 11 | ✅ retail |
 | 10 | `10_Teleporter` | 5 | ✅ retail |
 | 11 | `11_Sandswirl` | 3 | ✅ retail |
@@ -31,7 +30,7 @@ Within each folder, frames are 01.png .. NN.png in capture-time order.
 | 21 | `21_invisible` | 10 | ✅ retail |
 | 22 | `22_teleportation` | 18 | ✅ retail |
 | 23 | `23_Waterfall` | 5 | ✅ retail |
-| 24 | `24_wraith_purple_effect` | 4 | 📝 descriptive |
+| 24 | `24_shriek` | 4 | ✅ retail |
 | 25 | `25_IceBolt` | 18 | ✅ retail |
 | 26 | `26_RockStorm` | 10 | ✅ retail |
 | 27 | `27_pinkish_purple_egg_shape_effect` | 22 | 📝 descriptive |
@@ -39,7 +38,7 @@ Within each folder, frames are 01.png .. NN.png in capture-time order.
 | 29 | `29_priest_summoning_a_blue_beam_from_the_sky_-_not_sure_what_spell_-_sabu_boss_batt` | 16 | 📝 descriptive |
 | 30 | `30_FlowWater` | 4 | ✅ retail |
 | 31 | `31_Flame` | 3 | ✅ retail |
-| 32 | `32_Nahkranoth` | 22 | 📝 descriptive |
+| 32 | `32_Nahkranoth` | 22 | ✅ retail |
 | 33 | `33_ansarak_background_vortex_effect` | 7 | 📝 descriptive |
 | 34 | `34_some_kind_of_crazy_huge_fire_explosion_effect` | 20 | 📝 descriptive |
 | 35 | `35_maelstrom` | 27 | ✅ retail |
