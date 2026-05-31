@@ -59,9 +59,13 @@ struct SHudState
     int32_t bottomBarOpen   = 1;  // case 4 toggle (mbr_0x5b8 in retail)
     int32_t textBarVisible  = 1;
     int32_t statsBarVisible = 1;
+    // Inventory page index — driven by the scrollleft/scrollright arrows
+    // at pane-local (140,11)/(161,12). 0 = first page. Retail upper bound
+    // is 0xf3 per InventoryPane_SPEC `mbr_0x188` analysis.
+    int32_t inventoryPage   = 0;
 
     static constexpr uint32_t kMagic   = 0x52485644;  // 'RHVD'
-    static constexpr uint32_t kVersion = 1;
+    static constexpr uint32_t kVersion = 2;
 };
 
 bool SaveHudState(const SHudState& s, const char* path);
