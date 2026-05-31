@@ -1096,6 +1096,10 @@ private:
     // Dirty flags -- read by PresentToSwapchain.
     bool color_target_dirty = false;
     bool lit_target_dirty   = false;
+    // Sticky flag: set true once any Scene3D pass has written to a target
+    // in any frame, so PresentForSnap won't re-emit uninitialized GPU
+    // memory in HUD-only test modes (was tinting snap output magenta).
+    bool any_target_ever_written = false;
 
     // NDC sub-rect for the present blit. Default fills the swapchain.
     float present_ndc[4] = { -1.0f, -1.0f, 2.0f, 2.0f };
