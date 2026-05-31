@@ -63,9 +63,15 @@ struct SHudState
     // at pane-local (140,11)/(161,12). 0 = first page. Retail upper bound
     // is 0xf3 per InventoryPane_SPEC `mbr_0x188` analysis.
     int32_t inventoryPage   = 0;
+    // Currently-open container: 0 = root inventory; >0 = bag slot index
+    // (1 = bag in slot 0, 2 = bag in slot 1, …) — clicked-into-bag stack
+    // is single-level for now. Per user 2026-05-30: "Clicking on a bag in
+    // the inventory replaces the pack icon with a miniature image of the
+    // bag, and the inventory shows the contents of the bag."
+    int32_t inventoryContainer = 0;
 
     static constexpr uint32_t kMagic   = 0x52485644;  // 'RHVD'
-    static constexpr uint32_t kVersion = 2;
+    static constexpr uint32_t kVersion = 3;
 };
 
 bool SaveHudState(const SHudState& s, const char* path);

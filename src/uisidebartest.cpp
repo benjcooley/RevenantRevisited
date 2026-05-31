@@ -453,11 +453,61 @@ static int32_t HitInvSlot(int32_t x, int32_t y, int32_t page)
     const int32_t col = local_x / kPitchX;
     const int32_t row = local_y / kPitchY;
     if (col >= kCols || row >= kRows) return -1;
-    // Reject the inter-cell gap (cell content is 40px inside the 45/44 pitch).
     const int32_t cell_lx = local_x - col * kPitchX;
     const int32_t cell_ly = local_y - row * kPitchY;
     if (cell_lx >= kCellSize || cell_ly >= kCellSize) return -1;
     return page * (kCols * kRows) + col * kRows + row;
+}
+
+// Hit-test the BarInv (bottom-bar) 9-slot quick shelf. Per BarInvPane_SPEC:
+// 9 slots at pitch 45 from origin (220, 10) within the BottomBar's
+// 640x60 strip (bottom-anchored). Returns slot 0..8 or -1.
+static int32_t HitBarInvSlot(int32_t x, int32_t y)
+{
+    const int32_t dw       = Display.Width();
+    const int32_t dh       = Display.Height();
+    constexpr int32_t kBarH       = 60;
+    constexpr int32_t kSlotOriginX = 220;
+    constexpr int32_t kSlotOriginY = 10;
+    constexpr int32_t kSlotPitchX  = 45;
+    constexpr int32_t kSlotSize    = 40;
+    constexpr int32_t kSlotCount   = 9;
+    const int32_t bar_x = 0;
+    const int32_t bar_y = dh - kBarH;
+    const int32_t local_x = x - bar_x - kSlotOriginX;
+    const int32_t local_y = y - bar_y - kSlotOriginY;
+    if (local_x < 0 || local_y < 0) return -1;
+    if (local_y >= kSlotSize) return -1;
+    const int32_t col = local_x / kSlotPitchX;
+    if (col >= kSlotCount) return -1;
+    const int32_t cell_lx = local_x - col * kSlotPitchX;
+    if (cell_lx >= kSlotSize) return -1;
+    return col;
+}
+
+// Hit-test the Equip paperdoll 11-slot layout. Per EquipPane_SPEC
+// DAT_005e3f60 table (mirrored in uiequiptest.cpp). Returns 0..10 in
+// EQ_* enum order, -1 otherwise.
+static int32_t HitEquipSlot(int32_t x, int32_t y)
+{
+    struct SA { int32_t x; int32_t y; };
+    static constexpr SA kAnchor[11] = {
+        { 0x4a, 0x25 }, { 0x07, 0x3a }, { 0x8d, 0x3a }, { 0x8d, 0x6a },
+        { 0x07, 0x6a }, { 0x07, 0x9a }, { 0x8d, 0x9a }, { 0x18, 0x0b },
+        { 0x7c, 0x0b }, { 0x07, 0xca }, { 0x8d, 0xca },
+    };
+    constexpr int32_t kSlot = 40;
+    const int32_t dw     = Display.Width();
+    const int32_t pane_x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    const int32_t pane_y = 0;
+    for (int32_t i = 0; i < 11; ++i)
+    {
+        const int32_t bx = pane_x + kAnchor[i].x;
+        const int32_t by = pane_y + kAnchor[i].y;
+        if (x >= bx && x < bx + kSlot && y >= by && y < by + kSlot)
+            return i;
+    }
+    return -1;
 }
 
 void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
@@ -468,43 +518,105 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
     if (button == MB_LEFTUP)
     {
         if (!UIDragState::IsActive()) return;
-        // Find the drop target. For this test mode we only support Inv
-        // grid as a drop target; future passes wire BarInv + Equip too.
+
+        // Drop targets in priority order: Equip (most specific) → BarInv →
+        // Inventory grid. First one to hit wins. Each could refuse on a
+        // real-item type-filter; the test harness accepts all.
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+        {
+            const int32_t es = HitEquipSlot(x, y);
+            if (es >= 0)
+            {
+                UIDragState::CompleteDrag(EDragSource::Equip, es, true);
+                return;
+            }
+        }
+        if (s.bottomBarOpen)
+        {
+            const int32_t bs = HitBarInvSlot(x, y);
+            if (bs >= 0)
+            {
+                UIDragState::CompleteDrag(EDragSource::BarInv, bs, true);
+                return;
+            }
+        }
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
         {
             const int32_t dest_slot = HitInvSlot(x, y, s.inventoryPage);
             if (dest_slot >= 0)
             {
-                // Always accept in this test (allowed_type == 0). Real
-                // Equip slots would gate on CanEquip here.
                 UIDragState::CompleteDrag(EDragSource::Inventory, dest_slot, true);
                 return;
             }
         }
-        // Released somewhere uninteresting → cancel.
+        // Released somewhere uninteresting → cancel (the source's slot
+        // keeps its item — no move committed).
         UIDragState::Cancel();
+        return;
+    }
+
+    // ---- Right-click: Use / Open-bag (retail eventType == 5) ---------
+    if (button == MB_RIGHTDOWN)
+    {
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+        {
+            const int32_t slot = HitInvSlot(x, y, s.inventoryPage);
+            if (slot >= 0)
+            {
+                // For the test harness, any right-clicked slot is treated
+                // as a bag-open toggle. Real impl would inspect the slot's
+                // item type: bag → swap inventoryContainer; consumable →
+                // Use(); equipment → SetInventorySlot to auto-equip.
+                const int32_t was = s.inventoryContainer;
+                s.inventoryContainer = (was == slot + 1) ? 0 : (slot + 1);
+                log_info("[ui-sidebar] right-click inv slot=%d -> container=%d (was %d, %s)",
+                         slot, s.inventoryContainer, was,
+                         s.inventoryContainer == 0 ? "back to root" : "opened bag");
+                return;
+            }
+        }
         return;
     }
 
     if (button != MB_LEFTDOWN) return;
 
     // ---- Inventory grid: click-down on a cell starts a drag ----------
-    // Click-on-bag would open the bag (per user: "Clicking on a bag in
-    // the inventory replaces the pack icon with a miniature image of the
-    // bag, and the inventory shows the contents of the bag."). The bag
-    // detection requires real item refs which the test harness doesn't
-    // have yet — for now any cell click starts a drag from that slot.
     if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
     {
         const int32_t slot = HitInvSlot(x, y, s.inventoryPage);
         if (slot >= 0)
         {
-            // Test harness has no real items — use the slot index as a
-            // synthetic "item id" stand-in (cast to nullptr-equivalent
-            // pointer with a non-null offset so logs distinguish slots).
             TObjectInstance* fake_item =
                 reinterpret_cast<TObjectInstance*>(uintptr_t(slot + 1));
             UIDragState::BeginDrag(EDragSource::Inventory, slot,
+                                   fake_item, x, y);
+            return;
+        }
+    }
+
+    // ---- BarInv shelf: click-down on a slot starts a drag ------------
+    if (s.bottomBarOpen)
+    {
+        const int32_t bs = HitBarInvSlot(x, y);
+        if (bs >= 0)
+        {
+            TObjectInstance* fake_item =
+                reinterpret_cast<TObjectInstance*>(uintptr_t(0x100 + bs));
+            UIDragState::BeginDrag(EDragSource::BarInv, bs,
+                                   fake_item, x, y);
+            return;
+        }
+    }
+
+    // ---- Equip paperdoll: click-down on a slot starts a drag ---------
+    if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+    {
+        const int32_t es = HitEquipSlot(x, y);
+        if (es >= 0)
+        {
+            TObjectInstance* fake_item =
+                reinterpret_cast<TObjectInstance*>(uintptr_t(0x200 + es));
+            UIDragState::BeginDrag(EDragSource::Equip, es,
                                    fake_item, x, y);
             return;
         }
