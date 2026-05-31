@@ -15,3 +15,4 @@ char  StartupDumpTilesPath[MAXPATHLEN] = "";
 char  StartupVfxId[64]        = "";
 bool  StartupVfxHideUi        = false;
 char  StartupVfxBackground[16] = "";
+char  StartupInputScript[1024] = "";

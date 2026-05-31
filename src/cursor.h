@@ -14,6 +14,18 @@ extern int32_t cursory;
 extern int32_t mousebutton;
 
 void SetMouseBitmap(PTBitmap cursor);
+
+// Enable/disable the hardware (OS) pointer cursor. When ENABLED (default),
+// SetMouseBitmap hands the cursor pixels to the OS pointer (NSCursor on macOS)
+// so AppKit draws it everywhere — and TCursorHud suppresses its in-frame draw
+// to avoid double-drawing. When DISABLED, the OS pointer is hidden
+// (sapp_show_mouse(false)) and reset to the default, and TCursorHud draws the
+// game cursor bitmap in-frame at (cursorx, cursory) instead. Disable this when
+// something needs to drive the cursor position itself — e.g. the scripted
+// mouse simulator (--mouse-script) — or to force the classic in-game render.
+void SetHardwareCursorEnabled(bool enabled);
+bool HardwareCursorEnabled();
+
 void RefreshOSCursor();
   // Re-push the current MouseCursor to the OS pointer. Used after
   // resetting to the OS arrow (e.g. while ImGui captures the mouse)

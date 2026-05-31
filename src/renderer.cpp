@@ -1324,20 +1324,22 @@ void TRenderer::InitCompositePipeline()
     sh.attrs[1].sem_index   = 0;
     sh.vs.source                 = kCompositeVs;
     sh.vs.entry                  = kShaderVsEntry;
-    sh.vs.uniform_blocks[0].size = sizeof(float) * 12;
+    sh.vs.uniform_blocks[0].size = sizeof(float) * 16;
     sh.vs.uniform_blocks[0].uniforms[0].name = "rect";
     sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     sh.vs.uniform_blocks[0].uniforms[1].name = "uv_rect";
     sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.source                 = kCompositeFs;
     sh.fs.entry                  = kShaderFsEntry;
-    sh.fs.uniform_blocks[0].size = sizeof(float) * 12;
+    sh.fs.uniform_blocks[0].size = sizeof(float) * 16;
     sh.fs.uniform_blocks[0].uniforms[0].name = "rect";
     sh.fs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[1].name = "uv_rect";
     sh.fs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[2].name = "chroma_key";
     sh.fs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[3].name = "color_tint";
+    sh.fs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.images[0].name         = "tex";
     sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -3501,10 +3503,11 @@ void TRenderer::Composite(TSurface* src)
     bind.fs_images[0]      = img;
     sg_apply_bindings(&bind);
 
-    const float uniforms[12] = {
+    const float uniforms[16] = {
         -1.0f, -1.0f, 2.0f, 2.0f,
          0.0f,  0.0f, 1.0f, 1.0f,
-         0.0f,  0.0f, 0.0f, 0.0f,
+         0.0f,  0.0f, 0.0f, 0.0f,    // chroma_key disabled
+         1.0f,  1.0f, 1.0f, 1.0f,    // color_tint = white (no-op)
     };
     const sg_range u_range = { uniforms, sizeof(uniforms) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
@@ -3553,8 +3556,20 @@ void TRenderer::CompositeSwapchain(sg_image img,
                                    int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
                                    int32_t src_tex_w, int32_t src_tex_h)
 {
-    // Same blit math as the RT variant below, but uses the swapchain-
-    // format pipeline so it can be called inside sg_begin_default_pass.
+    // No tint (preserves all existing callers). For tinted blits use
+    // CompositeSwapchainTinted below.
+    CompositeSwapchainTinted(img, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
+                             src_x, src_y, src_w, src_h, src_tex_w, src_tex_h,
+                             1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+void TRenderer::CompositeSwapchainTinted(sg_image img,
+                                         int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                         int32_t target_w, int32_t target_h,
+                                         int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                         int32_t src_tex_w, int32_t src_tex_h,
+                                         float tr, float tg, float tb, float ta)
+{
     if (!img.id || !composite_pip_swap.id) return;
     if (target_w <= 0 || target_h <= 0) return;
     if (src_tex_w <= 0 || src_tex_h <= 0) return;
@@ -3575,7 +3590,13 @@ void TRenderer::CompositeSwapchain(sg_image img,
     const float uw = float(src_w) / float(src_tex_w);
     const float vh = float(src_h) / float(src_tex_h);
 
-    const float uniforms[12] = { nx, ny, nw, nh,  u0, v0, uw, vh,  0.0f, 0.0f, 0.0f, 0.0f };
+    // 16 floats: rect(4) + uv_rect(4) + chroma_key(4) + color_tint(4).
+    const float uniforms[16] = {
+        nx, ny, nw, nh,
+        u0, v0, uw, vh,
+        0.0f, 0.0f, 0.0f, 0.0f,    // chroma_key disabled
+        tr, tg, tb, ta,            // color_tint (multiplied with sample)
+    };
     const sg_range u_range = { uniforms, sizeof(uniforms) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
@@ -3612,7 +3633,12 @@ void TRenderer::Composite(sg_image img,
     const float uw = float(src_w) / float(src_tex_w);
     const float vh = float(src_h) / float(src_tex_h);
 
-    float uniforms[12] = { nx, ny, nw, nh,  u0, v0, uw, vh, 0.0f, 0.0f, 0.0f, 0.0f };
+    float uniforms[16] = {
+        nx, ny, nw, nh,
+        u0, v0, uw, vh,
+        0.0f, 0.0f, 0.0f, 0.0f,    // chroma_key
+        1.0f, 1.0f, 1.0f, 1.0f,    // color_tint (white = no-op)
+    };
     if (chroma_key && chroma_key_rgb)
     {
         uniforms[8] = 1.0f;
@@ -3624,6 +3650,85 @@ void TRenderer::Composite(sg_image img,
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
     sg_draw(0, 6, 1);
+}
+
+void TRenderer::CompositeTinted(sg_image img,
+                                int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                int32_t target_w, int32_t target_h,
+                                int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                int32_t src_tex_w, int32_t src_tex_h,
+                                float tr, float tg, float tb, float ta)
+{
+    if (!img.id || !composite_pip_rt.id) return;
+    if (target_w <= 0 || target_h <= 0) return;
+    if (src_tex_w <= 0 || src_tex_h <= 0) return;
+
+    sg_apply_pipeline(composite_pip_rt);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = composite_vbuf;
+    bind.fs_images[0]      = img;
+    sg_apply_bindings(&bind);
+
+    const float nx = (2.0f * dst_x / target_w) - 1.0f;
+    const float nw = (2.0f * dst_w) / target_w;
+    const float ny = 1.0f - (2.0f * (dst_y + dst_h) / target_h);
+    const float nh = (2.0f * dst_h) / target_h;
+
+    const float u0 = float(src_x) / float(src_tex_w);
+    const float v0 = float(src_y) / float(src_tex_h);
+    const float uw = float(src_w) / float(src_tex_w);
+    const float vh = float(src_h) / float(src_tex_h);
+
+    const float uniforms[16] = {
+        nx, ny, nw, nh,
+        u0, v0, uw, vh,
+        0.0f, 0.0f, 0.0f, 0.0f,
+        tr, tg, tb, ta,
+    };
+    const sg_range u_range = { uniforms, sizeof(uniforms) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
+    sg_draw(0, 6, 1);
+}
+
+void TRenderer::CompositeTinted(TTextureHandle texture,
+                                int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                int32_t target_w, int32_t target_h,
+                                int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                int32_t src_tex_w, int32_t src_tex_h,
+                                float tr, float tg, float tb, float ta)
+{
+    const sg_image img = TextureImage(texture);
+    if (!img.id) return;
+    CompositeTinted(img, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
+                    src_x, src_y, src_w, src_h, src_tex_w, src_tex_h,
+                    tr, tg, tb, ta);
+}
+
+void TRenderer::CompositeSwapchain(TTextureHandle texture,
+                                   int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                   int32_t target_w, int32_t target_h,
+                                   int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                   int32_t src_tex_w, int32_t src_tex_h)
+{
+    const sg_image img = TextureImage(texture);
+    if (!img.id) return;
+    CompositeSwapchain(img, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
+                       src_x, src_y, src_w, src_h, src_tex_w, src_tex_h);
+}
+
+void TRenderer::CompositeSwapchainTinted(TTextureHandle texture,
+                                         int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                         int32_t target_w, int32_t target_h,
+                                         int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                         int32_t src_tex_w, int32_t src_tex_h,
+                                         float tr, float tg, float tb, float ta)
+{
+    const sg_image img = TextureImage(texture);
+    if (!img.id) return;
+    CompositeSwapchainTinted(img, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
+                             src_x, src_y, src_w, src_h, src_tex_w, src_tex_h,
+                             tr, tg, tb, ta);
 }
 
 // *************************************************************************
@@ -3643,8 +3748,8 @@ TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, bool prefer_alias)
 
     // Cache key folds in prefer_alias: the same bitmap decoded data-mode
     // vs alias-mode is two distinct textures (cursor sprite vs its alias
-    // shadow). In practice a given bitmap is only ever drawn one way, but
-    // keying correctly keeps the two from colliding.
+    // RLE shadow). Keying both lets cursor + soft shadow coexist without
+    // colliding in the cache.
     const uintptr_t key = uintptr_t(bm) | (prefer_alias ? 1u : 0u);
     if (auto it = bitmap_texture_cache.find(key); it != bitmap_texture_cache.end())
         return it->second;
@@ -3701,6 +3806,166 @@ void TRenderer::DrawBitmapSubrect(PTBitmap bm,
                        bm->width, bm->height);
 }
 
+void TRenderer::DrawBitmapTinted(PTBitmap bm, int32_t x, int32_t y,
+                                 float tr, float tg, float tb, float ta)
+{
+    if (!bm) return;
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    const sg_image img = TextureImage(tex);
+    if (!img.id) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    CompositeSwapchainTinted(img, x, y, bm->width, bm->height, target_w, target_h,
+                             0, 0, bm->width, bm->height,
+                             bm->width, bm->height,
+                             tr, tg, tb, ta);
+}
+
+void TRenderer::DrawBitmapSubrectTinted(PTBitmap bm,
+                                        int32_t dst_x, int32_t dst_y,
+                                        int32_t src_x, int32_t src_y,
+                                        int32_t src_w, int32_t src_h,
+                                        float tr, float tg, float tb, float ta)
+{
+    if (!bm || src_w <= 0 || src_h <= 0) return;
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    const sg_image img = TextureImage(tex);
+    if (!img.id) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    CompositeSwapchainTinted(img, dst_x, dst_y, src_w, src_h, target_w, target_h,
+                             src_x, src_y, src_w, src_h,
+                             bm->width, bm->height,
+                             tr, tg, tb, ta);
+}
+
+void TRenderer::DrawBitmapToTarget(PTBitmap bm, int32_t x, int32_t y,
+                                   int32_t target_w, int32_t target_h)
+{
+    if (!bm) return;
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    Composite(tex, x, y, bm->width, bm->height, target_w, target_h,
+              0, 0, bm->width, bm->height,
+              bm->width, bm->height);
+}
+
+void TRenderer::DrawBitmapSubrectToTarget(PTBitmap bm,
+                                          int32_t dst_x, int32_t dst_y,
+                                          int32_t src_x, int32_t src_y,
+                                          int32_t src_w, int32_t src_h,
+                                          int32_t target_w, int32_t target_h)
+{
+    if (!bm || src_w <= 0 || src_h <= 0) return;
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    Composite(tex, dst_x, dst_y, src_w, src_h, target_w, target_h,
+              src_x, src_y, src_w, src_h,
+              bm->width, bm->height);
+}
+
+void TRenderer::DrawBitmapSubrectStretchedToTarget(PTBitmap bm,
+                                                   int32_t dst_x, int32_t dst_y,
+                                                   int32_t dst_w, int32_t dst_h,
+                                                   int32_t src_x, int32_t src_y,
+                                                   int32_t src_w, int32_t src_h,
+                                                   int32_t target_w, int32_t target_h)
+{
+    if (!bm || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return;
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    // dst_w/dst_h may differ from src_w/src_h — the underlying Composite already
+    // supports sub-rect → stretched dst (the UV span is src_w/src_tex_w and the
+    // NDC span is dst_w/target_w; they are independent).
+    Composite(tex, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
+              src_x, src_y, src_w, src_h,
+              bm->width, bm->height);
+}
+
+void TRenderer::DrawBitmapTintedToTarget(PTBitmap bm, int32_t x, int32_t y,
+                                         int32_t target_w, int32_t target_h,
+                                         float tr, float tg, float tb, float ta)
+{
+    if (!bm) return;
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    CompositeTinted(tex, x, y, bm->width, bm->height, target_w, target_h,
+                    0, 0, bm->width, bm->height,
+                    bm->width, bm->height,
+                    tr, tg, tb, ta);
+}
+
+void TRenderer::DrawBitmapSubrectTintedToTarget(PTBitmap bm,
+                                                int32_t dst_x, int32_t dst_y,
+                                                int32_t src_x, int32_t src_y,
+                                                int32_t src_w, int32_t src_h,
+                                                int32_t target_w, int32_t target_h,
+                                                float tr, float tg, float tb, float ta)
+{
+    if (!bm || src_w <= 0 || src_h <= 0) return;
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    CompositeTinted(tex, dst_x, dst_y, src_w, src_h, target_w, target_h,
+                    src_x, src_y, src_w, src_h,
+                    bm->width, bm->height,
+                    tr, tg, tb, ta);
+}
+
+void TRenderer::DrawBitmapShadowedToTarget(PTBitmap bm, int32_t x, int32_t y,
+                                           int32_t target_w, int32_t target_h,
+                                           int32_t off_x, int32_t off_y,
+                                           float shadow_a)
+{
+    if (!bm) return;
+    DrawBitmapTintedToTarget(bm, x + off_x, y + off_y, target_w, target_h,
+                             0.0f, 0.0f, 0.0f, shadow_a);
+    DrawBitmapToTarget(bm, x, y, target_w, target_h);
+}
+
+void TRenderer::DrawBitmapSubrectShadowedToTarget(PTBitmap bm,
+                                                  int32_t dst_x, int32_t dst_y,
+                                                  int32_t src_x, int32_t src_y,
+                                                  int32_t src_w, int32_t src_h,
+                                                  int32_t target_w, int32_t target_h,
+                                                  int32_t off_x, int32_t off_y,
+                                                  float shadow_a)
+{
+    if (!bm || src_w <= 0 || src_h <= 0) return;
+    DrawBitmapSubrectTintedToTarget(bm, dst_x + off_x, dst_y + off_y,
+                                    src_x, src_y, src_w, src_h,
+                                    target_w, target_h,
+                                    0.0f, 0.0f, 0.0f, shadow_a);
+    DrawBitmapSubrectToTarget(bm, dst_x, dst_y, src_x, src_y, src_w, src_h,
+                              target_w, target_h);
+}
+
+void TRenderer::DrawBitmapShadowed(PTBitmap bm, int32_t x, int32_t y,
+                                   int32_t off_x, int32_t off_y,
+                                   float shadow_a)
+{
+    if (!bm) return;
+    // Shadow pass: bitmap as a darkened silhouette at offset
+    DrawBitmapTinted(bm, x + off_x, y + off_y, 0.0f, 0.0f, 0.0f, shadow_a);
+    // Bar pass: normal bitmap on top
+    DrawBitmap(bm, x, y);
+}
+
+void TRenderer::DrawBitmapSubrectShadowed(PTBitmap bm,
+                                          int32_t dst_x, int32_t dst_y,
+                                          int32_t src_x, int32_t src_y,
+                                          int32_t src_w, int32_t src_h,
+                                          int32_t off_x, int32_t off_y,
+                                          float shadow_a)
+{
+    if (!bm || src_w <= 0 || src_h <= 0) return;
+    DrawBitmapSubrectTinted(bm, dst_x + off_x, dst_y + off_y,
+                            src_x, src_y, src_w, src_h,
+                            0.0f, 0.0f, 0.0f, shadow_a);
+    DrawBitmapSubrect(bm, dst_x, dst_y, src_x, src_y, src_w, src_h);
+}
+
 void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
 {
     if (!surf) return;
@@ -3712,6 +3977,21 @@ void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
     const int32_t sh = surf->Height();
     CompositeSwapchain(img, x, y, sw, sh, target_w, target_h,
                        0, 0, sw, sh, sw, sh);
+}
+
+void TRenderer::DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
+                                  float tr, float tg, float tb, float ta)
+{
+    if (!surf) return;
+    const sg_image img = surf->GetSGImage();
+    if (!img.id) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    const int32_t sw = surf->Width();
+    const int32_t sh = surf->Height();
+    CompositeSwapchainTinted(img, x, y, sw, sh, target_w, target_h,
+                             0, 0, sw, sh, sw, sh,
+                             tr, tg, tb, ta);
 }
 
 sg_image TRenderer::GetOrCreateSolidColorImage(uint32_t rgba)
@@ -3753,6 +4033,18 @@ void TRenderer::DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
     const int32_t target_h = sapp_height();
     CompositeSwapchain(img, x, y, w, h, target_w, target_h,
                        0, 0, 1, 1, 1, 1);
+}
+
+void TRenderer::DrawSolidRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
+                                      int32_t target_w, int32_t target_h,
+                                      uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    if (w <= 0 || h <= 0) return;
+    const uint32_t key = (uint32_t(r) << 24) | (uint32_t(g) << 16) |
+                         (uint32_t(b) <<  8) |  uint32_t(a);
+    const sg_image img = GetOrCreateSolidColorImage(key);
+    if (!img.id) return;
+    Composite(img, x, y, w, h, target_w, target_h, 0, 0, 1, 1, 1, 1);
 }
 
 void TRenderer::DrawNineSlice(PTBitmap bm,
@@ -3801,6 +4093,58 @@ void TRenderer::DrawNineSlice(PTBitmap bm,
             return;
         CompositeSwapchain(img, bdx, bdy, bdw, bdh, target_w, target_h,
                            bsx, bsy, bsw, bsh, sw, sh);
+    };
+
+    blit(dx0, dy0, dw0, dh0, sx0, sy0, sw0, sh0);  // TL corner
+    blit(dx1, dy0, dw1, dh0, sx1, sy0, sw1, sh0);  // top edge
+    blit(dx2, dy0, dw2, dh0, sx2, sy0, sw2, sh0);  // TR corner
+    blit(dx0, dy1, dw0, dh1, sx0, sy1, sw0, sh1);  // left edge
+    blit(dx1, dy1, dw1, dh1, sx1, sy1, sw1, sh1);  // center
+    blit(dx2, dy1, dw2, dh1, sx2, sy1, sw2, sh1);  // right edge
+    blit(dx0, dy2, dw0, dh2, sx0, sy2, sw0, sh2);  // BL corner
+    blit(dx1, dy2, dw1, dh2, sx1, sy2, sw1, sh2);  // bottom edge
+    blit(dx2, dy2, dw2, dh2, sx2, sy2, sw2, sh2);  // BR corner
+}
+
+void TRenderer::DrawNineSliceToTarget(PTBitmap bm,
+                                      int32_t l, int32_t t, int32_t r, int32_t b,
+                                      int32_t dx, int32_t dy, int32_t dw, int32_t dh,
+                                      int32_t target_w, int32_t target_h)
+{
+    if (!bm) return;
+    if (dw <= 0 || dh <= 0) return;
+
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+
+    const int32_t sw = bm->width;
+    const int32_t sh = bm->height;
+
+    // Clamp insets to half the source (same discipline as DrawNineSlice).
+    l = (std::max)(0, (std::min)(l, sw / 2));
+    r = (std::max)(0, (std::min)(r, sw / 2));
+    t = (std::max)(0, (std::min)(t, sh / 2));
+    b = (std::max)(0, (std::min)(b, sh / 2));
+
+    // Source columns: [0..l), [l..sw-r), [sw-r..sw); rows analogous.
+    const int32_t sx0 = 0, sx1 = l, sx2 = sw - r;
+    const int32_t sy0 = 0, sy1 = t, sy2 = sh - b;
+    const int32_t sw0 = l, sw1 = sw - l - r, sw2 = r;
+    const int32_t sh0 = t, sh1 = sh - t - b, sh2 = b;
+
+    // Dest pieces: corners fixed at source size, edges/center take the slack.
+    const int32_t dx0 = dx, dx1 = dx + l, dx2 = dx + dw - r;
+    const int32_t dy0 = dy, dy1 = dy + t, dy2 = dy + dh - b;
+    const int32_t dw0 = l, dw1 = dw - l - r, dw2 = r;
+    const int32_t dh0 = t, dh1 = dh - t - b, dh2 = b;
+
+    auto blit = [&](int32_t bdx, int32_t bdy, int32_t bdw, int32_t bdh,
+                    int32_t bsx, int32_t bsy, int32_t bsw, int32_t bsh)
+    {
+        if (bdw <= 0 || bdh <= 0 || bsw <= 0 || bsh <= 0)
+            return;
+        Composite(tex, bdx, bdy, bdw, bdh, target_w, target_h,
+                  bsx, bsy, bsw, bsh, sw, sh);
     };
 
     blit(dx0, dy0, dw0, dh0, sx0, sy0, sw0, sh0);  // TL corner
@@ -3897,10 +4241,18 @@ bool TRenderer::PresentToSwapchain()
     const float   v0  = float(pad)   / gbh;
     const float   uw  = float(width) / gbw;
     const float   vh  = float(height) / gbh;
-    const float u[12] = {
+    // 16-float composite-pipeline uniform layout — MUST match
+    // composite.{metal,glsl,hlsl}.h's `params` struct (rect + uv_rect +
+    // chroma_key + color_tint). Sending only 12 here was the
+    // uniformly-undefined color_tint that caused the black/yellow
+    // flashing on Misthaven (commit f8d826d "Revert renderer color_tint
+    // UI primitives"). PresentToSwapchain fires every frame — passing
+    // the no-tint default (1,1,1,1) so the scene composites unmodified.
+    const float u[16] = {
         present_ndc[0], present_ndc[1], present_ndc[2], present_ndc[3],
         u0, v0, uw, vh,
-        0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f,           // chroma_key disabled
+        1.0f, 1.0f, 1.0f, 1.0f,           // color_tint = identity (no tint)
     };
     const sg_range ur = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ur);
@@ -3909,6 +4261,54 @@ bool TRenderer::PresentToSwapchain()
 
     color_target_dirty = false;
     lit_target_dirty   = false;
+    return true;
+}
+
+// PresentForSnap — same composite as PresentToSwapchain but for the
+// framesnap mirror pass. Differences:
+//   1) Does NOT gate on dirty flags. PresentToSwapchain has already run
+//      this frame and cleared them; the lit_target / color_target images
+//      still hold valid pixels (sokol_gfx doesn't auto-zero RTs). We
+//      re-emit those pixels into the offscreen snap target.
+//   2) Does NOT clear the dirty flags itself — they're already false.
+// Returns true if any target had ever been written (i.e. there's content
+// to re-emit; false on the very first frame before any scene draw).
+bool TRenderer::PresentForSnap()
+{
+    if (suppress_present) return false;
+
+    // We always have one of the two targets initialized after Initialize();
+    // pick lit_target by default (final composited image), fall back to
+    // color_target if lighting hasn't been run yet.
+    sg_image src = lit_target;
+    if (sg_query_image_state(src) != SG_RESOURCESTATE_VALID)
+        src = color_target;
+    if (sg_query_image_state(src) != SG_RESOURCESTATE_VALID)
+        return false;
+
+    sg_apply_pipeline(composite_pip_swap);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = composite_vbuf;
+    bind.fs_images[0]      = src;
+    sg_apply_bindings(&bind);
+
+    const int32_t pad = kGBufPad;
+    const float   gbw = float(width  + 2 * pad);
+    const float   gbh = float(height + 2 * pad);
+    const float   u0  = float(pad)   / gbw;
+    const float   v0  = float(pad)   / gbh;
+    const float   uw  = float(width) / gbw;
+    const float   vh  = float(height) / gbh;
+    const float u[16] = {
+        present_ndc[0], present_ndc[1], present_ndc[2], present_ndc[3],
+        u0, v0, uw, vh,
+        0.0f, 0.0f, 0.0f, 0.0f,           // chroma_key disabled
+        1.0f, 1.0f, 1.0f, 1.0f,           // color_tint = identity
+    };
+    const sg_range ur = { u, sizeof(u) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &ur);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &ur);
+    sg_draw(0, 6, 1);
     return true;
 }
 
