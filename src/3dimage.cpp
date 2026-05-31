@@ -348,9 +348,15 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
 
             if (im->invsize > 0)
             {
+                // Allocate AND zero the icon array exactly once, on the first
+                // state that has an icon. (Zeroing inside the loop wiped every
+                // previously-loaded state's icon, leaving only the last one — so
+                // GetInvImage(state) returned null for any other state.)
                 if (!icons)
+                {
                     icons = new S3DImageryIcons[NumStates()];
-                std::memset(icons, 0, sizeof(S3DImageryIcons) * NumStates());
+                    std::memset(icons, 0, sizeof(S3DImageryIcons) * NumStates());
+                }
 
                 uint8_t* icon = new uint8_t[im->invsize];
                 if ((void*)im->invitem)
@@ -602,9 +608,15 @@ bool T3DImagery::InitializeMesh(S3DImageryBody* mesh)
 
             if (im->invsize > 0)
             {
+                // Allocate AND zero the icon array exactly once, on the first
+                // state that has an icon. (Zeroing inside the loop wiped every
+                // previously-loaded state's icon, leaving only the last one — so
+                // GetInvImage(state) returned null for any other state.)
                 if (!icons)
+                {
                     icons = new S3DImageryIcons[NumStates()];
-                std::memset(icons, 0, sizeof(S3DImageryIcons) * NumStates());
+                    std::memset(icons, 0, sizeof(S3DImageryIcons) * NumStates());
+                }
 
                 uint8_t* icon = new uint8_t[im->invsize];
                 if ((void*)im->invitem)
