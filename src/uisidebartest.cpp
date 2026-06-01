@@ -258,10 +258,15 @@ public:
     void Draw() override
     {
         const SHudState& s = GetHudState();
+        // Tab strip (#15): always visible — it is the controller that
+        // opens/closes the sidebar (TSideTabsPane_SPEC §1). Per retail,
+        // "the pane draws whenever the playscreen HUD is up"; there is no
+        // per-pane visibility predicate inside the class itself.
+        DrawTabStrip(s);
+        // Chrome panes (#15): only drawn when sidebar is OPEN.
         if (s.sidebarState != HUD_SIDEBAR_OPEN) return;
         DrawTopSlot(s);
         DrawBottomSlot(s);
-        DrawTabStrip(s);
     }
 
     void Refresh()
