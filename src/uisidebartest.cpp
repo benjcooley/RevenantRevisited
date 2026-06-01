@@ -40,6 +40,7 @@
 #include "surface.h"
 #include "testmodes.h"
 #include "time.h"
+#include "uidragstate.h"
 
 #include <cstdint>
 #include <cstring>
@@ -430,44 +431,335 @@ void CloseUISidebarMode()
     g_lastTickMs = 0.0;
 }
 
+// Hit-test the inventory 4x3 grid. Returns column-major slot index
+// 0..11 (col*3 + row + page*12) when (x,y) is inside a cell, -1 otherwise.
+// Per InventoryPane_SPEC: origin pane-local (8, 42), pitch 45x44,
+// interior 40x40, column-major.
+static int32_t HitInvSlot(int32_t x, int32_t y, int32_t page)
+{
+    const int32_t dw     = Display.Width();
+    const int32_t inv_x  = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    const int32_t inv_y  = kTopH;
+    constexpr int32_t kOriginX  = 8;
+    constexpr int32_t kOriginY  = 42;
+    constexpr int32_t kPitchX   = 45;
+    constexpr int32_t kPitchY   = 44;
+    constexpr int32_t kCellSize = 40;
+    constexpr int32_t kCols     = 4;
+    constexpr int32_t kRows     = 3;
+    const int32_t local_x = x - inv_x - kOriginX;
+    const int32_t local_y = y - inv_y - kOriginY;
+    if (local_x < 0 || local_y < 0) return -1;
+    const int32_t col = local_x / kPitchX;
+    const int32_t row = local_y / kPitchY;
+    if (col >= kCols || row >= kRows) return -1;
+    const int32_t cell_lx = local_x - col * kPitchX;
+    const int32_t cell_ly = local_y - row * kPitchY;
+    if (cell_lx >= kCellSize || cell_ly >= kCellSize) return -1;
+    return page * (kCols * kRows) + col * kRows + row;
+}
+
+// Hit-test the BarInv (bottom-bar) 9-slot quick shelf. Per BarInvPane_SPEC:
+// 9 slots at pitch 45 from origin (220, 10) within the BottomBar's
+// 640x60 strip (bottom-anchored). Returns slot 0..8 or -1.
+static int32_t HitBarInvSlot(int32_t x, int32_t y)
+{
+    const int32_t dw       = Display.Width();
+    const int32_t dh       = Display.Height();
+    constexpr int32_t kBarH       = 60;
+    constexpr int32_t kSlotOriginX = 220;
+    constexpr int32_t kSlotOriginY = 10;
+    constexpr int32_t kSlotPitchX  = 45;
+    constexpr int32_t kSlotSize    = 40;
+    constexpr int32_t kSlotCount   = 9;
+    const int32_t bar_x = 0;
+    const int32_t bar_y = dh - kBarH;
+    const int32_t local_x = x - bar_x - kSlotOriginX;
+    const int32_t local_y = y - bar_y - kSlotOriginY;
+    if (local_x < 0 || local_y < 0) return -1;
+    if (local_y >= kSlotSize) return -1;
+    const int32_t col = local_x / kSlotPitchX;
+    if (col >= kSlotCount) return -1;
+    const int32_t cell_lx = local_x - col * kSlotPitchX;
+    if (cell_lx >= kSlotSize) return -1;
+    return col;
+}
+
+// Hit-test the Equip paperdoll 11-slot layout. Per EquipPane_SPEC
+// DAT_005e3f60 table (mirrored in uiequiptest.cpp). Returns 0..10 in
+// EQ_* enum order, -1 otherwise.
+static int32_t HitEquipSlot(int32_t x, int32_t y)
+{
+    struct SA { int32_t x; int32_t y; };
+    static constexpr SA kAnchor[11] = {
+        { 0x4a, 0x25 }, { 0x07, 0x3a }, { 0x8d, 0x3a }, { 0x8d, 0x6a },
+        { 0x07, 0x6a }, { 0x07, 0x9a }, { 0x8d, 0x9a }, { 0x18, 0x0b },
+        { 0x7c, 0x0b }, { 0x07, 0xca }, { 0x8d, 0xca },
+    };
+    constexpr int32_t kSlot = 40;
+    const int32_t dw     = Display.Width();
+    const int32_t pane_x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    const int32_t pane_y = 0;
+    for (int32_t i = 0; i < 11; ++i)
+    {
+        const int32_t bx = pane_x + kAnchor[i].x;
+        const int32_t by = pane_y + kAnchor[i].y;
+        if (x >= bx && x < bx + kSlot && y >= by && y < by + kSlot)
+            return i;
+    }
+    return -1;
+}
+
 void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
 {
-    if (button != MB_LEFTDOWN) return;
+    SHudState& s = GetHudState();
 
-    // Mirror the same right-anchored placement used in DrawTabStrip.
-    const int32_t dw     = Display.Width();
-    const int32_t strip_x = (dw > 0 ? dw : kStripW + kTabsRightInset) - kStripW - kTabsRightInset;
-    const int32_t strip_y = kTabsTopInset;
-
-    // Hit-test the 6 buttons. Each is at (kBtnX, kBtnY[i]) within the strip,
-    // size kBtnW x kBtnH. Convert to screen coords and check (x, y).
-    for (int32_t i = 0; i < kBtnCount; ++i)
+    // ---- MouseUp: commit / cancel an in-flight drag -------------------
+    if (button == MB_LEFTUP)
     {
-        const int32_t bx = strip_x + kBtnX;
-        const int32_t by = strip_y + kBtnY[i];
-        if (x < bx || x >= bx + kBtnW) continue;
-        if (y < by || y >= by + kBtnH) continue;
+        if (!UIDragState::IsActive()) return;
 
-        SHudState& s = GetHudState();
-        // Per spec §10 modal mapping (matches g_buttons add-order):
-        //   Upper buttons (region 0): i=0 Book(mode 2), i=1 Stats(mode 1), i=2 Equip(mode 0)
-        //   Lower buttons (region 1): i=3 Spell(mode 2), i=4 Inv(mode 0),  i=5 Map(mode 1)
-        const int32_t mode = g_buttons[i].mode;
-        const char*   region;
-        if (g_buttons[i].region == 0)
+        // Drop targets in priority order: Equip (most specific) → BarInv →
+        // Inventory grid. First one to hit wins. Each could refuse on a
+        // real-item type-filter; the test harness accepts all.
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
         {
-            s.topSlot = mode;
-            s.sidebarState = HUD_SIDEBAR_OPEN;
-            region = "top";
+            const int32_t es = HitEquipSlot(x, y);
+            if (es >= 0)
+            {
+                UIDragState::CompleteDrag(EDragSource::Equip, es, true);
+                return;
+            }
         }
-        else
+        if (s.bottomBarOpen)
         {
-            s.bottomSlot = mode;
-            s.sidebarState = HUD_SIDEBAR_OPEN;
-            region = "bottom";
+            const int32_t bs = HitBarInvSlot(x, y);
+            if (bs >= 0)
+            {
+                UIDragState::CompleteDrag(EDragSource::BarInv, bs, true);
+                return;
+            }
         }
-        log_info("[ui-sidebar] click btn %d (%s/mode %d) -> top=%d bottom=%d",
-                 i, region, mode, s.topSlot, s.bottomSlot);
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+        {
+            const int32_t dest_slot = HitInvSlot(x, y, s.inventoryPage);
+            if (dest_slot >= 0)
+            {
+                UIDragState::CompleteDrag(EDragSource::Inventory, dest_slot, true);
+                return;
+            }
+        }
+        // Released somewhere uninteresting → cancel (the source's slot
+        // keeps its item — no move committed).
+        UIDragState::Cancel();
         return;
     }
+
+    // ---- Right-click: Use / Open-bag (retail eventType == 5) ---------
+    if (button == MB_RIGHTDOWN)
+    {
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+        {
+            const int32_t slot = HitInvSlot(x, y, s.inventoryPage);
+            if (slot >= 0)
+            {
+                // For the test harness, any right-clicked slot is treated
+                // as a bag-open toggle. Real impl would inspect the slot's
+                // item type: bag → swap inventoryContainer; consumable →
+                // Use(); equipment → SetInventorySlot to auto-equip.
+                const int32_t was = s.inventoryContainer;
+                s.inventoryContainer = (was == slot + 1) ? 0 : (slot + 1);
+                log_info("[ui-sidebar] right-click inv slot=%d -> container=%d (was %d, %s)",
+                         slot, s.inventoryContainer, was,
+                         s.inventoryContainer == 0 ? "back to root" : "opened bag");
+                return;
+            }
+        }
+        return;
+    }
+
+    if (button != MB_LEFTDOWN) return;
+
+    // ---- Sidebar tab strip (TAKES PRECEDENCE over chrome-pane slots) -
+    // The tab strip is visually on top of the chrome panes' right edge
+    // (sokol composite z-order), so its hit-tests must run before the
+    // Equip / BarInv / Inv slot drag-sources — otherwise an Equip slot
+    // anchor that happens to overlap a tab button (e.g. EQ_AMMO @ (576,11)
+    // vs upper-Book tab @ (583,26)) swallows the click.
+    {
+        const int32_t dw      = Display.Width();
+        const int32_t strip_x = (dw > 0 ? dw : kStripW + kTabsRightInset) - kStripW - kTabsRightInset;
+        const int32_t strip_y = kTabsTopInset;
+        for (int32_t i = 0; i < kBtnCount; ++i)
+        {
+            const int32_t bx = strip_x + kBtnX;
+            const int32_t by = strip_y + kBtnY[i];
+            if (x < bx || x >= bx + kBtnW) continue;
+            if (y < by || y >= by + kBtnH) continue;
+
+            const int32_t mode = g_buttons[i].mode;
+            const char*   region;
+            if (g_buttons[i].region == 0) { s.topSlot    = mode; region = "top"; }
+            else                          { s.bottomSlot = mode; region = "bottom"; }
+            s.sidebarState = HUD_SIDEBAR_OPEN;
+
+            // Auto-pairing (DispatchCommand cases 7/9): Book↔Spell, Equip↔Inv.
+            bool paired = false;
+            if (s.topSlot == HUD_TOP_BOOK && g_buttons[i].region == 0)
+            { s.bottomSlot = HUD_BOT_SPELL; paired = true; }
+            else if (s.topSlot == HUD_TOP_EQUIP && g_buttons[i].region == 0)
+            { s.bottomSlot = HUD_BOT_INV;   paired = true; }
+            else if (s.bottomSlot == HUD_BOT_SPELL && g_buttons[i].region == 1)
+            { s.topSlot    = HUD_TOP_BOOK;  paired = true; }
+            else if (s.bottomSlot == HUD_BOT_INV && g_buttons[i].region == 1)
+            { s.topSlot    = HUD_TOP_EQUIP; paired = true; }
+
+            log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
+                     i, region, mode, paired ? " [paired]" : "",
+                     s.topSlot, s.bottomSlot);
+            return;
+        }
+    }
+
+    // ---- Spellbook scroll arrows (only when top slot = Book) ---------
+    // Per SpellbookPane_SPEC: up arrow at pane-local (169, 150),
+    // down arrow at (169, 174), each 20x26. Scroll ±40 per click.
+    if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+    {
+        const int32_t dw       = Display.Width();
+        const int32_t book_x   = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+        const int32_t book_y   = 0;
+        constexpr int32_t kArrLocalX = 169;
+        constexpr int32_t kUpY    = 150;
+        constexpr int32_t kDnY    = 174;
+        constexpr int32_t kArrW   = 20;
+        constexpr int32_t kArrH   = 26;
+        constexpr int32_t kStep   = 40;
+        const int32_t arrX = book_x + kArrLocalX;
+        if (x >= arrX && x < arrX + kArrW)
+        {
+            const int32_t upY = book_y + kUpY;
+            const int32_t dnY = book_y + kDnY;
+            if (y >= upY && y < upY + kArrH)
+            {
+                if (s.spellbookScroll > 0)
+                {
+                    s.spellbookScroll -= kStep;
+                    if (s.spellbookScroll < 0) s.spellbookScroll = 0;
+                    log_info("[ui-sidebar] spellbook up-arrow -> scroll=%d",
+                             s.spellbookScroll);
+                }
+                else
+                {
+                    log_info("[ui-sidebar] spellbook up-arrow (at top, no-op)");
+                }
+                return;
+            }
+            if (y >= dnY && y < dnY + kArrH)
+            {
+                // No upper limit gated here — retail would clamp to the
+                // last spell row; the test harness doesn't have real
+                // content so we just let it grow.
+                s.spellbookScroll += kStep;
+                log_info("[ui-sidebar] spellbook dn-arrow -> scroll=%d",
+                         s.spellbookScroll);
+                return;
+            }
+        }
+    }
+
+    // ---- Inventory grid: click-down on a cell starts a drag ----------
+    if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+    {
+        const int32_t slot = HitInvSlot(x, y, s.inventoryPage);
+        if (slot >= 0)
+        {
+            TObjectInstance* fake_item =
+                reinterpret_cast<TObjectInstance*>(uintptr_t(slot + 1));
+            UIDragState::BeginDrag(EDragSource::Inventory, slot,
+                                   fake_item, x, y);
+            return;
+        }
+    }
+
+    // ---- BarInv shelf: click-down on a slot starts a drag ------------
+    if (s.bottomBarOpen)
+    {
+        const int32_t bs = HitBarInvSlot(x, y);
+        if (bs >= 0)
+        {
+            TObjectInstance* fake_item =
+                reinterpret_cast<TObjectInstance*>(uintptr_t(0x100 + bs));
+            UIDragState::BeginDrag(EDragSource::BarInv, bs,
+                                   fake_item, x, y);
+            return;
+        }
+    }
+
+    // ---- Equip paperdoll: click-down on a slot starts a drag ---------
+    if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+    {
+        const int32_t es = HitEquipSlot(x, y);
+        if (es >= 0)
+        {
+            TObjectInstance* fake_item =
+                reinterpret_cast<TObjectInstance*>(uintptr_t(0x200 + es));
+            UIDragState::BeginDrag(EDragSource::Equip, es,
+                                   fake_item, x, y);
+            return;
+        }
+    }
+
+    // --- Inventory page arrows (only when bottom slot = Inv) ---------
+    // Per docs/ui/forensics/InventoryPane_SPEC.md:392/393:
+    //   scrollleft  button at pane-local (140, 11) 24x24
+    //   scrollright button at pane-local (161, 12) 24x24
+    // Pane is bottom-right at (display_w - 188, kTopH=306) → screen coords.
+    {
+        SHudState& s = GetHudState();
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+        {
+            const int32_t dw       = Display.Width();
+            const int32_t inv_x    = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+            const int32_t inv_y    = kTopH;
+            const int32_t leftBx   = inv_x + 140;
+            const int32_t leftBy   = inv_y + 11;
+            const int32_t rightBx  = inv_x + 161;
+            const int32_t rightBy  = inv_y + 12;
+            constexpr int32_t kArrW = 24;
+            constexpr int32_t kArrH = 24;
+            if (x >= leftBx && x < leftBx + kArrW && y >= leftBy && y < leftBy + kArrH)
+            {
+                if (s.inventoryPage > 0)
+                {
+                    s.inventoryPage--;
+                    log_info("[ui-sidebar] inv L-arrow click -> page=%d", s.inventoryPage);
+                }
+                else
+                {
+                    log_info("[ui-sidebar] inv L-arrow click (at page 0, no-op)");
+                }
+                return;
+            }
+            if (x >= rightBx && x < rightBx + kArrW && y >= rightBy && y < rightBy + kArrH)
+            {
+                // Retail's hard upper bound is 0xf3 per spec UNCONFIRMED-D;
+                // clamp here so the test harness can't run away.
+                if (s.inventoryPage < 0xf3)
+                {
+                    s.inventoryPage++;
+                    log_info("[ui-sidebar] inv R-arrow click -> page=%d", s.inventoryPage);
+                }
+                else
+                {
+                    log_info("[ui-sidebar] inv R-arrow click (at max page, no-op)");
+                }
+                return;
+            }
+        }
+    }
+
+    // (Tab strip already handled at the top of the LEFTDOWN section,
+    // before chrome-pane slot hit-tests, so it takes precedence on
+    // overlapping coords.)
 }

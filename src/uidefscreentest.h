@@ -21,3 +21,4 @@ void RenderUIDefScreenMode();
 void CloseUIDefScreenMode();
 void HandleMouseClickUIDefScreenMode(int32_t button, int32_t x, int32_t y);
 void HandleMouseMoveUIDefScreenMode(int32_t button, int32_t x, int32_t y);
+void HandleKeyPressUIDefScreenMode(int32_t key, bool down);

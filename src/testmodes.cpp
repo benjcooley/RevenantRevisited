@@ -3311,6 +3311,11 @@ void HandleKeyPress(const char* mode, int32_t key, bool down)
         VfxTest::HandleKeyPress(key, down);
         return;
     }
+    if (IsUIDefScreenMode(mode))
+    {
+        HandleKeyPressUIDefScreenMode(key, down);
+        return;
+    }
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleKeyPress(key, down);
 }

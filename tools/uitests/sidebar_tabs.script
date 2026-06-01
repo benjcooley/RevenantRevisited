@@ -1,6 +1,6 @@
+# RUN: --test=ui-hud --filmstrip=8,0
+#
 # Sidebar tab-click smoke test.
-# Pair with: --test=ui-hud --headless --filmstrip=8,0
-#   --input-script="$(cat tools/uitests/sidebar_tabs.script)"
 #
 # Default output: ./filmstrips/001-NNN-<label>.png + ./filmstrips/filmstrip-001.png
 # Override with --snapprefix=<path or name>
