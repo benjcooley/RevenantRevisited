@@ -1,0 +1,30 @@
+# Test #7a + #7e: Inventory 12-slot grid + page arrows with gray-out.
+# Pair with: --test=ui-hud --headless --filmstrip=4,0
+#   --snapprefix=verify/inv-7a-
+#   --input-script="tools/uitests/inv_7a_page.script"
+#
+# Inv pane at (452, 306) in Classic 640x480:
+#   Left  arrow: (452+140, 306+11) = (592, 317)  size 24x24
+#   Right arrow: (452+161, 306+12) = (613, 318)  size 24x24
+#
+# 4 captures:
+#   1. Baseline (page=0) — left arrow GRAYED, right arrow ENABLED
+#   2. After 1 right-click (page=1) — both enabled
+#   3. After page=3 — both enabled
+#   4. After 1 left-click (page back to 2) — right re-enabled
+
+log baseline_page0;
+moveto 100 100 0; pause 300; take_snapshot baseline page=0 left-grayed;
+
+log page1_right_click;
+moveto 625 330 200; pause 100; left_down; pause 80; left_up; pause 200;
+take_snapshot page=1 both enabled;
+
+log page3;
+moveto 625 330 100; pause 100; left_down; pause 80; left_up; pause 200;
+moveto 625 330 100; pause 100; left_down; pause 80; left_up; pause 200;
+take_snapshot page=3;
+
+log left_click_back;
+moveto 604 329 200; pause 100; left_down; pause 80; left_up; pause 200;
+take_snapshot page=2 right-enabled;

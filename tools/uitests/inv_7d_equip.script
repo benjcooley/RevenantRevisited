@@ -1,0 +1,31 @@
+# Test #7d + #14: Drag inventory item to equip slot; committed swap with sound.
+# Pair with: --test=ui-hud --headless --filmstrip=4,0
+#   --snapprefix=verify/inv-7d-
+#
+# Coordinate cheat-sheet (Classic 640x480):
+#   Inv slot 0 (col0,row0): (480, 368)
+#   Inv slot 3 (col1,row0): (525, 368)
+#   Equip EQ_HEAD (0): pane at (452,0), anchor (74,37) -> screen (526, 57)
+#     center: (526+20, 57+20) = (546, 77)
+#   Equip EQ_PRIMEHAND (4): anchor (7,106) -> screen (459, 106)
+#     center: (459+20, 106+20) = (479, 126)
+#
+# 4 captures:
+#   1. Baseline — Inv slots populated, Equip shows placeholders
+#   2. During drag inv0→equip EQ_HEAD — inv slot 0 empty
+#   3. After drop — EQ_HEAD shows inv0's icon
+#   4. Drag inv3→equip EQ_PRIMEHAND
+
+log baseline;
+moveto 100 100 0; pause 300; take_snapshot baseline inv populated equip placeholder;
+
+log drag_inv0_to_equip_head;
+moveto 480 368 200; pause 100; left_down; pause 150;
+take_snapshot mid-drag inv0 empty;
+moveto 546 77 400; pause 100; left_up; pause 300;
+take_snapshot inv0 to equip_head committed;
+
+log drag_inv3_to_equip_primehand;
+moveto 525 368 200; pause 100; left_down; pause 100;
+moveto 479 126 400; pause 100; left_up; pause 300;
+take_snapshot inv3 to equip_primehand committed;
