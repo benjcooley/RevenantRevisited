@@ -134,6 +134,7 @@ target_compile_definitions(Revenant PRIVATE SOKOL_${SOKOL_BACKEND})
 # the current working directory at runtime.
 target_compile_definitions(Revenant PRIVATE REV_FONTS_DIR="${FONTS_DIR}")
 target_compile_definitions(Revenant PRIVATE REV_EDITOR_DATA_DIR="${CMAKE_SOURCE_DIR}/data/editor")
+target_compile_definitions(Revenant PRIVATE REV_VFX_TEST_BG_DIR="${CMAKE_SOURCE_DIR}/tools/vfx/test_backgrounds")
 
 # Include directories for third-party dependencies
 target_include_directories(Revenant PRIVATE

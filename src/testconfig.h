@@ -19,6 +19,11 @@ extern char StartupAssetPath[128];
 extern float StartupAssetScale;
 // --dumptiles=<path> — export tile albedo PNGs into the given folder, then exit.
 extern char StartupDumpTilesPath[MAXPATHLEN];
+// --dumpi3d=<asset> [--dumpi3dout=<dir>] — extract textures (PNG) +
+// sub-objects (Wavefront OBJ) + manifest.txt from one I3D file.
+// Default output: ./i3d_dump/<asset-basename>/. Triggers --test=i3ddump.
+extern char StartupDumpI3DPath[MAXPATHLEN];
+extern char StartupDumpI3DOutPath[MAXPATHLEN];
 // --vfx=<id> — pre-select an effect by id in --test=vfx (e.g.
 // --vfx=TStripEffect). Empty = first alphabetically-sorted entry.
 // Useful for clean screencaps + scripted iteration.
@@ -30,6 +35,10 @@ extern bool StartupVfxHideUi;
 // Empty = default intro FMV (data/Disk2/MIX_FMV1.SMK).
 extern char StartupCinematicPath[MAXPATHLEN];
 
+
+// --vfx-bg=<black|ltgray|forest|dungeon> — pre-select the diagnostic
+// backdrop for --test=vfx (default ltgray). Empty / unknown = default.
+extern char StartupVfxBackground[16];
 
 // --input-script="..." (alias: --mouse-script) — a scripted synthetic input
 // sequence (mouse + keyboard) replayed into the active --test mode's input

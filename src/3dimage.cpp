@@ -174,6 +174,11 @@ T3DImagery::~T3DImagery()
 
 // ****************** MESH LOADING STUFF **********************
 
+// Static — off by default. The i3ddump test mode (testmodes.cpp) sets
+// this to true before invoking FindImagery so the texture loader retains
+// the decoded RGBA bytes per frame for PNG export.
+bool T3DImagery::g_retain_decoded_rgba = false;
+
 bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
 {
     int32_t c;
@@ -1731,6 +1736,19 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
                         px[3] = 0;   // fully transparent (rgb already 0 = premul'd)
                 }
             }
+        }
+
+        // i3ddump tool retains the decoded RGBA bytes per frame so we can
+        // write them out as PNG. Stored on T3DImagery (NOT S3DTex) because
+        // S3DTex lives inside a TVirtualArray which copies via memcpy and
+        // would corrupt any std::vector member.
+        if (T3DImagery::g_retain_decoded_rgba && !rgba.empty())
+        {
+            if (int32_t(dump_textures.size()) <= texture_index)
+                dump_textures.resize(texture_index + 1);
+            if (int32_t(dump_textures[texture_index].size()) < frames)
+                dump_textures[texture_index].resize(frames);
+            dump_textures[texture_index][f] = rgba;
         }
 
         TTextureHandle htexture = kInvalidTexture;

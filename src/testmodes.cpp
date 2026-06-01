@@ -6,6 +6,8 @@
 
 #include "testmodes.h"
 
+#include <stb_image_write.h>   // for i3ddump test mode (impl lives in framesnap.cpp)
+
 #include "3dimage.h"
 #include "animimage.h"
 #include "audio_backend.h"
@@ -476,6 +478,337 @@ bool DumpTilesToPath(const char* out_path_cstr)
 bool InitializeTileDumpMode()
 {
     return DumpTilesToPath(StartupDumpTilesPath);
+}
+
+// =========================================================================
+// * i3ddump — extract everything from an I3D file into a folder.          *
+// *                                                                       *
+// * Per asset:                                                            *
+// *   manifest.txt            — sub-object list, materials, texture refs *
+// *   texture_NN_frame_FF.png — every decoded RGBA frame, every slot      *
+// *   subobj_NN_<name>.obj    — Wavefront OBJ per sub-object               *
+// *                                                                       *
+// * CLI: --dumpi3d=Magic\\comet.I3D [--dumpi3dout=DIR]                    *
+// * If --dumpi3dout omitted, defaults to ./i3d_dump/<asset_basename>/.    *
+// *                                                                       *
+// * Texture data is captured by setting                                   *
+// * T3DImagery::g_retain_decoded_rgba = true BEFORE LoadImagery — the    *
+// * loader retains decoded bytes per frame in S3DTex::dump_rgba_frames    *
+// * (see 3dimage.cpp).                                                    *
+// =========================================================================
+
+bool DumpI3DToPath(const char* asset_path_cstr, const char* out_dir_cstr)
+{
+    namespace fs = std::filesystem;
+    if (!asset_path_cstr || !asset_path_cstr[0])
+    {
+        log_error("[i3ddump] asset path is empty");
+        return false;
+    }
+
+    // Compute output folder. Default: ./i3d_dump/<basename-no-extension>/
+    fs::path out_dir;
+    if (out_dir_cstr && out_dir_cstr[0])
+    {
+        out_dir = fs::path(out_dir_cstr);
+    }
+    else
+    {
+        std::string base = asset_path_cstr;
+        // Strip directory (Win or Unix separators).
+        size_t slash = base.find_last_of("/\\");
+        if (slash != std::string::npos)
+            base = base.substr(slash + 1);
+        // Strip extension.
+        size_t dot = base.find_last_of('.');
+        if (dot != std::string::npos)
+            base = base.substr(0, dot);
+        out_dir = fs::current_path() / "i3d_dump" / base;
+    }
+    std::error_code ec;
+    fs::create_directories(out_dir, ec);
+    if (ec)
+    {
+        log_error("[i3ddump] create_directories failed for '%s': %s",
+                  out_dir.string().c_str(), ec.message().c_str());
+        return false;
+    }
+
+    // Enable CPU-side RGBA retention BEFORE LoadImagery so the texture
+    // loader keeps decoded bytes per frame.
+    T3DImagery::g_retain_decoded_rgba = true;
+
+    int32_t img_id = TObjectImagery::FindImagery(asset_path_cstr);
+    if (img_id < 0)
+    {
+        // Asset isn't registered in class.def's imagery table (e.g. legacy
+        // / test assets like Magic\fireball.i3d that were replaced by
+        // newfireball.i3d before ship). Try RegisterImagery as a fallback —
+        // this adds the path to the lookup table on-the-fly.
+        std::string path_copy = asset_path_cstr;
+        img_id = TObjectImagery::RegisterImagery(path_copy.data());
+        if (img_id < 0)
+        {
+            log_error("[i3ddump] FindImagery + RegisterImagery both failed for '%s'",
+                      asset_path_cstr);
+            return false;
+        }
+        log_info("[i3ddump]   '%s' not in class.def; registered as id=%d",
+                 asset_path_cstr, img_id);
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[i3ddump] LoadImagery(id=%d '%s') failed",
+                  img_id, asset_path_cstr);
+        return false;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[i3ddump] '%s' is not a T3DImagery (got %s)",
+                  asset_path_cstr, typeid(*base).name());
+        return false;
+    }
+
+    auto sanitize = [](const char* s) -> std::string {
+        std::string r;
+        if (!s) return std::string("unnamed");
+        for (; *s; ++s) {
+            const char c = *s;
+            r.push_back((c == '/' || c == '\\' || c == ':' || c == ' ' || c == '\t') ? '_' : c);
+        }
+        if (r.empty()) r = "unnamed";
+        return r;
+    };
+
+    // ---- manifest.txt ----
+    std::ofstream mf(out_dir / "manifest.txt");
+    mf << "asset: " << asset_path_cstr << "\n";
+    mf << "NumObjects: " << img3d->NumObjects() << "\n";
+    mf << "NumTextures: " << img3d->NumTextures() << "\n";
+    mf << "NumMaterials: " << img3d->NumMaterials() << "\n";
+    mf << "\n";
+
+    // ---- textures → PNG ----
+    // Frame data is on T3DImagery::dump_textures (NOT S3DTex — vector
+    // members in S3DTex get corrupted by TVirtualArray's memcpy copy
+    // semantics).
+    //
+    // Textures need a vertical flip on write because the I3D format
+    // stores them in D3D's top-down convention (row 0 = top), but PNG
+    // viewers expect bottom-up display semantics for the in-game look.
+    // (Try toggling this if dumps come out mirrored.)
+    stbi_flip_vertically_on_write(1);
+    int32_t pngs_written = 0;
+    for (int32_t t = 0; t < img3d->NumTextures(); ++t)
+    {
+        S3DTex tex = {};
+        img3d->GetTexture(t, &tex);
+        mf << "texture[" << t << "]: "
+           << tex.desc.width << "x" << tex.desc.height
+           << " frames=" << tex.numframes << "\n";
+        const int32_t w = int32_t(tex.desc.width);
+        const int32_t h = int32_t(tex.desc.height);
+        if (t >= int32_t(img3d->dump_textures.size())) continue;
+        const auto& frames = img3d->dump_textures[size_t(t)];
+        for (int32_t f = 0; f < int32_t(frames.size()); ++f)
+        {
+            const std::vector<uint8_t>& rgba = frames[size_t(f)];
+            if (rgba.empty() || w <= 0 || h <= 0) continue;
+            if (int32_t(rgba.size()) != w * h * 4)
+            {
+                log_warn("[i3ddump]   texture[%d] frame[%d] size mismatch "
+                         "(%zu vs %d)",
+                         t, f, rgba.size(), w * h * 4);
+                continue;
+            }
+            char stem[256];
+            std::snprintf(stem, sizeof(stem), "texture_%02d_frame_%02d.png", t, f);
+            const fs::path png_path = out_dir / stem;
+            if (stbi_write_png(png_path.string().c_str(), w, h, 4,
+                               rgba.data(), w * 4) == 0)
+            {
+                log_warn("[i3ddump] stbi_write_png failed: %s",
+                         png_path.string().c_str());
+                continue;
+            }
+            mf << "  frame[" << f << "]: " << stem << "\n";
+            ++pngs_written;
+        }
+    }
+    mf << "\n";
+
+    // ---- materials ----
+    for (int32_t m = 0; m < img3d->NumMaterials(); ++m)
+    {
+        S3DMat mat = {};
+        img3d->GetMaterial(m, &mat);
+        mf << "material[" << m << "]: "
+           << "diffuse=(" << mat.matdesc.diffuse.r
+           << "," << mat.matdesc.diffuse.g
+           << "," << mat.matdesc.diffuse.b
+           << "," << mat.matdesc.diffuse.a << ") "
+           << "emissive=(" << mat.matdesc.emissive.r
+           << "," << mat.matdesc.emissive.g
+           << "," << mat.matdesc.emissive.b << ") "
+           << "texture=" << mat.texture << "\n";
+    }
+    mf << "\n";
+
+    // ---- sub-objects → single combined Wavefront OBJ ----
+    // One <asset_basename>.obj per I3D, with `o NAME` markers per
+    // sub-object. Blender + most DCC tools can drag-drop this directly
+    // and see each sub-object as a separately named selectable mesh.
+    //
+    // Indexing rule (Wavefront): v/vt indices are 1-based and GLOBAL to
+    // the file. We accumulate a `vert_base` offset as we walk
+    // sub-objects so each block's `f` lines reference its own verts.
+    std::string asset_stem = asset_path_cstr;
+    {
+        size_t slash = asset_stem.find_last_of("/\\");
+        if (slash != std::string::npos) asset_stem = asset_stem.substr(slash + 1);
+        size_t dot = asset_stem.find_last_of('.');
+        if (dot != std::string::npos) asset_stem = asset_stem.substr(0, dot);
+    }
+    const fs::path combined_obj_path = out_dir / (asset_stem + ".obj");
+    std::ofstream combined_obj(combined_obj_path);
+    combined_obj << "# Revenant I3D dump\n";
+    combined_obj << "# asset: " << asset_path_cstr << "\n";
+    combined_obj << "# sub-objects: " << img3d->NumObjects() << "\n\n";
+
+    int32_t objs_written = 0;
+    int32_t global_vert_base = 0;
+    for (int32_t o = 0; o < img3d->NumObjects(); ++o)
+    {
+        const char* name = img3d->GetObjectName(o);
+        const std::string safe = sanitize(name);
+
+        // Try every texture slot (matches d3d::RegisterSubMesh pattern).
+        // Stop at the first slot that yields verts/indices. This handles
+        // both textured sub-objects (UVs in the texture's slot) and
+        // solid-fill ones (UVs in slot 0).
+        std::vector<SMeshVertex> verts;
+        std::vector<uint16_t>    indices;
+        const int32_t num_tex = img3d->NumTextures();
+        int32_t picked_slot = -1;
+        for (int32_t slot = 0; slot < num_tex + 1; ++slot)
+        {
+            verts.clear();
+            indices.clear();
+            if (!ExtractSubMeshTextureSlot(img3d, o, slot, verts, indices))
+                continue;
+            if (verts.empty() || indices.empty()) continue;
+            picked_slot = slot;
+            break;
+        }
+
+        mf << "object[" << o << "]: name='" << (name ? name : "")
+           << "' verts=" << verts.size()
+           << " idxs=" << indices.size()
+           << " texslot=" << picked_slot;
+
+        // Bbox for manifest.
+        if (!verts.empty())
+        {
+            float mn[3] = { verts[0].pos[0], verts[0].pos[1], verts[0].pos[2] };
+            float mx[3] = { mn[0], mn[1], mn[2] };
+            for (const auto& v : verts) {
+                for (int32_t k = 0; k < 3; ++k) {
+                    mn[k] = (std::min)(mn[k], v.pos[k]);
+                    mx[k] = (std::max)(mx[k], v.pos[k]);
+                }
+            }
+            mf << " bbox=(" << mn[0] << "," << mn[1] << "," << mn[2]
+               << ")..(" << mx[0] << "," << mx[1] << "," << mx[2] << ")";
+        }
+        mf << "\n";
+
+        if (verts.empty() || indices.empty())
+            continue;
+
+        // Append this sub-object as a named block in the combined OBJ.
+        combined_obj << "# sub-object[" << o << "] name='" << (name ? name : "")
+                     << "' texslot=" << picked_slot
+                     << " verts=" << verts.size()
+                     << " indices=" << indices.size() << "\n";
+        combined_obj << "o " << safe << "\n";
+        for (const auto& v : verts)
+            combined_obj << "v " << v.pos[0] << " " << v.pos[1] << " "
+                         << v.pos[2] << "\n";
+        for (const auto& v : verts)
+            combined_obj << "vt " << v.uv[0] << " " << v.uv[1] << "\n";
+        for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+            const int32_t a = int32_t(indices[i + 0]) + 1 + global_vert_base;
+            const int32_t b = int32_t(indices[i + 1]) + 1 + global_vert_base;
+            const int32_t c = int32_t(indices[i + 2]) + 1 + global_vert_base;
+            combined_obj << "f " << a << "/" << a
+                         << " "  << b << "/" << b
+                         << " "  << c << "/" << c << "\n";
+        }
+        combined_obj << "\n";
+        global_vert_base += int32_t(verts.size());
+        ++objs_written;
+    }
+
+    log_info("[i3ddump] dumped %d textures, %d sub-objects from '%s' -> %s",
+             pngs_written, objs_written,
+             asset_path_cstr, out_dir.string().c_str());
+    return (pngs_written > 0) || (objs_written > 0);
+}
+
+bool InitializeI3DDumpMode()
+{
+    // Batch mode: --dumpi3d=@LIST_FILE — process one asset path per
+    // non-empty/non-comment line. Output for each goes into
+    // <DUMPI3DOUT>/<asset_basename>/. Bootstraps the engine once instead
+    // of N times for catalog-wide dumps.
+    if (StartupDumpI3DPath[0] == '@')
+    {
+        namespace fs = std::filesystem;
+        const char* list_path = StartupDumpI3DPath + 1;
+        std::ifstream list(list_path);
+        if (!list)
+        {
+            log_error("[i3ddump] cannot open list file '%s'", list_path);
+            return false;
+        }
+        const fs::path base_out = StartupDumpI3DOutPath[0]
+            ? fs::path(StartupDumpI3DOutPath)
+            : (fs::current_path() / "i3d_dump_all");
+        std::error_code ec;
+        fs::create_directories(base_out, ec);
+        int32_t ok = 0, fail = 0;
+        std::string line;
+        while (std::getline(list, line))
+        {
+            // Trim whitespace.
+            while (!line.empty() && (line.back() == '\r' || line.back() == '\n'
+                                  || line.back() == ' '  || line.back() == '\t'))
+                line.pop_back();
+            size_t s = 0;
+            while (s < line.size() && (line[s] == ' ' || line[s] == '\t')) ++s;
+            if (s) line = line.substr(s);
+            if (line.empty() || line[0] == '#') continue;
+            // Per-asset output dir: <base_out>/<stem-of-path-without-extension>
+            std::string base = line;
+            size_t slash = base.find_last_of("/\\");
+            if (slash != std::string::npos) base = base.substr(slash + 1);
+            size_t dot = base.find_last_of('.');
+            if (dot != std::string::npos) base = base.substr(0, dot);
+            const fs::path sub = base_out / base;
+            log_info("[i3ddump] [%d] %s -> %s",
+                     ok + fail + 1, line.c_str(), sub.string().c_str());
+            if (DumpI3DToPath(line.c_str(), sub.string().c_str()))
+                ++ok;
+            else
+                ++fail;
+        }
+        log_info("[i3ddump] batch done: ok=%d fail=%d base='%s'",
+                 ok, fail, base_out.string().c_str());
+        return ok > 0;
+    }
+    return DumpI3DToPath(StartupDumpI3DPath, StartupDumpI3DOutPath);
 }
 
 struct SCharPreviewState
@@ -2675,6 +3008,8 @@ bool Initialize(const char* mode)
         return InitializeCharPreviewMode();
     if (strcmp(mode, "tiledump") == 0)
         return InitializeTileDumpMode();
+    if (strcmp(mode, "i3ddump") == 0)
+        return InitializeI3DDumpMode();
     if (strcmp(mode, "i3d3d") == 0)
         return InitializeI3DStaticMode();
     if (strcmp(mode, "water3d") == 0)
