@@ -17,6 +17,7 @@
 #include "script.h"
 #include "sector.h"
 #include "statusbar.h"
+#include "hudstate.h"
 
 #define NOTHING     0
 #define CONTENTS    1
@@ -63,6 +64,25 @@ bool TSaveGame::WriteGame(char *name)
         data[0] = gametime;
         data[1] = pane;
         data[7] = version;
+
+        // HudState slots [2..11] + presence flag slot [12]:
+        //   Serialize the 8 SHudState int32_t fields so the player's
+        //   sidebar/panel selection persists across save/load.
+        //   data[12] = 0xABCD is the presence flag: if slot 12 != 0xABCD
+        //   (old save without HudState), ReadGame falls back to defaults.
+        {
+            const SHudState& hs = GetHudState();
+            data[12] = 0xABCD;   // HudState presence sentinel
+            data[2]  = hs.topSlot;
+            data[3]  = hs.bottomSlot;
+            data[4]  = hs.sidebarState;
+            data[5]  = hs.bottomBarOpen;
+            data[6]  = hs.textBarVisible;
+            data[8]  = hs.statsBarVisible;
+            data[9]  = hs.inventoryPage;
+            data[10] = hs.inventoryContainer;
+            data[11] = hs.spellbookScroll;
+        }
 
         if (fwrite(data, sizeof(int32_t), DATA_SLOTS, fp) < DATA_SLOTS)
             retval = false;
@@ -144,6 +164,27 @@ bool TSaveGame::ReadGame(char *name)
                 gametime = data[0];
                 pane = data[1];
                 version = data[7];
+
+                // Restore HudState from save slots [2..11].
+                // Presence sentinel: data[12] == 0xABCD means this save has
+                // valid HudState fields (written by a version that includes
+                // this change). Old saves leave data[12] == 0 → use defaults.
+                if (data[12] == 0xABCD)
+                {
+                    SHudState& hs = GetHudState();
+                    hs.topSlot            = data[2];
+                    hs.bottomSlot         = data[3];
+                    hs.sidebarState       = data[4];
+                    hs.bottomBarOpen      = data[5];
+                    hs.textBarVisible     = data[6];
+                    hs.statsBarVisible    = data[8];
+                    hs.inventoryPage      = data[9];
+                    hs.inventoryContainer = data[10];
+                    hs.spellbookScroll    = data[11];
+                }
+                // else: old save without HudState — leave GetHudState() at
+                // its zero-init defaults (topSlot=EQUIP, bottomSlot=INV,
+                // sidebarState=OPEN) which is the sensible startup state.
 
                 // Now adjust bufsize so we can read in the streamed object list
                 bufsize -= size;
