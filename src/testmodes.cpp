@@ -53,6 +53,7 @@
 #include "uiquickspelltest.h"
 #include "uisidebartest.h"
 #include "uisidetabstest.h"
+#include "uiscrollpanetest.h"
 #include "uispellbooktest.h"
 #include "uispellcreatetest.h"
 #include "uistatstest.h"
@@ -3055,6 +3056,8 @@ bool Initialize(const char* mode)
         return InitializeUIBarInvMode();
     if (strcmp(mode, "ui-map") == 0)
         return InitializeUIMapMode();
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        return InitializeUIScrollPaneMode();
     if (strcmp(mode, "ui-spellbook") == 0)
         return InitializeUISpellbookMode();
     if (strcmp(mode, "ui-spellcreate") == 0)
@@ -3122,6 +3125,8 @@ void Close(const char* mode)
         CloseUIBarInvMode();
     if (strcmp(mode, "ui-map") == 0)
         CloseUIMapMode();
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        CloseUIScrollPaneMode();
     if (strcmp(mode, "ui-spellbook") == 0)
         CloseUISpellbookMode();
     if (strcmp(mode, "ui-spellcreate") == 0)
@@ -3202,6 +3207,8 @@ void Render(const char* mode)
         return RenderUIBarInvMode();
     if (strcmp(mode, "ui-map") == 0)
         return RenderUIMapMode();
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        return RenderUIScrollPaneMode();
     if (strcmp(mode, "ui-spellbook") == 0)
         return RenderUISpellbookMode();
     if (strcmp(mode, "ui-spellcreate") == 0)
