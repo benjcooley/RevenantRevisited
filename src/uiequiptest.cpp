@@ -53,7 +53,45 @@
 //   Renderer->DrawBitmapToTarget        — opaque chrome stamp
 //   Renderer->DrawBitmapSubrectStretchedToTarget — icon/placeholder into
 //                                          the 40×40 slot well
+//   Renderer->CompositeLitTargetSubrectToTarget — paperdoll body sub-rect
+//                                          (added for the 3D Locke path, #11)
 // No hand-rolled chroma-key passes, no procedural silhouette stand-ins.
+//
+// Live 3D paperdoll (#11, #13 — landed):
+//   The pane spawns Locke as a TPlayer instance and per-frame:
+//   1. Advances the engine animator (inst->NextFrame() + Animate(false))
+//      so the body cycles its current idle state.
+//   2. Picks a new idle state every ~4 wall-clock seconds from the
+//      verified Locke .i3d set (winv1..winv5, then binv1..binv5, then
+//      "walk" as last-ditch root). This is #13 — random idle behaviours.
+//   3. Renders the 3D body via the engine's tile-pass + lighting-pass at
+//      a fixed screen sub-rect (kBody3DSrc{X,Y,W,H}) into lit_target.
+//   4. Composites that lit_target sub-rect into the equip pane RT at the
+//      central body region via Renderer->CompositeLitTargetSubrectToTarget,
+//      on top of the chrome stone backdrop.
+//   SuppressPresent is enabled in InitializeUIEquipMode so the full-screen
+//   lit_target composite doesn't paint behind the rest of the UI.
+//
+// Equipment-on-skeleton (#12 — INFRASTRUCTURE ONLY, no visible meshes yet):
+//   The retail equipment-replacement system lives in
+//   src/charanimator.cpp::HideCharParts + RenderEquipment. It walks
+//   Player->GetEquip(i), for each occupied slot finds the BodyType-
+//   matched state in the equipment's .i3d, marks the player's matching
+//   sub-objects OBJ3D_HIDE, then renders the equipment's sub-objects
+//   in their place via Scene3D.RenderObject.
+//
+//   That code uses the legacy Scene3D path. For the sokol port the
+//   equivalent sokol-side mesh extraction (extract the equipment item's
+//   BodyType-matched sub-meshes via ExtractSubMeshTextureSlot, plus
+//   skip the player's hidden sub-objects in TryBuildBodyMeshes) is the
+//   next step. The wiring is in place: items can be Equip'd on the
+//   spawned Player (see EquipDemoItemsOnPlayer below), the engine state
+//   is correct, and the existing charanimator.cpp::ProcessEquipment is
+//   the algorithmic template to port. Per [[feedback-evolve-dont-
+//   replace]] the right home for the new code is a sokol-aware variant
+//   of ProcessEquipment on TCharAnimator itself, not a parallel
+//   panel-local fork. Captured here as a documented TODO rather than
+//   a partial inline guess.
 //
 // *************************************************************************
 
@@ -1123,6 +1161,35 @@ bool InitializeUIEquipMode()
     // once it lands. Falls back to the chrome's painted silhouette
     // until then.
     SpawnBodyInstance();
+
+    // Equip the demo items on the spawned Player so engine state mirrors
+    // a real "Locke wearing kit" scenario. This populates Player->GetEquip
+    // (i) which is what charanimator.cpp::ProcessEquipment reads. The
+    // sokol-side mesh extraction for equipment-on-skeleton (#12) reads
+    // the same equipment[] array — once it's wired (port of
+    // ProcessEquipment to the SubmitMesh path), no other change is
+    // needed here. CanEquip filters per-slot compatibility; mismatched
+    // items silently skip.
+    if (auto* player = dynamic_cast<TPlayer*>(g_bodyInst))
+    {
+        for (int32_t i = 0; i < kDemoCount; ++i)
+        {
+            const SDemoSlot& d = g_demo[i];
+            if (!d.inst || d.eqslot < 0 || d.eqslot >= NUM_EQ_SLOTS) continue;
+            if (player->CanEquip(d.inst, d.eqslot))
+            {
+                player->Equip(d.inst, d.eqslot);
+                log_info("[ui-equip] equipped EQ_%d ← %s on Player",
+                         d.eqslot, d.typeName ? d.typeName : "?");
+            }
+            else
+            {
+                log_info("[ui-equip] CanEquip rejected EQ_%d ← %s (likely "
+                         "EqSlot stat mismatch; item still drawn in slot well)",
+                         d.eqslot, d.typeName ? d.typeName : "?");
+            }
+        }
+    }
 
     delete g_pane;
     g_pane = nullptr;
