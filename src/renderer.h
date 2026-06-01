@@ -274,6 +274,14 @@ struct SStripSegment
     float color_b[4]   = {1.0f, 1.0f, 1.0f, 1.0f};
     float u_a          = 0.0f;
     float u_b          = 1.0f;
+    // V sub-range — left edge of the strip's quad samples `v_left`,
+    // right edge samples `v_right`. Default 0..1 spans the full
+    // texture height (the pre-existing behaviour). Used by the
+    // LightStrip lightning bolt to pick one of 8 horizontally-stacked
+    // crackle patterns per tick (flipbook-via-V-cell) — added 2026-05-31
+    // for S04 TLightningAnimator_Bespoke iter5.
+    float v_left       = 0.0f;
+    float v_right      = 1.0f;
 };
 
 struct SStripDrawItem
@@ -651,6 +659,22 @@ public:
     // Run the deferred lighting pass over the current G-buffer. Writes
     // lit_target (passes [2] + [3]).
     void RunLightingPass();
+
+    // ---- Backdrop pre-fill (optional, between EndTilePass + RunLightingPass)
+    //
+    // Pre-fills lit_target with a fullscreen color + optional image BEFORE
+    // the deferred light shader runs over it. The light shader discards on
+    // empty (alb.a < 0.01) pixels, so any pixel without scene contribution
+    // keeps the backdrop; lit geometry composites over it; post-light fx
+    // (fx_pass) then blends against the result. Pass kInvalidTexture for a
+    // solid-color backdrop. With a texture: lit_target is cleared to
+    // (r,g,b,a) for the letterbox bars, then the image is composited into
+    // the visible rect preserving its aspect ratio.
+    //
+    // No-op if not called this frame -- RunLightingPass falls back to its
+    // historical CLEAR-to-tile_clear_rgba behaviour for every other caller.
+    void DrawBackdrop(TTextureHandle backdrop,
+                      float r, float g, float b, float a);
 
     // ---- FX submission (Phase 1 VFX spine) ------------------------------
     // The fx pipelines need a camera basis (right/up) to expand
@@ -1100,6 +1124,11 @@ private:
     // in any frame, so PresentForSnap won't re-emit uninitialized GPU
     // memory in HUD-only test modes (was tinting snap output magenta).
     bool any_target_ever_written = false;
+
+    // Set by DrawBackdrop; consumed (and reset) by RunLightingPass to flip
+    // its lit_target clear action from CLEAR -> LOAD so the backdrop pixels
+    // survive under the light shader's discard.
+    bool backdrop_filled = false;
 
     // NDC sub-rect for the present blit. Default fills the swapchain.
     float present_ndc[4] = { -1.0f, -1.0f, 2.0f, 2.0f };
