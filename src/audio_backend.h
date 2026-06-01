@@ -41,9 +41,18 @@ namespace audio {
 
 // ---- Lifecycle ----------------------------------------------------------
 
+// Silence audio at the OS device level. When true, Init() will NOT create
+// a miniaudio engine / playback device — Functioning() stays false, all
+// Play* / SetMusic / SetSfx calls become no-ops. Used by --headless so
+// agent-driven test runs don't pump music + SFX onto the user's speakers.
+// Must be called BEFORE Init(). Idempotent.
+void SetSilenced(bool silenced);
+bool IsSilenced();
+
 // Bring up the audio engine. Idempotent — second call is a no-op and
 // returns the previous result. Safe to call from boot before any
-// TSound/TSoundPlayer use.
+// TSound/TSoundPlayer use. If SetSilenced(true) was called first, this
+// returns false immediately (no device, no thread, no output).
 bool Init();
 
 // Tear it down. Idempotent. Stops any in-flight sounds; the engine's

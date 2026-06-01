@@ -25,6 +25,7 @@
 
 #include "revenant.h"
 #include "assetcache.h"
+#include "audio_backend.h"
 #include "framesnap.h"
 #include "headless_window.h"
 #include "logging.h"
@@ -2324,6 +2325,12 @@ sapp_desc sokol_main(int argc, char* argv[])
         // timer still run normally; framesnap reads the offscreen RT.
         desc.hidden = true;
         desc.no_dock_icon = true;
+        // Suppress audio in headless mode — agent-driven test runs were
+        // dumping music + SFX onto the user's speakers. audio::SetSilenced
+        // must be called BEFORE audio::Init (which sound.cpp:406 does on
+        // first sound use); short-circuits Init so no miniaudio engine
+        // ever comes up.
+        audio::SetSilenced(true);
     }
     // Windowed by default; Borderless/FullScreen come from INI/args and
     // take effect before the window opens only if set via argv. Anything

@@ -2751,6 +2751,10 @@ size_t  g_inputSimNext   = 0;
 double  g_inputSimStartMs = 0.0;   // 0 until the first tick stamps it
 bool    g_inputSimActive = false;
 bool    g_inputSimLoop   = false;
+// Latched once we've fired sapp_request_quit() on script drain (see
+// auto-exit block at the end of InputSimTick) so we don't spam the quit
+// request every frame between request + actual app shutdown.
+bool    g_inputSimQuitRequested = false;
 
 // Split a string on a delimiter into trimmed, non-empty tokens.
 std::vector<std::string> SplitTokens(const std::string& s, char delim)
@@ -2978,6 +2982,23 @@ static void InputSimTick(const char* mode)
     {
         g_inputSimNext    = 0;
         g_inputSimStartMs = now_ms;
+    }
+
+    // Auto-exit when a one-shot --input-script drains. Agents have been
+    // accidentally leaving Revenant test processes running indefinitely
+    // because the test modes never exit on their own (manual filmstrip
+    // mode resets for the next batch, looping cycles forever). When the
+    // user provided an explicit one-shot script, the test is by
+    // definition non-interactive — quit as soon as the script's last
+    // event fires. Single-shot guarded by g_inputSimQuitRequested so we
+    // don't spam sapp_request_quit() across frames.
+    if (!g_inputSimLoop &&
+        g_inputSimNext >= g_inputSimEvents.size() &&
+        !g_inputSimQuitRequested)
+    {
+        g_inputSimQuitRequested = true;
+        log_info("[input-sim] script drained -- requesting quit");
+        sapp_request_quit();
     }
 }
 
