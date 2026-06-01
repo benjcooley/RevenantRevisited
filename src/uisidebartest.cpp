@@ -64,8 +64,20 @@ constexpr int32_t kBotH     = 174;
 // Approximations matching uisidetabstest.cpp (UNCONFIRMED-A: BSS constants
 // not yet extracted; refined in pixel-perfect alignment pass).
 constexpr int32_t kPaneRightInset = 0;
-constexpr int32_t kTabsRightInset = 8;
-constexpr int32_t kTabsTopInset   = 24;
+
+// Tab-strip placement is anchored to the LOWER-RIGHT corner of the live
+// PLAYFIELD VIEW, not the display:
+//   playfield_right  = display_w - (sidebar_open    ? kPaneW : 0)
+//   playfield_bottom = display_h - (bottombar_open  ? kBarH  : 0)
+//   strip rect       = playfield - (kStripW + insets, kStripH + insets)
+// So when the sidebar opens/closes (or bottombar toggles), the six-button
+// strip moves with the corner, sitting a constant distance inside it.
+// (UNCONFIRMED-A: spec leaves the inset literal as a BSS const; small
+// gap by visual measurement until refined.)
+constexpr int32_t kTabsRightInset  = 4;   // px gap from playfield right edge
+constexpr int32_t kTabsBottomInset = 2;   // px gap from playfield bottom edge
+constexpr int32_t kBottomBarH      = 60;  // matches BottomBarPane_SPEC §3
+// kPaneW (188) is the sidebar chrome width — defined above as kPaneW.
 
 // ---- hover-fade ramp (spec §6/§9) ---------------------------------------
 constexpr int32_t kRampMax    = 8;
@@ -252,6 +264,23 @@ void AdvanceRamps()
     }
 }
 
+// Tab-strip screen origin — anchored to the playfield's lower-right corner.
+// Playfield = display minus whatever chrome is currently open. See the
+// constants block above for the formula. Used by both DrawTabStrip and the
+// hit-test in HandleMouseClickUISidebarMode so the two stay in lockstep.
+void TabStripOrigin(int32_t& x, int32_t& y)
+{
+    const SHudState& s = GetHudState();
+    const int32_t dw = Display.Width();
+    const int32_t dh = Display.Height();
+    const int32_t playfieldRight  = (dw > 0 ? dw : kStripW)
+                                  - (s.sidebarState == HUD_SIDEBAR_OPEN ? kPaneW : 0);
+    const int32_t playfieldBottom = (dh > 0 ? dh : kStripH + kBottomBarH)
+                                  - (s.bottomBarOpen ? kBottomBarH : 0);
+    x = playfieldRight  - kStripW - kTabsRightInset;
+    y = playfieldBottom - kStripH - kTabsBottomInset;
+}
+
 class TSidebarHud : public THudDrawable
 {
 public:
@@ -300,9 +329,8 @@ private:
     void DrawTabStrip(const SHudState& /*s*/)
     {
         if (!g_stripSurface) return;
-        const int32_t dw = Display.Width();
-        const int32_t x  = (dw > 0 ? dw : kStripW + kTabsRightInset) - kStripW - kTabsRightInset;
-        const int32_t y  = kTabsTopInset;
+        int32_t x = 0, y = 0;
+        TabStripOrigin(x, y);
         Renderer->DrawSurface(g_stripSurface, x, y);
     }
 
@@ -592,9 +620,8 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
     // anchor that happens to overlap a tab button (e.g. EQ_AMMO @ (576,11)
     // vs upper-Book tab @ (583,26)) swallows the click.
     {
-        const int32_t dw      = Display.Width();
-        const int32_t strip_x = (dw > 0 ? dw : kStripW + kTabsRightInset) - kStripW - kTabsRightInset;
-        const int32_t strip_y = kTabsTopInset;
+        int32_t strip_x = 0, strip_y = 0;
+        TabStripOrigin(strip_x, strip_y);
         for (int32_t i = 0; i < kBtnCount; ++i)
         {
             const int32_t bx = strip_x + kBtnX;
