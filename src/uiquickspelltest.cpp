@@ -381,21 +381,16 @@ public:
                 g_cells[i]->State().pressed  = g_slotState[i].pressed;
                 g_cells[i]->State().disabled = g_slotState[i].disabled;
 
-                // Disabled-icon tint: when disabled, override Draw() by
-                // calling the tinted path directly (cell->Draw handles
-                // ring selection; we override icon only for disabled).
+                // Draw the cell. TSpellIconSlot::Draw() order (uispellcell.cpp):
+                //   icon first (below), ring on top (transparent center reveals icon).
+                // For disabled slots: the icon is greyed (35% tint) to indicate
+                // the slot is inactive. We achieve this by temporarily swapping
+                // the icon reference with a tinted blit — instead of calling
+                // Draw() which stamps the icon at full brightness, we manually
+                // draw the tinted icon then the ring.
                 if (g_slotState[i].disabled && g_cells[i]->Icon())
                 {
-                    // Draw ring (G state) from cell, then tinted icon.
-                    g_cells[i]->State().disabled = true;
-                    g_cells[i]->Draw(tw, th);
-                    // Re-draw the icon with a grey tint to override.
-                    // (Cell already drew it at full brightness in Draw()
-                    // before this path — we clear and redo just the icon.)
-                    // Actually, since the alpha pipeline composites in order,
-                    // we just draw a greyed blit ON TOP of the cell draw.
-                    // This double-stamps the icon but the grey overlay wins.
-                    // TODO: cleaner: add a disabled-tint flag to the cell.
+                    // 1. Draw greyed icon FIRST (below ring)
                     PTBitmap icon = g_cells[i]->Icon();
                     const int32_t iconOffX = (kRingW - kIconW) / 2;
                     const int32_t iconOffY = (kRingH - kIconH) / 2;
@@ -403,6 +398,9 @@ public:
                         icon, rx + iconOffX, ry + iconOffY,
                         0, 0, icon->width, icon->height,
                         tw, th, 0.35f, 0.35f, 0.35f, 1.0f);
+                    // 2. Draw RingG ON TOP (transparent center shows greyed icon)
+                    if (g_ringG)
+                        Renderer->DrawBitmapToTarget(g_ringG, rx, ry, tw, th);
                 }
                 else
                 {

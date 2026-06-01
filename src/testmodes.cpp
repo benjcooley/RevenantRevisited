@@ -3250,6 +3250,8 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseClickUIQuickSpellMode(button, x, y);
     if (strcmp(mode, "ui-spellbook") == 0)
         return HandleMouseClickUISpellbookMode(button, x, y);
+    if (strcmp(mode, "ui-spellcreate") == 0)
+        return HandleMouseClickUISpellCreateMode(button, x, y);
     if (strcmp(mode, "ui-scrollpane") == 0)
         return;  // TODO: add scroll-paging mouse handler if needed
     (void)x; (void)y;
