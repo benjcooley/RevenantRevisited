@@ -72,7 +72,6 @@
 #include "renderer.h"
 #include "surface.h"
 #include "time.h"
-#include "uidragstate.h"   // harness_equip[] for cross-pane drag-drop (#7d / #14)
 
 #include <cstdint>
 
@@ -605,69 +604,48 @@ public:
         // -----------------------------------------------------------------
 
         // -----------------------------------------------------------------
-        // Spec §5 step 3 — Per-slot loop, i = 0..10.
-        //
-        // #7d / #14: Cross-pane drag-drop priority.
-        // harness_equip[i] is written by UIDragState::CompleteDrag when a
-        // drag from any pane (Inventory, BarInv, or another Equip slot) is
-        // dropped onto EQ slot i.  Check harness_equip[] FIRST; if it has
-        // an item, that takes precedence over the local g_demo[] spawn state
-        // (which seeds the initial content at Initialize).  This means any
-        // committed Inventory→Equip drop immediately shows in the pane on
-        // the next Refresh() without waiting for a re-spawn.
-        //
-        // Active drag visual (#7b — drag FROM equip source):
-        // If a drag is currently in flight from this equip slot (source ==
-        // Equip, source_idx == i), skip drawing that slot — it shows empty
-        // while the item follows the cursor.
-        //
-        // Draw order per spec §5:
-        //   1. Empty slot → placeholder pictogram (DM_TRANSPARENT)
-        //   2. Occupied slot → item icon (harness_equip first, then g_demo)
-        // No drop shadows (UNCONFIRMED-F).
+        // Spec §5 step 3 — Per-slot loop, i = 0..10:
+        //   - If demo slot has a spawned item AND its icon has loaded,
+        //     blit the equipped icon (DM_TRANSPARENT|DM_BACKGROUND
+        //     analog — alpha from the source).
+        //   - Else blit the named placeholder pictogram
+        //     (DM_TRANSPARENT — magenta-keyed; spec §7).
+        // No drop shadows (spec §7: FUN_00438d80 NOT XREF'd from any
+        // of the four leaf methods — UNCONFIRMED-F).
         // -----------------------------------------------------------------
+        for (int32_t i = 0; i < 11; ++i)
         {
-            const SUIDragState& drag = UIDragState::Get();
-            const bool dragFromEquip = (drag.source == EDragSource::Equip);
+            const SSlotAnchor a = kSlotAnchor[i];
 
-            for (int32_t i = 0; i < 11; ++i)
-            {
-                const SSlotAnchor a = kSlotAnchor[i];
-
-                // #7b: skip this slot if it's the active drag source.
-                if (dragFromEquip && drag.source_idx == i) continue;
-
-                // Priority 1: harness_equip[i] (set by CompleteDrag on drop).
-                PTBitmap itemIcon = nullptr;
-                if (i < kHarnessEquipSlots)
+            // Find a demo item bound to this EQ slot, if any. The
+            // CurrentIconBitmap() helper resolves static (invitem) and
+            // animated (invanim) sources uniformly — for animated items
+            // it returns the current frame at the wall-clock-driven
+            // 10 FPS ramp.
+            PTBitmap itemIcon = nullptr;
+            for (int32_t j = 0; j < kDemoCount; ++j)
+                if (g_demo[j].eqslot == i)
                 {
-                    const SHarnessSlot& hs = UIDragState::harness_equip[i];
-                    if (hs.inst && hs.icon)
-                        itemIcon = hs.icon;
+                    itemIcon = CurrentIconBitmap(g_demo[j]);
+                    if (itemIcon) break;
                 }
 
-                // Priority 2: g_demo[] initial spawn state (seeded at Initialize).
-                if (!itemIcon)
-                {
-                    for (int32_t j = 0; j < kDemoCount; ++j)
-                        if (g_demo[j].eqslot == i)
-                        {
-                            itemIcon = CurrentIconBitmap(g_demo[j]);
-                            if (itemIcon) break;
-                        }
-                }
+            // Decide which bitmap fills the 40×40 well. Item icon first
+            // (occupied path, spec §5 step 3d); else placeholder (empty
+            // path, spec §5 step 3c / §6.3 retail addition).
+            PTBitmap fill = itemIcon ? itemIcon : g_placeholders[i];
+            if (!fill) continue;
 
-                // Decide fill: occupied icon or placeholder pictogram.
-                PTBitmap fill = itemIcon ? itemIcon : g_placeholders[i];
-                if (!fill) continue;
-
-                // Stretch into the 40×40 slot well (tolerates non-square sources).
-                Renderer->DrawBitmapSubrectStretchedToTarget(
-                    fill,
-                    /*dst*/ a.x, a.y, kSlotW, kSlotH,
-                    /*src*/ 0, 0, fill->width, fill->height,
-                    tw, th);
-            }
+            // Stretch into the canonical 40×40 slot well. Item icons are
+            // typically 40×40 already (matches placeholder WxH); the
+            // stretched variant tolerates source sizes that differ (the
+            // baked .i3d invitem isn't guaranteed to be exactly 40×40,
+            // and DrawBitmapToTarget would chop oversized art).
+            Renderer->DrawBitmapSubrectStretchedToTarget(
+                fill,
+                /*dst*/ a.x, a.y, kSlotW, kSlotH,
+                /*src*/ 0, 0, fill->width, fill->height,
+                tw, th);
         }
 
         g_pane->EndPass();
