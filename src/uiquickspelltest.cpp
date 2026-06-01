@@ -110,7 +110,12 @@ constexpr int32_t kStripW = 212;
 // retail literal.
 constexpr int32_t kBtnCount = 4;
 constexpr int32_t kBtnX[kBtnCount] = { 0x0a, 0x3c, 0x6e, 0xa0 };  // 10, 60, 110, 160
-constexpr int32_t kBtnYInBar       = 0x0a;                         // 10 in bar-local
+// Retail bar-y literal is 0x0a (10). We deviate to 0 so the 48-tall ring
+// occupies the upper portion of the 60-tall bar plate, freeing the lower
+// 12 px for line 2 of the spell-name label (per user 2026-05-30: "second
+// word goes below the ring"). With the retail literal of 10 the ring at
+// bar-y 10..58 leaves only 2 px below — line 2 gets clipped.
+constexpr int32_t kBtnYInBar       = 0;
 constexpr int32_t kBtnY            = kBtnYInBar + kLabelMarginAbove; // RT-local y
 
 // --- ring sprite + click rect (spec §3 hit-rect-vs-sprite note) ------
