@@ -3019,6 +3019,11 @@ void TRenderer::RunLightingPass()
     DrainFxQueue();
     DrainOverlayQueue();
     lit_target_dirty = true;
+    // Make any post-lighting samplers (PresentForSnap, the equip-pane
+    // paperdoll lit_target sub-rect composite) treat this frame's lit
+    // pixels as valid even if PresentToSwapchain ends up suppressed for
+    // this frame — previously this flag was only set by PresentToSwapchain.
+    any_target_ever_written = true;
 }
 
 // *************************************************************************
@@ -4068,6 +4073,39 @@ void TRenderer::DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
                              tr, tg, tb, ta);
 }
 
+void TRenderer::CompositeLitTargetSubrectToTarget(int32_t dst_x, int32_t dst_y,
+                                                  int32_t dst_w, int32_t dst_h,
+                                                  int32_t src_screen_x, int32_t src_screen_y,
+                                                  int32_t src_w, int32_t src_h,
+                                                  int32_t target_w, int32_t target_h)
+{
+    // Bail if nothing has ever rendered into lit_target — the GPU memory
+    // would be uninitialized (typically magenta), which would leak into
+    // the destination. Mirrors PresentForSnap's any_target_ever_written
+    // gate.
+    if (!any_target_ever_written) return;
+    if (sg_query_image_state(lit_target) != SG_RESOURCESTATE_VALID) return;
+
+    // Translate screen-space src coords into the padded G-buffer / lit
+    // target coords. PresentToSwapchain does the equivalent at the
+    // shader-uniform level; we apply the same kGBufPad offset to the
+    // pixel-space (src_x, src_y) inputs to the existing Composite path.
+    const int32_t pad     = kGBufPad;
+    const int32_t lit_w   = width  + 2 * pad;
+    const int32_t lit_h   = height + 2 * pad;
+    const int32_t src_x   = pad + src_screen_x;
+    const int32_t src_y   = pad + src_screen_y;
+
+    Composite(lit_target,
+              dst_x, dst_y, dst_w, dst_h,
+              target_w, target_h,
+              src_x, src_y, src_w, src_h,
+              lit_w, lit_h,
+              /*additive_blend=*/false,
+              /*chroma_key=*/false,
+              /*chroma_key_rgb=*/nullptr);
+}
+
 sg_image TRenderer::GetOrCreateSolidColorImage(uint32_t rgba)
 {
     auto it = solid_color_cache.find(rgba);
@@ -4294,9 +4332,16 @@ bool TRenderer::PresentToSwapchain()
     // Editor mode opts out: the game image is composited inside the
     // ImGui Game View panel via ImGui::Image of lit_target. Just mark
     // the targets clean so the next frame's pass actions don't fire.
+    //
+    // any_target_ever_written stays set true regardless — the lit_target
+    // image was just written by the lighting pass, so downstream samplers
+    // (PresentForSnap, the equip-pane paperdoll lit_target sub-rect
+    // composite) can validly read those pixels even though we skipped the
+    // swapchain composite.
     if (suppress_present) {
         color_target_dirty = false;
         lit_target_dirty   = false;
+        any_target_ever_written = true;
         return false;
     }
 

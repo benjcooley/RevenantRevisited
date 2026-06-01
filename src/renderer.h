@@ -884,6 +884,27 @@ public:
     void DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
                            float tr, float tg, float tb, float ta);
 
+    // Composite a sub-rect of the lit_target (the post-lighting 3D scene)
+    // into the currently-active TSurface render-target pass. `src_x/src_y`
+    // are **screen pixels** (display-space, not padded G-buffer space);
+    // the function applies the kGBufPad offset internally so callers don't
+    // have to know about the padding. `target_w/target_h` are the RT dims.
+    //
+    // Used by the equip-sidebar paperdoll path: 3D Locke is rendered by
+    // the test mode's tile-pass + lighting-pass into lit_target at a fixed
+    // screen rect; the equip pane RT then composites that rect into its
+    // own central body region so Locke renders on top of the chrome stone
+    // backdrop. Callers MUST ensure RunLightingPass() has already run this
+    // frame (lit_target_dirty), otherwise the sample is the prior frame's
+    // pixels (or magenta if never written).
+    //
+    // No-op if lit_target has never been written.
+    void CompositeLitTargetSubrectToTarget(int32_t dst_x, int32_t dst_y,
+                                           int32_t dst_w, int32_t dst_h,
+                                           int32_t src_screen_x, int32_t src_screen_y,
+                                           int32_t src_w, int32_t src_h,
+                                           int32_t target_w, int32_t target_h);
+
     // Solid-color filled rect (B-phase visual). Backed by a per-color 1x1
     // texture cache so the existing composite pipeline handles the blit
     // (no shader-side tint needed). Useful as a debug visualization for
