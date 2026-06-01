@@ -68,6 +68,7 @@
 #include "surface.h"
 #include "time.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -203,12 +204,48 @@ const SFontAtlas* g_font = nullptr;
 
 TSurface* g_pane = nullptr;
 
-// Scroll position (spec §6b — clamp [0, contentHeight-229]) + sim-tick
-// driver (we ping-pong it across the row stack so a single capture
-// exercises mid-page scrolling without persistent input).
-int32_t g_scrollY = 0;
-int32_t g_scrollDir = +1;
-double  g_lastTickMs = 0.0;
+// =====================================================================
+// #8 iOS-style velocity scroll state.
+//
+// Physics:
+//   - Drag: while mouse-down, track position changes per-tick to compute
+//     velocity (pixels/sec). g_scrollY follows the drag position directly.
+//   - Release: velocity decays with exponential friction (50%/tick at 24Hz
+//     → very fast. Use 85%/tick = 0.85 decay factor for pleasant feel).
+//   - Rubber-band: when scroll exceeds [0, maxScroll], the boundary
+//     resistance increases (extra δy / 3 past edge). On release, spring
+//     back with a simple lerp toward the clamped position (10% per tick).
+//   - Snap: when |velocity| < 1.0 px/s AND within bounds, zero velocity.
+//
+// Auto-drive: if no drag is active, the harness applies a slow auto-scroll
+// so filmstrip captures exercise mid-scroll layout (replaces old ping-pong).
+// Auto-drive is disabled once any mouse drag has been detected.
+// =====================================================================
+
+int32_t g_scrollY    = 0;       // current scroll position (px, may be out-of-range during rubber-band)
+double  g_velocityY  = 0.0;     // px / second
+double  g_lastTickMs = 0.0;     // last 24Hz tick timestamp (ms)
+
+// Drag state.
+bool    g_dragging    = false;   // true while mouse is held
+int32_t g_dragStartY  = 0;      // cursor y at mouse-down
+int32_t g_dragScrollStart = 0;  // g_scrollY at mouse-down
+double  g_dragLastMs  = 0.0;    // time of last drag-move sample
+int32_t g_dragLastCurY = 0;     // cursor y at last move sample (for velocity)
+bool    g_autoScrollActive = true;  // auto-drive active until first real drag
+int32_t g_autoScrollDir = +1;       // auto-drive direction
+
+// iOS rubber-band physics constants (spec #8).
+constexpr double kFriction       = 0.85;   // velocity decay per 24Hz tick
+constexpr double kSnapThreshold  = 1.0;    // px/s — velocity snap-to-zero
+constexpr double kSpringRate     = 0.12;   // fraction per tick for edge spring-back
+constexpr double kRubberBandDiv  = 3.0;    // resistance divisor past edge
+
+// Pane screen coordinates for hit-testing (spec §3).
+// pane is anchored at the right edge; the content surface is at
+// pane-local (20, 38) with size 148×229.
+constexpr int32_t kPaneScreenX = 452;      // sidebar pane origin x (UNCONFIRMED-A)
+constexpr int32_t kPaneScreenY = 24;       // approximate test-mode placement y
 
 // =====================================================================
 // Per-spell harness binding — names from QuickSpell + Heal (spec §1
@@ -562,27 +599,80 @@ private:
         g_pane = new TSurface(kPaneW, kPaneH, SG_PIXELFORMAT_RGBA8);
     }
 
-    // Scroll ping-pong driver — spec §6b step 0x28 per sim tick (24Hz).
-    // The real pane drives g_scrollY from arrow-button clicks; the harness
-    // bounces between 0 and maxScroll so a single capture exercises mid-
-    // scroll layout + the parchment tile scroll-align loop.
+    // #8 iOS-style velocity scroll driver.
+    // Called every Refresh() frame; applies momentum decay, rubber-band
+    // spring-back, and (when no drag is active) a slow auto-scroll so the
+    // harness filmstrip exercises mid-scroll layout.
     static void AdvanceScroll()
     {
-        const double nowMs = TTime::Time() * 1000.0;
+        const double nowMs  = TTime::Time() * 1000.0;
         if (g_lastTickMs == 0.0) g_lastTickMs = nowMs;
+
+        // Run 24Hz sim ticks to keep physics framerate-independent.
+        const int32_t maxS  = MaxScroll();
         int32_t guard = 0;
         while (nowMs - g_lastTickMs >= kSimTickMs && guard < 64)
         {
             g_lastTickMs += kSimTickMs;
             ++guard;
-            const int32_t maxS = MaxScroll();
-            if (maxS <= 0) { g_scrollY = 0; continue; }
-            // Step every 6 sim ticks (~4 px/sec when stride is 0x28/6 effective)
-            // — too-fast ping-pong is hard to read in a capture; slow it down.
-            if ((guard % 6) != 0) continue;
-            g_scrollY += g_scrollDir * (kScrollStep / 4);
-            if (g_scrollY >= maxS) { g_scrollY = maxS; g_scrollDir = -1; }
-            if (g_scrollY <= 0)    { g_scrollY = 0;    g_scrollDir = +1; }
+
+            if (g_dragging)
+            {
+                // During drag: scroll follows cursor directly (done in
+                // HandleMouseMove); velocity is computed from delta.
+                continue;
+            }
+
+            // Auto-scroll: slow constant drift when no user drag has
+            // happened yet. Disabled once any real drag fires.
+            if (g_autoScrollActive)
+            {
+                if (maxS <= 0) { g_scrollY = 0; continue; }
+                // 5 px / tick auto-speed — shows content scrolling gently.
+                g_scrollY += g_autoScrollDir * 5;
+                if (g_scrollY >= maxS) { g_scrollY = maxS; g_autoScrollDir = -1; }
+                if (g_scrollY <= 0)    { g_scrollY = 0;    g_autoScrollDir = +1; }
+                continue;
+            }
+
+            // Rubber-band spring-back: if out of bounds, spring toward edge.
+            const bool outLow  = (g_scrollY < 0);
+            const bool outHigh = (maxS > 0) && (g_scrollY > maxS);
+            if (outLow || outHigh)
+            {
+                const int32_t target = outLow ? 0 : maxS;
+                const double  delta  = (target - (double)g_scrollY) * kSpringRate;
+                g_scrollY  = int32_t(g_scrollY + delta);
+                g_velocityY = 0.0;  // zero velocity during spring-back
+                continue;
+            }
+
+            // Normal momentum decay.
+            if (std::abs(g_velocityY) < kSnapThreshold)
+            {
+                g_velocityY = 0.0;
+                continue;
+            }
+            const double dtSec = kSimTickMs / 1000.0;
+            g_scrollY   = int32_t(g_scrollY + g_velocityY * dtSec);
+            g_velocityY *= kFriction;
+
+            // Clamp and absorb velocity at edges.
+            if (maxS <= 0)
+            {
+                g_scrollY  = 0;
+                g_velocityY = 0.0;
+            }
+            else if (g_scrollY < 0)
+            {
+                g_scrollY   = 0;
+                g_velocityY = 0.0;
+            }
+            else if (g_scrollY > maxS)
+            {
+                g_scrollY   = maxS;
+                g_velocityY = 0.0;
+            }
         }
     }
 };
@@ -644,10 +734,13 @@ bool InitializeUISpellbookMode()
              kFontPath, kFontPx, g_font ? "OK" : "MISS");
 
     delete g_pane;
-    g_pane       = nullptr;
-    g_scrollY    = 0;
-    g_scrollDir  = +1;
-    g_lastTickMs = 0.0;
+    g_pane            = nullptr;
+    g_scrollY         = 0;
+    g_velocityY       = 0.0;
+    g_lastTickMs      = 0.0;
+    g_dragging        = false;
+    g_autoScrollActive = true;
+    g_autoScrollDir   = +1;
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
@@ -676,7 +769,123 @@ void CloseUISpellbookMode()
     g_scrollDat     = nullptr;
     g_spellIconsDat = nullptr;
     g_font          = nullptr;
-    g_scrollY       = 0;
-    g_scrollDir     = +1;
-    g_lastTickMs    = 0.0;
+    g_scrollY         = 0;
+    g_velocityY       = 0.0;
+    g_lastTickMs      = 0.0;
+    g_dragging        = false;
+    g_autoScrollActive = true;
+    g_autoScrollDir   = +1;
+}
+
+// =====================================================================
+// #8 iOS-style velocity scroll — mouse handlers.
+// =====================================================================
+
+
+// Hit-test helper: returns true if (x, y) is within the spellbook
+// content area on screen. The pane is right-anchored at screen x =
+// (display_w - kPaneW); the content surface is at pane-local (20, 38)
+// with size 148×229. kPaneScreenX/Y are harness approximations (UNCONFIRMED-A).
+static bool SpellbookHitTest(int32_t x, int32_t y)
+{
+    const int32_t dw   = Display.Width()  > 0 ? Display.Width()  : 640;
+    const int32_t paneX = dw - kPaneW;
+    const int32_t paneY = kPaneScreenY;
+    // Content area on screen:
+    const int32_t cx0 = paneX + kContentOrigX;
+    const int32_t cy0 = paneY + kContentOrigY;
+    const int32_t cx1 = cx0 + kContentW;
+    const int32_t cy1 = cy0 + kContentH;
+    return (x >= cx0 && x < cx1 && y >= cy0 && y < cy1);
+}
+
+void HandleMouseMoveUISpellbookMode(int32_t button, int32_t x, int32_t y)
+{
+    if (!(button & MB_LEFTDOWN)) { g_dragging = false; return; }
+    if (!g_dragging) return;
+
+    const double nowMs = TTime::Time() * 1000.0;
+    // Compute velocity from last move sample.
+    const double dtMs = nowMs - g_dragLastMs;
+    if (dtMs > 0.0)
+    {
+        const int32_t dy = y - g_dragLastCurY;
+        // velocity in px/s (negative dy = scroll down = positive scrollY)
+        g_velocityY = -(dy / (dtMs / 1000.0));
+    }
+    g_dragLastMs   = nowMs;
+    g_dragLastCurY = y;
+
+    // Direct-follow: scroll position tracks cursor.
+    const int32_t dy = y - g_dragStartY;
+    const int32_t maxS = MaxScroll();
+
+    int32_t newScroll = g_dragScrollStart - dy;
+
+    // Rubber-band past edges: δy / kRubberBandDiv resistance.
+    if (newScroll < 0)
+        newScroll = int32_t(newScroll / kRubberBandDiv);
+    else if (maxS > 0 && newScroll > maxS)
+        newScroll = maxS + int32_t((newScroll - maxS) / kRubberBandDiv);
+
+    g_scrollY = newScroll;
+}
+
+void HandleMouseClickUISpellbookMode(int32_t button, int32_t x, int32_t y)
+{
+    // Coordinate note: screen coords passed in from testmodes dispatcher.
+    // We convert to pane-local inside the hit-test helper.
+
+    if (button == MB_LEFTDOWN)
+    {
+        if (!SpellbookHitTest(x, y)) return;
+        // Disable auto-scroll once user first drags.
+        g_autoScrollActive = false;
+        g_dragging         = true;
+        g_dragStartY       = y;
+        g_dragScrollStart  = g_scrollY;
+        g_dragLastMs       = TTime::Time() * 1000.0;
+        g_dragLastCurY     = y;
+        g_velocityY        = 0.0;
+    }
+    else if (button == MB_LEFTUP)
+    {
+        g_dragging = false;
+        // Velocity is already set from the last move sample; momentum
+        // decay + rubber-band spring-back runs in AdvanceScroll().
+    }
+
+    // Scroll arrows (spec §10): up-arrow at pane-local (169,150),
+    // down-arrow at pane-local (169,174). Both are 24×24 hit-rects.
+    // The actual click handling for the retail arrows uses TButton
+    // dispatch; in the test harness we do a simple hit-rect check.
+    if (button == MB_LEFTDOWN)
+    {
+        const int32_t dw   = Display.Width()  > 0 ? Display.Width()  : 640;
+        const int32_t paneX = dw - kPaneW;
+        const int32_t paneY = kPaneScreenY;
+
+        const int32_t lx = x - paneX;
+        const int32_t ly = y - paneY;
+
+        // Up arrow: pane-local (169, 150) 24×24
+        if (lx >= kArrowX && lx < kArrowX + kArrowW &&
+            ly >= kArrowUpY && ly < kArrowUpY + kArrowH)
+        {
+            {
+                const int32_t v = g_scrollY - kScrollStep;
+                g_scrollY = v > 0 ? v : 0;
+            }
+            g_velocityY = 0.0;
+        }
+        // Down arrow: pane-local (169, 174) 24×24
+        else if (lx >= kArrowX && lx < kArrowX + kArrowW &&
+                 ly >= kArrowDownY && ly < kArrowDownY + kArrowH)
+        {
+            const int32_t ms = MaxScroll();
+            const int32_t v  = g_scrollY + kScrollStep;
+            g_scrollY = v < ms ? v : ms;
+            g_velocityY = 0.0;
+        }
+    }
 }

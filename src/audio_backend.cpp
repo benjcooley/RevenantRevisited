@@ -188,10 +188,27 @@ void TearDownSound(audio::Source* src) {
 
 // ============================================================ lifecycle
 
+// --headless / agent runs flip this true via audio::SetSilenced() before
+// Init() so no playback device is created at all (no music, no SFX, no
+// PortAudio thread). All downstream entry points already guard on
+// state().init_ok, so a silenced Init -> init_ok=false makes every
+// audio::Play* / SetMusic / Sfx call a clean no-op.
+static bool g_silenced = false;
+
+void audio::SetSilenced(bool silenced) { g_silenced = silenced; }
+bool audio::IsSilenced()               { return g_silenced; }
+
 bool audio::Init() {
     State& s = state();
     if (s.initialized) return s.init_ok;
     s.initialized = true;
+
+    if (g_silenced) {
+        log_info("audio: silenced (--headless / SetSilenced); "
+                 "no engine, no playback device");
+        s.init_ok = false;
+        return false;
+    }
 
     ma_engine_config cfg = ma_engine_config_init();
     // Default channel count / sample rate (whatever the device offers).

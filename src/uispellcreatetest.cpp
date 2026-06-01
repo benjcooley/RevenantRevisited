@@ -94,12 +94,15 @@
 
 #include "bitmap.h"
 #include "display.h"
+#include "font.h"
 #include "logging.h"
 #include "multi.h"
 #include "renderer.h"
 #include "surface.h"
+#include "uidragstate.h"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 namespace {
@@ -175,6 +178,22 @@ constexpr int32_t kTalCount    = 12;      // §2 — exactly 12 S* icons
 // =====================================================================
 constexpr const char* kArchive       = "spellpane.dat";
 
+// Font for composed-word display (GAP-2 — retail font unknown;
+// approximated with Arimo at 10px for the pouch area).
+constexpr const char* kFontPath  = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr int32_t     kFontPx    = 10;
+
+// Composed-word pouch area (UNCONFIRMED — §14-3; harness placement below
+// the talisman grid, above the invoke button — spec §1 "middle area").
+// Approximate: x=10, y=114, w=148, h=20 (between grid-bottom and Invoke).
+constexpr int32_t kPouchX        = 10;
+constexpr int32_t kPouchY        = 114;   // below grid (y0=8 + 3*33=107 ≈ 114)
+constexpr int32_t kPouchW        = 150;
+
+// Spell match result text: at the Invoke bar position (24,136) w=142.
+// Showing the matched spell name inside the Invoke bar area.
+constexpr float kMatchR = 1.0f, kMatchG = 0.85f, kMatchB = 0.3f;  // gold-ish
+
 constexpr const char* kChromeName    = "spellconstr";   // §2 idx 0 (188x174)
 constexpr const char* kInvokeUName   = "SpellInvU";     // §2 idx 2 (142x36)
 constexpr const char* kBackUName     = "SpellBackU";    // §2 idx 4 (22x20)
@@ -204,7 +223,121 @@ PTBitmap g_arwDU        = nullptr;   //  20x26  SpellArwDU
 PTBitmap g_talU         = nullptr;   //  18x18  SpellTalU
 PTBitmap g_talIcons[kTalCount] = { nullptr };
 
+const SFontAtlas* g_font = nullptr;  // for composed-word display + spell-name text
 TSurface* g_pane = nullptr;          // composed RT (188x174 — pane-sized)
+
+// =====================================================================
+// #10b/c/d — Spell composition buffer.
+//
+// The user clicks a talisman icon → it is appended to g_composedWord[].
+// The "back" button removes the last talisman.
+// The "invoke" button looks up the word in the harness spell table and
+// shows the result (spec §10d — the retail spell-lookup path via the
+// "Code" stat is not yet extracted per spec §14-6; the harness uses a
+// static word→spell table matching spell.def recipes).
+//
+// SPELLSIZE = 11 (snapshot src/spellpane.h:30; spec §14-3 UNCONFIRMED).
+// =====================================================================
+constexpr int32_t kSpellSize = 11;   // max talismans in a composed word (snapshot)
+
+// Each entry is a talisman index (0-11 into kTalismanNames) or -1 for empty.
+int32_t g_composedWord[kSpellSize] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+int32_t g_composedLen = 0;
+
+// Spell lookup result — name of the matched spell, or "" if none.
+char    g_matchedSpell[64] = {};
+bool    g_dirty = true;
+
+// =====================================================================
+// Harness spell table — word → spell name mapping.
+// Subset of spell.def TALISMANS recipes for the 5 harness spells.
+// Each entry: a sequence of talisman indices (into kTalismanNames[]),
+// terminated by -1, plus the spell name.
+// =====================================================================
+struct SHarnessSpell
+{
+    const char* name;
+    int32_t talismans[8];  // indices into kTalismanNames; -1 terminates
+};
+
+// kTalismanNames order: SStars(0), SLaw(1), SLife(2), SSky(3), SChaos(4),
+// SDeath(5), SSoul(6), SSun(7), SOcean(8), SMoon(9), SEarth(10), SWard(11)
+// Note: order must match kTalismanNames[] defined above.
+static const SHarnessSpell kHarnessSpells[] = {
+    { "Heal",             { 2,   7,  -1, -1, -1, -1, -1, -1 } },  // Life, Sun
+    { "Advanced Healing", { 2,   7,   6, -1, -1, -1, -1, -1 } },  // Life, Sun, Soul
+    { "Iron Skin",        { 10, 11,   1, -1, -1, -1, -1, -1 } },  // Earth, Ward, Law
+    { "Fire Flash",       {  7,  4,  -1, -1, -1, -1, -1, -1 } },  // Sun, Chaos
+    { "Ice Bolt",         {  8,  9,  -1, -1, -1, -1, -1, -1 } },  // Ocean, Moon
+    { nullptr, { -1 } },
+};
+
+// Check if the current g_composedWord matches a harness spell.
+static const char* LookupComposedWord()
+{
+    if (g_composedLen == 0) return "";
+    for (int32_t s = 0; kHarnessSpells[s].name; ++s)
+    {
+        const SHarnessSpell& sp = kHarnessSpells[s];
+        // Count recipe length.
+        int32_t rlen = 0;
+        while (rlen < 8 && sp.talismans[rlen] >= 0) ++rlen;
+        if (rlen != g_composedLen) continue;
+        bool match = true;
+        for (int32_t t = 0; t < rlen; ++t)
+        {
+            if (g_composedWord[t] != sp.talismans[t]) { match = false; break; }
+        }
+        if (match) return sp.name;
+    }
+    return "";
+}
+
+// Append a talisman to the composition buffer (#10b).
+static void ComposerAddTalisman(int32_t talIdx)
+{
+    if (g_composedLen >= kSpellSize) return;
+    g_composedWord[g_composedLen++] = talIdx;
+    std::snprintf(g_matchedSpell, sizeof(g_matchedSpell), "%s", LookupComposedWord());
+    g_dirty = true;
+    log_info("[ui-spellcreate] add talisman[%d]='%s' word-len=%d match='%s'",
+             talIdx, kTalismanNames[talIdx], g_composedLen, g_matchedSpell);
+}
+
+// Remove last talisman from buffer (#10c).
+static void ComposerBackspace()
+{
+    if (g_composedLen <= 0) return;
+    g_composedWord[--g_composedLen] = -1;
+    std::snprintf(g_matchedSpell, sizeof(g_matchedSpell), "%s", LookupComposedWord());
+    g_dirty = true;
+    log_info("[ui-spellcreate] backspace word-len=%d", g_composedLen);
+}
+
+// Invoke the composed word (#10d) — harness shows matched spell name.
+static void ComposerInvoke()
+{
+    const char* sp = LookupComposedWord();
+    if (sp && sp[0])
+    {
+        log_info("[ui-spellcreate] INVOKE matched='%s' — spell created", sp);
+        // In production this calls the script/spell engine via the TalismanClass
+        // "Code" lookup path. In the harness, we just note the match and clear.
+        // The resulting spell would appear in the spellbook (uispellbooktest) and
+        // on QuickSpell. Full wire-up requires: spell engine integration +
+        // SHudState::quickspellBindings (Agent A) + TSpellIconSlot drop (#6b).
+    }
+    else
+    {
+        log_info("[ui-spellcreate] INVOKE no match for composed word (len=%d)",
+                 g_composedLen);
+    }
+    // Clear after invoke.
+    for (int32_t i = 0; i < kSpellSize; ++i) g_composedWord[i] = -1;
+    g_composedLen = 0;
+    g_matchedSpell[0] = 0;
+    g_dirty = true;
+}
 
 // =====================================================================
 // Asset lookup helper — same shape as the other ui*test panes.
@@ -249,6 +382,10 @@ public:
         if (!g_chrome) return;
         EnsurePane();
         if (!g_pane) return;
+
+        // Only recompose when state changed (#10b/c/d dirty flag).
+        if (!g_dirty) return;
+        g_dirty = false;
 
         const int32_t tw = g_pane->Width();
         const int32_t th = g_pane->Height();
@@ -306,6 +443,47 @@ public:
         // (3e) "min" / SpellTal toggle — spec §3 row 5
         if (g_talU)
             Renderer->DrawBitmapToTarget(g_talU, kMinX, kMinY, tw, th);
+
+        // --- (4) Composed-word display (#10b "spell pouch area") ------
+        // Show the currently-composed talisman sequence as glyph icons
+        // in a horizontal strip in the middle area (pouch region).
+        // Each composed talisman is shown at 16×16 (halved from 32×32
+        // to fit up to 11 in the 150px-wide area).
+        // GAP-3: exact pouch cell positions / size are UNCONFIRMED (spec
+        // §14-3); we use a harness approximation below the talisman grid.
+        if (g_composedLen > 0)
+        {
+            const int32_t cellW = 14;   // halved icon cell size
+            const int32_t gap   = 2;
+            for (int32_t i = 0; i < g_composedLen && i < kSpellSize; ++i)
+            {
+                const int32_t idx = g_composedWord[i];
+                if (idx < 0 || idx >= kTalCount) continue;
+                PTBitmap icon = g_talIcons[idx];
+                if (!icon) continue;
+                const int32_t cx = kPouchX + i * (cellW + gap);
+                // Stretch 32×32 icon into 14×14 cell for the pouch display.
+                Renderer->DrawBitmapSubrectStretchedToTarget(
+                    icon, cx, kPouchY, cellW, cellW,
+                    0, 0, icon->width, icon->height,
+                    tw, th);
+            }
+        }
+
+        // --- (5) Matched spell name on the Invoke bar (#10d preview) --
+        // Show the spell name if the composed word matches a known spell.
+        // Renders over the SpellInvU bar bitmap (below it so it's readable).
+        if (g_font && g_matchedSpell[0])
+        {
+            const int32_t lineH = int32_t(TextLineHeight(g_font) + 0.5f);
+            // Center text vertically in the invoke bar (h=36).
+            const int32_t ty = kInvokeY + (kInvokeH - lineH) / 2;
+            DrawTextShadowedToTarget(
+                g_font, g_matchedSpell,
+                kInvokeX + 4, ty, kInvokeW - 8, lineH,
+                ETextAlign::Center,
+                kMatchR, kMatchG, kMatchB, tw, th);
+        }
 
         g_pane->EndPass();
     }
@@ -377,9 +555,18 @@ bool InitializeUISpellCreateMode()
                      i, kTalismanNames[i], g_talIcons[i] ? "OK" : "MISS");
     }
 
+    // Font — for composed-word + spell-match display (GAP-2 approximation).
+    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    log_info("[ui-spellcreate] font %s @%dpx = %s",
+             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+
     // Reset the cached RT (recreated on first Refresh).
     delete g_pane;
     g_pane = nullptr;
+    g_composedLen = 0;
+    for (int32_t i = 0; i < kSpellSize; ++i) g_composedWord[i] = -1;
+    g_matchedSpell[0] = 0;
+    g_dirty = true;
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
@@ -407,6 +594,67 @@ void CloseUISpellCreateMode()
     g_arwUU        = nullptr;
     g_arwDU        = nullptr;
     g_talU         = nullptr;
+    g_font         = nullptr;
     for (int32_t i = 0; i < kTalCount; ++i) g_talIcons[i] = nullptr;
     g_spellpaneDat = nullptr;
+    g_composedLen  = 0;
+    for (int32_t i = 0; i < kSpellSize; ++i) g_composedWord[i] = -1;
+    g_matchedSpell[0] = 0;
+    g_dirty = true;
+}
+
+// =====================================================================
+// #10b/c/d — Mouse handler for talisman click + backspace + invoke.
+// =====================================================================
+void HandleMouseClickUISpellCreateMode(int32_t button, int32_t x, int32_t y)
+{
+    if (button != MB_LEFTDOWN) return;
+
+    // Convert screen coords to pane-local.
+    // Pane is right-bottom anchored (spec §3 ctor: x=452, y=306 classic).
+    const int32_t dw    = Display.Width()  > 0 ? Display.Width()  : 640;
+    const int32_t dh    = Display.Height() > 0 ? Display.Height() : 480;
+    const int32_t paneX = dw - kPaneW;
+    const int32_t paneY = dh - kPaneH;
+    const int32_t lx    = x - paneX;
+    const int32_t ly    = y - paneY;
+
+    // Hit-test talisman grid (#10b): 4-col x 3-row placeholder grid at
+    // (kTalGridX0, kTalGridY0) pitch (kTalPitchX, kTalPitchY).
+    // Each icon cell is kTalIconW×kTalIconH.
+    if (lx >= kTalGridX0 && ly >= kTalGridY0)
+    {
+        const int32_t col = (lx - kTalGridX0) / kTalPitchX;
+        const int32_t row = (ly - kTalGridY0) / kTalPitchY;
+        // Verify it's inside the icon area (not in the gap).
+        const int32_t localX = (lx - kTalGridX0) % kTalPitchX;
+        const int32_t localY = (ly - kTalGridY0) % kTalPitchY;
+        if (col >= 0 && col < kTalGridCols &&
+            row >= 0 && row < kTalGridRows &&
+            localX < kTalIconW && localY < kTalIconH)
+        {
+            const int32_t idx = row * kTalGridCols + col;
+            if (idx < kTalCount)
+            {
+                ComposerAddTalisman(idx);
+                return;
+            }
+        }
+    }
+
+    // Hit-test "back" button (#10c).
+    if (lx >= kBackX && lx < kBackX + kBackW &&
+        ly >= kBackY && ly < kBackY + kBackH)
+    {
+        ComposerBackspace();
+        return;
+    }
+
+    // Hit-test "invoke" button (#10d).
+    if (lx >= kInvokeX && lx < kInvokeX + kInvokeW &&
+        ly >= kInvokeY && ly < kInvokeY + kInvokeH)
+    {
+        ComposerInvoke();
+        return;
+    }
 }
