@@ -2261,6 +2261,7 @@ void ShutdownGlobals()
 // Forward decls for the sokol callbacks (defined below sokol_main).
 static void AppInit();
 static void AppFrame();
+void SetMaxRuntimeSeconds(double s);   // see definition above AppFrame
 static void AppEvent(const sapp_event* ev);
 static void AppCleanup();
 
@@ -2291,13 +2292,25 @@ sapp_desc sokol_main(int argc, char* argv[])
     // window) AND again later in AppInit (which sets the post-init hide
     // flag in case desc.hidden wasn't honored by a build that doesn't
     // include our sokol_app patch). Scan argv directly — argh hasn't run.
+    // Also parse --max-runtime=N here: a wall-clock hard ceiling that
+    // calls sapp_request_quit() N seconds after AppFrame first ticks.
+    // This is a belt-and-suspenders safety net for agent runs — even if
+    // the input-script's auto-exit fails or the engine deadlocks before
+    // the script drains, the process eventually exits on its own.
     bool cli_headless = false;
     for (int i = 1; i < argc; ++i)
     {
         const char* a = argv[i];
         if (!a) continue;
         while (*a == '-' || *a == '/') ++a;
-        if (std::strcmp(a, "headless") == 0) { cli_headless = true; break; }
+        if (std::strcmp(a, "headless") == 0) { cli_headless = true; }
+        else if (std::strncmp(a, "max-runtime=", 12) == 0)
+        {
+            char* endp = nullptr;
+            const long s = std::strtol(a + 12, &endp, 10);
+            if (endp && *endp == '\0' && s > 0)
+                SetMaxRuntimeSeconds(double(s));
+        }
     }
 
     sapp_desc desc = {};
@@ -2454,6 +2467,15 @@ static void AppInit()
     SystemInitialized = true;
 }
 
+// --max-runtime=N: wall-clock hard ceiling that std::_Exit(0)s the process
+// N seconds after the first AppFrame tick. Belt-and-suspenders safety net
+// for agent runs (paired with the input-script auto-exit). 0 = disabled.
+// Parsed once in GetParameters; consumed by AppFrame.
+static double g_max_runtime_sec = 0.0;
+static double g_max_runtime_start_ms = 0.0;
+
+void SetMaxRuntimeSeconds(double s) { g_max_runtime_sec = s; }
+
 static void AppFrame()
 {
     // Drive the legacy screen dispatch. The pre-port top-level loop was:
@@ -2469,6 +2491,29 @@ static void AppFrame()
         return;
 
     TTime::BeginFrame(sapp_frame_duration());
+
+    // --max-runtime hard ceiling: if a positive limit was passed, hard-
+    // exit when wall-clock elapsed since first frame exceeds it. Belt-
+    // and-suspenders with the input-script auto-exit -- catches engine
+    // deadlocks, runaway loops, or crashes-pre-script-start that the
+    // script-side path can't handle. Uses std::_Exit(0) (skips atexit /
+    // static dtors) because sapp_request_quit() is best-effort and can
+    // be swallowed by a hung screen TimerLoop -- the whole point of this
+    // safety net is that it WORKS even when something is stuck. Mid-
+    // capture PNGs may be lost, which is fine: max-runtime hitting means
+    // the run was already broken.
+    if (g_max_runtime_sec > 0.0)
+    {
+        const double now_ms = TTime::Time() * 1000.0;
+        if (g_max_runtime_start_ms == 0.0) g_max_runtime_start_ms = now_ms;
+        const double elapsed_sec = (now_ms - g_max_runtime_start_ms) / 1000.0;
+        if (elapsed_sec >= g_max_runtime_sec)
+        {
+            log_info("[max-runtime] hit %.1fs limit -- hard exit",
+                     g_max_runtime_sec);
+            std::_Exit(0);
+        }
+    }
 
     // Start the ImGui frame before Animate/draw so screens can build debug
     // panels from their normal per-frame code. simgui_render() is called
