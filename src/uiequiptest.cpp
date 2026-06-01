@@ -321,6 +321,13 @@ std::vector<int32_t> g_hiddenPlayerObjnums;
 // mode); we include them as fallback in case the spawn lands in bow
 // mode. `walk` is the universal root fallback if no inv-pose exists.
 constexpr const char* kIdleStateCandidates[] = {
+    // Static / neutral stand candidates probed FIRST -- any of these
+    // would be the canonical "paperdoll resting pose" if Locke's .i3d
+    // has them. Most won't exist; the loop drops the misses.
+    "still", "stand", "wstand", "bstand", "ready", "wready", "main",
+    "all", "none", "default", "neutral", "rest", "wrest", "brest",
+    "pose", "wpose", "bpose", "stand1", "stand2", "winv0", "binv0",
+    // winv*/binv* (the SPEC §9 named retail equip idle cycle) come next.
     "winv1", "winv2", "winv3", "winv4", "winv5",
     "binv1", "binv2", "binv3", "binv4", "binv5",
     "walk",  // last-ditch fallback — root locomotion cycle
@@ -537,16 +544,23 @@ void SpawnBodyInstance()
     def.accum    = { 0, 0, 0 };
     def.rotatex  = 0;
     def.rotatey  = 0;
-    // rotatez is uint8 in 0..255 game-angle space (object.h:965). The
-    // equip pane shows Locke in a slight-3/4-left view (matches
-    // images/ui/sidebar-equipment/paperdoll-empty-locke_nude.png —
-    // his right shoulder is forward, body twisted slightly). Sweep
-    // (REVENANT_EQUIP_FACING env var) confirms 160 reads closest to
-    // the reference under the engine's iso projection.
+    // rotatez is uint8 in 0..255 game-angle space (object.h:965). At 96
+    // Locke reads as a slight-3/4-left chest-toward-camera view -- right
+    // shoulder slightly forward, chest visible face-on, matching
+    // images/ui/sidebar-equipment/paperdoll-empty-locke_nude.png.
+    // Frozen sweep (REVENANT_EQUIP_FREEZE=1 + REVENANT_EQUIP_FACING=N):
+    //   0   right profile, facing screen-left
+    //   32  rotating toward back
+    //   64  3/4 back-left
+    //   96  3/4 front-left -- chest visible, head slightly turned       <- pick
+    //   128 dead-back (we see Locke's shoulder blades)
+    //   160 3/4 back-right (D's prior pick)
+    //   192 right profile, facing screen-right
+    //   224 3/4 right
     if (const char* override_face = std::getenv("REVENANT_EQUIP_FACING"))
         def.rotatez = (uint8_t)std::atoi(override_face);
     else
-        def.rotatez  = 160;
+        def.rotatez  = 96;
     def.group    = 0;
 
     TObjectInstance* inst = cl->NewObject(&def);
@@ -997,9 +1011,18 @@ void TryBuildBodyMeshes()
         return;
 
     // Fit body world bbox to the body rect's height (175 px). Use the
-    // bbox z-extent (vertical) primarily — the body is tall and slim.
+    // bbox z-extent (vertical) primarily -- the body is tall and slim.
+    // Default 1.0 matches the retail reference scale (Locke fills the
+    // body sub-rect's height almost edge-to-edge). REVENANT_EQUIP_FIT
+    // env var overrides for further tuning.
+    float fit = 1.0f;
+    if (const char* env = std::getenv("REVENANT_EQUIP_FIT"))
+    {
+        const float f = float(std::atof(env));
+        if (f > 0.1f && f < 4.0f) fit = f;
+    }
     const float bbox_z = g_bodyBBoxMax[2] - g_bodyBBoxMin[2];
-    g_bodyScale = (bbox_z > 1e-3f) ? (float(kBody3DSrcH) * 0.85f / bbox_z) : 1.0f;
+    g_bodyScale = (bbox_z > 1e-3f) ? (float(kBody3DSrcH) * fit / bbox_z) : 1.0f;
     g_bodyMeshesBuilt = true;
     log_info("[ui-equip] body meshes built: %zu submeshes scale=%.2f bbox=(%.0f..%.0f, %.0f..%.0f, %.0f..%.0f)",
              g_bodyMeshes.size(), g_bodyScale,
@@ -1037,33 +1060,59 @@ void RenderBody3D()
     if (!Renderer || !Display.IsActive() || !Display.BackBuffer()) return;
     if (!g_bodyInst || g_bodyMeshes.empty() || !g_body3DImg) return;
 
-    // Advance animation once per legacy tick. Char3d uses the same gate;
-    // legacy tick advances on real wall-clock so this is frame-rate
-    // independent.
-    const int64_t legacy_tick = TTime::LegacyFrameCount();
-    if (legacy_tick != g_bodyLastTick)
-    {
-        g_bodyLastTick = legacy_tick;
-        g_bodyInst->NextFrame();
-        if (g_bodyInst->NeedsAnimator() && !g_bodyInst->HasAnimator())
-            g_bodyInst->OnScreen();
-        g_bodyInst->Animate(false);
-    }
+    // Freeze flag — when REVENANT_EQUIP_FREEZE=1 we skip NextFrame, Animate,
+    // and IdleAnimTick so the paperdoll holds its initial pose. Used while
+    // tuning camera/orientation/lighting against the retail reference image
+    // (paperdoll-empty-locke_nude.png) — a still image is the only fair
+    // comparison target. Drop the env var to restore #13 idle cycling.
+    static const bool s_freeze = []{
+        const char* env = std::getenv("REVENANT_EQUIP_FREEZE");
+        return env && *env && env[0] != '0';
+    }();
 
-    // #13: cycle to a different idle state on a wall-clock timer so the
-    // paperdoll isn't a frozen posture. Independent of the per-tick
-    // NextFrame above (which advances frames inside the current state).
-    IdleAnimTick();
+    if (!s_freeze)
+    {
+        // Advance animation once per legacy tick. Char3d uses the same gate;
+        // legacy tick advances on real wall-clock so this is frame-rate
+        // independent.
+        const int64_t legacy_tick = TTime::LegacyFrameCount();
+        if (legacy_tick != g_bodyLastTick)
+        {
+            g_bodyLastTick = legacy_tick;
+            g_bodyInst->NextFrame();
+            if (g_bodyInst->NeedsAnimator() && !g_bodyInst->HasAnimator())
+                g_bodyInst->OnScreen();
+            g_bodyInst->Animate(false);
+        }
+
+        // #13: cycle to a different idle state on a wall-clock timer so the
+        // paperdoll isn't a frozen posture. Independent of the per-tick
+        // NextFrame above (which advances frames inside the current state).
+        IdleAnimTick();
+    }
 
     const int32_t state = g_bodyInst->GetState();
 
-    // Camera origin in screen pixels. Centred inside the body sub-rect.
+    // Camera origin in screen pixels. Default: horizontally centred in
+    // the body sub-rect; vertically biased BELOW center so Locke's feet
+    // land on the pedestal (the body rect's bottom edge is well above
+    // the pedestal top in the pane chrome). +55 = empirically chosen
+    // against the retail reference paperdoll-empty-locke_nude.png.
+    // REVENANT_EQUIP_OFFY env var nudges further at iteration time.
+    constexpr int32_t kBody3DOriginYBias = 55;  // shift world origin DOWN
+    int32_t off_y = kBody3DOriginYBias;
+    if (const char* env = std::getenv("REVENANT_EQUIP_OFFY"))
+    {
+        const int32_t v = std::atoi(env);
+        if (v > -200 && v < 200) off_y = v;
+    }
     const int32_t cam_ox = kBody3DSrcX + kBody3DSrcW / 2;
-    const int32_t cam_oy = kBody3DSrcY + kBody3DSrcH / 2;
+    const int32_t cam_oy = kBody3DSrcY + kBody3DSrcH / 2 + off_y;
 
-    // Lighting / scene setup — copied from char3d defaults (testmodes.cpp
-    // :1088-1094). These deliberately match the char3d preview so Locke
-    // reads the same on a stage as he does in the preview.
+    // Lighting / scene setup -- char3d-derived baseline; tuning against
+    // the retail reference (paperdoll-empty-locke_nude.png) requires
+    // matching the engine's actual world-space conventions for the light
+    // direction vector, which the char3d defaults already do.
     Renderer->SetLight(0.6f, -0.6f, 0.4f, 1.0f, 1.0f, 1.0f, 1.0f, 0.25f);
     Renderer->SetAmbientColor(0.55f, 0.55f, 0.55f);
     Renderer->SetAmbientOcclusion(false, 12.0f, 1.0f, 0.15f, 96.0f);
