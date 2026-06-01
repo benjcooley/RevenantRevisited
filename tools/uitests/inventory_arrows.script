@@ -1,0 +1,20 @@
+# Inventory L/R page-arrow click test.
+# Pair with: --test=ui-hud --headless --filmstrip=6,0
+#   --snapprefix=inventory/arrows-
+#   --input-script="$(cat tools/uitests/inventory_arrows.script)"
+#
+# Pre-conditions: bottom slot must be Inv (default at HUD init).
+# Arrow screen coords (Classic 640x480, Inv pane at 452,306):
+#   left  arrow: (592, 317) to (616, 341) — center (604, 329)
+#   right arrow: (613, 318) to (637, 342) — center (625, 330)
+#
+# 6 captures: baseline → 4 right-clicks (pages 0→4) → 1 left-click (page 3)
+
+log baseline; moveto 100 100 0; pause 300; take_snapshot baseline page=0;
+
+log right_1; moveto 625 330 200; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot right click page=1;
+log right_2; moveto 625 330 100; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot right click page=2;
+log right_3; moveto 625 330 100; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot right click page=3;
+log right_4; moveto 625 330 100; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot right click page=4;
+
+log left_1; moveto 604 329 200; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot left click page=3

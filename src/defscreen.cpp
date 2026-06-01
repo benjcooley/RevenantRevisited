@@ -894,7 +894,10 @@ void TDefScreen::DrawEdit(const SDefWidget& w)
     const int32_t cy = w.y + st.rect.t;
     const int32_t cw = w.w - st.rect.l - st.rect.r;
     const int32_t ch = w.h - st.rect.t - st.rect.b;
-    DrawText(w.text, cx, cy, cw, ch, st.textflags | kTextVCenter, st.color, st.font);
+    // When focused, show the edit colour (yellow) + a simple caret.
+    const SDefColor col   = w.focused ? st.editcolor : st.color;
+    const std::string txt = w.focused ? (w.text + "_") : w.text;
+    DrawText(txt, cx, cy, cw, ch, st.textflags | kTextVCenter, col, st.font);
 }
 
 void TDefScreen::DrawScrollbar(const SDefWidget& w)
@@ -1009,9 +1012,32 @@ void TDefScreen::SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly)
     w.value = w.minval + static_cast<int32_t>(frac * (w.maxval - w.minval) + 0.5f);
 }
 
+bool TDefScreen::StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly)
+{
+    const SDefStyle& st = w.style;
+    PTBitmap up   = LookupBitmap((st.up + "U").c_str());
+    PTBitmap down = LookupBitmap((st.down + "U").c_str());
+    const bool vertical = (w.flags & kScrollVScroll) != 0;
+    auto dec = [&] { if (w.value > w.minval) --w.value; };
+    auto inc = [&] { if (w.value < w.maxval) ++w.value; };
+    if (vertical)
+    {
+        if (up   && ly <  w.y + 1 + up->height)          { dec(); return true; }
+        if (down && ly >= w.y + w.h - 1 - down->height)  { inc(); return true; }
+    }
+    else
+    {
+        if (up   && lx <  w.x + 1 + up->width)           { dec(); return true; }
+        if (down && lx >= w.x + w.w - 1 - down->width)   { inc(); return true; }
+    }
+    return false;
+}
+
 void TDefScreen::OnMouseDown(int32_t lx, int32_t ly)
 {
     draggingSlider = -1;
+    for (SDefWidget& w : widgets) w.focused = false;   // a press drops EDIT focus
+
     for (size_t i = 0; i < widgets.size(); ++i)
     {
         SDefWidget& w = widgets[i];
@@ -1019,14 +1045,39 @@ void TDefScreen::OnMouseDown(int32_t lx, int32_t ly)
         switch (w.type)
         {
             case EDefWidget::Button:    w.pressed = true;           break;
+            case EDefWidget::Edit:      w.focused = true;           break;
             case EDefWidget::Listbox:   SelectListRow(w, lx, ly);   break;
             case EDefWidget::Scrollbar:
-                draggingSlider = static_cast<int32_t>(i);
-                SetSliderFromCursor(w, lx, ly);
+                if (!StepSliderArrow(w, lx, ly))     // arrow click = ±1 step
+                {
+                    draggingSlider = static_cast<int32_t>(i);
+                    SetSliderFromCursor(w, lx, ly);  // track click = jump, then drag
+                }
                 break;
             default: break;
         }
     }
+}
+
+void TDefScreen::OnKey(int32_t vk, bool down)
+{
+    if (!down) return;
+    SDefWidget* ed = nullptr;
+    for (SDefWidget& w : widgets)
+        if (w.type == EDefWidget::Edit && w.focused) { ed = &w; break; }
+    if (!ed) return;
+
+    if (vk == 0x08 || vk == 0x2E)                 // Backspace / Delete
+    {
+        if (!ed->text.empty()) ed->text.pop_back();
+        return;
+    }
+    char c = 0;
+    if      (vk >= 'A' && vk <= 'Z') c = static_cast<char>('a' + (vk - 'A'));  // no shift
+    else if (vk >= '0' && vk <= '9') c = static_cast<char>(vk);
+    else if (vk == 0x20)             c = ' ';
+    if (c && (ed->maxlen <= 0 || static_cast<int32_t>(ed->text.size()) < ed->maxlen))
+        ed->text.push_back(c);
 }
 
 const char* TDefScreen::OnMouseUp(int32_t lx, int32_t ly)

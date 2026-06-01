@@ -112,6 +112,7 @@ struct SDefWidget
     bool        hovered  = false;
     bool        disabled = false;
     bool        selected = false;                  // toggle/checkbox checked state
+    bool        focused  = false;                  // EDIT has keyboard focus
     PTBitmap    fieldBitmap = nullptr;             // BITMAP bound via SetField
     std::vector<std::vector<std::string>> rows;    // LISTBOX data rows
     int32_t     selrow    = -1;
@@ -166,6 +167,7 @@ class TDefScreen
     void        OnMouseDown(int32_t lx, int32_t ly);
     const char* OnMouseUp(int32_t lx, int32_t ly);
     void        OnMouseMove(int32_t lx, int32_t ly);
+    void        OnKey(int32_t vk, bool down);     // routed to the focused EDIT
 
   private:
     // --- parsing (defscreen.cpp) ---
@@ -196,6 +198,7 @@ class TDefScreen
     // --- input helpers (defscreen.cpp) ---
     void SelectListRow(SDefWidget& w, int32_t lx, int32_t ly);
     void SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly);
+    bool StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly);
     void DrawNineSlice(PTBitmap bm, const SDefInsets& frame, int32_t x,
                        int32_t y, int32_t w, int32_t h);
 

@@ -156,6 +156,14 @@ static SControlEntry g_defaultGameControls[] =
     {"Down Right", "DownRight", ALLMODES, {{VK_NEXT},  {VK_JOYDOWNRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNRIGHT, false},
 };
 
+void InitDefaultControlMap()
+{
+    if (ControlMap.NumControls() > 0)
+        return;   // already populated (e.g. TPlayScreen ran first)
+    ControlMap.Initialize(int32_t(sizearray(g_defaultGameControls)),
+                          g_defaultGameControls);
+}
+
 // Game runs at this many internal ticks per real-time second. Used by
 // time-of-day + the frame-to-minutes helpers.
 static constexpr int32_t kGameFrameRate = 30;
@@ -245,8 +253,7 @@ bool TPlayScreen::Initialize()
     // arrow + numpad-diagonal layout. UpdateMove synthesizes diagonals
     // from adjacent cardinals so laptop users without a Home/PgUp/End/
     // PgDn cluster still get full 8-way movement.
-    ControlMap.Initialize(int32_t(sizearray(g_defaultGameControls)),
-                          g_defaultGameControls);
+    InitDefaultControlMap();
 
     EditorLoadState();
 

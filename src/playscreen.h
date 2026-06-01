@@ -80,6 +80,13 @@ enum GAMECOMMAND : int32_t
 #define CMDFLAG_DIRFLAGS    (0xFF)
 #define CMDFLAG_MOVEFLAGS   (0x300)
 
+// Populate the global ControlMap with the default game key bindings (the
+// canonical GAMECMD_* table). Idempotent-ish: callers that need the bindings
+// before TPlayScreen exists (the main-menu Options screen, --test=ui-options)
+// can call this so ControlMap.NumControls() is non-zero. TPlayScreen::Initialize
+// also calls it. The table lives here because it is keyed on GAMECMD_*.
+void InitDefaultControlMap();
+
 // Coarse time-of-day bucket from gametime, used by lighting and a few
 // scripted hooks.
 enum

@@ -1,0 +1,60 @@
+# Cross-pane drag + bag-open test.
+# Pair with: --test=ui-hud --headless --filmstrip=8,0
+#   --snapprefix=inventory/cross-pane-
+#   --input-script="$(cat tools/uitests/inventory_cross_pane.script)"
+#
+# Coordinate cheat-sheet (Classic 640x480):
+#   inv grid (bottom-right pane @ 452,306, origin pane-local 8,42):
+#     slot[col,row] = col*3 + row    center = (480 + col*45, 368 + row*44)
+#     slot 0  = (480, 368)
+#     slot 4  = (525, 412)
+#     slot 11 = (615, 456)
+#   BarInv (bottom strip, origin 220,10, pitch 45, slot 40x40):
+#     bar slot N center = (240 + N*45, display_h - 60 + 30)
+#     For display_h=480 → y = 450
+#     bar slot 0 = (240, 450), bar slot 8 = (240 + 8*45, 450) = (600, 450)
+#   Equip (top sidebar pane @ 452,0, anchors per DAT_005e3f60):
+#     EQ_HEAD       (0)  = (452+0x4a+20, 0x25+20) = (546, 57)
+#     EQ_PRIMEHAND  (4)  = (452+7+20,   106+20) = (479, 126)
+#     EQ_FEET      (10)  = (452+0x8d+20, 0xca+20) = (633, 222)
+#
+# 8 captures: cross-pane drag combos + bag-open right-click
+
+log baseline; moveto 100 100 0; pause 300; take_snapshot baseline;
+
+# 1. Inv slot 0 -> BarInv slot 0
+log drag_inv_to_barinv;
+moveto 480 368 200; pause 100; left_down; pause 80;
+moveto 240 450 300; pause 80; left_up;
+pause 200; take_snapshot inv0 to barinv0;
+
+# 2. Inv slot 4 -> Equip EQ_HEAD (need top slot = Equip; default OK)
+log drag_inv_to_equip_head;
+moveto 525 412 200; pause 100; left_down; pause 80;
+moveto 546 57 400; pause 80; left_up;
+pause 200; take_snapshot inv4 to equip head;
+
+# 3. BarInv slot 0 -> Inv slot 11
+log drag_barinv_to_inv;
+moveto 240 450 200; pause 100; left_down; pause 80;
+moveto 615 456 400; pause 80; left_up;
+pause 200; take_snapshot barinv0 to inv11;
+
+# 4. Equip EQ_HEAD -> BarInv slot 8
+log drag_equip_to_barinv;
+moveto 546 57 200; pause 100; left_down; pause 80;
+moveto 600 450 400; pause 80; left_up;
+pause 200; take_snapshot equip head to barinv8;
+
+# 5. Right-click bag-open on inv slot 0 → enters bag
+log bag_open;
+moveto 480 368 200; pause 100; right_down; pause 80; right_up;
+pause 200; take_snapshot bag opened slot 0;
+
+# 6. Right-click again on same slot → back to root
+log bag_close;
+moveto 480 368 100; pause 100; right_down; pause 80; right_up;
+pause 200; take_snapshot bag closed back to root;
+
+# 7. Final
+log final; pause 100; take_snapshot final

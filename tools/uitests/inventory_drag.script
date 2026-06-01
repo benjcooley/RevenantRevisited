@@ -1,0 +1,40 @@
+# Inventory item-drag click-down + release test.
+# Pair with: --test=ui-hud --headless --filmstrip=6,0
+#   --snapprefix=inventory/drag-
+#   --input-script="$(cat tools/uitests/inventory_drag.script)"
+#
+# Inv grid centers (Classic 640x480, pane at 452,306):
+#   slot[col,row] = col*3 + row (column-major)
+#   center = (480 + col*45, 368 + row*44)
+#   slot 0  = col 0,row 0 → (480, 368)
+#   slot 5  = col 1,row 2 → (525, 456)
+#   slot 11 = col 3,row 2 → (615, 456)
+#
+# 6 captures:
+#   1. baseline
+#   2. mid-drag (mouse-down on slot 0, hover over slot 11)
+#   3. dropped (left_up on slot 11 → commit)
+#   4. second drag pickup (mouse-down on slot 5)
+#   5. release over empty area (200,200) → CANCEL
+#   6. final
+
+log baseline;
+moveto 100 100 0; pause 300; take_snapshot baseline;
+
+log pickup_slot0;
+moveto 480 368 200; pause 100; left_down; pause 100;
+
+log drag_to_slot11;
+moveto 615 456 400; pause 100; take_snapshot mid drag slot 0 to 11;
+
+log drop_on_slot11;
+left_up; pause 200; take_snapshot drop committed;
+
+log pickup_slot5;
+moveto 525 456 200; pause 100; left_down; pause 100; take_snapshot pickup slot 5;
+
+log release_over_empty;
+moveto 200 200 300; pause 100; left_up; pause 200; take_snapshot release over empty (cancel);
+
+log final;
+pause 100; take_snapshot final
