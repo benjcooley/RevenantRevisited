@@ -8,6 +8,11 @@
 // its correct screen-anchored position; the renderer paints them all every
 // frame, so this orchestrator does nothing per-frame beyond the backdrop.
 //
+// 2026-05-31: Added Inventory + Equip pane initializations so drag-drop
+// (#7b / #7d / #14) and page-arrow (#7e) states are visible in ui-hud
+// filmstrips.  Inventory must init BEFORE Equip so harness_inv[] is
+// populated when Equip reads it in RenderUIEquipMode.
+//
 // *************************************************************************
 
 #include "uihudtest.h"
@@ -19,6 +24,8 @@
 
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
+#include "uiequiptest.h"       // Equip pane (#7d / #14 — reads harness_equip[])
+#include "uiinventorytest.h"   // Inventory pane (#7a-#7f — populates harness_inv[])
 #include "uiplyrstatusbartest.h"
 #include "uiquickspelltest.h"
 #include "uisidebartest.h"
@@ -32,6 +39,8 @@ bool g_initBottomBar = false;
 bool g_initBarInv    = false;
 bool g_initQuickSp   = false;
 bool g_initSidebar   = false;
+bool g_initInventory = false;   // Inventory pane (populates harness_inv[])
+bool g_initEquip     = false;   // Equip pane (reads harness_equip[])
 
 void SafeInit(const char* name, bool& flag, bool (*init)())
 {
@@ -62,8 +71,14 @@ bool InitializeUIHudMode()
     SafeInit("BarInv",        g_initBarInv,    &InitializeUIBarInvMode);
     SafeInit("QuickSpell",    g_initQuickSp,   &InitializeUIQuickSpellMode);
 
-    // Right-anchored sidebar = tabs + top-slot + bottom-slot
+    // Right-anchored sidebar = tabs + top-slot + bottom-slot chrome
     SafeInit("Sidebar",       g_initSidebar,   &InitializeUISidebarMode);
+
+    // Sidebar content panes — items and drag-drop state.
+    // Inventory MUST init before Equip (harness_inv[] seeded by Inventory
+    // is read by Equip to show items dropped from the inventory).
+    SafeInit("Inventory",     g_initInventory, &InitializeUIInventoryMode);
+    SafeInit("Equip",         g_initEquip,     &InitializeUIEquipMode);
 
     // Overlay (transparent)
     SafeInit("TextBar",       g_initTextBar,   &InitializeUITextBarMode);
@@ -89,6 +104,8 @@ void RenderUIHudMode()
     if (g_initBarInv)    RenderUIBarInvMode();
     if (g_initQuickSp)   RenderUIQuickSpellMode();
     if (g_initSidebar)   RenderUISidebarMode();
+    if (g_initInventory) RenderUIInventoryMode();
+    if (g_initEquip)     RenderUIEquipMode();
     if (g_initTextBar)   RenderUITextBarMode();
 
     // Final backdrop = dark-gray (simulates the empty playfield behind the
@@ -101,6 +118,8 @@ void CloseUIHudMode()
 {
     log_info("[ui-hud] closing");
     SafeClose("TextBar",       g_initTextBar,   &CloseUITextBarMode);
+    SafeClose("Equip",         g_initEquip,     &CloseUIEquipMode);
+    SafeClose("Inventory",     g_initInventory, &CloseUIInventoryMode);
     SafeClose("Sidebar",       g_initSidebar,   &CloseUISidebarMode);
     SafeClose("QuickSpell",    g_initQuickSp,   &CloseUIQuickSpellMode);
     SafeClose("BarInv",        g_initBarInv,    &CloseUIBarInvMode);
