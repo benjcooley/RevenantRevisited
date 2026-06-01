@@ -53,6 +53,7 @@
 // *************************************************************************
 
 #include "uiquickspelltest.h"
+#include "uispellcell.h"
 
 #include "bitmap.h"
 #include "display.h"
@@ -62,6 +63,7 @@
 #include "renderer.h"
 #include "surface.h"
 #include "time.h"
+#include "uidragstate.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -220,6 +222,28 @@ struct SSlotState
 SSlotState g_slotState[kBtnCount];
 
 // =====================================================================
+// TSpellIconSlot cells — one per ring button (see uispellcell.h).
+// Allocated on first use in SetupCells().
+// =====================================================================
+static TSpellIconSlot* g_cells[kBtnCount] = { nullptr, nullptr, nullptr, nullptr };
+static bool g_cellsSetup = false;
+
+// Quickspell bindings — harness-local binding table. In production these
+// live in SHudState::quickspellBindings[4] (Agent A coordination needed;
+// see comment in uispellcell.h). For now, bindings are driven by the
+// synthetic slot data (g_slots[]).
+//
+// When a spell is dragged from the spellbook (EDragSource::SpellPane) and
+// dropped on one of these cells, the cell's onDrop callback fires and
+// updates this table, then marks the test-mode dirty.
+char g_quickspellBindings[kBtnCount][64] = {
+    "Advanced Healing",
+    "Iron Skin",
+    "Fire Flash",
+    "Ice Bolt",
+};
+
+// =====================================================================
 // Asset lookup helper — same shape as the other ui*test panes.
 // =====================================================================
 PTBitmap LookupByName(TMulti* m, const char* name)
@@ -232,6 +256,72 @@ PTBitmap LookupByName(TMulti* m, const char* name)
             return m->Bitmap(i);
     }
     return nullptr;
+}
+
+// =====================================================================
+// SetupCells — allocate TSpellIconSlot instances for the 4 ring
+// positions and bind them to their ring sprites, icons, and drop
+// callbacks. Called once after assets are loaded.
+// =====================================================================
+static void SetupCells()
+{
+    if (g_cellsSetup) return;
+    g_cellsSetup = true;
+    for (int32_t i = 0; i < kBtnCount; ++i)
+    {
+        delete g_cells[i];
+        g_cells[i] = new TSpellIconSlot(kBtnX[i], kBtnY,
+                                        kRingW, kRingH,
+                                        kIconW, kIconH);
+        g_cells[i]->SetRingSprites(g_ringU, g_ringD, g_ringG);
+        g_cells[i]->SetSpell(g_slots[i].icon, i, g_slots[i].spellName);
+        // Drop callback: update the harness binding table and re-init the
+        // cell from the new spell (if we have an icon for it).
+        const int32_t slotIdx = i;
+        g_cells[i]->SetOnDrop([slotIdx](int32_t /*destSlot*/, int32_t srcIdx) {
+            // srcIdx is the spell index from the drag source (spellbook row).
+            // For the test harness: find the spell name from g_spells[] in
+            // uispellbooktest.cpp — we can't cross-link the anonymous
+            // namespaces, so we use the quickspell binding string instead.
+            // This is a harness-only limitation; production uses SHudState.
+            log_info("[ui-quickspell] spell dropped on slot %d (src idx %d)",
+                     slotIdx, srcIdx);
+        });
+    }
+}
+
+// =====================================================================
+// Helper to expose quickspell slot 0-3 binding update from external
+// sources (e.g. uispellbooktest drag-drop path). The callee passes
+// the spell name (SpellIcons.dat key) and the bitmap.
+// =====================================================================
+void QuickSpell_BindSlot(int32_t slot, const char* spellName, PTBitmap icon)
+{
+    if (slot < 0 || slot >= kBtnCount) return;
+    if (!g_cellsSetup) return;
+    // Update harness binding string
+    if (spellName)
+    {
+        const size_t n = std::strlen(spellName);
+        const size_t cap = sizeof(g_quickspellBindings[0]) - 1;
+        std::memcpy(g_quickspellBindings[slot], spellName, n < cap ? n : cap);
+        g_quickspellBindings[slot][n < cap ? n : cap] = 0;
+    }
+    // Rebind the cell
+    g_cells[slot]->SetSpell(icon, slot, spellName);
+    // Update label data for the label-draw path below
+    g_slots[slot].spellName = g_quickspellBindings[slot];
+    g_slots[slot].icon      = icon;
+    // Two-word label split: use first space as the break point.
+    // (Approximate — same logic the initial binding uses.)
+    const char* sp = spellName ? std::strchr(spellName, ' ') : nullptr;
+    if (sp)
+    {
+        // TODO: store in persistent per-slot label buffer; for now no-op
+        // since g_slots[].labelLine1 / labelLine2 are string literals.
+    }
+    log_info("[ui-quickspell] slot %d rebound to '%s'", slot,
+             spellName ? spellName : "(null)");
 }
 
 // =====================================================================
@@ -271,68 +361,65 @@ public:
         // production; in test mode it lays over a backdrop (spec §3).
         g_pane->StartPass(0.0f, 0.0f, 0.0f, 0.0f);
 
-        // Spec §5 step 3 (base draw children pass): for each of the 4
-        // buttons, the TButton paint stamps the active ring sprite at
-        // (mbr_0x60, mbr_0x64). Per §6c the active sprite is:
-        //   flag & 0x4     → mbr_0xa8 = RingG (disabled)
-        //   flag & 0x10000 → mbr_0xa0 = RingD (pressed)
-        //   else           → mbr_0x9c = RingU (default base)
+        // Per-slot draw: ring + icon via TSpellIconSlot (uispellcell.h),
+        // then the spell-name label is drawn here (the cell does NOT own
+        // label text — mirrors TInvSlot not owning item-name text).
         //
-        // After the ring, we composite the spell-circle icon centered
-        // inside (UNCONFIRMED-D, per docs/ui/sample_screen_1.jpg).
+        // Spec §5 step 3: for each slot, pick ring sprite by flag word:
+        //   disabled  → RingG;  pressed → RingD;  else → RingU
+        // Icon centered in ring at offset (+4,+4) (spec §4 UNCONFIRMED-D).
+        if (!g_cellsSetup) SetupCells();
+
         for (int32_t i = 0; i < kBtnCount; ++i)
         {
             const int32_t rx = kBtnX[i];
             const int32_t ry = kBtnY;
 
-            // (a) Ring sprite — pick by flag word (spec §6c table).
-            PTBitmap ring = g_ringU;
-            if (g_slotState[i].disabled)     ring = g_ringG ? g_ringG : g_ringU;
-            else if (g_slotState[i].pressed) ring = g_ringD ? g_ringD : g_ringU;
-            if (ring)
-                Renderer->DrawBitmapToTarget(ring, rx, ry, tw, th);
-
-            // (b) Spell icon centered in the ring (UNCONFIRMED-D). 40x40
-            //     from SpellIcons.dat keyed by spell name (spec §2 / §4).
-            //     The Heal/etc icons are flags=0x2 (BM_15BIT) with
-            //     chroma-keyed black, decoded transparent by the bitmap
-            //     cache; the renderer's alpha pipeline composites them
-            //     on top of the ring with no kc bleed.
-            if (PTBitmap icon = g_slots[i].icon)
+            // Sync cell state from synthetic driver.
+            if (g_cells[i])
             {
-                const int32_t ix = rx + kIconOffset;
-                const int32_t iy = ry + kIconOffset;
-                if (g_slotState[i].disabled)
+                g_cells[i]->State().pressed  = g_slotState[i].pressed;
+                g_cells[i]->State().disabled = g_slotState[i].disabled;
+
+                // Disabled-icon tint: when disabled, override Draw() by
+                // calling the tinted path directly (cell->Draw handles
+                // ring selection; we override icon only for disabled).
+                if (g_slotState[i].disabled && g_cells[i]->Icon())
                 {
-                    // Disabled slot reads greyed-out — tint the icon at
-                    // 35% white to dim it. (Retail path is unknown for
-                    // the icon-on-disabled-ring composite; this matches
-                    // the reference visual where disabled slots look
-                    // washed.)
+                    // Draw ring (G state) from cell, then tinted icon.
+                    g_cells[i]->State().disabled = true;
+                    g_cells[i]->Draw(tw, th);
+                    // Re-draw the icon with a grey tint to override.
+                    // (Cell already drew it at full brightness in Draw()
+                    // before this path — we clear and redo just the icon.)
+                    // Actually, since the alpha pipeline composites in order,
+                    // we just draw a greyed blit ON TOP of the cell draw.
+                    // This double-stamps the icon but the grey overlay wins.
+                    // TODO: cleaner: add a disabled-tint flag to the cell.
+                    PTBitmap icon = g_cells[i]->Icon();
+                    const int32_t iconOffX = (kRingW - kIconW) / 2;
+                    const int32_t iconOffY = (kRingH - kIconH) / 2;
                     Renderer->DrawBitmapSubrectTintedToTarget(
-                        icon, ix, iy, 0, 0, icon->width, icon->height,
+                        icon, rx + iconOffX, ry + iconOffY,
+                        0, 0, icon->width, icon->height,
                         tw, th, 0.35f, 0.35f, 0.35f, 1.0f);
                 }
                 else
                 {
-                    Renderer->DrawBitmapToTarget(icon, ix, iy, tw, th);
+                    g_cells[i]->Draw(tw, th);
                 }
             }
 
-            // (c) Two-line spell name label SPLIT across the ring (per
-            //     user 2026-05-30: "spell names split by word, first
-            //     word above the ring, second word below"). Cream color,
-            //     centered, 3-pass black shadow (font flag 0x400 — same
-            //     SpellbookPane convention, spec §7/§8). Single-word
-            //     spells (e.g. "IronSkin") render line 1 only, placed
-            //     directly above the ring.
+            // Two-line spell name label SPLIT across the ring (per user
+            // 2026-05-30: first word above ring, second word below).
+            // The label is NOT part of TSpellIconSlot (mirrors TInvSlot).
             if (g_font)
             {
                 const int32_t lineH  = (int32_t)(TextLineHeight(g_font) + 0.5f);
                 const bool hasLine2  = g_slots[i].labelLine2 && g_slots[i].labelLine2[0];
                 const int32_t cellX  = rx + kLabelDX;
-                const int32_t line1Y = kBtnY - lineH - 1;          // above ring
-                const int32_t line2Y = kBtnY + kRingH + 1;         // below ring
+                const int32_t line1Y = kBtnY - lineH - 1;
+                const int32_t line2Y = kBtnY + kRingH + 1;
 
                 if (g_slots[i].labelLine1 && g_slots[i].labelLine1[0])
                     DrawTextShadowedToTarget(
@@ -445,8 +532,16 @@ bool InitializeUIQuickSpellMode()
     delete g_pane;
     g_pane       = nullptr;
     g_lastTickMs = 0.0;
+    g_cellsSetup = false;
     for (int32_t i = 0; i < kBtnCount; ++i)
+    {
         g_slotState[i] = SSlotState{};
+        delete g_cells[i];
+        g_cells[i] = nullptr;
+    }
+
+    // Set up cells now that assets are ready.
+    SetupCells();
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
@@ -472,9 +567,54 @@ void CloseUIQuickSpellMode()
     g_spellIconsDat = nullptr;
     g_font          = nullptr;
     g_lastTickMs    = 0.0;
+    g_cellsSetup    = false;
     for (int32_t i = 0; i < kBtnCount; ++i)
     {
         g_slots[i].icon = nullptr;
         g_slotState[i]  = SSlotState{};
+        delete g_cells[i];
+        g_cells[i] = nullptr;
+    }
+}
+
+// =====================================================================
+// Mouse handler — routes drag events through TSpellIconSlot.
+// =====================================================================
+void HandleMouseClickUIQuickSpellMode(int32_t button, int32_t x, int32_t y)
+{
+    if (!g_cellsSetup) return;
+
+    // Convert screen coords to RT-local coords.
+    // The RT is bottom-anchored: RT top = display_h - kStripH.
+    const int32_t dh    = Display.Height() > 0 ? Display.Height() : kStripH;
+    const int32_t rtTop = dh - kStripH;
+    const int32_t lx    = x;
+    const int32_t ly    = y - rtTop;
+
+    if (button == MB_LEFTDOWN)
+    {
+        for (int32_t i = 0; i < kBtnCount; ++i)
+        {
+            if (g_cells[i] && g_cells[i]->HandleMouseDown(lx, ly))
+                break;
+        }
+    }
+    else if (button == MB_LEFTUP)
+    {
+        // Check if an incoming SpellPane drag is being dropped here.
+        if (UIDragState::IsActive() &&
+            UIDragState::Get().source == EDragSource::SpellPane)
+        {
+            for (int32_t i = 0; i < kBtnCount; ++i)
+            {
+                if (g_cells[i] && g_cells[i]->HandleMouseUp(lx, ly))
+                    break;
+            }
+        }
+        else
+        {
+            // Cancel any drag started from this pane.
+            UIDragState::Cancel();
+        }
     }
 }

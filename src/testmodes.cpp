@@ -3246,6 +3246,12 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseClickUIDefScreenMode(button, x, y);
     if (strcmp(mode, "ui-sidebar") == 0 || strcmp(mode, "ui-hud") == 0)
         return HandleMouseClickUISidebarMode(button, x, y);
+    if (strcmp(mode, "ui-quickspell") == 0)
+        return HandleMouseClickUIQuickSpellMode(button, x, y);
+    if (strcmp(mode, "ui-spellbook") == 0)
+        return HandleMouseClickUISpellbookMode(button, x, y);
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        return;  // TODO: add scroll-paging mouse handler if needed
     (void)x; (void)y;
     if (strcmp(mode, "char3d") == 0)
     {
@@ -3307,6 +3313,9 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseMoveUIDeathMode(x, y);
     if (IsUIDefScreenMode(mode))
         return HandleMouseMoveUIDefScreenMode(button, x, y);
+    // #8 iOS-style velocity drag for the spellbook scroll
+    if (strcmp(mode, "ui-spellbook") == 0)
+        return HandleMouseMoveUISpellbookMode(button, x, y);
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleMouseMove(button, x, y);
 }
