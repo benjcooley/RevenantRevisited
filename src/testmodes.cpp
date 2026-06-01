@@ -6,6 +6,7 @@
 
 #include "testmodes.h"
 
+#include <sokol_app.h>          // sapp_request_quit on script drain
 #include <stb_image_write.h>   // for i3ddump test mode (impl lives in framesnap.cpp)
 
 #include "3dimage.h"
