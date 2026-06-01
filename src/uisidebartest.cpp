@@ -795,3 +795,84 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
     // before chrome-pane slot hit-tests, so it takes precedence on
     // overlapping coords.)
 }
+
+// =====================================================================
+// Keyboard control for the HUD/sidebar — same dispatch as the mouse
+// click handler, but driven by retail-identified command IDs (cases 7,
+// 8, 9, 0xb, 0xc in TPlayScreen::DispatchCommand_47b4d0). Default key
+// bindings follow the HUD.md mention "Number keys (1-4) for panel
+// switching" + "V key: toggles the entire Side Panel"; B toggles the
+// bottom bar (no retail key documented; chosen for memorability — the
+// hide/show is dispatch cmd 4 in TPlayScreen).
+//
+//   V          → toggle SHudState.sidebarState (CLOSED ↔ OPEN)
+//   B          → toggle SHudState.bottomBarOpen (0 ↔ 1)
+//   1          → top=Book + bottom=Spell  (cmd 7)
+//   2          → top=Stats                (cmd 8)
+//   3          → top=Equip + bottom=Inv   (cmd 9)
+//   4          → bottom=Inv               (cmd 0xb)
+//   5          → bottom=Map               (cmd 0xc)
+//   6          → bottom=Spell             (lower-only; no clean cmd ID
+//                                          in DispatchCommand, treated
+//                                          symmetric to 5/0xc)
+//
+// For modes that compose the full HUD (--test=ui-hud) AND for the
+// sidebar-only mode (--test=ui-sidebar). The handler is a no-op on
+// key-up; we react on key-down only (single trigger per press).
+// =====================================================================
+void HandleKeyPressUISidebarMode(int32_t key, bool down)
+{
+    if (!down) return;
+    SHudState& s = GetHudState();
+    const char* logTag = nullptr;
+    switch (key)
+    {
+        case 'V': case 'v':
+            s.sidebarState = (s.sidebarState == HUD_SIDEBAR_OPEN)
+                             ? HUD_SIDEBAR_CLOSED : HUD_SIDEBAR_OPEN;
+            logTag = (s.sidebarState == HUD_SIDEBAR_OPEN) ? "V → sidebar OPEN"
+                                                          : "V → sidebar CLOSED";
+            break;
+        case 'B': case 'b':
+            s.bottomBarOpen = s.bottomBarOpen ? 0 : 1;
+            logTag = s.bottomBarOpen ? "B → bottombar OPEN"
+                                     : "B → bottombar CLOSED";
+            break;
+        case '1':                                    // cmd 7: Book + Spell
+            s.topSlot       = HUD_TOP_BOOK;
+            s.bottomSlot    = HUD_BOT_SPELL;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "1 → Book/Spell";
+            break;
+        case '2':                                    // cmd 8: Stats
+            s.topSlot       = HUD_TOP_STATS;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "2 → Stats";
+            break;
+        case '3':                                    // cmd 9: Equip + Inv
+            s.topSlot       = HUD_TOP_EQUIP;
+            s.bottomSlot    = HUD_BOT_INV;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "3 → Equip/Inv";
+            break;
+        case '4':                                    // cmd 0xb: Inv only
+            s.bottomSlot    = HUD_BOT_INV;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "4 → Inv";
+            break;
+        case '5':                                    // cmd 0xc: Map
+            s.bottomSlot    = HUD_BOT_MAP;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "5 → Map";
+            break;
+        case '6':                                    // lower-only Spell
+            s.bottomSlot    = HUD_BOT_SPELL;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "6 → Spell";
+            break;
+        default:
+            return;
+    }
+    log_info("[ui-sidebar] key: %s (state: top=%d bottom=%d sidebar=%d bottombar=%d)",
+             logTag, s.topSlot, s.bottomSlot, s.sidebarState, s.bottomBarOpen);
+}

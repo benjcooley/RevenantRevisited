@@ -3316,6 +3316,14 @@ void HandleKeyPress(const char* mode, int32_t key, bool down)
         HandleKeyPressUIDefScreenMode(key, down);
         return;
     }
+    // HUD test modes that compose the sidebar / bottom-bar / six-button
+    // strip receive keyboard control: V toggles sidebar, B toggles
+    // bottom-bar, 1-6 select panels (per uisidebartest.h docstring).
+    if (strcmp(mode, "ui-sidebar") == 0 || strcmp(mode, "ui-hud") == 0)
+    {
+        HandleKeyPressUISidebarMode(key, down);
+        return;
+    }
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleKeyPress(key, down);
 }
