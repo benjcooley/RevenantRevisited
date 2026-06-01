@@ -1109,12 +1109,31 @@ void RenderBody3D()
     const int32_t cam_ox = kBody3DSrcX + kBody3DSrcW / 2;
     const int32_t cam_oy = kBody3DSrcY + kBody3DSrcH / 2 + off_y;
 
-    // Lighting / scene setup -- char3d-derived baseline; tuning against
-    // the retail reference (paperdoll-empty-locke_nude.png) requires
-    // matching the engine's actual world-space conventions for the light
-    // direction vector, which the char3d defaults already do.
-    Renderer->SetLight(0.6f, -0.6f, 0.4f, 1.0f, 1.0f, 1.0f, 1.0f, 0.25f);
-    Renderer->SetAmbientColor(0.55f, 0.55f, 0.55f);
+    // Lighting / scene setup. Empirical light-direction sweep against the
+    // retail reference paperdoll-empty-locke_nude.png landed on
+    // (0.0, +0.6, +0.5): light points "toward camera + up", which gives
+    // chest-and-face highlights with a soft side shadow that reads as the
+    // painterly retail style. The earlier char3d default (0.6, -0.6, 0.4)
+    // was lighting Locke from his upper-right rear (left side of frame
+    // bright, right side in shadow) -- backward for a paperdoll display.
+    // Env knobs let us refine further:
+    //   REVENANT_EQUIP_LDX/LDY/LDZ  light direction
+    //   REVENANT_EQUIP_LI           light intensity (default 1.0)
+    //   REVENANT_EQUIP_AMB          ambient grey (default 0.55)
+    float lx = 0.0f, ly = 0.6f, lz = 0.5f, li = 1.0f, amb = 0.55f;
+    auto fenv = [](const char* k, float& dst){
+        if (const char* e = std::getenv(k)) {
+            const float v = float(std::atof(e));
+            if (std::isfinite(v)) dst = v;
+        }
+    };
+    fenv("REVENANT_EQUIP_LDX", lx);
+    fenv("REVENANT_EQUIP_LDY", ly);
+    fenv("REVENANT_EQUIP_LDZ", lz);
+    fenv("REVENANT_EQUIP_LI",  li);
+    fenv("REVENANT_EQUIP_AMB", amb);
+    Renderer->SetLight(lx, ly, lz, li, 1.0f, 1.0f, 1.0f, 0.25f);
+    Renderer->SetAmbientColor(amb, amb, amb);
     Renderer->SetAmbientOcclusion(false, 12.0f, 1.0f, 0.15f, 96.0f);
     Renderer->SetNormalLightingHardness(1.0f);
     Renderer->SetLightingMode(1);
