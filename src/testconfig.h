@@ -19,6 +19,11 @@ extern char StartupAssetPath[128];
 extern float StartupAssetScale;
 // --dumptiles=<path> — export tile albedo PNGs into the given folder, then exit.
 extern char StartupDumpTilesPath[MAXPATHLEN];
+// --dumpi3d=<asset> [--dumpi3dout=<dir>] — extract textures (PNG) +
+// sub-objects (Wavefront OBJ) + manifest.txt from one I3D file.
+// Default output: ./i3d_dump/<asset-basename>/. Triggers --test=i3ddump.
+extern char StartupDumpI3DPath[MAXPATHLEN];
+extern char StartupDumpI3DOutPath[MAXPATHLEN];
 // --vfx=<id> — pre-select an effect by id in --test=vfx (e.g.
 // --vfx=TStripEffect). Empty = first alphabetically-sorted entry.
 // Useful for clean screencaps + scripted iteration.
