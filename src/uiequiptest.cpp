@@ -116,6 +116,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -271,6 +272,43 @@ float          g_bodyBBoxMax[3] = { 0, 0, 0 };
 float          g_bodyScale      = 1.0f;
 int64_t        g_bodyLastTick   = -1;
 bool           g_bodyMeshesBuilt = false;
+
+// #12 — Per-equipment sub-mesh registry. One entry per equipment sub-
+// object that should attach to the player's skeleton (mirrors retail
+// charanimator.cpp::ProcessEquipment / RENDEREQUIPPARTS branch).
+//
+// Fields:
+//   handle       = registered mesh extracted from the EQUIPMENT'S
+//                  T3DImagery (ExtractSubMeshTextureSlot of equipObjnum
+//                  in equipState).
+//   equipImg     = the equipment's T3DImagery (kept so the texture
+//                  resolution can re-run in case the equipped item's
+//                  imagery is hot-swappable).
+//   equipObjnum  = which sub-object of the equipment we extracted from.
+//   equipState   = the BodyType-matched state (or "still"/"all" group
+//                  state) we extracted in.
+//   playerObjnum = the player sub-object whose animated world matrix
+//                  this equipment mesh rides — i.e. the bone matrix
+//                  (the weapon bone for a sword, the head bone for a
+//                  helmet, …). retail charanimator.cpp:303 memcpy's
+//                  this matrix into the equipobj before RenderObject.
+//                  The sokol port computes the matrix from the player's
+//                  pose via BuildAnimPoseObjectMatrix(playerObjnum).
+struct SEquipMesh
+{
+    MeshHandle  handle       = 0;
+    T3DImagery* equipImg     = nullptr;
+    int32_t     equipObjnum  = -1;
+    int32_t     equipState   = -1;
+    int32_t     playerObjnum = -1;
+};
+std::vector<SEquipMesh> g_equipMeshes;
+
+// Which player sub-object indices to SKIP when extracting Locke's
+// meshes (they're replaced by equipment sub-objects). Populated
+// alongside g_equipMeshes when equipment is processed. Mirrors the
+// HIDECHARPARTS branch in retail ProcessEquipment.
+std::vector<int32_t> g_hiddenPlayerObjnums;
 
 // Idle animation state cycle (#13). Locke's .i3d carries 5 dedicated
 // "walk inventory" idle poses (`winv1..winv5`) — verified by dumping all
@@ -499,7 +537,16 @@ void SpawnBodyInstance()
     def.accum    = { 0, 0, 0 };
     def.rotatex  = 0;
     def.rotatey  = 0;
-    def.rotatez  = 32;  // matches plyrstatusbar facing
+    // rotatez is uint8 in 0..255 game-angle space (object.h:965). The
+    // equip pane shows Locke in a slight-3/4-left view (matches
+    // images/ui/sidebar-equipment/paperdoll-empty-locke_nude.png —
+    // his right shoulder is forward, body twisted slightly). Sweep
+    // (REVENANT_EQUIP_FACING env var) confirms 160 reads closest to
+    // the reference under the engine's iso projection.
+    if (const char* override_face = std::getenv("REVENANT_EQUIP_FACING"))
+        def.rotatez = (uint8_t)std::atoi(override_face);
+    else
+        def.rotatez  = 160;
     def.group    = 0;
 
     TObjectInstance* inst = cl->NewObject(&def);
@@ -581,6 +628,240 @@ void IdleAnimTick()
 // Also computes the world-space bounding box of the body so the camera
 // reconstruction params can frame Locke automatically inside the body
 // rect (kBody3DSrc{W,H}).
+// #12 — Port of charanimator.cpp::ProcessEquipment to the sokol mesh-
+// submit path. Walks Player->GetEquip(i), and for each equipped item
+// whose imagery is OBJIMAGE_MESH3D:
+//   1. Find the equipment state matching the player's BodyType (or the
+//      "still"/"all" universal state if the equipment has no BodyType
+//      variant).
+//   2. For each non-hidden sub-object in that state, look up the
+//      corresponding player sub-object — name-matched, with BodyType
+//      prefix stripped where applicable. For weapons (PRIMEHAND): the
+//      player sub-object is "weapon" or "sword" depending on which
+//      exists.
+//   3. Register the equipment's sub-mesh via ExtractSubMeshTextureSlot
+//      and remember which PLAYER sub-object's animated matrix it should
+//      ride.
+//   4. Mark the player sub-object as hidden so TryBuildBodyMeshes will
+//      skip it (the equipment is replacing it).
+//
+// This must run AFTER the body imagery is loaded (so g_body3DImg is
+// valid) and BEFORE TryBuildBodyMeshes (so the hidden list is in place
+// before the body extract).
+//
+// Returns true if processing actually happened (imagery + player ready),
+// false if it should be retried next frame (e.g. equipment imagery still
+// streaming in). Idempotent on partial success — entries are only added
+// for items whose imagery has loaded; remaining items are picked up on
+// subsequent calls.
+bool ProcessEquipmentForSkeleton()
+{
+    if (!g_body3DImg || !g_bodyInst) return false;
+    auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
+    if (!player) return false;
+
+    // Player must have a BodyType for the equipment to match.
+    const char* bodyType = player->BodyType();
+    if (!bodyType || !*bodyType) return false;
+    const int32_t bodyTypeLen = int32_t(std::strlen(bodyType));
+
+    for (int32_t eq = 0; eq < NUM_EQ_SLOTS; ++eq)
+    {
+        TObjectInstance* oi = player->GetEquip(eq);
+        if (!oi) continue;
+
+        TObjectImagery* equipImagery = oi->GetImagery();
+        if (!equipImagery) continue;
+        // header->imageryid is the OBJIMAGE_* type (1 = MESH3D); not to
+        // be confused with the imagery's entry-array index returned by
+        // ImageryId() (which is a unique handle, not a type tag).
+        // Mirrors retail charanimator.cpp:214.
+        SImageryHeader* hdr = equipImagery->GetHeader();
+        if (!hdr) continue;
+        if (hdr->imageryid != OBJIMAGE_MESH3D)
+        {
+            log_info("[ui-equip] equip slot %d: imagery is not MESH3D (header "
+                     "type=%d) — no skeleton render for this item",
+                     eq, hdr->imageryid);
+            continue;
+        }
+
+        T3DImagery* equip3D = (T3DImagery*)equipImagery;
+        if (equip3D->NumStates() <= 0 || equip3D->NumObjects() <= 0)
+            continue;  // Imagery still streaming.
+
+        // Find the equipment state matching the player's BodyType
+        // (mirrors charanimator.cpp:222-238).
+        int32_t equipState = -1;
+        int32_t nlen = 0;  // BodyType prefix length to strip from object names
+        for (int32_t st = 0; st < equip3D->NumStates(); ++st)
+        {
+            const char* sn = equipImagery->GetAniName(st);
+            if (!sn) continue;
+            if (!strcasecmp(sn, "still") || !strcasecmp(sn, "all"))
+            {
+                equipState = st;
+                nlen = 0;
+                break;
+            }
+            if (!strcasecmp(sn, bodyType))
+            {
+                equipState = st;
+                nlen = bodyTypeLen;
+                break;
+            }
+        }
+        if (equipState < 0)
+        {
+            log_info("[ui-equip] equip slot %d: no body-type-matched state "
+                     "in imagery (bodytype='%s')", eq, bodyType);
+            continue;
+        }
+
+        const int32_t equipTexslots = equip3D->NumTextures() + 1;
+
+        for (int32_t o = 0; o < equip3D->NumObjects(); ++o)
+        {
+            if (equip3D->IsHidden(o, equipState)) continue;
+
+            char* equipName = equip3D->GetObjectName(o);
+            if (!equipName) continue;
+
+            // Strip BodyType prefix if present (charanimator.cpp:253-254).
+            const char* matchName = equipName;
+            if (nlen > 0 && !strncasecmp(matchName, bodyType, nlen))
+                matchName += nlen;
+
+            // Find player sub-object to replace.
+            int32_t playerObjnum = -1;
+            if (eq == EQ_PRIMEHAND)
+            {
+                // Replace the "weapon" or "sword" bone with this item.
+                playerObjnum = g_body3DImg->GetObjectNum((char*)"weapon");
+                if (playerObjnum < 0)
+                    playerObjnum = g_body3DImg->GetObjectNum((char*)"sword");
+                if (playerObjnum < 0)
+                    playerObjnum = g_body3DImg->GetObjectNum((char*)matchName);
+            }
+            else if (eq == EQ_RANGEDWEAPON)
+            {
+                // In retail this is gated on IsBowMode() — if the player
+                // isn't in bow mode the ranged weapon is hidden. For the
+                // equip pane preview we always show it (the equip pane
+                // is where the player CHOOSES the bow, so it should
+                // visibly be on Locke). Fall-through to the bone lookup.
+                playerObjnum = g_body3DImg->GetObjectNum((char*)"bow");
+                if (playerObjnum < 0)
+                    playerObjnum = g_body3DImg->GetObjectNum((char*)matchName);
+            }
+            else
+            {
+                playerObjnum = g_body3DImg->GetObjectNum((char*)matchName);
+            }
+
+            if (playerObjnum < 0)
+                continue;  // No bone for this part — skip silently.
+
+            // Extract this equipment sub-object's geometry. Iterate
+            // texture slots like the body extract does.
+            bool extracted_any = false;
+            for (int32_t texslot = 0; texslot < equipTexslots; ++texslot)
+            {
+                std::vector<SMeshVertex> verts;
+                std::vector<uint16_t> indices;
+                if (!ExtractSubMeshTextureSlot(equip3D, o, texslot, verts, indices))
+                    continue;
+
+                TTextureHandle albedo = g_bodyFallbackAlbedo;
+                if (texslot > 0)
+                {
+                    S3DTex tex = {};
+                    equip3D->GetTexture(texslot - 1, &tex);
+                    if (tex.htexture != kInvalidTexture)
+                        albedo = tex.htexture;
+                }
+                MeshHandle h = Renderer->RegisterMesh(
+                    verts.data(), int32_t(verts.size()),
+                    indices.data(), int32_t(indices.size()),
+                    albedo);
+                if (!h) continue;
+
+                g_equipMeshes.push_back({h, equip3D, o, equipState, playerObjnum});
+                extracted_any = true;
+            }
+            if (!extracted_any)
+            {
+                // Single-texture object fallback (mirrors body extract).
+                std::vector<SMeshVertex> verts;
+                std::vector<uint16_t> indices;
+                if (ExtractSubMesh(equip3D, o, verts, indices))
+                {
+                    TTextureHandle albedo = g_bodyFallbackAlbedo;
+                    if (equip3D->NumTextures() > 0)
+                    {
+                        S3DTex tex = {};
+                        equip3D->GetTexture(0, &tex);
+                        if (tex.htexture != kInvalidTexture)
+                            albedo = tex.htexture;
+                    }
+                    MeshHandle h = Renderer->RegisterMesh(
+                        verts.data(), int32_t(verts.size()),
+                        indices.data(), int32_t(indices.size()),
+                        albedo);
+                    if (h)
+                    {
+                        g_equipMeshes.push_back({h, equip3D, o, equipState, playerObjnum});
+                        extracted_any = true;
+                    }
+                }
+            }
+
+            if (extracted_any)
+            {
+                // Mark the player sub-object as hidden — the equipment
+                // is taking its place. Avoid duplicate entries.
+                bool already = false;
+                for (int32_t hidden : g_hiddenPlayerObjnums)
+                    if (hidden == playerObjnum) { already = true; break; }
+                if (!already) g_hiddenPlayerObjnums.push_back(playerObjnum);
+
+                log_info("[ui-equip] equip slot %d sub-obj %d ('%s') → "
+                         "player bone %d ('%s'); player obj hidden",
+                         eq, o, equipName, playerObjnum,
+                         g_body3DImg->GetObjectName(playerObjnum));
+            }
+        }
+    }
+
+    return true;
+}
+
+// Check whether ALL Player-equipped items have their imagery loaded.
+// Equipment imagery streams in async (separately from the body); the
+// build-body-meshes step depends on the equipment being ready so the
+// hide+attach logic can run in one pass.
+bool AreEquipmentImageriesReady()
+{
+    auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
+    if (!player) return true;  // No player → nothing to wait on.
+    for (int32_t eq = 0; eq < NUM_EQ_SLOTS; ++eq)
+    {
+        TObjectInstance* oi = player->GetEquip(eq);
+        if (!oi) continue;
+        TObjectImagery* im = oi->GetImagery();
+        if (!im) return false;
+        SImageryHeader* hdr = im->GetHeader();
+        if (!hdr) return false;
+        // Some items use non-MESH3D imagery (2D-only icons); those don't
+        // contribute to the skeleton — they just need to exist.
+        if (hdr->imageryid != OBJIMAGE_MESH3D) continue;
+        T3DImagery* t3d = (T3DImagery*)im;
+        if (t3d->NumStates() <= 0 || t3d->NumObjects() <= 0)
+            return false;
+    }
+    return true;
+}
+
 void TryBuildBodyMeshes()
 {
     if (g_bodyMeshesBuilt) return;
@@ -592,6 +873,17 @@ void TryBuildBodyMeshes()
         g_body3DImg = dynamic_cast<T3DImagery*>(g_bodyInst->GetImagery());
     if (!g_body3DImg) return;
     if (g_body3DImg->NumStates() <= 0 || g_body3DImg->NumObjects() <= 0) return;
+
+    // Wait for ALL equipped items' imagery to load before extracting
+    // (#12) — the equipment processing depends on the items' imagery
+    // being ready to extract sub-meshes from.
+    if (!AreEquipmentImageriesReady()) return;
+
+    // #12: process equipped items FIRST so the hidden-player-objnum list
+    // is populated before we extract Locke's submeshes. Equipment meshes
+    // are accumulated in g_equipMeshes; player sub-objects that are being
+    // replaced are added to g_hiddenPlayerObjnums.
+    ProcessEquipmentForSkeleton();
 
     const int32_t state     = g_bodyInst->GetState();
     const int32_t frame     = g_bodyInst->GetFrame();
@@ -800,27 +1092,70 @@ void RenderBody3D()
     const float cx = 0.5f * (g_bodyBBoxMin[0] + g_bodyBBoxMax[0]);
     const float cy = 0.5f * (g_bodyBBoxMin[1] + g_bodyBBoxMax[1]);
     const float cz = 0.5f * (g_bodyBBoxMin[2] + g_bodyBBoxMax[2]);
+
+    // Apply the instance's rotatez as a Z-axis world rotation so Locke
+    // faces the viewer (paperdoll convention). BuildAnimPoseObjectMatrix
+    // returns the I3D-local per-bone matrix and does NOT include the
+    // instance's transform; the production scene-render path multiplies
+    // BuildRootMatrixSource(oi) (which carries rotatez) in front. Here
+    // we synthesize the same Z-rotation locally so the equip pane
+    // doesn't have to plumb the full transform_ pipeline.
+    constexpr float kTurn = float(M_PI * 2.0 / 256.0);
+    const float az = float(g_bodyInst->GetRotateZ()) * kTurn;
+    const float cz_r = std::cos(az);
+    const float sz_r = std::sin(az);
+    const float rotZ[16] = {
+        cz_r, -sz_r, 0.0f, 0.0f,
+        sz_r,  cz_r, 0.0f, 0.0f,
+        0.0f,  0.0f, 1.0f, 0.0f,
+        0.0f,  0.0f, 0.0f, 1.0f,
+    };
+
     const SAnimPose pose = SampleI3DAnimPose(g_body3DImg,
                                               g_bodyInst->GetState(),
                                               g_bodyInst->GetFrame(),
                                               g_bodyInst->GetPrevState(),
                                               g_bodyInst->GetPrevFrame());
-    for (const auto& sub : g_bodyMeshes)
-    {
+
+    // Submit the body meshes — but skip any player sub-objects that are
+    // being replaced by equipment (#12). The hidden list is populated by
+    // ProcessEquipmentForSkeleton.
+    auto isHidden = [](int32_t objnum) {
+        for (int32_t h : g_hiddenPlayerObjnums) if (h == objnum) return true;
+        return false;
+    };
+
+    auto submitWithRot = [&](MeshHandle mesh, int32_t objnum) {
         SMeshSubmit m = {};
-        m.mesh = sub.handle;
-        float w[16];
-        BuildAnimPoseObjectMatrix(g_body3DImg, pose, state, sub.objnum, w);
-        w[0] *= s; w[1] *= s; w[2] *= s; w[3] *= s;
-        w[4] *= s; w[5] *= s; w[6] *= s; w[7] *= s;
-        w[8] *= s; w[9] *= s; w[10] *= s; w[11] *= s;
-        w[3] -= cx * s;
-        w[7] -= cy * s;
-        w[11] -= cz * s;
-        std::memcpy(m.world, w, sizeof(w));
+        m.mesh = mesh;
+        float local[16];
+        BuildAnimPoseObjectMatrix(g_body3DImg, pose, state, objnum, local);
+        // Apply scale.
+        for (int32_t i = 0; i < 12; ++i) local[i] *= s;
+        local[3]  -= cx * s;
+        local[7]  -= cy * s;
+        local[11] -= cz * s;
+        // Apply instance-Z rotation in front so Locke faces the viewer.
+        float world[16];
+        MatMul16(rotZ, local, world);
+        std::memcpy(m.world, world, sizeof(world));
         m.tint[0] = m.tint[1] = m.tint[2] = m.tint[3] = 1.0f;
         Renderer->SubmitMesh(m);
+    };
+
+    for (const auto& sub : g_bodyMeshes)
+    {
+        if (isHidden(sub.objnum)) continue;
+        submitWithRot(sub.handle, sub.objnum);
     }
+
+    // #12 — Equipment meshes ride the corresponding PLAYER sub-object's
+    // bone matrix, NOT the equipment's own pose. Mirrors retail
+    // charanimator.cpp:303 (memcpy player_obj.matrix → equip_obj.matrix
+    // before RenderObject).
+    for (const auto& eq : g_equipMeshes)
+        submitWithRot(eq.handle, eq.playerObjnum);
+
     Renderer->EndTilePass();
     Renderer->RunLightingPass();
 }
@@ -1266,7 +1601,11 @@ void CloseUIEquipMode()
     // our refcount.
     for (const auto& sub : g_bodyMeshes)
         if (sub.handle) Renderer->ReleaseMeshAssetRef(sub.handle, 1);
+    for (const auto& eq : g_equipMeshes)
+        if (eq.handle) Renderer->ReleaseMeshAssetRef(eq.handle, 1);
     g_bodyMeshes.clear();
+    g_equipMeshes.clear();
+    g_hiddenPlayerObjnums.clear();
     g_body3DImg          = nullptr;
     g_bodyFallbackAlbedo = kInvalidTexture;
     g_bodyMeshesBuilt    = false;
