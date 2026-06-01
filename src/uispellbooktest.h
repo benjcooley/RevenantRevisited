@@ -16,6 +16,11 @@
 
 #pragma once
 
+#include <cstdint>
+
 bool InitializeUISpellbookMode();
 void RenderUISpellbookMode();
 void CloseUISpellbookMode();
+// #8 iOS-style velocity scroll — mouse handler routes from testmodes.cpp.
+void HandleMouseMoveUISpellbookMode(int32_t button, int32_t x, int32_t y);
+void HandleMouseClickUISpellbookMode(int32_t button, int32_t x, int32_t y);

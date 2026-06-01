@@ -53,7 +53,45 @@
 //   Renderer->DrawBitmapToTarget        — opaque chrome stamp
 //   Renderer->DrawBitmapSubrectStretchedToTarget — icon/placeholder into
 //                                          the 40×40 slot well
+//   Renderer->CompositeLitTargetSubrectToTarget — paperdoll body sub-rect
+//                                          (added for the 3D Locke path, #11)
 // No hand-rolled chroma-key passes, no procedural silhouette stand-ins.
+//
+// Live 3D paperdoll (#11, #13 — landed):
+//   The pane spawns Locke as a TPlayer instance and per-frame:
+//   1. Advances the engine animator (inst->NextFrame() + Animate(false))
+//      so the body cycles its current idle state.
+//   2. Picks a new idle state every ~4 wall-clock seconds from the
+//      verified Locke .i3d set (winv1..winv5, then binv1..binv5, then
+//      "walk" as last-ditch root). This is #13 — random idle behaviours.
+//   3. Renders the 3D body via the engine's tile-pass + lighting-pass at
+//      a fixed screen sub-rect (kBody3DSrc{X,Y,W,H}) into lit_target.
+//   4. Composites that lit_target sub-rect into the equip pane RT at the
+//      central body region via Renderer->CompositeLitTargetSubrectToTarget,
+//      on top of the chrome stone backdrop.
+//   SuppressPresent is enabled in InitializeUIEquipMode so the full-screen
+//   lit_target composite doesn't paint behind the rest of the UI.
+//
+// Equipment-on-skeleton (#12 — INFRASTRUCTURE ONLY, no visible meshes yet):
+//   The retail equipment-replacement system lives in
+//   src/charanimator.cpp::HideCharParts + RenderEquipment. It walks
+//   Player->GetEquip(i), for each occupied slot finds the BodyType-
+//   matched state in the equipment's .i3d, marks the player's matching
+//   sub-objects OBJ3D_HIDE, then renders the equipment's sub-objects
+//   in their place via Scene3D.RenderObject.
+//
+//   That code uses the legacy Scene3D path. For the sokol port the
+//   equivalent sokol-side mesh extraction (extract the equipment item's
+//   BodyType-matched sub-meshes via ExtractSubMeshTextureSlot, plus
+//   skip the player's hidden sub-objects in TryBuildBodyMeshes) is the
+//   next step. The wiring is in place: items can be Equip'd on the
+//   spawned Player (see EquipDemoItemsOnPlayer below), the engine state
+//   is correct, and the existing charanimator.cpp::ProcessEquipment is
+//   the algorithmic template to port. Per [[feedback-evolve-dont-
+//   replace]] the right home for the new code is a sokol-aware variant
+//   of ProcessEquipment on TCharAnimator itself, not a parallel
+//   panel-local fork. Captured here as a documented TODO rather than
+//   a partial inline guess.
 //
 // *************************************************************************
 
@@ -64,8 +102,11 @@
 #include "bitmap.h"
 #include "character.h"
 #include "display.h"
+#include "i3danimpose.h"
 #include "imagery.h"
 #include "logging.h"
+#include "math3d.h"
+#include "meshextract.h"
 #include "multi.h"
 #include "object.h"
 #include "player.h"  // EQ_HEAD / EQ_NECK / ... NUM_EQ_SLOTS
@@ -73,7 +114,11 @@
 #include "surface.h"
 #include "time.h"
 
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <vector>
 
 // Item-class registries (defined in their respective .cpp files). The pane
 // is content-agnostic — these are sample real items so the test mode has
@@ -187,21 +232,129 @@ PTBitmap g_placeholders[11] = { nullptr };
 TSurface* g_pane = nullptr;
 
 // =====================================================================
-// Character body (paperdoll subject) — Locke, rendered as a baked .i3d
-// `invitem` icon. The live 3D animated paperdoll is OUT OF SCOPE — see
-// ENGINE/ASSET WALL note in RenderUIEquipMode(); three independent
-// blockers (char3d regression, missing SubmitMesh*ToTarget helper,
-// no `invanim` body cycle in Locke's .i3d) need to be cleared upstream
-// before the body can render live. The instance is spawned so the
-// inventory image streamer can hand us the baked head icon.
+// Character body (paperdoll subject) — Locke, rendered LIVE as the 3D
+// character model. Mirrors the --test=char3d render path (testmodes.cpp
+// :862-1141): spawn TObjectInstance, walk T3DImagery sub-objects through
+// ExtractSubMeshTextureSlot, RegisterMesh each, then per-frame submit a
+// SMeshSubmit per mesh handle with the BuildAnimPoseObjectMatrix world
+// transform. Per-frame tile-pass + lighting-pass run with a small camera
+// origin (kBody3DSrc{X,Y,W,H} in screen space) so Locke projects into a
+// fixed sub-rect of lit_target; the equip pane RT then samples that
+// sub-rect via Renderer->CompositeLitTargetSubrectToTarget so the live
+// Locke draws on top of the chrome stone backdrop.
+//
+// Animation drive: inst->NextFrame() + Animate(false) once per legacy
+// tick, exactly like char3d. The legacy-tick gate is delta-time-driven
+// (TTime::LegacyFrameCount() advances by wall-clock), so the cycle is
+// frame-rate-independent in compliance with [[feedback-framerate-
+// independent-anim]]. Idle state is the TCharacter DefaultRootState
+// ("walk"/"sleep"/"combat"/etc.) at spawn; future work can pull a random
+// idle string from the character data per equip-pane §9 (Animate slot 19
+// reads DAT_005e4060 → mbr_0x9c, UNCONFIRMED-G string content).
+//
+// Empty placeholder until the imagery streamer has loaded the .i3d body
+// (async, mirrors uiplyrstatusbartest::TryExtractPortrait): per-frame
+// TryBuildBodyMeshes retries until the sub-objects are decodable.
 // =====================================================================
-TObjectInstance* g_bodyInst   = nullptr;  // spawned Locke (or first player type)
-PTBitmap         g_bodyIcon   = nullptr;  // baked .i3d head icon (invitem)
-TAnimation*      g_bodyAnim   = nullptr;  // baked .i3d animated icon (invanim — none for Locke)
-int32_t          g_bodyFrames = 0;
+TObjectInstance* g_bodyInst    = nullptr;  // spawned Locke (player class instance)
+T3DImagery*      g_body3DImg   = nullptr;  // dynamic_cast<T3DImagery*> of imagery
+TTextureHandle   g_bodyFallbackAlbedo = kInvalidTexture;
 
-// Wall-clock rate for the body's invitem/invanim FALLBACK.
-constexpr double kBodyAnimMs = 100.0;
+struct SBodyMesh
+{
+    MeshHandle handle  = 0;
+    int32_t    objnum  = -1;
+    int32_t    texslot = -1;
+};
+std::vector<SBodyMesh> g_bodyMeshes;
+float          g_bodyBBoxMin[3] = { 0, 0, 0 };
+float          g_bodyBBoxMax[3] = { 0, 0, 0 };
+float          g_bodyScale      = 1.0f;
+int64_t        g_bodyLastTick   = -1;
+bool           g_bodyMeshesBuilt = false;
+
+// #12 — Per-equipment sub-mesh registry. One entry per equipment sub-
+// object that should attach to the player's skeleton (mirrors retail
+// charanimator.cpp::ProcessEquipment / RENDEREQUIPPARTS branch).
+//
+// Fields:
+//   handle       = registered mesh extracted from the EQUIPMENT'S
+//                  T3DImagery (ExtractSubMeshTextureSlot of equipObjnum
+//                  in equipState).
+//   equipImg     = the equipment's T3DImagery (kept so the texture
+//                  resolution can re-run in case the equipped item's
+//                  imagery is hot-swappable).
+//   equipObjnum  = which sub-object of the equipment we extracted from.
+//   equipState   = the BodyType-matched state (or "still"/"all" group
+//                  state) we extracted in.
+//   playerObjnum = the player sub-object whose animated world matrix
+//                  this equipment mesh rides — i.e. the bone matrix
+//                  (the weapon bone for a sword, the head bone for a
+//                  helmet, …). retail charanimator.cpp:303 memcpy's
+//                  this matrix into the equipobj before RenderObject.
+//                  The sokol port computes the matrix from the player's
+//                  pose via BuildAnimPoseObjectMatrix(playerObjnum).
+struct SEquipMesh
+{
+    MeshHandle  handle       = 0;
+    T3DImagery* equipImg     = nullptr;
+    int32_t     equipObjnum  = -1;
+    int32_t     equipState   = -1;
+    int32_t     playerObjnum = -1;
+};
+std::vector<SEquipMesh> g_equipMeshes;
+
+// Which player sub-object indices to SKIP when extracting Locke's
+// meshes (they're replaced by equipment sub-objects). Populated
+// alongside g_equipMeshes when equipment is processed. Mirrors the
+// HIDECHARPARTS branch in retail ProcessEquipment.
+std::vector<int32_t> g_hiddenPlayerObjnums;
+
+// Idle animation state cycle (#13). Locke's .i3d carries 5 dedicated
+// "walk inventory" idle poses (`winv1..winv5`) — verified by dumping all
+// 352 state names from the loaded imagery. These are the named retail
+// equip-pane idle behaviours (weight shift, stretch, look around,
+// etc.); each one is a short looped animation. We probe FindState for
+// each name and cycle on a wall-clock timer.
+//
+// `binv1..binv5` are the bow-equipped variants (when Locke is in bow
+// mode); we include them as fallback in case the spawn lands in bow
+// mode. `walk` is the universal root fallback if no inv-pose exists.
+constexpr const char* kIdleStateCandidates[] = {
+    "winv1", "winv2", "winv3", "winv4", "winv5",
+    "binv1", "binv2", "binv3", "binv4", "binv5",
+    "walk",  // last-ditch fallback — root locomotion cycle
+};
+constexpr int32_t kIdleStateCandidateCount =
+    int32_t(sizeof(kIdleStateCandidates) / sizeof(kIdleStateCandidates[0]));
+
+int32_t g_idleStateIds[kIdleStateCandidateCount];  // FindState lookups
+int32_t g_idleStateCount = 0;                       // # of valid entries
+int32_t g_idleStateCursor = 0;                      // index into above
+double  g_idleStateChangeAtSec = 0.0;               // wall-clock next switch
+
+// Mean dwell per idle state (wall-clock seconds). The retail idle
+// behaviour reads as "settle into a pose, hold for a few seconds, settle
+// into another" — 4 seconds is a reasonable midpoint. IdleAnimTick
+// jitters this ±0.5s so the cycle isn't a metronome.
+constexpr double kIdleSwitchDwellSec = 4.0;
+
+// Where in screen-space the 3D body renders. The size matches the
+// equip pane's central body region (between the slot wells). This rect
+// is also the source we sample from lit_target when composing the
+// pane RT.
+constexpr int32_t kBody3DSrcX = 16;   // off-screen-edge buffer in lit_target
+constexpr int32_t kBody3DSrcY = 16;
+constexpr int32_t kBody3DSrcW = 110;  // pane central body column ~110×175
+constexpr int32_t kBody3DSrcH = 175;
+
+// Where in the equip pane RT the body composites. Centred between the
+// slot wells (left wells x ≤ 7+40=47, right wells x ≥ 141), top under
+// the HEAD well (~y=80), bottom above the gold compass base (~y=240).
+constexpr int32_t kBodyDstX = 40;   // ~midway between left-edge slots and chrome edge
+constexpr int32_t kBodyDstY = 35;
+constexpr int32_t kBodyDstW = 110;
+constexpr int32_t kBodyDstH = 195;
 
 // =====================================================================
 // Per-slot demo content (spec §6.4 algorithm intent only; test mode
@@ -345,12 +498,12 @@ PTBitmap CurrentIconBitmap(const SDemoSlot& d)
 }
 
 // =====================================================================
-// SpawnBodyInstance — spawn Locke (or first available player/character)
-// so the paperdoll has a body to draw. Same shape as
-// uiplyrstatusbartest::SpawnPortraitInstance (which spawns the same
-// Locke instance to source the head icon). The body's imagery loads
-// asynchronously after OnScreen; per-frame TryExtractBody pulls the
-// bitmap/animation once it lands.
+// SpawnBodyInstance — spawn Locke (player class instance preferred so
+// Player->GetEquip(i) drives the equipment-replacement system in
+// charanimator.cpp::HideCharParts / RenderEquipment; falls back to
+// Character class if no Player type is available). Sets a "still" /
+// DefaultRootState so the paperdoll holds a stable idle pose; the
+// per-frame inst->NextFrame() ticks animation forward.
 // =====================================================================
 void SpawnBodyInstance()
 {
@@ -384,7 +537,16 @@ void SpawnBodyInstance()
     def.accum    = { 0, 0, 0 };
     def.rotatex  = 0;
     def.rotatey  = 0;
-    def.rotatez  = 32;  // matches plyrstatusbar facing
+    // rotatez is uint8 in 0..255 game-angle space (object.h:965). The
+    // equip pane shows Locke in a slight-3/4-left view (matches
+    // images/ui/sidebar-equipment/paperdoll-empty-locke_nude.png —
+    // his right shoulder is forward, body twisted slightly). Sweep
+    // (REVENANT_EQUIP_FACING env var) confirms 160 reads closest to
+    // the reference under the engine's iso projection.
+    if (const char* override_face = std::getenv("REVENANT_EQUIP_FACING"))
+        def.rotatez = (uint8_t)std::atoi(override_face);
+    else
+        def.rotatez  = 160;
     def.group    = 0;
 
     TObjectInstance* inst = cl->NewObject(&def);
@@ -394,86 +556,608 @@ void SpawnBodyInstance()
                  objclass, objtype);
         return;
     }
-    // Set a default root state — matches plyrstatusbar's portrait spawn.
-    // The character's idle pose is the state we want frame-walked for the
-    // paperdoll animation.
+    // Default pose: winv1 (Locke's first inventory-screen idle pose, the
+    // canonical equip-pane resting stance — verified against the state
+    // dump for the Locke .i3d). Falls back through the rest of the idle
+    // candidates and finally DefaultRootState if none match (a stripped-
+    // down character with no inv poses still renders, just frozen).
+    inst->OnScreen();
     if (auto* chr = dynamic_cast<TCharacter*>(inst))
     {
-        const char* root = chr->DefaultRootState();
-        if (root && *root) chr->SetState((char*)root);
+        int32_t initState = -1;
+        for (int32_t i = 0; i < kIdleStateCandidateCount && initState < 0; ++i)
+            initState = chr->FindState((char*)kIdleStateCandidates[i]);
+        if (initState >= 0)
+            chr->SetState(initState);
+        else if (const char* root = chr->DefaultRootState())
+            chr->SetState((char*)root);
     }
-    inst->OnScreen();
     g_bodyInst = inst;
-    log_info("[ui-equip] spawned paperdoll body: class=%d type=%d", objclass, objtype);
+    log_info("[ui-equip] spawned paperdoll body: class=%d type=%d name='%s'",
+             objclass, objtype, inst->GetTypeName() ? inst->GetTypeName() : "?");
+
+    // #13: probe which idle states this character actually carries. The
+    // initial cursor is whichever idle the spawn ended up in (typically
+    // the first valid one — "still"). Missing names are silently skipped.
+    g_idleStateCount = 0;
+    g_idleStateCursor = 0;
+    g_idleStateChangeAtSec = TTime::Time() + kIdleSwitchDwellSec;
+    for (int32_t i = 0; i < kIdleStateCandidateCount; ++i)
+    {
+        const int32_t id = inst->FindState((char*)kIdleStateCandidates[i]);
+        if (id >= 0)
+        {
+            g_idleStateIds[g_idleStateCount++] = id;
+            log_info("[ui-equip] idle state %d available: '%s' (state id=%d)",
+                     g_idleStateCount - 1, kIdleStateCandidates[i], id);
+        }
+    }
+    if (g_idleStateCount == 0)
+        log_warn("[ui-equip] no idle states matched; paperdoll will animate "
+                 "via DefaultRootState only — #13 idle cycling no-op");
 }
 
-// Per-frame: pull the spawned body's baked icon/animation once its
-// imagery has streamed in. Prefers invanim (animated body cycle); falls
-// back to invitem (static body bitmap). Retried each frame until it
-// succeeds (the imagery body streams in asynchronously after spawn —
-// mirrors uiplyrstatusbartest::TryExtractPortrait).
+// #13: idle-state switch on a wall-clock timer. Called once per frame
+// from RenderBody3D; rotates to the next available idle state in
+// kIdleStateIds when the dwell expires. Uses delta-time (TTime::Time())
+// per [[feedback-framerate-independent-anim]], not a fixed-frame counter.
+void IdleAnimTick()
+{
+    if (!g_bodyInst || g_idleStateCount <= 0) return;
+    const double now = TTime::Time();
+    if (now < g_idleStateChangeAtSec) return;
+
+    // Rotate to the next idle. The dwell jitters slightly (±25%) so the
+    // cycle isn't a metronome — equip pane idles should read as casual
+    // organic behaviour, not a clockwork rotation. (Simple deterministic
+    // jitter so capture filmstrips remain stable; not a true RNG.)
+    g_idleStateCursor = (g_idleStateCursor + 1) % g_idleStateCount;
+    const int32_t target = g_idleStateIds[g_idleStateCursor];
+    g_bodyInst->SetState(target);
+    g_idleStateChangeAtSec = now + kIdleSwitchDwellSec
+                             + 0.5 * ((g_idleStateCursor & 1) ? 1.0 : -1.0);
+}
+
+// Build mesh handles for every visible sub-object of the body's .i3d
+// imagery, one RegisterMesh call per (objnum, texslot) pair. Mirrors the
+// char3d testmode pattern (testmodes.cpp:923-1019). Imagery is async-
+// loaded after OnScreen, so this retries each frame until the imagery
+// is ready (NumStates > 0, NumObjects > 0) — same shape as
+// uiplyrstatusbartest::TryExtractPortrait.
 //
-// Scans ALL states — the body bitmap/animation might live on a non-zero
-// state (idle, walk, attack, ...). The portrait scan in plyrstatusbar
-// uses the same defensive sweep.
-void TryExtractBody()
+// Also computes the world-space bounding box of the body so the camera
+// reconstruction params can frame Locke automatically inside the body
+// rect (kBody3DSrc{W,H}).
+// #12 — Port of charanimator.cpp::ProcessEquipment to the sokol mesh-
+// submit path. Walks Player->GetEquip(i), and for each equipped item
+// whose imagery is OBJIMAGE_MESH3D:
+//   1. Find the equipment state matching the player's BodyType (or the
+//      "still"/"all" universal state if the equipment has no BodyType
+//      variant).
+//   2. For each non-hidden sub-object in that state, look up the
+//      corresponding player sub-object — name-matched, with BodyType
+//      prefix stripped where applicable. For weapons (PRIMEHAND): the
+//      player sub-object is "weapon" or "sword" depending on which
+//      exists.
+//   3. Register the equipment's sub-mesh via ExtractSubMeshTextureSlot
+//      and remember which PLAYER sub-object's animated matrix it should
+//      ride.
+//   4. Mark the player sub-object as hidden so TryBuildBodyMeshes will
+//      skip it (the equipment is replacing it).
+//
+// This must run AFTER the body imagery is loaded (so g_body3DImg is
+// valid) and BEFORE TryBuildBodyMeshes (so the hidden list is in place
+// before the body extract).
+//
+// Returns true if processing actually happened (imagery + player ready),
+// false if it should be retried next frame (e.g. equipment imagery still
+// streaming in). Idempotent on partial success — entries are only added
+// for items whose imagery has loaded; remaining items are picked up on
+// subsequent calls.
+bool ProcessEquipmentForSkeleton()
 {
-    if (g_bodyIcon || g_bodyAnim) return;  // already bound
-    if (!g_bodyInst) return;
-    TObjectImagery* img = g_bodyInst->GetImagery();
-    if (!img || img->NumStates() <= 0) return;
+    if (!g_body3DImg || !g_bodyInst) return false;
+    auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
+    if (!player) return false;
 
-    for (int32_t s = 0; s < img->NumStates(); ++s)
+    // Player must have a BodyType for the equipment to match.
+    const char* bodyType = player->BodyType();
+    if (!bodyType || !*bodyType) return false;
+    const int32_t bodyTypeLen = int32_t(std::strlen(bodyType));
+
+    for (int32_t eq = 0; eq < NUM_EQ_SLOTS; ++eq)
     {
-        // Prefer invanim (animated body) per user's "Locke ... doing his
-        // animation patterns" — that's a per-frame invanim playback.
-        if (TAnimation* a = img->GetInvAnimation(s))
+        TObjectInstance* oi = player->GetEquip(eq);
+        if (!oi) continue;
+
+        TObjectImagery* equipImagery = oi->GetImagery();
+        if (!equipImagery) continue;
+        // header->imageryid is the OBJIMAGE_* type (1 = MESH3D); not to
+        // be confused with the imagery's entry-array index returned by
+        // ImageryId() (which is a unique handle, not a type tag).
+        // Mirrors retail charanimator.cpp:214.
+        SImageryHeader* hdr = equipImagery->GetHeader();
+        if (!hdr) continue;
+        if (hdr->imageryid != OBJIMAGE_MESH3D)
         {
-            g_bodyAnim   = a;
-            g_bodyFrames = a->NumFrames();
-            log_info("[ui-equip] paperdoll body: invanim state %d, %d frames",
-                     s, g_bodyFrames);
-            return;
+            log_info("[ui-equip] equip slot %d: imagery is not MESH3D (header "
+                     "type=%d) — no skeleton render for this item",
+                     eq, hdr->imageryid);
+            continue;
+        }
+
+        T3DImagery* equip3D = (T3DImagery*)equipImagery;
+        if (equip3D->NumStates() <= 0 || equip3D->NumObjects() <= 0)
+            continue;  // Imagery still streaming.
+
+        // Find the equipment state matching the player's BodyType
+        // (mirrors charanimator.cpp:222-238).
+        int32_t equipState = -1;
+        int32_t nlen = 0;  // BodyType prefix length to strip from object names
+        for (int32_t st = 0; st < equip3D->NumStates(); ++st)
+        {
+            const char* sn = equipImagery->GetAniName(st);
+            if (!sn) continue;
+            if (!strcasecmp(sn, "still") || !strcasecmp(sn, "all"))
+            {
+                equipState = st;
+                nlen = 0;
+                break;
+            }
+            if (!strcasecmp(sn, bodyType))
+            {
+                equipState = st;
+                nlen = bodyTypeLen;
+                break;
+            }
+        }
+        if (equipState < 0)
+        {
+            log_info("[ui-equip] equip slot %d: no body-type-matched state "
+                     "in imagery (bodytype='%s')", eq, bodyType);
+            continue;
+        }
+
+        const int32_t equipTexslots = equip3D->NumTextures() + 1;
+
+        for (int32_t o = 0; o < equip3D->NumObjects(); ++o)
+        {
+            if (equip3D->IsHidden(o, equipState)) continue;
+
+            char* equipName = equip3D->GetObjectName(o);
+            if (!equipName) continue;
+
+            // Strip BodyType prefix if present (charanimator.cpp:253-254).
+            const char* matchName = equipName;
+            if (nlen > 0 && !strncasecmp(matchName, bodyType, nlen))
+                matchName += nlen;
+
+            // Find player sub-object to replace.
+            int32_t playerObjnum = -1;
+            if (eq == EQ_PRIMEHAND)
+            {
+                // Replace the "weapon" or "sword" bone with this item.
+                playerObjnum = g_body3DImg->GetObjectNum((char*)"weapon");
+                if (playerObjnum < 0)
+                    playerObjnum = g_body3DImg->GetObjectNum((char*)"sword");
+                if (playerObjnum < 0)
+                    playerObjnum = g_body3DImg->GetObjectNum((char*)matchName);
+            }
+            else if (eq == EQ_RANGEDWEAPON)
+            {
+                // In retail this is gated on IsBowMode() — if the player
+                // isn't in bow mode the ranged weapon is hidden. For the
+                // equip pane preview we always show it (the equip pane
+                // is where the player CHOOSES the bow, so it should
+                // visibly be on Locke). Fall-through to the bone lookup.
+                playerObjnum = g_body3DImg->GetObjectNum((char*)"bow");
+                if (playerObjnum < 0)
+                    playerObjnum = g_body3DImg->GetObjectNum((char*)matchName);
+            }
+            else
+            {
+                playerObjnum = g_body3DImg->GetObjectNum((char*)matchName);
+            }
+
+            if (playerObjnum < 0)
+                continue;  // No bone for this part — skip silently.
+
+            // Extract this equipment sub-object's geometry. Iterate
+            // texture slots like the body extract does.
+            bool extracted_any = false;
+            for (int32_t texslot = 0; texslot < equipTexslots; ++texslot)
+            {
+                std::vector<SMeshVertex> verts;
+                std::vector<uint16_t> indices;
+                if (!ExtractSubMeshTextureSlot(equip3D, o, texslot, verts, indices))
+                    continue;
+
+                TTextureHandle albedo = g_bodyFallbackAlbedo;
+                if (texslot > 0)
+                {
+                    S3DTex tex = {};
+                    equip3D->GetTexture(texslot - 1, &tex);
+                    if (tex.htexture != kInvalidTexture)
+                        albedo = tex.htexture;
+                }
+                MeshHandle h = Renderer->RegisterMesh(
+                    verts.data(), int32_t(verts.size()),
+                    indices.data(), int32_t(indices.size()),
+                    albedo);
+                if (!h) continue;
+
+                g_equipMeshes.push_back({h, equip3D, o, equipState, playerObjnum});
+                extracted_any = true;
+            }
+            if (!extracted_any)
+            {
+                // Single-texture object fallback (mirrors body extract).
+                std::vector<SMeshVertex> verts;
+                std::vector<uint16_t> indices;
+                if (ExtractSubMesh(equip3D, o, verts, indices))
+                {
+                    TTextureHandle albedo = g_bodyFallbackAlbedo;
+                    if (equip3D->NumTextures() > 0)
+                    {
+                        S3DTex tex = {};
+                        equip3D->GetTexture(0, &tex);
+                        if (tex.htexture != kInvalidTexture)
+                            albedo = tex.htexture;
+                    }
+                    MeshHandle h = Renderer->RegisterMesh(
+                        verts.data(), int32_t(verts.size()),
+                        indices.data(), int32_t(indices.size()),
+                        albedo);
+                    if (h)
+                    {
+                        g_equipMeshes.push_back({h, equip3D, o, equipState, playerObjnum});
+                        extracted_any = true;
+                    }
+                }
+            }
+
+            if (extracted_any)
+            {
+                // Mark the player sub-object as hidden — the equipment
+                // is taking its place. Avoid duplicate entries.
+                bool already = false;
+                for (int32_t hidden : g_hiddenPlayerObjnums)
+                    if (hidden == playerObjnum) { already = true; break; }
+                if (!already) g_hiddenPlayerObjnums.push_back(playerObjnum);
+
+                log_info("[ui-equip] equip slot %d sub-obj %d ('%s') → "
+                         "player bone %d ('%s'); player obj hidden",
+                         eq, o, equipName, playerObjnum,
+                         g_body3DImg->GetObjectName(playerObjnum));
+            }
         }
     }
-    // No invanim found anywhere — fall back to static invitem. That's
-    // still correct (just non-animated), matching the user's "fall back
-    // to GetInvImage if no anim" directive. Log a WARNING so it's clear
-    // the body is non-animated AND likely the .i3d only carries a head
-    // portrait icon (in which case the body viewport draws it at native
-    // size in the upper-torso area, not stretched — see Refresh).
-    for (int32_t s = 0; s < img->NumStates(); ++s)
-    {
-        if (PTBitmap bm = img->GetInvImage(s))
-        {
-            g_bodyIcon = bm;
-            log_warn("[ui-equip] paperdoll body: NO invanim — falling back to "
-                     "invitem state %d %dx%d (the character .i3d doesn't carry "
-                     "a per-frame body cycle; a real animated paperdoll requires "
-                     "an invanim baked into the character's .i3d, which Locke "
-                     "doesn't have)",
-                     s, bm->width, bm->height);
-            return;
-        }
-    }
-    log_warn("[ui-equip] paperdoll body: NEITHER invanim NOR invitem available "
-             "on the spawned character — the chrome's painted silhouette will "
-             "show through unmodified");
+
+    return true;
 }
 
-// Resolve the current body bitmap (FALLBACK ONLY — used in case the 3D
-// mesh render path doesn't engage). invanim → time-stepped frame;
-// invitem → flat bitmap; otherwise null (placeholder period before async
-// load completes).
-PTBitmap CurrentBodyBitmap()
+// Check whether ALL Player-equipped items have their imagery loaded.
+// Equipment imagery streams in async (separately from the body); the
+// build-body-meshes step depends on the equipment being ready so the
+// hide+attach logic can run in one pass.
+bool AreEquipmentImageriesReady()
 {
-    if (g_bodyAnim && g_bodyFrames > 0)
+    auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
+    if (!player) return true;  // No player → nothing to wait on.
+    for (int32_t eq = 0; eq < NUM_EQ_SLOTS; ++eq)
     {
-        const double nowMs = TTime::Time() * 1000.0;
-        const int32_t f    = (int32_t)(nowMs / kBodyAnimMs) % g_bodyFrames;
-        return g_bodyAnim->GetFrame(f);
+        TObjectInstance* oi = player->GetEquip(eq);
+        if (!oi) continue;
+        TObjectImagery* im = oi->GetImagery();
+        if (!im) return false;
+        SImageryHeader* hdr = im->GetHeader();
+        if (!hdr) return false;
+        // Some items use non-MESH3D imagery (2D-only icons); those don't
+        // contribute to the skeleton — they just need to exist.
+        if (hdr->imageryid != OBJIMAGE_MESH3D) continue;
+        T3DImagery* t3d = (T3DImagery*)im;
+        if (t3d->NumStates() <= 0 || t3d->NumObjects() <= 0)
+            return false;
     }
-    return g_bodyIcon;
+    return true;
+}
+
+void TryBuildBodyMeshes()
+{
+    if (g_bodyMeshesBuilt) return;
+    if (!g_bodyInst || !Renderer) return;
+    if (g_bodyFallbackAlbedo == kInvalidTexture)
+        g_bodyFallbackAlbedo = Renderer->WhiteTextureHandle();
+
+    if (!g_body3DImg)
+        g_body3DImg = dynamic_cast<T3DImagery*>(g_bodyInst->GetImagery());
+    if (!g_body3DImg) return;
+    if (g_body3DImg->NumStates() <= 0 || g_body3DImg->NumObjects() <= 0) return;
+
+    // Wait for ALL equipped items' imagery to load before extracting
+    // (#12) — the equipment processing depends on the items' imagery
+    // being ready to extract sub-meshes from.
+    if (!AreEquipmentImageriesReady()) return;
+
+    // #12: process equipped items FIRST so the hidden-player-objnum list
+    // is populated before we extract Locke's submeshes. Equipment meshes
+    // are accumulated in g_equipMeshes; player sub-objects that are being
+    // replaced are added to g_hiddenPlayerObjnums.
+    ProcessEquipmentForSkeleton();
+
+    const int32_t state     = g_bodyInst->GetState();
+    const int32_t frame     = g_bodyInst->GetFrame();
+    const int32_t prevstate = g_bodyInst->GetPrevState();
+    const int32_t prevframe = g_bodyInst->GetPrevFrame();
+    const SAnimPose pose = SampleI3DAnimPose(g_body3DImg, state, frame,
+                                             prevstate, prevframe);
+    bool bbox_init = false;
+    const int32_t texslots = g_body3DImg->NumTextures() + 1;
+
+    for (int32_t objnum = 0; objnum < g_body3DImg->NumObjects(); ++objnum)
+    {
+        if (g_body3DImg->IsHidden(objnum, state))
+            continue;
+
+        bool obj_kept = false;
+        for (int32_t texslot = 0; texslot < texslots; ++texslot)
+        {
+            std::vector<SMeshVertex> verts;
+            std::vector<uint16_t> indices;
+            if (!ExtractSubMeshTextureSlot(g_body3DImg, objnum, texslot, verts, indices))
+                continue;
+
+            TTextureHandle albedo = g_bodyFallbackAlbedo;
+            if (texslot > 0)
+            {
+                S3DTex tex = {};
+                g_body3DImg->GetTexture(texslot - 1, &tex);
+                if (tex.htexture != kInvalidTexture)
+                    albedo = tex.htexture;
+            }
+            MeshHandle h = Renderer->RegisterMesh(verts.data(), int32_t(verts.size()),
+                                                  indices.data(), int32_t(indices.size()),
+                                                  albedo);
+            if (!h) return;
+            g_bodyMeshes.push_back({h, objnum, texslot});
+            obj_kept = true;
+
+            float world[16];
+            BuildAnimPoseObjectMatrix(g_body3DImg, pose, state, objnum, world);
+            for (const auto& v : verts)
+            {
+                const float x = v.pos[0], y = v.pos[1], z = v.pos[2];
+                const float wx = world[0]*x + world[1]*y + world[2]*z + world[3];
+                const float wy = world[4]*x + world[5]*y + world[6]*z + world[7];
+                const float wz = world[8]*x + world[9]*y + world[10]*z + world[11];
+                if (!bbox_init) {
+                    g_bodyBBoxMin[0] = g_bodyBBoxMax[0] = wx;
+                    g_bodyBBoxMin[1] = g_bodyBBoxMax[1] = wy;
+                    g_bodyBBoxMin[2] = g_bodyBBoxMax[2] = wz;
+                    bbox_init = true;
+                } else {
+                    g_bodyBBoxMin[0] = std::fmin(g_bodyBBoxMin[0], wx);
+                    g_bodyBBoxMin[1] = std::fmin(g_bodyBBoxMin[1], wy);
+                    g_bodyBBoxMin[2] = std::fmin(g_bodyBBoxMin[2], wz);
+                    g_bodyBBoxMax[0] = std::fmax(g_bodyBBoxMax[0], wx);
+                    g_bodyBBoxMax[1] = std::fmax(g_bodyBBoxMax[1], wy);
+                    g_bodyBBoxMax[2] = std::fmax(g_bodyBBoxMax[2], wz);
+                }
+            }
+        }
+        if (!obj_kept)
+        {
+            // Fallback: whole-mesh extract for objects with no
+            // per-texture-slot decomposition (single-texture objects).
+            // Same fallback char3d uses (testmodes.cpp:976-1018).
+            std::vector<SMeshVertex> verts;
+            std::vector<uint16_t> indices;
+            if (!ExtractSubMesh(g_body3DImg, objnum, verts, indices))
+                continue;
+            TTextureHandle albedo = g_bodyFallbackAlbedo;
+            if (g_body3DImg->NumTextures() > 0)
+            {
+                S3DTex tex = {};
+                g_body3DImg->GetTexture(0, &tex);
+                if (tex.htexture != kInvalidTexture)
+                    albedo = tex.htexture;
+            }
+            MeshHandle h = Renderer->RegisterMesh(verts.data(), int32_t(verts.size()),
+                                                  indices.data(), int32_t(indices.size()),
+                                                  albedo);
+            if (!h) return;
+            g_bodyMeshes.push_back({h, objnum, -1});
+
+            float world[16];
+            BuildAnimPoseObjectMatrix(g_body3DImg, pose, state, objnum, world);
+            for (const auto& v : verts)
+            {
+                const float x = v.pos[0], y = v.pos[1], z = v.pos[2];
+                const float wx = world[0]*x + world[1]*y + world[2]*z + world[3];
+                const float wy = world[4]*x + world[5]*y + world[6]*z + world[7];
+                const float wz = world[8]*x + world[9]*y + world[10]*z + world[11];
+                if (!bbox_init) {
+                    g_bodyBBoxMin[0] = g_bodyBBoxMax[0] = wx;
+                    g_bodyBBoxMin[1] = g_bodyBBoxMax[1] = wy;
+                    g_bodyBBoxMin[2] = g_bodyBBoxMax[2] = wz;
+                    bbox_init = true;
+                } else {
+                    g_bodyBBoxMin[0] = std::fmin(g_bodyBBoxMin[0], wx);
+                    g_bodyBBoxMin[1] = std::fmin(g_bodyBBoxMin[1], wy);
+                    g_bodyBBoxMin[2] = std::fmin(g_bodyBBoxMin[2], wz);
+                    g_bodyBBoxMax[0] = std::fmax(g_bodyBBoxMax[0], wx);
+                    g_bodyBBoxMax[1] = std::fmax(g_bodyBBoxMax[1], wy);
+                    g_bodyBBoxMax[2] = std::fmax(g_bodyBBoxMax[2], wz);
+                }
+            }
+        }
+    }
+
+    if (g_bodyMeshes.empty() || !bbox_init)
+        return;
+
+    // Fit body world bbox to the body rect's height (175 px). Use the
+    // bbox z-extent (vertical) primarily — the body is tall and slim.
+    const float bbox_z = g_bodyBBoxMax[2] - g_bodyBBoxMin[2];
+    g_bodyScale = (bbox_z > 1e-3f) ? (float(kBody3DSrcH) * 0.85f / bbox_z) : 1.0f;
+    g_bodyMeshesBuilt = true;
+    log_info("[ui-equip] body meshes built: %zu submeshes scale=%.2f bbox=(%.0f..%.0f, %.0f..%.0f, %.0f..%.0f)",
+             g_bodyMeshes.size(), g_bodyScale,
+             g_bodyBBoxMin[0], g_bodyBBoxMax[0],
+             g_bodyBBoxMin[1], g_bodyBBoxMax[1],
+             g_bodyBBoxMin[2], g_bodyBBoxMax[2]);
+}
+
+// Multiply two row-major 4x4 matrices. Local helper (testmodes.cpp has
+// the same fn as a file-local; not pulling that in via include).
+void MatMul16(const float a[16], const float b[16], float out[16])
+{
+    for (int32_t r = 0; r < 4; ++r)
+        for (int32_t c = 0; c < 4; ++c)
+        {
+            float s = 0.0f;
+            for (int32_t i = 0; i < 4; ++i)
+                s += a[r * 4 + i] * b[i * 4 + c];
+            out[r * 4 + c] = s;
+        }
+}
+
+// Per-frame: render the 3D body via the renderer's tile-pass + lighting-
+// pass machinery. Mirrors char3d::RenderCharPreviewMode but with a small
+// camera origin so Locke projects into a known sub-rect of lit_target
+// (kBody3DSrc{X,Y,W,H}); the equip pane RT then samples that sub-rect
+// in Refresh() via Renderer->CompositeLitTargetSubrectToTarget.
+//
+// Animation drive: legacy-tick-gated inst->NextFrame() + Animate(false),
+// identical to char3d's per-tick step. This is delta-time-driven through
+// the engine's wall-clock tick counter, not a fixed-frame loop —
+// satisfies [[feedback-framerate-independent-anim]].
+void RenderBody3D()
+{
+    if (!Renderer || !Display.IsActive() || !Display.BackBuffer()) return;
+    if (!g_bodyInst || g_bodyMeshes.empty() || !g_body3DImg) return;
+
+    // Advance animation once per legacy tick. Char3d uses the same gate;
+    // legacy tick advances on real wall-clock so this is frame-rate
+    // independent.
+    const int64_t legacy_tick = TTime::LegacyFrameCount();
+    if (legacy_tick != g_bodyLastTick)
+    {
+        g_bodyLastTick = legacy_tick;
+        g_bodyInst->NextFrame();
+        if (g_bodyInst->NeedsAnimator() && !g_bodyInst->HasAnimator())
+            g_bodyInst->OnScreen();
+        g_bodyInst->Animate(false);
+    }
+
+    // #13: cycle to a different idle state on a wall-clock timer so the
+    // paperdoll isn't a frozen posture. Independent of the per-tick
+    // NextFrame above (which advances frames inside the current state).
+    IdleAnimTick();
+
+    const int32_t state = g_bodyInst->GetState();
+
+    // Camera origin in screen pixels. Centred inside the body sub-rect.
+    const int32_t cam_ox = kBody3DSrcX + kBody3DSrcW / 2;
+    const int32_t cam_oy = kBody3DSrcY + kBody3DSrcH / 2;
+
+    // Lighting / scene setup — copied from char3d defaults (testmodes.cpp
+    // :1088-1094). These deliberately match the char3d preview so Locke
+    // reads the same on a stage as he does in the preview.
+    Renderer->SetLight(0.6f, -0.6f, 0.4f, 1.0f, 1.0f, 1.0f, 1.0f, 0.25f);
+    Renderer->SetAmbientColor(0.55f, 0.55f, 0.55f);
+    Renderer->SetAmbientOcclusion(false, 12.0f, 1.0f, 0.15f, 96.0f);
+    Renderer->SetNormalLightingHardness(1.0f);
+    Renderer->SetLightingMode(1);
+    Renderer->SetTileViewMode(0);
+    Renderer->SetSunShadow(false, 24.0f, 3.0f, 32);
+
+    const float s = g_bodyScale;
+    const float bbox_w = std::fmax(
+        std::fmax(g_bodyBBoxMax[0] - g_bodyBBoxMin[0],
+                  g_bodyBBoxMax[1] - g_bodyBBoxMin[1]),
+                  g_bodyBBoxMax[2] - g_bodyBBoxMin[2]);
+    constexpr float kCam = 2750.0f;
+    const float half_z = std::fmax(256.0f, bbox_w * s);
+    const float znear = kCam - half_z - 128.0f;
+    const float zfar  = kCam + half_z + 128.0f;
+    Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
+                                      znear, zfar, 0.0f, 0.0f, kCam, 0.0f);
+    Renderer->ClearPointLights();
+    // Transparent backdrop — we only want Locke's lit pixels in the body
+    // sub-rect; the rest of lit_target stays clear so the equip pane
+    // chrome reads cleanly over it on swapchain present.
+    Renderer->BeginTilePass(0.0f, 0.0f, 0.0f, 0.0f);
+
+    const float cx = 0.5f * (g_bodyBBoxMin[0] + g_bodyBBoxMax[0]);
+    const float cy = 0.5f * (g_bodyBBoxMin[1] + g_bodyBBoxMax[1]);
+    const float cz = 0.5f * (g_bodyBBoxMin[2] + g_bodyBBoxMax[2]);
+
+    // Apply the instance's rotatez as a Z-axis world rotation so Locke
+    // faces the viewer (paperdoll convention). BuildAnimPoseObjectMatrix
+    // returns the I3D-local per-bone matrix and does NOT include the
+    // instance's transform; the production scene-render path multiplies
+    // BuildRootMatrixSource(oi) (which carries rotatez) in front. Here
+    // we synthesize the same Z-rotation locally so the equip pane
+    // doesn't have to plumb the full transform_ pipeline.
+    constexpr float kTurn = float(M_PI * 2.0 / 256.0);
+    const float az = float(g_bodyInst->GetRotateZ()) * kTurn;
+    const float cz_r = std::cos(az);
+    const float sz_r = std::sin(az);
+    const float rotZ[16] = {
+        cz_r, -sz_r, 0.0f, 0.0f,
+        sz_r,  cz_r, 0.0f, 0.0f,
+        0.0f,  0.0f, 1.0f, 0.0f,
+        0.0f,  0.0f, 0.0f, 1.0f,
+    };
+
+    const SAnimPose pose = SampleI3DAnimPose(g_body3DImg,
+                                              g_bodyInst->GetState(),
+                                              g_bodyInst->GetFrame(),
+                                              g_bodyInst->GetPrevState(),
+                                              g_bodyInst->GetPrevFrame());
+
+    // Submit the body meshes — but skip any player sub-objects that are
+    // being replaced by equipment (#12). The hidden list is populated by
+    // ProcessEquipmentForSkeleton.
+    auto isHidden = [](int32_t objnum) {
+        for (int32_t h : g_hiddenPlayerObjnums) if (h == objnum) return true;
+        return false;
+    };
+
+    auto submitWithRot = [&](MeshHandle mesh, int32_t objnum) {
+        SMeshSubmit m = {};
+        m.mesh = mesh;
+        float local[16];
+        BuildAnimPoseObjectMatrix(g_body3DImg, pose, state, objnum, local);
+        // Apply scale.
+        for (int32_t i = 0; i < 12; ++i) local[i] *= s;
+        local[3]  -= cx * s;
+        local[7]  -= cy * s;
+        local[11] -= cz * s;
+        // Apply instance-Z rotation in front so Locke faces the viewer.
+        float world[16];
+        MatMul16(rotZ, local, world);
+        std::memcpy(m.world, world, sizeof(world));
+        m.tint[0] = m.tint[1] = m.tint[2] = m.tint[3] = 1.0f;
+        Renderer->SubmitMesh(m);
+    };
+
+    for (const auto& sub : g_bodyMeshes)
+    {
+        if (isHidden(sub.objnum)) continue;
+        submitWithRot(sub.handle, sub.objnum);
+    }
+
+    // #12 — Equipment meshes ride the corresponding PLAYER sub-object's
+    // bone matrix, NOT the equipment's own pose. Mirrors retail
+    // charanimator.cpp:303 (memcpy player_obj.matrix → equip_obj.matrix
+    // before RenderObject).
+    for (const auto& eq : g_equipMeshes)
+        submitWithRot(eq.handle, eq.playerObjnum);
+
+    Renderer->EndTilePass();
+    Renderer->RunLightingPass();
 }
 
 
@@ -573,9 +1257,10 @@ public:
         // invitem (static) and invanim (animated) per feedback addendum B.
         for (int32_t i = 0; i < kDemoCount; ++i)
             TryExtractIcon(g_demo[i]);
-        // Same retry for the paperdoll body (Locke). Probes invanim first
-        // (animated body), falls back to invitem (static body).
-        TryExtractBody();
+        // Per-frame mesh build for the paperdoll body. Imagery loads
+        // async; retries each frame until the .i3d submeshes are
+        // available and registerable.
+        TryBuildBodyMeshes();
 
         const int32_t tw = g_pane->Width();
         const int32_t th = g_pane->Height();
@@ -595,13 +1280,26 @@ public:
         Renderer->DrawBitmapToTarget(g_chrome, 0, 0, tw, th);
 
         // -----------------------------------------------------------------
-        // Body / paperdoll: the live 3D render is OUT OF SCOPE (see
-        // RenderUIEquipMode for the three blockers). The chrome itself
-        // bakes a painted doll silhouette into the central column, so
-        // the visual reads as a body even without a live render. No 2D
-        // body blit here — stretching a 30-px invitem head to fill a
-        // body-shaped viewport would be visually wrong.
+        // Live 3D body (#11). RenderBody3D (called from
+        // RenderUIEquipMode BEFORE this pane's Refresh) has just
+        // rendered Locke into lit_target at kBody3DSrc{X,Y,W,H}.
+        // Sample that sub-rect into the pane RT at the body slot, on
+        // top of the chrome — Locke draws over the chrome stone
+        // backdrop matching paperdoll-empty-locke_nude.png.
+        //
+        // The composite is no-op until any_target_ever_written is true
+        // (i.e. the tile-pass has run at least once). On the first
+        // frame the chrome shows un-overlaid, which is fine —
+        // subsequent frames show Locke.
         // -----------------------------------------------------------------
+        if (g_bodyMeshesBuilt)
+        {
+            Renderer->CompositeLitTargetSubrectToTarget(
+                /*dst*/ kBodyDstX, kBodyDstY, kBodyDstW, kBodyDstH,
+                /*src screen*/ kBody3DSrcX, kBody3DSrcY,
+                /*src size*/ kBody3DSrcW, kBody3DSrcH,
+                tw, th);
+        }
 
         // -----------------------------------------------------------------
         // Spec §5 step 3 — Per-slot loop, i = 0..10:
@@ -799,8 +1497,46 @@ bool InitializeUIEquipMode()
     // until then.
     SpawnBodyInstance();
 
+    // Equip the demo items on the spawned Player so engine state mirrors
+    // a real "Locke wearing kit" scenario. This populates Player->GetEquip
+    // (i) which is what charanimator.cpp::ProcessEquipment reads. The
+    // sokol-side mesh extraction for equipment-on-skeleton (#12) reads
+    // the same equipment[] array — once it's wired (port of
+    // ProcessEquipment to the SubmitMesh path), no other change is
+    // needed here. CanEquip filters per-slot compatibility; mismatched
+    // items silently skip.
+    if (auto* player = dynamic_cast<TPlayer*>(g_bodyInst))
+    {
+        for (int32_t i = 0; i < kDemoCount; ++i)
+        {
+            const SDemoSlot& d = g_demo[i];
+            if (!d.inst || d.eqslot < 0 || d.eqslot >= NUM_EQ_SLOTS) continue;
+            if (player->CanEquip(d.inst, d.eqslot))
+            {
+                player->Equip(d.inst, d.eqslot);
+                log_info("[ui-equip] equipped EQ_%d ← %s on Player",
+                         d.eqslot, d.typeName ? d.typeName : "?");
+            }
+            else
+            {
+                log_info("[ui-equip] CanEquip rejected EQ_%d ← %s (likely "
+                         "EqSlot stat mismatch; item still drawn in slot well)",
+                         d.eqslot, d.typeName ? d.typeName : "?");
+            }
+        }
+    }
+
     delete g_pane;
     g_pane = nullptr;
+
+    // The 3D body render runs each frame in RenderUIEquipMode using the
+    // existing tile-pass + lighting-pass machinery (fills lit_target).
+    // Suppress the normal Scene3D → swapchain composite so lit_target
+    // does NOT paint behind the entire UI; the equip pane RT samples
+    // only the body sub-rect via CompositeLitTargetSubrectToTarget.
+    // CloseUIEquipMode restores the default (Present enabled) so other
+    // test modes work normally afterwards.
+    Renderer->SuppressPresent(true);
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
@@ -812,22 +1548,29 @@ void RenderUIEquipMode()
     Display.BackBuffer()->StartPass(0.18f, 0.20f, 0.26f, 1.0f);
     Display.BackBuffer()->EndPass();
 
-    // Live 3D Locke paperdoll is OUT OF SCOPE for this reconstruction.
-    // Three blockers, all owned outside this file:
-    //   1) `--test=char3d` is regressed (renders blank) — engine fix.
-    //   2) No `Renderer->SubmitMesh*ToTarget` helper exists to render a
-    //      mesh into a TSurface RT, which is required to compose the
-    //      body UNDER the (opaque-center) chrome.
-    //   3) Locke's .i3d carries only `invitem` (head, used as inventory
-    //      icon), NO `invanim` body cycle — animating the body needs an
-    //      asset/authoring task (bake an invanim into the .i3d).
-    // HUD compose only — chrome + per-slot icons (static AND animated).
+    // 1. Run the 3D body render so lit_target holds Locke at the
+    //    kBody3DSrc{...} rect. SuppressPresent is enabled before this
+    //    call (see InitializeUIEquipMode) so this fullscreen render
+    //    does NOT composite to the swapchain — only the equip pane RT
+    //    samples the relevant sub-rect.
+    RenderBody3D();
+
+    // 2. Compose the equip pane RT: chrome + lit_target sub-rect
+    //    (body) + per-slot icons. RenderBody3D must run FIRST so the
+    //    Refresh's CompositeLitTargetSubrectToTarget sees a freshly
+    //    rendered Locke (any_target_ever_written + valid lit_target
+    //    pixels).
     g_hud.Refresh();
 }
 
 void CloseUIEquipMode()
 {
     Renderer->RemoveHud(&g_hud);
+
+    // Restore the default Scene3D-to-swapchain composite (we toggled it
+    // off in InitializeUIEquipMode so the body lit_target wouldn't paint
+    // behind the UI). Other test modes that follow expect Present enabled.
+    Renderer->SuppressPresent(false);
 
     delete g_pane;
     g_pane = nullptr;
@@ -853,7 +1596,18 @@ void CloseUIEquipMode()
         delete g_bodyInst;
         g_bodyInst = nullptr;
     }
-    g_bodyIcon   = nullptr;
-    g_bodyAnim   = nullptr;
-    g_bodyFrames = 0;
+    // Mesh handles registered via RegisterMesh are owned by the renderer;
+    // the renderer's asset cache will GC them on shutdown. We just drop
+    // our refcount.
+    for (const auto& sub : g_bodyMeshes)
+        if (sub.handle) Renderer->ReleaseMeshAssetRef(sub.handle, 1);
+    for (const auto& eq : g_equipMeshes)
+        if (eq.handle) Renderer->ReleaseMeshAssetRef(eq.handle, 1);
+    g_bodyMeshes.clear();
+    g_equipMeshes.clear();
+    g_hiddenPlayerObjnums.clear();
+    g_body3DImg          = nullptr;
+    g_bodyFallbackAlbedo = kInvalidTexture;
+    g_bodyMeshesBuilt    = false;
+    g_bodyLastTick       = -1;
 }

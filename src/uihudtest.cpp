@@ -8,6 +8,10 @@
 // its correct screen-anchored position; the renderer paints them all every
 // frame, so this orchestrator does nothing per-frame beyond the backdrop.
 //
+// 2026-05-31: Added Inventory pane initialization so page-offset (#7a),
+// drag visual (#7b), and arrow gray-out (#7e) are visible in ui-hud
+// filmstrips.  Equip pane initialization is owned by the Opus agent.
+//
 // *************************************************************************
 
 #include "uihudtest.h"
@@ -19,6 +23,7 @@
 
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
+#include "uiinventorytest.h"   // Inventory pane (#7a-#7e — populates harness_inv[])
 #include "uiplyrstatusbartest.h"
 #include "uiquickspelltest.h"
 #include "uisidebartest.h"
@@ -32,6 +37,7 @@ bool g_initBottomBar = false;
 bool g_initBarInv    = false;
 bool g_initQuickSp   = false;
 bool g_initSidebar   = false;
+bool g_initInventory = false;   // Inventory pane (populates harness_inv[])
 
 void SafeInit(const char* name, bool& flag, bool (*init)())
 {
@@ -62,8 +68,12 @@ bool InitializeUIHudMode()
     SafeInit("BarInv",        g_initBarInv,    &InitializeUIBarInvMode);
     SafeInit("QuickSpell",    g_initQuickSp,   &InitializeUIQuickSpellMode);
 
-    // Right-anchored sidebar = tabs + top-slot + bottom-slot
+    // Right-anchored sidebar = tabs + top-slot + bottom-slot chrome
     SafeInit("Sidebar",       g_initSidebar,   &InitializeUISidebarMode);
+
+    // Inventory pane — items + page state + drag-drop source.
+    // (Equip pane initialization is owned by the Opus agent via uiequiptest.)
+    SafeInit("Inventory",     g_initInventory, &InitializeUIInventoryMode);
 
     // Overlay (transparent)
     SafeInit("TextBar",       g_initTextBar,   &InitializeUITextBarMode);
@@ -89,6 +99,7 @@ void RenderUIHudMode()
     if (g_initBarInv)    RenderUIBarInvMode();
     if (g_initQuickSp)   RenderUIQuickSpellMode();
     if (g_initSidebar)   RenderUISidebarMode();
+    if (g_initInventory) RenderUIInventoryMode();
     if (g_initTextBar)   RenderUITextBarMode();
 
     // Final backdrop = dark-gray (simulates the empty playfield behind the
@@ -101,6 +112,7 @@ void CloseUIHudMode()
 {
     log_info("[ui-hud] closing");
     SafeClose("TextBar",       g_initTextBar,   &CloseUITextBarMode);
+    SafeClose("Inventory",     g_initInventory, &CloseUIInventoryMode);
     SafeClose("Sidebar",       g_initSidebar,   &CloseUISidebarMode);
     SafeClose("QuickSpell",    g_initQuickSp,   &CloseUIQuickSpellMode);
     SafeClose("BarInv",        g_initBarInv,    &CloseUIBarInvMode);

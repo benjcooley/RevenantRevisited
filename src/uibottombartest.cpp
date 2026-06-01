@@ -44,6 +44,7 @@
 
 #include "bitmap.h"
 #include "display.h"
+#include "hudstate.h"
 #include "logging.h"
 #include "multi.h"
 #include "renderer.h"
@@ -62,6 +63,14 @@ namespace {
 // The Draw stretch passes dh = 0x3c regardless of the live mbr_0x10, so the
 // chrome height is fixed at 60 (spec §4 footnote).
 constexpr int32_t kBarH = 0x3c;          // 60 — chrome height (§3, §4)
+
+// Sidebar width contribution — retail TPlayScreen::Pulse sets DAT_0066615c =
+// 0xbc = 188 when the sidebar is OPEN, 0 when CLOSED (Pulse:84, Pulse:72).
+// The bottom-bar live width formula is: display_w - DAT_0066615c
+// (Pulse:269: `_DAT_0065be64 = (display_w - DAT_0065be5c) - DAT_0066615c`
+//  where DAT_0065be5c is 0 for this pane — cite Pulse_47b4d0.cpp:269).
+// We read SHudState::sidebarState each frame (versions-over-flags pattern).
+constexpr int32_t kSidebarW = 0xbc;      // 188 — sidebar chrome width (Pulse:84)
 
 // Source bitmap dimensions (spec §2 asset roster — measured via dump_dat.py).
 constexpr int32_t kUtilityBarSrcW = 640; // measured (§2)
@@ -158,17 +167,21 @@ public:
 private:
     void EnsurePane()
     {
-        // Spec §3: live pane width = display width (greedy, X-stretched).
-        // We re-create the RT when the display width changes so the chrome
-        // composes to the exact live width without a runtime scale.
-        const int32_t dw   = Display.Width();
-        const int32_t want = (dw > 0) ? dw : kUtilityBarSrcW;
+        // Spec §3: live pane width = display width (greedy, X-stretched),
+        // minus sidebar width when the sidebar is OPEN (item #3 in the
+        // HUD verification list). Retail formula: display_w - DAT_0066615c
+        // where DAT_0066615c is 0xbc=188 (OPEN) or 0 (CLOSED).
+        // Cite: TPlayScreen::Pulse_47b4d0.cpp:269, Pulse:84, Pulse:72.
+        const int32_t dw         = Display.Width();
+        const SHudState& hs      = GetHudState();
+        const int32_t sidebarAdj = (hs.sidebarState == HUD_SIDEBAR_OPEN) ? kSidebarW : 0;
+        const int32_t want       = (dw > 0 ? dw : kUtilityBarSrcW) - sidebarAdj;
         if (g_pane && g_paneW == want) return;
         delete g_pane;
         g_paneW = want;
         // Compose the WHOLE bar (UtilityBar + BarEndCap) into one RT of
-        // (display_w x 60) — spec §3 direct-renderer contract.
-        g_pane = new TSurface(g_paneW, kBarH, SG_PIXELFORMAT_RGBA8);
+        // (live_w x 60) — spec §3 direct-renderer contract.
+        g_pane = new TSurface(g_paneW > 0 ? g_paneW : kUtilityBarSrcW, kBarH, SG_PIXELFORMAT_RGBA8);
     }
 };
 

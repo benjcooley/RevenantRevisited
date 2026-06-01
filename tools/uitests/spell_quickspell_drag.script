@@ -1,0 +1,2 @@
+pause 200; take_snapshot quickspell initial state;
+pause 500; take_snapshot quickspell state 2 cycled

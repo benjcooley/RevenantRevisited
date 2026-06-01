@@ -6,6 +6,7 @@
 
 #include "testmodes.h"
 
+#include <sokol_app.h>          // sapp_request_quit on script drain
 #include <stb_image_write.h>   // for i3ddump test mode (impl lives in framesnap.cpp)
 
 #include "3dimage.h"
@@ -53,6 +54,7 @@
 #include "uiquickspelltest.h"
 #include "uisidebartest.h"
 #include "uisidetabstest.h"
+#include "uiscrollpanetest.h"
 #include "uispellbooktest.h"
 #include "uispellcreatetest.h"
 #include "uistatstest.h"
@@ -2750,6 +2752,10 @@ size_t  g_inputSimNext   = 0;
 double  g_inputSimStartMs = 0.0;   // 0 until the first tick stamps it
 bool    g_inputSimActive = false;
 bool    g_inputSimLoop   = false;
+// Latched once we've fired sapp_request_quit() on script drain (see
+// auto-exit block at the end of InputSimTick) so we don't spam the quit
+// request every frame between request + actual app shutdown.
+bool    g_inputSimQuitRequested = false;
 
 // Split a string on a delimiter into trimmed, non-empty tokens.
 std::vector<std::string> SplitTokens(const std::string& s, char delim)
@@ -2978,6 +2984,23 @@ static void InputSimTick(const char* mode)
         g_inputSimNext    = 0;
         g_inputSimStartMs = now_ms;
     }
+
+    // Auto-exit when a one-shot --input-script drains. Agents have been
+    // accidentally leaving Revenant test processes running indefinitely
+    // because the test modes never exit on their own (manual filmstrip
+    // mode resets for the next batch, looping cycles forever). When the
+    // user provided an explicit one-shot script, the test is by
+    // definition non-interactive — quit as soon as the script's last
+    // event fires. Single-shot guarded by g_inputSimQuitRequested so we
+    // don't spam sapp_request_quit() across frames.
+    if (!g_inputSimLoop &&
+        g_inputSimNext >= g_inputSimEvents.size() &&
+        !g_inputSimQuitRequested)
+    {
+        g_inputSimQuitRequested = true;
+        log_info("[input-sim] script drained -- requesting quit");
+        sapp_request_quit();
+    }
 }
 
 bool InputScriptActive()
@@ -3055,6 +3078,8 @@ bool Initialize(const char* mode)
         return InitializeUIBarInvMode();
     if (strcmp(mode, "ui-map") == 0)
         return InitializeUIMapMode();
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        return InitializeUIScrollPaneMode();
     if (strcmp(mode, "ui-spellbook") == 0)
         return InitializeUISpellbookMode();
     if (strcmp(mode, "ui-spellcreate") == 0)
@@ -3122,6 +3147,8 @@ void Close(const char* mode)
         CloseUIBarInvMode();
     if (strcmp(mode, "ui-map") == 0)
         CloseUIMapMode();
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        CloseUIScrollPaneMode();
     if (strcmp(mode, "ui-spellbook") == 0)
         CloseUISpellbookMode();
     if (strcmp(mode, "ui-spellcreate") == 0)
@@ -3202,6 +3229,8 @@ void Render(const char* mode)
         return RenderUIBarInvMode();
     if (strcmp(mode, "ui-map") == 0)
         return RenderUIMapMode();
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        return RenderUIScrollPaneMode();
     if (strcmp(mode, "ui-spellbook") == 0)
         return RenderUISpellbookMode();
     if (strcmp(mode, "ui-spellcreate") == 0)
@@ -3239,6 +3268,14 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseClickUIDefScreenMode(button, x, y);
     if (strcmp(mode, "ui-sidebar") == 0 || strcmp(mode, "ui-hud") == 0)
         return HandleMouseClickUISidebarMode(button, x, y);
+    if (strcmp(mode, "ui-quickspell") == 0)
+        return HandleMouseClickUIQuickSpellMode(button, x, y);
+    if (strcmp(mode, "ui-spellbook") == 0)
+        return HandleMouseClickUISpellbookMode(button, x, y);
+    if (strcmp(mode, "ui-spellcreate") == 0)
+        return HandleMouseClickUISpellCreateMode(button, x, y);
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        return;  // TODO: add scroll-paging mouse handler if needed
     (void)x; (void)y;
     if (strcmp(mode, "char3d") == 0)
     {
@@ -3300,6 +3337,9 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseMoveUIDeathMode(x, y);
     if (IsUIDefScreenMode(mode))
         return HandleMouseMoveUIDefScreenMode(button, x, y);
+    // #8 iOS-style velocity drag for the spellbook scroll
+    if (strcmp(mode, "ui-spellbook") == 0)
+        return HandleMouseMoveUISpellbookMode(button, x, y);
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleMouseMove(button, x, y);
 }
@@ -3314,6 +3354,14 @@ void HandleKeyPress(const char* mode, int32_t key, bool down)
     if (IsUIDefScreenMode(mode))
     {
         HandleKeyPressUIDefScreenMode(key, down);
+        return;
+    }
+    // HUD test modes that compose the sidebar / bottom-bar / six-button
+    // strip receive keyboard control: V toggles sidebar, B toggles
+    // bottom-bar, 1-6 select panels (per uisidebartest.h docstring).
+    if (strcmp(mode, "ui-sidebar") == 0 || strcmp(mode, "ui-hud") == 0)
+    {
+        HandleKeyPressUISidebarMode(key, down);
         return;
     }
     if (strcmp(mode, "sector") != 0) return;

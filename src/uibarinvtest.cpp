@@ -52,6 +52,7 @@
 #include "bitmap.h"
 #include "display.h"
 #include "font.h"
+#include "hudstate.h"
 #include "imagery.h"
 #include "logging.h"
 #include "multi.h"
@@ -83,6 +84,11 @@ namespace {
 // Pane height tracks the bottom bar at 60 (`0x3c`). The pane sits at
 // bar-pane-local origin (0,0); its on-screen y is display_h - 60.
 constexpr int32_t kBarH       = 0x3c;   // 60 — bottom-bar / pane height (§3)
+
+// Sidebar width contribution — same as uibottombartest.cpp; both panes
+// shrink together to leave the joint when the sidebar is open.
+// Retail: TPlayScreen::Pulse_47b4d0.cpp:84 → DAT_0066615c = 0xbc (OPEN).
+constexpr int32_t kSidebarW   = 0xbc;   // 188 — sidebar chrome width (Pulse:84)
 
 // --- slot row layout (spec §4 "static element layout" / §6 cell-origin) -
 // Triple-confirmed (forward in Draw `:1442`, inverse in Hover `:cdf6`, and
@@ -371,16 +377,18 @@ public:
 private:
     void EnsurePane()
     {
-        // Spec §3: live pane width tracks display width. The slot row is
-        // a sparse chunk of that width starting at x=220; the empty space
-        // to the left (the spell-ring area) is left untouched by this
-        // pane (it belongs to TQuickSpellPane / the bottom bar chrome).
-        const int32_t dw   = Display.Width();
-        const int32_t want = (dw > 0) ? dw : 640;
+        // Spec §3: live pane width tracks display width, minus sidebar width
+        // when sidebar is OPEN (item #3 HUD verification list). Mirrors the
+        // uibottombartest formula: display_w - kSidebarW (OPEN) / 0 (CLOSED).
+        // Retail cite: TPlayScreen::Pulse_47b4d0.cpp:269.
+        const int32_t dw         = Display.Width();
+        const SHudState& hs      = GetHudState();
+        const int32_t sidebarAdj = (hs.sidebarState == HUD_SIDEBAR_OPEN) ? kSidebarW : 0;
+        const int32_t want       = (dw > 0 ? dw : 640) - sidebarAdj;
         if (g_pane && g_paneW == want) return;
         delete g_pane;
         g_paneW = want;
-        g_pane = new TSurface(g_paneW, kBarH, SG_PIXELFORMAT_RGBA8);
+        g_pane = new TSurface(g_paneW > 0 ? g_paneW : 1, kBarH, SG_PIXELFORMAT_RGBA8);
     }
 };
 

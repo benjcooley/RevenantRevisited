@@ -64,8 +64,20 @@ constexpr int32_t kBotH     = 174;
 // Approximations matching uisidetabstest.cpp (UNCONFIRMED-A: BSS constants
 // not yet extracted; refined in pixel-perfect alignment pass).
 constexpr int32_t kPaneRightInset = 0;
-constexpr int32_t kTabsRightInset = 8;
-constexpr int32_t kTabsTopInset   = 24;
+
+// Tab-strip placement is anchored to the LOWER-RIGHT corner of the live
+// PLAYFIELD VIEW, not the display:
+//   playfield_right  = display_w - (sidebar_open    ? kPaneW : 0)
+//   playfield_bottom = display_h - (bottombar_open  ? kBarH  : 0)
+//   strip rect       = playfield - (kStripW + insets, kStripH + insets)
+// So when the sidebar opens/closes (or bottombar toggles), the six-button
+// strip moves with the corner, sitting a constant distance inside it.
+// (UNCONFIRMED-A: spec leaves the inset literal as a BSS const; small
+// gap by visual measurement until refined.)
+constexpr int32_t kTabsRightInset  = 4;   // px gap from playfield right edge
+constexpr int32_t kTabsBottomInset = 2;   // px gap from playfield bottom edge
+constexpr int32_t kBottomBarH      = 60;  // matches BottomBarPane_SPEC §3
+// kPaneW (188) is the sidebar chrome width — defined above as kPaneW.
 
 // ---- hover-fade ramp (spec §6/§9) ---------------------------------------
 constexpr int32_t kRampMax    = 8;
@@ -252,16 +264,38 @@ void AdvanceRamps()
     }
 }
 
+// Tab-strip screen origin — anchored to the playfield's lower-right corner.
+// Playfield = display minus whatever chrome is currently open. See the
+// constants block above for the formula. Used by both DrawTabStrip and the
+// hit-test in HandleMouseClickUISidebarMode so the two stay in lockstep.
+void TabStripOrigin(int32_t& x, int32_t& y)
+{
+    const SHudState& s = GetHudState();
+    const int32_t dw = Display.Width();
+    const int32_t dh = Display.Height();
+    const int32_t playfieldRight  = (dw > 0 ? dw : kStripW)
+                                  - (s.sidebarState == HUD_SIDEBAR_OPEN ? kPaneW : 0);
+    const int32_t playfieldBottom = (dh > 0 ? dh : kStripH + kBottomBarH)
+                                  - (s.bottomBarOpen ? kBottomBarH : 0);
+    x = playfieldRight  - kStripW - kTabsRightInset;
+    y = playfieldBottom - kStripH - kTabsBottomInset;
+}
+
 class TSidebarHud : public THudDrawable
 {
 public:
     void Draw() override
     {
         const SHudState& s = GetHudState();
+        // Tab strip (#15): always visible — it is the controller that
+        // opens/closes the sidebar (TSideTabsPane_SPEC §1). Per retail,
+        // "the pane draws whenever the playscreen HUD is up"; there is no
+        // per-pane visibility predicate inside the class itself.
+        DrawTabStrip(s);
+        // Chrome panes (#15): only drawn when sidebar is OPEN.
         if (s.sidebarState != HUD_SIDEBAR_OPEN) return;
         DrawTopSlot(s);
         DrawBottomSlot(s);
-        DrawTabStrip(s);
     }
 
     void Refresh()
@@ -295,9 +329,8 @@ private:
     void DrawTabStrip(const SHudState& /*s*/)
     {
         if (!g_stripSurface) return;
-        const int32_t dw = Display.Width();
-        const int32_t x  = (dw > 0 ? dw : kStripW + kTabsRightInset) - kStripW - kTabsRightInset;
-        const int32_t y  = kTabsTopInset;
+        int32_t x = 0, y = 0;
+        TabStripOrigin(x, y);
         Renderer->DrawSurface(g_stripSurface, x, y);
     }
 
@@ -587,9 +620,8 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
     // anchor that happens to overlap a tab button (e.g. EQ_AMMO @ (576,11)
     // vs upper-Book tab @ (583,26)) swallows the click.
     {
-        const int32_t dw      = Display.Width();
-        const int32_t strip_x = (dw > 0 ? dw : kStripW + kTabsRightInset) - kStripW - kTabsRightInset;
-        const int32_t strip_y = kTabsTopInset;
+        int32_t strip_x = 0, strip_y = 0;
+        TabStripOrigin(strip_x, strip_y);
         for (int32_t i = 0; i < kBtnCount; ++i)
         {
             const int32_t bx = strip_x + kBtnX;
@@ -762,4 +794,85 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
     // (Tab strip already handled at the top of the LEFTDOWN section,
     // before chrome-pane slot hit-tests, so it takes precedence on
     // overlapping coords.)
+}
+
+// =====================================================================
+// Keyboard control for the HUD/sidebar — same dispatch as the mouse
+// click handler, but driven by retail-identified command IDs (cases 7,
+// 8, 9, 0xb, 0xc in TPlayScreen::DispatchCommand_47b4d0). Default key
+// bindings follow the HUD.md mention "Number keys (1-4) for panel
+// switching" + "V key: toggles the entire Side Panel"; B toggles the
+// bottom bar (no retail key documented; chosen for memorability — the
+// hide/show is dispatch cmd 4 in TPlayScreen).
+//
+//   V          → toggle SHudState.sidebarState (CLOSED ↔ OPEN)
+//   B          → toggle SHudState.bottomBarOpen (0 ↔ 1)
+//   1          → top=Book + bottom=Spell  (cmd 7)
+//   2          → top=Stats                (cmd 8)
+//   3          → top=Equip + bottom=Inv   (cmd 9)
+//   4          → bottom=Inv               (cmd 0xb)
+//   5          → bottom=Map               (cmd 0xc)
+//   6          → bottom=Spell             (lower-only; no clean cmd ID
+//                                          in DispatchCommand, treated
+//                                          symmetric to 5/0xc)
+//
+// For modes that compose the full HUD (--test=ui-hud) AND for the
+// sidebar-only mode (--test=ui-sidebar). The handler is a no-op on
+// key-up; we react on key-down only (single trigger per press).
+// =====================================================================
+void HandleKeyPressUISidebarMode(int32_t key, bool down)
+{
+    if (!down) return;
+    SHudState& s = GetHudState();
+    const char* logTag = nullptr;
+    switch (key)
+    {
+        case 'V': case 'v':
+            s.sidebarState = (s.sidebarState == HUD_SIDEBAR_OPEN)
+                             ? HUD_SIDEBAR_CLOSED : HUD_SIDEBAR_OPEN;
+            logTag = (s.sidebarState == HUD_SIDEBAR_OPEN) ? "V → sidebar OPEN"
+                                                          : "V → sidebar CLOSED";
+            break;
+        case 'B': case 'b':
+            s.bottomBarOpen = s.bottomBarOpen ? 0 : 1;
+            logTag = s.bottomBarOpen ? "B → bottombar OPEN"
+                                     : "B → bottombar CLOSED";
+            break;
+        case '1':                                    // cmd 7: Book + Spell
+            s.topSlot       = HUD_TOP_BOOK;
+            s.bottomSlot    = HUD_BOT_SPELL;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "1 → Book/Spell";
+            break;
+        case '2':                                    // cmd 8: Stats
+            s.topSlot       = HUD_TOP_STATS;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "2 → Stats";
+            break;
+        case '3':                                    // cmd 9: Equip + Inv
+            s.topSlot       = HUD_TOP_EQUIP;
+            s.bottomSlot    = HUD_BOT_INV;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "3 → Equip/Inv";
+            break;
+        case '4':                                    // cmd 0xb: Inv only
+            s.bottomSlot    = HUD_BOT_INV;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "4 → Inv";
+            break;
+        case '5':                                    // cmd 0xc: Map
+            s.bottomSlot    = HUD_BOT_MAP;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "5 → Map";
+            break;
+        case '6':                                    // lower-only Spell
+            s.bottomSlot    = HUD_BOT_SPELL;
+            s.sidebarState  = HUD_SIDEBAR_OPEN;
+            logTag = "6 → Spell";
+            break;
+        default:
+            return;
+    }
+    log_info("[ui-sidebar] key: %s (state: top=%d bottom=%d sidebar=%d bottombar=%d)",
+             logTag, s.topSlot, s.bottomSlot, s.sidebarState, s.bottomBarOpen);
 }
