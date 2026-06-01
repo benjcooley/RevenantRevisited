@@ -3037,6 +3037,13 @@ class TLightningAnimator_Bespoke : public TEffect
 
     [[nodiscard]] static TLightningAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    // iter8: SubmitHelperMesh has to be called from the submit_world
+    // callback (inside BeginTilePass scope), NOT from the normal submit
+    // path where the helper-mesh queue gets cleared. Mirrors the sister
+    // TIceBoltEffect_Bespoke's SubmitWorldMeshes_BESPOKE method
+    // (src/effect.cpp:8280+). Called by LightningBespokeSubmitWorld
+    // in vfxtest.cpp.
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
   private:
@@ -3052,18 +3059,45 @@ class TLightningAnimator_Bespoke : public TEffect
         float jitter[2] = {0.0f, 0.0f};
     };
 
-    SBoltAnchor anchors_[100] {};    // STRIP_MAX_POINTS = 100 in retail
-    int32_t     numpoints_      = 0;
-    int32_t     maxpoints_      = 0;
-    int32_t     state_          = kLaunch;
-    int32_t     duration_       = 20;       // STRIP_FLY_DURATION
-    float       forward_dir_[3] = {1.0f, 0.0f, 0.0f};
-    float       glow_scale_     = 3.4f;     // retail initial
-    float       rotdegree_      = 0.0f;     // glow rot accumulator (degrees, mod 360)
-    float       morrotdegree_   = 0.0f;     // counter-rot accumulator
-    float       u_scroll_       = 0.0f;     // ScrollTexture(-0.1)/tick accumulator
-    bool        alive_          = true;
-    double      sim_accum_ms_   = 0.0;      // 24 Hz sim-tick gate
+    SBoltAnchor    anchors_[100] {};    // STRIP_MAX_POINTS = 100 in retail
+    int32_t        numpoints_      = 0;
+    int32_t        maxpoints_      = 0;
+    int32_t        state_          = kLaunch;
+    int32_t        duration_       = 20;       // STRIP_FLY_DURATION
+    float          forward_dir_[3] = {1.0f, 0.0f, 0.0f};
+    float          glow_scale_     = 3.4f;     // retail initial
+    float          rotdegree_      = 0.0f;     // glow rot accumulator (degrees, mod 360)
+    float          morrotdegree_   = 0.0f;     // counter-rot accumulator
+    float          u_scroll_       = 0.0f;     // ScrollTexture(-0.1)/tick accumulator
+    bool           alive_          = true;
+    double         sim_accum_ms_   = 0.0;      // 24 Hz sim-tick gate
+    // Asset textures from Magic\NewLightStrip.I3D — resolved at spawn,
+    // cached for the lifetime of the effect. The retail asset has 3
+    // sub-objects (`start`/`sparks`/`end` per forensics §4); the strip
+    // body samples the strip texture, the glow halos sample a glow/end
+    // texture. kInvalidTexture means "asset bind failed, do not render
+    // a stand-in" per AGENT_GUIDE §4.2.1 (no procedural substitutes).
+    TTextureHandle strip_tex_      = kInvalidTexture;
+    TTextureHandle glow_tex_       = kInvalidTexture;
+    // Flipbook plumbing — kept after iter5 even though the bound retail
+    // asset is single-frame (strip_tex 64×64, nframes=1). Documents that
+    // the 8-frame flipbook hypothesis was investigated and disproven by
+    // asset inspection.
+    int32_t        frame_idx_      = 0;
+    int32_t        num_frames_     = 1;
+    // iter5 glow-mesh path: real sub-object mesh for the snapshot's
+    // glow halo (stripfly / retail `end`) registered with the renderer
+    // at spawn and submitted via SubmitHelperMesh twice per render with
+    // the counter-rotating matrix chain from stripeffect.cpp:861-902.
+    // Replaces the iter4 SubmitFxBillboard stand-in. 0 = registration
+    // failed; the render path falls back to the iter4 billboard pass.
+    MeshHandle     glow_mesh_      = 0;
+    // Per-sub-object material colour from the I3D — fed to SubmitHelper
+    // Mesh::diffuse so the helper-mesh shader's `base = tex * diffuse`
+    // produces the authored hue. Snapshot wrote no per-vertex colour on
+    // the glow, so the material's authored diffuse is the ground truth.
+    float          glow_diffuse_[4]  = {1.0f, 1.0f, 1.0f, 1.0f};
+    float          glow_emissive_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 // --- S05 TShockAnimator_Bespoke -------------------------------------------
@@ -4259,7 +4293,16 @@ class TIceBoltEffect_Bespoke : public TEffect
     void OffScreen() override { KillThisEffect(); }
 
     [[nodiscard]] static TIceBoltEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    // Drives the per-tick simulation and submits the box01 billboards
+    // (end-glow spheres, frost particles, snow particles). Called from
+    // the harness's regular `submit` callback (outside BeginTilePass).
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    // Submits the cyl04/01/02/03 + cylinder05 (ring) + cylinder06
+    // (spiral) I3D sub-meshes via SubmitHelperMesh. Called from the
+    // harness's `submit_world` callback (inside BeginTilePass, after the
+    // pass clears the transparent_world_queue). Mirrors F07 fireball's
+    // SubmitWorldRing split.
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
   private:
@@ -4286,10 +4329,40 @@ class TIceBoltEffect_Bespoke : public TEffect
     //             [4]    = box01 (glow sphere / frost / snow billboard),
     //             [5]    = cylinder05 (rings),
     //             [6]    = cylinder06 (spirals).
+    // box01 retains its texture/UV for the end-glow and particle
+    // billboard pass (sub-obj 4 is a flat quad-mesh in the I3D — a
+    // billboard is exactly equivalent visually). The cyl/ring/spiral
+    // sub-objects are drawn via SubmitHelperMesh and don't need a billboard
+    // texture handle, but we keep them for the spawn-time diagnostic log.
     TTextureHandle subobj_tex_[7] {kInvalidTexture, kInvalidTexture, kInvalidTexture,
                                    kInvalidTexture, kInvalidTexture, kInvalidTexture,
                                    kInvalidTexture};
     float          subobj_uv_[7][4] {};
+
+    // Mesh handles extracted from icebolt.I3D for the SubmitHelperMesh
+    // draw pass. Per snapshot effect_old.cpp:8475-8504 the 4 nested core
+    // cylinders are each a separate sub-object (cyl04/01/02/03) drawn as
+    // its own stretched mesh; cyl05 is the ring; cyl06 is the spiral.
+    // Each handle is registered once at SpawnForTest via
+    // RegisterMesh(ExtractSubMeshTextureSlot(...)) and held for the bolt's
+    // lifetime. A value of 0 means extraction failed (logged at spawn).
+    MeshHandle cyl_meshes_[4] {0, 0, 0, 0};
+    MeshHandle ring_mesh_    = 0;
+    MeshHandle spiral_mesh_  = 0;
+
+    // Per-sub-object diffuse RGBA read from the I3D's material at spawn.
+    // The icebolt.I3D cylinder bodies sample a degenerate texel (UV(0,0))
+    // so all visible color comes from the authored material (S3DMaterial
+    // .diffuse / .emissive). We bind the renderer's white texture to the
+    // mesh handle so the helper-mesh shader's `base = tex * diffuse`
+    // reduces to `base = diffuse` — letting the I3D-authored material
+    // colour carry the look.
+    float cyl_diffuse_[4][4]    {};
+    float cyl_emissive_[4][4]   {};
+    float ring_diffuse_[4]      {};
+    float ring_emissive_[4]     {};
+    float spiral_diffuse_[4]    {};
+    float spiral_emissive_[4]   {};
 
     bool   alive_         = true;
     double sim_accum_ms_  = 0.0;
@@ -5278,6 +5351,29 @@ class TWindStripAnimator_Bespoke : public TEffect
 // * without touching the registration side.                              *
 // =========================================================================
 
+// W01 TMeteorStormEffect_Bespoke — faithful direct port of
+// TMeteorStormAnimator (effect_old.cpp:6365-6503) and its inner
+// TStormAnimator helper (effectcomp.cpp:38-380). Uses the real
+// `Magic\comet.I3D` imagery atlas: 8x2 grid for the falling-meteor sprite
+// (frames 0..7) and 4x4 grid for the ground-impact splash (frames 8..15).
+//
+// State + math are shared with W07 TStormAnimator_Bespoke (which is the
+// same animator wrapped with stormbolt placeholder texture). W01 owns its
+// own copies of the per-instance arrays so the two effects can run
+// independently in the harness cycle.
+inline constexpr int32_t kMeteorStormBespokeMaxInstance   = 20;
+inline constexpr int32_t kMeteorStormBespokeSimTickMs     = 1000 / 24;
+inline constexpr int32_t kMeteorStormBespokeDurationTicks = 24 * 5;  // ~5 s of meteor spawning
+inline constexpr int32_t kMeteorStormBespokeRampSize      = 8;       // METEOR_STORM_SIZE
+
+// One pre-registered atlas-tile mesh handle. SHelperMeshSubmit does not
+// expose a UV transform, so we register one MeshHandle per cell with the
+// cell's UV rect baked into the verts. 8 cells in the particle row
+// (cells 0..7 of the 8x2 grid) + 8 cells in the impact 4x4 sub-grid
+// (cells 8..15) = 16 handles total.
+inline constexpr int32_t kMeteorStormBespokeParticleCells = 8;   // params.particle_u
+inline constexpr int32_t kMeteorStormBespokeImpactCells   = 8;   // params.impact_end - impact_begin + 1
+
 _CLASSDEF(TMeteorStormEffect_Bespoke)
 
 class TMeteorStormEffect_Bespoke : public TEffect
@@ -5290,8 +5386,56 @@ class TMeteorStormEffect_Bespoke : public TEffect
     void OffScreen() override { KillThisEffect(); }
 
     [[nodiscard]] static TMeteorStormEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    // Drives the per-tick simulation (Create/Animate ramp + meteor
+    // physics) AND the optional billboard overlays. The real I3D mesh
+    // draws live in SubmitWorldMeshes_BESPOKE which must be called from
+    // the harness's `submit_world` hook (after BeginTilePass, see
+    // vfxtest.cpp:1518-1528).
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
-    [[nodiscard]] bool IsAlive() const { return true; }
+    // World-space mesh draws (the comet quad per meteor instance). Routes
+    // through SubmitHelperMesh — must run inside BeginTilePass scope
+    // so the transparent_world_queue isn't cleared before draws land.
+    // Pattern mirrors icebolt's iter4 (effect.cpp:8280+).
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot animator helpers (effectcomp.cpp:53/80/116).
+    int32_t GetCount_() const;
+    void    Create_();
+    void    Animate_();
+
+    SStormBespokeParams   params_ {};
+    SStormBespokeInstance storm_instance_[kMeteorStormBespokeMaxInstance] {};
+
+    // Outer-animator state (mirrors TMeteorStormAnimator: ticks/tracker
+    // drive the particle-count ramp, effect_old.cpp:6376-6377+6452-6463).
+    int32_t ticks_   = 0;
+    int32_t tracker_ = 0;
+    bool    alive_   = true;
+    double  sim_accum_ms_ = 0.0;
+
+    // Real Magic\comet.I3D imagery (held alive for the effect's lifetime
+    // so the texture handle stays valid). Released in the dtor via
+    // TObjectImagery::FreeImagery.
+    TObjectImagery* imagery_ = nullptr;
+
+    // Pre-baked atlas-cell meshes (Comet.I3D GetObject(0) quad with UVs
+    // remapped to each animation cell). cell_meshes_[0..7] = particle
+    // phase cells, [8..15] = impact phase cells. 0 = kInvalidMeshHandle
+    // means extraction failed (used in TickAndSubmit to skip submission).
+    MeshHandle cell_meshes_[16] = {};
+
+    // Static parent transform from BuildStaticObjectMatrix(img, obj=0).
+    // The comet quad's authored anchor in I3D-local space.
+    float parent_matrix_[16] = {};
+
+    // I3D material colours for sub-object 0 (loaded from S3DMat at
+    // SpawnForTest). Routed into SHelperMeshSubmit's diffuse/ambient/
+    // emissive at draw — same pattern as icebolt's iter4 path
+    // (effect.cpp:7830-7852 + 8382-8398).
+    float diffuse_[4]  = {1.0f, 1.0f, 1.0f, 1.0f};
+    float emissive_[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 };
 
 _CLASSDEF(TTornadoEffect_Bespoke)

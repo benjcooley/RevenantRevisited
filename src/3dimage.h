@@ -12,6 +12,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include "revenant.h"
 
 #include "3dimagebody.h"
@@ -53,6 +56,11 @@ struct S3DTex
                                   // by htexture, never by a direct GPU object.
 
     TTextureHandle  htexture;     // Current frame engine texture handle
+
+    // S3DTex is stored in TVirtualArray which copies elements via memcpy
+    // on resize — so this struct stays trivially-copyable. The i3ddump
+    // tool retains decoded RGBA bytes via T3DImagery::dump_textures, not
+    // here.
 };
 typedef TVirtualArray<S3DTex, 4, 4> T3DTexArray;
 
@@ -197,6 +205,20 @@ class T3DImagery : public TObjectImagery
   public:
     T3DImagery(int32_t imageid);
     virtual ~T3DImagery();
+
+    // When true at LoadImagery time, the texture loader retains the decoded
+    // RGBA pixel bytes per frame in dump_textures so the i3ddump tool can
+    // write them out as PNG. Off by default — zero cost when not set.
+    // Toggle from a CLI/test-mode init before invoking FindImagery.
+    static bool g_retain_decoded_rgba;
+
+    // Per-texture, per-frame decoded RGBA bytes. Only populated when
+    // g_retain_decoded_rgba is true at LoadTexture time. Indexed as
+    // dump_textures[texture_index][frame_index] = width*height*4 bytes.
+    // Lives on T3DImagery (not S3DTex) because S3DTex is stored in
+    // TVirtualArray which copies via memcpy and would corrupt a
+    // std::vector member.
+    std::vector<std::vector<std::vector<uint8_t>>> dump_textures;
 
     bool OldInitializeMesh(SOld3DImageryBody* mesh);
       // Initializes old style 3DImageBody mesh

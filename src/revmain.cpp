@@ -1707,6 +1707,22 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "dumptiles", p))
             strncpyz(StartupDumpTilesPath, p.c_str(), MAXPATHLEN);
     }
+
+  // DUMPI3D=asset [DUMPI3DOUT=dir] — extract one I3D's textures (PNG) +
+  // sub-objects (Wavefront OBJ) + manifest into a folder, then exit.
+    {
+        std::string p;
+        if (arg_param(cmd, "dumpi3d", p))
+        {
+            strncpyz(StartupDumpI3DPath, p.c_str(), MAXPATHLEN);
+            // Default test mode to i3ddump when --dumpi3d is supplied and
+            // no other test mode was named (mirrors the dumptiles pattern).
+            if (!StartupTestMode[0])
+                strncpyz(StartupTestMode, "i3ddump", sizeof(StartupTestMode));
+        }
+        if (arg_param(cmd, "dumpi3dout", p))
+            strncpyz(StartupDumpI3DOutPath, p.c_str(), MAXPATHLEN);
+    }
 }
 
 void GetINISettings()

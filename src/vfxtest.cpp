@@ -56,6 +56,19 @@
 extern TObjectClass CharacterClass;
 // PlayerClass already extern'd in revenant.h.
 
+// SHIM-validation port: TFountainAnimator transcribed via d3dport shim.
+// Source: src/effects/fountain.cpp. Mechanical 1:1 of the snapshot
+// Initialize/Animate/Render bodies; the shim handles conventions.
+// Forward declarations at file scope so the linker resolves them to
+// fountain.cpp's symbols (not the anonymous namespace below).
+namespace fountain_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin, int32_t colorobj);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   Destroy(State*);
+}
+
 namespace {
 
 // =========================================================================
@@ -1921,7 +1934,10 @@ struct SIceBoltBespokeCtx {
     float                   gap    = 0.0f;
 };
 
-constexpr float kIceBoltBespokeRetriggerGap = 1.5f;
+// Short gap (0.25 s) so the filmstrip rarely catches a fully-dead frame —
+// the 9-frame @ 0.5 s capture spans ~4.5 s and the bolt lives ~5 s; with
+// a long gap most frames after the first life landed black during iter1.
+constexpr float kIceBoltBespokeRetriggerGap = 0.25f;
 
 void* IceBoltBespokeSpawn(const S3DPoint& origin)
 {
@@ -1958,6 +1974,19 @@ void IceBoltBespokeSubmit(void* cp, EFxDebugMode dbg)
     }
     if (c->bolt)
         c->bolt->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// Submit_world callback: drives the helper-mesh draws (cyl04/01/02/03 +
+// cylinder05 ring + cylinder06 spiral). Called by the harness inside
+// BeginTilePass scope (vfxtest.cpp:1521-1528), AFTER that call clears
+// the transparent_world_queue. Mirrors F07 fireball's FireBallSubmitWorld
+// pattern (vfxtest.cpp:2899+).
+void IceBoltBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SIceBoltBespokeCtx*>(cp);
+    if (!c || !c->bolt)
+        return;
+    c->bolt->SubmitWorldMeshes_BESPOKE(dbg);
 }
 
 // --- I22 TIcedEffect bespoke wiring.
@@ -2310,6 +2339,17 @@ void LightningBespokeSubmit(void* cp, EFxDebugMode dbg)
     }
     if (c->eff)
         c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+// iter8: submit_world callback for LightStrip — drives the glow halo
+// SubmitHelperMesh draws inside BeginTilePass scope. Mirrors the
+// IceBoltBespokeSubmitWorld pattern at :1971-1977.
+void LightningBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SLightningBespokeCtx*>(cp);
+    if (!c || !c->eff)
+        return;
+    c->eff->SubmitWorldMeshes_BESPOKE(dbg);
 }
 
 // S05 TShockAnimator_Bespoke ----------------------------------------------
@@ -3361,6 +3401,19 @@ void MeteorStormBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->eff->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
+// Submit_world callback: drives the helper-mesh draws (comet quad per
+// meteor instance via SubmitHelperMesh). Called by the harness inside
+// BeginTilePass scope (vfxtest.cpp:1521-1528) — AFTER BeginTilePass
+// clears the transparent_world_queue. Mirrors icebolt iter4 pattern at
+// vfxtest.cpp:1971-1977.
+void MeteorStormBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SMeteorStormBespokeCtx*>(cp);
+    if (!c || !c->eff)
+        return;
+    c->eff->SubmitWorldMeshes_BESPOKE(dbg);
+}
+
 // W02 TTornadoEffect_Bespoke
 struct STornadoBespokeCtx {
     TTornadoEffect_Bespoke* eff = nullptr;
@@ -3511,6 +3564,39 @@ void FountainBespokeSubmit(void* cp, EFxDebugMode dbg)
     auto* c = static_cast<SFountainBespokeCtx*>(cp);
     if (c && c->fount)
         c->fount->TickAndSubmitForTest_BESPOKE(dbg);
+}
+
+struct SFountainShimCtx {
+    ::fountain_shim::State* state = nullptr;
+};
+
+template <int32_t kColorObj>
+void* FountainShimSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFountainShimCtx();
+    c->state = fountain_shim::Spawn(origin, kColorObj);
+    if (!c->state)
+        log_warn("[vfx] fountain_shim::Spawn(colorobj=%d) returned null",
+                 kColorObj);
+    return c;
+}
+
+void FountainShimDestroy(void* cp)
+{
+    auto* c = static_cast<SFountainShimCtx*>(cp);
+    if (c) {
+        fountain_shim::Destroy(c->state);
+        delete c;
+    }
+}
+
+void FountainShimSubmit(void* cp, EFxDebugMode /*dbg*/)
+{
+    auto* c = static_cast<SFountainShimCtx*>(cp);
+    if (c && c->state) {
+        fountain_shim::Tick(c->state);
+        fountain_shim::Submit(c->state);
+    }
 }
 
 // =========================================================================
@@ -4304,10 +4390,14 @@ struct SVfxTestBootstrap {
         VfxTest::SEffect icebolt_bespoke = {};
         icebolt_bespoke.id            = "TIceBoltEffect_BESPOKE";
         icebolt_bespoke.family        = "ice";
-        icebolt_bespoke.pipeline      = "FB";   // composite I3D billboard draws
+        // Pipeline tag: FB (billboards for box01 glow/frost/snow) + IM
+        // (cyl04/01/02/03 + ring + spiral as real I3D sub-meshes via
+        // SubmitHelperMesh from submit_world).
+        icebolt_bespoke.pipeline      = "FB+IM";
         icebolt_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
         icebolt_bespoke.factory       = [](const S3DPoint& o) -> void* { return IceBoltBespokeSpawn(o); };
         icebolt_bespoke.submit        = [](void* c, EFxDebugMode d) { IceBoltBespokeSubmit(c, d); };
+        icebolt_bespoke.submit_world  = [](void* c, EFxDebugMode d) { IceBoltBespokeSubmitWorld(c, d); };
         icebolt_bespoke.destroy       = [](void* c) { IceBoltBespokeDestroy(c); };
         VfxTest::DeferredRegister(icebolt_bespoke);
 
@@ -4404,10 +4494,15 @@ struct SVfxTestBootstrap {
         VfxTest::SEffect lightning_bespoke = {};
         lightning_bespoke.id            = "TLightningAnimator_BESPOKE";
         lightning_bespoke.family        = "strip";
-        lightning_bespoke.pipeline      = "SR+FB";
+        // iter8: pipeline tag SR+FB+IM — SR for the bolt strip body
+        // (SubmitFxStrip), FB for any billboard fallback if mesh bind
+        // fails, IM for the stripfly cross-disc glow drawn via
+        // SubmitHelperMesh from submit_world.
+        lightning_bespoke.pipeline      = "SR+FB+IM";
         lightning_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Combat;
         lightning_bespoke.factory       = [](const S3DPoint& o) -> void* { return LightningBespokeSpawn(o); };
         lightning_bespoke.submit        = [](void* c, EFxDebugMode d) { LightningBespokeSubmit(c, d); };
+        lightning_bespoke.submit_world  = [](void* c, EFxDebugMode d) { LightningBespokeSubmitWorld(c, d); };
         lightning_bespoke.destroy       = [](void* c) { LightningBespokeDestroy(c); };
         VfxTest::DeferredRegister(lightning_bespoke);
 
@@ -4854,6 +4949,7 @@ struct SVfxTestBootstrap {
         meteorstorm_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
         meteorstorm_bespoke.factory       = [](const S3DPoint& o) -> void* { return MeteorStormBespokeSpawn(o); };
         meteorstorm_bespoke.submit        = [](void* c, EFxDebugMode d) { MeteorStormBespokeSubmit(c, d); };
+        meteorstorm_bespoke.submit_world  = [](void* c, EFxDebugMode d) { MeteorStormBespokeSubmitWorld(c, d); };
         meteorstorm_bespoke.destroy       = [](void* c) { MeteorStormBespokeDestroy(c); };
         VfxTest::DeferredRegister(meteorstorm_bespoke);
 
@@ -5024,6 +5120,19 @@ struct SVfxTestBootstrap {
         fountain_bespoke.submit        = [](void* c, EFxDebugMode d) { FountainBespokeSubmit(c, d); };
         fountain_bespoke.destroy       = [](void* c) { FountainBespokeDestroy(c); };
         VfxTest::DeferredRegister(fountain_bespoke);
+
+        // Shim-validation port — transcribes effect_old.cpp:3801-3887 via
+        // d3dport.h shim into src/effects/fountain.cpp. iter1 default
+        // (cyan, snapshot-faithful Alpha blend).
+        VfxTest::SEffect fountain_shim_entry = {};
+        fountain_shim_entry.id            = "TFountainAnimator_SHIM";
+        fountain_shim_entry.family        = "magic";
+        fountain_shim_entry.pipeline      = "FB";
+        fountain_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fountain_shim_entry.factory       = [](const S3DPoint& o) -> void* { return FountainShimSpawn<0>(o); };
+        fountain_shim_entry.submit        = [](void* c, EFxDebugMode d) { FountainShimSubmit(c, d); };
+        fountain_shim_entry.destroy       = [](void* c) { FountainShimDestroy(c); };
+        VfxTest::DeferredRegister(fountain_shim_entry);
 
         VfxTest::SEffect cyan_fountain_bespoke = {};
         cyan_fountain_bespoke.id            = "TCyanFountainAnimator_BESPOKE";

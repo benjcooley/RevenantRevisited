@@ -274,6 +274,14 @@ struct SStripSegment
     float color_b[4]   = {1.0f, 1.0f, 1.0f, 1.0f};
     float u_a          = 0.0f;
     float u_b          = 1.0f;
+    // V sub-range — left edge of the strip's quad samples `v_left`,
+    // right edge samples `v_right`. Default 0..1 spans the full
+    // texture height (the pre-existing behaviour). Used by the
+    // LightStrip lightning bolt to pick one of 8 horizontally-stacked
+    // crackle patterns per tick (flipbook-via-V-cell) — added 2026-05-31
+    // for S04 TLightningAnimator_Bespoke iter5.
+    float v_left       = 0.0f;
+    float v_right      = 1.0f;
 };
 
 struct SStripDrawItem
