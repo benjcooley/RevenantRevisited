@@ -20,6 +20,7 @@
 #include "renderer.h"
 #include "revenant.h"
 #include "revtypes.h"
+#include "uisidebartest.h"
 
 #include <sokol_app.h>
 
@@ -57,7 +58,7 @@ class TGameModeImpl final : public IRuntimeMode
         // main cursor pixel (OS owns that); it still composites the
         // drag bitmap + corner-bitmap overlay on top.
         if (Renderer)
-            Renderer->AddHud(&cursor_hud, /*z=*/0.0f);
+            Renderer->AddHud(&cursor_hud, /*z=*/1000.0f);
     }
     void OnExit() override
     {
@@ -151,6 +152,14 @@ class TGameModeImpl final : public IRuntimeMode
                     case GAMECMD_COMBAT:
                         if (Player->IsCombat()) Player->EndCombat();
                         else                    Player->BeginCombat();
+                        break;
+
+                    case GAMECMD_SIDEPANEL:
+                        ToggleUISidebarPanel();
+                        break;
+
+                    case GAMECMD_BOTTOMPANEL:
+                        ToggleUIBottomPanel();
                         break;
 
                   // Three primary attack buttons.

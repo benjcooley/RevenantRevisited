@@ -55,6 +55,7 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
     // legacy MMX PutAlias* blit (graphics.cpp, now #if 0).
     if (prefer_alias && (bm->flags & BM_ALIAS) && bm->alias.ptr())
     {
+        const bool rgb565 = (bm->flags & BM_16BIT) != 0;
         const uint8_t* a   = (const uint8_t*)bm->alias.ptr();
         const uint8_t* aend = a + bm->aliassize;
 
@@ -84,7 +85,8 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
                     if (x >= 0 && x < w)
                     {
                         uint8_t* row = dst + (oy + y) * dst_pitch + (ox + x) * 4;
-                        Decode555(px, row);                       // RGB (sets A=255)
+                        if (rgb565) Decode565(px, row);           // RGB (sets A=255)
+                        else        Decode555(px, row);
                         row[3] = (uint8_t)((cov * 255) / 31);     // override A = coverage
                     }
                     x++;
@@ -168,14 +170,12 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
     }
     if (bm->flags & (BM_15BIT | BM_16BIT))
     {
+        const bool rgb565 = (bm->flags & BM_16BIT) != 0;
         const uint16_t key = (uint16_t)bm->keycolor;
-        // Magenta (R=31,G=0,B=31 in 555 = 0x7c1f) is the implicit
-        // transparency key in many Revenant retail sprites — the
-        // bitmap's keycolor field is often 0 even when magenta is the
-        // intended transparent background. The runtime engine appears
-        // to handle this via DM_TRANSPARENT drawmode + per-blit setup
-        // we don't have here. Treat magenta as transparent globally.
-        constexpr uint16_t MAGENTA_KEY = 0x7c1f;
+        // Magenta (R=max,G=0,B=max) is the implicit transparency key in many
+        // Revenant retail sprites. Match the packed value to the pixel format:
+        // RGB555 => 0x7c1f, RGB565 => 0xf81f.
+        const uint16_t magentaKey = rgb565 ? 0xf81f : 0x7c1f;
         const uint16_t* src = bm->data16;
         // Per-pixel alpha buffer (BM_ALPHA): 1 byte/pixel, 0 = transparent,
         // 0xff = opaque. Used by glass/translucent sprites like the portrait
@@ -199,17 +199,14 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
                     const uint8_t a5 = alpha5[y * w + x] & 0x1f;
                     a = (uint8_t)((a5 << 3) | (a5 >> 2));   // 5-bit -> 8-bit
                 }
-                if (a == 0 || px == key || px == MAGENTA_KEY)
+                if (a == 0 || px == key || px == magentaKey)
                 {
                     row[0]=row[1]=row[2]=row[3]=0;
                 }
                 else
                 {
-                    // Branch ONLY on BM_16BIT — BM_15BIT (e.g. spell icons,
-                    // chrome, portraits, every existing 555 asset) keeps the
-                    // exact pre-existing Decode555 path so nothing else moves.
-                    if (bm->flags & BM_16BIT) Decode565(px, row);
-                    else                      Decode555(px, row);
+                    if (rgb565) Decode565(px, row);
+                    else        Decode555(px, row);
                     row[3] = a;
                 }
                 row += 4;

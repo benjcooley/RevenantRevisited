@@ -43,6 +43,7 @@
 #include "uibottombartest.h"
 
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "display.h"
 #include "hudstate.h"
 #include "logging.h"
@@ -114,6 +115,7 @@ class TBottomBarHud : public THudDrawable
 public:
     void Draw() override
     {
+        if (!GetHudState().bottomBarOpen) return;
         if (!g_pane) return;
         // Spec §3: pane_y = display_h - 60 (bottom-anchored, mandatory formula).
         const int32_t dh = Display.Height();
@@ -123,6 +125,7 @@ public:
 
     void Refresh()
     {
+        if (!GetHudState().bottomBarOpen) return;
         if (!g_utilityBar || !g_barEndCap) return;
         EnsurePane();
         if (!g_pane) return;
@@ -199,6 +202,7 @@ bool InitializeUIBottomBarMode()
     // Spec §2: real retail bottombar.dat — UtilityBar (idx 0) + BarEndCap (idx
     // 2). LoadMulti goes through the standard archive path used by all panes.
     g_bottombarDat = TMulti::LoadMulti((char*)kArchive);
+    RegisterUIBitmapAtlasArchive(g_bottombarDat);
 
     if (g_bottombarDat)
     {
@@ -227,7 +231,7 @@ bool InitializeUIBottomBarMode()
 
 void RenderUIBottomBarMode()
 {
-    g_hud.Refresh();
+    RenderUIBottomBarModeEmbedded();
 
     // Backdrop so the bar's bottom-anchored placement reads clearly in
     // isolation (no playfield behind it in test mode). A muted slate-blue
@@ -235,6 +239,11 @@ void RenderUIBottomBarMode()
     // contrasts against it visually.
     Display.BackBuffer()->StartPass(0.18f, 0.20f, 0.26f, 1.0f);
     Display.BackBuffer()->EndPass();
+}
+
+void RenderUIBottomBarModeEmbedded()
+{
+    g_hud.Refresh();
 }
 
 void CloseUIBottomBarMode()

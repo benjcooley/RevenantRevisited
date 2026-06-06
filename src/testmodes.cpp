@@ -19,6 +19,7 @@
 #include "font.h"
 #include "fonttable.h"
 #include "framesnap.h"
+#include "hudstate.h"
 #include "imagery.h"
 #include "imageres.h"
 #include "imgui.h"
@@ -36,6 +37,7 @@
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
+#include "uidragstate.h"
 #include "uianchortest.h"
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
@@ -3069,9 +3071,15 @@ bool Initialize(const char* mode)
     if (strcmp(mode, "ui-sidetabs") == 0)
         return InitializeUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
+    {
+        SetUISidebarSyntheticStateEnabled(true);
         return InitializeUISidebarMode();
+    }
     if (strcmp(mode, "ui-quickspell") == 0)
+    {
+        SetUIQuickSpellSyntheticStateEnabled(true);
         return InitializeUIQuickSpellMode();
+    }
     if (strcmp(mode, "ui-bottombar") == 0)
         return InitializeUIBottomBarMode();
     if (strcmp(mode, "ui-barinv") == 0)
@@ -3091,7 +3099,12 @@ bool Initialize(const char* mode)
     if (strcmp(mode, "ui-inventory") == 0)
         return InitializeUIInventoryMode();
     if (strcmp(mode, "ui-hud") == 0)
+    {
+        SetUISidebarSyntheticStateEnabled(true);
+        SetUIQuickSpellSyntheticStateEnabled(true);
+        SetUIHudCursorOverlayEnabled(true);
         return InitializeUIHudMode();
+    }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
     if (strcmp(mode, "ui-mainmenu") == 0)
@@ -3266,7 +3279,24 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseClickUIDeathMode(button, x, y);
     if (IsUIDefScreenMode(mode))
         return HandleMouseClickUIDefScreenMode(button, x, y);
-    if (strcmp(mode, "ui-sidebar") == 0 || strcmp(mode, "ui-hud") == 0)
+    if (strcmp(mode, "ui-hud") == 0)
+    {
+        const SHudState& s = GetHudState();
+        if (HandleMouseClickUISidebarModeConsumed(button, x, y))
+            return;
+        if (s.bottomBarOpen ||
+            (UIDragState::IsActive() &&
+             UIDragState::Get().source == EDragSource::SpellPane))
+        {
+            HandleMouseClickUIQuickSpellMode(button, x, y);
+        }
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+            HandleMouseClickUISpellbookMode(button, x, y);
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+            HandleMouseClickUIEquipMode(button, x, y);
+        return;
+    }
+    if (strcmp(mode, "ui-sidebar") == 0)
         return HandleMouseClickUISidebarMode(button, x, y);
     if (strcmp(mode, "ui-quickspell") == 0)
         return HandleMouseClickUIQuickSpellMode(button, x, y);
@@ -3274,6 +3304,8 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseClickUISpellbookMode(button, x, y);
     if (strcmp(mode, "ui-spellcreate") == 0)
         return HandleMouseClickUISpellCreateMode(button, x, y);
+    if (strcmp(mode, "ui-equip") == 0)
+        return HandleMouseClickUIEquipMode(button, x, y);
     if (strcmp(mode, "ui-scrollpane") == 0)
         return;  // TODO: add scroll-paging mouse handler if needed
     (void)x; (void)y;
@@ -3340,6 +3372,27 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
     // #8 iOS-style velocity drag for the spellbook scroll
     if (strcmp(mode, "ui-spellbook") == 0)
         return HandleMouseMoveUISpellbookMode(button, x, y);
+    if (strcmp(mode, "ui-hud") == 0)
+    {
+        const SHudState& s = GetHudState();
+        if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
+            return;
+        if (UIDragState::IsActive() &&
+            UIDragState::Get().source == EDragSource::SpellPane)
+        {
+            HandleMouseMoveUIQuickSpellMode(button, x, y);
+            return;
+        }
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+            HandleMouseMoveUISpellbookMode(button, x, y);
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+            HandleMouseMoveUIEquipMode(button, x, y);
+        return;
+    }
+    if (strcmp(mode, "ui-quickspell") == 0)
+        return HandleMouseMoveUIQuickSpellMode(button, x, y);
+    if (strcmp(mode, "ui-equip") == 0)
+        return HandleMouseMoveUIEquipMode(button, x, y);
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleMouseMove(button, x, y);
 }

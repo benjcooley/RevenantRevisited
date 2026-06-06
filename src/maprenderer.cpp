@@ -120,6 +120,22 @@ static SMapCameraViewport ComputeMapCameraViewport(int32_t viewport_w, int32_t v
     return v;
 }
 
+template <typename TImpl>
+static int32_t EffectiveViewportW(const TImpl& s)
+{
+    return s.outputViewportW > 0
+        ? s.outputViewportW
+        : (Display.IsActive() ? Display.Width() : WIDTH);
+}
+
+template <typename TImpl>
+static int32_t EffectiveViewportH(const TImpl& s)
+{
+    return s.outputViewportH > 0
+        ? s.outputViewportH
+        : (Display.IsActive() ? Display.Height() : HEIGHT);
+}
+
 static int32_t ScalePixel(float scale, float value)
 {
     return (std::max)(1, int32_t(std::lround(value * scale)));
@@ -1275,8 +1291,8 @@ void TMapRenderer::ScreenToWorld(int32_t screen_x, int32_t screen_y,
     if (!impl || !Display.IsActive()) return;
 
     const Impl& s = *impl;
-    const int32_t vw = Display.Width();
-    const int32_t vh = Display.Height();
+    const int32_t vw = EffectiveViewportW(s);
+    const int32_t vh = EffectiveViewportH(s);
     const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
     const float effective_camera_zoom =
         (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
@@ -1321,8 +1337,8 @@ void TMapRenderer::GetWorldToPixel(int32_t dst_x, int32_t dst_y,
         // The viewport step then stretches that region into dst_w x
         // dst_h, picking up the panel's non-uniform stretch when the
         // window aspect doesn't match the panel aspect.
-        const int32_t lit_w = Display.Width();
-        const int32_t lit_h = Display.Height();
+        const int32_t lit_w = EffectiveViewportW(*impl);
+        const int32_t lit_h = EffectiveViewportH(*impl);
         const SMapCameraViewport vp = ComputeMapCameraViewport(lit_w, lit_h);
         const float scene_scale = (vp.scale > 1e-4f) ? vp.scale : 1.0f;
         const int32_t vis_w = int32_t(std::lround(float(lit_w) / scene_scale));
@@ -1384,6 +1400,13 @@ void TMapRenderer::SetCameraWorld(int32_t level, int32_t world_x, int32_t world_
     Impl& s = *impl;
     s.cameraLevel        = level;
     s.sectorCameraWorld  = S3DPoint{ world_x, world_y, world_z };
+}
+
+void TMapRenderer::SetOutputViewport(int32_t width, int32_t height)
+{
+    if (!impl) return;
+    impl->outputViewportW = width  > 0 ? width  : 0;
+    impl->outputViewportH = height > 0 ? height : 0;
 }
 
 void TMapRenderer::SetSunShadowEnabled(bool enable) { if (impl) impl->sun_shadow = enable; }
@@ -2585,8 +2608,8 @@ void TMapRenderer::RenderFrame()
             }
         }
     };
-    const int32_t vw = Display.Width();
-    const int32_t vh = Display.Height();
+    const int32_t vw = EffectiveViewportW(s);
+    const int32_t vh = EffectiveViewportH(s);
     const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
     const float effective_camera_zoom = s.sectorCameraZoom * camera_view.scale;
     const float camera_forward = s.sectorCameraForward(HEIGHT);
@@ -3018,8 +3041,8 @@ void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)
         int32_t picked = -1;
         if (!ctrl_pan && s.sectorShowGizmos)
         {
-            const int32_t vw = Display.IsActive() ? Display.Width() : WIDTH;
-            const int32_t vh = Display.IsActive() ? Display.Height() : HEIGHT;
+            const int32_t vw = EffectiveViewportW(s);
+            const int32_t vh = EffectiveViewportH(s);
             const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
             int32_t cam_ox_logical = 0, cam_oy_logical = 0;
             s.sectorCameraOriginScreen(cam_ox_logical, cam_oy_logical);
@@ -3093,8 +3116,8 @@ void TMapRenderer::HandleMouseMove(int32_t button, int32_t x, int32_t y)
         S3DPoint newpos = s.lightDragStartOiPos;
         if (ShiftDown)
         {
-            const int32_t vw = Display.IsActive() ? Display.Width() : WIDTH;
-            const int32_t vh = Display.IsActive() ? Display.Height() : HEIGHT;
+            const int32_t vw = EffectiveViewportW(s);
+            const int32_t vh = EffectiveViewportH(s);
             const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
             const float effective_camera_zoom = (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
             const int32_t dy = y - s.lightDragStartSY;
@@ -3102,8 +3125,8 @@ void TMapRenderer::HandleMouseMove(int32_t button, int32_t x, int32_t y)
         }
         else
         {
-            const int32_t vw = Display.IsActive() ? Display.Width() : WIDTH;
-            const int32_t vh = Display.IsActive() ? Display.Height() : HEIGHT;
+            const int32_t vw = EffectiveViewportW(s);
+            const int32_t vh = EffectiveViewportH(s);
             const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
             const float effective_camera_zoom = (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
             int32_t cam_ox_logical = 0, cam_oy_logical = 0;
@@ -3127,8 +3150,8 @@ void TMapRenderer::HandleMouseMove(int32_t button, int32_t x, int32_t y)
         return;
     }
     if (!s.sectorDragging) return;
-    const int32_t vw = Display.IsActive() ? Display.Width() : WIDTH;
-    const int32_t vh = Display.IsActive() ? Display.Height() : HEIGHT;
+    const int32_t vw = EffectiveViewportW(s);
+    const int32_t vh = EffectiveViewportH(s);
     const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
     const float effective_camera_zoom = (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
     S3DPoint drag_delta_w = {0,0,0};

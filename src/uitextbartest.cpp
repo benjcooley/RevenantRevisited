@@ -129,12 +129,18 @@ bool InitializeUITextBarMode()
 
 void RenderUITextBarMode()
 {
+    RenderUITextBarModeEmbedded();
+
     const double t = TTime::Time();
     const float r = 0.10f + 0.04f * float(std::sin(t * 0.6));
     const float g = 0.12f + 0.04f * float(std::sin(t * 0.8 + 1.0));
     const float b = 0.16f + 0.04f * float(std::sin(t * 1.0 + 2.0));
     Display.BackBuffer()->StartPass(r, g, b, 1.0f);
     Display.BackBuffer()->EndPass();
+}
+
+void RenderUITextBarModeEmbedded()
+{
 }
 
 void CloseUITextBarMode()

@@ -18,4 +18,5 @@
 
 bool InitializeUITextBarMode();
 void RenderUITextBarMode();
+void RenderUITextBarModeEmbedded();
 void CloseUITextBarMode();
