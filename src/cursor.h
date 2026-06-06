@@ -35,7 +35,17 @@ void SetMouseCornerBitmap(PTBitmap corner, bool toppriority = false);
 void SetMouseCornerBitmap(int32_t type, bool toppriority = false);
 void CursorOverObject(TObjectInstance* inst, bool toppriority = false);
 
+constexpr int32_t kMaxDragBitmapLayers = 4;
+struct SDragBitmapLayer
+{
+    PTBitmap bitmap = nullptr;
+    int32_t  x = 0;
+    int32_t  y = 0;
+};
+
 void SetDragBitmap(PTBitmap drag, int32_t x = 0, int32_t y = 0);
+void SetDragBitmapLayers(const SDragBitmapLayer* layers, int32_t count,
+                         int32_t x = 0, int32_t y = 0);
 void ClearDragBitmap();
 
 void SetDragObj(TObjectInstance* inst);

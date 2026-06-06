@@ -93,6 +93,7 @@
 #include "uispellcreatetest.h"
 
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "display.h"
 #include "font.h"
 #include "logging.h"
@@ -225,6 +226,7 @@ PTBitmap g_talIcons[kTalCount] = { nullptr };
 
 const SFontAtlas* g_font = nullptr;  // for composed-word display + spell-name text
 TSurface* g_pane = nullptr;          // composed RT (188x174 — pane-sized)
+bool g_hudVisible = true;
 
 // =====================================================================
 // #10b/c/d — Spell composition buffer.
@@ -366,7 +368,7 @@ class TSpellCreateHud : public THudDrawable
 public:
     void Draw() override
     {
-        if (!g_pane) return;
+        if (!g_hudVisible || !g_pane) return;
         // Spec §3: pane is right-anchored at the lower MULTIPANE slot.
         // For the harness we bottom-right anchor with a small inset so the
         // chrome reads in the corner where the player will see it in-engine.
@@ -379,6 +381,7 @@ public:
 
     void Refresh()
     {
+        if (!g_hudVisible) return;
         if (!g_chrome) return;
         EnsurePane();
         if (!g_pane) return;
@@ -514,6 +517,7 @@ bool InitializeUISpellCreateMode()
     // Spec §2: spellpane.dat is a 25-entry TMulti — owns chrome + 5
     // button base/down pairs + 12 S* talisman icons.
     g_spellpaneDat = TMulti::LoadMulti((char*)kArchive);
+    RegisterUIBitmapAtlasArchive(g_spellpaneDat);
     if (!g_spellpaneDat)
     {
         log_error("[ui-spellcreate] LoadMulti('%s') FAILED", kArchive);
@@ -563,6 +567,7 @@ bool InitializeUISpellCreateMode()
     // Reset the cached RT (recreated on first Refresh).
     delete g_pane;
     g_pane = nullptr;
+    g_hudVisible = true;
     g_composedLen = 0;
     for (int32_t i = 0; i < kSpellSize; ++i) g_composedWord[i] = -1;
     g_matchedSpell[0] = 0;
@@ -574,13 +579,26 @@ bool InitializeUISpellCreateMode()
 
 void RenderUISpellCreateMode()
 {
-    g_hud.Refresh();
+    RenderUISpellCreateModeEmbedded();
 
     // Muted slate backdrop matching the other ui*test modes so the
     // parchment chrome reads in isolation (no playfield behind the HUD
     // in test mode).
     Display.BackBuffer()->StartPass(0.18f, 0.20f, 0.26f, 1.0f);
     Display.BackBuffer()->EndPass();
+}
+
+void RenderUISpellCreateModeEmbedded()
+{
+    if (!g_hudVisible) return;
+    g_hud.Refresh();
+}
+
+void SetUISpellCreateModeVisible(bool visible)
+{
+    g_hudVisible = visible;
+    if (visible)
+        g_dirty = true;
 }
 
 void CloseUISpellCreateMode()
@@ -601,6 +619,7 @@ void CloseUISpellCreateMode()
     for (int32_t i = 0; i < kSpellSize; ++i) g_composedWord[i] = -1;
     g_matchedSpell[0] = 0;
     g_dirty = true;
+    g_hudVisible = true;
 }
 
 // =====================================================================

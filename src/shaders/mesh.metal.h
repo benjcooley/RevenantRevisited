@@ -59,6 +59,31 @@ vertex vs_out _main(vs_in in [[stage_in]],
                                  dot(in.w1.xyz, in.normal),
                                  dot(in.w2.xyz, in.normal)));
 
+    if (p.camw.w > 0.5) {
+        // Retail EquipmentPane paperdoll path:
+        // D3D view = identity, projection diag = {1/65536,1/65536,0x37b6db6e,1},
+        // viewport clip scale = 65536 * sqrt(2).  Net XY scale is sqrt(2)
+        // pixels per world unit around the D3D viewport center.
+        constexpr float D3D_XY_SCALE = 1.4142135623730951;
+        constexpr float D3D_Z_SCALE  = 2.1798270608996972e-5;
+        float spx = p.vp.x + wp.x * D3D_XY_SCALE;
+        float spy = p.vp.y - wp.y * D3D_XY_SCALE;
+        float scene_z_n = clamp(wp.z * D3D_Z_SCALE, 0.0, 1.0);
+
+        vs_out o;
+        o.pos.x = 2.0 * spx / max(p.vp.z, 1.0) - 1.0;
+        o.pos.y = 1.0 - 2.0 * spy / max(p.vp.w, 1.0);
+        o.pos.z = scene_z_n;
+        o.pos.w = 1.0;
+        o.wpos    = wp;
+        o.wnormal = wn;
+        o.uv      = in.uv;
+        o.tint    = in.tint;
+        o.obj_id  = in.inst_obj_id;
+        o.scene_z = scene_z_n;
+        return o;
+    }
+
     float wx = wp.x - p.camw.x;
     float wy = wp.y - p.camw.y;
     float wz = wp.z;

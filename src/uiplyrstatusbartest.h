@@ -21,4 +21,5 @@
 
 bool InitializeUIPlyrStatusBarMode();
 void RenderUIPlyrStatusBarMode();
+void RenderUIPlyrStatusBarModeEmbedded();
 void CloseUIPlyrStatusBarMode();

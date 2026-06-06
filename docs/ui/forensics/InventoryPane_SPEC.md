@@ -50,15 +50,17 @@ Per-cell paint + interaction now route through `src/invslot.{h,cpp}` —
 the single sub-control all inventory-style panes share:
 - TBarInv (bottom-bar 9-slot shelf)
 - TInventory (sidebar 4×3 grid)
-- TEquipPane (paperdoll 11 EQ_* slots — plug-in next pass)
+- TEquipPane (paperdoll 11 EQ_* slots)
 
 Constructor `TInvSlot(x,y,w,h, allowed_type, placeholder, style)` — each
 pane builds one `SInvSlotStyle` and constructs N slots with per-instance
 rects + `allowed_type` filter (EquipPane uses `EQ_HEAD` / `EQ_BODY` /
-etc. to restrict drop targets; Inventory/BarInv use 0 = accept any).
+etc. to restrict drop targets; Inventory/BarInv use `-1` = accept any,
+so `EQ_HEAD == 0` remains a real equipment filter).
 Interaction dispatch (MouseDown/MouseUp/UseOrEquip mirroring retail's
-`eventType` 1/4/5) is declared but stubbed — the cross-pane drag-state
-owner port is the next pass.
+`eventType` 1/4/5) routes through the cross-pane drag-state owner. Slots are
+grab handles and target cells; `UIDragState`/`TPlayScreen` owns the actual
+transaction.
 
 The cross-pane drag-state OWNER in retail is `cls_0x5a5320_TPlayScreen`
 via `virt_meth_0x44f140`; globals are `DAT_0065b878` (currently-dragged
@@ -67,6 +69,10 @@ EQ-slot, 14 read XREFs across InvSidebar / TBarInvPane / others),
 `DAT_00668510`/`14` (mouse x/y), `DAT_0066829c` (swap-allowed flag),
 `DAT_00667fcc` (Player global). Per-pane drag state lives in member
 fields `mbr_0x180..0x194` (grabslot/startslot/page/dragflag/clickX/Y).
+The manager's production duties include playfield pickup, map drops,
+inventory/bar/equipment transfers, use-on-object, replacement/swap/return, and
+the pickup/drop action sound. The harness currently uses a placeholder cue
+while the exact retail sound name remains unverified.
 The snapshot has NO shared item-cell class — `TInventory : TPane` and
 `TEquipPane : TButtonPane` each duplicate `grabslot`/`heldslot`/
 `OnSlot`/`DrawAnim` inline; THAT inline-state duplication is what

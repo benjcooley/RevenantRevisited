@@ -368,16 +368,11 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
                 {
                     std::memcpy(icon, im->invitem, im->invsize);
                     icons[c].invitem = (TBitmap*)icon;
-                    Convert15to16((TBitmap*)icon);
                 }
                 else if ((void*)im->invanim)
                 {
                     std::memcpy(icon, im->invanim, im->invsize);
                     icons[c].invanim = (TAnimation*)icon;
-                    for (int32_t d = 0; d < ((TAnimation*)icon)->numframes; d++)
-                    {
-                        Convert15to16((TBitmap*)((TAnimation*)icon)->frames[d].bitmap);
-                    }
                 }
             }
         }
@@ -628,16 +623,11 @@ bool T3DImagery::InitializeMesh(S3DImageryBody* mesh)
                 {
                     std::memcpy(icon, im->invitem, im->invsize);
                     icons[c].invitem = (TBitmap*)icon;
-                    Convert15to16((TBitmap*)icon);
                 }
                 else if ((void*)im->invanim)
                 {
                     std::memcpy(icon, im->invanim, im->invsize);
                     icons[c].invanim = (TAnimation*)icon;
-                    for (int32_t d = 0; d < ((TAnimation*)icon)->numframes; d++)
-                    {
-                        Convert15to16((TBitmap*)((TAnimation*)icon)->frames[d].bitmap);
-                    }
                 }
             }
         }

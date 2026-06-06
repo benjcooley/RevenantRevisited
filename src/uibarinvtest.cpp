@@ -50,6 +50,7 @@
 #include "uibarinvtest.h"
 
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "display.h"
 #include "font.h"
 #include "hudstate.h"
@@ -60,6 +61,7 @@
 #include "renderer.h"
 #include "surface.h"
 #include "invslot.h"
+#include "uidragstate.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -255,6 +257,41 @@ struct SSlotItem
 // kinds so the icon-only / icon+value / pouch+qty branches all render.
 SSlotItem g_slots[6];
 int32_t   g_slotCount = 0;
+TInvSlot* g_barSlots[kHarnessBarInvSlots] = {};
+
+int32_t SlotQuantity(const SSlotItem& s)
+{
+    return (s.kind == kIconPouch) ? s.qty
+         : (s.kind == kIconValue ? s.value : 1);
+}
+
+void SyncHarnessForDemoSlot(const SSlotItem& s)
+{
+    if (!s.inst) return;
+    for (int32_t i = 0; i < kHarnessBarInvSlots; ++i)
+    {
+        SHarnessSlot& hs = UIDragState::harness_barinv[i];
+        if (hs.inst != s.inst) continue;
+        hs.icon      = s.icon;
+        hs.qty       = SlotQuantity(s);
+        hs.is_bag    = (s.kind == kIconPouch);
+        hs.bag_inner = (s.kind == kIconPouch) ? s.inner : nullptr;
+        hs.label     = s.label;
+    }
+}
+
+void BuildBarInvSlots()
+{
+    for (int32_t i = 0; i < kHarnessBarInvSlots; ++i)
+    {
+        delete g_barSlots[i];
+        const int32_t slotX = kSlotX0 + kSlotPitchX * i;
+        g_barSlots[i] = new TInvSlot(slotX, kSlotY, kBoxW, kBoxH,
+                                     /*allowed_type*/ kInvSlotAcceptAny,
+                                     /*placeholder*/  nullptr,
+                                     /*style*/        &g_barInvSlotStyle);
+    }
+}
 
 // =====================================================================
 // Asset lookup helper (same shape as the other ui*test panes).
@@ -303,6 +340,7 @@ class TBarInvHud : public THudDrawable
 public:
     void Draw() override
     {
+        if (!GetHudState().bottomBarOpen) return;
         if (!g_pane) return;
         // Spec §3: pane_y = display_h - 60 (BL-anchored to bottom bar).
         const int32_t dh = Display.Height();
@@ -312,6 +350,7 @@ public:
 
     void Refresh()
     {
+        if (!GetHudState().bottomBarOpen) return;
         if (!g_barInvBox) return;
         EnsurePane();
         if (!g_pane) return;
@@ -323,6 +362,7 @@ public:
             SSlotItem& s = g_slots[i];
             if (!s.icon)  s.icon  = TryExtractIcon(s.inst);
             if (s.kind == kIconPouch && !s.inner) s.inner = s.icon; // overlay
+            SyncHarnessForDemoSlot(s);
         }
 
         const int32_t tw = g_pane->Width();
@@ -353,22 +393,31 @@ public:
         // Each slot routes through the shared TInvSlot class
         // (src/invslot.{h,cpp}) — same primitive Inventory + Equip
         // (next pass) use, per the FONT/COLOR MATRIX in invslot.h.
-        for (int32_t N = 0; N < g_slotCount && N < visibleCount; ++N)
-        {
-            SSlotItem& s = g_slots[N];
-            if (!s.slot) continue;
+        const SUIDragState& drag = UIDragState::Get();
+        const bool draggingBar = UIDragState::IsDragging()
+                              && drag.source == EDragSource::BarInv;
 
-            // Bind the live content. BarInv's three kinds map onto
-            // TInvSlot's two-kind model:
-            //   kIconOnly   → Regular with qty=1 (qty branch skipped)
-            //   kIconValue  → Regular with qty=value (qty branch draws)
-            //   kIconPouch  → Pouch (pouch_inner + bag-count branches)
-            const int32_t qtyOrCount = (s.kind == kIconPouch) ? s.qty
-                                       : (s.kind == kIconValue ? s.value : 1);
-            s.slot->SetItem(s.inst, s.icon, qtyOrCount);
-            if (s.kind == kIconPouch)
-                s.slot->SetPouchOverlay(s.inner);
-            s.slot->Draw(g_pane, tw, th, g_font);
+        for (int32_t N = 0; N < kHarnessBarInvSlots && N < visibleCount; ++N)
+        {
+            if (draggingBar && drag.source_idx == N)
+                continue;
+
+            TInvSlot* slot = g_barSlots[N];
+            if (!slot) continue;
+
+            const SHarnessSlot& hs = UIDragState::harness_barinv[N];
+            if (!hs.inst) continue;
+
+            // Bind the shared harness content. BarInv's private demo roster
+            // only owns sample instance lifetime and lazy icon extraction;
+            // visible slot contents come from UIDragState so inventory,
+            // equipment, and the bottom row all see the same transfer state.
+            slot->SetItem(hs.inst, hs.icon, hs.qty);
+            if (hs.is_bag)
+                slot->SetPouchOverlay(hs.bag_inner);
+            else
+                slot->SetPouchOverlay(nullptr);
+            slot->Draw(g_pane, tw, th, g_font);
         }
 
         g_pane->EndPass();
@@ -449,12 +498,13 @@ void SpawnDemoSlots()
         s.qty      = q;
         s.label    = nm ? nm : cls.ClassName();
 
-        // Construct the per-cell TInvSlot at this slot's pane-local rect.
-        const int32_t slotX = kSlotX0 + kSlotPitchX * g_slotCount;
-        s.slot = new TInvSlot(slotX, kSlotY, kBoxW, kBoxH,
-                              /*allowed_type*/ 0,
-                              /*placeholder*/  nullptr,
-                              /*style*/        &g_barInvSlotStyle);
+        SHarnessSlot& hs = UIDragState::harness_barinv[g_slotCount];
+        hs.inst      = s.inst;
+        hs.icon      = s.icon;
+        hs.qty       = SlotQuantity(s);
+        hs.is_bag    = (s.kind == kIconPouch);
+        hs.bag_inner = s.inner;
+        hs.label     = s.label;
 
         ++g_slotCount;
     };
@@ -480,6 +530,7 @@ bool InitializeUIBarInvMode()
 
     // Spec §2: real retail bottombar.dat — BarInvBox at idx 1.
     g_bottombarDat = TMulti::LoadMulti((char*)kArchive);
+    RegisterUIBitmapAtlasArchive(g_bottombarDat);
     if (g_bottombarDat)
         g_barInvBox = LookupByName(g_bottombarDat, kBoxName);
 
@@ -495,7 +546,9 @@ bool InitializeUIBarInvMode()
     // Spawn a small set of real items so the icon + text branches all
     // render. The imagery streams in asynchronously; per-frame Refresh
     // calls TryExtractIcon to pull the baked .i3d face once it lands.
+    UIDragState::ResetBarInvHarness();
     SpawnDemoSlots();
+    BuildBarInvSlots();
     log_info("[ui-barinv] spawned %d demo slot items", g_slotCount);
 
     delete g_pane;
@@ -508,13 +561,18 @@ bool InitializeUIBarInvMode()
 
 void RenderUIBarInvMode()
 {
-    g_hud.Refresh();
+    RenderUIBarInvModeEmbedded();
 
     // Same muted slate backdrop as ui-bottombar so the slot row's
     // bottom-anchored placement reads in isolation (no playfield behind
     // it in test mode).
     Display.BackBuffer()->StartPass(0.18f, 0.20f, 0.26f, 1.0f);
     Display.BackBuffer()->EndPass();
+}
+
+void RenderUIBarInvModeEmbedded()
+{
+    g_hud.Refresh();
 }
 
 void CloseUIBarInvMode()
@@ -535,8 +593,14 @@ void CloseUIBarInvMode()
             s.inst->OffScreen();
             delete s.inst;
         }
-        delete s.slot;
         s = SSlotItem{};
     }
     g_slotCount = 0;
+
+    for (int32_t i = 0; i < kHarnessBarInvSlots; ++i)
+    {
+        delete g_barSlots[i];
+        g_barSlots[i] = nullptr;
+    }
+    UIDragState::ResetBarInvHarness();
 }

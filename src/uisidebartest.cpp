@@ -30,6 +30,7 @@
 #include "uisidebartest.h"
 
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "display.h"
 #include "hudstate.h"
 #include "logging.h"
@@ -38,6 +39,7 @@
 #include "revdefs.h"
 #include "revenant.h"
 #include "surface.h"
+#include "testconfig.h"
 #include "testmodes.h"
 #include "time.h"
 #include "uidragstate.h"
@@ -102,6 +104,9 @@ TMulti*  g_spellpaneDat  = nullptr;   PTBitmap g_spellcreateChrome = nullptr;
 
 // Composite tab-strip surface (kept across frames; rebuilt every Refresh)
 TSurface* g_stripSurface = nullptr;
+
+bool g_syntheticStateEnabled = false;
+bool g_contentChromeEnabled = true;
 
 // Hover-fade per button (synthetic for v1)
 struct SButton {
@@ -202,16 +207,21 @@ const char* BottomSlotName(int32_t s)
     return "?";
 }
 
-// Synthetic driver — cycles modal states + open/close so a single capture
-// exercises the multiplex without real input wiring. SUPPRESSED when an
-// --input-script is active so scripted clicks fully drive the state.
+// Synthetic driver — cycles modal states + open/close so command-line UI
+// harness captures can exercise the multiplex without hand input. Disabled
+// in live PlayScreen; also suppressed for any run launched with an
+// --input-script so scripted clicks fully own state for the whole process.
 int32_t g_lastLoggedTop  = -1;
 int32_t g_lastLoggedBot  = -1;
 int32_t g_lastLoggedOpen = -1;
 void DriveSyntheticState()
 {
-    // When an input-script is running, the script owns state — don't cycle.
-    if (TestModes::InputScriptActive()) return;
+    if (!g_syntheticStateEnabled) return;
+
+    // When an input-script was provided on the command line, the script owns
+    // state for the entire run. It may drain before sapp_request_quit()
+    // finishes, so gate on the startup arg in addition to live queue state.
+    if (StartupInputScript[0] || TestModes::InputScriptActive()) return;
 
     SHudState& s = GetHudState();
 
@@ -292,6 +302,7 @@ public:
         // "the pane draws whenever the playscreen HUD is up"; there is no
         // per-pane visibility predicate inside the class itself.
         DrawTabStrip(s);
+        if (!g_contentChromeEnabled) return;
         // Chrome panes (#15): only drawn when sidebar is OPEN.
         if (s.sidebarState != HUD_SIDEBAR_OPEN) return;
         DrawTopSlot(s);
@@ -377,11 +388,26 @@ TSidebarHud g_hud;
 
 }  // namespace
 
+void SetUISidebarSyntheticStateEnabled(bool enabled)
+{
+    g_syntheticStateEnabled = enabled;
+    for (SButton& b : g_buttons)
+    {
+        b.cur = 0;
+        b.target = 0;
+        b.hovered = false;
+    }
+    g_lastTickMs = 0.0;
+    g_lastLoggedTop = g_lastLoggedBot = g_lastLoggedOpen = -1;
+}
+
 bool InitializeUISidebarMode()
 {
     log_info("[ui-sidebar] === sidebar integration (tabs + top + bottom) ===");
 
-    // Reset HUD state to a known start so the cycling demo starts clean.
+    // Reset HUD state to a known retail start. In command-line harness modes
+    // the optional synthetic driver will animate from here; live PlayScreen
+    // leaves that driver disabled so input/save-state owns changes.
     SHudState& s = GetHudState();
     s.topSlot       = HUD_TOP_EQUIP;
     s.bottomSlot    = HUD_BOT_INV;
@@ -392,33 +418,40 @@ bool InitializeUISidebarMode()
 
     // Tab-strip art (sidebartabsnotex.dat — Classic-faithful per spec §2/§13)
     g_sidetabsDat  = TMulti::LoadMulti((char*)"sidebartabsnotex.dat");
+    RegisterUIBitmapAtlasArchive(g_sidetabsDat);
     g_sidetabsUp   = LookupByName(g_sidetabsDat, "Up");
     g_sidetabsDown = LookupByName(g_sidetabsDat, "Down");
     g_sidetabsSel  = LookupByName(g_sidetabsDat, "Select");
 
     // Top-slot chrome — each pane archive's chrome-name from its SPEC.
     g_equipDat        = TMulti::LoadMulti((char*)"equippane.dat");
+    RegisterUIBitmapAtlasArchive(g_equipDat);
     g_equipChrome     = LookupByName(g_equipDat, "EquipTop");
     if (!g_equipChrome) g_equipChrome = LookupByName(g_equipDat, "Equip");
 
     g_spellscrollDat  = TMulti::LoadMulti((char*)"spellscroll.dat");
+    RegisterUIBitmapAtlasArchive(g_spellscrollDat);
     g_spellbookChrome = LookupByName(g_spellscrollDat, "Scroll");
     if (!g_spellbookChrome && g_spellscrollDat && g_spellscrollDat->numoffsets > 0)
         g_spellbookChrome = g_spellscrollDat->Bitmap(0);
 
     g_statpaneDat     = TMulti::LoadMulti((char*)"statspane.dat");
+    RegisterUIBitmapAtlasArchive(g_statpaneDat);
     g_statsChrome     = LookupByName(g_statpaneDat, "Stats");
     if (!g_statsChrome && g_statpaneDat && g_statpaneDat->numoffsets > 0)
         g_statsChrome = g_statpaneDat->Bitmap(0);
 
     // Bottom-slot chrome
     g_inventoryDat    = TMulti::LoadMulti((char*)"inventory.dat");
+    RegisterUIBitmapAtlasArchive(g_inventoryDat);
     g_invChrome       = LookupByName(g_inventoryDat, "Inventory");
 
     g_automapDat      = TMulti::LoadMulti((char*)"automap.dat");
+    RegisterUIBitmapAtlasArchive(g_automapDat);
     g_mapChrome       = LookupByName(g_automapDat, "Amap");
 
     g_spellpaneDat    = TMulti::LoadMulti((char*)"spellpane.dat");
+    RegisterUIBitmapAtlasArchive(g_spellpaneDat);
     g_spellcreateChrome = LookupByName(g_spellpaneDat, "spellconstr");
 
     log_info("[ui-sidebar] tabs strips Up=%s Down=%s Sel=%s",
@@ -438,16 +471,22 @@ bool InitializeUISidebarMode()
     g_stripSurface = nullptr;
     g_lastTickMs   = 0.0;
     g_lastLoggedTop = g_lastLoggedBot = g_lastLoggedOpen = -1;
+    g_contentChromeEnabled = true;
 
-    Renderer->AddHud(&g_hud, 0.0f);
+    Renderer->AddHud(&g_hud, 10.0f);
     return true;
 }
 
 void RenderUISidebarMode()
 {
-    g_hud.Refresh();
+    RenderUISidebarModeEmbedded();
     Display.BackBuffer()->StartPass(0.30f, 0.32f, 0.36f, 1.0f);
     Display.BackBuffer()->EndPass();
+}
+
+void RenderUISidebarModeEmbedded()
+{
+    g_hud.Refresh();
 }
 
 void CloseUISidebarMode()
@@ -462,13 +501,39 @@ void CloseUISidebarMode()
     g_equipChrome = g_spellbookChrome = g_statsChrome = nullptr;
     g_invChrome = g_mapChrome = g_spellcreateChrome = nullptr;
     g_lastTickMs = 0.0;
+    g_syntheticStateEnabled = false;
+    g_contentChromeEnabled = true;
 }
 
-// Hit-test the inventory 4x3 grid. Returns column-major slot index
-// 0..11 (col*3 + row + page*12) when (x,y) is inside a cell, -1 otherwise.
+void SetUISidebarContentChromeEnabled(bool enabled)
+{
+    g_contentChromeEnabled = enabled;
+}
+
+void ToggleUISidebarPanel()
+{
+    SHudState& s = GetHudState();
+    s.sidebarState = (s.sidebarState == HUD_SIDEBAR_OPEN)
+                     ? HUD_SIDEBAR_CLOSED
+                     : HUD_SIDEBAR_OPEN;
+    log_info("[ui-sidebar] sidebar %s",
+             s.sidebarState == HUD_SIDEBAR_OPEN ? "OPEN" : "CLOSED");
+}
+
+void ToggleUIBottomPanel()
+{
+    SHudState& s = GetHudState();
+    s.bottomBarOpen = s.bottomBarOpen ? 0 : 1;
+    log_info("[ui-sidebar] bottombar %s",
+             s.bottomBarOpen ? "OPEN" : "CLOSED");
+}
+
+// Hit-test the inventory 4x3 grid. Returns column-major harness slot index
+// (page + col*3 + row) when (x,y) is inside a cell, -1 otherwise.
 // Per InventoryPane_SPEC: origin pane-local (8, 42), pitch 45x44,
 // interior 40x40, column-major.
-static int32_t HitInvSlot(int32_t x, int32_t y, int32_t page)
+static bool HitInvSlotRect(int32_t x, int32_t y, int32_t page,
+                           int32_t& slot, int32_t& sx, int32_t& sy)
 {
     const int32_t dw     = Display.Width();
     const int32_t inv_x  = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
@@ -482,22 +547,31 @@ static int32_t HitInvSlot(int32_t x, int32_t y, int32_t page)
     constexpr int32_t kRows     = 3;
     const int32_t local_x = x - inv_x - kOriginX;
     const int32_t local_y = y - inv_y - kOriginY;
-    if (local_x < 0 || local_y < 0) return -1;
+    if (local_x < 0 || local_y < 0) return false;
     const int32_t col = local_x / kPitchX;
     const int32_t row = local_y / kPitchY;
-    if (col >= kCols || row >= kRows) return -1;
+    if (col >= kCols || row >= kRows) return false;
     const int32_t cell_lx = local_x - col * kPitchX;
     const int32_t cell_ly = local_y - row * kPitchY;
-    if (cell_lx >= kCellSize || cell_ly >= kCellSize) return -1;
-    return page * (kCols * kRows) + col * kRows + row;
+    if (cell_lx >= kCellSize || cell_ly >= kCellSize) return false;
+    slot = page + col * kRows + row;
+    sx = inv_x + kOriginX + col * kPitchX;
+    sy = inv_y + kOriginY + row * kPitchY;
+    return true;
+}
+
+static int32_t HitInvSlot(int32_t x, int32_t y, int32_t page)
+{
+    int32_t slot = -1, sx = 0, sy = 0;
+    return HitInvSlotRect(x, y, page, slot, sx, sy) ? slot : -1;
 }
 
 // Hit-test the BarInv (bottom-bar) 9-slot quick shelf. Per BarInvPane_SPEC:
 // 9 slots at pitch 45 from origin (220, 10) within the BottomBar's
 // 640x60 strip (bottom-anchored). Returns slot 0..8 or -1.
-static int32_t HitBarInvSlot(int32_t x, int32_t y)
+static bool HitBarInvSlotRect(int32_t x, int32_t y,
+                              int32_t& slot, int32_t& sx, int32_t& sy)
 {
-    const int32_t dw       = Display.Width();
     const int32_t dh       = Display.Height();
     constexpr int32_t kBarH       = 60;
     constexpr int32_t kSlotOriginX = 220;
@@ -507,21 +581,37 @@ static int32_t HitBarInvSlot(int32_t x, int32_t y)
     constexpr int32_t kSlotCount   = 9;
     const int32_t bar_x = 0;
     const int32_t bar_y = dh - kBarH;
+    const int32_t dw = Display.Width();
+    const SHudState& hs = GetHudState();
+    const int32_t bar_w = (dw > 0 ? dw : 640)
+                        - (hs.sidebarState == HUD_SIDEBAR_OPEN ? kPaneW : 0);
+    if (x >= bar_x + bar_w) return false;
     const int32_t local_x = x - bar_x - kSlotOriginX;
     const int32_t local_y = y - bar_y - kSlotOriginY;
-    if (local_x < 0 || local_y < 0) return -1;
-    if (local_y >= kSlotSize) return -1;
+    if (local_x < 0 || local_y < 0) return false;
+    if (local_y >= kSlotSize) return false;
     const int32_t col = local_x / kSlotPitchX;
-    if (col >= kSlotCount) return -1;
+    if (col >= kSlotCount) return false;
     const int32_t cell_lx = local_x - col * kSlotPitchX;
-    if (cell_lx >= kSlotSize) return -1;
-    return col;
+    if (cell_lx >= kSlotSize) return false;
+    slot = col;
+    sx = bar_x + kSlotOriginX + col * kSlotPitchX;
+    sy = bar_y + kSlotOriginY;
+    if (sx + kSlotSize > bar_x + bar_w) return false;
+    return true;
+}
+
+static int32_t HitBarInvSlot(int32_t x, int32_t y)
+{
+    int32_t slot = -1, sx = 0, sy = 0;
+    return HitBarInvSlotRect(x, y, slot, sx, sy) ? slot : -1;
 }
 
 // Hit-test the Equip paperdoll 11-slot layout. Per EquipPane_SPEC
 // DAT_005e3f60 table (mirrored in uiequiptest.cpp). Returns 0..10 in
 // EQ_* enum order, -1 otherwise.
-static int32_t HitEquipSlot(int32_t x, int32_t y)
+static bool HitEquipSlotRect(int32_t x, int32_t y,
+                             int32_t& slot, int32_t& sx, int32_t& sy)
 {
     struct SA { int32_t x; int32_t y; };
     static constexpr SA kAnchor[11] = {
@@ -538,19 +628,42 @@ static int32_t HitEquipSlot(int32_t x, int32_t y)
         const int32_t bx = pane_x + kAnchor[i].x;
         const int32_t by = pane_y + kAnchor[i].y;
         if (x >= bx && x < bx + kSlot && y >= by && y < by + kSlot)
-            return i;
+        {
+            slot = i;
+            sx = bx;
+            sy = by;
+            return true;
+        }
     }
-    return -1;
+    return false;
 }
 
-void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
+static int32_t HitEquipSlot(int32_t x, int32_t y)
+{
+    int32_t slot = -1, sx = 0, sy = 0;
+    return HitEquipSlotRect(x, y, slot, sx, sy) ? slot : -1;
+}
+
+bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
 {
     SHudState& s = GetHudState();
 
     // ---- MouseUp: commit / cancel an in-flight drag -------------------
     if (button == MB_LEFTUP)
     {
-        if (!UIDragState::IsActive()) return;
+        if (!UIDragState::IsActive()) return false;
+        const SUIDragState& drag = UIDragState::Get();
+        if (drag.source != EDragSource::Inventory &&
+            drag.source != EDragSource::BarInv &&
+            drag.source != EDragSource::Equip)
+        {
+            return false;
+        }
+        if (UIDragState::IsPending())
+        {
+            UIDragState::CompleteClick();
+            return true;
+        }
 
         // Drop targets in priority order: Equip (most specific) → BarInv →
         // Inventory grid. First one to hit wins. Each could refuse on a
@@ -561,7 +674,7 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
             if (es >= 0)
             {
                 UIDragState::CompleteDrag(EDragSource::Equip, es, true);
-                return;
+                return true;
             }
         }
         if (s.bottomBarOpen)
@@ -570,7 +683,7 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
             if (bs >= 0)
             {
                 UIDragState::CompleteDrag(EDragSource::BarInv, bs, true);
-                return;
+                return true;
             }
         }
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
@@ -579,13 +692,13 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
             if (dest_slot >= 0)
             {
                 UIDragState::CompleteDrag(EDragSource::Inventory, dest_slot, true);
-                return;
+                return true;
             }
         }
         // Released somewhere uninteresting → cancel (the source's slot
         // keeps its item — no move committed).
         UIDragState::Cancel();
-        return;
+        return true;
     }
 
     // ---- Right-click: Use / Open-bag (retail eventType == 5) ---------
@@ -605,20 +718,18 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
                 log_info("[ui-sidebar] right-click inv slot=%d -> container=%d (was %d, %s)",
                          slot, s.inventoryContainer, was,
                          s.inventoryContainer == 0 ? "back to root" : "opened bag");
-                return;
+                return true;
             }
         }
-        return;
+        return false;
     }
 
-    if (button != MB_LEFTDOWN) return;
+    if (button != MB_LEFTDOWN) return false;
 
     // ---- Sidebar tab strip (TAKES PRECEDENCE over chrome-pane slots) -
-    // The tab strip is visually on top of the chrome panes' right edge
-    // (sokol composite z-order), so its hit-tests must run before the
-    // Equip / BarInv / Inv slot drag-sources — otherwise an Equip slot
-    // anchor that happens to overlap a tab button (e.g. EQ_AMMO @ (576,11)
-    // vs upper-Book tab @ (583,26)) swallows the click.
+    // The tab strip is its own controller at the playfield corner. It should
+    // see clicks before content panes so tab changes never turn into item
+    // grabs when the strip visually occupies the pointer point.
     {
         int32_t strip_x = 0, strip_y = 0;
         TabStripOrigin(strip_x, strip_y);
@@ -635,110 +746,65 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
             else                          { s.bottomSlot = mode; region = "bottom"; }
             s.sidebarState = HUD_SIDEBAR_OPEN;
 
-            // Auto-pairing (DispatchCommand cases 7/9): Book↔Spell, Equip↔Inv.
+            // Retail dispatch pairs only the upper-region convenience presets:
+            // case 7/0xa = Book+Spell, case 9 = Equip+Inv. Lower-region
+            // commands 0xb/0xc update only DAT_0065d1bc, so clicking Inv/Map
+            // must not yank the upper pane away from Stats/Book/Equip.
             bool paired = false;
             if (s.topSlot == HUD_TOP_BOOK && g_buttons[i].region == 0)
             { s.bottomSlot = HUD_BOT_SPELL; paired = true; }
             else if (s.topSlot == HUD_TOP_EQUIP && g_buttons[i].region == 0)
             { s.bottomSlot = HUD_BOT_INV;   paired = true; }
-            else if (s.bottomSlot == HUD_BOT_SPELL && g_buttons[i].region == 1)
-            { s.topSlot    = HUD_TOP_BOOK;  paired = true; }
-            else if (s.bottomSlot == HUD_BOT_INV && g_buttons[i].region == 1)
-            { s.topSlot    = HUD_TOP_EQUIP; paired = true; }
 
             log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
                      i, region, mode, paired ? " [paired]" : "",
                      s.topSlot, s.bottomSlot);
-            return;
-        }
-    }
-
-    // ---- Spellbook scroll arrows (only when top slot = Book) ---------
-    // Per SpellbookPane_SPEC: up arrow at pane-local (169, 150),
-    // down arrow at (169, 174), each 20x26. Scroll ±40 per click.
-    if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-    {
-        const int32_t dw       = Display.Width();
-        const int32_t book_x   = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
-        const int32_t book_y   = 0;
-        constexpr int32_t kArrLocalX = 169;
-        constexpr int32_t kUpY    = 150;
-        constexpr int32_t kDnY    = 174;
-        constexpr int32_t kArrW   = 20;
-        constexpr int32_t kArrH   = 26;
-        constexpr int32_t kStep   = 40;
-        const int32_t arrX = book_x + kArrLocalX;
-        if (x >= arrX && x < arrX + kArrW)
-        {
-            const int32_t upY = book_y + kUpY;
-            const int32_t dnY = book_y + kDnY;
-            if (y >= upY && y < upY + kArrH)
-            {
-                if (s.spellbookScroll > 0)
-                {
-                    s.spellbookScroll -= kStep;
-                    if (s.spellbookScroll < 0) s.spellbookScroll = 0;
-                    log_info("[ui-sidebar] spellbook up-arrow -> scroll=%d",
-                             s.spellbookScroll);
-                }
-                else
-                {
-                    log_info("[ui-sidebar] spellbook up-arrow (at top, no-op)");
-                }
-                return;
-            }
-            if (y >= dnY && y < dnY + kArrH)
-            {
-                // No upper limit gated here — retail would clamp to the
-                // last spell row; the test harness doesn't have real
-                // content so we just let it grow.
-                s.spellbookScroll += kStep;
-                log_info("[ui-sidebar] spellbook dn-arrow -> scroll=%d",
-                         s.spellbookScroll);
-                return;
-            }
+            return true;
         }
     }
 
     // ---- Inventory grid: click-down on a cell starts a drag ----------
     if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
     {
-        const int32_t slot = HitInvSlot(x, y, s.inventoryPage);
-        if (slot >= 0)
+        int32_t slot = -1, sx = 0, sy = 0;
+        if (HitInvSlotRect(x, y, s.inventoryPage, slot, sx, sy))
         {
             TObjectInstance* fake_item =
                 reinterpret_cast<TObjectInstance*>(uintptr_t(slot + 1));
             UIDragState::BeginDrag(EDragSource::Inventory, slot,
-                                   fake_item, x, y);
-            return;
+                                   fake_item, x, y,
+                                   nullptr, x - sx, y - sy);
+            return true;
         }
     }
 
     // ---- BarInv shelf: click-down on a slot starts a drag ------------
     if (s.bottomBarOpen)
     {
-        const int32_t bs = HitBarInvSlot(x, y);
-        if (bs >= 0)
+        int32_t bs = -1, sx = 0, sy = 0;
+        if (HitBarInvSlotRect(x, y, bs, sx, sy))
         {
             TObjectInstance* fake_item =
                 reinterpret_cast<TObjectInstance*>(uintptr_t(0x100 + bs));
             UIDragState::BeginDrag(EDragSource::BarInv, bs,
-                                   fake_item, x, y);
-            return;
+                                   fake_item, x, y,
+                                   nullptr, x - sx, y - sy);
+            return true;
         }
     }
 
     // ---- Equip paperdoll: click-down on a slot starts a drag ---------
     if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
     {
-        const int32_t es = HitEquipSlot(x, y);
-        if (es >= 0)
+        int32_t es = -1, sx = 0, sy = 0;
+        if (HitEquipSlotRect(x, y, es, sx, sy))
         {
             TObjectInstance* fake_item =
                 reinterpret_cast<TObjectInstance*>(uintptr_t(0x200 + es));
             UIDragState::BeginDrag(EDragSource::Equip, es,
-                                   fake_item, x, y);
-            return;
+                                   fake_item, x, y,
+                                   nullptr, x - sx, y - sy);
+            return true;
         }
     }
 
@@ -771,7 +837,7 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
                 {
                     log_info("[ui-sidebar] inv L-arrow click (at page 0, no-op)");
                 }
-                return;
+                return true;
             }
             if (x >= rightBx && x < rightBx + kArrW && y >= rightBy && y < rightBy + kArrH)
             {
@@ -786,7 +852,7 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
                 {
                     log_info("[ui-sidebar] inv R-arrow click (at max page, no-op)");
                 }
-                return;
+                return true;
             }
         }
     }
@@ -794,6 +860,29 @@ void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
     // (Tab strip already handled at the top of the LEFTDOWN section,
     // before chrome-pane slot hit-tests, so it takes precedence on
     // overlapping coords.)
+    return false;
+}
+
+void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
+{
+    (void)HandleMouseClickUISidebarModeConsumed(button, x, y);
+}
+
+bool HandleMouseMoveUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
+{
+    if (!(button & MB_LEFTDOWN)) return false;
+    if (!UIDragState::IsActive()) return false;
+
+    const SUIDragState& drag = UIDragState::Get();
+    if (drag.source != EDragSource::Inventory &&
+        drag.source != EDragSource::BarInv &&
+        drag.source != EDragSource::Equip)
+    {
+        return false;
+    }
+
+    UIDragState::UpdateDrag(x, y);
+    return true;
 }
 
 // =====================================================================
@@ -828,13 +917,12 @@ void HandleKeyPressUISidebarMode(int32_t key, bool down)
     switch (key)
     {
         case 'V': case 'v':
-            s.sidebarState = (s.sidebarState == HUD_SIDEBAR_OPEN)
-                             ? HUD_SIDEBAR_CLOSED : HUD_SIDEBAR_OPEN;
+            ToggleUISidebarPanel();
             logTag = (s.sidebarState == HUD_SIDEBAR_OPEN) ? "V → sidebar OPEN"
                                                           : "V → sidebar CLOSED";
             break;
         case 'B': case 'b':
-            s.bottomBarOpen = s.bottomBarOpen ? 0 : 1;
+            ToggleUIBottomPanel();
             logTag = s.bottomBarOpen ? "B → bottombar OPEN"
                                      : "B → bottombar CLOSED";
             break;

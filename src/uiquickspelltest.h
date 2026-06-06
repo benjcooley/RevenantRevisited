@@ -18,8 +18,11 @@ struct TBitmap;
 
 bool InitializeUIQuickSpellMode();
 void RenderUIQuickSpellMode();
+void RenderUIQuickSpellModeEmbedded();
+void SetUIQuickSpellSyntheticStateEnabled(bool enabled);
 void CloseUIQuickSpellMode();
 void HandleMouseClickUIQuickSpellMode(int32_t button, int32_t x, int32_t y);
+void HandleMouseMoveUIQuickSpellMode(int32_t button, int32_t x, int32_t y);
 
 // Bind a spell into a quickspell slot from an external drag source.
 // slot in [0, 3]; spellName is the SpellIcons.dat key; icon is the

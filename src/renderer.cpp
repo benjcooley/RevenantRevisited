@@ -27,6 +27,7 @@
 #include <sokol_app.h>
 
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "bitmapdecode.h"
 #include "logging.h"
 #include "surface.h"
@@ -1728,11 +1729,15 @@ void TRenderer::InitMeshPipeline()
     hpip.label = "renderer.helper.add.front.pipeline";
     helper_mesh_add_front_pipeline = sg_make_pipeline(&hpip);
 
-    sg_buffer_desc ivb = {};
-    ivb.size  = kMaxMeshInstances * int32_t(sizeof(float)) * 24;   // 4*vec4 world + tint + obj_id
-    ivb.usage = SG_USAGE_STREAM;
-    ivb.label = "renderer.mesh.instance_vbuf";
-    mesh_instance_vb = sg_make_buffer(&ivb);
+    for (int32_t i = 0; i < kMeshInstanceVBCount; ++i)
+    {
+        sg_buffer_desc ivb = {};
+        ivb.size  = kMaxMeshInstances * int32_t(sizeof(float)) * 24;   // 4*vec4 world + tint + obj_id
+        ivb.usage = SG_USAGE_STREAM;
+        ivb.label = "renderer.mesh.instance_vbuf";
+        mesh_instance_vb[i] = sg_make_buffer(&ivb);
+    }
+    mesh_instance_vb_cursor = 0;
 }
 
 void TRenderer::ShutdownMeshPipeline()
@@ -1743,7 +1748,11 @@ void TRenderer::ShutdownMeshPipeline()
     }
     meshes.clear();
     mesh_by_key.clear();
-    if (mesh_instance_vb.id) { sg_destroy_buffer(mesh_instance_vb); mesh_instance_vb = {}; }
+    for (sg_buffer& vb : mesh_instance_vb)
+    {
+        if (vb.id) { sg_destroy_buffer(vb); vb = {}; }
+    }
+    mesh_instance_vb_cursor = 0;
     if (helper_mesh_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_back_pipeline); helper_mesh_back_pipeline = {}; }
     if (helper_mesh_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_front_pipeline); helper_mesh_front_pipeline = {}; }
     if (helper_mesh_add_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_back_pipeline); helper_mesh_add_back_pipeline = {}; }
@@ -1921,7 +1930,8 @@ const SRendererTextureInfo* TRenderer::TextureInfo(TTextureHandle handle) const
     return &texture_assets[handle - 1];
 }
 
-TTextureHandle TRenderer::CreateDynamicTexture(int32_t width, int32_t height)
+TTextureHandle TRenderer::CreateDynamicTexture(int32_t width, int32_t height,
+                                               ERendererTextureFilter filter)
 {
     if (width <= 0 || height <= 0)
         return kInvalidTexture;
@@ -1931,8 +1941,8 @@ TTextureHandle TRenderer::CreateDynamicTexture(int32_t width, int32_t height)
     desc.height = height;
     desc.usage = SG_USAGE_STREAM;
     desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    desc.min_filter = SG_FILTER_LINEAR;
-    desc.mag_filter = SG_FILTER_LINEAR;
+    desc.min_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+    desc.mag_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
     desc.wrap_u = desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
     desc.label = "renderer.dynamic_texture";
 
@@ -2200,7 +2210,8 @@ SRendererAssetStats TRenderer::GetAssetStats() const
     if (composite_vbuf.id) ++out.renderer_buffer_count;
     if (tile_vbuf.id) ++out.renderer_buffer_count;
     if (tile_proxy_vbuf.id) ++out.renderer_buffer_count;
-    if (mesh_instance_vb.id) ++out.renderer_buffer_count;
+    for (const sg_buffer& vb : mesh_instance_vb)
+        if (vb.id) ++out.renderer_buffer_count;
 
     out.renderer_image_count = uint32_t(image_pair_assets.size() * 3 + texture_assets.size());
     if (color_target.id) ++out.renderer_image_count;
@@ -2275,8 +2286,20 @@ void TRenderer::DrainMeshQueue()
         dst[22] = float((s.obj_id >> 16) & 0xFFu) / 255.0f;
         dst[23] = float((s.obj_id >> 24) & 0xFFu) / 255.0f;
     }
+    sg_buffer instance_vb = {};
+    for (int32_t attempt = 0; attempt < kMeshInstanceVBCount; ++attempt)
+    {
+        const int32_t idx = mesh_instance_vb_cursor++ % kMeshInstanceVBCount;
+        if (mesh_instance_vb[idx].id)
+        {
+            instance_vb = mesh_instance_vb[idx];
+            break;
+        }
+    }
+    if (!instance_vb.id) return;
+
     const sg_range r = { mesh_instance_scratch.data(), mesh_instance_scratch.size() * sizeof(float) };
-    sg_update_buffer(mesh_instance_vb, &r);
+    sg_update_buffer(instance_vb, &r);
 
     sg_apply_pipeline(mesh_pipeline);
 
@@ -2293,7 +2316,7 @@ void TRenderer::DrainMeshQueue()
     u[8] = recon.center_wx;
     u[9] = recon.center_wy;
     u[10] = recon.zoom;
-    u[11] = 0.0f;
+    u[11] = recon.mesh_projection_mode;
     const sg_range u_range = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
 
@@ -2306,7 +2329,7 @@ void TRenderer::DrainMeshQueue()
         const SMeshEntry& me = meshes[mesh_queue[i].mesh - 1];
         sg_bindings bind = {};
         bind.vertex_buffers[0]        = me.vbuf;
-        bind.vertex_buffers[1]        = mesh_instance_vb;
+        bind.vertex_buffers[1]        = instance_vb;
         bind.vertex_buffer_offsets[1] = int(i) * int(sizeof(float)) * 24;
         bind.index_buffer             = me.ibuf;
         bind.fs_images[0]             = TextureImage(me.albedo);
@@ -2916,6 +2939,11 @@ void TRenderer::SetReconstructionParams(float ox, float oy,
     recon.tile_scale   = tile_scale > 0.0f ? tile_scale : 1.0f;
 }
 
+void TRenderer::SetMeshProjectionMode(int32_t mode)
+{
+    recon.mesh_projection_mode = mode != 0 ? 1.0f : 0.0f;
+}
+
 void TRenderer::SetPerspectiveRaycastParams(int32_t steps, int32_t refine)
 {
     perspective_steps = std::clamp(steps, 4, 128);
@@ -3076,6 +3104,7 @@ bool TRenderer::ClipTileRasterRect(float& rect_x, float& rect_y,
 void TRenderer::BeginTilePass(float r, float g, float b, float a)
 {
     if (!default_pass.id) return;
+    suppress_scene_composite_frame = false;
     tile_clear_rgba[0] = r; tile_clear_rgba[1] = g;
     tile_clear_rgba[2] = b; tile_clear_rgba[3] = a;
     current_tile_pass_stats = {};
@@ -3829,7 +3858,7 @@ TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, bool prefer_alias)
     // vs alias-mode is two distinct textures (cursor sprite vs its alias
     // RLE shadow). Keying both lets cursor + soft shadow coexist without
     // colliding in the cache.
-    const uintptr_t key = uintptr_t(bm) | (prefer_alias ? 1u : 0u);
+    const uint64_t key = UIBitmapAtlasKey(bm, prefer_alias);
     if (auto it = bitmap_texture_cache.find(key); it != bitmap_texture_cache.end())
         return it->second;
 
@@ -3857,12 +3886,20 @@ TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, bool prefer_alias)
 void TRenderer::DrawBitmap(PTBitmap bm, int32_t x, int32_t y, bool prefer_alias)
 {
     if (!bm) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, prefer_alias, &slice))
+    {
+        CompositeSwapchain(slice.texture, x, y, bm->width, bm->height, target_w, target_h,
+                           slice.src_x, slice.src_y, bm->width, bm->height,
+                           slice.tex_width, slice.tex_height);
+        return;
+    }
     const TTextureHandle tex = BitmapAsTexture(bm, prefer_alias);
     if (tex == kInvalidTexture) return;
     const sg_image img = TextureImage(tex);
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
     CompositeSwapchain(img, x, y, bm->width, bm->height, target_w, target_h,
                        0, 0, bm->width, bm->height,
                        bm->width, bm->height);
@@ -3874,12 +3911,20 @@ void TRenderer::DrawBitmapSubrect(PTBitmap bm,
                                   int32_t src_w, int32_t src_h)
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    {
+        CompositeSwapchain(slice.texture, dst_x, dst_y, src_w, src_h, target_w, target_h,
+                           slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,
+                           slice.tex_width, slice.tex_height);
+        return;
+    }
     const TTextureHandle tex = BitmapAsTexture(bm);
     if (tex == kInvalidTexture) return;
     const sg_image img = TextureImage(tex);
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
     CompositeSwapchain(img, dst_x, dst_y, src_w, src_h, target_w, target_h,
                        src_x, src_y, src_w, src_h,
                        bm->width, bm->height);
@@ -3889,12 +3934,21 @@ void TRenderer::DrawBitmapTinted(PTBitmap bm, int32_t x, int32_t y,
                                  float tr, float tg, float tb, float ta)
 {
     if (!bm) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    {
+        CompositeSwapchainTinted(slice.texture, x, y, bm->width, bm->height, target_w, target_h,
+                                 slice.src_x, slice.src_y, bm->width, bm->height,
+                                 slice.tex_width, slice.tex_height,
+                                 tr, tg, tb, ta);
+        return;
+    }
     const TTextureHandle tex = BitmapAsTexture(bm);
     if (tex == kInvalidTexture) return;
     const sg_image img = TextureImage(tex);
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
     CompositeSwapchainTinted(img, x, y, bm->width, bm->height, target_w, target_h,
                              0, 0, bm->width, bm->height,
                              bm->width, bm->height,
@@ -3908,12 +3962,21 @@ void TRenderer::DrawBitmapSubrectTinted(PTBitmap bm,
                                         float tr, float tg, float tb, float ta)
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    {
+        CompositeSwapchainTinted(slice.texture, dst_x, dst_y, src_w, src_h, target_w, target_h,
+                                 slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,
+                                 slice.tex_width, slice.tex_height,
+                                 tr, tg, tb, ta);
+        return;
+    }
     const TTextureHandle tex = BitmapAsTexture(bm);
     if (tex == kInvalidTexture) return;
     const sg_image img = TextureImage(tex);
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
     CompositeSwapchainTinted(img, dst_x, dst_y, src_w, src_h, target_w, target_h,
                              src_x, src_y, src_w, src_h,
                              bm->width, bm->height,
@@ -3924,6 +3987,14 @@ void TRenderer::DrawBitmapToTarget(PTBitmap bm, int32_t x, int32_t y,
                                    int32_t target_w, int32_t target_h)
 {
     if (!bm) return;
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    {
+        Composite(slice.texture, x, y, bm->width, bm->height, target_w, target_h,
+                  slice.src_x, slice.src_y, bm->width, bm->height,
+                  slice.tex_width, slice.tex_height);
+        return;
+    }
     const TTextureHandle tex = BitmapAsTexture(bm);
     if (tex == kInvalidTexture) return;
     Composite(tex, x, y, bm->width, bm->height, target_w, target_h,
@@ -3938,6 +4009,14 @@ void TRenderer::DrawBitmapSubrectToTarget(PTBitmap bm,
                                           int32_t target_w, int32_t target_h)
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    {
+        Composite(slice.texture, dst_x, dst_y, src_w, src_h, target_w, target_h,
+                  slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,
+                  slice.tex_width, slice.tex_height);
+        return;
+    }
     const TTextureHandle tex = BitmapAsTexture(bm);
     if (tex == kInvalidTexture) return;
     Composite(tex, dst_x, dst_y, src_w, src_h, target_w, target_h,
@@ -3953,6 +4032,14 @@ void TRenderer::DrawBitmapSubrectStretchedToTarget(PTBitmap bm,
                                                    int32_t target_w, int32_t target_h)
 {
     if (!bm || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return;
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    {
+        Composite(slice.texture, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
+                  slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,
+                  slice.tex_width, slice.tex_height);
+        return;
+    }
     const TTextureHandle tex = BitmapAsTexture(bm);
     if (tex == kInvalidTexture) return;
     // dst_w/dst_h may differ from src_w/src_h — the underlying Composite already
@@ -3968,6 +4055,15 @@ void TRenderer::DrawBitmapTintedToTarget(PTBitmap bm, int32_t x, int32_t y,
                                          float tr, float tg, float tb, float ta)
 {
     if (!bm) return;
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    {
+        CompositeTinted(slice.texture, x, y, bm->width, bm->height, target_w, target_h,
+                        slice.src_x, slice.src_y, bm->width, bm->height,
+                        slice.tex_width, slice.tex_height,
+                        tr, tg, tb, ta);
+        return;
+    }
     const TTextureHandle tex = BitmapAsTexture(bm);
     if (tex == kInvalidTexture) return;
     CompositeTinted(tex, x, y, bm->width, bm->height, target_w, target_h,
@@ -3984,6 +4080,15 @@ void TRenderer::DrawBitmapSubrectTintedToTarget(PTBitmap bm,
                                                 float tr, float tg, float tb, float ta)
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    {
+        CompositeTinted(slice.texture, dst_x, dst_y, src_w, src_h, target_w, target_h,
+                        slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,
+                        slice.tex_width, slice.tex_height,
+                        tr, tg, tb, ta);
+        return;
+    }
     const TTextureHandle tex = BitmapAsTexture(bm);
     if (tex == kInvalidTexture) return;
     CompositeTinted(tex, dst_x, dst_y, src_w, src_h, target_w, target_h,
@@ -4018,6 +4123,32 @@ void TRenderer::DrawBitmapSubrectShadowedToTarget(PTBitmap bm,
                                     0.0f, 0.0f, 0.0f, shadow_a);
     DrawBitmapSubrectToTarget(bm, dst_x, dst_y, src_x, src_y, src_w, src_h,
                               target_w, target_h);
+}
+
+void TRenderer::DrawSurfaceToTarget(TSurface* surf, int32_t x, int32_t y,
+                                    int32_t target_w, int32_t target_h)
+{
+    if (!surf) return;
+    const sg_image img = surf->GetSGImage();
+    if (!img.id) return;
+    const int32_t sw = surf->Width();
+    const int32_t sh = surf->Height();
+    Composite(img, x, y, sw, sh, target_w, target_h,
+              0, 0, sw, sh, sw, sh);
+}
+
+void TRenderer::DrawSurfaceSubrectToTarget(TSurface* surf,
+                                           int32_t dst_x, int32_t dst_y,
+                                           int32_t src_x, int32_t src_y,
+                                           int32_t src_w, int32_t src_h,
+                                           int32_t target_w, int32_t target_h)
+{
+    if (!surf || src_w <= 0 || src_h <= 0) return;
+    const sg_image img = surf->GetSGImage();
+    if (!img.id) return;
+    Composite(img, dst_x, dst_y, src_w, src_h, target_w, target_h,
+              src_x, src_y, src_w, src_h,
+              surf->Width(), surf->Height());
 }
 
 void TRenderer::DrawBitmapShadowed(PTBitmap bm, int32_t x, int32_t y,
@@ -4338,7 +4469,7 @@ bool TRenderer::PresentToSwapchain()
     // (PresentForSnap, the equip-pane paperdoll lit_target sub-rect
     // composite) can validly read those pixels even though we skipped the
     // swapchain composite.
-    if (suppress_present) {
+    if (suppress_present || suppress_scene_composite_frame) {
         color_target_dirty = false;
         lit_target_dirty   = false;
         any_target_ever_written = true;
@@ -4354,12 +4485,16 @@ bool TRenderer::PresentToSwapchain()
     // Sample only the centered display-sized sub-rect of the padded
     // G-buffer / lit target. See kGBufPad.
     const int32_t pad = kGBufPad;
+    const int32_t src_x = present_src_rect_enabled ? present_src_rect[0] : 0;
+    const int32_t src_y = present_src_rect_enabled ? present_src_rect[1] : 0;
+    const int32_t src_w = present_src_rect_enabled ? present_src_rect[2] : width;
+    const int32_t src_h = present_src_rect_enabled ? present_src_rect[3] : height;
     const float   gbw = float(width  + 2 * pad);
     const float   gbh = float(height + 2 * pad);
-    const float   u0  = float(pad)   / gbw;
-    const float   v0  = float(pad)   / gbh;
-    const float   uw  = float(width) / gbw;
-    const float   vh  = float(height) / gbh;
+    const float   u0  = float(pad + src_x) / gbw;
+    const float   v0  = float(pad + src_y) / gbh;
+    const float   uw  = float(src_w) / gbw;
+    const float   vh  = float(src_h) / gbh;
     // 16-float composite-pipeline uniform layout — MUST match
     // composite.{metal,glsl,hlsl}.h's `params` struct (rect + uv_rect +
     // chroma_key + color_tint). Sending only 12 here was the
@@ -4395,7 +4530,7 @@ bool TRenderer::PresentToSwapchain()
 // to re-emit; false on the very first frame before any scene draw).
 bool TRenderer::PresentForSnap()
 {
-    if (suppress_present) return false;
+    if (suppress_present || suppress_scene_composite_frame) return false;
 
     // HUD-only test modes never write to lit_target / color_target — the
     // textures sit uninitialized in GPU memory. Reading those would emit
@@ -4419,12 +4554,16 @@ bool TRenderer::PresentForSnap()
     sg_apply_bindings(&bind);
 
     const int32_t pad = kGBufPad;
+    const int32_t src_x = present_src_rect_enabled ? present_src_rect[0] : 0;
+    const int32_t src_y = present_src_rect_enabled ? present_src_rect[1] : 0;
+    const int32_t src_w = present_src_rect_enabled ? present_src_rect[2] : width;
+    const int32_t src_h = present_src_rect_enabled ? present_src_rect[3] : height;
     const float   gbw = float(width  + 2 * pad);
     const float   gbh = float(height + 2 * pad);
-    const float   u0  = float(pad)   / gbw;
-    const float   v0  = float(pad)   / gbh;
-    const float   uw  = float(width) / gbw;
-    const float   vh  = float(height) / gbh;
+    const float   u0  = float(pad + src_x) / gbw;
+    const float   v0  = float(pad + src_y) / gbh;
+    const float   uw  = float(src_w) / gbw;
+    const float   vh  = float(src_h) / gbh;
     const float u[16] = {
         present_ndc[0], present_ndc[1], present_ndc[2], present_ndc[3],
         u0, v0, uw, vh,
@@ -4444,6 +4583,32 @@ void TRenderer::SetPresentNDCRect(float x, float y, float w, float h)
     present_ndc[1] = y;
     present_ndc[2] = w;
     present_ndc[3] = h;
+    present_src_rect_enabled = false;
+    present_src_rect[0] = present_src_rect[1] = present_src_rect[2] = present_src_rect[3] = 0;
+}
+
+void TRenderer::SetPresentPixelRect(int32_t dst_x, int32_t dst_y,
+                                    int32_t dst_w, int32_t dst_h,
+                                    int32_t target_w, int32_t target_h,
+                                    int32_t src_x, int32_t src_y,
+                                    int32_t src_w, int32_t src_h)
+{
+    if (dst_w <= 0 || dst_h <= 0 || target_w <= 0 || target_h <= 0 ||
+        src_w <= 0 || src_h <= 0)
+    {
+        ResetPresentNDCRect();
+        return;
+    }
+
+    present_ndc[0] = (2.0f * float(dst_x) / float(target_w)) - 1.0f;
+    present_ndc[1] = 1.0f - (2.0f * float(dst_y + dst_h) / float(target_h));
+    present_ndc[2] = (2.0f * float(dst_w) / float(target_w));
+    present_ndc[3] = (2.0f * float(dst_h) / float(target_h));
+    present_src_rect_enabled = true;
+    present_src_rect[0] = src_x;
+    present_src_rect[1] = src_y;
+    present_src_rect[2] = src_w;
+    present_src_rect[3] = src_h;
 }
 
 // *************************************************************************

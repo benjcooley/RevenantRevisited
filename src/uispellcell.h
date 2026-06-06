@@ -8,34 +8,37 @@
 //
 // Used in TWO places:
 //   - TQuickSpellPane (bottom-bar 4-slot ring strip) — each ring = one
-//     TSpellIconSlot. The ring sprite is stamped UNDER the 40×40 icon.
-//   - Spell-info scroll header (uiscrollpanetest.cpp) — when viewing a
-//     spell-scroll, the top-left of the body area shows one TSpellIconSlot
-//     as a "this is the spell" thumbnail without the ring overlay.
+//     TSpellIconSlot.
+//   - SpellbookSidebarPane (upper "Book" tab) — each spell row uses the
+//     same ring/icon unit without enabling quickspell labels.
 //
 // What each cell draws (compose-to-target contract):
-//   1. (optional) Ring base sprite (RingU/D/G from SpellIcons.dat, 48×48,
-//      BM_16BIT + BM_ALPHA) centered on the cell. Ring is BELOW the icon.
-//   2. 40×40 spell-circle icon from SpellIcons.dat, keyed by spell name,
-//      centered in the cell. Alpha-blended (BM_ALPHA).
-//   3. (optional) Disabled overlay: the ring is replaced by RingG.
-//   4. (optional) Pressed state: ring is replaced by RingD.
-//
-// The cell does NOT draw the spell name text — that is the caller's
-// responsibility (matching TInvSlot which doesn't draw item-name text).
+//   1. 40×40 spell-circle icon from SpellIcons.dat, keyed by spell name.
+//      Retail spellbook draws the icon and RingU/D/G at the same origin; the
+//      icon art is already inset inside its 40×40 bitmap.
+//   2. (optional) Ring sprite (RingU/D/G from SpellIcons.dat, 48×48,
+//      BM_16BIT + BM_ALPHA) drawn on top of the icon. The ring center is
+//      transparent, so the icon shows through the gold frame.
+//   3. Disabled state chooses RingG; pressed state chooses RingD.
+//   4. (optional) Two text labels. QuickSpell enables them; spellbook rows
+//      leave them hidden.
 //
 // Drag/drop support:
 //   - The cell can act as a DRAG SOURCE (left-click-down starts a drag
 //     with EDragSource::SpellPane and the spell index).
 //   - The cell can act as a DROP TARGET for EDragSource::SpellPane (only).
 //     On drop, it calls the bound `onDrop(slotIdx, spellIdx)` callback.
+//   - The drag visual is layered: spell icon/dark disk first, ring art on
+//     top. Items can drag as a single bitmap through the same manager, but
+//     spells are not forced into that shape.
 //
 // Coordination note (Agent B — uidragstate.{h,cpp}):
 //   EDragSource::SpellPane = 4 is already defined in uidragstate.h
 //   (added in an earlier pass). No additional changes needed there.
 //   However the drag-source item reference (`SUIDragState::item`) holds
-//   a `TObjectInstance*` — for spell slots we store the spell index as
-//   a reinterpret_cast<TObjectInstance*>(intptr_t(spellIdx)) sentinel.
+//   a `TObjectInstance*` — for spell slots we store spell index + 1 as
+//   a reinterpret_cast<TObjectInstance*>(intptr_t(spellIdx + 1)) sentinel
+//   so spell zero is not confused with nullptr.
 //   This is a harness-only hack; the production path will store a proper
 //   TSpell* (or equivalent) when TPlayScreen routes the drag.
 //
@@ -50,14 +53,13 @@
 #pragma once
 
 #include "bitmap.h"   // PTBitmap
+#include "font.h"     // SFontAtlas, ETextAlign
 #include "surface.h"  // TSurface (fwd reference via compiler's knowledge)
 
 #include <cstdint>
 #include <functional>
 
-// Forward-declare to keep the header minimal.
 class TMulti;
-struct SFontAtlas;
 
 // State flags — mirrors the retail `mbr_0x14` bits for TQuickSpellPane.
 struct SSpellCellState
@@ -121,6 +123,61 @@ public:
     // Set the callback invoked when a spell is dropped onto this slot.
     void SetOnDrop(FOnSpellDrop cb) { onDrop_ = cb; }
 
+    // Override the clickable rectangle relative to the slot origin. Retail
+    // QuickSpell uses a 32x32 TButton hit rect at the 48x48 ring's top-left;
+    // the spellbook uses the full 40x40 icon area.
+    void SetHitRect(int32_t x, int32_t y, int32_t w, int32_t h)
+    {
+        hitX_ = x; hitY_ = y; hitW_ = w; hitH_ = h; customHitRect_ = true;
+    }
+
+    // Icon placement relative to the slot origin. Default is (0,0) because
+    // retail spellbook stamps the spell bitmap and ring at the same origin.
+    void SetIconOffset(int32_t x, int32_t y)
+    {
+        iconOffX_ = x; iconOffY_ = y;
+    }
+
+    // Optional two-line label owned by the slot. Hidden by default so the
+    // spellbook scroll can reuse this class without quickspell labels.
+    void SetLabel(const SFontAtlas* font,
+                  const char* line1, const char* line2,
+                  int32_t x, int32_t line1Y, int32_t line2Y,
+                  int32_t w, int32_t h,
+                  float r, float g, float b,
+                  ETextAlign align = ETextAlign::Center)
+    {
+        labelFont_ = font;
+        labelLine1_ = line1;
+        labelLine2_ = line2;
+        labelX_ = x;
+        labelLine1Y_ = line1Y;
+        labelLine2Y_ = line2Y;
+        labelW_ = w;
+        labelH_ = h;
+        labelR_ = r;
+        labelG_ = g;
+        labelB_ = b;
+        labelAlign_ = align;
+        labelVisible_ = (font != nullptr);
+    }
+
+    void ClearLabel()
+    {
+        labelVisible_ = false;
+        labelFont_ = nullptr;
+        labelLine1_ = nullptr;
+        labelLine2_ = nullptr;
+    }
+
+    // Optional disabled icon tint. Disabled-state ring art is the confirmed
+    // retail cue; callers can opt into tinting when a harness needs it.
+    void SetDisabledIconTint(float r, float g, float b, float a = 1.0f)
+    {
+        disabledTint_ = true;
+        disabledR_ = r; disabledG_ = g; disabledB_ = b; disabledA_ = a;
+    }
+
     // --- state -------------------------------------------------------
 
     SSpellCellState& State()       { return state_; }
@@ -163,6 +220,8 @@ private:
     int32_t     ringH_   = 48;
     int32_t     iconW_   = 40;
     int32_t     iconH_   = 40;
+    int32_t     iconOffX_ = 0;
+    int32_t     iconOffY_ = 0;
 
     PTBitmap    ringU_    = nullptr;
     PTBitmap    ringD_    = nullptr;
@@ -171,6 +230,32 @@ private:
 
     int32_t     spellIdx_  = -1;
     const char* spellName_ = nullptr;
+
+    bool        customHitRect_ = false;
+    int32_t     hitX_ = 0;
+    int32_t     hitY_ = 0;
+    int32_t     hitW_ = 0;
+    int32_t     hitH_ = 0;
+
+    bool        disabledTint_ = false;
+    float       disabledR_ = 1.0f;
+    float       disabledG_ = 1.0f;
+    float       disabledB_ = 1.0f;
+    float       disabledA_ = 1.0f;
+
+    bool              labelVisible_ = false;
+    const SFontAtlas* labelFont_ = nullptr;
+    const char*       labelLine1_ = nullptr;
+    const char*       labelLine2_ = nullptr;
+    int32_t           labelX_ = 0;
+    int32_t           labelLine1Y_ = 0;
+    int32_t           labelLine2Y_ = 0;
+    int32_t           labelW_ = 0;
+    int32_t           labelH_ = 0;
+    float             labelR_ = 1.0f;
+    float             labelG_ = 1.0f;
+    float             labelB_ = 1.0f;
+    ETextAlign        labelAlign_ = ETextAlign::Center;
 
     SSpellCellState  state_;
     FOnSpellDrop     onDrop_;

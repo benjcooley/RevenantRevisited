@@ -36,6 +36,7 @@
 
 #include "animation.h"
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "display.h"
 #include "font.h"
 #include "fonttable.h"
@@ -58,6 +59,7 @@ extern TObjectClass PotionClass;
 extern TObjectClass FoodClass;
 extern TObjectClass KeyClass;
 extern TObjectClass MoneyClass;
+extern TObjectClass ArmorClass;
 
 namespace {
 
@@ -145,6 +147,7 @@ const SFontAtlas* g_goldFont  = nullptr;
 const SFontAtlas* g_countFont = nullptr;
 
 TSurface* g_pane = nullptr;
+bool g_hudVisible = true;
 
 // =====================================================================
 // Inventory slot style (Inventory-pane visual conventions).
@@ -299,6 +302,35 @@ TObjectInstance* SpawnItem(TObjectClass& cls, int32_t objclass,
     return nullptr;
 }
 
+TObjectInstance* SpawnNamedItem(TObjectClass& cls, int32_t objclass,
+                                const char* typeName,
+                                const char** name_out)
+{
+    const int32_t objtype = cls.FindObjType(typeName);
+    if (objtype < 0) return nullptr;
+    SObjectInfo* info = cls.GetObjType(objtype);
+    if (!info) return nullptr;
+
+    SObjectDef def = {};
+    def.objclass = (short)objclass;
+    def.objtype  = (short)objtype;
+    def.state    = 0;
+    def.level    = 0;
+    def.pos      = { 0, 0, 0 };
+    def.vel      = { 0, 0, 0 };
+    def.accum    = { 0, 0, 0 };
+    def.rotatex  = 0;
+    def.rotatey  = 0;
+    def.rotatez  = 0;
+    def.group    = 0;
+
+    TObjectInstance* inst = cls.NewObject(&def);
+    if (!inst) return nullptr;
+    inst->OnScreen();
+    if (name_out) *name_out = info->name ? info->name : typeName;
+    return inst;
+}
+
 void PopulateHarness()
 {
     // Fill the first few harness_inv[] slots with real spawned items.
@@ -306,13 +338,13 @@ void PopulateHarness()
     // readable by any pane (uiequiptest, uidragstate, etc.).
     //
     // Layout: column-major (slot = col*3 + row).
-    //   Slot 0 (col0, row0): Potion — exercises invanim fallback
+    //   Slot 0 (col0, row0): Helmet — equips into EQ_HEAD for drag tests
     //   Slot 1 (col0, row1): Food   — exercises qty count (5)
     //   Slot 2 (col0, row2): Key    — single item
     //   Slot 3 (col1, row0): Money  — exercises qty count (42)
     //   Slot 4 (col1, row1): Potion — second potion (qty 3 + potential anim)
     //   Slot 5 (col1, row2): Key    — single item
-    UIDragState::ResetHarness();
+    UIDragState::ResetInventoryHarness();
     g_spawnCount = 0;
 
     auto add = [&](TObjectClass& cls, int32_t objclass, int32_t qty,
@@ -336,7 +368,27 @@ void PopulateHarness()
         ++g_spawnCount;
     };
 
-    add(PotionClass, OBJCLASS_POTION, 1);          // slot 0 — col0 row0
+    auto addNamed = [&](TObjectClass& cls, int32_t objclass, const char* name,
+                        int32_t qty)
+    {
+        if (g_spawnCount >= kHarnessInvSlots) return;
+        const int32_t idx = g_spawnCount;
+        const char* nm = nullptr;
+        TObjectInstance* inst = SpawnNamedItem(cls, objclass, name, &nm);
+        if (!inst) return;
+
+        SHarnessSlot& slot = UIDragState::harness_inv[idx];
+        slot.inst   = inst;
+        slot.qty    = qty;
+        slot.label  = nm ? nm : name;
+
+        SSpawnMeta& meta = g_spawnMeta[idx];
+        meta.label  = slot.label;
+
+        ++g_spawnCount;
+    };
+
+    addNamed(ArmorClass, OBJCLASS_ARMOR, "Brown Leather Helmet", 1); // slot 0 — col0 row0
     add(FoodClass,   OBJCLASS_FOOD,   5);          // slot 1 — col0 row1 (qty)
     add(KeyClass,    OBJCLASS_KEY,    1);           // slot 2 — col0 row2
     add(MoneyClass,  OBJCLASS_MONEY,  42);         // slot 3 — col1 row0 (qty)
@@ -359,7 +411,7 @@ void BuildInvSlots()
         const int32_t cx  = col * kCellPitchX + kGridX0;
         const int32_t cy  = row * kCellPitchY + kGridY0;
         g_invSlots[cell] = new TInvSlot(cx, cy, kCellInner, kCellInner,
-                                        /*allowed_type*/ 0,
+                                        /*allowed_type*/ kInvSlotAcceptAny,
                                         /*placeholder*/  nullptr,
                                         /*style*/        &g_invSlotStyle);
     }
@@ -373,7 +425,7 @@ class TInventoryHud : public THudDrawable
 public:
     void Draw() override
     {
-        if (!g_pane) return;
+        if (!g_hudVisible || !g_pane) return;
         // Bottom-right anchor — spec §3: pane at (640-188, 480-174) in Classic.
         const int32_t dw = Display.Width();
         const int32_t dh = Display.Height();
@@ -384,6 +436,7 @@ public:
 
     void Refresh()
     {
+        if (!g_hudVisible) return;
         if (!g_chrome) return;
         EnsurePane();
         if (!g_pane) return;
@@ -412,7 +465,8 @@ public:
 
         // Active drag state (#7b — which slot is being dragged).
         const SUIDragState& drag = UIDragState::Get();
-        const bool dragging = drag.source == EDragSource::Inventory;
+        const bool dragging = UIDragState::IsDragging()
+                           && drag.source == EDragSource::Inventory;
 
         const int32_t tw = g_pane->Width();
         const int32_t th = g_pane->Height();
@@ -531,6 +585,7 @@ bool InitializeUIInventoryMode()
 
     // Load retail assets from inventory.dat (spec §2).
     g_inventoryDat = TMulti::LoadMulti((char*)kArchive);
+    RegisterUIBitmapAtlasArchive(g_inventoryDat);
     if (g_inventoryDat)
     {
         g_chrome   = LookupByName(g_inventoryDat, kChromeName);
@@ -572,6 +627,7 @@ bool InitializeUIInventoryMode()
 
     delete g_pane;
     g_pane = nullptr;
+    g_hudVisible = true;
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
@@ -579,11 +635,22 @@ bool InitializeUIInventoryMode()
 
 void RenderUIInventoryMode()
 {
-    g_hud.Refresh();
+    RenderUIInventoryModeEmbedded();
 
     // Muted slate backdrop for isolated test view.
     Display.BackBuffer()->StartPass(0.18f, 0.20f, 0.26f, 1.0f);
     Display.BackBuffer()->EndPass();
+}
+
+void RenderUIInventoryModeEmbedded()
+{
+    if (!g_hudVisible) return;
+    g_hud.Refresh();
+}
+
+void SetUIInventoryModeVisible(bool visible)
+{
+    g_hudVisible = visible;
 }
 
 void CloseUIInventoryMode()
@@ -620,4 +687,5 @@ void CloseUIInventoryMode()
     }
     g_spawnCount = 0;
     g_refreshCount = 0;
+    g_hudVisible = true;
 }
