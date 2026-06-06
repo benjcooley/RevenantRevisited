@@ -1662,6 +1662,15 @@ void GetParameters(int argc, char **argv)
     if (arg_flag(cmd, "vfx-no-ui"))
         StartupVfxHideUi = true;
 
+  // VFX-WIREFRAME — render every FX submit as a thin quad outline
+  // instead of filled textured. Sets g_fx_wireframe_override (renderer.h).
+  // Flag-style: --vfx-wireframe (no value).
+    if (arg_flag(cmd, "vfx-wireframe"))
+    {
+        StartupVfxWireframe = true;
+        g_fx_wireframe_override = true;
+    }
+
   // VFX-BG=<black|ltgray|forest|dungeon> — pre-select the diagnostic
   // backdrop for --test=vfx (for scripted multi-BG captures).
     {

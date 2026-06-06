@@ -4789,11 +4789,17 @@ void TRenderer::SetFxCamera(const float right_wu[3], const float up_wu[3],
     fx_camera.set = true;
 }
 
+// Global wireframe override toggle (CLI --vfx-wireframe). When true,
+// every FX submit clamps debug_mode to Wireframe so the fragment shader
+// renders only thin edge fragments.
+bool g_fx_wireframe_override = false;
+
 void TRenderer::SubmitFxBillboard(const SBillboardDrawItem& item)
 {
     if (int32_t(fx_billboard_queue.size()) >= kMaxFxInstances) return;
     SFxBillboardQueueEntry e{};
     e.item = item;
+    if (g_fx_wireframe_override) e.item.debug_mode = EFxDebugMode::Wireframe;
     if (e.item.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
         e.item.key.texture = white_texture;
     // Sort along camera forward: greater distance = further away = draw first.
@@ -4812,6 +4818,7 @@ void TRenderer::SubmitFxParticle(const SParticleDrawItem& item)
     if (int32_t(fx_particle_queue.size()) >= kMaxFxInstances) return;
     SFxParticleQueueEntry e{};
     e.item = item;
+    if (g_fx_wireframe_override) e.item.debug_mode = EFxDebugMode::Wireframe;
     if (e.item.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
         e.item.key.texture = white_texture;
     if (fx_camera.set)

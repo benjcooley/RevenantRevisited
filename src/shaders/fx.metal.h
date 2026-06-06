@@ -104,16 +104,24 @@ vertex vs_out _main(vs_in in [[stage_in]],
         wp_corner.y += in.corner.y * in.size_wu.y;
     }
 
+    // persp_scale + scene depth: PER-PARTICLE (from center world_pos).
+    // Per-corner persp_scale gives non-affine projection -> WorldXY trapezoids.
+    float cwx = in.world_pos.x - p.camw.x;
+    float cwy = in.world_pos.y - p.camw.y;
+    float cwz = in.world_pos.z;
+    float csum = cwx + cwy;
+    float center_scene_z_wu = p.camz.z - 0.867 * csum - 0.5 * cwz;
+    float scene_z_n  = (center_scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
+    float zoom = max(p.camw.z, 0.0001);
+    float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(center_scene_z_wu, 1.0)) : 1.0) * zoom;
+
+    // Per-corner S/T for in-plane iso offset (legitimately varies per corner).
     float wx = wp_corner.x - p.camw.x;
     float wy = wp_corner.y - p.camw.y;
     float wz = wp_corner.z;
     float sum = wx + wy;
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * 0.867;
-    float scene_z_wu = p.camz.z - 0.867 * sum - 0.5 * wz;
-    float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
-    float zoom = max(p.camw.z, 0.0001);
-    float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
 
     float spx, spy;
     if (omode == 1) {
@@ -177,6 +185,15 @@ fragment float4 _main(vs_out in [[stage_in]],
     } else if (mode == 3) {
         sampled = atlas.sample(smp, uv_normal);
         c = sampled;
+    } else if (mode == 4) {
+        // Wireframe: emit thin solid edge of the quad; discard interior.
+        // corner is in [-0.5, +0.5]; edge_dist = 0 at edge, 0.5 at center.
+        float edge_dist = min(0.5 - abs(in.corner.x),
+                              0.5 - abs(in.corner.y));
+        if (edge_dist > 0.02) discard_fragment();
+        // Bright cyan with alpha=1 so the line reads on any background.
+        sampled = float4(1.0, 1.0, 1.0, 1.0);
+        c = float4(0.0, 1.0, 1.0, 1.0);
     } else {
         sampled = atlas.sample(smp, uv_normal);
         // sampled is premultiplied (texture-load pass converts
@@ -254,16 +271,30 @@ vertex vs_out _main(vs_in in [[stage_in]],
         wp_corner.y += rc.y * in.size_wu.y;
     }
 
+    // ---- Persp scale + scene depth: compute from the PARTICLE CENTER
+    // (in.world_pos), NOT the per-corner wp_corner. If persp_scale varies
+    // per corner, the projection is non-affine and a flat WorldXY quad
+    // renders as a trapezoid instead of a rhombus (parallel sides go
+    // non-parallel). Bug fix 2026-05-31: use center for persp_scale,
+    // per-corner only for the iso-projected S/T offset.
+    float cwx = in.world_pos.x - p.camw.x;
+    float cwy = in.world_pos.y - p.camw.y;
+    float cwz = in.world_pos.z;
+    float csum = cwx + cwy;
+    float center_scene_z_wu = p.camz.z - 0.867 * csum - 0.5 * cwz;
+    float scene_z_n  = (center_scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
+    float zoom = max(p.camw.z, 0.0001);
+    float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(center_scene_z_wu, 1.0)) : 1.0) * zoom;
+
+    // Per-corner S/T for the in-plane iso offset (these legitimately
+    // differ per corner — the quad's 4 corners ARE at 4 different
+    // world XY positions when WorldXY-rotated).
     float wx = wp_corner.x - p.camw.x;
     float wy = wp_corner.y - p.camw.y;
     float wz = wp_corner.z;
     float sum = wx + wy;
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * 0.867;
-    float scene_z_wu = p.camz.z - 0.867 * sum - 0.5 * wz;
-    float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
-    float zoom = max(p.camw.z, 0.0001);
-    float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
 
     float spx, spy;
     if (omode == 1) {

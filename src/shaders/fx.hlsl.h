@@ -46,14 +46,19 @@ vs_out main_vs(vs_in i) {
         wp.x += i.corner.x * i.size_wu.x;
         wp.y += i.corner.y * i.size_wu.y;
     }
+    // persp_scale + scene depth: PER-PARTICLE (from center world_pos).
+    // Per-corner persp_scale gives non-affine projection -> WorldXY trapezoids.
+    float cwx = i.world_pos.x - camw.x, cwy = i.world_pos.y - camw.y, cwz = i.world_pos.z;
+    float csum = cwx + cwy;
+    float center_scene_z_wu = camz.z - 0.867 * csum - 0.5 * cwz;
+    float scene_z_n  = (center_scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    float zoom = max(camw.z, 0.0001);
+    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(center_scene_z_wu, 1.0)) : 1.0) * zoom;
+    // Per-corner S/T for in-plane iso offset (legitimately varies per corner).
     float wx = wp.x - camw.x, wy = wp.y - camw.y, wz = wp.z;
     float sum = wx + wy;
     float S = wx - wy;
     float T = 0.5 * sum - wz * 0.867;
-    float scene_z_wu = camz.z - 0.867 * sum - 0.5 * wz;
-    float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
-    float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx, spy;
     if (omode == 1) {
         spx = vp.x + S * persp_scale;
@@ -145,14 +150,20 @@ vs_out main_vs(vs_in i) {
         wp.x += rc.x * i.size_wu.x;
         wp.y += rc.y * i.size_wu.y;
     }
+    // persp_scale must be PER-PARTICLE (computed from center world_pos),
+    // not per-corner. Per-corner persp_scale produces non-affine
+    // projection of WorldXY quads -> trapezoidal distortion.
+    float cwx = i.world_pos.x - camw.x, cwy = i.world_pos.y - camw.y, cwz = i.world_pos.z;
+    float csum = cwx + cwy;
+    float center_scene_z_wu = camz.z - 0.867 * csum - 0.5 * cwz;
+    float scene_z_n  = (center_scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    float zoom = max(camw.z, 0.0001);
+    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(center_scene_z_wu, 1.0)) : 1.0) * zoom;
+    // Per-corner S/T for in-plane iso offset (these DO legitimately vary per corner).
     float wx = wp.x - camw.x, wy = wp.y - camw.y, wz = wp.z;
     float sum = wx + wy;
     float S = wx - wy;
     float T = 0.5 * sum - wz * 0.867;
-    float scene_z_wu = camz.z - 0.867 * sum - 0.5 * wz;
-    float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
-    float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx, spy;
     if (omode == 1) {
         spx = vp.x + S * persp_scale;

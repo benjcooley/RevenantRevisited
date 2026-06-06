@@ -549,18 +549,42 @@ Once preconditions are met, execute in order:
 ### Step 4 — Validate
 
 1. Kill any stray test processes: `pkill -f "build/revenant --headless"`
-2. Render filmstrip:
+
+2. **Pick a filmstrip interval that matches the effect's runtime.** From
+   the forensics doc estimate the visible lifetime (e.g. sparks: ~30 ticks
+   ≈ 1.25s @ 24Hz; lightstrip: ~12 frames ≈ 0.5s active; fountain: continuous
+   loop). Then pick `N` frames × `INTERVAL` so the capture spans roughly
+   1.2× the effect's active duration — you want 5-8 frames showing meaningful
+   state, not 1 active and 8 empty.
+
+   | Effect type | Suggested `--filmstrip` | Coverage |
+   |---|---|---|
+   | One-shot burst (sparks, fizzle, impact flash) | `9,0.1` | 0.9s — catches peak + decay |
+   | Short cast (icebolt strike, lightstrip flash) | `12,0.4` | 4.8s — catches grow/sustain/shrink |
+   | Continuous loop (fountain, flame, mist) | `9,0.5` | 4.5s — catches multiple particle cycles |
+   | Multi-state choreography (photon LAUNCH→FLY→EXPLODE) | `15,0.5` | 7.5s — catches each phase |
+
+   If unsure, do a quick `--filmstrip=9,0.1` first to see if everything's
+   done by frame 3, then bump to `9,0.5` for slow loops.
+
+3. Render filmstrip (use `--vfx-no-ui` to suppress the ImGui browser overlay
+   for clean capture):
    ```bash
    mkdir -p filmstrips/vfx_shim/<effect>
    build/revenant --headless --test=vfx --vfx=T<Class>_SHIM \
-     --filmstrip=9,0.5 --vfx-bg=black \
+     --filmstrip=<N>,<INTERVAL> --vfx-bg=black --vfx-no-ui \
      --snapprefix=vfx_shim/<effect>/iter1_
    ```
-3. Read the resulting `iter1_filmstrip.png` (multimodal, via Read tool).
-4. Compare against:
+
+4. Read the resulting `iter1_filmstrip.png` (multimodal, via Read tool).
+5. Compare against:
    - Reference frames in `images/vfx/<NN>_<EffectName>/`
-   - Existing bespoke render via `--vfx=T<Class>_BESPOKE`
-5. Decide verdict per §9.
+   - Existing bespoke render via `--vfx=T<Class>_BESPOKE` (same filmstrip
+     args so the A/B is fair)
+6. Decide verdict per §9.
+
+**A filmstrip showing 1 lit frame and 8 black frames is a bad capture, not a
+broken effect.** Retry with a shorter interval.
 
 ---
 

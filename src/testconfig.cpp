@@ -16,6 +16,7 @@ char  StartupDumpI3DPath[MAXPATHLEN]    = "";
 char  StartupDumpI3DOutPath[MAXPATHLEN] = "";
 char  StartupVfxId[64]        = "";
 bool  StartupVfxHideUi        = false;
+bool  StartupVfxWireframe     = false;
 char  StartupCinematicPath[MAXPATHLEN] = "";
 char  StartupVfxBackground[16] = "";
 char  StartupInputScript[1024] = "";
