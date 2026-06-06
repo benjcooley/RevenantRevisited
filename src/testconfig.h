@@ -31,6 +31,11 @@ extern char StartupVfxId[64];
 // --vfx-no-ui — suppress the ImGui VFX Browser panel so screencaps
 // show only the effect render.
 extern bool StartupVfxHideUi;
+// --vfx-wireframe — render every FX submit as a thin quad outline
+// instead of filled textured. Useful for verifying rotation,
+// projection, and screen-space distortion independently of the
+// authored texture content.
+extern bool StartupVfxWireframe;
 // --cinematic=<path> — which .SMK file --test=ui-cinematic should play.
 // Empty = default intro FMV (data/Disk2/MIX_FMV1.SMK).
 extern char StartupCinematicPath[MAXPATHLEN];

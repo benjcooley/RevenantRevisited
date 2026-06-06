@@ -171,7 +171,13 @@ enum class EFxBlend     : uint8_t { Alpha = 0, Additive = 1, AdditiveStraight = 
 // TestNoWrite is the standard transparent path; None is for always-on-top.
 enum class EFxDepthMode : uint8_t { TestNoWrite = 0, None = 1, TestWrite = 2 };
 enum class EFxLightMode : uint8_t { Unlit = 0, LitFlat = 1 };
-enum class EFxDebugMode : uint8_t { Normal = 0, SolidColor = 1, FullTexture = 2, CurrentFrame = 3 };
+enum class EFxDebugMode : uint8_t { Normal = 0, SolidColor = 1, FullTexture = 2, CurrentFrame = 3, Wireframe = 4 };
+
+// Global wireframe override — when true, every FX submit (Billboard /
+// Particle / Strip) renders as a thin quad outline regardless of its
+// per-instance debug_mode. Set from CLI --vfx-wireframe at startup.
+// Useful for verifying rotation, projection, screen-space distortion etc.
+extern bool g_fx_wireframe_override;
 
 // Per-billboard / per-particle quad orientation. Standard particle-engine
 // knob (cf. Unity Billboard / Stretched / Horizontal / Vertical / Mesh

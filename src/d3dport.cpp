@@ -365,4 +365,74 @@ void RenderObject(TRenderer&  renderer,
                  g_current_blend, inst_world, 0.0f);
 }
 
+// --------------------------------------------------------------------------
+// RenderObjectSpinning — camera-facing billboard with per-instance
+// in-plane rotation. Minimal shim extension for X21 TFizzleEffect.
+// Routes to SubmitFxParticle (ScreenAligned orientation + rotation_rad).
+// The rotation spins the sprite around the camera-Z axis (in screen
+// plane), which is what "particle sparkle spinning" looks like in the
+// original game. WorldXY would lay the quad flat on the ground.
+// --------------------------------------------------------------------------
+void RenderObjectSpinning(TRenderer&     renderer,
+                          const Obj&     obj,
+                          float          rotation_rad,
+                          TTextureHandle texture,
+                          const Matrix*  inst_world)
+{
+    // Resolve world position: inst_world * obj.pos (same as ScreenAligned path).
+    float wp[3];
+    if (inst_world)
+    {
+        for (int32_t r = 0; r < 3; ++r)
+        {
+            wp[r] = inst_world->m[r * 4 + 0] * obj.pos[0]
+                  + inst_world->m[r * 4 + 1] * obj.pos[1]
+                  + inst_world->m[r * 4 + 2] * obj.pos[2]
+                  + inst_world->m[r * 4 + 3];
+        }
+    }
+    else
+    {
+        wp[0] = obj.pos[0];
+        wp[1] = obj.pos[1];
+        wp[2] = obj.pos[2];
+    }
+
+    SParticleDrawItem item = {};
+    item.world_pos[0] = wp[0];
+    item.world_pos[1] = wp[1];
+    item.world_pos[2] = wp[2];
+    item.size_wu[0]   = obj.scl[0];
+    item.size_wu[1]   = obj.scl[1];
+    item.rotation_rad = rotation_rad;
+
+    // Per-vertex UV sub-rect (OBJ3D_VERTS / Flag_Verts).
+    if (obj.flags & Flag_Verts)
+    {
+        item.uv_rect[0] = obj.lverts[0].tu;
+        item.uv_rect[1] = obj.lverts[0].tv;
+        item.uv_rect[2] = obj.lverts[3].tu - obj.lverts[0].tu;
+        item.uv_rect[3] = obj.lverts[3].tv - obj.lverts[0].tv;
+    }
+    // else uv_rect stays (0,0,1,1) — full texture.
+
+    item.color_rgba[0] = obj.diffuse[0];
+    item.color_rgba[1] = obj.diffuse[1];
+    item.color_rgba[2] = obj.diffuse[2];
+    item.color_rgba[3] = obj.diffuse[3];
+
+    item.key.texture     = texture;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    item.key.blend       = uint8_t(
+        g_current_blend == BlendMode::Additive
+            ? EFxBlend::AdditiveStraight
+            : EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = EFxDebugMode::Normal;
+
+    renderer.SubmitFxParticle(item);
+}
+
 } // namespace d3d

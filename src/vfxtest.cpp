@@ -69,6 +69,126 @@ namespace fountain_shim {
     void   Destroy(State*);
 }
 
+// Second shim port: TParticle3DAnimator ("sparks") — combat-spark burst.
+// Source: src/effects/sparks.cpp. Snapshot effect_old.cpp:4944-4986 +
+// caller params at character.cpp:2290-2313.
+namespace sparks_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin, int32_t sub_obj);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   Destroy(State*);
+}
+
+// Third shim port: TFizzleEffect — spell-fail dust puff. WorldXY-tipped
+// billboards with per-particle in-plane spin (first use of
+// d3d::RenderObjectSpinning). Source: src/effects/fizzle.cpp.
+namespace fizzle_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   Destroy(State*);
+}
+
+// Fan-out wave 1 — four sonnet-ported shim effects.
+namespace blood_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin, int32_t hangle, int32_t num,
+                 int32_t maxsize, int32_t height);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   Destroy(State*);
+}
+namespace burn_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   Destroy(State*);
+}
+namespace iced_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   SubmitWorld(State*);
+    void   Destroy(State*);
+}
+namespace fireflash_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin, const float* anchor_world_pos, float facing_byte);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   Destroy(State*);
+    bool   IsAlive(const State*);
+}
+
+// Fan-out wave 2 — three sonnet-ported shim effects.
+namespace fireswarm_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   SubmitWorld(State*);
+    bool   IsAlive(const State*);
+    void   Destroy(State*);
+}
+namespace icebolt_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   SubmitWorld(State*);
+    void   Destroy(State*);
+    bool   IsAlive(const State*);
+}
+namespace fireball_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin, float facing_deg);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   SubmitWorld(State*);
+    void   Destroy(State*);
+    bool   IsAlive(const State*);
+}
+
+// Fan-out wave 3 — four sonnet-ported shim effects.
+namespace flame_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   Destroy(State*);
+}
+namespace flamedisc_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   SubmitWorld(State*);
+    bool   IsAlive(const State*);
+    void   Destroy(State*);
+}
+namespace faultfire_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   SubmitWorld(State*);
+    void   Destroy(State*);
+    bool   IsAlive(const State*);
+}
+namespace firecolumn_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin, float facing_byte);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   SubmitWorld(State*);
+    void   Destroy(State*);
+    bool   IsAlive(const State*);
+}
+
 namespace {
 
 // =========================================================================
@@ -3599,6 +3719,419 @@ void FountainShimSubmit(void* cp, EFxDebugMode /*dbg*/)
     }
 }
 
+// -------------------------------------------------------------------------
+// Second SHIM-validation port: TParticle3DAnimator ("sparks") — combat
+// burst. Source: src/effects/sparks.cpp. Snapshot is a one-shot ballistic
+// emitter (15-25 particles, gravity 0.25, lifetime 20-40 ticks, 2-step
+// motion-streak trail per particle).
+// -------------------------------------------------------------------------
+struct SSparksShimCtx {
+    ::sparks_shim::State* state = nullptr;
+};
+
+template <int32_t kSubObj>
+void* SparksShimSpawn(const S3DPoint& origin)
+{
+    auto* c = new SSparksShimCtx();
+    c->state = sparks_shim::Spawn(origin, kSubObj);
+    if (!c->state)
+        log_warn("[vfx] sparks_shim::Spawn(sub_obj=%d) returned null", kSubObj);
+    return c;
+}
+
+void SparksShimDestroy(void* cp)
+{
+    auto* c = static_cast<SSparksShimCtx*>(cp);
+    if (c) {
+        sparks_shim::Destroy(c->state);
+        delete c;
+    }
+}
+
+void SparksShimSubmit(void* cp, EFxDebugMode /*dbg*/)
+{
+    auto* c = static_cast<SSparksShimCtx*>(cp);
+    if (c && c->state) {
+        sparks_shim::Tick(c->state);
+        sparks_shim::Submit(c->state);
+    }
+}
+
+// -------------------------------------------------------------------------
+// Third SHIM-validation port: TFizzleEffect — spell-fail dust puff.
+// First port to exercise d3d::RenderObjectSpinning (WorldXY ground-tip
+// billboard + per-particle in-plane rotation). Source: src/effects/fizzle.cpp.
+// -------------------------------------------------------------------------
+struct SFizzleShimCtx {
+    ::fizzle_shim::State* state = nullptr;
+};
+
+void* FizzleShimSpawn(const S3DPoint& origin)
+{
+    auto* c = new SFizzleShimCtx();
+    c->state = fizzle_shim::Spawn(origin);
+    if (!c->state)
+        log_warn("[vfx] fizzle_shim::Spawn returned null");
+    return c;
+}
+
+void FizzleShimDestroy(void* cp)
+{
+    auto* c = static_cast<SFizzleShimCtx*>(cp);
+    if (c) {
+        fizzle_shim::Destroy(c->state);
+        delete c;
+    }
+}
+
+void FizzleShimSubmit(void* cp, EFxDebugMode /*dbg*/)
+{
+    auto* c = static_cast<SFizzleShimCtx*>(cp);
+    if (c && c->state) {
+        fizzle_shim::Tick(c->state);
+        fizzle_shim::Submit(c->state);
+    }
+}
+
+// -------------------------------------------------------------------------
+// Fan-out wave 1 ports: blood / burn / iced / fireflash.
+// Each context wraps a State* from the corresponding src/effects/<name>.cpp.
+// -------------------------------------------------------------------------
+
+struct SBloodShimCtx { ::blood_shim::State* state = nullptr; };
+void* BloodShimSpawn(const S3DPoint& origin) {
+    auto* c = new SBloodShimCtx();
+    // hangle=128 (180° from victim front), num=3 mid-burst, maxsize=2 all sizes,
+    // height=40 attack height — per forensics B01 §3 caller defaults.
+    c->state = blood_shim::Spawn(origin, /*hangle=*/128, /*num=*/3,
+                                 /*maxsize=*/2, /*height=*/40);
+    if (!c->state) log_warn("[vfx] blood_shim::Spawn returned null");
+    return c;
+}
+void BloodShimDestroy(void* cp) {
+    auto* c = static_cast<SBloodShimCtx*>(cp);
+    if (c) { blood_shim::Destroy(c->state); delete c; }
+}
+void BloodShimSubmit(void* cp, EFxDebugMode /*dbg*/) {
+    auto* c = static_cast<SBloodShimCtx*>(cp);
+    if (c && c->state) { blood_shim::Tick(c->state); blood_shim::Submit(c->state); }
+}
+
+struct SBurnShimCtx { ::burn_shim::State* state = nullptr; };
+void* BurnShimSpawn(const S3DPoint& origin) {
+    auto* c = new SBurnShimCtx();
+    c->state = burn_shim::Spawn(origin);
+    if (!c->state) log_warn("[vfx] burn_shim::Spawn returned null");
+    return c;
+}
+void BurnShimDestroy(void* cp) {
+    auto* c = static_cast<SBurnShimCtx*>(cp);
+    if (c) { burn_shim::Destroy(c->state); delete c; }
+}
+void BurnShimSubmit(void* cp, EFxDebugMode /*dbg*/) {
+    auto* c = static_cast<SBurnShimCtx*>(cp);
+    if (c && c->state) { burn_shim::Tick(c->state); burn_shim::Submit(c->state); }
+}
+
+// I22 Iced: WorldMesh-only. submit ticks; submit_world draws (must run inside
+// the renderer's world-draw scope, after BeginTilePass).
+struct SIcedShimCtx { ::iced_shim::State* state = nullptr; };
+void* IcedShimSpawn(const S3DPoint& origin) {
+    auto* c = new SIcedShimCtx();
+    c->state = iced_shim::Spawn(origin);
+    if (!c->state) log_warn("[vfx] iced_shim::Spawn returned null");
+    return c;
+}
+void IcedShimDestroy(void* cp) {
+    auto* c = static_cast<SIcedShimCtx*>(cp);
+    if (c) { iced_shim::Destroy(c->state); delete c; }
+}
+void IcedShimSubmit(void* cp, EFxDebugMode /*dbg*/) {
+    auto* c = static_cast<SIcedShimCtx*>(cp);
+    if (c && c->state) { iced_shim::Tick(c->state); iced_shim::Submit(c->state); }
+}
+void IcedShimSubmitWorld(void* cp, EFxDebugMode /*dbg*/) {
+    auto* c = static_cast<SIcedShimCtx*>(cp);
+    if (c && c->state) iced_shim::SubmitWorld(c->state);
+}
+
+// F-FireFlash: WorldMesh + auto-respawn after the 100-frame effect kills itself.
+struct SFireFlashShimCtx {
+    ::fireflash_shim::State* state  = nullptr;
+    S3DPoint                 origin = {0, 0, 0};
+    float                    gap    = 0.0f;
+};
+void* FireFlashShimSpawn(const S3DPoint& origin) {
+    auto* c = new SFireFlashShimCtx();
+    c->origin = origin;
+    c->state  = fireflash_shim::Spawn(origin, nullptr, 0.0f);
+    if (!c->state) log_warn("[vfx] fireflash_shim::Spawn returned null");
+    return c;
+}
+void FireFlashShimDestroy(void* cp) {
+    auto* c = static_cast<SFireFlashShimCtx*>(cp);
+    if (c) { fireflash_shim::Destroy(c->state); delete c; }
+}
+void FireFlashShimTick(void* cp, EFxDebugMode /*dbg*/) {
+    auto* c = static_cast<SFireFlashShimCtx*>(cp);
+    if (!c) return;
+    // Effect self-kills at framenum >= 100 by clearing state->alive (state stays
+    // non-null). Auto-respawn after a short gap so the test loop is continuous.
+    if (!c->state || !fireflash_shim::IsAlive(c->state)) {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f) {
+            fireflash_shim::Destroy(c->state);
+            c->state = fireflash_shim::Spawn(c->origin, nullptr, 0.0f);
+            c->gap   = 1.0f;
+        }
+        return;
+    }
+    fireflash_shim::Tick(c->state);
+}
+void FireFlashShimSubmitWorld(void* cp, EFxDebugMode /*dbg*/) {
+    auto* c = static_cast<SFireFlashShimCtx*>(cp);
+    if (c && c->state) fireflash_shim::Submit(c->state);
+}
+
+// -------------------------------------------------------------------------
+// Fan-out wave 2 ports: fireswarm / icebolt / fireball.
+// All three are WorldMesh effects with auto-respawn after self-kill.
+// -------------------------------------------------------------------------
+
+struct SFireSwarmShimCtx {
+    ::fireswarm_shim::State* state = nullptr;
+    S3DPoint origin = {};
+    float    gap    = 0.0f;
+};
+void* FireSwarmShimSpawn(const S3DPoint& origin) {
+    auto* c = new SFireSwarmShimCtx();
+    c->origin = origin;
+    c->state  = fireswarm_shim::Spawn(origin);
+    if (!c->state) log_warn("[vfx] fireswarm_shim::Spawn returned null");
+    return c;
+}
+void FireSwarmShimDestroy(void* cp) {
+    auto* c = static_cast<SFireSwarmShimCtx*>(cp);
+    if (c) { fireswarm_shim::Destroy(c->state); delete c; }
+}
+void FireSwarmShimSubmit(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFireSwarmShimCtx*>(cp);
+    if (!c) return;
+    if (!c->state || !fireswarm_shim::IsAlive(c->state)) {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f) {
+            fireswarm_shim::Destroy(c->state);
+            c->state = fireswarm_shim::Spawn(c->origin);
+            c->gap   = 1.0f;
+        }
+        return;
+    }
+    fireswarm_shim::Tick(c->state);
+}
+void FireSwarmShimSubmitWorld(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFireSwarmShimCtx*>(cp);
+    if (c && c->state && fireswarm_shim::IsAlive(c->state))
+        fireswarm_shim::SubmitWorld(c->state);
+}
+
+struct SIceBoltShimCtx {
+    ::icebolt_shim::State* state = nullptr;
+    S3DPoint origin = {};
+    float    gap    = 0.0f;
+};
+void* IceBoltShimSpawn(const S3DPoint& origin) {
+    auto* c = new SIceBoltShimCtx();
+    c->origin = origin;
+    c->state  = icebolt_shim::Spawn(origin);
+    if (!c->state) log_warn("[vfx] icebolt_shim::Spawn returned null");
+    return c;
+}
+void IceBoltShimDestroy(void* cp) {
+    auto* c = static_cast<SIceBoltShimCtx*>(cp);
+    if (c) { icebolt_shim::Destroy(c->state); delete c; }
+}
+void IceBoltShimSubmit(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SIceBoltShimCtx*>(cp);
+    if (!c) return;
+    if (!c->state || !icebolt_shim::IsAlive(c->state)) {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f) {
+            icebolt_shim::Destroy(c->state);
+            c->state = icebolt_shim::Spawn(c->origin);
+            // Shorter respawn gap so the test rig reads as continuous spray;
+            // the visible "pause" otherwise masks the frost/snow distribution.
+            c->gap   = 0.3f;
+        }
+        return;
+    }
+    icebolt_shim::Tick(c->state);
+}
+void IceBoltShimSubmitWorld(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SIceBoltShimCtx*>(cp);
+    if (c && c->state && icebolt_shim::IsAlive(c->state))
+        icebolt_shim::SubmitWorld(c->state);
+}
+
+struct SFireBallShimCtx {
+    ::fireball_shim::State* state = nullptr;
+    S3DPoint origin = {};
+    float    gap    = 0.0f;
+};
+void* FireBallShimSpawn(const S3DPoint& origin) {
+    auto* c = new SFireBallShimCtx();
+    c->origin = origin;
+    c->state  = fireball_shim::Spawn(origin, 0.0f);
+    if (!c->state) log_warn("[vfx] fireball_shim::Spawn returned null");
+    return c;
+}
+void FireBallShimDestroy(void* cp) {
+    auto* c = static_cast<SFireBallShimCtx*>(cp);
+    if (c) { fireball_shim::Destroy(c->state); delete c; }
+}
+void FireBallShimSubmit(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFireBallShimCtx*>(cp);
+    if (!c) return;
+    if (!c->state || !fireball_shim::IsAlive(c->state)) {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f) {
+            fireball_shim::Destroy(c->state);
+            c->state = fireball_shim::Spawn(c->origin, 0.0f);
+            c->gap   = 2.0f;
+        }
+        return;
+    }
+    fireball_shim::Tick(c->state);
+    fireball_shim::Submit(c->state);
+}
+void FireBallShimSubmitWorld(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFireBallShimCtx*>(cp);
+    if (c && c->state && fireball_shim::IsAlive(c->state))
+        fireball_shim::SubmitWorld(c->state);
+}
+
+// -------------------------------------------------------------------------
+// Fan-out wave 3 ports: flame / flamedisc / faultfire / firecolumn.
+// -------------------------------------------------------------------------
+
+struct SFlameShimCtx {
+    ::flame_shim::State* state = nullptr;
+    S3DPoint origin = {};
+};
+void* FlameShimSpawn(const S3DPoint& origin) {
+    auto* c = new SFlameShimCtx();
+    c->origin = origin;
+    c->state  = flame_shim::Spawn(origin);
+    if (!c->state) log_warn("[vfx] flame_shim::Spawn returned null");
+    return c;
+}
+void FlameShimDestroy(void* cp) {
+    auto* c = static_cast<SFlameShimCtx*>(cp);
+    if (c) { flame_shim::Destroy(c->state); delete c; }
+}
+// Continuous loop, no self-kill, no auto-respawn.
+void FlameShimSubmit(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFlameShimCtx*>(cp);
+    if (c && c->state) { flame_shim::Tick(c->state); flame_shim::Submit(c->state); }
+}
+
+struct SFlameDiscShimCtx {
+    ::flamedisc_shim::State* state = nullptr;
+    S3DPoint origin = {};
+    float    gap    = 0.0f;
+};
+void* FlameDiscShimSpawn(const S3DPoint& origin) {
+    auto* c = new SFlameDiscShimCtx();
+    c->origin = origin;
+    c->state  = flamedisc_shim::Spawn(origin);
+    if (!c->state) log_warn("[vfx] flamedisc_shim::Spawn returned null");
+    return c;
+}
+void FlameDiscShimDestroy(void* cp) {
+    auto* c = static_cast<SFlameDiscShimCtx*>(cp);
+    if (c) { flamedisc_shim::Destroy(c->state); delete c; }
+}
+void FlameDiscShimSubmit(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFlameDiscShimCtx*>(cp);
+    if (!c) return;
+    if (!c->state || !flamedisc_shim::IsAlive(c->state)) {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f) {
+            flamedisc_shim::Destroy(c->state);
+            c->state = flamedisc_shim::Spawn(c->origin);
+            c->gap   = 1.0f;
+        }
+        return;
+    }
+    flamedisc_shim::Tick(c->state);
+}
+void FlameDiscShimSubmitWorld(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFlameDiscShimCtx*>(cp);
+    if (c && c->state && flamedisc_shim::IsAlive(c->state))
+        flamedisc_shim::SubmitWorld(c->state);
+}
+
+struct SFaultFireShimCtx {
+    ::faultfire_shim::State* state = nullptr;
+    S3DPoint origin = {};
+};
+void* FaultFireShimSpawn(const S3DPoint& origin) {
+    auto* c = new SFaultFireShimCtx();
+    c->origin = origin;
+    c->state  = faultfire_shim::Spawn(origin);
+    if (!c->state) log_warn("[vfx] faultfire_shim::Spawn returned null");
+    return c;
+}
+void FaultFireShimDestroy(void* cp) {
+    auto* c = static_cast<SFaultFireShimCtx*>(cp);
+    if (c) { faultfire_shim::Destroy(c->state); delete c; }
+}
+// Persistent effect, no respawn needed.
+void FaultFireShimSubmit(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFaultFireShimCtx*>(cp);
+    if (c && c->state) { faultfire_shim::Tick(c->state); faultfire_shim::Submit(c->state); }
+}
+void FaultFireShimSubmitWorld(void* /*cp*/, EFxDebugMode) {
+    // No-op: FaultFire uses billboard path only.
+}
+
+struct SFireColumnShimCtx {
+    ::firecolumn_shim::State* state = nullptr;
+    S3DPoint origin = {};
+    float    gap    = 0.0f;
+};
+void* FireColumnShimSpawn(const S3DPoint& origin) {
+    auto* c = new SFireColumnShimCtx();
+    c->origin = origin;
+    c->state  = firecolumn_shim::Spawn(origin, 0.0f);
+    if (!c->state) log_warn("[vfx] firecolumn_shim::Spawn returned null");
+    return c;
+}
+void FireColumnShimDestroy(void* cp) {
+    auto* c = static_cast<SFireColumnShimCtx*>(cp);
+    if (c) { firecolumn_shim::Destroy(c->state); delete c; }
+}
+void FireColumnShimTick(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFireColumnShimCtx*>(cp);
+    if (!c) return;
+    if (!c->state || !firecolumn_shim::IsAlive(c->state)) {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f) {
+            firecolumn_shim::Destroy(c->state);
+            c->state = firecolumn_shim::Spawn(c->origin, 0.0f);
+            c->gap   = 1.5f;
+        }
+        return;
+    }
+    firecolumn_shim::Tick(c->state);
+}
+void FireColumnShimSubmitWorld(void* cp, EFxDebugMode) {
+    auto* c = static_cast<SFireColumnShimCtx*>(cp);
+    if (c && c->state && firecolumn_shim::IsAlive(c->state)) {
+        firecolumn_shim::Submit(c->state);
+        firecolumn_shim::SubmitWorld(c->state);
+    }
+}
+
 // =========================================================================
 // * Wave-4 retail-variant harness helpers                                  *
 // *   Each variant entry reuses an existing _Bespoke animator with a       *
@@ -5133,6 +5666,145 @@ struct SVfxTestBootstrap {
         fountain_shim_entry.submit        = [](void* c, EFxDebugMode d) { FountainShimSubmit(c, d); };
         fountain_shim_entry.destroy       = [](void* c) { FountainShimDestroy(c); };
         VfxTest::DeferredRegister(fountain_shim_entry);
+
+        // Second shim-validation port — TParticle3DAnimator ("sparks")
+        // via src/effects/sparks.cpp. One-shot combat burst, ballistic
+        // with gravity. Forensics: SPARKS_TSparkAnimator.md (retail-
+        // confirmed with 3 divergences, all using retail values).
+        VfxTest::SEffect sparks_shim_entry = {};
+        sparks_shim_entry.id            = "TSparkAnimator_SHIM";
+        sparks_shim_entry.family        = "blood";
+        sparks_shim_entry.pipeline      = "FB";
+        sparks_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        sparks_shim_entry.factory       = [](const S3DPoint& o) -> void* { return SparksShimSpawn<0>(o); };
+        sparks_shim_entry.submit        = [](void* c, EFxDebugMode d) { SparksShimSubmit(c, d); };
+        sparks_shim_entry.destroy       = [](void* c) { SparksShimDestroy(c); };
+        VfxTest::DeferredRegister(sparks_shim_entry);
+
+        // Third shim-validation port — TFizzleEffect spell-fail puff
+        // via src/effects/fizzle.cpp. WorldXY ground-tipped billboards
+        // with per-particle in-plane spin (first use of
+        // d3d::RenderObjectSpinning). 3 colored systems
+        // (blue/purple/red) emitting ~22 dust puffs over 15 ticks.
+        // Forensics: X21_TFizzleEffect.md (retail-partial).
+        VfxTest::SEffect fizzle_shim_entry = {};
+        fizzle_shim_entry.id            = "TFizzleAnimator_SHIM";
+        fizzle_shim_entry.family        = "magic";
+        fizzle_shim_entry.pipeline      = "PE";
+        fizzle_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fizzle_shim_entry.factory       = [](const S3DPoint& o) -> void* { return FizzleShimSpawn(o); };
+        fizzle_shim_entry.submit        = [](void* c, EFxDebugMode d) { FizzleShimSubmit(c, d); };
+        fizzle_shim_entry.destroy       = [](void* c) { FizzleShimDestroy(c); };
+        VfxTest::DeferredRegister(fizzle_shim_entry);
+
+        // Fan-out wave 1 (sonnet-ported) — B01 blood, M04 burn, I22 iced, FireFlash.
+        VfxTest::SEffect blood_shim_entry = {};
+        blood_shim_entry.id            = "TBloodAnimator_SHIM";
+        blood_shim_entry.family        = "blood";
+        blood_shim_entry.pipeline      = "FB";
+        blood_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        blood_shim_entry.factory       = [](const S3DPoint& o) -> void* { return BloodShimSpawn(o); };
+        blood_shim_entry.submit        = [](void* c, EFxDebugMode d) { BloodShimSubmit(c, d); };
+        blood_shim_entry.destroy       = [](void* c) { BloodShimDestroy(c); };
+        VfxTest::DeferredRegister(blood_shim_entry);
+
+        VfxTest::SEffect burn_shim_entry = {};
+        burn_shim_entry.id            = "TBurnAnimator_SHIM";
+        burn_shim_entry.family        = "magic";
+        burn_shim_entry.pipeline      = "FB";
+        burn_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        burn_shim_entry.factory       = [](const S3DPoint& o) -> void* { return BurnShimSpawn(o); };
+        burn_shim_entry.submit        = [](void* c, EFxDebugMode d) { BurnShimSubmit(c, d); };
+        burn_shim_entry.destroy       = [](void* c) { BurnShimDestroy(c); };
+        VfxTest::DeferredRegister(burn_shim_entry);
+
+        VfxTest::SEffect iced_shim_entry = {};
+        iced_shim_entry.id            = "TIcedAnimator_SHIM";
+        iced_shim_entry.family        = "magic";
+        iced_shim_entry.pipeline      = "IM";
+        iced_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        iced_shim_entry.factory       = [](const S3DPoint& o) -> void* { return IcedShimSpawn(o); };
+        iced_shim_entry.submit        = [](void* c, EFxDebugMode d) { IcedShimSubmit(c, d); };
+        iced_shim_entry.submit_world  = [](void* c, EFxDebugMode d) { IcedShimSubmitWorld(c, d); };
+        iced_shim_entry.destroy       = [](void* c) { IcedShimDestroy(c); };
+        VfxTest::DeferredRegister(iced_shim_entry);
+
+        VfxTest::SEffect fireflash_shim_entry = {};
+        fireflash_shim_entry.id            = "TFireFlashAnimator_SHIM";
+        fireflash_shim_entry.family        = "fire";
+        fireflash_shim_entry.pipeline      = "FB+IM";
+        fireflash_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fireflash_shim_entry.factory       = [](const S3DPoint& o) -> void* { return FireFlashShimSpawn(o); };
+        fireflash_shim_entry.submit        = [](void* c, EFxDebugMode d) { FireFlashShimTick(c, d); };
+        fireflash_shim_entry.submit_world  = [](void* c, EFxDebugMode d) { FireFlashShimSubmitWorld(c, d); };
+        fireflash_shim_entry.destroy       = [](void* c) { FireFlashShimDestroy(c); };
+        VfxTest::DeferredRegister(fireflash_shim_entry);
+
+        // Fan-out wave 2 — F05 fireswarm, I21 icebolt, F07 fireball.
+        VfxTest::SEffect fireswarm_shim_entry = {};
+        fireswarm_shim_entry.id            = "TFireSwarmAnimator_SHIM";
+        fireswarm_shim_entry.family        = "fire";
+        fireswarm_shim_entry.pipeline      = "IM";
+        fireswarm_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fireswarm_shim_entry.factory       = [](const S3DPoint& o) -> void* { return FireSwarmShimSpawn(o); };
+        fireswarm_shim_entry.submit        = [](void* c, EFxDebugMode d) { FireSwarmShimSubmit(c, d); };
+        fireswarm_shim_entry.submit_world  = [](void* c, EFxDebugMode d) { FireSwarmShimSubmitWorld(c, d); };
+        fireswarm_shim_entry.destroy       = [](void* c) { FireSwarmShimDestroy(c); };
+        VfxTest::DeferredRegister(fireswarm_shim_entry);
+
+        VfxTest::SEffect icebolt_shim_entry = {};
+        icebolt_shim_entry.id            = "TIceBoltAnimator_SHIM";
+        icebolt_shim_entry.family        = "ice";
+        icebolt_shim_entry.pipeline      = "FB+IM";
+        icebolt_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        icebolt_shim_entry.factory       = [](const S3DPoint& o) -> void* { return IceBoltShimSpawn(o); };
+        icebolt_shim_entry.submit        = [](void* c, EFxDebugMode d) { IceBoltShimSubmit(c, d); };
+        icebolt_shim_entry.submit_world  = [](void* c, EFxDebugMode d) { IceBoltShimSubmitWorld(c, d); };
+        icebolt_shim_entry.destroy       = [](void* c) { IceBoltShimDestroy(c); };
+        VfxTest::DeferredRegister(icebolt_shim_entry);
+
+        VfxTest::SEffect fireball_shim_entry = {};
+        fireball_shim_entry.id            = "TFireBallAnimator_SHIM";
+        fireball_shim_entry.family        = "magic";
+        fireball_shim_entry.pipeline      = "FB+IM";
+        fireball_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        fireball_shim_entry.factory       = [](const S3DPoint& o) -> void* { return FireBallShimSpawn(o); };
+        fireball_shim_entry.submit        = [](void* c, EFxDebugMode d) { FireBallShimSubmit(c, d); };
+        fireball_shim_entry.submit_world  = [](void* c, EFxDebugMode d) { FireBallShimSubmitWorld(c, d); };
+        fireball_shim_entry.destroy       = [](void* c) { FireBallShimDestroy(c); };
+        VfxTest::DeferredRegister(fireball_shim_entry);
+
+        // Fan-out wave 3 — F01 flame, F11 flamedisc, F06 faultfire, F09 firecolumn.
+        VfxTest::SEffect flame_shim_entry = {};
+        flame_shim_entry.id            = "TFlameAnimator_SHIM";
+        flame_shim_entry.family        = "fire";
+        flame_shim_entry.pipeline      = "FB";
+        flame_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        flame_shim_entry.factory       = [](const S3DPoint& o) -> void* { return FlameShimSpawn(o); };
+        flame_shim_entry.submit        = [](void* c, EFxDebugMode d) { FlameShimSubmit(c, d); };
+        flame_shim_entry.destroy       = [](void* c) { FlameShimDestroy(c); };
+        VfxTest::DeferredRegister(flame_shim_entry);
+
+        // F11 TFlameDiscEffect: shim port exists at src/effects/flamedisc.cpp
+        // but the asset Magic\FlameDisc.I3D was dropped from the shipped
+        // data/imagery.rvi before final retail ship (per F11 forensics §2.1).
+        // No I3D to load => not registered. Re-enable when asset is recovered.
+
+        VfxTest::SEffect faultfire_shim_entry = {};
+        faultfire_shim_entry.id            = "TFaultFireAnimator_SHIM";
+        faultfire_shim_entry.family        = "fire";
+        faultfire_shim_entry.pipeline      = "FB";
+        faultfire_shim_entry.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        faultfire_shim_entry.factory       = [](const S3DPoint& o) -> void* { return FaultFireShimSpawn(o); };
+        faultfire_shim_entry.submit        = [](void* c, EFxDebugMode d) { FaultFireShimSubmit(c, d); };
+        faultfire_shim_entry.submit_world  = [](void* c, EFxDebugMode d) { FaultFireShimSubmitWorld(c, d); };
+        faultfire_shim_entry.destroy       = [](void* c) { FaultFireShimDestroy(c); };
+        VfxTest::DeferredRegister(faultfire_shim_entry);
+
+        // F09 TFireColumnEffect: shim port exists at src/effects/firecolumn.cpp
+        // but the asset Magic\FireColumn.I3D is absent from shipped
+        // data/imagery.rvi (per F11 forensics §2.1 — sister of FlameDisc).
+        // No I3D to load => not registered. Re-enable when asset is recovered.
 
         VfxTest::SEffect cyan_fountain_bespoke = {};
         cyan_fountain_bespoke.id            = "TCyanFountainAnimator_BESPOKE";
