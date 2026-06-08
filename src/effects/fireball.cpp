@@ -20,9 +20,9 @@
 // *  LIGHTING CATEGORY: self-lit (fire IS the light emitter).             *
 // *  Blend = Alpha for ball/glow/trail/burst/spark (forensics §7 cites    *
 // *  SetBlendState() = MODULATE + SRCALPHA/INVSRCALPHA). Ring blend =     *
-// *  Additive on a warm orange tint (matches the bespoke port's choice    *
-// *  for an emissive shockwave look). Black-keyed atlas supplies          *
-// *  transparency; no DoLighting call in original render body.            *
+// *  Alpha too: TShockAnimator explicitly sets SRCALPHA/INVSRCALPHA.      *
+// *  Black-keyed atlas supplies transparency; no DoLighting call in       *
+// *  original render body.                                                *
 // *                                                                       *
 // *  RENDER PIPELINE: FB particle (SubmitFxParticle with                  *
 // *  EFxBillboardOrientation::ScreenAligned + per-instance rotation_rad)  *
@@ -54,8 +54,8 @@
 // *                                                                       *
 // *  DELIVERY (full Phase A + B + C — all visible passes implemented):    *
 // *  Phase A (DONE): LAUNCH→FLY ball + glow + spark trail                 *
-// *  Phase B (DONE): impact burst + shockwave ring (uniform-tint additive *
-// *    cylinder, no per-vertex 4-stop gradient — matches bespoke choice)  *
+// *  Phase B (DONE): impact burst + shockwave ring (split-band Alpha      *
+// *    cylinder approximating TShockAnimator's 4-stop vertex gradient)     *
 // *  Phase C (DONE): 10-slot decaying mesh trail                          *
 // *                                                                       *
 // *  TEST HARNESS NOTES:                                                  *
@@ -72,7 +72,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -85,11 +84,10 @@
 
 extern TRenderer* Renderer;
 
-// Forward decl: ExtractSubMeshTextureSlot lives in 3dimage.cpp. Mirrors the
-// declaration d3dport.cpp uses so we can directly bind a chosen albedo to
-// cylinder01 (which has texslot=0 = no authored texture). We override the
-// albedo with the fire atlas so the ring has texture content to sample
-// rather than rendering as a solid uniform color.
+// Forward decl: ExtractSubMeshTextureSlot lives in 3dimage.cpp. We use it to
+// extract cylinder01 geometry, bind it to a white albedo, and supply the ring
+// color through helper-mesh material state, matching TShockAnimator's
+// textureless path.
 struct SMeshVertex;
 extern bool ExtractSubMeshTextureSlot(T3DImagery* img3d,
                                       int32_t obj_num,
@@ -133,11 +131,22 @@ constexpr float   kSparkFlickerSize  = 1.75f; // missileeffect.cpp:619
 constexpr float   kRingInitScale     = 25.0f;
 constexpr float   kRingGrowFactor    = 1.085f;
 constexpr float   kRingMaxSize       = 120.0f;
+constexpr int32_t kRingColorStopCount= 4;
+constexpr int32_t kRingSegments      = 24;
+constexpr int32_t kRingBandCount     = kRingColorStopCount - 1;
+constexpr float   kRingStops[kRingColorStopCount][4] = {
+    {0.62f, 0.06f, 0.05f, 0.00f},
+    {0.78f, 0.24f, 0.06f, 1.00f},
+    {0.97f, 0.61f, 0.06f, 0.75f},
+    {0.99f, 0.83f, 0.52f, 0.00f},
+};
 
 // --- 4×4 atlas UV layout (missileeffect.cpp:763-764) [snapshot-only] ---
 // u = (frame % 4) * 0.25,  v = (frame / 4) * 0.25,  cell = 0.25 × 0.25
 constexpr float   kAtlasCellSize     = 0.25f;
 constexpr int32_t kAtlasCols         = 4;
+constexpr int32_t kBallAtlasPixels   = 256;   // newfireball texture[0]
+constexpr int32_t kSparkTexturePixels= 64;    // newfireball texture[1]
 
 // --- Billboard base size in world units (engine adaptation) ---
 // SubmitFxParticle.size_wu is full WU on-screen extent (not authored
@@ -171,6 +180,7 @@ constexpr int32_t kLaunchTicks       = 16;   // ~0.67 s @ 24 Hz — ball grows
 constexpr int32_t kFlyTicks          = 12;   // 0.5 s — travels 96 wu, lands in frame
 constexpr float   kFlySpeedWuPerTick = 8.0f; // matches FIREBALL_SPEED (§3)
 constexpr float   kHarnessSpawnXOff  = -96.0f; // start offset so impact lands at world origin
+constexpr uint32_t kHarnessRngSeed    = 0xF07F1EBAu; // deterministic filmstrip seed
 
 // --- Framerate-independent conversion ---
 constexpr float kTicksPerSec         = 24.0f;
@@ -185,13 +195,16 @@ constexpr int32_t kSubSpark          = 1;   // box02
 constexpr int32_t kSubRing           = 2;   // cylinder01
 
 // =========================================================================
-// snap_random — inclusive-range random matching snapshot semantics.
-// (src/revutils.cpp:1597-1613)
+// snap_random — inclusive-range deterministic random matching snapshot
+// semantics. Retail used the process RNG; this shim owns an instance-local
+// stream so repeated filmstrips are frame-comparable.
 // =========================================================================
-static int32_t snap_random(int32_t lo, int32_t hi)
+static int32_t snap_random(uint32_t& rng_state, int32_t lo, int32_t hi)
 {
     if (hi <= lo) return lo;
-    return lo + (std::rand() % (hi - lo + 1));
+    rng_state = rng_state * 1103515245u + 12345u;
+    const uint32_t r = (rng_state >> 16) & 0x7fffu;
+    return lo + int32_t(r % uint32_t(hi - lo + 1));
 }
 
 // =========================================================================
@@ -223,7 +236,7 @@ static void FillAtlasUv(int32_t frame_idx, float out_uv_rect[4])
 // NewFireBall.I3D manifest:
 //   box01    texslot=1 (1-based texfaces) → texture index 0 (256×256 atlas)
 //   box02    texslot=2 (1-based texfaces) → texture index 1 (64×64 glow)
-//   cyl01    texslot=0 (no texture) → ring uses uniform tint
+//   cyl01    texslot=0 (no texture) → split into tinted shockwave bands
 //
 // Mirrors FireBallSubObjTextureSlot at src/effect.cpp:6767-6782. The
 // texfaces[] table is 9 entries (slot 0 = no-tex, slots 1..8 = textures).
@@ -241,6 +254,58 @@ static int32_t ResolveSubObjTextureSlot(T3DImagery* img3d, int32_t sub_obj_num)
     for (int32_t s = 1; s <= 8; ++s)
         if (numtexfaces[s] > 0)
             return s - 1;     // 1-based texfaces slot → 0-based texture index
+    return -1;
+}
+
+static bool ReadTexture(T3DImagery* img3d, int32_t tex_idx, S3DTex& out)
+{
+    if (!img3d || tex_idx < 0) return false;
+    S3DTex tex = {};
+    img3d->GetTexture(tex_idx, &tex);
+    if (tex.htexture == kInvalidTexture) return false;
+    out = tex;
+    return true;
+}
+
+static bool TextureMatchesSquarePixels(const S3DTex& tex, int32_t pixels)
+{
+    return tex.htexture != kInvalidTexture &&
+           int32_t(tex.desc.width) == pixels &&
+           int32_t(tex.desc.height) == pixels;
+}
+
+static int32_t ResolveTextureByDimensions(T3DImagery* img3d,
+                                          int32_t primary_idx,
+                                          int32_t retail_idx,
+                                          int32_t expected_pixels,
+                                          S3DTex& out)
+{
+    S3DTex tex = {};
+    if (ReadTexture(img3d, primary_idx, tex) &&
+        TextureMatchesSquarePixels(tex, expected_pixels))
+    {
+        out = tex;
+        return primary_idx;
+    }
+    if (retail_idx != primary_idx &&
+        ReadTexture(img3d, retail_idx, tex) &&
+        TextureMatchesSquarePixels(tex, expected_pixels))
+    {
+        out = tex;
+        return retail_idx;
+    }
+
+    const int32_t num_tex = img3d ? img3d->NumTextures() : 0;
+    for (int32_t i = 0; i < num_tex; ++i)
+    {
+        if (i == primary_idx || i == retail_idx) continue;
+        if (ReadTexture(img3d, i, tex) &&
+            TextureMatchesSquarePixels(tex, expected_pixels))
+        {
+            out = tex;
+            return i;
+        }
+    }
     return -1;
 }
 
@@ -285,6 +350,7 @@ struct State
     FireBallData fireball;                  // the main ball
     FireBallData trail[kTrailSize];          // ring-buffer trail
     FireBallData burst[kMaxBurst];          // impact burst quads
+    int32_t      trail_valid = 0;            // recorded trail samples only
     int32_t      frame_count = kMaxFrame;
     int32_t      glow_frame  = kGlowFrame;
     int32_t      explode     = 0;            // 0=pre, 1=first-tick, -1=after
@@ -331,13 +397,92 @@ struct State
     // Framerate-independence
     float tick_accum = 0.0f;
 
+    // Deterministic test animation RNG.
+    uint32_t rng_state = kHarnessRngSeed;
+
     // Resolved asset data
     T3DImagery*    imagery       = nullptr;
     TTextureHandle box01_tex     = kInvalidTexture;  // 4×4 fire atlas
     TTextureHandle box02_tex     = kInvalidTexture;  // spark glow blob
-    MeshHandle     ring_mesh     = 0;                // cylinder01 (Phase B)
+    bool           box02_tex_verified = false;       // true only for 64×64 blob
+    MeshHandle     ring_mesh[kRingBandCount] = {};   // cylinder01 bands (Phase B)
+    int32_t        ring_band_count = 0;
     d3d::Matrix    ring_parent_mat;                  // cylinder01 authored object matrix
 };
+
+static bool ResolveSparkTexture(State* st, bool log_rebind)
+{
+    if (!st || !st->imagery) return false;
+
+    const int32_t slot = ResolveSubObjTextureSlot(st->imagery, kSubSpark);
+    const int32_t primary = (slot >= 0) ? slot : 1;
+    S3DTex tex = {};
+    const int32_t actual = ResolveTextureByDimensions(st->imagery,
+                                                      primary,
+                                                      1,
+                                                      kSparkTexturePixels,
+                                                      tex);
+    if (actual < 0)
+        return false;
+
+    if (log_rebind && st->box02_tex != tex.htexture)
+    {
+        log_info("[fireball-shim] box02 lazy rebind -> texidx=%d handle=%u %ux%u",
+                 actual, tex.htexture, tex.desc.width, tex.desc.height);
+    }
+    st->box02_tex = tex.htexture;
+    st->box02_tex_verified = true;
+    return true;
+}
+
+static bool BuildRingBandIndices(const std::vector<uint16_t>& src_indices,
+                                 int32_t band,
+                                 std::vector<uint16_t>& out)
+{
+    out.clear();
+    for (size_t i = 0; i + 2 < src_indices.size(); i += 3)
+    {
+        const int32_t g0 = int32_t(src_indices[i + 0]) / kRingSegments;
+        const int32_t g1 = int32_t(src_indices[i + 1]) / kRingSegments;
+        const int32_t g2 = int32_t(src_indices[i + 2]) / kRingSegments;
+
+        int32_t min_g = g0;
+        int32_t max_g = g0;
+        if (g1 < min_g) min_g = g1;
+        if (g2 < min_g) min_g = g2;
+        if (g1 > max_g) max_g = g1;
+        if (g2 > max_g) max_g = g2;
+
+        if (min_g == band && max_g == band + 1)
+        {
+            out.push_back(src_indices[i + 0]);
+            out.push_back(src_indices[i + 1]);
+            out.push_back(src_indices[i + 2]);
+        }
+    }
+    return !out.empty();
+}
+
+static void FillRingBandColor(int32_t band, int32_t band_count,
+                              float fade, float out_rgba[4])
+{
+    if (band_count == kRingBandCount && band >= 0 && band < kRingBandCount)
+    {
+        for (int32_t c = 0; c < 4; ++c)
+            out_rgba[c] = 0.5f * (kRingStops[band][c] + kRingStops[band + 1][c]);
+        out_rgba[3] *= fade;
+        return;
+    }
+
+    for (int32_t c = 0; c < 4; ++c)
+    {
+        float sum = 0.0f;
+        for (int32_t s = 0; s < kRingColorStopCount; ++s)
+            sum += kRingStops[s][c];
+        out_rgba[c] = sum / float(kRingColorStopCount);
+    }
+    out_rgba[3] *= fade;
+}
 
 // =========================================================================
 // CountActiveBurst / CountActiveSparks / IsTrail — death-gate helpers.
@@ -361,7 +506,9 @@ static int32_t CountActiveSparks(const State* st)
 // missileeffect.cpp:781-791
 static bool IsTrail(const State* st)
 {
-    const int32_t tail = kTrailSize - 1;
+    if (st->trail_valid <= 1)
+        return false;
+    const int32_t tail = (st->trail_valid < kTrailSize) ? st->trail_valid - 1 : kTrailSize - 1;
     if (st->trail[tail].pos[0] != st->trail[0].pos[0]) return true;
     if (st->trail[tail].pos[1] != st->trail[0].pos[1]) return true;
     if (st->trail[tail].pos[2] != st->trail[0].pos[2]) return true;
@@ -384,7 +531,7 @@ static void SpawnSparks(State* st, int32_t target_particles, int32_t chance_pct,
         if (st->sparks[i].used) continue;
 
         // effectcomp.cpp:458-459 — chance roll per spawn slot
-        if (snap_random(1, 100) > chance_pct) continue;
+        if (snap_random(st->rng_state, 1, 100) > chance_pct) continue;
 
         SparkParticle& p = st->sparks[i];
         p.used = true;
@@ -399,14 +546,14 @@ static void SpawnSparks(State* st, int32_t target_particles, int32_t chance_pct,
         p.scale_dec[0] = p.scale_dec[1] = p.scale_dec[2] = kSparkScaleDec;
 
         // effectcomp.cpp:483-508 — isotropic spread (velocity_dir=0)
-        p.velocity[0] = float(snap_random(int32_t(-vel_spread_xy), int32_t(vel_spread_xy)));
-        p.velocity[1] = float(snap_random(int32_t(-vel_spread_xy), int32_t(vel_spread_xy)));
-        p.velocity[2] = float(snap_random(int32_t(-vel_spread_z),  int32_t(vel_spread_z)));
+        p.velocity[0] = float(snap_random(st->rng_state, int32_t(-vel_spread_xy), int32_t(vel_spread_xy)));
+        p.velocity[1] = float(snap_random(st->rng_state, int32_t(-vel_spread_xy), int32_t(vel_spread_xy)));
+        p.velocity[2] = float(snap_random(st->rng_state, int32_t(-vel_spread_z),  int32_t(vel_spread_z)));
 
         p.gravity       = kSparkGravity;
-        p.life          = snap_random(kSparkMinLife, kSparkMaxLife);
+        p.life          = snap_random(st->rng_state, kSparkMinLife, kSparkMaxLife);
         p.flicker       = true;
-        p.flicker_status= snap_random(0, 1);
+        p.flicker_status= snap_random(st->rng_state, 0, 1);
         p.flicker_size  = kSparkFlickerSize;
 
         --to_spawn;
@@ -424,7 +571,7 @@ static void AnimateSparks(State* st)
         SparkParticle& p = st->sparks[i];
         if (!p.used) continue;
 
-        p.flicker_status = snap_random(0, 1);   // :383
+        p.flicker_status = snap_random(st->rng_state, 0, 1);   // :383
         --p.life;                                 // :386
         if (p.life < 0) { p.used = false; continue; } // :387-388
 
@@ -445,6 +592,9 @@ static void AnimateSparks(State* st)
 // =========================================================================
 static void Initialize(State* st)
 {
+    st->rng_state   = kHarnessRngSeed;
+    st->trail_valid = 0;
+
     // missileeffect.cpp:505 — state = LAUNCH
     st->missile_state = kStateLaunch;
     st->old_state     = kStateLaunch;
@@ -593,10 +743,12 @@ static void AnimateTick(State* st)
     st->trail[0].pos[0] += st->effect_pos[0];
     st->trail[0].pos[1] += st->effect_pos[1];
     st->trail[0].pos[2] += st->effect_pos[2];
+    if (st->trail_valid < kTrailSize)
+        ++st->trail_valid;
 
     // ─── BALL SELF-ANIMATION (missileeffect.cpp:638-655) ──────────────────
     // Glow flicker × 1.0..1.75 (:639)
-    st->fireball.glow = 1.0f + (0.05f * float(snap_random(0, 15)));
+    st->fireball.glow = 1.0f + (0.05f * float(snap_random(st->rng_state, 0, 15)));
 
     // ── FLIPBOOK FRAME ADVANCE (forensics §8) ──
     // Frame advances +1/tick, wrap at frame_count, skip glow_frame (:642-650)
@@ -642,13 +794,13 @@ static void AnimateTick(State* st)
                 for (int32_t i = 0; i < kMaxBurst; ++i)
                 {
                     st->burst[i].used = 1;
-                    st->burst[i].pos[0] = st->fireball.pos[0] + float(snap_random(-15, 20));
-                    st->burst[i].pos[1] = st->fireball.pos[1] + float(snap_random(-15, 20));
-                    st->burst[i].pos[2] = st->fireball.pos[2] + float(snap_random(-15, 20));
-                    st->burst[i].scale = 0.75f + float(snap_random(0, 5)) * 0.15f;
+                    st->burst[i].pos[0] = st->fireball.pos[0] + float(snap_random(st->rng_state, -15, 20));
+                    st->burst[i].pos[1] = st->fireball.pos[1] + float(snap_random(st->rng_state, -15, 20));
+                    st->burst[i].pos[2] = st->fireball.pos[2] + float(snap_random(st->rng_state, -15, 20));
+                    st->burst[i].scale = 0.75f + float(snap_random(st->rng_state, 0, 5)) * 0.15f;
                     st->burst[i].rotation = 0;
-                    st->burst[i].glow = 1.0f + (0.05f * float(snap_random(0, 15)));
-                    st->burst[i].frame = float(snap_random(0, st->frame_count - 1));
+                    st->burst[i].glow = 1.0f + (0.05f * float(snap_random(st->rng_state, 0, 15)));
+                    st->burst[i].frame = float(snap_random(st->rng_state, 0, st->frame_count - 1));
                     if (int32_t(st->burst[i].frame) == st->glow_frame)
                         ++st->burst[i].frame;
                 }
@@ -662,13 +814,14 @@ static void AnimateTick(State* st)
                 st->ring_done   = false;
 
                 log_info("[fireball-shim] EXPLODE entered impact_pos=(%.1f,%.1f,%.1f) "
-                         "ring_pos=(%.1f,%.1f,%.1f) ring_scale=%.1f ring_mesh=%u ring_will_draw=%d",
+                         "ring_pos=(%.1f,%.1f,%.1f) ring_scale=%.1f ring_bands=%d ring_will_draw=%d",
                          double(st->fireball.pos[0] + st->effect_pos[0]),
                          double(st->fireball.pos[1] + st->effect_pos[1]),
                          double(st->fireball.pos[2] + st->effect_pos[2]),
                          double(st->ring_pos[0]), double(st->ring_pos[1]), double(st->ring_pos[2]),
-                         double(st->ring_scale), st->ring_mesh,
-                         int(st->ring_mesh != 0 && st->ring_active && !st->ring_done));
+                         double(st->ring_scale), st->ring_band_count,
+                         int(st->ring_band_count > 0 && st->ring_mesh[0] != 0 &&
+                             st->ring_active && !st->ring_done));
             }
             else
             {
@@ -692,7 +845,7 @@ static void AnimateTick(State* st)
                         --burst_live_count;
                         continue;
                     }
-                    st->burst[i].glow = 1.0f + (0.05f * float(snap_random(0, 15)));
+                    st->burst[i].glow = 1.0f + (0.05f * float(snap_random(st->rng_state, 0, 15)));
                     ++st->burst[i].frame;
                     if (int32_t(st->burst[i].frame) == st->glow_frame)
                         ++st->burst[i].frame;
@@ -760,21 +913,16 @@ static void Animate(State* st)
 //
 // THE UV RECT IS THE FLIPBOOK CELL (forensics §8).
 //
-// BLEND: per-call. Round-5 over-applied additive (caller-uniform) which
-// blew the LAUNCH/FLY phase into yellow-red saturation (16 trail slots +
-// ball + glow stacking additively). Round-6 reverts the default to Alpha
-// (matches forensics §7 SetBlendState() = MODULATE + SRCALPHA/INVSRCALPHA;
-// the black-keyed atlas supplies chroma-key transparency under Alpha).
-// Caller passes `additive=true` for the 10-quad EXPLODE burst only, where
-// the per-impact additive flash IS the visual identity.
+// BLEND: Alpha for every box01 draw. Forensics §7 traces the animator's
+// SaveBlendState(); SetBlendState(); ... RestoreBlendState() bracket to
+// SRCALPHA/INVSRCALPHA, and RenderFireBallBurst does not override it.
 // =========================================================================
 static void SubmitBillboardQuad(State* /*st*/,
                                   TTextureHandle texture,
                                   int32_t frame_idx,
                                   float rotation_deg,
                                   float size_wu,
-                                  const float world_pos[3],
-                                  bool  additive = false)
+                                  const float world_pos[3])
 {
     if (texture == kInvalidTexture) return;
     if (size_wu <= 0.0f) return;
@@ -802,17 +950,13 @@ static void SubmitBillboardQuad(State* /*st*/,
 
     item.key.texture     = texture;
     item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
-    // Default Alpha per forensics §7 (snapshot bracket: SaveBlendState();
+    // Alpha per forensics §7 (snapshot bracket: SaveBlendState();
     // SetBlendState(); ... RestoreBlendState() at missileeffect.cpp:1062-
     // 1082 → MODULATE + SRCALPHA/INVSRCALPHA). The 4×4 atlas is authored
     // with chroma-key transparency on opaque fire pixels; Alpha composites
-    // crisp fire shapes onto the scene. Additive (round-5 mistake) stacked
-    // ball + glow + 10 trail slots into yellow-red saturation.
-    //
-    // EXPLODE burst caller passes additive=true: a brief 10-quad impact
-    // flash that visually IS a per-impact additive overlay (the explosion).
-    item.key.blend       = uint8_t(additive ? EFxBlend::AdditiveStraight
-                                            : EFxBlend::Alpha);
+    // crisp fire shapes onto the scene. Additive stacked overlapping
+    // ball/glow/trail/burst cards into yellow-red saturation.
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
     item.light_mode      = EFxLightMode::Unlit;
     // ScreenAligned: camera-facing billboard. Air sprites face the camera
@@ -882,6 +1026,8 @@ static void SubmitImpl(State* st)
 {
     if (!Renderer || !st->alive) return;
     if (st->box01_tex == kInvalidTexture) return;
+    if (!st->box02_tex_verified)
+        ResolveSparkTexture(st, /*log_rebind=*/true);
 
     if (!st->spawn_log_done)
     {
@@ -924,15 +1070,23 @@ static void SubmitImpl(State* st)
         }
 
         // ── TRAIL (RenderFireBallTrail — missileeffect.cpp:871-973) ────────
-        // The snapshot does two passes per slot (glow + ball); we draw a
-        // single quad per slot at the slot's stale frame and rotation. The
-        // ring buffer's pre-multiplied trail[i].scale provides the per-slot
-        // shrink; the warm streak reads coherently as a single layer.
-        for (int32_t i = kTrailSize - 1; i >= 0; --i)
+        // Snapshot draws two passes for each recorded slot: glow_frame at
+        // scale*glow, then the stale ball frame at scale. Restrict to slots
+        // that have actually been recorded so the bounded test trajectory
+        // does not show a zero-initialized pre-impact ghost at world origin.
+        for (int32_t i = st->trail_valid - 1; i >= 0; --i)
         {
             const FireBallData& tr = st->trail[i];
             if (tr.scale <= 0.0001f) continue;
             // Trail pos was set absolute (= effect_pos at time of recording).
+            const float tsize = kBaseQuadWu * tr.scale * tr.glow;
+            SubmitBillboardQuad(st, st->box01_tex, st->glow_frame,
+                                /*rotation_deg=*/0.0f, tsize, tr.pos);
+        }
+        for (int32_t i = st->trail_valid - 1; i >= 0; --i)
+        {
+            const FireBallData& tr = st->trail[i];
+            if (tr.scale <= 0.0001f) continue;
             const float tsize = kBaseQuadWu * tr.scale;
             SubmitBillboardQuad(st, st->box01_tex, int32_t(tr.frame),
                                 float(tr.rotation), tsize, tr.pos);
@@ -953,8 +1107,16 @@ static void SubmitImpl(State* st)
     }
     else /* kStateExplode */
     {
-        // ── TRAIL (still draining) ────────────────────────────────────────
-        for (int32_t i = kTrailSize - 1; i >= 0; --i)
+        // ── TRAIL (still draining; same glow/core two-pass order) ─────────
+        for (int32_t i = st->trail_valid - 1; i >= 0; --i)
+        {
+            const FireBallData& tr = st->trail[i];
+            if (tr.scale <= 0.0001f) continue;
+            const float tsize = kBaseQuadWu * tr.scale * tr.glow;
+            SubmitBillboardQuad(st, st->box01_tex, st->glow_frame,
+                                /*rotation_deg=*/0.0f, tsize, tr.pos);
+        }
+        for (int32_t i = st->trail_valid - 1; i >= 0; --i)
         {
             const FireBallData& tr = st->trail[i];
             if (tr.scale <= 0.0001f) continue;
@@ -964,23 +1126,24 @@ static void SubmitImpl(State* st)
         }
 
         // ── BURST (RenderFireBallBurst — missileeffect.cpp:793-869) ────────
-        // Burst quads are box01 with random starting frame (cycles per tick)
-        // and rotation=0 (seeded at impact). ADDITIVE blend: at impact the
-        // 10 burst quads are a brief overlapping flash; additive composition
-        // is the engine equivalent of "explosion lights the scene". Round-6
-        // call adds the `additive=true` flag (default Alpha is wrong here).
+        // Snapshot draws glow_frame first (rot.z=-60°, scale*glow), then the
+        // random stale burst frame at scale. Both inherit the animator's
+        // SetBlendState Alpha bracket.
         for (int32_t i = 0; i < kMaxBurst; ++i)
         {
             if (!st->burst[i].used) continue;
-            const float bsize = kBaseQuadWu * st->burst[i].scale * st->burst[i].glow;
             float bpos[3] = {
                 st->burst[i].pos[0] + st->effect_pos[0],
                 st->burst[i].pos[1] + st->effect_pos[1],
                 st->burst[i].pos[2] + st->effect_pos[2]
             };
+            const float gsize = kBaseQuadWu * st->burst[i].scale * st->burst[i].glow;
+            SubmitBillboardQuad(st, st->box01_tex, st->glow_frame,
+                                /*rotation_deg=*/60.0f, gsize, bpos);
+
+            const float bsize = kBaseQuadWu * st->burst[i].scale;
             SubmitBillboardQuad(st, st->box01_tex, int32_t(st->burst[i].frame),
-                                float(st->burst[i].rotation), bsize, bpos,
-                                /*additive=*/true);
+                                float(st->burst[i].rotation), bsize, bpos);
         }
         // (Ring is drawn from SubmitWorld.)
     }
@@ -990,16 +1153,16 @@ static void SubmitImpl(State* st)
 // SubmitWorldImpl — submit the shockwave ring (cylinder01) via helper mesh.
 // MUST be called from submit_world callback (gotcha #4).
 //
-// Per WAVE_1_LESSONS §1.2a: ring is "self-lit" (additive emissive). The
-// per-vertex 4-stop ARGB gradient described in forensics §10 cannot fit
-// d3d::Obj::lverts[4]; we use uniform warm-orange tint that fades with
-// scale instead. Bespoke port made the same choice (effect.cpp:7594-7597).
+// TShockAnimator::Render sets Alpha (SRCALPHA/INVSRCALPHA) and paints a
+// 4-stop per-vertex ARGB gradient. SHelperMeshSubmit cannot override vertex
+// colors, so the shim splits the 4-ring cylinder into 3 annular bands and
+// submits each band with the adjacent retail color-stop average.
 // =========================================================================
 static void SubmitWorldImpl(State* st)
 {
     if (!Renderer || !st->alive) return;
     if (!st->ring_active || st->ring_done) return;
-    if (st->ring_mesh == 0) return;
+    if (st->ring_band_count <= 0 || st->ring_mesh[0] == 0) return;
 
     ++st->ring_draw_count;
 
@@ -1007,10 +1170,10 @@ static void SubmitWorldImpl(State* st)
     {
         log_info("[fireball-shim] shockwave ring FIRST submit: "
                  "orient=WorldXY(helper-mesh, cylinder01 authored flat in XY plane) "
-                 "pos=(%.1f,%.1f,%.1f) radius=%.1f mesh=%u additive_blend=1 "
-                 "emissive=(.97f,.45f,.06f)*fade",
+                 "pos=(%.1f,%.1f,%.1f) radius=%.1f bands=%d alpha_blend=1 "
+                 "color_stops=4 alpha_stops=(0,1,.75,0)",
                  double(st->ring_pos[0]), double(st->ring_pos[1]), double(st->ring_pos[2]),
-                 double(st->ring_scale), st->ring_mesh);
+                 double(st->ring_scale), st->ring_band_count);
         st->ring_log_done = true;
     }
     // Periodic ring growth log every 8 draws so we can confirm the ring
@@ -1048,25 +1211,30 @@ static void SubmitWorldImpl(State* st)
     const float fade     = (fade_den > 0.0f)
                               ? std::fmax(0.0f, std::fmin(1.0f, fade_num / fade_den))
                               : 1.0f;
+    for (int32_t band = 0; band < st->ring_band_count; ++band)
+    {
+        if (st->ring_mesh[band] == 0) continue;
 
-    SHelperMeshSubmit m = {};
-    m.mesh           = st->ring_mesh;
-    m.additive_blend = true;   // shockwave reads as a luminant flash
-    m.shadow_plane   = false;
-    std::memcpy(m.world, world, sizeof(world));
-    m.diffuse[0]  = 1.0f; m.diffuse[1]  = 1.0f; m.diffuse[2]  = 1.0f; m.diffuse[3]  = 1.0f;
-    m.ambient[0]  = 0.0f; m.ambient[1]  = 0.0f; m.ambient[2]  = 0.0f; m.ambient[3]  = 1.0f;
-    m.specular[0] = 0.0f; m.specular[1] = 0.0f; m.specular[2] = 0.0f; m.specular[3] = 0.0f;
-    // Warm orange — mid stop of the 4-stop gradient (forensics §10):
-    // (0.78,0.24,0.06) red-orange / (0.97,0.61,0.06) orange, blended.
-    m.emissive[0] = 0.97f * fade;
-    m.emissive[1] = 0.45f * fade;
-    m.emissive[2] = 0.06f * fade;
-    m.emissive[3] = 1.0f;
-    m.power       = 1.0f;
-    m.sort_depth  = st->ring_pos[2];
+        float rgba[4] = {};
+        FillRingBandColor(band, st->ring_band_count, fade, rgba);
 
-    Renderer->SubmitHelperMesh(m);
+        SHelperMeshSubmit m = {};
+        m.mesh           = st->ring_mesh[band];
+        m.additive_blend = false;  // TShockAnimator uses SRCALPHA/INVSRCALPHA
+        m.shadow_plane   = false;
+        std::memcpy(m.world, world, sizeof(world));
+        m.diffuse[0]  = 0.0f; m.diffuse[1]  = 0.0f; m.diffuse[2]  = 0.0f; m.diffuse[3]  = rgba[3];
+        m.ambient[0]  = 0.0f; m.ambient[1]  = 0.0f; m.ambient[2]  = 0.0f; m.ambient[3]  = rgba[3];
+        m.specular[0] = 0.0f; m.specular[1] = 0.0f; m.specular[2] = 0.0f; m.specular[3] = rgba[3];
+        m.emissive[0] = rgba[0];
+        m.emissive[1] = rgba[1];
+        m.emissive[2] = rgba[2];
+        m.emissive[3] = rgba[3];
+        m.power       = 1.0f;
+        m.sort_depth  = st->ring_pos[2] + float(band) * 0.001f;
+
+        Renderer->SubmitHelperMesh(m);
+    }
 }
 
 // =========================================================================
@@ -1131,23 +1299,58 @@ State* Spawn(const S3DPoint& origin, float facing_byte)
     // Resolve box01 (ball atlas) via texfaces[].
     {
         const int32_t slot = ResolveSubObjTextureSlot(img3d, kSubBall);
-        const int32_t actual = (slot >= 0 && slot < num_tex) ? slot : 0;
+        int32_t actual = (slot >= 0) ? slot : 0;
         S3DTex tex = {};
-        img3d->GetTexture(actual, &tex);
+        const int32_t resolved = ResolveTextureByDimensions(img3d,
+                                                            actual,
+                                                            0,
+                                                            kBallAtlasPixels,
+                                                            tex);
+        if (resolved >= 0)
+        {
+            actual = resolved;
+        }
+        else if (!ReadTexture(img3d, actual, tex) &&
+                 actual != 0 &&
+                 ReadTexture(img3d, 0, tex))
+        {
+            actual = 0;
+        }
         st->box01_tex = tex.htexture;
-        log_info("[fireball-shim] box01 sub=%d -> texslot=%d handle=%u %ux%u",
+        log_info("[fireball-shim] box01 sub=%d -> texidx=%d handle=%u %ux%u",
                  kSubBall, actual, tex.htexture, tex.desc.width, tex.desc.height);
     }
 
     // Resolve box02 (spark glow) via texfaces[].
     {
         const int32_t slot = ResolveSubObjTextureSlot(img3d, kSubSpark);
-        const int32_t actual = (slot >= 0 && slot < num_tex) ? slot : 0;
+        int32_t actual = (slot >= 0) ? slot : 1;
         S3DTex tex = {};
-        img3d->GetTexture(actual, &tex);
-        st->box02_tex = tex.htexture;
-        log_info("[fireball-shim] box02 sub=%d -> texslot=%d handle=%u %ux%u",
-                 kSubSpark, actual, tex.htexture, tex.desc.width, tex.desc.height);
+        const int32_t resolved = ResolveTextureByDimensions(img3d,
+                                                            actual,
+                                                            1,
+                                                            kSparkTexturePixels,
+                                                            tex);
+        if (resolved >= 0)
+        {
+            actual = resolved;
+            st->box02_tex = tex.htexture;
+            st->box02_tex_verified = true;
+        }
+        else
+        {
+            // Never bind the 256x256 ball atlas as box02: it produces a
+            // retail-visible first-spawn spark mismatch. Leave sparks quiet
+            // until the 64x64 texture can be resolved by the lazy retry path.
+            ReadTexture(img3d, actual, tex);
+            st->box02_tex = kInvalidTexture;
+            log_warn("[fireball-shim] box02 64x64 spark texture unresolved at Spawn "
+                     "(candidate texidx=%d handle=%u %ux%u)",
+                     actual, tex.htexture, tex.desc.width, tex.desc.height);
+        }
+        log_info("[fireball-shim] box02 sub=%d -> texidx=%d handle=%u %ux%u verified=%d",
+                 kSubSpark, actual, tex.htexture, tex.desc.width, tex.desc.height,
+                 int(st->box02_tex_verified));
     }
 
     if (st->box01_tex == kInvalidTexture)
@@ -1156,20 +1359,14 @@ State* Spawn(const S3DPoint& origin, float facing_byte)
     }
     if (st->box02_tex == kInvalidTexture)
     {
-        // Fall back to box01 — atlas cells have warm color so sparks at least
-        // show. Better than invisible.
-        st->box02_tex = st->box01_tex;
+        log_warn("[fireball-shim] box02 tex unresolved at Spawn; sparks will lazy-resolve");
     }
 
-    // Register cylinder01 mesh for the ring (Phase B). We override the
-    // shim's default white-texture binding for cylinder01 (manifest:
-    // texslot=0, material[2].texture=-1 → no authored texture) and bind
-    // box01_tex (the 4×4 fire atlas) instead so the ring samples warm
-    // texture content. Cylinder01's authored UVs are degenerate (the
-    // snapshot's TShockAnimator paints per-vertex color, not UV), so the
-    // ring effectively samples cell (0,0) of the atlas uniformly — but
-    // multiplied by the warm orange emissive in SubmitWorldImpl that
-    // gives a lit warm ring rather than a white-tex emissive-only shape.
+    // Register cylinder01 mesh for the ring (Phase B). Manifest:
+    // texslot=0, material[2].texture=-1 → no authored texture. Snapshot
+    // TShockAnimator supplies the visual color through per-vertex ARGB. The
+    // helper mesh path lacks vertex colors, so split the known 4x24 vertex
+    // cylinder into 3 annular bands and tint each band independently.
     {
         bool got_mesh = false;
         const int32_t texslots = num_tex + 1;
@@ -1180,25 +1377,58 @@ State* Spawn(const S3DPoint& origin, float facing_byte)
             if (!ExtractSubMeshTextureSlot(img3d, kSubRing, texslot, verts, indices))
                 continue;
             if (verts.empty() || indices.empty()) continue;
-            // Force the atlas as albedo (cylinder01 has no authored texture;
-            // without this override the shim binds WhiteTextureHandle()).
-            const TTextureHandle albedo = (st->box01_tex != kInvalidTexture)
-                                              ? st->box01_tex
-                                              : Renderer->WhiteTextureHandle();
-            st->ring_mesh = Renderer->RegisterMesh(
-                verts.data(), int32_t(verts.size()),
-                indices.data(), int32_t(indices.size()),
-                albedo);
-            if (st->ring_mesh != 0)
+            const TTextureHandle albedo = Renderer->WhiteTextureHandle();
+
+            std::vector<uint16_t> band_indices[kRingBandCount];
+            bool split_ok = int32_t(verts.size()) >= kRingColorStopCount * kRingSegments;
+            for (int32_t band = 0; band < kRingBandCount && split_ok; ++band)
+                split_ok = BuildRingBandIndices(indices, band, band_indices[band]);
+
+            if (split_ok)
             {
-                log_info("[fireball-shim] cylinder01 sub=%d texslot=%d "
-                         "verts=%zu idx=%zu mesh=%u albedo=%u",
-                         kSubRing, texslot, verts.size(), indices.size(),
-                         st->ring_mesh, albedo);
-                got_mesh = true;
+                MeshHandle meshes[kRingBandCount] = {};
+                bool all_ok = true;
+                for (int32_t band = 0; band < kRingBandCount; ++band)
+                {
+                    meshes[band] = Renderer->RegisterMesh(
+                        verts.data(), int32_t(verts.size()),
+                        band_indices[band].data(), int32_t(band_indices[band].size()),
+                        albedo);
+                    if (meshes[band] == 0)
+                        all_ok = false;
+                }
+                if (all_ok)
+                {
+                    for (int32_t band = 0; band < kRingBandCount; ++band)
+                        st->ring_mesh[band] = meshes[band];
+                    st->ring_band_count = kRingBandCount;
+                    log_info("[fireball-shim] cylinder01 sub=%d texslot=%d "
+                             "verts=%zu idx=%zu bands=3 meshes=(%u,%u,%u) albedo=%u",
+                             kSubRing, texslot, verts.size(), indices.size(),
+                             st->ring_mesh[0], st->ring_mesh[1], st->ring_mesh[2],
+                             albedo);
+                    got_mesh = true;
+                }
+            }
+
+            if (!got_mesh)
+            {
+                st->ring_mesh[0] = Renderer->RegisterMesh(
+                    verts.data(), int32_t(verts.size()),
+                    indices.data(), int32_t(indices.size()),
+                    albedo);
+                if (st->ring_mesh[0] != 0)
+                {
+                    st->ring_band_count = 1;
+                    log_info("[fireball-shim] cylinder01 sub=%d texslot=%d "
+                             "verts=%zu idx=%zu bands=1 mesh=%u albedo=%u",
+                             kSubRing, texslot, verts.size(), indices.size(),
+                             st->ring_mesh[0], albedo);
+                    got_mesh = true;
+                }
             }
         }
-        if (st->ring_mesh == 0)
+        if (st->ring_band_count <= 0 || st->ring_mesh[0] == 0)
             log_warn("[fireball-shim] cylinder01 mesh registration failed; ring won't draw");
     }
     CaptureRingParentMatrix(img3d, kSubRing, st->ring_parent_mat);
@@ -1206,9 +1436,10 @@ State* Spawn(const S3DPoint& origin, float facing_byte)
     // Run Initialize (seeds ball, trail, burst, spark pools)
     Initialize(st);
 
-    log_info("[fireball-shim] Spawn ok: alive=%d box01_tex=%u box02_tex=%u ring_mesh=%u "
+    log_info("[fireball-shim] Spawn ok: alive=%d box01_tex=%u box02_tex=%u ring_bands=%d ring_mesh0=%u "
              "base_pos=(%d,%d,%d) facing=%.0f effect_pos=(%.0f,%.0f,%.0f)",
-             int(st->alive), st->box01_tex, st->box02_tex, st->ring_mesh,
+             int(st->alive), st->box01_tex, st->box02_tex,
+             st->ring_band_count, st->ring_mesh[0],
              origin.x, origin.y, origin.z, double(facing_byte),
              double(st->effect_pos[0]), double(st->effect_pos[1]), double(st->effect_pos[2]));
     log_info("[fireball-shim] Spawn trajectory: launch_pos=(%.1f,%.1f,%.1f) "
