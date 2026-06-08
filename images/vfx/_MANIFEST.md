@@ -21,7 +21,7 @@ Within each folder, frames are 01.png .. NN.png in capture-time order.
 | 12 | `12_combatflash` | 11 | ✅ retail |
 | 13 | `13_ceyes` | 9 | ✅ retail |
 | 14 | `14_dragonattack` | 11 | ✅ retail |
-| 15 | `15_FireFlash` | 6 | ✅ retail |
+| 15 | `15_FireWind` | 6 | ✅ retail (renamed 2026-06-07 — was mislabeled `15_FireFlash`; verified Fire Wind by playing original game) |
 | 16 | `16_TeleportDoorInside` | 3 | ✅ retail |
 | 17 | `17_SymGlow` | 8 | ✅ retail |
 | 18 | `18_red_ground_ring_rising_sparks` | 9 | 📝 descriptive |

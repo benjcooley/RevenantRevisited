@@ -26,6 +26,13 @@ forensics doc + (where present) a minimal port are preserved for re-enable.
 | ID | Class | Status | Why not | Asset shipped? | Notes |
 |---|---|---|---|---|---|
 | F03 | `TFireEffect` | NO-PORT | No live `EFFECT "fire"` caller anywhere in shipped or legacy data. Phase-B bespoke exists (`src/effect.cpp`) but the planned ambient-fire spell was WIP and never wired. | Yes (Misc/Fire.I3D) | Forensics `F-FIREFLASH` family. Per F03 inventory line: "Vestigial — no live retail caller." |
+
+## Effects we WILL port (confirmed live in shipped — pending forensics or fan-out slot)
+
+| ID | Class | Status | Notes |
+|---|---|---|---|
+| FW | `TFireWindEffect` | LIVE — needs forensics + port | Snapshot class at `src/effect_old.cpp:2497-2516` (`DEFINE_BUILDER("FireWind", TFireWindEffect)`). Spell.def variant: `"Fire Wind"` line 710, damage 96-124, EFFECT_NAME `firewind`. Cast by early CAVES priests (user-verified by playing original game, 2026-06-07). Visual reference: `images/vfx/15_FireWind/` (renamed from mislabeled `15_FireFlash`). Retail decomp body lives in `cls_0x5a9194` (13.5KB FireFlash+FireWind+BURN merged class). |
+
 | F05 | `TFireSwarmEffect` | MINIMAL | Class + asset shipped but `"FireSwarm"` has no spell.def variant, no ATTACHEFFECT, no char.def reference. The "growing fire ring" visual users may recall in early CAVES is actually **Fire Wind** (different class). | Yes (Magic/FireSwarm.i3d) | Ported minimally: cylinder ring + center glow disc. 4 unextracted retail particle systems in `cls_0x5abe4c` left as future Ghidra task. Per `src/effects/fireswarm.cpp`. |
 | F06 | `TFaultFireEffect` | MINIMAL | Vestigial / pre-release-only. No live caller. User: "doesn't look like any recognizable game effect" (because it never shipped one). | Yes | Ported minimally as a UV-scrolling textured strip. Per `src/effects/faultfire.cpp`. |
 | F09 | `TFireColumnEffect` | UNREGISTERED | Vestigial + asset `Magic\FireColumn.I3D` **dropped from shipped `data/imagery.rvi`** (per F11 forensics §2.1 sister-effect cross-check). No I3D to load even if we wanted to render it. | **NO — asset missing** | Port in `src/effects/firecolumn.cpp`, registration block commented out in vfxtest.cpp. Re-enable if asset recovered. |
