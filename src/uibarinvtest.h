@@ -18,4 +18,5 @@
 
 bool InitializeUIBarInvMode();
 void RenderUIBarInvMode();
+void RenderUIBarInvModeEmbedded();
 void CloseUIBarInvMode();

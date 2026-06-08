@@ -16,4 +16,5 @@
 
 bool InitializeUIBottomBarMode();
 void RenderUIBottomBarMode();
+void RenderUIBottomBarModeEmbedded();
 void CloseUIBottomBarMode();

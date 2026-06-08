@@ -16,6 +16,12 @@
 
 #pragma once
 
+#include <cstdint>
+
 bool InitializeUISpellCreateMode();
 void RenderUISpellCreateMode();
+void RenderUISpellCreateModeEmbedded();
+void SetUISpellCreateModeVisible(bool visible);
 void CloseUISpellCreateMode();
+// #10b/c/d — Mouse handler for talisman click + backspace + invoke.
+void HandleMouseClickUISpellCreateMode(int32_t button, int32_t x, int32_t y);

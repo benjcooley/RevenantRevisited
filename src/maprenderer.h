@@ -78,6 +78,12 @@ class TMapRenderer
     // to teleport the view).
     void SetCameraWorld(int32_t level, int32_t world_x, int32_t world_y, int32_t world_z);
 
+    // Limit the live game render to an on-screen viewport. The reconstructed
+    // HUD reserves the right sidebar and bottom bar just like retail, so the
+    // world camera renders into the remaining playfield instead of underneath
+    // the chrome. Pass <=0 dimensions to return to the full display.
+    void SetOutputViewport(int32_t width, int32_t height);
+
     // Sun-shadow toggle. The map renderer re-pushes its shadow params to
     // the renderer every frame, so a one-shot Renderer->SetSunShadow*()
     // gets clobbered. Editor calls this to keep shadows off across frames.

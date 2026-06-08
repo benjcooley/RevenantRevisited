@@ -1,0 +1,4 @@
+pause 200; take_snapshot item scroll lettuce line=0;
+pause 500; take_snapshot item scroll lettuce line=1;
+pause 3000; take_snapshot spell scroll might line=0;
+pause 300; take_snapshot spell scroll might paged

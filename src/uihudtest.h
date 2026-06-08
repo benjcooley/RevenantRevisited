@@ -7,14 +7,13 @@
 // the assembled in-game HUD layout can be verified end-to-end.
 //
 //   Top edge:    TPlyrStatusBar (player + target chips)
-//   Right edge:  Sidebar = TSideTabsPane + top-slot pane + bottom-slot pane
+//   Right edge:  TSideTabsPane + selected top-slot pane + selected bottom-slot pane
 //   Bottom edge: TBottomBarPane chrome + TBarInvPane shelf + TQuickSpellPane
 //   Overlay:     TTextBar (message log)
 //
-// Each existing per-panel test mode already registers a THudDrawable with
-// Renderer->AddHud at its correct screen-anchored position. We Initialize
-// them in sequence so all their HUDs paint together; this orchestrator's
-// own Render does just the backdrop clear.
+// Each content pane composes into its own render texture and registers a
+// THudDrawable at its screen-anchored position. The orchestrator refreshes
+// only the panes selected by SHudState.
 //
 // *************************************************************************
 
@@ -22,4 +21,9 @@
 
 bool InitializeUIHudMode();
 void RenderUIHudMode();
+void RenderUIHudModeEmbedded();
 void CloseUIHudMode();
+
+// Command-line harness helper. Live PlayScreen leaves this off because
+// GameMode already registers the cursor / drag overlay.
+void SetUIHudCursorOverlayEnabled(bool enabled);

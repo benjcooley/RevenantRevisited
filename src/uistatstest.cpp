@@ -47,6 +47,7 @@
 #include "uistatstest.h"
 
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "display.h"
 #include "font.h"
 #include "logging.h"
@@ -77,12 +78,11 @@ constexpr int32_t kStartX     = 28;        // §8 / def :29 (POS 28 62)
 constexpr int32_t kStartY     = 62;        // §8 / def :29 (POS 28 62)
 constexpr int32_t kLineHeight = 12;        // §6a / def :8 (LINEHEIGHT 12)
 
-// --- pane on-screen placement (harness only) -------------------------
-// The retail screen origin is set by TSidePane (UNCONFIRMED-3); for this
-// isolated harness we right-anchor the pane near the screen's right edge
-// with a small inset — matches the upper-right sidebar position in game.
-constexpr int32_t kPaneRightInset = 16;
-constexpr int32_t kPaneTopInset   = 24;
+// --- pane on-screen placement ---------------------------------------
+// Retail TSidePane places upper content at the right-sidebar top slot:
+// x = display_w - 188, y = 0. The pane still authors everything pane-local
+// into its own render surface.
+constexpr int32_t kPaneY = 0;
 
 // --- DEF COLOR palette (spec §8 / def :20-27) ------------------------
 // Cream default (255,240,215, def :20); named overrides for value tokens.
@@ -114,6 +114,7 @@ PTBitmap          g_chrome       = nullptr;
 const SFontAtlas* g_font         = nullptr;
 
 TSurface*         g_pane         = nullptr;
+bool              g_hudVisible   = true;
 
 // =====================================================================
 // Synthetic player state — drives the per-FIELD values until the DEF
@@ -301,12 +302,13 @@ class TStatPaneHud : public THudDrawable
 public:
     void Draw() override
     {
-        if (!g_pane) return;
+        if (!g_hudVisible || !g_pane) return;
         Renderer->DrawSurface(g_pane, m_paneX, m_paneY);
     }
 
     void Refresh()
     {
+        if (!g_hudVisible) return;
         if (!g_chrome) return;
         EnsurePane();
         if (!g_pane) return;
@@ -431,14 +433,10 @@ private:
 
     void PlacePane()
     {
-        // Right-anchored harness placement (UNCONFIRMED-3 — TSidePane owns
-        // the real screen origin). Inset from the right edge so the pane
-        // reads in isolation and doesn't hug the screen border.
         const int32_t dw = Display.Width();
-        m_paneX = (dw > 0 ? dw : kPaneW + 2 * kPaneRightInset)
-                  - kPaneW - kPaneRightInset;
+        m_paneX = (dw > 0 ? dw : kPaneW) - kPaneW;
         if (m_paneX < 0) m_paneX = 0;
-        m_paneY = kPaneTopInset;
+        m_paneY = kPaneY;
     }
 
     int32_t m_paneX = 0;
@@ -470,6 +468,7 @@ bool InitializeUIStatsMode()
 
     // Spec §2: real retail statspane.dat — "Stats" chrome at idx 0 (188x306).
     g_statspaneDat = TMulti::LoadMulti((char*)kArchive);
+    RegisterUIBitmapAtlasArchive(g_statspaneDat);
     if (g_statspaneDat)
         g_chrome = LookupByName(g_statspaneDat, kChromeName);
 
@@ -484,6 +483,7 @@ bool InitializeUIStatsMode()
 
     delete g_pane;
     g_pane = nullptr;
+    g_hudVisible = true;
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
@@ -491,7 +491,7 @@ bool InitializeUIStatsMode()
 
 void RenderUIStatsMode()
 {
-    g_hud.Refresh();
+    RenderUIStatsModeEmbedded();
 
     // Backdrop so the parchment chrome reads in isolation (no playfield
     // behind the right-anchored sidebar in test mode). Use the same muted
@@ -499,6 +499,17 @@ void RenderUIStatsMode()
     // is consistent across captures.
     Display.BackBuffer()->StartPass(0.18f, 0.20f, 0.26f, 1.0f);
     Display.BackBuffer()->EndPass();
+}
+
+void RenderUIStatsModeEmbedded()
+{
+    if (!g_hudVisible) return;
+    g_hud.Refresh();
+}
+
+void SetUIStatsModeVisible(bool visible)
+{
+    g_hudVisible = visible;
 }
 
 void CloseUIStatsMode()
@@ -509,4 +520,5 @@ void CloseUIStatsMode()
     g_chrome       = nullptr;
     g_statspaneDat = nullptr;
     g_font         = nullptr;
+    g_hudVisible   = true;
 }

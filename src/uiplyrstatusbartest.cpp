@@ -34,9 +34,11 @@
 
 #include "animation.h"
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "character.h"
 #include "display.h"
 #include "font.h"
+#include "hudstate.h"
 #include "logging.h"
 #include "multi.h"
 #include "object.h"
@@ -474,13 +476,16 @@ public:
 private:
     void EnsurePane()
     {
-        const int32_t dw   = Display.Width();
-        const int32_t want = (dw > 0) ? dw : (2 * kChipW);
+        constexpr int32_t kSidebarW = 0xbc;
+        const int32_t dw = Display.Width();
+        const SHudState& hs = GetHudState();
+        const int32_t sidebarAdj = (hs.sidebarState == HUD_SIDEBAR_OPEN) ? kSidebarW : 0;
+        const int32_t want = ((dw > 0) ? dw : (2 * kChipW)) - sidebarAdj;
         if (g_pane && g_paneW == want) return;
         delete g_pane;
         g_paneW = want;
         // Compose the WHOLE pane (both chips) into one RT (§3): full width x 0x70.
-        g_pane = new TSurface(g_paneW, kPaneH, SG_PIXELFORMAT_RGBA8);
+        g_pane = new TSurface(g_paneW > 0 ? g_paneW : 1, kPaneH, SG_PIXELFORMAT_RGBA8);
     }
 
     // Fade ramps, gated to 24Hz (spec §9, protocol rule 6).
@@ -610,6 +615,8 @@ bool InitializeUIPlyrStatusBarMode()
     // Real assets (spec §2). Classic / no-texture build: statusbarnotex.dat.
     g_statusbarDat = TMulti::LoadMulti((char*)"statusbarnotex.dat");
     g_portraitsDat = TMulti::LoadMulti((char*)"portraits.dat");
+    RegisterUIBitmapAtlasArchive(g_statusbarDat);
+    RegisterUIBitmapAtlasArchive(g_portraitsDat);
 
     if (g_statusbarDat)
     {
@@ -653,12 +660,17 @@ bool InitializeUIPlyrStatusBarMode()
 
 void RenderUIPlyrStatusBarMode()
 {
-    g_hud.Refresh();
+    RenderUIPlyrStatusBarModeEmbedded();
 
     // Backdrop so the chip's transparent areas + the round portrait/ring edges
     // read in isolation (no playfield behind the HUD in test mode).
     Display.BackBuffer()->StartPass(0.32f, 0.36f, 0.28f, 1.0f);
     Display.BackBuffer()->EndPass();
+}
+
+void RenderUIPlyrStatusBarModeEmbedded()
+{
+    g_hud.Refresh();
 }
 
 void CloseUIPlyrStatusBarMode()

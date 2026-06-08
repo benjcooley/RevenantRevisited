@@ -1,0 +1,8 @@
+pause 900; take_snapshot start;
+log drag paperdoll right;
+moveto 546 160 0; left_down; pause 100;
+moveto 596 160 450; pause 200; take_snapshot drag-right;
+log drag paperdoll left;
+moveto 506 160 600; pause 200; take_snapshot drag-left;
+log release paperdoll;
+left_up; pause 250; take_snapshot released

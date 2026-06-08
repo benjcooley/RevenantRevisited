@@ -18,6 +18,12 @@
 
 #pragma once
 
+#include <cstdint>
+
 bool InitializeUIEquipMode();
 void RenderUIEquipMode();
+void RenderUIEquipModeEmbedded();
 void CloseUIEquipMode();
+void SetUIEquipModeVisible(bool visible);
+void HandleMouseClickUIEquipMode(int32_t button, int32_t x, int32_t y);
+void HandleMouseMoveUIEquipMode(int32_t button, int32_t x, int32_t y);

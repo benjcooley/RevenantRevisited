@@ -265,6 +265,8 @@ struct TMapRenderer::Impl
     // The map keeps a full level resident; renderer draw/light records are
     // non-owning views over that resident level data.
     TSafeRef<TGameMap> currentMap;
+    int32_t outputViewportW = 0;
+    int32_t outputViewportH = 0;
 
     // Listener handle on currentMap.Get() (TGameMap::AddListener id).
     // SetMap registers; Unloaded handler / next SetMap unregisters.

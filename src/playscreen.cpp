@@ -31,6 +31,7 @@
 #include "3dimage.h"
 #include "area.h"
 #include "cursor.h"
+#include "debugui.h"
 #include "display.h"
 #include "multi.h"
 #include "editor.h"
@@ -40,6 +41,7 @@
 #include "logging.h"
 #include "ctrlmap.h"
 #include "gamemap.h"
+#include "hudstate.h"
 #include "mapmanager.h"
 #include "mappane.h"
 #include "maprenderer.h"
@@ -49,6 +51,12 @@
 #include "savegame.h"
 #include "sector.h"
 #include "time.h"
+#include "uidragstate.h"
+#include "uiequiptest.h"
+#include "uihudtest.h"
+#include "uiquickspelltest.h"
+#include "uisidebartest.h"
+#include "uispellbooktest.h"
 
 #include <vector>
 
@@ -57,6 +65,46 @@
 // them as globals so the existing call sites compile unchanged.
 PTBitmap PointerCursor = nullptr;
 PTBitmap HandCursor    = nullptr;
+static bool g_playHudInitialized = false;
+
+static void GetReconstructedPlayfieldRect(int32_t& x, int32_t& y,
+                                          int32_t& w, int32_t& h)
+{
+    const SHudState& s = GetHudState();
+    const int32_t dw = Display.Width()  > 0 ? Display.Width()  : WIDTH;
+    const int32_t dh = Display.Height() > 0 ? Display.Height() : HEIGHT;
+    constexpr int32_t kSidebarW = 188;
+    constexpr int32_t kBottomBarH = 60;
+    x = 0;
+    y = 0;
+    w = dw - (s.sidebarState == HUD_SIDEBAR_OPEN ? kSidebarW : 0);
+    h = dh - (s.bottomBarOpen ? kBottomBarH : 0);
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+}
+
+static bool IsReconstructedHudPoint(int32_t x, int32_t y)
+{
+    const SHudState& s = GetHudState();
+    const int32_t dw = Display.Width()  > 0 ? Display.Width()  : WIDTH;
+    const int32_t dh = Display.Height() > 0 ? Display.Height() : HEIGHT;
+    constexpr int32_t kSidebarW = 188;
+    constexpr int32_t kBottomBarH = 60;
+    constexpr int32_t kTabW = 64;
+    constexpr int32_t kTabH = 240;
+
+    if (s.sidebarState == HUD_SIDEBAR_OPEN && x >= dw - kSidebarW)
+        return true;
+    if (s.bottomBarOpen && y >= dh - kBottomBarH)
+        return true;
+
+    int32_t playfieldX = 0, playfieldY = 0, playfieldW = 0, playfieldH = 0;
+    GetReconstructedPlayfieldRect(playfieldX, playfieldY, playfieldW, playfieldH);
+    const int32_t playfieldRight = playfieldX + playfieldW;
+    const int32_t playfieldBottom = playfieldY + playfieldH;
+    return x >= playfieldRight - kTabW && x < playfieldRight &&
+           y >= playfieldBottom - kTabH && y < playfieldBottom;
+}
 
 // Default game controls. Mirrors the retail table from
 // attic/src/playscreen.cpp. Mode flags differ per binding: directional
@@ -82,6 +130,8 @@ static SControlEntry g_defaultGameControls[] =
     {"Combat Mode", "CombatMode", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_RETURN}}, GAMECMD_COMBAT,     0, 0, false},
     {"Bow Mode",    "BowMode",    CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'M'}},       GAMECMD_BOW,        0, 0, false},
     {"Full Screen", "FullScreen", ALLMODES,                                          {{VK_SPACE}},  GAMECMD_FULLSCREEN, 0, 0, false},
+    {"Side Panel",  "SidePanel",  ALLMODES,                                          {{'V'}},       GAMECMD_SIDEPANEL, 0, 0, false},
+    {"Lower Panel", "LowerPanel", ALLMODES,                                          {{'B'}},       GAMECMD_BOTTOMPANEL, 0, 0, false},
 
     // -- movement modifiers (state flags, repeat-down/up) --
     {"Sneak", "Sneak", CTRL_NORMALMODE | CTRL_SNEAKMODE, {{'S'}}, GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_SNEAK, false},
@@ -273,6 +323,13 @@ bool TPlayScreen::Initialize()
     // future game-mode init) is in place from the first frame.
     if (CurrentMode())
         CurrentMode()->OnEnter();
+
+    SetUIHudCursorOverlayEnabled(false);
+    SetUIQuickSpellSyntheticStateEnabled(false);
+    SetUISidebarSyntheticStateEnabled(false);
+    g_playHudInitialized = InitializeUIHudMode();
+    log_info("[playscreen] reconstructed HUD init = %s",
+             g_playHudInitialized ? "OK" : "FAIL");
 
     log_info("[playscreen] initialize done");
     return true;
@@ -546,6 +603,15 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
 
 void TPlayScreen::Close()
 {
+    if (g_playHudInitialized)
+    {
+        CloseUIHudMode();
+        g_playHudInitialized = false;
+    }
+    if (mapRenderer)
+        mapRenderer->SetOutputViewport(0, 0);
+    if (Renderer)
+        Renderer->ResetPresentNDCRect();
     AreaManager.Close();
     if (mapRenderer)
     {
@@ -612,6 +678,26 @@ void TPlayScreen::Update()
 void TPlayScreen::RenderFrame()
 {
     if (!mapRenderer) return;
+    if (g_playHudInitialized)
+    {
+        int32_t px = 0, py = 0, pw = 0, ph = 0;
+        GetReconstructedPlayfieldRect(px, py, pw, ph);
+        mapRenderer->SetOutputViewport(pw, ph);
+        if (Renderer)
+        {
+            const int32_t dw = Display.Width()  > 0 ? Display.Width()  : WIDTH;
+            const int32_t dh = Display.Height() > 0 ? Display.Height() : HEIGHT;
+            Renderer->SetPresentPixelRect(px, py, pw, ph, dw, dh,
+                                          0, 0, pw, ph);
+        }
+    }
+    else
+    {
+        mapRenderer->SetOutputViewport(0, 0);
+        if (Renderer)
+            Renderer->ResetPresentNDCRect();
+    }
+
     // Late camera update: gameplay has already moved the player for this
     // fixed tick, so follow from the final transform immediately before
     // rendering. The renderer compensates the camera origin by the followed
@@ -1001,7 +1087,22 @@ static void DrawClosestMonsterOverlay()
 // (matching what TTestScreen does for TestModes::Render). DrawBackground
 // is dead -- no BITMAP.100 backdrop on the new path.
 void TPlayScreen::Pulse()                  { Update(); }
-void TPlayScreen::Animate(bool /*draw*/)   { RenderFrame(); EditorDrawChrome(); DrawPlayerStatusOverlay(); DrawClosestMonsterOverlay(); }
+void TPlayScreen::Animate(bool /*draw*/)
+{
+    // Refresh reconstructed HUD surfaces before the world render. The
+    // EquipmentPane paperdoll temporarily uses the renderer's lit target;
+    // rendering the world afterward overwrites that temporary target before
+    // final present while the HUD keeps the sampled pane surface.
+    if (g_playHudInitialized)
+        RenderUIHudModeEmbedded();
+    RenderFrame();
+    EditorDrawChrome();
+    if (DebugUI::IsVisible())
+    {
+        DrawPlayerStatusOverlay();
+        DrawClosestMonsterOverlay();
+    }
+}
 void TPlayScreen::DrawBackground()         { /* no backdrop blit on the new path */ }
 
 // *************************************************************************
@@ -1036,6 +1137,25 @@ void TPlayScreen::KeyPress(int32_t key, bool down)
 
 void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 {
+    if (g_playHudInitialized &&
+        (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()))
+    {
+        const SHudState& s = GetHudState();
+        if (HandleMouseClickUISidebarModeConsumed(button, x, y))
+            return;
+        if (s.bottomBarOpen ||
+            (UIDragState::IsActive() &&
+             UIDragState::Get().source == EDragSource::SpellPane))
+        {
+            HandleMouseClickUIQuickSpellMode(button, x, y);
+        }
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+            HandleMouseClickUISpellbookMode(button, x, y);
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+            HandleMouseClickUIEquipMode(button, x, y);
+        return;
+    }
+
     TScreen::MouseClick(button, x, y);
     // Route to the active runtime mode; editor mode forwards to the
     // renderer's gizmo / drag picker, game mode forwards to MapPane's
@@ -1045,6 +1165,25 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 
 void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
 {
+    if (g_playHudInitialized)
+    {
+        const SHudState& s = GetHudState();
+        if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
+            return;
+        if (UIDragState::IsActive() &&
+            UIDragState::Get().source == EDragSource::SpellPane)
+        {
+            HandleMouseMoveUIQuickSpellMode(button, x, y);
+            return;
+        }
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+            HandleMouseMoveUISpellbookMode(button, x, y);
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+            HandleMouseMoveUIEquipMode(button, x, y);
+        if (IsReconstructedHudPoint(x, y) || UIDragState::IsActive())
+            return;
+    }
+
     TScreen::MouseMove(button, x, y);
     // Game mode -> MapPane.MouseMove (drives wedge cursor while walking,
     // bow aim, etc.). Editor mode default no-op until we wire its

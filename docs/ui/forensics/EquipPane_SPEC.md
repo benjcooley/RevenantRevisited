@@ -256,6 +256,9 @@ indicating the slot's role. The player drags items between slots, drags
 **from** the Inventory pane below to equip something, and drags **to** the
 Inventory pane to unequip; while a drag is in flight the dragged item's
 icon follows the cursor and the source slot is drawn empty.
+The slot begins the drag, but the top-level drag manager owns the transfer:
+inventory/bar/equipment moves, playfield pickup/drop, replacement/swap/return,
+and the action sound all belong to the same transaction owner.
 
 Plain-language: it's the player's "what am I wearing" screen. A tall body
 silhouette with hooks for head, neck, chest, two hands, two rings, ranged,
@@ -1012,6 +1015,13 @@ ramp/threshold drag-promote (snapshot-parity, retail UNCONFIRMED):
            system); if InPane and Inventory has a held item, resolve the
            target equip slot and do swap/move/equip per §6.4
 ```
+
+Port note: do not make equipment slots responsible for global ownership. A
+slot may identify itself as `EQ_HEAD`/`EQ_BODY`/etc. and start or accept a
+drag, but `UIDragState`/`TPlayScreen` must commit the transfer, including
+swap/replacement, returning rejected items, playfield pickup/drop, and the
+pickup/drop sound cue. The current harness cue is placeholder audio until the
+exact retail sound name is verified.
 
 ---
 
