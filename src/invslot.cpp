@@ -7,6 +7,7 @@
 
 #include "renderer.h"
 #include "logging.h"
+#include "object.h"
 
 #include <cstdio>
 #include <cstring>
@@ -30,9 +31,10 @@ void TInvSlot::SetItem(TObjectInstance* item, PTBitmap icon, int32_t qty)
     item_ = item;
     icon_ = icon;
     qty_  = qty;
+    pouch_inner_ = nullptr;
     if (!item || !icon)
         kind_ = EInvSlotKind::Empty;
-    else if (kind_ != EInvSlotKind::Pouch)   // pouch is set explicitly
+    else
         kind_ = EInvSlotKind::Regular;
 }
 
@@ -54,13 +56,17 @@ bool TInvSlot::OnSlot(int32_t mx, int32_t my) const
 // ----------------------------------------------------------------------
 // Drop-target policy (stubbed).
 //
-// Real implementation needs TPlayer::CanEquip(item, allowed_type_) to
-// reject mismatched equipment. Inventory + BarInv (allowed_type_ == 0)
-// accept anything. Lands with the cross-pane drag-state owner port.
+// Inventory + BarInv accept anything. Equip cells use the item's EqSlot stat
+// as the first-line filter; the top-level drop manager still performs the
+// authoritative Player::CanEquip / swap-or-return commit.
 // ----------------------------------------------------------------------
-bool TInvSlot::CanAcceptDrop(TObjectInstance* /*dragged*/) const
+bool TInvSlot::CanAcceptDrop(TObjectInstance* dragged) const
 {
-    return allowed_type_ == 0;
+    if (allowed_type_ == kInvSlotAcceptAny)
+        return true;
+    if (!dragged || dragged->FindStat("EqSlot") < 0)
+        return false;
+    return dragged->GetStat("EqSlot") == allowed_type_;
 }
 
 // ----------------------------------------------------------------------

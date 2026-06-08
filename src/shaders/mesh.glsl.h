@@ -40,6 +40,25 @@ void main() {
                              dot(w1.xyz, normal),
                              dot(w2.xyz, normal)));
 
+    if (camw.w > 0.5) {
+        const float D3D_XY_SCALE = 1.4142135623730951;
+        const float D3D_Z_SCALE  = 2.1798270608996972e-5;
+        float spx = vp.x + wp.x * D3D_XY_SCALE;
+        float spy = vp.y - wp.y * D3D_XY_SCALE;
+        float scene_z_n = clamp(wp.z * D3D_Z_SCALE, 0.0, 1.0);
+
+        gl_Position.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
+        gl_Position.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
+        gl_Position.z = scene_z_n;
+        gl_Position.w = 1.0;
+        v_wpos    = wp;
+        v_wnormal = wn;
+        v_uv      = uv;
+        v_tint    = tint;
+        v_scene_z = scene_z_n;
+        return;
+    }
+
     float wx = wp.x - camw.x;
     float wy = wp.y - camw.y;
     float wz = wp.z;

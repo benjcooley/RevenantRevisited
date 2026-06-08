@@ -48,14 +48,22 @@ gets reported and fixed — each pass tightens the pipeline.
 Item cells across BarInv, Inventory, and Equip are NOT each pane's private code — they're instances of one shared class `TInvSlot : TButton` (`src/invslot.{h,cpp}`, landed 2026-05-30). The class evolves from the snapshot `TTalismanButton : TButton` precedent (`src/spellpane.h:23`), generalizing it for any item. Per-instance config:
 
 - **Slot rect** — pane-local (x, y, w, h)
-- **`allowedType`** — `0` = accept any item; otherwise an `EqSlot`-style filter (Equip's per-slot policy mirrors `TPlayer::CanEquip`)
+- **`allowedType`** — `-1` = accept any item; otherwise an `EqSlot`-style filter (Equip's per-slot policy mirrors `TPlayer::CanEquip`). This avoids colliding with `EQ_HEAD == 0`.
 - **`emptyPlaceholder`** — optional sprite painted when the slot is empty (Equip's named pictograms: "Head", "Hand2", etc.)
 - **Paint style** — toggles for the per-text-cell matrix (gold-as-bitmap-Gold / qty-red-top-right / bag-count-white-bottom-center)
 
 Consumers today:
 - `src/uibarinvtest.cpp` — 9 shelf slots
 - `src/uiinventorytest.cpp` — 4×3 grid slots
-- `src/uiequiptest.cpp` — pending next-pass mechanical plug-in (11 EQ_* slots, code template in agent report)
+- `src/uiequiptest.cpp` — 11 EQ_* equipment slots
+
+Architecture note: slots initiate drags and expose local accept policy; they do
+not own cross-system transfers. The top-level drag/drop manager
+(`UIDragState`, mapping back to retail `TPlayScreen` globals) owns pickup/drop
+transactions across playfield, inventory, bottom bar, and equipment, including
+replacement/swap/return behavior and the pickup/drop sound effect. The current
+harness sound cue is a placeholder until the exact retail sound name is pinned
+from a capture or sound-registry pass.
 
 **Retail evidence** for the drag system that `TInvSlot` will hook into (cited in `invslot.h` header banner, not invented):
 - Dispatch owner: `cls_0x5a5320_TPlayScreen::virt_meth_0x44f140` (12 R/W XREFs)
