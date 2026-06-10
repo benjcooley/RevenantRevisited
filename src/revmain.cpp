@@ -1727,6 +1727,14 @@ void GetParameters(int argc, char **argv)
             strncpyz(StartupDumpTilesPath, p.c_str(), MAXPATHLEN);
     }
 
+  // DUMPICONS=path — export all baked inventory icons / portraits to the
+  // given folder, creating it if needed.
+    {
+        std::string p;
+        if (arg_param(cmd, "dumpicons", p))
+            strncpyz(StartupDumpIconsPath, p.c_str(), MAXPATHLEN);
+    }
+
   // DUMPI3D=asset [DUMPI3DOUT=dir] — extract one I3D's textures (PNG) +
   // sub-objects (Wavefront OBJ) + manifest into a folder, then exit.
     {
@@ -2084,6 +2092,15 @@ bool InitGlobals()
         if (!TestModes::DumpTilesToFolder(StartupDumpTilesPath))
             FatalError("Failed dumping any tiles to %s", StartupDumpTilesPath);
         Status("Tile dump complete. Exiting.\n");
+        return false;
+    }
+
+    if (StartupDumpIconsPath[0])
+    {
+        Status("Dumping icons to %s\n", StartupDumpIconsPath);
+        if (!TestModes::DumpIconsToFolder(StartupDumpIconsPath))
+            FatalError("Failed dumping any icons to %s", StartupDumpIconsPath);
+        Status("Icon dump complete. Exiting.\n");
         return false;
     }
 

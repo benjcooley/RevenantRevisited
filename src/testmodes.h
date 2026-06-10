@@ -17,6 +17,7 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y);
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y);
 void HandleKeyPress(const char* mode, int32_t key, bool down);
 bool DumpTilesToFolder(const char* path);
+bool DumpIconsToFolder(const char* path);
 
 // True while an --input-script is actively playing (events still pending, or
 // looping). The real-mouse input path consults this to yield control to the

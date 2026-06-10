@@ -119,6 +119,212 @@ void MatrixMul16(const float a[16], const float b[16], float out[16])
     }
 }
 
+// Shared minimal-PNG writer + bitmap decoder for the asset dump modes
+// (--dumptiles, --dumpicons).
+namespace fs = std::filesystem;
+
+auto append_be32 = [](std::vector<uint8_t>& out, uint32_t v) {
+    out.push_back(uint8_t((v >> 24) & 0xFF));
+    out.push_back(uint8_t((v >> 16) & 0xFF));
+    out.push_back(uint8_t((v >>  8) & 0xFF));
+    out.push_back(uint8_t((v      ) & 0xFF));
+};
+auto crc32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
+    static uint32_t table[256] = {};
+    static bool init = false;
+    if (!init) {
+        for (uint32_t i = 0; i < 256; ++i) {
+            uint32_t c = i;
+            for (int k = 0; k < 8; ++k)
+                c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+            table[i] = c;
+        }
+        init = true;
+    }
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; ++i)
+        c = table[(c ^ data[i]) & 0xFFu] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+};
+auto adler32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
+    uint32_t s1 = 1, s2 = 0;
+    for (size_t i = 0; i < len; ++i) {
+        s1 = (s1 + data[i]) % 65521u;
+        s2 = (s2 + s1) % 65521u;
+    }
+    return (s2 << 16) | s1;
+};
+auto write_png_rgba = [](const fs::path& path, int32_t w, int32_t h, const std::vector<uint8_t>& rgba) -> bool {
+    if (w <= 0 || h <= 0 || rgba.size() != size_t(w) * size_t(h) * 4) return false;
+    std::vector<uint8_t> raw;
+    raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
+    for (int32_t y = 0; y < h; ++y) {
+        raw.push_back(0); // filter type 0
+        const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
+        raw.insert(raw.end(), row, row + size_t(w) * 4);
+    }
+
+    std::vector<uint8_t> zlib;
+    zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
+    zlib.push_back(0x78);
+    zlib.push_back(0x01);
+    size_t off = 0;
+    while (off < raw.size()) {
+        const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
+        const bool final = (off + chunk) == raw.size();
+        zlib.push_back(final ? 0x01 : 0x00);
+        zlib.push_back(uint8_t(chunk & 0xFF));
+        zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
+        const uint16_t nlen = uint16_t(~uint16_t(chunk));
+        zlib.push_back(uint8_t(nlen & 0xFF));
+        zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
+        zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
+        off += chunk;
+    }
+    append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
+
+    std::vector<uint8_t> png;
+    const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
+    png.insert(png.end(), sig, sig + 8);
+
+    auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
+        append_be32(png, uint32_t(payload.size()));
+        const size_t type_off = png.size();
+        png.push_back(uint8_t(type[0]));
+        png.push_back(uint8_t(type[1]));
+        png.push_back(uint8_t(type[2]));
+        png.push_back(uint8_t(type[3]));
+        png.insert(png.end(), payload.begin(), payload.end());
+        const uint32_t crc = crc32_bytes(png.data() + type_off, 4 + payload.size());
+        append_be32(png, crc);
+    };
+
+    std::vector<uint8_t> ihdr;
+    ihdr.reserve(13);
+    append_be32(ihdr, uint32_t(w));
+    append_be32(ihdr, uint32_t(h));
+    ihdr.push_back(8); // bit depth
+    ihdr.push_back(6); // RGBA
+    ihdr.push_back(0); // compression
+    ihdr.push_back(0); // filter
+    ihdr.push_back(0); // interlace
+    append_chunk("IHDR", ihdr);
+    append_chunk("IDAT", zlib);
+    append_chunk("IEND", {});
+
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+    f.write((const char*)png.data(), std::streamsize(png.size()));
+    return f.good();
+};
+auto decode_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out,
+                                  std::vector<float>* zraw_out = nullptr,
+                                  std::vector<uint8_t>* alpha_out = nullptr,
+                                  int32_t* valid_out = nullptr,
+                                  float* zmin_out = nullptr,
+                                  float* zmax_out = nullptr) -> bool {
+    if (!bm || bm->width <= 0 || bm->height <= 0) return false;
+    const bool is_8bit = (bm->flags & BM_8BIT) != 0;
+    const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
+    const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
+    if (!is_8bit && !is_16bit) return false;
+    SPalette* pal = (SPalette*)bm->palette.ptr();
+    if (is_8bit && !pal) return false;
+    const int32_t w = bm->width, h = bm->height;
+    const size_t npx = size_t(w) * size_t(h);
+    const uint8_t key8 = (uint8_t)bm->keycolor;
+    const uint16_t key16 = (uint16_t)bm->keycolor;
+    std::unique_ptr<uint8_t[]> idxplane;
+    std::unique_ptr<uint16_t[]> rgbplane16;
+    if (is_8bit) idxplane.reset(new uint8_t[npx]); else rgbplane16.reset(new uint16_t[npx]);
+    std::unique_ptr<uint16_t[]> zplane;
+    if (has_zbuffer) zplane.reset(new uint16_t[npx]);
+
+    if (bm->flags & BM_CHUNKED)
+    {
+        if (!bm->CacheChunks()) return false;
+        SChunkHeader* hdr = (SChunkHeader*)(void*)bm->data8;
+        SChunkHeader* zhdr = has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
+        if (!hdr || (has_zbuffer && !zhdr)) return false;
+        const int32_t cw = hdr->width, ch = hdr->height;
+        if (is_8bit) std::memset(idxplane.get(), key8, npx);
+        else std::fill_n(rgbplane16.get(), npx, key16);
+        if (has_zbuffer) for (size_t i = 0; i < npx; ++i) zplane[i] = 0;
+        for (int32_t by = 0; by < ch; ++by)
+        for (int32_t bx = 0; bx < cw; ++bx)
+        {
+            void* cptr = hdr->block[by * cw + bx].ptr();
+            void* zptr = zhdr ? zhdr->block[by * cw + bx].ptr() : nullptr;
+            const uint8_t*  c8  = (is_8bit && cptr) ? (const uint8_t*)ChunkCache.AddChunk(cptr, 1) : nullptr;
+            const uint16_t* c16 = (is_16bit && cptr) ? (const uint16_t*)ChunkCache.AddChunk16(cptr, 1) : nullptr;
+            const uint16_t* z16 = (has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
+            const int32_t x0 = bx * CHUNKWIDTH, y0 = by * CHUNKHEIGHT;
+            const int32_t cxmax = (w - x0 < CHUNKWIDTH) ? (w - x0) : CHUNKWIDTH;
+            const int32_t cymax = (h - y0 < CHUNKHEIGHT) ? (h - y0) : CHUNKHEIGHT;
+            if (cxmax <= 0 || cymax <= 0) continue;
+            for (int32_t y = 0; y < cymax; ++y)
+            {
+                if (c8) std::memcpy(&idxplane[(y0 + y) * w + x0], &c8[y * CHUNKWIDTH], cxmax);
+                if (c16) std::memcpy(&rgbplane16[(y0 + y) * w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+                if (z16) std::memcpy(&zplane[(y0 + y) * w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+            }
+        }
+    }
+    else
+    {
+        if (is_8bit) std::memcpy(idxplane.get(), bm->data8, npx);
+        else std::memcpy(rgbplane16.get(), bm->data16, npx * sizeof(uint16_t));
+        if (has_zbuffer)
+        {
+            uint16_t* zbuf = (uint16_t*)bm->zbuffer.ptr();
+            if (zbuf) std::memcpy(zplane.get(), zbuf, npx * sizeof(uint16_t));
+        }
+    }
+
+    rgba_out.assign(npx * 4, 0);
+    if (zraw_out) zraw_out->assign(npx, 0.0f);
+    if (alpha_out) alpha_out->assign(npx, 0);
+    int32_t valid = 0;
+    float zmin = FLT_MAX;
+    float zmax = -FLT_MAX;
+    for (size_t i = 0; i < npx; ++i)
+    {
+        const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
+        const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
+        const uint16_t z = has_zbuffer ? zplane[i] : 1;
+        const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
+                                             : (is_8bit ? (idx8 == key8) : (px16 == key16));
+        uint8_t* row = rgba_out.data() + i * 4;
+        if (transparent)
+            continue;
+        ++valid;
+        if (alpha_out) (*alpha_out)[i] = 255;
+        const float zraw = has_zbuffer ? float(int16_t(z)) : 0.0f;
+        if (zraw_out) (*zraw_out)[i] = zraw;
+        zmin = (std::min)(zmin, zraw);
+        zmax = (std::max)(zmax, zraw);
+        if (is_8bit)
+        {
+            const uint32_t c = pal->rgbcolors[idx8];
+            row[0] = (uint8_t)( c        & 0xFF);
+            row[1] = (uint8_t)((c >> 8)  & 0xFF);
+            row[2] = (uint8_t)((c >> 16) & 0xFF);
+        }
+        else
+        {
+            row[0] = (uint8_t)(((px16 >> 10) & 0x1F) << 3);
+            row[1] = (uint8_t)(((px16 >> 5)  & 0x1F) << 3);
+            row[2] = (uint8_t)(( px16        & 0x1F) << 3);
+        }
+        row[3] = 255;
+    }
+    if (valid == 0) { zmin = 0.0f; zmax = 0.0f; }
+    if (valid_out) *valid_out = valid;
+    if (zmin_out) *zmin_out = zmin;
+    if (zmax_out) *zmax_out = zmax;
+    return true;
+};
+
 bool DumpTilesToPath(const char* out_path_cstr)
 {
     namespace fs = std::filesystem;
@@ -139,208 +345,6 @@ bool DumpTilesToPath(const char* out_path_cstr)
     std::ofstream report(out_dir / "tile_z_report.csv");
     if (report)
         report << "objtype,name,width,height,valid,zmin,zmax,expected_flat_zmin,expected_flat_zmax,mean_abs_flat_error,max_abs_flat_error,flat_fit_offset,mean_abs_fit_error,max_abs_fit_error\n";
-
-    auto append_be32 = [](std::vector<uint8_t>& out, uint32_t v) {
-        out.push_back(uint8_t((v >> 24) & 0xFF));
-        out.push_back(uint8_t((v >> 16) & 0xFF));
-        out.push_back(uint8_t((v >>  8) & 0xFF));
-        out.push_back(uint8_t((v      ) & 0xFF));
-    };
-    auto crc32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
-        static uint32_t table[256] = {};
-        static bool init = false;
-        if (!init) {
-            for (uint32_t i = 0; i < 256; ++i) {
-                uint32_t c = i;
-                for (int k = 0; k < 8; ++k)
-                    c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
-                table[i] = c;
-            }
-            init = true;
-        }
-        uint32_t c = 0xFFFFFFFFu;
-        for (size_t i = 0; i < len; ++i)
-            c = table[(c ^ data[i]) & 0xFFu] ^ (c >> 8);
-        return c ^ 0xFFFFFFFFu;
-    };
-    auto adler32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
-        uint32_t s1 = 1, s2 = 0;
-        for (size_t i = 0; i < len; ++i) {
-            s1 = (s1 + data[i]) % 65521u;
-            s2 = (s2 + s1) % 65521u;
-        }
-        return (s2 << 16) | s1;
-    };
-    auto write_png_rgba = [&](const fs::path& path, int32_t w, int32_t h, const std::vector<uint8_t>& rgba) -> bool {
-        if (w <= 0 || h <= 0 || rgba.size() != size_t(w) * size_t(h) * 4) return false;
-        std::vector<uint8_t> raw;
-        raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
-        for (int32_t y = 0; y < h; ++y) {
-            raw.push_back(0); // filter type 0
-            const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
-            raw.insert(raw.end(), row, row + size_t(w) * 4);
-        }
-
-        std::vector<uint8_t> zlib;
-        zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
-        zlib.push_back(0x78);
-        zlib.push_back(0x01);
-        size_t off = 0;
-        while (off < raw.size()) {
-            const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
-            const bool final = (off + chunk) == raw.size();
-            zlib.push_back(final ? 0x01 : 0x00);
-            zlib.push_back(uint8_t(chunk & 0xFF));
-            zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
-            const uint16_t nlen = uint16_t(~uint16_t(chunk));
-            zlib.push_back(uint8_t(nlen & 0xFF));
-            zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
-            zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
-            off += chunk;
-        }
-        append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
-
-        std::vector<uint8_t> png;
-        const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
-        png.insert(png.end(), sig, sig + 8);
-
-        auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
-            append_be32(png, uint32_t(payload.size()));
-            const size_t type_off = png.size();
-            png.push_back(uint8_t(type[0]));
-            png.push_back(uint8_t(type[1]));
-            png.push_back(uint8_t(type[2]));
-            png.push_back(uint8_t(type[3]));
-            png.insert(png.end(), payload.begin(), payload.end());
-            const uint32_t crc = crc32_bytes(png.data() + type_off, 4 + payload.size());
-            append_be32(png, crc);
-        };
-
-        std::vector<uint8_t> ihdr;
-        ihdr.reserve(13);
-        append_be32(ihdr, uint32_t(w));
-        append_be32(ihdr, uint32_t(h));
-        ihdr.push_back(8); // bit depth
-        ihdr.push_back(6); // RGBA
-        ihdr.push_back(0); // compression
-        ihdr.push_back(0); // filter
-        ihdr.push_back(0); // interlace
-        append_chunk("IHDR", ihdr);
-        append_chunk("IDAT", zlib);
-        append_chunk("IEND", {});
-
-        std::ofstream f(path, std::ios::binary);
-        if (!f) return false;
-        f.write((const char*)png.data(), std::streamsize(png.size()));
-        return f.good();
-    };
-    auto decode_tile_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out,
-                                      std::vector<float>* zraw_out = nullptr,
-                                      std::vector<uint8_t>* alpha_out = nullptr,
-                                      int32_t* valid_out = nullptr,
-                                      float* zmin_out = nullptr,
-                                      float* zmax_out = nullptr) -> bool {
-        if (!bm || bm->width <= 0 || bm->height <= 0) return false;
-        const bool is_8bit = (bm->flags & BM_8BIT) != 0;
-        const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
-        const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
-        if (!is_8bit && !is_16bit) return false;
-        SPalette* pal = (SPalette*)bm->palette.ptr();
-        if (is_8bit && !pal) return false;
-        const int32_t w = bm->width, h = bm->height;
-        const size_t npx = size_t(w) * size_t(h);
-        const uint8_t key8 = (uint8_t)bm->keycolor;
-        const uint16_t key16 = (uint16_t)bm->keycolor;
-        std::unique_ptr<uint8_t[]> idxplane;
-        std::unique_ptr<uint16_t[]> rgbplane16;
-        if (is_8bit) idxplane.reset(new uint8_t[npx]); else rgbplane16.reset(new uint16_t[npx]);
-        std::unique_ptr<uint16_t[]> zplane;
-        if (has_zbuffer) zplane.reset(new uint16_t[npx]);
-
-        if (bm->flags & BM_CHUNKED)
-        {
-            if (!bm->CacheChunks()) return false;
-            SChunkHeader* hdr = (SChunkHeader*)(void*)bm->data8;
-            SChunkHeader* zhdr = has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
-            if (!hdr || (has_zbuffer && !zhdr)) return false;
-            const int32_t cw = hdr->width, ch = hdr->height;
-            if (is_8bit) std::memset(idxplane.get(), key8, npx);
-            else std::fill_n(rgbplane16.get(), npx, key16);
-            if (has_zbuffer) for (size_t i = 0; i < npx; ++i) zplane[i] = 0;
-            for (int32_t by = 0; by < ch; ++by)
-            for (int32_t bx = 0; bx < cw; ++bx)
-            {
-                void* cptr = hdr->block[by * cw + bx].ptr();
-                void* zptr = zhdr ? zhdr->block[by * cw + bx].ptr() : nullptr;
-                const uint8_t*  c8  = (is_8bit && cptr) ? (const uint8_t*)ChunkCache.AddChunk(cptr, 1) : nullptr;
-                const uint16_t* c16 = (is_16bit && cptr) ? (const uint16_t*)ChunkCache.AddChunk16(cptr, 1) : nullptr;
-                const uint16_t* z16 = (has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
-                const int32_t x0 = bx * CHUNKWIDTH, y0 = by * CHUNKHEIGHT;
-                const int32_t cxmax = (w - x0 < CHUNKWIDTH) ? (w - x0) : CHUNKWIDTH;
-                const int32_t cymax = (h - y0 < CHUNKHEIGHT) ? (h - y0) : CHUNKHEIGHT;
-                if (cxmax <= 0 || cymax <= 0) continue;
-                for (int32_t y = 0; y < cymax; ++y)
-                {
-                    if (c8) std::memcpy(&idxplane[(y0 + y) * w + x0], &c8[y * CHUNKWIDTH], cxmax);
-                    if (c16) std::memcpy(&rgbplane16[(y0 + y) * w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
-                    if (z16) std::memcpy(&zplane[(y0 + y) * w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
-                }
-            }
-        }
-        else
-        {
-            if (is_8bit) std::memcpy(idxplane.get(), bm->data8, npx);
-            else std::memcpy(rgbplane16.get(), bm->data16, npx * sizeof(uint16_t));
-            if (has_zbuffer)
-            {
-                uint16_t* zbuf = (uint16_t*)bm->zbuffer.ptr();
-                if (zbuf) std::memcpy(zplane.get(), zbuf, npx * sizeof(uint16_t));
-            }
-        }
-
-        rgba_out.assign(npx * 4, 0);
-        if (zraw_out) zraw_out->assign(npx, 0.0f);
-        if (alpha_out) alpha_out->assign(npx, 0);
-        int32_t valid = 0;
-        float zmin = FLT_MAX;
-        float zmax = -FLT_MAX;
-        for (size_t i = 0; i < npx; ++i)
-        {
-            const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
-            const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
-            const uint16_t z = has_zbuffer ? zplane[i] : 1;
-            const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
-                                                 : (is_8bit ? (idx8 == key8) : (px16 == key16));
-            uint8_t* row = rgba_out.data() + i * 4;
-            if (transparent)
-                continue;
-            ++valid;
-            if (alpha_out) (*alpha_out)[i] = 255;
-            const float zraw = has_zbuffer ? float(int16_t(z)) : 0.0f;
-            if (zraw_out) (*zraw_out)[i] = zraw;
-            zmin = (std::min)(zmin, zraw);
-            zmax = (std::max)(zmax, zraw);
-            if (is_8bit)
-            {
-                const uint32_t c = pal->rgbcolors[idx8];
-                row[0] = (uint8_t)( c        & 0xFF);
-                row[1] = (uint8_t)((c >> 8)  & 0xFF);
-                row[2] = (uint8_t)((c >> 16) & 0xFF);
-            }
-            else
-            {
-                row[0] = (uint8_t)(((px16 >> 10) & 0x1F) << 3);
-                row[1] = (uint8_t)(((px16 >> 5)  & 0x1F) << 3);
-                row[2] = (uint8_t)(( px16        & 0x1F) << 3);
-            }
-            row[3] = 255;
-        }
-        if (valid == 0) { zmin = 0.0f; zmax = 0.0f; }
-        if (valid_out) *valid_out = valid;
-        if (zmin_out) *zmin_out = zmin;
-        if (zmax_out) *zmax_out = zmax;
-        return true;
-    };
 
     for (int32_t objtype = 0; objtype < TileClass.NumTypes(); ++objtype)
     {
@@ -375,7 +379,7 @@ bool DumpTilesToPath(const char* out_path_cstr)
         std::vector<uint8_t> alpha;
         int32_t valid_count = 0;
         float zmin = 0.0f, zmax = 0.0f;
-        if (!decode_tile_bitmap_rgba(bm, rgba, &zraw, &alpha, &valid_count, &zmin, &zmax))
+        if (!decode_bitmap_rgba(bm, rgba, &zraw, &alpha, &valid_count, &zmin, &zmax))
         {
             ++failed;
             log_warn("[tiledump] decode failed for tile[%d] '%s' flags=0x%x", objtype, info->name, bm->flags);
@@ -482,6 +486,84 @@ bool DumpTilesToPath(const char* out_path_cstr)
 bool InitializeTileDumpMode()
 {
     return DumpTilesToPath(StartupDumpTilesPath);
+}
+
+// Walk every object class/type, load its imagery, and export every baked
+// inventory icon (GetInvImage per state) as a PNG. This captures all item
+// icons and character portraits (portrait = state 0 of the body imagery);
+// only I3D imagery bakes icons, types without them are silently skipped.
+bool DumpIconsToPath(const char* out_path_cstr)
+{
+    const fs::path out_dir = (out_path_cstr && out_path_cstr[0])
+        ? fs::path(out_path_cstr)
+        : (fs::current_path() / "icons");
+    std::error_code ec;
+    fs::create_directories(out_dir, ec);
+    if (ec)
+    {
+        log_error("[icondump] create_directories failed for '%s': %s",
+                  out_dir.string().c_str(), ec.message().c_str());
+        return false;
+    }
+
+    int dumped = 0;
+    int failed = 0;
+    for (int32_t classid = 0; classid < TObjectClass::NumClasses(); ++classid)
+    {
+        const TObjectClass* cls = TObjectClass::GetClass(classid);
+        if (!cls)
+            continue;
+        const std::string safe_class = SanitizeFilenameComponent(cls->ClassName());
+
+        for (int32_t objtype = 0; objtype < cls->NumTypes(); ++objtype)
+        {
+            SObjectInfo* info = cls->GetObjType(objtype);
+            if (!info || !info->name)
+                continue;
+
+            TObjectImagery* imagery = TObjectImagery::LoadImagery(info->imageryid);
+            if (!imagery)
+                continue;
+
+            const std::string safe_name = SanitizeFilenameComponent(info->name);
+            const int32_t nstates = imagery->NumStates();
+            for (int32_t state = 0; state < nstates; ++state)
+            {
+                TBitmap* bm = imagery->GetInvImage(state);
+                if (!bm)
+                    continue;
+
+                std::vector<uint8_t> rgba;
+                if (!decode_bitmap_rgba(bm, rgba))
+                {
+                    ++failed;
+                    log_warn("[icondump] decode failed for %s '%s' state=%d flags=0x%x",
+                             cls->ClassName(), info->name, state, bm->flags);
+                    continue;
+                }
+
+                char stem[512];
+                if (state == 0)
+                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s.png",
+                                  safe_class.c_str(), objtype, safe_name.c_str());
+                else
+                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s_s%02d.png",
+                                  safe_class.c_str(), objtype, safe_name.c_str(), state);
+                if (!write_png_rgba(out_dir / stem, bm->width, bm->height, rgba))
+                {
+                    ++failed;
+                    log_warn("[icondump] png write failed for %s '%s' state=%d",
+                             cls->ClassName(), info->name, state);
+                    continue;
+                }
+                ++dumped;
+            }
+        }
+    }
+
+    log_info("[icondump] dumped=%d failed=%d folder='%s'",
+             dumped, failed, out_dir.string().c_str());
+    return dumped > 0;
 }
 
 // =========================================================================
@@ -3016,6 +3098,11 @@ bool InputScriptActive()
 bool DumpTilesToFolder(const char* path)
 {
     return DumpTilesToPath(path);
+}
+
+bool DumpIconsToFolder(const char* path)
+{
+    return DumpIconsToPath(path);
 }
 
 bool Initialize(const char* mode)
