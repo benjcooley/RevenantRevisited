@@ -22,6 +22,11 @@ extern char StartupDumpTilesPath[MAXPATHLEN];
 // --dumpicons=<path> — export every baked inventory icon / portrait
 // (GetInvImage, all classes/types/states) as PNGs into the folder, then exit.
 extern char StartupDumpIconsPath[MAXPATHLEN];
+// --dumpgltf=<asset|@list> [--dumpgltfout=<dir|file.glb>] — export I3D
+// asset(s) as Blender-loadable glTF 2.0 binaries (.glb) with per-state
+// animations, then exit.
+extern char StartupDumpGltfPath[MAXPATHLEN];
+extern char StartupDumpGltfOutPath[MAXPATHLEN];
 // --dumpi3d=<asset> [--dumpi3dout=<dir>] — extract textures (PNG) +
 // sub-objects (Wavefront OBJ) + manifest.txt from one I3D file.
 // Default output: ./i3d_dump/<asset-basename>/. Triggers --test=i3ddump.

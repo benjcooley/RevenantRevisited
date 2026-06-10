@@ -40,6 +40,7 @@
 #include "revisited_settings.h"
 #include "testscreen.h"
 #include "cinematicscreen.h"
+#include "i3dgltf.h"
 #include "testmodes.h"
 #include "testconfig.h"
 #include "time.h"
@@ -1735,6 +1736,16 @@ void GetParameters(int argc, char **argv)
             strncpyz(StartupDumpIconsPath, p.c_str(), MAXPATHLEN);
     }
 
+  // DUMPGLTF=asset|@list [DUMPGLTFOUT=dir|file.glb] — export I3D asset(s)
+  // as Blender-loadable .glb with per-state animations.
+    {
+        std::string p;
+        if (arg_param(cmd, "dumpgltf", p))
+            strncpyz(StartupDumpGltfPath, p.c_str(), MAXPATHLEN);
+        if (arg_param(cmd, "dumpgltfout", p))
+            strncpyz(StartupDumpGltfOutPath, p.c_str(), MAXPATHLEN);
+    }
+
   // DUMPI3D=asset [DUMPI3DOUT=dir] — extract one I3D's textures (PNG) +
   // sub-objects (Wavefront OBJ) + manifest into a folder, then exit.
     {
@@ -2101,6 +2112,15 @@ bool InitGlobals()
         if (!TestModes::DumpIconsToFolder(StartupDumpIconsPath))
             FatalError("Failed dumping any icons to %s", StartupDumpIconsPath);
         Status("Icon dump complete. Exiting.\n");
+        return false;
+    }
+
+    if (StartupDumpGltfPath[0])
+    {
+        Status("Dumping glTF for %s\n", StartupDumpGltfPath);
+        if (!DumpGltfFromStartupArgs(StartupDumpGltfPath, StartupDumpGltfOutPath))
+            FatalError("Failed dumping glTF for %s", StartupDumpGltfPath);
+        Status("glTF dump complete. Exiting.\n");
         return false;
     }
 
