@@ -288,6 +288,12 @@ struct SStripSegment
     // for S04 TLightningAnimator_Bespoke iter5.
     float v_left       = 0.0f;
     float v_right      = 1.0f;
+    // Swap the sampled texture axes: along-length (u_a..u_b) samples
+    // texture V and across-width (v_left..v_right) samples texture U.
+    // For authored art whose pattern runs along the image's vertical
+    // axis (LightStrip's 8 bolt columns in newlightstrip texture[1]) —
+    // completes the V-cell extension above for transposed layouts.
+    uint8_t uv_swapped = 0;
 };
 
 struct SStripDrawItem
