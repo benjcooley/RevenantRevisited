@@ -5465,6 +5465,10 @@ void TRenderer::DrainFxQueue()
                 auto emit = [&](const float* wp, const float* color,
                                 const float* tan,
                                 float half_w, float u, float v) {
+                    // uv_swapped: along-length samples texture V, across-
+                    // width samples texture U (transposed authored art —
+                    // see SStripSegment in renderer.h).
+                    if (seg.uv_swapped) { const float t = u; u = v; v = t; }
                     scratch.push_back(wp[0]); scratch.push_back(wp[1]); scratch.push_back(wp[2]);
                     scratch.push_back(tan[0]); scratch.push_back(tan[1]); scratch.push_back(tan[2]);
                     scratch.push_back(half_w);

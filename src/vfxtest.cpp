@@ -153,6 +153,18 @@ namespace fireball_shim {
     bool   IsAlive(const State*);
 }
 
+// S01/S04 LightStrip — retail-asset port (authored bolt columns + flare
+// + sparks from Magic\NewLightStrip.I3D; see src/effects/lightstrip.cpp).
+namespace lightstrip_shim {
+    struct State;
+    State* Spawn(const S3DPoint& origin);
+    void   Tick(State*);
+    void   Submit(State*);
+    void   SubmitWorld(State*);
+    bool   IsAlive(const State*);
+    void   Destroy(State*);
+}
+
 // Fan-out wave 3 — four sonnet-ported shim effects.
 namespace flame_shim {
     struct State;
@@ -2422,54 +2434,47 @@ void StripSubmit(void* cp, EFxDebugMode dbg)
 
 constexpr float kStripFamilyRetriggerGap = 1.0f;
 
-// S04 TLightningAnimator_Bespoke ------------------------------------------
-struct SLightningBespokeCtx {
-    TLightningAnimator_Bespoke* eff    = nullptr;
-    S3DPoint                    origin = {0, 0, 0};
-    float                       gap    = 0.0f;
+// S01/S04 LightStrip retail-asset shim port ---------------------------------
+// Replaces the retired TLightningAnimator_Bespoke iterations (iter1-9 drew
+// a smooth procedural ribbon — a faithful transcription of snapshot code
+// that never shipped; the retail asset carries authored jagged bolt
+// columns instead, forensics §2.1 + i3d_dump_all/newlightstrip).
+struct SLightStripShimCtx {
+    ::lightstrip_shim::State* state = nullptr;
+    S3DPoint origin = {0, 0, 0};
+    float    gap    = 0.0f;
 };
-void* LightningBespokeSpawn(const S3DPoint& origin)
+void* LightStripShimSpawn(const S3DPoint& origin)
 {
-    auto* c = new SLightningBespokeCtx();
+    auto* c = new SLightStripShimCtx();
     c->origin = origin;
-    c->eff    = TLightningAnimator_Bespoke::SpawnForTest_BESPOKE(origin);
-    if (!c->eff)
-        log_warn("[vfx] TLightningAnimator_Bespoke::SpawnForTest_BESPOKE returned null");
+    c->state  = lightstrip_shim::Spawn(origin);
+    if (!c->state)
+        log_warn("[vfx] lightstrip_shim::Spawn returned null");
     return c;
 }
-void LightningBespokeDestroy(void* cp)
+void LightStripShimDestroy(void* cp)
 {
-    auto* c = static_cast<SLightningBespokeCtx*>(cp);
-    delete c->eff;
-    delete c;
+    auto* c = static_cast<SLightStripShimCtx*>(cp);
+    if (c) { lightstrip_shim::Destroy(c->state); delete c; }
 }
-void LightningBespokeSubmit(void* cp, EFxDebugMode dbg)
+void LightStripShimSubmit(void* cp, EFxDebugMode)
 {
-    auto* c = static_cast<SLightningBespokeCtx*>(cp);
+    auto* c = static_cast<SLightStripShimCtx*>(cp);
     if (!c) return;
-    if (!c->eff || !c->eff->IsAlive())
+    if (!c->state || !lightstrip_shim::IsAlive(c->state))
     {
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
         {
-            delete c->eff;
-            c->eff = TLightningAnimator_Bespoke::SpawnForTest_BESPOKE(c->origin);
-            c->gap = kStripFamilyRetriggerGap;
+            lightstrip_shim::Destroy(c->state);
+            c->state = lightstrip_shim::Spawn(c->origin);
+            c->gap   = kStripFamilyRetriggerGap;
         }
-    }
-    if (c->eff)
-        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
-}
-
-// iter8: submit_world callback for LightStrip — drives the glow halo
-// SubmitHelperMesh draws inside BeginTilePass scope. Mirrors the
-// IceBoltBespokeSubmitWorld pattern at :1971-1977.
-void LightningBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
-{
-    auto* c = static_cast<SLightningBespokeCtx*>(cp);
-    if (!c || !c->eff)
         return;
-    c->eff->SubmitWorldMeshes_BESPOKE(dbg);
+    }
+    lightstrip_shim::Tick(c->state);
+    lightstrip_shim::Submit(c->state);
 }
 
 // S05 TShockAnimator_Bespoke ----------------------------------------------
@@ -5024,20 +5029,24 @@ struct SVfxTestBootstrap {
         // Wave 2 batch wave-bespoke-06-strip-ribbon: first-pass bespoke ports.
         // Each entry uses the same Combat / Static-respawning cadence as the
         // engine port siblings (TBloodEffect_BESPOKE convention).
-        VfxTest::SEffect lightning_bespoke = {};
-        lightning_bespoke.id            = "TLightningAnimator_BESPOKE";
-        lightning_bespoke.family        = "strip";
-        // iter8: pipeline tag SR+FB+IM — SR for the bolt strip body
-        // (SubmitFxStrip), FB for any billboard fallback if mesh bind
-        // fails, IM for the stripfly cross-disc glow drawn via
-        // SubmitHelperMesh from submit_world.
-        lightning_bespoke.pipeline      = "SR+FB+IM";
-        lightning_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Combat;
-        lightning_bespoke.factory       = [](const S3DPoint& o) -> void* { return LightningBespokeSpawn(o); };
-        lightning_bespoke.submit        = [](void* c, EFxDebugMode d) { LightningBespokeSubmit(c, d); };
-        lightning_bespoke.submit_world  = [](void* c, EFxDebugMode d) { LightningBespokeSubmitWorld(c, d); };
-        lightning_bespoke.destroy       = [](void* c) { LightningBespokeDestroy(c); };
-        VfxTest::DeferredRegister(lightning_bespoke);
+        VfxTest::SEffect lightstrip = {};
+        lightstrip.id            = "LightStrip";
+        lightstrip.family        = "strip";
+        // PE only — authored bolt-column quads + flare + sparks all go
+        // through SubmitFxParticle (rotated ScreenAligned billboards).
+        // No strip pipeline, no world meshes: the retail visual is
+        // pre-drawn art on quads (src/effects/lightstrip.cpp banner).
+        // SR for the bolt strands (one strip segment each) + PE for the
+        // flare ball + spark twinkles.
+        lightstrip.pipeline      = "SR+PE";
+        // SpellGround: centered ±40wu, ~3s cadence — frames the
+        // target-anchored composite (ball at center, strand back to the
+        // off-center caster).
+        lightstrip.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
+        lightstrip.factory       = [](const S3DPoint& o) -> void* { return LightStripShimSpawn(o); };
+        lightstrip.submit        = [](void* c, EFxDebugMode d) { LightStripShimSubmit(c, d); };
+        lightstrip.destroy       = [](void* c) { LightStripShimDestroy(c); };
+        VfxTest::DeferredRegister(lightstrip);
 
         VfxTest::SEffect shock_bespoke = {};
         shock_bespoke.id            = "TShockAnimator_BESPOKE";
