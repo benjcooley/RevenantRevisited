@@ -12,6 +12,7 @@ char  StartupLevelId[32]      = "";
 char  StartupAssetPath[128]   = "";
 float StartupAssetScale       = 0.0f;   // 0 = auto-fit based on bbox
 char  StartupDumpTilesPath[MAXPATHLEN] = "";
+char  StartupDumpIconsPath[MAXPATHLEN] = "";
 char  StartupDumpI3DPath[MAXPATHLEN]    = "";
 char  StartupDumpI3DOutPath[MAXPATHLEN] = "";
 char  StartupVfxId[64]        = "";

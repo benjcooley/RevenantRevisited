@@ -19,6 +19,9 @@ extern char StartupAssetPath[128];
 extern float StartupAssetScale;
 // --dumptiles=<path> — export tile albedo PNGs into the given folder, then exit.
 extern char StartupDumpTilesPath[MAXPATHLEN];
+// --dumpicons=<path> — export every baked inventory icon / portrait
+// (GetInvImage, all classes/types/states) as PNGs into the folder, then exit.
+extern char StartupDumpIconsPath[MAXPATHLEN];
 // --dumpi3d=<asset> [--dumpi3dout=<dir>] — extract textures (PNG) +
 // sub-objects (Wavefront OBJ) + manifest.txt from one I3D file.
 // Default output: ./i3d_dump/<asset-basename>/. Triggers --test=i3ddump.
