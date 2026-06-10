@@ -542,6 +542,18 @@ bool DumpIconsToPath(const char* out_path_cstr)
                     continue;
                 }
 
+                // Chroma-key the magenta background to transparent. The .i3d-
+                // baked portraits (CHARACTER/PLAYER) come back with an opaque
+                // magenta fill instead of the keyed/zbuffered transparency that
+                // item icons use, so decode_bitmap_rgba leaves it solid. Inv
+                // icons are chroma-keyed by definition and real icon art never
+                // uses pure (248,0,248) magenta, so keying it here is safe.
+                for (size_t p = 0; p + 3 < rgba.size(); p += 4)
+                {
+                    if (rgba[p] >= 224 && rgba[p + 1] <= 32 && rgba[p + 2] >= 224)
+                        rgba[p] = rgba[p + 1] = rgba[p + 2] = rgba[p + 3] = 0;
+                }
+
                 char stem[512];
                 if (state == 0)
                     std::snprintf(stem, sizeof(stem), "%s_%04d_%s.png",
