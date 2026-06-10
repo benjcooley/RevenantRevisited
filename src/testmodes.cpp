@@ -217,6 +217,108 @@ auto write_png_rgba = [](const fs::path& path, int32_t w, int32_t h, const std::
     f.write((const char*)png.data(), std::streamsize(png.size()));
     return f.good();
 };
+// zlib stored-block "compression" of a raw filtered-scanline buffer, shared
+// by the APNG writer's IDAT and fdAT payloads.
+auto zlib_store = [](const std::vector<uint8_t>& raw) -> std::vector<uint8_t> {
+    std::vector<uint8_t> zlib;
+    zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
+    zlib.push_back(0x78);
+    zlib.push_back(0x01);
+    size_t off = 0;
+    while (off < raw.size()) {
+        const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
+        const bool final = (off + chunk) == raw.size();
+        zlib.push_back(final ? 0x01 : 0x00);
+        zlib.push_back(uint8_t(chunk & 0xFF));
+        zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
+        const uint16_t nlen = uint16_t(~uint16_t(chunk));
+        zlib.push_back(uint8_t(nlen & 0xFF));
+        zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
+        zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
+        off += chunk;
+    }
+    append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
+    return zlib;
+};
+// Minimal animated-PNG (APNG) writer. `frames` are full-frame RGBA buffers,
+// each w*h*4 bytes; every frame replaces the whole canvas (dispose=background,
+// blend=source) at delay_num/delay_den seconds. Plays forever.
+auto write_apng_rgba = [](const fs::path& path, int32_t w, int32_t h,
+                          const std::vector<std::vector<uint8_t>>& frames,
+                          uint16_t delay_num, uint16_t delay_den) -> bool {
+    if (w <= 0 || h <= 0 || frames.empty()) return false;
+    const size_t need = size_t(w) * size_t(h) * 4;
+    for (const auto& fr : frames)
+        if (fr.size() != need) return false;
+
+    std::vector<uint8_t> png;
+    const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
+    png.insert(png.end(), sig, sig + 8);
+    auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
+        append_be32(png, uint32_t(payload.size()));
+        const size_t type_off = png.size();
+        png.push_back(uint8_t(type[0])); png.push_back(uint8_t(type[1]));
+        png.push_back(uint8_t(type[2])); png.push_back(uint8_t(type[3]));
+        png.insert(png.end(), payload.begin(), payload.end());
+        append_be32(png, crc32_bytes(png.data() + type_off, 4 + payload.size()));
+    };
+    auto filter_frame = [&](const std::vector<uint8_t>& rgba) {
+        std::vector<uint8_t> raw;
+        raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
+        for (int32_t y = 0; y < h; ++y) {
+            raw.push_back(0);
+            const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
+            raw.insert(raw.end(), row, row + size_t(w) * 4);
+        }
+        return raw;
+    };
+
+    std::vector<uint8_t> ihdr;
+    append_be32(ihdr, uint32_t(w));
+    append_be32(ihdr, uint32_t(h));
+    ihdr.push_back(8); ihdr.push_back(6);
+    ihdr.push_back(0); ihdr.push_back(0); ihdr.push_back(0);
+    append_chunk("IHDR", ihdr);
+
+    std::vector<uint8_t> actl;          // animation control
+    append_be32(actl, uint32_t(frames.size()));
+    append_be32(actl, 0);               // num_plays = 0 => infinite
+    append_chunk("acTL", actl);
+
+    uint32_t seq = 0;
+    auto append_fctl = [&](void) {
+        std::vector<uint8_t> fctl;
+        append_be32(fctl, seq++);
+        append_be32(fctl, uint32_t(w));
+        append_be32(fctl, uint32_t(h));
+        append_be32(fctl, 0);           // x_offset
+        append_be32(fctl, 0);           // y_offset
+        fctl.push_back(uint8_t(delay_num >> 8)); fctl.push_back(uint8_t(delay_num & 0xFF));
+        fctl.push_back(uint8_t(delay_den >> 8)); fctl.push_back(uint8_t(delay_den & 0xFF));
+        fctl.push_back(1);              // dispose_op = background
+        fctl.push_back(0);              // blend_op = source
+        append_chunk("fcTL", fctl);
+    };
+
+    // Frame 0: fcTL + IDAT (the default image).
+    append_fctl();
+    append_chunk("IDAT", zlib_store(filter_frame(frames[0])));
+    // Frames 1..n: fcTL + fdAT (payload = sequence number + zlib data).
+    for (size_t i = 1; i < frames.size(); ++i) {
+        append_fctl();
+        std::vector<uint8_t> z = zlib_store(filter_frame(frames[i]));
+        std::vector<uint8_t> fdat;
+        append_be32(fdat, seq++);
+        fdat.insert(fdat.end(), z.begin(), z.end());
+        append_chunk("fdAT", fdat);
+    }
+    append_chunk("IEND", {});
+
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+    f.write((const char*)png.data(), std::streamsize(png.size()));
+    return f.good();
+};
 auto decode_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out,
                                   std::vector<float>* zraw_out = nullptr,
                                   std::vector<uint8_t>* alpha_out = nullptr,
@@ -507,7 +609,20 @@ bool DumpIconsToPath(const char* out_path_cstr)
     }
 
     int dumped = 0;
+    int animated = 0;
     int failed = 0;
+
+    // Chroma-key the magenta background to transparent. The .i3d-baked
+    // portraits (CHARACTER/PLAYER) come back with an opaque magenta fill
+    // instead of the keyed/zbuffered transparency item icons use, so
+    // decode_bitmap_rgba leaves it solid. Inv icons are chroma-keyed by
+    // definition and real icon art never uses pure (248,0,248) magenta.
+    auto chroma_key = [](std::vector<uint8_t>& rgba) {
+        for (size_t p = 0; p + 3 < rgba.size(); p += 4)
+            if (rgba[p] >= 224 && rgba[p + 1] <= 32 && rgba[p + 2] >= 224)
+                rgba[p] = rgba[p + 1] = rgba[p + 2] = rgba[p + 3] = 0;
+    };
+
     for (int32_t classid = 0; classid < TObjectClass::NumClasses(); ++classid)
     {
         const TObjectClass* cls = TObjectClass::GetClass(classid);
@@ -529,7 +644,15 @@ bool DumpIconsToPath(const char* out_path_cstr)
             const int32_t nstates = imagery->NumStates();
             for (int32_t state = 0; state < nstates; ++state)
             {
+                // An item may ship a static inventory bitmap, an inventory
+                // animation, or both. Potions et al. have only the animation,
+                // so fall back to its first frame for the still (mirrors
+                // TObjectInstance::InventoryImage).
+                TAnimation* anim = imagery->GetInvAnimation(state);
+                const int32_t nframes = anim ? anim->NumFrames() : 0;
                 TBitmap* bm = imagery->GetInvImage(state);
+                if (!bm && anim && nframes > 0)
+                    bm = anim->GetFrame(0);
                 if (!bm)
                     continue;
 
@@ -541,27 +664,18 @@ bool DumpIconsToPath(const char* out_path_cstr)
                              cls->ClassName(), info->name, state, bm->flags);
                     continue;
                 }
-
-                // Chroma-key the magenta background to transparent. The .i3d-
-                // baked portraits (CHARACTER/PLAYER) come back with an opaque
-                // magenta fill instead of the keyed/zbuffered transparency that
-                // item icons use, so decode_bitmap_rgba leaves it solid. Inv
-                // icons are chroma-keyed by definition and real icon art never
-                // uses pure (248,0,248) magenta, so keying it here is safe.
-                for (size_t p = 0; p + 3 < rgba.size(); p += 4)
-                {
-                    if (rgba[p] >= 224 && rgba[p + 1] <= 32 && rgba[p + 2] >= 224)
-                        rgba[p] = rgba[p + 1] = rgba[p + 2] = rgba[p + 3] = 0;
-                }
+                chroma_key(rgba);
 
                 char stem[512];
                 if (state == 0)
-                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s.png",
+                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s",
                                   safe_class.c_str(), objtype, safe_name.c_str());
                 else
-                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s_s%02d.png",
+                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s_s%02d",
                                   safe_class.c_str(), objtype, safe_name.c_str(), state);
-                if (!write_png_rgba(out_dir / stem, bm->width, bm->height, rgba))
+
+                if (!write_png_rgba(out_dir / (std::string(stem) + ".png"),
+                                    bm->width, bm->height, rgba))
                 {
                     ++failed;
                     log_warn("[icondump] png write failed for %s '%s' state=%d",
@@ -569,12 +683,39 @@ bool DumpIconsToPath(const char* out_path_cstr)
                     continue;
                 }
                 ++dumped;
+
+                // Multi-frame inventory animation -> APNG alongside the still.
+                if (nframes > 1)
+                {
+                    std::vector<std::vector<uint8_t>> aframes;
+                    aframes.reserve(size_t(nframes));
+                    const int32_t aw = bm->width, ah = bm->height;
+                    bool ok = true;
+                    for (int32_t fr = 0; fr < nframes; ++fr)
+                    {
+                        TBitmap* fb = anim->GetFrame(fr);
+                        std::vector<uint8_t> frgba;
+                        if (!fb || fb->width != aw || fb->height != ah ||
+                            !decode_bitmap_rgba(fb, frgba))
+                        { ok = false; break; }
+                        chroma_key(frgba);
+                        aframes.push_back(std::move(frgba));
+                    }
+                    // 10 fps is a sensible default; the engine steps these
+                    // off the game tick and the source carries no per-clip rate.
+                    if (ok && write_apng_rgba(out_dir / (std::string(stem) + "_anim.png"),
+                                              aw, ah, aframes, 1, 10))
+                        ++animated;
+                    else if (!ok)
+                        log_warn("[icondump] anim frame decode failed for %s '%s' state=%d",
+                                 cls->ClassName(), info->name, state);
+                }
             }
         }
     }
 
-    log_info("[icondump] dumped=%d failed=%d folder='%s'",
-             dumped, failed, out_dir.string().c_str());
+    log_info("[icondump] dumped=%d animated=%d failed=%d folder='%s'",
+             dumped, animated, failed, out_dir.string().c_str());
     return dumped > 0;
 }
 
