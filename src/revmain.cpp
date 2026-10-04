@@ -105,6 +105,7 @@ char ExileRCPath[MAXPATHLEN];                // Where to run ExileRC from & wher
 char ResourcePath[MAXPATHLEN];               // Where to read / write the resources
 char BaseMapPath[MAXPATHLEN];                // Where the untouched version of the game map is stored
 char CurMapPath[MAXPATHLEN];                 // Where the current map is stored
+char MoviePath[MAXPATHLEN];                  // Where the .smk movies live
 
 // Current language
 TString Language;                   // Where the current map is stored
@@ -1790,6 +1791,7 @@ void GetINISettings()
     INIGetText("ResourcePath", ".", ResourcePath, MAXPATHLEN);
     INIGetText("CurMapPath", ".", CurMapPath, MAXPATHLEN);
     INIGetText("BaseMapPath", ".", BaseMapPath, MAXPATHLEN);
+    INIGetText("MoviePath", ".\\Resources\\FMV", MoviePath, MAXPATHLEN);   // retail default (GetINISettings @ 0x00484500)
 
     // Make sure each string ends with a backslash
     if (ClassDefPath[strlen(ClassDefPath) - 1] != '\\')
@@ -1806,6 +1808,9 @@ void GetINISettings()
 
     if (BaseMapPath[strlen(BaseMapPath) - 1] != '\\')
         strcat(BaseMapPath, "\\");
+
+    if (MoviePath[strlen(MoviePath) - 1] != '\\')
+        strcat(MoviePath, "\\");
 
     INISetSection("Lighting");
     MaxLights = INIGetInt("MaxLights", 1);

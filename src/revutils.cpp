@@ -1777,3 +1777,36 @@ uint32_t TotalPhys() { return 0; }
 uint32_t FreePage()  { return 0; }
 uint32_t TotalPage() { return 0; }
 #endif
+
+bool ResolveMoviePath(const char *name, char *out, int32_t outlen)
+{
+    if (!name || !*name || !out || outlen <= 0)
+        return false;
+
+    // MoviePath is a Win32-style relative path from the INI (".\Disk2\");
+    // anchor it at the install dir (RunPath) like retail's makepath did.
+    std::string rel = MoviePath;
+    for (char &c : rel)
+        if (c == '\\') c = '/';
+    while (rel.rfind("./", 0) == 0) rel.erase(0, 2);
+    if (rel == ".") rel.clear();
+
+    std::error_code ec;
+    const std::filesystem::path dir = std::filesystem::path(RunPath) / rel;
+    std::filesystem::path found = dir / name;
+    if (!std::filesystem::exists(found, ec))
+    {
+        // Shipped movie names differ in case from the script/exe references
+        // (MIX_FMV1.SMK vs "Mix_FMV1.smk"); match case-insensitively.
+        found.clear();
+        for (const auto &entry : std::filesystem::directory_iterator(dir, ec))
+        {
+            const std::string fn = entry.path().filename().string();
+            if (strcasecmp(fn.c_str(), name) == 0) { found = entry.path(); break; }
+        }
+        if (found.empty())
+            return false;
+    }
+    strncpyz(out, found.string().c_str(), outlen);
+    return true;
+}
