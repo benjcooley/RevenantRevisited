@@ -9,6 +9,9 @@
 #include <string.h>
 #include <ctype.h>
 
+#include <string>
+#include <unordered_set>
+
 // Local replacement for Win32 strlwr()
 static inline char *strlwr(char *s)
 {
@@ -47,6 +50,7 @@ static inline char *strlwr(char *s)
 #include "sound.h"
 #include "dialog.h"
 #include "effect.h"
+#include "logging.h"
 
 /* externs */
 extern TObjectClass TileClass;
@@ -167,111 +171,318 @@ COMMAND(CmdSet);
 COMMAND(CmdWait);
 COMMAND(CmdJump);
 
+
+// Retail-table commands added by the retail-sync (bodies in the
+// "Retail commands awaiting port" section at the end of this file until
+// their owner ports them).
+COMMAND(CmdAddAt);
+COMMAND(CmdAddMonsterType);
+COMMAND(CmdAddNear);
+COMMAND(CmdAmbSoundGet);
+COMMAND(CmdAmbSoundSet);
+COMMAND(CmdBeginFighting);
+COMMAND(CmdBigGenerate);
+COMMAND(CmdBusyMsg);
+COMMAND(CmdBusySay);
+COMMAND(CmdBuySellAdd);
+COMMAND(CmdBuySellAddBuyCriteria);
+COMMAND(CmdBuySellAddBuyItem);
+COMMAND(CmdBuySellAddBuyItems);
+COMMAND(CmdBuySellAddCriteria);
+COMMAND(CmdBuySellInit);
+COMMAND(CmdBuySellNoGoldDialog);
+COMMAND(CmdBuySellPurchaseDialog);
+COMMAND(CmdBuySellRemove);
+COMMAND(CmdBuySellRemoveBuyCriteria);
+COMMAND(CmdBuySellRemoveCriteria);
+COMMAND(CmdBuySellSalesPerson);
+COMMAND(CmdBuySellScreen);
+COMMAND(CmdBuySellShopType);
+COMMAND(CmdCleanIds);
+COMMAND(CmdCreateModule);
+COMMAND(CmdDelMonsterType);
+COMMAND(CmdDispInv);
+COMMAND(CmdDrop);
+COMMAND(CmdDumpTagList);
+COMMAND(CmdDumpTagListErrors);
+COMMAND(CmdEndFighting);
+COMMAND(CmdEndGame);
+COMMAND(CmdEquip);
+COMMAND(CmdFaceObject);
+COMMAND(CmdFadeCharacterIn);
+COMMAND(CmdFadeCharacterOut);
+COMMAND(CmdFadeScreenIn);
+COMMAND(CmdFadeScreenOut);
+COMMAND(CmdForget);
+COMMAND(CmdFogOfWar);
+COMMAND(CmdGenAutoMapS);
+COMMAND(CmdGenAutoMapW);
+COMMAND(CmdGetItemAmount);
+COMMAND(CmdGetItemName);
+COMMAND(CmdGetItemValue);
+COMMAND(CmdGiveWeapons);
+COMMAND(CmdGotoRelativeDistance);
+COMMAND(CmdGotoRelativePosition);
+COMMAND(CmdGroupFace);
+COMMAND(CmdGroupGoto);
+COMMAND(CmdGroupInRange);
+COMMAND(CmdGroupPos);
+COMMAND(CmdHasFreeSlot);
+COMMAND(CmdHasLevel);
+COMMAND(CmdHasPlayer);
+COMMAND(CmdHideObjects);
+COMMAND(CmdHideResponse);
+COMMAND(CmdHasNumPlayers);
+COMMAND(CmdIncidentals);
+COMMAND(CmdJumpClass);
+COMMAND(CmdJumpName);
+COMMAND(CmdLoadGame);
+COMMAND(CmdMap);
+COMMAND(CmdMapIndex);
+COMMAND(CmdMaxMonsters);
+COMMAND(CmdMessage);
+COMMAND(CmdMonsterTypes);
+COMMAND(CmdOperate);
+COMMAND(CmdPivotObject);
+COMMAND(CmdPlayerLevel);
+COMMAND(CmdPlayMovie);
+COMMAND(CmdRandom);
+COMMAND(CmdReloadStates);
+COMMAND(CmdStopAutoMapGen);
+COMMAND(CmdSaveGame);
+COMMAND(CmdSaveLevelSectors);
+COMMAND(CmdSetCDVolume);
+COMMAND(CmdSetCurModule);
+COMMAND(CmdSetCurrent);
+COMMAND(CmdSetFromExit);
+COMMAND(CmdSetProtoVariable);
+COMMAND(CmdShort);
+COMMAND(CmdShowObjects);
+COMMAND(CmdSize);
+COMMAND(CmdSpecificAttack);
+COMMAND(CmdStatMod);
+COMMAND(CmdSwapCDTrack);
+COMMAND(CmdTest);
+COMMAND(CmdTextDump);
+COMMAND(CmdTimeLimit);
+COMMAND(CmdTimeOfDay);
+COMMAND(CmdUnequip);
+COMMAND(CmdWalkCopy);
+
+// Shared body for retail-table commands whose port hasn't landed yet: skip
+// the rest of the line, note (once per command) that a script reached it,
+// and report success so the calling script keeps running.
+static int32_t CmdNotPorted(const char *name, uint32_t retailaddr, TToken &t)
+{
+    static std::unordered_set<std::string> reported;
+    if (reported.insert(name).second)
+        log_warn("[cmd] '%s' not ported yet (retail @ 0x%08x); ignored", name, retailaddr);
+    else
+        log_debug("[cmd] '%s' not ported yet; ignored", name);
+    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+        t.Get();
+    return 0;
+}
+
 // Master command list, evaluated top-to-bottom
 // --------------------------------------------
 //
 // "name", function, class1 (0 all, -1 none), class2, requiresparams, editoronly, "usage"
 
 SCommand Commands[] =
-{ { "activate", CmdActivate, OBJCLASS_EXIT, 0, false, false, "usage: <object>.activate\n" },
+{
+  { "activate", CmdActivate, OBJCLASS_EXIT, 0, false, false, "usage: <object>.activate\n" },
   { "add", CmdAdd, -1, -1, true, false, "usage: add [<amt>] <typename>\n       add light [<intensity>]\n" },
+  { "addat", CmdAddAt, -1, -1, true, false, "usage: addat <x> <y> [<amt>] <typename>\n       addat <x> <y> light [<intensity>]\n" },
+  { "addmonstertype", CmdAddMonsterType, OBJCLASS_HELPER, -1, true, false, "usage: <monstergen>.addmonstertype <monster name> <frequency in frames> <treasure type>" },
+  { "addnear", CmdAddNear, 0, -1, true, false, "usage: addnear <object> [<xoffset> <yoffset>] [<amt>] <typename>\n       addnear <object> [<xoffset> <yoffset>] light [<intensity>]\n" },
   { "addinv", CmdAddInv, 0, 0, true, false, "usage: <object>.addinv [<amt>] <obj>\n" },
   { "addrc", CmdAddRC, -1, -1, false, true, "usage: addrc\n" },
   { "amb", CmdAmbient, -1, -1, true, false, "usage: ambient <intensity>\n" },
   { "ambcolor", CmdAmbColor, -1, -1, true, false, "usage: ambcolor <red> <green> <blue>\n" },
+  { "ambsoundget", CmdAmbSoundGet, 0, 0, false, true, "usage: <speaker object>.getsound\n" },
+  { "ambsoundset", CmdAmbSoundSet, 0, 0, true, false, "usage: <speaker object>.ambsoundset [<sound name> <vol> <min range> <max range>] [SOUND <sound name>] [VOLUME <vol>] [RANGES <min range> <max range>]\n" },
   { "animreg", CmdAnimRegistration, 0, 0, false, true, "usage: <object>.animregistration <deltax> <deltay>\n" },
   { "animz", CmdAnimZ, 0, 0, false, true, "usage: <object>.animz <zval>\n" },
   { "attack", CmdAttack, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <object>.attack <target>\n" },
   { "begin", CmdBegin, -1, -1, false, false, "usage: begin\n         <block>\n       end\n" },
+  { "beginfighting", CmdBeginFighting, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>begincombat <target>\n" },
+  { "biggenerate", CmdBigGenerate, -1, -1, false, true, "usage: generate [<startx> <starty> <sizex> <sizey>] \n  Size in sectors \n" },
   { "block", CmdBlock, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <object>.block\n" },
   { "bounds", CmdBounds, 0, 0, true, true, "usage: <object>.bounds <regx> <regy> <width> <length>\n" },
   { "burn", CmdBurn, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.burn\n" },
+  { "busymsg", CmdBusyMsg, -1, -1, true, false, "usage: busymessage <message>\n" },
+  { "busysay", CmdBusySay, -1, -1, true, false, "usage: busysay <message>\n" },
+  { "buyselladd", CmdBuySellAdd, -1, -1, true, false, "usage: buyselladd <item>\n" },
+  { "buyselladdbuycriteria", CmdBuySellAddBuyCriteria, -1, -1, true, false, "usage: buyselladdbuycriteria <stat name> <min> <max>\n" },
+  { "buyselladdbuyitem", CmdBuySellAddBuyItem, -1, -1, false, false, "usage: buyselladdbuyitem <name>\n" },
+  { "buyselladdbuyitems", CmdBuySellAddBuyItems, -1, -1, false, false, "usage: buyselladdbuyitems\n" },
+  { "buyselladdcriteria", CmdBuySellAddCriteria, -1, -1, true, false, "usage: buyselladdcriteria <stat name> <min> <max>\n" },
+  { "buysellinit", CmdBuySellInit, -1, -1, false, false, "usage: buysellinit\n" },
+  { "buysellnogolddialog", CmdBuySellNoGoldDialog, -1, -1, true, false, "usage: buysellnogolddialog <tag>\n" },
+  { "buysellpurchasedialog", CmdBuySellPurchaseDialog, -1, -1, true, false, "usage: buysellpurchasedialog <tag>\n" },
+  { "buysellremove", CmdBuySellRemove, -1, -1, true, false, "usage: buysellremove <item>\n" },
+  { "buysellremovebuycriteria", CmdBuySellRemoveBuyCriteria, -1, -1, true, false, "usage: buysellremovebuycriteria <stat name> <min> <max>\n" },
+  { "buysellremovecriteria", CmdBuySellRemoveCriteria, -1, -1, true, false, "usage: buysellremovecriteria <stat name> <min> <max>\n" },
+  { "buysellsalesperson", CmdBuySellSalesPerson, -1, -1, true, false, "usage: buysellsalesperson <character>\n" },
+  { "buysellscreen", CmdBuySellScreen, -1, -1, false, false, "usage: buysellscreen\n" },
+  { "buysellshoptype", CmdBuySellShopType, -1, -1, true, false, "usage: buysellscreen <mode> <type>\n" },
   { "calcwalk", CmdCalcWalkmap, -1, -1, false, true, "usage: calcwalkmap\n" },
   { "cast", CmdCast, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.cast <name or talisman list>\n" },
   { "centeron", CmdCenterOn, 0, 0, false, false, "usage: <object>.centeron OR\n\t centeron <object> OR\n\t centeron <x> <y> <z> [<level>]\n" },
   { "choice", CmdChoice, -1, -1, true, false, "usage: choice <label> <text string>\n" },
+  { "cleanids", CmdCleanIds, -1, -1, false, false, "usage: cleanids\n" },
   { "combat", CmdCombat, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <object>.combat [off|on|<target>]\n" },
   { "control", CmdControl, -1, -1, false, false, "usage: control <on|off>\n" },
+  { "createmodule", CmdCreateModule, -1, -1, true, true, "usage: createmodule <modulename> ['single'|'multi']\n" },
   { "curplayer", CmdCurPlayer, OBJCLASS_PLAYER, -1, false, false, "usage: <player>.curplayer\n" },
   { "delete", CmdDelete, 0, 0, false, false, "usage: <object>.delete\n" },
   { "delinv", CmdDelInv, 0, 0, false, false, "usage: <object>.delinv [<amt>] <obj>\n" },
+  { "delmonstertype", CmdDelMonsterType, OBJCLASS_HELPER, -1, true, false, "usage: <monstergen>.delmonstertype <monster name>" },
   { "delrc", CmdDeleteRC, -1, -1, false, true, "usage: deleterc\n" },
   { "deselect", CmdDeselect, -1, -1, false, true, "usage: deselect [<selection number>]\n" },
+  { "dispinv", CmdDispInv, 0, 0, false, true, "usage: dispinv (shows inventory items in the selected object)\n" },
+  { "drop", CmdDrop, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.drop <item>\n" },
+  { "dumptaglist", CmdDumpTagList, 0, 0, true, true, "usage: [object.]dumptaglist <filename> [tag name]" },
+  { "dumptaglisterrors", CmdDumpTagListErrors, 0, 0, true, true, "usage: [object.]dumptaglisterrors <filename> [tag name]" },
   { "dxstats", CmdDXStats, -1, -1, false, false, "usage: dxstats\n" },
   { "else", CmdElse, -1, -1, false, false, "usage: if <condition>\n          <command block>\n"
                                   "         else <alternate command block>\n" },
   { "end", CmdEnd, -1, -1, false, false, "usage: begin\n         <block>\n       end\n" },
+  { "endfighting", CmdEndFighting, OBJCLASS_CHARACTER, -1, false, false, "usage: <character>.endfighting\n" },
+  { "endgame", CmdEndGame, -1, -1, false, false, "usage: endgame\n" },
+  { "equip", CmdEquip, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.equip <item>\n" },
   { "exit", CmdExit, OBJCLASS_EXIT, -1, true, true, "usage: <object>.exit <name> [posonly]\n" },
   { "extents", CmdExtents, 0, 0, false, true, "usage: <object>.extents [<state>] [FRONT]\n" },
   { "face", CmdFace, 0, 0, true, false, "usage: <object>.face <angle>\n" },
+  { "faceobject", CmdFaceObject, 0, 0, true, false, "usage: <object>.face <object> <offset>\n" },
+  { "fadecharacterin", CmdFadeCharacterIn, -1, -1, true, false, "usage: fadecharacterin <character>\n" },
+  { "fadecharacterout", CmdFadeCharacterOut, -1, -1, true, false, "usage: fadecharacterout <character>\n" },
+  { "fadescreenin", CmdFadeScreenIn, -1, -1, false, false, "usage: fadescreenin\n" },
+  { "fadescreenout", CmdFadeScreenOut, -1, -1, false, false, "usage: fadescreenout\n" },
   { "flip", CmdFlip, 0, 0, false, false, "usage: <object>.flip\n" },
   { "follow", CmdFollow, OBJCLASS_EXIT, -1, false, true, "usage: <exit>.follow\n" },
   { "force", CmdForce, 0, -1, true, false, "usage: force <state name>\n" },
+  { "forget", CmdForget, -1, -1, false, false, "usage: forget [<character>]\n" },
+  { "fow", CmdFogOfWar, -1, -1, false, false, "usage: toggles the fog of war on automap" },
   { "frame", CmdFrame, 0, -1, true, false, "usage: frame <frame num>\n" },
+  { "gamaps", CmdGenAutoMapS, -1, -1, true, true, "usage: <upper left of level x y> <lower right of level x y> docomp" },
+  { "gamapw", CmdGenAutoMapW, -1, -1, true, true, "usage: <upper left of level x y z> <lower right of level x y z> docomp" },
   { "generate", CmdGenerate, -1, -1, false, true, "usage: generate [<sizex> <sizey>] [from <startx> <starty>]\n" },
   { "get", CmdGet, 0, 0, false, false, "usage: <character>.get <object>\n" },
+  { "getitemamount", CmdGetItemAmount, OBJCLASS_CHARACTER, 0, true, false, "usage: <character>.getitemamount <obj>\n" },
+  { "getitemname", CmdGetItemName, 0, 0, true, false, "usage: <object>.getitemname <item number> <variable>\n" },
+  { "getitemvalue", CmdGetItemValue, 0, 0, true, false, "usage: <object>.getitemvalue <item number> <variable>\n" },
   { "getstate", CmdGetState, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.getstate\n" },
   { "give", CmdGive, 0, 0, true, false, "usage: <object>.give <to> [<amt>] <obj>\n" },
+  { "giveweapons", CmdGiveWeapons, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <charobj>.giveweapons \"<character>\"\n" },
   { "go", CmdGo, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.go <angle>\n" },
   { "goto", CmdGoto, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.goto <x> <y>\n" },
+  { "gotorelativedistance", CmdGotoRelativeDistance, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.gotorelativedistance <object> <distance> [<offset>]\n" },
+  { "gotorelativeposition", CmdGotoRelativePosition, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.gotorelativeposition <object> <x> <y> [<x> <y>]\n" },
   { "group", CmdGroup, 0, 0, false, true, "usage: group <groupnum>\n"},
+  { "groupface", CmdGroupFace, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.groupface <face [<face2>...]\n" },
+  { "groupgoto", CmdGroupGoto, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.groupgoto <x> <y> [<x2> <y2>...]\n" },
+  { "groupinrange", CmdGroupInRange, OBJCLASS_PLAYER, -1, false, false, "usage: <player>.groupinrange [<width> <height>]\n" },
+  { "grouppos", CmdGroupPos, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.grouppos <level> <x> <y> [<x2> <y2>...]\n" },
+  { "hasfreeslot", CmdHasFreeSlot, OBJCLASS_CHARACTER, 0, true, false, "usage: <character>.hasfreeslot\n" },
+  { "haslevel", CmdHasLevel, OBJCLASS_PLAYER, 0, true, false, "usage: <player>.haslevel <minlev>\n" },
   { "help", CmdHelp, -1, -1, false, true, "usage: help [<command>]\n" },
+  { "hasplayer", CmdHasPlayer, OBJCLASS_PLAYER, 0, true, false, "usage: <player>.hasplayer <name or classname>\n" },
+  { "hideobjects", CmdHideObjects, -1, -1, true, false, "usage: hideobjects <class>\n" },
+  { "hideresponse", CmdHideResponse, -1, -1, false, false, "usage: hideresponse\n" },
+  { "hasnumplayers", CmdHasNumPlayers, OBJCLASS_PLAYER, 0, true, false, "usage: <player>.hasnumplayers <min> <max>\n" },
   { "if", CmdIf, -1, -1, true, false, "usage: if <condition>\n          <command block>\n"
                                   "         else <alternate command block>\n" },
+  { "incidentals", CmdIncidentals, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: incidentals <on/off>\n" },
   { "jump", CmdJump, -1, -1, true, false, "usage: jump <label>\n" },
+  { "jumpclass", CmdJumpClass, 0, -1, true, false, "usage: <this/context>.jump <object>\n" },
+  { "jumpname", CmdJumpName, 0, -1, true, false, "usage: <this/context>.jump <object>\n" },
   { "knockback", CmdKnockBack, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.knockback <x> <y> <z>\n" },
   { "level", CmdLevel, -1, -1, true, false, "usage: level <level number>\n" },
   { "light", CmdLight, 0, 0, true, false, "usage: <object>.light <on/off>    <object>.light <intensity>\n"
                 "       <object>.light color <red> <green> <blue>\n"
                 "       <object>.light position <x> <y> <z>\n" },
-  { "load", CmdLoad, -1, -1, true, true, "usage: load [game <game number> | sectors]\n" },
+  { "load", CmdLoad, -1, -1, false, true, "usage: load [game <game number> | sectors]\n" },
+  { "loadgame", CmdLoadGame, -1, -1, true, false, "usage: loadgame.<game name>" },
   { "lock", CmdLock, 0, 0, false, true, "usage: lock\n" },
-  { "mappos",   CmdMapPos, -1, -1, true, true, "usage: mappos list [or] <name> [or] <x> <y> <z>\n" },
+  { "map", CmdMap, -1, -1, true, true, "usage: map list [or] <name> [or] <x> <y> <z>\n" },
+  { "mappos",   CmdMapPos, -1, -1, true, true, "usage: mappos list [or] <name> [or] <x> <y> <z>\n" },  // port-only: editor map-position bookmarks (not in retail table)
+  { "mapindex", CmdMapIndex, 0, -1, false, true, "usage: <object>.mapindex\n" },
+  { "maxmonsters", CmdMaxMonsters, OBJCLASS_HELPER, -1, false, false, "usage: <monstergen>.maxmonsters [max number of monsters]" },
   { "memory", CmdMemory, -1, -1, false, false, "usage: memory\n" },
+  { "message", CmdMessage, -1, -1, true, false, "usage: message <message>\n" },
   { "mono", CmdMono, -1, -1, true, false, "usage: mono <percent>\n" },
+  { "monstertypes", CmdMonsterTypes, OBJCLASS_HELPER, -1, false, false, "usage: <monstergen>.monstertypes" },
   { "move", CmdMove, 0, 0, true, false, "usage: <object>.move <dx> <dy> [<dz>]\n" },
   { "name", CmdName, 0, 0, true, false, "usage: <object>.name [type/clear] <name>\n" },
   { "newgame", CmdNewGame, -1, -1, false, false, "usage: newgame\n" },
+  { "operate", CmdOperate, OBJCLASS_EXIT, -1, true, false, "usage: <exit>.operate <object>\n" },
   { "pivot", CmdPivot, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <object>.pivot <angle>\n" },
+  { "pivotobject", CmdPivotObject, 0, 0, true, false, "usage: <object>.pivotobject <object> <offset>\n" },
   { "play", CmdPlay, -1, -1, true, false, "usage: play <sound>\n" },
   { "play3d", CmdPlay3D, 0, 0, true, false, "usage: <object>.play3d <sound>\n" },
-  { "pos", CmdPos, 0, 0, true, false, "usage: <object>.pos <dx> <dy> [<dz> [<level>]]\n" },
+  { "playerlevel", CmdPlayerLevel, OBJCLASS_PLAYER, -1, true, false, "usage: playerlevel <level 1-30>\n" },
+  { "playmovie", CmdPlayMovie, -1, -1, true, false, "usage: playmovie <smacker movie filename>\n" },
+  { "pos", CmdPos, 0, 0, true, false, "usage: <object>.pos <dx> <dy> [<dz> [<level>]]\n" },  // retail: requiresparams=false (owner flips when body is synced)
   { "pulp", CmdPulp, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.pulp <x> <y> <z>\n" },
+  { "random", CmdRandom, -1, -1, true, false, "usage: random <max>\n" },
   { "reg", CmdRegistration, 0, 0, false, true, "usage: <object>.registration <deltax> <deltay>\n" },
+  { "reloadstates", CmdReloadStates, -1, -1, false, false, "usage: reloadstates\n" },
   { "replace", CmdReplace, 0, 0, true, false, "usage: <object>.replace [<class>] [<newobjtype>]\n" },
   { "restore", CmdRestore, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.restore\n" },
   { "reveal", CmdReveal, 0, -1, false, false, "usage: reveal\n" },
   { "rotate", CmdRotate, 0, 0, false, true, "usage: <object>.rotate <x> <y> <z>\n" },
+  { "samap", CmdStopAutoMapGen, -1, -1, false, false, "usage: toggles the pause on amap generation" },
   { "save", CmdSave, -1, -1, false, true, "usage: save [game <game number> | map | headers | classes | exits]\n" },
+  { "savegame", CmdSaveGame, -1, -1, true, false, "usage: savegame.<game name>" },
+  { "savelevelsectors", CmdSaveLevelSectors, -1, -1, false, true, "usage: savelevelsectors\n" },
   { "savetilebm", CmdSaveTileBM, -1, -1, false, true, "usage: savetilebm\n" },
   { "say", CmdSay, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.say [<nowait>] [choice|\"string\"]\n" },
-  { "script", CmdScript, 0, 0, false, true, "usage: <object>.script\n" },
+  { "script", CmdScript, -1, -1, false, true, "usage: <object>.script\n" },
   { "scrollto", CmdScrollTo, 0, 0, false, false, "usage: <object>.scrollto OR\n\t scrollto <object> OR\n\t scrollto <x> <y> <z> [<level>]\n" },
   { "sectorcommand", CmdSectorCommand, -1, -1, true, true, "usage: sectorcommand <level> <command>\n" },
   { "select", CmdSelect, -1, -1, true, true, "usage: select [#.]<object name>\n       select <#/next/prev>\n" },
   { "set", CmdSet, -1, -1, true, false, "usage: set <state name> <new value>\n" },
+  { "setcdvolume", CmdSetCDVolume, -1, -1, true, false, "usage: setcdvolume <'half' or 'full'>\n" },
+  { "setcurmodule", CmdSetCurModule, -1, -1, true, true, "usage: setcurmodule <modulename>\n" },
+  { "setcurrent", CmdSetCurrent, -1, -1, true, false, "usage: setcurrent <class name>\n" },
   { "setdrip", CmdDrip, 0, 0, true, false, "usage: <drip object>.setdrip <ripplesize> <height> <period>\n" },
+  { "setfromexit", CmdSetFromExit, OBJCLASS_EXIT, -1, false, false, "usage: <exit>.setfromexit\n" },
+  { "setprotovariable", CmdSetProtoVariable, -1, -1, true, false, "usage: set <variable name> <new value>\n" },
+  { "short", CmdShort, -1, -1, true, true, "usage: short <1 or 0>" },
+  { "show", CmdShow, -1, -1, true, false, "usage: show <class> [<type>]\n" },
+  { "showobjects", CmdShowObjects, -1, -1, true, false, "usage: showobjects <class>\n" },
+  { "size", CmdSize, 0, -1, true, false, "usage: size <primitive> <x1 y1 z1> <x2 y2 z2>\n" },
   { "smoothscroll", CmdSmoothScroll, -1, -1, true, false, "usage: smoothscroll <on/off>\n" },
+  { "specificattack", CmdSpecificAttack, OBJCLASS_CHARACTER, -1, true, false, "usage: specificattack <attack number>\n" },
   { "stat", CmdStat, 0, 0, false, false, "usage: <object>.stat [<amt>]<name> <value>]\n" },
   { "state", CmdState, 0, -1, true, false, "usage: state <state number>\n" },
+  { "statmod", CmdStatMod, OBJCLASS_PLAYER, -1, true, false, "usage: <context>.statmod <statmod list>\n" },
   { "stop", CmdStop, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <object>.stop\n" },
-  { "show", CmdShow, -1, -1, true, false, "usage: show <class> [<type>]\n" },
   { "swap", CmdSwap, 0, 0, true, true, "usage: swap <obj to swap with>\n" },
+  { "swapcdtrack", CmdSwapCDTrack, -1, -1, true, false, "usage: swapcdtrack <'-1' or track#>\nwhere: '-1' restores last swapped track,\n       track# is new track to play\n" },
   { "take", CmdTake, 0, 0, true, false, "usage: <object>.take <from> [<amt>] <obj>\n" },
   { "template", CmdTemplate, 0, -1, false, true, "usage: <object.>template\n" },
+  { "test", CmdTest, -1, -1, false, true, "usage: test\n" },
   { "text", CmdText, OBJCLASS_SCROLL, -1, false, true, "usage: <scroll>.text\n" },
+  { "textdump", CmdTextDump, -1, -1, true, true, "usage: textdump <1 or 0>" },
   { "tilewalk", CmdTileWalkmap, OBJCLASS_TILE, -1, false, true, "usage: tilewalkmap\n" },
+  { "timelimit", CmdTimeLimit, -1, -1, true, false, "usage: <object>.script edit\nscript pause <all>\nscript resume <all>\nscript end <all>\n" },
+  { "timeofday", CmdTimeOfDay, -1, -1, false, false, "usage: timeofday\n" },
   { "toback", CmdToBack, 0, 0, false, true, "usage: toback\n" },
   { "tofront", CmdToFront, 0, 0, false, true, "usage: tofront\n" },
   { "toggle", CmdToggle, 0, 0, true, false, "usage: <object>.toggle <flagname>\n" },
   { "trigger", CmdTrigger, 0, 0, true, false, "usage: trigger <trigname>\n" },
   { "try", CmdTry, 0, -1, true, false, "usage: try <state name>\n" },
   { "undo", CmdUndo, -1, -1, false, true, "usage: undo\n" },
+  { "unequip", CmdUnequip, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.unequip <item>\n" },
   { "unlock", CmdUnlock, 0, 0, false, true, "usage: unlock\n" },
   { "use", CmdUse, 0, 0, false, false, "usage: <object>.use [<with object>]\n" },
   { "visible", CmdSetVisibility, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.visible <state #>\n" },
+  { "wait", CmdWait, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.wait [<wait type>]\n" },  // retail: context (0,0) (owner flips when body is synced)
+  { "walkcopy", CmdWalkCopy, -1, -1, true, true, "usage: walkcopy <src tile name> <dest tile name>  <applied rotation>\n" },
   { "walkmap", CmdWalkmap, 0, 0, true, true, "usage: walkmap <delta z>\n" },
-  { "wait", CmdWait, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.wait [<wait type>]\n" },
   { "while", CmdWhile, -1, -1, true, false, "usage: while <condition>\n         <command block>\n" },
   { "zoffset", CmdZOffset, 0, 0, false, true, "usage: <object>.zoffset <zoffset>\n" },
 
@@ -306,7 +517,7 @@ inline bool CheckContext(TObjectInstance* context, int32_t classid, int32_t clas
     return (CheckOneContext(context, classid) || (classid2 >= 0 && CheckOneContext(context, classid2)));
 }
 
-int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen)
+int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen, TScript* script)
 {
     bool skip = false;
     bool nowait = false;
@@ -431,7 +642,7 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
                           // Make sure this object is correct class for command 
                             if (CheckContext(context, Commands[cmd].classcontext, Commands[cmd].classcontext2))
                             {
-                                retval = (*(Commands[cmd].cmdfunc))(context, t); // Do it
+                                retval = (*(Commands[cmd].cmdfunc))(context, t, orgcontext, script); // Do it
                                 if (retval & CMD_ERROR)
                                     break;
                             }
@@ -439,7 +650,7 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
                     }
                 }
                 else                    // Do command for current context
-                    retval = (*(Commands[cmd].cmdfunc))(context, t);
+                    retval = (*(Commands[cmd].cmdfunc))(context, t, orgcontext, script);
             }
 
             break;
@@ -487,7 +698,7 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
 
 // Defined in editor.cpp (see extern declaration above)
 
-void Output(char *fmt,...)
+void Output(const char *fmt,...)
 {
     va_list marker;
     va_start(marker, fmt);
@@ -3721,3 +3932,125 @@ COMMAND(CmdGenerate)
     return 0;
 }
 
+// *************************************************************************
+// * Retail commands awaiting port                                         *
+// *************************************************************************
+//
+// Every entry of the retail command table (SCommand[189] @ 0x005c6e88) is
+// registered above. Commands the pre-release snapshot never had start here
+// as stubs: they consume their parameters, log once that they ran, and
+// succeed, so a script that uses them keeps flowing instead of aborting.
+// The retail body for each lives in recon/discovered/commands/cmd_<name>_<addr>.cpp.
+// When a command is ported, replace its stub with the real body (and move
+// the body next to its siblings if that reads better).
+
+// ----- owner: script engine (flow control / variables) -----
+
+COMMAND(CmdCleanIds) { return CmdNotPorted("cleanids", 0x00428a30, t); }
+COMMAND(CmdForget) { return CmdNotPorted("forget", 0x004282e0, t); }
+COMMAND(CmdJumpClass) { return CmdNotPorted("jumpclass", 0x004296c0, t); }
+COMMAND(CmdJumpName) { return CmdNotPorted("jumpname", 0x00429770, t); }
+COMMAND(CmdRandom) { return CmdNotPorted("random", 0x00427d40, t); }
+COMMAND(CmdReloadStates) { return CmdNotPorted("reloadstates", 0x00428a20, t); }
+COMMAND(CmdSetCurrent) { return CmdNotPorted("setcurrent", 0x00428e50, t); }
+COMMAND(CmdSetProtoVariable) { return CmdNotPorted("setprotovariable", 0x0041fd70, t); }
+COMMAND(CmdTimeLimit) { return CmdNotPorted("timelimit", 0x00429820, t); }
+
+// ----- owner: dialog (speech, messages, responses) -----
+
+COMMAND(CmdBusyMsg) { return CmdNotPorted("busymsg", 0x00429850, t); }
+COMMAND(CmdBusySay) { return CmdNotPorted("busysay", 0x004298b0, t); }
+COMMAND(CmdHideResponse) { return CmdNotPorted("hideresponse", 0x00426d40, t); }
+COMMAND(CmdMessage) { return CmdNotPorted("message", 0x004280e0, t); }
+
+// ----- owner: savegame (load/save orchestration) -----
+
+COMMAND(CmdLoadGame) { return CmdNotPorted("loadgame", 0x00428540, t); }
+COMMAND(CmdSaveGame) { return CmdNotPorted("savegame", 0x004285b0, t); }
+
+// ----- owner: world + character (movement, combat, inventory, objects) -----
+
+COMMAND(CmdAddAt) { return CmdNotPorted("addat", 0x00421770, t); }
+COMMAND(CmdAddMonsterType) { return CmdNotPorted("addmonstertype", 0x00427ac0, t); }
+COMMAND(CmdAddNear) { return CmdNotPorted("addnear", 0x00421bc0, t); }
+COMMAND(CmdAmbSoundGet) { return CmdNotPorted("ambsoundget", 0x00420fe0, t); }
+COMMAND(CmdAmbSoundSet) { return CmdNotPorted("ambsoundset", 0x00420dc0, t); }
+COMMAND(CmdBeginFighting) { return CmdNotPorted("beginfighting", 0x00427cd0, t); }
+COMMAND(CmdDelMonsterType) { return CmdNotPorted("delmonstertype", 0x00427b60, t); }
+COMMAND(CmdDispInv) { return CmdNotPorted("dispinv", 0x00422070, t); }
+COMMAND(CmdDrop) { return CmdNotPorted("drop", 0x004281c0, t); }
+COMMAND(CmdEndFighting) { return CmdNotPorted("endfighting", 0x00427d30, t); }
+COMMAND(CmdEquip) { return CmdNotPorted("equip", 0x00428140, t); }
+COMMAND(CmdFaceObject) { return CmdNotPorted("faceobject", 0x00420840, t); }
+COMMAND(CmdGetItemAmount) { return CmdNotPorted("getitemamount", 0x00426be0, t); }
+COMMAND(CmdGetItemName) { return CmdNotPorted("getitemname", 0x00426d60, t); }
+COMMAND(CmdGetItemValue) { return CmdNotPorted("getitemvalue", 0x00426e20, t); }
+COMMAND(CmdGiveWeapons) { return CmdNotPorted("giveweapons", 0x00422150, t); }
+COMMAND(CmdGotoRelativeDistance) { return CmdNotPorted("gotorelativedistance", 0x00420710, t); }
+COMMAND(CmdGotoRelativePosition) { return CmdNotPorted("gotorelativeposition", 0x004205c0, t); }
+COMMAND(CmdHasFreeSlot) { return CmdNotPorted("hasfreeslot", 0x00426c60, t); }
+COMMAND(CmdHideObjects) { return CmdNotPorted("hideobjects", 0x00427010, t); }
+COMMAND(CmdIncidentals) { return CmdNotPorted("incidentals", 0x00428250, t); }
+COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
+COMMAND(CmdMaxMonsters) { return CmdNotPorted("maxmonsters", 0x00427c30, t); }
+COMMAND(CmdMonsterTypes) { return CmdNotPorted("monstertypes", 0x00427bd0, t); }
+COMMAND(CmdOperate) { return CmdNotPorted("operate", 0x00426cd0, t); }
+COMMAND(CmdPivotObject) { return CmdNotPorted("pivotobject", 0x00420900, t); }
+COMMAND(CmdPlayerLevel) { return CmdNotPorted("playerlevel", 0x00428640, t); }
+COMMAND(CmdSetFromExit) { return CmdNotPorted("setfromexit", 0x00428a40, t); }
+COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
+COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
+COMMAND(CmdSpecificAttack) { return CmdNotPorted("specificattack", 0x00427c80, t); }
+COMMAND(CmdStatMod) { return CmdNotPorted("statmod", 0x00428200, t); }
+COMMAND(CmdUnequip) { return CmdNotPorted("unequip", 0x00428180, t); }
+
+// ----- owner: presentation (fades, music, movies, end game) -----
+
+COMMAND(CmdEndGame) { return CmdNotPorted("endgame", 0x00427060, t); }
+COMMAND(CmdFadeCharacterIn) { return CmdNotPorted("fadecharacterin", 0x00428070, t); }
+COMMAND(CmdFadeCharacterOut) { return CmdNotPorted("fadecharacterout", 0x00428020, t); }
+COMMAND(CmdFadeScreenIn) { return CmdNotPorted("fadescreenin", 0x00427f60, t); }
+COMMAND(CmdFadeScreenOut) { return CmdNotPorted("fadescreenout", 0x00427e80, t); }
+COMMAND(CmdFogOfWar) { return CmdNotPorted("fow", 0x00425440, t); }
+COMMAND(CmdPlayMovie) { return CmdNotPorted("playmovie", 0x00427d80, t); }
+COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }
+COMMAND(CmdSetCDVolume) { return CmdNotPorted("setcdvolume", 0x00428b20, t); }
+COMMAND(CmdSwapCDTrack) { return CmdNotPorted("swapcdtrack", 0x00428b90, t); }
+COMMAND(CmdTimeOfDay) { return CmdNotPorted("timeofday", 0x00427a80, t); }
+
+// ----- owner: deferred (buy/sell screen, multiplayer, editor tooling) -----
+
+COMMAND(CmdBigGenerate) { return CmdNotPorted("biggenerate", 0x00426d50, t); }
+COMMAND(CmdBuySellAdd) { return CmdNotPorted("buyselladd", 0x00427500, t); }
+COMMAND(CmdBuySellAddBuyCriteria) { return CmdNotPorted("buyselladdbuycriteria", 0x00427550, t); }
+COMMAND(CmdBuySellAddBuyItem) { return CmdNotPorted("buyselladdbuyitem", 0x00427810, t); }
+COMMAND(CmdBuySellAddBuyItems) { return CmdNotPorted("buyselladdbuyitems", 0x00427860, t); }
+COMMAND(CmdBuySellAddCriteria) { return CmdNotPorted("buyselladdcriteria", 0x00427240, t); }
+COMMAND(CmdBuySellInit) { return CmdNotPorted("buysellinit", 0x00427080, t); }
+COMMAND(CmdBuySellNoGoldDialog) { return CmdNotPorted("buysellnogolddialog", 0x00427a20, t); }
+COMMAND(CmdBuySellPurchaseDialog) { return CmdNotPorted("buysellpurchasedialog", 0x00427a50, t); }
+COMMAND(CmdBuySellRemove) { return CmdNotPorted("buysellremove", 0x00427840, t); }
+COMMAND(CmdBuySellRemoveBuyCriteria) { return CmdNotPorted("buysellremovebuycriteria", 0x004276b0, t); }
+COMMAND(CmdBuySellRemoveCriteria) { return CmdNotPorted("buysellremovecriteria", 0x004273a0, t); }
+COMMAND(CmdBuySellSalesPerson) { return CmdNotPorted("buysellsalesperson", 0x004279f0, t); }
+COMMAND(CmdBuySellScreen) { return CmdNotPorted("buysellscreen", 0x00427090, t); }
+COMMAND(CmdBuySellShopType) { return CmdNotPorted("buysellshoptype", 0x00427870, t); }
+COMMAND(CmdCreateModule) { return CmdNotPorted("createmodule", 0x00428c30, t); }
+COMMAND(CmdDumpTagList) { return CmdNotPorted("dumptaglist", 0x004287c0, t); }
+COMMAND(CmdDumpTagListErrors) { return CmdNotPorted("dumptaglisterrors", 0x004288f0, t); }
+COMMAND(CmdGenAutoMapS) { return CmdNotPorted("gamaps", 0x00425390, t); }
+COMMAND(CmdGenAutoMapW) { return CmdNotPorted("gamapw", 0x004252f0, t); }
+COMMAND(CmdGroupFace) { return CmdNotPorted("groupface", 0x00429390, t); }
+COMMAND(CmdGroupGoto) { return CmdNotPorted("groupgoto", 0x00429480, t); }
+COMMAND(CmdGroupInRange) { return CmdNotPorted("groupinrange", 0x00428f50, t); }
+COMMAND(CmdGroupPos) { return CmdNotPorted("grouppos", 0x00429590, t); }
+COMMAND(CmdHasLevel) { return CmdNotPorted("haslevel", 0x00429180, t); }
+COMMAND(CmdHasPlayer) { return CmdNotPorted("hasplayer", 0x00429060, t); }
+COMMAND(CmdHasNumPlayers) { return CmdNotPorted("hasnumplayers", 0x00429290, t); }
+COMMAND(CmdMap) { return CmdNotPorted("map", 0x00425170, t); }
+COMMAND(CmdSaveLevelSectors) { return CmdNotPorted("savelevelsectors", 0x00426350, t); }
+COMMAND(CmdSetCurModule) { return CmdNotPorted("setcurmodule", 0x00428d40, t); }
+COMMAND(CmdShort) { return CmdNotPorted("short", 0x00428ab0, t); }
+COMMAND(CmdTest) { return CmdNotPorted("test", 0x00428690, t); }
+COMMAND(CmdTextDump) { return CmdNotPorted("textdump", 0x00428a70, t); }
+COMMAND(CmdWalkCopy) { return CmdNotPorted("walkcopy", 0x004223c0, t); }

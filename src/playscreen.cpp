@@ -31,6 +31,7 @@
 #include "3dimage.h"
 #include "area.h"
 #include "automap.h"
+#include "consoleexec.h"
 #include "cursor.h"
 #include "debugui.h"
 #include "display.h"
@@ -745,6 +746,9 @@ void TPlayScreen::Update()
     // follow. Editor mode's Tick is a no-op (the editor drives camera
     // + pulse itself).
     CurrentMode()->Tick();
+
+    // --exec console queue (no-op unless the flag was given).
+    PulseStartupExec();
 
     // Tick the area system: detects player Enter/Exit of each TArea's
     // RECTs, runs day/night ambient interpolation, fires CDPLAYLIST /
