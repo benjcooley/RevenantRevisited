@@ -36,7 +36,7 @@
 // Primitives (UI_METHOD_MAP §12 — canonical shared toolbox only):
 //   Renderer->DrawBitmapToTarget                 - opaque chrome stamp
 //   Renderer->DrawBitmapSubrectToTarget          - opaque tile / subrect stamp
-//   Renderer->DrawBitmapSubrectStretchedToTarget - icon stretched into row
+//   TSpellIconSlot / Renderer target primitives  - spell icon cell
 //   font.h DrawTextShadowedToTarget              - 3-pass black shadow text
 // No hand-rolled shadow passes / glyph walks; no procedural stand-ins.
 //
@@ -49,17 +49,16 @@
 //     the recon does not expose the per-spell talisman list in source, so
 //     the harness uses representative glyphs per spell from spellscroll.dat
 //     (visual exercise of the per-row glyph blit — UNCONFIRMED-G).
-//   - Animation: scrollY advances at +40 px / sim tick (spec §6b 0x28 step,
-//     `cls_0x5a4494.cpp:641-696`) and ping-pongs across the content extent,
-//     so a single capture exercises both the parchment tile scroll-align
-//     loop (`for iVar11=-(p[0x5f]%0x50)`) and the row paint window test
-//     (spec §6c).
+//   - Scrolling is deterministic: the pane rests at scrollY=0 until input
+//     drives it. Use --input-script arrow clicks or drags when a filmstrip
+//     should exercise the scroll-align loop and row paint-window test.
 //
 // *************************************************************************
 
 #include "uispellbooktest.h"
 
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "display.h"
 #include "font.h"
 #include "logging.h"
@@ -67,7 +66,9 @@
 #include "renderer.h"
 #include "surface.h"
 #include "time.h"
+#include "uispellcell.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -85,12 +86,13 @@ constexpr int32_t kPaneH = 0x132;  // 306 — pane height (ctor :21-28)
 
 // --- content surface (spec §3 / Init :65) ----------------------------
 // FUN_004a5740(0x94, 0xe5, 0x400, …) — the 148x229 parchment viewport that
-// hosts the per-row paint + ScrollPaper tile. Inset inside the 188-wide
-// scroll-rod frame at pane-local (20, 38) (UNCONFIRMED-B in spec §3).
+// hosts the per-row paint + ScrollPaper tile. Retail draw setup uses a
+// pane-local y of 0x2f for the content blit; y=38 lets the paper intrude
+// into the top rod and leaves a visible gap above the bottom rod.
 constexpr int32_t kContentW    = 0x94;   // 148 (§3 surface alloc)
 constexpr int32_t kContentH    = 0xe5;   // 229 (§3 surface alloc)
 constexpr int32_t kContentOrigX = 20;    // pane-local content TL (§3 UNCONFIRMED-B)
-constexpr int32_t kContentOrigY = 38;    // pane-local content TL (§3 UNCONFIRMED-B)
+constexpr int32_t kContentOrigY = 0x2f;  // 47 — pane-local content TL
 
 // --- ScrollPaper tile (spec §2 / §5 step 2) --------------------------
 constexpr int32_t kPaperW = 148;   // measured (dump_dat.py [9])
@@ -119,32 +121,27 @@ constexpr int32_t kArrowH     = 0x18;   // 24
 // font line height since the spec rebuild does `lines*lineH + 0x5b`).
 constexpr int32_t kRowPitchBase = 0x5b;   // 91 — fixed per-row block (§6a)
 constexpr int32_t kIconX        = 12;     // ~12 + 0xc depth-bumped (§4)
+constexpr int32_t kRingW        = 48;     // RingU/D/G (§QuickSpell / spellbook xref)
+constexpr int32_t kRingH        = 48;
 constexpr int32_t kIconW        = 40;     // SpellIcons 40x40 (§2)
 constexpr int32_t kIconH        = 40;
 constexpr int32_t kNameX        = 10;     // 0xa (§4)
 constexpr int32_t kNameYRel     = 0x2c;   // 44 — name baseline within row (§4)
 constexpr int32_t kNameW        = 0x84;   // 132 (§4)
 constexpr int32_t kDescX        = 0x36;   // 54 (§4)
-constexpr int32_t kDescYRel     = 0;      // line 1 at row top (§4)
+constexpr int32_t kDescSingleYRel = 10;   // unsplit description (§4)
+constexpr int32_t kDescYRel     = 4;      // split line 1 (§4)
 constexpr int32_t kDescLine2YRel = 0x10;  // 16 — line 2 (§4)
 constexpr int32_t kDescW        = 0x55;   // 85 (§4)
 constexpr int32_t kDescH        = 0x56;   // 86 (§4)
 constexpr int32_t kGlyphXStart  = 0x0c;   // 12 — first talisman glyph x (§4)
-constexpr int32_t kGlyphYRel    = 0x3d;   // 61 — glyph row within row (§4)
+constexpr int32_t kGlyphYBaseRel = 0x3d;  // lineH + 61 — glyph row (§4 recon)
 constexpr int32_t kGlyphPitch   = 0x10;   // 16 — per-glyph step (§4)
 constexpr int32_t kGlyphW       = 20;     // spellscroll glyphs 20x20 (§2)
 constexpr int32_t kGlyphH       = 20;
 constexpr int32_t kSkillX       = 10;     // 0xa, same row as Mana (§4)
 constexpr int32_t kManaX        = 0x5a;   // 90 (§4)
-// Spec §4 literal says +0x2c (44 — same baseline as name); recon line 297/305
-// `FUN_004be2b0(10/0x5a, pcVar12 + (0x2c - iVar10), 0x84, …)` confirms the
-// row-relative y is 0x2c. But the reference image shows Skill/Mana BELOW the
-// talisman-glyph row (which sits at +0x3d = 61) — so the literal `0x2c`
-// placement collides with the name and over-prints the description. Render
-// Skill/Mana below the glyph row at +82 (glyph row end + small gap) so the
-// harness reads correctly; **spec gap: §4 Skill/Mana y likely needs another
-// row offset added** (UNCONFIRMED).
-constexpr int32_t kStatYRel     = 0x52;   // 82 — below glyph row (spec gap §4)
+constexpr int32_t kStatYBaseRel = 0x2c;   // lineH + 44 — Skill/Mana (§4 recon)
 constexpr int32_t kStatW        = 0x84;   // 132 (§4)
 
 // --- text colors (spec §8 PackRGB decode) ----------------------------
@@ -195,6 +192,9 @@ PTBitmap g_scrlTop      = nullptr;   // 32x12 ScrlTop cap
 PTBitmap g_scrlBottom   = nullptr;   // 40x16 ScrlBottom cap
 PTBitmap g_arrowUpUp    = nullptr;   // ScrlArwUU 24x24
 PTBitmap g_arrowDownUp  = nullptr;   // ScrlArwDU 24x24
+PTBitmap g_ringU        = nullptr;   // SpellIcons.dat RingU 48x48
+PTBitmap g_ringD        = nullptr;   // SpellIcons.dat RingD 48x48
+PTBitmap g_ringG        = nullptr;   // SpellIcons.dat RingG 48x48
 
 // Talisman glyphs keyed by name (S*); resolved at init from g_scrollDat.
 PTBitmap g_talismanGlyphs[12] = { nullptr };
@@ -202,13 +202,47 @@ PTBitmap g_talismanGlyphs[12] = { nullptr };
 const SFontAtlas* g_font = nullptr;
 
 TSurface* g_pane = nullptr;
+TSurface* g_content = nullptr;
+bool      g_hudVisible = true;
 
-// Scroll position (spec §6b — clamp [0, contentHeight-229]) + sim-tick
-// driver (we ping-pong it across the row stack so a single capture
-// exercises mid-page scrolling without persistent input).
-int32_t g_scrollY = 0;
-int32_t g_scrollDir = +1;
-double  g_lastTickMs = 0.0;
+// =====================================================================
+// #8 iOS-style velocity scroll state.
+//
+// Physics:
+//   - Drag: while mouse-down, track position changes per-tick to compute
+//     velocity (pixels/sec). g_scrollY follows the drag position directly.
+//   - Release: velocity decays with exponential friction (50%/tick at 24Hz
+//     → very fast. Use 85%/tick = 0.85 decay factor for pleasant feel).
+//   - Rubber-band: when scroll exceeds [0, maxScroll], the boundary
+//     resistance increases (extra δy / 3 past edge). On release, spring
+//     back with a simple lerp toward the clamped position (10% per tick).
+//   - Snap: when |velocity| < 1.0 px/s AND within bounds, zero velocity.
+//
+// No passive auto-drive. Retail scroll changes come from the arrow buttons,
+// programmatic select-into-view, or user input; the harness keeps that model
+// so snapshots are stable unless the command line asks for movement.
+// =====================================================================
+
+int32_t g_scrollY    = 0;       // current scroll position (px, may be out-of-range during rubber-band)
+double  g_velocityY  = 0.0;     // px / second
+double  g_lastTickMs = 0.0;     // last 24Hz tick timestamp (ms)
+
+// Drag state.
+bool    g_dragging    = false;   // true while mouse is held
+int32_t g_dragStartY  = 0;      // cursor y at mouse-down
+int32_t g_dragScrollStart = 0;  // g_scrollY at mouse-down
+double  g_dragLastMs  = 0.0;    // time of last drag-move sample
+int32_t g_dragLastCurY = 0;     // cursor y at last move sample (for velocity)
+
+// iOS rubber-band physics constants (spec #8).
+constexpr double kFriction       = 0.85;   // velocity decay per 24Hz tick
+constexpr double kSnapThreshold  = 1.0;    // px/s — velocity snap-to-zero
+constexpr double kSpringRate     = 0.12;   // fraction per tick for edge spring-back
+constexpr double kRubberBandDiv  = 3.0;    // resistance divisor past edge
+
+// Pane screen coordinates for hit-testing (spec §3). Retail TSidePane places
+// the upper content slot at x = display_w - 188, y = 0.
+constexpr int32_t kPaneScreenY = 0;
 
 // =====================================================================
 // Per-spell harness binding — names from QuickSpell + Heal (spec §1
@@ -312,23 +346,21 @@ class TSpellbookHud : public THudDrawable
 public:
     void Draw() override
     {
-        if (!g_pane) return;
-        // Place the pane on the right side of the screen, top-anchored
-        // with a small inset (the retail pane is owned by TSidePane's
-        // upper region — exact screen origin is UNCONFIRMED-A in spec
-        // §14; we hug the right edge to read as the upper sidebar).
+        if (!g_hudVisible || !g_pane) return;
         const int32_t dw = Display.Width();
-        const int32_t x  = (dw > 0 ? dw : kPaneW) - kPaneW - 8;
-        Renderer->DrawSurface(g_pane, x < 0 ? 0 : x, 24);
+        const int32_t x  = (dw > 0 ? dw : kPaneW) - kPaneW;
+        Renderer->DrawSurface(g_pane, x < 0 ? 0 : x, kPaneScreenY);
     }
 
     void Refresh()
     {
+        if (!g_hudVisible) return;
         if (!g_scrollFrame) return;
-        EnsurePane();
-        if (!g_pane) return;
+        EnsureSurfaces();
+        if (!g_pane || !g_content) return;
 
         AdvanceScroll();
+        RefreshContentSurface();
 
         const int32_t tw = g_pane->Width();
         const int32_t th = g_pane->Height();
@@ -343,65 +375,12 @@ public:
         //     188x306 ornate frame surrounding the parchment viewport).
         Renderer->DrawBitmapToTarget(g_scrollFrame, 0, 0, tw, th);
 
-        // --- (2) ScrollPaper vertical tile loop inside the content surface
-        //     (spec §5 step 2): for iVar11 = -(scrollY mod 80); iVar11 < 320;
-        //     iVar11 += 80. We compose tiles directly into the pane RT at
-        //     the content origin — same visual result as composing into a
-        //     separate content surface then DrawSurface'ing it (UI_METHOD_MAP
-        //     §3 — single-RT compose is equivalent for opaque tiles).
-        const int32_t tileOffY = -(g_scrollY % kTilePitch);
-        for (int32_t y = tileOffY; y < (kContentH + kTilePitch); y += kTilePitch)
-        {
-            // Clip the tile to the content viewport: src y starts at 0 of the
-            // tile, dst y at kContentOrigY + y; we use SubrectToTarget so the
-            // tile can extend past the bottom without overflowing into the
-            // bottom scroll-rod chrome.
-            const int32_t dstY  = kContentOrigY + y;
-            const int32_t srcY  = 0;
-            int32_t       sh    = kPaperH;
-            int32_t       drawY = dstY;
-            int32_t       srcOffY = srcY;
-            if (drawY < kContentOrigY)
-            {
-                const int32_t clip = kContentOrigY - drawY;
-                srcOffY += clip;
-                sh      -= clip;
-                drawY    = kContentOrigY;
-            }
-            const int32_t bottomLimit = kContentOrigY + kContentH;
-            if (drawY + sh > bottomLimit)
-                sh = bottomLimit - drawY;
-            if (sh <= 0) continue;
-            Renderer->DrawBitmapSubrectToTarget(
-                g_scrollPaper,
-                kContentOrigX, drawY,
-                0, srcOffY,
-                kPaperW, sh,
-                tw, th);
-        }
+        // --- (2) Content surface: retail draws rows into a 148x229 scroll
+        //     surface, then composites that clipped surface into the pane.
+        Renderer->DrawSurfaceToTarget(
+            g_content, kContentOrigX, kContentOrigY, tw, th);
 
-        // --- (3) Per-spell row loop (spec §5 step 3 / §6c paint-window test).
-        //     row_top accumulates down the column; iVar10 = scrollY - running
-        //     translates row-local y to content-surface-local y. Intersect
-        //     each row's [rowTop, rowTop+rowH] with the visible window
-        //     [scrollY, scrollY+229]; skip non-intersecting rows.
-        const int32_t rowH = RowPitch();
-        for (int32_t i = 0; i < kSpellCount; ++i)
-        {
-            const int32_t rowTop = i * rowH;
-            const int32_t rowBot = rowTop + rowH;
-            if (rowBot <= g_scrollY)           continue;          // above window
-            if (rowTop >= g_scrollY + kContentH) break;            // below window
-
-            // iVar10 = (running) - scrollY in spec §6c. The content y of an
-            // element at row-local rl is: rowTop + rl - scrollY (content-
-            // surface-local), then + (kContentOrigX, kContentOrigY) → pane.
-            const int32_t rowYInContent = rowTop - g_scrollY;
-
-            DrawSpellRow(g_spells[i], rowYInContent, tw, th);
-        }
-
-        // --- (4) Top + bottom scroll-rod caps (spec §5 step 4).
+        // --- (3) Top + bottom scroll-rod caps (spec §5 step 4).
         //     ScrlTop at content TL; ScrlBottom at content BL. They are
         //     composited OVER the content (mask the parchment edge where it
         //     meets the rods).
@@ -419,7 +398,7 @@ public:
                 kContentOrigY + kContentH - kScrlBotH / 2, tw, th);
         }
 
-        // --- (5) Scroll-arrow buttons (spec §4 / Init :128, :147). The
+        // --- (4) Scroll-arrow buttons (spec §4 / Init :128, :147). The
         //     retail buttons cycle between U/D/G art based on TButton state;
         //     this test mode shows the resting Up state (ScrlArwUU / DU).
         if (g_arrowUpUp)
@@ -431,50 +410,104 @@ public:
     }
 
 private:
+    static void RefreshContentSurface()
+    {
+        if (!g_content) return;
+
+        const int32_t tw = g_content->Width();
+        const int32_t th = g_content->Height();
+
+        g_content->StartPass(0.0f, 0.0f, 0.0f, 0.0f);
+
+        // --- ScrollPaper vertical tile loop inside the content surface
+        //     (spec §5 step 2): for iVar11 = -(scrollY mod 80); iVar11 < 320;
+        //     iVar11 += 80.
+        const int32_t tileOffY = -(g_scrollY % kTilePitch);
+        for (int32_t y = tileOffY; y < (kContentH + kTilePitch); y += kTilePitch)
+        {
+            // Clip the tile to the content viewport.
+            const int32_t dstY  = y;
+            const int32_t srcY  = 0;
+            int32_t       sh    = kPaperH;
+            int32_t       drawY = dstY;
+            int32_t       srcOffY = srcY;
+            if (drawY < 0)
+            {
+                const int32_t clip = -drawY;
+                srcOffY += clip;
+                sh      -= clip;
+                drawY    = 0;
+            }
+            const int32_t bottomLimit = kContentH;
+            if (drawY + sh > bottomLimit)
+                sh = bottomLimit - drawY;
+            if (sh <= 0) continue;
+            Renderer->DrawBitmapSubrectToTarget(
+                g_scrollPaper,
+                0, drawY,
+                0, srcOffY,
+                kPaperW, sh,
+                tw, th);
+        }
+
+        // --- Per-spell row loop (spec §5 step 3 / §6c paint-window test).
+        //     row_top accumulates down the column; iVar10 = scrollY - running
+        //     translates row-local y to content-surface-local y.
+        const int32_t rowH = RowPitch();
+        for (int32_t i = 0; i < kSpellCount; ++i)
+        {
+            const int32_t rowTop = i * rowH;
+            const int32_t rowBot = rowTop + rowH;
+            if (rowBot <= g_scrollY)           continue;          // above window
+            if (rowTop >= g_scrollY + kContentH) break;            // below window
+
+            // iVar10 = (running) - scrollY in spec §6c. The content y of an
+            // element at row-local rl is rowTop + rl - scrollY.
+            const int32_t rowYInContent = rowTop - g_scrollY;
+
+            DrawSpellRow(g_spells[i], rowYInContent, tw, th);
+        }
+
+        g_content->EndPass();
+    }
+
     // Compose one spell row's visible elements (spec §4 / §5 step 3 inner
-    // body). All coords are content-surface-local; compose to pane via
-    // (kContentOrigX, kContentOrigY).
+    // body). All coords are content-surface-local.
     static void DrawSpellRow(const SSpell& sp, int32_t rowYInContent,
                              int32_t tw, int32_t th)
     {
-        const int32_t paneX0 = kContentOrigX;
-        const int32_t paneY0 = kContentOrigY + rowYInContent;
+        const int32_t rowY = rowYInContent;
+        const int32_t lineH = g_font ? int32_t(TextLineHeight(g_font) + 0.5f) : 12;
 
         // (a) Spell circle icon — spec §4 / Draw FUN_004bd680(iStack_2d0,
-        //     uStack_2b4, icon, 0x100/0x2000). 40x40 at row-local
-        //     (~12 + depth, 0). Stretched-blit so undersized harness icons
-        //     still render correctly into the 40x40 cell (most icons are
-        //     exactly 40x40 — the stretch is identity in that case).
-        if (sp.icon)
-        {
-            Renderer->DrawBitmapSubrectStretchedToTarget(
-                sp.icon,
-                paneX0 + kIconX, paneY0,
-                kIconW, kIconH,
-                0, 0, sp.icon->width, sp.icon->height,
-                tw, th);
-        }
+        //     uStack_2b4, icon, 0x100/0x2000). Use the shared spell icon
+        //     slot with the same RingU/D/G overlay as retail's spellbook
+        //     xrefs. The icon and ring share the same origin.
+        TSpellIconSlot iconSlot(kIconX, rowY,
+                                kRingW, kRingH, kIconW, kIconH);
+        iconSlot.SetRingSprites(g_ringU, g_ringD, g_ringG);
+        iconSlot.SetIconOffset(0, 0);
+        iconSlot.SetHitRect(0, 0, kIconW, kIconH);
+        iconSlot.SetSpell(sp.icon, 0, sp.name);
+        iconSlot.Draw(tw, th);
 
         // (b) Spell name text — spec §8 row 1. cell (10, +44, 132, lineH),
         //     font 0x401, cream RGB(0xff,0xe7,0xf2), left-aligned, 3-pass
         //     black shadow (font flag 0x400 → DrawTextShadowedToTarget).
         if (g_font)
         {
-            const int32_t lineH = int32_t(TextLineHeight(g_font) + 0.5f);
             DrawTextShadowedToTarget(
                 g_font, sp.name,
-                paneX0 + kNameX, paneY0 + kNameYRel,
+                kNameX, rowY + kNameYRel,
                 kNameW, lineH,
                 ETextAlign::Left,
                 kNameR, kNameG, kNameB,
                 tw, th);
 
-            // (c) Description / skill block — spec §8 row 2/3. cell (54, 0,
-            //     85, 86), font 0x402, theme color, left-aligned, shadowed.
-            //     Spec splits into two lines at +0 and +16; we emit one
+            // (c) Description / skill block — spec §8 row 2/3. cell (54, 4,
+            //     85, 86) for split text, or y=10 when unsplit. We emit one
             //     DrawTextShadowedToTarget per line for the explicit "\n"
-            //     break in the harness desc, then let any further wrapping
-            //     be the cell-clip (DrawTextShadowedToTarget is single-line).
+            //     break in the harness desc.
             const char* desc = sp.desc;
             const char* nl   = std::strchr(desc, '\n');
             char line1[64], line2[64];
@@ -494,7 +527,7 @@ private:
             }
             DrawTextShadowedToTarget(
                 g_font, line1,
-                paneX0 + kDescX, paneY0 + kDescYRel,
+                kDescX, rowY + (line2[0] ? kDescYRel : kDescSingleYRel),
                 kDescW, lineH,
                 ETextAlign::Left,
                 kDescColR, kDescColG, kDescColB,
@@ -502,32 +535,33 @@ private:
             if (line2[0])
                 DrawTextShadowedToTarget(
                     g_font, line2,
-                    paneX0 + kDescX, paneY0 + kDescLine2YRel,
+                    kDescX, rowY + kDescLine2YRel,
                     kDescW, lineH,
                     ETextAlign::Left,
                     kDescColR, kDescColG, kDescColB,
                     tw, th);
 
-            // (d) "Skill: N" stat line — spec §8 row 4. cell (10, +44, 132),
-            //     font 0x401, yellow-green RGB(0xf4,0xf4,0x05), shadowed.
+            // (d) "Skill: N" stat line — spec §8 row 4. cell
+            //     (10, lineH + 44, 132), font 0x401, yellow-green,
+            //     shadowed.
             //     Format = "%s: %d" with label "Skill" (UNCONFIRMED-D label
             //     text — retail resolves SPANESKILLS via meth_0x49d800).
             char buf[32];
             std::snprintf(buf, sizeof(buf), "Skill: %d", sp.skill);
             DrawTextShadowedToTarget(
                 g_font, buf,
-                paneX0 + kSkillX, paneY0 + kStatYRel,
+                kSkillX, rowY + lineH + kStatYBaseRel,
                 kStatW, lineH,
                 ETextAlign::Left,
                 kSkillR, kSkillG, kSkillB,
                 tw, th);
 
-            // (e) "Mana: N" stat line — spec §8 row 5. cell (90, +44, 132),
-            //     font 0x401, cyan RGB(0x25,0xff,0xe9), shadowed.
+            // (e) "Mana: N" stat line — spec §8 row 5. cell
+            //     (90, lineH + 44, 132), font 0x401, cyan, shadowed.
             std::snprintf(buf, sizeof(buf), "Mana: %d", sp.mana);
             DrawTextShadowedToTarget(
                 g_font, buf,
-                paneX0 + kManaX, paneY0 + kStatYRel,
+                kManaX, rowY + lineH + kStatYBaseRel,
                 kStatW, lineH,
                 ETextAlign::Left,
                 kManaR, kManaG, kManaB,
@@ -535,7 +569,7 @@ private:
         }
 
         // (f) Talisman recipe glyph row — spec §4 / Draw glyph loop. start
-        //     x = 12, step 16 per glyph; y = row top + 61. Each glyph is
+        //     x = 12, step 16 per glyph; y = row top + lineH + 61. Each glyph is
         //     20x20 from spellscroll.dat:S<Talisman>, alpha (drawmode
         //     0x2000) — the bitmap's own alpha carries the composite.
         int32_t gx = kGlyphXStart;
@@ -547,42 +581,84 @@ private:
             if (!glyph) { gx += kGlyphPitch; continue; }
             Renderer->DrawBitmapToTarget(
                 glyph,
-                paneX0 + gx, paneY0 + kGlyphYRel,
+                gx, rowY + lineH + kGlyphYBaseRel,
                 tw, th);
             gx += kGlyphPitch;
         }
     }
 
-    void EnsurePane()
+    void EnsureSurfaces()
     {
-        if (g_pane) return;
         // Spec §3: pane is fixed 188x306. The whole compose (chrome +
         // content + arrows) lands in this RT; HUD-pass DrawSurface's it
         // once to the screen at the upper-sidebar slot.
-        g_pane = new TSurface(kPaneW, kPaneH, SG_PIXELFORMAT_RGBA8);
+        if (!g_pane)
+            g_pane = new TSurface(kPaneW, kPaneH, SG_PIXELFORMAT_RGBA8);
+        if (!g_content)
+            g_content = new TSurface(kContentW, kContentH, SG_PIXELFORMAT_RGBA8);
     }
 
-    // Scroll ping-pong driver — spec §6b step 0x28 per sim tick (24Hz).
-    // The real pane drives g_scrollY from arrow-button clicks; the harness
-    // bounces between 0 and maxScroll so a single capture exercises mid-
-    // scroll layout + the parchment tile scroll-align loop.
+    // #8 iOS-style velocity scroll driver.
+    // Called every Refresh() frame; applies momentum decay and rubber-band
+    // spring-back after explicit user/script input.
     static void AdvanceScroll()
     {
-        const double nowMs = TTime::Time() * 1000.0;
+        const double nowMs  = TTime::Time() * 1000.0;
         if (g_lastTickMs == 0.0) g_lastTickMs = nowMs;
+
+        // Run 24Hz sim ticks to keep physics framerate-independent.
+        const int32_t maxS  = MaxScroll();
         int32_t guard = 0;
         while (nowMs - g_lastTickMs >= kSimTickMs && guard < 64)
         {
             g_lastTickMs += kSimTickMs;
             ++guard;
-            const int32_t maxS = MaxScroll();
-            if (maxS <= 0) { g_scrollY = 0; continue; }
-            // Step every 6 sim ticks (~4 px/sec when stride is 0x28/6 effective)
-            // — too-fast ping-pong is hard to read in a capture; slow it down.
-            if ((guard % 6) != 0) continue;
-            g_scrollY += g_scrollDir * (kScrollStep / 4);
-            if (g_scrollY >= maxS) { g_scrollY = maxS; g_scrollDir = -1; }
-            if (g_scrollY <= 0)    { g_scrollY = 0;    g_scrollDir = +1; }
+
+            if (g_dragging)
+            {
+                // During drag: scroll follows cursor directly (done in
+                // HandleMouseMove); velocity is computed from delta.
+                continue;
+            }
+
+            // Rubber-band spring-back: if out of bounds, spring toward edge.
+            const bool outLow  = (g_scrollY < 0);
+            const bool outHigh = (maxS > 0) && (g_scrollY > maxS);
+            if (outLow || outHigh)
+            {
+                const int32_t target = outLow ? 0 : maxS;
+                const double  delta  = (target - (double)g_scrollY) * kSpringRate;
+                g_scrollY  = int32_t(g_scrollY + delta);
+                g_velocityY = 0.0;  // zero velocity during spring-back
+                continue;
+            }
+
+            // Normal momentum decay.
+            if (std::abs(g_velocityY) < kSnapThreshold)
+            {
+                g_velocityY = 0.0;
+                continue;
+            }
+            const double dtSec = kSimTickMs / 1000.0;
+            g_scrollY   = int32_t(g_scrollY + g_velocityY * dtSec);
+            g_velocityY *= kFriction;
+
+            // Clamp and absorb velocity at edges.
+            if (maxS <= 0)
+            {
+                g_scrollY  = 0;
+                g_velocityY = 0.0;
+            }
+            else if (g_scrollY < 0)
+            {
+                g_scrollY   = 0;
+                g_velocityY = 0.0;
+            }
+            else if (g_scrollY > maxS)
+            {
+                g_scrollY   = maxS;
+                g_velocityY = 0.0;
+            }
         }
     }
 };
@@ -601,6 +677,7 @@ bool InitializeUISpellbookMode()
     // Spec §2: spellscroll.dat owns Scroll + ScrollPaper + ScrlTop/Bottom
     // + ScrlArwU{U,D,G} / ScrlArwD{U,D,G} + the 12 S* talisman glyphs.
     g_scrollDat = TMulti::LoadMulti((char*)kScrollDat);
+    RegisterUIBitmapAtlasArchive(g_scrollDat);
     if (g_scrollDat)
     {
         g_scrollFrame  = LookupByName(g_scrollDat, "Scroll");
@@ -628,11 +705,19 @@ bool InitializeUISpellbookMode()
     // Spec §2: SpellIcons.dat owns the 40x40 spell-circle icons keyed by
     // spell name. Same archive uiquickspelltest already uses.
     g_spellIconsDat = TMulti::LoadMulti((char*)kSpellIconsDat);
+    RegisterUIBitmapAtlasArchive(g_spellIconsDat);
     if (g_spellIconsDat)
     {
+        g_ringU = LookupByName(g_spellIconsDat, "RingU");
+        g_ringD = LookupByName(g_spellIconsDat, "RingD");
+        g_ringG = LookupByName(g_spellIconsDat, "RingG");
         for (int32_t i = 0; i < kSpellCount; ++i)
             g_spells[i].icon = LookupByName(g_spellIconsDat, g_spells[i].name);
     }
+    log_info("[ui-spellbook] rings: RingU=%s RingD=%s RingG=%s",
+             g_ringU ? "OK" : "MISS",
+             g_ringD ? "OK" : "MISS",
+             g_ringG ? "OK" : "MISS");
     for (int32_t i = 0; i < kSpellCount; ++i)
         log_info("[ui-spellbook] spell[%d] '%s' icon=%s",
                  i, g_spells[i].name, g_spells[i].icon ? "OK" : "MISS");
@@ -644,10 +729,14 @@ bool InitializeUISpellbookMode()
              kFontPath, kFontPx, g_font ? "OK" : "MISS");
 
     delete g_pane;
-    g_pane       = nullptr;
-    g_scrollY    = 0;
-    g_scrollDir  = +1;
-    g_lastTickMs = 0.0;
+    delete g_content;
+    g_pane            = nullptr;
+    g_content         = nullptr;
+    g_scrollY         = 0;
+    g_velocityY       = 0.0;
+    g_lastTickMs      = 0.0;
+    g_dragging        = false;
+    g_hudVisible      = true;
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
@@ -655,7 +744,7 @@ bool InitializeUISpellbookMode()
 
 void RenderUISpellbookMode()
 {
-    g_hud.Refresh();
+    RenderUISpellbookModeEmbedded();
 
     // Muted slate backdrop matching the other ui*test modes so the
     // parchment scroll's chrome reads in isolation (no playfield behind
@@ -664,19 +753,147 @@ void RenderUISpellbookMode()
     Display.BackBuffer()->EndPass();
 }
 
+void RenderUISpellbookModeEmbedded()
+{
+    if (!g_hudVisible) return;
+    g_hud.Refresh();
+}
+
+void SetUISpellbookModeVisible(bool visible)
+{
+    g_hudVisible = visible;
+    if (!visible)
+        g_dragging = false;
+}
+
 void CloseUISpellbookMode()
 {
     Renderer->RemoveHud(&g_hud);
     delete g_pane;
+    delete g_content;
     g_pane         = nullptr;
+    g_content      = nullptr;
     g_scrollFrame  = g_scrollPaper = g_scrlTop = g_scrlBottom = nullptr;
     g_arrowUpUp    = g_arrowDownUp = nullptr;
+    g_ringU = g_ringD = g_ringG = nullptr;
     for (int32_t i = 0; i < 12; ++i) g_talismanGlyphs[i] = nullptr;
     for (int32_t i = 0; i < kSpellCount; ++i) g_spells[i].icon = nullptr;
     g_scrollDat     = nullptr;
     g_spellIconsDat = nullptr;
     g_font          = nullptr;
-    g_scrollY       = 0;
-    g_scrollDir     = +1;
-    g_lastTickMs    = 0.0;
+    g_scrollY         = 0;
+    g_velocityY       = 0.0;
+    g_lastTickMs      = 0.0;
+    g_dragging        = false;
+    g_hudVisible      = true;
+}
+
+// =====================================================================
+// #8 iOS-style velocity scroll — mouse handlers.
+// =====================================================================
+
+
+// Hit-test helper: returns true if (x, y) is within the spellbook content
+// area on screen. The pane is right-anchored at screen x = display_w-kPaneW
+// and y = 0; the content surface is at pane-local (20, 38) with size 148×229.
+static bool SpellbookHitTest(int32_t x, int32_t y)
+{
+    const int32_t dw   = Display.Width()  > 0 ? Display.Width()  : 640;
+    const int32_t paneX = dw - kPaneW;
+    const int32_t paneY = kPaneScreenY;
+    // Content area on screen:
+    const int32_t cx0 = paneX + kContentOrigX;
+    const int32_t cy0 = paneY + kContentOrigY;
+    const int32_t cx1 = cx0 + kContentW;
+    const int32_t cy1 = cy0 + kContentH;
+    return (x >= cx0 && x < cx1 && y >= cy0 && y < cy1);
+}
+
+void HandleMouseMoveUISpellbookMode(int32_t button, int32_t x, int32_t y)
+{
+    if (!(button & MB_LEFTDOWN)) { g_dragging = false; return; }
+    if (!g_dragging) return;
+
+    const double nowMs = TTime::Time() * 1000.0;
+    // Compute velocity from last move sample.
+    const double dtMs = nowMs - g_dragLastMs;
+    if (dtMs > 0.0)
+    {
+        const int32_t dy = y - g_dragLastCurY;
+        // velocity in px/s (negative dy = scroll down = positive scrollY)
+        g_velocityY = -(dy / (dtMs / 1000.0));
+    }
+    g_dragLastMs   = nowMs;
+    g_dragLastCurY = y;
+
+    // Direct-follow: scroll position tracks cursor.
+    const int32_t dy = y - g_dragStartY;
+    const int32_t maxS = MaxScroll();
+
+    int32_t newScroll = g_dragScrollStart - dy;
+
+    // Rubber-band past edges: δy / kRubberBandDiv resistance.
+    if (newScroll < 0)
+        newScroll = int32_t(newScroll / kRubberBandDiv);
+    else if (maxS > 0 && newScroll > maxS)
+        newScroll = maxS + int32_t((newScroll - maxS) / kRubberBandDiv);
+
+    g_scrollY = newScroll;
+}
+
+void HandleMouseClickUISpellbookMode(int32_t button, int32_t x, int32_t y)
+{
+    // Coordinate note: screen coords passed in from testmodes dispatcher.
+    // We convert to pane-local inside the hit-test helper.
+
+    if (button == MB_LEFTDOWN)
+    {
+        if (!SpellbookHitTest(x, y)) return;
+        g_dragging         = true;
+        g_dragStartY       = y;
+        g_dragScrollStart  = g_scrollY;
+        g_dragLastMs       = TTime::Time() * 1000.0;
+        g_dragLastCurY     = y;
+        g_velocityY        = 0.0;
+    }
+    else if (button == MB_LEFTUP)
+    {
+        g_dragging = false;
+        // Velocity is already set from the last move sample; momentum
+        // decay + rubber-band spring-back runs in AdvanceScroll().
+    }
+
+    // Scroll arrows (spec §10): up-arrow at pane-local (169,150),
+    // down-arrow at pane-local (169,174). Both are 24×24 hit-rects.
+    // The actual click handling for the retail arrows uses TButton
+    // dispatch; in the test harness we do a simple hit-rect check.
+    if (button == MB_LEFTDOWN)
+    {
+        const int32_t dw   = Display.Width()  > 0 ? Display.Width()  : 640;
+        const int32_t paneX = dw - kPaneW;
+        const int32_t paneY = kPaneScreenY;
+
+        const int32_t lx = x - paneX;
+        const int32_t ly = y - paneY;
+
+        // Up arrow: pane-local (169, 150) 24×24
+        if (lx >= kArrowX && lx < kArrowX + kArrowW &&
+            ly >= kArrowUpY && ly < kArrowUpY + kArrowH)
+        {
+            {
+                const int32_t v = g_scrollY - kScrollStep;
+                g_scrollY = v > 0 ? v : 0;
+            }
+            g_velocityY = 0.0;
+        }
+        // Down arrow: pane-local (169, 174) 24×24
+        else if (lx >= kArrowX && lx < kArrowX + kArrowW &&
+                 ly >= kArrowDownY && ly < kArrowDownY + kArrowH)
+        {
+            const int32_t ms = MaxScroll();
+            const int32_t v  = g_scrollY + kScrollStep;
+            g_scrollY = v < ms ? v : ms;
+            g_velocityY = 0.0;
+        }
+    }
 }

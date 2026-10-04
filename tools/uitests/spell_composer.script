@@ -1,0 +1,7 @@
+pause 200; take_snapshot composer idle;
+left_down 480 340; pause 80; left_up; pause 100;
+take_snapshot after Life click;
+left_down 518 340; pause 80; left_up; pause 100;
+take_snapshot after Sun click;
+left_down 480 340; pause 80; left_up; pause 100;
+take_snapshot Heal matched on third Life

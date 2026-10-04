@@ -6,6 +6,99 @@ Identified by Wave-2C 2026-05-16 — see `docs/ui/briefs/B_r7_def_widget_engine.
 
 This is engine-identification, NOT a class. Per AGENT_PROTOCOL Rule 2-sibling: most of these are bare/static functions Ghidra missed during the OOAnalyzer pass — extracted on demand to `recon/discovered/FUN_*.cpp`.
 
+---
+
+## ✅ PORT LANDED (static render) — 2026-05-30 — `src/defscreen.{h,cpp}`
+
+A modern, data-driven reimplementation of the DEF widget engine now lives in
+`src/defscreen.{h,cpp}` (`TDefScreen` + `SDefWidget`/`SDefStyle`). It is NOT a
+1:1 address-level port of the retail functions above — it reproduces the same
+*behaviour* from the same shipped `.def` data:
+
+- **Preprocessor + tokenizer**: strips `//` + `/* */` comments, joins `\`-newline
+  continuations, parses `#define NAME VALUE` into a symbol table, evaluates
+  `FLAGS A | B | C` expressions against it.
+- **STYLE library**: parses every `STYLE <type> [<variant>] …` block in
+  `widgets.def` into a `(type,variant)`-keyed style table; screen-local STYLE
+  overrides (popup.def) merge on top.
+- **PANEL parser**: builds the requested panel's widget tree, resolving each
+  widget's style by type+flags and overlaying per-widget attribute overrides;
+  handles the nested LISTBOX `BEGIN … FIELD … END` row format.
+- **Renderer walker** (compose-to-target, NOMENCLATURE §3): BITMAP, FRAME
+  (9-slice), TEXT (align/vcenter/shadow), BUTTON (NORMAL 9-slice + TOGGLE
+  checkbox), SCROLLBAR (HSCROLL bar+arrows+thumb), LISTBOX (rows + selection
+  fill + CTRLFLAG_CLEARBG), EDIT (frame + text). Assets resolve out of the
+  mounted `resources.rvr` by name; "Med" font → Arimo-14 TTF.
+- **New shared primitives** added to `TRenderer`: `DrawNineSliceToTarget`,
+  `DrawSolidRectToTarget` (compose-to-target variants of the existing swapchain
+  calls). Also added to UI_METHOD_MAP / RECONSTRUCTION_PROTOCOL toolbox.
+
+**Verified screens** (test harness `src/uidefscreentest.cpp`):
+`--test=ui-ingamemenu` (ingamemenu.def), `--test=ui-options` (options.def),
+`--test=ui-savegame` (savegame.def), `--test=ui-loadgame` (loadgame.def). Each
+visually matches its `docs/ui/forensics/*Def_SPEC.md` layout. The per-screen
+DefScreen_Open pane rects (x/y/w/h + chrome dat) are host-side constants in the
+harness's `kScreens` table (the .def carries pane-local coords only).
+
+**Background variant selection** (confirmed against a retail Options screenshot
+2026-05-30): each full-screen DEF screen ships up to three chrome `.dat`s:
+`<screen>notex.dat` = engraved frame with a **transparent (black-keyed) interior**
+(1998 software-renderer fallback / overlay form); `<screen>tex.dat` = ARGB4444
+texture variant; `<screen>alpha.dat` = the **full pre-composited backdrop** (the
+painted scene + frame + title plate). Screens reached from the main menu
+(options, loadgame) ship the `alpha` scene variant and the port uses it
+(`optionsalpha.dat` = the Ahkuilon vista; `loadgamealpha.dat` = the battle
+vista). `savegame` is only reached in-game and has no `alpha` variant — its
+`notex` chrome has a transparent interior meant to overlay the frozen game
+frame. The harness `kScreens` table picks the right variant per screen.
+
+**Controller-list layout CONFIRMED** (was OptionsDef_SPEC §4.5/§14 UNCONFIRMED-D):
+the retail screenshot shows the key-binding list rendered in THREE columns
+aligned to the headers — Control Name @x70 (white), Key 1 @x300 (white), Key 2
+@x455 (yellow) — populated from the global controller table (Invoke 1..4,
+Combat Combo 1..4, ...). The `name0..name7` "Up/Down/..." TEXT widgets are a dead
+earlier-design overlay and are NOT drawn. (The test harness reproduces this with
+3 synthetic column fields + suppressed name labels; real game-flow binding to the
+controller table is still a TODO.)
+
+**Scrollbar piece naming gotcha** (confirms / extends spec §0 asset notes): the
+`.dat` stores scrollbar arrow/thumb pieces as `<base>U`/`<base>D` (button
+up/down state), while `widgets.def` names only the base (`HScrollUp`,
+`HScrollThumb`). The engine appends `U` for the unpressed static render.
+Toggle/button faces (`CheckU`/`CheckD`, `ClearFrame2`/`FillFrame2`) are literal
+full names — no suffix.
+
+**Interactivity (ported 2026-05-30, verified via scripted headless filmstrips):**
+- BUTTON press/release + click dispatch (down-state FillFrame2 + black label).
+- TOGGLE checkbox flip on click (CheckU↔CheckD).
+- HSCROLL slider click + drag → value (thumb tracks the cursor) + arrow ±1 step.
+- LISTBOX row select on click (selection fill moves to the clicked row).
+- EDIT text entry: click to focus (yellow editcolor + caret), VK→char typing +
+  backspace, MAXLEN clamp. Keys route TestModes::HandleKeyPress → OnKey.
+- Two runners: `tools/ui/defscreen_verify.sh` (basic) and
+  `tools/ui/defscreen_widget_tests.sh` (exercises EVERY widget per screen +
+  greps the per-screen log for button-dispatch). Both headless, filmstrip-out.
+- Per-widget verification 2026-05-30: InGameMenu 6 buttons; Options 6 toggles +
+  4 sliders + OK; SaveGame row-select + EDIT "hero save" + Save; LoadGame
+  row-select + Load/Exit — all confirmed in the filmstrips + dispatch logs.
+
+**Deferred (not yet ported — integration):**
+- Options key-REBINDING flow: the controller LISTBOX is populated with SYNTHETIC
+  rows in test. The real keymapper exists — `TControlMap ControlMap`
+  (src/ctrlmap.{h,cpp}, extern in revenant.h), initialized in
+  TPlayScreen::Initialize from `g_defaultGameControls[]` and used for runtime
+  command dispatch (runtimemode.cpp `GetCommand`). Wiring TODO: populate the
+  controller list from `ControlMap.NumControls/GetControlEntry` + `MakeKeyString`
+  (name / key1 / key2 columns), and implement select-row→capture-keys→
+  `SetControlEntry`→`Save("Controls")`. The standalone --test would need to
+  `ControlMap.Initialize(...)` first (it's only init'd inside TPlayScreen today).
+- LISTBOX auto-spawned scrollbar thumb (the gamelist gutter draws, no thumb yet).
+- DROPLIST + EDIT SPIN variants (no in-scope screen uses them).
+- Real game-flow integration (TPlayScreen opening the modal, command dispatch to
+  loadgame/savegame/options) — the screens currently run only in test modes.
+
+---
+
 ## Engine core (entry points)
 
 | Addr | Identified name | Status | Notes |

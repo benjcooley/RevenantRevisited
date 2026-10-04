@@ -1,0 +1,34 @@
+# Test #7b: Intra-pane drag with visual ghost (slot goes empty during drag).
+# Pair with: --test=ui-hud --headless --filmstrip=4,0
+#   --snapprefix=verify/inv-7b-
+#
+# Inv grid centers (Classic 640x480, pane at 452,306):
+#   slot[col,row] center = (452 + 8 + col*45 + 20, 306 + 42 + row*44 + 20)
+#                        = (480 + col*45, 368 + row*44)
+#   slot 0 = col0,row0 -> (480, 368)
+#   slot 3 = col1,row0 -> (525, 368)
+#   slot 5 = col1,row2 -> (525, 456)
+#
+# 4 captures:
+#   1. Baseline — all slots populated
+#   2. Mid-drag slot0→slot3 — slot 0 shows empty, ghost follows cursor
+#   3. After drop — slot 3 shows slot0's item, slot 0 empty
+#   4. Final — drag slot5 to empty (cancel midway)
+
+log baseline;
+moveto 100 100 0; pause 300; take_snapshot baseline;
+
+log begin_drag_slot0;
+moveto 480 368 200; pause 100; left_down; pause 150;
+take_snapshot mid-drag slot0 empty;
+
+log drag_to_slot3;
+moveto 525 368 400;
+
+log drop_slot3;
+left_up; pause 200; take_snapshot dropped slot0-to-slot3;
+
+log drag_slot5_cancel;
+moveto 525 456 200; pause 100; left_down; pause 100;
+moveto 200 200 400; pause 80; left_up; pause 200;
+take_snapshot slot5 drag cancelled;

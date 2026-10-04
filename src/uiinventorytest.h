@@ -16,4 +16,6 @@
 
 bool InitializeUIInventoryMode();
 void RenderUIInventoryMode();
+void RenderUIInventoryModeEmbedded();
+void SetUIInventoryModeVisible(bool visible);
 void CloseUIInventoryMode();

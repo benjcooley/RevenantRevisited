@@ -171,7 +171,13 @@ enum class EFxBlend     : uint8_t { Alpha = 0, Additive = 1, AdditiveStraight = 
 // TestNoWrite is the standard transparent path; None is for always-on-top.
 enum class EFxDepthMode : uint8_t { TestNoWrite = 0, None = 1, TestWrite = 2 };
 enum class EFxLightMode : uint8_t { Unlit = 0, LitFlat = 1 };
-enum class EFxDebugMode : uint8_t { Normal = 0, SolidColor = 1, FullTexture = 2, CurrentFrame = 3 };
+enum class EFxDebugMode : uint8_t { Normal = 0, SolidColor = 1, FullTexture = 2, CurrentFrame = 3, Wireframe = 4 };
+
+// Global wireframe override — when true, every FX submit (Billboard /
+// Particle / Strip) renders as a thin quad outline regardless of its
+// per-instance debug_mode. Set from CLI --vfx-wireframe at startup.
+// Useful for verifying rotation, projection, screen-space distortion etc.
+extern bool g_fx_wireframe_override;
 
 // Per-billboard / per-particle quad orientation. Standard particle-engine
 // knob (cf. Unity Billboard / Stretched / Horizontal / Vertical / Mesh
@@ -274,6 +280,20 @@ struct SStripSegment
     float color_b[4]   = {1.0f, 1.0f, 1.0f, 1.0f};
     float u_a          = 0.0f;
     float u_b          = 1.0f;
+    // V sub-range — left edge of the strip's quad samples `v_left`,
+    // right edge samples `v_right`. Default 0..1 spans the full
+    // texture height (the pre-existing behaviour). Used by the
+    // LightStrip lightning bolt to pick one of 8 horizontally-stacked
+    // crackle patterns per tick (flipbook-via-V-cell) — added 2026-05-31
+    // for S04 TLightningAnimator_Bespoke iter5.
+    float v_left       = 0.0f;
+    float v_right      = 1.0f;
+    // Swap the sampled texture axes: along-length (u_a..u_b) samples
+    // texture V and across-width (v_left..v_right) samples texture U.
+    // For authored art whose pattern runs along the image's vertical
+    // axis (LightStrip's 8 bolt columns in newlightstrip texture[1]) —
+    // completes the V-cell extension above for transposed layouts.
+    uint8_t uv_swapped = 0;
 };
 
 struct SStripDrawItem
@@ -522,6 +542,22 @@ public:
     void ReleaseTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
     void ResetAssetRefCounts();
 
+    // Dynamic (streamable) RGBA8 texture for per-frame-updated content such as
+    // video playback. Create once at a fixed size; call UpdateDynamicTexture
+    // once per frame (outside any render pass) with a full width*height*4 RGBA
+    // buffer, then present it with DrawTextureFit. DestroyDynamicTexture frees
+    // the GPU image. Not key-cached or ref-counted -- the caller owns the
+    // lifetime.
+    TTextureHandle CreateDynamicTexture(int32_t width, int32_t height,
+                                        ERendererTextureFilter filter = ERendererTextureFilter::Linear);
+    void UpdateDynamicTexture(TTextureHandle handle, const void* rgba, size_t bytes);
+    void DestroyDynamicTexture(TTextureHandle handle);
+
+    // Aspect-preserving "contain" fit of a TTextureHandle into the swapchain.
+    // Used by the cinematic player (--test=ui-cinematic) to present a video
+    // frame regardless of source aspect.
+    void DrawTextureFit(TTextureHandle texture);
+
     // Register a rigid mesh. TRenderer owns the resulting GPU buffers and
     // resolves albedo_texture internally. Returns 0 on failure.
     MeshHandle RegisterMeshAsset(uint64_t key,
@@ -628,6 +664,9 @@ public:
                                  float z_offset = 0.0f,
                                  float z_scale = 1.0f,
                                  float tile_scale = 1.0f);
+    // 0 = normal iso mesh projection, 1 = retail D3D viewport projection
+    // used by the live EquipmentPane paperdoll.
+    void SetMeshProjectionMode(int32_t mode);
     void SetPerspectiveRaycastParams(int32_t steps, int32_t refine);
     void SetPerspectiveProjectionMode(int32_t mode);
     void SetPerspectiveProxyRasterScale(float scale);
@@ -636,6 +675,22 @@ public:
     // Run the deferred lighting pass over the current G-buffer. Writes
     // lit_target (passes [2] + [3]).
     void RunLightingPass();
+
+    // ---- Backdrop pre-fill (optional, between EndTilePass + RunLightingPass)
+    //
+    // Pre-fills lit_target with a fullscreen color + optional image BEFORE
+    // the deferred light shader runs over it. The light shader discards on
+    // empty (alb.a < 0.01) pixels, so any pixel without scene contribution
+    // keeps the backdrop; lit geometry composites over it; post-light fx
+    // (fx_pass) then blends against the result. Pass kInvalidTexture for a
+    // solid-color backdrop. With a texture: lit_target is cleared to
+    // (r,g,b,a) for the letterbox bars, then the image is composited into
+    // the visible rect preserving its aspect ratio.
+    //
+    // No-op if not called this frame -- RunLightingPass falls back to its
+    // historical CLEAR-to-tile_clear_rgba behaviour for every other caller.
+    void DrawBackdrop(TTextureHandle backdrop,
+                      float r, float g, float b, float a);
 
     // ---- FX submission (Phase 1 VFX spine) ------------------------------
     // The fx pipelines need a camera basis (right/up) to expand
@@ -743,9 +798,9 @@ public:
     // on the owning object; add in ctor / OnEnter, remove in dtor /
     // OnExit).
 
-    // PTBitmap -> cached GPU texture, then quad blit. The renderer
-    // caches by bitmap identity so repeat calls cost an unordered_map
-    // lookup. Caller never sees TTextureHandle for HUD purposes.
+    // PTBitmap -> registered bitmap atlas slice when available, otherwise
+    // a fallback one-off texture. Bitmap atlas registration/build lives in
+    // bitmapatlas.cpp so icon/imagery atlasing has a single owner.
     void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y, bool prefer_alias = false);
     // Subrect variant — blits the (src_x, src_y, src_w, src_h) region of
     // bm to (dst_x, dst_y). Used for sprite-atlas panels (e.g. the
@@ -822,6 +877,16 @@ public:
                                            int32_t off_x = 4, int32_t off_y = 4,
                                            float shadow_a = 0.6f);
 
+    // Render-target surface blit. Use while a TSurface::StartPass render
+    // target is active to composite one cached HUD surface into another.
+    void DrawSurfaceToTarget(TSurface* surf, int32_t x, int32_t y,
+                             int32_t target_w, int32_t target_h);
+    void DrawSurfaceSubrectToTarget(TSurface* surf,
+                                    int32_t dst_x, int32_t dst_y,
+                                    int32_t src_x, int32_t src_y,
+                                    int32_t src_w, int32_t src_h,
+                                    int32_t target_w, int32_t target_h);
+
     // Dropshadow convenience — draws a darkened silhouette of `bm` at
     // (x + off_x, y + off_y), then the normal bitmap on top. The shadow
     // alpha is `shadow_a` (default 0.6); shadow color defaults to black.
@@ -844,6 +909,26 @@ public:
     void DrawSurface(TSurface* surf, int32_t x, int32_t y);
     void DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
                            float tr, float tg, float tb, float ta);
+
+    // Composite a sub-rect of the lit_target (the post-lighting 3D scene)
+    // into the currently-active TSurface render-target pass. `src_x/src_y`
+    // are **screen pixels** (display-space, not padded G-buffer space);
+    // the function applies the kGBufPad offset internally so callers don't
+    // have to know about the padding. `target_w/target_h` are the RT dims.
+    //
+    // Used by the equip-sidebar paperdoll path: 3D Locke is rendered by
+    // the test mode's tile-pass + lighting-pass into lit_target at a fixed
+    // pane-sized screen rect; the equip pane RT then composites that rect
+    // over the chrome stone backdrop. Callers MUST ensure RunLightingPass()
+    // has already run this frame (lit_target_dirty), otherwise the sample is
+    // the prior frame's pixels (or magenta if never written).
+    //
+    // No-op if lit_target has never been written.
+    void CompositeLitTargetSubrectToTarget(int32_t dst_x, int32_t dst_y,
+                                           int32_t dst_w, int32_t dst_h,
+                                           int32_t src_screen_x, int32_t src_screen_y,
+                                           int32_t src_w, int32_t src_h,
+                                           int32_t target_w, int32_t target_h);
 
     // Solid-color filled rect (B-phase visual). Backed by a per-color 1x1
     // texture cache so the existing composite pipeline handles the blit
@@ -907,8 +992,20 @@ public:
     // arrives in the editor's Game View panel via ImGui::Image of the
     // lit target texture id) so the present blit can be skipped.
     void SetPresentNDCRect(float x, float y, float w, float h);
+    void SetPresentPixelRect(int32_t dst_x, int32_t dst_y,
+                             int32_t dst_w, int32_t dst_h,
+                             int32_t target_w, int32_t target_h,
+                             int32_t src_x, int32_t src_y,
+                             int32_t src_w, int32_t src_h);
     void ResetPresentNDCRect() { SetPresentNDCRect(-1.0f, -1.0f, 2.0f, 2.0f); }
     void SuppressPresent(bool on) { suppress_present = on; }
+    void SuppressSceneCompositeThisFrame()
+    {
+        suppress_scene_composite_frame = true;
+        color_target_dirty = false;
+        lit_target_dirty = false;
+        any_target_ever_written = true;
+    }
 
     // ---- Debug/editor accessors -----------------------------------------
     [[nodiscard]] uintptr_t LitTargetTextureId() const;
@@ -923,11 +1020,9 @@ public:
 
 private:
     // ---- HUD state (DrawBitmap/DrawSurface/AddHud/DrawHud) --------------
-    // PTBitmap -> cached GPU texture. Key is the bitmap pointer; cache
-    // entry holds the registered TTextureHandle so successive DrawBitmap
-    // calls for the same bitmap are O(1).
-    std::unordered_map<uintptr_t, TTextureHandle> bitmap_texture_cache;
-    // Get-or-create a TTextureHandle for the given bitmap.
+    // Fallback PTBitmap -> one-off GPU texture. Atlased bitmap draws are owned
+    // by bitmapatlas.cpp; this cache is used only for late/missed bitmaps.
+    std::unordered_map<uint64_t, TTextureHandle> bitmap_texture_cache;
     TTextureHandle BitmapAsTexture(PTBitmap bm, bool prefer_alias = false);
 
     // Registered HUD drawables + their z-order. Renderer owns this
@@ -1043,9 +1138,11 @@ private:
     sg_pipeline helper_mesh_front_pipeline = {};
     sg_pipeline helper_mesh_add_back_pipeline = {};
     sg_pipeline helper_mesh_add_front_pipeline = {};
-    sg_buffer   mesh_instance_vb = {};   // dynamic, rebuilt each frame
     std::vector<float> mesh_instance_scratch;
     static constexpr int32_t kMaxMeshInstances = 2048;
+    static constexpr int32_t kMeshInstanceVBCount = 8;
+    sg_buffer   mesh_instance_vb[kMeshInstanceVBCount] = {}; // stream ring; multiple mesh drains may occur per sokol frame
+    int32_t     mesh_instance_vb_cursor = 0;
 
     struct SMeshEntry {
         sg_buffer vbuf;
@@ -1086,9 +1183,17 @@ private:
     // memory in HUD-only test modes (was tinting snap output magenta).
     bool any_target_ever_written = false;
 
+    // Set by DrawBackdrop; consumed (and reset) by RunLightingPass to flip
+    // its lit_target clear action from CLEAR -> LOAD so the backdrop pixels
+    // survive under the light shader's discard.
+    bool backdrop_filled = false;
+
     // NDC sub-rect for the present blit. Default fills the swapchain.
     float present_ndc[4] = { -1.0f, -1.0f, 2.0f, 2.0f };
+    bool present_src_rect_enabled = false;
+    int32_t present_src_rect[4] = { 0, 0, 0, 0 };
     bool  suppress_present = false;
+    bool  suppress_scene_composite_frame = false;
     float tile_clear_rgba[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
     int32_t perspective_debug_mode = 0;
     int32_t perspective_projection_mode = 2; // 0 flat, 1 volume ref, 2 relief/SPOM.
@@ -1157,6 +1262,7 @@ private:
         float z_offset = 0.0f;
         float z_scale = 1.0f;
         float tile_scale = 1.0f;
+        float mesh_projection_mode = 0.0f;
     } recon;
 
     // ---- Pipeline setup / teardown --------------------------------------

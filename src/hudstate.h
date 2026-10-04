@@ -59,9 +59,23 @@ struct SHudState
     int32_t bottomBarOpen   = 1;  // case 4 toggle (mbr_0x5b8 in retail)
     int32_t textBarVisible  = 1;
     int32_t statsBarVisible = 1;
+    // Inventory page index — driven by the scrollleft/scrollright arrows
+    // at pane-local (140,11)/(161,12). 0 = first page. Retail upper bound
+    // is 0xf3 per InventoryPane_SPEC `mbr_0x188` analysis.
+    int32_t inventoryPage   = 0;
+    // Currently-open container: 0 = root inventory; >0 = bag slot index
+    // (1 = bag in slot 0, 2 = bag in slot 1, …) — clicked-into-bag stack
+    // is single-level for now. Per user 2026-05-30: "Clicking on a bag in
+    // the inventory replaces the pack icon with a miniature image of the
+    // bag, and the inventory shows the contents of the bag."
+    int32_t inventoryContainer = 0;
+    // Spellbook scroll offset in pixels — driven by the up/down arrows
+    // at pane-local (169, 150) and (169, 174). Per SpellbookPane_SPEC:
+    // ±40 per tick (one spell row = ~91px; 40 is a half-row scroll).
+    int32_t spellbookScroll = 0;
 
     static constexpr uint32_t kMagic   = 0x52485644;  // 'RHVD'
-    static constexpr uint32_t kVersion = 1;
+    static constexpr uint32_t kVersion = 4;
 };
 
 bool SaveHudState(const SHudState& s, const char* path);

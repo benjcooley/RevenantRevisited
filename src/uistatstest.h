@@ -23,4 +23,6 @@
 
 bool InitializeUIStatsMode();
 void RenderUIStatsMode();
+void RenderUIStatsModeEmbedded();
+void SetUIStatsModeVisible(bool visible);
 void CloseUIStatsMode();

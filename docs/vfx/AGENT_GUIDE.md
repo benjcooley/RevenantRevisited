@@ -14,6 +14,16 @@ Read, in order:
 2. [TEST_MODE.md](TEST_MODE.md) — what "done" looks like for any effect.
 3. [../PARTICLE_EFFECTS.md](../PARTICLE_EFFECTS.md) — the engine architecture you are extending. **Do not invent a parallel architecture.**
 4. [INVENTORY.md](INVENTORY.md) — pick an unclaimed row.
+5. [forensics/NOMENCLATURE.md](forensics/NOMENCLATURE.md) — canonical vocabulary for orientation / space / blend / lighting / depth / animation / pipelines / rigs. Use these terms; don't invent synonyms.
+
+### Two-phase workflow (forensics → reconstruction)
+
+Effect restoration splits into two roles, each with its own protocol:
+
+- **Forensics** — [forensics/FORENSICS_PROTOCOL.md](forensics/FORENSICS_PROTOCOL.md). Produce a complete reconstruction document (constants, assets, spawn shape + diagrams, pseudocode, render spec, color source, callers, rig+BG, roadmap). No engine code.
+- **Reconstruction** — [forensics/RECONSTRUCTION_PROTOCOL.md](forensics/RECONSTRUCTION_PROTOCOL.md). Rebuild from the forensics doc; verify visually on the recommended backgrounds; report doc gaps.
+
+See [forensics/README.md](forensics/README.md) for why the split exists. The §3.0–§4.2.* rules below apply to both phases.
 
 Spot-check the project-wide rules these touch:
 
@@ -102,21 +112,48 @@ if it grows beyond one paragraph):
    is standalone-spawnable like a torch flame. Categories so far:
    - **Standalone** — `SpawnForTest(origin)` is enough (F01 flame,
      B01 blood, S01 lightning). No external state needed.
+     Use `EVfxPreviewStyle::Static` / `Combat` / `SpellGround` /
+     `Projectile` depending on the in-game cadence.
    - **Character-attached** — needs a character imagery loaded +
      TCharAnimator running so the effect's owner exists. Status
      overlays (TBurnEffect / TAuraEffect / TIcedEffect), aura
-     glows, healing visuals.
+     glows, healing visuals. **Rig available** as of 2026-05-17:
+     register with `EVfxPreviewStyle::CharacterIdle` and set
+     `SEffect.anchor` to one of CharacterRoot / BoundsCenter /
+     Bone("rhand"|"lhand"|"head"|"chest") / BoneLocalPoint. Use
+     `submit_attached(ctx, dbg, attachment)` instead of `submit`;
+     the rig resolves the anchor every frame and the effect just
+     calls `effect->ForcePos(...)` from the world point. See
+     `TDripEffect.OnHand` in src/vfxtest.cpp for the canonical
+     1-line example. Design + forensics:
+     [CHARACTER_RIG_FORENSICS.md](CHARACTER_RIG_FORENSICS.md).
    - **Character + weapon + attack-anim** — needs a character
      with a weapon equipped and a swing animation cycling so the
      effect's per-tick logic has live weapon-extents to scan.
-     TWeaponSwipe.
+     TWeaponSwipe. **Rig available**: register with
+     `EVfxPreviewStyle::CharacterAttack` and anchor on
+     Bone("weapon") for hilt, BoneLocalPoint("weapon",
+     (0,0,+tipZ)) for tip. The rig picks an `attack*` anim state
+     automatically; cycle to a specific one via the "Next state"
+     button in the rig ImGui panel. Most character meshes name
+     their weapon sub-object `"weapon"` or `"sword"`; per-
+     character fallback list lives in
+     `CHARACTER_RIG_FORENSICS.md §2`.
    - **Projectile (source→target)** — needs a launch point, a
      target point, and a way to advance the projectile along a
      vector each tick. TMissileEffect / TFireBallEffect /
-     TIceBoltEffect / TPhotonEffect.
+     TIceBoltEffect / TPhotonEffect. **Rig pending**.
    - **Spell-cast (caster→ground)** — needs a caster character
      plus a ground-impact point. Spell visuals that originate at
-     a hand and play out at a target location.
+     a hand and play out at a target location. **Rig available**:
+     register with `EVfxPreviewStyle::CharacterCast` and anchor
+     on Bone("rhand") for the cast-from-hand convention (matches
+     `src/spell.cpp:399`'s in-game lookup). The rig picks a
+     `cast*`/`magic*`/`invoke*`/`spell*` anim state automatically.
+     **M09 TTeleporterAnimator (Misthaven recall) is the headline
+     downstream consumer** — its port author should pick this
+     category, anchor on CharacterRoot for the ground burst plus
+     a Bone("rhand") sub-effect for the flourish.
    - **Environment-context** — needs a sector / ground plane /
      water surface to anchor against. TWaterFallEffect, ambient
      drips, ripples on water.
@@ -126,11 +163,21 @@ if it grows beyond one paragraph):
    the rig is reusable from an existing harness primitive or
    needs to be built. The library of rig primitives grows
    incrementally — when a new category appears, add the primitive
-   to vfxtest.{h,cpp} as `Rig*` helpers (e.g. `CharacterRig`,
-   `CharacterWithWeaponRig`, `ProjectileRig`) so the next effect
-   in the same category reuses it.
+   to vfxtest.{h,cpp} as `Rig*` helpers (e.g. `CharacterRig`
+   [done], `ProjectileRig` [pending]) so the next effect in the
+   same category reuses it.
 7. **Gaps / unknowns** — anything still ambiguous. Mark explicitly
    what's documented vs guessed.
+8. **Trace every helper call.** When the retail draw / tick / pulse
+   body calls into a helper (texture lookup, mesh-load, particle-spawn,
+   color/scale envelope), the forensics must follow the helper, not
+   stop at the call site. Visual constants — colors, sizes, scales,
+   atlas frame counts, blend factors, rotation rates — frequently
+   live one or two helper-levels down from the lifecycle code that
+   first attracts the agent's eye. A port that nails the state
+   machine but reads scale/color/texture from "looked about right"
+   is the failure mode we keep hitting. If you find yourself making
+   up a number that retail computes, you have not finished forensics.
 
 Only after the row's notes carry these facts do you start the port.
 Reason: a port grounded in evidence is reviewable against the
@@ -156,20 +203,197 @@ divergence in the row's `Notes`.
 
 ### 3.2 What you're producing
 
-Per [../PARTICLE_EFFECTS.md §15](../PARTICLE_EFFECTS.md) — do *not* port D3D
-animators one-by-one as bespoke C++ renderers. Instead:
+Reconstruction now ships in **two sequenced ports**, not one:
 
-1. Identify the animator registration (`REGISTER_3DANIMATOR("X", TXAnimator)`).
-2. Attach an effect component from the animator builder.
-3. Express the behavior as an effect definition (expression-based, see PARTICLE_EFFECTS §6–§7).
-4. Add only the **missing** generic engine capability to support it. Generalize, don't special-case.
-5. Leave the old D3D body in `effect_old.cpp` / `#if 0` blocks — do not delete.
+  - **Phase B1 — Bespoke baseline**: faithful direct C++ translation of the
+    snapshot's animator body. Line-by-line from `effect_old.cpp` /
+    `effectcomp.cpp`. This is the *visual reference* — when it boots and
+    looks like the game, the forensics doc + constants are validated.
+  - **Phase B2 — Engine migration**: rewrite the bespoke into the engine
+    particle / effect system (`TParticleBucket` + `effects.def`). A/B against
+    B1 at every visual checkpoint. Engine port is "done" when its capture
+    matches the bespoke's capture frame-by-frame.
 
-If your effect genuinely needs a new pipeline capability (e.g. a soft-particle
-depth blend mode), that is a Phase-1 expansion. Stop, file it as a separate
-row, and either do it or claim it explicitly.
+Why two ports instead of going engine-first: the engine port has to
+re-derive the animator's behavior through bucket descriptors + expression
+VM + chain mechanics, which is a wider semantic gap than the source-to-source
+bespoke port. Bugs in that gap (wrong scale, wrong velocity unit, missing
+grow phase, dormant blend, UV priority overrides) are invisible without
+a reference to compare to. **The B1 baseline is what makes B2 verifiable.**
+B01 TBloodEffect is the canonical lesson: the engine port shipped, looked
+plausible, but was missing the SPLAT grow phase that the bespoke had —
+caught only because the user remembered the game's visual. With a bespoke
+baseline in hand we would have spotted it in the first A/B capture.
+
+After B2 lands and the A/B is clean, **B1 is preserved under `#if 0`** in
+the same file (per [[feedback-preserve-old-code]]), and the bespoke
+SpawnForTest/TickAndSubmit lambdas stay in `vfxtest.cpp` behind a
+`--vfx-bespoke` toggle for future regression checks. Don't delete it.
+
+#### Phase A.5 — capture reference footage (before B1)
+
+Forensics (Phase A) tells you what the code says the effect should do.
+Reference footage tells you what the **shipped game actually shows on
+screen** at runtime — which is the ground truth the bespoke must match
+in §3.2.0 step 4 and the engine port must match in §3.2.0 step B2.
+**Capture this footage before you write the bespoke port**, not after,
+otherwise you'll spend B1 debugging against your mental model of the
+effect instead of the game's pixels.
+
+  1. Launch the original game (GOG install, native macOS via the
+     supported wrapper, or VM) and reach a moment that triggers the
+     effect cleanly — pause/quicksave just before so you can re-do the
+     capture if needed.
+  2. Screen-record with QuickTime (region-select tight around the game
+     window's client area; do **not** include the macOS title bar);
+     native res, H.264 MP4, 60 fps preferred, 5–30 s per clip covering
+     **one** visual moment.
+  3. Import the clip into the reference-footage catalog:
+
+     ```
+     tools/refcap/import_clip vfx <TEffectId> /path/to/clip.mp4 \
+         --label "<short visual description>" \
+         --src  "<module + in-game timer or savefile name>"
+     ```
+
+     This sha256s the file, probes it (codec/fps/duration), copies it
+     to `$REVENANT_REFS_DIR/vfx/<id>/clips/`, and stubs a clip entry
+     in `manifest.yaml`. The clip **bytes** stay out of the repo; only
+     the inventory pointer `references/index.yaml` is committed (refresh
+     with `tools/refcap/sync_index`).
+  4. Scrub the clip, jot the `t_ms` of key moments (impact, peak,
+     settle, dissipate), and hand-add a `markers:` block to
+     `manifest.yaml`. Markers drive snap_ab's per-tile captions.
+  5. Extract the frame sets you'll A/B against:
+
+     ```
+     tools/refcap/extract_frames vfx <TEffectId> <clip_id> \
+         --set-id peak_window --at 1040,1080,1120,1160,1200,1240
+     # or:
+     tools/refcap/extract_frames vfx <TEffectId> <clip_id> \
+         --set-id full_8col --every-ms 80 --start-ms 900 --end-ms 1540
+     ```
+
+Once the catalog has a clip + extracted frame set for the effect, every
+later A/B grid in §3.2.0 should pass `--ref <TEffectId>` to
+`tools/vfx/snap_ab.py` so the reference row appears at the top of the
+output PNG alongside bespoke + engine. snap_ab degrades gracefully when
+the catalog is empty (it prints a friendly warning and falls back to
+the 2-row mode), so feature-flagging is unnecessary.
+
+See [`references/REFS_README.md`](../../references/REFS_README.md) for
+the full catalog protocol, manifest schema, and complete `refcat` CLI
+reference.
+
+#### 3.2.0 Bespoke baseline first (mandatory before engine port)
+
+  1. Identify the animator registration (`REGISTER_3DANIMATOR("X", TXAnimator)`).
+  2. Write `TXEffect::SpawnForTest_BESPOKE` + `TickAndSubmit_BESPOKE` —
+     a direct port of the snapshot's `Initialize` / `Animate` / `Render`,
+     line by line. Forensics doc §3 (constants) and §6 (pseudocode) are
+     the spec. No engine integration yet — just a per-frame `SubmitFx*`
+     call sequence that mirrors the original's draw order.
+  3. Wire it as the harness entry (`vfxtest.cpp`). Boot with
+     `--test=vfx --vfx=TXEffect` and capture via `snap_grid.py` (see §4.2.2).
+  4. The bespoke must visually match the game (or retail reference, or
+     sister-family pattern). If Phase A.5 reference footage exists for
+     this effect, A/B against it explicitly:
+
+     ```
+     tools/vfx/snap_ab.py TXEffect_BESPOKE TXEffect \
+         --ref TXEffect --cols 8 --interval-ms 80
+     ```
+
+     If it doesn't match, the forensics doc is wrong — stop the port
+     and fix the doc. **Do not move to B2 with a broken B1.**
+  5. Save the bespoke capture as `docs/vfx/captures/<ID>_bespoke.png` —
+     this is the A/B baseline for B2.
+
+Phase B2 then takes the validated bespoke and re-expresses it as an
+`effects.def` block, adding only the engine extensions strictly required
+(respawn / chain / reflection / random_start_frame / etc.). After every
+substantive B2 change, capture and diff against the saved bespoke. The
+B2 row is `validated` when the engine A/B captures are indistinguishable.
+
+#### 3.2.0 — when to skip the bespoke baseline
+
+Engine-only is acceptable when the effect is already trivially decomposable
+into existing engine bucket primitives with **zero new extensions needed**
+(simple flipbook billboard, single-shot ScreenAligned spray with standard
+gravity + alpha). For everything else — multi-stage effects, missiles with
+state machines, reflection-plane behavior, novel emit shapes — do the
+bespoke baseline first.
 
 #### 3.2.1 Engine-vs-bespoke decision (mandatory before Phase B)
+
+**STRONG DEFAULT: prefer the existing particle / effect engine over hand-rolled
+C++ particle pools.** If the engine is missing a feature the effect needs,
+**add the feature to the engine generically and use it** — don't build a
+one-off particle pool in the effect class. Engine extension is in-scope;
+parallel reinvention is not. See [[feedback-evolve-dont-replace]].
+
+**Canonical engine extensions worth adding when an effect needs them** (this
+list will grow — add to it when you ship an extension):
+
+- **Respawn (loop emission)** — bucket auto-recycles slots when particles
+  die so a constant alive count is maintained without an emitter pulse.
+  Blood is the archetype (30 droplets that re-fly on death until the
+  effect ends).
+- **Reflection planes** — particles bounce / transition on hitting a
+  configured plane (typically ground Z). Lets blood transition FLY →
+  SPLAT cleanly as a per-bucket behavior rather than a per-effect state
+  machine. Fireball's spark trail collides with ground via the same path.
+- **Velocity-aligned trails** — head particle position drives a trail
+  bucket that spawns one (or N) particle per tick along the head's recent
+  path. Fireball is the archetype (10-slot mesh-trail ring buffer in the
+  retail source is exactly this).
+- **Per-particle in-plane rotation** — `DrawRot` already exists in the
+  VM; bucket needs to expose it as a renderable per-instance attribute
+  on ScreenAligned / WorldXY billboards. Fizzle uses it.
+- **Per-particle flicker / atlas-cell jitter** — already partially there
+  via `DrawFrame` + `Rand01`; if an effect needs a specific cell-select
+  policy (alternate cells on flicker), extend the bucket desc.
+- **Stage transitions** — per-particle "stage" enum that gates which
+  expression runs and which sub-texture / orientation applies. Blood's
+  FLY / SPLAT / SHRINK is the archetype (different visual + kinematic
+  per stage, single bucket).
+- **Random start frame from atlas grid** *(shipped — `random_start_frame = true` bucket flag)*:
+  when true and `atlas_frames > 1`, the engine auto-picks `DrawFrame` from
+  `[0, atlas_frames)` on spawn using the per-particle seed and materializes
+  the correct cell UV rect into `DrawUvRect`. Use for "N droplet variants" /
+  "N spark variants" cases (blood's 4-cell 2x2 atlas of `Misc\Blood.I3D` is
+  the archetype). Saves `frame = floor(rand01() * N)` boilerplate. The
+  paired UV materialization is required because the renderer's UV priority
+  is `DrawUvRect > atlas-grid-from-DrawFrame` — leaving DrawUvRect at the
+  default `(0,0,1,1)` overrides the atlas pick.
+
+Effects that should be **engine particle effects, not bespoke C++**:
+
+- **Blood** — 30-droplet pool with respawn + reflection plane (FLY → SPLAT)
+  + per-stage orientation switch (ScreenAligned during FLY, WorldXY decal
+  on SPLAT/SHRINK). Already-merged port is structurally bespoke and will
+  be redone via engine.
+- **Fizzle** — 3 sub-system buckets (blue / red / purple) with
+  per-particle WorldXY + DrawRot. Already on the right shape.
+- **Fireball spark trail + spark burst** — Particle buckets spawned along
+  the missile's flight + at the impact. The fireball *head* + state
+  machine stay bespoke (multi-phase missile-with-collision), but every
+  sub-piece (head glow flicker doesn't count — the trail and explosion
+  particles do) goes through the engine.
+
+Effects that legitimately stay **bespoke C++** (combination of unique
+geometry + state machines + gameplay coupling):
+
+- Sword swipes (weapon-extents-driven strip geometry, hit callbacks).
+- Lightning bolts (spline-jittered per-segment ribbons).
+- Missile head + state machine (LAUNCH/FLY/EXPLODE) — but the trail
+  particles inside come from engine buckets.
+- Character-attached aura overlays that read owner bones / equip slots
+  every frame.
+
+When you discover a needed extension and it would take serious effort,
+**stop and propose it** in `docs/vfx/ENGINE_EXTENSIONS.md` (create the
+file if it doesn't exist) before sinking days into a bespoke workaround.
 
 Not every effect should be a data-driven engine definition. **Use the engine
 for the common shapes; keep bespoke when behavior is genuinely unique.**
@@ -262,6 +486,38 @@ submission in the Phase B port):
       before spawning, or whether the harness's z=0 (PickPreviewOrigin)
       is enough.
 
+#### 3.2.2 Blend-mode sanity check — don't trust the snapshot's writes verbatim
+
+A pre-release snapshot can write `SetBlendState()` / `SetAddBlendState()` /
+inline `SRCBLEND` / `DESTBLEND` factors that look authoritative but are
+actually **dormant**. Direct3D 6/7 ignores `SRCBLEND`/`DESTBLEND` unless
+`D3DRENDERSTATE_ALPHABLENDENABLE` is `TRUE`, and the default is `FALSE`.
+**Before declaring a blend mode "Alpha" or "Additive" from snapshot reads,
+audit who enables `ALPHABLENDENABLE` in the effect's call chain.** If
+nothing does, the factor writes are dead and the effect almost certainly
+ships as **chroma-keyed opaque + alpha-test**, consuming the 1-bit alpha
+that `legacy/3dimage.cpp:2079` bakes into textures with black keycolor.
+
+Audit recipe:
+
+```
+grep -rn "ALPHABLENDENABLE" src/ legacy/
+grep -rn "ALPHATESTENABLE\|ALPHAREF\|ALPHAFUNC" src/ legacy/
+```
+
+If neither is touched in the effect's path AND the texture is loaded via
+the chroma-key-to-1-bit-alpha imagery loader, the shipped behavior is:
+**alpha-test cut (no blend), TestNoWrite depth, opaque modulated texture**.
+Mistaking that for `EFxBlend::Alpha` produces washed-out / semi-transparent
+droplets — exactly the failure mode the B01 blood port hit. Reference:
+`docs/vfx/forensics/B01_TBloodEffect_RENDER_RESETTLED.md` §2.6 / §6.
+
+When the snapshot hand-rolls inline blend factors WITHOUT a `Set*BlendState()`
+helper (e.g. raw `SRC=ONE, DEST=ONE` writes mid-Render with no surrounding
+helper), suspect WIP dead-code. **Every additive effect in `effect_old.cpp`
+except blood-k=1 calls `SetAddBlendState()` consistently — outliers smell
+like experimental WIP that didn't ship.**
+
 ### 3.3 Diagnostic ladder (mandatory)
 
 Per PARTICLE_EFFECTS §3.2, every effect goes through these visible stages
@@ -342,6 +598,16 @@ The harness is the gate. Per [TEST_MODE.md](TEST_MODE.md):
 4. Watch a few seconds of the loop. Effects with finite lifetime should restart
    on a timer or via the `R` key.
 
+**ONE effect instance on screen at a time** (hard rule). Show a single instance;
+let a finite effect fully play out and die before any re-trigger (re-trigger on a
+clear gap or the `R` key, never overlapping). Do NOT spawn a grid of instances,
+do NOT overlap/group copies, and do NOT reuse a fixed random seed across spawns
+(seed per spawn so re-triggers vary). You cannot verify an effect against retail
+when many overlapping or identical copies are on screen — a grid of same-seed
+copies hides whether the effect or the rig is wrong. (The `snap_grid.py` temporal
+montage — one effect's frames over time — is fine; this rule is about live
+on-screen instances.) See [[feedback-vfx-one-effect-onscreen]].
+
 ### 4.2 Retail reference
 
 When possible, capture a short video / screenshot of the original Revenant
@@ -353,6 +619,132 @@ When possible, capture a short video / screenshot of the original Revenant
 - The retail `Revenant.exe` in `data/` runs under Wine/dosbox for spot checks.
 
 Note any deliberate divergence (e.g. "blood is a touch brighter — better on modern displays") in the row's `Notes`.
+
+### 4.2.1 No procedural stand-ins for asset-driven effects (HARD RULE)
+
+If the retail code loads a `.I3D` mesh, `.RVI` imagery, or any named asset and
+draws it, **the port must load and draw the same asset**. Writing procedural
+geometry / billboards / gradients as a "stand-in" for an asset draw is a bodge
+even if the harness output looks superficially similar.
+
+Self-check during forensics (§3.0): does the retail source call
+`FindImagery` / `RegisterImagery` / `LoadImagery` / `Load3DAsset` / any
+imagery-lookup helper that resolves a named asset? If yes, the port path
+must reach the equivalent engine API. If that engine API does not yet
+exist, **stop and escalate as a blocker** — do NOT silently fall back to
+procedural geometry.
+
+Test for this in your own work: read your `SpawnForTest` and `Tick*` paths
+back-to-back with retail. Every named-asset call in retail must have a
+named-asset call in your port. Procedural code (`MakeTexture(...)`,
+`GenerateGradient`, billboard-from-scratch) appearing where retail loaded
+an asset means you have a stand-in and the port is not done.
+
+Caught failures so far: M09 TTeleporterEffect first port shipped a procedural
+glow column instead of `Magic\gvortex.I3D` (re-dispatched as M09b). F03
+TFireEffect under audit for same pattern. Reference: [[feedback-no-standins]].
+
+### 4.2.1.5 Color is a health signal
+
+Revenant effects have rich saturated color by design. Fire-family = warm
+orange/red; ice/cyclone = blue / ice-blue; sandstorm = brown; magic spells
+= blue or violet; sword swipes pull from `chardata->swipecolor` (often
+saturated). **If your port renders pale, muted, gray, or off-saturation,
+suspect the port path is broken before declaring done.**
+
+Likely culprits in order of frequency observed this project:
+
+1. **Stand-in for a real asset** — procedural gradient/billboard texture
+   replacing a real `.I3D` / imagery atlas; the asset's authored palette
+   is gone. See §4.2.1 + [[feedback-no-standins]].
+2. **Default color path** — harness or port supplying a fallback colour
+   (gold, white, gray) because the real data source (`chardata->swipecolor`,
+   `spell->color`, per-cast tint) wasn't traced. See the S09c failure where
+   harness defaulted to gold instead of reading Locke's `SWIPECOLOR 0,0,10`.
+3. **Wrong blend mode** — AdditiveStraight where Alpha was needed
+   (or vice versa) washes out per-vertex colours. F03 fix changed this.
+4. **Lighting mode mismatch** — `LitFlat` against dark sun direction
+   crushes saturated colours; `Unlit` is the convention for self-lit FX.
+5. **Chroma-key miss** — auto-chroma in `3dimage.cpp` converts black-bordered
+   textures to premultiplied alpha; bypass that and dark borders eat colour.
+
+Cross-check against sister-family effects: fire-family is all warm; magic-
+family is all cool; combat-family pulls from per-character data. Out-of-
+family colour = broken port. Reference: [[feedback-vfx-color-health-signal]].
+
+### 4.2.1.6 Quad orientation expectation
+
+Revenant's billboards are almost always one of two things, never an
+arbitrary world rotation:
+
+- **Screen-aligned billboard** (default) — fire sparks, flame, projectile
+  trails, glow halos that should always face the camera.
+- **Ground-oriented** (WorldXY) — ring halos, ripples, ground decals,
+  ground-scatter fire patches, AoE markers. Pre-release source's
+  `rot.x = -π/2` is the canonical tell that the quad tips onto the floor
+  plane.
+
+If your forensics produces a per-quad rotation that's neither (e.g. a
+loose 30° world-Y rotation), re-read the pre-release transform — almost
+certainly it's one of the two canonical orientations and you've mis-
+interpreted the matrix. F03 forensics initially shipped ScreenAligned;
+helper-trace caught the `rot.x = -π/2` → it's WorldXY.
+
+### 4.2.1.7 Background selection during capture
+
+When using the `--test=vfx` rig (the dev-cycled `B` key + ImGui dropdown
+toggles Black / LtGray / Forest / Dungeon backdrops), pick the BG that
+exposes the most diagnostic information for the effect you're vetting:
+
+- **Dungeon** — best for fire-family effects (the warm glow contrasts
+  against cool stone walls) and for floor-parallel effects (the dungeon
+  ground is flat, so ground-orientation foreshortening reads cleanly).
+  Use as default for any cast / spell / projectile vetting.
+- **Forest** — best for brighter effects (sword sparks read against the
+  saturated green/brown forest floor), outdoor ambient effects, and
+  anything that should "blend into" daylit scenes.
+- **Black** — diagnostic check for additive blend modes. The effect's
+  contribution shows literally; if it disappears against black, your
+  additive isn't firing.
+- **LtGray** — diagnostic check for alpha / see-through. If the effect
+  looks "solid" against light gray, your alpha path is broken; if you
+  can see the gray through it cleanly, alpha is firing.
+
+Many effects warrant capturing on BOTH a diagnostic BG (Black or LtGray)
+AND a game-view BG (Forest or Dungeon) — the diagnostic confirms the
+pipeline, the game-view confirms it reads in real context. Report
+both captures when the effect's correctness depends on either.
+
+### 4.2.2 Capture practice (snap_grid framing)
+
+Your own captures via `tools/vfx/snap_grid.py` must let a reviewer see the
+whole effect without having to ask follow-up questions. That means:
+
+- **Frame to the full visual extent** — when the effect has multiple phases
+  (Init / peak / fade) with different bounding boxes, frame for the LARGEST.
+  A cylinder that grows to engulf the caster must not get cropped at peak.
+- **Capture the diagnostic moments**, not arbitrary intervals:
+  1. Pre-trigger (state machine in starting state — proves baseline)
+  2. First frame of visual (proves it spawns correctly)
+  3. Visual peak (proves shape / scale / texture / color at apex)
+  4. Mid-decay or motion mid-point (proves any rotation / drift / fade)
+  5. Last frame before kill (proves clean death)
+- **Animated effects need a sequence, not a grid.** For rotation, traveling
+  projectiles, sword arcs, or anything where motion IS the effect, capture
+  a per-frame sequence at the cadence the user can replay. A 4×4 stills grid
+  fails to show whether rotation is happening or just translation.
+- **Label the frames.** Annotate the moment each frame shows
+  (e.g. "OUT peak — engulf", "MOVE start — rotation 90°"), or include a
+  small timestamp burn-in. A 16-frame grid with no context shifts the
+  parsing burden to the reviewer.
+- **Include scene context.** Locke or a known-scale anchor in frame, so
+  the reviewer can judge whether the effect is the correct size relative
+  to a character / weapon / area.
+
+Before declaring done, look at your own capture and ask: "if I had only
+this image and the retail reference, could a stranger tell whether they
+match?" If not, the capture is failing its job and the port is not
+verifiable yet. Re-shoot before reporting.
 
 ### 4.3 Build-clean check
 

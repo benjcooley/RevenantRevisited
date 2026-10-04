@@ -25,6 +25,7 @@
 
 #include "revenant.h"
 #include "assetcache.h"
+#include "audio_backend.h"
 #include "framesnap.h"
 #include "headless_window.h"
 #include "logging.h"
@@ -38,6 +39,8 @@
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
 #include "testscreen.h"
+#include "cinematicscreen.h"
+#include "i3dgltf.h"
 #include "testmodes.h"
 #include "testconfig.h"
 #include "time.h"
@@ -1540,6 +1543,7 @@ void GetParameters(int argc, char **argv)
         "gamespeed", "monitor", "violencelevel", "preloadsize",
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
+        "cinematic",
     });
     cmd.parse(argc, argv);
 
@@ -1657,10 +1661,34 @@ void GetParameters(int argc, char **argv)
             strncpyz(StartupVfxId, p.c_str(), sizeof(StartupVfxId));
     }
 
+  // CINEMATIC=<path> — .SMK file for --test=ui-cinematic. Empty = intro FMV.
+    {
+        std::string p;
+        if (arg_param(cmd, "cinematic", p))
+            strncpyz(StartupCinematicPath, p.c_str(), sizeof(StartupCinematicPath));
+    }
+
   // VFX-NO-UI — suppress the ImGui VFX Browser panel (for clean
   // effect-only screencaps). Flag-style: --vfx-no-ui (no value).
     if (arg_flag(cmd, "vfx-no-ui"))
         StartupVfxHideUi = true;
+
+  // VFX-WIREFRAME — render every FX submit as a thin quad outline
+  // instead of filled textured. Sets g_fx_wireframe_override (renderer.h).
+  // Flag-style: --vfx-wireframe (no value).
+    if (arg_flag(cmd, "vfx-wireframe"))
+    {
+        StartupVfxWireframe = true;
+        g_fx_wireframe_override = true;
+    }
+
+  // VFX-BG=<black|ltgray|forest|dungeon> — pre-select the diagnostic
+  // backdrop for --test=vfx (for scripted multi-BG captures).
+    {
+        std::string p;
+        if (arg_param(cmd, "vfx-bg", p))
+            strncpyz(StartupVfxBackground, p.c_str(), sizeof(StartupVfxBackground));
+    }
 
   // INPUT-SCRIPT="..." (alias --mouse-script) — replay a scripted synthetic
   // input sequence (mouse + keyboard) into the active --test mode (drive/verify
@@ -1707,6 +1735,40 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "dumptiles", p))
             strncpyz(StartupDumpTilesPath, p.c_str(), MAXPATHLEN);
+    }
+
+  // DUMPICONS=path — export all baked inventory icons / portraits to the
+  // given folder, creating it if needed.
+    {
+        std::string p;
+        if (arg_param(cmd, "dumpicons", p))
+            strncpyz(StartupDumpIconsPath, p.c_str(), MAXPATHLEN);
+    }
+
+  // DUMPGLTF=asset|@list [DUMPGLTFOUT=dir|file.glb] — export I3D asset(s)
+  // as Blender-loadable .glb with per-state animations.
+    {
+        std::string p;
+        if (arg_param(cmd, "dumpgltf", p))
+            strncpyz(StartupDumpGltfPath, p.c_str(), MAXPATHLEN);
+        if (arg_param(cmd, "dumpgltfout", p))
+            strncpyz(StartupDumpGltfOutPath, p.c_str(), MAXPATHLEN);
+    }
+
+  // DUMPI3D=asset [DUMPI3DOUT=dir] — extract one I3D's textures (PNG) +
+  // sub-objects (Wavefront OBJ) + manifest into a folder, then exit.
+    {
+        std::string p;
+        if (arg_param(cmd, "dumpi3d", p))
+        {
+            strncpyz(StartupDumpI3DPath, p.c_str(), MAXPATHLEN);
+            // Default test mode to i3ddump when --dumpi3d is supplied and
+            // no other test mode was named (mirrors the dumptiles pattern).
+            if (!StartupTestMode[0])
+                strncpyz(StartupTestMode, "i3ddump", sizeof(StartupTestMode));
+        }
+        if (arg_param(cmd, "dumpi3dout", p))
+            strncpyz(StartupDumpI3DOutPath, p.c_str(), MAXPATHLEN);
     }
 }
 
@@ -2053,6 +2115,24 @@ bool InitGlobals()
         return false;
     }
 
+    if (StartupDumpIconsPath[0])
+    {
+        Status("Dumping icons to %s\n", StartupDumpIconsPath);
+        if (!TestModes::DumpIconsToFolder(StartupDumpIconsPath))
+            FatalError("Failed dumping any icons to %s", StartupDumpIconsPath);
+        Status("Icon dump complete. Exiting.\n");
+        return false;
+    }
+
+    if (StartupDumpGltfPath[0])
+    {
+        Status("Dumping glTF for %s\n", StartupDumpGltfPath);
+        if (!DumpGltfFromStartupArgs(StartupDumpGltfPath, StartupDumpGltfOutPath))
+            FatalError("Failed dumping glTF for %s", StartupDumpGltfPath);
+        Status("glTF dump complete. Exiting.\n");
+        return false;
+    }
+
     if (!_CrtCheckMemory())
     {
 //      _CrtMemDumpAllObjectsSince(&s1);
@@ -2253,6 +2333,7 @@ void ShutdownGlobals()
 // Forward decls for the sokol callbacks (defined below sokol_main).
 static void AppInit();
 static void AppFrame();
+void SetMaxRuntimeSeconds(double s);   // see definition above AppFrame
 static void AppEvent(const sapp_event* ev);
 static void AppCleanup();
 
@@ -2283,13 +2364,25 @@ sapp_desc sokol_main(int argc, char* argv[])
     // window) AND again later in AppInit (which sets the post-init hide
     // flag in case desc.hidden wasn't honored by a build that doesn't
     // include our sokol_app patch). Scan argv directly — argh hasn't run.
+    // Also parse --max-runtime=N here: a wall-clock hard ceiling that
+    // calls sapp_request_quit() N seconds after AppFrame first ticks.
+    // This is a belt-and-suspenders safety net for agent runs — even if
+    // the input-script's auto-exit fails or the engine deadlocks before
+    // the script drains, the process eventually exits on its own.
     bool cli_headless = false;
     for (int i = 1; i < argc; ++i)
     {
         const char* a = argv[i];
         if (!a) continue;
         while (*a == '-' || *a == '/') ++a;
-        if (std::strcmp(a, "headless") == 0) { cli_headless = true; break; }
+        if (std::strcmp(a, "headless") == 0) { cli_headless = true; }
+        else if (std::strncmp(a, "max-runtime=", 12) == 0)
+        {
+            char* endp = nullptr;
+            const long s = std::strtol(a + 12, &endp, 10);
+            if (endp && *endp == '\0' && s > 0)
+                SetMaxRuntimeSeconds(double(s));
+        }
     }
 
     sapp_desc desc = {};
@@ -2317,6 +2410,12 @@ sapp_desc sokol_main(int argc, char* argv[])
         // timer still run normally; framesnap reads the offscreen RT.
         desc.hidden = true;
         desc.no_dock_icon = true;
+        // Suppress audio in headless mode — agent-driven test runs were
+        // dumping music + SFX onto the user's speakers. audio::SetSilenced
+        // must be called BEFORE audio::Init (which sound.cpp:406 does on
+        // first sound use); short-circuits Init so no miniaudio engine
+        // ever comes up.
+        audio::SetSilenced(true);
     }
     // Windowed by default; Borderless/FullScreen come from INI/args and
     // take effect before the window opens only if set via argv. Anything
@@ -2411,8 +2510,16 @@ static void AppInit()
 
     if (StartupTestMode[0])
     {
-        log_info("[boot] routing to TestScreen, mode='%s'", StartupTestMode);
-        BootScreen = &TestScreen;
+        if (strcmp(StartupTestMode, "ui-cinematic") == 0)
+        {
+            log_info("[boot] routing to CinematicScreen");
+            BootScreen = &CinematicScreen;
+        }
+        else
+        {
+            log_info("[boot] routing to TestScreen, mode='%s'", StartupTestMode);
+            BootScreen = &TestScreen;
+        }
     }
     else
     {
@@ -2432,6 +2539,15 @@ static void AppInit()
     SystemInitialized = true;
 }
 
+// --max-runtime=N: wall-clock hard ceiling that std::_Exit(0)s the process
+// N seconds after the first AppFrame tick. Belt-and-suspenders safety net
+// for agent runs (paired with the input-script auto-exit). 0 = disabled.
+// Parsed once in GetParameters; consumed by AppFrame.
+static double g_max_runtime_sec = 0.0;
+static double g_max_runtime_start_ms = 0.0;
+
+void SetMaxRuntimeSeconds(double s) { g_max_runtime_sec = s; }
+
 static void AppFrame()
 {
     // Drive the legacy screen dispatch. The pre-port top-level loop was:
@@ -2447,6 +2563,29 @@ static void AppFrame()
         return;
 
     TTime::BeginFrame(sapp_frame_duration());
+
+    // --max-runtime hard ceiling: if a positive limit was passed, hard-
+    // exit when wall-clock elapsed since first frame exceeds it. Belt-
+    // and-suspenders with the input-script auto-exit -- catches engine
+    // deadlocks, runaway loops, or crashes-pre-script-start that the
+    // script-side path can't handle. Uses std::_Exit(0) (skips atexit /
+    // static dtors) because sapp_request_quit() is best-effort and can
+    // be swallowed by a hung screen TimerLoop -- the whole point of this
+    // safety net is that it WORKS even when something is stuck. Mid-
+    // capture PNGs may be lost, which is fine: max-runtime hitting means
+    // the run was already broken.
+    if (g_max_runtime_sec > 0.0)
+    {
+        const double now_ms = TTime::Time() * 1000.0;
+        if (g_max_runtime_start_ms == 0.0) g_max_runtime_start_ms = now_ms;
+        const double elapsed_sec = (now_ms - g_max_runtime_start_ms) / 1000.0;
+        if (elapsed_sec >= g_max_runtime_sec)
+        {
+            log_info("[max-runtime] hit %.1fs limit -- hard exit",
+                     g_max_runtime_sec);
+            std::_Exit(0);
+        }
+    }
 
     // Start the ImGui frame before Animate/draw so screens can build debug
     // panels from their normal per-frame code. simgui_render() is called

@@ -1,0 +1,8 @@
+pause 200; take_snapshot spellbook initial state;
+moveto 590 120 100; left_down; pause 80;
+moveto 590 80 200; pause 200;
+moveto 590 40 200; pause 200;
+left_up; pause 300;
+take_snapshot after fast flick down;
+pause 500; take_snapshot momentum decay mid;
+pause 500; take_snapshot settled

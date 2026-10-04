@@ -44,6 +44,26 @@ vs_out main_vs(vs_in i) {
                                  dot(i.w1.xyz, i.normal),
                                  dot(i.w2.xyz, i.normal)));
 
+    if (camw.w > 0.5) {
+        static const float D3D_XY_SCALE = 1.4142135623730951;
+        static const float D3D_Z_SCALE  = 2.1798270608996972e-5;
+        float spx = vp.x + wp.x * D3D_XY_SCALE;
+        float spy = vp.y - wp.y * D3D_XY_SCALE;
+        float scene_z_n = clamp(wp.z * D3D_Z_SCALE, 0.0, 1.0);
+
+        vs_out o;
+        o.pos.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
+        o.pos.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
+        o.pos.z = scene_z_n;
+        o.pos.w = 1.0;
+        o.wpos    = wp;
+        o.wnormal = wn;
+        o.uv      = i.uv;
+        o.tint    = i.tint;
+        o.scene_z = scene_z_n;
+        return o;
+    }
+
     float wx = wp.x - camw.x;
     float wy = wp.y - camw.y;
     float wz = wp.z;

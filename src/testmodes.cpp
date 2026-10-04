@@ -6,6 +6,9 @@
 
 #include "testmodes.h"
 
+#include <sokol_app.h>          // sapp_request_quit on script drain
+#include <stb_image_write.h>   // for i3ddump test mode (impl lives in framesnap.cpp)
+
 #include "3dimage.h"
 #include "animimage.h"
 #include "audio_backend.h"
@@ -16,6 +19,7 @@
 #include "font.h"
 #include "fonttable.h"
 #include "framesnap.h"
+#include "hudstate.h"
 #include "imagery.h"
 #include "imageres.h"
 #include "imgui.h"
@@ -33,6 +37,7 @@
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
+#include "uidragstate.h"
 #include "uianchortest.h"
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
@@ -51,6 +56,7 @@
 #include "uiquickspelltest.h"
 #include "uisidebartest.h"
 #include "uisidetabstest.h"
+#include "uiscrollpanetest.h"
 #include "uispellbooktest.h"
 #include "uispellcreatetest.h"
 #include "uistatstest.h"
@@ -113,6 +119,314 @@ void MatrixMul16(const float a[16], const float b[16], float out[16])
     }
 }
 
+// Shared minimal-PNG writer + bitmap decoder for the asset dump modes
+// (--dumptiles, --dumpicons).
+namespace fs = std::filesystem;
+
+auto append_be32 = [](std::vector<uint8_t>& out, uint32_t v) {
+    out.push_back(uint8_t((v >> 24) & 0xFF));
+    out.push_back(uint8_t((v >> 16) & 0xFF));
+    out.push_back(uint8_t((v >>  8) & 0xFF));
+    out.push_back(uint8_t((v      ) & 0xFF));
+};
+auto crc32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
+    static uint32_t table[256] = {};
+    static bool init = false;
+    if (!init) {
+        for (uint32_t i = 0; i < 256; ++i) {
+            uint32_t c = i;
+            for (int k = 0; k < 8; ++k)
+                c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+            table[i] = c;
+        }
+        init = true;
+    }
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; ++i)
+        c = table[(c ^ data[i]) & 0xFFu] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+};
+auto adler32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
+    uint32_t s1 = 1, s2 = 0;
+    for (size_t i = 0; i < len; ++i) {
+        s1 = (s1 + data[i]) % 65521u;
+        s2 = (s2 + s1) % 65521u;
+    }
+    return (s2 << 16) | s1;
+};
+auto write_png_rgba = [](const fs::path& path, int32_t w, int32_t h, const std::vector<uint8_t>& rgba) -> bool {
+    if (w <= 0 || h <= 0 || rgba.size() != size_t(w) * size_t(h) * 4) return false;
+    std::vector<uint8_t> raw;
+    raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
+    for (int32_t y = 0; y < h; ++y) {
+        raw.push_back(0); // filter type 0
+        const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
+        raw.insert(raw.end(), row, row + size_t(w) * 4);
+    }
+
+    std::vector<uint8_t> zlib;
+    zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
+    zlib.push_back(0x78);
+    zlib.push_back(0x01);
+    size_t off = 0;
+    while (off < raw.size()) {
+        const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
+        const bool final = (off + chunk) == raw.size();
+        zlib.push_back(final ? 0x01 : 0x00);
+        zlib.push_back(uint8_t(chunk & 0xFF));
+        zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
+        const uint16_t nlen = uint16_t(~uint16_t(chunk));
+        zlib.push_back(uint8_t(nlen & 0xFF));
+        zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
+        zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
+        off += chunk;
+    }
+    append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
+
+    std::vector<uint8_t> png;
+    const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
+    png.insert(png.end(), sig, sig + 8);
+
+    auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
+        append_be32(png, uint32_t(payload.size()));
+        const size_t type_off = png.size();
+        png.push_back(uint8_t(type[0]));
+        png.push_back(uint8_t(type[1]));
+        png.push_back(uint8_t(type[2]));
+        png.push_back(uint8_t(type[3]));
+        png.insert(png.end(), payload.begin(), payload.end());
+        const uint32_t crc = crc32_bytes(png.data() + type_off, 4 + payload.size());
+        append_be32(png, crc);
+    };
+
+    std::vector<uint8_t> ihdr;
+    ihdr.reserve(13);
+    append_be32(ihdr, uint32_t(w));
+    append_be32(ihdr, uint32_t(h));
+    ihdr.push_back(8); // bit depth
+    ihdr.push_back(6); // RGBA
+    ihdr.push_back(0); // compression
+    ihdr.push_back(0); // filter
+    ihdr.push_back(0); // interlace
+    append_chunk("IHDR", ihdr);
+    append_chunk("IDAT", zlib);
+    append_chunk("IEND", {});
+
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+    f.write((const char*)png.data(), std::streamsize(png.size()));
+    return f.good();
+};
+// zlib stored-block "compression" of a raw filtered-scanline buffer, shared
+// by the APNG writer's IDAT and fdAT payloads.
+auto zlib_store = [](const std::vector<uint8_t>& raw) -> std::vector<uint8_t> {
+    std::vector<uint8_t> zlib;
+    zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
+    zlib.push_back(0x78);
+    zlib.push_back(0x01);
+    size_t off = 0;
+    while (off < raw.size()) {
+        const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
+        const bool final = (off + chunk) == raw.size();
+        zlib.push_back(final ? 0x01 : 0x00);
+        zlib.push_back(uint8_t(chunk & 0xFF));
+        zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
+        const uint16_t nlen = uint16_t(~uint16_t(chunk));
+        zlib.push_back(uint8_t(nlen & 0xFF));
+        zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
+        zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
+        off += chunk;
+    }
+    append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
+    return zlib;
+};
+// Minimal animated-PNG (APNG) writer. `frames` are full-frame RGBA buffers,
+// each w*h*4 bytes; every frame replaces the whole canvas (dispose=background,
+// blend=source) at delay_num/delay_den seconds. Plays forever.
+auto write_apng_rgba = [](const fs::path& path, int32_t w, int32_t h,
+                          const std::vector<std::vector<uint8_t>>& frames,
+                          uint16_t delay_num, uint16_t delay_den) -> bool {
+    if (w <= 0 || h <= 0 || frames.empty()) return false;
+    const size_t need = size_t(w) * size_t(h) * 4;
+    for (const auto& fr : frames)
+        if (fr.size() != need) return false;
+
+    std::vector<uint8_t> png;
+    const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
+    png.insert(png.end(), sig, sig + 8);
+    auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
+        append_be32(png, uint32_t(payload.size()));
+        const size_t type_off = png.size();
+        png.push_back(uint8_t(type[0])); png.push_back(uint8_t(type[1]));
+        png.push_back(uint8_t(type[2])); png.push_back(uint8_t(type[3]));
+        png.insert(png.end(), payload.begin(), payload.end());
+        append_be32(png, crc32_bytes(png.data() + type_off, 4 + payload.size()));
+    };
+    auto filter_frame = [&](const std::vector<uint8_t>& rgba) {
+        std::vector<uint8_t> raw;
+        raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
+        for (int32_t y = 0; y < h; ++y) {
+            raw.push_back(0);
+            const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
+            raw.insert(raw.end(), row, row + size_t(w) * 4);
+        }
+        return raw;
+    };
+
+    std::vector<uint8_t> ihdr;
+    append_be32(ihdr, uint32_t(w));
+    append_be32(ihdr, uint32_t(h));
+    ihdr.push_back(8); ihdr.push_back(6);
+    ihdr.push_back(0); ihdr.push_back(0); ihdr.push_back(0);
+    append_chunk("IHDR", ihdr);
+
+    std::vector<uint8_t> actl;          // animation control
+    append_be32(actl, uint32_t(frames.size()));
+    append_be32(actl, 0);               // num_plays = 0 => infinite
+    append_chunk("acTL", actl);
+
+    uint32_t seq = 0;
+    auto append_fctl = [&](void) {
+        std::vector<uint8_t> fctl;
+        append_be32(fctl, seq++);
+        append_be32(fctl, uint32_t(w));
+        append_be32(fctl, uint32_t(h));
+        append_be32(fctl, 0);           // x_offset
+        append_be32(fctl, 0);           // y_offset
+        fctl.push_back(uint8_t(delay_num >> 8)); fctl.push_back(uint8_t(delay_num & 0xFF));
+        fctl.push_back(uint8_t(delay_den >> 8)); fctl.push_back(uint8_t(delay_den & 0xFF));
+        fctl.push_back(1);              // dispose_op = background
+        fctl.push_back(0);              // blend_op = source
+        append_chunk("fcTL", fctl);
+    };
+
+    // Frame 0: fcTL + IDAT (the default image).
+    append_fctl();
+    append_chunk("IDAT", zlib_store(filter_frame(frames[0])));
+    // Frames 1..n: fcTL + fdAT (payload = sequence number + zlib data).
+    for (size_t i = 1; i < frames.size(); ++i) {
+        append_fctl();
+        std::vector<uint8_t> z = zlib_store(filter_frame(frames[i]));
+        std::vector<uint8_t> fdat;
+        append_be32(fdat, seq++);
+        fdat.insert(fdat.end(), z.begin(), z.end());
+        append_chunk("fdAT", fdat);
+    }
+    append_chunk("IEND", {});
+
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+    f.write((const char*)png.data(), std::streamsize(png.size()));
+    return f.good();
+};
+auto decode_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out,
+                                  std::vector<float>* zraw_out = nullptr,
+                                  std::vector<uint8_t>* alpha_out = nullptr,
+                                  int32_t* valid_out = nullptr,
+                                  float* zmin_out = nullptr,
+                                  float* zmax_out = nullptr) -> bool {
+    if (!bm || bm->width <= 0 || bm->height <= 0) return false;
+    const bool is_8bit = (bm->flags & BM_8BIT) != 0;
+    const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
+    const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
+    if (!is_8bit && !is_16bit) return false;
+    SPalette* pal = (SPalette*)bm->palette.ptr();
+    if (is_8bit && !pal) return false;
+    const int32_t w = bm->width, h = bm->height;
+    const size_t npx = size_t(w) * size_t(h);
+    const uint8_t key8 = (uint8_t)bm->keycolor;
+    const uint16_t key16 = (uint16_t)bm->keycolor;
+    std::unique_ptr<uint8_t[]> idxplane;
+    std::unique_ptr<uint16_t[]> rgbplane16;
+    if (is_8bit) idxplane.reset(new uint8_t[npx]); else rgbplane16.reset(new uint16_t[npx]);
+    std::unique_ptr<uint16_t[]> zplane;
+    if (has_zbuffer) zplane.reset(new uint16_t[npx]);
+
+    if (bm->flags & BM_CHUNKED)
+    {
+        if (!bm->CacheChunks()) return false;
+        SChunkHeader* hdr = (SChunkHeader*)(void*)bm->data8;
+        SChunkHeader* zhdr = has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
+        if (!hdr || (has_zbuffer && !zhdr)) return false;
+        const int32_t cw = hdr->width, ch = hdr->height;
+        if (is_8bit) std::memset(idxplane.get(), key8, npx);
+        else std::fill_n(rgbplane16.get(), npx, key16);
+        if (has_zbuffer) for (size_t i = 0; i < npx; ++i) zplane[i] = 0;
+        for (int32_t by = 0; by < ch; ++by)
+        for (int32_t bx = 0; bx < cw; ++bx)
+        {
+            void* cptr = hdr->block[by * cw + bx].ptr();
+            void* zptr = zhdr ? zhdr->block[by * cw + bx].ptr() : nullptr;
+            const uint8_t*  c8  = (is_8bit && cptr) ? (const uint8_t*)ChunkCache.AddChunk(cptr, 1) : nullptr;
+            const uint16_t* c16 = (is_16bit && cptr) ? (const uint16_t*)ChunkCache.AddChunk16(cptr, 1) : nullptr;
+            const uint16_t* z16 = (has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
+            const int32_t x0 = bx * CHUNKWIDTH, y0 = by * CHUNKHEIGHT;
+            const int32_t cxmax = (w - x0 < CHUNKWIDTH) ? (w - x0) : CHUNKWIDTH;
+            const int32_t cymax = (h - y0 < CHUNKHEIGHT) ? (h - y0) : CHUNKHEIGHT;
+            if (cxmax <= 0 || cymax <= 0) continue;
+            for (int32_t y = 0; y < cymax; ++y)
+            {
+                if (c8) std::memcpy(&idxplane[(y0 + y) * w + x0], &c8[y * CHUNKWIDTH], cxmax);
+                if (c16) std::memcpy(&rgbplane16[(y0 + y) * w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+                if (z16) std::memcpy(&zplane[(y0 + y) * w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+            }
+        }
+    }
+    else
+    {
+        if (is_8bit) std::memcpy(idxplane.get(), bm->data8, npx);
+        else std::memcpy(rgbplane16.get(), bm->data16, npx * sizeof(uint16_t));
+        if (has_zbuffer)
+        {
+            uint16_t* zbuf = (uint16_t*)bm->zbuffer.ptr();
+            if (zbuf) std::memcpy(zplane.get(), zbuf, npx * sizeof(uint16_t));
+        }
+    }
+
+    rgba_out.assign(npx * 4, 0);
+    if (zraw_out) zraw_out->assign(npx, 0.0f);
+    if (alpha_out) alpha_out->assign(npx, 0);
+    int32_t valid = 0;
+    float zmin = FLT_MAX;
+    float zmax = -FLT_MAX;
+    for (size_t i = 0; i < npx; ++i)
+    {
+        const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
+        const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
+        const uint16_t z = has_zbuffer ? zplane[i] : 1;
+        const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
+                                             : (is_8bit ? (idx8 == key8) : (px16 == key16));
+        uint8_t* row = rgba_out.data() + i * 4;
+        if (transparent)
+            continue;
+        ++valid;
+        if (alpha_out) (*alpha_out)[i] = 255;
+        const float zraw = has_zbuffer ? float(int16_t(z)) : 0.0f;
+        if (zraw_out) (*zraw_out)[i] = zraw;
+        zmin = (std::min)(zmin, zraw);
+        zmax = (std::max)(zmax, zraw);
+        if (is_8bit)
+        {
+            const uint32_t c = pal->rgbcolors[idx8];
+            row[0] = (uint8_t)( c        & 0xFF);
+            row[1] = (uint8_t)((c >> 8)  & 0xFF);
+            row[2] = (uint8_t)((c >> 16) & 0xFF);
+        }
+        else
+        {
+            row[0] = (uint8_t)(((px16 >> 10) & 0x1F) << 3);
+            row[1] = (uint8_t)(((px16 >> 5)  & 0x1F) << 3);
+            row[2] = (uint8_t)(( px16        & 0x1F) << 3);
+        }
+        row[3] = 255;
+    }
+    if (valid == 0) { zmin = 0.0f; zmax = 0.0f; }
+    if (valid_out) *valid_out = valid;
+    if (zmin_out) *zmin_out = zmin;
+    if (zmax_out) *zmax_out = zmax;
+    return true;
+};
+
 bool DumpTilesToPath(const char* out_path_cstr)
 {
     namespace fs = std::filesystem;
@@ -133,208 +447,6 @@ bool DumpTilesToPath(const char* out_path_cstr)
     std::ofstream report(out_dir / "tile_z_report.csv");
     if (report)
         report << "objtype,name,width,height,valid,zmin,zmax,expected_flat_zmin,expected_flat_zmax,mean_abs_flat_error,max_abs_flat_error,flat_fit_offset,mean_abs_fit_error,max_abs_fit_error\n";
-
-    auto append_be32 = [](std::vector<uint8_t>& out, uint32_t v) {
-        out.push_back(uint8_t((v >> 24) & 0xFF));
-        out.push_back(uint8_t((v >> 16) & 0xFF));
-        out.push_back(uint8_t((v >>  8) & 0xFF));
-        out.push_back(uint8_t((v      ) & 0xFF));
-    };
-    auto crc32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
-        static uint32_t table[256] = {};
-        static bool init = false;
-        if (!init) {
-            for (uint32_t i = 0; i < 256; ++i) {
-                uint32_t c = i;
-                for (int k = 0; k < 8; ++k)
-                    c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
-                table[i] = c;
-            }
-            init = true;
-        }
-        uint32_t c = 0xFFFFFFFFu;
-        for (size_t i = 0; i < len; ++i)
-            c = table[(c ^ data[i]) & 0xFFu] ^ (c >> 8);
-        return c ^ 0xFFFFFFFFu;
-    };
-    auto adler32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
-        uint32_t s1 = 1, s2 = 0;
-        for (size_t i = 0; i < len; ++i) {
-            s1 = (s1 + data[i]) % 65521u;
-            s2 = (s2 + s1) % 65521u;
-        }
-        return (s2 << 16) | s1;
-    };
-    auto write_png_rgba = [&](const fs::path& path, int32_t w, int32_t h, const std::vector<uint8_t>& rgba) -> bool {
-        if (w <= 0 || h <= 0 || rgba.size() != size_t(w) * size_t(h) * 4) return false;
-        std::vector<uint8_t> raw;
-        raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
-        for (int32_t y = 0; y < h; ++y) {
-            raw.push_back(0); // filter type 0
-            const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
-            raw.insert(raw.end(), row, row + size_t(w) * 4);
-        }
-
-        std::vector<uint8_t> zlib;
-        zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
-        zlib.push_back(0x78);
-        zlib.push_back(0x01);
-        size_t off = 0;
-        while (off < raw.size()) {
-            const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
-            const bool final = (off + chunk) == raw.size();
-            zlib.push_back(final ? 0x01 : 0x00);
-            zlib.push_back(uint8_t(chunk & 0xFF));
-            zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
-            const uint16_t nlen = uint16_t(~uint16_t(chunk));
-            zlib.push_back(uint8_t(nlen & 0xFF));
-            zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
-            zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
-            off += chunk;
-        }
-        append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
-
-        std::vector<uint8_t> png;
-        const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
-        png.insert(png.end(), sig, sig + 8);
-
-        auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
-            append_be32(png, uint32_t(payload.size()));
-            const size_t type_off = png.size();
-            png.push_back(uint8_t(type[0]));
-            png.push_back(uint8_t(type[1]));
-            png.push_back(uint8_t(type[2]));
-            png.push_back(uint8_t(type[3]));
-            png.insert(png.end(), payload.begin(), payload.end());
-            const uint32_t crc = crc32_bytes(png.data() + type_off, 4 + payload.size());
-            append_be32(png, crc);
-        };
-
-        std::vector<uint8_t> ihdr;
-        ihdr.reserve(13);
-        append_be32(ihdr, uint32_t(w));
-        append_be32(ihdr, uint32_t(h));
-        ihdr.push_back(8); // bit depth
-        ihdr.push_back(6); // RGBA
-        ihdr.push_back(0); // compression
-        ihdr.push_back(0); // filter
-        ihdr.push_back(0); // interlace
-        append_chunk("IHDR", ihdr);
-        append_chunk("IDAT", zlib);
-        append_chunk("IEND", {});
-
-        std::ofstream f(path, std::ios::binary);
-        if (!f) return false;
-        f.write((const char*)png.data(), std::streamsize(png.size()));
-        return f.good();
-    };
-    auto decode_tile_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out,
-                                      std::vector<float>* zraw_out = nullptr,
-                                      std::vector<uint8_t>* alpha_out = nullptr,
-                                      int32_t* valid_out = nullptr,
-                                      float* zmin_out = nullptr,
-                                      float* zmax_out = nullptr) -> bool {
-        if (!bm || bm->width <= 0 || bm->height <= 0) return false;
-        const bool is_8bit = (bm->flags & BM_8BIT) != 0;
-        const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
-        const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
-        if (!is_8bit && !is_16bit) return false;
-        SPalette* pal = (SPalette*)bm->palette.ptr();
-        if (is_8bit && !pal) return false;
-        const int32_t w = bm->width, h = bm->height;
-        const size_t npx = size_t(w) * size_t(h);
-        const uint8_t key8 = (uint8_t)bm->keycolor;
-        const uint16_t key16 = (uint16_t)bm->keycolor;
-        std::unique_ptr<uint8_t[]> idxplane;
-        std::unique_ptr<uint16_t[]> rgbplane16;
-        if (is_8bit) idxplane.reset(new uint8_t[npx]); else rgbplane16.reset(new uint16_t[npx]);
-        std::unique_ptr<uint16_t[]> zplane;
-        if (has_zbuffer) zplane.reset(new uint16_t[npx]);
-
-        if (bm->flags & BM_CHUNKED)
-        {
-            if (!bm->CacheChunks()) return false;
-            SChunkHeader* hdr = (SChunkHeader*)(void*)bm->data8;
-            SChunkHeader* zhdr = has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
-            if (!hdr || (has_zbuffer && !zhdr)) return false;
-            const int32_t cw = hdr->width, ch = hdr->height;
-            if (is_8bit) std::memset(idxplane.get(), key8, npx);
-            else std::fill_n(rgbplane16.get(), npx, key16);
-            if (has_zbuffer) for (size_t i = 0; i < npx; ++i) zplane[i] = 0;
-            for (int32_t by = 0; by < ch; ++by)
-            for (int32_t bx = 0; bx < cw; ++bx)
-            {
-                void* cptr = hdr->block[by * cw + bx].ptr();
-                void* zptr = zhdr ? zhdr->block[by * cw + bx].ptr() : nullptr;
-                const uint8_t*  c8  = (is_8bit && cptr) ? (const uint8_t*)ChunkCache.AddChunk(cptr, 1) : nullptr;
-                const uint16_t* c16 = (is_16bit && cptr) ? (const uint16_t*)ChunkCache.AddChunk16(cptr, 1) : nullptr;
-                const uint16_t* z16 = (has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
-                const int32_t x0 = bx * CHUNKWIDTH, y0 = by * CHUNKHEIGHT;
-                const int32_t cxmax = (w - x0 < CHUNKWIDTH) ? (w - x0) : CHUNKWIDTH;
-                const int32_t cymax = (h - y0 < CHUNKHEIGHT) ? (h - y0) : CHUNKHEIGHT;
-                if (cxmax <= 0 || cymax <= 0) continue;
-                for (int32_t y = 0; y < cymax; ++y)
-                {
-                    if (c8) std::memcpy(&idxplane[(y0 + y) * w + x0], &c8[y * CHUNKWIDTH], cxmax);
-                    if (c16) std::memcpy(&rgbplane16[(y0 + y) * w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
-                    if (z16) std::memcpy(&zplane[(y0 + y) * w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
-                }
-            }
-        }
-        else
-        {
-            if (is_8bit) std::memcpy(idxplane.get(), bm->data8, npx);
-            else std::memcpy(rgbplane16.get(), bm->data16, npx * sizeof(uint16_t));
-            if (has_zbuffer)
-            {
-                uint16_t* zbuf = (uint16_t*)bm->zbuffer.ptr();
-                if (zbuf) std::memcpy(zplane.get(), zbuf, npx * sizeof(uint16_t));
-            }
-        }
-
-        rgba_out.assign(npx * 4, 0);
-        if (zraw_out) zraw_out->assign(npx, 0.0f);
-        if (alpha_out) alpha_out->assign(npx, 0);
-        int32_t valid = 0;
-        float zmin = FLT_MAX;
-        float zmax = -FLT_MAX;
-        for (size_t i = 0; i < npx; ++i)
-        {
-            const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
-            const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
-            const uint16_t z = has_zbuffer ? zplane[i] : 1;
-            const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
-                                                 : (is_8bit ? (idx8 == key8) : (px16 == key16));
-            uint8_t* row = rgba_out.data() + i * 4;
-            if (transparent)
-                continue;
-            ++valid;
-            if (alpha_out) (*alpha_out)[i] = 255;
-            const float zraw = has_zbuffer ? float(int16_t(z)) : 0.0f;
-            if (zraw_out) (*zraw_out)[i] = zraw;
-            zmin = (std::min)(zmin, zraw);
-            zmax = (std::max)(zmax, zraw);
-            if (is_8bit)
-            {
-                const uint32_t c = pal->rgbcolors[idx8];
-                row[0] = (uint8_t)( c        & 0xFF);
-                row[1] = (uint8_t)((c >> 8)  & 0xFF);
-                row[2] = (uint8_t)((c >> 16) & 0xFF);
-            }
-            else
-            {
-                row[0] = (uint8_t)(((px16 >> 10) & 0x1F) << 3);
-                row[1] = (uint8_t)(((px16 >> 5)  & 0x1F) << 3);
-                row[2] = (uint8_t)(( px16        & 0x1F) << 3);
-            }
-            row[3] = 255;
-        }
-        if (valid == 0) { zmin = 0.0f; zmax = 0.0f; }
-        if (valid_out) *valid_out = valid;
-        if (zmin_out) *zmin_out = zmin;
-        if (zmax_out) *zmax_out = zmax;
-        return true;
-    };
 
     for (int32_t objtype = 0; objtype < TileClass.NumTypes(); ++objtype)
     {
@@ -369,7 +481,7 @@ bool DumpTilesToPath(const char* out_path_cstr)
         std::vector<uint8_t> alpha;
         int32_t valid_count = 0;
         float zmin = 0.0f, zmax = 0.0f;
-        if (!decode_tile_bitmap_rgba(bm, rgba, &zraw, &alpha, &valid_count, &zmin, &zmax))
+        if (!decode_bitmap_rgba(bm, rgba, &zraw, &alpha, &valid_count, &zmin, &zmax))
         {
             ++failed;
             log_warn("[tiledump] decode failed for tile[%d] '%s' flags=0x%x", objtype, info->name, bm->flags);
@@ -476,6 +588,466 @@ bool DumpTilesToPath(const char* out_path_cstr)
 bool InitializeTileDumpMode()
 {
     return DumpTilesToPath(StartupDumpTilesPath);
+}
+
+// Walk every object class/type, load its imagery, and export every baked
+// inventory icon (GetInvImage per state) as a PNG. This captures all item
+// icons and character portraits (portrait = state 0 of the body imagery);
+// only I3D imagery bakes icons, types without them are silently skipped.
+bool DumpIconsToPath(const char* out_path_cstr)
+{
+    const fs::path out_dir = (out_path_cstr && out_path_cstr[0])
+        ? fs::path(out_path_cstr)
+        : (fs::current_path() / "icons");
+    std::error_code ec;
+    fs::create_directories(out_dir, ec);
+    if (ec)
+    {
+        log_error("[icondump] create_directories failed for '%s': %s",
+                  out_dir.string().c_str(), ec.message().c_str());
+        return false;
+    }
+
+    int dumped = 0;
+    int animated = 0;
+    int failed = 0;
+
+    // Chroma-key the magenta background to transparent. The .i3d-baked
+    // portraits (CHARACTER/PLAYER) come back with an opaque magenta fill
+    // instead of the keyed/zbuffered transparency item icons use, so
+    // decode_bitmap_rgba leaves it solid. Inv icons are chroma-keyed by
+    // definition and real icon art never uses pure (248,0,248) magenta.
+    auto chroma_key = [](std::vector<uint8_t>& rgba) {
+        for (size_t p = 0; p + 3 < rgba.size(); p += 4)
+            if (rgba[p] >= 224 && rgba[p + 1] <= 32 && rgba[p + 2] >= 224)
+                rgba[p] = rgba[p + 1] = rgba[p + 2] = rgba[p + 3] = 0;
+    };
+
+    for (int32_t classid = 0; classid < TObjectClass::NumClasses(); ++classid)
+    {
+        const TObjectClass* cls = TObjectClass::GetClass(classid);
+        if (!cls)
+            continue;
+        const std::string safe_class = SanitizeFilenameComponent(cls->ClassName());
+
+        for (int32_t objtype = 0; objtype < cls->NumTypes(); ++objtype)
+        {
+            SObjectInfo* info = cls->GetObjType(objtype);
+            if (!info || !info->name)
+                continue;
+
+            TObjectImagery* imagery = TObjectImagery::LoadImagery(info->imageryid);
+            if (!imagery)
+                continue;
+
+            const std::string safe_name = SanitizeFilenameComponent(info->name);
+            const int32_t nstates = imagery->NumStates();
+            for (int32_t state = 0; state < nstates; ++state)
+            {
+                // An item may ship a static inventory bitmap, an inventory
+                // animation, or both. Potions et al. have only the animation,
+                // so fall back to its first frame for the still (mirrors
+                // TObjectInstance::InventoryImage).
+                TAnimation* anim = imagery->GetInvAnimation(state);
+                const int32_t nframes = anim ? anim->NumFrames() : 0;
+                TBitmap* bm = imagery->GetInvImage(state);
+                if (!bm && anim && nframes > 0)
+                    bm = anim->GetFrame(0);
+                if (!bm)
+                    continue;
+
+                std::vector<uint8_t> rgba;
+                if (!decode_bitmap_rgba(bm, rgba))
+                {
+                    ++failed;
+                    log_warn("[icondump] decode failed for %s '%s' state=%d flags=0x%x",
+                             cls->ClassName(), info->name, state, bm->flags);
+                    continue;
+                }
+                chroma_key(rgba);
+
+                char stem[512];
+                if (state == 0)
+                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s",
+                                  safe_class.c_str(), objtype, safe_name.c_str());
+                else
+                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s_s%02d",
+                                  safe_class.c_str(), objtype, safe_name.c_str(), state);
+
+                if (!write_png_rgba(out_dir / (std::string(stem) + ".png"),
+                                    bm->width, bm->height, rgba))
+                {
+                    ++failed;
+                    log_warn("[icondump] png write failed for %s '%s' state=%d",
+                             cls->ClassName(), info->name, state);
+                    continue;
+                }
+                ++dumped;
+
+                // Multi-frame inventory animation -> APNG alongside the still.
+                if (nframes > 1)
+                {
+                    std::vector<std::vector<uint8_t>> aframes;
+                    aframes.reserve(size_t(nframes));
+                    const int32_t aw = bm->width, ah = bm->height;
+                    bool ok = true;
+                    for (int32_t fr = 0; fr < nframes; ++fr)
+                    {
+                        TBitmap* fb = anim->GetFrame(fr);
+                        std::vector<uint8_t> frgba;
+                        if (!fb || fb->width != aw || fb->height != ah ||
+                            !decode_bitmap_rgba(fb, frgba))
+                        { ok = false; break; }
+                        chroma_key(frgba);
+                        aframes.push_back(std::move(frgba));
+                    }
+                    // 10 fps is a sensible default; the engine steps these
+                    // off the game tick and the source carries no per-clip rate.
+                    if (ok && write_apng_rgba(out_dir / (std::string(stem) + "_anim.png"),
+                                              aw, ah, aframes, 1, 10))
+                        ++animated;
+                    else if (!ok)
+                        log_warn("[icondump] anim frame decode failed for %s '%s' state=%d",
+                                 cls->ClassName(), info->name, state);
+                }
+            }
+        }
+    }
+
+    log_info("[icondump] dumped=%d animated=%d failed=%d folder='%s'",
+             dumped, animated, failed, out_dir.string().c_str());
+    return dumped > 0;
+}
+
+// =========================================================================
+// * i3ddump — extract everything from an I3D file into a folder.          *
+// *                                                                       *
+// * Per asset:                                                            *
+// *   manifest.txt            — sub-object list, materials, texture refs *
+// *   texture_NN_frame_FF.png — every decoded RGBA frame, every slot      *
+// *   subobj_NN_<name>.obj    — Wavefront OBJ per sub-object               *
+// *                                                                       *
+// * CLI: --dumpi3d=Magic\\comet.I3D [--dumpi3dout=DIR]                    *
+// * If --dumpi3dout omitted, defaults to ./i3d_dump/<asset_basename>/.    *
+// *                                                                       *
+// * Texture data is captured by setting                                   *
+// * T3DImagery::g_retain_decoded_rgba = true BEFORE LoadImagery — the    *
+// * loader retains decoded bytes per frame in S3DTex::dump_rgba_frames    *
+// * (see 3dimage.cpp).                                                    *
+// =========================================================================
+
+bool DumpI3DToPath(const char* asset_path_cstr, const char* out_dir_cstr)
+{
+    namespace fs = std::filesystem;
+    if (!asset_path_cstr || !asset_path_cstr[0])
+    {
+        log_error("[i3ddump] asset path is empty");
+        return false;
+    }
+
+    // Compute output folder. Default: ./i3d_dump/<basename-no-extension>/
+    fs::path out_dir;
+    if (out_dir_cstr && out_dir_cstr[0])
+    {
+        out_dir = fs::path(out_dir_cstr);
+    }
+    else
+    {
+        std::string base = asset_path_cstr;
+        // Strip directory (Win or Unix separators).
+        size_t slash = base.find_last_of("/\\");
+        if (slash != std::string::npos)
+            base = base.substr(slash + 1);
+        // Strip extension.
+        size_t dot = base.find_last_of('.');
+        if (dot != std::string::npos)
+            base = base.substr(0, dot);
+        out_dir = fs::current_path() / "i3d_dump" / base;
+    }
+    std::error_code ec;
+    fs::create_directories(out_dir, ec);
+    if (ec)
+    {
+        log_error("[i3ddump] create_directories failed for '%s': %s",
+                  out_dir.string().c_str(), ec.message().c_str());
+        return false;
+    }
+
+    // Enable CPU-side RGBA retention BEFORE LoadImagery so the texture
+    // loader keeps decoded bytes per frame.
+    T3DImagery::g_retain_decoded_rgba = true;
+
+    int32_t img_id = TObjectImagery::FindImagery(asset_path_cstr);
+    if (img_id < 0)
+    {
+        // Asset isn't registered in class.def's imagery table (e.g. legacy
+        // / test assets like Magic\fireball.i3d that were replaced by
+        // newfireball.i3d before ship). Try RegisterImagery as a fallback —
+        // this adds the path to the lookup table on-the-fly.
+        std::string path_copy = asset_path_cstr;
+        img_id = TObjectImagery::RegisterImagery(path_copy.data());
+        if (img_id < 0)
+        {
+            log_error("[i3ddump] FindImagery + RegisterImagery both failed for '%s'",
+                      asset_path_cstr);
+            return false;
+        }
+        log_info("[i3ddump]   '%s' not in class.def; registered as id=%d",
+                 asset_path_cstr, img_id);
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[i3ddump] LoadImagery(id=%d '%s') failed",
+                  img_id, asset_path_cstr);
+        return false;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[i3ddump] '%s' is not a T3DImagery (got %s)",
+                  asset_path_cstr, typeid(*base).name());
+        return false;
+    }
+
+    auto sanitize = [](const char* s) -> std::string {
+        std::string r;
+        if (!s) return std::string("unnamed");
+        for (; *s; ++s) {
+            const char c = *s;
+            r.push_back((c == '/' || c == '\\' || c == ':' || c == ' ' || c == '\t') ? '_' : c);
+        }
+        if (r.empty()) r = "unnamed";
+        return r;
+    };
+
+    // ---- manifest.txt ----
+    std::ofstream mf(out_dir / "manifest.txt");
+    mf << "asset: " << asset_path_cstr << "\n";
+    mf << "NumObjects: " << img3d->NumObjects() << "\n";
+    mf << "NumTextures: " << img3d->NumTextures() << "\n";
+    mf << "NumMaterials: " << img3d->NumMaterials() << "\n";
+    mf << "\n";
+
+    // ---- textures → PNG ----
+    // Frame data is on T3DImagery::dump_textures (NOT S3DTex — vector
+    // members in S3DTex get corrupted by TVirtualArray's memcpy copy
+    // semantics).
+    //
+    // Textures need a vertical flip on write because the I3D format
+    // stores them in D3D's top-down convention (row 0 = top), but PNG
+    // viewers expect bottom-up display semantics for the in-game look.
+    // (Try toggling this if dumps come out mirrored.)
+    stbi_flip_vertically_on_write(1);
+    int32_t pngs_written = 0;
+    for (int32_t t = 0; t < img3d->NumTextures(); ++t)
+    {
+        S3DTex tex = {};
+        img3d->GetTexture(t, &tex);
+        mf << "texture[" << t << "]: "
+           << tex.desc.width << "x" << tex.desc.height
+           << " frames=" << tex.numframes << "\n";
+        const int32_t w = int32_t(tex.desc.width);
+        const int32_t h = int32_t(tex.desc.height);
+        if (t >= int32_t(img3d->dump_textures.size())) continue;
+        const auto& frames = img3d->dump_textures[size_t(t)];
+        for (int32_t f = 0; f < int32_t(frames.size()); ++f)
+        {
+            const std::vector<uint8_t>& rgba = frames[size_t(f)];
+            if (rgba.empty() || w <= 0 || h <= 0) continue;
+            if (int32_t(rgba.size()) != w * h * 4)
+            {
+                log_warn("[i3ddump]   texture[%d] frame[%d] size mismatch "
+                         "(%zu vs %d)",
+                         t, f, rgba.size(), w * h * 4);
+                continue;
+            }
+            char stem[256];
+            std::snprintf(stem, sizeof(stem), "texture_%02d_frame_%02d.png", t, f);
+            const fs::path png_path = out_dir / stem;
+            if (stbi_write_png(png_path.string().c_str(), w, h, 4,
+                               rgba.data(), w * 4) == 0)
+            {
+                log_warn("[i3ddump] stbi_write_png failed: %s",
+                         png_path.string().c_str());
+                continue;
+            }
+            mf << "  frame[" << f << "]: " << stem << "\n";
+            ++pngs_written;
+        }
+    }
+    mf << "\n";
+
+    // ---- materials ----
+    for (int32_t m = 0; m < img3d->NumMaterials(); ++m)
+    {
+        S3DMat mat = {};
+        img3d->GetMaterial(m, &mat);
+        mf << "material[" << m << "]: "
+           << "diffuse=(" << mat.matdesc.diffuse.r
+           << "," << mat.matdesc.diffuse.g
+           << "," << mat.matdesc.diffuse.b
+           << "," << mat.matdesc.diffuse.a << ") "
+           << "emissive=(" << mat.matdesc.emissive.r
+           << "," << mat.matdesc.emissive.g
+           << "," << mat.matdesc.emissive.b << ") "
+           << "texture=" << mat.texture << "\n";
+    }
+    mf << "\n";
+
+    // ---- sub-objects → single combined Wavefront OBJ ----
+    // One <asset_basename>.obj per I3D, with `o NAME` markers per
+    // sub-object. Blender + most DCC tools can drag-drop this directly
+    // and see each sub-object as a separately named selectable mesh.
+    //
+    // Indexing rule (Wavefront): v/vt indices are 1-based and GLOBAL to
+    // the file. We accumulate a `vert_base` offset as we walk
+    // sub-objects so each block's `f` lines reference its own verts.
+    std::string asset_stem = asset_path_cstr;
+    {
+        size_t slash = asset_stem.find_last_of("/\\");
+        if (slash != std::string::npos) asset_stem = asset_stem.substr(slash + 1);
+        size_t dot = asset_stem.find_last_of('.');
+        if (dot != std::string::npos) asset_stem = asset_stem.substr(0, dot);
+    }
+    const fs::path combined_obj_path = out_dir / (asset_stem + ".obj");
+    std::ofstream combined_obj(combined_obj_path);
+    combined_obj << "# Revenant I3D dump\n";
+    combined_obj << "# asset: " << asset_path_cstr << "\n";
+    combined_obj << "# sub-objects: " << img3d->NumObjects() << "\n\n";
+
+    int32_t objs_written = 0;
+    int32_t global_vert_base = 0;
+    for (int32_t o = 0; o < img3d->NumObjects(); ++o)
+    {
+        const char* name = img3d->GetObjectName(o);
+        const std::string safe = sanitize(name);
+
+        // Try every texture slot (matches d3d::RegisterSubMesh pattern).
+        // Stop at the first slot that yields verts/indices. This handles
+        // both textured sub-objects (UVs in the texture's slot) and
+        // solid-fill ones (UVs in slot 0).
+        std::vector<SMeshVertex> verts;
+        std::vector<uint16_t>    indices;
+        const int32_t num_tex = img3d->NumTextures();
+        int32_t picked_slot = -1;
+        for (int32_t slot = 0; slot < num_tex + 1; ++slot)
+        {
+            verts.clear();
+            indices.clear();
+            if (!ExtractSubMeshTextureSlot(img3d, o, slot, verts, indices))
+                continue;
+            if (verts.empty() || indices.empty()) continue;
+            picked_slot = slot;
+            break;
+        }
+
+        mf << "object[" << o << "]: name='" << (name ? name : "")
+           << "' verts=" << verts.size()
+           << " idxs=" << indices.size()
+           << " texslot=" << picked_slot;
+
+        // Bbox for manifest.
+        if (!verts.empty())
+        {
+            float mn[3] = { verts[0].pos[0], verts[0].pos[1], verts[0].pos[2] };
+            float mx[3] = { mn[0], mn[1], mn[2] };
+            for (const auto& v : verts) {
+                for (int32_t k = 0; k < 3; ++k) {
+                    mn[k] = (std::min)(mn[k], v.pos[k]);
+                    mx[k] = (std::max)(mx[k], v.pos[k]);
+                }
+            }
+            mf << " bbox=(" << mn[0] << "," << mn[1] << "," << mn[2]
+               << ")..(" << mx[0] << "," << mx[1] << "," << mx[2] << ")";
+        }
+        mf << "\n";
+
+        if (verts.empty() || indices.empty())
+            continue;
+
+        // Append this sub-object as a named block in the combined OBJ.
+        combined_obj << "# sub-object[" << o << "] name='" << (name ? name : "")
+                     << "' texslot=" << picked_slot
+                     << " verts=" << verts.size()
+                     << " indices=" << indices.size() << "\n";
+        combined_obj << "o " << safe << "\n";
+        for (const auto& v : verts)
+            combined_obj << "v " << v.pos[0] << " " << v.pos[1] << " "
+                         << v.pos[2] << "\n";
+        for (const auto& v : verts)
+            combined_obj << "vt " << v.uv[0] << " " << v.uv[1] << "\n";
+        for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+            const int32_t a = int32_t(indices[i + 0]) + 1 + global_vert_base;
+            const int32_t b = int32_t(indices[i + 1]) + 1 + global_vert_base;
+            const int32_t c = int32_t(indices[i + 2]) + 1 + global_vert_base;
+            combined_obj << "f " << a << "/" << a
+                         << " "  << b << "/" << b
+                         << " "  << c << "/" << c << "\n";
+        }
+        combined_obj << "\n";
+        global_vert_base += int32_t(verts.size());
+        ++objs_written;
+    }
+
+    log_info("[i3ddump] dumped %d textures, %d sub-objects from '%s' -> %s",
+             pngs_written, objs_written,
+             asset_path_cstr, out_dir.string().c_str());
+    return (pngs_written > 0) || (objs_written > 0);
+}
+
+bool InitializeI3DDumpMode()
+{
+    // Batch mode: --dumpi3d=@LIST_FILE — process one asset path per
+    // non-empty/non-comment line. Output for each goes into
+    // <DUMPI3DOUT>/<asset_basename>/. Bootstraps the engine once instead
+    // of N times for catalog-wide dumps.
+    if (StartupDumpI3DPath[0] == '@')
+    {
+        namespace fs = std::filesystem;
+        const char* list_path = StartupDumpI3DPath + 1;
+        std::ifstream list(list_path);
+        if (!list)
+        {
+            log_error("[i3ddump] cannot open list file '%s'", list_path);
+            return false;
+        }
+        const fs::path base_out = StartupDumpI3DOutPath[0]
+            ? fs::path(StartupDumpI3DOutPath)
+            : (fs::current_path() / "i3d_dump_all");
+        std::error_code ec;
+        fs::create_directories(base_out, ec);
+        int32_t ok = 0, fail = 0;
+        std::string line;
+        while (std::getline(list, line))
+        {
+            // Trim whitespace.
+            while (!line.empty() && (line.back() == '\r' || line.back() == '\n'
+                                  || line.back() == ' '  || line.back() == '\t'))
+                line.pop_back();
+            size_t s = 0;
+            while (s < line.size() && (line[s] == ' ' || line[s] == '\t')) ++s;
+            if (s) line = line.substr(s);
+            if (line.empty() || line[0] == '#') continue;
+            // Per-asset output dir: <base_out>/<stem-of-path-without-extension>
+            std::string base = line;
+            size_t slash = base.find_last_of("/\\");
+            if (slash != std::string::npos) base = base.substr(slash + 1);
+            size_t dot = base.find_last_of('.');
+            if (dot != std::string::npos) base = base.substr(0, dot);
+            const fs::path sub = base_out / base;
+            log_info("[i3ddump] [%d] %s -> %s",
+                     ok + fail + 1, line.c_str(), sub.string().c_str());
+            if (DumpI3DToPath(line.c_str(), sub.string().c_str()))
+                ++ok;
+            else
+                ++fail;
+        }
+        log_info("[i3ddump] batch done: ok=%d fail=%d base='%s'",
+                 ok, fail, base_out.string().c_str());
+        return ok > 0;
+    }
+    return DumpI3DToPath(StartupDumpI3DPath, StartupDumpI3DOutPath);
 }
 
 struct SCharPreviewState
@@ -2417,6 +2989,10 @@ size_t  g_inputSimNext   = 0;
 double  g_inputSimStartMs = 0.0;   // 0 until the first tick stamps it
 bool    g_inputSimActive = false;
 bool    g_inputSimLoop   = false;
+// Latched once we've fired sapp_request_quit() on script drain (see
+// auto-exit block at the end of InputSimTick) so we don't spam the quit
+// request every frame between request + actual app shutdown.
+bool    g_inputSimQuitRequested = false;
 
 // Split a string on a delimiter into trimmed, non-empty tokens.
 std::vector<std::string> SplitTokens(const std::string& s, char delim)
@@ -2645,6 +3221,23 @@ static void InputSimTick(const char* mode)
         g_inputSimNext    = 0;
         g_inputSimStartMs = now_ms;
     }
+
+    // Auto-exit when a one-shot --input-script drains. Agents have been
+    // accidentally leaving Revenant test processes running indefinitely
+    // because the test modes never exit on their own (manual filmstrip
+    // mode resets for the next batch, looping cycles forever). When the
+    // user provided an explicit one-shot script, the test is by
+    // definition non-interactive — quit as soon as the script's last
+    // event fires. Single-shot guarded by g_inputSimQuitRequested so we
+    // don't spam sapp_request_quit() across frames.
+    if (!g_inputSimLoop &&
+        g_inputSimNext >= g_inputSimEvents.size() &&
+        !g_inputSimQuitRequested)
+    {
+        g_inputSimQuitRequested = true;
+        log_info("[input-sim] script drained -- requesting quit");
+        sapp_request_quit();
+    }
 }
 
 bool InputScriptActive()
@@ -2658,6 +3251,11 @@ bool InputScriptActive()
 bool DumpTilesToFolder(const char* path)
 {
     return DumpTilesToPath(path);
+}
+
+bool DumpIconsToFolder(const char* path)
+{
+    return DumpIconsToPath(path);
 }
 
 bool Initialize(const char* mode)
@@ -2675,6 +3273,8 @@ bool Initialize(const char* mode)
         return InitializeCharPreviewMode();
     if (strcmp(mode, "tiledump") == 0)
         return InitializeTileDumpMode();
+    if (strcmp(mode, "i3ddump") == 0)
+        return InitializeI3DDumpMode();
     if (strcmp(mode, "i3d3d") == 0)
         return InitializeI3DStaticMode();
     if (strcmp(mode, "water3d") == 0)
@@ -2711,15 +3311,23 @@ bool Initialize(const char* mode)
     if (strcmp(mode, "ui-sidetabs") == 0)
         return InitializeUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
+    {
+        SetUISidebarSyntheticStateEnabled(true);
         return InitializeUISidebarMode();
+    }
     if (strcmp(mode, "ui-quickspell") == 0)
+    {
+        SetUIQuickSpellSyntheticStateEnabled(true);
         return InitializeUIQuickSpellMode();
+    }
     if (strcmp(mode, "ui-bottombar") == 0)
         return InitializeUIBottomBarMode();
     if (strcmp(mode, "ui-barinv") == 0)
         return InitializeUIBarInvMode();
     if (strcmp(mode, "ui-map") == 0)
         return InitializeUIMapMode();
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        return InitializeUIScrollPaneMode();
     if (strcmp(mode, "ui-spellbook") == 0)
         return InitializeUISpellbookMode();
     if (strcmp(mode, "ui-spellcreate") == 0)
@@ -2731,7 +3339,12 @@ bool Initialize(const char* mode)
     if (strcmp(mode, "ui-inventory") == 0)
         return InitializeUIInventoryMode();
     if (strcmp(mode, "ui-hud") == 0)
+    {
+        SetUISidebarSyntheticStateEnabled(true);
+        SetUIQuickSpellSyntheticStateEnabled(true);
+        SetUIHudCursorOverlayEnabled(true);
         return InitializeUIHudMode();
+    }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
     if (strcmp(mode, "ui-mainmenu") == 0)
@@ -2787,6 +3400,8 @@ void Close(const char* mode)
         CloseUIBarInvMode();
     if (strcmp(mode, "ui-map") == 0)
         CloseUIMapMode();
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        CloseUIScrollPaneMode();
     if (strcmp(mode, "ui-spellbook") == 0)
         CloseUISpellbookMode();
     if (strcmp(mode, "ui-spellcreate") == 0)
@@ -2867,6 +3482,8 @@ void Render(const char* mode)
         return RenderUIBarInvMode();
     if (strcmp(mode, "ui-map") == 0)
         return RenderUIMapMode();
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        return RenderUIScrollPaneMode();
     if (strcmp(mode, "ui-spellbook") == 0)
         return RenderUISpellbookMode();
     if (strcmp(mode, "ui-spellcreate") == 0)
@@ -2902,8 +3519,35 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseClickUIDeathMode(button, x, y);
     if (IsUIDefScreenMode(mode))
         return HandleMouseClickUIDefScreenMode(button, x, y);
-    if (strcmp(mode, "ui-sidebar") == 0 || strcmp(mode, "ui-hud") == 0)
+    if (strcmp(mode, "ui-hud") == 0)
+    {
+        const SHudState& s = GetHudState();
+        if (HandleMouseClickUISidebarModeConsumed(button, x, y))
+            return;
+        if (s.bottomBarOpen ||
+            (UIDragState::IsActive() &&
+             UIDragState::Get().source == EDragSource::SpellPane))
+        {
+            HandleMouseClickUIQuickSpellMode(button, x, y);
+        }
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+            HandleMouseClickUISpellbookMode(button, x, y);
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+            HandleMouseClickUIEquipMode(button, x, y);
+        return;
+    }
+    if (strcmp(mode, "ui-sidebar") == 0)
         return HandleMouseClickUISidebarMode(button, x, y);
+    if (strcmp(mode, "ui-quickspell") == 0)
+        return HandleMouseClickUIQuickSpellMode(button, x, y);
+    if (strcmp(mode, "ui-spellbook") == 0)
+        return HandleMouseClickUISpellbookMode(button, x, y);
+    if (strcmp(mode, "ui-spellcreate") == 0)
+        return HandleMouseClickUISpellCreateMode(button, x, y);
+    if (strcmp(mode, "ui-equip") == 0)
+        return HandleMouseClickUIEquipMode(button, x, y);
+    if (strcmp(mode, "ui-scrollpane") == 0)
+        return;  // TODO: add scroll-paging mouse handler if needed
     (void)x; (void)y;
     if (strcmp(mode, "char3d") == 0)
     {
@@ -2965,6 +3609,30 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseMoveUIDeathMode(x, y);
     if (IsUIDefScreenMode(mode))
         return HandleMouseMoveUIDefScreenMode(button, x, y);
+    // #8 iOS-style velocity drag for the spellbook scroll
+    if (strcmp(mode, "ui-spellbook") == 0)
+        return HandleMouseMoveUISpellbookMode(button, x, y);
+    if (strcmp(mode, "ui-hud") == 0)
+    {
+        const SHudState& s = GetHudState();
+        if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
+            return;
+        if (UIDragState::IsActive() &&
+            UIDragState::Get().source == EDragSource::SpellPane)
+        {
+            HandleMouseMoveUIQuickSpellMode(button, x, y);
+            return;
+        }
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+            HandleMouseMoveUISpellbookMode(button, x, y);
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+            HandleMouseMoveUIEquipMode(button, x, y);
+        return;
+    }
+    if (strcmp(mode, "ui-quickspell") == 0)
+        return HandleMouseMoveUIQuickSpellMode(button, x, y);
+    if (strcmp(mode, "ui-equip") == 0)
+        return HandleMouseMoveUIEquipMode(button, x, y);
     if (strcmp(mode, "sector") != 0) return;
     g_mapRenderer.HandleMouseMove(button, x, y);
 }
@@ -2974,6 +3642,19 @@ void HandleKeyPress(const char* mode, int32_t key, bool down)
     if (strcmp(mode, "vfx") == 0)
     {
         VfxTest::HandleKeyPress(key, down);
+        return;
+    }
+    if (IsUIDefScreenMode(mode))
+    {
+        HandleKeyPressUIDefScreenMode(key, down);
+        return;
+    }
+    // HUD test modes that compose the sidebar / bottom-bar / six-button
+    // strip receive keyboard control: V toggles sidebar, B toggles
+    // bottom-bar, 1-6 select panels (per uisidebartest.h docstring).
+    if (strcmp(mode, "ui-sidebar") == 0 || strcmp(mode, "ui-hud") == 0)
+    {
+        HandleKeyPressUISidebarMode(key, down);
         return;
     }
     if (strcmp(mode, "sector") != 0) return;

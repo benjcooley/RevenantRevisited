@@ -12,6 +12,7 @@
 #include <HandmadeMath.h>
 
 #include "3dimage.h"
+#include "logging.h"
 #include "math3d.h"
 #include "render3d_types.h"
 
@@ -368,7 +369,8 @@ void MatrixFromAnimPoseObject(const SAnimPose& pose, uint16_t target, float out1
 void BuildAnimPoseObjectMatrix(T3DImagery* img, const SAnimPose& pose,
                                int32_t state, int32_t objnum, float out16[16])
 {
-    if (!img || objnum < 0 || objnum >= img->NumObjects())
+    const int32_t num_objects = img ? img->NumObjects() : 0;
+    if (!img || objnum < 0 || objnum >= num_objects)
     {
         for (int32_t i = 0; i < 16; ++i)
             out16[i] = (i % 5 == 0) ? 1.0f : 0.0f;
@@ -377,13 +379,27 @@ void BuildAnimPoseObjectMatrix(T3DImagery* img, const SAnimPose& pose,
 
     MatrixFromAnimPoseObject(pose, uint16_t(objnum), out16);
 
-    const int32_t parent = img->GetObjectParent(objnum, state);
-    if ((uint32_t)parent < (uint32_t)img->NumObjects())
+    // Walk the parent chain iteratively, composing each ancestor's local
+    // matrix on the left. Some assets carry malformed parent data with
+    // cycles (e.g. Equip\dsblackhand.i3d), so track visited indices and
+    // stop instead of recursing forever.
+    std::vector<bool> visited(size_t(num_objects), false);
+    visited[size_t(objnum)] = true;
+    int32_t parent = img->GetObjectParent(objnum, state);
+    while ((uint32_t)parent < (uint32_t)num_objects)
     {
+        if (visited[size_t(parent)])
+        {
+            log_warn("[meshextract] parent cycle at object %d (state %d); "
+                     "truncating hierarchy walk", parent, state);
+            break;
+        }
+        visited[size_t(parent)] = true;
         float parent_mtx[16];
         float combined[16];
-        BuildAnimPoseObjectMatrix(img, pose, state, parent, parent_mtx);
+        MatrixFromAnimPoseObject(pose, uint16_t(parent), parent_mtx);
         MatrixMulLocal(parent_mtx, out16, combined);
         std::memcpy(out16, combined, sizeof(combined));
+        parent = img->GetObjectParent(parent, state);
     }
 }

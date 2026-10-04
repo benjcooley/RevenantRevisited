@@ -47,6 +47,7 @@
 #include "uimaptest.h"
 
 #include "bitmap.h"
+#include "bitmapatlas.h"
 #include "display.h"
 #include "logging.h"
 #include "multi.h"
@@ -141,6 +142,7 @@ TSurface* g_pane = nullptr;     // composed RT (188 wide; tall enough for
                                 // the chrome PLUS the MinusSel that sits
                                 // 0x70 px left of the body inset — see
                                 // EnsurePane / DrawSurface anchor below)
+bool g_hudVisible = true;
 
 // =====================================================================
 // Synthetic blip set — spec §6c style, fixed body-window-local positions.
@@ -212,7 +214,7 @@ class TMapHud : public THudDrawable
 public:
     void Draw() override
     {
-        if (!g_pane) return;
+        if (!g_hudVisible || !g_pane) return;
         // Spec §3: chrome at screen (kViewportX, kViewportY). RT is left-
         // padded by kRtLeftPad to fit MinusSel (which sits left of chrome).
         Renderer->DrawSurface(g_pane, kViewportX - kRtLeftPad, kViewportY);
@@ -220,6 +222,7 @@ public:
 
     void Refresh()
     {
+        if (!g_hudVisible) return;
         if (!g_amap) return;
         EnsurePane();
         if (!g_pane) return;
@@ -332,6 +335,7 @@ bool InitializeUIMapMode()
     // in archive order (cls_0x5a5658.cpp:153-165 iterator). LoadMulti is
     // the standard archive path used by every other pane.
     g_automapDat = TMulti::LoadMulti((char*)kArchive);
+    RegisterUIBitmapAtlasArchive(g_automapDat);
 
     if (g_automapDat)
     {
@@ -362,6 +366,7 @@ bool InitializeUIMapMode()
 
     delete g_pane;
     g_pane = nullptr;
+    g_hudVisible = true;
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
@@ -369,7 +374,7 @@ bool InitializeUIMapMode()
 
 void RenderUIMapMode()
 {
-    g_hud.Refresh();
+    RenderUIMapModeEmbedded();
 
     // Backdrop so the chrome's transparent body window + the Marker blips
     // read against a neutral surface (no playfield behind the HUD in test
@@ -377,6 +382,17 @@ void RenderUIMapMode()
     // tile color so the body-window cutout reads as see-through (spec §3).
     Display.BackBuffer()->StartPass(0.18f, 0.20f, 0.26f, 1.0f);
     Display.BackBuffer()->EndPass();
+}
+
+void RenderUIMapModeEmbedded()
+{
+    if (!g_hudVisible) return;
+    g_hud.Refresh();
+}
+
+void SetUIMapModeVisible(bool visible)
+{
+    g_hudVisible = visible;
 }
 
 void CloseUIMapMode()
@@ -389,4 +405,5 @@ void CloseUIMapMode()
     g_plusSel    = nullptr;
     g_minusSel   = nullptr;
     g_automapDat = nullptr;
+    g_hudVisible = true;
 }

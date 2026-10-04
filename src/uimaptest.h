@@ -20,4 +20,6 @@
 
 bool InitializeUIMapMode();
 void RenderUIMapMode();
+void RenderUIMapModeEmbedded();
+void SetUIMapModeVisible(bool visible);
 void CloseUIMapMode();

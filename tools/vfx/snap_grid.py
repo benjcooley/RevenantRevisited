@@ -53,20 +53,38 @@ def run_capture_grid(effect_id: str, rows: int, cols: int,
         try:
             # Warm-up: let initialise + first effect spawn settle.
             time.sleep(warmup_ms / 1000.0)
-            # Bring Revenant window forward (best-effort; ignore errors).
-            subprocess.run(
-                ["osascript", "-e",
-                 f'tell application "System Events" to set frontmost of '
-                 f'first process whose unix id is {proc.pid} to true'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
+            # Find the Revenant window via Quartz and capture by window-id
+            # (screencapture -l <wid>) — this gets the Revenant content even
+            # if the window is occluded by other apps (the bundle-less Revenant
+            # binary can't be raise-by-name-d via `osascript activate`, so
+            # window-id capture is the reliable path). Falls back to whole-
+            # screen capture if Quartz isn't importable or no window matches.
+            wid = None
+            try:
+                import Quartz  # type: ignore
+                wl = Quartz.CGWindowListCopyWindowInfo(
+                    Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID)
+                for w in wl:
+                    if 'Revenant' in (w.get('kCGWindowOwnerName') or ''):
+                        wid = w.get('kCGWindowNumber')
+                        break
+            except Exception as e:
+                print(f"warning: Quartz unavailable ({e}); falling back to "
+                      f"full-screen capture", file=sys.stderr)
             # Capture n frames.
             for i in range(n):
                 shot = tmp / f"shot_{i:03d}.png"
-                subprocess.run(
-                    ["screencapture", "-x", "-t", "png", str(shot)],
-                    check=True,
-                )
+                if wid is not None:
+                    subprocess.run(
+                        ["screencapture", "-x", "-t", "png", "-l", str(wid),
+                         str(shot)],
+                        check=True,
+                    )
+                else:
+                    subprocess.run(
+                        ["screencapture", "-x", "-t", "png", str(shot)],
+                        check=True,
+                    )
                 if i + 1 < n:
                     time.sleep(interval_ms / 1000.0)
         finally:
