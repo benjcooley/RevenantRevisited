@@ -21,5 +21,6 @@ char  StartupVfxId[64]        = "";
 bool  StartupVfxHideUi        = false;
 bool  StartupVfxWireframe     = false;
 char  StartupCinematicPath[MAXPATHLEN] = "";
+char  StartupExec[4096]             = "";
 char  StartupVfxBackground[16] = "";
 char  StartupInputScript[1024] = "";

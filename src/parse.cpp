@@ -497,7 +497,7 @@ int32_t abbrevcmp(const char *abbrev, const char *string)
     return i;
 }
 
-bool TToken::Is(char *istext, int32_t abbrevlen) const
+bool TToken::Is(const char *istext, int32_t abbrevlen) const
 {
     if (abbrevlen)
         return (abbrevcmp(text, istext) >= abbrevlen);

@@ -1661,6 +1661,14 @@ void GetParameters(int argc, char **argv)
             strncpyz(StartupVfxId, p.c_str(), sizeof(StartupVfxId));
     }
 
+  // EXEC="cmd; cmd; sleep N" — console commands to run once the PlayScreen
+  // has a player (consoleexec.cpp). Drives script commands headlessly.
+    {
+        std::string p;
+        if (arg_param(cmd, "exec", p))
+            strncpyz(StartupExec, p.c_str(), sizeof(StartupExec));
+    }
+
   // CINEMATIC=<path> — .SMK file for --test=ui-cinematic. Empty = intro FMV.
     {
         std::string p;

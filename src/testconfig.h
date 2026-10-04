@@ -47,6 +47,9 @@ extern bool StartupVfxWireframe;
 // --cinematic=<path> — which .SMK file --test=ui-cinematic should play.
 // Empty = default intro FMV (data/Disk2/MIX_FMV1.SMK).
 extern char StartupCinematicPath[MAXPATHLEN];
+// --exec="cmd; cmd; sleep N; ..." — console commands run in the live
+// PlayScreen once a player exists (see consoleexec.h).
+extern char StartupExec[4096];
 
 
 // --vfx-bg=<black|ltgray|forest|dungeon> — pre-select the diagnostic

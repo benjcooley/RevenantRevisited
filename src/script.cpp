@@ -285,7 +285,7 @@ void TScript::Continue(TObjectInstance* context)
         }
         else if (t.Type() == TKN_IDENT || t.Type() == TKN_KEYWORD)
         {
-            int32_t bits = CommandInterpreter(context, t);  // ****** MAIN COMMAND PROCESSOR HERE *****
+            int32_t bits = CommandInterpreter(context, t, 0, this);  // ****** MAIN COMMAND PROCESSOR HERE *****
 
             if (bits & CMD_DELETED)
                 return;

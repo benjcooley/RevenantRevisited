@@ -156,7 +156,7 @@ class TToken
     const char *Text() const { return text; }
     double Number() const { return number; }
 
-    bool Is(char *istext, int32_t abbrevlen = 0) const;
+    bool Is(const char *istext, int32_t abbrevlen = 0) const;
     bool IsBegin() const { return type == TKN_KEYWORD && code == KEY_BEGIN; }
     bool IsEnd() const { return type == TKN_KEYWORD && code == KEY_END; }
     void DoBegin();                 // Call to compile BEGIN
