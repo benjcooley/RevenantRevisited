@@ -41,6 +41,8 @@ static bool g_hw_cursor_enabled = true;
 
 PTBitmap DragBitmap = nullptr;
 int32_t grabx, graby;
+SDragBitmapLayer DragLayers[kMaxDragBitmapLayers] = {};
+int32_t DragLayerCount = 0;
 
 TObjectInstance* DragObj = nullptr;
 
@@ -147,6 +149,31 @@ void SetDragBitmap(PTBitmap drag, int32_t x, int32_t y)
     DragBitmap = drag;
     grabx = x;
     graby = y;
+    DragLayerCount = drag ? 1 : 0;
+    for (SDragBitmapLayer& layer : DragLayers)
+        layer = SDragBitmapLayer{};
+    if (drag)
+        DragLayers[0] = { drag, 0, 0 };
+}
+
+void SetDragBitmapLayers(const SDragBitmapLayer* layers, int32_t count,
+                         int32_t x, int32_t y)
+{
+    DragBitmap = nullptr;
+    grabx = x;
+    graby = y;
+    DragLayerCount = 0;
+    for (SDragBitmapLayer& layer : DragLayers)
+        layer = SDragBitmapLayer{};
+
+    if (!layers || count <= 0) return;
+    for (int32_t i = 0; i < count && DragLayerCount < kMaxDragBitmapLayers; ++i)
+    {
+        if (!layers[i].bitmap) continue;
+        DragLayers[DragLayerCount++] = layers[i];
+        if (!DragBitmap)
+            DragBitmap = layers[i].bitmap;
+    }
 }
 
 void ClearDragBitmap()
@@ -201,8 +228,19 @@ void TCursorHud::Draw()
     // the cursor sits above it. Still drawn here even when the OS owns
     // the cursor pixel -- the drag bitmap is a separate visual asset
     // (the item being moved), not part of the cursor sprite.
-    if (DragBitmap)
-        Renderer->DrawBitmap(DragBitmap, cursorx - grabx, cursory - graby);
+    if (DragLayerCount > 0)
+    {
+        const int32_t originX = cursorx - grabx;
+        const int32_t originY = cursory - graby;
+        for (int32_t i = 0; i < DragLayerCount; ++i)
+        {
+            const SDragBitmapLayer& layer = DragLayers[i];
+            if (!layer.bitmap) continue;
+            Renderer->DrawBitmap(layer.bitmap,
+                                 originX + layer.x,
+                                 originY + layer.y);
+        }
+    }
 
     // Main cursor pixel: only draw it ourselves if the OS didn't take
     // it. On macOS SetMouseBitmap routes through rev_platform::SetOSCursor

@@ -6,12 +6,14 @@
 // ONE per-cell sub-control covering every inventory-style slot in the HUD:
 //   - TBarInv      (bottom-bar 9-slot shelf)
 //   - TInventory   (sidebar 4x3 grid)
-//   - TEquipPane   (paperdoll 11 EQ_* slots — will plug in next pass)
+//   - TEquipPane   (paperdoll 11 EQ_* slots)
 //
 // Each pane owns N×TInvSlot, configured per-instance via the slot rect +
 // `allowedType` filter + `emptyPlaceholder` art + style flags. The slot
-// handles paint + click + drag-source + drop-target. Differences between
-// consumers are data (config), not branching code.
+// handles paint, hit-test, and "start/accept" policy. UIDragState/TPlayScreen
+// owns the drag transaction itself: playfield pickup, inventory/bar/equip
+// transfer, map drops, swaps/replacements, returns, and the drag/drop sound.
+// Differences between consumers are data (config), not branching code.
 //
 // Naming follows the user's vocabulary ("common inv slot class") and the
 // snapshot's per-cell-as-sub-control precedent (TTalismanButton :
@@ -72,9 +74,9 @@
 //     item)` to equip into the appropriate paperdoll slot
 //   - otherwise call `[item+vtbl]->Use(player)` (the item's own Use)
 //
-// FULL DRAG IMPLEMENTATION IS OUT-OF-SCOPE FOR THIS PASS — the API below
-// is declared so consumers can route through it; the dispatcher is
-// stubbed and will land with the cross-pane UIDragState port.
+// Full production drag/drop is a manager concern, not a slot concern. The API
+// below lets panes route slot events through UIDragState; the manager remains
+// the only place that should mutate Player/map ownership or play action audio.
 //
 // ========================================================================
 // FONT/COLOR MATRIX (per-consumer visual conventions)
@@ -103,6 +105,8 @@
 #include <cstdint>
 
 class TObjectInstance;
+
+constexpr int32_t kInvSlotAcceptAny = -1;
 
 // ----------------------------------------------------------------------
 // Per-cell kind tag. Set by the pane when binding an item into a slot.
@@ -199,7 +203,7 @@ public:
     // Construct + configure a slot. The slot keeps a const-ref to the
     // shared style table the pane owns.
     TInvSlot(int32_t x, int32_t y, int32_t w, int32_t h,
-             int32_t allowed_type        = 0,
+             int32_t allowed_type        = kInvSlotAcceptAny,
              PTBitmap empty_placeholder  = nullptr,
              const SInvSlotStyle* style  = nullptr);
 
@@ -221,10 +225,8 @@ public:
     bool OnSlot(int32_t mx, int32_t my) const;
 
     // ----- drop-target policy ---------------------------------------
-    // Inventory + BarInv accept anything (allowed_type_ == 0).
+    // Inventory + BarInv accept anything (allowed_type_ == -1).
     // Equip cells reject items whose eqslot doesn't match.
-    // (Stubbed at allowed_type_ == 0 until the cross-pane drag-state
-    // owner lands — see header banner for retail evidence.)
     bool CanAcceptDrop(TObjectInstance* dragged) const;
 
     // ----- paint -----------------------------------------------------
@@ -249,7 +251,7 @@ protected:
     int32_t          h_              = 0;
 
     // Per-instance config.
-    int32_t          allowed_type_   = 0;          // 0 = any
+    int32_t          allowed_type_   = kInvSlotAcceptAny;
     PTBitmap         empty_placeholder_ = nullptr;
     const SInvSlotStyle* style_      = nullptr;
 
