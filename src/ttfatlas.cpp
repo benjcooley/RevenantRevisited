@@ -82,12 +82,19 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     if (auto it = g_ttfAtlases.find(key); it != g_ttfAtlases.end())
         return it->second;
 
+    // A face that fails once fails every time: remember the failure, so a
+    // draw that asks for it each frame doesn't retry and log again.
+    auto fail = [&key]() -> const SFontAtlas* {
+        g_ttfAtlases.emplace(key, nullptr);
+        return nullptr;
+    };
+
     size_t file_size = 0;
     uint8_t* ttf = ReadWholeFile(path, &file_size);
     if (!ttf)
     {
         log_error("[ttf] could not read '%s'", path);
-        return nullptr;
+        return fail();
     }
 
     // Atlas dims: 512 wide, height scaled by font size so tall fonts get
@@ -113,7 +120,7 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     {
         log_error("[ttf] stbtt_PackBegin failed for '%s'", path);
         std::free(ttf);
-        return nullptr;
+        return fail();
     }
     stbtt_PackSetOversampling(&spc, 2, 2);
 
@@ -124,7 +131,7 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
             path, pixel_height);
         stbtt_PackEnd(&spc);
         std::free(ttf);
-        return nullptr;
+        return fail();
     }
     stbtt_PackEnd(&spc);
 
@@ -198,7 +205,7 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     if (atlas->texture == kInvalidTexture)
     {
         log_error("[ttf] texture upload failed for '%s'", path);
-        return nullptr;
+        return fail();
     }
 
     log_info("[ttf] atlas built: %dx%d for '%s' @%dpx", atlas_w, atlas_h,
