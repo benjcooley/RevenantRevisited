@@ -685,10 +685,10 @@ void TScript::Resume()
     priority &= ~SCRIPT_PAUSED;
 }
 
-// REVSYNC: End @ 0x00493e40 — gives back the dialog (4) and fade (2) bits.
-// Not ported: control (1) and camera (8), and the multiplayer rollback of
-// the player's state bits (SetPlayerState 0x0051d680).
-// TODO(revsync): control and camera once their commands take them.
+// REVSYNC: End @ 0x00493e40 — gives back what the block took: the dialog
+// (4), control (1), the fade bit (2) and the camera (8). Not ported: the
+// multiplayer rollback of the player's state bits (SetPlayerState
+// 0x0051d680).
 void TScript::End()
 {
     triggerguard.Clear();
@@ -704,9 +704,21 @@ void TScript::End()
         DialogPane.SkipSpeech();
         taken &= ~kTakenDialog;
     }
+    if (taken & kTakenControl)
+    {
+        PlayScreen.SetControlOn(true);      // retail SetControl(1), 0x0047c580
+        taken &= ~kTakenControl;
+    }
     // A block that faded the screen out and never back in leaves it black:
     // retail fades back in here only for a multiplayer host (0x0067682c).
     taken &= ~kTakenFade;
+    // The camera snaps back to the player unless it is already on him.
+    if (taken & kTakenCamera)
+    {
+        if (!MapPane.IsFollowingPlayer())
+            MapPane.CenterOnObj(Player, CENTERON_SNAP);
+        taken &= ~kTakenCamera;
+    }
 }
 
 // REVSYNC: 0x004932a0

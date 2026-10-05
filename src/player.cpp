@@ -1410,7 +1410,7 @@ void TPlayerManager::SetMainPlayer(int32_t newplayernum)
           // Set map position
             S3DPoint pos;
             MapPane.GetMapPos(pos);
-            MapPane.CenterOnPos(pos, MapPane.GetMapLevel(), false);
+            MapPane.CenterOnPos(pos, MapPane.GetMapLevel());
 
           // Set inventory container
             Inventory.SetContainer(nullptr);
@@ -1427,7 +1427,7 @@ void TPlayerManager::SetMainPlayer(int32_t newplayernum)
         if (CurrentScreen == &PlayScreen)
         {
           // Center on this player in map
-            MapPane.CenterOnObj(Player, false);
+            MapPane.CenterOnObj(Player);
 
           // Setup equipment pane
             Player->RefreshEquip();

@@ -1896,6 +1896,11 @@ COMMAND(CmdControl)
             return CMD_BADPARAMS;
     }
 
+    // REVSYNC: 0x00420ab0 -- a block that turns control off holds it
+    // (taken bit 1) until `control on` or its end gives it back.
+    if (script)
+        script->SetControlHeld(!t.Is("on"));
+
     t.WhiteGet();
 
     return 0;
@@ -3438,65 +3443,74 @@ COMMAND(CmdScript)
     return 0;
 }
 
-int32_t CenterOnFunc(TObjectInstance* context, TToken &t, bool scroll)
+// REVSYNC: 0x004249b0 (single player), shared by centeron (0x00424db0) and
+// scrollto (0x00424dd0): `<name>` -- anything the script resolver knows,
+// `player` and `user` included -- or `<x> <y> <z> [<level>]`. On an object
+// the camera snaps then follows it (centeron) or scrolls to it (scrollto);
+// on a point it jumps either way (retail masks the scroll bit). A block
+// that moves the camera off the player holds it (taken bit 8) until it
+// ends. In the editor the map just moves there.
+int32_t CenterOnFunc(TObjectInstance* context, TToken &t, TScript* script, bool scroll)
 {
-    S3DPoint pos;
-
+    // Editor, no target: the map moves to the context object and its level.
     if (Editor && context && t.Type() != TKN_IDENT && t.Type() != TKN_NUMBER)
     {
-        context->GetPos(pos);
+        S3DPoint pos = context->Pos();
         MapPane.SetMapPos(pos);
+        MapPane.SetMapLevel(context->GetLevel());
+        return 0;
     }
-    else
-    {
-        if (t.Type() == TKN_IDENT)
-        {
-            TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text());
-            if (!inst)
-            {
-                Output("Object not found");
-                return 0;
-            }
-            if (Editor)
-            {
-                inst->GetPos(pos);
-                MapPane.SetMapPos(pos);
-            }
-            else
-                MapPane.CenterOnObj(inst, scroll);
 
-            t.WhiteGet();
-        }
-        else if (t.Type() == TKN_NUMBER)
+    if (t.Type() == TKN_IDENT)
+    {
+        TObjectInstance* inst = ResolveScriptObject(t.Text(), context, script);
+        if (!inst)
         {
-            if (!Parse(t, "%i %i %i", &pos.x, &pos.y, &pos.z))
-                return CMD_BADPARAMS;
-            int32_t level = MapPane.GetMapLevel();
-            if (t.Type() == TKN_NUMBER)
-                if (!Parse(t, "%i", &level))
-                    return CMD_BADPARAMS;
-            if (Editor)
-            {
-                MapPane.SetMapPos(pos);
-            }
-            else
-                MapPane.CenterOnPos(pos, level, scroll);
+            Output("Object not found\n");
+            return 0;
+        }
+        if (Editor)
+        {
+            S3DPoint pos = inst->Pos();
+            MapPane.SetMapPos(pos);
         }
         else
-            return CMD_BADPARAMS;
+        {
+            MapPane.CenterOnObj(inst, scroll ? CENTERON_SCROLL : CENTERON_SCROLL | CENTERON_SNAP);
+            if (inst != Player && script)
+                script->SetCameraHeld(true);
+        }
+        t.WhiteGet();
+        return 0;
     }
 
+    if (t.Type() != TKN_NUMBER)
+        return CMD_BADPARAMS;
+
+    S3DPoint pos;
+    if (!Parse(t, "%i %i %i", &pos.x, &pos.y, &pos.z))
+        return CMD_BADPARAMS;
+    int32_t level = MapPane.GetMapLevel();
+    if (t.Type() == TKN_NUMBER && !Parse(t, "%i", &level))
+        return CMD_BADPARAMS;
+
+    if (Editor)
+        MapPane.SetMapPos(pos);
+    else
+        MapPane.CenterOnPos(pos, level);
+    if (script)
+        script->SetCameraHeld(true);
     return 0;
 }
 
 COMMAND(CmdCenterOn)
 {
-    return CenterOnFunc(context, t, false);
+    return CenterOnFunc(context, t, script, false);
 }
 
 COMMAND(CmdScrollTo)
 {
-    return CenterOnFunc(context, t, true);
+    return CenterOnFunc(context, t, script, true);
 }
 
 #define MAX_MAP_LOCATIONS       32

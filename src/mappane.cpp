@@ -1514,21 +1514,21 @@ void TMapPane::SnapIfFollowing(const TObjectInstance* obj)
         centeron.flags |= CENTERON_SNAP;
 }
 
-void TMapPane::CenterOnObj(TObjectInstance* obj, bool scroll)
+void TMapPane::CenterOnObj(TObjectInstance* obj, uint32_t flags)
 {
     if (IsFollowingPlayer() && obj != Player)
         DialogPane.ClearSpeech(false);
     centeron.obj = obj;
-    centeron.flags = CENTERON_OBJ | (scroll ? CENTERON_SCROLL : 0);
+    centeron.flags = (flags & ~CENTERON_POS) | CENTERON_OBJ;
 }
 
-void TMapPane::CenterOnPos(S3DPoint& pos, int32_t level, bool scroll)
+void TMapPane::CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags)
 {
     if (IsFollowingPlayer())
         DialogPane.ClearSpeech(false);
     centeron.pos = pos;
     centeron.level = level;
-    centeron.flags = CENTERON_POS | (scroll ? CENTERON_SCROLL : 0);
+    centeron.flags = (flags & ~CENTERON_OBJ) | CENTERON_POS;
 }
 
 // REVSYNC: FindClosestObject @ 0x00451fe0 / 0x00451de0. Names match exactly

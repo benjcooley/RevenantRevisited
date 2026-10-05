@@ -711,7 +711,7 @@ TObjectInstance::~TObjectInstance()
     // Raw-pointer holders that don't follow N_DELETINGOBJECT: let go of this
     // object whatever kind it is (also those built without a class, below).
     if (MapPane.GetCenterOnObj() == this)
-        MapPane.CenterOnObj(nullptr, false); // Don't center on anything
+        MapPane.CenterOnObj(nullptr); // Don't center on anything
 
     // Then drop the registry entry — even a partially-constructed instance
     // that stashed a mapindex must be removed before its memory is freed.
