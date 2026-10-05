@@ -140,3 +140,31 @@ Answer inline (or in chat) and the owning doc gets updated.
 43. Was PlayScreen's restart flow (`+0x5dc`: stop the player's script,
     fade out, load `newgame`, fade in) the "skip the opening" path?
 44. Was the music meant to dip with screen fades?
+
+## Walking to and facing objects ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §6.5)
+
+45. The door prototypes check `IF USER.ISATRELATIVEDISTANCE THIS … = 1`
+    after walking Locke to the door, and only then turn him and play the
+    opening animation. When did that walk fail to arrive in the shipped
+    game: another character in the way, a door blocking its own spot?
+    And was skipping the turn and the animation (the fade and teleport
+    still happen) the intended fallback?
+46. `gotorelativedistance`'s spot uses `sin((facing + angle + 0x7f) · k)`
+    and `cos((facing + angle) · k)` with `k` = 2π/255, so the spot sits
+    a little off the line straight behind the object. Was `0x7f` meant to
+    be a half turn (`0x80`) and 255 meant to be 256? The port keeps the
+    shipped numbers.
+47. In combat mode a script `goto` loses its target on the first step
+    (the combat-mode move clears it unless an item pick-up is pending),
+    so the character keeps walking in its first direction. Is that why
+    every door prototype turns `COMBAT OFF` before walking? Did any
+    shipped scene walk a fighting character?
+48. `faceobject` and the `gotorelative…` commands look their object up
+    from the script's owner (`THIS` is the door), while `pivotobject`
+    looks it up from the character that turns (`player.pivotobject
+    this` names Locke). Was the difference deliberate?
+49. Shot wanted (dosbox-x): open the Keep's `ressexit` door from inside
+    the resurrection chamber, one frame when Locke stops beside the door
+    and one after he turns to it. Settles where the side spot is and
+    which way he faces. The port aims him at (1200, 1098); he stops,
+    blocked, at (1178, 1065) and turns to facing 87.

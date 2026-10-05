@@ -1516,6 +1516,82 @@ COMMAND(CmdGoto)
     return CMD_WAIT;
 }
 
+// REVSYNC: gotorelativeposition @ 0x004205c0 --
+// `<character>.gotorelativeposition <object> <dx> <dy> [<dx2> <dy2>]`: walk
+// to the object's position plus (dx, dy), or plus (dx2, dy2) when that spot
+// is nearer the walker (no shipped script gives the second pair). Unlike
+// pivotobject's, the name resolves from the calling object: in a door's
+// `player.gotorelativeposition THIS 0 -60`, `this` is the door. Waits for the
+// walk, even one that couldn't start.
+COMMAND(CmdGotoRelativePosition)
+{
+    const TObjectInstance* target = ResolveScriptObject(t.Text(), scriptcontext, script);
+    t.WhiteGet();
+
+    int32_t dx = 0, dy = 0;
+    if (!Parse(t, "%d %d", &dx, &dy))
+        return CMD_BADPARAMS;
+    if (!target)
+    {
+        Output("Can't find any object by that name.\n");
+        return CMD_BADPARAMS;
+    }
+
+    const S3DPoint at = target->Pos();
+    S3DPoint spot = { at.x + dx, at.y + dy, at.z };
+    int32_t dx2 = 0, dy2 = 0;
+    if (Parse(t, "%d %d", &dx2, &dy2))
+    {
+        const S3DPoint from = context->Pos();
+        const S3DPoint other = { at.x + dx2, at.y + dy2, at.z };
+        if (Distance(from, other) < Distance(from, spot))
+            spot = other;
+    }
+
+    TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
+    log_debug("[cmd] %s at (%d, %d): gotorelativeposition %s at (%d, %d) -> (%d, %d)",
+              chr->GetName(), chr->Pos().x, chr->Pos().y, target->GetName(), at.x, at.y,
+              spot.x, spot.y);
+    chr->Goto(spot.x, spot.y);
+    return CMD_WAIT;
+}
+
+// REVSYNC: gotorelativedistance @ 0x00420710 --
+// `<character>.gotorelativedistance <object> <distance> [<angle>]`: walk to
+// the spot `distance` from the object, measured from its facing turned by
+// `angle` (RelativeDistanceSpot). The door prototypes in master.s walk the
+// player to the side of the door with it. The name resolves from the calling
+// object, as for gotorelativeposition. Waits for the walk, even one that
+// couldn't start.
+COMMAND(CmdGotoRelativeDistance)
+{
+    const TObjectInstance* target = ResolveScriptObject(t.Text(), scriptcontext, script);
+    t.WhiteGet();
+
+    int32_t distance = 0;
+    if (!Parse(t, "%d", &distance))
+        return CMD_BADPARAMS;
+    int32_t angle = 0;
+    if (!Parse(t, "%d", &angle))
+        angle = 0;
+    if (!target)
+    {
+        Output("Can't find any object by that name.\n");
+        return CMD_BADPARAMS;
+    }
+
+    const S3DPoint spot = RelativeDistanceSpot(*target, distance, angle);
+    TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
+    log_debug("[cmd] %s at (%d, %d): gotorelativedistance %s at (%d, %d) facing %d, %d at %d -> (%d, %d)",
+              chr->GetName(), chr->Pos().x, chr->Pos().y, target->GetName(), target->Pos().x,
+              target->Pos().y, target->GetFace(), distance, angle, spot.x, spot.y);
+    chr->Goto(spot.x, spot.y);
+    return CMD_WAIT;
+}
+
+// REVSYNC: face @ 0x00420800 -- `[<object>.]face <angle>`: set the facing at
+// once (no turning animation; that is `pivot`) and wait. Retail writes the
+// facing byte and the move angle of whatever the context is, as Face does.
 COMMAND(CmdFace)
 {
     int32_t angle;
@@ -1525,6 +1601,30 @@ COMMAND(CmdFace)
     if (context)
         context->Face(angle);
 
+    return CMD_WAIT;
+}
+
+// REVSYNC: faceobject @ 0x00420840 -- `[<object>.]faceobject <object>
+// [<offset>]`: face the object, plus an optional offset, at once, like `face`.
+// Unlike pivotobject's, the name resolves from the calling object: in a
+// door's `USER.FACEOBJECT THIS 15`, `this` is the door.
+COMMAND(CmdFaceObject)
+{
+    const TObjectInstance* target = ResolveScriptObject(t.Text(), scriptcontext, script);
+    t.WhiteGet();
+    if (!target)
+        return CMD_BADPARAMS;
+
+    int32_t offset = 0;
+    if (!Parse(t, "%d", &offset))
+        offset = 0;
+
+    if (context)
+    {
+        context->Face(context->AngleTo(target) + offset);
+        log_debug("[cmd] %s: faceobject %s %d -> facing %d",
+                  context->GetName(), target->GetName(), offset, context->GetFace());
+    }
     return CMD_WAIT;
 }
 
@@ -4091,13 +4191,10 @@ COMMAND(CmdDelMonsterType) { return CmdNotPorted("delmonstertype", 0x00427b60, t
 COMMAND(CmdDispInv) { return CmdNotPorted("dispinv", 0x00422070, t); }
 COMMAND(CmdDrop) { return CmdNotPorted("drop", 0x004281c0, t); }
 COMMAND(CmdEndFighting) { return CmdNotPorted("endfighting", 0x00427d30, t); }
-COMMAND(CmdFaceObject) { return CmdNotPorted("faceobject", 0x00420840, t); }
 COMMAND(CmdGetItemAmount) { return CmdNotPorted("getitemamount", 0x00426be0, t); }
 COMMAND(CmdGetItemName) { return CmdNotPorted("getitemname", 0x00426d60, t); }
 COMMAND(CmdGetItemValue) { return CmdNotPorted("getitemvalue", 0x00426e20, t); }
 COMMAND(CmdGiveWeapons) { return CmdNotPorted("giveweapons", 0x00422150, t); }
-COMMAND(CmdGotoRelativeDistance) { return CmdNotPorted("gotorelativedistance", 0x00420710, t); }
-COMMAND(CmdGotoRelativePosition) { return CmdNotPorted("gotorelativeposition", 0x004205c0, t); }
 COMMAND(CmdHasFreeSlot) { return CmdNotPorted("hasfreeslot", 0x00426c60, t); }
 COMMAND(CmdHideObjects) { return CmdNotPorted("hideobjects", 0x00427010, t); }
 COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
