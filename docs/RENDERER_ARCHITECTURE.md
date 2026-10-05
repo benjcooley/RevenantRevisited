@@ -73,13 +73,15 @@ marked):
 | 2 | Ambient occlusion  | `ao_target` R32F (`ao_pass`) | `TRenderer::RunAOPass` (inside `RunLightingPass`) |
 | 3 | Deferred lighting  | `lit_target` RGBA8 (`lit_pass`) | `TRenderer::RunLightingPass`     |
 | 4 | Water / refraction | scene-color ping-pong        | *forthcoming*                      |
-| 5 | Transparent FX     | lit color                    | *forthcoming*                      |
-| 6 | Debug 3D           | lit color                    | *forthcoming* (line/tri prims)     |
-| 7 | Game UI            | backbuffer or swapchain      | `TScreen`/`TPane` via `TRenderer::Composite` |
-| 8 | Debug UI           | swapchain                    | `simgui_render` (inside `FlipPage`) |
+| 5 | Transparent world  | `lit_target` + scene depth (`helper_pass`) | `DrainTransparentWorldQueue`: transparent tiles, helper meshes, translucent meshes, back to front |
+| 6 | Transparent FX     | `lit_target` + scene depth (`fx_pass`) | `DrainFxQueue` |
+| 7 | Debug 3D           | lit color                    | *forthcoming* (line/tri prims)     |
+| 8 | Game UI            | backbuffer or swapchain      | `TScreen`/`TPane` via `TRenderer::Composite` |
+| 9 | Debug UI           | swapchain                    | `simgui_render` (inside `FlipPage`) |
 
 At present, [TMapRenderer](../src/maprenderer.cpp) drives passes 1-3 each
-frame by pushing point lights, tile draws, and calling `RunLightingPass`.
+frame by pushing point lights, tile draws, and calling `RunLightingPass`,
+which runs passes 5 and 6 on the lit result.
 [TDisplay::FlipPage](../src/display.cpp#L163) opens the swapchain pass,
 asks the core renderer to present the freshest scene image (pass 3 output if
 available, falling back to the 2D backbuffer for UI-only frames), and then
@@ -324,6 +326,196 @@ as a view-time convenience; anything the lighting or depth math operates on
 must be in world units. Screen math leaking into the depth path is a bug.
 See [DEFERRED_LIGHTING.md](DEFERRED_LIGHTING.md) for the derivation.
 
+## Translucent meshes
+
+A mesh submitted with a tint alpha below `kOpaqueMeshAlpha` (0.999) is
+translucent: a character fading in or out. It can't go through the
+G-buffer, where it would replace the albedo, normal and depth of whatever is
+behind it, so `TRenderer::SubmitMesh` routes it to the transparent-world
+pass (pass 5) instead. That pass runs after the deferred light pass, over
+`lit_target`, with the scene depth buffer bound.
+
+**Submission.** The scene manager doesn't decide the pass. It fills two sort
+keys on every `SMeshSubmit` and the renderer uses them only for translucent
+meshes:
+
+- `sort_depth`: the object's camera depth (world units, greater is
+  farther). The pass draws back to front.
+- `surface_id`: shared by every mesh of one object. `TMapRenderer` uses the
+  object's map index + 1.
+
+**Drawing a surface.** A character is a dozen or more meshes, one per body
+part. Blending each part separately would show the arm through the chest.
+The pass draws the meshes of one surface as one layer, in two steps:
+
+1. `mesh_depth_pipeline`: depth only, colour writes masked off. Leaves the
+   surface's nearest depth.
+2. `mesh_translucent_pipeline`: lit colour, depth test `LESS_EQUAL`, no depth
+   write, blended at the tint alpha. Only fragments at the nearest depth
+   pass, so each pixel blends once.
+
+Both steps run behind `kMeshVs`, the G-buffer mesh vertex shader, so their
+depths agree. The surface's depth stays in the scene depth buffer
+afterwards. Transparent draws behind it are hidden by it, as retail's
+z-written translucent characters hid them.
+
+**Lighting.** The translucent fragment shader calls `shade_surface()`, the
+same function the deferred light pass calls for a G-buffer sample. Both
+shaders are built from `kLightModel` (`src/shaders/lightmodel.*.h`, the light
+uniform block, the Classic and modern models, and `shade_surface`) followed
+by the pass's own body (`TRenderer` prepends it at pipeline creation), and
+both upload the same uniforms (`TRenderer::PackLightUniforms`). The light
+pass reconstructs the world position from scene depth and the normal from
+the G-buffer; the translucent pass has both from the vertex shader. The
+lighting is in world space either way. Measured on the opening scene with
+every mesh forced through the translucent pass at alpha 1, about 97% of the
+pixels of the two idle NPCs (Sardok, Tendrick) match the G-buffer path
+within 2/255, in Classic and in modern lighting, with no mean bias. The
+rest are idle-animation differences between the two runs and the
+G-buffer's 8- and 16-bit storage.
+
+What a translucent mesh doesn't get, because it isn't in the G-buffer:
+screen-space AO and the sun cast-shadow mask (modern lighting only; the
+shader passes 1 for both), the editor's id target (it can't be picked while
+it fades), and a place in the AO and sun-shadow inputs of other surfaces.
+
+Instance rows for the pass's meshes are uploaded once per drain into the
+next buffer of the mesh instance ring (`NextMeshInstanceBuffer`).
+
+## Character transparency and invisibility
+
+### Retail (forensics)
+
+Retail draws a character through `TCharAnimator` (vtable `0x005a7dd8`):
+ctor `0x004d76b0`, `Animate` `0x004d7a00`, `Render` `0x004d7a50` (slot
+`+0x34`). The fade itself is simulation, on `TCharacter` (`+0x194..+0x1a4`,
+`Fade` / `SetFade` / `UpdateFade` / `Transparency`,
+[COMMAND_SYSTEM.md](gameflow/forensics/COMMAND_SYSTEM.md) §6.4). The animator
+keeps its own *drawn* alpha at `+0x588` and moves it toward the fade:
+
+```
+Render (0x004d7a50), head:
+  if (!(inst->flags & OF_INVISIBLE) || Editor) {       // flags bit 0x80, Editor = DAT_00668154
+      if (!preview) {                                  // +0x1a4, see below
+          t = inst->Transparency() * 0.01             // vtable +0x2d8 = 0x004c5a50; 0.01 @0x005a350c
+          if (!Editor && |t - a| >= 0.05)              // 0.05 @0x005a7e9c
+              t = a +/- 0.05
+          a = t                                        // a = +0x588
+          if (a < 0.01) return                         // 0.01 @0x005a3524: nothing drawn, no shadow
+      }
+  } else if (!preview) return                          // OF_INVISIBLE: not drawn, a holds
+```
+
+Then, in order: hide the `sword`/`weapon` objects; a player hides the body
+parts its equipment replaces (`0x004d7f20(1)`); the blob shadow
+(`0x004d86c0`, alive characters only) scaled by `Radius() * 1/12 * a`
+(1/12 @`0x005a7eac`), so the shadow shrinks as the character fades;
+`SetMaterialTransparency` (`0x004d82a0`) writes `a` to every material's
+ambient/diffuse/specular/emissive alpha and sets the blend state through
+`0x00417d60`; `T3DAnimator::Render` (`0x0040e8d0`); the equipment
+(`0x004d7f20(2)`), each item through `SetMaterialTransparency`, so worn items
+fade with the body.
+
+The blend state: 1 (opaque: z-write, z-test, cull CCW, `ONE`/`ZERO`) when
+`|a - 1| <= 0.001` (@`0x005a7ea8`), else `0x84`: `SRCALPHA`/`INVSRCALPHA`,
+z-write on (flag `0x80`), z-test on, culling off, texture alpha times
+material alpha. Triangles blend in draw order.
+
+The ctor seeds `a = Transparency() * 0.01` (`0x004d77b2`) and sets every
+material's alpha to 1 (its loop writes material 0 each pass).
+
+`+0x1a4` is a preview flag. The inventory/paperdoll draw sets it on the
+player's animator around its render (`0x00536fda`/`0x00537003`,
+`0x00538c7c`); with it set the character draws opaque whatever its fade or
+OF_INVISIBLE, without the shadow.
+
+Who gets an animator: `TMapPane::AnimateObjects` (`0x00458750`) walks the
+map with `0x29` = `CHECK_SECTRECT | CHECK_INVIS | CHECK_NOINVENT`. An
+OF_INVISIBLE object gets no `OnScreen` (no animator) and no `Animate`. A
+character loaded invisible therefore has no animator until it shows, and its
+first drawn alpha is the fade at that moment.
+
+Retail's timer ran at 24 Hz and drew at most one frame per tick, so the
+drawn alpha moved at most 0.05 x 24 = 1.2 a second. The script fade moves
+5 a pulse at 24 pulses a second, the same rate: either takes 0.83 s from 0
+to 100.
+
+What this means for the Keep's opening (`keep.s`, `SardokR`):
+
+- Locke is saved OF_INVISIBLE in `newgame.sav`: not drawn, no animator.
+- `fadecharacterout player`: his fade runs 100 -> 0 unseen.
+- `player.toggle invisible` + `fadecharacterin player`: he shows with fade
+  0, and the alpha follows the fade back to 1 over 0.83 s.
+- Rahul (`MUDOKON`) is OF_INVISIBLE until `RAHUL.TOGGLE INVISIBLE = 0`. Load
+  leaves every character at fade 100 (`0x004d4eb0`), so
+  `FADECHARACTERIN RAHUL` has nothing to do: he appears at full opacity as
+  the door opens.
+
+### Port
+
+- `TCharAnimator` holds the drawn alpha (`transparency`, retail `+0x588`)
+  and exposes it through two `T3DAnimator` virtuals: `UpdateDrawState(dt)`,
+  called by `TMapRenderer::RenderFrame` once per drawn frame for every
+  animated object, and `DrawAlpha()`, read by the mesh submit (0 = skip).
+  The base `T3DAnimator` draws at 1.
+- `UpdateDrawState` is retail's head: hidden while OF_INVISIBLE outside the
+  editor (the alpha holds), else `UpdateTransparency(dt)`. `DrawAlpha` is 0
+  while hidden or below 0.01.
+- `TMapRenderer` submits each mesh of the object with `tint.a = DrawAlpha()`
+  and the translucent sort keys. `TRenderer` decides the pass.
+- The paperdoll (`uiequiptest.cpp`, the equip pane) draws through its own
+  submit at alpha 1, which is retail's `+0x1a4` behaviour.
+
+Checked on the opening (`--quickstart --headless`, filmstrips): Locke isn't
+drawn until `player.toggle invisible`; he shows with his alpha seeded at
+0.05 (fade 5) and his colour over the black pit rises linearly to full in
+about 0.8 s (0.1 s captures), in Classic and in modern lighting. Rahul shows
+at alpha 1 (fade 100) and walks in opaque.
+
+Deviations from retail:
+
+- **Time-based ramp.** The alpha moves `1.2 * dt` (`kTransparencyPerSecond`
+  = 0.05 x `TTime::LegacyFramerate`) per drawn frame instead of 0.05 per
+  drawn frame, so it takes 0.83 s at any frame rate. `dt` is
+  `TTime::DeltaTime()` (scaled), so slow motion slows it with the fade.
+- **Re-seeding.** Port characters keep a permanent animator
+  (`TCharacter::IsAnimatorPermanent`), so there is no animator creation to
+  seed the alpha when a character shows. `UpdateDrawState` re-seeds it from
+  `Transparency()` on the first drawn frame after the character was hidden.
+  That is retail for a character that had no animator while invisible (every
+  scripted appearance, Locke's included). It differs only for a character
+  that was drawn, went invisible, and showed again at a different fade:
+  retail would ramp from the alpha it had.
+- **One layer per surface.** Retail blended a fading character's triangles
+  in draw order with z-write on and culling off, so some inner and far-side
+  faces showed through, depending on order. The port draws the nearest
+  layer only.
+- **Not in the G-buffer while translucent.** No screen-space AO or sun cast
+  shadow on the fading character (modern lighting), no id-target picking.
+- **Not ported here:** the blob shadow (the port doesn't draw the retail
+  `CharUtility` shadow yet; when it does, scale it by `DrawAlpha()`), the
+  equipment fade (the port doesn't draw worn equipment meshes on characters
+  yet; they should share the character's alpha and `surface_id`), the
+  `+0x224` additive second pass (`0x00417d60(0x10)`), and OF_INVISIBLE for
+  non-character objects (retail's map-pane walks skip them via
+  `CHECK_INVIS`; the port draws them).
+
+Fixed in `charanimator.cpp` along the way: `InitTransparency` assigned a
+local (the member was never set); `Set`/`ResetMaterialTransparency` wrote
+material 0 on every pass; the reset alpha was 100, not 1; `abs()` on a float
+difference resolved to the integer overload.
+
+Retail reference shots that would settle the open details (dosbox-x, New
+Game, frame-by-frame capture of the opening):
+
+1. The ~1 s after `player.toggle invisible`: Locke fading in over the pit.
+   Settles whether he starts from nothing (the re-seed), whether inner or
+   far-side faces show through (draw order), and whether his shadow grows
+   with him.
+2. Rahul at the door: a pop to full opacity, as predicted above.
+3. The invisibility spell on Locke (fade 30): the steady translucent look,
+   and whether worn equipment fades with him.
+
 ## Forthcoming work
 
 Tracked here so future additions land in the right layer:
@@ -350,8 +542,9 @@ Tracked here so future additions land in the right layer:
   quads. Thinnest kind; mostly UI + effects.
 - **Water / refraction pass** -- scene-color A<->B ping-pong; sampled back
   into a subsequent pass for refraction.
-- **Transparent effects pass** -- forward transparency over `lit_target`.
-  First consumer of ordered-mode submission.
+- **Ordered-mode batching** -- the transparent-world pass (pass 5) sorts
+  back to front and issues one draw per entry; translucent meshes draw one
+  per mesh per step. Batch depth-adjacent entries that share keys.
 - **Debug line/triangle pass** -- small dedicated pipeline, submitted by
   debug UI or test harness.
 - **`TMapPane` owns `TMapRenderer`** -- migrate `g_mapRenderer` off the

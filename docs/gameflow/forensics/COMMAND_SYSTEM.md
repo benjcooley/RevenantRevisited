@@ -423,29 +423,14 @@ monsters the player hadn't seen). The commands reject a name that isn't
 a character (retail wrote the fade fields of any object). Opening scene:
 Locke 100 → 0 over pulses 64–84, 0 → 100 over pulses 134–154.
 
-**The draw path doesn't show it.** In retail the character animator
+**The draw path (ported 2026-10-05).** In retail the character animator
 (`0x004d7a50`) skips an OF_INVISIBLE character (outside the editor) and
-otherwise moves its alpha (animator `+0x588`) toward Transparency()/100
-by 0.05 per drawn frame, not drawing below 0.01; `0x004d77b2` seeds it.
-In the port:
-
-1. `TMapRenderer` submits character bone meshes (`maprenderer.cpp`,
-   `SMeshSubmit`) with tint (1, 1, 1, 1) and doesn't skip OF_INVISIBLE:
-   Locke stands in the circle, opaque, while flagged invisible and faded
-   to 0 (filmstrip of the scene).
-2. `TCharAnimator::Render`, which runs `UpdateTransparency` and the
-   material alpha, is never called in the sokol game loop (counted: 0
-   calls), so nothing consumes `Transparency()`.
-3. The mesh pipeline writes a G-buffer: tint alpha blends only the albedo
-   target (normals, scene depth and depth are written opaque) and alpha
-   below 0.01 is discarded. Fully out works with tint alpha; a partial
-   fade needs a translucent (forward) pass for characters.
-4. In `charanimator.cpp`, `InitTransparency` assigns a local, leaving the
-   member uninitialized; `Set/ResetMaterialTransparency` loop over the
-   materials but always write material 0, and reset alpha to 100.0, not
-   1.0.
-5. The 0.05 step is per drawn frame; at 60 fps that is faster than
-   retail's frame rate (the port's convention is time-based).
+otherwise moves its alpha toward Transparency()/100 by 0.05 per drawn
+frame, not drawing below 0.01. The port does the same, time-based at 1.2
+alpha per second (retail's 0.05 per frame at 24 Hz), and draws a partly
+faded character through a translucent pass lit by the light pass's own
+model: [RENDERER_ARCHITECTURE.md](../../RENDERER_ARCHITECTURE.md) has the
+design and the deviations.
 
 ## Appendix — command catalog
 
