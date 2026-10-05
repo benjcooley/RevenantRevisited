@@ -739,13 +739,25 @@ void TPlayScreen::Update()
     timeofday = TimeOfDayMinutes(gametime);
 }
 
+void TPlayScreen::GetMapViewRect(int32_t& x, int32_t& y, int32_t& w, int32_t& h) const
+{
+    if (g_playHudInitialized)
+    {
+        GetReconstructedPlayfieldRect(x, y, w, h);
+        return;
+    }
+    x = y = 0;
+    w = Display.Width()  > 0 ? Display.Width()  : WIDTH;
+    h = Display.Height() > 0 ? Display.Height() : HEIGHT;
+}
+
 void TPlayScreen::RenderFrame()
 {
     if (!mapRenderer) return;
     if (g_playHudInitialized)
     {
         int32_t px = 0, py = 0, pw = 0, ph = 0;
-        GetReconstructedPlayfieldRect(px, py, pw, ph);
+        GetMapViewRect(px, py, pw, ph);
         mapRenderer->SetOutputViewport(pw, ph);
         if (Renderer)
         {

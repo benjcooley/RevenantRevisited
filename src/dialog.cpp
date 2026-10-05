@@ -18,8 +18,14 @@
 #include "script.h"
 #include "player.h"
 #include "logging.h"
+#include "font.h"
+#include "fonttable.h"
+#include "renderer.h"
+#include "surface.h"
+#include "time.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 // ****************************************************************************
@@ -236,17 +242,117 @@ char *DialogLine(const char *line, char *outbuf, int32_t buflen)
 // * TDialogEntry *
 // ****************
 
-TDialogEntry::TDialogEntry(TObjectInstance* speaker, EMode mode, std::vector<std::string> texts,
+namespace {
+
+// Colours as retail stores them, 0x00RRGGBB: red is byte 2. The overlay
+// quad's D3D diffuse is alpha << 24 | [2] << 16 | [1] << 8 | [0] (0x00534b60,
+// vertex format 0x1c4) and GDI text swaps bytes 0 and 2 into its COLORREF
+// (0x004be7ba), so both of retail's draw paths read byte 2 as red.
+constexpr uint32_t kPlayerColor    = 0x3cafff;     // AddSpeech 0x00535b90, ShowResponses 0x00535e90
+constexpr uint32_t kHighlightColor = 0xffffff;
+constexpr uint32_t kNpcColors[4]   = {0xff0000, 0x00ff00, 0xffff00, 0x00ffff};    // by slot & 3
+
+// The panes retail lays the entries out against (0x005351d0): the status bar
+// on top (TPlyrStatusBar 0x0065a8c0: y 0, h 0x70 from its static init
+// 0x00480663) and the side tabs at the map's right edge (0x0065be50, its 52 px
+// strip). The map view is MapPane's rect (0x006668d8).
+constexpr int32_t kStatusBarBottom = 0x70;
+constexpr int32_t kSideTabsWidth   = 52;
+constexpr int32_t kNpcTopGap       = 10;
+constexpr int32_t kPlayerBottomGap = 50;
+constexpr int32_t kEntryGap        = 5;
+
+float Red(uint32_t c)   { return float((c >> 16) & 0xff) / 255.0f; }
+float Green(uint32_t c) { return float((c >> 8) & 0xff) / 255.0f; }
+float Blue(uint32_t c)  { return float(c & 0xff) / 255.0f; }
+
+// A counter that steps by one per tick toward `target` (fades, highlights),
+// `frac` of the way into its next step.
+float StepToward(int32_t value, int32_t target, float frac)
+{
+    if (value < target)
+        return float(value) + frac;
+    if (value > target)
+        return float(value) - frac;
+    return float(value);
+}
+
+// One tick of a slide (0x005348f0): the 16.16 position's whole part, held at
+// the target.
+int32_t SlideStep(int32_t value, int32_t target, int32_t pos)
+{
+    const int32_t next = pos >> 16;
+    return value < target ? (next < target ? next : target)
+                          : (next > target ? next : target);
+}
+
+// The slide `frac` of the way into its next step.
+float SlidePosition(int32_t value, int32_t target, int32_t pos, int32_t step, float frac)
+{
+    if (value == target)
+        return float(value);
+    const float next = (float(pos) + float(step) * frac) / 65536.0f;
+    return value < target ? (next < float(target) ? next : float(target))
+                          : (next > float(target) ? next : float(target));
+}
+
+}  // namespace
+
+// REVSYNC: 0x00533f10. Each text wraps to 350 px in the rect x 50..399, 10 px
+// under the one before; a box shorter than 44 px centres its texts. A
+// response list gets one button per choice, named by its label.
+TDialogEntry::TDialogEntry(TDialogPane& owner, TObjectInstance* speaker, EMode mode,
+                           uint32_t color, uint32_t hicolor, std::vector<std::string> texts,
                            std::vector<std::string> labels, int32_t ticks)
-  : speaker(speaker), mode(mode), ticksleft(ticks), texts(std::move(texts)), labels(std::move(labels))
+  : pane(owner), speaker(speaker), mode(mode), color(color), hicolor(hicolor),
+    ticksleft(ticks), texts(std::move(texts)), labels(std::move(labels))
 {
     if (this->texts.size() > kMaxTexts)
         this->texts.resize(kMaxTexts);
+
+    const int32_t lineheight = pane.LineHeight();
+    int32_t top = 0;
+    for (size_t i = 0; i < this->texts.size(); ++i)
+    {
+        std::vector<std::string>& wrapped = lines.emplace_back();
+        const int32_t count = WrapTextLines(pane.Font(), this->texts[i].c_str(), kWrapWidth, wrapped);
+        SRect& r = rects[i];
+        r.left = kTextLeft;
+        r.top = top;
+        r.right = kWidth - 1;
+        r.bottom = top - 1 + count * lineheight;
+        height = r.bottom + 1;
+        top = r.bottom + 1 + kTextGap;
+    }
+    if (height < kMinHeight)
+    {
+        const int32_t shift = (kMinHeight - height) / 2;
+        height = kMinHeight;
+        for (size_t i = 0; i < this->texts.size(); ++i)
+        {
+            rects[i].top += shift;
+            rects[i].bottom += shift;
+        }
+    }
+
+    if (mode == EMode::Responses)
+        for (size_t i = 0; i < this->texts.size() && i < this->labels.size(); ++i)
+            buttons[i] = pane.NewChoiceButton(this->labels[i].c_str());
 }
 
-void TDialogEntry::Place()
+TDialogEntry::~TDialogEntry()
 {
-    placed = true;
+    RemoveButtons();
+}
+
+void TDialogEntry::RemoveButtons()
+{
+    for (TButton*& button : buttons)
+    {
+        if (button)
+            pane.DeleteButton(button);
+        button = nullptr;
+    }
 }
 
 TObjectInstance* TDialogEntry::Speaker() const
@@ -257,7 +363,7 @@ TObjectInstance* TDialogEntry::Speaker() const
 // REVSYNC: 0x005348f0. An entry isn't timed until the pane has placed it.
 void TDialogEntry::Pulse()
 {
-    if (!placed)
+    if (!IsPlaced())
         return;
 
     if (ticksleft >= 0)
@@ -267,10 +373,33 @@ void TDialogEntry::Pulse()
         ticksleft--;
     }
 
+    if (offx != targetx || offy != targety)
+    {
+        posx += stepx;
+        offx = SlideStep(offx, targetx, posx);
+        posy += stepy;
+        offy = SlideStep(offy, targety, posy);
+    }
+
     if (fade < fadetarget)
         fade++;
     else if (fade > fadetarget)
         fade--;
+
+    for (size_t i = 0; i < texts.size(); ++i)
+    {
+        TButton* button = buttons[i];
+        if (!button)
+            continue;
+        hightarget[i] = button->IsHover() ? kHighlightTicks : 0;
+        if (highlight[i] < hightarget[i])
+            highlight[i]++;
+        else if (highlight[i] > hightarget[i])
+            highlight[i]--;
+        const SRect& r = rects[i];
+        button->SetRect(basex + offx + r.left - pane.GetPosX(), basey + offy + r.top - pane.GetPosY(),
+                        r.right - r.left + 1, r.bottom - r.top + 1);
+    }
 }
 
 // REVSYNC: 0x00534a40
@@ -278,25 +407,139 @@ void TDialogEntry::Dismiss()
 {
     dismissed = true;
     fadetarget = 0;
+    RemoveButtons();
+}
+
+// REVSYNC: the layout step of 0x005351d0 for one entry. A new entry appears
+// at its place; a placed one slides there in kSlideTicks equal 16.16 steps.
+void TDialogEntry::MoveTo(int32_t offset)
+{
+    if (targetx == 0 && targety == offset)
+        return;
+    if (!IsPlaced())
+    {
+        offx = targetx = 0;
+        offy = targety = offset;
+        return;
+    }
+    targetx = 0;
+    targety = offset;
+    posx = offx * 65536;
+    posy = offy * 65536;
+    stepx = (targetx - offx) * 65536 / kSlideTicks;
+    stepy = (targety - offy) * 65536 / kSlideTicks;
+}
+
+// The speaker's inventory image (0x0046f190). REVSYNC-DIVERGENCE: retail's
+// imagery getter falls back to the state-0 icon (0x0040ce60), where a
+// character's portrait is baked; the port's InventoryImage doesn't, because
+// IsInventoryItem leans on it, so the fallback is taken here.
+TBitmap* TDialogEntry::Portrait() const
+{
+    TObjectInstance* who = speaker.Get();
+    if (!who)
+        return nullptr;
+    if (TBitmap* face = who->InventoryImage())
+        return face;
+    TObjectImagery* imagery = who->GetImagery();
+    return imagery ? imagery->GetInvImage(0) : nullptr;
+}
+
+// REVSYNC: 0x00534470 (NoTexOverlay off): the portrait centred at (22, 22),
+// the texts in white with the 3-pass black shadow (font flags 0x401), the
+// "Ring" over the portrait. The text colour is applied when drawn.
+void TDialogEntry::Compose()
+{
+    if (!Renderer || height <= 0)
+        return;
+    if (!surface || surface->Height() != height)
+        surface = std::make_unique<TSurface>(kWidth, height, SG_PIXELFORMAT_RGBA8);
+
+    surface->StartPass(0.0f, 0.0f, 0.0f, 0.0f);
+    if (TBitmap* face = Portrait())
+        Renderer->DrawBitmapToTarget(face, kPortraitCenter - face->width / 2,
+                                     kPortraitCenter - face->height / 2, kWidth, height);
+    const int32_t lineheight = pane.LineHeight();
+    for (size_t i = 0; i < lines.size(); ++i)
+        for (size_t j = 0; j < lines[i].size(); ++j)
+            DrawTextShadowedToTarget(pane.Font(), lines[i][j].c_str(), rects[i].left,
+                                     rects[i].top + int32_t(j) * lineheight, kWrapWidth, lineheight,
+                                     ETextAlign::Left, 1.0f, 1.0f, 1.0f, kWidth, height);
+    if (TBitmap* ring = pane.Ring())
+        Renderer->DrawBitmapToTarget(ring, kPortraitCenter - ring->width / 2,
+                                     kPortraitCenter - ring->height / 2, kWidth, height);
+    surface->EndPass();
+    composed = true;
+}
+
+// REVSYNC: 0x00534b60. Alpha = fade / 12. The portrait column draws in white,
+// the texts in the entry's colour; a hovered choice's text draws again over
+// it in the highlight colour at highlight / 8 of that alpha.
+void TDialogEntry::Draw(float frac) const
+{
+    if (!IsPlaced() || !composed || !surface || !Renderer)
+        return;
+    const float alpha = StepToward(fade, fadetarget, frac) / float(kFadeTicks);
+    if (alpha <= 0.0f)
+        return;
+
+    const int32_t x = basex + int32_t(std::lround(SlidePosition(offx, targetx, posx, stepx, frac)));
+    const int32_t y = basey + int32_t(std::lround(SlidePosition(offy, targety, posy, stepy, frac)));
+    Renderer->DrawSurfaceSubrectTinted(surface.get(), x, y, 0, 0, kTextLeft, height,
+                                       1.0f, 1.0f, 1.0f, alpha);
+    Renderer->DrawSurfaceSubrectTinted(surface.get(), x + kTextLeft, y, kTextLeft, 0,
+                                       kWidth - kTextLeft, height,
+                                       Red(color), Green(color), Blue(color), alpha);
+    for (size_t i = 0; i < texts.size(); ++i)
+    {
+        if (!buttons[i])
+            continue;
+        const float lit = StepToward(highlight[i], hightarget[i], frac) / float(kHighlightTicks) * alpha;
+        if (lit <= 0.0f)
+            continue;
+        const SRect& r = rects[i];
+        Renderer->DrawSurfaceSubrectTinted(surface.get(), x + r.left, y + r.top, r.left, r.top,
+                                           r.right - r.left + 1, r.bottom - r.top + 1,
+                                           Red(hicolor), Green(hicolor), Blue(hicolor), lit);
+    }
 }
 
 // ***************
 // * TDialogPane *
 // ***************
 
-// REVSYNC: 0x00534fd0
+// REVSYNC: 0x00534fd0. The pane tracks the hovered choice (+0x60 |= 2). The
+// entries use the "Dialog" font (0x0065c134, from FontTable at 0x00485e01)
+// and the "Ring" of the status bar archive (0x0065a9d0, 0x0047a917).
 bool TDialogPane::Initialize()
 {
     if (IsOpen())
         return true;
-    if (!TPane::Initialize())
+    if (!TButtonPane::Initialize())
         return false;
+    SetPaneFlags(BPF_HOVER);
     entries.clear();
     responses = nullptr;
     choicetexts.clear();
     choicelabels.clear();
     chosen = -1;
     committed = false;
+
+    font = FontTable ? FontTable->Atlas("Dialog") : nullptr;
+    const TGenericFont* fontdef = FontTable ? FontTable->FindFont("Dialog") : nullptr;
+    lineheight = fontdef ? fontdef->height + fontdef->lextra : 0;
+    if (!statusbardat)
+        statusbardat = TMulti::LoadMulti(const_cast<char*>("statusbarnotex.dat"));
+    ring = nullptr;
+    for (int32_t i = 0; statusbardat && i < statusbardat->numoffsets; ++i)
+    {
+        const char* name = static_cast<const char*>(static_cast<void*>(statusbardat->names[i]));
+        if (name && !stricmp(name, "Ring"))
+            ring = statusbardat->Bitmap(i);
+    }
+    if (!font || !ring)
+        log_warn("[dialog] font \"Dialog\" %s, \"Ring\" %s", font ? "ok" : "missing",
+                 ring ? "ok" : "missing");
     return true;
 }
 
@@ -305,40 +548,44 @@ void TDialogPane::Close()
 {
     if (!IsOpen())
         return;
-    entries.clear();
+    entries.clear();                        // their buttons leave the pane first
     responses = nullptr;
     choicetexts.clear();
     choicelabels.clear();
-    TPane::Close();
+    ring = nullptr;
+    delete statusbardat;
+    statusbardat = nullptr;
+    font = nullptr;
+    TButtonPane::Close();
 }
 
 // REVSYNC: 0x00535120 -- hidden, ignoring input, entries and choices gone.
 // (Retail forgot the entries without freeing them.)
 void TDialogPane::Hide()
 {
-    TPane::Hide();
+    TButtonPane::Hide();
     entries.clear();
     responses = nullptr;
     choicetexts.clear();
     choicelabels.clear();
 }
 
-// REVSYNC: 0x005351d0, once per simulation tick: age the entries, place new
-// ones, drop the faded, and commit a picked response -- after the scripts
+// REVSYNC: 0x005351d0, once per simulation tick: age the entries, lay them
+// out, drop the faded, and commit a picked response -- after the scripts
 // have pulsed, so the waiting script has seen it (TScript::WaitSatisfied).
+// While the player has no control (a response wait) the hovered choice stays
+// when the pointer leaves it, and the arrows and Enter work the choices
+// (+0x60 bits 4 and 8).
 void TDialogPane::Pulse()
 {
     for (const std::unique_ptr<TDialogEntry>& entry : entries)
         entry->Pulse();
 
-    // Layout: retail stacks the entries and slides them to their slots here.
-    // Positions belong to the presentation; the runtime only needs to know
-    // an entry is on screen, which starts its clock.
-    for (const std::unique_ptr<TDialogEntry>& entry : entries)
-        if (!entry->IsPlaced())
-            entry->Place();
-
+    LayOut();
     DeleteGoneEntries();
+
+    constexpr uint32_t kChoosing = BPF_KEEPHOVER | BPF_KEYFOCUS;
+    SetPaneFlags(PlayScreen.IsControlOn() ? PaneFlags() & ~kChoosing : PaneFlags() | kChoosing);
 
     if (committed && chosen >= 0)
     {
@@ -350,6 +597,42 @@ void TDialogPane::Pulse()
         responses = nullptr;
         answering.Clear();
         controlonwhilechoosing = false;
+    }
+}
+
+// REVSYNC: the layout of 0x005351d0. The entries are 400 wide, centred in
+// the map's width less the side tabs. NPC lines stack down from 10 px under
+// the status bar; the player's lines and the response list stack up to 50 px
+// above the map's bottom, oldest on top; 5 px apart, in creation order. A
+// dismissed entry keeps its place while it fades but holds no slot. The pane
+// covers the map view, so the choice buttons hit-test there.
+void TDialogPane::LayOut()
+{
+    int32_t mapx = 0, mapy = 0, mapw = 0, maph = 0;
+    PlayScreen.GetMapViewRect(mapx, mapy, mapw, maph);
+    if (GetPosX() != mapx || GetPosY() != mapy || GetWidth() != mapw || GetHeight() != maph)
+        Resize(mapx, mapy, mapw, maph);
+
+    const int32_t x = mapx + (mapw - kSideTabsWidth - TDialogEntry::kWidth) / 2;
+    const int32_t top = kStatusBarBottom + kNpcTopGap;
+    const int32_t bottom = mapy + maph - kPlayerBottomGap;
+
+    int32_t lowerheight = 0;
+    for (const std::unique_ptr<TDialogEntry>& entry : entries)
+        if (!entry->IsDismissed() && entry->Mode() != TDialogEntry::EMode::NpcSpeech)
+            lowerheight += (lowerheight ? kEntryGap : 0) + entry->Height();
+
+    int32_t upper = 0;
+    int32_t lower = -lowerheight;
+    for (const std::unique_ptr<TDialogEntry>& entry : entries)
+    {
+        const bool npc = entry->Mode() == TDialogEntry::EMode::NpcSpeech;
+        entry->SetBase(x, npc ? top : bottom);
+        if (entry->IsDismissed())
+            continue;
+        int32_t& offset = npc ? upper : lower;
+        entry->MoveTo(offset);
+        offset += entry->Height() + kEntryGap;
     }
 }
 
@@ -366,20 +649,43 @@ void TDialogPane::DeleteGoneEntries()
     entries.erase(gone, entries.end());
 }
 
-// REVSYNC: 0x00535610 (key-down only). Space silences the spoken lines;
-// 1-6 pick a choice while the responses are up.
+// REVSYNC: 0x00535500 -- render the new entries' surfaces.
+void TDialogPane::Compose()
+{
+    for (const std::unique_ptr<TDialogEntry>& entry : entries)
+        if (entry->IsPlaced() && !entry->IsComposed())
+            entry->Compose();
+}
+
+// REVSYNC: 0x00535550 -- the entries over the map in creation order, between
+// this tick's state and the next.
+void TDialogPane::Draw()
+{
+    const float frac = float(TTime::LegacyFrameFraction());
+    for (const std::unique_ptr<TDialogEntry>& entry : entries)
+        entry->Draw(frac);
+}
+
+// REVSYNC: 0x00535610 (key down). Space silences the spoken lines; 1-6 pick
+// a choice while the responses are up. Other keys, Space included, go on to
+// the button pane (0x004361f0): the arrows and Enter while choosing.
 void TDialogPane::KeyPress(int32_t key, bool down)
 {
-    if (!down)
-        return;
-    if (key == ' ')
-        SkipSpeech();
-    else if (key >= '1' && key <= '6')
+    if (down)
     {
-        const int32_t index = key - '1';
-        if (responses && index < (int32_t)choicelabels.size())
-            Choose(index);
+        if (key == ' ')
+            SkipSpeech();
+        else if (key >= '1' && key <= '6')
+        {
+            const int32_t index = key - '1';
+            if (responses && index < (int32_t)choicelabels.size())
+            {
+                Choose(index);
+                return;
+            }
+        }
     }
+    TButtonPane::KeyPress(key, down);
 }
 
 // REVSYNC: 0x00535760 -- the joystick's skip button (0x40a, "JOY2" in
@@ -388,6 +694,32 @@ void TDialogPane::Joystick(int32_t key, bool down)
 {
     if (down && key == VK_JOYBUTTON3)
         SkipSpeech();
+}
+
+// REVSYNC: 0x005362b0 -- a clicked choice button: its name is the choice's
+// label (every label is compared; the last match wins).
+void TDialogPane::OnControl(TButton *button, int32_t msg)
+{
+    if (msg != CONTROL_CLICKED || !button)
+        return;
+    for (size_t i = 0; i < choicelabels.size(); ++i)
+        if (!stricmp(button->GetName(), choicelabels[i].c_str()))
+        {
+            log_info("[dialog] choice %d clicked (label '%s')", int(i) + 1, button->GetName());
+            Choose(int32_t(i));
+        }
+}
+
+// A response entry's choice button: named by the label, invisible, hoverable
+// (retail ctor 0x0042c600, flags 0x100010). The entry places it over its text.
+TButton* TDialogPane::NewChoiceButton(const char *label)
+{
+    auto* button = new TButton(label, 0, 0, 0, 0, 0, nullptr);
+    button->SetHoverable(true);
+    if (NewButton(button))
+        return button;
+    delete button;
+    return nullptr;
 }
 
 void TDialogPane::Choose(int32_t index)
@@ -409,7 +741,8 @@ void TDialogPane::AddChoice(const char *label, const char *text)
     choicelabels.emplace_back(label ? label : "");
 }
 
-// REVSYNC: 0x00535e90. The choices show as their dialog lines in quotes.
+// REVSYNC: 0x00535e90. The choices show as their dialog lines in quotes, in
+// the player's colour.
 bool TDialogPane::ShowResponses(TObjectInstance* player, bool controlon)
 {
     if (choicelabels.empty() || !player)
@@ -423,24 +756,47 @@ bool TDialogPane::ShowResponses(TObjectInstance* player, bool controlon)
     std::vector<std::string> lines;
     for (const std::string& tag : choicetexts)
         lines.push_back("\"" + std::string(DialogList.GetLine(tag.c_str())) + "\"");
-    entries.push_back(std::make_unique<TDialogEntry>(player, TDialogEntry::EMode::Responses,
-                                                     std::move(lines), choicelabels,
-                                                     TDialogEntry::kNoTimeout));
+    entries.push_back(std::make_unique<TDialogEntry>(*this, player, TDialogEntry::EMode::Responses,
+                                                     kPlayerColor, kHighlightColor, std::move(lines),
+                                                     choicelabels, TDialogEntry::kNoTimeout));
     responses = entries.back().get();
     log_info("[dialog] %d choice(s) shown", (int)choicelabels.size());
     return true;
 }
 
-// REVSYNC: 0x00535b90
+// REVSYNC: 0x00535b90. The player speaks in the player's colour; an NPC in
+// its speaker slot's.
 void TDialogPane::AddSpeech(TObjectInstance* speaker, const char *text, int32_t ticks)
 {
     if (!speaker || !text || ticks <= 0)
         return;
-    const TDialogEntry::EMode mode = speaker->ObjClass() == OBJCLASS_PLAYER
-                                   ? TDialogEntry::EMode::PlayerSpeech
-                                   : TDialogEntry::EMode::NpcSpeech;
-    entries.push_back(std::make_unique<TDialogEntry>(speaker, mode, std::vector<std::string>{text},
+    const bool player = speaker->ObjClass() == OBJCLASS_PLAYER;
+    const TDialogEntry::EMode mode = player ? TDialogEntry::EMode::PlayerSpeech
+                                            : TDialogEntry::EMode::NpcSpeech;
+    const uint32_t color = player ? kPlayerColor : NpcColor(speaker);
+    entries.push_back(std::make_unique<TDialogEntry>(*this, speaker, mode, color, kHighlightColor,
+                                                     std::vector<std::string>{text},
                                                      std::vector<std::string>{}, ticks));
+}
+
+// REVSYNC: the speaker slots of 0x00535b90 -- a 16-entry round robin
+// (0x0066f6f8, counter 0x0066f73c); a new speaker takes the next slot, the
+// first one slot 1. Retail keys the slots by object pointer; the port by map
+// index.
+uint32_t TDialogPane::NpcColor(const TObjectInstance* speaker)
+{
+    const int32_t id = speaker->GetMapIndex();
+    int32_t slot = -1;
+    for (int32_t i = 0; i < kSpeakerSlots && slot < 0; ++i)
+        if (speakerslots[i] == id)
+            slot = i;
+    if (slot < 0)
+    {
+        lastslot = (lastslot + 1) & (kSpeakerSlots - 1);
+        speakerslots[lastslot] = id;
+        slot = lastslot;
+    }
+    return kNpcColors[slot & 3];
 }
 
 // REVSYNC: 0x00536010
