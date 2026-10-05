@@ -152,6 +152,9 @@ cmake --build build
 
 On macOS, the project links Metal/Cocoa/AppKit frameworks through `CMakeLists.txt`.
 
+For the ASan + UBSan build, headless test runs and lldb setup, see
+`docs/DEBUG_TOOLING.md`.
+
 ## Running
 
 Run the executable from the repository root so the game can find `data/` and the runtime INI/log paths land where expected:
