@@ -14,12 +14,14 @@
 
 #include "scriptvalue.h"
 
+#include <cmath>
 #include <cstdint>
 #include <iterator>
 #include <string>
 #include <unordered_set>
 
 #include "character.h"
+#include "command.h"
 #include "exit.h"
 #include "logging.h"
 #include "mappane.h"
@@ -44,8 +46,13 @@ enum class EOp : int32_t
 constexpr const char* kOperators[] =
     { "=", "<>", ">", "<", ">=", "<=", "and", "or", "not", "+", "-", "*", "/" };
 
-// `isatrelativeposition` holds when the object is this close to the spot.
+// `isatrelativeposition` and `isatrelativedistance` hold when the object is
+// this close to the spot.
 constexpr int32_t kAtPositionRange = 50;
+
+// Retail's facing-to-radians factor (float at 0x005a3a90, bits 0x3cc9d9aa):
+// 2*pi/255, not /256, as compiled.
+constexpr float kRadiansPerFacing = 0x1.93b354p-6f;
 
 std::optional<EOp> FindOperator(const char* text)
 {
@@ -216,8 +223,39 @@ std::optional<int32_t> MemberValue(TToken& t, TObjectInstance& obj,
         return value;
     }
     if (t.Is("isatrelativedistance"))
-        return NotPorted("isatrelativedistance", 0x0041f230,
-                         "the spot at a distance and angle from an object's facing");
+    {
+        t.Get();
+        t.WhiteGet();
+        const TObjectInstance* other = ResolveScriptObject(t.Text(), caller, script);
+        t.WhiteGet();
+        if (t.Type() != TKN_NUMBER)
+        {
+            t.WhiteGet();
+            return 0;
+        }
+        const int32_t distance = t.Index();
+        t.Get();
+        t.WhiteGet();
+        int32_t angle = 0;
+        if (t.Type() == TKN_NUMBER)
+        {
+            angle = t.Index();
+            t.Get();
+        }
+        if (!other)
+        {
+            // DEVIATION: retail returns from the evaluator here without a
+            // value, so `if` and `while` read their own untouched result
+            // variable, which holds the calling object's address: the
+            // condition is true and the rest of the line goes unevaluated.
+            Output("Can't find any object by that name.\n");
+            return std::nullopt;
+        }
+        const S3DPoint spot = RelativeDistanceSpot(*other, distance, angle);
+        const int32_t value = Distance(spot, obj.Pos()) < kAtPositionRange;
+        t.WhiteGet();
+        return value;
+    }
     if (t.Is("lastattack"))
         return NotPorted("lastattack", 0x004c62b0,
                          "whether the character's last attack landed (TCharacter +0x168)");
@@ -389,4 +427,21 @@ std::optional<int32_t> EvaluateExpression(TToken& t, TObjectInstance* context, T
     if (total && *total == STATE_INVALID)
         return std::nullopt;
     return total;
+}
+
+// REVSYNC: inline in gotorelativedistance (0x00420710) and the
+// isatrelativedistance member (0x0041f230). Retail works in x87: with
+// a = facing + angle, x += (int)(distance * sin((a + 0x7f) * k)) and
+// y += (int)(distance * cos(a * k)), truncating. The 0x7f (not 0x80) and k's
+// 255 steps make the spot a little off the straight line behind the object;
+// both are kept. Computed here in double, so only a product within rounding
+// of a whole number can truncate differently.
+S3DPoint RelativeDistanceSpot(const TObjectInstance& obj, int32_t distance, int32_t angle)
+{
+    const double radians = kRadiansPerFacing;
+    const int32_t a = obj.GetFace() + angle;
+    const S3DPoint at = obj.Pos();
+    return { at.x + static_cast<int32_t>(distance * std::sin((a + 0x7f) * radians)),
+             at.y + static_cast<int32_t>(distance * std::cos(a * radians)),
+             at.z };
 }

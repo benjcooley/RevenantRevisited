@@ -157,7 +157,7 @@ expression with the result so far):
 | `face` | the facing byte |
 | `getdistance` / `getdist <obj>` | 2D table distance (vtable `0x04`), 0 if `<obj>` is missing |
 | `isatrelativeposition` / `isrelpos <obj> <dx> [<dy>]` | within 50 of `<obj>`'s position + (dx, dy) |
-| `isatrelativedistance <obj> <dist> [<angle>]` | within 50 of the point `dist` from `<obj>` at its facing + angle |
+| `isatrelativedistance <obj> <dist> [<angle>]` | within 50 of the spot `dist` from `<obj>`, measured from its facing turned by `angle` (behind it for a positive `dist`; §6.5) |
 | `lastattack = "<attack>"` | the character's last attack had that name and landed (`+0x160` attack, `+0x168` its impact result from `0x004c62b0`) |
 | `position.x` / `.y` / `.z` | position |
 | `groupinrange …` | the `groupinrange` command's result |
@@ -174,7 +174,10 @@ Quirks the shipped scripts rely on (the port keeps them):
 
 Retail's undefined cases fail the expression in the port: an
 unrecognized token (retail loops forever), `isatrelativeposition` on a
-missing object (dereferenced), `position.` with no x/y/z (stale value).
+missing object (dereferenced), `isatrelativedistance` on a missing object
+(the evaluator returns 4 without a value, so `if` and `while` read their
+own untouched result variable, the caller's address, and come out true),
+`position.` with no x/y/z (stale value).
 An expression that fails makes `if` return false with
 `CMD_BADPARAMS` (`0x84`); `while` returns `CMD_BADPARAMS`.
 
@@ -219,7 +222,10 @@ debug level (`[console]`), so headless `--exec` runs can read it.
   command", and the script goes on with the next line.
 - The commands of the Keep's opening scene are ported: `incidentals`,
   `fadecharacterout`/`fadecharacterin`, `playerlevel`, `setcdvolume`
-  (§6). `fadescreenout`/`fadescreenin` and `wait screenfade` are ported
+  (§6). So are the door prototypes' `faceobject`, `gotorelativedistance`,
+  `gotorelativeposition` and the `isatrelativedistance` member, and `face`
+  is checked against retail (§6.5). `fadescreenout`/`fadescreenin` and
+  `wait screenfade` are ported
   (SCREEN_SYSTEM.md §2.6). `wait` takes any object as its context, as
   retail; with the 1998 character-only context a door's `WAIT` failed
   the class check.
@@ -247,9 +253,14 @@ debug level (`[console]`), so headless `--exec` runs can read it.
 - The interpreter's context syntax, the object resolver and the
   expression evaluator are retail (`src/scriptvalue.cpp`). Not ported:
   prototype variables, `setcurrent`, multiplayer parties,
-  and the members `maxslots`, `isatrelativedistance`,
+  and the members `maxslots`,
   `lastattack` (needs the attack-impact result, `TCharacter +0x168`) and
   `groupinrange` — those fail the expression and log once.
+- A command answering `CMD_WAIT` on a character holds the script until
+  the character is back in its root state, or ends a loop of a looping
+  animation (retail `0x00492d70`); the port had released it at the end
+  of any animation, so a script walk went on after its first step
+  (§6.5, SCRIPT_ENGINE.md §5).
 
 ## 5. Open questions for the author
 
@@ -269,8 +280,13 @@ debug level (`[console]`), so headless `--exec` runs can read it.
 - The CD plays at its full volume (`0x60`) from boot; the INI
   `MusicVolume` reaches it only when the player confirms the Options
   screen. Intended? (§6.3)
+- Walking to and facing objects (§6.5): questions 45–49 in
+  [../AUTHOR_QUESTIONS.md](../AUTHOR_QUESTIONS.md).
 
-## 6. The Keep's opening-scene commands
+## 6. Ported commands
+
+§6.1–§6.4 are the Keep's opening scene; §6.5 the door prototypes'
+walking and facing.
 
 Sardok's block in `keep.s` (`SardokR`, the first scene of a new game)
 runs `incidentals off`, `fadecharacterout player`,
@@ -455,6 +471,139 @@ alpha per second (retail's 0.05 per frame at 24 Hz), and draws a partly
 faded character through a translucent pass lit by the light pass's own
 model: [RENDERER_ARCHITECTURE.md](../../RENDERER_ARCHITECTURE.md) has the
 design and the deviations.
+
+### 6.5 Walking to and facing an object: `faceobject`, `gotorelativedistance`, `gotorelativeposition`, `isatrelativedistance`
+
+The door prototypes in `master.s` ([EXITS.md](EXITS.md) §1.9) walk the
+user to a spot beside the door, check that he got there, and turn him to
+it. The context is the user; `THIS` is the door:
+
+```
+USER.GOTORELATIVEDISTANCE THIS 42 -32
+IF USER.ISATRELATIVEDISTANCE THIS 42 -32 = 1
+BEGIN
+    USER.FACEOBJECT THIS 15
+```
+
+Shipped command lines (the loose `Resources/master.s`, quoted above, and
+the copy in `resources.rvr` agree on these; they differ elsewhere:
+`USER.` against `player.`, and where DOOR1/DOOR2 operate the door. The
+port reads the archive copy, its trace shows `PLAYER.STOP`; which one
+retail reads is the resource layer's choice, `0x004a13f0`, not checked
+here):
+
+| | master.s | keep.s | town.s | forest.s | cave.s | dungeon.s | tower.s | total |
+|---|---|---|---|---|---|---|---|---|
+| `face` | 12 | | 1 | 1 | 5 | 17 | | 36 |
+| `faceobject` | 10 | | 4 | 2 | | | 1 | 17 |
+| `gotorelativedistance` | 28 | | 1 | | | | | 29 |
+| `gotorelativeposition` | | 4 | 19 | 42 | 10 | 10 | 1 | 86 |
+| member `isatrelativedistance` | 8 | | | | | | | 8 |
+| member `isatrelativeposition` | | | | | 5 | 3 | | 8 |
+
+`labyrinth.s`, `ruins.s` and `arakna.s` use none. No script gives
+`gotorelativeposition` a second pair; the seven `faceobject` lines
+outside `master.s` give no offset.
+
+**The handlers** (decompiles and disassembly in `recon/discovered/commands/`):
+
+| Command | Grammar | Effect | Answers |
+|---|---|---|---|
+| `face` `0x00420800` | `[<obj>.]face <angle>` | facing byte (`+0x36`) and move angle (`+0xb0`) = angle, on any object | 1; 4 without a number |
+| `faceobject` `0x00420840` | `[<obj>.]faceobject <name> [<offset>]` | facing and move angle = `AngleTo(name)` (`0x0046ea90`) + offset | 1; 4 when the name finds nothing |
+| `gotorelativedistance` `0x00420710` | `<character>.gotorelativedistance <name> <distance> [<angle>]` | `Goto(spot, 0)`, the spot below | 1; 4 without a distance; "Can't find any object by that name." and 4 |
+| `gotorelativeposition` `0x004205c0` | `<character>.gotorelativeposition <name> <dx> <dy> [<dx2> <dy2>]` | `Goto(name + (dx, dy), 0)`, or `+ (dx2, dy2)` when that spot is nearer the walker (`Distance2D` `0x0046de60`; a tie keeps the first) | 1; 4 without both numbers; "Can't find…" and 4 |
+
+The name is the current token's text, then `WhiteGet`; numbers are
+`Parse "%d"` (`0x0047a410`), checked before the missing-object message.
+These three resolve the name from the **calling** object (handler
+argument 3): in a door's script `THIS` is the door. `pivotobject`
+(`0x00420900`) resolves from the turning object (argument 1) instead.
+
+**The spot** `gotorelativedistance` walks to and `isatrelativedistance`
+tests (inline x87 in both; the decompiles drop the multiplications by the
+distance, the disassembly has them): with `a` = the object's facing byte
++ angle and `k` = the float at `0x005a3a90` (`0x3cc9d9aa`, 2π/255),
+
+    x = obj.x + trunc(distance · sin((a + 0x7f) · k))
+    y = obj.y + trunc(distance · cos(a · k)),  z = obj.z
+
+Facing `f` points along (sin f, −cos f) (`ConvertToVector`), so for a
+positive distance the spot lies behind the object, turned by `angle`,
+skewed by the `0x7f` and the 255 steps (about a unit at the door
+distances). The Keep's `ressexit` (sector 2_1_1) stands at (1190, 1120)
+facing 0: `-25 18` → (1200, 1098) inside the resurrection chamber,
+`42 -32` → (1220, 1149) outside; `isoutside` picks the spot on the
+user's side.
+
+**The member** `isatrelativedistance <name> <distance> [<angle>]` reads
+its tokens like `isatrelativeposition`: past the member word, the name
+(resolved from the caller), then the numbers; no distance → 0. True when
+`Distance2D(spot, member's object) < 0x32`. A missing object prints the
+message and returns 4 from the evaluator without a value (§2.4).
+
+**The walk.** `TCharacter::Goto(x, y, item)` `0x004cedb0`: `Go(AngleTo)`
+(`0x004ce350`); if it went, the target (x, y, own z) and flag `0x1000`
+go on the desired block, or on the doing block when desired is the root
+(the walk started at once, or Go turned the current step); `+0x288` =
+item when one is given (a click on a far item: walk there, pick it up,
+`0x004cfef0`). The commands pass none. `ResolveAction` `0x004c3490`
+sends a MOVE to `ResolveMove` `0x004c5e90`: with a target, at
+|dx| + |dy| − min/2 < 8 it snaps onto the target (`MoveTo`), marks the
+block nowaitdone (and picks the item up); otherwise each step heads at
+the target. The combat-mode moves (`0x004c7f80`, `0x004c7980`) clear the
+target unless an item is pending, so a goto in combat mode keeps its
+first heading; the door prototypes turn `COMBAT OFF` first.
+
+**The wait.** Answer 1 makes the calling script `WaitChar` the context
+(type 3). `0x00492d70` takes a complex object as done only when it is
+back in its root state, or, playing a looping animation (`AF_LOOPING`,
+imagery slot `0x8c`), when its command is done. Walk steps don't loop,
+so the script waits for the arrival (or for a blocked walk's return to
+root). `face` and `faceobject` change no action, so their wait ends at
+once on an idle character.
+
+**Port.** The four as above (`src/command.cpp`, `src/scriptvalue.cpp`),
+the spot as `RelativeDistanceSpot` (`src/scriptvalue.h`), shared.
+`TCharacter::Goto` now gives the target to retail's block (it wrote
+`doing`, which isn't the walk when the walk could not start at once). The
+wait check above is retail now (it ended on any finished animation: the
+KeepExit walk below went on 80 units into 175). Not ported: Goto's item
+argument and flag `0x1000` (no caller passes an item; only the
+combat-mode moves read the flag, and those aren't retail yet).
+
+Deviations:
+- The spot is computed in double with the C library's sin/cos, where
+  retail used x87 `fsin`/`fcos` (precision of the products unknown: the
+  FPU control word at the time isn't known). Only a product within
+  rounding of a whole number can truncate differently.
+- `isatrelativedistance` on a missing object fails the expression (§2.4);
+  no shipped script can reach it (the object is always `THIS`).
+
+Checked (headless, `--quickstart --sector=…`, `--exec`):
+- `ressexit`: Locke placed at (1150, 980); `if player.isatrelativedistance
+  ressexit -25 18 = 1` → `0x80`; `gotorelativedistance ressexit -25 18`
+  → he heads for (1200, 1098) and stops, blocked, at (1178, 1065), 40
+  short (the reason the prototypes test with a 50 margin); the same `if`
+  → `0x40`, with `42 -32` → `0x80`, with `= 0` → `0x80`;
+  `faceobject ressexit -32` → facing 87, `faceobject ressexit` → 119.
+  `gotorelativeposition ressexit 60 60 10 -20` takes the nearer second
+  spot (1200, 1100). Missing object: the member → `if` `0x84` with the
+  message, `gotorelativeposition` → 4 with the message; no distance → 4;
+  `faceobject` → 4.
+- KeepExit (2_11_12), `use keepexit` (its USE block):
+  `player.GOTORELATIVEPOSITION THIS 0 -60` from (12208, 12512) → spot
+  (12236, 12682); the script resumes with `STATE "OPENING"` when Locke is
+  back in his root state at exactly that spot, then runs to its end.
+- `ressexit`'s DOOR1 block (`ressexit.stat locked = 0; use ressexit`,
+  with the exits port): from inside at (1150, 980) it takes the `-25 18`
+  branch, walks to (1178, 1065) as above, the `IF … ISATRELATIVEDISTANCE` holds,
+  `FACEOBJECT THIS -32` → facing 87, the door opens, the fade and
+  `ACTIVATE` follow; from outside at (1260, 1230) the `42 -32` branch →
+  (1220, 1149), `FACEOBJECT THIS 15` → facing 238. The block's
+  `NOWAIT player.TRY "WOPENDOORIN"` answers bad parameters: the port's
+  `try` reads only `%t`, retail falls back to `%s` (`0x005cb5b4`) for a
+  quoted state.
 
 ## Appendix — command catalog
 
