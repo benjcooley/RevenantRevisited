@@ -87,9 +87,13 @@ requests (`0x0047e770`: `+0x5e4` load pending, `+0x5ec` game index,
 
 ### 2.4 In the game
 
-- In-game menu `0x0047e500` (see [SCREEN_SYSTEM.md](SCREEN_SYSTEM.md)
-  §2.5): Load / Save / Options run as modal panes over the running
-  screen; Quit Module → next = title; Exit → quit the app.
+- In-game menu `0x0047e500` (see [INGAME_MENU.md](INGAME_MENU.md)):
+  ESC (hard-wired in PlayScreen's KeyPress, not a control) writes the
+  thumbnail and opens it; Load / Save / Options run as modal panes over
+  the screen, which stands still under them in single player; Quit
+  Module (after `quitgameyn`) → next = title; Exit (after `exitgameyn`) →
+  quit the app. Save does nothing while control is off (conversations,
+  cutscenes).
 - `control on/off` (`0x0047c580`): off releases the held movement keys
   (arrows, Home/End/PgUp/PgDn, `R`) and sets the global control-off
   flag; on clears it.

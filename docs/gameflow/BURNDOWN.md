@@ -52,8 +52,8 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 | [x] | Production `TLogoScreen` (title, version text) — verified vs retail screenshot | 2026-10-04 (ca25da2) |
 | [x] | Loading screen between the title and the game (retail bar, staged session steps) | 2026-10-05 |
 | [x] | Screen fades (title, PlayScreen, scripts) | 2026-10-05 |
-| [ ] | Load Game / Options screens from the title (host `TDefPane` loadgame / `TOptionsPane`) | — |
-| [ ] | ESC in-game menu as a modal continuation chain (retail 0x0047e500) | — |
+| [x] | Load Game / Options screens from the title: `TLoadGameScreen` / `TOptionsScreen` host the load dialog and `TOptionsPane` ([forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §8) | 2026-10-05 |
+| [x] | ESC in-game menu as a modal continuation chain (retail 0x0047e500): thumbnail first, world paused under it (retail modal flags 0xf), Load / Save / Options / Quit Module (`quitgameyn`) / Exit Program (`exitgameyn`) / Resume; Save refused without control; retail Game Options / Load / Save / Quick Save controls ([forensics/INGAME_MENU.md](forensics/INGAME_MENU.md)) | 2026-10-05 |
 
 **Exit:** App launches into a working main menu; ESC pulls it up mid-session.
 
@@ -63,6 +63,7 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 
 | Status | Item | Last touched |
 |--------|------|--------------|
+| [~] | Retail options pane (`options.def`, `TOptionsPane`) opens from the title and in game and returns; the key list and rebinding work, the toggles and sliders aren't bound to the settings yet | 2026-10-05 |
 | [ ] | `src/settingsscreen.{h,cpp}` — tabbed pane (Display/Audio/Controls/Game) | — |
 | [ ] | Display tab — resolution mode, windowed, vsync | — |
 | [ ] | Audio tab — master/sfx/music/spatial (depends on T0) | — |
@@ -119,7 +120,7 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 
 | [x] | Retail save format: header, game states, merchant table, player list; slots under `SaveGamePath/Single/<name>` with `CurMap/` (forensics/SAVE_GAME.md) | 2026-10-04 |
 | [x] | Retail `LoadGame` reset sequence (curmap, scripts, states, areas, players, control) | 2026-10-04 |
-| [x] | In-game requests: F5 = retail Quick Save, F9 = dev reload of the last slot; `--savecycle-test` runs through them | 2026-10-04 |
+| [x] | In-game requests: Quick Save (retail control, Ctrl+Backspace since 2026-10-05; was F5), F9 = dev reload of the last slot; `--savecycle-test` runs through them | 2026-10-04 |
 | [x] | Save interop: every class streams retail's layout (player objversion 15), sector hashes, `ss.bmp` thumbnail (ARCHITECTURE §3.5 2f); retail-side check in dosbox-x pending ([SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md)) | 2026-10-05 |
 | [x] | Player stats retail (maxima, RefreshStats, armor, level-up) — [../gameplay/forensics/PLAYER_STATS.md](../gameplay/forensics/PLAYER_STATS.md) | 2026-10-05 |
 | [ ] | Automap persistence (retail per-sector automap files; the pre-release blob is gone) | — |
@@ -139,11 +140,12 @@ REVSYNC-QUESTIONs surfaced for the user.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | `TSaveLoadPane` — list of slots with thumbnail / timestamp / location label | — |
-| [ ] | Slot scanner — enumerate `gameXX.sav` + extract header metadata | — |
-| [ ] | Save flow from in-game menu (slot picker + overwrite confirm) | — |
-| [ ] | Load flow from main menu and from death pane | — |
-| [ ] | Delete-slot action with confirm | — |
+| [x] | Load and save dialogs on `TDefPane` (`TLoadGamePane`, `TSaveGamePane`): retail slot list, thumbnail, name / module / character, name edit ([forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §5–6) | 2026-10-05 |
+| [x] | Slot list: retail `RefreshSlots` (`<SaveGamePath>/Single/<name>/game.sav`, T5) | 2026-10-04 |
+| [x] | Save flow from the in-game menu and the Save Game control (retail has no overwrite confirmation) | 2026-10-05 |
+| [x] | Load flow from the title, the in-game menu, the Load Game control and the death screen | 2026-10-05 |
+| [-] | Delete-slot action with confirm — not in retail (PopupDef_SPEC §13a.6) | 2026-10-05 |
+| [ ] | The in-game load's "loadingmap" progress popup (needs an in-game load staged across frames in the session) | — |
 
 **Exit:** Slot UI works from main menu, in-game menu, and death pane.
 
@@ -156,7 +158,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Retail death countdown (192 frames, TPlayer::Animate 0x00518aa0) -> `GameFlow.PlayerDied()` | 2026-10-04 (64c0f25) |
 | [x] | Retail `TDeathScreen` + `TDeathPane` (Restart / Load / Exit, death voice) | 2026-10-04 (64c0f25) |
 | [ ] | Restart semantics after a loaded game (author question 40) | — |
-| [ ] | Death "Load" -> load-game screen | — |
+| [x] | Death "Load" -> Load Game screen (retail 0x00533970) | 2026-10-05 |
 | [x] | Death voices audible (MP3 voice support in the sound player; `gosar00` stays missing, as in retail) | 2026-10-05 |
 
 **Exit:** Player dies → death pane shows → restart/load resumes.

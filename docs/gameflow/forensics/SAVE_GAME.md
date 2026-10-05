@@ -139,7 +139,9 @@ Sequence (flags & 2 clear):
 6. Fail if no players. **SetCurModule** by the header's module name
    (`0x00460d60` find, `0x004609f0` set; a no-op when already active).
 7. `SetGameTime(header time)` (`0x0047e950`), `_DAT_0065cb40 = 1`
-   (*unidentified*), `SetControl(on)`, `loading = 0`.
+   (PlayScreen `0x0065caf0` `+0x50`, TScreen's dirty flag: redraw
+   everything; [INGAME_MENU.md](INGAME_MENU.md) §3), `SetControl(on)`,
+   `loading = 0`.
 
 `LoadGame` does **not** load sectors or place the player in a sector.
 `TPlayScreen::Initialize` does that afterwards: it loads the sectors
@@ -312,9 +314,13 @@ the order differs it searches every class stat. When object flag
     rewrites the module's `newgame.sav`. *Thumbnail ported in 2f*
     (§11.7): `TSaveGame::CaptureThumbnail` reads back the next presented
     frame into `<SavePath>/ss.bmp` (retail `.\ss.bmp`); quick save calls
-    it, the in-game menu and save dialog must call it when they open
-    (retail `0x0047cb52`, `0x0047dc05`); a save with no thumbnail captured
-    since the last one captures its own.
+    it, and so do ESC before the in-game menu opens and the Save Game
+    command before its dialog (retail `0x0047cb52`, `0x0047dc05`; the
+    menu opens once the frame without it has been read back,
+    INGAME_MENU.md §10); a save with no thumbnail captured since the last
+    one captures its own. The load and save dialogs read a slot's
+    thumbnail back with retail's 24-bit `LoadBMP` path
+    (`TSaveGame::ReadThumbnail`).
 12. **Stat layout.** The port's CHARACTER and PLAYER object stats were
     in the 1998 order (level at index 6; damage resistances, NextExp,
     the modifiers, skill next-exp and caps appended from class.def;
