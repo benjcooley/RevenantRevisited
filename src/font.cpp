@@ -485,3 +485,58 @@ void DrawTextShadowedToTarget(const SFontAtlas* atlas, const char* text,
     DrawGlyphRun(atlas, text, penX,        baselineY + 1.0f, 0, 0, 0, target_w, target_h);
     DrawGlyphRunDoubled(atlas, text, penX,  baselineY,        r, g, b, target_w, target_h);
 }
+
+int32_t WrapTextLines(const SFontAtlas* atlas, const char* text, float wrapWidth,
+                      std::vector<std::string>& lines)
+{
+    const size_t first = lines.size();
+    // Control characters other than '\n' measure as spaces (the atlas holds
+    // printable glyphs only).
+    std::string src(text ? text : "");
+    for (char& c : src)
+        if ((unsigned char)c < ' ' && c != '\n')
+            c = ' ';
+
+    std::string line;
+    float lineW = 0.0f;
+    const char* p = src.c_str();
+    for (;;)
+    {
+        const char* gapStart = p;
+        while (*p == ' ')
+            ++p;
+        const std::string gap(gapStart, p);
+        const char* wordStart = p;
+        while (*p && *p != ' ' && *p != '\n')
+            ++p;
+        if (p > wordStart)
+        {
+            const std::string word(wordStart, p);
+            const float wordW = TextWidth(atlas, word.c_str());
+            float gapW = line.empty() ? 0.0f : TextWidth(atlas, gap.c_str());
+            if (!line.empty() && lineW + gapW + wordW > wrapWidth)
+            {
+                lines.push_back(line);
+                line.clear();
+                lineW = gapW = 0.0f;
+            }
+            if (!line.empty())
+                line += gap;
+            line += word;
+            lineW += gapW + wordW;
+        }
+        if (*p == '\n')
+        {
+            lines.push_back(line);
+            line.clear();
+            lineW = 0.0f;
+            ++p;
+            continue;
+        }
+        if (!*p)
+            break;
+    }
+    if (!line.empty() || lines.size() == first)
+        lines.push_back(line);
+    return (int32_t)(lines.size() - first);
+}

@@ -439,19 +439,54 @@ with the texts centred vertically. Mode 3 creates one button per choice
 (`0x0042c600`, **name = the choice label**, flags 0x100010, rect = the
 text rect) and registers it with the pane. Then `Render` `0x00534470`
 draws, into the surfaces: the speaker's portrait
-(`TObjectInstance::InventoryImage` vtable 0x130, `0x0046f190`) centred at
-(22, 22), the `"Ring"` bitmap over it, and the texts in the text colour
-(`NoTexOverlay`: also a white copy in +0x4c). **C**
+(`TObjectInstance::InventoryImage` vtable 0x130, `0x0046f190`, which falls
+back to the state-0 icon, `0x0040ce60`) centred at (22, 22) with
+`DM_TRANSPARENT`, then the texts with the 3-pass black shadow (`0x004be2b0`,
+format flags 0x401: left, shadow), then the `"Ring"` bitmap over the
+portrait with `DM_ALPHA` (`0x2000`). `NoTexOverlay` off: the texts are
+drawn **white** into one surface (+0x48) and take their colour when drawn
+(below). `NoTexOverlay` on: the texts are drawn in the text colour into
++0x48 and in the highlight colour into +0x4c. **C**
 
-Colours (bytes `[0],[1],[2]` as stored; decoded with the UI track's
-convention `[0] = R`,
-[UI_METHOD_MAP §6](../../ui/forensics/UI_METHOD_MAP.md)): player speech and choices
-`ff af 3c` → RGB(255,175,60) gold; NPC speech by speaker slot, a 16-entry
-round-robin table `0x0066f6f8` (counter `0x0066f73c`, first new speaker
-gets slot 1), colour = slot & 3: 0 `00 00 ff`, 1 `00 ff 00`, 2 `00 ff ff`,
-3 `ff ff 00`; highlight `ff ff ff`. **C** for the bytes, **I** for the
-decode — one retail screenshot of the opening settles it. The 1998 pane
-used a fixed red choice highlight and blue/red over-head text.
+The Ring is `"Ring"` in the archive at `0x0065a9d0`, loaded by
+`TPlayScreen::Initialize` (`0x0047a8f2..0x0047a917`): `StatusBarNoTex.dat`
+when `NoTexOverlay` is on, else `StatusBar.dat` (its bitmaps are a texture
+format, flags 0x10000). The status bar uses the same archive. The font is the
+font table's `"Dialog"` (`0x00485e01`: `0x0065c134`), `font.def`:
+`WINFONT "Dialog" FONT "Times New Roman" 20 COLOR 50 180 255`; a line is
+the font's height plus `LEXTRA` (font +0x50 + +0x54), 20 px. **C**
+
+Drawing (`DrawOverlay` `0x00534b60`, `NoTexOverlay` off), per frame, each
+placed entry: alpha = fade × 255 / 12; the portrait column (surface x 0..49)
+as a D3D quad with diffuse `alpha << 24 | 0xffffff`; the text part (x
+50..399) with diffuse `alpha << 24 | [2] << 16 | [1] << 8 | [0]` (the text
+colour's bytes); then each choice whose button is still there, with
+highlight h > 0, its text rect again with diffuse `(h × 255 / 8) × alpha /
+255 << 24 |` the highlight colour. The quads go through `0x00414d70` →
+`0x00414550` (`DrawIndexedPrimitive`, vertex format 0x1c4 = XYZRHW |
+DIFFUSE | SPECULAR | TEX1). **C**
+
+Colours (bytes `[0],[1],[2]` as stored): player speech and choices
+`ff af 3c` (the dword `0x003cafff`; `ShowResponses` builds it with
+`0x00429950(0x3c, 0xaf, 0xff)`, which stores its first argument in byte 2);
+NPC speech by speaker slot, a 16-entry round-robin table `0x0066f6f8`
+(counter `0x0066f73c`, first new speaker gets slot 1), colour = slot & 3:
+0 `00 00 ff`, 1 `00 ff 00`, 2 `00 ff ff`, 3 `ff ff 00`; highlight
+`ff ff ff`. **C**
+
+Decode: **byte 2 is red.** Both draw paths read it so: the overlay quad's
+D3D diffuse (a `D3DCOLOR`, 0xAARRGGBB) puts byte 2 in the red bits (above),
+and the GDI text path builds its `COLORREF` (0x00BBGGRR) as `[0] << 16 |
+[1] << 8 | [2]` (`0x004be7ba..0x004be7d2`, colour argument at `[ESP+0x334]`).
+So the player and the choices are **RGB(60,175,255), a light azure** — near
+`font.def`'s own `"Dialog"` colour (50,180,255) — and the NPC slots are
+0 red (255,0,0), 1 green (0,255,0), 2 yellow (255,255,0), 3 cyan
+(0,255,255). The first NPC to speak in a session is green, the second
+yellow. **C** (code); one retail screenshot of the opening confirms it.
+This replaces the earlier "gold" reading, which took the UI track's
+`[0] = R` convention ([UI_METHOD_MAP §6](../../ui/forensics/UI_METHOD_MAP.md));
+that convention is wrong for these colour dwords. The 1998 pane used a
+fixed red choice highlight and blue/red over-head text.
 
 ### 4.3 Methods
 
@@ -485,8 +520,8 @@ remove buttons). **C**
 
 | | Retail | Conf. |
 |---|---|---|
-| x | `(MapPane.w (0x006668e4) − pane 0x0065be50.w (0x0065be5c) − 400) / 2` — centred in the map width less the right-hand pane | C (pane identity I) |
-| NPC stack (mode 1) | top = pane `0x0065a8c0`.y + .h + 10; entries downward, 5 px apart | C |
+| x | `(MapPane.w (0x006668e4) − SideTabs.w (0x0065be5c) − 400) / 2` — centred in the map width less the side tabs (`0x0065be50`: "Trouble initializing SideTabs pane", `0x0047ab52`; right-anchored inside the map view, `0x0053cc30`) | C |
+| NPC stack (mode 1) | top = `TPlyrStatusBar` (`0x0065a8c0`, vtable `0x5a54e4`; static rect y 0, h 0x70, `0x00480663`).y + .h + 10 = 122; entries downward, 5 px apart | C |
 | player + responses (modes 2, 3) | bottom = MapPane.y + MapPane.h − 50; entries upward, 5 px apart, oldest on top | C |
 | order | creation order; dismissed entries keep their place while fading | C |
 | new entry | appears at its slot (no slide) | C |
@@ -495,9 +530,25 @@ remove buttons). **C**
 | speech lifetime | `ticks` from `Say` (same count as the action's `wait`) | C |
 | choice highlight | 8 ticks toward white while hovered | C |
 | `NoTexOverlay` on | no fade or highlight ramp: drawn while the target is shown, highlight swaps to the white surface | C |
+| slide | target set by the layout; 16.16 position stepped by (target − offset) / 12 each entry pulse, clamped at the target (`0x005348f0`) | C |
+| buttons | each pulse the entry moves its choice buttons to base + offset + text rect | C |
 
 The port converts these to time (½ s fade/slide, ⅓ s highlight,
 lifetimes in seconds), per the frame-rate-independent animation rule.
+
+Hover and keys (retail `TButtonPane`, which `TDialogPane` derives from —
+buttons at +0x88/+0x98, base calls `0x00435de0`/`0x00435d70`/`0x004361f0`):
+
+| | Retail | Conf. |
+|---|---|---|
+| hover tracking | `Initialize` sets pane flag 2: the button under the pointer takes the hover (button flag 8, only buttons with flag 0x10, which the choice buttons have), `0x00436660` → `0x004369f0` | C |
+| hover sound | `"frontend_move"` whenever the hover is asked to move to another button (`0x004369f0`) | C |
+| control off | `Pulse` sets pane flags 4 \| 8 while the player has no control (a response wait), clears them otherwise | C |
+| flag 4 | the hover stays when the pointer leaves every button | C |
+| flag 8 | arrows move the hover (Up/Left back, Down/Right on, wrapping; from the last button when none is hovered); Enter presses the hovered button, or the last one (`0x004361f0`) | C |
+| click | left down on a button: it takes the hover and is pressed (captured); left up over it: `"click1"`, then `OnControl(button, 3000)` (`0x00436530`, `0x0042d4b0`) | C |
+| Enter | presses on key down: `"click1"` and `OnControl(…, 3000)` (`0x0042d390`) | C |
+| KeyPress | `TDialogPane::KeyPress` handles Space and 1–6, then (except a taken 1–6) calls the base, so Enter and the arrows work while choosing | C |
 
 ### 4.5 From a click to the chosen response
 
@@ -575,7 +626,7 @@ lifetimes in seconds), per the frame-rate-independent animation rule.
 
 | File | Today | Gap to retail |
 |---|---|---|
-| `src/dialog.{h,cpp}` | Retail `TDialogList` (base + module tables, steps 1). Retail pane runtime (step 5): `TDialogEntry` (mode, speaker, texts, lifetime, fade, placed), `TDialogPane` entry manager (`AddChoice`, `ShowResponses`, `AddSpeech`, `SkipSpeech`, `ClearResponses`, `ClearSpeech`, `ResetForLoad`, `Pulse` commit, keys Space/1–6/joystick); retail `choice`. Bounded `DialogLine` (substitution kept, see §3.7). | layout, drawing, choice buttons (presentation, in progress). `ClearSpeech` runs when the camera leaves the player (`TMapPane::CenterOnObj/CenterOnPos`, retail `0x004538d0`/`0x00453940`) and `ResetForLoad` from `LoadGame`; still to wire: `fadescreenout` (not ported) and player setup `0x00518570` |
+| `src/dialog.{h,cpp}` | Retail `TDialogList` (base + module tables, steps 1). Retail pane runtime (step 5): `TDialogEntry` (mode, speaker, texts, lifetime, fade), `TDialogPane` entry manager (`AddChoice`, `ShowResponses`, `AddSpeech`, `SkipSpeech`, `ClearResponses`, `ClearSpeech`, `ResetForLoad`, `Pulse` commit, keys Space/1–6/joystick); retail `choice`. Bounded `DialogLine` (substitution kept, see §3.7). The pane drawn (see "The pane drawn in the port" below): layout, slides, wrap, portrait + Ring, colours, fades, choice buttons with hover, click, arrows/Enter. `ClearSpeech` runs when the camera leaves the player (`TMapPane::CenterOnObj/CenterOnPos`, retail `0x004538d0`/`0x00453940`) and `ResetForLoad` from `LoadGame` | still to wire: `fadescreenout` (not ported) and player setup `0x00518570` |
 | `src/script.cpp` | `SetWait` opens the responses (§2.3); the response wait takes the committed pick (§2.4); type 8 = the speaker idle in its root state (§2.5); taken flag 4, `AddChoice`, `End` (§2.6); `Continue` stops after any line that leaves the script waiting | busy fields + deferred say (MP); the MP choice list |
 | `src/command.cpp` | Retail `say` (§1.1): grammar, voice via the tag, caller's speech wait, result 0; `wait` response forms through `SetWait`; `say choice` reads the last pick | `message` (text bar), `busysay`/`busymsg` (stored on the script; their consumer `TScript::Busy` is multiplayer, not ported; retail's `&=` on the taken flags not copied). `hideresponse` answers "unrecognized": it closes PlayScreen's bottom drawer, which isn't ported, and no shipped script uses it. Prototype variables in text parts. |
 | `src/character.cpp` | Retail `Say`/`SayIndex`/`SayTag` (§3.1–3.2): unpositioned voice, voice-length or text-length durations, line to the pane; `StopTalking` (voice stopped, action ended); retail `ResolveSay` | deviations: the voice paces even with sound output off (retail paced by text); the action is set desired rather than `TryCommand`ed (the port's `TryCommand` drops a block it can't start) |
@@ -671,6 +722,58 @@ Deviations (`REVSYNC-DIVERGENCE` in the code):
   init in engine init `0x00485870`, the module later). The list is sorted
   after each step, so the result is the same.
 
+### The pane drawn in the port (2026-10-05)
+
+| Retail | Port |
+|---|---|
+| `TDialogPane : TButtonPane` | `TDialogPane : TButtonPane`; `TButtonPane` gained retail's `OnControl(button, msg)` (3000 = pressed), the hover (`SetHover`, pane flags `BPF_HOVER`/`BPF_KEEPHOVER`/`BPF_KEYFOCUS` = +0x60 bits 2/4/8), arrows/Enter, `"click1"` / `"frontend_move"`, `DeleteButton` |
+| Entry ctor `0x00533f10`: wrap, rects, min height, buttons | `TDialogEntry` ctor; `WrapTextLines` (font.cpp) for `0x004acb80`; one hoverable `TButton` per choice named by its label |
+| Pane pulse `0x005351d0` layout | `TDialogPane::LayOut`, `TDialogEntry::MoveTo` (place, or 12-step 16.16 slide) |
+| Entry pulse `0x005348f0` | `TDialogEntry::Pulse`: lifetime, slide, fade, highlight, buttons follow |
+| Render `0x00534470` | `TDialogEntry::Compose`, from `TDialogPane::Compose` (the screen's compose phase): portrait, white shadowed text (`DrawTextShadowedToTarget`), Ring, into a 400 × h render target |
+| DrawOverlay `0x00534b60` | `TDialogEntry::Draw`, from `TDialogPane::Draw` in the screen's HUD layer: `Renderer->DrawSurfaceSubrectTinted` per column / choice |
+| `OnControl` `0x005362b0` | `TDialogPane::OnControl` |
+| Mouse: `TScreen` → pane → button | `TPlayScreen::MouseClick`/`MouseMove` → `TScreen` → `TDialogPane` (`TButtonPane::MouseClick`/`MouseMove`) |
+| `InventoryImage` with the state-0 icon fallback `0x0040ce60` | `TDialogEntry::Portrait`: `InventoryImage()`, else the imagery's state-0 icon (deviation below) |
+
+Deviations (`REVSYNC`-noted in the code where they live):
+
+- **Overlay path only.** The port draws what retail draws with
+  `NoTexOverlay` off (fades, tinted text, ramped highlight); the ini switch
+  isn't read.
+- **Ring from `StatusBarNoTex.dat`.** With `NoTexOverlay` off retail takes
+  the Ring from `StatusBar.dat`, whose bitmaps are a texture format the
+  port doesn't decode (flags 0x10000); the HUD status bar already uses the
+  NoTex archive. Same name and size (44 × 44); the texture variant's pixels
+  are unverified.
+- **Font:** Times New Roman 20 is drawn with Tinos 20 (its metric-compatible
+  open sibling of Arimo), antialiased, through the canonical glyph walk.
+  Retail's GDI text was aliased; the chroma-key fringe is not reproduced.
+- **Time-based drawing.** Fades, slides and highlights step per tick as
+  retail's do; each frame draws them `TTime::LegacyFrameFraction()` of the
+  way into the next step. Slide positions round from that continuous value.
+- **Layout inputs.** The map view is `TPlayScreen::GetMapViewRect` (the
+  playfield the world renders into, inside the HUD's side and bottom
+  panels). The status bar's bottom (0x70) and the side tabs' width (52) are
+  constants until those panes are in the screen's tree.
+- **The pane covers the map view** (resized in its pulse) so the choice
+  buttons hit-test there.
+- **Portrait fallback at the call site.** Retail's imagery getter
+  (`0x0040ce60`) returns the state-0 icon when the current state has none,
+  so `InventoryImage` shows a character's portrait in any state. The port's
+  `T3DImagery::GetInvImage` doesn't, and can't simply start to: the port's
+  `TObjectInstance::IsInventoryItem` is "has an inventory image", so NPCs
+  would become pick-up targets in every state. The dialog takes the state-0
+  icon itself until `IsInventoryItem` follows retail.
+- **Speaker colour slots by map index**; retail compares object pointers.
+- **Hover asks only hoverable buttons.** Retail offers the hover to every
+  button under the pointer (non-hoverable ones refuse it but the sound
+  still plays).
+- **Draw order:** the screen's pane layer draws at HUD z 100, over the HUD
+  panels that still draw as their own HUD drawables (z 0–10) and under the
+  cursor. When retail's `DrawEntriesOverlay` (vtable slot 7) runs relative
+  to the 2D panes is not pinned down.
+
 ## 7. Open questions (author)
 
 1. Was the floating speech-box design (NPC lines top, Locke's lines and
@@ -691,6 +794,9 @@ Deviations (`REVSYNC-DIVERGENCE` in the code):
    in `Revenant.exe`; Space and `JOY2` are hard-coded. From another
    build or the launcher?
 8. Eight choices stored, keys reach six — was eight ever used?
+9. While choosing, retail keeps the last hovered choice lit when the
+   pointer leaves the list (pane flag 4), and the arrows and Enter pick
+   (flag 8). Intended, or a side effect of the control-off flags?
 
 ## 8. Retail hazards (decide in the port, don't copy blindly)
 
