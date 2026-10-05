@@ -18,6 +18,7 @@
 #include "sector.h"
 #include "textbar.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <iterator>
@@ -29,10 +30,21 @@
 // reads exit.def) 215; the game load and effect imagery 240; the sectors
 // around the player fill the rest.
 const TGameSession::SStep TGameSession::kLoadSteps[] = {
-    { "areas", &TGameSession::LoadAreas,     165 },
-    { "exits", &TGameSession::LoadExits,     215 },
-    { "game",  &TGameSession::LoadGameState, 240 },
-    { "world", &TGameSession::EnterWorld,    1000 },
+    { "areas", &TGameSession::LoadAreas,       0,  165 },
+    { "exits", &TGameSession::LoadExits,     165,  215 },
+    { "game",  &TGameSession::LoadGameState, 215,  240 },
+    { "world", &TGameSession::EnterWorld,    240, 1000 },
+};
+
+// REVSYNC: the load dialog's in-game load (0x00539590): LoadGame, the bar at
+// 80, then the sectors around the player with the bar at progress x 800 /
+// 1000 (callback 0x00539990), which starts under the 80 already drawn
+// (INGAME_MENU.md §5.1). The areas and exits stay: retail's LoadGame leaves
+// every area (in the game step's reset) but doesn't read area.def or
+// exit.def again.
+const TGameSession::SStep TGameSession::kGameLoadSteps[] = {
+    { "game",  &TGameSession::LoadGameState, 0,  80 },
+    { "world", &TGameSession::EnterWorld,    0, 800 },
 };
 
 namespace {
@@ -61,8 +73,16 @@ TGameMap* LoadSlice(int32_t level)
 
 void TGameSession::Start(const SSessionStart& request)
 {
+    Begin(request, kLoadSteps, (int32_t)std::size(kLoadSteps));
+}
+
+void TGameSession::Begin(const SSessionStart& request, const SStep* plan, int32_t planSteps)
+{
     start    = request;
+    steps    = plan;
+    numSteps = planSteps;
     nextStep = 0;
+    stepFraction = 0.0f;
     state    = EState::Loading;
     levelLoading = false;
 
@@ -77,7 +97,7 @@ bool TGameSession::Step()
     if (state != EState::Loading)
         return false;
 
-    const SStep& step = kLoadSteps[nextStep];
+    const SStep& step = steps[nextStep];
     switch ((this->*step.run)())
     {
       case EStep::Failed:
@@ -91,7 +111,7 @@ bool TGameSession::Step()
     }
 
     stepFraction = 0.0f;
-    if (++nextStep == (int32_t)std::size(kLoadSteps))
+    if (++nextStep == numSteps)
     {
         state = EState::Ready;
         return false;
@@ -99,15 +119,19 @@ bool TGameSession::Step()
     return true;
 }
 
+// Retail's bars only grew: a step that starts under the last one's end
+// reports that end until it passes it.
 int32_t TGameSession::Progress() const
 {
     switch (state)
     {
-    case EState::Ready:   return 1000;
+    case EState::Ready:   return steps[numSteps - 1].to;
     case EState::Loading:
     {
-        const int32_t done = nextStep > 0 ? kLoadSteps[nextStep - 1].progress : 0;
-        return done + static_cast<int32_t>((kLoadSteps[nextStep].progress - done) * stepFraction);
+        const int32_t done = nextStep > 0 ? steps[nextStep - 1].to : 0;
+        const SStep&  step = steps[nextStep];
+        const int32_t now  = step.from + static_cast<int32_t>((step.to - step.from) * stepFraction);
+        return (std::max)(done, now);
     }
     default:              return 0;
     }
@@ -355,9 +379,15 @@ void TGameSession::RequestReloadLastSlot()
 }
 
 // REVSYNC: request handling in the PlayScreen frame (0x0047bfab..0x0047c0b8):
-// a pending load, then a pending save. Retail announced each on the text bar.
+// a pending load, then a pending save. Retail announced each on the text bar
+// and loaded synchronously; here a load starts and runs a step a tick, the
+// PlayScreen holding the world (TPlayScreen::Update), so a pending save
+// waits for the next tick that isn't loading.
 void TGameSession::ProcessRequests()
 {
+    if (state == EState::Loading)
+        return;
+
     if (!pendingLoad.empty())
     {
         const std::string slot = std::exchange(pendingLoad, {});
@@ -371,9 +401,8 @@ void TGameSession::ProcessRequests()
             SSessionStart load;
             load.kind = SSessionStart::EKind::LoadSlot;
             load.slot = slot;
-            Start(load);
-            while (Step())
-                ;
+            Begin(load, kGameLoadSteps, (int32_t)std::size(kGameLoadSteps));
+            return;
         }
     }
 

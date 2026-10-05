@@ -207,6 +207,23 @@ death, quit).
   `TLoadScreen`, which runs one step per frame and draws the loading bar
   with retail's increments (forensics: `0x00448680` calls in
   `PlayScreen::Initialize`). No API change between the two.
+- **A load during play is staged too.** `ProcessRequests` starts it with
+  its own step list (the save, then the level: retail's in-game load has
+  no area or exit reload) and the progress scale of the load dialog's
+  popup (80, then the sectors to 800). `TPlayScreen::StepGameLoad` runs a
+  step a tick while `Loading()`, as it runs `EnterLevel` while
+  `LevelLoading()`: the world doesn't tick, render or take input, requests
+  wait, and a still of the frame's world and HUD panels (captured under
+  the pane tree) stands in for them; the panes stay live over it.
+  Retail did all of it synchronously, the screen standing still
+  (forensics/INGAME_MENU.md §5.1). What the hold covers: the game step's
+  reset (`TSaveGame::ResetWorld`) replaces `curmap` and unloads every
+  level, ends the conversation, clears the shop, resets the scripts,
+  leaves the areas and deletes the players; the save then makes a new
+  player outside any sector. Until the world step has loaded his level,
+  put him in his sector and centred the camera, there is no world to
+  tick, draw or click, and a HUD refresh would read that half-placed
+  player.
 - **Presenters follow `TMapManager::CurrentMapChanged`** to rebind after
   a load or level change; it is the existing "the world was replaced"
   signal, so the session adds none of its own.
@@ -484,7 +501,7 @@ perform.
 | Retail | Port | Why | Behavior impact |
 |---|---|---|---|
 | Re-entrant frame loop for modals (`RunModal`, `TimerLoop(1)`) | Modal stack + completion continuations | sokol owns the outer loop | none |
-| In-game dialogs load and save inside their button handler; the load behind a "loadingmap" progress popup | the dialog's host hands the slot to `TGameSession::RequestLoad` / `RequestSave`, carried out at the start of the next tick | one owner of the world's replacement | no progress popup during an in-game load (forensics/INGAME_MENU.md §10) |
+| In-game dialogs load and save inside their button handler; the load behind a "loadingmap" progress popup | the dialog's host hands the slot to `TGameSession::RequestLoad` / `RequestSave`, carried out at the start of the next tick; the load stages a step a tick behind a still of the world, under the same popup | one owner of the world's replacement; no frame drawn of a half-replaced world | the load starts a frame later; the panes over the still stay live (forensics/INGAME_MENU.md §10) |
 | DEF dialogs branch on a from-game flag (load: start mode or in-place load; exit: close or switch screens) | the host decides through the pane's activation handler / modal completion | panes don't switch screens | none |
 | World lives in `TPlayScreen` | `TGameSession` owned by `TGameFlow` | overlays, loads and movies don't rebuild the screen; testable | none |
 | Loading bar repainted inside one long frame | Staged session load across frames | no re-entrant loop | bar animates the same |

@@ -220,16 +220,56 @@ screen (`0x00533970`), the last two through the Load Game screen (§8).
   - event 3000 `loadgame` with a slot selected: result 1;
     `SetStartMode(1, current module, slot)`. From the title: Load Game
     screen's next = PlayScreen, close request (the PlayScreen loads it in
-    `Initialize`, behind the loading bar). In game: hide the cursor, draw a
-    frame, popup progress `loadingmap` (§9), `LoadGame` the slot, bar 80,
-    load the sectors around the player with the bar running to 800,
-    close the popup, refresh the map pane (`DAT_006669b0 |= 8`,
-    `0x00454390`, `0x00458750(1)`; *inferred*), `SetControl(1)`, fade in,
-    restore the cursor, close the pane.
+    `Initialize`, behind the loading bar). In game: the load in §5.1,
+    then the pane closes.
   - event 3000 `exit`: result 0; in game close the pane; from the title
     the Load Game screen's next = the title, close request.
 - **Field getters**: `0x00539470` answers `gamelist_name` (row *n*: slot
   *n*'s name); `0x00539550` answers `picture` with the thumbnail bitmap.
+
+### 5.1 The in-game load
+
+`0x00539590` event 3000 `loadgame`, from the game, after
+`SetStartMode(1, module, slot)` (`0x0047f4c0`, recorded for a later
+`Initialize`). Everything runs inside the button's handler; the frame loop
+turns only where noted.
+
+1. `0x0043a020(0)`: no cursor bitmap.
+2. `TimerLoop(1)` (`0x004911b0`): one frame — the world, the HUD and the
+   load dialog, without the cursor.
+3. `0x0053c1d0("loadingmap")` (§9): the progress popup opens and fades in;
+   frames run until it is in, and one more.
+4. `0x0048e5b0(slot, 0)`: `LoadGame` (SAVE_GAME.md §4). No frame runs; the
+   screen keeps showing the last one.
+5. `0x0053c3d0(0x50)`: the bar to 80.
+6. With sector preloading on (`DAT_005d7a30`) and a player
+   (`DAT_00667fcc`): `0x004997d0(player pos +0x10, level +0xe,
+   0x00539990)` loads the sectors around the player (`0x004998b0`,
+   `PreloadSectorSize` across); its callback sets the bar to
+   `progress × 800 / 1000`. The bar is drawn cumulatively (§9), so it
+   stays at 80 until the sectors pass it.
+7. `0x0053c3d0(800)`, then `0x0053c360`: the popup fades out (frames run:
+   the new world, the HUD and the load dialog under the fading popup)
+   and closes.
+8. The map pane: centre-on flag 8 (`DAT_006669b0 = MapPane +0xd8`: jump
+   at the next update), `0x00454390` (scroll position and sector update),
+   `0x00458750(1)` (full redraw).
+9. `0x0047c580(1)`: control on.
+10. The PlayScreen's fade-in slot (`DAT_0065cb30` = PlayScreen `+0x40`,
+    vtable `+0x28`, `0x00491bf0`): nothing unless the screen was faded
+    out.
+11. `0x0043a020("cursor")`: the game cursor.
+12. The side tabs pane (`0x0065be50`): `+0x48`/`+0x4c` cleared and its
+    redraw slot (`+0x28`) called — as the PlayScreen pulse does for every
+    HUD pane on a drawer change.
+13. The pane's own close (vtable `+8`, `0x00539440`), not the fading close
+    slot: the dialog goes at once, with result 1, and the menu loop
+    returns (§3).
+
+The frame's request load (`0x0047bfab`, console `loadgame`, `newgame`)
+is the other in-game path: "Loading Game %s... Please Wait"
+(`loadgamefmt`) on the text bar, `LoadGame`, control on; no popup, and the
+sectors come in through the map pane's sector update.
 
 ## 6. The save dialog
 
@@ -309,8 +349,26 @@ Yes/No, alpha chrome. Texts (`english.def`): QUITGAMEYN "\nAre you sure
 you want to quit the current module?", EXITGAMEYN "\nAre you sure you want
 to exit the game and return to Windows?".
 
-The progress popup (`0x0053c1d0` / `0x0053c3d0` / `0x0053c360`, panel
-`progress`) is used only by the in-game load (§5).
+The progress popup (§5.1) is its own instance (`0x0066ff10`), used only
+by the in-game load:
+
+- **Open** `0x0053c1d0(key)`: a 280×24 bar strip (`0x004a1ec0`, the
+  display's format) cleared to the transparent key colour; the message
+  `DialogList.GetLine(key)` (`0x0049d800`; `loadingmap` = "The game is
+  loading map graphics, characters, and animations... Please Wait.");
+  `DefScreen_Open("popup", "progress", 0x11, …, 129, 122, 398, 212, …)`;
+  `AddPane` and `SetExclusivePane(pane, 7)` (`0x0048ed90`, `0x0048eea0`)
+  — not `RunModal`, so the enclosing dialog's flags are **not** added
+  (`0x0048f040` ORs them in; `0x0048eea0` doesn't) and the world pulses
+  under the popup; then frames until the fade is in, plus one.
+- **Progress** `0x0053c3d0(n)`: a rectangle `n × 280 / 1000` wide in
+  colour `0x00429950(0xaa, 0, 0)` (RGB 170, 0, 0) filled into the strip —
+  never cleared, so the bar only grows — blitted with the key colour
+  transparent (`0x004bd680`, mode `0x100`) at the `progress` widget's
+  place (panel 49, 126) and the display flipped (`0x004a9ee0`); the widget
+  is marked for redraw.
+- **Close** `0x0053c360`: the fading close slot (`0x00435010`), frames
+  until it is out, plus one; the strip is freed.
 
 ## 10. Port (2026-10-05)
 
@@ -327,7 +385,10 @@ The progress popup (`0x0053c1d0` / `0x0053c3d0` / `0x0053c360`, panel
 | modal flags `0xf` | `TScreen::MODAL_*` carry retail's bits and each pass honours its bit; `TPlayScreen::Update` stops the world (mode tick, level entry, areas, game clock) under `MODAL_PAUSE`; mouse and keys go to the modal only, the HUD and the control map get none |
 | DEF flags `0x01`, `0x10` | `TDefPane::Open(def, panel, flags, rect, datBase)`: `tex` / `alpha` chrome for the screen and the widget pack; the fade, time-based at the pulse rate; `Finish(result)` ends the modal after the fade-out |
 | DEF widget behaviour the dialogs use | retail events as virtuals (`OnOpened` = 1, `OnActivate` = 3000, `OnListSelect` = 5000, `OnKey`, `DrawField`); button keys (own, Enter for ok/yes, ESC for cancel/no) firing on key-down; the `click1` sound on a DEF button; EDIT text from character events, Backspace, Enter ends editing, a press outside ends it; the VLIST list's scrollbar (arrows, page, thumb); word-wrapped TEXT and `TEXT_ELIPSES` |
-| in-game Load: synchronous load + `loadingmap` popup | the host hands the slot to `GameFlow.Session().RequestLoad` (next tick) — see deviations |
+| in-game Load (§5.1) | `TInGameMenu::BeginLoad`: no cursor; the `loadingmap` popup (`TPopupPane::OpenProgress`, pushed with exactly `MODAL_INPUT` through `TScreen::PushExclusive`); once it is in, `GameFlow.Session().RequestLoad(slot)`. The session runs the load a step a tick (`LoadGameState` to 80, `EnterWorld` to 800 at `progress × 800`); `TPlayScreen::StepGameLoad` holds the world and draws a still behind it (below), feeding `LoadProgress`; then `LoadFinished`: bar at 800, the popup fades out over the live new world, `EndLoad`: camera jump (`MapPane.SnapIfFollowing`), control on, the screen's fade-in, the game cursor, the dialog ends at once with result 1 |
+| the screen standing still while `LoadGame` runs | `TPlayScreen::StepGameLoad`: the first tick asks for a capture of the frame's layers under the pane tree (`Display.RequestCapture(…, TScreen::kPaneLayerZ)`: the world and the HUD panels, without the panes and the cursor); the still goes up as a renderer HUD layer at z 50 (over the HUD panels, under the pane tree); then each tick runs one session step. While the still is up the world doesn't tick, render or take input, the HUD panels aren't refreshed, and save / load requests wait; the panes (text bar, dialog pane, the load dialog, the popup) keep drawing live over it |
+| the progress popup (§9) | `TPopupPane::OpenProgress` / `SetProgress` (the bar never shrinks) / `CloseProgress`; the `progress` BITMAP field is the bar, drawn in the popup's compose |
+| request loads (console, F9, `--savecycle-test`) | the same staged load behind the still, without a popup |
 | in-game Save: `SaveGame` at once | the host hands the name to `GameFlow.Session().RequestSave` (next tick) |
 | Load Game / Options screens | `TLoadGameScreen` (with its fader) / `TOptionsScreen` (`src/menuscreens.*`), entered through `GameFlow.ShowLoadGameScreen()` (title, death) / `ShowOptionsScreen()`; a title load goes through `GameFlow.LoadGame(slot)` and the loading screen; Exit through `GameFlow.ReturnToTitle()` |
 | samples paused under the menu | `TSoundPlayer::PauseSamples` / `ResumeSamples`: every playing sound and duplicate stops where it is and starts again; music keeps playing; a paused sound counts as playing, so the dying-sound collector keeps it |
@@ -341,11 +402,20 @@ EDIT fields.
 
 **Deviations**
 
-- The in-game load runs through the session's deferred request: the world
-  is replaced at the start of the next tick, synchronously, without the
-  `loadingmap` progress popup and its bar. Staging an in-game load across
-  frames (as the title load does behind `TLoadScreen`) is session work
-  (ARCHITECTURE §3), not done here.
+- The in-game load runs a step a tick instead of in one call. The world
+  and the HUD panels stand still as in retail (a still of them); the panes
+  over them stay live, so the text bar and the dialog pane draw as they
+  are, unchanged by the load in practice. The popup asks for the load once
+  it has faded in; the load starts at the next tick, a frame later than
+  retail.
+- The port loads the player's whole level (`EnterWorld`), not
+  `PreloadSectorSize` sectors around him; the bar runs over that.
+- The cursor: `SetMouseBitmap(nullptr)` removes the in-frame cursor; in
+  windowed play with the OS pointer the pointer stays visible.
+- The side tabs need no redraw call: the port redraws every pane every
+  frame.
+- Request loads (console `loadgame`, F9, `--savecycle-test`) don't print
+  retail's "Loading Game %s... Please Wait" on the text bar.
 - The thumbnail of a slot without `ss.bmp` shows black; retail kept the
   previously selected slot's picture (its bitmap was only overwritten on a
   successful load).
@@ -365,7 +435,8 @@ EDIT fields.
 
 ## 11. Open questions
 
-See [../AUTHOR_QUESTIONS.md](../AUTHOR_QUESTIONS.md) §"In-game menu" (60–).
+See [../AUTHOR_QUESTIONS.md](../AUTHOR_QUESTIONS.md) §"In-game menu" (60–65,
+110–111; shots S13, S17).
 
 ## 12. Decomps used
 
@@ -384,4 +455,10 @@ See [../AUTHOR_QUESTIONS.md](../AUTHOR_QUESTIONS.md) §"In-game menu" (60–).
 `0x0048eea0`, `0x0048fda0`, `0x0048ff00`, `0x00490030`, `0x00490110`,
 `0x004902c0`, `0x00490530`, `0x00490660`, `0x00490760`, `0x00490860`,
 `0x0048d260`, `0x004a2ce0`, `0x0049c830`, `0x0049c890`, `0x0049c8f0`; the
-control table at `0x005d5500` (decoded with `peread.py`).
+control table at `0x005d5500` (decoded with `peread.py`). The in-game load
+(§5.1, §9): `0x0047f4c0`, `0x0043a020`, `0x004911b0`, `0x0048e5b0`,
+`0x004997d0`, `0x004998b0`, `0x00539990`, `0x00454390`, `0x00458750`,
+`0x0047c580`, `0x00491bf0`, `0x0048eea0`, `0x0048f040`, `0x00429950`,
+`0x004384a0`, `0x004bde60`, `0x004bd680`, `0x004a9ee0`, `0x00435010`,
+the request block `0x0047bfab..0x0047c0b8`; references to `0x0065cb30`
+and `0x0065be50`.

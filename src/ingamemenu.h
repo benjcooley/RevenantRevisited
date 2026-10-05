@@ -19,6 +19,7 @@
 #include "savegamepane.h"
 
 #include <cstdint>
+#include <string>
 
 // Retail's menu pane (cls_0x5b9480, instance 0x0066f748).
 class TInGameMenuPane : public TDefPane
@@ -69,6 +70,12 @@ class TInGameMenu
     // Demo mode's ESC (0x0047c630): "exitgameyn", then quit on Yes.
     void AskExit();
 
+    // The load dialog's in-game load, which the play screen stages
+    // (TPlayScreen::StepGameLoad): its progress per mille, and its end.
+    // Nothing happens unless the load came from the dialog.
+    void LoadProgress(int32_t permille);
+    void LoadFinished(bool loaded);
+
     // True while any of its panes is up.
     [[nodiscard]] bool IsOpen() const;
     // The play screen is closing: close whatever is still up.
@@ -76,6 +83,8 @@ class TInGameMenu
 
   private:
     void MenuDone(int32_t result);
+    void BeginLoad();
+    void EndLoad(bool loaded);
 
     TScreen&        screen;
     TInGameMenuPane menu;
@@ -83,4 +92,6 @@ class TInGameMenu
     TSaveGamePane   save;
     TOptionsPane    options;
     TPopupPane      popup;
+    TPopupPane      progress;       // "loadingmap" (retail 0x0066ff10)
+    bool            loading = false;  // the dialog's load is under way
 };

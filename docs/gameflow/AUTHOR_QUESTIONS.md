@@ -25,6 +25,7 @@ Answer inline (or in chat) and the owning doc gets updated.
 | S14 | In town (Misthaven), talk to Elahni (potions) with some gold, default ini: Buy Items and the panel as it opens; the mouse over the second row; a click on the first row; Buy (the gold and her line); the ↓ arrow; Exit and the next second | the shop's fonts, colours (names violet 130,13,197, hover 230,150,255, selected 200,83,255; gold and labels 255,186,0; stat lines grey), row positions, the icons; whether the bottom bar comes back after Exit | [../ui/forensics/BuySellScreen_SPEC.md](../ui/forensics/BuySellScreen_SPEC.md) §4, §8, §1 |
 | S15 | Sell Items at Elahni with potions in the pack, in a bag and in a belt pouch; then at Cronus (armor) with a worn and an unworn piece; sell one of each | which items a Sell shop lists (bags, belt pouches, worn armor), the sell prices (Value × 0.3) | BuySellScreen_SPEC §6.3, §6.4 |
 | S16 | One spot in the Keep hall, Locke standing still, `RealTimeLight=No`, fullscreen: one shot each at Gamma 0, 2 and 4 (set in Options, OK, then wait for the area ambient to settle — or restart between shots, since each OK adds the offset again) | whether the gamma ramp is in effect under dosbox-x / the GOG wrapper, and how much the ambient offset brightens the floor | [forensics/OPTIONS.md](forensics/OPTIONS.md) §7.11 |
+| S17 | In a played game, ESC → Load Game → a slot on another level → Load Game, frame by frame until control returns; then the same for a slot on the same level | the popup's look, the bar's colour and steps (80 after the save is read, then the sector fill, closing at 80%), what stands behind it, whether the world moves while the popup fades in and out, whether the dialog vanishes at once | [forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §5.1, §9 |
 
 ## Dialog ([forensics/DIALOG.md](forensics/DIALOG.md) §7)
 
@@ -228,6 +229,13 @@ Answer inline (or in chat) and the owning doc gets updated.
 65. Demo mode (module flag, `SetDemoMode`) makes ESC ask "exit the game?"
     instead of opening the menu. Which builds or modules ran in demo
     mode — the attract loop, a trade-show demo?
+110. The in-game load's bar never fills: the sector load maps onto 0–800
+     of 1000 and the popup closes at 800 (`0x00539990`). Was 800 meant to
+     leave room for a step after the sectors, or is it a leftover?
+111. The load's progress popup is pushed without the dialog's pause
+     (`SetExclusivePane` 7, not `RunModal`), so the old world runs for the
+     few frames the popup fades in, and the new one while it fades out.
+     Intended, or should the world have held?
 
 ## Options ([forensics/OPTIONS.md](forensics/OPTIONS.md))
 

@@ -40,9 +40,12 @@ class TGameSession
     // sequence of steps: call Step() until it returns false.
     void Start(const SSessionStart& start);
     bool Step();
-    // How far the load is, per mille: where retail's loading bar stood after
-    // the matching part of TPlayScreen::Initialize (0x0047a660).
+    // How far the load is, per mille: where retail's bar stood after the
+    // matching work -- the loading screen's for a game started from the
+    // title (TPlayScreen::Initialize 0x0047a660), the "loadingmap" popup's
+    // for a load during play (0x00539590), which stops at 800.
     [[nodiscard]] int32_t Progress() const;
+    [[nodiscard]] bool  Loading() const { return state == EState::Loading; }
     [[nodiscard]] bool  Ready() const  { return state == EState::Ready; }
     [[nodiscard]] bool  Failed() const { return state == EState::Failed; }
 
@@ -50,7 +53,9 @@ class TGameSession
     void End();
 
     // Requests made during play, carried out at the start of the next
-    // simulation tick (retail TPlayScreen +0x5e4..+0x5f0).
+    // simulation tick (retail TPlayScreen +0x5e4..+0x5f0). A load starts
+    // there and then runs a step per tick, the PlayScreen holding the world
+    // until it is Ready (Loading()); requests made meanwhile wait for it.
     void RequestLoad(const std::string& slot);
     void RequestSave(const std::string& slot);
     // REVSYNC: 0x0047e850 — save to the first unused "Quick Save N" slot.
@@ -79,13 +84,18 @@ class TGameSession
     // stepFraction), or fails the load.
     enum class EStep : uint8_t { Done, Again, Failed };
 
+    // A step's progress runs from `from` to `to` (per mille) as it works.
     struct SStep
     {
         const char* name;
         EStep (TGameSession::*run)();
-        int32_t     progress;          // per mille once the step is done
+        int32_t     from;
+        int32_t     to;
     };
-    static const SStep kLoadSteps[];
+    static const SStep kLoadSteps[];       // a game from the title
+    static const SStep kGameLoadSteps[];   // a save loaded during play
+
+    void Begin(const SSessionStart& start, const SStep* plan, int32_t planSteps);
 
     // Load steps, in order.
     EStep LoadAreas();
@@ -98,6 +108,8 @@ class TGameSession
     bool SaveNow(const std::string& slot);
 
     SSessionStart start;
+    const SStep*  steps    = kLoadSteps;
+    int32_t       numSteps = 0;
     int32_t       nextStep = 0;
     float         stepFraction = 0.0f; // how far the running step is (EStep::Again)
     EState        state    = EState::Idle;
