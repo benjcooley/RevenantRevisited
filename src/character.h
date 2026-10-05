@@ -280,6 +280,14 @@ class TCharacter : public TComplexObject
     void ForceCommandDone() { forcecommanddone = true; }
       // Forces the current command to be done
 
+    static constexpr uint32_t kCharFlagNoIncidentals = 0x2;
+      // charflags bit (retail +0x110 & 2): `incidentals off`
+    void SetIncidentals(bool on)
+        { if (on) charflags &= ~kCharFlagNoIncidentals; else charflags |= kCharFlagNoIncidentals; }
+      // Incidentals are the random "NN:" variants of a character's root and idle
+      // states (fidgets); off, the character always plays the 100% variant
+    bool Incidentals() const { return !(charflags & kCharFlagNoIncidentals); }
+
     // Static access functions
     static TCharacter* CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius = 0);
         // Find if a character is blocking movement to this position
@@ -514,7 +522,7 @@ class TCharacter : public TComplexObject
     bool forcecommanddone;      // For skipping past animations
     bool forcenomove;           // For forcing end movement
 
-    uint32_t charflags;            // Character flags
+    uint32_t charflags = 0;        // Character flags (retail +0x110; retail's allocator zeroed it)
 
     int32_t exittimestamp;          // When timestamp is +2 frames from current frame, OF_ONEXIT is cleared
     bool is_invisible;          // is our character affected by invisibility

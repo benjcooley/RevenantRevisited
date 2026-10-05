@@ -460,10 +460,12 @@ void TCharacter::UpdateAction(int32_t bits)
   // the root state.
 
   // Cause character to fall if move bits flag has fall
+  // REVSYNC: 0x004c3429 -- with incidentals off the next state is always
+  // the 100% variant (TryCommand's flag).
     if (bits & MOVE_FALLING)
         comstate = ForceCommand(new TActionBlock("fall"), bits);
     else
-        comstate = TryCommand(desired, bits);
+        comstate = TryCommand(desired, bits, Incidentals() ? 0 : kCommandNoIncidentals);
 
   // ********************************************************************
   // Decrement the wait value (if any)
@@ -2153,7 +2155,7 @@ int32_t TCharacter::ResolveSay(TActionBlock* ab, int32_t bits)
     if (ab->wait <= 0 || (doing && doing->stop))
     {
         ab->wait = 0;
-        ForceCommand(root);
+        ForceCommand(root, 0, Incidentals() ? 0 : kCommandNoIncidentals);   // REVSYNC: 0x004c8437
         return COM_COMPLETED;
     }
 

@@ -1535,6 +1535,26 @@ COMMAND(CmdPivotObject)
     return CMD_WAIT;
 }
 
+// REVSYNC: incidentals @ 0x00428250 -- `[<character>.]incidentals on|off`:
+// whether the character's root and idle animations may roll their random
+// "NN:" variants (TCharacter::SetIncidentals). Like retail, the word stays
+// for the interpreter to skip with the rest of the line.
+COMMAND(CmdIncidentals)
+{
+    TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
+    if (t.Is("on"))
+        chr->SetIncidentals(true);
+    else if (t.Is("off"))
+        chr->SetIncidentals(false);
+    else
+    {
+        Output("State must be included\n");
+        return CMD_BADPARAMS;
+    }
+    log_debug("[cmd] %s: incidentals %s", chr->GetName(), t.Text());
+    return 0;
+}
+
 // REVSYNC: playerlevel @ 0x00428640 -- `<player>.playerlevel <n>`: rebuild
 // the player as a fresh level-n character (TPlayer::SetPlayerLevel). The
 // table only lets a player be the context.
@@ -3951,7 +3971,6 @@ COMMAND(CmdGotoRelativeDistance) { return CmdNotPorted("gotorelativedistance", 0
 COMMAND(CmdGotoRelativePosition) { return CmdNotPorted("gotorelativeposition", 0x004205c0, t); }
 COMMAND(CmdHasFreeSlot) { return CmdNotPorted("hasfreeslot", 0x00426c60, t); }
 COMMAND(CmdHideObjects) { return CmdNotPorted("hideobjects", 0x00427010, t); }
-COMMAND(CmdIncidentals) { return CmdNotPorted("incidentals", 0x00428250, t); }
 COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
 COMMAND(CmdMaxMonsters) { return CmdNotPorted("maxmonsters", 0x00427c30, t); }
 COMMAND(CmdMonsterTypes) { return CmdNotPorted("monstertypes", 0x00427bd0, t); }
