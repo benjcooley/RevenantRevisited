@@ -2,6 +2,7 @@
 
 #include "maprenderer.h"
 
+#include "classiclighting.h"
 #include "gamemap.h"
 #include "object.h"
 #include "renderer.h"
@@ -377,15 +378,11 @@ struct TMapRenderer::Impl
     float color[3]     = { 1.0f, 1.0f, 1.0f };
     float ambient_color[3] = { 1.0f, 1.0f, 1.0f };
     float ambient      = 0.15f;
-    // AMBLIGHT is authored in arbitrary integer units (Demo-module values
-    // run 4..35; retail goes higher). The retail DirectX renderer mapped
-    // them through 8-bit palette lookups whose non-linear brightness
-    // boost we don't replicate in the linear-space GPU path, so the
-    // divisor is a tunable in the Lighting tab. Lower = brighter.
+    // Modern lighting mode only: the scale from AMBLIGHT to the shader
+    // ambient, an art tunable in the Lighting tab (lower = brighter).
     //   s.ambient = AMBLIGHT * Ambient3D / (ambient_divisor * 100)
-    // Default 20 matches retail Misthaven daytime to eye. Tune via the
-    // Lighting tab; the per-area AMBLIGHT/AMBCOLOR set elsewhere is the
-    // authored signal, this is just the curve we map it through.
+    // Classic mode uses retail's exact mapping instead (classiclighting.cpp,
+    // docs/LIGHTING_FIDELITY.md §2.4).
     float ambient_divisor = 20.0f;
     // Ceiling on the summed deferred light (ambient + per-point-lights).
     // Originally 1.0 to prevent 3D-object white-out from stacked point
@@ -414,15 +411,16 @@ struct TMapRenderer::Impl
     bool  animate = false;
     int32_t tick = 0;
     int32_t view_mode = 0;
-    // lighting_mode 0 = classic retail (area.def AMBLIGHT/AMBCOLOR + TLight
-    // positional contributions, no synthesized sun). lighting_mode 1 =
-    // modern directional w/ sun-shadow + AO multiplier; eventually keyed
-    // off Revisited.rvr override AREA.DEF entries. Default to classic so
+    // lighting_mode 0 = Classic: retail's lighting model (classiclighting.cpp;
+    // no sun). lighting_mode 1 = modern directional w/ sun-shadow + AO
+    // multiplier. Seeded from [Revisited] LightingMode; default Classic so
     // the retail look is what you get without touching the debug UI.
     bool lights_on = true;
-    float radius_mul = 1.0f;
-    float intensity_mul = 1.0f;
+    float radius_mul = 1.0f;      // Revisited per-area POINTLIGHTRANGE (1 = authored)
+    float intensity_mul = 1.0f;   // Revisited per-area POINTLIGHTINT (1 = authored)
     int32_t lighting_mode = 0;
+    // Current area has a day/night cycle (AREA_DONIGHT); gates the modern sun.
+    bool daylight_cycle = false;
     // Retail had no synthesized sun shadow ray-march; objects cast
     // alpha-blob shadows handled separately. Off by default.
     bool  sun_shadow = false;
@@ -591,16 +589,13 @@ struct TMapRenderer::Impl
             rgb[0] = rgb[1] = rgb[2] = 0.0f;
         }
     }
-    float sectorLightIntensity(const SSectorLight& L) const
+    // The light's multiplier as retail's light tables use it: the authored
+    // SLightDef.multiplier, or the default table's 28 when it is <= 0.
+    float sectorLightMultiplier(const SSectorLight& L) const
     {
         TObjectInstance* oi = L.ref.Get();
-        PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
-      // SLightDef.multiplier is a percent (retail authoring 0..100,
-      // occasionally higher for "supernova" effects). 100 -> base 1.0
-      // intensity; LightMult3D (default 250 = 2.5x) is applied at
-      // submission time. The earlier /10.0f produced 10x base intensity
-      // and burned 3D objects in close-range lights.
-        return (!ld || ld->multiplier <= 0) ? 0.0f : float(ld->multiplier) / 100.0f;
+        const SLightDef* ld = oi ? oi->GetLightDef() : nullptr;
+        return ld ? float(RetailLightMultiplier(ld->multiplier)) : 0.0f;
     }
     const char* sectorLightClassName(const SSectorLight& L) const
     {

@@ -1840,15 +1840,17 @@ void GetINISettings()
             strncatz(path, "\\", MAXPATHLEN);
     }
 
+    // Defaults as retail GetINISettings (FUN_00484500) and the Options
+    // reader (FUN_00484ae0); docs/LIGHTING_FIDELITY.md §3.1.
     INISetSection("Lighting");
-    MaxLights = INIGetInt("MaxLights", 1);
-    Ambient3D = INIGetInt("Ambient3D", 100);
+    MaxLights = INIGetInt("MaxLights", 3);
+    Ambient3D = INIGetInt("Ambient3D", 130);
     LightRange3D = INIGetInt("LightRange3D", 180);
     LightMult3D = INIGetInt("LightMult3D", 250);
-    EnhancedLighting = INIGetYesNo("EnhancedLighting", true);
 
     INISetSection("Options");
     DoubleTapTicks = INIGetInt("DoubleTapTicks", 6);
+    EnhancedLighting = INIGetYesNo("EnhancedLighting", false);
 }
 
 // This function gets called as soon as the display system finds the right driver.
