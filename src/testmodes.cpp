@@ -2895,19 +2895,19 @@ void RenderAudioMode()
         ImGui::Text("SFX registry (%d entries)", SoundPlayer.NumItems());
         if (ImGui::BeginChild("sfxlist", ImVec2(0, 0), true)) {
             for (int32_t i = 0; i < SoundPlayer.NumItems(); ++i) {
-                PSSoundRef ref = SoundPlayer.GetRef(i);
-                if (!ref || !ref->name) continue;
+                const SSoundRef* ref = SoundPlayer.GetRef(i);
+                if (!ref) continue;
                 ImGui::PushID(i);
                 if (ImGui::Button("Play")) {
                     if (SoundPlayer.Mount(i)) {
                         SoundPlayer.Play(i);
                         SoundPlayer.Unmount(i);
                     } else {
-                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name);
+                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name.c_str());
                     }
                 }
                 ImGui::SameLine();
-                ImGui::Text("%s", ref->name);
+                ImGui::Text("%s", ref->file.c_str());
                 ImGui::PopID();
             }
         }

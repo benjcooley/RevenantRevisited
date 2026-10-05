@@ -127,7 +127,10 @@ Results" toggle), `joingame.def` and `mpingame.def` take effect.
 
 `rev_file_exists` is the strict exists test (no step 4), and
 `rev_first_existing(preferred, fallback, file)` the either/or lookup the
-loaders use. `TModuleManager::DataFilePath(file)` is the module-or-shared
+loaders use. `rev_find_files(dir, ext)` lists a directory the same way
+(retail's pack-aware findfirst `FUN_004a19d0`): under each root, the pack
+whose directory holds it if any entry matches, else the loose directory.
+The sound list is built with it. `TModuleManager::DataFilePath(file)` is the module-or-shared
 rule of §2.4; `ModuleFilePath(file)` is the module's own path.
 `GetINISettings` uses retail's defaults and reads `ImageryPath` and
 `ModulesPath`; the loaders in §2.4 compose retail's paths (REVSYNC tags
@@ -143,7 +146,10 @@ Deliberate divergences (`// REVSYNC-DIVERGENCE:` in `revutils.cpp`):
   resort because older port INIs (`ClassDefPath = "."`, written by builds
   that defaulted to `.`) and call sites not yet moved to retail paths name
   files outside any pack directory. Both INI flavours now resolve every
-  data file to the same copy (§6).
+  data file to the same copy (§6). `rev_find_files` has the directory
+  counterpart: a directory no root answers is looked up as a path inside
+  the base packs (not the module's), so `.\sound\effects\` under an old
+  INI lists `resources.rvr`'s `Sound/effects/`.
 - **Fixed pack names.** Retail derives the pack file names from the INI
   values (`ResourcePath` → `Resources.rvr`); the port mounts the stock
   names `resources.rvr`, `imagery.rvi` and `Modules/<m>.rvm` under RunPath.
