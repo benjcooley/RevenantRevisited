@@ -431,18 +431,76 @@ fs::path TSaveGame::ThumbnailFile()
 // 0x0047dd08; SAVE_GAME.md §11.7): the screen in a 640x480 16-bit bitmap,
 // written by SaveBMP at scale 3. The port captures the next frame the display
 // presents. `slot`, when given, also gets a copy.
-void TSaveGame::CaptureThumbnail(const fs::path& slot)
+void TSaveGame::CaptureThumbnail(const fs::path& slot, std::function<void()> captured)
 {
     const bool requested = Display.RequestCapture(
-        [this, slot](const uint8_t* rgba, int32_t width, int32_t height) {
-            if (!WriteThumbnail(rgba, width, height))
-                return;
-            ++thumbnailVersion;
-            if (!slot.empty())
-                CopyThumbnailTo(slot);
+        [this, slot, captured](const uint8_t* rgba, int32_t width, int32_t height) {
+            if (rgba && WriteThumbnail(rgba, width, height))
+            {
+                ++thumbnailVersion;
+                if (!slot.empty())
+                    CopyThumbnailTo(slot);
+            }
+            if (captured)
+                captured();
         });
     if (!requested)
+    {
         log_info("[savegame] no display to capture a thumbnail from");
+        if (captured)
+            captured();
+    }
+}
+
+// The 24-bit path of 0x004a2ce0: "BM", a BITMAPINFOHEADER of the bitmap's
+// own width and height, then the rows bottom up, B G R per pixel.
+bool TSaveGame::ReadThumbnail(const fs::path& slot, std::vector<uint8_t>& rgba)
+{
+    const fs::path path = slot / kThumbnailFile;
+    std::vector<uint8_t> file;
+    {
+        FILE* fp = std::fopen(path.string().c_str(), "rb");
+        if (!fp)
+            return false;
+        uint8_t chunk[4096];
+        size_t got = 0;
+        while ((got = std::fread(chunk, 1, sizeof(chunk), fp)) > 0)
+            file.insert(file.end(), chunk, chunk + got);
+        std::fclose(fp);
+    }
+
+    constexpr size_t kHeadersSize = 14 + 40;
+    auto u16 = [&](size_t at) { return (uint32_t)file[at] | ((uint32_t)file[at + 1] << 8); };
+    auto u32 = [&](size_t at) { return u16(at) | (u16(at + 2) << 16); };
+    if (file.size() < kHeadersSize || u16(0) != 0x4D42)
+        return false;
+    const uint32_t offset = u32(10);
+    const int32_t  width  = (int32_t)u32(18);
+    const int32_t  height = (int32_t)u32(22);
+    const uint32_t bits   = u16(28);
+    const size_t   stride = (size_t)(((width * 3) + 3) & ~3);
+    if (width != kThumbnailWidth || height != kThumbnailHeight || bits != 24 ||
+        file.size() < offset + stride * (size_t)height)
+    {
+        log_warn("[savegame] %s: not a %dx%d 24-bit thumbnail", path.string().c_str(),
+                 kThumbnailWidth, kThumbnailHeight);
+        return false;
+    }
+
+    rgba.assign((size_t)width * height * 4, 0);
+    for (int32_t y = 0; y < height; y++)
+    {
+        const uint8_t* src = file.data() + offset + stride * (size_t)(height - 1 - y);
+        uint8_t* dst = rgba.data() + (size_t)y * width * 4;
+        for (int32_t x = 0; x < width; x++, src += 3, dst += 4)
+        {
+            dst[0] = src[2];
+            dst[1] = src[1];
+            dst[2] = src[0];
+            dst[3] = 255;
+        }
+    }
+    return true;
 }
 
 // Retail copied the current thumbnail into the slot (SAVE_GAME.md §5 step 6).

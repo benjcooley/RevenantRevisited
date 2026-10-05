@@ -21,6 +21,7 @@ Answer inline (or in chat) and the owning doc gets updated.
 | S10 | A click and a key press during the opening, before the first line | whether it fades out and restarts without the intro (PlayScreen `+0x5dc`) | SCREEN_SYSTEM §2.6 |
 | S11 | Enter the Keep from outside through its gate (`keepin`, forest side) and capture the first second inside | how dark the arrival corner is (the port shows it black beside a lit hall) | [forensics/EXITS.md](forensics/EXITS.md) §7 |
 | S12 | In the Keep, open a chest and pick something up so two or three messages show over a light floor; then wait 10 s. Note `NoTexOverlay` | text bar colour (the code says gold 255,200,0), shadow, position (x 4, baseline 9, 12 px lines from the map's bottom edge), how many lines stay | [../ui/forensics/TTextBar_SPEC.md](../ui/forensics/TTextBar_SPEC.md) §7, §8 |
+| S13 | In a played game (control on), default ini (no `NOTEXOVERLAYS`): ESC and the next ⅓ s frame by frame; the menu; Save Game with a few slots; Load Game from the menu, then Load Game on a slot and the next second; Quit Module's question; title Load Game and Options | the in-game chrome's translucency and fade, the popup's look, the list's scrollbar and selection, the in-game load's progress popup | [forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §4.2, §5, §9 |
 
 ## Dialog ([forensics/DIALOG.md](forensics/DIALOG.md) §7)
 
@@ -193,6 +194,29 @@ Answer inline (or in chat) and the owning doc gets updated.
     hiding the bar runs whatever was half-typed.)
 56. Line types 2 (violet) and 4 (pink) have colours but no callers. What
     were they for?
+
+## In-game menu, load, save, options ([forensics/INGAME_MENU.md](forensics/INGAME_MENU.md))
+
+60. The menu's Save Game does nothing while the player has no control
+    (a conversation, a cutscene) — no message, the click is ignored.
+    Was that how "saving isn't allowed during a conversation" was meant
+    to read, or was a message planned?
+61. The Load Game and Save Game controls default to Ctrl + left Windows
+    key and Ctrl + Menu (Apps) key (`CTRL-LWIN`, `CTRL-APPS`; Quick Save
+    Ctrl + Backspace, Game Options `O`). Were the Windows keys intended?
+    (On the port's keyboard the same codes are Ctrl+`[` and Ctrl+`]`.)
+62. The load and save dialogs open with the last slot of the list
+    selected (alphabetical on NTFS), not the most recent save, and the
+    save dialog then offers that slot's name. Intended?
+63. A slot without a picture kept the previously selected slot's
+    picture in the dialogs (the bitmap was only overwritten when a
+    picture loaded); the port shows black. Was a "No Picture" text meant
+    to cover it (`loadgame.def` has one commented out)?
+64. The "Character:" field always reads "Locke" (a literal), whatever
+    the save. Was it to show the player's name for multiplayer saves?
+65. Demo mode (module flag, `SetDemoMode`) makes ESC ask "exit the game?"
+    instead of opening the menu. Which builds or modules ran in demo
+    mode — the attract loop, a trade-show demo?
 
 ## Camera and control ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4)
 

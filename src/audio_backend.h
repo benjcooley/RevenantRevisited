@@ -124,6 +124,8 @@ void DestroySource(Source* src);
 // volume_ds and pan_ds use 1998 DirectSound units (see header preamble).
 bool PlaySource(Source* src, int32_t volume_ds, int32_t freq_hz, int32_t pan_ds);
 void StopSource(Source* src);
+// Start a voice StopSource stopped again from where it stopped (no rewind).
+void ResumeSource(Source* src);
 
 bool IsPlaying(const Source* src);
 bool IsLooping(const Source* src);

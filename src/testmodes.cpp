@@ -2931,13 +2931,13 @@ void RenderAudioMode()
 // HandleMouseClick / HandleKeyPress path real input uses. Coordinates are in
 // Classic 640x480 content pixels (the UI test modes letterbox internally).
 // =====================================================================
-enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_LOG, MS_SNAP };
+enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_CHAR, MS_LOG, MS_SNAP };
 
 struct SInputEvent
 {
     double      at_ms = 0.0;   // fire time, ms from script start
     int32_t     kind  = MS_MOVE;
-    int32_t     button = 0;    // MB_* for MS_CLICK; VK code for MS_KEY
+    int32_t     button = 0;    // MB_* for MS_CLICK; VK code for MS_KEY; character for MS_CHAR
     int32_t     x = 0, y = 0;  // for MS_KEY: x = 1 (down) / 0 (up)
     std::string text;          // for MS_LOG
 };
@@ -3123,6 +3123,18 @@ void InputSimStart(const char* script)
                 log_warn("[input-sim] key_press: unknown key '%s'",
                          tok.size() > 1 ? tok[1].c_str() : "");
         }
+        else if (op == "type" || op == "type_text")
+        {
+            // Typed text: one character event per character, 30 ms apart.
+            constexpr int32_t kTypeIntervalMs = 30;
+            const size_t sp = cmd.find(' ');
+            const std::string text = (sp == std::string::npos) ? "" : cmd.substr(sp + 1);
+            for (const char c : text)
+            {
+                g_inputSimEvents.push_back({ t_ms, MS_CHAR, (int32_t)(unsigned char)c, 0, 0, "" });
+                t_ms += kTypeIntervalMs;
+            }
+        }
         else if (op == "loop")
             g_inputSimLoop = true;
         else if (op == "take_snapshot" || op == "snapshot" || op == "snap")
@@ -3199,6 +3211,10 @@ void InputSimTick(TScreen* screen)
             // e.button = VK code, e.x = 1 (down) / 0 (up). Same path real keys
             // take; real keyboard is NOT gated, so synthetic + real coexist.
             screen->KeyPress(e.button, e.x != 0);
+            break;
+        case MS_CHAR:
+            // The CHAR event path (revmain's SAPP_EVENTTYPE_CHAR).
+            screen->CharPress(e.button, true);
             break;
         case MS_SNAP:
             // Manual filmstrip capture (--filmstrip=N,0). Captures the LAST

@@ -92,8 +92,9 @@ class TDisplay : public TSurface
     bool FlipPage(bool Wait = true);
 
     // Reads back the next frame FlipPage presents and hands it to `done`
-    // (RGBA8, top row first, display size). False when the display isn't
-    // up, in which case `done` is never called. Used for save thumbnails.
+    // (RGBA8, top row first, display size; null and 0x0 when the readback
+    // fails). False when the display isn't up, in which case `done` is never
+    // called. Used for save thumbnails.
     using TCaptureDone = std::function<void(const uint8_t* rgba, int32_t width, int32_t height)>;
     bool RequestCapture(TCaptureDone done);
 
