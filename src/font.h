@@ -147,6 +147,13 @@ void DrawTextShadowedToTarget(const SFontAtlas* atlas, const char* text,
                               int32_t cellX, int32_t cellY, int32_t cellW, int32_t cellH,
                               ETextAlign align, float r, float g, float b,
                               int32_t target_w, int32_t target_h);
+// The shadowed text with its pen at (penX, baselineY), for callers whose
+// retail coordinates are a baseline rather than a cell top (the text bar's
+// lines, TTextBar 0x0054cd40). Same passes as DrawTextShadowedToTarget.
+void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
+                                float penX, float baselineY,
+                                float r, float g, float b,
+                                int32_t target_w, int32_t target_h);
 
 // Word-wraps `text` to `wrapWidth` pixels the way retail's GDI DT_WORDBREAK
 // did (FUN_004acb80): breaks at spaces and '\n', drops the spaces at a break,
