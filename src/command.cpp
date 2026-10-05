@@ -1059,128 +1059,130 @@ void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
         fread(overmap+(y*MAXPLATESX), MAXPLATESX, 1, fp);
     fclose(fp);
 
-    MapPane.FreeAllSectors();
+    // The sector files are edited directly, so level 0 must be out of memory
+    // meanwhile (retail freed the loaded sectors first and reloaded them
+    // after: TMapPane::FreeAllSectors / ReloadSectors). The sectors' owner
+    // does both around the edit.
+    MapManager.ReloadLevel(0, [&] {
+        for (int32_t sy = starty; sy < (starty + sizey); sy++)
+            for (int32_t sx = startx; sx < (startx + sizex); sx++)
+            {
+                sect = new TSector(0, sx, sy);
+                sect->Load();
 
-    for (int32_t sy = starty; sy < (starty + sizey); sy++)
-        for (int32_t sx = startx; sx < (startx + sizex); sx++)
-        {
-            sect = new TSector(0, sx, sy);
-            sect->Load();
+                for (TObjectIterator i(sect->ObjectArray()); i; i++)
+                    if (i.Item() && i.Item()->GetFlags() & OF_GENERATED)
+                        sect->ObjectArray()->Remove(i);
 
-            for (TObjectIterator i(sect->ObjectArray()); i; i++)
-                if (i.Item() && i.Item()->GetFlags() & OF_GENERATED)
-                    sect->ObjectArray()->Remove(i);
-
-            for (py = 0; py < PLATESPERSECTY; py++)
-                for (px = 0; px < PLATESPERSECTX; px++)
-                {
-                    x = (sx * PLATESPERSECTX) + px;
-                    y = (sy * PLATESPERSECTY) + py;
-
-                    if (filled[x][y] != 0)
-                        continue;
-
-                    int32_t type, flux = 0;
-                    if ((type = FindSuperTile(map, x, y, &(filled[0][0]), &flux)) < 0)
+                for (py = 0; py < PLATESPERSECTY; py++)
+                    for (px = 0; px < PLATESPERSECTX; px++)
                     {
-                        uint32_t code = GetTileCode(map, x, y);
+                        x = (sx * PLATESPERSECTX) + px;
+                        y = (sy * PLATESPERSECTY) + py;
 
-                        // leave out the 'center' of the mountains
-                        if ((code & 0xF0F0F0F0) == 0x30303030)
+                        if (filled[x][y] != 0)
                             continue;
 
-                        // use solid street tile for anything containing street
-                        for (int32_t i = 0; i < 4; i++)
-                            if (QUAD(code, i) == 0x70)
-                                code = 0x70707070;
-
-
-                        if ((type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), code, nullptr)) < 0 &&
-                            (type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), code, &flux)) < 0)
-                            continue;
-
-                        TObjectInstance* inst = GenerateObj(sect, map, overmap, type, sx, sy, px, py, flux);
-
-                        if (!inst)
-                            continue;
-
-                        uint32_t oldcode = TileClass.GetStat(inst->ObjType(), "Code");
-
-                        // build a mask based on the wildcards in the code
-                        uint32_t newcode = 0;
-                        if (!QUAD(oldcode, 3))
-                            newcode |= code & 0xFF000000;
-                        if (!QUAD(oldcode, 2))
-                            newcode |= code & 0xFF0000;
-                        if (!QUAD(oldcode, 1))
-                            newcode |= code & 0xFF00;
-                        if (!QUAD(oldcode, 0))
-                            newcode |= code & 0xFF;
-
-                        if (newcode != 0)
+                        int32_t type, flux = 0;
+                        if ((type = FindSuperTile(map, x, y, &(filled[0][0]), &flux)) < 0)
                         {
-                            if (!QUAD(newcode, 0))
-                                if (QUAD(newcode, 1))
-                                    newcode |= QUAD(newcode, 1);
-                                else if (QUAD(newcode, 2))
-                                    newcode |= QUAD(newcode, 2);
-                                else
-                                    newcode |= QUAD(newcode, 3);
+                            uint32_t code = GetTileCode(map, x, y);
 
-                            if (!QUAD(newcode, 1))
-                                if (QUAD(newcode, 0))
-                                    newcode |= QUAD(newcode, 0) << 8;
-                                else if (QUAD(newcode, 3))
-                                    newcode |= QUAD(newcode, 3) << 8;
-                                else
-                                    newcode |= QUAD(newcode, 2) << 8;
-
-                            if (!QUAD(newcode, 2))
-                                if (QUAD(newcode, 0))
-                                    newcode |= QUAD(newcode, 0) << 16;
-                                else if (QUAD(newcode, 3))
-                                    newcode |= QUAD(newcode, 3) << 16;
-                                else
-                                    newcode |= QUAD(newcode, 1) << 16;
-
-                            if (!QUAD(newcode, 3))
-                                if (QUAD(newcode, 1))
-                                    newcode |= QUAD(newcode, 1) << 24;
-                                else if (QUAD(newcode, 2))
-                                    newcode |= QUAD(newcode, 2) << 24;
-                                else
-                                    newcode |= QUAD(newcode, 0) << 24;
-
-                            flux = 1000;
-                            int32_t i;
-                            for (i = 0; i < 4; i++)
-                                if ((QUAD(newcode, i) & 0x0F) < (uint32_t)flux)
-                                    flux = QUAD(newcode, i) & 0x0F;
-
-                            for (i = 0; i < 4; i++)
-                                newcode -= flux << (i * 8);
-
-                            if ((type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), newcode)) < 0)
+                            // leave out the 'center' of the mountains
+                            if ((code & 0xF0F0F0F0) == 0x30303030)
                                 continue;
 
-                            flux *= -1;
+                            // use solid street tile for anything containing street
+                            for (int32_t i = 0; i < 4; i++)
+                                if (QUAD(code, i) == 0x70)
+                                    code = 0x70707070;
+
+
+                            if ((type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), code, nullptr)) < 0 &&
+                                (type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), code, &flux)) < 0)
+                                continue;
+
+                            TObjectInstance* inst = GenerateObj(sect, map, overmap, type, sx, sy, px, py, flux);
+
+                            if (!inst)
+                                continue;
+
+                            uint32_t oldcode = TileClass.GetStat(inst->ObjType(), "Code");
+
+                            // build a mask based on the wildcards in the code
+                            uint32_t newcode = 0;
+                            if (!QUAD(oldcode, 3))
+                                newcode |= code & 0xFF000000;
+                            if (!QUAD(oldcode, 2))
+                                newcode |= code & 0xFF0000;
+                            if (!QUAD(oldcode, 1))
+                                newcode |= code & 0xFF00;
+                            if (!QUAD(oldcode, 0))
+                                newcode |= code & 0xFF;
+
+                            if (newcode != 0)
+                            {
+                                if (!QUAD(newcode, 0))
+                                    if (QUAD(newcode, 1))
+                                        newcode |= QUAD(newcode, 1);
+                                    else if (QUAD(newcode, 2))
+                                        newcode |= QUAD(newcode, 2);
+                                    else
+                                        newcode |= QUAD(newcode, 3);
+
+                                if (!QUAD(newcode, 1))
+                                    if (QUAD(newcode, 0))
+                                        newcode |= QUAD(newcode, 0) << 8;
+                                    else if (QUAD(newcode, 3))
+                                        newcode |= QUAD(newcode, 3) << 8;
+                                    else
+                                        newcode |= QUAD(newcode, 2) << 8;
+
+                                if (!QUAD(newcode, 2))
+                                    if (QUAD(newcode, 0))
+                                        newcode |= QUAD(newcode, 0) << 16;
+                                    else if (QUAD(newcode, 3))
+                                        newcode |= QUAD(newcode, 3) << 16;
+                                    else
+                                        newcode |= QUAD(newcode, 1) << 16;
+
+                                if (!QUAD(newcode, 3))
+                                    if (QUAD(newcode, 1))
+                                        newcode |= QUAD(newcode, 1) << 24;
+                                    else if (QUAD(newcode, 2))
+                                        newcode |= QUAD(newcode, 2) << 24;
+                                    else
+                                        newcode |= QUAD(newcode, 0) << 24;
+
+                                flux = 1000;
+                                int32_t i;
+                                for (i = 0; i < 4; i++)
+                                    if ((QUAD(newcode, i) & 0x0F) < (uint32_t)flux)
+                                        flux = QUAD(newcode, i) & 0x0F;
+
+                                for (i = 0; i < 4; i++)
+                                    newcode -= flux << (i * 8);
+
+                                if ((type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), newcode)) < 0)
+                                    continue;
+
+                                flux *= -1;
+                            }
+                            else
+                                continue;
                         }
-                        else
-                            continue;
+
+                        GenerateObj(sect, map, overmap, type, sx, sy, px, py, flux);
                     }
 
-                    GenerateObj(sect, map, overmap, type, sx, sy, px, py, flux);
-                }
-
-            delete sect;
-        }
+                delete sect;
+            }
+    });
 
     delete map;
     delete overmap;
 
     TObjectImagery::ResumeLoader();
-
-    MapPane.ReloadSectors();
 }
 
 // ******************************
@@ -2543,35 +2545,36 @@ COMMAND(CmdSectorCommand)
     sprintf(buf, "Processing command \"%s\" on level %d...\n", command, level);
     Output(buf);
 
-    if (MapPane.GetMapLevel() == level)
-    {
-        MapPane.FreeAllSectors();
-        MapPane.RedrawAll();
-    }
-
     IsSectorCommand = true;
 
-    for (int32_t sy = 0; sy < MAXSECTORY; sy++)
-        for (int32_t sx = 0; sx < MAXSECTORX; sx++)
-        {
-            TSector* sector = new TSector(level, sx, sy);
-            sector->Load(false);
-
-            for (int32_t i = 0; i < sector->NumItems(); i++)
+    // The command runs on the level's sector files, so the level must be out
+    // of memory meanwhile. Retail freed the loaded sectors when the level was
+    // the one on screen (TMapPane::FreeAllSectors) and reloaded them on the
+    // next sector update; the port's owner does both around the edit, for
+    // any loaded level (a cached copy would overwrite the edit when saved).
+    MapManager.ReloadLevel(level, [&] {
+        for (int32_t sy = 0; sy < MAXSECTORY; sy++)
+            for (int32_t sx = 0; sx < MAXSECTORX; sx++)
             {
-                TObjectInstance* inst = sector->GetInstance(i);
-                if (inst)
-                {
-                    TStringParseStream s(command, strlen(command));
-                    TToken t0(s);
-                    t0.Get();
-                    CommandInterpreter(inst, t0, MINCMDABREV);
-                }
-            }
+                TSector* sector = new TSector(level, sx, sy);
+                sector->Load(false);
 
-            sector->Save();
-            delete sector;
-        }
+                for (int32_t i = 0; i < sector->NumItems(); i++)
+                {
+                    TObjectInstance* inst = sector->GetInstance(i);
+                    if (inst)
+                    {
+                        TStringParseStream s(command, strlen(command));
+                        TToken t0(s);
+                        t0.Get();
+                        CommandInterpreter(inst, t0, MINCMDABREV);
+                    }
+                }
+
+                sector->Save();
+                delete sector;
+            }
+    });
 
     while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
         t.WhiteGet();
@@ -3809,7 +3812,7 @@ COMMAND(CmdLoad)
     if (loadsector)
     {
         Output("Reloading...\n");
-        MapPane.ReloadSectors();
+        MapManager.ReloadSectors();
     }
 
     return 0;
@@ -3889,9 +3892,9 @@ COMMAND(CmdSave)
     if (savemap)
     {
         Output("Saving map sectors...\n");
-        MapPane.SaveAllSectors();
-        // Publish the edited sectors to the base map, then empty the working
-        // set (the loaded sectors stay; they now match the base map).
+        // Publish the edited sectors to the base map (SaveCurMap writes every
+        // loaded sector first, as retail's SaveAllSectors did), then empty the
+        // working set (the loaded sectors stay; they now match the base map).
         MapManager.SaveCurMap(SectorStore::BaseMapDir());
         SectorStore::Clear();
     }

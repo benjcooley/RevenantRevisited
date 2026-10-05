@@ -7,6 +7,8 @@
 #include "mapmanager.h"
 
 #include "gamemap.h"
+#include "logging.h"
+#include "sector.h"
 #include "sectorstore.h"
 
 TMapManager::TMapManager()  = default;
@@ -135,4 +137,61 @@ void TMapManager::SaveCurMap(const std::filesystem::path& dir) const
 {
     FlushSectors();
     SectorStore::ExportTo(dir);
+}
+
+void TMapManager::ReloadLevel(int32_t level, const std::function<void()>& editFiles)
+{
+    TGameMap* map = GetCached(level);
+    if (!map)
+    {
+        if (editFiles)
+            editFiles();
+        return;
+    }
+
+    // The players outlive the sectors (a sector lets go of its OF_NONMAP
+    // objects when it is freed). Hold them by reference: `editFiles` runs
+    // console commands.
+    const std::vector<TSafeRef<TObjectInstance>> nonmap = map->NonMapObjects();
+    const bool wasCurrent = (map == current);
+
+    Evict(level);               // writes the sectors to the working set, then frees them
+    if (editFiles)
+        editFiles();
+
+    TGameMap* reloaded = GetOrLoad(level);
+    if (!reloaded)
+    {
+        log_error("[mapmanager] level %d didn't load again", level);
+        return;
+    }
+    int32_t placed = 0;
+    for (const TSafeRef<TObjectInstance>& ref : nonmap)
+    {
+        TObjectInstance* oi = ref.Get();
+        if (!oi || oi->GetSector())
+            continue;
+        if (TSector* sector = reloaded->SectorAt(oi->Pos()))
+        {
+            sector->AddObject(oi);
+            ++placed;
+        }
+        else
+            log_warn("[mapmanager] level %d: no sector under '%s' after the reload",
+                     level, oi->GetName() ? oi->GetName() : "?");
+    }
+    log_info("[mapmanager] level %d reloaded from its sector files; %d of %zu non-map "
+             "object(s) back in place", level, placed, nonmap.size());
+    if (wasCurrent)
+        SetCurrentMap(reloaded);
+}
+
+void TMapManager::ReloadSectors()
+{
+    std::vector<int32_t> levels;
+    for (const std::unique_ptr<TGameMap>& m : cache)
+        if (m)
+            levels.push_back(m->Level());
+    for (const int32_t level : levels)
+        ReloadLevel(level);
 }

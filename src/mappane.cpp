@@ -353,9 +353,7 @@ bool TMapPane::Initialize()
     oldscrollx = scrollx = oldscrolly = scrolly = 0x80000000;
     oldlevel = level = 0;
 
-    for (int32_t sy = 0; sy < SECTORWINDOWY; sy++)
-        for (int32_t sx = 0; sx < SECTORWINDOWX; sx++)
-            sectors[sx][sy] = nullptr;
+    ClearWindow();
 
     SColor c;
     c.red = 255;
@@ -405,11 +403,12 @@ bool TMapPane::Initialize()
 
 void TMapPane::Close()
 {
-  // Make sure update thread is finished  
+  // Make sure update thread is finished
     EndUpdateThread();
 
-  // Delete all sectors (saving them if in editor)
-    FreeAllSectors();
+  // Retail freed every loaded sector here (FreeAllSectors). The sectors
+  // belong to TMapManager in the port; the pane only lets go of its window.
+    ClearWindow();
 
   // Free imagery in imagery system
     TObjectImagery::FreeAllImagery();
@@ -1427,23 +1426,6 @@ void TMapPane::ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32
         return;
 
     oi->GetSector()->ObjectFlagsChanged(oi, oldflags, newflags);
-}
-
-// Delete sector
-void TMapPane::DeleteSector(TSector* sect)
-{
-    Notify(N_DELETINGSECTOR, sect);
-
-  // Make sure all objects know they are off screen now
-    for (TObjectIterator i(sect->ObjectArray()); i; i++)
-    {
-        if (!i.Item())
-            continue;
-        i.Item()->OffScreen();
-    }
-
-  // Saves and deletes
-    TSector::CloseSector(sect);
 }
 
 TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t sectindex)
@@ -2553,8 +2535,9 @@ void TMapPane::Pulse()
   // Update 3D position
     Update3DScenePos();
 
-  // Update Sectors
-    UpdateSectors();
+  // Borrow the sectors around the player (retail streamed them in here:
+  // UpdateSectors @ 0x00459220; TMapManager loads whole levels in the port)
+    UpdateActiveWindow();
 
   // Leave Pulse with new map position completely set
 }
@@ -3762,57 +3745,15 @@ void TMapPane::AnimateObjects(bool draw)
     Display.ResetClipRect();
 }
 
-// *******************************
-// * Sector Management Functions *
-// *******************************
+// *****************
+// * Sector Window *
+// *****************
 
-void TMapPane::SaveAllSectors()
-{
-    int32_t sx, sy;
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    for (sx = 0; sx < SECTORWINDOWX; sx++)
-        for (sy = 0; sy < SECTORWINDOWY; sy++)
-            if (sectors[sx][sy])
-                sectors[sx][sy]->Save();
-
-    UNLOCKSECTORS;       // Allow update system to access sector arrays again
-                         // If lock is called without unlock, system will CRASH!!
-}
-
-void TMapPane::FreeAllSectors()
-{
-    int32_t sx, sy;
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    // NOTE: We don't need to call the LockSectors() function here because the
-    // update system is turned off by the time we get here
-
-    for (sx = 0; sx < SECTORWINDOWX; sx++)
-        for (sy = 0; sy < SECTORWINDOWY; sy++)
-            if (sectors[sx][sy])
-            {
-                DeleteSector(sectors[sx][sy]);
-                sectors[sx][sy] = nullptr;
-            }
-
-    UNLOCKSECTORS;       // Allow update system to access sector arrays again
-                         // If lock is called without unlock, system will CRASH!!
-}
-
-void TMapPane::ReloadSectors()
-{
-    FreeAllSectors();
-    sectorx += 10000000;
-    sectory += 10000000;
-    RedrawAll();
-}
+// The window borrows sectors from TMapManager's current map (see mappane.h).
+// Loading, saving and freeing sectors is the manager's job: retail's
+// FreeAllSectors / ReloadSectors / SaveAllSectors / DeleteSector and the
+// streaming UpdateSectors are in attic/src/mappane_sectors.cpp with the
+// TMapManager operations that replace them.
 
 void TMapPane::UpdateActiveWindow()
 {
@@ -3831,148 +3772,47 @@ void TMapPane::UpdateActiveWindow()
     const int32_t new_sectorx = player_sx - SECTORWINDOWX / 2;
     const int32_t new_sectory = player_sy - SECTORWINDOWY / 2;
 
-    // The cells borrow the map's sectors, so they are only valid while the
-    // map they came from is alive and current: a load replaces the map even
-    // when the player lands in the same sector cell.
+    // A load replaces the map even when the player lands in the same sector
+    // cell, so the map is part of the check.
     if (windowmap.Get() == map && level == player_lvl &&
         sectorx == new_sectorx && sectory == new_sectory)
         return;
 
-    windowmap = map;
     level    = player_lvl;
     sectorx  = new_sectorx;
     sectory  = new_sectory;
+    BindWindow(map);
+}
+
+void TMapPane::BindWindow(TGameMap* map)
+{
+    if (windowmap.Get() != map)
+    {
+        ClearWindow();
+        windowmap = map;
+        // The map fires Unloaded before it frees its sectors (gamemap.h), so
+        // the window never holds a sector the map has freed.
+        windowlistener = map->AddListener([this](EGameMapEvent event, TGameMap*) {
+            if (event == EGameMapEvent::Unloaded)
+                ClearWindow();
+        });
+    }
 
     for (int32_t y = 0; y < SECTORWINDOWY; ++y)
         for (int32_t x = 0; x < SECTORWINDOWX; ++x)
             sectors[x][y] = map->FindSector(sectorx + x, sectory + y);
 }
 
-void TMapPane::UpdateSectors()
+void TMapPane::ClearWindow()
 {
-    int32_t x, y;
+    if (TGameMap* map = windowmap.Get(); map && windowlistener)
+        map->RemoveListener(windowlistener);
+    windowlistener = 0;
+    windowmap.Clear();
 
-  // Change sector position
-    oldlevel = level;
-    level = newlevel;
-    oldsectorx = sectorx;
-    oldsectory = sectory;
-
-  // account for the character actually being at (sectorx+1, sectory+1)
-    sectorx = (center.x >> SECTORWSHIFT) - 1;
-    sectory = (center.y >> SECTORHSHIFT) - 1;
-
-  // If sector has changed.. reload sectors
-    if (sectorx != oldsectorx || sectory != oldsectory || level != oldlevel || IsDirty())
-    {
-        LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                            // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                            //  BETWEEN THESE TWO FUNCTIONS!!)
-
-      // Temporary sectors
-        TSector* newsectors[SECTORWINDOWX][SECTORWINDOWY];
-        memset(newsectors, 0, sizeof(TSector*) * SECTORWINDOWX * SECTORWINDOWY);
-
-      // Delete old sectors
-        int32_t nx, ny;
-        for (x = 0; x < SECTORWINDOWX; x++)
-        {
-            for (y = 0; y < SECTORWINDOWY; y++)
-            {
-                // Offset by one, because sectorx refers to middle sector
-                nx = oldsectorx - sectorx + x;
-                ny = oldsectory - sectory + y;
-
-                // Old sector is out of sector window.. delete it
-                if (level != oldlevel || (uint32_t)nx >= SECTORWINDOWX || (uint32_t)ny >= SECTORWINDOWY)
-                {
-                    if (sectors[x][y])
-                        DeleteSector(sectors[x][y]);
-                    sectors[x][y] = nullptr;
-                }
-                else // Sector still there.. put it in a new position
-                    newsectors[nx][ny] = sectors[x][y];
-            }
-        }
-
-      // Copy new sector list to sector list
-        memcpy(sectors, newsectors, sizeof(TSector*) * SECTORWINDOWX * SECTORWINDOWY);
-
-      // Preload sectors if level changed
-        if (!PreloadSectors)
-            TSector::ClearPreloadSectors();
-        else if (!TSector::InPreloadArea(center, level)) // Reload cache if we're not in cache rect
-        {
-
-          // Get new sector rectangle area
-            SRect r;
-            r.left = center.x - SECTORWIDTH * PreloadSectorSize / 2;
-            r.right = center.x + SECTORWIDTH * PreloadSectorSize / 2;
-            r.top = center.y - SECTORHEIGHT * PreloadSectorSize / 2;
-            r.bottom = center.y + SECTORHEIGHT * PreloadSectorSize / 2;
-
-            if (TextBar.IsOpen() && !TextBar.IsHidden() && CurrentScreen->FrameCount() > 0)
-            {
-                TextBar.Print("Loading Map... Please Wait");
-                TextBar.DrawImmediate();
-                TextBar.PutToScreen();
-            }
-
-          // Now reload cache around current pos
-            TSector::LoadPreloadSectors(level, 1, &r); // Don't care if this works or not
-
-            if (TextBar.IsOpen() && !TextBar.IsHidden() && CurrentScreen->FrameCount() > 0)
-            {
-                TextBar.Print("");
-                TextBar.DrawImmediate();
-                TextBar.PutToScreen();
-            }
-        }
-
-      // Load new sectors if needed
-        bool loaded = false;
-
-        for (x = 0; x < SECTORWINDOWX; x++)
-        {
-            for (y = 0; y < SECTORWINDOWY; y++)
-            {
-                if (!sectors[x][y])
-                {
-                    if ((uint32_t)(sectorx + x) < MAXSECTORX && (uint32_t)(sectory + y) < MAXSECTORY)
-                    {
-                        sectors[x][y] = TSector::LoadSector(level, sectorx+x, sectory+y);
-                        loaded = true;
-                    }
-                }
-            }
-        }
-
-        if (loaded)
-            TransferAllWalkmaps();
-
-        // Make sure all selected objects are still valid
-        if (Editor)
-            StatusBar.Validate();
-
-        UNLOCKSECTORS;       // Allow update system to access sector arrays again
-                             // If lock is called without unlock, system will CRASH!!
-
-
-      // Now that sectors have changed, attempt to readd player characters to map
-      // if they aren't in it yet.
-      //
-      // Since player characters are OF_NONMAP. They aren't saved or deleted by the
-      // sector system.  When the map changes, we simply go through the list of characters.
-      // and add them into the current map if they aren't in there already.
-
-        for (int32_t player = 0; player < PlayerManager.NumPlayers(); player++)
-        {
-            TPlayer* p = PlayerManager.GetPlayer(player);
-            if (p && !p->GetSector())
-                AddObject(p); // Attempt to add player to current sector area
-        }
-
-    }
+    for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+        for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+            sectors[x][y] = nullptr;
 }
 
 /*void TMapPane::GetPlayerFocus(S3DPoint& pos)

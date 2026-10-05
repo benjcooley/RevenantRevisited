@@ -102,7 +102,7 @@ format, `LoadGame`/`SaveGame`, `curmap`) and
 | Mount start module, areas | `PlayScreen::Initialize` (`0x004609f0`, `TAreaMgr::Initialize`); `Close` | session start / `End` |
 | Script prototypes (`master.s`), `state.def` names | `TScriptManager::Initialize` per game | boot (`InitGlobals`), unchanged — see §3.4 |
 | Per-game script and state reset | inside `LoadGame` (`0x00496e20`, `ReloadStates`) | `TSaveGame::LoadGame`, as retail |
-| Sector working set (`curmap`) | `TMapPane::{Clear,Load,Save}CurMap` | `TMapManager` (sector owner); `TMapPane` methods delegate |
+| Sector working set (`curmap`) | `TMapPane::{Clear,Load,Save}CurMap` | `TMapManager` (sector owner); `TMapPane`'s window only borrows (§3.4) |
 | Save file read/write, slot list, merchant table | save manager (`0x0048d260..0x0048e820`) | `TSaveGame` (evolved to the retail format) |
 | New / load / save / end a game | `PlayScreen::Initialize` start modes, in-game menu | `TGameSession` |
 | Load the player's level, place players | `PlayScreen::Initialize` (`0x004997d0`) | `TGameSession` |
@@ -158,8 +158,11 @@ class TGameSession
   files live: the working set `<SavePath>/curmap` (created on demand)
   and the base map through the resource layer — never the install's
   `curmap`. `TMapManager` owns the loaded sectors and gains
-  `FlushSectors`, `ClearCurMap`, `LoadCurMap(dir)`, `SaveCurMap(dir)`.
-  `rev_fopen` write modes resolve only under SavePath.
+  `FlushSectors`, `ClearCurMap`, `LoadCurMap(dir)`, `SaveCurMap(dir)`,
+  and, for the editor commands that edit sector files directly
+  (`sectorcommand`, `generate`, `load sectors`), `ReloadLevel(level,
+  edit)` / `ReloadSectors` (retail `TMapPane::FreeAllSectors` /
+  `ReloadSectors`). `rev_fopen` write modes resolve only under SavePath.
 
 ### 3.2 New game, step by step
 
@@ -202,9 +205,18 @@ death, quit).
   `PlayScreen::Initialize`). No API change between the two.
 - **Presenters follow `TMapManager::CurrentMapChanged`** to rebind after
   a load or level change; it is the existing "the world was replaced"
-  signal, so the session adds none of its own. Borrowers of sector
-  pointers check the map they borrowed from (`TMapPane` keeps a
-  `TSafeRef<TGameMap>`).
+  signal, so the session adds none of its own.
+- **One owner for each sector and object.** `TMapManager` owns the maps,
+  each `TGameMap` owns its sectors (created in `Load`, freed in
+  `Unload`/`Discard`, nowhere else), each `TSector` owns its objects
+  except `OF_NONMAP` ones (the players, owned by `TPlayerManager`), which
+  it only holds while they stand in it. Everything else borrows:
+  `TMapPane`'s `sectors[][]` window and the renderer's draw records drop
+  their sector pointers on the map's `Unloaded` event, which fires before
+  the sectors are freed, and keep a `TSafeRef<TGameMap>`; objects are held
+  through `TSafeRef<TObjectInstance>` / mapindex. Retail kept the loaded
+  sectors on `TMapPane` (a global loaded list it streamed and freed);
+  those paths are gone (`attic/src/mappane_sectors.cpp`).
 - **No automap persistence until the retail automap files are ported**
   (SAVE_GAME §8). Dropping the pre-release blob loses automap state
   across save/load in the meantime; carrying it in a retail save is not
@@ -426,7 +438,7 @@ perform.
 | `master.s` re-parsed every game | parsed once at boot; per-game resets as retail | static data; `--test` hosts | none |
 | `LoadGame` resets the world, then reads the file | reads and checks the file first | a missing or damaged save no longer leaves an empty world | only on failure |
 | `TScriptManager` frees script instances on Close | objects own their scripts; the manager's list is non-owning | one owner (the port's objects already freed them: double free) | none |
-| Sectors tracked by `TMapPane` | working set managed by `TMapManager` | `TMapManager` owns loaded sectors in the port | none |
+| Sectors loaded, streamed and freed by `TMapPane` (global loaded list, `UpdateSectors`, `FreeAllSectors`) | `TMapManager` loads whole levels and owns their sectors; `TMapPane`'s window borrows the current map's | one owner; the window can't free or outlive what it borrows | none (editor reloads go through `TMapManager::ReloadLevel`) |
 | Panes blit into a CPU backbuffer | Pane `Compose`/`Draw` through `TRenderer` | GPU compositor | none (Classic pixel-identical) |
 | Handlers with 4 raw args, hand-rolled token parsing | `SCommandContext` + `TCommandArgs` | one parsing vocabulary | none |
 | 3,700-line `command.cpp` | per-family handler files, one table | maintainability | none |
