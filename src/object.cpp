@@ -3365,13 +3365,18 @@ void TObjectClass::CopyStats(const TObjectClass* from)
 
 // -------------------- Statistic Functions ----------------------
 
+// REVSYNC: LoadClasses @ 0x00476140 — class.def from ImageryPath when it has
+// one (imagery.rvi does), else ClassDefPath. The editor's lock mode opens the
+// ClassDefPath copy for writing, as before.
 bool TObjectClass::LoadClasses(bool lock, bool reload)
 {
-    char fname[MAXPATHLEN];
     FILE *classfp;
     struct stat st;
 
-    sprintf(fname, "%sclass.def", ClassDefPath);
+    const std::string fname_str =
+        lock ? std::string(ClassDefPath) + "class.def"
+             : rev_first_existing(ImageryPath, ClassDefPath, "class.def");
+    const char *fname = fname_str.c_str();
 
     classfp = TryOpen(fname, lock ? "w+" : "r");
     if (classfp == nullptr)

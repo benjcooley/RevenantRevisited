@@ -197,9 +197,11 @@ bool TModuleManager::Initialize()
     // ships MainModule = "Ahkuilon"; the dev tree mostly contains
     // Ahkuilon_unzipped instead, so the fallback path is the hot path
     // today and the log line tells you which entry was picked.
+    // REVSYNC: GetINISettings @ 0x00484500 reads MainModule with the same
+    // quoted-text getter as the paths (the retail INI writes it quoted).
     char mainname[kModNameMax] = {0};
     INISetSection("Modules");
-    INIGetStr("MainModule", (char *)"Ahkuilon", mainname, sizeof(mainname));
+    INIGetText("MainModule", (char *)"Ahkuilon", mainname, sizeof(mainname));
     main_idx = Find(mainname);
 
     if (main_idx < 0)
@@ -250,6 +252,29 @@ bool TModuleManager::SetCurModule(int idx)
     active_idx = idx;
     log_info("[module] active = '%s' (%s)", m->dirname.c_str(), m->name.c_str());
     return true;
+}
+
+// The "%s%s\%s" (ModulesPath, module dirname, file) composition retail's
+// loaders use for module data.
+std::string TModuleManager::ModuleFilePath(const char *file) const
+{
+    const TModule *m = Active();
+    if (!m)
+        return {};
+    return std::string(ModulesPath) + m->dirname + "\\" + file;
+}
+
+// REVSYNC: the module-or-shared lookup inlined in TAreaManager::Load
+// @ 0x0041c000, TExit::ReadExitList @ 0x0050c8f0, ReadMapLocationList
+// @ 0x00424e10, TGameState::Load @ 0x00495cf0 and TScriptManager::Load
+// @ 0x00496490.
+std::string TModuleManager::DataFilePath(const char *file) const
+{
+    const TModule *m = Active();
+    if (!m)
+        return std::string(ClassDefPath) + file;
+    const std::string module_dir = std::string(ModulesPath) + m->dirname + "\\";
+    return rev_first_existing(module_dir.c_str(), ClassDefPath, file);
 }
 
 bool TModuleManager::SetCurModule(const char *dirname)

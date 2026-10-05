@@ -34,6 +34,7 @@
 #include "render_metadata.h"
 #include "renderer.h"
 #include "revenant.h"
+#include "revutils.h"
 #include "sound.h"
 #include "testconfig.h"
 #include "time.h"
@@ -2323,11 +2324,10 @@ bool InitializeI3DStaticMode()
 bool InitializeWaterPreviewMode()
 {
     std::string meta_error;
-    const std::filesystem::path meta_path =
-        std::filesystem::current_path() / ".." / "data" / "Resources" / "render_metadata.def";
-    if (!LoadRenderMetadataFile(meta_path.string().c_str(), g_i3dTest.render_meta, &meta_error))
+    const std::string meta_path = rev_engine_asset("render_metadata.def");
+    if (!LoadRenderMetadataFile(meta_path.c_str(), g_i3dTest.render_meta, &meta_error))
         log_warn("[water3d] failed to load render metadata '%s': %s",
-                 meta_path.string().c_str(), meta_error.c_str());
+                 meta_path.c_str(), meta_error.c_str());
 
     g_i3dTest.roster = {
         "Misc\\Water.I3D",

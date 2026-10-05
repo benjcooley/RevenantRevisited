@@ -225,7 +225,7 @@ Revenant/
 - **Debugging**: `ShowZBuffer`, `ShowNormalBuffer`, `Debug`
 
 ### Runtime Options (INI Configuration)
-- **Paths**: ClassDefPath, ExileRCPath, ResourcePath, BaseMapPath, CurMapPath
+- **Paths**: ClassDefPath, ExileRCPath, ResourcePath, ImageryPath, CurMapPath, BaseMapPath, MoviePath, SaveGamePath, ModulesPath (retail defaults and how loaders use them: [DATA_LAYOUT.md](DATA_LAYOUT.md))
 - **Lighting**: MaxLights, Ambient3D, LightRange3D
 - **Gameplay**: DoubleTapTicks, ViolenceLevel, GameSpeed
 
