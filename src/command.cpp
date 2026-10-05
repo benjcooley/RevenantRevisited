@@ -4324,7 +4324,14 @@ COMMAND(CmdSpecificAttack) { return CmdNotPorted("specificattack", 0x00427c80, t
 
 // ----- owner: presentation (fades, music, movies, end game) -----
 
-COMMAND(CmdEndGame) { return CmdNotPorted("endgame", 0x00427060, t); }
+// REVSYNC: endgame @ 0x00427060 -- the PlayScreen's next screen is the title
+// and it closes: the game ends (labyrinth.s, after the closing movie and the
+// credits).
+COMMAND(CmdEndGame)
+{
+    GameFlow.ReturnToTitle();
+    return 0;
+}
 
 // REVSYNC: fadescreenout @ 0x00427e80 (single player). Fades the play screen
 // to black and clears the speech on screen; the block holds the fade (taken
