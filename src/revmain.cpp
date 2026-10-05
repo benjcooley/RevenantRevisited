@@ -2426,7 +2426,7 @@ sapp_desc sokol_main(int argc, char* argv[])
     // flag in case desc.hidden wasn't honored by a build that doesn't
     // include our sokol_app patch). Scan argv directly — argh hasn't run.
     // Also parse --max-runtime=N here: a wall-clock hard ceiling that
-    // calls sapp_request_quit() N seconds after AppFrame first ticks.
+    // hard-exits the process N seconds after AppFrame first ticks.
     // This is a belt-and-suspenders safety net for agent runs — even if
     // the input-script's auto-exit fails or the engine deadlocks before
     // the script drains, the process eventually exits on its own.
@@ -2518,9 +2518,8 @@ static void AppInit()
         if (HeadlessWindow::ParseArgs(g_argc, g_argv))
         {
             log_info("[headless] --headless active; window will be hidden");
-            // Hide ASAP — sokol_app has already shown the NSWindow by the
-            // time init_cb (this AppInit) fires, so a few frames may still
-            // flash visible before the per-frame HideAllWindows kicks in.
+            // desc.hidden already kept the window off screen; this and the
+            // per-frame call in AppFrame keep it that way.
             HeadlessWindow::HideAllWindows();
         }
     }
@@ -2767,9 +2766,13 @@ static void AppCleanup()
 {
     // ShutdownGlobals() handles MainWindow.Close() as its very last step;
     // AppCleanup just drives that and then unmounts the resource archives.
+    // The log lines bracket the teardown so a test run can confirm the
+    // process went through it rather than a hard exit.
+    log_info("[shutdown] begin");
     if (SystemInitialized)
         ShutdownGlobals();
     UnmountAll();
+    log_info("[shutdown] complete");
 }
 
 // Translate an sapp_keycode into the legacy VK_* codes the screen / pane
