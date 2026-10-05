@@ -300,6 +300,14 @@ debug level (`[console]`), so headless `--exec` runs can read it.
   (the message goes to the console). A value that isn't a number is
   looked up as a number variable of the caller's prototypes
   (`0x00497800`, sentinel `0xfeced300` → bad parameters).
+- `set <state> [=] <value>` (`0x0041fc00`) steps past the value after
+  storing it (one `WhiteGet`; after `on`/`true`/`off`/`false`, which have
+  already been stepped past, the second lands on the next line's first word
+  and the interpreter skips that line as extra parameters — no shipped
+  script writes those). The port left the number unread until
+  2026-10-05, so each of the 233 `set X = n` lines printed "(extra
+  parameters ignored)"; the value was stored either way. An unknown state is
+  ignored without a message, as retail.
 - `--exec` (`src/consoleexec.cpp`) is a separate command queue —
   **below the bar** (duplicates the console's job).
 - The interpreter's context syntax, the object resolver and the
