@@ -8,10 +8,12 @@
 // about — binding the controller LISTBOX to the live key-binding table
 // (TControlMap ControlMap), key rebinding, and apply/cancel.
 //
-// Retail TOptionsPane (recon cls_0x5b9744): a DEF pane (TDefPane) plus the
-// ControlMap wiring. Toggle/slider binding to the setting globals is roughed
-// in (see OpenOptions()); the controller list + rebind + persist are the real
-// path.
+// Retail TOptionsPane (recon cls_0x5b9744, instance 0x0066fcc0): a DEF pane
+// (TDefPane) plus the ControlMap wiring. Toggle/slider binding to the setting
+// globals is roughed in (see OpenOptions()); the controller list + rebind +
+// persist are the real path. Hosted modally by the in-game menu and as an
+// ordinary pane by the title's Options screen; its "ok" / "cancel" go to the
+// host's activation handler (docs/gameflow/forensics/INGAME_MENU.md §7).
 
 #pragma once
 
@@ -24,10 +26,11 @@ class TOptionsPane : public TDefPane
   public:
     TOptionsPane() = default;
 
-    // Open the "options" panel (options.def, panel "default") at display (x,y)
-    // size (w,h) with chrome `bgDat` (e.g. "optionsalpha.dat"). Ensures
-    // ControlMap is populated and binds the controller list to it.
-    bool OpenOptions(int32_t x, int32_t y, int32_t w, int32_t h, const char* bgDat);
+    // REVSYNC: Open @ 0x0053a8b0 -- options.def panel "default", 640x480 at
+    // display (x,y), with the in-game chrome and fade when `fromGame`
+    // (DEF flags 0x11, else 0). Ensures ControlMap is populated and binds the
+    // controller list to it.
+    bool OpenOptions(bool fromGame, int32_t x, int32_t y);
 
   protected:
     // "ok" persists the key bindings, then the activation handler runs.

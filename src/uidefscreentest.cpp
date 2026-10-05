@@ -11,8 +11,9 @@
 //   --test=ui-savegame     savegame.def    "default"     (Save)
 //   --test=ui-loadgame     loadgame.def    "default"     (Load)
 //
-// Each screen's pane rect + chrome dat are the host-side DefScreen_Open
-// constants from the respective *_SPEC.md (the .def carries pane-LOCAL coords).
+// Each screen's pane rect and DEF flags are the host-side DefScreen_Open
+// constants from the respective *_SPEC.md (the .def carries pane-LOCAL coords);
+// the flags pick the chrome (docs/gameflow/forensics/INGAME_MENU.md §4.2).
 // Simple screens run on a raw TDefPane with synthetic FIELD data; Options runs
 // on TOptionsPane which sources its controller list from the live keymapper.
 
@@ -33,26 +34,26 @@ namespace {
 struct SScreenSpec
 {
     const char* mode;
-    const char* def;        // <def>.def
+    const char* def;        // <def>.def, and the base of its chrome dat
     const char* panel;      // PANEL name
     int32_t     x, y, w, h; // pane rect on the 640x480 design canvas
-    const char* bgdat;      // chrome archive
+    uint32_t    defflags;   // retail DefScreen_Open flags (TDefPane::DEF_*)
     bool        modal;      // pushed as a modal (retail RunModal) vs added as a pane
 };
 
 constexpr SScreenSpec kScreens[] = {
-    // InGameMenuDef_SPEC §3: pane TL (126,65), 394x316. Retail runs it modally
-    // (TPlayScreen in-game menu 0x0047e500 -> RunModal).
-    {"ui-ingamemenu", "ingamemenu", "ingamemenu", 126, 65, 394, 316, "ingamemenunotex.dat", true},
-    // OptionsDef_SPEC §3: full-display pane (0,0) 640x480. The "alpha" variant is
-    // the full pre-composited Ahkuilon backdrop + frame + OPTIONS plate (retail);
-    // "notex" is frame-only (software fallback), "tex" is the ARGB4444 variant.
-    {"ui-options",    "options",    "default",    0,   0,  640, 480, "optionsalpha.dat",    false},
-    // Save/Load full-display chrome. Load is reached from the main menu and ships
-    // an "alpha" scene backdrop (battle vista); Save is in-game only and has a
-    // transparent interior meant to overlay the frozen game frame.
-    {"ui-savegame",   "savegame",   "default",    0,   0,  640, 480, "savegamenotex.dat",   false},
-    {"ui-loadgame",   "loadgame",   "default",    0,   0,  640, 480, "loadgamealpha.dat",   false},
+    // InGameMenuDef_SPEC §3: pane TL (126,65), 394x316, flags 0x11. Retail runs
+    // it modally (TPlayScreen in-game menu 0x0047e500 -> RunModal).
+    {"ui-ingamemenu", "ingamemenu", "ingamemenu", 126, 65, 394, 316, TDefPane::DEF_INGAME, true},
+    // OptionsDef_SPEC §3: full-display pane (0,0) 640x480. From the title (flags
+    // 0) the "alpha" chrome: the full pre-composited Ahkuilon backdrop + frame +
+    // OPTIONS plate.
+    {"ui-options",    "options",    "default",    0,   0,  640, 480, 0,                    false},
+    // Save/Load full-display chrome. Load from the title takes the "alpha" scene
+    // backdrop (battle vista); Save is in-game only (flags 0x11, the "tex"
+    // chrome with a transparent interior over the frozen game frame).
+    {"ui-savegame",   "savegame",   "default",    0,   0,  640, 480, TDefPane::DEF_INGAME, false},
+    {"ui-loadgame",   "loadgame",   "default",    0,   0,  640, 480, 0,                    false},
 };
 
 const SScreenSpec* FindSpec(const char* mode)
@@ -125,13 +126,14 @@ bool InitializeUIDefScreenMode(const char* mode)
     if (IsOptions(g_spec))
     {
         auto* options = new TOptionsPane();
-        ok = options->OpenOptions(x, y, g_spec->w, g_spec->h, g_spec->bgdat);
+        ok = options->OpenOptions(g_spec->defflags != 0, x, y);
         g_pane = options;
     }
     else
     {
         g_pane = new TDefPane();
-        ok = g_pane->Open(g_spec->def, g_spec->panel, x, y, g_spec->w, g_spec->h, g_spec->bgdat);
+        ok = g_pane->Open(g_spec->def, g_spec->panel, g_spec->defflags, x, y, g_spec->w,
+                          g_spec->h, g_spec->def);
         if (ok) PopulateSynthetic(*g_spec, *g_pane);
     }
     if (!ok)
