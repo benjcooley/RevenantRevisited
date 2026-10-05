@@ -42,9 +42,11 @@
 // (feedback_no_standins / feedback_ui_no_mock_use_retail).
 //
 // Test harness driver:
-//   - Synthetic 4-slot binding (Advanced Healing, Iron Skin, Fire Flash,
-//     Ice Bolt — matching the reference image labels exactly so visual
-//     verification against retail is direct).
+//   - Each ring shows the main player's quick spell 1..4 (a talisman code,
+//     TPlayer::GetQuickSpell; retail player + 0x2cc + slot*6, spec §1):
+//     the spell's circle and its spell.def variant name, split into a
+//     label above and below the ring ("Advanced" / "healing"). The
+//     --test=ui-quickspell host supplies a demo player.
 //   - Optional synthetic state cycling can be enabled by the embedding HUD
 //     harness to exercise RingD/RingG. The isolated quickspell mode rests
 //     in the normal enabled state unless input changes it.
@@ -61,7 +63,9 @@
 #include "hudstate.h"
 #include "logging.h"
 #include "multi.h"
+#include "player.h"
 #include "renderer.h"
+#include "spell.h"
 #include "surface.h"
 #include "testconfig.h"
 #include "testmodes.h"
@@ -172,34 +176,17 @@ bool      g_syntheticStateEnabled = false;
 bool      g_showQuickSpellLabels = true;
 
 // =====================================================================
-// Per-slot synthetic binding — spec §6b reads these from the player's
-// quick-spell array (`field_0x2cc + slot*6`, meth_0x51b560). This
-// harness binds directly so the icon/text branches all render without
-// needing a live Player object.
-//
-// Names MUST be SpellIcons.dat entry names (the asset is keyed by name —
-// spec §2). Reference image labels are visual wraps of the same names:
-// "Advanced healing" wraps "Advanced Healing", "IronSkin" is a compact
-// alias for "Iron Skin", etc.
+// Per-ring binding: the talisman code the cell was last bound to, so a
+// cell is rebound only when the player's quick spell changes.
 // =====================================================================
 struct SQuickSlot
 {
-    const char* spellName;    // SpellIcons.dat entry name
-    const char* labelLine1;   // text-wrapped 2-line label (reference image)
-    const char* labelLine2;
-    PTBitmap    icon;         // cached on init
-    char        labelLine1Buf[32];
-    char        labelLine2Buf[32];
+    char code[MAXTALISMANLEN]   = {};
+    char labelLine1[RESNAMELEN] = {};
+    char labelLine2[RESNAMELEN] = {};
 };
 
-SQuickSlot g_slots[kBtnCount] = {
-    // Reference image bottom-left labels: "Advanced/healing", "IronSkin",
-    // "Fire/Flash", "Ice/Bolt".
-    { "Advanced Healing", "Advanced", "healing", nullptr },
-    { "Iron Skin",        "IronSkin", "",        nullptr },
-    { "Fire Flash",       "Fire",     "Flash",   nullptr },
-    { "Ice Bolt",         "Ice",      "Bolt",    nullptr },
-};
+SQuickSlot g_slots[kBtnCount];
 
 // =====================================================================
 // Per-slot state — spec §5/§6c flag word (mbr_0x14 bits 0x4 = disabled,
@@ -226,23 +213,7 @@ SSlotState g_slotState[kBtnCount];
 static TSpellIconSlot* g_cells[kBtnCount] = { nullptr, nullptr, nullptr, nullptr };
 static bool g_cellsSetup = false;
 
-static void SetQuickSlotLabelFromSpellName(int32_t slot, const char* spellName);
 static void ConfigureQuickSpellCellLabel(int32_t slot);
-
-// Quickspell bindings — harness-local binding table. In production these
-// live in SHudState::quickspellBindings[4] (Agent A coordination needed;
-// see comment in uispellcell.h). For now, bindings are driven by the
-// synthetic slot data (g_slots[]).
-//
-// When a spell is dragged from the spellbook (EDragSource::SpellPane) and
-// dropped on one of these cells, the cell's onDrop callback fires and
-// updates this table, then marks the test-mode dirty.
-char g_quickspellBindings[kBtnCount][64] = {
-    "Advanced Healing",
-    "Iron Skin",
-    "Fire Flash",
-    "Ice Bolt",
-};
 
 // =====================================================================
 // Asset lookup helper — same shape as the other ui*test panes.
@@ -277,64 +248,35 @@ static void SetupCells()
         g_cells[i]->SetRingSprites(g_ringU, g_ringD, g_ringG);
         g_cells[i]->SetHitRect(0, 0, 0x20, 0x20);
         g_cells[i]->SetIconOffset(0, 0);
-        g_cells[i]->SetSpell(g_slots[i].icon, i, g_slots[i].spellName);
+        g_cells[i]->SetSpell(nullptr, i, "");
+        g_slots[i] = SQuickSlot{};
         ConfigureQuickSpellCellLabel(i);
-        // Drop callback: update the harness binding table and re-init the
-        // cell from the new spell (if we have an icon for it).
+        // Drop callback. Assigning a spell to a ring (TPlayer::SetQuickSpell)
+        // needs a spell-book row to pick one up, which isn't wired yet.
         const int32_t slotIdx = i;
         g_cells[i]->SetOnDrop([slotIdx](int32_t /*destSlot*/, int32_t srcIdx) {
-            // srcIdx is the spell index from the drag source (spellbook row).
-            // For the test harness: find the spell name from g_spells[] in
-            // uispellbooktest.cpp — we can't cross-link the anonymous
-            // namespaces, so we use the quickspell binding string instead.
-            // This is a harness-only limitation; production uses SHudState.
             log_info("[ui-quickspell] spell dropped on slot %d (src idx %d)",
                      slotIdx, srcIdx);
         });
     }
 }
 
-static void SetQuickSlotLabelFromSpellName(int32_t slot, const char* spellName)
+// Bind ring `slot` to talisman code `code`: the spell's circle, and its
+// variant name split at the first space into the label above the ring
+// and the label below it ("Advanced healing" -> "Advanced" / "healing").
+static void BindQuickSlot(int32_t slot, const char* code)
 {
-    if (slot < 0 || slot >= kBtnCount) return;
     SQuickSlot& s = g_slots[slot];
-    if (!spellName || !spellName[0])
-    {
-        s.labelLine1Buf[0] = 0;
-        s.labelLine2Buf[0] = 0;
-        s.labelLine1 = s.labelLine1Buf;
-        s.labelLine2 = s.labelLine2Buf;
-        return;
-    }
-
-    if (!std::strcmp(spellName, "Iron Skin"))
-    {
-        std::snprintf(s.labelLine1Buf, sizeof(s.labelLine1Buf), "IronSkin");
-        s.labelLine2Buf[0] = 0;
-    }
-    else
-    {
-        const char* sp = std::strchr(spellName, ' ');
-        if (sp)
-        {
-            const size_t n = (size_t)(sp - spellName);
-            const size_t cap = sizeof(s.labelLine1Buf) - 1;
-            const size_t cp = n < cap ? n : cap;
-            std::memcpy(s.labelLine1Buf, spellName, cp);
-            s.labelLine1Buf[cp] = 0;
-            std::snprintf(s.labelLine2Buf, sizeof(s.labelLine2Buf), "%s", sp + 1);
-            if (!std::strcmp(s.labelLine2Buf, "Healing"))
-                std::snprintf(s.labelLine2Buf, sizeof(s.labelLine2Buf), "healing");
-        }
-        else
-        {
-            std::snprintf(s.labelLine1Buf, sizeof(s.labelLine1Buf), "%s", spellName);
-            s.labelLine2Buf[0] = 0;
-        }
-    }
-
-    s.labelLine1 = s.labelLine1Buf;
-    s.labelLine2 = s.labelLine2Buf;
+    std::snprintf(s.code, sizeof(s.code), "%s", code);
+    const SSpellInfo info = LookupSpell(code);
+    const char* name = info.variant ? info.variant->name : "";
+    const char* space = std::strchr(name, ' ');
+    const int32_t n1 = space ? int32_t(space - name) : int32_t(std::strlen(name));
+    std::snprintf(s.labelLine1, sizeof(s.labelLine1), "%.*s", n1, name);
+    std::snprintf(s.labelLine2, sizeof(s.labelLine2), "%s", space ? space + 1 : "");
+    if (g_cells[slot])
+        g_cells[slot]->SetSpell(SpellIconFor(g_spellIconsDat, info), slot, name);
+    ConfigureQuickSpellCellLabel(slot);
 }
 
 static void ConfigureQuickSpellCellLabel(int32_t slot)
@@ -360,38 +302,6 @@ static void ConfigureQuickSpellCellLabel(int32_t slot)
         kLabelCellW, kLabelCellH,
         kLabelR, kLabelG, kLabelB,
         ETextAlign::Center);
-}
-
-// =====================================================================
-// Helper to expose quickspell slot 0-3 binding update from external
-// sources (e.g. uispellbooktest drag-drop path). The callee passes
-// the spell name (SpellIcons.dat key) and the bitmap.
-// =====================================================================
-void QuickSpell_BindSlot(int32_t slot, const char* spellName, PTBitmap icon)
-{
-    if (slot < 0 || slot >= kBtnCount) return;
-    if (!g_cellsSetup) return;
-    // Update harness binding string
-    if (spellName && spellName[0])
-    {
-        const size_t n = std::strlen(spellName);
-        const size_t cap = sizeof(g_quickspellBindings[0]) - 1;
-        std::memcpy(g_quickspellBindings[slot], spellName, n < cap ? n : cap);
-        g_quickspellBindings[slot][n < cap ? n : cap] = 0;
-    }
-    else
-    {
-        g_quickspellBindings[slot][0] = 0;
-    }
-    // Rebind the cell
-    g_cells[slot]->SetSpell(icon, slot, spellName);
-    // Update label data for the label-draw path below
-    g_slots[slot].spellName = g_quickspellBindings[slot];
-    g_slots[slot].icon      = icon;
-    SetQuickSlotLabelFromSpellName(slot, spellName);
-    ConfigureQuickSpellCellLabel(slot);
-    log_info("[ui-quickspell] slot %d rebound to '%s'", slot,
-             spellName ? spellName : "(null)");
 }
 
 // =====================================================================
@@ -441,6 +351,14 @@ public:
         // Icon and ring share the same origin; the 40x40 icon art is already
         // inset inside its source bitmap.
         if (!g_cellsSetup) SetupCells();
+
+        // Follow the player's quick spells 1..4.
+        for (int32_t i = 0; i < kBtnCount; ++i)
+        {
+            const char* code = Player ? Player->GetQuickSpell(QSPELL_1 + i) : "";
+            if (std::strcmp(code, g_slots[i].code) != 0)
+                BindQuickSlot(i, code);
+        }
 
         for (int32_t i = 0; i < kBtnCount; ++i)
         {
@@ -529,8 +447,6 @@ bool InitializeUIQuickSpellMode()
         g_ringU = LookupByName(g_spellIconsDat, kRingUName);
         g_ringD = LookupByName(g_spellIconsDat, kRingDName);
         g_ringG = LookupByName(g_spellIconsDat, kRingGName);
-        for (int32_t i = 0; i < kBtnCount; ++i)
-            g_slots[i].icon = LookupByName(g_spellIconsDat, g_slots[i].spellName);
     }
 
     log_info("[ui-quickspell] rings: RingU=%s RingD=%s RingG=%s",
@@ -540,19 +456,11 @@ bool InitializeUIQuickSpellMode()
     if (g_ringU)
         log_info("[ui-quickspell] RingU %dx%d (expect 48x48 flags=0x104)",
                  g_ringU->width, g_ringU->height);
-    for (int32_t i = 0; i < kBtnCount; ++i)
-        log_info("[ui-quickspell] slot[%d] spell='%s' icon=%s",
-                 i, g_slots[i].spellName,
-                 g_slots[i].icon ? "OK" : "MISS");
-
     // Font: small Arimo for the 2-line spell-name labels (spec §8 /
     // SpellbookPane spec §8 — same convention as the spellbook text).
     g_font = BuildTTFAtlas(kFontPath, kFontPx);
     log_info("[ui-quickspell] font %s @%dpx = %s",
              kFontPath, kFontPx, g_font ? "OK" : "MISS");
-
-    for (int32_t i = 0; i < kBtnCount; ++i)
-        SetQuickSlotLabelFromSpellName(i, g_slots[i].spellName);
 
     delete g_pane;
     g_pane       = nullptr;
@@ -606,7 +514,7 @@ void CloseUIQuickSpellMode()
     g_syntheticStateEnabled = false;
     for (int32_t i = 0; i < kBtnCount; ++i)
     {
-        g_slots[i].icon = nullptr;
+        g_slots[i]      = SQuickSlot{};
         g_slotState[i]  = SSlotState{};
         delete g_cells[i];
         g_cells[i] = nullptr;

@@ -138,6 +138,14 @@
 #define INVITEMSY           2
 #define MAXINVITEMS         (INVITEMSX * INVITEMSY)
 
+// Retail inventory slot numbers (TObjectInstance::AddToInventory 0x0046f3d0,
+// TPlayer::Equip 0x005199b0): carried items, then the 11 equipment slots
+// (0x100 + EQ_*), then the belt (0x10b + n). One inventory holds all three.
+constexpr int kInvSlotLastCarried = 0xfe;
+constexpr int kInvSlotEquipFirst  = 0x100;
+constexpr int kInvSlotBeltFirst   = 0x10b;
+constexpr int kInvSlotLast        = 0x115;
+
 // Multipane position and size
 #define MULTIPANEX      459
 #define MULTIPANEY      346

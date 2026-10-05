@@ -31,16 +31,12 @@
 // No hand-rolled glyph walks or shadow passes; no procedural stand-ins.
 //
 // Scope note (spec §0 / §14):
-//   The FIELD value getter (FUN_00547240 — UNCONFIRMED-1) and the full DEF
-//   interpreter (FUN_005475e0) are out of scope for this test mode; the
-//   forensics agent flagged the value-resolver as an open question. We
-//   render synthetic but plausible values (matching the reference player
-//   "Locke" style) directly through the same TEXT/FIELD coordinate model
-//   the interpreter would use — POS 28 62 + LINEHEIGHT 12 + TAB-from-line-
-//   start. So the chrome, layout, colors, shadow, and right-alignment are
-//   all spec-accurate; only the field-name→value lookup is stubbed pending
-//   the DEF engine port. The intent is: a stranger comparing this capture
-//   to a retail Stats-tab screenshot can verify every coord and color.
+//   The full DEF interpreter (FUN_005475e0) is out of scope; this pane walks
+//   the Page1 block as code through the same TEXT/FIELD coordinate model —
+//   POS 28 62 + LINEHEIGHT 12 + TAB-from-line-start. FIELD values are the
+//   main player's, resolved as retail resolves them (FUN_00547240 → the
+//   object's field text, decompiled 2026-10-05; docs/ui/HUD_LIVE_BINDING.md
+//   §6). The --test=ui-stats host supplies a demo player.
 //
 // *************************************************************************
 
@@ -52,6 +48,7 @@
 #include "font.h"
 #include "logging.h"
 #include "multi.h"
+#include "player.h"
 #include "renderer.h"
 #include "surface.h"
 
@@ -117,41 +114,35 @@ TSurface*         g_pane         = nullptr;
 bool              g_hudVisible   = true;
 
 // =====================================================================
-// Synthetic player state — drives the per-FIELD values until the DEF
-// engine + FUN_00547240 value-resolver port (spec §14 UNCONFIRMED-1).
-// Values are plausible mid-game numbers matching the reference player.
+// FIELD values (spec §6a / TStatPane FUN_00547240). The sheet shows the
+// main player (FUN_005475e0 :115-122 binds DAT_00667fcc). The pane answers
+// "train<stat>" itself; every other field is the object's own
+// (TObjectInstance::GetFieldText, retail vtable +0xc8). An unresolved FIELD
+// draws nothing, its inline label included (FUN_005475e0 :500).
 // =====================================================================
-struct SPlayerSheet
-{
-    const char* name;
-    const char* klass;
-    int32_t     level, exp, nextexp;
-    int32_t     health, maxhealth;
-    int32_t     mana,   maxmana;
-    int32_t     trainstrn, strn, strn_dmg, strn_hit;
-    int32_t     traincons, cons, cons_hlth, cons_ftg;
-    int32_t     trainagil, agil, agil_atk;
-    int32_t     trainrflx, rflx, rflx_def;
-    int32_t     trainmind, mind, mind_mana, mind_spl;
-    int32_t     trainluck, luck, luck_rolls;
-    int32_t     armor, damage;
-};
+constexpr int32_t kFieldLen = 80;     // retail resolve buffer (0x50)
 
-// Reference player matches the Locke-style sample player used by
-// uiplyrstatusbartest. The trainXxx counters seed at 0 (no points to spend).
-SPlayerSheet g_player = {
-    "Locke", "Knight",
-    26, 12500, 14000,
-    1833, 1930,
-    2174, 2650,
-    0, 18, 4, 2,
-    0, 16, 8, 6,
-    0, 14, 3,
-    0, 12, 2,
-    0, 10, 1, 1,
-    0,  8, 4,
-    24, 12,
-};
+// FUN_0051a280: the six trainable-stat names after "train".
+constexpr const char* kTrainStats[] = { "strn", "cons", "agil", "rflx", "mind", "luck" };
+
+bool FieldText(const char* field, char (&buf)[kFieldLen])
+{
+    buf[0] = '\0';
+    if (!Player)
+        return false;
+
+    // "train<stat>" shows "+" for the stat(s) the player picked at the last
+    // level-up (player +0x360/+0x364, the latter below level 15). The port
+    // doesn't keep that choice yet, so a valid stat resolves to "".
+    if (strnicmp(field, "train", 5) == 0)
+    {
+        for (const char* stat : kTrainStats)
+            if (stricmp(field + 5, stat) == 0)
+                return true;
+        return false;
+    }
+    return Player->GetFieldText(field, buf, kFieldLen);
+}
 
 // =====================================================================
 // Cursor state used by the per-line emitters. Mirrors the §6a interpreter
@@ -235,60 +226,78 @@ void EmitRight(const char* text, int32_t rightAt, int32_t y, SRgb col,
                              col.r, col.g, col.b, tw, th);
 }
 
+// FIELD [label] name — the label and the resolved value as one run in the
+// line's color; nothing at all when the field doesn't resolve.
+void EmitField(SCursor& c, const char* label, const char* field, SRgb col,
+               int32_t tw, int32_t th)
+{
+    char value[kFieldLen];
+    if (!FieldText(field, value))
+        return;
+    char run[kFieldLen + 16];
+    std::snprintf(run, sizeof(run), "%s%s", label ? label : "", value);
+    EmitText(c, run, col, tw, th);
+}
+
+// FIELD right name — right-aligned at the pen.
+void EmitFieldRight(const SCursor& c, const char* field, SRgb col,
+                    int32_t tw, int32_t th)
+{
+    char value[kFieldLen];
+    if (FieldText(field, value))
+        EmitRight(value, c.cursorX, c.cursorY, col, tw, th);
+}
+
 // =====================================================================
-// Per-stat row emitter (spec §8 — per-stat row x-stops).
-//   TAB 12 → x=40   trainXxx field (right-aligned)
-//   TAB 14 → x=42   "Strn"/"Cons"/etc label (cream, left)
-//   TAB 56 → x=84   stat value (right-aligned, color = cream)
-//   TAB 70 → x=98   mods column (cream, "Dmg<v> Hit<v>" / "Hlth<v> Ftg<v>"...)
+// Per-stat row emitter (spec §8 — per-stat row x-stops; def :60-121).
+//   TAB 12 → x=40   FIELD right train<stat>
+//   TAB 14 → x=42   TEXT "<Label>" (cream, left)
+//   TAB 56 → x=84   FIELD right <stat>
+//   TAB 70 → x=98   FIELD "<mod label>" <stat>mod1 [FIELD ... <stat>mod2]
 //
 // The "right" variant means the digits end at the pen, not start there
 // (spec §8 visual-anchor check). lineStartX is 28 (from POS 28 62) so the
 // per-stat x-stops are lineStartX + TAB: 40, 42, 84, 98.
 // =====================================================================
-void EmitStatRow(SCursor& c,
-                 const char* statLabel,
-                 int32_t trainPts,
-                 int32_t statVal,
-                 const char* modLabel1, int32_t modVal1,
-                 const char* modLabel2, int32_t modVal2,   // pass null for unused
-                 int32_t tw, int32_t th)
+struct SStatRow
 {
-    char buf[32];
+    const char* label;                 // TEXT
+    const char* stat;                  // FIELD name, also train<stat>
+    const char* modLabel1 = nullptr;   // FIELD "<label>" <stat>mod1
+    const char* modLabel2 = nullptr;   // FIELD "<label>" <stat>mod2
+};
 
-    // TAB 12 → x=40, right-aligned trainXxx FIELD.
-    // Color: GREEN when trainable points > 0, cream otherwise (spec §10
-    // grey/active state — `0x3c3c3c` grey for unspent=0). We use cream for
-    // the inactive state since the harness has no spendable-points source;
-    // green when synthetic trainPts > 0 to demonstrate the active branch.
+constexpr SStatRow kStatRows[] = {
+    { "Strn", "strn", "Dmg",    " Hit" },
+    { "Cons", "cons", "Hlth",   " Ftg" },
+    { "Agil", "agil", "Atk"            },
+    { "Rflx", "rflx", "Def"            },
+    { "Mind", "mind", "Mana ",  " Spl " },
+    { "Luck", "luck", "Rolls "         },
+};
+
+void EmitStatRow(SCursor& c, const SStatRow& row, int32_t tw, int32_t th)
+{
+    char field[32];
+
     TAB(c, 12);
-    std::snprintf(buf, sizeof(buf), "%d", trainPts);
-    EmitRight(buf, c.cursorX, c.cursorY,
-              trainPts > 0 ? kColGreen : kColCream, tw, th);
+    std::snprintf(field, sizeof(field), "train%s", row.stat);
+    EmitFieldRight(c, field, kColCream, tw, th);
 
-    // TAB 14 → x=42, stat label (cream).
     TAB(c, 14);
-    EmitText(c, statLabel, kColCream, tw, th);
+    EmitText(c, row.label, kColCream, tw, th);
 
-    // TAB 56 → x=84, stat value (right-aligned, cream).
     TAB(c, 56);
-    std::snprintf(buf, sizeof(buf), "%d", statVal);
-    EmitRight(buf, c.cursorX, c.cursorY, kColCream, tw, th);
+    EmitFieldRight(c, row.stat, kColCream, tw, th);
 
-    // TAB 70 → x=98, mods column. Each mod is "<label><value>"; the FIELD
-    // with inline-label form (def :68 `FIELD "Dmg" strnmod1`) prints the
-    // quoted label immediately before the resolved value in the same color
-    // (spec §8 "FIELD with inline label" note).
     TAB(c, 70);
-    if (modLabel1)
+    const char* modLabels[2] = { row.modLabel1, row.modLabel2 };
+    for (int32_t i = 0; i < 2; ++i)
     {
-        std::snprintf(buf, sizeof(buf), "%s%d", modLabel1, modVal1);
-        EmitText(c, buf, kColCream, tw, th);
-    }
-    if (modLabel2)
-    {
-        std::snprintf(buf, sizeof(buf), "%s%d", modLabel2, modVal2);
-        EmitText(c, buf, kColCream, tw, th);
+        if (!modLabels[i])
+            continue;
+        std::snprintf(field, sizeof(field), "%smod%d", row.stat, i + 1);
+        EmitField(c, modLabels[i], field, kColCream, tw, th);
     }
 }
 
@@ -337,34 +346,42 @@ public:
         SCursor c;
         POS(c, kStartX, kStartY);                       // POS 28 62
 
+        // The sheet is the player's; with none, the parchment stays blank
+        // (FUN_005475e0 :115-118).
+        if (!Player)
+        {
+            g_pane->EndPass();
+            return;
+        }
+
         // line y=62: "Name: " + FIELD aqua name        (def :30-31)
         EmitText(c, "Name: ", kColCream, tw, th);
-        EmitText(c, g_player.name, kColAqua, tw, th);
+        EmitField(c, nullptr, "name", kColAqua, tw, th);
 
         // line y=74: "Class: " + FIELD aqua class      (def :33-35)
         NEXTLINE(c);
         EmitText(c, "Class: ", kColCream, tw, th);
-        EmitText(c, g_player.klass, kColAqua, tw, th);
+        EmitField(c, nullptr, "class", kColAqua, tw, th);
 
         // line y=86: "Lvl: <teal> Exp: <teal> Nxt: <teal>"  (def :37-43)
         NEXTLINE(c);
         EmitText(c, "Lvl: ", kColCream, tw, th);
-        EmitNumber(c, g_player.level,   kColTeal, tw, th);
+        EmitField(c, nullptr, "level", kColTeal, tw, th);
         EmitText(c, " Exp: ", kColCream, tw, th);
-        EmitNumber(c, g_player.exp,     kColTeal, tw, th);
+        EmitField(c, nullptr, "exp", kColTeal, tw, th);
         EmitText(c, " Nxt: ", kColCream, tw, th);
-        EmitNumber(c, g_player.nextexp, kColTeal, tw, th);
+        EmitField(c, nullptr, "nextexp", kColTeal, tw, th);
 
         // line y=98: "Hlth: <red>/<red> Mana: <blue>/<blue>"   (def :45-53)
         NEXTLINE(c);
         EmitText(c, "Hlth: ", kColCream, tw, th);
-        EmitNumber(c, g_player.health,    kColRed,  tw, th);
+        EmitField(c, nullptr, "health", kColRed, tw, th);
         EmitText(c, "/", kColRed, tw, th);                       // def :48 (red "/")
-        EmitNumber(c, g_player.maxhealth, kColRed,  tw, th);
+        EmitField(c, nullptr, "maxhealth", kColRed, tw, th);
         EmitText(c, " Mana: ", kColCream, tw, th);
-        EmitNumber(c, g_player.mana,      kColBlue, tw, th);
+        EmitField(c, nullptr, "mana", kColBlue, tw, th);
         EmitText(c, "/", kColBlue, tw, th);                      // def :52 (blue "/")
-        EmitNumber(c, g_player.maxmana,   kColBlue, tw, th);
+        EmitField(c, nullptr, "maxmana", kColBlue, tw, th);
 
         // line y=110: TAB 40 → x=68; "Stats"(green)"/Skills"(cream)  (def :55-58)
         NEXTLINE(c);
@@ -372,56 +389,24 @@ public:
         EmitText(c, "Stats",  kColGreen, tw, th);
         EmitText(c, "/Skills", kColCream, tw, th);
 
-        // -------- 6 trainable-stat rows (def :60-121) -----------------
-        // Each row: TAB 12 trainXxx (right) · TAB 14 label · TAB 56 value (right) ·
-        //           TAB 70 mods("LabelN"). lineStartX is still 28 so the x-stops
-        //           are absolute 40 / 42 / 84 / 98 (spec §8 per-stat row x-stops).
-        NEXTLINE(c);                                                // y=120 Strn
-        EmitStatRow(c, "Strn", g_player.trainstrn, g_player.strn,
-                    "Dmg", g_player.strn_dmg, " Hit", g_player.strn_hit, tw, th);
-
-        NEXTLINE(c);                                                // y=132 Cons
-        EmitStatRow(c, "Cons", g_player.traincons, g_player.cons,
-                    "Hlth", g_player.cons_hlth, " Ftg", g_player.cons_ftg, tw, th);
-
-        NEXTLINE(c);                                                // y=144 Agil
-        EmitStatRow(c, "Agil", g_player.trainagil, g_player.agil,
-                    "Atk",  g_player.agil_atk, nullptr, 0, tw, th);
-
-        NEXTLINE(c);                                                // y=156 Rflx
-        EmitStatRow(c, "Rflx", g_player.trainrflx, g_player.rflx,
-                    "Def",  g_player.rflx_def, nullptr, 0, tw, th);
-
-        NEXTLINE(c);                                                // y=168 Mind
-        EmitStatRow(c, "Mind", g_player.trainmind, g_player.mind,
-                    "Mana ", g_player.mind_mana, " Spl ", g_player.mind_spl, tw, th);
-
-        NEXTLINE(c);                                                // y=180 Luck
-        EmitStatRow(c, "Luck", g_player.trainluck, g_player.luck,
-                    "Rolls ", g_player.luck_rolls, nullptr, 0, tw, th);
+        // -------- 6 trainable-stat rows (def :60-121), y=120..180 -----
+        for (const SStatRow& row : kStatRows)
+        {
+            NEXTLINE(c);
+            EmitStatRow(c, row, tw, th);
+        }
 
         // line y=192: "Armor: <yellow> Dmg: <yellow>"   (def :123-127)
         NEXTLINE(c);
         EmitText(c, "Armor: ", kColCream, tw, th);
-        EmitNumber(c, g_player.armor,  kColYellow, tw, th);
-        EmitText(c, " Dmg: ",   kColCream, tw, th);
-        EmitNumber(c, g_player.damage, kColYellow, tw, th);
+        EmitField(c, nullptr, "armor", kColYellow, tw, th);
+        EmitText(c, " Dmg: ", kColCream, tw, th);
+        EmitField(c, nullptr, "damage", kColYellow, tw, th);
 
         g_pane->EndPass();
     }
 
 private:
-    // %d emit — synthetic FIELD value stand-in (the real FUN_00547240
-    // resolver is UNCONFIRMED-1, spec §14). The numeric format is "%d" per
-    // every FIELD in the Page1 block (def :40-127, all integer fields).
-    static void EmitNumber(SCursor& c, int32_t v, SRgb col,
-                           int32_t tw, int32_t th)
-    {
-        char buf[16];
-        std::snprintf(buf, sizeof(buf), "%d", v);
-        EmitText(c, buf, col, tw, th);
-    }
-
     void EnsurePane()
     {
         if (g_pane) { PlacePane(); return; }

@@ -212,7 +212,7 @@ void TMoney::FreeInvItem(int32_t type, int32_t count)
     if (invusecount[type][count] == 0)
         return;
 
-    if (--(invusecount[type][count]) < 1 && invitem[count])
+    if (--(invusecount[type][count]) < 1 && invitem[type][count])
     {
         delete invitem[type][count];
         invitem[type][count] = nullptr;

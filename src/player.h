@@ -214,6 +214,8 @@ class TPlayer : public TCharacter
     // Info functions
     virtual int32_t GetResistance(int32_t type);
       // Get character's resistance to the given damage type
+    bool GetFieldText(const char *field, char *buf, int32_t buflen) override;
+      // Player fields of the stat sheet (retail 0x0051dfb0)
 
     // Resolve functions
     virtual int32_t ResolveCombat(PTActionBlock ab, int32_t bits);

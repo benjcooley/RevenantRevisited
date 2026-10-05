@@ -257,6 +257,27 @@ target_include_directories(test_classiclighting PRIVATE
 target_compile_definitions(test_classiclighting PRIVATE SOKOL_${SOKOL_BACKEND})
 target_link_libraries(test_classiclighting PRIVATE GTest::gtest_main)
 
+# Sound file decoding and lengths (audio_backend's decoders; no playback
+# device). miniz reads the shipped voices when REVENANT_DATA_PATH is set.
+add_executable(test_audio_decode
+  tools/test_audio_decode.cpp
+  src/audio_backend.cpp
+  ${MINIZ_DIR}/miniz.c
+  ${LOG_DIR}/log.c)
+target_include_directories(test_audio_decode PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR}
+  ${SIMPLEINI_DIR}
+  ${MINIZ_DIR}
+  ${LOG_DIR}
+  ${ARGH_DIR}
+  ${STB_DIR}
+  ${MINIAUDIO_DIR}
+  ${IMGUI_DIR}
+)
+target_compile_definitions(test_audio_decode PRIVATE SOKOL_${SOKOL_BACKEND})
+target_link_libraries(test_audio_decode PRIVATE GTest::gtest_main)
+
 # ----------------------------------------------------------------------------
 # revsmk — clean-room Smacker (SMK2) decoder. Self-contained (C++ stdlib only),
 # so it's a standalone static lib the engine and the smkdump tool both link.

@@ -141,13 +141,18 @@ void UnmountAll();
 // exists (logged once).
 [[nodiscard]] std::string rev_engine_asset(const char *relpath);
 
-// Enumerate file entries across all mounted archives whose in-archive
-// path starts with `prefix` (case-insensitive). Returns lowercase
-// basenames (with extension); appended to `out`. Used by subsystems
-// that need to discover assets without per-file probing, e.g. the
-// sound registry walking Sound/effects/*.wav out of resources.rvr.
-// Returns the number of new entries appended.
-size_t VFSListByPrefix(const char *prefix, std::vector<std::string> &out);
+// The files directly in directory `dir` whose extension is `ext` (".wav";
+// case-insensitive), as file names, appended to `names`. Retail's pack-aware
+// findfirst/findnext (FUN_004a19d0 / FUN_004a1b20) over "<dir>*<ext>": the
+// mounted pack whose directory holds `dir` answers if it has any match, and
+// only otherwise is the loose directory listed. A relative `dir` is looked
+// up under SavePath, the Revisited overlay and RunPath, as rev_fopen does; a
+// name found under an earlier root hides the same name under a later one,
+// so each name listed opens with rev_fopen(dir + name). When no root
+// answers, a relative `dir` is looked up as a path inside the base packs
+// (the legacy fallback for older port INIs, as rev_fopen's by-name lookup).
+// Returns the number of names appended.
+size_t rev_find_files(const char *dir, const char *ext, std::vector<std::string> &names);
 
 // Random number generation
 int32_t random(int32_t min, int32_t max);
