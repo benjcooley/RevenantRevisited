@@ -1555,6 +1555,27 @@ COMMAND(CmdIncidentals)
     return 0;
 }
 
+// REVSYNC: fadecharacterout @ 0x00428020, fadecharacterin @ 0x00428070 --
+// `fadecharacterout|fadecharacterin <character>`: fade a character out to
+// nothing or back in (TCharacter::Fade). The name resolves from the context.
+// Retail faded whatever object the name found; only characters fade here.
+// Retail also sent the fade to the other players of a network game. Like
+// retail, the name stays for the interpreter to skip.
+static int32_t FadeCharacter(TObjectInstance* context, TToken& t, TScript* script, int32_t direction)
+{
+    TObjectInstance* target = ResolveScriptObject(t.Text(), context, script);
+    if (!target || !target->IsCharacter())
+        return CMD_BADPARAMS;
+
+    TCharacter* chr = static_cast<TCharacter*>(target);
+    chr->Fade(direction);
+    log_debug("[cmd] %s: fade %s from %d", chr->GetName(), direction == 1 ? "in" : "out", chr->GetFade());
+    return 0;
+}
+
+COMMAND(CmdFadeCharacterOut) { return FadeCharacter(context, t, script, -1); }
+COMMAND(CmdFadeCharacterIn) { return FadeCharacter(context, t, script, 1); }
+
 // REVSYNC: playerlevel @ 0x00428640 -- `<player>.playerlevel <n>`: rebuild
 // the player as a fresh level-n character (TPlayer::SetPlayerLevel). The
 // table only lets a player be the context.
@@ -3985,8 +4006,6 @@ COMMAND(CmdUnequip) { return CmdNotPorted("unequip", 0x00428180, t); }
 // ----- owner: presentation (fades, music, movies, end game) -----
 
 COMMAND(CmdEndGame) { return CmdNotPorted("endgame", 0x00427060, t); }
-COMMAND(CmdFadeCharacterIn) { return CmdNotPorted("fadecharacterin", 0x00428070, t); }
-COMMAND(CmdFadeCharacterOut) { return CmdNotPorted("fadecharacterout", 0x00428020, t); }
 COMMAND(CmdFadeScreenIn) { return CmdNotPorted("fadescreenin", 0x00427f60, t); }
 COMMAND(CmdFadeScreenOut) { return CmdNotPorted("fadescreenout", 0x00427e80, t); }
 COMMAND(CmdFogOfWar) { return CmdNotPorted("fow", 0x00425440, t); }
