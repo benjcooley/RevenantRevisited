@@ -78,6 +78,11 @@ class TSaveGame
     // True while a load is replacing the world.
     [[nodiscard]] bool IsLoading() const { return loading; }
 
+    // REVSYNC: the thumbnail TPlayScreen writes when the in-game menu or the
+    // save dialog opens, or on a quick save: the next frame becomes the
+    // thumbnail the next save stores. `slot`, when given, also gets a copy.
+    void CaptureThumbnail(const std::filesystem::path& slot = {});
+
     // Shows the HUD sidebar the way the saved HUD words in the player record
     // say (SAVE_GAME.md §11.4). Called by a load and again by the PlayScreen
     // once it has built the HUD.
@@ -103,8 +108,14 @@ class TSaveGame
     bool ReadPlayers(TInputStream& is, const SSaveHeader& header);
     void WriteBody(TOutputStream& os) const;
     static SPlayerHudWords CurrentHudWords(const TPlayer& player);
+    static std::filesystem::path ThumbnailFile();
+    static bool WriteThumbnail(const uint8_t* rgba, int32_t width, int32_t height);
+    void StoreThumbnail(const std::filesystem::path& slot);
+    void CopyThumbnailTo(const std::filesystem::path& slot);
 
     std::vector<SSaveSlot>   slots;
     std::vector<SSoldUnique> soldUniques;
     bool                     loading = false;
+    int32_t                  thumbnailVersion = 0;         // bumped by each thumbnail written
+    int32_t                  storedThumbnailVersion = 0;   // the one the last save stored
 };

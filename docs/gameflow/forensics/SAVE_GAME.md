@@ -308,8 +308,12 @@ the order differs it searches every class stat. When object flag
 11. Not ported in `LoadGame`'s reset: finishing a PlayScreen fade
     (`0x0047ece0`), ending a conversation (`0x005360f0`), emptying the
     buy/sell pane (`0x00532f40`). In `SaveGame`: the editor path that
-    rewrites the module's `newgame.sav`, and the `ss.bmp` thumbnail
-    (the port doesn't capture one yet).
+    rewrites the module's `newgame.sav`. *Thumbnail ported in 2f*
+    (§11.7): `TSaveGame::CaptureThumbnail` reads back the next presented
+    frame into `<SavePath>/ss.bmp` (retail `.\ss.bmp`); quick save calls
+    it, the in-game menu and save dialog must call it when they open
+    (retail `0x0047cb52`, `0x0047dc05`); a save with no thumbnail captured
+    since the last one captures its own.
 12. **Stat layout.** The port's CHARACTER and PLAYER object stats were
     in the 1998 order (level at index 6; damage resistances, NextExp,
     the modifiers, skill next-exp and caps appended from class.def;

@@ -24,6 +24,9 @@
 #include "graphics.h"
 #include "surface.h"
 
+#include <functional>
+#include <vector>
+
 #define UPDATE_THISFRAME        0x01        // Adds a dirty rectangle update rect for this frame
 #define UPDATE_NEXTFRAME        0x02        // Adds a dirty rectangle update rect for the next frame
 #define UPDATE_SCREENTOBUFFER   0x04        // Immediately copies the screen rect to the background
@@ -88,6 +91,12 @@ class TDisplay : public TSurface
     // swapchain in that order. ImGui is always rendered last.
     bool FlipPage(bool Wait = true);
 
+    // Reads back the next frame FlipPage presents and hands it to `done`
+    // (RGBA8, top row first, display size). False when the display isn't
+    // up, in which case `done` is never called. Used for save thumbnails.
+    using TCaptureDone = std::function<void(const uint8_t* rgba, int32_t width, int32_t height)>;
+    bool RequestCapture(TCaptureDone done);
+
     // Headless-capture target: when FrameSnap is active, FlipPage mirrors
     // the swapchain composite into this offscreen sg_image RGBA8 RT so
     // framesnap.cpp can read it via Metal blit (renderer_readback). Lazily
@@ -109,4 +118,5 @@ class TDisplay : public TSurface
     sg_image  snap_capture_color { SG_INVALID_ID };
     int32_t   snap_capture_w = 0;
     int32_t   snap_capture_h = 0;
+    std::vector<TCaptureDone> capture_requests;
 };
