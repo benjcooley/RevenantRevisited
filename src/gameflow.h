@@ -34,12 +34,13 @@ class TGameFlow
 
     void StartNewGame();                    // title "New Game"
     void LoadGame(const char* saveName);    // QUICKSTART="<save>", load screens
+    void PlayerDied();                      // TPlayer death countdown ran out
+    void RestartAfterDeath();               // death screen "Restart"
     void ReturnToTitle();                   // Quit Module, death Exit, endgame
     void QuitApplication();                 // title Exit, in-game Exit Program
 
   private:
-    // Ends the current screen with `next` as its successor (null = quit). Before
-    // the first screen runs, `next` simply becomes the boot screen.
+    // Ends the current screen with `next` as its successor (null = quit).
     void SwitchTo(TScreen* next);
 };
 

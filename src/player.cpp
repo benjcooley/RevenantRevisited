@@ -12,14 +12,13 @@
 #include "armor.h"
 #include "statusbar.h"
 #include "equip.h"
-#include "death.h"
+#include "gameflow.h"
 #include "playscreen.h"
 #include "inventory.h"
 #include "mappane.h"
 #include "spell.h"
 #include "spellpane.h"
 
-extern TDeathPane DeathPane;
 
 extern TObjectClass  CharacterClass; // Used to indicate player is derived from character
 extern TObjectClass TalismanClass;
@@ -199,21 +198,28 @@ void TPlayer::ClearPlayer()
     }
 }
 
-int32_t deathframe = 0;
-
 void TPlayer::Pulse()
 {
     TCharacter::Pulse();
 
+    // REVSYNC: TPlayer::Animate @ 0x00518aa0. While alive the countdown is held
+    // at 192 frames (8 s at 24 Hz); once health drops below 1 it runs down and
+    // at zero the game ends on the death screen. (The 1998 snapshot showed a
+    // death pane on the PlayScreen after 100 frames instead.)
+    // REVSYNC-DIVERGENCE: retail also holds the countdown at >= 1 while a
+    // character flag (+0x110 bit 0x1000) is set; that flag is not identified
+    // yet, so the hold is not ported. Retail counted in Animate (once per 24 Hz
+    // tick); the port counts in Pulse, the same rate on the simulation side.
     if (!Editor)
     {
-        if (Health() <= 0)
+        if (Health() < 1)
         {
-            if (deathframe++ > 100)
-                PlayScreen.SetNextPane(&DeathPane);
+            if (deathcountdown == 0)
+                GameFlow.PlayerDied();
+            --deathcountdown;
         }
         else
-            deathframe = 0;
+            deathcountdown = 0xc0;
     }
 }
 

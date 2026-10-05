@@ -255,6 +255,7 @@ class TPlayer : public TCharacter
     TObjectInstance* equipment[NUM_EQ_SLOTS];       // Player's weapons and armor
     char quickspells[QSPELL_NUM][MAXTALISMANLEN];   // Quickspells (0-construction, 1-4 quick buttons)
     bool OnTheHog;                                  // hog cheat
+    int32_t deathcountdown = 0xc0;                  // frames left before the death screen (retail +0x39c)
 };
 
 DEFINE_BUILDER("Player", TPlayer)
