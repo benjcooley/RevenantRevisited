@@ -15,6 +15,11 @@
 
 #include "revenant.h"
 #include "charstats.h"
+#include "playerstats.h"
+
+#include <array>
+#include <string>
+#include <vector>
 
 #define MAXCHARATTACKS 32
 
@@ -156,6 +161,21 @@ struct SClassData
 
 typedef TPointerArray<SClassData, 16, 16> TClassDataArray;
 
+// REVSYNC: a WEAPON.DEF / ARMOR.DEF entry (retail records of 0xd0 / 0xcc
+// bytes, loaders 0x0048ac30 / 0x0048b1a0). Retail binds an entry to the
+// WEAPON or ARMOR object type of the same name (0x0048c930); the port looks
+// it up by that name.
+struct SItemData
+{
+    bool Load(const char *aname, TToken &t);
+      // Loads the block after `WEAPON "<name>"` / `ARMOR "<name>"`
+
+    std::string name;
+    std::string description;                // DESCRIPTION: a dialog tag
+    std::array<int32_t, 8> basicmods{};     // BASICMODS, in file order (the comment row above each)
+    std::string statline;                   // STATLINE as retail stores it (PlayerStats::ReadStatLine); empty when none
+};
+
 _STRUCTDEF(SCharData)
 struct SCharData
 {
@@ -256,6 +276,14 @@ class TRules
       // Skills stop rising here (retail TPlayer::AddSkillExp @ 0x0051ac90)
     int32_t SkillExpForLevel(int32_t level) const;
       // Experience a skill needs to reach 'level' (retail 0x0048cc90)
+    static constexpr int32_t kMaxPlayerLevel = 30;
+      // Players stop rising here (retail level-up @ 0x0051a630)
+    int32_t ExpForLevel(int32_t level) const;
+      // Experience a player needs to reach 'level' (retail 0x0048cc40)
+    int32_t StatLevel(int32_t plyrstat, int32_t value) const { return statlevels.Get(plyrstat, value); }
+      // The STATLEVEL percent of attribute 'plyrstat' (PLRSTAT_*) at 'value' (retail 0x0048cc20)
+    const SItemData *GetItemData(int32_t objclass, const char *type) const;
+      // The WEAPON.DEF / ARMOR.DEF entry of a weapon or armor type; null if none (retail 0x0048cb50)
     bool Load();
       // Loads character data and class data from rules.def + char.def
     bool LoadFile(const char* fname, bool required);
@@ -277,5 +305,10 @@ class TRules
 
   // Stealth mode values
     int32_t maxstealth, sneakstealth, minstealth;
+
+  private:
+    PlayerStats::TStatLevels statlevels;    // STATLEVEL tables (rules.def)
+    std::vector<SItemData> weapons;         // WEAPON.DEF entries
+    std::vector<SItemData> armors;          // ARMOR.DEF entries
 };
 

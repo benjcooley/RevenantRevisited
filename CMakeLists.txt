@@ -257,6 +257,26 @@ target_include_directories(test_classiclighting PRIVATE
 target_compile_definitions(test_classiclighting PRIVATE SOKOL_${SOKOL_BACKEND})
 target_link_libraries(test_classiclighting PRIVATE GTest::gtest_main)
 
+# Player-stat rules (maxima, STATLEVEL, kill experience, STATLINE).
+# playerstats.cpp needs only the tokenizer; the test stubs parse.cpp's
+# engine hooks like test_parse does.
+add_executable(test_playerstats
+  tools/test_playerstats.cpp
+  src/playerstats.cpp
+  src/parse.cpp)
+target_include_directories(test_playerstats PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR}
+  ${SIMPLEINI_DIR}
+  ${MINIZ_DIR}
+  ${LOG_DIR}
+  ${ARGH_DIR}
+  ${STB_DIR}
+  ${IMGUI_DIR}
+)
+target_compile_definitions(test_playerstats PRIVATE SOKOL_${SOKOL_BACKEND})
+target_link_libraries(test_playerstats PRIVATE GTest::gtest_main)
+
 # Sound file decoding and lengths (audio_backend's decoders; no playback
 # device). miniz reads the shipped voices when REVENANT_DATA_PATH is set.
 add_executable(test_audio_decode

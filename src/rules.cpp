@@ -15,6 +15,7 @@
 #include "playscreen.h"
 #include "rules.h"
 #include "revutils.h"
+#include "logging.h"
 
 extern TObjectClass CharacterClass;
 extern TObjectClass PlayerClass;
@@ -57,20 +58,14 @@ bool SClassData::Load(char *aname, TToken &t)
       // Tags...
         if (TAGIS("STATREQS"))
         {
-            // rules.def column order is `str, con, agl, rflx, luck, mind`
-            // (note: luck before mind), but our PLRSTAT_* enum has
-            // MIND=4 / LUCK=5 — the opposite. Read into the file's order
-            // and rebind to enum slots explicitly so retail data lands in
-            // the right stat.
-            int32_t s_str, s_con, s_agl, s_rfl, s_luck, s_mind;
+            // REVSYNC: 0x004891c0 reads the six values in file order, and
+            // ClearPlayer / SetPlayerLevel apply value i to attribute
+            // PLRSTAT_FIRST + i (Strn Cons Agil Rflx Mind Luck). rules.def's
+            // comment row says "str,con,agl,rflx,luck,mind"; the shipped
+            // code gives the fifth value to Mind and the sixth to Luck.
             ok = Parse(t, "%i, %i, %i, %i, %i, %i",
-                       &s_str, &s_con, &s_agl, &s_rfl, &s_luck, &s_mind);
-            statreqs[PLRSTAT_STRN] = s_str;
-            statreqs[PLRSTAT_CONS] = s_con;
-            statreqs[PLRSTAT_AGIL] = s_agl;
-            statreqs[PLRSTAT_RFLX] = s_rfl;
-            statreqs[PLRSTAT_LUCK] = s_luck;
-            statreqs[PLRSTAT_MIND] = s_mind;
+                       &statreqs[0], &statreqs[1], &statreqs[2],
+                       &statreqs[3], &statreqs[4], &statreqs[5]);
             static_assert(NUM_PLRSTATS == 6, "STATREQS row width changed");
         }
         else if (TAGIS("SKILLMODS"))
@@ -98,7 +93,7 @@ bool SClassData::Load(char *aname, TToken &t)
         {
             // Retail added per-class tags (WM_*, etc.) that didn't exist
             // in the pre-release source. Skip the line.
-            fprintf(stderr, "[rules] skipping unknown class tag '%s'\n", tag);
+            log_warn("[rules] skipping unknown class tag '%s'", tag);
             while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
                 t.Get();
             t.LineGet();
@@ -116,6 +111,66 @@ bool SClassData::Load(char *aname, TToken &t)
 
     if (!t.Is("END"))
         t.Error("Class block END expected");
+    t.Get();
+
+    return true;
+}
+
+// ********************
+// * SItemData Object *
+// ********************
+
+// REVSYNC: the WEAPON / ARMOR block loaders 0x0048ac30 / 0x0048b1a0:
+// BASICMODS (eight numbers), DESCRIPTION (a dialog tag), STATLINE (the rest
+// of the line, kept as PlayerStats::ReadStatLine joins it).
+bool SItemData::Load(const char *aname, TToken &t)
+{
+    name = aname;
+
+    t.SkipBlanks();
+    if (!t.Is("BEGIN"))
+        t.Error("Item block BEGIN expected");
+    t.LineGet();
+
+    while (t.Type() != TKN_EOF && !t.Is("END"))
+    {
+        if (t.Type() != TKN_IDENT)
+            t.Error("Item data keyword expected");
+
+        char tag[40];
+        strncpyz(tag, t.Text(), 40);
+        t.WhiteGet();
+
+        bool ok = true;
+        if (TAGIS("BASICMODS"))
+        {
+            ok = Parse(t, "%i, %i, %i, %i, %i, %i, %i, %i",
+                       &basicmods[0], &basicmods[1], &basicmods[2], &basicmods[3],
+                       &basicmods[4], &basicmods[5], &basicmods[6], &basicmods[7]);
+        }
+        else if (TAGIS("DESCRIPTION"))
+        {
+            char tagname[RESNAMELEN];
+            ok = Parse(t, "%32t", tagname);
+            if (ok)
+                description = tagname;
+        }
+        else if (TAGIS("STATLINE"))
+        {
+            statline = PlayerStats::ReadStatLine(t);
+        }
+        else
+            t.Error("Invalid character tag %s", tag);
+
+        if (!ok)
+            t.Error(errorparsingtag, tag);
+        if (t.Type() != TKN_RETURN)
+            t.Error("Return expected");
+        t.LineGet();
+    }
+
+    if (!t.Is("END"))
+        t.Error("Item block END expected");
     t.Get();
 
     return true;
@@ -567,6 +622,9 @@ bool TRules::Initialize()
     chardata.DeleteAll();
     classdata.DeleteAll();
     def = nullptr;
+    statlevels = {};
+    weapons.clear();
+    armors.clear();
 
     if (!Load())
         return false;
@@ -584,6 +642,9 @@ void TRules::Close()
     chardata.DeleteAll();
     classdata.DeleteAll();
     def = nullptr;
+    statlevels = {};
+    weapons.clear();
+    armors.clear();
     initialized = false;
 }
 
@@ -592,19 +653,30 @@ void TRules::Close()
 // but holds the 60-character retail roster (Araknid, Issathi, Druhgs, Golems,
 // etc.). When both files define the same CHARACTER name, the later load
 // replaces the earlier one, so char.def wins (retail-authoritative).
-// REVSYNC: Load @ 0x0048b990 — rules.def from ClassDefPath; the roster from
-// ImageryPath when it has one (imagery.rvi does), else ClassDefPath. Retail
-// also reads stats.def, weapon.def, armor.def and equip.def in this loop.
+// REVSYNC: Load @ 0x0048b990 — rules.def from ClassDefPath; char.def,
+// weapon.def and armor.def from ImageryPath when it has them (imagery.rvi
+// does), else ClassDefPath. All go through the same tag loop. Retail also
+// tries equip.def, which no install ships, and stats.def ("no longer used").
 bool TRules::Load()
 {
     const std::string rules_file = std::string(ClassDefPath) + "rules.def";
     if (!LoadFile(rules_file.c_str(), /*required=*/true))
         return false;
 
-    const std::string char_file = rev_first_existing(ImageryPath, ClassDefPath, "char.def");
-    if (rev_file_exists(char_file.c_str()))
-        LoadFile(char_file.c_str(), /*required=*/false);
+    for (const char *name : { "char.def", "weapon.def", "armor.def" })
+    {
+        const std::string file = rev_first_existing(ImageryPath, ClassDefPath, name);
+        if (rev_file_exists(file.c_str()))
+            LoadFile(file.c_str(), /*required=*/false);
+    }
 
+    const auto with_statline = [](const std::vector<SItemData> &items)
+        { return std::count_if(items.begin(), items.end(), [](const SItemData &d) { return !d.statline.empty(); }); };
+    log_info("[rules] %d classes, %d characters, %d weapons and %d armor (%d with STATLINE); "
+             "per level H/F/M %d/%d/%d",
+             (int)classdata.NumItems(), (int)chardata.NumItems(), (int)weapons.size(), (int)armors.size(),
+             (int)(with_statline(weapons) + with_statline(armors)),
+             (int)healthperlevel, (int)fatigueperlevel, (int)manaperlevel);
     return true;
 }
 
@@ -723,6 +795,47 @@ bool TRules::LoadFile(const char* fname, bool required)
                 t.Get();
             }
         }
+        else if (TAGIS("WEAPON") || TAGIS("ARMOR"))
+        {
+          // REVSYNC: 0x0048b990 -- one WEAPON.DEF / ARMOR.DEF entry. Retail
+          // stops on a name given twice; the port keeps the later entry.
+            const bool weapon = TAGIS("WEAPON");
+            char itemname[MAXNAMELEN];
+            ok = Parse(t, "%64s\n", itemname);
+
+            if (ok)
+            {
+                SItemData item;
+                if (!item.Load(itemname, t))
+                    t.Error(weapon ? "Error loading weapon data" : "Error loading armor data");
+
+                std::vector<SItemData> &items = weapon ? weapons : armors;
+                const auto same = std::find_if(items.begin(), items.end(),
+                    [&](const SItemData &d) { return stricmp(d.name.c_str(), itemname) == 0; });
+                if (same != items.end())
+                    *same = std::move(item);
+                else
+                    items.push_back(std::move(item));
+
+                t.WhiteGet();           // retail 0x00479580: a blank after END is allowed
+            }
+        }
+        else if (TAGIS("STATLEVEL"))
+        {
+          // REVSYNC: 0x0048b990 -> 0x0049c9f0
+            char tablename[RESNAMELEN];
+            ok = Parse(t, "%32s\n", tablename);
+
+            if (ok)
+            {
+                const int32_t table = PlayerStats::TStatLevels::FindTable(tablename);
+                if (table < 0)
+                    t.Error("Invalid Stat Level Type in Rules.def");
+                if (!statlevels.Parse(t, table))
+                    t.Error("Error loading statlevel data");
+                t.WhiteGet();           // retail 0x00479580
+            }
+        }
         else
         {
             // Retail added rules tags (TOHIT*, AMMODATA, etc.) that didn't
@@ -730,7 +843,7 @@ bool TRules::LoadFile(const char* fname, bool required)
             // the tag introduces a BEGIN/END block, skip the whole block;
             // otherwise just skip to end-of-line. Leave current token at the
             // trailing RETURN so the "Return expected" check below passes.
-            fprintf(stderr, "[rules] skipping unknown tag '%s'\n", tag);
+            log_warn("[rules] skipping unknown tag '%s'", tag);
             while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
                 t.Get();
             t.LineGet();
@@ -823,4 +936,43 @@ int32_t TRules::SkillExpForLevel(int32_t level) const
     if (level == 0)
         return 0;
     return kSkillExp[std::clamp(level - 1, 0, kMaxSkillLevel - 1)];   // retail doesn't guard < 0
+}
+
+// REVSYNC: 0x0048cc40 -- experience a player needs to reach 'level'; 0 for
+// level 0, the level-30 figure past 30. TRules::Initialize (0x0048b690)
+// builds the table (Rules +0xf0): 0 for level 1, 300 for level 2, then
+// (5 * i + 10) * 20 more for each level after.
+int32_t TRules::ExpForLevel(int32_t level) const
+{
+    static constexpr std::array<int32_t, kMaxPlayerLevel> kExp = [] {
+        std::array<int32_t, kMaxPlayerLevel> table{};
+        table[1] = 300;
+        for (int32_t i = 2; i < kMaxPlayerLevel; i++)
+            table[i] = table[i - 1] + (i * 5 + 10) * 20;
+        return table;
+    }();
+
+    if (level == 0)
+        return 0;
+    return kExp[std::clamp(level - 1, 0, kMaxPlayerLevel - 1)];   // retail doesn't guard < 0
+}
+
+// REVSYNC: 0x0048cb50 -- the WEAPON.DEF / ARMOR.DEF entry of an object type,
+// by class and type. Entries are bound to types by name (0x0048c930).
+const SItemData *TRules::GetItemData(int32_t objclass, const char *type) const
+{
+    const std::vector<SItemData> *items = nullptr;
+    if (objclass == OBJCLASS_WEAPON)
+        items = &weapons;
+    else if (objclass == OBJCLASS_ARMOR)
+        items = &armors;
+    if (!items || !type)
+        return nullptr;
+
+    for (const SItemData &item : *items)
+    {
+        if (stricmp(item.name.c_str(), type) == 0)
+            return &item;
+    }
+    return nullptr;
 }
