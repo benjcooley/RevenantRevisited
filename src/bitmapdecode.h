@@ -21,3 +21,11 @@
 // BM_ALIAS bitmap flag).
 bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
                         int32_t ox, int32_t oy, bool prefer_alias = false);
+
+// Decode a 15/16-bit bitmap the way retail's hue-change blit draws it
+// (DM_CHANGEHUE, FUN_004b21d0 -- the 1998 PutHueChange in graphics.cpp):
+// every green-dominant pixel takes `hue` (degrees, 0..359; 360 and up leave
+// it alone) at its own saturation and value, other pixels keep their colour,
+// and pixel 0 or the bitmap's key is transparent. Writes w*h RGBA8 at `dst`.
+bool DecodeBitmapHueChangedToRGBA(const TBitmap* bm, int32_t hue,
+                                  uint8_t* dst, int32_t dst_pitch);
