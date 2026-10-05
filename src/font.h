@@ -13,6 +13,9 @@
 #include "render3d_types.h"
 #include "resource.h"
 
+#include <string>
+#include <vector>
+
 #define FONT_DRAWMODE   (DM_TRANSPARENT | DM_ALIAS | DM_BACKGROUND)
 
 _CLASSDEF(TFont)
@@ -144,3 +147,10 @@ void DrawTextShadowedToTarget(const SFontAtlas* atlas, const char* text,
                               int32_t cellX, int32_t cellY, int32_t cellW, int32_t cellH,
                               ETextAlign align, float r, float g, float b,
                               int32_t target_w, int32_t target_h);
+
+// Word-wraps `text` to `wrapWidth` pixels the way retail's GDI DT_WORDBREAK
+// did (FUN_004acb80): breaks at spaces and '\n', drops the spaces at a break,
+// keeps a word wider than the line whole. Appends the lines to `lines` and
+// returns how many it added (at least one).
+int32_t WrapTextLines(const SFontAtlas* atlas, const char* text, float wrapWidth,
+                      std::vector<std::string>& lines);
