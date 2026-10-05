@@ -6,13 +6,17 @@
 #include "gamesession.h"
 
 #include "area.h"
+#include "dialog.h"
+#include "exit.h"
 #include "gamemap.h"
 #include "logging.h"
 #include "mapmanager.h"
+#include "mappane.h"
 #include "player.h"
 #include "revenant.h"
 #include "savegame.h"
 #include "sector.h"
+#include "textbar.h"
 
 #include <cstdio>
 #include <iterator>
@@ -20,6 +24,7 @@
 
 const TGameSession::SStep TGameSession::kLoadSteps[] = {
     { "areas", &TGameSession::LoadAreas },
+    { "exits", &TGameSession::LoadExits },
     { "game",  &TGameSession::LoadGameState },
     { "world", &TGameSession::EnterWorld },
 };
@@ -78,6 +83,15 @@ bool TGameSession::LoadAreas()
     return AreaManager.Initialize();
 }
 
+// REVSYNC: TExit::Initialize @ 0x0050c880, which retail ran from the map
+// pane's initialize (0x0044d5c0) inside TPlayScreen::Initialize. A missing or
+// malformed exit.def leaves fewer exits; the game still starts.
+bool TGameSession::LoadExits()
+{
+    TExit::Initialize();
+    return true;
+}
+
 // REVSYNC: TPlayScreen::Initialize @ 0x0047a660, start modes 0 and 1. A slot
 // that can't be loaded falls back to a new game, as retail (which also
 // showed GAMENOTFOUND on the text bar).
@@ -114,27 +128,70 @@ bool TGameSession::EnterWorld()
     if (start.devLevel >= 0)
         PlaceAtDevStart(*map);
 
-    for (int32_t i = 0; i < PlayerManager.NumPlayers(); i++)
-    {
-        TPlayer* player = PlayerManager.GetPlayer(i);
-        if (!player || player->GetLevel() != level)
-            continue;
-
-        const S3DPoint pos = player->Pos();
-        TSector* sector = map->FindSector(pos.x >> SECTORWSHIFT, pos.y >> SECTORHSHIFT);
-        if (!sector)
-        {
-            log_warn("[session] no sector under player %d at (%d,%d,%d) on level %d",
-                     i, pos.x, pos.y, pos.z, level);
-            continue;
-        }
-        sector->AddObject(player);
-    }
+    PlacePlayers(*map);
 
     const S3DPoint pos = Player->Pos();
     log_info("[session] entered level %d; player at (%d,%d,%d) in sector %d_%d",
              level, pos.x, pos.y, pos.z, pos.x >> SECTORWSHIFT, pos.y >> SECTORHSHIFT);
     return true;
+}
+
+// REVSYNC: 0x00459b80 -- every player on the map's level who isn't in a
+// sector goes into the one under it. (Retail also took players that had
+// left the game out of the map; single player has none.)
+void TGameSession::PlacePlayers(TGameMap& map) const
+{
+    for (int32_t i = 0; i < PlayerManager.NumPlayers(); i++)
+    {
+        TPlayer* player = PlayerManager.GetPlayer(i);
+        if (!player || player->GetSector() || player->GetLevel() != map.Level())
+            continue;
+
+        const S3DPoint pos = player->Pos();
+        TSector* sector = map.FindSector(pos.x >> SECTORWSHIFT, pos.y >> SECTORHSHIFT);
+        if (!sector)
+        {
+            log_warn("[session] no sector under player %d at (%d,%d,%d) on level %d",
+                     i, pos.x, pos.y, pos.z, map.Level());
+            continue;
+        }
+        sector->AddObject(player);
+    }
+}
+
+void TGameSession::EnterLevel()
+{
+    if (state != EState::Ready)
+        return;
+
+    const int32_t level = MapPane.GetMapLevel();
+    TGameMap* map = MapManager.CurrentMap();
+    if (!map || map->Level() != level)
+    {
+        // Retail loaded synchronously with LOADMAPMSG on the text bar
+        // (EXITS.md §3.2). The port shows it for a frame, then loads.
+        if (!MapManager.GetCached(level) && !loadAnnounced)
+        {
+            TextBar.Print("%s", DialogList.GetLine("LOADMAPMSG"));
+            loadAnnounced = true;
+            return;
+        }
+
+        map = MapManager.SetCurrentLevel(level);
+        if (loadAnnounced)
+        {
+            TextBar.Clear();
+            loadAnnounced = false;
+        }
+        if (!map)
+        {
+            log_error("[session] level %d has no sectors", level);
+            return;
+        }
+        log_info("[session] entered level %d", level);
+    }
+
+    PlacePlayers(*map);
 }
 
 // The player isn't in a sector yet, so the move is a plain position write.
@@ -173,6 +230,7 @@ void TGameSession::End()
         return;
 
     AreaManager.ExitAll();
+    TExit::Close();                 // retail: the map pane's close (0x0044d9c0)
     MapManager.ClearCurMap();
     PlayerManager.Clear();
     AreaManager.Close();

@@ -754,6 +754,8 @@ class TObjectInstance : protected SObjectDef
         // coherent -- but skips the side effects.
     virtual void MoveTo(const S3DPoint& newpos) { SetPos(newpos, -1, false); }
         // Moves object to new position (does walk checking for characters).
+    void Teleport(const S3DPoint& to, int32_t tolevel = -1, bool override = false);
+        // Puts the object somewhere else at once: an exit or `pos` (EXITS.md §3.1)
         // Use this function instead of SetPos() to avoid moving objects through or onto
         // barriers.
     void GetSnapPos(const TObjectInstance* oi, int32_t dist, S3DPoint &p) const;

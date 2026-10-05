@@ -194,7 +194,8 @@ helpers that test `+0x84` (the object's script): `0x004712b0`
 
 `Output` `0x0041ee50` formats into a shared buffer and writes to the
 console only in the editor with the console open. Handlers report
-errors through it; scripts never see the text.
+errors through it; scripts never see the text. The port also logs it at
+debug level (`[console]`), so headless `--exec` runs can read it.
 
 ## 3. Pre-release vs retail
 
@@ -222,6 +223,10 @@ errors through it; scripts never see the text.
   (SCREEN_SYSTEM.md §2.6). `wait` takes any object as its context, as
   retail; with the 1998 character-only context a door's `WAIT` failed
   the class check.
+- The exit commands are ported (EXITS.md §4, §7): `activate` (forced,
+  the script's user if a player), `follow`, `operate`, `setfromexit`,
+  `pos` (retail grammar, including the no-argument form; through
+  `TObjectInstance::Teleport`), and `statmod` (`0x00428200`).
 - A line the interpreter skips (class context mismatch, editor-only,
   missing parameters) takes the next line with it: `SkipLine`
   (`0x004795c0`) reads past the line's end into the next line's first
@@ -242,7 +247,7 @@ errors through it; scripts never see the text.
 - The interpreter's context syntax, the object resolver and the
   expression evaluator are retail (`src/scriptvalue.cpp`). Not ported:
   prototype variables, `setcurrent`, multiplayer parties,
-  and the members `isoutside`, `maxslots`, `isatrelativedistance`,
+  and the members `maxslots`, `isatrelativedistance`,
   `lastattack` (needs the attack-impact result, `TCharacter +0x168`) and
   `groupinrange` — those fail the expression and log once.
 

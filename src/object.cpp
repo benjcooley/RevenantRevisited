@@ -965,14 +965,15 @@ void TObjectInstance::GetScreenPos(S3DPoint& s) const
     }
 }
 
-// Sets the current object position
+// Sets the current object position. REVSYNC: 0x0046ed70 -- a level not given
+// is the object's own; in the map only a non-map object (a player) changes
+// level, and the map may clamp the position (TMapPane::CheckPos).
 int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool override)
 {
     int32_t index = GetMapIndex();
 
-  // Note: can't change level of regular map objects, only non map objects
-    if (newlevel < 0 || !(flags & OF_NONMAP))
-        newlevel = MapPane.GetMapLevel();
+    if (newlevel < 0)
+        newlevel = level;
 
   // Didn't move
     if (newpos == pos && newlevel == level)
@@ -1003,7 +1004,8 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     }
 
   // Make sure we're still in currently loaded map after we move
-    index = MapPane.CheckPos(this, newpos, newlevel);
+    S3DPoint to = newpos;
+    index = MapPane.CheckPos(this, to, newlevel);
 
   // Get original screen rectangle
     SRect oldrect;
@@ -1012,8 +1014,9 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     MapPane.ExtractWalkmap(this);
 
   // Sets new position
-    WriteTransformPos(transform_, pos, newpos);
-    level = newlevel;
+    WriteTransformPos(transform_, pos, to);
+    if (flags & OF_NONMAP)
+        level = newlevel;
 
     MapPane.TransferWalkmap(this);
 
@@ -1043,6 +1046,21 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     }
 
     return index;
+}
+
+// REVSYNC: the move TExit::Activate (0x0050d3a0) and `pos` (0x00423d40)
+// share: a character drops its combat target (0x004d4790 with no target),
+// the camera jumps rather than scrolls if it follows the object (`pos`
+// skips that in the editor), then SetPos. A player whose destination
+// sector isn't loaded leaves the map there until the session brings that
+// level in (TGameSession::EnterLevel).
+void TObjectInstance::Teleport(const S3DPoint& to, int32_t tolevel, bool override)
+{
+    if (objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER)
+        static_cast<TCharacter*>(this)->SetFighting(nullptr);
+    if (!Editor)
+        MapPane.SnapIfFollowing(this);
+    SetPos(to, tolevel, override);
 }
 
 // "Raw poke" path: same single setter as SetPos but skips the

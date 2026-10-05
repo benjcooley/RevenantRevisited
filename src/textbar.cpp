@@ -9,6 +9,7 @@
 
 #include "revenant.h"
 #include "textbar.h"
+#include "logging.h"
 #include "display.h"
 #include "multi.h"
 #include "object.h"
@@ -90,9 +91,10 @@ void TTextBar::Print(const char *txt, ...)
     va_start(marker, txt);
 
     name[0] = '\0';
-    vsprintf(text, txt, marker);
+    vsnprintf(text, sizeof(text), txt, marker);
     va_end(marker);
     SetDirty(true);
+    log_debug("[textbar] %s", text);
 }
 
 void TTextBar::SetHealthDisplay(const char *n, int32_t l)

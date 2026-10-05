@@ -106,6 +106,8 @@ format, `LoadGame`/`SaveGame`, `curmap`) and
 | Save file read/write, slot list, merchant table | save manager (`0x0048d260..0x0048e820`) | `TSaveGame` (evolved to the retail format) |
 | New / load / save / end a game | `PlayScreen::Initialize` start modes, in-game menu | `TGameSession` |
 | Load the player's level, place players | `PlayScreen::Initialize` (`0x004997d0`) | `TGameSession` |
+| Exit list (`exit.def`) | map pane initialize/close (`0x0050c880`, `0x0050c8a0`) | `TGameSession` load step `exits`, `End` (forensics/EXITS.md §8) |
+| Level change after a teleport: load the camera's level, put players back | map pane sector update (`0x00459220`, `0x00459b80`) | `TGameSession::EnterLevel`, each tick after the simulation |
 | Effect imagery, panes, cursors, fades | `PlayScreen::Initialize` | `TPlayScreen` (presentation) |
 | Game time, deferred load/save, simulation tick | PlayScreen (`+0x680..`, `+0x5e4..`, `Pulse`) | `TGameSession` — step 2e |
 
@@ -450,6 +452,7 @@ perform.
 | `LoadGame` resets the world, then reads the file | reads and checks the file first | a missing or damaged save no longer leaves an empty world | only on failure |
 | `TScriptManager` frees script instances on Close | objects own their scripts; the manager's list is non-owning | one owner (the port's objects already freed them: double free) | none |
 | Sectors loaded, streamed and freed by `TMapPane` (global loaded list, `UpdateSectors`, `FreeAllSectors`) | `TMapManager` loads whole levels and owns their sectors; `TMapPane`'s window borrows the current map's | one owner; the window can't free or outlive what it borrows | none (editor reloads go through `TMapManager::ReloadLevel`) |
+| Sector window streamed around the camera and every player; "Loading Map..." whenever it moved onto unloaded sectors | whole levels, kept once visited; the message shows for one frame before a level's first load | one owner, no streaming | the message appears only on a level's first visit |
 | Panes blit into a CPU backbuffer | Pane `Compose`/`Draw` through `TRenderer` | GPU compositor | none (Classic pixel-identical) |
 | Screen fade drawn per tick in 31 alpha levels | stepped on the same ticks, cover interpolated; a fade-in's cover one step behind | time-based animation | smooth; the fade-in reveal trails retail's by one tick |
 | Handlers with 4 raw args, hand-rolled token parsing | `SCommandContext` + `TCommandArgs` | one parsing vocabulary | none |

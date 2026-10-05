@@ -20,6 +20,7 @@
 #include <unordered_set>
 
 #include "character.h"
+#include "exit.h"
 #include "logging.h"
 #include "mappane.h"
 #include "object.h"
@@ -143,7 +144,18 @@ std::optional<int32_t> MemberValue(TToken& t, TObjectInstance& obj,
         return value;
     }
     if (t.Is("isoutside"))
-        return NotPorted("isoutside", 0x0050d2b0, "which side of an object another one is on");
+    {
+        // `<exit>.isoutside <object>`: 1 when the object is behind the exit's
+        // facing (TExit::IsOutside 0x0050d2b0, called at 0x0041f51b). Retail
+        // called it on any object; every shipped use is on an exit.
+        t.Get();
+        t.WhiteGet();
+        const TObjectInstance* other = ResolveScriptObject(t.Text(), caller, script);
+        t.WhiteGet();
+        if (obj.ObjClass() != OBJCLASS_EXIT)
+            return 0;
+        return static_cast<TExit&>(obj).IsOutside(other) ? 1 : 0;
+    }
     if (t.Is("maxslots"))
         return NotPorted("maxslots", 0x00470040, "the inventory capacity of the outermost container");
     if (t.Is("timeofday"))

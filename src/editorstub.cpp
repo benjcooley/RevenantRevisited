@@ -33,7 +33,7 @@ PTTerrainTemplate     TerrainTemplates = nullptr;
 
 // Legacy scratch buffer the retail editor + command interpreter both used
 // for ad-hoc string formatting. Kept in this TU because command.cpp
-// `extern char buf[];`s it.
+// `extern char buf[1024];`s it.
 char                  buf[1024]    = {};
 
 // Legacy editor command stubs. The retail bodies lived in attic/src/

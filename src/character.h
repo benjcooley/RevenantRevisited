@@ -549,7 +549,7 @@ class TCharacter : public TComplexObject
 
     uint32_t charflags = 0;        // Character flags (retail +0x110; retail's allocator zeroed it)
 
-    int32_t exittimestamp;          // When timestamp is +2 frames from current frame, OF_ONEXIT is cleared
+    int32_t exittimestamp;          // Frame the character was last on an exit; OF_ONEXIT clears 5 frames on
     bool is_invisible;          // is our character affected by invisibility
 
   // Move stuff
