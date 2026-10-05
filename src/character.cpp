@@ -53,6 +53,20 @@ DEFOBJSTAT(Character, Health,       HLT,  CHRSTAT_FIRST + CHRSTAT_HEALTH, 25, 0,
 DEFOBJSTAT(Character, Fatigue,      FAT,  CHRSTAT_FIRST + CHRSTAT_FATIGUE, 25, 0, 10000)
 DEFOBJSTAT(Character, Mana,         MAN,  CHRSTAT_FIRST + CHRSTAT_MANA, 25, 0, 10000)
 
+// REVSYNC: the shipped game's CHARACTER object stats 6-16 (SStatEntry
+// registrations; recon/scripts/object_stats.py).
+DEFOBJSTAT(Character, DmgResMisc,     DRMI, CHRRESIST_FIRST + CHRRESIST_MISC,     0, -100, 100)
+DEFOBJSTAT(Character, DmgResHand,     DRHA, CHRRESIST_FIRST + CHRRESIST_HAND,     0, -100, 100)
+DEFOBJSTAT(Character, DmgResPuncture, DRPU, CHRRESIST_FIRST + CHRRESIST_PUNCTURE, 0, -100, 100)
+DEFOBJSTAT(Character, DmgResCut,      DRCU, CHRRESIST_FIRST + CHRRESIST_CUT,      0, -100, 100)
+DEFOBJSTAT(Character, DmgResChop,     DRCH, CHRRESIST_FIRST + CHRRESIST_CHOP,     0, -100, 100)
+DEFOBJSTAT(Character, DmgResBludgeon, DRBL, CHRRESIST_FIRST + CHRRESIST_BLUDGEON, 0, -100, 100)
+DEFOBJSTAT(Character, DmgResMagical,  DRMA, CHRRESIST_FIRST + CHRRESIST_MAGICAL,  0, -100, 100)
+DEFOBJSTAT(Character, DmgResBurn,     DRBU, CHRRESIST_FIRST + CHRRESIST_BURN,     0, -100, 100)
+DEFOBJSTAT(Character, DmgResFreeze,   DRFR, CHRRESIST_FIRST + CHRRESIST_FREEZE,   0, -100, 100)
+DEFOBJSTAT(Character, DmgResPoison,   DRPO, CHRRESIST_FIRST + CHRRESIST_POISON,   0, -100, 100)
+DEFOBJSTAT(Character, DamageMod,      DMGM, CHRVAL_DAMAGEMOD,                     0, -100, 100)
+
 extern TDialogPane DialogPane;
 
 // Some character defines
@@ -4904,13 +4918,13 @@ TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos,
 
 // ------------- Streaming functions ------------------
 
-// Loads object data from the sector
+// REVSYNC: TCharacter::Load @ 0x004d4eb0 (SAVE_GAME.md §11.3).
 void TCharacter::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
+    uint8_t basever = 0;
     if (objversion >= 3)
-        LOAD_BASE(TComplexObject)
-    else
-        TComplexObject::Load(is, version, 0);
+        is >> basever;
+    TComplexObject::Load(is, version, basever);
 
   // Get saved last pulse values (so we can figure what has happened to char)
     if (objversion < 1)
@@ -4958,12 +4972,23 @@ void TCharacter::Load(RTInputStream is, int32_t version, int32_t objversion)
         if (MaxMana() > chardata->mana)
             SetMaxMana(chardata->mana);
     }
+
+  // A character saved dead is removed on its first frame.
+    if (Health() < 1)
+        ResetFlags(flags | OF_KILL);
+
+  // Fully visible, not fading. Retail also zeroes a fade direction
+  // (+0x1a0) the port's fade doesn't model.
+    fade = 100;
+    fade_step = 0;
+    fade_limit = 100;
 }
 
-// Saves object data to the sector
+// REVSYNC: TCharacter::Save @ 0x004d50d0.
 void TCharacter::Save(RTOutputStream os)
 {
-    SAVE_BASE(TComplexObject)
+    os << (uint8_t)TComplexObject::ObjVersion();
+    TComplexObject::Save(os);
 
   // Last time any health/fatigue/mana was recovered
     os << lasthealthrecov;

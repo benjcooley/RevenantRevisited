@@ -109,6 +109,8 @@ class TSector final
       // False if the file is missing, unreadable or malformed; objects read
       // before the failure stay in the sector
     void Save();
+    [[nodiscard]] uint32_t StateHash();
+        // The hash Save writes into the header (SAVE_GAME.md §11.6)
 
     // Sector
 
@@ -209,13 +211,12 @@ class TSector final
     char filename[FILENAMELEN];
     int32_t usecount = 0;
 
-    // v14+ adds a 4-byte hash between sector version and numobjects.
-    // Retail regenerates it at save time over sector coords, numobjects,
-    // and the serialized body of state-bearing objects (obj classes
-    // 0xb/0xc — TCharacter/TPlayer). See TSector::Save at FUN_00498c90
-    // and hash helper FUN_00499e90 in data/Revenant.exe. We round-trip
-    // the read value for now; regeneration is future work.
+    // v14+ header hash between version and object count, as last loaded or
+    // saved. Save regenerates it (StateHash).
     int32_t statehash = 0;
+
+    void KeepInside(TObjectInstance* inst) const;
+        // Moves a loaded object whose position is outside the sector into it
 
     // Bumped on every Add/Remove/Set, set to 1 in Load. Renderer
     // (and any other cache derived from `objects`) compares against

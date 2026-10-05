@@ -1,0 +1,20 @@
+// FUN_00528ea0 @ 00528ea0 size=63
+
+void __thiscall FUN_00528ea0(int param_1,int param_2)
+
+{
+  undefined4 uVar1;
+  undefined4 *puVar2;
+  
+  FUN_00472980(param_2);
+  uVar1 = *(undefined4 *)(param_1 + 0xd8);
+  if ((*(int *)(param_2 + 0xc) + *(int *)(param_2 + 4)) - *(int *)(param_2 + 8) < 4) {
+    FUN_0049cc70(4);
+  }
+  puVar2 = *(undefined4 **)(param_2 + 8);
+  *puVar2 = uVar1;
+  *(undefined4 **)(param_2 + 8) = puVar2 + 1;
+  return;
+}
+
+
