@@ -498,7 +498,7 @@ SCommand Commands[] =
   { "unlock", CmdUnlock, 0, 0, false, true, "usage: unlock\n" },
   { "use", CmdUse, 0, 0, false, false, "usage: <object>.use [<with object>]\n" },
   { "visible", CmdSetVisibility, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.visible <state #>\n" },
-  { "wait", CmdWait, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.wait [<wait type>]\n" },  // retail: context (0,0) (owner flips when body is synced)
+  { "wait", CmdWait, 0, 0, false, false, "usage: <object>.wait [<wait type>]\n" },  // retail 0x0041fe30: any object (doors and triggers wait too)
   { "walkcopy", CmdWalkCopy, -1, -1, true, true, "usage: walkcopy <src tile name> <dest tile name>  <applied rotation>\n" },
   { "walkmap", CmdWalkmap, 0, 0, true, true, "usage: walkmap <delta z>\n" },
   { "while", CmdWhile, -1, -1, true, false, "usage: while <condition>\n         <command block>\n" },
