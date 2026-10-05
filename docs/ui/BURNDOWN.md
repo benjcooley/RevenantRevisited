@@ -130,9 +130,17 @@ Highlights (full status in [RETAIL_UI_RECOVERY_PLAN.md](RETAIL_UI_RECOVERY_PLAN.
   `recon/classes_readable/TStatusBar.{h,cpp}` (may be the multi-bar
   grouping not a single bar), string hunt in `class_index.tsv`,
   PlayScreen decomp `meth_0x*` callers.
-- `[ ]` **B.r3 Tier 2 — Game-log overlay (TTextBar retail port)** —
-  ~~recon `cls_0x5a4358_likely_TTextBar.cpp` is 4× pre-release size;~~ **MISLABEL RETRACTED 2026-05-16** — cls_0x5a4358 is actually TConsolePane (Wave-1C golden-path identification). Real retail TTextBar is at FUN_0054bf70 (init wrapper) with three TMosaicSurface buffers; leaf class vtable still TBD;
-  port the missing scrolling/multi-line/history features.
+- `[x]` **B.r3 Tier 2 — Game-log overlay (TTextBar retail port)** — done
+  2026-10-05 (gameflow track). `src/textbar.{h,cpp}` is retail's TTextBar
+  (vtable `0x5a5560`): a feed of up to nine lines, newest at the bottom, the
+  three newest kept, older ones fading after 5 s; per-type colours; the
+  map-loading progress bar (`texthealthbar`, hue-changed) under the newest
+  line. A production pane on `TPlayScreen` (Compose/Draw), not a HUD
+  harness drawable; `--test=ui-textbar` hosts the same pane. Spec corrected
+  and port mapping in [forensics/TTextBar_SPEC.md](forensics/TTextBar_SPEC.md)
+  §0.1, §13. Not ported: the typed-message prompt and the multiplayer chat
+  feed. (History: `cls_0x5a4358` was once mislabelled TTextBar; it is
+  TConsolePane.)
 - `[ ]` **B.r4 Tier 3 — Right sidebar (TMultiCtrlPane + TEquipPane +
   TSpellPane + TAutoMap + TStatPane)** — verify each against recon.
 - `[ ]` **B.r5 Tier 4 — Bottom quickspell + shelf (TQuickSpellPane +
