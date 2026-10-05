@@ -911,8 +911,8 @@ namespace {
 
 // Walk up from `start` looking for a directory that contains both `src`
 // and `revisited` siblings (our repo layout). Returns empty path on
-// failure. Used by overlay discovery for the dev workflow when the exe
-// lives in <repo>/build/.
+// failure. Used by overlay and engine-asset discovery for the dev workflow
+// when the exe lives in <repo>/build/.
 static std::filesystem::path find_repo_root(const std::filesystem::path &start)
 {
     namespace fs = std::filesystem;
@@ -925,6 +925,73 @@ static std::filesystem::path find_repo_root(const std::filesystem::path &start)
         p = p.parent_path();
     }
     return {};
+}
+
+// The directory holding the running executable, or an empty path.
+static std::filesystem::path executable_dir()
+{
+    namespace fs = std::filesystem;
+#if defined(__APPLE__)
+    char raw[MAXPATHLEN];
+    uint32_t sz = sizeof(raw);
+    if (_NSGetExecutablePath(raw, &sz) == 0)
+    {
+        std::error_code ec;
+        const fs::path p = fs::weakly_canonical(fs::path(raw), ec);
+        return (ec ? fs::path(raw) : p).parent_path();
+    }
+#elif defined(__linux__)
+    char raw[MAXPATHLEN];
+    const ssize_t n = readlink("/proc/self/exe", raw, sizeof(raw) - 1);
+    if (n > 0)
+    {
+        raw[n] = 0;
+        return fs::path(raw).parent_path();
+    }
+#endif
+    return {};
+}
+
+std::string rev_engine_asset(const char *relpath)
+{
+    namespace fs = std::filesystem;
+    static const fs::path s_dir = [] {
+        auto is_dir = [](const fs::path &p) {
+            std::error_code ec;
+            return !p.empty() && fs::is_directory(p, ec);
+        };
+        fs::path found;
+        if (const char *env = getenv("REVENANT_ASSETS_PATH"); env && *env && is_dir(env))
+            found = env;
+        const fs::path exe_dir = executable_dir();
+        if (found.empty() && !exe_dir.empty())
+        {
+            for (const fs::path &cand : {exe_dir / "assets",
+                                         exe_dir / ".." / "Resources" / "assets"})
+                if (is_dir(cand))
+                {
+                    found = cand;
+                    break;
+                }
+        }
+        if (found.empty() && !exe_dir.empty())
+            if (const fs::path repo = find_repo_root(exe_dir); is_dir(repo / "assets"))
+                found = repo / "assets";
+
+        if (found.empty())
+        {
+            log_error("[assets] engine assets not found; looked in $REVENANT_ASSETS_PATH, "
+                      "<exe-dir>/assets, <exe-dir>/../Resources/assets, <repo>/assets");
+            return fs::path{};
+        }
+        std::error_code ec;
+        const fs::path canon = fs::weakly_canonical(found, ec);
+        log_info("[assets] engine assets: %s", (ec ? found : canon).string().c_str());
+        return ec ? found : canon;
+    }();
+    if (s_dir.empty() || !relpath)
+        return {};
+    return (s_dir / relpath).string();
 }
 
 const char *rev_resolve_revisited_overlay()
@@ -962,26 +1029,7 @@ const char *rev_resolve_revisited_overlay()
         }
     }
 
-    // Resolve exe directory once.
-    fs::path exe_dir;
-#if defined(__APPLE__)
-    {
-        char raw[MAXPATHLEN];
-        uint32_t sz = sizeof(raw);
-        if (_NSGetExecutablePath(raw, &sz) == 0)
-        {
-            std::error_code ec;
-            fs::path p = fs::weakly_canonical(fs::path(raw), ec);
-            exe_dir = (ec ? fs::path(raw) : p).parent_path();
-        }
-    }
-#elif defined(__linux__)
-    {
-        char raw[MAXPATHLEN];
-        ssize_t n = readlink("/proc/self/exe", raw, sizeof(raw) - 1);
-        if (n > 0) { raw[n] = 0; exe_dir = fs::path(raw).parent_path(); }
-    }
-#endif
+    const fs::path exe_dir = executable_dir();
 
     // 2) production: <exe-dir>/RevenantRevisited.rvr
     // 3) production alt: <RunPath>/RevenantRevisited.rvr — RunPath is set
@@ -1322,25 +1370,7 @@ std::filesystem::path vfs_resolve_data_root()
             return fs::canonical(cand, ec);
     }
 
-    fs::path exe_dir;
-#if defined(__APPLE__)
-    {
-        char raw[MAXPATHLEN];
-        uint32_t sz = sizeof(raw);
-        if (_NSGetExecutablePath(raw, &sz) == 0)
-        {
-            std::error_code ec;
-            fs::path p = fs::weakly_canonical(fs::path(raw), ec);
-            exe_dir = (ec ? fs::path(raw) : p).parent_path();
-        }
-    }
-#elif defined(__linux__)
-    {
-        char raw[MAXPATHLEN];
-        ssize_t n = readlink("/proc/self/exe", raw, sizeof(raw) - 1);
-        if (n > 0) { raw[n] = 0; exe_dir = fs::path(raw).parent_path(); }
-    }
-#endif
+    const fs::path exe_dir = executable_dir();
     if (!exe_dir.empty())
     {
         for (const fs::path cand : {

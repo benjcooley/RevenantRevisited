@@ -133,7 +133,6 @@ target_compile_definitions(Revenant PRIVATE SOKOL_${SOKOL_BACKEND})
 # Absolute path to vendored fonts so the editor can load them regardless of
 # the current working directory at runtime.
 target_compile_definitions(Revenant PRIVATE REV_FONTS_DIR="${FONTS_DIR}")
-target_compile_definitions(Revenant PRIVATE REV_EDITOR_DATA_DIR="${CMAKE_SOURCE_DIR}/data/editor")
 target_compile_definitions(Revenant PRIVATE REV_VFX_TEST_BG_DIR="${CMAKE_SOURCE_DIR}/tools/vfx/test_backgrounds")
 
 # Include directories for third-party dependencies
@@ -154,6 +153,8 @@ add_executable(test_defdoc tools/test_defdoc.cpp)
 add_executable(test_render_metadata
   tools/test_render_metadata.cpp
   src/render_metadata.cpp)
+# The test reads the source tree's engine asset, whatever the cwd.
+target_compile_definitions(test_render_metadata PRIVATE REV_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
 
 add_executable(test_anim_system
   tools/test_anim_system.cpp
