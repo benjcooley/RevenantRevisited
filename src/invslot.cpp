@@ -70,7 +70,7 @@ namespace {
 
 // The current frame of an animated inventory icon. Retail's panes step
 // these in their Animate pass (EquipPane_SPEC §9); here the 24 Hz tick.
-PTBitmap AnimatedIconFrame(TAnimation* anim)
+TBitmap* AnimatedIconFrame(TAnimation* anim)
 {
     if (!anim || anim->NumFrames() <= 0)
         return nullptr;
@@ -79,24 +79,24 @@ PTBitmap AnimatedIconFrame(TAnimation* anim)
 
 }  // namespace
 
-PTBitmap TInvSlot::ItemIcon(TObjectInstance* item)
+TBitmap* TInvSlot::ItemIcon(TObjectInstance* item)
 {
     if (!item)
         return nullptr;
     TObjectImagery* img = item->GetImagery();
     if (img)
-        if (PTBitmap frame = AnimatedIconFrame(img->GetInvAnimation(item->GetState())))
+        if (TBitmap* frame = AnimatedIconFrame(img->GetInvAnimation(item->GetState())))
             return frame;
-    if (PTBitmap bm = item->InventoryImage())
+    if (TBitmap* bm = item->InventoryImage())
         return bm;
 
     // Items whose icon is baked on another state (or still streaming in).
     if (img)
         for (int32_t s = 0; s < img->NumStates(); ++s)
         {
-            if (PTBitmap bm = img->GetInvImage(s))
+            if (TBitmap* bm = img->GetInvImage(s))
                 return bm;
-            if (PTBitmap frame = AnimatedIconFrame(img->GetInvAnimation(s)))
+            if (TBitmap* frame = AnimatedIconFrame(img->GetInvAnimation(s)))
                 return frame;
         }
     return nullptr;
