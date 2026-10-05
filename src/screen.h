@@ -428,12 +428,17 @@ void ClassicCanvasOrigin(int32_t& x, int32_t& y);
 // `wait screenfade`.
 //
 // The fader holds state only. Its level runs from 0 (black) to `steps`
-// (clear). Retail moved it one step per 24 Hz tick; here it moves at 24
-// steps a second, so a fade lasts steps / 24 seconds and the cover is
-// interpolated between ticks.
+// (clear) and moves at 24 steps a second of simulation time, so a fade
+// lasts steps / 24 seconds. TScreen brings it up to each tick right after
+// the tick's pulse, as retail stepped it, so scripts see it change on the
+// same ticks; between ticks the cover is interpolated.
 class TScreenFade
 {
   public:
+    // Every retail fader is set up 8 steps long (PlayScreen 0x0047b134,
+    // TLogoScreen 0x0053a33e): a third of a second.
+    static constexpr int32_t kDefaultSteps = 8;
+
     // REVSYNC: 0x0046cf90 (vtable +0x30): `steps` long, starting black.
     // Retail also stores a color (+0x14) that its draw never reads.
     void Setup(int32_t steps);
@@ -443,18 +448,19 @@ class TScreenFade
     // REVSYNC: 0x00491c20 (+0x2c)
     void FadeOut();
 
-    // Moves the level toward its target. REVSYNC: 0x00491c90 (+0x00), one
-    // step per tick from the screen's pulse pass 0x0048f180.
-    void Advance(double seconds);
+    // Moves the level toward its target up to tick time `time` (TTime
+    // seconds). REVSYNC: 0x00491c90 (+0x00), retail's one step per tick
+    // from the screen's pulse pass 0x0048f180.
+    void AdvanceTo(double time);
 
     // REVSYNC: 0x0046cf80 (+0x18)
     [[nodiscard]] bool IsBusy() const { return (flags & (kFadingIn | kFadingOut)) != 0; }
     // REVSYNC: 0x00491c70 (+0x24)
     [[nodiscard]] bool IsFadedOut() const { return level == 0.0f && !(flags & kFadingOut); }
 
-    // How much of the frame the black cover hides: 0 clear .. 1 black.
-    // REVSYNC: 0x00491cb0 (+0x10)
-    [[nodiscard]] float Opacity() const;
+    // How much of the frame the black cover hides at time `now`: 0 clear
+    // .. 1 black. REVSYNC: 0x00491cb0 (+0x10)
+    [[nodiscard]] float Opacity(double now) const;
 
   private:
     static constexpr uint32_t kFadingIn  = 2;
@@ -464,6 +470,7 @@ class TScreenFade
     float    level  = 0.0f;     // +0x08: steps of the fade, 0 = black
     float    target = 0.0f;     // +0x0c
     int32_t  steps  = 0;        // +0x10
+    double   clock  = -1.0;     // the tick time `level` is at; < 0 before the first
 };
 
 // ********************************

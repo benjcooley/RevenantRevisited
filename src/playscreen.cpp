@@ -330,10 +330,9 @@ bool TPlayScreen::Initialize()
     if (Player)
         TSaveGame::RestoreHud(Player->HudWords());
 
-    // REVSYNC: 0x0047b10c -- an 8-step fader, starting black, outside the
+    // REVSYNC: 0x0047b10c -- the fader, starting black, outside the
     // editor. TScreen fades it in once Initialize returns.
-    constexpr int32_t kScreenFadeSteps = 8;
-    screenfade.Setup(kScreenFadeSteps);
+    screenfade.Setup(TScreenFade::kDefaultSteps);
     fade = Editor ? nullptr : &screenfade;
 
     log_info("[playscreen] initialize done");
