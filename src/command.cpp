@@ -1269,9 +1269,8 @@ COMMAND(CmdSet)
 }
 
 // REVSYNC: wait @ 0x0041fe30. The waiting script is the context's
-// (retail's object wait wrappers 0x004712b0..0x00471350). Retail's SetWait
-// opened the dialog choices for a response wait; the 1998 dialog pane is
-// shown here until the dialog port moves it.
+// (retail's object wait wrappers 0x004712b0..0x00471350); a response wait
+// opens the dialog choices (TScript::SetWait).
 COMMAND(CmdWait)
 {
     TScript* waiting = context ? context->GetScript() : nullptr;
@@ -1329,13 +1328,8 @@ COMMAND(CmdWait)
     else
         return CMD_WAIT;    // plain "wait": until the context's action is done
 
-    if (type == EScriptWait::Response || type == EScriptWait::ResponseControlOn)
-    {
-        DialogPane.SetCharacter((PTCharacter)context);
-        DialogPane.Show();
-    }
     if (waiting)
-        waiting->SetWait(type);
+        waiting->SetWait(type);         // a response wait opens the choices
     t.WhiteGet();
     return CMD_WAIT;
 }
@@ -1420,14 +1414,15 @@ COMMAND(CmdSay)
         }
     }
 
-    char *text = nullptr;
+    const char *text = nullptr;
     int32_t tagid = -1;
     if (t.Is("choice"))
     {
-        if (DialogPane.GetResponse())
+        // The last choice picked (it survives the commit).
+        if (const char *chosen = DialogPane.ChosenText())
         {
-            text = DialogPane.GetResponse();
-            tagid = DialogList.FindLine(DialogPane.GetResponse());
+            text = chosen;
+            tagid = DialogList.FindLine(chosen);
         }
 
         t.WhiteGet();

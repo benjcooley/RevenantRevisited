@@ -312,6 +312,17 @@ void TScript::SetWait(EScriptWait type, TObjectInstance* object, int32_t frames)
     if (wait != EScriptWait::None)
         return;
 
+    TObjectInstance* waiter = User();
+    const bool response = type == EScriptWait::Response || type == EScriptWait::ResponseControlOn;
+    if (response && waiter == Player)
+    {
+        // Retail sets no wait if the choices are already up, so the block
+        // runs on into its first label (DIALOG.md §2.3).
+        if (DialogPane.IsShowingResponses())
+            return;
+        DialogPane.ShowResponses(waiter, type == EScriptWait::ResponseControlOn);
+    }
+
     wait = type;
     waitframes = frames;
     switch (type)
@@ -320,7 +331,7 @@ void TScript::SetWait(EScriptWait type, TObjectInstance* object, int32_t frames)
       case EScriptWait::ResponseControlOn:
       case EScriptWait::ScreenFade:
       case EScriptWait::BuySell:
-        waitobject = User();
+        waitobject = waiter;
         break;
       default:
         waitobject = object;
@@ -345,12 +356,15 @@ bool TScript::WaitSatisfied(bool commanddone)
 
       case EScriptWait::Response:
       case EScriptWait::ResponseControlOn:
-        if (!DialogPane.HasResponded())
-            return false;
-        if (char* label = DialogPane.GetResponseLabel())
-            Jump(nullptr, label);
-        DialogPane.Hide();
-        return true;
+        // The pane commits the pick in its own pulse, after this one.
+        if (const char *label = DialogPane.CommittedLabel())
+        {
+            taken &= ~kTakenDialog;
+            if (label[0])
+                Jump(nullptr, label);
+            return true;
+        }
+        return false;
 
       case EScriptWait::CharDone:
       {
@@ -551,19 +565,14 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
     }
 
     if (ip == kNotRunning) // Script done
-    {
         lastpriority = 0;
-        if (!DialogPane.IsHidden() &&
-            DialogPane.GetCharacter() == context)
-            DialogPane.Hide();
-    }
 }
 
 // REVSYNC: Jump @ 0x00493fa0 — retail walks to the current trigger by counting
 // BEGIN/END pairs (1000-newpriority iterations) then matches `:label`. Our
 // pre-release port has the same control-flow shape; the priority counter
 // initial value matches.
-void TScript::Jump(TObjectInstance* /*context*/, char *label)
+void TScript::Jump(TObjectInstance* /*context*/, const char *label)
 {
     if (!curproto || !curproto->text)
         return;
@@ -632,6 +641,21 @@ void TScript::End()
     waitobject.Clear();
     ip = kNotRunning;
     lastpriority = priority = 0;
+
+  // Give back what the block took. A block cut off between `choice` and
+  // its response still holds the dialog.
+    if (taken & kTakenDialog)
+    {
+        DialogPane.SkipSpeech();
+        taken &= ~kTakenDialog;
+    }
+}
+
+// REVSYNC: 0x004932a0
+void TScript::AddChoice(const char *label, const char *text)
+{
+    taken |= kTakenDialog;
+    DialogPane.AddChoice(label, text);
 }
 
 void TScript::Reset()
