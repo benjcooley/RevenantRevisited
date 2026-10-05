@@ -1033,10 +1033,14 @@ const char *rev_resolve_revisited_overlay()
 //   macOS:   ~/Library/Application Support/Revenant/
 //   Linux:   $XDG_DATA_HOME/Revenant/ (default ~/.local/share/Revenant/)
 //   Windows: %LOCALAPPDATA%\Revenant\
+// $REVENANT_SAVE_PATH overrides it (isolated test runs, parallel checkouts),
+// as $REVENANT_DATA_PATH does for the data root.
 // Returns an empty path on failure (no $HOME, etc.).
 static std::filesystem::path resolve_user_data_dir()
 {
     namespace fs = std::filesystem;
+    if (const char *override_dir = getenv("REVENANT_SAVE_PATH"); override_dir && *override_dir)
+        return fs::path(override_dir);
 #if defined(__APPLE__)
     if (const char *home = getenv("HOME"))
         return fs::path(home) / "Library" / "Application Support" / "Revenant";
