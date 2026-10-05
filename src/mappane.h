@@ -13,6 +13,8 @@
 #include "screen.h"
 #include "sector.h"
 
+class TGameMap;
+
 // Grid snap
 #define GRIDSHIFT   4
 #define GRIDSIZE    (1 << GRIDSHIFT)
@@ -165,16 +167,8 @@ class TMapPane : public TPane
     void UpdateMouseMovement(int32_t x, int32_t y);
       // Update moving Player around
 
-  // Map management functions
-    void LoadCurMap(char *from = nullptr);
-      // Loads the current map in the "curmap" directory from the given directory 
-      // (i.e. "savegame.001"), or clears the "curmap" directory if nullptr, forces
-      // reload of all sectors.
-    void SaveCurMap(char *to = nullptr);
-      // Saves map in curmap to the given game subdirectory 
-      //(i.e. "savegame.001") or "map" if null
-    void ClearCurMap();
-      // Deletes all files in the "curmap" directory, and forces sectors to reload.
+  // Map management (retail Load/Save/ClearCurMap) lives on TMapManager,
+  // which owns the loaded sectors in the port.
 
   // Lighting functions
     void DrawDLight();
@@ -512,6 +506,7 @@ class TMapPane : public TPane
   
   // Data Members
     TSector* sectors[SECTORWINDOWX][SECTORWINDOWY]; // Currently loaded sectors
+    TSafeRef<TGameMap> windowmap;                   // Map the sectors window borrows from
     int32_t oldsectorx, oldsectory;                 // Position of sector in last frame
     int32_t sectorx, sectory;                       // Position of sector in current frame
     int32_t newsectorx, newsectory;                 // Position of sector in next frame

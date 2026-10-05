@@ -1563,23 +1563,26 @@ FILE *rev_fopen(const char *name, const char *flags)
 
     FILE *fp = fopen(fn, flags);
 
+  // Writes resolve under SavePath and nowhere else: the install, the module
+  // and the data root are the user's original data and stay read-only. A
+  // write into a SavePath directory that doesn't exist fails here; the
+  // caller owns creating its directories.
+    const bool is_read = flags && flags[0] == 'r' && !strchr(flags, '+');
+    if (!is_read)
+        return fp;
+
   // Revisited overlay (Bug fixes, game-behavior tweaks, enhanced
   // graphics/UI). Strictly opt-in: empty string from the resolver means
-  // "no overlay, run vanilla". Reads only — never used for write fallback.
-  // See revisited/README.md for the contract.
+  // "no overlay, run vanilla". See revisited/README.md for the contract.
     if (!fp)
     {
-        const bool is_read = flags && flags[0] == 'r' && !strchr(flags, '+');
-        if (is_read)
+        const char *overlay = rev_resolve_revisited_overlay();
+        if (overlay && overlay[0])
         {
-            const char *overlay = rev_resolve_revisited_overlay();
-            if (overlay && overlay[0])
-            {
-                strncpyz(fn, overlay, MAXPATHLEN);
-                strncatz(fn, name, MAXPATHLEN);
-                rev_normalize_sep(fn);
-                fp = fopen(fn, flags);
-            }
+            strncpyz(fn, overlay, MAXPATHLEN);
+            strncatz(fn, name, MAXPATHLEN);
+            rev_normalize_sep(fn);
+            fp = fopen(fn, flags);
         }
     }
 
@@ -1613,7 +1616,9 @@ FILE *rev_fopen(const char *name, const char *flags)
             const char *rel = name;
             if (strncasecmp(rel, "data/", 5) == 0 || strncasecmp(rel, "data\\", 5) == 0)
                 rel += 5;
-            std::filesystem::path dpath = root / rel;
+            strncpyz(fn, rel, MAXPATHLEN);
+            rev_normalize_sep(fn);
+            const std::filesystem::path dpath = root / fn;
             fp = fopen(dpath.string().c_str(), flags);
         }
     }

@@ -12,6 +12,7 @@
 #include "object.h"
 #include "revutils.h"
 #include "sector.h"
+#include "sectorstore.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -23,22 +24,11 @@
 
 namespace
 {
-// Disk scan: walk every per-sector .DAT file under the resolved data
-// roots and return the (sx, sy) coordinates that exist for `level`.
-// Lifted from maprenderer.cpp's FindLevelSectorCoords -- this is the
-// same multi-path scan (curmap / basemap / data-root subdirs) plus the
-// 64x64 brute-force rev_fopen fallback that catches files visible only
-// through the VFS.
+// Disk scan: walk every per-sector .DAT file in the working set and the
+// base map (loose dirs) and return the (sx, sy) coordinates that exist for
+// `level`, plus a 64x64 probe through SectorStore that catches sectors
+// visible only through the VFS.
 struct SCoord { int32_t sx, sy; };
-
-inline std::filesystem::path NormalizeFsPath(const char* path)
-{
-    std::string s = (path && path[0]) ? path : ".";
-    for (char& ch : s)
-        if (ch == '\\') ch = '/';
-    if (s.empty()) s = ".";
-    return std::filesystem::path(s);
-}
 
 std::filesystem::path ResolveSectorDataRoot()
 {
@@ -91,13 +81,13 @@ std::vector<SCoord> ScanLevelCoords(int32_t level)
     namespace fs = std::filesystem;
     std::vector<SCoord> coords;
     std::vector<fs::path> scan_dirs;
-    scan_dirs.push_back(NormalizeFsPath(CurMapPath)  / CURMAPDIR);
-    scan_dirs.push_back(NormalizeFsPath(BaseMapPath) / BASEMAPDIR);
+    // The game's working set and the base map (SectorStore). An install's
+    // own curmap belongs to whoever last played retail there, never to us.
+    scan_dirs.push_back(SectorStore::WorkingSetDir());
+    scan_dirs.push_back(SectorStore::BaseMapDir());
     const fs::path data_root = ResolveSectorDataRoot();
     if (!data_root.empty())
     {
-        scan_dirs.push_back(data_root / "Curmap");
-        scan_dirs.push_back(data_root / "curmap");
         scan_dirs.push_back(data_root / "Map");
         scan_dirs.push_back(data_root / "map");
     }
@@ -109,22 +99,16 @@ std::vector<SCoord> ScanLevelCoords(int32_t level)
     for (const fs::path& dir : scan_dirs)
         GatherCoordsFromDir(dir, level, coords);
 
-    // VFS / rvr-pack fallback: try rev_fopen for every (sx,sy) up to
-    // 64x64. Picks up sectors visible through the resource archives
-    // even when there's no on-disk .DAT file in the scan dirs.
+    // VFS / rvr-pack fallback: probe every (sx,sy) up to 64x64 the way
+    // TSector::Load opens them. Picks up sectors visible only through the
+    // resource archives.
     {
-        char relpath[MAXPATHLEN] = {};
+        char filename[MAXPATHLEN] = {};
         for (int32_t sy = 0; sy < 64; ++sy)
         for (int32_t sx = 0; sx < 64; ++sx)
         {
-            std::snprintf(relpath, sizeof(relpath), CURMAPDIR "\\%d_%d_%d.DAT", level, sx, sy);
-            FILE* fp = rev_fopen(relpath, "rb");
-            if (!fp)
-            {
-                std::snprintf(relpath, sizeof(relpath), BASEMAPDIR "\\%d_%d_%d.DAT", level, sx, sy);
-                fp = rev_fopen(relpath, "rb");
-            }
-            if (fp)
+            std::snprintf(filename, sizeof(filename), "%d_%d_%d.DAT", level, sx, sy);
+            if (FILE* fp = SectorStore::OpenForRead(filename))
             {
                 fclose(fp);
                 coords.push_back({ sx, sy });
@@ -204,7 +188,10 @@ bool TGameMap::Load(int32_t lvl)
     return true;
 }
 
-void TGameMap::Unload()
+void TGameMap::Unload()  { Release(ESectorRelease::Save); }
+void TGameMap::Discard() { Release(ESectorRelease::Discard); }
+
+void TGameMap::Release(ESectorRelease how)
 {
     if (!IsLoaded()) return;
 
@@ -213,10 +200,22 @@ void TGameMap::Unload()
     listeners.Notify(EGameMapEvent::Unloaded, this);
 
     for (TSector* sec : sectors)
-        if (sec) TSector::CloseSector(sec);
+    {
+        if (!sec) continue;
+        if (how == ESectorRelease::Save)
+            TSector::CloseSector(sec);
+        else
+            TSector::DiscardSector(sec);
+    }
 
     sectors.clear();
     level = -1;
+}
+
+void TGameMap::Flush() const
+{
+    for (TSector* sec : sectors)
+        if (sec) sec->Save();
 }
 
 TSector* TGameMap::FindSector(int32_t sx, int32_t sy) const

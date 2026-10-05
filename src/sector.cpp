@@ -10,6 +10,7 @@
 #include "logging.h"
 #include "parse.h"
 #include "revutils.h"
+#include "sectorstore.h"
 #include "stream.h"
 #include "textbar.h"
 
@@ -41,7 +42,7 @@ TSector::TSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory)
 
     memset(walkmap, 0, sizeof(uint16_t) * WALKMAPSIZE);
 
-    sprintf(filename, sectorfilename, level, sectorx, sectory);
+    snprintf(filename, sizeof(filename), sectorfilename, level, sectorx, sectory);
 }
 
 TSector::~TSector()
@@ -107,6 +108,16 @@ void TSector::CloseSector(TSector* sector)
         sector->usecount--;
 }
 
+// Delete the sector without saving it: its working-set copy is about to be
+// replaced (a new or loaded game).
+void TSector::DiscardSector(TSector* sector)
+{
+    if (!sector->preloaded)
+        delete sector;
+    else
+        sector->usecount--;
+}
+
 // Straight (no preloaded sectors) load/save functions
 
 #define MAKEINDEX(level, sx, sy, item)  ((level<<24) | (sx<<18) | (sy<<12) | (item & 0xFFF))
@@ -116,25 +127,10 @@ bool TSector::Load(bool lock)
     int32_t version = 0;
     FILE *fp;
 
-    char mappath[MAXPATHLEN];
-
-    // rev_fopen handles SavePath/RunPath/data-root/VFS fallbacks so both the
-    // loose .DAT under data/Curmap and rvr-packed sectors resolve cleanly.
-    strcpy(mappath, CurMapPath);
-    strcat(mappath, CURMAPDIR "\\");
-    strcat(mappath, filename);
-    fp = rev_fopen(mappath, "rb");
-
+    // The working set's copy if this game has written one, else the base map.
+    fp = SectorStore::OpenForRead(filename);
     if (!fp)
-    {
-        strcpy(mappath, BaseMapPath);
-        strcat(mappath, BASEMAPDIR "\\");
-        strcat(mappath, filename);
-        fp = rev_fopen(mappath, "rb");
-
-        if (!fp)
-            return false;
-    }
+        return false;
 
     fseek(fp, 0, SEEK_SET);
 
@@ -223,18 +219,14 @@ bool TSector::Load(bool lock)
 // the rest of the engine is still alive, so by the time the global dtor
 // fires the cache is already empty and Save isn't reached.)
 
+// REVSYNC: TSector::Save @ 0x00498c90 + file write @ 0x00498a40. Retail
+// writes empty sectors too (a retail curmap holds 2_8_10.DAT with 0 objects);
+// the 1998 source deleted the file instead, which let a sector the player
+// emptied fall back to its base-map contents.
 void TSector::Save()
 {
     int32_t version = MAP_VERSION; // Current sector map version #
 
-    if (objects.NumItems() == 0)
-    {
-        // don't save empty sectors, and clear out old save file
-        std::remove(filename);
-        return;
-    }
-
-    bool closeit = false;
     TOutputStream os(STARTSIZE, GROWSIZE);
     TPointerIterator<TObjectInstance> i(&objects);
 
@@ -255,22 +247,13 @@ void TSector::Save()
         TObjectInstance::SaveObject(i.Item(), os, true);
     }
 
-    char mappath[MAXPATHLEN];
-
-    // mirror TSector::Load — three-step concat. The original second line
-    // here was `strcpy` (clobbering CurMapPath); that's why every saved
-    // sector landed at `curmap\<file>.DAT` relative to CWD instead of
-    // `<CurMapPath>curmap\<file>.DAT`. Route through rev_fopen so the
-    // SavePath/separator-normalization layers apply on writes too.
-    strcpy(mappath, CurMapPath);
-    strcat(mappath, CURMAPDIR "\\");
-    strcat(mappath, filename);
-
-    FILE *fp = rev_fopen(mappath, "wb");
+    FILE *fp = SectorStore::OpenForWrite(filename);
     if (!fp)
+    {
+        log_error("[sector] can't write %s to the working set", filename);
         return;
+    }
 
-    fseek(fp, 0, 0);
     fwrite(os.Buffer(), os.DataSize(), 1, fp);
     fclose(fp);
 }

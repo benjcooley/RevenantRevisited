@@ -7,6 +7,7 @@
 #include "mapmanager.h"
 
 #include "gamemap.h"
+#include "sectorstore.h"
 
 TMapManager::TMapManager()  = default;
 // Trivial dtor: Shutdown() must have run already (via ShutdownGlobals) so
@@ -106,4 +107,32 @@ void TMapManager::EvictAll()
     cache.clear();        // each unique_ptr -> ~TGameMap -> Unload notify
     if (had_current)
         listeners.Notify(EMapManagerEvent::CurrentMapChanged, this);
+}
+
+void TMapManager::FlushSectors() const
+{
+    for (const std::unique_ptr<TGameMap>& m : cache)
+        if (m)
+            m->Flush();
+}
+
+void TMapManager::ClearCurMap()
+{
+    for (const std::unique_ptr<TGameMap>& m : cache)
+        if (m)
+            m->Discard();
+    EvictAll();
+    SectorStore::Clear();
+}
+
+void TMapManager::LoadCurMap(const std::filesystem::path& dir)
+{
+    ClearCurMap();
+    SectorStore::ImportFrom(dir);
+}
+
+void TMapManager::SaveCurMap(const std::filesystem::path& dir) const
+{
+    FlushSectors();
+    SectorStore::ExportTo(dir);
 }

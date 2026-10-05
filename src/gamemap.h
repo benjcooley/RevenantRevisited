@@ -56,10 +56,17 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     // unloads first.
     bool Load(int32_t level);
 
-    // Free all sectors. Fires Unloaded BEFORE the sectors are deleted
-    // so subscribers can drop refs while the pointers are still
-    // dereferenceable (for last-frame cleanup).
+    // Free all sectors, writing each to the working set first. Fires
+    // Unloaded BEFORE the sectors are deleted so subscribers can drop refs
+    // while the pointers are still dereferenceable (for last-frame cleanup).
     void Unload();
+
+    // Free all sectors without writing them, for when the working set is
+    // about to be replaced (new or loaded game). Fires Unloaded like Unload.
+    void Discard();
+
+    // Write every sector to the working set, keeping them loaded.
+    void Flush() const;
 
     [[nodiscard]] bool    IsLoaded() const { return level >= 0; }
     [[nodiscard]] int32_t Level()    const { return level;       }
@@ -99,6 +106,9 @@ class TGameMap : public TSafeObjectBase<TGameMap>
                                  const FindSectorFn& find_sector);
 
   private:
+    enum class ESectorRelease : uint8_t { Save, Discard };
+    void Release(ESectorRelease how);
+
     int32_t               level = -1;
     std::vector<TSector*> sectors;
     Listeners             listeners;
