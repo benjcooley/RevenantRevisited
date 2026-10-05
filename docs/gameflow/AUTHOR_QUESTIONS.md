@@ -22,6 +22,7 @@ Answer inline (or in chat) and the owning doc gets updated.
 | S11 | Enter the Keep from outside through its gate (`keepin`, forest side) and capture the first second inside | how dark the arrival corner is (the port shows it black beside a lit hall) | [forensics/EXITS.md](forensics/EXITS.md) §7 |
 | S12 | In the Keep, open a chest and pick something up so two or three messages show over a light floor; then wait 10 s. Note `NoTexOverlay` | text bar colour (the code says gold 255,200,0), shadow, position (x 4, baseline 9, 12 px lines from the map's bottom edge), how many lines stay | [../ui/forensics/TTextBar_SPEC.md](../ui/forensics/TTextBar_SPEC.md) §7, §8 |
 | S13 | In a played game (control on), default ini (no `NOTEXOVERLAYS`): ESC and the next ⅓ s frame by frame; the menu; Save Game with a few slots; Load Game from the menu, then Load Game on a slot and the next second; Quit Module's question; title Load Game and Options | the in-game chrome's translucency and fade, the popup's look, the list's scrollbar and selection, the in-game load's progress popup | [forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §4.2, §5, §9 |
+| S15 | One spot in the Keep hall, Locke standing still, `RealTimeLight=No`, fullscreen: one shot each at Gamma 0, 2 and 4 (set in Options, OK, then wait for the area ambient to settle — or restart between shots, since each OK adds the offset again) | whether the gamma ramp is in effect under dosbox-x / the GOG wrapper, and how much the ambient offset brightens the floor | [forensics/OPTIONS.md](forensics/OPTIONS.md) §7.11 |
 
 ## Dialog ([forensics/DIALOG.md](forensics/DIALOG.md) §7)
 
@@ -64,8 +65,12 @@ Answer inline (or in chat) and the owning doc gets updated.
     Intended?
 15. A level-up stat point lands on the Attack skill one time in seven
     (`random(0,6)` over seven ids). Intended?
-16. Music plays at full CD volume until the player confirms the Options
-    screen, ignoring the INI `MusicVolume`. Intended?
+16. ~~Music plays at full CD volume until the player confirms the Options
+    screen, ignoring the INI `MusicVolume`. Intended?~~ Settled from the
+    code ([forensics/OPTIONS.md](forensics/OPTIONS.md) §7.9): the CD keeps
+    the OS mixer's own level until the Options pane opens (opening it
+    applies `MusicVolume`, not only OK); that mixer level outlived the
+    process, so the player's last setting normally carried over.
 17. `timelimit`'s usage text is the `script edit/pause/resume/end` help —
     a leftover, or is it the script-control command?
 72. `endfighting` starts a fight instead of ending one: it calls
@@ -221,6 +226,28 @@ Answer inline (or in chat) and the owning doc gets updated.
 65. Demo mode (module flag, `SetDemoMode`) makes ESC ask "exit the game?"
     instead of opening the menu. Which builds or modules ran in demo
     mode — the attract loop, a trade-show demo?
+
+## Options ([forensics/OPTIONS.md](forensics/OPTIONS.md))
+
+90. Cancel restores only the gamma. A music level dragged on the slider
+    keeps playing after Cancel, while the saved `MusicVolume` stays the old
+    one, until Options is opened again. Was Cancel meant to put the music
+    back too?
+91. The Violence slider stops at 4, but the exe's default is 5 (the
+    manual's "Level 5 is satisfyingly bloody" reads as the slider's top).
+    Opening Options and pressing OK turns a default 5 into 4, which allows
+    fewer and smaller blood particles. Was 5 meant to be the slider's top
+    (a 0..5 range), or the default meant to be 4?
+92. Gamma does two things: a display gamma ramp, and an offset of
+    (level − 2) × 10 on every area's ambient light (`SetAmbientLight`). All
+    five ramps darken the midtones (level 4 only a little, level 2 like a
+    1.8 power curve), and the shipped ini says `GammaLevel = 4`, so the
+    shipped look was the level-4 ramp plus 20 ambient. Was that the intended
+    picture, and did the ramp take effect on the hardware of the time? The
+    port renders neither yet (shot S15).
+93. Each Options OK re-applies the gamma offset to the current ambient,
+    which already includes it, so pressing OK repeatedly at level 3 or 4
+    brightens the area until its ambient is next set. A bug?
 
 ## Camera and control ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4)
 

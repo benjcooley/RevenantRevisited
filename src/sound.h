@@ -260,6 +260,24 @@ class TSoundPlayer
     S3DPoint listener_pos{};
 };
 
+// The player's sound levels, [Options] MusicVolume and EffectsVolume
+// (docs/gameflow/forensics/OPTIONS.md §7.9, §7.10). Both may be set before
+// audio output is up; they take effect when it is.
+constexpr int32_t kMusicLevelMax   = 0x60;   // the CD volume's ceiling
+constexpr int32_t kEffectsLevelMax = 0x7f;   // Miles' full sample volume
+
+// REVSYNC: CD SetVolume @ 0x0049a5c0 -- the music at `level` (clamped to
+// 0..kMusicLevelMax), as the music group's gain level / kMusicLevelMax.
+// setcdvolume's half/full scale rides on top (audio::MusicSetVolume).
+void ApplyMusicVolume(int32_t level);
+
+// REVSYNC-DIVERGENCE: retail subtracted 0x7f - EffectsVolume from each
+// sample's Miles volume as it started (0x0049b990, 0x0049c760) and scaled
+// movie audio by it (0x004bc470). The port sets the sfx group's gain to
+// `level` / kEffectsLevelMax (clamped); game sounds and movie audio both
+// play through that group.
+void ApplyEffectsVolume(int32_t level);
+
 // Easy access function for one-time sounds
 inline bool PLAY(const char *x)
 {

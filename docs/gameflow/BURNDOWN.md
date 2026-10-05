@@ -61,18 +61,25 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 
 ## T2 — Settings screen  (Phase G3.2)
 
+Retail-first: the settings screen is retail's Options pane
+([forensics/OPTIONS.md](forensics/OPTIONS.md)). The tabbed
+`settingsscreen` rows that were here predate that decision and are
+dropped. Revisited-only settings would extend this pane (a Revisited
+`options.def` in the overlay) or the `[Revisited]` section
+(`SRevisitedSettings`) later; they don't go in `[Options]`, which retail
+reads.
+
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [~] | Retail options pane (`options.def`, `TOptionsPane`) opens from the title and in game and returns; the key list and rebinding work, the toggles and sliders aren't bound to the settings yet | 2026-10-05 |
-| [ ] | `src/settingsscreen.{h,cpp}` — tabbed pane (Display/Audio/Controls/Game) | — |
-| [ ] | Display tab — resolution mode, windowed, vsync | — |
-| [ ] | Audio tab — master/sfx/music/spatial (depends on T0) | — |
-| [ ] | Controls tab — keybinding viewer (rebinding deferred) | — |
-| [ ] | Game tab — difficulty, autosave, log behavior | — |
-| [ ] | Apply / Save Settings buttons (round-trip through existing INI) | — |
-| [ ] | Coord with ui track on widget styling | — |
+| [x] | Retail options pane (`options.def`, `TOptionsPane`) opens from the title and in game and returns; the key list and rebinding | 2026-10-05 |
+| [x] | Toggles and sliders bound to the settings as retail: copies on open, the music level live, OK applies and saves `[Options]` (retail keys, `%d` / `Yes`/`No`) and `[Controls]`, Cancel drops them; rebinds held until OK; `[Options]` read at boot (`ReadOptions`, `src/gameoptions.*`) and saved at shutdown; music / effects levels on the audio groups | 2026-10-05 |
+| [x] | `[Controls]` read when the control map is built (it never was, so OK overwrote the player's bindings with the port's table) | 2026-10-05 |
+| [ ] | Gamma on screen: the display ramp and the ambient offset in `TMapPane::SetAmbientLight` (OPTIONS.md §7.11) — renderer / lighting owner, after shot S15 and question 92 | — |
+| [ ] | Combat reads `CombatFace` and `NoCombatResults` (gameplay track; OPTIONS.md §7.4, §7.7) | — |
+| [ ] | DEF slider: a track click pages by the slider's page size, as retail (DEF engine; OPTIONS.md §8) | — |
+| [ ] | The control table → retail's (`0x005d5500`: order, defaults, entries), so a missing `[Controls]` gives retail's keys | — |
 
-**Exit:** Settings opens from main menu and in-game; changes persist; existing SRevisitedSettings is the SoT.
+**Exit:** Options opens from the title and in game; changes take effect and persist in `Revenant.ini` as retail's did, and the GOG install's INI loads unchanged.
 
 ---
 
