@@ -24,6 +24,7 @@ class TToken;
 //   target      a fighting character's opponent (root COMBAT or BOW action)
 //   current     the object `setcurrent` chose (not ported: always none)
 //   party<N>    the Nth member of the user's party (multiplayer)
+//   an alias    an object the running trigger names: "item", "enemy", ...
 //   <name>      the closest object with exactly that name, from `caller`
 // Returns nullptr when nothing answers to the name.
 [[nodiscard]] TObjectInstance* ResolveScriptObject(const char* name,

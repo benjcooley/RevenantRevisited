@@ -4652,8 +4652,13 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
 
     SetDesired(ab);
 
+  // REVSYNC: 0x004d3f8b -- the opponent is both the block's user and its
+  // enemy.
     if (GetScript())
-        GetScript()->Trigger(TRIGGER_COMBAT); // Trigger the combat script
+    {
+        TCharacter* enemy = Fighting();
+        GetScript()->Trigger(TRIGGER_COMBAT, nullptr, nullptr, enemy, kAliasUser, enemy, kAliasEnemy);
+    }
 
     nextattack = -1;
 
@@ -4750,21 +4755,29 @@ int32_t TCharacter::CursorType(TObjectInstance* inst)
     return CURSOR_MOUTH;                // chat for a bit
 }
 
+// REVSYNC: Use @ 0x004d4a60. An object used on a character is a GET for
+// the character and a GIVE for the giver; a character used without one is
+// looted when dead and talked to otherwise. Not ported yet: when GET, GIVE or
+// DIALOG fires, retail also turns incidentals off for both characters, stops
+// them (0x004cee70) and marks the character (+0x108).
 bool TCharacter::Use(TObjectInstance* user, int32_t with)
 {
+    if (TObjectInstance::Use(user, with))   // objects that combine
+        return true;
+
     if (with >= 0)
     {
-        TObjectInstance* inst = MapPane.GetInstance(with);
-        if (!inst)
+        TObjectInstance* item = MapPane.GetInstance(with);
+        if (!item)
             return false;
         if (GetScript())
-            GetScript()->Trigger(TRIGGER_GET, inst->GetName());
+            GetScript()->Trigger(TRIGGER_GET, item->GetName(), nullptr, user, kAliasUser, item, kAliasItem);
         if (user && user->GetScript())
-            GetScript()->Trigger(TRIGGER_GIVE, inst->GetName());
+            user->GetScript()->Trigger(TRIGGER_GIVE, item->GetName(), nullptr, this, kAliasUser, item, kAliasItem);
         return true;
     }
 
-    if (IsDead() && user)
+    if (Health() <= 0 && user)
     {
         // loot the corpse
         TInventoryIterator i(this);
@@ -4790,24 +4803,21 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
         return false;
     }
 
-    if (!Aggressive() && user == (TObjectInstance*)Player)
-    {
-      // Face eachother
-        S3DPoint upos;
-        user->GetPos(upos);
-        int32_t angle = ConvertToFacing(pos, upos);
-        Face(angle);
-        angle = ConvertToFacing(upos, pos);
-        user->Face(angle);
+    if (Aggressive() || !user || user->ObjClass() != OBJCLASS_PLAYER)
+        return false;
 
-      // Start DIALOG section
-        if (GetScript())
-            GetScript()->Trigger(TRIGGER_DIALOG);
+  // Face each other, then start the DIALOG block with the player as its user.
+    S3DPoint upos;
+    user->GetPos(upos);
+    int32_t angle = ConvertToFacing(pos, upos);
+    Face(angle);
+    angle = ConvertToFacing(upos, pos);
+    user->Face(angle);
 
-        return true;
-    }
+    if (GetScript())
+        GetScript()->Trigger(TRIGGER_DIALOG, nullptr, nullptr, user, kAliasUser);
 
-    return false;
+    return true;
 }
 
 // REVSYNC: retail TCharacter::CharBlocking / FindCharInLine @ 0x4d4db0
