@@ -8,12 +8,11 @@
 
 #include "revenant.h"
 
+#include "gamemap.h"
 #include "lightdef.h"
 #include "multisurface.h"
 #include "screen.h"
 #include "sector.h"
-
-class TGameMap;
 
 // Grid snap
 #define GRIDSHIFT   4
@@ -295,23 +294,26 @@ class TMapPane : public TPane
     void AnimateSelectedObjects();
       // Draws selected objects that are moving (usually being dragged)
 
-  // Sector Functions
-    void UpdateSectors();
-        // Reload sectors based on pane x, y position
+  // Sector window
+  // -------------
+  // sectors[][] is a window of SECTORWINDOWX x SECTORWINDOWY sectors BORROWED
+  // from MapManager's current map; the pane never loads, saves or frees a
+  // sector. TMapManager owns the loaded sectors (retail kept them on the
+  // pane: TMapPane::FreeAllSectors/ReloadSectors/DeleteSector and the
+  // streaming UpdateSectors, which now live on TMapManager or are gone).
+  // The window follows the map it borrowed from: it is emptied when that
+  // map unloads, before the sectors are freed, and refilled on the next
+  // UpdateActiveWindow.
 
-    // Populate the active window (sectors[SECTORWINDOWX][SECTORWINDOWY])
-    // from MapManager.CurrentMap, centered on the Player's sector. The
-    // active window is what TMapIterator walks for per-frame
-    // PulseObjects / MoveObjects / NextFrameObjects -- so anything
-    // inside it ticks; anything outside is idle this frame. Cheap when
-    // the player hasn't crossed a sector boundary (no-op).
+    // Populate the active window from MapManager.CurrentMap, centered on
+    // the Player's sector. The active window is what TMapIterator walks
+    // for per-frame PulseObjects / MoveObjects / NextFrameObjects -- so
+    // anything inside it ticks; anything outside is idle this frame.
+    // Cheap when the player hasn't crossed a sector boundary (no-op).
     void UpdateActiveWindow();
-    void SaveAllSectors();
-        // Save all sectors to disk without deallocating
-    void FreeAllSectors();
-        // Save all sectors to disk and then deallocate them
-    void ReloadSectors();
-        // Free and then reload all sectors
+    void ClearWindow();
+        // Drop every borrowed sector (the window is empty until the next
+        // UpdateActiveWindow)
 
   // World position functions
     void SetMapPos(S3DPoint& newpos);
@@ -354,17 +356,14 @@ class TMapPane : public TPane
       // Allows map to update lists, etc. when an objects flags change (mainly
       // for OF_LIGHT, OF_PULSE, and OF_ANIMATE changing objects location on 
       // OBJSET_xxx sector arrays.
-    TObjectInstance* RemoveObject(int32_t index);
-      // Removes the given object from the map, recursing through inventories
-    TObjectInstance* RemoveObject(TObjectInstance* inst)
-        { return RemoveObject(inst->GetMapIndex()); }
-      // Removes the given object from the map, recursing through inventories
+    TObjectInstance* RemoveObject(TObjectInstance* inst);
+      // Takes the object (and its shadow) out of the world -- out of its
+      // owner's inventory or its sector -- without deleting it. Works from
+      // the object's own links, inside or outside the sector window.
     void DeleteObject(TObjectInstance* obj);
       // Removes and deletes an object
-    TObjectInstance* RemoveFromSector(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t sectindex);
-      // Removes the given object from the sector array (called by RemoveObject())
-    void DeleteSector(TSector* sect);
-      // Removes and deletes a sector (hey.. don't call this)
+    TObjectInstance* RemoveFromSector(TObjectInstance* inst);
+      // Takes the object out of its sector (walkmap, redraw, sector array)
     void ReloadImagery();
       // Forces imagery system to reload imagery.
     int32_t AddShadow(TObjectInstance* oi);
@@ -504,9 +503,13 @@ class TMapPane : public TPane
     void PulseFadeAmbient();
         // Called by Pulse() function to update ambient fade values
   
+    void BindWindow(TGameMap* map);
+        // Borrow the window's sectors from `map` and follow its Unloaded event
+
   // Data Members
-    TSector* sectors[SECTORWINDOWX][SECTORWINDOWY]; // Currently loaded sectors
-    TSafeRef<TGameMap> windowmap;                   // Map the sectors window borrows from
+    TSector* sectors[SECTORWINDOWX][SECTORWINDOWY] = {}; // Window borrowed from windowmap (see above)
+    TSafeRef<TGameMap> windowmap;                        // Map the sector window borrows from
+    TGameMap::EventListenerId windowlistener = 0;        // Our Unloaded listener on windowmap
     int32_t oldsectorx, oldsectory;                 // Position of sector in last frame
     int32_t sectorx, sectory;                       // Position of sector in current frame
     int32_t newsectorx, newsectory;                 // Position of sector in next frame
