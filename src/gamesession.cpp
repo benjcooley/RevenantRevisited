@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <iterator>
 #include <utility>
+#include <vector>
 
 // Progress is retail's loading bar after the same work in
 // TPlayScreen::Initialize (0x0047a660; LoadingScreen_SPEC.md §1): the module
@@ -238,6 +239,38 @@ void TGameSession::PlacePlayers(TGameMap& map, bool entering) const
     }
 }
 
+// REVSYNC: the release half of the sector update (0x00459490): retail kept
+// the sectors around the camera and every active player loaded and released
+// the rest to the working set (0x00498460 -> curmap). The port loads whole
+// levels, so after a level change it keeps the camera's level and those with
+// a player on them and releases the others -- written to the working set
+// (TGameMap::Unload), and their imagery leaves the GPU with them. Keeping
+// every visited level filled the renderer's image pool: level 0 alone holds
+// ~3,700 images of the 4,096.
+void TGameSession::ReleaseUnusedLevels(int32_t current) const
+{
+    std::vector<int32_t> unused;
+    for (int32_t i = 0; i < MapManager.NumCached(); i++)
+    {
+        const TGameMap* map = MapManager.Cached(i);
+        if (!map || map->Level() == current)
+            continue;
+        bool occupied = false;
+        for (int32_t p = 0; p < PlayerManager.NumPlayers() && !occupied; p++)
+        {
+            const TPlayer* player = PlayerManager.GetPlayer(p);
+            occupied = player && player->GetLevel() == map->Level();
+        }
+        if (!occupied)
+            unused.push_back(map->Level());
+    }
+    for (const int32_t level : unused)
+    {
+        log_info("[session] level %d released", level);
+        MapManager.Evict(level);
+    }
+}
+
 // REVSYNC: the map loader 0x004597b0 and its progress callback 0x00459a00.
 // Retail loaded a new level synchronously, drawing the text bar's loading
 // line straight to the display between sectors: LOADMAPMSG with the strip
@@ -281,6 +314,7 @@ bool TGameSession::EnterLevel()
         }
         MapManager.SetCurrentMap(map);
         log_info("[session] entered level %d", level);
+        ReleaseUnusedLevels(level);
         entering = true;
     }
 

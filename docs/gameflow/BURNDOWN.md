@@ -307,6 +307,13 @@ These items aren't part of any single track but block others:
       animation finish event; gameflow consumes for T7.
 - [ ] Inventory use/give/get hooks — track ui owns these; gameflow
       consumes for T8 triggers.
+- [ ] GPU asset eviction — renderer track. The renderer keeps every imagery
+      asset it has drawn until shutdown (zero-ref assets aren't evicted,
+      `RecomputeLoadedMapAssetRefs`), so the image pool must hold the whole
+      game's imagery; walking forest → town overflowed 4,096 and sokol
+      aborted. Interim: pool 32,768 (`display.cpp`), sized from the data.
+      Gameflow releases unused levels on a level change, so evicting
+      assets no loaded map references is now safe.
 - [ ] One source for the HUD's geometry — track ui (common-host stage).
       The PlayScreen's HUD hosting hard-codes the sidebar (188), bottom bar
       (60) and tab strip (64 × 240, hit test); the dialog entries and the

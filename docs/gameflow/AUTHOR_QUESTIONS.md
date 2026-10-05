@@ -307,6 +307,11 @@ Answer inline (or in chat) and the owning doc gets updated.
     SaleType 1). Were jewelry prices still to be filled in, or meant to
     come from ARMOR.DEF's BASICMODS value column (which the shop never
     reads)?
+123. The first shop visit of a game that goes straight to Sell lists
+     nothing: `BuySellAddbuyitem` lists the customer's items, the customer
+     is only set by `buysellscreen` (after the add lines), and the shop's
+     first `buysellinit` clears it. Choosing Buy first, or any later
+     visit, works. Did players see an empty Sell list the first time?
 
 ## Inventory ([forensics/INVENTORY.md](forensics/INVENTORY.md))
 
