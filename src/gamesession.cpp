@@ -167,8 +167,6 @@ void TGameSession::PlaceAtDevStart(const TGameMap& map) const
 // REVSYNC: the world half of TPlayScreen::Close @ 0x0047b290. Nothing
 // continues from the working set once a game ends (a new game clears it, a
 // load replaces it), so the loaded sectors are dropped rather than written.
-// The maps go before the players: a sector detaches its players when it is
-// deleted, but a deleted player doesn't detach from its sector.
 void TGameSession::End()
 {
     if (state == EState::Idle)

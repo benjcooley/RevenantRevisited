@@ -148,11 +148,13 @@ bool TGameMap::Load(int32_t lvl)
     int32_t loaded_objs = 0;
     for (const SCoord& c : coords)
     {
+        // A sector whose file can't be read is left out of the map, so its
+        // file is never written over (LoadSector logs why).
         TSector* sec = TSector::LoadSector(level, c.sx, c.sy, false);
         if (!sec)
         {
-            log_warn("[gamemap] level %d sector %d_%d: LoadSector failed",
-                     level, c.sx, c.sy);
+            log_error("[gamemap] level %d sector %d_%d didn't load; left out of the map",
+                      level, c.sx, c.sy);
             continue;
         }
         sectors.push_back(sec);
@@ -224,6 +226,28 @@ TSector* TGameMap::FindSector(int32_t sx, int32_t sy) const
         if (sec && sec->SectorX() == sx && sec->SectorY() == sy)
             return sec;
     return nullptr;
+}
+
+TSector* TGameMap::SectorAt(const S3DPoint& pos) const
+{
+    return FindSector(pos.x >> SECTORWSHIFT, pos.y >> SECTORHSHIFT);
+}
+
+std::vector<TSafeRef<TObjectInstance>> TGameMap::NonMapObjects() const
+{
+    std::vector<TSafeRef<TObjectInstance>> found;
+    for (TSector* sec : sectors)
+    {
+        if (!sec)
+            continue;
+        for (int32_t i = 0; i < sec->NumItems(); ++i)
+        {
+            TObjectInstance* oi = sec->GetInstance(i);
+            if (oi && (oi->Flags() & OF_NONMAP))
+                found.emplace_back(oi);
+        }
+    }
+    return found;
 }
 
 void TGameMap::StampTileWalkmap(TObjectInstance* oi, int32_t mode,

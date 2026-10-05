@@ -141,10 +141,11 @@ void test_comma_list_mid_negative()
     EXPECT_EQ(c,   7, "[2]");
 }
 
-// 6. The exact Revenant STATREQS from data/Resources/rules.def. This
-// stored as [18,-12,0,0,14,0] in our build — diagnosed bad but root
-// cause unknown. Pin down the expected values here so when we fix the
-// parser this stays correct.
+// 6. A six-value STATREQS line with a trailing negative, as it stood in the
+// port's merged data/Resources/rules.def (b1bd2be; that file has since been
+// restored to stock). The build that "stored [18,-12,0,0,14,0]" was right:
+// that is CLASS "Revenant" in resources.rvr:rules.def, the copy retail
+// reads (docs/DATA_LAYOUT.md). Kept as a parser fixture.
 void test_revenant_statreqs()
 {
     int32_t a=99,b=99,c=99,d=99,e=99,f=99;

@@ -8,6 +8,7 @@
 
 #include "revenant.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -69,17 +70,48 @@ const char *rev_resolve_revisited_overlay();
 
 // Makes a file path given the current settings of RunPath and SavePath
 char *makepath(char *name, char *buf, int32_t buflen);
+
+// Which copy of a file wins when both a pack archive and a loose file
+// answer the same path. Retail's pack-aware open (FUN_004a1240, reached
+// through FUN_004a13f0) takes this as its third argument: nearly every
+// loader passes PackFirst; the .def screen loader (FUN_004377c0) passes
+// LooseFirst, which is how loose patch files beside the packs take effect.
+enum class EOpenOrder : uint8_t
+{
+    PackFirst,
+    LooseFirst,
+};
+
 // Open a FILE relative to SavePath / RunPath. Named to avoid the libc
 // popen(3) shell-pipe function, which would otherwise win overload
 // resolution on POSIX.
-//   Reads:  SavePath → Revisited overlay → RunPath → module dir → data root → VFS.
+//   Reads:  for each root in SavePath → Revisited overlay → RunPath, try the
+//           mounted pack whose directory holds the path and the loose file,
+//           in `order`. Then the legacy fallbacks: unpacked module dir, data
+//           root, and a flat by-file-name lookup across every mounted pack.
 //   Writes: SavePath only (the install is read-only); the caller creates
 //           any directories it writes into.
-FILE *rev_fopen(const char *file, const char *flags);
+FILE *rev_fopen(const char *file, const char *flags, EOpenOrder order = EOpenOrder::PackFirst);
 
-// Reads a whole file through rev_fopen (SavePath, Revisited overlay, RunPath,
-// module, VFS archives). Returns false if it can't be opened or read.
-bool rev_read_file(const char *name, std::vector<uint8_t> &out);
+// Reads a whole file through rev_fopen. Returns false if it can't be opened
+// or read.
+bool rev_read_file(const char *name, std::vector<uint8_t> &out,
+                   EOpenOrder order = EOpenOrder::PackFirst);
+
+// True when `name` resolves to a mounted-pack entry or a loose file under
+// SavePath, the Revisited overlay or RunPath. Unlike rev_fopen it does not
+// use the legacy by-file-name fallback, so it answers for exactly the path
+// given — retail's FUN_004a1c00, which the loaders use to pick between a
+// module's copy of a file and the shared one.
+[[nodiscard]] bool rev_file_exists(const char *name);
+
+// "<preferred_dir><file>" when rev_file_exists says so, otherwise
+// "<fallback_dir><file>". This is the either/or lookup retail inlines in its
+// loaders: ImageryPath before ClassDefPath for class.def and the rules
+// rosters, the active module before ClassDefPath for module data.
+[[nodiscard]] std::string rev_first_existing(const char *preferred_dir,
+                                             const char *fallback_dir,
+                                             const char *file);
 
 // Resource archive VFS — retail shipped data/resources.rvr, data/imagery.rvi
 // and data/Modules/<name>.rvm as stored (uncompressed) ZIPs. WinMain mounted
@@ -87,11 +119,27 @@ bool rev_read_file(const char *name, std::vector<uint8_t> &out);
 // in when the active module changed. We mirror that lifecycle: call these
 // explicitly; nothing is auto-scanned.
 //
-// Resolution order in rev_fopen: SavePath → RunPath → active module → base.
+// A mounted archive stands in for the directory its path names without the
+// extension: <RunPath>/resources.rvr answers <RunPath>/Resources/..., and
+// Modules/Ahkuilon.rvm answers Modules/Ahkuilon/... (case-insensitive), as
+// retail's TPackFile does (FUN_0049ee20 / FUN_004a0380).
 bool MountArchive(const char *name);    // name looked up under data root, e.g. "resources.rvr"
 bool MountModule(const char *name);     // mounts data/Modules/<name>.rvm (unmounts any prior)
 void UnmountModule();
 void UnmountAll();
+
+// Engine-owned runtime assets: data the port itself authors and needs in
+// every mode (particle definitions, render policy, editor icons). They are
+// not part of the retail install, which stays read-only and stock, and not
+// part of the optional Revisited overlay, which the engine must run without.
+// Resolution order:
+//   1. $REVENANT_ASSETS_PATH            (explicit override)
+//   2. <exe-dir>/assets/                (shipped beside the binary)
+//   3. <exe-dir>/../Resources/assets/   (macOS .app bundle)
+//   4. <repo-root>/assets/              (dev: walk up from the binary)
+// Returns "<assets>/<relpath>", or an empty string when no assets directory
+// exists (logged once).
+[[nodiscard]] std::string rev_engine_asset(const char *relpath);
 
 // Enumerate file entries across all mounted archives whose in-archive
 // path starts with `prefix` (case-insensitive). Returns lowercase

@@ -28,3 +28,6 @@ data/**/*.EXE     filter=lfs diff=lfs merge=lfs -text
 data/**/*.asi     filter=lfs diff=lfs merge=lfs -text
 data/**/*.ico     filter=lfs diff=lfs merge=lfs -text
 data/**/*.sav     filter=lfs diff=lfs merge=lfs -text
+
+# Engine-owned runtime assets (port-authored; see docs/DATA_LAYOUT.md)
+assets/**/*.png   filter=lfs diff=lfs merge=lfs -text

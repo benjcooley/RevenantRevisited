@@ -30,6 +30,7 @@
 #include "mapmanager.h"
 #include "dialog.h"
 #include "file.h"
+#include "module.h"
 #include "revutils.h"
 #include "exit.h"
 #include "player.h"
@@ -40,6 +41,23 @@
 
 bool TScript::pauseall = false;
 
+namespace {
+
+// The script line about to run, at trace level (revenant.log), so a scene can
+// be followed line by line.
+void TraceLine(TObjectInstance* context, const char* line)
+{
+    while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n')
+        ++line;
+    const char* end = line;
+    while (*end && *end != '\n' && *end != '\r')
+        ++end;
+    log_trace("[script] %s: %.*s", (context && context->GetName()) ? context->GetName() : "?",
+              (int)(end - line), line);
+}
+
+}  // namespace
+
 TObjectInstance* TakenObject = nullptr;
 TObjectInstance* DroppedObject = nullptr;
 
@@ -47,6 +65,7 @@ void ScriptError(const char *buf, int32_t linenum)
 {
     char buf2[100];
     snprintf(buf2, sizeof(buf2), "Script error at line %d: %s\n", linenum, buf);
+    log_warn("[script] error at line %d: %s", linenum, buf);
     if (Editor)
         Output(buf2);
     else
@@ -106,11 +125,17 @@ void TScript::Start(TScriptProto* startproto, int32_t pos, int32_t /*newpriority
     if (!curproto || pos < 0 || pos >= curproto->Length())
         return;
 
-    ip = curproto->Text() + pos;
+    ip = pos;
 }
 
 void TScript::StartTrigger(TScriptProto* startproto, PSScriptTrigger st)
 {
+  // REVSYNC: Continue @ 0x004933d0 — a trigger set off by an object can't be
+  // interrupted while that object exists (Triggered checks the guard).
+    if (st->type != TRIGGER_ALWAYS && triggerer.Get())
+        triggerguard = triggerer.Get();
+    else
+        triggerguard.Clear();
     Start(startproto, st->pos, st->priority);
     trigger = st->type;         // Set current trigger we're going to do
     newtrigger = 0;             // Set manual new trigger (if any) to 0
@@ -118,108 +143,176 @@ void TScript::StartTrigger(TScriptProto* startproto, PSScriptTrigger st)
     curtrigger = st;
 }
 
-// REVSYNC: Triggered @ 0x00492d70 — retail body is 199 lines of engine-coupled
-// logic (dialog FSM, player combat state, vftable slot 0x8c/0x154/0x1c0 calls).
-// We keep the pre-release per-trigger-type switch because it produces the right
-// observable behaviour for the trigger types our ported engine actually emits.
-// TODO(revsync): once Player/Dialog/Combat are retail-synced, replace this with
-// the retail Triggered body and route through the new VFT slots.
+// REVSYNC: 0x004927b0. SCRIPT_ENGINE.md §3. Retail's USE trigger also
+// matches a second string the port doesn't record yet.
 bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance* context)
 {
-    bool retval = false;
-
-  // Are we already doing this trigger?
+  // Not the trigger already running, nor one below its priority.
     if (curtrigger == st || st->priority < curpriority)
         return false;
 
-  // ******************
-  // !!!!!REMEMBER!!!!!
-  // ******************
-  //
-  // This function is being called often, so make sure you don't do anything
-  // too intense here. KEEP IT SIMPLE AND FAST!
-
+    bool fires = false;
     switch (st->type)
     {
-      case TRIGGER_ALWAYS:      // This trigger will always fire if it has a higherer priority
-        retval = true;
+      case TRIGGER_ALWAYS:
+        fires = true;
         break;
 
-      case TRIGGER_TRIGGER:     // Manually fired trigger (script 'trigger' command)
-        if (newtrigger == TRIGGER_TRIGGER && !stricmp(st->name, newtriggerstr))
-            retval = true;
+      case TRIGGER_TRIGGER:
+      case TRIGGER_USE:
+      case TRIGGER_GIVE:
+      case TRIGGER_GET:
+        fires = newtrigger == st->type && !stricmp(st->name, newtriggerstr);
         break;
 
-      case TRIGGER_DIALOG:      // Player clicked a friendly character
-        if (newtrigger == TRIGGER_DIALOG)
-            retval = true;
+      case TRIGGER_DIALOG:
+      case TRIGGER_ACTIVATE:
+      case TRIGGER_COMBAT:
+      case TRIGGER_DEAD:
+        fires = newtrigger == st->type;
         break;
 
-      case TRIGGER_PROXIMITY:   // Floating proximity field — slightly slow
+      case TRIGGER_PROXIMITY:
         if (newtrigger == TRIGGER_PROXIMITY)
-            retval = true;
+            fires = true;
         else if (Player && !stricmp(st->name, Player->GetName()))
-            retval = context->Pos().InRange(Player->Pos(), st->dist);
-        else
         {
-            // TODO(revsync): retail also walks the moving-object set here
-            //   (FUN_00492d70 LAB_00492ea2 path). Disabled in pre-release.
+            // Box first, then dx² + dy² ≤ 2·dist².
+            const S3DPoint here = context->Pos();
+            const S3DPoint there = Player->Pos();
+            const int32_t dx = here.x - there.x;
+            const int32_t dy = here.y - there.y;
+            if (std::abs(dx) <= st->dist && std::abs(dy) <= st->dist &&
+                dx * dx + dy * dy <= 2 * st->dist * st->dist)
+            {
+                triggerer = Player;
+                fires = true;
+            }
         }
         break;
 
-      case TRIGGER_CUBE:        // Fast cube trigger
+      case TRIGGER_CUBE:
         if (newtrigger == TRIGGER_CUBE)
-            retval = true;
-        else if (!stricmp(st->name, context->GetName()))
-        {
-            if (st->cube.In(context->Pos()))
-                retval = true;
-        }
-        else if (Player && !stricmp(st->name, Player->GetName()))
+            fires = true;
+        else if (Player && (!stricmp(st->name, "player") || !stricmp(st->name, Player->GetName())))
         {
             if (st->cube.In(Player->Pos()))
-                retval = true;
+            {
+                triggerer = Player;
+                fires = true;
+            }
         }
-        else
+        else if (TObjectInstance* inside = MapPane.ObjectInCube(&st->cube, OBJSET_MOVING))
         {
-            TObjectInstance* inst = MapPane.ObjectInCube(&st->cube, OBJSET_MOVING);
-            if (inst && (st->name[0] == '\0' || !stricmp(st->name, inst->GetName())))
-                retval = true;
+            // A character or player in the cube that isn't the named object
+            // (an unnamed cube carries its own prototype's name, so its owner
+            // standing in it doesn't count).
+            const int32_t objclass = inside->ObjClass();
+            const bool character = objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER;
+            const bool named = st->name[0] != '\0' && inside->GetName() &&
+                               !stricmp(st->name, inside->GetName());
+            if (character && !named)
+            {
+                triggerer = inside;
+                fires = true;
+            }
         }
-        break;
-
-      case TRIGGER_ACTIVATE:    // Object activated
-        if (newtrigger == TRIGGER_ACTIVATE)
-            retval = true;
-        break;
-
-      case TRIGGER_USE:         // Character used an object
-        if (newtrigger == TRIGGER_USE && !stricmp(st->name, newtriggerstr))
-            retval = true;
-        break;
-
-      case TRIGGER_GIVE:        // Character gave another char an object
-        if (newtrigger == TRIGGER_GIVE && !stricmp(st->name, newtriggerstr))
-            retval = true;
-        break;
-
-      case TRIGGER_GET:         // Character got an object
-        if (newtrigger == TRIGGER_GET && !stricmp(st->name, newtriggerstr))
-            retval = true;
-        break;
-
-      case TRIGGER_COMBAT:      // Entered combat mode
-        if (newtrigger == TRIGGER_COMBAT)
-            retval = true;
-        break;
-
-      case TRIGGER_DEAD:        // Died (Blahhh.. uuhhhh!!)
-        if (newtrigger == TRIGGER_DEAD)
-            retval = true;
         break;
     }
 
-    return retval;
+  // While the object that set off the running trigger exists, nothing else
+  // fires.
+    if (fires && triggerguard.Id() != -1)
+    {
+        if (triggerguard.Get())
+            return false;
+        triggerguard.Clear();
+    }
+    return fires;
+}
+
+// REVSYNC: 0x00492ac0
+TObjectInstance* TScript::User() const
+{
+    TObjectInstance* user = triggerer.Get();
+    return (user && user->ObjClass() == OBJCLASS_PLAYER) ? user : Player;
+}
+
+// REVSYNC: SetWait @ 0x00492b00 (single player). Response waits name the
+// player waited on; retail also opened the dialog pane's choices here, which
+// arrives with the dialog port (the 1998 pane is opened by "wait response").
+void TScript::SetWait(EScriptWait type, TObjectInstance* object, int32_t frames)
+{
+    if (wait != EScriptWait::None)
+        return;
+
+    wait = type;
+    waitframes = frames;
+    switch (type)
+    {
+      case EScriptWait::Response:
+      case EScriptWait::ResponseControlOn:
+      case EScriptWait::ScreenFade:
+      case EScriptWait::BuySell:
+        waitobject = User();
+        break;
+      default:
+        waitobject = object;
+        break;
+    }
+}
+
+// REVSYNC: 0x00492d70 (single player). The screen fade and the buy/sell
+// screen aren't ported, so neither is ever in progress.
+bool TScript::WaitSatisfied(bool commanddone)
+{
+    if (wait == EScriptWait::Frames && waitframes > 0)
+        waitframes--;
+
+    switch (wait)
+    {
+      case EScriptWait::None:
+        return commanddone;
+
+      case EScriptWait::Frames:
+        return waitframes < 1;
+
+      case EScriptWait::Response:
+      case EScriptWait::ResponseControlOn:
+        if (!DialogPane.HasResponded())
+            return false;
+        if (char* label = DialogPane.GetResponseLabel())
+            Jump(nullptr, label);
+        DialogPane.Hide();
+        return true;
+
+      case EScriptWait::CharDone:
+      {
+        TObjectInstance* object = waitobject.Get();
+        if (!object)
+            return commanddone;
+        if (object->IsComplex() && static_cast<TComplexObject*>(object)->IsInRoot())
+            return true;
+        return object->CommandDone();
+      }
+
+      case EScriptWait::Say:
+      {
+        TObjectInstance* object = waitobject.Get();
+        return !object || object->CommandDone();
+      }
+
+      case EScriptWait::Death:
+      {
+        TObjectInstance* object = waitobject.Get();
+        return !object || (object->IsCharacter() && static_cast<TCharacter*>(object)->IsDead());
+      }
+
+      case EScriptWait::ScreenFade:
+      case EScriptWait::BuySell:
+        return true;
+    }
+    return true;
 }
 
 #define MAXITERATIONS   6000            // for catching endless loops
@@ -228,10 +321,18 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
 // of engine-coupled logic; we keep the pre-release executor which matches the
 // retail outer loop (trigger scan → token interpreter → CMD_* flag handling →
 // MAXITERATIONS guard) but skips the context-vftable plumbing.
-void TScript::Continue(TObjectInstance* context)
+// REVSYNC: Continue @ 0x004933d0 — entry and wait gate (SCRIPT_ENGINE.md §4).
+// The trigger scan and line loop below are still the 1998 ones.
+void TScript::Continue(TObjectInstance* context, bool commanddone)
 {
     if (priority & SCRIPT_PAUSED || pauseall)
         return;
+
+  // Nothing to do while the owner is busy or a wait is unsatisfied.
+    if ((!commanddone || wait != EScriptWait::None) && !WaitSatisfied(commanddone))
+        return;
+    wait = EScriptWait::None;
+    waitobject.Clear();
 
     if (!curproto)
         return;
@@ -252,6 +353,9 @@ void TScript::Continue(TObjectInstance* context)
             if (Triggered(&p->triggers[c], priority, context))
             {
                 foundtrigger = true;
+                log_trace("[script] %s: trigger %d of '%s' starts",
+                          (context && context->GetName()) ? context->GetName() : "?",
+                          p->triggers[c].type, p->name ? p->name : "?");
                 StartTrigger(p, &p->triggers[c]);
                 break;
             }
@@ -264,11 +368,13 @@ void TScript::Continue(TObjectInstance* context)
     // Now Continue Script
     // *******************
 
-    s.SetPos((uint32_t)(uintptr_t)ip);
+    if (ip != kNotRunning)
+        s.SetPos((uint32_t)ip);
 
     int32_t iterations = MAXITERATIONS;
+    const char *text = curproto->text;
 
-    while (ip && (!(priority & SCRIPT_PAUSED)))
+    while (ip != kNotRunning && (!(priority & SCRIPT_PAUSED)))
     {
       // Prevent main char self running demo script from interrupting this script...
         if (Player && context != Player && Player->GetScript() &&
@@ -279,8 +385,8 @@ void TScript::Continue(TObjectInstance* context)
         }
 
         uint32_t thisline = s.GetPos();
-        if (thisline > (uint32_t)(uintptr_t)ip && !isspace(*((char *)(uintptr_t)thisline)) &&
-                                    !isspace(*((char *)(uintptr_t)thisline - 1)))
+        if (thisline > (uint32_t)ip && !isspace(text[thisline]) &&
+                                    !isspace(text[thisline - 1]))
             thisline--;                         // token code jacks the pointer sometimes
 
         t.Get();
@@ -292,6 +398,7 @@ void TScript::Continue(TObjectInstance* context)
         }
         else if (t.Type() == TKN_IDENT || t.Type() == TKN_KEYWORD)
         {
+            TraceLine(context, text + thisline);
             int32_t bits = CommandInterpreter(context, t, 0, this);  // ****** MAIN COMMAND PROCESSOR HERE *****
 
             if (bits & CMD_DELETED)
@@ -352,13 +459,13 @@ void TScript::Continue(TObjectInstance* context)
 
             if (bits & CMD_WAIT)
             {
-                ip = (char *)(uintptr_t)s.GetPos();
+                ip = (int32_t)s.GetPos();
                 break;
             }
 
             if (bits & CMD_JUMP)
             {
-                s.SetPos((uint32_t)(uintptr_t)ip);
+                s.SetPos((uint32_t)ip);
             }
         }
         else
@@ -372,12 +479,12 @@ void TScript::Continue(TObjectInstance* context)
             if (iterations < 1)
                 ScriptError("Infinite loop detected\n", t.LineNum());
 
-            ip = nullptr;
+            ip = kNotRunning;
             priority = 0;
         }
     }
 
-    if (ip == nullptr) // Script done
+    if (ip == kNotRunning) // Script done
     {
         lastpriority = 0;
         if (!DialogPane.IsHidden() &&
@@ -432,7 +539,7 @@ void TScript::Jump(TObjectInstance* /*context*/, char *label)
         t.LineGet();
     }
 
-    ip = (char *)(uintptr_t)s.GetPos();
+    ip = (int32_t)s.GetPos();
     depth = 1;          // a bit hacky - probably needs to count the begin/end pairs..
 }
 
@@ -454,7 +561,10 @@ void TScript::Resume()
 // TODO(revsync): re-port flag rollback once Player FSM exists.
 void TScript::End()
 {
-    ip = nullptr;
+    triggerguard.Clear();
+    wait = EScriptWait::None;
+    waitobject.Clear();
+    ip = kNotRunning;
     lastpriority = priority = 0;
 }
 
@@ -467,6 +577,7 @@ void TScript::Reset()
     curtrigger = nullptr;
     depth = 0;
     block[0] = SScriptBlock{};
+    triggerer.Clear();
 }
 
 // ****************
@@ -793,13 +904,19 @@ int32_t TScriptProto::ParseScript(TToken &t)
     // has the same contents. The "-4" trims the trailing "END\n".
     int32_t bodylen = (int32_t)(t.GetPos() - start - 4);
     if (bodylen < 0) bodylen = 0;
-    char *newtext = (char *)malloc(bodylen + 1);
-    if (text)
+    // The body is copied from the text being parsed. (The 1998 code copied
+    // through a raw pointer position; positions are offsets now.)
+    const char *source = t.Stream() ? t.Stream()->Data() : nullptr;
+    if (!source)
     {
-        memcpy(newtext, text + start, bodylen);
-        free(text);
+        ScriptError("Script body can't be read from this stream", t.LineNum());
+        bodylen = 0;
     }
+    char *newtext = (char *)malloc(bodylen + 1);
+    if (bodylen > 0)
+        memcpy(newtext, source + start, bodylen);
     newtext[bodylen] = 0;
+    free(text);
     text = newtext;
     len = bodylen;
 
@@ -823,11 +940,12 @@ bool TScriptProto::WriteScript(FILE *fp)
 // * TGameState *
 // **************
 
-// REVSYNC: Load @ 0x00495cf0 — text .def parser.
+// REVSYNC: Load @ 0x00495cf0 — text .def parser; the active module's copy of
+// the file, else the shared one.
 bool TGameState::Load(char *filename)
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s", ClassDefPath, filename);
+    const std::string fname_str = ModuleManager.DataFilePath(filename);
+    const char *fname = fname_str.c_str();
 
     FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
@@ -1024,10 +1142,11 @@ void TScriptManager::Close()
 }
 
 // REVSYNC: Load @ 0x00496490 — slurps file, ParseScripts, registers owner.
+// The active module's copy of the script, else the shared one.
 bool TScriptManager::Load(char *filename, void *owner)
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s", ClassDefPath, filename);
+    const std::string fname_str = ModuleManager.DataFilePath(filename);
+    const char *fname = fname_str.c_str();
 
     const int before = scripts.NumItems();
 

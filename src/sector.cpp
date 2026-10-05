@@ -14,10 +14,12 @@
 #include "stream.h"
 #include "textbar.h"
 
+#include <algorithm>
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 
 #include <algorithm>
 
@@ -49,8 +51,7 @@ TSector::TSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory)
 
 TSector::~TSector()
 {
-    if (walkmap)
-        delete walkmap;
+    delete[] walkmap;
 
     for (int32_t c = 1; c < NUMOBJSETS; c++)
         objsets[c-1].Clear();
@@ -93,7 +94,18 @@ TSector* TSector::LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newse
     }
 
     sector = new TSector(newlevel, newsectorx, newsectory);
-    sector->Load(); // Assume this works
+
+    // REVSYNC-DIVERGENCE: retail LoadSector @ 0x004982b0 ignored Load's
+    // result and kept the sector, empty or half read. The port loads only
+    // sectors whose files exist (TGameMap::Load), so a failure means the file
+    // is unreadable or malformed, and keeping the sector would write the
+    // partial copy over it when the map unloads. The sector is dropped; the
+    // map leaves it out and logs it.
+    if (!sector->Load())
+    {
+        delete sector;
+        return nullptr;
+    }
 
     return sector;
 }
@@ -124,40 +136,38 @@ void TSector::DiscardSector(TSector* sector)
 
 #define MAKEINDEX(level, sx, sy, item)  ((level<<24) | (sx<<18) | (sy<<12) | (item & 0xFFF))
 
+// REVSYNC: TSector::Load @ 0x004984d0 + LoadFromStream @ 0x00498780.
+// Returns false when the file is missing, can't be read, or is malformed as
+// far as the sector can tell (header, object count, stream running out);
+// retail rejected only a missing "MAP " header. Objects read before a
+// failure stay in the sector: LoadSector discards such a sector.
 bool TSector::Load(bool lock)
 {
     int32_t version = 0;
-    FILE *fp;
 
     // The working set's copy if this game has written one, else the base map.
-    fp = SectorStore::OpenForRead(filename);
+    FILE* fp = SectorStore::OpenForRead(filename);
     if (!fp)
         return false;
 
     fseek(fp, 0, SEEK_SET);
 
-    int32_t bufsize = flen(fp);
-    uint8_t *buf;
+    // An empty file reads as a sector with no objects (the 1998 format had
+    // no header). The buffer outlives `is`, which doesn't own it (retail
+    // freed it after the read; the 1998 code leaked it).
+    const int32_t filesize = flen(fp);
+    std::vector<uint8_t> buf((size_t)std::max<int32_t>(filesize, sizeof(int32_t)), 0);
+    const bool readok = filesize <= 0 || fread(buf.data(), (size_t)filesize, 1, fp) == 1;
+    fclose(fp);
 
-    if (bufsize > 0)
-    {
-        buf = (uint8_t *)malloc(bufsize);
-        fread(buf, bufsize, 1, fp);
-    }
-    else
-    {
-        buf = (uint8_t *)malloc(sizeof(int32_t));
-        bufsize = 4;
-        *((int32_t *)buf) = 0;
-    }
+    auto malformed = [this](const char* why) {
+        log_error("[sector] %s: %s", filename, why);
+        return false;
+    };
+    if (!readok)
+        return malformed("read failed");
 
-    //if (!lock)
-    {
-        fclose(fp);
-        fp = nullptr;
-    }
-
-    TInputStream is(buf, bufsize);
+    TInputStream is(buf.data(), (int32_t)buf.size());
 
     int32_t numobjects;
     is >> numobjects;
@@ -166,20 +176,33 @@ bool TSector::Load(bool lock)
     if ((uint32_t)numobjects == SectrorMapFCC)
     {
         // Get which sector map version this is
+        if (is.Remaining() < 4)
+            return malformed("truncated header");
         is >> version;
 
         // v14+ adds a 4-byte hash (statehash) between version and
         // numobjects. See TSector in sector.h and
         // recon/docs/SECTOR_FILE_FORMAT.md. Gate matches retail
         // (FUN_00498780 @ 0x498780): `if (version > 13)`.
+        if (is.Remaining() < (version > 13 ? 8 : 4))
+            return malformed("truncated header");
         if (version > 13)
             is >> statehash;
 
         is >> numobjects;
     }
 
+    if (numobjects < 0 || numobjects > MAXSECTOROBJECTS)
+        return malformed("bad object count");
+
     for (int32_t c = 0; c < numobjects; c++)
     {
+        // Every object record starts with a 16-bit field (objversion, or the
+        // objclass in pre-v8 maps). A record that runs past the end of the
+        // file marks the stream overrun (below).
+        if (is.Remaining() < 2)
+            return malformed("object data ends early");
+
         TObjectInstance* inst = TObjectInstance::LoadObject(is, version, OSTREAM_MAP);
         // Note: inst can be nullptr here if a placeholder (-1) was saved for the obj class id
 
@@ -209,6 +232,9 @@ bool TSector::Load(bool lock)
         if (version < 3 && inst) // This is nolonger used (indexes are now unique id's)
             inst->SetMapIndex(MAKEINDEX(level, sectorx, sectory, c));
     }
+
+    if (is.Overrun())
+        return malformed("object data overruns the file");
 
     // Load is the initial "contents are populated" event.
     contentver = 1;
@@ -473,6 +499,17 @@ TObjectInstance* TSector::RemoveObject(int32_t item)
     return oi;
 }
 
+// REVSYNC: TSector::RemoveObject @ 0x00499250 (retail removes by object).
+int32_t TSector::RemoveObject(TObjectInstance* oi)
+{
+    if (!oi)
+        return -1;
+    const int32_t item = GetObjIndex(oi);
+    if (item >= 0)
+        RemoveObject(item);
+    return item;
+}
+
 int32_t TSector::GetObjIndex(const TObjectInstance* oi) const
 {
     for (int32_t i = 0; i < objects.NumItems(); i++)
@@ -652,10 +689,9 @@ bool TSector::LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
           // If not already in sector list, load it
             if (!alreadyloaded)
             {
-                TSector* sector = new TSector(level, x, y);
-                if (sector)
+                // Retail loads through LoadSector here too (0x004998b0).
+                if (TSector* sector = LoadSector(level, x, y, false))
                 {
-                    sector->Load();
                     sector->preloaded = true;
                     preloads.Add(sector);
                 }
