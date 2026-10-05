@@ -57,14 +57,14 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
         if (inst)
         {
             sprintf(buf, "The %s is closed.", GetName());
-            TextBar.Print(buf);
+            TextBar.Print("%s", buf);
             return false;
         }
 
         SetState(OPEN);
         
         sprintf(buf, "%s opened.", GetName());
-        TextBar.Print(buf);
+        TextBar.Print("%s", buf);
         return true;
     }
 
@@ -99,7 +99,7 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
                     Inventory.GetContainer()->AddToInventory(oi);
 
                     sprintf(buf, "%s taken from %s.", oi->GetName(), GetName());
-                    TextBar.Print(buf);
+                    TextBar.Print("%s", buf);
 
                     TakenObject = oi;
                 }
@@ -113,7 +113,7 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
 
                 SetState(CLOSED);
                 sprintf(buf, "%s closed.", GetName());
-                TextBar.Print(buf);
+                TextBar.Print("%s", buf);
             }
         }
         else
@@ -123,7 +123,7 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
             AddToInventory(inst);
 
             sprintf(buf, "%s put in %s.", inst->GetName(), GetName());
-            TextBar.Print(buf);
+            TextBar.Print("%s", buf);
 
             DroppedObject = inst;
         }

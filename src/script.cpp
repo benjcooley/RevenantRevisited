@@ -78,7 +78,7 @@ void ScriptError(const char *buf, int32_t linenum)
     if (Editor)
         Output(buf2);
     else
-        TextBar.Print(buf2);
+        TextBar.Print("%s", buf2);
 }
 
 void SkipBlock(TToken &t)
