@@ -195,13 +195,13 @@ void TInGameMenu::BeginLoad()
     SetMouseBitmap(nullptr);
     loading = true;
     const bool shown = progress.OpenProgress(screen, "loadingmap", [slot] {
-        GameFlow.Session().RequestLoad(slot);
+        GameFlow.Session().RequestLoad(slot, /*announce=*/false);
     });
     if (!shown)
     {
         // No popup to show it under: load all the same.
         log_warn("[ingamemenu] no progress popup; loading without it");
-        GameFlow.Session().RequestLoad(slot);
+        GameFlow.Session().RequestLoad(slot, /*announce=*/false);
     }
 }
 

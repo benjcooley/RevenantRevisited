@@ -374,9 +374,10 @@ void TGameSession::End()
 // * Requests *
 // ************
 
-void TGameSession::RequestLoad(const std::string& slot)
+void TGameSession::RequestLoad(const std::string& slot, bool announce)
 {
     pendingLoad = slot;
+    pendingLoadAnnounce = announce;
 }
 
 void TGameSession::RequestSave(const std::string& slot)
@@ -434,6 +435,21 @@ void TGameSession::ProcessRequests()
         }
         else
         {
+            // REVSYNC: 0x0047bf63 -- outside the editor, with the text bar up,
+            // the module's `loadgamefmt` line (else retail's built-in one)
+            // with the slot's name in its %s. Retail handed the line to
+            // printf as the format; the port fills the %s itself, so a line
+            // from the data can't misformat.
+            if (pendingLoadAnnounce && !Editor && TextBar.IsOpen())
+            {
+                std::string line = DialogList.FindLine("loadgamefmt") >= 0
+                                 ? DialogList.GetLine("loadgamefmt")
+                                 : "Loading Game \"%s\"... Please Wait";
+                if (const size_t at = line.find("%s"); at != std::string::npos)
+                    line.replace(at, 2, slot);
+                TextBar.Print("%s", line.c_str());
+            }
+
             SSessionStart load;
             load.kind = SSessionStart::EKind::LoadSlot;
             load.slot = slot;

@@ -56,7 +56,10 @@ class TGameSession
     // simulation tick (retail TPlayScreen +0x5e4..+0x5f0). A load starts
     // there and then runs a step per tick, the PlayScreen holding the world
     // until it is Ready (Loading()); requests made meanwhile wait for it.
-    void RequestLoad(const std::string& slot);
+    // `announce`: retail's frame request (0x0047bfab: console `loadgame`,
+    // F9) puts 'Loading Game "<slot>"... Please Wait' on the text bar; the
+    // load dialog shows its progress popup instead and passes false.
+    void RequestLoad(const std::string& slot, bool announce = true);
     void RequestSave(const std::string& slot);
     // REVSYNC: 0x0047e850 — save to the first unused "Quick Save N" slot.
     void RequestQuickSave();
@@ -117,6 +120,7 @@ class TGameSession
     std::string   lastSlot;        // last slot saved or loaded
 
     std::string   pendingLoad;     // requested slot, empty = none
+    bool          pendingLoadAnnounce = false;
     std::string   pendingSave;
     bool          levelLoading = false;    // EnterLevel is part way through a level
 };
