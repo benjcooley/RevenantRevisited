@@ -115,7 +115,7 @@ choice list (`0x00535e90`) unless one is already up.
 |---|---|
 | 0 | not waiting (with `nowait`: immediately) |
 | 2, 5, 10 | the player picked a response: jump to that choice's label |
-| 3 | the object waited on finished its action (vtable 0x154) |
+| 3 | the object waited on finished its action: a complex object (OF_COMPLEX) is back in its root state (doing == root), or plays a looping animation (`AF_LOOPING`, imagery slot 0x8c) and its command is done (vtable 0x154); any other object, its command is done. So a walk, a chain of non-looping steps, holds the wait until it arrives |
 | 4 | a frame count ran out |
 | 6 | the screen fade finished (`0x0048eb00`) |
 | 7 | the buy/sell screen closed |
@@ -148,7 +148,10 @@ Retail:
   raw pointer broke on 64-bit);
 - the trigger test (`0x004927b0`), the user and the trigger-user guard;
 - `Continue`'s wait gate, `SetWait` and the wait check, the
-  interpreter's wait post-hook and `wait`'s grammar;
+  interpreter's wait post-hook and `wait`'s grammar. The type-3 check
+  ended on any finished animation until 2026-10-05, so a script walk
+  (`goto`, `gotorelative…`) went on after its first step
+  ([COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) §6.5);
 - object names and expressions (`if`, `while`): `src/scriptvalue.cpp`,
   [COMMAND_SYSTEM.md §2.4](COMMAND_SYSTEM.md);
 - the trigger scan with the ALWAYS interrupt/resume (`+0xac`/`+0xb0`):
