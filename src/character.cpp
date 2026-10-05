@@ -3553,7 +3553,7 @@ bool TCharacter::TryGet()
     return true;
 }
 
-// REVSYNC: Say @ 0x004d0610 (DIALOG.md ง3.1). Plays the voice unpositioned,
+// REVSYNC: Say @ 0x004d0610 (DIALOG.md ยง3.1). Plays the voice unpositioned,
 // starts the say action for the voice's length (or the line's), and puts the
 // line in the dialog pane. `wait` (ticks), when given, wins.
 //   - The voice paces the line whenever it exists: retail measured the playing

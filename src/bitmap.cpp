@@ -494,7 +494,7 @@ bool TBitmap::Put(int32_t x, int32_t y, TSurface* surface, int32_t srcx, int32_t
 // put it (retail stepped its row pointer back twice), clamped to the first
 // row. The header's image-size field is 0 and the file-size field is
 // (width * height + 18) * 3, both as retail wrote them. The save thumbnail
-// (docs/gameflow/forensics/SAVE_GAME.md ง11.7) is a 640x480 capture at
+// (docs/gameflow/forensics/SAVE_GAME.md ยง11.7) is a 640x480 capture at
 // scale 3.
 bool TBitmap::SaveBMP(const char *filename, int32_t scale)
 {
