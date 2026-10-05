@@ -429,10 +429,18 @@ int32_t TSector::AddObject(TObjectInstance* oi, int32_t item)
     oi->ForceSector(this);
     oi->ForceLevel(level);
 
+    // REVSYNC: TSector::AddObject @ 0x00498fb0 adds with retail's array Add
+    // (0x0041c840), which takes the first empty slot; TPointerArray::Add
+    // appends. The difference shows in the sector file: an object that
+    // leaves and comes back (the player crossing a sector) is written
+    // where retail writes it.
     if (item < 0)
-        item = objects.Add(oi);
-    else
-        item = objects.Set(oi, item);
+    {
+        item = 0;
+        while (item < objects.NumItems() && objects[item])
+            ++item;
+    }
+    item = objects.Set(oi, item);
 
     for (int32_t d = 1; d < NUMOBJSETS; d++)
     {
@@ -520,20 +528,40 @@ int32_t TSector::GetObjIndex(const TObjectInstance* oi) const
     return -1;
 }
 
+// REVSYNC: TSector::ObjectFlagsChanged @ 0x00499360. The object keeps its
+// slot; only its object-set memberships follow the new flags. (The 1998
+// source removed and re-added the object, which moved it to the end of the
+// sector, so a sector saved after a flag change listed its objects in a
+// different order than retail.)
 void TSector::ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags)
 {
-    if (oi->GetSector() != this)
+    if (oi->GetSector() != this || !(OBJSETOBJFLAGS & (oldflags ^ newflags)))
         return;
 
-    if (OBJSETOBJFLAGS & (oldflags ^ newflags))
-    {
-        int32_t index = GetObjIndex(oi);
-        if (index < 0)
-            return;
+    int32_t index = GetObjIndex(oi);
+    if (index < 0)
+        return;
 
-        RemoveObject(index);
-        AddObject(oi);
+    for (int32_t d = 1; d < NUMOBJSETS; d++)
+    {
+        TObjSetArray& set = objsets[d-1];
+        int32_t at = -1;
+        for (int32_t c = 0; c < set.NumItems(); c++)
+        {
+            if (set[c] == index)
+            {
+                at = c;
+                break;
+            }
+        }
+
+        const bool wanted = InObjSet(oi, d);
+        if (at >= 0 && !wanted)
+            set.Collapse(at);
+        else if (at < 0 && wanted)
+            set.Set(index, set.NumItems());
     }
+    ++contentver;
 }
 
 // *****************

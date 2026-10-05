@@ -655,6 +655,11 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     // clear-to-negative must move the registry entry with the instance.
     if (newindex == mapindex)
         return;
+    // Retail allowed several objects to share an id (sector files hold such
+    // duplicates); the registry needs unique ones. The object that gives up
+    // the id keeps it as its file id, so the files it is saved to still say
+    // what retail wrote.
+    int32_t fileid = -1;
     if (newindex >= 0)
     {
         if (TObjectInstance* existing = LookupMapIndex(newindex))
@@ -665,16 +670,19 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
                 const int32_t incoming_priority = MapIndexPreservePriority(this);
                 if (incoming_priority > existing_priority)
                 {
-                    const int32_t replacement = FreshRuntimeMapIndex();
-                    existing->SetMapIndex(replacement);
+                    const int32_t existingfileid = existing->FileMapIndex();
+                    existing->SetMapIndex(FreshRuntimeMapIndex());
+                    existing->filemapindex = existingfileid;
                 }
                 else
                 {
+                    fileid = newindex;
                     newindex = FreshRuntimeMapIndex();
                 }
             }
         }
     }
+    filemapindex = fileid;
     if (mapindex >= 0)
         MapPane.UnregisterInstance(mapindex);
     mapindex = newindex;
@@ -2622,7 +2630,7 @@ void TObjectInstance::Save(RTOutputStream os)
         os << level;
 
     os << inventnum << invindex << shadow <<
-        rotatex << rotatey << rotatez << mapindex;
+        rotatex << rotatey << rotatez << FileMapIndex();
 
     if (flags & OF_ANIMATE)
         os << frame << framerate;
