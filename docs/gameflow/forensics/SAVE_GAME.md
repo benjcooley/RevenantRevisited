@@ -121,7 +121,7 @@ Sequence (flags & 2 clear):
 | `0x0044e050(DAT_00667eb8)` | MapPane | **LoadCurMap** (named load only): clear, then copy `<slot>\CurMap\*` into `curmap` | `TMapPane::LoadCurMap` (same problem) |
 | `0x0047ece0` | PlayScreen | if a fade is active (+0x6ac), mark it finished (+0x6b4) | — |
 | `_DAT_00667ca8 = 1` | — | *unidentified* flag | — |
-| `0x005360f0` | dialog pane `0x00667cc8` | end any conversation: free choice list, send `Finish` to the speaker's script, close the pane | — (dialog not ported) |
+| `0x005360f0` | dialog pane `0x00667cc8` | end any conversation: dismiss the responses, free the choices, delete every entry (its `Finish`/close tail is unreachable, DIALOG.md §4.3) | `TDialogPane::ResetForLoad` |
 | `0x00532f40` | buy/sell pane `0x0065a3b8` | clear its item list | — |
 | `0x00496e20` | ScriptManager | reset every script instance: End if running, rewind, clear trigger/wait state | — |
 | `0x004975c0` | ScriptManager | **ReloadStates**: reload `state.def` defaults | `TScriptManager::ReloadStates` |

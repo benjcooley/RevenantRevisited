@@ -144,6 +144,13 @@ Retail:
   interpreter's wait post-hook and `wait`'s grammar;
 - object names and expressions (`if`, `while`): `src/scriptvalue.cpp`,
   [COMMAND_SYSTEM.md §2.4](COMMAND_SYSTEM.md);
+- the trigger scan with the ALWAYS interrupt/resume (`+0xac`/`+0xb0`):
+  a firing trigger starts if the script is idle, runs an ALWAYS block
+  (saved to resume) or runs a block that interrupted one; an ALWAYS
+  block starts only on an idle script, resuming where it was cut off.
+  The "running trigger" record `+0xa8` that the trigger test compares
+  with is never written in retail, so it plays no part; the trigger-user
+  guard and the priority test keep a trigger from re-firing over itself;
 - manual trigger requests (`0x00492640`, `TScript::Trigger`): the
   prototype search, the guard refusal, the user and second object with
   their aliases, the second USE name. Callers pass retail's arguments:
@@ -162,7 +169,6 @@ Not ported:
 - the multiplayer choice list (`+0xb8`/`+0xb6`); single-player responses
   go through the dialog pane (DIALOG.md, ported)
 - the pending `say` (`+0xd8`…);
-- the ALWAYS interrupt/resume (`+0xac`/`+0xb0`);
 - a refused request's busy reply (`0x00494620`, multiplayer, needs
   `busysay`/`busymsg`);
 - `TExit::Activate`'s ACTIVATE request has no user yet (retail

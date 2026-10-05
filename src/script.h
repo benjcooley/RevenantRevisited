@@ -181,7 +181,7 @@ class TScript
     [[nodiscard]] char *Text() const { if (curproto) return curproto->text; else return nullptr; }
 
     void Start(TScriptProto* proto = nullptr, int32_t pos = 0, int32_t newpriority = 0);
-    void StartTrigger(TScriptProto* proto, PSScriptTrigger st);
+    void StartTrigger(TObjectInstance* context, TScriptProto* proto, PSScriptTrigger st);
     // REVSYNC: Continue @ 0x004933d0 — retail body weaves in dialog/combat
     //   notify hooks via context vftable slots 0x148/0x14c/0x154 that don't
     //   exist on our TObjectInstance yet; we keep the pre-release loop which
@@ -226,6 +226,12 @@ class TScript
     // through the dialog pane; the script then owns the dialog until the
     // response (taken flag 4, which `choice` sets in retail).
     void AddChoice(const char *label, const char *text);
+    // REVSYNC: 0x00494530 / 0x004944c0 (`busysay` / `busymsg`) -- the line
+    // the owner says, and the message sent, to a player whose trigger is
+    // refused while the script is busy with someone else (TScript::Busy
+    // 0x00494620, a multiplayer reply; not ported).
+    void SetBusySay(const char *text, const char *voice);
+    void SetBusyMessage(const char *text);
     [[nodiscard]] int32_t GetTrigger() const { return trigger; }
     [[nodiscard]] int32_t GetPriority() const { return priority; }
     [[nodiscard]] TScriptProto* GetScriptProto() const { return proto; }
@@ -271,6 +277,8 @@ class TScript
     // offset, which is also what survives 64-bit pointers.)
     static constexpr int32_t kNotRunning = -1;
     int32_t ip               = kNotRunning;
+    int32_t savedip          = kNotRunning;        // +0xac: an interrupted ALWAYS block's place
+    int32_t saveddepth       = 0;                  // +0xb0
     int32_t priority         = 0;                  // Priority of current ip (block id)
     int32_t lastpriority     = 0;                  // Last trigger executed
 
@@ -291,6 +299,9 @@ class TScript
     TSafeRef<TObjectInstance> second;              // +0xc8: the other object it concerns
     std::string useralias;                         // +0xcc: the block's name for `triggerer`
     std::string secondalias;                       // +0xd0: the block's name for `second`
+    std::string busysay;                           // +0xd8
+    std::string busysayvoice;                      // +0xdc: its voice (the line's tag)
+    std::string busymessage;                       // +0xe0
     TSafeRef<TObjectInstance> triggerguard;        // +0x10: no re-trigger while this exists
     EScriptWait wait         = EScriptWait::None;  // +0xb4
     int32_t     waitframes   = 0;                  // +0xbc for Frames

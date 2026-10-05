@@ -3997,10 +3997,7 @@ COMMAND(CmdTimeLimit) { return CmdNotPorted("timelimit", 0x00429820, t); }
 
 // ----- owner: dialog (speech, messages, responses) -----
 
-COMMAND(CmdBusyMsg) { return CmdNotPorted("busymsg", 0x00429850, t); }
-COMMAND(CmdBusySay) { return CmdNotPorted("busysay", 0x004298b0, t); }
 COMMAND(CmdHideResponse) { return CmdNotPorted("hideresponse", 0x00426d40, t); }
-COMMAND(CmdMessage) { return CmdNotPorted("message", 0x004280e0, t); }
 
 // ----- owner: savegame (load/save orchestration) -----
 
