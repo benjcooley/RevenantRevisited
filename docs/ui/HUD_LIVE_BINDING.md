@@ -131,7 +131,12 @@ Also in the commit messages.
 - **Spell icon key.** SpellIcons.dat names some circles by variant
   ("Advanced Healing") and some by spell ("Iron Skin"); the panes try the
   variant name, then the spell name, ignoring case
-  (QuickSpellPane_SPEC UNCONFIRMED-D).
+  (QuickSpellPane_SPEC UNCONFIRMED-D). Lead for confirming it: spell.def
+  gives each spell an `ICONNAME`, which retail's loader parses
+  (`meth_0x53e4e0`, `"ICONNAME %30s"` into the spell record's `+0x5c`) and
+  the port's `SSpellData::Load` skips. The Heal spell's is `"Heal"`, so if
+  the panes key by `ICONNAME` the "Advanced healing" ring shows the Heal
+  circle, not the "Advanced Healing" one.
 - **Quick-spell labels.** The variant name splits at its first space into
   the label above and below the ring, the rule the harness used. Retail's
   wrap rule is not confirmed.
@@ -183,3 +188,5 @@ Current behaviour is kept until these are answered.
    the port updates it on level-up; does retail's level-up rewrite it?
 5. Quick spells: do two-word names always split at the first space, and
    does dragging one ring onto another swap them?
+6. Spell icons: does "Advanced healing" show its own circle or Heal's?
+   (Settles whether the panes key icons by `ICONNAME`; §5.)
