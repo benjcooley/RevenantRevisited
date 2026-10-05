@@ -233,9 +233,10 @@ void TCharacter::Pulse()
         if (target)
             target->SignalHostility(this, target);
 
-      // Update the health/etc. for player's target
-        if ((TPlayer*)this == Player && target)
-            TextBar.SetHealthDisplay(target->GetName(), target->Health());
+        // REVSYNC: the 1998 build put the player's target's name and health
+        // on the text bar here. Retail dropped it: TTextBar::SetHealthDisplay
+        // (0x0054ca20) has one caller, the map loader's progress bar
+        // (0x004598c8); the target's health is TPlyrStatusBar's.
     }
 
     // Check to see if exit flag has expired (exit flags are set by exit objects)

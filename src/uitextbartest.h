@@ -1,16 +1,18 @@
 // *************************************************************************
 // *                  Revenant Revisited (port) - 2026                     *
-// *      uitextbartest.h - --test=ui-textbar: TTextBar data API           *
+// *      uitextbartest.h - --test=ui-textbar: the TTextBar pane           *
 // *************************************************************************
 //
-// First-pane bring-up test mode (burndown B.1). Exercises TTextBar's
-// public data API (Print, Clear, SetHealthDisplay, ClearHealthDisplay)
-// with synthesized inputs and logs state at each step. The pane's
-// DrawBackground still uses the old Display CPU-surface API and depends
-// on GameData (playscrn.dat) which isn't loaded in test mode -- the
-// render port is incremental (see TODO in DrawBackground); this commit
-// validates the data-model contract so we can wire it confidently when
-// the new HUD render path is ready.
+// Hosts the production text bar (TextBar, textbar.h) on the test screen and
+// plays a scripted feed into it through its public calls: messages (one of
+// them two lines, one a typed Notice) and the map-loading bar
+// (SetHealthDisplay, SetLevels, ClearHealthDisplay). The feed is test data
+// in this host only. Lines stack, take the black shadow, and the older ones
+// fade; a --filmstrip over ~14 s shows the whole run.
+//
+// With no play screen HUD up, the map view is the whole display, so the bar
+// sits at the bottom of the screen, as wide as the screen less the side
+// tabs.
 //
 // *************************************************************************
 
@@ -18,5 +20,4 @@
 
 bool InitializeUITextBarMode();
 void RenderUITextBarMode();
-void RenderUITextBarModeEmbedded();
 void CloseUITextBarMode();
