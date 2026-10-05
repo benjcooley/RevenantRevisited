@@ -181,7 +181,7 @@ class TScript
     [[nodiscard]] char *Text() const { if (curproto) return curproto->text; else return nullptr; }
 
     void Start(TScriptProto* proto = nullptr, int32_t pos = 0, int32_t newpriority = 0);
-    void StartTrigger(TScriptProto* proto, PSScriptTrigger st);
+    void StartTrigger(TObjectInstance* context, TScriptProto* proto, PSScriptTrigger st);
     // REVSYNC: Continue @ 0x004933d0 — retail body weaves in dialog/combat
     //   notify hooks via context vftable slots 0x148/0x14c/0x154 that don't
     //   exist on our TObjectInstance yet; we keep the pre-release loop which
@@ -277,6 +277,8 @@ class TScript
     // offset, which is also what survives 64-bit pointers.)
     static constexpr int32_t kNotRunning = -1;
     int32_t ip               = kNotRunning;
+    int32_t savedip          = kNotRunning;        // +0xac: an interrupted ALWAYS block's place
+    int32_t saveddepth       = 0;                  // +0xb0
     int32_t priority         = 0;                  // Priority of current ip (block id)
     int32_t lastpriority     = 0;                  // Last trigger executed
 
