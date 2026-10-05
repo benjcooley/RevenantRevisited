@@ -775,6 +775,7 @@ void TDialogPane::AddSpeech(TObjectInstance* speaker, const char *text, int32_t 
     const TDialogEntry::EMode mode = player ? TDialogEntry::EMode::PlayerSpeech
                                             : TDialogEntry::EMode::NpcSpeech;
     const uint32_t color = player ? kPlayerColor : NpcColor(speaker);
+    log_debug("[dialog] %s says: %s", speaker->GetName() ? speaker->GetName() : "?", text);
     entries.push_back(std::make_unique<TDialogEntry>(*this, speaker, mode, color, kHighlightColor,
                                                      std::vector<std::string>{text},
                                                      std::vector<std::string>{}, ticks));
@@ -886,11 +887,17 @@ COMMAND(CmdChoice)
             text += t.Text();
         else if (t.Type() == TKN_IDENT)
         {
-            // Retail appends a prototype number or string variable named
-            // here (not ported); any other identifier replaces the text
-            // with its DialogLine form -- the identifier itself.
-            char buf[256];
-            text = DialogLine(t.Text(), buf, sizeof(buf));
+            // A prototype variable of the context: retail checked the type
+            // on the context but read the value with no object, so a number
+            // came out as its not-found value and text dereferenced null.
+            // DEVIATION: the port appends nothing (no shipped choice names a
+            // variable). Any other identifier replaces the text with its
+            // DialogLine form -- the identifier itself.
+            if (ScriptManager.VariableType(t.Text(), context) < 0)
+            {
+                char buf[256];
+                text = DialogLine(t.Text(), buf, sizeof(buf));
+            }
         }
         t.WhiteGet();                       // numbers and symbols are skipped
     }

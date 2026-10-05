@@ -1411,6 +1411,39 @@ COMMAND(CmdActivate)
 // calling script waits until the speaker is idle again (the speech wait) --
 // set here, so the interpreter's NOWAIT prefix doesn't lift it; only `say
 // nowait` does. Always 0.
+// A prototype variable named in a `say` line (0x00420140): a number as retail
+// writes it -- five digit places, leading zeros dropped, plain decimal for
+// 0..99999 -- or text as is. Any other name adds nothing.
+static void AppendVariable(std::string& text, const char *name, const TObjectInstance* obj)
+{
+    switch (ScriptManager.VariableType(name, obj))
+    {
+      case static_cast<int32_t>(SScriptVariable::EType::Number):
+      {
+        int32_t value = ScriptManager.VariableNumber(name, obj);
+        bool started = false;
+        for (int32_t place = 10000; place >= 10; place /= 10)
+        {
+            const int32_t digit = value / place;
+            value -= digit * place;
+            if (digit != 0 || started)
+            {
+                text += static_cast<char>('0' + digit);
+                started = true;
+            }
+        }
+        text += static_cast<char>('0' + value);
+        break;
+      }
+      case static_cast<int32_t>(SScriptVariable::EType::Text):
+        if (const char *value = ScriptManager.VariableText(name, obj))
+            text += value;
+        break;
+      default:
+        break;
+    }
+}
+
 COMMAND(CmdSay)
 {
     TCharacter* speaker = static_cast<TCharacter*>(context);
@@ -1471,12 +1504,15 @@ COMMAND(CmdSay)
     else
         return CMD_BADPARAMS;
 
-    // Further parts: quoted text is appended to plain text. (Retail also
-    // appends prototype variables named here; not ported.)
+    // Further parts: quoted text, and the speaker's prototype variables
+    // named here (a number in decimal, text as is), appended to plain text;
+    // other words are skipped.
     while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
     {
         if (t.Type() == TKN_TEXT)
             text += t.Text();
+        else if (t.Type() == TKN_IDENT)
+            AppendVariable(text, t.Text(), context);
         t.WhiteGet();
     }
 
@@ -1506,31 +1542,40 @@ COMMAND(CmdGo)
 }
 
 // REVSYNC: goto @ 0x004204f0 -- `<character>.goto <x> <y>` or `goto <object>`
-// (keep.s: `goto Point2`): an object the name finds (partial match, near the
-// character) is walked to (0x004cee50: Goto to its position). Retail also
-// read a name as a prototype variable (0x00497800) for either coordinate;
-// prototype variables aren't ported, so such a name answers bad parameters.
+// (keep.s: `goto Point2`): an object the first name finds (partial match,
+// near the character) is walked to (0x004cee50: Goto to its position);
+// otherwise each coordinate is a number or a number variable of the
+// character's prototypes (0x00497800). An undeclared variable reads as
+// retail's not-found value and the walk heads for it, as retail's did.
 COMMAND(CmdGoto)
 {
     TCharacter* chr = static_cast<TCharacter*>(context);
 
-    if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
-    {
-        TObjectInstance* target = MapPane.FindClosestObject(t.Text(), context, true);
-        if (!target)
-            return CMD_BADPARAMS;
+    auto coordinate = [&t, context](int32_t& value) {
+        if (t.Type() == TKN_NUMBER)
+            value = t.Index();
+        else if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
+            value = ScriptManager.VariableNumber(t.Text(), context);
+        else
+            return false;
         t.WhiteGet();
-        const S3DPoint at = target->Pos();
-        chr->Goto(at.x, at.y);
-        return CMD_WAIT;
-    }
+        return true;
+    };
 
-    int32_t x, y;
-    if (!Parse(t, "%d %d", &x, &y))
+    if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
+        if (TObjectInstance* target = MapPane.FindClosestObject(t.Text(), context, true))
+        {
+            t.WhiteGet();
+            const S3DPoint at = target->Pos();
+            chr->Goto(at.x, at.y);
+            return CMD_WAIT;
+        }
+
+    int32_t x = 0, y = 0;
+    if (!coordinate(x) || !coordinate(y))
         return CMD_BADPARAMS;
 
     chr->Goto(x, y);
-
     return CMD_WAIT;
 }
 
@@ -1730,6 +1775,34 @@ COMMAND(CmdPlayerLevel)
 
     static_cast<TPlayer*>(context)->SetPlayerLevel(static_cast<int32_t>(t.Number()));
     t.Get();
+    return 0;
+}
+
+// REVSYNC: setprotovariable @ 0x0041fd70 -- `setprotovariable <name> [=] <value>`:
+// a number variable takes the rest of the line as an expression (as `if`
+// reads it), a text variable the next token's text; the write goes to every
+// prototype of the context (TScriptManager::SetVariableNumber/Text). An
+// undeclared name does nothing. DEVIATION: retail stored whatever its result
+// slot held when the expression failed; the port leaves the variable alone.
+COMMAND(CmdSetProtoVariable)
+{
+    const std::string name = std::string(t.Text()).substr(0, 39);   // retail's 40-byte copy
+    t.WhiteGet();
+    if (t.Is("="))
+        t.WhiteGet();
+
+    switch (ScriptManager.VariableType(name.c_str(), context))
+    {
+      case static_cast<int32_t>(SScriptVariable::EType::Number):
+        if (const std::optional<int32_t> value = EvaluateExpression(t, context, scriptcontext))
+            ScriptManager.SetVariableNumber(name.c_str(), *value, context);
+        break;
+      case static_cast<int32_t>(SScriptVariable::EType::Text):
+        ScriptManager.SetVariableText(name.c_str(), t.Text(), context);
+        break;
+      default:
+        break;
+    }
     return 0;
 }
 
@@ -3248,9 +3321,15 @@ COMMAND(CmdStat)
         {
             t.WhiteGet();
 
+            // REVSYNC: 0x00424010 -- a number, else a number variable of the
+            // caller's prototypes (0x00497800); neither is bad parameters.
             int32_t val;
             if (!Parse(t, "%i", &val))
-                return CMD_BADPARAMS;
+            {
+                val = ScriptManager.VariableNumber(t.Text(), scriptcontext);
+                if (val == STATE_INVALID)
+                    return CMD_BADPARAMS;
+            }
     
             context->SetStat(buf, val);
 
@@ -4188,7 +4267,6 @@ COMMAND(CmdJumpName) { return CmdNotPorted("jumpname", 0x00429770, t); }
 COMMAND(CmdRandom) { return CmdNotPorted("random", 0x00427d40, t); }
 COMMAND(CmdReloadStates) { return CmdNotPorted("reloadstates", 0x00428a20, t); }
 COMMAND(CmdSetCurrent) { return CmdNotPorted("setcurrent", 0x00428e50, t); }
-COMMAND(CmdSetProtoVariable) { return CmdNotPorted("setprotovariable", 0x0041fd70, t); }
 COMMAND(CmdTimeLimit) { return CmdNotPorted("timelimit", 0x00429820, t); }
 
 // ----- owner: dialog (speech, messages, responses) -----

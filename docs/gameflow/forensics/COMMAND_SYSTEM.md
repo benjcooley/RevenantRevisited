@@ -236,8 +236,15 @@ debug level (`[console]`), so headless `--exec` runs can read it.
 - `try` (`0x00422c30`) takes a quoted state as well as a bare word (`%t`,
   else `%s`): the door prototypes' `TRY "WOPENDOORIN"` failed before.
   `goto` (`0x004204f0`) takes an object name (keep.s `goto Point2`, the
-  town and forest waypoints) and walks to it (`0x004cee50`); a name read
-  as a prototype variable waits for those.
+  town and forest waypoints) and walks to it (`0x004cee50`); otherwise
+  each coordinate may name a number variable.
+- Prototype variables are ported (SCRIPT_ENGINE.md §7): `setprotovariable`
+  (`0x0041fd70`), bare names in expressions, `say` text parts, `goto`
+  coordinates, `stat`'s value. `choice` checks a name's type on the
+  context but retail read the value with no object (a number came out as
+  the not-found value, text dereferenced null); the port appends nothing
+  for a variable there. `addat`, `getitemname`/`getitemvalue` and the
+  buy/sell criteria commands also read them and aren't ported.
 - A line the interpreter skips (class context mismatch, editor-only,
   missing parameters) takes the next line with it: `SkipLine`
   (`0x004795c0`) reads past the line's end into the next line's first
@@ -250,14 +257,13 @@ debug level (`[console]`), so headless `--exec` runs can read it.
   "bad parameters" in a script: it requires end-of-file after the value
   (`type != 10` → 4), and a script line ends in a return. Retail, kept
   (the message goes to the console). A value that isn't a number is
-  looked up as a prototype variable (`0x00497800`, sentinel
-  `0xfeced300` → bad parameters); the port has no prototype variables
-  yet, so it answers bad parameters straight away.
+  looked up as a number variable of the caller's prototypes
+  (`0x00497800`, sentinel `0xfeced300` → bad parameters).
 - `--exec` (`src/consoleexec.cpp`) is a separate command queue —
   **below the bar** (duplicates the console's job).
 - The interpreter's context syntax, the object resolver and the
   expression evaluator are retail (`src/scriptvalue.cpp`). Not ported:
-  prototype variables, `setcurrent`, multiplayer parties,
+  `setcurrent`, multiplayer parties,
   and the members `maxslots`,
   `lastattack` (needs the attack-impact result, `TCharacter +0x168`) and
   `groupinrange` — those fail the expression and log once.

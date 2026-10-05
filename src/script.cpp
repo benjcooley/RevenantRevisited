@@ -866,14 +866,68 @@ bool TScriptProto::ParseCriteria(TToken &t)
 // REVSYNC: ParseScript @ 0x00494e20. Trigger tag→type mapping verified against
 // the retail switch ladder. Cube parsing canonicalises (x1,y1,z1)..(x2,y2,z2)
 // into (min,max) per retail.
+// REVSYNC: 0x00495750 / 0x00495830 -- `DATA`, `BEGIN`, then one variable per
+// line up to `END`: `NUMBER <name> [<value>]` or `TEXT <name> ["<value>"]`; a
+// missing or mistyped value leaves 0 or "". Retail looped forever on a line
+// starting with neither keyword (or blank): it never moved past it. The port
+// reports such a line and goes on.
+void TScriptProto::ParseVariables(TToken &t)
+{
+    auto nextline = [&t]() {
+        while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+            t.Get();
+        t.SkipBlanks();
+    };
+
+    nextline();                                 // past `DATA`
+    if (t.Is("BEGIN"))
+        nextline();
+
+    while (t.Type() != TKN_EOF && !t.Is("END") && !t.Is("BEGIN"))
+    {
+        SScriptVariable var;
+        if (t.Is("NUMBER"))
+            var.type = SScriptVariable::EType::Number;
+        else if (t.Is("TEXT"))
+            var.type = SScriptVariable::EType::Text;
+        else
+        {
+            ScriptError("NUMBER or TEXT expected in DATA block", t.LineNum());
+            nextline();
+            continue;
+        }
+
+        t.WhiteGet();
+        var.name = t.Text();
+        t.WhiteGet();
+        if (var.type == SScriptVariable::EType::Number && t.Type() == TKN_NUMBER)
+            var.number = t.Index();
+        else if (var.type == SScriptVariable::EType::Text && t.Type() == TKN_TEXT)
+            var.text = std::string(t.Text()).substr(0, SScriptVariable::kMaxText);
+        variables.push_back(std::move(var));
+        nextline();
+    }
+
+    nextline();                                 // past `END`
+}
+
+SScriptVariable* TScriptProto::FindVariable(const char *varname)
+{
+    for (SScriptVariable& var : variables)
+        if (!stricmp(var.name.c_str(), varname))
+            return &var;
+    return nullptr;
+}
+
 int32_t TScriptProto::ParseScript(TToken &t)
 {
     char buf[80];
     char trigname[20];
 
-  // Clear current list of triggers before we begin
+  // Clear current list of triggers (and variables) before we begin
     triggers.Clear();
     numtriggers = 0;
+    variables.clear();
 
   // Skip initial blanks
     t.SkipBlanks();
@@ -899,6 +953,14 @@ int32_t TScriptProto::ParseScript(TToken &t)
     {
         if (t.Type() != TKN_IDENT)
             ScriptError("Trigger identifier expected", t.LineNum());
+
+        // REVSYNC: 0x004954f4 -- a DATA block declares the prototype's
+        // variables; then on to the next trigger.
+        if (t.Is("DATA"))
+        {
+            ParseVariables(t);
+            continue;
+        }
 
         SScriptTrigger st;
         memset(&st, 0, sizeof(SScriptTrigger));
@@ -1634,4 +1696,70 @@ int32_t TScriptManager::GameState(const char *fname)
 
     // if it's not there, check the game state variables (globals)
     return gamestate.State(fname);
+}
+
+// ***********************
+// * Prototype variables *
+// ***********************
+
+namespace {
+
+// The prototypes an object reads its variables from: named like the object
+// or like its type (retail compares the name at +0x38, then the type name).
+bool ProtoNamesObject(const TScriptProto* proto, const TObjectInstance* obj)
+{
+    if (!obj || !proto || !proto->name || !*proto->name)
+        return false;
+    const char *objname = obj->GetName();
+    const char *typname = obj->GetTypeName();
+    return (objname && !stricmp(proto->name, objname)) || (typname && !stricmp(proto->name, typname));
+}
+
+}  // namespace
+
+int32_t TScriptManager::VariableType(const char *name, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (const SScriptVariable* var = scripts[c]->FindVariable(name))
+                return static_cast<int32_t>(var->type);
+    return -1;
+}
+
+int32_t TScriptManager::VariableNumber(const char *name, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (const SScriptVariable* var = scripts[c]->FindVariable(name);
+                var && var->type == SScriptVariable::EType::Number && var->number != STATE_INVALID)
+                return var->number;
+    return STATE_INVALID;
+}
+
+const char *TScriptManager::VariableText(const char *name, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (const SScriptVariable* var = scripts[c]->FindVariable(name);
+                var && var->type == SScriptVariable::EType::Text)
+                return var->text.c_str();
+    return nullptr;
+}
+
+void TScriptManager::SetVariableNumber(const char *name, int32_t value, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (SScriptVariable* var = scripts[c]->FindVariable(name);
+                var && var->type == SScriptVariable::EType::Number)
+                var->number = value;
+}
+
+void TScriptManager::SetVariableText(const char *name, const char *text, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (SScriptVariable* var = scripts[c]->FindVariable(name);
+                var && var->type == SScriptVariable::EType::Text)
+                var->text = std::string(text ? text : "").substr(0, SScriptVariable::kMaxText);
 }
