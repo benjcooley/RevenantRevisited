@@ -1201,8 +1201,8 @@ static void DrawClosestMonsterOverlay()
 
 // Legacy entry points still referenced by drivers / pane code. Pulse
 // pumps the per-frame state update; Animate fires the world render
-// (matching what TTestScreen does for TestModes::Render). DrawBackground
-// is dead -- no BITMAP.100 backdrop on the new path.
+// (matching what TTestScreen does for TestModes::Render); DrawBackground
+// only consumes the redraw flag -- no BITMAP.100 backdrop on the new path.
 // REVSYNC: Pulse @ 0x0047b4d0 -- the world, then the screen's panes
 // (0x0048fda0 at its end).
 void TPlayScreen::Pulse()
@@ -1226,7 +1226,14 @@ void TPlayScreen::Animate(bool /*draw*/)
         DrawClosestMonsterOverlay();
     }
 }
-void TPlayScreen::DrawBackground()         { /* no backdrop blit on the new path */ }
+// No backdrop to blit on the new path, but this is where a screen consumes
+// its redraw flag (TScreen::DrawBackground): DrawFrame has already passed it
+// to the panes. Left set, every pane would recompose every frame after the
+// first Redraw (a focus change, the editor closing).
+void TPlayScreen::DrawBackground()
+{
+    dirty = false;
+}
 
 // *************************************************************************
 // * Input                                                                 *
