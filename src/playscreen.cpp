@@ -645,6 +645,7 @@ void TPlayScreen::Close()
 {
     ingamemenu->Close();
     menuPending = false;
+    ThawFrame();
     if (drawer == EDrawer::BuySell)
         CloseBuySellDrawer();
     BuySellPane.Close();
@@ -753,6 +754,14 @@ void TPlayScreen::Update()
         return;
     }
 
+    // Nor while a save loads (ProcessRequests below started it): it runs a
+    // step a tick behind a still of the world.
+    if (GameFlow.Session().Loading())
+    {
+        StepGameLoad();
+        return;
+    }
+
     if (StartupSaveCycle)
         PulseSaveCycleTest();
 
@@ -803,6 +812,128 @@ void TPlayScreen::Update()
     gametime = lastsessionframes
              + (gameframes - sessionstart) * 100 / kGameFrameRate;
     timeofday = TimeOfDayMinutes(gametime);
+}
+
+namespace {
+
+// The still behind a load: over the HUD panels (z 0..10), under the pane
+// tree (TScreen::kPaneLayerZ).
+constexpr float kFrozenFrameZ = 50.0f;
+
+class TFrozenFrameLayer final : public THudDrawable
+{
+  public:
+    explicit TFrozenFrameLayer(const TTextureHandle& texture) : texture(texture) {}
+    void Draw() override
+    {
+        if (texture != kInvalidTexture)
+            Renderer->DrawTextureFit(texture);
+        else
+            Renderer->FillScreen(0.0f, 0.0f, 0.0f, 1.0f);
+    }
+
+  private:
+    const TTextureHandle& texture;
+};
+
+}  // namespace
+
+// REVSYNC: the load dialog's in-game load (0x00539590) and the frame's
+// request load (0x0047bfab) ran LoadGame and the sector load synchronously,
+// so the screen stood still on the last frame (the popup's bar drawn straight
+// to the display, 0x0053c3d0). Here: the first tick keeps the world and the
+// HUD panels of the frame on screen (the capture leaves out the pane tree,
+// which keeps drawing live over it); then each tick runs a load step behind
+// that still, its progress going to the load dialog's popup, until the game
+// is in (or the load failed: back to the title).
+void TPlayScreen::StepGameLoad()
+{
+    TGameSession& session = GameFlow.Session();
+    switch (freeze)
+    {
+    case EFreeze::None:
+        freeze = EFreeze::Capturing;
+        if (!Display.RequestCapture(
+                [this](const uint8_t* rgba, int32_t width, int32_t height) {
+                    FreezeFrame(rgba, width, height);
+                },
+                kPaneLayerZ))
+            FreezeFrame(nullptr, 0, 0);
+        return;
+    case EFreeze::Capturing:
+        return;                     // the capture comes with this frame's flip
+    case EFreeze::Frozen:
+        break;
+    }
+
+    session.Step();
+    ingamemenu->LoadProgress(session.Progress());
+    if (session.Loading())
+        return;
+
+    ThawFrame();
+    const bool loaded = session.Ready();
+    log_info("[playscreen] game load %s", loaded ? "done" : "failed");
+    ingamemenu->LoadFinished(loaded);
+    if (!loaded)
+        GameFlow.ReturnToTitle();
+}
+
+// The capture's frame has been drawn by now; the still goes up with the
+// next one (ShowStill).
+void TPlayScreen::FreezeFrame(const uint8_t* rgba, int32_t width, int32_t height)
+{
+    freeze = EFreeze::Frozen;
+    if (rgba && width > 0 && height > 0)
+    {
+        // The swapchain's alpha isn't the picture's: the still is opaque.
+        frozenPixels.assign(rgba, rgba + size_t(width) * size_t(height) * 4);
+        for (size_t i = 3; i < frozenPixels.size(); i += 4)
+            frozenPixels[i] = 255;
+        frozenWidth  = width;
+        frozenHeight = height;
+    }
+    else
+    {
+        log_warn("[playscreen] no still of the frame for the load; it shows black");
+    }
+    log_info("[playscreen] the load runs behind a still of the frame (%dx%d)", width, height);
+}
+
+// From Animate, outside any pass: the still's texture, and its layer.
+void TPlayScreen::ShowStill()
+{
+    if (stillShown || !Renderer)
+        return;
+    if (!frozenPixels.empty())
+    {
+        frozenTexture = Renderer->CreateDynamicTexture(frozenWidth, frozenHeight,
+                                                       ERendererTextureFilter::Nearest);
+        if (frozenTexture != kInvalidTexture)
+            Renderer->UpdateDynamicTexture(frozenTexture, frozenPixels.data(), frozenPixels.size());
+        frozenPixels.clear();
+    }
+    if (!frozenLayer)
+        frozenLayer = std::make_unique<TFrozenFrameLayer>(frozenTexture);
+    Renderer->AddHud(frozenLayer.get(), kFrozenFrameZ);
+    stillShown = true;
+}
+
+void TPlayScreen::ThawFrame()
+{
+    if (freeze == EFreeze::None)
+        return;
+    freeze     = EFreeze::None;
+    stillShown = false;
+    frozenPixels.clear();
+    if (Renderer)
+    {
+        if (frozenLayer)
+            Renderer->RemoveHud(frozenLayer.get());
+        if (frozenTexture != kInvalidTexture)
+            Renderer->DestroyDynamicTexture(frozenTexture);
+    }
+    frozenTexture = kInvalidTexture;
 }
 
 int32_t TPlayScreen::DrawerHeight() const
@@ -1331,6 +1462,13 @@ void TPlayScreen::Pulse()
 }
 void TPlayScreen::Animate(bool /*draw*/)
 {
+    // While a load runs behind the still, neither the world being replaced
+    // nor the HUD reading its player is drawn.
+    if (freeze == EFreeze::Frozen)
+    {
+        ShowStill();
+        return;
+    }
     // Refresh reconstructed HUD surfaces before the world render. The
     // EquipmentPane paperdoll temporarily uses the renderer's lit target;
     // rendering the world afterward overwrites that temporary target before
@@ -1360,6 +1498,14 @@ void TPlayScreen::DrawBackground()
 
 void TPlayScreen::KeyPress(int32_t key, bool down)
 {
+    // A load is under way: the panes get the key (the progress popup holds
+    // it, when up), the world and the editor nothing.
+    if (GameFlow.Session().Loading())
+    {
+        TScreen::KeyPress(key, down);
+        return;
+    }
+
     // Editor toggle. F12 is the retail-era hotkey -- always handled at
     // the screen level so the user can flip modes regardless of who
     // currently owns input.
@@ -1423,6 +1569,10 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         return;
     }
 
+    // A load is under way: the world takes no clicks.
+    if (GameFlow.Session().Loading())
+        return;
+
     if (InBuySellDrawer(x, y))
     {
         TScreen::MouseClick(button, x, y);
@@ -1462,6 +1612,8 @@ void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
         TScreen::MouseMove(button, x, y);
         return;
     }
+    if (GameFlow.Session().Loading())
+        return;
 
     if (g_playHudInitialized)
     {
