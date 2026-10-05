@@ -4364,7 +4364,32 @@ COMMAND(CmdFadeScreenIn)
 }
 
 COMMAND(CmdFogOfWar) { return CmdNotPorted("fow", 0x00425440, t); }
-COMMAND(CmdPlayMovie) { return CmdNotPorted("playmovie", 0x00427d80, t); }
+// REVSYNC: playmovie @ 0x00427d80 -- `playmovie "<file>"`: MoviePath and the
+// name (a backslash between them when MoviePath lacks one), played on the
+// PlayScreen (TPlayScreen::PlayMovie). Not in the editor. Retail returned 0
+// from inside its blocking player, so the next line ran after the movie;
+// the port answers CMD_WAIT so this pass ends here, and the world (the
+// script with it) holds until the movie is over -- labyrinth.s's ENDGAME
+// follows its credits movie.
+COMMAND(CmdPlayMovie)
+{
+    if (Editor)
+    {
+        Output("This command is only available in scripts!\n");
+        return CMD_BADPARAMS;
+    }
+
+    char name[MAXPATHLEN];
+    if (!Parse(t, "%s", name))
+        return CMD_BADPARAMS;
+
+    std::string path = MoviePath;
+    if (path.empty() || path.back() != '\\')
+        path += '\\';
+    path += name;
+    PlayScreen.PlayMovie(path.c_str());
+    return CMD_WAIT;
+}
 COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }
 COMMAND(CmdSwapCDTrack) { return CmdNotPorted("swapcdtrack", 0x00428b90, t); }
 COMMAND(CmdTimeOfDay) { return CmdNotPorted("timeofday", 0x00427a80, t); }

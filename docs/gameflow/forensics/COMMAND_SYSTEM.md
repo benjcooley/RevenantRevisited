@@ -233,6 +233,12 @@ debug level (`[console]`), so headless `--exec` runs can read it.
   the script's user if a player), `follow`, `operate`, `setfromexit`,
   `pos` (retail grammar, including the no-argument form; through
   `TObjectInstance::Teleport`), and `statmod` (`0x00428200`).
+- `endgame` (`0x00427060`) returns to the title; `playmovie`
+  (`0x00427d80`) plays `MoviePath\<file>` as a modal movie pane on the
+  PlayScreen after stopping the music (`0x0049a560`). Retail's player
+  blocked, so the next line ran after the movie; the port answers
+  `CMD_WAIT` to end the pass and holds the world (scripts included) until
+  the movie is over.
 - `try` (`0x00422c30`) takes a quoted state as well as a bare word (`%t`,
   else `%s`): the door prototypes' `TRY "WOPENDOORIN"` failed before.
   `goto` (`0x004204f0`) takes an object name (keep.s `goto Point2`, the

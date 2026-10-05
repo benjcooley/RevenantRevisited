@@ -26,6 +26,7 @@
 
 #include "playscreen.h"
 
+#include "audio_backend.h"
 #include "dialog.h"
 
 #include <cstring>
@@ -722,6 +723,10 @@ void TPlayScreen::Update()
         nextpane = nullptr;
     }
 
+    // Retail's movie player blocked the game: nothing ticks while one plays.
+    if (movieplaying)
+        return;
+
     if (StartupSaveCycle)
         PulseSaveCycleTest();
 
@@ -1318,6 +1323,22 @@ void TPlayScreen::Command(GAMECOMMAND /*command*/)
 {
     // TODO(port): full GAMECOMMAND dispatch (combat / inventory / spells
     // / dodge / leap / etc.). Tracked alongside the player-input revival.
+}
+
+void TPlayScreen::PlayMovie(const char* path)
+{
+    if (movieplaying)
+        return;
+
+    audio::MusicStop();
+    movieplaying = true;
+    movie.Initialize();
+    movie.SetOnFinished([this] { movie.EndModal(0); });
+    PushModal(&movie, MODAL_TOPONLY, [this](int32_t) {
+        movie.Close();
+        movieplaying = false;
+    });
+    movie.Open(path);           // one that can't play ends at once
 }
 
 void TPlayScreen::UpdateMove()

@@ -234,12 +234,9 @@ REVSYNC-QUESTIONs surfaced for the user.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | Add `endgame "<credits_file>"` script command | — |
-| [ ] | `src/creditsscreen.{h,cpp}` — scrolling text | — |
-| [ ] | Credits content loader: `data/Modules/<active>/credits.txt` | — |
-| [ ] | Music loop via T0 | — |
-| [ ] | Click/key returns to main menu | — |
-| [ ] | Persist a "completed" flag for future "New Game+" affordances | — |
+| [x] | `endgame` (retail `0x00427060`): back to the title | 2026-10-05 |
+| [x] | `playmovie` (retail `0x00427d80`): the movie as a modal `TMoviePane` on the PlayScreen, the world held while it plays; the credits are a movie (`Mix_Credits.smk`), not a screen | 2026-10-05 |
+| [-] | Credits screen / text loader: retail rolls its credits as a movie | 2026-10-05 |
 
 **Exit:** Calling the endgame command rolls credits; returns to main menu cleanly.
 
