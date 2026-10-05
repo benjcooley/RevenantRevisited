@@ -44,6 +44,7 @@ static inline char *strlwr(char *s)
 #include "multi.h"
 #include "savegame.h"
 #include "player.h"
+#include "playerstats.h"
 #include "template.h"
 #include "scroll.h"
 #include "exit.h"
@@ -1587,6 +1588,24 @@ COMMAND(CmdPlayerLevel)
 
     static_cast<TPlayer*>(context)->SetPlayerLevel(static_cast<int32_t>(t.Number()));
     t.Get();
+    return 0;
+}
+
+// REVSYNC: statmod @ 0x00428200. The rest of the line is a STATLINE
+// (`<stat> <n>`, `<stat> % <n>`, `TIME <frames>`; PLAYER_STATS.md §3) that
+// becomes the player's stat effect, replacing any other (0x0051c550:
+// ReadStatLine, then AddStatEffect). The "list required" check repeats
+// the interpreter's (the table requires parameters), so it doesn't fire
+// from a script line. No shipped script uses the command.
+COMMAND(CmdStatMod)
+{
+    if (t.Type() == TKN_RETURN || t.Type() == TKN_EOF)
+    {
+        Output("Statmod list required\n");
+        return CMD_BADPARAMS;
+    }
+
+    static_cast<TPlayer*>(context)->AddStatEffect(PlayerStats::ReadStatLine(t).c_str());
     return 0;
 }
 
@@ -4033,7 +4052,6 @@ COMMAND(CmdSetFromExit) { return CmdNotPorted("setfromexit", 0x00428a40, t); }
 COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
 COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
 COMMAND(CmdSpecificAttack) { return CmdNotPorted("specificattack", 0x00427c80, t); }
-COMMAND(CmdStatMod) { return CmdNotPorted("statmod", 0x00428200, t); }
 
 // ----- owner: presentation (fades, music, movies, end game) -----
 
