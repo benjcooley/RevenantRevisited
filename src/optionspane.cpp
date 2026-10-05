@@ -1,9 +1,9 @@
 // *************************************************************************
 // *                  Revenant Revisited (port) - 2026                     *
-// *  optionsscreen.cpp - TOptionsScreen (DEF options screen + keymapper)   *
+// *  optionspane.cpp - TOptionsPane (DEF options pane + keymapper)        *
 // *************************************************************************
 
-#include "optionsscreen.h"
+#include "optionspane.h"
 
 #include "ctrlmap.h"      // TControlMap / SControlEntry / KEYSPERCODE
 #include "logging.h"
@@ -29,10 +29,10 @@ const char* KeyToString(const SControlKey& k, char* buf, int32_t buflen)
 
 }  // namespace
 
-bool TOptionsScreen::Open(int32_t x, int32_t y, int32_t w, int32_t h,
-                          const char* bgDat)
+bool TOptionsPane::OpenOptions(int32_t x, int32_t y, int32_t w, int32_t h,
+                               const char* bgDat)
 {
-    if (!def.Open("options", "default", x, y, w, h, bgDat))
+    if (!Open("options", "default", x, y, w, h, bgDat))
         return false;
 
     // The controller list binds to the global key-binding table. Make sure it
@@ -47,7 +47,7 @@ bool TOptionsScreen::Open(int32_t x, int32_t y, int32_t w, int32_t h,
     {
         char n[8];
         std::snprintf(n, sizeof(n), "name%d", i);
-        if (SDefWidget* lbl = def.Find(n))
+        if (SDefWidget* lbl = Find(n))
             lbl->text.clear();
     }
 
@@ -58,9 +58,9 @@ bool TOptionsScreen::Open(int32_t x, int32_t y, int32_t w, int32_t h,
     // apply them on OK (OptionsDef_SPEC §6.1/§6.3). Roughed in with sensible
     // initial state for now so the panel reads; the keymapper path below is the
     // real one.
-    auto check  = [&](const char* nm, bool on) { if (SDefWidget* g = def.Find(nm)) g->selected = on; };
+    auto check  = [&](const char* nm, bool on) { if (SDefWidget* g = Find(nm)) g->selected = on; };
     auto slider = [&](const char* nm, int32_t v, int32_t mx) {
-        if (SDefWidget* g = def.Find(nm)) { g->value = v; g->maxval = mx; }
+        if (SDefWidget* g = Find(nm)) { g->value = v; g->maxval = mx; }
     };
     check("Realtime", true);  check("Enhanced", true);
     slider("Violence", 4, 5); slider("Music", 96, 127);
@@ -69,12 +69,10 @@ bool TOptionsScreen::Open(int32_t x, int32_t y, int32_t w, int32_t h,
     return true;
 }
 
-void TOptionsScreen::Close() { def.Close(); }
-void TOptionsScreen::Render() { def.Render(); }
 
-void TOptionsScreen::RefreshControllerList()
+void TOptionsPane::RefreshControllerList()
 {
-    SDefWidget* ctrl = def.Find("controller");
+    SDefWidget* ctrl = Find("controller");
     if (!ctrl) return;
 
     // Three columns aligned to the headers (Control Name @70, Key 1 @300,
@@ -104,34 +102,33 @@ void TOptionsScreen::RefreshControllerList()
     ctrl->rows = std::move(rows);
 }
 
-void TOptionsScreen::OnMouseDown(int32_t lx, int32_t ly) { def.OnMouseDown(lx, ly); }
-void TOptionsScreen::OnMouseMove(int32_t lx, int32_t ly) { def.OnMouseMove(lx, ly); }
-
-const char* TOptionsScreen::OnMouseUp(int32_t lx, int32_t ly)
+void TOptionsPane::OnActivate(const SDefWidget& widget, int32_t buttonIndex)
 {
-    const char* hit = def.OnMouseUp(lx, ly);
-    if (hit && std::strcmp(hit, "ok") == 0)
+    if (widget.name == "ok")
         ControlMap.Save(const_cast<char*>("Controls"));   // persist rebinds to INI
-    return hit;
+    TDefPane::OnActivate(widget, buttonIndex);
 }
 
-void TOptionsScreen::OnKey(int32_t vk, bool down)
+void TOptionsPane::OnKey(int32_t vk, bool down)
 {
     if (!down || vk <= 0) return;
 
     // Rebind: when a controller row is selected, the next keypress becomes its
     // primary binding (Key 1). Single-key for now; chord capture (CTRL-/SHIFT-)
     // is a refinement. Writes through the real ControlMap + redraws the row.
-    SDefWidget* ctrl = def.Find("controller");
-    if (ctrl && ctrl->selrow >= 0 && ctrl->selrow < ControlMap.NumControls())
+    SDefWidget* ctrl = Find("controller");
+    if (!(ctrl && ctrl->selrow >= 0 && ctrl->selrow < ControlMap.NumControls()))
     {
-        SControlEntry ce;
-        ControlMap.GetControlEntry(ctrl->selrow, &ce);
-        ce.codes[0].keys[0] = vk;
-        ce.codes[0].keys[1] = 0;
-        ce.codes[0].keys[2] = 0;
-        ControlMap.SetControlEntry(ctrl->selrow, &ce);
-        RefreshControllerList();
-        log_info("[options] rebound '%s' -> vk 0x%x", ce.name ? ce.name : "?", vk);
+        TDefPane::OnKey(vk, down);
+        return;
     }
+
+    SControlEntry ce;
+    ControlMap.GetControlEntry(ctrl->selrow, &ce);
+    ce.codes[0].keys[0] = vk;
+    ce.codes[0].keys[1] = 0;
+    ce.codes[0].keys[2] = 0;
+    ControlMap.SetControlEntry(ctrl->selrow, &ce);
+    RefreshControllerList();
+    log_info("[options] rebound '%s' -> vk 0x%x", ce.name ? ce.name : "?", vk);
 }

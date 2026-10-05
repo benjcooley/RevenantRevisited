@@ -2549,6 +2549,8 @@ static void AppInit()
         }
     }
 
+    TestModes::InputSimArm();   // no-op without --input-script
+
     SystemInitialized = true;
 }
 
@@ -2645,6 +2647,9 @@ static void AppFrame()
         if (AppActive)
             CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
     }
+
+    // Scripted input (--input-script) takes the same route as real input.
+    TestModes::InputSimTick(CurrentScreen);
 
     // Tick / Draw split (see docs/FRAME_PIPELINE.md). Tick catches up
     // missed legacy 24Hz pulses (pure sim, no draw calls); DrawFrame
