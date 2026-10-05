@@ -40,12 +40,12 @@ namespace SectorStore
 // Deletes every sector file in the working set.
 void Clear();
 
-// Copies the sector files in `dir` into the working set, replacing any
-// copies already there. Returns the number of files copied.
+// Replaces the working set with the sector files in `dir` (a save slot's
+// CurMap). Returns the number of files copied.
 int32_t ImportFrom(const std::filesystem::path& dir);
 
-// Copies the working set's sector files into `dir`, creating it. Returns the
-// number of files copied.
+// Replaces the sector files in `dir` (created if needed) with the working
+// set. Returns the number of files copied.
 int32_t ExportTo(const std::filesystem::path& dir);
 
 }  // namespace SectorStore

@@ -110,6 +110,7 @@ char ResourcePath[MAXPATHLEN];               // Where to read / write the resour
 char BaseMapPath[MAXPATHLEN];                // Where the untouched version of the game map is stored
 char CurMapPath[MAXPATHLEN];                 // Where the current map is stored
 char MoviePath[MAXPATHLEN];                  // Where the .smk movies live
+char SaveGamePath[MAXPATHLEN];               // Root of the save slots (INI [Paths] SaveGamePath)
 
 // Current language
 TString Language;                   // Where the current map is stored
@@ -263,9 +264,8 @@ static int32_t videocapmegs, videocapfps;
 char DXDriverMatchStr[FILENAMELEN]; // Will use first DX driver who's description has the given string in it
                                     // i.e. use if string is "permidia" and driver desc is "Glint Permidia 2 3D"
 
-// Optional save-game path requested via `--loadmap=...` on the command line.
-// When non-empty, AppInit hands it to PlayScreen.LoadGameFile() so the engine
-// restores a live session on first Pulse().
+// Optional save slot requested via `--loadmap=...` on the command line; the
+// boot quickstarts into it.
 char StartupSavePath[MAXPATHLEN] = "";
 bool StartupSaveCycle = false;
 
@@ -1633,9 +1633,8 @@ void GetParameters(int argc, char **argv)
         }
     }
 
-  // LOADMAP=<save-file> — jump straight into a loaded save at boot,
-  // skipping any menu screens. Path is resolved via rev_fopen (SavePath,
-  // RunPath, module dir, then VFS archives).
+  // LOADMAP=<slot> — jump straight into a save slot at boot, skipping any
+  // menu screens (same as --quickstart=<slot>).
     {
         std::string p;
         if (arg_param(cmd, "loadmap", p))
@@ -1821,6 +1820,7 @@ void GetINISettings()
     INIGetText("CurMapPath", ".", CurMapPath, MAXPATHLEN);
     INIGetText("BaseMapPath", ".", BaseMapPath, MAXPATHLEN);
     INIGetText("MoviePath", ".\\Resources\\FMV", MoviePath, MAXPATHLEN);   // retail default (GetINISettings @ 0x00484500)
+    INIGetText("SaveGamePath", ".\\Save", SaveGamePath, MAXPATHLEN);       // retail default (GetINISettings @ 0x00484500)
 
     // Make sure each string ends with a backslash
     if (ClassDefPath[strlen(ClassDefPath) - 1] != '\\')
@@ -1840,6 +1840,9 @@ void GetINISettings()
 
     if (MoviePath[strlen(MoviePath) - 1] != '\\')
         strcat(MoviePath, "\\");
+
+    if (SaveGamePath[strlen(SaveGamePath) - 1] != '\\')
+        strcat(SaveGamePath, "\\");
 
     INISetSection("Lighting");
     MaxLights = INIGetInt("MaxLights", 1);
@@ -2602,6 +2605,19 @@ static void AppInit()
         if (StartupMenuButton[0] && options.menuButton < 0)
             log_warn("[boot] --menu=%s: unknown title button "
                      "(newgame|loadgame|multi|options|exit)", StartupMenuButton);
+        if (StartupSectorId[0] &&
+            std::sscanf(StartupSectorId, "%d_%d_%d", &options.devLevel,
+                        &options.devSectorX, &options.devSectorY) != 3)
+        {
+            log_warn("[boot] bad --sector='%s', expected L_X_Y", StartupSectorId);
+            options.devLevel = options.devSectorX = options.devSectorY = -1;
+        }
+        else if (!StartupSectorId[0] && StartupLevelId[0] &&
+                 std::sscanf(StartupLevelId, "%d", &options.devLevel) != 1)
+        {
+            log_warn("[boot] bad --level='%s', expected L", StartupLevelId);
+            options.devLevel = -1;
+        }
         BootScreen = GameFlow.Boot(options);
     }
 
@@ -2740,6 +2756,7 @@ static void AppFrame()
     {
         TScreen *next = CurrentScreen->GetNextScreen();
         TScreen::EndCurrentScreen();
+        GameFlow.ScreenEnded(next);
         BootScreen = next;
         if (!next && !Closing)
             sapp_request_quit();

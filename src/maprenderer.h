@@ -33,6 +33,10 @@ class TMapRenderer
                                                        int32_t sector_x,
                                                        int32_t sector_y)> post_load_hook = {});
 
+    // One-time setup for a renderer whose map is supplied with SetMap
+    // (the PlayScreen, which presents the game session's world).
+    void Initialize();
+
     // Bind the renderer to a TGameMap (owned by TMapManager).
     // Subscribes to the map's Loaded/Updated/Unloaded events:
     //  * Loaded / Updated -> rebuild drawable / light / scene caches

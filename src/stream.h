@@ -43,6 +43,10 @@ class TInputStream
     int32_t GetPos()
       { return (int32_t)(ptr - buf); }
         // Gets read position
+    [[nodiscard]] int32_t Remaining() const
+      { return buflen - (int32_t)(ptr - buf); }
+        // Bytes left to read (the operators don't bounds-check; callers
+        // reading untrusted data check this first)
     bool SetPos(int32_t newpos)
       { if ((uint32_t)newpos < (uint32_t)buflen) { ptr = buf + newpos; return true; } else return false; }
         // Sets read position (if not past end of buffer)

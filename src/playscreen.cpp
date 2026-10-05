@@ -43,6 +43,7 @@
 #include "logging.h"
 #include "ctrlmap.h"
 #include "gamemap.h"
+#include "gameflow.h"
 #include "hudstate.h"
 #include "mapmanager.h"
 #include "mappane.h"
@@ -50,7 +51,6 @@
 #include "player.h"
 #include "revisited_settings.h"
 #include "runtimemode.h"
-#include "savegame.h"
 #include "sector.h"
 #include "time.h"
 #include "uidragstate.h"
@@ -257,20 +257,12 @@ bool TPlayScreen::Initialize()
     // TScreen's base Initialize() returns false (it's a "must override"
     // hook); skip it and do our own setup.
 
-    log_info("[playscreen] booting map renderer");
-    // Spin up the map renderer. InitializeFromStartupArgs reads --level
-    // and --sector to pick the starting world; with neither set, we fall
-    // back to its defaults (Misthaven-area). The post-load hook injects
-    // Locke into the anchor sector before the renderer scans for
-    // drawables, so the player ends up in the initial draw list.
+    // Present the session's world: the renderer draws MapManager's current
+    // map and follows it when a load or level change replaces it.
     mapRenderer = std::make_unique<TMapRenderer>();
-    if (!mapRenderer->InitializeFromStartupArgs(
-            [this](int32_t lvl, int32_t sx, int32_t sy) { SpawnDefaultPlayer(lvl, sx, sy); }))
-    {
-        log_warn("[playscreen] map renderer failed to initialize from startup args");
-        // Keep going -- we still want to land on PlayScreen with empty
-        // world rather than abort the whole boot.
-    }
+    mapRenderer->Initialize();
+    BindWorld();
+    mapListener = MapManager.AddListener([this](EMapManagerEvent, TMapManager*) { BindWorld(); });
     // Push global Revisited point-light multipliers now that MapRenderer
     // is live. Per-area POINTLIGHTINT / POINTLIGHTRANGE will compose on
     // top of these each time TArea::Enter fires.
@@ -295,23 +287,12 @@ bool TPlayScreen::Initialize()
 
     EditorLoadState();
 
-    // Load the active module's area.def (forest / Misthaven / House
-    // Interior / etc.). Until this runs, area->Enter() never fires and
-    // MapPane stays at its default ambient. The Ahkuilon module ZIP is
-    // already mounted by InitGlobals so AreaManager.Initialize finds
-    // area.def via rev_fopen + VFS.
-    if (!AreaManager.Initialize())
-        log_warn("[playscreen] AreaManager.Initialize failed; ambient will fall back to MapPane defaults");
-
     // AutoMap loads automap.dat from resources.rvr and allocates the
-    // MapList / ActiveBuf state every other AutoMap method (and the
-    // save-game writer/reader) treats as required-non-null. Without
-    // this, TSaveGame::WriteGame/ReadGame would nullptr-deref the
-    // first time the player triggers a save. Has to run after
-    // resources.rvr is mounted (InitGlobals step pre-condition) and
-    // before any save path can fire.
+    // MapList / ActiveBuf state every other AutoMap method treats as
+    // required-non-null. Has to run after resources.rvr is mounted
+    // (InitGlobals step pre-condition).
     if (!AutoMap.Initialize())
-        log_warn("[playscreen] AutoMap.Initialize failed; save-game will skip automap state");
+        log_warn("[playscreen] AutoMap.Initialize failed; the automap will be empty");
 
     // Runtime mode owns mode-specific UI state (cursor, overlay
     // visibility, etc.). At static init g_currentMode defaults to game
@@ -329,63 +310,32 @@ bool TPlayScreen::Initialize()
     log_info("[playscreen] reconstructed HUD init = %s",
              g_playHudInitialized ? "OK" : "FAIL");
 
-    StartFromStartMode();
-
     log_info("[playscreen] initialize done");
     return true;
 }
 
-// REVSYNC: TPlayScreen::SetStartMode @ 0x0047f4c0
-void TPlayScreen::SetStartMode(int32_t mode, int32_t module, int32_t game, const char* name)
+void TPlayScreen::BindWorld()
 {
-    if (mode == 4)          // retail ignores mode 4
+    if (!mapRenderer)
         return;
-    startmode   = mode;
-    startmodule = module;
-    startgame   = game;
-    if (name)
-        strncpyz(startname, name, sizeof(startname));
-    else
-        startname[0] = '\0';
-}
 
-// Tail of retail TPlayScreen::Initialize (0x0047a660): start the game the
-// way SetStartMode asked for, once the panes and map systems exist.
-void TPlayScreen::StartFromStartMode()
-{
-    switch (startmode)
+    TGameMap* map = MapManager.CurrentMap();
+    int32_t sx = 0, sy = 0;
+    if (Player)
     {
-    case STARTMODE_NEWGAME:
-        // Retail: MapPane.ClearCurMap(); LoadNewGame() (= LoadGame("newgame", 1),
-        // the module's newgame.sav). TODO(gameflow D): route through the retail
-        // LoadNewGame once the savegame port lands; until then the map
-        // renderer's default spawn above stands in for the new-game player.
-        log_info("[playscreen] start mode: new game");
-        break;
-
-    case STARTMODE_LOADGAME:
-        // Retail: resolve the slot name to an index, LoadGame it, and fall back
-        // to a new game ("GAMENOTFOUND") if that fails.
-        log_info("[playscreen] start mode: load game '%s' (index %d)", startname, startgame);
-        if (startname[0])
-            LoadGameFile(startname);
-        else if (startgame >= 0)
-            LoadGame(startgame);
-        break;
-
-    default:
-        log_warn("[playscreen] start mode %d not supported", startmode);
-        break;
+        const S3DPoint pos = Player->Pos();
+        sx = pos.x >> SECTORWSHIFT;
+        sy = pos.y >> SECTORHSHIFT;
     }
-
-    // Retail clears the request once consumed (name + game index).
-    startname[0] = '\0';
-    startgame    = -1;
+    else if (map)
+    {
+        log_warn("[playscreen] presenting level %d with no player", map->Level());
+    }
+    mapRenderer->SetMap(map, /*use_level_origin=*/false, sx, sy);
 }
 
-// Hand-rolled starter loadout for Demo 1. Stand-in until newgame.sav
-// loading (see [docs/gameplay/BURNDOWN.md](../docs/gameplay/BURNDOWN.md)
-// phase E) supersedes this. Each entry: (item name as known to
+// Hand-rolled starter loadout for the editor's default Locke (games start
+// from newgame.sav, which brings its own). Each entry: (item name as known to
 // class.def, target equipment slot). Name lookup scans every
 // TObjectClass so we don't have to hand-pick OBJCLASS_WEAPON vs
 // OBJCLASS_ARMOR per row. Order matters: PRIMEHAND first so the
@@ -661,7 +611,11 @@ void TPlayScreen::Close()
         mapRenderer->SetOutputViewport(0, 0);
     if (Renderer)
         Renderer->ResetPresentNDCRect();
-    AreaManager.Close();
+    if (mapListener)
+    {
+        MapManager.RemoveListener(mapListener);
+        mapListener = 0;
+    }
     if (mapRenderer)
     {
         mapRenderer->Shutdown();
@@ -674,23 +628,15 @@ void TPlayScreen::Close()
 // * Per-frame                                                             *
 // *************************************************************************
 
-// Headless save-cycle smoke test. Runs ONCE on the first PlayScreen
-// Update() after enough frames have elapsed for the spawn sequence to
-// settle (player exists + sector attached). Writes the live player to
-// "savecycle.sav" then immediately reads it back; logs a side-by-side
-// diff of the canonical fields so the parent agent (and user) can
-// verify the round-trip without an interactive F5/F9 repro.
-//
-// Gated by --savecycle-test command-line flag so it never fires in
-// normal play. The harness only consumes the existing TSaveGame
-// WriteGame/ReadGame entry points — no special test path.
-static void RunSaveCycleTest()
+// Headless save-cycle smoke test (--savecycle-test). Once the game has
+// settled, saves to slot "savecycle", loads it back on the next frame and
+// logs the player's key fields before and after, through the same session
+// requests the in-game save/load paths use. Identical lines = round trip OK.
+static void PulseSaveCycleTest()
 {
-    if (!Player)
-    {
-        log_warn("[savecycle] no live Player — cannot run cycle");
-        return;
-    }
+    enum class EStage { Settle, Save, Load, Report, Done };
+    static EStage  stage  = EStage::Settle;
+    static int32_t settle = 60;   // ~1 second at 60 Hz
 
     auto snapshot = [](const char* tag) {
         const S3DPoint p = Player->Pos();
@@ -702,26 +648,32 @@ static void RunSaveCycleTest()
                  Player->RealNumInventoryItems());
     };
 
-    snapshot("pre-write ");
-    if (!::SaveGame.WriteGame((char *)"savecycle.sav"))
-    {
-        log_error("[savecycle] WriteGame failed; aborting cycle");
+    if (!Player || stage == EStage::Done)
         return;
-    }
 
-    // The ReadGame chain re-runs MapManager.Shutdown / Init /
-    // ScriptManager.ReloadStates / PlayerManager.Clear, so any state
-    // sitting on the live player gets torn down — exactly what F9
-    // would do mid-session.
-    if (!::SaveGame.ReadGame((char *)"savecycle.sav"))
+    switch (stage)
     {
-        log_error("[savecycle] ReadGame failed");
-        return;
+    case EStage::Settle:
+        if (--settle <= 0)
+            stage = EStage::Save;
+        break;
+    case EStage::Save:
+        snapshot("pre-save ");
+        GameFlow.Session().RequestSave("savecycle");
+        stage = EStage::Load;
+        break;
+    case EStage::Load:
+        GameFlow.Session().RequestLoad("savecycle");
+        stage = EStage::Report;
+        break;
+    case EStage::Report:
+        snapshot("post-load");
+        stage = EStage::Done;
+        StartupSaveCycle = false;
+        break;
+    case EStage::Done:
+        break;
     }
-    snapshot("post-read ");
-
-    log_info("[savecycle] cycle complete — compare 'pre-write' and "
-             "'post-read' lines above. Identical = round-trip OK.");
 }
 
 void TPlayScreen::Update()
@@ -733,49 +685,11 @@ void TPlayScreen::Update()
         nextpane = nullptr;
     }
 
-    // --savecycle-test: once the spawn has settled (a handful of frames
-    // so MapPane window / sector loads complete), run the headless
-    // save-cycle smoke harness once.
     if (StartupSaveCycle)
-    {
-        static int32_t s_savecycle_delay = 60;  // ~1 second at 60 Hz
-        if (s_savecycle_delay > 0)
-            --s_savecycle_delay;
-        else if (Player)
-        {
-            StartupSaveCycle = false;
-            RunSaveCycleTest();
-        }
-    }
+        PulseSaveCycleTest();
 
-    // Honor save / load requests staged from the input layer or scripts.
-    if (loadgame)
-    {
-        loadgame = false;
-        if (loadgamepath[0])
-        {
-            log_info("[playscreen] loading save '%s'", loadgamepath);
-            ::SaveGame.ReadGame(loadgamepath);
-            loadgamepath[0] = '\0';
-        }
-        else
-        {
-            ::SaveGame.ReadGame(gamenum);
-        }
-        // Re-bind the renderer to the newly-loaded TGameMap. ReadGame
-        // tore down the old map cache (firing Unloaded → renderer cleared
-        // its currentMap pointer) then SetCurrentLevel'd to the player's
-        // level; nothing else re-binds the renderer. Without this the
-        // frame loop after a load produces a black screen.
-        if (mapRenderer)
-            if (TGameMap* gm = MapManager.CurrentMap())
-                mapRenderer->SetMap(gm, /*use_level_origin=*/true);
-    }
-    if (savegame)
-    {
-        savegame = false;
-        ::SaveGame.WriteGame(gamenum);
-    }
+    // Save / load requests made during play (input, console, scripts).
+    GameFlow.Session().ProcessRequests();
 
     // Per-frame work that differs between game and editor: input ->
     // movement, pulse / move over the active sector window, camera
@@ -1433,35 +1347,6 @@ void TPlayScreen::HideLowerPanes()
 void TPlayScreen::ShowLowerPanes()
 {
     // TODO(port): symmetric reveal.
-}
-
-// *************************************************************************
-// * Save / load                                                           *
-// *************************************************************************
-
-void TPlayScreen::LoadGame(int32_t game)
-{
-    loadgame = true;
-    gamenum  = game;
-    loadgamepath[0] = '\0';
-}
-
-void TPlayScreen::LoadGameFile(const char* path)
-{
-    if (!path) return;
-    loadgame = true;
-    strncpyz(loadgamepath, path, MAXPATHLEN);
-}
-
-void TPlayScreen::SaveGame(int32_t game)
-{
-    savegame = true;
-    gamenum  = game;
-}
-
-void TPlayScreen::SaveMap()
-{
-    savemap = true;
 }
 
 // *************************************************************************

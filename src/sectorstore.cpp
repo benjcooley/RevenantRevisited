@@ -37,8 +37,24 @@ bool IsSectorFile(const fs::directory_entry& entry)
            stricmp(entry.path().extension().string().c_str(), ".DAT") == 0;
 }
 
-int32_t CopySectorFiles(const fs::path& from, const fs::path& to)
+int32_t RemoveSectorFiles(const fs::path& dir)
 {
+    int32_t removed = 0;
+    std::error_code ec;
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+    {
+        std::error_code removeError;
+        if (IsSectorFile(*it) && fs::remove(it->path(), removeError))
+            ++removed;
+    }
+    return removed;
+}
+
+// Makes `to`'s sector files an exact copy of `from`'s.
+int32_t ReplaceSectorFiles(const fs::path& from, const fs::path& to)
+{
+    RemoveSectorFiles(to);
+
     std::error_code ec;
     if (!fs::is_directory(from, ec))
         return 0;
@@ -107,27 +123,20 @@ FILE* OpenForWrite(const char* filename)
 void Clear()
 {
     const fs::path dir = WorkingSetDir();
-    int32_t removed = 0;
-    std::error_code ec;
-    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
-    {
-        std::error_code removeError;
-        if (IsSectorFile(*it) && fs::remove(it->path(), removeError))
-            ++removed;
-    }
+    const int32_t removed = RemoveSectorFiles(dir);
     log_info("[sectorstore] cleared working set %s (%d sectors)", dir.string().c_str(), removed);
 }
 
 int32_t ImportFrom(const fs::path& dir)
 {
-    const int32_t copied = CopySectorFiles(dir, WorkingSetDir());
+    const int32_t copied = ReplaceSectorFiles(dir, WorkingSetDir());
     log_info("[sectorstore] imported %d sectors from %s", copied, dir.string().c_str());
     return copied;
 }
 
 int32_t ExportTo(const fs::path& dir)
 {
-    const int32_t copied = CopySectorFiles(WorkingSetDir(), dir);
+    const int32_t copied = ReplaceSectorFiles(WorkingSetDir(), dir);
     log_info("[sectorstore] exported %d sectors to %s", copied, dir.string().c_str());
     return copied;
 }

@@ -600,10 +600,12 @@ bool TAreaManager::Initialize()
     return true;
 }
 
-// Closes the area manager
+// Closes the area manager. The next Initialize reloads area.def (each game
+// starts with its module's areas).
 void TAreaManager::Close()
 {
     areas.DeleteAll();
+    initialized = false;
 }
 
 // Loads all areas from the "AREA.DEF" file
@@ -696,6 +698,12 @@ void TAreaManager::Pulse()
   // can decide between snap and FadeAmbient.
     lastpos = pos;
     lastlevel = level;
+}
+
+void TAreaManager::ExitAll()
+{
+    for (int32_t c = 0; c < areas.NumItems(); c++)
+        areas[c]->Exit();
 }
 
 PTArea TAreaManager::CurrentArea()

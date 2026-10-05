@@ -2551,6 +2551,11 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
         if (cl->NumObjStats() > 0)
             stats.SetNumItems(cl->NumObjStats());
 
+        // REVSYNC: stat loop of TObjectInstance::Load @ 0x00472430. Retail
+        // masks the saved stat id with 0x7f7f7f7f, and its slow path matches
+        // each class stat in turn; the 1998 source compared against the
+        // current index only, dropping every stat after the first mismatch.
+        constexpr uint32_t kStatIdMask = 0x7f7f7f7f;
         uint8_t numstats;
         is >> numstats;
         if (numstats > 0)   // Note: oridnary tiles can't have stats..
@@ -2561,6 +2566,7 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
                 int32_t stat;
                 uint32_t uniqueid;
                 is >> stat >> uniqueid;
+                uniqueid &= kStatIdMask;
 
               // Note: to allow us to change the stats for characters,
               // we check the unique id of the stat and match it to our object stat array
@@ -2569,11 +2575,11 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
                     stats[statid] = stat;   // Quick case, id's all match
                     statid++;
                 }
-                else                
+                else
                 {                           // Slow case.. search for id for stat
                     for (int32_t c = 0; c < cl->NumObjStats(); c++)
                     {
-                        if (uniqueid == cl->ObjStatUniqueId(statid))
+                        if (uniqueid == cl->ObjStatUniqueId(c))
                             stats[c] = stat;
                     }
                 }

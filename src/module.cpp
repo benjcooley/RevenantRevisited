@@ -226,17 +226,21 @@ void TModuleManager::Close()
     initialized = false;
 }
 
+// REVSYNC: 0x00460d60 — case-insensitive, as retail (save headers store the
+// dirname in whatever case the save was written with, e.g. "ahkuilon").
 int TModuleManager::Find(const char *dirname) const
 {
     if (!dirname || !*dirname) return -1;
     for (int i = 0; i < (int)modules.size(); ++i)
-        if (modules[i]->dirname == dirname) return i;
+        if (stricmp(modules[i]->dirname.c_str(), dirname) == 0) return i;
     return -1;
 }
 
+// REVSYNC: 0x004609f0 — selecting the active module again is a no-op.
 bool TModuleManager::SetCurModule(int idx)
 {
     if (idx < 0 || idx >= (int)modules.size()) return false;
+    if (idx == active_idx) return true;
     TModule *m = modules[idx].get();
     if (!MountModule(m->dirname.c_str()))
     {

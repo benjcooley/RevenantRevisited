@@ -4,9 +4,11 @@
 // *                  playscreen.h - main play-mode screen                 *
 // *************************************************************************
 //
-// TPlayScreen drives an in-game session: world rendering through the
+// TPlayScreen presents the game in progress: world rendering through the
 // owned TMapRenderer, command/input dispatch, game-time tracking, and
-// pane composition for HUD / inventory / editor / dialogs.
+// pane composition for HUD / inventory / editor / dialogs. The world itself
+// (map, players, areas, game states) belongs to the game session
+// (TGameSession, owned by TGameFlow); the screen binds to it.
 //
 // Architecture:
 //   - World rendering happens via the same TMapRenderer that powers
@@ -14,8 +16,8 @@
 //     loop calls RenderFrame() each tick; panes composite 2D on top.
 //   - Game-time + time-of-day live here so other systems (lighting,
 //     save-game, scripts) can ask the screen for "now".
-//   - Save-load entry points stage their work and run on the next
-//     Update() so we don't tear down state mid-frame.
+//   - Save/load requests made during play are queued on the session and
+//     carried out at the start of the next Update().
 //
 // The retail TPlayScreen and its DrawBackground / Pulse / Animate /
 // post-character anim arrays have been retired to attic/src/playscreen.*
@@ -30,6 +32,8 @@
 
 #include "graphics.h"
 #include "screen.h"
+
+#include "mapmanager.h"
 
 #include <memory>
 
@@ -112,12 +116,10 @@ class TPlayScreen : public TScreen
     bool Initialize() override;
     void Close()      override;
 
-    // Drop a default "Locke" TPlayer into the loaded sector at
-    // (level, sx, sy) and register him with PlayerManager. Used when
-    // there is no save-load path / new-game flow yet -- gives the
-    // world a Player to render and drive. Called from inside the
-    // TMapRenderer post-load hook so the renderer's drawable scan
-    // picks the player up. Returns true if Player exists after the call.
+    // Editor "Place Here" with no game loaded: drop a default "Locke"
+    // TPlayer into the loaded sector at (level, sx, sy) and register him
+    // with PlayerManager. Games start from newgame.sav (TGameSession).
+    // Returns true if Player exists after the call.
     bool SpawnDefaultPlayer(int32_t level, int32_t sector_x, int32_t sector_y);
 
     // ---- Per-frame -----------------------------------------------------
@@ -151,23 +153,6 @@ class TPlayScreen : public TScreen
     [[nodiscard]] bool IsControlOn() const { return controlon; }
     void               SetControlOn(bool on);
 
-    // ---- Start mode ----------------------------------------------------
-    // How the next Initialize() starts the game (retail fields +0x6d8..+0x6e4).
-    enum EStartMode : int32_t
-    {
-        STARTMODE_NEWGAME     = 0,   // ClearCurMap + LoadNewGame (module newgame.sav)
-        STARTMODE_LOADGAME    = 1,   // load the named / indexed save; new game if missing
-        STARTMODE_EDITOR      = 2,
-        STARTMODE_MULTIPLAYER = 3,
-    };
-    // REVSYNC: TPlayScreen::SetStartMode @ 0x0047f4c0. Called by the main menu
-    // (New Game), WinMain (QUICKSTART / EDITOR) and the load-game screen.
-    // `module` / `game` are indices (-1 = main module / by name); mode 4 is
-    // ignored, as in retail.
-    void SetStartMode(int32_t mode, int32_t module = -1, int32_t game = -1,
-                      const char* name = nullptr);
-    [[nodiscard]] int32_t StartMode() const { return startmode; }
-
     void MultiUpdate() { multidirty = true; }
       // Marks the multipane-overhang region dirty so the next composite
       // refreshes it.
@@ -177,14 +162,6 @@ class TPlayScreen : public TScreen
 
     void HideLowerPanes();
     void ShowLowerPanes();
-
-    // ---- Save / load ---------------------------------------------------
-    [[nodiscard]] int32_t GameNum() const { return gamenum; }
-    void LoadGame    (int32_t game);
-    void LoadGameFile(const char* path);
-    void SaveGame    (int32_t game);
-    void NewGame() { LoadGame(0); }
-    void SaveMap();
 
     // ---- Game time -----------------------------------------------------
     [[nodiscard]] int32_t GameFrame()    const;
@@ -222,9 +199,11 @@ class TPlayScreen : public TScreen
       // mode can drive it without befriending the screen.
 
   private:
-    void StartFromStartMode();
+    // Points the renderer at MapManager's current map (the session's world).
+    void BindWorld();
 
     std::unique_ptr<TMapRenderer> mapRenderer;
+    TMapManager::EventListenerId  mapListener = 0;
 
     // Mode flags
     bool fullscreen   = false;
@@ -232,19 +211,6 @@ class TPlayScreen : public TScreen
     bool controlon    = true;
     bool interfacedirty = false;
     bool multidirty   = false;
-
-    // Start mode (SetStartMode); consumed by Initialize().
-    int32_t startmode   = STARTMODE_NEWGAME;
-    int32_t startmodule = -1;
-    int32_t startgame   = -1;
-    char    startname[128] = {};
-
-    // Save / load deferred work
-    bool    loadgame  = false;
-    bool    savegame  = false;
-    int32_t gamenum   = 0;
-    char    loadgamepath[MAXPATHLEN] = {};
-    bool    savemap   = false;
 
     // Game time
     int32_t gameframes        = 0;  // frames since this PlayScreen started

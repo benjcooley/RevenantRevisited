@@ -26,6 +26,8 @@
 #include "parse.h"
 #include "command.h"
 
+#include <vector>
+
 // REVSYNC: trigger type constants confirmed against retail
 //   cls_TScriptProto_ParseScript_494e20.cpp tag→id mapping
 //   cls_TScript_Triggered_492d70.cpp switch on st->type
@@ -151,6 +153,9 @@ class TScript
     explicit TScript(TScriptProto* prototype);
     ~TScript();
 
+    TScript(const TScript&)            = delete;
+    TScript& operator=(const TScript&) = delete;
+
     bool Load(char *filename);
     bool Save(char *filename);
 
@@ -181,6 +186,10 @@ class TScript
     //   TODO(revsync): wire SetPlayerState rollback once player state machine
     //   is in place.
     void End();
+    // REVSYNC: per-instance body of TScriptManager::ResetScripts @ 0x00496e20
+    //   — End if running and return to the just-constructed state: top
+    //   prototype, no pending or current trigger, no open blocks.
+    void Reset();
     [[nodiscard]] bool Running() const { return priority > 0; }
     void Trigger(int32_t newtrig, const char *triggerstr = nullptr)
       { newtrigger = newtrig; if (triggerstr) strcpy(newtriggerstr, triggerstr); }
@@ -246,12 +255,13 @@ class TGameState
     // Text writer (retail had this for editor; keep for parity)
     bool Save(char *filename);
 
-    // REVSYNC: LoadStream / SaveStream @ 0x00496110 / 0x004974d0 — binary
-    //   save-game format. Names are XOR'd with 0x80 per byte. Used by
-    //   TSaveGame restore; stubbed until savegame is retail-synced.
-    //   TODO(revsync): expose to TSaveGame when that class is ported.
-    bool LoadStream(TParseStream &stream);
-    bool SaveStream(TParseStream &stream);
+    // REVSYNC: LoadStream / SaveStream @ 0x00496110 / 0x004974d0 — the game
+    //   states in a save file: int32 count, then per state a name (uint8
+    //   length + bytes, each OR'd with 0x80) and an int32 value. Loading
+    //   updates states by name and appends unknown ones. LoadStream returns
+    //   false on a truncated stream. docs/gameflow/forensics/SAVE_GAME.md §3.2.
+    bool LoadStream(TInputStream &is);
+    void SaveStream(TOutputStream &os) const;
 
     [[nodiscard]] int32_t NumStates() const { return numstates; }
     [[nodiscard]] int32_t State(int32_t index) const
@@ -289,10 +299,15 @@ class TGameState
 //     0x802c  TVirtualArray<SScriptFileOwner> (filename↔owner registry)
 //     0x8040  int32_t scriptsdirty
 // We keep scripts as TPointerArray (retail uses TVirtualArray<T*> but the
-// API is the same for our usage). The instances array (`instances`) and the
-// file→owner registry (`fileowners`) are new fields needed for retail-faithful
-// Clear/Load semantics — area Exit now scans both proto and registry rather
-// than only the proto list.
+// API is the same for our usage). The file→owner registry (`fileowners`) is
+// needed for retail-faithful Clear/Load semantics — area Exit scans both proto
+// and registry rather than only the proto list.
+//
+// REVSYNC-DIVERGENCE: the live-instance list (`instances`) doesn't own the
+// scripts. Every TScript belongs to the object it runs on, which deletes it;
+// the script joins the list when constructed and leaves it when destroyed.
+// Retail's Close freed the instances itself; with objects already freeing
+// theirs, doing both freed each script twice.
 
 // Filename→owner association tracked per Load() call (one record per file).
 struct SScriptFileOwner
@@ -301,7 +316,6 @@ struct SScriptFileOwner
     void *owner          = nullptr;
 };
 
-typedef TPointerArray<TScript, 64, 64>           TScriptInstanceArray;
 typedef TPointerArray<SScriptFileOwner, 64, 64>  TScriptFileOwnerArray;
 
 class TScriptManager
@@ -311,7 +325,7 @@ class TScriptManager
 
     // REVSYNC: Initialize @ 0x00496240 — clears the 3 arrays then loads master.s + state.def
     bool Initialize();
-    // REVSYNC: Close @ 0x00496330 — Save (editor) + delete instances + delete protos + free file/owner records
+    // REVSYNC: Close @ 0x00496330 — Save (editor) + delete protos + free file/owner records
     void Close();
 
     // REVSYNC: ParseScripts @ 0x00496860 — body of Load after slurp; chunks buffer into TScriptProtos.
@@ -330,6 +344,10 @@ class TScriptManager
 
     // REVSYNC: ReloadStates @ 0x004975c0 — just re-calls gamestate.Load("state.def")
     bool ReloadStates();
+
+    // REVSYNC: 0x00496e20 — reset every live script instance (TScript::Reset).
+    //   LoadGame runs this before ReloadStates.
+    void ResetScripts();
 
     // REVSYNC: ObjectScript @ 0x00497370 — find first matching proto for `inst`
     PTScript ObjectScript(TObjectInstance* inst);
@@ -359,9 +377,13 @@ class TScriptManager
     [[nodiscard]] int32_t NumProtos() const { return scripts.NumItems(); }
 
   private:
+    friend class TScript;                   // joins/leaves `instances` itself
+    void RegisterScript(TScript* script);
+    void UnregisterScript(TScript* script);
+
     TGameState gamestate;                   // 0x0000 (32 KB inline)
     TScriptProtoArray scripts;              // proto registry
-    TScriptInstanceArray instances;         // live TScript* (retail tracks for Clear/Close)
+    std::vector<TScript*> instances;        // live scripts (non-owning, see above)
     TScriptFileOwnerArray fileowners;       // filename→owner table (retail per-Load record)
 
     bool scriptsdirty = false;

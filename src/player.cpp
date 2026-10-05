@@ -179,14 +179,6 @@ void TPlayer::ClearPlayer()
             SetObjStat(SK_FIRST + s, 30);
     }
 
-  // Band-aid (newgame.sav not loaded yet — TODO port System 12 save/load):
-  // retail's FATIGUEDATA is "3 per level" and attacks scale up. At Level 5
-  // (15 fatigue) Locke can do mediumpunch (12) and frontkick (14) but not
-  // spinkick (16) or any combo (most cost 18-30). Bump to Level 10 (30
-  // fatigue) so the protagonist can actually fight until newgame.sav is
-  // wired up.
-    if (Level() < 10) SetLevel(10);
-
   // Refresh current stats now that Level + PLRSTAT_* are set. Retail calls
   // TPlayer::RefreshStats (0x51c660) which we don't have ported; doing the
   // equivalent inline.

@@ -116,17 +116,32 @@ format, `LoadGame`/`SaveGame`, `curmap`) and
 class TGameSession
 {
   public:
-    // Start a game: queue retail's load steps for a new game (start mode 0)
-    // or a named slot (start mode 1; GAMENOTFOUND -> new game, as retail).
-    void Start(const SSessionStart& request);
+    // Start a game: queue the load steps for a new game (start mode 0) or a
+    // named slot (start mode 1; a slot that can't load -> new game, as retail).
+    void Start(const SSessionStart& start);
     bool Step();                         // run the next load step; false when done
-    [[nodiscard]] float Progress() const;
-    [[nodiscard]] bool  Ready() const;
+    float Progress() const;
+    bool  Ready() const;
+    bool  Failed() const;
 
-    bool Save(const char* slot);         // retail SaveGame
     void End();                          // leave the game: unload world, clear players, close areas
+
+    // Requests made during play, carried out at the start of the next tick
+    // (retail PlayScreen +0x5e4..+0x5f0).
+    void RequestLoad(const std::string& slot);
+    void RequestSave(const std::string& slot);
+    void RequestQuickSave();             // retail 0x0047e850
+    void RequestReloadLastSlot();        // developer convenience (F9), not retail
+    void ProcessRequests();              // called by TPlayScreen::Update
 };
 ```
+
+- **`TGameFlow` owns the session.** Its intents start games through it
+  (`StartNewGame`, `LoadGame`, `RestartAfterDeath`, QUICKSTART) and it
+  ends the game when the screen that follows the PlayScreen isn't the
+  PlayScreen (`ScreenEnded`, called by `AppFrame` after the swap). The
+  game therefore never ends inside a simulation tick (e.g. from
+  `TPlayer`'s death countdown).
 
 - **`TSaveGame`** keeps its class identity and becomes retail's save
   manager: `SSaveHeader` and the body codec (game states, merchant
@@ -199,11 +214,11 @@ death, quit).
 
 | Step | Content | Verified by |
 |---|---|---|
-| 2a | Working set + write policy (`rev_fopen`, `TSector`, `TMapManager`, `TMapPane` delegation) | sectors written under SavePath, nothing written to the install; existing boot unchanged |
-| 2b | `TSaveGame` retail format + `TGameState` streams + slot list | `newgame.sav` and the GOG `Save/Single/New Game1` parse; write→read round trip byte-identical |
-| 2c | `TGameSession`, flow/PlayScreen integration, stand-ins removed | `--quickstart`: Locke in the Keep resurrection chamber with `newgame.sav` stats/inventory (filmstrip) |
+| 2a ✓ | Working set + write policy (`SectorStore`, `rev_fopen`, `TSector`, `TMapManager`) | sectors written under SavePath, nothing written to the install; level 0 loads the pristine 35,549 objects |
+| 2b ✓ | `TSaveGame` retail format + `TGameState` streams + slot list | `newgame.sav` parses; header, game states and merchant table written byte-identical to retail (player body: see SAVE_GAME §10) |
+| 2c ✓ | `TGameSession`, flow/PlayScreen integration, in-game requests, stand-ins removed | `--quickstart` and title New Game: Locke L1, 25/25 HP, in the Keep resurrection chamber (filmstrip); `--savecycle-test` round trip identical |
 | 2d | `TLoadScreen` + staged steps | loading bar matches retail; filmstrip |
-| 2e | Game time, deferred load/save, tick into the session | save/load from the in-game path |
+| 2e | Game time and the simulation tick into the session | time and time-of-day match retail (TIME.md) |
 
 - `IRuntimeMode` (game/editor) stays inside `TPlayScreen`: it is a
   presentation/input policy, and editor mode decides whether the session
@@ -409,6 +424,8 @@ perform.
 | Loading bar repainted inside one long frame | Staged session load across frames | no re-entrant loop | bar animates the same |
 | `nextscreen` set from many sites | `TGameFlow` intents | one transition graph | none |
 | `master.s` re-parsed every game | parsed once at boot; per-game resets as retail | static data; `--test` hosts | none |
+| `LoadGame` resets the world, then reads the file | reads and checks the file first | a missing or damaged save no longer leaves an empty world | only on failure |
+| `TScriptManager` frees script instances on Close | objects own their scripts; the manager's list is non-owning | one owner (the port's objects already freed them: double free) | none |
 | Sectors tracked by `TMapPane` | working set managed by `TMapManager` | `TMapManager` owns loaded sectors in the port | none |
 | Panes blit into a CPU backbuffer | Pane `Compose`/`Draw` through `TRenderer` | GPU compositor | none (Classic pixel-identical) |
 | Handlers with 4 raw args, hand-rolled token parsing | `SCommandContext` + `TCommandArgs` | one parsing vocabulary | none |
