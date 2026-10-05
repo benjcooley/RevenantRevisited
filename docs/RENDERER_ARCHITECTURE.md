@@ -6,7 +6,9 @@ document captures the layering, the per-frame pass pipeline, and how the new
 `TRenderer` class relates to the demoted `TDisplay`.
 
 For the shader math (normal reconstruction, sun-shadow ray march, AO, iso
-inverse), see [DEFERRED_LIGHTING.md](DEFERRED_LIGHTING.md). For the retail
+inverse), see [DEFERRED_LIGHTING.md](DEFERRED_LIGHTING.md). For the lighting
+models themselves (Classic = retail, modern), see
+[LIGHTING_FIDELITY.md](LIGHTING_FIDELITY.md). For the retail
 1998 high-level system map, see [ARCHITECTURE.md](ARCHITECTURE.md). For the
 map-rendering data flow specifically, see [MAP_RENDERING.md](MAP_RENDERING.md).
 
@@ -224,9 +226,11 @@ specific calls go through this pointer:
 
 ```cpp
 Renderer->SetLight(dx, dy, dz, intensity, r, g, b, ambient);
+Renderer->SetClassicLightModel(model);
 Renderer->ClearPointLights();
+Renderer->AddRetailPointLight(wx, wy, wz, radius, r, g, b, multiplier);
 Renderer->AddPointLight(wx, wy, wz, radius, r, g, b, intensity);
-Renderer->BeginTilePass(0.12f, 0.16f, 0.10f, 1.0f);
+Renderer->BeginTilePass(0.0f, 0.0f, 0.0f, 1.0f);
 Renderer->DrawTile(color, depth, dst_x, dst_y, ...);
 Renderer->EndTilePass();
 Renderer->SetReconstructionParams(ox, oy, znear, zfar, cx, cy, kcam, 0);
@@ -252,10 +256,17 @@ purpose:
 `SetAmbientOcclusion`, `SetNormalRadius`, `SetEdgeThreshold`,
 `SetNormalLightingHardness`, `SetTileViewMode`, `SetLightingMode`,
 `SetSunShadow`, `SetShadowWorldDir`, `SetShadowVariance`.
+`SetLightingMode(0)` selects the Classic (retail) model, whose inputs come
+from `SetClassicLightModel` (computed by `classiclighting.cpp`); it lights
+tiles and meshes differently, keyed by the G-buffer normal target's alpha
+(1 tile, 0 mesh). See [LIGHTING_FIDELITY.md](LIGHTING_FIDELITY.md).
 
 **Point lights (rebuild each frame)** -- `ClearPointLights`,
-`AddPointLight(wx,wy,wz,radius,r,g,b,intensity)`. Max
-[`kMaxPointLights` (16)](../src/renderer.h#L94); extras silently dropped.
+`AddRetailPointLight(wx,wy,wz,radius,r,g,b,multiplier)` for authored map
+lights (retail units; modern mode reads them through
+`SetRetailLightModernScale`), `AddPointLight(wx,wy,wz,radius,r,g,b,intensity)`
+for direct (VFX) lights. Max
+[`kMaxPointLights` (16)](../src/renderer.h#L94) across both; extras silently dropped.
 
 **Deferred reconstruction** -- `SetReconstructionParams(ox, oy, z_near,
 z_far, center_wx, center_wy, kcam_forward, reserved)` once per frame before
