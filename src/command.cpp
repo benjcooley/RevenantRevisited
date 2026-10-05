@@ -1068,7 +1068,7 @@ void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
             for (int32_t sx = startx; sx < (startx + sizex); sx++)
             {
                 sect = new TSector(0, sx, sy);
-                sect->Load();
+                static_cast<void>(sect->Load());    // a sector with no file is generated from empty
 
                 for (TObjectIterator i(sect->ObjectArray()); i; i++)
                     if (i.Item() && i.Item()->GetFlags() & OF_GENERATED)
@@ -2556,8 +2556,16 @@ COMMAND(CmdSectorCommand)
         for (int32_t sy = 0; sy < MAXSECTORY; sy++)
             for (int32_t sx = 0; sx < MAXSECTORX; sx++)
             {
+                // REVSYNC-DIVERGENCE: retail (0x004231b0) ignored the load
+                // and saved every sector of the level, writing an empty file
+                // for each one that has none and the half-read contents over
+                // one it couldn't read. Sectors that don't load are skipped.
                 TSector* sector = new TSector(level, sx, sy);
-                sector->Load(false);
+                if (!sector->Load(false))
+                {
+                    delete sector;
+                    continue;
+                }
 
                 for (int32_t i = 0; i < sector->NumItems(); i++)
                 {

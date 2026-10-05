@@ -148,11 +148,13 @@ bool TGameMap::Load(int32_t lvl)
     int32_t loaded_objs = 0;
     for (const SCoord& c : coords)
     {
+        // A sector whose file can't be read is left out of the map, so its
+        // file is never written over (LoadSector logs why).
         TSector* sec = TSector::LoadSector(level, c.sx, c.sy, false);
         if (!sec)
         {
-            log_warn("[gamemap] level %d sector %d_%d: LoadSector failed",
-                     level, c.sx, c.sy);
+            log_error("[gamemap] level %d sector %d_%d didn't load; left out of the map",
+                      level, c.sx, c.sy);
             continue;
         }
         sectors.push_back(sec);
