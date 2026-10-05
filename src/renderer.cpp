@@ -4339,6 +4339,17 @@ void TRenderer::DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
                        0, 0, 1, 1, 1, 1);
 }
 
+void TRenderer::FillScreen(float r, float g, float b, float a)
+{
+    if (a <= 0.0f) return;
+    const sg_image img = GetOrCreateSolidColorImage(0xFFFFFFFFu);
+    if (!img.id) return;
+    const int32_t target_w = sapp_width();
+    const int32_t target_h = sapp_height();
+    CompositeSwapchainTinted(img, 0, 0, target_w, target_h, target_w, target_h,
+                             0, 0, 1, 1, 1, 1, r, g, b, a);
+}
+
 void TRenderer::DrawSolidRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
                                       int32_t target_w, int32_t target_h,
                                       uint8_t r, uint8_t g, uint8_t b, uint8_t a)

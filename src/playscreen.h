@@ -222,6 +222,9 @@ class TPlayScreen : public TScreen
     // Pane plumbing
     PTPane nextpane = nullptr;
 
+    // The play screen's fader (retail +0x5bc), set up in Initialize.
+    TScreenFade screenfade;
+
     // Effect imagery cached at boot (blood, sparks). Optional; kept null
     // when the imagery isn't in the current data set.
     TObjectImagery* bloodimagery  = nullptr;

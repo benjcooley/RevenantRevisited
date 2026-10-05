@@ -4038,8 +4038,37 @@ COMMAND(CmdStatMod) { return CmdNotPorted("statmod", 0x00428200, t); }
 // ----- owner: presentation (fades, music, movies, end game) -----
 
 COMMAND(CmdEndGame) { return CmdNotPorted("endgame", 0x00427060, t); }
-COMMAND(CmdFadeScreenIn) { return CmdNotPorted("fadescreenin", 0x00427f60, t); }
-COMMAND(CmdFadeScreenOut) { return CmdNotPorted("fadescreenout", 0x00427e80, t); }
+
+// REVSYNC: fadescreenout @ 0x00427e80 (single player). Fades the play screen
+// to black and clears the speech on screen; the block holds the fade (taken
+// bit 2) until `fadescreenin`. Both fade commands answer like a character
+// action (retail result 1): the calling script waits on the command's object
+// until its action is done, unless the line says `nowait`. `wait screenfade`
+// waits for the fade itself. Not ported: closing the play screen's buy/sell
+// drawer (drawer mode 3, `0x0047ed20` / `0x0047ecc0`), and the multiplayer
+// branch, which fades through the player's state bit 8 (`0x0051d680`).
+COMMAND(CmdFadeScreenOut)
+{
+    if (TScreenFade* fade = PlayScreen.Fade())
+    {
+        fade->FadeOut();
+        DialogPane.ClearSpeech(false);
+    }
+    if (script)
+        script->SetFadeHeld(true);
+    return CMD_WAIT;
+}
+
+// REVSYNC: fadescreenin @ 0x00427f60 (single player).
+COMMAND(CmdFadeScreenIn)
+{
+    if (TScreenFade* fade = PlayScreen.Fade())
+        fade->FadeIn();
+    if (script)
+        script->SetFadeHeld(false);
+    return CMD_WAIT;
+}
+
 COMMAND(CmdFogOfWar) { return CmdNotPorted("fow", 0x00425440, t); }
 COMMAND(CmdPlayMovie) { return CmdNotPorted("playmovie", 0x00427d80, t); }
 COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }

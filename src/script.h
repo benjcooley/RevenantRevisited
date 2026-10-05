@@ -198,12 +198,8 @@ class TScript
     // REVSYNC: Resume @ 0x004942b0 — clears SCRIPT_PAUSED bit
     void Resume();
     [[nodiscard]] bool IsPaused() const { return (priority & SCRIPT_PAUSED) != 0; }
-    // REVSYNC: End @ 0x00493e40 — retail also rolls back player FSM state
-    //   bits (FUN_0051d680_SetPlayerState) when END runs while the script
-    //   has stolen control away from the player. We don't have a player FSM
-    //   port yet; the basic teardown matches.
-    //   TODO(revsync): wire SetPlayerState rollback once player state machine
-    //   is in place.
+    // REVSYNC: End @ 0x00493e40 — ends the block and gives back what it
+    //   took (the dialog and fade bits; control and camera aren't ported).
     void End();
     // REVSYNC: per-instance body of TScriptManager::ResetScripts @ 0x00496e20
     //   — End if running and return to the just-constructed state: top
@@ -226,6 +222,9 @@ class TScript
     // through the dialog pane; the script then owns the dialog until the
     // response (taken flag 4, which `choice` sets in retail).
     void AddChoice(const char *label, const char *text);
+    // The block holds the screen fade (taken bit 2): `fadescreenout` sets it
+    // and `fadescreenin` clears it (retail 0x00427e80 / 0x00427f60).
+    void SetFadeHeld(bool held) { taken = held ? (taken | kTakenFade) : (taken & ~kTakenFade); }
     // REVSYNC: 0x00494530 / 0x004944c0 (`busysay` / `busymsg`) -- the line
     // the owner says, and the message sent, to a player whose trigger is
     // refused while the script is busy with someone else (TScript::Busy
@@ -288,10 +287,13 @@ class TScript
     PSScriptTrigger curtrigger = nullptr;          // The current trigger record
 
     // Retail state (SCRIPT_ENGINE.md §2).
-    // +0x00: what the running block took and End gives back. Only the
-    // dialog bit is ported; control (1) and the camera (8) follow their
-    // commands.
+    // +0x00: what the running block took and End gives back. The dialog
+    // and fade bits are ported; control (1) and the camera (8) follow their
+    // commands. The fade bit is set by `fadescreenout` and cleared by
+    // `fadescreenin`; in single player End only drops it (retail fades back
+    // in there for a multiplayer host alone).
     static constexpr uint32_t kTakenControl = 1;
+    static constexpr uint32_t kTakenFade    = 2;
     static constexpr uint32_t kTakenDialog  = 4;
     static constexpr uint32_t kTakenCamera  = 8;
     uint32_t taken           = 0;

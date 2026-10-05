@@ -34,6 +34,7 @@
 #include "revutils.h"
 #include "exit.h"
 #include "player.h"
+#include "playscreen.h"
 #include "stream.h"
 #include "textbar.h"
 
@@ -346,8 +347,8 @@ void TScript::SetWait(EScriptWait type, TObjectInstance* object, int32_t frames)
     }
 }
 
-// REVSYNC: 0x00492d70 (single player). The screen fade and the buy/sell
-// screen aren't ported, so neither is ever in progress.
+// REVSYNC: 0x00492d70 (single player). The buy/sell screen isn't ported,
+// so it is never in progress.
 bool TScript::WaitSatisfied(bool commanddone)
 {
     if (wait == EScriptWait::Frames && waitframes > 0)
@@ -403,6 +404,9 @@ bool TScript::WaitSatisfied(bool commanddone)
       }
 
       case EScriptWait::ScreenFade:
+        // The play screen's fade has finished (0x0048eb00).
+        return !PlayScreen.IsFading();
+
       case EScriptWait::BuySell:
         return true;
     }
@@ -667,10 +671,10 @@ void TScript::Resume()
     priority &= ~SCRIPT_PAUSED;
 }
 
-// REVSYNC: End @ 0x00493e40 — retail additionally rolls back PlayerFSM bits
-// (FUN_0051d680_SetPlayerState) on flags 1/2/4/8. Those subsystems aren't
-// ported yet; basic IP/priority teardown matches.
-// TODO(revsync): re-port flag rollback once Player FSM exists.
+// REVSYNC: End @ 0x00493e40 — gives back the dialog (4) and fade (2) bits.
+// Not ported: control (1) and camera (8), and the multiplayer rollback of
+// the player's state bits (SetPlayerState 0x0051d680).
+// TODO(revsync): control and camera once their commands take them.
 void TScript::End()
 {
     triggerguard.Clear();
@@ -686,6 +690,9 @@ void TScript::End()
         DialogPane.SkipSpeech();
         taken &= ~kTakenDialog;
     }
+  // A block that faded the screen out and never back in leaves it black:
+  // retail fades back in here only for a multiplayer host (0x0067682c).
+    taken &= ~kTakenFade;
 }
 
 // REVSYNC: 0x004932a0

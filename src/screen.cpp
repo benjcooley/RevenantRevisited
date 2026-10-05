@@ -468,6 +468,88 @@ class TScreenPaneLayer final : public THudDrawable
     TScreen* screen;
 };
 
+// The fade's black cover is the last thing in the frame: retail draws it at
+// the end of TScreen::TimerTick (0x00490bd0), after the panes and the
+// cursor (0x0043a480). Above the cursor HUD (z 1000); the debug UI still
+// draws over it.
+constexpr float kScreenFadeHudZ = 2000.0f;
+
+class TScreenFadeLayer final : public THudDrawable
+{
+  public:
+    explicit TScreenFadeLayer(TScreen* owner) : screen(owner) {}
+    void Draw() override { screen->DrawFade(); }
+
+  private:
+    TScreen* screen;
+};
+
+// ----------------------------------------------------------------------------
+// TScreenFade
+// ----------------------------------------------------------------------------
+
+void TScreenFade::Setup(int32_t numsteps)
+{
+    steps = numsteps;
+    level = 0.0f;
+    target = 0.0f;
+    flags = 0;
+}
+
+// Retail also steps the level one back (`cur -= 1` here, `+= 1` in FadeOut)
+// so the tick that starts a fade, whose pulse pass steps it right away,
+// still draws the level it started from. A level that moves by elapsed time
+// starts where it is without that.
+void TScreenFade::FadeIn()
+{
+    if (flags & kFadingIn)
+        return;
+    target = float(steps);
+    if (level == target)
+        return;
+    flags = (flags & ~kFadingOut) | kFadingIn;
+    log_debug("[screenfade] fade in from %.2f/%d", level, steps);
+}
+
+void TScreenFade::FadeOut()
+{
+    if (flags & kFadingOut)
+        return;
+    target = 0.0f;
+    if (level == target)
+        return;
+    flags = (flags & ~kFadingIn) | kFadingOut;
+    log_debug("[screenfade] fade out from %.2f/%d", level, steps);
+}
+
+// Retail's draw clears the busy flags once the level reaches its target
+// (0x00491cb0's tail); here the advance does.
+void TScreenFade::Advance(double seconds)
+{
+    if (!IsBusy())
+        return;
+    const float delta = float(seconds * TTime::LegacyFramerate);
+    level = level < target ? (std::min)(level + delta, target)
+                           : (std::max)(level - delta, target);
+    if (level == target)
+    {
+        flags &= ~(kFadingIn | kFadingOut);
+        log_debug("[screenfade] %s", level == 0.0f ? "black" : "clear");
+    }
+}
+
+// Retail draws nothing at the last step and above, clears the display to
+// black at step 0, and in between blends a black 640x480 quad with alpha
+// 1 - step / (steps - 1), the step first quantized to 31 levels
+// (`step * 31 / (steps - 1)`, then `1 - level / 31`). The port keeps the
+// curve and drops the quantization.
+float TScreenFade::Opacity() const
+{
+    if (steps < 2)
+        return level < float(steps) ? 1.0f : 0.0f;
+    return std::clamp(1.0f - level / float(steps - 1), 0.0f, 1.0f);
+}
+
 // ----------------------------------------------------------------------------
 // TScreen
 // ----------------------------------------------------------------------------
@@ -515,9 +597,18 @@ bool TScreen::BeginScreen()
         if (!panelayer)
             panelayer = std::make_unique<TScreenPaneLayer>(this);
         Renderer->AddHud(panelayer.get(), 0.0f);
+        if (!fadelayer)
+            fadelayer = std::make_unique<TScreenFadeLayer>(this);
+        Renderer->AddHud(fadelayer.get(), kScreenFadeHudZ);
     }
 
-    return Initialize();
+    // REVSYNC: BeginScreen 0x0048e8f0 -- a screen that fades comes up black
+    // (its Initialize set the fader up) and fades in.
+    if (!Initialize())
+        return false;
+    if (fade)
+        fade->FadeIn();
+    return true;
 }
 
 void TScreen::EndScreen()
@@ -528,6 +619,8 @@ void TScreen::EndScreen()
     BroadcastEvent(SCREENEVENT_CLOSING);
     if (Renderer && panelayer)
         Renderer->RemoveHud(panelayer.get());
+    if (Renderer && fadelayer)
+        Renderer->RemoveHud(fadelayer.get());
 
     Close();
 
@@ -1081,6 +1174,33 @@ void TScreen::Tick()
         lastPulseLegacyFrame++;
         screenframes++;
     }
+
+    // The fade moves after the screen's pulses, as retail steps it after
+    // the screen pulse (0x0048f180), by the frame's simulation time.
+    if (fade)
+        fade->Advance(TTime::DeltaTime());
+}
+
+void TScreen::RequestClose()
+{
+    done = true;
+    if (fade)
+        fade->FadeOut();
+}
+
+bool TScreen::ReadyToEnd() const
+{
+    return done && (!fade || !fade->IsBusy() || fade->IsFadedOut());
+}
+
+void TScreen::DrawFade()
+{
+    // Retail's editor runs without a fader (PlayScreen sets one up only
+    // outside it, 0x0047b10c). The port's editor opens over a running game
+    // and shows it in its own view, so the cover stays off while it's up.
+    if (!fade || Editor || CurrentScreen != this || !Renderer)
+        return;
+    Renderer->FillScreen(0.0f, 0.0f, 0.0f, fade->Opacity());
 }
 
 // Draw half of the frame. Two-phase to keep sokol's "one pass active
