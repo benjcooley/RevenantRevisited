@@ -1,0 +1,74 @@
+// Disassembly: Activate 0x0052ff40, head: the no-gold path calls SayTag(tag, -1, 0) (0x004d0a20)
+// on the salesperson unless its doing action (+0xd8) is 0x10 (say).
+---- 0052ffb0
+0052ff32  XOR EAX,EAX
+0052ff34  RET 0x8
+0052ff40  SUB ESP,0x1c
+0052ff43  PUSH EBX
+0052ff44  MOV EBX,ECX
+0052ff46  PUSH EBP
+0052ff47  PUSH ESI
+0052ff48  MOV EAX,dword ptr [EBX + 0x188]
+0052ff4e  CMP EAX,-0x1
+0052ff51  JZ 0x00530553
+0052ff57  MOVSX ECX,word ptr [EBX + 0x194]
+0052ff5e  CMP EAX,ECX
+0052ff60  JG 0x00530553
+0052ff66  MOV ESI,dword ptr [EBX + 0x1b4]
+0052ff6c  XOR EBP,EBP
+0052ff6e  CMP ESI,EBP
+0052ff70  JZ 0x00530553
+0052ff76  CMP dword ptr [ESP + 0x30],0xbb8
+0052ff7e  JNZ 0x00530535
+0052ff84  MOV ECX,dword ptr [EBX + 0x17c]
+0052ff8a  PUSH EDI
+0052ff8b  TEST CL,0x1
+0052ff8e  JZ 0x005300ec
+0052ff94  LEA EDX,[EAX + EAX*0x8]
+0052ff97  MOV EAX,dword ptr [EBX + 0x198]
+0052ff9d  PUSH 0x5e3dcc
+0052ffa2  MOV ECX,ESI
+0052ffa4  LEA EDI,[EAX + EDX*0x8]
+0052ffa7  MOV EDX,dword ptr [ESI]
+0052ffa9  CALL dword ptr [EDX + 0x84]
+0052ffaf  CMP EAX,dword ptr [EDI + 0x38]
+0052ffb2  JGE 0x00530011
+0052ffb4  MOV ECX,dword ptr [EBX + 0x1a0]
+0052ffba  CMP ECX,EBP
+0052ffbc  JZ 0x0053051d
+0052ffc2  MOV EDI,dword ptr [EBX + 0x1a8]
+0052ffc8  CMP EDI,EBP
+0052ffca  JZ 0x0053051d
+0052ffd0  CMP ECX,EBP
+0052ffd2  JZ 0x0052fff0
+0052ffd4  MOV ESI,dword ptr [ECX + 0xd8]
+0052ffda  CMP ESI,EBP
+0052ffdc  JZ 0x0052fff0
+0052ffde  MOV EDX,dword ptr [ESI]
+0052ffe0  XOR EAX,EAX
+0052ffe2  CMP EDX,0x10
+0052ffe5  SETZ AL
+0052ffe8  CMP EAX,EBP
+0052ffea  JNZ 0x0053051d
+0052fff0  PUSH EBP
+0052fff1  PUSH -0x1
+0052fff3  PUSH EDI
+0052fff4  CALL 0x004d0a20
+0052fff9  MOV EAX,dword ptr [EBX]
+0052fffb  PUSH 0x1
+0052fffd  MOV ECX,EBX
+0052ffff  CALL dword ptr [EAX + 0x2c]
+00530002  POP EDI
+00530003  POP ESI
+00530004  POP EBP
+00530005  MOV EAX,0x1
+0053000a  POP EBX
+0053000b  ADD ESP,0x1c
+0053000e  RET 0x8
+00530011  MOV ECX,dword ptr [EBX + 0x1b4]
+00530017  MOV EAX,dword ptr [ECX]
+00530019  CALL dword ptr [EAX + 0x88]
+0053001f  TEST EAX,EAX
+00530021  JZ 0x0053051d
+00530027  MOV EAX,dword ptr [EBX + 0x188]
+0053002d  MOV EDX,dword ptr [EBX + 0x198]

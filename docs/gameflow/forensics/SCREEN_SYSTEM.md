@@ -278,8 +278,9 @@ While fading in it is drawn one step behind the level, because retail
 held each step's cover until the next pulse had run and scripts teleport
 right after `fadescreenin`; interpolating ahead showed the old picture
 through the lightening cover. `fadescreenout` / `fadescreenin` / `wait
-screenfade` and End's bit 2 are ported (single player). Not ported: the
-drawer close in `fadescreenout` (no drawer), the music fade request, the
+screenfade` and End's bit 2 are ported (single player), and so is the
+drawer close in `fadescreenout` (the shop's drawer, COMMAND_SYSTEM.md
+§6.6). Not ported: the music fade request, the
 `0x10` / `0x20` flags (unused), the restart flow (`+0x5dc`), the Load
 pane's fade-in (a no-op: the in-game load goes through the session's
 request with the screen faded in, INGAME_MENU.md §10), multiplayer.

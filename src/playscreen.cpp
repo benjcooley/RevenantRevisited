@@ -34,6 +34,7 @@
 #include "3dimage.h"
 #include "area.h"
 #include "automap.h"
+#include "buysell.h"
 #include "consoleexec.h"
 #include "cursor.h"
 #include "debugui.h"
@@ -83,11 +84,10 @@ static void GetReconstructedPlayfieldRect(int32_t& x, int32_t& y,
     const int32_t dw = Display.Width()  > 0 ? Display.Width()  : WIDTH;
     const int32_t dh = Display.Height() > 0 ? Display.Height() : HEIGHT;
     constexpr int32_t kSidebarW = 188;
-    constexpr int32_t kBottomBarH = 60;
     x = 0;
     y = 0;
     w = dw - (s.sidebarState == HUD_SIDEBAR_OPEN ? kSidebarW : 0);
-    h = dh - (s.bottomBarOpen ? kBottomBarH : 0);
+    h = dh - PlayScreen.DrawerHeight();
     if (w < 1) w = 1;
     if (h < 1) h = 1;
 }
@@ -640,6 +640,11 @@ void TPlayScreen::Close()
 {
     ingamemenu->Close();
     menuPending = false;
+    if (drawer == EDrawer::BuySell)
+        CloseBuySellDrawer();
+    BuySellPane.Close();
+    buysellrequest = false;
+    drawerclose    = false;
     RemovePane(&TextBar);
     TextBar.Close();                        // REVSYNC: 0x0047b30c
     RemovePane(&DialogPane);
@@ -751,6 +756,9 @@ void TPlayScreen::Update()
     // world doesn't hold them (0x0047bd20).
     GameFlow.Session().ProcessRequests();
 
+    // The bottom drawer follows its requests (the shop opening or closing).
+    UpdateDrawer();
+
     // REVSYNC: 0x0048fda0 / 0x0052b9f0 / 0x0047c2c0 -- under a MODAL_PAUSE
     // modal (the single-player in-game menu and its dialogs) only the modal
     // pulses: the world, the areas and the game clock stand still. The
@@ -790,6 +798,88 @@ void TPlayScreen::Update()
     gametime = lastsessionframes
              + (gameframes - sessionstart) * 100 / kGameFrameRate;
     timeofday = TimeOfDayMinutes(gametime);
+}
+
+int32_t TPlayScreen::DrawerHeight() const
+{
+    constexpr int32_t kBottomBarH = 60;           // BottomBarPane_SPEC §3 (0x3c)
+    if (drawer == EDrawer::BuySell)
+        return TBuySellPane::kHeight;
+    return GetHudState().bottomBarOpen ? kBottomBarH : 0;
+}
+
+// Retail's close request reaches whatever the drawer holds; only the shop is
+// closed here. The HUD's bottom bar (mode 2) belongs to the HUD, whose Lower
+// Panel toggle is SHudState::bottomBarOpen; retail's LoadGame (0x0047ece0)
+// and hideresponse would close it too (AUTHOR_QUESTIONS.md 81).
+void TPlayScreen::CloseDrawer()
+{
+    if (drawer == EDrawer::BuySell)
+        drawerclose = true;
+}
+
+// REVSYNC: the drawer half of Pulse 0x0047b4d0, mode 3. A shop request opens
+// the drawer once the shop has re-initialized (0x0052f390); the request's end
+// (the shop's Exit) or a close request closes it.
+void TPlayScreen::UpdateDrawer()
+{
+    if (drawer == EDrawer::BuySell)
+    {
+        if (!buysellrequest || drawerclose)
+            CloseBuySellDrawer();
+    }
+    else if (buysellrequest)
+    {
+        if (BuySellPane.Initialize())
+            OpenBuySellDrawer();
+        else
+        {
+            // Retail retried every pulse and the script's `wait buysell`
+            // never ended; the port lets the script go.
+            buysellrequest = false;
+            BuySellPane.Reset();
+        }
+    }
+    drawerclose = false;
+}
+
+// REVSYNC: 0x0047b8c2..0x0047b966 -- the HUD's drawer content goes (bottom
+// bar, belt, quick spells), the side panel opens (+0x6a4), the text bar hides
+// (TTextBar::Hide 0x0054c9c0), and the shop is added and shown at the bottom
+// left. The dialog pane and the side tabs lay themselves out against the map
+// view, which the drawer shortens.
+void TPlayScreen::OpenBuySellDrawer()
+{
+    SHudState& hud = GetHudState();
+    hud.bottomBarOpen = 0;
+    hud.sidebarState  = HUD_SIDEBAR_OPEN;
+    TextBar.Hide();
+    AddPane(&BuySellPane);
+    BuySellPane.Show();
+    drawer = EDrawer::BuySell;
+    log_info("[buysell] the shop opens: %d rows", static_cast<int32_t>(BuySellPane.Items().size()));
+}
+
+// REVSYNC: 0x0047b7d5..0x0047b81c -- Reset the shop (0x00530600), take it
+// out, show the text bar again; the drawer is closed in mode 2, so the
+// bottom bar stays closed until the Lower Panel command opens it.
+void TPlayScreen::CloseBuySellDrawer()
+{
+    BuySellPane.Reset();
+    RemovePane(&BuySellPane);
+    TextBar.Show();
+    drawer         = EDrawer::Hud;
+    buysellrequest = false;
+    log_info("[buysell] the shop closes");
+}
+
+// The shop's rect while the drawer holds it: its clicks and moves are its
+// own, not the world's.
+static bool InBuySellDrawer(int32_t x, int32_t y)
+{
+    return PlayScreen.Drawer() == TPlayScreen::EDrawer::BuySell &&
+           x >= BuySellPane.GetPosX() && x < BuySellPane.GetPosX() + BuySellPane.GetWidth() &&
+           y >= BuySellPane.GetPosY() && y < BuySellPane.GetPosY() + BuySellPane.GetHeight();
 }
 
 void TPlayScreen::GetMapViewRect(int32_t& x, int32_t& y, int32_t& w, int32_t& h) const
@@ -1328,6 +1418,12 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         return;
     }
 
+    if (InBuySellDrawer(x, y))
+    {
+        TScreen::MouseClick(button, x, y);
+        return;
+    }
+
     if (g_playHudInitialized &&
         (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()))
     {
@@ -1356,7 +1452,7 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 
 void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
 {
-    if (ModalHas(MODAL_MOUSE))
+    if (ModalHas(MODAL_MOUSE) || InBuySellDrawer(x, y))
     {
         TScreen::MouseMove(button, x, y);
         return;

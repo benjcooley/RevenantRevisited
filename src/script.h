@@ -286,6 +286,9 @@ class TScript
     // REVSYNC: User @ 0x00492ac0 — the player this script deals with: the
     // running trigger's "user" when that is a player, else the main player.
     [[nodiscard]] TObjectInstance* User() const;
+    // The running trigger's "user" when that is a player, else null: User's
+    // test without the fallback (buysellscreen 0x00427090 makes it inline).
+    [[nodiscard]] TObjectInstance* AliasedUser() const;
 
     static void PauseAllScripts() { pauseall = true; }
     static void ResumeAllScripts() { pauseall = false; }

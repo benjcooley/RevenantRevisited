@@ -244,9 +244,21 @@ class TDefPane : public TPane
     // 0x00436de0): the bound bitmap. Panes with live pictures override it.
     virtual void DrawField(const SDefWidget& widget);
 
-    // Compose-time helpers for subclasses (valid inside DrawField).
+    // The pane's paint into its surface (retail slot 21, inside the compose
+    // pass): by default the background, then the widgets. A code-built pane
+    // that draws its own content around the buttons overrides it and calls
+    // the two parts itself, as retail paints call the button pane's draw
+    // (0x00435de0) between their own steps.
+    virtual void Paint();
+    void PaintBackground();
+    void PaintWidgets();
+
+    // Compose-time helpers for subclasses (valid inside Paint / DrawField).
     [[nodiscard]] TSurface* Surface() const { return surface; }
     [[nodiscard]] uint32_t DefFlags() const { return defflags; }
+    // Retail's "click1": once, at full volume, not positioned
+    // (0x0049b990(id, 0x7f, 1, 0, 0x50, 700)).
+    void PlayClick() const;
 
   private:
     void ReleaseAssets();
@@ -255,7 +267,6 @@ class TDefPane : public TPane
     const char* OnMouseUp(int32_t lx, int32_t ly);   // name of the activated widget
     void        OnMouseMove(int32_t lx, int32_t ly);
     void        Activate(const char* widgetName);
-    void        PlayClick() const;
     [[nodiscard]] float FadeLevel() const;           // 0..kFadeSteps
 
     // --- parsing (defpane.cpp) ---

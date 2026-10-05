@@ -1239,15 +1239,27 @@ void TDefPane::Render()
     if (!open || !surface) return;
 
     surface->StartPass(0.0f, 0.0f, 0.0f, 0.0f);   // transparent (modal over frozen frame)
+    Paint();
+    surface->EndPass();
+}
 
-    const int32_t tw = surface->Width(), th = surface->Height();
+void TDefPane::Paint()
+{
+    PaintBackground();
+    PaintWidgets();
+}
+
+void TDefPane::PaintBackground()
+{
     if (background)
-        Renderer->DrawBitmapToTarget(background, 0, 0, tw, th);
+        Renderer->DrawBitmapToTarget(background, 0, 0, surface->Width(), surface->Height());
+}
 
+// REVSYNC: the button pane's draw, 0x00435de0 -- every widget in order.
+void TDefPane::PaintWidgets()
+{
     for (const SDefWidget& w : widgets)
         DrawWidget(w);
-
-    surface->EndPass();
 }
 
 // =====================================================================

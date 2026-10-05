@@ -494,6 +494,9 @@ class TMapPane : public TPane
   private:
 
   // Private functions
+    void StopFollowingPlayer();
+        // What the camera leaving the player does: the speech goes, and the
+        // play screen's drawer closes when it holds the shop
     void UpdateMapPos();
         // Called by drawbackground to update the map pane position (Does CenterOn stuff)
         // calls SetMapPos())
