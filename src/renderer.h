@@ -941,6 +941,13 @@ public:
     void DrawSurface(TSurface* surf, int32_t x, int32_t y);
     void DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
                            float tr, float tg, float tb, float ta);
+    // Sub-rect of a cached surface, tinted: the swapchain twin of
+    // DrawSurfaceSubrectToTarget (retail's colour-modulated overlay quads).
+    void DrawSurfaceSubrectTinted(TSurface* surf,
+                                  int32_t dst_x, int32_t dst_y,
+                                  int32_t src_x, int32_t src_y,
+                                  int32_t src_w, int32_t src_h,
+                                  float tr, float tg, float tb, float ta);
 
     // Composite a sub-rect of the lit_target (the post-lighting 3D scene)
     // into the currently-active TSurface render-target pass. `src_x/src_y`

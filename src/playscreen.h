@@ -163,6 +163,10 @@ class TPlayScreen : public TScreen
     void HideLowerPanes();
     void ShowLowerPanes();
 
+    // The map view on screen (retail MapPane's rect): what the world renders
+    // into, inside the HUD's side and bottom panels.
+    void GetMapViewRect(int32_t& x, int32_t& y, int32_t& w, int32_t& h) const;
+
     // ---- Game time -----------------------------------------------------
     [[nodiscard]] int32_t GameFrame()    const;
     [[nodiscard]] int32_t GameTime()     const { return gametime; }

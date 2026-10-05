@@ -11,10 +11,9 @@
 #include "revenant.h"
 #endif
 
-#ifndef _SCREEN_H
-#include "screen.h"
-#endif
+#include "button.h"
 
+#include <array>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -76,29 +75,64 @@ class TDialogList
 void SetDialogContext(TObjectInstance* context); // The script context
 char *DialogLine(const char *line, char *buf, int32_t buflen);
 
+class TDialogPane;
+class TMulti;
+class TSurface;
+struct SFontAtlas;
+
 // REVSYNC: dialog entry, ctor 0x00533f10 (0x160 bytes; DIALOG.md §4.2). One
-// floating box: a spoken line, or the response list. Lifetimes and fades
-// count simulation ticks (24 Hz) as retail's do; the presentation reads
-// their progress.
+// floating box: a spoken line, or the response list -- the speaker's portrait
+// in the "Ring" on the left, the wrapped texts on the right. Lifetimes, fades,
+// slides and highlights step per simulation tick (24 Hz) as retail's do; the
+// presentation interpolates between the steps.
 class TDialogEntry
 {
   public:
     enum class EMode : int32_t { NpcSpeech = 1, PlayerSpeech = 2, Responses = 3 };
 
-    static constexpr int32_t kFadeTicks   = 12;    // fade in or out
-    static constexpr int32_t kMaxTexts    = 8;
-    static constexpr int32_t kNoTimeout   = -1;
+    static constexpr int32_t kFadeTicks      = 12;     // fade in or out
+    static constexpr int32_t kSlideTicks     = 12;     // restack slide
+    static constexpr int32_t kHighlightTicks = 8;      // hovered choice ramp
+    static constexpr int32_t kMaxTexts       = 8;
+    static constexpr int32_t kNoTimeout      = -1;
+    static constexpr int32_t kWidth          = 400;    // +0x28
+    static constexpr int32_t kTextLeft       = 50;     // text rects x 50..399
+    static constexpr int32_t kWrapWidth      = 350;    // 0x15e
+    static constexpr int32_t kTextGap        = 10;     // between texts
+    static constexpr int32_t kMinHeight      = 44;     // 0x2c, texts centred
+    static constexpr int32_t kPortraitCenter = 22;     // portrait + Ring centre (0x16)
 
-    TDialogEntry(TObjectInstance* speaker, EMode mode, std::vector<std::string> texts,
+    // `color` / `hicolor` as retail stores them: 0x00RRGGBB.
+    TDialogEntry(TDialogPane& owner, TObjectInstance* speaker, EMode mode,
+                 uint32_t color, uint32_t hicolor, std::vector<std::string> texts,
                  std::vector<std::string> labels, int32_t ticks);
+    // REVSYNC: dtor @ 0x005343e0 -- its choice buttons leave the pane.
+    ~TDialogEntry();
+    TDialogEntry(const TDialogEntry&) = delete;
+    TDialogEntry& operator=(const TDialogEntry&) = delete;
 
-    // REVSYNC: Pulse @ 0x005348f0 -- the lifetime and the fade, one tick.
+    // REVSYNC: Pulse @ 0x005348f0 -- one tick of the lifetime, the slide, the
+    // fade and each choice's highlight; the buttons follow the box.
     void Pulse();
-    // REVSYNC: Dismiss @ 0x00534a40 -- start fading out.
+    // REVSYNC: Dismiss @ 0x00534a40 -- fade out; the choice buttons go.
     void Dismiss();
+
+    // Layout (TDialogPane::Pulse 0x005351d0): the stack's base on screen and
+    // this entry's place in it. A new entry appears there; a placed one
+    // slides to it over kSlideTicks.
+    void SetBase(int32_t x, int32_t y) { basex = x; basey = y; }
+    void MoveTo(int32_t offset);
     // Laid out on screen (retail +0x20 leaves -10000); its clock runs from then.
-    void Place();
-    [[nodiscard]] bool IsPlaced() const { return placed; }
+    [[nodiscard]] bool IsPlaced() const { return offx != kNotPlaced; }
+
+    // REVSYNC: Render @ 0x00534470 -- portrait, Ring and texts into the
+    // entry's surface (once; the text is white and takes its colour when drawn).
+    void Compose();
+    [[nodiscard]] bool IsComposed() const { return composed; }
+    // REVSYNC: DrawOverlay @ 0x00534b60 -- the surface over the map, faded,
+    // the text tinted, hovered choices ramped toward the highlight colour.
+    // `frac` is the progress (0..1) from this tick toward the next.
+    void Draw(float frac) const;
 
     [[nodiscard]] EMode Mode() const { return mode; }
     [[nodiscard]] TObjectInstance* Speaker() const;
@@ -109,29 +143,51 @@ class TDialogEntry
     [[nodiscard]] bool IsGone() const { return dismissed && fade == 0; }
     // 0 (invisible) .. kFadeTicks (fully shown).
     [[nodiscard]] int32_t Fade() const { return fade; }
+    [[nodiscard]] int32_t Height() const { return height; }
 
   private:
-    TSafeRef<TObjectInstance> speaker;      // +0x04
-    EMode mode = EMode::NpcSpeech;          // +0x08
-    int32_t ticksleft = kNoTimeout;         // +0x14
-    bool placed = false;                    // +0x20 != -10000
-    bool dismissed = false;                 // +0x50
-    int32_t fade = 0;                       // +0x54
-    int32_t fadetarget = kFadeTicks;        // +0x58
-    std::vector<std::string> texts;         // +0x5c/+0x60
-    std::vector<std::string> labels;        // the response buttons' names (mode 3)
+    static constexpr int32_t kNotPlaced = -10000;
+
+    void RemoveButtons();
+    [[nodiscard]] TBitmap* Portrait() const;
+
+    TDialogPane& pane;                              // +0x00
+    TSafeRef<TObjectInstance> speaker;              // +0x04
+    EMode mode = EMode::NpcSpeech;                  // +0x08
+    uint32_t color = 0xffffff;                      // +0x0c
+    uint32_t hicolor = 0xffffff;                    // +0x10
+    int32_t ticksleft = kNoTimeout;                 // +0x14
+    int32_t basex = 0, basey = 0;                   // +0x18 / +0x1c
+    int32_t offx = kNotPlaced, offy = kNotPlaced;   // +0x20 / +0x24
+    int32_t height = 0;                             // +0x2c
+    int32_t targetx = kNotPlaced, targety = kNotPlaced;    // +0x30 / +0x34
+    int32_t posx = 0, posy = 0;                     // +0x38 / +0x3c, 16.16
+    int32_t stepx = 0, stepy = 0;                   // +0x40 / +0x44, 16.16
+    std::unique_ptr<TSurface> surface;              // +0x48
+    bool composed = false;
+    bool dismissed = false;                         // +0x50
+    int32_t fade = 0;                               // +0x54
+    int32_t fadetarget = kFadeTicks;                // +0x58
+    std::vector<std::string> texts;                 // +0x5c / +0x60
+    std::vector<std::string> labels;                // the response buttons' names (mode 3)
+    std::vector<std::vector<std::string>> lines;    // each text, wrapped
+    std::array<SRect, kMaxTexts> rects{};           // +0x80, inclusive
+    std::array<TButton*, kMaxTexts> buttons{};      // +0x100, owned by the pane
+    std::array<int32_t, kMaxTexts> highlight{};     // +0x120
+    std::array<int32_t, kMaxTexts> hightarget{};    // +0x140
 };
 
 // REVSYNC: TDialogPane @ 0x00667cc8 (vtable 0x005a5c60, 0x1f0 bytes;
-// DIALOG.md §4). Not a panel: it manages the floating entries -- NPC lines
-// stacked from the top of the map view, the player's lines and the response
-// list from the bottom -- and the choices a script offers.
-class TDialogPane : public TPane
+// DIALOG.md §4). A button pane, not a panel: it manages the floating
+// entries -- NPC lines stacked from the top of the map view, the player's
+// lines and the response list from the bottom -- and the choices a script
+// offers, each a button named by its label.
+class TDialogPane : public TButtonPane
 {
   public:
     static constexpr int32_t kMaxChoices = 8;
 
-    TDialogPane() : TPane(0, 0, WIDTH, HEIGHT) {}
+    TDialogPane() : TButtonPane(0, 0, WIDTH, HEIGHT) {}
 
     bool Initialize() override;                     // 0x00534fd0
     void Close() override;                          // 0x00535060
@@ -139,6 +195,11 @@ class TDialogPane : public TPane
     void Pulse() override;                          // 0x005351d0
     void KeyPress(int32_t key, bool down) override; // 0x00535610
     void Joystick(int32_t key, bool down) override; // 0x00535760
+    void OnControl(TButton *button, int32_t msg) override;  // 0x005362b0
+    void Compose() override;                        // 0x00535500
+    void Draw() override;                           // 0x00535550
+    void DrawBackground() override {}               // entries draw in Compose/Draw;
+                                                    // the choice buttons are invisible
 
     // REVSYNC: AddChoice @ 0x00535870 -- `text` is the dialog tag shown for
     // the choice; `label` is where the script goes if it's picked. After an
@@ -168,9 +229,20 @@ class TDialogPane : public TPane
     [[nodiscard]] const char *ChosenText() const;
     [[nodiscard]] const std::vector<std::unique_ptr<TDialogEntry>>& Entries() const { return entries; }
 
+    // For the entries: the "Dialog" font (0x0065c134) and its line height,
+    // the "Ring" over the portrait, and the response buttons.
+    [[nodiscard]] const SFontAtlas* Font() const { return font; }
+    [[nodiscard]] int32_t LineHeight() const { return lineheight; }
+    [[nodiscard]] TBitmap* Ring() const { return ring; }
+    TButton* NewChoiceButton(const char *label);
+
   private:
+    static constexpr int32_t kSpeakerSlots = 16;
+
     void Choose(int32_t index);                     // a click or key 1-6
+    void LayOut();
     void DeleteGoneEntries();
+    uint32_t NpcColor(const TObjectInstance* speaker);
 
     std::vector<std::unique_ptr<TDialogEntry>> entries;    // +0x17c..
     TDialogEntry* responses = nullptr;                      // +0x190
@@ -181,6 +253,17 @@ class TDialogPane : public TPane
     bool committed = false;                                 // +0x1e4
     bool controlonwhilechoosing = false;                    // +0x1e8
     bool savedcontrol = true;                               // +0x1ec
+
+    // NPC colour slots (0x0066f6f8, counter 0x0066f73c): speakers by map
+    // index, kept for the whole run as retail's global table is.
+    std::array<int32_t, kSpeakerSlots> speakerslots = {-1, -1, -1, -1, -1, -1, -1, -1,
+                                                       -1, -1, -1, -1, -1, -1, -1, -1};
+    int32_t lastslot = 0;
+
+    const SFontAtlas* font = nullptr;
+    int32_t lineheight = 0;
+    TMulti* statusbardat = nullptr;                        // the Ring's archive
+    TBitmap* ring = nullptr;
 };
 
 #endif

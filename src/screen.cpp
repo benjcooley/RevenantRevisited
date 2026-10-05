@@ -457,7 +457,11 @@ void TPane::RouteCharPress(int32_t key, bool down)
 
 // The screen's pane tree reaches the swapchain through one HUD drawable,
 // registered for as long as the screen runs (docs/gameflow/ARCHITECTURE.md
-// §4.1). Panes never register drawables of their own.
+// §4.1). Panes never register drawables of their own. It sits over the HUD
+// panels not yet in the tree (their own drawables, z 0..10) and under the
+// cursor (z 1000).
+constexpr float kPaneLayerZ = 100.0f;
+
 class TScreenPaneLayer final : public THudDrawable
 {
   public:
@@ -514,7 +518,7 @@ bool TScreen::BeginScreen()
     {
         if (!panelayer)
             panelayer = std::make_unique<TScreenPaneLayer>(this);
-        Renderer->AddHud(panelayer.get(), 0.0f);
+        Renderer->AddHud(panelayer.get(), kPaneLayerZ);
     }
 
     return Initialize();
