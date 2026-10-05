@@ -724,7 +724,7 @@ The survey above found the 1998 exit code; this is what the port has now.
 | Teleport | `TObjectInstance::Teleport` (drop target, camera snap, `SetPos`), used by `Activate` and `pos` |
 | `CheckPos` / `SetPos` | retail: loaded = any sector of a cached level; a player bound for an unloaded level leaves the map (no delete notification); others clamp as retail; a missing level is the object's own |
 | Camera | retail `UpdateMapPos` (snap flag 8, far jump, z hysteresis, grid scrolling only with control) |
-| Level change | `TGameSession::EnterLevel` each tick: "Loading Map..." for a frame if uncached, `SetCurrentLevel`, players back into sectors; the pane's window stays empty while the camera's level isn't current |
+| Level change | `TGameSession::EnterLevel` each tick: an uncached level loads a slice (~30 ms) per frame under the text bar's retail loading line (`SetHealthDisplay(LOADMAPMSG)`, `SetLevels`, `ClearHealthDisplay`; the line stays in the feed) while `TPlayScreen::Update` holds the world; then the level is current and players go back into sectors (a player with none under it, as on a level with no sector files, is reported once and retried quietly); the pane's window stays empty while the camera's level isn't current |
 | Commands | `activate`, `follow`, `operate`, `setfromexit`, `pos` (no-argument form) retail; `exit`, `level` as before |
 | Members | `isoutside` |
 | Scripts | type-named prototypes attach (`ObjectScript` pass 2 matched the class name): the `master.s` door prototypes reach their doors |
@@ -787,16 +787,23 @@ Each step lands with a `--test` or filmstrip check; no parallel paths.
   body: the snap flag, the ~1024-unit jump, z hysteresis (moves under 9
   units ignored), grid scrolling only with smooth scrolling off and
   control on (`0x0065d0d0` is PlayScreen `+0x5e0`, the control flag).
-- **Level entry** is a session step run at the start of each tick
-  (`TGameSession::EnterLevel`, from `TPlayScreen::Update` beside
-  `ProcessRequests`): when the camera's level (`MapPane.GetMapLevel()`,
-  which follows the centeron target) differs from
-  `MapManager.CurrentLevel()`, it makes that level current (loading it
-  if not cached, after one frame showing `LOADMAPMSG` on the text bar)
-  and puts every player with no sector into the one under it — the
-  body `EnterWorld` uses at game start, shared. The pane's window binds
-  a map only when the map is the camera's level; until the session
-  switches, the window is empty.
+- **Level entry** is a session step run each tick after the simulation
+  (`TGameSession::EnterLevel`, from `TPlayScreen::Update`): when the
+  camera's level (`MapPane.GetMapLevel()`, which follows the centeron
+  target) differs from `MapManager.CurrentLevel()`, it makes that level
+  current and puts every player with no sector into the one under it
+  (the body `EnterWorld` uses at game start, shared). A level not yet
+  loaded comes in a slice per frame, as the game start's world step
+  does, under retail's loading line on the text bar (`LOADMAPMSG` and the
+  `texthealthbar` strip at progress × 180 / 1000), with the world held
+  meanwhile (`TGameSession::LevelLoading`). Retail drew the line straight
+  to the display between the sectors of a synchronous load; either way
+  nothing moves while the strip fills. A level with no sector files (some
+  exit.def targets, e.g. level 204) enters as an empty map; a player
+  with no sector under it is reported once and stays out of the map,
+  retried each tick as retail retried on each sector update. The pane's window binds a map only when the
+  map is the camera's level; until the session switches, the window is
+  empty.
 - **Not ported** (write-only in retail): the player's `onexit` pointer
   (`+0xe4`); `exit.def`'s `mapindex` and ambient fields (read, kept,
   never applied — retail's behaviour).

@@ -208,6 +208,8 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [-] | curmap written on every transition: the port keeps visited levels loaded and writes them when saving (ARCHITECTURE §7) | 2026-10-05 |
 | [x] | Walk-on of an unscripted AutoActivate exit: a level-41 teleport pad sends Locke to `Lv41Tel5`'s target | 2026-10-05 |
 | [x] | The loading bar fills per sector during the world load (staged `TGameMap` load) | 2026-10-05 |
+| [x] | A level's first visit loads a slice per frame under the text bar's retail loading line (`SetHealthDisplay`/`SetLevels`/`ClearHealthDisplay`), the world held | 2026-10-05 |
+| [ ] | First visit to level 0 stalls ~7 s in `TMapRenderer::SetMap` after the sectors load (renderer track; the strip is already full) | 2026-10-05 |
 
 **Exit:** Walking through a door swaps sectors; walking back restores the changed state.
 
@@ -254,6 +256,15 @@ These items aren't part of any single track but block others:
       animation finish event; gameflow consumes for T7.
 - [ ] Inventory use/give/get hooks — track ui owns these; gameflow
       consumes for T8 triggers.
+- [ ] One source for the HUD's geometry — track ui (common-host stage).
+      The PlayScreen's HUD hosting hard-codes the sidebar (188), bottom bar
+      (60) and tab strip (64 × 240, hit test); the dialog entries and the
+      text bar each define the side tabs as 52 (`kSideTabsWidth`), and the
+      dialog the status bar's bottom (0x70). Retail derives the text bar's
+      rect from the panes (`TPlayScreen` layout `0x0047bc50`).
+- [ ] `TPlayScreen::HideLowerPanes`/`ShowLowerPanes` are stubs with no
+      callers; retail hides and shows the text bar from its drawer states
+      (`0x47b874`, `0x47b8d0`, `0x47b96b`) — track ui (HUD drawers).
 
 ---
 

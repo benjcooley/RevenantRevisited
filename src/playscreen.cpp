@@ -353,26 +353,12 @@ void TPlayScreen::BindWorld()
     if (!mapRenderer)
         return;
 
-    TGameMap* map = MapManager.CurrentMap();
-    int32_t sx = 0, sy = 0;
-    if (Player)
-    {
-        S3DPoint pos = Player->Pos();
-        sx = pos.x >> SECTORWSHIFT;
-        sy = pos.y >> SECTORHSHIFT;
-
-        // The camera starts on the player and follows it (retail sets this up
-        // as TPlayScreen::Initialize makes the player the main one; the
-        // session builds the world before this screen is current).
-        MapPane.CenterOnObj(Player);
-        MapPane.SetMapPos(pos);
-        MapPane.SetMapLevel(Player->GetLevel());
-    }
-    else if (map)
-    {
-        log_warn("[playscreen] presenting level %d with no player", map->Level());
-    }
-    mapRenderer->SetMap(map, /*use_level_origin=*/false, sx, sy);
+    // The renderer anchors on the player when it is on the map's level;
+    // the camera's sector is the fallback.
+    S3DPoint center;
+    MapPane.GetMapPos(center);
+    mapRenderer->SetMap(MapManager.CurrentMap(), /*use_level_origin=*/false,
+                        center.x >> SECTORWSHIFT, center.y >> SECTORHSHIFT);
 }
 
 // Hand-rolled starter loadout for the editor's default Locke (games start
@@ -736,6 +722,14 @@ void TPlayScreen::Update()
     // Retail's movie player blocked the game: nothing ticks while one plays.
     if (movieplaying)
         return;
+
+    // Nor while a new level loads (retail loaded it synchronously): the
+    // session brings in a slice a frame under the loading line.
+    if (GameFlow.Session().LevelLoading())
+    {
+        GameFlow.Session().EnterLevel();
+        return;
+    }
 
     if (StartupSaveCycle)
         PulseSaveCycleTest();

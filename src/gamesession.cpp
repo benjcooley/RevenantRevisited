@@ -35,6 +35,26 @@ const TGameSession::SStep TGameSession::kLoadSteps[] = {
     { "world", &TGameSession::EnterWorld,    1000 },
 };
 
+namespace {
+
+// About a frame's worth of sector loading: a staged load gives the frame loop
+// back after this long, so the loading bars move while a level comes in.
+constexpr auto kLoadSlice = std::chrono::milliseconds(30);
+
+// Loads sectors of `level` for one slice; the map, complete once
+// !Loading(). nullptr if the level can't be loaded (a negative level).
+TGameMap* LoadSlice(int32_t level)
+{
+    const auto until = std::chrono::steady_clock::now() + kLoadSlice;
+    TGameMap* map = nullptr;
+    do
+        map = MapManager.LoadStaged(level, 1);
+    while (map && map->Loading() && std::chrono::steady_clock::now() < until);
+    return map;
+}
+
+}  // namespace
+
 // ***********
 // * Loading *
 // ***********
@@ -44,6 +64,7 @@ void TGameSession::Start(const SSessionStart& request)
     start    = request;
     nextStep = 0;
     state    = EState::Loading;
+    levelLoading = false;
 
     if (start.kind == SSessionStart::EKind::LoadSlot)
         log_info("[session] start: load '%s'", start.slot.c_str());
@@ -137,15 +158,10 @@ TGameSession::EStep TGameSession::EnterWorld()
         return EStep::Failed;
 
     const int32_t level = start.devLevel >= 0 ? start.devLevel : Player->GetLevel();
-    constexpr auto kSlice = std::chrono::milliseconds(30);
-    const auto until = std::chrono::steady_clock::now() + kSlice;
-    TGameMap* map = nullptr;
-    do
-        map = MapManager.LoadStaged(level, 1);
-    while (map && map->Loading() && std::chrono::steady_clock::now() < until);
+    TGameMap* map = LoadSlice(level);
     if (!map)
     {
-        log_error("[session] level %d has no sectors", level);
+        log_error("[session] level %d can't be loaded", level);
         return EStep::Failed;
     }
     if (map->Loading())
@@ -157,9 +173,15 @@ TGameSession::EStep TGameSession::EnterWorld()
     if (start.devLevel >= 0)
         PlaceAtDevStart(*map);
 
-    PlacePlayers(*map);
+    PlacePlayers(*map, /*entering=*/true);
 
-    const S3DPoint pos = Player->Pos();
+    // The camera starts on the main player and follows it (retail set this
+    // up as TPlayScreen::Initialize made the player the main one).
+    S3DPoint pos = Player->Pos();
+    MapPane.CenterOnObj(Player);
+    MapPane.SetMapPos(pos);
+    MapPane.SetMapLevel(Player->GetLevel());
+
     log_info("[session] entered level %d; player at (%d,%d,%d) in sector %d_%d",
              level, pos.x, pos.y, pos.z, pos.x >> SECTORWSHIFT, pos.y >> SECTORHSHIFT);
     return EStep::Done;
@@ -167,8 +189,11 @@ TGameSession::EStep TGameSession::EnterWorld()
 
 // REVSYNC: 0x00459b80 -- every player on the map's level who isn't in a
 // sector goes into the one under it. (Retail also took players that had
-// left the game out of the map; single player has none.)
-void TGameSession::PlacePlayers(TGameMap& map) const
+// left the game out of the map; single player has none.) Retail ran it on
+// each sector update, so a player left where the level has no sector was
+// retried as the window moved; the port retries each tick and reports it
+// only on the tick the level is entered.
+void TGameSession::PlacePlayers(TGameMap& map, bool entering) const
 {
     for (int32_t i = 0; i < PlayerManager.NumPlayers(); i++)
     {
@@ -180,14 +205,22 @@ void TGameSession::PlacePlayers(TGameMap& map) const
         TSector* sector = map.FindSector(pos.x >> SECTORWSHIFT, pos.y >> SECTORHSHIFT);
         if (!sector)
         {
-            log_warn("[session] no sector under player %d at (%d,%d,%d) on level %d",
-                     i, pos.x, pos.y, pos.z, map.Level());
+            if (entering)
+                log_warn("[session] no sector under player %d at (%d,%d,%d) on level %d",
+                         i, pos.x, pos.y, pos.z, map.Level());
             continue;
         }
         sector->AddObject(player);
     }
 }
 
+// REVSYNC: the map loader 0x004597b0 and its progress callback 0x00459a00.
+// Retail loaded a new level synchronously, drawing the text bar's loading
+// line straight to the display between sectors: LOADMAPMSG with the strip
+// under it filling to progress x 180 / 1000, then ClearHealthDisplay, which
+// leaves the message in the feed. The port can't present mid-tick, so it
+// loads a slice per frame while the PlayScreen holds the world -- what the
+// player saw either way: nothing moves while the strip fills (EXITS.md §3.2).
 bool TGameSession::EnterLevel()
 {
     if (state != EState::Ready)
@@ -195,32 +228,39 @@ bool TGameSession::EnterLevel()
 
     const int32_t level = MapPane.GetMapLevel();
     TGameMap* map = MapManager.CurrentMap();
+    bool entering = false;
     if (!map || map->Level() != level)
     {
-        // Retail loaded synchronously with LOADMAPMSG on the text bar
-        // (EXITS.md §3.2). The port shows it for a frame, then loads.
-        if (!MapManager.GetCached(level) && !loadAnnounced)
+        map = MapManager.GetCached(level);
+        if (!map || map->Loading())
         {
-            TextBar.Print("%s", DialogList.GetLine("LOADMAPMSG"));
-            loadAnnounced = true;
-            return false;
+            if (!levelLoading)
+            {
+                levelLoading = true;
+                TextBar.SetHealthDisplay(DialogList.GetLine("LOADMAPMSG"));
+            }
+            map = LoadSlice(level);
+            if (map && map->Loading())
+            {
+                const int32_t bar = int32_t(map->LoadFraction() * 180.0f);
+                TextBar.SetLevels(bar, bar);
+                return false;
+            }
+            levelLoading = false;
+            TextBar.ClearHealthDisplay();
         }
 
-        map = MapManager.SetCurrentLevel(level);
-        if (loadAnnounced)
-        {
-            TextBar.Clear();
-            loadAnnounced = false;
-        }
         if (!map)
         {
-            log_error("[session] level %d has no sectors", level);
+            log_error("[session] level %d can't be loaded", level);
             return false;
         }
+        MapManager.SetCurrentMap(map);
         log_info("[session] entered level %d", level);
+        entering = true;
     }
 
-    PlacePlayers(*map);
+    PlacePlayers(*map, entering);
     return true;
 }
 
@@ -267,6 +307,7 @@ void TGameSession::End()
 
     pendingLoad.clear();
     pendingSave.clear();
+    levelLoading = false;
     state = EState::Idle;
     log_info("[session] ended");
 }
