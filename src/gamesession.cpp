@@ -159,10 +159,10 @@ void TGameSession::PlacePlayers(TGameMap& map) const
     }
 }
 
-void TGameSession::EnterLevel()
+bool TGameSession::EnterLevel()
 {
     if (state != EState::Ready)
-        return;
+        return true;
 
     const int32_t level = MapPane.GetMapLevel();
     TGameMap* map = MapManager.CurrentMap();
@@ -174,7 +174,7 @@ void TGameSession::EnterLevel()
         {
             TextBar.Print("%s", DialogList.GetLine("LOADMAPMSG"));
             loadAnnounced = true;
-            return;
+            return false;
         }
 
         map = MapManager.SetCurrentLevel(level);
@@ -186,12 +186,13 @@ void TGameSession::EnterLevel()
         if (!map)
         {
             log_error("[session] level %d has no sectors", level);
-            return;
+            return false;
         }
         log_info("[session] entered level %d", level);
     }
 
     PlacePlayers(*map);
+    return true;
 }
 
 // The player isn't in a sector yet, so the move is a plain position write.

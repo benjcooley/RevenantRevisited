@@ -737,7 +737,7 @@ void TPlayScreen::Update()
     // A teleport to another level moved the camera there this tick: bring
     // the level in and put the player back into the map (retail did both in
     // the map pane's sector update).
-    GameFlow.Session().EnterLevel();
+    const bool levelready = GameFlow.Session().EnterLevel();
 
     // --exec console queue (no-op unless the flag was given).
     PulseStartupExec();
@@ -745,8 +745,11 @@ void TPlayScreen::Update()
     // Tick the area system: detects player Enter/Exit of each TArea's
     // RECTs, runs day/night ambient interpolation, fires CDPLAYLIST /
     // AUDIOENV transitions. Must run after CurrentMode()->Tick() so
-    // MapPane.GetMapPos reflects this frame's player position.
-    AreaManager.Pulse();
+    // MapPane.GetMapPos reflects this frame's player position, and only
+    // once the camera's level is in: retail entered the new area after the
+    // sector update had loaded it.
+    if (levelready)
+        AreaManager.Pulse();
 
     // Advance fixed-tick counters. CurrentMode()->Tick() owns gameplay frame
     // advancement; the renderer only samples/interpolates the current pose.
