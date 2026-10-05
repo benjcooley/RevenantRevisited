@@ -301,3 +301,20 @@ experience is called from `TCharacter::ResolveHit`.
   Str 18 → 20 and expires two seconds later; Exp 299 plus a kill → level
   2, Exp 302/700, Str 19 (+2 effect) Con 13, H 125/125 F 81/81
   M 131/131.
+
+## 11. Questions for the author
+
+Mirrored in [docs/gameflow/AUTHOR_QUESTIONS.md](../../gameflow/AUTHOR_QUESTIONS.md)
+(36–39). The port keeps retail's behaviour until answered.
+
+1. rules.def's comment names the STATREQS columns "... luck, mind", but
+   the shipped code gives the fifth value to Mind and the sixth to Luck
+   (§8). Which was intended?
+2. ClearPlayer divides the free attribute budget by six, so each free
+   attribute gets about 6–7 points and a character totals 63 rather than
+   84 (§8). Intended?
+3. Adding a stat effect removes every other active one, so only one buff
+   is in force at a time (§4). Intended?
+4. Some armor.def lines never worked as written: `FAT %15`, `LEV n`, and
+   the trailing `%` in `Hands 15%`; and `Fatigue %4` scales *current*
+   fatigue (§3). What were they meant to do?
