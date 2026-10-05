@@ -1632,14 +1632,33 @@ void TPlayScreen::SetFullScreen(bool on)
     interfacedirty = true;
 }
 
+// REVSYNC: 0x0047c550 -- demo mode: the main player plays itself (its AI
+// flag, set by name in retail: 0x00472db0 "AI"); leaving it gives the player
+// control back.
 void TPlayScreen::SetDemoMode(bool on)
 {
     demomode = on;
+    if (!on)
+        SetControlOn(true);
+    if (Player)
+        Player->SetFlag(OF_AI, on);
 }
 
+// REVSYNC: 0x0047c580 -- control on also ends demo mode. Control off lets go
+// of the right button (walking) and the movement keys through the screen's
+// own handlers, so nothing held keeps the player moving into a cutscene.
 void TPlayScreen::SetControlOn(bool on)
 {
     controlon = on;
+    if (on)
+    {
+        demomode = false;
+        return;
+    }
+    MouseClick(MB_RIGHTUP, 1, 1);
+    for (const int32_t key : { VK_UP, VK_LEFT, VK_RIGHT, VK_DOWN, int32_t('R'),
+                               VK_NEXT, VK_PRIOR, VK_HOME, VK_END })
+        KeyPress(key, false);
 }
 
 void TPlayScreen::HideLowerPanes()

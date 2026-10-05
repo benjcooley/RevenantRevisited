@@ -228,8 +228,9 @@ Answer inline (or in chat) and the owning doc gets updated.
 
 70. `scrollto <x> <y> <z>` jumps rather than scrolls: SetCameraPos
     (`0x00453940`) masks the scroll bit `centeron`/`scrollto` pass, so
-    only `scrollto <object>` scrolls. The opening's `scrollto 1207 667`
-    therefore cuts. Intended?
+    only `scrollto <object>` scrolls. Intended? (The opening's
+    `scrollto 1207 667` gives two coordinates where the parser wants
+    three, `%i %i %i` at `0x005cbc84`, so that line does nothing at all.)
 71. A block that ends with the camera off the player snaps it back to him
     (`TScript::End`), and one that ends with control off turns it back
     on. Were scripts written to rely on that, or is it a safety net?

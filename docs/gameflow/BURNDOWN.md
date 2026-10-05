@@ -214,6 +214,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | The loading bar fills per sector during the world load (staged `TGameMap` load) | 2026-10-05 |
 | [x] | A level's first visit loads a slice per frame under the text bar's retail loading line (`SetHealthDisplay`/`SetLevels`/`ClearHealthDisplay`), the world held | 2026-10-05 |
 | [ ] | First visit to level 0 stalls ~7 s in `TMapRenderer::SetMap` after the sectors load (renderer track; the strip is already full) | 2026-10-05 |
+| [ ] | Forensics: the scope of retail's object pulse and name lookups (`TMapIterator` `0x0044cf80`) -- the 3x3 window or the 3-5 sector preload square. The port pulses and searches the 3x3 window, so a script at its edge misses an object just outside (Hruthford's `GOTO HRUWAY01` with the camera at Cronus) | 2026-10-05 |
 
 **Exit:** Walking through a door swaps sectors; walking back restores the changed state.
 
