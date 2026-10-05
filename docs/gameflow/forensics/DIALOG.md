@@ -579,7 +579,7 @@ lifetimes in seconds), per the frame-rate-independent animation rule.
 | `src/script.cpp` | `SetWait`/`WaitSatisfied` retail-shaped; response branch reads the 1998 pane (`HasResponded`, `GetResponseLabel`, `Hide`); type 8 = `!o \|\| o->CommandDone()`; script end hides the 1998 pane | `SetWait` must open responses (§2.3); type 8 rule (§2.5); flag 4 + `End`; busy fields + deferred say; MP list not needed |
 | `src/command.cpp` | `CmdSay` 1998 (returns `CMD_WAIT` → interpreter `WaitChar`, type 3); `CmdWait` response forms map correctly but call 1998 `Show`/`SetCharacter`; `message`, `hideresponse`, `busysay`, `busymsg` = `CmdNotPorted` | §1 |
 | `src/character.cpp` | 1998 `Say`/`SayTag` (positional voice, 1998 durations, text to `AddPostCharText`, a no-op), 1998 `ResolveSay`; `ShowDialog` default false | §3 |
-| `src/sound.cpp` | scans `.wav` only, `Sound/effects` and `Sound/<Language>` in mounted archives + `RunPath/sound` | `.mp3` voices (all 1,749) and the module's `sound\<Language>\` never registered (BURNDOWN "MP3 voice support") |
+| `src/sound.cpp` | Retail sound list (step 2 done): `.wav` + `.mp3` from the resource directories at `Initialize` and the module's at `SetCurModule`, sorted, bsearch; `Play` without a position; `SampleLengthMs` (see "Voices in the port" below) | — |
 
 ### Proposed port order
 
@@ -614,6 +614,62 @@ Each step is checked on the opening scene (`keep.s` `SardokR`, lines
    close, once the drawer exists), `busysay`/`busymsg` (store only),
    `LoadGame` → `ResetForLoad`, camera retarget / `fadescreenout` →
    `ClearSpeech`.
+
+### Voices in the port (step 2, 2026-10-05)
+
+`TSoundPlayer` (`src/sound.{h,cpp}`) keeps retail's sound list. Decomps
+cited here are in `recon/discovered/dialog/` and `recon/classes/cls_0x41c7d0.cpp`.
+
+| Retail | Port |
+|---|---|
+| Sound init `0x0049a830` → `0x0049afd0`: `<ResourcePath>sound\effects\`, `<ResourcePath>sound\<Language>\`, the same two under `ImageryPath` when they differ; qsort | `Initialize` → `LoadResourceSounds` (`InitGlobals` step 22) |
+| Module mount `0x004609f0` → `0x0049b220` (after the dialog list): `<ModulesPath><module>\sound\effects\`, `…\sound\<Language>\`; qsort | `TModuleManager::SetCurModule` → `LoadModuleSounds`, after `DialogList.LoadModule()` |
+| Leaving a module `0x0049b400` (from `0x004609f0` and the module close `0x00460c10`) | `UnloadModuleSounds`, from `SetCurModule` when a module was active and from `TModuleManager::Close` |
+| Directory scan `0x0049ad20`: `*.wav`, then `*.mp3`, through the pack-aware findfirst `0x004a19d0`; name = file name up to its first `.` | `RegisterSounds` over `rev_find_files` |
+| `FindSound` `0x0049c430`: bsearch, `_stricmp` | `FindSound`: binary search, `stricmp` |
+| Load `0x0049b650` | `Mount` (decodes to 16-bit PCM) |
+| Play `0x0049b990(id, 0x7f, 1, NULL, 0x50, 700)`: once, full volume (relative to the SFX volume), no position (0x50/700 are the 3D path's distances) | `Play(id)`: volume 0 is full; without `spos` the sound isn't positioned |
+| Stop `0x0049bd90` | `Stop(id)` |
+| Sample length `0x0049c640` | `SampleLengthMs(id)` |
+
+On the GOG data: 1,057 `.wav` + 6 `.mp3` resource sounds and 1,743
+module voices, 2,806 in all. `I1LOC00` → `i1loc00.mp3`, 1,227 ms (say
+duration 12 + 29 = 41 ticks); `I1SAR00` → `i1sar00.mp3`, 3,343 ms (92
+ticks). Both agree with `afinfo` (47 and 128 MPEG frames × 1,152 /
+44,100 Hz). `build/test_audio_decode` pins the decoder lengths.
+
+Deviations (`REVSYNC-DIVERGENCE` in the code):
+
+- **Registration doesn't need output.** Retail has no sound list when
+  output is off or fails to open (`0x00668114`): `FindSound` fails and
+  every say falls back to text pacing. The port registers regardless, so a
+  `--headless` run paces voiced lines by the voice, as a run with sound
+  does. `Functioning()` says whether output is live, for step 3 to decide
+  how a player's "sound off" paces.
+- **`SampleLengthMs` decodes the file** (once per sound, cached). Retail
+  asks Miles for the total of the 2D sample playing the sound
+  (`AIL_sample_ms_position`) and gets 0 when it isn't playing. MP3 length
+  counts every frame, with no encoder-delay trim; that Miles' `mp3dec.asi`
+  does the same is **I**.
+- **Decoded when mounted.** Retail kept the file bytes (an LRU cache
+  against a memory budget) and Miles decoded while playing.
+- **Duplicate names:** a stable sort, so the first registered is found;
+  retail's qsort + bsearch find either. The shipped data has none.
+- **`.mp3` 2D-only flag** (`+0x18` bit 1) not kept: the port has no 3D
+  path, and `Play` with a position applies the 1998 pan law to any sound.
+- **Without a position, not positioned** for every caller (ambience,
+  `PLAY` one-shots): before, such a sound was pinned to the listener's
+  position at play time and faded as the listener moved away.
+- **A module sound still playing** when its module goes is freed (it
+  stops); retail drops it from the list without freeing it.
+- **Older port INI** (`ResourcePath = "."`): `.\sound\effects\` lies
+  outside every pack's directory, so `rev_find_files` looks the directory
+  up inside the base packs (the by-name fallback's counterpart) and the
+  1,063 resource sounds still register. Retail would find none.
+- **Boot order:** the port mounts the main module before `InitGlobals`, so
+  the module's sounds register before the resource sounds (retail: sound
+  init in engine init `0x00485870`, the module later). The list is sorted
+  after each step, so the result is the same.
 
 ## 7. Open questions (author)
 

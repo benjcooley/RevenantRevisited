@@ -34,9 +34,9 @@ bool TDeathPane::OpenDeath(int32_t x, int32_t y)
     if (!OpenChrome(x, y, WIDTH, HEIGHT, "death.dat", "background"))
         return false;
 
-    // REVSYNC-DIVERGENCE: retail plays the voice with extra parameters
-    // (0x0049b990(id, 0x7f, 1, 0, 0x50, 700), meaning unconfirmed); the port
-    // plays it at the sound player's defaults.
+    // REVSYNC: 0x0049b990(id, 0x7f, 1, NULL, 0x50, 700) — once, at full
+    // volume, not positioned (the last two are the 3D path's distances,
+    // unused without a position). The port's Play(id) is the same call.
     char* voice = const_cast<char*>(kDeathVoices[random(0, 4)]);
     const int32_t id = SoundPlayer.FindSound(voice);
     if (id >= 0 && SoundPlayer.Mount(id))

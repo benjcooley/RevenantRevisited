@@ -40,6 +40,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // ************************************************************************
@@ -1593,6 +1594,97 @@ bool exists_under_root(const char *root, const char *rel)
     return std::filesystem::is_regular_file(fn, ec);
 }
 
+// rev_find_files' search: the extension asked for (lower case), the names
+// found, and the lower-case names already listed (an earlier root's copy
+// hides a later one's).
+struct SFileFind
+{
+    std::string ext;
+    std::vector<std::string> &names;
+    std::unordered_set<std::string> seen;
+
+    bool HasExt(const std::string &name) const
+    {
+        return name.size() > ext.size() &&
+               vfs_lower(name.substr(name.size() - ext.size())) == ext;
+    }
+
+    void Add(std::string name)
+    {
+        if (seen.insert(vfs_lower(name)).second)
+            names.push_back(std::move(name));
+    }
+
+    // The entries of `arc` directly in its sub-directory `sub` (a lookup
+    // key: "" for the pack's top level, else "a/b/"), by the names the pack
+    // spells them. Returns whether any matched.
+    bool InPack(VFSArchive &arc, const std::string &sub)
+    {
+        bool any = false;
+        const mz_uint n = mz_zip_reader_get_num_files(&arc.zip);
+        for (mz_uint i = 0; i < n; ++i)
+        {
+            mz_zip_archive_file_stat st;
+            if (!mz_zip_reader_file_stat(&arc.zip, i, &st) || st.m_is_directory)
+                continue;
+            const std::string entry = vfs_key(st.m_filename);
+            if (entry.compare(0, sub.size(), sub) != 0 ||
+                entry.find('/', sub.size()) != std::string::npos || !HasExt(entry))
+                continue;
+            const std::string stored = st.m_filename;
+            Add(stored.substr(stored.find_last_of("/\\") + 1));
+            any = true;
+        }
+        return any;
+    }
+
+    // One search root (FUN_004a19d0): the mounted pack whose directory holds
+    // <root><dir> answers if it has any match, otherwise the loose
+    // directory does.
+    void UnderRoot(const char *root, const char *dir)
+    {
+        char fn[MAXPATHLEN];
+        strncpyz(fn, root, MAXPATHLEN);
+        strncatz(fn, dir, MAXPATHLEN);
+        rev_normalize_sep(fn);
+        const std::string key = vfs_key(fn);
+
+        auto in_pack = [&](VFSArchive *arc) {
+            if (!arc)
+                return false;
+            if (key == arc->mount)
+                return InPack(*arc, "");
+            if (key.size() <= arc->mount.size() ||
+                key.compare(0, arc->mount.size(), arc->mount) != 0 || key[arc->mount.size()] != '/')
+                return false;
+            return InPack(*arc, key.substr(arc->mount.size() + 1) + '/');
+        };
+        if (in_pack(g_module_archive.get()))
+            return;
+        for (const auto &arc : g_base_archives)
+            if (in_pack(arc.get()))
+                return;
+
+        std::error_code ec;
+        for (const auto &e : std::filesystem::directory_iterator(fn, ec))
+        {
+            std::string name = e.path().filename().string();
+            if (e.is_regular_file(ec) && HasExt(name))
+                Add(std::move(name));
+        }
+    }
+
+    // The legacy fallback: `dir` as a path inside the base packs, the first
+    // pack with a match answering.
+    void InBasePacks(const char *dir)
+    {
+        const std::string sub = vfs_key(dir) + '/';
+        for (const auto &arc : g_base_archives)
+            if (InPack(*arc, sub))
+                return;
+    }
+};
+
 // A name relative to the search roots: strips retail's leading ".\" (and
 // any separators after it). Absolute names (POSIX root, '\', a drive
 // letter or "..") return nullptr; they are opened as given.
@@ -1629,29 +1721,32 @@ std::vector<const char *> read_roots()
 
 } // anonymous namespace
 
-size_t VFSListByPrefix(const char *prefix, std::vector<std::string> &out)
+// REVSYNC: FUN_004a19d0 / FUN_004a1b20 — findfirst/findnext through the packs.
+size_t rev_find_files(const char *dir, const char *ext, std::vector<std::string> &names)
 {
-    if (!prefix) return 0;
-    const std::string pfx = vfs_lower(prefix);
-    const size_t before = out.size();
+    if (!dir || !ext)
+        return 0;
+    const size_t before = names.size();
+    SFileFind find{vfs_lower(ext), names, {}};
 
-    auto walk = [&](VFSArchive *arc) {
-        if (!arc) return;
-        const mz_uint n = mz_zip_reader_get_num_files(&arc->zip);
-        for (mz_uint i = 0; i < n; ++i)
-        {
-            mz_zip_archive_file_stat st;
-            if (!mz_zip_reader_file_stat(&arc->zip, i, &st)) continue;
-            if (st.m_is_directory) continue;
-            const std::string lo = vfs_lower(st.m_filename);
-            if (lo.compare(0, pfx.size(), pfx) != 0) continue;
-            out.push_back(vfs_basename_lower(st.m_filename));
-        }
-    };
+    const char *rel = relative_name(dir);
+    if (!rel)
+    {
+        find.UnderRoot("", dir);
+        return names.size() - before;
+    }
+    for (const char *root : read_roots())
+        find.UnderRoot(root, rel);
 
-    for (auto &up : g_base_archives) walk(up.get());
-    walk(g_module_archive.get());
-    return out.size() - before;
+  // REVSYNC-DIVERGENCE: the legacy fallback, as rev_fopen's by-name lookup.
+  // An older port INI (ResourcePath = ".") names directories outside any
+  // pack's directory, e.g. .\sound\effects\; when no root answers, the
+  // directory is looked up as a path inside the base packs. Not the
+  // module's: its directories are always named under ModulesPath, and its
+  // Sound\english\ would otherwise answer for the resources' too.
+    if (names.size() == before)
+        find.InBasePacks(rel);
+    return names.size() - before;
 }
 
 bool MountArchive(const char *name)
