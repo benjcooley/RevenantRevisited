@@ -99,6 +99,26 @@ constexpr uint32_t kObjFlagHovered  = 1u << 30;
 constexpr uint32_t kObjIdMask       = 0x0FFFFFFFu;
 constexpr uint32_t kObjFlagMask     = 0xF0000000u;
 
+// Inputs to the light pass's Classic model (lighting mode 0), which lights
+// the two G-buffer surface classes the way retail lit them: static tiles
+// with the DLS light tables, 3D meshes with T3DScene's vertex lighting.
+// The renderer only evaluates the model; the game layer derives these
+// values from the area ambient and the lighting settings
+// (classiclighting.cpp). Derivation: docs/LIGHTING_FIDELITY.md §2-§3, §6.
+struct SClassicLightModel {
+    // Static tiles (DLS light table).
+    float tile_ambient[3]        = {};    // ambient gain per channel
+    float tile_gain_per_mult     = 0.0f;  // full-intensity light gain per unit of light multiplier
+    // 3D meshes (T3DScene). Light values are in effective units, after the
+    // EnhancedLighting MODULATEnX scale; mesh_overbright is that scale.
+    float mesh_ambient[3]        = {};
+    float mesh_ambient_intensity = 0.0f;  // subtracted from each light's brightness, pre-scale
+    float mesh_dir_color[3]      = {};    // directional key light colour
+    float mesh_gain_per_mult     = 0.0f;  // light brightness at the source per unit of multiplier
+    float mesh_dir_to_light[3]   = { 0.0f, 0.0f, 1.0f };  // world space, unit length
+    float mesh_overbright        = 1.0f;  // ceiling on summed mesh light
+};
+
 // Opaque handles to renderer-owned resources. 0 is invalid.
 using MeshHandle = uint32_t;
 using RendererImagePairHandle = uint32_t;
@@ -609,10 +629,12 @@ public:
     //   4 = point-only   5 = recon heat 6 = shadow mask 7 = AO only
     //   8 = z edges      9 = ground/world height
     void SetTileViewMode(int32_t mode);
-    // 0 = retail 1998 (ambient + distance-only point lights, no sun,
-    //                  no shadows, no AO)
-    // 1 = modern (adds directional sun + screen-space contact shadows)
+    // 0 = Classic: the retail lighting model (SetClassicLightModel), no
+    //     sun, no shadows, no AO
+    // 1 = modern (ambient * light_col.w, directional sun + screen-space
+    //     contact shadows, AO, world-space point-light falloff)
     void SetLightingMode(int32_t mode);
+    void SetClassicLightModel(const SClassicLightModel& model);
     // Sun contact-shadow mask. The expensive receiver->sun ray march writes
     // a low-resolution R32F visibility buffer once; softness is then a cheap
     // separable blur of that buffer before deferred lighting samples it.
@@ -638,13 +660,23 @@ public:
     void SetShadowVariance(float sx, float sy, float sz);
 
     // ---- Point lights ---------------------------------------------------
-    // Rebuild each frame: ClearPointLights() then AddPointLight(...) per.
-    // Position is world xyz, radius is world units (linear-then-squared
-    // falloff to 0 at radius). Up to kMaxPointLights per frame; extras
-    // silently dropped.
+    // Rebuild each frame: ClearPointLights() then Add*PointLight(...) per.
+    // Up to kMaxPointLights per frame across both kinds; extras silently
+    // dropped.
     void ClearPointLights();
+    // Direct light: world xyz, radius in world units, colour * intensity
+    // added through the pow falloff in every lighting mode.
     void AddPointLight(float wx, float wy, float wz, float radius_wu,
                        float r, float g, float b, float intensity);
+    // Authored map light (an object's SLightDef): radius is the authored
+    // intensity, rgb the authored colour / 255, multiplier the resolved
+    // retail multiplier. Classic evaluates it with the retail model; modern
+    // scales it with SetRetailLightModernScale.
+    void AddRetailPointLight(float wx, float wy, float wz, float radius,
+                             float r, float g, float b, float multiplier);
+    // Modern-mode reading of retail lights: intensity = multiplier *
+    // gain_per_mult, world radius = radius * range_scale.
+    void SetRetailLightModernScale(float gain_per_mult, float range_scale);
 
     // ---- Deferred reconstruction (pass [3]) -----------------------------
     // Packed per-frame params for the light shader's iso inverse. Call
@@ -1249,6 +1281,10 @@ private:
         int32_t plight_count = 0;
         float   plight_pos[kMaxPointLights][4] = {};
         float   plight_col[kMaxPointLights][4] = {};
+        bool    plight_retail[kMaxPointLights] = {};   // AddRetailPointLight vs AddPointLight
+        SClassicLightModel classic;
+        float   retail_modern_gain_per_mult = 0.0f;
+        float   retail_modern_range_scale   = 1.0f;
     } light;
 
     // ---- Reconstruction params (per frame) ------------------------------
@@ -1274,6 +1310,8 @@ private:
     void ShutdownAOPipeline();
     void InitLightPipeline();
     void ShutdownLightPipeline();
+    void PushPointLight(bool retail, float wx, float wy, float wz, float radius,
+                        float r, float g, float b, float w);
     void RunAOPass();
     void InitShadowPipeline();
     void ShutdownShadowPipeline();

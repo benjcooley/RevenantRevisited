@@ -187,7 +187,7 @@ void TMapRenderer::DrawDebugTab()
             ImGui::SameLine(); if (ImGui::RadioButton("ao",      s.view_mode == 7)) s.view_mode = 7;
 
             ImGui::TextUnformatted("lighting mode:");
-            ImGui::SameLine(); if (ImGui::RadioButton("retail 1998", s.lighting_mode == 0)) s.lighting_mode = 0;
+            ImGui::SameLine(); if (ImGui::RadioButton("classic (retail)", s.lighting_mode == 0)) s.lighting_mode = 0;
             ImGui::SameLine(); if (ImGui::RadioButton("modern",      s.lighting_mode == 1)) s.lighting_mode = 1;
 
             ImGui::Separator();
@@ -464,38 +464,43 @@ void TMapRenderer::DrawDebugTab()
 
             // Ambient color + the live ambient term get overwritten each
             // frame from the active TArea (AMBLIGHT/AMBCOLOR via MapPane).
-            // Show them read-only, and expose the tunable divisor that
-            // controls the scaling from AMBLIGHT's arbitrary units to
-            // the 0..1 shader value. See maprenderer.cpp ambient bridge.
+            // Show them read-only. Classic maps AMBLIGHT exactly as retail
+            // (classiclighting.cpp); the divisor below only shapes the
+            // modern mode. See maprenderer.cpp ambient bridge.
             ImGui::BeginDisabled(true);
-            ImGui::ColorEdit3("ambient color (from area.def)", s.ambient_color);
+            ImGui::ColorEdit3("ambient color (live)", s.ambient_color);
             ImGui::SliderFloat("ambient (live)", &s.ambient, 0.0f, 1.0f);
             ImGui::EndDisabled();
+            ImGui::BeginDisabled(s.lighting_mode == 0);
             ImGui::SliderFloat("ambient divisor", &s.ambient_divisor,
                                10.0f, 100.0f, "%.1f");
+            ImGui::EndDisabled();
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip(
+                    "Modern mode only:\n"
                     "ambient = AMBLIGHT * Ambient3D / (divisor * 100)\n"
-                    "Lower = brighter ambient. AMBLIGHT is authored in\n"
-                    "arbitrary units. At divisor=100 with AMBLIGHT=30\n"
-                    "and Ambient3D=100, s.ambient = 0.30. Drop the\n"
-                    "divisor to push ambient overbright (paired with\n"
-                    "light_ceiling > 1.0 below).");
+                    "Lower = brighter ambient. Classic uses retail's\n"
+                    "light-table mapping, 8 * AMBLIGHT / 255 with the\n"
+                    "colour scaled to a max channel of 1\n"
+                    "(docs/LIGHTING_FIDELITY.md).");
 
+            ImGui::BeginDisabled(s.lighting_mode == 0);
             ImGui::SliderFloat("light ceiling", &s.light_ceiling,
                                0.25f, 8.0f, "%.2f",
                                ImGuiSliderFlags_Logarithmic);
+            ImGui::EndDisabled();
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip(
-                    "Per-channel clamp on summed light (ambient +\n"
-                    "point lights) before albedo multiply. Caps\n"
-                    "burn-out from stacked point lights. > 1.0 allows\n"
-                    "overbright; the linear-space GPU path needs this\n"
-                    "to match retail's non-linear palette boost.");
+                    "Modern mode only: per-channel clamp on summed\n"
+                    "light (ambient + point lights) before albedo\n"
+                    "multiply. > 1.0 allows overbright. Classic follows\n"
+                    "retail: tile light is uncapped (the colour\n"
+                    "saturates), mesh light caps at the\n"
+                    "EnhancedLighting overbright scale.");
 
             // ---- Time of day --------------------------------------------
             // Drives the day/night ambient blend in TArea::Pulse. The

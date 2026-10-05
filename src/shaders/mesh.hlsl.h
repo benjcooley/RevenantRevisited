@@ -113,7 +113,7 @@ fs_out main_ps(vs_out in_) {
     float3 N = normalize(in_.wnormal);
     fs_out o;
     o.albedo  = c;
-    o.normal  = float4(N * 0.5 + 0.5, 1.0);
+    o.normal  = float4(N * 0.5 + 0.5, 0.0);   // .a = surface class: 0 mesh, 1 tile
     o.scene_z = float4(in_.scene_z, 0.0, 0.0, 1.0);
     o.obj_id  = float4(0.0, 0.0, 0.0, 0.0);   // Phase 1: empty id
     return o;

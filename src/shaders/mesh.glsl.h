@@ -102,7 +102,7 @@ void main() {
     if (c.a < 0.01) discard;
     vec3 N = normalize(v_wnormal);
     o_albedo  = c;
-    o_normal  = vec4(N * 0.5 + 0.5, 1.0);
+    o_normal  = vec4(N * 0.5 + 0.5, 0.0);   // .a = surface class: 0 mesh, 1 tile
     o_scene_z = vec4(v_scene_z, 0.0, 0.0, 1.0);
     o_obj_id  = vec4(0.0, 0.0, 0.0, 0.0);   // Phase 1: empty id
 }

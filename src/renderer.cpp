@@ -33,6 +33,7 @@
 #include "surface.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cfloat>
 #include <cmath>
 #include <cstring>
@@ -71,6 +72,17 @@ constexpr int32_t kMaxTileProxyVerticesPerDraw = 2048;
 constexpr int32_t kMaxTileTightProxyHullVertices = 64;
 constexpr int32_t kMaxClipPolygonPoints = 512;
 constexpr float kTileProxyHullPadPx = 1.5f;
+
+// Light-pass fragment uniform block, in vec4s. Order matches the `params`
+// struct in src/shaders/light.*.h.
+constexpr int32_t kClassicModelVec4s = 4;   // classic_model[]: tile, mesh ambient, mesh key colour, mesh key dir
+constexpr int32_t kLightUniformVec4s =
+      6                                 // vp, recon, light_dir, light_col, ambient_col, settings
+    + 2 * TRenderer::kMaxPointLights    // plight_pos[], plight_col[]
+    + 4                                 // shadow, shadow_dir, shadow_world_dir, normal_lighting
+    + 1                                 // selected_obj_id
+    + kClassicModelVec4s
+    + 1;                                // point_model
 
 struct SScreenPoint { float x, y; };
 
@@ -2829,10 +2841,7 @@ void TRenderer::RunShadowPass()
 void TRenderer::InitLightPipeline()
 {
     constexpr int32_t kPL = TRenderer::kMaxPointLights;
-    // 6 scalar vec4s + kPL plight_pos + kPL plight_col
-    //                + shadow + shadow_dir + shadow_world_dir + normal_lighting
-    constexpr int32_t kUB_vec4s = 6 + kPL + kPL + 4 + 1;   // +1 = selected_obj_id (editor outline)
-    constexpr int32_t kUB_bytes = kUB_vec4s * 16;
+    constexpr int32_t kUB_bytes = kLightUniformVec4s * 16;
 
     sg_shader_desc sh = {};
     sh.attrs[0].name = "pos";
@@ -2874,6 +2883,11 @@ void TRenderer::InitLightPipeline()
     sh.fs.uniform_blocks[0].uniforms[11].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.uniform_blocks[0].uniforms[12].name = "selected_obj_id";
     sh.fs.uniform_blocks[0].uniforms[12].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[13].name = "classic_model";
+    sh.fs.uniform_blocks[0].uniforms[13].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.fs.uniform_blocks[0].uniforms[13].array_count = kClassicModelVec4s;
+    sh.fs.uniform_blocks[0].uniforms[14].name = "point_model";
+    sh.fs.uniform_blocks[0].uniforms[14].type = SG_UNIFORMTYPE_FLOAT4;
     sh.fs.images[0].name         = "albedo_tex";
     sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -2996,8 +3010,7 @@ void TRenderer::RunLightingPass()
     sg_apply_bindings(&bind);
 
     constexpr int32_t kPL = TRenderer::kMaxPointLights;
-    constexpr int32_t kUB_vec4s = 6 + kPL + kPL + 4 + 1;   // +1 = selected_obj_id (editor outline)
-    float u[kUB_vec4s * 4] = {};
+    float u[kLightUniformVec4s * 4] = {};
     int32_t o = 0;
     u[o++] = recon.ox;    u[o++] = recon.oy;
     u[o++] = recon.z_near; u[o++] = recon.zspan;
@@ -3011,10 +3024,20 @@ void TRenderer::RunLightingPass()
     u[o++] = float(light.plight_count);
     u[o++] = float(light.mode);
     u[o++] = recon.zoom;
+    // Retail lights are packed first; point_model.x tells the shader where
+    // the direct lights start.
+    int32_t packed[kPL] = {};
+    int32_t retail_count = 0;
+    for (int32_t i = 0; i < light.plight_count; ++i)
+        if (light.plight_retail[i]) packed[retail_count++] = i;
+    for (int32_t i = 0, n = retail_count; i < light.plight_count; ++i)
+        if (!light.plight_retail[i]) packed[n++] = i;
     for (int32_t i = 0; i < kPL; ++i)
-        for (int32_t k = 0; k < 4; ++k) u[o++] = light.plight_pos[i][k];
+        for (int32_t k = 0; k < 4; ++k)
+            u[o++] = (i < light.plight_count) ? light.plight_pos[packed[i]][k] : 0.0f;
     for (int32_t i = 0; i < kPL; ++i)
-        for (int32_t k = 0; k < 4; ++k) u[o++] = light.plight_col[i][k];
+        for (int32_t k = 0; k < 4; ++k)
+            u[o++] = (i < light.plight_count) ? light.plight_col[packed[i]][k] : 0.0f;
     u[o++] = light.sun_shadow_step_wu;
     u[o++] = light.sun_shadow_softness_px;
     u[o++] = float(light.sun_shadow_max_steps);
@@ -3037,6 +3060,20 @@ void TRenderer::RunLightingPass()
     u[o++] = float((selected_obj_id >>  8) & 0xFFu) / 255.0f;
     u[o++] = float((selected_obj_id >> 16) & 0xFFu) / 255.0f;
     u[o++] = float((selected_obj_id >> 24) & 0xFFu) / 255.0f;
+    const SClassicLightModel& cl = light.classic;
+    u[o++] = cl.tile_ambient[0]; u[o++] = cl.tile_ambient[1];
+    u[o++] = cl.tile_ambient[2]; u[o++] = cl.tile_gain_per_mult;
+    u[o++] = cl.mesh_ambient[0]; u[o++] = cl.mesh_ambient[1];
+    u[o++] = cl.mesh_ambient[2]; u[o++] = cl.mesh_ambient_intensity;
+    u[o++] = cl.mesh_dir_color[0]; u[o++] = cl.mesh_dir_color[1];
+    u[o++] = cl.mesh_dir_color[2]; u[o++] = cl.mesh_gain_per_mult;
+    u[o++] = cl.mesh_dir_to_light[0]; u[o++] = cl.mesh_dir_to_light[1];
+    u[o++] = cl.mesh_dir_to_light[2]; u[o++] = cl.mesh_overbright;
+    u[o++] = float(retail_count);
+    u[o++] = light.retail_modern_gain_per_mult;
+    u[o++] = light.retail_modern_range_scale;
+    u[o++] = 0.0f;
+    assert(o == kLightUniformVec4s * 4);
 
     const sg_range r = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &r);
@@ -3580,19 +3617,43 @@ void TRenderer::ClearPointLights()
     light.plight_count = 0;
 }
 
-void TRenderer::AddPointLight(float wx, float wy, float wz, float radius_wu,
-                              float r, float g, float b, float intensity)
+void TRenderer::PushPointLight(bool retail, float wx, float wy, float wz, float radius,
+                               float r, float g, float b, float w)
 {
     if (light.plight_count >= kMaxPointLights) return;
     const int32_t i = light.plight_count++;
     light.plight_pos[i][0] = wx;
     light.plight_pos[i][1] = wy;
     light.plight_pos[i][2] = wz;
-    light.plight_pos[i][3] = radius_wu;
+    light.plight_pos[i][3] = radius;
     light.plight_col[i][0] = r;
     light.plight_col[i][1] = g;
     light.plight_col[i][2] = b;
-    light.plight_col[i][3] = intensity;
+    light.plight_col[i][3] = w;
+    light.plight_retail[i] = retail;
+}
+
+void TRenderer::AddPointLight(float wx, float wy, float wz, float radius_wu,
+                              float r, float g, float b, float intensity)
+{
+    PushPointLight(false, wx, wy, wz, radius_wu, r, g, b, intensity);
+}
+
+void TRenderer::AddRetailPointLight(float wx, float wy, float wz, float radius,
+                                    float r, float g, float b, float multiplier)
+{
+    PushPointLight(true, wx, wy, wz, radius, r, g, b, multiplier);
+}
+
+void TRenderer::SetRetailLightModernScale(float gain_per_mult, float range_scale)
+{
+    light.retail_modern_gain_per_mult = gain_per_mult;
+    light.retail_modern_range_scale   = range_scale;
+}
+
+void TRenderer::SetClassicLightModel(const SClassicLightModel& model)
+{
+    light.classic = model;
 }
 
 // *************************************************************************
