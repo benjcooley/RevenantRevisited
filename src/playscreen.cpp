@@ -56,6 +56,7 @@
 #include "runtimemode.h"
 #include "sector.h"
 #include "spell.h"
+#include "textbar.h"
 #include "time.h"
 #include "uidragstate.h"
 #include "uiequiptest.h"
@@ -325,6 +326,13 @@ bool TPlayScreen::Initialize()
     g_playHudInitialized = InitializeUIHudMode();
     log_info("[playscreen] reconstructed HUD init = %s",
              g_playHudInitialized ? "OK" : "FAIL");
+
+    // REVSYNC: 0x0047abf8 / 0x0047adab -- the text bar, added after the side
+    // tabs and before the player status bar, so it draws over the dialog
+    // entries. After the HUD so it anchors to the HUD's map view.
+    if (!TextBar.Initialize())
+        log_error("[playscreen] Trouble initializing text bar");
+    AddPane(&TextBar);
 
     // The HUD starts as the loaded game left it (building the HUD resets it).
     if (Player)
@@ -633,6 +641,8 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
 
 void TPlayScreen::Close()
 {
+    RemovePane(&TextBar);
+    TextBar.Close();                        // REVSYNC: 0x0047b30c
     RemovePane(&DialogPane);
     DialogPane.Close();
     AutoMap.Close();
