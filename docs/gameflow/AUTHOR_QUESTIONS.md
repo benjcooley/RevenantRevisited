@@ -19,6 +19,7 @@ Answer inline (or in chat) and the owning doc gets updated.
 | S8 | A door transition frame by frame: the KEEPIN door into the Keep (`0_1_23`) | the fade's seven cover levels, the two-tick black hold, whether the cursor is covered | [forensics/SCREEN_SYSTEM.md](forensics/SCREEN_SYSTEM.md) §2.6 |
 | S9 | Any door or teleport with music playing | whether the music dips during a screen fade | SCREEN_SYSTEM §2.6 |
 | S10 | A click and a key press during the opening, before the first line | whether it fades out and restarts without the intro (PlayScreen `+0x5dc`) | SCREEN_SYSTEM §2.6 |
+| S11 | Enter the Keep from outside through its gate (`keepin`, forest side) and capture the first second inside | how dark the arrival corner is (the port shows it black beside a lit hall) | [forensics/EXITS.md](forensics/EXITS.md) §7 |
 
 ## Dialog ([forensics/DIALOG.md](forensics/DIALOG.md) §7)
 
