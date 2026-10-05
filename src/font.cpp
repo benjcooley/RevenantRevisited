@@ -20,7 +20,7 @@
 
 PTBitmap TFont::GetChar(unsigned char ch)
 {
-    if (ch < firstchar || ch > (firstchar + numchars))
+    if (ch < firstchar || ch >= firstchar + numchars)
         return nullptr;
 
     PTBitmap character = (PTBitmap)chars[ch - firstchar].ptr();

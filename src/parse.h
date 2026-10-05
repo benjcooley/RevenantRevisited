@@ -41,7 +41,7 @@ class TStringParseStream : public TParseStream
     TStringParseStream(char *buffer, int32_t len = 0x7FFFFFFF)
         { buf = buffer; end = buf + len; ptr = buffer; }
     virtual const char *Name() const { return "String"; }
-    virtual int32_t GetChar() { if (!*ptr || ptr == end) return ENDOFSTREAM; else return *ptr++; }
+    virtual int32_t GetChar() { if (!*ptr || ptr == end) return ENDOFSTREAM; else return (uint8_t)*ptr++; }
     virtual void Reset() { ptr = buf; }
     virtual uint32_t GetPos() const { return (uint32_t)(ptr - buf); }
     virtual void SetPos(uint32_t newpos) { ptr = (char *)(buf + newpos); }

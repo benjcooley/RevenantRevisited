@@ -89,3 +89,35 @@ char32_t DecodeChar(const char*& p, ETextEncoding encoding)
         return DecodeUtf8(p);
     return Cp1252ToUnicode(static_cast<uint8_t>(*p++));
 }
+
+std::string ToUtf8(const char* text, ETextEncoding encoding)
+{
+    std::string out;
+    if (!text)
+        return out;
+    while (*text)
+    {
+        const char32_t cp = DecodeChar(text, encoding);
+        if (cp < 0x80)
+            out += char(cp);
+        else if (cp < 0x800)
+        {
+            out += char(0xC0 | (cp >> 6));
+            out += char(0x80 | (cp & 0x3F));
+        }
+        else if (cp < 0x10000)
+        {
+            out += char(0xE0 | (cp >> 12));
+            out += char(0x80 | ((cp >> 6) & 0x3F));
+            out += char(0x80 | (cp & 0x3F));
+        }
+        else
+        {
+            out += char(0xF0 | (cp >> 18));
+            out += char(0x80 | ((cp >> 12) & 0x3F));
+            out += char(0x80 | ((cp >> 6) & 0x3F));
+            out += char(0x80 | (cp & 0x3F));
+        }
+    }
+    return out;
+}

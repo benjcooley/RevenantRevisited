@@ -23,6 +23,7 @@
 #include "fonttable.h"
 #include "renderer.h"
 #include "surface.h"
+#include "textencoding.h"
 #include "time.h"
 
 #include <algorithm>
@@ -775,7 +776,7 @@ void TDialogPane::AddSpeech(TObjectInstance* speaker, const char *text, int32_t 
     const TDialogEntry::EMode mode = player ? TDialogEntry::EMode::PlayerSpeech
                                             : TDialogEntry::EMode::NpcSpeech;
     const uint32_t color = player ? kPlayerColor : NpcColor(speaker);
-    log_debug("[dialog] %s says: %s", speaker->GetName() ? speaker->GetName() : "?", text);
+    log_debug("[dialog] %s says: %s", speaker->GetName() ? speaker->GetName() : "?", ToUtf8(text).c_str());
     entries.push_back(std::make_unique<TDialogEntry>(*this, speaker, mode, color, kHighlightColor,
                                                      std::vector<std::string>{text},
                                                      std::vector<std::string>{}, ticks));
