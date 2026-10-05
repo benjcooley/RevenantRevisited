@@ -137,6 +137,9 @@ class TComplexObject : public TObjectInstance
       // Main pulse (done before frame is drawn)
 
     bool IsInRoot() { return (doing == root); }
+    bool IsIdleInRoot() const { return doing && doing == root && desired == root && !doing->transition; }
+        // REVSYNC: the speech wait (0x00492d70 type 8) -- back in the root state, nothing
+        // else desired, not transitioning
         // Returns whether the object is in their root state or not
 
     void Try(const char *state)

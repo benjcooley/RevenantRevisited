@@ -236,6 +236,8 @@ class TCharacter : public TComplexObject
     bool SetFighting(TCharacter* newtarget);
       // Sets the current fighting target
     bool IsTalking() { if (doing && doing->Is("say")) return true; return false; }
+    void StopTalking();
+      // REVSYNC: 0x004d6000 -- silence the voice and end the say action
       // Returns whether character is talking or not
     bool IsWalkMode() { if (root && 
         ((IsCombat() && (root->Is("combat") || root->Is("comhand"))) ||
@@ -586,6 +588,7 @@ class TCharacter : public TComplexObject
 
   // Invisible Spell Addition
     bool invisible_spell = false;   // retail +0x1a4
+    int32_t voice = -1;             // retail +0x260: the sound id of the line being spoken, -1 none
 
   // Teleport Coordinates
     int32_t teleport_level;

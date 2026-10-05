@@ -443,8 +443,7 @@ void TDialogPane::AddSpeech(TObjectInstance* speaker, const char *text, int32_t 
                                                      std::vector<std::string>{}, ticks));
 }
 
-// REVSYNC: 0x00536010. Retail's StopTalking (0x004d6000) also stops the
-// speaker's voice; that arrives with the speech port.
+// REVSYNC: 0x00536010
 void TDialogPane::SkipSpeech()
 {
     if (!IsOpen() || responses)
@@ -452,7 +451,7 @@ void TDialogPane::SkipSpeech()
     for (const std::unique_ptr<TDialogEntry>& entry : entries)
     {
         if (TObjectInstance* speaker = entry->Speaker(); speaker && speaker->IsCharacter())
-            static_cast<TCharacter*>(speaker)->ForceCommandDone();
+            static_cast<TCharacter*>(speaker)->StopTalking();
         entry->Dismiss();
     }
 }
