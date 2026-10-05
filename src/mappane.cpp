@@ -1497,7 +1497,11 @@ TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t obj
     return nullptr;
 }
 
-TObjectInstance* TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool partial, int32_t objset)
+// REVSYNC: FindClosestObject @ 0x00451fe0 / 0x00451de0. Names match exactly
+// (ignoring case) unless `partial` asks for an abbreviation match. The 1998
+// source had the two branches the other way round; retail's callers pass
+// `partial` for the abbreviated forms (`get`, `select`, `swap`).
+TObjectInstance* TMapPane::FindClosestObject(const char *name, S3DPoint frompos, bool partial, int32_t objset)
 {
     TObjectInstance* closest = nullptr;
     int32_t closestdist = 0x800000;
@@ -1505,20 +1509,11 @@ TObjectInstance* TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool 
     for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
     {
         const char *instname = i->GetName();
+        if (!instname)
+            continue;
 
-        bool found = false;
-
-        if (partial)
-        {
-            if (instname && stricmp(name, instname) == 0)
-                 found = true;
-        }
-        else
-        {
-            if (instname && abbrevcmp(name, instname) > 0)
-                 found = true;
-        }
-
+        const bool found = partial ? abbrevcmp(name, instname) > 0
+                                   : stricmp(name, instname) == 0;
         if (found)
         {
             S3DPoint pos;
@@ -1535,7 +1530,7 @@ TObjectInstance* TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool 
     return closest;
 }
 
-TObjectInstance* TMapPane::FindClosestObject(char *name, TObjectInstance* from, bool partial, int32_t objset)
+TObjectInstance* TMapPane::FindClosestObject(const char *name, TObjectInstance* from, bool partial, int32_t objset)
 {
     S3DPoint frompos;
     if (from)

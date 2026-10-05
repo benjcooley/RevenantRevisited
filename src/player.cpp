@@ -13,6 +13,7 @@
 #include "statusbar.h"
 #include "equip.h"
 #include "gameflow.h"
+#include "logging.h"
 #include "playscreen.h"
 #include "inventory.h"
 #include "logging.h"
@@ -250,6 +251,101 @@ void TPlayer::ClearPlayer()
         SetHealth(MaxHealth());
         SetFatigue(MaxFatigue());
         SetMana(MaxMana());
+    }
+}
+
+// Retail's per-skill "experience for the next level" statistics (CLASS.DEF
+// PLAYER OBJSTATS, retail ids 0x3e + skill). The 1998 stat layout the port
+// keeps has no slots for them, so they're found by name. SK_* order.
+static constexpr const char* kSkillNextExpStat[NUM_SKILLS] =
+{
+    "AttackNxtExp", "DefenseNxtExp", "InvokeNxtExp", "HandsNxtExp",
+    "KnifeNxtExp", "SwordNxtExp", "BludgeonNxtExp", "AxesNxtExp",
+    "BowsNxtExp", "StealthNxtExp", "LockPickNxtExp",
+};
+
+// REVSYNC: TPlayer::SetPlayerLevel @ 0x0051d840 (`playerlevel`) -- rebuild
+// the player as a fresh level-'level' character of its class. Retail stat
+// ids against the port's: 0x22+i PLRSTAT_FIRST+i, 0x28+s SK_FIRST+s,
+// 0x33+s SKE_FIRST+s, 0x3e+s "<skill>NxtExp", 0x14 "AttackLevel".
+void TPlayer::SetPlayerLevel(int32_t level)
+{
+    SetLevel(level);
+
+  // Attributes from the class's STATREQS: |req|, or 14 where the class
+  // leaves the attribute free.
+    const SClassData* cd = chardata->classdata;
+    for (int32_t i = 0; i < NUM_PLRSTATS; i++)
+    {
+        const int32_t req = std::abs(cd->statreqs[i]);
+        SetObjStat(PLRSTAT_FIRST + i, req != 0 ? req : 14);
+    }
+
+  // Every skill back to level 0 with no experience, 300 to reach level 1.
+    for (int32_t s = 0; s < NUM_SKILLS; s++)
+    {
+        SetObjStat(SK_FIRST + s, 0);
+        SetObjStat(SKE_FIRST + s, 0);
+        SetStat(kSkillNextExpStat[s], 300);
+    }
+
+  // Each level above the first: two attribute points (one from level 15
+  // on) to random attributes, then experience for every skill. Retail picks
+  // from random(0, 6), seven ids from Strn, so one pick in seven lands on
+  // the Attack skill, the id after Luck. Kept.
+    for (int32_t lvl = 1; lvl < level; lvl++)
+    {
+        for (int32_t points = (lvl < 15) ? 2 : 1; points > 0; points--)
+        {
+            const int32_t pick = random(0, NUM_PLRSTATS);
+            const int32_t stat = (pick < NUM_PLRSTATS) ? PLRSTAT_FIRST + pick : SK_FIRST + SK_ATTACK;
+            SetObjStat(stat, GetObjStat(stat) + 1);
+        }
+        for (int32_t s = 0; s < NUM_SKILLS; s++)
+            AddSkillExp(s, 333 + 100 * (lvl - 1));
+    }
+
+    SetStat("AttackLevel", level);
+
+    SetHealth(MaxHealth());
+    SetMana(MaxMana());
+    SetFatigue(MaxFatigue());
+
+  // Retail ends with TPlayer::RefreshStats (0x0051c660), which the port
+  // doesn't have (ClearPlayer stands in the same way): it rebuilds the
+  // equipment- and spell-modified copy of the stats, caps those copies of
+  // the attributes and skills at 30, and clamps health/mana/fatigue to their
+  // maximums -- nothing to clamp here, they were just filled.
+    log_info("[player] level %d: STR=%d CON=%d AGI=%d RFL=%d MND=%d LCK=%d "
+             "AttackLevel=%d H=%d/%d M=%d/%d F=%d/%d",
+             (int)Level(), (int)Strn(), (int)Cons(), (int)Agil(), (int)Rflx(),
+             (int)Mind(), (int)Luck(), (int)GetStat("AttackLevel"),
+             (int)Health(), (int)MaxHealth(), (int)Mana(), (int)MaxMana(),
+             (int)Fatigue(), (int)MaxFatigue());
+}
+
+// REVSYNC: TPlayer::AddSkillExp @ 0x0051ac90 -- add experience to a skill.
+// Reaching the next threshold raises the skill one level (one per call) and
+// sets the threshold after it; at the top level the experience pins to that
+// level's figure. Retail first forwards the call in a network game, or
+// drops it for a remote player (no multiplayer in the port). Retail reads
+// the equipment-modified skill level (the RefreshStats copy); the port has
+// only the base one.
+void TPlayer::AddSkillExp(int32_t skillnum, int32_t exp)
+{
+    const int32_t have = GetObjStat(SKE_FIRST + skillnum);
+    const int32_t level = GetObjStat(SK_FIRST + skillnum);
+    if (level >= TRules::kMaxSkillLevel)
+    {
+        SetObjStat(SKE_FIRST + skillnum, Rules.SkillExpForLevel(TRules::kMaxSkillLevel));
+        return;
+    }
+
+    SetObjStat(SKE_FIRST + skillnum, have + exp);
+    if (have + exp >= Rules.SkillExpForLevel(level + 1))
+    {
+        SetObjStat(SK_FIRST + skillnum, level + 1);
+        SetStat(kSkillNextExpStat[skillnum], Rules.SkillExpForLevel(level + 2));
     }
 }
 

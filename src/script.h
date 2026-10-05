@@ -27,6 +27,7 @@
 #include "command.h"
 #include "saferef.h"
 
+#include <string>
 #include <vector>
 
 // REVSYNC: trigger type constants confirmed against retail
@@ -191,7 +192,7 @@ class TScript
     // when it has and nothing is being waited for, or when the wait is over.
     void Continue(TObjectInstance* context, bool commanddone);
     // REVSYNC: Jump @ 0x00493fa0
-    void Jump(TObjectInstance* context, char *label);
+    void Jump(TObjectInstance* context, const char *label);
     // REVSYNC: Break @ 0x004942a0 — sets SCRIPT_PAUSED bit
     void Break();
     // REVSYNC: Resume @ 0x004942b0 — clears SCRIPT_PAUSED bit
@@ -209,8 +210,22 @@ class TScript
     //   prototype, no pending or current trigger, no open blocks.
     void Reset();
     [[nodiscard]] bool Running() const { return priority > 0; }
-    void Trigger(int32_t newtrig, const char *triggerstr = nullptr)
-      { newtrigger = newtrig; if (triggerstr) strcpy(newtriggerstr, triggerstr); }
+
+    // REVSYNC: 0x00492640 -- asks for a manual trigger (TRIGGER, DIALOG,
+    // ACTIVATE, USE, GIVE, GET, COMBAT, DEAD), which starts at the next
+    // Continue. It needs a trigger of that type named `str` or `str2` (a
+    // nameless request matches any). `user` and `second` are the objects the
+    // event concerns; the block addresses them by their aliases ("user",
+    // "item", "enemy"). Refused while another object's trigger runs here.
+    bool Trigger(int32_t type, const char *str = nullptr, const char *str2 = nullptr,
+                 TObjectInstance* user = nullptr, const char *useras = nullptr,
+                 TObjectInstance* other = nullptr, const char *otheras = nullptr);
+    // The object one of the running trigger's aliases names, or nullptr.
+    [[nodiscard]] TObjectInstance* Alias(const char *name) const;
+    // REVSYNC: AddChoice @ 0x004932a0 (single player) -- offers a choice
+    // through the dialog pane; the script then owns the dialog until the
+    // response (taken flag 4, which `choice` sets in retail).
+    void AddChoice(const char *label, const char *text);
     [[nodiscard]] int32_t GetTrigger() const { return trigger; }
     [[nodiscard]] int32_t GetPriority() const { return priority; }
     [[nodiscard]] TScriptProto* GetScriptProto() const { return proto; }
@@ -225,8 +240,7 @@ class TScript
     [[nodiscard]] bool IsWaiting() const     { return wait != EScriptWait::None; }
 
     // REVSYNC: User @ 0x00492ac0 — the player this script deals with: the
-    // object that set off the running trigger if it's a player, else the
-    // main player.
+    // running trigger's "user" when that is a player, else the main player.
     [[nodiscard]] TObjectInstance* User() const;
 
     static void PauseAllScripts() { pauseall = true; }
@@ -236,6 +250,9 @@ class TScript
     // REVSYNC: 0x004927b0 — does trigger `st` fire now? Records the object
     // that set it off in `triggerer`.
     bool Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* context);
+    // The prototype search of 0x00492640: is there a `type` trigger a request
+    // naming `str`/`str2` would start?
+    [[nodiscard]] bool HasTrigger(int32_t type, const char *str, const char *str2) const;
     // REVSYNC: 0x00492d70 — is the current wait over?
     bool WaitSatisfied(bool commanddone);
 
@@ -246,7 +263,8 @@ class TScript
     TScriptProto* curproto   = nullptr;            // Pointer to the current prototype
     int32_t newtrigger       = 0;                  // Next trigger type to execute
     int32_t trigger          = 0;                  // Current trigger type executing
-    char    newtriggerstr[MAXSCRIPTNAME] = {};     // Name of what is triggering
+    char    newtriggerstr[MAXSCRIPTNAME] = {};     // +0x20: name the requested trigger matches
+    char    newtriggerstr2[MAXSCRIPTNAME] = {};    // +0x34: second name a USE trigger matches
 
     // Offset of the next line to execute in curproto's text, or kNotRunning.
     // (The 1998 engine kept a raw char*; the parse streams address text by
@@ -262,12 +280,27 @@ class TScript
     PSScriptTrigger curtrigger = nullptr;          // The current trigger record
 
     // Retail state (SCRIPT_ENGINE.md §2).
-    TSafeRef<TObjectInstance> triggerer;           // +0xc4: what set off the running trigger ("user")
+    // +0x00: what the running block took and End gives back. Only the
+    // dialog bit is ported; control (1) and the camera (8) follow their
+    // commands.
+    static constexpr uint32_t kTakenControl = 1;
+    static constexpr uint32_t kTakenDialog  = 4;
+    static constexpr uint32_t kTakenCamera  = 8;
+    uint32_t taken           = 0;
+    TSafeRef<TObjectInstance> triggerer;           // +0xc4: what set off the running trigger
+    TSafeRef<TObjectInstance> second;              // +0xc8: the other object it concerns
+    std::string useralias;                         // +0xcc: the block's name for `triggerer`
+    std::string secondalias;                       // +0xd0: the block's name for `second`
     TSafeRef<TObjectInstance> triggerguard;        // +0x10: no re-trigger while this exists
     EScriptWait wait         = EScriptWait::None;  // +0xb4
     int32_t     waitframes   = 0;                  // +0xbc for Frames
     TSafeRef<TObjectInstance> waitobject;          // +0xbc for CharDone/Say/Death
 };
+
+// The names a trigger's objects go by in its block (retail's alias strings).
+inline constexpr const char *kAliasUser  = "user";
+inline constexpr const char *kAliasItem  = "item";
+inline constexpr const char *kAliasEnemy = "enemy";
 
 // **************
 // * TGameState *

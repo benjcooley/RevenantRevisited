@@ -159,10 +159,14 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
         break;
 
       case TRIGGER_TRIGGER:
-      case TRIGGER_USE:
       case TRIGGER_GIVE:
       case TRIGGER_GET:
         fires = newtrigger == st->type && !stricmp(st->name, newtriggerstr);
+        break;
+
+      case TRIGGER_USE:                     // either name the request gave
+        fires = newtrigger == TRIGGER_USE &&
+                (!stricmp(st->name, newtriggerstr) || !stricmp(st->name, newtriggerstr2));
         break;
 
       case TRIGGER_DIALOG:
@@ -186,6 +190,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
                 dx * dx + dy * dy <= 2 * st->dist * st->dist)
             {
                 triggerer = Player;
+                useralias = kAliasUser;
                 fires = true;
             }
         }
@@ -199,6 +204,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
             if (st->cube.In(Player->Pos()))
             {
                 triggerer = Player;
+                useralias = kAliasUser;
                 fires = true;
             }
         }
@@ -214,6 +220,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
             if (character && !named)
             {
                 triggerer = inside;
+                useralias = kAliasUser;
                 fires = true;
             }
         }
@@ -235,7 +242,66 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
 TObjectInstance* TScript::User() const
 {
     TObjectInstance* user = triggerer.Get();
-    return (user && user->ObjClass() == OBJCLASS_PLAYER) ? user : Player;
+    if (user && user->ObjClass() == OBJCLASS_PLAYER && !stricmp(useralias.c_str(), kAliasUser))
+        return user;
+    return Player;
+}
+
+// REVSYNC: 0x00492640, the prototype search. A nameless request matches any
+// trigger of its type; otherwise the trigger's name must be one of the two.
+bool TScript::HasTrigger(int32_t type, const char *str, const char *str2) const
+{
+    for (TScriptProto* p = topproto; p; p = p->ParentProto())
+        for (int32_t c = 0; c < p->NumTriggers(); c++)
+        {
+            const SScriptTrigger& st = p->triggers[c];
+            if (st.type != type)
+                continue;
+            if ((!str && !str2) || (str && !stricmp(st.name, str)) || (str2 && !stricmp(st.name, str2)))
+                return true;
+        }
+    return false;
+}
+
+// REVSYNC: 0x00492640
+bool TScript::Trigger(int32_t type, const char *str, const char *str2,
+                      TObjectInstance* user, const char *useras,
+                      TObjectInstance* other, const char *otheras)
+{
+    if (!HasTrigger(type, str, str2))
+        return false;
+
+  // While an object's trigger runs here, only that object may ask again.
+  // Retail answers anyone else with the script's busy line (0x00494620), a
+  // multiplayer reply built on busysay/busymsg, which aren't ported.
+    if (triggerguard.Id() != -1)
+    {
+        const bool asuser = user && useras && !stricmp(useras, kAliasUser);
+        if (!asuser || user != triggerguard.Get())
+            return false;
+    }
+
+    newtrigger = type;
+    if (str)
+        snprintf(newtriggerstr, sizeof(newtriggerstr), "%s", str);
+    if (str2)
+        snprintf(newtriggerstr2, sizeof(newtriggerstr2), "%s", str2);
+    triggerer = user;
+    useralias = useras ? useras : "";
+    second = other;
+    secondalias = otheras ? otheras : "";
+    return true;
+}
+
+// The resolver's alias step (in 0x0041e690): +0xcc names +0xc4, +0xd0 names
+// +0xc8.
+TObjectInstance* TScript::Alias(const char *name) const
+{
+    if (!useralias.empty() && !stricmp(name, useralias.c_str()))
+        return triggerer.Get();
+    if (!secondalias.empty() && !stricmp(name, secondalias.c_str()))
+        return second.Get();
+    return nullptr;
 }
 
 // REVSYNC: SetWait @ 0x00492b00 (single player). Response waits name the
@@ -246,6 +312,17 @@ void TScript::SetWait(EScriptWait type, TObjectInstance* object, int32_t frames)
     if (wait != EScriptWait::None)
         return;
 
+    TObjectInstance* waiter = User();
+    const bool response = type == EScriptWait::Response || type == EScriptWait::ResponseControlOn;
+    if (response && waiter == Player)
+    {
+        // Retail sets no wait if the choices are already up, so the block
+        // runs on into its first label (DIALOG.md §2.3).
+        if (DialogPane.IsShowingResponses())
+            return;
+        DialogPane.ShowResponses(waiter, type == EScriptWait::ResponseControlOn);
+    }
+
     wait = type;
     waitframes = frames;
     switch (type)
@@ -254,7 +331,7 @@ void TScript::SetWait(EScriptWait type, TObjectInstance* object, int32_t frames)
       case EScriptWait::ResponseControlOn:
       case EScriptWait::ScreenFade:
       case EScriptWait::BuySell:
-        waitobject = User();
+        waitobject = waiter;
         break;
       default:
         waitobject = object;
@@ -279,12 +356,15 @@ bool TScript::WaitSatisfied(bool commanddone)
 
       case EScriptWait::Response:
       case EScriptWait::ResponseControlOn:
-        if (!DialogPane.HasResponded())
-            return false;
-        if (char* label = DialogPane.GetResponseLabel())
-            Jump(nullptr, label);
-        DialogPane.Hide();
-        return true;
+        // The pane commits the pick in its own pulse, after this one.
+        if (const char *label = DialogPane.CommittedLabel())
+        {
+            taken &= ~kTakenDialog;
+            if (label[0])
+                Jump(nullptr, label);
+            return true;
+        }
+        return false;
 
       case EScriptWait::CharDone:
       {
@@ -485,19 +565,14 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
     }
 
     if (ip == kNotRunning) // Script done
-    {
         lastpriority = 0;
-        if (!DialogPane.IsHidden() &&
-            DialogPane.GetCharacter() == context)
-            DialogPane.Hide();
-    }
 }
 
 // REVSYNC: Jump @ 0x00493fa0 — retail walks to the current trigger by counting
 // BEGIN/END pairs (1000-newpriority iterations) then matches `:label`. Our
 // pre-release port has the same control-flow shape; the priority counter
 // initial value matches.
-void TScript::Jump(TObjectInstance* /*context*/, char *label)
+void TScript::Jump(TObjectInstance* /*context*/, const char *label)
 {
     if (!curproto || !curproto->text)
         return;
@@ -566,6 +641,21 @@ void TScript::End()
     waitobject.Clear();
     ip = kNotRunning;
     lastpriority = priority = 0;
+
+  // Give back what the block took. A block cut off between `choice` and
+  // its response still holds the dialog.
+    if (taken & kTakenDialog)
+    {
+        DialogPane.SkipSpeech();
+        taken &= ~kTakenDialog;
+    }
+}
+
+// REVSYNC: 0x004932a0
+void TScript::AddChoice(const char *label, const char *text)
+{
+    taken |= kTakenDialog;
+    DialogPane.AddChoice(label, text);
 }
 
 void TScript::Reset()
@@ -574,10 +664,14 @@ void TScript::Reset()
     curproto = topproto;
     newtrigger = trigger = 0;
     newtriggerstr[0] = '\0';
+    newtriggerstr2[0] = '\0';
     curtrigger = nullptr;
     depth = 0;
     block[0] = SScriptBlock{};
     triggerer.Clear();
+    useralias.clear();
+    second.Clear();
+    secondalias.clear();
 }
 
 // ****************

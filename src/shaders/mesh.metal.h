@@ -5,7 +5,9 @@
 // *************************************************************************
 //
 // Writes the same G-buffer MRT layout as tile.metal.h but from real 3D
-// vertices transformed by a per-instance world matrix. Instance layout:
+// vertices transformed by a per-instance world matrix, with surface class 0
+// in normal.a so the light pass applies the mesh lighting model.
+// Instance layout:
 //   slot 1  mat4 world   (4 * float4, one attribute each for cols 0..3)
 //   slot 2  tint rgba    (1 * float4)
 //
@@ -137,7 +139,7 @@ fragment fs_out _main(vs_out in [[stage_in]],
     float3 N = normalize(in.wnormal);
     fs_out o;
     o.albedo  = c;
-    o.normal  = float4(N * 0.5 + 0.5, 1.0);
+    o.normal  = float4(N * 0.5 + 0.5, 0.0);   // .a = surface class: 0 mesh, 1 tile
     o.scene_z = float4(in.scene_z, 0.0, 0.0, 1.0);
     o.obj_id  = in.obj_id;
     return o;

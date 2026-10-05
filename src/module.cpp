@@ -2,6 +2,8 @@
 
 #include "module.h"
 
+#include "dialog.h"
+
 #include "logging.h"
 #include "parse.h"
 #include "revutils.h"
@@ -251,6 +253,10 @@ bool TModuleManager::SetCurModule(int idx)
     }
     active_idx = idx;
     log_info("[module] active = '%s' (%s)", m->dirname.c_str(), m->name.c_str());
+
+  // Retail loads the module's dialog list, then its sounds, right after the
+  // mount.
+    DialogList.LoadModule();
     return true;
 }
 
