@@ -48,7 +48,10 @@ void LogFeed(int64_t tick)
              TextBar.IsHealthDisplayed() ? " over the loading bar" : "");
 }
 
-// Test data, by tick since the mode started (24 per second).
+// Test data, by tick since the mode started (24 per second). Ticks 6 and 12
+// print Windows-1252 dialog lines (the apostrophe 0x92, the e-grave 0xE8;
+// docs/ui/TEXT_RENDERING.md); they fade before the end, so the three lines
+// left are the same as without them.
 void Feed(int64_t tick)
 {
     if (tick > kLoadStart && tick <= kLoadEnd)
@@ -64,6 +67,8 @@ void Feed(int64_t tick)
     switch (tick)
     {
         case 0:   TextBar.Print("Locke entered The Keep");                                  break;
+        case 6:   TextBar.Print("%s", DialogList.GetLine("I2MIY01"));                       break;
+        case 12:  TextBar.Print("%s", DialogList.GetLine("XII12NAV01"));                    break;
         case 18:  TextBar.Print("%s", DialogList.GetLine("DOORLOCKED"));                    break;
         case 36:  TextBar.Print(ELineType::Notice, "%s", DialogList.GetLine("ITEMTOFAR"));  break;
         case 54:  TextBar.Print("Picked up Greater Mana.\nChest opened.");                   break;

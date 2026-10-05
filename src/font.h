@@ -12,8 +12,11 @@
 #include "fontdata.h"
 #include "render3d_types.h"
 #include "resource.h"
+#include "textencoding.h"
 
+#include <array>
 #include <string>
+#include <utility>
 #include <vector>
 
 #define FONT_DRAWMODE   (DM_TRANSPARENT | DM_ALIAS | DM_BACKGROUND)
@@ -42,15 +45,17 @@ class TFont : public TFontData
         // and size of each character in the font.
 };
 
-// Renderer texture atlas for a TFont: every glyph baked into one RGBA8 texture
-// with a per-glyph UV rect. Keycolor pixels become alpha=0 so straight-alpha
-// blend composites correctly. Stored in a parallel cache keyed by TFont* rather
-// than on the TFont object itself, because TFont instances are raw
-// resource-file memory (malloc'd to exact on-disk size by LoadResource) —
-// appending member fields would corrupt the bitmap data that follows.
+// A font's glyphs baked into one RGBA8 texture, looked up by Unicode code
+// point (docs/ui/TEXT_RENDERING.md). Two builders make one: BuildFontAtlas
+// from a retail bitmap TFont (keycolor pixels become alpha=0 so straight-alpha
+// blend composites correctly) and BuildTTFAtlas from a TrueType face. The
+// bitmap atlases live in a parallel cache keyed by TFont* rather than on the
+// TFont itself, because TFont instances are raw resource-file memory
+// (malloc'd to exact on-disk size by LoadResource) — appending member fields
+// would corrupt the bitmap data that follows.
 struct SFontAtlasRect
 {
-    uint16_t x, y, w, h;          // pixel rect inside the atlas image
+    uint16_t x = 0, y = 0, w = 0, h = 0;    // pixel rect inside the atlas image
     float xoff = 0, yoff = 0;     // top-left offset from pen baseline
     float xoff2 = 0, yoff2 = 0;   // bottom-right offset from pen baseline
     float xadvance = 0;           // pen advance after glyph
@@ -60,15 +65,28 @@ struct SFontAtlasRect
 
 struct SFontAtlas
 {
+    // glyphs[kFallbackGlyph] draws every code point the atlas doesn't hold:
+    // the face's .notdef box for TrueType, nothing (no advance) for a retail
+    // bitmap font, which drew nothing for a byte outside it.
+    static constexpr uint16_t kFallbackGlyph = 0;
+
     TTextureHandle texture = kInvalidTexture;
     int32_t        width = 0;
     int32_t        height = 0;
-    int16_t        firstchar = 0;
-    int16_t        numchars  = 0;
-    SFontAtlasRect rects[MAXFONTCHARS] = {};
+    float          ascent = 0.0f;       // line metrics: pixels above the baseline
+    float          descent = 0.0f;      // and below it (TextAscent, TextLineHeight)
+    std::vector<SFontAtlasRect> glyphs;
 
-    const SFontAtlasRect& Rect(unsigned char ch) const
-        { return rects[ch - firstchar]; }
+    // The glyph that draws `cp`; the fallback for a code point the atlas
+    // doesn't hold. Safe for every code point.
+    [[nodiscard]] const SFontAtlasRect& Glyph(char32_t cp) const;
+
+    // Builder side: `cp` draws glyphs[index].
+    void MapGlyph(char32_t cp, uint16_t index);
+
+  private:
+    std::array<uint16_t, 0x100> latin{};                 // U+0000..U+00FF
+    std::vector<std::pair<char32_t, uint16_t>> beyond;   // the rest, by code point
 };
 
 const SFontAtlas* BuildFontAtlas(TFont* font);
@@ -87,10 +105,11 @@ void LogFontGlyphHexDump(const char* fontname, unsigned char ch,
                         int max_rows = 8, int max_cols = 14);
   // Logs the raw 16-bit source pixels for the top-left rows of one glyph.
 
-// stb_truetype-backed atlas for WINFONT entries. Rasterizes ASCII 32..127
-// at `pixel_height` and packs via stbtt_PackFontRange. Uses a separate
-// cache (keyed by path+size) from BuildFontAtlas's TFont* cache because
-// TTF fonts have no TFont resource to key against.
+// stb_truetype-backed atlas for WINFONT entries. Rasterizes the printable
+// Windows-1252 repertoire (ASCII, CP1252's 0x80..0x9F specials, Latin-1) at
+// `pixel_height`, plus the face's .notdef as the fallback glyph. Uses a
+// separate cache (keyed by path+size) from BuildFontAtlas's TFont* cache
+// because TTF fonts have no TFont resource to key against.
 const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height);
 void DestroyAllTTFAtlases();
 
@@ -117,12 +136,17 @@ void DestroyAllTTFAtlases();
 // colored pass at base (UI_METHOD_MAP §5). The pink halo seen in some
 // retail captures is a chroma-key artifact, NOT reproduced here
 // (project-retail-pink-halo-bug).
+//
+// Text is bytes in `encoding`, which defaults to the game data's
+// Windows-1252 (textencoding.h); each character is decoded to a code point
+// and drawn with SFontAtlas::Glyph. A UTF-8 source passes ETextEncoding::Utf8.
 
 enum class ETextAlign { Left, Center, Right };
 
 // Total advance width of `text` in `atlas` (pixels). For alignment.
-float TextWidth(const SFontAtlas* atlas, const char* text);
-// Ascent of `atlas` (pixels above baseline) = max(-yoff) over glyphs.
+float TextWidth(const SFontAtlas* atlas, const char* text,
+                ETextEncoding encoding = kGameTextEncoding);
+// Ascent of `atlas` (pixels above baseline), fixed when the atlas is built.
 // Use to top-align a string inside a cell: baseline = cellY + ascent.
 float TextAscent(const SFontAtlas* atlas);
 // Line height of `atlas` (pixels) = ascent + descent. Use to stack the cells
@@ -138,7 +162,8 @@ float TextLineHeight(const SFontAtlas* atlas);
 void DrawTextAtBaseline(const SFontAtlas* atlas, const char* text,
                         float penX, float baselineY,
                         float r, float g, float b,
-                        int32_t target_w, int32_t target_h);
+                        int32_t target_w, int32_t target_h,
+                        ETextEncoding encoding = kGameTextEncoding);
 
 // Draw one line of `text` into the cell (cellX, cellY, cellW, cellH),
 // horizontally aligned per `align`, baseline top-aligned in the cell
@@ -148,23 +173,27 @@ void DrawTextAtBaseline(const SFontAtlas* atlas, const char* text,
 void DrawTextToTarget(const SFontAtlas* atlas, const char* text,
                       int32_t cellX, int32_t cellY, int32_t cellW, int32_t cellH,
                       ETextAlign align, float r, float g, float b,
-                      int32_t target_w, int32_t target_h);
+                      int32_t target_w, int32_t target_h,
+                      ETextEncoding encoding = kGameTextEncoding);
 // Same, with the retail 3-pass black drop shadow under the colored text.
 void DrawTextShadowedToTarget(const SFontAtlas* atlas, const char* text,
                               int32_t cellX, int32_t cellY, int32_t cellW, int32_t cellH,
                               ETextAlign align, float r, float g, float b,
-                              int32_t target_w, int32_t target_h);
+                              int32_t target_w, int32_t target_h,
+                              ETextEncoding encoding = kGameTextEncoding);
 // The shadowed text with its pen at (penX, baselineY), for callers whose
 // retail coordinates are a baseline rather than a cell top (the text bar's
 // lines, TTextBar 0x0054cd40). Same passes as DrawTextShadowedToTarget.
 void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
                                 float penX, float baselineY,
                                 float r, float g, float b,
-                                int32_t target_w, int32_t target_h);
+                                int32_t target_w, int32_t target_h,
+                                ETextEncoding encoding = kGameTextEncoding);
 
 // Word-wraps `text` to `wrapWidth` pixels the way retail's GDI DT_WORDBREAK
 // did (FUN_004acb80): breaks at spaces and '\n', drops the spaces at a break,
 // keeps a word wider than the line whole. Appends the lines to `lines` and
 // returns how many it added (at least one).
 int32_t WrapTextLines(const SFontAtlas* atlas, const char* text, float wrapWidth,
-                      std::vector<std::string>& lines);
+                      std::vector<std::string>& lines,
+                      ETextEncoding encoding = kGameTextEncoding);

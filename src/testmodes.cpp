@@ -2555,7 +2555,7 @@ bool InitializeIconMode()
         return true;
     }
     log_info("[icon] atlas %dx%d for %d glyphs",
-        atlas->width, atlas->height, (int)atlas->numchars);
+        atlas->width, atlas->height, (int)atlas->glyphs.size() - 1);
     return true;
 }
 
