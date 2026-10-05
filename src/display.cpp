@@ -27,6 +27,8 @@
 #include "renderer_readback.h"
 #include "revenant.h"
 
+#include <algorithm>
+
 extern bool  Hardware3D;
 extern bool  UsingHardware;
 extern void  MakeColorTables();
@@ -251,114 +253,130 @@ bool TDisplay::FlipPage(bool /*Wait*/)
     // Re-run the composite into an offscreen RT we own so it can be read
     // back via Metal blit: every frame while --snap / --filmstrip is active
     // (framesnap reads it), and for the one frame a capture was requested.
-    // The RT, depth, and pass are lazily allocated and re-created on
-    // display-size changes.
-    //
-    // Both color + depth must match the SWAPCHAIN formats, because the
-    // renderer's pipelines were created against them — sokol-gfx will
-    // assert if pipeline.color_format != pass.color_format (or depth).
-    if (FrameSnap::Active() || !capture_requests.empty())
-    {
-        const int32_t w = sapp_width();
-        const int32_t h = sapp_height();
-        const sg_pixel_format scColor = (sg_pixel_format) sapp_color_format();
-        const sg_pixel_format scDepth = (sg_pixel_format) sapp_depth_format();
-
-        if (snap_capture_color.id == SG_INVALID_ID
-            || snap_capture_w != w
-            || snap_capture_h != h)
-        {
-            if (snap_capture_color.id != SG_INVALID_ID)
-                sg_destroy_image(snap_capture_color);
-
-            sg_image_desc cd = {};
-            cd.render_target = true;
-            cd.width  = w;
-            cd.height = h;
-            cd.pixel_format = scColor;
-            cd.min_filter = SG_FILTER_NEAREST;
-            cd.mag_filter = SG_FILTER_NEAREST;
-            cd.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-            cd.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-            cd.label = "snap-capture-color";
-            snap_capture_color = sg_make_image(&cd);
-
-            snap_capture_w = w;
-            snap_capture_h = h;
-        }
-
-        // Build a transient depth attachment + pass each frame. Cheap
-        // relative to the composite work itself; keeps display.cpp from
-        // owning more long-lived sokol resources.
-        sg_image_desc dd = {};
-        dd.render_target = true;
-        dd.width  = w;
-        dd.height = h;
-        dd.pixel_format = scDepth;
-        dd.min_filter = SG_FILTER_NEAREST;
-        dd.mag_filter = SG_FILTER_NEAREST;
-        dd.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-        dd.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-        dd.label = "snap-capture-depth";
-        sg_image snapDepth = sg_make_image(&dd);
-
-        sg_pass_desc pd = {};
-        pd.color_attachments[0].image = snap_capture_color;
-        pd.depth_stencil_attachment.image = snapDepth;
-        sg_pass capturePass = sg_make_pass(&pd);
-
-        sg_pass_action snapPa = {};
-        snapPa.colors[0].action = SG_ACTION_CLEAR;
-        snapPa.colors[0].value  = { 0.0f, 0.0f, 0.0f, 1.0f };
-        snapPa.depth.action     = SG_ACTION_CLEAR;
-        snapPa.depth.value      = 1.0f;
-        snapPa.stencil.action   = SG_ACTION_DONTCARE;
-
-        sg_begin_pass(capturePass, &snapPa);
-        if (Renderer) {
-            // Mirror pass: use PresentForSnap (dirty-flag-free variant)
-            // because PresentToSwapchain already cleared the flags this
-            // frame. Without this the snap RT misses Scene3D entirely
-            // and the filmstrip captures only the HUD over black —
-            // which broke vfx test snaps (the effects ARE the scene).
-            Renderer->PresentForSnap();
-            Renderer->Composite(backbuffer);
-            Renderer->DrawHud();
-        }
-        // simgui_render() omitted from snap path — ImGui in a non-default
-        // pass needs careful pipeline setup; HUD-test modes don't use it.
-        sg_end_pass();
-        sg_commit();
-
-        sg_destroy_pass(capturePass);
-        sg_destroy_image(snapDepth);
-    }
-
+    // A capture that stops below a HUD layer gets its own composite first;
+    // the full one runs last, so framesnap reads the whole frame.
     if (!capture_requests.empty())
     {
-        const std::vector<TCaptureDone> requests = std::move(capture_requests);
+        std::vector<SCaptureRequest> requests = std::move(capture_requests);
         capture_requests.clear();
-        std::vector<uint8_t> rgba(size_t(snap_capture_w) * size_t(snap_capture_h) * 4);
-        if (RendererReadback::ReadRect(snap_capture_color, 0, 0, snap_capture_w, snap_capture_h, rgba.data()))
+
+        std::vector<float> layers;
+        for (const SCaptureRequest& r : requests)
+            if (std::find(layers.begin(), layers.end(), r.hudBelowZ) == layers.end())
+                layers.push_back(r.hudBelowZ);
+        std::sort(layers.begin(), layers.end());     // the full frame (largest) last
+
+        std::vector<uint8_t> rgba;
+        for (const float layer : layers)
         {
-            for (const TCaptureDone& done : requests)
-                done(rgba.data(), snap_capture_w, snap_capture_h);
+            MirrorComposite(layer);
+            rgba.resize(size_t(snap_capture_w) * size_t(snap_capture_h) * 4);
+            const bool read = RendererReadback::ReadRect(snap_capture_color, 0, 0, snap_capture_w,
+                                                         snap_capture_h, rgba.data());
+            if (!read)
+                log_warn("[display] frame capture readback failed");
+            for (const SCaptureRequest& r : requests)
+                if (r.hudBelowZ == layer)
+                    r.done(read ? rgba.data() : nullptr, read ? snap_capture_w : 0,
+                           read ? snap_capture_h : 0);
         }
-        else
-        {
-            log_warn("[display] frame capture readback failed");
-            for (const TCaptureDone& done : requests)
-                done(nullptr, 0, 0);
-        }
+        if (FrameSnap::Active() && layers.back() < kWholeFrame)
+            MirrorComposite(kWholeFrame);
+    }
+    else if (FrameSnap::Active())
+    {
+        MirrorComposite(kWholeFrame);
     }
 
     return true;
 }
 
-bool TDisplay::RequestCapture(TCaptureDone done)
+// The swapchain's composite again, into snap_capture_color (made, or made
+// again, at the display size), with the HUD items under `hudBelowZ`.
+void TDisplay::MirrorComposite(float hudBelowZ)
+{
+    const int32_t w = sapp_width();
+    const int32_t h = sapp_height();
+    const sg_pixel_format scColor = (sg_pixel_format) sapp_color_format();
+    const sg_pixel_format scDepth = (sg_pixel_format) sapp_depth_format();
+
+    // Both color + depth must match the SWAPCHAIN formats, because the
+    // renderer's pipelines were created against them — sokol-gfx will
+    // assert if pipeline.color_format != pass.color_format (or depth).
+    if (snap_capture_color.id == SG_INVALID_ID
+        || snap_capture_w != w
+        || snap_capture_h != h)
+    {
+        if (snap_capture_color.id != SG_INVALID_ID)
+            sg_destroy_image(snap_capture_color);
+
+        sg_image_desc cd = {};
+        cd.render_target = true;
+        cd.width  = w;
+        cd.height = h;
+        cd.pixel_format = scColor;
+        cd.min_filter = SG_FILTER_NEAREST;
+        cd.mag_filter = SG_FILTER_NEAREST;
+        cd.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+        cd.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+        cd.label = "snap-capture-color";
+        snap_capture_color = sg_make_image(&cd);
+
+        snap_capture_w = w;
+        snap_capture_h = h;
+    }
+
+    // Build a transient depth attachment + pass each time. Cheap
+    // relative to the composite work itself; keeps display.cpp from
+    // owning more long-lived sokol resources.
+    sg_image_desc dd = {};
+    dd.render_target = true;
+    dd.width  = w;
+    dd.height = h;
+    dd.pixel_format = scDepth;
+    dd.min_filter = SG_FILTER_NEAREST;
+    dd.mag_filter = SG_FILTER_NEAREST;
+    dd.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+    dd.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    dd.label = "snap-capture-depth";
+    sg_image snapDepth = sg_make_image(&dd);
+
+    sg_pass_desc pd = {};
+    pd.color_attachments[0].image = snap_capture_color;
+    pd.depth_stencil_attachment.image = snapDepth;
+    sg_pass capturePass = sg_make_pass(&pd);
+
+    sg_pass_action snapPa = {};
+    snapPa.colors[0].action = SG_ACTION_CLEAR;
+    snapPa.colors[0].value  = { 0.0f, 0.0f, 0.0f, 1.0f };
+    snapPa.depth.action     = SG_ACTION_CLEAR;
+    snapPa.depth.value      = 1.0f;
+    snapPa.stencil.action   = SG_ACTION_DONTCARE;
+
+    sg_begin_pass(capturePass, &snapPa);
+    if (Renderer) {
+        // Mirror pass: use PresentForSnap (dirty-flag-free variant)
+        // because PresentToSwapchain already cleared the flags this
+        // frame. Without this the snap RT misses Scene3D entirely
+        // and the filmstrip captures only the HUD over black —
+        // which broke vfx test snaps (the effects ARE the scene).
+        Renderer->PresentForSnap();
+        Renderer->Composite(backbuffer);
+        Renderer->DrawHud(hudBelowZ);
+    }
+    // simgui_render() omitted from snap path — ImGui in a non-default
+    // pass needs careful pipeline setup; HUD-test modes don't use it.
+    sg_end_pass();
+    sg_commit();
+
+    sg_destroy_pass(capturePass);
+    sg_destroy_image(snapDepth);
+}
+
+bool TDisplay::RequestCapture(TCaptureDone done, float hudBelowZ)
 {
     if (!backbuffer || !done)
         return false;
-    capture_requests.push_back(std::move(done));
+    capture_requests.push_back({std::move(done), hudBelowZ});
     return true;
 }
