@@ -632,10 +632,20 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
         lastpriority = 0;
 }
 
-// REVSYNC: Jump @ 0x00493fa0 — retail walks to the current trigger by counting
-// BEGIN/END pairs (1000-newpriority iterations) then matches `:label`. Our
-// pre-release port has the same control-flow shape; the priority counter
-// initial value matches.
+// REVSYNC: Jump @ 0x00493fa0 (the `jump` command's, through 0x00471290, and a
+// taken response's). The skip to the current trigger is the 1998 loop; it
+// moves nothing, since the fresh token is no BEGIN (SkipBlock 0x004795f0), so
+// the label is looked for from the top of the prototype. On the way every
+// BEGIN and END token is counted into the block depth (0x004940cd..
+// 0x00494152), so the script lands at the label as deep as the label sits:
+// a label inside `IF … BEGIN` keeps that block open, and the block's END
+// closes it rather than the trigger's. The 1998 code set the depth to 1
+// ("a bit hacky"), so a choice inside an IF ended the trigger at the IF's END
+// and skipped the block's last lines (town.s Heather1: CONTROL ON,
+// SETCDVOLUME FULL).
+// A label it can't find: the error, the ip unchanged and the depth counted to
+// the prototype's end (0, so Continue ends the block after the jump's line);
+// the 1998 code restarted the script instead.
 void TScript::Jump(TObjectInstance* /*context*/, const char *label)
 {
     if (!curproto || !curproto->text)
@@ -653,7 +663,8 @@ void TScript::Jump(TObjectInstance* /*context*/, const char *label)
         t.SkipBlanks();
     }
 
-    // find the label
+    // find the label, counting the blocks opened on the way
+    depth = 0;
     while (1)
     {
         t.SkipBlanks();
@@ -661,15 +672,14 @@ void TScript::Jump(TObjectInstance* /*context*/, const char *label)
         if (t.Type() == TKN_EOF)
         {
             ScriptError("Jump to an unknown label attempted", t.LineNum());
-            Start();        // reset the script
             return;
         }
 
-        // REVSYNC: Jump @ 0x00493fa0 -- the script goes on right after the
-        // label's name (0x00494208 stores the token's position as the ip), so
-        // the line after the label runs. The 1998 code skipped to the next
-        // line here, which ate that line's first token: `:sell1` followed by
-        // `buysellshoptype sell misc` (town.s, every shop) lost the shop type.
+        // The script goes on right after the label's name (0x00494208 stores
+        // the token's position as the ip), so the line after the label runs.
+        // The 1998 code skipped to the next line here, which ate that line's
+        // first token: `:sell1` followed by `buysellshoptype sell misc`
+        // (town.s, every shop) lost the shop type.
         if (t.Type() == TKN_SYMBOL && t.Code() == ':')
         {
             t.Get();
@@ -677,11 +687,15 @@ void TScript::Jump(TObjectInstance* /*context*/, const char *label)
                 break;
         }
 
+        if (t.Is("BEGIN"))
+            depth++;
+        else if (t.Is("END"))
+            depth--;
+
         t.LineGet();
     }
 
     ip = (int32_t)s.GetPos();
-    depth = 1;          // a bit hacky - probably needs to count the begin/end pairs..
 }
 
 // REVSYNC: Break @ 0x004942a0
