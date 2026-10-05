@@ -122,15 +122,10 @@ class TGameModeImpl final : public IRuntimeMode
 
     bool HandleKey(int32_t key, bool down) override
     {
-      // F5: retail's Quick Save (a new "Quick Save N" slot each time). F9:
-      // developer reload of the last slot saved or loaded; retail had no
-      // quick load. Both move to the control map when the in-game menu
-      // lands. Fire on key-down only and consume the key so it doesn't fall
-      // through to the gameplay command path.
-        if (down && key == VK_F5) {
-            GameFlow.Session().RequestQuickSave();
-            return true;
-        }
+      // F9: developer reload of the last slot saved or loaded; retail had no
+      // quick load. (Quick Save is retail's control, Ctrl+Backspace, through
+      // the control map below.) Fires on key-down only and consumes the key
+      // so it doesn't fall through to the gameplay command path.
         if (down && key == VK_F9) {
             GameFlow.Session().RequestReloadLastSlot();
             return true;
@@ -201,6 +196,14 @@ class TGameModeImpl final : public IRuntimeMode
                     case GAMECMD_DODGE:    Player->Dodge();   break;
                     case GAMECMD_JUMP:     Player->Jump();    break;
                     case GAMECMD_BLOCKDOWN: Player->Block();   break;
+
+                  // The in-game dialogs (retail Command 0x52-0x55).
+                    case GAMECMD_GAMEOPTIONS:
+                    case GAMECMD_LOADGAME:
+                    case GAMECMD_SAVEGAME:
+                    case GAMECMD_QUICKSAVE:
+                        PlayScreen.Command(static_cast<GAMECOMMAND>(cmd));
+                        break;
 
                     default: break;
                 }

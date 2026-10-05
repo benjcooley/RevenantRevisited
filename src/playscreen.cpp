@@ -42,6 +42,7 @@
 #include "editorstub.h"
 #include "imagery.h"
 #include "imgui.h"
+#include "ingamemenu.h"
 #include "logging.h"
 #include "ctrlmap.h"
 #include "gamemap.h"
@@ -210,6 +211,15 @@ static SControlEntry g_defaultGameControls[] =
     {"Up Right",   "UpRight",   ALLMODES, {{VK_PRIOR}, {VK_JOYUPRIGHT}},   GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPRIGHT,   false},
     {"Down Left",  "DownLeft",  ALLMODES, {{VK_END},   {VK_JOYDOWNLEFT}},  GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNLEFT,  false},
     {"Down Right", "DownRight", ALLMODES, {{VK_NEXT},  {VK_JOYDOWNRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNRIGHT, false},
+
+    // -- in-game dialogs: retail's controls 65-68 (table 0x005d5500), keys
+    //    as retail's (VK_LWIN / VK_APPS are 0x5b / 0x5d, the codes the port's
+    //    input gives '[' and ']'; a retail INI writes them CTRL-LWIN /
+    //    CTRL-APPS) --
+    {"Game Options", "GameOpts",  ALLMODES, {{'O'}},                 GAMECMD_GAMEOPTIONS, 0, 0, false},
+    {"Load Game",    "LoadGame",  ALLMODES, {{VK_CONTROL, VK_LWIN}}, GAMECMD_LOADGAME,    0, 0, false},
+    {"Save Game",    "SaveGame",  ALLMODES, {{VK_CONTROL, VK_APPS}}, GAMECMD_SAVEGAME,    0, 0, false},
+    {"Quick Save",   "QuickSave", ALLMODES, {{VK_CONTROL, VK_BACK}}, GAMECMD_QUICKSAVE,   0, 0, false},
 };
 
 void InitDefaultControlMap()
@@ -252,7 +262,7 @@ int32_t ConvertMinutesToFrames(int32_t minutes)
 // * Construction / lifetime                                               *
 // *************************************************************************
 
-TPlayScreen::TPlayScreen() = default;
+TPlayScreen::TPlayScreen() : ingamemenu(std::make_unique<TInGameMenu>(*this)) {}
 TPlayScreen::~TPlayScreen() = default;
 
 bool TPlayScreen::Initialize()
@@ -633,6 +643,8 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
 
 void TPlayScreen::Close()
 {
+    ingamemenu->Close();
+    menuPending = false;
     RemovePane(&DialogPane);
     DialogPane.Close();
     AutoMap.Close();
@@ -725,8 +737,20 @@ void TPlayScreen::Update()
     if (StartupSaveCycle)
         PulseSaveCycleTest();
 
-    // Save / load requests made during play (input, console, scripts).
+    // Save / load requests made during play (input, console, scripts, the
+    // in-game dialogs). Retail ran them ahead of the pane pulse, so a paused
+    // world doesn't hold them (0x0047bd20).
     GameFlow.Session().ProcessRequests();
+
+    // REVSYNC: 0x0048fda0 / 0x0052b9f0 / 0x0047c2c0 -- under a MODAL_PAUSE
+    // modal (the single-player in-game menu and its dialogs) only the modal
+    // pulses: the world, the areas and the game clock stand still. The
+    // --exec console queue keeps running.
+    if (ModalHas(MODAL_PAUSE))
+    {
+        PulseStartupExec();
+        return;
+    }
 
     // Per-frame work that differs between game and editor: input ->
     // movement, pulse / move over the active sector window, camera
@@ -1242,17 +1266,52 @@ void TPlayScreen::KeyPress(int32_t key, bool down)
         return;
     }
 
-    // REVSYNC: KeyPress @ 0x0047c400 -- the panes first (the dialog pane's
-    // choice keys), then the play screen's own handling, whose commands act
-    // only while the player has control. A modal keeps the keys to itself.
+    // REVSYNC: KeyPress @ 0x0047c630 -- the panes first (the dialog pane's
+    // choice keys, a modal's keys), then the play screen's own keys, which
+    // any flagged modal holds back: ESC opens the in-game menu (in demo
+    // mode it asks to quit); then the control map's commands, unless the
+    // modal keeps the keys (MODAL_KEYS).
     TScreen::KeyPress(key, down);
-    if (HasModal())
+    if (down && key == VK_ESCAPE && TopModalFlags() == 0 && !Editor)
+    {
+        if (demomode)
+            ingamemenu->AskExit();
+        else
+            OpenInGameMenu();
+        return;
+    }
+    if (ModalHas(MODAL_KEYS))
         return;
     CurrentMode()->HandleKey(key, down);
 }
 
+void TPlayScreen::OpenInGameMenu()
+{
+    if (InGameMenuOpen())
+        return;
+    menuPending = true;
+    ::SaveGame.CaptureThumbnail({}, [this] {
+        menuPending = false;
+        if (CurrentScreen == this && !IsDone())
+            ingamemenu->Open();
+    });
+}
+
+bool TPlayScreen::InGameMenuOpen() const
+{
+    return menuPending || ingamemenu->IsOpen();
+}
+
 void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 {
+    // REVSYNC: 0x00490530 -- a modal holding the mouse (MODAL_MOUSE) gets
+    // every click; the HUD and the world get none.
+    if (ModalHas(MODAL_MOUSE))
+    {
+        TScreen::MouseClick(button, x, y);
+        return;
+    }
+
     if (g_playHudInitialized &&
         (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()))
     {
@@ -1281,6 +1340,12 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 
 void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
 {
+    if (ModalHas(MODAL_MOUSE))
+    {
+        TScreen::MouseMove(button, x, y);
+        return;
+    }
+
     if (g_playHudInitialized)
     {
         const SHudState& s = GetHudState();
@@ -1314,10 +1379,40 @@ void TPlayScreen::Joystick(int32_t key, bool down)
     TScreen::Joystick(key, down);
 }
 
-void TPlayScreen::Command(GAMECOMMAND /*command*/)
+// REVSYNC: Command @ 0x0047cf40. Every command is held back while control is
+// off (the global control-off flag DAT_00666924, 0x0047d009), so none of
+// these work in a cutscene or a conversation.
+// TODO(port): the rest of the GAMECOMMAND dispatch (combat / inventory /
+// spells / dodge / leap / etc.) still lives in the game mode's HandleKey;
+// tracked alongside the player-input revival.
+void TPlayScreen::Command(GAMECOMMAND command)
 {
-    // TODO(port): full GAMECOMMAND dispatch (combat / inventory / spells
-    // / dodge / leap / etc.). Tracked alongside the player-input revival.
+    if (!controlon)
+        return;
+    switch (command)
+    {
+    case GAMECMD_GAMEOPTIONS:       // 0x52: 0x0047e700
+        ingamemenu->OpenOptions();
+        break;
+    case GAMECMD_LOADGAME:          // 0x53: = 0x0047e660
+        ingamemenu->OpenLoad();
+        break;
+    case GAMECMD_SAVEGAME:          // 0x54: the thumbnail (0x0047dc05), then the dialog
+        if (InGameMenuOpen())
+            break;
+        menuPending = true;
+        ::SaveGame.CaptureThumbnail({}, [this] {
+            menuPending = false;
+            if (CurrentScreen == this && !IsDone())
+                ingamemenu->OpenSave();
+        });
+        break;
+    case GAMECMD_QUICKSAVE:         // 0x55: the thumbnail (0x0047dd08), QuickSave 0x0047e850
+        GameFlow.Session().RequestQuickSave();
+        break;
+    default:
+        break;
+    }
 }
 
 void TPlayScreen::UpdateMove()
