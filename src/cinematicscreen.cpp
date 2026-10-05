@@ -15,7 +15,9 @@
 #include "wavedata.h" // WAVEFORMATEX
 
 #include "revsmk.h"
+#include "revutils.h"
 
+#include <cstdio>
 #include <cstring>
 
 TCinematicScreen CinematicScreen;
@@ -32,12 +34,23 @@ void TCinematicScreen::SetVideo(const char* path)
 
 bool TCinematicScreen::Initialize()
 {
-    const char* path = path_[0]               ? path_
-                     : StartupCinematicPath[0] ? StartupCinematicPath
-                                               : "data/Disk2/MIX_FMV1.SMK";
+    // --test=ui-cinematic may name a movie; otherwise the retail intro.
+    char path[MAXPATHLEN];
+    if (path_[0])
+        strncpyz(path, path_, sizeof(path));
+    else if (StartupCinematicPath[0])
+        strncpyz(path, StartupCinematicPath, sizeof(path));
+    else
+        std::snprintf(path, sizeof(path), "%sMix_FMV1.smk", MoviePath);
 
+    // Movies resolve like every other game file (SavePath, Revisited overlay,
+    // RunPath, archives); MoviePath is retail-relative (".\Disk2\").
+    std::vector<uint8_t> bytes;
     std::string err;
-    decoder_ = revsmk::Decoder::OpenFile(path, &err);
+    if (rev_read_file(path, bytes))
+        decoder_ = revsmk::Decoder::OpenMemory(std::move(bytes), &err);
+    else
+        err = "file not found";
     if (!decoder_)
     {
         log_error("[cinematic] failed to open '%s': %s", path, err.c_str());

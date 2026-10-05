@@ -61,21 +61,10 @@ constexpr int32_t     kDefaultFontPx   = 14;
 
 std::string ReadResourceText(const char* name)
 {
-    FILE* f = rev_fopen(name, "rb");
-    if (!f)
+    std::vector<uint8_t> bytes;
+    if (!rev_read_file(name, bytes))
         return {};
-    fseek(f, 0, SEEK_END);
-    const long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    std::string s;
-    if (sz > 0)
-    {
-        s.resize(static_cast<size_t>(sz));
-        const size_t got = fread(&s[0], 1, static_cast<size_t>(sz), f);
-        s.resize(got);
-    }
-    fclose(f);
-    return s;
+    return std::string(bytes.begin(), bytes.end());
 }
 
 bool ParseNumber(const std::string& t, int64_t& out)
@@ -694,6 +683,23 @@ bool TDefPane::OpenChrome(int32_t x, int32_t y, int32_t w, int32_t h,
     log_info("[defpane] opened chrome '%s' %dx%d @(%d,%d), bg=%s",
              bgDatName.c_str(), paneW, paneH, x, y, background ? "OK" : "MISS");
     return true;
+}
+
+void TDefPane::AddText(const char* name, int32_t x, int32_t y, int32_t w, int32_t h,
+                       const char* text, uint32_t flags, const SDefColor& color,
+                       const char* font)
+{
+    SDefWidget wid;
+    wid.type  = EDefWidget::Text;
+    wid.name  = name ? name : "";
+    wid.text  = text ? text : "";
+    wid.x = x; wid.y = y; wid.w = w; wid.h = h;
+    wid.flags = flags;
+    wid.style.color = color;
+    if (font)
+        wid.style.font = font;
+    widgets.push_back(std::move(wid));
+    SetDirty(true);
 }
 
 bool TDefPane::AddSpriteButton(const char* name, const char* faceBase)

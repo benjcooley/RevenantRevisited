@@ -40,6 +40,8 @@
 #include "revisited_settings.h"
 #include "testscreen.h"
 #include "cinematicscreen.h"
+#include "gameflow.h"
+#include "logoscreen.h"
 #include "i3dgltf.h"
 #include "testmodes.h"
 #include "testconfig.h"
@@ -58,6 +60,7 @@
 #include "parse.h"
 #include "mapmanager.h"
 #include "player.h"
+#include "multi.h"
 #include "multictrl.h"
 #include "spell.h"
 #include "spellpane.h"
@@ -1544,7 +1547,7 @@ void GetParameters(int argc, char **argv)
         "gamespeed", "monitor", "violencelevel", "preloadsize",
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
-        "cinematic",
+        "cinematic", "menu", "exec",
     });
     cmd.parse(argc, argv);
 
@@ -1660,6 +1663,31 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "vfx", p))
             strncpyz(StartupVfxId, p.c_str(), sizeof(StartupVfxId));
+    }
+
+  // QUICKSTART[=<save>] — retail flag: skip the intro and the title screen,
+  // start a new game (or load the named save) directly.
+    {
+        std::string p;
+        if (arg_param(cmd, "quickstart", p))
+        {
+            StartupQuickstart = true;
+            strncpyz(StartupQuickstartSave, p.c_str(), sizeof(StartupQuickstartSave));
+        }
+        else if (arg_flag(cmd, "quickstart"))
+            StartupQuickstart = true;
+    }
+
+  // NOINTRO — skip the intro movie before the title screen.
+    if (arg_flag(cmd, "nointro"))
+        StartupNoIntro = true;
+
+  // MENU=<newgame|loadgame|multi|options|exit> — press that title button
+  // automatically (skips the intro). For driving the menu in tests.
+    {
+        std::string p;
+        if (arg_param(cmd, "menu", p))
+            strncpyz(StartupMenuButton, p.c_str(), sizeof(StartupMenuButton));
     }
 
   // EXEC="cmd; cmd; sleep N" — console commands to run once the PlayScreen
@@ -2198,6 +2226,15 @@ bool InitGlobals()
     if (!ScriptManager.Initialize())
         FatalError("Unable to load master script (master.s)");
 
+  // (24) GameData — the shared in-game resource archive (cursor, hand
+  // cursor, walk wedges). REVSYNC: retail engine init (0x00485870) loads
+  // gamedata.dat into this global before any screen runs; the title screen
+  // and the PlayScreen both draw its cursors. (The 1998 snapshot loaded the
+  // identical playscrn.dat lazily from TPlayScreen::Initialize.)
+    GameData = TMulti::LoadMulti(const_cast<char*>("gamedata.dat"));
+    if (!GameData)
+        FatalError("Unable to load gamedata.dat");
+
     if (!_CrtCheckMemory())
     {
 //      _CrtMemDumpAllObjectsSince(&s1);
@@ -2236,6 +2273,13 @@ void ShutdownGlobals()
         ResumeThreads();
 
   // ---- inverse of InitGlobals ----
+
+  // (24) GameData
+    if (GameData)
+    {
+        free(GameData);                 // TMulti is a malloc'd resource blob
+        GameData = nullptr;
+    }
 
   // (23) ScriptManager — flushes the proto registry + gamestate names.
   // Editor builds write any dirty scripts back to master.s before the
@@ -2528,6 +2572,14 @@ static void AppInit()
             log_info("[boot] routing to CinematicScreen");
             BootScreen = &CinematicScreen;
         }
+        else if (strcmp(StartupTestMode, "ui-mainmenu") == 0)
+        {
+            log_info("[boot] routing to LogoScreen (title)");
+            SBootOptions options;
+            options.noIntro    = true;
+            options.menuButton = TLogoScreen::ButtonFromName(StartupMenuButton);
+            BootScreen = GameFlow.Boot(options);
+        }
         else
         {
             log_info("[boot] routing to TestScreen, mode='%s'", StartupTestMode);
@@ -2536,17 +2588,15 @@ static void AppInit()
     }
     else
     {
-        log_info("[boot] routing to PlayScreen");
-        BootScreen = &PlayScreen;
-
-        // --loadmap=<file>: hand the save path to PlayScreen; its Pulse()
-        // picks it up on the first tick, clears the current map, and streams
-        // the player object — the same path the menu uses for "Continue".
-        if (StartupSavePath[0])
-        {
-            log_info("[boot] auto-loading save '%s'", StartupSavePath);
-            PlayScreen.LoadGameFile(StartupSavePath);
-        }
+        SBootOptions options;
+        options.quickstart     = StartupQuickstart || StartupSavePath[0];
+        options.quickstartSave = StartupQuickstartSave[0] ? StartupQuickstartSave : StartupSavePath;
+        options.noIntro        = StartupNoIntro;
+        options.menuButton     = TLogoScreen::ButtonFromName(StartupMenuButton);
+        if (StartupMenuButton[0] && options.menuButton < 0)
+            log_warn("[boot] --menu=%s: unknown title button "
+                     "(newgame|loadgame|multi|options|exit)", StartupMenuButton);
+        BootScreen = GameFlow.Boot(options);
     }
 
     TestModes::InputSimArm();   // no-op without --input-script
@@ -2622,20 +2672,20 @@ static void AppFrame()
         simgui_new_frame(&fd);
     }
 
-    // Begin next queued screen if none is active.
+    // Begin next queued screen if none is active. With nothing to run the app
+    // is quitting; quit requests are processed asynchronously (frames can keep
+    // arriving meanwhile), so close the ImGui frame opened above before
+    // returning or the next NewFrame asserts.
     if (!CurrentScreen && BootScreen)
     {
         TScreen *next = BootScreen;
         BootScreen = nullptr;
-        if (!TScreen::ShowScreen(next, 0))
-        {
-            sapp_request_quit();
-            return;
-        }
+        TScreen::ShowScreen(next, 0);
     }
 
     if (!CurrentScreen)
     {
+        ImGui::EndFrame();
         sapp_request_quit();
         return;
     }

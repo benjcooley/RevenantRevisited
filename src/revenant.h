@@ -42,10 +42,6 @@ extern char BaseMapPath[MAXPATHLEN];  // Where the untouched version of the game
 extern char CurMapPath[MAXPATHLEN];   // Where the current map is stored
 extern char MoviePath[MAXPATHLEN];    // Where the .smk movies live (INI [Paths] MoviePath)
 
-// Resolves a movie file name (e.g. "Mix_FMV1.smk") against RunPath + MoviePath,
-// matching the file name case-insensitively. Returns false if it isn't there.
-bool ResolveMoviePath(const char *name, char *out, int32_t outlen);
-
 // Multi-Monitor Variables (Note: Additional Monitor globals are defined in MONITOR.H)
 extern int32_t MonitorNum;                 // Monitor game will run on (default is 1, primary)
 extern int32_t MonitorX, MonitorY;         // Relative position of monitor in desktop coordinates

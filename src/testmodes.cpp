@@ -50,7 +50,6 @@
 #include "uiinventorytest.h"
 #include "uilayouttest.h"
 #include "uiloadscreentest.h"
-#include "uimainmenutest.h"
 #include "uimaptest.h"
 #include "uinineslicetest.h"
 #include "uiplyrstatusbartest.h"
@@ -3351,8 +3350,6 @@ bool Initialize(const char* mode)
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return InitializeUIMainMenuMode();
     if (strcmp(mode, "ui-death") == 0)
         return InitializeUIDeathMode();
     if (IsUIDefScreenMode(mode))
@@ -3420,8 +3417,6 @@ void Close(const char* mode)
         CloseUIHudMode();
     if (strcmp(mode, "ui-loadscreen") == 0)
         CloseUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        CloseUIMainMenuMode();
     if (strcmp(mode, "ui-death") == 0)
         CloseUIDeathMode();
     if (IsUIDefScreenMode(mode))
@@ -3499,8 +3494,6 @@ void Render(const char* mode)
         return RenderUIHudMode();
     if (strcmp(mode, "ui-loadscreen") == 0)
         return RenderUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return RenderUIMainMenuMode();
     if (strcmp(mode, "ui-death") == 0)
         return RenderUIDeathMode();
     if (IsUIDefScreenMode(mode))
@@ -3514,8 +3507,6 @@ void Render(const char* mode)
 
 void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return HandleMouseClickUIMainMenuMode(button, x, y);
     if (strcmp(mode, "ui-death") == 0)
         return HandleMouseClickUIDeathMode(button, x, y);
     if (strcmp(mode, "ui-hud") == 0)
@@ -3602,8 +3593,6 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return HandleMouseMoveUIMainMenuMode(x, y);
     if (strcmp(mode, "ui-death") == 0)
         return HandleMouseMoveUIDeathMode(x, y);
     // #8 iOS-style velocity drag for the spellbook scroll

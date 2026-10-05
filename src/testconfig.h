@@ -50,6 +50,14 @@ extern char StartupCinematicPath[MAXPATHLEN];
 // --exec="cmd; cmd; sleep N; ..." — console commands run in the live
 // PlayScreen once a player exists (see consoleexec.h).
 extern char StartupExec[4096];
+// Boot options (TGameFlow::Boot): --quickstart[=<save>] is retail QUICKSTART
+// (no intro / title; new game or load <save>); --nointro skips the intro movie;
+// --menu=<button> presses a title button automatically
+// (newgame|loadgame|multi|options|exit).
+extern bool StartupQuickstart;
+extern char StartupQuickstartSave[MAXPATHLEN];
+extern bool StartupNoIntro;
+extern char StartupMenuButton[32];
 
 
 // --vfx-bg=<black|ltgray|forest|dungeon> — pre-select the diagnostic
