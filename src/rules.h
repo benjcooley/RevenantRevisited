@@ -252,6 +252,10 @@ class TRules
       // Returns a particular character data item
     PSCharData GetCharData(int32_t objtype, int32_t objclass);
       // Gets pointer to character data structure
+    static constexpr int32_t kMaxSkillLevel = 30;
+      // Skills stop rising here (retail TPlayer::AddSkillExp @ 0x0051ac90)
+    int32_t SkillExpForLevel(int32_t level) const;
+      // Experience a skill needs to reach 'level' (retail 0x0048cc90)
     bool Load();
       // Loads character data and class data from rules.def + char.def
     bool LoadFile(const char* fname, bool required);
