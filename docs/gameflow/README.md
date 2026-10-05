@@ -113,6 +113,18 @@ What's broken / stubbed:
 - [BURNDOWN.md](BURNDOWN.md) — per-track checklist tracking what's
   done, in-progress, blocked, or open. The thing to update as work
   lands. Designed to be the recovery point if this chat is lost.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — the design: session, screens,
+  commands, scripts, and every divergence from retail (§7).
+- [AUTHOR_QUESTIONS.md](AUTHOR_QUESTIONS.md) — retail screenshots wanted
+  and behaviour questions for the original author.
+- [OPENING_SEQUENCE.md](OPENING_SEQUENCE.md) — the opening as the
+  acceptance test for scripts, commands and dialog.
+- [STORY_TESTING.md](STORY_TESTING.md) — driving scenes and conversations
+  headless, checkpoints, and the verified story chain.
+- [SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md) — saves between the port
+  and retail.
+- [forensics/](forensics/) — retail behaviour per subsystem, with
+  addresses.
 
 ## How to recover from a fresh session
 
