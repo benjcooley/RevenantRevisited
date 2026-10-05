@@ -107,6 +107,8 @@ char ClassDefPath[MAXPATHLEN];               // Where to load / save Class.Def
 char ExileRCPath[MAXPATHLEN];                // Where to run ExileRC from & where
                                              // the graphics for the resources are
 char ResourcePath[MAXPATHLEN];               // Where to read / write the resources
+char ImageryPath[MAXPATHLEN];                // Imagery tree / imagery.rvi; class.def and rules rosters
+char ModulesPath[MAXPATHLEN];                // Root of the game modules
 char BaseMapPath[MAXPATHLEN];                // Where the untouched version of the game map is stored
 char CurMapPath[MAXPATHLEN];                 // Where the current map is stored
 char MoviePath[MAXPATHLEN];                  // Where the .smk movies live
@@ -1809,40 +1811,34 @@ void GetParameters(int argc, char **argv)
     }
 }
 
+// REVSYNC: GetINISettings @ 0x00484500 — the [Paths] section, with retail's
+// defaults. Each path ends with a backslash. The loaders compose paths from
+// these: shared game data under ClassDefPath / ResourcePath (resources.rvr
+// answers .\Resources\), imagery data under ImageryPath (imagery.rvi answers
+// .\Imagery\), a module's own files under ModulesPath\<module>\. See
+// docs/DATA_LAYOUT.md.
 void GetINISettings()
 {
   // ***** Get Program Paths *****
 
     INISetSection("Paths");
-    INIGetText("ClassDefPath", ".", ClassDefPath, MAXPATHLEN);
     INIGetText("ExileRCPath", ".", ExileRCPath, MAXPATHLEN);
-    INIGetText("ResourcePath", ".", ResourcePath, MAXPATHLEN);
+    INIGetText("ClassDefPath", ".\\Resources", ClassDefPath, MAXPATHLEN);
+    INIGetText("ResourcePath", ".\\Resources", ResourcePath, MAXPATHLEN);
+    INIGetText("ImageryPath", ".\\Imagery", ImageryPath, MAXPATHLEN);
     INIGetText("CurMapPath", ".", CurMapPath, MAXPATHLEN);
     INIGetText("BaseMapPath", ".", BaseMapPath, MAXPATHLEN);
-    INIGetText("MoviePath", ".\\Resources\\FMV", MoviePath, MAXPATHLEN);   // retail default (GetINISettings @ 0x00484500)
-    INIGetText("SaveGamePath", ".\\Save", SaveGamePath, MAXPATHLEN);       // retail default (GetINISettings @ 0x00484500)
+    INIGetText("MoviePath", ".\\Resources\\FMV", MoviePath, MAXPATHLEN);
+    INIGetText("SaveGamePath", ".\\Save", SaveGamePath, MAXPATHLEN);
+    INIGetText("ModulesPath", ".\\Modules", ModulesPath, MAXPATHLEN);
 
     // Make sure each string ends with a backslash
-    if (ClassDefPath[strlen(ClassDefPath) - 1] != '\\')
-        strcat(ClassDefPath, "\\");
-
-    if (ExileRCPath[strlen(ExileRCPath) - 1] != '\\')
-        strcat(ExileRCPath, "\\");
-
-    if (ResourcePath[strlen(ResourcePath) - 1] != '\\')
-        strcat(ResourcePath, "\\");
-
-    if (CurMapPath[strlen(CurMapPath) - 1] != '\\')
-        strcat(CurMapPath, "\\");
-
-    if (BaseMapPath[strlen(BaseMapPath) - 1] != '\\')
-        strcat(BaseMapPath, "\\");
-
-    if (MoviePath[strlen(MoviePath) - 1] != '\\')
-        strcat(MoviePath, "\\");
-
-    if (SaveGamePath[strlen(SaveGamePath) - 1] != '\\')
-        strcat(SaveGamePath, "\\");
+    for (char *path : {ClassDefPath, ExileRCPath, ResourcePath, ImageryPath, CurMapPath,
+                       BaseMapPath, MoviePath, SaveGamePath, ModulesPath})
+    {
+        if (path[0] == '\0' || path[strlen(path) - 1] != '\\')
+            strncatz(path, "\\", MAXPATHLEN);
+    }
 
     INISetSection("Lighting");
     MaxLights = INIGetInt("MaxLights", 1);

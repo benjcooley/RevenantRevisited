@@ -58,6 +58,14 @@ class TModuleManager {
     [[nodiscard]] TModule       *Active()       { return ModuleAt(active_idx); }
     [[nodiscard]] const TModule *Active() const { return ModuleAt(active_idx); }
 
+    [[nodiscard]] std::string ModuleFilePath(const char *file) const;
+        // The active module's copy of a file: "<ModulesPath><module>\<file>",
+        // which the mounted <module>.rvm answers. Empty with no active module.
+    [[nodiscard]] std::string DataFilePath(const char *file) const;
+        // The active module's copy of a data file when it has one, otherwise
+        // the shared "<ClassDefPath><file>". Retail inlines this in each
+        // loader (area.def, exit.def, location.def, state.def, scripts).
+
     [[nodiscard]] int      Count() const            { return (int)modules.size(); }
     [[nodiscard]] TModule *Get(int idx)             { return ModuleAt(idx); }
     [[nodiscard]] int      Find(const char *dirname) const;
