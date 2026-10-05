@@ -322,14 +322,21 @@ class TCharacter : public TComplexObject
     virtual void Save(RTOutputStream os);
         // Saves object data to the sector
 
-  // invisibilty functions
+  // Fading (retail TCharacter +0x194..+0x1a4): fade is the visibility 0..100
+  // that Transparency() reports; each Pulse moves it by fade_step (positive
+  // fades out) until it reaches fade_limit.
+    void Fade(int32_t direction);
+      // `fadecharacterin/out`: +1 back to fully visible (living characters only), else out to 0
     void SetFade(int32_t amt, int32_t amt2 = 5, int32_t amt3 = -1);
-    int32_t GetFade(void);
-    void UpdateFade(void);
+      // Start a fade from 'amt' (kept when < 0) by 'amt2' per pulse to 'amt3' (-1: no limit)
+    int32_t GetFade() const { return fade; }
+    void UpdateFade();
+      // One pulse of the fade
 
   // Invisible Spell Functions
     bool IsInvisibleSpell(){return invisible_spell;}
-    void SetInvisibleSpell(bool new_val){invisible_spell = new_val;}
+    void SetInvisibleSpell(bool on);
+      // Fades to 30 while the spell lasts and back afterwards
 
   // Teleport functions
     void SetTeleportLevel(int32_t new_level){teleport_level = new_level;}
@@ -556,12 +563,13 @@ class TCharacter : public TComplexObject
     float magic_resistance;     // between 0.0 and 1.0... percentage of magic resistance
 
     // Visibility
-    int32_t fade;
-    int32_t fade_step;
-    int32_t fade_limit;
+    int32_t fade = 100;             // retail +0x194, 0..100
+    int32_t fade_step = 0;          // retail +0x198, subtracted from fade each pulse
+    int32_t fade_limit = 100;       // retail +0x19c, where the fade stops (-1: at 0 or 100)
+    int32_t fade_direction = 0;     // retail +0x1a0, -1 out / 1 in / 0 still (no retail reader found)
 
   // Invisible Spell Addition
-    bool invisible_spell;
+    bool invisible_spell = false;   // retail +0x1a4
 
   // Teleport Coordinates
     int32_t teleport_level;
