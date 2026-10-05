@@ -102,8 +102,81 @@ sources a parameter can name:
   `0x00497a30` string; matched on the context's name or type name);
 - dialog tags (`english.def`, `TDialogList`);
 - object stats (`stat`, `if <obj>.stat <name> <op> <value>`).
-Conditions (`if`, `while`) go through one evaluator, `0x0041f230`
-(not yet decompiled for this write-up).
+
+#### Naming an object (`0x0041e690`)
+
+The interpreter's `<context>.` prefix, `wait death` and the evaluator's
+object values all resolve names here, given the calling object and its
+script:
+
+| Name | Object |
+|---|---|
+| `this` | the caller |
+| `user` | the script's user (`0x00492ac0`: the triggering player, else the main player) |
+| `player` | the main player |
+| `target` | a character's opponent: the object of its root action when that is COMBAT (3) or BOW (25) (`TCharacter::Fighting`); nothing for other callers |
+| `current` | the script's `+0xd4`, set only by `setcurrent` (`0x00428e50`) |
+| `party<N>` | the Nth player sharing the base's party name (`TPlayer +0x494`), base = the script's user, else the caller if a player; the base when no member matches |
+| an alias | the script's user alias (`+0xcc` → `+0xc4`) or second alias (`+0xd0` → `+0xc8`), named by manual trigger requests (`0x00492640`) |
+| anything else | `TMapPane::FindClosestObject(name, caller, exact, all)`: the nearest object with exactly that name (ignoring case) in the sector window |
+
+Names are compared ignoring case and in full (`stricmp`). An unknown
+`<context>.` makes the interpreter report "Context not found" and return
+`CMD_BADCOMMAND`. `FindClosestObject`'s `partial` flag selects an
+abbreviation match; the 1998 source had the two branches swapped, and
+retail passes `partial` only from `get`, `select` and `swap`.
+
+#### Expressions (`0x0041f230`)
+
+`if` and `while` evaluate the rest of the line, as does
+`setprotovariable` after its `=`. Left to right, no precedence:
+
+- operands: a number; quoted text, hashed (each character's offset from
+  `A`, shifted to its index, OR-ed); a bare name — the context's
+  prototype variable (`0x00497800`), else a game state (`0x004975d0`),
+  else 0; `<object>.<member> …` (below);
+- operators (table `0x005c8350`, the codes are its indices): `=` `<>`
+  `>` `<` `>=` `<=` `and` `or` `not` `+` `-` `*` `/`, a symbol operator
+  being one or two symbol tokens. `ApplyOperation` (`0x0041f0b0`):
+  comparisons and `and`/`or`/`not` leave the right operand as the
+  running operand, arithmetic leaves its result, `/0` is 0;
+- the result is the last operation's value (or the single operand).
+
+Members of `<object>.` (resolved as above; the object missing ends the
+expression with the result so far):
+
+| Member | Value |
+|---|---|
+| `state` | the object's state |
+| `getitemamount` / `amount` `<item>` | inventory amount by name (vtable `0x84`) |
+| `hasemptyslot` | vtable `0x88` |
+| `isoutside <obj>` | which side of the object `<obj>` is on (`0x0050d2b0`) |
+| `maxslots` | the outermost container's capacity (`0x00470040`) |
+| `timeofday` | the PlayScreen's time of day |
+| `random` | 1–100 |
+| `face` | the facing byte |
+| `getdistance` / `getdist <obj>` | 2D table distance (vtable `0x04`), 0 if `<obj>` is missing |
+| `isatrelativeposition` / `isrelpos <obj> <dx> [<dy>]` | within 50 of `<obj>`'s position + (dx, dy) |
+| `isatrelativedistance <obj> <dist> [<angle>]` | within 50 of the point `dist` from `<obj>` at its facing + angle |
+| `lastattack = "<attack>"` | the character's last attack had that name and landed (`+0x160` attack, `+0x168` its impact result from `0x004c62b0`) |
+| `position.x` / `.y` / `.z` | position |
+| `groupinrange …` | the `groupinrange` command's result |
+| anything else | the member word is skipped and the next word names a statistic (`0x00473900` checks it exists, else 0): `Rahul.stat health` |
+
+Quirks the shipped scripts rely on (the port keeps them):
+- the operator handler steps past its spacing with `WhiteGet`, so in
+  `PedSix.state=1` (no spaces) the `1` is consumed and the line tests
+  the state alone;
+- only `not` may come before the first operand, and it is left pending,
+  so `not X` reads as `X`;
+- `random`'s optional range is tested on the keyword token, so it
+  never applies.
+
+Retail's undefined cases fail the expression in the port: an
+unrecognized token (retail loops forever), `isatrelativeposition` on a
+missing object (dereferenced), `position.` with no x/y/z (stale value).
+An expression that fails makes `if` return false with
+`CMD_BADPARAMS` (`0x84`); `while` returns `CMD_BADPARAMS`.
 
 ### 2.5 Wait protocol (owned by TScript)
 
@@ -134,15 +207,22 @@ errors through it; scripts never see the text.
   release: `FindClosestObject` only), and an error result for an
   unresolved context.
 
-## 4. Port state (2026-10-04, `feature/gameflow`)
+## 4. Port state (2026-10-05, `feature/gameflow`)
 
 - `Commands[]` mirrors the retail table (order, contexts, flags, usage
   text) and handlers take the retail argument list. Missing commands are
-  stubs (`CmdNotPorted`) that **report success without doing the work —
-  below the bar; to be replaced** by an honest "not ported" result.
+  `CmdNotPorted` stubs: they log once with the retail address but still
+  return success (0) — **below the bar**; ARCHITECTURE §6.5 wants
+  "unrecognized".
 - `--exec` (`src/consoleexec.cpp`) is a separate command queue —
   **below the bar** (duplicates the console's job).
-- Interpreter and resolver are still pre-release.
+- The interpreter's context syntax, the object resolver and the
+  expression evaluator are retail (`src/scriptvalue.cpp`). Not ported:
+  prototype variables, the script's trigger aliases (set by manual
+  trigger requests, `0x00492640`), `setcurrent`, multiplayer parties,
+  and the members `isoutside`, `maxslots`, `isatrelativedistance`,
+  `lastattack` (needs the attack-impact result, `TCharacter +0x168`) and
+  `groupinrange` — those fail the expression and log once.
 
 ## 5. Open questions for the author
 

@@ -991,7 +991,7 @@ class TObjectInstance : protected SObjectDef
         // Returns a statistic for an class
     int32_t GetObjStat(int32_t statid) const { if ((uint32_t)statid < (uint32_t)stats.NumItems()) return stats[statid]; else return 0; }
         // Returns a statistic for an object
-    int32_t FindObjStat(char *statname) const { return cl->FindObjStat(statname); }
+    int32_t FindObjStat(const char *statname) const { return cl->FindObjStat(statname); }
         // Finds a stat and returns its stat id or -1 if not found
     void SetStat(int32_t statid, int32_t value) { cl->SetStat(objtype, statid, value); }
         // Sets a class statistic
@@ -1003,6 +1003,8 @@ class TObjectInstance : protected SObjectDef
         // Resets object stat to default value
     int32_t GetStat(const char *statname) const;
         // Returns a statistic given the statistic name (stat can be object or class stat)
+    bool HasStat(const char *statname) const;
+        // REVSYNC: 0x00473900 -- true if the name is one of this object's object or class statistics
     int32_t GetStat(const char *statname, char *str, int32_t id = -1) const;
         // Returns a statistic via sprintf format 'StatnameId.Str' (stat can be object or class stat)
     void SetStat(const char *statname, int32_t value);

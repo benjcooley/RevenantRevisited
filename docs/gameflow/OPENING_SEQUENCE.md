@@ -28,15 +28,21 @@ the block:
 
 ## 2. What it needs
 
-| Need | Retail | Port (2026-10-04) |
+| Need | Retail | Port (2026-10-05) |
 |---|---|---|
-| Area scripts attach to objects already in the world | `ParseScripts` `0x00496860` notifies the map (`N_SCRIPTADDED`); objects match by name (`ObjectScript` `0x00497370`) | **Broken**: the notify is gated on `MapPane.IsOpen()` (never true) and only reaches MapPane's 3×3 window |
-| CUBE trigger fires when the player enters | trigger scan in `TScript::Continue` `0x004933d0` (`0x004927b0` per trigger) | to check |
-| Line execution, blocks, labels, `jump`, `nowait` | `Continue`, `CommandInterpreter` `0x0041e8e0` | 1998 engine |
-| Waits: frames, character done, speech done, dialog response, screen fade | `TScript` wait machine: `SetWait` `0x00492b00`, check `0x00492d70` | **Missing**: 1998 waits live on `TCharacter` |
+| Area scripts attach to objects already in the world | `ParseScripts` `0x00496860` notifies the map (`N_SCRIPTADDED`); objects match by name (`ObjectScript` `0x00497370`) | retail |
+| CUBE trigger fires when the player enters | trigger scan in `TScript::Continue` `0x004933d0` (`0x004927b0` per trigger) | retail |
+| Line execution, blocks, labels, `jump`, `nowait` | `Continue`, `CommandInterpreter` `0x0041e8e0` | 1998 block engine; retail context syntax |
+| Waits: frames, character done, speech done, dialog response, screen fade | `TScript` wait machine: `SetWait` `0x00492b00`, check `0x00492d70` | retail; the screen-fade wait passes at once |
+| Conditions (`If Rahul.stat health = 0` in Tendrick's ALWAYS block) | evaluator `0x0041f230`, resolver `0x0041e690` | retail |
 | Commands used | see §3 | 6 not ported, rest 1998 |
 | Dialog: speech text + voice, choice list, response | `TDialogPane`, speech | 1998 `TDialogPane`, unwired |
 | Presentation: fades, camera, control off | PlayScreen fade state, `centeron`/`scrollto` | partial |
+
+Where it stands: Sardok's block runs from the trigger through the
+resurrection and the first lines (`say I1LOC00`, `say I1SAR00`) to the
+first choice list (`Choice people/whoamI/brought`, `wait response`),
+where it waits for a response the dialog pane doesn't offer yet.
 
 ## 3. Commands in the block (order of first use)
 
@@ -62,13 +68,13 @@ needs checking against its retail handler (`recon/discovered/commands/`).
 
 ## 5. Order of work
 
-1. Script attachment for area-loaded scripts (whole loaded world).
-2. Trigger scan and `Continue` (retail), so the block starts.
-3. Command layer foundation (ARCHITECTURE §6: context, arguments,
-   resolver, evaluator), then the block's commands in order, each
-   checked against retail.
-4. The `TScript` wait machine.
-5. Dialog: speech text and voice, choices, response.
+1. ~~Script attachment for area-loaded scripts (whole loaded world).~~
+2. ~~Trigger scan and `Continue` (retail), so the block starts.~~
+3. Command layer foundation (ARCHITECTURE §6): ~~resolver,
+   evaluator~~; context and arguments; then the block's commands in
+   order, each checked against retail.
+4. ~~The `TScript` wait machine.~~
+5. Dialog: speech text and voice, choices, response — next.
 6. Presentation: fades, camera, control.
 
 Verification: headless runs logging each executed line and command

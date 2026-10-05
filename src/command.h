@@ -62,7 +62,6 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
                            TScript* script = nullptr);
 void Output(const char *fmt, ...);
 
-int32_t StringVal(char *string);
 
 // *******************
 // * Alias Functions *
