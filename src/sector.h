@@ -89,10 +89,14 @@ class TSector final
 
     void Clear();
 
-  // Creates and loads a sector (uses preloaded sector if it can find one)
+  // Creates and loads a sector (uses preloaded sector if it can find one).
+  // TGameMap is the only caller and owns the result: sectors are freed with
+  // CloseSector / DiscardSector by the map that loaded them, never by a
+  // borrower (see gamemap.h).
 
-    // Loads the sector.. keeps file open so sector is locked
-    static TSector* LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory, bool preload = true);
+    // Loads the sector; nullptr if its file is missing, unreadable or
+    // malformed (the sector isn't kept half loaded).
+    [[nodiscard]] static TSector* LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory, bool preload = true);
     // Save and delete the sector (doesn't really delete it if sector is preload)
     static void CloseSector(TSector* sector);
     // Delete the sector without saving it (its working-set copy is being replaced)
@@ -100,7 +104,9 @@ class TSector final
 
     // Load and save the sector (straight load.. don't use preloaded sector list)
 
-    bool Load(bool lock = false);
+    [[nodiscard]] bool Load(bool lock = false);
+      // False if the file is missing, unreadable or malformed; objects read
+      // before the failure stay in the sector
     void Save();
 
     // Sector
