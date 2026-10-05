@@ -730,7 +730,7 @@ The survey above found the 1998 exit code; this is what the port has now.
 | Scripts | type-named prototypes attach (`ObjectScript` pass 2 matched the class name): the `master.s` door prototypes reach their doors |
 | Door walking | `gotorelativedistance`, `gotorelativeposition`, `faceobject`, `isatrelativedistance`, retail `Goto` and the character wait (COMMAND_SYSTEM.md §6.5); `try "QUOTED"` (the door animations) and `goto <object>` |
 | `CheckKeyUse` | retail (player-only localized messages, difficulty 0 unpickable, lockpick experience) |
-| Not yet | the load progress bar; TTrapLever/TTrapPressPlate (TRAP port); prototype variables in `goto` |
+| Not yet | the load progress bar; TTrapLever/TTrapPressPlate (TRAP port) |
 
 Verified (headless, `--quickstart`, `--exec`):
 - `ressexit.activate` puts Locke beside `ressenter` with the camera

@@ -89,6 +89,29 @@ typedef TVirtualArray<SScriptTrigger, 0, 4> TTriggerArray;
 // differently than retail x86 32-bit but the observable semantics are identical;
 // retail save-game compat for this object set isn't tracked yet.
 _CLASSDEF(TScriptProto)
+// A prototype variable, declared in an object block's DATA block --
+//     DATA
+//     BEGIN
+//         NUMBER MUDOX 0
+//         TEXT   NAME "Jong"
+//     END
+// -- and shared by every object the prototype drives. Retail record 0x2c
+// bytes (ParseVariable 0x00495830): type, value, name. `setprotovariable`
+// writes it; expressions, `say`, `goto`, `stat` and `addat` read it.
+struct SScriptVariable
+{
+    enum class EType : int32_t { Number = 0, Text = 1 };
+
+    // Retail held a TEXT value in 30 bytes and copied into it unbounded;
+    // the port keeps the 29 characters that fit.
+    static constexpr size_t kMaxText = 29;
+
+    EType       type   = EType::Number;
+    std::string name;
+    int32_t     number = 0;
+    std::string text;
+};
+
 class TScriptProto
 {
   public:
@@ -111,6 +134,11 @@ class TScriptProto
     bool FitsCriteria(TObjectInstance* inst);
     [[nodiscard]] int32_t NumTriggers() const { return numtriggers; }
 
+    // REVSYNC: 0x00495750 -- a DATA block: its NUMBER and TEXT lines.
+    void ParseVariables(TToken &t);
+    // The variable of that name (ignoring case), or nullptr.
+    [[nodiscard]] SScriptVariable* FindVariable(const char *varname);
+
     char *name        = nullptr;            // Text for criteria (OBJECT/CONTEXT identifier)
     char *text        = nullptr;            // Text of script body (post-BEGIN..pre-END)
     TScriptProto* parent = nullptr;         // The parent in the proto chain
@@ -119,6 +147,7 @@ class TScriptProto
     char *filename    = nullptr;            // Source filename
     int32_t len       = 0;                  // Body length in bytes (excludes trailing END)
     int32_t numtriggers = 0;                // Live count beside triggers (retail mirrors this)
+    std::vector<SScriptVariable> variables; // DATA block (retail +0x24 count, +0x34 records)
 };
 
 typedef TPointerArray<TScriptProto, 64, 64> TScriptProtoArray;
@@ -456,6 +485,19 @@ class TScriptManager
     //   Returns STATE_INVALID (retail 0xfeced300) when name not found.
     int32_t GameState(const char *name);
     void SetGameState(const char *name, int32_t newval) { gamestate.SetState(name, newval); }
+
+    // Prototype variables as an object sees them: those of every prototype
+    // named like it (its name, or its type's), in load order. A read takes
+    // the first prototype declaring the name; a write goes to all of them.
+    // REVSYNC: 0x00497b40 (type, -1 when undeclared), 0x00497800 (number,
+    // STATE_INVALID when not a number -- a number holding that value reads
+    // as unset), 0x00497a30 (text, nullptr when not text), 0x00497700 and
+    // 0x00497910 (writes).
+    [[nodiscard]] int32_t VariableType(const char *name, const TObjectInstance* obj);
+    [[nodiscard]] int32_t VariableNumber(const char *name, const TObjectInstance* obj);
+    [[nodiscard]] const char *VariableText(const char *name, const TObjectInstance* obj);
+    void SetVariableNumber(const char *name, int32_t value, const TObjectInstance* obj);
+    void SetVariableText(const char *name, const char *text, const TObjectInstance* obj);
 
     int32_t FindLocalVal(const char *name);
     void SetLocalVal(int32_t index, int32_t value);

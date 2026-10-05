@@ -99,11 +99,12 @@ int32_t TextValue(const char* text)
     return static_cast<int32_t>(value);
 }
 
-// A bare name is a prototype variable of the context's script, then a game
-// state; an unknown name is 0. Prototype variables (DATA/NUMBER blocks,
-// 0x00497800) aren't ported; only forest.s declares any.
-int32_t VariableValue(const char* name)
+// A bare name is a number variable of the context's prototypes (0x00497800),
+// then a game state (0x004975d0); an unknown name is 0.
+int32_t VariableValue(const char* name, const TObjectInstance* context)
 {
+    if (const int32_t number = ScriptManager.VariableNumber(name, context); number != STATE_INVALID)
+        return number;
     const int32_t state = ScriptManager.GameState(name);
     return state == STATE_INVALID ? 0 : state;
 }
@@ -376,7 +377,7 @@ std::optional<int32_t> EvaluateExpression(TToken& t, TObjectInstance* context, T
             const std::string name = t.Text();
             t.Get();
             if (!t.Is("."))
-                value = VariableValue(name.c_str());
+                value = VariableValue(name.c_str(), context);
             else
             {
                 t.Get();

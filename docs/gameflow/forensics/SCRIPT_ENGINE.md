@@ -144,6 +144,12 @@ Retail:
   the class name until 2026-10-05, so no type-named prototype attached,
   and a new script started at offset 0, running its first trigger's
   header line as a command);
+- prototype variables: `DATA` blocks (`0x00495750`/`0x00495830`, NUMBER
+  and TEXT) on the prototype, the manager's lookups (`0x00497b40`,
+  `0x00497800`, `0x00497a30`, `0x00497700`, `0x00497910`: every
+  prototype named like the object or its type; reads take the first,
+  writes go to all), `setprotovariable`, and their readers (expressions,
+  `say`, `goto`, `stat`); only `forest.s` declares any (Jong's training);
 - the instruction pointer, an offset into the prototype text (the 1998
   raw pointer broke on 64-bit);
 - the trigger test (`0x004927b0`), the user and the trigger-user guard;
@@ -189,6 +195,5 @@ Not ported:
 - two retail USE callers whose classes aren't ported (vtables `0x5b70bc`,
   `0x5b72f8`, slot `0x110`: a delayed use that toggles state 2/3, then
   USE `<name>`/`<type>` with no user);
-- prototype variables (`DATA`/`NUMBER`, `0x00497800`; only `forest.s`);
 - screen-fade and buy/sell waits are satisfied at once (no fade or
   buy/sell screen yet).
