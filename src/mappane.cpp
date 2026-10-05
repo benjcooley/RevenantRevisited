@@ -2388,6 +2388,7 @@ void TMapPane::UpdateMapPos()
     else        // Set map position code for regular game
     {           // --------------------------------------
 
+        prevcenter = center;
         S3DPoint pos, newpos;
         GetMapPos(newpos);
         int32_t newlevel = GetMapLevel();
@@ -3774,33 +3775,39 @@ void TMapPane::AnimateObjects(bool draw)
 // streaming UpdateSectors are in attic/src/mappane_sectors.cpp with the
 // TMapManager operations that replace them.
 
+// REVSYNC: UpdateSectors @ 0x00459220 -- the window is the sectors around
+// the map's center (where the camera looks: normally the player, elsewhere
+// during a scripted pan), on the map's level.
 void TMapPane::UpdateActiveWindow()
 {
-    if (!Player) return;
     TGameMap* map = MapManager.CurrentMap();
     if (!map) return;
 
-    S3DPoint pos;
-    Player->GetPos(pos);
-    const int32_t player_lvl = Player->GetLevel();
-    const int32_t player_sx  = pos.x >> SECTORWSHIFT;
-    const int32_t player_sy  = pos.y >> SECTORHSHIFT;
+    // Window origin = center's sector minus half the window, so that sector
+    // is the center cell.
+    const int32_t new_sectorx = (center.x >> SECTORWSHIFT) - SECTORWINDOWX / 2;
+    const int32_t new_sectory = (center.y >> SECTORHSHIFT) - SECTORWINDOWY / 2;
 
-    // Window origin = player sector minus half-window so the player's
-    // sector ends up at the center cell.
-    const int32_t new_sectorx = player_sx - SECTORWINDOWX / 2;
-    const int32_t new_sectory = player_sy - SECTORWINDOWY / 2;
-
-    // A load replaces the map even when the player lands in the same sector
+    // A load replaces the map even when the center lands in the same sector
     // cell, so the map is part of the check.
-    if (windowmap.Get() == map && level == player_lvl &&
+    if (windowmap.Get() == map && level == newlevel &&
         sectorx == new_sectorx && sectory == new_sectory)
         return;
 
-    level    = player_lvl;
+    level    = newlevel;
     sectorx  = new_sectorx;
     sectory  = new_sectory;
     BindWindow(map);
+}
+
+// Where the camera looks this frame: the center, moved `fraction` of the way
+// from the previous tick's (the center steps at 24 Hz).
+S3DPoint TMapPane::CameraPos(double fraction) const
+{
+    const double f = std::clamp(fraction, 0.0, 1.0);
+    return S3DPoint(prevcenter.x + (int32_t)std::lround((center.x - prevcenter.x) * f),
+                    prevcenter.y + (int32_t)std::lround((center.y - prevcenter.y) * f),
+                    prevcenter.z + (int32_t)std::lround((center.z - prevcenter.z) * f));
 }
 
 void TMapPane::BindWindow(TGameMap* map)

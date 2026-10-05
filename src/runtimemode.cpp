@@ -113,15 +113,11 @@ class TGameModeImpl final : public IRuntimeMode
         if (PlayScreen.IsControlOn() && !PlayScreen.IsDemoMode())
             PlayScreen.UpdateMove();
 
-        // Game-logic tick over the active 3x3 window centered on the
-        // player. UpdateActiveWindow re-fills MapPane.sectors[][];
-        // NextFrameObjects owns the authoritative 24 Hz animation frame
-        // advance; PulseObjects runs per-instance AI/state; MoveObjects
-        // applies movement from movebits set during Pulse.
-        MapPane.UpdateActiveWindow();
-        MapPane.NextFrameObjects();
-        MapPane.PulseObjects();
-        MapPane.MoveObjects();
+        // The map pane's tick (retail's pane pass pulses it before the
+        // dialog pane): ambient fades, animation frames, object AI and
+        // movement, the camera following its centeron target, then the
+        // sector window around the camera's center.
+        MapPane.Pulse();
     }
 
     bool HandleKey(int32_t key, bool down) override
