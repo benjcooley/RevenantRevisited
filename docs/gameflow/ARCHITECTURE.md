@@ -149,9 +149,13 @@ void TScreen::PushModal(TPane* pane, uint32_t flags, TModalDone done);
 void TPane::EndModal(int32_t result);   // pops and calls done(result) next frame
 ```
 
-- Flags keep retail meaning: `MODAL_ANIMATE_ONLY_TOP` (`0x10`),
-  `MODAL_DIM_BACKGROUND` (`0x100`, the darkened backdrop); input goes
-  only to the top modal.
+- Flags keep retail values: `0x10` only the top modal pulses/animates;
+  `0x100` re-applies UI blit effects under the modal (retail
+  `0x004aacb0`, purpose unconfirmed — stored, not yet rendered). Input
+  goes only to the top modal.
+- The modal stack *is* retail's exclusive-pane stack (retail `RunModal`
+  pushes through `SetExclusivePane`), evolved with completion callbacks
+  and results; the legacy `SetExclusivePane` callers keep working.
 - Retail sequences written as nested `RunModal` calls (in-game menu →
   load → back to menu) become continuation chains:
   `PushModal(menu, …, [](int r){ if (r == LOAD) PushModal(load, …,
