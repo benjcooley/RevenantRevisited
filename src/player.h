@@ -253,7 +253,7 @@ class TPlayer : public TCharacter
     OBJSTATFUNC(Level)
     OBJSTATFUNC(Exp)
     OBJSTAT(NextExp)
-    OBJSTAT(AttackLevel)
+    OBJSTATFUNC(AttackLevel)
     OBJSTAT(HealthPct)
     OBJSTAT(ManaPct)
     OBJSTAT(FatiguePct)

@@ -296,10 +296,9 @@ level.
 Retail stat ids are CLASS.DEF's PLAYER OBJSTATS order (17 Level, 20
 AttackLevel, `0x18`–`0x1d` Max{Health,Mana,Fatigue}{Flat,Pct}, `0x22`
 Strn … `0x27` Luck, then four rows of 11 skills: level, exp, next exp,
-cap). The port keeps the 1998 numbering (Level 6, `PLRSTAT_FIRST` 8,
-`SK_FIRST` 14, `SKE_FIRST` 25) and appends CLASS.DEF's other stats when
-it loads (`AttackLevel` 48, `AttackNxtExp` … `LockPickNxtExp` 61–71 with
-the shipped data), so the port finds those by name.
+cap). The port's `charstats.h` uses the same numbering (SAVE_GAME.md
+§10 item 12): `PLRVAL_FIRST + PLRVAL_ATTACKLEVEL`, `PLRSTAT_FIRST`,
+`SK_FIRST`, `SKE_FIRST`, `SKN_FIRST`, `SKC_FIRST`.
 
 Port: `TPlayer::SetPlayerLevel`, `TPlayer::AddSkillExp`,
 `TRules::SkillExpForLevel`. Not ported: RefreshStats. Retail TPlayer
