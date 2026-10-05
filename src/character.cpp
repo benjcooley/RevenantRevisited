@@ -4873,11 +4873,13 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
                 TextBar.Print("Can't carry any more.");
             else
             {
+                // Before the add: gold or food may merge into a pile and be deleted
+                char buf[80];
+                snprintf(buf, sizeof(buf), "%s taken from corpse of %s.", oi->GetName(), GetName());
+
                 oi->RemoveFromInventory();
                 user->AddToInventory(oi);
 
-                char buf[80];
-                sprintf(buf, "%s taken from corpse of %s.", oi->GetName(), GetName());
                 TextBar.Print("%s", buf);
             }
 

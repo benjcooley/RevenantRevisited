@@ -307,3 +307,27 @@ Answer inline (or in chat) and the owning doc gets updated.
     SaleType 1). Were jewelry prices still to be filled in, or meant to
     come from ARMOR.DEF's BASICMODS value column (which the shop never
     reads)?
+
+## Inventory ([forensics/INVENTORY.md](forensics/INVENTORY.md))
+
+120. Gold, food and potions merge into a pile of their kind when they join
+     an inventory, but ammo never does: TAmmo's merge hook (`0x004bf680`)
+     only counts its inventory icon. So arrows bought or picked up stay
+     separate piles. Intended (quivers kept apart?), or an unfinished
+     merge?
+121. Giving part of a pile to someone (`0x0046fc40`: `give`, `take`, a
+     script's partial gift) makes the recipient's new pile from the
+     **giver's** name, not the item's. Where a type has that name (Locke's
+     own, or a chest's) the recipient gets a new object of that type
+     instead of the gold. Where none has (a giver with its own instance
+     name), the add fails, the amount already taken off the pile is lost,
+     and `GiveInventoryTo` calls again on the same pile until it is small
+     enough to move whole. Was that ever seen? No shipped
+     script gives part of a pile, so it may never have shown. The port
+     uses the item's type.
+122. The opening adds Life, Moon and Soul before the Spell Pouch
+     (`keep.s` 616–619), and AddToInventory only routes a player's new item
+     into an item named exactly "Pouch", so the talismans land loose in
+     Locke's pack, beside the pouch. Retail's `New Game1` has them inside
+     the Spell Pouch. Did players drag them in, or did something else put
+     them there?

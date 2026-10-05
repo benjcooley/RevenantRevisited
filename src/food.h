@@ -29,6 +29,8 @@ class TFood : public TObjectInstance
 
     void Load(RTInputStream is, int32_t version, int32_t objversion) override;
         // A loaded stack holds at least one
+    bool MergeInto(TObjectInstance* newowner) override;
+        // REVSYNC: 0x0050ea80. Joins newowner's stack of the same name
 
     // How many are in this stack (retail object stat 0)
     OBJSTATFUNC(Amount)

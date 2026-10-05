@@ -811,7 +811,10 @@ void TPlayer::OnInventoryRemove(TObjectInstance* item)
 {
     const int32_t slot = item->InventNum() - kInvSlotEquipFirst;
     if ((uint32_t)slot < NUM_EQ_SLOTS && equipment[slot] == item)
+    {
+        log_debug("[inv] %s: %s leaves equipment slot %d, unequipped", GetName(), item->GetName(), slot);
         Equip(nullptr, slot);
+    }
 }
 
 // REVSYNC: TPlayer::Equip = retail 0x005199b0. The item moves to inventory
