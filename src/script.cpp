@@ -45,11 +45,19 @@ bool TScript::pauseall = false;
 namespace {
 
 // The script line about to run, at trace level (revenant.log), so a scene can
-// be followed line by line.
+// be followed line by line. `line` may start with the blank and comment
+// lines the tokenizer skipped to reach the command.
 void TraceLine(TObjectInstance* context, const char* line)
 {
-    while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n')
-        ++line;
+    for (;;)
+    {
+        while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n')
+            ++line;
+        if (line[0] != '/' || line[1] != '/')
+            break;
+        while (*line && *line != '\n')
+            ++line;
+    }
     const char* end = line;
     while (*end && *end != '\n' && *end != '\r')
         ++end;
