@@ -78,7 +78,6 @@ void TCharacter::ClearChar()
 
     autocombat = AutoBeginCombat;
     
-    waittype = WAIT_NOTHING;
     waitticks = 0;
     forcecommanddone = false;
     forcenomove = false;
@@ -446,50 +445,10 @@ void TCharacter::UpdateAction(int32_t bits)
     if (doing->firsttime)
         doing->firsttime = false;
 
-  // ********************************************************************
-  // Now continue the script (before the code below sets the Action Block for the
-  // next frame.  The script is currently paused if this code is running.  Ordinary
-  // script CMD_WAITS always wait on the next command being finished (WAIT_NOTHING).
-  // Special waits can set the WAIT_ flags to wait on other things.
-    if (GetScript())
-    {
-        bool continuescript = false;
-
-        if (waittype == WAIT_NOTHING && comstate == COM_COMPLETED) // Ordinary wait action done
-            continuescript = true;
-        else if (waittype == WAIT_TICKS)                           // Wait for ticks done
-        {
-            waitticks--;
-            if (waitticks <= 0)
-                continuescript = true;  
-        }
-        else if (waittype == WAIT_RESPONSE && DialogPane.HasResponded())  // Wait for a response    
-        {
-            ScriptJump(DialogPane.GetResponseLabel());
-            waittype = WAIT_NOTHING;
-            continuescript = true;
-            DialogPane.Hide(); // Done with dialog pane, now hide it
-        }
-        else if (waittype == WAIT_CHAR_DONE && comstate == COM_COMPLETED)
-        {
-            if (!doing->obj || ((TCharacter*)doing->obj)->IsInRoot())
-                continuescript = true;
-        }
-
-      // NEXT LINE: Next line in script
-        if (continuescript)
-        {
-            commanddone = true;             // Force animation state to done
-            comstate = COM_COMPLETED;       // Force command state to COMPLETED
-            if (desired)                    // Break whatever is animating!
-                desired->priority = false;
-            if (doing)                      // Break whatever is animating!
-                doing->priority = false;
-            waittype = WAIT_NOTHING;        // Don't wait anymore
-            ContinueScript();
-        }
-    }
-
+  // REVSYNC: TCharacter::Pulse @ 0x004c3371 — run the script, telling it
+  // whether the current action has completed. Waits belong to the script
+  // (SCRIPT_ENGINE.md §5); the 1998 character-side waits are gone.
+    ContinueScript(comstate == COM_COMPLETED);
 
   // ********************************************************************
   // Now set the action blocks for the next frame.  The rules are:
@@ -3846,8 +3805,10 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
         return true;
     }
 
-    if (waittype != 0 && objclass != OBJCLASS_PLAYER)
-        return false;  // monster waittype gate, never fires for player
+    // Monsters don't attack while their script waits. (This gate read the
+    // 1998 character wait state, which now lives on the script.)
+    if (IsScriptWaiting() && objclass != OBJCLASS_PLAYER)
+        return false;
 
     // Not still doing another attack (retail 0x4d139c)
     if (doing && doing->action == ACTION_ATTACK && doing->attack &&
@@ -4747,12 +4708,6 @@ bool TCharacter::SetFighting(TCharacter* newtarget)
     }
 
     return true;
-}
-
-void TCharacter::Wait(int32_t waitlen)
-{
-    waittype = WAIT_TICKS;
-    waitticks = waitlen;
 }
 
 bool TCharacter::PlayAnim(char *string)

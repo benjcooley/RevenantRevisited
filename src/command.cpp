@@ -695,15 +695,16 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
     if (nowait && retval == CMD_WAIT)
         retval = 0;
 
-  // If we're  character, and our script just caused another character to do something, 
-  // wait for that character to finish what he's doing
-    if (orgcontext && context && // Both not null
-        orgcontext != context && // Doing something to somebody other than ourselves
-        retval == CMD_WAIT &&    // Script caused a wait (and we are both chars below)
-        (context->ObjClass() == OBJCLASS_CHARACTER || context->ObjClass() == OBJCLASS_PLAYER) &&
-        (orgcontext->ObjClass() == OBJCLASS_CHARACTER || orgcontext->ObjClass() == OBJCLASS_PLAYER))
+  // REVSYNC: CommandInterpreter @ 0x0041e8e0 — a command that keeps its
+  // target busy makes the calling object's script wait for it, unless that
+  // script already waits for something.
+    if (orgcontext && context && !orgcontext->IsScriptWaiting())
     {
-        ((PTCharacter)orgcontext)->WaitChar(context);
+        TScript* waiting = orgcontext->GetScript();
+        if (waiting && retval == CMD_WAIT)
+            waiting->WaitChar(context);
+        else if (waiting && retval == CMD_WAITSAY)
+            waiting->WaitSay(context);
     }
 
     return retval;
@@ -1433,40 +1434,76 @@ COMMAND(CmdSet)
     return 0;
 }
 
+// REVSYNC: wait @ 0x0041fe30. The waiting script is the context's
+// (retail's object wait wrappers 0x004712b0..0x00471350). Retail's SetWait
+// opened the dialog choices for a response wait; the 1998 dialog pane is
+// shown here until the dialog port moves it.
 COMMAND(CmdWait)
 {
+    TScript* waiting = context ? context->GetScript() : nullptr;
+
     if (t.Type() == TKN_NUMBER)
     {
-        int32_t wait = t.Index();
-
-        ((PTCharacter)context)->Wait(wait);
-
+        if (waiting)
+            waiting->WaitFrames(t.Index());
         t.WhiteGet();
+        return CMD_WAIT;
     }
-    else if (t.Is("response"))
-    {
-        DialogPane.SetCharacter((PTCharacter)context);  // Waiting for dialog.. show dialog pane
-        DialogPane.Show();
 
-        ((PTCharacter)context)->WaitResponse();
-
-        t.WhiteGet();
-    }
-    else if (t.Is("char"))
+    if (t.Is("char") || t.Is("obj") || t.Is("object"))
     {
         t.WhiteGet();
         if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
             return CMD_BADPARAMS;
-
         TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
         if (!inst)
             Output("Couldn't find wait char\n");
-
-        ((PTCharacter)context)->WaitChar(inst);
-
+        if (waiting)
+            waiting->WaitChar(inst);
         t.WhiteGet();
+        return CMD_WAIT;
     }
 
+    if (t.Is("death"))
+    {
+        t.WhiteGet();
+        if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+            return CMD_BADPARAMS;
+        TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
+        t.WhiteGet();
+        if (inst && t.Type() == TKN_SYMBOL && t.Code() == '.')
+        {
+            t.Get();
+            inst = MapPane.FindClosestObject((char *)t.Text(), inst);
+            t.WhiteGet();
+        }
+        if (!inst)
+            Output("Couldn't find wait char\n");
+        if (waiting)
+            waiting->WaitDeath(inst);
+        return CMD_WAIT;
+    }
+
+    EScriptWait type = EScriptWait::None;
+    if (t.Is("screenfade"))
+        type = EScriptWait::ScreenFade;
+    else if (t.Is("buysell"))
+        type = EScriptWait::BuySell;
+    else if (t.Is("response") || t.Is("responsenohide") || t.Is("respnohide"))
+        type = EScriptWait::Response;
+    else if (t.Is("respctrlon"))
+        type = EScriptWait::ResponseControlOn;
+    else
+        return CMD_WAIT;    // plain "wait": until the context's action is done
+
+    if (type == EScriptWait::Response || type == EScriptWait::ResponseControlOn)
+    {
+        DialogPane.SetCharacter((PTCharacter)context);
+        DialogPane.Show();
+    }
+    if (waiting)
+        waiting->SetWait(type);
+    t.WhiteGet();
     return CMD_WAIT;
 }
 

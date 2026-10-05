@@ -27,12 +27,6 @@
 #include "spell.h"
 #endif
 
-// Wait types
-#define WAIT_NOTHING        0
-#define WAIT_RESPONSE       1
-#define WAIT_CHAR_DONE      2
-#define WAIT_TICKS          3
-
 // FindChar flags
 #define FINDCHAR_ENEMY     1    // Find only enemies
 #define FINDCHAR_HEAR      2    // Find only characters we can hear
@@ -283,13 +277,6 @@ class TCharacter : public TComplexObject
         { return doing && doing->action == ACTION_FLAIL; }
       // Returns true if character is acting like a fool (result of calling Go())
 
-  // Wait functions
-    void Wait(int32_t waitlen);
-      // Wait for specified number of frames to elapse
-    void WaitChar(TObjectInstance* inst) { if (doing) doing->obj = inst; waittype = WAIT_CHAR_DONE; }
-      // Waits for another character to finish his current action
-    void WaitResponse() { waittype = WAIT_RESPONSE; }
-      // Waits for the player to pick a response in the response panel
     void ForceCommandDone() { forcecommanddone = true; }
       // Forces the current command to be done
 
@@ -522,7 +509,6 @@ class TCharacter : public TComplexObject
 
     PSCharData chardata;        // Pointer to global character settings for this type of char
 
-    int32_t waittype;               // Wait for this before continuing script execution
     int32_t waitticks;              // Number of ticks to wait for no action block wait
 
     bool forcecommanddone;      // For skipping past animations

@@ -25,6 +25,9 @@ class TParseStream
     virtual void Reset() = 0;
     virtual uint32_t GetPos() const = 0;
     virtual void SetPos(uint32_t newpos) = 0;
+    // The text being parsed, for streams over memory (positions are offsets
+    // into it); null for file streams.
+    [[nodiscard]] virtual const char *Data() const { return nullptr; }
 };
 
 // ********************************************************
@@ -42,6 +45,7 @@ class TStringParseStream : public TParseStream
     virtual void Reset() { ptr = buf; }
     virtual uint32_t GetPos() const { return (uint32_t)(ptr - buf); }
     virtual void SetPos(uint32_t newpos) { ptr = (char *)(buf + newpos); }
+    [[nodiscard]] const char *Data() const override { return buf; }
 
   private:
 
@@ -138,6 +142,7 @@ class TToken
       index = 0; code = 0; number = 0; text[0] = 0; lastch = 0; linenum = 1; }
     
     void SetStream(TParseStream &s) { stream = &s; }
+    [[nodiscard]] TParseStream *Stream() const { return stream; }
 
     void Get();         // Gets next token
     void WhiteGet();    // Gets next non-whitespace token
