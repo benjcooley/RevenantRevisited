@@ -4,6 +4,9 @@
 // *                  Rules.cpp - TRules object module                     *
 // *************************************************************************
 
+#include <algorithm>
+#include <array>
+
 #include "revenant.h"
 #include "parse.h"
 #include "character.h"
@@ -801,4 +804,23 @@ PSCharData TRules::GetCharData(int32_t objtype, int32_t objclass)
         return d;
     }();
     return &s_fallback;
+}
+
+// REVSYNC: 0x0048cc90 -- experience a skill needs to reach 'level'; 0 for
+// level 0, the level-30 figure past 30. TRules::Initialize (0x0048b690)
+// builds the table (Rules +0x168) from a formula, not from rules.def: 300
+// for level 1, then 100 * i + 300 more for each level after.
+int32_t TRules::SkillExpForLevel(int32_t level) const
+{
+    static constexpr std::array<int32_t, kMaxSkillLevel> kSkillExp = [] {
+        std::array<int32_t, kMaxSkillLevel> table{};
+        table[0] = 300;
+        for (int32_t i = 1; i < kMaxSkillLevel; i++)
+            table[i] = table[i - 1] + 100 * i + 300;
+        return table;
+    }();
+
+    if (level == 0)
+        return 0;
+    return kSkillExp[std::clamp(level - 1, 0, kMaxSkillLevel - 1)];   // retail doesn't guard < 0
 }

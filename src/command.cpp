@@ -1535,6 +1535,19 @@ COMMAND(CmdPivotObject)
     return CMD_WAIT;
 }
 
+// REVSYNC: playerlevel @ 0x00428640 -- `<player>.playerlevel <n>`: rebuild
+// the player as a fresh level-n character (TPlayer::SetPlayerLevel). The
+// table only lets a player be the context.
+COMMAND(CmdPlayerLevel)
+{
+    if (t.Type() != TKN_NUMBER)
+        return CMD_BADPARAMS;
+
+    static_cast<TPlayer*>(context)->SetPlayerLevel(static_cast<int32_t>(t.Number()));
+    t.Get();
+    return 0;
+}
+
 COMMAND(CmdCombat)
 {
     int32_t index = -1;
@@ -3943,7 +3956,6 @@ COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
 COMMAND(CmdMaxMonsters) { return CmdNotPorted("maxmonsters", 0x00427c30, t); }
 COMMAND(CmdMonsterTypes) { return CmdNotPorted("monstertypes", 0x00427bd0, t); }
 COMMAND(CmdOperate) { return CmdNotPorted("operate", 0x00426cd0, t); }
-COMMAND(CmdPlayerLevel) { return CmdNotPorted("playerlevel", 0x00428640, t); }
 COMMAND(CmdSetFromExit) { return CmdNotPorted("setfromexit", 0x00428a40, t); }
 COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
 COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
