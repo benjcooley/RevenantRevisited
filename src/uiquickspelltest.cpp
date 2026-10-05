@@ -152,7 +152,7 @@ constexpr float kLabelB = 0xF2 / 255.0f;
 
 // Font: same Arimo atlas the rest of the HUD uses — Arial-metric-compatible
 // TTF; size picked to fit the reference image's ~10px label height.
-constexpr const char* kFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx   = 10;
 
 // =====================================================================
@@ -458,9 +458,9 @@ bool InitializeUIQuickSpellMode()
                  g_ringU->width, g_ringU->height);
     // Font: small Arimo for the 2-line spell-name labels (spec §8 /
     // SpellbookPane spec §8 — same convention as the spellbook text).
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-quickspell] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
     delete g_pane;
     g_pane       = nullptr;
