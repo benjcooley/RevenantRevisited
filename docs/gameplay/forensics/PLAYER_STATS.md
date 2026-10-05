@@ -277,10 +277,11 @@ experience is called from `TCharacter::ResolveHit`.
   the stat sheet's `armor` lacks that term, and AttackModifier /
   DefenseModifier stay the 1998 ones.
 - Network forwarding in AddSkillExp and the level-up isn't ported.
-- Nothing in the port adds stat effects yet: the `statmod` command
-  (`0x00428200`, `0x0051c550` = `PlayerStats::ReadStatLine` then
-  `AddStatEffect`) and the spell effect constructor (`0x0053f090`) are
-  not ported.
+- The `statmod` command (`0x00428200`, `0x0051c550` =
+  `PlayerStats::ReadStatLine` then `AddStatEffect`) is ported
+  (`--exec "statmod STRN 2 TIME 48"` raises Str by 2 for two seconds); the
+  spell effect constructor (`0x0053f090`) is not, so spells add no stat
+  effects yet.
 
 ## 10. Verification (2026-10-05)
 
