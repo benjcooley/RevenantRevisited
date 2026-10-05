@@ -9,6 +9,7 @@ screen system and is covered here as its first consumer.
 Requirements and retail behavior come from the forensics:
 [forensics/SCREEN_SYSTEM.md](forensics/SCREEN_SYSTEM.md),
 [forensics/GAME_FLOW.md](forensics/GAME_FLOW.md),
+[forensics/SAVE_GAME.md](forensics/SAVE_GAME.md),
 [forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md).
 Engine conventions this extends: [../FRAME_PIPELINE.md](../FRAME_PIPELINE.md),
 [../RENDERER_ARCHITECTURE.md](../RENDERER_ARCHITECTURE.md),
@@ -92,27 +93,117 @@ extern TGameFlow GameFlow;
 
 Retail's `TPlayScreen` conflated presentation with the world. The
 session takes the world half; the managers it coordinates are unchanged.
+Retail behavior: [forensics/SAVE_GAME.md](forensics/SAVE_GAME.md) (save
+format, `LoadGame`/`SaveGame`, `curmap`) and
+[forensics/GAME_FLOW.md](forensics/GAME_FLOW.md) §2.3 (start modes).
 
-| Responsibility | Retail | Session |
+| Responsibility | Retail | Port owner |
 |---|---|---|
-| Mount start module | `PlayScreen::Initialize` (`0x004609f0`) | `Begin(module)` |
-| Scripts, areas, automap | `TScriptManager::Initialize`, `TAreaMgr::Initialize` in Initialize; `Close` | `Begin` / `End` (moves `ScriptManager.Initialize` out of `InitGlobals`) |
-| World map, players | `ClearCurMap`, `LoadGame`, `PlayerManager.Clear` | `LoadNewGame()`, `LoadSave(slot)`, `End()` |
-| Game time | PlayScreen `gametime/gameframes` | session |
-| Deferred load/save requests | PlayScreen `+0x5e4..+0x5f0` | session request queue |
-| Simulation tick | `TPlayScreen::Pulse` | `TGameSession::Tick()` (called by the presenting screen each legacy frame unless paused) |
+| Mount start module, areas | `PlayScreen::Initialize` (`0x004609f0`, `TAreaMgr::Initialize`); `Close` | session start / `End` |
+| Script prototypes (`master.s`), `state.def` names | `TScriptManager::Initialize` per game | boot (`InitGlobals`), unchanged — see §3.4 |
+| Per-game script and state reset | inside `LoadGame` (`0x00496e20`, `ReloadStates`) | `TSaveGame::LoadGame`, as retail |
+| Sector working set (`curmap`) | `TMapPane::{Clear,Load,Save}CurMap` | `TMapManager` (sector owner); `TMapPane` methods delegate |
+| Save file read/write, slot list, merchant table | save manager (`0x0048d260..0x0048e820`) | `TSaveGame` (evolved to the retail format) |
+| New / load / save / end a game | `PlayScreen::Initialize` start modes, in-game menu | `TGameSession` |
+| Load the player's level, place players | `PlayScreen::Initialize` (`0x004997d0`) | `TGameSession` |
+| Effect imagery, panes, cursors, fades | `PlayScreen::Initialize` | `TPlayScreen` (presentation) |
+| Game time, deferred load/save, simulation tick | PlayScreen (`+0x680..`, `+0x5e4..`, `Pulse`) | `TGameSession` — step 2e |
 
-- **Loading is a staged job**, not a frame-blocking call: `LoadNewGame`
-  / `LoadSave` enqueue retail's steps (mount, scripts, areas, map,
-  `newgame.sav` / slot, player, effects preload) and the session runs
-  steps each frame, exposing `Progress()` (0–1) and `IsReady()`. Retail
-  repainted the loading bar by hand inside one long frame; staging gives
-  the same bar without re-entering the frame loop. Steps stay on the
-  main thread (no worker pool exists; per the threading rule a pool can
-  be introduced later without changing callers).
-- Save/load serialization stays with `TSaveGame` (retail format — see
-  [../../recon/discovered/save_system_notes.md](../../recon/discovered/save_system_notes.md));
-  the session orchestrates it.
+### 3.1 Components
+
+```cpp
+// src/gamesession.h — owned by TGameFlow (GameFlow.Session()).
+class TGameSession
+{
+  public:
+    // Start a game: queue retail's load steps for a new game (start mode 0)
+    // or a named slot (start mode 1; GAMENOTFOUND -> new game, as retail).
+    void Start(const SSessionStart& request);
+    bool Step();                         // run the next load step; false when done
+    [[nodiscard]] float Progress() const;
+    [[nodiscard]] bool  Ready() const;
+
+    bool Save(const char* slot);         // retail SaveGame
+    void End();                          // leave the game: unload world, clear players, close areas
+
+    // Bumped whenever the loaded world is replaced. Presenters (the map
+    // renderer via TPlayScreen) rebind when it changes.
+    [[nodiscard]] uint32_t WorldVersion() const;
+};
+```
+
+- **`TSaveGame`** keeps its class identity and becomes retail's save
+  manager: `SSaveHeader` and the body codec (game states, merchant
+  table, player list) are separate from orchestration, so the format can
+  be tested on a buffer; `LoadGame(name, flags)`, `LoadNewGame()`,
+  `SaveGame(name)`, `RefreshSlots()`, `HasSoldUnique/AddSoldUnique`
+  follow the retail functions one for one. The reset sequence in
+  `LoadGame` calls the ported subsystem for each retail call and marks
+  the unported ones (dialog, buy/sell, area exit, control) with their
+  retail address.
+- **`TGameState::LoadStream/SaveStream`** move to
+  `TInputStream`/`TOutputStream` (the binary streams the format uses).
+- **Working set.** `TMapManager` gains `FlushSectors`, `ClearCurMap`,
+  `LoadCurMap(dir)`, `SaveCurMap(dir)`. The working set is always
+  `<SavePath>/curmap` (created on demand). `TSector::Load` reads the
+  working set, then the module map — never the install's `curmap`.
+  `rev_fopen` write modes resolve only under SavePath; they never fall
+  back to the install, the module or the data root.
+
+### 3.2 New game, step by step
+
+1. `TGameFlow::StartNewGame()` → `Session().Start({NEWGAME})`.
+2. Session steps: module + areas → `ClearCurMap` → `LoadNewGame`
+   (retail resets, `newgame.sav`, players, game time) → load the main
+   player's level → put each player into its sector → `++WorldVersion`.
+3. The flow switches to `TPlayScreen`. Its `Initialize` builds
+   presentation only (renderer, HUD, cursors, effect imagery) and binds
+   the renderer to the session's world.
+
+A load from a slot is the same with `LoadCurMap(<slot>/CurMap)` +
+`LoadGame(slot)`. `End()` runs when the flow leaves the game (title,
+death, quit).
+
+### 3.3 What this replaces
+
+- `SpawnDefaultPlayer` + starter loadout in the boot path, and the
+  Level-10 floor in `TPlayer::ClearPlayer` (stand-ins for `newgame.sav`).
+  The editor's "Place Here" keeps its own use of `SpawnDefaultPlayer`.
+- The pre-release `game.sav` wrapper, including HUD state in slots 2–12
+  and the automap blob (neither exists in retail saves).
+- The renderer choosing the starting level from defaults. Dev overrides
+  `--level=L` / `--sector=L_X_Y` still work: the new game loads normally,
+  then the player is moved to that sector at walkmap height.
+
+### 3.4 Decisions
+
+- **Script prototypes stay boot-loaded.** Retail re-parsed `master.s` per
+  game, but prototypes are static data, `--test` hosts need them, and
+  every per-game reset retail performs is in `LoadGame` anyway. (This
+  revises the earlier plan to move `ScriptManager.Initialize` into the
+  session.)
+- **Synchronous first, then staged.** The load is written as an ordered
+  step list from the start; 2c runs all steps in one call, 2d adds
+  `TLoadScreen`, which runs one step per frame and draws the loading bar
+  with retail's increments (forensics: `0x00448680` calls in
+  `PlayScreen::Initialize`). No API change between the two.
+- **Version counter, not a callback chain**, for rebinding presenters
+  after a load (house rule: versions over flags).
+- **No automap persistence until the retail automap files are ported**
+  (SAVE_GAME §8). Dropping the pre-release blob loses automap state
+  across save/load in the meantime; carrying it in a retail save is not
+  an option.
+
+### 3.5 Delivery
+
+| Step | Content | Verified by |
+|---|---|---|
+| 2a | Working set + write policy (`rev_fopen`, `TSector`, `TMapManager`, `TMapPane` delegation) | sectors written under SavePath, nothing written to the install; existing boot unchanged |
+| 2b | `TSaveGame` retail format + `TGameState` streams + slot list | `newgame.sav` and the GOG `Save/Single/New Game1` parse; write→read round trip byte-identical |
+| 2c | `TGameSession`, flow/PlayScreen integration, stand-ins removed | `--quickstart`: Locke in the Keep resurrection chamber with `newgame.sav` stats/inventory (filmstrip) |
+| 2d | `TLoadScreen` + staged steps | loading bar matches retail; filmstrip |
+| 2e | Game time, deferred load/save, tick into the session | save/load from the in-game path |
+
 - `IRuntimeMode` (game/editor) stays inside `TPlayScreen`: it is a
   presentation/input policy, and editor mode decides whether the session
   ticks.
@@ -316,6 +407,8 @@ perform.
 | World lives in `TPlayScreen` | `TGameSession` owned by `TGameFlow` | overlays, loads and movies don't rebuild the screen; testable | none |
 | Loading bar repainted inside one long frame | Staged session load across frames | no re-entrant loop | bar animates the same |
 | `nextscreen` set from many sites | `TGameFlow` intents | one transition graph | none |
+| `master.s` re-parsed every game | parsed once at boot; per-game resets as retail | static data; `--test` hosts | none |
+| Sectors tracked by `TMapPane` | working set managed by `TMapManager` | `TMapManager` owns loaded sectors in the port | none |
 | Panes blit into a CPU backbuffer | Pane `Compose`/`Draw` through `TRenderer` | GPU compositor | none (Classic pixel-identical) |
 | Handlers with 4 raw args, hand-rolled token parsing | `SCommandContext` + `TCommandArgs` | one parsing vocabulary | none |
 | 3,700-line `command.cpp` | per-family handler files, one table | maintainability | none |
