@@ -50,6 +50,8 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 | [x] | DEF engine as a pane (`TDefPane`; `TOptionsPane`), sprite buttons + text for code-built panes | 2026-10-04 (c52d4f1, ca25da2) |
 | [x] | `TGameFlow` intents; boot = intro `Mix_FMV1.smk` -> title; `--quickstart[=save]`, `--nointro`, `--menu=` | 2026-10-04 (ca25da2) |
 | [x] | Production `TLogoScreen` (title, version text) — verified vs retail screenshot | 2026-10-04 (ca25da2) |
+| [x] | Loading screen between the title and the game (retail bar, staged session steps) | 2026-10-05 |
+| [x] | Screen fades (title, PlayScreen, scripts) | 2026-10-05 |
 | [ ] | Load Game / Options screens from the title (host `TDefPane` loadgame / `TOptionsPane`) | — |
 | [ ] | ESC in-game menu as a modal continuation chain (retail 0x0047e500) | — |
 
@@ -93,8 +95,8 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 |--------|------|--------------|
 | [x] | Recon: retail's start location is the player in the module's `newgame.sav` (forensics/SAVE_GAME.md) | 2026-10-04 |
 | [x] | Read the start position from module data, not hard-coded | 2026-10-04 |
-| [ ] | Fire the starting TRIGGER_ALWAYS script in the start sector | — |
-| [ ] | Verify with the GOG Misthaven module data | — |
+| [x] | The opening runs end to end (CUBE trigger, voiced lines, choices, gifts, Rahul, control back) — [OPENING_SEQUENCE.md](OPENING_SEQUENCE.md) | 2026-10-05 |
+| [x] | Verified on the GOG Ahkuilon module data | 2026-10-05 |
 
 **Exit:** New Game uses module data for the start position and fires the opening script.
 
@@ -107,7 +109,7 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 | [x] | Audit `TSaveGame::WriteGame/ReadGame` against current `TObjectInstance::Save/Load` | 2026-05-19 (T5_FORENSIC.md) |
 | [x] | Confirm version IDs match `docs/SAVE_GAME.md` (= MAP_VERSION 15; envelope + per-class version gates symmetric) | 2026-05-19 |
 | [-] | Confirm `LoadCurMap/SaveCurMap` work with modern TModuleManager + Revisited overlay — out of scope per architectural rule (map orchestration uses modern engine; see T5_FORENSIC §1.3) | 2026-05-19 |
-| [!] | Confirm `TScript::ip` saves as offset, not raw pointer — TScript per-instance state is NOT in the WriteGame envelope (REVSYNC-QUESTION in T5_FORENSIC §8); needs user guidance | 2026-05-19 |
+| [x] | Script state across saves: retail saves none; `LoadGame` resets every script (`0x00496e20`). The ip is a text offset. | 2026-10-05 |
 | [~] | Round-trip test: spawn → walk → save → restart → load → verify (gated on interactive F5/F9; `--savecycle-test` is the non-interactive proxy) | 2026-05-19 |
 | [x] | `--savecycle-test` headless round-trip harness | 2026-05-19 |
 | [x] | Fix LoadInventory to place items at saved slot (retail-faithful; closes exit-crash candidate C2) | 2026-05-19 |
@@ -118,9 +120,9 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 | [x] | Retail save format: header, game states, merchant table, player list; slots under `SaveGamePath/Single/<name>` with `CurMap/` (forensics/SAVE_GAME.md) | 2026-10-04 |
 | [x] | Retail `LoadGame` reset sequence (curmap, scripts, states, areas, players, control) | 2026-10-04 |
 | [x] | In-game requests: F5 = retail Quick Save, F9 = dev reload of the last slot; `--savecycle-test` runs through them | 2026-10-04 |
-| [ ] | `TPlayer`/`TCharacter::Save` in the retail objversion 14 layout (port writes the 1998 v4 body; SAVE_GAME §10.8) | — |
+| [x] | Save interop: every class streams retail's layout (player objversion 15), sector hashes, `ss.bmp` thumbnail (ARCHITECTURE §3.5 2f); retail-side check in dosbox-x pending ([SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md)) | 2026-10-05 |
+| [x] | Player stats retail (maxima, RefreshStats, armor, level-up) — [../gameplay/forensics/PLAYER_STATS.md](../gameplay/forensics/PLAYER_STATS.md) | 2026-10-05 |
 | [ ] | Automap persistence (retail per-sector automap files; the pre-release blob is gone) | — |
-| [ ] | `ss.bmp` slot thumbnail | — |
 
 **Exit:** Save/load round-trips player + script state cleanly.
 
@@ -153,7 +155,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 |--------|------|--------------|
 | [x] | Retail death countdown (192 frames, TPlayer::Animate 0x00518aa0) -> `GameFlow.PlayerDied()` | 2026-10-04 (64c0f25) |
 | [x] | Retail `TDeathScreen` + `TDeathPane` (Restart / Load / Exit, death voice) | 2026-10-04 (64c0f25) |
-| [ ] | Restart semantics after a loaded game (author question, ARCHITECTURE §8 Q1) | — |
+| [ ] | Restart semantics after a loaded game (author question 40) | — |
 | [ ] | Death "Load" -> load-game screen | — |
 | [x] | Death voices audible (MP3 voice support in the sound player; `gosar00` stays missing, as in retail) | 2026-10-05 |
 
@@ -171,14 +173,13 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Pump driver verified — `TGameModeImpl::Tick` → `MapPane.PulseObjects` → `inst->Pulse` → `ContinueScript` → `script->Continue(this)` already wired (no new code needed) | 2026-05-17 |
 | [x] | Retire/refactor the 3 `#if 0` MSVC-debug-heap blocks in script.cpp | 2026-05-17 (b2bd02a) |
 | [x] | **T8.1 RETAIL-SYNC** — `src/script.{cpp,h}` synced against `recon/discovered/cls_TScript*` (~1700 lines decomp). New: TScriptManager.instances + fileowners registries, ObjectScript class-name second-pass match (now actually attaches DOOR1 etc. at boot), TGameState::STATE_INVALID = 0xfeced300, AddScript port, USE-trigger fallback to proto-self name. Continue/Triggered/End keep pre-release C++ because retail bodies hook subsystems not yet ported (dialog FSM, player combat FSM, multi-context vftable slots) — flagged `TODO(revsync)` in-source. Per-method `// REVSYNC: @ <addr>` provenance markers | 2026-05-17 (52904fe) |
-| [ ] | TRIGGER_ALWAYS verified live (after sync) | — |
-| [ ] | TRIGGER_DIALOG — click-on-character handler (depends on T9) | — |
-| [ ] | TRIGGER_PROXIMITY — per-frame distance check | — |
-| [ ] | TRIGGER_CUBE — entry detection | — |
-| [ ] | TRIGGER_ACTIVATE / USE / GIVE / GET — coord with ui inventory | — |
-| [ ] | TRIGGER_COMBAT / DEAD — coord with core combat | — |
+| [x] | Retail engine: trigger scan and requests, waits, the evaluator and resolver, aliases, attach by name then type, reset on attach ([forensics/SCRIPT_ENGINE.md](forensics/SCRIPT_ENGINE.md)) | 2026-10-05 |
+| [x] | Triggers seen live: ALWAYS, CUBE, DIALOG (TendrickT), ACTIVATE (TownTel0), USE (the door prototypes), COMBAT | 2026-10-05 |
+| [ ] | Triggers ported but not yet seen live: PROXIMITY, GIVE, GET, DEAD | — |
+| [x] | Prototype variables (DATA blocks, `setprotovariable`, readers) | 2026-10-05 |
+| [x] | Commands for the opening, the doors and exits, movement (`goto*`, `face*`), `try`, `statmod`, `addat` ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §6) | 2026-10-05 |
+| [ ] | `lastattack` member (needs the combat track's attack result; Jong's training) | — |
 | [ ] | Mainline ImGui console panel (replaces threaded TConsolePane) | — |
-| [ ] | `--test=script` patrol-and-say NPC sample | — |
 
 **Exit:** Scripts pump every frame; triggered scripts fire from in-game; console executes commands.
 
@@ -190,12 +191,9 @@ REVSYNC-QUESTIONs surfaced for the user.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | Verify `TDialogList::Initialize` finds `ENGLISH.DEF` under active module | — |
-| [ ] | `say "tag"` script command → `TDialogList::GetLine` → push to `TDialogPane` | — |
-| [ ] | `wait response` script command — block + unblock via script manager | — |
-| [ ] | Choice button layout via UI layout system (flow, no pixel positioning) | — |
-| [ ] | Style coord with ui track | — |
-| [ ] | `--test=dialog` merchant example from docs/SCRIPTING.md | — |
+| [x] | Retail `TDialogList` (base + module tables), `say`/`choice`/`wait response`, voices paced by their length ([forensics/DIALOG.md](forensics/DIALOG.md)) | 2026-10-05 |
+| [x] | Retail floating dialog pane: speech boxes, portrait ring, choices by key or mouse | 2026-10-05 |
+| [ ] | Retail shots S6 to settle colours, positions and hover behaviour | — |
 
 **Exit:** Clicking an NPC brings up dialog; choice routes back to script branch.
 
@@ -205,12 +203,11 @@ REVSYNC-QUESTIONs surfaced for the user.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | Audit `TExit` against current engine — compiles + links | — |
-| [ ] | Level transition glue: cross active exit → load target level → re-parent player at target mapindex | — |
-| [ ] | Verify curmap save runs on every transition, not just full save | — |
-| [ ] | Verify curmap restore runs on return to Misthaven | — |
-| [ ] | Lock/key + TRIGGER_USE script gating on exits | — |
-| [ ] | `--test=exits` two sectors connected by a door | — |
+| [x] | Retail TExit, the exit list, teleports, level changes as a session step ([forensics/EXITS.md](forensics/EXITS.md) §7) | 2026-10-05 |
+| [x] | Locks and keys (`CheckKeyUse`), the door prototypes' USE scripts end to end | 2026-10-05 |
+| [-] | curmap written on every transition: the port keeps visited levels loaded and writes them when saving (ARCHITECTURE §7) | 2026-10-05 |
+| [ ] | Walk-on of an unscripted AutoActivate exit seen live (stairs, DunTeleport) | — |
+| [ ] | The loading bar's per-sector fill during a level load | — |
 
 **Exit:** Walking through a door swaps sectors; walking back restores the changed state.
 
