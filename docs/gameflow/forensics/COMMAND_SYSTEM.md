@@ -222,17 +222,26 @@ errors through it; scripts never see the text.
   (SCREEN_SYSTEM.md §2.6). `wait` takes any object as its context, as
   retail; with the 1998 character-only context a door's `WAIT` failed
   the class check.
-- **Bug, not fixed:** a line the interpreter skips (class context
-  mismatch, editor-only, missing parameters) takes the next line with
-  it: `TToken::SkipLine` reads past the line's end into the next line's
-  first token, and `Continue` then skips "the rest of the line" — the
-  next one.
+- A line the interpreter skips (class context mismatch, editor-only,
+  missing parameters) takes the next line with it: `SkipLine`
+  (`0x004795c0`) reads past the line's end into the next line's first
+  token, and `Continue` (`0x004933d0`) then skips "the rest of the
+  line" — the next one. Retail, kept: the same path runs after every
+  `:label` line, and the shipped scripts follow each label with a blank
+  line [I: written around it]. A port command that skips where retail's
+  doesn't is the bug to fix (as `wait`'s context was).
+- `stat <name> = <n>` (`0x00424010`) sets the stat and then answers
+  "bad parameters" in a script: it requires end-of-file after the value
+  (`type != 10` → 4), and a script line ends in a return. Retail, kept
+  (the message goes to the console). A value that isn't a number is
+  looked up as a prototype variable (`0x00497800`, sentinel
+  `0xfeced300` → bad parameters); the port has no prototype variables
+  yet, so it answers bad parameters straight away.
 - `--exec` (`src/consoleexec.cpp`) is a separate command queue —
   **below the bar** (duplicates the console's job).
 - The interpreter's context syntax, the object resolver and the
   expression evaluator are retail (`src/scriptvalue.cpp`). Not ported:
-  prototype variables, the script's trigger aliases (set by manual
-  trigger requests, `0x00492640`), `setcurrent`, multiplayer parties,
+  prototype variables, `setcurrent`, multiplayer parties,
   and the members `isoutside`, `maxslots`, `isatrelativedistance`,
   `lastattack` (needs the attack-impact result, `TCharacter +0x168`) and
   `groupinrange` — those fail the expression and log once.
