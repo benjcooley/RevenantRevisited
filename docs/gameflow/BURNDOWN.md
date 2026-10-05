@@ -40,15 +40,17 @@ a status changes.
 
 ## T1 — Main menu  (Phase G3.1)
 
+Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREEN_SYSTEM.md](forensics/SCREEN_SYSTEM.md), [forensics/GAME_FLOW.md](forensics/GAME_FLOW.md).
+
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | Recon: spawn agent to identify retail menu class (TMenuScreen? TMainScreen?) | — |
-| [ ] | `src/mainmenuscreen.{h,cpp}` — TScreen with buttons New/Load/Settings/Credits/Quit | — |
-| [ ] | Title art loader + background draw | — |
-| [ ] | Ambient music loop (depends on T0) | — |
-| [ ] | Boot path change in `revmain.cpp`: push TMainMenuScreen instead of straight to PlayScreen | — |
-| [ ] | ESC from PlayScreen → in-game menu (subset: Save/Load/Settings/Main Menu/Quit) | — |
-| [ ] | `--test=mainmenu` standalone mode | — |
+| [x] | Recon: retail TLogoScreen (cls_0x5a5d18), button callbacks, WinMain boot, QUICKSTART | 2026-10-04 |
+| [x] | Screen foundation: pane Compose/Draw contract, modal stack (evolved exclusive panes), pane-tree input, one scripted-input path | 2026-10-04 (c52d4f1) |
+| [x] | DEF engine as a pane (`TDefPane`; `TOptionsPane`), sprite buttons + text for code-built panes | 2026-10-04 (c52d4f1, ca25da2) |
+| [x] | `TGameFlow` intents; boot = intro `Mix_FMV1.smk` -> title; `--quickstart[=save]`, `--nointro`, `--menu=` | 2026-10-04 (ca25da2) |
+| [x] | Production `TLogoScreen` (title, version text) — verified vs retail screenshot | 2026-10-04 (ca25da2) |
+| [ ] | Load Game / Options screens from the title (host `TDefPane` loadgame / `TOptionsPane`) | — |
+| [ ] | ESC in-game menu as a modal continuation chain (retail 0x0047e500) | — |
 
 **Exit:** App launches into a working main menu; ESC pulls it up mid-session.
 
@@ -141,12 +143,11 @@ REVSYNC-QUESTIONs surfaced for the user.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | Hook `TCharacter`/`TPlayer` death to push `TDeathPane` after death animation | — |
-| [ ] | Wire pane buttons: Restart Last Save / Load / Main Menu / Quit | — |
-| [ ] | Restart Last Save → `TSaveGame::ReadGame(last)` | — |
-| [ ] | Fallback to NewGame if no save exists | — |
-| [ ] | Verify TDeathPane art renders correctly over live scene | — |
-| [ ] | `--test=death` mode (spawn player + kill on a key) | — |
+| [x] | Retail death countdown (192 frames, TPlayer::Animate 0x00518aa0) -> `GameFlow.PlayerDied()` | 2026-10-04 (64c0f25) |
+| [x] | Retail `TDeathScreen` + `TDeathPane` (Restart / Load / Exit, death voice) | 2026-10-04 (64c0f25) |
+| [ ] | Restart semantics after a loaded game (author question, ARCHITECTURE §8 Q1) | — |
+| [ ] | Death "Load" -> load-game screen | — |
+| [ ] | Death voices audible (MP3 voice support in the sound player) | — |
 
 **Exit:** Player dies → death pane shows → restart/load resumes.
 
