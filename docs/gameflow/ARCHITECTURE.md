@@ -65,7 +65,9 @@ class TGameFlow
     void Boot(const SBootOptions& options);
 
     void StartNewGame();                    // title "New Game"
-    void LoadGame(const char* slotName);    // title / in-game / death "Load"
+    void LoadGame(const char* slotName);    // the Load Game screen's "Load Game"
+    void ShowLoadGameScreen();              // title "Load Game", death "Load"
+    void ShowOptionsScreen();               // title "Options"
     void RestartAfterDeath();               // death "Restart" (see §8 Q1)
     void PlayerDied();                      // from TPlayer death countdown
     void ReturnToTitle();                   // Quit Module, death Exit, endgame
