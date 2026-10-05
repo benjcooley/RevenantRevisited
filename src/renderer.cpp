@@ -4709,7 +4709,7 @@ void TRenderer::SetHudZ(THudDrawable* d, float z)
         it->z = z;
 }
 
-void TRenderer::DrawHud()
+void TRenderer::DrawHud(float belowZ)
 {
     if (hud_drawables.empty()) return;
     // Stable sort by z ascending; ties keep insertion order. List is
@@ -4720,7 +4720,11 @@ void TRenderer::DrawHud()
                          return a.z < b.z;
                      });
     for (const SHudRegistration& r : hud_drawables)
+    {
+        if (r.z >= belowZ)
+            break;
         if (r.drawable) r.drawable->Draw();
+    }
 }
 
 // *************************************************************************

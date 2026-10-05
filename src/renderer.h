@@ -1045,8 +1045,10 @@ public:
     // Called by TDisplay::FlipPage between Scene3D present and ImGui.
     // Sorts registered drawables by z ascending (ties keep insertion
     // order) and invokes Draw() on each inside the active swapchain
-    // pass.
-    void DrawHud();
+    // pass. With `belowZ`, only the drawables under that z draw (a frame
+    // capture without the layers above it).
+    void DrawHud(float belowZ = kAllHudLayers);
+    static constexpr float kAllHudLayers = 1.0e30f;
 
     // Where to composite the game image onto the swapchain. Default is
     // the entire window. Editor mode disables this (the game render

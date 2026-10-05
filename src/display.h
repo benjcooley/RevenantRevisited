@@ -94,9 +94,12 @@ class TDisplay : public TSurface
     // Reads back the next frame FlipPage presents and hands it to `done`
     // (RGBA8, top row first, display size; null and 0x0 when the readback
     // fails). False when the display isn't up, in which case `done` is never
-    // called. Used for save thumbnails.
+    // called. Used for save thumbnails. With `hudBelowZ`, the capture holds
+    // only the HUD items under that z (the screen's frame is unchanged):
+    // the world and HUD panels without the pane tree, say.
     using TCaptureDone = std::function<void(const uint8_t* rgba, int32_t width, int32_t height)>;
-    bool RequestCapture(TCaptureDone done);
+    static constexpr float kWholeFrame = 1.0e30f;  // every HUD layer (TRenderer::kAllHudLayers)
+    bool RequestCapture(TCaptureDone done, float hudBelowZ = kWholeFrame);
 
     // Headless-capture target: when FrameSnap is active, FlipPage mirrors
     // the swapchain composite into this offscreen sg_image RGBA8 RT so
@@ -119,5 +122,12 @@ class TDisplay : public TSurface
     sg_image  snap_capture_color { SG_INVALID_ID };
     int32_t   snap_capture_w = 0;
     int32_t   snap_capture_h = 0;
-    std::vector<TCaptureDone> capture_requests;
+    struct SCaptureRequest
+    {
+        TCaptureDone done;
+        float        hudBelowZ = kWholeFrame;
+    };
+    std::vector<SCaptureRequest> capture_requests;
+
+    void MirrorComposite(float hudBelowZ);
 };
