@@ -251,16 +251,26 @@ debug level (`[console]`), so headless `--exec` runs can read it.
   the not-found value, text dereferenced null); the port appends nothing
   for a variable there. `addat` (`0x00421770`) is ported on `add`'s
   body (coordinates as numbers or variables, then an amount and the
-  type); `getitemname`/`getitemvalue` and the buy/sell criteria
-  commands also read variables and aren't ported.
+  type). The buy/sell criteria commands read their bounds the same way
+  (§6.6). `getitemname`/`getitemvalue` also read variables; no shipped
+  script uses them and they aren't ported.
+- The buy/sell family is ported (§6.6): the shop is PlayScreen's bottom
+  drawer (`TBuySellPane`, [BuySellScreen_SPEC.md](../../ui/forensics/BuySellScreen_SPEC.md)),
+  and `wait buysell` holds the script until the shop's Exit.
 - A line the interpreter skips (class context mismatch, editor-only,
   missing parameters) takes the next line with it: `SkipLine`
   (`0x004795c0`) reads past the line's end into the next line's first
   token, and `Continue` (`0x004933d0`) then skips "the rest of the
-  line" — the next one. Retail, kept: the same path runs after every
-  `:label` line, and the shipped scripts follow each label with a blank
-  line [I: written around it]. A port command that skips where retail's
-  doesn't is the bug to fix (as `wait`'s context was).
+  line" — the next one. Retail, kept. A port command that skips where
+  retail's doesn't is the bug to fix (as `wait`'s context was).
+  *Correction (2026-10-05):* this note used to say the same skip runs
+  after every `:label` line a jump lands on. It doesn't: `TScript::Jump`
+  (`0x00493fa0`) sets the ip right after the label's name
+  (`0x00494208`), so the line after the label runs. The port's 1998
+  `Jump` skipped the label line with `SkipLine`, eating the next line's
+  first token; labels followed by a blank line hid it, but every shop's
+  `:sell1` is followed by `buysellshoptype sell …`, which was lost
+  (SCRIPT_ENGINE.md §7).
 - `stat <name> = <n>` (`0x00424010`) sets the stat and then answers
   "bad parameters" in a script: it requires end-of-file after the value
   (`type != 10` → 4), and a script line ends in a return. Retail, kept
@@ -623,6 +633,88 @@ Checked (headless, `--quickstart --sector=…`, `--exec`):
   `NOWAIT player.TRY "WOPENDOORIN"` answers bad parameters: the port's
   `try` reads only `%t`, retail falls back to `%s` (`0x005cb5b4`) for a
   quoted state.
+
+### 6.6 Buy/sell: the `buysell*` family
+
+The shop's scripts (`town.s`: Elahni, Hruthford, Gina, Cronus — 42 shops
+opened, 265 lines) fill the shop pane `0x0065a3b8` and open it as
+PlayScreen's bottom drawer. The pane, its paint, the price rules and the
+transactions are in [BuySellScreen_SPEC.md](../../ui/forensics/BuySellScreen_SPEC.md).
+A typical block:
+
+```
+buysellinit
+buysellsalesperson GINA1
+buysellnogolddialog II9GIN03
+buysellpurchasedialog II9GIN04
+choice buy1 BSBUY2 / choice sell1 BSSELL2 / choice stop1 BSEXIT2 / wait response
+:buy1
+buysellshoptype buy WEAPON
+BuySellAddCriteria "minstrength" 1 VALUE
+buysellscreen
+wait buysell
+jump start1
+:sell1
+buysellshoptype sell WEAPON
+buyselladdbuyitems
+buysellscreen
+wait buysell
+jump start1
+```
+
+Every handler answers 0 (never `CMD_WAIT`); `wait buysell` (script wait 7,
+`0x0049301d`) holds the script until the shop's `+0x1b0` is 0 — its Exit,
+or the drawer closing. Decomps: `recon/discovered/commands/cmd_buysell*.cpp`.
+
+| Command | Handler → shop | Grammar | Effect | Errors |
+|---|---|---|---|---|
+| `buysellinit` | `0x00427080` → `0x0052f390` | — | Initialize: in use, first row 0, no selection/hover; builds the pane the first time (§9 of the spec). Rows, salesperson, dialog tags and customer are kept | — |
+| `buysellsalesperson` | `0x004279f0` → `0x00532fb0` | `<name>` | `+0x1a0 = FindClosestObject(name, target, exact)` (`0x00451fe0`); may be null | not text/ident → 4 |
+| `buysellnogolddialog` | `0x00427a20` → `0x00533040` | `<tag>` | the no-gold dialog tag (`+0x1a8`) | not text/ident → 4 |
+| `buysellpurchasedialog` | `0x00427a50` → `0x00532fe0` | `<tag>` | the purchase tag (`+0x1a4`) | not text/ident → 4 |
+| `buysellshoptype` | `0x00427870` | `buy\|sell weapon\|armor\|misc` | shop type `+0x17c`: buy 9 / 5 / 0x11, sell 10 / 6 / 0x12 | neither word → "Buy Sell Option" 4; a bad second word → "Missing Shop Type" 4 |
+| `buyselladd` | `0x00427500` → `0x00530670` | `[<amount>] <type>` | stock one type (`amount` default 1, used by misc shops) | — |
+| `buyselladdcriteria` | `0x00427240` → `0x00530af0` | `<stat> <min> <max>` | stock every type of the shop's class with class stat `stat` in [min, max] | not text/ident → "Name required" 4; a bound neither a number nor a known number variable → "Invalid Params" / "Invalid min/max value" 4 |
+| `buysellremovecriteria` | `0x004273a0` → `0x00532340` | `<stat> <min> <max>` | drop rows whose type has `stat` in [min, max] | as above |
+| `buyselladdbuyitems` | `0x00427860` → `0x00531b70` | — | the customer's sellable items, one row each | — |
+| `buyselladdbuyitem` | `0x00427810` → `0x00531d70` | `<name>` | the customer's sellable items of that name | not text/ident → 4 |
+| `buyselladdbuycriteria` | `0x00427550` → `0x00531fc0` | `<stat> <min> <max>` | the customer's sellable items with `stat` in [min, max] | as `buyselladdcriteria` |
+| `buysellremovebuycriteria` | `0x004276b0` → `0x005321f0` = `0x00532340` | `<stat> <min> <max>` | as `buysellremovecriteria` | as above |
+| `buysellremove` | `0x00427840` → `0x00532210` | `<name>` | drop the rows of that display name | — |
+| `buysellscreen` | `0x00427090` | — | open the shop: the customer (`+0x1b4`) is the target if a player, else the caller if a player, else the script's user when it is aliased `user` and is a player, else none; PlayScreen `+0x6b8 = 1` (the drawer opens on its next pulse) | — |
+
+Grammar details (retail, kept):
+- `buysellshoptype` tests each word with `Is` (`0x00479700`, no
+  abbreviation) and steps with `Get` + `WhiteGet`; shipped scripts write the
+  words in either case.
+- `buyselladd` takes a number token as the amount, then the next token as the
+  type; any other first token is the type with amount 1. It doesn't check
+  the type token.
+- The criteria commands copy the stat name into a 32-byte buffer (retail
+  overflows on a longer name; the port truncates), then read each bound as a
+  number token or, for an identifier, the caller's prototype number variable
+  (`0x00497800`, not found = `-20000000`). `BuySellAddCriteria "minstrength"
+  1 VALUE` in `town.s` reads Gina's `VALUE`, set just before by
+  `SETPROTOVARIABLE VALUE = player.STAT "LEVEL" / 3 + 16`.
+- `buysellsalesperson`, the dialog commands and `buysellremove` don't consume
+  their token; the interpreter skips the rest of the line.
+- `buysellscreen` also writes the dialog pane's responder (`+0x194`) and
+  "control on while choosing" (`+0x1e8`); single player reads neither before
+  `SetWait` rewrites them (DIALOG.md §4.1), so the port leaves them alone. In a
+  network game it sends the shop to the customer's machine (`0x00586a60`);
+  not ported.
+
+**Drawer.** `buysellscreen` only requests the shop. PlayScreen's pulse
+(`0x0047b4d0`) re-initializes it and switches the bottom drawer to mode 3
+(spec §1). Other drawer closes now reach it: `hideresponse` (`0x00426d40` →
+`0x0047ecc0`, any drawer mode), `fadescreenout` and the camera calls
+(`0x00427f44`, `0x00453914`, `0x0045397c`: mode 3 only), and `LoadGame`'s
+reset (`0x0047ece0`, then `0x00532f40` clears the rows).
+
+**Port.** `src/cmd_buysell.cpp` (the first per-family handler file,
+ARCHITECTURE §6.1) parses each command as above and calls `BuySellPane`
+(`src/buysell.{h,cpp}`) and `TPlayScreen::RequestBuySell`. Checked
+(headless, `town.s`): see BURNDOWN.md T13.
 
 ## Appendix — command catalog
 

@@ -200,5 +200,12 @@ Not ported:
 - two retail USE callers whose classes aren't ported (vtables `0x5b70bc`,
   `0x5b72f8`, slot `0x110`: a delayed use that toggles state 2/3, then
   USE `<name>`/`<type>` with no user);
-- screen-fade and buy/sell waits are satisfied at once (no fade or
-  buy/sell screen yet).
+- (the screen-fade wait is ported, SCREEN_SYSTEM.md §2.6; the buy/sell
+  wait ends when the shop is no longer in use, COMMAND_SYSTEM.md §6.6).
+
+`Jump` (`0x00493fa0`), the `jump` command's and a picked response's: the
+script goes on right after the label's name (`0x00494208` stores the
+token's position as the ip), so the line after the label runs. Ported
+2026-10-05; the 1998 code skipped past the label line (`SkipLine`), which
+ate the next line's first token — harmless before a blank line, but every
+shop's `:sell1` / `buysellshoptype sell …` lost its shop type.

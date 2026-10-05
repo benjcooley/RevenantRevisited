@@ -246,6 +246,44 @@ REVSYNC-QUESTIONs surfaced for the user.
 
 ---
 
+## T13 — Shops (buy/sell)
+
+Forensics: [../ui/forensics/BuySellScreen_SPEC.md](../ui/forensics/BuySellScreen_SPEC.md)
+(the pane), [forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §6.6
+(the commands, the drawer), [forensics/SAVE_GAME.md](forensics/SAVE_GAME.md)
+§6 (the merchant table).
+
+| Status | Item | Last touched |
+|--------|------|--------------|
+| [x] | The 14 `buysell*` commands, retail grammar (`src/cmd_buysell.cpp`, the first per-family handler file) | 2026-10-05 |
+| [x] | `TBuySellPane` (retail `TBuySellScreen` `0x0065a3b8`) on `TDefPane`: `buysell.dat` chrome and buttons, the paint `0x0052f7d0` / row `0x0052f040` literals, keys, mouse rows and hover, joystick | 2026-10-05 |
+| [x] | Rows: BuildItem `0x0052da90` (Value, sell × 0.3, WEAPON/ARMOR.DEF stats and STATLINE text, class stats, display names, quivers, icons), stock by name and by criteria, the customer's sellable items, removal by name and by criteria | 2026-10-05 |
+| [x] | Buy / sell `0x0052ff40`: gold, empty slot, the salesperson's no-gold and purchase lines, the merchant table for unique (SaleType 1) types | 2026-10-05 |
+| [x] | PlayScreen's bottom drawer, mode 3: `buysellscreen` opens it (bottom bar out, side panel open, text bar hidden), Exit closes it; `wait buysell` | 2026-10-05 |
+| [x] | Other drawer closes: `LoadGame`'s reset (+ the rows), `fadescreenout`, the camera leaving the player, `hideresponse` | 2026-10-05 |
+| [x] | `TScript::Jump` lands after the label name (retail `0x00493fa0`); it skipped the next line's first token, which lost every Sell shop's shop type | 2026-10-05 |
+| [ ] | `getitemname` / `getitemvalue` (no shipped script uses them) | — |
+| [ ] | Multiplayer branches (`0x00586a60`, `0x005869a0`, `0x00586a10`) | — |
+| [ ] | Retail shots S14, S15 to check fonts, colours and which pack items a Sell shop lists | — |
+
+**Checked** (headless, `--quickstart`, `--exec "player.pos … 1; player.addinv 1000 gold; player.use elahni1"`, input script):
+Elahni (`town.s`, potions): the choices, Buy Items → the drawer opens with
+10 rows; key `1` / a row click selects, `A` / the Buy button buys (gold
+1000 → 750, "A wise decision my child."), ↓ pages to the Greater potions,
+`E` / Exit closes and the choices come back; Sell Items → the two potions
+bought, 75 gp each (250 × 0.3); selling one → gold 575. Cronus (armor):
+12 rows (`minstrength` 1–16 minus `EQSLOT` 1 and 5–6), the stat line
+"Protection: +1  Min Strn: +14  Min Cons: +10", no gold → "You're going to
+need more gold for that.", a Red Cloth Shirt sells for 39. Hruthford (misc):
+8 of his 24 names stocked (the rest are unique jewelry, SaleType 1), the
+jewelry's STATLINE text ("Luck 2", "Armor Class Bonus 2"); Sell Items lists
+the Pouch (30 gp), the Ivory Pendant and the Emerald Ring (EQSLOT
+criteria) and not the Apple. From `--exec` with control on: `buysellremove`
+drops a row, and B (Lower Panel) closes the shop. The opening still plays
+to `SardokR: END`.
+
+---
+
 ## Cross-track dependencies
 
 These items aren't part of any single track but block others:
@@ -264,9 +302,18 @@ These items aren't part of any single track but block others:
       text bar each define the side tabs as 52 (`kSideTabsWidth`), and the
       dialog the status bar's bottom (0x70). Retail derives the text bar's
       rect from the panes (`TPlayScreen` layout `0x0047bc50`).
-- [ ] `TPlayScreen::HideLowerPanes`/`ShowLowerPanes` are stubs with no
+- [~] `TPlayScreen::HideLowerPanes`/`ShowLowerPanes` are stubs with no
       callers; retail hides and shows the text bar from its drawer states
-      (`0x47b874`, `0x47b8d0`, `0x47b96b`) — track ui (HUD drawers).
+      (`0x47b874`, `0x47b8d0`, `0x47b96b`) — track ui (HUD drawers). The
+      shop's drawer (mode 3) is ported (T13): it hides and shows the text
+      bar, closes the bottom bar and opens the side panel. Mode 1 (the
+      editor console) isn't; the HUD's bottom bar is still the harness's
+      `bottomBarOpen`, and retail's other drawer closes of it (LoadGame,
+      `hideresponse`) aren't ported (AUTHOR_QUESTIONS 81).
+- [ ] `AddToInventory(name, amount)` makes a new pile (the shop's gold
+      payout shows as a second gold pile); retail's `0x0046f940` →
+      `0x0046f3d0` may merge stackables — not checked. Track ui / gameplay
+      (inventory).
 
 ---
 
