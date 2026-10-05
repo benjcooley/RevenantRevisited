@@ -278,8 +278,9 @@ void TPlayer::RefreshEquip()
 {
     for (TInventoryIterator i(this); i; i++)
     {
-        if (i.Item()->InventNum() > 255)
-            Equip(i.Item(), i.Item()->InventNum() - 256);
+        const int32_t slot = i.Item()->InventNum() - kInvSlotEquipFirst;
+        if ((uint32_t)slot < NUM_EQ_SLOTS)
+            Equip(i.Item(), slot);
 
         if (this == Player)
             EquipPane.SetDirty(true);
@@ -316,10 +317,57 @@ bool TPlayer::CanEquip(TObjectInstance* oi, int32_t slot)
     return true;
 }
 
+// REVSYNC: TPlayer::Equip = retail 0x005199b0. The item moves to inventory
+// slot 0x100 + slot of this player; the item it displaces takes the item's
+// old place (the same slot of the same container, or a free carried slot
+// when the item came from an equipment slot or from no container).
+// Equipping an item already at its equipment slot moves nothing, which
+// RefreshEquip relies on after a load. Not ported: the equip effect hookup
+// (0x00519500), the body-part rebuild (0x00584e00) and the stat recompute
+// (0x0051c660).
 bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
 {
+    if (slot < 0)
+    {
+        if (!oi || oi->FindStat("EqSlot") < 0)
+            return false;
+        slot = oi->GetStat("EqSlot");
+    }
+    if ((uint32_t)slot >= NUM_EQ_SLOTS)
+        return false;
+    if (equipment[slot] == oi)
+        return true;
     if (oi && !CanEquip(oi, slot))
         return false;
+
+  // Inventory bookkeeping
+    TObjectInstance* displaced = equipment[slot];
+    TObjectInstance* container = (oi && oi->GetOwner()) ? oi->GetOwner() : this;
+    int32_t place = (oi && oi->GetOwner()) ? oi->InventNum() : -1;
+    if (place < 0 || (place >= kInvSlotEquipFirst && place < kInvSlotBeltFirst))
+        place = container->FindFreeInventorySlot();
+    const int32_t equipslot = kInvSlotEquipFirst + slot;
+    if (container == this)
+    {
+        if (displaced)
+            displaced->SetInventNum(short(place));
+        if (oi && !oi->GetOwner())
+            AddToInventory(oi, equipslot);
+        else if (oi)
+            oi->SetInventNum(short(equipslot));
+    }
+    else
+    {
+        if (oi)
+            oi->RemoveFromInventory();
+        if (displaced)
+        {
+            displaced->RemoveFromInventory();
+            container->AddToInventory(displaced, place);
+        }
+        if (oi)
+            AddToInventory(oi, equipslot);
+    }
 
   // Get old combat root name
     char old[RESNAMELEN];
@@ -329,12 +377,9 @@ bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
         strcpy(old, GetBowRoot());
 
   // Change slot
-    if ((uint32_t)slot < NUM_EQ_SLOTS)
-    {
-        equipment[slot] = oi;
-        if (this == Player)
-            EquipPane.SetDirty(true);
-    }
+    equipment[slot] = oi;
+    if (this == Player)
+        EquipPane.SetDirty(true);
 
   // Combat root changed
     if (IsCombat() && slot == EQ_PRIMEHAND && stricmp(old, GetCombatRoot()) != 0)

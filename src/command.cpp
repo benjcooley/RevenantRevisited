@@ -2099,6 +2099,42 @@ COMMAND(CmdDelInv)
     return 0;
 }
 
+// REVSYNC: retail 0x00428140 -> TPlayer 0x00519ea0. "<player>.equip <item>":
+// the player's item of that name goes to its equipment slot (EqSlot).
+COMMAND(CmdEquip)
+{
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    TObjectInstance* item = context->FindObjInventory(t.Text());
+    if (!item || !static_cast<TPlayer*>(context)->Equip(item, -1))
+        Output("Unable to equip %s", t.Text());
+
+    t.WhiteGet();
+    return 0;
+}
+
+// REVSYNC: retail 0x00428180 -> TPlayer 0x00519ff0. "<player>.unequip <item>":
+// the equipped item of that name goes back to a free carried slot.
+COMMAND(CmdUnequip)
+{
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    auto* player = static_cast<TPlayer*>(context);
+    int32_t slot = 0;
+    while (slot < NUM_EQ_SLOTS &&
+           !(player->GetEquip(slot) && stricmp(player->GetEquip(slot)->GetName(), t.Text()) == 0))
+        ++slot;
+    if (slot == NUM_EQ_SLOTS || player->FindFreeInventorySlot() > kInvSlotLastCarried)
+        Output("Unable to unequip %s", t.Text());
+    else
+        player->Equip(nullptr, slot);
+
+    t.WhiteGet();
+    return 0;
+}
+
 COMMAND(CmdGive)
 {
     int32_t number = 1;
@@ -4051,7 +4087,6 @@ COMMAND(CmdDelMonsterType) { return CmdNotPorted("delmonstertype", 0x00427b60, t
 COMMAND(CmdDispInv) { return CmdNotPorted("dispinv", 0x00422070, t); }
 COMMAND(CmdDrop) { return CmdNotPorted("drop", 0x004281c0, t); }
 COMMAND(CmdEndFighting) { return CmdNotPorted("endfighting", 0x00427d30, t); }
-COMMAND(CmdEquip) { return CmdNotPorted("equip", 0x00428140, t); }
 COMMAND(CmdFaceObject) { return CmdNotPorted("faceobject", 0x00420840, t); }
 COMMAND(CmdGetItemAmount) { return CmdNotPorted("getitemamount", 0x00426be0, t); }
 COMMAND(CmdGetItemName) { return CmdNotPorted("getitemname", 0x00426d60, t); }
@@ -4073,7 +4108,6 @@ COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
 COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
 COMMAND(CmdSpecificAttack) { return CmdNotPorted("specificattack", 0x00427c80, t); }
 COMMAND(CmdStatMod) { return CmdNotPorted("statmod", 0x00428200, t); }
-COMMAND(CmdUnequip) { return CmdNotPorted("unequip", 0x00428180, t); }
 
 // ----- owner: presentation (fades, music, movies, end game) -----
 
