@@ -28,7 +28,7 @@
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
 #include "uiequiptest.h"
-#include "uiinventorytest.h"   // Inventory pane (#7a-#7e — populates harness_inv[])
+#include "uiinventorytest.h"
 #include "uimaptest.h"
 #include "uiplyrstatusbartest.h"
 #include "uiquickspelltest.h"
@@ -46,7 +46,7 @@ bool g_initBottomBar = false;
 bool g_initBarInv    = false;
 bool g_initQuickSp   = false;
 bool g_initSidebar   = false;
-bool g_initInventory = false;   // Inventory pane (populates harness_inv[])
+bool g_initInventory = false;
 bool g_initMap       = false;
 bool g_initSpell     = false;
 bool g_initStats     = false;

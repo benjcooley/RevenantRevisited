@@ -1143,6 +1143,35 @@ void TCharacter::RestoreHealth()
     SetHealth(MaxHealth());
 }
 
+// REVSYNC: TCharacter::GetFieldText = retail 0x004d5260 (vtable +0xc8).
+// "armor" is the port's ArmorValue(); retail adds two player-only terms
+// (active armor effects FUN_005407d0 and vtable +0x260) that aren't ported.
+// "attackpct", "defensepct", "damage" and "stealth" are combat formulas
+// over getters not yet identified in the port; they answer "no such field".
+bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
+{
+    if (!field || !buf || buflen <= 0)
+        return false;
+
+    int32_t value = 0;
+    if (stricmp(field, "armor") == 0)
+        value = ArmorValue();
+    else if (stricmp(field, "maxhealth") == 0)
+        value = MaxHealth();
+    else if (stricmp(field, "maxfatigue") == 0)
+        value = MaxFatigue();
+    else if (stricmp(field, "maxmana") == 0)
+        value = MaxMana();
+    else if (stricmp(field, "attackpct") == 0 || stricmp(field, "defensepct") == 0 ||
+             stricmp(field, "damage") == 0 || stricmp(field, "stealth") == 0)
+        return false;
+    else
+        return TComplexObject::GetFieldText(field, buf, buflen);
+
+    snprintf(buf, buflen, "%d", value);
+    return true;
+}
+
 // Returns true if character has seen 'me'
 bool TCharacter::HasSeenMe(TCharacter* me)
 {

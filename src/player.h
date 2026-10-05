@@ -15,6 +15,9 @@
 #include "rules.h"
 #include "weapon.h"
 
+#include <array>
+#include <vector>
+
 // Equipment slot defines
 #define NUM_EQ_SLOTS    11
 
@@ -40,6 +43,11 @@
 #define QSPELL_3         3
 #define QSPELL_4         4
 #define QSPELL_NUM       5
+
+// A learned spell's talisman code. Retail stores it as char[6], NUL padded;
+// the extra byte keeps the code a C string.
+constexpr int32_t kSpellCodeBytes = 6;
+using TSpellCode = std::array<char, kSpellCodeBytes + 1>;
 
 // **************
 // * Skill Tree *
@@ -151,10 +159,17 @@ class TPlayer : public TCharacter
       // Sets the quickspell button
     bool InvokeQuickSpell(int32_t button);
       // Invokes the given quickspell for the player
+    [[nodiscard]] int32_t NumKnownSpells() const { return (int32_t)knownspells.size(); }
+    [[nodiscard]] const char* KnownSpell(int32_t i) const { return knownspells[i].data(); }
+        // Talisman codes of the spells the player has learned (retail +0x2ec), in the order learned
+    bool LearnSpell(const char* talismans);
+        // Adds a spell's talisman code; false when it is already known
 
     // Info functions
     virtual int32_t GetResistance(int32_t type);
       // Get character's resistance to the given damage type
+    bool GetFieldText(const char *field, char *buf, int32_t buflen) override;
+      // Player fields of the stat sheet (retail 0x0051dfb0)
 
     // Resolve functions
     virtual int32_t ResolveCombat(PTActionBlock ab, int32_t bits);
@@ -260,6 +275,7 @@ class TPlayer : public TCharacter
     char quickspells[QSPELL_NUM][MAXTALISMANLEN];   // Quickspells (0-construction, 1-4 quick buttons)
     bool OnTheHog;                                  // hog cheat
     int32_t deathcountdown = 0xc0;                  // frames left before the death screen (retail +0x39c)
+    std::vector<TSpellCode> knownspells;            // +0x2ec: talisman codes learned
 };
 
 DEFINE_BUILDER("Player", TPlayer)

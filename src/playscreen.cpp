@@ -54,6 +54,7 @@
 #include "revisited_settings.h"
 #include "runtimemode.h"
 #include "sector.h"
+#include "spell.h"
 #include "time.h"
 #include "uidragstate.h"
 #include "uiequiptest.h"
@@ -310,6 +311,12 @@ bool TPlayScreen::Initialize()
     // future game-mode init) is in place from the first frame.
     if (CurrentMode())
         CurrentMode()->OnEnter();
+
+    // spell.def, reloaded for each game as retail's Initialize does
+    // (0x0047add4: clear, then load); the spell panes and casting read it.
+    SpellList.Close();
+    if (!SpellList.Initialize())
+        log_warn("[playscreen] spell.def failed to load; no spells");
 
     SetUIHudCursorOverlayEnabled(false);
     SetUIQuickSpellSyntheticStateEnabled(false);

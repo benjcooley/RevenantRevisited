@@ -2280,6 +2280,10 @@ void ShutdownGlobals()
   // (18) Rules
     Rules.Close();
 
+  // SpellList — loaded by TPlayScreen::Initialize (retail 0x0047add4) or by
+  // a --test=ui-* demo player; nothing to close when neither ran.
+    SpellList.Close();
+
   // (17) PlayerManager
     PlayerManager.Close();
 

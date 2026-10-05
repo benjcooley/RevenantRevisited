@@ -7,12 +7,11 @@
 
 #include "audio_backend.h"
 #include "cursor.h"
+#include "invslot.h"
 #include "logging.h"
-#include "object.h"
+#include "player.h"
 
-#include <algorithm>
 #include <cstdlib>
-#include <cstring>
 
 namespace UIDragState {
 
@@ -34,27 +33,6 @@ const char* SrcName(EDragSource s)
 
 constexpr int32_t kDragThresholdPx = 4;
 
-int32_t SlotCount(EDragSource s)
-{
-    switch (s) {
-        case EDragSource::Inventory: return kHarnessInvSlots;
-        case EDragSource::BarInv:    return kHarnessBarInvSlots;
-        case EDragSource::Equip:     return kHarnessEquipSlots;
-        default:                     return 0;
-    }
-}
-
-SHarnessSlot* SlotFor(EDragSource s, int32_t idx)
-{
-    if (idx < 0 || idx >= SlotCount(s)) return nullptr;
-    switch (s) {
-        case EDragSource::Inventory: return &harness_inv[idx];
-        case EDragSource::BarInv:    return &harness_barinv[idx];
-        case EDragSource::Equip:     return &harness_equip[idx];
-        default:                     return nullptr;
-    }
-}
-
 void ClampGrabToVisual(const SDragBitmapLayer* layers, int32_t layer_count,
                        int32_t& grab_x, int32_t& grab_y)
 {
@@ -75,25 +53,59 @@ void ClampGrabToVisual(const SDragBitmapLayer* layers, int32_t layer_count,
     if (h > 0 && grab_y >= h) grab_y = h - 1;
 }
 
-// ---------------------------------------------------------------------------
-// Perform the harness item swap on drop commit.
-// ---------------------------------------------------------------------------
-void CommitHarnessSwap(EDragSource src, int32_t src_idx,
-                       EDragSource dst, int32_t dst_idx)
+// The inventory slot number a carried or belt cell stands for.
+int32_t CarriedSlotOf(EDragSource s, int32_t idx)
 {
-    SHarnessSlot* srcSlot = SlotFor(src, src_idx);
-    SHarnessSlot* dstSlot = SlotFor(dst, dst_idx);
+    switch (s) {
+        case EDragSource::Inventory: return idx;
+        case EDragSource::BarInv:    return kInvSlotBeltFirst + idx;
+        default:                     return -1;
+    }
+}
 
-    if (!srcSlot || !dstSlot) return;
+// Move a dragged item of the main player to another HUD cell. Equipment
+// goes through TPlayer::Equip (retail 0x005199b0), which puts the item it
+// displaces where the dragged item was; carried and belt slots swap slot
+// numbers with their occupant. This is the drop the 1998 TEquipPane /
+// TInventory performed (equip.cpp:83-128) on top of retail's Equip.
+// Not ported: dropping into a pouch (retail AddToInventory on the pouch).
+bool CommitMove(TObjectInstance* item, EDragSource src, int32_t srcIdx,
+                EDragSource dst, int32_t dstIdx)
+{
+    TPlayer* player = Player;
+    if (!player || !item || item->GetOwner() != player)
+        return false;
+    if (src == dst && srcIdx == dstIdx)
+        return false;
 
-    if (src == dst && src_idx == dst_idx) return;   // drop onto self: no-op
+    if (dst == EDragSource::Equip)
+    {
+        if (src == EDragSource::Equip)
+        {
+            if (!player->CanEquip(item, dstIdx))
+                return false;
+            player->Equip(nullptr, srcIdx);
+        }
+        return player->Equip(item, dstIdx);
+    }
 
-    // Swap covers inventory, bottom bar, and equipment slots. Replacement is
-    // just the item from the destination returning to the source.
-    std::swap(*srcSlot, *dstSlot);
-
-    log_info("[drag] harness swap committed: %s[%d] <-> %s[%d]",
-             SrcName(src), src_idx, SrcName(dst), dst_idx);
+    const int32_t to = CarriedSlotOf(dst, dstIdx);
+    if (to < 0)
+        return false;
+    TObjectInstance* occupant = player->GetInventorySlot(to);
+    if (src == EDragSource::Equip)
+    {
+        // An occupant that fits the vacated equipment slot trades places.
+        if (occupant)
+            return player->CanEquip(occupant, srcIdx) && player->Equip(occupant, srcIdx);
+        player->Equip(nullptr, srcIdx);
+        item->SetInventNum(short(to));
+        return true;
+    }
+    if (occupant)
+        occupant->SetInventNum(short(item->InventNum()));
+    item->SetInventNum(short(to));
+    return true;
 }
 
 // Sound file for UI inventory actions. The important ownership rule is now
@@ -106,36 +118,7 @@ constexpr const char* kActionSound = "data/open.wav";
 } // namespace
 
 // ---------------------------------------------------------------------------
-// Public shared harness state (extern in header).
-// ---------------------------------------------------------------------------
-SHarnessSlot harness_inv  [kHarnessInvSlots]   = {};
-SHarnessSlot harness_barinv[kHarnessBarInvSlots] = {};
-SHarnessSlot harness_equip[kHarnessEquipSlots] = {};
-
-// ---------------------------------------------------------------------------
 SUIDragState& Get() { return g_state; }
-
-void ResetHarness()
-{
-    ResetInventoryHarness();
-    ResetBarInvHarness();
-    ResetEquipHarness();
-}
-
-void ResetInventoryHarness()
-{
-    for (auto& s : harness_inv)   s = SHarnessSlot{};
-}
-
-void ResetBarInvHarness()
-{
-    for (auto& s : harness_barinv) s = SHarnessSlot{};
-}
-
-void ResetEquipHarness()
-{
-    for (auto& s : harness_equip) s = SHarnessSlot{};
-}
 
 bool BeginDrag(EDragSource src, int32_t slot_idx,
                TObjectInstance* item,
@@ -143,6 +126,8 @@ bool BeginDrag(EDragSource src, int32_t slot_idx,
                PTBitmap icon,
                int32_t grab_x, int32_t grab_y)
 {
+    if (!icon)
+        icon = TInvSlot::ItemIcon(item);
     SDragBitmapLayer layer = {};
     if (icon)
         layer = { icon, 0, 0 };
@@ -157,18 +142,6 @@ bool BeginDragLayers(EDragSource src, int32_t slot_idx,
                      const SDragBitmapLayer* layers, int32_t layer_count,
                      int32_t grab_x, int32_t grab_y)
 {
-    SHarnessSlot* harnessSlot = SlotFor(src, slot_idx);
-    if (harnessSlot)
-    {
-        if (!harnessSlot->inst)
-        {
-            g_state = SUIDragState{};
-            ClearDragBitmap();
-            return false;
-        }
-        item = harnessSlot->inst;
-    }
-
     if (!item && src != EDragSource::SpellPane)
     {
         g_state = SUIDragState{};
@@ -186,9 +159,6 @@ bool BeginDragLayers(EDragSource src, int32_t slot_idx,
     g_state.pending    = true;
     g_state.dragging   = false;
 
-    // Auto-resolve visual from harness state if caller didn't pass one.
-    // This allows uisidebartest.cpp to initiate drags without per-pane icon
-    // plumbing while still preserving the original click offset.
     g_state.layer_count = 0;
     for (SDragBitmapLayer& layer : g_state.layers)
         layer = SDragBitmapLayer{};
@@ -201,8 +171,6 @@ bool BeginDragLayers(EDragSource src, int32_t slot_idx,
             g_state.layers[g_state.layer_count++] = layers[i];
         }
     }
-    if (g_state.layer_count == 0 && harnessSlot && harnessSlot->icon)
-        g_state.layers[g_state.layer_count++] = { harnessSlot->icon, 0, 0 };
 
     ClampGrabToVisual(g_state.layers, g_state.layer_count, g_state.grab_x, g_state.grab_y);
     g_state.icon = g_state.layer_count > 0 ? g_state.layers[0].bitmap : nullptr;
@@ -212,8 +180,8 @@ bool BeginDragLayers(EDragSource src, int32_t slot_idx,
     // click-drag. Clear any stale ghost from a previous transaction.
     ClearDragBitmap();
 
-    log_info("[drag] pending from %s slot=%d item=%p @ (%d,%d) grab=(%d,%d) icon=%s",
-             SrcName(src), slot_idx, (void*)item, mouse_x, mouse_y,
+    log_info("[drag] pending from %s slot=%d item='%s' @ (%d,%d) grab=(%d,%d) icon=%s",
+             SrcName(src), slot_idx, item ? item->GetName() : "-", mouse_x, mouse_y,
              g_state.grab_x, g_state.grab_y,
              g_state.layer_count > 0 ? "yes" : "none");
     return true;
@@ -253,8 +221,7 @@ bool CompleteClick()
     if (g_state.source == EDragSource::None || !g_state.pending)
         return false;
 
-    log_info("[drag] click %s slot=%d item=%p",
-             SrcName(g_state.source), g_state.source_idx, (void*)g_state.item);
+    log_info("[drag] click %s slot=%d", SrcName(g_state.source), g_state.source_idx);
     ClearDragBitmap();
     g_state = SUIDragState{};
     return true;
@@ -271,38 +238,17 @@ bool CompleteDrag(EDragSource dest, int32_t dest_slot, bool commit)
     const EDragSource oldSrc = g_state.source;
     const int32_t     oldIdx = g_state.source_idx;
 
-    if (commit && dest == EDragSource::Equip)
-    {
-        TObjectInstance* item = g_state.item;
-        if (oldSrc != EDragSource::Inventory &&
-            oldSrc != EDragSource::BarInv &&
-            oldSrc != EDragSource::Equip)
-        {
-            commit = false;
-        }
-        else if (!item)
-        {
-            commit = false;
-        }
-        else if (item->FindStat("EqSlot") < 0 || item->GetStat("EqSlot") != dest_slot)
-        {
-            log_info("[drag] reject equip drop: item=%p EqSlot=%d dest=%d",
-                     (void*)item,
-                     item->FindStat("EqSlot") >= 0 ? item->GetStat("EqSlot") : -1,
-                     dest_slot);
-            commit = false;
-        }
-    }
-
     // Clear the drag ghost regardless of commit status.
     ClearDragBitmap();
+
+    // Spell-book drags carry no item; the drop target applies them.
+    if (commit && oldSrc != EDragSource::SpellPane)
+        commit = CommitMove(g_state.item.Get(), oldSrc, oldIdx, dest, dest_slot);
 
     if (commit)
     {
         log_info("[drag] DROP %s slot=%d -> %s slot=%d",
                  SrcName(oldSrc), oldIdx, SrcName(dest), dest_slot);
-        CommitHarnessSwap(oldSrc, oldIdx, dest, dest_slot);
-        // Sound: play the shared drag/drop action cue on successful commit.
         audio::PlayOneShot(kActionSound);
     }
     else
