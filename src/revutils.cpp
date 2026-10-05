@@ -1202,34 +1202,51 @@ static void rev_normalize_sep(char *p)
 // ----------------------------------------------------------------------------
 // Retail shipped data/resources.rvr, data/imagery.rvi and data/Modules/<N>.rvm
 // as stored (uncompressed) ZIPs. WinMain (FUN_004865a0) mounted the two base
-// archives explicitly — see FUN_0045f980 + DAT_00666448 — and a per-module
-// archive was swapped in when the active module changed. Different modules
-// share root filenames (module.def, state.def, exit.def, area.def, ...) so
-// a flat "index everything up front" scan would collide across modules.
+// archives explicitly and a per-module archive was swapped in when the active
+// module changed (SetCurModule, FUN_004609f0).
+//
+// A mounted pack stands in for a directory: TPackFile::Open (FUN_0049ee20)
+// keeps the pack's directory and file name, and the lookup (FUN_004a0380)
+// matches a request against "<directory><file name up to '.'>\", then finds
+// the remainder inside the pack. So <install>\Resources.rvr answers every
+// <install>\Resources\... path and nothing else. The pack-aware open
+// (FUN_004a1240) asks the packs before the loose file unless the caller
+// asks for loose-first. docs/DATA_LAYOUT.md has the full account.
 //
 // API: MountArchive / MountModule / UnmountModule / UnmountAll.
-// Lookup in rev_fopen: SavePath → RunPath → active module map → base map.
 // ============================================================================
 
 namespace {
 
+struct VFSArchive;
+
+struct VFSEntry
+{
+    VFSArchive *arch = nullptr;
+    mz_uint file_index = 0;
+    size_t size = 0;
+};
+
 struct VFSArchive
 {
     std::string path;
+    // The directory this pack answers for: its path without the extension,
+    // as a lookup key (see vfs_key).
+    std::string mount;
+    // Entries by their path inside the pack, as lookup keys.
+    std::unordered_map<std::string, VFSEntry> entries;
     mz_zip_archive zip{};
     ~VFSArchive() { mz_zip_reader_end(&zip); }
 };
 
-struct VFSEntry
-{
-    VFSArchive *arch;
-    mz_uint file_index;
-    size_t size;
-};
-
 std::vector<std::unique_ptr<VFSArchive>> g_base_archives;
-std::unordered_map<std::string, VFSEntry> g_base_map;
 std::unique_ptr<VFSArchive> g_module_archive;
+// Legacy flat lookup: entries by bare file name, module first, then base.
+// REVSYNC-DIVERGENCE: retail has no by-name lookup — a request either lies in
+// a pack's directory or it is a loose file. The port's pre-release call sites
+// and older port INIs (ClassDefPath / ResourcePath = ".") name files with no
+// pack directory, so rev_fopen keeps this as its last resort.
+std::unordered_map<std::string, VFSEntry> g_base_map;
 std::unordered_map<std::string, VFSEntry> g_module_map;
 // Pre-release modules ship unpacked as data/Modules/<name>/; retail uses
 // data/Modules/<name>.rvm ZIPs. MountModule detects which and we fall back
@@ -1253,6 +1270,20 @@ std::string vfs_basename_lower(const char *p)
         if (*q == '/' || *q == '\\')
             name = q + 1;
     return vfs_lower(std::string(name));
+}
+
+// Lookup key for a path: '/'-separated, lexically normalised, lower case.
+// Retail compares pack directories and entry names case-insensitively, and
+// the 1998 call sites build paths with '\' (and the odd "..").
+std::string vfs_key(std::string p)
+{
+    for (char &c : p)
+        if (c == '\\')
+            c = '/';
+    p = std::filesystem::path(p).lexically_normal().generic_string();
+    while (p.size() > 1 && p.back() == '/')
+        p.pop_back();
+    return vfs_lower(std::move(p));
 }
 
 // Locate the user's existing Revenant install (read-only assets:
@@ -1339,29 +1370,66 @@ const std::filesystem::path &vfs_data_root()
     return g_data_root;
 }
 
+// The install root packs are mounted under. Retail mounts at makepath()
+// of the INI path (SavePath, which is the install on a hard-drive install);
+// the port's install is RunPath. The data-root probe covers callers that
+// mount before RunPath is set.
+std::filesystem::path vfs_install_root()
+{
+    if (RunPath[0])
+        return std::filesystem::path(RunPath);
+    return vfs_data_root();
+}
+
+// Opens a pack and indexes it. The pack answers for the directory its path
+// names without the extension (FUN_0049ee20 / FUN_004a0380).
 std::unique_ptr<VFSArchive> vfs_open_archive(const std::filesystem::path &path)
 {
     auto arc = std::make_unique<VFSArchive>();
     arc->path = path.string();
     if (!mz_zip_reader_init_file(&arc->zip, arc->path.c_str(), 0))
         return nullptr;
-    return arc;
-}
+    arc->mount = vfs_key((path.parent_path() / path.stem()).string());
 
-void vfs_index_archive(VFSArchive *arc, std::unordered_map<std::string, VFSEntry> &map)
-{
     const mz_uint n = mz_zip_reader_get_num_files(&arc->zip);
     for (mz_uint i = 0; i < n; ++i)
     {
         mz_zip_archive_file_stat st;
-        if (!mz_zip_reader_file_stat(&arc->zip, i, &st))
+        if (!mz_zip_reader_file_stat(&arc->zip, i, &st) || st.m_is_directory)
             continue;
-        if (st.m_is_directory)
-            continue;
-        // First-wins within a single archive (same as retail)
-        map.try_emplace(vfs_basename_lower(st.m_filename),
-                        VFSEntry{arc, i, (size_t)st.m_uncomp_size});
+        arc->entries.try_emplace(vfs_key(st.m_filename),
+                                 VFSEntry{arc.get(), i, (size_t)st.m_uncomp_size});
     }
+    return arc;
+}
+
+// Adds a pack's entries to a legacy by-name map. First wins within a pack.
+void vfs_index_by_name(const VFSArchive &arc, std::unordered_map<std::string, VFSEntry> &map)
+{
+    for (const auto &[path, entry] : arc.entries)
+        map.try_emplace(vfs_basename_lower(path.c_str()), entry);
+}
+
+// The entry for `path` in whichever mounted pack's directory holds it, or
+// nullptr. The mount directories don't overlap, so at most one pack can
+// answer.
+const VFSEntry *vfs_find_mounted(const std::string &path)
+{
+    const std::string key = vfs_key(path);
+    auto find_in = [&key](const VFSArchive *arc) -> const VFSEntry * {
+        if (!arc || key.size() <= arc->mount.size() ||
+            key.compare(0, arc->mount.size(), arc->mount) != 0 ||
+            key[arc->mount.size()] != '/')
+            return nullptr;
+        const auto it = arc->entries.find(key.substr(arc->mount.size() + 1));
+        return it != arc->entries.end() ? &it->second : nullptr;
+    };
+    if (const VFSEntry *e = find_in(g_module_archive.get()))
+        return e;
+    for (const auto &arc : g_base_archives)
+        if (const VFSEntry *e = find_in(arc.get()))
+            return e;
+    return nullptr;
 }
 
 struct VFSHandle
@@ -1405,25 +1473,24 @@ int vfs_close(void *c)
     return 0;
 }
 
-FILE *rev_vfs_open(const char *name, const char *flags)
+// $REVENANT_VFS_TRACE=1 logs which copy served every read: "pack", "loose" or
+// the legacy "by-name" lookup. Off by default (thousands of lines per boot).
+bool vfs_trace_enabled()
 {
-    if (!flags || flags[0] != 'r' || strchr(flags, '+'))
-        return nullptr;
+    static const bool enabled = [] {
+        const char *env = getenv("REVENANT_VFS_TRACE");
+        return env && env[0] && env[0] != '0';
+    }();
+    return enabled;
+}
 
-    const auto key = vfs_basename_lower(name);
-
-    const VFSEntry *entry = nullptr;
-    if (auto it = g_module_map.find(key); it != g_module_map.end())
-        entry = &it->second;
-    else if (auto it = g_base_map.find(key); it != g_base_map.end())
-        entry = &it->second;
-    if (!entry)
-        return nullptr;
-
+// Opens a pack entry as a read-only FILE over an in-memory copy.
+FILE *vfs_open_entry(const VFSEntry &entry)
+{
     auto h = std::make_unique<VFSHandle>();
-    h->buf.resize(entry->size);
+    h->buf.resize(entry.size);
     h->pos = 0;
-    if (!mz_zip_reader_extract_to_mem(&entry->arch->zip, entry->file_index,
+    if (!mz_zip_reader_extract_to_mem(&entry.arch->zip, entry.file_index,
                                       h->buf.data(), h->buf.size(), 0))
         return nullptr;
 
@@ -1431,6 +1498,103 @@ FILE *rev_vfs_open(const char *name, const char *flags)
     if (fp)
         h.release();
     return fp;
+}
+
+// The legacy by-name lookup (see g_base_map): module first, then base.
+FILE *vfs_open_by_name(const char *name)
+{
+    const auto key = vfs_basename_lower(name);
+    const VFSEntry *entry = nullptr;
+    if (auto it = g_module_map.find(key); it != g_module_map.end())
+        entry = &it->second;
+    else if (auto it = g_base_map.find(key); it != g_base_map.end())
+        entry = &it->second;
+    if (!entry)
+        return nullptr;
+    if (vfs_trace_enabled())
+        log_info("[vfs] %s -> by-name %s", name, entry->arch->path.c_str());
+    return vfs_open_entry(*entry);
+}
+
+bool is_read_mode(const char *flags)
+{
+    return flags && flags[0] == 'r' && !strchr(flags, '+');
+}
+
+// One root of the read search: <root><rel> from the pack whose directory
+// holds it and from the loose file, in `order`. Retail's FUN_004a1240.
+FILE *open_under_root(const char *root, const char *rel, const char *flags, EOpenOrder order)
+{
+    char fn[MAXPATHLEN];
+    strncpyz(fn, root, MAXPATHLEN);
+    strncatz(fn, rel, MAXPATHLEN);
+    rev_normalize_sep(fn);
+
+    auto open_loose = [&]() -> FILE * {
+        FILE *fp = fopen(fn, flags);
+        if (fp && vfs_trace_enabled())
+            log_info("[vfs] %s -> loose %s", rel, fn);
+        return fp;
+    };
+    if (order == EOpenOrder::LooseFirst)
+        if (FILE *fp = open_loose())
+            return fp;
+    if (const VFSEntry *entry = vfs_find_mounted(fn))
+        if (FILE *fp = vfs_open_entry(*entry))
+        {
+            if (vfs_trace_enabled())
+                log_info("[vfs] %s -> pack %s", rel, entry->arch->path.c_str());
+            return fp;
+        }
+    return order == EOpenOrder::PackFirst ? open_loose() : nullptr;
+}
+
+// Whether <root><rel> is a mounted-pack entry or a loose file.
+bool exists_under_root(const char *root, const char *rel)
+{
+    char fn[MAXPATHLEN];
+    strncpyz(fn, root, MAXPATHLEN);
+    strncatz(fn, rel, MAXPATHLEN);
+    rev_normalize_sep(fn);
+
+    if (vfs_find_mounted(fn))
+        return true;
+    std::error_code ec;
+    return std::filesystem::is_regular_file(fn, ec);
+}
+
+// A name relative to the search roots: strips retail's leading ".\" (and
+// any separators after it). Absolute names (POSIX root, '\', a drive
+// letter or "..") return nullptr; they are opened as given.
+const char *relative_name(const char *name)
+{
+    if (name[0] == '/' || name[0] == '\\' || (name[0] && name[1] == ':') ||
+        (name[0] == '.' && name[1] == '.'))
+        return nullptr;
+    if (name[0] == '.')
+    {
+        ++name;
+        while (name[0] == '\\' || name[0] == '/')
+            ++name;
+    }
+    return name;
+}
+
+// The read search roots, in order: SavePath, the Revisited overlay (opt-in;
+// a loose folder), RunPath. Retail searched SavePath then RunPath; the
+// overlay is the port's addition.
+// REVSYNC-DIVERGENCE: retail asks the packs first within SavePath too,
+// because its packs live there on a hard-drive install. The port's packs
+// live under RunPath, so a loose file the player has in SavePath (editor
+// saves, user data) is found before the install's packs.
+std::vector<const char *> read_roots()
+{
+    std::vector<const char *> roots{SavePath};
+    if (const char *overlay = rev_resolve_revisited_overlay(); overlay && overlay[0])
+        roots.push_back(overlay);
+    if (stricmp(SavePath, RunPath) != 0)
+        roots.push_back(RunPath);
+    return roots;
 }
 
 } // anonymous namespace
@@ -1463,10 +1627,10 @@ size_t VFSListByPrefix(const char *prefix, std::vector<std::string> &out)
 bool MountArchive(const char *name)
 {
     namespace fs = std::filesystem;
-    const fs::path root = vfs_data_root();
+    const fs::path root = vfs_install_root();
     if (root.empty())
     {
-        log_error("[vfs] MountArchive(%s): no data root found", name);
+        log_error("[vfs] MountArchive(%s): no install found", name);
         return false;
     }
 
@@ -1478,9 +1642,9 @@ bool MountArchive(const char *name)
         return false;
     }
 
-    VFSArchive *raw = arc.get();
+    vfs_index_by_name(*arc, g_base_map);
+    log_info("[vfs] mounted %s for %s/", p.string().c_str(), arc->mount.c_str());
     g_base_archives.push_back(std::move(arc));
-    vfs_index_archive(raw, g_base_map);
     return true;
 }
 
@@ -1489,14 +1653,15 @@ bool MountModule(const char *name)
     namespace fs = std::filesystem;
     UnmountModule();
 
-    const fs::path root = vfs_data_root();
+    const fs::path root = vfs_install_root();
     if (root.empty())
     {
-        log_error("[vfs] MountModule(%s): no data root found", name);
+        log_error("[vfs] MountModule(%s): no install found", name);
         return false;
     }
 
-    // Pre-release unpacked module dir first.
+    // Pre-release unpacked module dir first. Its files are loose in the
+    // module's directory, where the module-file paths point anyway.
     const fs::path dir = root / "Modules" / name;
     std::error_code ec;
     if (fs::is_directory(dir, ec))
@@ -1514,9 +1679,8 @@ bool MountModule(const char *name)
         return false;
     }
 
-    VFSArchive *raw = arc.get();
+    vfs_index_by_name(*arc, g_module_map);
     g_module_archive = std::move(arc);
-    vfs_index_archive(raw, g_module_map);
     return true;
 }
 
@@ -1534,102 +1698,101 @@ void UnmountAll()
     g_base_archives.clear();
 }
 
-FILE *rev_fopen(const char *name, const char *flags)
+// REVSYNC: FUN_004a13f0 — the pack-aware open: SavePath, then RunPath, each
+// through FUN_004a1240 (the pack whose directory holds the path, then the
+// loose file; loose first when the caller asks).
+FILE *rev_fopen(const char *name, const char *flags, EOpenOrder order)
 {
     if (!name)
         return nullptr;
 
-    char fn[MAXPATHLEN];
+    const bool is_read = is_read_mode(flags);
+    const char *rel = relative_name(name);
 
-  // If root path explicitly given (absolute POSIX, Win32 drive, or "..") use it
-    if (name[0] == '/' || name[0] == '\\' || name[1] == ':' ||
-        (name[0] == '.' && name[1] == '.'))
+  // Explicit root (absolute POSIX, '\', a drive letter, or ".."): opened as
+  // given, through the packs like any other read.
+    if (!rel)
     {
-        strncpyz(fn, name, MAXPATHLEN);
-        rev_normalize_sep(fn);
-        if (FILE *fp = fopen(fn, flags))
+        if (!is_read)
+        {
+            char fn[MAXPATHLEN];
+            strncpyz(fn, name, MAXPATHLEN);
+            rev_normalize_sep(fn);
+            return fopen(fn, flags);
+        }
+        if (FILE *fp = open_under_root("", name, flags, order))
             return fp;
-        return rev_vfs_open(name, flags);
+        return vfs_open_by_name(name);
     }
-
-  // If root path is ".", strip it and any following separators
-    if (name[0] == '.')
-    {
-        name++;
-        while (name[0] == '\\' || name[0] == '/')
-            name++;
-    }
-
-  // Always try SavePath first (writable on real installs — saves, INI).
-    strncpyz(fn, SavePath, MAXPATHLEN);
-    strncatz(fn, name, MAXPATHLEN);
-    rev_normalize_sep(fn);
-
-    FILE *fp = fopen(fn, flags);
 
   // Writes resolve under SavePath and nowhere else: the install, the module
   // and the data root are the user's original data and stay read-only. A
   // write into a SavePath directory that doesn't exist fails here; the
   // caller owns creating its directories.
-    const bool is_read = flags && flags[0] == 'r' && !strchr(flags, '+');
     if (!is_read)
-        return fp;
-
-  // Revisited overlay (Bug fixes, game-behavior tweaks, enhanced
-  // graphics/UI). Strictly opt-in: empty string from the resolver means
-  // "no overlay, run vanilla". See revisited/README.md for the contract.
-    if (!fp)
     {
-        const char *overlay = rev_resolve_revisited_overlay();
-        if (overlay && overlay[0])
-        {
-            strncpyz(fn, overlay, MAXPATHLEN);
-            strncatz(fn, name, MAXPATHLEN);
-            rev_normalize_sep(fn);
-            fp = fopen(fn, flags);
-        }
-    }
-
-    if (!fp && stricmp(SavePath, RunPath) != 0)
-    {
-        strncpyz(fn, RunPath, MAXPATHLEN);
-        strncatz(fn, name, MAXPATHLEN);
+        char fn[MAXPATHLEN];
+        strncpyz(fn, SavePath, MAXPATHLEN);
+        strncatz(fn, rel, MAXPATHLEN);
         rev_normalize_sep(fn);
-        fp = fopen(fn, flags);
+        return fopen(fn, flags);
     }
-    if (!fp && !g_module_dir.empty())
+
+    for (const char *root : read_roots())
+        if (FILE *fp = open_under_root(root, rel, flags, order))
+            return fp;
+
+  // Legacy fallbacks, for names that no search root answers.
+    if (!g_module_dir.empty())
     {
-        // Module-dir fallback: try <module_dir>/<basename>.
-        const char *base = name;
-        for (const char *q = name; *q; ++q)
+        // Unpacked module: <module_dir>/<file name>.
+        const char *base = rel;
+        for (const char *q = rel; *q; ++q)
             if (*q == '/' || *q == '\\')
                 base = q + 1;
-        std::filesystem::path mpath = g_module_dir / base;
-        fp = fopen(mpath.string().c_str(), flags);
+        const std::filesystem::path mpath = g_module_dir / base;
+        if (FILE *fp = fopen(mpath.string().c_str(), flags))
+            return fp;
     }
-    if (!fp)
+    if (const std::filesystem::path &root = vfs_data_root(); !root.empty())
     {
-        // Data-root fallback: when the engine is launched from a build/ dir
-        // with SavePath/RunPath = "./", loose-file paths like
-        // "data/Save/Single/Foo/game.sav" won't resolve relative to cwd.
-        // Try them under the detected data root as well. Strip a leading
-        // "data/" since data_root IS the data dir.
-        const std::filesystem::path &root = vfs_data_root();
-        if (!root.empty())
-        {
-            const char *rel = name;
-            if (strncasecmp(rel, "data/", 5) == 0 || strncasecmp(rel, "data\\", 5) == 0)
-                rel += 5;
-            strncpyz(fn, rel, MAXPATHLEN);
-            rev_normalize_sep(fn);
-            const std::filesystem::path dpath = root / fn;
-            fp = fopen(dpath.string().c_str(), flags);
-        }
+        // Data-root fallback: when the engine is launched from a build/ dir,
+        // loose-file paths like "data/Save/Single/Foo/game.sav" don't resolve
+        // relative to cwd. Strip a leading "data/" since data_root IS the
+        // data dir.
+        if (strncasecmp(rel, "data/", 5) == 0 || strncasecmp(rel, "data\\", 5) == 0)
+            rel += 5;
+        char fn[MAXPATHLEN];
+        strncpyz(fn, rel, MAXPATHLEN);
+        rev_normalize_sep(fn);
+        if (FILE *fp = fopen((root / fn).string().c_str(), flags))
+            return fp;
     }
-    if (!fp)
-        fp = rev_vfs_open(name, flags);
+    return vfs_open_by_name(name);
+}
 
-    return fp;
+// REVSYNC: FUN_004a1c00 / FUN_004a1c30 — a pack entry or a loose file at
+// exactly this path; no by-name fallback.
+bool rev_file_exists(const char *name)
+{
+    if (!name || !name[0])
+        return false;
+    const char *rel = relative_name(name);
+    if (!rel)
+        return exists_under_root("", name);
+    for (const char *root : read_roots())
+        if (exists_under_root(root, rel))
+            return true;
+    return false;
+}
+
+std::string rev_first_existing(const char *preferred_dir, const char *fallback_dir,
+                               const char *file)
+{
+    std::string path = std::string(preferred_dir) + file;
+    if (!rev_file_exists(path.c_str()))
+        path = std::string(fallback_dir) + file;
+    return path;
 }
 
 // Random number function
@@ -1817,10 +1980,10 @@ uint32_t FreePage()  { return 0; }
 uint32_t TotalPage() { return 0; }
 #endif
 
-bool rev_read_file(const char *name, std::vector<uint8_t> &out)
+bool rev_read_file(const char *name, std::vector<uint8_t> &out, EOpenOrder order)
 {
     out.clear();
-    FILE *fp = rev_fopen(name, "rb");
+    FILE *fp = rev_fopen(name, "rb", order);
     if (!fp)
         return false;
     fseek(fp, 0, SEEK_END);
