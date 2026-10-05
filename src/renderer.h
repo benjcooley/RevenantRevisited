@@ -994,6 +994,12 @@ public:
     void DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
                        uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 
+    // Covers the whole swapchain with (r, g, b) at opacity `a` (0..1),
+    // blended over everything drawn before it. Tints one cached white texel,
+    // so an opacity that changes every frame creates no per-value images
+    // (unlike DrawSolidRect). The screen fade draws with it (TScreenFade).
+    void FillScreen(float r, float g, float b, float a);
+
     // Compose-to-target variant of DrawSolidRect (emits into the active TSurface
     // render-target pass). `target_w/target_h` are the RT dims. Used by the DEF
     // widget engine for listbox selection fills.

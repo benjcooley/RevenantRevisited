@@ -33,11 +33,11 @@ the block:
 | Area scripts attach to objects already in the world | `ParseScripts` `0x00496860` notifies the map (`N_SCRIPTADDED`); objects match by name (`ObjectScript` `0x00497370`) | retail |
 | CUBE trigger fires when the player enters | trigger scan in `TScript::Continue` `0x004933d0` (`0x004927b0` per trigger) | retail |
 | Line execution, blocks, labels, `jump`, `nowait` | `Continue`, `CommandInterpreter` `0x0041e8e0` | 1998 block engine; retail context syntax |
-| Waits: frames, character done, speech done, dialog response, screen fade | `TScript` wait machine: `SetWait` `0x00492b00`, check `0x00492d70` | retail; the screen-fade wait passes at once |
+| Waits: frames, character done, speech done, dialog response, screen fade | `TScript` wait machine: `SetWait` `0x00492b00`, check `0x00492d70` | retail |
 | Conditions (`If Rahul.stat health = 0` in Tendrick's ALWAYS block) | evaluator `0x0041f230`, resolver `0x0041e690` | retail |
 | Commands used | see §3 | 6 ported from retail, rest 1998 |
 | Dialog: speech text + voice, choice list, response | `TDialogPane`, speech | 1998 `TDialogPane`, unwired |
-| Presentation: fades, camera, control off | PlayScreen fade state, `centeron`/`scrollto`; character fade (`TCharacter` `+0x194`) | partial; character fades run but aren't drawn (COMMAND_SYSTEM.md §6.4) |
+| Presentation: fades, camera, control off | screen fader (SCREEN_SYSTEM.md §2.6), `centeron`/`scrollto`; character fade (`TCharacter` `+0x194`) | partial; the screen fade is ported; character fades run but aren't drawn (COMMAND_SYSTEM.md §6.4) |
 
 Where it stands (2026-10-05): the whole block runs, headless with key
 presses for the choices -- trigger, resurrection, voiced lines paced by

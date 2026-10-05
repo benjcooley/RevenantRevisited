@@ -2732,7 +2732,8 @@ static void AppFrame()
     if (FrameSnap::Active())
         FrameSnap::TickAfterRender();
 
-    if (CurrentScreen->IsDone() || Closing)
+    // A closing screen runs on until its fade-out reaches black.
+    if (CurrentScreen->ReadyToEnd() || Closing)
     {
         TScreen *next = CurrentScreen->GetNextScreen();
         TScreen::EndCurrentScreen();

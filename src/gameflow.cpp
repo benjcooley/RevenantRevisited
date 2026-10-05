@@ -144,5 +144,5 @@ void TGameFlow::SwitchTo(TScreen* next)
         return;
     }
     CurrentScreen->SetNextScreen(next);
-    CurrentScreen->SetDone();
+    CurrentScreen->RequestClose();
 }
