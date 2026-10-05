@@ -354,9 +354,6 @@ void TGameSession::RequestSave(const std::string& slot)
 // port has no string table yet and uses retail's built-in default.
 void TGameSession::RequestQuickSave()
 {
-    // REVSYNC: QuickSave @ 0x0047e850 follows writing the thumbnail
-    // (0x0047dd08).
-    ::SaveGame.CaptureThumbnail();
     ::SaveGame.RefreshSlots();
     char name[128];
     for (int32_t n = 1; n < 1000; n++)
@@ -365,7 +362,12 @@ void TGameSession::RequestQuickSave()
         if (::SaveGame.FindSlot(name) < 0)
             break;
     }
-    RequestSave(name);
+
+    // REVSYNC: QuickSave @ 0x0047e850 follows writing the thumbnail
+    // (0x0047dd08). The capture is read back after the next frame, so the
+    // save waits for it; requested at once, it could store the previous
+    // picture.
+    ::SaveGame.CaptureThumbnail({}, [this, slot = std::string(name)] { RequestSave(slot); });
 }
 
 void TGameSession::RequestReloadLastSlot()
