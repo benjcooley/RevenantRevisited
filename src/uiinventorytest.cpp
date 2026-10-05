@@ -89,7 +89,7 @@ constexpr int32_t kCountCellW = 0x28; // 40
 
 // Fonts.
 constexpr const char* kGoldFontName  = "Gold";   // user override — retail is GoldMed
-constexpr const char* kCountFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kCountFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kCountFontPx   = 12;
 
 // Page step — retail spec UNCONFIRMED-D says per-click delta is extracted
@@ -373,7 +373,7 @@ bool InitializeUIInventoryMode()
             g_goldFont = BuildFontAtlas(f);
 
     // Stack-count font (Arimo TTF).
-    g_countFont = BuildTTFAtlas(kCountFontPath, kCountFontPx);
+    g_countFont = BuildTTFAtlas(TTFFilePath(kCountFontFile).c_str(), kCountFontPx);
 
     log_info("[ui-inventory] fonts: Gold=%s  count=%s",
              g_goldFont ? "OK" : "MISS", g_countFont ? "OK" : "MISS");

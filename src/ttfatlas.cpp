@@ -12,6 +12,7 @@
 
 #include "logging.h"
 #include "renderer.h"
+#include "revutils.h"   // rev_engine_asset
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_STATIC
@@ -62,6 +63,16 @@ uint8_t* ReadWholeFile(const char* path, size_t* out_size)
 }
 
 } // namespace
+
+std::string TTFFilePath(const char* file)
+{
+    // The directory is resolved once: TDefPane::FontFor asks for its face on
+    // every text draw.
+    static const std::string fonts_dir = rev_engine_asset("fonts");
+    if (fonts_dir.empty() || !file || !*file)
+        return {};
+    return fonts_dir + "/" + file;
+}
 
 const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
 {

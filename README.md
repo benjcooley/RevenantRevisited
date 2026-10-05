@@ -42,9 +42,10 @@ RevenantRevisited/
 │                      include this; the user provides their own legally-
 │                      owned copy. Kept stock: nothing the port authors
 │                      lives here (docs/DATA_LAYOUT.md has the inventory).
-├── assets/          ← engine-owned runtime data the port authors and needs
-│                      in every mode (effects.def, render_metadata.def,
-│                      editor icons). Ships beside the binary.
+├── assets/          ← engine-owned runtime data the port authors or supplies
+│                      and needs in every mode (effects.def,
+│                      render_metadata.def, editor icons, fonts/). Ships
+│                      beside the binary.
 ├── revisited/       ← our enhancement layer. Sibling to src/. Strictly
 │   │                  opt-in: empty/missing means the engine plays vanilla
 │   │                  retail. See revisited/README.md for the contract.
@@ -89,6 +90,27 @@ read-only — writes never go there. Details and the retail forensics:
 
 The engine refuses to run if SavePath isn't writable (no installs on
 read-only media). It runs fine without the overlay (vanilla retail).
+
+### Fonts
+
+The TrueType faces the port draws with are engine assets, kept in
+`assets/fonts/` beside their licence files. Arimo and Tinos are the
+metric-compatible stand-ins for retail's Arial and Times New Roman (the
+text bar, dialog, HUD numbers and .def screens draw with them); Inter,
+JetBrains Mono and Material Symbols serve the editor and capture labels.
+They belong to Assets rather than the Overlay because Classic mode draws
+with them, and the engine must run without the opt-in overlay.
+
+Every load names a face by file name and asks one resolver,
+`TTFFilePath("Arimo-Regular.ttf")` in `src/font.h`, which returns
+`rev_engine_asset("fonts/<file>")`. The faces are therefore found from
+any working directory: `<exe-dir>/assets/fonts/` in a GOG install, the
+`.app` bundle's `Resources/assets/fonts/`, or, in development, the
+source tree's `assets/fonts/` above `build/`. They ship as loose files
+and are read with `fopen` like every engine asset, so no pack or VFS
+read is involved. If the overlay ever carries an alternate face (the
+"Enhanced UI" category in revisited/README.md), that lookup belongs in
+`TTFFilePath`, ahead of the asset.
 
 ### SavePath layout
 

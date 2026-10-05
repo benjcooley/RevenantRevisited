@@ -162,7 +162,7 @@ constexpr float kDescColR = 0x40 / 255.0f, kDescColG = 0x28 / 255.0f, kDescColB 
 // All cells: font_id 0x401 / 0x402 — both go through FUN_004be2b0 with bit
 // 0x400 set (3-pass black shadow). Arimo-Regular @ ~11 px matches the
 // Arial-metric retail font for HUD-scale text.
-constexpr const char* kFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx   = 11;
 
 // --- scroll animation (spec §6b — step 0x28 = 40 px/tick) ------------
@@ -701,9 +701,9 @@ bool InitializeUISpellbookMode()
              g_ringG ? "OK" : "MISS");
     // Font: small Arimo for the spell-name + stat lines (spec §8 — retail
     // fonts 0x401/0x402, Arial-metric compatible).
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-spellbook] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
     delete g_pane;
     delete g_content;

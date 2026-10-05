@@ -94,6 +94,13 @@ void LogFontGlyphHexDump(const char* fontname, unsigned char ch,
 const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height);
 void DestroyAllTTFAtlases();
 
+// The path of a TrueType face the port ships, named by file
+// ("Arimo-Regular.ttf"). The faces are engine assets in assets/fonts/, so
+// this is rev_engine_asset("fonts/<file>"): it does not depend on the
+// working directory. Every load of one of these faces resolves its file here.
+// Empty when the engine assets can't be found (logged by rev_engine_asset).
+[[nodiscard]] std::string TTFFilePath(const char* file);
+
 // *************************************************************************
 // * Canonical UI text drawing (the shared "text" / "text with shadow")   *
 // *************************************************************************
