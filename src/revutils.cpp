@@ -479,20 +479,47 @@ void ExitGame()
 namespace {
 
 std::filesystem::path g_iniPath;
+std::filesystem::path g_installIniPath;   // RunPath's Revenant.ini when it differs from the user's
 std::string g_iniSection;
 CSimpleIniA g_ini;
+CSimpleIniA g_installIni;
 bool g_iniLoaded = false;
 
 void EnsureLoaded()
 {
     if (g_iniLoaded)
         return;
-    g_ini.SetUnicode(false);
-    g_ini.SetMultiKey(false);
-    g_ini.SetQuotes(false);
+    for (CSimpleIniA* ini : {&g_ini, &g_installIni})
+    {
+        ini->SetUnicode(false);
+        ini->SetMultiKey(false);
+        ini->SetQuotes(false);
+    }
     if (!g_iniPath.empty())
         g_ini.LoadFile(g_iniPath.string().c_str());
+    if (!g_installIniPath.empty())
+        g_installIni.LoadFile(g_installIniPath.string().c_str());
     g_iniLoaded = true;
+}
+
+// The user's Revenant.ini (SavePath) is layered over the install's (RunPath):
+// a key the user file lacks takes the install's value before the built-in
+// default. Retail got the same result by copying the install INI into the
+// save directory on first run; the port seeds only once, so keys read later
+// (or added by newer builds) would otherwise miss the install's values.
+const CSimpleIniA* IniHolding(const char* key)
+{
+    if (g_ini.GetValue(g_iniSection.c_str(), key, nullptr))
+        return &g_ini;
+    if (g_installIni.GetValue(g_iniSection.c_str(), key, nullptr))
+        return &g_installIni;
+    return nullptr;
+}
+
+const char* IniRaw(const char* key, const char* def)
+{
+    const CSimpleIniA* ini = IniHolding(key);
+    return ini ? ini->GetValue(g_iniSection.c_str(), key, def) : def;
 }
 
 void Flush()
@@ -530,12 +557,14 @@ void INISetPath(const char* /*runpath*/)
     std::filesystem::path runPath  = RunPath;
 
     g_iniPath = savePath / ininame;
+    g_installIniPath.clear();
 
     // If SavePath and RunPath differ and SavePath doesn't yet hold an .ini,
     // seed it from RunPath so first-run defaults come from the install.
     std::error_code ec;
     if (!std::filesystem::equivalent(savePath, runPath, ec))
     {
+        g_installIniPath = runPath / ininame;
         if (!std::filesystem::exists(g_iniPath, ec))
         {
             std::filesystem::path src = runPath / ininame;
@@ -552,8 +581,9 @@ void INISetPath(const char* /*runpath*/)
 int32_t INIGetInt(const char* key, int32_t def, char* format)
 {
     EnsureLoaded();
-    const int32_t i = static_cast<int32_t>(
-        g_ini.GetLongValue(g_iniSection.c_str(), key, def));
+    const CSimpleIniA* ini = IniHolding(key);
+    const int32_t i = ini ? static_cast<int32_t>(ini->GetLongValue(g_iniSection.c_str(), key, def))
+                          : def;
     INISetInt(key, i, format);
     return i;
 }
@@ -587,7 +617,7 @@ char* INIGetText(const char* key, char* def, char* buf, int32_t buflen)
     // Original semantics: stored text is quoted; default is also quoted for
     // the Win32 GetPrivateProfileString call so the retrieved raw value ends
     // with surrounding quotes, which the old code then strips.
-    const char* raw = g_ini.GetValue(g_iniSection.c_str(), key, nullptr);
+    const char* raw = IniRaw(key, nullptr);
     std::string value;
     if (raw)
     {
@@ -628,7 +658,7 @@ char* INIGetStr(const char* key, char* def, char* buf, int32_t buflen)
     if (!def)
         def = const_cast<char*>("");
 
-    const char* raw = g_ini.GetValue(g_iniSection.c_str(), key, def);
+    const char* raw = IniRaw(key, def);
     strncpyz(buf, raw ? raw : "", buflen);
     INISetStr(key, buf);
     return buf;
@@ -649,7 +679,7 @@ int32_t INIGetArray(const char* key, int32_t size, int32_t* ary,
     if (ary != defary)
         std::memset(ary, 0, sizeof(int32_t) * size);
 
-    const char* raw = g_ini.GetValue(g_iniSection.c_str(), key, "");
+    const char* raw = IniRaw(key, "");
     std::string buf = raw ? raw : "";
 
     int32_t newsize = 0;
@@ -707,7 +737,7 @@ bool INIGetBool(const char* key, bool def, const char* yes, const char* no)
     const std::string yesTokens = yes ? ToLower(yes) : "yes on true 1";
     const std::string noTokens  = no  ? ToLower(no)  : "no off false 0";
 
-    const char* raw = g_ini.GetValue(g_iniSection.c_str(), key, "");
+    const char* raw = IniRaw(key, "");
     const std::string val = ToLower(raw ? raw : "");
 
     bool b;
@@ -1778,35 +1808,23 @@ uint32_t FreePage()  { return 0; }
 uint32_t TotalPage() { return 0; }
 #endif
 
-bool ResolveMoviePath(const char *name, char *out, int32_t outlen)
+bool rev_read_file(const char *name, std::vector<uint8_t> &out)
 {
-    if (!name || !*name || !out || outlen <= 0)
+    out.clear();
+    FILE *fp = rev_fopen(name, "rb");
+    if (!fp)
         return false;
-
-    // MoviePath is a Win32-style relative path from the INI (".\Disk2\");
-    // anchor it at the install dir (RunPath) like retail's makepath did.
-    std::string rel = MoviePath;
-    for (char &c : rel)
-        if (c == '\\') c = '/';
-    while (rel.rfind("./", 0) == 0) rel.erase(0, 2);
-    if (rel == ".") rel.clear();
-
-    std::error_code ec;
-    const std::filesystem::path dir = std::filesystem::path(RunPath) / rel;
-    std::filesystem::path found = dir / name;
-    if (!std::filesystem::exists(found, ec))
+    fseek(fp, 0, SEEK_END);
+    const long size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    bool ok = size >= 0;
+    if (ok && size > 0)
     {
-        // Shipped movie names differ in case from the script/exe references
-        // (MIX_FMV1.SMK vs "Mix_FMV1.smk"); match case-insensitively.
-        found.clear();
-        for (const auto &entry : std::filesystem::directory_iterator(dir, ec))
-        {
-            const std::string fn = entry.path().filename().string();
-            if (strcasecmp(fn.c_str(), name) == 0) { found = entry.path(); break; }
-        }
-        if (found.empty())
-            return false;
+        out.resize(static_cast<size_t>(size));
+        ok = fread(out.data(), 1, out.size(), fp) == out.size();
     }
-    strncpyz(out, found.string().c_str(), outlen);
-    return true;
+    fclose(fp);
+    if (!ok)
+        out.clear();
+    return ok;
 }

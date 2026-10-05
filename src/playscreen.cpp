@@ -257,20 +257,6 @@ bool TPlayScreen::Initialize()
     // TScreen's base Initialize() returns false (it's a "must override"
     // hook); skip it and do our own setup.
 
-    // Load the play-screen multi-resource (cursors, gameplay bitmaps,
-    // fonts referenced by HUD widgets). Retail did this at the top of
-    // TPlayScreen::Initialize (legacy/playscreen.cpp:179). Anything
-    // touching GameData->Bitmap("cursor") / Font(...) / Animation(...)
-    // before this load would see a null pointer.
-    if (!GameData)
-    {
-        GameData = TMulti::LoadMulti((char*)"playscrn.dat");
-        if (!GameData)
-            log_warn("[playscreen] failed to load playscrn.dat -- GameData stays null");
-        else
-            log_info("[playscreen] playscrn.dat loaded");
-    }
-
     log_info("[playscreen] booting map renderer");
     // Spin up the map renderer. InitializeFromStartupArgs reads --level
     // and --sector to pick the starting world; with neither set, we fall
@@ -343,8 +329,58 @@ bool TPlayScreen::Initialize()
     log_info("[playscreen] reconstructed HUD init = %s",
              g_playHudInitialized ? "OK" : "FAIL");
 
+    StartFromStartMode();
+
     log_info("[playscreen] initialize done");
     return true;
+}
+
+// REVSYNC: TPlayScreen::SetStartMode @ 0x0047f4c0
+void TPlayScreen::SetStartMode(int32_t mode, int32_t module, int32_t game, const char* name)
+{
+    if (mode == 4)          // retail ignores mode 4
+        return;
+    startmode   = mode;
+    startmodule = module;
+    startgame   = game;
+    if (name)
+        strncpyz(startname, name, sizeof(startname));
+    else
+        startname[0] = '\0';
+}
+
+// Tail of retail TPlayScreen::Initialize (0x0047a660): start the game the
+// way SetStartMode asked for, once the panes and map systems exist.
+void TPlayScreen::StartFromStartMode()
+{
+    switch (startmode)
+    {
+    case STARTMODE_NEWGAME:
+        // Retail: MapPane.ClearCurMap(); LoadNewGame() (= LoadGame("newgame", 1),
+        // the module's newgame.sav). TODO(gameflow D): route through the retail
+        // LoadNewGame once the savegame port lands; until then the map
+        // renderer's default spawn above stands in for the new-game player.
+        log_info("[playscreen] start mode: new game");
+        break;
+
+    case STARTMODE_LOADGAME:
+        // Retail: resolve the slot name to an index, LoadGame it, and fall back
+        // to a new game ("GAMENOTFOUND") if that fails.
+        log_info("[playscreen] start mode: load game '%s' (index %d)", startname, startgame);
+        if (startname[0])
+            LoadGameFile(startname);
+        else if (startgame >= 0)
+            LoadGame(startgame);
+        break;
+
+    default:
+        log_warn("[playscreen] start mode %d not supported", startmode);
+        break;
+    }
+
+    // Retail clears the request once consumed (name + game index).
+    startname[0] = '\0';
+    startgame    = -1;
 }
 
 // Hand-rolled starter loadout for Demo 1. Stand-in until newgame.sav

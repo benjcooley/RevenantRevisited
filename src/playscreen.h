@@ -151,6 +151,23 @@ class TPlayScreen : public TScreen
     [[nodiscard]] bool IsControlOn() const { return controlon; }
     void               SetControlOn(bool on);
 
+    // ---- Start mode ----------------------------------------------------
+    // How the next Initialize() starts the game (retail fields +0x6d8..+0x6e4).
+    enum EStartMode : int32_t
+    {
+        STARTMODE_NEWGAME     = 0,   // ClearCurMap + LoadNewGame (module newgame.sav)
+        STARTMODE_LOADGAME    = 1,   // load the named / indexed save; new game if missing
+        STARTMODE_EDITOR      = 2,
+        STARTMODE_MULTIPLAYER = 3,
+    };
+    // REVSYNC: TPlayScreen::SetStartMode @ 0x0047f4c0. Called by the main menu
+    // (New Game), WinMain (QUICKSTART / EDITOR) and the load-game screen.
+    // `module` / `game` are indices (-1 = main module / by name); mode 4 is
+    // ignored, as in retail.
+    void SetStartMode(int32_t mode, int32_t module = -1, int32_t game = -1,
+                      const char* name = nullptr);
+    [[nodiscard]] int32_t StartMode() const { return startmode; }
+
     void MultiUpdate() { multidirty = true; }
       // Marks the multipane-overhang region dirty so the next composite
       // refreshes it.
@@ -205,6 +222,7 @@ class TPlayScreen : public TScreen
       // mode can drive it without befriending the screen.
 
   private:
+    void StartFromStartMode();
 
     std::unique_ptr<TMapRenderer> mapRenderer;
 
@@ -214,6 +232,12 @@ class TPlayScreen : public TScreen
     bool controlon    = true;
     bool interfacedirty = false;
     bool multidirty   = false;
+
+    // Start mode (SetStartMode); consumed by Initialize().
+    int32_t startmode   = STARTMODE_NEWGAME;
+    int32_t startmodule = -1;
+    int32_t startgame   = -1;
+    char    startname[128] = {};
 
     // Save / load deferred work
     bool    loadgame  = false;

@@ -165,6 +165,14 @@ class TDefPane : public TPane
     // pane-local). Returns false (and logs) if the up face is missing.
     bool AddSpriteButton(const char* name, const char* faceBase);
 
+    // A static text label (retail draws code-built labels with the same text
+    // engine as DEF TEXT widgets). `flags` are the TEXT_* bits from
+    // widgets.def (e.g. TEXT_LEFT 0x1 | TEXT_VCENTER 0x40); `font` is a DEF
+    // font name ("Med", "Large", "small").
+    void AddText(const char* name, int32_t x, int32_t y, int32_t w, int32_t h,
+                 const char* text, uint32_t flags, const SDefColor& color,
+                 const char* font);
+
     // A completed button click. `buttonIndex` is the button's 1-based position
     // among the pane's BUTTON widgets, the order retail RunModal results follow.
     using TActivateHandler =

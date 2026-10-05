@@ -74,6 +74,10 @@ char *makepath(char *name, char *buf, int32_t buflen);
 // resolution on POSIX.
 FILE *rev_fopen(const char *file, const char *flags);
 
+// Reads a whole file through rev_fopen (SavePath, Revisited overlay, RunPath,
+// module, VFS archives). Returns false if it can't be opened or read.
+bool rev_read_file(const char *name, std::vector<uint8_t> &out);
+
 // Resource archive VFS — retail shipped data/resources.rvr, data/imagery.rvi
 // and data/Modules/<name>.rvm as stored (uncompressed) ZIPs. WinMain mounted
 // the two base archives individually, and a per-module archive was swapped
