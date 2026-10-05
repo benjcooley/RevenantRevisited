@@ -1396,20 +1396,23 @@ TObjectInstance* TObjectInstance::FindObjInventory(int32_t objclass, int32_t typ
     return nullptr;
 }
 
+// REVSYNC: Use @ 0x004705f0. Using an object on this one starts a USE named
+// after the object used; using this one alone starts a USE named after it (or
+// its type), and one on the user's script with this object as its "item".
 bool TObjectInstance::Use(TObjectInstance* user, int32_t with)
 {
-    if (with >= 0)  // With object.. use with name as key
+    TObjectInstance* item = with >= 0 ? MapPane.GetInstance(with) : nullptr;
+    if (item)
     {
-        TObjectInstance* inst = MapPane.GetInstance(with);
         if (GetScript())
-            GetScript()->Trigger(TRIGGER_USE, inst->GetName());
+            GetScript()->Trigger(TRIGGER_USE, item->GetName(), nullptr, user, kAliasUser, item, kAliasItem);
     }
-    else        // No with object.. use 'use' object as key
+    else
     {
         if (GetScript())
-            GetScript()->Trigger(TRIGGER_USE);
+            GetScript()->Trigger(TRIGGER_USE, GetName(), GetTypeName(), user, kAliasUser);
         if (user && user->GetScript())
-            user->GetScript()->Trigger(TRIGGER_USE, this->GetName());
+            user->GetScript()->Trigger(TRIGGER_USE, GetName(), nullptr, this, kAliasItem);
     }
 
     /*
@@ -2728,6 +2731,13 @@ int32_t TObjectInstance::GetStat(const char *statname) const
     if (statid >= 0)
         return cl->GetStat(objtype, statid);
     return 0;
+}
+
+// REVSYNC: 0x00473900 -- the lookup GetStat(name) makes, answering whether it
+// would find anything.
+bool TObjectInstance::HasStat(const char *statname) const
+{
+    return cl->FindObjStat(statname) >= 0 || cl->FindStat(statname) >= 0;
 }
 
 void TObjectInstance::SetStat(const char *statname, int32_t value)

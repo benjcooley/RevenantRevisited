@@ -1419,6 +1419,9 @@ void TMapRenderer::SetPointLightMultipliers(float intensity_mul, float range_mul
     impl->radius_mul    = range_mul;
 }
 
+void TMapRenderer::SetLightingMode(int32_t mode) { if (impl) impl->lighting_mode = mode; }
+void TMapRenderer::SetDaylightCycle(bool has_cycle) { if (impl) impl->daylight_cycle = has_cycle; }
+
 TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
 {
     SDrawCounts out;
@@ -2792,27 +2795,44 @@ void TMapRenderer::RenderFrame()
     // MapPane every time the player enters an area; the renderer is the
     // only consumer that has to push it onward to the GPU.
     //
-    // Scaling: AMBLIGHT is an arbitrary-units integer authored by level
-    // designers (Demo-module range 4..35; retail levels run higher). The
-    // retail DirectX renderer mapped these through palette lookups whose
-    // final pixel-multiplier behaviour we don't have a closed form for,
-    // so the divisor `s.ambient_divisor` is a tunable in the debug UI
-    // (Lighting tab) seeded to ~1200 from observation of retail
-    // screenshots. [Lighting]Ambient3D is an additional percent
-    // multiplier on top.
+    // Classic maps it exactly as retail did (classiclighting.cpp). Modern
+    // maps it through the `s.ambient_divisor` art tunable, with
+    // [Lighting]Ambient3D as a percent on top. Both models also feed the
+    // scene ambient and sun to the FX LitFlat path, so Classic exposes its
+    // tile ambient there and no sun: retail had none.
+    const bool classic = (s.lighting_mode == 0);
+    const bool sun_active = !classic && s.daylight_cycle;
     {
-        const int32_t mp_ambient   = MapPane.GetAmbientLight();
-        const SColor& mp_color     = MapPane.GetAmbientColor();
-        const float   divisor      = (s.ambient_divisor > 0.0f) ? s.ambient_divisor : 1.0f;
-        const float   amb_scale    =
-            float(mp_ambient) * float(Ambient3D) / (divisor * 100.0f);
-        s.ambient          = amb_scale;
-        s.ambient_color[0] = float(mp_color.red)   / 255.0f;
-        s.ambient_color[1] = float(mp_color.green) / 255.0f;
-        s.ambient_color[2] = float(mp_color.blue)  / 255.0f;
+        const int32_t mp_ambient = MapPane.GetAmbientLight();
+        const SColor& mp_color   = MapPane.GetAmbientColor();
+        SClassicLightSettings settings;
+        settings.ambient3d         = Ambient3D;
+        settings.light_mult3d      = LightMult3D;
+        settings.max_lights        = MaxLights;
+        settings.enhanced_lighting = EnhancedLighting;
+        settings.use_dir_light     = UseDirLight;
+        settings.dir_light_percent = DirLightPercent;
+        const SClassicLightModel model = ComputeClassicLightModel(mp_ambient, mp_color, settings);
+        Renderer->SetClassicLightModel(model);
+        if (classic)
+        {
+            s.ambient = 1.0f;
+            for (int32_t i = 0; i < 3; ++i)
+                s.ambient_color[i] = model.tile_ambient[i];
+        }
+        else
+        {
+            const float divisor = (s.ambient_divisor > 0.0f) ? s.ambient_divisor : 1.0f;
+            s.ambient          = float(mp_ambient) * float(Ambient3D) / (divisor * 100.0f);
+            s.ambient_color[0] = float(mp_color.red)   / 255.0f;
+            s.ambient_color[1] = float(mp_color.green) / 255.0f;
+            s.ambient_color[2] = float(mp_color.blue)  / 255.0f;
+        }
     }
 
-    Renderer->SetLight(s.light_dir[0], s.light_dir[1], s.light_dir[2], s.intensity, s.color[0], s.color[1], s.color[2], s.ambient);
+    Renderer->SetLight(s.light_dir[0], s.light_dir[1], s.light_dir[2],
+                       sun_active ? s.intensity : 0.0f,
+                       s.color[0], s.color[1], s.color[2], s.ambient);
     Renderer->SetAmbientColor(s.ambient_color[0], s.ambient_color[1], s.ambient_color[2]);
     Renderer->SetLightCeiling(s.light_ceiling);
     Renderer->SetAmbientOcclusion(s.ao_enable, s.ao_radius_px, s.ao_strength, s.ao_bias, s.ao_max_dist);
@@ -2824,7 +2844,7 @@ void TMapRenderer::RenderFrame()
     Renderer->SetEdgeThreshold(s.edge_thr);
     Renderer->SetTileViewMode(s.view_mode);
     Renderer->SetLightingMode(s.lighting_mode);
-    Renderer->SetSunShadow(s.sun_shadow, s.sun_shadow_step, s.sun_shadow_soft, s.sun_shadow_max);
+    Renderer->SetSunShadow(s.sun_shadow && sun_active, s.sun_shadow_step, s.sun_shadow_soft, s.sun_shadow_max);
     Renderer->SetPerspectiveDebugMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveDebugMode : 0);
     Renderer->SetPerspectiveProjectionMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveProjectionMode : 0);
     Renderer->SetPerspectiveProxyRasterScale(s.sectorPerspectiveCamera ? s.sectorPerspectiveProxyRasterScale : 1.0f);
@@ -2876,27 +2896,32 @@ void TMapRenderer::RenderFrame()
                 if (d2 < picks[worst].d2_to_view) picks[worst] = { light_idx, d2 };
             }
         }
-      // Retail [Lighting]LightMult3D is a per-light intensity scale in
-      // percent (default 250 = 2.5x). Apply on top of the editor-tunable
-      // intensity_mul so debug overrides still compose.
-        const float light_mult = float(LightMult3D) / 100.0f;
-        const float range_mul  = float(LightRange3D) / 100.0f;
+        // Authored lights go up in retail units (radius, colour,
+        // multiplier); the light pass applies the Classic or modern model.
+        // radius_mul / intensity_mul are the Revisited per-area
+        // POINTLIGHTRANGE / POINTLIGHTINT and stay 1 without --revisited.
         for (int32_t k = 0; k < pick_n; ++k)
         {
             const SSectorLight& L = s.sectorLights[picks[k].light_idx];
             const S3DPoint wp = s.sectorLightPos(L);
             float rgb[3]; s.sectorLightColor(L, rgb);
-            Renderer->AddPointLight(float(wp.x), float(wp.y), float(wp.z),
-                                    s.sectorLightRadius(L) * s.radius_mul * range_mul,
-                                    rgb[0], rgb[1], rgb[2],
-                                    s.sectorLightIntensity(L) * s.intensity_mul * light_mult);
+            Renderer->AddRetailPointLight(float(wp.x), float(wp.y), float(wp.z),
+                                          s.sectorLightRadius(L) * s.radius_mul,
+                                          rgb[0], rgb[1], rgb[2],
+                                          s.sectorLightMultiplier(L) * s.intensity_mul);
         }
         stats.point_lights_submitted = pick_n;
     }
+    // Modern reading of the authored lights: LightMult3D percent of a
+    // percent multiplier, radius stretched by LightRange3D.
+    Renderer->SetRetailLightModernScale(float(LightMult3D) / 10000.0f,
+                                        float(LightRange3D) / 100.0f);
     mark_phase(timings.point_lights_ms);
 
     const float zspan = s.z_far - s.z_near;
-    Renderer->BeginTilePass(0.12f, 0.16f, 0.10f, 1.0f);
+    // Pixels no tile covers are black, as retail's DrawUnlitObjects clears
+    // them (Box colour 0, FUN_00456cc0; docs/LIGHTING_FIDELITY.md §2.1).
+    Renderer->BeginTilePass(0.0f, 0.0f, 0.0f, 1.0f);
     mark_phase(timings.begin_pass_ms);
 
     constexpr int32_t kCovCellPx = 32;

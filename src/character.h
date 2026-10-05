@@ -144,14 +144,14 @@ class TCharacter : public TComplexObject
       // Attempts to use something in the direction character is facing
     bool TryGet();
       // Attempts to get something in the direction character is facing
-    bool Say(char *string, int32_t wait = -1, char *anim = nullptr, char *sound = nullptr);
+    bool Say(const char *string, int32_t wait = -1, const char *anim = nullptr, const char *sound = nullptr);
       // Causes character to blather incessantly about something irrelevant
       // (anim is override for animation to play when saying, nullptr is "say")
       // Tag indicates that the say command is a index tag into the DialogList
       // list of dialog lines.  The tag will also be used to play the dialog wave file.
-    bool SayTag(int32_t tagid, int32_t wait = -1, char *anim = nullptr);
+    bool SayTag(int32_t tagid, int32_t wait = -1, const char *anim = nullptr);
       // Says something given a dialog tag id number
-    bool SayTag(char *tag, int32_t wait = -1, char *anim = nullptr);
+    bool SayTag(const char *tag, int32_t wait = -1, const char *anim = nullptr);
       // Says something given a dialog tag
     bool CastByName(char* name, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
       // Cast a spell by usings its name
@@ -280,6 +280,14 @@ class TCharacter : public TComplexObject
     void ForceCommandDone() { forcecommanddone = true; }
       // Forces the current command to be done
 
+    static constexpr uint32_t kCharFlagNoIncidentals = 0x2;
+      // charflags bit (retail +0x110 & 2): `incidentals off`
+    void SetIncidentals(bool on)
+        { if (on) charflags &= ~kCharFlagNoIncidentals; else charflags |= kCharFlagNoIncidentals; }
+      // Incidentals are the random "NN:" variants of a character's root and idle
+      // states (fidgets); off, the character always plays the 100% variant
+    bool Incidentals() const { return !(charflags & kCharFlagNoIncidentals); }
+
     // Static access functions
     static TCharacter* CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius = 0);
         // Find if a character is blocking movement to this position
@@ -314,14 +322,21 @@ class TCharacter : public TComplexObject
     virtual void Save(RTOutputStream os);
         // Saves object data to the sector
 
-  // invisibilty functions
+  // Fading (retail TCharacter +0x194..+0x1a4): fade is the visibility 0..100
+  // that Transparency() reports; each Pulse moves it by fade_step (positive
+  // fades out) until it reaches fade_limit.
+    void Fade(int32_t direction);
+      // `fadecharacterin/out`: +1 back to fully visible (living characters only), else out to 0
     void SetFade(int32_t amt, int32_t amt2 = 5, int32_t amt3 = -1);
-    int32_t GetFade(void);
-    void UpdateFade(void);
+      // Start a fade from 'amt' (kept when < 0) by 'amt2' per pulse to 'amt3' (-1: no limit)
+    int32_t GetFade() const { return fade; }
+    void UpdateFade();
+      // One pulse of the fade
 
   // Invisible Spell Functions
     bool IsInvisibleSpell(){return invisible_spell;}
-    void SetInvisibleSpell(bool new_val){invisible_spell = new_val;}
+    void SetInvisibleSpell(bool on);
+      // Fades to 30 while the spell lasts and back afterwards
 
   // Teleport functions
     void SetTeleportLevel(int32_t new_level){teleport_level = new_level;}
@@ -528,7 +543,7 @@ class TCharacter : public TComplexObject
     bool forcecommanddone;      // For skipping past animations
     bool forcenomove;           // For forcing end movement
 
-    uint32_t charflags;            // Character flags
+    uint32_t charflags = 0;        // Character flags (retail +0x110; retail's allocator zeroed it)
 
     int32_t exittimestamp;          // When timestamp is +2 frames from current frame, OF_ONEXIT is cleared
     bool is_invisible;          // is our character affected by invisibility
@@ -562,12 +577,13 @@ class TCharacter : public TComplexObject
     float magic_resistance;     // between 0.0 and 1.0... percentage of magic resistance
 
     // Visibility
-    int32_t fade;
-    int32_t fade_step;
-    int32_t fade_limit;
+    int32_t fade = 100;             // retail +0x194, 0..100
+    int32_t fade_step = 0;          // retail +0x198, subtracted from fade each pulse
+    int32_t fade_limit = 100;       // retail +0x19c, where the fade stops (-1: at 0 or 100)
+    int32_t fade_direction = 0;     // retail +0x1a0, -1 out / 1 in / 0 still (no retail reader found)
 
   // Invisible Spell Addition
-    bool invisible_spell;
+    bool invisible_spell = false;   // retail +0x1a4
 
   // Teleport Coordinates
     int32_t teleport_level;

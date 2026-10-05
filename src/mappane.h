@@ -376,9 +376,9 @@ class TMapPane : public TPane
   
     TObjectInstance* FindObject(char *name, int32_t occurance = 1, int32_t objset = OBJSET_ALL);
         // Returns a pointer to the occurance of object answering to name
-    TObjectInstance* FindClosestObject(char *name, S3DPoint pos, bool partial, int32_t objset = OBJSET_ALL);
+    TObjectInstance* FindClosestObject(const char *name, S3DPoint pos, bool partial, int32_t objset = OBJSET_ALL);
         // Returns a pointer to the object answering to name closest to center
-    TObjectInstance* FindClosestObject(char *name, TObjectInstance* from = nullptr, bool partial = false, int32_t objset = OBJSET_ALL);
+    TObjectInstance* FindClosestObject(const char *name, TObjectInstance* from = nullptr, bool partial = false, int32_t objset = OBJSET_ALL);
         // Returns a pointer to the object answering to name closest to center
     int32_t FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height = 0, int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL);
       // Finds objects within given range. If height not given uses width as radius

@@ -6,7 +6,8 @@
 //
 // Deferred shading G-buffer fill. Each tile sprite writes:
 //   color(0)  albedo  (RGBA8)
-//   color(1)  world normal, packed x*0.5+0.5 (RGBA16F)
+//   color(1)  world normal, packed x*0.5+0.5 (RGBA16F); .a = surface
+//             class, 1 tile / 0 mesh (selects the Classic lighting model)
 //   color(2)  scene_z  (R32F, maps tile-local z to camera-depth [0..1])
 //   color(3)  obj_id, non-zero iff this pixel is occupied
 //   depth     same scene_z, for hardware depth test

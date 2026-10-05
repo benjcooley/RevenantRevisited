@@ -26,6 +26,8 @@
 
 #include "playscreen.h"
 
+#include "dialog.h"
+
 #include <cstring>
 
 #include "3dimage.h"
@@ -294,6 +296,12 @@ bool TPlayScreen::Initialize()
     // (InitGlobals step pre-condition).
     if (!AutoMap.Initialize())
         log_warn("[playscreen] AutoMap.Initialize failed; the automap will be empty");
+
+    // Retail TPlayScreen::Initialize adds the dialog pane right after the
+    // map pane; the screen's pane pass pulses it after the world each tick.
+    if (!DialogPane.Initialize())
+        log_error("[playscreen] Trouble initializing dialog pane");
+    AddPane(&DialogPane);
 
     // Runtime mode owns mode-specific UI state (cursor, overlay
     // visibility, etc.). At static init g_currentMode defaults to game
@@ -606,6 +614,8 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
 
 void TPlayScreen::Close()
 {
+    RemovePane(&DialogPane);
+    DialogPane.Close();
     AutoMap.Close();
     if (g_playHudInitialized)
     {
@@ -1133,7 +1143,13 @@ static void DrawClosestMonsterOverlay()
 // pumps the per-frame state update; Animate fires the world render
 // (matching what TTestScreen does for TestModes::Render). DrawBackground
 // is dead -- no BITMAP.100 backdrop on the new path.
-void TPlayScreen::Pulse()                  { Update(); }
+// REVSYNC: Pulse @ 0x0047b4d0 -- the world, then the screen's panes
+// (0x0048fda0 at its end).
+void TPlayScreen::Pulse()
+{
+    Update();
+    TScreen::Pulse();
+}
 void TPlayScreen::Animate(bool /*draw*/)
 {
     // Refresh reconstructed HUD surfaces before the world render. The
@@ -1175,11 +1191,13 @@ void TPlayScreen::KeyPress(int32_t key, bool down)
         return;
     }
 
-    // Give the active mode first crack at the key (game-mode movement
-    // bindings, etc.). If it consumes the event we stop here.
-    if (CurrentMode()->HandleKey(key, down)) return;
-
+    // REVSYNC: KeyPress @ 0x0047c400 -- the panes first (the dialog pane's
+    // choice keys), then the play screen's own handling, whose commands act
+    // only while the player has control. A modal keeps the keys to itself.
     TScreen::KeyPress(key, down);
+    if (HasModal())
+        return;
+    CurrentMode()->HandleKey(key, down);
 }
 
 void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
@@ -1238,9 +1256,11 @@ void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
     CurrentMode()->HandleMouseMove(button, x, y);
 }
 
-void TPlayScreen::Joystick(int32_t /*key*/, bool /*down*/)
+// REVSYNC: Joystick @ 0x0047ce80 -> TScreen 0x00490860: the panes. (Nothing
+// sends joystick events yet under sokol_app.)
+void TPlayScreen::Joystick(int32_t key, bool down)
 {
-    // TODO(port): wire sokol_app gamepad events. Stubbed for now.
+    TScreen::Joystick(key, down);
 }
 
 void TPlayScreen::Command(GAMECOMMAND /*command*/)

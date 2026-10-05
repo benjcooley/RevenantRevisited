@@ -101,6 +101,15 @@ class TMapRenderer
     // drop range to keep the scene crisper.
     void SetPointLightMultipliers(float intensity_mul, float range_mul);
 
+    // Lighting model pushed to the renderer every frame: 0 = Classic
+    // (retail), 1 = modern. Seeded from [Revisited] LightingMode.
+    void SetLightingMode(int32_t mode);
+
+    // Whether the current area has a day/night cycle (AREA_DONIGHT: the area
+    // defines night ambient values). The modern model's sun only exists in
+    // such areas; retail had no sun at all, so Classic never uses one.
+    void SetDaylightCycle(bool has_cycle);
+
     // Last-frame draw counts, exposed so the editor status bar can show
     // exactly what's hitting the GPU. All-zero before the first frame.
     struct SDrawCounts {

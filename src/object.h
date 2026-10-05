@@ -1008,7 +1008,7 @@ class TObjectInstance : protected SObjectDef
         // Returns a statistic for an class
     int32_t GetObjStat(int32_t statid) const { if ((uint32_t)statid < (uint32_t)stats.NumItems()) return stats[statid]; else return 0; }
         // Returns a statistic for an object
-    int32_t FindObjStat(char *statname) const { return cl->FindObjStat(statname); }
+    int32_t FindObjStat(const char *statname) const { return cl->FindObjStat(statname); }
         // Finds a stat and returns its stat id or -1 if not found
     void SetStat(int32_t statid, int32_t value) { cl->SetStat(objtype, statid, value); }
         // Sets a class statistic
@@ -1020,6 +1020,8 @@ class TObjectInstance : protected SObjectDef
         // Resets object stat to default value
     int32_t GetStat(const char *statname) const;
         // Returns a statistic given the statistic name (stat can be object or class stat)
+    bool HasStat(const char *statname) const;
+        // REVSYNC: 0x00473900 -- true if the name is one of this object's object or class statistics
     int32_t GetStat(const char *statname, char *str, int32_t id = -1) const;
         // Returns a statistic via sprintf format 'StatnameId.Str' (stat can be object or class stat)
     void SetStat(const char *statname, int32_t value);
@@ -1088,9 +1090,9 @@ class TObjectInstance : protected SObjectDef
     virtual bool IsInventoryItem();
         // Inventory-eligible iff InventoryImage() would return non-null (matches retail's
         // semantics: a baked invitem OR an invanim with at least one frame).
-    virtual int32_t FindState(const char *name) const { return imagery ? imagery->FindState(name) : -1; }
-        // Find a state in the object's imagery
-    virtual int32_t FindTransitionState(const char *from, const char *to) const { return imagery ? imagery->FindTransitionState(from, to) : -1; }
+    virtual int32_t FindState(const char *name, int32_t pcnt = -1) const { return imagery ? imagery->FindState(name, pcnt) : -1; }
+        // Find a state in the object's imagery ('pcnt' picks among "NN:" variants; -1 rolls one)
+    virtual int32_t FindTransitionState(const char *from, const char *to, int32_t pcnt = -1) const { return imagery ? imagery->FindTransitionState(from, to, pcnt) : -1; }
         // Find a state in the object's imagery
     const char *GetAniName() const { return imagery ? imagery->GetAniName(GetState()) : nullptr; }
         // Gets current animation name

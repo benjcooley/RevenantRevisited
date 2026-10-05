@@ -155,6 +155,9 @@ void ApplyRevisitedSettingsToMapRenderer(TMapRenderer *mr)
 {
     if (!mr) return;
     const SRevisitedSettings &s = RevisitedSettings;
+    // The map renderer pushes its own lighting state every frame, so the
+    // mode has to be set here as well as on TRenderer.
+    mr->SetLightingMode(s.lighting_mode);
     mr->SetPointLightMultipliers(float(s.point_light_int_mul),
                                  float(s.point_light_range_mul));
 }

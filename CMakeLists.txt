@@ -239,6 +239,24 @@ target_include_directories(test_parse PRIVATE
 )
 target_compile_definitions(test_parse PRIVATE SOKOL_${SOKOL_BACKEND})
 
+# Classic (retail) light-model arithmetic. classiclighting.cpp is pure; the
+# engine headers it includes need the same include dirs as test_parse.
+add_executable(test_classiclighting
+  tools/test_classiclighting.cpp
+  src/classiclighting.cpp)
+target_include_directories(test_classiclighting PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR}
+  ${SIMPLEINI_DIR}
+  ${MINIZ_DIR}
+  ${LOG_DIR}
+  ${ARGH_DIR}
+  ${STB_DIR}
+  ${IMGUI_DIR}
+)
+target_compile_definitions(test_classiclighting PRIVATE SOKOL_${SOKOL_BACKEND})
+target_link_libraries(test_classiclighting PRIVATE GTest::gtest_main)
+
 # ----------------------------------------------------------------------------
 # revsmk — clean-room Smacker (SMK2) decoder. Self-contained (C++ stdlib only),
 # so it's a standalone static lib the engine and the smkdump tool both link.

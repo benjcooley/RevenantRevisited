@@ -40,6 +40,7 @@ static inline char *strlwr(char *s)
 #include "cursor.h"
 #include "gameflow.h"
 #include "script.h"
+#include "scriptvalue.h"
 #include "multi.h"
 #include "savegame.h"
 #include "player.h"
@@ -52,6 +53,7 @@ static inline char *strlwr(char *s)
 #include "file.h"
 #include "3dimage.h"
 #include "sound.h"
+#include "audio_backend.h"
 #include "dialog.h"
 #include "effect.h"
 #include "logging.h"
@@ -283,19 +285,21 @@ static std::string SaveSlotAt(int32_t index)
     return (index >= 0 && index < (int32_t)slots.size()) ? slots[index].name : std::string();
 }
 
-// Shared body for retail-table commands whose port hasn't landed yet: skip
-// the rest of the line, note (once per command) that a script reached it,
-// and report success so the calling script keeps running.
+// Shared body for retail-table commands whose port hasn't landed yet. They
+// answer the way retail answers a command it doesn't have (ARCHITECTURE
+// §6.5): CMD_BADCOMMAND, so the interpreter offers the line to the target's
+// own parser, reports "Unrecognized command" and the script carries on with
+// the next line. Logged once per command with the retail address.
 static int32_t CmdNotPorted(const char *name, uint32_t retailaddr, TToken &t)
 {
     static std::unordered_set<std::string> reported;
     if (reported.insert(name).second)
-        log_warn("[cmd] '%s' not ported yet (retail @ 0x%08x); ignored", name, retailaddr);
+        log_warn("[cmd] '%s' not ported (retail @ 0x%08x); unrecognized", name, retailaddr);
     else
-        log_debug("[cmd] '%s' not ported yet; ignored", name);
+        log_debug("[cmd] '%s' not ported; unrecognized", name);
     while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
         t.Get();
-    return 0;
+    return CMD_BADCOMMAND;
 }
 
 // Master command list, evaluated top-to-bottom
@@ -548,13 +552,15 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
 
     SetDialogContext(context); // Who's script is running?
 
-    // check for <context>.<command> syntax
-    if (t.Type() == TKN_IDENT)
+  // REVSYNC: CommandInterpreter @ 0x0041e8e0 -- [nowait] [<context>.]<command>,
+  // where the context is a name (quoted or not) the script resolver answers.
+    if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
     {
         if (t.Is("nowait"))
         {
             nowait = true;
             t.WhiteGet();
+            strcpy(buf, t.Text());
         }
 
         t.Get();
@@ -573,26 +579,21 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
                 }
             }
             else
-            {               
-                TObjectInstance* inst = MapPane.FindClosestObject(buf);
-                if (inst)
+            {
+                context = ResolveScriptObject(buf, orgcontext, script);
+                if (!context)
                 {
-                    context = inst;
-                    t.Get();
-                    if (t.Type() == TKN_IDENT)
-                        strcpy(buf, t.Text());
-                    else
-                    {
-                        Output("Specify command following object context\n");
-                        return CMD_BADPARAMS;
-                    }
+                    const std::string name = buf;   // Output formats into buf
+                    Output("%s: Context not found\n", name.c_str());
+                    return CMD_BADCOMMAND;
                 }
-                else
+                t.Get();
+                if (t.Type() != TKN_IDENT)
                 {
-                    sprintf(buf, "%s: Context not found\n", buf);
-                    Output(buf);
-                    return 0;
+                    Output("Specify command following object context\n");
+                    return CMD_BADPARAMS;
                 }
+                strcpy(buf, t.Text());
             }
         }
     }
@@ -1191,174 +1192,6 @@ void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
 // * Script Language Components *
 // ******************************
 
-char *Operators[] = { "=", "<>", ">", "<", ">=", "<=", "and", "or", "not", "+", "-", "*", "/", nullptr };
-
-int32_t ApplyOperation(int32_t &lval, int32_t op, int32_t rval)
-{
-    int32_t newval = 0;
-
-    switch (op)
-    {
-        case 0: newval = (lval == rval); break;
-        case 1: newval = (lval != rval); break;
-        case 2: newval = (lval > rval); break;
-        case 3: newval = (lval < rval); break;
-        case 4: newval = (lval >= rval); break;
-        case 5: newval = (lval <= rval); break;
-        case 6: newval = (lval && rval); break;
-        case 7: newval = (lval || rval); break;
-        case 8: newval = !rval; break;              // boolean not is a special case
-        case 9: newval = (lval + rval); break;
-        case 10: newval = (lval - rval); break;
-        case 11: newval = (lval * rval); break;
-        case 12: if (rval == 0) newval = 0; else newval = (lval / rval); break;
-    }
-
-    // adjust for boolean or arithmatic operations
-    if (op <= 5)
-        lval = rval;
-    else
-        lval = newval;
-
-    return newval;
-}
-
-int32_t FindElement(char *elem, char *list[])
-{
-    for (int32_t i = 0; list[i] && i < 64; i++)
-        if (stricmp(elem, list[i]) == 0)
-            return i;
-
-    return -1;
-}
-
-// Finds a (semi-)unique value for a given string for expression parsing
-int32_t StringVal(char *string)
-{
-    int32_t val = 0;
-
-    for (int32_t i = 0; string[i]; i++)
-        val |= (int32_t)(string[i] - 'A') << i;
-
-    return val;
-}
-
-bool ParseExpression(TToken &t, int32_t *value)
-{
-    int32_t totalval = STATE_INVALID;
-    int32_t lval = STATE_INVALID;
-    int32_t optype = -1;
-    char buf[60];
-
-    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
-    {
-        if (t.Type() == TKN_SYMBOL)
-        {
-            if (optype != -1)
-                return false;
-
-            strcpy(buf, t.Text());      // First char of operator
-            t.Get();
-            if (t.Type() == TKN_SYMBOL)
-                strcat(buf, t.Text());  // Add second char to operator
-
-            int32_t ot = FindElement(buf, Operators);
-            if (ot >= 0 && (lval != STATE_INVALID || ot == 8))  // boolean "not" is 7
-                optype = ot;
-            else
-                return false;
-
-            t.WhiteGet();
-        }
-        else if (t.Type() == TKN_IDENT || t.Type() == TKN_NUMBER || t.Type() == TKN_TEXT)
-        {
-            int32_t rval;
-            bool isop = false;
-
-            if (t.Type() == TKN_IDENT)
-            {
-                int32_t ot = FindElement((char *)t.Text(), Operators);
-                if (ot >= 0) // and, or, not...
-                {
-                    if (lval != STATE_INVALID || ot == 8)
-                        optype = ot;
-                    else
-                        return false;
-
-                    isop = true;
-
-                    t.WhiteGet();
-                }
-                else         // Game id
-                {
-                    strcpy(buf, t.Text());
-                    t.Get();
-                    if (t.Is("."))
-                    {
-                        t.Get();
-                        if (t.Type() != TKN_IDENT)
-                            return false;
-
-                        TObjectInstance* inst = MapPane.FindClosestObject(buf);;
-                        if (inst)
-                        {
-                            if (t.Is("state"))
-                                rval = inst->GetState();
-                            else
-                                rval = inst->GetStat(t.Text());
-                        }
-                        t.WhiteGet();
-                    }
-                    else
-                        rval = ScriptManager.GameState(buf);
-                    if (t.Type() == TKN_WHITESPACE)
-                        t.Get();
-                }
-            }
-            else if (t.Type() == TKN_TEXT)
-            {
-                rval = StringVal((char *)t.Text());
-                t.WhiteGet();
-            }
-            else
-            {
-                rval = t.Index();
-                t.WhiteGet();
-            }
-
-            if (!isop)
-            {
-                if (rval == STATE_INVALID)
-                    return false;
-
-                if (lval == STATE_INVALID)
-                {
-                    if (optype == 7)        // boolean not
-                        totalval = ApplyOperation(lval, optype, rval);
-                    else
-                        totalval = lval = rval;
-                }
-                else
-                {
-                    if (optype == -1)
-                        return false;
-                    else
-                    {
-                        totalval = ApplyOperation(lval, optype, rval);
-                        optype = -1;
-                    }
-                }
-            }
-        }
-    }
-
-    if (totalval == STATE_INVALID)
-        return false;
-
-    *value = totalval;
-    return true;
-}
-
 COMMAND(CmdBegin)
 {
     return CMD_BEGIN;
@@ -1369,13 +1202,14 @@ COMMAND(CmdEnd)
     return CMD_END;
 }
 
+// REVSYNC: if @ 0x0041fb70. An expression that can't be evaluated is false,
+// reported as bad parameters.
 COMMAND(CmdIf)
 {
-    int32_t cond;
-    if (!ParseExpression(t, &cond))
-        return CMD_BADPARAMS;
-
-    return (cond ? CMD_CONDTRUE : CMD_CONDFALSE);
+    const std::optional<int32_t> cond = EvaluateExpression(t, context, scriptcontext);
+    if (!cond)
+        return CMD_CONDFALSE | CMD_BADPARAMS;
+    return *cond ? CMD_CONDTRUE : CMD_CONDFALSE;
 }
 
 COMMAND(CmdElse)
@@ -1388,13 +1222,13 @@ COMMAND(CmdElse)
     return CMD_ELSE;
 }
 
+// REVSYNC: while @ 0x0041fbc0
 COMMAND(CmdWhile)
 {
-    int32_t cond;
-    if (!ParseExpression(t, &cond))
+    const std::optional<int32_t> cond = EvaluateExpression(t, context, scriptcontext);
+    if (!cond)
         return CMD_BADPARAMS;
-
-    return cond ? CMD_LOOP : CMD_SKIPBLOCK;
+    return *cond ? CMD_LOOP : CMD_SKIPBLOCK;
 }
 
 COMMAND(CmdSet)
@@ -1438,9 +1272,8 @@ COMMAND(CmdSet)
 }
 
 // REVSYNC: wait @ 0x0041fe30. The waiting script is the context's
-// (retail's object wait wrappers 0x004712b0..0x00471350). Retail's SetWait
-// opened the dialog choices for a response wait; the 1998 dialog pane is
-// shown here until the dialog port moves it.
+// (retail's object wait wrappers 0x004712b0..0x00471350); a response wait
+// opens the dialog choices (TScript::SetWait).
 COMMAND(CmdWait)
 {
     TScript* waiting = context ? context->GetScript() : nullptr;
@@ -1472,16 +1305,15 @@ COMMAND(CmdWait)
         t.WhiteGet();
         if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
             return CMD_BADPARAMS;
-        TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
+        TObjectInstance* inst = ResolveScriptObject(t.Text(), scriptcontext, script);
         t.WhiteGet();
-        if (inst && t.Type() == TKN_SYMBOL && t.Code() == '.')
-        {
-            t.Get();
-            inst = MapPane.FindClosestObject((char *)t.Text(), inst);
-            t.WhiteGet();
-        }
         if (!inst)
             Output("Couldn't find wait char\n");
+        if (t.Is("."))
+        {
+            t.Get();
+            inst = ResolveScriptObject(t.Text(), inst, script);
+        }
         if (waiting)
             waiting->WaitDeath(inst);
         return CMD_WAIT;
@@ -1499,13 +1331,8 @@ COMMAND(CmdWait)
     else
         return CMD_WAIT;    // plain "wait": until the context's action is done
 
-    if (type == EScriptWait::Response || type == EScriptWait::ResponseControlOn)
-    {
-        DialogPane.SetCharacter((PTCharacter)context);
-        DialogPane.Show();
-    }
     if (waiting)
-        waiting->SetWait(type);
+        waiting->SetWait(type);         // a response wait opens the choices
     t.WhiteGet();
     return CMD_WAIT;
 }
@@ -1590,14 +1417,15 @@ COMMAND(CmdSay)
         }
     }
 
-    char *text = nullptr;
+    const char *text = nullptr;
     int32_t tagid = -1;
     if (t.Is("choice"))
     {
-        if (DialogPane.GetResponse())
+        // The last choice picked (it survives the commit).
+        if (const char *chosen = DialogPane.ChosenText())
         {
-            text = DialogPane.GetResponse();
-            tagid = DialogList.FindLine(DialogPane.GetResponse());
+            text = chosen;
+            tagid = DialogList.FindLine(chosen);
         }
 
         t.WhiteGet();
@@ -1679,6 +1507,81 @@ COMMAND(CmdPivot)
         ((PTCharacter)context)->Pivot(angle);
 
     return CMD_WAIT;
+}
+
+// REVSYNC: pivotobject @ 0x00420900 -- turn to face an object, plus an
+// optional angle offset, and wait for the turn. The name resolves from the
+// turning object (`this` is the context).
+COMMAND(CmdPivotObject)
+{
+    TObjectInstance* target = ResolveScriptObject(t.Text(), context, script);
+    if (!target)
+        return CMD_BADPARAMS;
+    t.WhiteGet();
+
+    int32_t offset = 0;
+    if (!Parse(t, "%d", &offset))
+        offset = 0;
+
+    // Retail pivots whatever the context is; only characters can.
+    if (context && context->IsCharacter())
+        static_cast<TCharacter*>(context)->Pivot(context->AngleTo(target) + offset);
+
+    return CMD_WAIT;
+}
+
+// REVSYNC: incidentals @ 0x00428250 -- `[<character>.]incidentals on|off`:
+// whether the character's root and idle animations may roll their random
+// "NN:" variants (TCharacter::SetIncidentals). Like retail, the word stays
+// for the interpreter to skip with the rest of the line.
+COMMAND(CmdIncidentals)
+{
+    TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
+    if (t.Is("on"))
+        chr->SetIncidentals(true);
+    else if (t.Is("off"))
+        chr->SetIncidentals(false);
+    else
+    {
+        Output("State must be included\n");
+        return CMD_BADPARAMS;
+    }
+    log_debug("[cmd] %s: incidentals %s", chr->GetName(), t.Text());
+    return 0;
+}
+
+// REVSYNC: fadecharacterout @ 0x00428020, fadecharacterin @ 0x00428070 --
+// `fadecharacterout|fadecharacterin <character>`: fade a character out to
+// nothing or back in (TCharacter::Fade). The name resolves from the context.
+// Retail faded whatever object the name found; only characters fade here.
+// Retail also sent the fade to the other players of a network game. Like
+// retail, the name stays for the interpreter to skip.
+static int32_t FadeCharacter(TObjectInstance* context, TToken& t, TScript* script, int32_t direction)
+{
+    TObjectInstance* target = ResolveScriptObject(t.Text(), context, script);
+    if (!target || !target->IsCharacter())
+        return CMD_BADPARAMS;
+
+    TCharacter* chr = static_cast<TCharacter*>(target);
+    chr->Fade(direction);
+    log_debug("[cmd] %s: fade %s from %d", chr->GetName(), direction == 1 ? "in" : "out", chr->GetFade());
+    return 0;
+}
+
+COMMAND(CmdFadeCharacterOut) { return FadeCharacter(context, t, script, -1); }
+COMMAND(CmdFadeCharacterIn) { return FadeCharacter(context, t, script, 1); }
+
+// REVSYNC: playerlevel @ 0x00428640 -- `<player>.playerlevel <n>`: rebuild
+// the player as a fresh level-n character (TPlayer::SetPlayerLevel). The
+// table only lets a player be the context.
+COMMAND(CmdPlayerLevel)
+{
+    if (t.Type() != TKN_NUMBER)
+        return CMD_BADPARAMS;
+
+    static_cast<TPlayer*>(context)->SetPlayerLevel(static_cast<int32_t>(t.Number()));
+    t.Get();
+    return 0;
 }
 
 COMMAND(CmdCombat)
@@ -1908,7 +1811,7 @@ COMMAND(CmdSelect)
         return 0;
     }
 
-    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context, true);
 
     if (!inst)
         Output("Can't find any object by that name.\n");
@@ -2546,7 +2449,7 @@ COMMAND(CmdGet)
         return CMD_BADPARAMS;
 
     int32_t index = -1;
-    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context, true);
 
     if (inst == nullptr)
         Output("Can't find any object by that name.\n");
@@ -2635,7 +2538,7 @@ COMMAND(CmdSwap)
     if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
         return CMD_BADPARAMS;
 
-    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context, true);
 
     if (inst == nullptr)
         Output("Can't find any object by that name.\n");
@@ -2750,6 +2653,28 @@ COMMAND(CmdPlay3D)
 
     context->PlayWave(buf);
 
+    return 0;
+}
+
+// REVSYNC: setcdvolume @ 0x00428b20 -- `setcdvolume half|full`: the music
+// drops to half the player's music volume, or back to all of it. Retail sets
+// the CD's current volume (0x0049a610) to its base volume (CD object
+// 0x0065abc8 +4, the player's music setting) or half of it. The port keeps
+// the player's setting as the music group volume, so the script's part is a
+// scale of 1/2 or 1 on top (audio::MusicSetVolume).
+COMMAND(CmdSetCDVolume)
+{
+    float scale;
+    if (t.Is("half"))
+        scale = 0.5f;
+    else if (t.Is("full"))
+        scale = 1.0f;
+    else
+        return CMD_BADPARAMS;
+
+    audio::MusicSetVolume(scale);
+    log_debug("[cmd] setcdvolume %s: music at %.2f of the music volume", t.Text(), scale);
+    t.WhiteGet();
     return 0;
 }
 
@@ -4009,8 +3934,9 @@ COMMAND(CmdGenerate)
 //
 // Every entry of the retail command table (SCommand[189] @ 0x005c6e88) is
 // registered above. Commands the pre-release snapshot never had start here
-// as stubs: they consume their parameters, log once that they ran, and
-// succeed, so a script that uses them keeps flowing instead of aborting.
+// as stubs: they consume their parameters, log once that a script reached
+// them, and answer "unrecognized" (CmdNotPorted) -- the script skips the
+// line and keeps running, as retail does for a command it doesn't know.
 // The retail body for each lives in recon/discovered/commands/cmd_<name>_<addr>.cpp.
 // When a command is ported, replace its stub with the real body (and move
 // the body next to its siblings if that reads better).
@@ -4061,13 +3987,10 @@ COMMAND(CmdGotoRelativeDistance) { return CmdNotPorted("gotorelativedistance", 0
 COMMAND(CmdGotoRelativePosition) { return CmdNotPorted("gotorelativeposition", 0x004205c0, t); }
 COMMAND(CmdHasFreeSlot) { return CmdNotPorted("hasfreeslot", 0x00426c60, t); }
 COMMAND(CmdHideObjects) { return CmdNotPorted("hideobjects", 0x00427010, t); }
-COMMAND(CmdIncidentals) { return CmdNotPorted("incidentals", 0x00428250, t); }
 COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
 COMMAND(CmdMaxMonsters) { return CmdNotPorted("maxmonsters", 0x00427c30, t); }
 COMMAND(CmdMonsterTypes) { return CmdNotPorted("monstertypes", 0x00427bd0, t); }
 COMMAND(CmdOperate) { return CmdNotPorted("operate", 0x00426cd0, t); }
-COMMAND(CmdPivotObject) { return CmdNotPorted("pivotobject", 0x00420900, t); }
-COMMAND(CmdPlayerLevel) { return CmdNotPorted("playerlevel", 0x00428640, t); }
 COMMAND(CmdSetFromExit) { return CmdNotPorted("setfromexit", 0x00428a40, t); }
 COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
 COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
@@ -4078,14 +4001,11 @@ COMMAND(CmdUnequip) { return CmdNotPorted("unequip", 0x00428180, t); }
 // ----- owner: presentation (fades, music, movies, end game) -----
 
 COMMAND(CmdEndGame) { return CmdNotPorted("endgame", 0x00427060, t); }
-COMMAND(CmdFadeCharacterIn) { return CmdNotPorted("fadecharacterin", 0x00428070, t); }
-COMMAND(CmdFadeCharacterOut) { return CmdNotPorted("fadecharacterout", 0x00428020, t); }
 COMMAND(CmdFadeScreenIn) { return CmdNotPorted("fadescreenin", 0x00427f60, t); }
 COMMAND(CmdFadeScreenOut) { return CmdNotPorted("fadescreenout", 0x00427e80, t); }
 COMMAND(CmdFogOfWar) { return CmdNotPorted("fow", 0x00425440, t); }
 COMMAND(CmdPlayMovie) { return CmdNotPorted("playmovie", 0x00427d80, t); }
 COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }
-COMMAND(CmdSetCDVolume) { return CmdNotPorted("setcdvolume", 0x00428b20, t); }
 COMMAND(CmdSwapCDTrack) { return CmdNotPorted("swapcdtrack", 0x00428b90, t); }
 COMMAND(CmdTimeOfDay) { return CmdNotPorted("timeofday", 0x00427a80, t); }
 
