@@ -10,6 +10,7 @@
 #include "dls.h"
 #include "file.h"
 #include "mappane.h"
+#include "module.h"
 #include "parse.h"
 #include "player.h"
 #include "playscreen.h"
@@ -51,14 +52,16 @@ void TExit::Close()
     DestroyExitList();
 }
 
+// REVSYNC: ReadExitList @ 0x0050c8f0 — the active module's exit.def, else the
+// shared one.
 bool TExit::ReadExitList(bool reload)
 {
     if (!reload)
         exitlist = nullptr;
 
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%sexit.def", ClassDefPath);
-    
+    const std::string fname_str = ModuleManager.DataFilePath("exit.def");
+    const char *fname = fname_str.c_str();
+
     FILE *fp = TryOpen(fname, "rb");
     if (!fp)
         return false;

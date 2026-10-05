@@ -29,6 +29,7 @@
 #include "mappane.h"
 #include "dialog.h"
 #include "file.h"
+#include "module.h"
 #include "revutils.h"
 #include "exit.h"
 #include "player.h"
@@ -822,11 +823,12 @@ bool TScriptProto::WriteScript(FILE *fp)
 // * TGameState *
 // **************
 
-// REVSYNC: Load @ 0x00495cf0 — text .def parser.
+// REVSYNC: Load @ 0x00495cf0 — text .def parser; the active module's copy of
+// the file, else the shared one.
 bool TGameState::Load(char *filename)
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s", ClassDefPath, filename);
+    const std::string fname_str = ModuleManager.DataFilePath(filename);
+    const char *fname = fname_str.c_str();
 
     FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
@@ -1023,10 +1025,11 @@ void TScriptManager::Close()
 }
 
 // REVSYNC: Load @ 0x00496490 — slurps file, ParseScripts, registers owner.
+// The active module's copy of the script, else the shared one.
 bool TScriptManager::Load(char *filename, void *owner)
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s", ClassDefPath, filename);
+    const std::string fname_str = ModuleManager.DataFilePath(filename);
+    const char *fname = fname_str.c_str();
 
     const int before = scripts.NumItems();
 

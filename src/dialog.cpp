@@ -13,24 +13,39 @@
 #include "command.h"
 #include "bitmap.h"
 #include "mappane.h"
+#include "module.h"
+#include "revutils.h"
 #include "script.h"
 #include "player.h"
+
+#include <string>
 
 // ****************************************************************************
 // * TDialogList - Stores language specific dialog and message lines for game *
 // ****************************************************************************
 
 // Initialize the dialog list
+// REVSYNC: Initialize @ 0x0049d2a0 — the dialog file is the active module's:
+// <Language>dialog.def, else <Language>.def, else english.def.
 bool TDialogList::Initialize()
 {
     if (initialized)
         return true;
     lines.DeleteAll();
 
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s.def", ClassDefPath, Language.CStr());
+    const std::string language = Language.CStr();
+    std::string fname_str;
+    for (const std::string &file : {language + "dialog.def", language + ".def",
+                                    std::string("english.def")})
+    {
+        fname_str = ModuleManager.ModuleFilePath(file.c_str());
+        if (!fname_str.empty() && rev_file_exists(fname_str.c_str()))
+            break;
+        fname_str.clear();
+    }
+    const char *fname = fname_str.c_str();
 
-    FILE *fp = rev_fopen(fname, "rb");
+    FILE *fp = fname_str.empty() ? nullptr : rev_fopen(fname, "rb");
     if (!fp)
         FatalError("Unable to find game area file", Language.CStr());
 

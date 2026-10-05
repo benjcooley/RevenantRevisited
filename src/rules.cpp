@@ -584,32 +584,23 @@ void TRules::Close()
     initialized = false;
 }
 
-// Loads all areas from the "RULES.DEF" file plus the retail character roster
-// in "<dataroot>/Imagery/char.def". rules.def is required (provides global
-// rules tags + the pre-release characters); char.def is optional but gives us
-// the full 60-character retail roster that the post-snapshot game data
-// references (Araknid, Issathi, Druhgs, Golems, etc.). When both files
-// define the same CHARACTER name, the later load replaces the earlier one,
-// so char.def wins (retail-authoritative).
+// Loads the game rules from "RULES.DEF" plus the character roster in
+// "CHAR.DEF". rules.def is required (global rules tags); char.def is optional
+// but holds the 60-character retail roster (Araknid, Issathi, Druhgs, Golems,
+// etc.). When both files define the same CHARACTER name, the later load
+// replaces the earlier one, so char.def wins (retail-authoritative).
+// REVSYNC: Load @ 0x0048b990 — rules.def from ClassDefPath; the roster from
+// ImageryPath when it has one (imagery.rvi does), else ClassDefPath. Retail
+// also reads stats.def, weapon.def, armor.def and equip.def in this loop.
 bool TRules::Load()
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s", ClassDefPath, "rules.def");
-    if (!LoadFile(fname, /*required=*/true))
+    const std::string rules_file = std::string(ClassDefPath) + "rules.def";
+    if (!LoadFile(rules_file.c_str(), /*required=*/true))
         return false;
 
-  // Pre-snapshot rules.def lives in <ClassDefPath> (which is .\Resources).
-  // Retail char.def lives in <dataroot>/Imagery/char.def. ClassDefPath is
-  // ".\\Resources\\" with a trailing slash; up one and into Imagery gets us
-  // there.
-    char charfile[MAXPATHLEN];
-#ifdef _WIN32
-    constexpr char SEP = '\\';
-#else
-    constexpr char SEP = '/';
-#endif
-    sprintf(charfile, "%s..%cImagery%cchar.def", ClassDefPath, SEP, SEP);
-    LoadFile(charfile, /*required=*/false);
+    const std::string char_file = rev_first_existing(ImageryPath, ClassDefPath, "char.def");
+    if (rev_file_exists(char_file.c_str()))
+        LoadFile(char_file.c_str(), /*required=*/false);
 
     return true;
 }
