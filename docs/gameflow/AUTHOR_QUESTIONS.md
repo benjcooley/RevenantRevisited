@@ -24,6 +24,7 @@ Answer inline (or in chat) and the owning doc gets updated.
 | S13 | In a played game (control on), default ini (no `NOTEXOVERLAYS`): ESC and the next ⅓ s frame by frame; the menu; Save Game with a few slots; Load Game from the menu, then Load Game on a slot and the next second; Quit Module's question; title Load Game and Options | the in-game chrome's translucency and fade, the popup's look, the list's scrollbar and selection, the in-game load's progress popup | [forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §4.2, §5, §9 |
 | S14 | In town (Misthaven), talk to Elahni (potions) with some gold, default ini: Buy Items and the panel as it opens; the mouse over the second row; a click on the first row; Buy (the gold and her line); the ↓ arrow; Exit and the next second | the shop's fonts, colours (names violet 130,13,197, hover 230,150,255, selected 200,83,255; gold and labels 255,186,0; stat lines grey), row positions, the icons; whether the bottom bar comes back after Exit | [../ui/forensics/BuySellScreen_SPEC.md](../ui/forensics/BuySellScreen_SPEC.md) §4, §8, §1 |
 | S15 | Sell Items at Elahni with potions in the pack, in a bag and in a belt pouch; then at Cronus (armor) with a worn and an unworn piece; sell one of each | which items a Sell shop lists (bags, belt pouches, worn armor), the sell prices (Value × 0.3) | BuySellScreen_SPEC §6.3, §6.4 |
+| S16 | One spot in the Keep hall, Locke standing still, `RealTimeLight=No`, fullscreen: one shot each at Gamma 0, 2 and 4 (set in Options, OK, then wait for the area ambient to settle — or restart between shots, since each OK adds the offset again) | whether the gamma ramp is in effect under dosbox-x / the GOG wrapper, and how much the ambient offset brightens the floor | [forensics/OPTIONS.md](forensics/OPTIONS.md) §7.11 |
 
 ## Dialog ([forensics/DIALOG.md](forensics/DIALOG.md) §7)
 
@@ -66,8 +67,12 @@ Answer inline (or in chat) and the owning doc gets updated.
     Intended?
 15. A level-up stat point lands on the Attack skill one time in seven
     (`random(0,6)` over seven ids). Intended?
-16. Music plays at full CD volume until the player confirms the Options
-    screen, ignoring the INI `MusicVolume`. Intended?
+16. ~~Music plays at full CD volume until the player confirms the Options
+    screen, ignoring the INI `MusicVolume`. Intended?~~ Settled from the
+    code ([forensics/OPTIONS.md](forensics/OPTIONS.md) §7.9): the CD keeps
+    the OS mixer's own level until the Options pane opens (opening it
+    applies `MusicVolume`, not only OK); that mixer level outlived the
+    process, so the player's last setting normally carried over.
 17. `timelimit`'s usage text is the `script edit/pause/resume/end` help —
     a leftover, or is it the script-control command?
 72. `endfighting` starts a fight instead of ending one: it calls
@@ -223,6 +228,28 @@ Answer inline (or in chat) and the owning doc gets updated.
 65. Demo mode (module flag, `SetDemoMode`) makes ESC ask "exit the game?"
     instead of opening the menu. Which builds or modules ran in demo
     mode — the attract loop, a trade-show demo?
+
+## Options ([forensics/OPTIONS.md](forensics/OPTIONS.md))
+
+90. Cancel restores only the gamma. A music level dragged on the slider
+    keeps playing after Cancel, while the saved `MusicVolume` stays the old
+    one, until Options is opened again. Was Cancel meant to put the music
+    back too?
+91. The Violence slider stops at 4, but the exe's default is 5 (the
+    manual's "Level 5 is satisfyingly bloody" reads as the slider's top).
+    Opening Options and pressing OK turns a default 5 into 4, which allows
+    fewer and smaller blood particles. Was 5 meant to be the slider's top
+    (a 0..5 range), or the default meant to be 4?
+92. Gamma does two things: a display gamma ramp, and an offset of
+    (level − 2) × 10 on every area's ambient light (`SetAmbientLight`). All
+    five ramps darken the midtones (level 4 only a little, level 2 like a
+    1.8 power curve), and the shipped ini says `GammaLevel = 4`, so the
+    shipped look was the level-4 ramp plus 20 ambient. Was that the intended
+    picture, and did the ramp take effect on the hardware of the time? The
+    port renders neither yet (shot S16).
+93. Each Options OK re-applies the gamma offset to the current ambient,
+    which already includes it, so pressing OK repeatedly at level 3 or 4
+    brightens the area until its ambient is next set. A bug?
 
 ## Camera and control ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4)
 

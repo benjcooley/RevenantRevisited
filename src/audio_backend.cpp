@@ -63,6 +63,11 @@ struct State {
     // (multiple Sources share the same PCM); ref-counted through SharedPCM.
     std::mutex       sources_mtx;          // guards source bookkeeping
 
+    // Group volumes as last set. A setting read before the device opens
+    // (the player's [Options] levels at boot) takes effect when it does.
+    float            sfx_group_volume   = 1.0f;
+    float            music_group_volume = 1.0f;
+
     // The active music track (one at a time).
     bool             music_loaded = false;
     ma_sound         music{};
@@ -227,6 +232,9 @@ bool audio::Init() {
         return false;
     }
 
+    ma_sound_group_set_volume(&s.sfx_group, s.sfx_group_volume);
+    ma_sound_group_set_volume(&s.music_group, s.music_group_volume);
+
     ma_engine_listener_set_position(&s.engine, 0, 0.0f, 0.0f, 0.0f);
 
     // Force the playback device to a started state. ma_engine_init normally
@@ -353,12 +361,14 @@ void audio::SetMasterVolume(float v) {
 
 void audio::SetSfxVolume(float v) {
     State& s = state();
+    s.sfx_group_volume = v;
     if (!s.init_ok) return;
     ma_sound_group_set_volume(&s.sfx_group, v);
 }
 
 void audio::SetMusicVolume(float v) {
     State& s = state();
+    s.music_group_volume = v;
     if (!s.init_ok) return;
     ma_sound_group_set_volume(&s.music_group, v);
 }
