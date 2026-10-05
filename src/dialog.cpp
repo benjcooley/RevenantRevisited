@@ -17,6 +17,7 @@
 #include "revutils.h"
 #include "script.h"
 #include "player.h"
+#include "textbar.h"
 #include "logging.h"
 
 #include <algorithm>
@@ -542,5 +543,69 @@ COMMAND(CmdChoice)
         script->AddChoice(label.c_str(), text.c_str());
     else
         DialogPane.AddChoice(label.c_str(), text.c_str());
+    return 0;
+}
+
+// REVSYNC: message @ 0x004280e0 -- message ("<text>" | <TAG>): quoted text,
+// or the tag's dialog line, on the text bar. (Retail passes the text as the
+// format string; no shipped line contains '%'.)
+COMMAND(CmdMessage)
+{
+    const char *text = nullptr;
+    if (t.Type() == TKN_TEXT)
+        text = t.Text();
+    else if (t.Type() == TKN_IDENT)
+        text = DialogList.GetLine(t.Text());
+    else
+    {
+        Output("There was no message to display!\n");
+        return CMD_BADCOMMAND;
+    }
+    TextBar.Print(const_cast<char *>("%s"), text);
+    t.WhiteGet();
+    return 0;
+}
+
+// A busy line: quoted text, or a tag that must exist (its line and voice).
+static bool BusyLine(TToken &t, const char *&text, const char *&voice)
+{
+    voice = nullptr;
+    if (t.Type() == TKN_TEXT)
+        text = t.Text();
+    else if (t.Type() == TKN_IDENT)
+    {
+        const int32_t id = DialogList.FindLine(t.Text());
+        if (id < 0)
+            return false;
+        text = DialogList.GetLine(id);
+        voice = DialogList.GetTag(id);
+    }
+    else
+        return false;
+    return true;
+}
+
+// REVSYNC: busysay @ 0x004298b0 -- busysay ("<text>" | <TAG>), from a
+// script only. DEVIATION: retail also ANDs the script's taken flags with
+// 0x10000 (probably meant |=), which would drop them; not copied.
+COMMAND(CmdBusySay)
+{
+    const char *text = nullptr, *voice = nullptr;
+    if (!script || !BusyLine(t, text, voice))
+        return CMD_BADPARAMS;
+    script->SetBusySay(text, voice);
+    t.WhiteGet();
+    return 0;
+}
+
+// REVSYNC: busymsg @ 0x00429850 -- as busysay, the text only (same
+// DEVIATION for the taken flags, 0x20000 there).
+COMMAND(CmdBusyMsg)
+{
+    const char *text = nullptr, *voice = nullptr;
+    if (!script || !BusyLine(t, text, voice))
+        return CMD_BADPARAMS;
+    script->SetBusyMessage(text);
+    t.WhiteGet();
     return 0;
 }
