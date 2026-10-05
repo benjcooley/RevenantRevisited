@@ -110,6 +110,27 @@ sg_commit();
 
 `Renderer->Composite(TSurface*)` uses an alpha-blended swap pipeline; transparent backbuffer pixels leave the 3D scene visible. (See [renderer.cpp](src/renderer.cpp) `composite_pip_swap`.)
 
+## Inside Scene3D
+
+`TMapRenderer::RenderFrame` (from `TPlayScreen::Animate`) builds the Scene3D
+layer in this order:
+
+1. **Draw-time state.** For every animated object: `Animate(false)` samples
+   the pose for this frame, then `T3DAnimator::UpdateDrawState(dt)` advances
+   state that exists only for drawing, once per drawn frame with
+   `dt = TTime::DeltaTime()`. A character's drawn alpha lives here
+   (`TCharAnimator`); its fade (`TCharacter::Transparency`) is simulation and
+   moves in `Pulse`.
+2. **Submit.** Each visible drawable hands its payload to `TRenderer`.
+   Meshes carry `T3DAnimator::DrawAlpha()` as their tint alpha; an object
+   at alpha 0 (an OF_INVISIBLE character) isn't submitted.
+3. **Passes** (`TRenderer`, [RENDERER_ARCHITECTURE.md](RENDERER_ARCHITECTURE.md)):
+   G-buffer -> AO -> sun-shadow mask -> deferred lighting -> transparent world
+   (transparent tiles, helper meshes, translucent meshes, back to front) ->
+   transparent FX -> overlays. Opaque meshes fill the G-buffer; a mesh below
+   full alpha goes to the transparent-world pass, lit by the same function
+   as the deferred pass.
+
 ## Migration State
 
 - ✅ `TScreen::Tick` / `TScreen::DrawFrame` exist; default impls bridge into legacy `Pulse()` / `Animate()` so existing screens keep working.
@@ -124,6 +145,7 @@ sg_commit();
 
 - 2D draws (`Display.Put`, `Display.Blit`, `Display.Line`, …) belong inside a screen's `Animate()` (or anything reachable from `DrawFrame()`). Anywhere else is a bug.
 - Game logic and state mutation belongs in `Pulse()` (reached from `Tick`). Don't read input or mutate state in `Animate()`.
+- Animation that exists only for drawing (retail stepped it once per drawn frame, e.g. a character's drawn alpha) goes in `T3DAnimator::UpdateDrawState(dt)`, time-based, never in `Pulse()`.
 - 3D rendering is owned by `TMapRenderer` / `TRenderer`; screens submit by calling those, not by issuing sokol calls directly.
 - Debug UI lives in ImGui via `DebugUI::DrawFrame()` and is the final composite layer — visible over both Scene3D and Overlay2D.
 - Future work: a formal render-graph (named passes with declared inputs/outputs) when the layer count starts to hurt. Until then this three-layer model is fine.

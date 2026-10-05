@@ -416,13 +416,26 @@ struct SMeshVertex
 // mesh handle, uploads a dynamic instance vertex buffer, and emits one
 // instanced draw per mesh at EndTilePass (instancing is always on; a single
 // instance just means count=1).
+//
+// The tint alpha picks the pass. At kOpaqueMeshAlpha or above the mesh fills
+// the G-buffer; below it the mesh is translucent and draws in the
+// transparent-world pass over the lit scene, back to front by sort_depth.
+// Translucent meshes that share a surface_id are one surface (a character's
+// body parts): it shows only its nearest layer, blended once.
 struct SMeshSubmit
 {
-    MeshHandle mesh;
-    float      world[16];     // row-major 4x4
-    float      tint[4];       // rgba multiplier
+    MeshHandle mesh = 0;
+    float      world[16] = {};   // row-major 4x4
+    float      tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // rgba multiplier; alpha < kOpaqueMeshAlpha = translucent
     uint32_t   obj_id = 0;    // packed into id_target (RGBA8) for picking
+    float      sort_depth = 0.0f;   // translucent only: camera depth, wu (greater is farther)
+    uint32_t   surface_id = 0;      // translucent only: shared by one surface's meshes; 0 = its own surface
 };
+
+// Tint alpha at or above which a mesh is opaque. Retail drew a character's
+// materials opaque when their alpha was within 0.001 of 1 (TCharAnimator
+// SetMaterialTransparency 0x004d82a0) and alpha-blended otherwise.
+inline constexpr float kOpaqueMeshAlpha = 0.999f;
 
 struct SHelperMeshSubmit
 {
@@ -442,6 +455,7 @@ enum class ETransparentWorldKind : uint8_t
 {
     Tile,
     Helper,
+    Mesh,       // translucent SMeshSubmit
 };
 
 struct STransparentWorldSubmit
@@ -450,6 +464,8 @@ struct STransparentWorldSubmit
     float                 sort_depth = 0.0f;
     STileSubmit           tile = {};
     SHelperMeshSubmit     helper = {};
+    SMeshSubmit           mesh = {};
+    int32_t               mesh_instance = 0;   // Mesh: row in this drain's instance buffer
 };
 
 // THudDrawable -- base class for everything that draws into the HUD layer.
@@ -1170,6 +1186,12 @@ private:
     // ---- Mesh pipeline -------------------------------------------------
     sg_shader   mesh_shader      = {};
     sg_pipeline mesh_pipeline    = {};
+    // Translucent meshes, in the transparent-world pass: a depth-only pass
+    // per surface, then its lit colour where that left the nearest depth.
+    sg_shader   mesh_depth_shader          = {};
+    sg_pipeline mesh_depth_pipeline        = {};
+    sg_shader   mesh_translucent_shader    = {};
+    sg_pipeline mesh_translucent_pipeline  = {};
     sg_shader   transparent_tile_shader   = {};
     sg_pipeline transparent_tile_pipeline = {};
     sg_shader   helper_mesh_shader        = {};
@@ -1336,9 +1358,21 @@ private:
     void InitMeshPipeline();
     void ShutdownMeshPipeline();
     void DrainMeshQueue();
+    // Next buffer of the instance-row stream ring (one upload per buffer per frame).
+    sg_buffer NextMeshInstanceBuffer();
+    // The mesh vertex shader's uniform block (vp / camz / camw), 12 floats.
+    void PackMeshVsUniforms(float (&u)[12]) const;
     void EmitTransparentTile(const STileSubmit& t);
     void EmitTransparentHelper(const SHelperMeshSubmit& s);
+    // Uploads the instance rows of the queue's translucent meshes; null if none.
+    sg_buffer UploadTranslucentMeshInstances();
+    // One translucent surface: entries [first, first+count) share a surface_id.
+    void EmitTranslucentMeshSurface(const STransparentWorldSubmit* first, size_t count,
+                                    sg_buffer instances, const float* light_uniforms);
     void DrainTransparentWorldQueue();
+    // The light uniform block (lightmodel.*.h `params`), shared by the
+    // deferred light pass and the translucent mesh pass.
+    void PackLightUniforms(float* u) const;
 
     // ---- FX (billboards / particles / strips) ---------------------------
     void InitFxPipeline();

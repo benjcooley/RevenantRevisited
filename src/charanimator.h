@@ -27,6 +27,15 @@ class TCharAnimator : public T3DAnimator
     void Animate(bool draw) override;
     bool Render() override;
 
+  // Drawn transparency (retail +0x588). The scene manager calls
+  // UpdateDrawState once per drawn frame and draws the character at
+  // DrawAlpha(); the fade itself (TCharacter::Transparency) is simulation.
+    void UpdateDrawState(double dt_seconds) override;
+      // Hidden while OF_INVISIBLE (outside the editor); otherwise the drawn
+      // alpha moves toward Transparency()/100
+    [[nodiscard]] float DrawAlpha() const override;
+      // The drawn alpha, or 0 while hidden or too faint to draw
+
   protected:
 
   // Poison functions
@@ -51,10 +60,12 @@ class TCharAnimator : public T3DAnimator
       // Calls ProcessEquipment()
 
   // Transparency functions
+    [[nodiscard]] bool IsHidden() const;
+      // OF_INVISIBLE outside the editor: not drawn, and the drawn alpha holds
     void InitTransparency();
-      // Sets initial transparency level for character
-    void UpdateTransparency();
-      // Updates the character's transparency each frame
+      // Seeds the drawn alpha from the character's Transparency()
+    void UpdateTransparency(double dt_seconds);
+      // Moves the drawn alpha toward Transparency()/100 at the retail rate
     void SetMaterialTransparency(T3DImagery* img);
       // Sets the transparency for a given imagery (all materials) based on current
       // transparency level
@@ -73,12 +84,14 @@ class TCharAnimator : public T3DAnimator
     void GetImFaces(T3DImagery* imagery, S3DAnimObj* obj);
     void GetImVerts(T3DImagery* imagery, S3DAnimObj* obj, ERender3DVertex verttype);
 
-    T3DImagery* utilityimagery;
+    T3DImagery* utilityimagery = nullptr;
 
-    float *origmatred, *origmatgreen;       // saved material values
-    int32_t oldpoison;                          // update only when needed
-    float transparency;                     // Current transparency level for character
-    float visindicator_shiftval;
+    float* origmatred = nullptr;            // saved material values
+    float* origmatgreen = nullptr;
+    int32_t oldpoison = 0;                  // update only when needed
+    float transparency = 1.0f;              // drawn alpha 0..1 (retail +0x588)
+    bool reseed_transparency = false;       // hidden since the last drawn frame
+    float visindicator_shiftval = 0.0f;
 };
 
 _CLASSDEF(TPlayerAnimator)
