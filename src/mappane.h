@@ -119,6 +119,7 @@ struct SBgUpdateRect
 #define CENTERON_OBJ    1
 #define CENTERON_POS    2
 #define CENTERON_SCROLL 4
+#define CENTERON_SNAP   8     // jump to the target at the next update, once (retail flag 8)
 
 _STRUCTDEF(SCenterOnState)
 struct SCenterOnState
@@ -336,6 +337,8 @@ class TMapPane : public TPane
       // Gets current center on point
     bool IsScrollCenterOn() { return centeron.flags & CENTERON_SCROLL; }
       // True if we smooth scroll to object or point
+    void SnapIfFollowing(const TObjectInstance* obj);
+      // When the camera follows obj, its next update jumps instead of scrolling (a teleport)
     void SaveCenterOnState(PSCenterOnState state)
         { memcpy(state, &centeron, sizeof(SCenterOnState)); }
       // Saves the current center on state to structure
@@ -466,10 +469,10 @@ class TMapPane : public TPane
     int32_t GetTotalMoney(TObjectInstance* oi);
         // Return the total about of money owned by the object
 
-    int32_t CheckPos(TObjectInstance* inst, const S3DPoint& newpos, int32_t newlevel = -1);
-        // Call before moving inst to newpos - returns index
-    int32_t TransferObject(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t newsx, int32_t newsy);
-        // Transfer an object to a new sector, returns new itemnum
+    int32_t CheckPos(TObjectInstance* inst, S3DPoint& newpos, int32_t newlevel = -1);
+        // Call before moving inst to newpos (may clamp it) - returns index, 0 if it left the map
+    void TakeOutOfMap(TObjectInstance* inst);
+        // A player whose destination isn't loaded: out of its sector, not deleted
     bool Use(int32_t index, int32_t with);
     int32_t Face(int32_t index, int32_t newfacing);
 
@@ -522,6 +525,8 @@ class TMapPane : public TPane
     int32_t scrollx, scrolly;                       // Scroll position of current frame
     S3DPoint center;                                // World coordinates of pane center (current pos)
     S3DPoint prevcenter;                            // The center at the previous tick (camera interpolation)
+    S3DPoint scrollvel{};                           // Smooth-scroll velocity (retail 0x00658468..70)
+    int32_t  lastcamz = 0;                          // The target z last update (retail 0x00658320)
     SCenterOnState centeron;                        // Pane will attempt to scroll to this object or point
     int32_t onobject;                               // Object clicked on
     int32_t grabx, graby;                           // Click pos

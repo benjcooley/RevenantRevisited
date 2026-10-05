@@ -65,7 +65,7 @@ extern TObjectClass TileClass;
 extern TObjectClass HelperClass;
 extern TConsolePane Console;
 extern bool BlitHardware;
-extern char buf[];
+extern char buf[1024];          // editorstub.cpp
 
 /* Prototypes for command functions */
 // editor and general object manipulation
@@ -443,7 +443,7 @@ SCommand Commands[] =
   { "play3d", CmdPlay3D, 0, 0, true, false, "usage: <object>.play3d <sound>\n" },
   { "playerlevel", CmdPlayerLevel, OBJCLASS_PLAYER, -1, true, false, "usage: playerlevel <level 1-30>\n" },
   { "playmovie", CmdPlayMovie, -1, -1, true, false, "usage: playmovie <smacker movie filename>\n" },
-  { "pos", CmdPos, 0, 0, true, false, "usage: <object>.pos <dx> <dy> [<dz> [<level>]]\n" },  // retail: requiresparams=false (owner flips when body is synced)
+  { "pos", CmdPos, 0, 0, false, false, "usage: <object>.pos [add] <x> <y> [<z> [<level>]]\n" },
   { "pulp", CmdPulp, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.pulp <x> <y> <z>\n" },
   { "random", CmdRandom, -1, -1, true, false, "usage: random <max>\n" },
   { "reg", CmdRegistration, 0, 0, false, true, "usage: <object>.registration <deltax> <deltay>\n" },
@@ -715,23 +715,36 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
 
 // Defined in editor.cpp (see extern declaration above)
 
+// Console output (retail 0x0041ee50). Outside the editor the console isn't
+// shown; the log keeps it at debug level (headless --exec runs read it there).
 void Output(const char *fmt,...)
 {
     va_list marker;
     va_start(marker, fmt);
-    vsprintf(buf, fmt, marker);
+    vsnprintf(buf, sizeof(buf), fmt, marker);
+    va_end(marker);
 
     if (Editor && !Console.IsHidden())
         Console.Output(buf);
+
+    size_t len = strlen(buf);
+    while (len > 0 && buf[len - 1] == '\n')
+        --len;
+    if (len > 0)
+        log_debug("[console] %.*s", (int)len, buf);
 }
 
-char *sprintbit(int32_t bits, char *enumbits[], char *buf)
+// Appends " NAME" to buf for each set bit, names[i] naming bit i, up to the
+// array's end or a null entry (OBJFLAGNAMES has none).
+template <size_t N>
+static void AppendBitNames(uint32_t bits, const char* const (&names)[N], char *buf)
 {
-    for (int32_t i = 0; enumbits[i]; i++)
-        if (bits & (1 << i))
-            sprintf(buf, "%s %s", buf, enumbits[i]);
-
-    return buf;
+    for (size_t i = 0; i < N && i < 32 && names[i]; i++)
+        if (bits & (1u << i))
+        {
+            strcat(buf, " ");
+            strcat(buf, names[i]);
+        }
 }
 
 COMMAND(CmdHelp)
@@ -1373,10 +1386,21 @@ COMMAND(CmdUse)
     return 0;
 }
 
+// REVSYNC: activate @ 0x00420100 -- forced: the running script's user, when
+// it is a player, else the main player, goes through the exit (no ACTIVATE
+// request, no AutoActivate test). Always 0. The table allows any context and
+// retail called vtable slot 0x248 on it, an exit's Activate; every shipped
+// use runs on an exit, and the port ignores other objects.
 COMMAND(CmdActivate)
 {
-    ((PTExit)context)->Activate();
+    if (context->ObjClass() != OBJCLASS_EXIT)
+        return 0;
 
+    TObjectInstance* user = Player;
+    if (script)
+        if (TObjectInstance* scriptuser = script->User(); scriptuser && scriptuser->ObjClass() == OBJCLASS_PLAYER)
+            user = scriptuser;
+    static_cast<TExit*>(context)->Activate(user, true);
     return 0;
 }
 
@@ -2490,11 +2514,33 @@ COMMAND(CmdExit)
     return 0;
 }
 
+// REVSYNC: follow @ 0x004230e0 (editor) -- as if the main player walked on.
 COMMAND(CmdFollow)
 {
-    if (!((PTExit)context)->Activate())
+    if (!static_cast<TExit*>(context)->Activate(nullptr, false))
         Output("Nothing defined for this exit, can't follow\n");
 
+    return 0;
+}
+
+// REVSYNC: operate @ 0x00426cd0 -- `<exit>.operate <object>`: the exit opens
+// or closes away from the object (any name the resolver knows: player,
+// user, ...). An unknown name operates as seen from nowhere (inside).
+COMMAND(CmdOperate)
+{
+    if (t.Type() != TKN_TEXT && t.Type() != TKN_IDENT)
+        return CMD_BADPARAMS;
+
+    TObjectInstance* from = ResolveScriptObject(t.Text(), context, script);
+    t.WhiteGet();
+    static_cast<TExit*>(context)->Operate(from);
+    return 0;
+}
+
+// REVSYNC: setfromexit @ 0x00428a40 (TExit::SetFromExit).
+COMMAND(CmdSetFromExit)
+{
+    static_cast<TExit*>(context)->SetFromExit();
     return 0;
 }
 
@@ -2933,35 +2979,46 @@ COMMAND(CmdMove)
     return 0;
 }
 
+// REVSYNC: pos @ 0x00423d40 -- `<obj>.pos [add] <x> <y> [<z> [<level>]]`,
+// or no arguments for the camera's position and level; then the teleport
+// (TObjectInstance::Teleport). With `add` and no z, retail adds the object's
+// z to itself; kept.
 COMMAND(CmdPos)
 {
-    S3DPoint newpos;
-    context->GetPos(newpos);
+    S3DPoint newpos = context->Pos();
     int32_t newlevel = -1;
 
-    bool add = false;
-    if (t.Is("add"))
+    if (t.Type() == TKN_RETURN || t.Type() == TKN_EOF)
     {
-        add = true;
-        t.WhiteGet();
+        MapPane.GetMapPos(newpos);
+        newlevel = MapPane.GetMapLevel();
+    }
+    else
+    {
+        bool add = false;
+        if (t.Is("add"))
+        {
+            add = true;
+            t.WhiteGet();
+        }
+
+        if (!Parse(t, "%i %i", &newpos.x, &newpos.y))
+            return CMD_BADPARAMS;
+
+        if (t.Type() == TKN_NUMBER)
+        {
+            if (!Parse(t, "%i", &newpos.z))
+                return CMD_BADPARAMS;
+            if (t.Type() == TKN_NUMBER && !Parse(t, "%i", &newlevel))
+                return CMD_BADPARAMS;
+        }
+
+        if (add)
+            newpos += context->Pos();
     }
 
-    if (!Parse(t, "%i %i", &newpos.x, &newpos.y))
-        return CMD_BADPARAMS;
-
-    if (t.Type() == TKN_NUMBER)
-        if (!Parse(t, "%i", &newpos.z))
-            return CMD_BADPARAMS;
-
-    if (t.Type() == TKN_NUMBER)
-        if (!Parse(t, "%i", &newlevel))
-            return CMD_BADPARAMS;
-    
-    if (add)
-        newpos += context->Pos();
-
     MapPane.AddObjectUpdateRect(context->GetMapIndex());
-    context->SetPos(newpos, newlevel, IsSectorCommand);
+    context->Teleport(newpos, newlevel, IsSectorCommand);
     MapPane.AddObjectUpdateRect(context->GetMapIndex());
 
     return 0;
@@ -3006,11 +3063,9 @@ COMMAND(CmdDelete)
 COMMAND(CmdStat)
 {
     /* enumeration of object flags */
-    char *objflags[] = OBJFLAGNAMES;
+    static const char* const objflags[] = OBJFLAGNAMES;
     /* enumeration of light flags */
-    char *lightflags[] = { "DIR", "SUN", "MOON", nullptr };
-    /* enumeration of container flags */
-    char *contflags[] = { "LOCKED", nullptr };
+    static const char* const lightflags[] = { "DIR", "SUN", "MOON" };
 
     TObjectClass* cl = TObjectClass::GetClass(context->ObjClass());
 
@@ -3112,7 +3167,7 @@ COMMAND(CmdStat)
 
     strcpy(buf, "Flags:");
     if (context->GetFlags())
-        sprintbit(context->GetFlags(), objflags, buf);
+        AppendBitNames(context->GetFlags(), objflags, buf);
     else
         strcat(buf, " (none)");
     strcat(buf, "\n");
@@ -3133,13 +3188,14 @@ COMMAND(CmdStat)
         sprintf(buf, "Light: intensity %d, multiplier %d, flags [", def->intensity, def->multiplier);
 
         if (context->GetLightFlags())
-            sprintbit(context->GetLightFlags(), lightflags, buf);
+            AppendBitNames(context->GetLightFlags(), lightflags, buf);
         else
             strcat(buf, "--");
 
-        sprintf(buf, "%s]\n       color (%d, %d, %d), pos (%d, %d, %d)\n"
+        const size_t used = strlen(buf);
+        snprintf(buf + used, sizeof(buf) - used, "]\n       color (%d, %d, %d), pos (%d, %d, %d)\n"
                      "       3d index: %d lightid: %d\n",
-                buf, def->color.red, def->color.green, def->color.blue,
+                def->color.red, def->color.green, def->color.blue,
                 def->pos.x, def->pos.y, def->pos.z,
                 def->lightindex, def->lightid);
         Output(buf);
@@ -4047,8 +4103,6 @@ COMMAND(CmdHideObjects) { return CmdNotPorted("hideobjects", 0x00427010, t); }
 COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
 COMMAND(CmdMaxMonsters) { return CmdNotPorted("maxmonsters", 0x00427c30, t); }
 COMMAND(CmdMonsterTypes) { return CmdNotPorted("monstertypes", 0x00427bd0, t); }
-COMMAND(CmdOperate) { return CmdNotPorted("operate", 0x00426cd0, t); }
-COMMAND(CmdSetFromExit) { return CmdNotPorted("setfromexit", 0x00428a40, t); }
 COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
 COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
 COMMAND(CmdSpecificAttack) { return CmdNotPorted("specificattack", 0x00427c80, t); }

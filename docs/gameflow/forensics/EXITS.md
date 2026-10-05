@@ -55,12 +55,10 @@ not read directly), **[U]** unknown.
   `TileFlags` stats, the localized locked message, two TRAP-class device
   classes (`TrapLever`, `TrapPressPlate`). Gone: `TSpikeWall` (spike walls
   are TRAP objects now), the 1998 "Door" push hack, the Delay counter.
-- **Port**: `src/exit.*` is the 1998 code, and `TExit::Initialize` is never
-  called (no caller of `TMapPane::Initialize`), so the exit list is empty.
-  `CursorType`'s signature doesn't override the (const) base, so doors
-  can't be picked with the mouse. A teleport to another level drops the
-  player out of every sector and nothing loads the level or puts the
-  player back. §7.
+- **Port**: ported (2026-10-05); what remains is listed in §7. Before
+  that, `src/exit.*` was the 1998 code, the exit list was never read, a
+  const mismatch hid every `CursorType` override, and a teleport to another
+  level dropped the player out of every sector.
 
 ## 1. TExit in retail
 
@@ -716,40 +714,74 @@ directly (Door1 has them). `TendrickR`'s ALWAYS block unlocks it
 
 ## 7. Port state (feature/gameflow, 2026-10-05)
 
-- `src/exit.{h,cpp}`: the 1998 code; only `ReadExitList` takes the module
-  path. TPressPlate, TUpBlock, TDragonEntAnimator, TSpikeWall, TLever as
-  1998. No AutoActivate/TileFlags, 4 states, no Operate/IsOutside.
-- **The exit list is never read**: `TExit::Initialize` is called only from
-  `TMapPane::Initialize` (`src/mappane.cpp:385`), which nothing calls
-  (static search; `TMoney::Initialize` there doesn't run either).
-- **Doors can't be clicked**: `TObjectInstance::CursorType(...) const`
-  (`src/object.h:971`) is const and every subclass's is not
-  (`TExit`, `TContainer`, `TFood`, `TScroll`, `TTrap`, the exit
-  subclasses), so none override it; the map pane's picker skips objects
-  whose `CursorType` is `CURSOR_NONE` (`src/mappane.cpp:1697`) and
-  `TCharacter` uses it too (`src/character.cpp:1460`, `3532`).
-- Commands: `activate` → `Activate()` (1998, no user); `follow`, `exit`
-  as 1998; `operate`, `setfromexit` are not-ported stubs; the `isoutside`
-  member is not ported (`src/scriptvalue.cpp:145`); `pos` is the 1998
-  handler (no SetTarget, no camera snap, no no-argument form).
-- Script side: `TScript::Trigger(type, str, str2, user, useras, other,
-  otheras)` already has retail's shape (SCRIPT_ENGINE §7); the
-  ACTIVATE request from exits doesn't pass the user yet.
-- Level change: `TMapPane::CheckPos` (1998) removes a player whose
-  destination is outside the 3×3 window or on another level; nothing puts
-  it back, and nothing loads the level. `TMapPane::UpdateActiveWindow`
-  binds `MapManager.CurrentMap()` at the player's level *number* even
-  when the current map is another level. `TGameSession::EnterWorld` has
-  the needed body (set the level, put players into sectors) but runs only
-  at game start.
-- Areas: `AreaManager.Pulse` reads the map pane's position and level, as
-  retail. Screen fades and the `screenfade` wait are not ported yet
-  (another track); `isatrelativedistance` is not ported (the door
-  prototypes use it).
+The survey above found the 1998 exit code; this is what the port has now.
 
-## 8. Proposed port order
+| Piece | State |
+|---|---|
+| `src/exit.{h,cpp}` | retail: stats (+ TileFlags, AutoActivate), 6-state `SetExitState`, `Use`, `CursorType`, `Activate(user, forced)`, `Unactivate`, `Operate`, `IsOutside`, `Pulse` (players, door-type exclusion, `exitflags`, OF_ONEXIT), TLever (`Use`, `Operate`, its Pulse), TUpBlock, TPressPlate, TDragonEntAnimator. 1998 bodies in `attic/src/exit_1998.cpp` (TSpikeWall too). |
+| Exit list | read by the session's `exits` load step (155 entries from `Ahkuilon.rvm`), written/freed at `TGameSession::End` |
+| `CursorType` | overrides really override (the const base was the bug) |
+| Teleport | `TObjectInstance::Teleport` (drop target, camera snap, `SetPos`), used by `Activate` and `pos` |
+| `CheckPos` / `SetPos` | retail: loaded = any sector of a cached level; a player bound for an unloaded level leaves the map (no delete notification); others clamp as retail; a missing level is the object's own |
+| Camera | retail `UpdateMapPos` (snap flag 8, far jump, z hysteresis, grid scrolling only with control) |
+| Level change | `TGameSession::EnterLevel` each tick: "Loading Map..." for a frame if uncached, `SetCurrentLevel`, players back into sectors; the pane's window stays empty while the camera's level isn't current |
+| Commands | `activate`, `follow`, `operate`, `setfromexit`, `pos` (no-argument form) retail; `exit`, `level` as before |
+| Members | `isoutside` |
+| Scripts | type-named prototypes attach (`ObjectScript` pass 2 matched the class name): the `master.s` door prototypes reach their doors |
+| Not yet | the door prototypes' walking (`gotorelativedistance`, `faceobject`, `isatrelativedistance`: in progress on another track); the load progress bar; `CheckKeyUse` is still the 1998 one (literal messages); TTrapLever/TTrapPressPlate (TRAP port) |
+
+Verified (headless, `--quickstart`): `ressexit.activate` puts Locke beside
+`ressenter` with the camera snapped to him; `player.pos 1842 24388 451 0`
+(KeepExit's own move) loads level 0 (366 sectors, 35,549 objects), enters
+"The Forest", attaches its scripts and shows Locke at the Keep gate.
+
+**IsOutside reads past the sine table.** Retail passes the Facing stat
+plus the object's facing byte (and that plus 0x7f) to `0x0046db20`
+unwrapped. DistX (`0x00634d44`) is followed by DistY (`0x00634f44`), so an
+angle of 256..383 takes its x from the cosine table. With facing byte 0
+that happens for INPORTNS (Facing 190: the back point is 317). The port
+reproduces reads inside the two tables and wraps the rest
+(`RetailFacingPoint`, logged once).
+
+## 8. Port order and design
 
 Each step lands with a `--test` or filmstrip check; no parallel paths.
+
+**Design decisions** (coordinator, 2026-10-05; they refine §3.5):
+
+- **Exit list**: a session load step (`TGameSession::LoadExits`, after
+  the areas, so the module is mounted) and `TExit::Close` in
+  `TGameSession::End`. `TMapPane::Initialize`/`Close`, retail's callers,
+  are dead in the port.
+- **"Loaded"** in `CheckPos` means a sector of a map in `TMapManager`'s
+  cache (`GetCached(level)->FindSector`): the port keeps whole levels, so
+  any sector of a cached level is loaded, and only a move to an uncached
+  level takes a player out of the map. Non-players stay clamped inside
+  their sector, as retail. `CheckPos` works on sectors, not the pane's
+  3×3 window (the 1998 window test is what lost far same-level
+  teleports).
+- **The teleport** is one function, `TObjectInstance::Teleport(pos,
+  level)`: a character drops its combat target (`SetFighting(nullptr)`,
+  retail `0x004d4790`'s null path), the camera snaps if it follows the
+  object (`TMapPane::SnapIfFollowing`, centeron flag 8), then `SetPos`.
+  `TExit::Activate` and `pos` call it.
+- **The camera**: retail `UpdateMapPos` (`0x004539d0`) replaces the 1998
+  body: the snap flag, the ~1024-unit jump, z hysteresis (moves under 9
+  units ignored), grid scrolling only with smooth scrolling off and
+  control on (`0x0065d0d0` is PlayScreen `+0x5e0`, the control flag).
+- **Level entry** is a session step run at the start of each tick
+  (`TGameSession::EnterLevel`, from `TPlayScreen::Update` beside
+  `ProcessRequests`): when the camera's level (`MapPane.GetMapLevel()`,
+  which follows the centeron target) differs from
+  `MapManager.CurrentLevel()`, it makes that level current (loading it
+  if not cached, after one frame showing `LOADMAPMSG` on the text bar)
+  and puts every player with no sector into the one under it — the
+  body `EnterWorld` uses at game start, shared. The pane's window binds
+  a map only when the map is the camera's level; until the session
+  switches, the window is empty.
+- **Not ported** (write-only in retail): the player's `onexit` pointer
+  (`+0xe4`); `exit.def`'s `mapindex` and ambient fields (read, kept,
+  never applied — retail's behaviour).
 
 1. **Prerequisites** (shared with other tracks): make `CursorType`
    override (fix the const mismatch at the base, add `override`); the

@@ -12,6 +12,7 @@
 #include "tool.h"
 #include "player.h"
 #include "key.h"
+#include "dialog.h"
 #include "sound.h"
 #include "spellpane.h"
 
@@ -171,57 +172,60 @@ void TContainer::Save(RTOutputStream os)
     TObjectInstance::Save(os);
 }
 
+// REVSYNC: CheckKeyUse @ 0x004dd480 -- a key or lockpick used on this locked
+// container or door. True for any key or pick attempt, whatever came of it;
+// only the main player hears and reads about it. A lock of difficulty 0
+// can't be picked; a successful pick earns lockpicking experience.
 bool TContainer::CheckKeyUse(TObjectInstance* user, TObjectInstance* inst)
 {
     if (!inst || !Locked())
         return false;
 
-    // check for the key unlock
+    auto report = [user](const char *sound, const char *line, bool keys) {
+        if (user != Player)
+            return;
+        PLAY(sound);
+        TextBar.Print("%s", DialogList.GetLine(line));
+        if (keys)
+            PLAY("keys");
+    };
+
     if (inst->ObjClass() == OBJCLASS_KEY)
     {
-        if (((PTKey)inst)->KeyId() == KeyId())
-        {   
-            PLAY("unlock succeed");
-            TextBar.Print("Unlocked.");
+        if (static_cast<TKey*>(inst)->KeyId() == KeyId())
+        {
+            report("unlock succeed", "CONTUNLOCKED", false);
             SetLocked(false);
-            return true;
         }
         else
-        {
-            PLAY("unlock failed");
-            TextBar.Print("This is the wrong key.");
-            return true;
-        }
+            report("unlock failed", "CONTWRONGKEY", false);
+        return true;
     }
 
-    // check for a lockpick attempt
     if (inst->ObjClass() == OBJCLASS_TOOL)
     {
-        int32_t abil = ((PTTool)inst)->Pick();
-        if (abil > 0)
+        int32_t abil = static_cast<TTool*>(inst)->Pick();
+        if (abil <= 0)
+            return false;
+
+        TPlayer* player = user && user->ObjClass() == OBJCLASS_PLAYER ? static_cast<TPlayer*>(user) : nullptr;
+        if (player)
+            abil += player->Skill(SK_LOCKPICK) + player->Agil();
+
+        if (PickDifficulty() == 0)
+            report("unlock fail", "CONTPICKFAIL", true);
+        else if (abil < PickDifficulty())
+            report("unlock fail", "CONTPICKTOUGH", true);
+        else if (random(0, abil) < PickDifficulty())
+            report("unlock fail", "CONTPICKFAIL", true);
+        else
         {
-            if (user->ObjClass() == OBJCLASS_PLAYER)
-                abil += ((TPlayer*)user)->Agil() + ((TPlayer*)user)->Skill(SK_LOCKPICK);
-
-            if (abil < PickDifficulty())
-            {
-                PLAY("unlock fail");
-                TextBar.Print("The lock is too difficult to pick.");
-            }
-            else if (random(0, abil) < PickDifficulty())
-            {
-                PLAY("unlock fail");
-                TextBar.Print("You fail to pick the lock.");
-            }
-            else
-            {
-                PLAY("unlock succeed");
-                TextBar.Print("The lock quietly yields to your skills.");
-                SetLocked(false);
-            }
-
-            return true;
+            report("unlock succeed", "CONTUNLOCK", true);
+            SetLocked(false);
+            if (player)
+                player->AddSkillExp(SK_LOCKPICK, 50);
         }
+        return true;
     }
 
     return false;

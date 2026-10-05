@@ -734,6 +734,11 @@ void TPlayScreen::Update()
     // + pulse itself).
     CurrentMode()->Tick();
 
+    // A teleport to another level moved the camera there this tick: bring
+    // the level in and put the player back into the map (retail did both in
+    // the map pane's sector update).
+    GameFlow.Session().EnterLevel();
+
     // --exec console queue (no-op unless the flag was given).
     PulseStartupExec();
 

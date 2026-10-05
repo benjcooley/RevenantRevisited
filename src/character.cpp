@@ -239,12 +239,15 @@ void TCharacter::Pulse()
     }
 
     // Check to see if exit flag has expired (exit flags are set by exit objects)
-    // Exits search through character list to tag character that it is on an exit.  Characters
-    // then check the time stamp and clear themselves after two frames.  This system prevents
-    // the old reflective exit bug, where an exit takes a character to another exit, which
-    // then takes him back to the first... etc. etc. as the character can only activate an
-    // exit when he was previously (in the past two frames) not already on one.
-    if (exittimestamp < CurrentScreen->FrameCount() - 2)
+    // Exits search through the player list to tag a player that is on an exit.  Characters
+    // then check the time stamp and clear themselves once off every strip for a while.  This
+    // system prevents the old reflective exit bug, where an exit takes a character to another
+    // exit, which then takes him back to the first... etc. etc. as the character can only
+    // activate an exit when he was previously not already on one.
+    // REVSYNC: 0x004c1c7d -- retail waits more than 5 frames (1998: 2). Retail
+    // also forgets the exit it stood on after 24; nothing reads that, so the
+    // port doesn't keep it (EXITS.md §1.6).
+    if (CurrentScreen->FrameCount() - exittimestamp > 5)
         SetFlag(OF_ONEXIT, false);
 
     // Do blood for impdecap (you can be dead!)
@@ -4763,11 +4766,16 @@ bool TCharacter::EndFighting()
     return true;
 }
 
+// REVSYNC: 0x004d4790 (in part). No target drops the current one from the
+// doing, root and desired actions without starting combat -- what a
+// teleport does (EXITS.md §3.1); 1998 entered combat with nobody. Retail's
+// gates for a live target (busy attack/impact blocks, the player's pending
+// attack fields) aren't compared yet.
 bool TCharacter::SetFighting(TCharacter* newtarget)
 {
     if (newtarget && newtarget->IsDead())   // Can't target dead guys
         return false;
-    if (!IsFighting())
+    if (!IsFighting() && newtarget)
         return BeginCombat(newtarget);
     if (doing->obj == newtarget)
         return true;

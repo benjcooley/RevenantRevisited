@@ -1506,6 +1506,14 @@ bool TMapPane::IsFollowingPlayer() const
     return (centeron.flags & CENTERON_OBJ) && Player && centeron.obj == Player;
 }
 
+// REVSYNC: the camera half of a teleport (TExit::Activate 0x0050d3a0, `pos`
+// 0x00423d40): flag 8, which UpdateMapPos clears after jumping.
+void TMapPane::SnapIfFollowing(const TObjectInstance* obj)
+{
+    if ((centeron.flags & CENTERON_OBJ) && centeron.obj == obj)
+        centeron.flags |= CENTERON_SNAP;
+}
+
 void TMapPane::CenterOnObj(TObjectInstance* obj, bool scroll)
 {
     if (IsFollowingPlayer() && obj != Player)
@@ -2385,140 +2393,95 @@ void TMapPane::UpdateMapPos()
             }
         }
     }
-    else        // Set map position code for regular game
-    {           // --------------------------------------
-
+    else
+    {
+        // REVSYNC: UpdateMapPos @ 0x004539d0, the game half. The camera moves
+        // toward what it follows -- the centeron object or point, else where
+        // it is -- scrolling smoothly, or jumping when it is told to snap (a
+        // teleport), changes level, is ~1024 units away or isn't scrolling.
+        // Grid scrolling is used only with smooth scrolling off while the
+        // player has control (0x0065d0d0 is PlayScreen +0x5e0, the control
+        // flag). Not ported: a map pane mode (+0x918 == 1) that ignored the
+        // centeron target; its meaning is unknown.
         prevcenter = center;
-        S3DPoint pos, newpos;
-        GetMapPos(newpos);
-        int32_t newlevel = GetMapLevel();
-        static S3DPoint vel(0, 0, 0);
-        static S3DPoint lastpos;
-        static int32_t lastlevel;
 
-      // Regular game uses the contents of the 'centeron' structure to attempt
-      // to center on either a point or an object.  The center on structure is
-      // set by the CenterOn() functions, and can be called from a script.
-
-      // Get what we're supposed to center on
-        if (centeron.flags & CENTERON_OBJ)
+        S3DPoint target = center;
+        int32_t targetlevel = newlevel;
+        if ((centeron.flags & CENTERON_OBJ) && centeron.obj)
         {
-            if (centeron.obj)   // Note: check for validity of this object in Notify()
-            {
-                centeron.obj->GetPos(pos);
-                newlevel = centeron.obj->GetLevel();
-            }
+            target = centeron.obj->Pos();
+            targetlevel = centeron.obj->GetLevel();
         }
         else if (centeron.flags & CENTERON_POS)
         {
-            pos = centeron.pos;
-            newlevel = centeron.level;
-        }
-        else
-        {
-            pos = newpos; // Center on nothing
-            newlevel = GetMapLevel();
+            target = centeron.pos;
+            targetlevel = centeron.level;
         }
 
-      // Smooth out z (average last five z positions)
-        static int32_t zsmoothlist[5];
-        static int32_t zsmoothpos;
-        if (dist(lastpos.x, lastpos.y, pos.x, pos.y) < 32)
+        // Height changes under 9 units (steps, bobbing) don't move the camera.
+        if (absval(lastcamz - target.z) < 9)
+            target.z = lastcamz;
+
+        const bool gridscroll = !SmoothScroll && PlayScreen.IsControlOn();
+        bool jump = gridscroll || targetlevel != newlevel ||
+                    dist(center.x, center.y, target.x, target.y) > 0x3ff ||
+                    !(centeron.flags & CENTERON_SCROLL) || (centeron.flags & CENTERON_SNAP);
+
+        S3DPoint next = target;
+        if (!jump)
         {
-            zsmoothlist[zsmoothpos] = pos.z;
-            pos.z = (zsmoothlist[0] + 
-                     zsmoothlist[1] +
-                     zsmoothlist[2] +
-                     zsmoothlist[3] +    
-                     zsmoothlist[4]) / 5;
-            zsmoothpos++;
-            if (zsmoothpos >= 5)
-                zsmoothpos = 0;
-        }
-        else
-        {
-            zsmoothlist[0] = 
-                zsmoothlist[1] =     
-                zsmoothlist[2] =      
-                zsmoothlist[3] =     
-                zsmoothlist[4] = pos.z;
-            zsmoothpos = 0;
-        }
-
-      // If scrolling, handle scroll velocities to new position (only if scroll on and level is same)
-        if (SmoothScroll && newlevel == GetMapLevel() && (centeron.flags & CENTERON_SCROLL))
-        {
-            S3DPoint newvel;
-
-            int32_t factor = 10;
-            if (ScrollLock)
-                factor = 6;
-
-            newvel.x = (pos.x - center.x) / factor;
-            newvel.y = (pos.y - center.y) / factor;
-            newvel.z = (pos.z - center.z) / factor;
-
-            if (newvel.x > vel.x)
-                vel.x++;
-            else if (newvel.x < vel.x)
-                vel.x--;
-
-            if (newvel.y > vel.y)
-                vel.y++;
-            else if (newvel.y < vel.y)
-                vel.y--;
-
-            if (newvel.z > vel.z)
-                vel.z++;
-            else if (newvel.z < vel.z)
-                vel.z--;
-
-            vel.x = max(-12, min(12, vel.x));
-            vel.y = max(-12, min(12, vel.y));
-            vel.z = max(-12, min(12, vel.z));
-
-            newpos += vel;
-        }
-        else
-        {
-            vel.x = vel.y = vel.z = 0;
-            newpos = pos;   // No scrolling,.. just set pos
-        }
-        
-        if (SmoothScroll)
-            SetMapPos(newpos);
-        else                // Non smooth scrolling, calculate screen grid and set pos
-        {
-            int32_t x, y;
-            WorldToScreen(pos, x, y);
-            x = ScreenGrid(x, MAPGRIDWIDTH);
-            y = ScreenGrid(y - CHARACTER_HEIGHT, MAPGRIDHEIGHT);
-
-            int32_t sx, sy;
-            WorldToScreen(center, sx, sy);
-            sx = ScreenGrid(sx, MAPGRIDWIDTH);
-            sy = ScreenGrid(sy, MAPGRIDHEIGHT);
-
-            x *= MAPGRIDWIDTH;
-            y *= MAPGRIDHEIGHT;
-            ScreenToWorld(x, y, newpos);
-            if (absval(newpos.x - center.x) > 4 || absval(newpos.y - center.y) > 4)
-            //if (x != sx || y != sy)
+            const int32_t factor = ScrollLock ? 6 : 10;
+            const S3DPoint want((target.x - center.x) / factor,
+                                (target.y - center.y) / factor,
+                                (target.z - center.z) / factor);
+            // Retail's test sums signed velocities, so a fast scroll up or
+            // left never jumps.
+            if (want.x + want.y < 0x100)
             {
-                //x *= MAPGRIDWIDTH;
-                //y *= MAPGRIDHEIGHT;
-                //ScreenToWorld(x, y, newpos);
-                SetMapPos(newpos);
-                MapPane.RedrawAll();
+                auto approach = [](int32_t v, int32_t goal) {
+                    v += (goal > v) - (goal < v);
+                    return std::clamp(v, -12, 12);
+                };
+                scrollvel.x = approach(scrollvel.x, want.x);
+                scrollvel.y = approach(scrollvel.y, want.y);
+                scrollvel.z = approach(scrollvel.z, want.z);
+                next = center;
+                next += scrollvel;
+            }
+            else
+                jump = true;
+        }
+        if (jump)
+            scrollvel = S3DPoint(0, 0, 0);
+        lastcamz = target.z;
+
+        if (gridscroll)
+        {
+            // The view moves a screen (less a 64-pixel overlap) at a time, to
+            // the cell the target is in.
+            auto cell = [](int32_t v, int32_t size) {
+                if (absval(v) < size / 2)
+                    return 0;
+                return (v + (v < 0 ? -size / 2 : size / 2)) / size;
+            };
+            const int32_t cellw = MAPPANEWIDTH - 64;
+            const int32_t cellh = MAPPANEHEIGHT - 64;
+            int32_t sx, sy;
+            WorldToScreen(target, sx, sy);
+            S3DPoint snapped;
+            ScreenToWorld(cell(sx, cellw) * cellw, cell(sy - 32, cellh) * cellh, snapped);
+            if (absval(snapped.x - center.x) >= 5 || absval(snapped.y - center.y) >= 5)
+            {
+                SetMapPos(snapped);
+                RedrawAll();
             }
         }
+        else
+            SetMapPos(next);
 
-        SetMapLevel(newlevel);
-
-      // Set Last values
-        lastpos = pos;
-        lastlevel = level;
-    }       
+        SetMapLevel(targetlevel);
+        centeron.flags &= ~CENTERON_SNAP;
+    }
 }
 
 // The pulse function is pretty much the first function that's called in a screen refresh.
@@ -3783,6 +3746,16 @@ void TMapPane::UpdateActiveWindow()
     TGameMap* map = MapManager.CurrentMap();
     if (!map) return;
 
+    // The camera has moved to a level that isn't current yet (a teleport):
+    // nothing to borrow until TGameSession::EnterLevel brings it in.
+    if (map->Level() != newlevel)
+    {
+        if (windowmap.Get())
+            ClearWindow();
+        level = newlevel;
+        return;
+    }
+
     // Window origin = center's sector minus half the window, so that sector
     // is the center cell.
     const int32_t new_sectorx = (center.x >> SECTORWSHIFT) - SECTORWINDOWX / 2;
@@ -3994,129 +3967,77 @@ int32_t TMapPane::GetTotalMoney(TObjectInstance* oi)
     return MoneyHandler(oi, 0);
 }
 
-// Checks new position and transfers object between sectors if object crosses a sector
-// boundry.  Also prevents objects from going outside of loaded sector list
-int32_t TMapPane::CheckPos(TObjectInstance* inst, const S3DPoint& newpos_in, int32_t newlevel)
+// The loaded sector at (level, sx, sy): any sector of a level TMapManager
+// holds (retail's loaded-sector list, 0x00499e10).
+static TSector* LoadedSector(int32_t level, int32_t sx, int32_t sy)
 {
-  // If default, or object is owned by map, set level to object level
-  // Note: only floating NONMAP objects like TPlayer objects can change their level
+    TGameMap* map = MapManager.GetCached(level);
+    return map ? map->FindSector(sx, sy) : nullptr;
+}
+
+// REVSYNC: CheckPos @ 0x00459f50 -- before an object moves to newpos (which
+// this may clamp), keep it in a loaded sector:
+// - a move within its sector changes nothing;
+// - into another loaded sector, it changes sectors;
+// - a player whose destination isn't loaded (another level, not yet
+//   brought in) leaves the map until TGameSession::EnterLevel puts it back;
+// - any other object stays inside its sector.
+// Returns the object's map index, 0 when it left the map, -1 when it can't
+// be placed.
+int32_t TMapPane::CheckPos(TObjectInstance* inst, S3DPoint& newpos, int32_t newlevel)
+{
+    if (inst->IsInInventory())
+        return inst->GetMapIndex();
+
+    // Only non-map objects (players) can change level.
     if (newlevel == -1 || !(inst->Flags() & OF_NONMAP))
         newlevel = inst->GetLevel();
 
-    // Local mutable copy so we can clamp/snap to sector bounds without
-    // mutating the caller's point.
-    S3DPoint newpos = newpos_in;
+    newpos.x = std::clamp(newpos.x, 0, MAXMAPWIDTH);
+    newpos.y = std::clamp(newpos.y, 0, MAXMAPHEIGHT);
 
-    // basic bounds checking
-    if (newpos.x < 0)
-        newpos.x = 0;
-    else if (newpos.x >= MAXMAPWIDTH)
-        newpos.x = MAXMAPWIDTH;
-
-    if (newpos.y < 0)
-        newpos.y = 0;
-    else if (newpos.y >= MAXMAPHEIGHT)
-        newpos.y = MAXMAPHEIGHT;
-
-    int32_t newsx = (newpos.x >> SECTORWSHIFT) - sectorx;
-    int32_t newsy = (newpos.y >> SECTORHSHIFT) - sectory;
-
-
-    // Note: Since non map objects are usually characters, it's ok to move them outside of
-    if (inst->Flags() & OF_NONMAP)  // Non map can be outside of current sector list (it's OK)
+    if (!LoadedSector(newlevel, newpos.x >> SECTORWSHIFT, newpos.y >> SECTORHSHIFT))
     {
-
-    // Non map objects (usually characters), can be teleported outside of the current map.
-    // When this happens, they are removed from the current sector list until the DrawBackground()
-    // function reloads a new sector list which contains them again.  Objects outside of sectors
-    // will never get Pulse or Animate calls (to make sure they don't somehow hose the system).
-
-        if (newsx < 0 || newsx >= SECTORWINDOWX || 
-            newsy < 0 || newsy >= SECTORWINDOWY || 
-            newlevel != GetMapLevel())
+        if (inst->Flags() & OF_NONMAP)
         {
-            RemoveObject(inst);
+            TakeOutOfMap(inst);
             return 0;
         }
+
+        // Retail clamps to its sector's span plus one: a move past the far
+        // edge lands on the next sector's first unit, which then fails below.
+        const S3DPoint cur = inst->Pos();
+        const int32_t minx = (cur.x >> SECTORWSHIFT) << SECTORWSHIFT;
+        const int32_t miny = (cur.y >> SECTORHSHIFT) << SECTORHSHIFT;
+        newpos.x = std::clamp(newpos.x, minx, minx + SECTORWIDTH);
+        newpos.y = std::clamp(newpos.y, miny, miny + SECTORHEIGHT);
     }
-    else
+
+    TSector* from = inst->GetSector();
+    TSector* to = LoadedSector(newlevel, newpos.x >> SECTORWSHIFT, newpos.y >> SECTORHSHIFT);
+    if (!from || !to)
+        return -1;
+    if (from != to)
     {
-
-    // For normal objects, make sure new sector is within loaded sectors - 
-    // if not leave it bumping up against the sector boundry
-
-        if (newsx < 0)
-        {
-            newsx = 0;
-            newpos.x = max(sectorx, 0) << SECTORWSHIFT;
-        }
-        else if (newsx >= SECTORWINDOWX)
-        {
-            newsx = SECTORWINDOWX - 1;
-            newpos.x = ((sectorx + newsx) << SECTORWSHIFT) + SECTORWIDTH - 1;
-        }
-
-        if (newsy < 0)
-        {
-            newsy = 0;
-            newpos.y = max(sectory, 0) << SECTORHSHIFT;
-        }
-        else if (newsy >= SECTORWINDOWY)
-        {
-            newsy = SECTORWINDOWY - 1;
-            newpos.y = ((sectory + newsy) << SECTORHSHIFT) + SECTORHEIGHT - 1;
-        }
+        LOCKSECTORS;
+        from->RemoveObject(inst);
+        to->AddObject(inst);
+        UNLOCKSECTORS;
     }
-
-    // Check to see if it changed sectors while moving
-    if (!inst->IsInInventory())
-    {
-        S3DPoint pos;
-        inst->GetPos(pos);
-        int32_t sx = (pos.x >> SECTORWSHIFT) - sectorx;
-        int32_t sy = (pos.y >> SECTORHSHIFT) - sectory;
-
-      // Position is OUT OF RANGE!!!!
-        if ((uint32_t)sx >= SECTORWINDOWX || (uint32_t)sy >= SECTORWINDOWY)
-        {
-            pos.x = (inst->GetSector()->SectorX() << SECTORWSHIFT) + (SECTORWIDTH >> 1);
-            pos.y = (inst->GetSector()->SectorY() << SECTORHSHIFT) + (SECTORHEIGHT >> 1);
-            pos.z = 16;
-            inst->ForcePos(pos);
-            sx = (pos.x >> SECTORWSHIFT) - sectorx;
-            sy = (pos.y >> SECTORHSHIFT) - sectory;
-        }
-
-        if (newsx != sx || newsy != sy)
-            return TransferObject(inst, sx, sy, newsx, newsy);
-    }
-
     return inst->GetMapIndex();
 }
 
-// Moves an object from one sector to another
-int32_t TMapPane::TransferObject(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t newsx, int32_t newsy)
+// The player half of CheckPos: out of its sector with its shadow and
+// animator, but not deleted -- the camera, scripts and the player list keep
+// their references (no N_DELETINGOBJECT, unlike RemoveObject).
+void TMapPane::TakeOutOfMap(TObjectInstance* inst)
 {
-    if (!inst || (uint32_t)sx >= SECTORWINDOWX || (uint32_t)sy >= SECTORWINDOWY)
-        return -1;
-
-    TMapIterator i;
-
-    for ( ; i; i++)
-        if (i == inst)
-            break;
-
-    if (!i)
-        return -1;
-
-    LOCKSECTORS;      // Prevent update system from accessing sectors
-
-    sectors[sx][sy]->RemoveObject(i.SectorIndex());
-    sectors[newsx][newsy]->AddObject(inst);
-
-    UNLOCKSECTORS;    // Allow update system to access sectors again
-
-    return inst->GetMapIndex();
+    if (inst->GetShadow() >= 0)
+        RemoveObject(GetInstance(inst->GetShadow()));
+    if (inst->HasAnimator())
+        inst->FreeAnimator();
+    if (inst->GetSector())
+        RemoveFromSector(inst);
 }
 
 // Walkmap auto-generator for current sector
