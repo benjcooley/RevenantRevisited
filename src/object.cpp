@@ -1867,10 +1867,13 @@ void TObjectInstance::InitScript(PTScript newscr)
     ResetScript();
 }
 
+// Retail InitScript ends with TScript::Reset (0x004924f0): the script waits
+// for a trigger. (Starting it at offset 0 ran the first trigger's header
+// line as a command -- a door's `USE` used the door.)
 void TObjectInstance::ResetScript()
 {
     if (script)
-        script->Start();
+        script->Reset();
 }
 
 void TObjectInstance::ContinueScript(bool commanddone)

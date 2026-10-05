@@ -1112,12 +1112,13 @@ class TObjectInstance : protected SObjectDef
 
   // Script functions
     void InitScript(PTScript newscr);
-      // Replace the script with newscr (taking ownership) and start it;
+      // Replace the script with newscr (taking ownership) and reset it to
+      // wait for a trigger;
       // deletes newscr when this object can't have a script
     [[nodiscard]] bool CanHaveScript() const;
       // Carried items and tiles that keep their type's name have no script
     void ResetScript();
-      // Reset the current script
+      // Reset the current script (TScript::Reset)
     // REVSYNC: TObjectInstance::Pulse @ 0x004708e0 — run the script, telling
     // it whether this object's current action has finished.
     void ContinueScript(bool commanddone);
