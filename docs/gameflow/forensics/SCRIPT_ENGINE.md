@@ -125,7 +125,11 @@ choice list (`0x00535e90`) unless one is already up.
 ## 6. Attaching scripts to objects
 
 `TScriptManager::ObjectScript` (`0x00497370`) matches a prototype to an
-object by instance name, then by type name. Objects match when created or
+object by instance name (`+0x38`, which an unnamed object shares with its
+type), then by type name (`**(+0x4c)`): the `master.s` door prototypes
+(DOOR1, PORTEW, ...) reach every door of their type this way. A new
+script waits for a trigger (`InitScript` `0x00471150` ends with
+`TScript::Reset` `0x004924f0`). Objects match when created or
 loaded. Script files loaded later — area scripts load on
 `TArea::Enter` (`0x0041ba00`) in single player — are announced with
 `N_SCRIPTADDED` to every loaded object (`ParseScripts` `0x00496860`),
@@ -136,7 +140,10 @@ stored with bit 7 set on every byte (`TObjectInstance::Load`
 ## 7. Port state (2026-10-05)
 
 Retail:
-- attachment (names decoded, world-wide notify);
+- attachment (names decoded, world-wide notify; the second pass matched
+  the class name until 2026-10-05, so no type-named prototype attached,
+  and a new script started at offset 0, running its first trigger's
+  header line as a command);
 - the instruction pointer, an offset into the prototype text (the 1998
   raw pointer broke on 64-bit);
 - the trigger test (`0x004927b0`), the user and the trigger-user guard;
