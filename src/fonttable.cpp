@@ -103,10 +103,10 @@ const SFontAtlas* TFontTable::Atlas(const char* nm)
         return nullptr;
     if (f->type != FONT_WINFONT)
         return BuildFontAtlas(f->primary);
-    const char* path = !stricmp(f->facename, "Times New Roman")
-                     ? "thirdparty/fonts/Tinos-Regular.ttf"
-                     : "thirdparty/fonts/Arimo-Regular.ttf";
-    return BuildTTFAtlas(path, f->height);
+    const char* file = !stricmp(f->facename, "Times New Roman")
+                     ? "Tinos-Regular.ttf"
+                     : "Arimo-Regular.ttf";
+    return BuildTTFAtlas(TTFFilePath(file).c_str(), f->height);
 }
 
 TFont* TFontTable::LoadAtom(const char* resname)

@@ -99,7 +99,7 @@ constexpr SRgb kColYellow = { 255.0f/255.0f, 247.0f/255.0f,  73.0f/255.0f };  //
 // (Arial-metric-compatible) at ~12 px so the cells laid out by POS 28 62
 // + LINEHEIGHT 12 stack correctly; this matches every other HUD text path
 // in the port (project-ui-text-rendering).
-constexpr const char* kFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx   = 11;       // §8 12px GDI; Arimo @11 reads ~12 px tall
 
 // --- assets (spec §2) ------------------------------------------------
@@ -462,9 +462,9 @@ bool InitializeUIStatsMode()
         log_info("[ui-stats] Stats chrome %dx%d (expect 188x306)",
                  g_chrome->width, g_chrome->height);
 
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-stats] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
     delete g_pane;
     g_pane = nullptr;

@@ -158,7 +158,7 @@ constexpr int32_t kNameCellH     = 0x40;    // 64 (§8)
 constexpr int32_t kNameCellY     = 0x36;    // 54 (§8)
 
 // Font: Arimo-Regular ("Small") — the Arial-metric-compatible font, spec §8 px ~12.
-constexpr const char* kFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx   = 12;       // §8 ("~12")
 
 // --- animation (spec §9) ---------------------------------------------
@@ -575,9 +575,9 @@ bool InitializeUIPlyrStatusBarMode()
              g_lockeFace ? "OK" : "MISS");
 
     // Font: LiberationSans "Small" (spec §8).
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-plyrstatusbar] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
     delete g_pane;
     g_pane       = nullptr;

@@ -16,7 +16,7 @@ binary in `data/`) unless marked otherwise.
 | **Install** (`RunPath`) | The player's stock Revenant install: `resources.rvr`, `imagery.rvi`, `Modules/*.rvm`, loose patch files. The repo's `data/` stands in for it in dev. | never | `$REVENANT_DATA_PATH`, else cwd / exe-relative probes (`rev_resolve_program_paths`) |
 | **User data** (`SavePath`) | `Revenant.ini`, `curmap/`, `Save/`, `cache/` | yes, the only writable root | `$REVENANT_SAVE_PATH`, else Application Support / XDG / LOCALAPPDATA |
 | **Overlay** | Revisited enhancements; mirrors the install tree. Opt-in (`--revisited`). | no | `rev_resolve_revisited_overlay()` |
-| **Engine assets** | Data the port itself authors and needs in every mode: `effects.def`, `render_metadata.def`, `editor/icons/`. Repo: `assets/`. | no | `rev_engine_asset()`: `$REVENANT_ASSETS_PATH`, `<exe-dir>/assets`, `<exe-dir>/../Resources/assets`, `<repo>/assets` |
+| **Engine assets** | Data the port itself authors or supplies and needs in every mode: `effects.def`, `render_metadata.def`, `editor/icons/`, `fonts/` (the TrueType faces: Arimo and Tinos draw retail's Arial and Times New Roman, plus the editor's). Repo: `assets/`. | no | `rev_engine_asset()`: `$REVENANT_ASSETS_PATH`, `<exe-dir>/assets`, `<exe-dir>/../Resources/assets`, `<repo>/assets` |
 
 The install is the player's property and stays stock: nothing the port
 authors goes into it, and nothing writes to it. The engine must run on a
@@ -225,6 +225,9 @@ under `Modules/`, so `Ahkuilon_unzipped` shows up there as an extra module.
 ## 5. Engine assets (`assets/`)
 
 Port-authored data the engine needs whether or not the overlay is present.
+The fonts are here rather than in the overlay because Classic mode needs
+them too: retail's WINFONT faces (Arial, Times New Roman) are drawn with
+metric-compatible Arimo and Tinos, found through `TTFFilePath` (`font.h`).
 Dev builds find `<repo>/assets/`; a shipped build puts `assets/` beside the
 binary (or in the `.app`'s `Resources/`). Unit tests read the source tree's
 copy through `REV_ASSETS_DIR`. PNGs are LFS-tracked. This is distinct from:

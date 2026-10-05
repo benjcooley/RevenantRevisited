@@ -57,13 +57,13 @@ constexpr uint32_t kEditSpin       = 0x00040000;
 // Retail bitmap fonts ("Med"/"Large"/"small" from font.def) are mapped to the
 // Arial-metric Arimo TTF per the UI text-rendering convention
 // (project-ui-text-rendering; InGameMenuDef_SPEC §2 maps "Med" -> Arimo-14).
-struct SFontMap { const char* name; const char* path; int32_t px; };
+struct SFontMap { const char* name; const char* file; int32_t px; };
 constexpr SFontMap kFontMap[] = {
-    {"Med",   "thirdparty/fonts/Arimo-Regular.ttf", 14},
-    {"Large", "thirdparty/fonts/Arimo-Regular.ttf", 18},
-    {"small", "thirdparty/fonts/Arimo-Regular.ttf", 11},
+    {"Med",   "Arimo-Regular.ttf", 14},
+    {"Large", "Arimo-Regular.ttf", 18},
+    {"small", "Arimo-Regular.ttf", 11},
 };
-constexpr const char* kDefaultFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kDefaultFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kDefaultFontPx   = 14;
 
 // DEF_FADE: the level runs 0..5, one step per pulse (TButtonPane::Initialize
@@ -615,8 +615,8 @@ const SFontAtlas* TDefPane::FontFor(const std::string& name)
 {
     for (const SFontMap& fm : kFontMap)
         if (name == fm.name)
-            return BuildTTFAtlas(fm.path, fm.px);
-    return BuildTTFAtlas(kDefaultFontPath, kDefaultFontPx);
+            return BuildTTFAtlas(TTFFilePath(fm.file).c_str(), fm.px);
+    return BuildTTFAtlas(TTFFilePath(kDefaultFontFile).c_str(), kDefaultFontPx);
 }
 
 // =====================================================================

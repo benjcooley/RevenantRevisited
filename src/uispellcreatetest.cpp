@@ -181,7 +181,7 @@ constexpr const char* kArchive       = "spellpane.dat";
 
 // Font for composed-word display (GAP-2 — retail font unknown;
 // approximated with Arimo at 10px for the pouch area).
-constexpr const char* kFontPath  = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile  = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx    = 10;
 
 // Composed-word pouch area (UNCONFIRMED — §14-3; harness placement below
@@ -560,9 +560,9 @@ bool InitializeUISpellCreateMode()
     }
 
     // Font — for composed-word + spell-match display (GAP-2 approximation).
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-spellcreate] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
     // Reset the cached RT (recreated on first Refresh).
     delete g_pane;

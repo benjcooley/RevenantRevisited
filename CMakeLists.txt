@@ -159,9 +159,6 @@ target_link_libraries(Revenant PRIVATE imgui revsmk)
 # <sokol_gfx.h> / <sokol_app.h> / sokol_imgui.h.
 target_compile_definitions(Revenant PRIVATE SOKOL_${SOKOL_BACKEND})
 
-# Absolute path to vendored fonts so the editor can load them regardless of
-# the current working directory at runtime.
-target_compile_definitions(Revenant PRIVATE REV_FONTS_DIR="${FONTS_DIR}")
 target_compile_definitions(Revenant PRIVATE REV_VFX_TEST_BG_DIR="${CMAKE_SOURCE_DIR}/tools/vfx/test_backgrounds")
 
 # Include directories for third-party dependencies
