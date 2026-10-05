@@ -38,6 +38,12 @@ revisited/
                    manifest generators. Run by hand or in CI.
 ```
 
+An override sits at the path the engine asks the install for, which is
+retail's path (docs/DATA_LAYOUT.md §2.4): a module's file under
+`Modules/<module>/` (`resources/Modules/Ahkuilon/area.def`), a shared
+game file under `Resources/` (`resources/Resources/rules.def`), an
+imagery def under `Imagery/`.
+
 ## Discovery (engine boot)
 
 Resolution order in `vfs_resolve_revisited_overlay`:
