@@ -1769,6 +1769,77 @@ static int32_t FadeCharacter(TObjectInstance* context, TToken& t, TScript* scrip
 COMMAND(CmdFadeCharacterOut) { return FadeCharacter(context, t, script, -1); }
 COMMAND(CmdFadeCharacterIn) { return FadeCharacter(context, t, script, 1); }
 
+// REVSYNC: beginfighting @ 0x00427cd0 -- `<character>.beginfighting <name>`:
+// the character squares up to the first character of that name
+// (FindObject 0x00451d70 over the characters; TCharacter::BeginFighting
+// 0x004d3b90). forest.s's trainer faces the practice dummy this way. An
+// unknown name answers bad parameters; one it can't fight says so too.
+COMMAND(CmdBeginFighting)
+{
+    TObjectInstance* found = MapPane.FindObject(t.Text(), 1, OBJSET_CHARACTER);
+    if (!found)
+        return CMD_BADPARAMS;
+
+    TCharacter* chr = static_cast<TCharacter*>(context);
+    if (!found->IsCharacter() || !chr->BeginFighting(static_cast<TCharacter*>(found), ACTION_COMBAT))
+    {
+        Output("Invalid Target %s\n", t.Text());
+        t.WhiteGet();
+        return CMD_BADPARAMS;
+    }
+    t.WhiteGet();
+    return 0;
+}
+
+// REVSYNC: endfighting @ 0x00427d30 -- despite the name, retail calls
+// BeginFighting with no target (0x004d3b90(0, 3)): the character squares up
+// to the closest enemy, if there is one. No shipped script uses it.
+COMMAND(CmdEndFighting)
+{
+    static_cast<TCharacter*>(context)->BeginFighting(nullptr, ACTION_COMBAT);
+    return 0;
+}
+
+// REVSYNC: specificattack @ 0x00427c80 -- `<character>.specificattack <n>`:
+// the character makes attack <n> of its combat moves (TCharacter::
+// SpecificAttack 0x004d2a60), as forest.s's trainer demonstrates each one.
+COMMAND(CmdSpecificAttack)
+{
+    if (t.Type() != TKN_NUMBER)
+        return CMD_BADPARAMS;
+
+    const int32_t attack = t.Index();
+    if (!static_cast<TCharacter*>(context)->SpecificAttack(attack))
+    {
+        Output("Invalid Attack %d\n", attack);
+        t.WhiteGet();
+        return CMD_BADPARAMS;
+    }
+    t.WhiteGet();
+    return 0;
+}
+
+// REVSYNC: giveweapons @ 0x00422150 -- `<character>.giveweapons "<name>"`:
+// the character's weapons and ammo go to the object of that name (the first
+// one, FindObject 0x00451d70; TObjectInstance::GiveWeapons 0x00477780).
+// forest.s: the chief takes Locke's weapons and later gives them back.
+COMMAND(CmdGiveWeapons)
+{
+    char name[RESNAMELEN];
+    static_assert(RESNAMELEN == 32, "the width below is the buffer's");
+    if (!Parse(t, "%32s", name))
+        return CMD_BADPARAMS;
+
+    TObjectInstance* to = MapPane.FindObject(name, 1, OBJSET_ALL);
+    if (!to)
+    {
+        log_warn("[cmd] giveweapons: no object named '%s'", name);
+        return 0;
+    }
+    context->GiveWeapons(to);
+    return 0;
+}
+
 // REVSYNC: playerlevel @ 0x00428640 -- `<player>.playerlevel <n>`: rebuild
 // the player as a fresh level-n character (TPlayer::SetPlayerLevel). The
 // table only lets a player be the context.
@@ -4318,15 +4389,12 @@ COMMAND(CmdAddMonsterType) { return CmdNotPorted("addmonstertype", 0x00427ac0, t
 COMMAND(CmdAddNear) { return CmdNotPorted("addnear", 0x00421bc0, t); }
 COMMAND(CmdAmbSoundGet) { return CmdNotPorted("ambsoundget", 0x00420fe0, t); }
 COMMAND(CmdAmbSoundSet) { return CmdNotPorted("ambsoundset", 0x00420dc0, t); }
-COMMAND(CmdBeginFighting) { return CmdNotPorted("beginfighting", 0x00427cd0, t); }
 COMMAND(CmdDelMonsterType) { return CmdNotPorted("delmonstertype", 0x00427b60, t); }
 COMMAND(CmdDispInv) { return CmdNotPorted("dispinv", 0x00422070, t); }
 COMMAND(CmdDrop) { return CmdNotPorted("drop", 0x004281c0, t); }
-COMMAND(CmdEndFighting) { return CmdNotPorted("endfighting", 0x00427d30, t); }
 COMMAND(CmdGetItemAmount) { return CmdNotPorted("getitemamount", 0x00426be0, t); }
 COMMAND(CmdGetItemName) { return CmdNotPorted("getitemname", 0x00426d60, t); }
 COMMAND(CmdGetItemValue) { return CmdNotPorted("getitemvalue", 0x00426e20, t); }
-COMMAND(CmdGiveWeapons) { return CmdNotPorted("giveweapons", 0x00422150, t); }
 COMMAND(CmdHasFreeSlot) { return CmdNotPorted("hasfreeslot", 0x00426c60, t); }
 COMMAND(CmdHideObjects) { return CmdNotPorted("hideobjects", 0x00427010, t); }
 COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
@@ -4334,7 +4402,6 @@ COMMAND(CmdMaxMonsters) { return CmdNotPorted("maxmonsters", 0x00427c30, t); }
 COMMAND(CmdMonsterTypes) { return CmdNotPorted("monstertypes", 0x00427bd0, t); }
 COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
 COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
-COMMAND(CmdSpecificAttack) { return CmdNotPorted("specificattack", 0x00427c80, t); }
 
 // ----- owner: presentation (fades, music, movies, end game) -----
 

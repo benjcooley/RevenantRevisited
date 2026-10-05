@@ -68,6 +68,10 @@ Answer inline (or in chat) and the owning doc gets updated.
     screen, ignoring the INI `MusicVolume`. Intended?
 17. `timelimit`'s usage text is the `script edit/pause/resume/end` help —
     a leftover, or is it the script-control command?
+72. `endfighting` starts a fight instead of ending one: it calls
+    BeginFighting with no target (`0x00427d30`), so the character squares
+    up to the closest enemy. No shipped script uses it. Was it meant to end
+    combat (as `combat off` does)?
 
 ## Saves ([SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md), [forensics/SAVE_GAME.md](forensics/SAVE_GAME.md))
 

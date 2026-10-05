@@ -1483,7 +1483,7 @@ int32_t TMapPane::AddShadow(TObjectInstance* oi)
 }
 
 // Object find functions
-TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t objset)
+TObjectInstance* TMapPane::FindObject(const char *name, int32_t occurance, int32_t objset)
 {
     int32_t found = 0;
 

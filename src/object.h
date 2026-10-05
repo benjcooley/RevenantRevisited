@@ -942,9 +942,16 @@ class TObjectInstance : protected SObjectDef
         // Add object of type 'name', amount of 'number' to this objects inventory at slot 'slot'
     virtual void RemoveFromInventory();
         // Remove this object from whatever inventory it is in
+    virtual void OnInventoryRemove(TObjectInstance* item) { (void)item; }
+        // `item` is leaving this object's inventory (called before it goes).
+        // TPlayer unequips it. A virtual, not a class test: during this
+        // object's own destruction it resolves to this no-op.
     virtual int32_t GiveInventoryTo(TObjectInstance* to, const char *name, int32_t number = 1);
         // Gives the object 'name' to another object.  Will move multiple objects, 
         // or objects with varying amounts if 'number' > 1.
+    void GiveWeapons(TObjectInstance* to);
+        // REVSYNC: 0x00477780 -- the weapons, ranged weapons and ammo this object
+        // carries, in its bags too, move to `to`'s inventory.
     virtual int32_t DeleteFromInventory(const char *name, int32_t number = 1)
       { return GiveInventoryTo(nullptr, name, number); }
         // Uses the GiveInventoryTo function with a null destination to delete inventory objects

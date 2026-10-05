@@ -381,7 +381,7 @@ class TMapPane : public TPane
   // NOTE: Use the 'objset' variable to greatly reduce search times for common sets of
   // objects like MOVING objects and CHARACTERS. 
   
-    TObjectInstance* FindObject(char *name, int32_t occurance = 1, int32_t objset = OBJSET_ALL);
+    TObjectInstance* FindObject(const char *name, int32_t occurance = 1, int32_t objset = OBJSET_ALL);
         // Returns a pointer to the occurance of object answering to name
     TObjectInstance* FindClosestObject(const char *name, S3DPoint pos, bool partial, int32_t objset = OBJSET_ALL);
         // Returns a pointer to the object answering to name closest to center

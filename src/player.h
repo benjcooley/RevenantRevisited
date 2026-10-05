@@ -134,18 +134,18 @@ class TPlayer : public TCharacter
     TPlayer(SObjectDef* def, TObjectImagery* newim);
     ~TPlayer();
 
-    virtual bool GetZ(TSurface* surface) { if (!Editor) return false; return TCharacter::GetZ(surface); }
-    virtual bool AlwaysOnTop() { if (!Editor) return false; return TCharacter::AlwaysOnTop(); }
-    virtual bool Use(TObjectInstance* user, int32_t with = -1) { return false; }
+    bool GetZ(TSurface* surface) override { if (!Editor) return false; return TCharacter::GetZ(surface); }
+    bool AlwaysOnTop() override { if (!Editor) return false; return TCharacter::AlwaysOnTop(); }
+    bool Use(TObjectInstance* user, int32_t with = -1) override { return false; }
     int32_t CursorType(TObjectInstance* inst = nullptr) override { return CURSOR_NONE; }
         // These functions make sure the player never clicks on themselves
 
-    virtual void Pulse();
-    virtual uint32_t Move();
+    void Pulse() override;
+    uint32_t Move() override;
 
-    virtual void AI() { }
+    void AI() override { }
 
-    virtual void Damage(int32_t damage, int32_t type = DAMAGE_UNDEFINED);
+    void Damage(int32_t damage, int32_t type = DAMAGE_UNDEFINED) override;
         // Apply damage to the player
 
 //  virtual int32_t SwingRange();
@@ -169,6 +169,8 @@ class TPlayer : public TCharacter
         // Returns true if player can be equiped by the given object
     bool Equip(TObjectInstance* oi, int32_t slot);
         // Set up equipment pointers from objects in player's inventory
+    void OnInventoryRemove(TObjectInstance* item) override;
+        // An equipped item leaving the inventory is unequipped first
     TObjectInstance* GetEquip(int32_t slot) { return equipment[slot]; }
         // Returns object pointer to equipment in the given slot
 
@@ -244,7 +246,7 @@ class TPlayer : public TCharacter
       // Player fields of the stat sheet (retail 0x0051dfb0)
 
     // Resolve functions
-    virtual int32_t ResolveCombat(PTActionBlock ab, int32_t bits);
+    int32_t ResolveCombat(PTActionBlock ab, int32_t bits) override;
 
   // Streaming functions
     int32_t ObjVersion() override { return 15; }
@@ -361,18 +363,18 @@ class TPlayer : public TCharacter
       // Returns percentage of time character will block an attack
     int32_t ArmorValue() override;
       // REVSYNC: 0x00519850 -- ACBonus plus the Protection of the armor worn
-    virtual int32_t WeaponType() { if (PrimeHand() && PrimeHand()->ObjClass() == OBJCLASS_WEAPON)
+    int32_t WeaponType() override { if (PrimeHand() && PrimeHand()->ObjClass() == OBJCLASS_WEAPON)
         return ((PTWeapon)PrimeHand())->Type();
         else return WT_HAND; }
       // Returns the type of weapon being used
 //  virtual int32_t WeaponDamage() { if (PrimeHand()) return PrimeHand()->GetStat("Damage"); else return chardata->handdamage; }
       // Returns the current weapon's damage value
-    virtual int32_t StealthMod() { 
+    int32_t StealthMod() override { 
         return SkillPcnt(SK_STEALTH, 10) + 
             (Body()?Body()->GetStat("Stealth"):0) + 
             (Feet()?Feet()->GetStat("Stealth"):0);  }
       // Get stealth by combining clothing stealth value and stealth stat
-    virtual char *BodyType() { return chardata->bodytype; }
+    char *BodyType() override { return chardata->bodytype; }
       // Returns the player's body type for equipment replacement.
       // The standard body types are "normal", "large", "small", "dwarf", "lithe".
       // Normal - Locke - Characters with standard strong builds (warriors, etc.)
@@ -381,9 +383,9 @@ class TPlayer : public TCharacter
       // Dwarf - Navarro - Halflings, dwarves, etc.
       // Lithe - Morgana - Sexy female characters (longer legs, hips, breasts, etc.)
       // NOTE: Not all armor or clothing needs to fit all body types.
-    virtual char *GetCombatRoot(TObjectInstance* oi = nullptr);
+    char *GetCombatRoot(TObjectInstance* oi = nullptr) override;
       // Returns combat root given the weapon oi or current weapon if oi is nullptr
-    virtual char *GetBowRoot(TObjectInstance* oi = nullptr); 
+    char *GetBowRoot(TObjectInstance* oi = nullptr) override; 
       // Returns bow root given the bow 'oi' or current bow if oi is nullptr
 
   private:
