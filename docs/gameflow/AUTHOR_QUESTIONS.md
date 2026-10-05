@@ -168,3 +168,13 @@ Answer inline (or in chat) and the owning doc gets updated.
     and one after he turns to it. Settles where the side spot is and
     which way he faces. The port aims him at (1200, 1098); he stops,
     blocked, at (1178, 1065) and turns to facing 87.
+
+## Camera and control ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4)
+
+70. `scrollto <x> <y> <z>` jumps rather than scrolls: SetCameraPos
+    (`0x00453940`) masks the scroll bit `centeron`/`scrollto` pass, so
+    only `scrollto <object>` scrolls. The opening's `scrollto 1207 667`
+    therefore cuts. Intended?
+71. A block that ends with the camera off the player snaps it back to him
+    (`TScript::End`), and one that ends with control off turns it back
+    on. Were scripts written to rely on that, or is it a safety net?
