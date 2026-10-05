@@ -220,7 +220,7 @@ public:
     // The icon an item shows in a slot: its inventory image (retail vtable
     // +0x130), or the first baked inventory icon / animation of its imagery
     // when that has none; an animated icon steps on the 24 Hz legacy tick.
-    [[nodiscard]] static PTBitmap ItemIcon(TObjectInstance* item);
+    [[nodiscard]] static TBitmap* ItemIcon(TObjectInstance* item);
 
     // ----- accessors --------------------------------------------------
     int32_t          PosX()        const { return x_; }
