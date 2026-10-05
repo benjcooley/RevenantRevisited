@@ -526,6 +526,11 @@ class TScreen
     static constexpr uint32_t MODAL_INPUT = MODAL_MOUSE | MODAL_KEYS | MODAL_JOYSTICK;
     static constexpr uint32_t MODAL_GAME  = MODAL_INPUT | MODAL_PAUSE;
 
+  // The pane tree reaches the swapchain as one renderer HUD item at this z:
+  // over the HUD panels not yet in the tree (z 0..10), under the cursor
+  // (1000) and the fade (2000).
+    static constexpr float kPaneLayerZ = 100.0f;
+
   // Screen events (retail TScreen::OnEvent 0x00490960 forwards to every pane).
     static constexpr int32_t SCREENEVENT_CLOSING     = 0x100;
     static constexpr int32_t SCREENEVENT_MODALPUSHED = 0x101;
@@ -579,6 +584,11 @@ class TScreen
   // before pushing and owns (closes / deletes) it after `done` runs.
     using TModalDone = std::function<void(int32_t result)>;
     bool PushModal(PTPane pane, uint32_t flags = 0, TModalDone done = nullptr);
+    // REVSYNC: AddPane 0x0048ed90 + SetExclusivePane 0x0048eea0 -- as
+    // PushModal, but with exactly `flags`: the enclosing modal's are not added
+    // (the progress popup 0x0053c1d0 pushes 7 over the in-game load dialog,
+    // so the world pulses while it fades).
+    bool PushExclusive(PTPane pane, uint32_t flags, TModalDone done = nullptr);
     [[nodiscard]] bool HasModal() const { return numexclusive > 0; }
     [[nodiscard]] PTPane TopModal();
 

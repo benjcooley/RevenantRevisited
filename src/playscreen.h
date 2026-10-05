@@ -37,6 +37,7 @@
 #include "moviepane.h"
 
 #include <memory>
+#include <vector>
 
 class TInGameMenu;
 class TMapRenderer;
@@ -245,6 +246,17 @@ class TPlayScreen : public TScreen
     // Points the renderer at MapManager's current map (the session's world).
     void BindWorld();
 
+    // A save loaded during play (TGameSession::Loading). Retail loaded it
+    // synchronously, the screen standing still; here the session runs it a
+    // step a tick while the world holds, and a still of the world and the
+    // HUD panels (the frame's layers under the pane tree, captured as the
+    // load began) stands in for them. The panes keep drawing over it.
+    // docs/gameflow/forensics/INGAME_MENU.md §5.1.
+    void StepGameLoad();
+    void FreezeFrame(const uint8_t* rgba, int32_t width, int32_t height);
+    void ShowStill();
+    void ThawFrame();
+
     // The drawer half of Pulse 0x0047b4d0.
     void UpdateDrawer();
     void OpenBuySellDrawer();
@@ -280,6 +292,16 @@ class TPlayScreen : public TScreen
     // `playmovie`'s movie while it plays.
     TMoviePane movie;
     bool       movieplaying = false;
+
+    // The still behind a load during play.
+    enum class EFreeze : uint8_t { None, Capturing, Frozen };
+    EFreeze                       freeze = EFreeze::None;
+    std::vector<uint8_t>          frozenPixels;     // the capture, until uploaded
+    int32_t                       frozenWidth  = 0;
+    int32_t                       frozenHeight = 0;
+    TTextureHandle                frozenTexture = kInvalidTexture;
+    std::unique_ptr<THudDrawable> frozenLayer;
+    bool                          stillShown = false;
 
     // The bottom drawer (+0x6c0 mode, +0x6b8 shop request, +0x6b4 close
     // request).

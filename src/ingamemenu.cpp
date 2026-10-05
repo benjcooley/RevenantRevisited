@@ -5,8 +5,12 @@
 
 #include "ingamemenu.h"
 
+#include "cursor.h"     // SetMouseBitmap
 #include "gameflow.h"
 #include "logging.h"
+#include "mappane.h"
+#include "multi.h"      // GameData->Bitmap
+#include "player.h"
 #include "playscreen.h"
 #include "sound.h"
 
@@ -144,10 +148,9 @@ void TInGameMenu::MenuDone(int32_t result)
     }
 }
 
-// REVSYNC: 0x0047e660 + the load dialog's in-game branch (0x00539590): the
-// chosen slot replaces the game. REVSYNC-DIVERGENCE: retail loaded inside the
-// dialog behind its "loadingmap" progress popup; the port hands the slot to
-// the session, which loads it at the start of the next tick.
+// REVSYNC: 0x0047e660 + the load dialog (0x00539590). "loadgame" loads the
+// chosen slot while the dialog stays up (BeginLoad), then closes it with
+// result 1; "exit" closes it with 0.
 void TInGameMenu::OpenLoad(TScreen::TModalDone done)
 {
     if (load.IsOpen())
@@ -160,16 +163,12 @@ void TInGameMenu::OpenLoad(TScreen::TModalDone done)
         return;
     }
     load.SetOnActivate([this](TDefPane&, const SDefWidget& widget, int32_t) {
-        load.Finish(widget.name == "loadgame" ? TSaveSlotPane::RESULT_DONE
-                                              : TSaveSlotPane::RESULT_EXIT);
+        if (widget.name == "loadgame")
+            BeginLoad();
+        else
+            load.Finish(TSaveSlotPane::RESULT_EXIT);
     });
     const bool pushed = screen.PushModal(&load, kDialogModalFlags, [this, done](int32_t result) {
-        if (result == TSaveSlotPane::RESULT_DONE)
-        {
-            const std::string slot = load.SelectedSlot();
-            log_info("[ingamemenu] load '%s'", slot.c_str());
-            GameFlow.Session().RequestLoad(slot);
-        }
         load.Close();
         screen.Redraw();
         if (done)
@@ -177,6 +176,76 @@ void TInGameMenu::OpenLoad(TScreen::TModalDone done)
     });
     if (!pushed)
         load.Close();
+}
+
+// REVSYNC: 0x00539590 event 3000 "loadgame" from the game. Retail hid the
+// cursor (0x0043a020(0)), ran a frame, opened the "loadingmap" progress popup
+// and ran frames until it had faded in (0x0053c1d0), then loaded the save
+// (0x0048e5b0), set the bar to 80 and loaded the sectors around the player
+// with the bar running to 800 -- all in one go, the screen standing still.
+// The port asks the session for the load once the popup is in; the session
+// runs it a step a tick while the play screen holds the world behind a still
+// of it (TPlayScreen::StepGameLoad), feeding LoadProgress / LoadFinished.
+void TInGameMenu::BeginLoad()
+{
+    if (loading)
+        return;
+    const std::string slot = load.SelectedSlot();
+    log_info("[ingamemenu] load '%s'", slot.c_str());
+    SetMouseBitmap(nullptr);
+    loading = true;
+    const bool shown = progress.OpenProgress(screen, "loadingmap", [slot] {
+        GameFlow.Session().RequestLoad(slot);
+    });
+    if (!shown)
+    {
+        // No popup to show it under: load all the same.
+        log_warn("[ingamemenu] no progress popup; loading without it");
+        GameFlow.Session().RequestLoad(slot);
+    }
+}
+
+void TInGameMenu::LoadProgress(int32_t permille)
+{
+    if (loading)
+        progress.SetProgress(permille);
+}
+
+// REVSYNC: 0x00539590 after the sectors: the bar at 800, the popup fades out
+// and closes (0x0053c360); then EndLoad.
+void TInGameMenu::LoadFinished(bool loaded)
+{
+    if (!loading)
+        return;
+    if (!progress.IsOpen())
+    {
+        EndLoad(loaded);
+        return;
+    }
+    progress.SetProgress(800);
+    progress.CloseProgress([this, loaded] { EndLoad(loaded); });
+}
+
+// REVSYNC: the rest of 0x00539590: the camera jumps to the player (map pane
+// centre-on flag 8, 0x00454390, redrawn by 0x00458750), control on
+// (0x0047c580(1)), the screen's fade-in (a no-op unless it was faded out),
+// the game cursor back, the side tabs redrawn, and the dialog closes at once
+// with result 1 (its close, not the fading one). The port redraws every pane
+// every frame, so the side tabs need nothing.
+void TInGameMenu::EndLoad(bool loaded)
+{
+    loading = false;
+    if (loaded)
+    {
+        MapPane.SnapIfFollowing(Player);
+        PlayScreen.SetControlOn(true);
+        if (TScreenFade* fade = screen.Fade())
+            fade->FadeIn();
+    }
+    if (GameData)
+        SetMouseBitmap(GameData->Bitmap("cursor"));
+    if (load.IsOpen())
+        load.EndModal(TSaveSlotPane::RESULT_DONE);
 }
 
 // Command 0x54 and the menu's case 2. REVSYNC-DIVERGENCE: retail's dialog
@@ -253,7 +322,8 @@ void TInGameMenu::AskExit()
 
 bool TInGameMenu::IsOpen() const
 {
-    return menu.IsOpen() || load.IsOpen() || save.IsOpen() || options.IsOpen() || popup.IsOpen();
+    return menu.IsOpen() || load.IsOpen() || save.IsOpen() || options.IsOpen() ||
+           popup.IsOpen() || progress.IsOpen();
 }
 
 void TInGameMenu::Close()
@@ -263,4 +333,6 @@ void TInGameMenu::Close()
     save.Close();
     options.Close();
     popup.Close();
+    progress.Close();
+    loading = false;
 }
