@@ -438,12 +438,13 @@ Deviations:
   buffer is bounded (`vsnprintf`); the trailing piece after a `'\n'` is added
   (§11.2).
 - **`Clear()`** is a port call (empty feed, bar off: what Initialize leaves);
-  retail has none. Its one caller, `TGameSession::EnterLevel`, pairs it with
-  `Print(LOADMAPMSG)`; retail's loader uses `SetHealthDisplay`/`SetLevels`/
-  `ClearHealthDisplay` and keeps the line (§6.5) — reported to the exits
-  track, not changed here.
+  retail has none, and nothing calls it yet. The level loader,
+  `TGameSession::EnterLevel`, drives the bar as retail's loader does (§6.5):
+  `SetHealthDisplay(LOADMAPMSG)`, `SetLevels(p · 180 / 1000)` per slice,
+  `ClearHealthDisplay`, which leaves the line in the feed.
 - **`DrawImmediate`** (`0x54cbb0`) is not ported: the port never blocks a
-  frame to load. `TPane::DrawImmediate`/`PutToScreen` remain for the unused
+  frame to load; the level loads a slice per frame instead, with the world
+  held (EXITS.md §7). `TPane::DrawImmediate`/`PutToScreen` remain for the unused
   `TSector::LoadPreloadSectors`.
 - **Hide** skips the prompt submit (no prompt).
 - **The 1998 combat readout is gone.** `TCharacter::Pulse` no longer calls

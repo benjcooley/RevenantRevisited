@@ -62,12 +62,15 @@ class TGameSession
 
     // REVSYNC: the level half of the map pane's sector update (0x00459220,
     // 0x00459b80). When the camera has moved to another level -- a player
-    // went through an exit or `pos` -- make that level current (loading it
-    // the tick after "Loading Map..." is shown, if it isn't cached), and put
-    // every player who left the map back into the sector under it. Runs
-    // each tick after the simulation. True when the camera's level is the
-    // current one.
+    // went through an exit or `pos` -- make that level current, and put
+    // every player who left the map back into the sector under it. A level
+    // not yet loaded loads a slice per call under the text bar's loading
+    // line. Runs each tick after the simulation. True when the camera's
+    // level is the current one.
     bool EnterLevel();
+    // A level is part loaded: the world holds until EnterLevel finishes it,
+    // as retail's synchronous load stalled the game.
+    [[nodiscard]] bool LevelLoading() const { return levelLoading; }
 
   private:
     enum class EState : uint8_t { Idle, Loading, Ready, Failed };
@@ -91,7 +94,7 @@ class TGameSession
     EStep EnterWorld();
 
     void PlaceAtDevStart(const TGameMap& map) const;
-    void PlacePlayers(TGameMap& map) const;
+    void PlacePlayers(TGameMap& map, bool entering) const;
     bool SaveNow(const std::string& slot);
 
     SSessionStart start;
@@ -102,5 +105,5 @@ class TGameSession
 
     std::string   pendingLoad;     // requested slot, empty = none
     std::string   pendingSave;
-    bool          loadAnnounced = false;   // "Loading Map..." is up; load next tick
+    bool          levelLoading = false;    // EnterLevel is part way through a level
 };
