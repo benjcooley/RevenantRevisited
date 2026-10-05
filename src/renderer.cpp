@@ -4265,6 +4265,22 @@ void TRenderer::DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
                              tr, tg, tb, ta);
 }
 
+void TRenderer::DrawSurfaceSubrectTinted(TSurface* surf,
+                                         int32_t dst_x, int32_t dst_y,
+                                         int32_t src_x, int32_t src_y,
+                                         int32_t src_w, int32_t src_h,
+                                         float tr, float tg, float tb, float ta)
+{
+    if (!surf || src_w <= 0 || src_h <= 0 || ta <= 0.0f) return;
+    const sg_image img = surf->GetSGImage();
+    if (!img.id) return;
+    CompositeSwapchainTinted(img, dst_x, dst_y, src_w, src_h,
+                             sapp_width(), sapp_height(),
+                             src_x, src_y, src_w, src_h,
+                             surf->Width(), surf->Height(),
+                             tr, tg, tb, ta);
+}
+
 void TRenderer::CompositeLitTargetSubrectToTarget(int32_t dst_x, int32_t dst_y,
                                                   int32_t dst_w, int32_t dst_h,
                                                   int32_t src_screen_x, int32_t src_screen_y,
