@@ -323,16 +323,18 @@ class TMapPane : public TPane
     int32_t GetMapLevel() { return level; }
 
   // Center On Functions (causes game map to center on point or object)
-    void CenterOnObj(TObjectInstance* obj, bool scroll);
-      // Center on object. REVSYNC: SetCameraObject @ 0x004538d0
+    void CenterOnObj(TObjectInstance* obj, uint32_t flags = 0);
+      // Follow an object. REVSYNC: SetCameraObject @ 0x004538d0 -- `flags`
+      // may add CENTERON_SCROLL (scroll rather than jump) and CENTERON_SNAP
+      // (jump once first); `centeron` passes both, `scrollto` scroll.
     TObjectInstance* GetCenterOnObj() { return centeron.obj; }
     [[nodiscard]] bool IsFollowingPlayer() const;
       // The camera follows the player
     [[nodiscard]] S3DPoint CameraPos(double fraction) const;
       // Where the camera looks between ticks: the center, `fraction` of the way from the last tick's
       // Gets centered object
-    void CenterOnPos(S3DPoint& pos, int32_t level, bool scroll);
-      // Center on a point. REVSYNC: SetCameraPos @ 0x00453940
+    void CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags = 0);
+      // Center on a point. REVSYNC: SetCameraPos @ 0x00453940 (flags as above)
     void GetCenterOnPos(S3DPoint& pos, int32_t &level) { pos = centeron.pos; level = centeron.level; }
       // Gets current center on point
     bool IsScrollCenterOn() { return centeron.flags & CENTERON_SCROLL; }

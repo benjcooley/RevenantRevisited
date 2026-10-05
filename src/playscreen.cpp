@@ -356,7 +356,7 @@ void TPlayScreen::BindWorld()
         // The camera starts on the player and follows it (retail sets this up
         // as TPlayScreen::Initialize makes the player the main one; the
         // session builds the world before this screen is current).
-        MapPane.CenterOnObj(Player, false);
+        MapPane.CenterOnObj(Player);
         MapPane.SetMapPos(pos);
         MapPane.SetMapLevel(Player->GetLevel());
     }
