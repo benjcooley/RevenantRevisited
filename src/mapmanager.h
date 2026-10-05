@@ -8,6 +8,13 @@
 // "current map" pointer. Mirrors PlayerManager's pattern -- declared
 // global in revenant.h, defined in revmain.cpp.
 //
+// Ownership: TMapManager owns the maps, each TGameMap owns its sectors and
+// each TSector owns its objects (except OF_NONMAP ones, the players, which
+// it only holds while they stand in it). Everything that loads, saves or
+// frees sectors goes through here; other holders of a sector pointer
+// borrow it and must drop it on the map's Unloaded event (TMapPane's
+// window, the renderer) or hold a TSafeRef<TGameMap> and re-resolve.
+//
 // Why a manager (not on MapPane): MapPane is the on-screen widget; this
 // is pure game state (which levels are loaded, which is active). They
 // have different lifetimes and concerns. MapPane / MapRenderer
@@ -128,6 +135,21 @@ class TMapManager
     // slot's CurMap into `dir`; LoadCurMap already imported that into the
     // working set, so the copy is a no-op and isn't repeated here.
     void SaveCurMap(const std::filesystem::path& dir) const;
+
+    // ---- Reloading from the sector files (editor commands) ------------
+    // REVSYNC: TMapPane::FreeAllSectors @ 0x00458ff0 and the reload that
+    // followed it (the next sector update). Write `level`'s sectors to the
+    // working set and drop them, run `editFiles` while the level is out of
+    // memory -- its sector files are authoritative then -- and load the
+    // level again if it was loaded. Objects the map doesn't own (OF_NONMAP:
+    // the players) stay in the world and go back into the sector under
+    // them, as retail's sector update re-added them. A level that isn't
+    // loaded just runs `editFiles`.
+    void ReloadLevel(int32_t level, const std::function<void()>& editFiles = {});
+
+    // REVSYNC: TMapPane::ReloadSectors @ 0x004590e0 — ReloadLevel for every
+    // loaded level.
+    void ReloadSectors();
 
     // ---- Listener API -------------------------------------------------
     using Listeners       = TListenerList<EMapManagerEvent, TMapManager*>;

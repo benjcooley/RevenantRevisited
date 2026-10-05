@@ -139,8 +139,7 @@ bool TMoney::Use(TObjectInstance* user, int32_t with)
         else
         {
             // nuke one, and combine values into the second
-            MapPane.RemoveObject(with);
-            delete inst;
+            MapPane.DeleteObject(inst);
 
             SetAmount(amt);
         }

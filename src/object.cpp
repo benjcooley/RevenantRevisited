@@ -664,9 +664,24 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     }
 }
 
+// REVSYNC: ~TObjectInstance @ 0x0046e420
 TObjectInstance::~TObjectInstance()
 {
-    // Drop any registry entry first — even a partially-constructed instance
+    // Retail's destructor starts with the object's detach (0x0046e630): out
+    // of its owner's inventory and out of its sector, while the object is
+    // still whole -- the walkmap extraction needs its imagery and mapindex.
+    // A sector holds a raw pointer to every object in it, so an object is
+    // never freed while still in one, whoever deletes it (a sector freeing
+    // its own objects unlinks them first, as retail's does).
+    if (sector || owner)
+        MapPane.RemoveObject(this);
+
+    // Raw-pointer holders that don't follow N_DELETINGOBJECT: let go of this
+    // object whatever kind it is (also those built without a class, below).
+    if (MapPane.GetCenterOnObj() == this)
+        MapPane.CenterOnObj(nullptr, false); // Don't center on anything
+
+    // Then drop the registry entry — even a partially-constructed instance
     // that stashed a mapindex must be removed before its memory is freed.
     if (mapindex >= 0) {
         MapPane.UnregisterInstance(mapindex);
@@ -714,23 +729,12 @@ TObjectInstance::~TObjectInstance()
         delete i.Item();
     }
 
-    // take itself out of owner's inventory
-    RemoveFromInventory();
-
-    // If in map, remove from map
-    if (GetSector() != nullptr)
-        MapPane.RemoveObject(this);
-
     // Delete the name
     if (name && name != inf->name)
     {
         free(name);
         name = nullptr;
     }
-
-    // If we're being centered on, cancel that
-    if (MapPane.GetCenterOnObj() == this)
-        MapPane.CenterOnObj(nullptr, false); // Don't center on anything
 
     // Kill the script
     if (script)
@@ -1289,18 +1293,13 @@ bool TObjectInstance::AddToMap()
 
 }
 
+// Through the object's own sector link: a search of the sector window missed
+// objects outside it, which then stayed in their sector while the caller
+// moved them into an inventory.
 void TObjectInstance::RemoveFromMap()
 {
-    TMapIterator i;
-    while (i)
-    {
-        if (i.Item() == this)
-            break;
-        i++;
-    }
-
-    if (i.Item())
-        MapPane.RemoveFromSector(this, i.SectorX(), i.SectorY(), i.SectorIndex());
+    if (sector)
+        MapPane.RemoveFromSector(this);
 }
 
 int32_t TObjectInstance::FindFreeInventorySlot() const
