@@ -27,6 +27,7 @@
 #include "object.h"
 #include "command.h"
 #include "mappane.h"
+#include "mapmanager.h"
 #include "dialog.h"
 #include "file.h"
 #include "revutils.h"
@@ -1051,8 +1052,10 @@ bool TScriptManager::Load(char *filename, void *owner)
     delete[] buffer;
     fclose(fp);
 
-    if (MapPane.IsOpen())
-        MapPane.Notify(N_SCRIPTADDED, nullptr);
+    // REVSYNC: ParseScripts @ 0x00496860 notifies the world so objects that
+    // match a new prototype pick it up (area scripts load after the area's
+    // objects exist).
+    MapManager.Notify(N_SCRIPTADDED, nullptr);
 
     scriptsdirty = false;
 
@@ -1133,7 +1136,7 @@ void TScriptManager::Clear(void *owner)
 
         if (scripts[c]->owner == owner)
         {
-            MapPane.Notify(N_SCRIPTDELETED, scripts[c]);
+            MapManager.Notify(N_SCRIPTDELETED, scripts[c]);
             scripts.Delete(c);
         }
     }

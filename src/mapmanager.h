@@ -89,6 +89,12 @@ class TMapManager
     // references from loaded maps, independent of which map is currently drawn.
     void ForEachLoadedMap(const std::function<void(TGameMap*)>& fn) const;
 
+    // REVSYNC: TMapPane::Notify @ 0x0045a680 — tell every object that asked
+    // for notifications (OF_NOTIFY) about a world change (N_SCRIPTADDED,
+    // N_SCRIPTDELETED, ...). Retail walked the loaded sectors, which were
+    // MapPane's; in the port they are every loaded map's.
+    void Notify(uint32_t notify, void* ptr) const;
+
     // Force-evict a single level. The map is unloaded (fires its
     // Unloaded event) and removed from the cache. If the evicted map
     // was the current map, current is cleared and CurrentMapChanged
