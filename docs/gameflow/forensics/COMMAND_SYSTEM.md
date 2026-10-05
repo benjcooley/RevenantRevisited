@@ -233,6 +233,11 @@ debug level (`[console]`), so headless `--exec` runs can read it.
   the script's user if a player), `follow`, `operate`, `setfromexit`,
   `pos` (retail grammar, including the no-argument form; through
   `TObjectInstance::Teleport`), and `statmod` (`0x00428200`).
+- `try` (`0x00422c30`) takes a quoted state as well as a bare word (`%t`,
+  else `%s`): the door prototypes' `TRY "WOPENDOORIN"` failed before.
+  `goto` (`0x004204f0`) takes an object name (keep.s `goto Point2`, the
+  town and forest waypoints) and walks to it (`0x004cee50`); a name read
+  as a prototype variable waits for those.
 - A line the interpreter skips (class context mismatch, editor-only,
   missing parameters) takes the next line with it: `SkipLine`
   (`0x004795c0`) reads past the line's end into the next line's first
