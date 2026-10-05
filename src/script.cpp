@@ -656,14 +656,16 @@ void TScript::Jump(TObjectInstance* /*context*/, const char *label)
             return;
         }
 
+        // REVSYNC: Jump @ 0x00493fa0 -- the script goes on right after the
+        // label's name (0x00494208 stores the token's position as the ip), so
+        // the line after the label runs. The 1998 code skipped to the next
+        // line here, which ate that line's first token: `:sell1` followed by
+        // `buysellshoptype sell misc` (town.s, every shop) lost the shop type.
         if (t.Type() == TKN_SYMBOL && t.Code() == ':')
         {
             t.Get();
             if (t.Is(label))
-            {
-                t.SkipLine();
                 break;
-            }
         }
 
         t.LineGet();
