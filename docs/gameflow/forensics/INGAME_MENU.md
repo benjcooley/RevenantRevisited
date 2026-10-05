@@ -255,6 +255,23 @@ Entered from the menu (case 2) and the Save Game command (`0x54`).
 There is no overwrite confirmation and no delete (PopupDef_SPEC
 §13a.6).
 
+**The name field takes typing only after a click.** Nothing gives the
+EDIT focus when the dialog opens (`0x005399f0`, event 1, `DefScreen_Open`;
+the DEF engine's `0x004369f0` is the keyboard-navigation highlight, not
+edit focus). The EDIT starts editing on a left press inside it
+(`0x00432ab0`: its `+0x90`, the pane's focus `+0xa0`, the caret blink);
+its character handler (`0x00432f70`) drops every character while it isn't
+editing, and characters reach it through the pane (`0x00436460`) either
+way. So typing straight after the dialog opens changes nothing, and
+Enter then is `savegame`'s key: it saves under the name shown (the last
+slot's, or "New Game"). While editing, characters append (a click
+doesn't clear the field), Backspace deletes, and Enter ends editing and
+sends event 6001, which saves nothing (its sender is the EDIT, not
+`savegame`); a second Enter saves. A press outside the field ends
+editing too (`0x00436530` → `0x00433100`). Verified in the port
+2026-10-05 (headless: type without a click → name unchanged; click, type,
+Enter, Enter → saved under the typed name).
+
 ## 7. The options dialog
 
 Entered from the menu (case 3), the Game Options command (`0x52`,
