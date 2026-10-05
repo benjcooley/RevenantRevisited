@@ -327,6 +327,8 @@ class TMapPane : public TPane
     TObjectInstance* GetCenterOnObj() { return centeron.obj; }
     [[nodiscard]] bool IsFollowingPlayer() const;
       // The camera follows the player
+    [[nodiscard]] S3DPoint CameraPos(double fraction) const;
+      // Where the camera looks between ticks: the center, `fraction` of the way from the last tick's
       // Gets centered object
     void CenterOnPos(S3DPoint& pos, int32_t level, bool scroll);
       // Center on a point. REVSYNC: SetCameraPos @ 0x00453940
@@ -519,6 +521,7 @@ class TMapPane : public TPane
     int32_t oldscrollx, oldscrolly;                 // Scroll position of previous frame
     int32_t scrollx, scrolly;                       // Scroll position of current frame
     S3DPoint center;                                // World coordinates of pane center (current pos)
+    S3DPoint prevcenter;                            // The center at the previous tick (camera interpolation)
     SCenterOnState centeron;                        // Pane will attempt to scroll to this object or point
     int32_t onobject;                               // Object clicked on
     int32_t grabx, graby;                           // Click pos

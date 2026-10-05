@@ -343,9 +343,16 @@ void TPlayScreen::BindWorld()
     int32_t sx = 0, sy = 0;
     if (Player)
     {
-        const S3DPoint pos = Player->Pos();
+        S3DPoint pos = Player->Pos();
         sx = pos.x >> SECTORWSHIFT;
         sy = pos.y >> SECTORHSHIFT;
+
+        // The camera starts on the player and follows it (retail sets this up
+        // as TPlayScreen::Initialize makes the player the main one; the
+        // session builds the world before this screen is current).
+        MapPane.CenterOnObj(Player, false);
+        MapPane.SetMapPos(pos);
+        MapPane.SetMapLevel(Player->GetLevel());
     }
     else if (map)
     {
@@ -778,11 +785,23 @@ void TPlayScreen::RenderFrame()
     // fixed tick, so follow from the final transform immediately before
     // rendering. The renderer compensates the camera origin by the followed
     // height so Locke stays centered while walking up/down terrain.
+    // The camera shows the map pane's center (TMapPane::UpdateMapPos follows
+    // the centeron target, scrolling to it). While it simply follows the
+    // player, the player's final transform keeps walking smooth; otherwise
+    // the center is interpolated between ticks.
     if (CurrentMode() == GameMode() && Player)
     {
-        S3DPoint p;
-        Player->GetPos(p);
-        mapRenderer->SetCameraWorld(Player->GetLevel(), p.x, p.y, p.z);
+        if (MapPane.IsFollowingPlayer() && !MapPane.IsScrollCenterOn())
+        {
+            S3DPoint p;
+            Player->GetPos(p);
+            mapRenderer->SetCameraWorld(Player->GetLevel(), p.x, p.y, p.z);
+        }
+        else
+        {
+            const S3DPoint p = MapPane.CameraPos(TTime::LegacyFrameFraction());
+            mapRenderer->SetCameraWorld(MapPane.GetMapLevel(), p.x, p.y, p.z);
+        }
     }
 
     // While the editor is paused and nothing is dirty, skip the world
