@@ -25,6 +25,7 @@
 
 #include "parse.h"
 #include "command.h"
+#include "saferef.h"
 
 #include <vector>
 
@@ -144,6 +145,21 @@ struct SScriptBlock
     int32_t  conditional = COND_UNDEF; // State of conditional for block (uses COND_UNDEF + true/false)
 };
 
+// What a script is waiting for (retail TScript +0xb4; SCRIPT_ENGINE.md §5).
+// Retail's type 5 is the multiplayer response wait and isn't used here.
+enum class EScriptWait : uint8_t
+{
+    None              = 0,
+    Response          = 2,    // the player picks a dialog choice
+    CharDone          = 3,    // the object waited on finishes its action
+    Frames            = 4,
+    ScreenFade        = 6,
+    BuySell           = 7,
+    Say               = 8,    // the object waited on stops talking
+    Death             = 9,
+    ResponseControlOn = 10,   // "wait respctrlon"
+};
+
 class TScript
 {
   public:
@@ -171,7 +187,9 @@ class TScript
     //   has identical observable semantics for the trigger types we exercise.
     //   TODO(revsync): re-port Continue when PlayerFSM + DialogPane are
     //   retail-synced and their vftable slots stabilise.
-    void Continue(TObjectInstance* context);
+    // `commanddone`: the owner's current action has finished. Lines run only
+    // when it has and nothing is being waited for, or when the wait is over.
+    void Continue(TObjectInstance* context, bool commanddone);
     // REVSYNC: Jump @ 0x00493fa0
     void Jump(TObjectInstance* context, char *label);
     // REVSYNC: Break @ 0x004942a0 — sets SCRIPT_PAUSED bit
@@ -197,12 +215,29 @@ class TScript
     [[nodiscard]] int32_t GetPriority() const { return priority; }
     [[nodiscard]] TScriptProto* GetScriptProto() const { return proto; }
 
+    // ---- Waits (retail; SCRIPT_ENGINE.md §5) -------------------------
+    // REVSYNC: SetWait @ 0x00492b00 — no effect while already waiting.
+    void SetWait(EScriptWait type, TObjectInstance* object = nullptr, int32_t frames = 0);
+    void WaitFrames(int32_t frames)          { SetWait(EScriptWait::Frames, nullptr, frames); } // 0x00492cc0
+    void WaitChar(TObjectInstance* object)   { if (object) SetWait(EScriptWait::CharDone, object); } // 0x00492cf0
+    void WaitSay(TObjectInstance* object)    { if (object) SetWait(EScriptWait::Say, object); }      // 0x00492d10
+    void WaitDeath(TObjectInstance* object)  { if (object) SetWait(EScriptWait::Death, object); }    // 0x00492d30
+    [[nodiscard]] bool IsWaiting() const     { return wait != EScriptWait::None; }
+
+    // REVSYNC: User @ 0x00492ac0 — the player this script deals with: the
+    // object that set off the running trigger if it's a player, else the
+    // main player.
+    [[nodiscard]] TObjectInstance* User() const;
+
     static void PauseAllScripts() { pauseall = true; }
     static void ResumeAllScripts() { pauseall = false; }
 
   private:
-    // REVSYNC: Triggered @ 0x00492d70 (helper, called once per proto in Continue)
+    // REVSYNC: 0x004927b0 — does trigger `st` fire now? Records the object
+    // that set it off in `triggerer`.
     bool Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* context);
+    // REVSYNC: 0x00492d70 — is the current wait over?
+    bool WaitSatisfied(bool commanddone);
 
     static bool pauseall;                          // True if all scripts paused
 
@@ -213,7 +248,11 @@ class TScript
     int32_t trigger          = 0;                  // Current trigger type executing
     char    newtriggerstr[MAXSCRIPTNAME] = {};     // Name of what is triggering
 
-    char *  ip               = nullptr;            // Next line to execute
+    // Offset of the next line to execute in curproto's text, or kNotRunning.
+    // (The 1998 engine kept a raw char*; the parse streams address text by
+    // offset, which is also what survives 64-bit pointers.)
+    static constexpr int32_t kNotRunning = -1;
+    int32_t ip               = kNotRunning;
     int32_t priority         = 0;                  // Priority of current ip (block id)
     int32_t lastpriority     = 0;                  // Last trigger executed
 
@@ -221,6 +260,13 @@ class TScript
     int32_t depth            = 0;                  // Number of blocks deep
 
     PSScriptTrigger curtrigger = nullptr;          // The current trigger record
+
+    // Retail state (SCRIPT_ENGINE.md §2).
+    TSafeRef<TObjectInstance> triggerer;           // +0xc4: what set off the running trigger ("user")
+    TSafeRef<TObjectInstance> triggerguard;        // +0x10: no re-trigger while this exists
+    EScriptWait wait         = EScriptWait::None;  // +0xb4
+    int32_t     waitframes   = 0;                  // +0xbc for Frames
+    TSafeRef<TObjectInstance> waitobject;          // +0xbc for CharDone/Say/Death
 };
 
 // **************

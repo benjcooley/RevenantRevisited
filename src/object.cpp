@@ -1446,9 +1446,9 @@ void TObjectInstance::Pulse()
     if (TObjectAnimator* a = GetComponent<TObjectAnimator>())
         a->Pulse();
 
-  // Check if script is done
-    if (CommandDone())
-        ContinueScript();
+  // REVSYNC: Pulse @ 0x004708e0 — the script runs every pulse; it holds
+  // itself while this object is busy or a wait is unsatisfied.
+    ContinueScript(CommandDone());
 }
 
 uint32_t TObjectInstance::Move()
@@ -1818,10 +1818,15 @@ void TObjectInstance::ResetScript()
         script->Start();
 }
 
-void TObjectInstance::ContinueScript()
+void TObjectInstance::ContinueScript(bool commanddone)
 {
     if (script && !(flags & OF_PAUSE))
-        script->Continue(this);
+        script->Continue(this, commanddone);
+}
+
+bool TObjectInstance::IsScriptWaiting() const
+{
+    return script && script->IsWaiting();
 }
 
 void TObjectInstance::ScriptJump(char *label)

@@ -1091,7 +1091,11 @@ class TObjectInstance : protected SObjectDef
       // Set script to newscr and initialize
     void ResetScript();
       // Reset the current script
-    void ContinueScript();
+    // REVSYNC: TObjectInstance::Pulse @ 0x004708e0 — run the script, telling
+    // it whether this object's current action has finished.
+    void ContinueScript(bool commanddone);
+    // REVSYNC: 0x00471390 — the script is waiting for something.
+    [[nodiscard]] bool IsScriptWaiting() const;
       // Continue script execution (call every frame)
     void ScriptJump(char *label);
       // Jump to a given label in the script
