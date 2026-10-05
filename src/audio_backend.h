@@ -22,6 +22,9 @@
 //     engine spatializer on for Revisited mode.
 //   - Music is a separate one-shot streaming Source on the music group,
 //     loaded from .ogg (stb_vorbis built into miniaudio).
+//   - File decoding (WAV, MP3, Ogg Vorbis) needs no engine: it works when
+//     output is silenced (--headless) or failed to come up, so a sound's
+//     length is known either way.
 //
 // Unit conventions match the 1998 API so callers don't need to know about
 // the backend:
@@ -33,7 +36,9 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <vector>
 
 struct tWAVEFORMATEX;   // sound.h's WAVEFORMATEX
 
@@ -75,6 +80,20 @@ void SetMusicVolume(float v);
 // game pause.
 void PauseAll();
 void UnpauseAll();
+
+// ---- Decoding (no engine needed) ----------------------------------------
+
+// Decodes a whole encoded file held in memory (WAV, MP3 or Ogg Vorbis) to
+// interleaved signed 16-bit PCM at the file's own rate and channel count.
+// `format` receives the PCM WAVEFORMATEX that CreateSourceFromPCM takes.
+// Returns false if the data can't be decoded.
+bool DecodeToPCM16(const uint8_t* data, size_t bytes,
+                   tWAVEFORMATEX* format, std::vector<uint8_t>& pcm);
+
+// Length of an encoded file held in memory, in milliseconds: its PCM frame
+// count * 1000 / its sample rate, truncated. MP3 counts every frame
+// (no encoder-delay trim). 0 if the data can't be decoded.
+uint32_t DecodedLengthMs(const uint8_t* data, size_t bytes);
 
 // ---- Source (one decoded SFX, possibly with one playing voice) ----------
 

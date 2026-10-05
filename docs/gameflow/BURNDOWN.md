@@ -33,6 +33,7 @@ a status changes.
 | [ ] | Settings `[Audio]` section: master / sfx / music / spatial (G3.2 work; backend volume hooks already in place) | — |
 | [x] | Surface SFX from `resources.rvr` via new `VFSListByPrefix` + route `LoadWave` through `rev_fopen` — 1057 SFX in registry on GOG install | 2026-05-16 |
 | [ ] | Inside-game smoke test — `--test=sector` footsteps / ambient / sword swings (now unblocked; SFX registry populated) | — |
+| [x] | Retail sound list (DIALOG.md §3.4): `.wav` + `.mp3` (MP3 decode on), resource dirs at `Initialize`, module dirs at `SetCurModule`, sorted + bsearch; `rev_find_files` replaces `VFSListByPrefix`; `SampleLengthMs` decodes, so registry and lengths work under `--headless`. 1063 resource + 1743 module sounds | 2026-10-05 |
 
 **Exit:** SFX play in `--test=sector`; music can be started/stopped; spatial voices position correctly.
 
@@ -154,7 +155,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Retail `TDeathScreen` + `TDeathPane` (Restart / Load / Exit, death voice) | 2026-10-04 (64c0f25) |
 | [ ] | Restart semantics after a loaded game (author question, ARCHITECTURE §8 Q1) | — |
 | [ ] | Death "Load" -> load-game screen | — |
-| [ ] | Death voices audible (MP3 voice support in the sound player) | — |
+| [x] | Death voices audible (MP3 voice support in the sound player; `gosar00` stays missing, as in retail) | 2026-10-05 |
 
 **Exit:** Player dies → death pane shows → restart/load resumes.
 
