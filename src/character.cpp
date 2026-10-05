@@ -1158,8 +1158,10 @@ void TCharacter::RestoreHealth()
 }
 
 // REVSYNC: TCharacter::GetFieldText = retail 0x004d5260 (vtable +0xc8).
-// "armor" is the port's ArmorValue(); retail adds two player-only terms
-// (active armor effects FUN_005407d0 and vtable +0x260) that aren't ported.
+// "armor" is ArmorValue(), plus for the main player its DmgResMisc (vtable
+// +0x260; spells such as STATLINE DmgResMisc 4 raise it) and the armor of
+// the effects on it (0x005407d0, the +0x134 of each object in the
+// character's list at +0x170) -- that list isn't in the port yet.
 // "attackpct", "defensepct", "damage" and "stealth" are combat formulas
 // over getters not yet identified in the port; they answer "no such field".
 bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
@@ -1169,7 +1171,11 @@ bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
 
     int32_t value = 0;
     if (stricmp(field, "armor") == 0)
+    {
         value = ArmorValue();
+        if (this == Player)
+            value += GetObjStat(CHRRESIST_FIRST + CHRRESIST_MISC);
+    }
     else if (stricmp(field, "maxhealth") == 0)
         value = MaxHealth();
     else if (stricmp(field, "maxfatigue") == 0)
@@ -1691,6 +1697,19 @@ bool TCharacter::ResolveHit(TCharacter* targ,
           // recalculating damage with damagetype modifiers, etc.
                 targ->Damage(damage, DT_NONE, 0, hitab, this);
 
+            }
+
+          // REVSYNC: the end of retail's hit resolution (0x004c62b0): a
+          // player earns experience from the target -- for the kill, in the
+          // weapon's skill, and in stealth if the target never saw it
+          // coming (TPlayer vtable +0x414, +0x41c, +0x420; each checks the
+          // target is dead). docs/gameplay/forensics/PLAYER_STATS.md §7.
+            if (ObjClass() == OBJCLASS_PLAYER)
+            {
+                TPlayer* player = static_cast<TPlayer*>(this);
+                player->AwardKillExp(targ);
+                player->AwardSkillExp(SK_WEAPONSKILLS + player->WeaponType(), targ);
+                player->AwardStealthExp(targ);
             }
         }
     }

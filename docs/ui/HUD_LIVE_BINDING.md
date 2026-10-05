@@ -75,7 +75,7 @@ plus the item's `invanim` stepped on the legacy 24 Hz tick).
 **Objects answer the stat sheet.** The retail field resolver is an object
 virtual; the port gains `TObjectInstance::GetFieldText` with the
 TCharacter / TPlayer overrides, ported from the decompiles. Branches whose
-inputs the port's object model does not have yet (`statmod`, `experience`,
+inputs the port's object model does not have yet (`statmod`,
 `attackpct`, `defensepct`, `damage`, `stealth`) return "not resolved", which is what retail does for an unknown
 field; each is listed in §6.
 
@@ -119,11 +119,12 @@ Also in the commit messages.
   recovered `"walk"` state (`DAT_005e4060`), the pose the harness showed;
   stepping the walk cycle turns the model, so it is not the idle retail
   plays.
-- **Armor.** `armor` is `ArmorValue()` (the character's armor value);
-  retail adds two player-only terms (active armor effects `FUN_005407d0`,
-  vtable `+0x260`) that are not ported. The other unported resolver
-  branches are in §6; they draw nothing, as retail does for an unknown
-  field.
+- **Armor.** `armor` is `ArmorValue()` (the player's: ACBonus plus the
+  Protection of the armor worn, `0x00519850`), plus the main player's
+  DmgResMisc (vtable `+0x260`); the armor of the effects on the character
+  (`FUN_005407d0`, a list at `+0x170` the port doesn't have) is not
+  ported. The other unported resolver branches are in §6; they draw
+  nothing, as retail does for an unknown field.
 - **Spell lookup.** A talisman code is matched to its spell.def variant
   exactly. `TSpellList::GetVariantDataByTalismans` compares talisman
   counts, not order, so it maps DEB ("Advanced healing") to BED ("Restore
@@ -168,11 +169,12 @@ the panes changed:
 | `objdesc`, weapon type, `stmod<stat><n>` | pane-level strings / stat modifier | not ported (Page1 does not use them) |
 | `class` | class name | `chardata->classdata->name` |
 | `maxhealth`, `maxfatigue`, `maxmana` | `+0x1d8/+0x1e0/+0x1e8` | `MaxHealth()` / `MaxFatigue()` / `MaxMana()` |
-| `armor` | `+0x2bc` plus two player bonuses (`FUN_005407d0`, `+0x260`) | `ArmorValue()`; the two bonuses not ported |
+| `armor` | `+0x2bc` plus two player bonuses (`FUN_005407d0`, `+0x260`) | `ArmorValue()` + DmgResMisc; `FUN_005407d0` not ported |
 | `damage`, `attackpct`, `defensepct`, `stealth` | combat formulas | not ported (inputs unidentified) |
 | `name` | localized name (dialog tag of the name's letters/digits, else the name) | same |
 | `objtype`, `objclass` | localized class name | same |
-| `statmod`, `experience` | modifier list / item value | not ported |
+| `statmod` | modifier list | not ported |
+| `experience` | a CHARACTER's kill experience for the main player (`0x0051a5b0`) | same |
 | anything else | object stat of that name | `GetStat` when the stat exists (e.g. `nextexp`, a PLAYER class stat) |
 
 ## 7. Open questions (in-game behaviour recon doesn't settle)
@@ -183,9 +185,12 @@ Current behaviour is kept until these are answered.
    pose? Which animation?
 2. Status bar: when the player has no portrait icon, does retail show an
    empty frame? (The port shows `LockeFace`.)
-3. New game: Locke starts with 0 of 26 mana. Is that retail?
-4. `Nxt` reads the PLAYER class stat `NextExp` (300 at level 1). Nothing in
-   the port updates it on level-up; does retail's level-up rewrite it?
+3. New game: Locke starts with 0 of 105 mana (newgame.sav stores 0). Is
+   that retail?
+4. Answered by the decompile (gameplay/forensics/PLAYER_STATS.md §7):
+   `Nxt` is the PLAYER stat `NextExp`; retail's kill-experience level-up
+   (`0x0051a630`) sets it to the next level's figure, `playerlevel` leaves
+   it. Ported.
 5. Quick spells: do two-word names always split at the first space, and
    does dragging one ring onto another swap them?
 6. Spell icons: does "Advanced healing" show its own circle or Heal's?
