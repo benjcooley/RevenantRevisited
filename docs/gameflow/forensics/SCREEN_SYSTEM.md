@@ -347,6 +347,14 @@ hit-testing in the title/death harnesses instead of
   save?
 - Event code `0x103` and the pre-initialized screen `DAT_0065bb14`:
   what were they for?
+- Screen fade (§2.6): in single player, a block that fades out and ends
+  without fading in leaves the screen black (`TScript::End` fades back in
+  only for a multiplayer host). Intended? All 79 fade-out/fade-in pairs in
+  Ahkuilon are balanced.
+- Was PlayScreen's restart flow (`+0x5dc`: stop the player's script, fade
+  out, load `newgame`, fade in) the "skip the opening" path?
+- Was the music meant to dip with screen fades (the fade posts ±8 to the
+  globals area music changes use, `0x0065abd8`/`0x0065abdc`)?
 
 ## 7. Decomps used
 
