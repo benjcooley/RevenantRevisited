@@ -201,9 +201,12 @@ class TScript
     // REVSYNC: End @ 0x00493e40 — ends the block and gives back what it
     //   took (the dialog and fade bits; control and camera aren't ported).
     void End();
-    // REVSYNC: per-instance body of TScriptManager::ResetScripts @ 0x00496e20
-    //   — End if running and return to the just-constructed state: top
-    //   prototype, no pending or current trigger, no open blocks.
+    // REVSYNC: 0x004924f0 (InitScript's last call; inlined per instance in
+    //   TScriptManager::ResetScripts @ 0x00496e20) — End if running and
+    //   wait for a trigger: top prototype, no open blocks, no guard, no wait.
+    //   The port also drops a pending trigger request, the aliases and an
+    //   interrupted ALWAYS block, which retail leaves; a just-attached or
+    //   just-loaded script has none.
     void Reset();
     [[nodiscard]] bool Running() const { return priority > 0; }
 
