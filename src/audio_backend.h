@@ -145,7 +145,10 @@ void MusicStop();
 
 bool MusicPlaying();
 
-// 0..1 linear, scaled on top of SetMusicVolume's group setting.
+// 0..1 linear, scaled on top of SetMusicVolume's group setting. Applies to
+// the playing track and every track after it (starts at 1): it stands in
+// for retail's CD "current volume", a device setting that outlives a track,
+// which scripts drop to half and back with `setcdvolume`.
 void MusicSetVolume(float v);
 
 // ---- Diagnostics --------------------------------------------------------

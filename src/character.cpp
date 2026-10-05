@@ -29,6 +29,7 @@
 #include "player.h"
 #include "logging.h"
 
+#include <algorithm>
 #include <math.h>
 #include <string.h>
 
@@ -151,9 +152,12 @@ void TCharacter::ClearChar()
   // Reset hasseen list
     memset(&hasseen, 0, sizeof(SHasSeen) * MAXHASSEEN);
 
-  // Clear Fade
+  // Clear Fade (retail ClearChar 0x004c18a0): fully visible. The step of 5
+  // toward a limit of 100 settles to still on the first pulse.
     fade = 100;
     fade_step = 5;
+    fade_limit = 100;
+    fade_direction = 0;
 
   // Clear the Invisible Spell
     invisible_spell = false;
@@ -256,6 +260,10 @@ void TCharacter::Pulse()
             }
         }
     }
+
+  // REVSYNC: TCharacter::Pulse @ 0x004c1bb0 -- one step of any fade, dead
+  // or alive (UpdateFade's only caller in retail).
+    UpdateFade();
 
     if (IsDead())
     {
@@ -460,10 +468,12 @@ void TCharacter::UpdateAction(int32_t bits)
   // the root state.
 
   // Cause character to fall if move bits flag has fall
+  // REVSYNC: 0x004c3429 -- with incidentals off the next state is always
+  // the 100% variant (TryCommand's flag).
     if (bits & MOVE_FALLING)
         comstate = ForceCommand(new TActionBlock("fall"), bits);
     else
-        comstate = TryCommand(desired, bits);
+        comstate = TryCommand(desired, bits, Incidentals() ? 0 : kCommandNoIncidentals);
 
   // ********************************************************************
   // Decrement the wait value (if any)
@@ -1192,17 +1202,14 @@ void TCharacter::SetHasSeenAutoCombat(bool on)
     }
 }
 
-// Returns the percentage of transparency for character's imagery
+// REVSYNC: TCharacter::Transparency @ 0x004c5a50 -- how visible the
+// character's imagery is, 0..100: the fade. (In a network game a player in
+// player state 2 is capped at 40; no multiplayer in the port.) The
+// pre-release hid aggressive monsters the player hadn't seen yet; retail
+// dropped that.
 int32_t TCharacter::Transparency()
 {
-    if (Editor ||
-        !Player || this == Player || 
-        !Aggressive() || 
-        IsDead() ||
-        Player->HasSeenMe(this))
-            return max(0, min(fade, 100));
-    else
-        return min(fade, 0);
+    return std::clamp(fade, 0, 100);
 }
 
 // DLS brightness routine (gives brightness given distance)
@@ -2153,7 +2160,7 @@ int32_t TCharacter::ResolveSay(TActionBlock* ab, int32_t bits)
     if (ab->wait <= 0 || (doing && doing->stop))
     {
         ab->wait = 0;
-        ForceCommand(root);
+        ForceCommand(root, 0, Incidentals() ? 0 : kCommandNoIncidentals);   // REVSYNC: 0x004c8437
         return COM_COMPLETED;
     }
 
@@ -3533,8 +3540,8 @@ bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const c
       }
     } 
         
-    char buf[128];
-    DialogLine(string, buf, 128);  // Translate dialog line (convert [tags])
+    char buf[256];                  // retail's line buffer
+    DialogLine(string, buf, sizeof(buf));
 
     TActionBlock* ab;
     if (anim)
@@ -3552,7 +3559,12 @@ bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const c
     else
         ab->wait = wait;
     ab->loop = true;
+    const int32_t ticks = ab->wait;
     SetDesired(ab);
+
+  // REVSYNC: Say @ 0x004d0610 step 8 -- the line always goes to the dialog
+  // pane, whatever ShowDialog says.
+    DialogPane.AddSpeech(this, buf, ticks);
 
     return true;
 }
@@ -4982,44 +4994,108 @@ void TCharacter::MakeInvisible()
     }
 }
 
+// REVSYNC: TCharacter::Fade @ 0x004d56c0 (`fadecharacterin/out`) -- +1
+// fades back in to 100, but only while the character is alive; anything
+// else fades out to 0. 5 a pulse either way.
+void TCharacter::Fade(int32_t direction)
+{
+    fade_direction = direction;
+    if (direction == 1)
+    {
+        if (Health() > 0)
+        {
+            fade_step = -5;
+            fade_limit = 100;
+        }
+        return;
+    }
+
+    fade_step = 5;
+    fade_limit = 0;
+    fade_direction = -1;
+}
+
+// REVSYNC: TCharacter::SetFade @ 0x004d5730 -- a dead character can only
+// fade out. A negative 'amt' keeps the current visibility.
 void TCharacter::SetFade(int32_t amt, int32_t amt2, int32_t amt3)
 {
-    fade = amt;
+    if (Health() <= 0 && amt2 < 0)
+        return;
+
+    if (amt >= 0)
+        fade = amt;
     fade_step = amt2;
     fade_limit = amt3;
+    fade_direction = (amt2 > 0) ? -1 : 1;
 }
 
-int32_t TCharacter::GetFade(void)
+// REVSYNC: TCharacter::UpdateFade @ 0x004d57a0 -- one pulse of the fade.
+// Fading in past 0 makes an object-invisible character visible again; the
+// fade stops (step and direction 0) at its limit, at 0, or at 100.
+void TCharacter::UpdateFade()
 {
-    return fade;
-}
+    if (fade_step == 0)
+        return;
 
-void TCharacter::UpdateFade(void)
-{
     fade -= fade_step;
+    if (fade > 0 && fade_step < 0 && (flags & OF_INVISIBLE))
+        SetFlag(OF_INVISIBLE, false);
 
     if (fade_limit == -1)
     {
         if (fade < 0)
+        {
             fade = 0;
-        if (fade > 100)
-            fade = 100;
-    }
-    else if (fade_step > 0)
-    {
-        if (fade < fade_limit)
-            fade = fade_limit;
-        if (fade > 100)
-            fade = 100;
+            fade_step = fade_direction = 0;
+        }
     }
     else if (fade_step < 0)
     {
         if (fade > fade_limit)
+        {
             fade = fade_limit;
+            fade_step = fade_direction = 0;
+        }
         if (fade < 0)
+        {
             fade = 0;
+            fade_step = fade_direction = 0;
+        }
+        return;     // retail skips the 100 cap on the way in
+    }
+    else if (fade < fade_limit)
+    {
+        fade = fade_limit;
+        fade_step = fade_direction = 0;
     }
 
+    if (fade > 100)
+    {
+        fade = 100;
+        fade_step = fade_direction = 0;
+    }
+}
+
+// REVSYNC: TCharacter::SetInvisible @ 0x004d5880 -- the invisibility spell
+// fades its target to 30; ending it fades a living character back to 100.
+void TCharacter::SetInvisibleSpell(bool on)
+{
+    if (invisible_spell == on)
+        return;
+
+    invisible_spell = on;
+    if (on)
+    {
+        fade_step = 5;
+        fade_limit = 30;
+        fade_direction = -1;
+    }
+    else if (Health() > 0)
+    {
+        fade_step = -5;
+        fade_limit = 100;
+        fade_direction = 1;
+    }
 }
 
 // set to cast mode
