@@ -105,6 +105,7 @@ class TGameSession
 
     void PlaceAtDevStart(const TGameMap& map) const;
     void PlacePlayers(TGameMap& map, bool entering) const;
+    void ReleaseUnusedLevels(int32_t current) const;
     bool SaveNow(const std::string& slot);
 
     SSessionStart start;

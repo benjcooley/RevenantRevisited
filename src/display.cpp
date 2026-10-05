@@ -58,10 +58,15 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     // addition to tile/backbuffer/ImGui buffers. Each mesh asset owns a vertex
     // and index buffer, so leave generous headroom.
     desc.buffer_pool_size = 8192;
-    // One tile bitmap needs 2 images (color + depth); a Misthaven sector
-    // has ~200 unique bitmaps, and the test harness loads a 3x3 neighborhood.
-    // Plenty of headroom for UI atlases and ImGui.
-    desc.image_pool_size  = 4096;
+    // The renderer keeps every imagery asset it has drawn (an image pair --
+    // color, depth, height -- per 2D imagery, textures per mesh) until
+    // shutdown: zero-reference assets aren't evicted yet (TMapRenderer,
+    // RecomputeLoadedMapAssetRefs). So the pool must hold the game's whole
+    // imagery -- ~2,650 I2D and ~620 I3D in imagery.rvi, over 10,000 images --
+    // not one level's: level 0 alone holds ~3,700, and a walk from the forest
+    // into the town exhausted a pool of 4,096 (sokol aborts). Size it for the
+    // data until the renderer evicts.
+    desc.image_pool_size  = 32768;
     desc.shader_pool_size = 64;
     desc.pipeline_pool_size = 128;
     desc.pass_pool_size   = 64;

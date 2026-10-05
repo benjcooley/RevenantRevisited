@@ -612,7 +612,7 @@ that as follows:
 | `CheckPos` takes a player out of the map when its sector isn't loaded | same (the window/map lookup), then the session puts it back |
 | sector update: load the camera's level, re-add players (`0x00459220`) | **the session's level-entry step**: when the camera's level differs from `MapManager.CurrentLevel()`, `SetCurrentLevel(level)` and put every player with no sector into the sector under it — the body `EnterWorld` already has, run at the start of the next tick, before the simulation |
 | `LOADMAPMSG` + bar in the text bar during the load | `TPlayScreen` draws it from the session's progress while a level loads (staged across frames like the start load, §3.4 of ARCHITECTURE); the simulation doesn't tick meanwhile, as retail's synchronous load stalled it |
-| releasing sectors saves them to `curmap` | the port keeps visited levels loaded (`TMapManager` cache) and writes them at `FlushSectors`/`SaveCurMap`; the save is what interop needs |
+| releasing sectors saves them to `curmap` | after a level change the port releases every level without the camera or a player (`TGameSession::ReleaseUnusedLevels`), writing its sectors to the working set; `FlushSectors`/`SaveCurMap` write the rest at a save |
 | area exit/enter from the camera | unchanged: `AreaManager.Pulse` already reads the map pane's position and level |
 
 Divergence to record in ARCHITECTURE §7: the port loads a whole level and
