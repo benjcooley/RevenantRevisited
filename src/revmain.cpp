@@ -2454,6 +2454,9 @@ sapp_desc sokol_main(int argc, char* argv[])
         // timer still run normally; framesnap reads the offscreen RT.
         desc.hidden = true;
         desc.no_dock_icon = true;
+        // ...which, silent too, makes the app an App Nap target: keep the
+        // frame timer running.
+        HeadlessWindow::KeepAwake();
         // Suppress audio in headless mode — agent-driven test runs were
         // dumping music + SFX onto the user's speakers. audio::SetSilenced
         // must be called BEFORE audio::Init (which sound.cpp:406 does on

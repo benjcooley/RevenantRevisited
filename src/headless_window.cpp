@@ -40,6 +40,7 @@ bool IsActive() { return g_active; }
 // platforms so the build links — they'd need their own platform-specific
 // hide path (X11 unmap on Linux, ShowWindow(SW_HIDE) on Win32, etc.).
 void HideAllWindows() {}
+void KeepAwake() {}
 #endif
 
 } // namespace HeadlessWindow

@@ -67,4 +67,20 @@ void HideAllWindows()
     }
 }
 
+void KeepAwake()
+{
+    static id s_activity = nil;     // held for the life of the process
+    if (s_activity)
+        return;
+    @autoreleasepool {
+        s_activity = [[NSProcessInfo processInfo]
+            beginActivityWithOptions:(NSActivityUserInitiatedAllowingIdleSystemSleep
+                                      | NSActivityLatencyCritical)
+                              reason:@"Revenant --headless run"];
+#if !__has_feature(objc_arc)
+        [s_activity retain];
+#endif
+    }
+}
+
 } // namespace HeadlessWindow
