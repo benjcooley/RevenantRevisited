@@ -53,6 +53,7 @@ static inline char *strlwr(char *s)
 #include "file.h"
 #include "3dimage.h"
 #include "sound.h"
+#include "audio_backend.h"
 #include "dialog.h"
 #include "effect.h"
 #include "logging.h"
@@ -2606,6 +2607,28 @@ COMMAND(CmdPlay3D)
     return 0;
 }
 
+// REVSYNC: setcdvolume @ 0x00428b20 -- `setcdvolume half|full`: the music
+// drops to half the player's music volume, or back to all of it. Retail sets
+// the CD's current volume (0x0049a610) to its base volume (CD object
+// 0x0065abc8 +4, the player's music setting) or half of it. The port keeps
+// the player's setting as the music group volume, so the script's part is a
+// scale of 1/2 or 1 on top (audio::MusicSetVolume).
+COMMAND(CmdSetCDVolume)
+{
+    float scale;
+    if (t.Is("half"))
+        scale = 0.5f;
+    else if (t.Is("full"))
+        scale = 1.0f;
+    else
+        return CMD_BADPARAMS;
+
+    audio::MusicSetVolume(scale);
+    log_debug("[cmd] setcdvolume %s: music at %.2f of the music volume", t.Text(), scale);
+    t.WhiteGet();
+    return 0;
+}
+
 COMMAND(CmdTrigger)
 {
     if (t.Type() != TKN_TEXT && t.Type() != TKN_IDENT)
@@ -3938,7 +3961,6 @@ COMMAND(CmdFadeScreenOut) { return CmdNotPorted("fadescreenout", 0x00427e80, t);
 COMMAND(CmdFogOfWar) { return CmdNotPorted("fow", 0x00425440, t); }
 COMMAND(CmdPlayMovie) { return CmdNotPorted("playmovie", 0x00427d80, t); }
 COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }
-COMMAND(CmdSetCDVolume) { return CmdNotPorted("setcdvolume", 0x00428b20, t); }
 COMMAND(CmdSwapCDTrack) { return CmdNotPorted("swapcdtrack", 0x00428b90, t); }
 COMMAND(CmdTimeOfDay) { return CmdNotPorted("timeofday", 0x00427a80, t); }
 
