@@ -40,7 +40,9 @@ class TGameSession
     // sequence of steps: call Step() until it returns false.
     void Start(const SSessionStart& start);
     bool Step();
-    [[nodiscard]] float Progress() const;
+    // How far the load is, per mille: where retail's loading bar stood after
+    // the matching part of TPlayScreen::Initialize (0x0047a660).
+    [[nodiscard]] int32_t Progress() const;
     [[nodiscard]] bool  Ready() const  { return state == EState::Ready; }
     [[nodiscard]] bool  Failed() const { return state == EState::Failed; }
 
@@ -74,6 +76,7 @@ class TGameSession
     {
         const char* name;
         bool (TGameSession::*run)();
+        int32_t     progress;          // per mille once the step is done
     };
     static const SStep kLoadSteps[];
 

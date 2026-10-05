@@ -49,8 +49,13 @@ class TGameFlow
     void QuitApplication();                 // title Exit, in-game Exit Program
 
     // Called once the current screen has closed, with the screen that
-    // follows it. Leaving the PlayScreen ends the game.
+    // follows it. Leaving the game (for anything but the loading or play
+    // screen) ends it.
     void ScreenEnded(TScreen* next);
+
+    // The loading screen's tick: the next load step, then the bar; once
+    // loaded, on to the PlayScreen (back to the title if the load failed).
+    void ContinueLoading();
 
     [[nodiscard]] TGameSession& Session() { return session; }
 
