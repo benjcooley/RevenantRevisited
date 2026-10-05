@@ -345,7 +345,11 @@ bool TDisplay::FlipPage(bool /*Wait*/)
                 done(rgba.data(), snap_capture_w, snap_capture_h);
         }
         else
+        {
             log_warn("[display] frame capture readback failed");
+            for (const TCaptureDone& done : requests)
+                done(nullptr, 0, 0);
+        }
     }
 
     return true;

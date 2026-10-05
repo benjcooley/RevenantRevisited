@@ -65,7 +65,9 @@ class TGameFlow
     void Boot(const SBootOptions& options);
 
     void StartNewGame();                    // title "New Game"
-    void LoadGame(const char* slotName);    // title / in-game / death "Load"
+    void LoadGame(const char* slotName);    // the Load Game screen's "Load Game"
+    void ShowLoadGameScreen();              // title "Load Game", death "Load"
+    void ShowOptionsScreen();               // title "Options"
     void RestartAfterDeath();               // death "Restart" (see §8 Q1)
     void PlayerDied();                      // from TPlayer death countdown
     void ReturnToTitle();                   // Quit Module, death Exit, endgame
@@ -281,10 +283,17 @@ void TScreen::PushModal(TPane* pane, uint32_t flags, TModalDone done);
 void TPane::EndModal(int32_t result);   // pops and calls done(result) next frame
 ```
 
-- Flags keep retail values: `0x10` only the top modal pulses/animates;
-  `0x100` re-applies UI blit effects under the modal (retail
-  `0x004aacb0`, purpose unconfirmed — stored, not yet rendered). Input
-  goes only to the top modal.
+- Flags keep retail values, one bit per screen pass narrowed to the top
+  modal (forensics/INGAME_MENU.md §4.1): `MODAL_MOUSE` 0x01,
+  `MODAL_KEYS` 0x02 (also holds back the screen's own key commands),
+  `MODAL_JOYSTICK` 0x04, `MODAL_PAUSE` 0x08 (only the modal pulses: the
+  world stops), `MODAL_ANIMATE` 0x10 (only the modal animates and
+  draws); `0x100` re-applies UI blit effects under the modal (retail
+  `0x004aacb0`, purpose unconfirmed — stored, not yet rendered). A pass
+  without its bit goes to every pane once, the modal included. Popups
+  push `MODAL_INPUT` (7); the in-game menu and its dialogs `MODAL_GAME`
+  (0xf: the world pauses but keeps drawing). `SetExclusivePane` gives
+  `MODAL_INPUT`, or everything with complete exclusion.
 - The modal stack *is* retail's exclusive-pane stack (retail `RunModal`
   pushes through `SetExclusivePane`), evolved with completion callbacks
   and results; the legacy `SetExclusivePane` callers keep working.
@@ -319,6 +328,20 @@ subclass so the in-game menu, load/save, options and popups push as
 modals; the title's Load/Options screens host the same pane in a small
 `TScreen`.
 
+Built (2026-10-05): `TDefPane` (`src/defpane.*`) opens with retail's DEF
+flags (`DEF_OVERLAY` picks the `tex` / `alpha` chrome, `DEF_FADE` the
+5-pulse fade, `Finish(result)` ends a modal after its fade-out), raises
+retail's control events as virtuals (`OnOpened`, `OnActivate`,
+`OnListSelect`, `OnKey`, `DrawField`) and has button keys, EDIT text entry
+and the list's scrollbar. The dialogs on it: `TInGameMenuPane` and the
+continuation chain `TInGameMenu` (`src/ingamemenu.*`, owned by
+`TPlayScreen`), `TLoadGamePane` / `TSaveGamePane` (`src/savegamepane.*`),
+`TOptionsPane`, `TPopupPane` (`src/popuppane.*`). A pane does its own
+checks and confirmations; what an outcome means (load, return to the
+title, close the modal) is its host's, through the activation handler or
+the `PushModal` completion — retail branched inside the pane on a
+from-game flag.
+
 ### 4.6 Screens
 
 | Screen | Basis |
@@ -328,7 +351,7 @@ modals; the title's Load/Options screens host the same pane in a small
 | `TLoadScreen` | retail loading bar (`loadbar.dat` / module `loadscreen.bmp`), shows session load progress |
 | `TPlayScreen` | presents the session; HUD panes; in-game menu, dialog, popups as modals; in-game `playmovie` as a modal pane |
 | `TDeathScreen` | retail death screen with `TDeathPane` (Restart / Load / Exit) |
-| Load / Options screens | small screens hosting the DEF panes (title route) |
+| `TLoadGameScreen` / `TOptionsScreen` | retail `0x0066fa78` / `0x0066fe88` (`src/menuscreens.*`): the load dialog and the options pane as ordinary panes, entered through `GameFlow.ShowLoadGameScreen()` (title, death) / `ShowOptionsScreen()` (title) |
 
 ## 5. HUD (production rebuild)
 
@@ -454,6 +477,8 @@ perform.
 | Retail | Port | Why | Behavior impact |
 |---|---|---|---|
 | Re-entrant frame loop for modals (`RunModal`, `TimerLoop(1)`) | Modal stack + completion continuations | sokol owns the outer loop | none |
+| In-game dialogs load and save inside their button handler; the load behind a "loadingmap" progress popup | the dialog's host hands the slot to `TGameSession::RequestLoad` / `RequestSave`, carried out at the start of the next tick | one owner of the world's replacement | no progress popup during an in-game load (forensics/INGAME_MENU.md §10) |
+| DEF dialogs branch on a from-game flag (load: start mode or in-place load; exit: close or switch screens) | the host decides through the pane's activation handler / modal completion | panes don't switch screens | none |
 | World lives in `TPlayScreen` | `TGameSession` owned by `TGameFlow` | overlays, loads and movies don't rebuild the screen; testable | none |
 | Loading bar repainted inside one long frame | Staged session load across frames | no re-entrant loop | bar animates the same |
 | `nextscreen` set from many sites | `TGameFlow` intents | one transition graph | none |

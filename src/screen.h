@@ -509,12 +509,22 @@ class TScreen
     TScreen();
     virtual ~TScreen();
 
-  // Exclusive-pane flags (retail TScreen exclusive entries, +0x30). TOPONLY:
-  // only the innermost exclusive pane pulses / animates / draws (pre-release
-  // "complete exclusion"). REAPPLYEFFECTS: retail re-applies the UI blit-effect
-  // regions under the pane (0x004aacb0 mode 6); stored, not rendered yet.
-    static constexpr uint32_t MODAL_TOPONLY        = 0x010;
+  // Exclusive-pane flags (retail TScreen exclusive entries, +0x30), retail's
+  // bits. Each narrows one screen pass to the innermost exclusive pane; a
+  // pass without its bit goes to every pane, the modal included
+  // (docs/gameflow/forensics/INGAME_MENU.md §4.1).
+    static constexpr uint32_t MODAL_MOUSE    = 0x001;   // 0x00490530: clicks and moves
+    static constexpr uint32_t MODAL_KEYS     = 0x002;   // 0x00490660/0x00490760; no screen key commands
+    static constexpr uint32_t MODAL_JOYSTICK = 0x004;   // 0x00490860
+    static constexpr uint32_t MODAL_PAUSE    = 0x008;   // 0x0048fda0: only the modal pulses; the world stops
+    static constexpr uint32_t MODAL_ANIMATE  = 0x010;   // 0x0048ff00: only the modal animates and draws
+  // REAPPLYEFFECTS: retail re-applies the UI blit-effect regions under the
+  // pane (0x004aacb0 mode 6); stored, not rendered yet.
     static constexpr uint32_t MODAL_REAPPLYEFFECTS = 0x100;
+  // Retail's combinations: popups (0x0053c060) pass the input bits; the
+  // in-game menu and its dialogs (0x0047e500) add the pause in single player.
+    static constexpr uint32_t MODAL_INPUT = MODAL_MOUSE | MODAL_KEYS | MODAL_JOYSTICK;
+    static constexpr uint32_t MODAL_GAME  = MODAL_INPUT | MODAL_PAUSE;
 
   // Screen events (retail TScreen::OnEvent 0x00490960 forwards to every pane).
     static constexpr int32_t SCREENEVENT_CLOSING     = 0x100;
@@ -538,10 +548,10 @@ class TScreen
     bool RemovePane(PTPane pane);
       // Removes pane from the pane list (returns true if pane was actually in pane list)
     bool SetExclusivePane(int32_t panenum, bool completeexclusion = false);
-      // Sets pane to handle all input/output (for error or popup panes)
+      // Sets pane to handle all input (for error or popup panes): MODAL_INPUT.
       // If complete is true then *nothing* from the other panes (including
-      // Animate() and DrawBackground()) will be called during exclusive mode.
-      // (Equivalent to pushing with MODAL_TOPONLY and no completion.)
+      // Pulse(), Animate() and DrawBackground()) will be called during
+      // exclusive mode: MODAL_INPUT | MODAL_PAUSE | MODAL_ANIMATE.
     bool SetExclusivePane(PTPane pane, bool completeexclusion = false)
         { return SetExclusivePane(FindPane(pane), completeexclusion); }
       // Sets pane to handle all input/output (for error or popup panes)
@@ -549,8 +559,12 @@ class TScreen
       // Releases exclusive pane
     void ReleaseExclusivePane(PTPane pane) { ReleaseExclusivePane(FindPane(pane)); }
       // Releases exclusive pane
-    bool InCompleteExclusion() { return (numexclusive > 0 && (exclusiveflags[numexclusive - 1] & MODAL_TOPONLY)); }
-      // Whether or not all i/o is stopped except for one pane
+    bool InCompleteExclusion() const { return ModalHas(MODAL_ANIMATE); }
+      // Whether only the top exclusive pane animates and draws
+    [[nodiscard]] uint32_t TopModalFlags() const
+        { return numexclusive > 0 ? exclusiveflags[numexclusive - 1] : 0; }
+    [[nodiscard]] bool ModalHas(uint32_t flag) const { return (TopModalFlags() & flag) != 0; }
+      // The innermost exclusive pane's MODAL_* flags (0 without one)
     bool FirstFrame() { return firstframe; }
       // Is this the first frame for this screen?
     void RedrawAllPanes();
@@ -666,6 +680,9 @@ class TScreen
       // HUD-layer draw of the pane tree, called by the renderer
     void DrawFade();
       // HUD-layer draw of the fade's black cover, over everything else
+    PTPane ModalFor(uint32_t flag);
+      // The innermost exclusive pane when its entry carries `flag` (a pass
+      // narrowed to it), else null
     void RequestModalEnd(PTPane pane, int32_t result);
     void ProcessModalEnds();
       // Pops modals that called EndModal and runs their completions

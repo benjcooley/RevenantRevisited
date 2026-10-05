@@ -734,7 +734,8 @@ bool TScreen::SetExclusivePane(int32_t panenum, bool completeexclusion)
         return false;
 
     exclusive[numexclusive] = panenum;
-    exclusiveflags[numexclusive] = completeexclusion ? MODAL_TOPONLY : 0;
+    exclusiveflags[numexclusive] = completeexclusion ? MODAL_INPUT | MODAL_PAUSE | MODAL_ANIMATE
+                                                     : MODAL_INPUT;
     modaldone[numexclusive] = nullptr;
     numexclusive++;
 
@@ -750,9 +751,14 @@ void TScreen::ReleaseExclusivePane(int32_t panenum)
     {
         if (exclusive[c] != panenum)
         {
-            exclusive[pos] = exclusive[c];
-            exclusiveflags[pos] = exclusiveflags[c];
-            modaldone[pos] = std::move(modaldone[c]);
+            // Entries below the released one stay where they are: moving a
+            // completion onto itself would empty it.
+            if (pos != c)
+            {
+                exclusive[pos] = exclusive[c];
+                exclusiveflags[pos] = exclusiveflags[c];
+                modaldone[pos] = std::move(modaldone[c]);
+            }
             pos++;
         }
     }
@@ -829,11 +835,16 @@ void TScreen::BroadcastEvent(int32_t code, void* param)
             panes[loop]->OnScreenEvent(code, param);
 }
 
+PTPane TScreen::ModalFor(uint32_t flag)
+{
+    return ModalHas(flag) ? panes[exclusive[numexclusive - 1]] : nullptr;
+}
+
 void TScreen::ComposePanes()
 {
-    if (numexclusive > 0 && (exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
+    if (ModalHas(MODAL_ANIMATE))
     {
-        if (PTPane pane = panes[exclusive[numexclusive - 1]])
+        if (PTPane pane = ModalFor(MODAL_ANIMATE))
             pane->ComposeTree();
         return;
     }
@@ -844,9 +855,9 @@ void TScreen::ComposePanes()
 
 void TScreen::DrawPanes()
 {
-    if (numexclusive > 0 && (exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
+    if (ModalHas(MODAL_ANIMATE))
     {
-        if (PTPane pane = panes[exclusive[numexclusive - 1]])
+        if (PTPane pane = ModalFor(MODAL_ANIMATE))
             pane->DrawTree();
         return;
     }
@@ -859,21 +870,15 @@ void TScreen::RedrawAllPanes()
 {
     Display.Reset();
 
-  // Do exclusive
-    if (numexclusive > 0)
+    if (ModalHas(MODAL_ANIMATE))
     {
-        PTPane pane = panes[exclusive[numexclusive - 1]];
+        PTPane pane = ModalFor(MODAL_ANIMATE);
         if (pane && !pane->IsHidden())
             pane->SetDirty(true);
-
-        if ((exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
-        {
-            Display.Reset();
-            return;
-        }
+        Display.Reset();
+        return;
     }
 
-  // Do pane list
     for (int32_t loop = 0; loop < panes.NumItems(); loop++)
         if (panes.Used(loop) && !panes[loop]->IsHidden())
             panes[loop]->SetDirty(true);
@@ -885,32 +890,30 @@ void TScreen::RedrawAllPanes()
 // * Virtual Handler Functions *
 // *****************************
 
+// Each pass below goes to the innermost exclusive pane alone when its entry
+// carries the pass's MODAL_* bit, and otherwise to every pane once -- the
+// modal included, since it is in the pane array (retail 0x0048fda0,
+// 0x0048ff00, 0x00490530, 0x00490660, 0x00490760, 0x00490860).
+
 void TScreen::DrawBackground()
 {
     Display.Reset();
 
-  // Do exclusive
-    if (numexclusive > 0)
+    if (ModalHas(MODAL_ANIMATE))
     {
-        PTPane pane = panes[exclusive[numexclusive - 1]];
+        PTPane pane = ModalFor(MODAL_ANIMATE);
         if (pane && !pane->IsHidden())
         {
             if (dirty)
                 pane->Update();
-
             pane->SetClipRect();
             pane->DrawBackground();
         }
-
-        if ((exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
-        {
-            dirty = false;
-            Display.Reset();
-            return;
-        }
+        dirty = false;
+        Display.Reset();
+        return;
     }
 
-  // Do pane list
     for (int32_t loop = 0; loop < panes.NumItems(); loop++)
     {
         if (!panes.Used(loop) || panes[loop]->IsHidden())
@@ -927,28 +930,24 @@ void TScreen::DrawBackground()
     Display.Reset();
 }
 
+// REVSYNC: TScreen pane pulse @ 0x0048fda0. Under MODAL_PAUSE only the modal
+// pulses, so a pane-driven world (the map pane, in retail) stands still.
 void TScreen::Pulse()
 {
     Display.Reset();
 
-  // Do exclusive
-    if (numexclusive > 0)
+    if (ModalHas(MODAL_PAUSE))
     {
-        PTPane pane = panes[exclusive[numexclusive - 1]];
+        PTPane pane = ModalFor(MODAL_PAUSE);
         if (pane && !pane->IsHidden())
         {
             pane->SetClipRect();
             pane->Pulse();
         }
-
-        if ((exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
-        {
-            Display.Reset();
-            return;
-        }
+        Display.Reset();
+        return;
     }
 
-  // Do pane list
     for (int32_t loop = 0; loop < panes.NumItems(); loop++)
     {
         if (!panes.Used(loop) || panes[loop]->IsHidden())
@@ -960,28 +959,23 @@ void TScreen::Pulse()
     Display.Reset();
 }
 
+// REVSYNC: TScreen::Animate @ 0x0048ff00
 void TScreen::Animate(bool draw)
 {
     Display.Reset();
 
-  // Do exclusive
-    if (numexclusive > 0)
+    if (ModalHas(MODAL_ANIMATE))
     {
-        PTPane pane = panes[exclusive[numexclusive - 1]];
+        PTPane pane = ModalFor(MODAL_ANIMATE);
         if (pane && !pane->IsHidden())
         {
             pane->SetClipRect();
             pane->Animate(draw);
         }
-
-        if ((exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
-        {
-            Display.Reset();
-            return;
-        }
+        Display.Reset();
+        return;
     }
 
-  // Do pane list
     for (int32_t loop = 0; loop < panes.NumItems(); loop++)
     {
         if (!panes.Used(loop) || panes[loop]->IsHidden())
@@ -993,14 +987,16 @@ void TScreen::Animate(bool draw)
     Display.Reset();
 }
 
+// REVSYNC: 0x00490530 (MODAL_MOUSE). The modal gets the click wherever it
+// lands, in its own coordinates; without the bit, a pane gets it when it is
+// under the point, and every pane gets a button-up.
 void TScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 {
     Display.Reset();
 
-  // Do exclusive
-    if (numexclusive > 0)
+    if (ModalHas(MODAL_MOUSE))
     {
-        PTPane pane = panes[exclusive[numexclusive - 1]];
+        PTPane pane = ModalFor(MODAL_MOUSE);
         if (pane && !pane->IsHidden())
         {
             pane->SetClipRect();
@@ -1010,7 +1006,6 @@ void TScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         return;
     }
 
-  // Do pane list
     for (int32_t loop = 0; loop < panes.NumItems(); loop++)
     {
         if (!panes.Used(loop) || panes[loop]->IsHidden() || panes[loop]->IsIgnoringInput())
@@ -1033,10 +1028,9 @@ void TScreen::MouseMove(int32_t button, int32_t x, int32_t y)
 {
     Display.Reset();
 
-  // Do exclusive
-    if (numexclusive > 0)
+    if (ModalHas(MODAL_MOUSE))
     {
-        PTPane pane = panes[exclusive[numexclusive - 1]];
+        PTPane pane = ModalFor(MODAL_MOUSE);
         if (pane && !pane->IsHidden())
         {
             pane->SetClipRect();
@@ -1046,7 +1040,6 @@ void TScreen::MouseMove(int32_t button, int32_t x, int32_t y)
         return;
     }
 
-  // Do pane list
     for (int32_t loop = 0; loop < panes.NumItems(); loop++)
     {
         if (!panes.Used(loop) || panes[loop]->IsHidden() || panes[loop]->IsIgnoringInput())
@@ -1061,14 +1054,14 @@ void TScreen::MouseMove(int32_t button, int32_t x, int32_t y)
     Display.Reset();
 }
 
+// REVSYNC: 0x00490660 (MODAL_KEYS)
 void TScreen::KeyPress(int32_t key, bool down)
 {
     Display.Reset();
 
-  // Do exclusive
-    if (numexclusive > 0)
+    if (ModalHas(MODAL_KEYS))
     {
-        PTPane pane = panes[exclusive[numexclusive - 1]];
+        PTPane pane = ModalFor(MODAL_KEYS);
         if (pane && !pane->IsHidden())
             pane->RouteKeyPress(key, down);
         Display.Reset();
@@ -1086,14 +1079,14 @@ void TScreen::KeyPress(int32_t key, bool down)
     Display.Reset();
 }
 
+// REVSYNC: 0x00490760 (MODAL_KEYS)
 void TScreen::CharPress(int32_t key, bool down)
 {
     Display.Reset();
 
-  // Do exclusive
-    if (numexclusive > 0)
+    if (ModalHas(MODAL_KEYS))
     {
-        PTPane pane = panes[exclusive[numexclusive - 1]];
+        PTPane pane = ModalFor(MODAL_KEYS);
         if (pane && !pane->IsHidden())
             pane->RouteCharPress(key, down);
         Display.Reset();
@@ -1111,14 +1104,14 @@ void TScreen::CharPress(int32_t key, bool down)
     Display.Reset();
 }
 
+// REVSYNC: 0x00490860 (MODAL_JOYSTICK)
 void TScreen::Joystick(int32_t key, bool down)
 {
     Display.Reset();
 
-  // Do exclusive
-    if (numexclusive > 0)
+    if (ModalHas(MODAL_JOYSTICK))
     {
-        PTPane pane = panes[exclusive[numexclusive - 1]];
+        PTPane pane = ModalFor(MODAL_JOYSTICK);
         if (pane && !pane->IsHidden())
             pane->Joystick(key, down);
         Display.Reset();
