@@ -61,7 +61,12 @@ if(REVENANT_ASAN)
   # (TBloodEffect, TBurnEffect, TDripEffect, TPulpEffect, TParticle3DAnimator)
   # have all virtuals inline → no key function → no typeinfo emitted →
   # link error. Re-enable once those have an out-of-line virtual.
+  # -fsanitize-recover=address only makes recovery possible: ASan still
+  # stops at the first error unless the run sets
+  # ASAN_OPTIONS=halt_on_error=0, which lets one run report past a known
+  # bug (e.g. to reach shutdown).
   add_compile_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr
+                      -fsanitize-recover=address
                       -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1)
   add_link_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr)
 endif()
