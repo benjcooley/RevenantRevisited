@@ -51,6 +51,7 @@
 #include "mappane.h"
 #include "maprenderer.h"
 #include "player.h"
+#include "savegame.h"
 #include "revisited_settings.h"
 #include "runtimemode.h"
 #include "sector.h"
@@ -324,6 +325,10 @@ bool TPlayScreen::Initialize()
     g_playHudInitialized = InitializeUIHudMode();
     log_info("[playscreen] reconstructed HUD init = %s",
              g_playHudInitialized ? "OK" : "FAIL");
+
+    // The HUD starts as the loaded game left it (building the HUD resets it).
+    if (Player)
+        TSaveGame::RestoreHud(Player->HudWords());
 
     log_info("[playscreen] initialize done");
     return true;
@@ -645,15 +650,17 @@ void TPlayScreen::Close()
 // * Per-frame                                                             *
 // *************************************************************************
 
-// Headless save-cycle smoke test (--savecycle-test). Once the game has
-// settled, saves to slot "savecycle", loads it back on the next frame and
-// logs the player's key fields before and after, through the same session
-// requests the in-game save/load paths use. Identical lines = round trip OK.
+// Headless save-cycle smoke test (--savecycle-test[=<frames>]). After
+// <frames> frames, saves to slot "savecycle", loads it back on the next
+// frame and logs the player's key fields before and after, through the same
+// session requests the in-game save/load paths use. Identical lines = round
+// trip OK. Runs before this frame's requests and tick, so with 0 frames the
+// slot holds the game exactly as it was loaded.
 static void PulseSaveCycleTest()
 {
     enum class EStage { Settle, Save, Load, Report, Done };
     static EStage  stage  = EStage::Settle;
-    static int32_t settle = 60;   // ~1 second at 60 Hz
+    static int32_t settle = StartupSaveCycleSettle;
 
     auto snapshot = [](const char* tag) {
         const S3DPoint p = Player->Pos();
@@ -671,9 +678,10 @@ static void PulseSaveCycleTest()
     switch (stage)
     {
     case EStage::Settle:
-        if (--settle <= 0)
-            stage = EStage::Save;
-        break;
+        if (settle-- > 0)
+            break;
+        stage = EStage::Save;
+        [[fallthrough]];
     case EStage::Save:
         snapshot("pre-save ");
         GameFlow.Session().RequestSave("savecycle");

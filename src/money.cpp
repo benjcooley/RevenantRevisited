@@ -159,6 +159,9 @@ int32_t TMoney::CursorType(TObjectInstance* with)
     return CURSOR_NONE;
 }
 
+// REVSYNC: TMoney::Load @ 0x00515f40. Retail cleared OF_VIRGIN before
+// loading; the base Load replaces that flag from the file, so the clear has
+// no effect and isn't ported.
 void TMoney::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
     TObjectInstance::Load(is, version, objversion);

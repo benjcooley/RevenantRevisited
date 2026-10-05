@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <vector>
 
+#include <algorithm>
+
 char sectorfilename[80] = "%d_%d_%d.DAT";
 uint32_t SectrorMapFCC = (('M' << 0) | ('A' << 8) | ('P' << 16) | (' ' << 24));
 #define STARTSIZE 32768
@@ -196,18 +198,19 @@ bool TSector::Load(bool lock)
     for (int32_t c = 0; c < numobjects; c++)
     {
         // Every object record starts with a 16-bit field (objversion, or the
-        // objclass in pre-v8 maps). LoadObject itself reads unchecked, so an
-        // overrun inside one record shows only after it (below).
+        // objclass in pre-v8 maps). A record that runs past the end of the
+        // file marks the stream overrun (below).
         if (is.Remaining() < 2)
             return malformed("object data ends early");
 
-        TObjectInstance* inst = TObjectInstance::LoadObject(is, version, true);
+        TObjectInstance* inst = TObjectInstance::LoadObject(is, version, OSTREAM_MAP);
         // Note: inst can be nullptr here if a placeholder (-1) was saved for the obj class id
 
         if (inst)
         {
             inst->ForceSector(this);
             inst->ForceLevel(level); // Directly sets the inst's level variable
+            KeepInside(inst);
             // World positions stay in tile-Z space (matches the tile
             // draw path). The mesh-only 1.5 scaling lives entirely in
             // the per-instance mesh model matrix at draw time, so a
@@ -230,7 +233,7 @@ bool TSector::Load(bool lock)
             inst->SetMapIndex(MAKEINDEX(level, sectorx, sectory, c));
     }
 
-    if (is.Remaining() < 0)
+    if (is.Overrun())
         return malformed("object data overruns the file");
 
     // Load is the initial "contents are populated" event.
@@ -245,33 +248,113 @@ bool TSector::Load(bool lock)
 // the rest of the engine is still alive, so by the time the global dtor
 // fires the cache is already empty and Save isn't reached.)
 
+// REVSYNC: the position fix-up in TSector::Load @ 0x00498780: an object
+// whose position lies outside the sector is moved into it by whole sectors
+// on x and y (z unchanged).
+void TSector::KeepInside(TObjectInstance* inst) const
+{
+    auto inside = [](int32_t v, int32_t lo, int32_t size) {
+        const int32_t offset = (v - lo) % size;
+        return lo + (offset < 0 ? offset + size : offset);
+    };
+    S3DPoint p = inst->Pos();
+    const int32_t x = inside(p.x, sectorx * SECTORWIDTH, SECTORWIDTH);
+    const int32_t y = inside(p.y, sectory * SECTORHEIGHT, SECTORHEIGHT);
+    if (x != p.x || y != p.y)
+    {
+        p.x = x;
+        p.y = y;
+        inst->ForcePos(p);
+    }
+}
+
+namespace {
+
+// Adler-32 as retail computes it (0x0056ff60 / 0x0056ff80): the bytes are
+// signed chars, and the sums are reduced mod 65521 only after each
+// 5552-byte chunk, with 32-bit wraparound in between.
+class TRetailAdler32
+{
+  public:
+    void Update(const void* data, size_t count)
+    {
+        const int8_t* bytes = static_cast<const int8_t*>(data);
+        uint32_t a = state & 0xffff;
+        uint32_t b = state >> 16;
+        while (count > 0)
+        {
+            const size_t chunk = std::min<size_t>(count, kChunk);
+            for (size_t i = 0; i < chunk; i++)
+            {
+                a += (uint32_t)(int32_t)bytes[i];
+                b += a;
+            }
+            bytes += chunk;
+            count -= chunk;
+            a %= kModulus;
+            b %= kModulus;
+        }
+        state = (b << 16) | a;
+    }
+
+    [[nodiscard]] uint32_t Value() const { return state; }
+
+  private:
+    static constexpr size_t   kChunk   = 5552;
+    static constexpr uint32_t kModulus = 65521;
+    uint32_t state = 1;
+};
+
+}  // namespace
+
+// REVSYNC: the sector state hash @ 0x00499e90 (SAVE_GAME.md §11.6): the
+// sector's coordinates and object count, then the stream of each character
+// and player in it, saved as for a map without inventories.
+uint32_t TSector::StateHash()
+{
+    TRetailAdler32 hash;
+    const int32_t header[4] = { level, sectorx, sectory, objects.NumItems() };
+    for (int32_t value : header)
+        hash.Update(&value, sizeof(value));
+
+    TOutputStream os(0x8000, 0x3f9c);
+    for (TPointerIterator<TObjectInstance> i(&objects); i; i++)
+    {
+        TObjectInstance* inst = i.Item();
+        if (!inst || (inst->ObjClass() != OBJCLASS_CHARACTER && inst->ObjClass() != OBJCLASS_PLAYER))
+            continue;
+        os.Reset();
+        TObjectInstance::SaveObject(inst, os, OSTREAM_MAP | OSTREAM_NOINVENTORY);
+        hash.Update(os.Buffer(), os.DataSize());
+    }
+
+    constexpr uint32_t kZeroHash = 0xf0f0f0f0;
+    return hash.Value() != 0 ? hash.Value() : kZeroHash;
+}
+
 // REVSYNC: TSector::Save @ 0x00498c90 + file write @ 0x00498a40. Retail
 // writes empty sectors too (a retail curmap holds 2_8_10.DAT with 0 objects);
 // the 1998 source deleted the file instead, which let a sector the player
-// emptied fall back to its base-map contents.
+// emptied fall back to its base-map contents. The state hash is computed
+// after the objects are written, as retail (a lit object's Save sets flags).
 void TSector::Save()
 {
-    int32_t version = MAP_VERSION; // Current sector map version #
-
     TOutputStream os(STARTSIZE, GROWSIZE);
-    TPointerIterator<TObjectInstance> i(&objects);
 
-    // Write out the "header" with "MAP " followed by the version #
     os << SectrorMapFCC;
-    os << version;
-
-    // v14+ writes statehash between version and numobjects. Retail
-    // regenerates this hash at save time (FUN_00499e90). We round-trip
-    // the last-loaded value for now.
-    if (version > 13)
-        os << statehash;
-
+    os << (int32_t)MAP_VERSION;
+    const int32_t hashpos = os.GetPos();
+    os << (uint32_t)0;
     os << objects.NumItems();
 
-    for ( ; i; i++)
-    {
-        TObjectInstance::SaveObject(i.Item(), os, true);
-    }
+    for (TPointerIterator<TObjectInstance> i(&objects); i; i++)
+        TObjectInstance::SaveObject(i.Item(), os, OSTREAM_MAP);
+
+    statehash = (int32_t)StateHash();
+    const int32_t end = os.GetPos();
+    os.SetPos(hashpos);
+    os << (uint32_t)statehash;
+    os.SetPos(end);
 
     FILE *fp = SectorStore::OpenForWrite(filename);
     if (!fp)
@@ -346,10 +429,18 @@ int32_t TSector::AddObject(TObjectInstance* oi, int32_t item)
     oi->ForceSector(this);
     oi->ForceLevel(level);
 
+    // REVSYNC: TSector::AddObject @ 0x00498fb0 adds with retail's array Add
+    // (0x0041c840), which takes the first empty slot; TPointerArray::Add
+    // appends. The difference shows in the sector file: an object that
+    // leaves and comes back (the player crossing a sector) is written
+    // where retail writes it.
     if (item < 0)
-        item = objects.Add(oi);
-    else
-        item = objects.Set(oi, item);
+    {
+        item = 0;
+        while (item < objects.NumItems() && objects[item])
+            ++item;
+    }
+    item = objects.Set(oi, item);
 
     for (int32_t d = 1; d < NUMOBJSETS; d++)
     {
@@ -437,20 +528,40 @@ int32_t TSector::GetObjIndex(const TObjectInstance* oi) const
     return -1;
 }
 
+// REVSYNC: TSector::ObjectFlagsChanged @ 0x00499360. The object keeps its
+// slot; only its object-set memberships follow the new flags. (The 1998
+// source removed and re-added the object, which moved it to the end of the
+// sector, so a sector saved after a flag change listed its objects in a
+// different order than retail.)
 void TSector::ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags)
 {
-    if (oi->GetSector() != this)
+    if (oi->GetSector() != this || !(OBJSETOBJFLAGS & (oldflags ^ newflags)))
         return;
 
-    if (OBJSETOBJFLAGS & (oldflags ^ newflags))
-    {
-        int32_t index = GetObjIndex(oi);
-        if (index < 0)
-            return;
+    int32_t index = GetObjIndex(oi);
+    if (index < 0)
+        return;
 
-        RemoveObject(index);
-        AddObject(oi);
+    for (int32_t d = 1; d < NUMOBJSETS; d++)
+    {
+        TObjSetArray& set = objsets[d-1];
+        int32_t at = -1;
+        for (int32_t c = 0; c < set.NumItems(); c++)
+        {
+            if (set[c] == index)
+            {
+                at = c;
+                break;
+            }
+        }
+
+        const bool wanted = InObjSet(oi, d);
+        if (at >= 0 && !wanted)
+            set.Collapse(at);
+        else if (at < 0 && wanted)
+            set.Set(index, set.NumItems());
     }
+    ++contentver;
 }
 
 // *****************

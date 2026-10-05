@@ -114,6 +114,7 @@ extern bool RevisitedEnabled;   // --revisited: mount the Revisited overlay (.rv
 extern bool NoQuickLoad;        // Prevent the program from attempting to load the IMAGERY.DAT file
 extern char StartupSavePath[];  // --loadmap=<slot>; empty if no startup auto-load
 extern bool StartupSaveCycle;   // --savecycle-test: WriteGame/ReadGame round-trip + diff log on first PlayScreen pulse
+extern int32_t StartupSaveCycleSettle;  // --savecycle-test=<frames>: frames before the save (0 = before the first tick)
 
 // Startup-selected render size. WIDTH/HEIGHT remain the classic fallback
 // constants for legacy layout code; new render targets and window creation

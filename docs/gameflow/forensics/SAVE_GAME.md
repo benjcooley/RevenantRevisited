@@ -84,9 +84,10 @@ saves never have it.
    Each object is the standard object stream (`SaveObject` `0x00472110`
    / `LoadObject` `0x00471ce0`, as ported by T5), player then inventory.
 
-Before writing each player, `SaveGame` clears object flag `0x04000000`
-on the player and on every inventory item (*unidentified* retail-only
-flag; the port's `OF_*` set stops at bit 25).
+Before writing each player, `SaveGame` clears object flag `VIRGIN`
+(`0x04000000`, §11.2) on the player and on each item directly in its
+inventory (the iterator is non-recursive), so a loaded player keeps its
+own stats.
 
 ### 3.3 `newgame.sav` decoded (Ahkuilon, 2,396 bytes)
 
@@ -166,10 +167,12 @@ object.
    sector into `curmap` (`0x00499e60`); if the game was loaded from a
    different slot, first copy that slot's `CurMap` into the new one;
    then copy `curmap\*` over it.
-6. Copy the current thumbnail `ss.bmp` into the slot (*probable*: source
-   path `DAT_005d9cfc` not decoded).
-7. `DAT_0065a250 = flags` for the duration (*unidentified* use), write
-   header + MP block + body (§3), clear `DAT_0065a250`.
+6. Copy the current thumbnail `.\ss.bmp` (current directory = the
+   install) into the slot (`0x004814d0`, file copy). §11.7 covers how
+   that file is written.
+7. `DAT_0065a250 = flags` for the duration (the object-save flags of
+   §11.1; both single-player call sites pass 0), write header + MP block
+   + body (§3), clear `DAT_0065a250`.
 
 ## 6. Merchant unique-item table
 
@@ -220,17 +223,20 @@ Retail has a "Quick Save" control and no quick load.
 `TObjectInstance::Load` (`0x00472430`) matches each saved stat to the
 class's stats by unique id, masking the saved id with `0x7f7f7f7f`; when
 the order differs it searches every class stat. When object flag
-`0x04000000` is set, it then resets every stat except indices 3–5 to the
-object type's defaults; this is why `SaveGame` clears that flag on the
-players before writing them.
+`VIRGIN` (`0x04000000`) is set, it then resets every stat except indices
+3–5 (health, fatigue, mana) to the object type's defaults; this is why
+`SaveGame` clears that flag on the players before writing them. See §11.2.
 
 ## 8. Persistence outside `game.sav`
 
-- **Automap**: retail stores per-sector automap bitmaps as files
-  (`%sautomaps\%d_%d_%d.bmp`, `lev%dcomposite.bmp`, `0x0045f1e0`)
-  alongside the sector working set, not in `game.sav`. Not yet traced
-  in full.
-- **HUD state**: not saved by retail.
+- **Automap**: the per-player record of explored map is saved *inside*
+  the player object (§11.5). The per-sector automap bitmaps
+  (`%sautomaps\%d_%d_%d.bmp`, `lev%dcomposite.bmp`, `0x0045f1e0`) are
+  a render cache next to the working set.
+- **HUD state**: retail writes four HUD words into the player record
+  (§11.4: sidebar open flag, upper and lower sidebar mode, one
+  unidentified word) but never reads them back; loading leaves the HUD
+  as it was.
 
 ## 9. Corrections to earlier notes
 
@@ -282,13 +288,14 @@ players before writing them.
    so every stat after the first ordering mismatch was dropped. Locke
    loaded from `newgame.sav` as level 0 with 0 HP. *Fixed in 2c* to
    retail (§7.2). This affects every object loaded from a sector too.
-   The `0x04000000` reset is not ported.
+   *VIRGIN reset ported in 2f* (§11.2).
 8. **Player saved in the 1998 layout.** `TPlayer`/`TCharacter::Save`
    write objversion 4 (809 bytes for the new-game Locke); retail writes
    objversion 14 (976 bytes). The port reads both, so its saves
    round-trip, but retail can't read them and v14-only fields are lost
    on save. Header, game states and merchant table match retail byte for
-   byte.
+   byte. *Fixed in 2f:* every class writes retail's layout (§11), the
+   player at objversion 15.
 9. **Script ownership.** Objects delete their scripts and
    `TScriptManager::Close` deleted the same instances (double free at
    shutdown); a load's script reset would have touched freed scripts.
@@ -301,5 +308,262 @@ players before writing them.
 11. Not ported in `LoadGame`'s reset: finishing a PlayScreen fade
     (`0x0047ece0`), ending a conversation (`0x005360f0`), emptying the
     buy/sell pane (`0x00532f40`). In `SaveGame`: the editor path that
-    rewrites the module's `newgame.sav`, and the `ss.bmp` thumbnail
-    (the port doesn't capture one yet).
+    rewrites the module's `newgame.sav`. *Thumbnail ported in 2f*
+    (§11.7): `TSaveGame::CaptureThumbnail` reads back the next presented
+    frame into `<SavePath>/ss.bmp` (retail `.\ss.bmp`); quick save calls
+    it, the in-game menu and save dialog must call it when they open
+    (retail `0x0047cb52`, `0x0047dc05`); a save with no thumbnail captured
+    since the last one captures its own.
+12. **Stat layout.** The port's CHARACTER and PLAYER object stats were
+    in the 1998 order (level at index 6; damage resistances, NextExp,
+    the modifiers, skill next-exp and caps appended from class.def;
+    SpellDamageInc and EdgeBonus missing). Saves list stats in class
+    order and class.def's per-type default lists are positional, so
+    Locke's type defaults landed on the wrong stats, and SINC/EBNS were
+    dropped on load. *Fixed in 2f:* `charstats.h` and the code-defined
+    stats follow retail's registrations (`recon/scripts/object_stats.py`):
+    90 player stats in retail order.
+
+## 11. Object stream, per class
+
+Everything an object writes into a sector file or a save. Decompiles of
+every function named here are in
+[`recon/discovered/save/`](../../../recon/discovered/save/). The class
+behind each vtable was found from the vtables themselves
+(`recon/scripts/object_vtables.py`: 124 object vtables share
+`TObjectInstance`'s layout up to slot `0x170`) and from the builder that
+constructs each one (`recon/scripts/object_builders.py`: a
+`REGISTER_BUILDER` static initializer pushes the class.def builder name;
+its `Build` override inlines the constructor that stores the vtable).
+
+Vtable slots used here: `0x15c` ObjVersion, `0x160` Load, `0x164` Save,
+`0x168` LoadInventory, `0x16c` SaveInventory, `0x170` linked inventory
+(null for every class except the container family, which returns
+`+0xd8`).
+
+### 11.1 `SaveObject` `0x00472110` / `LoadObject` `0x00471ce0`
+
+Header (stream version ≥ 14): `int16 objversion` (ObjVersion()),
+`int16 objclass`, `uint32 type unique id`, `int16 blocksize` (body +
+inventory), `int16 invblocksize` (inventory tail). An empty slot is a
+lone `int16 -1`. The body follows, then, when the object has inventory,
+`int32 count` and `count` objects (recursively).
+
+Save flags (`DAT_0065a250`, set by the caller): bit 1 = writing a map
+(a NONMAP object becomes the `-1` placeholder), bit 2 = omit
+inventories (the sector hash), bit 0x10 = blank the player's private
+strings (a multiplayer export; never set by a single-player save). Load
+flags (`DAT_0065a254`): bit 1 = loading a map (NONMAP objects are
+discarded), bit 2 = skip inventories. `TSector::Load` sets bit 1,
+`LoadGame` clears it.
+
+`LoadObject` differences from the 1998 source:
+
+- The type is found by unique id through one global table
+  (`0x00477f20`); when that type belongs to another class, the class is
+  replaced and the base `TObjectInstance::Load` is used.
+- The object is created with `def.flags = LOADING` (`0x08000000`); the
+  constructor skips the script for LOADING objects and `Load` clears the
+  flag (§11.2).
+- `MAPSCROLL` (class 26) objects are never loaded: skipped by block size,
+  or deleted after loading when the block size is unknown.
+- A block size that doesn't match what `Load`/`LoadInventory` consumed
+  logs `"Block size error for object %s"` (`0x004820b0`); the stream is
+  resynced to the end of the block either way.
+
+`SaveInventory` (`0x00472380`) writes the inventory array's high-water
+item count (`+0x68`), then every non-null item. Retail's array keeps
+holes when an item is removed from the middle (`0x0041cb40` only trims
+trailing nulls), so after such a removal the count exceeds the items
+written and a later load reads the following data as inventory: a latent
+retail bug. `LoadInventory` (`0x00472310`) adds each item with the
+array's `Add` (`0x0041c840`, first free slot) and sets its `invindex`
+to the slot it got, so a loaded inventory is always packed.
+
+### 11.2 `TObjectInstance::Load` `0x00472430` / `Save` `0x00472980`
+
+| Field | Type | Present |
+|---|---|---|
+| name length | uint8 | always; 0 = the type's name (Save writes 0 unless the instance was renamed) |
+| name | bytes, each with bit 7 set | |
+| flags | uint32 | |
+| pos x, y, z | int32 ×3 | |
+| vel x, y, z | int32 ×3 | !IMMOBILE |
+| state | uint16 | |
+| level | uint16 | NONMAP |
+| inventnum, invindex | int16 ×2 | |
+| shadow | int32 | |
+| rotatex, rotatey, rotatez | uint8 ×3 | |
+| mapindex | int32 | |
+| frame, framerate | int16 ×2 | ANIMATE |
+| group | uint8 | |
+| stat count | uint8 | the class's object-stat count |
+| stats | {int32 value, uint32 unique id \| `0x80808080`} × count | |
+| light | uint8 flags; int32 x, y, z; uint8 red, green, blue, intensity; int16 multiplier | LIGHT |
+
+Save first sets ANIMATE|PULSE on a LIGHT object. Load, after the fields:
+
+1. Flags: bits in `0x3ff1ffd7` come from the file; MOVING, AI, COMPLEX,
+   NOTIFY, NONMAP, INVENTORY and CALLEDPREDEL (`0xc00e0028`) keep the
+   constructor's value.
+2. `moveangle = rotatez`; the stat array is sized to the class and
+   filled by unique id (§7.2); VIRGIN resets stats other than 3–5 to the
+   type defaults.
+3. LIGHT → flags |= LIGHT|ANIMATE.
+4. Class and type pointers are re-resolved; an existing script is
+   deleted.
+5. Stream version < 12: clear FOREGROUND and bits 26–31. Always clear
+   LOADING; a lit tile also loses PULSE; INVENTORY → ANIMATE|PULSE.
+6. Script: attached unless INVENTORY, or a tile whose name is its
+   type's name (a renamed tile gets its script).
+
+Retail's object flag names (the `OBJFLAGNAMES` table at `0x005d4770`,
+which scripts use by name):
+
+| Bit | Name | Port before this work |
+|---|---|---|
+| 9 | FOREGROUND | `OF_DRAWFLIP` |
+| 26 | VIRGIN: untouched since the designer placed it; stats reload from the type | — |
+| 27 | LOADING: set while `LoadObject` builds the object | — |
+| 28 | INVULNERABLE | — |
+| 29 | BACKGROUND | — |
+| 30 | INVENTORY: an item, one that can live in an inventory | — |
+| 31 | CALLEDPREDEL | — |
+
+Constructor `0x0046e1f0`: NOTIFY on every object; INVENTORY|ANIMATE|
+PULSE for the item classes (0–4, 6–8, 16–18, 21–23, 26); ANIMATE|PULSE
+for effects (25); VIRGIN for characters and players (11, 12);
+ANIMATE|PULSE when the imagery needs an animator; PULSE for every
+non-tile. The script is attached unless INVENTORY, LOADING, or a tile
+with its type's name. VIRGIN is cleared by `TPlayer` setup (`0x00518750`,
+`0x00518b2c`), by `SaveGame` (§5) and by `TMoney::Load`.
+
+Measured over the 558 sector files and the save of §12: every object has
+NOTIFY; every item has INVENTORY; VIRGIN is set on 57 of 110 characters
+and 119 of 11,008 tiles.
+
+### 11.3 Classes with their own stream data
+
+ObjVersion is 0 for every class except `TComplexObject` 1, `TCharacter`
+4 and `TPlayer` 15. Everything not listed uses the base Load/Save.
+
+| Class (builders) | Vtables | Load / Save | Body after the base fields |
+|---|---|---|---|
+| TComplexObject | `0x5a7b98` | `0x004db930` / `0x004dbb80` | uint8 TObjectInstance version; base; uint8 root action; stream string root name. Load keeps the loaded `state` when it is the root's state, else `state = FindState(root name)` |
+| TCharacter (`Character`) | `0x5a7848` | `0x004d4eb0` / `0x004d50d0` | uint8 TComplexObject version; complex object; int32 lasthealthrecov, lastfatiguerecov, lastmanarecov, lastpoisondamage; int32 teleport x, y, z, level. Load (objversion ≥ 1) clamps a CHARACTER's health/fatigue/mana and maxima to its chardata, sets KILL when health < 1, and resets the fade (fade 100, step 0, limit 100, fade direction 0) |
+| TPlayer (`Player`) | `0x5b4f30` | `0x0051b960` / `0x0051bdc0`, LoadInventory `0x0051bd20` | §11.4 |
+| TAmmo (`AMMO`, `Arrow`, `Fire/Poison/Ice/Magic Arrow`) | `0x5a6944`…`0x5a73f8` | `0x004bf940` / `0x004bf980` | none (stream version < 5: int32 amount − 1) |
+| TMoney (`MONEY`) | `0x5b4a7c` | `0x00515f40` / `0x00515fa0` | none (v < 5: int32 amount − 1). Load clears VIRGIN first |
+| TContainer (`CONTAINER`), TInvContainer (`INVCONTAINER`) | `0x5a8118`, `0x5a8360` | `0x004dd3e0` / `0x004dd470` | none (2 ≤ v < 5: int32 locked, int32 pick difficulty). Load: unless INVENTORY, SetCommandDone(true) and SetState(state) |
+| TVialRack (`VIAL RACK`) | `0x5a7ed0` | `0x004dd3e0` / `0x004ddbe0` | none; Save deletes the rack's contents first |
+| TExit family (`EXIT`, `PressPlate`, `UpBlock`, `LEVER`) | `0x5b2258`, `0x5b24e0`, `0x5b27cc`, `0x5b2a4c` | `0x0050d990` / `0x0050d9c0` | container fields; int32 exitflags |
+| TFood (`FOOD`), TPotion (`POTION`) | `0x5b2cd4`, `0x5b2ee4` | `0x0050eae0` / base | none; Load sets Amount to 1 when it is 0 |
+| TWeapon (`WEAPON`) | `0x5b9088` | `0x00528e70` / `0x00528ea0` | int32 poison |
+| TScroll (`SCROLL`) | `0x5b5560` | `0x00520d80` / `0x00520e00` | int16 length; text bytes |
+| Drip (effect) | `0x5ac630` | `0x004f0fb0` / `0x004f1000` | int32 ripplesize, height, period |
+| Speaker (ambient sound effect) | `0x5ada3c` | `0x004f47a0` / `0x004f4820` | stream string sound name; int32 ×3 (`+0x1a8..+0x1b0`; the 1998 source had one, the sample length) |
+| Cube, BarrierCube | `0x5b341c`, `0x5b360c` | `0x0050f250` / `0x0050f1b0` | int32 x, y, z (a target; Load derives its offset from `pos`) |
+| MonsterGen (class HELPER) | `0x5b4cd4` | `0x00516e00` / `0x00516eb0` | uint8 count of used slots (of 5); per slot: NUL-terminated monster name, int32 `+8`, int32 `+4` (capped at 19999), int32 `+0xc` start time (stream version ≥ 15); then int32 `+0xec` |
+
+Retail never saves a MAPSCROLL (§11.1).
+
+### 11.4 TPlayer, objversion 15
+
+After `uint8 4` (TCharacter's version) and the character body:
+
+| Field | Type | Retail member | Notes |
+|---|---|---|---|
+| quickspells | stream string ×5 | `+0x2cc` char[6] ×5 | construct slot, then buttons 1–4 |
+| known spells | int32 count; count × char[6] | `+0x2ec` list | talisman codes the player has learned |
+| HUD words | int32 ×4 | — | Save writes `DAT_0065d190` (sidebar open), `DAT_0065d1b8` (upper sidebar mode), `DAT_0065d1bc` (lower sidebar mode) and `DAT_0065d19c` (unidentified); Load stores them at `+0x304..+0x310`, which nothing reads |
+| level-up stats | int32 ×3 | `+0x360..+0x368` | player-stat indices (from stat `0x22`) used by the level-up messages (`LUPBASE`, `STATCFG%s`) |
+| multiplayer identity | stream string `+0x494`, stream string `+0x4c6`, int32 `+0x4d8`, `+0x490`, `+0x4dc` | 0x60-byte record at `+0x490` | set and compared by `0x0051e4d0`; `+0x4dc` groups frag totals (`0x0051f6b0`); empty in single player |
+| module | stream string | `+0x4f0` | the active module's dirname |
+| player state | int32 | `+0x36c` | `SetPlayerState` `0x0051d680`; LoadGame then sets `(state & ~2) \| 1` |
+| state time | int32 | `+0x370` | game time; Load derives `+0x374` = time × 24 / 100 |
+| profile strings | stream string ×4 | `+0x378`, `+0x570`, `+0x590`, `+0x5d0` | multiplayer lobby text (`0x0044b2d0` lists `+0x570`); empty in single player |
+| frag counters | int32 ×4 | `+0x650..+0x65c` | multiplayer kill counts (`0x00519050`); the last two from objversion 15 |
+| automap record | §11.5 | `+0x314` | objversion ≥ 14 |
+
+Older objversions (`0x0051b960`): ≥ 4 base version byte and quickspells;
+≥ 5 known spells (6–8 add 4 skipped bytes per spell); ≥ 7 the HUD words;
+≥ 8 the level-up stats; 10 a fixed 50-byte `+0x494`; 11–12 `+0x494`,
+`+0x4c6`, `+0x4d8`, `+0x4f0` only; ≥ 13 the identity, state, time,
+strings and two frag counters; ≥ 15 the other two frag counters. Below
+13 the state is 0 and the time is the current game time.
+
+`TPlayer::LoadInventory` (`0x0051bd20`) remembers health, fatigue and
+mana, loads the inventory, re-equips (`0x00519230`) and recomputes stats,
+then restores the three values (equipment changes the maxima).
+
+### 11.5 Automap record (player `+0x314`)
+
+Load `0x00529770` / Save `0x00529830`: stream string module dirname (the
+record is discarded when the module changes, `0x0052c3d0`); int32 level
+count; per level: int32 level, int32 word count, that many int16 words:
+the level's explored mask (0x2080 bytes) compressed by `0x005295e0`
+(decompressor `0x00529220`). Before saving, the automap pane compresses
+the level it is showing back into the record (`0x0052c5c0`).
+
+### 11.6 Sector files
+
+`TSector::Load` `0x00498780`: header (see
+[SECTOR_FILE_FORMAT.md](../../../recon/docs/SECTOR_FILE_FORMAT.md)),
+then the objects with load flag 1. Each loaded object gets the sector's
+level and sector, and a position outside the sector's 1024×1024 square
+is moved into it by whole multiples of 1024 on x and y (z unchanged). In
+multiplayer with option bit 8, monsters and `monstergen` helpers are
+dropped.
+
+`TSector::Save` `0x00498c90`: writes `"MAP "`, 15, a zero hash and the
+object count, then the objects (save flag 1), then rewrites the header
+with the hash from `0x00499e90`:
+
+- Adler-32 (`0x0056ff60` init 1, `0x0056ff80` update; bytes are
+  sign-extended, the sums reduced mod 65521 after each 5552-byte chunk),
+- over level, sector x, sector y and object count (int32 each),
+- then, for each character or player object in the sector in slot
+  order, its `SaveObject` bytes with save flags 1|2 (a player reduces
+  to `ff ff` at its slot; no inventories);
+- a result of 0 becomes `0xf0f0f0f0`.
+
+`Load` keeps the file's value at `TSector+0xb4`; `Save` doesn't use it,
+and no other sector function reads it (what retail reads it for is
+open). `revsave.py statehash` reproduces the stored hash of all 558
+retail-written sectors of §12 and of 4,822 of the 4,823 hashed sectors
+in the shipped Ahkuilon base map; `46_6_9.dat` ships with a value that
+matches neither its contents nor a player in any of its empty slots. The
+base map also holds 27 version-1 sectors (levels 41, 42, 43, 46), which
+have no object block sizes.
+
+### 11.7 Thumbnail `ss.bmp`
+
+The play screen writes `.\ss.bmp` when the player opens the in-game menu
+(`0x0047cb52`, then `0x0047e500`), opens the save dialog (`0x0047dc05`,
+then `0x005399f0`), quick-saves (`0x0047dd08`, then `0x0047e850`) and on
+one more command (`0x0047c800`): it creates a 640×480 16-bit bitmap
+(`0x004a1ec0`), blits the display into it and calls `TBitmap::SaveBMP`
+(`0x004a2960`) with scale 3. `SaveGame` copies the file into the slot.
+
+`SaveBMP(file, scale)`: output width `(640 / 3 + 3) & ~3` = 216, height
+480 / 3 = 160, 24-bit uncompressed, bottom-up. Headers: `BM`, file size
+`(width × height + 18) × 3` = 103,734, data offset 54; info header size
+40, planes 1, 24 bits, all else 0. Each output pixel is the mean of a
+3×3 block of the 16-bit image (RGB565 for a 16-bit bitmap, RGB555 for a
+15-bit one; channels widened with `<< 3` / `& 0xf8`, no low-bit fill),
+stored B, G, R. Output row *r* (counted from the bottom) averages source
+rows `475 − 3r … 477 − 3r` (the pointer steps back `(scale − 1) × 2`
+rows instead of `scale − 1`; clamped to rows 0–2 for the top row); the
+last three output columns read past x = 639 into the next row.
+
+## 12. Test data
+
+| Data | Content |
+|---|---|
+| module `newgame.sav` | player objversion 14 |
+| `New Game1` (a retail slot: `game.sav`, `ss.bmp`, 283 `CurMap` sectors on levels 0, 2, 6) | game time 294,225; player objversion 15; 9 inventory items, one of them a pouch with 4 talismans |
+| 275 retail working-set sectors (levels 0, 1, 2, 6) | written by retail during play |
+
+`tools/savefmt/revsave.py dump` decodes all of them field by field with
+no bytes left over. The port-written test slots and the retail-side
+procedure are in [SAVE_INTEROP_TEST.md](../SAVE_INTEROP_TEST.md).

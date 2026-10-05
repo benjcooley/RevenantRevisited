@@ -16,6 +16,7 @@
 #include "weapon.h"
 
 #include <array>
+#include <string>
 #include <vector>
 
 // Equipment slot defines
@@ -44,11 +45,6 @@
 #define QSPELL_4         4
 #define QSPELL_NUM       5
 
-// A learned spell's talisman code. Retail stores it as char[6], NUL padded;
-// the extra byte keeps the code a C string.
-constexpr int32_t kSpellCodeBytes = 6;
-using TSpellCode = std::array<char, kSpellCodeBytes + 1>;
-
 // **************
 // * Skill Tree *
 // **************
@@ -64,6 +60,61 @@ struct SSkill
 };
 
 extern SSkill SkillTree[NUM_SKILLS];    // Master skill tree
+
+// *******************************************
+// * Player record (shipped-game player data) *
+// *******************************************
+
+// What the shipped TPlayer keeps beyond the 1998 source, as its saves
+// carry it (objversion 15; docs/gameflow/forensics/SAVE_GAME.md §11.4-11.5).
+// The multiplayer parts are empty in single player but round-trip so a save
+// is never changed by passing through the port.
+
+// A learned spell's talisman code. Retail stores it as char[6], NUL padded;
+// the extra byte keeps the code a C string.
+constexpr int32_t kSpellCodeBytes = 6;
+using TSpellCode = std::array<char, kSpellCodeBytes + 1>;
+
+// The HUD state retail writes into the player record: its globals at save
+// time (DAT_0065d190, DAT_0065d1b8, DAT_0065d1bc, DAT_0065d19c).
+struct SPlayerHudWords
+{
+    int32_t sidebarOpen = 0;    // DAT_0065d190: the sidebar is showing
+    int32_t upperMode   = 0;    // DAT_0065d1b8: 0 equip, 1 stats, 2 spellbook
+    int32_t lowerMode   = 0;    // DAT_0065d1bc: 0 inventory, 1 map, 2 spell composer
+    int32_t unknown19c  = 0;    // DAT_0065d19c: unidentified (written, never read)
+};
+
+// The multiplayer team record (retail +0x490, 0x60 bytes). Set from the
+// network as a whole and compared field by field (0x0051e4d0); players are
+// grouped into teams by the two names (0x0051f370), and the team index
+// groups the frag totals (0x0051f6b0).
+struct SPlayerTeamRecord
+{
+    int32_t     id        = 0;  // +0x490
+    std::string name;           // +0x494 char[50]
+    std::string name2;          // +0x4c6 char[18]
+    int32_t     value     = 0;  // +0x4d8
+    int32_t     teamindex = 0;  // +0x4dc
+};
+
+// The player's explored automap (retail +0x314; Load 0x00529770, Save
+// 0x00529830). One compressed explored-area mask per level visited
+// (compressor 0x005295e0, decompressor 0x00529220), for the module named.
+struct SAutoMapLevel
+{
+    int32_t              level = 0;
+    std::vector<int16_t> mask;
+};
+
+struct SAutoMapRecord
+{
+    std::string                module;
+    std::vector<SAutoMapLevel> levels;
+
+    void Load(RTInputStream is);
+    void Save(RTOutputStream os) const;
+};
 
 // ***********
 // * TPlayer *
@@ -159,11 +210,6 @@ class TPlayer : public TCharacter
       // Sets the quickspell button
     bool InvokeQuickSpell(int32_t button);
       // Invokes the given quickspell for the player
-    [[nodiscard]] int32_t NumKnownSpells() const { return (int32_t)knownspells.size(); }
-    [[nodiscard]] const char* KnownSpell(int32_t i) const { return knownspells[i].data(); }
-        // Talisman codes of the spells the player has learned (retail +0x2ec), in the order learned
-    bool LearnSpell(const char* talismans);
-        // Adds a spell's talisman code; false when it is already known
 
     // Info functions
     virtual int32_t GetResistance(int32_t type);
@@ -175,12 +221,27 @@ class TPlayer : public TCharacter
     virtual int32_t ResolveCombat(PTActionBlock ab, int32_t bits);
 
   // Streaming functions
-    virtual int32_t ObjVersion() { return 4; }
-        // Returns the version id for this object for loading/saving
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
+    int32_t ObjVersion() override { return 15; }
+        // The shipped game's player layout (SAVE_GAME.md §11.4)
+    void Load(RTInputStream is, int32_t version, int32_t objversion) override;
         // Loads object data from the sector
-    virtual void Save(RTOutputStream os);
+    void Save(RTOutputStream os) override;
         // Saves object data to the sector
+    void LoadInventory(RTInputStream is, int32_t version, uint32_t streamflags) override;
+        // Loads the inventory, re-equips, and keeps health/fatigue/mana
+
+  // Shipped-game player record (SAVE_GAME.md §11.4)
+    [[nodiscard]] int32_t PlayerState() const { return playerstate; }
+    void SetPlayerState(int32_t newstate);
+        // Player state bits (retail +0x36c)
+    [[nodiscard]] const SPlayerHudWords& HudWords() const { return hudwords; }
+    void SetHudWords(const SPlayerHudWords& words) { hudwords = words; }
+        // The HUD state written into a save
+    [[nodiscard]] int32_t NumKnownSpells() const { return (int32_t)knownspells.size(); }
+    [[nodiscard]] const char* KnownSpell(int32_t i) const { return knownspells[i].data(); }
+        // Talisman codes of the spells the player has learned (retail +0x2ec), in the order learned
+    bool LearnSpell(const char* talismans);
+        // Adds a spell's talisman code; false when it is already known
 
     // Cheat - ride that hog
     void GetOnYerHog();
@@ -193,7 +254,22 @@ class TPlayer : public TCharacter
     // Miscellaneous player values
     OBJSTATFUNC(Level)
     OBJSTATFUNC(Exp)
-    
+    OBJSTAT(NextExp)
+    OBJSTATFUNC(AttackLevel)
+    OBJSTAT(HealthPct)
+    OBJSTAT(ManaPct)
+    OBJSTAT(FatiguePct)
+    OBJSTAT(MaxHealthFlat)
+    OBJSTAT(MaxManaFlat)
+    OBJSTAT(MaxFatigueFlat)
+    OBJSTAT(MaxHealthPct)
+    OBJSTAT(MaxManaPct)
+    OBJSTAT(MaxFatiguePct)
+    OBJSTAT(ACBonus)
+    OBJSTAT(ManaCostPct)
+    OBJSTAT(SpellDamageInc)
+    OBJSTAT(EdgeBonus)
+
     // Player stats
     OBJSTATFUNC(Strn)
     OBJSTATFUNC(Cons)
@@ -209,7 +285,7 @@ class TPlayer : public TCharacter
     OBJSTAT(Hands)
     OBJSTAT(Knife)
     OBJSTAT(Sword)
-    OBJSTAT(Bludgeons)
+    OBJSTAT(Bludgeon)
     OBJSTAT(Axes)
     OBJSTAT(Bows)
     OBJSTAT(Stealth)
@@ -222,11 +298,35 @@ class TPlayer : public TCharacter
     OBJSTAT(HandsExp)
     OBJSTAT(KnifeExp)
     OBJSTAT(SwordExp)
-    OBJSTAT(BludgeonsExp)
+    OBJSTAT(BludgeonExp)
     OBJSTAT(AxesExp)
     OBJSTAT(BowsExp)
     OBJSTAT(StealthExp)
     OBJSTAT(LockPickExp)
+
+    // Experience for the next skill level, and the skill caps
+    OBJSTAT(AttackNxtExp)
+    OBJSTAT(DefenseNxtExp)
+    OBJSTAT(InvokeNxtExp)
+    OBJSTAT(HandsNxtExp)
+    OBJSTAT(KnifeNxtExp)
+    OBJSTAT(SwordNxtExp)
+    OBJSTAT(BludgeonNxtExp)
+    OBJSTAT(AxesNxtExp)
+    OBJSTAT(BowsNxtExp)
+    OBJSTAT(StealthNxtExp)
+    OBJSTAT(LockPickNxtExp)
+    OBJSTAT(AttackCap)
+    OBJSTAT(DefenseCap)
+    OBJSTAT(InvokeCap)
+    OBJSTAT(HandsCap)
+    OBJSTAT(KnifeCap)
+    OBJSTAT(SwordCap)
+    OBJSTAT(BludgeonCap)
+    OBJSTAT(AxesCap)
+    OBJSTAT(BowsCap)
+    OBJSTAT(StealthCap)
+    OBJSTAT(LockPickCap)
 
    // Calculated stats
     virtual int32_t MaxHealth() 
@@ -275,7 +375,18 @@ class TPlayer : public TCharacter
     char quickspells[QSPELL_NUM][MAXTALISMANLEN];   // Quickspells (0-construction, 1-4 quick buttons)
     bool OnTheHog;                                  // hog cheat
     int32_t deathcountdown = 0xc0;                  // frames left before the death screen (retail +0x39c)
+
+  // Shipped-game player record, in retail's save order (SAVE_GAME.md §11.4)
     std::vector<TSpellCode> knownspells;            // +0x2ec: talisman codes learned
+    SPlayerHudWords hudwords;                       // HUD state as last saved/loaded
+    std::array<int32_t, 3> levelupstats{};          // +0x360: player-stat indices the level-up messages use
+    SPlayerTeamRecord team;                         // +0x490: multiplayer team record
+    std::string modulename;                         // +0x4f0: the module the player is in
+    int32_t playerstate = 1;                        // +0x36c: player state bits (SetPlayerState 0x0051d680)
+    int32_t statetime = 0;                          // +0x370: game time of the last state change
+    std::array<std::string, 4> profile;             // +0x378, +0x570, +0x590, +0x5d0: multiplayer lobby text
+    std::array<int32_t, 4> frags{};                 // +0x650..+0x65c: multiplayer kill counts
+    SAutoMapRecord automap;                         // +0x314: explored automap
 };
 
 DEFINE_BUILDER("Player", TPlayer)

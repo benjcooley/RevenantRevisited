@@ -18,14 +18,17 @@
 #pragma once
 
 #include "revenant.h"
-#include "object.h"
+#include "food.h"
 
+// Retail's POTION class is based on FOOD (TObjectClass registration @
+// 0x0050e5a3) and its vtable shares TFood's Load and Amount accessors
+// (docs/gameflow/forensics/SAVE_GAME.md §11.3), so a potion is a food.
 _CLASSDEF(TPotion)
-class TPotion : public TObjectInstance
+class TPotion : public TFood
 {
   public:
-    TPotion(TObjectImagery* newim) : TObjectInstance(newim) {}
-    TPotion(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TPotion(TObjectImagery* newim) : TFood(newim) {}
+    TPotion(SObjectDef* def, TObjectImagery* newim) : TFood(def, newim) {}
 };
 
 DEFINE_BUILDER("POTION", TPotion)
