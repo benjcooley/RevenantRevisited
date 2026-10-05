@@ -3234,18 +3234,23 @@ bool TCharacter::Go(S3DPoint vect)
     return Go(angle);
 }
 
+// REVSYNC: Goto @ 0x004cedb0 -- start walking toward (x, y) (Go), then give
+// the walk its target, which ResolveMove walks to and snaps onto within 8.
+// The target goes on the block Go queued, the desired one, or on the one
+// being done when nothing is queued (desired is the root): the walk started
+// at once, or Go turned the current step. Not ported: retail's third argument,
+// an item to pick up on arrival (+0x288, set only when given), and flag
+// 0x1000 on the block, which the combat-mode move resolvers read (0x004c7f80,
+// 0x004c7980).
 bool TCharacter::Goto(int32_t x, int32_t y)
 {
-    int32_t angle = ConvertToFacing(pos, S3DPoint(x, y, pos.z));
-    if (Go(angle))
-    {
-        doing->target.x = x;
-        doing->target.y = y;
-        doing->target.z = pos.z;
-        return true;
-    }
-    else
+    const int32_t angle = ConvertToFacing(pos, S3DPoint(x, y, pos.z));
+    if (!Go(angle))
         return false;
+
+    TActionBlock* ab = desired != root ? desired : doing;
+    ab->target = S3DPoint(x, y, pos.z);
+    return true;
 }
 
 bool TCharacter::Stop(char *name)
