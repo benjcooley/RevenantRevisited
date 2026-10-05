@@ -730,10 +730,25 @@ The survey above found the 1998 exit code; this is what the port has now.
 | Scripts | type-named prototypes attach (`ObjectScript` pass 2 matched the class name): the `master.s` door prototypes reach their doors |
 | Not yet | the door prototypes' walking (`gotorelativedistance`, `faceobject`, `isatrelativedistance`: in progress on another track); the load progress bar; `CheckKeyUse` is still the 1998 one (literal messages); TTrapLever/TTrapPressPlate (TRAP port) |
 
-Verified (headless, `--quickstart`): `ressexit.activate` puts Locke beside
-`ressenter` with the camera snapped to him; `player.pos 1842 24388 451 0`
-(KeepExit's own move) loads level 0 (366 sectors, 35,549 objects), enters
-"The Forest", attaches its scripts and shows Locke at the Keep gate.
+Verified (headless, `--quickstart`, `--exec`):
+- `ressexit.activate` puts Locke beside `ressenter` with the camera
+  snapped to him;
+- `player.pos 1842 24388 451 0` (KeepExit's own move) loads level 0 (366
+  sectors, 35,549 objects), enters "The Forest", attaches its scripts and
+  shows Locke at the Keep gate;
+- `use ressexit` while locked: "It seems to be locked"; unlocked, DOOR1's
+  USE block runs to the fades, `ACTIVATE` and `STATE "CLOSED"` (its walk
+  to the door waits for the movement commands);
+- stepping onto `towntel0` (after 6+ frames off any strip) starts its
+  ACTIVATE block; with `TOWNTELSTATE = 1` it fades, `player.POS ... 3`
+  shows "Loading Map... Please Wait", loads level 3 and enters "The
+  Ancient Tower". Teleported straight onto the stone from another strip,
+  the player arrives "on an exit" and nothing fires -- retail's
+  anti-bounce (`newgame.sav` stores Locke with OF_ONEXIT, and he starts
+  on a strip in the chamber).
+- Not exercised: an unscripted AutoActivate exit (stairs, DunTeleport)
+  walked onto; it shares the strip test with the stone and the list
+  lookup with `activate`.
 
 **IsOutside reads past the sine table.** Retail passes the Facing stat
 plus the object's facing byte (and that plus 0x7f) to `0x0046db20`
