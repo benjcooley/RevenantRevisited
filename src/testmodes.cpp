@@ -43,7 +43,6 @@
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
 #include "uicliptest.h"
-#include "uideathtest.h"
 #include "uiequiptest.h"
 #include "uihudtest.h"
 #include "uidefscreentest.h"
@@ -3350,8 +3349,6 @@ bool Initialize(const char* mode)
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
-    if (strcmp(mode, "ui-death") == 0)
-        return InitializeUIDeathMode();
     if (IsUIDefScreenMode(mode))
         return InitializeUIDefScreenMode(mode);
     if (strcmp(mode, "audio") == 0)
@@ -3417,8 +3414,6 @@ void Close(const char* mode)
         CloseUIHudMode();
     if (strcmp(mode, "ui-loadscreen") == 0)
         CloseUILoadScreenMode();
-    if (strcmp(mode, "ui-death") == 0)
-        CloseUIDeathMode();
     if (IsUIDefScreenMode(mode))
         CloseUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
@@ -3494,8 +3489,6 @@ void Render(const char* mode)
         return RenderUIHudMode();
     if (strcmp(mode, "ui-loadscreen") == 0)
         return RenderUILoadScreenMode();
-    if (strcmp(mode, "ui-death") == 0)
-        return RenderUIDeathMode();
     if (IsUIDefScreenMode(mode))
         return RenderUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
@@ -3507,8 +3500,6 @@ void Render(const char* mode)
 
 void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-death") == 0)
-        return HandleMouseClickUIDeathMode(button, x, y);
     if (strcmp(mode, "ui-hud") == 0)
     {
         const SHudState& s = GetHudState();
@@ -3593,8 +3584,6 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-death") == 0)
-        return HandleMouseMoveUIDeathMode(x, y);
     // #8 iOS-style velocity drag for the spellbook scroll
     if (strcmp(mode, "ui-spellbook") == 0)
         return HandleMouseMoveUISpellbookMode(button, x, y);

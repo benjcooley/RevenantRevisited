@@ -6,10 +6,13 @@
 #include "gameflow.h"
 
 #include "cinematicscreen.h"
+#include "death.h"
 #include "logging.h"
 #include "logoscreen.h"
 #include "playscreen.h"
 #include "revenant.h"
+
+#include <cstdio>
 
 TGameFlow GameFlow;
 
@@ -67,6 +70,22 @@ void TGameFlow::StartNewGame()
 void TGameFlow::LoadGame(const char* saveName)
 {
     PlayScreen.SetStartMode(TPlayScreen::STARTMODE_LOADGAME, -1, -1, saveName);
+    SwitchTo(&PlayScreen);
+}
+
+// REVSYNC: TPlayer::Animate @ 0x00518aa0 sets PlayScreen's next screen to
+// the death screen and closes it once the death countdown runs out.
+void TGameFlow::PlayerDied()
+{
+    log_info("[gameflow] player died");
+    SwitchTo(&DeathScreen);
+}
+
+// REVSYNC: death pane Restart @ 0x00533950 switches back to the PlayScreen
+// with whatever start mode it last had (the start name/index were cleared
+// when consumed). See docs/gameflow/ARCHITECTURE.md §8 Q1.
+void TGameFlow::RestartAfterDeath()
+{
     SwitchTo(&PlayScreen);
 }
 

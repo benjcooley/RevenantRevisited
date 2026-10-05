@@ -40,6 +40,7 @@
 #include "revisited_settings.h"
 #include "testscreen.h"
 #include "cinematicscreen.h"
+#include "death.h"
 #include "gameflow.h"
 #include "logoscreen.h"
 #include "i3dgltf.h"
@@ -2571,6 +2572,11 @@ static void AppInit()
         {
             log_info("[boot] routing to CinematicScreen");
             BootScreen = &CinematicScreen;
+        }
+        else if (strcmp(StartupTestMode, "ui-death") == 0)
+        {
+            log_info("[boot] routing to DeathScreen");
+            BootScreen = &DeathScreen;
         }
         else if (strcmp(StartupTestMode, "ui-mainmenu") == 0)
         {
