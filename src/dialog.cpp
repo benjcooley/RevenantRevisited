@@ -189,298 +189,359 @@ void SetDialogContext(TObjectInstance* context)
     DlgContext = context;
 }
 
-// Dialog line translator... Note: Dialog TAGS are listed in DLGTAG.TXT
-
+// Translates a dialog line into `outbuf` (at most buflen - 1 characters):
+// [me] becomes the player's name, [chr] the name of the object whose command
+// is running, and [[ / ]] are literal brackets.
+// REVSYNC: 0x00533dd0 -- retail's lead-byte test is inverted, so its
+// substitution never runs; no shipped line contains '[', so the text matches.
 char *DialogLine(const char *line, char *outbuf, int32_t buflen)
 {
-    char buf[128];
-    char tag[20];
-    char data[128];
-    const char *p;
-    char *b, *d;
+    if (!outbuf || buflen <= 0)
+        return outbuf;
 
-    b = buf;
-    for (p = line; *p != '\0'; )
+    std::string out;
+    for (const char *p = line ? line : ""; *p; )
     {
-        if (*p == '[')
+        if (*p != '[')
         {
-            p++;
-            if (*p == '[' || *p == ']')
-            {
-                *b++ = *p++;
-                continue;
-            }
-            char *t = tag;
-            while (*p && *p != ']')
-                *t++ = *p++;
-            if (*p == ']')
-                p++;
-            *t++ = '\0';
-
-            data[0] = '\0';
-            if (!stricmp(tag, "me"))                // "me" is locke
-                strcpy(data, Player->GetName());
-            else if (!stricmp(tag, "chr") && DlgContext != nullptr) // "chr" is the character talking
-                strcpy(data, DlgContext->GetName());
-            
-            d = data;
-            while (*d)
-                *b++ = *d++;
+            out += *p++;
+            continue;
         }
-        else
-            *b++ = *p++;
+        p++;
+        if (*p == '[' || *p == ']')
+        {
+            out += *p++;
+            continue;
+        }
+        std::string tag;
+        while (*p && *p != ']')
+            tag += *p++;
+        if (*p == ']')
+            p++;
+
+        const TObjectInstance* named = nullptr;
+        if (!stricmp(tag.c_str(), "me"))
+            named = Player;
+        else if (!stricmp(tag.c_str(), "chr"))
+            named = DlgContext;
+        if (named && named->GetName())
+            out += named->GetName();
     }
 
-    *b = '\0';
-
-    return strncpyz(outbuf, buf, buflen);
+    snprintf(outbuf, (size_t)buflen, "%s", out.c_str());
+    return outbuf;
 }
 
+// ****************
+// * TDialogEntry *
+// ****************
+
+TDialogEntry::TDialogEntry(TObjectInstance* speaker, EMode mode, std::vector<std::string> texts,
+                           std::vector<std::string> labels, int32_t ticks)
+  : speaker(speaker), mode(mode), ticksleft(ticks), texts(std::move(texts)), labels(std::move(labels))
+{
+    if (this->texts.size() > kMaxTexts)
+        this->texts.resize(kMaxTexts);
+}
+
+void TDialogEntry::Place()
+{
+    placed = true;
+}
+
+TObjectInstance* TDialogEntry::Speaker() const
+{
+    return speaker.Get();
+}
+
+// REVSYNC: 0x005348f0. An entry isn't timed until the pane has placed it.
+void TDialogEntry::Pulse()
+{
+    if (!placed)
+        return;
+
+    if (ticksleft >= 0)
+    {
+        if (ticksleft == 0)
+            Dismiss();
+        ticksleft--;
+    }
+
+    if (fade < fadetarget)
+        fade++;
+    else if (fade > fadetarget)
+        fade--;
+}
+
+// REVSYNC: 0x00534a40
+void TDialogEntry::Dismiss()
+{
+    dismissed = true;
+    fadetarget = 0;
+}
+
+// ***************
+// * TDialogPane *
+// ***************
+
+// REVSYNC: 0x00534fd0
 bool TDialogPane::Initialize()
 {
     if (IsOpen())
         return true;
-
     if (!TPane::Initialize())
         return false;
-
-    dialogdata = TMulti::LoadMulti("dialog.dat");
-    choice = -1;
-    freshresponse = false;
-
-    for (int32_t i = 0; i < MAXCHOICES; i++)
-        choices[i] = label[i] = nullptr;
-
+    entries.clear();
+    responses = nullptr;
+    choicetexts.clear();
+    choicelabels.clear();
+    chosen = -1;
+    committed = false;
     return true;
 }
 
+// REVSYNC: 0x00535060
 void TDialogPane::Close()
 {
     if (!IsOpen())
         return;
-
+    entries.clear();
+    responses = nullptr;
+    choicetexts.clear();
+    choicelabels.clear();
     TPane::Close();
-
-    if (dialogdata)
-        delete dialogdata;
 }
 
-void TDialogPane::Show()
-{
-    if (!IsHidden() || !IsOpen() || PlayScreen.IsDemoMode())
-        return;
-
-    TPane::Show();
-
-    if (dialogdata)
-    {
-        saveisfullscreen = PlayScreen.IsFullScreen();
-        PlayScreen.SetFullScreen(false);
-        PlayScreen.HideLowerPanes();
-        savecontrolon = PlayScreen.IsControlOn();
-        PlayScreen.SetControlOn(false);     // don't want them wandering off or anything
-
-//      OldScrollLock = ScrollLock;
-//      ScrollLock = false;
-    }
-    SetDirty(true);
-}
-
+// REVSYNC: 0x00535120 -- hidden, ignoring input, entries and choices gone.
+// (Retail forgot the entries without freeing them.)
 void TDialogPane::Hide()
 {
-    if (IsHidden() || !IsOpen())
-        return;
-
     TPane::Hide();
-
-    PlayScreen.ShowLowerPanes();
-    PlayScreen.Redraw();
-    PlayScreen.SetControlOn(savecontrolon);
-    PlayScreen.SetFullScreen(saveisfullscreen);
-
-    character = nullptr;
-
-//  ScrollLock = OldScrollLock;
+    entries.clear();
+    responses = nullptr;
+    choicetexts.clear();
+    choicelabels.clear();
 }
 
-#define CHOICEHEIGHT    21
-
-void TDialogPane::DrawBackground()
+// REVSYNC: 0x005351d0, once per simulation tick: age the entries, place new
+// ones, drop the faded, and commit a picked response -- after the scripts
+// have pulsed, so the waiting script has seen it (TScript::WaitSatisfied).
+void TDialogPane::Pulse()
 {
-    if (IsDirty())
+    for (const std::unique_ptr<TDialogEntry>& entry : entries)
+        entry->Pulse();
+
+    // Layout: retail stacks the entries and slides them to their slots here.
+    // Positions belong to the presentation; the runtime only needs to know
+    // an entry is on screen, which starts its clock.
+    for (const std::unique_ptr<TDialogEntry>& entry : entries)
+        if (!entry->IsPlaced())
+            entry->Place();
+
+    DeleteGoneEntries();
+
+    if (committed && chosen >= 0)
     {
-        Display.Put(0, 0, dialogdata->Bitmap("background"), DM_BACKGROUND);
-
-        for (int32_t i = 0; i < numchoices; i++)
-        {
-            SColor color = { 255, 0, 50 };
-            // (1998 pane, replaced by the retail entry manager; WriteText
-            // isn't const-correct yet.)
-            char *line = const_cast<char *>(DialogList.GetLine(choices[i]));
-            Display.WriteText(line, 32, (i * CHOICEHEIGHT) + 4, 1, GameData->Font("choicefont"),
-                                ((grabslot == i || choice == i) && highlighted) ? &color : nullptr);
-        }
-
-        SetDirty(false);
+        log_info("[dialog] choice %d committed (label '%s')", chosen + 1, choicelabels[chosen].c_str());
+        committed = false;
+        PlayScreen.SetControlOn(savedcontrol);
+        if (responses)
+            responses->Dismiss();
+        responses = nullptr;
+        answering.Clear();
+        controlonwhilechoosing = false;
     }
 }
 
-void TDialogPane::Animate(bool draw)
+void TDialogPane::DeleteGoneEntries()
 {
+    const auto gone = std::remove_if(entries.begin(), entries.end(),
+                                     [this](const std::unique_ptr<TDialogEntry>& entry) {
+        if (!entry->IsGone())
+            return false;
+        if (entry.get() == responses)
+            responses = nullptr;
+        return true;
+    });
+    entries.erase(gone, entries.end());
 }
 
+// REVSYNC: 0x00535610 (key-down only). Space silences the spoken lines;
+// 1-6 pick a choice while the responses are up.
 void TDialogPane::KeyPress(int32_t key, bool down)
 {
-    if (down)
+    if (!down)
+        return;
+    if (key == ' ')
+        SkipSpeech();
+    else if (key >= '1' && key <= '6')
     {
-        switch (key)
-        {
-            case '1':
-                SetChoice(0);
-                break;
-            case '2':
-                SetChoice(1);
-                break;
-            case '3':
-                SetChoice(2);
-                break;
-            case '4':
-                SetChoice(3);
-                break;
-            case ' ':
-                Skip();
-                break;
-            case VK_ESCAPE:
-                Skip();
-
-                if (character)
-                    character->ScriptJump("Finish");
-
-                Close();
-        }
+        const int32_t index = key - '1';
+        if (responses && index < (int32_t)choicelabels.size())
+            Choose(index);
     }
 }
 
-void TDialogPane::MouseClick(int32_t button, int32_t x, int32_t y)
+// REVSYNC: 0x00535760 -- the joystick's skip button (0x40a, "JOY2" in
+// retail's key table) silences the spoken lines.
+void TDialogPane::Joystick(int32_t key, bool down)
 {
-    if (button == MB_LEFTDOWN)
-    {
-        if (numchoices > 0)
-        {
-            highlighted = true;
-            grabslot = OnSlot(x, y);
-            SetDirty(true);
-        }
-        else
-            Skip();
-    }
-    else if (button == MB_LEFTUP && grabslot >= 0)
-    {
-        if (OnSlot(x, y) == grabslot)
-            SetChoice(grabslot);
-
-        grabslot = -1;
-    }
+    if (down && key == VK_JOYBUTTON3)
+        SkipSpeech();
 }
 
-void TDialogPane::MouseMove(int32_t button, int32_t x, int32_t y)
+void TDialogPane::Choose(int32_t index)
 {
-    if (button == MB_LEFTDOWN)
-    {
-        int32_t onslot = OnSlot(x, y);
+    chosen = index;
+    committed = true;
+}
 
-        if ((onslot == grabslot && !highlighted) ||
-            (onslot != grabslot && highlighted))
-        {
-            highlighted = !highlighted;
-            SetDirty(true);
-        }
+// REVSYNC: 0x00535870
+void TDialogPane::AddChoice(const char *label, const char *text)
+{
+    if (!IsOpen() && !responses)
+        return;
+    if (chosen >= 0)                        // answered: a new list begins
+        ClearResponses();
+    if ((int32_t)choicelabels.size() >= kMaxChoices)
+        return;
+    choicetexts.emplace_back(text ? text : "");
+    choicelabels.emplace_back(label ? label : "");
+}
+
+// REVSYNC: 0x00535e90. The choices show as their dialog lines in quotes.
+bool TDialogPane::ShowResponses(TObjectInstance* player, bool controlon)
+{
+    if (choicelabels.empty() || !player)
+        return false;
+
+    answering = player;
+    controlonwhilechoosing = controlon;
+    savedcontrol = PlayScreen.IsControlOn();
+    PlayScreen.SetControlOn(controlonwhilechoosing);
+
+    std::vector<std::string> lines;
+    for (const std::string& tag : choicetexts)
+        lines.push_back("\"" + std::string(DialogList.GetLine(tag.c_str())) + "\"");
+    entries.push_back(std::make_unique<TDialogEntry>(player, TDialogEntry::EMode::Responses,
+                                                     std::move(lines), choicelabels,
+                                                     TDialogEntry::kNoTimeout));
+    responses = entries.back().get();
+    log_info("[dialog] %d choice(s) shown", (int)choicelabels.size());
+    return true;
+}
+
+// REVSYNC: 0x00535b90
+void TDialogPane::AddSpeech(TObjectInstance* speaker, const char *text, int32_t ticks)
+{
+    if (!speaker || !text || ticks <= 0)
+        return;
+    const TDialogEntry::EMode mode = speaker->ObjClass() == OBJCLASS_PLAYER
+                                   ? TDialogEntry::EMode::PlayerSpeech
+                                   : TDialogEntry::EMode::NpcSpeech;
+    entries.push_back(std::make_unique<TDialogEntry>(speaker, mode, std::vector<std::string>{text},
+                                                     std::vector<std::string>{}, ticks));
+}
+
+// REVSYNC: 0x00536010. Retail's StopTalking (0x004d6000) also stops the
+// speaker's voice; that arrives with the speech port.
+void TDialogPane::SkipSpeech()
+{
+    if (!IsOpen() || responses)
+        return;
+    for (const std::unique_ptr<TDialogEntry>& entry : entries)
+    {
+        if (TObjectInstance* speaker = entry->Speaker(); speaker && speaker->IsCharacter())
+            static_cast<TCharacter*>(speaker)->ForceCommandDone();
+        entry->Dismiss();
     }
 }
 
-int32_t TDialogPane::OnSlot(int32_t x, int32_t y)
+// REVSYNC: 0x00535a10 -- control is not given back here.
+void TDialogPane::ClearResponses()
 {
-    if (!InPane(x, y))
-        return -1;
-
-    y -= 6;
-    if (y < 0)
-        return -1;
-
-    y /= CHOICEHEIGHT;
-    return y;
+    if (responses)
+        responses->Dismiss();
+    responses = nullptr;
+    choicetexts.clear();
+    choicelabels.clear();
+    chosen = -1;
+    committed = false;
 }
 
-void TDialogPane::AddChoice(char *lab, char *txt)
+// REVSYNC: 0x00535d80
+void TDialogPane::ClearSpeech(bool now)
 {
     if (!IsOpen())
         return;
-
-    if (choice >= 0)
-        ResetResponses();
-
-    if (numchoices >= MAXCHOICES)
-        return;
-
-    if (!txt)
-        choices[numchoices] = nullptr;
+    SkipSpeech();
+    ClearResponses();
+    if (now)
+        entries.clear();
     else
-        choices[numchoices] = _strdup(txt);
-
-    label[numchoices] = lab ? _strdup(lab) : nullptr;
-
-    numchoices++;
-
-    SetDirty(true);
+        for (const std::unique_ptr<TDialogEntry>& entry : entries)
+            entry->Dismiss();
 }
 
-void TDialogPane::ResetResponses()
+// REVSYNC: 0x005360f0 (its tail -- give control back, jump the answering
+// player's script to "Finish", Hide -- is unreachable in retail).
+void TDialogPane::ResetForLoad()
 {
-    if (!IsOpen())
-        return;
-
-    for (int32_t i = 0; i < numchoices; i++)
-    {
-        if (choices[i])
-            free(choices[i]);
-
-        if (label[i])
-            free(label[i]);
-    }
-
-    if (numchoices > 0)
-        SetDirty(true);     // only redraw if there wasn't anything there before
-
-    numchoices = 0;
-    choice = -1;
-    freshresponse = false;
-    grabslot = -1;
+    if (responses)
+        responses->Dismiss();
+    responses = nullptr;
+    choicetexts.clear();
+    choicelabels.clear();
+    entries.clear();
 }
 
-void TDialogPane::Skip()
+const char *TDialogPane::CommittedLabel() const
 {
-    if (!IsOpen())
-        return;
-
-    if (character && character->IsTalking())
-        character->ForceCommandDone();
+    if (!committed || chosen < 0 || chosen >= (int32_t)choicelabels.size())
+        return nullptr;
+    return choicelabels[chosen].c_str();
 }
 
+const char *TDialogPane::ChosenText() const
+{
+    if (chosen < 0 || chosen >= (int32_t)choicetexts.size())
+        return nullptr;
+    return choicetexts[chosen].c_str();
+}
 
+// REVSYNC: choice @ 0x004282f0 -- choice <label> <text-part>... The text is
+// in practice the dialog tag of the line the choice shows. From a script the
+// choice goes through the script (TScript::AddChoice); from the console,
+// straight to the pane.
 COMMAND(CmdChoice)
 {
     if (t.Type() != TKN_IDENT)
         return CMD_BADPARAMS;
-
-    char buf[80];
-    strcpy(buf, t.Text());
+    const std::string label = t.Text();
 
     t.WhiteGet();
     if (t.Type() != TKN_TEXT && t.Type() != TKN_IDENT)
         return CMD_BADPARAMS;
 
-    DialogPane.AddChoice(buf, const_cast<char *>(t.Text()));
+    std::string text;
+    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+    {
+        if (t.Type() == TKN_TEXT)
+            text += t.Text();
+        else if (t.Type() == TKN_IDENT)
+        {
+            // Retail appends a prototype number or string variable named
+            // here (not ported); any other identifier replaces the text
+            // with its DialogLine form -- the identifier itself.
+            char buf[256];
+            text = DialogLine(t.Text(), buf, sizeof(buf));
+        }
+        t.WhiteGet();                       // numbers and symbols are skipped
+    }
 
-    t.Get();
+    if (script)
+        script->AddChoice(label.c_str(), text.c_str());
+    else
+        DialogPane.AddChoice(label.c_str(), text.c_str());
     return 0;
 }

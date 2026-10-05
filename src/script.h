@@ -192,7 +192,7 @@ class TScript
     // when it has and nothing is being waited for, or when the wait is over.
     void Continue(TObjectInstance* context, bool commanddone);
     // REVSYNC: Jump @ 0x00493fa0
-    void Jump(TObjectInstance* context, char *label);
+    void Jump(TObjectInstance* context, const char *label);
     // REVSYNC: Break @ 0x004942a0 — sets SCRIPT_PAUSED bit
     void Break();
     // REVSYNC: Resume @ 0x004942b0 — clears SCRIPT_PAUSED bit
@@ -222,6 +222,10 @@ class TScript
                  TObjectInstance* other = nullptr, const char *otheras = nullptr);
     // The object one of the running trigger's aliases names, or nullptr.
     [[nodiscard]] TObjectInstance* Alias(const char *name) const;
+    // REVSYNC: AddChoice @ 0x004932a0 (single player) -- offers a choice
+    // through the dialog pane; the script then owns the dialog until the
+    // response (taken flag 4, which `choice` sets in retail).
+    void AddChoice(const char *label, const char *text);
     [[nodiscard]] int32_t GetTrigger() const { return trigger; }
     [[nodiscard]] int32_t GetPriority() const { return priority; }
     [[nodiscard]] TScriptProto* GetScriptProto() const { return proto; }
@@ -276,6 +280,13 @@ class TScript
     PSScriptTrigger curtrigger = nullptr;          // The current trigger record
 
     // Retail state (SCRIPT_ENGINE.md §2).
+    // +0x00: what the running block took and End gives back. Only the
+    // dialog bit is ported; control (1) and the camera (8) follow their
+    // commands.
+    static constexpr uint32_t kTakenControl = 1;
+    static constexpr uint32_t kTakenDialog  = 4;
+    static constexpr uint32_t kTakenCamera  = 8;
+    uint32_t taken           = 0;
     TSafeRef<TObjectInstance> triggerer;           // +0xc4: what set off the running trigger
     TSafeRef<TObjectInstance> second;              // +0xc8: the other object it concerns
     std::string useralias;                         // +0xcc: the block's name for `triggerer`

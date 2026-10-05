@@ -3533,8 +3533,8 @@ bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const c
       }
     } 
         
-    char buf[128];
-    DialogLine(string, buf, 128);  // Translate dialog line (convert [tags])
+    char buf[256];                  // retail's line buffer
+    DialogLine(string, buf, sizeof(buf));
 
     TActionBlock* ab;
     if (anim)
@@ -3552,7 +3552,12 @@ bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const c
     else
         ab->wait = wait;
     ab->loop = true;
+    const int32_t ticks = ab->wait;
     SetDesired(ab);
+
+  // REVSYNC: Say @ 0x004d0610 step 8 -- the line always goes to the dialog
+  // pane, whatever ShowDialog says.
+    DialogPane.AddSpeech(this, buf, ticks);
 
     return true;
 }
