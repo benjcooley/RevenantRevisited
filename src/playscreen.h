@@ -91,9 +91,10 @@ enum GAMECOMMAND : int32_t
 #define CMDFLAG_MOVEFLAGS   (0x300)
 
 // Populate the global ControlMap with the default game key bindings (the
-// canonical GAMECMD_* table). Idempotent-ish: callers that need the bindings
-// before TPlayScreen exists (the main-menu Options screen, --test=ui-options)
-// can call this so ControlMap.NumControls() is non-zero. TPlayScreen::Initialize
+// canonical GAMECMD_* table), then the player's bindings from Revenant.ini
+// [Controls]. Idempotent-ish: callers that need the bindings before
+// TPlayScreen exists (the main-menu Options screen, --test=ui-options) can
+// call this so ControlMap.NumControls() is non-zero. TPlayScreen::Initialize
 // also calls it. The table lives here because it is keyed on GAMECMD_*.
 void InitDefaultControlMap();
 
