@@ -114,6 +114,7 @@ void TPlayer::ClearPlayer()
     memset(quickspells, 0, QSPELL_NUM * MAXTALISMANLEN);
 
     OnTheHog = false;
+    knownspells.clear();
 
   // Port of retail TPlayer::ClearPlayer (0x518750) starting-stats logic
   // (recon/discovered/cls_0x5b4f30_TPlayer_ClearPlayer_518750.cpp,
@@ -596,6 +597,20 @@ void TPlayer::SetQuickSpell(int32_t button, char *talismans)
         SpellPane.SetDirty(true);
     else
         QuickSpells.SetDirty(true);
+}
+
+bool TPlayer::LearnSpell(const char* talismans)
+{
+    if (!talismans || !*talismans)
+        return false;
+    for (const TSpellCode& code : knownspells)
+    {
+        if (strncmp(code.data(), talismans, kSpellCodeBytes) == 0)
+            return false;
+    }
+    TSpellCode& code = knownspells.emplace_back();
+    strncpy(code.data(), talismans, kSpellCodeBytes);
+    return true;
 }
 
 // Invokes one of players quickspells

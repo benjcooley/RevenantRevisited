@@ -29,7 +29,9 @@
 // *************************************************************************
 
 #include "uispellcell.h"
+#include "multi.h"
 #include "renderer.h"
+#include "spell.h"
 #include "uidragstate.h"
 
 #include <cstdint>
@@ -198,4 +200,40 @@ bool TSpellIconSlot::HandleMouseUp(int32_t mx, int32_t my)
         onDrop_(spellIdx_, srcIdx);
 
     return true;
+}
+
+// -----------------------------------------------------------------------
+// Spell lookup (talisman code -> spell.def entry -> SpellIcons.dat icon).
+// -----------------------------------------------------------------------
+// Exact code match. TSpellList::GetVariantDataByTalismans compares
+// talisman counts, not order, and spell.def has variants that differ only
+// in order ("Advanced healing" DEB, "Restore Life" BED).
+SSpellInfo LookupSpell(const char* talismans)
+{
+    if (!talismans || !*talismans)
+        return {};
+    for (int32_t s = 0; s < SpellList.NumSpells(); ++s)
+    {
+        const SSpellData* spell = SpellList.GetSpellData(s);
+        for (int32_t v = 0; spell && v < spell->variants.NumItems(); ++v)
+            if (stricmp(spell->variants[v].talismans, talismans) == 0)
+                return { &spell->variants[v], spell };
+    }
+    return {};
+}
+
+TBitmap* SpellIconFor(TMulti* spellIcons, const SSpellInfo& info)
+{
+    if (!spellIcons)
+        return nullptr;
+    const char* names[2] = { info.variant ? info.variant->name : nullptr,
+                             info.spell   ? info.spell->name   : nullptr };
+    for (const char* name : names)
+        for (int32_t i = 0; name && i < spellIcons->numoffsets; ++i)
+        {
+            const char* entry = (const char*)spellIcons->names[i].ptr();
+            if (entry && stricmp(entry, name) == 0)
+                return spellIcons->Bitmap(i);
+        }
+    return nullptr;
 }

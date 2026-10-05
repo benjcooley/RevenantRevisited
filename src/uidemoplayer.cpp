@@ -7,6 +7,7 @@
 
 #include "logging.h"
 #include "player.h"
+#include "spell.h"
 #include "time.h"
 
 #include <cmath>
@@ -81,6 +82,13 @@ constexpr SSampleItem kBelt[] = {
 };
 constexpr const char* kPouchContents     = "Lesser Healing";
 constexpr int32_t     kPouchContentCount = 7;
+
+// The spells the spell panes were built showing (spell.def variant names):
+// all five known, the first four on the quick-spell rings 1-4.
+constexpr const char* kKnownSpells[] = {
+    "Advanced healing", "IronSkin", "Fire Flash", "Ice Bolt", "Heal",
+};
+constexpr int32_t kQuickSpellCount = 4;
 
 // Opponent cycle: engaged for 5 s, released for 2 s; its bars sweep on a
 // 4 s triangle wave between these fractions of its maxima.
@@ -179,6 +187,23 @@ void AddSampleKit(TPlayer* player)
                 AddItem(item, kPouchContents, -1);
 }
 
+void LearnSampleSpells(TPlayer* player)
+{
+    int32_t quick = QSPELL_1;
+    for (const char* name : kKnownSpells)
+    {
+        SSpellVariant* variant = SpellList.GetVariantDataByName(const_cast<char*>(name));
+        if (!variant)
+        {
+            log_warn("[ui-demo] spell.def has no spell '%s'", name);
+            continue;
+        }
+        player->LearnSpell(variant->talismans);
+        if (quick < QSPELL_1 + kQuickSpellCount)
+            player->SetQuickSpell(quick++, variant->talismans);
+    }
+}
+
 void DeletePlayer(TPlayer*& player)
 {
     if (!player)
@@ -205,6 +230,8 @@ bool Install()
         return false;
     ApplySample(g_player, kPlayerSample);
     AddSampleKit(g_player);
+    if (SpellList.Initialize())
+        LearnSampleSpells(g_player);
     PlayerManager.AddPlayer(g_player);
     PlayerManager.SetMainPlayer(g_player);
 
