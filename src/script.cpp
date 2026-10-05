@@ -128,27 +128,34 @@ void TScript::Start(TScriptProto* startproto, int32_t pos, int32_t /*newpriority
     ip = pos;
 }
 
-void TScript::StartTrigger(TScriptProto* startproto, PSScriptTrigger st)
+// REVSYNC: the start in Continue @ 0x004933d0. A block a player's trigger
+// started can't be interrupted by another trigger while that player exists
+// (Triggered checks the guard). Retail also calls the owner's, user's and
+// second object's "script started" hooks (vtable 0x148; not ported).
+void TScript::StartTrigger(TObjectInstance* context, TScriptProto* startproto, PSScriptTrigger st)
 {
-  // REVSYNC: Continue @ 0x004933d0 — a trigger set off by an object can't be
-  // interrupted while that object exists (Triggered checks the guard).
-    if (st->type != TRIGGER_ALWAYS && triggerer.Get())
-        triggerguard = triggerer.Get();
-    else
-        triggerguard.Clear();
+    log_trace("[script] %s: trigger %d of '%s' starts",
+              (context && context->GetName()) ? context->GetName() : "?",
+              st->type, startproto && startproto->name ? startproto->name : "?");
     Start(startproto, st->pos, st->priority);
-    trigger = st->type;         // Set current trigger we're going to do
-    newtrigger = 0;             // Set manual new trigger (if any) to 0
-    newtriggerstr[0] = '\0';    // Set manual new trigger key (if any) to nullptr
+    depth = 0;
+    trigger = st->type;
+    newtrigger = 0;
+    newtriggerstr[0] = '\0';
     curtrigger = st;
+    if (st->type == TRIGGER_ALWAYS)
+        triggerguard.Clear();
+    else if (triggerer.Get() && !stricmp(useralias.c_str(), kAliasUser))
+        triggerguard = triggerer.Get();
 }
 
 // REVSYNC: 0x004927b0. SCRIPT_ENGINE.md §3. Retail's USE trigger also
 // matches a second string the port doesn't record yet.
 bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance* context)
 {
-  // Not the trigger already running, nor one below its priority.
-    if (curtrigger == st || st->priority < curpriority)
+  // Not one below the running block's priority. (Retail also compares with a
+  // running-trigger record, +0xa8, that nothing ever sets.)
+    if (st->priority < curpriority)
         return false;
 
     bool fires = false;
@@ -431,25 +438,53 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
     // Check Triggers For Interruption
     // *******************************
 
-    TScriptProto* p = topproto;
-    bool foundtrigger = false;
-    while (p)
+    // REVSYNC: Continue @ 0x004933d0, the trigger scan (SCRIPT_ENGINE.md §4).
+    // A firing trigger starts if the script is idle, runs an ALWAYS block
+    // (whose place is saved to resume), or runs a block that interrupted
+    // one. ALWAYS triggers only start an idle script, after the scan,
+    // resuming an interrupted ALWAYS block where it stopped.
+    TScriptProto* alwaysproto = nullptr;
+    PSScriptTrigger always = nullptr;
+    bool started = false;
+    for (TScriptProto* p = topproto; p && !started; p = p->ParentProto())
     {
         for (int32_t c = 0; c < p->NumTriggers(); c++)
         {
-            if (Triggered(&p->triggers[c], priority, context))
+            PSScriptTrigger st = &p->triggers[c];
+            if (!Triggered(st, priority, context))
+                continue;
+            if (st->type == TRIGGER_ALWAYS)
             {
-                foundtrigger = true;
-                log_trace("[script] %s: trigger %d of '%s' starts",
-                          (context && context->GetName()) ? context->GetName() : "?",
-                          p->triggers[c].type, p->name ? p->name : "?");
-                StartTrigger(p, &p->triggers[c]);
-                break;
+                const bool first = always == nullptr;
+                alwaysproto = p;                // retail keeps the last it passes
+                always = st;
+                if (first)
+                    continue;
             }
-        }
-        if (foundtrigger)
+            if (Running() && trigger != TRIGGER_ALWAYS && savedip == kNotRunning)
+                continue;
+            if (Running() && trigger == TRIGGER_ALWAYS)
+            {
+                savedip = ip;
+                saveddepth = depth;
+            }
+            StartTrigger(context, p, st);
+            started = true;
             break;
-        p = p->ParentProto();
+        }
+    }
+    if (!started && always && !Running())
+    {
+        StartTrigger(context, alwaysproto, always);
+        if (savedip == kNotRunning)
+            savedip = ip;                       // retail notes the block's start
+        else
+        {
+            ip = savedip;
+            depth = saveddepth;
+            savedip = kNotRunning;
+            saveddepth = 0;
+        }
     }
 
     // Now Continue Script
@@ -463,14 +498,6 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
 
     while (ip != kNotRunning && (!(priority & SCRIPT_PAUSED)))
     {
-      // Prevent main char self running demo script from interrupting this script...
-        if (Player && context != Player && Player->GetScript() &&
-            Player->GetScript()->Running() &&
-            Player->GetScript()->GetTrigger() == TRIGGER_ALWAYS)
-        {
-            Player->GetScript()->End();
-        }
-
         uint32_t thisline = s.GetPos();
         if (thisline > (uint32_t)ip && !isspace(text[thisline]) &&
                                     !isspace(text[thisline - 1]))
@@ -691,6 +718,8 @@ void TScript::Reset()
     curtrigger = nullptr;
     depth = 0;
     block[0] = SScriptBlock{};
+    savedip = kNotRunning;
+    saveddepth = 0;
     triggerer.Clear();
     useralias.clear();
     second.Clear();
