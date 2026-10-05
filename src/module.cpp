@@ -7,6 +7,7 @@
 #include "logging.h"
 #include "parse.h"
 #include "revutils.h"
+#include "sound.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -221,8 +222,12 @@ bool TModuleManager::Initialize()
     return true;
 }
 
+// The module close (retail 0x00460c10, from TPlayScreen::Close) drops the
+// module's sounds (0x0049b400) with the module.
 void TModuleManager::Close()
 {
+    if (active_idx >= 0)
+        SoundPlayer.UnloadModuleSounds();
     UnmountModule();
     modules.clear();
     active_idx  = -1;
@@ -245,6 +250,15 @@ bool TModuleManager::SetCurModule(int idx)
 {
     if (idx < 0 || idx >= (int)modules.size()) return false;
     if (idx == active_idx) return true;
+
+  // Leaving the current module: its sounds go (0x0049b400) before the next
+  // module mounts.
+    if (active_idx >= 0)
+    {
+        SoundPlayer.UnloadModuleSounds();
+        active_idx = -1;
+    }
+
     TModule *m = modules[idx].get();
     if (!MountModule(m->dirname.c_str()))
     {
@@ -257,6 +271,7 @@ bool TModuleManager::SetCurModule(int idx)
   // Retail loads the module's dialog list, then its sounds, right after the
   // mount.
     DialogList.LoadModule();
+    SoundPlayer.LoadModuleSounds(m->dirname.c_str());   // 0x0049b220
     return true;
 }
 

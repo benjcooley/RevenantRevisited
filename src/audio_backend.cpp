@@ -26,11 +26,11 @@
 #include "stb_vorbis.c"
 
 // ---- miniaudio implementation -------------------------------------------
-// Tighten: we don't need flac/mp3 (no game data in those formats), we
-// only ship the engine API (not the low-level device API directly), and
-// we skip the WAV writer (we never write audio).
+// Decoders: WAV (sound effects), MP3 (the dialog voices, Sound/<Language>/
+// in resources.rvr and the module packs; retail decoded them with Miles'
+// mp3dec.asi), Ogg Vorbis (music). No FLAC data exists. We skip the WAV
+// writer (we never write audio).
 #define MA_NO_FLAC
-#define MA_NO_MP3
 #define MA_NO_ENCODING
 #define MA_NO_GENERATION
 // Default null backend off so missing-device errors are not silent.
@@ -266,6 +266,81 @@ void audio::Shutdown() {
 }
 
 bool audio::Functioning() { return state().init_ok; }
+
+// ============================================================ decoding
+
+namespace {
+
+// A miniaudio decoder over an encoded file in memory, producing signed
+// 16-bit PCM at the file's own rate and channel count. Independent of the
+// engine, so it works when output is silenced or offline.
+struct MemoryDecoder {
+    ma_decoder decoder{};
+    bool       ok = false;
+
+    MemoryDecoder(const uint8_t* data, size_t bytes) {
+        const ma_decoder_config cfg = ma_decoder_config_init(ma_format_s16, 0, 0);
+        ok = data && bytes &&
+             ma_decoder_init_memory(data, bytes, &cfg, &decoder) == MA_SUCCESS;
+    }
+    ~MemoryDecoder() { if (ok) ma_decoder_uninit(&decoder); }
+
+    MemoryDecoder(const MemoryDecoder&) = delete;
+    MemoryDecoder& operator=(const MemoryDecoder&) = delete;
+
+    bool Format(ma_uint32& channels, ma_uint32& rate) {
+        return ok &&
+               ma_decoder_get_data_format(&decoder, nullptr, &channels, &rate,
+                                          nullptr, 0) == MA_SUCCESS &&
+               channels > 0 && rate > 0;
+    }
+};
+
+}  // namespace
+
+bool audio::DecodeToPCM16(const uint8_t* data, size_t bytes,
+                          tWAVEFORMATEX* format, std::vector<uint8_t>& pcm) {
+    pcm.clear();
+    MemoryDecoder dec(data, bytes);
+    ma_uint32 channels = 0, rate = 0;
+    if (!format || !dec.Format(channels, rate)) return false;
+
+    const size_t frame_bytes = channels * sizeof(int16_t);
+    ma_uint64 total = 0;
+    if (ma_decoder_get_length_in_pcm_frames(&dec.decoder, &total) == MA_SUCCESS)
+        pcm.reserve(static_cast<size_t>(total) * frame_bytes);
+
+    constexpr ma_uint64 kChunkFrames = 4096;
+    for (;;) {
+        const size_t at = pcm.size();
+        pcm.resize(at + kChunkFrames * frame_bytes);
+        ma_uint64 got = 0;
+        const ma_result r = ma_decoder_read_pcm_frames(&dec.decoder, pcm.data() + at,
+                                                       kChunkFrames, &got);
+        pcm.resize(at + static_cast<size_t>(got) * frame_bytes);
+        if (r != MA_SUCCESS || got < kChunkFrames) break;
+    }
+    if (pcm.empty()) return false;
+
+    format->wFormatTag      = 1;  // WAVE_FORMAT_PCM
+    format->nChannels       = static_cast<uint16_t>(channels);
+    format->nSamplesPerSec  = rate;
+    format->wBitsPerSample  = 16;
+    format->nBlockAlign     = static_cast<uint16_t>(frame_bytes);
+    format->nAvgBytesPerSec = rate * static_cast<uint32_t>(frame_bytes);
+    format->cbSize          = 0;
+    return true;
+}
+
+uint32_t audio::DecodedLengthMs(const uint8_t* data, size_t bytes) {
+    MemoryDecoder dec(data, bytes);
+    ma_uint32 channels = 0, rate = 0;
+    ma_uint64 frames = 0;
+    if (!dec.Format(channels, rate) ||
+        ma_decoder_get_length_in_pcm_frames(&dec.decoder, &frames) != MA_SUCCESS)
+        return 0;
+    return static_cast<uint32_t>(frames * 1000 / rate);
+}
 
 // ============================================================ mixer
 
