@@ -1851,6 +1851,13 @@ void GetINISettings()
     INISetSection("Options");
     DoubleTapTicks = INIGetInt("DoubleTapTicks", 6);
     EnhancedLighting = INIGetYesNo("EnhancedLighting", false);
+
+    // FUN_00484500: the language names the dialog lists and the voice folder,
+    // so it is known before the main module mounts.
+    INISetSection("Language");
+    char language[64];
+    INIGetText("Language", "English", language, sizeof(language));
+    Language = language;
 }
 
 // This function gets called as soon as the display system finds the right driver.
@@ -1871,41 +1878,6 @@ void DriverSetupCallback()
         UseClearZBuffer = true; // Use a secondary clear zbuffer for drawing instead of display zbuffer
     }
 #endif
-}
-
-bool InitLanguage()
-{
-  // Set language. The actual DialogList load happens inside InitGlobals
-  // alongside the rest of the engine's lifecycle steps; that keeps every
-  // singleton's Initialize/Init call in one canonical caller.
-    Language = "english";
-
-// Old MAYHEM stuff
-#if 0
-   // Get Language file
-    p = strstr(lpCmdLine, "LANG=");
-    if (p)
-        Language = atoi(p + 5);
-    else
-        Language = GetProfileInt("intl", "iCountry", 1);
-    char buf[20];
-    wsprintf(buf, "LANGUAGE.%03d", Language);
-    f = fopen(buf, "rb");
-    if (!f)
-        Language = ENGLISH;
-    else
-        fclose(f);
-
-    if (Language == ENGLISH)
-        SecondLang = ENGLISH;
-
-    if (strstr(lpCmdLine, "KOR"))
-        SecondLang = KOREAN;
-
-    LoadLanguage(Language);
-#endif
-
-    return true;
 }
 
 // TODO(port): multi-monitor selection. sokol_app puts the window on the
@@ -2195,9 +2167,9 @@ bool InitGlobals()
     if (!Rules.Initialize())
         FatalError("Unable to load game rules");
 
-  // (19) DialogList — Initialize() loads <Language>.def. Pulled out of
-  // the old InitLanguage() helper so all global lifecycle calls live in
-  // one canonical caller.
+  // (19) DialogList — Initialize() loads the base table,
+  // <ClassDefPath><Language>.def; the module's table loads when the module
+  // is mounted (TModuleManager::SetCurModule).
     if (!DialogList.Initialize())
         FatalError("Unable to load dialog list");
 
@@ -2541,8 +2513,6 @@ static void AppInit()
 
     if (!InitMonitor())
         FatalError("Invalid monitor selected", nullptr);
-
-    InitLanguage();
 
     // MainWindow's lifecycle now lives at the top of InitGlobals so every
     // singleton flows through the canonical caller; sokol_app already
@@ -3165,8 +3135,7 @@ static void UnusedWinMainAnchor_()
     }
 #endif
 
-  // Initialize language resources
-    if (!InitLanguage());
+  // Language: read by GetINISettings ([Language] Language).
 
 #ifdef _DEBUG
     if (!_CrtCheckMemory())

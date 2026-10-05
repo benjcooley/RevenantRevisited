@@ -17,117 +17,161 @@
 #include "revutils.h"
 #include "script.h"
 #include "player.h"
+#include "logging.h"
 
+#include <algorithm>
 #include <string>
 
 // ****************************************************************************
 // * TDialogList - Stores language specific dialog and message lines for game *
 // ****************************************************************************
 
-// Initialize the dialog list
-// REVSYNC: Initialize @ 0x0049d2a0 — the dialog file is the active module's:
-// <Language>dialog.def, else <Language>.def, else english.def.
-bool TDialogList::Initialize()
+namespace {
+
+// Lookups compare at most this many characters of the probe (0x0049d6d0).
+constexpr size_t kMaxProbe = 39;
+
+std::string UpperTag(const char *tag, size_t maxlen = std::string::npos)
 {
-    if (initialized)
-        return true;
-    lines.DeleteAll();
+    std::string up(tag ? tag : "");
+    if (up.size() > maxlen)
+        up.resize(maxlen);
+    for (char &c : up)
+        c = (char)toupper((unsigned char)c);
+    return up;
+}
 
-    const std::string language = Language.CStr();
-    std::string fname_str;
-    for (const std::string &file : {language + "dialog.def", language + ".def",
-                                    std::string("english.def")})
-    {
-        fname_str = ModuleManager.ModuleFilePath(file.c_str());
-        if (!fname_str.empty() && rev_file_exists(fname_str.c_str()))
-            break;
-        fname_str.clear();
-    }
-    const char *fname = fname_str.c_str();
+}  // namespace
 
-    FILE *fp = fname_str.empty() ? nullptr : rev_fopen(fname, "rb");
+// Reads one dialog file: a #define header, then `TAG "line"` per line
+// (retail Parse("%63t %4091s")), sorted by tag. Duplicate tags keep file
+// order and the first one answers (retail's bsearch picks either).
+bool TDialogList::LoadTable(const char *path, TTable &table)
+{
+    table.clear();
+    FILE *fp = rev_fopen(path, "rb");
     if (!fp)
-        FatalError("Unable to find game area file", Language.CStr());
+        return false;
 
-    TFileParseStream s(fp, fname);
+    TFileParseStream s(fp, path);
     TToken t(s);
-
     if (!t.DefineGet())
         t.Error("Syntax error in header");
 
     while (t.Type() != TKN_EOF)
     {
         char tag[64];
-        char line[256];
-
-        if (!Parse(t, "%63t %255s", tag, line))
+        char line[4092];
+        if (!Parse(t, "%63t %4091s", tag, line))
             t.Error("tag \"line\" expected");
-
         if (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
             t.Error("RETURN expected");
-
-        PSDialogLine l = new SDialogLine;
-        l->Set(tag, line);
-        lines.Add(l);
-
+        table.push_back({UpperTag(tag), line});
         t.DefineGet();
     }
-
     fclose(fp);
 
+    std::stable_sort(table.begin(), table.end(),
+                     [](const SLine &a, const SLine &b) { return a.tag < b.tag; });
+    return true;
+}
+
+int32_t TDialogList::Find(const TTable &table, const std::string &tag)
+{
+    const auto it = std::lower_bound(table.begin(), table.end(), tag,
+                                     [](const SLine &l, const std::string &t) { return l.tag < t; });
+    if (it == table.end() || it->tag != tag)
+        return -1;
+    return (int32_t)(it - table.begin());
+}
+
+// REVSYNC: 0x0049ceb0
+bool TDialogList::Initialize()
+{
+    if (initialized)
+        return true;
+    const std::string path = std::string(ClassDefPath) + Language.CStr() + ".def";
+    if (!LoadTable(path.c_str(), base))
+    {
+        log_error("[dialog] base dialog list '%s' not found", path.c_str());
+        return false;
+    }
+    log_info("[dialog] base list %s: %d lines", path.c_str(), (int)base.size());
     initialized = true;
     return true;
 }
 
-// Closes dialog file (idempotent).
+// REVSYNC: 0x0049d2a0
+bool TDialogList::LoadModule()
+{
+    misses.clear();
+    const std::string language = Language.CStr();
+    for (const std::string &file : {language + "_dialog.def", language + ".def",
+                                    std::string("english.def")})
+    {
+        const std::string path = ModuleManager.ModuleFilePath(file.c_str());
+        if (!path.empty() && rev_file_exists(path.c_str()) && LoadTable(path.c_str(), module))
+        {
+            log_info("[dialog] module list %s: %d lines", path.c_str(), (int)module.size());
+            return true;
+        }
+    }
+    module.clear();
+    log_error("[dialog] the active module has no dialog list");
+    return false;
+}
+
 void TDialogList::Close()
 {
-    if (!initialized)
-        return;
-    lines.DeleteAll();
+    base.clear();
+    module.clear();
+    misses.clear();
     initialized = false;
 }
 
-// Finds the dialog line for the given tag and returns id
-int32_t TDialogList::FindLine(char *tag)
+// REVSYNC: 0x0049d6d0
+int32_t TDialogList::FindLine(const char *tag) const
 {
-    for (int32_t c = 0; c < lines.NumItems(); c++)
-    {
-        if (!stricmp(lines[c]->tag, tag))
-            return c;
-    }
-
-    return -1;
+    const std::string probe = UpperTag(tag, kMaxProbe);
+    const int32_t inbase = Find(base, probe);
+    if (inbase >= 0)
+        return inbase;
+    const int32_t inmodule = Find(module, probe);
+    return inmodule >= 0 ? (int32_t)base.size() + inmodule : -1;
 }
 
-// Gets the dialog line given the id number of the line
-char *TDialogList::GetLine(int32_t id)
+// REVSYNC: 0x0049d780
+const char *TDialogList::GetLine(int32_t id) const
 {
-    if ((uint32_t)id >= (uint32_t)lines.NumItems() || lines[id] == nullptr)
-        return nullptr;
-
-    return lines[id]->line;
+    if (id >= 0 && id < (int32_t)base.size())
+        return base[id].line.c_str();
+    id -= (int32_t)base.size();
+    if (id >= 0 && id < (int32_t)module.size())
+        return module[id].line.c_str();
+    return "[badid]";
 }
 
-// Gets the dialog tag given the id number of the line
-char *TDialogList::GetTag(int32_t id)
+// REVSYNC: 0x0049d7c0
+const char *TDialogList::GetTag(int32_t id) const
 {
-    if ((uint32_t)id >= (uint32_t)lines.NumItems() || lines[id] == nullptr)
-        return nullptr;
-
-    return lines[id]->tag;
+    if (id >= 0 && id < (int32_t)base.size())
+        return base[id].tag.c_str();
+    id -= (int32_t)base.size();
+    if (id >= 0 && id < (int32_t)module.size())
+        return module[id].tag.c_str();
+    return "[badid]";
 }
 
-// Finds the dialog line for the given tag
-char *TDialogList::GetLine(char *tag)
+// REVSYNC: 0x0049d800
+const char *TDialogList::GetLine(const char *tag) const
 {
-    for (int32_t c = 0; c < lines.NumItems(); c++)
-    {
-        if (!stricmp(lines[c]->tag, tag))
-            return lines[c]->line;
-    }
-
-    return nullptr;
+    const int32_t id = FindLine(tag);
+    if (id >= 0)
+        return GetLine(id);
+    auto [it, added] = misses.try_emplace(tag ? tag : "");
+    if (added)
+        it->second = "[" + it->first + "]";
+    return it->second.c_str();
 }
 
 // ************************************************************
@@ -147,12 +191,13 @@ void SetDialogContext(TObjectInstance* context)
 
 // Dialog line translator... Note: Dialog TAGS are listed in DLGTAG.TXT
 
-char *DialogLine(char *line, char *outbuf, int32_t buflen)
+char *DialogLine(const char *line, char *outbuf, int32_t buflen)
 {
     char buf[128];
     char tag[20];
     char data[128];
-    char *p, *b, *d;
+    const char *p;
+    char *b, *d;
 
     b = buf;
     for (p = line; *p != '\0'; )
@@ -269,9 +314,9 @@ void TDialogPane::DrawBackground()
         for (int32_t i = 0; i < numchoices; i++)
         {
             SColor color = { 255, 0, 50 };
-            char *line = DialogList.GetLine(choices[i]);
-            if (!line)
-                line = choices[i];
+            // (1998 pane, replaced by the retail entry manager; WriteText
+            // isn't const-correct yet.)
+            char *line = const_cast<char *>(DialogList.GetLine(choices[i]));
             Display.WriteText(line, 32, (i * CHOICEHEIGHT) + 4, 1, GameData->Font("choicefont"),
                                 ((grabslot == i || choice == i) && highlighted) ? &color : nullptr);
         }

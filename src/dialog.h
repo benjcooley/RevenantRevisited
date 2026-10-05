@@ -15,42 +15,53 @@
 #include "screen.h"
 #endif
 
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 // ****************************************************************************
 // * TDialogList - Stores language specific dialog and message lines for game *
 // ****************************************************************************
 
-_STRUCTDEF(SDialogLine)
-struct SDialogLine
-{
-    char *tag;
-    char *line;
-    SDialogLine() { tag = line = nullptr; }
-    ~SDialogLine() { if (tag) free(tag); if (line) free(line); }
-    void Set(char *t, char *l) { tag = strdup(t); line = strdup(l); }
-};
-typedef TPointerArray<SDialogLine, 64, 64> TDialogLineArray;
-
+// REVSYNC: TDialogList @ 0x0065d4d0 (DIALOG.md §3.6). Two tables of
+// {tag, line}, each sorted by upper-cased tag: the game-wide base table
+// (<ClassDefPath><Language>.def: UI text, item names, messages), loaded at
+// boot, and the module's (its dialog), loaded when the module is mounted.
+// Ids run through the base table, then the module's. Lookups never fail: a
+// miss answers "[TAG]" or "[badid]", as retail's do.
 class TDialogList
 {
   public:
+    // REVSYNC: 0x0049ceb0 -- the base table. Idempotent.
     bool Initialize();
-      // Loads lines from LANGUAGE.DEF file (i.e. ENGLISH.DEF for english).
-      // Idempotent.
+    // REVSYNC: 0x0049d2a0 -- the active module's table: <Language>_dialog.def,
+    // else <Language>.def, else english.def. Replaces any earlier module's.
+    bool LoadModule();
     void Close();
-      // Closes dialog file. Idempotent â€” leaves `lines` empty so the
-      // trivial default dtor only walks zeroed state.
-    int32_t FindLine(char *tag);
-      // Finds the dialog line for the given tag and returns id
-    char *GetLine(int32_t id);
-      // Finds the dialog line for the given id and returns it
-    char *GetTag(int32_t id);
-      // Finds the dialog line for the given id and returns it
-    char *GetLine(char *tag);
-      // Finds the dialog line for the given tag and returns it
+
+    // REVSYNC: 0x0049d6d0 -- the id of `tag`, base table first; -1 if absent.
+    [[nodiscard]] int32_t FindLine(const char *tag) const;
+    // REVSYNC: 0x0049d780 / 0x0049d7c0 -- "[badid]" out of range.
+    [[nodiscard]] const char *GetLine(int32_t id) const;
+    [[nodiscard]] const char *GetTag(int32_t id) const;
+    // REVSYNC: 0x0049d800 -- "[TAG]" when absent.
+    [[nodiscard]] const char *GetLine(const char *tag) const;
 
   private:
-    TDialogLineArray lines;         // Dialog line list
+    struct SLine
+    {
+        std::string tag;            // upper case
+        std::string line;
+    };
+    using TTable = std::vector<SLine>;
+
+    static bool LoadTable(const char *path, TTable &table);
+    static int32_t Find(const TTable &table, const std::string &tag);
+
+    TTable base;
+    TTable module;
     bool initialized = false;
+    mutable std::unordered_map<std::string, std::string> misses;    // "[TAG]" answers
 };
 
 // ************************************************************
@@ -62,7 +73,7 @@ class TDialogList
 // Global function for translating dialog lines
 
 void SetDialogContext(TObjectInstance* context); // The script context
-char *DialogLine(char *line, char *buf, int32_t buflen);
+char *DialogLine(const char *line, char *buf, int32_t buflen);
 
 // Dialog pane, for interacting with NPCs in conversation
 

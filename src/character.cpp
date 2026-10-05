@@ -3503,7 +3503,7 @@ bool TCharacter::TryGet()
     return true;
 }
 
-bool TCharacter::Say(char *string, int32_t wait, char *anim, char *sound)
+bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const char *sound)
 {
     if (!string)
         return false;
@@ -3512,7 +3512,8 @@ bool TCharacter::Say(char *string, int32_t wait, char *anim, char *sound)
     bool played = false;
     if (sound && PlaySpeech)
     {
-      int32_t soundid = SoundPlayer.FindSound(sound);
+      // FindSound isn't const-correct yet (the voice registration port).
+      int32_t soundid = SoundPlayer.FindSound(const_cast<char *>(sound));
       if (soundid >= 0)
       {
         if (SoundPlayer.Mount(soundid))
@@ -3556,10 +3557,10 @@ bool TCharacter::Say(char *string, int32_t wait, char *anim, char *sound)
     return true;
 }
 
-bool TCharacter::SayTag(int32_t tagid, int32_t wait, char *anim)
+bool TCharacter::SayTag(int32_t tagid, int32_t wait, const char *anim)
 {
-    char *line = DialogList.GetLine(tagid);
-    char *tag = DialogList.GetTag(tagid);
+    const char *line = DialogList.GetLine(tagid);
+    const char *tag = DialogList.GetTag(tagid);
 
     if (!line || !tag)
         return false;
@@ -3567,7 +3568,7 @@ bool TCharacter::SayTag(int32_t tagid, int32_t wait, char *anim)
     return Say(line, wait, anim, tag);
 }
 
-bool TCharacter::SayTag(char *tag, int32_t wait, char *anim)
+bool TCharacter::SayTag(const char *tag, int32_t wait, const char *anim)
 {
     int32_t tagid = DialogList.FindLine(tag);
     if (tagid < 0)
