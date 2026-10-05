@@ -40,6 +40,7 @@
 #include "time.h"
 #include "tile.h"
 #include "uidragstate.h"
+#include "uidemoplayer.h"
 #include "uianchortest.h"
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
@@ -3263,8 +3264,24 @@ bool DumpIconsToFolder(const char* path)
     return DumpIconsToPath(path);
 }
 
+// The --test=ui-* modes whose panes read the main player. They run against
+// the demo player (uidemoplayer.h), installed around the mode.
+static bool UsesDemoPlayer(const char* mode)
+{
+    static constexpr const char* kModes[] = {
+        "ui-hud", "ui-plyrstatusbar",
+    };
+    for (const char* m : kModes)
+        if (strcmp(mode, m) == 0)
+            return true;
+    return false;
+}
+
 bool Initialize(const char* mode)
 {
+    if (UsesDemoPlayer(mode) && !UIDemoPlayer::Install())
+        log_warn("[test] %s: no demo player; the panes show no player", mode);
+
     if (strcmp(mode, "blank") == 0 || strcmp(mode, "ticker") == 0)
         return true;
     if (strcmp(mode, "sector") == 0)
@@ -3421,6 +3438,8 @@ void Close(const char* mode)
     if (strcmp(mode, "vfx") == 0)
         VfxTest::Close();
     DestroyBitmapAtlas(&g_uiAtlas);
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Remove();
 }
 
 void Render(const char* mode)
@@ -3428,6 +3447,8 @@ void Render(const char* mode)
     if (!Display.IsActive() || !Display.BackBuffer())
         return;
 
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Pulse();
 
     if (strcmp(mode, "sector") == 0)
         return g_mapRenderer.RenderFrame();
