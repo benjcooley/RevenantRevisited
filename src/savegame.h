@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -81,7 +82,23 @@ class TSaveGame
     // REVSYNC: the thumbnail TPlayScreen writes when the in-game menu or the
     // save dialog opens, or on a quick save: the next frame becomes the
     // thumbnail the next save stores. `slot`, when given, also gets a copy.
-    void CaptureThumbnail(const std::filesystem::path& slot = {});
+    // `captured` runs once the frame has been read back (at once when there
+    // is no display to read), so a menu can open over the game only after
+    // the picture without it is taken, as retail's did.
+    void CaptureThumbnail(const std::filesystem::path& slot = {},
+                          std::function<void()> captured = nullptr);
+
+    // The thumbnail SaveBMP writes at scale 3: 216x160 (SAVE_GAME.md §11.7).
+    static constexpr int32_t kThumbnailWidth  = 216;
+    static constexpr int32_t kThumbnailHeight = 160;
+
+    // REVSYNC: TBitmap::LoadBMP @ 0x004a2ce0 as the load and save dialogs
+    // use it (0x00539590): `slot`'s ss.bmp into a thumbnail-sized picture.
+    // Retail took only a file of exactly the bitmap's size; thumbnails are
+    // 24-bit. RGBA8, top row first. False when the slot has none or it
+    // isn't one.
+    [[nodiscard]] static bool ReadThumbnail(const std::filesystem::path& slot,
+                                            std::vector<uint8_t>& rgba);
 
     // Shows the HUD sidebar the way the saved HUD words in the player record
     // say (SAVE_GAME.md §11.4). Called by a load and again by the PlayScreen
