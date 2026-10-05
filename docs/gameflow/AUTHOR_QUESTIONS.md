@@ -83,3 +83,27 @@ Answer inline (or in chat) and the owning doc gets updated.
 26. Do two-word quick-spell names split at the first space, and does
     dragging one ring onto another swap them?
 27. Does "Advanced healing" show its own icon or Heal's?
+
+## Exits ([forensics/EXITS.md](forensics/EXITS.md) §10)
+
+28. Door1, Door2, PortEW and PortNS are excluded from walk-over
+    activation by name, so their `master.s` USE scripts own them. Was
+    leaving `InDoor1`, `InportEW` and `InportNS` off that list deliberate?
+29. `setfromexit` does `exitflags &= 4`, which changes nothing on a door
+    or teleport stone; its 28 uses mark the destination stone. Meant to
+    be `|= 4`, with the player's on-exit flag doing the real work?
+30. Press plates (`PressPlate`) never animate down: their 1998 `Activate`
+    ended up in a vtable slot nothing calls. Known at the time?
+31. A key or lockpick attempt on a locked door, even a failed one, lets
+    the door's USE script run: it swings open, but the teleport refuses.
+    Seen in play?
+32. What does the `TileFlags` stat (EXIT, TILE, CONTAINER, INVCONTAINER)
+    control?
+33. A lever whose `closing` animation finishes goes to state 0
+    (`openingout`), where other exits go to `closed`. Levers springing
+    back, or a slip?
+34. `exit.def`'s `mapindex` and ambient fields are written by the editor
+    but never read. Were they ever applied on arrival?
+35. Shot wanted (dosbox-x): after Rahul dies, click the resurrection
+    chamber door (`ressexit`) and capture the transition to the hall —
+    does "Loading Map... Please Wait" appear in the text bar?

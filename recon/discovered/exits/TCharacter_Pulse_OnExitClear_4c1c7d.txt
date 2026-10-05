@@ -1,0 +1,30 @@
+# TCharacter::Pulse @ 0x004c1bb0 (TCharacter vtable 0x5a7848, slot 0x110) -- the OF_ONEXIT clear.
+# Retail Revenant.exe disassembly (Ghidra). See docs/gameflow/forensics/EXITS.md 1.6.
+# (recon/discovered/cls_0x5a7b98_TCharacter_ResolveAttack_4c1bb0.cpp labels this function
+# "ResolveAttack"; the vtable slot says it is TCharacter's Pulse.)
+#
+#   if (CurrentScreen->FrameCount (+0x48) - exittimestamp (+0x114) > 5)  SetFlags(flags & ~OF_ONEXIT)
+#   if (CurrentScreen->FrameCount - exittimestamp > 24)                  onexit (+0xe4) = 0
+004c1c7d  MOV EAX,[0x00667fd0]
+004c1c82  MOV EDX,dword ptr [EBP + 0x114]
+004c1c88  MOV EAX,dword ptr [EAX + 0x48]
+004c1c8b  SUB EAX,EDX
+004c1c8d  CMP EAX,0x5
+004c1c90  JLE 0x004c1ca3
+004c1c92  MOV EAX,dword ptr [EBP + 0x8]
+004c1c95  MOV EDX,dword ptr [EBP]
+004c1c98  AND EAX,0xffefffff
+004c1c9d  MOV ECX,EBP
+004c1c9f  PUSH EAX
+004c1ca0  CALL dword ptr [EDX + 0x40]
+004c1ca3  MOV ECX,dword ptr [0x00667fd0]
+004c1ca9  MOV EDX,dword ptr [EBP + 0x114]
+004c1caf  MOV EAX,dword ptr [ECX + 0x48]
+004c1cb2  SUB EAX,EDX
+004c1cb4  CMP EAX,0x18
+004c1cb7  JLE 0x004c1cc3
+004c1cb9  MOV dword ptr [EBP + 0xe4],0x0
+#
+# The constructor-side initialisation (0x004c18e4..): exittimestamp = FrameCount.
+004c18ea  MOV EAX,dword ptr [EDX + 0x48]
+004c1908  MOV dword ptr [ESI + 0x114],EAX
