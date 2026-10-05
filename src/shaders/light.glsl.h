@@ -43,6 +43,14 @@ layout(std140) uniform params {
     vec4 shadow_dir;
     vec4 shadow_world_dir;
     vec4 normal_lighting;
+    vec4 selected_obj_id;
+    // Classic model, indexed by CM_*:
+    //   CM_TILE      .rgb tile ambient gain, .w light gain per multiplier
+    //   CM_MESH_AMB  .rgb mesh ambient, .w ambient intensity subtracted per light
+    //   CM_MESH_DIR  .rgb key-light colour, .w light brightness per multiplier
+    //   CM_MESH_KEY  .xyz key-light direction (to light), .w overbright ceiling
+    vec4 classic_model[4];
+    vec4 point_model;       // .x retail light count, .y modern gain/multiplier, .z modern range scale
 };
 in vec2 v_uv;
 uniform sampler2D albedo_tex;
@@ -52,6 +60,9 @@ uniform sampler2D ao_tex;
 uniform sampler2D id_tex;
 uniform sampler2D shadow_tex;
 out vec4 frag_color;
+const int CM_TILE = 0, CM_MESH_AMB = 1, CM_MESH_DIR = 2, CM_MESH_KEY = 3;
+const float kMinPower    = 0.0022436;                  // pow(256, -1.1)
+const float kBrightScale = 50.0 / (1.0 - 0.0022436);   // maxbrightness / (1 - minpower)
 vec3 reconstruct_world(vec2 uv, float d, float fbw, float fbh) {
     float scene_z = d * vp.w + vp.z;
     // Convert framebuffer pixels back to Revenant's authored iso screen
@@ -73,50 +84,89 @@ vec3 reconstruct_world(vec2 uv, float d, float fbw, float fbh) {
                 recon.y + (sum_r - S) * 0.5,
                 wz);
 }
-vec2 project_world_uv(vec3 W, float fbw, float fbh) {
-    float dx = W.x - recon.x;
-    float dy = W.y - recon.y;
-    float S = dx - dy;
-    float T = 0.5 * (dx + dy) - W.z * ISO_COS30;
-    float scale = max(settings.w, 0.0001);
-    if (recon.w > 0.5) {
-        float scene_z = recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
-        scale *= recon.z / max(scene_z, 1.0);
-    }
-    S *= scale;
-    T *= scale;
-    return vec2((S + vp.x) / fbw, (T + vp.y) / fbh);
-}
-float scene_depth_world(vec3 W) {
-    float dx = W.x - recon.x;
-    float dy = W.y - recon.y;
-    return recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
-}
-float interpolate_ray_depth(float z0, float z1, float a) {
-    if (recon.w > 0.5) {
-        float inv_z = mix(1.0 / max(z0, 1.0), 1.0 / max(z1, 1.0), a);
-        return 1.0 / max(inv_z, 1e-6);
-    }
-    return mix(z0, z1, a);
-}
 float sample_scene_depth(vec2 uv) {
     ivec2 ts = textureSize(depth_tex, 0);
     ivec2 p = clamp(ivec2(uv * vec2(ts)), ivec2(0), ts - ivec2(1));
     return texelFetch(depth_tex, p, 0).r;
 }
-float shadow_tap_weight(int tap, int sampleCount) {
-    if (sampleCount <= 1) return 1.0;
-    float u = float(tap) / float(sampleCount - 1);
-    return mix(0.5, 1.0, 1.0 - abs(u * 2.0 - 1.0));
+// Retail BrightnessTable[normd] (colortable.cpp MakeColorTables).
+float retail_brightness(float normd) {
+    return clamp((pow(normd + 1.0, -1.1) - kMinPower) * kBrightScale, 0.0, 1.0);
+}
+// Length of a world delta in the retail iso screen basis: screen x/y pixels
+// plus 16-bit screen z (object.cpp WorldToScreen / WorldToScreenZ). The DLS
+// light block measures light reach in this metric.
+float retail_iso_distance(vec3 d) {
+    float sx = d.x - d.y;
+    float sy = 0.5 * (d.x + d.y) - ISO_COS30 * d.z;
+    float sz = -0.5 * d.z - ISO_COS30 * (d.x + d.y);
+    return sqrt(sx * sx + sy * sy + sz * sz);
+}
+// Retail light tables scale every colour so its largest channel is 1.
+vec3 max_normalized(vec3 c) {
+    float m = max(max(c.r, c.g), c.b);
+    return (m > 0.0) ? c / m : vec3(0.0);
+}
+// Light with the world-space pow falloff: direct lights in every model,
+// and authored lights in the modern model (rad/intensity pre-scaled).
+vec3 pow_point_light(vec3 W, vec3 N, float hardness, vec3 pos, float rad,
+                     vec3 col, float intensity) {
+    vec3  delta = pos - W;
+    float dist  = length(delta);
+    if (rad <= 0.0 || dist >= rad) return vec3(0.0);
+    vec3  Lp    = delta / max(dist, 1e-5);
+    float pterm = mix(1.0, max(dot(N, Lp), 0.0), hardness);
+    return col * intensity * retail_brightness(dist * 254.0 / rad) * pterm;
+}
+// Classic tiles: DLS. Each authored light adds int(63*B)/63 to a 6-bit
+// intensity that saturates at 1; the light table turns it into
+// gain * colour. Retail keeps one colour per pixel (the light drawn last);
+// the B-weighted average is the same for one light or same-coloured lights.
+vec3 classic_tile_points(vec3 W, int n_retail) {
+    float sum_b = 0.0;
+    vec3  sum_c = vec3(0.0);
+    for (int i = 0; i < KPL; ++i) {
+        if (i >= n_retail) break;
+        float r = plight_pos[i].w;
+        if (r <= 0.0) continue;
+        float d = retail_iso_distance(plight_pos[i].xyz - W);
+        if (d >= r) continue;
+        float b6 = floor(63.0 * retail_brightness(d * 254.0 / r)) / 63.0;
+        sum_b += b6;
+        sum_c += b6 * max_normalized(plight_col[i].rgb) * plight_col[i].w;
+    }
+    if (sum_b <= 0.0) return vec3(0.0);
+    return sum_c / sum_b * min(sum_b, 1.0) * classic_model[CM_TILE].w;
+}
+// Classic meshes: T3DLight::GetBrightness (linear, saturating) per light,
+// applied as a D3D point light with N.L. Light inputs are divided by the
+// overbright scale s and clamped to [0,1] the way the vertex colour is.
+vec3 classic_mesh_points(vec3 W, vec3 N, int n_retail) {
+    float s   = max(classic_model[CM_MESH_KEY].w, 1.0);
+    vec3  sum = vec3(0.0);
+    for (int i = 0; i < KPL; ++i) {
+        if (i >= n_retail) break;
+        float r = plight_pos[i].w;
+        if (r <= 0.0) continue;
+        vec3  delta = plight_pos[i].xyz - W;
+        float d     = length(delta);
+        if (d >= r) continue;
+        float raw = classic_model[CM_MESH_DIR].w * plight_col[i].w * (1.0 - d / r);
+        float b   = s * clamp(raw / s - classic_model[CM_MESH_AMB].w, 0.0, 1.0);
+        sum += max_normalized(plight_col[i].rgb) * b * max(dot(N, delta / max(d, 1e-5)), 0.0);
+    }
+    return sum;
 }
 void main() {
     vec4 alb = texture(albedo_tex, v_uv);
     if (alb.a < 0.01) discard;
-    float d  = sample_scene_depth(v_uv);
-    vec3  np = texture(normal_tex, v_uv).xyz;
-    vec3  N  = normalize(np * 2.0 - 1.0);
-    float ao = texture(ao_tex, v_uv).r;
-    vec2  ts = vec2(textureSize(albedo_tex, 0));
+    float d   = sample_scene_depth(v_uv);
+    vec4  nrm = texture(normal_tex, v_uv);
+    vec3  np  = nrm.xyz;
+    vec3  N   = normalize(np * 2.0 - 1.0);
+    bool  is_mesh = nrm.a < 0.5;     // G-buffer surface class: 1 tile, 0 mesh
+    float ao  = texture(ao_tex, v_uv).r;
+    vec2  ts  = vec2(textureSize(albedo_tex, 0));
     float fbw = ts.x, fbh = ts.y;
     vec3  W = reconstruct_world(v_uv, d, fbw, fbh);
     int vm = int(settings.x);
@@ -132,26 +182,6 @@ void main() {
         return;
     }
     if (vm == 3) { frag_color = vec4(np, 1.0); return; }
-    int nl_dbg = int(settings.y);
-    if (vm == 4) {
-        vec3 accum = vec3(0.0);
-        const float kMP = 0.0022436;
-        const float kSC = 50.0 / (1.0 - kMP);
-        for (int i = 0; i < nl_dbg; ++i) {
-            vec3  delta = plight_pos[i].xyz - W;
-            float dist  = length(delta);
-            float rad   = plight_pos[i].w;
-            if (rad > 0.0 && dist < rad) {
-                vec3  Lp    = delta / max(dist, 1e-5);
-                float pterm = mix(1.0, max(dot(N, Lp), 0.0), clamp(normal_lighting.x, 0.0, 1.0));
-                float normd = dist * 254.0 / rad;
-                float pw    = pow(normd + 1.0, -1.1) - kMP;
-                float attn  = clamp(pw * kSC, 0.0, 1.0);
-                accum += plight_col[i].rgb * plight_col[i].w * attn * pterm;
-            }
-        }
-        frag_color = vec4(accum, 1.0); return;
-    }
     if (vm == 5) {
         float ws = max(settings.z, 1.0);
         float zs = max(settings.w, 1.0);
@@ -178,50 +208,56 @@ void main() {
         frag_color = vec4(max(norm_h, band), norm_h * (1.0 - 0.5 * band), 1.0 - norm_h, 1.0);
         return;
     }
-    vec3 light = ambient_col.rgb * light_col.w;
-    int mode = int(settings.z);
-    if (mode == 1) light *= ao;
-    vec3  Ldir = normalize(light_dir.xyz);
-    float raw_sun_ndotl = dot(N, Ldir);
-    float sun_ndotl = max(raw_sun_ndotl, 0.0);
+    int   mode     = int(settings.z);
+    int   nl       = min(int(settings.y), KPL);
+    int   n_retail = min(int(point_model.x), nl);
     float normal_hardness = clamp(normal_lighting.x, 0.0, 1.0);
-    float sun_term = mix(1.0, sun_ndotl, normal_hardness);
-    // Direct sun visibility is a composition of two intentionally separate
-    // facts: normal-facing geometry and the blurred cast-shadow mask. The
-    // lighting pass never ray-marches; the mask is produced once per frame by
-    // the shadow pass, then blurred as an image operation.
-    float normal_visibility = (raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
-    float cast_shadow = (mode == 1 && shadow.w > 0.5) ? texture(shadow_tex, v_uv).r : 1.0;
-    float sun_shadow = normal_visibility * cast_shadow;
-    if (mode == 1) {
-        light += light_col.rgb * light_dir.w * sun_term * sun_shadow;
+    vec3  base;           // ambient + directional
+    vec3  points;         // point lights
+    float ceiling;        // per-channel cap on base + points
+    float sun_shadow = 1.0;
+    if (mode == 0) {
+        if (is_mesh) {
+            base    = classic_model[CM_MESH_AMB].rgb
+                    + classic_model[CM_MESH_DIR].rgb * max(dot(N, classic_model[CM_MESH_KEY].xyz), 0.0);
+            points  = classic_mesh_points(W, N, n_retail);
+            ceiling = max(classic_model[CM_MESH_KEY].w, 1.0);
+        } else {
+            base    = classic_model[CM_TILE].rgb;
+            points  = classic_tile_points(W, n_retail);
+            ceiling = 1.0e4;    // the light table has no gain cap; the output saturates
+        }
+    } else {
+        base = ambient_col.rgb * light_col.w * ao;
+        vec3  Ldir = normalize(light_dir.xyz);
+        float raw_sun_ndotl = dot(N, Ldir);
+        float sun_term = mix(1.0, max(raw_sun_ndotl, 0.0), normal_hardness);
+        // Direct sun visibility is a composition of two intentionally separate
+        // facts: normal-facing geometry and the blurred cast-shadow mask. The
+        // lighting pass never ray-marches; the mask is produced once per frame by
+        // the shadow pass, then blurred as an image operation.
+        float normal_visibility = (raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
+        float cast_shadow = (shadow.w > 0.5) ? texture(shadow_tex, v_uv).r : 1.0;
+        sun_shadow = normal_visibility * cast_shadow;
+        base += light_col.rgb * light_dir.w * sun_term * sun_shadow;
+        points = vec3(0.0);
+        for (int i = 0; i < KPL; ++i) {
+            if (i >= n_retail) break;
+            points += pow_point_light(W, N, normal_hardness, plight_pos[i].xyz,
+                                      plight_pos[i].w * point_model.z,
+                                      plight_col[i].rgb, plight_col[i].w * point_model.y);
+        }
+        ceiling = max(ambient_col.w, 1e-3);
     }
-    if (vm == 6) { frag_color = vec4(vec3(sun_shadow), 1.0); return; }
-    const float kMinPower = 0.0022436;
-    const float kScale    = 50.0 / (1.0 - kMinPower);
-    int nl = int(settings.y);
     for (int i = 0; i < KPL; ++i) {
         if (i >= nl) break;
-        vec3  delta = plight_pos[i].xyz - W;
-        float dist  = length(delta);
-        float rad   = plight_pos[i].w;
-        if (rad > 0.0 && dist < rad) {
-            vec3  Lp    = delta / max(dist, 1e-5);
-            float pterm = mix(1.0, max(dot(N, Lp), 0.0), normal_hardness);
-            float normd = dist * 254.0 / rad;
-            float pw    = pow(normd + 1.0, -1.1) - kMinPower;
-            float attn  = clamp(pw * kScale, 0.0, 1.0);
-            light += plight_col[i].rgb * plight_col[i].w * attn * pterm;
-        }
+        if (i < n_retail) continue;
+        points += pow_point_light(W, N, normal_hardness, plight_pos[i].xyz, plight_pos[i].w,
+                                  plight_col[i].rgb, plight_col[i].w);
     }
-  // Brightness cap: deferred lighting can sum > 1.0 across several
-  // point lights at close range, which "burns" 3D objects (white-out)
-  // since the framebuffer just clips. Retail forward-lit meshes with
-  // per-vertex normalisation, so we approximate by clamping. The
-  // ceiling comes from ambient_col.w (tunable; default 1.5 allows
-  // ambient overbright while still capping stacked point lights).
-    float light_ceiling = max(ambient_col.w, 1e-3);
-    light = min(light, vec3(light_ceiling));
-    frag_color = vec4(alb.rgb * light, 1.0);
+    if (vm == 4) { frag_color = vec4(points, 1.0); return; }
+    if (vm == 6) { frag_color = vec4(vec3(sun_shadow), 1.0); return; }
+    vec3 light = min(base + points, vec3(ceiling));
+    frag_color = vec4(clamp(alb.rgb * light, 0.0, 1.0), 1.0);
 }
 )GLSL";

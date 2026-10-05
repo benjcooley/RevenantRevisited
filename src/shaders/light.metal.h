@@ -4,10 +4,18 @@
 // *        light.metal.h  - MSL deferred lighting fullscreen pass         *
 // *************************************************************************
 //
-// Reads the G-buffer (albedo + world normal + scene_z + AO) and runs:
-//   * directional sun (hard normal-facing visibility, tunable N.L falloff)
-//   * blurred screen-space sun-shadow mask (mode 1 only)
-//   * up to KPL point lights with retail's pow-based falloff curve
+// Reads the G-buffer (albedo + world normal + scene_z + AO) and lights it
+// with one of two models (settings.z):
+//   0 Classic -- the retail lighting model. Static tiles (normal.a = 1) use
+//     the DLS light table: ambient gain, pow-curve falloff in the retail iso
+//     screen metric, 6-bit saturating intensity, no N.L. Meshes
+//     (normal.a = 0) use T3DScene's vertex lighting: split ambient + key
+//     light, linear per-light brightness, N.L. docs/LIGHTING_FIDELITY.md.
+//   1 modern -- ambient * AO, directional sun with the blurred sun-shadow
+//     mask, world-space pow falloff with tunable N.L.
+// Point lights 0..point_model.x-1 are authored map lights (retail radius,
+// colour, multiplier); the rest are direct (VFX) lights, the same in both
+// models.
 //
 // Fragment world position is reconstructed from scene_z via the retail iso
 // inverse (same math as ao.metal.h and tile.metal.h). See
@@ -48,8 +56,18 @@ struct params {
     float4 shadow_world_dir;
     float4 normal_lighting;
     float4 selected_obj_id;
+    // Classic model, indexed by CM_*:
+    //   CM_TILE      .rgb tile ambient gain, .w light gain per multiplier
+    //   CM_MESH_AMB  .rgb mesh ambient, .w ambient intensity subtracted per light
+    //   CM_MESH_DIR  .rgb key-light colour, .w light brightness per multiplier
+    //   CM_MESH_KEY  .xyz key-light direction (to light), .w overbright ceiling
+    float4 classic_model[4];
+    float4 point_model;       // .x retail light count, .y modern gain/multiplier, .z modern range scale
 };
 struct vs_out { float4 pos [[position]]; float2 uv; };
+constant int CM_TILE = 0, CM_MESH_AMB = 1, CM_MESH_DIR = 2, CM_MESH_KEY = 3;
+constant float kMinPower   = 0.0022436;                  // pow(256, -1.1)
+constant float kBrightScale = 50.0 / (1.0 - 0.0022436);  // maxbrightness / (1 - minpower)
 static float3 reconstruct_world(float2 uv, float d, constant params& p, float fbw, float fbh) {
     float scene_z = d * p.vp.w + p.vp.z;
     // Convert framebuffer pixels back to Revenant's authored iso screen
@@ -71,32 +89,6 @@ static float3 reconstruct_world(float2 uv, float d, constant params& p, float fb
                   p.recon.y + (sum_r - S) * 0.5,
                   wz);
 }
-static float2 project_world_uv(float3 W, constant params& p, float fbw, float fbh) {
-    float dx = W.x - p.recon.x;
-    float dy = W.y - p.recon.y;
-    float S = dx - dy;
-    float T = 0.5 * (dx + dy) - W.z * ISO_COS30;
-    float scale = max(p.settings.w, 0.0001);
-    if (p.recon.w > 0.5) {
-        float scene_z = p.recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
-        scale *= p.recon.z / max(scene_z, 1.0);
-    }
-    S *= scale;
-    T *= scale;
-    return float2((S + p.vp.x) / fbw, (T + p.vp.y) / fbh);
-}
-static float scene_depth_world(float3 W, constant params& p) {
-    float dx = W.x - p.recon.x;
-    float dy = W.y - p.recon.y;
-    return p.recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
-}
-static float interpolate_ray_depth(float z0, float z1, float a, constant params& p) {
-    if (p.recon.w > 0.5) {
-        float inv_z = mix(1.0 / max(z0, 1.0), 1.0 / max(z1, 1.0), a);
-        return 1.0 / max(inv_z, 1e-6);
-    }
-    return mix(z0, z1, a);
-}
 static float sample_scene_depth(texture2d<float> depth_tex, float2 uv) {
     uint w = depth_tex.get_width();
     uint h = depth_tex.get_height();
@@ -104,10 +96,73 @@ static float sample_scene_depth(texture2d<float> depth_tex, float2 uv) {
                     uint(clamp(uv.y * float(h), 0.0, float(h - 1))));
     return depth_tex.read(p).r;
 }
-static float shadow_tap_weight(int tap, int sampleCount) {
-    if (sampleCount <= 1) return 1.0;
-    float u = float(tap) / float(sampleCount - 1);
-    return mix(0.5, 1.0, 1.0 - fabs(u * 2.0 - 1.0));
+// Retail BrightnessTable[normd] (colortable.cpp MakeColorTables).
+static float retail_brightness(float normd) {
+    return clamp((pow(normd + 1.0, -1.1) - kMinPower) * kBrightScale, 0.0, 1.0);
+}
+// Length of a world delta in the retail iso screen basis: screen x/y pixels
+// plus 16-bit screen z (object.cpp WorldToScreen / WorldToScreenZ). The DLS
+// light block measures light reach in this metric.
+static float retail_iso_distance(float3 d) {
+    float sx = d.x - d.y;
+    float sy = 0.5 * (d.x + d.y) - ISO_COS30 * d.z;
+    float sz = -0.5 * d.z - ISO_COS30 * (d.x + d.y);
+    return sqrt(sx * sx + sy * sy + sz * sz);
+}
+// Retail light tables scale every colour so its largest channel is 1.
+static float3 max_normalized(float3 c) {
+    float m = max(max(c.r, c.g), c.b);
+    return (m > 0.0) ? c / m : float3(0.0);
+}
+// Light i with the world-space pow falloff: direct lights in every model,
+// and authored lights in the modern model (rad/intensity pre-scaled).
+static float3 pow_point_light(float3 W, float3 N, float hardness, float3 pos, float rad,
+                              float3 col, float intensity) {
+    float3 delta = pos - W;
+    float  dist  = length(delta);
+    if (rad <= 0.0 || dist >= rad) return float3(0.0);
+    float3 Lp    = delta / max(dist, 1e-5);
+    float  pterm = mix(1.0, max(dot(N, Lp), 0.0), hardness);
+    return col * intensity * retail_brightness(dist * 254.0 / rad) * pterm;
+}
+// Classic tiles: DLS. Each authored light adds int(63*B)/63 to a 6-bit
+// intensity that saturates at 1; the light table turns it into
+// gain * colour. Retail keeps one colour per pixel (the light drawn last);
+// the B-weighted average is the same for one light or same-coloured lights.
+static float3 classic_tile_points(float3 W, int n_retail, constant params& p) {
+    float  sum_b = 0.0;
+    float3 sum_c = float3(0.0);
+    for (int i = 0; i < KPL; ++i) {
+        if (i >= n_retail) break;
+        float r = p.plight_pos[i].w;
+        if (r <= 0.0) continue;
+        float d = retail_iso_distance(p.plight_pos[i].xyz - W);
+        if (d >= r) continue;
+        float b6 = floor(63.0 * retail_brightness(d * 254.0 / r)) / 63.0;
+        sum_b += b6;
+        sum_c += b6 * max_normalized(p.plight_col[i].rgb) * p.plight_col[i].w;
+    }
+    if (sum_b <= 0.0) return float3(0.0);
+    return sum_c / sum_b * min(sum_b, 1.0) * p.classic_model[CM_TILE].w;
+}
+// Classic meshes: T3DLight::GetBrightness (linear, saturating) per light,
+// applied as a D3D point light with N.L. Light inputs are divided by the
+// overbright scale s and clamped to [0,1] the way the vertex colour is.
+static float3 classic_mesh_points(float3 W, float3 N, int n_retail, constant params& p) {
+    float  s   = max(p.classic_model[CM_MESH_KEY].w, 1.0);
+    float3 sum = float3(0.0);
+    for (int i = 0; i < KPL; ++i) {
+        if (i >= n_retail) break;
+        float r = p.plight_pos[i].w;
+        if (r <= 0.0) continue;
+        float3 delta = p.plight_pos[i].xyz - W;
+        float  d     = length(delta);
+        if (d >= r) continue;
+        float raw = p.classic_model[CM_MESH_DIR].w * p.plight_col[i].w * (1.0 - d / r);
+        float b   = s * clamp(raw / s - p.classic_model[CM_MESH_AMB].w, 0.0, 1.0);
+        sum += max_normalized(p.plight_col[i].rgb) * b * max(dot(N, delta / max(d, 1e-5)), 0.0);
+    }
+    return sum;
 }
 fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> albedo_tex [[texture(0)]],
@@ -121,8 +176,10 @@ fragment float4 _main(vs_out in [[stage_in]],
     float4 alb = albedo_tex.sample(smp, in.uv);
     if (alb.a < 0.01) discard_fragment();
     float  d   = sample_scene_depth(depth_tex, in.uv);
-    float3 np  = normal_tex.sample(smp, in.uv).xyz;
+    float4 nrm = normal_tex.sample(smp, in.uv);
+    float3 np  = nrm.xyz;
     float3 N   = normalize(np * 2.0 - 1.0);
+    bool   is_mesh = nrm.a < 0.5;     // G-buffer surface class: 1 tile, 0 mesh
     float  ao  = ao_tex.sample(smp, in.uv).r;
     float  fbw = float(albedo_tex.get_width());
     float  fbh = float(albedo_tex.get_height());
@@ -139,26 +196,6 @@ fragment float4 _main(vs_out in [[stage_in]],
         return float4(fine, coarse, 1.0 - coarse, 1.0);
     }
     if (vm == 3) return float4(np, 1.0);
-    int nl_dbg = int(p.settings.y);
-    if (vm == 4) {
-        float3 accum = float3(0.0);
-        const float kMP = 0.0022436f;
-        const float kSC = 50.0 / (1.0 - kMP);
-        for (int i = 0; i < nl_dbg; ++i) {
-            float3 delta = p.plight_pos[i].xyz - W;
-            float  dist  = length(delta);
-            float  rad   = p.plight_pos[i].w;
-            if (rad > 0.0 && dist < rad) {
-                float3 Lp    = delta / max(dist, 1e-5);
-                float  pterm = mix(1.0, max(dot(N, Lp), 0.0), clamp(p.normal_lighting.x, 0.0, 1.0));
-                float normd = dist * 254.0 / rad;
-                float pw    = pow(normd + 1.0, -1.1) - kMP;
-                float attn  = clamp(pw * kSC, 0.0, 1.0);
-                accum += p.plight_col[i].rgb * p.plight_col[i].w * attn * pterm;
-            }
-        }
-        return float4(accum, 1.0);
-    }
     if (vm == 5) {
         float ws = max(p.settings.z, 1.0);
         float zs = max(p.settings.w, 1.0);
@@ -182,46 +219,57 @@ fragment float4 _main(vs_out in [[stage_in]],
         float band = (fract(fabs(h) / 128.0) < 0.04) ? 1.0 : 0.0;
         return float4(max(norm_h, band), norm_h * (1.0 - 0.5 * band), 1.0 - norm_h, 1.0);
     }
-    float3 light = p.ambient_col.rgb * p.light_col.w;
-    int mode = int(p.settings.z);
-    if (mode == 1) light *= ao;
-    float3 Ldir = normalize(p.light_dir.xyz);
-    float  raw_sun_ndotl = dot(N, Ldir);
-    float  sun_ndotl = max(raw_sun_ndotl, 0.0);
+    int    mode     = int(p.settings.z);
+    int    nl       = min(int(p.settings.y), KPL);
+    int    n_retail = min(int(p.point_model.x), nl);
     float  normal_hardness = clamp(p.normal_lighting.x, 0.0, 1.0);
-    float  sun_term = mix(1.0, sun_ndotl, normal_hardness);
-    // Direct sun visibility is a composition of two intentionally separate
-    // facts: normal-facing geometry and the blurred cast-shadow mask. The
-    // lighting pass never ray-marches; the mask is produced once per frame by
-    // the shadow pass, then blurred as an image operation.
-    float normal_visibility = (raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
-    float cast_shadow = (mode == 1 && p.shadow.w > 0.5) ? shadow_tex.sample(smp, in.uv).r : 1.0;
-    float sun_shadow = normal_visibility * cast_shadow;
-    if (mode == 1) {
-        light += p.light_col.rgb * p.light_dir.w * sun_term * sun_shadow;
+    float3 base;          // ambient + directional
+    float3 points;        // point lights
+    float  ceiling;       // per-channel cap on base + points
+    float  sun_shadow = 1.0;
+    if (mode == 0) {
+        if (is_mesh) {
+            base    = p.classic_model[CM_MESH_AMB].rgb
+                    + p.classic_model[CM_MESH_DIR].rgb * max(dot(N, p.classic_model[CM_MESH_KEY].xyz), 0.0);
+            points  = classic_mesh_points(W, N, n_retail, p);
+            ceiling = max(p.classic_model[CM_MESH_KEY].w, 1.0);
+        } else {
+            base    = p.classic_model[CM_TILE].rgb;
+            points  = classic_tile_points(W, n_retail, p);
+            ceiling = 1.0e4;    // the light table has no gain cap; the output saturates
+        }
+    } else {
+        base = p.ambient_col.rgb * p.light_col.w * ao;
+        float3 Ldir = normalize(p.light_dir.xyz);
+        float  raw_sun_ndotl = dot(N, Ldir);
+        float  sun_term = mix(1.0, max(raw_sun_ndotl, 0.0), normal_hardness);
+        // Direct sun visibility is a composition of two intentionally separate
+        // facts: normal-facing geometry and the blurred cast-shadow mask. The
+        // lighting pass never ray-marches; the mask is produced once per frame by
+        // the shadow pass, then blurred as an image operation.
+        float normal_visibility = (raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
+        float cast_shadow = (p.shadow.w > 0.5) ? shadow_tex.sample(smp, in.uv).r : 1.0;
+        sun_shadow = normal_visibility * cast_shadow;
+        base += p.light_col.rgb * p.light_dir.w * sun_term * sun_shadow;
+        points = float3(0.0);
+        for (int i = 0; i < KPL; ++i) {
+            if (i >= n_retail) break;
+            points += pow_point_light(W, N, normal_hardness, p.plight_pos[i].xyz,
+                                      p.plight_pos[i].w * p.point_model.z,
+                                      p.plight_col[i].rgb, p.plight_col[i].w * p.point_model.y);
+        }
+        ceiling = max(p.ambient_col.w, 1e-3);
     }
-    if (vm == 6) return float4(float3(sun_shadow), 1.0);
-    const float kMinPower = 0.0022436f;
-    const float kScale    = 50.0 / (1.0 - kMinPower);
-    int nl = int(p.settings.y);
     for (int i = 0; i < KPL; ++i) {
         if (i >= nl) break;
-        float3 delta = p.plight_pos[i].xyz - W;
-        float  dist  = length(delta);
-        float  rad   = p.plight_pos[i].w;
-        if (rad > 0.0 && dist < rad) {
-            float3 Lp    = delta / max(dist, 1e-5);
-            float  pterm = mix(1.0, max(dot(N, Lp), 0.0), normal_hardness);
-            float  normd = dist * 254.0 / rad;
-            float  pw    = pow(normd + 1.0, -1.1) - kMinPower;
-            float  attn  = clamp(pw * kScale, 0.0, 1.0);
-            light += p.plight_col[i].rgb * p.plight_col[i].w * attn * pterm;
-        }
+        if (i < n_retail) continue;
+        points += pow_point_light(W, N, normal_hardness, p.plight_pos[i].xyz, p.plight_pos[i].w,
+                                  p.plight_col[i].rgb, p.plight_col[i].w);
     }
-  // Brightness cap (see light.glsl.h for rationale).
-    float light_ceiling = max(p.ambient_col.w, 1e-3f);
-    light = min(light, float3(light_ceiling));
-    float3 col = alb.rgb * light;
+    if (vm == 4) return float4(points, 1.0);
+    if (vm == 6) return float4(float3(sun_shadow), 1.0);
+    float3 light = min(base + points, float3(ceiling));
+    float3 col = clamp(alb.rgb * light, 0.0, 1.0);
 
     // Editor outline: each id_target pixel carries flag bits in the top
     // 4 bits of its packed obj_id (alpha channel). Bit 0x80 of A is

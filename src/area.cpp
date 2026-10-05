@@ -538,6 +538,7 @@ void TArea::Enter()
         const float int_mul   = float(RevisitedSettings.point_light_int_mul   * point_light_int_mul);
         const float range_mul = float(RevisitedSettings.point_light_range_mul * point_light_range_mul);
         mr->SetPointLightMultipliers(int_mul, range_mul);
+        mr->SetDaylightCycle((flags & AREA_DONIGHT) != 0);
     }
 
   // Load local scripts
