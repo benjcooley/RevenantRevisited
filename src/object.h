@@ -1006,14 +1006,16 @@ class TObjectInstance : protected SObjectDef
         // Finds a stat and returns its stat id or -1 if not found
     const char *ObjStatName(int32_t statid) const { return cl->ObjStatName(statid); }
         // Returns a statistic for an class
-    int32_t GetObjStat(int32_t statid) const { if ((uint32_t)statid < (uint32_t)stats.NumItems()) return stats[statid]; else return 0; }
-        // Returns a statistic for an object
+    virtual int32_t GetObjStat(int32_t statid) const { if ((uint32_t)statid < (uint32_t)stats.NumItems()) return stats[statid]; else return 0; }
+        // Returns a statistic for an object (retail vtable +0xdc; a player
+        // answers from its equipment- and spell-modified copy)
     int32_t FindObjStat(const char *statname) const { return cl->FindObjStat(statname); }
         // Finds a stat and returns its stat id or -1 if not found
     void SetStat(int32_t statid, int32_t value) { cl->SetStat(objtype, statid, value); }
         // Sets a class statistic
-    void SetObjStat(int32_t statid, int32_t value) { if ((uint32_t)statid < (uint32_t)stats.NumItems()) stats[statid] = value; }
-        // Sets an object statistic
+    virtual void SetObjStat(int32_t statid, int32_t value) { if ((uint32_t)statid < (uint32_t)stats.NumItems()) stats[statid] = value; }
+        // Sets an object statistic (retail vtable +0xe8; a player sets its
+        // modified copy too)
     void ResetStat(int32_t statid) { cl->ResetStat(objtype, statid); }
         // Resets class stat to default value
     void ResetObjStat(int32_t statid) { stats[statid] = cl->GetObjStat(objtype, statid); }

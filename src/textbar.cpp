@@ -84,13 +84,14 @@ void TTextBar::DrawBackground()
         ClearHealthDisplay();
 }
 
-void TTextBar::Print(char *txt, ...)
+void TTextBar::Print(const char *txt, ...)
 {
     va_list marker;
     va_start(marker, txt);
 
     name[0] = '\0';
     vsprintf(text, txt, marker);
+    va_end(marker);
     SetDirty(true);
 }
 
