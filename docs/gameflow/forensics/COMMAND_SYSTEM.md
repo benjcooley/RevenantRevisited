@@ -301,19 +301,21 @@ cap). The port's `charstats.h` uses the same numbering (SAVE_GAME.md
 `SK_FIRST`, `SKE_FIRST`, `SKN_FIRST`, `SKC_FIRST`.
 
 Port: `TPlayer::SetPlayerLevel`, `TPlayer::AddSkillExp`,
-`TRules::SkillExpForLevel`. Not ported: RefreshStats. Retail TPlayer
+`TRules::SkillExpForLevel`, `TPlayer::RefreshStats`. Retail TPlayer
 keeps a second, equipment- and spell-modified copy of the stats
 (`+0x34c` count, `+0x350` {id, value} pairs): SetObjStat writes both,
 GetObjStat reads the copy, RefreshStats rebuilds it, caps attributes and
-skills at 30 in it, and clamps health/mana/fatigue. The port has one set
-of stats, so AddSkillExp reads the unmodified skill level. Inside
-SetPlayerLevel the two agree (every value it reads was just written).
+skills at 30 in it, and clamps health/mana/fatigue. The port does the
+same ([PLAYER_STATS.md](../../gameplay/forensics/PLAYER_STATS.md)).
+Inside SetPlayerLevel the two agree (every value it reads was just
+written). SetPlayerLevel leaves Exp and NextExp alone.
 
 Opening scene, Locke from `newgame.sav`: STR 16 CON 12 AGI 14 RFL 14
-MND 14 LCK 16, ten skills at 30, AttackLevel 0 → after `playerlevel 1`
-(class Revenant, STATREQS 18, −12, 0, 0, 0, 14): STR 18 CON 12 AGI 14
-RFL 14 MND 14 LCK 14, skills 0 / 0 / 300, AttackLevel 1, H 25/25,
-M 26/26, F 3/3. The script then sets AttackLevel to 0 itself.
+MND 14 LCK 16, ten skills at 30, AttackLevel 0, H 25/100 M 0/105
+F 78/78 → after `playerlevel 1` (class Revenant, STATREQS 18, −12, 0, 0,
+14, 0 in file order: the fifth value is Mind's): STR 18 CON 12 AGI 14
+RFL 14 MND 14 LCK 14, skills 0 / 0 / 300, AttackLevel 1, H 100/100,
+M 105/105, F 78/78. The script then sets AttackLevel to 0 itself.
 
 ### 6.2 `incidentals` `0x00428250`
 

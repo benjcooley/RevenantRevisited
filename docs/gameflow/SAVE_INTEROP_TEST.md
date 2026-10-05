@@ -67,9 +67,11 @@ variants at random, as retail does.
   base-map sectors written back in version 15, and retail reads them
   in place of the base map.
 - **`Port Played`** also differs in what 600 frames of the port's
-  simulation changed: Locke's animation frame, his health / fatigue /
-  mana recovery timers, his last-poison-damage time (-1 in retail's
-  file; not looked into), and creatures that moved (12
+  simulation changed: Locke's animation frame, his health and mana (they
+  recover toward 100 and 105: 40 → 43, 7 → 10) and recovery timers, his
+  last-poison-damage time (-1 in retail's file; not looked into), his
+  play clock (`statetime`, +2496: 600 frames of game time, which retail's
+  `TPlayer::Animate` advances too), and creatures that moved (12
   of the 283 sectors differ, against 4 for `Port Resave`).
 - **Thumbnails** are the port's own rendering. `Port Resave`'s is solid
   magenta: it was captured from the first frame after the load, which
@@ -110,7 +112,7 @@ one with `Revenant.exe`); retail lists one save per folder in
    seconds of play change (position if Locke moved, recovery timers).
    Sectors: differences only where creatures moved.
 8. Load **`Port New Game`**. Expected: Locke in the Keep's resurrection
-   chamber on level 2, level 1, 25/25 health, no items, no spells. The
+   chamber on level 2, level 1, 25/100 health, no items, no spells. The
    module's `newgame.sav` stores Locke with INVISIBLE set and the
    opening scene clears it; please note whether Locke is visible and
    whether the opening plays. Either way it tells us what retail does

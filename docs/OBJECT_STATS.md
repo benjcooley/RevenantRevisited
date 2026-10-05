@@ -267,11 +267,19 @@ Player statistics use a modifier system that converts raw values to gameplay mod
 ```
 
 ### Calculated Statistics
-Some statistics are calculated from other statistics:
+Some statistics are calculated from other statistics. The shipped game's
+formulas (the 1998 source had `perlevel × Level × (100 + classmod + stat%) / 100`):
 
-- **MaxHealth** = `Rules.healthperlevel * Level * (100 + classmod + constitution%) / 100`
-- **MaxFatigue** = `Rules.fatigueperlevel * Level * (100 + classmod + constitution%) / 100`
-- **MaxMana** = `Rules.manaperlevel * Level * (100 + classmod + mind%) / 100`
+- **MaxHealth** = `(MaxHealthFlat + 75 + healthperlevel × Level) × (100 + MaxHealthPct + STATLEVEL Constitution + HEALTHMOD) / 100`
+- **MaxFatigue** = `(MaxFatigueFlat + 75 + fatigueperlevel × Level) × (200 + MaxFatiguePct + FATIGUEMOD + 2 × STATLEVEL Constitution) / 200`
+- **MaxMana** = `(MaxManaFlat + 75 + manaperlevel × Level) × (100 + MaxManaPct + STATLEVEL Mind + MANAMOD) / 100`
+- **ArmorValue** = `ACBonus + Σ Protection of the armor worn`
+
+The player's stats are read from a copy that equipment and stat effects
+modify. Addresses, the STATLEVEL tables, STATLINE and experience:
+[gameplay/forensics/PLAYER_STATS.md](gameplay/forensics/PLAYER_STATS.md).
+The "Modifier System" table above is the 1998 one; the shipped game uses
+rules.def's STATLEVEL tables instead.
 
 ### Skill Experience System
 Skills have both a current level and accumulated experience:
