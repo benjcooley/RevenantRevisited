@@ -339,44 +339,47 @@ TObjectBuilder* TObjectBuilder::GetBuilder(const char *name)
 // * TInventoryIterator *
 // **********************
 
-TObjectInstance* TInventoryIterator::NextItem()
+namespace {
+
+// REVSYNC: one step of retail's inventory walk 0x0046dfb0: the item after
+// `item` in `container`. A nested walk first enters `item`'s own inventory,
+// and climbs out of an exhausted bag to the item after the bag, until the
+// walk's `root` is exhausted. Retail also followed a container's linked
+// inventory (vtable 0x170), which only multiplayer sets (INVENTORY.md §5).
+template <class Owner>
+TObjectInstance* NextInventoryItem(Owner* root, Owner*& container, int32_t& index,
+                                   TObjectInstance* item, EInvWalk walk)
 {
-    // Currently this DOES NOT recurse into other object's inventories,
-    // because nothing uses it that way.  Copying some code from TMapIterator
-    // would make it possible to do so if it is ever needed.
-    item = nullptr;
-
-    if (owner)
+    if (walk == EInvWalk::Nested && item && item->NumInventoryItems() > 0)
     {
-        do
-        {
-            if (invindex >= owner->NumInventoryItems())
-                break;
-
-            item = owner->GetInventory(invindex++);
-
-        } while (!item);
+        container = item;
+        index = 0;
     }
 
+    while (container)
+    {
+        while (index < container->NumInventoryItems())
+            if (TObjectInstance* next = container->GetInventory(index++))
+                return next;
+        if (container == root)
+            break;
+        index = container->InvIndex() + 1;
+        container = container->GetOwner();
+    }
+    return nullptr;
+}
+
+} // namespace
+
+TObjectInstance* TInventoryIterator::NextItem()
+{
+    item = NextInventoryItem(owner, container, invindex, item, walk);
     return item;
 }
 
 const TObjectInstance* TConstInventoryIterator::NextItem() const
 {
-    item = nullptr;
-
-    if (owner)
-    {
-        do
-        {
-            if (invindex >= owner->NumInventoryItems())
-                break;
-
-            item = owner->GetInventory(invindex++);
-
-        } while (!item);
-    }
-
+    item = NextInventoryItem(owner, container, invindex, item, walk);
     return item;
 }
 
@@ -1189,33 +1192,122 @@ bool TObjectInstance::SetState(int32_t newstate)
     return true;
 }
 
-// Slot limits are retail's (0x0046f3d0): a free slot is a carried slot,
-// and a given slot may also be an equipment or belt slot (revdefs.h).
-// Not ported: retail moves an item already at the slot to a free one, and
-// merges stackables (vtable +0x98).
+namespace {
+
+// REVSYNC: the Pouch AddToInventory routes a player's new item to
+// (0x0046f41c..0x0046f4c5): the first item named "Pouch" in the player's
+// inventory, bags included, whose first item is of the new item's class.
+TObjectInstance* PouchFor(TObjectInstance* player, const TObjectInstance* item)
+{
+    for (TInventoryIterator i(player, EInvWalk::Nested); i; i++)
+    {
+        if (stricmp(i->GetName(), "Pouch") != 0)
+            continue;
+        const TInventoryIterator first(i.Item());
+        if (first.Item() && first->ObjClass() == item->ObjClass())
+            return i.Item();
+    }
+    return nullptr;
+}
+
+} // namespace
+
+// REVSYNC: AddToInventory @ 0x0046f3d0 (vtable 0x58), docs/gameflow/
+// forensics/INVENTORY.md §2. In order:
+//   1. No slot: a player's item goes to a Pouch holding its kind; else the
+//      first free slot, which must be a carried slot. Any slot past the
+//      belt fails.
+//   2. The item already at that slot is the one to make room; the item
+//      being added there already is a success with nothing to do.
+//   3. The item leaves the inventory it was in (an equipped item is
+//      unequipped there). If it was somewhere in this inventory's tree, its
+//      container and slot are where the item making room goes.
+//   4. MergeInto: an item that joins a pile is deleted, and that's a
+//      success.
+//   5. The item making room leaves; the item is placed; the item making
+//      room goes to the added item's old place, or else to a free slot.
+// Not ported (multiplayer only): the linked inventory of vtable 0x170 that
+// retail forwarded to, the Swag Bag link, the network messages and the
+// guard 0x00676e5d that silenced them. Deviations (INVENTORY.md §6): a null
+// item or this object itself fails; SignalAddedToInventory is still called
+// (the port's inventory icons hang on it; retail's AddToInventory didn't).
 bool TObjectInstance::AddToInventory(TObjectInstance* inst, int32_t slot)
 {
+    if (!inst || inst == this)
+        return false;
+
     if (slot < 0)
     {
+        if (ObjClass() == OBJCLASS_PLAYER)
+            if (TObjectInstance* pouch = PouchFor(this, inst))
+                return pouch->AddToInventory(inst, slot);
+
         slot = FindFreeInventorySlot();
         if (slot > kInvSlotLastCarried)
             return false;
     }
-
-    if ((uint32_t)slot > kInvSlotLast)
+    if (slot > kInvSlotLast)
         return false;
+
+    TObjectInstance* const occupant = GetInventorySlot(slot);
+    if (occupant == inst)
+        return true;
 
     inst->OffScreen();
 
-    int32_t index = inventory.Add(inst);
-    if (index < 0)
-        return false;
+    // The item's old place, when it moves within this inventory's tree
+    TObjectInstance* prevowner = nullptr;
+    int32_t prevslot = -1;
+    if (TObjectInstance* from = inst->GetOwner())
+    {
+        TObjectInstance* const top = GetTopOwner();
+        if ((top ? top : this)->Holds(inst))
+        {
+            prevowner = from;
+            prevslot = inst->InventNum();
+        }
+        inst->RemoveFromInventory();
+    }
+
+    if (inst->MergeInto(this))
+    {
+        delete inst;
+        if (this == Inventory.GetContainer() || (prevowner && prevowner == Inventory.GetContainer()))
+            Inventory.Update();
+        return true;
+    }
+
+    if (occupant)
+        occupant->RemoveFromInventory();
+
+    PlaceInInventory(inst, slot);
+    log_debug("[inv] %s: %s added at slot 0x%x", GetName(), inst->GetName(), slot);
+
+    if (occupant)
+    {
+        if (prevowner)
+            prevowner->AddToInventory(occupant, prevslot);
+        else
+            AddToInventory(occupant);
+    }
+
+    if (this == Inventory.GetContainer() || (prevowner && prevowner == Inventory.GetContainer()))
+        Inventory.Update();
+
+    return true;
+}
+
+// The placement retail's AddToInventory ends with (0x0046f64f..0x0046f69c):
+// the item joins the inventory array, gets an id if it has none
+// (MakeIndex 0x0044ce30), takes the slot and leaves the map.
+void TObjectInstance::PlaceInInventory(TObjectInstance* inst, int32_t slot)
+{
+    inst->invindex = short(inventory.Add(inst));
 
     if (inst->GetMapIndex() <= 0)
         inst->SetMapIndex(MapPane.MakeIndex());
 
-    inst->invindex = index;
-    inst->inventnum = slot;
+    inst->inventnum = short(slot);
     inst->owner = this;
 
     inst->pos.x = inst->pos.y = inst->pos.z = 0;
@@ -1223,30 +1315,34 @@ bool TObjectInstance::AddToInventory(TObjectInstance* inst, int32_t slot)
     inst->sector = nullptr;
 
     inst->SignalAddedToInventory();
-
-    if (this == Inventory.GetContainer())
-        Inventory.Update();
-
-    return true;
 }
 
+bool TObjectInstance::Holds(const TObjectInstance* item) const
+{
+    for (const TObjectInstance* o = item ? item->GetOwner() : nullptr; o; o = o->GetOwner())
+        if (o == this)
+            return true;
+    return false;
+}
+
+// REVSYNC: 0x0046f940. Retail found the type in its name-sorted table of
+// every class's types; the port asks each class in turn, which finds the
+// same type while names are unique. Deviation: an object that can't be
+// added is deleted (retail kept it, unowned).
 bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t slot)
 {
-    TObjectClass* cl;
-    int32_t ot;
-    for (int32_t i = 0; i < MAXOBJECTCLASSES; i++)
+    TObjectClass* cl = nullptr;
+    int32_t ot = -1;
+    for (int32_t i = 0; i < MAXOBJECTCLASSES && ot < 0; i++)
     {
         cl = TObjectClass::GetClass(i);
-        if (cl && (ot = cl->FindObjType(name)) >= 0)
-            break;
+        if (cl)
+            ot = cl->FindObjType(name);
     }
-
     if (ot < 0)
         return false;
 
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
-
+    SObjectDef def = {};
     def.objclass = cl->ClassId();
     def.objtype = ot;
 
@@ -1257,7 +1353,10 @@ bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t s
     if (number != 1)
         inst->SetAmount(number);
 
-    return AddToInventory(inst, slot);
+    if (AddToInventory(inst, slot))
+        return true;
+    delete inst;
+    return false;
 }
 
 // REVSYNC: 0x0046faf0. The owner hears of it first: retail unequipped an
@@ -1281,6 +1380,14 @@ void TObjectInstance::RemoveFromInventory()
     inventnum = -1;
 }
 
+// REVSYNC: GiveInventoryTo @ 0x0046fd30 (vtable 0x70) over the per-item give
+// 0x0046fc40 (vtable 0x6c); DeleteFromInventory is the same with no
+// recipient (0x00477950 / 0x00477970). Items are found by name in bags too.
+// A whole item moves (and may merge into the recipient's pile); part of a
+// pile stays and a new object of that many goes. Deviations (INVENTORY.md
+// §6): the new object is of the item's type (retail named it after the
+// giver, so a partial give of a pile to someone failed, question 121), and
+// what the recipient refuses stays with the giver (retail lost it).
 int32_t TObjectInstance::GiveInventoryTo(TObjectInstance* to, const char *name, int32_t number)
 {
     int32_t total = 0;
@@ -1294,29 +1401,33 @@ int32_t TObjectInstance::GiveInventoryTo(TObjectInstance* to, const char *name, 
         if (!inst)
             return total;
 
-        int32_t amt = max(inst->Amount(), 1);
+        const int32_t amt = max(inst->Amount(), 1);
 
         if (number >= amt)
         {
+            TObjectInstance* const from = inst->GetOwner();
+            inst->RemoveFromInventory();
+            if (!to)
+                delete inst;
+            else if (!to->AddToInventory(inst))
+            {
+                from->AddToInventory(inst);
+                return total;
+            }
             total += amt;
             number -= amt;
-            inst->RemoveFromInventory();
-            if (to)
-                to->AddToInventory(inst);
-            else
-                delete inst;
         }
         else
         {
             inst->SetAmount(amt - number);
-            if (to)
+            if (to && !to->AddToInventory(inst->GetTypeName(), number))
             {
-                if (!to->AddToInventory(name, number))
-                    return total;
+                inst->SetAmount(amt);
+                return total;
             }
             total += number;
             number = 0;
-            
+
             if (inst->owner == Inventory.GetContainer())
                 Inventory.Update();
         }
@@ -1366,11 +1477,12 @@ void TObjectInstance::GiveWeapons(TObjectInstance* to)
         AddToInventory(item);
 }
 
+// REVSYNC: 0x0046fde0 (vtable 0x84), bags included.
 int32_t TObjectInstance::GetInventoryAmount(const char *name) const
 {
     int32_t total = 0;
 
-    for (TConstInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this, EInvWalk::Nested); i; i++)
         if (stricmp(i.Item()->GetName(), name) == 0)
             total += max(i.Item()->Amount(), 1);
 
@@ -1446,18 +1558,20 @@ TObjectInstance* TObjectInstance::GetInventorySlot(int32_t slot) const
     return nullptr;
 }
 
+// REVSYNC: 0x00470280 (vtable 0xa8), bags included.
 TObjectInstance* TObjectInstance::FindObjInventory(const char *name) const
 {
-    for (TConstInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this, EInvWalk::Nested); i; i++)
         if (stricmp(i.Item()->GetName(), name) == 0)
             return i.Item();
 
     return nullptr;
 }
 
+// REVSYNC: 0x004703c0 (vtable 0xa4), bags included.
 TObjectInstance* TObjectInstance::FindObjInventory(int32_t objclass, int32_t type) const
 {
-    for (TConstInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this, EInvWalk::Nested); i; i++)
         if (i.Item()->ObjClass() == objclass && (type < 0 || i.Item()->GetStat("Type") == type))
             return i.Item();
 

@@ -1,0 +1,25 @@
+// FUN_00470280 @ 00470280 size=163
+
+/* WARNING: Removing unreachable block (ram,0x004702e7) */
+/* WARNING: Removing unreachable block (ram,0x004702eb) */
+/* WARNING: Removing unreachable block (ram,0x00470317) */
+/* WARNING: Removing unreachable block (ram,0x004702fc) */
+
+undefined4 __thiscall FUN_00470280(int *param_1,undefined4 param_2)
+
+{
+  int iVar1;
+  int *piVar2;
+  undefined4 uVar3;
+  
+  iVar1 = (**(code **)(*param_1 + 0x170))();
+  if (iVar1 == 0) {
+    FUN_0046dfb0();
+    return 0;
+  }
+  piVar2 = (int *)(**(code **)(*param_1 + 0x170))();
+  uVar3 = (**(code **)(*piVar2 + 0xa8))(param_2);
+  return uVar3;
+}
+
+

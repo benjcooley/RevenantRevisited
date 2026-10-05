@@ -144,7 +144,9 @@ void ApplySample(TPlayer* player, const SSampleStats& sample)
 }
 
 // Build the item type of that name (whatever its class) into `owner`'s
-// inventory at `slot`.
+// inventory at `slot` (a free slot when negative). Placed, not added: the
+// kit's gold piles and potions stay apart as laid out, where AddToInventory
+// would merge them.
 TObjectInstance* AddItem(TObjectInstance* owner, const char* name, int32_t slot,
                          int32_t amount = 1)
 {
@@ -163,8 +165,13 @@ TObjectInstance* AddItem(TObjectInstance* owner, const char* name, int32_t slot,
             break;
         if (amount != 1)
             item->SetAmount(amount);
-        if (owner->AddToInventory(item, slot))
+        if (slot < 0)
+            slot = owner->FindFreeInventorySlot();
+        if (slot <= kInvSlotLast && !owner->GetInventorySlot(slot))
+        {
+            owner->PlaceInInventory(item, slot);
             return item;
+        }
         delete item;
         break;
     }
