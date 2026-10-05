@@ -278,9 +278,11 @@ Entered from the menu (case 3), the Game Options command (`0x52`,
 `0x0047e700`) and the title. **Pane** `cls_0x5b9744`, instance
 `0x0066fcc0`; `+0x17c` is `fromGame` (`DAT_0066fe3c`). Open `0x0053a8b0`
 uses DEF flags `fromGame ? 0x11 : 0`; the control handler `0x0053aa90`
-(OptionsDef_SPEC §6.3): `ok` applies the settings and saves `[Controls]`,
-`cancel` restores the gamma; from the game either closes the pane (back
-to the menu), from the title the Options screen's next = the title.
+(OptionsDef_SPEC §6.3): `ok` applies the settings and saves `[Options]`
+and `[Controls]`, `cancel` restores the gamma; from the game either
+closes the pane (back to the menu), from the title the Options screen's
+next = the title. What each control reads and writes, and the INI, are
+in [OPTIONS.md](OPTIONS.md).
 
 ## 8. The title-route screens
 
@@ -320,7 +322,7 @@ The progress popup (`0x0053c1d0` / `0x0053c3d0` / `0x0053c360`, panel
 | `0x0047e500` and its nested `RunModal`s | `TInGameMenu` (`src/ingamemenu.*`, owned by `TPlayScreen`): a continuation chain of `PushModal` completions — same panes, order and results |
 | menu pane `0x00537110`–`0x00537400` | `TInGameMenuPane`: results 1–6, Save gated on `PlayScreen.IsControlOn()`, Quit/Exit through `TPopupPane`, ESC = Resume, samples paused while open |
 | load / save panes | `TSaveSlotPane` (the shared slot list, thumbnail, fields, Enter/ESC keys, last slot selected) under `TLoadGamePane` / `TSaveGamePane` (`src/savegamepane.*`); `TSaveGamePane::SanitizeName` is retail's filter |
-| options pane | `TOptionsPane::OpenOptions(fromGame, x, y)`; its "ok" / "cancel" go to the host |
+| options pane | `TOptionsPane::OpenOptions(fromGame, x, y)`; the settings and key bindings bound as retail's ([OPTIONS.md](OPTIONS.md) §9); after them "ok" / "cancel" go to the host |
 | popup `0x0053c060` | `TPopupPane::Ask(screen, key, flags, done)` (`src/popuppane.*`): retail's flags and panels, Yes/Ok 1, No/Cancel 0 |
 | modal flags `0xf` | `TScreen::MODAL_*` carry retail's bits and each pass honours its bit; `TPlayScreen::Update` stops the world (mode tick, level entry, areas, game clock) under `MODAL_PAUSE`; mouse and keys go to the modal only, the HUD and the control map get none |
 | DEF flags `0x01`, `0x10` | `TDefPane::Open(def, panel, flags, rect, datBase)`: `tex` / `alpha` chrome for the screen and the widget pack; the fade, time-based at the pulse rate; `Finish(result)` ends the modal after the fade-out |

@@ -312,9 +312,9 @@ debug level (`[console]`), so headless `--exec` runs can read it.
 - `playerlevel` gives each level's attribute points with `random(0, 6)`
   over seven stat ids starting at Strn, so one point in seven goes to the
   Attack skill. Intended? (§6.1)
-- The CD plays at its full volume (`0x60`) from boot; the INI
-  `MusicVolume` reaches it only when the player confirms the Options
-  screen. Intended? (§6.3)
+- Settled ([OPTIONS.md](OPTIONS.md) §7.9): `MusicVolume` isn't applied
+  at boot; it reaches the CD when the Options pane opens, on a drag and on
+  OK, and until then the CD keeps the OS mixer's level (question 16).
 - Walking to and facing objects (§6.5): questions 45–49 in
   [../AUTHOR_QUESTIONS.md](../AUTHOR_QUESTIONS.md).
 
@@ -439,19 +439,19 @@ the token advances.
 The CD object is `0x0065abc8`: `+0` redbook handle, `+4` base volume
 (`DAT_0065abcc`), `+8` playing, `+0xc` current volume, `+0x10`/`+0x14`
 fade step/pending (stepped by `0x0049a380`). Init `0x0049a270` sets the
-base to `0x60`. Options' OK (`0x0053af77`, `0x0053b425`, the `Music`
-slider) calls `0x0049a5c0`, which sets base and current to the device's
-readback. The INI `MusicVolume` (default `0x7f`) is read at boot
-(`0x00484ae0`) and written back (`0x00484ed0`) through `0x005d7a9c`, but
-reaches the CD only through Options' OK.
+base to `0x60` and current to the device's own volume. The Options pane
+calls `0x0049a5c0` when it opens, on a `Music` drag (`0x0053b431`) and on
+OK (`0x0053af87`); it sets base and current to the device's readback. The
+INI `MusicVolume` (default `0x7f`) is read at boot (`0x00484ae0`) and
+written back (`0x00484ed0`) through `0x005d7a9c`, but reaches the CD only
+through the Options pane ([OPTIONS.md](OPTIONS.md) §7.9).
 
 Port: the player's music volume is the music group volume
 (`audio::SetMusicVolume`); `setcdvolume` sets the scale on the music
 voice (`audio::MusicSetVolume` 0.5 or 1), which now lasts across tracks
 like the redbook volume. Retail's half is an integer halving of the base.
-Missing elsewhere: nothing sets the music group volume from the INI or
-the Options slider yet (`TOptionsPane` TODO; only `--test=audio` calls
-`SetMusicVolume`).
+The music group volume is the player's `MusicVolume`, set at boot and by
+the Options pane (`ApplyMusicVolume`, OPTIONS.md §9).
 
 ### 6.4 `fadecharacterout` `0x00428020`, `fadecharacterin` `0x00428070`
 

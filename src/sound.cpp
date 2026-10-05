@@ -358,6 +358,24 @@ void TSoundPlayer::SetVolume(int32_t volume)
     audio::SetMasterVolume(linear);
 }
 
+// ---- the player's levels ---------------------------------------------------
+
+void ApplyMusicVolume(int32_t level)
+{
+    const int32_t clamped = (std::clamp)(level, 0, kMusicLevelMax);
+    audio::SetMusicVolume(static_cast<float>(clamped) / static_cast<float>(kMusicLevelMax));
+    log_info("[sound] music level %d -> gain %.3f", clamped,
+             static_cast<double>(clamped) / kMusicLevelMax);
+}
+
+void ApplyEffectsVolume(int32_t level)
+{
+    const int32_t clamped = (std::clamp)(level, 0, kEffectsLevelMax);
+    audio::SetSfxVolume(static_cast<float>(clamped) / static_cast<float>(kEffectsLevelMax));
+    log_info("[sound] effects level %d -> gain %.3f", clamped,
+             static_cast<double>(clamped) / kEffectsLevelMax);
+}
+
 // ---- sound list -----------------------------------------------------------
 
 // REVSYNC: 0x0049ad20 — every "<dir>*.wav", then every "<dir>*.mp3",

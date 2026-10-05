@@ -332,8 +332,9 @@ Built (2026-10-05): `TDefPane` (`src/defpane.*`) opens with retail's DEF
 flags (`DEF_OVERLAY` picks the `tex` / `alpha` chrome, `DEF_FADE` the
 5-pulse fade, `Finish(result)` ends a modal after its fade-out), raises
 retail's control events as virtuals (`OnOpened`, `OnActivate`,
-`OnListSelect`, `OnKey`, `DrawField`) and has button keys, EDIT text entry
-and the list's scrollbar. The dialogs on it: `TInGameMenuPane` and the
+`OnListSelect`, `OnSliderChanged`, `OnKey`, `DrawField`) and has button
+keys, EDIT text entry, the list's scrollbar and slider range / value
+setters. The dialogs on it: `TInGameMenuPane` and the
 continuation chain `TInGameMenu` (`src/ingamemenu.*`, owned by
 `TPlayScreen`), `TLoadGamePane` / `TSaveGamePane` (`src/savegamepane.*`),
 `TOptionsPane`, `TPopupPane` (`src/popuppane.*`). A pane does its own
@@ -341,6 +342,12 @@ checks and confirmations; what an outcome means (load, return to the
 title, close the modal) is its host's, through the activation handler or
 the `PushModal` completion — retail branched inside the pane on a
 from-game flag.
+
+The player's settings stay retail's globals, read from and written to
+`Revenant.ini` in retail's keys and format: `[Options]` by `ReadOptions` /
+`SaveOptions` (`src/gameoptions.*`, at boot, on the Options pane's OK and
+at shutdown), `[Controls]` by the control map. The Options pane edits
+copies and applies them on OK ([forensics/OPTIONS.md](forensics/OPTIONS.md)).
 
 ### 4.6 Screens
 

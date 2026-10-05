@@ -231,19 +231,13 @@ class than a wrongly-labelled "port" of something else).
 
 ### G3.2 — Settings screen (T2)
 
-Existing `SRevisitedSettings` (per
-[project-revisited-settings]) is the source of truth for runtime
-state. Settings screen is a UI surface over the same struct + the
-existing INI round-trip.
-
-- Tabbed layout: Display / Audio / Controls / Game.
-- Display: resolution mode (Classic 640×480 vs Revisited 1920×1080,
-  per [project-resolution-modes]), windowed, vsync.
-- Audio: master / sfx / music volume, 3D audio on/off.
-- Controls: keybinding viewer (rebinding deferred unless trivial).
-- Game: difficulty, autosave on/off, log behavior.
-- "Apply" calls the existing Apply path; "Save Settings" persists.
-- Coord with ui track on widget style.
+Superseded by the retail-first decision: the settings screen is retail's
+Options pane (`options.def`, `TOptionsPane`), bound to the game's
+settings and persisted in `Revenant.ini` `[Options]` / `[Controls]` as
+retail did ([forensics/OPTIONS.md](forensics/OPTIONS.md)). The earlier
+tabbed Display / Audio / Controls / Game design was dropped.
+Revisited-only settings (resolution mode, vsync, …) would extend this
+pane through the overlay or live in `[Revisited]` (`SRevisitedSettings`).
 
 ### G3.3 — New Game + starting scripts (T3 + T4)
 
