@@ -86,6 +86,10 @@ extern char StartupVfxBackground[16];
 //                             return, tab, space, up/down/left/right, f1..f12,
 //                             del, home, end, pgup, pgdn, backspace), or a
 //                             numeric VK code.
+//   type TEXT               — type TEXT (the rest of the command, spaces
+//                             kept): one character event per character, 30 ms
+//                             apart, as the platform sends for printable keys
+//                             (what an EDIT field takes).
 //   loop                    — restart the script from the top when it ends
 //   take_snapshot [LABEL]   — capture one manual-filmstrip frame (only when
 //   | snapshot [LABEL]        --filmstrip=N,0 manual mode is active). Put a
