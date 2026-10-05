@@ -276,11 +276,12 @@ TObjectInstance* ResolveScriptObject(const char* name, TObjectInstance* caller, 
             return caller;
     }
 
-    // Retail checks the script's two trigger aliases here (+0xcc/+0xd0, named
-    // by manual trigger requests, 0x00492640). Until those are ported the only
-    // alias is "user", answered above.
+    // The running trigger's aliases: "item", "enemy", ... (TScript::Trigger).
+    if (script)
+        if (TObjectInstance* aliased = script->Alias(name))
+            return aliased;
 
-    return MapPane.FindClosestObject(const_cast<char*>(name), caller);
+    return MapPane.FindClosestObject(name, caller);
 }
 
 // REVSYNC: 0x0041f230

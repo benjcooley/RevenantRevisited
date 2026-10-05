@@ -143,7 +143,18 @@ Retail:
 - `Continue`'s wait gate, `SetWait` and the wait check, the
   interpreter's wait post-hook and `wait`'s grammar;
 - object names and expressions (`if`, `while`): `src/scriptvalue.cpp`,
-  [COMMAND_SYSTEM.md §2.4](COMMAND_SYSTEM.md).
+  [COMMAND_SYSTEM.md §2.4](COMMAND_SYSTEM.md);
+- manual trigger requests (`0x00492640`, `TScript::Trigger`): the
+  prototype search, the guard refusal, the user and second object with
+  their aliases, the second USE name. Callers pass retail's arguments:
+
+  | Caller | Request |
+  |---|---|
+  | `TObjectInstance::Use` `0x004705f0` | USE `<item>`, user "user", item "item"; alone: USE `<name>`/`<type>`, user "user", and on the user's script USE `<name>` with this object as "item" |
+  | `TCharacter::Use` `0x004d4a60` | GET `<item>` (user "user", item "item"); GIVE `<item>` on the giver's script (this character "user"); DIALOG (player "user") |
+  | `TCharacter::BeginFighting` `0x004d3b90` | COMBAT, the opponent as "user" and "enemy" |
+  | the `trigger` command `0x00423710` | TRIGGER `<name>` |
+  | dying | DEAD |
 
 Not ported:
 - the taken flags (`+0x00`) and `End` giving them back;
@@ -151,8 +162,16 @@ Not ported:
   the 1998 `TDialogPane` labels until the dialog port;
 - the pending `say` (`+0xd8`…);
 - the ALWAYS interrupt/resume (`+0xac`/`+0xb0`);
-- manual trigger requests with a user and aliases (`0x00492640`);
-  the 1998 `Trigger` runs, so manual triggers have no user;
+- a refused request's busy reply (`0x00494620`, multiplayer, needs
+  `busysay`/`busymsg`);
+- `TExit::Activate`'s ACTIVATE request has no user yet (retail
+  `0x0050d3a0` passes the activating object, defaulting to the player,
+  and leaves the exit to a scripted exit's block) — exits port;
+- `TCharacter::Use`'s side effects when GET, GIVE or DIALOG fires:
+  incidentals off for both characters, `0x004cee70`, `+0x108`;
+- two retail USE callers whose classes aren't ported (vtables `0x5b70bc`,
+  `0x5b72f8`, slot `0x110`: a delayed use that toggles state 2/3, then
+  USE `<name>`/`<type>` with no user);
 - prototype variables (`DATA`/`NUMBER`, `0x00497800`; only `forest.s`);
 - screen-fade and buy/sell waits are satisfied at once (no fade or
   buy/sell screen yet).
