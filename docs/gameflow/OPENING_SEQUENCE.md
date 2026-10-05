@@ -1,0 +1,76 @@
+# Opening sequence — acceptance test for scripting, commands and dialog
+
+The first minutes of a new game exercise most of the script engine, the
+command set and the dialog system. Getting them to play exactly as retail
+is the acceptance test for gameflow step 3 (ARCHITECTURE.md §9). This
+doc is the trace: what the opening needs, what the port has, what's next.
+
+## 1. The scene (`Ahkuilon/keep.s`, `OBJECT "SardokR"`, lines 479–670)
+
+Locke wakes in the Keep's resurrection chamber (newgame.sav puts him at
+1212,545 on level 2). Entering the Keep area loads `keep.s`; the player
+standing in Sardok's trigger cube (`CUBE 1145,475,0 1265,619,60`) starts
+the block:
+
+1. Control off, incidentals off; Locke faded out; camera centred on him;
+   level 1 and attack level 0.
+2. A vortex effect (`add gvortex`) rises; Locke faded back in and
+   resurrected (`try resurrect`); music to half volume.
+3. Voiced dialog: Locke and Sardok talk (`say I1LOC00`, `say I1SAR00`…),
+   characters turning to face each other (`pivotobject`) and walking
+   (`goto`).
+4. Two rounds of dialog choices (`Choice <label> <text>`,
+   `wait response`, `jump`) until the player picks the exit choice.
+5. Sardok gives the spell pouch, talismans and a scroll (`addinv`, `get`);
+   Tendrick gives clothes and a sword.
+6. Rahul bursts in through the exit door (`RESSEXIT.STATE …`, fade in,
+   `goto`), speaks, and sets `RAHULSTATE` for the next scene.
+
+## 2. What it needs
+
+| Need | Retail | Port (2026-10-04) |
+|---|---|---|
+| Area scripts attach to objects already in the world | `ParseScripts` `0x00496860` notifies the map (`N_SCRIPTADDED`); objects match by name (`ObjectScript` `0x00497370`) | **Broken**: the notify is gated on `MapPane.IsOpen()` (never true) and only reaches MapPane's 3×3 window |
+| CUBE trigger fires when the player enters | trigger scan in `TScript::Continue` `0x004933d0` (`0x004927b0` per trigger) | to check |
+| Line execution, blocks, labels, `jump`, `nowait` | `Continue`, `CommandInterpreter` `0x0041e8e0` | 1998 engine |
+| Waits: frames, character done, speech done, dialog response, screen fade | `TScript` wait machine: `SetWait` `0x00492b00`, check `0x00492d70` | **Missing**: 1998 waits live on `TCharacter` |
+| Commands used | see §3 | 6 not ported, rest 1998 |
+| Dialog: speech text + voice, choice list, response | `TDialogPane`, speech | 1998 `TDialogPane`, unwired |
+| Presentation: fades, camera, control off | PlayScreen fade state, `centeron`/`scrollto` | partial |
+
+## 3. Commands in the block (order of first use)
+
+`control`, `incidentals`*, `fadecharacterout`*, `centeron`,
+`playerlevel`*, `stat`, `wait`, `add`, `move`, `toggle`,
+`fadecharacterin`*, `try`, `setcdvolume`*, `say`, `scrollto`,
+`pivotobject`*, `goto`, `choice`, `jump`, `addinv`, `get`, `play`,
+`pivot`, `state`, `set`.
+
+\* not ported (`CmdNotPorted`). The rest run their 1998 bodies and each
+needs checking against its retail handler (`recon/discovered/commands/`).
+
+## 4. Sources
+
+- The 1998 source (`/Users/benjamincooley/projects/Revenant/`) is the
+  readable baseline for structure and most command bodies.
+- Retail Ghidra decomps give the delta to release. The script engine's
+  delta is large: retail moved waits from `TCharacter` into `TScript`
+  (typed waits, a choice list, per-script wait object), and the trigger
+  and continue logic changed with it.
+- Findings go to `forensics/SCRIPT_ENGINE.md` (engine) and
+  `forensics/COMMAND_SYSTEM.md` (commands) as each piece is ported.
+
+## 5. Order of work
+
+1. Script attachment for area-loaded scripts (whole loaded world).
+2. Trigger scan and `Continue` (retail), so the block starts.
+3. Command layer foundation (ARCHITECTURE §6: context, arguments,
+   resolver, evaluator), then the block's commands in order, each
+   checked against retail.
+4. The `TScript` wait machine.
+5. Dialog: speech text and voice, choices, response.
+6. Presentation: fades, camera, control.
+
+Verification: headless runs logging each executed line and command
+result; filmstrips at the key beats (vortex, first dialog, choice list,
+Rahul's entrance); an input script that picks the choices.

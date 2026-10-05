@@ -7,6 +7,8 @@
 #include "mapmanager.h"
 
 #include "gamemap.h"
+#include "object.h"
+#include "sector.h"
 #include "sectorstore.h"
 
 TMapManager::TMapManager()  = default;
@@ -107,6 +109,26 @@ void TMapManager::EvictAll()
     cache.clear();        // each unique_ptr -> ~TGameMap -> Unload notify
     if (had_current)
         listeners.Notify(EMapManagerEvent::CurrentMapChanged, this);
+}
+
+void TMapManager::Notify(uint32_t notify, void* ptr) const
+{
+    for (const std::unique_ptr<TGameMap>& map : cache)
+    {
+        if (!map)
+            continue;
+        for (TSector* sector : map->Sectors())
+        {
+            if (!sector)
+                continue;
+            for (int32_t i = 0; i < sector->NumObjSetItems(OBJSET_NOTIFY); i++)
+            {
+                TObjectInstance* object = sector->GetObjSetInstance(OBJSET_NOTIFY, i);
+                if (object && (object->Flags() & OF_NOTIFY))
+                    object->Notify(notify, ptr);
+            }
+        }
+    }
 }
 
 void TMapManager::FlushSectors() const

@@ -28,6 +28,7 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <algorithm>
 #include <atomic>
 #include <vector>
 
@@ -2415,9 +2416,17 @@ void TObjectInstance::SaveInventory(RTOutputStream os)
 
 }
 
+namespace {
+
+// Object names in sector and save files carry bit 7 on every byte.
+constexpr uint8_t kNameByteFlag = 0x80;
+constexpr uint8_t kNameByteMask = 0x7f;
+
+}  // namespace
+
 // REVSYNC: TObjectInstance::Load — vtable slot 0x160 (offset 352) of
 // cls_0x5a50e8 (= FUN_00472430). Body field order matches retail v15:
-//   uint8 namelen; namelen × char name
+//   uint8 namelen; namelen × char name (bit 7 set; 0 = the type's name)
 //   uint32 flags; int32 pos.x, pos.y, pos.z
 //   if !(flags & OF_IMMOBILE): int32 vel.x, vel.y, vel.z
 //   uint16 state                              (uint8 pre-v9)
@@ -2435,18 +2444,21 @@ void TObjectInstance::SaveInventory(RTOutputStream os)
 // back via Pos().
 void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
+    // REVSYNC: name block of TObjectInstance::Load @ 0x00472430. Names are
+    // stored with bit 7 set on every byte; length 0 means "the type's name",
+    // which the constructor already set. The 1998 source stored them plain.
     uint8_t len;
     is >> len;
     if (len > 0)
     {
         name = (char *)malloc(len + 1);
-        int32_t i = 0;
-        while (i < len)
+        for (int32_t i = 0; i < len; i++)
         {
-            is >> name[i];
-            ++i;
+            uint8_t encoded;
+            is >> encoded;
+            name[i] = (char)(encoded & kNameByteMask);
         }
-        name[i] = 0;
+        name[len] = 0;
     }
 
     uint32_t newflags;
@@ -2620,10 +2632,13 @@ void TObjectInstance::Save(RTOutputStream os)
     if (flags & OF_LIGHT)
         flags |= OF_PULSE | OF_ANIMATE;
 
-    uint8_t len = strlen(name);
+    // REVSYNC: name block of TObjectInstance::Save @ 0x00472980 — only a
+    // renamed instance stores its name, each byte with bit 7 set.
+    const bool renamed = name && inf && inf->name && strcmp(name, inf->name) != 0;
+    const uint8_t len = renamed ? (uint8_t)std::min<size_t>(strlen(name), 255) : 0;
     os << len;
     for (int32_t i = 0; i < len; i++)
-        os << name[i];
+        os << (uint8_t)(name[i] | kNameByteFlag);
   
   // Save general object data
     os << flags << pos.x << pos.y << pos.z;
