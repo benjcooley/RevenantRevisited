@@ -196,6 +196,8 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Retail `TDialogList` (base + module tables), `say`/`choice`/`wait response`, voices paced by their length ([forensics/DIALOG.md](forensics/DIALOG.md)) | 2026-10-05 |
 | [x] | Retail floating dialog pane: speech boxes, portrait ring, choices by key or mouse | 2026-10-05 |
 | [ ] | Retail shots S6 to settle colours, positions and hover behaviour | — |
+| [x] | The Keep's story chain plays end to end (headless, choices by key): opening; Rahul's death and Tendrick's scene (`ressexit` unlocked); DOOR1; Rand in the jail (`RandK`: looped choice, two menus, `TENDRICKSTATE = 1`); Tendrick in the throne room (`TendrickT`: four choices with loops, `Finish`, Locke to level 6); the level-6 scene (`GowE`: walks, `cast "electric bolt"`, Rand dies, fade, back to the Keep, `TENDRICKSTATE = 2`, `KeepExit` unlocked); menu saves at each step | 2026-10-05 |
+| [ ] | Dialog text in Windows-1252 (`’` 0x92 and the like) drops characters: the TrueType atlases cover 32..127 (agent working on it) | 2026-10-05 |
 
 **Exit:** Clicking an NPC brings up dialog; choice routes back to script branch.
 
