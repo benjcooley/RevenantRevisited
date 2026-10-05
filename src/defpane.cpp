@@ -1523,6 +1523,11 @@ float TDefPane::FadeLevel() const
     return std::clamp(level, 0.0f, kFadeSteps);
 }
 
+bool TDefPane::FadedIn() const
+{
+    return open && !finishing && (!(defflags & DEF_FADE) || FadeLevel() >= kFadeSteps);
+}
+
 // REVSYNC: the DEF pane's close slot @ 0x00435010: a DEF_FADE pane sets its
 // fade target to 0 and closes only when the pulse (0x00435d70) has stepped
 // the level down to it.

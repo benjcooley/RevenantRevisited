@@ -7,6 +7,11 @@
 
 #include "dialog.h"     // DialogList
 #include "logging.h"
+#include "renderer.h"   // Renderer (the progress bar)
+#include "surface.h"
+
+#include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -16,6 +21,10 @@ constexpr int32_t kPopupY = 122;
 constexpr int32_t kPopupW = 398;
 constexpr int32_t kPopupH = 212;
 constexpr const char* kPopupDef = "popup";
+
+// 0x0053c3d0: the bar strip's colour, 0x00429950(0xaa, 0, 0), over the
+// strip's transparent key colour.
+constexpr uint8_t kBarRed = 0xaa;
 
 }  // namespace
 
@@ -51,9 +60,84 @@ bool TPopupPane::Ask(TScreen& screen, const char* text, uint32_t flags,
     return pushed;
 }
 
+bool TPopupPane::OpenProgress(TScreen& screen, const char* key, std::function<void()> shown)
+{
+    if (IsOpen() || !key)
+        return false;
+
+    message = DialogList.GetLine(key);
+    bar     = 0;
+    int32_t ox = 0, oy = 0;
+    ClassicCanvasOrigin(ox, oy);
+    if (!Open(kPopupDef, "progress", DEF_INGAME, ox + kPopupX, oy + kPopupY, kPopupW, kPopupH,
+              kPopupDef))
+    {
+        log_error("[popup] can't open 'progress'");
+        return false;
+    }
+
+    log_info("[popup] progress: %s", key);
+    onShown    = std::move(shown);
+    shownPulse = false;
+    const bool pushed = screen.PushExclusive(this, TScreen::MODAL_INPUT, [this](int32_t) {
+        Close();
+        if (std::function<void()> closed = std::exchange(onClosed, nullptr))
+            closed();
+    });
+    if (!pushed)
+    {
+        onShown = nullptr;
+        Close();
+    }
+    return pushed;
+}
+
+void TPopupPane::SetProgress(int32_t permille)
+{
+    const int32_t value = std::clamp(permille, 0, 1000);
+    if (value <= bar)
+        return;
+    bar = value;
+    SetDirty(true);
+}
+
+void TPopupPane::CloseProgress(std::function<void()> closed)
+{
+    onShown  = nullptr;
+    onClosed = std::move(closed);
+    Finish(0);
+}
+
+void TPopupPane::Pulse()
+{
+    TDefPane::Pulse();
+    if (!onShown || !FadedIn())
+        return;
+    if (!shownPulse)
+    {
+        shownPulse = true;
+        return;
+    }
+    std::exchange(onShown, nullptr)();
+}
+
 void TPopupPane::OnOpened()
 {
     SetText("message", message);
+}
+
+void TPopupPane::DrawField(const SDefWidget& widget)
+{
+    if (widget.field != "progress")
+    {
+        TDefPane::DrawField(widget);
+        return;
+    }
+    TSurface* target = Surface();
+    const int32_t   filled = widget.w * bar / 1000;
+    if (target && filled > 0)
+        Renderer->DrawSolidRectToTarget(widget.x, widget.y, filled, widget.h, target->Width(),
+                                        target->Height(), kBarRed, 0, 0, 255);
 }
 
 void TPopupPane::OnActivate(const SDefWidget& widget, int32_t buttonIndex)
