@@ -300,6 +300,14 @@ debug level (`[console]`), so headless `--exec` runs can read it.
   (the message goes to the console). A value that isn't a number is
   looked up as a number variable of the caller's prototypes
   (`0x00497800`, sentinel `0xfeced300` → bad parameters).
+- `set <state> [=] <value>` (`0x0041fc00`) steps past the value after
+  storing it (one `WhiteGet`; after `on`/`true`/`off`/`false`, which have
+  already been stepped past, the second lands on the next line's first word
+  and the interpreter skips that line as extra parameters — no shipped
+  script writes those). The port left the number unread until
+  2026-10-05, so each of the 233 `set X = n` lines printed "(extra
+  parameters ignored)"; the value was stored either way. An unknown state is
+  ignored without a message, as retail.
 - `--exec` (`src/consoleexec.cpp`) is a separate command queue —
   **below the bar** (duplicates the console's job).
 - The interpreter's context syntax, the object resolver and the
@@ -719,8 +727,12 @@ Grammar details (retail, kept):
   (`0x00497800`, not found = `-20000000`). `BuySellAddCriteria "minstrength"
   1 VALUE` in `town.s` reads Gina's `VALUE`, set just before by
   `SETPROTOVARIABLE VALUE = player.STAT "LEVEL" / 3 + 16`.
-- `buysellsalesperson`, the dialog commands and `buysellremove` don't consume
-  their token; the interpreter skips the rest of the line.
+- `buysellsalesperson`, the dialog commands, `buysellremove`,
+  `buyselladdbuyitem` (`0x00427810`), `buyselladd`'s type and the four
+  criteria commands' max bound don't consume their token; the interpreter
+  skips the rest of the line and, since the answer is 0 with a token left,
+  prints "(extra parameters ignored)" to the console for each (as for
+  `jump`, whose `0x00420c70` leaves the label). The port answers the same.
 - `buysellscreen` also writes the dialog pane's responder (`+0x194`) and
   "control on while choosing" (`+0x1e8`); single player reads neither before
   `SetWait` rewrites them (DIALOG.md §4.1), so the port leaves them alone. In a

@@ -163,6 +163,13 @@ Retail:
   ended on any finished animation until 2026-10-05, so a script walk
   (`goto`, `gotorelative…`) went on after its first step
   ([COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) §6.5);
+- which lines run: `Continue` hands a line that starts with an identifier,
+  a keyword or quoted text (token types 4, 3, 2) to the interpreter, skips a
+  `:label` line, and reports anything else as "Bad token in trigger
+  block". The port left quoted text out until 2026-10-05, so forest.s's
+  `"TRAINING SWORD".DELETE` (MUDOKON1's ALWAYS block, line 1907, run once
+  Jong has set `EQUIPSTATE`) printed that error on the text bar instead of
+  running;
 - object names and expressions (`if`, `while`): `src/scriptvalue.cpp`,
   [COMMAND_SYSTEM.md §2.4](COMMAND_SYSTEM.md);
 - the trigger scan with the ALWAYS interrupt/resume (`+0xac`/`+0xb0`):
@@ -209,3 +216,25 @@ token's position as the ip), so the line after the label runs. Ported
 2026-10-05; the 1998 code skipped past the label line (`SkipLine`), which
 ate the next line's first token — harmless before a blank line, but every
 shop's `:sell1` / `buysellshoptype sell …` lost its shop type.
+
+The search starts at the top of the prototype (the 1998 "skip down to the
+current trigger" loop moves nothing: the fresh token isn't a BEGIN, so
+`SkipBlock` `0x004795f0` returns at once) and steps token by token
+(`LineGet` `0x004795a0`). On the way it sets the block depth (`+0xa4`) to 0
+and counts every `BEGIN` (+1) and `END` (−1) token (`0x004940cd`–`0x00494152`),
+so the script lands at the label as deep as the label sits: the trigger's
+own BEGIN is 1, each enclosing `IF … BEGIN` one more. A label it can't find
+prints "Jump to an unknown label attempted" (`0x005da1dc`) and returns 0
+with the ip unchanged and the depth counted to the end of the prototype (0,
+so the block ends after the jump's line). Ported 2026-10-05: the 1998 code
+set the depth to 1 ("a bit hacky"), so a choice or `jump` whose label sat
+inside an `IF … BEGIN` block ended the whole trigger at that IF's `END` and
+skipped the block's last lines, typically `CONTROL ON` and `SETCDVOLUME
+FULL` (the music stayed at half volume): from `New Game1`, forest.s
+Gatekeeper1 and town.s Heather1, Pauline1, Verhoeven1 and Kylie1, and the
+shops of Hruthford, Gina and Cronus, whose menus sit inside `IF MISTSTATE`
+blocks; found by the NPC sweep (STORY_TESTING.md §7). 284 of the 327
+labels in the module's DIALOG blocks sit inside an IF block. It
+also restarted the script on an unknown label; no shipped script has one
+(the 404 `jump` and `choice` lines of the module scripts and `master.s`
+all name a label of their own OBJECT block).

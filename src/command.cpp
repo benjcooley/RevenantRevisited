@@ -1245,6 +1245,12 @@ COMMAND(CmdWhile)
     return *cond ? CMD_LOOP : CMD_SKIPBLOCK;
 }
 
+// REVSYNC: set @ 0x0041fc00 -- `set <state> [= ] <number|on|true|off|false>`;
+// alone, prints the state. An unknown state is ignored (no message). After
+// storing the value it steps past it, so `set X = 1` leaves the line's end
+// and draws no "(extra parameters ignored)"; after on/off/true/false it has
+// already stepped once and so lands on the next line (no shipped script
+// writes those).
 COMMAND(CmdSet)
 {
     char buf[40];
@@ -1282,6 +1288,7 @@ COMMAND(CmdSet)
 
     ScriptManager.SetGameState(buf, value);
 
+    t.WhiteGet();
     return 0;
 }
 

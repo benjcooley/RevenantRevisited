@@ -336,3 +336,25 @@ Answer inline (or in chat) and the owning doc gets updated.
      Locke's pack, beside the pouch. Retail's `New Game1` has them inside
      the Spell Pouch. Did players drag them in, or did something else put
      them there?
+
+## NPC conversations ([STORY_TESTING.md](STORY_TESTING.md) §7)
+
+100. Rubold's idle walk (town.s:2653, his ALWAYS block) starts with
+     `gotorelativeposition playerway 0 0`, but no level of the module has
+     an object named `playerway` (his other three waypoints are in his
+     house, 1_3_19). Retail answers "Can't find any object by that name"
+     and the walk goes on from the second leg. Was a waypoint lost from the
+     map, and where did it stand?
+101. The Ogrok gatekeeper's block turns Locke with `player.PIVOTOBJECT
+     GATEKEEPER` four times (forest.s:2046, 2057, 2096, 2125); the object is
+     `Gatekeeper1` and nothing answers to `Gatekeeper`, so Locke never turns
+     to face him. Meant to be `GATEKEEPER1`?
+102. forest.s has two DIALOG blocks with no object: `Shari1` (no object of
+     that name on any level; `SHARIL1`, which it turns Locke to, doesn't
+     exist either) and a second `Pepper1` (the object stands in a house on
+     level 1, where town.s's own `Pepper1` block answers). Leftovers from
+     when those townsfolk stood outside?
+103. Kylie's conversation turns the music down with `SETCDVOLUME HALF` at
+     its start (town.s:2677) and again at its end (2778), where every other
+     block sets it back to `FULL`; after talking to her the music stays at
+     half volume until the next conversation. A typo for `FULL`?
