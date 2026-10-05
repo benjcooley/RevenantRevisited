@@ -89,6 +89,11 @@ bool TLogoScreen::Initialize()
         SetMouseBitmap(cursor);
     if (Renderer)
         Renderer->AddHud(&cursorHud, kCursorHudZ);
+
+    // REVSYNC: 0x0053a31d -- the fader, starting black; TScreen fades it in
+    // once Initialize returns and out when a button closes the screen.
+    screenfade.Setup(TScreenFade::kDefaultSteps);
+    fade = &screenfade;
     return true;
 }
 

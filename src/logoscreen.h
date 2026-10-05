@@ -43,8 +43,9 @@ class TLogoScreen : public TScreen
     [[nodiscard]] static int32_t ButtonFromName(const char* name);
 
   private:
-    TDefPane   menu;            // retail TButtonPane (+0x88) with the five buttons
-    TCursorHud cursorHud;
+    TDefPane    menu;           // retail TButtonPane (+0x88) with the five buttons
+    TCursorHud  cursorHud;
+    TScreenFade screenfade;     // retail +0x70: the title fades in and out
     int32_t    autoActivate = -1;
 };
 
