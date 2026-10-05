@@ -134,14 +134,10 @@ void TLogoScreen::Activate(int32_t button)
         GameFlow.QuitApplication();
         break;
     case BTN_LOADGAME:
-        // Retail switches to the load-game screen (0x0066fa78, loadgame.def);
-        // that screen is not ported yet (BURNDOWN T6).
-        log_warn("[logoscreen] Load Game screen not ported yet");
+        GameFlow.ShowLoadGameScreen();
         break;
     case BTN_OPTIONS:
-        // Retail switches to the options screen (0x0066fe88, options.def);
-        // TOptionsPane exists, its hosting screen is not ported yet (T2).
-        log_warn("[logoscreen] Options screen not ported yet");
+        GameFlow.ShowOptionsScreen();
         break;
     case BTN_MULTI:
         log_warn("[logoscreen] multiplayer is not supported");

@@ -10,6 +10,7 @@
 #include "loadscreen.h"
 #include "logging.h"
 #include "logoscreen.h"
+#include "menuscreens.h"
 #include "playscreen.h"
 #include "revenant.h"
 
@@ -71,12 +72,28 @@ void TGameFlow::StartNewGame()
 }
 
 // Start mode 1: a slot that can't be loaded becomes a new game.
+// REVSYNC: the load dialog's title branch (0x00539590): SetStartMode(1, slot),
+// next = PlayScreen, which loaded it behind the loading bar.
 void TGameFlow::LoadGame(const char* slot)
 {
     SSessionStart start;
     start.kind = SSessionStart::EKind::LoadSlot;
     start.slot = slot ? slot : "";
     PlayGame(start);
+}
+
+// REVSYNC: TLogoScreen Load Game @ 0x0053a220 and the death pane's Load
+// @ 0x00533970: next = the Load Game screen (0x0066fa78), loadFromGame = 0.
+void TGameFlow::ShowLoadGameScreen()
+{
+    SwitchTo(&LoadGameScreen);
+}
+
+// REVSYNC: TLogoScreen Options @ 0x0053a260: next = the Options screen
+// (0x0066fe88).
+void TGameFlow::ShowOptionsScreen()
+{
+    SwitchTo(&OptionsScreen);
 }
 
 // REVSYNC: TPlayer::Animate @ 0x00518aa0 sets PlayScreen's next screen to
@@ -96,7 +113,8 @@ void TGameFlow::RestartAfterDeath()
 }
 
 // REVSYNC: endgame @ 0x00427060, in-game Quit Module (0x0047e500 case 4),
-// death pane Exit @ 0x00533990 — each sets next = title and closes.
+// death pane Exit @ 0x00533990, the Load Game and Options screens' Exit
+// (0x00539590, 0x0053aa90) — each sets next = title and closes.
 void TGameFlow::ReturnToTitle()
 {
     SwitchTo(&LogoScreen);
