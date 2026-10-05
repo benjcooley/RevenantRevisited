@@ -264,6 +264,12 @@ UI model and replace the re-entrant modal loop.
   migrated and are removed as panes move over.
 - Dirty tracking uses the existing `SetDirty` propagation; children
   compose before parents.
+- **Screen fade.** A screen that fades embeds a `TScreenFade` and points
+  `TScreen::fade` at it (retail's fade-in/fade-out slots). The screen
+  fades in when it begins, fades out when closed (`RequestClose`;
+  `AppFrame` ends it at black, `ReadyToEnd`), steps the fader after each
+  tick's pulse, and draws its cover as its top HUD layer, above the
+  cursor. Forensics: [forensics/SCREEN_SYSTEM.md](forensics/SCREEN_SYSTEM.md) §2.6.
 
 ### 4.2 Modal stack (replaces exclusive panes + `RunModal`)
 
@@ -445,6 +451,7 @@ perform.
 | `TScriptManager` frees script instances on Close | objects own their scripts; the manager's list is non-owning | one owner (the port's objects already freed them: double free) | none |
 | Sectors loaded, streamed and freed by `TMapPane` (global loaded list, `UpdateSectors`, `FreeAllSectors`) | `TMapManager` loads whole levels and owns their sectors; `TMapPane`'s window borrows the current map's | one owner; the window can't free or outlive what it borrows | none (editor reloads go through `TMapManager::ReloadLevel`) |
 | Panes blit into a CPU backbuffer | Pane `Compose`/`Draw` through `TRenderer` | GPU compositor | none (Classic pixel-identical) |
+| Screen fade drawn per tick in 31 alpha levels | stepped on the same ticks, cover interpolated; a fade-in's cover one step behind | time-based animation | smooth; the fade-in reveal trails retail's by one tick |
 | Handlers with 4 raw args, hand-rolled token parsing | `SCommandContext` + `TCommandArgs` | one parsing vocabulary | none |
 | 3,700-line `command.cpp` | per-family handler files, one table | maintainability | none |
 

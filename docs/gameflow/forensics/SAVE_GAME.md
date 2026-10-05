@@ -305,8 +305,9 @@ the order differs it searches every class stat. When object flag
     read `CurrentScreen->FrameCount()`, so building the world before the
     PlayScreen ran crashed. *Fixed in 2c* (frame 0, which is what
     retail's load inside `TPlayScreen::Initialize` saw).
-11. Not ported in `LoadGame`'s reset: finishing a PlayScreen fade
-    (`0x0047ece0`), ending a conversation (`0x005360f0`), emptying the
+11. Not ported in `LoadGame`'s reset: closing PlayScreen's bottom
+    drawer (`0x0047ece0`, a drawer close request; not a fade — see
+    SCREEN_SYSTEM.md §2.6), ending a conversation (`0x005360f0`), emptying the
     buy/sell pane (`0x00532f40`). In `SaveGame`: the editor path that
     rewrites the module's `newgame.sav`. *Thumbnail ported in 2f*
     (§11.7): `TSaveGame::CaptureThumbnail` reads back the next presented

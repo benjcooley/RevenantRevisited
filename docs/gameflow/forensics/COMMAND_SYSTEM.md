@@ -218,7 +218,15 @@ errors through it; scripts never see the text.
   command", and the script goes on with the next line.
 - The commands of the Keep's opening scene are ported: `incidentals`,
   `fadecharacterout`/`fadecharacterin`, `playerlevel`, `setcdvolume`
-  (§6).
+  (§6). `fadescreenout`/`fadescreenin` and `wait screenfade` are ported
+  (SCREEN_SYSTEM.md §2.6). `wait` takes any object as its context, as
+  retail; with the 1998 character-only context a door's `WAIT` failed
+  the class check.
+- **Bug, not fixed:** a line the interpreter skips (class context
+  mismatch, editor-only, missing parameters) takes the next line with
+  it: `TToken::SkipLine` reads past the line's end into the next line's
+  first token, and `Continue` then skips "the rest of the line" — the
+  next one.
 - `--exec` (`src/consoleexec.cpp`) is a separate command queue —
   **below the bar** (duplicates the console's job).
 - The interpreter's context syntax, the object resolver and the

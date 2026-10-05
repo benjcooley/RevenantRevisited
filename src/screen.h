@@ -415,6 +415,64 @@ class TPane
 // made yet (docs/gameflow/ARCHITECTURE.md §4.4).
 void ClassicCanvasOrigin(int32_t& x, int32_t& y);
 
+// *************************************
+// * TScreenFade - the screen fade     *
+// *************************************
+
+// The picture fading to black and back: retail's screen fader (vtable
+// 0x005a4c30, Screen.cpp, 24 bytes). A screen that fades embeds one and
+// points TScreen at it; TScreen fades it in when the screen begins, out
+// when the screen closes, and draws it over everything else in the frame
+// (docs/gameflow/forensics/SCREEN_SYSTEM.md §2.6). Scripts fade the play
+// screen with `fadescreenout` / `fadescreenin` and wait with
+// `wait screenfade`.
+//
+// The fader holds state only. Its level runs from 0 (black) to `steps`
+// (clear) and moves at 24 steps a second of simulation time, so a fade
+// lasts steps / 24 seconds. TScreen brings it up to each tick right after
+// the tick's pulse, as retail stepped it, so scripts see it change on the
+// same ticks; between ticks the cover is interpolated.
+class TScreenFade
+{
+  public:
+    // Every retail fader is set up 8 steps long (PlayScreen 0x0047b134,
+    // TLogoScreen 0x0053a33e): a third of a second.
+    static constexpr int32_t kDefaultSteps = 8;
+
+    // REVSYNC: 0x0046cf90 (vtable +0x30): `steps` long, starting black.
+    // Retail also stores a color (+0x14) that its draw never reads.
+    void Setup(int32_t steps);
+
+    // REVSYNC: 0x00491bf0 (+0x28)
+    void FadeIn();
+    // REVSYNC: 0x00491c20 (+0x2c)
+    void FadeOut();
+
+    // Moves the level toward its target up to tick time `time` (TTime
+    // seconds). REVSYNC: 0x00491c90 (+0x00), retail's one step per tick
+    // from the screen's pulse pass 0x0048f180.
+    void AdvanceTo(double time);
+
+    // REVSYNC: 0x0046cf80 (+0x18)
+    [[nodiscard]] bool IsBusy() const { return (flags & (kFadingIn | kFadingOut)) != 0; }
+    // REVSYNC: 0x00491c70 (+0x24)
+    [[nodiscard]] bool IsFadedOut() const { return level == 0.0f && !(flags & kFadingOut); }
+
+    // How much of the frame the black cover hides at time `now`: 0 clear
+    // .. 1 black. REVSYNC: 0x00491cb0 (+0x10)
+    [[nodiscard]] float Opacity(double now) const;
+
+  private:
+    static constexpr uint32_t kFadingIn  = 2;
+    static constexpr uint32_t kFadingOut = 4;
+
+    uint32_t flags  = 0;        // +0x04
+    float    level  = 0.0f;     // +0x08: steps of the fade, 0 = black
+    float    target = 0.0f;     // +0x0c
+    int32_t  steps  = 0;        // +0x10
+    double   clock  = -1.0;     // the tick time `level` is at; < 0 before the first
+};
+
 // ********************************
 // * TScreen - Game screen object *
 // ********************************
@@ -442,6 +500,10 @@ class TScreen
     bool done = false;                  // Set by subclass when screen is ready to end (AppFrame transitions)
     int32_t screenframes;                   // Number of ticks since screen initialized
     int64_t lastPulseLegacyFrame = -1;  // Last TTime::LegacyFrameCount() value a Pulse was emitted at
+    // The screen's fader, set by screens that fade (in Initialize, as
+    // retail). Retail has a fade-in and a fade-out slot (+0x40 / +0x44);
+    // every retail screen points both at the one fader it embeds.
+    TScreenFade* fade = nullptr;
 
   public:
     TScreen();
@@ -561,6 +623,20 @@ class TScreen
     [[nodiscard]] bool IsDone() const { return done; }
     void SetDone(bool v = true) { done = v; }
 
+    // REVSYNC: close request 0x0048ea40: the screen is done and fades out.
+    // (Retail also closes the modal panes and broadcasts the closing event
+    // here; the port does both when the screen ends.)
+    void RequestClose();
+    // REVSYNC: TimerLoop 0x004911b0 exit test: done, and no fade still
+    // running unless the fade-out has reached black. AppFrame ends the
+    // screen when this holds.
+    [[nodiscard]] bool ReadyToEnd() const;
+
+  // The screen fade. Null for screens that don't fade.
+    [[nodiscard]] TScreenFade* Fade() const { return fade; }
+    // REVSYNC: 0x0048eb00
+    [[nodiscard]] bool IsFading() const { return fade && fade->IsBusy(); }
+
   // Get screen frames
     int32_t FrameCount() { return screenframes; }
       // Get the current frame number since this screen was initialized
@@ -578,6 +654,7 @@ class TScreen
   private:
     friend class TPane;
     friend class TScreenPaneLayer;
+    friend class TScreenFadeLayer;
 
     bool BeginScreen();
       // Calls all pane and screen initialize functions
@@ -587,6 +664,8 @@ class TScreen
       // Compose phase of DrawFrame for the pane tree (no render pass open)
     void DrawPanes();
       // HUD-layer draw of the pane tree, called by the renderer
+    void DrawFade();
+      // HUD-layer draw of the fade's black cover, over everything else
     void RequestModalEnd(PTPane pane, int32_t result);
     void ProcessModalEnds();
       // Pops modals that called EndModal and runs their completions
@@ -595,4 +674,5 @@ class TScreen
     TModalDone modaldone[NUMEXCLUSIVEPANES];  // completion per exclusive entry
     std::vector<SModalEnd> modalends;         // EndModal requests, processed next tick
     std::unique_ptr<THudDrawable> panelayer;  // registered with the renderer while the screen runs
+    std::unique_ptr<THudDrawable> fadelayer;  // likewise, above the cursor
 };
