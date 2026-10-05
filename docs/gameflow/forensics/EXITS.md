@@ -748,9 +748,10 @@ Verified (headless, `--quickstart`, `--exec`):
   the player arrives "on an exit" and nothing fires -- retail's
   anti-bounce (`newgame.sav` stores Locke with OF_ONEXIT, and he starts
   on a strip in the chamber).
-- Not exercised: an unscripted AutoActivate exit (stairs, DunTeleport)
-  walked onto; it shares the strip test with the stone and the list
-  lookup with `activate`.
+- an unscripted AutoActivate exit: on level 41 (The City of the
+  Children), stepping onto the pad at (10312, 15816) after 6+ frames off
+  any strip sends Locke to `Lv41Tel5`'s target (9928, 15912); the list's
+  z (272) becomes the floor's (12) as he lands.
 
 **IsOutside reads past the sine table.** Retail passes the Facing stat
 plus the object's facing byte (and that plus 0x7f) to `0x0046db20`
