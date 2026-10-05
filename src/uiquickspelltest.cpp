@@ -407,7 +407,7 @@ private:
     static void UpdateSyntheticState()
     {
         if (!g_syntheticStateEnabled) return;
-        if (StartupInputScript[0] || TestModes::InputScriptActive()) return;
+        if (!StartupInputScript.empty() || TestModes::InputScriptActive()) return;
 
         const double t = TTime::Time();
 

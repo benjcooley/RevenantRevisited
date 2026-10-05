@@ -3243,7 +3243,7 @@ void InputSimTick(TScreen* screen)
 
 void InputSimArm()
 {
-    InputSimStart(StartupInputScript);
+    InputSimStart(StartupInputScript.c_str());
 }
 
 bool InputScriptActive()

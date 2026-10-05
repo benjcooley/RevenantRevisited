@@ -222,7 +222,7 @@ void DriveSyntheticState()
     // When an input-script was provided on the command line, the script owns
     // state for the entire run. It may drain before sapp_request_quit()
     // finishes, so gate on the startup arg in addition to live queue state.
-    if (StartupInputScript[0] || TestModes::InputScriptActive()) return;
+    if (!StartupInputScript.empty() || TestModes::InputScriptActive()) return;
 
     SHudState& s = GetHudState();
 

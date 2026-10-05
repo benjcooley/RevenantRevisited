@@ -8,6 +8,8 @@
 
 #include "revenant.h"
 
+#include <string>
+
 extern char StartupTestMode[32];
 // --sector=L_X_Y — which sector --test=sector should render. Empty = default.
 extern char StartupSectorId[32];
@@ -97,4 +99,4 @@ extern char StartupVfxBackground[16];
 // Example (per-item move→hover→press→release→snap):
 //   --filmstrip=6,0 --input-script="moveto 435 161; pause 300; take_snapshot;
 //     left_down; pause 150; take_snapshot; left_up; pause 300; ..."
-extern char StartupInputScript[1024];
+extern std::string StartupInputScript;      // any length

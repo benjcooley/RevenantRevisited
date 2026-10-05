@@ -27,4 +27,4 @@ char  StartupQuickstartSave[MAXPATHLEN] = "";
 bool  StartupNoIntro                    = false;
 char  StartupMenuButton[32]             = "";
 char  StartupVfxBackground[16] = "";
-char  StartupInputScript[1024] = "";
+std::string StartupInputScript;
