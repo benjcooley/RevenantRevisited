@@ -307,6 +307,11 @@ light = D3D ambient + dir colour · max(N·L_dir, 0)
 lit   = albedo · min(light, s)
 ```
 
+Both models live in `src/shaders/lightmodel.*.h` (`shade_surface`). The
+deferred light pass and the translucent mesh pass (a character fading in or
+out) both call it, so a fading mesh is lit exactly like an opaque one
+([RENDERER_ARCHITECTURE.md](RENDERER_ARCHITECTURE.md), "Translucent meshes").
+
 Known simplifications for meshes, each to confirm with a retail shot (§7):
 `b` is evaluated per pixel instead of at the object origin; every light in
 range counts instead of the `MaxLights` nearest; the D3D distance attenuation
