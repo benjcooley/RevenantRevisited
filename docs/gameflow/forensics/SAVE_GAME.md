@@ -218,13 +218,20 @@ persists only through the save file.
 1. **Writes escape into the install.** `rev_fopen("…", "wb")` falls back
    through RunPath, the module dir and the data root when the SavePath
    target directory doesn't exist. `SavePath/curmap` is never created, so
-   every sector save lands in the retail install as a file literally
-   named `curmap\L_X_Y.DAT` (197 such files in `data/`, dated Jun 7).
+   every sector save lands in the data root (the repo's copy of the
+   retail install) as a file literally named `curmap\L_X_Y.DAT`: 197 in
+   the main checkout's `data/` (Jun 7), and the same again in this
+   worktree's `data/` from today's runs. A `.gitignore` rule
+   (`/data/curmap\\*.DAT`) hid them.
 2. **Reads pick those files back up.** The data-root fallback joins the
    unnormalized path, so `curmap\0_0_14.DAT` resolves to the stray
-   files. A new game in the port starts from an old session's modified
-   sectors. A real retail `data/Curmap/` (a GOG player's world) would be
-   read the same way.
+   files. Each run re-saved them with duplicated objects: level 0 loaded
+   47,205 → 48,542 → 49,879 objects across consecutive runs, against
+   35,549 in the pristine base map. A retail `data/Curmap/` (someone's
+   retail playthrough) would be read the same way.
+   *Fixed in 2a:* `SectorStore` (working set under SavePath, base map
+   through the resource layer), `rev_fopen` writes confined to
+   SavePath, the `.gitignore` rule removed.
 3. **The pre-release wrapper overwrites retail fields.** `TSaveGame`
    writes AutoMap data + 32 slots + one player. UI commit `ab4d8f5`
    stores HUD state in slots 2–12 with a `0xABCD` sentinel. None of this

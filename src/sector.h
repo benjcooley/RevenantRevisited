@@ -95,6 +95,8 @@ class TSector final
     static TSector* LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory, bool preload = true);
     // Save and delete the sector (doesn't really delete it if sector is preload)
     static void CloseSector(TSector* sector);
+    // Delete the sector without saving it (its working-set copy is being replaced)
+    static void DiscardSector(TSector* sector);
 
     // Load and save the sector (straight load.. don't use preloaded sector list)
 
@@ -191,9 +193,9 @@ class TSector final
   private:
     uint16_t *walkmap;
     int32_t  level, sectorx, sectory;
-    bool preloaded;
+    bool preloaded = false;
     char filename[FILENAMELEN];
-    int32_t usecount;
+    int32_t usecount = 0;
 
     // v14+ adds a 4-byte hash between sector version and numobjects.
     // Retail regenerates it at save time over sector coords, numobjects,

@@ -72,6 +72,9 @@ char *makepath(char *name, char *buf, int32_t buflen);
 // Open a FILE relative to SavePath / RunPath. Named to avoid the libc
 // popen(3) shell-pipe function, which would otherwise win overload
 // resolution on POSIX.
+//   Reads:  SavePath → Revisited overlay → RunPath → module dir → data root → VFS.
+//   Writes: SavePath only (the install is read-only); the caller creates
+//           any directories it writes into.
 FILE *rev_fopen(const char *file, const char *flags);
 
 // Reads a whole file through rev_fopen (SavePath, Revisited overlay, RunPath,

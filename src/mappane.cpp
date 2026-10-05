@@ -511,77 +511,6 @@ void TMapPane::FreeBackgroundBuffers()
 }
 
 // ******************
-// * Map Management *
-// ******************
-
-// Loads the current map in the "curmap" directory from the given directory 
-// (i.e. "savegame.001"), or clears the "curmap" directory if nullptr, forces
-// reload of all sectors.
-void TMapPane::LoadCurMap(char *from)
-{
-    char frompath[MAXPATHLEN], topath[MAXPATHLEN];
-    
-    ClearCurMap();
-
-    if (!from)
-        return;
-
-    makepath(from, frompath, MAXPATHLEN);
-    strcat(frompath, "\\*.DAT");
-    makepath(CURMAPDIR, topath, MAXPATHLEN);
-
-    copyfiles(frompath, topath);
-}
-
-// Saves map in curmap to the given game subdirectory 
-//(i.e. "savegame.001") or "map" if null
-void TMapPane::SaveCurMap(char *to)
-{
-    ReloadSectors(); // Forces sectors to be saved
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    TSector::ClearPreloadSectors();
-    
-    UNLOCKSECTORS;      // Do not return between these two things
-
-    if (!to)
-        to = BASEMAPDIR;
-
-    char frompath[MAXPATHLEN], topath[MAXPATHLEN];
-
-    makepath(CURMAPDIR, frompath, MAXPATHLEN);
-    strncatz(frompath, "\\*.DAT", MAXPATHLEN);
-    makepath(to, topath, MAXPATHLEN);
-    strncatz(topath, "\\", MAXPATHLEN);
-
-    copyfiles(frompath, topath);
-}
-
-// Deletes all files in the "curmap" directory, and forces sectors to reload.
-void TMapPane::ClearCurMap()
-{
-    char path[MAXPATHLEN];
-    
-    ReloadSectors();
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    TSector::ClearPreloadSectors();
-    
-    UNLOCKSECTORS;      // Do not return between these two things
-
-    makepath("curmap", path, MAXPATHLEN);
-    strncatz(path, "\\*.DAT", MAXPATHLEN);
-
-    deletefiles(path);
-}
-
-// ******************
 // * Input Handling *
 // ******************
 
@@ -3902,14 +3831,14 @@ void TMapPane::UpdateActiveWindow()
     const int32_t new_sectorx = player_sx - SECTORWINDOWX / 2;
     const int32_t new_sectory = player_sy - SECTORWINDOWY / 2;
 
-    if (level == player_lvl && sectorx == new_sectorx && sectory == new_sectory)
-    {
-        // Already centered correctly. Cells stay valid as long as the
-        // map underneath doesn't change -- TGameMap::Unloaded would
-        // null these out at the renderer too.
+    // The cells borrow the map's sectors, so they are only valid while the
+    // map they came from is alive and current: a load replaces the map even
+    // when the player lands in the same sector cell.
+    if (windowmap.Get() == map && level == player_lvl &&
+        sectorx == new_sectorx && sectory == new_sectory)
         return;
-    }
 
+    windowmap = map;
     level    = player_lvl;
     sectorx  = new_sectorx;
     sectory  = new_sectory;

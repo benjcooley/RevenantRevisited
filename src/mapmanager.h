@@ -29,6 +29,7 @@
 #include "listenerlist.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -97,6 +98,30 @@ class TMapManager
     // Evict every cached map. Clears current (and notifies). Used at
     // shutdown.
     void EvictAll();
+
+    // ---- Working set (retail TMapPane curmap functions) ---------------
+    // The sectors a game has modified live in the working set
+    // (SectorStore). These move it between the loaded world and save slots.
+    // See docs/gameflow/forensics/SAVE_GAME.md §4-5.
+
+    // REVSYNC: 0x00499e60 — write every loaded sector to the working set.
+    void FlushSectors() const;
+
+    // REVSYNC: TMapPane::ClearCurMap @ 0x0044e460 — drop every loaded map
+    // and empty the working set, so the world reverts to the base map.
+    // Loaded sectors are discarded rather than saved (retail saved them and
+    // then deleted the files; the outcome is the same).
+    void ClearCurMap();
+
+    // REVSYNC: TMapPane::LoadCurMap @ 0x0044e050 — ClearCurMap, then take
+    // the working set from `dir` (a save slot's CurMap).
+    void LoadCurMap(const std::filesystem::path& dir);
+
+    // REVSYNC: TMapPane::SaveCurMap @ 0x0044e250 — flush, then copy the
+    // working set into `dir`. Retail first copied the previously loaded
+    // slot's CurMap into `dir`; LoadCurMap already imported that into the
+    // working set, so the copy is a no-op and isn't repeated here.
+    void SaveCurMap(const std::filesystem::path& dir) const;
 
     // ---- Listener API -------------------------------------------------
     using Listeners       = TListenerList<EMapManagerEvent, TMapManager*>;

@@ -125,10 +125,6 @@ class TGameSession
 
     bool Save(const char* slot);         // retail SaveGame
     void End();                          // leave the game: unload world, clear players, close areas
-
-    // Bumped whenever the loaded world is replaced. Presenters (the map
-    // renderer via TPlayScreen) rebind when it changes.
-    [[nodiscard]] uint32_t WorldVersion() const;
 };
 ```
 
@@ -143,22 +139,24 @@ class TGameSession
   retail address.
 - **`TGameState::LoadStream/SaveStream`** move to
   `TInputStream`/`TOutputStream` (the binary streams the format uses).
-- **Working set.** `TMapManager` gains `FlushSectors`, `ClearCurMap`,
-  `LoadCurMap(dir)`, `SaveCurMap(dir)`. The working set is always
-  `<SavePath>/curmap` (created on demand). `TSector::Load` reads the
-  working set, then the module map — never the install's `curmap`.
-  `rev_fopen` write modes resolve only under SavePath; they never fall
-  back to the install, the module or the data root.
+- **Working set.** `SectorStore` (`src/sectorstore.h`) owns where sector
+  files live: the working set `<SavePath>/curmap` (created on demand)
+  and the base map through the resource layer — never the install's
+  `curmap`. `TMapManager` owns the loaded sectors and gains
+  `FlushSectors`, `ClearCurMap`, `LoadCurMap(dir)`, `SaveCurMap(dir)`.
+  `rev_fopen` write modes resolve only under SavePath.
 
 ### 3.2 New game, step by step
 
 1. `TGameFlow::StartNewGame()` → `Session().Start({NEWGAME})`.
 2. Session steps: module + areas → `ClearCurMap` → `LoadNewGame`
    (retail resets, `newgame.sav`, players, game time) → load the main
-   player's level → put each player into its sector → `++WorldVersion`.
+   player's level (`MapManager.SetCurrentLevel`) → put each player into
+   its sector.
 3. The flow switches to `TPlayScreen`. Its `Initialize` builds
    presentation only (renderer, HUD, cursors, effect imagery) and binds
-   the renderer to the session's world.
+   the renderer to `MapManager`'s current map, following
+   `CurrentMapChanged` from then on.
 
 A load from a slot is the same with `LoadCurMap(<slot>/CurMap)` +
 `LoadGame(slot)`. `End()` runs when the flow leaves the game (title,
@@ -187,8 +185,11 @@ death, quit).
   `TLoadScreen`, which runs one step per frame and draws the loading bar
   with retail's increments (forensics: `0x00448680` calls in
   `PlayScreen::Initialize`). No API change between the two.
-- **Version counter, not a callback chain**, for rebinding presenters
-  after a load (house rule: versions over flags).
+- **Presenters follow `TMapManager::CurrentMapChanged`** to rebind after
+  a load or level change; it is the existing "the world was replaced"
+  signal, so the session adds none of its own. Borrowers of sector
+  pointers check the map they borrowed from (`TMapPane` keeps a
+  `TSafeRef<TGameMap>`).
 - **No automap persistence until the retail automap files are ported**
   (SAVE_GAME §8). Dropping the pre-release blob loses automap state
   across save/load in the meantime; carrying it in a retail save is not

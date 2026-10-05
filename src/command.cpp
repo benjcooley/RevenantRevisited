@@ -23,7 +23,9 @@ static inline char *strlwr(char *s)
 #include "revenant.h"
 #include "3dscene.h"
 #include "mappane.h"
+#include "mapmanager.h"
 #include "object.h"
+#include "sectorstore.h"
 #include "tile.h"
 #include "editorstub.h"
 #include "display.h"
@@ -3871,8 +3873,10 @@ COMMAND(CmdSave)
     {
         Output("Saving map sectors...\n");
         MapPane.SaveAllSectors();
-        MapPane.SaveCurMap();  // Copies new sector files to main game map dir
-        MapPane.ClearCurMap(); // Clears all map sectors from the 'curmap' directory
+        // Publish the edited sectors to the base map, then empty the working
+        // set (the loaded sectors stay; they now match the base map).
+        MapManager.SaveCurMap(SectorStore::BaseMapDir());
+        SectorStore::Clear();
     }
 
     TObjectImagery::ResumeLoader();
