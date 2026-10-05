@@ -78,8 +78,10 @@ Answer inline (or in chat) and the owning doc gets updated.
 
 22. Does the retail paperdoll animate or hold one pose? Which animation?
 23. With no portrait icon, does retail show an empty frame?
-24. Does a new game start with 0 of 26 mana?
-25. Does a level-up rewrite NextExp?
+24. Does a new game start with 0 of 105 mana? (`newgame.sav` stores 0;
+    retail's `New Game1` has 7 of 105.)
+25. *(Answered by the decompile: the kill-experience level-up sets
+    NextExp; `playerlevel` leaves it.)*
 26. Do two-word quick-spell names split at the first space, and does
     dragging one ring onto another swap them?
 27. Does "Advanced healing" show its own icon or Heal's?
@@ -107,3 +109,16 @@ Answer inline (or in chat) and the owning doc gets updated.
 35. Shot wanted (dosbox-x): after Rahul dies, click the resurrection
     chamber door (`ressexit`) and capture the transition to the hall —
     does "Loading Map... Please Wait" appear in the text bar?
+
+## Player stats ([../gameplay/forensics/PLAYER_STATS.md](../gameplay/forensics/PLAYER_STATS.md) §11)
+
+36. rules.def's comment names the STATREQS columns "... luck, mind", but
+    the shipped code gives the fifth value to Mind and the sixth to Luck.
+    Which was intended?
+37. ClearPlayer divides the free attribute budget by six (each free
+    attribute gets 6–7 points; a character totals 63, not 84). Intended?
+38. Adding a stat effect removes every other active one, so only one
+    buff is ever in force. Intended?
+39. armor.def's `FAT %15`, `LEV n` and the trailing `%` in `Hands 15%`
+    never worked as written, and `Fatigue %4` scales current fatigue.
+    What were they meant to do?
