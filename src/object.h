@@ -1007,6 +1007,9 @@ class TObjectInstance : protected SObjectDef
         // Returns a statistic via sprintf format 'StatnameId.Str' (stat can be object or class stat)
     void SetStat(const char *statname, int32_t value);
         // Sets a statistic given the stat name (stat can be object or class stat)
+    virtual bool GetFieldText(const char *field, char *buf, int32_t buflen);
+        // Text of a named field as the stat sheet shows it (retail vtable +0xc8,
+        // 0x00472f80); false when the object has no such field
     void DelStat(int32_t statid) { stats.Collapse(statid); }
         // Deletes a stat in stat array (Used by classes DeleteStat(), don't call directly)
 
