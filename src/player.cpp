@@ -254,20 +254,10 @@ void TPlayer::ClearPlayer()
     }
 }
 
-// Retail's per-skill "experience for the next level" statistics (CLASS.DEF
-// PLAYER OBJSTATS, retail ids 0x3e + skill). The 1998 stat layout the port
-// keeps has no slots for them, so they're found by name. SK_* order.
-static constexpr const char* kSkillNextExpStat[NUM_SKILLS] =
-{
-    "AttackNxtExp", "DefenseNxtExp", "InvokeNxtExp", "HandsNxtExp",
-    "KnifeNxtExp", "SwordNxtExp", "BludgeonNxtExp", "AxesNxtExp",
-    "BowsNxtExp", "StealthNxtExp", "LockPickNxtExp",
-};
-
 // REVSYNC: TPlayer::SetPlayerLevel @ 0x0051d840 (`playerlevel`) -- rebuild
-// the player as a fresh level-'level' character of its class. Retail stat
-// ids against the port's: 0x22+i PLRSTAT_FIRST+i, 0x28+s SK_FIRST+s,
-// 0x33+s SKE_FIRST+s, 0x3e+s "<skill>NxtExp", 0x14 "AttackLevel".
+// the player as a fresh level-'level' character of its class. The stat
+// indices are retail's (charstats.h): 0x22+i PLRSTAT_FIRST+i, 0x28+s
+// SK_FIRST+s, 0x33+s SKE_FIRST+s, 0x3e+s SKN_FIRST+s, 0x14 AttackLevel.
 void TPlayer::SetPlayerLevel(int32_t level)
 {
     SetLevel(level);
@@ -286,7 +276,7 @@ void TPlayer::SetPlayerLevel(int32_t level)
     {
         SetObjStat(SK_FIRST + s, 0);
         SetObjStat(SKE_FIRST + s, 0);
-        SetStat(kSkillNextExpStat[s], 300);
+        SetObjStat(SKN_FIRST + s, 300);
     }
 
   // Each level above the first: two attribute points (one from level 15
@@ -305,7 +295,7 @@ void TPlayer::SetPlayerLevel(int32_t level)
             AddSkillExp(s, 333 + 100 * (lvl - 1));
     }
 
-    SetStat("AttackLevel", level);
+    SetAttackLevel(level);
 
     SetHealth(MaxHealth());
     SetMana(MaxMana());
@@ -319,7 +309,7 @@ void TPlayer::SetPlayerLevel(int32_t level)
     log_info("[player] level %d: STR=%d CON=%d AGI=%d RFL=%d MND=%d LCK=%d "
              "AttackLevel=%d H=%d/%d M=%d/%d F=%d/%d",
              (int)Level(), (int)Strn(), (int)Cons(), (int)Agil(), (int)Rflx(),
-             (int)Mind(), (int)Luck(), (int)GetStat("AttackLevel"),
+             (int)Mind(), (int)Luck(), (int)AttackLevel(),
              (int)Health(), (int)MaxHealth(), (int)Mana(), (int)MaxMana(),
              (int)Fatigue(), (int)MaxFatigue());
 }
@@ -345,7 +335,7 @@ void TPlayer::AddSkillExp(int32_t skillnum, int32_t exp)
     if (have + exp >= Rules.SkillExpForLevel(level + 1))
     {
         SetObjStat(SK_FIRST + skillnum, level + 1);
-        SetStat(kSkillNextExpStat[skillnum], Rules.SkillExpForLevel(level + 2));
+        SetObjStat(SKN_FIRST + skillnum, Rules.SkillExpForLevel(level + 2));
     }
 }
 
