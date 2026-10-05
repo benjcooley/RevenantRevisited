@@ -26,7 +26,7 @@
 // * TDialogList - Stores language specific dialog and message lines for game *
 // ****************************************************************************
 
-// REVSYNC: TDialogList @ 0x0065d4d0 (DIALOG.md ง3.6). Two tables of
+// REVSYNC: TDialogList @ 0x0065d4d0 (DIALOG.md ยง3.6). Two tables of
 // {tag, line}, each sorted by upper-cased tag: the game-wide base table
 // (<ClassDefPath><Language>.def: UI text, item names, messages), loaded at
 // boot, and the module's (its dialog), loaded when the module is mounted.
@@ -76,7 +76,7 @@ class TDialogList
 void SetDialogContext(TObjectInstance* context); // The script context
 char *DialogLine(const char *line, char *buf, int32_t buflen);
 
-// REVSYNC: dialog entry, ctor 0x00533f10 (0x160 bytes; DIALOG.md ง4.2). One
+// REVSYNC: dialog entry, ctor 0x00533f10 (0x160 bytes; DIALOG.md ยง4.2). One
 // floating box: a spoken line, or the response list. Lifetimes and fades
 // count simulation ticks (24 Hz) as retail's do; the presentation reads
 // their progress.
@@ -123,7 +123,7 @@ class TDialogEntry
 };
 
 // REVSYNC: TDialogPane @ 0x00667cc8 (vtable 0x005a5c60, 0x1f0 bytes;
-// DIALOG.md ง4). Not a panel: it manages the floating entries -- NPC lines
+// DIALOG.md ยง4). Not a panel: it manages the floating entries -- NPC lines
 // stacked from the top of the map view, the player's lines and the response
 // list from the bottom -- and the choices a script offers.
 class TDialogPane : public TPane

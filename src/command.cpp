@@ -1379,7 +1379,7 @@ COMMAND(CmdActivate)
     return 0;
 }
 
-// REVSYNC: say @ 0x00420140 (DIALOG.md ง1.1):
+// REVSYNC: say @ 0x00420140 (DIALOG.md ยง1.1):
 //   [<speaker>.]say [nowait] [<ticks>] {anim <state> | sound <name>}*
 //                   (choice | "<text>" | <TAG>) {<text-part>}*
 // A tag is said with its voice; quoted text with the `sound` given. The
