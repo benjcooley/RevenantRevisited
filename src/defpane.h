@@ -19,7 +19,8 @@
 // into one offscreen TSurface in Compose() and submits it in Draw() (the pane
 // draw contract, docs/gameflow/ARCHITECTURE.md §4.1). Panes the game builds in
 // code (title screen, death pane) use OpenChrome + AddSpriteButton instead of
-// a .def file.
+// a .def file. Behaviour of the dialogs built on it:
+// docs/gameflow/forensics/INGAME_MENU.md.
 
 #pragma once
 
@@ -110,6 +111,7 @@ struct SDefWidget
     std::string name, text, field;
     uint32_t    flags = 0;
     int32_t     maxlen = 0;                        // EDIT MAXLEN
+    int32_t     hotkey = 0;                        // BUTTON key (retail button +0x70)
     SDefStyle   style;                             // resolved + overridden
     std::vector<SDefListField> rowfields;          // LISTBOX row format
 
@@ -118,7 +120,7 @@ struct SDefWidget
     bool        hovered  = false;
     bool        disabled = false;
     bool        selected = false;                  // toggle/checkbox checked state
-    bool        focused  = false;                  // EDIT has keyboard focus
+    bool        focused  = false;                  // EDIT is being edited
     PTBitmap    fieldBitmap = nullptr;             // BITMAP bound via SetField
     PTBitmap    faceUp    = nullptr;               // sprite BUTTON faces (AddSpriteButton):
     PTBitmap    faceDown  = nullptr;               //   up / pressed / hover; when set they
@@ -139,19 +141,37 @@ struct SDefWidget
 class TDefPane : public TPane
 {
   public:
+    // Retail DEF-screen flags: DefScreen_Open's third argument, kept at pane
+    // +0x60 (INGAME_MENU.md §4.2).
+    // OVERLAY: chrome drawn over the running game -- "<name>tex.dat" and
+    // "widgetstex.dat" (0x00435b20); clear, the opaque title-route art
+    // "<name>alpha.dat" / "widgetsalpha.dat".
+    // FADE: the pane fades in over 5 pulses when it opens and out before it
+    // closes (0x00435d70, 0x00436090, 0x00435010).
+    static constexpr uint32_t DEF_OVERLAY = 0x01;
+    static constexpr uint32_t DEF_FADE    = 0x10;
+    // Every in-game dialog (menu, load, save, options, popups) opens with both.
+    static constexpr uint32_t DEF_INGAME  = DEF_OVERLAY | DEF_FADE;
+
+    // Retail control events (the pane's OnControl second argument).
+    static constexpr int32_t EVENT_CLICKED   = 3000;   // a button
+    static constexpr int32_t EVENT_SELECTED  = 5000;   // a list's selection changed
+    static constexpr int32_t EVENT_EDITENTER = 6001;   // Enter ended an EDIT
+
     TDefPane() = default;
     ~TDefPane() override;
     TDefPane(const TDefPane&)            = delete;
     TDefPane& operator=(const TDefPane&) = delete;
 
-    // REVSYNC: DefScreen_Open @ 0x00435150. Build panel `panelName` from
-    // `<defName>.def` (+ widgets.def styles) as a pane at display (x,y) with
-    // size (w,h); the "Background" chrome comes from `bgDatName` (e.g.
-    // "ingamemenunotex.dat"). Initializes the pane. Returns false and logs if
-    // a required asset is missing.
-    bool Open(const char* defName, const char* panelName,
-              int32_t x, int32_t y, int32_t w, int32_t h,
-              const char* bgDatName);
+    // REVSYNC: DefScreen_Open @ 0x00435150 (+ LoadAndShow 0x00435040). Build
+    // panel `panelName` from `<defName>.def` (+ widgets.def styles) as a pane
+    // at display (x,y) with size (w,h). The chrome comes from
+    // "<datBase><variant>.dat" and the widget art from "widgets<variant>.dat",
+    // the variant chosen by DEF_OVERLAY. Initializes the pane, then calls
+    // OnOpened (retail control event 1). Returns false and logs if a required
+    // asset is missing.
+    bool Open(const char* defName, const char* panelName, uint32_t defFlags,
+              int32_t x, int32_t y, int32_t w, int32_t h, const char* datBase);
 
     // Code-built pane (retail TLogoScreen 0x0053a2c0, TDeathPane 0x005339b0):
     // chrome from `datName`, background bitmap `backgroundEntry` (may be null),
@@ -179,25 +199,54 @@ class TDefPane : public TPane
         std::function<void(TDefPane& pane, const SDefWidget& widget, int32_t buttonIndex)>;
     void SetOnActivate(TActivateHandler handler) { onActivate = std::move(handler); }
 
+    // Ends the pane's modal run with `result` (retail: the result at +0x5c,
+    // then the pane's close slot 0x00435010). A DEF_FADE pane fades out
+    // first and ends when it reaches 0.
+    void Finish(int32_t result);
+    [[nodiscard]] bool IsFinishing() const { return finishing; }
+
     // TPane
     void Close() override;
+    void Pulse() override;
     void Compose() override;
     void Draw() override;
     void MouseClick(int32_t button, int32_t x, int32_t y) override;
     void MouseMove(int32_t button, int32_t x, int32_t y) override;
     void KeyPress(int32_t key, bool down) override;
+    void CharPress(int32_t key, bool down) override;
 
     // Data binding
     [[nodiscard]] SDefWidget* Find(const char* name);
     void SetFieldBitmap(const char* field, PTBitmap bm);  // BITMAP FIELD source
     void SetListRows(const char* listName,
                      std::vector<std::vector<std::string>> rows);
+    // A TEXT or EDIT widget's text (retail widget SetText, vtable +0x18).
+    void SetText(const char* name, const std::string& text);
+    // A BUTTON's key (retail button +0x70, set through vtable +0x24).
+    void SetHotKey(const char* name, int32_t vk);
+    // REVSYNC: list SetSelection @ 0x00430b80 -- select `row` (-1 = none) of
+    // list `listName`, scroll it into view, and raise OnListSelect when the
+    // selection changed.
+    void SelectListRow(const char* listName, int32_t row);
 
   protected:
-    // Subclass hooks (e.g. TOptionsPane). Default OnActivate forwards to the
-    // handler; default OnKey routes typing to the focused EDIT.
+    // Subclass hooks (retail OnControl, vtable slot 37, by event).
+    // OnOpened: the widgets are built (event 1). OnActivate: a button was
+    // clicked (event 3000; the default forwards to the handler).
+    // OnListSelect: a list's selection changed (event 5000). OnKey: a key
+    // (retail DispatchInput 0x004361f0: the EDIT being edited, then the
+    // buttons' keys).
+    virtual void OnOpened() {}
     virtual void OnActivate(const SDefWidget& widget, int32_t buttonIndex);
+    virtual void OnListSelect(const SDefWidget& list, int32_t row) { (void)list; (void)row; }
     virtual void OnKey(int32_t vk, bool down);
+    // Draws a BITMAP FIELD widget (retail field getter, vtable slot 40,
+    // 0x00436de0): the bound bitmap. Panes with live pictures override it.
+    virtual void DrawField(const SDefWidget& widget);
+
+    // Compose-time helpers for subclasses (valid inside DrawField).
+    [[nodiscard]] TSurface* Surface() const { return surface; }
+    [[nodiscard]] uint32_t DefFlags() const { return defflags; }
 
   private:
     void ReleaseAssets();
@@ -206,6 +255,8 @@ class TDefPane : public TPane
     const char* OnMouseUp(int32_t lx, int32_t ly);   // name of the activated widget
     void        OnMouseMove(int32_t lx, int32_t ly);
     void        Activate(const char* widgetName);
+    void        PlayClick() const;
+    [[nodiscard]] float FadeLevel() const;           // 0..kFadeSteps
 
     // --- parsing (defpane.cpp) ---
     bool LoadDefFile(const char* name, bool collectPanels);
@@ -222,10 +273,12 @@ class TDefPane : public TPane
     // --- assets (defpane.cpp) ---
     [[nodiscard]] PTBitmap        LookupBitmap(const char* entry);
     [[nodiscard]] const SFontAtlas* FontFor(const std::string& name);
+    TMulti* LoadDat(const std::string& name);
 
     // --- rendering (defpane.cpp) ---
     void DrawWidget(const SDefWidget& w);
     void DrawListbox(const SDefWidget& w);
+    void DrawListScrollbar(const SDefWidget& w);
     void DrawEdit(const SDefWidget& w);
     void DrawScrollbar(const SDefWidget& w);
     void DrawText(const std::string& text, int32_t x, int32_t y, int32_t w,
@@ -233,11 +286,14 @@ class TDefPane : public TPane
                   const std::string& font);
 
     // --- input helpers (defpane.cpp) ---
-    void SelectListRow(SDefWidget& w, int32_t lx, int32_t ly);
+    void ClickListRow(SDefWidget& w, int32_t lx, int32_t ly);
+    bool ClickListScrollbar(SDefWidget& w, int32_t lx, int32_t ly);
+    void SetSelection(SDefWidget& w, int32_t row);
     void SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly);
     bool StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly);
     void DrawNineSlice(PTBitmap bm, const SDefInsets& frame, int32_t x,
                        int32_t y, int32_t w, int32_t h);
+    [[nodiscard]] SDefWidget* EditingWidget();
 
     // --- state ---
     std::vector<SDefWidget> widgets;
@@ -253,4 +309,11 @@ class TDefPane : public TPane
     TActivateHandler onActivate;
     int32_t draggingSlider = -1;                 // widget index being dragged
     bool    open  = false;
+
+    // DEF flags and the DEF_FADE transition (retail +0x60, +0xb8..+0xc0).
+    uint32_t defflags      = 0;
+    double   fadeStartTime = 0.0;                // when the current fade began
+    float    fadeFromLevel = 0.0f;               // the level it began at
+    bool     finishing     = false;              // fading out before ending
+    int32_t  finishResult  = 0;
 };

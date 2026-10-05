@@ -29,10 +29,9 @@ const char* KeyToString(const SControlKey& k, char* buf, int32_t buflen)
 
 }  // namespace
 
-bool TOptionsPane::OpenOptions(int32_t x, int32_t y, int32_t w, int32_t h,
-                               const char* bgDat)
+bool TOptionsPane::OpenOptions(bool fromGame, int32_t x, int32_t y)
 {
-    if (!Open("options", "default", x, y, w, h, bgDat))
+    if (!Open("options", "default", fromGame ? DEF_INGAME : 0, x, y, WIDTH, HEIGHT, "options"))
         return false;
 
     // The controller list binds to the global key-binding table. Make sure it
