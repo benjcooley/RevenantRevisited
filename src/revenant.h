@@ -38,6 +38,8 @@ extern char ClassDefPath[MAXPATHLEN]; // Where to load / save Class.Def
 extern char ExileRCPath[MAXPATHLEN];  // Where to run ExileRC from & where
                                       // the graphics for the resources are
 extern char ResourcePath[MAXPATHLEN]; // Where to read / write the resources
+extern char ImageryPath[MAXPATHLEN];  // Imagery tree / imagery.rvi; class.def and the rules rosters (INI [Paths] ImageryPath)
+extern char ModulesPath[MAXPATHLEN];  // Root of the game modules (INI [Paths] ModulesPath)
 extern char BaseMapPath[MAXPATHLEN];  // Where the untouched version of the game map is stored
 extern char CurMapPath[MAXPATHLEN];   // Where the current map is stored
 extern char MoviePath[MAXPATHLEN];    // Where the .smk movies live (INI [Paths] MoviePath)

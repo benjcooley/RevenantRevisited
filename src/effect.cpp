@@ -119,32 +119,16 @@ void ParseOptionalColorRgb01(const defdoc::Node& node, const char* key, bool& en
     enabled = true;
 }
 
+// effects.def is port-authored engine data (the particle definitions the
+// engine's effect reconstructions run on), not a retail file, so it lives in
+// the engine's own assets rather than the install.
 std::string ReadParticleEffectsFile()
 {
-    const char* candidates[] = {
-        "data/Resources/effects.def",
-        "../data/Resources/effects.def",
-        "effects.def",
-    };
-
-    char fname[MAXPATHLEN];
-    std::snprintf(fname, sizeof(fname), "%seffects.def", ClassDefPath);
-    FILE* fp = rev_fopen(fname, "rb");
+    const std::string fname = rev_engine_asset("effects.def");
+    FILE* fp = fname.empty() ? nullptr : std::fopen(fname.c_str(), "rb");
     if (!fp)
-    {
-        for (const char* candidate : candidates)
-        {
-            fp = rev_fopen(candidate, "rb");
-            if (fp)
-            {
-                std::snprintf(fname, sizeof(fname), "%s", candidate);
-                break;
-            }
-        }
-    }
-    if (!fp)
-        ParticleFatal(std::string("[particle] unable to open effects.def; tried ") + fname +
-                      ", data/Resources/effects.def, ../data/Resources/effects.def, effects.def");
+        ParticleFatal(std::string("[particle] unable to open engine asset effects.def ('") +
+                      fname + "')");
 
     std::string text;
     char buf[4096];
@@ -1397,7 +1381,7 @@ TFlameEffect* TFlameEffect::SpawnForTest(const S3DPoint& origin)
 // See docs/vfx/forensics/B01_TBloodEffect_RENDER_RESETTLED.md for the
 // authoritative spec, docs/vfx/PLAN_B01_engine_rework.md for the rework
 // plan. Blood is rebuilt as two engine particle buckets declared in
-// data/Resources/effects.def:
+// assets/effects.def:
 //
 //   blood_fly    — one-shot 10-droplet burst (spawn_burst=10), 24 Hz
 //                  integration, gravity+drag tick_expr, reflection-plane
@@ -2023,7 +2007,7 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
         item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
         // Light mode: matches the engine-driven blood_fly bucket
-        // (data/Resources/effects.def `light_mode = "unlit"`) which is
+        // (assets/effects.def `light_mode = "unlit"`) which is
         // currently set Unlit as a harness diagnostic until the test scene
         // lights TBloodEffect properly (resettled doc §6.6). Keeping the
         // bespoke aligned with the engine path means the A/B capture

@@ -134,7 +134,7 @@ this glow sprite.
     `:200-209` (the standard 6-state save/restore wrapper used by all
     `Render()` bodies in `effect_old.cpp`).
 - **`spell.def` / placement search:** searched `data/Resources/spell.def`,
-  `data/Resources/effects.def`, `data/Resources/rules.def`,
+  `assets/effects.def`, `data/Resources/rules.def`,
   `data/Resources/master.s`, `data/Imagery/char.def`, `legacy/spell.def`,
   `legacy/rules.def`, `legacy/char.def`, every `data/Modules/*/*.def`,
   and `data/Modules/Ahkuilon_unzipped/*.s` for `FireSwarm` / `fireswarm`
@@ -941,7 +941,7 @@ FLY-entry; FireSwarm has **no equivalent** — the effect is silent.
 **No live callers in shipped retail data.** Confirmed by grep across:
 - `data/Resources/spell.def` (0 hits)
 - `data/Resources/rules.def` (0 hits)
-- `data/Resources/effects.def` (0 hits)
+- `assets/effects.def` (0 hits)
 - `data/Resources/master.s` (0 hits)
 - `data/Imagery/char.def` (0 hits — no `ATTACHEFFECT "FireSwarm"`)
 - `data/Modules/Ahkuilon_unzipped/*.def` and `*.s` (0 hits — no

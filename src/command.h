@@ -42,6 +42,7 @@ class TScript;
 #define CMD_BEGIN       (1 << 11)       // begin new block
 #define CMD_END         (1 << 12)       // end block
 #define CMD_JUMP        (1 << 13)       // indicate a code jump occured
+#define CMD_WAITSAY     (1 << 14)       // wait for the target to stop talking (retail 0x4000)
 
 #define CMD_ERROR       (CMD_BADCOMMAND | CMD_BADPARAMS | CMD_OUTOFMEM)
 

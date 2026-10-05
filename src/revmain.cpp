@@ -107,6 +107,8 @@ char ClassDefPath[MAXPATHLEN];               // Where to load / save Class.Def
 char ExileRCPath[MAXPATHLEN];                // Where to run ExileRC from & where
                                              // the graphics for the resources are
 char ResourcePath[MAXPATHLEN];               // Where to read / write the resources
+char ImageryPath[MAXPATHLEN];                // Imagery tree / imagery.rvi; class.def and rules rosters
+char ModulesPath[MAXPATHLEN];                // Root of the game modules
 char BaseMapPath[MAXPATHLEN];                // Where the untouched version of the game map is stored
 char CurMapPath[MAXPATHLEN];                 // Where the current map is stored
 char MoviePath[MAXPATHLEN];                  // Where the .smk movies live
@@ -1818,40 +1820,34 @@ void GetParameters(int argc, char **argv)
     }
 }
 
+// REVSYNC: GetINISettings @ 0x00484500 — the [Paths] section, with retail's
+// defaults. Each path ends with a backslash. The loaders compose paths from
+// these: shared game data under ClassDefPath / ResourcePath (resources.rvr
+// answers .\Resources\), imagery data under ImageryPath (imagery.rvi answers
+// .\Imagery\), a module's own files under ModulesPath\<module>\. See
+// docs/DATA_LAYOUT.md.
 void GetINISettings()
 {
   // ***** Get Program Paths *****
 
     INISetSection("Paths");
-    INIGetText("ClassDefPath", ".", ClassDefPath, MAXPATHLEN);
     INIGetText("ExileRCPath", ".", ExileRCPath, MAXPATHLEN);
-    INIGetText("ResourcePath", ".", ResourcePath, MAXPATHLEN);
+    INIGetText("ClassDefPath", ".\\Resources", ClassDefPath, MAXPATHLEN);
+    INIGetText("ResourcePath", ".\\Resources", ResourcePath, MAXPATHLEN);
+    INIGetText("ImageryPath", ".\\Imagery", ImageryPath, MAXPATHLEN);
     INIGetText("CurMapPath", ".", CurMapPath, MAXPATHLEN);
     INIGetText("BaseMapPath", ".", BaseMapPath, MAXPATHLEN);
-    INIGetText("MoviePath", ".\\Resources\\FMV", MoviePath, MAXPATHLEN);   // retail default (GetINISettings @ 0x00484500)
-    INIGetText("SaveGamePath", ".\\Save", SaveGamePath, MAXPATHLEN);       // retail default (GetINISettings @ 0x00484500)
+    INIGetText("MoviePath", ".\\Resources\\FMV", MoviePath, MAXPATHLEN);
+    INIGetText("SaveGamePath", ".\\Save", SaveGamePath, MAXPATHLEN);
+    INIGetText("ModulesPath", ".\\Modules", ModulesPath, MAXPATHLEN);
 
     // Make sure each string ends with a backslash
-    if (ClassDefPath[strlen(ClassDefPath) - 1] != '\\')
-        strcat(ClassDefPath, "\\");
-
-    if (ExileRCPath[strlen(ExileRCPath) - 1] != '\\')
-        strcat(ExileRCPath, "\\");
-
-    if (ResourcePath[strlen(ResourcePath) - 1] != '\\')
-        strcat(ResourcePath, "\\");
-
-    if (CurMapPath[strlen(CurMapPath) - 1] != '\\')
-        strcat(CurMapPath, "\\");
-
-    if (BaseMapPath[strlen(BaseMapPath) - 1] != '\\')
-        strcat(BaseMapPath, "\\");
-
-    if (MoviePath[strlen(MoviePath) - 1] != '\\')
-        strcat(MoviePath, "\\");
-
-    if (SaveGamePath[strlen(SaveGamePath) - 1] != '\\')
-        strcat(SaveGamePath, "\\");
+    for (char *path : {ClassDefPath, ExileRCPath, ResourcePath, ImageryPath, CurMapPath,
+                       BaseMapPath, MoviePath, SaveGamePath, ModulesPath})
+    {
+        if (path[0] == '\0' || path[strlen(path) - 1] != '\\')
+            strncatz(path, "\\", MAXPATHLEN);
+    }
 
     INISetSection("Lighting");
     MaxLights = INIGetInt("MaxLights", 1);
@@ -2435,7 +2431,7 @@ sapp_desc sokol_main(int argc, char* argv[])
     // flag in case desc.hidden wasn't honored by a build that doesn't
     // include our sokol_app patch). Scan argv directly — argh hasn't run.
     // Also parse --max-runtime=N here: a wall-clock hard ceiling that
-    // calls sapp_request_quit() N seconds after AppFrame first ticks.
+    // hard-exits the process N seconds after AppFrame first ticks.
     // This is a belt-and-suspenders safety net for agent runs — even if
     // the input-script's auto-exit fails or the engine deadlocks before
     // the script drains, the process eventually exits on its own.
@@ -2527,9 +2523,8 @@ static void AppInit()
         if (HeadlessWindow::ParseArgs(g_argc, g_argv))
         {
             log_info("[headless] --headless active; window will be hidden");
-            // Hide ASAP — sokol_app has already shown the NSWindow by the
-            // time init_cb (this AppInit) fires, so a few frames may still
-            // flash visible before the per-frame HideAllWindows kicks in.
+            // desc.hidden already kept the window off screen; this and the
+            // per-frame call in AppFrame keep it that way.
             HeadlessWindow::HideAllWindows();
         }
     }
@@ -2776,9 +2771,13 @@ static void AppCleanup()
 {
     // ShutdownGlobals() handles MainWindow.Close() as its very last step;
     // AppCleanup just drives that and then unmounts the resource archives.
+    // The log lines bracket the teardown so a test run can confirm the
+    // process went through it rather than a hard exit.
+    log_info("[shutdown] begin");
     if (SystemInitialized)
         ShutdownGlobals();
     UnmountAll();
+    log_info("[shutdown] complete");
 }
 
 // Translate an sapp_keycode into the legacy VK_* codes the screen / pane

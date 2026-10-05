@@ -14,13 +14,15 @@
 #include "multi.h"
 #include "renderer.h"
 #include "revdefs.h"    // MB_LEFTDOWN / MB_LEFTUP
-#include "revutils.h"   // rev_fopen
+#include "revenant.h"   // ResourcePath
+#include "revutils.h"   // rev_read_file
 #include "surface.h"
 
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 // =====================================================================
 // Flag bits — mirror the #define values in data/Resources/widgets.def. Only
@@ -59,10 +61,15 @@ constexpr int32_t     kDefaultFontPx   = 14;
 
 // ----- low-level helpers -------------------------------------------------
 
+// REVSYNC: FUN_004377c0 — widgets.def and the screen's .def are read from
+// ResourcePath, loose file first. That is how the loose 1.22 copies beside
+// resources.rvr (options.def with "No Combat Results", joingame.def,
+// mpingame.def) override the pack's older ones.
 std::string ReadResourceText(const char* name)
 {
+    const std::string path = std::string(ResourcePath) + name;
     std::vector<uint8_t> bytes;
-    if (!rev_read_file(name, bytes))
+    if (!rev_read_file(path.c_str(), bytes, EOpenOrder::LooseFirst))
         return {};
     return std::string(bytes.begin(), bytes.end());
 }
