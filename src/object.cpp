@@ -1260,10 +1260,16 @@ bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t s
     return AddToInventory(inst, slot);
 }
 
+// REVSYNC: 0x0046faf0. The owner hears of it first: retail unequipped an
+// item leaving a player's equipment slot here (TPlayer::OnInventoryRemove).
+// Retail compacted the inventory array; the port leaves a hole, which its
+// iterators skip.
 void TObjectInstance::RemoveFromInventory()
 {
     if (owner)
     {
+        owner->OnInventoryRemove(this);
+
         if (owner == Inventory.GetContainer())
             Inventory.Update();
 
@@ -1318,6 +1324,46 @@ int32_t TObjectInstance::GiveInventoryTo(TObjectInstance* to, const char *name, 
     } while (number > 0);
 
     return total;
+}
+
+// REVSYNC: TObjectInstance::GiveWeapons @ 0x00477780 (the `giveweapons`
+// command; forest.s's chief takes Locke's weapons and hands them back).
+// Each weapon, ranged weapon and ammo leaves this inventory (unequipped on
+// the way, RemoveFromInventory) for a free slot in `to`'s; a bag's are given
+// the same way. Deviations: retail found the recipient by name again for
+// each bag, and kept no item it couldn't place (nor checked for a missing
+// recipient); the caller resolves `to` once and a refused item stays here.
+void TObjectInstance::GiveWeapons(TObjectInstance* to)
+{
+    if (!to || to == this)
+        return;
+
+    // Taken back after the walk: an item added during it lands at the end of
+    // the inventory, where the walk would meet it again.
+    std::vector<TObjectInstance*> refused;
+    for (TInventoryIterator i(this); i; i++)
+    {
+        TObjectInstance* item = i.Item();
+        switch (item->ObjClass())
+        {
+          case OBJCLASS_WEAPON:
+          case OBJCLASS_RANGEDWEAPON:
+          case OBJCLASS_AMMO:
+            item->RemoveFromInventory();
+            if (to->AddToInventory(item))
+                log_debug("[inv] %s gives %s to %s", GetName(), item->GetName(), to->GetName());
+            else
+                refused.push_back(item);
+            break;
+          case OBJCLASS_INVCONTAINER:
+            item->GiveWeapons(to);
+            break;
+          default:
+            break;
+        }
+    }
+    for (TObjectInstance* item : refused)
+        AddToInventory(item);
 }
 
 int32_t TObjectInstance::GetInventoryAmount(const char *name) const

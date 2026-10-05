@@ -70,7 +70,7 @@ Original E.1-E.4 items (quicksave bindings, save indicator toast, persistence mo
 
 Gameflow owns the scripting engine bring-up. Combat-side cross-cuts:
 
-- `[ ]` **F-cross.1 Script-callable combat actions** — `Player->BeginFighting / Cast / Go / Stop / Say` are C++ entry points the script VM dispatches into. Verify the function signatures the gameflow VM needs match what we expose. *Audit only — no work unless gameflow flags a mismatch.*
+- `[ ]` **F-cross.1 Script-callable combat actions** — `Player->BeginFighting / Cast / Go / Stop / Say` are C++ entry points the script VM dispatches into. Verify the function signatures the gameflow VM needs match what we expose. *Audit only — no work unless gameflow flags a mismatch.* **Flagged 2026-10-05 (gameflow):** the script commands `beginfighting` / `specificattack` / `endfighting` are ported (COMMAND_SYSTEM.md, fighting commands); they call `TCharacter::BeginFighting` and `SpecificAttack`, which are still the 1998 bodies, not retail's `0x004d3b90` / `0x004d2a60` (decomps in `recon/discovered/`). In forest.s's training, `JONG1.specificattack 25` beside `MUDOKON1` answers "Invalid Attack", so the trainer demonstrates nothing.
 
 Original F.1-F.5 items (opcode inventory, missing-opcode port, trigger fire-through, Cast/Say/Wait, GameState read/write) are owned by gameflow.
 

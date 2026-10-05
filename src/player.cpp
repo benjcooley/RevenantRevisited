@@ -801,6 +801,19 @@ bool TPlayer::CanEquip(TObjectInstance* oi, int32_t slot)
     return true;
 }
 
+// REVSYNC: the player half of RemoveFromInventory @ 0x0046faf0 -- an item
+// leaving one of this player's equipment slots is unequipped first
+// (Equip(nullptr, slot) 0x005199b0), so the equipment never points at an
+// item the player no longer holds. Retail tested the owner's class and
+// slot; the equipment pointer check makes a stale slot number harmless. The
+// 1998 callers that unequip by hand beforehand find the slot empty.
+void TPlayer::OnInventoryRemove(TObjectInstance* item)
+{
+    const int32_t slot = item->InventNum() - kInvSlotEquipFirst;
+    if ((uint32_t)slot < NUM_EQ_SLOTS && equipment[slot] == item)
+        Equip(nullptr, slot);
+}
+
 // REVSYNC: TPlayer::Equip = retail 0x005199b0. The item moves to inventory
 // slot 0x100 + slot of this player; the item it displaces takes the item's
 // old place (the same slot of the same container, or a free carried slot

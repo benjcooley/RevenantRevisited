@@ -244,6 +244,22 @@ debug level (`[console]`), so headless `--exec` runs can read it.
   `goto` (`0x004204f0`) takes an object name (keep.s `goto Point2`, the
   town and forest waypoints) and walks to it (`0x004cee50`); otherwise
   each coordinate may name a number variable.
+- The fighting commands forest.s needs are ported over the character's
+  own calls: `beginfighting` (`0x00427cd0`) finds its target with
+  `FindObject` among the characters (`0x00451d70`, objset 2: the active
+  window's objects by name, not the resolver's aliases) and calls
+  `BeginFighting(target, COMBAT)` (`0x004d3b90`); `endfighting`
+  (`0x00427d30`), despite its name, calls `BeginFighting` with no target,
+  so the character squares up to the closest enemy (no script uses it);
+  `specificattack <n>` (`0x00427c80`) is `SpecificAttack(n)`
+  (`0x004d2a60`). `giveweapons "<name>"` (`0x00422150`, slot `0x68`
+  `TObjectInstance::GiveWeapons` `0x00477780`) moves every weapon, ranged
+  weapon and ammo, bags included, to the first object of that name; on the
+  way retail's `RemoveFromInventory` (`0x0046faf0`) unequips a player's
+  item, which the port's lacked (the equipment kept pointing at the item).
+  Open, combat track: `SpecificAttack` and `BeginFighting` are still the
+  1998 bodies; the trainer's `specificattack 25` beside the dummy answers
+  "Invalid Attack" in the port (decomps in `recon/discovered/`).
 - Prototype variables are ported (SCRIPT_ENGINE.md §7): `setprotovariable`
   (`0x0041fd70`), bare names in expressions, `say` text parts, `goto`
   coordinates, `stat`'s value. `choice` checks a name's type on the
