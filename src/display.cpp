@@ -21,8 +21,10 @@
 #include "editorfonts.h"
 #include "editoricons.h"
 #include "framesnap.h"
+#include "logging.h"
 #include "multisurface.h"
 #include "renderer.h"
+#include "renderer_readback.h"
 #include "revenant.h"
 
 extern bool  Hardware3D;
@@ -245,16 +247,17 @@ bool TDisplay::FlipPage(bool /*Wait*/)
     sg_end_pass();
     sg_commit();
 
-    // ---- Snap-mode mirror pass -------------------------------------------
-    // Re-run the composite into an offscreen RT we own so framesnap can
-    // read it back via Metal blit. Adds one extra composite per frame but
-    // only when --snap / --filmstrip is active. The RT, depth, and pass
-    // are lazily allocated and re-created on display-size changes.
+    // ---- Mirror pass ------------------------------------------------------
+    // Re-run the composite into an offscreen RT we own so it can be read
+    // back via Metal blit: every frame while --snap / --filmstrip is active
+    // (framesnap reads it), and for the one frame a capture was requested.
+    // The RT, depth, and pass are lazily allocated and re-created on
+    // display-size changes.
     //
     // Both color + depth must match the SWAPCHAIN formats, because the
     // renderer's pipelines were created against them — sokol-gfx will
     // assert if pipeline.color_format != pass.color_format (or depth).
-    if (FrameSnap::Active())
+    if (FrameSnap::Active() || !capture_requests.empty())
     {
         const int32_t w = sapp_width();
         const int32_t h = sapp_height();
@@ -331,5 +334,27 @@ bool TDisplay::FlipPage(bool /*Wait*/)
         sg_destroy_image(snapDepth);
     }
 
+    if (!capture_requests.empty())
+    {
+        const std::vector<TCaptureDone> requests = std::move(capture_requests);
+        capture_requests.clear();
+        std::vector<uint8_t> rgba(size_t(snap_capture_w) * size_t(snap_capture_h) * 4);
+        if (RendererReadback::ReadRect(snap_capture_color, 0, 0, snap_capture_w, snap_capture_h, rgba.data()))
+        {
+            for (const TCaptureDone& done : requests)
+                done(rgba.data(), snap_capture_w, snap_capture_h);
+        }
+        else
+            log_warn("[display] frame capture readback failed");
+    }
+
+    return true;
+}
+
+bool TDisplay::RequestCapture(TCaptureDone done)
+{
+    if (!backbuffer || !done)
+        return false;
+    capture_requests.push_back(std::move(done));
     return true;
 }

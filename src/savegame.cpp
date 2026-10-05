@@ -10,6 +10,8 @@
 #include "savegame.h"
 
 #include "area.h"
+#include "bitmap.h"
+#include "display.h"
 #include "hudstate.h"
 #include "logging.h"
 #include "mapmanager.h"
@@ -25,6 +27,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <memory>
 #include <system_error>
 
 namespace fs = std::filesystem;
@@ -355,8 +358,7 @@ SPlayerHudWords TSaveGame::CurrentHudWords(const TPlayer& player)
 }
 
 // REVSYNC: SaveGame @ 0x0048d720. Not ported: the editor path that writes
-// the module's own newgame.sav (the port never writes into the install), and
-// copying the ss.bmp thumbnail (the port doesn't capture one yet).
+// the module's own newgame.sav (the port never writes into the install).
 bool TSaveGame::Save(const char* name)
 {
     if (!Player)
@@ -378,6 +380,7 @@ bool TSaveGame::Save(const char* name)
     fs::remove(slot / kThumbnailFile, ec);
 
     MapManager.SaveCurMap(slot / kSlotCurMapDir);
+    StoreThumbnail(slot);
 
     SSaveHeader header;
     header.gametime     = PlayScreen.GameTime();
@@ -410,6 +413,96 @@ bool TSaveGame::Save(const char* name)
     }
 
     log_info("[savegame] saved '%s' (%d bytes, time=%d)", name, os.DataSize(), header.gametime);
+    return true;
+}
+
+// <SavePath>/ss.bmp: retail's ".\ss.bmp" in the install directory; the port
+// writes only under SavePath.
+fs::path TSaveGame::ThumbnailFile()
+{
+    return fs::path(SavePath) / kThumbnailFile;
+}
+
+// REVSYNC: the thumbnail TPlayScreen writes when the player opens the
+// in-game menu or the save dialog, or quick-saves (0x0047cb52, 0x0047dc05,
+// 0x0047dd08; SAVE_GAME.md §11.7): the screen in a 640x480 16-bit bitmap,
+// written by SaveBMP at scale 3. The port captures the next frame the display
+// presents. `slot`, when given, also gets a copy.
+void TSaveGame::CaptureThumbnail(const fs::path& slot)
+{
+    const bool requested = Display.RequestCapture(
+        [this, slot](const uint8_t* rgba, int32_t width, int32_t height) {
+            if (!WriteThumbnail(rgba, width, height))
+                return;
+            ++thumbnailVersion;
+            if (!slot.empty())
+                CopyThumbnailTo(slot);
+        });
+    if (!requested)
+        log_info("[savegame] no display to capture a thumbnail from");
+}
+
+// Retail copied the current thumbnail into the slot (SAVE_GAME.md §5 step 6).
+// REVSYNC-DIVERGENCE: retail copied whatever .\ss.bmp was there, however
+// old; when nothing has been captured since the last save (a save from the
+// console), the port captures the next frame for this slot instead.
+void TSaveGame::StoreThumbnail(const fs::path& slot)
+{
+    if (thumbnailVersion != storedThumbnailVersion)
+        CopyThumbnailTo(slot);
+    else
+        CaptureThumbnail(slot);
+}
+
+void TSaveGame::CopyThumbnailTo(const fs::path& slot)
+{
+    std::error_code ec;
+    fs::copy_file(ThumbnailFile(), slot / kThumbnailFile, fs::copy_options::overwrite_existing, ec);
+    if (ec)
+        log_warn("[savegame] can't copy the thumbnail into %s: %s", slot.string().c_str(),
+                 ec.message().c_str());
+    storedThumbnailVersion = thumbnailVersion;
+}
+
+// The 640x480 16-bit screen retail captured, from the display's RGBA frame.
+// REVSYNC-DIVERGENCE: a display that isn't 4:3 is cropped to its centred
+// 4:3 area first, so the thumbnail isn't squashed.
+bool TSaveGame::WriteThumbnail(const uint8_t* rgba, int32_t width, int32_t height)
+{
+    constexpr int32_t kScreenWidth  = 640;
+    constexpr int32_t kScreenHeight = 480;
+    constexpr int32_t kShrink       = 3;
+
+    int32_t cropw = width, croph = height;
+    if ((int64_t)width * kScreenHeight > (int64_t)height * kScreenWidth)
+        cropw = height * kScreenWidth / kScreenHeight;
+    else
+        croph = width * kScreenHeight / kScreenWidth;
+    const int32_t cropx = (width - cropw) / 2;
+    const int32_t cropy = (height - croph) / 2;
+    if (cropw < 1 || croph < 1)
+        return false;
+
+    std::unique_ptr<TBitmap> screen(TBitmap::NewBitmap(kScreenWidth, kScreenHeight, BM_16BIT));
+    if (!screen)
+        return false;
+    uint16_t* dst = (uint16_t*)screen->data16;
+    for (int32_t y = 0; y < kScreenHeight; y++)
+    {
+        const uint8_t* row = rgba + ((size_t)(cropy + y * croph / kScreenHeight) * width) * 4;
+        for (int32_t x = 0; x < kScreenWidth; x++)
+        {
+            const uint8_t* p = row + (size_t)(cropx + x * cropw / kScreenWidth) * 4;
+            *dst++ = (uint16_t)(((p[0] & 0xf8) << 8) | ((p[1] & 0xfc) << 3) | (p[2] >> 3));
+        }
+    }
+
+    const std::string file = ThumbnailFile().string();
+    if (!screen->SaveBMP(file.c_str(), kShrink))
+    {
+        log_warn("[savegame] can't write the thumbnail %s", file.c_str());
+        return false;
+    }
     return true;
 }
 

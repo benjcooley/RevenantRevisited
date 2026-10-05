@@ -201,6 +201,9 @@ void TGameSession::RequestSave(const std::string& slot)
 // port has no string table yet and uses retail's built-in default.
 void TGameSession::RequestQuickSave()
 {
+    // REVSYNC: QuickSave @ 0x0047e850 follows writing the thumbnail
+    // (0x0047dd08).
+    ::SaveGame.CaptureThumbnail();
     ::SaveGame.RefreshSlots();
     char name[128];
     for (int32_t n = 1; n < 1000; n++)
