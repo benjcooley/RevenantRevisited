@@ -40,6 +40,7 @@ static inline char *strlwr(char *s)
 #include "cursor.h"
 #include "gameflow.h"
 #include "script.h"
+#include "scriptvalue.h"
 #include "multi.h"
 #include "savegame.h"
 #include "player.h"
@@ -548,13 +549,15 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
 
     SetDialogContext(context); // Who's script is running?
 
-    // check for <context>.<command> syntax
-    if (t.Type() == TKN_IDENT)
+  // REVSYNC: CommandInterpreter @ 0x0041e8e0 -- [nowait] [<context>.]<command>,
+  // where the context is a name (quoted or not) the script resolver answers.
+    if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
     {
         if (t.Is("nowait"))
         {
             nowait = true;
             t.WhiteGet();
+            strcpy(buf, t.Text());
         }
 
         t.Get();
@@ -573,26 +576,21 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
                 }
             }
             else
-            {               
-                TObjectInstance* inst = MapPane.FindClosestObject(buf);
-                if (inst)
+            {
+                context = ResolveScriptObject(buf, orgcontext, script);
+                if (!context)
                 {
-                    context = inst;
-                    t.Get();
-                    if (t.Type() == TKN_IDENT)
-                        strcpy(buf, t.Text());
-                    else
-                    {
-                        Output("Specify command following object context\n");
-                        return CMD_BADPARAMS;
-                    }
+                    const std::string name = buf;   // Output formats into buf
+                    Output("%s: Context not found\n", name.c_str());
+                    return CMD_BADCOMMAND;
                 }
-                else
+                t.Get();
+                if (t.Type() != TKN_IDENT)
                 {
-                    sprintf(buf, "%s: Context not found\n", buf);
-                    Output(buf);
-                    return 0;
+                    Output("Specify command following object context\n");
+                    return CMD_BADPARAMS;
                 }
+                strcpy(buf, t.Text());
             }
         }
     }
@@ -1191,174 +1189,6 @@ void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
 // * Script Language Components *
 // ******************************
 
-char *Operators[] = { "=", "<>", ">", "<", ">=", "<=", "and", "or", "not", "+", "-", "*", "/", nullptr };
-
-int32_t ApplyOperation(int32_t &lval, int32_t op, int32_t rval)
-{
-    int32_t newval = 0;
-
-    switch (op)
-    {
-        case 0: newval = (lval == rval); break;
-        case 1: newval = (lval != rval); break;
-        case 2: newval = (lval > rval); break;
-        case 3: newval = (lval < rval); break;
-        case 4: newval = (lval >= rval); break;
-        case 5: newval = (lval <= rval); break;
-        case 6: newval = (lval && rval); break;
-        case 7: newval = (lval || rval); break;
-        case 8: newval = !rval; break;              // boolean not is a special case
-        case 9: newval = (lval + rval); break;
-        case 10: newval = (lval - rval); break;
-        case 11: newval = (lval * rval); break;
-        case 12: if (rval == 0) newval = 0; else newval = (lval / rval); break;
-    }
-
-    // adjust for boolean or arithmatic operations
-    if (op <= 5)
-        lval = rval;
-    else
-        lval = newval;
-
-    return newval;
-}
-
-int32_t FindElement(char *elem, char *list[])
-{
-    for (int32_t i = 0; list[i] && i < 64; i++)
-        if (stricmp(elem, list[i]) == 0)
-            return i;
-
-    return -1;
-}
-
-// Finds a (semi-)unique value for a given string for expression parsing
-int32_t StringVal(char *string)
-{
-    int32_t val = 0;
-
-    for (int32_t i = 0; string[i]; i++)
-        val |= (int32_t)(string[i] - 'A') << i;
-
-    return val;
-}
-
-bool ParseExpression(TToken &t, int32_t *value)
-{
-    int32_t totalval = STATE_INVALID;
-    int32_t lval = STATE_INVALID;
-    int32_t optype = -1;
-    char buf[60];
-
-    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
-    {
-        if (t.Type() == TKN_SYMBOL)
-        {
-            if (optype != -1)
-                return false;
-
-            strcpy(buf, t.Text());      // First char of operator
-            t.Get();
-            if (t.Type() == TKN_SYMBOL)
-                strcat(buf, t.Text());  // Add second char to operator
-
-            int32_t ot = FindElement(buf, Operators);
-            if (ot >= 0 && (lval != STATE_INVALID || ot == 8))  // boolean "not" is 7
-                optype = ot;
-            else
-                return false;
-
-            t.WhiteGet();
-        }
-        else if (t.Type() == TKN_IDENT || t.Type() == TKN_NUMBER || t.Type() == TKN_TEXT)
-        {
-            int32_t rval;
-            bool isop = false;
-
-            if (t.Type() == TKN_IDENT)
-            {
-                int32_t ot = FindElement((char *)t.Text(), Operators);
-                if (ot >= 0) // and, or, not...
-                {
-                    if (lval != STATE_INVALID || ot == 8)
-                        optype = ot;
-                    else
-                        return false;
-
-                    isop = true;
-
-                    t.WhiteGet();
-                }
-                else         // Game id
-                {
-                    strcpy(buf, t.Text());
-                    t.Get();
-                    if (t.Is("."))
-                    {
-                        t.Get();
-                        if (t.Type() != TKN_IDENT)
-                            return false;
-
-                        TObjectInstance* inst = MapPane.FindClosestObject(buf);;
-                        if (inst)
-                        {
-                            if (t.Is("state"))
-                                rval = inst->GetState();
-                            else
-                                rval = inst->GetStat(t.Text());
-                        }
-                        t.WhiteGet();
-                    }
-                    else
-                        rval = ScriptManager.GameState(buf);
-                    if (t.Type() == TKN_WHITESPACE)
-                        t.Get();
-                }
-            }
-            else if (t.Type() == TKN_TEXT)
-            {
-                rval = StringVal((char *)t.Text());
-                t.WhiteGet();
-            }
-            else
-            {
-                rval = t.Index();
-                t.WhiteGet();
-            }
-
-            if (!isop)
-            {
-                if (rval == STATE_INVALID)
-                    return false;
-
-                if (lval == STATE_INVALID)
-                {
-                    if (optype == 7)        // boolean not
-                        totalval = ApplyOperation(lval, optype, rval);
-                    else
-                        totalval = lval = rval;
-                }
-                else
-                {
-                    if (optype == -1)
-                        return false;
-                    else
-                    {
-                        totalval = ApplyOperation(lval, optype, rval);
-                        optype = -1;
-                    }
-                }
-            }
-        }
-    }
-
-    if (totalval == STATE_INVALID)
-        return false;
-
-    *value = totalval;
-    return true;
-}
-
 COMMAND(CmdBegin)
 {
     return CMD_BEGIN;
@@ -1369,13 +1199,14 @@ COMMAND(CmdEnd)
     return CMD_END;
 }
 
+// REVSYNC: if @ 0x0041fb70. An expression that can't be evaluated is false,
+// reported as bad parameters.
 COMMAND(CmdIf)
 {
-    int32_t cond;
-    if (!ParseExpression(t, &cond))
-        return CMD_BADPARAMS;
-
-    return (cond ? CMD_CONDTRUE : CMD_CONDFALSE);
+    const std::optional<int32_t> cond = EvaluateExpression(t, context, scriptcontext);
+    if (!cond)
+        return CMD_CONDFALSE | CMD_BADPARAMS;
+    return *cond ? CMD_CONDTRUE : CMD_CONDFALSE;
 }
 
 COMMAND(CmdElse)
@@ -1388,13 +1219,13 @@ COMMAND(CmdElse)
     return CMD_ELSE;
 }
 
+// REVSYNC: while @ 0x0041fbc0
 COMMAND(CmdWhile)
 {
-    int32_t cond;
-    if (!ParseExpression(t, &cond))
+    const std::optional<int32_t> cond = EvaluateExpression(t, context, scriptcontext);
+    if (!cond)
         return CMD_BADPARAMS;
-
-    return cond ? CMD_LOOP : CMD_SKIPBLOCK;
+    return *cond ? CMD_LOOP : CMD_SKIPBLOCK;
 }
 
 COMMAND(CmdSet)
@@ -1472,16 +1303,15 @@ COMMAND(CmdWait)
         t.WhiteGet();
         if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
             return CMD_BADPARAMS;
-        TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
+        TObjectInstance* inst = ResolveScriptObject(t.Text(), scriptcontext, script);
         t.WhiteGet();
-        if (inst && t.Type() == TKN_SYMBOL && t.Code() == '.')
-        {
-            t.Get();
-            inst = MapPane.FindClosestObject((char *)t.Text(), inst);
-            t.WhiteGet();
-        }
         if (!inst)
             Output("Couldn't find wait char\n");
+        if (t.Is("."))
+        {
+            t.Get();
+            inst = ResolveScriptObject(t.Text(), inst, script);
+        }
         if (waiting)
             waiting->WaitDeath(inst);
         return CMD_WAIT;
@@ -1908,7 +1738,7 @@ COMMAND(CmdSelect)
         return 0;
     }
 
-    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context, true);
 
     if (!inst)
         Output("Can't find any object by that name.\n");
@@ -2546,7 +2376,7 @@ COMMAND(CmdGet)
         return CMD_BADPARAMS;
 
     int32_t index = -1;
-    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context, true);
 
     if (inst == nullptr)
         Output("Can't find any object by that name.\n");
@@ -2635,7 +2465,7 @@ COMMAND(CmdSwap)
     if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
         return CMD_BADPARAMS;
 
-    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), nullptr, true);
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context, true);
 
     if (inst == nullptr)
         Output("Can't find any object by that name.\n");

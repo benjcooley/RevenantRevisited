@@ -133,10 +133,26 @@ which matches itself again. Object names in sector and save files are
 stored with bit 7 set on every byte (`TObjectInstance::Load`
 `0x00472430`).
 
-## 7. Port state (2026-10-04)
+## 7. Port state (2026-10-05)
 
-- Attachment: fixed (names decoded, world-wide notify).
-- Instruction pointer: an offset into the prototype text (the 1998 raw
-  pointer broke on 64-bit; fixed).
-- Trigger test, user, guard, taken flags, waits: 1998 versions; being
-  ported from retail (this doc).
+Retail:
+- attachment (names decoded, world-wide notify);
+- the instruction pointer, an offset into the prototype text (the 1998
+  raw pointer broke on 64-bit);
+- the trigger test (`0x004927b0`), the user and the trigger-user guard;
+- `Continue`'s wait gate, `SetWait` and the wait check, the
+  interpreter's wait post-hook and `wait`'s grammar;
+- object names and expressions (`if`, `while`): `src/scriptvalue.cpp`,
+  [COMMAND_SYSTEM.md §2.4](COMMAND_SYSTEM.md).
+
+Not ported:
+- the taken flags (`+0x00`) and `End` giving them back;
+- the choice list on the script (`+0xb8`): response waits jump through
+  the 1998 `TDialogPane` labels until the dialog port;
+- the pending `say` (`+0xd8`…);
+- the ALWAYS interrupt/resume (`+0xac`/`+0xb0`);
+- manual trigger requests with a user and aliases (`0x00492640`);
+  the 1998 `Trigger` runs, so manual triggers have no user;
+- prototype variables (`DATA`/`NUMBER`, `0x00497800`; only `forest.s`);
+- screen-fade and buy/sell waits are satisfied at once (no fade or
+  buy/sell screen yet).

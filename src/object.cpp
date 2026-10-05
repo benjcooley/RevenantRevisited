@@ -2761,6 +2761,13 @@ int32_t TObjectInstance::GetStat(const char *statname) const
     return 0;
 }
 
+// REVSYNC: 0x00473900 -- the lookup GetStat(name) makes, answering whether it
+// would find anything.
+bool TObjectInstance::HasStat(const char *statname) const
+{
+    return cl->FindObjStat(statname) >= 0 || cl->FindStat(statname) >= 0;
+}
+
 void TObjectInstance::SetStat(const char *statname, int32_t value)
 {
     int32_t statid = cl->FindObjStat(statname);
