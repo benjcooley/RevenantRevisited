@@ -20,6 +20,7 @@ Answer inline (or in chat) and the owning doc gets updated.
 | S9 | Any door or teleport with music playing | whether the music dips during a screen fade | SCREEN_SYSTEM §2.6 |
 | S10 | A click and a key press during the opening, before the first line | whether it fades out and restarts without the intro (PlayScreen `+0x5dc`) | SCREEN_SYSTEM §2.6 |
 | S11 | Enter the Keep from outside through its gate (`keepin`, forest side) and capture the first second inside | how dark the arrival corner is (the port shows it black beside a lit hall) | [forensics/EXITS.md](forensics/EXITS.md) §7 |
+| S12 | In the Keep, open a chest and pick something up so two or three messages show over a light floor; then wait 10 s. Note `NoTexOverlay` | text bar colour (the code says gold 255,200,0), shadow, position (x 4, baseline 9, 12 px lines from the map's bottom edge), how many lines stay | [../ui/forensics/TTextBar_SPEC.md](../ui/forensics/TTextBar_SPEC.md) §7, §8 |
 
 ## Dialog ([forensics/DIALOG.md](forensics/DIALOG.md) §7)
 
@@ -168,3 +169,27 @@ Answer inline (or in chat) and the owning doc gets updated.
     and one after he turns to it. Settles where the side spot is and
     which way he faces. The port aims him at (1200, 1098); he stops,
     blocked, at (1178, 1065) and turns to facing 87.
+
+## Text bar ([../ui/forensics/TTextBar_SPEC.md](../ui/forensics/TTextBar_SPEC.md) §14)
+
+50. The three newest messages never fade (`DAT_005e5804` = 3); only older
+    ones age out, five seconds after they move up past the third. Both
+    sample screenshots show three lines left at the bottom of the map. Was
+    a standing "last three messages" log the intent?
+51. Ordinary messages are drawn gold (255,200,0) in the code, but the sample
+    screenshots show them pale peach with magenta fringes. Which did the
+    shipped game show? (Shot S12.)
+52. The `texthealthbar` strip is only the map-loading progress bar in
+    retail; the 1998 code showed the combat target's name and health in the
+    text bar. Was the combat readout dropped on purpose when the status bar
+    got its target side?
+53. `Print` splits a message at `'\n'`, but after a newline it adds the
+    message's first piece again instead of the last (`0x0054d2ba`). Did any
+    shipped message contain a newline? The port adds the last piece.
+54. A message that starts with a space is dropped. Intended?
+55. Enter opens a "Message: " prompt in single player too: `@` lines run a
+    script line on Locke and words like `alchemy` or `abracadabra` toggle
+    cheats. Was that meant to ship, and should the port keep it? (Also,
+    hiding the bar runs whatever was half-typed.)
+56. Line types 2 (violet) and 4 (pink) have colours but no callers. What
+    were they for?
