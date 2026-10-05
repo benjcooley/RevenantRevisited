@@ -102,6 +102,10 @@ class TMapManager
     // Visit every loaded/cached map. Asset residency code uses this to count
     // references from loaded maps, independent of which map is currently drawn.
     void ForEachLoadedMap(const std::function<void(TGameMap*)>& fn) const;
+    // The cached maps by index (0 .. NumCached()-1), for walks that can't
+    // take a callback (TMapIterator's loaded-sector mode).
+    [[nodiscard]] int32_t   NumCached() const { return int32_t(cache.size()); }
+    [[nodiscard]] TGameMap* Cached(int32_t i) const;
 
     // REVSYNC: TMapPane::Notify @ 0x0045a680 — tell every object that asked
     // for notifications (OF_NOTIFY) about a world change (N_SCRIPTADDED,
