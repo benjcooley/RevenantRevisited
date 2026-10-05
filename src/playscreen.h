@@ -187,6 +187,24 @@ class TPlayScreen : public TScreen
     // into, inside the HUD's side and bottom panels.
     void GetMapViewRect(int32_t& x, int32_t& y, int32_t& w, int32_t& h) const;
 
+    // ---- The bottom drawer ---------------------------------------------
+    // REVSYNC: PlayScreen +0x6a0..+0x6c4, run by its pulse 0x0047b4d0. The
+    // drawer holds one thing at a time: the editor's console (mode 1, not
+    // ported), the HUD's bottom bar (mode 2; open while SHudState::
+    // bottomBarOpen), or the shop (mode 3, BuySellPane). Opening the shop
+    // closes the bottom bar and opens the side panel; closing the shop leaves
+    // the drawer closed in mode 2 (BuySellScreen_SPEC §1).
+    enum class EDrawer : int32_t { Console = 1, Hud = 2, BuySell = 3 };
+    [[nodiscard]] EDrawer Drawer() const { return drawer; }           // 0x0047ed20
+    // The height the drawer covers at the bottom of the screen.
+    [[nodiscard]] int32_t DrawerHeight() const;
+    // +0x6b8: buysellscreen asks for the shop (on), its Exit lets it go
+    // (off); the drawer follows on the next pulse.
+    void RequestBuySell(bool on) { buysellrequest = on; }
+    // REVSYNC: 0x0047ecc0 / 0x0047ece0 -- close the drawer on the next pulse
+    // if it is open. Only the shop's mode is closed here; see the definition.
+    void CloseDrawer();
+
     // ---- Game time -----------------------------------------------------
     [[nodiscard]] int32_t GameFrame()    const;
     [[nodiscard]] int32_t GameTime()     const { return gametime; }
@@ -226,6 +244,11 @@ class TPlayScreen : public TScreen
     // Points the renderer at MapManager's current map (the session's world).
     void BindWorld();
 
+    // The drawer half of Pulse 0x0047b4d0.
+    void UpdateDrawer();
+    void OpenBuySellDrawer();
+    void CloseBuySellDrawer();
+
     std::unique_ptr<TMapRenderer> mapRenderer;
     TMapManager::EventListenerId  mapListener = 0;
 
@@ -256,6 +279,12 @@ class TPlayScreen : public TScreen
     // `playmovie`'s movie while it plays.
     TMoviePane movie;
     bool       movieplaying = false;
+
+    // The bottom drawer (+0x6c0 mode, +0x6b8 shop request, +0x6b4 close
+    // request).
+    EDrawer drawer         = EDrawer::Hud;
+    bool    buysellrequest = false;
+    bool    drawerclose    = false;
 
     // Effect imagery cached at boot (blood, sparks). Optional; kept null
     // when the imagery isn't in the current data set.

@@ -13,6 +13,7 @@
 
 #include "area.h"
 #include "bitmap.h"
+#include "buysell.h"
 #include "display.h"
 #include "hudstate.h"
 #include "logging.h"
@@ -238,16 +239,16 @@ bool TSaveGame::LoadFile(const char* file, const fs::path& slotCurMap)
 }
 
 // The reset block of LoadGame @ 0x0048df70, in retail order
-// (SAVE_GAME.md §4). Not yet ported, and joining this sequence with their
-// systems: finishing a PlayScreen fade (0x0047ece0) and emptying the
-// buy/sell pane (0x00532f40).
+// (SAVE_GAME.md §4).
 void TSaveGame::ResetWorld(const fs::path& slotCurMap)
 {
     if (slotCurMap.empty())
         MapManager.ClearCurMap();               // 0x0044e460
     else
         MapManager.LoadCurMap(slotCurMap);      // 0x0044e460 + 0x0044e050
+    PlayScreen.CloseDrawer();                   // 0x0047ece0 (the shop's; see CloseDrawer)
     DialogPane.ResetForLoad();                  // 0x005360f0
+    BuySellPane.Clear();                        // 0x00532f40
     ScriptManager.ResetScripts();               // 0x00496e20
     ScriptManager.ReloadStates();               // 0x004975c0
     AreaManager.ExitAll();                      // 0x0041c600
