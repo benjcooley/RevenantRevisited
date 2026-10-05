@@ -90,9 +90,10 @@ class TSector final
     void Clear();
 
   // Creates and loads a sector (uses preloaded sector if it can find one).
-  // TGameMap is the only caller and owns the result: sectors are freed with
-  // CloseSector / DiscardSector by the map that loaded them, never by a
-  // borrower (see gamemap.h).
+  // TGameMap is the only live caller and owns the result: sectors are freed
+  // with CloseSector / DiscardSector by the map that loaded them, never by a
+  // borrower (see gamemap.h). The preload cache below is the 1998/retail
+  // streaming cache; nothing fills it in the port.
 
     // Loads the sector; nullptr if its file is missing, unreadable or
     // malformed (the sector isn't kept half loaded).

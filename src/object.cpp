@@ -675,7 +675,12 @@ TObjectInstance::~TObjectInstance()
     if (sector || owner)
         MapPane.RemoveObject(this);
 
-    // Drop any registry entry first — even a partially-constructed instance
+    // Raw-pointer holders that don't follow N_DELETINGOBJECT: let go of this
+    // object whatever kind it is (also those built without a class, below).
+    if (MapPane.GetCenterOnObj() == this)
+        MapPane.CenterOnObj(nullptr, false); // Don't center on anything
+
+    // Then drop the registry entry — even a partially-constructed instance
     // that stashed a mapindex must be removed before its memory is freed.
     if (mapindex >= 0) {
         MapPane.UnregisterInstance(mapindex);
@@ -729,10 +734,6 @@ TObjectInstance::~TObjectInstance()
         free(name);
         name = nullptr;
     }
-
-    // If we're being centered on, cancel that
-    if (MapPane.GetCenterOnObj() == this)
-        MapPane.CenterOnObj(nullptr, false); // Don't center on anything
 
     // Kill the script
     if (script)
