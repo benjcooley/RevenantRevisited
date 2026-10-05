@@ -70,7 +70,9 @@ bool Functioning();
 // ---- Mixer --------------------------------------------------------------
 
 // Master/sfx/music volume in linear 0..1. The factory default is 1.0
-// (passthrough). Apply call after a Settings change.
+// (passthrough). Apply call after a Settings change. The sfx and music
+// group volumes may be set before Init(); they take effect when it opens
+// the device.
 void SetMasterVolume(float v);
 void SetSfxVolume(float v);
 void SetMusicVolume(float v);

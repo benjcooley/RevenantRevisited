@@ -27,6 +27,7 @@
 #include "assetcache.h"
 #include "audio_backend.h"
 #include "framesnap.h"
+#include "gameoptions.h"
 #include "headless_window.h"
 #include "logging.h"
 #include "fonttable.h"
@@ -1849,17 +1850,14 @@ void GetINISettings()
             strncatz(path, "\\", MAXPATHLEN);
     }
 
-    // Defaults as retail GetINISettings (FUN_00484500) and the Options
-    // reader (FUN_00484ae0); docs/LIGHTING_FIDELITY.md §3.1.
+    // Defaults as retail GetINISettings (FUN_00484500);
+    // docs/LIGHTING_FIDELITY.md §3.1. ReadOptions (gameoptions.cpp) reads
+    // [Options].
     INISetSection("Lighting");
     MaxLights = INIGetInt("MaxLights", 3);
     Ambient3D = INIGetInt("Ambient3D", 130);
     LightRange3D = INIGetInt("LightRange3D", 180);
     LightMult3D = INIGetInt("LightMult3D", 250);
-
-    INISetSection("Options");
-    DoubleTapTicks = INIGetInt("DoubleTapTicks", 6);
-    EnhancedLighting = INIGetYesNo("EnhancedLighting", false);
 
     // FUN_00484500: the language names the dialog lists and the voice folder,
     // so it is known before the main module mounts.
@@ -2486,6 +2484,7 @@ static void AppInit()
     INISetPath(RunPath);
 
     GetINISettings();
+    ReadOptions();   // retail's order (0x004865a0): INI, [Options], command line
 
     GetParameters(g_argc, g_argv);
 
@@ -2754,6 +2753,8 @@ static void AppCleanup()
     // The log lines bracket the teardown so a test run can confirm the
     // process went through it rather than a hard exit.
     log_info("[shutdown] begin");
+    // REVSYNC: 0x004870ee -- retail saved [Options] once its main loop ended.
+    SaveOptions();
     if (SystemInitialized)
         ShutdownGlobals();
     UnmountAll();

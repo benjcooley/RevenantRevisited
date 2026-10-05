@@ -228,17 +228,25 @@ class TDefPane : public TPane
     // list `listName`, scroll it into view, and raise OnListSelect when the
     // selection changed.
     void SelectListRow(const char* listName, int32_t row);
+    // REVSYNC: scrollbar SetRange @ 0x0042e3d0 -- a SCROLLBAR's range; the
+    // value is clamped into it without an event.
+    void SetSliderRange(const char* name, int32_t minval, int32_t maxval);
+    // REVSYNC: scrollbar SetValue @ 0x0042e440 -- clamped into the range;
+    // a change raises OnSliderChanged (OPTIONS.md §8).
+    void SetSliderValue(const char* name, int32_t value);
 
   protected:
     // Subclass hooks (retail OnControl, vtable slot 37, by event).
     // OnOpened: the widgets are built (event 1). OnActivate: a button was
     // clicked (event 3000; the default forwards to the handler).
-    // OnListSelect: a list's selection changed (event 5000). OnKey: a key
-    // (retail DispatchInput 0x004361f0: the EDIT being edited, then the
-    // buttons' keys).
+    // OnListSelect: a list's selection changed (event 5000). OnSliderChanged:
+    // a SCROLLBAR's value changed, by the player or SetSliderValue (event
+    // 4000). OnKey: a key (retail DispatchInput 0x004361f0: the EDIT being
+    // edited, then the buttons' keys).
     virtual void OnOpened() {}
     virtual void OnActivate(const SDefWidget& widget, int32_t buttonIndex);
     virtual void OnListSelect(const SDefWidget& list, int32_t row) { (void)list; (void)row; }
+    virtual void OnSliderChanged(const SDefWidget& slider) { (void)slider; }
     virtual void OnKey(int32_t vk, bool down);
     // Draws a BITMAP FIELD widget (retail field getter, vtable slot 40,
     // 0x00436de0): the bound bitmap. Panes with live pictures override it.
@@ -302,6 +310,7 @@ class TDefPane : public TPane
     void SetSelection(SDefWidget& w, int32_t row);
     void SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly);
     bool StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly);
+    void ChangeSlider(SDefWidget& w, int32_t value);   // clamp, set, raise OnSliderChanged
     void DrawNineSlice(PTBitmap bm, const SDefInsets& frame, int32_t x,
                        int32_t y, int32_t w, int32_t h);
     [[nodiscard]] SDefWidget* EditingWidget();

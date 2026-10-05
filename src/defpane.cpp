@@ -856,6 +856,33 @@ void TDefPane::SelectListRow(const char* listName, int32_t row)
         SetSelection(*w, row);
 }
 
+void TDefPane::SetSliderRange(const char* name, int32_t minval, int32_t maxval)
+{
+    SDefWidget* w = Find(name);
+    if (!w || w->type != EDefWidget::Scrollbar)
+        return;
+    w->minval = minval;
+    w->maxval = (std::max)(minval, maxval);
+    w->value  = std::clamp(w->value, w->minval, w->maxval);
+    SetDirty(true);
+}
+
+void TDefPane::SetSliderValue(const char* name, int32_t value)
+{
+    if (SDefWidget* w = Find(name); w && w->type == EDefWidget::Scrollbar)
+        ChangeSlider(*w, value);
+}
+
+void TDefPane::ChangeSlider(SDefWidget& w, int32_t value)
+{
+    value = std::clamp(value, w.minval, (std::max)(w.minval, w.maxval));
+    if (value == w.value)
+        return;
+    w.value = value;
+    SetDirty(true);
+    OnSliderChanged(w);
+}
+
 // REVSYNC: list SetSelection @ 0x00430b80: out-of-range rows select nothing;
 // a row outside the visible window scrolls to centre it; a change raises the
 // list event 5000.
@@ -1333,7 +1360,7 @@ void TDefPane::SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly)
         if (span > 0) frac = float(lx - left - half) / float(span);
     }
     frac = (frac < 0.0f) ? 0.0f : (frac > 1.0f ? 1.0f : frac);
-    w.value = w.minval + static_cast<int32_t>(frac * (w.maxval - w.minval) + 0.5f);
+    ChangeSlider(w, w.minval + static_cast<int32_t>(frac * (w.maxval - w.minval) + 0.5f));
 }
 
 bool TDefPane::StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly)
@@ -1342,8 +1369,8 @@ bool TDefPane::StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly)
     PTBitmap up   = LookupBitmap((st.up + "U").c_str());
     PTBitmap down = LookupBitmap((st.down + "U").c_str());
     const bool vertical = (w.flags & kScrollVScroll) != 0;
-    auto dec = [&] { if (w.value > w.minval) --w.value; };
-    auto inc = [&] { if (w.value < w.maxval) ++w.value; };
+    auto dec = [&] { ChangeSlider(w, w.value - 1); };
+    auto inc = [&] { ChangeSlider(w, w.value + 1); };
     if (vertical)
     {
         if (up   && ly <  w.y + 1 + up->height)          { dec(); return true; }

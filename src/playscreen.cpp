@@ -224,12 +224,17 @@ static SControlEntry g_defaultGameControls[] =
     {"Quick Save",   "QuickSave", ALLMODES, {{VK_CONTROL, VK_BACK}}, GAMECMD_QUICKSAVE,   0, 0, false},
 };
 
+// REVSYNC: 0x00486177 / 0x00486186 -- retail initialized the control map
+// from its table at boot and then read the player's bindings from
+// [Controls] (each key written back); the Options pane's OK saves them
+// (0x00439dc0). A binding the INI lacks keeps the table's.
 void InitDefaultControlMap()
 {
     if (ControlMap.NumControls() > 0)
         return;   // already populated (e.g. TPlayScreen ran first)
     ControlMap.Initialize(int32_t(sizearray(g_defaultGameControls)),
                           g_defaultGameControls);
+    ControlMap.Load(const_cast<char*>("Controls"));
 }
 
 // Game runs at this many internal ticks per real-time second. Used by
