@@ -9,43 +9,31 @@
 // docs/ui/forensics/InventoryPane_SPEC.md (FORENSICS_PROTOCOL, NOMENCLATURE,
 // UI_METHOD_MAP §12, RECONSTRUCTION_PROTOCOL).
 //
-// Scope of this file (sub-items #7a–#7f and #14):
-//   #7a  — 4×3 = 12 slots, reading HudState.inventoryPage for correct offset
-//   #7b  — Drag visual: dragged slot skipped in paint; icon follows cursor
-//          via SetDragBitmap (cursor.h); begins drag via UIDragState::BeginDrag
-//   #7c  — Bags: harness_inv slots marked is_bag show mini inner-item icon;
-//          right-click open/close handled in uisidebartest.cpp (not owned here)
-//   #7d  — Inv→Equip drop handled by CompleteDrag swap in uidragstate.cpp;
-//          uiequiptest.cpp reads harness_equip[] to show dropped items
-//   #7e  — Arrow gray-out: Left gray at page=0, Right gray at max page.
-//          Uses InvArwLD (Down art = grayed) for disabled side; Up for enabled.
-//   #7f  — Use cursor: right-click detection in uisidebartest.cpp (not owned
-//          here — this pane just renders); reported as sidebar dispatch issue.
-//   #14  — Swap committed in UIDragState::CompleteDrag with sound effect.
+// Contents (spec §5 step 8): the main player's carried items, slot
+// page + column*3 + row of its inventory (Player->GetInventorySlot), each
+// bound through the shared TInvSlot; gold is the player's "Gold" items
+// (retail (*player+0x84)("Gold") = GetInventoryAmount). The page comes from
+// HudState.inventoryPage; a dragged item's cell paints empty while it
+// follows the cursor (UIDragState). The --test=ui-inventory host supplies a
+// demo player.
 //
 // Architecture (spec §3): compose the whole pane into one offscreen TSurface
 // RT via the *ToTarget primitive family, then DrawSurface it once in the HUD.
-//
-// Shared state: reads UIDragState::harness_inv[] for per-slot item content
-// (written here at Initialize, updated by CompleteDrag swaps). Reads
-// HudState.inventoryPage for the visible slot window.
 //
 // *************************************************************************
 
 #include "uiinventorytest.h"
 
-#include "animation.h"
 #include "bitmap.h"
 #include "bitmapatlas.h"
 #include "display.h"
 #include "font.h"
 #include "fonttable.h"
 #include "hudstate.h"
-#include "imagery.h"
 #include "invslot.h"
 #include "logging.h"
 #include "multi.h"
-#include "object.h"
+#include "player.h"
 #include "renderer.h"
 #include "surface.h"
 #include "uidragstate.h"
@@ -53,13 +41,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-
-// Item-class registries (defined in their respective .cpp files).
-extern TObjectClass PotionClass;
-extern TObjectClass FoodClass;
-extern TObjectClass KeyClass;
-extern TObjectClass MoneyClass;
-extern TObjectClass ArmorClass;
 
 namespace {
 
@@ -117,8 +98,8 @@ constexpr int32_t     kCountFontPx   = 12;
 // here and match on that.
 constexpr int32_t kMaxPage = 0xf3;    // retail upper bound per spec §5 step 10
 
-// Synthetic gold value (no real TPlayer in harness).
-constexpr int32_t kGoldValue = 14475;
+// The money type the gold readout totals (`0x5e41a0`).
+constexpr const char* kGoldItemName = "Gold";
 
 // =====================================================================
 // Asset roster — spec §2.
@@ -192,29 +173,8 @@ SInvSlotStyle MakeInventorySlotStyle()
 
 SInvSlotStyle g_invSlotStyle = MakeInventorySlotStyle();
 
-// =====================================================================
-// Per-spawn tracking (for icon lazy-extraction and anim stepping).
-// harness_inv[] is the shared cross-pane item state; g_spawned[] is the
-// per-instance animation/label metadata that only this pane needs.
-// =====================================================================
-struct SSpawnMeta
-{
-    PTAnimation  anim       = nullptr;   // non-null if animated
-    int32_t      animFrames = 0;
-    const char*  label      = "?";
-};
-// One meta entry per harness_inv slot populated at Initialize.
-SSpawnMeta   g_spawnMeta[kHarnessInvSlots] = {};
-int32_t      g_spawnCount = 0;
-
-// Per-slot TInvSlot objects (geometry only; content comes from harness_inv[]).
-TInvSlot*    g_invSlots[kHarnessInvSlots] = {};
-
-// Refresh tick counter (drives invanim stepping).
-int32_t      g_refreshCount = 0;
-// Advance animation every 3 Refresh ticks (24 fps asset cadence / ~60+ fps
-// harness cadence; matches the existing animation gate pattern).
-constexpr int32_t kAnimStride = 3;
+// One TInvSlot per visible cell (geometry; content bound each Refresh).
+TInvSlot* g_invSlots[kGridCells] = {};
 
 // =====================================================================
 // Asset lookup helper.
@@ -231,178 +191,11 @@ PTBitmap LookupByName(TMulti* m, const char* name)
     return nullptr;
 }
 
-// Try to extract a static or animated inventory icon from a spawned instance.
-// Returns true once bound; retried each Refresh() until imagery streams in.
-bool TryExtractIcon(int32_t idx)
-{
-    SHarnessSlot& slot = UIDragState::harness_inv[idx];
-    SSpawnMeta&   meta = g_spawnMeta[idx];
-    if (slot.icon || meta.anim) return true;   // already bound
-    if (!slot.inst) return false;
-
-    TObjectImagery* img = slot.inst->GetImagery();
-    if (!img || img->NumStates() <= 0) return false;
-
-    // Static invitem first (mirrors InventoryImage() retail logic).
-    for (int32_t s = 0; s < img->NumStates(); ++s)
-        if (PTBitmap bm = img->GetInvImage(s))
-        {
-            slot.icon = bm;
-            log_info("[ui-inventory] slot %d '%s' bound invitem %dx%d",
-                     idx, meta.label ? meta.label : "?", bm->width, bm->height);
-            return true;
-        }
-
-    // invanim fallback (potions etc. carry only animation).
-    for (int32_t s = 0; s < img->NumStates(); ++s)
-        if (TAnimation* a = img->GetInvAnimation(s))
-        {
-            meta.anim       = a;
-            meta.animFrames = a->NumFrames();
-            slot.icon       = a->GetFrame(0);
-            log_info("[ui-inventory] slot %d '%s' bound invanim %d frames",
-                     idx, meta.label ? meta.label : "?", meta.animFrames);
-            return true;
-        }
-
-    return false;
-}
-
-// =====================================================================
-// Spawn helper — same pattern as uibarinvtest + uiequiptest.
-// =====================================================================
-TObjectInstance* SpawnItem(TObjectClass& cls, int32_t objclass,
-                           const char** name_out)
-{
-    const int32_t n = cls.NumTypes();
-    for (int32_t i = 0; i < n; ++i)
-    {
-        SObjectInfo* info = cls.GetObjType(i);
-        if (!info) continue;
-
-        SObjectDef def = {};
-        def.objclass = (short)objclass;
-        def.objtype  = (short)i;
-        def.state    = 0;
-        def.level    = 0;
-        def.pos      = { 0, 0, 0 };
-        def.vel      = { 0, 0, 0 };
-        def.accum    = { 0, 0, 0 };
-        def.rotatex  = 0;
-        def.rotatey  = 0;
-        def.rotatez  = 0;
-        def.group    = 0;
-
-        TObjectInstance* inst = cls.NewObject(&def);
-        if (!inst) continue;
-        inst->OnScreen();
-        if (name_out) *name_out = info->name ? info->name : cls.ClassName();
-        return inst;
-    }
-    return nullptr;
-}
-
-TObjectInstance* SpawnNamedItem(TObjectClass& cls, int32_t objclass,
-                                const char* typeName,
-                                const char** name_out)
-{
-    const int32_t objtype = cls.FindObjType(typeName);
-    if (objtype < 0) return nullptr;
-    SObjectInfo* info = cls.GetObjType(objtype);
-    if (!info) return nullptr;
-
-    SObjectDef def = {};
-    def.objclass = (short)objclass;
-    def.objtype  = (short)objtype;
-    def.state    = 0;
-    def.level    = 0;
-    def.pos      = { 0, 0, 0 };
-    def.vel      = { 0, 0, 0 };
-    def.accum    = { 0, 0, 0 };
-    def.rotatex  = 0;
-    def.rotatey  = 0;
-    def.rotatez  = 0;
-    def.group    = 0;
-
-    TObjectInstance* inst = cls.NewObject(&def);
-    if (!inst) return nullptr;
-    inst->OnScreen();
-    if (name_out) *name_out = info->name ? info->name : typeName;
-    return inst;
-}
-
-void PopulateHarness()
-{
-    // Fill the first few harness_inv[] slots with real spawned items.
-    // This also seeds their metadata in g_spawnMeta[].  harness_inv[] is
-    // readable by any pane (uiequiptest, uidragstate, etc.).
-    //
-    // Layout: column-major (slot = col*3 + row).
-    //   Slot 0 (col0, row0): Helmet — equips into EQ_HEAD for drag tests
-    //   Slot 1 (col0, row1): Food   — exercises qty count (5)
-    //   Slot 2 (col0, row2): Key    — single item
-    //   Slot 3 (col1, row0): Money  — exercises qty count (42)
-    //   Slot 4 (col1, row1): Potion — second potion (qty 3 + potential anim)
-    //   Slot 5 (col1, row2): Key    — single item
-    UIDragState::ResetInventoryHarness();
-    g_spawnCount = 0;
-
-    auto add = [&](TObjectClass& cls, int32_t objclass, int32_t qty,
-                   bool is_bag = false)
-    {
-        if (g_spawnCount >= kHarnessInvSlots) return;
-        const int32_t idx = g_spawnCount;
-        const char* nm = nullptr;
-        TObjectInstance* inst = SpawnItem(cls, objclass, &nm);
-        if (!inst) return;
-
-        SHarnessSlot& slot = UIDragState::harness_inv[idx];
-        slot.inst   = inst;
-        slot.qty    = qty;
-        slot.is_bag = is_bag;
-        slot.label  = nm ? nm : cls.ClassName();
-
-        SSpawnMeta& meta = g_spawnMeta[idx];
-        meta.label  = slot.label;
-
-        ++g_spawnCount;
-    };
-
-    auto addNamed = [&](TObjectClass& cls, int32_t objclass, const char* name,
-                        int32_t qty)
-    {
-        if (g_spawnCount >= kHarnessInvSlots) return;
-        const int32_t idx = g_spawnCount;
-        const char* nm = nullptr;
-        TObjectInstance* inst = SpawnNamedItem(cls, objclass, name, &nm);
-        if (!inst) return;
-
-        SHarnessSlot& slot = UIDragState::harness_inv[idx];
-        slot.inst   = inst;
-        slot.qty    = qty;
-        slot.label  = nm ? nm : name;
-
-        SSpawnMeta& meta = g_spawnMeta[idx];
-        meta.label  = slot.label;
-
-        ++g_spawnCount;
-    };
-
-    addNamed(ArmorClass, OBJCLASS_ARMOR, "Brown Leather Helmet", 1); // slot 0 — col0 row0
-    add(FoodClass,   OBJCLASS_FOOD,   5);          // slot 1 — col0 row1 (qty)
-    add(KeyClass,    OBJCLASS_KEY,    1);           // slot 2 — col0 row2
-    add(MoneyClass,  OBJCLASS_MONEY,  42);         // slot 3 — col1 row0 (qty)
-    add(PotionClass, OBJCLASS_POTION, 3);          // slot 4 — col1 row1 (qty)
-    add(KeyClass,    OBJCLASS_KEY,    1);           // slot 5 — col1 row2
-
-    log_info("[ui-inventory] harness populated with %d items", g_spawnCount);
-}
-
 void BuildInvSlots()
 {
     // Construct per-cell TInvSlot objects at the correct pane-local rects.
     // The geometry is fixed regardless of page; the page offset shifts which
-    // harness_inv[] entry maps to which cell during paint.
+    // inventory slot each cell shows.
     for (int32_t cell = 0; cell < kGridCells; ++cell)
     {
         delete g_invSlots[cell];
@@ -441,25 +234,6 @@ public:
         EnsurePane();
         if (!g_pane) return;
 
-        ++g_refreshCount;
-
-        // Lazy icon extraction for each spawned item.
-        for (int32_t i = 0; i < g_spawnCount; ++i)
-            TryExtractIcon(i);
-
-        // Advance animated icons (24Hz asset cadence).
-        if ((g_refreshCount % kAnimStride) == 0)
-        {
-            for (int32_t i = 0; i < g_spawnCount; ++i)
-            {
-                SSpawnMeta& meta = g_spawnMeta[i];
-                if (!meta.anim || meta.animFrames <= 0) continue;
-                const int32_t f = (g_refreshCount / kAnimStride) % meta.animFrames;
-                if (PTBitmap bm = meta.anim->GetFrame(f))
-                    UIDragState::harness_inv[i].icon = bm;
-            }
-        }
-
         // HudState page (#7a — which 12-slot window is visible).
         const int32_t page = GetHudState().inventoryPage;
 
@@ -484,58 +258,41 @@ public:
                 0, 0, g_backpack->width, g_backpack->height,
                 tw, th);
 
-        // Gold readout (spec §5 step 6 / §8 row 1).
-        if (g_goldFont)
+        // Gold readout + GoldPile icon, only with a player (spec §5 step 6 /
+        // §8 row 1 / §0 LIVE-VERIFIED #1+#4).
+        if (Player)
         {
-            const int32_t cellW = kArrowLX - kGoldX;
-            const int32_t cellH = (int32_t)(TextLineHeight(g_goldFont) + 0.5f);
-            char buf[16];
-            std::snprintf(buf, sizeof(buf), "%d$", kGoldValue);
-            DrawTextToTarget(g_goldFont, buf,
-                             kGoldX, kGoldY, cellW, cellH,
-                             ETextAlign::Left,
-                             1.0f, 1.0f, 1.0f, tw, th);
+            if (g_goldFont)
+            {
+                const int32_t cellW = kArrowLX - kGoldX;
+                const int32_t cellH = (int32_t)(TextLineHeight(g_goldFont) + 0.5f);
+                char buf[16];
+                std::snprintf(buf, sizeof(buf), "%d$",
+                              Player->GetInventoryAmount(kGoldItemName));
+                DrawTextToTarget(g_goldFont, buf,
+                                 kGoldX, kGoldY, cellW, cellH,
+                                 ETextAlign::Left,
+                                 1.0f, 1.0f, 1.0f, tw, th);
+            }
+            if (g_goldPile)
+                Renderer->DrawBitmapToTarget(g_goldPile, kGoldIconX, kGoldIconY, tw, th);
         }
 
-        // GoldPile icon (spec §4 / §0 LIVE-VERIFIED #1+#4).
-        if (g_goldPile)
-            Renderer->DrawBitmapToTarget(g_goldPile, kGoldIconX, kGoldIconY, tw, th);
-
-        // Per-cell item loop (spec §5 step 8 / §6.1 cell kernel).
-        // Grid maps cells 0..11 to harness_inv[] slots page..page+11.
-        // Each visible cell = column-major position; slot index into harness_inv
-        // is page + col*3 + row (spec §6.1: `slot = col*3 + row + page`).
-        for (int32_t cell = 0; cell < kGridCells; ++cell)
+        // Per-cell item loop (spec §5 step 8 / §6.1 cell kernel): the cell
+        // at column col, row row shows carried slot page + col*3 + row.
+        for (int32_t cell = 0; Player && cell < kGridCells; ++cell)
         {
-            const int32_t col  = cell / kGridRows;
-            const int32_t row  = cell % kGridRows;
-            const int32_t hidx = page + cell;   // harness_inv[] index
+            const int32_t slot = page + cell;
 
-            // Bounds check (harness only has kHarnessInvSlots slots).
-            if (hidx < 0 || hidx >= kHarnessInvSlots) continue;
+            // #7b: the dragged item's cell paints empty while it follows
+            // the cursor.
+            if (dragging && drag.source_idx == slot) continue;
 
-            const SHarnessSlot& hs = UIDragState::harness_inv[hidx];
+            TObjectInstance* item = Player->GetInventorySlot(slot);
+            if (!item || !g_invSlots[cell]) continue;   // chrome border shows through
 
-            // #7b: skip drawing this cell if it's the active drag source
-            // (the item is following the cursor — its origin shows empty).
-            if (dragging && drag.source_idx == hidx) continue;
-
-            if (!hs.inst) continue;   // empty slot — chrome baked border shows through
-
-            // Bind slot content and paint via the shared TInvSlot.
-            if (!g_invSlots[cell]) continue;
-            TInvSlot* isl = g_invSlots[cell];
-
-            isl->SetItem(hs.inst, hs.icon, hs.qty);
-
-            // #7c: bag contents overlay — if the harness slot is a bag,
-            // set the pouch overlay so the inner icon renders.
-            if (hs.is_bag && hs.bag_inner)
-                isl->SetPouchOverlay(hs.bag_inner);
-            else
-                isl->SetPouchOverlay(nullptr);
-
-            isl->Draw(g_pane, tw, th, g_countFont);
+            g_invSlots[cell]->BindItem(item);
+            g_invSlots[cell]->Draw(g_pane, tw, th, g_countFont);
         }
 
         // #7e: Scroll arrows with gray-out at page boundaries (spec §5 step 10).
@@ -621,8 +378,6 @@ bool InitializeUIInventoryMode()
     log_info("[ui-inventory] fonts: Gold=%s  count=%s",
              g_goldFont ? "OK" : "MISS", g_countFont ? "OK" : "MISS");
 
-    // Populate harness_inv[] and build per-cell TInvSlot geometry.
-    PopulateHarness();
     BuildInvSlots();
 
     delete g_pane;
@@ -666,26 +421,10 @@ void CloseUIInventoryMode()
     g_goldFont  = nullptr;
     g_countFont = nullptr;
 
-    // Clean up per-cell slots.
     for (int32_t i = 0; i < kGridCells; ++i)
     {
         delete g_invSlots[i];
         g_invSlots[i] = nullptr;
     }
-
-    // Clean up spawned instances.
-    for (int32_t i = 0; i < g_spawnCount; ++i)
-    {
-        SHarnessSlot& hs = UIDragState::harness_inv[i];
-        if (hs.inst)
-        {
-            hs.inst->OffScreen();
-            delete hs.inst;
-        }
-        hs = SHarnessSlot{};
-        g_spawnMeta[i] = SSpawnMeta{};
-    }
-    g_spawnCount = 0;
-    g_refreshCount = 0;
     g_hudVisible = true;
 }

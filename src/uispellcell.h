@@ -32,15 +32,7 @@
 //     top. Items can drag as a single bitmap through the same manager, but
 //     spells are not forced into that shape.
 //
-// Coordination note (Agent B — uidragstate.{h,cpp}):
-//   EDragSource::SpellPane = 4 is already defined in uidragstate.h
-//   (added in an earlier pass). No additional changes needed there.
-//   However the drag-source item reference (`SUIDragState::item`) holds
-//   a `TObjectInstance*` — for spell slots we store spell index + 1 as
-//   a reinterpret_cast<TObjectInstance*>(intptr_t(spellIdx + 1)) sentinel
-//   so spell zero is not confused with nullptr.
-//   This is a harness-only hack; the production path will store a proper
-//   TSpell* (or equivalent) when TPlayScreen routes the drag.
+// A spell drag carries no item: SUIDragState::source_idx is the spell row.
 //
 // Coordination note (Agent A — hudstate.{h,cpp}):
 //   For persistent quickspell bindings (survive save/load), add:

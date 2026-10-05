@@ -5,9 +5,12 @@
 
 #include "invslot.h"
 
+#include "animation.h"
+#include "imagery.h"
 #include "renderer.h"
 #include "logging.h"
 #include "object.h"
+#include "time.h"
 
 #include <cstdio>
 #include <cstring>
@@ -42,6 +45,61 @@ void TInvSlot::SetPouchOverlay(PTBitmap inner)
 {
     pouch_inner_ = inner;
     if (inner) kind_ = EInvSlotKind::Pouch;
+}
+
+void TInvSlot::BindItem(TObjectInstance* item)
+{
+    SetItem(item, ItemIcon(item), item ? item->Amount() : 1);
+    if (!item || stricmp(item->GetName(), "Pouch") != 0)
+        return;
+
+    // A pouch: the first item inside, and how many items it holds.
+    TObjectInstance* first = nullptr;
+    int32_t count = 0;
+    for (TInventoryIterator i(item); i; i++)
+    {
+        if (!first)
+            first = i.Item();
+        ++count;
+    }
+    SetPouchOverlay(ItemIcon(first));
+    qty_ = count;
+}
+
+namespace {
+
+// The current frame of an animated inventory icon. Retail's panes step
+// these in their Animate pass (EquipPane_SPEC §9); here the 24 Hz tick.
+PTBitmap AnimatedIconFrame(TAnimation* anim)
+{
+    if (!anim || anim->NumFrames() <= 0)
+        return nullptr;
+    return anim->GetFrame(int32_t(TTime::LegacyFrameCount() % anim->NumFrames()));
+}
+
+}  // namespace
+
+PTBitmap TInvSlot::ItemIcon(TObjectInstance* item)
+{
+    if (!item)
+        return nullptr;
+    TObjectImagery* img = item->GetImagery();
+    if (img)
+        if (PTBitmap frame = AnimatedIconFrame(img->GetInvAnimation(item->GetState())))
+            return frame;
+    if (PTBitmap bm = item->InventoryImage())
+        return bm;
+
+    // Items whose icon is baked on another state (or still streaming in).
+    if (img)
+        for (int32_t s = 0; s < img->NumStates(); ++s)
+        {
+            if (PTBitmap bm = img->GetInvImage(s))
+                return bm;
+            if (PTBitmap frame = AnimatedIconFrame(img->GetInvAnimation(s)))
+                return frame;
+        }
+    return nullptr;
 }
 
 // ----------------------------------------------------------------------

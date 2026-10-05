@@ -211,6 +211,17 @@ public:
     void SetItem(TObjectInstance* item, PTBitmap icon, int32_t qty);
     void SetPouchOverlay(PTBitmap inner);
 
+    // Bind an inventory item as the retail panes draw it: its icon, its
+    // Amount() as the count, and for a "Pouch" its first item's icon and
+    // its item count (InventoryPane_SPEC §5 step 8, BarInvPane_SPEC §5
+    // step 7). Null empties the slot.
+    void BindItem(TObjectInstance* item);
+
+    // The icon an item shows in a slot: its inventory image (retail vtable
+    // +0x130), or the first baked inventory icon / animation of its imagery
+    // when that has none; an animated icon steps on the 24 Hz legacy tick.
+    [[nodiscard]] static PTBitmap ItemIcon(TObjectInstance* item);
+
     // ----- accessors --------------------------------------------------
     int32_t          PosX()        const { return x_; }
     int32_t          PosY()        const { return y_; }

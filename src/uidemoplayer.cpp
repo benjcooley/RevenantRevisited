@@ -39,6 +39,49 @@ constexpr SSampleStats kPlayerSample = {
 constexpr SSampleStats kOpponentSample = { 18 };   // bars swept by Pulse
 constexpr const char*  kOpponentName   = "Vermis";
 
+// The sample kit: what the equipment, inventory and belt panes were built
+// showing. Equipment is worn through TPlayer::Equip; carried items sit at
+// carried slots, the belt at slot 0x10b + n. Food and potions don't stack
+// (their classes have no Amount), so only gold shows a count.
+struct SSampleItem
+{
+    const char* name  = nullptr;
+    int32_t     slot  = 0;        // inventory slot, or EQ_* for kEquipment
+    int32_t     amount = 1;
+};
+constexpr SSampleItem kEquipment[] = {
+    { "Brown Leather Helmet",      EQ_HEAD         },
+    { "Emerald Collar",            EQ_NECK         },
+    { "Brown Leather Chest Plate", EQ_BODY         },
+    { "Brown Leather Gloves",      EQ_OFFHAND      },
+    { "Short Sword",               EQ_PRIMEHAND    },
+    { "Emerald Ring",              EQ_R_ACCESSORY  },
+    { "Torch",                     EQ_L_ACCESSORY  },
+    { "Light Bow",                 EQ_RANGEDWEAPON },
+    { "Arrow",                     EQ_AMMO         },
+    { "Brown Leather Leg Plate",   EQ_LEGS         },
+    { "Brown Leather Boots",       EQ_FEET         },
+};
+// The first page of the grid, plus the rest of the 14475 gold on page two.
+constexpr SSampleItem kCarried[] = {
+    { "Brown Leather Helmet", 0 },
+    { "Ale Mug",              1 },
+    { "Golden Sun Key",       2 },
+    { "Gold",                 3, 42 },
+    { "Lesser Healing",       4 },
+    { "Golden Sun Key",       5 },
+    { "Gold",                12, 10000 },
+    { "Gold",                13, 4433 },
+};
+constexpr SSampleItem kBelt[] = {
+    { "Lesser Healing", kInvSlotBeltFirst + 0 },
+    { "Ale Mug",        kInvSlotBeltFirst + 1 },
+    { "Pouch",          kInvSlotBeltFirst + 2 },
+    { "Golden Sun Key", kInvSlotBeltFirst + 3 },
+};
+constexpr const char* kPouchContents     = "Lesser Healing";
+constexpr int32_t     kPouchContentCount = 7;
+
 // Opponent cycle: engaged for 5 s, released for 2 s; its bars sweep on a
 // 4 s triangle wave between these fractions of its maxima.
 constexpr double kCycleSeconds    = 7.0;
@@ -92,6 +135,50 @@ void ApplySample(TPlayer* player, const SSampleStats& sample)
     player->SetFatigue(int32_t(player->MaxFatigue() * sample.fatigueFill));
 }
 
+// Build the item type of that name (whatever its class) into `owner`'s
+// inventory at `slot`.
+TObjectInstance* AddItem(TObjectInstance* owner, const char* name, int32_t slot,
+                         int32_t amount = 1)
+{
+    for (int32_t c = 0; c < MAXOBJECTCLASSES; ++c)
+    {
+        TObjectClass* cl = TObjectClass::GetClass(c);
+        const int32_t type = cl ? cl->FindObjType(name) : -1;
+        if (type < 0)
+            continue;
+
+        SObjectDef def = {};
+        def.objclass = static_cast<short>(cl->ClassId());
+        def.objtype  = static_cast<short>(type);
+        TObjectInstance* item = cl->NewObject(&def);
+        if (!item)
+            break;
+        if (amount != 1)
+            item->SetAmount(amount);
+        if (owner->AddToInventory(item, slot))
+            return item;
+        delete item;
+        break;
+    }
+    log_warn("[ui-demo] could not add '%s' at slot %d", name, slot);
+    return nullptr;
+}
+
+void AddSampleKit(TPlayer* player)
+{
+    for (const SSampleItem& entry : kEquipment)
+        if (TObjectInstance* item = AddItem(player, entry.name, -1))
+            if (!player->Equip(item, entry.slot))
+                log_warn("[ui-demo] '%s' doesn't fit equipment slot %d", entry.name, entry.slot);
+    for (const SSampleItem& entry : kCarried)
+        AddItem(player, entry.name, entry.slot, entry.amount);
+    for (const SSampleItem& entry : kBelt)
+        if (TObjectInstance* item = AddItem(player, entry.name, entry.slot);
+            item && stricmp(entry.name, "Pouch") == 0)
+            for (int32_t i = 0; i < kPouchContentCount; ++i)
+                AddItem(item, kPouchContents, -1);
+}
+
 void DeletePlayer(TPlayer*& player)
 {
     if (!player)
@@ -117,6 +204,7 @@ bool Install()
     if (!g_player)
         return false;
     ApplySample(g_player, kPlayerSample);
+    AddSampleKit(g_player);
     PlayerManager.AddPlayer(g_player);
     PlayerManager.SetMainPlayer(g_player);
 

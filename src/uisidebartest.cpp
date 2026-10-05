@@ -35,6 +35,7 @@
 #include "hudstate.h"
 #include "logging.h"
 #include "multi.h"
+#include "player.h"
 #include "renderer.h"
 #include "revdefs.h"
 #include "revenant.h"
@@ -528,7 +529,7 @@ void ToggleUIBottomPanel()
              s.bottomBarOpen ? "OPEN" : "CLOSED");
 }
 
-// Hit-test the inventory 4x3 grid. Returns column-major harness slot index
+// Hit-test the inventory 4x3 grid. Returns the carried slot number
 // (page + col*3 + row) when (x,y) is inside a cell, -1 otherwise.
 // Per InventoryPane_SPEC: origin pane-local (8, 42), pitch 45x44,
 // interior 40x40, column-major.
@@ -666,8 +667,8 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         }
 
         // Drop targets in priority order: Equip (most specific) → BarInv →
-        // Inventory grid. First one to hit wins. Each could refuse on a
-        // real-item type-filter; the test harness accepts all.
+        // Inventory grid. First one to hit wins; the manager refuses a drop
+        // the destination can't take (an item that doesn't fit the slot).
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
         {
             const int32_t es = HitEquipSlot(x, y);
@@ -763,16 +764,17 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         }
     }
 
-    // ---- Inventory grid: click-down on a cell starts a drag ----------
+    // ---- Item slots: click-down on an item starts a drag. The items are
+    // the main player's: carried slot, belt slot 0x10b + n, equipment.
+    // ---- Inventory grid ------------------------------------------------
     if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
     {
         int32_t slot = -1, sx = 0, sy = 0;
         if (HitInvSlotRect(x, y, s.inventoryPage, slot, sx, sy))
         {
-            TObjectInstance* fake_item =
-                reinterpret_cast<TObjectInstance*>(uintptr_t(slot + 1));
+            TObjectInstance* item = Player ? Player->GetInventorySlot(slot) : nullptr;
             UIDragState::BeginDrag(EDragSource::Inventory, slot,
-                                   fake_item, x, y,
+                                   item, x, y,
                                    nullptr, x - sx, y - sy);
             return true;
         }
@@ -784,10 +786,10 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         int32_t bs = -1, sx = 0, sy = 0;
         if (HitBarInvSlotRect(x, y, bs, sx, sy))
         {
-            TObjectInstance* fake_item =
-                reinterpret_cast<TObjectInstance*>(uintptr_t(0x100 + bs));
+            TObjectInstance* item =
+                Player ? Player->GetInventorySlot(kInvSlotBeltFirst + bs) : nullptr;
             UIDragState::BeginDrag(EDragSource::BarInv, bs,
-                                   fake_item, x, y,
+                                   item, x, y,
                                    nullptr, x - sx, y - sy);
             return true;
         }
@@ -799,10 +801,9 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         int32_t es = -1, sx = 0, sy = 0;
         if (HitEquipSlotRect(x, y, es, sx, sy))
         {
-            TObjectInstance* fake_item =
-                reinterpret_cast<TObjectInstance*>(uintptr_t(0x200 + es));
+            TObjectInstance* item = Player ? Player->GetEquip(es) : nullptr;
             UIDragState::BeginDrag(EDragSource::Equip, es,
-                                   fake_item, x, y,
+                                   item, x, y,
                                    nullptr, x - sx, y - sy);
             return true;
         }
