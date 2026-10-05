@@ -37,6 +37,7 @@
 
 #include <memory>
 
+class TInGameMenu;
 class TMapRenderer;
 class TObjectImagery;
 
@@ -66,6 +67,9 @@ enum GAMECOMMAND : int32_t
     GAMECMD_MOVEDOWN, GAMECMD_MOVEUP,
     GAMECMD_LEAPDOWN, GAMECMD_LEAPUP,
     GAMECMD_BLOCKDOWN, GAMECMD_BLOCKUP,
+    // Retail's last four controls (table 0x005d5500 #65-68, Command
+    // 0x0047cf40 cases 0x52-0x55): the in-game dialogs without the menu.
+    GAMECMD_GAMEOPTIONS, GAMECMD_LOADGAME, GAMECMD_SAVEGAME, GAMECMD_QUICKSAVE,
 };
 
 // CMDFLAG_* bitmask values fed into TPlayer command-flag state.
@@ -132,16 +136,24 @@ class TPlayScreen : public TScreen
     // Legacy entry points kept so existing callers compile. Pulse() /
     // Animate() forward to Update() in the new model; DrawBackground() is
     // now a no-op (no BITMAP.100 backdrop). Treat them as deprecated.
-    virtual void Pulse();
-    virtual void Animate(bool draw);
-    virtual void DrawBackground();
+    void Pulse() override;
+    void Animate(bool draw) override;
+    void DrawBackground() override;
 
     // ---- Input ---------------------------------------------------------
     void MouseClick(int32_t button, int32_t x, int32_t y) override;
     void MouseMove (int32_t button, int32_t x, int32_t y) override;
     void KeyPress  (int32_t key, bool down)               override;
-    virtual void Joystick(int32_t key, bool down);
+    void Joystick  (int32_t key, bool down)               override;
     virtual void Command (GAMECOMMAND command);
+
+    // ---- In-game menu --------------------------------------------------
+    // REVSYNC: the ESC case of KeyPress @ 0x0047c630: write the save
+    // thumbnail from the frame on screen, then open the in-game menu
+    // (0x0047e500) over it.
+    void OpenInGameMenu();
+    // The in-game menu or one of its dialogs is up.
+    [[nodiscard]] bool InGameMenuOpen() const;
 
     // ---- Mode flags ----------------------------------------------------
     [[nodiscard]] bool IsFullScreen() const { return fullscreen; }
@@ -208,6 +220,10 @@ class TPlayScreen : public TScreen
 
     std::unique_ptr<TMapRenderer> mapRenderer;
     TMapManager::EventListenerId  mapListener = 0;
+
+    // The in-game menu and its dialogs (retail's panes 0x0066f748 ...).
+    std::unique_ptr<TInGameMenu>  ingamemenu;
+    bool menuPending = false;       // the menu opens once its thumbnail is taken
 
     // Mode flags
     bool fullscreen   = false;
