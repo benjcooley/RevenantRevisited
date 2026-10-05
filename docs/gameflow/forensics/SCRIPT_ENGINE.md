@@ -21,7 +21,7 @@ interpreter are the 1998 design. Retail changed the execution model:
 | When a script runs | `TCharacter::Pulse` calls `Continue` only when the current action is done | the object's pulse calls `Continue` every tick; `Continue` returns at once while a wait is unsatisfied |
 | Who triggered it | not recorded | the triggering object becomes the script's **user** (`+0xc4`, alias `user`) |
 | What the script took | nothing to restore | flags at `+0x00` (control, dialog pane, camera); `End` gives them back |
-| Dialog choices | `DialogPane` labels | a choice list on the script (`+0xb8`) that the response wait jumps through |
+| Dialog choices | `DialogPane` labels | the dialog pane's choices; the wait check jumps to the picked label. A choice list on the script (`+0xb8`) exists only for multiplayer (DIALOG.md §2) |
 
 ## 2. `TScript` layout (0xe8 bytes; ctor `0x00492170`)
 
@@ -43,8 +43,8 @@ interpreter are the 1998 design. Retail changed the execution model:
 | +0xac / +0xb0 | ip / depth of an ALWAYS block interrupted by a higher trigger (resumed after) |
 | +0xb4 | wait type (byte), see §5 |
 | +0xb5 | multiplayer wait countdown |
-| +0xb6 | chosen response index |
-| +0xb8 | choice list (32-byte entries: label…) |
+| +0xb6 | a remote player's response index (multiplayer) |
+| +0xb8 | a remote player's choice list (multiplayer) |
 | +0xbc | wait parameter (frames left, or the object waited on) |
 | +0xc4 | user object; +0xc8 second object; +0xcc user alias (`"user"`) |
 | +0xd8 / +0xdc / +0xe4 | a pending `say` started at the next `Continue` |
@@ -157,9 +157,10 @@ Retail:
   | dying | DEAD |
 
 Not ported:
-- the taken flags (`+0x00`) and `End` giving them back;
-- the choice list on the script (`+0xb8`): response waits jump through
-  the 1998 `TDialogPane` labels until the dialog port;
+- the taken flags' control (1) and camera (8) bits and `End` giving
+  them back (the dialog bit, 4, is ported);
+- the multiplayer choice list (`+0xb8`/`+0xb6`); single-player responses
+  go through the dialog pane (DIALOG.md, ported)
 - the pending `say` (`+0xd8`…);
 - the ALWAYS interrupt/resume (`+0xac`/`+0xb0`);
 - a refused request's busy reply (`0x00494620`, multiplayer, needs
