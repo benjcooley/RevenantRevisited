@@ -501,7 +501,7 @@ class TPressPlate : public TExit
     TPressPlate(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { }
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1) { return false; }
-    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
+    int32_t CursorType(TObjectInstance* with = nullptr) override { return CURSOR_NONE; }
 
     virtual bool Activate();
     virtual void Unactivate();
@@ -536,7 +536,7 @@ class TUpBlock : public TExit
     TUpBlock(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { }
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
-    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
+    int32_t CursorType(TObjectInstance* with = nullptr) override { return CURSOR_NONE; }
 
     virtual void Pulse();
 };
@@ -633,7 +633,7 @@ class TSpikeWall : public TExit
     TSpikeWall(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { }
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1) { return false; }
-    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
+    int32_t CursorType(TObjectInstance* with = nullptr) override { return CURSOR_NONE; }
 
     virtual bool Activate();
     virtual void Unactivate();

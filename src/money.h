@@ -36,7 +36,7 @@ class TMoney : public TObjectInstance
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Combine money
-    virtual int32_t CursorType(TObjectInstance* with = nullptr);
+    int32_t CursorType(TObjectInstance* with = nullptr) override;
         // Returns type of cursor that should appear when mouse arrow is over the object
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);

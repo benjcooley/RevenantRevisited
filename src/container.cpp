@@ -240,7 +240,7 @@ class TVialRack : public TContainer
     TVialRack(SObjectDef* def, TObjectImagery* newim) : TContainer(def, newim) {}
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
-    virtual int32_t CursorType(TObjectInstance* inst = nullptr);
+    int32_t CursorType(TObjectInstance* inst = nullptr) override;
     virtual void Save(RTOutputStream os);
 };
 

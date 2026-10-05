@@ -968,8 +968,9 @@ class TObjectInstance : protected SObjectDef
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Uses object (user is the person using it, with is the object to use with this)
         // Returns true if the object was actually used, false if nothing could be done with it
-    virtual int32_t CursorType(TObjectInstance* with = nullptr) const { return CURSOR_NONE; }
+    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
         // Returns type of cursor that should appear when mouse arrow is over the object
+        // (not const: the overrides read stats through non-const accessors)
     virtual void UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang)
         { mindist = 20; maxdist = 50; minang = 0; maxang = 255; }
         // Valid locations character can be standing in order to use the object
