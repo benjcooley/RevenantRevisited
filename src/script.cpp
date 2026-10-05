@@ -32,7 +32,10 @@
 #include "revutils.h"
 #include "exit.h"
 #include "player.h"
+#include "stream.h"
 #include "textbar.h"
+
+#include <algorithm>
 
 bool TScript::pauseall = false;
 
@@ -66,16 +69,19 @@ TScript::TScript(TScriptProto* prototype)
     proto = prototype;
     block[0].conditional = COND_UNDEF;
     block[0].loopstart = 0;
+    ScriptManager.RegisterScript(this);
 }
 
 TScript::TScript()
 {
     block[0].conditional = COND_UNDEF;
     block[0].loopstart = 0;
+    ScriptManager.RegisterScript(this);
 }
 
 TScript::~TScript()
 {
+    ScriptManager.UnregisterScript(this);
 }
 
 // REVSYNC: SetText @ 0x004944c0 — retail allocates via FUN_00482ef0 (strdup-like) and
@@ -449,6 +455,17 @@ void TScript::End()
 {
     ip = nullptr;
     lastpriority = priority = 0;
+}
+
+void TScript::Reset()
+{
+    End();
+    curproto = topproto;
+    newtrigger = trigger = 0;
+    newtriggerstr[0] = '\0';
+    curtrigger = nullptr;
+    depth = 0;
+    block[0] = SScriptBlock{};
 }
 
 // ****************
@@ -884,29 +901,79 @@ bool TGameState::Save(char *filename)
     return true;
 }
 
-// REVSYNC: LoadStream @ 0x00496110 — binary save-game format.
-//   On-disk layout (little-endian, 32-bit):
-//     int32 count
-//     count × { uint8 namebytes[] terminated by NUL, all bytes XOR'd with 0x80;
-//               int32 value }
-// Names are unxor'd on load; if the unxor'd name already exists in our table
-// only its value is overwritten, otherwise a new entry is appended.
-// TODO(revsync): TSaveGame currently uses the pre-release format. Wire this in
-// when savegame.cpp is retail-synced.
-bool TGameState::LoadStream(TParseStream & /*stream*/)
+namespace {
+
+// Names are stored with the high bit set on every byte (retail ORs on save,
+// XORs on load; state names are ASCII, so the two agree).
+constexpr uint8_t kStateNameMask = 0x80;
+
+}  // namespace
+
+// REVSYNC: LoadStream @ 0x00496110
+bool TGameState::LoadStream(TInputStream &is)
 {
-    // Stub — TParseStream doesn't expose a binary read API at this level. The
-    // retail decomp uses raw pointer increments on a memory-mapped buffer
-    // (*(int**)(stream+4)). When savegame ports its file IO we'll add a
-    // matching helper. Returning true keeps the current pre-release behaviour
-    // (which just calls Load("state.def") via ReloadStates) intact.
+    if (is.Remaining() < 4)
+        return false;
+    int32_t count = 0;
+    is >> count;
+
+    for (int32_t i = 0; i < count; i++)
+    {
+        if (is.Remaining() < 1)
+            return false;
+        uint8_t length = 0;
+        is >> length;
+        if (is.Remaining() < length + 4)
+            return false;
+
+        char name[256];
+        for (int32_t c = 0; c < length; c++)
+        {
+            uint8_t byte = 0;
+            is >> byte;
+            name[c] = (char)(byte ^ kStateNameMask);
+        }
+        name[length] = '\0';
+
+        int32_t value = 0;
+        is >> value;
+
+        const int32_t index = FindStateIndex(name);
+        if (index >= 0)
+        {
+            state[index] = value;
+            continue;
+        }
+        if (numstates >= MAXGAMESTATES)
+        {
+            log_warn("[gamestate] save holds more than %d states; dropping '%s'",
+                     MAXGAMESTATES, name);
+            continue;
+        }
+        statename[numstates] = new char[length + 1];
+        strcpy(statename[numstates], name);
+        state[numstates] = value;
+        numstates++;
+    }
     return true;
 }
 
-bool TGameState::SaveStream(TParseStream & /*stream*/)
+// REVSYNC: SaveStream @ 0x004974d0
+void TGameState::SaveStream(TOutputStream &os) const
 {
-    // Stub — see LoadStream. TODO(revsync) parallel to LoadStream.
-    return true;
+    os.MakeFreeSpace(4);
+    os << numstates;
+
+    for (int32_t i = 0; i < numstates; i++)
+    {
+        const char *name = statename[i] ? statename[i] : "";
+        const size_t length = std::min<size_t>(strlen(name), 255);
+        os.MakeFreeSpace((int32_t)length + 5);
+        os << (uint8_t)length;
+        for (size_t c = 0; c < length; c++)
+            os << (uint8_t)(name[c] | kStateNameMask);
+        os << state[i];
+    }
 }
 
 // ******************
@@ -918,7 +985,6 @@ bool TGameState::SaveStream(TParseStream & /*stream*/)
 bool TScriptManager::Initialize()
 {
     scripts.Clear();
-    instances.Clear();
     fileowners.Clear();
 
     const bool master_ok = Load("master.s");
@@ -931,9 +997,11 @@ bool TScriptManager::Initialize()
     return master_ok && state_ok;
 }
 
-// REVSYNC: Close @ 0x00496330 — Save if editor + delete instances + delete
-// protos + delete file/owner records. Retail also clears the empty TVirtualArray
-// slots; our containers do that in their destructors.
+// REVSYNC: Close @ 0x00496330 — Save if editor + delete protos + delete
+// file/owner records. Retail also clears the empty TVirtualArray slots; our
+// containers do that in their destructors. REVSYNC-DIVERGENCE: retail also
+// deleted the live script instances here; in the port their objects own and
+// delete them (see the TScriptManager comment in script.h).
 void TScriptManager::Close()
 {
     if (Editor)
@@ -941,15 +1009,6 @@ void TScriptManager::Close()
         Save("master.s");
         gamestate.Save("state.def");
     }
-
-    // Delete live script instances first (retail: ScriptManager destroys
-    // before protos, since instances reference protos).
-    for (int32_t i = 0; i < instances.NumItems(); i++)
-    {
-        if (instances.Used(i))
-            instances.Delete(i);
-    }
-    instances.Clear();
 
     // Delete protos.
     scripts.DeleteAll();
@@ -1106,6 +1165,28 @@ bool TScriptManager::ReloadStates()
     return gamestate.Load("state.def");
 }
 
+// REVSYNC: 0x00496e20
+void TScriptManager::ResetScripts()
+{
+    for (TScript* script : instances)
+        script->Reset();
+}
+
+void TScriptManager::RegisterScript(TScript* script)
+{
+    instances.push_back(script);
+}
+
+void TScriptManager::UnregisterScript(TScript* script)
+{
+    const auto it = std::find(instances.begin(), instances.end(), script);
+    if (it != instances.end())
+    {
+        *it = instances.back();
+        instances.pop_back();
+    }
+}
+
 // REVSYNC: ParseScripts @ 0x00496860 — chunk buffer into TScriptProtos. Retail
 // also handles a hot-reload diff path (mark-protos-stale → reparse → reattach
 // to instances) which we don't exercise in the cold-load case; the per-proto
@@ -1158,7 +1239,6 @@ PTScript TScriptManager::ObjectScript(TObjectInstance* inst)
             if (stricmp(sp->name, instname) == 0)
             {
                 PTScript ns = new TScript(sp);
-                instances.Add(ns);
                 log_info("[script] attached '%s' -> obj %s", sp->name, instname);
                 return ns;
             }
@@ -1178,7 +1258,6 @@ PTScript TScriptManager::ObjectScript(TObjectInstance* inst)
             if (stricmp(sp->name, classname) == 0)
             {
                 PTScript ns = new TScript(sp);
-                instances.Add(ns);
                 log_info("[script] attached '%s' -> obj %s (class match)", sp->name,
                          instname ? instname : "(unnamed)");
                 return ns;
@@ -1221,7 +1300,6 @@ PTScript TScriptManager::AddScript(TObjectInstance* /*inst*/, char *name, void *
     }
 
     PTScript ns = new TScript(sp);
-    instances.Add(ns);
     return ns;
 }
 

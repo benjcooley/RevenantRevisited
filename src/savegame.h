@@ -1,35 +1,102 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
-// *                 savegame.h - SaveGame header file                     *
+// *                  Revenant Revisited (port) - 2026                     *
+// *            savegame.h - save slots and the save file format           *
 // *************************************************************************
-
+//
+// TSaveGame is retail's save manager: the list of save slots, the save file
+// format, loading a slot or the module's newgame.sav into a reset world, and
+// writing a slot. It also carries the merchant unique-item table, which
+// persists only through the save file.
+//
+// Loading replaces the players, game states and sector working set; it does
+// not load sectors or place the players in them (TGameSession does that, as
+// retail's TPlayScreen did). Format, sequence and retail addresses:
+// docs/gameflow/forensics/SAVE_GAME.md.
 #pragma once
 
-#include "revenant.h"
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
 
-#include "object.h"
-#include "graphics.h"
+class TInputStream;
+class TOutputStream;
 
-_CLASSDEF(TSaveGame)
+// The 0x80-byte header that starts every save file (SAVE_GAME.md §3.1).
+struct SSaveHeader
+{
+    static constexpr int32_t kSize          = 0x80;
+    static constexpr int32_t kModuleNameLen = 32;
+
+    int32_t gametime     = 0;   // hundredths of a second
+    int32_t multiplayer  = 0;   // a 0x200-byte multiplayer block follows the header
+    int32_t playerformat = 0;   // 0: one player (legacy); 2: counted player list + merchant table
+    int32_t version      = 0;   // object stream version, passed to LoadObject
+    char    module[kModuleNameLen] = {};   // module dirname
+
+    // False when fewer than kSize bytes remain.
+    [[nodiscard]] bool Read(TInputStream& is);
+    void Write(TOutputStream& os) const;
+};
+
+// A save slot: <SaveGamePath>/Single/<name>/ holding game.sav, CurMap/ and
+// the ss.bmp thumbnail.
+struct SSaveSlot
+{
+    std::string           name;
+    std::filesystem::path dir;
+    std::string           module;   // from the slot's header
+};
+
 class TSaveGame
 {
   public:
-    TSaveGame() { saved = nullptr; }
+    // REVSYNC: LoadGame @ 0x0048df70 — load slot `name` ("Default Save" if
+    // null). The slot must be in Slots(); see RefreshSlots.
+    bool Load(const char* name);
 
-    bool WriteGame(char *name = nullptr);
-    bool WriteGame(int32_t);
-        // Write savegame to disk
-    bool ReadGame(char *name = nullptr);
-    bool ReadGame(int32_t);
-        // Read savegame from disk
-    bool IsLoading() const {return loading;}
-        // Checks to see if the game is loading
+    // REVSYNC: LoadNewGame @ 0x0048e610 (LoadGame("newgame", 1)) — the active
+    // module's newgame.sav into an empty working set.
+    bool LoadNewGame();
 
-  protected:
-    TObjectInstance* saved;                 // Saved object (Locke)
-    int32_t gametime;                       // Game time when saved
-    int32_t version;                        // Version of savegame
-    int32_t pane;                           // Which pane was up
-    bool loading;
+    // REVSYNC: SaveGame @ 0x0048d720 — write the game to slot `name`
+    // ("Default Save" if null), creating it.
+    bool Save(const char* name);
+
+    // REVSYNC: 0x0048d260 — rescan the save slots on disk.
+    void RefreshSlots();
+
+    // REVSYNC: 0x0048d6d0 — index of slot `name` (case-insensitive) or -1.
+    [[nodiscard]] int32_t FindSlot(const char* name) const;
+
+    [[nodiscard]] const std::vector<SSaveSlot>& Slots() const { return slots; }
+
+    // True while a load is replacing the world.
+    [[nodiscard]] bool IsLoading() const { return loading; }
+
+    // Merchant unique items already bought (SAVE_GAME.md §6).
+    // REVSYNC: HasPair @ 0x0048e630 / AddPair @ 0x0048e670.
+    [[nodiscard]] bool HasSoldUnique(int32_t objclass, int32_t objtype) const;
+    void AddSoldUnique(int32_t objclass, int32_t objtype);
+
+  private:
+    struct SSoldUnique
+    {
+        int32_t objclass = 0;
+        int32_t objtype  = 0;
+    };
+
+    // Loads `file` (resolved through the resource layer). `slotCurMap` is
+    // the slot's sector working set, or empty for a new game.
+    bool LoadFile(const char* file, const std::filesystem::path& slotCurMap);
+    void ResetWorld(const std::filesystem::path& slotCurMap);
+    bool ReadSoldUniques(TInputStream& is, const SSaveHeader& header);
+    bool ReadPlayers(TInputStream& is, const SSaveHeader& header);
+    void WriteBody(TOutputStream& os) const;
+
+    std::vector<SSaveSlot>   slots;
+    std::vector<SSoldUnique> soldUniques;
+    bool                     loading = false;
 };

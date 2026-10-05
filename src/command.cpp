@@ -10,6 +10,7 @@
 #include <ctype.h>
 
 #include <string>
+#include <vector>
 #include <unordered_set>
 
 // Local replacement for Win32 strlwr()
@@ -37,6 +38,7 @@ static inline char *strlwr(char *s)
 #include "multictrl.h"
 #include "command.h"
 #include "cursor.h"
+#include "gameflow.h"
 #include "script.h"
 #include "multi.h"
 #include "savegame.h"
@@ -270,6 +272,15 @@ COMMAND(CmdTimeLimit);
 COMMAND(CmdTimeOfDay);
 COMMAND(CmdUnequip);
 COMMAND(CmdWalkCopy);
+
+// Name of save slot `index`, the way the editor's "load/save game <n>"
+// address slots (retail 0x0048e5b0 / 0x0048df40). Empty if out of range.
+static std::string SaveSlotAt(int32_t index)
+{
+    ::SaveGame.RefreshSlots();
+    const std::vector<SSaveSlot>& slots = ::SaveGame.Slots();
+    return (index >= 0 && index < (int32_t)slots.size()) ? slots[index].name : std::string();
+}
 
 // Shared body for retail-table commands whose port hasn't landed yet: skip
 // the rest of the line, note (once per command) that a script reached it,
@@ -2706,12 +2717,9 @@ COMMAND(CmdTrigger)
     return 0;
 }
 
-COMMAND(CmdNewGame)
-{
-    PlayScreen.NewGame();
-
-    return 0;
-}
+// REVSYNC: retail newgame (0x00423760) requests loading save slot 0; it
+// joins the command-system port (docs/gameflow/ARCHITECTURE.md §6).
+COMMAND(CmdNewGame) { return CmdNotPorted("newgame", 0x00423760, t); }
 
 COMMAND(CmdCurPlayer)
 {
@@ -3788,8 +3796,14 @@ COMMAND(CmdLoad)
             gamenum = t.Index();
             t.WhiteGet();
         }
-        Output("Loading game...\n");
-        PlayScreen.LoadGame(gamenum);
+        const std::string slot = SaveSlotAt(gamenum);
+        if (slot.empty())
+            Output("Invalid Game\n");
+        else
+        {
+            Output("Loading game...\n");
+            GameFlow.Session().RequestLoad(slot);
+        }
     }
             
     if (loadsector)
@@ -3865,8 +3879,11 @@ COMMAND(CmdSave)
             gamenum = t.Index();
             t.WhiteGet();
         }
+        // An index past the slot list saves to "Default Save" (retail
+        // SaveGame with no name).
+        const std::string slot = SaveSlotAt(gamenum);
         Output("Saving game...\n");
-        PlayScreen.SaveGame(gamenum);
+        GameFlow.Session().RequestSave(slot.empty() ? "Default Save" : slot);
     }
 
     if (savemap)

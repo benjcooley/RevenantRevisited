@@ -87,8 +87,10 @@ void TCharacter::ClearChar()
 
     // When character loaded or created, make exit timestamp current..
     // Prevents ONEXIT flag from expiring when character is saved on top of a
-    // destination exit.
-    exittimestamp = CurrentScreen->FrameCount();
+    // destination exit. The game session can build the world before the
+    // PlayScreen runs; its frame count starts at 0 when it does, which is
+    // what retail's load inside TPlayScreen::Initialize saw.
+    exittimestamp = (CurrentScreen == &PlayScreen) ? PlayScreen.FrameCount() : 0;
 
   // Set root state
   // NONE: DefaultRootState() will NOT be virtual when ClearChar()

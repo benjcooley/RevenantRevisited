@@ -76,11 +76,11 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | `TPlayScreen::NewGame()` already exists — audit it; expand if it just calls `LoadGame(0)` | — |
-| [ ] | curmap clear on NewGame; reset save state | — |
-| [ ] | Spawn default player at start location (depends on T4) | — |
-| [ ] | Hook from TMainMenuScreen NEW button | — |
-| [ ] | Optional difficulty selector | — |
+| [x] | New Game = retail start mode 0: `ClearCurMap` + `LoadNewGame` (module `newgame.sav`) through `TGameSession` | 2026-10-04 |
+| [x] | curmap clear on NewGame (`SectorStore` working set under SavePath) | 2026-10-04 |
+| [x] | Player from `newgame.sav` (Locke L1, 25/25 HP, Keep resurrection chamber); default-spawn stand-in and Level-10 floor removed | 2026-10-04 |
+| [x] | Title New Game button → `TGameFlow::StartNewGame` | 2026-10-04 |
+| [-] | Difficulty selector — not in retail | 2026-10-04 |
 
 **Exit:** New Game from menu lands a fresh player in the starting sector.
 
@@ -90,8 +90,8 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 
 | Status | Item | Last touched |
 |--------|------|--------------|
-| [ ] | Recon: identify how retail marks the start location (AREA.DEF START keyword? tagged TObject?) | — |
-| [ ] | Read the start position from module data, not hard-coded | — |
+| [x] | Recon: retail's start location is the player in the module's `newgame.sav` (forensics/SAVE_GAME.md) | 2026-10-04 |
+| [x] | Read the start position from module data, not hard-coded | 2026-10-04 |
 | [ ] | Fire the starting TRIGGER_ALWAYS script in the start sector | — |
 | [ ] | Verify with the GOG Misthaven module data | — |
 
@@ -113,6 +113,13 @@ Design: [ARCHITECTURE.md](ARCHITECTURE.md) §2, §4; forensics: [forensics/SCREE
 | [x] | Post-load sector attach for loaded player (closes Locke-in-ground candidate H3) | 2026-05-19 |
 | [x] | REVSYNC headers on SaveObject / LoadObject / Load / Save / LoadInventory / SaveInventory | 2026-05-19 |
 | [x] | Harden WriteGame/ReadGame diagnostic log (Pos() canonical; sector liveness; inv count) | 2026-05-19 |
+
+| [x] | Retail save format: header, game states, merchant table, player list; slots under `SaveGamePath/Single/<name>` with `CurMap/` (forensics/SAVE_GAME.md) | 2026-10-04 |
+| [x] | Retail `LoadGame` reset sequence (curmap, scripts, states, areas, players, control) | 2026-10-04 |
+| [x] | In-game requests: F5 = retail Quick Save, F9 = dev reload of the last slot; `--savecycle-test` runs through them | 2026-10-04 |
+| [ ] | `TPlayer`/`TCharacter::Save` in the retail objversion 14 layout (port writes the 1998 v4 body; SAVE_GAME §10.8) | — |
+| [ ] | Automap persistence (retail per-sector automap files; the pre-release blob is gone) | — |
+| [ ] | `ss.bmp` slot thumbnail | — |
 
 **Exit:** Save/load round-trips player + script state cleanly.
 

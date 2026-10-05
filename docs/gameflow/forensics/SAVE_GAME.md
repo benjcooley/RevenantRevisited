@@ -191,6 +191,39 @@ persists only through the save file.
 | `0x0048e610` | **LoadNewGame** = `LoadGame("newgame", 1)` |
 | `0x0048df40` | `SaveGame(slot[index].name)` |
 
+Saves root: INI `[Paths] SaveGamePath`, default `.\Save`
+(`GetINISettings` `0x00484500`).
+
+### 7.1 Requests during play
+
+Loads and saves requested in game are queued on the PlayScreen
+(`+0x5e4` load, `+0x5e8` save, `+0x5ec` slot index, `+0x5f0` slot name)
+and carried out at the start of its next frame (`0x0047bfab..0x0047c0b8`):
+the load first (announced on the text bar, then `LoadGame`, then
+SetControl on), then the save (`0x00458f00` on the MapPane, announced,
+then `SaveGame`).
+
+| Address | Role |
+|---|---|
+| `0x0047e770` | RequestLoad(index) |
+| `0x0047e7a0` | RequestLoad(name) |
+| `0x0047e810` | RequestSave(name) |
+| `0x0047e850` | QuickSave: refresh slots, take the first unused `"Quick Save %d"` (format from string `quicksavefmt` if present), request a save |
+| `0x00428540` | console `loadgame.<name>`: refresh, find, request load |
+| `0x004285b0` | console `savegame.<name>`: request save |
+| `0x00423760` | console `newgame`: RequestLoad(index 0) |
+
+Retail has a "Quick Save" control and no quick load.
+
+### 7.2 Object stats on load
+
+`TObjectInstance::Load` (`0x00472430`) matches each saved stat to the
+class's stats by unique id, masking the saved id with `0x7f7f7f7f`; when
+the order differs it searches every class stat. When object flag
+`0x04000000` is set, it then resets every stat except indices 3–5 to the
+object type's defaults; this is why `SaveGame` clears that flag on the
+players before writing them.
+
 ## 8. Persistence outside `game.sav`
 
 - **Automap**: retail stores per-sector automap bitmaps as files
@@ -244,3 +277,29 @@ persists only through the save file.
 6. Player state flags (+0x36c, `SetPlayerState` `0x0051d680`) are not
    ported; in single player the load-time value only marks the player
    active.
+7. **Stats lost on load.** The port's stat loop was the 1998 one: no id
+   mask, and a slow path that compared against the current index only,
+   so every stat after the first ordering mismatch was dropped. Locke
+   loaded from `newgame.sav` as level 0 with 0 HP. *Fixed in 2c* to
+   retail (§7.2). This affects every object loaded from a sector too.
+   The `0x04000000` reset is not ported.
+8. **Player saved in the 1998 layout.** `TPlayer`/`TCharacter::Save`
+   write objversion 4 (809 bytes for the new-game Locke); retail writes
+   objversion 14 (976 bytes). The port reads both, so its saves
+   round-trip, but retail can't read them and v14-only fields are lost
+   on save. Header, game states and merchant table match retail byte for
+   byte.
+9. **Script ownership.** Objects delete their scripts and
+   `TScriptManager::Close` deleted the same instances (double free at
+   shutdown); a load's script reset would have touched freed scripts.
+   *Fixed in 2c:* the manager's list is non-owning and maintained by
+   `TScript` itself.
+10. **Construction read the current screen.** `TCharacter::ClearChar`
+    read `CurrentScreen->FrameCount()`, so building the world before the
+    PlayScreen ran crashed. *Fixed in 2c* (frame 0, which is what
+    retail's load inside `TPlayScreen::Initialize` saw).
+11. Not ported in `LoadGame`'s reset: finishing a PlayScreen fade
+    (`0x0047ece0`), ending a conversation (`0x005360f0`), emptying the
+    buy/sell pane (`0x00532f40`). In `SaveGame`: the editor path that
+    rewrites the module's `newgame.sav`, and the `ss.bmp` thumbnail
+    (the port doesn't capture one yet).

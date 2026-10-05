@@ -8,6 +8,7 @@
 
 #include "ctrlmap.h"
 #include "cursor.h"
+#include "gameflow.h"
 #include "platform/cursor.h"
 #include "imgui.h"
 #include "logging.h"
@@ -125,18 +126,17 @@ class TGameModeImpl final : public IRuntimeMode
 
     bool HandleKey(int32_t key, bool down) override
     {
-      // Quick-save / quick-load shortcuts (debug-grade for now; will be
-      // promoted to GAMECMD_QUICKSAVE/QUICKLOAD once T6 ships the proper
-      // slot-picker UI). Fire on key-down only and consume the key so it
-      // doesn't fall through to the gameplay command path.
+      // F5: retail's Quick Save (a new "Quick Save N" slot each time). F9:
+      // developer reload of the last slot saved or loaded; retail had no
+      // quick load. Both move to the control map when the in-game menu
+      // lands. Fire on key-down only and consume the key so it doesn't fall
+      // through to the gameplay command path.
         if (down && key == VK_F5) {
-            PlayScreen.SaveGame(1);
-            log_info("[playscreen] F5 -> SaveGame(1) staged");
+            GameFlow.Session().RequestQuickSave();
             return true;
         }
         if (down && key == VK_F9) {
-            PlayScreen.LoadGame(1);
-            log_info("[playscreen] F9 -> LoadGame(1) staged");
+            GameFlow.Session().RequestReloadLastSlot();
             return true;
         }
 

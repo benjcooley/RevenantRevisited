@@ -1720,8 +1720,13 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     // and light records over the level-resident asset cache.
     SetMap(gmap, use_level_origin, keep_sx, keep_sy);
 
-    DebugUI::RegisterContributor(this);
+    Initialize();
     return true;
+}
+
+void TMapRenderer::Initialize()
+{
+    DebugUI::RegisterContributor(this);
 }
 
 void TMapRenderer::SetMap(TGameMap* m, bool use_level_origin,
