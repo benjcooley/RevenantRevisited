@@ -1140,12 +1140,20 @@ bool TObjectInstance::SetState(int32_t newstate)
     return true;
 }
 
+// Slot limits are retail's (0x0046f3d0): a free slot is a carried slot,
+// and a given slot may also be an equipment or belt slot (revdefs.h).
+// Not ported: retail moves an item already at the slot to a free one, and
+// merges stackables (vtable +0x98).
 bool TObjectInstance::AddToInventory(TObjectInstance* inst, int32_t slot)
 {
     if (slot < 0)
+    {
         slot = FindFreeInventorySlot();
+        if (slot > kInvSlotLastCarried)
+            return false;
+    }
 
-    if ((uint32_t)slot >= MAXINVITEMS)
+    if ((uint32_t)slot > kInvSlotLast)
         return false;
 
     inst->OffScreen();
@@ -1276,12 +1284,7 @@ int32_t TObjectInstance::GetInventoryAmount(const char *name) const
 
 bool TObjectInstance::HasEmptySlot() const
 {
-    uint32_t slot = FindFreeInventorySlot();
-
-    if ((uint32_t)slot >= MAXINVITEMS)
-        return false;
-
-    return true;
+    return FindFreeInventorySlot() <= kInvSlotLastCarried;
 }
 
 void TObjectInstance::SignalAddedToInventory()
