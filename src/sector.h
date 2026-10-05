@@ -118,6 +118,11 @@ class TSector final
     int32_t AddObject(TObjectInstance* oi, int32_t item = -1);
     int32_t SetObject(TObjectInstance* oi, int32_t item);
     TObjectInstance* RemoveObject(int32_t item);
+    int32_t RemoveObject(TObjectInstance* oi);
+      // Takes `oi` out of the sector and clears its sector pointer; returns
+      // its former index, or -1 if it isn't here. The sector holds a raw
+      // pointer to each object in it, so an object leaves its sector before
+      // it is freed (~TObjectInstance does this) or handed to an inventory.
     int32_t NumItems() const { return objects.NumItems(); }
     int32_t GetObjIndex(const TObjectInstance* oi) const;
     PTObjectArray ObjectArray()

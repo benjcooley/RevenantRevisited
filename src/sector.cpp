@@ -390,6 +390,17 @@ TObjectInstance* TSector::RemoveObject(int32_t item)
     return oi;
 }
 
+// REVSYNC: TSector::RemoveObject @ 0x00499250 (retail removes by object).
+int32_t TSector::RemoveObject(TObjectInstance* oi)
+{
+    if (!oi)
+        return -1;
+    const int32_t item = GetObjIndex(oi);
+    if (item >= 0)
+        RemoveObject(item);
+    return item;
+}
+
 int32_t TSector::GetObjIndex(const TObjectInstance* oi) const
 {
     for (int32_t i = 0; i < objects.NumItems(); i++)

@@ -214,9 +214,13 @@ death, quit).
   `TMapPane`'s `sectors[][]` window and the renderer's draw records drop
   their sector pointers on the map's `Unloaded` event, which fires before
   the sectors are freed, and keep a `TSafeRef<TGameMap>`; objects are held
-  through `TSafeRef<TObjectInstance>` / mapindex. Retail kept the loaded
-  sectors on `TMapPane` (a global loaded list it streamed and freed);
-  those paths are gone (`attic/src/mappane_sectors.cpp`).
+  through `TSafeRef<TObjectInstance>` / mapindex. A destroyed object
+  first leaves its owner's inventory and its sector (retail
+  `~TObjectInstance` → detach `0x0046e630` → `TMapPane::RemoveObject`
+  `0x00451610`, which works from the object's own links), so deleting a
+  player still standing in a sector is safe in any order. Retail kept the
+  loaded sectors on `TMapPane` (a global loaded list it streamed and
+  freed); those paths are gone (`attic/src/mappane_sectors.cpp`).
 - **No automap persistence until the retail automap files are ported**
   (SAVE_GAME §8). Dropping the pre-release blob loses automap state
   across save/load in the meantime; carrying it in a retail save is not

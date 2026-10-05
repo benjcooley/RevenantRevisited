@@ -356,15 +356,14 @@ class TMapPane : public TPane
       // Allows map to update lists, etc. when an objects flags change (mainly
       // for OF_LIGHT, OF_PULSE, and OF_ANIMATE changing objects location on 
       // OBJSET_xxx sector arrays.
-    TObjectInstance* RemoveObject(int32_t index);
-      // Removes the given object from the map, recursing through inventories
-    TObjectInstance* RemoveObject(TObjectInstance* inst)
-        { return RemoveObject(inst->GetMapIndex()); }
-      // Removes the given object from the map, recursing through inventories
+    TObjectInstance* RemoveObject(TObjectInstance* inst);
+      // Takes the object (and its shadow) out of the world -- out of its
+      // owner's inventory or its sector -- without deleting it. Works from
+      // the object's own links, inside or outside the sector window.
     void DeleteObject(TObjectInstance* obj);
       // Removes and deletes an object
-    TObjectInstance* RemoveFromSector(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t sectindex);
-      // Removes the given object from the sector array (called by RemoveObject())
+    TObjectInstance* RemoveFromSector(TObjectInstance* inst);
+      // Takes the object out of its sector (walkmap, redraw, sector array)
     void ReloadImagery();
       // Forces imagery system to reload imagery.
     int32_t AddShadow(TObjectInstance* oi);
