@@ -130,7 +130,7 @@ reads.
 | [x] | In-game requests: Quick Save (retail control, Ctrl+Backspace since 2026-10-05; was F5), F9 = dev reload of the last slot; `--savecycle-test` runs through them | 2026-10-04 |
 | [x] | Save interop: every class streams retail's layout (player objversion 15), sector hashes, `ss.bmp` thumbnail (ARCHITECTURE §3.5 2f); retail-side check in dosbox-x pending ([SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md)) | 2026-10-05 |
 | [x] | Player stats retail (maxima, RefreshStats, armor, level-up) — [../gameplay/forensics/PLAYER_STATS.md](../gameplay/forensics/PLAYER_STATS.md) | 2026-10-05 |
-| [ ] | Automap persistence (retail per-sector automap files; the pre-release blob is gone) | — |
+| [x] | Automap persistence: retail keeps the explored masks in the player record (SAVE_GAME.md §11.5), streamed with the save interop work; the per-sector automap bitmaps are a render cache | 2026-10-05 |
 
 **Exit:** Save/load round-trips player + script state cleanly.
 
@@ -204,7 +204,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Retail floating dialog pane: speech boxes, portrait ring, choices by key or mouse | 2026-10-05 |
 | [ ] | Retail shots S6 to settle colours, positions and hover behaviour | — |
 | [x] | The Keep's story chain plays end to end (headless, choices by key): opening; Rahul's death and Tendrick's scene (`ressexit` unlocked); DOOR1; Rand in the jail (`RandK`: looped choice, two menus, `TENDRICKSTATE = 1`); Tendrick in the throne room (`TendrickT`: four choices with loops, `Finish`, Locke to level 6); the level-6 scene (`GowE`: walks, `cast "electric bolt"`, Rand dies, fade, back to the Keep, `TENDRICKSTATE = 2`, `KeepExit` unlocked); menu saves at each step | 2026-10-05 |
-| [ ] | Dialog text in Windows-1252 (`’` 0x92 and the like) drops characters: the TrueType atlases cover 32..127 (agent working on it) | 2026-10-05 |
+| [x] | Dialog text in Windows-1252 (`’` 0x92, `è`): the TrueType path decodes CP1252 and its atlases hold the printable repertoire ([../ui/TEXT_RENDERING.md](../ui/TEXT_RENDERING.md)) | 2026-10-05 |
 
 **Exit:** Clicking an NPC brings up dialog; choice routes back to script branch.
 
