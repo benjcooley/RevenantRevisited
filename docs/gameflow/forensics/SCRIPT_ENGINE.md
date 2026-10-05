@@ -153,6 +153,11 @@ Retail:
 - the instruction pointer, an offset into the prototype text (the 1998
   raw pointer broke on 64-bit);
 - the trigger test (`0x004927b0`), the user and the trigger-user guard;
+- "running" is retail's test, the ip being set (`+0x48`); until
+  2026-10-05 the port tested its `priority` (retail's flags, `+0x4c`,
+  which no start sets), so every block counted as idle and an ALWAYS
+  block restarted after each wait (TendrickR never reached its
+  `If Rahul.stat health = 0`, and the chamber door never unlocked);
 - `Continue`'s wait gate, `SetWait` and the wait check, the
   interpreter's wait post-hook and `wait`'s grammar. The type-3 check
   ended on any finished animation until 2026-10-05, so a script walk

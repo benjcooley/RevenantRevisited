@@ -228,7 +228,7 @@ class TScript
     void Resume();
     [[nodiscard]] bool IsPaused() const { return (priority & SCRIPT_PAUSED) != 0; }
     // REVSYNC: End @ 0x00493e40 — ends the block and gives back what it
-    //   took (the dialog and fade bits; control and camera aren't ported).
+    //   took: the dialog, control, the fade bit and the camera.
     void End();
     // REVSYNC: 0x004924f0 (InitScript's last call; inlined per instance in
     //   TScriptManager::ResetScripts @ 0x00496e20) — End if running and
@@ -237,7 +237,9 @@ class TScript
     //   interrupted ALWAYS block, which retail leaves; a just-attached or
     //   just-loaded script has none.
     void Reset();
-    [[nodiscard]] bool Running() const { return priority > 0; }
+    // A block is running (retail: the ip at +0x48 is set). `priority` holds
+    // retail's script flags (+0x4c, SCRIPT_PAUSED), not a running state.
+    [[nodiscard]] bool Running() const { return ip != kNotRunning; }
 
     // REVSYNC: 0x00492640 -- asks for a manual trigger (TRIGGER, DIALOG,
     // ACTIVATE, USE, GIVE, GET, COMBAT, DEAD), which starts at the next
@@ -257,6 +259,11 @@ class TScript
     // The block holds the screen fade (taken bit 2): `fadescreenout` sets it
     // and `fadescreenin` clears it (retail 0x00427e80 / 0x00427f60).
     void SetFadeHeld(bool held) { taken = held ? (taken | kTakenFade) : (taken & ~kTakenFade); }
+    // The block holds control (taken bit 1: `control off`, retail 0x00420ab0)
+    // or the camera (bit 8: `centeron`/`scrollto` off the player, 0x004249b0);
+    // End gives either back.
+    void SetControlHeld(bool held) { taken = held ? (taken | kTakenControl) : (taken & ~kTakenControl); }
+    void SetCameraHeld(bool held) { taken = held ? (taken | kTakenCamera) : (taken & ~kTakenCamera); }
     // REVSYNC: 0x00494530 / 0x004944c0 (`busysay` / `busymsg`) -- the line
     // the owner says, and the message sent, to a player whose trigger is
     // refused while the script is busy with someone else (TScript::Busy
@@ -319,11 +326,11 @@ class TScript
     PSScriptTrigger curtrigger = nullptr;          // The current trigger record
 
     // Retail state (SCRIPT_ENGINE.md §2).
-    // +0x00: what the running block took and End gives back. The dialog
-    // and fade bits are ported; control (1) and the camera (8) follow their
-    // commands. The fade bit is set by `fadescreenout` and cleared by
-    // `fadescreenin`; in single player End only drops it (retail fades back
-    // in there for a multiplayer host alone).
+    // +0x00: what the running block took and End gives back: control (1,
+    // `control off`), the fade (2, `fadescreenout`; in single player End
+    // only drops it -- retail fades back in there for a multiplayer host
+    // alone), the dialog (4, `choice`) and the camera (8, `centeron`/
+    // `scrollto` off the player).
     static constexpr uint32_t kTakenControl = 1;
     static constexpr uint32_t kTakenFade    = 2;
     static constexpr uint32_t kTakenDialog  = 4;
