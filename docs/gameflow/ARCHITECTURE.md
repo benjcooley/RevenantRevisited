@@ -235,7 +235,7 @@ death, quit).
 | 2a ✓ | Working set + write policy (`SectorStore`, `rev_fopen`, `TSector`, `TMapManager`) | sectors written under SavePath, nothing written to the install; level 0 loads the pristine 35,549 objects |
 | 2b ✓ | `TSaveGame` retail format + `TGameState` streams + slot list | `newgame.sav` parses; header, game states and merchant table written byte-identical to retail (player body: see SAVE_GAME §10) |
 | 2c ✓ | `TGameSession`, flow/PlayScreen integration, in-game requests, stand-ins removed | `--quickstart` and title New Game: Locke L1, 25/25 HP, in the Keep resurrection chamber (filmstrip); `--savecycle-test` round trip identical |
-| 2d | `TLoadScreen` + staged steps | loading bar matches retail; filmstrip |
+| 2d ✓ | `TLoadScreen` (`src/loadscreen.*`) + staged steps: the title fades out, the loading screen runs one session step per tick with the bar at retail's running total after the same work (areas 165, exits 215, game 240, world 1000), then the PlayScreen fades in. QUICKSTART still loads before the first screen | `--menu=newgame` filmstrip: retail "Loading Game" backdrop, bar at 16% then full |
 | 2e | Game time and the simulation tick into the session | time and time-of-day match retail (TIME.md) |
 | 2f ✓ | Save interop: every object class streams retail's layout (player objversion 15), sector state hash, `ss.bmp` thumbnail (SAVE_GAME §11) | retail `New Game1` loaded and re-saved: `game.sav` differs only in game time and the player's AI bit, 279 of 283 sectors equal ignoring constructor-owned flags; state hashes of all 558 retail sectors and 4,822 shipped base-map sectors reproduced; a port save re-saves byte-identical. In retail (dosbox-x): pending, [SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md) |
 

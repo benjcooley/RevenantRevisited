@@ -7,6 +7,7 @@
 
 #include "cinematicscreen.h"
 #include "death.h"
+#include "loadscreen.h"
 #include "logging.h"
 #include "logoscreen.h"
 #include "playscreen.h"
@@ -108,10 +109,11 @@ void TGameFlow::QuitApplication()
 }
 
 // Retail tore the world down in TPlayScreen::Close (0x0047b290); here the
-// game ends when the flow moves on from the PlayScreen.
+// game ends when the flow moves on to anything but the game's own screens
+// (the loading screen, then the PlayScreen).
 void TGameFlow::ScreenEnded(TScreen* next)
 {
-    if (next != &PlayScreen)
+    if (next != &PlayScreen && next != &LoadScreen)
         session.End();
 }
 
@@ -128,12 +130,33 @@ bool TGameFlow::StartSession(const SSessionStart& start)
     return false;
 }
 
+// The title fades out, the loading screen runs the session's steps (one per
+// tick, ContinueLoading), then the play screen fades in. Retail did the same
+// work inside TPlayScreen::Initialize (0x0047a660) behind its loading bar.
 void TGameFlow::PlayGame(const SSessionStart& start)
 {
-    if (StartSession(start))
+    session.Start(start);
+    SwitchTo(&LoadScreen);
+}
+
+void TGameFlow::ContinueLoading()
+{
+    if (session.Step())
+    {
+        LoadScreen.SetProgress(session.Progress());
+        return;
+    }
+
+    if (session.Ready())
+    {
+        LoadScreen.SetProgress(session.Progress());
         SwitchTo(&PlayScreen);
-    else
-        log_error("[gameflow] the game didn't start");
+        return;
+    }
+
+    log_error("[gameflow] the game didn't start; back to the title screen");
+    session.End();
+    SwitchTo(&LogoScreen);
 }
 
 void TGameFlow::SwitchTo(TScreen* next)

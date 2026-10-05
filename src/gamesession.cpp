@@ -22,11 +22,16 @@
 #include <iterator>
 #include <utility>
 
+// Progress is retail's loading bar after the same work in
+// TPlayScreen::Initialize (0x0047a660; LoadingScreen_SPEC.md §1): the module
+// mount, HUD archives, scripts and areas reach 165; the panes (the map pane
+// reads exit.def) 215; the game load and effect imagery 240; the sectors
+// around the player fill the rest.
 const TGameSession::SStep TGameSession::kLoadSteps[] = {
-    { "areas", &TGameSession::LoadAreas },
-    { "exits", &TGameSession::LoadExits },
-    { "game",  &TGameSession::LoadGameState },
-    { "world", &TGameSession::EnterWorld },
+    { "areas", &TGameSession::LoadAreas,     165 },
+    { "exits", &TGameSession::LoadExits,     215 },
+    { "game",  &TGameSession::LoadGameState, 240 },
+    { "world", &TGameSession::EnterWorld,    1000 },
 };
 
 // ***********
@@ -66,13 +71,13 @@ bool TGameSession::Step()
     return true;
 }
 
-float TGameSession::Progress() const
+int32_t TGameSession::Progress() const
 {
     switch (state)
     {
-    case EState::Ready:   return 1.0f;
-    case EState::Loading: return (float)nextStep / (float)std::size(kLoadSteps);
-    default:              return 0.0f;
+    case EState::Ready:   return 1000;
+    case EState::Loading: return nextStep > 0 ? kLoadSteps[nextStep - 1].progress : 0;
+    default:              return 0;
     }
 }
 
