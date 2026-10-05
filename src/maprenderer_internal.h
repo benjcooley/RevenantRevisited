@@ -413,12 +413,14 @@ struct TMapRenderer::Impl
     int32_t view_mode = 0;
     // lighting_mode 0 = Classic: retail's lighting model (classiclighting.cpp;
     // no sun). lighting_mode 1 = modern directional w/ sun-shadow + AO
-    // multiplier. Default Classic so the retail look is what you get
-    // without touching the debug UI.
+    // multiplier. Seeded from [Revisited] LightingMode; default Classic so
+    // the retail look is what you get without touching the debug UI.
     bool lights_on = true;
     float radius_mul = 1.0f;      // Revisited per-area POINTLIGHTRANGE (1 = authored)
     float intensity_mul = 1.0f;   // Revisited per-area POINTLIGHTINT (1 = authored)
     int32_t lighting_mode = 0;
+    // Current area has a day/night cycle (AREA_DONIGHT); gates the modern sun.
+    bool daylight_cycle = false;
     // Retail had no synthesized sun shadow ray-march; objects cast
     // alpha-blob shadows handled separately. Off by default.
     bool  sun_shadow = false;
