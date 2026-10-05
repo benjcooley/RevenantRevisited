@@ -66,6 +66,7 @@ struct State {
     // The active music track (one at a time).
     bool             music_loaded = false;
     ma_sound         music{};
+    float            music_volume = 1.0f;  // MusicSetVolume scale, every track
 };
 
 State& state() { static State s; return s; }
@@ -500,6 +501,7 @@ bool audio::MusicPlayFile(const char* path, bool looping) {
         return false;
     }
     s.music_loaded = true;
+    ma_sound_set_volume(&s.music, s.music_volume);
     ma_sound_set_looping(&s.music, looping ? MA_TRUE : MA_FALSE);
     if (ma_sound_start(&s.music) != MA_SUCCESS) {
         ma_sound_uninit(&s.music);
@@ -527,6 +529,7 @@ bool audio::MusicPlaying() {
 
 void audio::MusicSetVolume(float v) {
     State& s = state();
+    s.music_volume = v;   // kept for the next track, even while silenced
     if (!s.init_ok || !s.music_loaded) return;
     ma_sound_set_volume(&s.music, v);
 }

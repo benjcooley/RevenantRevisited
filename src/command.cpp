@@ -53,6 +53,7 @@ static inline char *strlwr(char *s)
 #include "file.h"
 #include "3dimage.h"
 #include "sound.h"
+#include "audio_backend.h"
 #include "dialog.h"
 #include "effect.h"
 #include "logging.h"
@@ -284,19 +285,21 @@ static std::string SaveSlotAt(int32_t index)
     return (index >= 0 && index < (int32_t)slots.size()) ? slots[index].name : std::string();
 }
 
-// Shared body for retail-table commands whose port hasn't landed yet: skip
-// the rest of the line, note (once per command) that a script reached it,
-// and report success so the calling script keeps running.
+// Shared body for retail-table commands whose port hasn't landed yet. They
+// answer the way retail answers a command it doesn't have (ARCHITECTURE
+// §6.5): CMD_BADCOMMAND, so the interpreter offers the line to the target's
+// own parser, reports "Unrecognized command" and the script carries on with
+// the next line. Logged once per command with the retail address.
 static int32_t CmdNotPorted(const char *name, uint32_t retailaddr, TToken &t)
 {
     static std::unordered_set<std::string> reported;
     if (reported.insert(name).second)
-        log_warn("[cmd] '%s' not ported yet (retail @ 0x%08x); ignored", name, retailaddr);
+        log_warn("[cmd] '%s' not ported (retail @ 0x%08x); unrecognized", name, retailaddr);
     else
-        log_debug("[cmd] '%s' not ported yet; ignored", name);
+        log_debug("[cmd] '%s' not ported; unrecognized", name);
     while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
         t.Get();
-    return 0;
+    return CMD_BADCOMMAND;
 }
 
 // Master command list, evaluated top-to-bottom
@@ -1269,9 +1272,8 @@ COMMAND(CmdSet)
 }
 
 // REVSYNC: wait @ 0x0041fe30. The waiting script is the context's
-// (retail's object wait wrappers 0x004712b0..0x00471350). Retail's SetWait
-// opened the dialog choices for a response wait; the 1998 dialog pane is
-// shown here until the dialog port moves it.
+// (retail's object wait wrappers 0x004712b0..0x00471350); a response wait
+// opens the dialog choices (TScript::SetWait).
 COMMAND(CmdWait)
 {
     TScript* waiting = context ? context->GetScript() : nullptr;
@@ -1329,13 +1331,8 @@ COMMAND(CmdWait)
     else
         return CMD_WAIT;    // plain "wait": until the context's action is done
 
-    if (type == EScriptWait::Response || type == EScriptWait::ResponseControlOn)
-    {
-        DialogPane.SetCharacter((PTCharacter)context);
-        DialogPane.Show();
-    }
     if (waiting)
-        waiting->SetWait(type);
+        waiting->SetWait(type);         // a response wait opens the choices
     t.WhiteGet();
     return CMD_WAIT;
 }
@@ -1420,14 +1417,15 @@ COMMAND(CmdSay)
         }
     }
 
-    char *text = nullptr;
+    const char *text = nullptr;
     int32_t tagid = -1;
     if (t.Is("choice"))
     {
-        if (DialogPane.GetResponse())
+        // The last choice picked (it survives the commit).
+        if (const char *chosen = DialogPane.ChosenText())
         {
-            text = DialogPane.GetResponse();
-            tagid = DialogList.FindLine(DialogPane.GetResponse());
+            text = chosen;
+            tagid = DialogList.FindLine(chosen);
         }
 
         t.WhiteGet();
@@ -1530,6 +1528,60 @@ COMMAND(CmdPivotObject)
         static_cast<TCharacter*>(context)->Pivot(context->AngleTo(target) + offset);
 
     return CMD_WAIT;
+}
+
+// REVSYNC: incidentals @ 0x00428250 -- `[<character>.]incidentals on|off`:
+// whether the character's root and idle animations may roll their random
+// "NN:" variants (TCharacter::SetIncidentals). Like retail, the word stays
+// for the interpreter to skip with the rest of the line.
+COMMAND(CmdIncidentals)
+{
+    TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
+    if (t.Is("on"))
+        chr->SetIncidentals(true);
+    else if (t.Is("off"))
+        chr->SetIncidentals(false);
+    else
+    {
+        Output("State must be included\n");
+        return CMD_BADPARAMS;
+    }
+    log_debug("[cmd] %s: incidentals %s", chr->GetName(), t.Text());
+    return 0;
+}
+
+// REVSYNC: fadecharacterout @ 0x00428020, fadecharacterin @ 0x00428070 --
+// `fadecharacterout|fadecharacterin <character>`: fade a character out to
+// nothing or back in (TCharacter::Fade). The name resolves from the context.
+// Retail faded whatever object the name found; only characters fade here.
+// Retail also sent the fade to the other players of a network game. Like
+// retail, the name stays for the interpreter to skip.
+static int32_t FadeCharacter(TObjectInstance* context, TToken& t, TScript* script, int32_t direction)
+{
+    TObjectInstance* target = ResolveScriptObject(t.Text(), context, script);
+    if (!target || !target->IsCharacter())
+        return CMD_BADPARAMS;
+
+    TCharacter* chr = static_cast<TCharacter*>(target);
+    chr->Fade(direction);
+    log_debug("[cmd] %s: fade %s from %d", chr->GetName(), direction == 1 ? "in" : "out", chr->GetFade());
+    return 0;
+}
+
+COMMAND(CmdFadeCharacterOut) { return FadeCharacter(context, t, script, -1); }
+COMMAND(CmdFadeCharacterIn) { return FadeCharacter(context, t, script, 1); }
+
+// REVSYNC: playerlevel @ 0x00428640 -- `<player>.playerlevel <n>`: rebuild
+// the player as a fresh level-n character (TPlayer::SetPlayerLevel). The
+// table only lets a player be the context.
+COMMAND(CmdPlayerLevel)
+{
+    if (t.Type() != TKN_NUMBER)
+        return CMD_BADPARAMS;
+
+    static_cast<TPlayer*>(context)->SetPlayerLevel(static_cast<int32_t>(t.Number()));
+    t.Get();
+    return 0;
 }
 
 COMMAND(CmdCombat)
@@ -2601,6 +2653,28 @@ COMMAND(CmdPlay3D)
 
     context->PlayWave(buf);
 
+    return 0;
+}
+
+// REVSYNC: setcdvolume @ 0x00428b20 -- `setcdvolume half|full`: the music
+// drops to half the player's music volume, or back to all of it. Retail sets
+// the CD's current volume (0x0049a610) to its base volume (CD object
+// 0x0065abc8 +4, the player's music setting) or half of it. The port keeps
+// the player's setting as the music group volume, so the script's part is a
+// scale of 1/2 or 1 on top (audio::MusicSetVolume).
+COMMAND(CmdSetCDVolume)
+{
+    float scale;
+    if (t.Is("half"))
+        scale = 0.5f;
+    else if (t.Is("full"))
+        scale = 1.0f;
+    else
+        return CMD_BADPARAMS;
+
+    audio::MusicSetVolume(scale);
+    log_debug("[cmd] setcdvolume %s: music at %.2f of the music volume", t.Text(), scale);
+    t.WhiteGet();
     return 0;
 }
 
@@ -3860,8 +3934,9 @@ COMMAND(CmdGenerate)
 //
 // Every entry of the retail command table (SCommand[189] @ 0x005c6e88) is
 // registered above. Commands the pre-release snapshot never had start here
-// as stubs: they consume their parameters, log once that they ran, and
-// succeed, so a script that uses them keeps flowing instead of aborting.
+// as stubs: they consume their parameters, log once that a script reached
+// them, and answer "unrecognized" (CmdNotPorted) -- the script skips the
+// line and keeps running, as retail does for a command it doesn't know.
 // The retail body for each lives in recon/discovered/commands/cmd_<name>_<addr>.cpp.
 // When a command is ported, replace its stub with the real body (and move
 // the body next to its siblings if that reads better).
@@ -3912,12 +3987,10 @@ COMMAND(CmdGotoRelativeDistance) { return CmdNotPorted("gotorelativedistance", 0
 COMMAND(CmdGotoRelativePosition) { return CmdNotPorted("gotorelativeposition", 0x004205c0, t); }
 COMMAND(CmdHasFreeSlot) { return CmdNotPorted("hasfreeslot", 0x00426c60, t); }
 COMMAND(CmdHideObjects) { return CmdNotPorted("hideobjects", 0x00427010, t); }
-COMMAND(CmdIncidentals) { return CmdNotPorted("incidentals", 0x00428250, t); }
 COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
 COMMAND(CmdMaxMonsters) { return CmdNotPorted("maxmonsters", 0x00427c30, t); }
 COMMAND(CmdMonsterTypes) { return CmdNotPorted("monstertypes", 0x00427bd0, t); }
 COMMAND(CmdOperate) { return CmdNotPorted("operate", 0x00426cd0, t); }
-COMMAND(CmdPlayerLevel) { return CmdNotPorted("playerlevel", 0x00428640, t); }
 COMMAND(CmdSetFromExit) { return CmdNotPorted("setfromexit", 0x00428a40, t); }
 COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
 COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
@@ -3928,14 +4001,11 @@ COMMAND(CmdUnequip) { return CmdNotPorted("unequip", 0x00428180, t); }
 // ----- owner: presentation (fades, music, movies, end game) -----
 
 COMMAND(CmdEndGame) { return CmdNotPorted("endgame", 0x00427060, t); }
-COMMAND(CmdFadeCharacterIn) { return CmdNotPorted("fadecharacterin", 0x00428070, t); }
-COMMAND(CmdFadeCharacterOut) { return CmdNotPorted("fadecharacterout", 0x00428020, t); }
 COMMAND(CmdFadeScreenIn) { return CmdNotPorted("fadescreenin", 0x00427f60, t); }
 COMMAND(CmdFadeScreenOut) { return CmdNotPorted("fadescreenout", 0x00427e80, t); }
 COMMAND(CmdFogOfWar) { return CmdNotPorted("fow", 0x00425440, t); }
 COMMAND(CmdPlayMovie) { return CmdNotPorted("playmovie", 0x00427d80, t); }
 COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }
-COMMAND(CmdSetCDVolume) { return CmdNotPorted("setcdvolume", 0x00428b20, t); }
 COMMAND(CmdSwapCDTrack) { return CmdNotPorted("swapcdtrack", 0x00428b90, t); }
 COMMAND(CmdTimeOfDay) { return CmdNotPorted("timeofday", 0x00427a80, t); }
 

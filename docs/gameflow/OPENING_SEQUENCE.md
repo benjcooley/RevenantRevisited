@@ -35,9 +35,9 @@ the block:
 | Line execution, blocks, labels, `jump`, `nowait` | `Continue`, `CommandInterpreter` `0x0041e8e0` | 1998 block engine; retail context syntax |
 | Waits: frames, character done, speech done, dialog response, screen fade | `TScript` wait machine: `SetWait` `0x00492b00`, check `0x00492d70` | retail; the screen-fade wait passes at once |
 | Conditions (`If Rahul.stat health = 0` in Tendrick's ALWAYS block) | evaluator `0x0041f230`, resolver `0x0041e690` | retail |
-| Commands used | see §3 | 6 not ported, rest 1998 |
+| Commands used | see §3 | 6 ported from retail, rest 1998 |
 | Dialog: speech text + voice, choice list, response | `TDialogPane`, speech | 1998 `TDialogPane`, unwired |
-| Presentation: fades, camera, control off | PlayScreen fade state, `centeron`/`scrollto` | partial |
+| Presentation: fades, camera, control off | PlayScreen fade state, `centeron`/`scrollto`; character fade (`TCharacter` `+0x194`) | partial; character fades run but aren't drawn (COMMAND_SYSTEM.md §6.4) |
 
 Where it stands: Sardok's block runs from the trigger through the
 resurrection and the first lines (`say I1LOC00`, `say I1SAR00`) to the
@@ -52,8 +52,9 @@ where it waits for a response the dialog pane doesn't offer yet.
 `pivotobject`*, `goto`, `choice`, `jump`, `addinv`, `get`, `play`,
 `pivot`, `state`, `set`.
 
-\* not ported (`CmdNotPorted`). The rest run their 1998 bodies and each
-needs checking against its retail handler (`recon/discovered/commands/`).
+\* ported from retail (`forensics/COMMAND_SYSTEM.md` §6; `pivotobject`
+in its own commit). The rest run their 1998 bodies and each needs
+checking against its retail handler (`recon/discovered/commands/`).
 
 ## 4. Sources
 

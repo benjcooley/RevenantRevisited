@@ -66,6 +66,8 @@ class TPlayer : public TCharacter
 {
   public:
     void ClearPlayer();
+    void SetPlayerLevel(int32_t level);
+      // Rebuild as a fresh level-'level' character of its class (`playerlevel`)
 
     TPlayer(TObjectImagery* newim);
     TPlayer(SObjectDef* def, TObjectImagery* newim);
@@ -136,6 +138,8 @@ class TPlayer : public TCharacter
       // power.  (i.e. min=5, base=5, inc=5... skill 0=5, 5=10, 10=15, 20=20, 40=25, 80=30, etc.)
     void SetSkill(int32_t skillnum, int32_t v) { SetObjStat(skillnum, v); }
       // Sets the skill value
+    void AddSkillExp(int32_t skillnum, int32_t exp);
+      // Adds skill experience; reaching the next threshold raises the skill a level
     int32_t WeaponSkill(int32_t weapontype) { return Skill(SK_WEAPONSKILLS + weapontype); }
 
     // Spell casting
