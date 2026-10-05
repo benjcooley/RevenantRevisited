@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 enum class ETextEncoding : uint8_t
 {
@@ -36,3 +37,7 @@ inline constexpr char32_t kReplacementChar = U'�';
 // at the string's terminating NUL. Malformed UTF-8 decodes to
 // kReplacementChar and advances one byte, so a NUL is never stepped over.
 [[nodiscard]] char32_t DecodeChar(const char*& p, ETextEncoding encoding);
+
+// `text` re-encoded as UTF-8, for anything outside the game's own text
+// path: the log, ImGui. Null gives an empty string.
+[[nodiscard]] std::string ToUtf8(const char* text, ETextEncoding encoding = kGameTextEncoding);

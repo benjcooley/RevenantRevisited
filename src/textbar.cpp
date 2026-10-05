@@ -17,6 +17,7 @@
 #include "playscreen.h"
 #include "renderer.h"
 #include "surface.h"
+#include "textencoding.h"
 #include "time.h"
 
 #include <algorithm>
@@ -215,7 +216,7 @@ void TTextBar::VPrint(ELineType type, const char *fmt, va_list args)
 {
     char text[kPrintChars];
     vsnprintf(text, sizeof(text), fmt ? fmt : "", args);
-    log_debug("[textbar] %s", text);
+    log_debug("[textbar] %s", ToUtf8(text).c_str());
     if (!IsOpen())
         return;
 
