@@ -176,7 +176,7 @@ bool TActionBlock::IsPartOf(const char *prefix, const char *state) const
     if (state)
         sprintf(stnamebuf, "%s%s*", prefix, state);
     else
-        sprintf(stnamebuf, "%s*", prefix, state);
+        sprintf(stnamebuf, "%s*", prefix);
     return Is(stnamebuf);
 }
 

@@ -4878,7 +4878,7 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
 
                 char buf[80];
                 sprintf(buf, "%s taken from corpse of %s.", oi->GetName(), GetName());
-                TextBar.Print(buf);
+                TextBar.Print("%s", buf);
             }
 
             return true;
