@@ -54,6 +54,11 @@ class TSound
         // Without lpos the sound is not positioned: listener moves don't pan
         // or attenuate it
     void Stop();
+    void Pause();
+    void Resume();
+        // Stop a playing sound where it is / start it again from there
+        // (TSoundPlayer::PauseSamples); Resume does nothing unless Pause
+        // stopped it
 
     void SetListenerPos(S3DPoint* lpos = nullptr);
         // set the listener's position for direction-based audio
@@ -105,6 +110,7 @@ class TSound
     WAVEFORMATEX format;
     audio::Source* source;  // opaque miniaudio voice (was LPDIRECTSOUNDBUFFER in 1998)
     bool looping;
+    bool paused = false;    // stopped by Pause, to be resumed
 
     PTSound next;           // next in list
 };
@@ -160,6 +166,13 @@ class TSoundPlayer
     void Pause();
     void Unpause();
         // Start and stop all sound effects (ie, game pausing/unpausing)
+
+    void PauseSamples();
+    void ResumeSamples();
+        // REVSYNC: 0x0049c830 / 0x0049c890 -- stop every playing sound effect
+        // and voice where it is, and start those again. Music isn't a sample
+        // and keeps playing. The in-game menu pauses them while it is open
+        // (docs/gameflow/forensics/INGAME_MENU.md §4.3).
 
     void SetVolume(int32_t volume = 0);
         // An argument of 0 is the normal playing level

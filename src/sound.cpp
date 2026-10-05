@@ -87,9 +87,11 @@ TSound::~TSound()
         delete next;
 }
 
+// A sound PauseSamples stopped is still in progress (it resumes where it
+// was), so the dying-sound collector keeps it.
 bool TSound::IsPlaying()
 {
-    return source && audio::IsPlaying(source);
+    return paused || (source && audio::IsPlaying(source));
 }
 
 bool TSound::IsLooping()
@@ -221,6 +223,7 @@ void TSound::SetSoundPos(S3DPoint* spos)
 // lpos the sound plays flat and stays that way.
 void TSound::Play(int32_t volume, int32_t freq, S3DPoint* lpos, S3DPoint* spos)
 {
+    paused = false;
     positional = lpos != nullptr;
     if (lpos) {
         listener_pos = *lpos;
@@ -242,8 +245,26 @@ void TSound::Play(int32_t volume, int32_t freq, S3DPoint* lpos, S3DPoint* spos)
 
 void TSound::Stop()
 {
+    paused = false;
     if (!SoundPlayer.Functioning() || source == nullptr) return;
     audio::StopSource(source);
+}
+
+void TSound::Pause()
+{
+    if (paused || !source || !audio::IsPlaying(source))
+        return;
+    audio::StopSource(source);
+    paused = true;
+}
+
+void TSound::Resume()
+{
+    if (!paused)
+        return;
+    paused = false;
+    if (SoundPlayer.Functioning() && source)
+        audio::ResumeSource(source);
 }
 
 uint32_t TSound::GetStatus()
@@ -304,6 +325,26 @@ void TSoundPlayer::Pause()
 void TSoundPlayer::Unpause()
 {
     if (Functioning()) audio::UnpauseAll();
+}
+
+// Retail walked its 16 2D and 16 3D sample slots; the port's voices are the
+// mounted sounds and their duplicates.
+void TSoundPlayer::PauseSamples()
+{
+    if (!Functioning())
+        return;
+    for (const std::unique_ptr<SSoundRef>& ref : soundlist)
+        for (TSound* sound = ref->sound.get(); sound; sound = sound->Next())
+            sound->Pause();
+}
+
+void TSoundPlayer::ResumeSamples()
+{
+    if (!Functioning())
+        return;
+    for (const std::unique_ptr<SSoundRef>& ref : soundlist)
+        for (TSound* sound = ref->sound.get(); sound; sound = sound->Next())
+            sound->Resume();
 }
 
 void TSoundPlayer::SetVolume(int32_t volume)
