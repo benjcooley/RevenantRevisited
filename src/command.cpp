@@ -1511,6 +1511,27 @@ COMMAND(CmdPivot)
     return CMD_WAIT;
 }
 
+// REVSYNC: pivotobject @ 0x00420900 -- turn to face an object, plus an
+// optional angle offset, and wait for the turn. The name resolves from the
+// turning object (`this` is the context).
+COMMAND(CmdPivotObject)
+{
+    TObjectInstance* target = ResolveScriptObject(t.Text(), context, script);
+    if (!target)
+        return CMD_BADPARAMS;
+    t.WhiteGet();
+
+    int32_t offset = 0;
+    if (!Parse(t, "%d", &offset))
+        offset = 0;
+
+    // Retail pivots whatever the context is; only characters can.
+    if (context && context->IsCharacter())
+        static_cast<TCharacter*>(context)->Pivot(context->AngleTo(target) + offset);
+
+    return CMD_WAIT;
+}
+
 COMMAND(CmdCombat)
 {
     int32_t index = -1;
@@ -3896,7 +3917,6 @@ COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
 COMMAND(CmdMaxMonsters) { return CmdNotPorted("maxmonsters", 0x00427c30, t); }
 COMMAND(CmdMonsterTypes) { return CmdNotPorted("monstertypes", 0x00427bd0, t); }
 COMMAND(CmdOperate) { return CmdNotPorted("operate", 0x00426cd0, t); }
-COMMAND(CmdPivotObject) { return CmdNotPorted("pivotobject", 0x00420900, t); }
 COMMAND(CmdPlayerLevel) { return CmdNotPorted("playerlevel", 0x00428640, t); }
 COMMAND(CmdSetFromExit) { return CmdNotPorted("setfromexit", 0x00428a40, t); }
 COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
