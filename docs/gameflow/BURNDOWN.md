@@ -175,7 +175,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | **T8.1 RETAIL-SYNC** — `src/script.{cpp,h}` synced against `recon/discovered/cls_TScript*` (~1700 lines decomp). New: TScriptManager.instances + fileowners registries, ObjectScript class-name second-pass match (now actually attaches DOOR1 etc. at boot), TGameState::STATE_INVALID = 0xfeced300, AddScript port, USE-trigger fallback to proto-self name. Continue/Triggered/End keep pre-release C++ because retail bodies hook subsystems not yet ported (dialog FSM, player combat FSM, multi-context vftable slots) — flagged `TODO(revsync)` in-source. Per-method `// REVSYNC: @ <addr>` provenance markers | 2026-05-17 (52904fe) |
 | [x] | Retail engine: trigger scan and requests, waits, the evaluator and resolver, aliases, attach by name then type, reset on attach ([forensics/SCRIPT_ENGINE.md](forensics/SCRIPT_ENGINE.md)) | 2026-10-05 |
 | [x] | Triggers seen live: ALWAYS, CUBE, DIALOG (TendrickT), ACTIVATE (TownTel0), USE (the door prototypes), COMBAT | 2026-10-05 |
-| [ ] | Triggers ported but not yet seen live: PROXIMITY, GIVE, GET, DEAD | — |
+| [-] | PROXIMITY, GIVE, GET, DEAD triggers: ported, but no shipped script declares one (module scripts and master.s) | 2026-10-05 |
 | [x] | Prototype variables (DATA blocks, `setprotovariable`, readers) | 2026-10-05 |
 | [x] | Commands for the opening, the doors and exits, movement (`goto*`, `face*`), `try`, `statmod`, `addat` ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §6) | 2026-10-05 |
 | [ ] | `lastattack` member (needs the combat track's attack result; Jong's training) | — |
