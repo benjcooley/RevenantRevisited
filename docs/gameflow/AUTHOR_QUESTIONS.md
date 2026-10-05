@@ -22,6 +22,8 @@ Answer inline (or in chat) and the owning doc gets updated.
 | S11 | Enter the Keep from outside through its gate (`keepin`, forest side) and capture the first second inside | how dark the arrival corner is (the port shows it black beside a lit hall) | [forensics/EXITS.md](forensics/EXITS.md) §7 |
 | S12 | In the Keep, open a chest and pick something up so two or three messages show over a light floor; then wait 10 s. Note `NoTexOverlay` | text bar colour (the code says gold 255,200,0), shadow, position (x 4, baseline 9, 12 px lines from the map's bottom edge), how many lines stay | [../ui/forensics/TTextBar_SPEC.md](../ui/forensics/TTextBar_SPEC.md) §7, §8 |
 | S13 | In a played game (control on), default ini (no `NOTEXOVERLAYS`): ESC and the next ⅓ s frame by frame; the menu; Save Game with a few slots; Load Game from the menu, then Load Game on a slot and the next second; Quit Module's question; title Load Game and Options | the in-game chrome's translucency and fade, the popup's look, the list's scrollbar and selection, the in-game load's progress popup | [forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §4.2, §5, §9 |
+| S14 | In town (Misthaven), talk to Elahni (potions) with some gold, default ini: Buy Items and the panel as it opens; the mouse over the second row; a click on the first row; Buy (the gold and her line); the ↓ arrow; Exit and the next second | the shop's fonts, colours (names violet 130,13,197, hover 230,150,255, selected 200,83,255; gold and labels 255,186,0; stat lines grey), row positions, the icons; whether the bottom bar comes back after Exit | [../ui/forensics/BuySellScreen_SPEC.md](../ui/forensics/BuySellScreen_SPEC.md) §4, §8, §1 |
+| S15 | Sell Items at Elahni with potions in the pack, in a bag and in a belt pouch; then at Cronus (armor) with a worn and an unworn piece; sell one of each | which items a Sell shop lists (bags, belt pouches, worn armor), the sell prices (Value × 0.3) | BuySellScreen_SPEC §6.3, §6.4 |
 
 ## Dialog ([forensics/DIALOG.md](forensics/DIALOG.md) §7)
 
@@ -217,6 +219,44 @@ Answer inline (or in chat) and the owning doc gets updated.
 65. Demo mode (module flag, `SetDemoMode`) makes ESC ask "exit the game?"
     instead of opening the menu. Which builds or modules ran in demo
     mode — the attract loop, a trade-show demo?
+
+## Shops ([../ui/forensics/BuySellScreen_SPEC.md](../ui/forensics/BuySellScreen_SPEC.md), [forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §6.6)
+
+80. Selling pays the type's Value × 0.3 (truncated) for the whole item, so
+    a stack (a quiver of arrows, anything with Amount > 1) sells for one
+    unit's price. Intended, or was the amount meant to count?
+81. Retail's drawer close (`0x0047ecc0` / `0x0047ece0`) closes whatever the
+    bottom drawer holds. `LoadGame` calls it, so an in-game load would
+    close the HUD's bottom bar (belt, quick spells) until the player opens
+    it again, and so would `hideresponse`. Was that seen in play? The port
+    closes only the shop there for now.
+82. After a shop's Exit the drawer stays closed: the bottom bar does not
+    come back until Lower Panel (B). Intended, or was the bar meant to
+    return with the shop's close?
+83. A unique type (class stat SaleType 1) is in no shop until the player
+    sells one; from then on every shop that lists it stocks it, and buying
+    it back doesn't take it out of the merchant table. Was that the
+    design (sell your finds, buy them back), or should a purchase have
+    removed the entry?
+84. A misc shop filled with `buyselladdcriteria` walks the armor class
+    twice, so matching armor is listed twice (`0x00530af0`). No shipped
+    script does that. Was the second meant to be another class?
+85. `buysellremovecriteria` finds a row's type by its display name; a
+    localized name (from a dialog tag) would never match, so the row
+    would stay. Known? (English: display names equal type names.)
+86. Armor without an ARMOR.DEF entry labels its fifth stat with BSARM4
+    again ("Min Strn" twice; ARMOR.DEF armor uses BSARM5 "Min Cons").
+    A typo?
+87. The shop is not modal: it is the play screen's bottom drawer and the
+    world keeps running (the shop scripts turn control off). Was pausing
+    ever considered?
+88. Buying with a full pack does nothing and says nothing. Was a line
+    planned (there is a no-gold line but no no-room line)?
+89. Hruthford stocks the Bracelet of Fortune and the Ivory Pendant for
+    0 gp: their class.def `Value` is 0 (most jewelry is, and is also
+    SaleType 1). Were jewelry prices still to be filled in, or meant to
+    come from ARMOR.DEF's BASICMODS value column (which the shop never
+    reads)?
 
 ## Camera and control ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4)
 
