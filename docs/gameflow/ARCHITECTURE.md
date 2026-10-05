@@ -356,6 +356,15 @@ bar, dialog, player status bar. The rebuild:
   the retail way. HUD-only state that retail did not save is not written
   into the retail save header.
 
+**In production so far:** `TDialogPane` and `TTextBar`. `TPlayScreen::
+Initialize` adds them in retail's order (dialog, then the text bar,
+`0x0047adab`); each composes its own render target in `Compose`, draws in
+the screen's pane layer, pulses in the screen's pane pass, and lays itself
+out against `TPlayScreen::GetMapViewRect` (retail's play-screen layout
+moves them). The text bar's `--test=ui-textbar` hosts the production pane
+and feeds it through its public calls. The other HUD panels are still
+harness drawables (`InitializeUIHudMode`) under the pane layer.
+
 ## 6. Command system
 
 Scripts keep retail's text-interpreted execution (decision 2026-10-04):

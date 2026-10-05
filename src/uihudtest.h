@@ -9,7 +9,9 @@
 //   Top edge:    TPlyrStatusBar (player + target chips)
 //   Right edge:  TSideTabsPane + selected top-slot pane + selected bottom-slot pane
 //   Bottom edge: TBottomBarPane chrome + TBarInvPane shelf + TQuickSpellPane
-//   Overlay:     TTextBar (message log)
+//
+// The text bar (TTextBar) is a production pane on TPlayScreen, not part of
+// this assembly; --test=ui-textbar hosts it alone.
 //
 // Each content pane composes into its own render texture and registers a
 // THudDrawable at its screen-anchored position. The orchestrator refreshes
