@@ -145,7 +145,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Save flow from the in-game menu and the Save Game control (retail has no overwrite confirmation) | 2026-10-05 |
 | [x] | Load flow from the title, the in-game menu, the Load Game control and the death screen | 2026-10-05 |
 | [-] | Delete-slot action with confirm — not in retail (PopupDef_SPEC §13a.6) | 2026-10-05 |
-| [ ] | The in-game load's "loadingmap" progress popup (needs an in-game load staged across frames in the session) | — |
+| [ ] | The in-game load's "loadingmap" progress popup (needs an in-game load staged across frames in the session). Design note: retail drew the popup over the frozen last frame while loading synchronously; the port can't present a half-replaced world, so stage the load with the PlayScreen showing a captured frame (the display readback the thumbnail uses, uploaded as the movie pane uploads frames) under the popup | 2026-10-05 |
 
 **Exit:** Slot UI works from main menu, in-game menu, and death pane.
 
