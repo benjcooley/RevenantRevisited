@@ -226,6 +226,28 @@ TSector* TGameMap::FindSector(int32_t sx, int32_t sy) const
     return nullptr;
 }
 
+TSector* TGameMap::SectorAt(const S3DPoint& pos) const
+{
+    return FindSector(pos.x >> SECTORWSHIFT, pos.y >> SECTORHSHIFT);
+}
+
+std::vector<TSafeRef<TObjectInstance>> TGameMap::NonMapObjects() const
+{
+    std::vector<TSafeRef<TObjectInstance>> found;
+    for (TSector* sec : sectors)
+    {
+        if (!sec)
+            continue;
+        for (int32_t i = 0; i < sec->NumItems(); ++i)
+        {
+            TObjectInstance* oi = sec->GetInstance(i);
+            if (oi && (oi->Flags() & OF_NONMAP))
+                found.emplace_back(oi);
+        }
+    }
+    return found;
+}
+
 void TGameMap::StampTileWalkmap(TObjectInstance* oi, int32_t mode,
                                 const FindSectorFn& find_sector)
 {
