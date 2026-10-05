@@ -1221,6 +1221,8 @@ class TObjectInstance : protected SObjectDef
     void SetMapIndex(int32_t newindex);   // out-of-line: also syncs the
                                           // MapPane mapindex→instance registry
     int32_t GetMapIndex() const { return mapindex; }
+    int32_t FileMapIndex() const { return filemapindex >= 0 ? filemapindex : mapindex; }
+        // The instance id sector and save files record for this object
 
   // TSafeRef<T> contract -- see comment block before TSafeRef in this file.
   // SafeRefId is the mapindex (the existing stable id for instances).
@@ -1293,6 +1295,9 @@ class TObjectInstance : protected SObjectDef
     char *name;                 // What is my name
     uint32_t notifyflags;       // Notify Objects of changes
     int32_t mapindex;           // Unique instance id
+    int32_t filemapindex = -1;  // The id the object was loaded with when another object
+                                // already held it and the registry had to give this one
+                                // a fresh id (retail allowed duplicates); -1 otherwise
     uint32_t safe_ref_gen;      // Per-instance generation; TSafeRef<T>
                                 // captures (id, gen) and rejects lookups
                                 // where gen mismatches the current

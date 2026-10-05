@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
-"""Decode and compare retail Revenant save files and sector files.
+"""Decode, compare and check retail Revenant save files and sector files.
 
-    revsave.py dump  <file>            decoded listing (game.sav / newgame.sav / N_X_Y.DAT)
-    revsave.py diff  <a> <b>           field-level diff of two files of the same kind
-    revsave.py cmpdir <dirA> <dirB>    diff every sector file present in both directories
+    revsave.py dump   <file>                         decoded listing (game.sav, newgame.sav, N_X_Y.DAT)
+    revsave.py diff   [--fixed-flags] <a> <b>        field-level diff of two files of the same kind
+    revsave.py cmpdir [--fixed-flags] <dirA> <dirB>  diff every sector file present in both directories
+    revsave.py statehash <sector file or dir> ...    recompute each sector's state hash and compare
+    revsave.py bmp    <ss.bmp> ...                   check a slot thumbnail's format
 
-The format follows docs/gameflow/forensics/SAVE_GAME.md (save file and
-object stream) and recon/docs/SECTOR_FILE_FORMAT.md (sector header). Object
-bodies are decoded down to the fields each retail Load reads; the class tail
-after TObjectInstance's fields is decoded for the classes whose layout is
-known (player, character, complex object) and shown as raw bytes otherwise,
-so a diff still localises a difference to an object and a byte offset.
+Layouts: docs/gameflow/forensics/SAVE_GAME.md §3 (save file) and §11 (object
+stream, sector hash, thumbnail). Object bodies are decoded down to every
+field retail's Load reads. A class tail whose layout depends on the C++ class
+rather than the object class (an ambient sound effect, a monster generator)
+is shown as raw bytes, so a diff still pins a difference to an object and an
+offset.
 
-`diff` ignores the save header's game time (it is the only field a save
-written right after a load is expected to change).
+`diff` and `cmpdir` ignore the save header's game time, the one field a save
+written right after a load is expected to change. With --fixed-flags they
+also ignore the object flag bits retail's TObjectInstance::Load takes from
+the constructor rather than the file (MOVING, AI, COMPLEX, NOTIFY, NONMAP,
+INVENTORY, CALLEDPREDEL): runtime state that no load ever reads back.
 """
+import re
 import struct
 import sys
 from pathlib import Path
@@ -23,6 +29,7 @@ OF_IMMOBILE = 1 << 0
 OF_LIGHT = 1 << 2
 OF_ANIMATE = 1 << 14
 OF_NONMAP = 1 << 19
+FIXED_FLAGS = 0xc00e0028        # ~0x3ff1ffd7: TObjectInstance::Load @ 0x00472430
 
 OBJCLASS_NAMES = {
     0: 'ITEM', 1: 'WEAPON', 2: 'ARMOR', 3: 'TALISMAN', 4: 'FOOD', 5: 'CONTAINER',
@@ -31,8 +38,11 @@ OBJCLASS_NAMES = {
     17: 'INVCONTAINER', 18: 'POTION', 21: 'AMMO', 22: 'SCROLL', 23: 'RANGEDWEAPON',
     25: 'EFFECT', 26: 'MAPSCROLL',
 }
+OBJCLASS_WEAPON = 1
+OBJCLASS_EXIT = 10
 OBJCLASS_PLAYER = 11
 OBJCLASS_CHARACTER = 12
+OBJCLASS_SCROLL = 22
 
 
 class Truncated(Exception):
@@ -46,7 +56,7 @@ class Reader:
         self.end = len(data) if end is None else end
 
     def take(self, n):
-        if self.pos + n > self.end:
+        if n < 0 or self.pos + n > self.end:
             raise Truncated(f'need {n} bytes at {self.pos:#x}, block ends at {self.end:#x}')
         b = self.d[self.pos:self.pos + n]
         self.pos += n
@@ -59,12 +69,15 @@ class Reader:
     def u32(self): return struct.unpack('<I', self.take(4))[0]
 
     def pstr(self):
-        """TInputStream string (0x0049ce00): uint8 length + bytes, no NUL."""
-        n = self.u8()
-        return self.take(n).decode('latin1')
+        """Stream string (retail 0x0049ce00): uint8 length + bytes, no NUL."""
+        return self.take(self.u8()).decode('latin1')
 
-    def remaining(self):
-        return self.end - self.pos
+    def cstr(self):
+        """NUL-terminated string."""
+        end = self.d.index(b'\0', self.pos, self.end)
+        s = self.d[self.pos:end].decode('latin1')
+        self.pos = end + 1
+        return s
 
 
 class Field:
@@ -75,10 +88,20 @@ class Field:
         self.path, self.off, self.size, self.value = path, off, size, value
 
 
+class Record:
+    """An object record's location in a sector file (for the state hash)."""
+    __slots__ = ('objclass', 'header', 'bodystart', 'blocksize', 'invblocksize')
+
+    def __init__(self, objclass, header, bodystart, blocksize, invblocksize):
+        self.objclass, self.header = objclass, header
+        self.bodystart, self.blocksize, self.invblocksize = bodystart, blocksize, invblocksize
+
+
 class Decoder:
     def __init__(self, data):
         self.r = Reader(data)
         self.fields = []
+        self.records = []           # top-level object records, in order (None = empty slot)
 
     def emit(self, path, off, value):
         self.fields.append(Field(path, off, self.r.pos - off, value))
@@ -88,27 +111,42 @@ class Decoder:
         off = self.r.pos
         return self.emit(path, off, getattr(self.r, kind)())
 
+    def hexf(self, path, kind):
+        off = self.r.pos
+        v = getattr(self.r, kind)()
+        return self.emit(path, off, f'{v:#010x}')
+
     def raw(self, path, n):
         off = self.r.pos
         return self.emit(path, off, self.r.take(n).hex())
 
     # ---------------------------------------------------------------- objects
 
-    def object(self, path, version):
-        """TObjectInstance::LoadObject (0x00471ce0) for stream version >= 14."""
+    def object(self, path, version, toplevel=False):
+        """LoadObject (0x00471ce0); stream version >= 14."""
         r = self.r
+        header = r.pos
         objversion = self.f(f'{path}.objversion', 'i16')
         if objversion < 0:
+            if toplevel:
+                self.records.append(None)
             return None
         objclass = self.f(f'{path}.objclass', 'i16')
         if objclass < 0:
+            if toplevel:
+                self.records.append(None)
             return None
         self.emit(f'{path}.class', r.pos, OBJCLASS_NAMES.get(objclass, f'?{objclass}'))
-        uid = r.pos
-        self.emit(f'{path}.uniqueid', uid, f'{r.u32():#010x}')
+        self.hexf(f'{path}.uniqueid', 'u32')
         blocksize = self.f(f'{path}.blocksize', 'i16')
-        invblocksize = self.f(f'{path}.invblocksize', 'i16') if version >= 14 else 0
+        invblocksize = self.f(f'{path}.invblocksize', 'i16') if version >= 14 else -1
         bodystart = r.pos
+        if toplevel:
+            self.records.append(Record(objclass, header, bodystart, blocksize, invblocksize))
+        if version < 14:
+            # A single block size covers body and inventory: show it raw.
+            self.raw(f'{path}.block', blocksize)
+            return objclass
         bodyend = bodystart + blocksize - max(invblocksize, 0)
         outer_end = r.end
         r.end = bodyend
@@ -129,13 +167,20 @@ class Decoder:
         return objclass
 
     def body(self, path, objclass, objversion, version):
-        r = self.r
         if objclass == OBJCLASS_PLAYER:
             self.player(path, objversion, version)
         elif objclass == OBJCLASS_CHARACTER:
             self.character(path, objversion, version)
         else:
             self.instance(path, version)
+            if objclass == OBJCLASS_WEAPON:
+                self.f(f'{path}.poison', 'i32')
+            elif objclass == OBJCLASS_EXIT:
+                self.f(f'{path}.exitflags', 'i32')
+            elif objclass == OBJCLASS_SCROLL:
+                off = self.r.pos
+                n = self.r.i16()
+                self.emit(f'{path}.text', off, self.r.take(max(n, 0)).decode('latin1'))
 
     def instance(self, path, version):
         """TObjectInstance::Load (0x00472430), stream version >= 9."""
@@ -144,8 +189,8 @@ class Decoder:
         n = r.u8()
         name = bytes(b & 0x7f for b in r.take(n)).decode('latin1')
         self.emit(f'{path}.name', off, name if n else '<type name>')
-        flags = self.f(f'{path}.flags', 'u32')
-        self.fields[-1].value = f'{flags:#010x}'
+        flags = self.hexf(f'{path}.flags', 'u32')
+        flags = int(flags, 16)
         for c in 'xyz':
             self.f(f'{path}.pos.{c}', 'i32')
         if not (flags & OF_IMMOBILE):
@@ -178,12 +223,11 @@ class Decoder:
             for c in ('red', 'green', 'blue', 'intensity'):
                 self.f(f'{path}.light.{c}', 'u8')
             self.f(f'{path}.light.multiplier', 'i16')
-        return flags
 
     def complexobj(self, path, objversion, version):
         """TComplexObject::Load (0x004db930)."""
         if objversion >= 1:
-            base = self.f(f'{path}.TObjectInstance.objversion', 'u8')
+            self.f(f'{path}.TObjectInstance.objversion', 'u8')
         self.instance(path, version)
         if version >= 7:
             self.f(f'{path}.root.action', 'u8')
@@ -205,7 +249,7 @@ class Decoder:
             self.f(f'{path}.teleport.level', 'i32')
 
     def player(self, path, objversion, version):
-        """TPlayer::Load (0x0051b960) and the tail it calls (0x00529770)."""
+        """TPlayer::Load (0x0051b960) and the automap record (0x00529770)."""
         r = self.r
         chv = self.f(f'{path}.TCharacter.objversion', 'u8') if objversion > 3 else objversion
         self.character(path, chv, version)
@@ -213,56 +257,49 @@ class Decoder:
             for i in range(5):
                 self.f(f'{path}.quickspell[{i}]', 'pstr')
         if objversion > 4:
-            n = self.f(f'{path}.spells.count', 'i32')
+            n = self.f(f'{path}.knownspells.count', 'i32')
             for i in range(n):
-                self.raw(f'{path}.spells[{i}]', 6)
+                off = r.pos
+                self.emit(f'{path}.knownspells[{i}]', off, r.take(6).rstrip(b'\0').decode('latin1'))
             if 5 < objversion < 9:
                 for i in range(n):
-                    self.raw(f'{path}.spells_old[{i}]', 4)
+                    self.raw(f'{path}.knownspells_old[{i}]', 4)
         if objversion > 6:
-            for i in range(4):
-                self.f(f'{path}.p304[{i}]', 'i32')
+            for n in ('sidebaropen', 'uppermode', 'lowermode', 'unknown19c'):
+                self.f(f'{path}.hud.{n}', 'i32')
         if objversion >= 8:
             for i in range(3):
-                self.f(f'{path}.p360[{i}]', 'i32')
-        if objversion >= 13:
-            self.f(f'{path}.s494', 'pstr')
-            self.f(f'{path}.s4c6', 'pstr')
-            self.f(f'{path}.p4d8', 'i32')
-            self.f(f'{path}.p490', 'i32')
-            self.f(f'{path}.p4dc', 'i32')
-            self.f(f'{path}.s4f0', 'pstr')
-        elif objversion >= 11:
-            self.f(f'{path}.s494', 'pstr')
-            self.f(f'{path}.s4c6', 'pstr')
-            self.f(f'{path}.p4d8', 'i32')
-            self.f(f'{path}.s4f0', 'pstr')
+                self.f(f'{path}.levelupstats[{i}]', 'i32')
+        if objversion >= 11:
+            self.f(f'{path}.team.name', 'pstr')
+            self.f(f'{path}.team.name2', 'pstr')
+            self.f(f'{path}.team.value', 'i32')
+            if objversion >= 13:
+                self.f(f'{path}.team.id', 'i32')
+                self.f(f'{path}.team.teamindex', 'i32')
+            self.f(f'{path}.module', 'pstr')
         elif objversion >= 10:
-            self.raw(f'{path}.s494_fixed', 0x32)
+            self.raw(f'{path}.team.name_fixed', 0x32)
         if objversion >= 13:
-            self.f(f'{path}.p36c', 'i32')
-            self.f(f'{path}.p370', 'i32')
-            for n in ('s378', 's570', 's590', 's5d0'):
-                self.f(f'{path}.{n}', 'pstr')
-            self.f(f'{path}.p650', 'i32')
-            self.f(f'{path}.p654', 'i32')
-            if objversion >= 15:
-                self.f(f'{path}.p658', 'i32')
-                self.f(f'{path}.p65c', 'i32')
-        if objversion > 13:
-            self.f(f'{path}.tail.name', 'pstr')
-            n = self.f(f'{path}.tail.count', 'i32')
+            self.f(f'{path}.playerstate', 'i32')
+            self.f(f'{path}.statetime', 'i32')
+            for i in range(4):
+                self.f(f'{path}.profile[{i}]', 'pstr')
+            for i in range(4 if objversion >= 15 else 2):
+                self.f(f'{path}.frags[{i}]', 'i32')
+        if objversion >= 14:
+            self.f(f'{path}.automap.module', 'pstr')
+            n = self.f(f'{path}.automap.count', 'i32')
             for i in range(n):
-                self.f(f'{path}.tail[{i}].a', 'i32')
-                k = self.f(f'{path}.tail[{i}].n', 'i32')
-                for j in range(k):
-                    self.f(f'{path}.tail[{i}].v[{j}]', 'i16')
+                self.f(f'{path}.automap[{i}].level', 'i32')
+                k = self.f(f'{path}.automap[{i}].words', 'i32')
+                self.raw(f'{path}.automap[{i}].mask', 2 * k)
 
     # ------------------------------------------------------------- top level
 
     def save(self):
         r = self.r
-        gt = self.f('header.gametime', 'i32')
+        self.f('header.gametime', 'i32')
         self.raw('header.zero04', 0x10)
         mp = self.f('header.multiplayer', 'i32')
         fmt = self.f('header.playerformat', 'i32')
@@ -274,12 +311,11 @@ class Decoder:
             self.raw('mpblock', 0x200)
         if version > 9:
             n = self.f('states.count', 'i32')
-            for i in range(n):
+            for _ in range(n):
                 off = r.pos
                 ln = r.u8()
                 name = bytes(b ^ 0x80 for b in r.take(ln)).decode('latin1')
-                val = r.i32()
-                self.emit(f'states[{name}]', off, val)
+                self.emit(f'states[{name}]', off, r.i32())
         if version >= 11 and fmt > 1:
             n = self.f('solduniques.count', 'i32')
             for i in range(n):
@@ -299,93 +335,203 @@ class Decoder:
     def sector(self):
         r = self.r
         off = r.pos
-        fcc = r.take(4)
-        self.emit('fcc', off, fcc.decode('latin1'))
+        self.emit('fcc', off, r.take(4).decode('latin1'))
         version = self.f('version', 'i32')
         if version > 13:
-            h = self.f('statehash', 'u32')
-            self.fields[-1].value = f'{h:#010x}'
+            self.hexf('statehash', 'u32')
         n = self.f('numobjects', 'i32')
         for i in range(n):
-            self.object(f'obj[{i}]', version)
+            self.object(f'obj[{i}]', version, toplevel=True)
         if r.pos != len(r.d):
             self.raw('TRAILING', len(r.d) - r.pos)
+        return version
 
 
-def decode(path):
+def decode_full(path):
     data = Path(path).read_bytes()
     d = Decoder(data)
     if data[:4] == b'MAP ':
         d.sector()
     else:
         d.save()
-    return d.fields
+    return d
 
+
+def decode(path):
+    return decode_full(path).fields
+
+
+# ------------------------------------------------------------------- dump/diff
 
 def dump(path):
     for fl in decode(path):
         print(f'{fl.off:#08x} +{fl.size:<3d} {fl.path} = {fl.value}')
 
 
-IGNORED = {'header.gametime'}
+def comparable(fl, fixed_flags):
+    if fixed_flags and fl.path.endswith('.flags') and '.light.' not in fl.path:
+        return f'{int(fl.value, 16) & ~FIXED_FLAGS:#010x}'
+    return fl.value
 
 
-def diff_fields(fa, fb):
-    """Returns a list of difference lines (empty when identical)."""
+def diff_fields(fa, fb, fixed_flags=False):
+    """Field-level differences (empty when identical)."""
+    ignored = {'header.gametime'}
     out = []
-    a = {f.path: f for f in fa}
     b = {f.path: f for f in fb}
+    a = {f.path for f in fa}
     for f in fa:
-        if f.path in IGNORED:
+        if f.path in ignored:
             continue
         g = b.get(f.path)
         if g is None:
             out.append(f'- {f.path} = {f.value}  (only in A @ {f.off:#x})')
-        elif g.value != f.value:
+        elif comparable(g, fixed_flags) != comparable(f, fixed_flags):
             out.append(f'~ {f.path}: {f.value}  ->  {g.value}  (A @ {f.off:#x}, B @ {g.off:#x})')
     for g in fb:
-        if g.path not in a and g.path not in IGNORED:
+        if g.path not in a and g.path not in ignored:
             out.append(f'+ {g.path} = {g.value}  (only in B @ {g.off:#x})')
     return out
 
 
-def diff(pa, pb):
-    lines = diff_fields(decode(pa), decode(pb))
+def diff(pa, pb, fixed_flags=False):
+    lines = diff_fields(decode(pa), decode(pb), fixed_flags)
     ra, rb = Path(pa).read_bytes(), Path(pb).read_bytes()
-    same_bytes = ra == rb or (ra[:4] != b'MAP ' and ra[4:] == rb[4:])
+    is_save = ra[:4] != b'MAP '
+    same_bytes = ra == rb or (is_save and ra[4:] == rb[4:])
     for ln in lines:
         print(ln)
     print(f'{len(lines)} field difference(s); bytes {"identical" if same_bytes else "differ"}'
-          f'{" (ignoring game time)" if ra[:4] != b"MAP " else ""}; sizes {len(ra)} / {len(rb)}')
-    return 0 if same_bytes and not lines else 1
+          f'{" (ignoring game time)" if is_save else ""}; sizes {len(ra)} / {len(rb)}')
+    return 0 if not lines else 1
 
 
-def cmpdir(da, db):
+def cmpdir(da, db, fixed_flags=False):
     a = {p.name.upper(): p for p in Path(da).iterdir() if p.suffix.upper() == '.DAT'}
     b = {p.name.upper(): p for p in Path(db).iterdir() if p.suffix.upper() == '.DAT'}
     common = sorted(set(a) & set(b))
-    same = 0
+    same = equal_fields = 0
     for name in common:
         if a[name].read_bytes() == b[name].read_bytes():
             same += 1
             continue
-        lines = diff_fields(decode(a[name]), decode(b[name]))
+        lines = diff_fields(decode(a[name]), decode(b[name]), fixed_flags)
+        if not lines:
+            equal_fields += 1
+            continue
         print(f'{name}: {len(lines)} field difference(s)')
         for ln in lines[:20]:
             print('   ', ln)
-    print(f'{same}/{len(common)} byte-identical; only in A: {len(set(a) - set(b))}, '
-          f'only in B: {len(set(b) - set(a))}')
-    return 0 if same == len(common) else 1
+    print(f'{same}/{len(common)} byte-identical'
+          + (f', {equal_fields} more equal ignoring fixed flags' if fixed_flags else '')
+          + f'; only in A: {len(set(a) - set(b))}, only in B: {len(set(b) - set(a))}')
+    return 0 if same + equal_fields == len(common) else 1
+
+
+# ------------------------------------------------------------------ state hash
+
+def retail_adler32(chunks):
+    """Adler-32 as retail computes it (0x0056ff60 / 0x0056ff80): bytes are
+    signed, sums reduced mod 65521 after each 5552-byte run."""
+    a, b = 1, 0
+    for data in chunks:
+        i = 0
+        while i < len(data):
+            run = data[i:i + 5552]
+            for byte in run:
+                a = (a + (byte - 256 if byte > 127 else byte)) & 0xffffffff
+                b = (b + a) & 0xffffffff
+            a %= 65521
+            b %= 65521
+            i += len(run)
+    return (b << 16) | a
+
+
+def sector_hash(path):
+    """Recompute a sector's state hash (0x00499e90) from its file. Returns
+    (stored, computed, computed_if_player) or None for pre-v14 files. A
+    player in the sector is written as an empty slot, so the hash it
+    contributed (its 0xffff placeholder) can't be told from a real empty
+    slot; the third value assumes one of the empty slots was a player."""
+    data = Path(path).read_bytes()
+    m = re.match(r'(\d+)_(\d+)_(\d+)\.DAT$', Path(path).name, re.I)
+    level, sx, sy = (int(g) for g in m.groups())
+    d = Decoder(data)
+    version = d.sector()
+    if version <= 13:
+        return None
+    stored = struct.unpack_from('<I', data, 8)[0]
+    chunks = [struct.pack('<4i', level, sx, sy, len(d.records))]
+    for rec in d.records:
+        if rec is None or rec.objclass not in (OBJCLASS_PLAYER, OBJCLASS_CHARACTER):
+            continue
+        bodysize = rec.blocksize - max(rec.invblocksize, 0)
+        head = bytearray(data[rec.header:rec.bodystart])
+        struct.pack_into('<hh', head, len(head) - 4, bodysize, 0)
+        chunks.append(bytes(head) + data[rec.bodystart:rec.bodystart + bodysize])
+    computed = retail_adler32(chunks) or 0xf0f0f0f0
+    with_player = (retail_adler32(chunks + [b'\xff\xff']) or 0xf0f0f0f0) if None in d.records else None
+    return stored, computed, with_player
+
+
+def hash_cmd(paths):
+    files = []
+    for p in map(Path, paths):
+        files += sorted(x for x in p.iterdir() if x.suffix.upper() == '.DAT') if p.is_dir() else [p]
+    ok = player = bad = old = 0
+    for f in files:
+        res = sector_hash(f)
+        if res is None:
+            old += 1
+            continue
+        stored, computed, with_player = res
+        if stored == computed:
+            ok += 1
+        elif stored == with_player:
+            player += 1
+        else:
+            bad += 1
+            print(f'{f.name}: stored {stored:#010x}, computed {computed:#010x}')
+    print(f'{ok} match, {player} match with the player in the sector, {bad} differ, '
+          f'{old} pre-v14 (no hash)')
+    return 0 if bad == 0 else 1
+
+
+# ------------------------------------------------------------------- thumbnail
+
+def bmp_cmd(paths):
+    """ss.bmp as retail's SaveBMP (0x004a2960) writes it: 216x160, 24-bit,
+    bottom-up, 54-byte headers, file size field 103,734."""
+    bad = 0
+    for p in paths:
+        d = Path(p).read_bytes()
+        magic, size, r1, r2, off = struct.unpack_from('<2sIHHI', d, 0)
+        hsize, w, h, planes, bpp, comp, isize, xr, yr, used, imp = struct.unpack_from('<IiiHHIIiiII', d, 14)
+        expect = dict(magic=b'BM', size=103734, off=54, hsize=40, w=216, h=160, planes=1, bpp=24,
+                      comp=0, isize=0, xr=0, yr=0, used=0, imp=0, length=103734)
+        got = dict(magic=magic, size=size, off=off, hsize=hsize, w=w, h=h, planes=planes, bpp=bpp,
+                   comp=comp, isize=isize, xr=xr, yr=yr, used=used, imp=imp, length=len(d))
+        wrong = {k: (got[k], v) for k, v in expect.items() if got[k] != v}
+        print(f'{p}: ' + ('retail format' if not wrong else f'differs {wrong}'))
+        bad += bool(wrong)
+    return 0 if bad == 0 else 1
 
 
 def main(argv):
-    if len(argv) >= 3 and argv[1] == 'dump':
-        dump(argv[2])
+    args = argv[1:]
+    fixed = '--fixed-flags' in args
+    args = [a for a in args if a != '--fixed-flags']
+    if len(args) >= 2 and args[0] == 'dump':
+        dump(args[1])
         return 0
-    if len(argv) >= 4 and argv[1] == 'diff':
-        return diff(argv[2], argv[3])
-    if len(argv) >= 4 and argv[1] == 'cmpdir':
-        return cmpdir(argv[2], argv[3])
+    if len(args) >= 3 and args[0] == 'diff':
+        return diff(args[1], args[2], fixed)
+    if len(args) >= 3 and args[0] == 'cmpdir':
+        return cmpdir(args[1], args[2], fixed)
+    if len(args) >= 2 and args[0] == 'statehash':
+        return hash_cmd(args[1:])
+    if len(args) >= 2 and args[0] == 'bmp':
+        return bmp_cmd(args[1:])
     print(__doc__)
     return 2
 
