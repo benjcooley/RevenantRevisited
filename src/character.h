@@ -144,14 +144,14 @@ class TCharacter : public TComplexObject
       // Attempts to use something in the direction character is facing
     bool TryGet();
       // Attempts to get something in the direction character is facing
-    bool Say(char *string, int32_t wait = -1, char *anim = nullptr, char *sound = nullptr);
+    bool Say(const char *string, int32_t wait = -1, const char *anim = nullptr, const char *sound = nullptr);
       // Causes character to blather incessantly about something irrelevant
       // (anim is override for animation to play when saying, nullptr is "say")
       // Tag indicates that the say command is a index tag into the DialogList
       // list of dialog lines.  The tag will also be used to play the dialog wave file.
-    bool SayTag(int32_t tagid, int32_t wait = -1, char *anim = nullptr);
+    bool SayTag(int32_t tagid, int32_t wait = -1, const char *anim = nullptr);
       // Says something given a dialog tag id number
-    bool SayTag(char *tag, int32_t wait = -1, char *anim = nullptr);
+    bool SayTag(const char *tag, int32_t wait = -1, const char *anim = nullptr);
       // Says something given a dialog tag
     bool CastByName(char* name, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
       // Cast a spell by usings its name
