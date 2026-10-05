@@ -63,8 +63,9 @@ class TGameSession
     // went through an exit or `pos` -- make that level current (loading it
     // the tick after "Loading Map..." is shown, if it isn't cached), and put
     // every player who left the map back into the sector under it. Runs
-    // each tick after the simulation.
-    void EnterLevel();
+    // each tick after the simulation. True when the camera's level is the
+    // current one.
+    bool EnterLevel();
 
   private:
     enum class EState : uint8_t { Idle, Loading, Ready, Failed };
