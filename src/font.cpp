@@ -12,6 +12,7 @@
 #include "logging.h"
 #include "renderer.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -73,7 +74,44 @@ void BlitBitmap16ToRGBA8(uint8_t* dst, int32_t dst_pitch,
     }
 }
 
+// Orders SFontAtlas's code point table (sorted by code point) for lower_bound.
+bool CodepointBefore(const std::pair<char32_t, uint16_t>& entry, char32_t cp)
+{
+    return entry.first < cp;
+}
+
 } // namespace
+
+const SFontAtlasRect& SFontAtlas::Glyph(char32_t cp) const
+{
+    uint16_t index = kFallbackGlyph;
+    if (cp < latin.size())
+        index = latin[cp];
+    else
+    {
+        const auto it = std::lower_bound(beyond.begin(), beyond.end(), cp, CodepointBefore);
+        if (it != beyond.end() && it->first == cp)
+            index = it->second;
+    }
+    if (index < glyphs.size())
+        return glyphs[index];
+    static const SFontAtlasRect kNoGlyph;
+    return glyphs.empty() ? kNoGlyph : glyphs[kFallbackGlyph];
+}
+
+void SFontAtlas::MapGlyph(char32_t cp, uint16_t index)
+{
+    if (cp < latin.size())
+    {
+        latin[cp] = index;
+        return;
+    }
+    const auto it = std::lower_bound(beyond.begin(), beyond.end(), cp, CodepointBefore);
+    if (it != beyond.end() && it->first == cp)
+        it->second = index;
+    else
+        beyond.insert(it, { cp, index });
+}
 
 const SFontAtlas* BuildFontAtlas(TFont* font)
 {
@@ -92,9 +130,11 @@ const SFontAtlas* BuildFontAtlas(TFont* font)
     constexpr int32_t kGlyphPadding = 1;
 
     auto atlas = std::make_unique<SFontAtlas>();
-    atlas->firstchar = (int16_t)first;
-    atlas->numchars  = (int16_t)count;
     atlas->width     = kAtlasWidth;
+    // Glyph 0, the fallback, is empty with no advance: retail's TFont drew
+    // nothing for a byte outside the font.
+    atlas->glyphs.reserve(size_t(count) + 1);
+    atlas->glyphs.emplace_back();
 
     int32_t cursor_x = 0;
     int32_t shelf_y  = 0;
@@ -102,13 +142,10 @@ const SFontAtlas* BuildFontAtlas(TFont* font)
 
     for (int32_t i = 0; i < count; i++)
     {
-        PTBitmap bm = font->GetChar((unsigned char)(first + i));
-        auto& r = atlas->rects[i];
+        const unsigned char ch = (unsigned char)(first + i);
+        PTBitmap bm = font->GetChar(ch);
         if (!bm || bm->width <= 0 || bm->height <= 0)
-        {
-            r = { 0, 0, 0, 0 };
-            continue;
-        }
+            continue;       // draws the fallback: nothing, like retail
         const int32_t gw = bm->width;
         const int32_t gh = bm->height;
 
@@ -119,6 +156,7 @@ const SFontAtlas* BuildFontAtlas(TFont* font)
             shelf_h  = 0;
         }
 
+        SFontAtlasRect r;
         r.x = (uint16_t)cursor_x;
         r.y = (uint16_t)shelf_y;
         r.w = (uint16_t)gw;
@@ -130,12 +168,19 @@ const SFontAtlas* BuildFontAtlas(TFont* font)
         // StartHeight is the glyph top's rise above the line baseline that the
         // pen y references. Bitmap glyphs are 1:1 (no oversample) so the dst
         // extent (xoff2-xoff, yoff2-yoff) equals the source pixel extent.
-        const unsigned char ch = (unsigned char)(first + i);
         r.xoff     = -(float)font->DrawLeft(ch);
         r.yoff     = -(float)font->StartHeight(ch);
         r.xoff2    = r.xoff + (float)gw;
         r.yoff2    = r.yoff + (float)gh;
         r.xadvance = (float)(font->DrawRight(ch) - font->DrawLeft(ch));
+        atlas->ascent  = (std::max)(atlas->ascent, -r.yoff);
+        atlas->descent = (std::max)(atlas->descent, r.yoff2);
+
+        // A bitmap font is indexed by byte, as retail drew it. Under the
+        // byte's CP1252 code point, the game text's CP1252 decode brings
+        // every byte back to its own glyph.
+        atlas->MapGlyph(Cp1252ToUnicode(ch), (uint16_t)atlas->glyphs.size());
+        atlas->glyphs.push_back(r);
 
         cursor_x += gw + kGlyphPadding;
         if (gh > shelf_h) shelf_h = gh;
@@ -160,9 +205,10 @@ const SFontAtlas* BuildFontAtlas(TFont* font)
 
     for (int32_t i = 0; i < count; i++)
     {
-        const auto& r = atlas->rects[i];
+        const unsigned char ch = (unsigned char)(first + i);
+        const auto& r = atlas->Glyph(Cp1252ToUnicode(ch));
         if (r.w == 0 || r.h == 0) continue;
-        PTBitmap bm = font->GetChar((unsigned char)(first + i));
+        PTBitmap bm = font->GetChar(ch);
         if (!bm) continue;
         BlitBitmap16ToRGBA8(rgba, (int32_t)pitch, r.x, r.y, bm);
     }
@@ -190,7 +236,7 @@ const SFontAtlas* BuildFontAtlas(TFont* font)
     }
 
     log_info("[font] atlas built: %dx%d for %d glyphs (first=%d)",
-        atlas->width, atlas->height, count, first);
+        atlas->width, atlas->height, (int)atlas->glyphs.size() - 1, first);
 
     SFontAtlas* raw = atlas.release();
     g_fontAtlases.emplace(font, raw);
@@ -335,44 +381,39 @@ int32_t TFont::FindNumLinesInText(char *text, int32_t wrapwidth, int32_t justify
 // * Canonical UI text drawing (see font.h)                               *
 // *************************************************************************
 
-float TextWidth(const SFontAtlas* atlas, const char* text)
+namespace {
+
+// The one walk over a string's glyphs: decode each character of `text` per
+// `encoding` and hand `fn` the glyph that draws it (the atlas's fallback for
+// one it doesn't hold). Measuring, wrapping and drawing all step through here.
+template <typename Fn>
+void ForEachGlyph(const SFontAtlas& atlas, const char* text, ETextEncoding encoding, Fn&& fn)
+{
+    for (const char* p = text; *p;)
+        fn(atlas.Glyph(DecodeChar(p, encoding)));
+}
+
+} // namespace
+
+float TextWidth(const SFontAtlas* atlas, const char* text, ETextEncoding encoding)
 {
     if (!atlas || !text) return 0.0f;
     float w = 0.0f;
-    for (const char* p = text; *p; ++p)
-        w += atlas->Rect((unsigned char)*p).xadvance;
+    ForEachGlyph(*atlas, text, encoding, [&w](const SFontAtlasRect& rc) { w += rc.xadvance; });
     return w;
 }
 
 float TextAscent(const SFontAtlas* atlas)
 {
-    if (!atlas) return 0.0f;
-    // Ascent = how far the tallest glyph rises above the baseline. stb's
-    // yoff is the (negative) top offset from the pen baseline, so the
-    // ascent is max(-yoff) over the renderable glyphs.
-    float ascent = 0.0f;
-    for (int i = 0; i < atlas->numchars; ++i)
-    {
-        const SFontAtlasRect& r = atlas->rects[i];
-        if (r.w > 0 && r.h > 0 && -r.yoff > ascent)
-            ascent = -r.yoff;
-    }
-    return ascent;
+    // How far the glyphs rise above the baseline: max(-yoff) over the glyphs
+    // the builder measures (all of a bitmap font, the ASCII of a TrueType one).
+    return atlas ? atlas->ascent : 0.0f;
 }
 
 float TextLineHeight(const SFontAtlas* atlas)
 {
-    if (!atlas) return 0.0f;
-    // Line height = ascent + descent. stb's yoff2 is the (positive) bottom
-    // offset from the baseline, so descent = max(yoff2) over the glyphs.
-    float descent = 0.0f;
-    for (int i = 0; i < atlas->numchars; ++i)
-    {
-        const SFontAtlasRect& r = atlas->rects[i];
-        if (r.w > 0 && r.h > 0 && r.yoff2 > descent)
-            descent = r.yoff2;
-    }
-    return TextAscent(atlas) + descent;
+    // Ascent + descent; descent is max(yoff2), how far glyphs drop below it.
+    return atlas ? atlas->ascent + atlas->descent : 0.0f;
 }
 
 namespace {
@@ -388,15 +429,13 @@ namespace {
 // there is no per-glyph cell scissor (that truncated cap tops and made
 // lowercase look top-justified). This matches the vetted RenderTTFMode walk in
 // testmodes.cpp. Used by both the plain and shadowed public helpers.
-void DrawGlyphRun(const SFontAtlas* atlas, const char* text,
+void DrawGlyphRun(const SFontAtlas* atlas, const char* text, ETextEncoding encoding,
                   float penX, float baselineY,
                   float r, float g, float b,
                   int32_t target_w, int32_t target_h)
 {
     if (!Renderer) return;
-    for (const char* p = text; *p; ++p)
-    {
-        const SFontAtlasRect& rc = atlas->Rect((unsigned char)*p);
+    ForEachGlyph(*atlas, text, encoding, [&](const SFontAtlasRect& rc) {
         if (rc.w > 0 && rc.h > 0)
         {
             const int32_t gx = (int32_t)(penX + rc.xoff + 0.5f);
@@ -412,15 +451,15 @@ void DrawGlyphRun(const SFontAtlas* atlas, const char* text,
                                           r, g, b, 1.0f);
         }
         penX += rc.xadvance;
-    }
+    });
 }
 
 // Pen-x for the given alignment of `text` within [cellX, cellX+cellW).
-float AlignedPenX(const SFontAtlas* atlas, const char* text,
+float AlignedPenX(const SFontAtlas* atlas, const char* text, ETextEncoding encoding,
                   int32_t cellX, int32_t cellW, ETextAlign align)
 {
     if (align == ETextAlign::Left) return (float)cellX;
-    const float tw = TextWidth(atlas, text);
+    const float tw = TextWidth(atlas, text, encoding);
     if (align == ETextAlign::Center) return cellX + (cellW - tw) * 0.5f;
     return cellX + (cellW - tw);   // Right
 }
@@ -430,10 +469,11 @@ float AlignedPenX(const SFontAtlas* atlas, const char* text,
 void DrawTextAtBaseline(const SFontAtlas* atlas, const char* text,
                         float penX, float baselineY,
                         float r, float g, float b,
-                        int32_t target_w, int32_t target_h)
+                        int32_t target_w, int32_t target_h,
+                        ETextEncoding encoding)
 {
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
-    DrawGlyphRun(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
+    DrawGlyphRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
 
 // Retail drew UI text with GDI DrawTextA (DT_TOP). GDI's DT_TOP hangs glyphs
@@ -448,59 +488,64 @@ constexpr float kGdiTopLeading = 2.0f;
 // thin antialiased coverage of small glyphs up to a solid read (two alpha-over
 // passes: 0.5 coverage -> 0.75). We keep that double pass in the canonical
 // helpers so every panel's text matches retail's weight.
-static void DrawGlyphRunDoubled(const SFontAtlas* atlas, const char* text,
+static void DrawGlyphRunDoubled(const SFontAtlas* atlas, const char* text, ETextEncoding encoding,
                                 float penX, float baselineY,
                                 float r, float g, float b,
                                 int32_t target_w, int32_t target_h)
 {
-    DrawGlyphRun(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
-    DrawGlyphRun(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
+    DrawGlyphRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
+    DrawGlyphRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
 
 void DrawTextToTarget(const SFontAtlas* atlas, const char* text,
                       int32_t cellX, int32_t cellY, int32_t cellW, int32_t cellH,
                       ETextAlign align, float r, float g, float b,
-                      int32_t target_w, int32_t target_h)
+                      int32_t target_w, int32_t target_h,
+                      ETextEncoding encoding)
 {
     (void)cellH;
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
-    const float penX = AlignedPenX(atlas, text, cellX, cellW, align);
+    const float penX = AlignedPenX(atlas, text, encoding, cellX, cellW, align);
     const float baselineY = cellY + TextAscent(atlas) - kGdiTopLeading;
-    DrawGlyphRunDoubled(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
+    DrawGlyphRunDoubled(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
 
 void DrawTextShadowedToTarget(const SFontAtlas* atlas, const char* text,
                               int32_t cellX, int32_t cellY, int32_t cellW, int32_t cellH,
                               ETextAlign align, float r, float g, float b,
-                              int32_t target_w, int32_t target_h)
+                              int32_t target_w, int32_t target_h,
+                              ETextEncoding encoding)
 {
     (void)cellH;
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
-    const float penX = AlignedPenX(atlas, text, cellX, cellW, align);
+    const float penX = AlignedPenX(atlas, text, encoding, cellX, cellW, align);
     const float baselineY = cellY + TextAscent(atlas) - kGdiTopLeading;
-    DrawTextShadowedAtBaseline(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
+    DrawTextShadowedAtBaseline(atlas, text, penX, baselineY, r, g, b, target_w, target_h, encoding);
 }
 
 void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
                                 float penX, float baselineY,
                                 float r, float g, float b,
-                                int32_t target_w, int32_t target_h)
+                                int32_t target_w, int32_t target_h,
+                                ETextEncoding encoding)
 {
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
     // Retail FUN_004be2b0 font-flag-0x400: 3 black passes (base, +1x, +1y) then
     // the colored (doubled) pass at base. 1px shadow on the right + bottom.
-    DrawGlyphRun(atlas, text, penX,        baselineY,        0, 0, 0, target_w, target_h);
-    DrawGlyphRun(atlas, text, penX + 1.0f, baselineY,        0, 0, 0, target_w, target_h);
-    DrawGlyphRun(atlas, text, penX,        baselineY + 1.0f, 0, 0, 0, target_w, target_h);
-    DrawGlyphRunDoubled(atlas, text, penX,  baselineY,        r, g, b, target_w, target_h);
+    DrawGlyphRun(atlas, text, encoding, penX,        baselineY,        0, 0, 0, target_w, target_h);
+    DrawGlyphRun(atlas, text, encoding, penX + 1.0f, baselineY,        0, 0, 0, target_w, target_h);
+    DrawGlyphRun(atlas, text, encoding, penX,        baselineY + 1.0f, 0, 0, 0, target_w, target_h);
+    DrawGlyphRunDoubled(atlas, text, encoding, penX,  baselineY,        r, g, b, target_w, target_h);
 }
 
 int32_t WrapTextLines(const SFontAtlas* atlas, const char* text, float wrapWidth,
-                      std::vector<std::string>& lines)
+                      std::vector<std::string>& lines, ETextEncoding encoding)
 {
     const size_t first = lines.size();
     // Control characters other than '\n' measure as spaces (the atlas holds
-    // printable glyphs only).
+    // printable glyphs only). The walk below works on bytes: ' ' and '\n'
+    // never occur inside a multi-byte UTF-8 character, so it splits either
+    // encoding cleanly.
     std::string src(text ? text : "");
     for (char& c : src)
         if ((unsigned char)c < ' ' && c != '\n')
@@ -521,8 +566,8 @@ int32_t WrapTextLines(const SFontAtlas* atlas, const char* text, float wrapWidth
         if (p > wordStart)
         {
             const std::string word(wordStart, p);
-            const float wordW = TextWidth(atlas, word.c_str());
-            float gapW = line.empty() ? 0.0f : TextWidth(atlas, gap.c_str());
+            const float wordW = TextWidth(atlas, word.c_str(), encoding);
+            float gapW = line.empty() ? 0.0f : TextWidth(atlas, gap.c_str(), encoding);
             if (!line.empty() && lineW + gapW + wordW > wrapWidth)
             {
                 lines.push_back(line);
