@@ -211,9 +211,14 @@ errors through it; scripts never see the text.
 
 - `Commands[]` mirrors the retail table (order, contexts, flags, usage
   text) and handlers take the retail argument list. Missing commands are
-  `CmdNotPorted` stubs: they log once with the retail address but still
-  return success (0) — **below the bar**; ARCHITECTURE §6.5 wants
-  "unrecognized".
+  `CmdNotPorted` stubs: they log once with the retail address and answer
+  `CMD_BADCOMMAND`, as retail answers a command it doesn't have. The
+  interpreter then offers the line to the target's `ParseCommand` (slot
+  `0x150`, which answers 2 for every class), reports "Unrecognized
+  command", and the script goes on with the next line.
+- The commands of the Keep's opening scene are ported: `incidentals`,
+  `fadecharacterout`/`fadecharacterin`, `playerlevel`, `setcdvolume`
+  (§6).
 - `--exec` (`src/consoleexec.cpp`) is a separate command queue —
   **below the bar** (duplicates the console's job).
 - The interpreter's context syntax, the object resolver and the
@@ -231,6 +236,217 @@ errors through it; scripts never see the text.
 - `0x4000` vs `CMD_WAIT`: was the speech wait added specifically so
   `nowait say` could still let the script continue while the speaker
   talks?
+- When a trigger starts, `TScript::Continue` turns incidentals off for the
+  script's object and its two alias objects (the user: Locke, for a CUBE
+  trigger he walks into), but turns them back on only if the trigger runs
+  to its end in the same pass. A trigger that waits leaves them off. Was
+  that intended? (§6.2)
+- `playerlevel` gives each level's attribute points with `random(0, 6)`
+  over seven stat ids starting at Strn, so one point in seven goes to the
+  Attack skill. Intended? (§6.1)
+- The CD plays at its full volume (`0x60`) from boot; the INI
+  `MusicVolume` reaches it only when the player confirms the Options
+  screen. Intended? (§6.3)
+
+## 6. The Keep's opening-scene commands
+
+Sardok's block in `keep.s` (`SardokR`, the first scene of a new game)
+runs `incidentals off`, `fadecharacterout player`,
+`player.PLAYERLEVEL 1`, `player.toggle invisible`,
+`fadecharacterin player`, `SETCDVOLUME HALF` and `incidentals on`.
+
+Vtables (for the slots below): TCharacter `0x005a7848` (slot 0
+`0x004d6c00`), TPlayer `0x005b4f30` (slot 0 `0x0051ff00`). `0x005a7b98`
+and `0x005b5364` belong to other classes: their stat slots are the
+TObjectInstance stubs. Character slots: `0xdc` GetObjStat, `0xe8`
+SetObjStat, `0x138`/`0x13c` FindState/FindTransitionState(…, pcnt),
+`0x148`/`0x14c` incidentals off/on, `0x1c0`/`0x1c4` Health/SetHealth,
+`0x1c8`/`0x1cc` Fatigue, `0x1d0`/`0x1d4` Mana, `0x1d8`/`0x1e0`/`0x1e8`
+MaxHealth/MaxFatigue/MaxMana, `0x208` SetDesired(ab, flags), `0x210`
+UpdateAction, `0x214`/`0x218` TryCommand/ForceCommand(ab, bits, flags),
+`0x2d8` Transparency, `0x340` the say handler. TPlayer adds `0x358`
+SetLevel and `0x418` AddSkillExp.
+
+### 6.1 `playerlevel` `0x00428640`
+
+A number is required (else 4); `__ftol` of it goes to
+`TPlayer::SetPlayerLevel` `0x0051d840`, then the token advances.
+SetPlayerLevel:
+
+1. SetLevel(n) (`0x005201f0`, the Level stat entry, id 17).
+2. Attributes `0x22+i` (Strn … Luck) = |class STATREQS[i]|, or 14 when 0
+   (chardata `+0xfc` → classdata `+0x190`, STATREQS at `+0x20`).
+3. For each skill: level `0x28+s` = 0, experience `0x33+s` = 0, next
+   level's experience `0x3e+s` = 300.
+4. For each level 1 … n−1: (level < 15 ? 2 : 1) points, each to stat
+   `0x22 + random(0, 6)` (the seventh id is the Attack skill), then
+   AddSkillExp(s, 333 + 100·(level − 1)) for every skill.
+5. Stat 20 (`AttackLevel`) = n; health, mana, fatigue to their maximums;
+   RefreshStats `0x0051c660`.
+
+`TPlayer::AddSkillExp` `0x0051ac90`: at skill level ≥ 30 the experience
+is pinned to SkillExp(30); otherwise the experience is added, and if it
+reaches SkillExp(level + 1) the skill goes up one level and its next
+experience becomes SkillExp(level + 2). In a network game it first
+forwards the call, or drops it for a remote player. SkillExp
+`0x0048cc90` reads a 30-entry table (Rules `+0x168`) that
+`TRules::Initialize` `0x0048b690` computes: 300, then +100·i + 300 per
+level.
+
+Retail stat ids are CLASS.DEF's PLAYER OBJSTATS order (17 Level, 20
+AttackLevel, `0x18`–`0x1d` Max{Health,Mana,Fatigue}{Flat,Pct}, `0x22`
+Strn … `0x27` Luck, then four rows of 11 skills: level, exp, next exp,
+cap). The port keeps the 1998 numbering (Level 6, `PLRSTAT_FIRST` 8,
+`SK_FIRST` 14, `SKE_FIRST` 25) and appends CLASS.DEF's other stats when
+it loads (`AttackLevel` 48, `AttackNxtExp` … `LockPickNxtExp` 61–71 with
+the shipped data), so the port finds those by name.
+
+Port: `TPlayer::SetPlayerLevel`, `TPlayer::AddSkillExp`,
+`TRules::SkillExpForLevel`. Not ported: RefreshStats. Retail TPlayer
+keeps a second, equipment- and spell-modified copy of the stats
+(`+0x34c` count, `+0x350` {id, value} pairs): SetObjStat writes both,
+GetObjStat reads the copy, RefreshStats rebuilds it, caps attributes and
+skills at 30 in it, and clamps health/mana/fatigue. The port has one set
+of stats, so AddSkillExp reads the unmodified skill level. Inside
+SetPlayerLevel the two agree (every value it reads was just written).
+
+Opening scene, Locke from `newgame.sav`: STR 16 CON 12 AGI 14 RFL 14
+MND 14 LCK 16, ten skills at 30, AttackLevel 0 → after `playerlevel 1`
+(class Revenant, STATREQS 18, −12, 0, 0, 0, 14): STR 18 CON 12 AGI 14
+RFL 14 MND 14 LCK 14, skills 0 / 0 / 300, AttackLevel 1, H 25/25,
+M 26/26, F 3/3. The script then sets AttackLevel to 0 itself.
+
+### 6.2 `incidentals` `0x00428250`
+
+`on` clears and `off` sets bit 2 of `charflags` (TCharacter `+0x110`);
+any other word → "State must be included", 4. The word isn't consumed
+(the interpreter skips it with the rest of the line).
+
+The bit picks between a state's random variants. Imagery states named
+`NN:name` are frequency variants (`3:walk`, `75:walk`, `100:walk` …):
+FindState rolls 1–100 and takes the variant whose number is the smallest
+one ≥ the roll; pcnt 100 always takes the 100% variant. Bit 0 of
+TryCommand/ForceCommand's flags makes every lookup use pcnt 100.
+Readers of `charflags & 2`:
+
+- `0x004c3429`, UpdateAction (`0x004c3260`): the per-frame
+  TryCommand(desired, bits, incidentals off ? 1 : 0);
+- `0x004c8437`, the say handler (`0x004c8400`, the port's ResolveSay):
+  ForceCommand(root, 0, incidentals off ? 1 : 0).
+
+SetDesired `0x004db3a0` forwards a flags argument to ForceCommand too;
+its callers pass registers that look zeroed (not checked one by one).
+
+Other writers: a script trigger fired on a character sets the bit —
+`0x004c245c` (hit, trigger `0xb`), `0x004d3f94` (trigger `0xa`),
+`0x004d4add`/`0x004d4b15` (TCharacter::Use, triggers 9 and 8). Slot
+`0x148` (`0x004d5f70`) sets it and, when the character is doing its
+root, clears action flag `0x10` on doing and desired; slot `0x14c`
+(`0x004d5f60`) clears it. `TScript::Continue` `0x004933d0` calls `0x148`
+on the script's object and its two alias objects when a trigger starts,
+and `0x14c` on them when the script ends in the same call that started
+the trigger.
+
+Port: `TCharacter::SetIncidentals`/`Incidentals` (`charflags` now starts
+at 0; retail's allocator zeroed objects), the flags argument on
+`TComplexObject::TryCommand`/`ForceCommand` (`kCommandNoIncidentals`),
+`FindState`/`FindTransitionState` taking pcnt, and the two readers. Not
+ported: the trigger writers and the TScript calls (script engine and
+character owners). Opening scene: while it is off Sardok's root resolves
+to `100:walk` every time; after `incidentals on` he plays `75:walk`.
+
+### 6.3 `setcdvolume` `0x00428b20`
+
+`half` → the CD's base volume / 2, `full` → the base volume; anything
+else (or nothing) → 4. The value goes to `0x0049a610` (the CD's current
+volume, clamped 0–`0x60`, set on the redbook device while playing), then
+the token advances.
+
+The CD object is `0x0065abc8`: `+0` redbook handle, `+4` base volume
+(`DAT_0065abcc`), `+8` playing, `+0xc` current volume, `+0x10`/`+0x14`
+fade step/pending (stepped by `0x0049a380`). Init `0x0049a270` sets the
+base to `0x60`. Options' OK (`0x0053af77`, `0x0053b425`, the `Music`
+slider) calls `0x0049a5c0`, which sets base and current to the device's
+readback. The INI `MusicVolume` (default `0x7f`) is read at boot
+(`0x00484ae0`) and written back (`0x00484ed0`) through `0x005d7a9c`, but
+reaches the CD only through Options' OK.
+
+Port: the player's music volume is the music group volume
+(`audio::SetMusicVolume`); `setcdvolume` sets the scale on the music
+voice (`audio::MusicSetVolume` 0.5 or 1), which now lasts across tracks
+like the redbook volume. Retail's half is an integer halving of the base.
+Missing elsewhere: nothing sets the music group volume from the INI or
+the Options slider yet (`TOptionsPane` TODO; only `--test=audio` calls
+`SetMusicVolume`).
+
+### 6.4 `fadecharacterout` `0x00428020`, `fadecharacterin` `0x00428070`
+
+The name resolves through `0x0041e690` from the command's context; not
+found → 4. Then `TCharacter::Fade` `0x004d56c0` with −1 or +1 (on
+whatever object was found), and in a network game the fade is sent to
+the other players. The name isn't consumed.
+
+| Offset | Field |
+|---|---|
+| `+0x194` | visibility 0–100 |
+| `+0x198` | step, subtracted each pulse (positive fades out) |
+| `+0x19c` | limit (−1: run to 0 or 100) |
+| `+0x1a0` | direction −1 / 1 / 0 (written only; no reader found) |
+| `+0x1a4` | invisibility-spell flag |
+
+- Fade `0x004d56c0`: +1 → step −5, limit 100, only while Health > 0;
+  anything else → step 5, limit 0.
+- SetFade `0x004d5730` (effects `0x004e6c34`, `0x004e6d1a`, `0x004e7087`;
+  network `0x005836d2`): applies when Health > 0 or step ≥ 0; a negative
+  visibility keeps the current one.
+- UpdateFade `0x004d57a0`, called only from TCharacter::Pulse
+  `0x004c1bb0`, every pulse: visibility −= step; fading in past 0 clears
+  OF_INVISIBLE; stops at the limit, at 0, or (out, or with no limit) at
+  100.
+- SetInvisible `0x004d5880` (invisibility spell `0x004fd8c0`): on → step
+  5 to 30; off → back to 100 while alive.
+- ClearChar `0x004c18a0`: 100 / 5 / 100 / 0 / 0. Load `0x004d4eb0` ends
+  with 100 / 0 / 100 / 0. Appear `0x004d4460` (slot 8 move + flags reset):
+  0 / 4 / 100 / 1, which snaps to 100 on the next pulse.
+- Transparency `0x004c5a50`: the visibility clamped to 0–100 (40 at most
+  for a player in player state 2 of a network game).
+
+What brings Locke back in the opening scene: `newgame.sav` stores him
+with OF_INVISIBLE set; `player.toggle invisible` clears it and
+`fadecharacterin` raises the visibility 0 → 100 in 20 pulses (UpdateFade
+would also have cleared OF_INVISIBLE on its first step). The resurrect
+state is only the animation.
+
+Port: `TCharacter::Fade`, `SetFade`, `UpdateFade`, `SetInvisibleSpell`
+(retail bodies), UpdateFade from `TCharacter::Pulse`, the direction
+field, retail `Transparency()` (the pre-release one also hid aggressive
+monsters the player hadn't seen). The commands reject a name that isn't
+a character (retail wrote the fade fields of any object). Opening scene:
+Locke 100 → 0 over pulses 64–84, 0 → 100 over pulses 134–154.
+
+**The draw path doesn't show it.** In retail the character animator
+(`0x004d7a50`) skips an OF_INVISIBLE character (outside the editor) and
+otherwise moves its alpha (animator `+0x588`) toward Transparency()/100
+by 0.05 per drawn frame, not drawing below 0.01; `0x004d77b2` seeds it.
+In the port:
+
+1. `TMapRenderer` submits character bone meshes (`maprenderer.cpp`,
+   `SMeshSubmit`) with tint (1, 1, 1, 1) and doesn't skip OF_INVISIBLE:
+   Locke stands in the circle, opaque, while flagged invisible and faded
+   to 0 (filmstrip of the scene).
+2. `TCharAnimator::Render`, which runs `UpdateTransparency` and the
+   material alpha, is never called in the sokol game loop (counted: 0
+   calls), so nothing consumes `Transparency()`.
+3. The mesh pipeline writes a G-buffer: tint alpha blends only the albedo
+   target (normals, scene depth and depth are written opaque) and alpha
+   below 0.01 is discarded. Fully out works with tint alpha; a partial
+   fade needs a translucent (forward) pass for characters.
+4. In `charanimator.cpp`, `InitTransparency` assigns a local, leaving the
+   member uninitialized; `Set/ResetMaterialTransparency` loop over the
+   materials but always write material 0, and reset alpha to 100.0, not
+   1.0.
+5. The 0.05 step is per drawn frame; at 60 fps that is faster than
+   retail's frame rate (the port's convention is time-based).
 
 ## Appendix — command catalog
 

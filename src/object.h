@@ -1073,9 +1073,9 @@ class TObjectInstance : protected SObjectDef
     virtual bool IsInventoryItem();
         // Inventory-eligible iff InventoryImage() would return non-null (matches retail's
         // semantics: a baked invitem OR an invanim with at least one frame).
-    virtual int32_t FindState(const char *name) const { return imagery ? imagery->FindState(name) : -1; }
-        // Find a state in the object's imagery
-    virtual int32_t FindTransitionState(const char *from, const char *to) const { return imagery ? imagery->FindTransitionState(from, to) : -1; }
+    virtual int32_t FindState(const char *name, int32_t pcnt = -1) const { return imagery ? imagery->FindState(name, pcnt) : -1; }
+        // Find a state in the object's imagery ('pcnt' picks among "NN:" variants; -1 rolls one)
+    virtual int32_t FindTransitionState(const char *from, const char *to, int32_t pcnt = -1) const { return imagery ? imagery->FindTransitionState(from, to, pcnt) : -1; }
         // Find a state in the object's imagery
     const char *GetAniName() const { return imagery ? imagery->GetAniName(GetState()) : nullptr; }
         // Gets current animation name
