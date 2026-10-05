@@ -378,8 +378,15 @@ bool TScript::WaitSatisfied(bool commanddone)
 
       case EScriptWait::Say:
       {
+        // The speaker is idle again: back in its root state (DIALOG.md §2.5),
+        // not merely done with the say action. Retail also wants a
+        // non-character's animation state to carry flag 1 (not ported).
         TObjectInstance* object = waitobject.Get();
-        return !object || object->CommandDone();
+        if (!object)
+            return commanddone;
+        if (object->IsComplex())
+            return static_cast<TComplexObject*>(object)->IsIdleInRoot();
+        return object->CommandDone();
       }
 
       case EScriptWait::Death:
@@ -537,7 +544,10 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
             if (bits & CMD_LOOP)
                 block[depth].loopstart = thisline;
 
-            if (bits & CMD_WAIT)
+            // A line that leaves the script waiting ends the run: a command
+            // that keeps its target busy (CMD_WAIT), or one that set a wait
+            // itself (`wait`, `say`).
+            if ((bits & CMD_WAIT) || IsWaiting())
             {
                 ip = (int32_t)s.GetPos();
                 break;

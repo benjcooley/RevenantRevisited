@@ -3553,83 +3553,78 @@ bool TCharacter::TryGet()
     return true;
 }
 
+// REVSYNC: Say @ 0x004d0610 (DIALOG.md §3.1). Plays the voice unpositioned,
+// starts the say action for the voice's length (or the line's), and puts the
+// line in the dialog pane. `wait` (ticks), when given, wins.
+//   - The voice paces the line whenever it exists: retail measured the playing
+//     sample, so with sound output off it paced by text; the port's decoded
+//     length keeps silenced and test runs paced like normal play.
+//   - Retail starts the action with TryCommand; the port's TryCommand drops a
+//     block it can't start yet, so the action is set desired (which owns it).
 bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const char *sound)
 {
-    if (!string)
+    if (!string || Health() <= 0)
         return false;
 
-  // Play sound file
-    bool played = false;
+    voice = -1;
+    int32_t voicems = 0;
     if (sound && PlaySpeech)
     {
-      // FindSound isn't const-correct yet (the voice registration port).
-      int32_t soundid = SoundPlayer.FindSound(const_cast<char *>(sound));
-      if (soundid >= 0)
-      {
-        if (SoundPlayer.Mount(soundid))
+        voice = SoundPlayer.FindSound(sound);
+        if (voice >= 0)
         {
-            TSound* sound = SoundPlayer.GetSound(soundid);
-            if (sound)
+            if (SoundPlayer.Mount(voice))
             {
-                wait = sound->GetLength() * FRAMERATE / 100;     // Get seconds to wait
+                SoundPlayer.Play(voice);            // full volume, no position
+                SoundPlayer.Unmount(voice);
             }
-            S3DPoint p, mp;
-            GetPos(p);
-            MapPane.GetMapPos(mp);
-            p -= mp;
-            played = SoundPlayer.Play(soundid, 0, 0, &p);
-            SoundPlayer.Unmount(soundid);
+            voicems = SoundPlayer.SampleLengthMs(voice);
         }
-      }
-    } 
-        
-    char buf[256];                  // retail's line buffer
-    DialogLine(string, buf, sizeof(buf));
+    }
 
-    TActionBlock* ab;
-    if (anim)
-        ab = new TActionBlock(anim, ACTION_SAY);
-    else
-        ab = new TActionBlock("say", ACTION_SAY);
+    char line[256];
+    DialogLine(string, line, sizeof(line));
 
-    if (!played || ShowDialog)
-        ab->data = (void *)strdup(buf);
-    else
-        ab->data = nullptr;
-
-    if (wait < 0)
-        ab->wait = 20 + max(15, strlen(buf) * 5 / 4);  // Ratio of ticks to chars
-    else
+    TActionBlock* ab = new TActionBlock(anim ? anim : "say", ACTION_SAY);
+    // The action's copy of the line; ShowDialog off blanks it when a voice
+    // speaks it (nothing draws it -- the pane always shows the line).
+    ab->data = (voicems > 0 && !ShowDialog) ? nullptr : (void *)strdup(line);
+    if (wait >= 0)
         ab->wait = wait;
+    else if (voicems > 0)
+        ab->wait = 12 + voicems * 24 / 1000;
+    else
+        ab->wait = 2 * (int32_t)strlen(line) + 36;
     ab->loop = true;
     const int32_t ticks = ab->wait;
     SetDesired(ab);
 
-  // REVSYNC: Say @ 0x004d0610 step 8 -- the line always goes to the dialog
-  // pane, whatever ShowDialog says.
-    DialogPane.AddSpeech(this, buf, ticks);
-
+    DialogPane.AddSpeech(this, line, ticks);
     return true;
 }
 
+// REVSYNC: SayIndex @ 0x004d09b0 -- dialog line `tagid`, with the voice its
+// tag names.
 bool TCharacter::SayTag(int32_t tagid, int32_t wait, const char *anim)
 {
-    const char *line = DialogList.GetLine(tagid);
-    const char *tag = DialogList.GetTag(tagid);
-
-    if (!line || !tag)
-        return false;
-
-    return Say(line, wait, anim, tag);
+    return Say(DialogList.GetLine(tagid), wait, anim, DialogList.GetTag(tagid));
 }
 
+// REVSYNC: SayTag @ 0x004d0a20
 bool TCharacter::SayTag(const char *tag, int32_t wait, const char *anim)
 {
-    int32_t tagid = DialogList.FindLine(tag);
+    const int32_t tagid = DialogList.FindLine(tag);
     if (tagid < 0)
         return false;
-
     return SayTag(tagid, wait, anim);
+}
+
+// REVSYNC: 0x004d6000
+void TCharacter::StopTalking()
+{
+    if (voice >= 0)
+        SoundPlayer.Stop(voice);
+    ForceCommandDone();
 }
 
 // Begins drawing bow or crossbow

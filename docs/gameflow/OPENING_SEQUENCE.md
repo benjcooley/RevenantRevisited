@@ -39,10 +39,11 @@ the block:
 | Dialog: speech text + voice, choice list, response | `TDialogPane`, speech | 1998 `TDialogPane`, unwired |
 | Presentation: fades, camera, control off | PlayScreen fade state, `centeron`/`scrollto`; character fade (`TCharacter` `+0x194`) | partial; character fades run but aren't drawn (COMMAND_SYSTEM.md §6.4) |
 
-Where it stands: Sardok's block runs from the trigger through the
-resurrection and the first lines (`say I1LOC00`, `say I1SAR00`) to the
-first choice list (`Choice people/whoamI/brought`, `wait response`),
-where it waits for a response the dialog pane doesn't offer yet.
+Where it stands (2026-10-05): the whole block runs, headless with key
+presses for the choices -- trigger, resurrection, voiced lines paced by
+their voices, both rounds of choices, the gifts, Rahul's entrance,
+RAHULSTATE, control back. Not yet visible: the dialog boxes (presentation
+in progress) and the character fades (renderer).
 
 ## 3. Commands in the block (order of first use)
 
@@ -75,7 +76,7 @@ checking against its retail handler (`recon/discovered/commands/`).
    evaluator~~; context and arguments; then the block's commands in
    order, each checked against retail.
 4. ~~The `TScript` wait machine.~~
-5. Dialog: speech text and voice, choices, response — next.
+5. ~~Dialog: speech text and voice, choices, response~~ (drawing in progress).
 6. Presentation: fades, camera, control.
 
 Verification: headless runs logging each executed line and command

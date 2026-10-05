@@ -1379,13 +1379,16 @@ COMMAND(CmdActivate)
     return 0;
 }
 
+// REVSYNC: say @ 0x00420140 (DIALOG.md §1.1):
+//   [<speaker>.]say [nowait] [<ticks>] {anim <state> | sound <name>}*
+//                   (choice | "<text>" | <TAG>) {<text-part>}*
+// A tag is said with its voice; quoted text with the `sound` given. The
+// calling script waits until the speaker is idle again (the speech wait) --
+// set here, so the interpreter's NOWAIT prefix doesn't lift it; only `say
+// nowait` does. Always 0.
 COMMAND(CmdSay)
 {
-    char anim[32];
-    char sound[32];
-
-    anim[0] = '\0';
-    sound[0] = '\0';
+    TCharacter* speaker = static_cast<TCharacter*>(context);
 
     bool nowait = false;
     if (t.Is("nowait"))
@@ -1394,73 +1397,76 @@ COMMAND(CmdSay)
         t.WhiteGet();
     }
 
-    int32_t wait = -1;
+    int32_t ticks = -1;
     if (t.Type() == TKN_NUMBER)
     {
-        wait = t.Index();
+        ticks = t.Index();
         t.WhiteGet();
     }
 
+    std::string anim, sound;
     while (t.Is("anim") || t.Is("sound"))
     {
-        if (t.Is("anim"))
-        {
-            t.WhiteGet();
-            strncpy(anim, t.Text(), 31);
-            t.WhiteGet();
-        }
-        else if (t.Is("sound"))
-        {
-            t.WhiteGet();
-            strncpy(sound, t.Text(), 31);
-            t.WhiteGet();
-        }
-    }
-
-    const char *text = nullptr;
-    int32_t tagid = -1;
-    if (t.Is("choice"))
-    {
-        // The last choice picked (it survives the commit).
-        if (const char *chosen = DialogPane.ChosenText())
-        {
-            text = chosen;
-            tagid = DialogList.FindLine(chosen);
-        }
-
+        std::string& value = t.Is("anim") ? anim : sound;
+        t.WhiteGet();
+        value = std::string(t.Text()).substr(0, 31);
         t.WhiteGet();
     }
-    else 
+    if (!sound.empty())
+        ticks = -1;                         // the voice's length wins
+    const char *animname = anim.empty() ? nullptr : anim.c_str();
+
+    int32_t tagid = -1;
+    std::string text;
+    bool speak = true;
+    if (t.Is("choice"))
+    {
+        // The last choice picked. DEVIATION: with none yet retail says a
+        // stale shared buffer; the port says nothing.
+        const char *chosen = DialogPane.ChosenText();
+        speak = chosen != nullptr;
+        if (chosen)
+        {
+            tagid = DialogList.FindLine(chosen);
+            text = chosen;
+        }
+        t.WhiteGet();
+    }
+    else if (t.Type() == TKN_TEXT)
+    {
+        text = t.Text();
+        t.WhiteGet();
+    }
+    else if (t.Type() == TKN_IDENT)
+    {
+        text = t.Text();                    // a tag, or plain text if it isn't one
+        tagid = DialogList.FindLine(text.c_str());
+        t.WhiteGet();
+    }
+    else
+        return CMD_BADPARAMS;
+
+    // Further parts: quoted text is appended to plain text. (Retail also
+    // appends prototype variables named here; not ported.)
+    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
     {
         if (t.Type() == TKN_TEXT)
-        {
-            strcpy(buf, t.Text());
-            text = buf;
-            tagid = -1;
-
-            t.WhiteGet();
-        }
-        else if (t.Type() == TKN_IDENT)
-        {
-            strcpy(buf, t.Text());
-            text = buf;
-            tagid = DialogList.FindLine(text);
-
-            t.WhiteGet();
-        }
-        else
-            return CMD_BADPARAMS;
+            text += t.Text();
+        t.WhiteGet();
     }
 
-    if (tagid >= 0)
-        ((PTCharacter)context)->SayTag(tagid, wait, (anim[0])?anim:nullptr);
-    else
-        ((PTCharacter)context)->Say(buf, wait, (anim[0])?anim:nullptr, (sound[0])?sound:nullptr);
+    if (speak)
+    {
+        if (tagid >= 0)
+            speaker->SayTag(tagid, ticks, animname);
+        else
+            speaker->Say(text.c_str(), ticks, animname, sound.empty() ? nullptr : sound.c_str());
+    }
 
-    if (nowait)
-        return 0;
-
-    return CMD_WAIT;
+    if (!nowait && scriptcontext)
+        if (TScript* waiting = scriptcontext->GetScript())
+            waiting->WaitSay(speaker);
+    return 0;
 }
 
 COMMAND(CmdGo)

@@ -571,14 +571,14 @@ lifetimes in seconds), per the frame-rate-independent animation rule.
 | Dialog files | `<Language>.def` | base + module `<Language>_dialog.def` → … | C |
 | `[me]`/`[chr]` | works | unreachable | C |
 
-## 6. Port state (2026-10-05, `feature/gameflow`)
+## 6. Port state (2026-10-05, `feature/gameflow`, after steps 1–6)
 
 | File | Today | Gap to retail |
 |---|---|---|
-| `src/dialog.{h,cpp}` | 1998 `TDialogList` (one table; module file tried as `<lang>dialog.def` — retail is `<lang>_dialog.def`; then `<lang>.def`, `english.def`; linear search; 255-char lines); 1998 `TDialogPane` and `CmdChoice` | base table missing (all `message` tags and UI text live there); everything in §4 |
-| `src/script.cpp` | `SetWait`/`WaitSatisfied` retail-shaped; response branch reads the 1998 pane (`HasResponded`, `GetResponseLabel`, `Hide`); type 8 = `!o \|\| o->CommandDone()`; script end hides the 1998 pane | `SetWait` must open responses (§2.3); type 8 rule (§2.5); flag 4 + `End`; busy fields + deferred say; MP list not needed |
-| `src/command.cpp` | `CmdSay` 1998 (returns `CMD_WAIT` → interpreter `WaitChar`, type 3); `CmdWait` response forms map correctly but call 1998 `Show`/`SetCharacter`; `message`, `hideresponse`, `busysay`, `busymsg` = `CmdNotPorted` | §1 |
-| `src/character.cpp` | 1998 `Say`/`SayTag` (positional voice, 1998 durations, text to `AddPostCharText`, a no-op), 1998 `ResolveSay`; `ShowDialog` default false | §3 |
+| `src/dialog.{h,cpp}` | Retail `TDialogList` (base + module tables, steps 1). Retail pane runtime (step 5): `TDialogEntry` (mode, speaker, texts, lifetime, fade, placed), `TDialogPane` entry manager (`AddChoice`, `ShowResponses`, `AddSpeech`, `SkipSpeech`, `ClearResponses`, `ClearSpeech`, `ResetForLoad`, `Pulse` commit, keys Space/1–6/joystick); retail `choice`. Bounded `DialogLine` (substitution kept, see §3.7). | layout, drawing, choice buttons (presentation, in progress); `ClearSpeech` callers (camera retarget, `fadescreenout`), `ResetForLoad` from `LoadGame` |
+| `src/script.cpp` | `SetWait` opens the responses (§2.3); the response wait takes the committed pick (§2.4); type 8 = the speaker idle in its root state (§2.5); taken flag 4, `AddChoice`, `End` (§2.6); `Continue` stops after any line that leaves the script waiting | busy fields + deferred say (MP); the MP choice list |
+| `src/command.cpp` | Retail `say` (§1.1): grammar, voice via the tag, caller's speech wait, result 0; `wait` response forms through `SetWait`; `say choice` reads the last pick | `message`, `hideresponse`, `busysay`, `busymsg` still `CmdNotPorted`; prototype variables in text parts |
+| `src/character.cpp` | Retail `Say`/`SayIndex`/`SayTag` (§3.1–3.2): unpositioned voice, voice-length or text-length durations, line to the pane; `StopTalking` (voice stopped, action ended); retail `ResolveSay` | deviations: the voice paces even with sound output off (retail paced by text); the action is set desired rather than `TryCommand`ed (the port's `TryCommand` drops a block it can't start) |
 | `src/sound.cpp` | Retail sound list (step 2 done): `.wav` + `.mp3` from the resource directories at `Initialize` and the module's at `SetCurModule`, sorted, bsearch; `Play` without a position; `SampleLengthMs` (see "Voices in the port" below) | — |
 
 ### Proposed port order
