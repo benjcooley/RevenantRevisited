@@ -39,7 +39,10 @@ void TMapManager::Shutdown()
 TGameMap* TMapManager::GetOrLoad(int32_t level)
 {
     if (TGameMap* cached = GetCached(level))
+    {
+        cached->LoadSectors(INT32_MAX);     // a staged load finishes now
         return cached;
+    }
 
     auto fresh = std::make_unique<TGameMap>();
     if (!fresh->Load(level))
@@ -48,6 +51,21 @@ TGameMap* TMapManager::GetOrLoad(int32_t level)
     TGameMap* raw = fresh.get();
     cache.emplace_back(std::move(fresh));
     return raw;
+}
+
+TGameMap* TMapManager::LoadStaged(int32_t level, int32_t count)
+{
+    TGameMap* map = GetCached(level);
+    if (!map)
+    {
+        auto fresh = std::make_unique<TGameMap>();
+        if (!fresh->BeginLoad(level))
+            return nullptr;
+        map = fresh.get();
+        cache.emplace_back(std::move(fresh));
+    }
+    map->LoadSectors(count);
+    return map;
 }
 
 TGameMap* TMapManager::GetCached(int32_t level) const

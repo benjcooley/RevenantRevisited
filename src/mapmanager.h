@@ -76,6 +76,13 @@ class TMapManager
     // (no sector files for that level). Caller does not own.
     TGameMap* GetOrLoad(int32_t level);
 
+    // A step of a level load spread over frames (the loading screen): the
+    // first call caches the map and starts reading it, each call reads up
+    // to `count` more sectors. The map is complete once !Loading(); a
+    // GetOrLoad of the same level meanwhile finishes it at once. nullptr if
+    // the level can't be loaded.
+    TGameMap* LoadStaged(int32_t level, int32_t count);
+
     // Lookup-only: returns the cached map for `level` or nullptr.
     // Doesn't trigger a disk load.
     [[nodiscard]] TGameMap* GetCached(int32_t level) const;

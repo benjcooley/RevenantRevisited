@@ -59,6 +59,19 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     // unloads first.
     bool Load(int32_t level);
 
+    // Load in stages, so a loading screen can show it filling (retail filled
+    // its bar per sector, 0x004997d0): BeginLoad finds the level's sector
+    // files (as Load: a same-level map is already done); LoadSectors reads
+    // up to `count` more and, once every one is in, stamps the tile walkmaps,
+    // fires Loaded and returns true. Load is BeginLoad + all of LoadSectors.
+    bool BeginLoad(int32_t level);
+    bool LoadSectors(int32_t count);
+    [[nodiscard]] bool  Loading() const { return loading; }
+    [[nodiscard]] float LoadFraction() const;
+
+    // A sector's place on its level.
+    struct SSectorCoord { int32_t sx = 0; int32_t sy = 0; };
+
     // Free all sectors, writing each to the working set first. Fires
     // Unloaded BEFORE the sectors are deleted so subscribers can drop refs
     // while the pointers are still dereferenceable (for last-frame cleanup).
@@ -119,7 +132,14 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     enum class ESectorRelease : uint8_t { Save, Discard };
     void Release(ESectorRelease how);
 
+    void FinishLoad();
+
     int32_t               level = -1;
     std::vector<TSector*> sectors;
     Listeners             listeners;
+
+    std::vector<SSectorCoord> pending;      // the level's sector files, in load order
+    size_t                nextpending = 0;  // the next one to read
+    int32_t               loadedobjs  = 0;
+    bool                  loading     = false;
 };
