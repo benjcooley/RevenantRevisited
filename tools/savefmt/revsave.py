@@ -21,6 +21,7 @@ the constructor rather than the file (MOVING, AI, COMPLEX, NOTIFY, NONMAP,
 INVENTORY, CALLEDPREDEL): runtime state that no load ever reads back.
 """
 import re
+import signal
 import struct
 import sys
 from pathlib import Path
@@ -123,10 +124,12 @@ class Decoder:
     # ---------------------------------------------------------------- objects
 
     def object(self, path, version, toplevel=False):
-        """LoadObject (0x00471ce0); stream version >= 14."""
+        """LoadObject (0x00471ce0). Bodies are decoded for stream version 14
+        and up; older streams down to version 4 are delimited by their block
+        sizes and shown raw."""
         r = self.r
         header = r.pos
-        objversion = self.f(f'{path}.objversion', 'i16')
+        objversion = self.f(f'{path}.objversion', 'i16') if version >= 8 else 0
         if objversion < 0:
             if toplevel:
                 self.records.append(None)
@@ -137,6 +140,10 @@ class Decoder:
                 self.records.append(None)
             return None
         self.emit(f'{path}.class', r.pos, OBJCLASS_NAMES.get(objclass, f'?{objclass}'))
+        if version < 4:
+            # Before version 4 there are no block sizes: only a decoder for
+            # every class's body could find where an object ends.
+            raise Truncated(f'stream version {version} has no object block sizes')
         self.hexf(f'{path}.uniqueid', 'u32')
         blocksize = self.f(f'{path}.blocksize', 'i16')
         invblocksize = self.f(f'{path}.invblocksize', 'i16') if version >= 14 else -1
@@ -350,10 +357,13 @@ class Decoder:
 def decode_full(path):
     data = Path(path).read_bytes()
     d = Decoder(data)
-    if data[:4] == b'MAP ':
-        d.sector()
-    else:
-        d.save()
+    try:
+        if data[:4] == b'MAP ':
+            d.sector()
+        else:
+            d.save()
+    except Truncated as e:
+        d.emit('DECODE_ERROR', d.r.pos, str(e))
     return d
 
 
@@ -451,26 +461,32 @@ def sector_hash(path):
     """Recompute a sector's state hash (0x00499e90) from its file. Returns
     (stored, computed, computed_if_player) or None for pre-v14 files. A
     player in the sector is written as an empty slot, so the hash it
-    contributed (its 0xffff placeholder) can't be told from a real empty
-    slot; the third value assumes one of the empty slots was a player."""
+    contributed (its 0xffff placeholder, at its slot) can't be told from a
+    real empty slot; the third value is the set of hashes for a player in
+    each of the empty slots."""
     data = Path(path).read_bytes()
     m = re.match(r'(\d+)_(\d+)_(\d+)\.DAT$', Path(path).name, re.I)
     level, sx, sy = (int(g) for g in m.groups())
-    d = Decoder(data)
-    version = d.sector()
-    if version <= 13:
+    if struct.unpack_from('<i', data, 4)[0] <= 13:
         return None
+    d = Decoder(data)
+    d.sector()
     stored = struct.unpack_from('<I', data, 8)[0]
     chunks = [struct.pack('<4i', level, sx, sy, len(d.records))]
+    empty_at = []           # index into chunks where each empty slot falls
     for rec in d.records:
-        if rec is None or rec.objclass not in (OBJCLASS_PLAYER, OBJCLASS_CHARACTER):
+        if rec is None:
+            empty_at.append(len(chunks))
+            continue
+        if rec.objclass not in (OBJCLASS_PLAYER, OBJCLASS_CHARACTER):
             continue
         bodysize = rec.blocksize - max(rec.invblocksize, 0)
         head = bytearray(data[rec.header:rec.bodystart])
         struct.pack_into('<hh', head, len(head) - 4, bodysize, 0)
         chunks.append(bytes(head) + data[rec.bodystart:rec.bodystart + bodysize])
     computed = retail_adler32(chunks) or 0xf0f0f0f0
-    with_player = (retail_adler32(chunks + [b'\xff\xff']) or 0xf0f0f0f0) if None in d.records else None
+    with_player = {retail_adler32(chunks[:at] + [b'\xff\xff'] + chunks[at:]) or 0xf0f0f0f0
+                   for at in empty_at}
     return stored, computed, with_player
 
 
@@ -487,7 +503,7 @@ def hash_cmd(paths):
         stored, computed, with_player = res
         if stored == computed:
             ok += 1
-        elif stored == with_player:
+        elif stored in with_player:
             player += 1
         else:
             bad += 1
@@ -537,4 +553,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)   # quiet when piped into head
     sys.exit(main(sys.argv))
