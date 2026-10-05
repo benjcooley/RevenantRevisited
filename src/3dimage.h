@@ -503,6 +503,14 @@ class T3DAnimator : public TObjectAnimator
     void PostRender();
     hmm_mat4* GetMatrix() { return &matrix; };
 
+  // Draw state. The scene manager advances it once per drawn frame, then
+  // reads it when it submits the object's meshes (the renderer submits;
+  // the animator holds the data).
+    virtual void UpdateDrawState(double dt_seconds) { (void)dt_seconds; }
+      // Advances draw-only state by one drawn frame of dt_seconds
+    [[nodiscard]] virtual float DrawAlpha() const { return 1.0f; }
+      // Opacity to draw the object at, 0..1; 0 = not drawn
+
   // Extents
     void ResetExtents()
       { Get3DImagery()->ResetExtents(); updated = false; }

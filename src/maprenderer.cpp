@@ -1092,6 +1092,14 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img);
         if (!meshimg) { ++stats.mesh_skipped; return; }
 
+        // The animator says how opaque the object draws this frame. A
+        // character that is OF_INVISIBLE, or faded below retail's threshold,
+        // isn't drawn (TCharAnimator::DrawAlpha).
+        T3DAnimator* d3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
+        const float draw_alpha = d3 ? d3->DrawAlpha() : 1.0f;
+        if (draw_alpha <= 0.0f)
+            return;
+
         // Cheap padded-G-buffer cull: project the mesh anchor to screen
         // pixels and skip only once it is well outside the drawable border.
         // The object-size margin covers tall/wide meshes whose bounds extend
@@ -1128,7 +1136,6 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         bool used_bone_xform = false;
         if (!ctx.force_mesh_preview_pose)
         {
-            T3DAnimator* d3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
             if (d3)
             {
                 S3DAnimObj* bone = d3->GetObject(asset.objnum);
@@ -1193,11 +1200,19 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         }
         else
         {
+            // Sort keys for the renderer's translucent pass (it uses them only
+            // when draw_alpha is below opaque): the object's camera depth, and
+            // the object as the surface all its meshes belong to.
+            const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             SMeshSubmit m = {};
             m.mesh = asset.handle;
             std::memcpy(m.world, world_renderer, sizeof(m.world));
-            m.tint[0] = m.tint[1] = m.tint[2] = m.tint[3] = 1.0f;
+            m.tint[0] = m.tint[1] = m.tint[2] = 1.0f;
+            m.tint[3] = draw_alpha;
             m.obj_id = obj_id;
+            m.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
+            m.surface_id = uint32_t(oi->GetMapIndex() + 1);
             Renderer->SubmitMesh(m);
         }
         ++stats.mesh_submitted;
@@ -2572,6 +2587,10 @@ void TMapRenderer::RenderFrame()
             // here double-advances live gameplay animation and skips authored
             // keys at loop boundaries.
             oi->Animate(false);
+            // Draw-only state (a character's drawn alpha) moves once per
+            // drawn frame, by draw time; Submit reads it below.
+            if (T3DAnimator* a3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator()))
+                a3->UpdateDrawState(TTime::DeltaTime());
         }
     }
     mark_phase(timings.animate_ms);

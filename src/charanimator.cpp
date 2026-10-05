@@ -4,7 +4,7 @@
 // *                 charanimator.cpp - TCharAnimator module               *
 // *************************************************************************
 
-#include <math.h>
+#include <cmath>
 
 #include "character.h"
 #include "player.h"
@@ -12,9 +12,20 @@
 #include "effect.h"
 #include "math3d.h"
 #include "render3d_types.h"
+#include "time.h"
 
 namespace
 {
+// REVSYNC: TCharAnimator::Render @ 0x004d7a50 -- the drawn alpha.
+constexpr float kTransparencyScale   = 0.01f;   // Transparency() 0..100 to alpha (@0x005a350c)
+constexpr float kTransparencyStep    = 0.05f;   // alpha moved per drawn frame (@0x005a7e9c)
+constexpr float kMinDrawTransparency = 0.01f;   // below this nothing draws (@0x005a3524)
+// Retail drew at most one frame per 24 Hz timer tick, so its 0.05 a frame is
+// 1.2 a second. The port moves the alpha by time, at that rate, whatever the
+// frame rate: a full fade takes 1/1.2 = 0.83 s, as the 20-pulse script fade
+// (TCharacter::UpdateFade, 5 a pulse) does.
+constexpr float kTransparencyPerSecond = kTransparencyStep * float(TTime::LegacyFramerate);
+
 // Float-RGBA (0..1) -> packed ARGB8 uint32 (matches S3DLVertex::diffuse layout).
 static inline uint32_t PackARGB(float r, float g, float b, float a)
 {
@@ -59,9 +70,9 @@ bool TCharAnimator::Render()
     // crap to them.  BEN
 
     SetPoisonColor();       // Sets green color for character
-    UpdateTransparency();   // Updates animator's transparency value based on char
-    if (transparency < 0.01f)
-        return true;        // Too dim to render
+    UpdateDrawState(TTime::LegacyFrameSeconds);   // this path draws once a 24 Hz frame
+    if (DrawAlpha() <= 0.0f)
+        return true;        // Invisible, or too dim to render
 
   // Unhide all objects (except for weapon/sword)
     for (int32_t c = 0; c < NumObjects(); c++)
@@ -78,7 +89,7 @@ bool TCharAnimator::Render()
         HideCharParts();        // Hides char parts replaced by equipment before rendering
     
   // Now reset transparency (if needed)
-    if (abs(transparency - 1.0f) > 0.001f)
+    if (std::fabs(transparency - 1.0f) > 0.001f)
         SetMaterialTransparency(Get3DImagery());
 
     RenderShadow();
@@ -93,7 +104,7 @@ bool TCharAnimator::Render()
     RenderBloodyChunks();
 
   // Now reset transparency (if needed)
-    if (abs(transparency - 1.0f) > 0.001f)
+    if (std::fabs(transparency - 1.0f) > 0.001f)
         ResetMaterialTransparency(Get3DImagery());
 
     if (inst->ObjClass() == OBJCLASS_PLAYER)
@@ -303,14 +314,14 @@ void TCharAnimator::ProcessEquipment(int32_t task)
                 memcpy(&(equipobj.matrix), &(playerobj->matrix), sizeof(hmm_mat4));
 
               // Set transparency (if needed)
-                if (abs(transparency - 1.0f) > 0.001f)
+                if (std::fabs(transparency - 1.0f) > 0.001f)
                     SetMaterialTransparency(equipimagery);
 
              // Render the inventory item weapon via it's own imagery object!!
                 equipimagery->RenderObject(&equipobj, 0, 0, &matrix, -1, false);
 
               // Now reset transparency (if needed)
-                if (abs(transparency - 1.0f) > 0.001f)
+                if (std::fabs(transparency - 1.0f) > 0.001f)
                     ResetMaterialTransparency(equipimagery);
             }
         }
@@ -331,46 +342,99 @@ void TCharAnimator::RenderEquipment()
 // * Visibility Functions *
 // ************************
 
-#define MAX_TRANSPARENCY_GROW (0.05f)
+// REVSYNC: TCharAnimator::Render @ 0x004d7a50 tests OF_INVISIBLE (flags bit
+// 0x80) unless the editor (DAT_00668154) is running.
+bool TCharAnimator::IsHidden() const
+{
+    return (inst->GetFlags() & OF_INVISIBLE) && !Editor;
+}
 
+// REVSYNC: TCharAnimator::TCharAnimator @ 0x004d76b0 (at 0x004d77b2) seeds
+// the drawn alpha from Transparency() * 0.01 and resets the materials' alpha
+// to 1. (1998 assigned a local, leaving the member unset; retail's reset loop
+// writes material 0 every pass, which the port doesn't copy.)
 void TCharAnimator::InitTransparency()
 {
-    float transparency = (float)((TCharacter*)inst)->Transparency() / 100.0f;
+    transparency = float(static_cast<TCharacter*>(inst)->Transparency()) * kTransparencyScale;
+    ResetMaterialTransparency(Get3DImagery());
 }
 
-void TCharAnimator::UpdateTransparency()
+// REVSYNC: TCharAnimator::Render @ 0x004d7a50, the head. An OF_INVISIBLE
+// character isn't drawn and its alpha holds; otherwise the alpha steps
+// toward Transparency(). Retail runs it once per drawn frame.
+//
+// Retail gives a character no animator while it is OF_INVISIBLE:
+// TMapPane::AnimateObjects (0x00458750) skips invisible objects, so the
+// animator, and its alpha seeded from Transparency(), comes into being on
+// the first frame the character shows. Port characters keep a permanent
+// animator (TCharacter::IsAnimatorPermanent), so the alpha is seeded again
+// on that frame instead. That's what lets `player.toggle invisible` +
+// `fadecharacterin player` fade Locke in from nothing.
+void TCharAnimator::UpdateDrawState(double dt_seconds)
 {
-    float t = (float)((TCharacter*)inst)->Transparency() / 100.0f;
-
-    if (Editor || abs(t - transparency) < MAX_TRANSPARENCY_GROW)
-        transparency = t;
-    else if (t < transparency)
-        transparency -= MAX_TRANSPARENCY_GROW;
-    else
-        transparency += MAX_TRANSPARENCY_GROW;
+    if (IsHidden())
+    {
+        reseed_transparency = true;
+        return;
+    }
+    if (reseed_transparency)
+    {
+        InitTransparency();
+        reseed_transparency = false;
+        return;
+    }
+    UpdateTransparency(dt_seconds);
 }
 
+float TCharAnimator::DrawAlpha() const
+{
+    if (IsHidden() || transparency < kMinDrawTransparency)
+        return 0.0f;
+    return transparency;
+}
+
+// REVSYNC: TCharAnimator::Render @ 0x004d7a50 -- steps 0.05 toward
+// Transparency() * 0.01, or lands on it once within a step; the editor
+// lands on it at once. Time-based here: kTransparencyPerSecond.
+void TCharAnimator::UpdateTransparency(double dt_seconds)
+{
+    const float target = float(static_cast<TCharacter*>(inst)->Transparency()) * kTransparencyScale;
+    const float step = kTransparencyPerSecond * float(dt_seconds);
+
+    if (Editor || std::fabs(target - transparency) <= step)
+        transparency = target;
+    else if (target < transparency)
+        transparency -= step;
+    else
+        transparency += step;
+}
+
+// REVSYNC: TCharAnimator::SetMaterialTransparency @ 0x004d82a0 -- every
+// material's ambient/diffuse/specular/emissive alpha (1998 wrote material 0
+// on every pass). Retail also picks the blend state here; the port's
+// renderer picks it from the alpha the character is submitted with.
 void TCharAnimator::SetMaterialTransparency(T3DImagery* img)
 {
     for (int32_t c = 0; c < img->NumMaterials(); c++)
     {
         S3DMat m;
-        img->GetMaterial(0, &m);
+        img->GetMaterial(c, &m);
         m.matdesc.ambient.a = m.matdesc.diffuse.a =
             m.matdesc.specular.a = m.matdesc.emissive.a = transparency;
-        img->SetMaterial(0, &m);
+        img->SetMaterial(c, &m);
     }
 }
 
+// Every material's alpha back to 1 (1998 wrote 100 to material 0 only).
 void TCharAnimator::ResetMaterialTransparency(T3DImagery* img)
 {
     for (int32_t c = 0; c < img->NumMaterials(); c++)
     {
         S3DMat m;
-        img->GetMaterial(0, &m);
+        img->GetMaterial(c, &m);
         m.matdesc.ambient.a = m.matdesc.diffuse.a =
-            m.matdesc.specular.a = m.matdesc.emissive.a = 100.0f;
-        img->SetMaterial(0, &m);
+            m.matdesc.specular.a = m.matdesc.emissive.a = 1.0f;
+        img->SetMaterial(c, &m);
     }
 }
 
