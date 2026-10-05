@@ -7,6 +7,7 @@
 #include "revenant.h"
 #include "audio_backend.h"
 #include "logging.h"
+#include "module.h"
 #include "parse.h"
 #include "sound.h"
 #include "mappane.h"
@@ -609,10 +610,11 @@ void TAreaManager::Close()
 }
 
 // Loads all areas from the "AREA.DEF" file
+// REVSYNC: Load @ 0x0041c000 — the active module's area.def, else the shared one.
 bool TAreaManager::Load()
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s", ClassDefPath, "area.def");
+    const std::string fname_str = ModuleManager.DataFilePath("area.def");
+    const char *fname = fname_str.c_str();
 
     FILE *fp = rev_fopen(fname, "rb");
     if (!fp)

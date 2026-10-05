@@ -55,6 +55,7 @@ static inline char *strlwr(char *s)
 #include "dialog.h"
 #include "effect.h"
 #include "logging.h"
+#include "module.h"
 
 /* externs */
 extern TObjectClass TileClass;
@@ -3241,12 +3242,13 @@ COMMAND(CmdScrollTo)
 struct { char name[RESNAMELEN]; struct { int32_t x, y, z; } pos; int32_t level; } MapLocations[MAX_MAP_LOCATIONS];
 int32_t numlocations = 0;
 
+// REVSYNC: ReadMapLocationList @ 0x00424e10 — the active module's
+// location.def, else the shared one.
 bool ReadMapLocationList()
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%slocation.def", ClassDefPath);
+    const std::string fname = ModuleManager.DataFilePath("location.def");
 
-    FILE *fp = TryOpen(fname, "rb");
+    FILE *fp = TryOpen(fname.c_str(), "rb");
     if (!fp)
         return false;
 
