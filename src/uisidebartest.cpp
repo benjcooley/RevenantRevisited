@@ -36,6 +36,7 @@
 #include "logging.h"
 #include "multi.h"
 #include "player.h"
+#include "playscreen.h"
 #include "renderer.h"
 #include "revdefs.h"
 #include "revenant.h"
@@ -286,8 +287,11 @@ void TabStripOrigin(int32_t& x, int32_t& y)
     const int32_t dh = Display.Height();
     const int32_t playfieldRight  = (dw > 0 ? dw : kStripW)
                                   - (s.sidebarState == HUD_SIDEBAR_OPEN ? kPaneW : 0);
+    // The bottom drawer (the bottom bar, or the shop) sits under the
+    // playfield; PlayScreen owns it (retail lays the side tabs out from its
+    // drawer code, 0x0047b4d0).
     const int32_t playfieldBottom = (dh > 0 ? dh : kStripH + kBottomBarH)
-                                  - (s.bottomBarOpen ? kBottomBarH : 0);
+                                  - PlayScreen.DrawerHeight();
     x = playfieldRight  - kStripW - kTabsRightInset;
     y = playfieldBottom - kStripH - kTabsBottomInset;
 }

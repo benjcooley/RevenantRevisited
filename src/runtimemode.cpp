@@ -165,7 +165,12 @@ class TGameModeImpl final : public IRuntimeMode
                         break;
 
                     case GAMECMD_BOTTOMPANEL:
-                        ToggleUIBottomPanel();
+                        // REVSYNC: Command 5 (0x0047cf40) toggles the bottom
+                        // drawer: with the shop in it, that closes the shop.
+                        if (PlayScreen.Drawer() == TPlayScreen::EDrawer::BuySell)
+                            PlayScreen.CloseDrawer();
+                        else
+                            ToggleUIBottomPanel();
                         break;
 
                   // Three primary attack buttons.
