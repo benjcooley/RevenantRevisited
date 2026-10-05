@@ -83,7 +83,10 @@ Vtable slots (shared order, `TScreen` base entries in parentheses):
 - Panes live in a flat array; input and draw walk it in order.
 - **Exclusive stack** (`SetExclusivePane` `0x0048eea0`): up to 4. Flags
   per entry: `0x10` = only the top exclusive pane animates; `0x100` =
-  dim the screen behind it (`0x004aacb0` post-process effect).
+  run `0x004aacb0` (`BlitEffect_Iterate`) over the whole screen with
+  mode 6 — it re-applies the registered UI blit-effect regions (glow
+  text etc.) that overlap the screen; exact visual purpose unconfirmed,
+  it is **not** a dimming pass.
   Pushing broadcasts event `0x101` with the pane. Input goes only to the
   top exclusive pane.
 - **Screen → pane events** (`OnEvent` `0x00490960`): forwards
