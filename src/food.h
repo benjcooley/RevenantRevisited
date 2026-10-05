@@ -24,7 +24,7 @@ class TFood : public TObjectInstance
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Munch munch munch
-    virtual int32_t CursorType(TObjectInstance* inst = nullptr) { if (inst) return CURSOR_NONE; return CURSOR_MOUTH; }
+    int32_t CursorType(TObjectInstance* inst = nullptr) override { if (inst) return CURSOR_NONE; return CURSOR_MOUTH; }
         // Yummy
 
     void Load(RTInputStream is, int32_t version, int32_t objversion) override;

@@ -59,7 +59,7 @@ class TCharacter : public TComplexObject
         // Characters always own a TObjectAnimator from construction. See
         // TObjectInstance::IsAnimatorPermanent for the contract.
 
-    virtual int32_t CursorType(TObjectInstance* inst = nullptr);
+    int32_t CursorType(TObjectInstance* inst = nullptr) override;
         // Talk icon if they are friendly, attack icon if aggressive, hand if dead
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Talk to or attack character

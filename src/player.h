@@ -137,7 +137,7 @@ class TPlayer : public TCharacter
     virtual bool GetZ(TSurface* surface) { if (!Editor) return false; return TCharacter::GetZ(surface); }
     virtual bool AlwaysOnTop() { if (!Editor) return false; return TCharacter::AlwaysOnTop(); }
     virtual bool Use(TObjectInstance* user, int32_t with = -1) { return false; }
-    virtual int32_t CursorType(TObjectInstance* inst = nullptr) { return CURSOR_NONE; }
+    int32_t CursorType(TObjectInstance* inst = nullptr) override { return CURSOR_NONE; }
         // These functions make sure the player never clicks on themselves
 
     virtual void Pulse();

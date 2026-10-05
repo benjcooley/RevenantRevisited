@@ -69,7 +69,7 @@ class TExit : public TContainer
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Open or close the exit
-    virtual int32_t CursorType(TObjectInstance* with = nullptr);
+    int32_t CursorType(TObjectInstance* with = nullptr) override;
         // Show that they can enter this object
     virtual void UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang);
         // Character needs to be standing in front of the door
