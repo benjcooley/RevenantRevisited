@@ -72,19 +72,23 @@ class TGameSession
   private:
     enum class EState : uint8_t { Idle, Loading, Ready, Failed };
 
+    // A load step finishes, needs another tick (it reports how far it is in
+    // stepFraction), or fails the load.
+    enum class EStep : uint8_t { Done, Again, Failed };
+
     struct SStep
     {
         const char* name;
-        bool (TGameSession::*run)();
+        EStep (TGameSession::*run)();
         int32_t     progress;          // per mille once the step is done
     };
     static const SStep kLoadSteps[];
 
     // Load steps, in order.
-    bool LoadAreas();
-    bool LoadExits();
-    bool LoadGameState();
-    bool EnterWorld();
+    EStep LoadAreas();
+    EStep LoadExits();
+    EStep LoadGameState();
+    EStep EnterWorld();
 
     void PlaceAtDevStart(const TGameMap& map) const;
     void PlacePlayers(TGameMap& map) const;
@@ -92,6 +96,7 @@ class TGameSession
 
     SSessionStart start;
     int32_t       nextStep = 0;
+    float         stepFraction = 0.0f; // how far the running step is (EStep::Again)
     EState        state    = EState::Idle;
     std::string   lastSlot;        // last slot saved or loaded
 

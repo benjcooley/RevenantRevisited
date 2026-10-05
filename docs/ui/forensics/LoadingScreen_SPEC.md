@@ -27,9 +27,10 @@ Set, the §4 draw) on a `TLoadScreen` the game flow shows between the title
 and the PlayScreen, fed by the session's load steps
 (docs/gameflow/ARCHITECTURE.md §3.5 2d). `DAT_00668158` is the EDITOR
 flag (GetParameters `0x00483bc0`). Not ported: the
-`<module>\loadscreen.bmp` override (no shipped module has one) and the
-per-sector fill during the world load (the port loads a level in one
-call, so the bar goes from 240 to full at once).
+`<module>\loadscreen.bmp` override (no shipped module has one). The world
+load reads about 30 ms of sectors per tick (`TMapManager::LoadStaged`),
+filling the bar from 240 by the fraction of the level read, as retail's
+per-sector callback (`0x0047b260`) filled it from where it stood.
 
 **This is NOT the in-game `loadgame.def` saved-game picker** — that is
 the DEF screen `cls_0x5b9584`, covered separately in

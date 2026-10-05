@@ -18,6 +18,7 @@
 #include "sector.h"
 #include "textbar.h"
 
+#include <chrono>
 #include <cstdio>
 #include <iterator>
 #include <utility>
@@ -56,13 +57,19 @@ bool TGameSession::Step()
         return false;
 
     const SStep& step = kLoadSteps[nextStep];
-    if (!(this->*step.run)())
+    switch ((this->*step.run)())
     {
+      case EStep::Failed:
         log_error("[session] load step '%s' failed", step.name);
         state = EState::Failed;
         return false;
+      case EStep::Again:
+        return true;
+      case EStep::Done:
+        break;
     }
 
+    stepFraction = 0.0f;
     if (++nextStep == (int32_t)std::size(kLoadSteps))
     {
         state = EState::Ready;
@@ -76,31 +83,35 @@ int32_t TGameSession::Progress() const
     switch (state)
     {
     case EState::Ready:   return 1000;
-    case EState::Loading: return nextStep > 0 ? kLoadSteps[nextStep - 1].progress : 0;
+    case EState::Loading:
+    {
+        const int32_t done = nextStep > 0 ? kLoadSteps[nextStep - 1].progress : 0;
+        return done + static_cast<int32_t>((kLoadSteps[nextStep].progress - done) * stepFraction);
+    }
     default:              return 0;
     }
 }
 
 // REVSYNC: TAreaMgr::Initialize in TPlayScreen::Initialize @ 0x0047a660 —
 // the active module's area.def.
-bool TGameSession::LoadAreas()
+TGameSession::EStep TGameSession::LoadAreas()
 {
-    return AreaManager.Initialize();
+    return AreaManager.Initialize() ? EStep::Done : EStep::Failed;
 }
 
 // REVSYNC: TExit::Initialize @ 0x0050c880, which retail ran from the map
 // pane's initialize (0x0044d5c0) inside TPlayScreen::Initialize. A missing or
 // malformed exit.def leaves fewer exits; the game still starts.
-bool TGameSession::LoadExits()
+TGameSession::EStep TGameSession::LoadExits()
 {
     TExit::Initialize();
-    return true;
+    return EStep::Done;
 }
 
 // REVSYNC: TPlayScreen::Initialize @ 0x0047a660, start modes 0 and 1. A slot
 // that can't be loaded falls back to a new game, as retail (which also
 // showed GAMENOTFOUND on the text bar).
-bool TGameSession::LoadGameState()
+TGameSession::EStep TGameSession::LoadGameState()
 {
     if (start.kind == SSessionStart::EKind::LoadSlot)
     {
@@ -108,28 +119,41 @@ bool TGameSession::LoadGameState()
         if (::SaveGame.Load(start.slot.c_str()))
         {
             lastSlot = start.slot;
-            return true;
+            return EStep::Done;
         }
         log_warn("[session] save '%s' can't be loaded; starting a new game", start.slot.c_str());
     }
-    return ::SaveGame.LoadNewGame();
+    return ::SaveGame.LoadNewGame() ? EStep::Done : EStep::Failed;
 }
 
 // REVSYNC: the end of TPlayScreen::Initialize @ 0x0047a660 loads the sectors
-// around the main player (0x004997d0). The port loads the main player's whole
-// level and puts each player into the sector it stands in.
-bool TGameSession::EnterWorld()
+// around the main player (0x004997d0, its progress callback 0x0047b260 filling
+// the loading bar). The port loads the main player's whole level, about a
+// frame's worth of sectors per tick, and then puts each player into the
+// sector it stands in.
+TGameSession::EStep TGameSession::EnterWorld()
 {
     if (!Player)
-        return false;
+        return EStep::Failed;
 
     const int32_t level = start.devLevel >= 0 ? start.devLevel : Player->GetLevel();
-    TGameMap* map = MapManager.SetCurrentLevel(level);
+    constexpr auto kSlice = std::chrono::milliseconds(30);
+    const auto until = std::chrono::steady_clock::now() + kSlice;
+    TGameMap* map = nullptr;
+    do
+        map = MapManager.LoadStaged(level, 1);
+    while (map && map->Loading() && std::chrono::steady_clock::now() < until);
     if (!map)
     {
         log_error("[session] level %d has no sectors", level);
-        return false;
+        return EStep::Failed;
     }
+    if (map->Loading())
+    {
+        stepFraction = map->LoadFraction();
+        return EStep::Again;
+    }
+    MapManager.SetCurrentMap(map);
     if (start.devLevel >= 0)
         PlaceAtDevStart(*map);
 
@@ -138,7 +162,7 @@ bool TGameSession::EnterWorld()
     const S3DPoint pos = Player->Pos();
     log_info("[session] entered level %d; player at (%d,%d,%d) in sector %d_%d",
              level, pos.x, pos.y, pos.z, pos.x >> SECTORWSHIFT, pos.y >> SECTORHSHIFT);
-    return true;
+    return EStep::Done;
 }
 
 // REVSYNC: 0x00459b80 -- every player on the map's level who isn't in a

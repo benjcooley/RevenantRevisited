@@ -207,7 +207,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Locks and keys (`CheckKeyUse`), the door prototypes' USE scripts end to end | 2026-10-05 |
 | [-] | curmap written on every transition: the port keeps visited levels loaded and writes them when saving (ARCHITECTURE §7) | 2026-10-05 |
 | [x] | Walk-on of an unscripted AutoActivate exit: a level-41 teleport pad sends Locke to `Lv41Tel5`'s target | 2026-10-05 |
-| [ ] | The loading bar's per-sector fill during a level load | — |
+| [x] | The loading bar fills per sector during the world load (staged `TGameMap` load) | 2026-10-05 |
 
 **Exit:** Walking through a door swaps sectors; walking back restores the changed state.
 

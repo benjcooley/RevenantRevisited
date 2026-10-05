@@ -15,6 +15,7 @@
 #include "sectorstore.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -28,7 +29,7 @@ namespace
 // base map (loose dirs) and return the (sx, sy) coordinates that exist for
 // `level`, plus a 64x64 probe through SectorStore that catches sectors
 // visible only through the VFS.
-struct SCoord { int32_t sx, sy; };
+using SCoord = TGameMap::SSectorCoord;
 
 std::filesystem::path ResolveSectorDataRoot()
 {
@@ -132,24 +133,41 @@ std::vector<SCoord> ScanLevelCoords(int32_t level)
 
 bool TGameMap::Load(int32_t lvl)
 {
+    if (!BeginLoad(lvl))
+        return false;
+    LoadSectors(INT32_MAX);
+    return true;
+}
+
+bool TGameMap::BeginLoad(int32_t lvl)
+{
     if (lvl < 0)
         return false;
-    if (level == lvl && !sectors.empty())
-        return true;          // already loaded at this level
+    if (level == lvl && (loading || !sectors.empty()))
+        return true;          // already loaded (or loading) at this level
 
     if (IsLoaded())
         Unload();             // swap to a different level
 
-    level = lvl;
+    level       = lvl;
+    pending     = ScanLevelCoords(level);
+    nextpending = 0;
+    loadedobjs  = 0;
+    loading     = true;
+    sectors.reserve(pending.size());
+    return true;
+}
 
-    const std::vector<SCoord> coords = ScanLevelCoords(level);
-    sectors.reserve(coords.size());
+bool TGameMap::LoadSectors(int32_t count)
+{
+    if (!loading)
+        return true;
 
-    int32_t loaded_objs = 0;
-    for (const SCoord& c : coords)
+    for (; count > 0 && nextpending < pending.size(); --count, ++nextpending)
     {
         // A sector whose file can't be read is left out of the map, so its
         // file is never written over (LoadSector logs why).
+        const SCoord& c = pending[nextpending];
         TSector* sec = TSector::LoadSector(level, c.sx, c.sy, false);
         if (!sec)
         {
@@ -158,8 +176,27 @@ bool TGameMap::Load(int32_t lvl)
             continue;
         }
         sectors.push_back(sec);
-        loaded_objs += sec->NumItems();
+        loadedobjs += sec->NumItems();
     }
+
+    if (nextpending < pending.size())
+        return false;
+    FinishLoad();
+    return true;
+}
+
+float TGameMap::LoadFraction() const
+{
+    if (!loading)
+        return 1.0f;
+    return pending.empty() ? 1.0f : static_cast<float>(nextpending) / static_cast<float>(pending.size());
+}
+
+void TGameMap::FinishLoad()
+{
+    loading = false;
+    pending.clear();
+    pending.shrink_to_fit();
 
     // Stamp tile walkmaps onto the sector walkmaps using a self-
     // resolver -- no MapPane / renderer fallback dependency, so the
@@ -184,10 +221,9 @@ bool TGameMap::Load(int32_t lvl)
 
     log_info("[gamemap] level %d loaded: %zu sectors, %d objects, "
              "%d tile walkmaps stamped",
-             level, sectors.size(), loaded_objs, walkmap_tiles_stamped);
+             level, sectors.size(), loadedobjs, walkmap_tiles_stamped);
 
     listeners.Notify(EGameMapEvent::Loaded, this);
-    return true;
 }
 
 void TGameMap::Unload()  { Release(ESectorRelease::Save); }
@@ -212,6 +248,9 @@ void TGameMap::Release(ESectorRelease how)
 
     sectors.clear();
     level = -1;
+    loading = false;
+    pending.clear();
+    nextpending = 0;
 }
 
 void TGameMap::Flush() const
