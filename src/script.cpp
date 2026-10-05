@@ -1493,8 +1493,8 @@ void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
 }
 
 // REVSYNC: ObjectScript @ 0x00497370 — match proto by instance name first
-// (against inst+0x38 in retail), then fall back to class/type-name lookup
-// (against inst+0x4c → TObjectClass.name in retail). Retail allocates the new
+// (inst+0x38), then by type name (**(inst+0x4c), the type's name: Door1,
+// PortEW... -- how the master.s door prototypes reach every door). Retail allocates the new
 // TScript via FUN_00482fb0(0xe8) then runs the ctor; the `FUN_0041c840`
 // follow-up call returns a registry id stored at +0x14 — we don't need that
 // runtime id in our port (no global instance handle table).
@@ -1520,20 +1520,19 @@ PTScript TScriptManager::ObjectScript(TObjectInstance* inst)
         }
     }
 
-    // Pass 2: match class/type name.
-    TObjectClass *cls = TObjectClass::GetClass(inst->ObjClass());
-    if (cls && cls->ClassName() && *cls->ClassName())
+    // Pass 2: match the type name.
+    const char *typename_ = inst->GetTypeName();
+    if (typename_ && *typename_)
     {
-        const char *classname = cls->ClassName();
         for (int32_t c = 0; c < scripts.NumItems(); c++)
         {
             if (!scripts.Used(c)) continue;
             TScriptProto *sp = scripts[c];
             if (!sp->name || !*sp->name) continue;
-            if (stricmp(sp->name, classname) == 0)
+            if (stricmp(sp->name, typename_) == 0)
             {
                 PTScript ns = new TScript(sp);
-                log_info("[script] attached '%s' -> obj %s (class match)", sp->name,
+                log_info("[script] attached '%s' -> obj %s (type match)", sp->name,
                          instname ? instname : "(unnamed)");
                 return ns;
             }
