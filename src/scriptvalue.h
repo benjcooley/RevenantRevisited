@@ -6,7 +6,8 @@
 //
 // The two pieces of the command language every command shares (ARCHITECTURE
 // §6.2): naming an object and evaluating an expression. Both are retail ports;
-// docs/gameflow/forensics/COMMAND_SYSTEM.md §2.4 has the grammar.
+// docs/gameflow/forensics/COMMAND_SYSTEM.md §2.4 has the grammar. Also the
+// spot relative to an object's facing that a command and a member share.
 
 #pragma once
 
@@ -16,6 +17,7 @@
 class TObjectInstance;
 class TScript;
 class TToken;
+struct S3DPoint;
 
 // The object a command line names (retail 0x0041e690). In order:
 //   this        the object running the line (`caller`)
@@ -41,3 +43,11 @@ class TToken;
 [[nodiscard]] std::optional<int32_t> EvaluateExpression(TToken& t,
                                                         TObjectInstance* context,
                                                         TObjectInstance* caller);
+
+// The spot `distance` from `obj`, measured from its facing turned by `angle`
+// (facing units, 256 a turn), that `gotorelativedistance` walks to and the
+// `isatrelativedistance` member tests. Retail computes it inline in both
+// (0x00420710, 0x0041f230); COMMAND_SYSTEM.md §6.5 has the formula. A
+// positive distance lies on the side the object faces away from.
+[[nodiscard]] S3DPoint RelativeDistanceSpot(const TObjectInstance& obj,
+                                            int32_t distance, int32_t angle);
