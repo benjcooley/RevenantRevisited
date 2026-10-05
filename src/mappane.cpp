@@ -1302,14 +1302,15 @@ int32_t TMapPane::NewObject(SObjectDef* def)
     oi->SetMapIndex(-1);
     int32_t index = AddObject(oi);
 
-    if (index < 0 && shadowindex >= 0)
+    // REVSYNC: the failure path of TMapPane::NewObject @ 0x00450e40 deletes
+    // the shadow it made (once; the 1998 code deleted it a second time).
+    if (index < 0)
     {
-        TObjectInstance* shadow = GetInstance(shadowindex);
-        if (shadow)
-        {
-            DeleteObject(shadow);
-            delete shadow;
-        }
+        if (shadowindex >= 0)
+            DeleteObject(GetInstance(shadowindex));
+        // REVSYNC-DIVERGENCE: retail leaked the object it couldn't place;
+        // nothing else refers to it, so it is freed here.
+        delete oi;
     }
 
     return index;
@@ -1370,52 +1371,41 @@ int32_t TMapPane::AddObject(TObjectInstance* oi)
     return oi->GetMapIndex();
 }
 
-// Remove object (The main place objects are removed)
-TObjectInstance* TMapPane::RemoveObject(int32_t index)
+// REVSYNC: TMapPane::RemoveObject @ 0x00451610 -- take an object out of the
+// world (the main place objects are removed): its shadow, its animator, then
+// out of its owner's inventory or out of its sector. Retail works from the
+// object's own links, so this finds objects outside the sector window and
+// in sectors no window holds (the 1998 version searched the window by
+// mapindex). The object is not deleted.
+TObjectInstance* TMapPane::RemoveObject(TObjectInstance* inst)
 {
-    TObjectInstance* inst = nullptr;
-    TMapIterator i;
-
-    for ( ; i; i++)
-        if (i->GetMapIndex() == index)
-        {
-            inst = i;
-            break;
-        }
-
     if (!inst)
         return nullptr;
 
-  // Notify that object is being deleted
+  // Notify that object is being deleted. Kept where the 1998 code had it;
+  // retail notified from the object's detach (0x0046e630) instead.
     Notify(N_DELETINGOBJECT, inst);
 
-    if (i.Parent())
-    {
-        // extract from inventory
+    if (inst->GetShadow() >= 0)
+        RemoveObject(GetInstance(inst->GetShadow()));
+
+    if (inst->HasAnimator())
+        inst->FreeAnimator();
+
+    // Retail also sent a multiplayer "object removed" message (0x00584270)
+    // for objects in the map; the port is single player.
+    if (inst->IsInInventory() || inst->GetOwner())
         inst->RemoveFromInventory();
-    }
-    else
-    {
-        RemoveFromSector(inst, i.SectorX(), i.SectorY(), i.SectorIndex());
-    }
-
-    if (inst)
-    {
-        if (inst->GetShadow() >= 0)
-            RemoveObject(inst->GetShadow());
-
-        if (inst->HasAnimator())
-            inst->FreeAnimator();
-    }
+    else if (inst->GetSector())
+        RemoveFromSector(inst);
 
     return inst;
 }
 
-// Delete object
+// Removes and deletes an object
 void TMapPane::DeleteObject(TObjectInstance* obj)
 {
-    if (RemoveObject(obj->GetMapIndex()) == nullptr)
-        FatalError("Tried to delete an object not in the sector.  This is a Very Bad Thing(tm).  Get Adam to check this out RIGHT AWAY!");
+    RemoveObject(obj);
     delete obj;
 }
 
@@ -1428,8 +1418,12 @@ void TMapPane::ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32
     oi->GetSector()->ObjectFlagsChanged(oi, oldflags, newflags);
 }
 
-TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t sectindex)
+TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst)
 {
+    TSector* sector = inst->GetSector();
+    if (!sector)
+        return inst;
+
     // extract from sector
     ExtractWalkmap(inst);
 
@@ -1437,8 +1431,8 @@ TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst, int32_t sx, i
                         // Group the update rect and the actual removal below so update system doesn't
                         // accidently redraw this object before it is deleted
 
-    AddObjectUpdateRect(inst->GetMapIndex());  
-    sectors[sx][sy]->RemoveObject(sectindex);
+    AddObjectUpdateRect(inst->GetMapIndex());
+    sector->RemoveObject(inst);
 
     UNLOCKSECTORS;
 
