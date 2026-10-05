@@ -40,7 +40,11 @@ RevenantRevisited/
 ├── data/            ← user's existing Revenant install (dev only — symlink
 │                      or copy of a GoG/CD install). Shipped builds DO NOT
 │                      include this; the user provides their own legally-
-│                      owned copy.
+│                      owned copy. Kept stock: nothing the port authors
+│                      lives here (docs/DATA_LAYOUT.md has the inventory).
+├── assets/          ← engine-owned runtime data the port authors and needs
+│                      in every mode (effects.def, render_metadata.def,
+│                      editor icons). Ships beside the binary.
 ├── revisited/       ← our enhancement layer. Sibling to src/. Strictly
 │   │                  opt-in: empty/missing means the engine plays vanilla
 │   │                  retail. See revisited/README.md for the contract.
@@ -73,10 +77,15 @@ The engine resolves three platform-aware paths at boot:
 | RunPath  | User's existing Revenant install (read-only)      | env `$REVENANT_DATA_PATH`, else exe-dir / cwd / repo `data/` heuristic |
 | SavePath | User saves, INI, prefs (writable, per-user)       | macOS `~/Library/Application Support/Revenant/` · Linux `$XDG_DATA_HOME/Revenant/` · Windows `%LOCALAPPDATA%\Revenant\` |
 | Overlay  | Our enhancement pack (optional)                   | env `$REVENANT_REVISITED_PATH`, else `<exe-dir>/RevenantRevisited.rvr`, else dev `<repo>/revisited/resources/` |
+| Assets   | Engine-owned data (required)                      | env `$REVENANT_ASSETS_PATH`, else `<exe-dir>/assets/`, else `.app` `Resources/assets/`, else dev `<repo>/assets/` |
 
-`rev_fopen` resolution order is **SavePath → Overlay → RunPath → mounted
-archives**, so user saves always win over overlay, overlay always wins
-over original assets. Overlay is read-only — writes never go there.
+`rev_fopen` reads walk **SavePath → Overlay → RunPath**. A mounted pack
+answers for the directory it names (`resources.rvr` for `Resources\…`,
+`Modules/Ahkuilon.rvm` for `Modules\Ahkuilon\…`) and, as in retail, wins
+over a loose file at the same path unless the caller asks for loose-first.
+User saves win over overlay; overlay wins over original assets. Overlay is
+read-only — writes never go there. Details and the retail forensics:
+[docs/DATA_LAYOUT.md](docs/DATA_LAYOUT.md).
 
 The engine refuses to run if SavePath isn't writable (no installs on
 read-only media). It runs fine without the overlay (vanilla retail).
@@ -132,6 +141,7 @@ We ship per-platform binaries plus a single optional pack:
 RevenantRevisitedOSX             ← our binary (one of these per OS)
 RevenantRevisitedLinux
 RevenantRevisitedWindows.exe
+assets/                          ← required: engine-owned data (the repo's assets/)
 RevenantRevisited.rvr            ← optional: enhancement overlay (zipped revisited/resources/)
 ```
 

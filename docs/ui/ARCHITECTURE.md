@@ -110,7 +110,7 @@ Per-resolution choices live as toggles under `[Revisited]` in `Revenant.ini`:
 
 ## 5. Resource overlay (mostly free)
 
-`rev_fopen()` already walks SavePath → RunPath → active module → base. The Revisited overlay slots in via `rev_resolve_revisited_overlay()` + `MountArchive` per [revisited/README.md](../../revisited/README.md). UI work uses `LoadResource` / `TMulti::LoadMulti` / `rev_fopen` as-is and gets overlay precedence for free. Dev mode = `revisited/resources/` loose folder; deploy = `RevenantRevisited.rvr` ZIP.
+`rev_fopen()` already walks SavePath → overlay → RunPath, where each mounted pack answers for its directory (`resources.rvr` for `Resources\…`), pack before loose file as in retail; DEF screens read `ResourcePath` loose-first ([../DATA_LAYOUT.md](../DATA_LAYOUT.md)). The Revisited overlay slots in via `rev_resolve_revisited_overlay()` + `MountArchive` per [revisited/README.md](../../revisited/README.md). UI work uses `LoadResource` / `TMulti::LoadMulti` / `rev_fopen` as-is and gets overlay precedence for free. Dev mode = `revisited/resources/` loose folder; deploy = `RevenantRevisited.rvr` ZIP.
 
 ## 6. Render path for UI
 
