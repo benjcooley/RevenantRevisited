@@ -40,6 +40,7 @@
 #include "time.h"
 #include "tile.h"
 #include "uidragstate.h"
+#include "uidemoplayer.h"
 #include "uianchortest.h"
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
@@ -2895,19 +2896,19 @@ void RenderAudioMode()
         ImGui::Text("SFX registry (%d entries)", SoundPlayer.NumItems());
         if (ImGui::BeginChild("sfxlist", ImVec2(0, 0), true)) {
             for (int32_t i = 0; i < SoundPlayer.NumItems(); ++i) {
-                PSSoundRef ref = SoundPlayer.GetRef(i);
-                if (!ref || !ref->name) continue;
+                const SSoundRef* ref = SoundPlayer.GetRef(i);
+                if (!ref) continue;
                 ImGui::PushID(i);
                 if (ImGui::Button("Play")) {
                     if (SoundPlayer.Mount(i)) {
                         SoundPlayer.Play(i);
                         SoundPlayer.Unmount(i);
                     } else {
-                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name);
+                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name.c_str());
                     }
                 }
                 ImGui::SameLine();
-                ImGui::Text("%s", ref->name);
+                ImGui::Text("%s", ref->file.c_str());
                 ImGui::PopID();
             }
         }
@@ -3263,8 +3264,25 @@ bool DumpIconsToFolder(const char* path)
     return DumpIconsToPath(path);
 }
 
+// The --test=ui-* modes whose panes read the main player. They run against
+// the demo player (uidemoplayer.h), installed around the mode.
+static bool UsesDemoPlayer(const char* mode)
+{
+    static constexpr const char* kModes[] = {
+        "ui-hud", "ui-plyrstatusbar", "ui-stats", "ui-equip", "ui-inventory",
+        "ui-barinv", "ui-sidebar", "ui-quickspell", "ui-spellbook",
+    };
+    for (const char* m : kModes)
+        if (strcmp(mode, m) == 0)
+            return true;
+    return false;
+}
+
 bool Initialize(const char* mode)
 {
+    if (UsesDemoPlayer(mode) && !UIDemoPlayer::Install())
+        log_warn("[test] %s: no demo player; the panes show no player", mode);
+
     if (strcmp(mode, "blank") == 0 || strcmp(mode, "ticker") == 0)
         return true;
     if (strcmp(mode, "sector") == 0)
@@ -3421,6 +3439,8 @@ void Close(const char* mode)
     if (strcmp(mode, "vfx") == 0)
         VfxTest::Close();
     DestroyBitmapAtlas(&g_uiAtlas);
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Remove();
 }
 
 void Render(const char* mode)
@@ -3428,6 +3448,8 @@ void Render(const char* mode)
     if (!Display.IsActive() || !Display.BackBuffer())
         return;
 
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Pulse();
 
     if (strcmp(mode, "sector") == 0)
         return g_mapRenderer.RenderFrame();

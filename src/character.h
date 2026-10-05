@@ -390,6 +390,8 @@ class TCharacter : public TComplexObject
       // Returns monster max fatigue value
     virtual int32_t MaxMana() { return chardata->mana; }
       // Returns monster max mana value
+    bool GetFieldText(const char *field, char *buf, int32_t buflen) override;
+      // Character fields of the stat sheet (retail 0x004d5260)
     virtual int32_t BlockPcnt() { return chardata->blockfreq; }
       // Returns percentage of time character will block an attack
     virtual int32_t ArmorValue() { return chardata->armorvalue; }

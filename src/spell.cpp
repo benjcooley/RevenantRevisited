@@ -17,6 +17,9 @@
 #include "parse.h"
 #include "statusbar.h"
 
+#include <set>
+#include <string>
+
 extern TObjectClass EffectClass;
 extern TObjectClass TalismanClass;
 
@@ -122,8 +125,11 @@ bool SSpellData::Load(char *aname, TToken &t)
             // them rather than aborting. Tags come in two flavors: single-
             // line (ICONNAME, LIGHT) and ones followed by a BEGIN/END block
             // (CONTROLDATA). Detect the block form by peeking for BEGIN.
+            // One warning per tag name, not per spell.
+            static std::set<std::string> reported;
             const char *tag = t.Text();
-            log_warn("[spell] skipping unknown tag '%s'", tag);
+            if (reported.insert(tag).second)
+                log_warn("[spell] skipping unknown tag '%s'", tag);
 
             while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
                 t.Get();

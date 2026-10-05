@@ -17,6 +17,13 @@
 //     distance attenuation in DirectSound dB units. Audio backend
 //     converts to linear under the hood.
 //
+// What is retail's (TSoundPlayer, cls_0x41c7d0; DIALOG.md §3.4):
+//   - The sound list: every .wav and .mp3 in the resource directories
+//     sound\effects\ and sound\<Language>\ (and under ImageryPath) at Initialize
+//     (0x0049afd0), and in the module's sound\effects\ and
+//     sound\<Language>\ when the module mounts (0x0049b220); sorted by name
+//     without case and searched by bsearch (0x0049c430).
+//
 // What changed:
 //   - No CDOpen/CDClose/CDPlayTrack shim. Music goes through
 //     audio::MusicPlayFile directly (callers updated, e.g. area.cpp).
@@ -24,25 +31,25 @@
 //   - TSoundPlayer needs an explicit Initialize() now (called from
 //     revmain boot) — the 1998 code paired init with the device-open
 //     side effect of the first directsound call.
+//   - Sound files are decoded to PCM when mounted (retail kept the file
+//     bytes and let Miles decode while playing). The registry and
+//     SampleLengthMs don't need audio output, so --headless runs see the
+//     same sounds and lengths as a run with sound.
 //
 // *************************************************************************
 
 #include "sound.h"
 
 #include "audio_backend.h"
-#include "file.h"
 #include "logging.h"
-#include "mainwnd.h"
 #include "object.h"
-#include "parse.h"
-#include "resource.h"
 #include "revutils.h"
 #include "wavedata.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
 
 // Distance thresholds (world units) for the flat 2D mix law. < MINDIST is
 // full-volume; > MAXDIST is silent; in between we linearly interpolate in
@@ -54,124 +61,6 @@
 // disable audio without crashing. Set by revmain config.
 extern bool SoundSystemOn;
 
-namespace {
-
-// Read a little-endian 32-bit value out of a buffer.
-inline uint32_t rd_u32_le(const uint8_t* p) {
-    return static_cast<uint32_t>(p[0])       |
-           static_cast<uint32_t>(p[1]) <<  8 |
-           static_cast<uint32_t>(p[2]) << 16 |
-           static_cast<uint32_t>(p[3]) << 24;
-}
-inline uint16_t rd_u16_le(const uint8_t* p) {
-    return static_cast<uint16_t>(p[0]) |
-           static_cast<uint16_t>(p[1]) << 8;
-}
-
-}  // namespace
-
-// LoadWave — small portable PCM RIFF/WAVE reader. Replaces the 1998
-// winmm mmio + ACM-decompress path. Only uncompressed PCM (fmtTag == 1)
-// is accepted; the shipped data set is all PCM.
-//
-// Allocates one TWaveData via operator new[]'d byte buffer (the trailing
-// flex array `uint8_t data[1]` carries the PCM samples). Caller frees
-// with `delete wave`.
-PTWaveData LoadWave(char* filename, int32_t volume, int32_t loopstart, int32_t loopend)
-{
-    if (!filename) return nullptr;
-
-    // rev_fopen walks SavePath → overlay → RunPath → data root → mounted
-    // archives (keyed by basename). That last step is what lets
-    // "sound/effects/aura.wav" find aura.wav inside the resources.rvr
-    // zip without us mounting an explicit per-subsystem virtual fs.
-    FILE* fp = rev_fopen(filename, "rb");
-    if (!fp) return nullptr;
-
-    std::fseek(fp, 0, SEEK_END);
-    const long flen_l = std::ftell(fp);
-    std::fseek(fp, 0, SEEK_SET);
-    if (flen_l < 44 /* RIFF header + minimal fmt/data */) {
-        std::fclose(fp);
-        return nullptr;
-    }
-
-    const size_t file_bytes = static_cast<size_t>(flen_l);
-    uint8_t* file_buf = new uint8_t[file_bytes];
-    const size_t got = std::fread(file_buf, 1, file_bytes, fp);
-    std::fclose(fp);
-    if (got != file_bytes) {
-        delete[] file_buf;
-        return nullptr;
-    }
-
-    if (std::memcmp(file_buf,     "RIFF", 4) != 0 ||
-        std::memcmp(file_buf + 8, "WAVE", 4) != 0) {
-        log_warn("audio: %s is not a RIFF/WAVE file", filename);
-        delete[] file_buf;
-        return nullptr;
-    }
-
-    // Walk subchunks until we find both 'fmt ' and 'data'.
-    WAVEFORMATEX fmt{};
-    const uint8_t* pcm_data = nullptr;
-    uint32_t       pcm_len  = 0;
-    bool           have_fmt = false;
-
-    size_t cursor = 12;  // skip RIFF/size/WAVE
-    while (cursor + 8 <= file_bytes) {
-        const char* ckid = reinterpret_cast<const char*>(file_buf + cursor);
-        const uint32_t cksz = rd_u32_le(file_buf + cursor + 4);
-        const size_t body = cursor + 8;
-        if (body + cksz > file_bytes) break;
-
-        if (std::memcmp(ckid, "fmt ", 4) == 0 && cksz >= 16) {
-            fmt.wFormatTag      = rd_u16_le(file_buf + body + 0);
-            fmt.nChannels       = rd_u16_le(file_buf + body + 2);
-            fmt.nSamplesPerSec  = rd_u32_le(file_buf + body + 4);
-            fmt.nAvgBytesPerSec = rd_u32_le(file_buf + body + 8);
-            fmt.nBlockAlign     = rd_u16_le(file_buf + body + 12);
-            fmt.wBitsPerSample  = rd_u16_le(file_buf + body + 14);
-            fmt.cbSize          = 0;
-            have_fmt = true;
-        } else if (std::memcmp(ckid, "data", 4) == 0) {
-            pcm_data = file_buf + body;
-            pcm_len  = cksz;
-        }
-        // Chunks are 2-byte aligned per the RIFF spec.
-        cursor = body + cksz + (cksz & 1);
-        if (have_fmt && pcm_data) break;
-    }
-
-    if (!have_fmt || !pcm_data || pcm_len == 0) {
-        log_warn("audio: %s missing fmt/data chunk", filename);
-        delete[] file_buf;
-        return nullptr;
-    }
-    if (fmt.wFormatTag != 1 /* WAVE_FORMAT_PCM */) {
-        log_warn("audio: %s is non-PCM (tag=%u) — only PCM is supported",
-                 filename, fmt.wFormatTag);
-        delete[] file_buf;
-        return nullptr;
-    }
-
-    // Allocate a TWaveData big enough for the PCM payload. TWaveData
-    // ends in `uint8_t data[1]` — extend the alloc by (pcm_len - 1).
-    // ::operator new (non-array) so callers can `delete wave;` and have
-    // it match.
-    const size_t alloc_bytes = sizeof(TWaveData) + pcm_len - 1;
-    auto* wave = static_cast<TWaveData*>(::operator new(alloc_bytes));
-    wave->format    = fmt;
-    wave->size      = pcm_len;
-    wave->volume    = volume;
-    wave->loopstart = loopstart;
-    wave->loopend   = loopend;
-    std::memcpy(wave->data, pcm_data, pcm_len);
-
-    delete[] file_buf;
-    return wave;
-}
-
 // *********************
 // * TSound (one voice) *
 // *********************
@@ -182,8 +71,8 @@ TSound::TSound()
     looping = false;
     next = nullptr;
     sound_volume = 0;
-    memset(&listener_pos, 0, sizeof(listener_pos));
-    memset(&sound_pos,    0, sizeof(sound_pos));
+    listener_pos = S3DPoint(0, 0, 0);
+    sound_pos    = S3DPoint(0, 0, 0);
     memset(&format,       0, sizeof(format));
     size = 0;
 }
@@ -210,7 +99,7 @@ bool TSound::IsLooping()
 }
 
 // Load from in-memory PCM (the only Load that actually has data to feed
-// the backend; the file/resource Loads below funnel into this one).
+// the backend; the file Load below funnels into this one).
 PTSound TSound::Load(WAVEFORMATEX* format_in, uint32_t size_in, uint8_t* data_in, bool looping_in)
 {
     if (!format_in || !data_in || size_in == 0)
@@ -232,51 +121,25 @@ PTSound TSound::Load(WAVEFORMATEX* format_in, uint32_t size_in, uint8_t* data_in
     return sound;
 }
 
-// Load by name from the active sound directory (effects/<lang>). The
-// file-system path is intentionally Posix-style; the 1998 backslashes are
-// gone with the Win32 build.
-PTSound TSound::Load(char* name, int32_t dirresid)
+// Reads a sound file through the resource layer, pack first as retail's
+// load (0x0049b650) opens it, and decodes it to PCM: .wav and .mp3 alike.
+PTSound TSound::Load(const char* path)
 {
-    if (!name || !SoundPlayer.Functioning())
+    if (!path || !SoundPlayer.Functioning())
         return nullptr;
 
-    // rev_fopen handles all the path resolution: SavePath → overlay →
-    // RunPath → data root → mounted ZIPs (keyed by basename). The
-    // "sound/<sub>/<name>.wav" prefix matters for the on-disk fallback
-    // chain but is collapsed to just "<name>.wav" when the lookup ends
-    // up in resources.rvr.
-    char filename[MAXPATHLEN];
-    strncpyz(filename, "sound/", MAXPATHLEN);
-    if (dirresid == DIRRESID_EFFECTDIR)
-        strncatz(filename, "effects", MAXPATHLEN);
-    else if (dirresid == DIRRESID_DIALOGDIR)
-        strncatz(filename, Language.CStr(), MAXPATHLEN);
-    strncatz(filename, "/",  MAXPATHLEN);
-    strncatz(filename, name, MAXPATHLEN);
-    strncatz(filename, ".wav", MAXPATHLEN);
-
-    PTWaveData wave = ::LoadWave(filename);
-    if (!wave) {
-        log_warn("audio: wav not found %s", filename);
+    std::vector<uint8_t> bytes;
+    if (!rev_read_file(path, bytes)) {
+        log_warn("audio: can't read %s", path);
         return nullptr;
     }
-
-    const bool wave_loops = (wave->loopend - wave->loopstart) > 0;
-    PTSound sound = Load(&wave->format, wave->size, wave->data, wave_loops);
-    delete wave;
-    return sound;
-}
-
-// Load from a resource pack (the old WAVE.### resource ID path). We keep
-// the entry point so call sites don't churn, but the resource pack itself
-// is bypassed in the modern port — log a TODO and return nullptr until a
-// caller actually needs it.
-PTSound TSound::Load(int32_t resid)
-{
-    if (!SoundPlayer.Functioning())
+    WAVEFORMATEX fmt{};
+    std::vector<uint8_t> pcm;
+    if (!audio::DecodeToPCM16(bytes.data(), bytes.size(), &fmt, pcm)) {
+        log_warn("audio: can't decode %s", path);
         return nullptr;
-    log_warn("audio: TSound::Load(resid=%d) not yet wired — resource-pack WAV path is unused", resid);
-    return nullptr;
+    }
+    return Load(&fmt, static_cast<uint32_t>(pcm.size()), pcm.data(), false);
 }
 
 PTSound TSound::Duplicate()
@@ -335,8 +198,8 @@ int32_t CalcDirectionalVol(int32_t orig_vol, S3DPoint* lpos, S3DPoint* spos)
 void TSound::SetListenerPos(S3DPoint* lpos)
 {
     if (!lpos) return;
-    memcpy(&listener_pos, lpos, sizeof(S3DPoint));
-    if (source) {
+    listener_pos = *lpos;
+    if (source && positional) {
         const int32_t v = CalcDirectionalVol(sound_volume, &listener_pos, &sound_pos);
         const int32_t p = CalcPan(&listener_pos, &sound_pos);
         audio::SetSourceVolumePan(source, v, p);
@@ -346,23 +209,25 @@ void TSound::SetListenerPos(S3DPoint* lpos)
 void TSound::SetSoundPos(S3DPoint* spos)
 {
     if (!spos) return;
-    memcpy(&sound_pos, spos, sizeof(S3DPoint));
-    if (source) {
+    sound_pos = *spos;
+    if (source && positional) {
         const int32_t v = CalcDirectionalVol(sound_volume, &listener_pos, &sound_pos);
         const int32_t p = v ? CalcPan(&listener_pos, &sound_pos) : 0;
         audio::SetSourceVolumePan(source, v, p);
     }
 }
 
-// lpos is the listener's position; spos is the sound's position.
+// lpos is the listener's position; spos is the sound's position. Without
+// lpos the sound plays flat and stays that way.
 void TSound::Play(int32_t volume, int32_t freq, S3DPoint* lpos, S3DPoint* spos)
 {
+    positional = lpos != nullptr;
     if (lpos) {
-        memcpy(&listener_pos, lpos, sizeof(S3DPoint));
+        listener_pos = *lpos;
         if (spos)
-            memcpy(&sound_pos, spos, sizeof(S3DPoint));
+            sound_pos = *spos;
         else
-            memcpy(&sound_pos, lpos, sizeof(S3DPoint));
+            sound_pos = *lpos;
         volume = CalcDirectionalVol(volume, lpos, spos ? spos : lpos);
     }
 
@@ -394,32 +259,32 @@ uint32_t TSound::GetStatus()
 // * TSoundPlayer (registry + mixer) *
 // **********************************
 
+// REVSYNC: 0x0049a830 — sound init: opens output, then registers the
+// resource sounds (0x0049afd0) and sorts the list.
+// REVSYNC-DIVERGENCE: retail has no sound list when output is off or fails
+// to open (0x00668114 set: nothing registered, every voice falls back to
+// text pacing). The port registers regardless, so lookups and
+// SampleLengthMs answer the same with output silenced (--headless).
 bool TSoundPlayer::Initialize()
 {
     if (initialized) return true;
-
-    if (!SoundSystemOn) {
-        log_info("audio: SoundSystemOn=false — leaving audio offline");
-        return false;
-    }
-
-    if (!audio::Init()) {
-        log_warn("audio: backend init failed — TSoundPlayer offline");
-        return false;
-    }
-
-    // ReadSoundList() walks ClassDefPath/sound.def (if present) plus the
-    // effects/ and language/ folders under ResourcePath. Either path can
-    // legitimately be empty — we still come up.
-    ReadSoundList();
     initialized = true;
-    log_info("audio: TSoundPlayer ready, %d entries", soundlist.NumItems());
+
+    LoadResourceSounds();
+
+    if (!SoundSystemOn)
+        log_info("audio: SoundSystemOn=false — output offline, sounds registered");
+    else if (!audio::Init())
+        log_info("audio: output offline (silenced or no device) — sounds registered");
     return true;
 }
 
 void TSoundPlayer::Close()
 {
-    DestroySoundList();
+    // Sounds release their voices while the engine is still up.
+    soundlist.clear();
+    for (std::string& dir : sounddirs)
+        dir.clear();
     if (initialized) {
         audio::Shutdown();
         initialized = false;
@@ -452,62 +317,166 @@ void TSoundPlayer::SetVolume(int32_t volume)
     audio::SetMasterVolume(linear);
 }
 
-// ---- registry lookup ----------------------------------------------------
+// ---- sound list -----------------------------------------------------------
 
-int32_t TSoundPlayer::FindSound(char* soundname, int32_t nr)
+// REVSYNC: 0x0049ad20 — every "<dir>*.wav", then every "<dir>*.mp3",
+// through the packs (findfirst 0x004a19d0); the name is the file name up to
+// its first '.'. No duplicate check, as retail. (Retail also marks the .mp3
+// entries 2D-only, +0x18 bit 1; the port's positioning is the 1998 pan law
+// for every sound.)
+int32_t TSoundPlayer::RegisterSounds(ESoundDir dir)
 {
-    char buf[80];
-    if (nr >= 0) {
-        sprintf(buf, "%s%d", soundname, nr);
-        return FindSound(buf, -1);
+    const std::string& path = Dir(dir);
+    int32_t added = 0;
+    for (const char* ext : {".wav", ".mp3"}) {
+        std::vector<std::string> files;
+        rev_find_files(path.c_str(), ext, files);
+        for (std::string& file : files) {
+            auto ref  = std::make_unique<SSoundRef>();
+            ref->name = file.substr(0, file.find('.'));
+            ref->file = std::move(file);
+            ref->dir  = dir;
+            soundlist.push_back(std::move(ref));
+            ++added;
+        }
     }
-    strcpy(buf, soundname);
-
-    for (int32_t c = 0; c < soundlist.NumItems(); c++) {
-        PSSoundRef ref = soundlist[c];
-        if (ref && !stricmp(ref->name, buf))
-            return c;
-    }
-    return -1;
+    return added;
 }
 
-int32_t TSoundPlayer::NewSound(char* soundname, int32_t nr)
+// REVSYNC: qsort (0x0058c9ff) with 0x0049ab00 — names compared by _stricmp
+// (0x0059a530) — after each registration.
+// REVSYNC-DIVERGENCE: a stable sort, so of two sounds with one name the
+// first registered is found; retail's qsort + bsearch find either. The
+// shipped data has no such pair.
+void TSoundPlayer::SortSoundList()
 {
+    std::stable_sort(soundlist.begin(), soundlist.end(),
+                     [](const std::unique_ptr<SSoundRef>& a, const std::unique_ptr<SSoundRef>& b) {
+                         return stricmp(a->name.c_str(), b->name.c_str()) < 0;
+                     });
+}
+
+// REVSYNC: 0x0049afd0 — <ResourcePath>sound\effects\ and
+// <ResourcePath>sound\<Language>\, then the same two under ImageryPath when
+// they name other directories. Retail lower-cases the paths (_strlwr); the
+// port's lookups ignore case.
+void TSoundPlayer::LoadResourceSounds()
+{
+    const std::string language = Language.CStr();
+    Dir(ESoundDir::ResourceEffects)  = std::string(ResourcePath) + "sound\\effects\\";
+    Dir(ESoundDir::ResourceLanguage) = std::string(ResourcePath) + "sound\\" + language + "\\";
+    Dir(ESoundDir::ImageryEffects)   = std::string(ImageryPath) + "sound\\effects\\";
+    Dir(ESoundDir::ImageryLanguage)  = std::string(ImageryPath) + "sound\\" + language + "\\";
+
+    const int32_t effects = RegisterSounds(ESoundDir::ResourceEffects);
+    const int32_t voices  = RegisterSounds(ESoundDir::ResourceLanguage);
+    int32_t imagery = 0;
+    if (stricmp(Dir(ESoundDir::ImageryEffects).c_str(), Dir(ESoundDir::ResourceEffects).c_str()) != 0)
+        imagery += RegisterSounds(ESoundDir::ImageryEffects);
+    if (stricmp(Dir(ESoundDir::ImageryLanguage).c_str(), Dir(ESoundDir::ResourceLanguage).c_str()) != 0)
+        imagery += RegisterSounds(ESoundDir::ImageryLanguage);
+    SortSoundList();
+
+    log_info("audio: resource sounds: %d in %s, %d in %s, %d under %s; %d registered",
+             effects, Dir(ESoundDir::ResourceEffects).c_str(),
+             voices, Dir(ESoundDir::ResourceLanguage).c_str(),
+             imagery, ImageryPath, NumItems());
+}
+
+// REVSYNC: 0x0049b220 — called by SetCurModule (0x004609f0) right after the
+// module's dialog list: <ModulesPath><module>\sound\effects\ and
+// <ModulesPath><module>\sound\<Language>\, then the sort.
+// REVSYNC-DIVERGENCE: retail skips this when output is off (0x00668114); see
+// Initialize.
+bool TSoundPlayer::LoadModuleSounds(const char* module)
+{
+    if (!module || !module[0]) return false;
+
+    const std::string base = std::string(ModulesPath) + module;
+    Dir(ESoundDir::ModuleEffects)  = base + "\\sound\\effects\\";
+    Dir(ESoundDir::ModuleLanguage) = base + "\\sound\\" + Language.CStr() + "\\";
+
+    const int32_t effects = RegisterSounds(ESoundDir::ModuleEffects);
+    const int32_t voices  = RegisterSounds(ESoundDir::ModuleLanguage);
+    SortSoundList();
+
+    log_info("audio: module sounds: %d in %s, %d in %s; %d registered",
+             effects, Dir(ESoundDir::ModuleEffects).c_str(),
+             voices, Dir(ESoundDir::ModuleLanguage).c_str(), NumItems());
+    return true;
+}
+
+// REVSYNC: 0x0049b400 — called by SetCurModule before another module mounts
+// (and by the module close, 0x00460c10): drops every entry found in the
+// module's directories; the rest keep their order. Retail leaves an entry
+// that is still playing out of the list without freeing it; the port frees
+// it, which stops it.
+void TSoundPlayer::UnloadModuleSounds()
+{
+    if (Dir(ESoundDir::ModuleEffects).empty()) return;
+
+    soundlist.erase(std::remove_if(soundlist.begin(), soundlist.end(),
+                                   [](const std::unique_ptr<SSoundRef>& ref) {
+                                       return ref->dir == ESoundDir::ModuleEffects ||
+                                              ref->dir == ESoundDir::ModuleLanguage;
+                                   }),
+                    soundlist.end());
+    Dir(ESoundDir::ModuleEffects).clear();
+    Dir(ESoundDir::ModuleLanguage).clear();
+}
+
+// REVSYNC: 0x0049c430 — bsearch over the sorted list, names compared
+// without case.
+int32_t TSoundPlayer::FindSound(const char* soundname, int32_t nr) const
+{
+    if (!soundname) return -1;
+
     char buf[80];
     if (nr >= 0) {
-        sprintf(buf, "%s%d", soundname, nr);
-        return FindSound(buf, -1);
+        snprintf(buf, sizeof(buf), "%s%d", soundname, nr);
+        soundname = buf;
     }
-    strcpy(buf, soundname);
 
-    PSSoundRef ref = new SSoundRef;
-    ref->name     = strdup(buf);
-    ref->dir      = nullptr;
-    ref->resid    = -1;
-    ref->usecount = 0;
-    ref->flags    = 0;
-    ref->sound    = nullptr;
-
-    int32_t id = soundlist.Add(ref);
-    if (id < 0) {
-        free(ref->name);
-        delete ref;
+    const auto it = std::lower_bound(soundlist.begin(), soundlist.end(), soundname,
+                                     [](const std::unique_ptr<SSoundRef>& ref, const char* name) {
+                                         return stricmp(ref->name.c_str(), name) < 0;
+                                     });
+    if (it == soundlist.end() || stricmp((*it)->name.c_str(), soundname) != 0)
         return -1;
+    return static_cast<int32_t>(it - soundlist.begin());
+}
+
+// REVSYNC: 0x0049c640 — the sound's length in milliseconds; TCharacter::Say
+// (0x004d0610) sizes the say action from it.
+// REVSYNC-DIVERGENCE: retail asks Miles for the total of the 2D sample
+// playing the sound (AIL_sample_ms_position), so it answers 0 unless the
+// sound is playing. The port decodes the file once and caches the length:
+// the answer doesn't depend on audio output (--headless) or on playback.
+int32_t TSoundPlayer::SampleLengthMs(int32_t id)
+{
+    SSoundRef* ref = Ref(id);
+    if (!ref) return 0;
+
+    if (ref->lengthms < 0) {
+        const std::string path = SoundPath(*ref);
+        std::vector<uint8_t> bytes;
+        ref->lengthms = rev_read_file(path.c_str(), bytes)
+                      ? static_cast<int32_t>(audio::DecodedLengthMs(bytes.data(), bytes.size()))
+                      : 0;
+        if (ref->lengthms == 0)
+            log_warn("audio: can't measure %s", path.c_str());
     }
-    return id;
+    return ref->lengthms;
 }
 
 // ---- gc for SOUND_DYING ---------------------------------------------------
 
 void TSoundPlayer::UpdateDying()
 {
-    for (int32_t c = 0; c < soundlist.NumItems(); c++) {
-        PSSoundRef ref = soundlist[c];
-        if (!ref) continue;
-
+    for (const std::unique_ptr<SSoundRef>& ref : soundlist) {
         // Walk duplicate voices and prune the finished ones.
         if (ref->sound && ref->sound->Next()) {
-            PTSound prev = ref->sound;
+            PTSound prev = ref->sound.get();
             PTSound next = prev->Next();
             for (PTSound snd; (snd = next); ) {
                 next = snd->Next();
@@ -525,8 +494,7 @@ void TSoundPlayer::UpdateDying()
         // done playing.
         if (ref->flags & SOUND_DYING) {
             if (ref->sound && (!ref->sound->IsPlaying() || ref->sound->IsLooping())) {
-                delete ref->sound;
-                ref->sound = nullptr;
+                ref->sound.reset();
                 ref->flags &= ~SOUND_DYING;
             }
         }
@@ -535,23 +503,18 @@ void TSoundPlayer::UpdateDying()
 
 // ---- mount / unmount / play / stop --------------------------------------
 
+// The port's load (retail 0x0049b650): decodes the sound's file.
 bool TSoundPlayer::Mount(int32_t id)
 {
-    if (!Functioning() || id < 0 || id >= soundlist.NumItems())
-        return false;
-
-    PSSoundRef ref = soundlist[id];
+    if (!Functioning()) return false;
+    SSoundRef* ref = Ref(id);
     if (!ref) return false;
 
     if (ref->usecount < 1) {
-        if (ref->flags & SOUND_DYING) {
+        if (ref->flags & SOUND_DYING)
             ref->flags &= ~SOUND_DYING;
-        } else {
-            if (ref->resid >= 0)
-                ref->sound = TSound::Load(ref->resid);
-            else
-                ref->sound = TSound::Load(ref->name, ref->resid);
-        }
+        else
+            ref->sound.reset(TSound::Load(SoundPath(*ref).c_str()));
         ref->usecount = ref->sound ? 1 : 0;
     } else {
         ref->usecount++;
@@ -563,21 +526,17 @@ bool TSoundPlayer::Mount(int32_t id)
 
 bool TSoundPlayer::Unmount(int32_t id)
 {
-    if (!Functioning() || id < 0 || id >= soundlist.NumItems())
-        return false;
-
-    PSSoundRef ref = soundlist[id];
+    if (!Functioning()) return false;
+    SSoundRef* ref = Ref(id);
     if (!ref) return false;
 
     ref->usecount--;
     if (ref->usecount < 1) {
         if (ref->sound) {
-            if (ref->sound->IsPlaying() && !ref->sound->IsLooping()) {
+            if (ref->sound->IsPlaying() && !ref->sound->IsLooping())
                 ref->flags |= SOUND_DYING;
-            } else {
-                delete ref->sound;
-                ref->sound = nullptr;
-            }
+            else
+                ref->sound.reset();
         }
         ref->usecount = 0;
     }
@@ -586,16 +545,20 @@ bool TSoundPlayer::Unmount(int32_t id)
     return true;
 }
 
+// REVSYNC: 0x0049b990 — without a position (pos NULL) the sound plays at the
+// listener as a 2D sample and isn't moved by later listener updates; that
+// is how TCharacter::Say (0x004d0610) and the death screen (0x005339b0)
+// play voices. Their volume 0x7f is retail's full scale, relative to the
+// SFX volume: the port's 0 (the sfx group carries the SFX volume).
 bool TSoundPlayer::Play(int32_t id, int32_t volume, int32_t freq, S3DPoint* spos)
 {
-    if (!Functioning() || id < 0 || id >= soundlist.NumItems())
-        return false;
-
-    PSSoundRef ref = soundlist[id];
+    if (!Functioning()) return false;
+    SSoundRef* ref = Ref(id);
     if (!ref || !ref->sound) return false;
 
+    S3DPoint* lpos = spos ? &listener_pos : nullptr;
     if (!ref->sound->IsPlaying()) {
-        ref->sound->Play(volume, freq, &listener_pos, spos);
+        ref->sound->Play(volume, freq, lpos, spos);
     } else {
         // Overlap an existing playing instance: duplicate the source so
         // the new voice can run in parallel without re-triggering the old.
@@ -603,7 +566,7 @@ bool TSoundPlayer::Play(int32_t id, int32_t volume, int32_t freq, S3DPoint* spos
         if (!newsound) return false;
         newsound->SetNext(ref->sound->Next());
         ref->sound->SetNext(newsound);
-        newsound->Play(volume, freq, &listener_pos, spos);
+        newsound->Play(volume, freq, lpos, spos);
     }
 
     UpdateDying();
@@ -612,10 +575,8 @@ bool TSoundPlayer::Play(int32_t id, int32_t volume, int32_t freq, S3DPoint* spos
 
 bool TSoundPlayer::Stop(int32_t id)
 {
-    if (!Functioning() || id < 0 || id >= soundlist.NumItems())
-        return false;
-
-    PSSoundRef ref = soundlist[id];
+    if (!Functioning()) return false;
+    SSoundRef* ref = Ref(id);
     if (!ref) return false;
     if (ref->sound) ref->sound->Stop();
     return true;
@@ -623,10 +584,9 @@ bool TSoundPlayer::Stop(int32_t id)
 
 PTSound TSoundPlayer::GetSound(int32_t id)
 {
-    if (!Functioning() || id < 0 || id >= soundlist.NumItems())
-        return nullptr;
-    PSSoundRef ref = soundlist[id];
-    return ref ? ref->sound : nullptr;
+    if (!Functioning()) return nullptr;
+    SSoundRef* ref = Ref(id);
+    return ref ? ref->sound.get() : nullptr;
 }
 
 void TSoundPlayer::SetListenerPos(int32_t x, int32_t y, int32_t z)
@@ -635,126 +595,8 @@ void TSoundPlayer::SetListenerPos(int32_t x, int32_t y, int32_t z)
     listener_pos.y = y;
     listener_pos.z = z;
 
-    for (int32_t c = 0; c < soundlist.NumItems(); c++) {
-        PSSoundRef ref = soundlist[c];
-        if (ref && ref->sound)
+    for (const std::unique_ptr<SSoundRef>& ref : soundlist) {
+        if (ref->sound)
             ref->sound->SetListenerPos(&listener_pos);
     }
-}
-
-// ---- sound-list population from disk ------------------------------------
-
-bool TSoundPlayer::SearchSoundDir(const char* soundpath, const char* subdir, int32_t dirresid)
-{
-    if (!subdir) return false;
-
-    // First-wins de-dup: a sound that's already in the registry (from a
-    // prior pass or sound.def) doesn't get clobbered by an archive entry
-    // with the same basename.
-    auto add_if_new = [&](const char* basename) {
-        if (FindSound(const_cast<char*>(basename), -1) >= 0) return;
-        auto* ref     = new SSoundRef;
-        ref->name     = strdup(basename);
-        ref->dir      = nullptr;
-        ref->resid    = dirresid;
-        ref->usecount = 0;
-        ref->flags    = 0;
-        ref->sound    = nullptr;
-        soundlist.Add(ref);
-    };
-
-    // 1) Loose WAVs on disk under <RunPath>/sound/<subdir>/*.wav. Modders
-    // or partial extractions will land here; first pass for compatibility.
-    if (soundpath) {
-        std::filesystem::path dir = std::filesystem::path(soundpath) / subdir;
-        std::error_code ec;
-        if (std::filesystem::is_directory(dir, ec)) {
-            for (auto& ent : std::filesystem::directory_iterator(dir, ec)) {
-                if (ec) break;
-                if (!ent.is_regular_file()) continue;
-                auto ext = ent.path().extension().string();
-                for (auto& c : ext) c = static_cast<char>(std::tolower(c));
-                if (ext != ".wav") continue;
-
-                add_if_new(ent.path().stem().string().c_str());
-            }
-        }
-    }
-
-    // 2) Archive-resident WAVs under "Sound/<subdir>/" inside the mounted
-    // resource ZIPs (resources.rvr ships effects/ this way). Listing
-    // returns lowercased basenames *with* extension; strip ".wav" for
-    // the registry to match the disk path.
-    std::string prefix = std::string("Sound/") + subdir + "/";
-    std::vector<std::string> entries;
-    VFSListByPrefix(prefix.c_str(), entries);
-    for (auto& fname : entries) {
-        // Strip extension. (We already filtered to .wav-shaped names by
-        // path, but be defensive about other extensions slipping in.)
-        std::string base = fname;
-        auto dot = base.rfind('.');
-        std::string ext = (dot == std::string::npos) ? "" : base.substr(dot);
-        for (auto& c : ext) c = static_cast<char>(std::tolower(c));
-        if (ext != ".wav") continue;
-        base.resize(dot);
-        add_if_new(base.c_str());
-    }
-    return true;
-}
-
-bool TSoundPlayer::ReadSoundList()
-{
-    soundlist.Clear();
-
-    // sound.def is optional (it carried the legacy resource-pack ID map);
-    // the directory scan below is what actually populates the registry
-    // for the modern WAV-on-disk path.
-    char defpath[MAXPATHLEN];
-    snprintf(defpath, MAXPATHLEN, "%ssound.def", ClassDefPath);
-    if (FILE* fp = TryOpen(defpath, "rb")) {
-        TFileParseStream s(fp, defpath);
-        TToken t(s);
-        t.Get();
-
-        char name[128];
-        int32_t resid;
-        while (t.Type() != TKN_EOF) {
-            if (t.Type() == TKN_RETURN || t.Type() == TKN_WHITESPACE) {
-                t.LineGet();
-                continue;
-            }
-            if (!Parse(t, "%s %d", name, &resid)) {
-                log_warn("audio: malformed sound.def near token '%s'", name);
-                break;
-            }
-            auto* ref = new SSoundRef;
-            ref->name     = strdup(name);
-            ref->dir      = nullptr;
-            ref->resid    = resid;
-            ref->usecount = 0;
-            ref->flags    = 0;
-            ref->sound    = nullptr;
-            soundlist.Add(ref);
-        }
-        fclose(fp);
-    }
-
-    char fname[MAXPATHLEN];
-    strncpyz(fname, RunPath, MAXPATHLEN);
-    strncatz(fname, "sound/", MAXPATHLEN);
-
-    SearchSoundDir(fname, "effects",        DIRRESID_EFFECTDIR);
-    SearchSoundDir(fname, Language.CStr(),  DIRRESID_DIALOGDIR);
-    return true;
-}
-
-void TSoundPlayer::DestroySoundList()
-{
-    for (int32_t c = 0; c < soundlist.NumItems(); c++) {
-        PSSoundRef ref = soundlist[c];
-        if (!ref) continue;
-        if (ref->sound) delete ref->sound;
-        free(ref->name);
-    }
-    soundlist.DeleteAll();
 }
