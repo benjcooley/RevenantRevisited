@@ -34,6 +34,7 @@
 #include "screen.h"
 
 #include "mapmanager.h"
+#include "moviepane.h"
 
 #include <memory>
 
@@ -151,6 +152,13 @@ class TPlayScreen : public TScreen
     void               SetDemoMode(bool on);
 
     [[nodiscard]] bool IsControlOn() const { return controlon; }
+
+    // REVSYNC: playmovie @ 0x00427d80 -- retail stopped the CD music
+    // (0x0049a560) and played the movie through its blocking player
+    // (0x004bc470), so nothing else moved until it ended. Here the movie is a
+    // modal pane and the world doesn't tick while it plays.
+    void PlayMovie(const char* path);
+    [[nodiscard]] bool PlayingMovie() const { return movieplaying; }
     void               SetControlOn(bool on);
 
     void MultiUpdate() { multidirty = true; }
@@ -228,6 +236,10 @@ class TPlayScreen : public TScreen
 
     // The play screen's fader (retail +0x5bc), set up in Initialize.
     TScreenFade screenfade;
+
+    // `playmovie`'s movie while it plays.
+    TMoviePane movie;
+    bool       movieplaying = false;
 
     // Effect imagery cached at boot (blood, sparks). Optional; kept null
     // when the imagery isn't in the current data set.
