@@ -93,8 +93,9 @@ requests (`0x0047e770`: `+0x5e4` load pending, `+0x5ec` game index,
 - `control on/off` (`0x0047c580`): off releases the held movement keys
   (arrows, Home/End/PgUp/PgDn, `R`) and sets the global control-off
   flag; on clears it.
-- Pause (`P` / script `toggle pause`) and the script-driven screen fade
-  live on PlayScreen (fade: [SCREEN_SYSTEM.md](SCREEN_SYSTEM.md) §2.6).
+- Pause (`P` / script `toggle pause`) lives on PlayScreen; the
+  script-driven screen fade is PlayScreen's fader, a TScreen facility
+  ([SCREEN_SYSTEM.md](SCREEN_SYSTEM.md) §2.6).
 
 ### 2.5 Leaving the game
 

@@ -27,7 +27,7 @@ interpreter are the 1998 design. Retail changed the execution model:
 
 | Offset | Field |
 |---|---|
-| +0x00 | taken flags: 1 control off, 2 (mp/ui), 4 dialog pane shown, 8 camera taken |
+| +0x00 | taken flags: 1 control off, 2 screen faded out (`fadescreenout` sets, `fadescreenin` clears; End fades back in only for a multiplayer host, SCREEN_SYSTEM.md §2.6), 4 dialog pane shown, 8 camera taken |
 | +0x04 | top prototype (chain through each prototype's parent) |
 | +0x08 | current prototype (`+0x04` text, `+0x40` length) |
 | +0x0c | owner object (the script's context) |
@@ -165,7 +165,7 @@ Retail:
 
 Not ported:
 - the taken flags' control (1) and camera (8) bits and `End` giving
-  them back (the dialog bit, 4, is ported);
+  them back (the dialog bit, 4, and the fade bit, 2, are ported);
 - the multiplayer choice list (`+0xb8`/`+0xb6`); single-player responses
   go through the dialog pane (DIALOG.md, ported)
 - the pending `say` (`+0xd8`…);
