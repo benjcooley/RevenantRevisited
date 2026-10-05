@@ -104,7 +104,11 @@ grep -E "ERROR: AddressSanitizer|runtime error|SUMMARY:" asan.log
 `--headless` keeps the window off screen (our sokol_app patch:
 `desc.hidden`, `desc.no_dock_icon`), hides the Dock icon and silences audio.
 Snapshots read an offscreen render target, so `--snap` and `--filmstrip`
-work without a visible window.
+work without a visible window. A hidden, silent app with no Dock icon is
+what macOS App Nap throttles, which held back the frame timer for minutes
+(a run that never reached its first frame; another stalled ~10 min), so
+`--headless` also takes an `NSProcessInfo` activity that opts out
+(`HeadlessWindow::KeepAwake`, from `sokol_main`).
 
 Each of these quit requests ends the process through the normal path
 (`AppCleanup` → `ShutdownGlobals`):
@@ -135,9 +139,10 @@ Isolating a test run:
   `~/Library/Application Support/Revenant/Revenant.ini` into it first.
 - `REVENANT_DATA_PATH=<checkout>/data`: read-only game data. Needed in
   worktrees, where `data/*.rvr` can be Git LFS pointer files.
-- Run from the repository root: the TrueType fonts resolve relative to the
-  working directory, and `revenant.log` / `imgui.ini` land there
-  (gitignored).
+- `revenant.log` and `imgui.ini` land in the working directory; run from
+  the repository root (gitignored there) or a scratch directory. The
+  TrueType fonts are engine assets found from the executable
+  (`rev_engine_asset`, DATA_LAYOUT.md §5), so any directory works.
 
 Examples:
 
