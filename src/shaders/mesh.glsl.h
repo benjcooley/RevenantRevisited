@@ -5,7 +5,8 @@
 // *************************************************************************
 //
 // GL core port of mesh.metal.h.  See that header for layout + projection
-// math documentation.
+// math documentation, and for the translucent pass's depth and colour
+// shaders.
 //
 // *************************************************************************
 
@@ -105,5 +106,45 @@ void main() {
     o_normal  = vec4(N * 0.5 + 0.5, 0.0);   // .a = surface class: 0 mesh, 1 tile
     o_scene_z = vec4(v_scene_z, 0.0, 0.0, 1.0);
     o_obj_id  = vec4(0.0, 0.0, 0.0, 0.0);   // Phase 1: empty id
+}
+)GLSL";
+
+// Translucent pass, step 1: depth only (colour writes are masked off). Covers
+// exactly the fragments step 2 shades.
+inline constexpr const char* kMeshDepthFsGlsl = R"GLSL(
+#version 330
+in vec3  v_wpos;
+in vec3  v_wnormal;
+in vec2  v_uv;
+in vec4  v_tint;
+in float v_scene_z;
+uniform sampler2D albedo_tex;
+void main() {
+    if (texture(albedo_tex, v_uv).a * v_tint.a < 0.01) discard;
+}
+)GLSL";
+
+// Translucent pass, step 2: lit colour at the surface's nearest depth,
+// blended over lit_target. Appended to kLightModelGlsl. The surface isn't in
+// the G-buffer, so it has no SSAO or sun cast shadow (both 1).
+inline constexpr const char* kMeshTranslucentFsGlsl = R"GLSL(
+in vec3  v_wpos;
+in vec3  v_wnormal;
+in vec2  v_uv;
+in vec4  v_tint;
+in float v_scene_z;
+uniform sampler2D albedo_tex;
+out vec4 frag_color;
+void main() {
+    vec4 c = texture(albedo_tex, v_uv) * v_tint;
+    if (c.a < 0.01) discard;
+    vec3 N = normalize(v_wnormal);
+    int vm = int(settings.x);
+    if (vm == 1) { frag_color = vec4(c.rgb, c.a); return; }
+    if (vm == 3) { frag_color = vec4(N * 0.5 + 0.5, c.a); return; }
+    surface_light s = shade_surface(c.rgb, v_wpos, N, true, 1.0, 1.0);
+    if (vm == 4) { frag_color = vec4(s.points, c.a); return; }
+    if (vm == 6) { frag_color = vec4(vec3(s.sun_shadow), c.a); return; }
+    frag_color = vec4(s.lit, c.a);
 }
 )GLSL";

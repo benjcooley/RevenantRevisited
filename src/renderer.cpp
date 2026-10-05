@@ -13,9 +13,13 @@
 //      [2] Ambient occlusion      -> ao_pass
 //      [3] Sun shadow mask        -> shadow_pass + blur ping-pong
 //      [4] Deferred lighting      -> lit_pass
+//      [5] Transparent world      -> helper_pass (lit_target + scene depth):
+//                                    transparent tiles, helper meshes and
+//                                    translucent meshes, back to front
+//      [6] Transparent FX         -> fx_pass
 //      [7] Composite to swapchain <- TDisplay::FlipPage via PresentToSwapchain
 //
-// Passes [4]-[6] (water, effects, debug 3D) are reserved.
+// Water and debug 3D are reserved.
 // Passes [8] (debug UI) is the sokol_imgui overlay, rendered by TDisplay
 // inside the swapchain pass after PresentToSwapchain.
 //
@@ -37,6 +41,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstring>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -83,6 +88,108 @@ constexpr int32_t kLightUniformVec4s =
     + 1                                 // selected_obj_id
     + kClassicModelVec4s
     + 1;                                // point_model
+constexpr int32_t kLightUniformFloats = kLightUniformVec4s * 4;
+
+// Floats per mesh instance row: world rows w0..w3, tint, obj_id (RGBA8 as floats).
+constexpr int32_t kMeshInstanceFloats = 24;
+
+// A fragment shader that lights surfaces: the shared lighting model
+// (lightmodel.*.h) followed by the pass's own body.
+std::string WithLightModel(const char* body)
+{
+    return std::string(kLightModel) + body;
+}
+
+// The `params` block of lightmodel.*.h. Order matches PackLightUniforms.
+void DescribeLightUniformBlock(sg_shader_uniform_block_desc& ub)
+{
+    constexpr int32_t kPL = TRenderer::kMaxPointLights;
+    struct SUniform { const char* name; int32_t count; };
+    constexpr SUniform kUniforms[] = {
+        { "vp", 1 }, { "recon", 1 }, { "light_dir", 1 }, { "light_col", 1 },
+        { "ambient_col", 1 }, { "settings", 1 },
+        { "plight_pos", kPL }, { "plight_col", kPL },
+        { "shadow", 1 }, { "shadow_dir", 1 }, { "shadow_world_dir", 1 },
+        { "normal_lighting", 1 }, { "selected_obj_id", 1 },
+        { "classic_model", kClassicModelVec4s }, { "point_model", 1 },
+    };
+    ub.size = kLightUniformVec4s * 16;
+    int32_t i = 0;
+    for (const SUniform& u : kUniforms)
+    {
+        ub.uniforms[i].name = u.name;
+        ub.uniforms[i].type = SG_UNIFORMTYPE_FLOAT4;
+        ub.uniforms[i].array_count = u.count > 1 ? u.count : 0;
+        ++i;
+    }
+}
+
+// Vertex stage shared by every mesh shader (kMeshVs): per-vertex pos/normal/uv,
+// per-instance world rows + tint + obj_id, and the vp/camz/camw block.
+void DescribeMeshVertexStage(sg_shader_desc& sh)
+{
+    sh.attrs[0].name = "pos";         sh.attrs[0].sem_name = "POSITION"; sh.attrs[0].sem_index = 0;
+    sh.attrs[1].name = "normal";      sh.attrs[1].sem_name = "NORMAL";   sh.attrs[1].sem_index = 0;
+    sh.attrs[2].name = "uv";          sh.attrs[2].sem_name = "TEXCOORD"; sh.attrs[2].sem_index = 0;
+    sh.attrs[3].name = "w0";          sh.attrs[3].sem_name = "TEXCOORD"; sh.attrs[3].sem_index = 1;
+    sh.attrs[4].name = "w1";          sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 2;
+    sh.attrs[5].name = "w2";          sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 3;
+    sh.attrs[6].name = "w3";          sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 4;
+    sh.attrs[7].name = "tint";        sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 5;
+    sh.attrs[8].name = "inst_obj_id"; sh.attrs[8].sem_name = "TEXCOORD"; sh.attrs[8].sem_index = 6;
+
+    sh.vs.source = kMeshVs;
+    sh.vs.entry  = kShaderVsEntry;
+    sh.vs.uniform_blocks[0].size = 3 * sizeof(float) * 4;
+    sh.vs.uniform_blocks[0].uniforms[0].name = "vp";
+    sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[1].name = "camz";
+    sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[2].name = "camw";
+    sh.vs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+
+    sh.fs.entry = kShaderFsEntry;
+    sh.fs.images[0].name         = "albedo_tex";
+    sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
+    sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
+}
+
+// Vertex buffer 0 per vertex (SMeshVertex), buffer 1 per instance (one row).
+void DescribeMeshVertexLayout(sg_pipeline_desc& pip)
+{
+    pip.layout.buffers[0].stride    = sizeof(SMeshVertex);
+    pip.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+    pip.layout.buffers[1].stride    = kMeshInstanceFloats * int32_t(sizeof(float));
+    pip.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
+    pip.layout.attrs[0].buffer_index = 0;
+    pip.layout.attrs[0].offset       = offsetof(SMeshVertex, pos);
+    pip.layout.attrs[0].format       = SG_VERTEXFORMAT_FLOAT3;
+    pip.layout.attrs[1].buffer_index = 0;
+    pip.layout.attrs[1].offset       = offsetof(SMeshVertex, normal);
+    pip.layout.attrs[1].format       = SG_VERTEXFORMAT_FLOAT3;
+    pip.layout.attrs[2].buffer_index = 0;
+    pip.layout.attrs[2].offset       = offsetof(SMeshVertex, uv);
+    pip.layout.attrs[2].format       = SG_VERTEXFORMAT_FLOAT2;
+    for (int32_t i = 0; i < 6; ++i) {
+        pip.layout.attrs[3 + i].buffer_index = 1;
+        pip.layout.attrs[3 + i].offset       = i * int32_t(sizeof(float)) * 4;
+        pip.layout.attrs[3 + i].format       = SG_VERTEXFORMAT_FLOAT4;
+    }
+    pip.index_type     = SG_INDEXTYPE_UINT16;
+    pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+    pip.cull_mode      = SG_CULLMODE_NONE;
+}
+
+// One mesh instance row (kMeshInstanceFloats): world rows, tint, obj_id bytes.
+void PackMeshInstanceRow(const SMeshSubmit& s, float* dst)
+{
+    std::memcpy(dst,      s.world, sizeof(s.world));
+    std::memcpy(dst + 16, s.tint,  sizeof(s.tint));
+    dst[20] = float((s.obj_id >>  0) & 0xFFu) / 255.0f;
+    dst[21] = float((s.obj_id >>  8) & 0xFFu) / 255.0f;
+    dst[22] = float((s.obj_id >> 16) & 0xFFu) / 255.0f;
+    dst[23] = float((s.obj_id >> 24) & 0xFFu) / 255.0f;
+}
 
 struct SScreenPoint { float x, y; };
 
@@ -1576,63 +1683,18 @@ void TRenderer::ShutdownTilePipeline()
 
 void TRenderer::InitMeshPipeline()
 {
-    // Shader: 8 attribute slots. Slot 0..2 per-vertex; slot 3..7 per-instance
-    // (4 rows of the world matrix + tint). Single uniform block of 3 vec4s
-    // (vp / camz / camw) shared VS-side.
+    // Every mesh shader shares kMeshVs: 9 attribute slots (0..2 per vertex,
+    // 3..8 per instance: 4 world rows, tint, obj_id) and one uniform block of
+    // 3 vec4s (vp / camz / camw) on the vertex side.
     sg_shader_desc sh = {};
-    sh.attrs[0].name = "pos";       sh.attrs[0].sem_name = "POSITION"; sh.attrs[0].sem_index = 0;
-    sh.attrs[1].name = "normal";    sh.attrs[1].sem_name = "NORMAL";   sh.attrs[1].sem_index = 0;
-    sh.attrs[2].name = "uv";        sh.attrs[2].sem_name = "TEXCOORD"; sh.attrs[2].sem_index = 0;
-    sh.attrs[3].name = "w0";        sh.attrs[3].sem_name = "TEXCOORD"; sh.attrs[3].sem_index = 1;
-    sh.attrs[4].name = "w1";        sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 2;
-    sh.attrs[5].name = "w2";        sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 3;
-    sh.attrs[6].name = "w3";        sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 4;
-    sh.attrs[7].name = "tint";        sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 5;
-    sh.attrs[8].name = "inst_obj_id"; sh.attrs[8].sem_name = "TEXCOORD"; sh.attrs[8].sem_index = 6;
-
-    sh.vs.source = kMeshVs;
-    sh.vs.entry  = kShaderVsEntry;
-    sh.vs.uniform_blocks[0].size = 3 * sizeof(float) * 4;
-    sh.vs.uniform_blocks[0].uniforms[0].name = "vp";
-    sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.vs.uniform_blocks[0].uniforms[1].name = "camz";
-    sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.vs.uniform_blocks[0].uniforms[2].name = "camw";
-    sh.vs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
-
+    DescribeMeshVertexStage(sh);
     sh.fs.source = kMeshFs;
-    sh.fs.entry  = kShaderFsEntry;
-    sh.fs.images[0].name         = "albedo_tex";
-    sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
-    sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
     sh.label = "renderer.mesh.shader";
     mesh_shader = sg_make_shader(&sh);
 
     sg_pipeline_desc pip = {};
     pip.shader = mesh_shader;
-    // Vertex buffer 0: per-vertex (pos/normal/uv).
-    pip.layout.buffers[0].stride    = sizeof(SMeshVertex);
-    pip.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
-    // Vertex buffer 1: per-instance (world rows + tint + obj_id rgba8).
-    pip.layout.buffers[1].stride    = sizeof(float) * 24;   // 4*vec4 world + vec4 tint + vec4 obj_id
-    pip.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
-    pip.layout.attrs[0].buffer_index = 0;
-    pip.layout.attrs[0].offset       = offsetof(SMeshVertex, pos);
-    pip.layout.attrs[0].format       = SG_VERTEXFORMAT_FLOAT3;
-    pip.layout.attrs[1].buffer_index = 0;
-    pip.layout.attrs[1].offset       = offsetof(SMeshVertex, normal);
-    pip.layout.attrs[1].format       = SG_VERTEXFORMAT_FLOAT3;
-    pip.layout.attrs[2].buffer_index = 0;
-    pip.layout.attrs[2].offset       = offsetof(SMeshVertex, uv);
-    pip.layout.attrs[2].format       = SG_VERTEXFORMAT_FLOAT2;
-    for (int32_t i = 0; i < 6; ++i) {
-        pip.layout.attrs[3 + i].buffer_index = 1;
-        pip.layout.attrs[3 + i].offset       = i * int32_t(sizeof(float)) * 4;
-        pip.layout.attrs[3 + i].format       = SG_VERTEXFORMAT_FLOAT4;
-    }
-    pip.index_type     = SG_INDEXTYPE_UINT16;
-    pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-    pip.cull_mode      = SG_CULLMODE_NONE;
+    DescribeMeshVertexLayout(pip);
     pip.color_count            = 4;
     pip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
     pip.colors[0].blend.enabled = true;
@@ -1651,6 +1713,52 @@ void TRenderer::InitMeshPipeline()
     pip.depth.write_enabled = true;
     pip.label = "renderer.mesh.pipeline";
     mesh_pipeline = sg_make_pipeline(&pip);
+
+    // Translucent meshes draw into helper_pass (lit_target + scene depth).
+    // Step 1 leaves each surface's nearest depth; colour writes are off.
+    sg_shader_desc dsh = {};
+    DescribeMeshVertexStage(dsh);
+    dsh.fs.source = kMeshDepthFs;
+    dsh.label = "renderer.mesh.depth.shader";
+    mesh_depth_shader = sg_make_shader(&dsh);
+
+    sg_pipeline_desc dpip = {};
+    dpip.shader = mesh_depth_shader;
+    DescribeMeshVertexLayout(dpip);
+    dpip.color_count            = 1;
+    dpip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    dpip.colors[0].write_mask   = SG_COLORMASK_NONE;
+    dpip.depth.pixel_format  = SG_PIXELFORMAT_DEPTH;
+    dpip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
+    dpip.depth.write_enabled = true;
+    dpip.label = "renderer.mesh.depth.pipeline";
+    mesh_depth_pipeline = sg_make_pipeline(&dpip);
+
+    // Step 2: lit colour, blended at the tint alpha where step 1 left the
+    // nearest depth. Lit by the light pass's own model (WithLightModel).
+    const std::string translucent_fs = WithLightModel(kMeshTranslucentFs);
+    sg_shader_desc tsh = {};
+    DescribeMeshVertexStage(tsh);
+    tsh.fs.source = translucent_fs.c_str();
+    DescribeLightUniformBlock(tsh.fs.uniform_blocks[0]);
+    tsh.label = "renderer.mesh.translucent.shader";
+    mesh_translucent_shader = sg_make_shader(&tsh);
+
+    sg_pipeline_desc tpip = {};
+    tpip.shader = mesh_translucent_shader;
+    DescribeMeshVertexLayout(tpip);
+    tpip.color_count            = 1;
+    tpip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    tpip.colors[0].blend.enabled = true;
+    tpip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+    tpip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    tpip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    tpip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    tpip.depth.pixel_format  = SG_PIXELFORMAT_DEPTH;
+    tpip.depth.compare       = SG_COMPAREFUNC_LESS_EQUAL;
+    tpip.depth.write_enabled = false;
+    tpip.label = "renderer.mesh.translucent.pipeline";
+    mesh_translucent_pipeline = sg_make_pipeline(&tpip);
 
     sg_shader_desc hsh = {};
     hsh.attrs[0].name = "pos";       hsh.attrs[0].sem_name = "POSITION"; hsh.attrs[0].sem_index = 0;
@@ -1744,7 +1852,7 @@ void TRenderer::InitMeshPipeline()
     for (int32_t i = 0; i < kMeshInstanceVBCount; ++i)
     {
         sg_buffer_desc ivb = {};
-        ivb.size  = kMaxMeshInstances * int32_t(sizeof(float)) * 24;   // 4*vec4 world + tint + obj_id
+        ivb.size  = kMaxMeshInstances * kMeshInstanceFloats * int32_t(sizeof(float));
         ivb.usage = SG_USAGE_STREAM;
         ivb.label = "renderer.mesh.instance_vbuf";
         mesh_instance_vb[i] = sg_make_buffer(&ivb);
@@ -1770,6 +1878,10 @@ void TRenderer::ShutdownMeshPipeline()
     if (helper_mesh_add_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_back_pipeline); helper_mesh_add_back_pipeline = {}; }
     if (helper_mesh_add_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_front_pipeline); helper_mesh_add_front_pipeline = {}; }
     if (helper_mesh_shader.id)   { sg_destroy_shader(helper_mesh_shader); helper_mesh_shader = {}; }
+    if (mesh_translucent_pipeline.id) { sg_destroy_pipeline(mesh_translucent_pipeline); mesh_translucent_pipeline = {}; }
+    if (mesh_translucent_shader.id)   { sg_destroy_shader(mesh_translucent_shader);     mesh_translucent_shader   = {}; }
+    if (mesh_depth_pipeline.id) { sg_destroy_pipeline(mesh_depth_pipeline); mesh_depth_pipeline = {}; }
+    if (mesh_depth_shader.id)   { sg_destroy_shader(mesh_depth_shader);     mesh_depth_shader   = {}; }
     if (mesh_pipeline.id)    { sg_destroy_pipeline(mesh_pipeline);  mesh_pipeline    = {}; }
     if (mesh_shader.id)      { sg_destroy_shader(mesh_shader);      mesh_shader      = {}; }
 }
@@ -2249,7 +2361,18 @@ SRendererAssetStats TRenderer::GetAssetStats() const
 void TRenderer::SubmitMesh(const SMeshSubmit& m)
 {
     if (m.mesh == 0 || m.mesh > meshes.size()) return;
-    mesh_queue.push_back(m);
+    if (m.tint[3] >= kOpaqueMeshAlpha)
+    {
+        mesh_queue.push_back(m);
+        return;
+    }
+    // Translucent: lit in the transparent-world pass, after the G-buffer
+    // scene, so whatever is behind it is already lit.
+    STransparentWorldSubmit sub = {};
+    sub.kind = ETransparentWorldKind::Mesh;
+    sub.sort_depth = m.sort_depth;
+    sub.mesh = m;
+    transparent_world_queue.push_back(sub);
 }
 
 void TRenderer::SubmitTransparentTile(const STileSubmit& t)
@@ -2284,30 +2407,13 @@ void TRenderer::DrainMeshQueue()
     std::sort(mesh_queue.begin(), mesh_queue.end(),
               [](const SMeshSubmit& a, const SMeshSubmit& b) { return a.mesh < b.mesh; });
 
-    // Pack instance rows (24 floats each: w0..w3 + tint + obj_id rgba8).
-    // Capacity is retained by the renderer; the draw loop must not allocate
-    // just because animated/visible mesh count changes within the usual range.
-    mesh_instance_scratch.resize(mesh_queue.size() * 24);
-    for (size_t i = 0; i < mesh_queue.size(); ++i) {
-        const SMeshSubmit& s = mesh_queue[i];
-        float* dst = &mesh_instance_scratch[i * 24];
-        std::memcpy(dst,      s.world, sizeof(s.world));
-        std::memcpy(dst + 16, s.tint,  sizeof(s.tint));
-        dst[20] = float((s.obj_id >>  0) & 0xFFu) / 255.0f;
-        dst[21] = float((s.obj_id >>  8) & 0xFFu) / 255.0f;
-        dst[22] = float((s.obj_id >> 16) & 0xFFu) / 255.0f;
-        dst[23] = float((s.obj_id >> 24) & 0xFFu) / 255.0f;
-    }
-    sg_buffer instance_vb = {};
-    for (int32_t attempt = 0; attempt < kMeshInstanceVBCount; ++attempt)
-    {
-        const int32_t idx = mesh_instance_vb_cursor++ % kMeshInstanceVBCount;
-        if (mesh_instance_vb[idx].id)
-        {
-            instance_vb = mesh_instance_vb[idx];
-            break;
-        }
-    }
+    // Pack instance rows (kMeshInstanceFloats each). Capacity is retained by
+    // the renderer; the draw loop must not allocate just because the
+    // animated/visible mesh count changes within the usual range.
+    mesh_instance_scratch.resize(mesh_queue.size() * kMeshInstanceFloats);
+    for (size_t i = 0; i < mesh_queue.size(); ++i)
+        PackMeshInstanceRow(mesh_queue[i], &mesh_instance_scratch[i * kMeshInstanceFloats]);
+    const sg_buffer instance_vb = NextMeshInstanceBuffer();
     if (!instance_vb.id) return;
 
     const sg_range r = { mesh_instance_scratch.data(), mesh_instance_scratch.size() * sizeof(float) };
@@ -2315,20 +2421,8 @@ void TRenderer::DrainMeshQueue()
 
     sg_apply_pipeline(mesh_pipeline);
 
-    // Uniform block: vp/camz/camw.
     float u[12] = {};
-    u[0] = recon.ox;
-    u[1] = recon.oy;
-    u[2] = float(width  + 2 * kGBufPad);
-    u[3] = float(height + 2 * kGBufPad);
-    u[4] = recon.z_near;
-    u[5] = recon.zspan;
-    u[6] = recon.kcam_forward;
-    u[7] = recon.reserved;
-    u[8] = recon.center_wx;
-    u[9] = recon.center_wy;
-    u[10] = recon.zoom;
-    u[11] = recon.mesh_projection_mode;
+    PackMeshVsUniforms(u);
     const sg_range u_range = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
 
@@ -2342,7 +2436,7 @@ void TRenderer::DrainMeshQueue()
         sg_bindings bind = {};
         bind.vertex_buffers[0]        = me.vbuf;
         bind.vertex_buffers[1]        = instance_vb;
-        bind.vertex_buffer_offsets[1] = int(i) * int(sizeof(float)) * 24;
+        bind.vertex_buffer_offsets[1] = int(i) * kMeshInstanceFloats * int(sizeof(float));
         bind.index_buffer             = me.ibuf;
         bind.fs_images[0]             = TextureImage(me.albedo);
         sg_apply_bindings(&bind);
@@ -2350,6 +2444,33 @@ void TRenderer::DrainMeshQueue()
 
         i = j;
     }
+}
+
+sg_buffer TRenderer::NextMeshInstanceBuffer()
+{
+    for (int32_t attempt = 0; attempt < kMeshInstanceVBCount; ++attempt)
+    {
+        const int32_t idx = mesh_instance_vb_cursor++ % kMeshInstanceVBCount;
+        if (mesh_instance_vb[idx].id)
+            return mesh_instance_vb[idx];
+    }
+    return {};
+}
+
+void TRenderer::PackMeshVsUniforms(float (&u)[12]) const
+{
+    u[0] = recon.ox;
+    u[1] = recon.oy;
+    u[2] = float(width  + 2 * kGBufPad);
+    u[3] = float(height + 2 * kGBufPad);
+    u[4] = recon.z_near;
+    u[5] = recon.zspan;
+    u[6] = recon.kcam_forward;
+    u[7] = recon.reserved;
+    u[8] = recon.center_wx;
+    u[9] = recon.center_wy;
+    u[10] = recon.zoom;
+    u[11] = recon.mesh_projection_mode;
 }
 
 void TRenderer::EmitTransparentTile(const STileSubmit& t)
@@ -2542,27 +2663,121 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     sg_draw(0, me.num_indices, 1);
 }
 
+sg_buffer TRenderer::UploadTranslucentMeshInstances()
+{
+    mesh_instance_scratch.clear();
+    int32_t rows = 0;
+    for (STransparentWorldSubmit& s : transparent_world_queue)
+    {
+        if (s.kind != ETransparentWorldKind::Mesh)
+            continue;
+        if (rows >= kMaxMeshInstances)
+        {
+            s.mesh_instance = -1;   // over capacity: not drawn
+            continue;
+        }
+        s.mesh_instance = rows++;
+        mesh_instance_scratch.resize(size_t(rows) * kMeshInstanceFloats);
+        PackMeshInstanceRow(s.mesh, &mesh_instance_scratch[size_t(s.mesh_instance) * kMeshInstanceFloats]);
+    }
+    if (rows == 0)
+        return {};
+    const sg_buffer vb = NextMeshInstanceBuffer();
+    if (!vb.id)
+        return {};
+    const sg_range r = { mesh_instance_scratch.data(), mesh_instance_scratch.size() * sizeof(float) };
+    sg_update_buffer(vb, &r);
+    return vb;
+}
+
+// A translucent surface (one character, say) shows only its nearest layer,
+// blended over the lit scene once: step 1 writes the surface's depth, step 2
+// shades the fragments at that depth. The depth stays in the scene depth
+// buffer, so later transparent draws behind the surface are hidden by it.
+void TRenderer::EmitTranslucentMeshSurface(const STransparentWorldSubmit* first, size_t count,
+                                           sg_buffer instances, const float* light_uniforms)
+{
+    if (!mesh_depth_pipeline.id || !mesh_translucent_pipeline.id || !instances.id)
+        return;
+
+    float vsu[12] = {};
+    PackMeshVsUniforms(vsu);
+    const sg_range vs_range = { vsu, sizeof(vsu) };
+    const sg_range fs_range = { light_uniforms, size_t(kLightUniformFloats) * sizeof(float) };
+
+    auto draw_members = [&]() {
+        for (size_t k = 0; k < count; ++k)
+        {
+            const STransparentWorldSubmit& e = first[k];
+            if (e.mesh_instance < 0)
+                continue;
+            const SMeshEntry& me = meshes[e.mesh.mesh - 1];
+            sg_bindings bind = {};
+            bind.vertex_buffers[0]        = me.vbuf;
+            bind.vertex_buffers[1]        = instances;
+            bind.vertex_buffer_offsets[1] = e.mesh_instance * kMeshInstanceFloats * int(sizeof(float));
+            bind.index_buffer             = me.ibuf;
+            bind.fs_images[0]             = TextureImage(me.albedo);
+            sg_apply_bindings(&bind);
+            sg_draw(0, me.num_indices, 1);
+        }
+    };
+
+    sg_apply_pipeline(mesh_depth_pipeline);
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_range);
+    draw_members();
+
+    sg_apply_pipeline(mesh_translucent_pipeline);
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_range);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_range);
+    draw_members();
+}
+
 void TRenderer::DrainTransparentWorldQueue()
 {
     if (transparent_world_queue.empty() || !helper_pass.id) return;
 
+    // Back to front: greater camera depth is farther and draws first. Equal
+    // depths order by surface so one surface's meshes stay together (the
+    // meshes of a character all carry the character's depth).
     std::stable_sort(transparent_world_queue.begin(), transparent_world_queue.end(),
                      [](const STransparentWorldSubmit& a, const STransparentWorldSubmit& b)
                      {
-                         return a.sort_depth < b.sort_depth;
+                         if (a.sort_depth != b.sort_depth)
+                             return a.sort_depth > b.sort_depth;
+                         return a.mesh.surface_id < b.mesh.surface_id;
                      });
+
+    const sg_buffer mesh_instances = UploadTranslucentMeshInstances();
+    float light_uniforms[kLightUniformFloats] = {};
+    if (mesh_instances.id)
+        PackLightUniforms(light_uniforms);
 
     sg_pass_action pa = {};
     pa.colors[0].action = SG_ACTION_LOAD;
     pa.depth.action = SG_ACTION_LOAD;
     pa.stencil.action = SG_ACTION_DONTCARE;
     sg_begin_pass(helper_pass, &pa);
-    for (const auto& s : transparent_world_queue)
+    const size_t n = transparent_world_queue.size();
+    for (size_t i = 0; i < n; )
     {
+        const STransparentWorldSubmit& s = transparent_world_queue[i];
+        if (s.kind == ETransparentWorldKind::Mesh)
+        {
+            size_t j = i + 1;
+            while (s.mesh.surface_id != 0 && j < n &&
+                   transparent_world_queue[j].kind == ETransparentWorldKind::Mesh &&
+                   transparent_world_queue[j].mesh.surface_id == s.mesh.surface_id)
+                ++j;
+            EmitTranslucentMeshSurface(&s, j - i, mesh_instances, light_uniforms);
+            i = j;
+            continue;
+        }
         if (s.kind == ETransparentWorldKind::Tile)
             EmitTransparentTile(s.tile);
         else
             EmitTransparentHelper(s.helper);
+        ++i;
     }
     sg_end_pass();
     transparent_world_queue.clear();
@@ -2840,9 +3055,6 @@ void TRenderer::RunShadowPass()
 
 void TRenderer::InitLightPipeline()
 {
-    constexpr int32_t kPL = TRenderer::kMaxPointLights;
-    constexpr int32_t kUB_bytes = kLightUniformVec4s * 16;
-
     sg_shader_desc sh = {};
     sh.attrs[0].name = "pos";
     sh.attrs[0].sem_name    = "POSITION";
@@ -2852,42 +3064,10 @@ void TRenderer::InitLightPipeline()
     sh.attrs[1].sem_index   = 0;
     sh.vs.source = kLightVs;
     sh.vs.entry  = kShaderVsEntry;
-    sh.fs.source = kLightFs;
+    const std::string light_fs = WithLightModel(kLightFs);
+    sh.fs.source = light_fs.c_str();
     sh.fs.entry  = kShaderFsEntry;
-    sh.fs.uniform_blocks[0].size = kUB_bytes;
-    sh.fs.uniform_blocks[0].uniforms[0].name = "vp";
-    sh.fs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[1].name = "recon";
-    sh.fs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[2].name = "light_dir";
-    sh.fs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[3].name = "light_col";
-    sh.fs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[4].name = "ambient_col";
-    sh.fs.uniform_blocks[0].uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[5].name = "settings";
-    sh.fs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[6].name = "plight_pos";
-    sh.fs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[6].array_count = kPL;
-    sh.fs.uniform_blocks[0].uniforms[7].name = "plight_col";
-    sh.fs.uniform_blocks[0].uniforms[7].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[7].array_count = kPL;
-    sh.fs.uniform_blocks[0].uniforms[8].name = "shadow";
-    sh.fs.uniform_blocks[0].uniforms[8].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[9].name = "shadow_dir";
-    sh.fs.uniform_blocks[0].uniforms[9].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[10].name = "shadow_world_dir";
-    sh.fs.uniform_blocks[0].uniforms[10].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[11].name = "normal_lighting";
-    sh.fs.uniform_blocks[0].uniforms[11].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[12].name = "selected_obj_id";
-    sh.fs.uniform_blocks[0].uniforms[12].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[13].name = "classic_model";
-    sh.fs.uniform_blocks[0].uniforms[13].type = SG_UNIFORMTYPE_FLOAT4;
-    sh.fs.uniform_blocks[0].uniforms[13].array_count = kClassicModelVec4s;
-    sh.fs.uniform_blocks[0].uniforms[14].name = "point_model";
-    sh.fs.uniform_blocks[0].uniforms[14].type = SG_UNIFORMTYPE_FLOAT4;
+    DescribeLightUniformBlock(sh.fs.uniform_blocks[0]);
     sh.fs.images[0].name         = "albedo_tex";
     sh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -2974,43 +3154,11 @@ void TRenderer::SetPerspectiveProxyRasterScale(float scale)
     perspective_proxy_raster_scale = std::clamp(scale, 0.25f, 1.25f);
 }
 
-void TRenderer::RunLightingPass()
+// The `params` block of lightmodel.*.h, for the deferred light pass and the
+// translucent mesh pass. u holds kLightUniformFloats floats.
+void TRenderer::PackLightUniforms(float* u) const
 {
-    if (!lit_pass.id || !light_pipeline.id) return;
-
-    RunAOPass();
-    RunShadowPass();
-
-    sg_pass_action pa = {};
-    if (backdrop_filled)
-    {
-        // DrawBackdrop ran this frame; keep its contents so the light
-        // shader's `discard` on empty pixels reveals the backdrop instead
-        // of solid tile_clear_rgba.
-        pa.colors[0].action = SG_ACTION_LOAD;
-        backdrop_filled = false;
-    }
-    else
-    {
-        pa.colors[0].action = SG_ACTION_CLEAR;
-        pa.colors[0].value  = { tile_clear_rgba[0], tile_clear_rgba[1],
-                                tile_clear_rgba[2], tile_clear_rgba[3] };
-    }
-    sg_begin_pass(lit_pass, &pa);
-
-    sg_apply_pipeline(light_pipeline);
-    sg_bindings bind = {};
-    bind.vertex_buffers[0] = composite_vbuf;
-    bind.fs_images[0]      = color_target;
-    bind.fs_images[1]      = normal_target;
-    bind.fs_images[2]      = scene_z_target;
-    bind.fs_images[3]      = ao_target;
-    bind.fs_images[4]      = id_target;
-    bind.fs_images[5]      = shadow_target;
-    sg_apply_bindings(&bind);
-
     constexpr int32_t kPL = TRenderer::kMaxPointLights;
-    float u[kLightUniformVec4s * 4] = {};
     int32_t o = 0;
     u[o++] = recon.ox;    u[o++] = recon.oy;
     u[o++] = recon.z_near; u[o++] = recon.zspan;
@@ -3073,7 +3221,46 @@ void TRenderer::RunLightingPass()
     u[o++] = light.retail_modern_gain_per_mult;
     u[o++] = light.retail_modern_range_scale;
     u[o++] = 0.0f;
-    assert(o == kLightUniformVec4s * 4);
+    assert(o == kLightUniformFloats);
+}
+
+void TRenderer::RunLightingPass()
+{
+    if (!lit_pass.id || !light_pipeline.id) return;
+
+    RunAOPass();
+    RunShadowPass();
+
+    sg_pass_action pa = {};
+    if (backdrop_filled)
+    {
+        // DrawBackdrop ran this frame; keep its contents so the light
+        // shader's `discard` on empty pixels reveals the backdrop instead
+        // of solid tile_clear_rgba.
+        pa.colors[0].action = SG_ACTION_LOAD;
+        backdrop_filled = false;
+    }
+    else
+    {
+        pa.colors[0].action = SG_ACTION_CLEAR;
+        pa.colors[0].value  = { tile_clear_rgba[0], tile_clear_rgba[1],
+                                tile_clear_rgba[2], tile_clear_rgba[3] };
+    }
+    sg_begin_pass(lit_pass, &pa);
+
+    sg_apply_pipeline(light_pipeline);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = composite_vbuf;
+    bind.fs_images[0]      = color_target;
+    bind.fs_images[1]      = normal_target;
+    bind.fs_images[2]      = scene_z_target;
+    bind.fs_images[3]      = ao_target;
+    bind.fs_images[4]      = id_target;
+    bind.fs_images[5]      = shadow_target;
+    sg_apply_bindings(&bind);
+
+    float u[kLightUniformFloats] = {};
+    PackLightUniforms(u);
 
     const sg_range r = { u, sizeof(u) };
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &r);
