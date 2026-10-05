@@ -70,7 +70,7 @@ bool TDeathScreen::Initialize()
         if (widget.name == "restart")
             GameFlow.RestartAfterDeath();
         else if (widget.name == "load")
-            log_warn("[death] Load Game screen not ported yet");   // retail 0x0066fa78
+            GameFlow.ShowLoadGameScreen();
         else if (widget.name == "exit")
             GameFlow.ReturnToTitle();
     });

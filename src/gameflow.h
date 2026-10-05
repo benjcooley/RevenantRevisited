@@ -42,10 +42,13 @@ class TGameFlow
     TScreen* Boot(const SBootOptions& options);
 
     void StartNewGame();                    // title "New Game"
-    void LoadGame(const char* slot);        // title / death "Load"
+    void LoadGame(const char* slot);        // the Load Game screen's "Load Game"
+    void ShowLoadGameScreen();              // title "Load Game", death "Load"
+    void ShowOptionsScreen();               // title "Options"
     void PlayerDied();                      // TPlayer death countdown ran out
     void RestartAfterDeath();               // death screen "Restart"
-    void ReturnToTitle();                   // Quit Module, death Exit, endgame
+    void ReturnToTitle();                   // Quit Module, death Exit, endgame,
+                                            // the Load Game / Options screens' Exit
     void QuitApplication();                 // title Exit, in-game Exit Program
 
     // Called once the current screen has closed, with the screen that
