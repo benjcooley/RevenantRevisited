@@ -129,7 +129,7 @@ constexpr int32_t kValCellHMul = 2;              // h = lineH * 2 (spec §8 / §
 // the single shared Arimo atlas (UI_METHOD_MAP §12) for both, since
 // font-id 0x404's exact pt-size mapping is UNCONFIRMED-I and the visible
 // difference at HUD scale is negligible.
-constexpr const char* kFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx   = 11;            // tiny labels in a 42-tall box
 
 // =====================================================================
@@ -344,9 +344,9 @@ bool InitializeUIBarInvMode()
         log_info("[ui-barinv] BarInvBox %dx%d (expect 42x42)",
                  g_barInvBox->width, g_barInvBox->height);
 
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-barinv] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
     BuildBarInvSlots();
 
