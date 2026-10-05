@@ -9,6 +9,7 @@
 #include "statusbar.h"
 #include <typeinfo>
 #include "food.h"
+#include "logging.h"
 
 REGISTER_BUILDER(TFood)
 
@@ -32,6 +33,21 @@ void TFood::Load(RTInputStream is, int32_t version, int32_t objversion)
     TObjectInstance::Load(is, version, objversion);
     if (Amount() == 0)
         SetAmount(1);
+}
+
+// REVSYNC: TFood::MergeInto @ 0x0050ea80 (vtable 0x98, POTION's too). Food
+// joins the first item named as its type in the new owner's inventory, bags
+// included, whatever that item's class.
+bool TFood::MergeInto(TObjectInstance* newowner)
+{
+    TObjectInstance* stack = newowner->FindObjInventory(GetTypeName());
+    if (!stack)
+        return false;
+
+    stack->SetAmount(stack->Amount() + Amount());
+    log_debug("[inv] %s: %d %s merged into the stack in %s, now %d", newowner->GetName(),
+              Amount(), GetName(), stack->GetOwner()->GetName(), stack->Amount());
+    return true;
 }
 
 

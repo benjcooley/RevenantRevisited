@@ -10,6 +10,7 @@
 #include "money.h"
 #include "mappane.h"
 #include "inventory.h"
+#include "logging.h"
 
 REGISTER_BUILDER(TMoney)
 TObjectClass MoneyClass("MONEY", OBJCLASS_MONEY, 0);
@@ -100,6 +101,47 @@ void TMoney::RemoveFromInventory()
         FreeInvItem(objtype, Amount());
 }
 
+namespace {
+
+// The name retail's merge looks the pile up by (0x005e1d98); class.def has
+// one money type, "Gold".
+constexpr const char* kPileName = "Gold";
+
+// REVSYNC: the state retail's SetAmount (0x00515c90) gives a pile of
+// `amount`: bigger piles look bigger.
+int32_t PileState(int32_t amount)
+{
+    if (amount < 11)
+        return 0;
+    if (amount < 101)
+        return 2;
+    if (amount < 301)
+        return 4;
+    if (amount < 501)
+        return 6;
+    return 8;
+}
+
+} // namespace
+
+// REVSYNC: TMoney::MergeInto @ 0x00515b50 (vtable 0x98). Gold joins the first
+// "Gold" in the new owner's inventory, bags included, when that is money of
+// the same type. Not ported: retail's inventory-icon count on the path that
+// doesn't merge; the port counts in SignalAddedToInventory.
+bool TMoney::MergeInto(TObjectInstance* newowner)
+{
+    TObjectInstance* pile = newowner->FindObjInventory(kPileName);
+    if (!pile || pile->ObjClass() != ObjClass() || pile->ObjType() != ObjType())
+        return false;
+
+    pile->SetAmount(pile->Amount() + Amount());
+    log_debug("[inv] %s: %d %s merged into the pile in %s, now %d", newowner->GetName(),
+              Amount(), GetName(), pile->GetOwner()->GetName(), pile->Amount());
+    return true;
+}
+
+// REVSYNC: 0x00515c90: the icons (inventory and ground) for the new count,
+// the pile state, then the amount.
 void TMoney::SetAmount(int32_t amt)
 {
     if (Amount() == amt || amt < 1)
@@ -119,6 +161,7 @@ void TMoney::SetAmount(int32_t amt)
             AllocGroundItem(imagery->GetStillImage(GetState()), objtype, amt);
     }
 
+    SetState(PileState(amt));
     SetObjStat(se_Amount.id, amt);
 }
 

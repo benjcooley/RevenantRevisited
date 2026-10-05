@@ -41,6 +41,7 @@
 #include <memory.h>
 #include <math.h>
 #include <time.h>
+#include <string>
 #include <unordered_map>
 
 extern TEditStatusPane StatusBar;
@@ -1090,9 +1091,13 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
                                 used = inst->Use(Player);
                             else
                             {
-                                TakenObject = GetInstance(objindex);
-                                Player->Pickup(TakenObject);
-                                TextBar.Print("Picked up %s.", inst->GetTypeName());
+                                // Gold or food may merge into a pile and be deleted
+                                TObjectInstance* const item = GetInstance(objindex);
+                                const std::string name = inst->GetTypeName();
+                                const TSafeRef<TObjectInstance> taken(item);
+                                Player->Pickup(item);
+                                TakenObject = taken.Get();
+                                TextBar.Print("Picked up %s.", name.c_str());
                                 used = true;
                             }
                         }

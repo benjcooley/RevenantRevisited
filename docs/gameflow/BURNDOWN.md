@@ -320,10 +320,13 @@ These items aren't part of any single track but block others:
       editor console) isn't; the HUD's bottom bar is still the harness's
       `bottomBarOpen`, and retail's other drawer closes of it (LoadGame,
       `hideresponse`) aren't ported (AUTHOR_QUESTIONS 81).
-- [ ] `AddToInventory(name, amount)` makes a new pile (the shop's gold
-      payout shows as a second gold pile); retail's `0x0046f940` →
-      `0x0046f3d0` may merge stackables — not checked. Track ui / gameplay
-      (inventory).
+- [x] `AddToInventory(name, amount)` made a new pile (the shop's gold
+      payout showed as a second gold pile). Retail's `0x0046f3d0` merges
+      gold, food and potions into a pile of their kind (vtable `0x98`),
+      routes a player's item into a Pouch of its kind and swaps the item in
+      the target slot; ported 2026-10-05, with the nested searches
+      ([forensics/INVENTORY.md](forensics/INVENTORY.md)). Open: author
+      questions 120-122.
 
 ---
 
