@@ -628,6 +628,10 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
             if (iterations < 1)
                 ScriptError("Infinite loop detected\n", t.LineNum());
 
+            // The block is over: a story test reads this to tell a block
+            // that ran to its END from one still waiting.
+            log_trace("[script] %s: trigger %d ends", (context && context->GetName()) ? context->GetName() : "?",
+                      trigger);
             ip = kNotRunning;
             priority = 0;
         }

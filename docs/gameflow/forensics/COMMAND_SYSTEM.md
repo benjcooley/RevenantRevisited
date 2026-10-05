@@ -727,8 +727,12 @@ Grammar details (retail, kept):
   (`0x00497800`, not found = `-20000000`). `BuySellAddCriteria "minstrength"
   1 VALUE` in `town.s` reads Gina's `VALUE`, set just before by
   `SETPROTOVARIABLE VALUE = player.STAT "LEVEL" / 3 + 16`.
-- `buysellsalesperson`, the dialog commands and `buysellremove` don't consume
-  their token; the interpreter skips the rest of the line.
+- `buysellsalesperson`, the dialog commands, `buysellremove`,
+  `buyselladdbuyitem` (`0x00427810`), `buyselladd`'s type and the four
+  criteria commands' max bound don't consume their token; the interpreter
+  skips the rest of the line and, since the answer is 0 with a token left,
+  prints "(extra parameters ignored)" to the console for each (as for
+  `jump`, whose `0x00420c70` leaves the label). The port answers the same.
 - `buysellscreen` also writes the dialog pane's responder (`+0x194`) and
   "control on while choosing" (`+0x1e8`); single player reads neither before
   `SetWait` rewrites them (DIALOG.md §4.1), so the port leaves them alone. In a
