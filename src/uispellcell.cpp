@@ -167,14 +167,11 @@ bool TSpellIconSlot::HandleMouseDown(int32_t mx, int32_t my)
     if (ringBm && layerCount < kMaxDragBitmapLayers)
         layers[layerCount++] = { ringBm, 0, 0 };
 
-    // Start a SpellPane drag. The item pointer carries the spell index as
-    // an index+1 integer cast — harness-only sentinel (see header note).
-    // Coordination: EDragSource::SpellPane = 4 is already in uidragstate.h
-    // (no Agent-B change needed).
+    // Start a SpellPane drag: no item, the source index is the spell row.
     UIDragState::BeginDragLayers(
         EDragSource::SpellPane,
         spellIdx_,
-        reinterpret_cast<TObjectInstance*>(static_cast<intptr_t>(spellIdx_ + 1)),
+        nullptr,
         mx, my,
         layers, layerCount,
         mx - originX, my - originY);
@@ -195,8 +192,7 @@ bool TSpellIconSlot::HandleMouseUp(int32_t mx, int32_t my)
     if (drag.source != EDragSource::SpellPane) return false;
     if (!HitTest(mx, my)) return false;
 
-    const int32_t srcIdx = static_cast<int32_t>(
-        reinterpret_cast<intptr_t>(drag.item)) - 1;
+    const int32_t srcIdx = drag.source_idx;
 
     if (UIDragState::CompleteDrag(EDragSource::SpellPane, spellIdx_, true) && onDrop_)
         onDrop_(spellIdx_, srcIdx);
