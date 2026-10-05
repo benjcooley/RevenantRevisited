@@ -284,19 +284,21 @@ static std::string SaveSlotAt(int32_t index)
     return (index >= 0 && index < (int32_t)slots.size()) ? slots[index].name : std::string();
 }
 
-// Shared body for retail-table commands whose port hasn't landed yet: skip
-// the rest of the line, note (once per command) that a script reached it,
-// and report success so the calling script keeps running.
+// Shared body for retail-table commands whose port hasn't landed yet. They
+// answer the way retail answers a command it doesn't have (ARCHITECTURE
+// §6.5): CMD_BADCOMMAND, so the interpreter offers the line to the target's
+// own parser, reports "Unrecognized command" and the script carries on with
+// the next line. Logged once per command with the retail address.
 static int32_t CmdNotPorted(const char *name, uint32_t retailaddr, TToken &t)
 {
     static std::unordered_set<std::string> reported;
     if (reported.insert(name).second)
-        log_warn("[cmd] '%s' not ported yet (retail @ 0x%08x); ignored", name, retailaddr);
+        log_warn("[cmd] '%s' not ported (retail @ 0x%08x); unrecognized", name, retailaddr);
     else
-        log_debug("[cmd] '%s' not ported yet; ignored", name);
+        log_debug("[cmd] '%s' not ported; unrecognized", name);
     while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
         t.Get();
-    return 0;
+    return CMD_BADCOMMAND;
 }
 
 // Master command list, evaluated top-to-bottom
@@ -3860,8 +3862,9 @@ COMMAND(CmdGenerate)
 //
 // Every entry of the retail command table (SCommand[189] @ 0x005c6e88) is
 // registered above. Commands the pre-release snapshot never had start here
-// as stubs: they consume their parameters, log once that they ran, and
-// succeed, so a script that uses them keeps flowing instead of aborting.
+// as stubs: they consume their parameters, log once that a script reached
+// them, and answer "unrecognized" (CmdNotPorted) -- the script skips the
+// line and keeps running, as retail does for a command it doesn't know.
 // The retail body for each lives in recon/discovered/commands/cmd_<name>_<addr>.cpp.
 // When a command is ported, replace its stub with the real body (and move
 // the body next to its siblings if that reads better).
