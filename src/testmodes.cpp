@@ -3270,7 +3270,7 @@ static bool UsesDemoPlayer(const char* mode)
 {
     static constexpr const char* kModes[] = {
         "ui-hud", "ui-plyrstatusbar", "ui-stats", "ui-equip", "ui-inventory",
-        "ui-barinv", "ui-sidebar",
+        "ui-barinv", "ui-sidebar", "ui-quickspell", "ui-spellbook",
     };
     for (const char* m : kModes)
         if (strcmp(mode, m) == 0)
