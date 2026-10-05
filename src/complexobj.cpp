@@ -420,13 +420,13 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
     return COM_EXECUTING;
 }
 
-// Loads object data from the sector
+// REVSYNC: TComplexObject::Load @ 0x004db930 (SAVE_GAME.md §11.3).
 void TComplexObject::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
+    uint8_t basever = 0;
     if (objversion >= 1)
-        LOAD_BASE(TObjectInstance)
-    else
-        TObjectInstance::Load(is, version, 0);
+        is >> basever;
+    TObjectInstance::Load(is, version, basever);
 
   // Load root state
     PTActionBlock ab;
@@ -437,34 +437,36 @@ void TComplexObject::Load(RTInputStream is, int32_t version, int32_t objversion)
     else
     {
         uint8_t action;
-        char name[RESNAMELEN];
         is >> action;
-        is >> name;
-        ab = new TActionBlock(name, (ACTION)action);
+        const std::string rootname = is.ReadString();
+        ab = new TActionBlock(rootname.substr(0, RESNAMELEN - 1).c_str(), (ACTION)action);
     }
 
     SetRoot(ab);
     SetDoing(ab);
     SetDesired(ab);
+
+  // Keep the saved state when it is the root's own (an animation state is
+  // named "<group>:<name>"); otherwise start the root.
+    if (const char* statename = imagery ? imagery->GetAniName(state) : nullptr)
+    {
+        if (const char* colon = strchr(statename, ':'))
+            statename = colon + 1;
+        if (stricmp(ab->name, statename) == 0)
+            return;
+    }
     state = FindState(ab->name);
 }
 
-// Saves object data to the sector
+// REVSYNC: TComplexObject::Save @ 0x004dbb80.
 void TComplexObject::Save(RTOutputStream os)
 {
-    SAVE_BASE(TObjectInstance)
+    os << (uint8_t)TObjectInstance::ObjVersion();
+    TObjectInstance::Save(os);
 
   // Save root state
     os << (uint8_t)root->action;
-    uint8_t len = (uint8_t)strlen(root->name);
-    os << len;
-    char *p = root->name;
-    while (len)
-    {
-        os << (*p);
-        p++;
-        len--;
-    }
+    os << root->name;
 }
 
 void TComplexObject::Notify(int32_t notify, void *ptr)

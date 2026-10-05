@@ -30,6 +30,9 @@
 #include <sys/stat.h>
 #include <algorithm>
 #include <atomic>
+#include <memory>
+#include <set>
+#include <string>
 #include <vector>
 
 namespace {
@@ -596,16 +599,11 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
   // Set imagery
     imagery = img;
 
-  // Set ANIMATE and PULSE flags
-    if (imagery->NeedsAnimator(this))
-        flags |= OF_ANIMATE;
+  // REVSYNC: TObjectInstance::TObjectInstance(SObjectDef*, ...) @ 0x0046e1f0.
+  // Every object asks to be notified; the flags each class starts with are
+  // part of what a sector or save file records (SAVE_GAME.md §11.2).
+    flags |= OF_NOTIFY;
 
-    if (ObjClass() != OBJCLASS_TILE)
-        flags |= OF_PULSE;
-
-    if (flags & OF_LIGHT)
-        flags = flags | OF_ANIMATE | OF_PULSE;
-    
   // Set Object info pointer
     cl = TObjectClass::GetClass(objclass);
     if (!cl)
@@ -621,7 +619,32 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
             ResetObjStat(c);
     }
 
-    if (objclass != OBJCLASS_TILE) // No scripts for regular tiles (for efficiency sake)
+    switch (objclass)
+    {
+    case OBJCLASS_ITEM:      case OBJCLASS_WEAPON:  case OBJCLASS_ARMOR:
+    case OBJCLASS_TALISMAN:  case OBJCLASS_FOOD:    case OBJCLASS_LIGHTSOURCE:
+    case OBJCLASS_TOOL:      case OBJCLASS_MONEY:   case OBJCLASS_KEY:
+    case OBJCLASS_INVCONTAINER: case OBJCLASS_POTION: case OBJCLASS_AMMO:
+    case OBJCLASS_SCROLL:    case OBJCLASS_RANGEDWEAPON: case OBJCLASS_MAPSCROLL:
+        flags |= OF_INVENTORY | OF_ANIMATE | OF_PULSE;
+        break;
+    case OBJCLASS_EFFECT:
+        flags |= OF_ANIMATE | OF_PULSE;
+        break;
+    default:
+        break;
+    }
+    if (objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER)
+        flags |= OF_VIRGIN;
+
+    if (imagery->NeedsAnimator(this))
+        flags |= OF_ANIMATE | OF_PULSE;
+
+    if (objclass != OBJCLASS_TILE)
+        flags |= OF_PULSE;
+
+  // An object LoadObject is building gets its script when Load finishes.
+    if (!(flags & OF_LOADING) && CanHaveScript())
         InitScript(ScriptManager.ObjectScript(this));
 }
 
@@ -1792,11 +1815,29 @@ void TObjectInstance::RedrawBackground(int32_t bgdraw)
 
 // ********** Script Functions ************
 
+// Retail: carried items and tiles that keep their type's name have no
+// scripts (InitScript @ 0x00471150); a renamed tile can have one.
+bool TObjectInstance::CanHaveScript() const
+{
+    if (flags & OF_INVENTORY)
+        return false;
+    return objclass != OBJCLASS_TILE || !inf || name != inf->name;
+}
+
+// REVSYNC: InitScript @ 0x00471150. Replaces the current script. Retail's
+// multiplayer gate (a module flag allows scripts in multiplayer) is not
+// ported: the port plays single player.
 void TObjectInstance::InitScript(PTScript newscr)
 {
-    if (objclass == OBJCLASS_TILE)
-        return; // Tiles can't do scripts!!
+    if (newscr == script)
+        return;
+    if (!CanHaveScript())
+    {
+        delete newscr;              // REVSYNC-DIVERGENCE: retail detached and leaked it
+        return;
+    }
 
+    delete script;
     script = newscr;
     if (script)
     {
@@ -2039,7 +2080,7 @@ void TObjectInstance::Notify(int32_t notify, void *ptr)
     }
     else if (notify == N_SCRIPTADDED)   // Check to see if new script matches us
     {
-        if (!script && objclass != OBJCLASS_TILE) // No scripts for regular tiles
+        if (!script && CanHaveScript())
             InitScript(ScriptManager.ObjectScript(this));
     }
 }
@@ -2056,78 +2097,73 @@ int32_t g_loadObjNullCorruptDrop = 0;
 int32_t g_loadObjNullNonMapDrop  = 0;
 int32_t g_loadObjOk              = 0;
 
-// REVSYNC: TObjectInstance::LoadObject (universal stream decoder) @ 0x471ce0
-//   = FUN_00471ce0_CreateObjectFromStream
-//   Source-path fingerprint: d:\revenant\object.cpp (1998 source).
-//   Header layout, version gates, MovePos resync semantics, and the
-//   "force-simple" recovery path (mismatched objclass found via id scan,
-//   dispatch via TObjectInstance::Load instead of the virtual) all match
-//   retail. v14+ adds the separate invblocksize tail.
-TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, bool ismap)
+namespace {
+
+// Object names in sector and save files carry bit 7 on every byte.
+constexpr uint8_t kNameByteFlag = 0x80;
+constexpr uint8_t kNameByteMask = 0x7f;
+
+// The stats an object untouched since placement keeps through a load
+// (health, fatigue and mana for a character); the rest come from its type.
+constexpr int32_t kFirstKeptStat = 3;
+constexpr int32_t kLastKeptStat  = 5;
+
+}  // namespace
+
+// REVSYNC: TObjectInstance::LoadObject (universal stream decoder) @ 0x00471ce0.
+// docs/gameflow/forensics/SAVE_GAME.md §11.1. `streamflags` carries what
+// retail kept in DAT_0065a254: OSTREAM_MAP discards NONMAP objects (players
+// never come from a sector file), OSTREAM_NOINVENTORY skips inventories.
+//
+// The type comes from the unique id; when the id belongs to another class
+// the object is built as that class and loaded with the base
+// TObjectInstance::Load ("force simple"), as retail. Retail looked the id up
+// in one global table; the port asks the stored class first and then every
+// class, which finds the same type because ids are unique.
+TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, uint32_t streamflags)
 {
-    uint32_t uniqueid;
+    uint32_t uniqueid = 0;
     short objversion = 0;
     short objclass;
-    short objtype;
-    short blocksize;
-    short invblocksize = -1;  // v14+: separate block size for inventory body
-    SObjectDef def;
+    short objtype = -1;
+    short blocksize = -1;
+    short invblocksize = -1;  // v14+: the inventory's share of blocksize
     bool forcesimple = false;
     bool corrupted = false;
 
     // ****** Load object block header ******
 
-    // Get object version
     if (version >= 8)
         is >> objversion;
-
-    if (objversion < 0) // Objversion is the placeholder in map version 8 or above
+    if (objversion < 0) // Placeholder for an empty slot (map version 8 and up)
     {
         ++g_loadObjNullObjVerNeg;
         return nullptr;
     }
 
     is >> objclass;
-    if (objclass < 0)   // Placeholder for empty object slot
+    if (objclass < 0)   // Placeholder for an empty slot
     {
         ++g_loadObjNullClassNeg;
         return nullptr;
     }
 
-    // Check the sector map version before we read the type info
     if (version < 1)
-    {
-        // Version 0 - No Unique ID's, so just read the objtype directly
-        is >> objtype;
-        uint32_t uniqueid = 0;
-        blocksize = -1;     
-    }
-    else if (version < 4)
-    {
-        // Version 1 and above - Unique ID's used instead of objtype, so find
-        //             the objtype given the Unique ID
-
-        objtype = -1;
-        is >> uniqueid;
-        blocksize = -1;
-    }
+        is >> objtype;              // Version 0: no unique ids
     else
     {
-        // Version 4 has block size, so we can just skip over objects
-        //              we don't recognize
-        objtype = -1;
         is >> uniqueid;
-        is >> blocksize;
-
-        // v14+ splits the single blocksize into a body blocksize plus a
-        // separate inventory blocksize, so the inventory body can also be
-        // skipped independently. See retail FUN_00471ce0 gate `param_4 >= 0xe`.
+        if (version >= 4)
+            is >> blocksize;        // Version 4: block size, so unknown objects can be skipped
         if (version >= 14)
             is >> invblocksize;
     }
 
+    const int32_t headerend = is.GetPos();
+    auto skipBlock = [&]() { is.SetPos(headerend + blocksize); };
+
     // ****** Is this object any good? ******
-    
+
     TObjectClass* cl = TObjectClass::GetClass(objclass);
     if (!cl || !cl->ClassName())
     {
@@ -2135,11 +2171,7 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
             FatalError("Object in map file has invalid class - possible file corruption");
         else if (blocksize >= 0)
         {
-            // Retail LAB_00471e57: unsupported class (bags/chests/invcontainer
-            // added post-1998-source, e.g. retail-only class 18). `blocksize`
-            // covers body + inventory together in v14+, so a single MovePos
-            // resyncs to the next object. invblocksize is already included.
-            is.MovePos(blocksize);
+            skipBlock();
             ++g_loadObjNullBadClass;
             return nullptr;
         }
@@ -2151,22 +2183,26 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
         }
     }
 
-    if (objtype < 0)
-    {           
-        objtype = cl->FindObjType(uniqueid);
+    // Retail never loads a map scroll from a file.
+    if (objclass == OBJCLASS_MAPSCROLL && blocksize >= 0)
+    {
+        skipBlock();
+        return nullptr;
+    }
 
+    if (objtype < 0)
+    {
+        objtype = cl->FindObjType(uniqueid);
         if (objtype < 0)
         {
-            // not found in this class, so check all of them
-            int32_t newobjtype, newobjclass;
-            TObjectClass* newcl;
-            for (newobjclass = 0; newobjclass < MAXOBJECTCLASSES; newobjclass++)
+            for (int32_t newobjclass = 0; newobjclass < MAXOBJECTCLASSES; newobjclass++)
             {
-                newcl = TObjectClass::GetClass(newobjclass);
-                if (newcl && (newobjtype = newcl->FindObjType(uniqueid)) >= 0)
+                TObjectClass* newcl = TObjectClass::GetClass(newobjclass);
+                const int32_t newobjtype = newcl ? newcl->FindObjType(uniqueid) : -1;
+                if (newobjtype >= 0)
                 {
-                    objclass = newobjclass;
-                    objtype = newobjtype;
+                    objclass = (short)newobjclass;
+                    objtype = (short)newobjtype;
                     cl = newcl;
                     forcesimple = true;
                     break;
@@ -2178,20 +2214,18 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
         {
             if (Debug)
             {
-                // give a more descriptive error
                 char buf[80];
-                sprintf(buf, "Object unique id 0x%x not found in class.def", uniqueid);
+                snprintf(buf, sizeof(buf), "Object unique id 0x%x not found in class.def", uniqueid);
                 FatalError(buf);
             }
-            else if (blocksize >= 0)    // Just skip over this object
+            else if (blocksize >= 0)
             {
-                is.MovePos(blocksize);
+                skipBlock();
                 ++g_loadObjNullBadType;
                 return nullptr;
             }
-            else      // If attempting to fix, assume type is type 0 - first type in list
-            {   
-                
+            else
+            {
                 objtype = 0;
                 corrupted = true;
             }
@@ -2200,64 +2234,60 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
 
     // ****** Create the object ******
 
+    // Retail builds it LOADING: the constructor leaves the script to Load.
+    SObjectDef def;
     memset(&def, 0, sizeof(SObjectDef));
     def.objclass = objclass;
     def.objtype  = objtype;
+    def.flags    = OF_LOADING;
 
     TObjectInstance* inst = cl->NewObject(&def);
     if (!inst)
     {
-        // Class factory missing — retail added bag/chest/invcontainer-style
-        // classes (e.g. class 25) after this 1998 source was snapshotted, so
-        // NewObject returns null for them. Skip rather than abort; blocksize
-        // covers body+inventory so a single MovePos resyncs the stream.
-        // Retail FUN_00471ce0 would crash here (the "Trouble creating" error
-        // is a warning, followed by an unchecked virtual call on null); our
-        // port is strictly safer.
+        // A type whose class.def builder the port lacks. Retail would have
+        // crashed here ("Trouble creating loaded object", then an unchecked
+        // call); skip the block instead.
         if (blocksize >= 0)
-            is.MovePos(blocksize);
+            skipBlock();
         ++g_loadObjNullNewObjFail;
         return nullptr;
     }
 
     // ****** Load the object ******
 
-  // Retail layout (FUN_00471ce0, v14+): `blocksize` is the TOTAL post-header
-  // byte count covering body + inventory together; `invblocksize` is the
-  // inventory tail carved out of the end of that block. Body-proper size is
-  // `blocksize - invblocksize`. The single final resync at LAB_00471fbc sets
-  // the stream to `bodystart + blocksize`. Earlier pre-retail (v4..v13) source
-  // used a single blocksize covering body+inventory without a separate
-  // invblocksize field.
-    uint32_t bodystart = is.GetPos();
+    // v14+: blocksize covers body and inventory; invblocksize is the
+    // inventory's tail of it. Older versions don't say where the body ends.
+    const int32_t bodystart = is.GetPos();
+    const int32_t bodysize  = (version >= 14 && blocksize >= 0)
+                                  ? blocksize - std::max<int32_t>(invblocksize, 0) : -1;
 
     if (forcesimple)
         inst->TObjectInstance::Load(is, version, objversion);
     else
         inst->Load(is, version, objversion);
 
-  // Snap back to start-of-inventory before calling LoadInventory so it reads
-  // from the correct offset regardless of how many bytes Load() actually
-  // consumed.
-    if (version >= 14 && blocksize >= 0 && invblocksize >= 0)
-        is.SetPos(bodystart + blocksize - invblocksize);
+    if (bodysize >= 0)
+    {
+        const int32_t consumed = is.GetPos() - bodystart;
+        if (consumed < bodysize)
+            inst->KeepUnreadClassData(is, bodystart + consumed, bodystart + bodysize);
+        else if (consumed > bodysize)
+            log_warn("[object] block size error for object %s: body is %d bytes, Load read %d",
+                     inst->GetName() ? inst->GetName() : "?", bodysize, consumed);
+        is.SetPos(bodystart + bodysize);
+    }
 
-  // v14+: retail skips LoadInventory entirely when invblocksize < 1 (no
-  // inventory body present). See FUN_00471ce0 LAB_00471fa3 — the `0xd <
-  // param_4` gate jumps over the vtable dispatch for version > 13.
-    if (version < 14 || invblocksize >= 1)
-        inst->LoadInventory(is, version);
+    // Before v14 the inventory can't be skipped (its size isn't recorded).
+    const bool loadInventory =
+        version < 14 || (!(streamflags & OSTREAM_NOINVENTORY) && invblocksize >= 1);
+    if (loadInventory)
+        inst->LoadInventory(is, version, streamflags);
 
-  // Final resync to end-of-object = bodystart + blocksize (covers body+inv).
     if (blocksize >= 0)
         is.SetPos(bodystart + blocksize);
 
-  // If this object is corrupted in some way, delete it after doing load.
-  // Keep OF_NONMAP drops separate from true corruption so the sector harness
-  // can distinguish "players intentionally discarded from map-owned sectors"
-  // from "loader failed to reconstruct this object."
-    const bool nonmap_drop = ismap && (inst->Flags() & OF_NONMAP);
-    if (corrupted || nonmap_drop)
+    const bool nonmap_drop = (streamflags & OSTREAM_MAP) && (inst->Flags() & OF_NONMAP);
+    if (corrupted || nonmap_drop || inst->ObjClass() == OBJCLASS_MAPSCROLL)
     {
         delete inst;
         if (nonmap_drop)
@@ -2271,182 +2301,116 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     return inst;
 }
 
-// REVSYNC: TObjectInstance::SaveObject (universal stream encoder) @ 0x472110
-//   = FUN_00472110 (called from cls_0x45f7c0.cpp:2153 in SaveGame,
-//     and from cls_TSector_FUN_00499e90.cpp:47 / cls_TSector_FUN_00498c90.cpp:36
-//     in sector serialization). Source-path fingerprint: d:\revenant\object.cpp.
-//
-// Layout written to disk:
-//   [objversion:int16][objclass:int16][uniqueid:uint32]
-//   [blocksize:int16][invblocksize:int16]     (invblocksize only when v14+)
-//   [body bytes: blocksize - invblocksize]
-//   [inventory bytes: invblocksize]           (present only when invblocksize>0)
-// An empty slot is encoded as just a single int16 = -1.
-//
-// The retail `ismap` corresponds to (DAT_0065a254 & 1); when saving a map
-// file, OF_NONMAP objects (players, script-generated effects, etc.) emit
-// the empty-slot placeholder so they don't leak into sector .DAT files.
-void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, bool ismap)
+// REVSYNC: TObjectInstance::SaveObject (universal stream encoder) @ 0x00472110.
+// Layout: SAVE_GAME.md §11.1. `streamflags` carries what retail kept in
+// DAT_0065a250: OSTREAM_MAP writes a NONMAP object as the empty placeholder,
+// OSTREAM_NOINVENTORY leaves inventories out.
+void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, uint32_t streamflags)
 {
-    os.MakeFreeSpace(1024);
-
-    // Retail gate: when saving a map file, any OF_NONMAP object (players,
-    // script-generated effects, etc.) is emitted as a placeholder. The
-    // `ismap` argument corresponds to retail `DAT_0065a254 & 1`.
-    if (!inst || (ismap && (inst->Flags() & OF_NONMAP)))
+    if (!inst || ((streamflags & OSTREAM_MAP) && (inst->Flags() & OF_NONMAP)))
     {
-        os << (short const)-1;
+        os << (short)-1;
         return;
     }
 
     os << (short)inst->ObjVersion();
     os << (short)inst->ObjClass();
     os << (uint32_t)inst->ObjId();
-    os << (short)0;                           // blocksize placeholder
-    if (MAP_VERSION >= 14)
-        os << (short)0;                       // invblocksize placeholder
+    const int32_t sizes = os.GetPos();
+    os << (short)0;                           // blocksize, patched below
+    os << (short)0;                           // invblocksize, patched below
 
-    uint32_t bodystart = os.GetPos();
+    const int32_t bodystart = os.GetPos();
     inst->Save(os);
-    uint32_t bodyend = os.GetPos();
+    inst->SaveUnreadClassData(os);
+    const int32_t bodyend = os.GetPos();
 
-    // Retail only emits inventory bytes when there is actually something to
-    // save. Skipping the SaveInventory call entirely (rather than letting it
-    // write just a 4-byte count=0) keeps invblocksize==0 on disk, matching
-    // retail byte-for-byte and letting LoadObject's `invblocksize < 1`
-    // fast-path skip LoadInventory.
-    if (inst->RealNumInventoryItems() > 0)
-        inst->SaveInventory(os);
+    // Retail calls SaveInventory only when there is something to save, so
+    // an empty inventory writes no count and invblocksize stays 0.
+    if (!(streamflags & OSTREAM_NOINVENTORY) && inst->RealNumInventoryItems() > 0)
+        inst->SaveInventory(os, streamflags);
 
-    uint32_t end = os.GetPos();
-
-    if (MAP_VERSION >= 14)
-    {
-        // v14+: blocksize = total body+inv bytes, invblocksize = inv tail.
-        os.SetPos(bodystart - 4);
-        os << (short)(end - bodystart);
-        os << (short)(end - bodyend);
-    }
-    else
-    {
-        // Pre-v14: single blocksize covering body+inventory together.
-        os.SetPos(bodystart - 2);
-        os << (short)(end - bodystart);
-    }
+    const int32_t end = os.GetPos();
+    os.SetPos(sizes);
+    os << (short)(end - bodystart);
+    os << (short)(end - bodyend);
     os.SetPos(end);
 }
 
-// REVSYNC: TObjectInstance::LoadInventory — vtable slot 0x168 (offset 360)
-// of cls_0x5a50e8 (= FUN_00472310). Called by FUN_00471ce0_CreateObjectFromStream
-// when v14+ invblocksize >= 1 (or unconditionally pre-v14).
-//
-// Retail places each item at the slot recorded in its body
-// (TObjectInstance::Load reads `invindex` from the stream), so that the
-// child's stale invindex field always matches its true position in the
-// parent's inventory array. Our previous port used `inventory.Add(inst)`
-// which packs items into the front of the array — if the saved layout
-// had gaps (slot 0 used, slot 1 null, slot 2 used), the loaded item with
-// invindex=2 ended up at array slot 1, leaving the dtor's
-// RemoveFromInventory() walk pointing `Remove(2)` at the wrong (or
-// out-of-bounds) slot. That's the exit-crash candidate documented in
-// docs/gameflow/T5_FORENSIC.md §5 (C2). `Set(slot)` places the item at
-// its saved slot, restoring the retail-faithful invariant and incidentally
-// repairing the dtor walk's slot-skip behaviour.
-void TObjectInstance::LoadInventory(RTInputStream is, int32_t version)
+// REVSYNC: TObjectInstance::LoadInventory @ 0x00472310 (vtable slot 0x168).
+// Each item takes the first free slot (retail's array Add) and its invindex
+// is set to that slot, so a loaded inventory is packed whatever invindex the
+// file recorded.
+void TObjectInstance::LoadInventory(RTInputStream is, int32_t version, uint32_t streamflags)
 {
     if (version < 3)
         return;
 
-    int32_t num;
+    int32_t num = 0;
     is >> num;
-
-    if (num > 2048) // Maddness!!  Maddness!!
+    if (num < 1 || num > 2048)
     {
-        fprintf(stderr, "Invalid inventory size for obj %s\n", this->GetName());
+        if (num != 0)
+            log_warn("[object] invalid inventory size %d for %s", num, GetName() ? GetName() : "?");
         return;
     }
 
     for (int32_t i = 0; i < num; i++)
     {
-        TObjectInstance* inst = LoadObject(is, version);
+        TObjectInstance* inst = LoadObject(is, version, streamflags);
         if (!inst)
-        {
-            fprintf(stderr, "Invalid inventory object for obj %s", this->GetName());
             continue;
-        }
-
-        // TObjectInstance::Load read `invindex` out of the stream into
-        // inst->invindex. Place the item at exactly that slot. Fall back
-        // to Add for malformed bodies that left invindex < 0 (shouldn't
-        // happen for v>=3 but be defensive).
-        const int32_t slot = inst->invindex;
-        int32_t placed;
-        if (slot >= 0 && slot < MAXINVITEMS)
-            placed = inventory.Set(inst, slot);
-        else
-            placed = inventory.Add(inst);
-
-        // Keep the in-memory field consistent with where the item
-        // actually landed, in case Set/Add clamped.
-        inst->invindex = placed;
+        inst->invindex = (short)inventory.Add(inst);
         inst->SetOwner(this);
     }
 }
 
-// REVSYNC: TObjectInstance::SaveInventory — vtable slot 0x16c (offset 364)
-// of cls_0x5a50e8 (= FUN_00472380). Mirror of LoadInventory at slot 0x168.
-//   [int32 count] [count × SaveObject(...) recursively]
-// `count` is the live item count (RealNumInventoryItems), not the max
-// slot — gaps in the parent's inventory array are NOT encoded; LoadInventory
-// rebuilds the slot placement from each child's invindex body field.
-void TObjectInstance::SaveInventory(RTOutputStream os)
+// REVSYNC: TObjectInstance::SaveInventory @ 0x00472380 (vtable slot 0x16c):
+// int32 count, then each item. REVSYNC-DIVERGENCE: the count is the number
+// of items. Retail wrote the array's high-water mark, which overcounts after
+// an item is removed from the middle, so its next load read the following
+// data as inventory (SAVE_GAME.md §11.1).
+void TObjectInstance::SaveInventory(RTOutputStream os, uint32_t streamflags)
 {
-    int32_t num = RealNumInventoryItems();
-
-    os << num;
-
-    if (num > 0)
-    {
-        // save them out recursively
-        for (TInventoryIterator i(this); i; i++)
-        {
-            TObjectInstance::SaveObject(i.Item(), os);
-        }
-    }
-
+    os << (int32_t)RealNumInventoryItems();
+    for (TInventoryIterator i(this); i; i++)
+        TObjectInstance::SaveObject(i.Item(), os, streamflags);
 }
 
-namespace {
+// Class data a port class doesn't read yet: kept as bytes and written back
+// after the class's own fields, so the object survives a round trip intact.
+// REVSYNC-DIVERGENCE: retail always had the class (SAVE_GAME.md §11.3 lists
+// the layouts these bytes follow).
+void TObjectInstance::KeepUnreadClassData(RTInputStream is, int32_t from, int32_t to)
+{
+    const int32_t count = to - from;
+    if (count <= 0)
+        return;
+    unreadClassData = std::make_unique<std::vector<uint8_t>>(count);
+    is.SetPos(from);
+    is.ReadBytes(unreadClassData->data(), count);
 
-// Object names in sector and save files carry bit 7 on every byte.
-constexpr uint8_t kNameByteFlag = 0x80;
-constexpr uint8_t kNameByteMask = 0x7f;
+    static std::set<std::string> logged;
+    const char* type = inf && inf->name ? inf->name : "?";
+    if (logged.insert(type).second)
+        log_info("[object] '%s' (class %d): keeping %d bytes of class data the port doesn't read",
+                 type, objclass, count);
+}
 
-}  // namespace
+void TObjectInstance::SaveUnreadClassData(RTOutputStream os) const
+{
+    if (unreadClassData && !unreadClassData->empty())
+        os.WriteBytes(unreadClassData->data(), (int32_t)unreadClassData->size());
+}
 
-// REVSYNC: TObjectInstance::Load — vtable slot 0x160 (offset 352) of
-// cls_0x5a50e8 (= FUN_00472430). Body field order matches retail v15:
-//   uint8 namelen; namelen × char name (bit 7 set; 0 = the type's name)
-//   uint32 flags; int32 pos.x, pos.y, pos.z
-//   if !(flags & OF_IMMOBILE): int32 vel.x, vel.y, vel.z
-//   uint16 state                              (uint8 pre-v9)
-//   if (flags & OF_NONMAP): uint16 level      (gated v>=6; uint8 pre-v9)
-//   int32 inventnum, invindex, shadow
-//   uint8 rotatex, rotatey, rotatez (or facing pre-v3)
-//   int32 mapindex
-//   if (flags & OF_ANIMATE): int32 frame, framerate   (gated v>=6)
-//   int32 group
-//   uint8 numstats; numstats × { int32 stat; uint32 uniqueid }
-//   if (flags & OF_LIGHT): light block (flags, pos.xyz, color.rgb,
-//                                       intensity, multiplier)
-// pos is routed through WriteTransformPos so transform_ and the legacy
-// pos mirror stay in lockstep — the canonical world position is read
-// back via Pos().
+// REVSYNC: TObjectInstance::Load @ 0x00472430 (vtable slot 0x160). Fields:
+// SAVE_GAME.md §11.2 (the older-version branches follow the 1998 source and
+// retail). pos is routed through WriteTransformPos so transform_ and the
+// legacy pos mirror stay in lockstep.
 void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
-    // REVSYNC: name block of TObjectInstance::Load @ 0x00472430. Names are
-    // stored with bit 7 set on every byte; length 0 means "the type's name",
-    // which the constructor already set. The 1998 source stored them plain.
+    // Names are stored with bit 7 set on every byte; length 0 means "the
+    // type's name", which the constructor already set.
     uint8_t len;
     is >> len;
     if (len > 0)
@@ -2462,20 +2426,19 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
     }
 
     uint32_t newflags;
-
     {
         S3DPoint loaded;
         is >> newflags >> loaded.x >> loaded.y >> loaded.z;
         WriteTransformPos(transform_, pos, loaded);
     }
 
-  // Make sure fixed flags remain the way they were set in the constructor
-    flags = flags & OF_FIXEDFLAGS | (newflags & ~(OF_FIXEDFLAGS));
+  // The constructor's fixed flags stay; everything else comes from the file
+    flags = (flags & OF_FIXEDFLAGS) | (newflags & ~OF_FIXEDFLAGS);
 
   // Don't load velocity vectors if not mobile
     if (version < 6 || !(flags & OF_IMMOBILE))
         is >> vel.x >> vel.y >> vel.z;
-        
+
     if (version < 9)
     {
         uint8_t statebyte;
@@ -2483,11 +2446,10 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
         state = statebyte;
     }
     else
-        is >> state; // uint16_t
+        is >> state;
 
-  // Non map objects (i.e. players) store their level
-  // Players are stored in the save game file, and not in the map, so we need to know what
-  // level to put them in when we load them
+  // Non map objects (i.e. players) store their level: they come from the
+  // save, not a sector, so the level says where to put them.
     if (version >= 6 && (flags & OF_NONMAP))
     {
         if (version < 9)
@@ -2497,42 +2459,38 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
             level = levelbyte;
         }
         else
-            is >> level; // uint16_t
+            is >> level;
     }
     else
         level = 0;
-        
-    uint8_t health;
+
+    uint8_t health = 0;
     if (version < 5)
-        is >> health; // This is now an objstat
-    
+        is >> health; // Now an object stat
+
     if (version < 3)
     {
         uint8_t dummy8;
         short dummy16;
         is >> facing >> dummy16 >> inventnum >> dummy16 >> shadow >> dummy8;
 
-        // ignore inventories in old version
-        inventnum = -1;
-
-        // sector will set old-style indexes after object is loaded
-        mapindex = -1;
+        inventnum = -1;     // ignore inventories in old versions
+        mapindex = -1;      // the sector sets old-style indexes after the load
     }
     else
     {
         int32_t loaded_mapindex = -1;
         is >> inventnum >> invindex >> shadow >> rotatex >> rotatey >> rotatez >> loaded_mapindex;
-        // Route through SetMapIndex so the MapPane mapindex→instance registry
-        // picks up every streamed-in instance; TSafeRef<T>::Get() relies on it.
+        // Through SetMapIndex so the mapindex registry sees every streamed-in
+        // instance; TSafeRef<T>::Get() relies on it.
         SetMapIndex(loaded_mapindex);
     }
-    // Streamed-in rotatex / rotatey / rotatez (or facing for v<3) bypass
-    // the SetRotate* setter paths, so re-sync transform_'s rotation from
-    // the freshly-loaded triple here.
+    // The rotation fields bypass the SetRotate* setters, so re-sync
+    // transform_'s rotation from them.
     SyncTransformRot();
-    moveangle = rotatez;    // Set movement angle
+    moveangle = rotatez;
 
-    if (version < 5)  // Set up empty stat array and stick health in it
+    if (version < 5)  // Empty stat array with health stuck in it
     {
         frame = 0;
         framerate = 1;
@@ -2549,55 +2507,53 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
     }
     else
     {
-        if (version >= 6)
-        {
-            if (flags & OF_ANIMATE)
-                is >> frame >> framerate;   // Save framerate and frame if animating
-        }
-        else
-            is >> frame >> framerate;       // Version 5, always save
+        if (version < 6 || (flags & OF_ANIMATE))
+            is >> frame >> framerate;
 
         is >> group;
 
-      // Sure stat storage is inefficient, but it's only for a few objects in the game
         if (cl->NumObjStats() > 0)
             stats.SetNumItems(cl->NumObjStats());
 
-        // REVSYNC: stat loop of TObjectInstance::Load @ 0x00472430. Retail
-        // masks the saved stat id with 0x7f7f7f7f, and its slow path matches
-        // each class stat in turn; the 1998 source compared against the
-        // current index only, dropping every stat after the first mismatch.
+        // Each saved stat is matched to the class's stats by unique id (the
+        // saved id carries bit 7 in every byte); the slow path searches every
+        // class stat, so stats survive a reordered class.def.
         constexpr uint32_t kStatIdMask = 0x7f7f7f7f;
         uint8_t numstats;
         is >> numstats;
-        if (numstats > 0)   // Note: oridnary tiles can't have stats..
+        int32_t statid = 0;
+        for (int32_t st = 0; st < numstats && statid < stats.NumItems(); st++)
         {
-            int32_t statid = 0;
-            for (int32_t st = 0; st < numstats && statid < stats.NumItems(); st++)
-            {
-                int32_t stat;
-                uint32_t uniqueid;
-                is >> stat >> uniqueid;
-                uniqueid &= kStatIdMask;
+            int32_t stat;
+            uint32_t uniqueid;
+            is >> stat >> uniqueid;
+            uniqueid &= kStatIdMask;
 
-              // Note: to allow us to change the stats for characters,
-              // we check the unique id of the stat and match it to our object stat array
-                if (uniqueid == cl->ObjStatUniqueId(statid))
+            if (uniqueid == cl->ObjStatUniqueId(statid))
+            {
+                stats[statid] = stat;
+                statid++;
+            }
+            else
+            {
+                for (int32_t c = 0; c < cl->NumObjStats(); c++)
                 {
-                    stats[statid] = stat;   // Quick case, id's all match
-                    statid++;
-                }
-                else
-                {                           // Slow case.. search for id for stat
-                    for (int32_t c = 0; c < cl->NumObjStats(); c++)
-                    {
-                        if (uniqueid == cl->ObjStatUniqueId(c))
-                            stats[c] = stat;
-                    }
+                    if (uniqueid == cl->ObjStatUniqueId(c))
+                        stats[c] = stat;
                 }
             }
         }
 
+        // An object untouched since it was placed takes its type's current
+        // stats; only its health, fatigue and mana (stats 3-5) are its own.
+        if (flags & OF_VIRGIN)
+        {
+            for (int32_t c = 0; c < cl->NumObjStats(); c++)
+            {
+                if (c < kFirstKeptStat || c > kLastKeptStat)
+                    ResetObjStat(c);
+            }
+        }
     }
 
     if (flags & OF_LIGHT)
@@ -2614,63 +2570,68 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
         FatalError("Bad object class!"); // This should never happen!!
     inf = cl->GetObjType(objtype);
 
-  // Initialize the script (no tiles for efficiency)
-    if (objclass != OBJCLASS_TILE)
-        InitScript(ScriptManager.ObjectScript(this));
+  // Any script the object had goes; the right one is attached below
+    delete script;
+    script = nullptr;
 
   // Reset inventory
     if (this == Inventory.GetContainer())
         Inventory.Update();
+
+  // Flags retail settles once the object is loaded
+    if (version < 12)
+        flags &= ~(OF_DRAWFLIP | OF_VIRGIN | OF_LOADING | OF_INVULNERABLE | OF_BACKGROUND |
+                   OF_INVENTORY | OF_CALLEDPREDEL);
+    flags &= ~OF_LOADING;
+    if (objclass == OBJCLASS_TILE && (flags & OF_LIGHT))
+        flags &= ~OF_PULSE;
+    if (flags & OF_INVENTORY)
+        flags |= OF_ANIMATE | OF_PULSE;
+
+  // The script, now that the name and flags are final
+    if (CanHaveScript())
+        InitScript(ScriptManager.ObjectScript(this));
 }
 
-// REVSYNC: TObjectInstance::Save — vtable slot 0x164 (offset 356) of
-// cls_0x5a50e8 (= FUN_00472980). Byte-symmetric counterpart of Load
-// above; field order, version gates, and OF_IMMOBILE / OF_NONMAP /
-// OF_ANIMATE / OF_LIGHT predicates match retail v15.
+// REVSYNC: TObjectInstance::Save @ 0x00472980 (vtable slot 0x164).
+// Byte-symmetric with Load above (SAVE_GAME.md §11.2).
 void TObjectInstance::Save(RTOutputStream os)
 {
     if (flags & OF_LIGHT)
         flags |= OF_PULSE | OF_ANIMATE;
 
-    // REVSYNC: name block of TObjectInstance::Save @ 0x00472980 — only a
-    // renamed instance stores its name, each byte with bit 7 set.
+    // Only a renamed instance stores its name, each byte with bit 7 set.
     const bool renamed = name && inf && inf->name && strcmp(name, inf->name) != 0;
     const uint8_t len = renamed ? (uint8_t)std::min<size_t>(strlen(name), 255) : 0;
     os << len;
     for (int32_t i = 0; i < len; i++)
         os << (uint8_t)(name[i] | kNameByteFlag);
-  
-  // Save general object data
+
     os << flags << pos.x << pos.y << pos.z;
-    
+
     if (!(flags & OF_IMMOBILE))
         os << vel.x << vel.y << vel.z;
-    
+
     os << state;
 
-  // Non map objects (i.e. players) store their level
-  // Players are stored in the save game file, and not in the map, so we need to know what
-  // level to put them in when we load them
     if (flags & OF_NONMAP)
         os << level;
-        
-    os << inventnum << invindex << shadow << 
+
+    os << inventnum << invindex << shadow <<
         rotatex << rotatey << rotatez << mapindex;
-        
+
     if (flags & OF_ANIMATE)
         os << frame << framerate;
-        
+
     os << group;
 
-  // Save object specific stats (unique id is <=4 char code like "AMT", "TYPE", "AC")
-  // Now I've got to say that the unique id thing is just pretty damn cool.  That's one
-  // super tricky bit of coding there boy... wow.. what an idea.  Super groovy and all
-  // that.  
+    // Object stats with their unique ids (<=4 char codes like "AMT",
+    // "TYPE", "AC"), each id byte with bit 7 set.
+    constexpr uint32_t kStatIdFlag = 0x80808080;
     os << (uint8_t)(cl->NumObjStats());
     for (int32_t c = 0; c < cl->NumObjStats(); c++)
-        os << stats[c] << cl->ObjStatUniqueId(c);
+        os << stats[c] << (uint32_t)(cl->ObjStatUniqueId(c) | kStatIdFlag);
 
-  // Save light data
     if (flags & OF_LIGHT)
         os << lightdef.flags << lightdef.pos.x << lightdef.pos.y << lightdef.pos.z <<
             lightdef.color.red << lightdef.color.green << lightdef.color.blue <<
@@ -2709,9 +2670,9 @@ void TObjectInstance::SetFlag(const char *flagname, bool on)
         return;
 
     if (on)
-        ResetFlags(flags | (1 << flagnum));
+        ResetFlags(flags | (1u << flagnum));
     else
-        ResetFlags(flags & (~(1 << flagnum)));
+        ResetFlags(flags & ~(1u << flagnum));
 }
 
 bool TObjectInstance::IsFlagSet(const char *flagname) const
@@ -2720,7 +2681,7 @@ bool TObjectInstance::IsFlagSet(const char *flagname) const
     if (flagnum < 0)
         return false;
 
-    return (flags & (1 << flagnum)) != 0;
+    return (flags & (1u << flagnum)) != 0;
 }
 
 void TObjectInstance::ResetFlags(uint32_t newflags)

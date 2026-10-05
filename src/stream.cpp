@@ -4,14 +4,10 @@
 // *                     stream.cpp - TStream object                       *
 // *************************************************************************
 
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <memory.h>
-
-#include "revenant.h"
 #include "stream.h"
-#pragma hdrstop
+
+#include <algorithm>
+#include <cstdlib>
 
 // ******************************
 // * Constructor and Destructor *
@@ -19,44 +15,57 @@
 
 TOutputStream::TOutputStream(int32_t startsize, int32_t grwsize)
 {
-    buf = (uint8_t *)malloc(startsize);
-    bufsize = startsize;
-    growsize = grwsize;
+    bufsize  = std::max<int32_t>(startsize, 16);
+    growsize = std::max<int32_t>(grwsize, 16);
+    buf = (uint8_t *)std::malloc(bufsize);
     Reset();
 }
 
 TOutputStream::~TOutputStream()
 {
-    delete buf;
+    std::free(buf);
 }
 
 void TOutputStream::MakeFreeSpace(int32_t freespace)
 {
-    int32_t datasize = DataSize();
-    if (bufsize - datasize < freespace)
-    {
-        buf = (uint8_t *)realloc(buf, bufsize + growsize);
-        ptr = buf + datasize;
-        bufsize = bufsize + growsize;
-    }
+    const int32_t datasize = DataSize();
+    if (bufsize - datasize >= freespace)
+        return;
+
+    int32_t newsize = bufsize;
+    while (newsize - datasize < freespace)
+        newsize += growsize;
+    buf = (uint8_t *)std::realloc(buf, newsize);
+    ptr = buf + datasize;
+    bufsize = newsize;
 }
 
 // ****************
 // * IO Functions *
 // ****************
 
-RTInputStream TInputStream::operator >> (char *d)
+TInputStream& TInputStream::operator >> (char *d)
 {
-    strncpy(d, (char *)(ptr + 1), *ptr);
-    d[*ptr] = 0;
-    ptr += *ptr + 1;
+    uint8_t len = 0;
+    *this >> len;
+    Read(d, len);
+    d[len] = 0;
     return *this;
 }
 
-RTOutputStream TOutputStream::operator << (char *d)
+std::string TInputStream::ReadString()
 {
-    *ptr = strlen(d);
-    strncpy((char *)(ptr + 1), d, *ptr);
-    ptr += *ptr + 1;
+    uint8_t len = 0;
+    *this >> len;
+    std::string s(len, '\0');
+    Read(s.data(), len);
+    return s;
+}
+
+TOutputStream& TOutputStream::operator << (const char *d)
+{
+    const uint8_t len = (uint8_t)std::min<size_t>(std::strlen(d), 255);
+    *this << len;
+    Write(d, len);
     return *this;
 }

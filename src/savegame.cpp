@@ -10,6 +10,7 @@
 #include "savegame.h"
 
 #include "area.h"
+#include "hudstate.h"
 #include "logging.h"
 #include "mapmanager.h"
 #include "module.h"
@@ -22,6 +23,7 @@
 #include "stream.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <system_error>
 
@@ -41,6 +43,10 @@ constexpr int32_t kMultiplayerBlockSize = 0x200;
 constexpr int32_t kLegacyPlayerPadding  = 0x50;   // format 0, version > 12
 constexpr int32_t kGameStatesVersion    = 10;     // game states present from version 10
 constexpr int32_t kSoldUniquesVersion   = 11;     // merchant table present from version 11
+
+// Player state bits LoadGame adjusts (TPlayer +0x36c; SetPlayerState 0x0051d680).
+constexpr int32_t kPlayerStateActive = 1 << 0;   // set on every loaded player
+constexpr int32_t kPlayerStateStop   = 1 << 1;   // stops the action in progress; cleared on load
 
 void SkipBytes(TInputStream& is, int32_t count)
 {
@@ -80,6 +86,17 @@ const char* ActiveModuleName()
 {
     const TModule* module = ModuleManager.Active();
     return module ? module->dirname.c_str() : "";
+}
+
+// The module name a save records. Retail lowercases module directory names
+// when it scans the modules (0x00460620), so its saves name "ahkuilon"; the
+// port keeps the directory's own case for file lookups.
+std::string SaveModuleName()
+{
+    std::string name = ActiveModuleName();
+    for (char& c : name)
+        c = (char)std::tolower((unsigned char)c);
+    return name;
 }
 
 }  // namespace
@@ -260,11 +277,9 @@ bool TSaveGame::ReadSoldUniques(TInputStream& is, const SSaveHeader& header)
     return true;
 }
 
-// REVSYNC: the player loop of LoadGame @ 0x0048df70. Retail passes 1 as
-// LoadObject's third argument, but that argument isn't the port's `ismap`
-// (retail's non-map gate is a global LoadGame clears): see SAVE_GAME.md §4.
-// SetPlayerState((state & ~2) | 1) (0x0051d680) is not ported; in single
-// player it only marks the player active.
+// REVSYNC: the player loop of LoadGame @ 0x0048df70. Players are loaded
+// without the map flag (LoadGame clears retail's map-load global), so they
+// aren't discarded as NONMAP objects; see SAVE_GAME.md §4.
 bool TSaveGame::ReadPlayers(TInputStream& is, const SSaveHeader& header)
 {
     int32_t count = 1;
@@ -286,7 +301,7 @@ bool TSaveGame::ReadPlayers(TInputStream& is, const SSaveHeader& header)
 
     for (int32_t i = 0; i < count && is.Remaining() > 0; i++)
     {
-        TObjectInstance* object = TObjectInstance::LoadObject(is, header.version, false);
+        TObjectInstance* object = TObjectInstance::LoadObject(is, header.version);
         if (!object)
             continue;
         if (object->ObjClass() != OBJCLASS_PLAYER)
@@ -299,10 +314,44 @@ bool TSaveGame::ReadPlayers(TInputStream& is, const SSaveHeader& header)
 
         TPlayer* player = static_cast<TPlayer*>(object);
         PlayerManager.AddPlayer(player);
+        player->SetPlayerState((player->PlayerState() & ~kPlayerStateStop) | kPlayerStateActive);
         if (!header.multiplayer)
+        {
             PlayerManager.SetMainPlayer(player);
+            RestoreHud(player->HudWords());
+        }
+    }
+    if (is.Overrun())
+    {
+        log_error("[savegame] the player data is truncated");
+        return false;
     }
     return true;
+}
+
+// REVSYNC-DIVERGENCE: retail stored the HUD words it saved (§11.4) but never
+// applied them, so a load left the HUD as it was. The port restores the
+// sidebar from them.
+void TSaveGame::RestoreHud(const SPlayerHudWords& words)
+{
+    SHudState& hud = GetHudState();
+    hud.sidebarState = words.sidebarOpen ? HUD_SIDEBAR_OPEN : HUD_SIDEBAR_CLOSED;
+    if (words.upperMode >= HUD_TOP_EQUIP && words.upperMode <= HUD_TOP_BOOK)
+        hud.topSlot = words.upperMode;
+    if (words.lowerMode >= HUD_BOT_INV && words.lowerMode <= HUD_BOT_SPELL)
+        hud.bottomSlot = words.lowerMode;
+}
+
+// What retail's SaveGame wrote from its HUD globals (TPlayer::Save
+// @ 0x0051bdc0); the word the port can't identify keeps the loaded value.
+SPlayerHudWords TSaveGame::CurrentHudWords(const TPlayer& player)
+{
+    const SHudState& hud = GetHudState();
+    SPlayerHudWords words = player.HudWords();
+    words.sidebarOpen = hud.sidebarState == HUD_SIDEBAR_OPEN ? 1 : 0;
+    words.upperMode   = hud.topSlot;
+    words.lowerMode   = hud.bottomSlot;
+    return words;
 }
 
 // REVSYNC: SaveGame @ 0x0048d720. Not ported: the editor path that writes
@@ -334,7 +383,7 @@ bool TSaveGame::Save(const char* name)
     header.gametime     = PlayScreen.GameTime();
     header.playerformat = kPlayerListFormat;
     header.version      = MAP_VERSION;
-    strncpyz(header.module, ActiveModuleName(), SSaveHeader::kModuleNameLen);
+    strncpyz(header.module, SaveModuleName().c_str(), SSaveHeader::kModuleNameLen);
 
     TOutputStream os(0x8000, 0x4000);
     header.Write(os);
@@ -364,22 +413,29 @@ bool TSaveGame::Save(const char* name)
     return true;
 }
 
-// The body after the header (SAVE_GAME.md §3.2). Retail clears object flag
-// 0x04000000 on each player and its inventory first; the port never sets it.
+// The body after the header (SAVE_GAME.md §3.2). REVSYNC: the player loop of
+// SaveGame @ 0x0048d720 clears OF_VIRGIN on each player and on each item
+// directly in its inventory (a loaded player keeps its own stats), and the
+// player record carries the HUD state.
 void TSaveGame::WriteBody(TOutputStream& os) const
 {
     ScriptManager.GameStates().SaveStream(os);
 
-    os.MakeFreeSpace(4 + 8 * (int32_t)soldUniques.size());
     os << (int32_t)soldUniques.size();
     for (const SSoldUnique& sold : soldUniques)
         os << sold.objclass << sold.objtype;
 
     const int32_t count = PlayerManager.NumPlayers();
-    os.MakeFreeSpace(4);
     os << count;
     for (int32_t i = 0; i < count; i++)
-        TObjectInstance::SaveObject(PlayerManager.GetPlayer(i), os);
+    {
+        TPlayer* player = PlayerManager.GetPlayer(i);
+        player->ResetFlags(player->Flags() & ~OF_VIRGIN);
+        for (TInventoryIterator item(player); item; item++)
+            item->ResetFlags(item->Flags() & ~OF_VIRGIN);
+        player->SetHudWords(CurrentHudWords(*player));
+        TObjectInstance::SaveObject(player, os);
+    }
 }
 
 void TSaveGame::RefreshSlots()

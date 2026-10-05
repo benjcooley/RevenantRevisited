@@ -268,6 +268,7 @@ char DXDriverMatchStr[FILENAMELEN]; // Will use first DX driver who's descriptio
 // boot quickstarts into it.
 char StartupSavePath[MAXPATHLEN] = "";
 bool StartupSaveCycle = false;
+int32_t StartupSaveCycleSettle = 60;
 
 // Window/backbuffer size selected before sokol creates the native window.
 // WIDTH/HEIGHT stay as the classic 640x480 layout baseline; the renderer and
@@ -1641,13 +1642,21 @@ void GetParameters(int argc, char **argv)
             strncpyz(StartupSavePath, p.c_str(), MAXPATHLEN);
     }
 
-  // SAVECYCLE-TEST — once the PlayScreen reaches its first frame, run
-  // WriteGame("savecycle.sav") → ReadGame("savecycle.sav") back-to-back
-  // and dump a side-by-side comparison of the player's key retail-faithful
-  // fields. Lets a non-interactive smoke test verify the round-trip
-  // landed correctly. See docs/gameflow/T5_FORENSIC.md.
-    if (arg_flag(cmd, "savecycle-test"))
-        StartupSaveCycle = true;
+  // SAVECYCLE-TEST[=<frames>] — after <frames> PlayScreen frames (default
+  // 60; 0 = before the first simulation tick) save to slot "savecycle",
+  // load it back and log the player's key fields before and after. With 0,
+  // the slot is what the port writes for the game exactly as it was loaded
+  // (docs/gameflow/SAVE_INTEROP_TEST.md).
+    {
+        std::string p;
+        if (arg_param(cmd, "savecycle-test", p))
+        {
+            StartupSaveCycle = true;
+            StartupSaveCycleSettle = std::max<int32_t>(0, std::atoi(p.c_str()));
+        }
+        else if (arg_flag(cmd, "savecycle-test"))
+            StartupSaveCycle = true;
+    }
 
   // TEST=<mode> — route to TTestScreen instead of LogoScreen/PlayScreen.
   // See recon/docs/RETAIL_SYNC_PLAN.md.

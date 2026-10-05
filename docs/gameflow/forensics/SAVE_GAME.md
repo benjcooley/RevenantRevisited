@@ -288,13 +288,14 @@ the order differs it searches every class stat. When object flag
    so every stat after the first ordering mismatch was dropped. Locke
    loaded from `newgame.sav` as level 0 with 0 HP. *Fixed in 2c* to
    retail (§7.2). This affects every object loaded from a sector too.
-   The `0x04000000` reset is not ported.
+   *VIRGIN reset ported in 2f* (§11.2).
 8. **Player saved in the 1998 layout.** `TPlayer`/`TCharacter::Save`
    write objversion 4 (809 bytes for the new-game Locke); retail writes
    objversion 14 (976 bytes). The port reads both, so its saves
    round-trip, but retail can't read them and v14-only fields are lost
    on save. Header, game states and merchant table match retail byte for
-   byte.
+   byte. *Fixed in 2f:* every class writes retail's layout (§11), the
+   player at objversion 15.
 9. **Script ownership.** Objects delete their scripts and
    `TScriptManager::Close` deleted the same instances (double free at
    shutdown); a load's script reset would have touched freed scripts.
@@ -309,6 +310,15 @@ the order differs it searches every class stat. When object flag
     buy/sell pane (`0x00532f40`). In `SaveGame`: the editor path that
     rewrites the module's `newgame.sav`, and the `ss.bmp` thumbnail
     (the port doesn't capture one yet).
+12. **Stat layout.** The port's CHARACTER and PLAYER object stats were
+    in the 1998 order (level at index 6; damage resistances, NextExp,
+    the modifiers, skill next-exp and caps appended from class.def;
+    SpellDamageInc and EdgeBonus missing). Saves list stats in class
+    order and class.def's per-type default lists are positional, so
+    Locke's type defaults landed on the wrong stats, and SINC/EBNS were
+    dropped on load. *Fixed in 2f:* `charstats.h` and the code-defined
+    stats follow retail's registrations (`recon/scripts/object_stats.py`):
+    90 player stats in retail order.
 
 ## 11. Object stream, per class
 
