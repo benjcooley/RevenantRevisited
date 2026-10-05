@@ -367,6 +367,20 @@ class TCharacter : public TComplexObject
     OBJSTATFUNC(Fatigue)
     OBJSTATFUNC(Mana)
 
+  // Damage resistances and modifier (the shipped game's code-defined stats;
+  // their values come from class.def and saves, nothing in the port reads them yet)
+    OBJSTAT(DmgResMisc)
+    OBJSTAT(DmgResHand)
+    OBJSTAT(DmgResPuncture)
+    OBJSTAT(DmgResCut)
+    OBJSTAT(DmgResChop)
+    OBJSTAT(DmgResBludgeon)
+    OBJSTAT(DmgResMagical)
+    OBJSTAT(DmgResBurn)
+    OBJSTAT(DmgResFreeze)
+    OBJSTAT(DmgResPoison)
+    OBJSTAT(DamageMod)
+
    // Calculated stats
     virtual int32_t MaxHealth() { return chardata->health; }
       // Returns monster max health value

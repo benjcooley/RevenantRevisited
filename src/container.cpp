@@ -145,6 +145,7 @@ int32_t TContainer::NumObjects()
     return RealNumInventoryItems();
 }
 
+// REVSYNC: TContainer::Load @ 0x004dd3e0 (SAVE_GAME.md §11.3).
 void TContainer::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
     TObjectInstance::Load(is, version, objversion);
@@ -157,6 +158,12 @@ void TContainer::Load(RTInputStream is, int32_t version, int32_t objversion)
         SetStat("PickDifficulty", pickdifficulty);
     }
 
+  // A container in the world re-enters its saved state (open or shut).
+    if (!(flags & OF_INVENTORY))
+    {
+        SetCommandDone(true);
+        SetState(state);
+    }
 }
 
 void TContainer::Save(RTOutputStream os)

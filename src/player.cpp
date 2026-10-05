@@ -15,9 +15,13 @@
 #include "gameflow.h"
 #include "playscreen.h"
 #include "inventory.h"
+#include "logging.h"
 #include "mappane.h"
 #include "spell.h"
 #include "spellpane.h"
+
+#include <algorithm>
+#include <cstring>
 
 
 extern TObjectClass  CharacterClass; // Used to indicate player is derived from character
@@ -26,9 +30,28 @@ extern TObjectClass TalismanClass;
 REGISTER_BUILDER(TPlayer)
 TObjectClass PlayerClass("PLAYER", OBJCLASS_PLAYER, 0, &CharacterClass);
 
-// Miscellaneous character values
+// REVSYNC: the shipped game's PLAYER object stats 17-83 (SStatEntry
+// registrations; recon/scripts/object_stats.py). Index, unique id, default
+// and range as retail; class.def appends the six it adds after them.
+
+// Miscellaneous player values
 DEFOBJSTAT(Player, Level,           LEV,  PLRVAL_FIRST + PLRVAL_LEVEL, 1, 1, 100)
 DEFOBJSTAT(Player, Exp,             EXP,  PLRVAL_FIRST + PLRVAL_EXP, 0, 0, 1000000)
+DEFOBJSTAT(Player, NextExp,         NEXP, PLRVAL_FIRST + PLRVAL_NEXTEXP, 0, 0, 1000000)
+DEFOBJSTAT(Player, AttackLevel,     ATKL, PLRVAL_FIRST + PLRVAL_ATTACKLEVEL, 1, 1, 100)
+DEFOBJSTAT(Player, HealthPct,       HPCT, PLRVAL_FIRST + PLRVAL_HEALTHPCT, 0, -100000, 100000)
+DEFOBJSTAT(Player, ManaPct,         MPCT, PLRVAL_FIRST + PLRVAL_MANAPCT, 0, -100000, 100000)
+DEFOBJSTAT(Player, FatiguePct,      FPCT, PLRVAL_FIRST + PLRVAL_FATIGUEPCT, 0, -100000, 100000)
+DEFOBJSTAT(Player, MaxHealthFlat,   MHFT, PLRVAL_FIRST + PLRVAL_MAXHEALTHFLAT, 0, -100000, 100000)
+DEFOBJSTAT(Player, MaxManaFlat,     MMFT, PLRVAL_FIRST + PLRVAL_MAXMANAFLAT, 0, -100000, 100000)
+DEFOBJSTAT(Player, MaxFatigueFlat,  MFFT, PLRVAL_FIRST + PLRVAL_MAXFATIGUEFLAT, 0, -100000, 100000)
+DEFOBJSTAT(Player, MaxHealthPct,    MHPC, PLRVAL_FIRST + PLRVAL_MAXHEALTHPCT, 0, -100000, 100000)
+DEFOBJSTAT(Player, MaxManaPct,      MMPC, PLRVAL_FIRST + PLRVAL_MAXMANAPCT, 0, -100000, 100000)
+DEFOBJSTAT(Player, MaxFatiguePct,   MFPC, PLRVAL_FIRST + PLRVAL_MAXFATIGUEPCT, 0, -100000, 100000)
+DEFOBJSTAT(Player, ACBonus,         ACBN, PLRVAL_FIRST + PLRVAL_ACBONUS, 0, -100000, 100000)
+DEFOBJSTAT(Player, ManaCostPct,     MCPC, PLRVAL_FIRST + PLRVAL_MANACOSTPCT, 0, -100000, 100000)
+DEFOBJSTAT(Player, SpellDamageInc,  SINC, PLRVAL_FIRST + PLRVAL_SPELLDAMAGEINC, 0, -100000, 100000)
+DEFOBJSTAT(Player, EdgeBonus,       EBNS, PLRVAL_FIRST + PLRVAL_EDGEBONUS, 0, -100000, 100000)
 
 // Character stats
 DEFOBJSTAT(Player, Strn,            STRN, PLRSTAT_FIRST + PLRSTAT_STRN, 14, 0, 100)
@@ -45,7 +68,7 @@ DEFOBJSTAT(Player, Invoke,          INV,  SK_FIRST + SK_INVOKE, 0, 0, 100)
 DEFOBJSTAT(Player, Hands,           HAN,  SK_FIRST + SK_HANDS, 0, 0, 100)
 DEFOBJSTAT(Player, Knife,           KNF,  SK_FIRST + SK_KNIFE, 0, 0, 100)
 DEFOBJSTAT(Player, Sword,           SWR,  SK_FIRST + SK_SWORD, 0, 0, 100)
-DEFOBJSTAT(Player, Bludgeons,       BLD,  SK_FIRST + SK_BLUDGEONS, 0, 0, 100)
+DEFOBJSTAT(Player, Bludgeon,        BLD,  SK_FIRST + SK_BLUDGEONS, 0, 0, 100)
 DEFOBJSTAT(Player, Axes,            AXE,  SK_FIRST + SK_AXES, 0, 0, 100)
 DEFOBJSTAT(Player, Bows,            BOW,  SK_FIRST + SK_BOWS, 0, 0, 100)
 DEFOBJSTAT(Player, Stealth,         SLT,  SK_FIRST + SK_STEALTH, 0, 0, 100)
@@ -58,11 +81,37 @@ DEFOBJSTAT(Player, InvokeExp,       INVE, SKE_FIRST + SK_INVOKE, 0, 0, 1000000)
 DEFOBJSTAT(Player, HandsExp,        HANE, SKE_FIRST + SK_HANDS, 0, 0, 1000000)
 DEFOBJSTAT(Player, KnifeExp,        KNFE, SKE_FIRST + SK_KNIFE, 0, 0, 1000000)
 DEFOBJSTAT(Player, SwordExp,        SWRE, SKE_FIRST + SK_SWORD, 0, 0, 1000000)
-DEFOBJSTAT(Player, BludgeonsExp,    BLDE, SKE_FIRST + SK_BLUDGEONS, 0, 0, 1000000)
+DEFOBJSTAT(Player, BludgeonExp,     BLDE, SKE_FIRST + SK_BLUDGEONS, 0, 0, 1000000)
 DEFOBJSTAT(Player, AxesExp,         AXEE, SKE_FIRST + SK_AXES, 0, 0, 1000000)
 DEFOBJSTAT(Player, BowsExp,         BOWE, SKE_FIRST + SK_BOWS, 0, 0, 1000000)
 DEFOBJSTAT(Player, StealthExp,      SLTE, SKE_FIRST + SK_STEALTH, 0, 0, 1000000)
 DEFOBJSTAT(Player, LockPickExp,     LPKE, SKE_FIRST + SK_LOCKPICK, 0, 0, 1000000)
+
+// Experience for the next skill level
+DEFOBJSTAT(Player, AttackNxtExp,    ATKN, SKN_FIRST + SK_ATTACK, 0, 0, 1000000)
+DEFOBJSTAT(Player, DefenseNxtExp,   DEFN, SKN_FIRST + SK_DEFENSE, 0, 0, 1000000)
+DEFOBJSTAT(Player, InvokeNxtExp,    INVN, SKN_FIRST + SK_INVOKE, 0, 0, 1000000)
+DEFOBJSTAT(Player, HandsNxtExp,     HANN, SKN_FIRST + SK_HANDS, 0, 0, 1000000)
+DEFOBJSTAT(Player, KnifeNxtExp,     KNFN, SKN_FIRST + SK_KNIFE, 0, 0, 1000000)
+DEFOBJSTAT(Player, SwordNxtExp,     SWRN, SKN_FIRST + SK_SWORD, 0, 0, 1000000)
+DEFOBJSTAT(Player, BludgeonNxtExp,  BLDN, SKN_FIRST + SK_BLUDGEONS, 0, 0, 1000000)
+DEFOBJSTAT(Player, AxesNxtExp,      AXEN, SKN_FIRST + SK_AXES, 0, 0, 1000000)
+DEFOBJSTAT(Player, BowsNxtExp,      BOWN, SKN_FIRST + SK_BOWS, 0, 0, 1000000)
+DEFOBJSTAT(Player, StealthNxtExp,   SLTN, SKN_FIRST + SK_STEALTH, 0, 0, 1000000)
+DEFOBJSTAT(Player, LockPickNxtExp,  LPKN, SKN_FIRST + SK_LOCKPICK, 0, 0, 1000000)
+
+// Skill caps
+DEFOBJSTAT(Player, AttackCap,       ATKC, SKC_FIRST + SK_ATTACK, 0, 0, 100)
+DEFOBJSTAT(Player, DefenseCap,      DEFC, SKC_FIRST + SK_DEFENSE, 0, 0, 100)
+DEFOBJSTAT(Player, InvokeCap,       INVC, SKC_FIRST + SK_INVOKE, 0, 0, 100)
+DEFOBJSTAT(Player, HandsCap,        HANC, SKC_FIRST + SK_HANDS, 0, 0, 100)
+DEFOBJSTAT(Player, KnifeCap,        KNFC, SKC_FIRST + SK_KNIFE, 0, 0, 100)
+DEFOBJSTAT(Player, SwordCap,        SWRC, SKC_FIRST + SK_SWORD, 0, 0, 100)
+DEFOBJSTAT(Player, BludgeonCap,     BLDC, SKC_FIRST + SK_BLUDGEONS, 0, 0, 100)
+DEFOBJSTAT(Player, AxesCap,         AXEC, SKC_FIRST + SK_AXES, 0, 0, 100)
+DEFOBJSTAT(Player, BowsCap,         BOWC, SKC_FIRST + SK_BOWS, 0, 0, 100)
+DEFOBJSTAT(Player, StealthCap,      SLTC, SKC_FIRST + SK_STEALTH, 0, 0, 100)
+DEFOBJSTAT(Player, LockPickCap,     LPKC, SKC_FIRST + SK_LOCKPICK, 0, 0, 100)
 
 // **************
 // * Skill Tree *
@@ -114,6 +163,20 @@ void TPlayer::ClearPlayer()
     memset(quickspells, 0, QSPELL_NUM * MAXTALISMANLEN);
 
     OnTheHog = false;
+
+  // REVSYNC: the record fields of TPlayer::ClearPlayer @ 0x00518750. A player
+  // is never VIRGIN: its stats are its own.
+    flags &= ~OF_VIRGIN;
+    knownspells.clear();
+    hudwords = {};
+    levelupstats = {};
+    team = {};
+    modulename.clear();
+    playerstate = 1;
+    statetime = PlayScreen.GameTime();
+    profile = {};
+    frags = {};
+    automap = {};
 
   // Port of retail TPlayer::ClearPlayer (0x518750) starting-stats logic
   // (recon/discovered/cls_0x5b4f30_TPlayer_ClearPlayer_518750.cpp,
@@ -618,36 +681,214 @@ bool TPlayer::HasTalismans(char *talismans)
     return has;
 }
 
-// Loads object data from the sector
-void TPlayer::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    if (objversion >= 4)
-        LOAD_BASE(TCharacter)
-    else
-        TCharacter::Load(is, version, objversion);
+// ***************************
+// * Player record streaming *
+// ***************************
 
-  // Load quickspells
-    if (objversion >= 4)
+namespace {
+
+// Stream string into a fixed char buffer, cut to fit.
+void ReadFixedString(RTInputStream is, char* dst, size_t capacity)
+{
+    const std::string s = is.ReadString();
+    const size_t n = std::min<size_t>(s.size(), capacity - 1);
+    std::memcpy(dst, s.data(), n);
+    dst[n] = 0;
+}
+
+}  // namespace
+
+// REVSYNC: automap record Load @ 0x00529770 (SAVE_GAME.md §11.5).
+void SAutoMapRecord::Load(RTInputStream is)
+{
+    module = is.ReadString();
+    int32_t count = 0;
+    is >> count;
+    levels.clear();
+    for (int32_t i = 0; i < count && !is.Overrun(); i++)
     {
-        is >> quickspells[QSPELL_CONSTRUCT];
-        is >> quickspells[QSPELL_1];
-        is >> quickspells[QSPELL_2];
-        is >> quickspells[QSPELL_3];
-        is >> quickspells[QSPELL_4];
+        SAutoMapLevel& entry = levels.emplace_back();
+        int32_t words = 0;
+        is >> entry.level >> words;
+        if (words < 0 || words * 2 > is.Remaining())
+        {
+            log_warn("[player] automap record: level %d claims %d words; dropped", entry.level, words);
+            levels.pop_back();
+            break;
+        }
+        entry.mask.resize(words);
+        for (int16_t& w : entry.mask)
+            is >> w;
     }
 }
 
-// Saves object data to the sector
+// REVSYNC: automap record Save @ 0x00529830. Retail first had the automap
+// pane fold the level it was showing back into the record (0x0052c5c0);
+// the port's automap pane doesn't keep one yet.
+void SAutoMapRecord::Save(RTOutputStream os) const
+{
+    os << module.c_str();
+    os << (int32_t)levels.size();
+    for (const SAutoMapLevel& entry : levels)
+    {
+        os << entry.level << (int32_t)entry.mask.size();
+        for (int16_t w : entry.mask)
+            os << w;
+    }
+}
+
+// REVSYNC: TPlayer::Load @ 0x0051b960 (SAVE_GAME.md §11.4).
+// Not ported: the frame counter retail derives from the state time
+// (+0x374), and the RefreshStats (0x0051c660) it ends with.
+void TPlayer::Load(RTInputStream is, int32_t version, int32_t objversion)
+{
+    uint8_t basever = (uint8_t)objversion;
+    if (objversion >= 4)
+        is >> basever;
+    TCharacter::Load(is, version, basever);
+
+    if (objversion >= 4)
+    {
+        for (char* quickspell : quickspells)
+            ReadFixedString(is, quickspell, MAXTALISMANLEN);
+    }
+
+    if (objversion >= 5)
+    {
+        int32_t count = 0;
+        is >> count;
+        knownspells.clear();
+        for (int32_t i = 0; i < count && !is.Overrun(); i++)
+            is.ReadBytes(knownspells.emplace_back().data(), kSpellCodeBytes);
+        if (objversion >= 6 && objversion <= 8)
+            is.MovePos(count * 4);  // a per-spell int those versions had
+    }
+
+    // Retail kept these in a member nothing reads; the port restores the HUD
+    // from them (TSaveGame).
+    if (objversion >= 7)
+        is >> hudwords.sidebarOpen >> hudwords.upperMode >> hudwords.lowerMode >> hudwords.unknown19c;
+
+    levelupstats = {};
+    if (objversion >= 8)
+        is >> levelupstats[0] >> levelupstats[1] >> levelupstats[2];
+
+    team = {};
+    modulename.clear();
+    if (objversion >= 13)
+    {
+        team.name  = is.ReadString();
+        team.name2 = is.ReadString();
+        is >> team.value >> team.id >> team.teamindex;
+        modulename = is.ReadString();
+    }
+    else if (objversion >= 11)
+    {
+        team.name  = is.ReadString();
+        team.name2 = is.ReadString();
+        is >> team.value;
+        modulename = is.ReadString();
+    }
+    else
+    {
+        if (objversion == 10)
+        {
+            char fixedname[50];
+            is.ReadBytes(fixedname, (int32_t)sizeof(fixedname));
+            team.name.assign(fixedname, strnlen(fixedname, sizeof(fixedname)));
+        }
+        team.value = -1;
+    }
+
+    profile = {};
+    frags = {};
+    if (objversion >= 13)
+    {
+        is >> playerstate >> statetime;
+        for (std::string& text : profile)
+            text = is.ReadString();
+        is >> frags[0] >> frags[1];
+        if (objversion >= 15)
+            is >> frags[2] >> frags[3];
+    }
+    else
+    {
+        playerstate = 0;
+        statetime = PlayScreen.GameTime();
+    }
+
+    automap = {};
+    if (objversion >= 14)
+        automap.Load(is);
+}
+
+// REVSYNC: TPlayer::Save @ 0x0051bdc0 (objversion 15). Retail wrote its
+// live HUD globals where the HUD words go; TSaveGame sets them from the
+// HUD before saving.
 void TPlayer::Save(RTOutputStream os)
 {
-    SAVE_BASE(TCharacter)
+    os << (uint8_t)TCharacter::ObjVersion();
+    TCharacter::Save(os);
 
-  // Save quickspells
-    os << quickspells[QSPELL_CONSTRUCT];
-    os << quickspells[QSPELL_1];
-    os << quickspells[QSPELL_2];
-    os << quickspells[QSPELL_3];
-    os << quickspells[QSPELL_4];
+    for (const char* quickspell : quickspells)
+        os << quickspell;
+
+    os << (int32_t)knownspells.size();
+    for (const TSpellCode& code : knownspells)
+        os.WriteBytes(code.data(), kSpellCodeBytes);
+
+    os << hudwords.sidebarOpen << hudwords.upperMode << hudwords.lowerMode << hudwords.unknown19c;
+    os << levelupstats[0] << levelupstats[1] << levelupstats[2];
+
+    os << team.name.c_str() << team.name2.c_str();
+    os << team.value << team.id << team.teamindex;
+    os << modulename.c_str();
+
+    os << playerstate << statetime;
+    for (const std::string& text : profile)
+        os << text.c_str();
+    for (int32_t count : frags)
+        os << count;
+
+    automap.Save(os);
+}
+
+// REVSYNC: TPlayer::LoadInventory @ 0x0051bd20. Equipping changes the
+// maxima, so health, fatigue and mana are carried across it. Not ported:
+// the RefreshStats (0x0051c660) retail ran before and after equipping.
+void TPlayer::LoadInventory(RTInputStream is, int32_t version, uint32_t streamflags)
+{
+    TCharacter::LoadInventory(is, version, streamflags);
+
+    const int32_t health  = Health();
+    const int32_t fatigue = Fatigue();
+    const int32_t mana    = Mana();
+    RefreshEquip();
+    SetHealth(health);
+    SetMana(mana);
+    SetFatigue(fatigue);
+}
+
+bool TPlayer::LearnSpell(const char* talismans)
+{
+    if (!talismans || !*talismans)
+        return false;
+    for (const TSpellCode& code : knownspells)
+    {
+        if (strncmp(code.data(), talismans, kSpellCodeBytes) == 0)
+            return false;
+    }
+    TSpellCode& code = knownspells.emplace_back();
+    strncpy(code.data(), talismans, kSpellCodeBytes);
+    return true;
+}
+
+// REVSYNC: TPlayer::SetPlayerState @ 0x0051d680. Not ported: with bit 2 set
+// retail also stopped certain actions in progress (0x004cee70), and the
+// multiplayer control and message handling.
+void TPlayer::SetPlayerState(int32_t newstate)
+{
+    playerstate = newstate;
 }
 
 
