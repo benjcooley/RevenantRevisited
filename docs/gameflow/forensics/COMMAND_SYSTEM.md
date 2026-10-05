@@ -243,8 +243,10 @@ debug level (`[console]`), so headless `--exec` runs can read it.
   coordinates, `stat`'s value. `choice` checks a name's type on the
   context but retail read the value with no object (a number came out as
   the not-found value, text dereferenced null); the port appends nothing
-  for a variable there. `addat`, `getitemname`/`getitemvalue` and the
-  buy/sell criteria commands also read them and aren't ported.
+  for a variable there. `addat` (`0x00421770`) is ported on `add`'s
+  body (coordinates as numbers or variables, then an amount and the
+  type); `getitemname`/`getitemvalue` and the buy/sell criteria
+  commands also read variables and aren't ported.
 - A line the interpreter skips (class context mismatch, editor-only,
   missing parameters) takes the next line with it: `SkipLine`
   (`0x004795c0`) reads past the line's end into the next line's first

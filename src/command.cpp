@@ -1541,6 +1541,21 @@ COMMAND(CmdGo)
     return 0;
 }
 
+// A coordinate in `goto` (0x004204f0) and `addat` (0x00421770): a number, or a
+// number variable of the object's prototypes (0x00497800; an undeclared one
+// reads as retail's not-found value).
+static bool ReadCoordinate(TToken& t, const TObjectInstance* obj, int32_t& value)
+{
+    if (t.Type() == TKN_NUMBER)
+        value = t.Index();
+    else if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
+        value = ScriptManager.VariableNumber(t.Text(), obj);
+    else
+        return false;
+    t.WhiteGet();
+    return true;
+}
+
 // REVSYNC: goto @ 0x004204f0 -- `<character>.goto <x> <y>` or `goto <object>`
 // (keep.s: `goto Point2`): an object the first name finds (partial match,
 // near the character) is walked to (0x004cee50: Goto to its position);
@@ -1550,17 +1565,6 @@ COMMAND(CmdGo)
 COMMAND(CmdGoto)
 {
     TCharacter* chr = static_cast<TCharacter*>(context);
-
-    auto coordinate = [&t, context](int32_t& value) {
-        if (t.Type() == TKN_NUMBER)
-            value = t.Index();
-        else if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
-            value = ScriptManager.VariableNumber(t.Text(), context);
-        else
-            return false;
-        t.WhiteGet();
-        return true;
-    };
 
     if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
         if (TObjectInstance* target = MapPane.FindClosestObject(t.Text(), context, true))
@@ -1572,7 +1576,7 @@ COMMAND(CmdGoto)
         }
 
     int32_t x = 0, y = 0;
-    if (!coordinate(x) || !coordinate(y))
+    if (!ReadCoordinate(t, context, x) || !ReadCoordinate(t, context, y))
         return CMD_BADPARAMS;
 
     chr->Goto(x, y);
@@ -2074,42 +2078,27 @@ COMMAND(CmdDeselect)
     return 0;
 }
 
-COMMAND(CmdAdd)
+// The shared tail of `add` (0x004213c0) and `addat` (0x00421770): after the
+// position and amount, `next`/`prev` step the editor's tile palette, `light`
+// adds an editor light, anything else names an object type to add at `pos`
+// on the map's level (selected in the editor's status bar; a player joins
+// the player list as the main player).
+static void AddWhat(TToken& t, S3DPoint pos, int32_t number)
 {
-    int32_t objtype = -1;
-    int32_t number = 1;
-
-    S3DPoint pos;
-    MapPane.GetMapPos(pos);
-
-    if (t.Type() == TKN_NUMBER)
+    if (t.Is("next") || t.Is("prev"))
     {
-        number = t.Index();
-        t.WhiteGet();
-    }
-
-    if (t.Is("next"))
-    {
-        S3DPoint zero;
-        memset(&zero, 0, sizeof(S3DPoint));
-        ClassPane.SelObjType(ClassPane.GetObjType() + 1);
+        const int32_t step = t.Is("next") ? 1 : -1;
+        S3DPoint zero(0, 0, 0);
+        ClassPane.SelObjType(ClassPane.GetObjType() + step);
         ClassPane.PutObject(zero);
         t.WhiteGet();
-        return 0;
+        return;
     }
-    else if (t.Is("prev"))
-    {
-        S3DPoint zero;
-        memset(&zero, 0, sizeof(S3DPoint));
-        ClassPane.SelObjType(ClassPane.GetObjType() - 1);
-        ClassPane.PutObject(zero);
-        t.WhiteGet();
-        return 0;
-    }
-    else if (t.Is("light", 1))
+
+    if (t.Is("light", 1))
     {
         SObjectDef def;
-        int32_t intensity = 220, mult = 12;
+        constexpr int32_t intensity = 220, mult = 12;
         memset(&def, 0, sizeof(SObjectDef));
 
         def.objclass = OBJCLASS_TILE;
@@ -2120,11 +2109,7 @@ COMMAND(CmdAdd)
         def.pos.z = 60;
         def.level = MapPane.GetMapLevel();
 
-        //t.WhiteGet();
-        //if (!Parse(t, "<%d> <%d>", &intensity, &mult))
-        //  return CMD_BADPARAMS;
-
-        int32_t index = MapPane.NewObject(&def);
+        const int32_t index = MapPane.NewObject(&def);
         if (index < 0)
             Output("ERROR: Unable to add light\n");
         else
@@ -2138,60 +2123,95 @@ COMMAND(CmdAdd)
             MapPane.GetInstance(index)->SetLightPos(lightpos);
             StatusBar.Select(index);
         }
+        return;
     }
-    else // Add an object
+
+    TObjectClass* cl = nullptr;
+    int32_t objtype = -1;
+    for (int32_t i = 0; i < MAXOBJECTCLASSES && objtype < 0; i++)
     {
-        TObjectClass* cl;
-
-        for (int32_t i = 0; i < MAXOBJECTCLASSES; i++)
-        {
-            cl = TObjectClass::GetClass(i);
-            if (cl && (objtype = cl->FindObjType(t.Text())) >= 0)
-                break;
-        }
-
-        if (objtype >= 0)
-        {
-            SObjectDef def;
-            memset(&def, 0, sizeof(SObjectDef));
-
-            def.objclass = cl->ClassId();
-            def.objtype = objtype;
-            def.flags = 0;
-            def.level = MapPane.GetMapLevel();
-            def.pos = pos;
-
-            int32_t index = MapPane.NewObject(&def);
-            if (index < 0)
-                Output("ERROR: Creating object\n");
-            else
-            {
-                StatusBar.Select(index);
-
-                Output("%s:%s added at (%d, %d, %d).\n", cl->ClassName(),
-                    cl->GetObjType(objtype)->name, def.pos.x, def.pos.y, def.pos.z);
-
-                if (number != 1)
-                    MapPane.GetInstance(index)->SetAmount(number);
-
-                // If we added a player, add him to the player manager
-                if (def.objclass == OBJCLASS_PLAYER)
-                {
-                    TObjectInstance* oi = MapPane.GetInstance(index);
-                    if (oi)
-                    {
-                        PlayerManager.AddPlayer((TPlayer*)oi);
-                        PlayerManager.SetMainPlayer((TPlayer*)oi);
-                    }
-                }
-            }
-
-            t.WhiteGet();
-        }
-        else
-            Output("No object type named '%s'.\n", t.Text());
+        cl = TObjectClass::GetClass(i);
+        objtype = cl ? cl->FindObjType(t.Text()) : -1;
+    }
+    if (objtype < 0)
+    {
+        Output("No object type named '%s'.\n", t.Text());
+        return;
     }
 
+    SObjectDef def;
+    memset(&def, 0, sizeof(SObjectDef));
+    def.objclass = cl->ClassId();
+    def.objtype = objtype;
+    def.flags = 0;
+    def.level = MapPane.GetMapLevel();
+    def.pos = pos;
+
+    const int32_t index = MapPane.NewObject(&def);
+    if (index < 0)
+    {
+        Output("ERROR: Creating object\n");
+        t.WhiteGet();
+        return;
+    }
+
+    StatusBar.Select(index);
+    Output("%s:%s added at (%d, %d, %d).\n", cl->ClassName(),
+        cl->GetObjType(objtype)->name, def.pos.x, def.pos.y, def.pos.z);
+
+    if (number != 1)
+        MapPane.GetInstance(index)->SetAmount(number);
+
+    // If we added a player, add him to the player manager
+    if (def.objclass == OBJCLASS_PLAYER)
+    {
+        TObjectInstance* oi = MapPane.GetInstance(index);
+        if (oi)
+        {
+            PlayerManager.AddPlayer((TPlayer*)oi);
+            PlayerManager.SetMainPlayer((TPlayer*)oi);
+        }
+    }
+
+    t.WhiteGet();
+}
+
+// REVSYNC: add @ 0x004213c0 -- `add [<amount>] <type>|light|next|prev` at the
+// camera's position.
+COMMAND(CmdAdd)
+{
+    S3DPoint pos;
+    MapPane.GetMapPos(pos);
+
+    int32_t number = 1;
+    if (t.Type() == TKN_NUMBER)
+    {
+        number = t.Index();
+        t.WhiteGet();
+    }
+
+    AddWhat(t, pos, number);
+    return 0;
+}
+
+// REVSYNC: addat @ 0x00421770 -- `addat <x> <y> [<amount>] <type>|light|next|prev`:
+// as `add`, at (x, y) and the camera's height. forest.s's fire training:
+// `ADDAT MUDOX1 MUDOY1 FIREFLASH`.
+COMMAND(CmdAddAt)
+{
+    S3DPoint pos;
+    MapPane.GetMapPos(pos);
+    if (!ReadCoordinate(t, context, pos.x) || !ReadCoordinate(t, context, pos.y))
+        return CMD_BADPARAMS;
+
+    int32_t number = 1;
+    if (t.Type() == TKN_NUMBER)
+    {
+        number = t.Index();
+        t.WhiteGet();
+    }
+
+    AddWhat(t, pos, number);
     return 0;
 }
 
@@ -4280,7 +4300,6 @@ COMMAND(CmdSaveGame) { return CmdNotPorted("savegame", 0x004285b0, t); }
 
 // ----- owner: world + character (movement, combat, inventory, objects) -----
 
-COMMAND(CmdAddAt) { return CmdNotPorted("addat", 0x00421770, t); }
 COMMAND(CmdAddMonsterType) { return CmdNotPorted("addmonstertype", 0x00427ac0, t); }
 COMMAND(CmdAddNear) { return CmdNotPorted("addnear", 0x00421bc0, t); }
 COMMAND(CmdAmbSoundGet) { return CmdNotPorted("ambsoundget", 0x00420fe0, t); }
