@@ -226,6 +226,12 @@ class TScript
     // through the dialog pane; the script then owns the dialog until the
     // response (taken flag 4, which `choice` sets in retail).
     void AddChoice(const char *label, const char *text);
+    // REVSYNC: 0x00494530 / 0x004944c0 (`busysay` / `busymsg`) -- the line
+    // the owner says, and the message sent, to a player whose trigger is
+    // refused while the script is busy with someone else (TScript::Busy
+    // 0x00494620, a multiplayer reply; not ported).
+    void SetBusySay(const char *text, const char *voice);
+    void SetBusyMessage(const char *text);
     [[nodiscard]] int32_t GetTrigger() const { return trigger; }
     [[nodiscard]] int32_t GetPriority() const { return priority; }
     [[nodiscard]] TScriptProto* GetScriptProto() const { return proto; }
@@ -291,6 +297,9 @@ class TScript
     TSafeRef<TObjectInstance> second;              // +0xc8: the other object it concerns
     std::string useralias;                         // +0xcc: the block's name for `triggerer`
     std::string secondalias;                       // +0xd0: the block's name for `second`
+    std::string busysay;                           // +0xd8
+    std::string busysayvoice;                      // +0xdc: its voice (the line's tag)
+    std::string busymessage;                       // +0xe0
     TSafeRef<TObjectInstance> triggerguard;        // +0x10: no re-trigger while this exists
     EScriptWait wait         = EScriptWait::None;  // +0xb4
     int32_t     waitframes   = 0;                  // +0xbc for Frames

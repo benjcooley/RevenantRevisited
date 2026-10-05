@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "mappane.h"
+#include "dialog.h"
 
 #include "gamemap.h"
 #include "graphics.h"
@@ -1495,6 +1496,31 @@ TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t obj
     }
 
     return nullptr;
+}
+
+// Retail drops the spoken lines and any open choices when the camera stops
+// following the player (SetCameraObject 0x004538d0, SetCameraPos 0x00453940).
+// (Retail also closes the buy/sell drawer there; not ported.)
+bool TMapPane::IsFollowingPlayer() const
+{
+    return (centeron.flags & CENTERON_OBJ) && Player && centeron.obj == Player;
+}
+
+void TMapPane::CenterOnObj(TObjectInstance* obj, bool scroll)
+{
+    if (IsFollowingPlayer() && obj != Player)
+        DialogPane.ClearSpeech(false);
+    centeron.obj = obj;
+    centeron.flags = CENTERON_OBJ | (scroll ? CENTERON_SCROLL : 0);
+}
+
+void TMapPane::CenterOnPos(S3DPoint& pos, int32_t level, bool scroll)
+{
+    if (IsFollowingPlayer())
+        DialogPane.ClearSpeech(false);
+    centeron.pos = pos;
+    centeron.level = level;
+    centeron.flags = CENTERON_POS | (scroll ? CENTERON_SCROLL : 0);
 }
 
 // REVSYNC: FindClosestObject @ 0x00451fe0 / 0x00451de0. Names match exactly

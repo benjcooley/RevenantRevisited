@@ -668,6 +668,19 @@ void TScript::AddChoice(const char *label, const char *text)
     DialogPane.AddChoice(label, text);
 }
 
+// REVSYNC: 0x00494530
+void TScript::SetBusySay(const char *text, const char *voice)
+{
+    busysay = text ? text : "";
+    busysayvoice = voice ? voice : "";
+}
+
+// REVSYNC: 0x004944c0
+void TScript::SetBusyMessage(const char *text)
+{
+    busymessage = text ? text : "";
+}
+
 void TScript::Reset()
 {
     End();
