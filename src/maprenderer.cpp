@@ -1419,6 +1419,9 @@ void TMapRenderer::SetPointLightMultipliers(float intensity_mul, float range_mul
     impl->radius_mul    = range_mul;
 }
 
+void TMapRenderer::SetLightingMode(int32_t mode) { if (impl) impl->lighting_mode = mode; }
+void TMapRenderer::SetDaylightCycle(bool has_cycle) { if (impl) impl->daylight_cycle = has_cycle; }
+
 TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
 {
     SDrawCounts out;
@@ -2798,7 +2801,7 @@ void TMapRenderer::RenderFrame()
     // scene ambient and sun to the FX LitFlat path, so Classic exposes its
     // tile ambient there and no sun: retail had none.
     const bool classic = (s.lighting_mode == 0);
-    const bool sun_active = !classic;
+    const bool sun_active = !classic && s.daylight_cycle;
     {
         const int32_t mp_ambient = MapPane.GetAmbientLight();
         const SColor& mp_color   = MapPane.GetAmbientColor();
