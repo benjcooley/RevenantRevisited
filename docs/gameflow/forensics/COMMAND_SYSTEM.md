@@ -84,7 +84,14 @@ action is attack or `0x19`); `current` → `script+0xd4`; `party<N>` →
 N-th party member (multiplayer); the script's two alias slots
 (`script+0xcc`/`+0xc4`, `+0xd0`/`+0xc8`); otherwise the closest map
 object with that name (`TMapPane::FindClosestObject` `0x00451fe0`,
-measured from the context or the map center).
+measured from the context or the map center). Its search is not the
+pane's 3×3 window: `0x00451de0` walks the loaded sectors of the
+context's level (iterator `0x0044cf80` flags `0x4a0`) and keeps the
+nearest match within √0x800000 ≈ 2,896 units. `FindObject`
+(`0x00451d70`, flags `0x2a0`) walks the loaded sectors of every level.
+The port walks the same way over its cached levels (`TMapIterator`'s
+`CHECK_LOADED` mode), bounded by that reach; the 1998 code searched the
+window, so a script at its edge lost its waypoints.
 
 ### 2.4 Parameters and values
 
@@ -118,7 +125,7 @@ script:
 | `current` | the script's `+0xd4`, set only by `setcurrent` (`0x00428e50`) |
 | `party<N>` | the Nth player sharing the base's party name (`TPlayer +0x494`), base = the script's user, else the caller if a player; the base when no member matches |
 | an alias | the script's user alias (`+0xcc` → `+0xc4`) or second alias (`+0xd0` → `+0xc8`), named by manual trigger requests (`0x00492640`) |
-| anything else | `TMapPane::FindClosestObject(name, caller, exact, all)`: the nearest object with exactly that name (ignoring case) in the sector window |
+| anything else | `TMapPane::FindClosestObject(name, caller, exact, all)`: the nearest object with exactly that name (ignoring case) on the caller's level, within ~2,896 units, in the loaded sectors (§2.3) |
 
 Names are compared ignoring case and in full (`stricmp`). An unknown
 `<context>.` makes the interpreter report "Context not found" and return

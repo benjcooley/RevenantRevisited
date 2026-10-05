@@ -68,6 +68,11 @@ TGameMap* TMapManager::LoadStaged(int32_t level, int32_t count)
     return map;
 }
 
+TGameMap* TMapManager::Cached(int32_t i) const
+{
+    return (i >= 0 && i < NumCached()) ? cache[size_t(i)].get() : nullptr;
+}
+
 TGameMap* TMapManager::GetCached(int32_t level) const
 {
     for (const std::unique_ptr<TGameMap>& m : cache)

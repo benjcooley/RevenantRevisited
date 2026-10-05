@@ -159,6 +159,12 @@ TMapIterator::TMapIterator(RTObjectInstance oi, int32_t fl, int32_t objset)
     Initialize(&r, fl | CHECK_MAPRECT, objset);
 }
 
+TMapIterator::TMapIterator(int32_t lvl, PSRect maprect, int32_t fl, int32_t objset)
+    : level(lvl)
+{
+    Initialize(maprect, fl | CHECK_LOADED | (maprect ? CHECK_MAPRECT : 0), objset);
+}
+
 void TMapIterator::Initialize(PSRect sr, int32_t fl, int32_t os)
 {
     if (sr)
@@ -175,6 +181,8 @@ void TMapIterator::Initialize(PSRect sr, int32_t fl, int32_t os)
     objset = os;
     sx = -1;        // Causes NextItem() to start at sx=0
     sy = 0;
+    mapnum = 0;
+    secnum = 0;
     index = 0;
     numitems = 0;
     sector = nullptr;
@@ -227,36 +235,9 @@ TObjectInstance* TMapIterator::NextItem()
 
         while (index >= numitems)   // If at end of array (or no array) get next sector
         {
-            if (++sx >= SECTORWINDOWX)
-            {
-                sx = 0;
-                sy++;
-            }
-                
-            if (sy >= SECTORWINDOWY)
+            sector = (flags & CHECK_LOADED) ? NextLoadedSector() : NextWindowSector();
+            if (!sector)
                 return nullptr;
-            
-            if (!MapPane.sectors[sx][sy])
-                continue;
-
-            if (flags & CHECK_SECTRECT)
-            {
-                // Does rectangle intersect sector
-                SRect sr;
-                MapPane.sectors[sx][sy]->GetMaxScreenRect(sr);
-                if (!r.Intersects(sr))
-                    continue;
-            }
-            else if (flags & CHECK_MAPRECT)
-            {
-                // Does rectangle intersect sector
-                SRect sr;
-                MapPane.sectors[sx][sy]->GetMaxMapRect(sr);
-                if (!r.Intersects(sr))
-                    continue;
-            }
-
-            sector = MapPane.sectors[sx][sy];
             numitems = sector->NumObjSetItems(objset);
             index = 0;
         }
@@ -325,6 +306,71 @@ TObjectInstance* TMapIterator::NextItem()
     }
 
     return item;
+}
+
+// The next sector of the pane's 3x3 window that passes the rect checks.
+TSector* TMapIterator::NextWindowSector()
+{
+    for (;;)
+    {
+        if (++sx >= SECTORWINDOWX)
+        {
+            sx = 0;
+            sy++;
+        }
+        if (sy >= SECTORWINDOWY)
+            return nullptr;
+
+        TSector* candidate = MapPane.sectors[sx][sy];
+        if (!candidate)
+            continue;
+
+        SRect sr;
+        if (flags & CHECK_SECTRECT)
+        {
+            candidate->GetMaxScreenRect(sr);
+            if (!r.Intersects(sr))
+                continue;
+        }
+        else if (flags & CHECK_MAPRECT)
+        {
+            candidate->GetMaxMapRect(sr);
+            if (!r.Intersects(sr))
+                continue;
+        }
+        return candidate;
+    }
+}
+
+// The next loaded sector of `level` (every level when negative) that meets
+// the map rect, walking MapManager's cached maps.
+TSector* TMapIterator::NextLoadedSector()
+{
+    for (; mapnum < MapManager.NumCached(); mapnum++, secnum = 0)
+    {
+        const TGameMap* map = MapManager.Cached(mapnum);
+        if (!map || (level >= 0 && map->Level() != level))
+            continue;
+
+        const std::vector<TSector*>& list = map->Sectors();
+        while (secnum < list.size())
+        {
+            TSector* candidate = list[secnum++];
+            if (!candidate)
+                continue;
+            if (flags & CHECK_MAPRECT)
+            {
+                SRect sr;
+                candidate->GetMaxMapRect(sr);
+                if (!r.Intersects(sr))
+                    continue;
+            }
+            sx = candidate->SectorX();
+            sy = candidate->SectorY();
+            return candidate;
+        }
+    }
+    return nullptr;
 }
 
 void TMapIterator::Nuke()
@@ -1482,12 +1528,15 @@ int32_t TMapPane::AddShadow(TObjectInstance* oi)
     return index;
 }
 
-// Object find functions
+// REVSYNC: FindObject @ 0x00451d70 -- the occurance'th object of that name
+// in the loaded sectors of any level (its iterator flags 0x2a0: loaded,
+// active or not), not only the pane's 3x3 window. beginfighting and
+// giveweapons look their objects up this way.
 TObjectInstance* TMapPane::FindObject(const char *name, int32_t occurance, int32_t objset)
 {
     int32_t found = 0;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+    for (TMapIterator i(-1, nullptr, CHECK_NOINVENT, objset); i; i++)
     {
         const char *instname = i->GetName();
 
@@ -1538,16 +1587,29 @@ void TMapPane::CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags)
     centeron.flags = (flags & ~CENTERON_OBJ) | CENTERON_POS;
 }
 
-// REVSYNC: FindClosestObject @ 0x00451fe0 / 0x00451de0. Names match exactly
-// (ignoring case) unless `partial` asks for an abbreviation match. The 1998
-// source had the two branches the other way round; retail's callers pass
-// `partial` for the abbreviated forms (`get`, `select`, `swap`).
-TObjectInstance* TMapPane::FindClosestObject(const char *name, S3DPoint frompos, bool partial, int32_t objset)
+// REVSYNC: 0x00451de0 -- the nearest object of that name on `lvl` within
+// sqrt(0x800000) (~2896 units) of frompos, from the level's loaded sectors
+// (its iterator flags 0x4a0), not only the pane's 3x3 window: a script
+// near the window's edge finds its waypoints (Hruthford's `goto HRUWAY01`
+// with the camera elsewhere on the level). Only the sectors within that
+// reach are walked. Names match exactly (ignoring case) unless `partial`
+// asks for an abbreviation match; the 1998 source had the two branches the
+// other way round, and retail's callers pass `partial` for the abbreviated
+// forms (`get`, `select`, `swap`).
+TObjectInstance* TMapPane::FindClosestObject(const char *name, const S3DPoint& frompos, int32_t lvl, bool partial, int32_t objset)
 {
-    TObjectInstance* closest = nullptr;
-    int32_t closestdist = 0x800000;
+    constexpr int32_t kMaxSqrDist = 0x800000;
+    constexpr int32_t kReach      = 2897;       // ceil(sqrt(kMaxSqrDist))
+    SRect area;
+    area.left   = frompos.x - kReach;
+    area.top    = frompos.y - kReach;
+    area.right  = frompos.x + kReach;
+    area.bottom = frompos.y + kReach;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+    TObjectInstance* closest = nullptr;
+    int32_t closestdist = kMaxSqrDist;
+
+    for (TMapIterator i(lvl, &area, CHECK_NOINVENT, objset); i; i++)
     {
         const char *instname = i->GetName();
         if (!instname)
@@ -1571,15 +1633,12 @@ TObjectInstance* TMapPane::FindClosestObject(const char *name, S3DPoint frompos,
     return closest;
 }
 
+// REVSYNC: FindClosestObject @ 0x00451fe0 -- from the object's position and
+// level, else the camera's.
 TObjectInstance* TMapPane::FindClosestObject(const char *name, TObjectInstance* from, bool partial, int32_t objset)
 {
-    S3DPoint frompos;
-    if (from)
-        from->GetPos(frompos);
-    else
-        frompos = center;
-
-    return FindClosestObject(name, frompos, partial, objset);
+    const S3DPoint frompos = from ? from->Pos() : center;
+    return FindClosestObject(name, frompos, from ? from->GetLevel() : level, partial, objset);
 }
 
 int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height, int32_t objclass, int32_t maxnum, int32_t objset)

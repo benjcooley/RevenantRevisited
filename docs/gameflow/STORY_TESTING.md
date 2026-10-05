@@ -48,9 +48,10 @@ a later menu with fewer choices ignores a digit past its count. Check the
 path in the log (`choice N committed`) rather than trusting the timing.
 
 `use <npc>` opens an NPC's DIALOG block with Locke as the user. Name
-lookups (`use`, `<npc>.stat`, script `goto <waypoint>`) see only the
-sector window around the camera, as retail's loaded set did: teleport
-Locke near the NPC first (`player.pos x y z level`).
+lookups (`use`, `<npc>.stat`, script `goto <waypoint>`) find the
+nearest object of that name on the caller's level within ~2,900 units
+(retail's reach, COMMAND_SYSTEM.md §2.3): teleport Locke near the NPC
+first (`player.pos x y z level`).
 
 ## 4. Checkpoints
 

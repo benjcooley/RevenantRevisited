@@ -39,6 +39,7 @@
 #define CHECK_MOVING    (1 << 4)        // check OF_MOVING
 #define CHECK_NOINVENT  (1 << 5)        // no inventory recurse
 #define CHECK_MAPRECT   (1 << 6)        // check screen rectangle for intersection
+#define CHECK_LOADED    (1 << 7)        // walk the loaded sectors, not the pane's window
 
 // This is the standard local range for an object when iterating through its neighbors
 // Using this range prevents object searches from becoming too big when large numbers of
@@ -57,6 +58,12 @@ class TMapIterator
       // Initializes iterator with a range value
     TMapIterator(RTObjectInstance oi, int32_t fl = CHECK_NONE, int32_t objset = OBJSET_ALL);
       // Initializes iterator with a range value
+    TMapIterator(int32_t level, PSRect maprect, int32_t fl = CHECK_NOINVENT, int32_t objset = OBJSET_ALL);
+      // REVSYNC: the retail iterator's loaded-sector mode (0x0044cf80, flag
+      // 0x80; 0x400 with a level): every loaded sector of `level` (-1: of
+      // every loaded level) instead of the pane's 3x3 window, and given a
+      // map rect, only the sectors and objects in it. Retail's name lookups
+      // walk this way (FindObject 0x00451d70, FindClosestObject 0x00451de0).
     void Initialize(PSRect sr = nullptr, int32_t fl = CHECK_NONE, int32_t objset = OBJSET_ALL);
       // Initializes iterator
     TObjectInstance* Item() { return item; }
@@ -97,6 +104,15 @@ class TMapIterator
 
     int32_t flags;                  // flags for which objects are valid
     SRect r;                    // screen rectangle for CHECK_RECT and CHECK_LIGHT
+
+    // CHECK_LOADED: the level walked (-1: all) and the walk's position in
+    // MapManager's cached maps.
+    int32_t level  = -1;
+    int32_t mapnum = 0;
+    size_t  secnum = 0;
+
+    TSector* NextWindowSector();
+    TSector* NextLoadedSector();
 };
 
 // ********************************
@@ -382,11 +398,13 @@ class TMapPane : public TPane
   // objects like MOVING objects and CHARACTERS. 
   
     TObjectInstance* FindObject(const char *name, int32_t occurance = 1, int32_t objset = OBJSET_ALL);
-        // Returns a pointer to the occurance of object answering to name
-    TObjectInstance* FindClosestObject(const char *name, S3DPoint pos, bool partial, int32_t objset = OBJSET_ALL);
-        // Returns a pointer to the object answering to name closest to center
+        // The occurance'th object answering to name in the loaded sectors of
+        // any level
+    TObjectInstance* FindClosestObject(const char *name, const S3DPoint& pos, int32_t level, bool partial, int32_t objset = OBJSET_ALL);
+        // The object answering to name nearest pos on level, within retail's
+        // reach (sqrt 0x800000), in that level's loaded sectors
     TObjectInstance* FindClosestObject(const char *name, TObjectInstance* from = nullptr, bool partial = false, int32_t objset = OBJSET_ALL);
-        // Returns a pointer to the object answering to name closest to center
+        // As above, from an object's position and level (else the camera's)
     int32_t FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height = 0, int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL);
       // Finds objects within given range. If height not given uses width as radius
     TObjectInstance* ObjectInCube(PS3DRect cube, int32_t objset = OBJSET_ALL);
