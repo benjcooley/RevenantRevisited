@@ -478,6 +478,15 @@ void DrawTextShadowedToTarget(const SFontAtlas* atlas, const char* text,
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
     const float penX = AlignedPenX(atlas, text, cellX, cellW, align);
     const float baselineY = cellY + TextAscent(atlas) - kGdiTopLeading;
+    DrawTextShadowedAtBaseline(atlas, text, penX, baselineY, r, g, b, target_w, target_h);
+}
+
+void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
+                                float penX, float baselineY,
+                                float r, float g, float b,
+                                int32_t target_w, int32_t target_h)
+{
+    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
     // Retail FUN_004be2b0 font-flag-0x400: 3 black passes (base, +1x, +1y) then
     // the colored (doubled) pass at base. 1px shadow on the right + bottom.
     DrawGlyphRun(atlas, text, penX,        baselineY,        0, 0, 0, target_w, target_h);
