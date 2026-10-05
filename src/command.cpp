@@ -1505,13 +1505,31 @@ COMMAND(CmdGo)
     return 0;
 }
 
+// REVSYNC: goto @ 0x004204f0 -- `<character>.goto <x> <y>` or `goto <object>`
+// (keep.s: `goto Point2`): an object the name finds (partial match, near the
+// character) is walked to (0x004cee50: Goto to its position). Retail also
+// read a name as a prototype variable (0x00497800) for either coordinate;
+// prototype variables aren't ported, so such a name answers bad parameters.
 COMMAND(CmdGoto)
 {
+    TCharacter* chr = static_cast<TCharacter*>(context);
+
+    if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
+    {
+        TObjectInstance* target = MapPane.FindClosestObject(t.Text(), context, true);
+        if (!target)
+            return CMD_BADPARAMS;
+        t.WhiteGet();
+        const S3DPoint at = target->Pos();
+        chr->Goto(at.x, at.y);
+        return CMD_WAIT;
+    }
+
     int32_t x, y;
     if (!Parse(t, "%d %d", &x, &y))
         return CMD_BADPARAMS;
 
-    ((PTCharacter)context)->Goto(x, y);
+    chr->Goto(x, y);
 
     return CMD_WAIT;
 }
@@ -2446,17 +2464,20 @@ COMMAND(CmdFrame)
     return 0;
 }
 
+// REVSYNC: try @ 0x00422c30 -- `<object>.try <state>`: the state as a bare
+// word or quoted ("%t", else "%s"; the door prototypes quote theirs:
+// TRY "WOPENDOORIN"). Waits for the character.
 COMMAND(CmdTry)
 {
-    char newstate[80];
+    char newstate[MAXTOKENTEXT];
 
     if (!context->IsComplex())
         return 0;
 
-    if (!Parse(t, "%t", &newstate))
+    if (!Parse(t, "%t", newstate) && !Parse(t, "%s", newstate))
         return CMD_BADPARAMS;
 
-    ((PTComplexObject)context)->Try(newstate);
+    static_cast<TComplexObject*>(context)->Try(newstate);
 
     return CMD_WAIT;
 }
