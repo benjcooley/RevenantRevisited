@@ -83,13 +83,18 @@ Vtable slots (shared order, `TScreen` base entries in parentheses):
 
 - Panes live in a flat array; input and draw walk it in order.
 - **Exclusive stack** (`SetExclusivePane` `0x0048eea0`): up to 4. Flags
-  per entry: `0x10` = only the top exclusive pane animates; `0x100` =
-  run `0x004aacb0` (`BlitEffect_Iterate`) over the whole screen with
-  mode 6 — it re-applies the registered UI blit-effect regions (glow
-  text etc.) that overlap the screen; exact visual purpose unconfirmed,
-  it is **not** a dimming pass.
-  Pushing broadcasts event `0x101` with the pane. Input goes only to the
-  top exclusive pane.
+  per entry narrow one screen pass each to the top exclusive pane
+  (table: [INGAME_MENU.md](INGAME_MENU.md) §4.1): `0x01` mouse, `0x02`
+  keys (and PlayScreen's key commands), `0x04` joystick, `0x08` pulse —
+  the world stops, `0x10` animate, `0x20`/`0x40` two more draw passes;
+  `0x100` = run `0x004aacb0` (`BlitEffect_Iterate`) over the whole
+  screen with mode 6 — it re-applies the registered UI blit-effect
+  regions (glow text etc.) that overlap the screen; exact visual purpose
+  unconfirmed, it is **not** a dimming pass. A pass whose bit is clear
+  goes to every pane, the exclusive one included.
+  Pushing broadcasts event `0x101` with the pane. *Correction:* earlier
+  versions read `0x10` as "only the top pane pulses and animates" and
+  sent all input to the top pane whatever its flags.
 - **Screen → pane events** (`OnEvent` `0x00490960`): forwards
   `(code, param)` to every pane (pane vtable `+0x78`). Codes seen:
   `0x100` screen closing, `0x101` exclusive pushed, `0x103` (also calls
@@ -100,14 +105,16 @@ Vtable slots (shared order, `TScreen` base entries in parentheses):
 `RunModal(pane, flags)` `0x0048f040`: add the pane to the current
 screen, push it exclusive with the screen's current flags `| flags`,
 then `while (pane is open) TimerLoop(1);` and return the pane's result
-code (`+0x5c`). The world keeps running (or stays paused, per the
-screen's own pause state) because every iteration is a full frame. The
-caller simply continues after the modal returns.
+code (`+0x5c`). Every iteration is a full frame; whether the world moves
+meanwhile is the flags' `0x08` (§2.3): the single-player in-game dialogs
+pass `0xf`, so it stands still and keeps drawing. The caller simply
+continues after the modal returns.
 
 DEF screens are panes: `DefScreen_Open` `0x00435150` initializes a
 `TButtonPane` and loads the `.def`/`.dat` into it. The in-game menu
 (`0x00537110`, `ingamemenu.def` / `mpingamemenu.def`, rect
-126,65 394×316, flags `0x11`) is opened and run with `RunModal`.
+126,65 394×316, DEF flags `0x11` — the overlay chrome and the fade,
+INGAME_MENU.md §4.2) is opened and run with `RunModal(menu, 0xf)`.
 
 ### 2.5 Screens and transitions
 
@@ -125,7 +132,10 @@ Inside PlayScreen, overlays are modal panes, not screens: the in-game
 menu (`0x0047e500`) loops `RunModal(ingamemenu)` → result 1 Load
 (loadgame pane, modal) / 2 Save (savegame pane) / 3 Options (options
 pane) / 4 Quit Module (`nextscreen = title`, close) / 5 exit app /
-otherwise resume. Dialog choices, popups and buy/sell are panes too.
+otherwise resume; Load and Save come back to the menu when left with
+their Exit, Options always. The whole flow, the dialogs and the title's
+Load Game / Options screens: [INGAME_MENU.md](INGAME_MENU.md). Dialog
+choices, popups and buy/sell are panes too.
 
 Death: `TPlayer::Animate` (`0x00518aa0`) restarts a 192-frame countdown
 while the player is alive; once health < 1 and it runs out, PlayScreen's
@@ -271,7 +281,8 @@ through the lightening cover. `fadescreenout` / `fadescreenin` / `wait
 screenfade` and End's bit 2 are ported (single player). Not ported: the
 drawer close in `fadescreenout` (no drawer), the music fade request, the
 `0x10` / `0x20` flags (unused), the restart flow (`+0x5dc`), the Load
-pane's fade-in (no in-game Load pane yet), multiplayer.
+pane's fade-in (a no-op: the in-game load goes through the session's
+request with the screen faded in, INGAME_MENU.md §10), multiplayer.
 
 **Deviations:** no 31-level quantization; a fade-in's reveal trails
 retail's by one tick; the cover spans the whole window at any resolution;
@@ -305,11 +316,12 @@ snapshot source for it — the decomps above are the only reference.
 - 2D presentation goes through `TRenderer` HUD drawables (`AddHud`), not
   through the pane walk. Each reconstructed UI panel registers its own
   drawable.
-- Screens in the tree: `TPlayScreen`, `TTestScreen`, `TCinematicScreen`.
-  The title screen, load/options screens, death screen and in-game menu
-  exist only as `--test` harnesses (`uimainmenutest`, `uideathtest`,
-  `uidefscreentest`) or as the DEF engine (`TDefScreen`, a compose-to-
-  texture engine rather than a pane).
+- Screens in the tree: `TPlayScreen`, `TTestScreen`, `TCinematicScreen`;
+  since 2026-10-05 also `TLogoScreen`, `TLoadScreen`, `TDeathScreen`,
+  `TLoadGameScreen`, `TOptionsScreen`, and the in-game menu with its
+  dialogs as modal `TDefPane`s on `TPlayScreen`
+  ([INGAME_MENU.md](INGAME_MENU.md) §10). The modal flags carry retail's
+  per-pass bits (§2.3).
 - `IRuntimeMode` (game / editor) lives inside `TPlayScreen`.
 - The screen fade is ported (§2.6): a closing screen with a fader runs
   on until black (`ReadyToEnd`); TPlayScreen and TLogoScreen fade.
@@ -369,4 +381,6 @@ drawer, `0x0047c580` SetControl; for the fade (§2.6): `0x00427e80`,
 `0x00491870`, `0x00491bf0..0x0049204e`, `0x0046cf40..0x0046cfc0`,
 `0x0047a620`, `0x0047be00`, `0x0047ce80`, `0x0047cf40`, `0x0048e610`,
 `0x0051d680`, `0x0054cbb0`, `0x0041b240`, `0x00539700..0x005397a1`, plus the existing TLogoScreen / TPlayScreen /
-TDeathScreen / DefScreen decomps in `recon/discovered/`.
+TDeathScreen / DefScreen decomps in `recon/discovered/`. The screen
+passes behind the exclusive flags, the in-game menu and its dialogs:
+[INGAME_MENU.md](INGAME_MENU.md) §12.
