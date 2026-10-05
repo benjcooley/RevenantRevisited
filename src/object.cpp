@@ -9,6 +9,7 @@
 #include "3dscene.h"
 #include "animation.h"
 #include "command.h"
+#include "dialog.h"
 #include "display.h"
 #include "dls.h"
 #include "file.h"
@@ -2789,6 +2790,53 @@ int32_t TObjectInstance::GetStat(const char *statname, char *str, int32_t id) co
     } 
         
     return GetStat(statname);
+}
+
+// A name as the stat sheet shows it: the dialog line tagged with the
+// prefix plus the name's letters and digits, else the name itself.
+static void LocalizedName(const char *prefix, const char *name, char *buf, int32_t buflen)
+{
+    char tag[MAXNAMELEN + 8];
+    int32_t len = snprintf(tag, sizeof(tag), "%s", prefix);
+    for (const char *c = name; c && *c && len < int32_t(sizeof(tag)) - 1; ++c)
+        if (isalnum((unsigned char)*c))
+            tag[len++] = *c;
+    tag[len] = '\0';
+    const char *line = DialogList.GetLine(tag);
+    snprintf(buf, buflen, "%s", line ? line : (name ? name : ""));
+}
+
+// REVSYNC: TObjectInstance::GetFieldText = retail vtable +0xc8, 0x00472f80.
+// Not ported: "statmod" (the equipped-modifier list through the player's
+// +0xec iterator) and "experience" (a character's kill value); both answer
+// "no such field", as retail does for any name it doesn't know.
+bool TObjectInstance::GetFieldText(const char *field, char *buf, int32_t buflen)
+{
+    if (!field || !buf || buflen <= 0)
+        return false;
+    buf[0] = '\0';
+
+    if (stricmp(field, "name") == 0 || stricmp(field, "objtype") == 0)
+    {
+        LocalizedName("", GetTypeName(), buf, buflen);
+        return true;
+    }
+    if (stricmp(field, "objclass") == 0)
+    {
+        LocalizedName("CLASS", GetClassName(), buf, buflen);
+        if (buf[0])
+            for (char *c = buf + 1; *c; ++c)        // retail _strlwr(buf + 1)
+                *c = char(tolower((unsigned char)*c));
+        return true;
+    }
+    if (stricmp(field, "statmod") == 0 || stricmp(field, "experience") == 0)
+        return false;
+
+    // Any other field is the object or class stat of that name.
+    if (cl->FindObjStat(field) < 0 && cl->FindStat(field) < 0)
+        return false;
+    snprintf(buf, buflen, "%d", GetStat(field));
+    return true;
 }
 
 // Plays a sound at the given object position

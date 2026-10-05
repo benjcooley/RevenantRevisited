@@ -257,6 +257,18 @@ int32_t TPlayer::GetResistance(int32_t type)
     return 0; // Huhh?
 }
 
+// REVSYNC: TPlayer::GetFieldText = retail 0x0051dfb0 (vtable +0xc8).
+bool TPlayer::GetFieldText(const char *field, char *buf, int32_t buflen)
+{
+    if (field && buf && buflen > 0 && stricmp(field, "class") == 0)
+    {
+        const SClassData *classdata = chardata ? chardata->classdata : nullptr;
+        snprintf(buf, buflen, "%s", classdata ? classdata->name : "");
+        return true;
+    }
+    return TCharacter::GetFieldText(field, buf, buflen);
+}
+
 int32_t TPlayer::ResolveCombat(PTActionBlock ab, int32_t bits)
 {
     return TCharacter::ResolveCombat(ab, bits);

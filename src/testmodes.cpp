@@ -3269,7 +3269,7 @@ bool DumpIconsToFolder(const char* path)
 static bool UsesDemoPlayer(const char* mode)
 {
     static constexpr const char* kModes[] = {
-        "ui-hud", "ui-plyrstatusbar",
+        "ui-hud", "ui-plyrstatusbar", "ui-stats",
     };
     for (const char* m : kModes)
         if (strcmp(mode, m) == 0)

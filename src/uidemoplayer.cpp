@@ -25,12 +25,17 @@ namespace
 // player's own maxima rather than to the sample's numbers.
 struct SSampleStats
 {
-    int32_t level      = 0;
+    int32_t level       = 0;
+    int32_t exp         = 0;
+    int32_t attributes[NUM_PLRSTATS] = {};   // Strn..Luck; 0 keeps the class default
     double  healthFill  = 1.0;
     double  manaFill    = 1.0;
     double  fatigueFill = 1.0;
 };
-constexpr SSampleStats kPlayerSample   = { 26, 1833.0 / 1930.0, 2174.0 / 2650.0, 191.0 / 380.0 };
+constexpr SSampleStats kPlayerSample = {
+    26, 12500, { 18, 16, 14, 12, 10, 8 },
+    1833.0 / 1930.0, 2174.0 / 2650.0, 191.0 / 380.0,
+};
 constexpr SSampleStats kOpponentSample = { 18 };   // bars swept by Pulse
 constexpr const char*  kOpponentName   = "Vermis";
 
@@ -70,10 +75,18 @@ TPlayer* NewLocke(const char* name)
     return player;
 }
 
-// Level first: the maxima scale with it.
+// Level and attributes first: the maxima scale with them.
 void ApplySample(TPlayer* player, const SSampleStats& sample)
 {
     player->SetLevel(sample.level);
+    player->SetExp(sample.exp);
+    void (TPlayer::*const setters[NUM_PLRSTATS])(int32_t) = {
+        &TPlayer::SetStrn, &TPlayer::SetCons, &TPlayer::SetAgil,
+        &TPlayer::SetRflx, &TPlayer::SetMind, &TPlayer::SetLuck,
+    };
+    for (int32_t i = 0; i < NUM_PLRSTATS; ++i)
+        if (sample.attributes[i] > 0)
+            (player->*setters[i])(sample.attributes[i]);
     player->SetHealth(int32_t(player->MaxHealth() * sample.healthFill));
     player->SetMana(int32_t(player->MaxMana() * sample.manaFill));
     player->SetFatigue(int32_t(player->MaxFatigue() * sample.fatigueFill));
