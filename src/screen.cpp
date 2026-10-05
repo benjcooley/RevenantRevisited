@@ -455,13 +455,10 @@ void TPane::RouteCharPress(int32_t key, bool down)
     CharPress(key, down);
 }
 
-// The screen's pane tree reaches the swapchain through one HUD drawable,
-// registered for as long as the screen runs (docs/gameflow/ARCHITECTURE.md
-// §4.1). Panes never register drawables of their own. It sits over the HUD
-// panels not yet in the tree (their own drawables, z 0..10) and under the
-// cursor (z 1000).
-constexpr float kPaneLayerZ = 100.0f;
-
+// The screen's pane tree reaches the swapchain through one HUD drawable
+// (z TScreen::kPaneLayerZ), registered for as long as the screen runs
+// (docs/gameflow/ARCHITECTURE.md §4.1). Panes never register drawables of
+// their own.
 class TScreenPaneLayer final : public THudDrawable
 {
   public:
@@ -775,6 +772,12 @@ void TScreen::ReleaseExclusivePane(int32_t panenum)
 // sokol owns the frame loop. Player-visible behavior is the same.
 bool TScreen::PushModal(PTPane pane, uint32_t flags, TModalDone done)
 {
+    const uint32_t inherited = numexclusive > 0 ? exclusiveflags[numexclusive - 1] : 0;
+    return PushExclusive(pane, inherited | flags, std::move(done));
+}
+
+bool TScreen::PushExclusive(PTPane pane, uint32_t flags, TModalDone done)
+{
     if (!pane)
         return false;
     if (numexclusive >= NUMEXCLUSIVEPANES)
@@ -782,10 +785,9 @@ bool TScreen::PushModal(PTPane pane, uint32_t flags, TModalDone done)
         log_error("[screen] PushModal: modal stack full (%d)", NUMEXCLUSIVEPANES);
         return false;
     }
-    const uint32_t inherited = numexclusive > 0 ? exclusiveflags[numexclusive - 1] : 0;
     const int32_t panenum = AddPane(pane);
     exclusive[numexclusive] = panenum;
-    exclusiveflags[numexclusive] = inherited | flags;
+    exclusiveflags[numexclusive] = flags;
     modaldone[numexclusive] = std::move(done);
     numexclusive++;
     BroadcastEvent(SCREENEVENT_MODALPUSHED, pane);

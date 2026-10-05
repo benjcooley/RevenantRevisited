@@ -7,13 +7,16 @@
 // run by 0x0053c060): popup.def's "yesno", "okcancel" or "ok" panel with a
 // message from the string table, run modally until a button answers. Yes and
 // Ok answer 1, No and Cancel 0; Enter and ESC press them (the DEF buttons'
-// default keys). Layout: docs/ui/forensics/PopupDef_SPEC.md; behaviour:
-// docs/gameflow/forensics/INGAME_MENU.md §9.
+// default keys). The same pane class shows the "progress" panel, a message
+// over a bar, for the in-game load (instance 0x0066ff10; 0x0053c1d0,
+// 0x0053c3d0, 0x0053c360). Layout: docs/ui/forensics/PopupDef_SPEC.md;
+// behaviour: docs/gameflow/forensics/INGAME_MENU.md §5.1, §9.
 #pragma once
 
 #include "defpane.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 
 class TPopupPane : public TDefPane
@@ -35,12 +38,35 @@ class TPopupPane : public TDefPane
     bool Ask(TScreen& screen, const char* message, uint32_t flags,
              TScreen::TModalDone done);
 
+    // REVSYNC: 0x0053c1d0 -- the "progress" panel with the string-table line
+    // `key`, in-game chrome and fade, pushed over `screen` with the input
+    // flags alone (7; not RunModal's, so whatever runs under it keeps
+    // pulsing). `shown` runs once it has faded in and one more pulse has
+    // passed, as retail ran frames until then. False if it can't open.
+    bool OpenProgress(TScreen& screen, const char* key, std::function<void()> shown);
+    // REVSYNC: 0x0053c3d0 -- the bar to `permille` of its 280 pixels.
+    // Retail filled its strip without clearing it, so the bar never
+    // shrinks.
+    void SetProgress(int32_t permille);
+    // REVSYNC: 0x0053c360 -- fade out and close; `closed` runs once it has.
+    void CloseProgress(std::function<void()> closed);
+
+    void Pulse() override;
+
   protected:
     // REVSYNC: 0x0053bfa0 event 1 -- the message into the "message" TEXT.
     void OnOpened() override;
     // REVSYNC: 0x0053bfa0 event 3000 -- ok/yes answer 1, cancel/no 0.
     void OnActivate(const SDefWidget& widget, int32_t buttonIndex) override;
+    // The "progress" BITMAP is the bar: its filled part in retail's dark red.
+    void DrawField(const SDefWidget& widget) override;
 
   private:
     std::string message;
+
+    // The progress panel.
+    int32_t               bar = 0;          // per mille, as far as it has filled
+    std::function<void()> onShown;
+    bool                  shownPulse = false;  // faded in: `shown` runs at the next pulse
+    std::function<void()> onClosed;
 };

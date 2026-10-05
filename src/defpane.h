@@ -264,6 +264,8 @@ class TDefPane : public TPane
     // Compose-time helpers for subclasses (valid inside Paint / DrawField).
     [[nodiscard]] TSurface* Surface() const { return surface; }
     [[nodiscard]] uint32_t DefFlags() const { return defflags; }
+    // Open and done fading in (at once without DEF_FADE).
+    [[nodiscard]] bool FadedIn() const;
     // Retail's "click1": once, at full volume, not positioned
     // (0x0049b990(id, 0x7f, 1, 0, 0x50, 700)).
     void PlayClick() const;

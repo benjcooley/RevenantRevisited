@@ -152,7 +152,8 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Save flow from the in-game menu and the Save Game control (retail has no overwrite confirmation) | 2026-10-05 |
 | [x] | Load flow from the title, the in-game menu, the Load Game control and the death screen | 2026-10-05 |
 | [-] | Delete-slot action with confirm — not in retail (PopupDef_SPEC §13a.6) | 2026-10-05 |
-| [ ] | The in-game load's "loadingmap" progress popup (needs an in-game load staged across frames in the session). Design note: retail drew the popup over the frozen last frame while loading synchronously; the port can't present a half-replaced world, so stage the load with the PlayScreen showing a captured frame (the display readback the thumbnail uses, uploaded as the movie pane uploads frames) under the popup | 2026-10-05 |
+| [x] | The in-game load's "loadingmap" progress popup over a staged load: `ProcessRequests` starts the load and the PlayScreen runs a step a tick behind a still of the world and HUD panels (captured under the pane tree), the popup's bar at retail's 80 then the sectors to 800; the camera jumps to the loaded player, control on, cursor back, the dialog ends ([forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §5.1, §9, §10) | 2026-10-05 |
+| [ ] | Request loads (console `loadgame`, F9, `--savecycle-test`): retail's "Loading Game %s... Please Wait" (`loadgamefmt`) on the text bar (0x0047bfab); they stage behind the still without it | — |
 
 **Exit:** Slot UI works from main menu, in-game menu, and death pane.
 
