@@ -398,7 +398,7 @@ file if it doesn't exist) before sinking days into a bespoke workaround.
 Not every effect should be a data-driven engine definition. **Use the engine
 for the common shapes; keep bespoke when behavior is genuinely unique.**
 
-**Use the engine** (declare in `data/Resources/effects.def`, drive via
+**Use the engine** (declare in `assets/effects.def`, drive via
 `TParticleEffectComponent` + expression VM, minimal C++ shim) when the
 effect is one of these shapes:
 

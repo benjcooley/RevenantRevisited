@@ -128,6 +128,19 @@ bool MountModule(const char *name);     // mounts data/Modules/<name>.rvm (unmou
 void UnmountModule();
 void UnmountAll();
 
+// Engine-owned runtime assets: data the port itself authors and needs in
+// every mode (particle definitions, render policy, editor icons). They are
+// not part of the retail install, which stays read-only and stock, and not
+// part of the optional Revisited overlay, which the engine must run without.
+// Resolution order:
+//   1. $REVENANT_ASSETS_PATH            (explicit override)
+//   2. <exe-dir>/assets/                (shipped beside the binary)
+//   3. <exe-dir>/../Resources/assets/   (macOS .app bundle)
+//   4. <repo-root>/assets/              (dev: walk up from the binary)
+// Returns "<assets>/<relpath>", or an empty string when no assets directory
+// exists (logged once).
+[[nodiscard]] std::string rev_engine_asset(const char *relpath);
+
 // Enumerate file entries across all mounted archives whose in-archive
 // path starts with `prefix` (case-insensitive). Returns lowercase
 // basenames (with extension); appended to `out`. Used by subsystems
