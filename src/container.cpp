@@ -95,13 +95,15 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
             {
                 if (Inventory.GetContainer() && (uint32_t)Inventory.GetContainer()->FindFreeInventorySlot() < MAXINVITEMS)
                 {
+                    // Gold or food may merge into a pile and be deleted
+                    snprintf(buf, sizeof(buf), "%s taken from %s.", oi->GetName(), GetName());
+                    const TSafeRef<TObjectInstance> taken(oi);
                     oi->RemoveFromInventory();
                     Inventory.GetContainer()->AddToInventory(oi);
 
-                    sprintf(buf, "%s taken from %s.", oi->GetName(), GetName());
                     TextBar.Print("%s", buf);
 
-                    TakenObject = oi;
+                    TakenObject = taken.Get();
                 }
                 else
                     TextBar.Print("Can't carry any more.");
@@ -118,14 +120,15 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
         }
         else
         {
-            // add to
+            // add to (gold or food may merge into a pile and be deleted)
+            snprintf(buf, sizeof(buf), "%s put in %s.", inst->GetName(), GetName());
+            const TSafeRef<TObjectInstance> dropped(inst);
             inst->RemoveFromInventory();
             AddToInventory(inst);
 
-            sprintf(buf, "%s put in %s.", inst->GetName(), GetName());
             TextBar.Print("%s", buf);
 
-            DroppedObject = inst;
+            DroppedObject = dropped.Get();
         }
 
     }

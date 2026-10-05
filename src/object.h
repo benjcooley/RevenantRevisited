@@ -109,17 +109,23 @@ class obj##Builder : public TObjectBuilder                                      
 // * TInventoryIterator *
 // **********************
 
+// How an inventory walk treats bags. Direct visits the object's own items.
+// Nested also enters each item's inventory right after the item, depth
+// first, and climbs back out: retail's walk 0x0046dfb0 with flag 1, as
+// retail's searches (by name, class or id) and amount count use it.
+enum class EInvWalk : uint8_t { Direct, Nested };
+
 _CLASSDEF(TInventoryIterator)
 class TInventoryIterator
 {
   public:
-    TInventoryIterator(TObjectInstance* own)
-        { owner = own; invindex = 0; item = nullptr; NextItem(); }
+    explicit TInventoryIterator(TObjectInstance* own, EInvWalk how = EInvWalk::Direct)
+        { owner = container = own; walk = how; NextItem(); }
 
     TObjectInstance* Item() const { return item; }
       // Returns current item.
     int32_t InvIndex() const { return invindex - 1; }
-      // Returns current inventory index
+      // Returns the current item's index in its container's inventory
     TObjectInstance* NextItem();
       // Advance to the next item, and return it (nullptr if end of list)
     bool operator ++ (int32_t) { return (NextItem() != nullptr); }
@@ -132,22 +138,24 @@ class TInventoryIterator
       // Dereferencing operator
 
   protected:
-    TObjectInstance* owner;     // inventory parent
-    int32_t invindex;           // index into inventory
-    TObjectInstance* item;      // current object
+    TObjectInstance* owner = nullptr;       // inventory parent: where the walk starts and ends
+    TObjectInstance* container = nullptr;   // whose inventory the walk is in (a bag, nested)
+    int32_t invindex = 0;                   // index into container's inventory
+    TObjectInstance* item = nullptr;        // current object
+    EInvWalk walk = EInvWalk::Direct;
 };
 
 _CLASSDEF(TConstInventoryIterator)
 class TConstInventoryIterator
 {
   public:
-    TConstInventoryIterator(const TObjectInstance* own)
-        { owner = own; invindex = 0; item = nullptr; NextItem(); }
+    explicit TConstInventoryIterator(const TObjectInstance* own, EInvWalk how = EInvWalk::Direct)
+        { owner = container = own; walk = how; NextItem(); }
 
     TObjectInstance* Item() const { return item; }
       // Returns current item.
     int32_t InvIndex() const { return invindex - 1; }
-      // Returns current inventory index
+      // Returns the current item's index in its container's inventory
     const TObjectInstance* NextItem() const;
       // Advance to the next item, and return it (nullptr if end of list)
     bool operator ++ (int32_t) const { return (NextItem() != nullptr); }
@@ -160,9 +168,11 @@ class TConstInventoryIterator
       // Dereferencing operator
 
   protected:
-    const TObjectInstance* owner;   // inventory parent
-    mutable int32_t invindex;       // index into inventory
-    mutable TObjectInstance* item;  // current object
+    const TObjectInstance* owner = nullptr;             // inventory parent
+    mutable const TObjectInstance* container = nullptr; // whose inventory the walk is in
+    mutable int32_t invindex = 0;                       // index into container's inventory
+    mutable TObjectInstance* item = nullptr;            // current object
+    EInvWalk walk = EInvWalk::Direct;
 };
 
 // ************************************************
@@ -937,9 +947,22 @@ class TObjectInstance : protected SObjectDef
     virtual void RepaintObject();
         // Cause object to repaint itself on the screen
     virtual bool AddToInventory(TObjectInstance* inst, int32_t slot = -1);
-        // Add inst to this object's inventory, in the given slot (first free slot if none specified)
+        // REVSYNC: 0x0046f3d0 (vtable 0x58). Moves inst into this object's
+        // inventory at `slot` (a free carried slot when negative), out of
+        // the inventory it was in. Rules in docs/gameflow/forensics/INVENTORY.md:
+        // a player's new item joins a Pouch holding its kind, the item in
+        // `slot` makes room, and an item that merges into a pile of its kind
+        // (MergeInto) is deleted. On true inst may be gone: don't touch it.
     virtual bool AddToInventory(const char *name, int32_t number = 1, int32_t slot = -1);
-        // Add object of type 'name', amount of 'number' to this objects inventory at slot 'slot'
+        // REVSYNC: 0x0046f940 (vtable 0x54). A new object of type 'name',
+        // amount 'number', through AddToInventory above.
+    void PlaceInInventory(TObjectInstance* inst, int32_t slot);
+        // Puts inst, in no inventory, at `slot` as it stands: no pouch, no
+        // merge, no room made. AddToInventory's last step; also a fixture's
+        // way to lay out an inventory exactly, as a load would.
+    bool Holds(const TObjectInstance* item) const;
+        // True if item is in this object's inventory, bags included
+        // (retail's search by id, vtable 0xac, from the inventory's top)
     virtual void RemoveFromInventory();
         // Remove this object from whatever inventory it is in
     virtual void OnInventoryRemove(TObjectInstance* item) { (void)item; }
@@ -957,7 +980,7 @@ class TObjectInstance : protected SObjectDef
         // Uses the GiveInventoryTo function with a null destination to delete inventory objects
         // from an object.  
     virtual int32_t GetInventoryAmount(const char *name) const;
-        // Returns how many 'name' objects are in inventory
+        // Returns how many 'name' objects are in inventory, bags included
     virtual bool HasEmptySlot() const;
         // Returns true if there is an empty slot available
     virtual bool AddToMap();
@@ -966,12 +989,18 @@ class TObjectInstance : protected SObjectDef
         // Remove this object from the map pane
     virtual int32_t FindFreeInventorySlot() const;
         // Find the first free inventory slot in the object's inventory
+    virtual bool MergeInto(TObjectInstance* newowner) { (void)newowner; return false; }
+        // REVSYNC: vtable 0x98 (base 0x0046fee0). Asked by AddToInventory
+        // once this item has left its old inventory: an item that joins a
+        // pile of its kind in newowner's inventory adds its amount to the
+        // pile and returns true, and AddToInventory deletes it. TMoney and
+        // TFood (so TPotion) merge; everything else never does.
     virtual void SignalAddedToInventory();
         // Called to signal object that it was added to a new inventory
     virtual TObjectInstance* FindObjInventory(const char *name) const;
-        // Find an object by name in inventory
+        // Find an object by name in inventory, bags included
     virtual TObjectInstance* FindObjInventory(int32_t objclass, int32_t type = -1) const;
-        // Find an object by class and type in inventory
+        // Find an object by class and type in inventory, bags included
     virtual bool IsInInventory() const { return (inventnum >= 0); }
       // Returns true if the object is in another object's inventory and should not be drawn
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
@@ -1222,12 +1251,12 @@ class TObjectInstance : protected SObjectDef
         // Number of objects in the array
     int32_t RealNumInventoryItems();
         // Number of *used* objects in the array
-    int32_t InventNum() { return inventnum; }
-    int32_t InvIndex() { return invindex; }
+    int32_t InventNum() const { return inventnum; }
+    int32_t InvIndex() const { return invindex; }
     void SetInventNum(short i) { inventnum = i; }
 
   // Owner functions
-    TObjectInstance* GetOwner() { return owner; }
+    TObjectInstance* GetOwner() const { return owner; }
     TObjectInstance* GetTopOwner()
         { TObjectInstance* inst = this;
           while (inst->owner) inst = inst->owner;
